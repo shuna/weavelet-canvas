@@ -1,4 +1,5 @@
 import { PersistStorage, StorageValue, StateStorage } from 'zustand/middleware';
+import { compress, decompress } from 'lz-string';
 import useCloudAuthStore from '@store/cloud-auth-store';
 import useStore from '@store/store';
 import {
@@ -44,11 +45,12 @@ const createGoogleCloudStorage = <S>(): PersistStorage<S> | undefined => {
       const fileId = useCloudAuthStore.getState().fileId;
       if (!accessToken || !fileId) return;
 
-      const blob = new Blob([JSON.stringify(newValue)], {
-        type: 'application/json',
+      const compressed = compress(JSON.stringify(newValue));
+      const blob = new Blob([compressed], {
+        type: 'application/octet-stream',
       });
       const file = new File([blob], 'better-chatgpt.json', {
-        type: 'application/json',
+        type: 'application/octet-stream',
       });
 
       if (useCloudAuthStore.getState().syncStatus !== 'unauthenticated') {

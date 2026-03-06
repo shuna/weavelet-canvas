@@ -1,4 +1,5 @@
 import { debounce } from 'lodash';
+import { decompress } from 'lz-string';
 import { StorageValue } from 'zustand/middleware';
 import useStore from '@store/store';
 import useCloudAuthStore from '@store/cloud-auth-store';
@@ -59,7 +60,11 @@ export const getDriveFile = async <S>(
       },
     }
   );
-  const result: StorageValue<S> = await response.json();
+  const text = await response.text();
+  // Auto-detect: if it starts with { it's uncompressed JSON (backward compat)
+  const firstChar = text.charAt(0);
+  const json = firstChar === '{' ? text : decompress(text);
+  const result: StorageValue<S> = JSON.parse(json!);
   return result;
 };
 

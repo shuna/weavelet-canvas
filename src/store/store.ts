@@ -1,5 +1,6 @@
 import { StoreApi, create } from 'zustand';
-import { persist } from 'zustand/middleware';
+import { createJSONStorage, persist } from 'zustand/middleware';
+import compressedStorage from './storage/CompressedStorage';
 import { ChatSlice, createChatSlice } from './chat-slice';
 import { InputSlice, createInputSlice } from './input-slice';
 import { AuthSlice, createAuthSlice } from './auth-slice';
@@ -96,6 +97,7 @@ const useStore = create<StoreState>()(
     }),
     {
       name: 'free-chat-gpt',
+      storage: createJSONStorage(() => compressedStorage),
       partialize: (state) => createPartializedState(state),
       version: 10,
       migrate: (persistedState, version) => {
