@@ -102,6 +102,11 @@ const ChatHistory = React.memo(
     };
 
     const handleDragStart = (e: React.DragEvent<HTMLAnchorElement>) => {
+      if (isEdit) {
+        e.preventDefault();
+        return;
+      }
+
       if (e.dataTransfer) {
         const chatIndices =
           selectedChats.length > 0 ? selectedChats : [chatIndex];
@@ -171,7 +176,7 @@ const ChatHistory = React.memo(
         onClick={() => {
           if (!generating) setCurrentChatIndex(chatIndex);
         }}
-        draggable
+        draggable={!isEdit}
         onDragStart={handleDragStart}
       >
         <input
@@ -193,6 +198,7 @@ const ChatHistory = React.memo(
               onChange={(e) => {
                 _setTitle(e.target.value);
               }}
+              onClick={(e) => e.stopPropagation()}
               onKeyDown={handleKeyDown}
               ref={inputRef}
             />
