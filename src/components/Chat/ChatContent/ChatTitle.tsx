@@ -6,6 +6,7 @@ import ConfigMenu from '@components/ConfigMenu';
 import { ChatInterface, ConfigInterface, ImageDetail } from '@type/chat';
 import { _defaultChatConfig } from '@constants/chat';
 import { ModelOptions } from '@utils/modelReader';
+import { cloneChatAtIndex } from '@utils/chatShallowClone';
 
 const ChatTitle = React.memo(() => {
   const { t } = useTranslation('model');
@@ -29,25 +30,25 @@ const ChatTitle = React.memo(() => {
   const dropdownRef = useRef<HTMLDivElement>(null);
 
   const setConfig = (config: ConfigInterface) => {
-    const updatedChats: ChatInterface[] = JSON.parse(
-      JSON.stringify(useStore.getState().chats)
-    );
+    const chats = useStore.getState().chats;
+    if (!chats) return;
+    const updatedChats = cloneChatAtIndex(chats, currentChatIndex);
     updatedChats[currentChatIndex].config = config;
     setChats(updatedChats);
   };
 
   const setImageDetail = (imageDetail: ImageDetail) => {
-    const updatedChats: ChatInterface[] = JSON.parse(
-      JSON.stringify(useStore.getState().chats)
-    );
+    const chats = useStore.getState().chats;
+    if (!chats) return;
+    const updatedChats = cloneChatAtIndex(chats, currentChatIndex);
     updatedChats[currentChatIndex].imageDetail = imageDetail;
     setChats(updatedChats);
   };
 
   const handleModelChange = (modelId: string) => {
-    const updatedChats: ChatInterface[] = JSON.parse(
-      JSON.stringify(useStore.getState().chats)
-    );
+    const chats = useStore.getState().chats;
+    if (!chats) return;
+    const updatedChats = cloneChatAtIndex(chats, currentChatIndex);
     updatedChats[currentChatIndex].config.model = modelId as ModelOptions;
     setChats(updatedChats);
     setIsModelDropdownOpen(false);
@@ -78,7 +79,7 @@ const ChatTitle = React.memo(() => {
   useEffect(() => {
     const chats = useStore.getState().chats;
     if (chats && chats.length > 0 && currentChatIndex !== -1 && !chat?.config) {
-      const updatedChats: ChatInterface[] = JSON.parse(JSON.stringify(chats));
+      const updatedChats = cloneChatAtIndex(chats, currentChatIndex);
       updatedChats[currentChatIndex].config = { ..._defaultChatConfig };
       setChats(updatedChats);
     }
