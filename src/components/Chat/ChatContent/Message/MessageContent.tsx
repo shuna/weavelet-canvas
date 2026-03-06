@@ -24,6 +24,7 @@ const MessageContent = ({
       {advancedMode && <div className='flex flex-grow flex-col gap-3'></div>}
       {isEdit ? (
         <EditView
+          role={role}
           content={content}
           setIsEdit={setIsEdit}
           messageIndex={messageIndex}

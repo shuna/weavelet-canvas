@@ -1,6 +1,7 @@
 {
    "save": "Salvează",
    "generate": "Generează",
+   "generateBelow": "Generate All Below",
    "cancel": "Anulează",
    "confirm": "Confirmați",
    "warning": "Avertisment",

@@ -1,6 +1,7 @@
 {
   "save": "保存",
   "generate": "生成",
+  "generateBelow": "以下全て生成",
   "cancel": "キャンセル",
   "confirm": "確認",
   "warning": "警告",

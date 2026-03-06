@@ -107,6 +107,7 @@ const ContentView = memo(
       setChats(updatedChats);
       handleSubmit();
     };
+
     const currentTextContent = isTextContent(content[0]) ? content[0].text : '';
     const handleCopy = () => {
       navigator.clipboard.writeText(currentTextContent);

@@ -1,6 +1,7 @@
 {
   "save": "Spara",
   "generate": "Generera",
+  "generateBelow": "Generate All Below",
   "cancel": "Avbryt",
   "confirm": "Bekräfta",
   "warning": "Varning",

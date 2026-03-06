@@ -1,6 +1,7 @@
 {
   "save": "Enregistrer",
   "generate": "Générer",
+  "generateBelow": "Générer tout ci-dessous",
   "cancel": "Annuler",
   "confirm": "Confirmer",
   "warning": "Attention",
