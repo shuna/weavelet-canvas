@@ -4,6 +4,7 @@ import useStore from '@store/store';
 
 import { ChatInterface } from '@type/chat';
 import { retainContent } from '@utils/contentStore';
+import { deepCloneSingleChat } from '@utils/chatShallowClone';
 
 import TickIcon from '@icon/TickIcon';
 
@@ -28,8 +29,8 @@ const CloneChat = React.memo(() => {
         title = `Copy ${i} of ${chats[index].title}`;
       }
 
-      // Copy-on-write: deep-clone the structure but share contentHash refs
-      const clonedChat: ChatInterface = JSON.parse(JSON.stringify(chats[index]));
+      // Deep-clone only the single chat being duplicated
+      const clonedChat = deepCloneSingleChat(chats[index]);
       clonedChat.title = title;
 
       // Increment refCounts for all content hashes in the cloned tree
@@ -40,7 +41,7 @@ const CloneChat = React.memo(() => {
         }
       }
 
-      const updatedChats: ChatInterface[] = JSON.parse(JSON.stringify(chats));
+      const updatedChats = chats.slice();
       updatedChats.unshift(clonedChat);
 
       setChats(updatedChats);

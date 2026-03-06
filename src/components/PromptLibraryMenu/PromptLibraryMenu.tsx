@@ -40,7 +40,7 @@ const PromptLibraryMenuPopUp = ({
   const prompts = useStore((state) => state.prompts);
 
   const [_prompts, _setPrompts] = useState<Prompt[]>(
-    JSON.parse(JSON.stringify(prompts))
+    prompts.map((p) => ({ ...p }))
   );
   const container = useRef<HTMLDivElement>(null);
 
@@ -56,19 +56,11 @@ const PromptLibraryMenuPopUp = ({
   };
 
   const addPrompt = () => {
-    const updatedPrompts: Prompt[] = JSON.parse(JSON.stringify(_prompts));
-    updatedPrompts.push({
-      id: uuidv4(),
-      name: '',
-      prompt: '',
-    });
-    _setPrompts(updatedPrompts);
+    _setPrompts((prev) => [...prev, { id: uuidv4(), name: '', prompt: '' }]);
   };
 
   const deletePrompt = (index: number) => {
-    const updatedPrompts: Prompt[] = JSON.parse(JSON.stringify(_prompts));
-    updatedPrompts.splice(index, 1);
-    _setPrompts(updatedPrompts);
+    _setPrompts((prev) => prev.filter((_, i) => i !== index));
   };
 
   const clearPrompts = () => {
@@ -117,11 +109,10 @@ const PromptLibraryMenuPopUp = ({
                   onFocus={handleOnFocus}
                   onBlur={handleOnBlur}
                   onChange={(e) => {
-                    _setPrompts((prev) => {
-                      const newPrompts = [...prev];
-                      newPrompts[index].name = e.target.value;
-                      return newPrompts;
-                    });
+                    const val = e.target.value;
+                    _setPrompts((prev) =>
+                      prev.map((p, i) => (i === index ? { ...p, name: val } : p))
+                    );
                   }}
                   onInput={handleInput}
                   value={prompt.name}
@@ -134,11 +125,10 @@ const PromptLibraryMenuPopUp = ({
                   onFocus={handleOnFocus}
                   onBlur={handleOnBlur}
                   onChange={(e) => {
-                    _setPrompts((prev) => {
-                      const newPrompts = [...prev];
-                      newPrompts[index].prompt = e.target.value;
-                      return newPrompts;
-                    });
+                    const val = e.target.value;
+                    _setPrompts((prev) =>
+                      prev.map((p, i) => (i === index ? { ...p, prompt: val } : p))
+                    );
                   }}
                   onInput={handleInput}
                   value={prompt.prompt}

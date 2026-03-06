@@ -2,6 +2,7 @@ import React from 'react';
 import useStore from '@store/store';
 import { generateDefaultChat } from '@constants/chat';
 import { ChatInterface } from '@type/chat';
+/* no deep clone needed – just prepend a new default chat */
 
 const useAddChat = () => {
   const setChats = useStore((state) => state.setChats);
@@ -10,7 +11,7 @@ const useAddChat = () => {
   const addChat = (folder?:string) => {
     const chats = useStore.getState().chats;
     if (chats) {
-      const updatedChats: ChatInterface[] = JSON.parse(JSON.stringify(chats));
+      const updatedChats = chats.slice();
       let titleIndex = 1;
       let title = `New Chat ${titleIndex}`;
 

@@ -12,6 +12,7 @@ import useStore from '@store/store';
 import { formatNumber } from '@utils/chat';
 import { ChatInterface } from '@type/chat';
 import { retainContent, releaseContent } from '@utils/contentStore';
+import { cloneChatAtIndex, deepCloneSingleChat } from '@utils/chatShallowClone';
 
 const ChatHistoryClass = {
   normal:
@@ -54,9 +55,9 @@ const ChatHistory = React.memo(
     const inputRef = useRef<HTMLInputElement>(null);
 
     const editTitle = () => {
-      const updatedChats = JSON.parse(
-        JSON.stringify(useStore.getState().chats)
-      );
+      const chats = useStore.getState().chats;
+      if (!chats) return;
+      const updatedChats = cloneChatAtIndex(chats, chatIndex);
       updatedChats[chatIndex].title = _title;
       setChats(updatedChats);
       setIsEdit(false);
@@ -64,7 +65,8 @@ const ChatHistory = React.memo(
 
     const deleteChat = () => {
       const chats = useStore.getState().chats;
-      const updatedChats = JSON.parse(JSON.stringify(chats));
+      if (!chats) return;
+      const updatedChats = chats.slice();
       const indicesToDelete =
         selectedChats.length > 0 ? selectedChats : [chatIndex];
 
@@ -163,7 +165,7 @@ const ChatHistory = React.memo(
           title = `Copy ${i} of ${chats[index].title}`;
         }
 
-        const clonedChat = JSON.parse(JSON.stringify(chats[index]));
+        const clonedChat = deepCloneSingleChat(chats[index]);
         clonedChat.title = title;
 
         // Retain contentStore refs for cloned branchTree nodes
@@ -174,7 +176,7 @@ const ChatHistory = React.memo(
           }
         }
 
-        const updatedChats: ChatInterface[] = JSON.parse(JSON.stringify(chats));
+        const updatedChats = chats.slice();
         updatedChats.unshift(clonedChat);
 
         setChats(updatedChats);

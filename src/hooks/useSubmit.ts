@@ -14,6 +14,7 @@ import { officialAPIEndpoint } from '@constants/auth';
 import { modelStreamSupport } from '@constants/modelLoader';
 import { FavoriteModel, ProviderConfig } from '@store/provider-slice';
 import { upsertActivePathMessage } from '@utils/branchUtils';
+import { cloneChatAtIndex } from '@utils/chatShallowClone';
 
 const useSubmit = () => {
   const { t, i18n } = useTranslation('api');
@@ -83,7 +84,7 @@ const useSubmit = () => {
     const chats = useStore.getState().chats;
     if (generating || !chats) return;
 
-    const updatedChats: ChatInterface[] = JSON.parse(JSON.stringify(chats));
+    const updatedChats = cloneChatAtIndex(chats, currentChatIndex);
     const assistantMessage: MessageInterface = {
       role: 'assistant',
       content: [
@@ -157,18 +158,18 @@ const useSubmit = () => {
           throw new Error(t('errors.failedToRetrieveData') as string);
         }
 
-        const updatedChats: ChatInterface[] = JSON.parse(
-          JSON.stringify(useStore.getState().chats)
-        );
+        const latestChats = useStore.getState().chats!;
+        const updatedChats = cloneChatAtIndex(latestChats, currentChatIndex);
         const updatedMessages = updatedChats[currentChatIndex].messages;
-        (
-          updatedMessages[updatedMessages.length - 1]
-            .content[0] as TextContentInterface
-        ).text += data.choices[0].message.content;
+        const oldMsg = updatedMessages[updatedMessages.length - 1];
+        const newContent0 = { ...oldMsg.content[0] as TextContentInterface };
+        newContent0.text += data.choices[0].message.content;
+        const lastMsg = { ...oldMsg, content: [newContent0, ...oldMsg.content.slice(1)] };
+        updatedMessages[updatedMessages.length - 1] = lastMsg;
         upsertActivePathMessage(
           updatedChats[currentChatIndex],
           updatedMessages.length - 1,
-          updatedMessages[updatedMessages.length - 1],
+          lastMsg,
           useStore.getState().contentStore
         );
         setChats(updatedChats);
@@ -227,18 +228,18 @@ const useSubmit = () => {
                 return output;
               }, '');
 
-              const updatedChats: ChatInterface[] = JSON.parse(
-                JSON.stringify(useStore.getState().chats)
-              );
+              const latestChats2 = useStore.getState().chats!;
+              const updatedChats = cloneChatAtIndex(latestChats2, currentChatIndex);
               const updatedMessages = updatedChats[currentChatIndex].messages;
-              (
-                updatedMessages[updatedMessages.length - 1]
-                  .content[0] as TextContentInterface
-              ).text += resultString;
+              const oldMsg = updatedMessages[updatedMessages.length - 1];
+              const newContent0 = { ...oldMsg.content[0] as TextContentInterface };
+              newContent0.text += resultString;
+              const lastMsg = { ...oldMsg, content: [newContent0, ...oldMsg.content.slice(1)] };
+              updatedMessages[updatedMessages.length - 1] = lastMsg;
               upsertActivePathMessage(
                 updatedChats[currentChatIndex],
                 updatedMessages.length - 1,
-                updatedMessages[updatedMessages.length - 1],
+                lastMsg,
                 useStore.getState().contentStore
               );
               setChats(updatedChats);
@@ -292,9 +293,8 @@ const useSubmit = () => {
           ],
         };
 
-        const updatedChats: ChatInterface[] = JSON.parse(
-          JSON.stringify(useStore.getState().chats)
-        );
+        const titleChats = useStore.getState().chats!;
+        const updatedChats = cloneChatAtIndex(titleChats, currentChatIndex);
         let title = (
           await generateTitle([message], updatedChats[currentChatIndex].config)
         ).trim();
@@ -326,7 +326,7 @@ const useSubmit = () => {
     const chats = useStore.getState().chats;
     if (generating || !chats) return;
 
-    const updatedChats: ChatInterface[] = JSON.parse(JSON.stringify(chats));
+    const updatedChats = cloneChatAtIndex(chats, currentChatIndex);
     const assistantMessage: MessageInterface = {
       role: 'assistant',
       content: [
@@ -409,18 +409,18 @@ const useSubmit = () => {
           throw new Error(t('errors.failedToRetrieveData') as string);
         }
 
-        const updatedChats: ChatInterface[] = JSON.parse(
-          JSON.stringify(useStore.getState().chats)
-        );
+        const latestChats3 = useStore.getState().chats!;
+        const updatedChats = cloneChatAtIndex(latestChats3, currentChatIndex);
         const updatedMessages = updatedChats[currentChatIndex].messages;
-        (
-          updatedMessages[insertIndex]
-            .content[0] as TextContentInterface
-        ).text += data.choices[0].message.content;
+        const oldMsg3 = updatedMessages[insertIndex];
+        const newContent03 = { ...oldMsg3.content[0] as TextContentInterface };
+        newContent03.text += data.choices[0].message.content;
+        const msg = { ...oldMsg3, content: [newContent03, ...oldMsg3.content.slice(1)] };
+        updatedMessages[insertIndex] = msg;
         upsertActivePathMessage(
           updatedChats[currentChatIndex],
           insertIndex,
-          updatedMessages[insertIndex],
+          msg,
           useStore.getState().contentStore
         );
         setChats(updatedChats);
@@ -478,18 +478,18 @@ const useSubmit = () => {
                 return output;
               }, '');
 
-              const updatedChats: ChatInterface[] = JSON.parse(
-                JSON.stringify(useStore.getState().chats)
-              );
+              const latestChats4 = useStore.getState().chats!;
+              const updatedChats = cloneChatAtIndex(latestChats4, currentChatIndex);
               const updatedMessages = updatedChats[currentChatIndex].messages;
-              (
-                updatedMessages[insertIndex]
-                  .content[0] as TextContentInterface
-              ).text += resultString;
+              const oldMsg4 = updatedMessages[insertIndex];
+              const newContent04 = { ...oldMsg4.content[0] as TextContentInterface };
+              newContent04.text += resultString;
+              const msg = { ...oldMsg4, content: [newContent04, ...oldMsg4.content.slice(1)] };
+              updatedMessages[insertIndex] = msg;
               upsertActivePathMessage(
                 updatedChats[currentChatIndex],
                 insertIndex,
-                updatedMessages[insertIndex],
+                msg,
                 useStore.getState().contentStore
               );
               setChats(updatedChats);
