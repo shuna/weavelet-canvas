@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import PopupModal from '@components/PopupModal';
 import { ConfigInterface, ImageDetail } from '@type/chat';
@@ -169,12 +169,21 @@ export const MaxTokenSlider = ({
   _model: ModelOptions;
 }) => {
   const { t } = useTranslation('model');
-  const inputRef = useRef<HTMLInputElement>(null);
+  const favoriteModels = useStore((state) => state.favoriteModels) || [];
+
+  const getMaxForModel = (): number => {
+    if (modelMaxToken[_model] != null) return modelMaxToken[_model];
+    const fav = favoriteModels.find((f) => f.modelId === _model);
+    if (fav?.contextLength) return fav.contextLength;
+    return 128000; // sensible default
+  };
+
+  const maxForModel = getMaxForModel();
 
   useEffect(() => {
-    inputRef &&
-      inputRef.current &&
-      _setMaxToken(Number(inputRef.current.value));
+    if (_maxToken > maxForModel) {
+      _setMaxToken(maxForModel);
+    }
   }, [_model]);
 
   return (
@@ -184,13 +193,12 @@ export const MaxTokenSlider = ({
       </label>
       <input
         type='range'
-        ref={inputRef}
         value={_maxToken}
         onChange={(e) => {
           _setMaxToken(Number(e.target.value));
         }}
         min={0}
-        max={modelMaxToken[_model]}
+        max={maxForModel}
         step={1}
         className='w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer'
       />
