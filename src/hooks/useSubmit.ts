@@ -307,7 +307,189 @@ const useSubmit = () => {
     setGenerating(false);
   };
 
-  return { handleSubmit, error };
+  const handleSubmitMidChat = async (insertIndex: number) => {
+    const chats = useStore.getState().chats;
+    if (generating || !chats) return;
+
+    const updatedChats: ChatInterface[] = JSON.parse(JSON.stringify(chats));
+
+    // Insert empty assistant message at the specified index
+    updatedChats[currentChatIndex].messages.splice(insertIndex, 0, {
+      role: 'assistant',
+      content: [
+        {
+          type: 'text',
+          text: '',
+        } as TextContentInterface,
+      ],
+    });
+
+    setChats(updatedChats);
+    setGenerating(true);
+
+    try {
+      let data;
+      let stream;
+
+      // Use only messages up to insertIndex (exclusive) as context
+      const allMessages = updatedChats[currentChatIndex].messages;
+      const contextMessages = allMessages.slice(0, insertIndex);
+
+      if (contextMessages.length === 0)
+        throw new Error(t('errors.noMessagesSubmitted') as string);
+
+      const messages = limitMessageTokens(
+        contextMessages,
+        chats[currentChatIndex].config.max_tokens,
+        chats[currentChatIndex].config.model
+      );
+      if (messages.length === 0)
+        throw new Error(t('errors.messageExceedMaxToken') as string);
+
+      const resolved = resolveProvider(chats[currentChatIndex].config.model);
+      const isStreamSupported =
+        modelStreamSupport[chats[currentChatIndex].config.model];
+
+      if (!isStreamSupported) {
+        if (!resolved.key || resolved.key.length === 0) {
+          if (resolved.endpoint === officialAPIEndpoint) {
+            throw new Error(t('noApiKeyWarning') as string);
+          }
+          data = await getChatCompletion(
+            resolved.endpoint,
+            messages,
+            chats[currentChatIndex].config,
+            undefined,
+            undefined,
+            useStore.getState().apiVersion
+          );
+        } else {
+          data = await getChatCompletion(
+            resolved.endpoint,
+            messages,
+            chats[currentChatIndex].config,
+            resolved.key,
+            undefined,
+            useStore.getState().apiVersion
+          );
+        }
+
+        if (
+          !data ||
+          !data.choices ||
+          !data.choices[0] ||
+          !data.choices[0].message ||
+          !data.choices[0].message.content
+        ) {
+          throw new Error(t('errors.failedToRetrieveData') as string);
+        }
+
+        const updatedChats: ChatInterface[] = JSON.parse(
+          JSON.stringify(useStore.getState().chats)
+        );
+        const updatedMessages = updatedChats[currentChatIndex].messages;
+        (
+          updatedMessages[insertIndex]
+            .content[0] as TextContentInterface
+        ).text += data.choices[0].message.content;
+        setChats(updatedChats);
+      } else {
+        if (!resolved.key || resolved.key.length === 0) {
+          if (resolved.endpoint === officialAPIEndpoint) {
+            throw new Error(t('noApiKeyWarning') as string);
+          }
+          stream = await getChatCompletionStream(
+            resolved.endpoint,
+            messages,
+            chats[currentChatIndex].config,
+            undefined,
+            undefined,
+            useStore.getState().apiVersion
+          );
+        } else {
+          stream = await getChatCompletionStream(
+            resolved.endpoint,
+            messages,
+            chats[currentChatIndex].config,
+            resolved.key,
+            undefined,
+            useStore.getState().apiVersion
+          );
+        }
+
+        if (stream) {
+          if (stream.locked)
+            throw new Error(t('errors.streamLocked') as string);
+          const reader = stream.getReader();
+          let reading = true;
+          let partial = '';
+          const decoder = new TextDecoder();
+          while (reading && useStore.getState().generating) {
+            const { done, value } = await reader.read();
+            const result = parseEventSource(
+              partial + decoder.decode(value, { stream: true })
+            );
+            partial = '';
+
+            if (result === '[DONE]' || done) {
+              reading = false;
+            } else {
+              const resultString = result.reduce((output: string, curr) => {
+                if (typeof curr === 'string') {
+                  partial += curr;
+                } else {
+                  if (!curr.choices || !curr.choices[0] || !curr.choices[0].delta) {
+                    return output;
+                  }
+                  const content = curr.choices[0]?.delta?.content ?? null;
+                  if (content) output += content;
+                }
+                return output;
+              }, '');
+
+              const updatedChats: ChatInterface[] = JSON.parse(
+                JSON.stringify(useStore.getState().chats)
+              );
+              const updatedMessages = updatedChats[currentChatIndex].messages;
+              (
+                updatedMessages[insertIndex]
+                  .content[0] as TextContentInterface
+              ).text += resultString;
+              setChats(updatedChats);
+            }
+          }
+          if (useStore.getState().generating) {
+            reader.cancel(t('errors.cancelledByUser') as string);
+          } else {
+            reader.cancel(t('errors.generationCompleted') as string);
+          }
+          reader.releaseLock();
+          stream.cancel();
+        }
+      }
+
+      // update tokens used
+      const currChats = useStore.getState().chats;
+      const countTotalTokens = useStore.getState().countTotalTokens;
+
+      if (currChats && countTotalTokens) {
+        const model = currChats[currentChatIndex].config.model;
+        const msgs = currChats[currentChatIndex].messages;
+        updateTotalTokenUsed(
+          model,
+          msgs.slice(0, insertIndex),
+          msgs[insertIndex]
+        );
+      }
+    } catch (e: unknown) {
+      const err = (e as Error).message;
+      console.log(err);
+      setError(err);
+    }
+    setGenerating(false);
+  };
+
+  return { handleSubmit, handleSubmitMidChat, error };
 };
 
 export default useSubmit;

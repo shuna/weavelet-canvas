@@ -1,6 +1,7 @@
 {
   "save": "Save",
   "generate": "Generate",
+  "generateBelow": "Generate All Below",
   "add_image_url": "Add image URL",
   "enter_image_url_placeholder": "Enter image URL",
   "cancel": "Cancel",

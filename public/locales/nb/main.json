@@ -1,6 +1,7 @@
 {
   "save": "Lagre",
   "generate": "Generere",
+  "generateBelow": "Generate All Below",
   "cancel": "Avbryt",
   "confirm": "Bekreft",
   "warning": "Advarsel",

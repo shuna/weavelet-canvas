@@ -1,6 +1,7 @@
 {
   "save": "Gem",
   "generate": "Generere",
+  "generateBelow": "Generate All Below",
   "cancel": "Annuller",
   "confirm": "Bekræft",
   "warning": "Advarsel",

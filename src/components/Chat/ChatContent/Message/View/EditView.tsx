@@ -21,11 +21,13 @@ import { modelTypes } from '@constants/modelLoader';
 import { toast } from 'react-toastify';
 
 const EditView = ({
+  role,
   content: content,
   setIsEdit,
   messageIndex,
   sticky,
 }: {
+  role?: string;
   content: ContentInterface[];
   setIsEdit: React.Dispatch<React.SetStateAction<boolean>>;
   messageIndex: number;
@@ -226,7 +228,34 @@ const EditView = ({
     }
   };
 
-  const { handleSubmit } = useSubmit();
+  const { handleSubmit, handleSubmitMidChat } = useSubmit();
+
+  const handleGenerateNextOnly = () => {
+    if (useStore.getState().generating || !modelValid) return;
+
+    const updatedChats: ChatInterface[] = JSON.parse(
+      JSON.stringify(useStore.getState().chats)
+    );
+    const updatedMessages = updatedChats[currentChatIndex].messages;
+
+    // Update message content
+    updatedMessages[messageIndex].content = _content;
+    // Remove only the next message if it exists
+    const nextIndex = messageIndex + 1;
+    if (nextIndex < updatedMessages.length) {
+      updatedMessages.splice(nextIndex, 1);
+    }
+    setIsEdit(false);
+
+    try {
+      setChats(updatedChats);
+    } catch (error: unknown) {
+      console.log(error);
+      return;
+    }
+    handleSubmitMidChat(nextIndex);
+  };
+
   const handleGenerate = () => {
     const hasTextContent = (_content[0] as TextContentInterface).text !== '';
     const hasImageContent = Array.isArray(_content) && _content.some(
@@ -397,6 +426,7 @@ const EditView = ({
         handleImageDetailChange={handleImageDetailChange}
         handleRemoveImage={handleRemoveImage}
         handleGenerate={handleGenerate}
+        handleGenerateNextOnly={handleGenerateNextOnly}
         handleSave={handleSave}
         setIsModalOpen={setIsModalOpen}
         setIsEdit={setIsEdit}
@@ -408,6 +438,8 @@ const EditView = ({
         fileInputRef={fileInputRef}
         model={model}
         modelValid={modelValid}
+        messageIndex={messageIndex}
+        role={role}
       />
       {isModalOpen && (
         <PopupModal
@@ -428,6 +460,7 @@ const EditViewButtons = memo(
     handleImageDetailChange,
     handleRemoveImage,
     handleGenerate,
+    handleGenerateNextOnly,
     handleSave,
     setIsModalOpen,
     setIsEdit,
@@ -439,12 +472,15 @@ const EditViewButtons = memo(
     fileInputRef,
     model,
     modelValid,
+    messageIndex,
+    role,
   }: {
     sticky?: boolean;
     handleFileChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
     handleImageDetailChange: (index: number, e: string) => void;
     handleRemoveImage: (index: number) => void;
     handleGenerate: () => void;
+    handleGenerateNextOnly: () => void;
     handleSave: () => void;
     setIsModalOpen: React.Dispatch<React.SetStateAction<boolean>>;
     setIsEdit: React.Dispatch<React.SetStateAction<boolean>>;
@@ -456,11 +492,18 @@ const EditViewButtons = memo(
     fileInputRef: React.MutableRefObject<null>;
     model: ModelOptions;
     modelValid: boolean;
+    messageIndex: number;
+    role?: string;
   }) => {
     const { t } = useTranslation();
     const generating = useStore.getState().generating;
     const noModel = !modelValid;
     const advancedMode = useStore((state) => state.advancedMode);
+    const lastMessageIndex = useStore((state) =>
+      state.chats ? state.chats[state.currentChatIndex].messages.length - 1 : 0
+    );
+    const isAssistant = role === 'assistant';
+    const isNotLast = !sticky && messageIndex < lastMessageIndex;
 
     return (
       <div>
@@ -548,20 +591,49 @@ const EditViewButtons = memo(
               </button>
             )}
 
-            {sticky || (
-              <button
-                className={`btn relative mr-2 btn-primary ${
-                  noModel ? 'cursor-not-allowed opacity-40' : ''
-                }`}
-                onClick={() => {
-                  !generating && !noModel && setIsModalOpen(true);
-                }}
-                disabled={noModel}
-              >
-                <div className='flex items-center justify-center gap-2'>
-                  {t('generate')}
-                </div>
-              </button>
+            {!sticky && !isAssistant && (
+              isNotLast ? (
+                <>
+                  <button
+                    className={`btn relative mr-2 btn-primary ${
+                      generating || noModel ? 'cursor-not-allowed opacity-40' : ''
+                    }`}
+                    onClick={handleGenerateNextOnly}
+                    disabled={noModel}
+                  >
+                    <div className='flex items-center justify-center gap-2'>
+                      {t('generate')}
+                    </div>
+                  </button>
+                  <button
+                    className={`btn relative mr-2 btn-neutral ${
+                      noModel ? 'cursor-not-allowed opacity-40' : ''
+                    }`}
+                    onClick={() => {
+                      !generating && !noModel && setIsModalOpen(true);
+                    }}
+                    disabled={noModel}
+                  >
+                    <div className='flex items-center justify-center gap-2'>
+                      {t('generateBelow')}
+                    </div>
+                  </button>
+                </>
+              ) : (
+                <button
+                  className={`btn relative mr-2 btn-primary ${
+                    noModel ? 'cursor-not-allowed opacity-40' : ''
+                  }`}
+                  onClick={() => {
+                    !generating && !noModel && setIsModalOpen(true);
+                  }}
+                  disabled={noModel}
+                >
+                  <div className='flex items-center justify-center gap-2'>
+                    {t('generate')}
+                  </div>
+                </button>
+              )
             )}
 
             <button
