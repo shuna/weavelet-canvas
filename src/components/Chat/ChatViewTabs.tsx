@@ -1,6 +1,12 @@
-import React from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { shallow } from 'zustand/shallow';
+import useStore from '@store/store';
 import BranchIcon from '@icon/BranchIcon';
+import ConfigMenu from '@components/ConfigMenu';
+import { ChatInterface, ConfigInterface, ImageDetail } from '@type/chat';
+import { _defaultChatConfig } from '@constants/chat';
+import { ModelOptions } from '@utils/modelReader';
 
 export type ChatView = 'chat' | 'branch-editor';
 
@@ -11,32 +17,175 @@ const ChatViewTabs = ({
   activeView: ChatView;
   setActiveView: (view: ChatView) => void;
 }) => {
-  const { t } = useTranslation();
+  const { t } = useTranslation('model');
+  const { t: tMain } = useTranslation();
+  const advancedMode = useStore((state) => state.advancedMode);
+  const customModels = useStore((state) => state.customModels);
+  const favoriteModels = useStore((state) => state.favoriteModels) || [];
+  const providers = useStore((state) => state.providers) || {};
+  const chat = useStore(
+    (state) =>
+      state.chats &&
+      state.chats.length > 0 &&
+      state.currentChatIndex >= 0 &&
+      state.currentChatIndex < state.chats.length
+        ? state.chats[state.currentChatIndex]
+        : undefined,
+    shallow
+  );
+  const setChats = useStore((state) => state.setChats);
+  const currentChatIndex = useStore((state) => state.currentChatIndex);
+  const [isModalOpen, setIsModalOpen] = useState<boolean>(false);
+  const [isModelDropdownOpen, setIsModelDropdownOpen] = useState<boolean>(false);
+  const dropdownRef = useRef<HTMLDivElement>(null);
+
+  const setConfig = (config: ConfigInterface) => {
+    const updatedChats: ChatInterface[] = JSON.parse(
+      JSON.stringify(useStore.getState().chats)
+    );
+    updatedChats[currentChatIndex].config = config;
+    setChats(updatedChats);
+  };
+
+  const setImageDetail = (imageDetail: ImageDetail) => {
+    const updatedChats: ChatInterface[] = JSON.parse(
+      JSON.stringify(useStore.getState().chats)
+    );
+    updatedChats[currentChatIndex].imageDetail = imageDetail;
+    setChats(updatedChats);
+  };
+
+  const handleModelChange = (modelId: string) => {
+    const updatedChats: ChatInterface[] = JSON.parse(
+      JSON.stringify(useStore.getState().chats)
+    );
+    updatedChats[currentChatIndex].config.model = modelId as ModelOptions;
+    setChats(updatedChats);
+    setIsModelDropdownOpen(false);
+  };
+
+  const getModelDisplayName = (modelId: string) => {
+    const fav = favoriteModels.find(f => f.modelId === modelId);
+    if (fav) {
+      return `${modelId} (${providers[fav.providerId]?.name || fav.providerId})`;
+    }
+    return t('provider.noModelSelected', 'モデル未選択') as string;
+  };
+
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
+        setIsModelDropdownOpen(false);
+      }
+    };
+    if (isModelDropdownOpen) {
+      document.addEventListener('mousedown', handleClickOutside);
+    }
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [isModelDropdownOpen]);
+
+  useEffect(() => {
+    const chats = useStore.getState().chats;
+    if (chats && chats.length > 0 && currentChatIndex !== -1 && !chat?.config) {
+      const updatedChats: ChatInterface[] = JSON.parse(JSON.stringify(chats));
+      updatedChats[currentChatIndex].config = { ..._defaultChatConfig };
+      setChats(updatedChats);
+    }
+  }, [currentChatIndex]);
 
   return (
-    <div className='flex border-b border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 z-10'>
-      <button
-        className={`px-4 py-2 text-sm font-medium transition-colors ${
-          activeView === 'chat'
-            ? 'text-blue-600 dark:text-blue-400 border-b-2 border-blue-600 dark:border-blue-400'
-            : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300'
-        }`}
-        onClick={() => setActiveView('chat')}
-      >
-        {t('chat')}
-      </button>
-      <button
-        className={`px-4 py-2 text-sm font-medium transition-colors flex items-center gap-1.5 ${
-          activeView === 'branch-editor'
-            ? 'text-blue-600 dark:text-blue-400 border-b-2 border-blue-600 dark:border-blue-400'
-            : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300'
-        }`}
-        onClick={() => setActiveView('branch-editor')}
-      >
-        <BranchIcon className='w-3.5 h-3.5' />
-        {t('branchEditor')}
-      </button>
-    </div>
+    <>
+      <div className='flex items-center border-b border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 z-10 px-2 min-h-[40px]'>
+        {/* Left: Model dropdown & options */}
+        {advancedMode && chat && (
+          <div className='flex items-center gap-2 text-sm text-gray-600 dark:text-gray-300 min-w-0'>
+            <div className='relative min-w-0' ref={dropdownRef}>
+              <div
+                className='p-1 px-2 rounded-md bg-gray-300/20 dark:bg-gray-900/10 hover:bg-gray-300/50 dark:hover:bg-gray-900/50 cursor-pointer flex items-center gap-1 truncate'
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setIsModelDropdownOpen(!isModelDropdownOpen);
+                }}
+              >
+                {t('model')}: {getModelDisplayName(chat.config.model)}
+                <svg className='w-3 h-3 ml-1' fill='none' stroke='currentColor' viewBox='0 0 24 24'>
+                  <path strokeLinecap='round' strokeLinejoin='round' strokeWidth={2} d='M19 9l-7 7-7-7' />
+                </svg>
+              </div>
+              {isModelDropdownOpen && (
+                <div className='absolute top-full left-0 mt-1 min-w-[280px] max-h-[300px] overflow-y-auto bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 rounded-md shadow-lg z-50'>
+                  {favoriteModels.length === 0 ? (
+                    <div className='px-3 py-2 text-sm text-gray-500'>
+                      {t('provider.noModelSelected', 'モデル未選択')}
+                    </div>
+                  ) : (
+                    favoriteModels.map((fav) => (
+                      <div
+                        key={`${fav.providerId}-${fav.modelId}`}
+                        className={`px-3 py-2 text-sm cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-700 ${
+                          chat.config.model === fav.modelId
+                            ? 'bg-gray-100 dark:bg-gray-700 font-medium'
+                            : ''
+                        }`}
+                        onClick={() => handleModelChange(fav.modelId)}
+                      >
+                        {fav.modelId} ({providers[fav.providerId]?.name || fav.providerId})
+                      </div>
+                    ))
+                  )}
+                </div>
+              )}
+            </div>
+            <div
+              className='p-1 px-2 rounded-md bg-gray-300/20 dark:bg-gray-900/10 hover:bg-gray-300/50 dark:hover:bg-gray-900/50 cursor-pointer flex items-center gap-1 shrink-0 whitespace-nowrap'
+              onClick={() => setIsModalOpen(true)}
+            >
+              <svg className='w-4 h-4' fill='none' stroke='currentColor' viewBox='0 0 24 24'>
+                <path strokeLinecap='round' strokeLinejoin='round' strokeWidth={2} d='M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4' />
+              </svg>
+              {t('modelOptions', 'モデルオプション')}
+            </div>
+          </div>
+        )}
+
+        {/* Right: View tabs */}
+        <div className='flex ml-auto shrink-0 whitespace-nowrap'>
+          <button
+            className={`px-4 py-2 text-sm font-medium transition-colors flex items-center gap-1.5 ${
+              activeView === 'chat'
+                ? 'text-blue-600 dark:text-blue-400 border-b-2 border-blue-600 dark:border-blue-400'
+                : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300'
+            }`}
+            onClick={() => setActiveView('chat')}
+          >
+            <svg className='w-3.5 h-3.5' stroke='currentColor' fill='none' strokeWidth='2' viewBox='0 0 24 24' strokeLinecap='round' strokeLinejoin='round'>
+              <path d='M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z'></path>
+            </svg>
+            {tMain('chat')}
+          </button>
+          <button
+            className={`px-4 py-2 text-sm font-medium transition-colors flex items-center gap-1.5 ${
+              activeView === 'branch-editor'
+                ? 'text-blue-600 dark:text-blue-400 border-b-2 border-blue-600 dark:border-blue-400'
+                : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300'
+            }`}
+            onClick={() => setActiveView('branch-editor')}
+          >
+            <BranchIcon className='w-3.5 h-3.5' />
+            {tMain('branchEditor')}
+          </button>
+        </div>
+      </div>
+      {isModalOpen && chat && (
+        <ConfigMenu
+          setIsModalOpen={setIsModalOpen}
+          config={chat.config}
+          setConfig={setConfig}
+          imageDetail={chat.imageDetail}
+          setImageDetail={setImageDetail}
+        />
+      )}
+    </>
   );
 };
 
