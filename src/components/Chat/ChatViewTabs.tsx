@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { shallow } from 'zustand/shallow';
 import useStore from '@store/store';
@@ -38,7 +38,23 @@ const ChatViewTabs = ({
   const currentChatIndex = useStore((state) => state.currentChatIndex);
   const [isModalOpen, setIsModalOpen] = useState<boolean>(false);
   const [isModelDropdownOpen, setIsModelDropdownOpen] = useState<boolean>(false);
+  const [isCompact, setIsCompact] = useState<boolean>(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
+  const modelRef = useRef<HTMLDivElement>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el) return;
+    const check = () => {
+      // Use a width threshold: if container is narrow, go compact
+      setIsCompact(el.clientWidth < 700);
+    };
+    check();
+    const observer = new ResizeObserver(check);
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, []);
 
   const setConfig = (config: ConfigInterface) => {
     const chats = useStore.getState().chats;
@@ -96,25 +112,26 @@ const ChatViewTabs = ({
 
   return (
     <>
-      <div className='flex items-center border-b border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 z-10 px-2 min-h-[40px]'>
+      <div ref={containerRef} className='flex items-center border-b border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 z-10 px-2 min-h-[40px]'>
         {/* Left: Model dropdown & options */}
         {advancedMode && chat && (
           <div className='flex items-center gap-2 text-sm text-gray-600 dark:text-gray-300 min-w-0'>
             <div className='relative min-w-0' ref={dropdownRef}>
               <div
-                className='p-1 px-2 rounded-md bg-gray-300/20 dark:bg-gray-900/10 hover:bg-gray-300/50 dark:hover:bg-gray-900/50 cursor-pointer flex items-center gap-1 truncate'
+                ref={modelRef}
+                className='p-1 px-2 rounded-md bg-gray-300/20 dark:bg-gray-900/10 hover:bg-gray-300/50 dark:hover:bg-gray-900/50 cursor-pointer flex items-center gap-1 overflow-hidden'
                 onClick={(e) => {
                   e.stopPropagation();
                   setIsModelDropdownOpen(!isModelDropdownOpen);
                 }}
               >
-                {t('model')}: {getModelDisplayName(chat.config.model)}
+                <span ref={modelRef} className='truncate'>{t('model')}: {getModelDisplayName(chat.config.model)}</span>
                 <svg className='w-3 h-3 ml-1' fill='none' stroke='currentColor' viewBox='0 0 24 24'>
                   <path strokeLinecap='round' strokeLinejoin='round' strokeWidth={2} d='M19 9l-7 7-7-7' />
                 </svg>
               </div>
               {isModelDropdownOpen && (
-                <div className='absolute top-full left-0 mt-1 min-w-[280px] max-h-[300px] overflow-y-auto bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 rounded-md shadow-lg z-50'>
+                <div className='absolute top-full left-0 mt-1 min-w-[280px] max-h-[300px] overflow-y-auto bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 rounded-md shadow-lg z-[100]'>
                   {favoriteModels.length === 0 ? (
                     <div className='px-3 py-2 text-sm text-gray-500'>
                       {t('provider.noModelSelected', 'モデル未選択')}
@@ -144,7 +161,7 @@ const ChatViewTabs = ({
               <svg className='w-4 h-4' fill='none' stroke='currentColor' viewBox='0 0 24 24'>
                 <path strokeLinecap='round' strokeLinejoin='round' strokeWidth={2} d='M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4' />
               </svg>
-              {t('modelOptions', 'モデルオプション')}
+              {!isCompact && t('modelOptions', 'モデル設定')}
             </div>
           </div>
         )}
@@ -162,7 +179,7 @@ const ChatViewTabs = ({
             <svg className='w-3.5 h-3.5' stroke='currentColor' fill='none' strokeWidth='2' viewBox='0 0 24 24' strokeLinecap='round' strokeLinejoin='round'>
               <path d='M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z'></path>
             </svg>
-            {tMain('chat')}
+            {!isCompact && tMain('chat')}
           </button>
           <button
             className={`px-4 py-2 text-sm font-medium transition-colors flex items-center gap-1.5 ${
@@ -173,7 +190,7 @@ const ChatViewTabs = ({
             onClick={() => setActiveView('branch-editor')}
           >
             <BranchIcon className='w-3.5 h-3.5' />
-            {tMain('branchEditor')}
+            {!isCompact && tMain('branchEditor')}
           </button>
         </div>
       </div>
