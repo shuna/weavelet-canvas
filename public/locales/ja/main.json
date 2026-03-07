@@ -49,7 +49,7 @@
   "tokenCostModelNotRegistered": "料金不明: モデル未登録",
   "tokenCostNoPricingData": "料金不明: 料金データなし",
   "branchGenerate": "ブランチ",
-  "branchEditor": "ブランチエディタ",
+  "branchEditor": "分岐エディタ",
   "chat": "チャット",
   "branchOf": "{{current}} / {{total}}",
   "switchToBranch": "このブランチに切り替え",

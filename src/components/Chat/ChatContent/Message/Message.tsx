@@ -7,26 +7,23 @@ import MessageContent from './MessageContent';
 import { ContentInterface, Role } from '@type/chat';
 import RoleSelector from './RoleSelector';
 
-// const backgroundStyle: { [role in Role]: string } = {
-//   user: 'dark:bg-gray-800',
-//   assistant: 'bg-gray-50 dark:bg-gray-650',
-//   system: 'bg-gray-50 dark:bg-gray-650',
-// };
 const backgroundStyle = ['dark:bg-gray-800', 'bg-gray-50 dark:bg-gray-650'];
 
-const CollapseClickArea = ({
-  side,
+const CollapseToggle = ({
+  isCollapsed,
   onClick,
 }: {
-  side: 'left' | 'right';
+  isCollapsed: boolean;
   onClick: () => void;
 }) => (
   <div
-    className={`absolute top-0 bottom-0 w-3 z-10 cursor-pointer transition-colors duration-150 bg-gray-400/5 dark:bg-gray-300/5 hover:bg-gray-500/20 dark:hover:bg-gray-300/15 ${
-      side === 'left' ? 'left-0' : 'right-[14px]'
+    className={`absolute left-1.5 top-2 bottom-2 z-10 cursor-pointer transition-all duration-200 rounded-full ${
+      isCollapsed
+        ? 'w-1.5 bg-gray-300/50 dark:bg-gray-500/40 hover:bg-gray-400/60 dark:hover:bg-gray-400/50'
+        : 'w-1 bg-transparent hover:w-1.5 hover:bg-gray-400/40 dark:hover:bg-gray-300/25'
     }`}
     onClick={onClick}
-    title='Click to collapse/expand'
+    title={isCollapsed ? 'Expand' : 'Collapse'}
   />
 );
 
@@ -72,13 +69,13 @@ const Message = React.memo(
         }`}
       >
         {!sticky && (
-          <>
-            <CollapseClickArea side='left' onClick={handleToggleCollapse} />
-            <CollapseClickArea side='right' onClick={handleToggleCollapse} />
-          </>
+          <CollapseToggle
+            isCollapsed={isCollapsed}
+            onClick={handleToggleCollapse}
+          />
         )}
         <div
-          className={`text-base gap-4 md:gap-6 m-auto p-4 md:py-6 flex transition-all ease-in-out ${
+          className={`text-base gap-2.5 md:gap-4 m-auto p-4 pl-7 md:py-6 flex transition-all ease-in-out ${
             hideSideMenu
               ? 'md:max-w-5xl lg:max-w-5xl xl:max-w-6xl'
               : 'md:max-w-3xl lg:max-w-3xl xl:max-w-4xl'
@@ -87,7 +84,7 @@ const Message = React.memo(
           <Avatar role={role} />
           <div
             className={`w-[calc(100%-50px)] transition-[max-height] duration-200 ease-in-out ${
-              isCollapsed ? 'max-h-12 overflow-hidden' : ''
+              isCollapsed ? 'max-h-[5rem] overflow-hidden' : ''
             }`}
           >
             {advancedMode &&
@@ -105,7 +102,7 @@ const Message = React.memo(
           </div>
         </div>
         {isCollapsed && (
-          <div className='absolute bottom-0 left-0 right-0 h-8 bg-gradient-to-t from-white/80 dark:from-gray-800/80 to-transparent pointer-events-none' />
+          <div className='absolute bottom-0 left-0 right-0 h-6 bg-gradient-to-t from-white/90 dark:from-gray-800/90 to-transparent pointer-events-none' />
         )}
       </div>
     );
