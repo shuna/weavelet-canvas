@@ -1,3 +1,4 @@
+import { v4 as uuidv4 } from 'uuid';
 import { ChatInterface } from '@type/chat';
 
 /**
@@ -26,5 +27,8 @@ export const cloneChatAtIndex = (
  * Uses structuredClone for correctness without full-array deep clone.
  */
 export const deepCloneSingleChat = (chat: ChatInterface): ChatInterface => {
-  return structuredClone(chat);
+  return {
+    ...structuredClone(chat),
+    id: uuidv4(),
+  };
 };

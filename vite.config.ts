@@ -6,6 +6,10 @@ import topLevelAwait from 'vite-plugin-top-level-await';
 // https://vitejs.dev/config/
 export default defineConfig({
   plugins: [react(), wasm(), topLevelAwait()],
+  worker: {
+    format: 'es',
+    plugins: [wasm()],
+  },
   resolve: {
     alias: {
       '@icon/': new URL('./src/assets/icons/', import.meta.url).pathname,
@@ -21,11 +25,56 @@ export default defineConfig({
   },
   base: './',
   build: {
+    chunkSizeWarningLimit: 1200,
     rollupOptions: {
       output: {
-        manualChunks: {
-          'vendor-react': ['react', 'react-dom'],
-          'vendor-i18n': ['i18next', 'react-i18next'],
+        manualChunks(id) {
+          if (id.includes('node_modules/react/') || id.includes('node_modules/react-dom/')) {
+            return 'vendor-react';
+          }
+
+          if (id.includes('node_modules/i18next/') || id.includes('node_modules/react-i18next/')) {
+            return 'vendor-i18n';
+          }
+
+          if (
+            id.includes('node_modules/react-markdown/') ||
+            id.includes('node_modules/remark-gfm/') ||
+            id.includes('node_modules/remark-math/')
+          ) {
+            return 'vendor-markdown';
+          }
+
+          if (
+            id.includes('node_modules/rehype-katex/') ||
+            id.includes('node_modules/katex/')
+          ) {
+            return 'vendor-katex';
+          }
+
+          if (
+            id.includes('node_modules/rehype-highlight/') ||
+            id.includes('node_modules/highlight.js/')
+          ) {
+            return 'vendor-highlight';
+          }
+
+          if (
+            id.includes('node_modules/@dqbd/tiktoken/') ||
+            id.includes('cl100k_base.json')
+          ) {
+            return 'vendor-tiktoken';
+          }
+
+          if (
+            id.includes('node_modules/reactflow/') ||
+            id.includes('node_modules/dagre/') ||
+            id.includes('node_modules/d3-')
+          ) {
+            return 'vendor-graph';
+          }
+
+          return undefined;
         },
       },
     },

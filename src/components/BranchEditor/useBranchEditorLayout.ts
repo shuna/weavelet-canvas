@@ -1,6 +1,6 @@
 import { useMemo } from 'react';
 import dagre from 'dagre';
-import { BranchTree } from '@type/chat';
+import { BranchTree, isTextContent } from '@type/chat';
 import { Node, Edge } from 'reactflow';
 import useStore from '@store/store';
 import { resolveContent, ContentStoreData } from '@utils/contentStore';
@@ -74,8 +74,8 @@ function layoutSingleTree(
 
       const content = resolveContent(contentStore, node.contentHash);
       const textContent = content
-        .filter((c) => c.type === 'text')
-        .map((c) => (c as any).text || '')
+        .filter(isTextContent)
+        .map((c) => c.text)
         .join(' ');
 
       return {

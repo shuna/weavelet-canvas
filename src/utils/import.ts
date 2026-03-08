@@ -20,28 +20,115 @@ import { ExportV1, ExportV2, OpenAIChat, OpenAIPlaygroundJSON } from '@type/expo
 import { BranchNode, BranchTree } from '@type/chat';
 import { ContentStoreData, addContent, resolveContent } from '@utils/contentStore';
 import { modelOptions } from '@constants/modelLoader';
+import { ensureUniqueChatIds } from '@utils/chatIdentity';
 import i18next from 'i18next';
 
-export const validateAndFixChats = (chats: any): chats is ChatInterface[] => {
+type UnknownRecord = Record<string, unknown>;
+type MutableChatCandidate = Partial<ChatInterface> &
+  UnknownRecord & {
+    messages?: unknown;
+    config?: unknown;
+  };
+type OpenAIMessageNode = {
+  id: string;
+  parent: string | null;
+  children: string[];
+  message?: {
+    author: {
+      role: string;
+    };
+    content: unknown;
+  };
+};
+
+type OpenAIConfigCarrier = Partial<
+  Pick<
+    ConfigInterface,
+    | 'temperature'
+    | 'max_tokens'
+    | 'top_p'
+    | 'frequency_penalty'
+    | 'presence_penalty'
+  >
+> & {
+  model?: unknown;
+};
+
+const hasOwn = <T extends object>(
+  value: T,
+  key: PropertyKey
+): key is keyof T => Object.prototype.hasOwnProperty.call(value, key);
+
+const isRecord = (value: unknown): value is UnknownRecord =>
+  typeof value === 'object' && value !== null;
+
+const asConfigCarrier = (value: unknown): OpenAIConfigCarrier =>
+  (isRecord(value) ? value : {}) as OpenAIConfigCarrier;
+
+const extractConfigOverrides = (value: unknown): Partial<ConfigInterface> => {
+  const source = asConfigCarrier(value);
+  const overrides: Partial<ConfigInterface> = {};
+
+  if (typeof source.temperature === 'number') overrides.temperature = source.temperature;
+  if (typeof source.max_tokens === 'number') overrides.max_tokens = source.max_tokens;
+  if (typeof source.top_p === 'number') overrides.top_p = source.top_p;
+  if (typeof source.frequency_penalty === 'number') {
+    overrides.frequency_penalty = source.frequency_penalty;
+  }
+  if (typeof source.presence_penalty === 'number') {
+    overrides.presence_penalty = source.presence_penalty;
+  }
+  if (typeof source.model === 'string' && modelOptions.includes(source.model)) {
+    overrides.model = source.model;
+  }
+
+  return overrides;
+};
+
+const buildImportedConfig = (value: unknown): ConfigInterface => ({
+  ..._defaultChatConfig,
+  ...extractConfigOverrides(value),
+});
+
+const isOpenAIMessageContentParts = (
+  value: unknown
+): value is { parts: string[] } =>
+  isRecord(value) &&
+  hasOwn(value, 'parts') &&
+  Array.isArray(value.parts) &&
+  value.parts.every((part) => typeof part === 'string');
+
+const isRole = (value: unknown): value is MessageInterface['role'] =>
+  typeof value === 'string' && roles.includes(value as MessageInterface['role']);
+
+export const validateAndFixChats = (chats: unknown): chats is ChatInterface[] => {
   if (!Array.isArray(chats)) return false;
 
   for (const chat of chats) {
-    if (!(typeof chat.id === 'string')) chat.id = uuidv4();
-    if (!(typeof chat.title === 'string') || chat.title === '') return false;
+    if (!isRecord(chat)) return false;
 
-    if (chat.titleSet === undefined) chat.titleSet = false;
-    if (!(typeof chat.titleSet === 'boolean')) return false;
+    const mutableChat = chat as MutableChatCandidate;
 
-    if (!validateMessage(chat.messages)) return false;
-    if (!validateAndFixChatConfig(chat.config)) return false;
+    if (!(typeof mutableChat.id === 'string')) mutableChat.id = uuidv4();
+    if (!(typeof mutableChat.title === 'string') || mutableChat.title === '') return false;
+
+    if (mutableChat.titleSet === undefined) mutableChat.titleSet = false;
+    if (!(typeof mutableChat.titleSet === 'boolean')) return false;
+
+    if (!validateMessage(mutableChat.messages)) return false;
+    if (!validateAndFixChatConfig(mutableChat.config)) return false;
   }
+
+  ensureUniqueChatIds(chats as ChatInterface[]);
 
   return true;
 };
 
-const validateMessage = (messages: MessageInterface[]): boolean => {
+const validateMessage = (messages: unknown): messages is MessageInterface[] => {
   if (!Array.isArray(messages)) return false;
   for (const message of messages) {
+    if (!isRecord(message)) return false;
+
     if (typeof message.content === 'string') {
       // Convert string content to an array containing that string
       // Ensure the TextContent format
@@ -51,39 +138,41 @@ const validateMessage = (messages: MessageInterface[]): boolean => {
     }
 
     if (!(typeof message.role === 'string')) return false;
-    if (!roles.includes(message.role)) return false;
+    if (!roles.includes(message.role as MessageInterface['role'])) return false;
   }
   return true;
 };
 
-const validateAndFixChatConfig = (config: ConfigInterface) => {
-  if (config === undefined) config = _defaultChatConfig;
-  if (!(typeof config === 'object')) return false;
+const validateAndFixChatConfig = (config: unknown): config is ConfigInterface => {
+  if (config === undefined) return true;
+  if (!isRecord(config)) return false;
 
-  if (!config.temperature) config.temperature = _defaultChatConfig.temperature;
+  if (config.temperature === undefined) config.temperature = _defaultChatConfig.temperature;
   if (!(typeof config.temperature === 'number')) return false;
 
-  if (!config.presence_penalty)
+  if (config.presence_penalty === undefined)
     config.presence_penalty = _defaultChatConfig.presence_penalty;
   if (!(typeof config.presence_penalty === 'number')) return false;
 
-  if (!config.top_p) config.top_p = _defaultChatConfig.top_p;
+  if (config.top_p === undefined) config.top_p = _defaultChatConfig.top_p;
   if (!(typeof config.top_p === 'number')) return false;
 
-  if (!config.frequency_penalty)
+  if (config.frequency_penalty === undefined)
     config.frequency_penalty = _defaultChatConfig.frequency_penalty;
   if (!(typeof config.frequency_penalty === 'number')) return false;
 
-  if (!config.model) config.model = defaultModel;
-  if (!modelOptions.includes(config.model)) config.model = defaultModel;
+  const modelId =
+    typeof config.model === 'string' && config.model.length > 0
+      ? config.model
+      : defaultModel;
+  if (!modelOptions.includes(modelId)) config.model = defaultModel;
+  else config.model = modelId;
 
   return true;
 };
 
-export const isLegacyImport = (importedData: any) => {
-  if (Array.isArray(importedData)) return true;
-  return false;
-};
+export const isLegacyImport = (importedData: unknown): importedData is unknown[] =>
+  Array.isArray(importedData);
 
 export const validateFolders = (
   folders: FolderCollection
@@ -121,11 +210,24 @@ export const validateExportV2 = (data: ExportV2): data is ExportV2 => {
 };
 
 // Type guard to check if content is ContentInterface
-const isContentInterface = (content: any): content is ContentInterface => {
-  return typeof content === 'object' && 'type' in content;
+const isContentInterface = (content: unknown): content is ContentInterface => {
+  if (!isRecord(content) || typeof content.type !== 'string') return false;
+  if (content.type === 'text') {
+    return typeof content.text === 'string';
+  }
+  if (content.type === 'image_url') {
+    return (
+      isRecord(content.image_url) &&
+      typeof content.image_url.url === 'string' &&
+      typeof content.image_url.detail === 'string'
+    );
+  }
+  return false;
 };
 
-export const isOpenAIContent = (content: any) => {
+export const isOpenAIContent = (
+  content: unknown
+): content is OpenAIChat | OpenAIPlaygroundJSON | OpenAIChat[] => {
   return (
     isOpenAIChat(content) ||
     isOpenAIPlaygroundJSON(content) ||
@@ -133,18 +235,18 @@ export const isOpenAIContent = (content: any) => {
   );
 };
 
-const isOpenAIChat = (content: any): content is OpenAIChat => {
-  return typeof content === 'object' && 'mapping' in content;
+const isOpenAIChat = (content: unknown): content is OpenAIChat => {
+  return isRecord(content) && hasOwn(content, 'mapping') && isRecord(content.mapping);
 };
-const isOpenAIDataExport = (content: any): content is OpenAIChat => {
+const isOpenAIDataExport = (content: unknown): content is OpenAIChat[] => {
   return (
     Array.isArray(content) && content.length > 0 && isOpenAIChat(content[0])
   );
 };
 const isOpenAIPlaygroundJSON = (
-  content: any
+  content: unknown
 ): content is OpenAIPlaygroundJSON => {
-  return typeof content === 'object' && 'messages' in content;
+  return isRecord(content) && hasOwn(content, 'messages') && Array.isArray(content.messages);
 };
 
 // Define the custom error class
@@ -156,19 +258,19 @@ export class PartialImportError extends Error {
 }
 
 export const convertOpenAIToConversationFormatPartialOK = (
-  openAIChatExport: any
+  openAIChatExport: OpenAIChat | OpenAIPlaygroundJSON
 ): ChatInterface => {
   return convertOpenAIToConversationFormat(openAIChatExport, true);
 };
 
 export const convertOpenAIToConversationFormatPartialNTY = (
-  openAIChatExport: any
+  openAIChatExport: OpenAIChat | OpenAIPlaygroundJSON
 ): ChatInterface => {
   return convertOpenAIToConversationFormat(openAIChatExport, false);
 };
 // Convert OpenAI chat exports into the app's conversation format.
 export const convertOpenAIToConversationFormat = (
-  openAIChatExport: any,
+  openAIChatExport: OpenAIChat | OpenAIPlaygroundJSON,
   shouldAllowPartialImport: boolean
 ): ChatInterface => {
   const messages: MessageInterface[] = [];
@@ -180,19 +282,15 @@ export const convertOpenAIToConversationFormat = (
   let emptyOrNullMessagesCount = 0; // Counter for empty or null messages
 
   if (isOpenAIChat(openAIChatExport)) {
-    let deepestNode: any = null;
+    let deepestNode: OpenAIMessageNode | null = null;
 
     // Traverse the chat tree and find the deepest node
     const traverseTree = (id: string, currentDepth: number) => {
-      const node = openAIChatExport.mapping[id];
-      console.log(`Traversing node with id ${id} at depth ${currentDepth}`);
+      const node = openAIChatExport.mapping[id] as OpenAIMessageNode;
 
       // If the current depth is greater than maxDepth, update deepestNode and maxDepth
       if (currentDepth > maxDepth) {
         deepestNode = node;
-        if (!node.parent) {
-          console.log('no parent for node with id ' + node.id);
-        }
         maxDepth = currentDepth;
       }
 
@@ -211,47 +309,52 @@ export const convertOpenAIToConversationFormat = (
     let currentDepth = 0;
     while (deepestNode) {
       deepestPathIds.push(deepestNode.id); // Record the ID of the deepest part
-      console.log(`Backtracking node with id ${deepestNode.id} at depth ${currentDepth}`);
 
       if (deepestNode.message) {
         const { role } = deepestNode.message.author;
         const content = deepestNode.message.content;
 
-        if (Array.isArray(content.parts)) {
+        if (isOpenAIMessageContentParts(content)) {
           const textContent = content.parts.join('') || '';
           if (textContent.length > 0) {
+            if (!isRole(role)) {
+              emptyOrNullMessagesCount++;
+              emptyOrNullMessageIds.push(deepestNode.id);
+              continue;
+            }
             // Insert each message at the beginning of the array to maintain order from root to deepest node
             messages.unshift({
               role,
               content: [{ type: 'text', text: textContent }],
             });
             messageIds.push(deepestNode.id);
-            console.log(`Node with id ${deepestNode.id} added to messages.`);
           } else {
-            console.log(`Node with id ${deepestNode.id} has empty text content.`);
             emptyOrNullMessagesCount++;
             emptyOrNullMessageIds.push(deepestNode.id);
           }
         } else if (isContentInterface(content)) {
+          if (!isRole(role)) {
+            emptyOrNullMessagesCount++;
+            emptyOrNullMessageIds.push(deepestNode.id);
+            continue;
+          }
           // Insert each message at the beginning of the array
           messages.unshift({ role, content: [content] });
           messageIds.push(deepestNode.id);
-          console.log(`Node with id ${deepestNode.id} added to messages.`);
         } else {
-          console.log(`Node with id ${deepestNode.id} has invalid content.`);
           emptyOrNullMessagesCount++;
           emptyOrNullMessageIds.push(deepestNode.id);
         }
       } else {
-        console.log(`Node with id ${deepestNode.id} has no message.`);
         emptyOrNullMessagesCount++;
         emptyOrNullMessageIds.push(deepestNode.id);
       }
 
       // Move up to the parent node
-      const parentNodeId = deepestNode.parent ? deepestNode.parent : null;
-      console.log(`Moving from node ${deepestNode.id} to parent node ${parentNodeId}`);
-      deepestNode = parentNodeId ? openAIChatExport.mapping[parentNodeId] : null;
+      const parentNodeId: string | null = deepestNode.parent ? deepestNode.parent : null;
+      deepestNode = parentNodeId
+        ? (openAIChatExport.mapping[parentNodeId] as OpenAIMessageNode)
+        : null;
       currentDepth++;
     }
 
@@ -260,45 +363,16 @@ export const convertOpenAIToConversationFormat = (
       upwardPathIds.push(deepestPathIds[i]);
     }
 
-    console.log('Deepest Path IDs:', deepestPathIds);
-    console.log('Upward Path IDs:', upwardPathIds);
-    console.log('Message IDs:', messageIds);
-    console.log('Empty or Null Message IDs:', emptyOrNullMessageIds);
-    console.log('Empty or Null Messages Count:', emptyOrNullMessagesCount);
-    console.log('messages.length:', messages.length);
-
     // Show differences
     const diffDeepestToMessages = deepestPathIds.filter(id => !messageIds.includes(id));
-    console.log('Difference between Deepest Path IDs and Message IDs:', diffDeepestToMessages);
 
     // Check if the difference between diffDeepestToMessages and emptyOrNullMessageIds is empty
     const diffDeepestToMessagesAndEmpty = diffDeepestToMessages.filter(id => !emptyOrNullMessageIds.includes(id));
-    console.log('Difference between diffDeepestToMessages and Empty or Null Message IDs:', diffDeepestToMessagesAndEmpty);
 
     if (!shouldAllowPartialImport) {
       // If the difference between diffDeepestToMessages and emptyOrNullMessageIds is not empty, throw PartialImportError
       if (diffDeepestToMessagesAndEmpty.length > 0) {
-        const config: ConfigInterface = {
-          ..._defaultChatConfig,
-          ...((openAIChatExport as any).temperature !== undefined && {
-            temperature: (openAIChatExport as any).temperature,
-          }),
-          ...((openAIChatExport as any).max_tokens !== undefined && {
-            max_tokens: (openAIChatExport as any).max_tokens,
-          }),
-          ...((openAIChatExport as any).top_p !== undefined && {
-            top_p: (openAIChatExport as any).top_p,
-          }),
-          ...((openAIChatExport as any).frequency_penalty !== undefined && {
-            frequency_penalty: (openAIChatExport as any).frequency_penalty,
-          }),
-          ...((openAIChatExport as any).presence_penalty !== undefined && {
-            presence_penalty: (openAIChatExport as any).presence_penalty,
-          }),
-          ...((openAIChatExport as any).model !== undefined && {
-            model: (openAIChatExport as any).model,
-          }),
-        };
+        const config = buildImportedConfig(openAIChatExport);
 
         const result: ChatInterface = {
           id: uuidv4(),
@@ -351,32 +425,15 @@ export const convertOpenAIToConversationFormat = (
   }
 
   // Extend or override _defaultChatConfig with values from openAIChat
-  const config: ConfigInterface = {
-    ..._defaultChatConfig,
-    ...((openAIChatExport as any).temperature !== undefined && {
-      temperature: (openAIChatExport as any).temperature,
-    }),
-    ...((openAIChatExport as any).max_tokens !== undefined && {
-      max_tokens: (openAIChatExport as any).max_tokens,
-    }),
-    ...((openAIChatExport as any).top_p !== undefined && {
-      top_p: (openAIChatExport as any).top_p,
-    }),
-    ...((openAIChatExport as any).frequency_penalty !== undefined && {
-      frequency_penalty: (openAIChatExport as any).frequency_penalty,
-    }),
-    ...((openAIChatExport as any).presence_penalty !== undefined && {
-      presence_penalty: (openAIChatExport as any).presence_penalty,
-    }),
-    ...((openAIChatExport as any).model !== undefined && {
-      model: (openAIChatExport as any).model,
-    }),
-  };
+  const config = buildImportedConfig(openAIChatExport);
 
   // Return the chat interface object
   return {
     id: uuidv4(),
-    title: openAIChatExport.title || 'Untitled Chat',
+    title:
+      'title' in openAIChatExport && typeof openAIChatExport.title === 'string'
+        ? openAIChatExport.title
+        : 'Untitled Chat',
     messages,
     config,
     titleSet: true,
@@ -401,16 +458,17 @@ export const convertOpenAIToBranchTree = (
     idMap[oaiId] = newId;
 
     let role: 'user' | 'assistant' | 'system' = 'system';
-    let content: ContentInterface[] = [{ type: 'text', text: '' } as any];
+      let content: ContentInterface[] = [{ type: 'text', text: '' }];
 
     if (entry.message) {
-      role = entry.message.author.role as any;
-      if (!roles.includes(role)) role = 'system';
+      role = isRole(entry.message.author.role)
+        ? entry.message.author.role
+        : 'system';
 
       const msgContent = entry.message.content;
-      if (Array.isArray((msgContent as any).parts)) {
-        const text = (msgContent as any).parts.join('') || '';
-        content = [{ type: 'text', text } as any];
+      if (isOpenAIMessageContentParts(msgContent)) {
+        const text = msgContent.parts.join('') || '';
+        content = [{ type: 'text', text }];
       } else if (isContentInterface(msgContent)) {
         content = [msgContent];
       }
@@ -466,7 +524,7 @@ export const convertOpenAIToBranchTree = (
     .map((id) => nodes[id])
     .filter((n) => {
       const c = resolveContent(contentStore, n.contentHash);
-      return c.some((ci) => (ci as any).text?.length > 0);
+      return c.some((ci) => isTextContent(ci) && ci.text.length > 0);
     })
     .map((n) => ({
       role: n.role,
@@ -478,7 +536,7 @@ export const convertOpenAIToBranchTree = (
 
 // Import OpenAI chat data and convert it into the app's conversation format.
 export const importOpenAIChatExport = (
-  openAIChatExport: any,
+  openAIChatExport: OpenAIChat | OpenAIPlaygroundJSON | OpenAIChat[],
   shouldAllowPartialImport: boolean
 ) => {
   if (Array.isArray(openAIChatExport)) {
@@ -487,7 +545,7 @@ export const importOpenAIChatExport = (
     } else {
       return openAIChatExport.map(convertOpenAIToConversationFormatPartialNTY);
     }
-  } else if (typeof openAIChatExport === 'object') {
+  } else {
     return [
       convertOpenAIToConversationFormat(
         openAIChatExport,

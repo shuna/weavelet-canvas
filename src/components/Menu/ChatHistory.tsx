@@ -13,6 +13,7 @@ import { formatNumber } from '@utils/chat';
 import { retainContent, releaseContent } from '@utils/contentStore';
 import { cloneChatAtIndex, deepCloneSingleChat } from '@utils/chatShallowClone';
 import { stopSessionsForChat } from '@hooks/useSubmit';
+import { BranchNode } from '@type/chat';
 
 const ChatHistoryClass = {
   normal:
@@ -92,7 +93,7 @@ const ChatHistory = React.memo(
       if (updatedChats.length > 0) {
         setCurrentChatIndex(0);
         setChats(updatedChats);
-        useStore.setState({ contentStore } as any);
+        useStore.setState({ contentStore });
       } else {
         initialiseNewChat();
       }
@@ -170,7 +171,7 @@ const ChatHistory = React.memo(
 
         const contentStore = { ...useStore.getState().contentStore };
         if (clonedChat.branchTree) {
-          for (const node of Object.values(clonedChat.branchTree.nodes) as any[]) {
+          for (const node of Object.values(clonedChat.branchTree.nodes) as BranchNode[]) {
             retainContent(contentStore, node.contentHash);
           }
         }
@@ -179,7 +180,7 @@ const ChatHistory = React.memo(
         updatedChats.unshift(clonedChat);
 
         setChats(updatedChats);
-        useStore.setState({ contentStore } as any);
+        useStore.setState({ contentStore });
         setCurrentChatIndex(0);
       }
     };

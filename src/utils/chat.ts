@@ -1,4 +1,3 @@
-import html2canvas from 'html2canvas';
 import { ChatInterface, ContentInterface, isImageContent, isTextContent } from '@type/chat';
 
 export const formatNumber = (num: number): string => {
@@ -31,6 +30,7 @@ export const htmlToImg = async (html: HTMLDivElement) => {
   // Temporarily set position to absolute
   html.style.position = 'absolute';
 
+  const { default: html2canvas } = await import('html2canvas');
   const canvas = await html2canvas(html);
 
   // Revert styles

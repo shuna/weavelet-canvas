@@ -1,39 +1,15 @@
-import React, { memo, useEffect, useState, useRef, ChangeEvent } from 'react';
+import React from 'react';
 import { useTranslation } from 'react-i18next';
-import useStore from '@store/store';
-
-import useSubmit from '@hooks/useSubmit';
-
-import {
-  ChatInterface,
-  ContentInterface,
-  ImageContentInterface,
-  TextContentInterface,
-} from '@type/chat';
-
-import PopupModal from '@components/PopupModal';
-import TokenCount from '@components/TokenCount';
-import CommandPrompt from '../CommandPrompt';
-import { defaultModel } from '@constants/chat';
-import AttachmentIcon from '@icon/AttachmentIcon';
-import { ModelOptions } from '@utils/modelReader';
+import { ContentInterface, TextContentInterface } from '@type/chat';
 import { modelTypes } from '@constants/modelLoader';
-import { toast } from 'react-toastify';
-import BranchIcon from '@icon/BranchIcon';
-import {
-  truncateActivePathAfterIndex,
-  upsertActivePathMessage,
-} from '@utils/branchUtils';
-
-function isChatBusy(): boolean {
-  const state = useStore.getState();
-  const chatId = state.chats?.[state.currentChatIndex]?.id ?? '';
-  return Object.values(state.generatingSessions).some((s) => s.chatId === chatId);
-}
+import PopupModal from '@components/PopupModal';
+import AttachmentIcon from '@icon/AttachmentIcon';
+import EditViewButtons from './EditViewButtons';
+import { useEditViewLogic } from './useEditViewLogic';
 
 const EditView = ({
   role,
-  content: content,
+  content,
   setIsEdit,
   messageIndex,
   sticky,
@@ -44,314 +20,9 @@ const EditView = ({
   messageIndex: number;
   sticky?: boolean;
 }) => {
-  const setCurrentChatIndex = useStore((state) => state.setCurrentChatIndex);
-  const inputRole = useStore((state) => state.inputRole);
-  const setChats = useStore((state) => state.setChats);
-  var currentChatIndex = useStore((state) => state.currentChatIndex);
-  const model = useStore((state) => {
-    const isInitialised =
-      state.chats &&
-      state.chats.length > 0 &&
-      state.currentChatIndex >= 0 &&
-      state.currentChatIndex < state.chats.length;
-    if (!isInitialised) {
-      currentChatIndex = 0;
-      setCurrentChatIndex(0);
-    }
-    return isInitialised
-      ? state.chats![state.currentChatIndex].config.model
-      : defaultModel;
-  });
-  const favoriteModels = useStore((state) => state.favoriteModels) || [];
-  const modelValid = !!model && favoriteModels.some((f) => f.modelId === model);
-
-  const [_content, _setContent] = useState<ContentInterface[]>(content);
-  const [isModalOpen, setIsModalOpen] = useState<boolean>(false);
-  const [imageUrl, setImageUrl] = useState<string>('');
-  const textareaRef = React.useRef<HTMLTextAreaElement>(null);
-
   const { t } = useTranslation();
+  const logic = useEditViewLogic({ content, setIsEdit, messageIndex, sticky });
 
-  const resetTextAreaHeight = () => {
-    if (textareaRef.current) textareaRef.current.style.height = 'auto';
-  };
-
-  const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
-    const isMobile =
-      /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini|playbook|silk/i.test(
-        navigator.userAgent
-      );
-
-    if (e.key === 'Enter' && !isMobile && !e.nativeEvent.isComposing) {
-      const enterToSubmit = useStore.getState().enterToSubmit;
-
-      if (e.ctrlKey && e.shiftKey) {
-        e.preventDefault();
-        handleGenerate();
-        resetTextAreaHeight();
-      } else if (
-        (enterToSubmit && !e.shiftKey) ||
-        (!enterToSubmit && (e.ctrlKey || e.shiftKey))
-      ) {
-        if (sticky) {
-          e.preventDefault();
-          handleGenerate();
-          resetTextAreaHeight();
-        } else {
-          handleSave();
-        }
-      }
-    }
-  };
-
-  // convert message blob urls to base64
-  const blobToBase64 = async (blob: Blob) => {
-    return new Promise((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onerror = reject;
-      reader.onload = () => {
-        resolve(reader.result);
-      };
-      reader.readAsDataURL(blob);
-    });
-  };
-
-  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const updatedChats: ChatInterface[] = JSON.parse(
-      JSON.stringify(useStore.getState().chats)
-    );
-    const chat = updatedChats[currentChatIndex];
-    const files = e.target.files!;
-    const newImageURLs = Array.from(files).map((file: Blob) =>
-      URL.createObjectURL(file)
-    );
-    const newImages = await Promise.all(
-      newImageURLs.map(async (url) => {
-        const blob = await fetch(url).then((r) => r.blob());
-        return {
-          type: 'image_url',
-          image_url: {
-            detail: chat.imageDetail,
-            url: (await blobToBase64(blob)) as string,
-          },
-        } as ImageContentInterface;
-      })
-    );
-    const updatedContent = [..._content, ...newImages];
-
-    _setContent(updatedContent);
-  };
-
-  const handleImageUrlChange = () => {
-    if (imageUrl.trim() === '') return;
-    const updatedChats: ChatInterface[] = JSON.parse(
-      JSON.stringify(useStore.getState().chats)
-    );
-    const chat = updatedChats[currentChatIndex];
-    const newImage: ImageContentInterface = {
-      type: 'image_url',
-      image_url: {
-        detail: chat.imageDetail,
-        url: imageUrl,
-      },
-    };
-
-    const updatedContent = [..._content, newImage];
-    _setContent(updatedContent);
-    setImageUrl('');
-  };
-
-  const handleImageDetailChange = (index: number, detail: string) => {
-    const updatedImages = [..._content];
-    updatedImages[index + 1].image_url.detail = detail;
-    _setContent(updatedImages);
-  };
-
-  const handleRemoveImage = (index: number) => {
-    const updatedImages = [..._content];
-    updatedImages.splice(index + 1, 1);
-
-    _setContent(updatedImages);
-  };
-  const handleSave = () => {
-    const hasTextContent = (_content[0] as TextContentInterface).text !== '';
-    const hasImageContent = Array.isArray(_content) && _content.some(
-      (content) => content.type === 'image_url'
-    );
-
-    if (
-      sticky &&
-      ((!hasTextContent && !hasImageContent) || isChatBusy())
-    ) {
-      return;
-    }
-    const chats = useStore.getState().chats!;
-    const updatedChats = chats.slice();
-    const chat = { ...chats[currentChatIndex], messages: [...chats[currentChatIndex].messages] };
-    updatedChats[currentChatIndex] = chat;
-    const updatedMessages = chat.messages;
-
-    if (sticky) {
-      const newMessage = { role: inputRole, content: _content };
-      updatedMessages.push(newMessage);
-      upsertActivePathMessage(chat, updatedMessages.length - 1, newMessage, useStore.getState().contentStore);
-      _setContent([
-        {
-          type: 'text',
-          text: '',
-        } as TextContentInterface,
-      ]);
-      resetTextAreaHeight();
-    } else {
-      updatedMessages[messageIndex] = { ...updatedMessages[messageIndex], content: _content };
-      upsertActivePathMessage(chat, messageIndex, updatedMessages[messageIndex], useStore.getState().contentStore);
-      setIsEdit(false);
-    }
-    setChats(updatedChats);
-  };
-
-  const { handleSubmit, handleSubmitMidChat } = useSubmit();
-
-  const handleBranchOnly = () => {
-    if (isChatBusy()) return;
-    if (sticky) return;
-
-    const { ensureBranchTree, createBranch } = useStore.getState();
-    ensureBranchTree(currentChatIndex);
-
-    const tree = useStore.getState().chats![currentChatIndex].branchTree!;
-    const nodeId = tree.activePath[messageIndex];
-    if (!nodeId) return;
-
-    createBranch(currentChatIndex, nodeId, _content);
-    setIsEdit(false);
-  };
-
-  const handleBranchGenerate = () => {
-    if (isChatBusy() || !modelValid) return;
-    if (sticky) return;
-
-    const { ensureBranchTree, createBranch } = useStore.getState();
-    ensureBranchTree(currentChatIndex);
-
-    const tree = useStore.getState().chats![currentChatIndex].branchTree!;
-    const nodeId = tree.activePath[messageIndex];
-    if (!nodeId) return;
-
-    createBranch(currentChatIndex, nodeId, _content);
-    setIsEdit(false);
-    handleSubmit();
-  };
-
-  const handleGenerateNextOnly = () => {
-    if (isChatBusy() || !modelValid) return;
-
-    const chats = useStore.getState().chats!;
-    const updatedChats = chats.slice();
-    const chat = { ...chats[currentChatIndex], messages: [...chats[currentChatIndex].messages] };
-    updatedChats[currentChatIndex] = chat;
-    const updatedMessages = chat.messages;
-
-    // Update message content
-    updatedMessages[messageIndex] = { ...updatedMessages[messageIndex], content: _content };
-    upsertActivePathMessage(chat, messageIndex, updatedMessages[messageIndex], useStore.getState().contentStore);
-    // Remove only the next message if it exists
-    const nextIndex = messageIndex + 1;
-    if (nextIndex < updatedMessages.length) {
-      updatedMessages.splice(nextIndex, 1);
-    }
-    setIsEdit(false);
-    setChats(updatedChats);
-    handleSubmitMidChat(nextIndex);
-  };
-
-  const handleGenerate = () => {
-    const hasTextContent = (_content[0] as TextContentInterface).text !== '';
-    const hasImageContent = Array.isArray(_content) && _content.some(
-      (content) => content.type === 'image_url'
-    );
-
-    if (isChatBusy() || !modelValid) {
-      return;
-    }
-
-    const chats = useStore.getState().chats!;
-    const updatedChats = chats.slice();
-    const chat = { ...chats[currentChatIndex], messages: [...chats[currentChatIndex].messages] };
-    updatedChats[currentChatIndex] = chat;
-    const updatedMessages = chat.messages;
-
-    if (sticky) {
-      if (hasTextContent || hasImageContent) {
-        const newMessage = { role: inputRole, content: _content };
-        updatedMessages.push(newMessage);
-        upsertActivePathMessage(chat, updatedMessages.length - 1, newMessage, useStore.getState().contentStore);
-      }
-      _setContent([
-        {
-          type: 'text',
-          text: '',
-        } as TextContentInterface,
-      ]);
-      resetTextAreaHeight();
-    } else {
-      updatedMessages[messageIndex] = { ...updatedMessages[messageIndex], content: _content };
-      upsertActivePathMessage(chat, messageIndex, updatedMessages[messageIndex], useStore.getState().contentStore);
-      chat.messages = updatedMessages.slice(0, messageIndex + 1);
-      truncateActivePathAfterIndex(chat, messageIndex);
-      setIsEdit(false);
-    }
-    setChats(updatedChats);
-    handleSubmit();
-  };
-
-  const isTextContent = (
-    content: ContentInterface
-  ): content is TextContentInterface => {
-    return content.type === 'text';
-  };
-
-  const handlePaste = async (e: React.ClipboardEvent<HTMLTextAreaElement>) => {
-    const items = e.clipboardData.items;
-    const chat = useStore.getState().chats![currentChatIndex];
-    for (const item of items) {
-      if (item.type.startsWith('image/')) {
-        const blob = item.getAsFile();
-        if (blob) {
-          const base64Image = (await blobToBase64(blob)) as string;
-          const newImage: ImageContentInterface = {
-            type: 'image_url',
-            image_url: {
-              detail: chat.imageDetail,
-              url: base64Image,
-            },
-          };
-          const updatedContent = [..._content, newImage];
-          _setContent(updatedContent);
-        }
-      }
-    }
-  };
-
-  useEffect(() => {
-    if (textareaRef.current) {
-      textareaRef.current.style.height = 'auto';
-      textareaRef.current.style.height = `${textareaRef.current.scrollHeight}px`;
-    }
-  }, [(_content[0] as TextContentInterface).text]);
-
-  useEffect(() => {
-    if (textareaRef.current) {
-      textareaRef.current.style.height = 'auto';
-      textareaRef.current.style.height = `${textareaRef.current.scrollHeight}px`;
-    }
-  }, []);
-
-  const fileInputRef = useRef(null);
-  const handleUploadButtonClick = () => {
-    // Trigger the file input when the custom button is clicked
-    (fileInputRef.current! as HTMLInputElement).click();
-  };
   return (
     <div className='relative'>
       <div
@@ -362,352 +33,69 @@ const EditView = ({
         }`}
       >
         <div className='relative flex items-start'>
-          {modelTypes[model] == 'image' && (
-            <>
-              <button
-                className='absolute left-0 bottom-0  btn btn-secondary h-10 ml-[-1.2rem] mb-[-0.4rem]'
-                onClick={handleUploadButtonClick}
-                aria-label={'Upload Images'}
-              >
-                <div className='flex items-center justify-center gap-2'>
-                  <AttachmentIcon />
-                </div>
-              </button>
-            </>
+          {modelTypes[logic.model] == 'image' && (
+            <button
+              className='absolute left-0 bottom-0 btn btn-secondary h-10 ml-[-1.2rem] mb-[-0.4rem]'
+              onClick={logic.handleUploadButtonClick}
+              aria-label='Upload Images'
+            >
+              <div className='flex items-center justify-center gap-2'>
+                <AttachmentIcon />
+              </div>
+            </button>
           )}
-          {/* Place the AttachmentIcon directly over the textarea */}
           <textarea
-            ref={textareaRef}
+            ref={logic.textareaRef}
             className={`m-0 resize-none rounded-lg bg-transparent overflow-y-hidden focus:ring-0 focus-visible:ring-0 leading-7 w-full placeholder:text-gray-500/40 pr-10 ${
-              modelTypes[model] == 'image' ? 'pl-7' : ''
-            }`} // Adjust padding-right to make space for the icon
+              modelTypes[logic.model] == 'image' ? 'pl-7' : ''
+            }`}
             onChange={(e) => {
-              _setContent((prev) => [
+              logic._setContent((prev) => [
                 { type: 'text', text: e.target.value },
                 ...prev.slice(1),
               ]);
             }}
-            value={(_content[0] as TextContentInterface).text}
+            value={(logic._content[0] as TextContentInterface).text}
             placeholder={t('submitPlaceholder') as string}
-            onKeyDown={handleKeyDown}
-            onPaste={handlePaste}
+            onKeyDown={logic.handleKeyDown}
+            onPaste={logic.handlePaste}
             rows={1}
-          ></textarea>
+          />
         </div>
       </div>
       <EditViewButtons
         sticky={sticky}
-        handleFileChange={handleFileChange}
-        handleImageDetailChange={handleImageDetailChange}
-        handleRemoveImage={handleRemoveImage}
-        handleGenerate={handleGenerate}
-        handleGenerateNextOnly={handleGenerateNextOnly}
-        handleBranchOnly={handleBranchOnly}
-        handleBranchGenerate={handleBranchGenerate}
-        handleSave={handleSave}
-        setIsModalOpen={setIsModalOpen}
+        handleFileChange={logic.handleFileChange}
+        handleImageDetailChange={logic.handleImageDetailChange}
+        handleRemoveImage={logic.handleRemoveImage}
+        handleGenerate={logic.handleGenerate}
+        handleGenerateNextOnly={logic.handleGenerateNextOnly}
+        handleBranchOnly={logic.handleBranchOnly}
+        handleBranchGenerate={logic.handleBranchGenerate}
+        handleSave={logic.handleSave}
+        setIsModalOpen={logic.setIsModalOpen}
         setIsEdit={setIsEdit}
-        _setContent={_setContent}
-        _content={_content}
-        imageUrl={imageUrl}
-        setImageUrl={setImageUrl}
-        handleImageUrlChange={handleImageUrlChange}
-        fileInputRef={fileInputRef}
-        model={model}
-        modelValid={modelValid}
+        _setContent={logic._setContent}
+        _content={logic._content}
+        imageUrl={logic.imageUrl}
+        setImageUrl={logic.setImageUrl}
+        handleImageUrlChange={logic.handleImageUrlChange}
+        fileInputRef={logic.fileInputRef}
+        model={logic.model}
+        modelValid={logic.modelValid}
         messageIndex={messageIndex}
         role={role}
       />
-      {isModalOpen && (
+      {logic.isModalOpen && (
         <PopupModal
-          setIsModalOpen={setIsModalOpen}
+          setIsModalOpen={logic.setIsModalOpen}
           title={t('warning') as string}
           message={t('clearMessageWarning') as string}
-          handleConfirm={handleGenerate}
+          handleConfirm={logic.handleGenerate}
         />
       )}
     </div>
   );
 };
-
-const EditViewButtons = memo(
-  ({
-    sticky = false,
-    handleFileChange,
-    handleImageDetailChange,
-    handleRemoveImage,
-    handleGenerate,
-    handleGenerateNextOnly,
-    handleBranchOnly,
-    handleBranchGenerate,
-    handleSave,
-    setIsModalOpen,
-    setIsEdit,
-    _setContent,
-    _content,
-    imageUrl,
-    setImageUrl,
-    handleImageUrlChange,
-    fileInputRef,
-    model,
-    modelValid,
-    messageIndex,
-    role,
-  }: {
-    sticky?: boolean;
-    handleFileChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
-    handleImageDetailChange: (index: number, e: string) => void;
-    handleRemoveImage: (index: number) => void;
-    handleGenerate: () => void;
-    handleGenerateNextOnly: () => void;
-    handleBranchOnly: () => void;
-    handleBranchGenerate: () => void;
-    handleSave: () => void;
-    setIsModalOpen: React.Dispatch<React.SetStateAction<boolean>>;
-    setIsEdit: React.Dispatch<React.SetStateAction<boolean>>;
-    _setContent: React.Dispatch<React.SetStateAction<ContentInterface[]>>;
-    _content: ContentInterface[];
-    imageUrl: string;
-    setImageUrl: React.Dispatch<React.SetStateAction<string>>;
-    handleImageUrlChange: () => void;
-    fileInputRef: React.MutableRefObject<null>;
-    model: ModelOptions;
-    modelValid: boolean;
-    messageIndex: number;
-    role?: string;
-  }) => {
-    const { t } = useTranslation();
-    const generating = useStore((state) => {
-      const chatId = state.chats?.[state.currentChatIndex]?.id ?? '';
-      return Object.values(state.generatingSessions).some((s) => s.chatId === chatId);
-    });
-    const noModel = !modelValid;
-    const advancedMode = useStore((state) => state.advancedMode);
-    const lastMessageIndex = useStore((state) =>
-      state.chats?.[state.currentChatIndex]?.messages.length
-        ? state.chats[state.currentChatIndex].messages.length - 1
-        : 0
-    );
-    const isAssistant = role === 'assistant';
-    const isNotLast = !sticky && messageIndex < lastMessageIndex;
-
-    return (
-      <div>
-        {modelTypes[model] == 'image' && (
-          <>
-            <div className='flex justify-center'>
-              <div className='flex gap-5'>
-                {_content.slice(1).map((image, index) => (
-                  <div
-                    key={index}
-                    className='image-container flex flex-col gap-2'
-                  >
-                    <img
-                      src={image.image_url.url}
-                      alt={`uploaded-${index}`}
-                      className='h-10'
-                    />
-                    <div className='flex flex-row gap-3'>
-                      <select
-                        onChange={(event) =>
-                          handleImageDetailChange(index, event.target.value)
-                        }
-                        title='Select image resolution'
-                        aria-label='Select image resolution'
-                        defaultValue={image.image_url.detail}
-                        style={{ color: 'black' }}
-                      >
-                        <option value='auto'>Auto</option>
-                        <option value='high'>High</option>
-                        <option value='low'>Low</option>
-                      </select>
-                      <button
-                        className='close-button'
-                        onClick={() => handleRemoveImage(index)}
-                        aria-label='Remove Image'
-                      >
-                        &times;
-                      </button>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-            <div className='flex justify-center mt-4'>
-              <input
-                type='text'
-                value={imageUrl}
-                onChange={(e) => setImageUrl(e.target.value)}
-                placeholder={t('enter_image_url_placeholder') as string}
-                className='input input-bordered w-full max-w-xs text-gray-800 dark:text-white p-3  border-none bg-gray-200 dark:bg-gray-600 rounded-md m-0 w-full mr-0 h-10 focus:outline-none'
-              />
-              <button
-                className='btn btn-neutral ml-2'
-                onClick={handleImageUrlChange}
-                aria-label={t('add_image_url') as string}
-              >
-                {t('add_image_url')}
-              </button>
-            </div>
-            {/* Hidden file input */}
-            <input
-              type='file'
-              ref={fileInputRef}
-              style={{ display: 'none' }}
-              onChange={handleFileChange}
-              multiple
-            />
-          </>
-        )}
-
-        <div className='flex'>
-          <div className='flex-1 text-center mt-2 flex justify-center'>
-            {sticky && (
-              <button
-                className={`btn relative mr-2 btn-primary ${
-                  generating || noModel ? 'cursor-not-allowed opacity-40' : ''
-                }`}
-                onClick={handleGenerate}
-                disabled={noModel}
-                aria-label={t('generate') as string}
-              >
-                <div className='flex items-center justify-center gap-2'>
-                  {t('generate')}
-                </div>
-              </button>
-            )}
-
-            {!sticky && !isAssistant && (
-              isNotLast ? (
-                <>
-                  <button
-                    className={`btn relative mr-2 btn-primary ${
-                      generating || noModel ? 'cursor-not-allowed opacity-40' : ''
-                    }`}
-                    onClick={handleGenerateNextOnly}
-                    disabled={noModel}
-                  >
-                    <div className='flex items-center justify-center gap-2'>
-                      {t('generate')}
-                    </div>
-                  </button>
-                  <button
-                    className={`btn relative mr-2 btn-neutral ${
-                      noModel ? 'cursor-not-allowed opacity-40' : ''
-                    }`}
-                    onClick={() => {
-                      !generating && !noModel && setIsModalOpen(true);
-                    }}
-                    disabled={noModel}
-                  >
-                    <div className='flex items-center justify-center gap-2'>
-                      {t('generateBelow')}
-                    </div>
-                  </button>
-                  <button
-                    className={`btn relative mr-2 btn-neutral ${
-                      generating || noModel ? 'cursor-not-allowed opacity-40' : ''
-                    }`}
-                    onClick={handleBranchGenerate}
-                    disabled={noModel}
-                    title={t('branchGenerate') as string}
-                  >
-                    <div className='flex items-center justify-center gap-2'>
-                      <BranchIcon />
-                      {t('branchGenerate')}
-                    </div>
-                  </button>
-                  <button
-                    className={`btn relative mr-2 btn-neutral ${
-                      generating ? 'cursor-not-allowed opacity-40' : ''
-                    }`}
-                    onClick={handleBranchOnly}
-                    title={t('branchOnly') as string}
-                  >
-                    <div className='flex items-center justify-center gap-2'>
-                      <BranchIcon />
-                      {t('branchOnly')}
-                    </div>
-                  </button>
-                </>
-              ) : (
-                <>
-                  <button
-                    className={`btn relative mr-2 btn-primary ${
-                      noModel ? 'cursor-not-allowed opacity-40' : ''
-                    }`}
-                    onClick={() => {
-                      !generating && !noModel && setIsModalOpen(true);
-                    }}
-                    disabled={noModel}
-                  >
-                    <div className='flex items-center justify-center gap-2'>
-                      {t('generate')}
-                    </div>
-                  </button>
-                  <button
-                    className={`btn relative mr-2 btn-neutral ${
-                      generating || noModel ? 'cursor-not-allowed opacity-40' : ''
-                    }`}
-                    onClick={handleBranchGenerate}
-                    disabled={noModel}
-                    title={t('branchGenerate') as string}
-                  >
-                    <div className='flex items-center justify-center gap-2'>
-                      <BranchIcon />
-                      {t('branchGenerate')}
-                    </div>
-                  </button>
-                  <button
-                    className={`btn relative mr-2 btn-neutral ${
-                      generating ? 'cursor-not-allowed opacity-40' : ''
-                    }`}
-                    onClick={handleBranchOnly}
-                    title={t('branchOnly') as string}
-                  >
-                    <div className='flex items-center justify-center gap-2'>
-                      <BranchIcon />
-                      {t('branchOnly')}
-                    </div>
-                  </button>
-                </>
-              )
-            )}
-
-            <button
-              className={`btn relative mr-2 ${
-                sticky
-                  ? `btn-neutral ${
-                      generating ? 'cursor-not-allowed opacity-40' : ''
-                    }`
-                  : 'btn-neutral'
-              }`}
-              onClick={handleSave}
-              aria-label={t('save') as string}
-            >
-              <div className='flex items-center justify-center gap-2'>
-                {t('save')}
-              </div>
-            </button>
-
-            {sticky || (
-              <button
-                className='btn relative btn-neutral'
-                onClick={() => setIsEdit(false)}
-                aria-label={t('cancel') as string}
-              >
-                <div className='flex items-center justify-center gap-2'>
-                  {t('cancel')}
-                </div>
-              </button>
-            )}
-          </div>
-          {sticky && advancedMode && <TokenCount />}
-          <CommandPrompt _setContent={_setContent} />
-        </div>
-      </div>
-    );
-  }
-);
 
 export default EditView;

@@ -1,13 +1,15 @@
 declare module 'dagre' {
   export namespace graphlib {
+    type GraphLabel = Record<string, unknown>;
+
     class Graph {
       constructor(opts?: { directed?: boolean; multigraph?: boolean; compound?: boolean });
-      setGraph(label: Record<string, any>): this;
-      setDefaultEdgeLabel(labelFn: () => Record<string, any>): this;
-      setNode(name: string, label: Record<string, any>): this;
-      setEdge(v: string, w: string, label?: Record<string, any>): this;
+      setGraph(label: GraphLabel): this;
+      setDefaultEdgeLabel(labelFn: () => GraphLabel): this;
+      setNode(name: string, label: GraphLabel): this;
+      setEdge(v: string, w: string, label?: GraphLabel): this;
       node(name: string): { x: number; y: number; width: number; height: number };
-      graph(): Record<string, any>;
+      graph(): GraphLabel;
     }
   }
   export function layout(graph: graphlib.Graph): void;

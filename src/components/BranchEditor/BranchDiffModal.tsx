@@ -1,7 +1,7 @@
 import React, { useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import useStore from '@store/store';
-import { BranchTree } from '@type/chat';
+import { BranchTree, isTextContent } from '@type/chat';
 import { wordDiff, DiffSegment } from '@utils/diffUtils';
 import PopupModal from '@components/PopupModal';
 import { resolveContent } from '@utils/contentStore';
@@ -42,12 +42,12 @@ const BranchDiffModal = ({
       const contentB = nodeB ? resolveContent(contentStore, nodeB.contentHash) : [];
 
       const textA = contentA
-            .filter((c) => c.type === 'text')
-            .map((c) => (c as any).text || '')
+            .filter(isTextContent)
+            .map((c) => c.text)
             .join(' ');
       const textB = contentB
-            .filter((c) => c.type === 'text')
-            .map((c) => (c as any).text || '')
+            .filter(isTextContent)
+            .map((c) => c.text)
             .join(' ');
 
       const role = nodeA?.role || nodeB?.role || 'unknown';

@@ -1,6 +1,7 @@
 import { v4 as uuidv4 } from 'uuid';
 
 import {
+  BranchNodeLegacy,
   Folder,
   FolderCollection,
   LocalStorageInterfaceV0ToV1,
@@ -21,7 +22,7 @@ import {
   ContentInterface,
 } from '@type/chat';
 import { ContentStoreData, addContent } from '@utils/contentStore';
-import { DEFAULT_PROVIDERS } from './provider-slice';
+import { DEFAULT_PROVIDERS } from './provider-config';
 import {
   _defaultChatConfig,
   _defaultMenuWidth,
@@ -173,17 +174,26 @@ export const migrateV11 = (persistedState: LocalStorageInterfaceV11ToV12) => {
   // Migrate from inline content to contentHash references.
   // Build a ContentStore and replace BranchNode.content with BranchNode.contentHash.
   const contentStore: ContentStoreData = {};
+  type LegacyBranchNodeWithHash = Omit<BranchNodeLegacy, 'content'> & {
+    content?: ContentInterface[];
+    contentHash?: string;
+  };
+  type LegacyBranchTree = {
+    nodes: Record<string, LegacyBranchNodeWithHash>;
+  };
+  type LegacyChatWithBranchTree = {
+    branchTree?: LegacyBranchTree;
+  };
 
   if (persistedState.chats) {
-    for (const chat of persistedState.chats as any[]) {
+    for (const chat of persistedState.chats as LegacyChatWithBranchTree[]) {
       if (chat.branchTree && chat.branchTree.nodes) {
-        const nodes = chat.branchTree.nodes as Record<string, any>;
+        const nodes = chat.branchTree.nodes;
         for (const nodeId of Object.keys(nodes)) {
           const node = nodes[nodeId];
           // Only migrate nodes that still have inline content (no contentHash)
           if (node.content && !node.contentHash) {
-            const content: ContentInterface[] = node.content;
-            node.contentHash = addContent(contentStore, content);
+            node.contentHash = addContent(contentStore, node.content as ContentInterface[]);
             delete node.content;
           }
         }
