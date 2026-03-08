@@ -65,6 +65,14 @@ const ChatContent = () => {
   );
   const [messagesLimited, setMessagesLimited] = React.useState(messages);
 
+  // Synchronously reset messagesLimited when conversation changes so that
+  // the new messages are displayed immediately (before async token limiting).
+  const prevChatIndexRef = useRef(currentChatIndex);
+  if (prevChatIndexRef.current !== currentChatIndex) {
+    prevChatIndexRef.current = currentChatIndex;
+    setMessagesLimited(messages);
+  }
+
   useEffect(() => {
     let cancelled = false;
 
@@ -144,6 +152,7 @@ const ChatContent = () => {
   return (
     <div className='flex-1 overflow-hidden'>
       <ScrollToBottom
+        key={currentChatIndex}
         className='h-full dark:bg-gray-800'
         followButtonClassName='hidden'
         scroller={customScroller}
