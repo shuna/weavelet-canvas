@@ -86,4 +86,19 @@ describe('submitHelpers', () => {
     );
     expect(contextMessages).toEqual([userMessage, assistantMessage]);
   });
+
+  it('strips system messages for reasoning models', () => {
+    const systemMsg = textMessage('system', 'You are helpful');
+    const userMsg = textMessage('user', 'Hello');
+    const messages = [systemMsg, userMsg, textMessage('assistant', '')];
+
+    const withO1 = getSubmitContextMessages(messages, 'append', 2, 'o1-preview');
+    expect(withO1).toEqual([userMsg]);
+
+    const withO3 = getSubmitContextMessages(messages, 'append', 2, 'o3-mini-high');
+    expect(withO3).toEqual([userMsg]);
+
+    const withGpt4 = getSubmitContextMessages(messages, 'append', 2, 'gpt-4o');
+    expect(withGpt4).toEqual([systemMsg, userMsg]);
+  });
 });

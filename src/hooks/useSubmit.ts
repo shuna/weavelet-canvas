@@ -83,7 +83,8 @@ const useSubmit = () => {
       const contextMessages = getSubmitContextMessages(
         updatedChats[chatIndex].messages,
         mode,
-        messageIndex
+        messageIndex,
+        chats[chatIndex].config.model
       );
 
       if (contextMessages.length === 0)
