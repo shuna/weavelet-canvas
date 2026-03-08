@@ -49,6 +49,7 @@ type PersistedStoreState = Omit<
   | 'apiEndpoint'
   | 'theme'
   | 'autoTitle'
+  | 'titleModel'
   | 'advancedMode'
   | 'prompts'
   | 'defaultChatConfig'
@@ -80,7 +81,7 @@ type PersistedStoreState = Omit<
 
 export const PERSIST_KEYS: (keyof PersistedStoreState)[] = [
   'chats', 'apiKey', 'apiVersion', 'apiEndpoint', 'theme', 'autoTitle',
-  'advancedMode', 'prompts', 'defaultChatConfig', 'defaultSystemMessage',
+  'titleModel', 'advancedMode', 'prompts', 'defaultChatConfig', 'defaultSystemMessage',
   'hideMenuOptions', 'firstVisit', 'hideSideMenu', 'folders', 'enterToSubmit',
   'inlineLatex', 'markdownMode', 'totalTokenUsed', 'countTotalTokens',
   'displayChatSize', 'menuWidth', 'defaultImageDetail', 'autoScroll',
@@ -101,6 +102,7 @@ function buildPartializedState(state: StoreState): PersistedStoreState {
     apiEndpoint: state.apiEndpoint,
     theme: state.theme,
     autoTitle: state.autoTitle,
+    titleModel: state.titleModel,
     advancedMode: state.advancedMode,
     prompts: state.prompts,
     defaultChatConfig: state.defaultChatConfig,

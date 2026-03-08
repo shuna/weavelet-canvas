@@ -92,12 +92,26 @@ export const resolveProviderForModel = (
   };
 };
 
+const isReasoningModel = (modelId: string): boolean =>
+  modelId.startsWith('o1-') || modelId.startsWith('o3-') || modelId.startsWith('o1 ');
+
+const stripSystemMessages = (
+  messages: MessageInterface[],
+  modelId: string
+): MessageInterface[] => {
+  if (!isReasoningModel(modelId)) return messages;
+  return messages.filter((m) => m.role !== 'system');
+};
+
 export const getSubmitContextMessages = (
   messages: MessageInterface[],
   _mode: SubmitMode,
-  messageIndex: number
-): MessageInterface[] =>
-  messages.slice(0, messageIndex);
+  messageIndex: number,
+  modelId?: string
+): MessageInterface[] => {
+  const sliced = messages.slice(0, messageIndex);
+  return modelId ? stripSystemMessages(sliced, modelId) : sliced;
+};
 
 export const applySubmitTokenUsage = async (
   chatId: string,
