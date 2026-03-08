@@ -22,7 +22,7 @@ const ExportChat = () => {
     const folders = useStore.getState().folders;
     const contentStore = useStore.getState().contentStore;
 
-    let fileData: any;
+    let fileData: ExportV1 | ExportV3;
     const filename = getToday();
 
     if (format === 'v1') {

@@ -1,6 +1,7 @@
 import { ModelOptions } from '@utils/modelReader';
 import { Prompt } from './prompt';
 import { Theme } from './theme';
+import type { FavoriteModel, ProviderConfig, ProviderId } from './provider';
 
 // The types in this file must mimick the structure of the the API request
 
@@ -10,7 +11,7 @@ export const imageDetails: ImageDetail[] = ['low', 'high', 'auto'];
 export type Role = 'user' | 'assistant' | 'system';
 export const roles: Role[] = ['user', 'assistant', 'system'];
 
-export interface ImageContentInterface extends ContentInterface {
+export interface ImageContentInterface {
   type: 'image_url';
   image_url: {
     url: string; // base64 or image URL
@@ -18,7 +19,7 @@ export interface ImageContentInterface extends ContentInterface {
   };
 }
 
-export interface TextContentInterface extends ContentInterface {
+export interface TextContentInterface {
   type: 'text';
   text: string;
 }
@@ -38,10 +39,7 @@ export function isImageContent(ob: ContentInterface | undefined): ob is ImageCon
   return ob !== undefined && ob !== null && (ob as ImageContentInterface).image_url !== undefined;
 }
 
-export interface ContentInterface {
-  [x: string]: any;
-  type: Content;
-}
+export type ContentInterface = TextContentInterface | ImageContentInterface;
 
 export interface MessageInterface {
   role: Role;
@@ -261,8 +259,8 @@ export interface LocalStorageInterfaceV8_2ToV9
 
 export interface LocalStorageInterfaceV9ToV10
   extends LocalStorageInterfaceV8_2ToV9 {
-  providers?: any;
-  favoriteModels?: any;
+  providers?: Partial<Record<ProviderId, ProviderConfig>>;
+  favoriteModels?: FavoriteModel[];
 }
 
 export interface GeneratingSession {

@@ -18,6 +18,4 @@ export const initializeModels = async () => {
   modelDisplayNames = models.modelDisplayNames;
 };
 
-initializeModels();
-
 export { modelOptions, modelMaxToken, modelCost, modelTypes, modelStreamSupport, modelDisplayNames };

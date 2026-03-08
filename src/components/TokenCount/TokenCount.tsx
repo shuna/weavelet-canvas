@@ -44,6 +44,8 @@ const TokenCount = React.memo(() => {
   }, [model, tokenCount, favoriteModels, t]);
 
   useEffect(() => {
+    let cancelled = false;
+
     if (!generating) {
       const textPrompts = messages.filter(
         (e) => Array.isArray(e.content) && e.content.some(isTextContent)
@@ -51,11 +53,20 @@ const TokenCount = React.memo(() => {
       const imgPrompts = messages.filter(
         (e) => Array.isArray(e.content) && e.content.some(isImageContent)
       );
-      const newPromptTokens = countTokens(textPrompts, model);
-      const newImageTokens = countTokens(imgPrompts, model);
-      setTokenCount(newPromptTokens);
-      setImageTokenCount(newImageTokens);
+
+      Promise.all([
+        countTokens(textPrompts, model),
+        countTokens(imgPrompts, model),
+      ]).then(([newPromptTokens, newImageTokens]) => {
+        if (cancelled) return;
+        setTokenCount(newPromptTokens);
+        setImageTokenCount(newImageTokens);
+      });
     }
+
+    return () => {
+      cancelled = true;
+    };
   }, [messages, generating, model, encoderReady]);
 
   return (

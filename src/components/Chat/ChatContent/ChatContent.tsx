@@ -63,10 +63,19 @@ const ChatContent = () => {
       ? state.chats[state.currentChatIndex].config.model
       : defaultModel
   );
-  const messagesLimited = useMemo(
-    () => limitMessageTokens(messages, reduceMessagesToTotalToken, model),
-    [messages, model]
-  );
+  const [messagesLimited, setMessagesLimited] = React.useState(messages);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    limitMessageTokens(messages, reduceMessagesToTotalToken, model).then((nextMessages) => {
+      if (!cancelled) setMessagesLimited(nextMessages);
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [messages, model]);
 
   const handleReduceMessages = () => {
     const confirmMessage = t('reduceMessagesWarning');
@@ -82,26 +91,37 @@ const ChatContent = () => {
   };
 
   useEffect(() => {
+    let cancelled = false;
+
     if (!isCurrentChatGenerating) {
       if (messagesLimited.length < messages.length) {
-        const hiddenTokens =
-          countTokens(messages, model) - countTokens(messagesLimited, model);
-        const message = (
-          <div>
-            <span>
-              {t('hiddenMessagesWarning', { hiddenTokens, reduceMessagesToTotalToken })}
-            </span><br />
-            <button
-              onClick={handleReduceMessages}
-              className="px-2 py-1 bg-blue-500 text-white rounded"
-            >
-              {t('reduceMessagesButton')}
-            </button>
-          </div>
-        );
-        toast.error(message);
+        Promise.all([
+          countTokens(messages, model),
+          countTokens(messagesLimited, model),
+        ]).then(([allTokens, limitedTokens]) => {
+          if (cancelled) return;
+          const hiddenTokens = allTokens - limitedTokens;
+          const message = (
+            <div>
+              <span>
+                {t('hiddenMessagesWarning', { hiddenTokens, reduceMessagesToTotalToken })}
+              </span><br />
+              <button
+                onClick={handleReduceMessages}
+                className="px-2 py-1 bg-blue-500 text-white rounded"
+              >
+                {t('reduceMessagesButton')}
+              </button>
+            </div>
+          );
+          toast.error(message);
+        });
       }
     }
+
+    return () => {
+      cancelled = true;
+    };
   }, [messagesLimited, isCurrentChatGenerating, messages, model]);
 
   const saveRef = useRef<HTMLDivElement>(null);

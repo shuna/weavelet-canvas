@@ -1,11 +1,18 @@
 import { useEffect, useRef } from 'react';
-import { toast } from 'react-toastify';
 import useStore from '@store/store';
-import { TextContentInterface } from '@type/chat';
 import { getAllPending, deleteRequest, StreamRecord } from '@utils/streamDb';
 import { upsertActivePathMessage } from '@utils/branchUtils';
 import { cloneChatAtIndex } from '@utils/chatShallowClone';
 import { register } from '@utils/swBridge';
+import {
+  buildRecoveredMessage,
+  findRecoverableChat,
+  getCurrentMessageText,
+  hasRecoverableMessage,
+  resolveRecoveryStatus,
+  shouldApplyRecoveredText,
+  showRecoveryToast,
+} from './streamRecoveryHelpers';
 
 const VISIBILITY_THRESHOLD_MS = 3000;
 
@@ -20,6 +27,13 @@ export default function useStreamRecovery() {
   }, []);
 
   useEffect(() => {
+    const onPageShow = () => {
+      if (hiddenAtRef.current) {
+        hiddenAtRef.current = null;
+        recoverPending();
+      }
+    };
+
     function onVisibilityChange() {
       if (document.visibilityState === 'hidden') {
         hiddenAtRef.current = Date.now();
@@ -37,15 +51,11 @@ export default function useStreamRecovery() {
     }
 
     document.addEventListener('visibilitychange', onVisibilityChange);
-    window.addEventListener('pageshow', () => {
-      if (hiddenAtRef.current) {
-        hiddenAtRef.current = null;
-        recoverPending();
-      }
-    });
+    window.addEventListener('pageshow', onPageShow);
 
     return () => {
       document.removeEventListener('visibilitychange', onVisibilityChange);
+      window.removeEventListener('pageshow', onPageShow);
     };
   }, []);
 }
@@ -69,33 +79,24 @@ async function recoverPending() {
     const chats = useStore.getState().chats;
     if (!chats) return;
 
-    // Validate indices
-    if (chatIndex < 0 || chatIndex >= chats.length) {
+    const chat = findRecoverableChat(chats, chatIndex);
+    if (!chat) {
       await deleteRequest(requestId);
       continue;
     }
-    const messages = chats[chatIndex].messages;
-    if (messageIndex < 0 || messageIndex >= messages.length) {
+    if (!hasRecoverableMessage(chat, messageIndex)) {
       await deleteRequest(requestId);
       continue;
     }
 
-    const currentText =
-      (messages[messageIndex].content[0] as TextContentInterface)?.text ?? '';
+    const currentText = getCurrentMessageText(chat.messages[messageIndex]);
 
     // Only apply if SW captured more text than what's currently displayed
-    if (bufferedText.length > currentText.length) {
+    if (shouldApplyRecoveredText(currentText, bufferedText)) {
       const updatedChats = cloneChatAtIndex(chats, chatIndex);
       const updatedMessages = updatedChats[chatIndex].messages;
       const oldMsg = updatedMessages[messageIndex];
-      const newContent0 = {
-        ...(oldMsg.content[0] as TextContentInterface),
-        text: bufferedText,
-      };
-      const newMsg = {
-        ...oldMsg,
-        content: [newContent0, ...oldMsg.content.slice(1)],
-      };
+      const newMsg = buildRecoveredMessage(oldMsg, bufferedText);
       updatedMessages[messageIndex] = newMsg;
       upsertActivePathMessage(
         updatedChats[chatIndex],
@@ -107,30 +108,19 @@ async function recoverPending() {
     }
 
     // Determine if stream is stale (SW probably died)
-    let effectiveStatus = status;
-    if (status === 'streaming') {
-      const staleSec = (Date.now() - record.updatedAt) / 1000;
-      if (staleSec > 30) {
-        effectiveStatus = 'interrupted';
-      } else {
-        // Still actively streaming, don't notify yet
-        continue;
-      }
+    const effectiveStatus = resolveRecoveryStatus(record);
+    if (effectiveStatus === 'streaming') {
+      // Still actively streaming, don't notify yet
+      continue;
     }
 
     // Clear any generating sessions for this chat
-    if (effectiveStatus !== 'streaming') {
-      useStore.getState().removeSessionsForChat(
-        useStore.getState().chats?.[chatIndex]?.id ?? ''
-      );
-    }
+    useStore.getState().removeSessionsForChat(
+      useStore.getState().chats?.[chatIndex]?.id ?? ''
+    );
 
     // Show toast
-    if (effectiveStatus === 'completed') {
-      toast.info('バックグラウンド中に応答が完了しました', { autoClose: 4000 });
-    } else if (effectiveStatus === 'interrupted' || effectiveStatus === 'failed') {
-      toast.warning('バックグラウンド中に応答が途切れました', { autoClose: 6000 });
-    }
+    showRecoveryToast(effectiveStatus);
 
     await deleteRequest(requestId);
   }

@@ -1,0 +1,266 @@
+import useStore from '@store/store';
+import {
+  getChatCompletion,
+  getChatCompletionStream,
+  prepareStreamRequest,
+} from '@api/api';
+import { parseEventSource } from '@api/helper';
+import { officialAPIEndpoint } from '@constants/auth';
+import { upsertActivePathMessage } from '@utils/branchUtils';
+import { cloneChatAtIndex } from '@utils/chatShallowClone';
+import { deleteRequest as deleteStreamRecord } from '@utils/streamDb';
+import { getEffectiveStreamEnabled } from '@utils/streamSupport';
+import * as swBridge from '@utils/swBridge';
+import {
+  ConfigInterface,
+  MessageInterface,
+  TextContentInterface,
+} from '@type/chat';
+import type { ResolvedProvider } from './submitHelpers';
+
+const abortControllers = new Map<string, AbortController>();
+const swCancellers = new Map<string, () => void>();
+
+export const createSubmitAbortController = (sessionId: string) => {
+  const abortController = new AbortController();
+  abortControllers.set(sessionId, abortController);
+  return abortController;
+};
+
+export const clearSubmitSessionRuntime = (sessionId: string) => {
+  abortControllers.delete(sessionId);
+  swCancellers.delete(sessionId);
+};
+
+export const stopSubmitSession = (sessionId: string) => {
+  abortControllers.get(sessionId)?.abort();
+  swCancellers.get(sessionId)?.();
+  clearSubmitSessionRuntime(sessionId);
+  useStore.getState().removeSession(sessionId);
+};
+
+export const stopSubmitSessionsForChat = (chatId: string) => {
+  const sessions = useStore.getState().generatingSessions;
+  Object.values(sessions)
+    .filter((session) => session.chatId === chatId)
+    .forEach((session) => stopSubmitSession(session.sessionId));
+};
+
+export const isChatGenerating = (chatId: string): boolean =>
+  Object.values(useStore.getState().generatingSessions).some(
+    (session) => session.chatId === chatId
+  );
+
+export const writeChunkToStore = (
+  chatId: string,
+  messageIndex: number,
+  text: string
+) => {
+  useStore.setState((state) => {
+    const chats = state.chats;
+    if (!chats) return state;
+
+    const chatIndex = chats.findIndex((chat) => chat.id === chatId);
+    if (chatIndex < 0) return state;
+
+    const updatedChats = cloneChatAtIndex(chats, chatIndex);
+    const message = updatedChats[chatIndex].messages[messageIndex];
+    if (!message) return state;
+
+    const textContent = message.content[0] as TextContentInterface;
+    const updatedMessage = {
+      ...message,
+      content: [
+        { ...textContent, text: textContent.text + text },
+        ...message.content.slice(1),
+      ],
+    };
+
+    updatedChats[chatIndex].messages[messageIndex] = updatedMessage;
+    upsertActivePathMessage(
+      updatedChats[chatIndex],
+      messageIndex,
+      updatedMessage,
+      state.contentStore
+    );
+
+    return { ...state, chats: updatedChats };
+  });
+};
+
+type ExecuteSubmitStreamParams = {
+  sessionId: string;
+  chatId: string;
+  chatIndex: number;
+  messageIndex: number;
+  messages: MessageInterface[];
+  config: ConfigInterface;
+  resolvedProvider: ResolvedProvider;
+  abortController: AbortController;
+  apiVersion?: string;
+  t: (key: string) => string;
+};
+
+export const executeSubmitStream = async ({
+  sessionId,
+  chatId,
+  chatIndex,
+  messageIndex,
+  messages,
+  config,
+  resolvedProvider,
+  abortController,
+  apiVersion,
+  t,
+}: ExecuteSubmitStreamParams) => {
+  const isStreamSupported = getEffectiveStreamEnabled(config);
+
+  if (!isStreamSupported) {
+    let data;
+    const signal = abortController.signal;
+
+    if (!resolvedProvider.key || resolvedProvider.key.length === 0) {
+      if (resolvedProvider.endpoint === officialAPIEndpoint) {
+        throw new Error(t('noApiKeyWarning'));
+      }
+      data = await getChatCompletion(
+        resolvedProvider.endpoint,
+        messages,
+        config,
+        undefined,
+        undefined,
+        apiVersion,
+        signal
+      );
+    } else {
+      data = await getChatCompletion(
+        resolvedProvider.endpoint,
+        messages,
+        config,
+        resolvedProvider.key,
+        undefined,
+        apiVersion,
+        signal
+      );
+    }
+
+    if (!useStore.getState().generatingSessions[sessionId]) return;
+    if (!data?.choices?.[0]?.message?.content) {
+      throw new Error(t('errors.failedToRetrieveData'));
+    }
+
+    writeChunkToStore(chatId, messageIndex, data.choices[0].message.content);
+    return;
+  }
+
+  if (
+    (!resolvedProvider.key || resolvedProvider.key.length === 0) &&
+    resolvedProvider.endpoint === officialAPIEndpoint
+  ) {
+    throw new Error(t('noApiKeyWarning'));
+  }
+
+  const onChunk = (text: string) => {
+    if (text) writeChunkToStore(chatId, messageIndex, text);
+  };
+
+  if (await swBridge.waitForController()) {
+    const requestId = crypto.randomUUID();
+    const prepared = prepareStreamRequest(
+      resolvedProvider.endpoint,
+      messages,
+      config,
+      resolvedProvider.key,
+      undefined,
+      apiVersion
+    );
+
+    await new Promise<void>((resolve, reject) => {
+      let swHandle: swBridge.SwStreamHandle | undefined;
+
+      const cleanup = () => {
+        clearInterval(checkStop);
+        deleteStreamRecord(requestId).catch(() => {});
+      };
+
+      const checkStop = setInterval(() => {
+        if (!useStore.getState().generatingSessions[sessionId]) {
+          swHandle?.cancel();
+          cleanup();
+          resolve();
+        }
+      }, 500);
+
+      swBridge.startStream({
+        requestId,
+        endpoint: prepared.endpoint,
+        headers: prepared.headers,
+        body: prepared.body,
+        chatIndex,
+        messageIndex,
+        onChunk,
+        onDone: () => {
+          cleanup();
+          resolve();
+        },
+        onError: (error) => {
+          cleanup();
+          reject(new Error(error));
+        },
+      }).then((handle) => {
+        swHandle = handle;
+        swCancellers.set(sessionId, () => handle.cancel());
+      }).catch((error) => {
+        cleanup();
+        reject(error);
+      });
+    });
+    return;
+  }
+
+  const stream = await getChatCompletionStream(
+    resolvedProvider.endpoint,
+    messages,
+    config,
+    resolvedProvider.key || undefined,
+    undefined,
+    apiVersion,
+    abortController.signal
+  );
+
+  if (!stream) return;
+  if (stream.locked) throw new Error(t('errors.streamLocked'));
+
+  const reader = stream.getReader();
+  let reading = true;
+  let partial = '';
+  const decoder = new TextDecoder();
+
+  try {
+    while (reading && !abortController.signal.aborted) {
+      const { done, value } = await reader.read();
+      const chunk = partial + decoder.decode(value, { stream: !done });
+      const parsed = parseEventSource(chunk, done);
+      partial = parsed.partial;
+
+      if (parsed.done || done) reading = false;
+
+      const resultString = parsed.events.reduce((output: string, current) => {
+        if (!current.choices?.[0]?.delta) return output;
+        const content = current.choices[0]?.delta?.content ?? null;
+        if (content) output += content;
+        return output;
+      }, '');
+
+      if (resultString) onChunk(resultString);
+    }
+  } finally {
+    if (!abortController.signal.aborted) {
+      reader.cancel(t('errors.generationCompleted'));
+    } else {
+      reader.cancel(t('errors.cancelledByUser'));
+    }
+    reader.releaseLock();
+    stream.cancel();
+  }
+};

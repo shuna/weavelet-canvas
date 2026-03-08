@@ -2,11 +2,16 @@ import React, { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import PopupModal from '@components/PopupModal';
 import { ConfigInterface, ImageDetail } from '@type/chat';
-import Select from 'react-select';
 import { modelMaxToken } from '@constants/modelLoader';
 import { ModelOptions } from '@utils/modelReader';
 import { isModelStreamSupported, normalizeConfigStream } from '@utils/streamSupport';
 import useStore from '@store/store';
+import {
+  DarkSelectField,
+  FieldDescription,
+  FieldLabel,
+  RangeField,
+} from './fields';
 
 const ConfigMenu = ({
   setIsModalOpen,
@@ -119,58 +124,16 @@ export const ModelSelector = ({
     label: `${fav.modelId} (${providers[fav.providerId]?.name || fav.providerId})`,
   }));
 
-  const customStyles = {
-    control: (provided: any) => ({
-      ...provided,
-      backgroundColor: '#2D3748', // Dark background color
-      color: '#E2E8F0', // Light text color
-    }),
-    menu: (provided: any) => ({
-      ...provided,
-      backgroundColor: '#2D3748', // Dark background color
-    }),
-    option: (provided: any, state: any) => ({
-      ...provided,
-      'backgroundColor': state.isSelected ? '#4A5568' : '#2D3748', // Darker background for selected option
-      'color': '#E2E8F0', // Light text color
-      '&:hover': {
-        backgroundColor: '#4A5568', // Darker background on hover
-      },
-    }),
-    singleValue: (provided: any) => ({
-      ...provided,
-      color: '#E2E8F0', // Light text color
-    }),
-    input: (provided: any) => ({
-      ...provided,
-      color: '#E2E8F0', // Light text color for input
-    }),
-    placeholder: (provided: any) => ({
-      ...provided,
-      color: '#A0AEC0', // Light gray color for placeholder
-    }),
-  };
-
   return (
-    <div className='mb-4'>
-      <label className='block text-sm font-medium text-gray-900 dark:text-white'>
-        {_label}
-      </label>
-      <Select
-        value={
-          modelOptionsFormatted.find((o) => o.value === _model) || null
-        }
-        onChange={(selectedOption) =>
-          _setModel(selectedOption?.value as ModelOptions)
-        }
-        options={modelOptionsFormatted}
-        placeholder={t('model:provider.noModelSelected', 'No model selected')}
-        isClearable
-        className='basic-single'
-        classNamePrefix='select'
-        styles={customStyles}
-      />
-    </div>
+    <DarkSelectField
+      label={_label}
+      value={_model}
+      options={modelOptionsFormatted}
+      onChange={(value) => _setModel((value ?? _model) as ModelOptions)}
+      placeholder={t('model:provider.noModelSelected', 'No model selected') as string}
+      isClearable
+      className='mb-4'
+    />
   );
 };
 
@@ -199,28 +162,18 @@ export const MaxTokenSlider = ({
     if (_maxToken > maxForModel) {
       _setMaxToken(maxForModel);
     }
-  }, [_model]);
+  }, [_maxToken, _setMaxToken, maxForModel]);
 
   return (
-    <div className='mt-5 pt-5 border-t border-gray-500'>
-      <label className='block text-sm font-medium text-gray-900 dark:text-white'>
-        {t('token.label')}: {_maxToken}
-      </label>
-      <input
-        type='range'
-        value={_maxToken}
-        onChange={(e) => {
-          _setMaxToken(Number(e.target.value));
-        }}
-        min={0}
-        max={maxForModel}
-        step={1}
-        className='w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer'
-      />
-      <div className='min-w-fit text-gray-500 dark:text-gray-300 text-sm mt-2'>
-        {t('token.description')}
-      </div>
-    </div>
+    <RangeField
+      label={t('token.label') as string}
+      value={_maxToken}
+      onChange={_setMaxToken}
+      min={0}
+      max={maxForModel}
+      step={1}
+      description={t('token.description')}
+    />
   );
 };
 
@@ -234,26 +187,15 @@ export const TemperatureSlider = ({
   const { t } = useTranslation('model');
 
   return (
-    <div className='mt-5 pt-5 border-t border-gray-500'>
-      <label className='block text-sm font-medium text-gray-900 dark:text-white'>
-        {t('temperature.label')}: {_temperature}
-      </label>
-      <input
-        id='default-range'
-        type='range'
-        value={_temperature}
-        onChange={(e) => {
-          _setTemperature(Number(e.target.value));
-        }}
-        min={0}
-        max={2}
-        step={0.1}
-        className='w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer'
-      />
-      <div className='min-w-fit text-gray-500 dark:text-gray-300 text-sm mt-2'>
-        {t('temperature.description')}
-      </div>
-    </div>
+    <RangeField
+      label={t('temperature.label') as string}
+      value={_temperature}
+      onChange={_setTemperature}
+      min={0}
+      max={2}
+      step={0.1}
+      description={t('temperature.description')}
+    />
   );
 };
 
@@ -267,26 +209,15 @@ export const TopPSlider = ({
   const { t } = useTranslation('model');
 
   return (
-    <div className='mt-5 pt-5 border-t border-gray-500'>
-      <label className='block text-sm font-medium text-gray-900 dark:text-white'>
-        {t('topP.label')}: {_topP}
-      </label>
-      <input
-        id='default-range'
-        type='range'
-        value={_topP}
-        onChange={(e) => {
-          _setTopP(Number(e.target.value));
-        }}
-        min={0}
-        max={1}
-        step={0.05}
-        className='w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer'
-      />
-      <div className='min-w-fit text-gray-500 dark:text-gray-300 text-sm mt-2'>
-        {t('topP.description')}
-      </div>
-    </div>
+    <RangeField
+      label={t('topP.label') as string}
+      value={_topP}
+      onChange={_setTopP}
+      min={0}
+      max={1}
+      step={0.05}
+      description={t('topP.description')}
+    />
   );
 };
 
@@ -300,26 +231,15 @@ export const PresencePenaltySlider = ({
   const { t } = useTranslation('model');
 
   return (
-    <div className='mt-5 pt-5 border-t border-gray-500'>
-      <label className='block text-sm font-medium text-gray-900 dark:text-white'>
-        {t('presencePenalty.label')}: {_presencePenalty}
-      </label>
-      <input
-        id='default-range'
-        type='range'
-        value={_presencePenalty}
-        onChange={(e) => {
-          _setPresencePenalty(Number(e.target.value));
-        }}
-        min={-2}
-        max={2}
-        step={0.1}
-        className='w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer'
-      />
-      <div className='min-w-fit text-gray-500 dark:text-gray-300 text-sm mt-2'>
-        {t('presencePenalty.description')}
-      </div>
-    </div>
+    <RangeField
+      label={t('presencePenalty.label') as string}
+      value={_presencePenalty}
+      onChange={_setPresencePenalty}
+      min={-2}
+      max={2}
+      step={0.1}
+      description={t('presencePenalty.description')}
+    />
   );
 };
 
@@ -333,26 +253,15 @@ export const FrequencyPenaltySlider = ({
   const { t } = useTranslation('model');
 
   return (
-    <div className='mt-5 pt-5 border-t border-gray-500'>
-      <label className='block text-sm font-medium text-gray-900 dark:text-white'>
-        {t('frequencyPenalty.label')}: {_frequencyPenalty}
-      </label>
-      <input
-        id='default-range'
-        type='range'
-        value={_frequencyPenalty}
-        onChange={(e) => {
-          _setFrequencyPenalty(Number(e.target.value));
-        }}
-        min={-2}
-        max={2}
-        step={0.1}
-        className='w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer'
-      />
-      <div className='min-w-fit text-gray-500 dark:text-gray-300 text-sm mt-2'>
-        {t('frequencyPenalty.description')}
-      </div>
-    </div>
+    <RangeField
+      label={t('frequencyPenalty.label') as string}
+      value={_frequencyPenalty}
+      onChange={_setFrequencyPenalty}
+      min={-2}
+      max={2}
+      step={0.1}
+      description={t('frequencyPenalty.description')}
+    />
   );
 };
 
@@ -370,7 +279,8 @@ export const StreamToggle = ({
   return (
     <div className='mt-4 flex items-center justify-between'>
       <div>
-        <label
+        <FieldLabel>
+          <span
           className={`block text-sm font-medium ${
             disabled
               ? 'text-gray-400 dark:text-gray-500'
@@ -378,8 +288,10 @@ export const StreamToggle = ({
           }`}
         >
           {t('stream.label')}
-        </label>
-        <div
+          </span>
+        </FieldLabel>
+        <FieldDescription>
+          <span
           className={`text-sm ${
             disabled
               ? 'text-gray-400 dark:text-gray-500'
@@ -392,7 +304,8 @@ export const StreamToggle = ({
                 'This model does not support streaming.'
               )
             : t('stream.description')}
-        </div>
+          </span>
+        </FieldDescription>
       </div>
       <button
         className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
@@ -432,62 +345,19 @@ export const ImageDetailSelector = ({
 }) => {
   const { t } = useTranslation('model');
 
-  const imageDetailOptions = [
+  const imageDetailOptions: { value: ImageDetail; label: string }[] = [
     { value: 'low', label: t('imageDetail.low') },
     { value: 'high', label: t('imageDetail.high') },
     { value: 'auto', label: t('imageDetail.auto') },
   ];
 
-  const customStyles = {
-    control: (provided: any) => ({
-      ...provided,
-      backgroundColor: '#2D3748', // Dark background color
-      color: '#E2E8F0', // Light text color
-    }),
-    menu: (provided: any) => ({
-      ...provided,
-      backgroundColor: '#2D3748', // Dark background color
-    }),
-    option: (provided: any, state: any) => ({
-      ...provided,
-      'backgroundColor': state.isSelected ? '#4A5568' : '#2D3748', // Darker background for selected option
-      'color': '#E2E8F0', // Light text color
-      '&:hover': {
-        backgroundColor: '#4A5568', // Darker background on hover
-      },
-    }),
-    singleValue: (provided: any) => ({
-      ...provided,
-      color: '#E2E8F0', // Light text color
-    }),
-    input: (provided: any) => ({
-      ...provided,
-      color: '#E2E8F0', // Light text color for input
-    }),
-    placeholder: (provided: any) => ({
-      ...provided,
-      color: '#A0AEC0', // Light gray color for placeholder
-    }),
-  };
-
   return (
-    <div className='mt-5 pt-5 border-t border-gray-500'>
-      <label className='block text-sm font-medium text-gray-900 dark:text-white'>
-        {t('imageDetail.label')}
-      </label>
-      <Select
-        value={imageDetailOptions.find(
-          (option) => option.value === _imageDetail
-        )}
-        onChange={(selectedOption) =>
-          _setImageDetail(selectedOption?.value as ImageDetail)
-        }
-        options={imageDetailOptions}
-        className='basic-single'
-        classNamePrefix='select'
-        styles={customStyles}
-      />
-    </div>
+    <DarkSelectField
+      label={t('imageDetail.label') as string}
+      value={_imageDetail}
+      options={imageDetailOptions}
+      onChange={(value) => _setImageDetail((value ?? _imageDetail) as ImageDetail)}
+    />
   );
 };
 

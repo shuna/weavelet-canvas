@@ -45,7 +45,7 @@ const CloneChat = React.memo(() => {
       updatedChats.unshift(clonedChat);
 
       setChats(updatedChats);
-      useStore.setState({ contentStore } as any);
+      useStore.setState({ contentStore });
       setCurrentChatIndex(0);
       setCloned(true);
 

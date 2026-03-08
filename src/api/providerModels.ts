@@ -1,4 +1,100 @@
-import { ProviderConfig, ProviderId, ProviderModel } from '@store/provider-slice';
+import { ProviderConfig, ProviderId, ProviderModel } from '@type/provider';
+
+type UnknownRecord = Record<string, unknown>;
+type ProviderPricingPayload = {
+  prompt?: unknown;
+  completion?: unknown;
+};
+
+type ProviderModelPayload = {
+  id?: unknown;
+  name?: unknown;
+  context_length?: unknown;
+  context_window?: unknown;
+  created?: unknown;
+  pricing?: unknown;
+};
+
+type ProviderModelListPayload = {
+  data?: unknown;
+  models?: unknown;
+};
+
+const isRecord = (value: unknown): value is UnknownRecord =>
+  typeof value === 'object' && value !== null;
+
+const asProviderModelListPayload = (value: unknown): ProviderModelListPayload =>
+  (isRecord(value) ? value : {}) as ProviderModelListPayload;
+
+const asProviderModelPayload = (value: unknown): ProviderModelPayload =>
+  (isRecord(value) ? value : {}) as ProviderModelPayload;
+
+const asProviderPricingPayload = (value: unknown): ProviderPricingPayload =>
+  (isRecord(value) ? value : {}) as ProviderPricingPayload;
+
+const toStringValue = (value: unknown): string | undefined =>
+  typeof value === 'string' && value.length > 0 ? value : undefined;
+
+const toNumberValue = (value: unknown): number | undefined =>
+  typeof value === 'number' && Number.isFinite(value) ? value : undefined;
+
+const toMillionTokenPrice = (value: unknown): number | undefined => {
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    return value * 1_000_000;
+  }
+  if (typeof value === 'string') {
+    const parsed = parseFloat(value);
+    return Number.isFinite(parsed) ? parsed * 1_000_000 : undefined;
+  }
+  return undefined;
+};
+
+const getModelEntries = (value: unknown): unknown[] => {
+  const payload = asProviderModelListPayload(value);
+  if (Array.isArray(payload.data)) return payload.data;
+  if (Array.isArray(payload.models)) return payload.models;
+  return [];
+};
+
+const isSupportedModelId = (modelId: string) => {
+  const normalizedId = modelId.toLowerCase();
+  return !(
+    normalizedId.includes('embed') ||
+    normalizedId.includes('tts') ||
+    normalizedId.includes('whisper') ||
+    normalizedId.includes('dall-e') ||
+    normalizedId.includes('moderation')
+  );
+};
+
+const normalizeModelEntry = (
+  providerId: ProviderId,
+  entry: unknown
+): ProviderModel | null => {
+  const payload = asProviderModelPayload(entry);
+  const id = toStringValue(payload.id) ?? toStringValue(payload.name);
+  const name = toStringValue(payload.name) ?? toStringValue(payload.id);
+
+  if (!id || !name || !isSupportedModelId(id)) {
+    return null;
+  }
+
+  const pricing = asProviderPricingPayload(payload.pricing);
+  const promptPrice = toMillionTokenPrice(pricing.prompt);
+  const completionPrice = toMillionTokenPrice(pricing.completion);
+
+  return {
+    id,
+    name,
+    providerId,
+    contextLength:
+      toNumberValue(payload.context_length) ??
+      toNumberValue(payload.context_window),
+    promptPrice,
+    completionPrice,
+    created: toNumberValue(payload.created),
+  };
+};
 
 const HARDCODED_MODELS: Record<ProviderId, ProviderModel[]> = {
   openrouter: [
@@ -52,42 +148,11 @@ const HARDCODED_MODELS: Record<ProviderId, ProviderModel[]> = {
 
 function normalizeModels(
   providerId: ProviderId,
-  data: any
+  data: unknown
 ): ProviderModel[] {
-  const models: any[] = data?.data || data?.models || [];
-  return models
-    .filter((m: any) => {
-      const id = (m.id || m.name || '').toLowerCase();
-      // Filter out non-chat models
-      if (id.includes('embed') || id.includes('tts') || id.includes('whisper') ||
-          id.includes('dall-e') || id.includes('moderation')) {
-        return false;
-      }
-      return true;
-    })
-    .map((m: any) => {
-      // Pricing: OpenRouter uses pricing.prompt/completion as string per-token
-      // Other providers may have different formats
-      let promptPrice: number | undefined;
-      let completionPrice: number | undefined;
-      if (m.pricing?.prompt != null) {
-        // OpenRouter: price per token as string, convert to per 1M tokens
-        promptPrice = parseFloat(m.pricing.prompt) * 1_000_000;
-      }
-      if (m.pricing?.completion != null) {
-        completionPrice = parseFloat(m.pricing.completion) * 1_000_000;
-      }
-
-      return {
-        id: m.id || m.name,
-        name: m.name || m.id,
-        providerId,
-        contextLength: m.context_length ?? m.context_window ?? undefined,
-        promptPrice: promptPrice != null ? promptPrice : undefined,
-        completionPrice: completionPrice != null ? completionPrice : undefined,
-        created: m.created || undefined,
-      };
-    });
+  return getModelEntries(data)
+    .map((entry) => normalizeModelEntry(providerId, entry))
+    .filter((model): model is ProviderModel => model !== null);
 }
 
 function markHardcoded(models: ProviderModel[]): ProviderModel[] {
