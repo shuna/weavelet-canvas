@@ -13,7 +13,7 @@ export default function ProviderSidebar({
   onSelectProvider: (providerId: ProviderId) => void;
 }) {
   return (
-    <div className='w-48 border-r dark:border-gray-600 overflow-y-auto flex-shrink-0'>
+    <div className='hidden md:block w-48 border-r dark:border-gray-600 overflow-y-auto flex-shrink-0'>
       {PROVIDER_ORDER.map((providerId) => {
         const provider = providers[providerId];
         const favoriteCount = favoriteModels.filter(

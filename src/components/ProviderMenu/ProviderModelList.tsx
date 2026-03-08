@@ -115,7 +115,7 @@ export default function ProviderModelList({
             currentField={sortField}
             currentDir={sortDir}
             onSort={onSort}
-            className='w-20 text-right'
+            className='hidden sm:inline w-20 text-right'
           />
           <SortHeader
             field='context'
@@ -123,7 +123,7 @@ export default function ProviderModelList({
             currentField={sortField}
             currentDir={sortDir}
             onSort={onSort}
-            className='w-20 text-right'
+            className='hidden sm:inline w-20 text-right'
           />
           <SortHeader
             field='price'
@@ -131,7 +131,7 @@ export default function ProviderModelList({
             currentField={sortField}
             currentDir={sortDir}
             onSort={onSort}
-            className='w-28 text-right'
+            className='hidden md:inline w-28 text-right'
           />
         </div>
       )}
@@ -173,13 +173,13 @@ export default function ProviderModelList({
               <span className='flex-1 text-sm text-gray-900 dark:text-white truncate'>
                 {model.name}
               </span>
-              <span className='w-20 text-right text-xs text-gray-400 dark:text-gray-500'>
+              <span className='hidden sm:inline w-20 text-right text-xs text-gray-400 dark:text-gray-500'>
                 {formatCreatedDate(model.created)}
               </span>
-              <span className='w-20 text-right text-xs text-gray-400 dark:text-gray-500'>
+              <span className='hidden sm:inline w-20 text-right text-xs text-gray-400 dark:text-gray-500'>
                 {formatContextLength(model.contextLength)}
               </span>
-              <span className='w-28 text-right text-xs text-gray-400 dark:text-gray-500'>
+              <span className='hidden md:inline w-28 text-right text-xs text-gray-400 dark:text-gray-500'>
                 {model.promptPrice != null && model.promptPrice >= 0
                   ? formatModelPrice(model.promptPrice, model.completionPrice)
                   : '-'}

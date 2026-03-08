@@ -3,6 +3,7 @@ import ReactDOM from 'react-dom';
 import { useTranslation } from 'react-i18next';
 import useStore from '@store/store';
 import { ProviderId } from '@type/provider';
+import { PROVIDER_ORDER } from '@store/provider-config';
 import CrossIcon2 from '@icon/CrossIcon2';
 import {
   SortDir,
@@ -106,8 +107,8 @@ const ProviderMenu = ({
   if (!modalRoot) return null;
 
   return ReactDOM.createPortal(
-    <div className='fixed top-0 left-0 z-[999] w-full p-4 overflow-x-hidden overflow-y-auto h-full flex justify-center items-center'>
-      <div className='relative z-2 w-full max-w-4xl md:h-auto flex justify-center max-h-[80vh]'>
+    <div className='fixed top-0 left-0 z-[999] w-full p-2 md:p-4 overflow-x-hidden overflow-y-auto h-full flex justify-center items-center'>
+      <div className='relative z-2 w-full max-w-4xl md:h-auto flex justify-center max-h-[90vh] md:max-h-[80vh]'>
         <div className='relative bg-gray-50 rounded-lg shadow dark:bg-gray-700 w-full max-h-full overflow-hidden flex flex-col'>
           {/* Header */}
           <div className='flex items-center justify-between p-4 border-b dark:border-gray-600'>
@@ -121,6 +122,27 @@ const ProviderMenu = ({
             >
               <CrossIcon2 />
             </button>
+          </div>
+
+          {/* Mobile provider selector */}
+          <div className='md:hidden p-3 border-b dark:border-gray-600'>
+            <select
+              value={selectedProvider}
+              onChange={(e) => setSelectedProvider(e.target.value as ProviderId)}
+              className='w-full px-3 py-2 text-sm bg-gray-100 dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500'
+            >
+              {PROVIDER_ORDER.map((providerId) => {
+                const provider = providers[providerId];
+                const favoriteCount = favoriteModels.filter(
+                  (f) => f.providerId === providerId
+                ).length;
+                return (
+                  <option key={providerId} value={providerId}>
+                    {provider.name}{favoriteCount > 0 ? ` (${favoriteCount})` : ''}
+                  </option>
+                );
+              })}
+            </select>
           </div>
 
           {/* Body */}
