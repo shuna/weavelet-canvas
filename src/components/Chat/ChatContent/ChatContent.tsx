@@ -196,13 +196,6 @@ const ChatContent = () => {
     );
   }, [items, activePath, isCurrentChatGenerating, advancedMode]);
 
-  const Header = useMemo(() => {
-    if (!isCurrentChatGenerating && advancedMode && messages?.length === 0) {
-      return () => <NewMessageButton messageIndex={-1} />;
-    }
-    return undefined;
-  }, [isCurrentChatGenerating, advancedMode, messages?.length]);
-
   const Footer = useCallback(() => (
     <div className='flex flex-col items-center text-sm dark:bg-gray-800'>
       <Message
@@ -287,10 +280,7 @@ const ChatContent = () => {
     </div>
   ), [inputRole, stickyIndex, isCurrentChatGenerating, currentChatId, error, lastSubmitMode, handleRetry, hideSideMenu, hideShareGPT, t, setError, setLastSubmitContext]);
 
-  const components = useMemo(() => ({
-    ...(Header ? { Header } : {}),
-    Footer,
-  }), [Header, Footer]);
+  const components = useMemo(() => ({ Footer }), [Footer]);
 
   return (
     <div className='flex-1 overflow-hidden'>
