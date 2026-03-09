@@ -218,7 +218,7 @@ const EditViewButtons = memo(
                       noModel ? 'cursor-not-allowed opacity-40' : ''
                     }`}
                     onClick={() => {
-                      !generating && !noModel && setIsModalOpen(true);
+                      !generating && !noModel && handleGenerate();
                     }}
                     disabled={noModel}
                   >
