@@ -32,10 +32,6 @@ vi.mock('@store/store', () => ({
   },
 }));
 
-vi.mock('@utils/branchUtils', () => ({
-  upsertActivePathMessage: vi.fn(),
-}));
-
 vi.mock('@constants/modelLoader', () => ({
   modelOptions: [],
   modelMaxToken: {},
@@ -44,14 +40,6 @@ vi.mock('@constants/modelLoader', () => ({
   modelStreamSupport: {},
   modelDisplayNames: {},
   initializeModels: vi.fn(),
-}));
-
-vi.mock('@utils/chatShallowClone', () => ({
-  cloneChatAtIndex: (chats: any[], index: number) => {
-    const cloned = [...chats];
-    cloned[index] = { ...chats[index], messages: [...chats[index].messages] };
-    return cloned;
-  },
 }));
 
 vi.mock('@api/api', () => ({
@@ -102,45 +90,92 @@ describe('writeChunkToStore', () => {
       chats: [
         {
           id: 'chat-1',
+          branchTree: {
+            rootId: 'node-user',
+            activePath: ['node-user', 'node-assistant'],
+            nodes: {
+              'node-user': {
+                id: 'node-user',
+                parentId: null,
+                role: 'user',
+                contentHash: 'user-hash',
+                createdAt: 1,
+              },
+              'node-assistant': {
+                id: 'node-assistant',
+                parentId: 'node-user',
+                role: 'assistant',
+                contentHash: 'assistant-hash',
+                createdAt: 2,
+              },
+            },
+          },
           messages: [
             { role: 'user', content: [{ type: 'text', text: 'hi' }] },
             { role: 'assistant', content: [{ type: 'text', text: '' }] },
           ],
         },
       ],
-      contentStore: {},
+      contentStore: {
+        'user-hash': { content: [{ type: 'text', text: 'hi' }], refCount: 1 },
+        'assistant-hash': { content: [{ type: 'text', text: '' }], refCount: 1 },
+      },
     };
 
-    writeChunkToStore('chat-1', 1, 'Hello');
+    writeChunkToStore('chat-1', 'node-assistant', 'Hello');
 
     const msg = (mockState as any).chats[0].messages[1];
     expect(msg.content[0].text).toBe('Hello');
   });
 
-  it('accumulates multiple chunks', () => {
+  it('tracks the target bubble after reordering activePath', () => {
     mockState = {
       chats: [
         {
           id: 'chat-a',
+          branchTree: {
+            rootId: 'node-1',
+            activePath: ['node-2', 'node-1'],
+            nodes: {
+              'node-1': {
+                id: 'node-1',
+                parentId: 'node-2',
+                role: 'assistant',
+                contentHash: 'hash-1',
+                createdAt: 2,
+              },
+              'node-2': {
+                id: 'node-2',
+                parentId: null,
+                role: 'user',
+                contentHash: 'hash-2',
+                createdAt: 1,
+              },
+            },
+          },
           messages: [
+            { role: 'user', content: [{ type: 'text', text: 'prompt' }] },
             { role: 'assistant', content: [{ type: 'text', text: '' }] },
           ],
         },
       ],
-      contentStore: {},
+      contentStore: {
+        'hash-1': { content: [{ type: 'text', text: '' }], refCount: 1 },
+        'hash-2': { content: [{ type: 'text', text: 'prompt' }], refCount: 1 },
+      },
     };
 
-    writeChunkToStore('chat-a', 0, 'one');
-    writeChunkToStore('chat-a', 0, ' two');
+    writeChunkToStore('chat-a', 'node-1', 'one');
+    writeChunkToStore('chat-a', 'node-1', ' two');
 
-    const msg = (mockState as any).chats[0].messages[0];
+    const msg = (mockState as any).chats[0].messages[1];
     expect(msg.content[0].text).toBe('one two');
   });
 
   it('is a no-op when chatId is not found', () => {
     mockState = { chats: [{ id: 'other', messages: [] }], contentStore: {} };
     // Should not throw
-    writeChunkToStore('nonexistent', 0, 'text');
+    writeChunkToStore('nonexistent', 'node-1', 'text');
   });
 });
 
@@ -151,12 +186,27 @@ describe('executeSubmitStream', () => {
       chats: [
         {
           id: 'chat-1',
+          branchTree: {
+            rootId: 'node-1',
+            activePath: ['node-1'],
+            nodes: {
+              'node-1': {
+                id: 'node-1',
+                parentId: null,
+                role: 'assistant',
+                contentHash: 'hash-1',
+                createdAt: 1,
+              },
+            },
+          },
           messages: [
             { role: 'assistant', content: [{ type: 'text', text: '' }] },
           ],
         },
       ],
-      contentStore: {},
+      contentStore: {
+        'hash-1': { content: [{ type: 'text', text: '' }], refCount: 1 },
+      },
       favoriteModels: [],
       providerModelCache: {},
       providerCustomModels: {},
@@ -173,6 +223,7 @@ describe('executeSubmitStream', () => {
       chatId: 'chat-1',
       chatIndex: 0,
       messageIndex: 0,
+      targetNodeId: 'node-1',
       messages: [
         { role: 'system', content: [{ type: 'text', text: 'be helpful' }] },
         { role: 'user', content: [{ type: 'text', text: 'hi' }] },

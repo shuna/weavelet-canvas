@@ -21,6 +21,7 @@ type ContentActionsProps = {
   messageIndex: number;
   lastMessageIndex: number;
   isDelete: boolean;
+  isGeneratingMessage: boolean;
   isCurrentChatGenerating: boolean;
   setIsEdit: React.Dispatch<React.SetStateAction<boolean>>;
   setIsDelete: React.Dispatch<React.SetStateAction<boolean>>;
@@ -38,6 +39,7 @@ export default function ContentActions({
   messageIndex,
   lastMessageIndex,
   isDelete,
+  isGeneratingMessage,
   isCurrentChatGenerating,
   setIsEdit,
   setIsDelete,
@@ -73,7 +75,7 @@ export default function ContentActions({
 
             <MarkdownModeButton />
             <CopyButton onClick={onCopy} />
-            <EditButton setIsEdit={setIsEdit} />
+            {!isGeneratingMessage && <EditButton setIsEdit={setIsEdit} />}
             <ShowInEditorButton messageIndex={messageIndex} />
             <DeleteButton setIsDelete={setIsDelete} />
           </>

@@ -55,9 +55,9 @@ const ContentView = memo(
       state.chats?.[state.currentChatIndex]?.id ?? ''
     );
     const isGeneratingMessage = useStore((state) =>
-      role === 'assistant' &&
+      !!nodeId &&
       Object.values(state.generatingSessions).some(
-        (s) => s.chatId === currentChatId && s.messageIndex === messageIndex
+        (s) => s.chatId === currentChatId && s.targetNodeId === nodeId
       )
     );
     const isCurrentChatGenerating = useStore((state) =>
@@ -124,6 +124,7 @@ const ContentView = memo(
           messageIndex={messageIndex}
           lastMessageIndex={lastMessageIndex}
           isDelete={isDelete}
+          isGeneratingMessage={isGeneratingMessage}
           isCurrentChatGenerating={isCurrentChatGenerating}
           setIsEdit={setIsEdit}
           setIsDelete={setIsDelete}

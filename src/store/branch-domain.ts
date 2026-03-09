@@ -107,7 +107,8 @@ const finalizePreparedBranchMutationState = ({
 
 const removeMessageAtIndexFromPreparedState = (
   state: PreparedBranchMutationState,
-  messageIndex: number
+  messageIndex: number,
+  options?: { preserveNode?: boolean }
 ) => {
   const { tree, contentStore } = state;
   const nodeId = tree.activePath[messageIndex];
@@ -130,8 +131,10 @@ const removeMessageAtIndexFromPreparedState = (
     tree.nodes[nextId].parentId = parentId;
   }
 
-  releaseContent(contentStore, tree.nodes[nodeId].contentHash);
-  delete tree.nodes[nodeId];
+  if (!options?.preserveNode) {
+    releaseContent(contentStore, tree.nodes[nodeId].contentHash);
+    delete tree.nodes[nodeId];
+  }
   tree.activePath.splice(messageIndex, 1);
 };
 
@@ -401,10 +404,11 @@ export const removeMessageAtIndexState = (
   chats: ChatInterface[],
   chatIndex: number,
   messageIndex: number,
-  currentContentStore: ContentStoreData
+  currentContentStore: ContentStoreData,
+  options?: { preserveNode?: boolean }
 ) => {
   const state = prepareBranchMutationState(chats, chatIndex, currentContentStore);
-  removeMessageAtIndexFromPreparedState(state, messageIndex);
+  removeMessageAtIndexFromPreparedState(state, messageIndex, options);
   return finalizePreparedBranchMutationState(state);
 };
 

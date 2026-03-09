@@ -280,9 +280,9 @@ export interface GeneratingSession {
   chatId: string;
   chatIndex: number;
   messageIndex: number;
+  targetNodeId: string;
   mode: 'append' | 'midchat';
   insertIndex: number | null;
   requestPath: 'sw' | 'fetch';
   startedAt: number;
 }
-

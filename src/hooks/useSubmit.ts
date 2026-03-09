@@ -55,7 +55,7 @@ const useSubmit = () => {
     const sessionId = crypto.randomUUID();
     const abortController = createSubmitAbortController(sessionId);
 
-    const { updatedChats, messageIndex, contentStore } = insertAssistantPlaceholder(
+    const { updatedChats, messageIndex, targetNodeId, contentStore } = insertAssistantPlaceholder(
       chats,
       chatIndex,
       mode,
@@ -69,6 +69,7 @@ const useSubmit = () => {
       chatId,
       chatIndex,
       messageIndex,
+      targetNodeId,
       mode,
       mode === 'midchat' ? messageIndex : null
     );
@@ -113,6 +114,7 @@ const useSubmit = () => {
         chatId,
         chatIndex,
         messageIndex,
+        targetNodeId,
         messages,
         config: chats[chatIndex].config,
         resolvedProvider: resolved,
@@ -121,7 +123,7 @@ const useSubmit = () => {
         t: (key: string) => t(key) as string,
       });
 
-      await applySubmitTokenUsage(chatId, messageIndex);
+      await applySubmitTokenUsage(chatId, targetNodeId);
 
       if (mode === 'append') {
         await maybeGenerateAutoTitle({
