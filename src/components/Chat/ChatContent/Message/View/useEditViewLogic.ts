@@ -7,10 +7,6 @@ import {
   TextContentInterface,
   isImageContent,
 } from '@type/chat';
-import {
-  truncateActivePathAfterIndex,
-  upsertActivePathMessage,
-} from '@utils/branchUtils';
 import { defaultModel } from '@constants/chat';
 
 function isChatBusy(): boolean {
@@ -40,7 +36,9 @@ export function useEditViewLogic({
 }) {
   const setCurrentChatIndex = useStore((state) => state.setCurrentChatIndex);
   const inputRole = useStore((state) => state.inputRole);
-  const setChats = useStore((state) => state.setChats);
+  const appendNodeToActivePath = useStore((state) => state.appendNodeToActivePath);
+  const replaceMessageAndPruneFollowing = useStore((state) => state.replaceMessageAndPruneFollowing);
+  const upsertMessageAtIndex = useStore((state) => state.upsertMessageAtIndex);
   var currentChatIndex = useStore((state) => state.currentChatIndex);
   const { model, providerId } = useStore((state) => {
     const isInitialised =
@@ -156,23 +154,19 @@ export function useEditViewLogic({
     );
     if (sticky && ((!hasTextContent && !hasImageContent) || isChatBusy())) return;
 
-    const chats = useStore.getState().chats!;
-    const updatedChats = chats.slice();
-    const chat = { ...chats[currentChatIndex], messages: [...chats[currentChatIndex].messages] };
-    updatedChats[currentChatIndex] = chat;
-
     if (sticky) {
-      const newMessage = { role: inputRole, content: _content };
-      chat.messages.push(newMessage);
-      upsertActivePathMessage(chat, chat.messages.length - 1, newMessage, useStore.getState().contentStore);
+      appendNodeToActivePath(currentChatIndex, inputRole, _content);
       _setContent([{ type: 'text', text: '' } as TextContentInterface]);
       resetTextAreaHeight();
     } else {
-      chat.messages[messageIndex] = { ...chat.messages[messageIndex], content: _content };
-      upsertActivePathMessage(chat, messageIndex, chat.messages[messageIndex], useStore.getState().contentStore);
+      upsertMessageAtIndex(
+        currentChatIndex,
+        messageIndex,
+        useStore.getState().chats![currentChatIndex].messages[messageIndex].role,
+        _content
+      );
       setIsEdit(false);
     }
-    setChats(updatedChats);
   };
 
   const handleBranchOnly = () => {
@@ -200,18 +194,17 @@ export function useEditViewLogic({
 
   const handleGenerateNextOnly = () => {
     if (isChatBusy() || !modelValid) return;
-    const chats = useStore.getState().chats!;
-    const updatedChats = chats.slice();
-    const chat = { ...chats[currentChatIndex], messages: [...chats[currentChatIndex].messages] };
-    updatedChats[currentChatIndex] = chat;
-    chat.messages[messageIndex] = { ...chat.messages[messageIndex], content: _content };
-    upsertActivePathMessage(chat, messageIndex, chat.messages[messageIndex], useStore.getState().contentStore);
     const nextIndex = messageIndex + 1;
-    if (nextIndex < chat.messages.length) {
-      chat.messages.splice(nextIndex, 1);
-    }
+    const chats = useStore.getState().chats!;
+    const removeCount = nextIndex < chats[currentChatIndex].messages.length ? 1 : 0;
+    replaceMessageAndPruneFollowing(
+      currentChatIndex,
+      messageIndex,
+      chats[currentChatIndex].messages[messageIndex].role,
+      _content,
+      removeCount
+    );
     setIsEdit(false);
-    setChats(updatedChats);
     handleSubmitMidChat(nextIndex);
   };
 
@@ -222,27 +215,24 @@ export function useEditViewLogic({
     );
     if (isChatBusy() || !modelValid) return;
 
-    const chats = useStore.getState().chats!;
-    const updatedChats = chats.slice();
-    const chat = { ...chats[currentChatIndex], messages: [...chats[currentChatIndex].messages] };
-    updatedChats[currentChatIndex] = chat;
-
     if (sticky) {
       if (hasTextContent || hasImageContent) {
-        const newMessage = { role: inputRole, content: _content };
-        chat.messages.push(newMessage);
-        upsertActivePathMessage(chat, chat.messages.length - 1, newMessage, useStore.getState().contentStore);
+        appendNodeToActivePath(currentChatIndex, inputRole, _content);
       }
       _setContent([{ type: 'text', text: '' } as TextContentInterface]);
       resetTextAreaHeight();
     } else {
-      chat.messages[messageIndex] = { ...chat.messages[messageIndex], content: _content };
-      upsertActivePathMessage(chat, messageIndex, chat.messages[messageIndex], useStore.getState().contentStore);
-      chat.messages = chat.messages.slice(0, messageIndex + 1);
-      truncateActivePathAfterIndex(chat, messageIndex);
+      const chats = useStore.getState().chats!;
+      const removeCount = Math.max(0, chats[currentChatIndex].messages.length - (messageIndex + 1));
+      replaceMessageAndPruneFollowing(
+        currentChatIndex,
+        messageIndex,
+        chats[currentChatIndex].messages[messageIndex].role,
+        _content,
+        removeCount
+      );
       setIsEdit(false);
     }
-    setChats(updatedChats);
     handleSubmit();
   };
 

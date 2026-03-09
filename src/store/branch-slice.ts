@@ -1,6 +1,7 @@
 import { StoreSlice } from './store';
 import {
   BranchClipboard,
+  ChatInterface,
   ContentInterface,
   Role,
 } from '@type/chat';
@@ -11,16 +12,23 @@ import {
   createBranchState,
   deleteBranchState,
   ensureBranchTreeState,
+  insertMessageAtIndexState,
+  moveMessageState,
   pasteBranchSequenceState,
+  removeMessageAtIndexState,
   renameBranchNodeState,
+  replaceMessageAndPruneFollowingState,
   switchActivePathState,
   switchBranchAtNodeState,
   truncateActivePathState,
+  upsertMessageAtIndexState,
   updateLastNodeContentState,
 } from './branch-domain';
 
 export interface BranchSlice {
   contentStore: ContentStoreData;
+  setContentStore: (contentStore: ContentStoreData) => void;
+  applyBranchState: (chats: ChatInterface[], contentStore: ContentStoreData) => void;
   branchClipboard: BranchClipboard | null;
   branchEditorFocusNodeId: string | null;
   setBranchEditorFocusNodeId: (nodeId: string | null) => void;
@@ -68,6 +76,31 @@ export interface BranchSlice {
     content: ContentInterface[]
   ) => void;
   truncateActivePathAt: (chatIndex: number, nodeId: string) => void;
+  upsertMessageAtIndex: (
+    chatIndex: number,
+    messageIndex: number,
+    role: Role,
+    content: ContentInterface[]
+  ) => void;
+  insertMessageAtIndex: (
+    chatIndex: number,
+    messageIndex: number,
+    role: Role,
+    content: ContentInterface[]
+  ) => string;
+  removeMessageAtIndex: (chatIndex: number, messageIndex: number) => void;
+  moveMessage: (
+    chatIndex: number,
+    messageIndex: number,
+    direction: 'up' | 'down'
+  ) => void;
+  replaceMessageAndPruneFollowing: (
+    chatIndex: number,
+    messageIndex: number,
+    role: Role,
+    content: ContentInterface[],
+    removeCount?: number
+  ) => void;
 
   copyBranchSequence: (
     chatIndex: number,
@@ -83,6 +116,13 @@ export interface BranchSlice {
 
 export const createBranchSlice: StoreSlice<BranchSlice> = (set, get) => ({
   contentStore: {},
+  setContentStore: (contentStore) => {
+    set({ contentStore });
+  },
+  applyBranchState: (chats, contentStore) => {
+    get().setChats(chats);
+    set({ contentStore });
+  },
   branchClipboard: null,
   branchEditorFocusNodeId: null,
   setBranchEditorFocusNodeId: (nodeId) => {
@@ -149,8 +189,7 @@ export const createBranchSlice: StoreSlice<BranchSlice> = (set, get) => ({
       chatIndex,
       get().contentStore
     );
-    get().setChats(updatedChats);
-    set({ contentStore });
+    get().applyBranchState(updatedChats, contentStore);
   },
 
   createBranch: (chatIndex, fromNodeId, newContent) => {
@@ -161,8 +200,7 @@ export const createBranchSlice: StoreSlice<BranchSlice> = (set, get) => ({
       newContent,
       get().contentStore
     );
-    get().setChats(chats);
-    set({ contentStore });
+    get().applyBranchState(chats, contentStore);
     return newId;
   },
 
@@ -185,8 +223,7 @@ export const createBranchSlice: StoreSlice<BranchSlice> = (set, get) => ({
       nodeId,
       get().contentStore
     );
-    get().setChats(chats);
-    set({ contentStore });
+    get().applyBranchState(chats, contentStore);
   },
 
   renameBranchNode: (chatIndex, nodeId, label) => {
@@ -201,8 +238,7 @@ export const createBranchSlice: StoreSlice<BranchSlice> = (set, get) => ({
       content,
       get().contentStore
     );
-    get().setChats(chats);
-    set({ contentStore });
+    get().applyBranchState(chats, contentStore);
     return newId;
   },
 
@@ -213,14 +249,75 @@ export const createBranchSlice: StoreSlice<BranchSlice> = (set, get) => ({
       content,
       get().contentStore
     );
-    get().setChats(chats);
-    set({ contentStore });
+    get().applyBranchState(chats, contentStore);
   },
 
   truncateActivePathAt: (chatIndex, nodeId) => {
     get().setChats(
       truncateActivePathState(get().chats!, chatIndex, nodeId, get().contentStore)
     );
+  },
+
+  upsertMessageAtIndex: (chatIndex, messageIndex, role, content) => {
+    const { chats, contentStore } = upsertMessageAtIndexState(
+      get().chats!,
+      chatIndex,
+      messageIndex,
+      { role, content },
+      get().contentStore
+    );
+    get().applyBranchState(chats, contentStore);
+  },
+
+  insertMessageAtIndex: (chatIndex, messageIndex, role, content) => {
+    const { chats, contentStore, newId } = insertMessageAtIndexState(
+      get().chats!,
+      chatIndex,
+      messageIndex,
+      { role, content },
+      get().contentStore
+    );
+    get().applyBranchState(chats, contentStore);
+    return newId;
+  },
+
+  removeMessageAtIndex: (chatIndex, messageIndex) => {
+    const { chats, contentStore } = removeMessageAtIndexState(
+      get().chats!,
+      chatIndex,
+      messageIndex,
+      get().contentStore
+    );
+    get().applyBranchState(chats, contentStore);
+  },
+
+  moveMessage: (chatIndex, messageIndex, direction) => {
+    const { chats, contentStore } = moveMessageState(
+      get().chats!,
+      chatIndex,
+      messageIndex,
+      direction,
+      get().contentStore
+    );
+    get().applyBranchState(chats, contentStore);
+  },
+
+  replaceMessageAndPruneFollowing: (
+    chatIndex,
+    messageIndex,
+    role,
+    content,
+    removeCount = 0
+  ) => {
+    const { chats, contentStore } = replaceMessageAndPruneFollowingState(
+      get().chats!,
+      chatIndex,
+      messageIndex,
+      { role, content },
+      get().contentStore,
+      removeCount
+    );
+    get().applyBranchState(chats, contentStore);
   },
 
   copyBranchSequence: (chatIndex, fromNodeId, toNodeId) => {
@@ -243,8 +340,7 @@ export const createBranchSlice: StoreSlice<BranchSlice> = (set, get) => ({
       clipboard,
       get().contentStore
     );
-    get().setChats(chats);
-    set({ contentStore });
+    get().applyBranchState(chats, contentStore);
   },
 
   setBranchClipboard: (clipboard) => {
