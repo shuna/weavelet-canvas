@@ -15,7 +15,6 @@ import {
   isTextContent,
 } from '@type/chat';
 import {
-  removeMessageWithBranchSync,
   resolveRegenerateTarget,
 } from '@utils/branchUtils';
 import ContentActions from './ContentActions';
@@ -39,7 +38,8 @@ const ContentView = memo(
     const [isDelete, setIsDelete] = useState<boolean>(false);
 
     const currentChatIndex = useStore((state) => state.currentChatIndex);
-    const setChats = useStore((state) => state.setChats);
+    const removeMessageAtIndex = useStore((state) => state.removeMessageAtIndex);
+    const moveMessage = useStore((state) => state.moveMessage);
     const nodeId = useStore(
       (state) =>
         state.chats?.[state.currentChatIndex]?.branchTree?.activePath?.[
@@ -65,28 +65,11 @@ const ContentView = memo(
     );
 
     const handleDelete = () => {
-      const chats = useStore.getState().chats!;
-      const contentStore = useStore.getState().contentStore;
-      const updatedChats = chats.slice();
-      updatedChats[currentChatIndex] = structuredClone(chats[currentChatIndex]);
-      removeMessageWithBranchSync(updatedChats[currentChatIndex], messageIndex, contentStore);
-      setChats(updatedChats);
+      removeMessageAtIndex(currentChatIndex, messageIndex);
     };
 
     const handleMove = (direction: 'up' | 'down') => {
-      const chats = useStore.getState().chats!;
-      const updatedChats = chats.slice();
-      updatedChats[currentChatIndex] = structuredClone(chats[currentChatIndex]);
-      const updatedMessages = updatedChats[currentChatIndex].messages;
-      const temp = updatedMessages[messageIndex];
-      if (direction === 'up') {
-        updatedMessages[messageIndex] = updatedMessages[messageIndex - 1];
-        updatedMessages[messageIndex - 1] = temp;
-      } else {
-        updatedMessages[messageIndex] = updatedMessages[messageIndex + 1];
-        updatedMessages[messageIndex + 1] = temp;
-      }
-      setChats(updatedChats);
+      moveMessage(currentChatIndex, messageIndex, direction);
     };
 
     const handleMoveUp = () => {
@@ -107,15 +90,9 @@ const ContentView = memo(
       );
       if (!plan) return;
 
-      const chats = useStore.getState().chats!;
-      const contentStore = useStore.getState().contentStore;
-      const updatedChats = chats.slice();
-      updatedChats[currentChatIndex] = structuredClone(chats[currentChatIndex]);
-
       if (plan.removeIndex >= 0) {
-        removeMessageWithBranchSync(updatedChats[currentChatIndex], plan.removeIndex, contentStore);
+        removeMessageAtIndex(currentChatIndex, plan.removeIndex);
       }
-      setChats(updatedChats);
 
       if (plan.submitMode === 'append') {
         handleSubmit();

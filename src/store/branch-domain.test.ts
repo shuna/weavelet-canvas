@@ -6,7 +6,12 @@ import {
   createBranchState,
   deleteBranchState,
   ensureBranchTreeState,
+  insertMessageAtIndexState,
+  moveMessageState,
   pasteBranchSequenceState,
+  removeMessageAtIndexState,
+  replaceMessageAndPruneFollowingState,
+  upsertMessageAtIndexState,
 } from './branch-domain';
 
 const textContent = (text: string): ContentInterface[] => [{ type: 'text', text }];
@@ -83,5 +88,113 @@ describe('branch-domain', () => {
 
     expect(pasted.chats[0].branchTree?.activePath).toHaveLength(2);
     expect(pasted.contentStore[secondNode.contentHash].refCount).toBe(2);
+  });
+
+  it('inserts a message into the active path and rewires parent links', () => {
+    const ensured = ensureBranchTreeState([createChat()], 0, {});
+
+    const inserted = insertMessageAtIndexState(
+      ensured.chats,
+      0,
+      1,
+      { role: 'system', content: textContent('inserted') },
+      ensured.contentStore
+    );
+
+    expect(inserted.chats[0].messages.map((message) => message.role)).toEqual([
+      'user',
+      'system',
+      'assistant',
+    ]);
+
+    const tree = inserted.chats[0].branchTree!;
+    const [firstId, insertedId, thirdId] = tree.activePath;
+    expect(tree.nodes[insertedId].parentId).toBe(firstId);
+    expect(tree.nodes[thirdId].parentId).toBe(insertedId);
+  });
+
+  it('removes the first active-path node and updates the root', () => {
+    const ensured = ensureBranchTreeState([createChat()], 0, {});
+    const treeBefore = ensured.chats[0].branchTree!;
+    const oldRootId = treeBefore.rootId;
+    const secondId = treeBefore.activePath[1];
+
+    const removed = removeMessageAtIndexState(
+      ensured.chats,
+      0,
+      0,
+      ensured.contentStore
+    );
+
+    const tree = removed.chats[0].branchTree!;
+    expect(tree.rootId).toBe(secondId);
+    expect(tree.nodes[secondId].parentId).toBeNull();
+    expect(tree.nodes[oldRootId]).toBeUndefined();
+    expect(removed.chats[0].messages.map((message) => message.role)).toEqual([
+      'assistant',
+    ]);
+  });
+
+  it('moves the root message down while preserving a valid active path', () => {
+    const ensured = ensureBranchTreeState([createChat()], 0, {});
+
+    const moved = moveMessageState(
+      ensured.chats,
+      0,
+      0,
+      'down',
+      ensured.contentStore
+    );
+
+    const tree = moved.chats[0].branchTree!;
+    const [firstId, secondId] = tree.activePath;
+    expect(tree.rootId).toBe(firstId);
+    expect(tree.nodes[firstId].parentId).toBeNull();
+    expect(tree.nodes[secondId].parentId).toBe(firstId);
+    expect(moved.chats[0].messages.map((message) => message.role)).toEqual([
+      'assistant',
+      'user',
+    ]);
+  });
+
+  it('replaces a message and prunes following messages in one branch-aware path', () => {
+    const ensured = ensureBranchTreeState([createChat()], 0, {});
+    const inserted = insertMessageAtIndexState(
+      ensured.chats,
+      0,
+      2,
+      { role: 'assistant', content: textContent('tail') },
+      ensured.contentStore
+    );
+
+    const updated = replaceMessageAndPruneFollowingState(
+      inserted.chats,
+      0,
+      0,
+      { role: 'user', content: textContent('updated') },
+      inserted.contentStore,
+      2
+    );
+
+    expect(updated.chats[0].messages).toEqual([
+      { role: 'user', content: textContent('updated') },
+    ]);
+    expect(updated.chats[0].branchTree?.activePath).toHaveLength(1);
+  });
+
+  it('upserts into a flat chat by first materializing a branch tree', () => {
+    const updated = upsertMessageAtIndexState(
+      [createChat()],
+      0,
+      1,
+      { role: 'assistant', content: textContent('updated world') },
+      {}
+    );
+
+    expect(updated.chats[0].branchTree).toBeDefined();
+    expect(updated.chats[0].messages[1]).toEqual({
+      role: 'assistant',
+      content: textContent('updated world'),
+    });
   });
 });

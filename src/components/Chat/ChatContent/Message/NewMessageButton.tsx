@@ -3,15 +3,15 @@ import useStore from '@store/store';
 
 import PlusIcon from '@icon/PlusIcon';
 
-import { ChatInterface, TextContentInterface } from '@type/chat';
+import { TextContentInterface } from '@type/chat';
 import { generateDefaultChat } from '@constants/chat';
-import { cloneChatAtIndex } from '@utils/chatShallowClone';
 
 const NewMessageButton = React.memo(
   ({ messageIndex }: { messageIndex: number }) => {
     const setChats = useStore((state) => state.setChats);
     const currentChatIndex = useStore((state) => state.currentChatIndex);
     const setCurrentChatIndex = useStore((state) => state.setCurrentChatIndex);
+    const insertMessageAtIndex = useStore((state) => state.insertMessageAtIndex);
 
     const addChat = () => {
       const chats = useStore.getState().chats;
@@ -35,14 +35,12 @@ const NewMessageButton = React.memo(
       if (currentChatIndex === -1) {
         addChat();
       } else {
-        const chats = useStore.getState().chats;
-        if (!chats) return;
-        const updatedChats = cloneChatAtIndex(chats, currentChatIndex);
-        updatedChats[currentChatIndex].messages.splice(messageIndex + 1, 0, {
-          content: [{ type: 'text', text: '' } as TextContentInterface],
-          role: 'user',
-        });
-        setChats(updatedChats);
+        insertMessageAtIndex(
+          currentChatIndex,
+          messageIndex + 1,
+          'user',
+          [{ type: 'text', text: '' } as TextContentInterface]
+        );
       }
     };
 

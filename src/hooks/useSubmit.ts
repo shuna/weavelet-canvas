@@ -38,6 +38,7 @@ const useSubmit = () => {
   const providers = useStore((state) => state.providers) || {};
   const currentChatIndex = useStore((state) => state.currentChatIndex);
   const setChats = useStore((state) => state.setChats);
+  const applyBranchState = useStore((state) => state.applyBranchState);
   const fallbackProvider: ResolvedProvider = { endpoint: apiEndpoint, key: apiKey };
 
   const runSubmit = async (mode: SubmitMode, insertIndex: number | null = null) => {
@@ -54,14 +55,14 @@ const useSubmit = () => {
     const sessionId = crypto.randomUUID();
     const abortController = createSubmitAbortController(sessionId);
 
-    const { updatedChats, messageIndex } = insertAssistantPlaceholder(
+    const { updatedChats, messageIndex, contentStore } = insertAssistantPlaceholder(
       chats,
       chatIndex,
       mode,
       useStore.getState().contentStore,
       insertIndex
     );
-    setChats(updatedChats);
+    applyBranchState(updatedChats, contentStore);
 
     const session = buildGeneratingSession(
       sessionId,
@@ -164,23 +165,19 @@ const useSubmit = () => {
     const chats = useStore.getState().chats;
     if (!chats) return;
 
-    const updatedChats = chats.slice();
-    const chat = { ...chats[currentChatIndex], messages: [...chats[currentChatIndex].messages] };
-    updatedChats[currentChatIndex] = chat;
-
     if (lastSubmitMode === 'append') {
+      const chat = chats[currentChatIndex];
       const lastMsg = chat.messages[chat.messages.length - 1];
       if (lastMsg?.role === 'assistant') {
-        chat.messages.pop();
-        setChats(updatedChats);
+        useStore.getState().removeMessageAtIndex(currentChatIndex, chat.messages.length - 1);
       }
       setError('');
       handleSubmit();
     } else if (lastSubmitMode === 'midchat' && lastSubmitIndex !== null) {
+      const chat = chats[currentChatIndex];
       const targetMsg = chat.messages[lastSubmitIndex];
       if (targetMsg?.role === 'assistant') {
-        chat.messages.splice(lastSubmitIndex, 1);
-        setChats(updatedChats);
+        useStore.getState().removeMessageAtIndex(currentChatIndex, lastSubmitIndex);
       }
       setError('');
       handleSubmitMidChat(lastSubmitIndex);

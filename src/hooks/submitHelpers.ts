@@ -1,10 +1,13 @@
 import { getChatCompletion } from '@api/api';
 import { officialAPIEndpoint } from '@constants/auth';
 import useStore from '@store/store';
-import { upsertActivePathMessage } from '@utils/branchUtils';
 import { cloneChatAtIndex } from '@utils/chatShallowClone';
 import { ContentStoreData } from '@utils/contentStore';
 import { updateTotalTokenUsed } from '@utils/messageUtils';
+import {
+  appendNodeToActivePathState,
+  insertMessageAtIndexState,
+} from '@store/branch-domain';
 import {
   ChatInterface,
   ConfigInterface,
@@ -34,26 +37,38 @@ export const insertAssistantPlaceholder = (
   mode: SubmitMode,
   contentStore: ContentStoreData,
   insertIndex: number | null
-): { updatedChats: ChatInterface[]; messageIndex: number } => {
-  const updatedChats = cloneChatAtIndex(chats, chatIndex);
+): { updatedChats: ChatInterface[]; messageIndex: number; contentStore: ContentStoreData } => {
   const assistantMessage = createAssistantPlaceholder();
   const messageIndex =
-    mode === 'append' ? updatedChats[chatIndex].messages.length : insertIndex ?? 0;
+    mode === 'append' ? chats[chatIndex].messages.length : insertIndex ?? 0;
 
   if (mode === 'append') {
-    updatedChats[chatIndex].messages.push(assistantMessage);
-  } else {
-    updatedChats[chatIndex].messages.splice(messageIndex, 0, assistantMessage);
+    const appended = appendNodeToActivePathState(
+      chats,
+      chatIndex,
+      'assistant',
+      assistantMessage.content,
+      contentStore
+    );
+    return {
+      updatedChats: appended.chats,
+      messageIndex,
+      contentStore: appended.contentStore,
+    };
   }
 
-  upsertActivePathMessage(
-    updatedChats[chatIndex],
+  const inserted = insertMessageAtIndexState(
+    chats,
+    chatIndex,
     messageIndex,
     assistantMessage,
     contentStore
   );
-
-  return { updatedChats, messageIndex };
+  return {
+    updatedChats: inserted.chats,
+    messageIndex,
+    contentStore: inserted.contentStore,
+  };
 };
 
 export const buildGeneratingSession = (
