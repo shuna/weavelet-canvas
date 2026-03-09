@@ -37,7 +37,12 @@ export const insertAssistantPlaceholder = (
   mode: SubmitMode,
   contentStore: ContentStoreData,
   insertIndex: number | null
-): { updatedChats: ChatInterface[]; messageIndex: number; contentStore: ContentStoreData } => {
+): {
+  updatedChats: ChatInterface[];
+  messageIndex: number;
+  targetNodeId: string;
+  contentStore: ContentStoreData;
+} => {
   const assistantMessage = createAssistantPlaceholder();
   const messageIndex =
     mode === 'append' ? chats[chatIndex].messages.length : insertIndex ?? 0;
@@ -53,6 +58,7 @@ export const insertAssistantPlaceholder = (
     return {
       updatedChats: appended.chats,
       messageIndex,
+      targetNodeId: appended.newId,
       contentStore: appended.contentStore,
     };
   }
@@ -67,6 +73,7 @@ export const insertAssistantPlaceholder = (
   return {
     updatedChats: inserted.chats,
     messageIndex,
+    targetNodeId: inserted.newId,
     contentStore: inserted.contentStore,
   };
 };
@@ -76,6 +83,7 @@ export const buildGeneratingSession = (
   chatId: string,
   chatIndex: number,
   messageIndex: number,
+  targetNodeId: string,
   mode: 'append' | 'midchat',
   insertIndex: number | null
 ): GeneratingSession => ({
@@ -83,6 +91,7 @@ export const buildGeneratingSession = (
   chatId,
   chatIndex,
   messageIndex,
+  targetNodeId,
   mode,
   insertIndex,
   requestPath: 'sw',
@@ -140,7 +149,7 @@ export const getSubmitContextMessages = (
 
 export const applySubmitTokenUsage = async (
   chatId: string,
-  assistantMessageIndex: number
+  targetNodeId: string
 ): Promise<void> => {
   const state = useStore.getState();
   if (!state.countTotalTokens || !state.chats) return;
@@ -148,8 +157,12 @@ export const applySubmitTokenUsage = async (
   const chatIndex = state.chats.findIndex((chat) => chat.id === chatId);
   if (chatIndex < 0) return;
 
-  const config = state.chats[chatIndex].config;
-  const messages = state.chats[chatIndex].messages;
+  const chat = state.chats[chatIndex];
+  const assistantMessageIndex = chat.branchTree?.activePath.indexOf(targetNodeId) ?? -1;
+  if (assistantMessageIndex < 0) return;
+
+  const config = chat.config;
+  const messages = chat.messages;
   const assistantMessage = messages[assistantMessageIndex];
   if (!assistantMessage) return;
 

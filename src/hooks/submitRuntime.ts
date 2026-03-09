@@ -6,8 +6,10 @@ import {
 } from '@api/api';
 import { parseEventSource } from '@api/helper';
 import { officialAPIEndpoint } from '@constants/auth';
+import { cloneChatAt } from '@store/branch-domain';
 import { upsertActivePathMessage } from '@utils/branchUtils';
-import { cloneChatAtIndex } from '@utils/chatShallowClone';
+import { materializeActivePath } from '@utils/branchUtils';
+import { addContent, releaseContent, resolveContent } from '@utils/contentStore';
 import { deleteRequest as deleteStreamRecord } from '@utils/streamDb';
 import { getEffectiveStreamEnabled } from '@utils/streamSupport';
 import * as swBridge from '@utils/swBridge';
@@ -15,6 +17,7 @@ import {
   ConfigInterface,
   MessageInterface,
   TextContentInterface,
+  isTextContent,
 } from '@type/chat';
 import type { ResolvedProvider } from './submitHelpers';
 
@@ -76,7 +79,7 @@ export const isChatGenerating = (chatId: string): boolean =>
 
 export const writeChunkToStore = (
   chatId: string,
-  messageIndex: number,
+  targetNodeId: string,
   text: string
 ) => {
   useStore.setState((state) => {
@@ -86,8 +89,41 @@ export const writeChunkToStore = (
     const chatIndex = chats.findIndex((chat) => chat.id === chatId);
     if (chatIndex < 0) return state;
 
-    const updatedChats = cloneChatAtIndex(chats, chatIndex);
-    const message = updatedChats[chatIndex].messages[messageIndex];
+    const updatedChats = cloneChatAt(chats, chatIndex);
+    const updatedContentStore = { ...state.contentStore };
+    const updatedChat = updatedChats[chatIndex];
+    const tree = updatedChat.branchTree;
+
+    if (tree?.nodes[targetNodeId]) {
+      const node = tree.nodes[targetNodeId];
+      const currentContent = resolveContent(updatedContentStore, node.contentHash);
+      const currentText = isTextContent(currentContent[0]) ? currentContent[0].text : '';
+      const nextContent = [
+        { type: 'text', text: currentText + text } as TextContentInterface,
+        ...currentContent.slice(1),
+      ];
+
+      releaseContent(updatedContentStore, node.contentHash);
+      tree.nodes[targetNodeId] = {
+        ...node,
+        contentHash: addContent(updatedContentStore, nextContent),
+      };
+
+      if (tree.activePath.includes(targetNodeId)) {
+        updatedChat.messages = materializeActivePath(tree, updatedContentStore);
+      }
+
+      return {
+        ...state,
+        chats: updatedChats,
+        contentStore: updatedContentStore,
+      };
+    }
+
+    const messageIndex = updatedChat.messages.findIndex(
+      (_, index) => updatedChat.branchTree?.activePath?.[index] === targetNodeId
+    );
+    const message = messageIndex >= 0 ? updatedChat.messages[messageIndex] : undefined;
     if (!message) return state;
 
     const textContent = message.content[0] as TextContentInterface;
@@ -99,15 +135,14 @@ export const writeChunkToStore = (
       ],
     };
 
-    updatedChats[chatIndex].messages[messageIndex] = updatedMessage;
-    upsertActivePathMessage(
-      updatedChats[chatIndex],
-      messageIndex,
-      updatedMessage,
-      state.contentStore
-    );
+    updatedChat.messages[messageIndex] = updatedMessage;
+    upsertActivePathMessage(updatedChat, messageIndex, updatedMessage, updatedContentStore);
 
-    return { ...state, chats: updatedChats };
+    return {
+      ...state,
+      chats: updatedChats,
+      contentStore: updatedContentStore,
+    };
   });
 };
 
@@ -116,6 +151,7 @@ type ExecuteSubmitStreamParams = {
   chatId: string;
   chatIndex: number;
   messageIndex: number;
+  targetNodeId: string;
   messages: MessageInterface[];
   config: ConfigInterface;
   resolvedProvider: ResolvedProvider;
@@ -129,6 +165,7 @@ export const executeSubmitStream = async ({
   chatId,
   chatIndex,
   messageIndex,
+  targetNodeId,
   messages,
   config,
   resolvedProvider,
@@ -172,7 +209,7 @@ export const executeSubmitStream = async ({
         throw new Error(t('errors.failedToRetrieveData'));
       }
 
-      writeChunkToStore(chatId, messageIndex, data.choices[0].message.content);
+      writeChunkToStore(chatId, targetNodeId, data.choices[0].message.content);
       return;
     }
 
@@ -184,7 +221,7 @@ export const executeSubmitStream = async ({
     }
 
     const onChunk = (text: string) => {
-      if (text) writeChunkToStore(chatId, messageIndex, text);
+      if (text) writeChunkToStore(chatId, targetNodeId, text);
     };
 
     if (await swBridge.waitForController()) {

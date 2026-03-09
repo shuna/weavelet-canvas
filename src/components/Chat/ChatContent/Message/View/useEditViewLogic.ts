@@ -16,6 +16,17 @@ function isChatBusy(): boolean {
   return Object.values(state.generatingSessions).some((s) => s.chatId === chatId);
 }
 
+function isMessageBusy(messageIndex: number): boolean {
+  const state = useStore.getState();
+  const chat = state.chats?.[state.currentChatIndex];
+  const chatId = chat?.id ?? '';
+  const nodeId = chat?.branchTree?.activePath?.[messageIndex];
+  if (!nodeId) return false;
+  return Object.values(state.generatingSessions).some(
+    (s) => s.chatId === chatId && s.targetNodeId === nodeId
+  );
+}
+
 const blobToBase64 = (blob: Blob): Promise<string> =>
   new Promise((resolve, reject) => {
     const reader = new FileReader();
@@ -155,7 +166,8 @@ export function useEditViewLogic({
     const hasImageContent = Array.isArray(_content) && _content.some(
       (c) => c.type === 'image_url'
     );
-    if (sticky && ((!hasTextContent && !hasImageContent) || isChatBusy())) return;
+    if (sticky && !hasTextContent && !hasImageContent) return;
+    if (!sticky && isMessageBusy(messageIndex)) return;
 
     if (sticky) {
       appendNodeToActivePath(currentChatIndex, inputRole, _content);
@@ -173,7 +185,7 @@ export function useEditViewLogic({
   };
 
   const handleBranchOnly = () => {
-    if (isChatBusy() || sticky) return;
+    if (sticky || isMessageBusy(messageIndex)) return;
     const { ensureBranchTree, createBranch } = useStore.getState();
     ensureBranchTree(currentChatIndex);
     const tree = useStore.getState().chats![currentChatIndex].branchTree!;

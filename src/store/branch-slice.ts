@@ -282,11 +282,17 @@ export const createBranchSlice: StoreSlice<BranchSlice> = (set, get) => ({
   },
 
   removeMessageAtIndex: (chatIndex, messageIndex) => {
+    const chat = get().chats?.[chatIndex];
+    const nodeId = chat?.branchTree?.activePath?.[messageIndex];
+    const preserveNode = !!nodeId && Object.values(get().generatingSessions).some(
+      (session) => session.chatId === chat?.id && session.targetNodeId === nodeId
+    );
     const { chats, contentStore } = removeMessageAtIndexState(
       get().chats!,
       chatIndex,
       messageIndex,
-      get().contentStore
+      get().contentStore,
+      { preserveNode }
     );
     get().applyBranchState(chats, contentStore);
   },

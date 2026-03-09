@@ -22,6 +22,7 @@ describe('submitHelpers', () => {
       'chat-1',
       2,
       3,
+      'node-3',
       'midchat',
       3
     );
@@ -31,6 +32,7 @@ describe('submitHelpers', () => {
       chatId: 'chat-1',
       chatIndex: 2,
       messageIndex: 3,
+      targetNodeId: 'node-3',
       mode: 'midchat',
       insertIndex: 3,
       requestPath: 'sw',

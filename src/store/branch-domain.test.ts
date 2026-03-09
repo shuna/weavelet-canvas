@@ -135,6 +135,30 @@ describe('branch-domain', () => {
     ]);
   });
 
+  it('preserves a generating node as a hidden branch when deleting it', () => {
+    const ensured = ensureBranchTreeState([createChat()], 0, {});
+    const treeBefore = ensured.chats[0].branchTree!;
+    const removedNodeId = treeBefore.activePath[1];
+    const removedHash = treeBefore.nodes[removedNodeId].contentHash;
+
+    const removed = removeMessageAtIndexState(
+      ensured.chats,
+      0,
+      1,
+      ensured.contentStore,
+      { preserveNode: true }
+    );
+
+    const tree = removed.chats[0].branchTree!;
+    expect(tree.activePath).toEqual([treeBefore.activePath[0]]);
+    expect(tree.nodes[removedNodeId]).toBeDefined();
+    expect(tree.nodes[removedNodeId].parentId).toBe(treeBefore.activePath[0]);
+    expect(removed.contentStore[removedHash]).toBeDefined();
+    expect(removed.chats[0].messages.map((message) => message.role)).toEqual([
+      'user',
+    ]);
+  });
+
   it('moves the root message down while preserving a valid active path', () => {
     const ensured = ensureBranchTreeState([createChat()], 0, {});
 
