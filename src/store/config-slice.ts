@@ -5,6 +5,7 @@ import { ConfigInterface, ImageDetail, TotalTokenUsed } from '@type/chat';
 import { ModelOptions } from '@type/chat';
 import type { ProviderId } from '@type/provider';
 import { normalizeConfigStream } from '@utils/streamSupport';
+import { STORE_VERSION } from './version';
 
 const isSameConfig = (
   left: ConfigInterface,
@@ -39,6 +40,8 @@ export interface ConfigSlice {
   defaultImageDetail: ImageDetail;
   autoScroll: boolean;
   hideShareGPT: boolean;
+  onboardingCompleted: number | false; // false = not completed, number = store version when completed
+  setOnboardingCompleted: (completed: boolean) => void;
   setOpenConfig: (openConfig: boolean) => void;
   setTheme: (theme: Theme) => void;
   setAutoTitle: (autoTitle: boolean) => void;
@@ -81,6 +84,12 @@ export const createConfigSlice: StoreSlice<ConfigSlice> = (set, get) => ({
   defaultImageDetail: _defaultImageDetail,
   autoScroll: true,
   hideShareGPT: true,
+  onboardingCompleted: false,
+  setOnboardingCompleted: (completed: boolean) => {
+    const value = completed ? STORE_VERSION : false;
+    if (get().onboardingCompleted === value) return;
+    set((prev: ConfigSlice) => ({ ...prev, onboardingCompleted: value }));
+  },
   setOpenConfig: (openConfig: boolean) => {
     if (get().openConfig === openConfig) return;
     set((prev: ConfigSlice) => ({

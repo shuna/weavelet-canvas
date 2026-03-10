@@ -1,4 +1,5 @@
 import { v4 as uuidv4 } from 'uuid';
+import { STORE_VERSION } from './version';
 
 import {
   BranchNodeLegacy,
@@ -22,6 +23,7 @@ import {
   LocalStorageInterfaceV12ToV13,
   LocalStorageInterfaceV13ToV14,
   ContentInterface,
+  LocalStorageInterfaceV14ToV15,
 } from '@type/chat';
 import { ContentStoreData, addContent } from '@utils/contentStore';
 import { DEFAULT_PROVIDERS } from './provider-config';
@@ -246,4 +248,10 @@ export const migrateV13 = (persistedState: LocalStorageInterfaceV13ToV14) => {
     persistedState._legacyCustomModels = legacy;
   }
   delete (persistedState as unknown as { customModels?: unknown }).customModels;
+};
+
+export const migrateV14 = (persistedState: LocalStorageInterfaceV14ToV15) => {
+  // migrate only runs when persisted state exists, so the user is existing.
+  // New users have no persisted state and get onboardingCompleted: false from defaults.
+  persistedState.onboardingCompleted = STORE_VERSION;
 };

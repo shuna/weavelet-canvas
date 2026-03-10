@@ -7,12 +7,12 @@ import Menu from '@components/Menu';
 import useStreamRecovery from '@hooks/useStreamRecovery';
 import useIosStatusBarScroll from '@hooks/useIosStatusBarScroll';
 import useAppBootstrap from '@hooks/useAppBootstrap';
-import ApiPopup from '@components/ApiPopup';
 import Toast from '@components/Toast';
 import { ToastContainer } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
 import VersionInfo from '@components/Footer/VersionInfo';
 import LegacyCustomModelsBanner from '@components/LegacyCustomModelsBanner';
+import OnboardingModal from '@components/Onboarding/OnboardingModal';
 
 function App() {
   useAppBootstrap();
@@ -21,11 +21,11 @@ function App() {
 
   return (
     <div className='overflow-hidden w-full h-full relative'>
+      <OnboardingModal />
       <LegacyCustomModelsBanner />
       <Menu />
       <div className={`flex h-full flex-1 flex-col`}>
         <Chat />
-        <ApiPopup />
         <Toast />
         <ToastContainer />
         <VersionInfo />

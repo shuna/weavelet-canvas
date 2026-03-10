@@ -107,7 +107,7 @@ const ChatContent = () => {
     let cancelled = false;
 
     if (!isCurrentChatGenerating) {
-      if (messagesLimited.length < messages.length) {
+      if (messagesLimited.length > 0 && messagesLimited.length < messages.length) {
         Promise.all([
           countTokens(messages, model),
           countTokens(messagesLimited, model),

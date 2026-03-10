@@ -9,6 +9,7 @@ import { PromptSlice, createPromptSlice } from './prompt-slice';
 import { ToastSlice, createToastSlice } from './toast-slice';
 import { ProviderSlice, createProviderSlice } from './provider-slice';
 import { BranchSlice, createBranchSlice } from './branch-slice';
+import { STORE_VERSION } from './version';
 import {
   createPartializedState,
   migratePersistedState,
@@ -46,7 +47,7 @@ const useStore = create<StoreState>()(
       name: 'free-chat-gpt',
       storage: createJSONStorage(() => compressedStorage),
       partialize: (state) => createPartializedState(state),
-      version: 14,
+      version: STORE_VERSION,
       onRehydrateStorage: () => (state) => {
         if (!state) return;
         const repaired = rehydrateStoreState(state as StoreState);

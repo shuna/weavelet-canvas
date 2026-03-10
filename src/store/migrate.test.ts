@@ -2,7 +2,8 @@ import { describe, expect, it } from 'vitest';
 
 import { _defaultChatConfig, _defaultImageDetail } from '@constants/chat';
 import { DEFAULT_PROVIDERS } from './provider-config';
-import { migrateV9, migrateV10, migrateV11, migrateV12, migrateV13 } from './migrate';
+import { migrateV9, migrateV10, migrateV11, migrateV12, migrateV13, migrateV14 } from './migrate';
+import { STORE_VERSION } from './version';
 
 // ---------------------------------------------------------------------------
 // v9 → v10: provider migration from flat apiKey/apiEndpoint
@@ -308,5 +309,13 @@ describe('migrateV13', () => {
 
     expect(state.providerCustomModels).toEqual({});
     expect(state._legacyCustomModels).toBeUndefined();
+  });
+});
+
+describe('migrateV14', () => {
+  it('always sets onboardingCompleted true (persisted state = existing user)', () => {
+    const state = {} as any;
+    migrateV14(state);
+    expect(state.onboardingCompleted).toBe(STORE_VERSION);
   });
 });

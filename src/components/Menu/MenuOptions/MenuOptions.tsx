@@ -9,6 +9,7 @@ const ImportExportChat = React.lazy(
 );
 const GoogleSync = React.lazy(() => import('@components/GoogleSync'));
 const SettingsMenu = React.lazy(() => import('@components/SettingsMenu'));
+const HelpMenu = React.lazy(() => import('@components/HelpMenu/HelpMenu'));
 
 const googleClientId = import.meta.env.VITE_GOOGLE_CLIENT_ID || undefined;
 
@@ -42,6 +43,7 @@ const MenuOptions = () => {
             {googleClientId && <GoogleSync clientId={googleClientId} />}
             <ImportExportChat />
             <SettingsMenu />
+            <HelpMenu />
           </Suspense>
         )}
       </div>

@@ -19,6 +19,7 @@ import {
   LocalStorageInterfaceV11ToV12,
   LocalStorageInterfaceV12ToV13,
   LocalStorageInterfaceV13ToV14,
+  LocalStorageInterfaceV14ToV15,
 } from '@type/chat';
 import {
   migrateV10,
@@ -37,6 +38,7 @@ import {
   migrateV8_1_fix,
   migrateV8_2,
   migrateV13,
+  migrateV14,
 } from './migrate';
 import type { StoreState } from './store';
 
@@ -60,8 +62,7 @@ type PersistedStoreState = Omit<
   | 'defaultChatConfig'
   | 'defaultSystemMessage'
   | 'hideMenuOptions'
-  | 'firstVisit'
-  | 'hideSideMenu'
+| 'hideSideMenu'
   | 'folders'
   | 'enterToSubmit'
   | 'inlineLatex'
@@ -80,6 +81,7 @@ type PersistedStoreState = Omit<
   | 'providerModelCache'
   | 'providerCustomModels'
   | '_legacyCustomModels'
+  | 'onboardingCompleted'
   >,
   'chats'
 > & {
@@ -89,12 +91,13 @@ type PersistedStoreState = Omit<
 export const PERSIST_KEYS: (keyof PersistedStoreState)[] = [
   'chats', 'apiKey', 'apiVersion', 'apiEndpoint', 'theme', 'autoTitle',
   'titleModel', 'titleProviderId', 'advancedMode', 'prompts', 'defaultChatConfig', 'defaultSystemMessage',
-  'hideMenuOptions', 'firstVisit', 'hideSideMenu', 'folders', 'enterToSubmit',
+  'hideMenuOptions', 'hideSideMenu', 'folders', 'enterToSubmit',
   'inlineLatex', 'markdownMode', 'totalTokenUsed', 'countTotalTokens',
   'displayChatSize', 'menuWidth', 'defaultImageDetail', 'autoScroll',
   'hideShareGPT', 'providers', 'favoriteModels',
   'branchClipboard', 'contentStore', 'providerModelCache',
   'providerCustomModels', '_legacyCustomModels',
+  'onboardingCompleted',
 ];
 
 let previousInputRefs: Partial<Record<keyof PersistedStoreState, unknown>> = {};
@@ -117,7 +120,6 @@ function buildPartializedState(state: StoreState): PersistedStoreState {
     defaultChatConfig: state.defaultChatConfig,
     defaultSystemMessage: state.defaultSystemMessage,
     hideMenuOptions: state.hideMenuOptions,
-    firstVisit: state.firstVisit,
     hideSideMenu: state.hideSideMenu,
     folders: state.folders,
     enterToSubmit: state.enterToSubmit,
@@ -137,6 +139,7 @@ function buildPartializedState(state: StoreState): PersistedStoreState {
     providerModelCache: state.providerModelCache,
     providerCustomModels: state.providerCustomModels,
     _legacyCustomModels: state._legacyCustomModels,
+    onboardingCompleted: state.onboardingCompleted,
   };
 }
 
@@ -204,7 +207,8 @@ type PersistedStateVersion =
   | LocalStorageInterfaceV10ToV11
   | LocalStorageInterfaceV11ToV12
   | LocalStorageInterfaceV12ToV13
-  | LocalStorageInterfaceV13ToV14;
+  | LocalStorageInterfaceV13ToV14
+  | LocalStorageInterfaceV14ToV15;
 
 type MigrationEntry = {
   version: number;
@@ -228,6 +232,7 @@ const MIGRATIONS: MigrationEntry[] = [
   { version: 11, apply: (state) => migrateV11(state as LocalStorageInterfaceV11ToV12) },
   { version: 12, apply: (state) => migrateV12(state as LocalStorageInterfaceV12ToV13) },
   { version: 13, apply: (state) => migrateV13(state as LocalStorageInterfaceV13ToV14) },
+  { version: 14, apply: (state) => migrateV14(state as LocalStorageInterfaceV14ToV15) },
 ];
 
 export const migratePersistedState = (

@@ -105,6 +105,11 @@ export interface LocalStorageInterfaceV13ToV14
   _legacyCustomModels?: unknown[];
 }
 
+export interface LocalStorageInterfaceV14ToV15
+  extends LocalStorageInterfaceV13ToV14 {
+  onboardingCompleted: number | false;
+}
+
 export interface LocalStorageInterfaceV10ToV11
   extends LocalStorageInterfaceV9ToV10 {
   // branchTree is inside ChatInterface, no new top-level fields

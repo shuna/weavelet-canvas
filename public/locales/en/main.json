@@ -85,12 +85,12 @@
   "onboarding": {
     "welcome": {
       "title": "Welcome to Weavelet Canvas",
-      "description": "A powerful chat interface that connects to multiple AI providers. Set up your API key and start chatting in minutes."
+      "description": "A powerful chat interface that connects to multiple AI providers. Set up your API key and start chatting in minutes. (API keys are stored in your browser. You can also sync them to your Google Drive.)"
     },
     "apiSetup": {
       "title": "Set Up Your AI Provider",
       "description": "To get started, you'll need an API key from at least one AI provider.",
-      "hint": "Click \"Next\" to open the provider settings where you can add your API key and browse available models."
+      "hint": "Click \"Next\" below to open the provider settings where you can add your API key and select models."
     },
     "modelSelection": {
       "title": "Choose Your Models",
@@ -104,7 +104,8 @@
       "tip3": "Create branches to explore different conversation paths",
       "tip4": "Access settings from the left sidebar menu"
     },
-    "skip": "Skip",
+    "skip": "Skip All",
+    "back": "Back",
     "next": "Next",
     "startChatting": "Start Chatting"
   },

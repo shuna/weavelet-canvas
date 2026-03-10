@@ -61,7 +61,6 @@ const buildStoreState = () => {
     defaultChatConfig: { ..._defaultChatConfig },
     defaultSystemMessage: '',
     hideMenuOptions: false,
-    firstVisit: false,
     hideSideMenu: false,
     folders: {},
     enterToSubmit: false,
