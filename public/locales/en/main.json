@@ -65,6 +65,7 @@
   "branchGenerate": "Branch + Gen",
   "branchEditor": "Branch Editor",
   "chat": "Chat",
+  "modelOptions": "Model Settings",
   "branchOf": "{{current}} of {{total}}",
   "switchToBranch": "Switch to this branch",
   "deleteBranch": "Delete branch",
@@ -80,5 +81,55 @@
   "changed": "Changed",
   "stopGenerating": "Stop generating",
   "retry": "Retry",
-  "searchDisabledDuringGeneration": "Generating..."
+  "searchDisabledDuringGeneration": "Generating...",
+  "onboarding": {
+    "welcome": {
+      "title": "Welcome to Weavelet Canvas",
+      "description": "A powerful chat interface that connects to multiple AI providers. Set up your API key and start chatting in minutes."
+    },
+    "apiSetup": {
+      "title": "Set Up Your AI Provider",
+      "description": "To get started, you'll need an API key from at least one AI provider.",
+      "hint": "Click \"Next\" to open the provider settings where you can add your API key and browse available models."
+    },
+    "modelSelection": {
+      "title": "Choose Your Models",
+      "description": "After adding your API key, browse and add models to your favorites for quick access.",
+      "hint": "You can add models from the star icon in the provider menu. Your favorites will appear in the chat model selector."
+    },
+    "gettingStarted": {
+      "title": "You're All Set!",
+      "tip1": "Type a message in the input box and press Enter to send",
+      "tip2": "Use [/] to access the prompt library for quick templates",
+      "tip3": "Create branches to explore different conversation paths",
+      "tip4": "Access settings from the left sidebar menu"
+    },
+    "skip": "Skip",
+    "next": "Next",
+    "startChatting": "Start Chatting"
+  },
+  "help": {
+    "title": "Help",
+    "basicOps": "Basic Operations",
+    "ops": {
+      "newChat": "Click the \"+\" button in the sidebar to start a new chat",
+      "selectModel": "Use the model selector at the top of the chat to switch AI models",
+      "promptLibrary": "Click [/] in the input area to browse prompt templates",
+      "branch": "Use branching to explore alternative conversation paths"
+    },
+    "shortcuts": {
+      "title": "Keyboard Shortcuts",
+      "submit": "Send message",
+      "newLine": "New line",
+      "prompt": "Open prompt library",
+      "close": "Close modal / Stop generating"
+    },
+    "faq": {
+      "title": "FAQ",
+      "q1": "How do I add an API key?",
+      "a1": "Open the provider settings from the sidebar, select your provider, and enter your API key.",
+      "q2": "How do I switch models?",
+      "a2": "Click the model name at the top of the chat area to select from your favorite models."
+    }
+  }
 }

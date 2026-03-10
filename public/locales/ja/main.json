@@ -53,6 +53,7 @@
   "branchGenerate": "ブランチ+生成",
   "branchEditor": "分岐エディタ",
   "chat": "チャット",
+  "modelOptions": "モデル設定",
   "branchOf": "{{current}} / {{total}}",
   "switchToBranch": "このブランチに切り替え",
   "deleteBranch": "ブランチを削除",
@@ -68,5 +69,55 @@
   "changed": "変更",
   "stopGenerating": "生成を停止",
   "retry": "再試行",
-  "searchDisabledDuringGeneration": "生成中..."
+  "searchDisabledDuringGeneration": "生成中...",
+  "onboarding": {
+    "welcome": {
+      "title": "Weavelet Canvas へようこそ",
+      "description": "複数のAIプロバイダーに対応したチャットインターフェースです。APIキーを設定して、すぐにチャットを始めましょう。"
+    },
+    "apiSetup": {
+      "title": "AIプロバイダーの設定",
+      "description": "利用を開始するには、少なくとも1つのAIプロバイダーのAPIキーが必要です。",
+      "hint": "「次へ」をクリックするとプロバイダー設定が開き、APIキーの追加やモデルの閲覧ができます。"
+    },
+    "modelSelection": {
+      "title": "モデルを選択",
+      "description": "APIキーを追加したら、モデルをお気に入りに追加してすぐにアクセスできるようにしましょう。",
+      "hint": "プロバイダーメニューの星アイコンからモデルをお気に入りに追加できます。お気に入りはチャットのモデル選択に表示されます。"
+    },
+    "gettingStarted": {
+      "title": "準備完了！",
+      "tip1": "入力欄にメッセージを入力し、Enterキーで送信します",
+      "tip2": "[/] をクリックしてプロンプトテンプレートにアクセスできます",
+      "tip3": "ブランチ機能で会話の異なる展開を探索できます",
+      "tip4": "左サイドバーのメニューから設定にアクセスできます"
+    },
+    "skip": "スキップ",
+    "next": "次へ",
+    "startChatting": "チャットを始める"
+  },
+  "help": {
+    "title": "ヘルプ",
+    "basicOps": "基本操作",
+    "ops": {
+      "newChat": "サイドバーの「+」ボタンで新しいチャットを作成",
+      "selectModel": "チャット上部のモデル選択でAIモデルを切り替え",
+      "promptLibrary": "入力欄の [/] でプロンプトテンプレートを表示",
+      "branch": "ブランチ機能で会話の異なる展開を探索"
+    },
+    "shortcuts": {
+      "title": "キーボードショートカット",
+      "submit": "メッセージを送信",
+      "newLine": "改行",
+      "prompt": "プロンプトライブラリを開く",
+      "close": "モーダルを閉じる / 生成を停止"
+    },
+    "faq": {
+      "title": "よくある質問",
+      "q1": "APIキーはどこで設定しますか？",
+      "a1": "サイドバーからプロバイダー設定を開き、プロバイダーを選択してAPIキーを入力してください。",
+      "q2": "モデルを切り替えるには？",
+      "a2": "チャットエリア上部のモデル名をクリックして、お気に入りのモデルから選択できます。"
+    }
+  }
 }
