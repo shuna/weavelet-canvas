@@ -1,6 +1,7 @@
 import useStore from '@store/store';
 import { useTranslation } from 'react-i18next';
 import { limitMessageTokens, loadEncoder } from '@utils/messageUtils';
+import { getModelMaxToken } from '@utils/modelLookup';
 import {
   applySubmitTokenUsage,
   buildGeneratingSession,
@@ -93,9 +94,15 @@ const useSubmit = () => {
         throw new Error(t('errors.noMessagesSubmitted') as string);
 
       await loadEncoder();
+      const modelContextLength = getModelMaxToken(
+        chats[chatIndex].config.model,
+        chats[chatIndex].config.providerId
+      );
+      const completionBudget = chats[chatIndex].config.max_tokens;
+      const promptBudget = Math.max(0, modelContextLength - completionBudget);
       const messages = await limitMessageTokens(
         contextMessages,
-        chats[chatIndex].config.max_tokens,
+        promptBudget,
         chats[chatIndex].config.model
       );
       if (messages.length === 0)

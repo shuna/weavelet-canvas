@@ -3,6 +3,7 @@ import { countImageInputs } from '@utils/cost';
 import {
   MessageInterface,
   TotalTokenUsed,
+  isTextContent,
 } from '@type/chat';
 import { ModelOptions } from '@type/chat';
 
@@ -153,13 +154,40 @@ const countTokens = async (
   }
 };
 
+const estimateTokensByChars = (messages: MessageInterface[]): number => {
+  let chars = 0;
+  for (const msg of messages) {
+    chars += msg.role.length + 4; // role + separators
+    for (const part of msg.content) {
+      if (isTextContent(part)) chars += part.text.length;
+    }
+  }
+  // Conservative: ~2 chars per token (handles CJK and mixed content)
+  return Math.ceil(chars / 2);
+};
+
+const fallbackLimitMessages = (
+  messages: MessageInterface[],
+  limit: number
+): MessageInterface[] => {
+  const limited: MessageInterface[] = [];
+  let tokens = 0;
+  for (let i = messages.length - 1; i >= 0; i--) {
+    const est = estimateTokensByChars([messages[i]]);
+    if (est + tokens > limit) break;
+    tokens += est;
+    limited.unshift(messages[i]);
+  }
+  return limited;
+};
+
 export const limitMessageTokens = async (
   messages: MessageInterface[],
   limit: number = 4096,
   model: ModelOptions
 ): Promise<MessageInterface[]> => {
   await loadEncoder();
-  if (unavailable) return messages;
+  if (unavailable) return fallbackLimitMessages(messages, limit);
   try {
     const response = await postToWorker({
       type: 'limitMessages',
@@ -167,10 +195,12 @@ export const limitMessageTokens = async (
       model,
       limit,
     });
-    return response.type === 'limitMessagesResult' ? response.messages : messages;
+    return response.type === 'limitMessagesResult'
+      ? response.messages
+      : fallbackLimitMessages(messages, limit);
   } catch {
     unavailable = true;
-    return messages;
+    return fallbackLimitMessages(messages, limit);
   }
 };
 
