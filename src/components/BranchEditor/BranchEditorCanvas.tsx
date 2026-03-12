@@ -299,12 +299,10 @@ const BranchEditorCanvas = ({
     const { sourceNodeId, sourceChatIndex, targetNodeId, targetChatIndex } = dropPopover;
     const sourceChat = chats?.[sourceChatIndex];
     if (!sourceChat?.branchTree) return;
-    const path = sourceChat.branchTree.activePath;
-    const idx = path.indexOf(sourceNodeId);
-    if (idx >= 0) {
-      copyBranchSequence(sourceChatIndex, sourceNodeId, path[path.length - 1]);
-      pasteBranchSequence(targetChatIndex, targetNodeId);
-    }
+    const path = buildPathToLeaf(sourceChat.branchTree, sourceNodeId);
+    const leafId = path[path.length - 1];
+    copyBranchSequence(sourceChatIndex, sourceNodeId, leafId);
+    pasteBranchSequence(targetChatIndex, targetNodeId);
     setDropPopover(null);
   }, [dropPopover, chats, copyBranchSequence, pasteBranchSequence]);
 
@@ -313,11 +311,9 @@ const BranchEditorCanvas = ({
     const { sourceNodeId, sourceChatIndex, targetNodeId, targetChatIndex } = dropPopover;
     const sourceChat = chats?.[sourceChatIndex];
     if (!sourceChat?.branchTree) return;
-    const path = sourceChat.branchTree.activePath;
-    const idx = path.indexOf(sourceNodeId);
-    if (idx >= 0) {
-      moveBranchSequence(sourceChatIndex, sourceNodeId, path[path.length - 1], targetChatIndex, targetNodeId);
-    }
+    const path = buildPathToLeaf(sourceChat.branchTree, sourceNodeId);
+    const leafId = path[path.length - 1];
+    moveBranchSequence(sourceChatIndex, sourceNodeId, leafId, targetChatIndex, targetNodeId);
     setDropPopover(null);
   }, [dropPopover, chats, moveBranchSequence]);
 
