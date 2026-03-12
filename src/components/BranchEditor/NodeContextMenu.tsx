@@ -42,11 +42,9 @@ const NodeContextMenu = ({
 
   const handleCopyFrom = () => {
     if (!tree) return;
-    const path = tree.activePath;
-    const idx = path.indexOf(nodeId);
-    if (idx >= 0) {
-      copyBranchSequence(chatIndex, nodeId, path[path.length - 1]);
-    }
+    const path = buildPathToLeaf(tree, nodeId);
+    const leafId = path[path.length - 1];
+    copyBranchSequence(chatIndex, nodeId, leafId);
     onClose();
   };
 

@@ -529,12 +529,17 @@ export const copyBranchSequenceState = (
   toNodeId: string
 ): BranchClipboard | null => {
   const tree = chats[chatIndex].branchTree!;
-  const path = tree.activePath;
-  const fromIdx = path.indexOf(fromNodeId);
-  const toIdx = path.indexOf(toNodeId);
-  if (fromIdx < 0 || toIdx < 0 || fromIdx > toIdx) return null;
 
-  const nodeIds = path.slice(fromIdx, toIdx + 1);
+  // Walk from toNodeId up to fromNodeId to build the path
+  const nodeIds: string[] = [];
+  let cur: string | null = toNodeId;
+  while (cur) {
+    nodeIds.unshift(cur);
+    if (cur === fromNodeId) break;
+    cur = tree.nodes[cur]?.parentId ?? null;
+  }
+  // Verify we actually reached fromNodeId
+  if (nodeIds[0] !== fromNodeId) return null;
   const nodes: Record<string, BranchNode> = {};
   nodeIds.forEach((id) => {
     nodes[id] = { ...tree.nodes[id] };
