@@ -1,10 +1,12 @@
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 
 import {
+  queueChunkToStore,
   executeSubmitStream,
   createSubmitAbortController,
   clearSubmitSessionRuntime,
   stopSubmitSession,
+  flushQueuedChunks,
   writeChunkToStore,
 } from './submitRuntime';
 
@@ -57,6 +59,7 @@ beforeEach(() => {
   mockRemoveSession.mockClear();
   mockGetChatCompletion.mockReset();
   mockState = {};
+  vi.useRealTimers();
 });
 
 // ---------------------------------------------------------------------------
@@ -78,6 +81,65 @@ describe('abort controller lifecycle', () => {
     stopSubmitSession('sess-2');
     expect(ctrl.signal.aborted).toBe(true);
     expect(mockRemoveSession).toHaveBeenCalledWith('sess-2');
+  });
+
+  it('stopSubmitSession discards queued chunks for the stopped session', () => {
+    vi.useFakeTimers();
+    mockState = {
+      generatingSessions: {
+        'sess-3': {
+          sessionId: 'sess-3',
+          chatId: 'chat-1',
+          chatIndex: 0,
+          messageIndex: 1,
+          targetNodeId: 'node-assistant',
+          mode: 'append',
+          insertIndex: null,
+          requestPath: 'fetch',
+          startedAt: 1,
+        },
+      },
+      chats: [
+        {
+          id: 'chat-1',
+          branchTree: {
+            rootId: 'node-user',
+            activePath: ['node-user', 'node-assistant'],
+            nodes: {
+              'node-user': {
+                id: 'node-user',
+                parentId: null,
+                role: 'user',
+                contentHash: 'user-hash',
+                createdAt: 1,
+              },
+              'node-assistant': {
+                id: 'node-assistant',
+                parentId: 'node-user',
+                role: 'assistant',
+                contentHash: 'assistant-hash',
+                createdAt: 2,
+              },
+            },
+          },
+          messages: [
+            { role: 'user', content: [{ type: 'text', text: 'hi' }] },
+            { role: 'assistant', content: [{ type: 'text', text: '' }] },
+          ],
+        },
+      ],
+      contentStore: {
+        'user-hash': { content: [{ type: 'text', text: 'hi' }], refCount: 1 },
+        'assistant-hash': { content: [{ type: 'text', text: '' }], refCount: 1 },
+      },
+    };
+
+    createSubmitAbortController('sess-3');
+    queueChunkToStore('chat-1', 'node-assistant', 'partial');
+    stopSubmitSession('sess-3');
+    vi.advanceTimersByTime(32);
+
+    expect((mockState as any).chats[0].messages[1].content[0].text).toBe('');
   });
 });
 
@@ -176,6 +238,98 @@ describe('writeChunkToStore', () => {
     mockState = { chats: [{ id: 'other', messages: [] }], contentStore: {} };
     // Should not throw
     writeChunkToStore('nonexistent', 'node-1', 'text');
+  });
+
+  it('buffers streaming chunks until the scheduled flush', () => {
+    vi.useFakeTimers();
+    mockState = {
+      chats: [
+        {
+          id: 'chat-1',
+          branchTree: {
+            rootId: 'node-user',
+            activePath: ['node-user', 'node-assistant'],
+            nodes: {
+              'node-user': {
+                id: 'node-user',
+                parentId: null,
+                role: 'user',
+                contentHash: 'user-hash',
+                createdAt: 1,
+              },
+              'node-assistant': {
+                id: 'node-assistant',
+                parentId: 'node-user',
+                role: 'assistant',
+                contentHash: 'assistant-hash',
+                createdAt: 2,
+              },
+            },
+          },
+          messages: [
+            { role: 'user', content: [{ type: 'text', text: 'hi' }] },
+            { role: 'assistant', content: [{ type: 'text', text: '' }] },
+          ],
+        },
+      ],
+      contentStore: {
+        'user-hash': { content: [{ type: 'text', text: 'hi' }], refCount: 1 },
+        'assistant-hash': { content: [{ type: 'text', text: '' }], refCount: 1 },
+      },
+    };
+
+    queueChunkToStore('chat-1', 'node-assistant', 'Hel');
+    queueChunkToStore('chat-1', 'node-assistant', 'lo');
+
+    expect((mockState as any).chats[0].messages[1].content[0].text).toBe('');
+
+    vi.advanceTimersByTime(32);
+
+    expect((mockState as any).chats[0].messages[1].content[0].text).toBe('Hello');
+  });
+
+  it('flushes buffered text immediately when requested', () => {
+    vi.useFakeTimers();
+    mockState = {
+      chats: [
+        {
+          id: 'chat-1',
+          branchTree: {
+            rootId: 'node-user',
+            activePath: ['node-user', 'node-assistant'],
+            nodes: {
+              'node-user': {
+                id: 'node-user',
+                parentId: null,
+                role: 'user',
+                contentHash: 'user-hash',
+                createdAt: 1,
+              },
+              'node-assistant': {
+                id: 'node-assistant',
+                parentId: 'node-user',
+                role: 'assistant',
+                contentHash: 'assistant-hash',
+                createdAt: 2,
+              },
+            },
+          },
+          messages: [
+            { role: 'user', content: [{ type: 'text', text: 'hi' }] },
+            { role: 'assistant', content: [{ type: 'text', text: '' }] },
+          ],
+        },
+      ],
+      contentStore: {
+        'user-hash': { content: [{ type: 'text', text: 'hi' }], refCount: 1 },
+        'assistant-hash': { content: [{ type: 'text', text: '' }], refCount: 1 },
+      },
+    };
+
+    queueChunkToStore('chat-1', 'node-assistant', 'partial');
+    flushQueuedChunks('chat-1', 'node-assistant');
+
+    expect((mockState as any).chats[0].messages[1].content[0].text).toBe('partial');
   });
 });
 

@@ -23,6 +23,10 @@ import type { ResolvedProvider } from './submitHelpers';
 
 const abortControllers = new Map<string, AbortController>();
 const swCancellers = new Map<string, () => void>();
+const sessionChunkTargets = new Map<string, { chatId: string; targetNodeId: string }>();
+const pendingChunkBuffers = new Map<string, string>();
+const pendingChunkTimers = new Map<string, ReturnType<typeof setTimeout>>();
+const STREAM_FLUSH_INTERVAL_MS = 32;
 const SYSTEM_MESSAGE_UNSUPPORTED_PATTERNS = [
   /does not support.*system/i,
   /system.*not supported/i,
@@ -53,7 +57,24 @@ export const createSubmitAbortController = (sessionId: string) => {
   return abortController;
 };
 
+const discardQueuedChunks = (chatId: string, targetNodeId: string) => {
+  const key = getChunkBufferKey(chatId, targetNodeId);
+  const timer = pendingChunkTimers.get(key);
+  if (timer) {
+    clearTimeout(timer);
+    pendingChunkTimers.delete(key);
+  }
+  pendingChunkBuffers.delete(key);
+};
+
 export const clearSubmitSessionRuntime = (sessionId: string) => {
+  const chunkTarget =
+    sessionChunkTargets.get(sessionId) ??
+    useStore.getState().generatingSessions[sessionId];
+  if (chunkTarget) {
+    discardQueuedChunks(chunkTarget.chatId, chunkTarget.targetNodeId);
+    sessionChunkTargets.delete(sessionId);
+  }
   abortControllers.delete(sessionId);
   swCancellers.delete(sessionId);
 };
@@ -76,6 +97,9 @@ export const isChatGenerating = (chatId: string): boolean =>
   Object.values(useStore.getState().generatingSessions).some(
     (session) => session.chatId === chatId
   );
+
+const getChunkBufferKey = (chatId: string, targetNodeId: string) =>
+  `${chatId}::${targetNodeId}`;
 
 export const writeChunkToStore = (
   chatId: string,
@@ -146,6 +170,41 @@ export const writeChunkToStore = (
   });
 };
 
+export const flushQueuedChunks = (chatId: string, targetNodeId: string) => {
+  const key = getChunkBufferKey(chatId, targetNodeId);
+  const buffered = pendingChunkBuffers.get(key);
+  const timer = pendingChunkTimers.get(key);
+
+  if (timer) {
+    clearTimeout(timer);
+    pendingChunkTimers.delete(key);
+  }
+
+  if (!buffered) return;
+  pendingChunkBuffers.delete(key);
+  writeChunkToStore(chatId, targetNodeId, buffered);
+};
+
+export const queueChunkToStore = (
+  chatId: string,
+  targetNodeId: string,
+  text: string
+) => {
+  if (!text) return;
+
+  const key = getChunkBufferKey(chatId, targetNodeId);
+  pendingChunkBuffers.set(key, (pendingChunkBuffers.get(key) ?? '') + text);
+
+  if (pendingChunkTimers.has(key)) return;
+
+  pendingChunkTimers.set(
+    key,
+    setTimeout(() => {
+      flushQueuedChunks(chatId, targetNodeId);
+    }, STREAM_FLUSH_INTERVAL_MS)
+  );
+};
+
 type ExecuteSubmitStreamParams = {
   sessionId: string;
   chatId: string;
@@ -173,6 +232,7 @@ export const executeSubmitStream = async ({
   apiVersion,
   t,
 }: ExecuteSubmitStreamParams) => {
+  sessionChunkTargets.set(sessionId, { chatId, targetNodeId });
   const isStreamSupported = getEffectiveStreamEnabled(config);
   const runRequest = async (requestMessages: MessageInterface[]) => {
     if (!isStreamSupported) {
@@ -221,7 +281,7 @@ export const executeSubmitStream = async ({
     }
 
     const onChunk = (text: string) => {
-      if (text) writeChunkToStore(chatId, targetNodeId, text);
+      queueChunkToStore(chatId, targetNodeId, text);
     };
 
     if (await swBridge.waitForController()) {
@@ -343,5 +403,7 @@ export const executeSubmitStream = async ({
       throw error;
     }
     await runRequest(removeSystemMessages(messages));
+  } finally {
+    flushQueuedChunks(chatId, targetNodeId);
   }
 };
