@@ -27,6 +27,16 @@ export default defineConfig({
   build: {
     chunkSizeWarningLimit: 1200,
     rollupOptions: {
+      onwarn(warning, warn) {
+        if (
+          warning.code === 'MODULE_LEVEL_DIRECTIVE' &&
+          warning.id?.includes('react-toastify/dist/react-toastify.esm.mjs')
+        ) {
+          return;
+        }
+
+        warn(warning);
+      },
       output: {
         manualChunks(id) {
           if (id.includes('node_modules/react/') || id.includes('node_modules/react-dom/')) {
