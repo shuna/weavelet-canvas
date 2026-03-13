@@ -9,6 +9,7 @@ import {
   createPartializedState,
   createPersistedChatDataState,
   hydrateFromPersistedStoreState,
+  migratePersistedState,
   migratePersistedChatDataState,
   rehydrateStoreState,
 } from './persistence';
@@ -193,6 +194,20 @@ describe('persistence', () => {
 
     expect(migrated.branchClipboard).toEqual(state.branchClipboard);
     expect(migrated.contentStore).toEqual(state.contentStore);
+  });
+
+  it('does not crash when migrating an old snapshot without chats', () => {
+    expect(() =>
+      migratePersistedState(
+        {
+          theme: 'light',
+          prompts: [],
+          foldersName: [],
+          foldersExpanded: [],
+        },
+        0
+      )
+    ).not.toThrow();
   });
 
   it('deduplicates persisted chat ids during rehydration', () => {

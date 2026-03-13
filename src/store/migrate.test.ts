@@ -2,8 +2,31 @@ import { describe, expect, it } from 'vitest';
 
 import { _defaultChatConfig, _defaultImageDetail } from '@constants/chat';
 import { DEFAULT_PROVIDERS } from './provider-config';
-import { migrateV9, migrateV10, migrateV11, migrateV12, migrateV13, migrateV14, migrateV15 } from './migrate';
+import { migrateV7, migrateV8_1, migrateV9, migrateV10, migrateV11, migrateV12, migrateV13, migrateV14, migrateV15 } from './migrate';
 import { STORE_VERSION } from './version';
+
+describe('migrateV7', () => {
+  it('handles missing folder arrays gracefully', () => {
+    const state = {
+      chats: [{ folder: 'legacy-folder' }],
+    } as any;
+
+    expect(() => migrateV7(state)).not.toThrow();
+    expect(state.folders).toEqual({});
+    expect(state.chats[0].id).toEqual(expect.any(String));
+  });
+});
+
+describe('migrateV8_1', () => {
+  it('handles chats without messages gracefully', () => {
+    const state = {
+      chats: [{}],
+    } as any;
+
+    expect(() => migrateV8_1(state)).not.toThrow();
+    expect(state.apiVersion).toBeDefined();
+  });
+});
 
 // ---------------------------------------------------------------------------
 // v9 → v10: provider migration from flat apiKey/apiEndpoint
