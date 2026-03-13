@@ -7,7 +7,8 @@
     "create": "Create new file",
     "confirm": "Confirm selection",
     "pull": "Load selected cloud file",
-    "push": "Overwrite cloud with local data"
+    "push": "Overwrite cloud with local data",
+    "refreshFiles": "Refresh cloud files"
   },
   "labels": {
     "localState": "Current local data",
@@ -50,5 +51,14 @@
     "stop": "Syncing stopped",
     "pull": "Loaded cloud data into this device.",
     "push": "Cloud file overwritten with local data."
+  },
+  "status": {
+    "checking": "Checking cloud files.",
+    "syncing": "Syncing data.",
+    "downloading": "Loading cloud data.",
+    "authenticating": "Connecting to Google Drive.",
+    "idleConnected": "Auto-sync target is confirmed.",
+    "idleAwaitingChoice": "Auto-sync is waiting for you to choose the sync direction.",
+    "idleDisconnected": "Google Drive Sync is not connected."
   }
 }
