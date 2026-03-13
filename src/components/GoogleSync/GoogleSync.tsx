@@ -8,6 +8,7 @@ import useGStore from '@store/cloud-auth-store';
 import {
   createDriveFile,
   deleteDriveFile,
+  getDriveFileTyped,
   updateDriveFile,
   updateDriveFileName,
   validateGoogleOath2AccessToken,
@@ -15,9 +16,14 @@ import {
 import { getFiles, stateToFile } from '@utils/google-api';
 import createGoogleCloudStorage from '@store/storage/GoogleCloudStorage';
 import {
+  createPersistedChatDataState,
   createLocalStoragePartializedState,
   createPartializedState,
+  hydrateFromPersistedStoreState,
+  migratePersistedState,
+  PersistedStoreState,
 } from '@store/persistence';
+import { saveChatData } from '@store/storage/IndexedDbStorage';
 
 import GoogleSyncButton, { GoogleSyncButtonHandle } from './GoogleSyncButton';
 import PopupModal from '@components/PopupModal';
@@ -349,12 +355,23 @@ const GooglePopup = ({
   };
 
   const applyRemoteToLocal = async () => {
-    if (!_fileId) return;
+    if (!_fileId || !googleAccessToken) return;
     try {
       setBusyActivity('downloading');
       setSyncStatus('syncing');
       activateCloudSyncTarget(_fileId);
-      await useStore.persist.rehydrate();
+      const remoteStorageValue = await getDriveFileTyped(_fileId, googleAccessToken);
+      const remotePersistedState = migratePersistedState(
+        structuredClone(remoteStorageValue.state ?? {}),
+        remoteStorageValue.version ?? 0
+      ) as Partial<PersistedStoreState>;
+      const hydratedState = hydrateFromPersistedStoreState(
+        useStore.getState(),
+        remotePersistedState
+      );
+
+      useStore.setState(hydratedState);
+      await saveChatData(createPersistedChatDataState(useStore.getState()));
       setToastStatus('success');
       setToastMessage(t('toast.pull'));
       setToastShow(true);

@@ -43,6 +43,7 @@ import {
   migrateV15,
 } from './migrate';
 import type { StoreState } from './store';
+import { setLocalStorageItem } from './storage/storageErrors';
 import { STORE_VERSION } from './version';
 
 type PersistedChat = Omit<ChatInterface, 'messages'> & {
@@ -307,6 +308,34 @@ export const applyPersistedChatDataState = (
   state.contentStore = persistedChatData.contentStore ?? {};
   state.branchClipboard = persistedChatData.branchClipboard ?? null;
   return rehydrateStoreState(state);
+};
+
+export const hydrateFromPersistedStoreState = (
+  baseState: StoreState,
+  persistedState: Partial<PersistedStoreState>
+): Partial<StoreState> => {
+  const nextState = {
+    ...baseState,
+    ...persistedState,
+  } as StoreState;
+
+  applyPersistedChatDataState(nextState, {
+    chats: persistedState.chats,
+    contentStore: persistedState.contentStore ?? {},
+    branchClipboard: persistedState.branchClipboard ?? null,
+  });
+
+  const currentChatIndex =
+    nextState.chats && nextState.chats.length > 0 ? nextState.currentChatIndex : -1;
+  setLocalStorageItem('currentChatIndex', String(currentChatIndex));
+
+  return {
+    ...persistedState,
+    chats: nextState.chats,
+    contentStore: nextState.contentStore,
+    branchClipboard: nextState.branchClipboard,
+    currentChatIndex,
+  };
 };
 
 export const migratePersistedChatDataState = (
