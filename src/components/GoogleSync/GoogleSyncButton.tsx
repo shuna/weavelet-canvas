@@ -5,6 +5,8 @@ import { useGoogleLogin, googleLogout } from '@react-oauth/google';
 import useGStore from '@store/cloud-auth-store';
 import useStore from '@store/store';
 import { createJSONStorage } from 'zustand/middleware';
+import { createLocalStoragePartializedState } from '@store/persistence';
+import compressedStorage from '@store/storage/CompressedStorage';
 
 export interface GoogleSyncButtonHandle {
   connect: () => void;
@@ -16,11 +18,12 @@ const GoogleSyncButton = forwardRef<
   GoogleSyncButtonHandle,
   {
     loginHandler?: () => void;
+    onBeforeSilentRefresh?: () => void;
     onSilentRefreshFail?: () => void;
     showDisconnectButton?: boolean;
     showDisconnectNotice?: boolean;
   }
->(({ loginHandler, onSilentRefreshFail, showDisconnectButton = true, showDisconnectNotice = true }, ref) => {
+>(({ loginHandler, onBeforeSilentRefresh, onSilentRefreshFail, showDisconnectButton = true, showDisconnectNotice = true }, ref) => {
   const { t } = useTranslation(['drive']);
 
   const setGoogleAccessToken = useGStore((state) => state.setGoogleAccessToken);
@@ -52,6 +55,7 @@ const GoogleSyncButton = forwardRef<
 
   const silentLogin = useGoogleLogin({
     onSuccess: (codeResponse) => {
+      onBeforeSilentRefresh?.();
       setGoogleAccessToken(codeResponse.access_token);
     },
     onError: () => {
@@ -80,7 +84,8 @@ const GoogleSyncButton = forwardRef<
     setCloudSync(false);
     googleLogout();
     useStore.persist.setOptions({
-      storage: createJSONStorage(() => localStorage),
+      storage: createJSONStorage(() => compressedStorage),
+      partialize: (state) => createLocalStoragePartializedState(state),
     });
     useStore.persist.rehydrate();
     setToastStatus('success');

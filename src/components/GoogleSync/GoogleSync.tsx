@@ -14,6 +14,7 @@ import {
 } from '@api/google-api';
 import { getFiles, stateToFile } from '@utils/google-api';
 import createGoogleCloudStorage from '@store/storage/GoogleCloudStorage';
+import { createPartializedState } from '@store/persistence';
 
 import GoogleSyncButton, { GoogleSyncButtonHandle } from './GoogleSyncButton';
 import PopupModal from '@components/PopupModal';
@@ -128,8 +129,9 @@ const GoogleSync = ({ clientId }: { clientId: string }) => {
 
   const [isModalOpen, setIsModalOpen] = useState<boolean>(cloudSync);
   const [files, setFiles] = useState<GoogleFileResource[]>([]);
+  const isSilentRefresh = useRef(false);
 
-  const initialiseState = async (_googleAccessToken: string) => {
+  const initialiseState = async (_googleAccessToken: string, options?: { openModal?: boolean }) => {
     const validated = await validateGoogleOath2AccessToken(_googleAccessToken);
     if (validated) {
       try {
@@ -137,7 +139,7 @@ const GoogleSync = ({ clientId }: { clientId: string }) => {
         if (_files) {
           setFiles(_files);
           if (_files.length === 0) {
-            // _files is empty, create new file in google drive and set the file id
+            // _files is empty, create new file in google drive and push local state
             const googleFile = await createDriveFile(
               stateToFile(),
               _googleAccessToken
@@ -145,17 +147,20 @@ const GoogleSync = ({ clientId }: { clientId: string }) => {
             setFileId(googleFile.id);
           } else {
             if (_files.findIndex((f) => f.id === fileId) !== -1) {
-              // local storage file id matches one of the file ids returned
               setFileId(fileId);
             } else {
-              // default set file id to the latest one
               setFileId(_files[0].id);
             }
           }
           useStore.persist.setOptions({
             storage: createGoogleCloudStorage(),
+            partialize: (state) => createPartializedState(state),
           });
-          useStore.persist.rehydrate();
+          setSyncStatus('synced');
+          // Open modal so user can choose Pull/Push direction (skip for silent refresh)
+          if (options?.openModal) {
+            setIsModalOpen(true);
+          }
         }
       } catch (e: unknown) {
         console.log(e);
@@ -168,7 +173,9 @@ const GoogleSync = ({ clientId }: { clientId: string }) => {
   useEffect(() => {
     if (googleAccessToken) {
       setSyncStatus('syncing');
-      initialiseState(googleAccessToken);
+      const openModal = !isSilentRefresh.current;
+      isSilentRefresh.current = false;
+      initialiseState(googleAccessToken, { openModal });
     }
   }, [googleAccessToken]);
 
@@ -188,6 +195,7 @@ const GoogleSync = ({ clientId }: { clientId: string }) => {
           setIsModalOpen={setIsModalOpen}
           files={files}
           setFiles={setFiles}
+          isSilentRefresh={isSilentRefresh}
         />
       )}
     </GoogleOAuthProvider>
@@ -198,10 +206,12 @@ const GooglePopup = ({
   setIsModalOpen,
   files,
   setFiles,
+  isSilentRefresh,
 }: {
   setIsModalOpen: React.Dispatch<React.SetStateAction<boolean>>;
   files: GoogleFileResource[];
   setFiles: React.Dispatch<React.SetStateAction<GoogleFileResource[]>>;
+  isSilentRefresh: React.MutableRefObject<boolean>;
 }) => {
   const { t } = useTranslation(['drive']);
 
@@ -400,8 +410,11 @@ const GooglePopup = ({
           showDisconnectButton={false}
           showDisconnectNotice={false}
           loginHandler={() => {
-            setIsModalOpen(false);
+            // Modal stays open so user can choose Pull/Push direction
             startSilentRefreshInterval();
+          }}
+          onBeforeSilentRefresh={() => {
+            isSilentRefresh.current = true;
           }}
           onSilentRefreshFail={() => {
             if (refreshIntervalRef.current) {
