@@ -8,6 +8,7 @@ import {
   createLocalStoragePartializedState,
   createPartializedState,
   createPersistedChatDataState,
+  hydrateFromPersistedStoreState,
   migratePersistedChatDataState,
   rehydrateStoreState,
 } from './persistence';
@@ -163,6 +164,23 @@ describe('persistence', () => {
     ]);
     expect(Object.keys(targetState.contentStore)).not.toHaveLength(0);
     expect(targetState.branchClipboard).toEqual(chatData.branchClipboard);
+  });
+
+  it('hydrates a persisted store snapshot and resets the current chat index when chats are empty', () => {
+    const baseState = buildStoreState();
+    localStorage.setItem('currentChatIndex', '1');
+
+    const hydrated = hydrateFromPersistedStoreState(baseState as never, {
+      chats: [],
+      contentStore: {},
+      branchClipboard: null,
+      theme: 'light',
+    });
+
+    expect(hydrated.chats).toEqual([]);
+    expect(hydrated.currentChatIndex).toBe(-1);
+    expect(localStorage.getItem('currentChatIndex')).toBe('-1');
+    expect(hydrated.theme).toBe('light');
   });
 
   it('migrates persisted chat data using the store version pipeline', () => {
