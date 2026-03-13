@@ -14,7 +14,10 @@ import {
 } from '@api/google-api';
 import { getFiles, stateToFile } from '@utils/google-api';
 import createGoogleCloudStorage from '@store/storage/GoogleCloudStorage';
-import { createPartializedState } from '@store/persistence';
+import {
+  createLocalStoragePartializedState,
+  createPartializedState,
+} from '@store/persistence';
 
 import GoogleSyncButton, { GoogleSyncButtonHandle } from './GoogleSyncButton';
 import PopupModal from '@components/PopupModal';
@@ -28,6 +31,8 @@ import CrossIcon from '@icon/CrossIcon';
 import DeleteIcon from '@icon/DeleteIcon';
 
 import { GoogleFileResource, SyncStatus } from '@type/google-api';
+import { createJSONStorage } from 'zustand/middleware';
+import compressedStorage from '@store/storage/CompressedStorage';
 
 const SILENT_REFRESH_INTERVAL = 3000000; // 50 minutes
 
@@ -38,6 +43,13 @@ type SyncOperation =
   | 'pull'
   | 'push'
   | 'disconnect';
+
+type SyncActivity =
+  | 'checking'
+  | 'syncing'
+  | 'downloading'
+  | 'authenticating'
+  | null;
 
 const formatDateTime = (value: string | undefined, locale?: string): string => {
   if (!value) return 'Unknown';
@@ -70,6 +82,9 @@ const formatFileSize = (value: string | undefined, locale?: string): string => {
     maximumFractionDigits: digits,
   }).format(normalized)} ${units[unitIndex]}`;
 };
+
+const actionButtonClass =
+  'btn btn-primary disabled:pointer-events-none disabled:cursor-not-allowed disabled:opacity-50 disabled:saturate-50';
 
 const SyncDirectionOverlay = ({
   direction,
@@ -126,6 +141,21 @@ const GoogleSync = ({ clientId }: { clientId: string }) => {
   const syncStatus = useGStore((state) => state.syncStatus);
   const cloudSync = useGStore((state) => state.cloudSync);
   const setSyncStatus = useGStore((state) => state.setSyncStatus);
+  const syncTargetConfirmed = useGStore((state) => state.syncTargetConfirmed);
+
+  const enableCloudPersistence = () => {
+    useStore.persist.setOptions({
+      storage: createGoogleCloudStorage(),
+      partialize: (state) => createPartializedState(state),
+    });
+  };
+
+  const enableLocalPersistence = () => {
+    useStore.persist.setOptions({
+      storage: createJSONStorage(() => compressedStorage),
+      partialize: (state) => createLocalStoragePartializedState(state),
+    });
+  };
 
   const [isModalOpen, setIsModalOpen] = useState<boolean>(cloudSync);
   const [files, setFiles] = useState<GoogleFileResource[]>([]);
@@ -152,10 +182,11 @@ const GoogleSync = ({ clientId }: { clientId: string }) => {
               setFileId(_files[0].id);
             }
           }
-          useStore.persist.setOptions({
-            storage: createGoogleCloudStorage(),
-            partialize: (state) => createPartializedState(state),
-          });
+          if (syncTargetConfirmed) {
+            enableCloudPersistence();
+          } else {
+            enableLocalPersistence();
+          }
           setSyncStatus('synced');
           // Open modal so user can choose Pull/Push direction (skip for silent refresh)
           if (options?.openModal) {
@@ -220,6 +251,8 @@ const GooglePopup = ({
   const cloudSync = useGStore((state) => state.cloudSync);
   const googleAccessToken = useGStore((state) => state.googleAccessToken);
   const setFileId = useGStore((state) => state.setFileId);
+  const setSyncTargetConfirmed = useGStore((state) => state.setSyncTargetConfirmed);
+  const syncTargetConfirmed = useGStore((state) => state.syncTargetConfirmed);
   const currentFileId = useGStore((state) => state.fileId);
   const localFileSize = formatFileSize(String(stateToFile().size), navigator.language);
 
@@ -239,11 +272,16 @@ const GooglePopup = ({
     }, SILENT_REFRESH_INTERVAL);
   };
 
+  const stopSilentRefreshInterval = () => {
+    if (refreshIntervalRef.current) {
+      window.clearInterval(refreshIntervalRef.current);
+      refreshIntervalRef.current = undefined;
+    }
+  };
+
   useEffect(() => {
     return () => {
-      if (refreshIntervalRef.current) {
-        window.clearInterval(refreshIntervalRef.current);
-      }
+      stopSilentRefreshInterval();
     };
   }, []);
 
@@ -252,6 +290,13 @@ const GooglePopup = ({
   );
   const [selectedOperation, setSelectedOperation] =
     useState<SyncOperation>('connect');
+  const [activity, setActivity] = useState<SyncActivity>(null);
+
+  const isBusy = syncStatus === 'syncing';
+
+  const setBusyActivity = (nextActivity: Exclude<SyncActivity, null>) => {
+    setActivity(nextActivity);
+  };
 
   useEffect(() => {
     if (!_fileId && files.length > 0) {
@@ -259,19 +304,56 @@ const GooglePopup = ({
     }
   }, [_fileId, files]);
 
+  useEffect(() => {
+    if (!isBusy) {
+      setActivity(null);
+    }
+  }, [isBusy]);
+
   const selectSyncTarget = (fileId: string) => {
     setFileId(fileId);
     _setFileId(fileId);
   };
 
+  const activateCloudSyncTarget = (fileId: string) => {
+    selectSyncTarget(fileId);
+    setSyncTargetConfirmed(true);
+    useStore.persist.setOptions({
+      storage: createGoogleCloudStorage(),
+      partialize: (state) => createPartializedState(state),
+    });
+  };
+
   const selectedFile = files.find((file) => file.id === _fileId);
   const disableCloudSelection = selectedOperation === 'create';
+
+  const refreshCloudFiles = async () => {
+    if (!googleAccessToken || isBusy) return;
+    try {
+      setBusyActivity('checking');
+      setSyncStatus('syncing');
+      const nextFiles = await getFiles(googleAccessToken);
+      if (nextFiles) {
+        setFiles(nextFiles);
+        if (_fileId && !nextFiles.some((file) => file.id === _fileId)) {
+          _setFileId(nextFiles[0]?.id ?? '');
+        }
+      }
+      setSyncStatus('synced');
+    } catch (e: unknown) {
+      setSyncStatus('unauthenticated');
+      setToastMessage((e as Error).message);
+      setToastShow(true);
+      setToastStatus('error');
+    }
+  };
 
   const applyRemoteToLocal = async () => {
     if (!_fileId) return;
     try {
+      setBusyActivity('downloading');
       setSyncStatus('syncing');
-      selectSyncTarget(_fileId);
+      activateCloudSyncTarget(_fileId);
       await useStore.persist.rehydrate();
       setToastStatus('success');
       setToastMessage(t('toast.pull'));
@@ -289,8 +371,9 @@ const GooglePopup = ({
   const overwriteRemoteWithLocal = async () => {
     if (!_fileId || !googleAccessToken) return;
     try {
+      setBusyActivity('syncing');
       setSyncStatus('syncing');
-      selectSyncTarget(_fileId);
+      activateCloudSyncTarget(_fileId);
       await updateDriveFile(stateToFile(), _fileId, googleAccessToken);
       const _files = await getFiles(googleAccessToken);
       if (_files) setFiles(_files);
@@ -309,11 +392,12 @@ const GooglePopup = ({
   const createSyncFile = async () => {
     if (!googleAccessToken) return;
     try {
+      setBusyActivity('syncing');
       setSyncStatus('syncing');
       const createdFile = await createDriveFile(stateToFile(), googleAccessToken);
       const _files = await getFiles(googleAccessToken);
       if (_files) setFiles(_files);
-      selectSyncTarget(createdFile.id);
+      activateCloudSyncTarget(createdFile.id);
       setSyncStatus('synced');
     } catch (e: unknown) {
       setSyncStatus('unauthenticated');
@@ -324,16 +408,26 @@ const GooglePopup = ({
   };
 
   const stopSyncing = () => {
+    if (isBusy) return;
     syncButtonRef.current?.disconnect();
     setIsModalOpen(false);
   };
 
   const startSyncing = () => {
+    setBusyActivity('authenticating');
     syncButtonRef.current?.connect();
   };
 
   const needsReconnect = cloudSync && syncStatus === 'unauthenticated';
   const connected = cloudSync && syncStatus !== 'unauthenticated';
+
+  useEffect(() => {
+    if (connected && syncTargetConfirmed && googleAccessToken) {
+      startSilentRefreshInterval();
+      return;
+    }
+    stopSilentRefreshInterval();
+  }, [connected, googleAccessToken, syncTargetConfirmed]);
 
   const availableOperations: SyncOperation[] = !cloudSync
     ? ['connect']
@@ -349,6 +443,7 @@ const GooglePopup = ({
   }, [availableOperations, selectedOperation]);
 
   const runSelectedOperation = async () => {
+    if (isBusy) return;
     if (selectedOperation === 'connect' || selectedOperation === 'reconnect') {
       startSyncing();
       return;
@@ -393,13 +488,67 @@ const GooglePopup = ({
         ? ({ mobile: 'up', desktop: 'right' } as const)
         : null;
 
+  const statusMessageKey =
+    activity === 'downloading'
+      ? 'status.downloading'
+      : activity === 'authenticating'
+        ? 'status.authenticating'
+        : activity === 'checking'
+          ? 'status.checking'
+          : isBusy
+            ? 'status.syncing'
+            : syncTargetConfirmed
+              ? 'status.idleConnected'
+              : connected
+                ? 'status.idleAwaitingChoice'
+                : 'status.idleDisconnected';
+
   return (
     <PopupModal
       title={t('name') as string}
       setIsModalOpen={setIsModalOpen}
       cancelButton={false}
+      disableClose={isBusy}
+      footerStartContent={
+        <div className='flex min-h-[1.5rem] items-center gap-3 text-left'>
+          {isBusy ? <SyncIcon status='syncing' /> : <div className='h-4 w-4' />}
+          <span className='text-sm text-gray-600 dark:text-gray-300'>
+            {t(statusMessageKey)}
+          </span>
+        </div>
+      }
+      footerEndContent={
+        connected ? (
+          <button
+            type='button'
+            className={actionButtonClass}
+            onClick={runSelectedOperation}
+            disabled={
+              isBusy ||
+              ((selectedOperation === 'pull' || selectedOperation === 'push') &&
+                !_fileId)
+            }
+          >
+            {t(operationLabelKey[selectedOperation])}
+          </button>
+        ) : (
+          <button
+            type='button'
+            className={actionButtonClass}
+            onClick={runSelectedOperation}
+            disabled={isBusy}
+          >
+            {t(operationLabelKey[selectedOperation])}
+          </button>
+        )
+      }
     >
-      <div className='p-6 border-b border-gray-200 dark:border-gray-600 text-gray-900 dark:text-gray-300 text-sm flex flex-col items-center gap-4 text-center'>
+      <div
+        aria-busy={isBusy}
+        className={`border-b border-gray-200 p-6 text-sm text-gray-900 dark:border-gray-600 dark:text-gray-300 ${
+          isBusy ? 'pointer-events-none select-none opacity-60' : ''
+        } flex flex-col items-center gap-4 text-center`}
+      >
         <div className='w-full max-w-2xl rounded-lg border border-gray-300 bg-gray-50/90 px-4 py-4 text-left dark:border-gray-600 dark:bg-gray-800/50'>
           <p className='text-sm text-gray-900 dark:text-gray-100'>{t('tagline')}</p>
           <p className='mt-3 text-xs text-gray-700 dark:text-gray-300'>{t('privacy')}</p>
@@ -409,12 +558,10 @@ const GooglePopup = ({
           ref={syncButtonRef}
           showDisconnectButton={false}
           showDisconnectNotice={false}
-          loginHandler={() => {
-            // Modal stays open so user can choose Pull/Push direction
-            startSilentRefreshInterval();
-          }}
+          loginHandler={() => {}}
           onBeforeSilentRefresh={() => {
             isSilentRefresh.current = true;
+            setBusyActivity('checking');
           }}
           onSilentRefreshFail={() => {
             if (refreshIntervalRef.current) {
@@ -431,7 +578,7 @@ const GooglePopup = ({
             className='w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-emerald-500 dark:border-gray-500 dark:bg-gray-700 dark:text-white'
             value={selectedOperation}
             onChange={(e) => setSelectedOperation(e.target.value as SyncOperation)}
-            disabled={syncStatus === 'syncing'}
+            disabled={isBusy}
           >
             {availableOperations.map((operation) => (
               <option key={operation} value={operation}>
@@ -448,8 +595,10 @@ const GooglePopup = ({
             <div className='relative flex flex-col gap-3 md:grid md:grid-cols-2'>
               {syncDirection && <SyncDirectionOverlay direction={syncDirection.desktop} />}
               <div className='order-3 rounded-lg border border-gray-200 bg-gray-100/80 p-3 md:order-1 dark:border-gray-600 dark:bg-gray-800/60'>
-                <div className='mb-2 text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400'>
-                  {t('labels.localState')}
+                <div className='mb-2 flex h-8 items-center'>
+                  <div className='text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400'>
+                    {t('labels.localState')}
+                  </div>
                 </div>
                 <div className='text-sm text-gray-900 dark:text-gray-100'>
                   {t('labels.fileSize')}:{' '}
@@ -457,12 +606,26 @@ const GooglePopup = ({
                 </div>
                 <div className='text-xs text-gray-600 dark:text-gray-400 break-all'>
                   {t('labels.syncingFileId')}:{' '}
-                  {currentFileId ? currentFileId : '-'}
+                  {syncTargetConfirmed && currentFileId ? currentFileId : '-'}
                 </div>
               </div>
               <div className='order-1 rounded-lg border border-gray-200 bg-gray-100/80 p-3 md:order-2 dark:border-gray-600 dark:bg-gray-800/60'>
-                <div className='mb-2 text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400'>
-                  {t('labels.selectedFile')}
+                <div className='mb-2 flex items-center justify-between gap-3'>
+                  <div className='text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400'>
+                    {t('labels.selectedFile')}
+                  </div>
+                  <button
+                    type='button'
+                    className='inline-flex h-8 w-8 items-center justify-center rounded-full border border-gray-300 bg-white/80 text-gray-600 transition-colors hover:border-emerald-400 hover:text-emerald-600 disabled:pointer-events-none disabled:opacity-50 dark:border-gray-500 dark:bg-gray-700 dark:text-gray-200 dark:hover:border-emerald-400 dark:hover:text-emerald-300'
+                    onClick={() => {
+                      void refreshCloudFiles();
+                    }}
+                    disabled={isBusy || !googleAccessToken}
+                    aria-label={t('button.refreshFiles') as string}
+                    title={t('button.refreshFiles') as string}
+                  >
+                    <RefreshIcon className={isBusy ? 'animate-spin' : ''} />
+                  </button>
                 </div>
                 <div className='max-h-72 overflow-y-auto pr-1'>
                   {files.length === 0 ? (
@@ -476,10 +639,11 @@ const GooglePopup = ({
                         file={file}
                         selected={!disableCloudSelection && _fileId === file.id}
                         current={currentFileId === file.id}
-                        syncing={syncStatus === 'syncing'}
+                        syncing={isBusy}
                         selectionDisabled={disableCloudSelection}
                         onSelect={_setFileId}
                         onFilesChange={setFiles}
+                        onActivityChange={setBusyActivity}
                       />
                     ))
                   )}
@@ -491,32 +655,7 @@ const GooglePopup = ({
                 </div>
               )}
             </div>
-            <button
-              type='button'
-              className='btn btn-primary self-center'
-              onClick={runSelectedOperation}
-              disabled={
-                syncStatus === 'syncing' ||
-                ((selectedOperation === 'pull' || selectedOperation === 'push') &&
-                  !_fileId)
-              }
-            >
-              {t(operationLabelKey[selectedOperation])}
-            </button>
-            <div className='h-4 w-4'>
-              {syncStatus === 'syncing' && <SyncIcon status='syncing' />}
-            </div>
           </div>
-        )}
-        {!connected && (
-          <button
-            type='button'
-            className='btn btn-primary self-center'
-            onClick={runSelectedOperation}
-            disabled={syncStatus === 'syncing'}
-          >
-            {t(operationLabelKey[selectedOperation])}
-          </button>
         )}
       </div>
     </PopupModal>
@@ -531,6 +670,7 @@ const FileSelector = ({
   selectionDisabled,
   onSelect,
   onFilesChange,
+  onActivityChange,
 }: {
   file: GoogleFileResource;
   selected: boolean;
@@ -539,6 +679,7 @@ const FileSelector = ({
   selectionDisabled: boolean;
   onSelect: React.Dispatch<React.SetStateAction<string>>;
   onFilesChange: React.Dispatch<React.SetStateAction<GoogleFileResource[]>>;
+  onActivityChange: (activity: Exclude<SyncActivity, null>) => void;
 }) => {
   const { t, i18n } = useTranslation(['drive']);
   const setSyncStatus = useGStore((state) => state.setSyncStatus);
@@ -560,6 +701,7 @@ const FileSelector = ({
     if (!accessToken) return;
 
     try {
+      onActivityChange('syncing');
       setSyncStatus('syncing');
       const newFileName = _name.endsWith('.json') ? _name : `${_name}.json`;
       await updateDriveFileName(newFileName, file.id, accessToken);
@@ -581,6 +723,7 @@ const FileSelector = ({
     if (!accessToken) return;
 
     try {
+      onActivityChange('checking');
       setSyncStatus('syncing');
       await deleteDriveFile(file.id, accessToken);
       const updatedFiles = await getFiles(accessToken);
@@ -601,7 +744,7 @@ const FileSelector = ({
     <label
       className={`mb-2 flex w-full min-w-0 items-start gap-3 overflow-hidden rounded-lg border px-3 py-3 text-sm ${
         selected
-          ? 'border-emerald-400 bg-emerald-50/70 dark:border-emerald-700 dark:bg-emerald-950/20'
+          ? 'border-emerald-400 bg-emerald-50/80 ring-1 ring-emerald-400/70 dark:border-emerald-500/70 dark:bg-gray-800/90 dark:ring-emerald-500/60'
           : 'border-gray-200 bg-white/80 dark:border-gray-600 dark:bg-gray-800/40'
       } ${syncing ? 'cursor-not-allowed opacity-60' : 'cursor-pointer'}`}
     >
@@ -629,17 +772,17 @@ const FileSelector = ({
             </div>
           )
         )}
-        <div className='mt-1 break-all text-xs text-gray-600 dark:text-gray-300'>
+        <div className='mt-1 break-all text-xs text-gray-600 dark:text-gray-100'>
           {t('labels.fileId')}: {file.id}
         </div>
-        <div className='mt-1 break-all text-xs text-gray-600 dark:text-gray-300'>
+        <div className='mt-1 break-all text-xs text-gray-600 dark:text-gray-100'>
           {t('labels.fileName')}: {file.name}
         </div>
-        <div className='mt-1 text-xs text-gray-600 dark:text-gray-300'>
+        <div className='mt-1 text-xs text-gray-600 dark:text-gray-100'>
           {t('labels.fileSize')}:{' '}
           {formattedSize === 'Unknown' ? t('labels.unknownSize') : formattedSize}
         </div>
-        <div className='mt-1 text-xs text-gray-600 dark:text-gray-300'>
+        <div className='mt-1 text-xs text-gray-600 dark:text-gray-100'>
           {t('labels.updatedAt')}:{' '}
           {formattedUpdatedAt === 'Unknown' ? t('labels.unknownDate') : formattedUpdatedAt}
         </div>
@@ -704,7 +847,7 @@ const SyncIcon = ({ status }: { status: SyncStatus }) => {
       </div>
     ),
     syncing: (
-      <div className='bg-gray-600/80 rounded-full p-1 animate-spin'>
+      <div className='rounded-full bg-gray-600/80 p-1 animate-spin'>
         <RefreshIcon className='h-2 w-2' />
       </div>
     ),

@@ -19,8 +19,9 @@ const useCloudAuthStore = create<StoreState>()(
       partialize: (state) => ({
         cloudSync: state.cloudSync,
         fileId: state.fileId,
+        syncTargetConfirmed: state.syncTargetConfirmed,
       }),
-      version: 1,
+      version: 2,
     }
   )
 );

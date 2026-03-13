@@ -7,7 +7,8 @@
     "create": "新しいファイルを作成",
     "confirm": "選択を確定",
     "pull": "選択したクラウドを読み込む",
-    "push": "ローカル状態でクラウドを上書き"
+    "push": "ローカル状態でクラウドを上書き",
+    "refreshFiles": "クラウドファイル情報を更新"
   },
   "labels": {
     "localState": "現在のローカルデータ",
@@ -50,5 +51,14 @@
     "stop": "同期を停止しました。",
     "pull": "クラウドの内容をこの端末に読み込みました。",
     "push": "クラウドファイルをローカル状態で上書きしました。"
+  },
+  "status": {
+    "checking": "ファイルを確認しています。",
+    "syncing": "同期しています。",
+    "downloading": "クラウドデータを読み込んでいます。",
+    "authenticating": "Google Drive に接続しています。",
+    "idleConnected": "自動保存の同期先が確定しています。",
+    "idleAwaitingChoice": "同期方向を選ぶまで自動保存は保留されています。",
+    "idleDisconnected": "Google Drive Sync は未接続です。"
   }
 }

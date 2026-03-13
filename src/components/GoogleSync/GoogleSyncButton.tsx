@@ -1,4 +1,4 @@
-import React, { useEffect, useCallback, useImperativeHandle, forwardRef } from 'react';
+import React, { useImperativeHandle, forwardRef } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import { useGoogleLogin, googleLogout } from '@react-oauth/google';
@@ -29,6 +29,7 @@ const GoogleSyncButton = forwardRef<
   const setGoogleAccessToken = useGStore((state) => state.setGoogleAccessToken);
   const setSyncStatus = useGStore((state) => state.setSyncStatus);
   const setCloudSync = useGStore((state) => state.setCloudSync);
+  const setSyncTargetConfirmed = useGStore((state) => state.setSyncTargetConfirmed);
   const cloudSync = useGStore((state) => state.cloudSync);
 
   const setToastStatus = useStore((state) => state.setToastStatus);
@@ -82,6 +83,7 @@ const GoogleSyncButton = forwardRef<
     setGoogleAccessToken(undefined);
     setSyncStatus('unauthenticated');
     setCloudSync(false);
+    setSyncTargetConfirmed(false);
     googleLogout();
     useStore.persist.setOptions({
       storage: createJSONStorage(() => compressedStorage),

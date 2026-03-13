@@ -7,16 +7,19 @@ export interface CloudAuthSlice {
   cloudSync: boolean;
   syncStatus: SyncStatus;
   fileId?: string;
+  syncTargetConfirmed: boolean;
   setGoogleAccessToken: (googleAccessToken?: string) => void;
   setGoogleRefreshToken: (googleRefreshToken?: string) => void;
   setFileId: (fileId?: string) => void;
   setCloudSync: (cloudSync: boolean) => void;
   setSyncStatus: (syncStatus: SyncStatus) => void;
+  setSyncTargetConfirmed: (syncTargetConfirmed: boolean) => void;
 }
 
 export const createCloudAuthSlice: StoreSlice<CloudAuthSlice> = (set, get) => ({
   cloudSync: false,
   syncStatus: 'unauthenticated',
+  syncTargetConfirmed: false,
   setGoogleAccessToken: (googleAccessToken?: string) => {
     set((prev: CloudAuthSlice) => ({
       ...prev,
@@ -45,6 +48,12 @@ export const createCloudAuthSlice: StoreSlice<CloudAuthSlice> = (set, get) => ({
     set((prev: CloudAuthSlice) => ({
       ...prev,
       syncStatus: syncStatus,
+    }));
+  },
+  setSyncTargetConfirmed: (syncTargetConfirmed: boolean) => {
+    set((prev: CloudAuthSlice) => ({
+      ...prev,
+      syncTargetConfirmed,
     }));
   },
 });

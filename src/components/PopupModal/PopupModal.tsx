@@ -12,6 +12,9 @@ const PopupModal = ({
   handleClose,
   handleClickBackdrop,
   cancelButton = true,
+  disableClose = false,
+  footerStartContent,
+  footerEndContent,
   children,
 }: {
   title?: string;
@@ -21,22 +24,28 @@ const PopupModal = ({
   handleClose?: () => void;
   handleClickBackdrop?: () => void;
   cancelButton?: boolean;
+  disableClose?: boolean;
+  footerStartContent?: React.ReactNode;
+  footerEndContent?: React.ReactNode;
   children?: React.ReactElement;
 }) => {
   const modalRoot = document.getElementById('modal-root');
   const { t } = useTranslation();
 
   const _handleClose = () => {
+    if (disableClose) return;
     handleClose && handleClose();
     setIsModalOpen(false);
   };
 
   const _handleBackdropClose = () => {
+    if (disableClose) return;
     if (handleClickBackdrop) handleClickBackdrop();
     else _handleClose();
   };
 
   const handleKeyDown = (event: KeyboardEvent) => {
+    if (disableClose) return;
     if (event.key === 'Escape') {
       if (handleClickBackdrop) handleClickBackdrop();
       else handleClose ? handleClose() : setIsModalOpen(false);
@@ -63,9 +72,10 @@ const PopupModal = ({
               </h3>
               <button
                 type='button'
-                className='text-gray-400 bg-transparent hover:bg-gray-200 hover:text-gray-900 rounded-lg text-sm p-1.5 ml-auto inline-flex items-center dark:hover:bg-gray-600 dark:hover:text-white'
+                className='text-gray-400 bg-transparent hover:bg-gray-200 hover:text-gray-900 rounded-lg text-sm p-1.5 ml-auto inline-flex items-center disabled:cursor-not-allowed disabled:opacity-50 dark:hover:bg-gray-600 dark:hover:text-white'
                 onClick={_handleClose}
                 aria-label='close modal'
+                disabled={disableClose}
               >
                 <CrossIcon2 />
               </button>
@@ -81,27 +91,35 @@ const PopupModal = ({
 
             {children}
 
-            <div className='flex items-center justify-center p-6 gap-4'>
-              {handleConfirm && (
-                <button
-                  type='button'
-                  className='btn btn-primary'
-                  onClick={handleConfirm}
-                  aria-label='confirm'
-                >
-                  {t('confirm')}
-                </button>
-              )}
-              {cancelButton && (
-                <button
-                  type='button'
-                  className='btn btn-neutral'
-                  onClick={_handleClose}
-                  aria-label='cancel'
-                >
-                  {t('cancel')}
-                </button>
-              )}
+            <div className='flex items-center justify-between p-6 gap-4'>
+              <div className='min-w-0 flex-1'>
+                {footerStartContent}
+              </div>
+              <div className='flex items-center justify-end gap-4'>
+                {footerEndContent}
+                {handleConfirm && (
+                  <button
+                    type='button'
+                    className='btn btn-primary'
+                    onClick={handleConfirm}
+                    aria-label='confirm'
+                    disabled={disableClose}
+                  >
+                    {t('confirm')}
+                  </button>
+                )}
+                {cancelButton && (
+                  <button
+                    type='button'
+                    className='btn btn-neutral'
+                    onClick={_handleClose}
+                    aria-label='cancel'
+                    disabled={disableClose}
+                  >
+                    {t('cancel')}
+                  </button>
+                )}
+              </div>
             </div>
           </div>
         </div>
