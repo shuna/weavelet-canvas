@@ -141,11 +141,14 @@ const readImportFile = async (file: File): Promise<string> => {
 };
 
 const detectImportType = (parsedData: unknown): ImportType => {
-  if (isOpenAIContent(parsedData)) return 'OpenAIContent';
-  if (isLegacyImport(parsedData)) return 'LegacyImport';
+  // Check versioned exports first — they are the most specific (have a
+  // numeric `version` field) and must not be swallowed by the broader
+  // OpenAI / legacy checks that follow.
   if (isRecord(parsedData) && parsedData.version === 3) return 'ExportV3';
   if (isRecord(parsedData) && parsedData.version === 2) return 'ExportV2';
   if (isRecord(parsedData) && parsedData.version === 1) return 'ExportV1';
+  if (isOpenAIContent(parsedData)) return 'OpenAIContent';
+  if (isLegacyImport(parsedData)) return 'LegacyImport';
   if (isSingleChatImport(parsedData)) return 'SingleChat';
   return '';
 };

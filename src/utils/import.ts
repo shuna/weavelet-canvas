@@ -250,12 +250,16 @@ const isOpenAIDataExport = (content: unknown): content is OpenAIChat[] => {
 const isOpenAIPlaygroundJSON = (
   content: unknown
 ): content is OpenAIPlaygroundJSON => {
-  return (
-    isRecord(content) &&
-    hasOwn(content, 'messages') &&
-    Array.isArray(content.messages) &&
-    !hasOwn(content, 'config')
-  );
+  if (!isRecord(content) || !hasOwn(content, 'messages') || !Array.isArray(content.messages)) {
+    return false;
+  }
+  // Exclude ChatInterface objects (nested `config` object) and versioned
+  // export wrappers (`version` field).  OpenAI Playground JSON carries config
+  // values (model, temperature, …) at the top level, never nested.
+  if (hasOwn(content, 'config') || hasOwn(content, 'version')) {
+    return false;
+  }
+  return true;
 };
 
 // Define the custom error class
