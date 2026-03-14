@@ -101,7 +101,7 @@ const Message = React.memo(
           />
         )}
         <div
-          className={`text-base gap-2.5 md:gap-4 m-auto p-4 pl-10 md:py-6 md:pl-7 flex transition-all ease-in-out ${
+          className={`text-base gap-2.5 md:gap-4 m-auto p-4 py-6 pl-10 md:py-8 md:pl-7 flex transition-all ease-in-out ${
             isDesktopMenuExpanded
               ? 'md:max-w-3xl lg:max-w-3xl xl:max-w-4xl'
               : 'md:max-w-5xl lg:max-w-5xl xl:max-w-6xl'

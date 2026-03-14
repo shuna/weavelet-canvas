@@ -126,6 +126,52 @@ const EditViewButtons = memo(
           </>
         )}
 
+        {!sticky && isUser && (
+          <div className='flex md:hidden items-center justify-end gap-1 whitespace-nowrap mt-1'>
+            {isNotLast ? (
+              <>
+                <button
+                  className={`btn btn-small btn-primary ${
+                    isCurrentChatGenerating || noModel ? 'cursor-not-allowed opacity-40' : ''
+                  }`}
+                  onClick={handleGenerateNextOnly}
+                  disabled={isCurrentChatGenerating || noModel}
+                  title={t('regenerateNextTooltip') as string}
+                >
+                  {t('regenerateNext')}
+                </button>
+                <button
+                  className={`btn btn-small btn-neutral ${
+                    isCurrentChatGenerating || noModel
+                      ? 'cursor-not-allowed opacity-40'
+                      : ''
+                  }`}
+                  onClick={() => {
+                    !isCurrentChatGenerating && !noModel && setIsModalOpen(true);
+                  }}
+                  disabled={isCurrentChatGenerating || noModel}
+                  title={t('regenerateBelowTooltip') as string}
+                >
+                  {t('regenerateBelow')}
+                </button>
+              </>
+            ) : (
+              <button
+                className={`btn btn-small btn-primary ${
+                  isCurrentChatGenerating || noModel ? 'cursor-not-allowed opacity-40' : ''
+                }`}
+                onClick={() => {
+                  !isCurrentChatGenerating && !noModel && handleGenerate();
+                }}
+                disabled={isCurrentChatGenerating || noModel}
+                title={t('generateTooltip') as string}
+              >
+                {t('generate')}
+              </button>
+            )}
+          </div>
+        )}
+
         <div className='flex items-center mt-1'>
           <div className='flex items-center gap-1'>
             {isImageModel && (
@@ -178,10 +224,10 @@ const EditViewButtons = memo(
 
           <div className='flex-1' />
 
-          <div className='flex items-center'>
+          <div className='flex items-center gap-1 whitespace-nowrap'>
             {sticky && (
               <button
-                className={`btn relative mr-2 btn-primary ${
+                className={`btn btn-small btn-primary ${
                   isCurrentChatGenerating || noModel || !canSubmitDraft
                     ? 'cursor-not-allowed opacity-40'
                     : ''
@@ -190,9 +236,7 @@ const EditViewButtons = memo(
                 disabled={isCurrentChatGenerating || noModel || !canSubmitDraft}
                 aria-label={t('generate') as string}
               >
-                <div className='flex items-center justify-center gap-2'>
-                  {t('generate')}
-                </div>
+                {t('generate')}
               </button>
             )}
 
@@ -200,19 +244,17 @@ const EditViewButtons = memo(
               isNotLast ? (
                 <>
                   <button
-                    className={`btn relative mr-2 btn-primary ${
+                    className={`hidden md:inline-flex btn btn-small btn-primary ${
                       isCurrentChatGenerating || noModel ? 'cursor-not-allowed opacity-40' : ''
                     }`}
                     onClick={handleGenerateNextOnly}
                     disabled={isCurrentChatGenerating || noModel}
                     title={t('regenerateNextTooltip') as string}
                   >
-                    <div className='flex items-center justify-center gap-2'>
-                      {t('regenerateNext')}
-                    </div>
+                    {t('regenerateNext')}
                   </button>
                   <button
-                    className={`btn relative mr-2 btn-neutral ${
+                    className={`hidden md:inline-flex btn btn-small btn-neutral ${
                       isCurrentChatGenerating || noModel
                         ? 'cursor-not-allowed opacity-40'
                         : ''
@@ -223,33 +265,27 @@ const EditViewButtons = memo(
                     disabled={isCurrentChatGenerating || noModel}
                     title={t('regenerateBelowTooltip') as string}
                   >
-                    <div className='flex items-center justify-center gap-2'>
-                      {t('regenerateBelow')}
-                    </div>
+                    {t('regenerateBelow')}
                   </button>
                 </>
               ) : (
-                <>
-                  <button
-                    className={`btn relative mr-2 btn-primary ${
-                      isCurrentChatGenerating || noModel ? 'cursor-not-allowed opacity-40' : ''
-                    }`}
-                    onClick={() => {
-                      !isCurrentChatGenerating && !noModel && handleGenerate();
-                    }}
-                    disabled={isCurrentChatGenerating || noModel}
-                    title={t('regenerateNextTooltip') as string}
-                  >
-                    <div className='flex items-center justify-center gap-2'>
-                      {t('regenerateNext')}
-                    </div>
-                  </button>
-                </>
+                <button
+                  className={`hidden md:inline-flex btn btn-small btn-primary ${
+                    isCurrentChatGenerating || noModel ? 'cursor-not-allowed opacity-40' : ''
+                  }`}
+                  onClick={() => {
+                    !isCurrentChatGenerating && !noModel && handleGenerate();
+                  }}
+                  disabled={isCurrentChatGenerating || noModel}
+                  title={t('generateTooltip') as string}
+                >
+                  {t('generate')}
+                </button>
               )
             )}
 
             <button
-              className={`btn relative mr-2 ${
+              className={`btn btn-small ${
                 sticky
                   ? `btn-neutral ${
                       isCurrentChatGenerating ? 'cursor-not-allowed opacity-40' : ''
@@ -259,20 +295,16 @@ const EditViewButtons = memo(
               onClick={handleSave}
               aria-label={t('save') as string}
             >
-              <div className='flex items-center justify-center gap-2'>
-                {t('save')}
-              </div>
+              {t('save')}
             </button>
 
             {sticky || (
               <button
-                className='btn relative btn-neutral'
+                className='btn btn-small btn-neutral'
                 onClick={handleCancel}
                 aria-label={t('cancel') as string}
               >
-                <div className='flex items-center justify-center gap-2'>
-                  {t('cancel')}
-                </div>
+                {t('cancel')}
               </button>
             )}
           </div>
