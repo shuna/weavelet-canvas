@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { isEditingMessageElement } from './ChatContent';
+import { isEditingMessageElement, shouldShowHiddenMessagesWarning } from './ChatContent';
 
 describe('isEditingMessageElement', () => {
   it('returns true when a message edit textarea inside the scroller is focused', () => {
@@ -37,5 +37,31 @@ describe('isEditingMessageElement', () => {
     };
 
     expect(isEditingMessageElement(scroller, activeElement)).toBe(false);
+  });
+});
+
+describe('shouldShowHiddenMessagesWarning', () => {
+  it('returns false when the token total is below the reduction threshold', () => {
+    expect(
+      shouldShowHiddenMessagesWarning({
+        totalTokens: 18,
+        limitedTokens: 0,
+        totalMessages: 2,
+        limitedMessages: 1,
+        tokenLimit: 256000,
+      })
+    ).toBe(false);
+  });
+
+  it('returns true when the conversation still exceeds the reduction threshold after dropping messages', () => {
+    expect(
+      shouldShowHiddenMessagesWarning({
+        totalTokens: 300000,
+        limitedTokens: 250000,
+        totalMessages: 40,
+        limitedMessages: 30,
+        tokenLimit: 256000,
+      })
+    ).toBe(true);
   });
 });
