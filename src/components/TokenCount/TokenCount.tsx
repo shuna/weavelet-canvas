@@ -268,7 +268,7 @@ const TokenCount = React.memo(() => {
   }, [generatingSession?.sessionId, model]);
 
   return (
-    <div className='absolute top-[-16px] right-0'>
+    <div>
       <div
         className={`text-xs italic tabular-nums text-gray-900 transition-opacity duration-200 dark:text-gray-300 ${
           isDisplayRefreshing ? 'opacity-80' : 'opacity-100'

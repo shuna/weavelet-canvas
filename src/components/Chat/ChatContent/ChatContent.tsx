@@ -1,4 +1,4 @@
-import React, { Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ListRange, Virtuoso, VirtuosoHandle } from 'react-virtuoso';
 import useStore from '@store/store';
 import { useTranslation } from 'react-i18next';
@@ -11,15 +11,12 @@ import CrossIcon from '@icon/CrossIcon';
 
 import useSubmit from '@hooks/useSubmit';
 import { stopSessionsForChat } from '@hooks/useSubmit';
-import DownloadChat from './DownloadChat';
-import CloneChat from './CloneChat';
-const ShareGPT = React.lazy(() => import('@components/ShareGPT'));
+import TokenCount from '@components/TokenCount/TokenCount';
 import { MessageInterface, TextContentInterface } from '@type/chat';
 import countTokens, { limitMessageTokens } from '@utils/messageUtils';
 import { perfStart, perfEnd } from '@utils/perfTrace';
 import { defaultModel, reduceMessagesToTotalToken } from '@constants/chat';
 import { toast } from 'react-toastify';
-import useIsDesktop from '@hooks/useIsDesktop';
 
 const EMPTY_MESSAGES: never[] = [];
 const SCROLL_TO_BOTTOM_TOP = Number.MAX_SAFE_INTEGER;
@@ -153,12 +150,8 @@ const ChatContent = () => {
       : 0
   );
   const advancedMode = useStore((state) => state.advancedMode);
-  const hideSideMenu = useStore((state) => state.hideSideMenu);
   const autoScroll = useStore((state) => state.autoScroll);
   const animateBubbleNavigation = useStore((state) => state.animateBubbleNavigation);
-  const hideShareGPT = useStore((state) => state.hideShareGPT);
-  const isDesktop = useIsDesktop();
-  const isDesktopMenuExpanded = isDesktop && !hideSideMenu;
 
   const currentChatId = useStore((state) =>
     state.chats?.[state.currentChatIndex]?.id ?? ''
@@ -781,6 +774,10 @@ const ChatContent = () => {
         sticky
       />
 
+      <div className='flex justify-center mt-1'>
+        <TokenCount />
+      </div>
+
       <div
         className={`flex justify-center my-2 min-h-[40px] ${
           isCurrentChatGenerating ? '' : 'invisible pointer-events-none'
@@ -842,31 +839,9 @@ const ChatContent = () => {
           </div>
         </div>
       )}
-      <div
-        className={`mt-4 w-full m-auto ${
-          isDesktopMenuExpanded
-            ? 'md:max-w-3xl lg:max-w-3xl xl:max-w-4xl'
-            : 'md:max-w-5xl lg:max-w-5xl xl:max-w-6xl'
-        }`}
-      >
-        <div
-          className={`md:w-[calc(100%-50px)] flex gap-4 flex-wrap justify-center min-h-[40px] ${
-            isCurrentChatGenerating ? 'invisible pointer-events-none' : ''
-          }`}
-          aria-hidden={isCurrentChatGenerating}
-        >
-          {!isCurrentChatGenerating && (
-            <>
-              <DownloadChat visibleMessages={items} />
-              {!hideShareGPT && <Suspense fallback={null}><ShareGPT /></Suspense>}
-              <CloneChat />
-            </>
-          )}
-        </div>
-      </div>
       <div className='w-full h-36'></div>
     </div>
-  ), [inputRole, stickyIndex, isCurrentChatGenerating, currentChatId, error, lastSubmitMode, handleRetry, isDesktopMenuExpanded, hideShareGPT, t, setError, setLastSubmitContext]);
+  ), [inputRole, stickyIndex, isCurrentChatGenerating, currentChatId, error, lastSubmitMode, handleRetry, t, setError, setLastSubmitContext]);
 
   const components = useMemo(() => ({ Footer }), [Footer]);
 

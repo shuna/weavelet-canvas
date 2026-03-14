@@ -6,7 +6,6 @@ import { ModelOptions } from '@type/chat';
 import type { ProviderId } from '@type/provider';
 import { useModelType } from '@utils/modelLookup';
 import { hasMeaningfulContent } from '@utils/contentValidation';
-import TokenCount from '@components/TokenCount';
 import CommandPrompt from '../CommandPrompt';
 
 const EditViewButtons = memo(
@@ -59,7 +58,6 @@ const EditViewButtons = memo(
       return Object.values(state.generatingSessions).some((s) => s.chatId === chatId);
     });
     const noModel = !modelValid;
-    const advancedMode = useStore((state) => state.advancedMode);
     const lastMessageIndex = useStore((state) =>
       state.chats?.[state.currentChatIndex]?.messages.length
         ? state.chats[state.currentChatIndex].messages.length - 1
@@ -238,7 +236,7 @@ const EditViewButtons = memo(
               </button>
             )}
           </div>
-          {sticky && advancedMode && <TokenCount />}
+
           <CommandPrompt _setContent={_setContent} />
         </div>
       </div>

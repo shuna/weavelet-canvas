@@ -19,6 +19,18 @@ import { MessageInterface } from '@type/chat';
 import { ExportV3 } from '@type/export';
 import { prepareChatForExport } from '@utils/chatExport';
 
+const getVisibleMessages = (): Array<{ message: MessageInterface; originalIndex: number }> => {
+  const state = useStore.getState();
+  const chat = state.chats?.[state.currentChatIndex];
+  if (!chat) return [];
+  const result: Array<{ message: MessageInterface; originalIndex: number }> = [];
+  chat.messages.forEach((message, index) => {
+    if (!state.advancedMode && index === 0 && message.role === 'system') return;
+    result.push({ message, originalIndex: index });
+  });
+  return result;
+};
+
 const renderAllMessagesForCapture = (
   visibleMessages: Array<{ message: MessageInterface; originalIndex: number }>
 ): Promise<string> => {
@@ -68,21 +80,26 @@ const renderAllMessagesForCapture = (
 };
 
 const DownloadChat = React.memo(
-  ({ visibleMessages }: { visibleMessages: Array<{ message: MessageInterface; originalIndex: number }> }) => {
+  ({ trigger }: { trigger?: (onClick: () => void) => React.ReactNode }) => {
     const { t } = useTranslation();
     const [isModalOpen, setIsModalOpen] = useState<boolean>(false);
     const [visibleBranchOnly, setVisibleBranchOnly] = useState<boolean>(false);
+
+    const openModal = () => setIsModalOpen(true);
+
     return (
       <>
-        <button
-          className='btn btn-neutral'
-          aria-label={t('downloadChat') as string}
-          onClick={() => {
-            setIsModalOpen(true);
-          }}
-        >
-          {t('downloadChat')}
-        </button>
+        {trigger ? (
+          trigger(openModal)
+        ) : (
+          <button
+            className='btn btn-neutral'
+            aria-label={t('downloadChat') as string}
+            onClick={openModal}
+          >
+            {t('downloadChat')}
+          </button>
+        )}
         {isModalOpen && (
           <PopupModal
             setIsModalOpen={setIsModalOpen}
@@ -105,7 +122,8 @@ const DownloadChat = React.memo(
                 aria-label='image'
                 onClick={async () => {
                   try {
-                    const imgData = await renderAllMessagesForCapture(visibleMessages);
+                    const msgs = getVisibleMessages();
+                    const imgData = await renderAllMessagesForCapture(msgs);
                     downloadImg(
                       imgData,
                       `${
@@ -124,15 +142,6 @@ const DownloadChat = React.memo(
                 <ImageIcon />
                 Image
               </button>
-              {/* <button
-                className='btn btn-neutral gap-2'
-                onClick={async () => {
-                  // PDF export placeholder
-                }}
-              >
-                <PdfIcon />
-                PDF
-              </button> */}
               <button
                 className='btn btn-neutral gap-2'
                 aria-label='markdown'
