@@ -7,6 +7,7 @@ import CrossIcon from '@icon/CrossIcon';
 import DeleteIcon from '@icon/DeleteIcon';
 import EditIcon from '@icon/EditIcon';
 import CloneIcon from '@icon/CloneIcon';
+import ExportIcon from '@icon/ExportIcon';
 import TickIcon from '@icon/TickIcon';
 import useStore from '@store/store';
 import { formatNumber } from '@utils/chat';
@@ -14,6 +15,7 @@ import { retainContent, releaseContent } from '@utils/contentStore';
 import { cloneChatAtIndex, deepCloneSingleChat } from '@utils/chatShallowClone';
 import { stopSessionsForChat } from '@hooks/useSubmit';
 import { BranchNode } from '@type/chat';
+import DownloadChat from '@components/Chat/ChatContent/DownloadChat';
 
 const ChatHistoryClass = {
   normal:
@@ -296,6 +298,21 @@ const ChatHistory = React.memo(
                 >
                   <CloneIcon />
                 </button>
+                <DownloadChat
+                  trigger={(onClick) => (
+                    <button
+                      className='p-1 hover:text-gray-900 dark:hover:text-white'
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        e.preventDefault();
+                        onClick();
+                      }}
+                      aria-label='download chat'
+                    >
+                      <ExportIcon />
+                    </button>
+                  )}
+                />
                 <button
                   className='p-1 hover:text-gray-900 dark:hover:text-white'
                   onClick={() => setIsDelete(true)}
