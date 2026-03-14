@@ -19,6 +19,8 @@ import { useTranslation } from 'react-i18next';
 import { useModelType } from '@utils/modelLookup';
 import { TextContentInterface } from '@type/chat';
 
+const MARKDOWN_SYNTAX_PATTERN = /(^|\n)\s{0,3}(#{1,6}\s|[-*+]\s|\d+\.\s|>\s)|(\*\*|__|~~|`|\[.+?\]\(.+?\)|!\[.*?\]\(.+?\)|\|.+\|)/m;
+
 const UnifiedMessageView = memo(
   ({
     role,
@@ -117,31 +119,38 @@ const UnifiedMessageView = memo(
     const displayValue = isEditState
       ? (editLogic._content[0] as TextContentInterface).text
       : currentTextContent;
+    const usesMarkdownPreview = MARKDOWN_SYNTAX_PATTERN.test(displayValue);
 
     return (
       <>
-        <OverTypeEditor
-          value={displayValue}
-          mode={isEditState ? 'edit' : 'preview'}
-          onChange={
-            isEditState
-              ? (val) => {
-                  editLogic._setContent((prev) => [
-                    { type: 'text', text: val },
-                    ...prev.slice(1),
-                  ]);
-                }
-              : undefined
-          }
-          onKeyDown={isEditState ? (e) => {
-            // Convert native KeyboardEvent to React-compatible format for handleKeyDown
-            editLogic.handleKeyDown(e as unknown as React.KeyboardEvent<HTMLTextAreaElement>);
-          } : undefined}
-          onPaste={isEditState ? (e) => {
-            editLogic.handlePaste(e as unknown as React.ClipboardEvent<HTMLTextAreaElement>);
-          } : undefined}
-          autoFocus={isEditState}
-        />
+        {isEditState || usesMarkdownPreview ? (
+          <OverTypeEditor
+            value={displayValue}
+            mode={isEditState ? 'edit' : 'preview'}
+            onChange={
+              isEditState
+                ? (val) => {
+                    editLogic._setContent((prev) => [
+                      { type: 'text', text: val },
+                      ...prev.slice(1),
+                    ]);
+                  }
+                : undefined
+            }
+            onKeyDown={isEditState ? (e) => {
+              // Convert native KeyboardEvent to React-compatible format for handleKeyDown
+              editLogic.handleKeyDown(e as unknown as React.KeyboardEvent<HTMLTextAreaElement>);
+            } : undefined}
+            onPaste={isEditState ? (e) => {
+              editLogic.handlePaste(e as unknown as React.ClipboardEvent<HTMLTextAreaElement>);
+            } : undefined}
+            autoFocus={isEditState}
+          />
+        ) : (
+          <div className='whitespace-pre-wrap break-words leading-6'>
+            {displayValue}
+          </div>
+        )}
         <ContentAttachments images={isEditState ? [] : validImageContents} />
         <div className='min-h-[68px] mt-3 flex items-end'>
         {isEditState ? (

@@ -306,6 +306,11 @@
   padding: 0 !important;
   border: none !important;
   font-family: inherit !important;
+  min-height: 0 !important;
+}
+
+.overtype-container.overtype-auto-resize .overtype-wrapper {
+  min-height: 0 !important;
 }
 
 .overtype-wrapper .overtype-input,
@@ -321,6 +326,33 @@
   color: inherit !important;
 }
 
+.overtype-container[data-mode="preview"] .overtype-wrapper .overtype-preview {
+  font-family: inherit !important;
+  font-size: inherit !important;
+  line-height: inherit !important;
+  background: transparent !important;
+}
+
+.overtype-container[data-mode="plain"] .overtype-wrapper .overtype-input {
+  color: inherit !important;
+  font-family: inherit !important;
+  font-size: inherit !important;
+  line-height: inherit !important;
+}
+
 .overtype-wrapper .overtype-input::placeholder {
   color: transparent !important;
+}
+
+/* Keep edit-mode preview metrics aligned with the underlying textarea. */
+.overtype-container[data-mode="normal"] .overtype-wrapper .overtype-preview .header,
+.overtype-container[data-mode="normal"] .overtype-wrapper .overtype-preview h1,
+.overtype-container[data-mode="normal"] .overtype-wrapper .overtype-preview h2,
+.overtype-container[data-mode="normal"] .overtype-wrapper .overtype-preview h3,
+.overtype-container[data-mode="normal"] .overtype-wrapper .overtype-preview strong {
+  font-weight: normal !important;
+}
+
+.overtype-container[data-mode="normal"] .overtype-wrapper .overtype-preview em {
+  font-style: normal !important;
 }

@@ -2,6 +2,35 @@ import React, { useRef, useEffect, useCallback } from 'react';
 import OverType from 'overtype';
 import type { OverTypeInstance, Theme } from 'overtype';
 
+const MARKDOWN_SYNTAX_PATTERN = /(^|\n)\s{0,3}(#{1,6}\s|[-*+]\s|\d+\.\s|>\s)|(\*\*|__|~~|`|\[.+?\]\(.+?\)|!\[.*?\]\(.+?\)|\|.+\|)/m;
+
+const hasMarkdownSyntax = (value: string) => MARKDOWN_SYNTAX_PATTERN.test(value);
+
+const applyEditorMode = (
+  instance: OverTypeInstance,
+  mode: 'preview' | 'edit',
+  value: string,
+  autoFocus?: boolean
+) => {
+  if (mode === 'preview') {
+    instance.showPreviewMode();
+    return;
+  }
+
+  if (hasMarkdownSyntax(value)) {
+    instance.showNormalEditMode();
+    if (autoFocus) {
+      instance.focus();
+    }
+    return;
+  }
+
+  instance.showPlainTextarea();
+  if (autoFocus) {
+    instance.focus();
+  }
+};
+
 // Custom themes that blend with the app's existing dark/light styles
 const lightTheme: Theme = {
   name: 'app-light',
@@ -162,13 +191,17 @@ const OverTypeEditor: React.FC<OverTypeEditorProps> = ({
 
     // Force font/color to inherit from parent (OverType's CSS overrides !important)
     const container = containerRef.current;
-    const forceInherit = (el: HTMLElement | null) => {
+    const forceFontInherit = (el: HTMLElement | null) => {
+      if (!el) return;
+      el.style.setProperty('font-family', 'inherit', 'important');
+    };
+    const forcePreviewInherit = (el: HTMLElement | null) => {
       if (!el) return;
       el.style.setProperty('font-family', 'inherit', 'important');
       el.style.setProperty('color', 'inherit', 'important');
     };
-    forceInherit(container.querySelector('.overtype-preview'));
-    forceInherit(container.querySelector('.overtype-input'));
+    forcePreviewInherit(container.querySelector('.overtype-preview'));
+    forceFontInherit(container.querySelector('.overtype-input'));
 
     // Attach paste handler to internal textarea
     if (instance.textarea && onPasteRef.current) {
@@ -178,11 +211,7 @@ const OverTypeEditor: React.FC<OverTypeEditorProps> = ({
     }
 
     // Set initial mode
-    if (mode === 'preview') {
-      instance.showPreviewMode();
-    } else {
-      instance.showNormalEditMode();
-    }
+    applyEditorMode(instance, mode, valueRef.current, autoFocus);
 
     return () => {
       instance.destroy();
@@ -195,15 +224,8 @@ const OverTypeEditor: React.FC<OverTypeEditorProps> = ({
     const instance = instanceRef.current;
     if (!instance) return;
 
-    if (mode === 'preview') {
-      instance.showPreviewMode();
-    } else {
-      instance.showNormalEditMode();
-      if (autoFocus) {
-        instance.focus();
-      }
-    }
-  }, [mode, autoFocus]);
+    applyEditorMode(instance, mode, valueRef.current, autoFocus);
+  }, [mode, autoFocus, value]);
 
   useEffect(() => {
     const textarea = instanceRef.current?.textarea;
@@ -222,8 +244,9 @@ const OverTypeEditor: React.FC<OverTypeEditorProps> = ({
     if (!instance) return;
     if (instance.getValue() !== value) {
       instance.setValue(value);
+      applyEditorMode(instance, mode, value, autoFocus);
     }
-  }, [value]);
+  }, [value, mode, autoFocus]);
 
   // Sync theme with dark mode
   useEffect(() => {
