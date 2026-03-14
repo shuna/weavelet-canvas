@@ -65,6 +65,28 @@ export function isEditingMessageElement(
   );
 }
 
+export function shouldShowHiddenMessagesWarning({
+  totalTokens,
+  limitedTokens,
+  totalMessages,
+  limitedMessages,
+  tokenLimit,
+}: {
+  totalTokens: number;
+  limitedTokens: number;
+  totalMessages: number;
+  limitedMessages: number;
+  tokenLimit: number;
+}): boolean {
+  return (
+    totalMessages > 0 &&
+    limitedMessages > 0 &&
+    limitedMessages < totalMessages &&
+    totalTokens > tokenLimit &&
+    limitedTokens < totalTokens
+  );
+}
+
 function isEditableTarget(target: EventTarget | null): boolean {
   if (!(target instanceof HTMLElement)) return false;
   return (
@@ -216,6 +238,17 @@ const ChatContent = () => {
           countTokens(messagesLimited, model),
         ]).then(([allTokens, limitedTokens]) => {
           if (cancelled) return;
+          if (
+            !shouldShowHiddenMessagesWarning({
+              totalTokens: allTokens,
+              limitedTokens,
+              totalMessages: messages.length,
+              limitedMessages: messagesLimited.length,
+              tokenLimit: reduceMessagesToTotalToken,
+            })
+          ) {
+            return;
+          }
           const hiddenTokens = allTokens - limitedTokens;
           const message = (
             <div>
