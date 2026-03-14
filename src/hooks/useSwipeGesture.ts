@@ -18,6 +18,17 @@ export default function useSwipeGesture(
   const lockedRef = useRef(false);
   const horizontalRef = useRef(false);
   const modeRef = useRef<'open' | 'close'>('open');
+  const lockedScrollYRef = useRef(0);
+  const bodyLockStyleRef = useRef<{
+    position: string;
+    top: string;
+    left: string;
+    right: string;
+    width: string;
+    overflow: string;
+  } | null>(null);
+  const htmlOverflowRef = useRef<string>('');
+  const htmlOverscrollBehaviorRef = useRef<string>('');
 
   const getEffectiveWidth = useCallback(() => {
     return Math.min(menuWidth, window.innerWidth * 0.75);
@@ -42,7 +53,59 @@ export default function useSwipeGesture(
   );
 
   const setBodySwiping = useCallback((active: boolean) => {
-    document.body.classList.toggle('sidebar-swiping', active);
+    const body = document.body;
+    const html = document.documentElement;
+
+    body.classList.toggle('sidebar-swiping', active);
+    html.classList.toggle('sidebar-swiping', active);
+
+    if (active) {
+      if (!bodyLockStyleRef.current) {
+        lockedScrollYRef.current = window.scrollY;
+        bodyLockStyleRef.current = {
+          position: body.style.position,
+          top: body.style.top,
+          left: body.style.left,
+          right: body.style.right,
+          width: body.style.width,
+          overflow: body.style.overflow,
+        };
+        htmlOverflowRef.current = html.style.overflow;
+        htmlOverscrollBehaviorRef.current = html.style.overscrollBehavior;
+      }
+
+      body.style.position = 'fixed';
+      body.style.top = `-${lockedScrollYRef.current}px`;
+      body.style.left = '0';
+      body.style.right = '0';
+      body.style.width = '100%';
+      body.style.overflow = 'hidden';
+      html.style.overflow = 'hidden';
+      html.style.overscrollBehavior = 'none';
+      return;
+    }
+
+    const previousBodyStyles = bodyLockStyleRef.current;
+    if (previousBodyStyles) {
+      body.style.position = previousBodyStyles.position;
+      body.style.top = previousBodyStyles.top;
+      body.style.left = previousBodyStyles.left;
+      body.style.right = previousBodyStyles.right;
+      body.style.width = previousBodyStyles.width;
+      body.style.overflow = previousBodyStyles.overflow;
+      bodyLockStyleRef.current = null;
+    } else {
+      body.style.position = '';
+      body.style.top = '';
+      body.style.left = '';
+      body.style.right = '';
+      body.style.width = '';
+      body.style.overflow = '';
+    }
+
+    html.style.overflow = htmlOverflowRef.current;
+    html.style.overscrollBehavior = htmlOverscrollBehaviorRef.current;
+    window.scrollTo(0, lockedScrollYRef.current);
   }, []);
 
   const finishSwipe = useCallback(
@@ -97,6 +160,8 @@ export default function useSwipeGesture(
         return;
       }
       if (!horizontalRef.current) return;
+
+      e.preventDefault();
 
       const width = getEffectiveWidth();
       if (modeRef.current === 'open') {
@@ -186,6 +251,22 @@ export default function useSwipeGesture(
   useEffect(() => {
     return () => {
       document.body.classList.remove('sidebar-swiping');
+      document.documentElement.classList.remove('sidebar-swiping');
+      const body = document.body;
+      const html = document.documentElement;
+      const previousBodyStyles = bodyLockStyleRef.current;
+
+      if (previousBodyStyles) {
+        body.style.position = previousBodyStyles.position;
+        body.style.top = previousBodyStyles.top;
+        body.style.left = previousBodyStyles.left;
+        body.style.right = previousBodyStyles.right;
+        body.style.width = previousBodyStyles.width;
+        body.style.overflow = previousBodyStyles.overflow;
+        html.style.overflow = htmlOverflowRef.current;
+        html.style.overscrollBehavior = htmlOverscrollBehaviorRef.current;
+        window.scrollTo(0, lockedScrollYRef.current);
+      }
     };
   }, []);
 

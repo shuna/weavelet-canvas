@@ -95,6 +95,12 @@
   }
 
   /* Lock chat scroll while sidebar swipe is in progress */
+  html.sidebar-swiping,
+  body.sidebar-swiping {
+    overflow: hidden;
+    overscroll-behavior: none;
+  }
+
   .sidebar-swiping [data-virtuoso-scroller='true'] {
     touch-action: none !important;
     pointer-events: none !important;
