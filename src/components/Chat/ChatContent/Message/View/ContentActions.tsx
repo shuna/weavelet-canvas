@@ -50,7 +50,7 @@ export default function ContentActions({
   onDelete,
 }: ContentActionsProps) {
   return (
-    <div className='sticky bottom-3 z-20 mt-3 -mx-2 flex w-[calc(100%+1rem)] flex-wrap items-center justify-between gap-x-3 gap-y-2 px-2 py-2 transition duration-150 md:pointer-events-none md:translate-y-2 md:opacity-0 md:group-hover:pointer-events-auto md:group-hover:translate-y-0 md:group-hover:opacity-100'>
+    <div className='sticky bottom-3 z-20 mt-3 -mx-2 flex w-[calc(100%+1rem)] flex-nowrap items-center justify-between gap-x-3 gap-y-2 px-2 py-2 transition duration-150 md:pointer-events-none md:translate-y-2 md:opacity-0 md:group-hover:pointer-events-auto md:group-hover:translate-y-0 md:group-hover:opacity-100'>
       <div className='min-w-0'>
         {nodeId && (
           <BranchSwitcher
