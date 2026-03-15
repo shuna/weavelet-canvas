@@ -146,13 +146,41 @@ func streamChatCompletion(
 | B. SwiftUI Canvas | 宣言的 UI | 大規模グラフで性能不安、ジェスチャ制約 |
 | C. SpriteKit | ゲーム向け高性能 | オーバースペック、学習コスト |
 | D. WebView 埋め込み | 既存コード再利用 | ネイティブ感喪失 |
+| E. OSS ライブラリ活用 (後述) | 初期コスト削減 | カスタマイズ・追従コスト |
 
-**UIKit を選択する理由:**
+**UIKit スクラッチを選択する理由:**
 - `UIScrollView` がズーム (0.1x〜2.0x) とパンを標準サポート
 - `CALayer` ベースのノード描画は数百ノードでも高速
 - `UIContextMenuInteraction` でネイティブコンテキストメニュー
 - `UIKit Dynamics` でアニメーション対応
 - SwiftUI からは `UIViewRepresentable` で統合
+- 外部依存なしで長期保守が容易
+
+#### 2.4.1.1 OSS ライブラリ (Make or Buy) の検討
+
+Swift/iOS のノードエディタ系ライブラリを調査し、スクラッチ実装と比較検討した。
+
+**調査した主なライブラリ:**
+
+| ライブラリ | 概要 | Stars | 描画方式 |
+|-----------|------|-------|---------|
+| [AudioKit/Flow](https://github.com/AudioKit/Flow) | SwiftUI Canvas ノードグラフエディタ | 390 | Canvas 一括描画 |
+| [ShinpuruNodeUI](https://github.com/FlexMonkey/ShinpuruNodeUI) | UIKit ノード UI | — | CAShapeLayer |
+| [EasyNodeEditor](https://github.com/yukiny0811/easy-node-editor) | SwiftUI 宣言的ノードエディタ | — | SwiftUI |
+| [Grape](https://github.com/SwiftGraphs/Grape) | 力学シミュレーショングラフ | — | SwiftUI |
+
+最も有力な候補は **AudioKit/Flow** で、Canvas ベースの高速描画・ズーム/パン/ドラッグ・ワイヤー描画を備え MIT ライセンスで改造自由。機能的にはブランチエディタの要件をカバーできる。
+
+**しかし、スクラッチを選択した理由:**
+
+Flow が節約してくれるのはズーム/パン/ドラッグ/エッジ描画だが、これらは UIKit 標準 API (`UIScrollView`, `CAShapeLayer`) でほぼ同等に実現でき、初期コスト差は小さい。一方で:
+
+1. **カスタマイズ深度**: ノード外見 (ロールバッジ、2行プレビュー、アクティブパスハイライト)、マルチツリー表示、クロスツリードラッグ等、ブランチエディタ固有の要件が多い。Flow の内部設計はオーディオパッチ向けに最適化されており、改造が深くなるほど乖離が拡大する
+2. **レイアウトエンジン**: いずれのライブラリも Dagre 相当の階層自動レイアウトを持たない。最も工数のかかるレイアウトエンジン (Sugiyama アルゴリズム) は自前実装が必要で、ここはライブラリ採用でも削減できない
+3. **追従コスト**: フォーク改造は上流更新への継続的な追従コストが発生する。大幅に書き換えるとフォークの意味が薄れ、保守負担だけが残る
+4. **依存の少なさ**: UIKit 標準 API のみで構成すれば外部依存ゼロとなり、OS アップデートへの追従も容易
+
+**結論**: ライブラリが節約する初期コスト < カスタマイズ・追従の継続コスト。スクラッチ実装が適切。
 
 #### 2.4.2 現行レイアウトパラメータ
 
