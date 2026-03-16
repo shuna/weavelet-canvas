@@ -658,7 +658,7 @@ const ChatContent = () => {
         <div
           ref={scrollerCallbackRef}
           key={currentChatIndex}
-          className='h-full overflow-y-auto'
+          className='h-full overflow-y-auto overscroll-contain'
           data-chat-scroller
         >
           <div data-message-list>
