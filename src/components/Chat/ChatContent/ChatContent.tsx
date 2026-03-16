@@ -115,6 +115,7 @@ const ChatContent = () => {
   const advancedMode = useStore((state) => state.advancedMode);
   const autoScroll = useStore((state) => state.autoScroll);
   const animateBubbleNavigation = useStore((state) => state.animateBubbleNavigation);
+  const setVisibleNodeId = useStore((state) => state.setVisibleNodeId);
 
   const currentChatId = useStore((state) =>
     state.chats?.[state.currentChatIndex]?.id ?? ''
@@ -357,6 +358,14 @@ const ChatContent = () => {
         }
       }
       anchorRef.current.wasAtBottom = isBottom;
+
+      // Track the visible node for branch editor sync
+      const visibleItemIndex = anchorRef.current.firstVisibleItemIndex;
+      const visibleItem = items[visibleItemIndex];
+      if (visibleItem) {
+        const nodeId = activePath[visibleItem.originalIndex];
+        if (nodeId) setVisibleNodeId(nodeId);
+      }
 
       updateBubbleNavigationState();
     };

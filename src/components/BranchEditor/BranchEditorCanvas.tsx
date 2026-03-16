@@ -177,20 +177,24 @@ const BranchEditorCanvas = ({
     setEdges(rfEdges);
   }, [rfNodes, rfEdges, setNodes, setEdges]);
 
+  const branchEditorSyncEnabled = useStore((state) => state.branchEditorSyncEnabled);
+
   // Focus on a specific node when navigated from chat view
   useEffect(() => {
     if (focusNodeId && reactFlowInstance.current) {
-      const targetNode = rfNodes.find((n) => n.id === focusNodeId);
-      if (targetNode) {
-        reactFlowInstance.current.setCenter(
-          targetNode.position.x + 140,
-          targetNode.position.y + 40,
-          { zoom: 1.2, duration: 400 }
-        );
+      if (branchEditorSyncEnabled) {
+        const targetNode = rfNodes.find((n) => n.id === focusNodeId);
+        if (targetNode) {
+          reactFlowInstance.current.setCenter(
+            targetNode.position.x + 140,
+            targetNode.position.y + 40,
+            { zoom: 1.2, duration: 400 }
+          );
+        }
       }
       setBranchEditorFocusNodeId(null);
     }
-  }, [focusNodeId, rfNodes, setBranchEditorFocusNodeId]);
+  }, [focusNodeId, rfNodes, setBranchEditorFocusNodeId, branchEditorSyncEnabled]);
 
   const navigateToChat = useCallback(
     (chatIndex: number, nodeId: string) => {

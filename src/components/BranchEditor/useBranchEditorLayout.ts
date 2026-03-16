@@ -207,8 +207,8 @@ export function useMultiBranchEditorLayout(entries: MultiLayoutEntry[]) {
       return {
         ...edge,
         style: active.activeSet.has(edge.target)
-          ? { stroke: active.color, strokeWidth: 2 }
-          : { stroke: '#6b7280', strokeWidth: 1 },
+          ? { stroke: active.color, strokeWidth: 3, opacity: 1 }
+          : { stroke: '#9ca3af', strokeWidth: 1, opacity: 0.4 },
       };
     });
   }, [entries, layoutEdges, rfNodes]);

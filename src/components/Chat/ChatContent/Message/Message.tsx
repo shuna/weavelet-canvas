@@ -4,7 +4,7 @@ import useStore from '@store/store';
 import Avatar from './Avatar';
 import MessageContent from './MessageContent';
 
-import { ContentInterface, Role, isTextContent } from '@type/chat';
+import { ContentInterface, Role, isSplitView, isTextContent } from '@type/chat';
 import RoleSelector from './RoleSelector';
 import useIsDesktop from '@hooks/useIsDesktop';
 import useCanHover from '@hooks/useCanHover';
@@ -53,6 +53,10 @@ const Message = React.memo(
     const advancedMode = useStore((state) => state.advancedMode);
     const toggleCollapseNode = useStore((state) => state.toggleCollapseNode);
     const currentChatIndex = useStore((state) => state.currentChatIndex);
+    const setHoveredNodeId = useStore((state) => state.setHoveredNodeId);
+    const setBranchEditorFocusNodeId = useStore((state) => state.setBranchEditorFocusNodeId);
+    const chatActiveView = useStore((state) => state.chatActiveView);
+    const branchEditorSyncEnabled = useStore((state) => state.branchEditorSyncEnabled);
     const isDesktop = useIsDesktop();
     const canHover = useCanHover();
     const isDesktopMenuExpanded = isDesktop && !hideSideMenu;
@@ -87,6 +91,24 @@ const Message = React.memo(
       }
     }, [currentChatIndex, messageIndex, sticky, toggleCollapseNode]);
 
+    const handleMouseEnter = useCallback(() => {
+      if (!sticky && isSplitView(chatActiveView)) {
+        setHoveredNodeId(resolvedNodeId ?? null);
+      }
+    }, [sticky, chatActiveView, resolvedNodeId, setHoveredNodeId]);
+
+    const handleMouseLeave = useCallback(() => {
+      if (!sticky && isSplitView(chatActiveView)) {
+        setHoveredNodeId(null);
+      }
+    }, [sticky, chatActiveView, setHoveredNodeId]);
+
+    const handleClick = useCallback(() => {
+      if (!sticky && resolvedNodeId && isSplitView(chatActiveView) && branchEditorSyncEnabled) {
+        setBranchEditorFocusNodeId(resolvedNodeId);
+      }
+    }, [sticky, resolvedNodeId, chatActiveView, branchEditorSyncEnabled, setBranchEditorFocusNodeId]);
+
     const maxWidthClass = isDesktopMenuExpanded
       ? 'md:max-w-3xl lg:max-w-3xl xl:max-w-4xl'
       : 'md:max-w-5xl lg:max-w-5xl xl:max-w-6xl';
@@ -96,6 +118,9 @@ const Message = React.memo(
         className={`w-full border-b border-black/10 dark:border-gray-900/50 text-gray-800 dark:text-gray-100 group relative ${
           backgroundStyle[messageIndex % 2]
         }`}
+        onMouseEnter={handleMouseEnter}
+        onMouseLeave={handleMouseLeave}
+        onClick={handleClick}
       >
         {!sticky && (
           <CollapseToggle

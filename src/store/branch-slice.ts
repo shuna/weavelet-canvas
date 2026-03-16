@@ -80,6 +80,12 @@ export interface BranchSlice {
   branchClipboard: BranchClipboard | null;
   branchEditorFocusNodeId: string | null;
   setBranchEditorFocusNodeId: (nodeId: string | null) => void;
+  hoveredNodeId: string | null;
+  setHoveredNodeId: (nodeId: string | null) => void;
+  visibleNodeId: string | null;
+  setVisibleNodeId: (nodeId: string | null) => void;
+  branchEditorSyncEnabled: boolean;
+  setBranchEditorSyncEnabled: (enabled: boolean) => void;
   chatActiveView: ChatView;
   setChatActiveView: (view: ChatView) => void;
   navigateToBranchEditor: () => void;
@@ -185,6 +191,21 @@ export const createBranchSlice: StoreSlice<BranchSlice> = (set, get) => ({
   setBranchEditorFocusNodeId: (nodeId) => {
     if (get().branchEditorFocusNodeId === nodeId) return;
     set({ branchEditorFocusNodeId: nodeId });
+  },
+  hoveredNodeId: null,
+  setHoveredNodeId: (nodeId) => {
+    if (get().hoveredNodeId === nodeId) return;
+    set({ hoveredNodeId: nodeId });
+  },
+  visibleNodeId: null,
+  setVisibleNodeId: (nodeId) => {
+    if (get().visibleNodeId === nodeId) return;
+    set({ visibleNodeId: nodeId });
+  },
+  branchEditorSyncEnabled: true,
+  setBranchEditorSyncEnabled: (enabled) => {
+    if (get().branchEditorSyncEnabled === enabled) return;
+    set({ branchEditorSyncEnabled: enabled });
   },
   chatActiveView: 'chat' as ChatView,
   setChatActiveView: (view) => {

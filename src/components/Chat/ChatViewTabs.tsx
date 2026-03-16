@@ -42,6 +42,8 @@ const ChatViewTabs = ({
   const isDesktop = useIsDesktop();
   const splitPanelSwapped = useStore((state) => state.splitPanelSwapped);
   const setSplitPanelSwapped = useStore((state) => state.setSplitPanelSwapped);
+  const branchEditorSyncEnabled = useStore((state) => state.branchEditorSyncEnabled);
+  const setBranchEditorSyncEnabled = useStore((state) => state.setBranchEditorSyncEnabled);
   const [isModalOpen, setIsModalOpen] = useState<boolean>(false);
   const [isModelDropdownOpen, setIsModelDropdownOpen] = useState<boolean>(false);
   const [isLayoutDropdownOpen, setIsLayoutDropdownOpen] = useState<boolean>(false);
@@ -312,6 +314,19 @@ const ChatViewTabs = ({
                           <line x1='3' y1='12' x2='21' y2='12' />
                         </svg>
                         {tMain('swapPanels', 'Swap Panels')}
+                      </button>
+                      <div className='my-1 border-t border-gray-200 dark:border-gray-600' />
+                      <button
+                        className={`w-full px-3 py-2 text-sm text-left flex items-center gap-2 hover:bg-gray-100 dark:hover:bg-gray-700 ${
+                          branchEditorSyncEnabled ? 'text-blue-600 dark:text-blue-400' : 'text-gray-700 dark:text-gray-300'
+                        }`}
+                        onClick={() => { setBranchEditorSyncEnabled(!branchEditorSyncEnabled); setIsLayoutDropdownOpen(false); }}
+                      >
+                        <svg className='w-4 h-4' fill='none' stroke='currentColor' viewBox='0 0 24 24' strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'>
+                          <path d='M8 7h12M8 12h12M8 17h12' />
+                          <path d='M4 7h0M4 12h0M4 17h0' />
+                        </svg>
+                        {branchEditorSyncEnabled ? tMain('syncEnabled', 'リンク: ON') : tMain('syncDisabled', 'リンク: OFF')}
                       </button>
                     </>
                   )}
