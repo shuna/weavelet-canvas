@@ -4,20 +4,208 @@
 `react-virtuoso` を廃止し、プレーンな `overflow-y: auto` コンテナ + ネイティブスクロールに置き換える。
 仮想化が必要になった場合は `@tanstack/react-virtual` を後日導入する。
 
+Virtuoso 廃止に伴い、Virtuoso の API に合わせて構築されていたスクロール管理ロジックを
+ブラウザネイティブの仕組み（`overflow-anchor`、scroll イベント）で置き換え、大幅に簡素化する。
+
 ---
 
-## Step 1: ChatContent.tsx — Virtuoso をプレーン div に置き換え
+## 設計方針: スクロール管理の簡素化
 
-### 1a. インポートの変更
-- `react-virtuoso` のインポート (`Virtuoso`, `VirtuosoHandle`, `ListRange`) を削除
-- `VirtuosoHandle` の ref → 通常の `HTMLDivElement` ref に変更
+### 現行の問題
 
-### 1b. レンダリング部分の書き換え
-現在の `<Virtuoso>` コンポーネントを以下のようなプレーン構造に置き換え：
+現行実装では以下の 4 つの独立した仕組みが絡み合っている：
+
+1. **Bottom Lock** (`bottomLockRef` + `bottomLockTimerRef` + `handleFollowOutput` + `handleAtBottomStateChange`) — Virtuoso の `followOutput` API に合わせた追従制御
+2. **Viewport Lock** (`lockTargetRef` + `ResizeObserver` + `getViewportLockTarget` / `getEditingLockTarget`) — コンテンツ高さ変化時のスクロール位置補正
+3. **Anchor Tracking** (`anchorRef` + `handleRangeChanged` + `refreshAnchorOffsetWithinItem`) — Virtuoso の `rangeChanged` に依存したアンカー追跡
+4. **Dual Ref** (`scrollerRef` + `scrollerElement` + `handleScrollerRef` + `scrollListenerCleanupRef`) — Virtuoso の `scrollerRef` callback に合わせた二重管理
+
+### 簡素化後
+
+| 現行 | 置き換え | 削除量 |
+|------|---------|--------|
+| Viewport Lock (ResizeObserver + lockTarget + drift 補正) | CSS `overflow-anchor: auto` | ~80 行 |
+| Bottom Lock (4 つの ref/callback) | `atBottom` state + `useEffect` | ~50 行 |
+| Anchor Tracking (rangeChanged + refreshOffset) | scroll イベントで `scrollTop` ベース計算 | ~20 行 |
+| Dual Ref (handleScrollerRef + cleanup) | callback ref + element state（簡素化） | ~30 行 |
+
+**削減見込み: 約 180 行（~600 行 → ~420 行）**
+
+---
+
+## Step 1: CSS `overflow-anchor` によるビューポート安定化
+
+### 背景
+
+CSS `overflow-anchor: auto` はブラウザネイティブのスクロールアンカリング機能。
+スクロールコンテナ内の要素の高さが変わったとき、ブラウザが自動的に `scrollTop` を補正して
+ビューポート内の可視要素の位置を維持する。
+
+現行の `lockTargetRef` + `ResizeObserver` + drift 補正ロジック（~80 行）が
+やっていることと同等の処理を CSS 1 行で実現する。
+
+### 削除するコード
+
+```
+getViewportLockTarget()          L100-121  — 22 行
+getEditingLockTarget()           L123-137  — 15 行
+getLockTarget()                  L139-141  — 3 行
+getVirtuosoListContainer()       L143-151  — 9 行
+LockTarget 型                    L39-42    — 4 行
+lockTargetRef                    L312      — 1 行
+shouldLockViewport (部分)         L528      — viewport lock 判定を削除、editing 判定は残す
+ResizeObserver effect            L674-700  — 27 行
+scroll→lockTarget 更新 effect    L702-720  — 19 行
+lockTarget 設定 effect           L663-672  — 10 行
+```
+
+### 追加するコード
+
+```css
+/* scroll container */
+[data-chat-scroller] {
+  overflow-anchor: auto;  /* デフォルトだが明示 */
+}
+
+/* Footer をアンカー候補から除外 */
+[data-chat-scroller] > footer {
+  overflow-anchor: none;
+}
+```
+
+### `overflow-anchor` で対処できるケース
+
+- メッセージ編集中に他メッセージの高さが変わる → ブラウザがアンカーを維持
+- ストリーミング中に上の方のメッセージを見ている → ビューポート位置が安定
+- コードブロックの折りたたみ/展開 → アンカー補正が自動適用
+
+### `overflow-anchor` の制約と対処
+
+- ブラウザはビューポート内の最初の可視要素をアンカーに選ぶ。編集中の textarea のバブルが
+  必ずしもアンカーになるとは限らないが、**編集中のバブルは通常ビューポート内にある**ため
+  実用上問題ない
+- Footer に `overflow-anchor: none` を付けることで、Footer の高さ変化
+  （生成中ボタン、エラー表示）がアンカー選択に干渉しない
+
+---
+
+## Step 2: ストリーミング追従の簡素化
+
+### 現行（~50 行）
+
+```
+handleFollowOutput()          — Virtuoso callback、条件分岐が複雑
+handleAtBottomStateChange()   — 500ms debounce の unlock ロジック
+bottomLockRef                 — follow 強制フラグ
+bottomLockTimerRef            — debounce タイマー
+lastScrollTopRef              — 手動スクロール検知用
+scroll listener の一部         — 上方 10px 移動で lock 解除
+```
+
+### 簡素化後
+
+```tsx
+// --- atBottom を scroll イベントから計算 ---
+const BOTTOM_THRESHOLD = 150;
+
+useEffect(() => {
+  const scroller = scrollerElement;
+  if (!scroller) return;
+
+  const onScroll = () => {
+    const isBottom = scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight < BOTTOM_THRESHOLD;
+    setAtBottom(isBottom);
+    atBottomRef.current = isBottom;
+  };
+
+  scroller.addEventListener('scroll', onScroll, { passive: true });
+  return () => scroller.removeEventListener('scroll', onScroll);
+}, [scrollerElement]);
+
+// --- ストリーミング中の auto-follow ---
+useEffect(() => {
+  if (!isCurrentChatGenerating || !atBottom || !autoScroll) return;
+  if (isEditingInScroller) return;
+
+  const scroller = scrollerRef.current;
+  if (!scroller) return;
+
+  // コンテンツ追加を検知して末尾にスクロール
+  const observer = new MutationObserver(() => {
+    scroller.scrollTop = scroller.scrollHeight;
+  });
+
+  // 即座に末尾へ
+  scroller.scrollTop = scroller.scrollHeight;
+
+  observer.observe(scroller, { childList: true, subtree: true, characterData: true });
+  return () => observer.disconnect();
+}, [isCurrentChatGenerating, atBottom, autoScroll, isEditingInScroller]);
+```
+
+### 削除するもの
+
+- `bottomLockRef`, `bottomLockTimerRef`, `lastScrollTopRef`
+- `handleFollowOutput`, `handleAtBottomStateChange`
+- `scrollListenerCleanupRef` + cleanup effect
+- `handleScrollerRef` 内の bottom lock 解除ロジック
+
+### `handleScrollToBottom` の簡素化
+
+```tsx
+// 現行: bottomLockRef + Virtuoso scrollTo + 3フレームリトライ
+// 簡素化後:
+const handleScrollToBottom = useCallback(() => {
+  const scroller = scrollerRef.current;
+  if (!scroller) return;
+  scroller.scrollTo({
+    top: scroller.scrollHeight,
+    behavior: animateBubbleNavigation ? 'smooth' : 'auto',
+  });
+}, [animateBubbleNavigation]);
+```
+
+リトライが不要な理由: Virtuoso は仮想化のため要素のレンダリングが遅延し、
+scrollHeight が確定しないことがあった。全件レンダリングでは即座に確定する。
+
+---
+
+## Step 3: Scroller Ref の簡素化
+
+### 現行
+
+```tsx
+// Virtuoso の scrollerRef callback に合わせた複雑な構造
+const handleScrollerRef = useCallback((ref: HTMLElement | Window | null) => {
+  // cleanup, ref/state 設定, scroll listener 登録, editing 判定... (~35行)
+}, [...]);
+```
+
+### 簡素化後
+
+```tsx
+const scrollerRef = useRef<HTMLDivElement>(null);
+const [scrollerElement, setScrollerElement] = useState<HTMLDivElement | null>(null);
+
+const scrollerCallbackRef = useCallback((el: HTMLDivElement | null) => {
+  scrollerRef.current = el;
+  setScrollerElement(el);
+}, []);
+```
+
+- `scrollerElement` state は維持（focusin/focusout、keyboard viewport の effect が依存）
+- scroll listener は `handleScrollerRef` 内ではなく、専用の `useEffect` で登録（Step 2 参照）
+- `scrollListenerCleanupRef` は不要（useEffect の cleanup で管理）
+
+---
+
+## Step 4: レンダリングの書き換え
+
+### DOM 構造
 
 ```tsx
 <div ref={scrollerCallbackRef} className="h-full overflow-y-auto" data-chat-scroller>
-  <div ref={messageListRef} data-message-list>
+  <div data-message-list>
     {items.map((item, index) => (
       <div key={computeItemKey(index)} data-item-index={index}>
         <Message ... />
@@ -25,130 +213,159 @@
       </div>
     ))}
   </div>
-  <Footer />
+  <footer style={{ overflowAnchor: 'none' }}>
+    <Footer />
+  </footer>
 </div>
 ```
 
-- `data-message-list` wrapper でメッセージ群と Footer を構造的に分離する
-  - ResizeObserver はこの wrapper のみを監視し、Footer の高さ変化に反応しない
-  - ビューポートロックの `lockTargetRef` はメッセージの高さ変化のみを対象にできる
-- `data-item-index` 属性はバブルナビゲーション等で使われているため維持
-- `Footer` は `data-message-list` の外側・スクロールコンテナの直接の子として配置
-- `computeItemKey` のロジックはそのまま `key` prop に流用
+- `data-message-list` wrapper: メッセージ群の構造的グルーピング
+- `<footer>` に `overflow-anchor: none`: Footer の高さ変化でアンカーが狂わない
+- `data-item-index`: バブルナビゲーションで引き続き使用
+- `data-chat-scroller`: iOS ステータスバー、サイドバースワイプのセレクタ
 
-### 1c. スクロール制御の簡素化
+### インポートの変更
 
-| Virtuoso API | 置き換え |
-|-------------|---------|
-| `virtuosoRef.current?.scrollTo({ top: MAX })` | `scrollerRef.current.scrollTop = scrollerRef.current.scrollHeight` |
-| `virtuosoRef.current?.scrollToIndex({ index, align })` | `querySelector('[data-item-index="N"]').scrollIntoView({ block: align })` |
-| `followOutput` コールバック | ストリーミング中に `scrollTop = scrollHeight` を定期適用（`MutationObserver` or `useEffect`） |
-| `atBottomStateChange` コールバック | `scroll` イベントで `scrollTop + clientHeight >= scrollHeight - threshold` を計算 |
-| `rangeChanged` コールバック | `IntersectionObserver` で最初の可視アイテムを追跡、またはスクロール位置から計算 |
+```diff
+-import { ListRange, Virtuoso, VirtuosoHandle } from 'react-virtuoso';
+```
 
-### 1d. 削除する Virtuoso 固有ロジック
-- `handleFollowOutput` → 新しい auto-scroll ロジックに置き換え
-- `handleAtBottomStateChange` → scroll イベントリスナーに統合
-- `handleRangeChanged` → スクロール位置ベースのアンカー追跡に簡素化
-- `handleScrollerRef` コールバック → 直接 ref を渡す（scroll リスナーの登録はそのまま）
-- `bottomLockRef` / `bottomLockTimerRef` → ストリーミング中の auto-scroll として簡素化可能
-- `increaseViewportBy` → 不要（全件レンダリング）
+### 削除する定数
 
----
+```diff
+-const SCROLL_TO_BOTTOM_TOP = Number.MAX_SAFE_INTEGER;
+-const VIRTUOSO_LIST_SELECTOR = '[data-test-id="virtuoso-item-list"]';
+```
 
-## Step 2: ビューポートロック (編集時安定化) の簡素化
+### リネームする定数
 
-### 現状
-- `getVirtuosoListContainer()` で `[data-test-id="virtuoso-item-list"]` を検索
-- `ResizeObserver` で Virtuoso の内部リストコンテナの高さ変化を検知
-- `lockTargetRef` でスクロール補正
-
-### 変更
-- `getVirtuosoListContainer()` を削除
-- `VIRTUOSO_LIST_SELECTOR` 定数を削除
-- `ResizeObserver` は `messageListRef.current`（`[data-message-list]` wrapper）を監視
-  - Footer はこの wrapper の外にあるため、Footer の高さ変化（生成中ボタン表示、エラー表示等）では ResizeObserver が発火しない
-  - これによりビューポートロックが Footer 変化に誤反応するリスクを排除
-- ロックロジック自体は引き続き有用なので、監視対象のみ更新
+```diff
+-const VIRTUOSO_ITEM_SELECTOR = '[data-item-index]';
++const MESSAGE_ITEM_SELECTOR = '[data-item-index]';
+```
 
 ---
 
-## Step 3: `isEditingMessageElement` の修正
+## Step 5: アンカー保存/復元の簡素化
 
-### 現状
-- `VIRTUOSO_ITEM_SELECTOR = '[data-item-index]'` で、textarea が Virtuoso アイテム内かを判定
-- Footer textarea と区別するためのワークアラウンド
+### 現行
+
+- `handleRangeChanged` (Virtuoso の `rangeChanged` callback) でアンカーインデックスを更新
+- `refreshAnchorOffsetWithinItem` でオフセットを計算
+- 復元は `virtuosoRef.current?.scrollToIndex()`
+
+### 簡素化後
+
+アンカーの保存は scroll イベント内で計算:
+
+```tsx
+// scroll イベントハンドラ内（Step 2 と統合）
+const onScroll = () => {
+  // atBottom 計算
+  const isBottom = ...;
+
+  // アンカー更新
+  if (!isBottom) {
+    const items = scroller.querySelectorAll<HTMLElement>('[data-item-index]');
+    for (const item of items) {
+      const rect = item.getBoundingClientRect();
+      if (rect.bottom > scrollerRect.top) {
+        anchorRef.current.firstVisibleItemIndex = Number(item.dataset.itemIndex);
+        anchorRef.current.offsetWithinItem = scrollerRect.top - rect.top;
+        break;
+      }
+    }
+  }
+  anchorRef.current.wasAtBottom = isBottom;
+};
+```
+
+復元は `scrollIntoView` + `scrollTop` 補正:
+
+```tsx
+useEffect(() => {
+  if (pendingChatFocus && pendingChatFocus.chatIndex === currentChatIndex) return;
+  const anchor = getChatScrollAnchor(currentChatId);
+  if (!anchor || anchor.wasAtBottom) return;
+
+  requestAnimationFrame(() => {
+    const scroller = scrollerRef.current;
+    const item = scroller?.querySelector(`[data-item-index="${anchor.firstVisibleItemIndex}"]`);
+    if (!item || !scroller) return;
+    item.scrollIntoView({ block: 'start' });
+    scroller.scrollTop += anchor.offsetWithinItem;
+  });
+}, [currentChatIndex]);
+```
+
+### 削除するもの
+
+- `handleRangeChanged`
+- `refreshAnchorOffsetWithinItem`
+
+---
+
+## Step 6: `isEditingMessageElement` の修正
 
 ### 変更
-- `data-item-index` 属性は維持するため、基本ロジックはそのまま動作する
-- `VIRTUOSO_ITEM_SELECTOR` 定数名を `MESSAGE_ITEM_SELECTOR` にリネーム
+
+- `VIRTUOSO_ITEM_SELECTOR` → `MESSAGE_ITEM_SELECTOR` にリネーム
 - `VIRTUOSO_LIST_SELECTOR` は削除
+- 関数ロジックはそのまま（`data-item-index` は維持するため）
+- `isEditingInScroller` state + focusin/focusout effect もそのまま維持
+  （auto-follow 抑制と keyboard viewport の判定に使用）
 
 ---
 
-## Step 4: `useIosStatusBarScroll.ts` の更新
+## Step 7: `useIosStatusBarScroll.ts` の更新
 
-### 現状
-```ts
-const scroller = document.querySelector('[data-virtuoso-scroller="true"]');
-```
-
-### 変更
-スクロールコンテナに独自の data 属性（例: `data-chat-scroller`）を付与し、それをセレクタに使用：
-```ts
-const scroller = document.querySelector('[data-chat-scroller]');
+```diff
+-const scroller = document.querySelector('[data-virtuoso-scroller="true"]');
++const scroller = document.querySelector('[data-chat-scroller]');
 ```
 
 ---
 
-## Step 5: `main.css` の更新
+## Step 8: `main.css` の更新
 
-### 現状
-```css
-.sidebar-swiping [data-virtuoso-scroller='true'] {
-  touch-action: none !important;
-  pointer-events: none !important;
-}
-```
-
-### 変更
-```css
-.sidebar-swiping [data-chat-scroller] {
-  touch-action: none !important;
-  pointer-events: none !important;
-}
+```diff
+-.sidebar-swiping [data-virtuoso-scroller='true'] {
++.sidebar-swiping [data-chat-scroller] {
+   touch-action: none !important;
+   pointer-events: none !important;
+ }
 ```
 
 ---
 
-## Step 6: テストの更新
+## Step 9: テストの更新
 
-### 6a. 既存テストの修正 (`ChatContent.test.ts`)
-- `isEditingMessageElement` のテストはほぼそのまま動作（`[data-item-index]` セレクタ維持）
-- Virtuoso 固有のモックが不要になるため、テストが簡素化される可能性
-- 定数名 `VIRTUOSO_ITEM_SELECTOR` → `MESSAGE_ITEM_SELECTOR` に追従
+### 9a. 既存テストの修正 (`ChatContent.test.ts`)
+- `VIRTUOSO_ITEM_SELECTOR` → `MESSAGE_ITEM_SELECTOR` に追従
+- Virtuoso 固有のモック削除
 
-### 6b. スクロール復元テスト（新規追加）
-- **pendingChatFocus**: チャット切り替え時に `pendingChatFocus` が設定された状態で、指定メッセージまでスクロールされることを検証
-- **保存済みアンカー復元**: `getChatScrollAnchor` で保存されたアンカー（`firstVisibleItemIndex` + `offsetWithinItem`）から `scrollTop` が正しく復元されることを検証
-- **アンカーが存在しない場合**: アンカーのメッセージが削除された場合のフォールバック（末尾にスクロール）
+### 9b. ストリーミング追従テスト（新規 — 最重要）
+- **auto-follow**: ストリーミング中に `atBottom` なら、コンテンツ追加で `scrollTop` が追従
+- **手動スクロールアップで解除**: 上方スクロールで auto-follow 停止
+- **ボトム復帰で再開**: ボトムに戻ると auto-follow 再開
+- **編集中の抑制**: `isEditingInScroller` が true なら auto-follow しない
 
-### 6c. ストリーミング追従テスト（新規追加 — 最重要）
-- **auto-follow 有効時**: ストリーミング中に `atBottom` なら、コンテンツ追加のたびに `scrollTop` が `scrollHeight` に追従することを検証
-- **手動スクロールアップで解除**: ユーザーが上方にスクロールした場合、auto-follow が解除され、新しいコンテンツが追加されてもスクロールしないことを検証
-- **再度ボトムに戻ると復帰**: ユーザーがボトムまでスクロールし直した場合、auto-follow が再開することを検証
-- **編集中の抑制**: メッセージ編集中（`isEditingMessageElement` が true）は auto-follow を行わないことを検証
+### 9c. スクロール復元テスト（新規）
+- **pendingChatFocus**: 指定メッセージまでスクロール
+- **保存済みアンカー復元**: `scrollTop` が正しく復元
+- **アンカー不在時のフォールバック**: 末尾にスクロール
 
-### 6d. ビューポートロックテスト（新規追加）
-- **メッセージ編集で高さ変化**: 編集対象より上のメッセージの高さが変わった場合、スクロール位置が補正されることを検証
-- **Footer の高さ変化は無視**: Footer 内の生成中ボタンやエラー表示の高さ変化では ResizeObserver が発火しないことを検証（`data-message-list` wrapper の分離により保証）
+### 9d. `overflow-anchor` 動作確認（手動テスト）
+- メッセージ編集中に他メッセージの高さが変わってもビューポートが安定
+- Footer の高さ変化でスクロールが飛ばない
+- ※ `overflow-anchor` はブラウザ実装のため JSDOM ではテスト不可。手動テスト項目として管理
 
-### 6e. `useIosStatusBarScroll` テスト
-- セレクタが `[data-chat-scroller]` に変更されても、ステータスバータップで scroller が `scrollTop = 0` にリセットされることを検証
+### 9e. `useIosStatusBarScroll` テスト
+- セレクタ変更後もステータスバータップが動作
 
 ---
 
-## Step 7: パッケージの削除
+## Step 10: パッケージの削除
 
 ```bash
 yarn remove react-virtuoso
@@ -156,21 +373,38 @@ yarn remove react-virtuoso
 
 ---
 
-## Step 8: スクロールアンカー復元の再実装
+## 削除コードまとめ
 
-### 現状
-- Virtuoso の `scrollToIndex` API でチャット切り替え時にスクロール位置を復元
-- `saveChatScrollAnchor` / `getChatScrollAnchor` (store) にアンカー情報を保存
+| 対象 | 行数 | 理由 |
+|------|------|------|
+| `getViewportLockTarget` / `getEditingLockTarget` / `getLockTarget` | ~40 行 | `overflow-anchor` で代替 |
+| `getVirtuosoListContainer` | ~9 行 | 不要 |
+| `LockTarget` 型 | ~4 行 | 不要 |
+| ResizeObserver effect | ~27 行 | `overflow-anchor` で代替 |
+| scroll→lockTarget 更新 effect | ~19 行 | `overflow-anchor` で代替 |
+| lockTarget 設定 effect | ~10 行 | `overflow-anchor` で代替 |
+| `handleFollowOutput` | ~14 行 | useEffect で代替 |
+| `handleAtBottomStateChange` | ~17 行 | scroll イベントで代替 |
+| `handleScrollerRef` | ~35 行 | callback ref に簡素化 |
+| `handleRangeChanged` | ~5 行 | scroll イベントに統合 |
+| `refreshAnchorOffsetWithinItem` | ~13 行 | scroll イベントに統合 |
+| `bottomLockRef` 関連 refs | ~4 行 | 不要 |
+| `scrollListenerCleanupRef` + effect | ~10 行 | useEffect cleanup で管理 |
+| **合計** | **~207 行** | |
 
-### 変更
-- store のアンカー保存/復元の仕組みはそのまま維持
-- 復元時は `scrollIntoView` または `scrollTop` 計算で代替：
-  ```ts
-  const item = scrollerRef.current?.querySelector(`[data-item-index="${anchor.firstVisibleItemIndex}"]`);
-  item?.scrollIntoView({ block: 'start' });
-  scrollerRef.current.scrollTop -= anchor.offsetWithinItem;
-  ```
-- `pendingChatFocus` の処理も同様に `scrollIntoView` で代替
+## 新規追加コードまとめ
+
+| 対象 | 行数 |
+|------|------|
+| CSS `overflow-anchor` 指定 | ~4 行 |
+| scroll イベント effect（atBottom + アンカー） | ~25 行 |
+| MutationObserver auto-follow effect | ~15 行 |
+| callback ref | ~5 行 |
+| `handleScrollToBottom` 簡素化 | ~7 行 |
+| DOM 構造（map + footer） | ~15 行 |
+| **合計** | **~71 行** |
+
+**差引: 約 136 行の純減**
 
 ---
 
@@ -178,80 +412,21 @@ yarn remove react-virtuoso
 
 | ファイル | 変更内容 |
 |---------|---------|
-| `ChatContent.tsx` | Virtuoso → プレーン div、スクロール制御の書き換え（主要変更） |
+| `ChatContent.tsx` | Virtuoso → プレーン div、スクロール管理の大幅簡素化 |
 | `useIosStatusBarScroll.ts` | セレクタを `[data-chat-scroller]` に変更（1行） |
 | `main.css` | セレクタを `[data-chat-scroller]` に変更（1行） |
-| `ChatContent.test.ts` | 定数名変更に追従（軽微） |
+| `ChatContent.test.ts` | 定数名変更に追従 + テスト追加 |
 | `package.json` | `react-virtuoso` を削除 |
 
-## Virtuoso 起因のワークアラウンド処遇
-
-Virtuoso 導入に伴い追加されたワークアラウンドを、廃止後にどう扱うか整理する。
-
-### 1. Sticky input フォーカス喪失の回避 → **削除**
-- **経緯**: Virtuoso の Footer コンポーネントが再マウントされる際に textarea のフォーカスが失われる問題。Footer textarea が `MESSAGE_EDIT_TEXTAREA_SELECTOR` にマッチしてしまうため、`closest(VIRTUOSO_ITEM_SELECTOR)` で区別するワークアラウンドを追加。
-- **場所**: `ChatContent.tsx` L49-67 (`isEditingMessageElement`)、L621-626 (`onFocusIn`)
-- **廃止後**: Footer は通常の子要素として描画されるため再マウントが発生しない。ただし `isEditingMessageElement` 自体はメッセージ編集中のビューポートロック判定で引き続き使うため、関数は維持。`closest(VIRTUOSO_ITEM_SELECTOR)` のチェックも `data-item-index` を維持するなら残しておいて問題ない。**ワークアラウンドの動機は消滅するが、防御的チェックとして残存しても害はない。**
-
-### 2. スクロールリバウンド防止 → **削除**
-- **経緯**: Virtuoso が内部でスクロール位置を調整する際にリバウンド（意図しない跳ね返り）が発生。アンカー追跡の精緻化で対処。
-- **場所**: `ChatContent.tsx` L326-338 (`refreshAnchorOffsetWithinItem`)、L386-390 (`handleRangeChanged`)
-- **廃止後**: ネイティブスクロールではリバウンドが発生しない。`handleRangeChanged` は Virtuoso の `rangeChanged` prop 用なので丸ごと削除。アンカー追跡は scroll イベントから `scrollTop` ベースで再実装し、大幅に簡素化。
-
-### 3. サイドバースワイプ時の touch-action ロック → **簡素化**
-- **経緯**: Virtuoso がスクロールコンテナを制御するため、サイドバースワイプ中に競合が発生。`[data-virtuoso-scroller='true']` に `touch-action: none` を適用。
-- **場所**: `main.css` L104-107
-- **廃止後**: セレクタを `[data-chat-scroller]` に変更するのみ。スワイプ中のスクロール抑制自体はネイティブスクロールでも必要なので、ワークアラウンドではなく正当な処理として維持。
-
-### 4. iOS ステータスバータップ対応 → **簡素化**
-- **経緯**: iOS Safari のステータスバータップで `window.scrollY` が 0 になるが、Virtuoso が独自のスクロールコンテナを持つためネイティブの scroll-to-top が効かない。カスタムフック `useIosStatusBarScroll` で Virtuoso のスクロールコンテナを手動で操作。
-- **場所**: `useIosStatusBarScroll.ts` L98-103
-- **廃止後**: セレクタを `[data-chat-scroller]` に変更。フック自体は `overflow: hidden` のレイアウト構造上引き続き必要（window ではなくコンテナをスクロールする必要があるため）。**Virtuoso 固有の問題ではなく、アプリのレイアウト構造の問題。**
-
-### 5. メッセージ編集時のビューポートジャンプ防止 → **簡素化**
-- **経緯**: メッセージ編集で要素の高さが変わると、Virtuoso が内部でスクロール位置を再計算して意図しないジャンプが発生。`ResizeObserver` + `lockTargetRef` でスクロール補正。
-- **場所**: `ChatContent.tsx` L663-720 (`ResizeObserver` + ロックロジック)
-- **廃止後**: ネイティブスクロールでもコンテンツ高さ変化によるビューポートずれは発生しうるため、ロックロジック自体は維持。ただし `getVirtuosoListContainer()` (L143-151) は削除し、直接スクロールコンテナの子要素を参照するよう簡素化。
-
-### 6. `handleScrollerRef` の二重 ref パターン → **簡素化（state は維持）**
-- **経緯**: Virtuoso は `scrollerRef` コールバックで HTMLElement を渡すが、ref と state の両方で保持する必要があった（同期読み取り用 ref + リアクティブな effect 用 state）。
-- **場所**: `ChatContent.tsx` L289-294, L566-599
-- **廃止後**: Virtuoso の callback ref 形式は不要になるが、**element state は維持する**。理由：
-  - 現行実装では `scrollerElement` を依存配列に持つ `useEffect` が複数あり（focusin/focusout リスナー、ResizeObserver、scroll listener、keyboard viewport 対応）、これらは要素の mount/unmount を起点に張り替える必要がある
-  - `useRef` だけに寄せると ref 変更が再レンダーを起こさないため、listener/observer の再登録漏れが発生する
-  - 実装: JSX の `ref` に callback ref を渡し、内部で `scrollerRef.current` と `setScrollerElement` の両方を更新する
-  ```tsx
-  const scrollerRef = useRef<HTMLDivElement>(null);
-  const [scrollerElement, setScrollerElement] = useState<HTMLDivElement | null>(null);
-  const scrollerCallbackRef = useCallback((el: HTMLDivElement | null) => {
-    scrollerRef.current = el;
-    setScrollerElement(el);
-  }, []);
-  ```
-  - Virtuoso の `scrollerRef` prop 経由ではなく、JSX の `ref` 属性に直接渡す点だけが変更
-
-### 7. `followOutput` / `bottomLockRef` のストリーミング追従制御 → **再実装**
-- **経緯**: Virtuoso の `followOutput` API は「コンテンツが追加されたときに自動スクロールするか」を制御するコールバック。ストリーミング中の追従、手動スクロールアップでの解除、編集中の抑制など複雑なロジックが必要。
-- **場所**: `ChatContent.tsx` L530-561 (`handleFollowOutput`, `handleAtBottomStateChange`, `bottomLockRef`)
-- **廃止後**: `followOutput` API 自体が消えるため、代替として:
-  - ストリーミング中かつ `atBottom` なら、`MutationObserver` or `useEffect` で `scrollTop = scrollHeight` を適用
-  - `bottomLockRef` / `bottomLockTimerRef` は不要になる可能性が高い（ネイティブスクロールでは `scrollTop = scrollHeight` が即座に反映される）
-  - **最もリスクの高い再実装部分**
-
-### まとめ
-
-| ワークアラウンド | 処遇 | 理由 |
-|----------------|------|------|
-| Sticky input フォーカス喪失回避 | **そのまま維持** | 防御的チェックとして害なし |
-| スクロールリバウンド防止 | **削除** | Virtuoso固有の問題 |
-| サイドバースワイプ touch-action | **セレクタ変更のみ** | レイアウト構造上の正当な処理 |
-| iOS ステータスバータップ | **セレクタ変更のみ** | レイアウト構造上の正当な処理 |
-| 編集時ビューポートジャンプ防止 | **簡素化** | ロック自体は必要、Virtuosoセレクタのみ削除 |
-| 二重 ref パターン | **簡素化** | callback ref + element state は維持、Virtuoso prop 経由を JSX ref に変更 |
-| followOutput / bottomLock | **再実装** | ストリーミング追従はネイティブ scroll で再実装 |
+---
 
 ## リスク
 
-1. **大規模会話 (200件超) でのパフォーマンス** — 初期は `content-visibility: auto` で対処。問題が出れば `@tanstack/react-virtual` を導入
-2. **ストリーミング中の auto-scroll** — Virtuoso の `followOutput` が担っていた挙動を正確に再現する必要あり。`MutationObserver` or `useEffect` + `scrollHeight` 監視で実現
-3. **スクロール位置復元の精度** — Virtuoso の `scrollToIndex` は内部で要素の遅延レンダリングを考慮していた。プレーン構成では全件レンダリングのため、むしろ精度は上がる可能性が高い
+1. **`overflow-anchor` の精度** — ブラウザの実装に依存。Chrome/Safari/Firefox すべてでサポート済み。
+   万が一問題が出た場合は、特定要素への `overflow-anchor: none` 付与で制御可能。
+   最悪の場合、編集時のみ旧来の ResizeObserver ロジックにフォールバック可能
+2. **ストリーミング中の auto-scroll** — MutationObserver で十分かの検証が必要。
+   `characterData: true` でテキストノードの変化も検知する。
+   パフォーマンスが問題なら `requestAnimationFrame` でスロットル
+3. **大規模会話 (200件超) でのパフォーマンス** — `content-visibility: auto` で対処。
+   問題が出れば `@tanstack/react-virtual` を後日導入
