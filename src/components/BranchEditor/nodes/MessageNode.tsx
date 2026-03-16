@@ -1,5 +1,6 @@
-import React, { memo } from 'react';
+import React, { memo, useCallback } from 'react';
 import { Handle, Position, NodeProps } from 'reactflow';
+import useStore from '@store/store';
 import { MessageNodeData } from '../useBranchEditorLayout';
 
 const roleBadgeColors: Record<string, string> = {
@@ -8,19 +9,34 @@ const roleBadgeColors: Record<string, string> = {
   system: 'bg-purple-500',
 };
 
-const MessageNode = memo(({ data }: NodeProps<MessageNodeData>) => {
+const MessageNode = memo(({ data, id }: NodeProps<MessageNodeData>) => {
+  const hoveredNodeId = useStore((state) => state.hoveredNodeId);
+  const setHoveredNodeId = useStore((state) => state.setHoveredNodeId);
+
+  const isHovered = hoveredNodeId === id;
+
+  const handleMouseEnter = useCallback(() => {
+    setHoveredNodeId(id);
+  }, [id, setHoveredNodeId]);
+
+  const handleMouseLeave = useCallback(() => {
+    setHoveredNodeId(null);
+  }, [setHoveredNodeId]);
+
   const borderColor = data.isActive
     ? data.conversationColor || '#3b82f6'
     : undefined;
 
   return (
     <div
-      className={`px-3 py-2 rounded-lg border-2 shadow-md w-[280px] cursor-pointer transition-colors ${
+      className={`px-3 py-2 rounded-lg border-2 shadow-md w-[280px] cursor-pointer transition-shadow duration-150 ${
         data.isActive
           ? 'bg-white dark:bg-gray-700'
-          : 'border-gray-400 dark:border-gray-500 bg-gray-100 dark:bg-gray-800 opacity-80'
-      }`}
+          : 'border-gray-400 dark:border-gray-500 bg-gray-100 dark:bg-gray-800 opacity-50'
+      } ${isHovered ? 'outline outline-[3px] outline-blue-400 outline-offset-0' : ''}`}
       style={data.isActive ? { borderColor } : undefined}
+      onMouseEnter={handleMouseEnter}
+      onMouseLeave={handleMouseLeave}
     >
       <Handle type='target' position={Position.Top} className='!bg-gray-400' />
       <div className='flex items-center gap-2 mb-1'>
