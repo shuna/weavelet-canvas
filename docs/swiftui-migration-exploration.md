@@ -585,6 +585,46 @@ Swift 5.9+ / Xcode 15+ を前提とする。
 | フォルダ管理 | 低 | AppState |
 | Markdown + コードハイライト表示 | 中 | — |
 
+#### Markdown レンダリング方針
+
+**要件整理:**
+- **必須**: GFM (見出し・リスト・テーブル・太字・斜体・取消線) + コードブロックの基本ハイライト
+- **不要**: LaTeX 数式レンダリング、多プログラム言語対応のシンタックスハイライト
+
+**Apple 標準 API の限界:**
+
+`AttributedString(markdown:)` (iOS 15+) はインライン要素 (太字, 斜体, リンク) のみ対応。
+見出し・リスト・テーブル・コードブロック等のブロック要素は非対応のため、標準 API だけでは不十分。
+
+**選択: [MarkdownView](https://github.com/nicholasbrandenburg/MarkdownView) ライブラリ**
+
+| 候補 | 評価 |
+|------|------|
+| **MarkdownView** ★採用 | `apple/swift-markdown` (CommonMark AST) → SwiftUI View ツリー再帰生成。GFM・コードブロック対応。X (Grok), Hugging Face Chat で採用実績あり |
+| SwiftyMarkdown | Markdown → `NSAttributedString` 変換。ブロック要素対応だが SwiftUI ネイティブではない |
+| 自前実装 (`swift-markdown` AST → View) | 完全な制御が可能だが、ブロック要素の種類が多く初期コスト高。ブランチエディタと異なりカスタマイズ要件が少ないため過剰 |
+
+**ブランチエディタ (スクラッチ) との判断の違い:**
+
+ブランチエディタは固有要件が多くライブラリの節約効果が薄かったが、Markdown レンダリングは CommonMark 仕様に沿った標準的な処理であり、カスタマイズ要件が少ない。ライブラリの恩恵が大きく、Make or Buy の判断が逆になる。
+
+**構成:**
+
+```
+パース:   apple/swift-markdown (MarkdownView 内部で使用)
+描画:     MarkdownView (SwiftUI View ツリー)
+コード:   MarkdownView 標準のコードブロック表示 + 基本的なフォント/背景色スタイリング
+```
+
+**対応するビュー:**
+- `MarkdownContentView.swift` — MarkdownView ラッパー。テーマ・フォント設定を注入
+- `CodeBlockView.swift` — コードブロックのカスタムスタイリング (モノスペースフォント、背景色、コピーボタン)
+
+**Web 版から削減される機能:**
+- `rehype-katex` / `remark-math` → 不要 (LaTeX 非対応)
+- `rehype-highlight` の多言語対応 → 不要 (基本ハイライトのみ)
+- `markdownStreamingPolicy` (ストリーミング中の描画モード切替) → MarkdownView の差分更新で対応。パフォーマンス問題が出た場合のみ debounce を検討
+
 ### Phase 3: 高度な機能 (推定 6-9 週)
 
 | タスク | 難易度 | 依存 |
