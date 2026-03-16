@@ -12,7 +12,7 @@ import ImageIcon from '@icon/ImageIcon';
 import MarkdownIcon from '@icon/MarkdownIcon';
 import JsonIcon from '@icon/JsonIcon';
 
-import downloadFile from '@utils/downloadFile';
+import downloadFile, { downloadFileGzip } from '@utils/downloadFile';
 import { createRoot } from 'react-dom/client';
 import Message from './Message';
 import { MessageInterface } from '@type/chat';
@@ -84,6 +84,7 @@ const DownloadChat = React.memo(
     const { t } = useTranslation();
     const [isModalOpen, setIsModalOpen] = useState<boolean>(false);
     const [visibleBranchOnly, setVisibleBranchOnly] = useState<boolean>(false);
+    const [useGzip, setUseGzip] = useState(true);
 
     const openModal = () => setIsModalOpen(true);
 
@@ -115,6 +116,15 @@ const DownloadChat = React.memo(
                   className='rounded'
                 />
                 {t('exportVisibleBranchOnly')}
+              </label>
+              <label className='flex items-center gap-2 text-sm text-gray-900 dark:text-gray-300 cursor-pointer'>
+                <input
+                  type='checkbox'
+                  checked={useGzip}
+                  onChange={(e) => setUseGzip(e.target.checked)}
+                  className='rounded'
+                />
+                .gz {t('compression', 'compression')}
               </label>
               <div className='flex gap-4'>
               <button
@@ -191,7 +201,11 @@ const DownloadChat = React.memo(
                       folders: {},
                       version: 3,
                     } satisfies ExportV3;
-                    downloadFile(fileData, exportedChat.title);
+                    if (useGzip) {
+                      await downloadFileGzip(fileData, exportedChat.title);
+                    } else {
+                      downloadFile(fileData, exportedChat.title);
+                    }
                   }
                 }}
               >
