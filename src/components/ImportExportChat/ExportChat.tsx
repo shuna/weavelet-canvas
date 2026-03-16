@@ -3,7 +3,7 @@ import { useTranslation } from 'react-i18next';
 
 import useStore from '@store/store';
 
-import downloadFile from '@utils/downloadFile';
+import downloadFile, { downloadFileGzip } from '@utils/downloadFile';
 import { getToday } from '@utils/date';
 import { resolveContent } from '@utils/contentStore';
 
@@ -47,19 +47,8 @@ const ExportChat = () => {
       fileData = { chats, contentStore, folders, version: 3 } satisfies ExportV3;
     }
 
-    if (useGzip && typeof CompressionStream !== 'undefined') {
-      const jsonStr = JSON.stringify(fileData);
-      const blob = new Blob([jsonStr]);
-      const cs = new CompressionStream('gzip');
-      const compressedStream = blob.stream().pipeThrough(cs);
-      const compressedBlob = await new Response(compressedStream).blob();
-      const url = URL.createObjectURL(compressedBlob);
-      const link = document.createElement('a');
-      link.href = url;
-      link.download = `${filename}.json.gz`;
-      link.click();
-      link.remove();
-      URL.revokeObjectURL(url);
+    if (useGzip) {
+      await downloadFileGzip(fileData, filename);
     } else {
       downloadFile(fileData, filename);
     }
