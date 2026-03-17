@@ -56,6 +56,7 @@ const ChatHistory = React.memo(
       Object.values(state.generatingSessions).some((s) => s.chatId === chatId)
     );
 
+    const [isIconHovered, setIsIconHovered] = useState(false);
     const [isDelete, setIsDelete] = useState<boolean>(false);
     const [isEdit, setIsEdit] = useState<boolean>(false);
     const [_title, _setTitle] = useState<string>(title);
@@ -133,7 +134,8 @@ const ChatHistory = React.memo(
       }
     };
 
-    const handleCheckboxClick = (e: React.MouseEvent<HTMLInputElement>) => {
+    const handleCheckboxClick = (e: React.MouseEvent<HTMLInputElement> | React.MouseEvent<HTMLButtonElement>) => {
+      e.stopPropagation();
       if (e.shiftKey && lastSelectedIndex !== null) {
         const start = Math.min(lastSelectedIndex, chatIndex);
         const end = Math.max(lastSelectedIndex, chatIndex);
@@ -207,32 +209,23 @@ const ChatHistory = React.memo(
         draggable={!isEdit}
         onDragStart={handleDragStart}
       >
-        <input
-          type='checkbox'
-          checked={selectedChats.includes(chatIndex)}
-          onClick={handleCheckboxClick}
-          onChange={() => {}}
-        />
-        {isThisChatGenerating ? (
-          <button
-            className='p-0.5 hover:text-red-400 text-green-400 flex-shrink-0'
-            onClick={handleStopGeneration}
-            aria-label='stop generation'
-            title='Stop generation'
-          >
-            <svg
-              className='h-4 w-4 animate-spin'
-              viewBox='0 0 24 24'
-              fill='none'
-              stroke='currentColor'
-              strokeWidth='2'
-            >
-              <circle cx='12' cy='12' r='10' strokeDasharray='60' strokeDashoffset='15' />
-            </svg>
-          </button>
-        ) : (
-          <ChatIcon />
-        )}
+        <div
+          className='flex-shrink-0 w-4 h-4 flex items-center justify-center'
+          onMouseEnter={() => setIsIconHovered(true)}
+          onMouseLeave={() => setIsIconHovered(false)}
+        >
+          {selectedChats.includes(chatIndex) || isIconHovered ? (
+            <input
+              type='checkbox'
+              checked={selectedChats.includes(chatIndex)}
+              onClick={handleCheckboxClick}
+              onChange={() => {}}
+              className='m-0'
+            />
+          ) : (
+            <ChatIcon />
+          )}
+        </div>
         <div
           className='flex-1 text-ellipsis max-h-5 overflow-hidden break-all relative'
           title={`${title}${chatSize ? ` (${formatNumber(chatSize)})` : ''}`}
@@ -263,7 +256,26 @@ const ChatHistory = React.memo(
             />
           )}
         </div>
-        {active && (
+        {isThisChatGenerating ? (
+          <div className='visible absolute right-1 z-10 flex text-gray-500 dark:text-gray-300'>
+            <button
+              className='p-1 hover:text-red-400 text-green-400'
+              onClick={handleStopGeneration}
+              aria-label='stop generation'
+              title='Stop generation'
+            >
+              <svg
+                className='h-4 w-4 animate-spin'
+                viewBox='0 0 24 24'
+                fill='none'
+                stroke='currentColor'
+                strokeWidth='2'
+              >
+                <circle cx='12' cy='12' r='10' strokeDasharray='60' strokeDashoffset='15' />
+              </svg>
+            </button>
+          </div>
+        ) : active && (
           <div className='visible absolute right-1 z-10 flex text-gray-500 dark:text-gray-300'>
             {isDelete || isEdit ? (
               <>
