@@ -108,7 +108,7 @@ const ChatContent = () => {
     state.chats.length > 0 &&
     state.currentChatIndex >= 0 &&
     state.currentChatIndex < state.chats.length
-      ? state.chats[state.currentChatIndex].messages
+      ? (state.chats[state.currentChatIndex].messages ?? EMPTY_MESSAGES)
       : EMPTY_MESSAGES
   );
   const currentChatIndex = useStore((state) => state.currentChatIndex);
@@ -117,7 +117,7 @@ const ChatContent = () => {
     state.chats.length > 0 &&
     state.currentChatIndex >= 0 &&
     state.currentChatIndex < state.chats.length
-      ? state.chats[state.currentChatIndex].messages.length
+      ? (state.chats[state.currentChatIndex].messages?.length ?? 0)
       : 0
   );
   const advancedMode = useStore((state) => state.advancedMode);

@@ -43,12 +43,12 @@ const TokenCount = React.memo(() => {
     return Object.values(state.generatingSessions).find((s) => s.chatId === chatId);
   });
   const messages = useStore(
-    (state) => (state.chats ? state.chats[state.currentChatIndex].messages : []),
+    (state) => (state.chats?.[state.currentChatIndex]?.messages ?? []),
     shallow
   );
 
   const { model, providerId } = useStore((state) =>
-    state.chats
+    state.chats?.[state.currentChatIndex]
       ? {
           model: state.chats[state.currentChatIndex].config.model,
           providerId: state.chats[state.currentChatIndex].config.providerId,

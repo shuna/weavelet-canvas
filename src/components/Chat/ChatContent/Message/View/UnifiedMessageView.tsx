@@ -47,7 +47,9 @@ const UnifiedMessageView = memo(
     const removeMessageAtIndex = useStore((state) => state.removeMessageAtIndex);
     const moveMessage = useStore((state) => state.moveMessage);
     const lastMessageIndex = useStore((state) =>
-      state.chats ? state.chats[state.currentChatIndex].messages.length - 1 : 0
+      state.chats?.[state.currentChatIndex]?.messages
+        ? state.chats[state.currentChatIndex].messages.length - 1
+        : 0
     );
     const inlineLatex = useStore((state) => state.inlineLatex);
     const markdownMode = useStore((state) => state.markdownMode);
