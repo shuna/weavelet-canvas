@@ -91,6 +91,7 @@ export type MigrationProgressCallback = (meta: MigrationMetaRecord) => void;
 let currentGeneration = 0;
 let previousContentStoreSnapshot: ContentStoreData = {};
 let migrationInProgress = false;
+let migrationResumeRunning = false;
 
 const hasIndexedDb = () =>
   typeof window !== 'undefined' && typeof indexedDB !== 'undefined';
@@ -305,6 +306,7 @@ export async function beginLargeMigration(
     });
   }
 
+  migrationInProgress = true;
   return meta;
 }
 
@@ -362,6 +364,22 @@ export async function migrateSingleChat(
  * Calls onProgress after each chat. Returns when complete or on error.
  */
 export async function resumeLargeMigration(
+  baseState: StoreState,
+  onProgress?: MigrationProgressCallback
+): Promise<PersistedChatData | null> {
+  if (migrationResumeRunning) {
+    console.warn('[Migration] resumeLargeMigration already running — skipping');
+    return null;
+  }
+  migrationResumeRunning = true;
+  try {
+    return await resumeLargeMigrationInner(baseState, onProgress);
+  } finally {
+    migrationResumeRunning = false;
+  }
+}
+
+async function resumeLargeMigrationInner(
   baseState: StoreState,
   onProgress?: MigrationProgressCallback
 ): Promise<PersistedChatData | null> {
@@ -492,8 +510,15 @@ async function finalizeLargeMigration(
     }
   }
 
-  let sourceData = snapshot?.data ?? { chats: [], contentStore: {}, branchClipboard: null };
-  if (snapshot && snapshot.version < STORE_VERSION) {
+  if (!snapshot?.data) {
+    // Snapshot was already consumed by a prior finalization — nothing to do
+    console.warn('[Migration] finalizeLargeMigration: no snapshot data found, skipping');
+    await updateMigrationMeta({ status: 'done', updatedAt: Date.now() });
+    return null;
+  }
+
+  let sourceData = snapshot.data;
+  if (snapshot.version < STORE_VERSION) {
     sourceData = migratePersistedChatDataState(baseState, sourceData, snapshot.version);
   }
 
@@ -888,6 +913,10 @@ function computeChatFingerprint(chat: PersistedChat): string {
  */
 export const saveChatData = async (data: PersistedChatData): Promise<void> => {
   if (!hasIndexedDb()) return;
+  if (migrationInProgress) {
+    console.warn('[saveChatData] Skipped — migration in progress');
+    return;
+  }
 
   const nextGen = currentGeneration + 1;
   const chats = (data.chats ?? []) as PersistedChat[];

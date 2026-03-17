@@ -19,6 +19,7 @@ import {
   loadMigrationMeta,
   resumeLargeMigration,
   setMigrationInProgress,
+  isMigrationInProgress,
   beginLargeMigration,
   estimatePersistedPayloadSize,
   LARGE_MIGRATION_THRESHOLD,
@@ -117,6 +118,7 @@ const useAppBootstrap = () => {
     let saveTimer: number | undefined;
     let unsubscribe: (() => void) | undefined;
     let cleanupCompression: (() => void) | undefined;
+    let migrationStarted = false;
 
     const flushChatDataSave = async () => {
       if (saveTimer) {
@@ -190,7 +192,10 @@ const useAppBootstrap = () => {
       }
       if (cancelled) return;
 
-      if (indexedDbChatData?.chats || indexedDbChatData?.contentStore) {
+      if (
+        (indexedDbChatData?.chats && indexedDbChatData.chats.length > 0) ||
+        (indexedDbChatData?.contentStore && Object.keys(indexedDbChatData.contentStore).length > 0)
+      ) {
         const nextState = { ...useStore.getState() };
         applyPersistedChatDataState(nextState, indexedDbChatData);
         useStore.setState({
@@ -201,9 +206,11 @@ const useAppBootstrap = () => {
         // IndexedDB already has authoritative data — safe to strip chats from localStorage
         setIndexedDbMigrationComplete(true);
       } else if (
-        useStore.getState().chats ||
-        Object.keys(useStore.getState().contentStore ?? {}).length > 0 ||
-        useStore.getState().branchClipboard
+        !isMigrationInProgress() && (
+          useStore.getState().chats ||
+          Object.keys(useStore.getState().contentStore ?? {}).length > 0 ||
+          useStore.getState().branchClipboard
+        )
       ) {
         // First launch after introducing IndexedDB: migrate any existing chat payloads
         // from localStorage-backed zustand state into IndexedDB and keep localStorage slim.
@@ -212,12 +219,15 @@ const useAppBootstrap = () => {
         try {
           if (payloadSize >= LARGE_MIGRATION_THRESHOLD) {
             await beginLargeMigration(chatDataState, STORE_VERSION, 'localStorage');
+            migrationStarted = true;
             setMigrationInProgress(true);
+            // Do NOT set migrationComplete yet — chats must stay in localStorage
+            // until resumeLargeMigration finishes and applies data to store.
           } else {
             await saveChatData(chatDataState);
+            // IndexedDB write succeeded — safe to strip chats from localStorage
+            setIndexedDbMigrationComplete(true);
           }
-          // IndexedDB write succeeded — safe to strip chats from localStorage
-          setIndexedDbMigrationComplete(true);
         } catch (error) {
           notifyStorageError(error);
           // Do NOT set migrationComplete — keep chats in localStorage as safety net
@@ -230,6 +240,7 @@ const useAppBootstrap = () => {
           // Defer to background migration
           try {
             await beginLargeMigration(lsPayload, STORE_VERSION, 'localStorage');
+            migrationStarted = true;
             setMigrationInProgress(true);
             setIndexedDbMigrationComplete(true);
           } catch (error) {
@@ -264,7 +275,9 @@ const useAppBootstrap = () => {
       localStorage.removeItem('chats');
 
       const { chats, currentChatIndex } = useStore.getState();
+      const largeMigrationRunning = migrationStarted || isMigrationInProgress();
       const missingChatDataWhileFoldersRemain =
+        !largeMigrationRunning &&
         persistedFolderCount > 0 &&
         (!chats || chats.length === 0) &&
         !(legacyChats && legacyChats.length > 0) &&

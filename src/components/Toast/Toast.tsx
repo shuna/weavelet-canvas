@@ -15,11 +15,14 @@ const Toast = () => {
     if (toastShow) {
       window.clearTimeout(timeoutID);
 
-      const newTimeoutID = window.setTimeout(() => {
-        setToastShow(false);
-      }, 5000);
+      // Warning and error toasts persist until manually dismissed
+      if (status === 'success') {
+        const newTimeoutID = window.setTimeout(() => {
+          setToastShow(false);
+        }, 5000);
 
-      setTimeoutID(newTimeoutID);
+        setTimeoutID(newTimeoutID);
+      }
     }
   }, [toastShow, status, message]);
 

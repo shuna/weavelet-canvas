@@ -22,7 +22,7 @@ const MigrationProgressBanner = () => {
   const percent = Math.round(progress * 100);
 
   return (
-    <div className='fixed top-0 left-0 right-0 z-[998] bg-blue-600 text-white px-4 py-3 shadow-md'>
+    <div className='fixed top-0 left-0 right-0 z-[1000] bg-blue-600 text-white px-4 py-3 shadow-md'>
       {status === 'running' && (
         <div className='flex items-center gap-4'>
           <div className='flex-1'>
