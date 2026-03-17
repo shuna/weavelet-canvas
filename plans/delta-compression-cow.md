@@ -375,7 +375,7 @@ function buildSupersetForCommit(
 2. `commitState`関数を実装（content-store superset先行書き込み、meta最後、GCはコミット後）
 3. `buildSupersetForCommit`を実装（pendingDeletesの旧hashをsupersetに含める）
 4. 起動時のgeneration照合・修復・残留GCロジックを実装
-4. `saveChatData`を差分書き込み対応に変更（変更されたチャットのみ書き込み）
+5. `saveChatData`を差分書き込み対応に変更（変更されたチャットのみ書き込み）
 5. `CompressionService`クラスを新規作成:
    - `compressChat(id)` — gzip圧縮 + packedキーに書き込み + raw削除
    - `decompressChat(id)` — packed読み込み + 展開 + rawキーに書き込み + packed削除
@@ -444,7 +444,7 @@ function buildSupersetForCommit(
 - GC中断リカバリ: 起動時に参照走査で不要エントリが再GCされること
 
 **clipboard世代ずれ**:
-- branch-clipboard(nextGen) + content-store(oldGen) → clipboard参照のhashが解決可能であること（supersetによる保護、またはcontent-store先行書き込みにより到達不可能な状態であること）
+- branch-clipboard(nextGen) + content-store(oldGen) → content-store先行書き込みによりこの状態は到達不可能であることを確認（clipboardはステップ2、content-storeはステップ1のため）
 - content-store(nextGen) + branch-clipboard(oldGen) → 旧clipboardの参照がsuperset内に存在すること
 - 起動時GC: clipboardが参照するhashがGC対象から除外されること
 
