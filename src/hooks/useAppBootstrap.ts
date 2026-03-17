@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import useStore from '@store/store';
+import useStore, { type StoreState } from '@store/store';
 import i18n from '../i18n';
 import { ChatInterface } from '@type/chat';
 import { Theme } from '@type/theme';
@@ -7,9 +7,72 @@ import useInitialiseNewChat from './useInitialiseNewChat';
 import {
   applyPersistedChatDataState,
   createPersistedChatDataState,
+  type PersistedChatData,
 } from '@store/persistence';
-import { loadChatData, saveChatData } from '@store/storage/IndexedDbStorage';
+import { STORE_VERSION } from '@store/version';
+import {
+  loadChatData,
+  saveChatData,
+  initCompressionScheduler,
+  notifyActiveChatChanged,
+  loadMigrationMeta,
+  resumeLargeMigration,
+  setMigrationInProgress,
+  beginLargeMigration,
+  estimatePersistedPayloadSize,
+  LARGE_MIGRATION_THRESHOLD,
+} from '@store/storage/IndexedDbStorage';
+import type { MigrationMetaRecord } from '@store/storage/IndexedDbStorage';
 import { notifyStorageError } from '@store/storage/storageErrors';
+
+function migMetaToUiState(meta: MigrationMetaRecord) {
+  const status = meta.status === 'idle' || meta.status === 'done' ? 'done' : meta.status;
+  return {
+    visible: status !== 'done',
+    status: status as 'running' | 'finalizing' | 'failed' | 'done',
+    progress: meta.totalChats > 0 ? meta.migratedChats / meta.totalChats : 0,
+    migratedChats: meta.migratedChats,
+    totalChats: meta.totalChats,
+    sourceSizeBytes: meta.sourceSizeBytes,
+    currentPhase: meta.status === 'finalizing' ? 'finalizing' as const : 'migrating-chats' as const,
+    resumable: meta.status === 'failed',
+    lastError: meta.lastError,
+  };
+}
+
+export function resumeLargeMigrationInBackground(baseState: StoreState) {
+  resumeLargeMigration(baseState, (meta) => {
+    useStore.getState().setMigrationUiState(migMetaToUiState(meta));
+  }).then((result) => {
+    setMigrationInProgress(false);
+    if (result) {
+      // Apply migrated data to store
+      const nextState = { ...useStore.getState() };
+      applyPersistedChatDataState(nextState, result);
+      useStore.setState({
+        chats: nextState.chats,
+        contentStore: nextState.contentStore,
+        currentChatIndex: nextState.currentChatIndex,
+      });
+      // Now safe to start compression scheduler
+      const activeChatId = nextState.chats?.[nextState.currentChatIndex]?.id;
+      initCompressionScheduler(activeChatId);
+    }
+    useStore.getState().setMigrationUiState({
+      visible: false,
+      status: 'done',
+      progress: 1,
+      migratedChats: 0,
+      totalChats: 0,
+      sourceSizeBytes: 0,
+      currentPhase: 'finalizing',
+      resumable: false,
+    });
+  }).catch((e) => {
+    setMigrationInProgress(false);
+    console.error('[Migration] Background migration failed', e);
+  });
+}
 
 const useAppBootstrap = () => {
   const [isBootstrapped, setIsBootstrapped] = useState(false);
@@ -51,6 +114,7 @@ const useAppBootstrap = () => {
     let cancelled = false;
     let saveTimer: number | undefined;
     let unsubscribe: (() => void) | undefined;
+    let cleanupCompression: (() => void) | undefined;
 
     const flushChatDataSave = async () => {
       if (saveTimer) {
@@ -145,13 +209,36 @@ const useAppBootstrap = () => {
           notifyStorageError(error);
         }
       } else if (legacyChats && legacyChats.length > 0) {
-        setChats(legacyChats);
-        setCurrentChatIndex(0);
-        useStore.setState({ contentStore: {} });
-        try {
-          await saveChatData(createPersistedChatDataState(useStore.getState()));
-        } catch (error) {
-          notifyStorageError(error);
+        // Check if localStorage chats are large enough for background migration
+        const lsPayload: PersistedChatData = { chats: legacyChats, contentStore: {}, branchClipboard: null };
+        const lsSize = estimatePersistedPayloadSize(lsPayload);
+        if (lsSize >= LARGE_MIGRATION_THRESHOLD) {
+          // Defer to background migration
+          try {
+            await beginLargeMigration(lsPayload, STORE_VERSION, 'localStorage');
+            setMigrationInProgress(true);
+            // Don't set chats into store yet — migration will apply them on completion
+          } catch (error) {
+            notifyStorageError(error);
+            // Fallback: immediate save
+            setChats(legacyChats);
+            setCurrentChatIndex(0);
+            useStore.setState({ contentStore: {} });
+            try {
+              await saveChatData(createPersistedChatDataState(useStore.getState()));
+            } catch (err) {
+              notifyStorageError(err);
+            }
+          }
+        } else {
+          setChats(legacyChats);
+          setCurrentChatIndex(0);
+          useStore.setState({ contentStore: {} });
+          try {
+            await saveChatData(createPersistedChatDataState(useStore.getState()));
+          } catch (error) {
+            notifyStorageError(error);
+          }
         }
       }
 
@@ -187,7 +274,36 @@ const useAppBootstrap = () => {
         setIsBootstrapped(true);
       }
 
+      // Check for in-progress large migration
+      const migMeta = await loadMigrationMeta();
+      if (migMeta && (migMeta.status === 'running' || migMeta.status === 'finalizing' || migMeta.status === 'failed')) {
+        setMigrationInProgress(true);
+
+        // Show initial migration UI state
+        const initialUiState = migMetaToUiState(migMeta);
+        useStore.getState().setMigrationUiState(initialUiState);
+
+        if (migMeta.status === 'failed') {
+          // Show failed state, user can retry via banner
+        } else {
+          // Resume migration in background
+          resumeLargeMigrationInBackground(useStore.getState());
+        }
+      }
+
+      // Initialize compression scheduler (skips if migration in progress)
+      const activeChatId = useStore.getState().chats?.[useStore.getState().currentChatIndex]?.id;
+      cleanupCompression = initCompressionScheduler(activeChatId);
+
       unsubscribe = useStore.subscribe((state, prev) => {
+        // Track active chat changes for compression scheduler
+        if (state.currentChatIndex !== prev.currentChatIndex || state.chats !== prev.chats) {
+          const newActiveChatId = state.chats?.[state.currentChatIndex]?.id;
+          if (newActiveChatId !== prev.chats?.[prev.currentChatIndex]?.id) {
+            notifyActiveChatChanged(newActiveChatId);
+          }
+        }
+
         if (
           state.chats === prev.chats &&
           state.contentStore === prev.contentStore &&
@@ -197,6 +313,7 @@ const useAppBootstrap = () => {
         }
         queueChatDataSave();
       });
+
     };
 
     document.addEventListener('visibilitychange', handleVisibilityFlush);
@@ -215,6 +332,7 @@ const useAppBootstrap = () => {
       if (saveTimer) {
         window.clearTimeout(saveTimer);
       }
+      cleanupCompression?.();
       unsubscribe?.();
     };
   }, [initialiseNewChat, setApiKey, setChats, setCurrentChatIndex, setTheme]);

@@ -50,8 +50,12 @@ export const prepareChatForExport = (
   hashRefCounts.forEach((refCount, hash) => {
     const entry = sourceContentStore[hash];
     if (!entry) return;
+    // Resolve deltas to full content for V3-compatible export
+    const content = entry.delta
+      ? resolveContent(sourceContentStore, hash)
+      : entry.content;
     contentStore[hash] = {
-      content: clone(entry.content),
+      content: clone(content),
       refCount,
     };
   });

@@ -16,6 +16,7 @@ import {
 import {
   ContentStoreData,
   addContent,
+  addContentDelta,
   releaseContent,
   retainContent,
 } from '@utils/contentStore';
@@ -171,7 +172,7 @@ export const createBranchState = (
 
   const newId = uuidv4();
   const contentHash = newContent
-    ? addContent(contentStore, newContent)
+    ? addContentDelta(contentStore, newContent, fromNode.contentHash)
     : (() => {
         retainContent(contentStore, fromNode.contentHash);
         return fromNode.contentHash;
@@ -313,11 +314,18 @@ export const upsertMessageAtIndexState = (
   chat.messages[messageIndex] = message;
 
   if (existingId) {
-    releaseContent(contentStore, tree.nodes[existingId].contentHash);
+    const oldHash = tree.nodes[existingId].contentHash;
+    // Delta vs full: addContentDelta attempts delta compression against oldHash.
+    // If oldHash refCount drops to 0 on release, promoteDependents will promote
+    // the delta back to full — this is intentional. Delta only persists when the
+    // base is shared (e.g., another branch references it). The diff computation
+    // overhead for the single-ref case is negligible.
+    const newHash = addContentDelta(contentStore, message.content, oldHash);
+    releaseContent(contentStore, oldHash);
     tree.nodes[existingId] = {
       ...tree.nodes[existingId],
       role: message.role,
-      contentHash: addContent(contentStore, message.content),
+      contentHash: newHash,
     };
   } else if (messageIndex === tree.activePath.length) {
     const parentId =
@@ -396,9 +404,12 @@ export const updateLastNodeContentState = (
   const lastId = tree.activePath[tree.activePath.length - 1];
 
   if (lastId) {
-    releaseContent(contentStore, tree.nodes[lastId].contentHash);
+    const oldHash = tree.nodes[lastId].contentHash;
+    // See upsertMessageAtIndexState for delta-on-edit rationale
+    const newHash = addContentDelta(contentStore, content, oldHash);
+    releaseContent(contentStore, oldHash);
     tree.nodes[lastId] = cloneNode(tree.nodes[lastId]);
-    tree.nodes[lastId].contentHash = addContent(contentStore, content);
+    tree.nodes[lastId].contentHash = newHash;
     updatedChats[chatIndex].messages = materializeActivePath(tree, contentStore);
   }
 
@@ -479,11 +490,14 @@ export const replaceMessageAndPruneFollowingState = (
   state.chat.messages[messageIndex] = message;
 
   if (existingId) {
-    releaseContent(contentStore, tree.nodes[existingId].contentHash);
+    const oldHash = tree.nodes[existingId].contentHash;
+    // See upsertMessageAtIndexState for delta-on-edit rationale
+    const newHash = addContentDelta(contentStore, message.content, oldHash);
+    releaseContent(contentStore, oldHash);
     tree.nodes[existingId] = {
       ...tree.nodes[existingId],
       role: message.role,
-      contentHash: addContent(contentStore, message.content),
+      contentHash: newHash,
     };
   } else if (messageIndex === tree.activePath.length) {
     const parentId =

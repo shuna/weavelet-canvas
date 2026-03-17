@@ -386,6 +386,236 @@ function buildSupersetForCommit(
 
 ---
 
+## Part 2.4: 大容量既存データの段階的マイグレーション
+
+数十MB超の既存環境では、従来の「起動時に全データを一括読み込み → 一括変換 → 一括書き込み」方式は以下の問題を起こしやすい。
+
+- 初回起動が長時間ブロックされる
+- JSON parse / clone / gzip が単発で走り、メインスレッドを占有する
+- 旧データと新データが長時間共存し、容量ピークでQuotaExceededに近づく
+- 中断時に「移行済みか未移行か」が曖昧になり、再試行時の分岐が複雑になる
+
+そのため、大容量環境では**再開可能な段階的マイグレーション**を採用する。
+
+### 2.4.1 方針
+
+- 軽量データ（例: 8MB未満）は現行の即時マイグレーションを維持
+- 大容量データ（例: 8MB以上）は**バックグラウンド段階移行**に切り替える
+- 移行単位は「チャット1件ずつ」。各チャット完了ごとにチェックポイントを保存
+- 旧データ削除は最後のコミットまで遅延し、途中中断時は必ず再開可能にする
+- UIは先に起動し、移行中は進捗表示のみ行う。移行完了までは旧データを読み取り元として扱える状態を維持する
+
+### 2.4.2 追加レコード
+
+`persisted-state` に以下のレコードを追加する。
+
+```ts
+persisted-state/
+  migration-meta   → {
+    status: 'idle' | 'running' | 'finalizing' | 'done' | 'failed';
+    source: 'localStorage' | 'indexeddb-legacy';
+    sourceVersion: number;
+    sourceSizeBytes: number;
+    totalChats: number;
+    migratedChats: number;
+    migratedContentHashes: number;
+    startedAt: number;
+    updatedAt: number;
+    lastChatIndex: number;      // 次に移行するチャットのcursor
+    lastError?: string;
+  }
+  migration-snapshot → {
+    // 移行開始時点の旧データをそのまま保持
+    // localStorage起点でも、先にIndexedDBへ退避してから段階処理する
+    data: PersistedChatData;
+    version: number;
+  }
+```
+
+ポイント:
+
+- `migration-snapshot` は移行開始時に一度だけ作成し、以後の再開元として使う
+- `lastChatIndex` により「どこまで終わったか」を明確にする
+- `migratedChats` は進捗表示専用で、正確な再開判定は `lastChatIndex` を使う
+- `status=finalizing` は「全チャット移行済み、旧データ削除待ち」の短い最終段階を表す
+
+### 2.4.3 段階的マイグレーション手順
+
+#### ステップ0: 大容量判定
+
+- `localStorage['chats']` または IndexedDB legacy key `chat-data` の概算サイズを測る
+- 閾値未満なら現行フロー
+- 閾値以上なら `migration-meta` を `running` で作成し、`migration-snapshot` にソースを退避
+
+#### ステップ1: スナップショット固定
+
+```ts
+async function beginLargeMigration(sourceData, sourceVersion, source): Promise<void> {
+  put('migration-snapshot', { data: sourceData, version: sourceVersion });
+  put('migration-meta', {
+    status: 'running',
+    source,
+    sourceVersion,
+    sourceSizeBytes: estimateSize(sourceData),
+    totalChats: sourceData.chats.length,
+    migratedChats: 0,
+    migratedContentHashes: 0,
+    startedAt: Date.now(),
+    updatedAt: Date.now(),
+    lastChatIndex: 0,
+  });
+}
+```
+
+この時点では:
+
+- 旧データはまだ残す
+- 新形式データは空でもよい
+- 再起動しても `migration-snapshot` から再開できる
+
+#### ステップ2: チャット単位で移行
+
+1. `migration-snapshot.data.chats[lastChatIndex]` を1件読む
+2. そのチャットが参照する `contentHash` 群だけを新 `content-store` に追加
+3. `chat:{id}` を新形式で書く
+4. `migration-meta.lastChatIndex++` と進捗を更新
+5. `requestIdleCallback` または短い `setTimeout(0)` で次チャットへ進む
+
+重要:
+
+- `content-store` はチャットごとに増やすが、各チャット完了後に都度保存する
+- 1チャット単位でトランザクションを閉じることで、長大トランザクションを避ける
+- 途中中断時は「最後に完了したチャット」までが確定状態として残る
+
+#### ステップ3: 仕上げ
+
+全チャット移行後:
+
+1. `branch-clipboard` を移行
+2. `meta` を新形式の committed state として書く
+3. 必要なら初回 residual GC を実行
+4. `migration-meta.status = 'finalizing'`
+5. 旧 `chat-data` / `localStorage['chats']` / `migration-snapshot` を削除
+6. `migration-meta.status = 'done'`
+
+#### ステップ4: Phase 3 圧縮は移行完了後に解禁
+
+大容量移行中は gzip 圧縮を走らせない。理由:
+
+- 移行と圧縮が同時に走ると I/O 競合が増える
+- 容量ピークが高くなりやすい
+- ボトルネックの切り分けが難しくなる
+
+したがって:
+
+- `migration-meta.status === 'running' | 'finalizing'` の間は圧縮スケジューラを無効化
+- 移行完了後の次アイドルタイミングから Phase 3 圧縮を開始
+
+### 2.4.4 起動時の復旧ルール
+
+```ts
+if (migrationMeta.status === 'running') {
+  // migration-snapshot から lastChatIndex 以降を再開
+}
+
+if (migrationMeta.status === 'finalizing') {
+  // 新形式データは完成済み。旧データ削除とsnapshot掃除だけ再実行
+}
+
+if (migrationMeta.status === 'failed') {
+  // snapshot は残す。ユーザー通知 + 次回再試行可能
+}
+```
+
+復旧原則:
+
+- `migration-snapshot` がある限り、旧データは失われない
+- `chat:{id}` は1件ずつ確定するため、途中中断しても完了済みチャットを再利用できる
+- `lastChatIndex` より前のチャットは冪等に再書き込みしてもよい設計にする
+
+### 2.4.5 マイグレーションUI / UX
+
+重い既存環境では、「裏で移行している」だけでは不十分で、ユーザーが今何が起きているか分からないと不安になりやすい。そこで、移行状態を明示する専用UIを入れる。
+
+#### 表示方針
+
+- 起動後、`migration-meta.status === 'running' | 'finalizing'` の間は**非破壊の進捗バナー**を常時表示
+- 進捗は最小でも `migratedChats / totalChats` と百分率を表示
+- 可能なら `sourceSizeBytes` から概算サイズも表示し、「大きな保存データを安全に移行中」であることを伝える
+- 画面全体をブロックしない。ただし、保存/圧縮に影響する操作は必要に応じて一部制限する
+
+#### UI要素
+
+```ts
+interface MigrationUiState {
+  visible: boolean;
+  status: 'running' | 'finalizing' | 'failed' | 'done';
+  progress: number;          // 0..1
+  migratedChats: number;
+  totalChats: number;
+  sourceSizeBytes: number;
+  currentPhase: 'snapshot' | 'migrating-chats' | 'finalizing';
+  resumable: boolean;
+  lastError?: string;
+}
+```
+
+- ヘッダーまたはストレージ警告エリアに progress bar を表示
+- 文言例:
+  - `保存データを移行中です（12 / 84 チャット）`
+  - `大きな保存データを最適化しています。完了までそのままお使いいただけます。`
+  - `移行の最終処理中です。まもなく完了します。`
+- `failed` 時は warning / retry UI を表示
+  - `保存データの移行を再開できませんでした。データは保持されています。再試行してください。`
+
+#### ユーザー配慮
+
+- 移行中も既存チャット閲覧は継続可能にする
+- 進捗が長時間止まって見えないよう、チャット完了ごとに必ず progress 更新を反映する
+- `finalizing` は短時間でも専用表示に切り替え、「あと少し」であることを伝える
+- 圧縮スケジューラ停止中は必要に応じて説明を出す
+  - `保存データ移行中のため、バックグラウンド圧縮は一時停止しています`
+- タブ再読み込みや再起動後も、`migration-meta` を読み直して前回の進捗をそのまま表示する
+
+#### 操作ポリシー
+
+- `running` 中:
+  - 読み取り系操作は許可
+  - エクスポートは許可するが、snapshot を正本として行う
+  - 削除や大規模インポートなど、保存構造を大きく変える操作は一時的に制限してもよい
+- `failed` 中:
+  - 通常データは保持
+  - `再試行` ボタンを表示
+  - `詳細` として `lastError` の要約を開けるようにする
+
+### 2.4.6 懸念事項と対策
+
+| 懸念 | リスク | 対策 |
+|------|--------|------|
+| 起動直後の長時間フリーズ | 旧大容量JSONのparseでUIが固まる | 閾値超過時は即時全面移行をやめ、snapshot化後にアイドル分割実行 |
+| 容量ピーク | 旧データ + 新データ + packedが同時存在してQuota逼迫 | 大容量移行中はgzip無効。旧データ削除はfinalizingでまとめて実施 |
+| 中断時の進捗不明 | 何件移行済みか分からず重複・欠落が起きる | `migration-meta.lastChatIndex` をチャット単位で更新 |
+| 一部チャットのみ新形式化 | 読み込み元が分散して不整合 | migration完了前は snapshot を正本とみなし、通常ロードへ切り替えるのは finalizing 後のみ |
+| 破損した旧データ | 特定チャットだけ読めず移行全体が停止 | 失敗チャットを記録し、全体statusを`failed`または該当チャットskipで継続できる戦略を選択 |
+| 巨大content-storeの一括生成 | 単発メモリ使用量が跳ねる | チャット参照分だけ逐次追加し、各バッチ後に保存 |
+| 移行中の不透明さ | ユーザーが固まったと誤解して離脱する | progress bar、phase文言、再開案内、failed時のretry UIを表示 |
+
+### 2.4.7 実装ステップ
+
+1. 大容量判定関数 `estimatePersistedPayloadSize` を追加
+2. `migration-meta` / `migration-snapshot` レコード定義を追加
+3. `beginLargeMigration` を実装し、旧データをsnapshot化
+4. `resumeLargeMigration` を実装し、`lastChatIndex` から1チャットずつ再開
+5. チャット単位移行 `migrateSingleChat` を実装
+6. `finalizeLargeMigration` を実装し、新形式meta確定→旧データ削除→snapshot削除を行う
+7. `useAppBootstrap` に移行再開フックと進捗通知を追加
+8. `store` に `migrationUiState` を追加し、progress bar / status banner を表示
+9. `failed` 時の retry UI と `lastError` 表示を追加
+10. 圧縮スケジューラに「migration中は無効」のガードを追加
+11. テスト
+
+---
+
 ## Part 3: テスト計画
 
 ### 3.1 ユニットテスト
@@ -475,6 +705,55 @@ function buildSupersetForCommit(
 - 100チャット × 各10ブランチでの圧縮/展開サイクル: 全体で数秒以内に完了すること
 - gzip圧縮率の実測（実際のチャットデータで50-70%削減を確認）
 
+### 3.5 大容量既存データマイグレーション
+
+#### `IndexedDbStorage.largeMigration.test.ts`（新規）
+
+- 大容量判定: 閾値未満は従来の即時マイグレーションに留まること
+- 大容量判定: 閾値超過で `migration-meta.status=running` と `migration-snapshot` が作成されること
+- `beginLargeMigration`: snapshot作成後も旧データが残存すること
+- `resumeLargeMigration`: `lastChatIndex=0` から1チャットずつ移行されること
+- `resumeLargeMigration`: 途中で中断しても `lastChatIndex` から再開できること
+- `migrateSingleChat`: 参照する `contentHash` だけを `content-store` に追加すること
+- `finalizeLargeMigration`: 新形式meta書き込み後に旧 `chat-data` / `localStorage['chats']` / `migration-snapshot` が削除されること
+- `finalizeLargeMigration`: finalizing途中で落ちても再起動時に削除処理だけ再実行できること
+- migration中は圧縮スケジューラが起動しないこと
+- migration完了後にのみ圧縮スケジューラが起動すること
+- `migration-meta` 更新ごとにUI用 progress 値が単調増加すること
+- `failed` 時に `lastError` と `resumable=true` がUIへ渡ること
+
+#### 統合テスト
+
+- 50MB相当の旧データをsnapshot化しても起動時に即座にUI初期化まで進めること
+- 100チャット規模で、複数回のアイドルサイクルに分けて全件移行できること
+- migrate途中でタブを閉じても、次回起動時に重複や欠落なく再開できること
+- 一部チャットの移行失敗時に `migration-meta.status=failed` と `lastError` が記録されること
+- failed状態から再試行して完了まで進めること
+- 再起動後も progress bar が前回の進捗位置から再表示されること
+- finalizing中は progress bar が完了直前表示に切り替わること
+
+#### E2Eシナリオ
+
+- 旧大容量環境起動 → 移行進捗表示 → 通常操作継続 → バックグラウンドで移行完了
+- 移行途中でリロード → 再開 → 完了後も全チャットが開けること
+- 移行完了後に export/import と圧縮が従来通り動作すること
+- failed表示 → retry 実行 → progress 再開 → 完了、の一連のUXが成立すること
+- migration中に「圧縮一時停止中」の補助文言が正しく表示/非表示されること
+
+#### UIコンポーネントテスト
+
+- `MigrationProgressBanner`: `running` で progress bar と `migratedChats / totalChats` を表示すること
+- `MigrationProgressBanner`: `finalizing` で最終処理メッセージに切り替わること
+- `MigrationProgressBanner`: `failed` で warning と retry ボタンを表示すること
+- `MigrationProgressBanner`: `done` で非表示になること
+- `useAppBootstrap`: `migration-meta` の変更を購読して store の `migrationUiState` に反映すること
+
+#### パフォーマンステスト
+
+- 旧50MB payload の snapshot 化が許容時間内で完了すること
+- 1アイドルサイクルあたりの処理時間がUIブロック級に悪化しないこと
+- 100チャット移行の総時間、ピークメモリ、IndexedDB使用量ピークを記録すること
+
 ---
 
 ## 実装順序（各Phase独立してマージ可能）
@@ -504,3 +783,13 @@ function buildSupersetForCommit(
 - テスト
 - **効果**: IndexedDBのディスク使用量が大幅に削減
 - **リスク**: 中（SPA中断シナリオへの対応が必要、ただしCoW設計で緩和済み）
+
+### Phase 4: 大容量既存データの段階的マイグレーション
+- 大容量判定、`migration-meta`、`migration-snapshot`
+- チャット単位の再開可能マイグレーション
+- finalizingフェーズによる旧データ遅延削除
+- progress bar / retry を含む migration UI
+- migration中の圧縮停止
+- テスト
+- **効果**: 数十MB超の既存環境でも初回起動停止や容量ピークを抑えながら安全に移行できる
+- **リスク**: 中〜高（移行状態管理、再開性、旧データ削除タイミングの厳密さが必要）

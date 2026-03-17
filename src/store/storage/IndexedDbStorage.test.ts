@@ -3,6 +3,7 @@ import {
   collectReferencedHashes,
   buildSupersetForCommit,
   runResidualGC,
+  computeChatFingerprint,
 } from './IndexedDbStorage';
 import type { ContentStoreData } from '@utils/contentStore';
 import type { BranchClipboard, BranchNode } from '@type/chat';
@@ -131,5 +132,92 @@ describe('runResidualGC', () => {
     const chats = [makeChat('c1', ['d3'])];
     const result = runResidualGC(store, chats, null);
     expect(Object.keys(result).sort()).toEqual(['base', 'd1', 'd2', 'd3']);
+  });
+});
+
+describe('computeChatFingerprint', () => {
+  it('detects contentHash changes on existing nodes', () => {
+    const chat1 = makeChat('c1', ['h1', 'h2']);
+    const chat2 = makeChat('c1', ['h1', 'h3']); // h2→h3: content edit
+    expect(computeChatFingerprint(chat1 as any)).not.toBe(
+      computeChatFingerprint(chat2 as any)
+    );
+  });
+
+  it('detects title changes', () => {
+    const chat1 = { ...makeChat('c1', ['h1']), title: 'old' };
+    const chat2 = { ...makeChat('c1', ['h1']), title: 'new' };
+    expect(computeChatFingerprint(chat1 as any)).not.toBe(
+      computeChatFingerprint(chat2 as any)
+    );
+  });
+
+  it('returns same fingerprint for identical chats', () => {
+    const chat1 = makeChat('c1', ['h1', 'h2']);
+    const chat2 = makeChat('c1', ['h1', 'h2']);
+    expect(computeChatFingerprint(chat1 as any)).toBe(
+      computeChatFingerprint(chat2 as any)
+    );
+  });
+
+  it('detects message content changes in non-branchTree chats', () => {
+    const legacyChat1 = {
+      id: 'c1',
+      title: 'test',
+      config: {} as any,
+      titleSet: false,
+      imageDetail: 'auto' as const,
+      messages: [
+        { role: 'user', content: [{ type: 'text', text: 'hello' }] },
+      ],
+    };
+    const legacyChat2 = {
+      ...legacyChat1,
+      messages: [
+        { role: 'user', content: [{ type: 'text', text: 'goodbye' }] },
+      ],
+    };
+    expect(computeChatFingerprint(legacyChat1 as any)).not.toBe(
+      computeChatFingerprint(legacyChat2 as any)
+    );
+  });
+
+  it('detects config changes', () => {
+    const chat1 = { ...makeChat('c1', ['h1']), config: { model: 'a' } };
+    const chat2 = { ...makeChat('c1', ['h1']), config: { model: 'b' } };
+    expect(computeChatFingerprint(chat1 as any)).not.toBe(
+      computeChatFingerprint(chat2 as any)
+    );
+  });
+
+  it('detects folder changes', () => {
+    const chat1 = { ...makeChat('c1', ['h1']), folder: 'folderA' };
+    const chat2 = { ...makeChat('c1', ['h1']), folder: 'folderB' };
+    expect(computeChatFingerprint(chat1 as any)).not.toBe(
+      computeChatFingerprint(chat2 as any)
+    );
+  });
+
+  it('detects message count changes in non-branchTree chats', () => {
+    const legacyChat1 = {
+      id: 'c1',
+      title: 'test',
+      config: {} as any,
+      titleSet: false,
+      imageDetail: 'auto' as const,
+      messages: [
+        { role: 'user', content: [{ type: 'text', text: 'hello' }] },
+      ],
+    };
+    const legacyChat2 = {
+      ...legacyChat1,
+      messages: [
+        { role: 'user', content: [{ type: 'text', text: 'hello' }] },
+        { role: 'assistant', content: [{ type: 'text', text: 'hi' }] },
+      ],
+    };
+    expect(computeChatFingerprint(legacyChat1 as any)).not.toBe(
+      computeChatFingerprint(legacyChat2 as any)
+    );
   });
 });

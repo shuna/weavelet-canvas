@@ -5,7 +5,7 @@ import useStore from '@store/store';
 
 import downloadFile, { downloadFileGzip } from '@utils/downloadFile';
 import { getToday } from '@utils/date';
-import { resolveContent } from '@utils/contentStore';
+import { resolveContent, buildExportContentStore } from '@utils/contentStore';
 
 import { ChatInterface } from '@type/chat';
 import { ExportV1, ExportV3 } from '@type/export';
@@ -44,7 +44,7 @@ const ExportChat = () => {
       fileData = { chats: v1Chats, folders, version: 1 } satisfies ExportV1;
     } else {
       // V3 Compact: contentStore + chats with contentHash references
-      fileData = { chats, contentStore, folders, version: 3 } satisfies ExportV3;
+      fileData = { chats, contentStore: buildExportContentStore(contentStore), folders, version: 3 } satisfies ExportV3;
     }
 
     if (useGzip) {
