@@ -208,7 +208,7 @@ persisted-state/
   chat:{id}         → { chat: ChatInterface, generation: number }
   chat:{id}:packed  → { compressed: Uint8Array, generation: number }
   content-store     → { data: ContentStoreData, generation: number }
-  branch-clipboard  → BranchClipboard
+  branch-clipboard  → { data: BranchClipboard, generation: number }
 ```
 
 #### 世代番号によるchat↔content-store整合性保証
@@ -228,6 +228,14 @@ async function commitState(db, chats, contentStore, changedChatIds) {
   // GCを遅延: refCount=0のエントリにpendingDeleteマークを付けるが、
   // この時点ではまだ削除しない
   const supersetStore = buildSupersetForCommit(contentStore, pendingDeletes);
+
+  // ステップ0: branch-clipboardを書く（clipboardもcontentHashを参照するため）
+  const tx0 = db.transaction('persisted-state', 'readwrite');
+  tx0.objectStore('persisted-state').put(
+    { data: branchClipboard, generation: nextGen },
+    'branch-clipboard'
+  );
+  await tx0.done;
 
   // ステップ1: content-store(superset)を先に書く
   // 旧chatが参照するhashも新chatが参照するhashも両方含む
@@ -309,8 +317,8 @@ function buildSupersetForCommit(
    - generation === G → 正常
    - generation < G → chatはコミット途中で中断。content-storeはsupersetなので参照は解決可能
 4. GC残留チェック:
-   - 全chatが参照するcontentHashを収集
-   - content-store内でどのchatからも参照されていないエントリを削除（遅延GCの再実行）
+   - 全chatおよびbranch-clipboardが参照するcontentHashを収集
+   - content-store内でどこからも参照されていないエントリを削除（遅延GCの再実行）
 ```
 
 **設計の鍵**: content-storeを書く時点では**何も消さない（superset）**。消すのはコミット完了後。これにより、どの時点で中断しても旧chatが参照するhashがcontent-storeに存在することが保証される。
