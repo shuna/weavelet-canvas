@@ -1,6 +1,6 @@
 import { materializeActivePath } from '@utils/branchUtils';
 import { ensureUniqueChatIds } from '@utils/chatIdentity';
-import { ContentStoreData } from '@utils/contentStore';
+import { ContentStoreData, validateDeltaIntegrity } from '@utils/contentStore';
 import {
   finalizeStreamingSnapshotState,
   hasActiveStreamingBuffers,
@@ -324,6 +324,7 @@ export const rehydrateStoreState = (state: StoreState) => {
   }
 
   const contentStore: ContentStoreData = state.contentStore ?? {};
+  validateDeltaIntegrity(contentStore);
   state.chats?.forEach((chat: ChatInterface) => {
     if (!chat.messages) chat.messages = [];
     if (chat.branchTree) {

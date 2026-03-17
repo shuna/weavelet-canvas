@@ -12,6 +12,7 @@ import { ToastContainer } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
 import VersionInfo from '@components/Footer/VersionInfo';
 import LegacyCustomModelsBanner from '@components/LegacyCustomModelsBanner';
+import MigrationProgressBanner from '@components/MigrationProgressBanner';
 import OnboardingModal from '@components/Onboarding/OnboardingModal';
 
 function App() {
@@ -27,6 +28,7 @@ function App() {
     <div className='overflow-hidden w-full h-full relative'>
       <OnboardingModal />
       <LegacyCustomModelsBanner />
+      <MigrationProgressBanner />
       <Menu />
       <div className={`flex h-full flex-1 flex-col`}>
         <Chat />
