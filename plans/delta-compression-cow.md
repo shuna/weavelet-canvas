@@ -229,15 +229,7 @@ async function commitState(db, chats, contentStore, changedChatIds) {
   // この時点ではまだ削除しない
   const supersetStore = buildSupersetForCommit(contentStore, pendingDeletes);
 
-  // ステップ0: branch-clipboardを書く（clipboardもcontentHashを参照するため）
-  const tx0 = db.transaction('persisted-state', 'readwrite');
-  tx0.objectStore('persisted-state').put(
-    { data: branchClipboard, generation: nextGen },
-    'branch-clipboard'
-  );
-  await tx0.done;
-
-  // ステップ1: content-store(superset)を先に書く
+  // ステップ1: content-store(superset)を最初に書く
   // 旧chatが参照するhashも新chatが参照するhashも両方含む
   const tx1 = db.transaction('persisted-state', 'readwrite');
   tx1.objectStore('persisted-state').put(
@@ -246,12 +238,14 @@ async function commitState(db, chats, contentStore, changedChatIds) {
   );
   await tx1.done;
 
-  // ステップ2: 変更されたchatを書く
+  // ステップ2: 変更されたchatとbranch-clipboardを書く
+  // content-storeが先に書かれているため、これらが参照するhashは必ず存在する
   const tx2 = db.transaction('persisted-state', 'readwrite');
   const store = tx2.objectStore('persisted-state');
   for (const id of changedChatIds) {
     store.put({ chat: chats[id], generation: nextGen }, `chat:${id}`);
   }
+  store.put({ data: branchClipboard, generation: nextGen }, 'branch-clipboard');
   await tx2.done;
 
   // ステップ3: metaのgenerationを更新（コミットマーカー）
