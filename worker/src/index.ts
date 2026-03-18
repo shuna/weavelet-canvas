@@ -34,6 +34,9 @@ interface StreamRequest {
 /** Number of chunks between intermediate KV writes */
 const INTERMEDIATE_CACHE_INTERVAL = 50;
 
+/** KV TTL in seconds - safety net if client never sends ACK */
+const KV_EXPIRATION_TTL = 1800; // 30 minutes
+
 interface CachedSession {
   /** Raw text chunks as received from LLM API */
   chunks: string[];
@@ -51,7 +54,7 @@ interface CachedSession {
 
 const CORS_HEADERS: Record<string, string> = {
   'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+  'Access-Control-Allow-Methods': 'GET, POST, DELETE, OPTIONS',
   'Access-Control-Allow-Headers': 'Content-Type, Authorization',
 };
 
@@ -166,7 +169,7 @@ async function handleStream(
         done,
         error,
       } satisfies CachedSession),
-      { expirationTtl: 300 }
+      { expirationTtl: KV_EXPIRATION_TTL }
     ).catch(() => {/* KV write failed - quota exceeded or other error */});
 
   const processStream = async () => {
@@ -329,6 +332,18 @@ async function handleRecover(
 }
 
 // ---------------------------------------------------------------------------
+// ACK handler - client confirms full receipt, KV entry is deleted
+// ---------------------------------------------------------------------------
+
+async function handleAck(
+  sessionId: string,
+  env: Env
+): Promise<Response> {
+  await env.STREAM_CACHE.delete(`session:${sessionId}`);
+  return jsonResponse({ deleted: true });
+}
+
+// ---------------------------------------------------------------------------
 // Health check
 // ---------------------------------------------------------------------------
 
@@ -368,6 +383,17 @@ export default {
     // POST /api/stream - Start proxied SSE stream
     if (url.pathname === '/api/stream' && request.method === 'POST') {
       return handleStream(request, env, ctx);
+    }
+
+    // POST /api/ack/:sessionId - Client confirms full receipt, deletes KV
+    if (url.pathname.startsWith('/api/ack/') && request.method === 'POST') {
+      const sessionId = decodeURIComponent(
+        url.pathname.slice('/api/ack/'.length)
+      );
+      if (!sessionId) {
+        return jsonResponse({ error: 'sessionId is required' }, 400);
+      }
+      return handleAck(sessionId, env);
     }
 
     // GET /api/recover/:sessionId?lastEventId=N - Recover missed chunks
