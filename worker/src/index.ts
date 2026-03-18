@@ -35,7 +35,7 @@ interface StreamRequest {
 const INTERMEDIATE_CACHE_INTERVAL = 50;
 
 /** KV TTL in seconds - safety net if client never sends ACK */
-const KV_EXPIRATION_TTL = 86400; // 24 hours
+const KV_EXPIRATION_TTL = 21600; // 6 hours
 
 interface CachedSession {
   /** Raw text chunks as received from LLM API */
