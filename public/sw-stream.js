@@ -240,7 +240,17 @@ async function handleStartStream(msg, port) {
     });
 
     if (!response.ok) {
-      const errorText = await response.text();
+      let errorText = await response.text();
+      // Cloudflare platform errors (e.g. 530/1016 DNS failure) return HTML.
+      // Detect and provide a user-friendly message.
+      const isCloudflareError =
+        response.status >= 520 ||
+        (errorText.includes('error code:') && !errorText.startsWith('{'));
+      if (isCloudflareError) {
+        const codeMatch = errorText.match(/error code:\s*(\d+)/);
+        const code = codeMatch ? codeMatch[1] : String(response.status);
+        errorText = 'Proxy error (' + code + '): The LLM API endpoint is unreachable. Check the URL and try again.';
+      }
       await dbUpdate(requestId, { status: 'failed', error: errorText });
       postToClient({ type: 'sw-error', requestId, error: errorText });
       activeStreams.delete(requestId);

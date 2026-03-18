@@ -59,13 +59,20 @@ export async function getRequest(requestId: string): Promise<StreamRecord | unde
   return result;
 }
 
-export async function appendText(requestId: string, text: string): Promise<void> {
+export async function appendText(
+  requestId: string,
+  text: string,
+  lastProxyEventId?: number
+): Promise<void> {
   const db = await openDb();
   const store = tx(db, 'readwrite');
   const record: StreamRecord | undefined = await reqToPromise(store.get(requestId));
   if (record) {
     record.bufferedText += text;
     record.updatedAt = Date.now();
+    if (lastProxyEventId !== undefined) {
+      record.lastProxyEventId = lastProxyEventId;
+    }
     await reqToPromise(store.put(record));
   }
   db.close();

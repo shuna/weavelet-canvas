@@ -491,7 +491,20 @@ export const executeSubmitStream = async ({
       });
 
       if (!res.ok) {
-        throw new Error(await res.text());
+        const errBody = await res.text();
+        // Cloudflare platform errors (e.g. 530/1016 DNS failure) return HTML,
+        // not JSON. Detect these and provide a user-friendly message.
+        const isCloudflareError =
+          res.status >= 520 ||
+          (errBody.includes('error code:') && !errBody.startsWith('{'));
+        if (isCloudflareError) {
+          const codeMatch = errBody.match(/error code:\s*(\d+)/);
+          const code = codeMatch ? codeMatch[1] : String(res.status);
+          throw new Error(
+            `Proxy error (${code}): The LLM API endpoint is unreachable. Check the URL and try again.`
+          );
+        }
+        throw new Error(errBody);
       }
 
       if (!res.body) throw new Error('Proxy returned no body');
@@ -506,16 +519,18 @@ export const executeSubmitStream = async ({
       // Periodic streamDb flush (mirrors SW's FLUSH_INTERVAL_MS = 800)
       const DB_FLUSH_INTERVAL_MS = 800;
       let dbBuffered = '';
+      let dbLastProxyEventId = 0;
       let dbFlushTimer: ReturnType<typeof setTimeout> | null = null;
       let dbFlushChain = Promise.resolve();
 
       function flushDbBuffer() {
         if (dbFlushTimer) { clearTimeout(dbFlushTimer); dbFlushTimer = null; }
         const snapshot = dbBuffered;
+        const eventIdSnapshot = dbLastProxyEventId;
         if (!snapshot) return;
         dbBuffered = '';
         dbFlushChain = dbFlushChain
-          .then(() => appendStreamText(requestId, snapshot))
+          .then(() => appendStreamText(requestId, snapshot, eventIdSnapshot))
           .catch(() => {});
       }
 
@@ -545,6 +560,7 @@ export const executeSubmitStream = async ({
           partial = proxySse.partial;
 
           for (const evt of proxySse.events) {
+            if (evt.id > dbLastProxyEventId) dbLastProxyEventId = evt.id;
             if (evt.eventType === 'done') {
               reading = false;
               break;
