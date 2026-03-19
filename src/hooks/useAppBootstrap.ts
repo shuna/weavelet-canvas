@@ -212,6 +212,10 @@ const useAppBootstrap = () => {
         (indexedDbChatData?.chats && indexedDbChatData.chats.length > 0) ||
         (indexedDbChatData?.contentStore && Object.keys(indexedDbChatData.contentStore).length > 0)
       ) {
+        // Set migration complete BEFORE setState so that the synchronous
+        // persist subscriber does not try to write all chats to localStorage
+        // (which would exceed the quota).
+        setIndexedDbMigrationComplete(true);
         const nextState = { ...useStore.getState() };
         applyPersistedChatDataState(nextState, indexedDbChatData);
         useStore.setState({
@@ -219,8 +223,6 @@ const useAppBootstrap = () => {
           contentStore: nextState.contentStore,
           currentChatIndex: nextState.currentChatIndex,
         });
-        // IndexedDB already has authoritative data — safe to strip chats from localStorage
-        setIndexedDbMigrationComplete(true);
       } else if (
         !isMigrationInProgress() && (
           useStore.getState().chats ||
