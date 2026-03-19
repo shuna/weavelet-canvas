@@ -1,6 +1,11 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { MessageInterface } from '@type/chat';
-import { countTokens, resetTokenizerWorkerForTests } from './messageUtils';
+import {
+  countTokens,
+  isEncoderReady,
+  onEncoderReady,
+  resetTokenizerWorkerForTests,
+} from './messageUtils';
 
 class ErroringWorker {
   onmessage: ((e: MessageEvent) => void) | null = null;
@@ -69,6 +74,47 @@ describe('countTokens fallback', () => {
 
     const count = await countTokens(messages, 'gpt-4o');
     expect(count).toBeGreaterThan(0);
+  });
+
+  it('onEncoderReady fires callback when worker becomes unavailable', async () => {
+    vi.stubGlobal('Worker', ErroringWorker);
+
+    // Initially not ready
+    expect(isEncoderReady()).toBe(false);
+
+    // Register listener
+    let called = false;
+    onEncoderReady(() => { called = true; });
+
+    // Trigger worker init (will error and mark unavailable)
+    const messages: MessageInterface[] = [
+      { role: 'user', content: [{ type: 'text', text: 'test' }] },
+    ];
+    await countTokens(messages, 'gpt-4o');
+
+    // After worker failure, isEncoderReady should be true (unavailable)
+    expect(isEncoderReady()).toBe(true);
+    // And the callback should have been called
+    expect(called).toBe(true);
+  });
+
+  it('onEncoderReady fires immediately if already unavailable', () => {
+    vi.stubGlobal('Worker', ErroringWorker);
+
+    // Simulate already-unavailable state by running a count first
+    // We need to make it unavailable first
+    const p = countTokens(
+      [{ role: 'user', content: [{ type: 'text', text: 'x' }] }],
+      'gpt-4o'
+    );
+
+    return p.then(() => {
+      expect(isEncoderReady()).toBe(true);
+
+      let called = false;
+      onEncoderReady(() => { called = true; });
+      expect(called).toBe(true);
+    });
   });
 
   it('counts longer text higher than shorter text in fallback mode', async () => {

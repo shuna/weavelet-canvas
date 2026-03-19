@@ -54,6 +54,8 @@ const markWorkerUnavailable = (reason: Error) => {
   ready = false;
   unavailable = true;
   initPromise = null;
+  // Notify listeners so useTokenEncoder can switch to char-based fallback
+  listeners.forEach((fn) => fn());
   listeners.clear();
   failPendingRequests(reason);
   worker?.terminate();
@@ -130,7 +132,7 @@ export const loadEncoder = async (): Promise<void> => {
 export const isEncoderReady = (): boolean => ready || unavailable;
 
 export const onEncoderReady = (fn: () => void): (() => void) => {
-  if (ready) {
+  if (ready || unavailable) {
     fn();
     return () => {};
   }
@@ -168,7 +170,14 @@ export const countTokens = async (
   model: ModelOptions
 ): Promise<number> => {
   if (!messages || messages.length === 0) return 0;
-  await loadEncoder();
+  // Return a char-based estimate immediately if the encoder isn't ready yet.
+  // The caller (TokenCount / useLiveTotalTokenUsed) will recount once
+  // encoderReady flips to true via the useTokenEncoder hook.
+  if (!ready && !unavailable) {
+    // Kick off loading in the background (no await)
+    loadEncoder();
+    return estimateTokensByChars(messages);
+  }
   if (unavailable) return estimateTokensByChars(messages);
   try {
     const response = await postToWorker({ type: 'countTokens', messages, model });
