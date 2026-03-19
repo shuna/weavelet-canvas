@@ -185,7 +185,7 @@ const SettingsDialog = ({
         </ResizableNav>
 
         {/* Content area */}
-        <div className='flex-1 overflow-y-auto p-6'>
+        <div className={`flex-1 ${activeTab === 'providers' ? 'overflow-hidden' : 'overflow-y-auto p-6'}`}>
           {activeTab === 'general' && <GeneralTab />}
           {activeTab === 'chatConfig' && <ChatConfigInline />}
           {activeTab === 'providers' && <ProvidersTab />}

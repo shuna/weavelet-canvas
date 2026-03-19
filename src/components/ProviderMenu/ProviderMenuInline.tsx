@@ -132,7 +132,7 @@ const ProviderMenuInline = () => {
   );
 
   return (
-    <div className='flex flex-col h-full -m-6'>
+    <div className='flex flex-col h-full'>
       {/* Mobile provider selector */}
       <div className='md:hidden p-3 border-b dark:border-gray-600'>
         <select
@@ -210,27 +210,29 @@ const ProviderMenuInline = () => {
             </button>
           </div>
 
-          {viewMode === 'browse' ? (
-            <ProviderModelList
-              search={search}
-              onSearchChange={setSearch}
-              loading={loading}
-              selectedProvider={selectedProvider}
-              filteredModels={filteredModels}
-              providers={providers}
-              sortField={sortField}
-              sortDir={sortDir}
-              onSort={handleSort}
-              favoriteModels={favoriteModels}
-              onToggleFavorite={toggleFavoriteModel}
-            />
-          ) : (
-            <ProviderCustomModelList
-              selectedProvider={selectedProvider}
-              favoriteModels={favoriteModels}
-              onToggleFavorite={toggleFavoriteModel}
-            />
-          )}
+          <div className='flex-1 flex flex-col overflow-hidden min-h-0'>
+            {viewMode === 'browse' ? (
+              <ProviderModelList
+                search={search}
+                onSearchChange={setSearch}
+                loading={loading}
+                selectedProvider={selectedProvider}
+                filteredModels={filteredModels}
+                providers={providers}
+                sortField={sortField}
+                sortDir={sortDir}
+                onSort={handleSort}
+                favoriteModels={favoriteModels}
+                onToggleFavorite={toggleFavoriteModel}
+              />
+            ) : (
+              <ProviderCustomModelList
+                selectedProvider={selectedProvider}
+                favoriteModels={favoriteModels}
+                onToggleFavorite={toggleFavoriteModel}
+              />
+            )}
+          </div>
 
           <ProviderSettingsForm
             selectedProvider={selectedProvider}
