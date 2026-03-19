@@ -122,6 +122,7 @@ const useLiveTotalTokenUsed = (): TotalTokenUsed => {
   latestInputRef.current = { chats, generatingSessions };
 
   useEffect(() => {
+    mountedRef.current = true;
     throttledCalculationRef.current = throttle(
       () => {
         const version = requestVersionRef.current;
@@ -147,8 +148,6 @@ const useLiveTotalTokenUsed = (): TotalTokenUsed => {
   }, []);
 
   useEffect(() => {
-    if (!encoderReady) return;
-
     requestVersionRef.current += 1;
     const sessions = Object.values(generatingSessions);
 

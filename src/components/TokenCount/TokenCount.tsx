@@ -105,7 +105,6 @@ const TokenCount = React.memo(() => {
   const countCurrentSnapshot = async (version: number) => {
     const snapshot = latestInputRef.current;
     let nextCounts: TokenCounts;
-
     if (snapshot.generatingSession) {
       const promptMessages = snapshot.messages.slice(
         0,
@@ -229,6 +228,7 @@ const TokenCount = React.memo(() => {
   }, [currentChatId]);
 
   useEffect(() => {
+    mountedRef.current = true;
     throttledCountRef.current = throttle(
       () => {
         const version = requestVersionRef.current;
@@ -258,8 +258,10 @@ const TokenCount = React.memo(() => {
   }, []);
 
   useEffect(() => {
-    if (!encoderReady) return;
-
+    // countTokens returns a char-based estimate immediately when the
+    // encoder is not yet ready, so no guard is needed here.  When
+    // encoderReady flips to true the effect re-fires and recounts
+    // with the real tokenizer.
     requestVersionRef.current += 1;
 
     if (generatingSession) {
