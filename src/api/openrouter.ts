@@ -34,11 +34,13 @@ export interface OpenRouterGenerationStats {
 export async function fetchGenerationStats(
   generationId: string,
   apiKey: string,
-  retries = 3
+  retries = 5
 ): Promise<OpenRouterGenerationStats | null> {
+  // Initial delay — OpenRouter needs time to persist the generation record.
+  await new Promise((r) => setTimeout(r, 3000));
   for (let attempt = 0; attempt <= retries; attempt++) {
     if (attempt > 0) {
-      await new Promise((r) => setTimeout(r, 1000 * attempt));
+      await new Promise((r) => setTimeout(r, 2000 * attempt));
     }
     try {
       const res = await fetch(
