@@ -147,8 +147,12 @@ async function tryProxyRecovery(
     if (!result.interrupted) break;
   }
 
-  // ACK the proxy to free KV
-  sendAck(config, record.proxySessionId);
+  // Only ACK (delete KV) when we exited normally — NOT on client-side abort.
+  // If the client timed out but the Worker is still streaming, we must keep
+  // the KV cache so the next recovery attempt can pick up remaining data.
+  if (!signal.aborted) {
+    sendAck(config, record.proxySessionId);
+  }
 
   return bestText && bestText.length > currentText.length ? bestText : null;
 }
