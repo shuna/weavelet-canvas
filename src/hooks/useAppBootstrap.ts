@@ -80,6 +80,7 @@ export function resumeLargeMigrationInBackground(baseState: StoreState) {
 
 const useAppBootstrap = () => {
   const [isBootstrapped, setIsBootstrapped] = useState(false);
+  const [bootPhase, setBootPhase] = useState('initializing');
   const initialiseNewChat = useInitialiseNewChat();
   const setChats = useStore((state) => state.setChats);
   const setTheme = useStore((state) => state.setTheme);
@@ -172,6 +173,7 @@ const useAppBootstrap = () => {
     };
 
     const bootstrap = async () => {
+      setBootPhase('rehydrating store');
       await useStore.persist.rehydrate();
 
       const persistedFolderCount = Object.keys(useStore.getState().folders).length;
@@ -202,6 +204,7 @@ const useAppBootstrap = () => {
       let indexedDbChatData = null;
       let indexedDbLoadFailed = false;
       try {
+        setBootPhase('loading chat data');
         indexedDbChatData = await loadChatData(useStore.getState());
       } catch (error) {
         indexedDbLoadFailed = true;
@@ -291,6 +294,7 @@ const useAppBootstrap = () => {
         setIndexedDbMigrationComplete(true);
       }
 
+      setBootPhase('finalizing');
       localStorage.removeItem('chats');
 
       const { chats, currentChatIndex } = useStore.getState();
@@ -392,7 +396,7 @@ const useAppBootstrap = () => {
     };
   }, [initialiseNewChat, setApiKey, setChats, setCurrentChatIndex, setTheme]);
 
-  return isBootstrapped;
+  return { isBootstrapped, bootPhase };
 };
 
 export default useAppBootstrap;
