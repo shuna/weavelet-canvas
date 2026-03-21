@@ -8,6 +8,7 @@ const ImportChat = () => {
   const inputRef = useRef<HTMLInputElement>(null);
   const [mode, setMode] = useState<ImportMode>('append');
   const [fileSelected, setFileSelected] = useState(false);
+  const [includeSettings, setIncludeSettings] = useState(false);
   const [alert, setAlert] = useState<{
     message: string;
     success: boolean;
@@ -31,7 +32,7 @@ const ImportChat = () => {
       return;
     }
 
-    importChatFromFile(file, translate, mode).then((result) => {
+    importChatFromFile(file, translate, mode, mode === 'replace' ? includeSettings : true).then((result) => {
       if (result.success) {
         toast.success(result.message);
       } else {
@@ -80,9 +81,20 @@ const ImportChat = () => {
           {t('mode.replace', { ns: 'import' })}
         </label>
         {mode === 'replace' && (
-          <div className='rounded-md border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-amber-700 dark:text-amber-200'>
-            {t('replaceWarning', { ns: 'import' })}
-          </div>
+          <>
+            <div className='rounded-md border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-amber-700 dark:text-amber-200'>
+              {t('replaceWarning', { ns: 'import' })}
+            </div>
+            <label className='flex items-center gap-1.5 cursor-pointer mt-1'>
+              <input
+                type='checkbox'
+                checked={includeSettings}
+                onChange={() => setIncludeSettings((v) => !v)}
+                className='rounded'
+              />
+              {t('includeSettings', { ns: 'import' })}
+            </label>
+          </>
         )}
       </div>
       <div className='flex items-center justify-between mt-3'>
