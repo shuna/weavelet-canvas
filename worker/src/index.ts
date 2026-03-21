@@ -239,6 +239,7 @@ async function handleStream(
   }
 
   if (!llmRes.ok) {
+    activeStreams.delete(sessionId);
     const errBody = await llmRes.text();
     return withCORS(
       new Response(errBody, {
@@ -249,6 +250,7 @@ async function handleStream(
   }
 
   if (!llmRes.body) {
+    activeStreams.delete(sessionId);
     return jsonResponse({ error: 'LLM API returned no body' }, 502);
   }
 

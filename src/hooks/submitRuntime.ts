@@ -402,9 +402,12 @@ export const executeSubmitStream = async ({
   const proxyConfig = getProxyConfig();
   let capturedGenerationId: string | undefined;
 
-  // Seed cancel metadata so stopSubmitSession can reach the provider
+  // Seed cancel metadata so stopSubmitSession can reach the provider.
+  // Only store apiKey when the provider is OpenRouter — sending keys
+  // to openrouter.ai for non-OpenRouter providers would be a leak.
+  const isOpenRouter = config.providerId === 'openrouter';
   setSessionCancelMeta(sessionId, {
-    apiKey: resolvedProvider.key || undefined,
+    apiKey: isOpenRouter ? (resolvedProvider.key || undefined) : undefined,
     proxyConfig,
   });
   const runRequest = async (requestMessages: MessageInterface[]) => {
