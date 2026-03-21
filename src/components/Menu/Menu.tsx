@@ -6,6 +6,7 @@ import NewFolder from './NewFolder';
 import ChatHistoryList from './ChatHistoryList';
 import MenuOptions from './MenuOptions';
 import DebugPanel from './DebugPanel';
+import VersionInfo from '@components/Footer/VersionInfo';
 
 import MenuIcon from '@icon/MenuIcon';
 import useSwipeGesture from '@hooks/useSwipeGesture';
@@ -91,7 +92,10 @@ const Menu = () => {
               </div>
               <ChatHistoryList />
               <DebugPanel />
-              <MenuOptions />
+              <div className='mt-auto flex flex-col gap-2 pb-2'>
+                <VersionInfo />
+                <MenuOptions />
+              </div>
             </nav>
           </div>
         </div>

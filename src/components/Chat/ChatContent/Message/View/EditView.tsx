@@ -27,6 +27,8 @@ const EditView = ({
   autoFocus?: boolean;
 }) => {
   const { t } = useTranslation();
+  const stickySurfaceClass =
+    'rounded-2xl bg-white/60 px-4 pt-2.5 pb-4 shadow-sm ring-1 ring-black/5 dark:bg-gray-900/20 dark:ring-white/10 md:px-5 md:pt-3 md:pb-5';
   const logic = useEditViewLogic({
     content,
     setIsEdit,
@@ -42,7 +44,7 @@ const EditView = ({
       <div
         className={`w-full ${
           sticky
-            ? 'py-2 md:py-3 px-2 md:px-4 border border-black/10 bg-white dark:border-gray-900/50 dark:text-white dark:bg-gray-700 rounded-md shadow-[0_0_10px_rgba(0,0,0,0.10)] dark:shadow-[0_0_15px_rgba(0,0,0,0.10)]'
+            ? stickySurfaceClass
             : ''
         }`}
       >
@@ -64,7 +66,7 @@ const EditView = ({
           placeholder={t('submitPlaceholder') as string}
           autoFocus={autoFocus}
           autoResize
-          minHeight='3.5rem'
+          minHeight='5.25rem'
         />
         {sticky && (
           <EditViewButtons
