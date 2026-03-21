@@ -15,7 +15,7 @@ interface ScrollToBottomButtonProps {
 }
 
 const baseButtonClass =
-  'cursor-pointer rounded-full border border-gray-300 bg-gray-200 p-1.5 text-gray-600 shadow-sm transition-colors hover:bg-gray-300 disabled:cursor-default disabled:opacity-40 dark:border-white/10 dark:bg-white/10 dark:text-gray-200 dark:hover:bg-white/20';
+  'flex h-10 w-10 items-center justify-center cursor-pointer rounded-full border border-gray-300 bg-gray-200/80 text-gray-600 shadow-sm backdrop-blur-2xl supports-[backdrop-filter]:bg-gray-200/45 transition-colors hover:bg-gray-300/85 disabled:cursor-default disabled:opacity-40 dark:border-white/10 dark:bg-white/8 dark:text-gray-200 dark:hover:bg-white/18 dark:supports-[backdrop-filter]:bg-white/5';
 
 const ScrollToBottomButton = React.memo(({
   atBottom,
@@ -28,7 +28,7 @@ const ScrollToBottomButton = React.memo(({
   scrollToBottom,
 }: ScrollToBottomButtonProps) => {
   return (
-    <div className='absolute right-6 bottom-[22px] z-30 flex flex-col gap-1.5'>
+    <div className='absolute right-2 bottom-2 z-30 flex flex-col gap-1.5 md:right-4 md:bottom-3'>
       <button
         className={baseButtonClass}
         aria-label='scroll to top'

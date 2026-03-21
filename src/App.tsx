@@ -11,7 +11,6 @@ import useAppBootstrap from '@hooks/useAppBootstrap';
 import Toast from '@components/Toast';
 import { ToastContainer } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
-import VersionInfo from '@components/Footer/VersionInfo';
 import LegacyCustomModelsBanner from '@components/LegacyCustomModelsBanner';
 import MigrationProgressBanner from '@components/MigrationProgressBanner';
 import OnboardingModal from '@components/Onboarding/OnboardingModal';
@@ -39,7 +38,6 @@ function App() {
         <Chat />
         <Toast />
         <ToastContainer />
-        <VersionInfo />
       </div>
     </div>
   );

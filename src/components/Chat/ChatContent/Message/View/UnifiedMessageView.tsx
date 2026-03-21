@@ -39,6 +39,9 @@ const UnifiedMessageView = memo(
     isEditState: boolean;
     editSessionKey: string;
   }) => {
+    const contentSurfaceClass =
+      'rounded-2xl bg-white/60 px-4 pt-2.5 pb-14 shadow-sm ring-1 ring-black/5 dark:bg-gray-900/20 dark:ring-white/10 md:px-5 md:pt-3 md:pb-16';
+    const contentMinHeightClass = 'min-h-[5.25rem]';
     const { t } = useTranslation();
     const { handleSubmit, handleSubmitMidChat } = useSubmit();
     const [isDelete, setIsDelete] = useState(false);
@@ -129,59 +132,53 @@ const UnifiedMessageView = memo(
     return (
       <>
         {isEditState ? (
-          <OverTypeEditor
-            value={displayValue}
-            mode='edit'
-            onChange={(val) => {
-              editLogic._setContent((prev) => [
-                { type: 'text', text: val },
-                ...prev.slice(1),
-              ]);
-            }}
-            onKeyDown={(e) => {
-              // Convert native KeyboardEvent to React-compatible format for handleKeyDown
-              editLogic.handleKeyDown(e as unknown as React.KeyboardEvent<HTMLTextAreaElement>);
-            }}
-            onPaste={(e) => {
-              editLogic.handlePaste(e as unknown as React.ClipboardEvent<HTMLTextAreaElement>);
-            }}
-            autoFocus
-          />
-        ) : (
-          <ContentBody
-            currentTextContent={currentTextContent}
-            markdownMode={markdownMode}
-            streamingMarkdownPolicy={streamingMarkdownPolicy}
-            inlineLatex={inlineLatex}
-            isGeneratingMessage={isGeneratingMessage}
-          />
-        )}
-        <ContentAttachments images={isEditState ? [] : validImageContents} />
-        {isEditState ? (
-          <div className='min-h-[68px] mt-3 flex items-end'>
-            <EditViewButtons
-              sticky={false}
-              handleFileChange={editLogic.handleFileChange}
-              handleImageDetailChange={editLogic.handleImageDetailChange}
-              handleRemoveImage={editLogic.handleRemoveImage}
-              handleGenerate={editLogic.handleGenerate}
-              handleGenerateNextOnly={editLogic.handleGenerateNextOnly}
-              handleSave={editLogic.handleSave}
-              handleCancel={editLogic.handleCancel}
-              handleUploadButtonClick={editLogic.handleUploadButtonClick}
-              setIsModalOpen={editLogic.setIsModalOpen}
-              _setContent={editLogic._setContent}
-              _content={editLogic._content}
-              imageUrl={editLogic.imageUrl}
-              setImageUrl={editLogic.setImageUrl}
-              handleImageUrlChange={editLogic.handleImageUrlChange}
-              fileInputRef={editLogic.fileInputRef}
-              model={editLogic.model}
-              providerId={editLogic.providerId}
-              modelValid={editLogic.modelValid}
-              messageIndex={messageIndex}
-              role={role}
-            />
+          <div className={`relative ${contentSurfaceClass}`}>
+            <div className={contentMinHeightClass}>
+              <OverTypeEditor
+                value={displayValue}
+                mode='edit'
+                onChange={(val) => {
+                  editLogic._setContent((prev) => [
+                    { type: 'text', text: val },
+                    ...prev.slice(1),
+                  ]);
+                }}
+                onKeyDown={(e) => {
+                  // Convert native KeyboardEvent to React-compatible format for handleKeyDown
+                  editLogic.handleKeyDown(e as unknown as React.KeyboardEvent<HTMLTextAreaElement>);
+                }}
+                onPaste={(e) => {
+                  editLogic.handlePaste(e as unknown as React.ClipboardEvent<HTMLTextAreaElement>);
+                }}
+                autoFocus
+                minHeight='5.25rem'
+              />
+            </div>
+            <div className='absolute inset-x-4 bottom-3 md:inset-x-5 md:bottom-4'>
+              <EditViewButtons
+                sticky={false}
+                handleFileChange={editLogic.handleFileChange}
+                handleImageDetailChange={editLogic.handleImageDetailChange}
+                handleRemoveImage={editLogic.handleRemoveImage}
+                handleGenerate={editLogic.handleGenerate}
+                handleGenerateNextOnly={editLogic.handleGenerateNextOnly}
+                handleSave={editLogic.handleSave}
+                handleCancel={editLogic.handleCancel}
+                handleUploadButtonClick={editLogic.handleUploadButtonClick}
+                setIsModalOpen={editLogic.setIsModalOpen}
+                _setContent={editLogic._setContent}
+                _content={editLogic._content}
+                imageUrl={editLogic.imageUrl}
+                setImageUrl={editLogic.setImageUrl}
+                handleImageUrlChange={editLogic.handleImageUrlChange}
+                fileInputRef={editLogic.fileInputRef}
+                model={editLogic.model}
+                providerId={editLogic.providerId}
+                modelValid={editLogic.modelValid}
+                messageIndex={messageIndex}
+                role={role}
+              />
+            </div>
             {editLogic.isModalOpen && (
               <PopupModal
                 setIsModalOpen={editLogic.setIsModalOpen}
@@ -192,23 +189,35 @@ const UnifiedMessageView = memo(
             )}
           </div>
         ) : (
-          <ContentActions
-            nodeId={nodeId}
-            currentChatIndex={currentChatIndex}
-            role={role}
-            messageIndex={messageIndex}
-            lastMessageIndex={lastMessageIndex}
-            isDelete={isDelete}
-            isGeneratingMessage={isGeneratingMessage}
-            isCurrentChatGenerating={isCurrentChatGenerating}
-            setIsEdit={setIsEdit}
-            setIsDelete={setIsDelete}
-            onRefresh={handleRefresh}
-            onMoveUp={() => handleMove('up')}
-            onMoveDown={() => handleMove('down')}
-            onCopy={handleCopy}
-            onDelete={handleDelete}
-          />
+          <div className={contentSurfaceClass}>
+            <div className={contentMinHeightClass}>
+              <ContentBody
+                currentTextContent={currentTextContent}
+                markdownMode={markdownMode}
+                streamingMarkdownPolicy={streamingMarkdownPolicy}
+                inlineLatex={inlineLatex}
+                isGeneratingMessage={isGeneratingMessage}
+              />
+            </div>
+            <ContentAttachments images={isEditState ? [] : validImageContents} />
+            <ContentActions
+              nodeId={nodeId}
+              currentChatIndex={currentChatIndex}
+              role={role}
+              messageIndex={messageIndex}
+              lastMessageIndex={lastMessageIndex}
+              isDelete={isDelete}
+              isGeneratingMessage={isGeneratingMessage}
+              isCurrentChatGenerating={isCurrentChatGenerating}
+              setIsEdit={setIsEdit}
+              setIsDelete={setIsDelete}
+              onRefresh={handleRefresh}
+              onMoveUp={() => handleMove('up')}
+              onMoveDown={() => handleMove('down')}
+              onCopy={handleCopy}
+              onDelete={handleDelete}
+            />
+          </div>
         )}
       </>
     );

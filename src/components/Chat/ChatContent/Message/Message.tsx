@@ -22,7 +22,7 @@ const CollapseToggle = ({
 }) => (
   <button
     type='button'
-    className={`collapse-toggle absolute left-px top-[4.2rem] bottom-2 z-[999] w-6 rounded-full touch-manipulation transition-all duration-200 md:left-0 md:top-2 md:w-5 ${
+    className={`collapse-toggle absolute left-px top-[4.2rem] bottom-2 z-10 w-6 rounded-full touch-manipulation transition-all duration-200 md:left-0 md:top-2 md:w-5 ${
       isCollapsed
         ? 'before:absolute before:left-[9px] before:top-0 before:bottom-0 before:w-1.5 before:rounded-full before:bg-gray-300/50 dark:before:bg-gray-500/40 hover:before:bg-gray-400/60 dark:hover:before:bg-gray-400/50 md:before:left-1.5'
         : canHover
@@ -111,7 +111,10 @@ const Message = React.memo(
 
     const maxWidthClass = isDesktopMenuExpanded
       ? 'md:max-w-3xl lg:max-w-3xl xl:max-w-4xl'
-      : 'md:max-w-5xl lg:max-w-5xl xl:max-w-6xl';
+      : 'md:max-w-4xl lg:max-w-4xl xl:max-w-5xl';
+
+    const contentSurfaceClass =
+      'rounded-2xl bg-white/60 px-4 pt-2.5 pb-2 shadow-sm ring-1 ring-black/5 backdrop-blur-sm dark:bg-gray-900/20 dark:ring-white/10 md:px-5 md:pt-3 md:pb-2.5';
 
     return (
       <div
@@ -168,8 +171,10 @@ const Message = React.memo(
               </div>
               <div className='min-w-0'>
                 {isCollapsed ? (
-                  <div className='h-[4.5rem] overflow-hidden py-0 text-sm leading-6 text-gray-700 dark:text-gray-200 whitespace-pre-wrap break-words line-clamp-3'>
-                    {collapsedPreview}
+                  <div className={contentSurfaceClass}>
+                    <div className='h-[4.5rem] overflow-hidden py-0 text-sm leading-6 text-gray-700 dark:text-gray-200 whitespace-pre-wrap break-words line-clamp-3'>
+                      {collapsedPreview}
+                    </div>
                   </div>
                 ) : (
                   <MessageContent

@@ -48,8 +48,8 @@ export default function ContentActions({
   onDelete,
 }: ContentActionsProps) {
   return (
-    <div className='sticky bottom-3 z-20 mt-3 -mx-2 flex w-[calc(100%+1rem)] flex-nowrap items-end justify-end gap-x-3 gap-y-2 px-2 py-2 pr-14 pointer-events-none translate-y-2 opacity-0 transition duration-150 group-hover:pointer-events-auto group-hover:translate-y-0 group-hover:opacity-100'>
-      <div className='min-w-0'>
+    <div className='absolute inset-x-0 bottom-2 z-20 flex min-h-[2.75rem] items-end justify-center gap-2 px-2 md:bottom-3 md:px-3 pointer-events-none translate-y-1 opacity-0 transition duration-150 group-hover:pointer-events-auto group-hover:translate-y-0 group-hover:opacity-100'>
+      <div className='absolute left-2 bottom-1.5 min-w-0 shrink-0 md:left-3 md:bottom-2'>
         {nodeId && (
           <BranchSwitcher
             chatIndex={currentChatIndex}
@@ -57,44 +57,46 @@ export default function ContentActions({
           />
         )}
       </div>
-      <div className='ml-auto flex flex-wrap items-center justify-end gap-2 rounded-xl bg-transparent px-2 py-2 transition-all duration-150 group-hover:bg-white/75 group-hover:shadow-sm group-hover:backdrop-blur supports-[backdrop-filter]:group-hover:bg-white/60 dark:group-hover:bg-gray-800/75 dark:supports-[backdrop-filter]:group-hover:bg-gray-800/60'>
-        {isDelete || (
-          <>
-            {!isCurrentChatGenerating && role === 'assistant' && (
-              <RefreshButton onClick={onRefresh} />
-            )}
-            {!isCurrentChatGenerating && role === 'user' && (
-              <RegenerateNextButton onClick={onRefresh} />
-            )}
-            {messageIndex !== 0 && <UpButton onClick={onMoveUp} />}
-            {messageIndex !== lastMessageIndex && (
-              <DownButton onClick={onMoveDown} />
-            )}
+      <div className='relative isolate flex shrink-0 overflow-hidden rounded-full border border-gray-300 bg-gray-200/80 shadow-sm backdrop-blur-2xl supports-[backdrop-filter]:bg-gray-200/45 transition duration-150 dark:border-white/10 dark:bg-white/8 dark:supports-[backdrop-filter]:bg-white/5'>
+        <div className='relative z-10 flex flex-nowrap items-center justify-center gap-1.5 px-1.5 py-1.5 text-gray-600 md:gap-2 md:px-2 md:py-2 dark:text-gray-200'>
+          {isDelete || (
+            <>
+              {!isCurrentChatGenerating && role === 'assistant' && (
+                <RefreshButton onClick={onRefresh} />
+              )}
+              {!isCurrentChatGenerating && role === 'user' && (
+                <RegenerateNextButton onClick={onRefresh} />
+              )}
+              {messageIndex !== 0 && <UpButton onClick={onMoveUp} />}
+              {messageIndex !== lastMessageIndex && (
+                <DownButton onClick={onMoveDown} />
+              )}
 
-            <MarkdownModeButton />
-            <CopyButton onClick={onCopy} />
-            {!isGeneratingMessage && <EditButton setIsEdit={setIsEdit} />}
-            <DeleteButton setIsDelete={setIsDelete} />
-          </>
-        )}
-        {isDelete && (
-          <>
-            <button
-              className='p-1 hover:text-white'
-              aria-label='cancel'
-              onClick={() => setIsDelete(false)}
-            >
-              <CrossIcon />
-            </button>
-            <button
-              className='p-1 hover:text-white'
-              aria-label='confirm'
-              onClick={onDelete}
-            >
-              <TickIcon />
-            </button>
-          </>
-        )}
+              <MarkdownModeButton />
+              <CopyButton onClick={onCopy} />
+              {!isGeneratingMessage && <EditButton setIsEdit={setIsEdit} />}
+              <DeleteButton setIsDelete={setIsDelete} />
+            </>
+          )}
+          {isDelete && (
+            <>
+              <button
+                className='p-1 hover:text-white'
+                aria-label='cancel'
+                onClick={() => setIsDelete(false)}
+              >
+                <CrossIcon />
+              </button>
+              <button
+                className='p-1 hover:text-white'
+                aria-label='confirm'
+                onClick={onDelete}
+              >
+                <TickIcon />
+              </button>
+            </>
+          )}
+        </div>
       </div>
     </div>
   );
