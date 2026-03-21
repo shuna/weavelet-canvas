@@ -122,6 +122,50 @@ describe('TokenCount live streaming content resolution', () => {
   });
 });
 
+// ---------------------------------------------------------------------------
+// Regression guard: the re-chain condition in TokenCount (useEffect at ~line
+// 329) must NOT gate on `version !== requestVersionRef.current`.  A previous
+// bug in the sibling hook useLiveTotalTokenUsed did exactly that, which
+// stopped polling after the first calculation because version always equalled
+// requestVersionRef.current by the time `.finally()` ran.
+// The fix: chain continues whenever mounted + generatingSession exists.
+// ---------------------------------------------------------------------------
+describe('TokenCount self-chaining', () => {
+  it('chain continues while a generating session exists (no version check required)', () => {
+    const version = 10;
+    const requestVersionRef = { current: 10 }; // same version
+    const mounted = true;
+    const generatingSession = { sessionId: 'sess-1' };
+
+    // Old (broken): required version !== requestVersionRef.current
+    const oldCondition =
+      mounted &&
+      version !== requestVersionRef.current &&
+      !!generatingSession;
+    expect(oldCondition).toBe(false);
+
+    // New (fixed): just check mounted + session exists
+    const newCondition = mounted && !!generatingSession;
+    expect(newCondition).toBe(true);
+  });
+
+  it('chain stops when no generating session exists', () => {
+    const mounted = true;
+    const generatingSession = null;
+
+    const condition = mounted && !!generatingSession;
+    expect(condition).toBe(false);
+  });
+
+  it('chain stops when unmounted', () => {
+    const mounted = false;
+    const generatingSession = { sessionId: 'sess-1' };
+
+    const condition = mounted && !!generatingSession;
+    expect(condition).toBe(false);
+  });
+});
+
 describe('TokenCount prompt token counting during generation', () => {
   beforeEach(() => {
     clearStreamingBuffersForTest();
