@@ -510,6 +510,9 @@ export const executeSubmitStream = async ({
         setSessionCancelMeta(sessionId, { proxySessionId: swProxySessionId });
       }
 
+      // Track whether the SW resolved due to user cancel (session removed) vs normal completion
+      let swCancelledByUser = false;
+
       await new Promise<void>((resolve, reject) => {
         let swHandle: swBridge.SwStreamHandle | undefined;
 
@@ -520,6 +523,7 @@ export const executeSubmitStream = async ({
 
         const checkStop = setInterval(() => {
           if (!useStore.getState().generatingSessions[sessionId]) {
+            swCancelledByUser = true;
             swHandle?.cancel();
             cleanup();
             resolve();
@@ -537,6 +541,7 @@ export const executeSubmitStream = async ({
           onDone: (meta) => {
             cleanup();
             if (meta?.generationId) capturedGenerationId = meta.generationId;
+            if (meta?.finishReason) lastFinishReason = meta.finishReason;
             // ACK proxy to free KV cache
             if (meta?.proxySessionId && proxyConfig) {
               sendAck(proxyConfig, meta.proxySessionId);
@@ -559,6 +564,11 @@ export const executeSubmitStream = async ({
           reject(error);
         });
       });
+
+      // If user cancelled, signal the caller not to overwrite 'interrupted' status
+      if (swCancelledByUser) {
+        lastFinishReason = '__cancelled__';
+      }
       return;
     }
 
@@ -860,8 +870,11 @@ export const executeSubmitStream = async ({
   }
 
   // Stream completed successfully — determine the reason
-  const endReason: StreamEndReason = lastFinishReason === 'length' ? 'max_tokens' : 'completed';
-  useStreamEndStatusStore.getState().setStatus(targetNodeId, endReason);
+  // Skip if the SW path resolved due to user cancel (status already set by stopSubmitSession)
+  if (lastFinishReason !== '__cancelled__') {
+    const endReason: StreamEndReason = lastFinishReason === 'length' ? 'max_tokens' : 'completed';
+    useStreamEndStatusStore.getState().setStatus(targetNodeId, endReason);
+  }
 
   return { generationId: capturedGenerationId };
 };

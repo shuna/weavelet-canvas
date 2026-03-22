@@ -97,6 +97,17 @@ function extractText(events) {
   return text;
 }
 
+/** Extract the last non-null finish_reason from events. */
+function extractFinishReason(events) {
+  let reason = null;
+  for (const evt of events) {
+    if (evt.choices && evt.choices[0] && evt.choices[0].finish_reason) {
+      reason = evt.choices[0].finish_reason;
+    }
+  }
+  return reason;
+}
+
 /** Extract the first non-empty generation ID (e.g. `gen-xxxxx`) from events. */
 function extractGenerationId(events) {
   for (const evt of events) {
@@ -171,6 +182,7 @@ async function handleStartStream(msg, port) {
   let flushChain = Promise.resolve();
   let lastProxyEventId = 0;
   let generationId = null;
+  let finishReason = null;
 
   // Save initial record
   const initialRecord = {
@@ -318,6 +330,8 @@ async function handleStartStream(msg, port) {
                 void dbUpdate(requestId, { generationId });
               }
             }
+            const fr = extractFinishReason(llmParsed.events);
+            if (fr) finishReason = fr;
             const text = extractText(llmParsed.events);
             if (text) {
               postToClient({ type: 'sw-chunk', requestId, text, generationId });
@@ -338,6 +352,8 @@ async function handleStartStream(msg, port) {
       // Flush any remaining partial LLM SSE
       if (llmPartial) {
         const llmFlushed = parseEventSource(llmPartial, true);
+        const fr = extractFinishReason(llmFlushed.events);
+        if (fr) finishReason = fr;
         const text = extractText(llmFlushed.events);
         if (text) {
           postToClient({ type: 'sw-chunk', requestId, text });
@@ -358,6 +374,8 @@ async function handleStartStream(msg, port) {
             void dbUpdate(requestId, { generationId });
           }
         }
+        const fr = extractFinishReason(parsed.events);
+        if (fr) finishReason = fr;
         const text = extractText(parsed.events);
         if (text) {
           postToClient({ type: 'sw-chunk', requestId, text, generationId });
@@ -377,6 +395,7 @@ async function handleStartStream(msg, port) {
       type: 'sw-done',
       requestId,
       generationId,
+      finishReason,
       ...(proxyMode ? { proxySessionId: proxyConfig.sessionId, lastProxyEventId } : {}),
     });
   } catch (err) {
