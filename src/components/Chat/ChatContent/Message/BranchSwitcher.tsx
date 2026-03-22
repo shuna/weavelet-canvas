@@ -21,7 +21,6 @@ const BranchSwitcher = ({
   if (!branchTree) return null;
 
   const siblings = getSiblingsOf(branchTree, nodeId);
-  if (siblings.length <= 1) return null;
 
   const currentIdx = siblings.findIndex((s) => s.id === nodeId);
   const total = siblings.length;
