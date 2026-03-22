@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import useStore from '@store/store';
 import { useTranslation } from 'react-i18next';
 
@@ -244,7 +244,7 @@ const DefaultSystemChat = ({
 
 export { ChatConfigInline };
 
-const ChatConfigInline = () => {
+const ChatConfigInline = ({ onSettingsChanged }: { onSettingsChanged?: () => void }) => {
   const config = useStore.getState().defaultChatConfig;
   const setDefaultChatConfig = useStore((state) => state.setDefaultChatConfig);
   const setDefaultSystemMessage = useStore(
@@ -282,29 +282,53 @@ const ChatConfigInline = () => {
     }
   }, [isStreamSupported, _stream]);
 
-  const handleSave = () => {
-    const modelContextLength = getModelContextInfo(_model, _providerId).contextLength;
-    const nextConfig = normalizeConfigStream({
-      model: _model,
-      max_tokens: clampCompletionTokens(_maxToken, modelContextLength),
-      temperature: _temperature,
-      top_p: _topP,
-      presence_penalty: _presencePenalty,
-      frequency_penalty: _frequencyPenalty,
-      stream: _stream,
-      providerId: _providerId,
-    });
-
-    if (!isSameConfig(config, nextConfig)) {
-      setDefaultChatConfig(nextConfig);
-    }
-    if (useStore.getState().defaultSystemMessage !== _systemMessage) {
-      setDefaultSystemMessage(_systemMessage);
-    }
-    if (useStore.getState().defaultImageDetail !== _imageDetail) {
-      setDefaultImageDetail(_imageDetail);
-    }
+  // Keep refs in sync for unmount save
+  const stateRef = useRef({
+    _model, _providerId, _maxToken, _temperature, _topP,
+    _presencePenalty, _frequencyPenalty, _stream, _systemMessage, _imageDetail,
+  });
+  stateRef.current = {
+    _model, _providerId, _maxToken, _temperature, _topP,
+    _presencePenalty, _frequencyPenalty, _stream, _systemMessage, _imageDetail,
   };
+  const onSettingsChangedRef = useRef(onSettingsChanged);
+  onSettingsChangedRef.current = onSettingsChanged;
+
+  // Auto-save on unmount
+  useEffect(() => {
+    return () => {
+      const s = stateRef.current;
+      const currentConfig = useStore.getState().defaultChatConfig;
+      const modelContextLength = getModelContextInfo(s._model, s._providerId).contextLength;
+      const nextConfig = normalizeConfigStream({
+        model: s._model,
+        max_tokens: clampCompletionTokens(s._maxToken, modelContextLength),
+        temperature: s._temperature,
+        top_p: s._topP,
+        presence_penalty: s._presencePenalty,
+        frequency_penalty: s._frequencyPenalty,
+        stream: s._stream,
+        providerId: s._providerId,
+      });
+
+      let changed = false;
+      if (!isSameConfig(currentConfig, nextConfig)) {
+        setDefaultChatConfig(nextConfig);
+        changed = true;
+      }
+      if (useStore.getState().defaultSystemMessage !== s._systemMessage) {
+        setDefaultSystemMessage(s._systemMessage);
+        changed = true;
+      }
+      if (useStore.getState().defaultImageDetail !== s._imageDetail) {
+        setDefaultImageDetail(s._imageDetail);
+        changed = true;
+      }
+      if (changed) {
+        onSettingsChangedRef.current?.();
+      }
+    };
+  }, []);
 
   const handleReset = () => {
     _setModel(_defaultChatConfig.model);
@@ -364,12 +388,6 @@ const ChatConfigInline = () => {
         _setImageDetail={_setImageDetail}
       />
       <div className='flex gap-3 mt-5'>
-        <button
-          className='btn btn-primary cursor-pointer'
-          onClick={handleSave}
-        >
-          {t('save', { ns: 'main', defaultValue: 'Save' })}
-        </button>
         <button
           className='btn btn-neutral cursor-pointer'
           onClick={handleReset}

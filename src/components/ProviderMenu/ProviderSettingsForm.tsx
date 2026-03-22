@@ -12,7 +12,6 @@ export default function ProviderSettingsForm({
   onEndpointChange,
   onApiVersionChange,
   onApiKeyChange,
-  onSave,
 }: {
   selectedProvider: ProviderId;
   providers: Record<ProviderId, ProviderConfig>;
@@ -22,7 +21,6 @@ export default function ProviderSettingsForm({
   onEndpointChange: (value: string) => void;
   onApiVersionChange: (value: string) => void;
   onApiKeyChange: (value: string) => void;
-  onSave: () => void;
 }) {
   const { t } = useTranslation('model');
 
@@ -60,22 +58,17 @@ export default function ProviderSettingsForm({
         <label className='text-sm text-gray-700 dark:text-gray-300 whitespace-nowrap md:w-24'>
           {t('provider.apiKeyLabel', 'API Key:')}
         </label>
-        <div className='flex gap-2 flex-1'>
-          <input
-            type='password'
-            value={apiKeyInput}
-            onChange={(event) => onApiKeyChange(event.target.value)}
-            placeholder={
-              t('provider.enterApiKey', 'Enter API key for {{name}}...', {
-                name: providers[selectedProvider]?.name || selectedProvider,
-              }) as string
-            }
-            className='flex-1 px-3 py-2 text-sm bg-gray-100 dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500'
-          />
-          <button onClick={onSave} className='btn btn-primary text-sm px-4 py-2'>
-            {t('provider.save', 'Save')}
-          </button>
-        </div>
+        <input
+          type='password'
+          value={apiKeyInput}
+          onChange={(event) => onApiKeyChange(event.target.value)}
+          placeholder={
+            t('provider.enterApiKey', 'Enter API key for {{name}}...', {
+              name: providers[selectedProvider]?.name || selectedProvider,
+            }) as string
+          }
+          className='flex-1 px-3 py-2 text-sm bg-gray-100 dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500'
+        />
       </div>
     </div>
   );
