@@ -46,7 +46,7 @@ export function strToTextContent(ob: string): TextContentInterface {
 }
 
 export function isTextContent(ob: ContentInterface | undefined): ob is TextContentInterface {
-  return ob !== undefined && ob !== null && (ob as TextContentInterface).text !== undefined;
+  return ob !== undefined && ob !== null && ob.type === 'text';
 }
 
 export function isImageContent(ob: ContentInterface | undefined): ob is ImageContentInterface {

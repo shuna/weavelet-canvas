@@ -122,6 +122,77 @@ function extractReasoning(events) {
   return reasoning;
 }
 
+// --- ThinkTagParser (plain-JS copy of src/utils/thinkTagParser.ts) ---
+// Handles <think>...</think> tags in content for open-source reasoning models.
+// Keep both implementations in sync.
+
+function createThinkTagParser() {
+  let state = 'outside'; // 'outside' | 'inside'
+  let pending = '';
+
+  function findPartialTag(buffer, tag) {
+    const maxLen = Math.min(tag.length - 1, buffer.length);
+    for (let len = maxLen; len > 0; len--) {
+      if (buffer.endsWith(tag.slice(0, len))) return len;
+    }
+    return 0;
+  }
+
+  function process(text) {
+    let content = '';
+    let reasoning = '';
+    let buffer = pending + text;
+    pending = '';
+
+    while (buffer.length > 0) {
+      if (state === 'outside') {
+        const openIdx = buffer.indexOf('<think>');
+        if (openIdx === -1) {
+          const partial = findPartialTag(buffer, '<think>');
+          if (partial > 0) {
+            content += buffer.slice(0, buffer.length - partial);
+            pending = buffer.slice(buffer.length - partial);
+          } else {
+            content += buffer;
+          }
+          break;
+        } else {
+          content += buffer.slice(0, openIdx);
+          buffer = buffer.slice(openIdx + 7);
+          state = 'inside';
+        }
+      } else {
+        const closeIdx = buffer.indexOf('</think>');
+        if (closeIdx === -1) {
+          const partial = findPartialTag(buffer, '</think>');
+          if (partial > 0) {
+            reasoning += buffer.slice(0, buffer.length - partial);
+            pending = buffer.slice(buffer.length - partial);
+          } else {
+            reasoning += buffer;
+          }
+          break;
+        } else {
+          reasoning += buffer.slice(0, closeIdx);
+          buffer = buffer.slice(closeIdx + 8);
+          state = 'outside';
+        }
+      }
+    }
+
+    return { content, reasoning };
+  }
+
+  function flush() {
+    const remaining = pending;
+    pending = '';
+    if (state === 'inside') return { content: '', reasoning: remaining };
+    return { content: remaining, reasoning: '' };
+  }
+
+  return { process, flush };
+}
+
 /** Extract the last non-null finish_reason from events. */
 function extractFinishReason(events) {
   let reason = null;
@@ -208,6 +279,7 @@ async function handleStartStream(msg, port) {
   let lastProxyEventId = 0;
   let generationId = null;
   let finishReason = null;
+  const thinkParser = createThinkTagParser();
 
   // Save initial record
   const initialRecord = {
@@ -361,11 +433,17 @@ async function handleStartStream(msg, port) {
             if (reasoning) {
               postToClient({ type: 'sw-chunk', requestId, text: '', reasoning, generationId });
             }
-            const text = extractText(llmParsed.events);
-            if (text) {
-              postToClient({ type: 'sw-chunk', requestId, text, generationId });
-              bufferedText += text;
-              scheduleFlush();
+            const rawText = extractText(llmParsed.events);
+            if (rawText) {
+              const parsed = thinkParser.process(rawText);
+              if (parsed.reasoning) {
+                postToClient({ type: 'sw-chunk', requestId, text: '', reasoning: parsed.reasoning, generationId });
+              }
+              if (parsed.content) {
+                postToClient({ type: 'sw-chunk', requestId, text: parsed.content, generationId });
+                bufferedText += parsed.content;
+                scheduleFlush();
+              }
             }
 
             if (llmParsed.done) {
@@ -387,11 +465,26 @@ async function handleStartStream(msg, port) {
         if (reasoning) {
           postToClient({ type: 'sw-chunk', requestId, text: '', reasoning });
         }
-        const text = extractText(llmFlushed.events);
-        if (text) {
-          postToClient({ type: 'sw-chunk', requestId, text });
-          bufferedText += text;
+        const rawFlushText = extractText(llmFlushed.events);
+        if (rawFlushText) {
+          const parsed = thinkParser.process(rawFlushText);
+          if (parsed.reasoning) {
+            postToClient({ type: 'sw-chunk', requestId, text: '', reasoning: parsed.reasoning });
+          }
+          if (parsed.content) {
+            postToClient({ type: 'sw-chunk', requestId, text: parsed.content });
+            bufferedText += parsed.content;
+          }
         }
+      }
+      // Flush remaining think-tag buffer for proxy mode
+      const proxyThinkRemaining = thinkParser.flush();
+      if (proxyThinkRemaining.reasoning) {
+        postToClient({ type: 'sw-chunk', requestId, text: '', reasoning: proxyThinkRemaining.reasoning });
+      }
+      if (proxyThinkRemaining.content) {
+        postToClient({ type: 'sw-chunk', requestId, text: proxyThinkRemaining.content });
+        bufferedText += proxyThinkRemaining.content;
       }
     } else {
       // --- Direct mode: existing LLM SSE parsing ---
@@ -413,16 +506,31 @@ async function handleStartStream(msg, port) {
         if (reasoning) {
           postToClient({ type: 'sw-chunk', requestId, text: '', reasoning, generationId });
         }
-        const text = extractText(parsed.events);
-        if (text) {
-          postToClient({ type: 'sw-chunk', requestId, text, generationId });
-          bufferedText += text;
-          scheduleFlush();
+        const rawDirectText = extractText(parsed.events);
+        if (rawDirectText) {
+          const thinkParsed = thinkParser.process(rawDirectText);
+          if (thinkParsed.reasoning) {
+            postToClient({ type: 'sw-chunk', requestId, text: '', reasoning: thinkParsed.reasoning, generationId });
+          }
+          if (thinkParsed.content) {
+            postToClient({ type: 'sw-chunk', requestId, text: thinkParsed.content, generationId });
+            bufferedText += thinkParsed.content;
+            scheduleFlush();
+          }
         }
 
         if (parsed.done || done) {
           reading = false;
         }
+      }
+      // Flush remaining think-tag buffer for direct mode
+      const directThinkRemaining = thinkParser.flush();
+      if (directThinkRemaining.reasoning) {
+        postToClient({ type: 'sw-chunk', requestId, text: '', reasoning: directThinkRemaining.reasoning });
+      }
+      if (directThinkRemaining.content) {
+        postToClient({ type: 'sw-chunk', requestId, text: directThinkRemaining.content });
+        bufferedText += directThinkRemaining.content;
       }
     }
 

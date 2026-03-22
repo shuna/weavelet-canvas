@@ -125,7 +125,10 @@ const UnifiedMessageView = memo(
       ? content.filter(isReasoningContent).map((c) => c.text).join('')
       : '';
     const currentReasoning = streamingReasoning ?? persistedReasoning;
-    const currentTextContent = streamingText ?? (content?.[0] && isTextContent(content[0]) ? content[0].text : '');
+    const firstTextItem = Array.isArray(content)
+      ? content.find(isTextContent)
+      : undefined;
+    const currentTextContent = streamingText ?? (firstTextItem?.text ?? '');
     const handleCopy = () => {
       navigator.clipboard.writeText(currentTextContent);
     };

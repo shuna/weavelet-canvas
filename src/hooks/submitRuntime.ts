@@ -29,6 +29,7 @@ import {
   notifyStreamingUpdate,
 } from '@utils/streamingBuffer';
 import type { EventSourceDataInterface, ReasoningDetail } from '@type/api';
+import { ThinkTagParser } from '@utils/thinkTagParser';
 import { getEffectiveStreamEnabled } from '@utils/streamSupport';
 import { useStreamEndStatusStore, type StreamEndReason } from '@store/stream-end-status-store';
 import * as swBridge from '@utils/swBridge';
@@ -449,6 +450,10 @@ export const executeSubmitStream = async ({
   let capturedGenerationId: string | undefined;
   let lastFinishReason: string | undefined;
 
+  // Parser for <think>...</think> tags in content (used by open-source models
+  // on Together AI, Fireworks, Groq, etc.)
+  const thinkTagParser = new ThinkTagParser();
+
   // Seed cancel metadata so stopSubmitSession can reach the provider.
   // Only store apiKey when the provider is OpenRouter — sending keys
   // to openrouter.ai for non-OpenRouter providers would be a leak.
@@ -505,9 +510,14 @@ export const executeSubmitStream = async ({
       // Extract reasoning from non-streaming response
       const msg = data.choices[0].message;
       const reasoningText = msg.reasoning ?? msg.reasoning_content ?? '';
-      writeChunkToStore(chatId, targetNodeId, msg.content);
-      if (reasoningText) {
-        writeReasoningChunk(targetNodeId, reasoningText);
+      // Parse <think> tags from content
+      const parsedContent = thinkTagParser.process(msg.content);
+      const flushedContent = thinkTagParser.flush();
+      const finalContent = parsedContent.content + flushedContent.content;
+      const thinkReasoning = parsedContent.reasoning + flushedContent.reasoning;
+      writeChunkToStore(chatId, targetNodeId, finalContent || msg.content);
+      if (reasoningText || thinkReasoning) {
+        writeReasoningChunk(targetNodeId, reasoningText + thinkReasoning);
       }
       return;
     }
@@ -524,12 +534,19 @@ export const executeSubmitStream = async ({
         capturedGenerationId = meta.generationId;
         setSessionCancelMeta(sessionId, { generationId: capturedGenerationId });
       }
-      // Handle reasoning from SW path
+      // Handle reasoning from SW path (already extracted by SW)
       if (meta?.reasoning) {
         writeReasoningChunk(targetNodeId, meta.reasoning);
       }
       if (text) {
-        queueChunkToStore(chatId, targetNodeId, text);
+        // Parse <think> tags from content stream
+        const parsed = thinkTagParser.process(text);
+        if (parsed.reasoning) {
+          writeReasoningChunk(targetNodeId, parsed.reasoning);
+        }
+        if (parsed.content) {
+          queueChunkToStore(chatId, targetNodeId, parsed.content);
+        }
       }
     };
 
@@ -930,6 +947,10 @@ export const executeSubmitStream = async ({
       throw withCapturedGenerationId(retryError, capturedGenerationId);
     }
   } finally {
+    // Flush any remaining <think> tag buffer before finalizing
+    const remaining = thinkTagParser.flush();
+    if (remaining.reasoning) writeReasoningChunk(targetNodeId, remaining.reasoning);
+    if (remaining.content) queueChunkToStore(chatId, targetNodeId, remaining.content);
     flushQueuedChunks(chatId, targetNodeId);
     finalizeStreamingNode(chatId, targetNodeId);
   }
