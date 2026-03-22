@@ -12,6 +12,7 @@ import {
 } from '@utils/proxyClient';
 import { parseEventSource } from '@api/helper';
 import { debugReport } from '@store/debug-store';
+import { useStreamEndStatusStore } from '@store/stream-end-status-store';
 import { showToast } from '@utils/showToast';
 import {
   buildVerifiedStatsKey,
@@ -304,6 +305,7 @@ async function recoverPendingInner(manual: boolean, debugId: string) {
 
       const { requestId, chatIndex, messageIndex, bufferedText } = record;
       let restoredThisRecord = false;
+      let proxyRecoveredThisRecord = false;
 
       // Re-read latest state each iteration to avoid overwriting prior recoveries
       const chats = useStore.getState().chats;
@@ -378,6 +380,7 @@ async function recoverPendingInner(manual: boolean, debugId: string) {
               setChats(updatedChats);
               recoveredCount++;
               restoredThisRecord = true;
+              proxyRecoveredThisRecord = true;
             }
           }
         } catch {
@@ -406,6 +409,19 @@ async function recoverPendingInner(manual: boolean, debugId: string) {
 
       if (restoredThisRecord) {
         restoredMessageCount++;
+      }
+
+      // Set stream end status indicator for the recovered message
+      if (targetNodeId && restoredThisRecord) {
+        const isPartial = effectiveStatus === 'interrupted' || effectiveStatus === 'failed';
+        if (isPartial) {
+          useStreamEndStatusStore.getState().setStatus(targetNodeId, 'recovered_partial');
+        } else if (proxyRecoveredThisRecord) {
+          useStreamEndStatusStore.getState().setStatus(targetNodeId, 'recovered');
+        } else {
+          // IndexedDB-only recovery that completed successfully
+          useStreamEndStatusStore.getState().setStatus(targetNodeId, 'completed');
+        }
       }
 
       // Clear any generating sessions for this chat

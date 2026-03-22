@@ -11,6 +11,9 @@ import {
   finalizeStreamingNode,
 } from './submitRuntime';
 import { clearStreamingBuffersForTest } from '@utils/streamingBuffer';
+import { useStreamEndStatusStore } from '@store/stream-end-status-store';
+import * as swBridge from '@utils/swBridge';
+import { prepareStreamRequest } from '@api/api';
 
 // ---------------------------------------------------------------------------
 // Mock zustand store
@@ -63,6 +66,9 @@ beforeEach(() => {
   mockState = {};
   clearStreamingBuffersForTest();
   vi.useRealTimers();
+  // Reset stream end status store between tests
+  const { statuses } = useStreamEndStatusStore.getState();
+  Object.keys(statuses).forEach((k) => useStreamEndStatusStore.getState().clearStatus(k));
 });
 
 // ---------------------------------------------------------------------------
@@ -449,5 +455,176 @@ describe('executeSubmitStream', () => {
       { role: 'user', content: [{ type: 'text', text: 'hi' }] },
     ]);
     expect((mockState as any).chats[0].messages[0].content[0].text).toBe('ok');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// stream end status — SW path
+// ---------------------------------------------------------------------------
+describe('stream end status via SW path', () => {
+  const makeMockState = (sessionId: string) => ({
+    generatingSessions: {
+      [sessionId]: {
+        sessionId,
+        chatId: 'chat-1',
+        chatIndex: 0,
+        messageIndex: 0,
+        targetNodeId: 'node-assistant',
+        mode: 'append',
+        insertIndex: null,
+        requestPath: 'sw',
+        startedAt: 1,
+      },
+    },
+    chats: [
+      {
+        id: 'chat-1',
+        config: { model: 'test', max_tokens: 100, temperature: 1, presence_penalty: 0, top_p: 1, frequency_penalty: 0, stream: true },
+        branchTree: {
+          rootId: 'node-user',
+          activePath: ['node-user', 'node-assistant'],
+          nodes: {
+            'node-user': { id: 'node-user', parentId: null, role: 'user', contentHash: 'user-hash', createdAt: 1 },
+            'node-assistant': { id: 'node-assistant', parentId: 'node-user', role: 'assistant', contentHash: 'asst-hash', createdAt: 2 },
+          },
+        },
+        messages: [
+          { role: 'user', content: [{ type: 'text', text: 'hi' }] },
+          { role: 'assistant', content: [{ type: 'text', text: '' }] },
+        ],
+      },
+    ],
+    contentStore: {
+      'user-hash': { content: [{ type: 'text', text: 'hi' }], refCount: 1 },
+      'asst-hash': { content: [{ type: 'text', text: '' }], refCount: 1 },
+    },
+    favoriteModels: [],
+    providerModelCache: {},
+    providerCustomModels: {},
+  });
+
+  it('preserves interrupted status when user cancels on SW path', async () => {
+    vi.useFakeTimers();
+    const sessionId = 'sess-sw-cancel';
+    mockState = makeMockState(sessionId);
+
+    // Enable SW path
+    vi.mocked(swBridge.waitForController).mockResolvedValue(true);
+    vi.mocked(prepareStreamRequest as any).mockReturnValue({
+      endpoint: 'https://example.com/v1/chat/completions',
+      headers: {},
+      body: {},
+    });
+
+    // Mock startStream: simulate SW that sends a chunk then user cancels
+    vi.mocked(swBridge.startStream).mockImplementation(async (params) => {
+      // Send a chunk
+      params.onChunk('Hello');
+      // Don't call onDone — user will cancel via stopSubmitSession
+      return { cancel: vi.fn() };
+    });
+
+    const abortController = createSubmitAbortController(sessionId);
+
+    const streamPromise = executeSubmitStream({
+      sessionId,
+      chatId: 'chat-1',
+      chatIndex: 0,
+      messageIndex: 0,
+      targetNodeId: 'node-assistant',
+      messages: [{ role: 'user', content: [{ type: 'text', text: 'hi' }] }],
+      config: { model: 'test', max_tokens: 100, temperature: 1, presence_penalty: 0, top_p: 1, frequency_penalty: 0, stream: true },
+      resolvedProvider: { endpoint: 'https://example.com/v1/chat/completions', key: 'secret' },
+      abortController,
+      t: (key) => key,
+    });
+
+    // Simulate user cancel: remove the session from generatingSessions
+    // (this is what stopSubmitSession does before the checkStop interval fires)
+    (mockState as any).generatingSessions = {};
+    useStreamEndStatusStore.getState().setStatus('node-assistant', 'interrupted');
+
+    // Advance timer so checkStop interval fires (every 500ms)
+    await vi.advanceTimersByTimeAsync(600);
+
+    await streamPromise;
+
+    // The status should remain 'interrupted', NOT be overwritten with 'completed'
+    const status = useStreamEndStatusStore.getState().statuses['node-assistant'];
+    expect(status).toBe('interrupted');
+  });
+
+  it('sets max_tokens status when SW path reports finish_reason=length', async () => {
+    const sessionId = 'sess-sw-length';
+    mockState = makeMockState(sessionId);
+
+    // Enable SW path
+    vi.mocked(swBridge.waitForController).mockResolvedValue(true);
+    vi.mocked(prepareStreamRequest as any).mockReturnValue({
+      endpoint: 'https://example.com/v1/chat/completions',
+      headers: {},
+      body: {},
+    });
+
+    // Mock startStream: simulate SW that completes with finish_reason=length
+    vi.mocked(swBridge.startStream).mockImplementation(async (params) => {
+      params.onChunk('Hello truncated');
+      params.onDone({ finishReason: 'length' });
+      return { cancel: vi.fn() };
+    });
+
+    const abortController = createSubmitAbortController(sessionId);
+
+    await executeSubmitStream({
+      sessionId,
+      chatId: 'chat-1',
+      chatIndex: 0,
+      messageIndex: 0,
+      targetNodeId: 'node-assistant',
+      messages: [{ role: 'user', content: [{ type: 'text', text: 'hi' }] }],
+      config: { model: 'test', max_tokens: 100, temperature: 1, presence_penalty: 0, top_p: 1, frequency_penalty: 0, stream: true },
+      resolvedProvider: { endpoint: 'https://example.com/v1/chat/completions', key: 'secret' },
+      abortController,
+      t: (key) => key,
+    });
+
+    const status = useStreamEndStatusStore.getState().statuses['node-assistant'];
+    expect(status).toBe('max_tokens');
+  });
+
+  it('sets completed status when SW path reports finish_reason=stop', async () => {
+    const sessionId = 'sess-sw-stop';
+    mockState = makeMockState(sessionId);
+
+    vi.mocked(swBridge.waitForController).mockResolvedValue(true);
+    vi.mocked(prepareStreamRequest as any).mockReturnValue({
+      endpoint: 'https://example.com/v1/chat/completions',
+      headers: {},
+      body: {},
+    });
+
+    vi.mocked(swBridge.startStream).mockImplementation(async (params) => {
+      params.onChunk('Hello world');
+      params.onDone({ finishReason: 'stop' });
+      return { cancel: vi.fn() };
+    });
+
+    const abortController = createSubmitAbortController(sessionId);
+
+    await executeSubmitStream({
+      sessionId,
+      chatId: 'chat-1',
+      chatIndex: 0,
+      messageIndex: 0,
+      targetNodeId: 'node-assistant',
+      messages: [{ role: 'user', content: [{ type: 'text', text: 'hi' }] }],
+      config: { model: 'test', max_tokens: 100, temperature: 1, presence_penalty: 0, top_p: 1, frequency_penalty: 0, stream: true },
+      resolvedProvider: { endpoint: 'https://example.com/v1/chat/completions', key: 'secret' },
+      abortController,
+      t: (key) => key,
+    });
+
+    const status = useStreamEndStatusStore.getState().statuses['node-assistant'];
+    expect(status).toBe('completed');
   });
 });

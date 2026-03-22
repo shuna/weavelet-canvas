@@ -28,6 +28,7 @@ import {
   notifyStreamingUpdate,
 } from '@utils/streamingBuffer';
 import { getEffectiveStreamEnabled } from '@utils/streamSupport';
+import { useStreamEndStatusStore, type StreamEndReason } from '@store/stream-end-status-store';
 import * as swBridge from '@utils/swBridge';
 import {
   ConfigInterface,
@@ -124,6 +125,14 @@ export const clearSubmitSessionRuntime = (sessionId: string) => {
 };
 
 export const stopSubmitSession = (sessionId: string) => {
+  // Mark the target node as interrupted before aborting
+  const chunkTarget =
+    sessionChunkTargets.get(sessionId) ??
+    useStore.getState().generatingSessions[sessionId];
+  if (chunkTarget) {
+    useStreamEndStatusStore.getState().setStatus(chunkTarget.targetNodeId, 'interrupted');
+  }
+
   abortControllers.get(sessionId)?.abort();
   swCancellers.get(sessionId)?.();
 
@@ -401,6 +410,7 @@ export const executeSubmitStream = async ({
   const isStreamSupported = getEffectiveStreamEnabled(config);
   const proxyConfig = getProxyConfig();
   let capturedGenerationId: string | undefined;
+  let lastFinishReason: string | undefined;
 
   // Seed cancel metadata so stopSubmitSession can reach the provider.
   // Only store apiKey when the provider is OpenRouter — sending keys
@@ -454,6 +464,7 @@ export const executeSubmitStream = async ({
         setSessionCancelMeta(sessionId, { generationId: capturedGenerationId });
       }
 
+      lastFinishReason = data.choices[0].finish_reason ?? 'stop';
       writeChunkToStore(chatId, targetNodeId, data.choices[0].message.content);
       return;
     }
@@ -499,6 +510,9 @@ export const executeSubmitStream = async ({
         setSessionCancelMeta(sessionId, { proxySessionId: swProxySessionId });
       }
 
+      // Track whether the SW resolved due to user cancel (session removed) vs normal completion
+      let swCancelledByUser = false;
+
       await new Promise<void>((resolve, reject) => {
         let swHandle: swBridge.SwStreamHandle | undefined;
 
@@ -509,6 +523,7 @@ export const executeSubmitStream = async ({
 
         const checkStop = setInterval(() => {
           if (!useStore.getState().generatingSessions[sessionId]) {
+            swCancelledByUser = true;
             swHandle?.cancel();
             cleanup();
             resolve();
@@ -526,6 +541,7 @@ export const executeSubmitStream = async ({
           onDone: (meta) => {
             cleanup();
             if (meta?.generationId) capturedGenerationId = meta.generationId;
+            if (meta?.finishReason) lastFinishReason = meta.finishReason;
             // ACK proxy to free KV cache
             if (meta?.proxySessionId && proxyConfig) {
               sendAck(proxyConfig, meta.proxySessionId);
@@ -548,6 +564,11 @@ export const executeSubmitStream = async ({
           reject(error);
         });
       });
+
+      // If user cancelled, signal the caller not to overwrite 'interrupted' status
+      if (swCancelledByUser) {
+        lastFinishReason = '__cancelled__';
+      }
       return;
     }
 
@@ -699,6 +720,9 @@ export const executeSubmitStream = async ({
               const resultString = llmParsed.events.reduce(
                 (output: string, current) => {
                   if (!current.choices?.[0]?.delta) return output;
+                  if (current.choices[0]?.finish_reason) {
+                    lastFinishReason = current.choices[0].finish_reason;
+                  }
                   const content = current.choices[0]?.delta?.content ?? null;
                   if (content) output += content;
                   return output;
@@ -801,6 +825,9 @@ export const executeSubmitStream = async ({
 
         const resultString = parsed.events.reduce((output: string, current) => {
           if (!current.choices?.[0]?.delta) return output;
+          if (current.choices[0]?.finish_reason) {
+            lastFinishReason = current.choices[0].finish_reason;
+          }
           const content = current.choices[0]?.delta?.content ?? null;
           if (content) output += content;
           return output;
@@ -823,16 +850,31 @@ export const executeSubmitStream = async ({
     await runRequest(messages);
   } catch (error) {
     if (!shouldRetryWithoutSystemMessages(error, messages)) {
+      // Determine end reason from the error type
+      const isAbort = error instanceof Error && error.name === 'AbortError';
+      const endReason: StreamEndReason = isAbort ? 'interrupted' : 'error';
+      useStreamEndStatusStore.getState().setStatus(targetNodeId, endReason);
       throw withCapturedGenerationId(error, capturedGenerationId);
     }
     try {
       await runRequest(removeSystemMessages(messages));
     } catch (retryError) {
+      const isAbort = retryError instanceof Error && retryError.name === 'AbortError';
+      const endReason: StreamEndReason = isAbort ? 'interrupted' : 'error';
+      useStreamEndStatusStore.getState().setStatus(targetNodeId, endReason);
       throw withCapturedGenerationId(retryError, capturedGenerationId);
     }
   } finally {
     flushQueuedChunks(chatId, targetNodeId);
     finalizeStreamingNode(chatId, targetNodeId);
   }
+
+  // Stream completed successfully — determine the reason
+  // Skip if the SW path resolved due to user cancel (status already set by stopSubmitSession)
+  if (lastFinishReason !== '__cancelled__') {
+    const endReason: StreamEndReason = lastFinishReason === 'length' ? 'max_tokens' : 'completed';
+    useStreamEndStatusStore.getState().setStatus(targetNodeId, endReason);
+  }
+
   return { generationId: capturedGenerationId };
 };

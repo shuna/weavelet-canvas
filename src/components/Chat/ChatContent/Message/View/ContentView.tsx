@@ -122,6 +122,7 @@ const ContentView = memo(
           streamingMarkdownPolicy={streamingMarkdownPolicy}
           inlineLatex={inlineLatex}
           isGeneratingMessage={isGeneratingMessage}
+          nodeId={nodeId}
         />
         <ContentAttachments images={validImageContents} />
         <ContentActions
