@@ -8,6 +8,12 @@ interface ChatFindBarProps {
 const MARK_CLASS = 'chat-find-highlight';
 const MARK_ACTIVE_CLASS = 'chat-find-highlight-active';
 
+type SearchTarget = {
+  node: Text;
+  text: string;
+  positions: number[];
+};
+
 /**
  * Find-in-page search bar for chat content.
  * Walks text nodes inside the scroller, wraps matches with <mark>, and
@@ -66,7 +72,7 @@ const ChatFindBar = ({ scrollerRef, onClose }: ChatFindBarProps) => {
       });
 
       const marks: HTMLElement[] = [];
-      const textNodes: { node: Text; start: number }[] = [];
+      const searchTargets: SearchTarget[] = [];
 
       let node: Node | null;
       while ((node = walker.nextNode())) {
@@ -82,10 +88,13 @@ const ChatFindBar = ({ scrollerRef, onClose }: ChatFindBarProps) => {
           idx = lower.indexOf(lowerQ, idx + 1);
         }
 
-        textNodes.push({ node: node as Text, start: positions[0] });
+        searchTargets.push({ node: node as Text, text, positions });
+      }
 
-        // Replace text node with fragments containing <mark> wrappers
-        const parent = node.parentNode!;
+      // Replace text nodes after traversal so we do not invalidate the walker mid-search.
+      for (const { node: textNode, text, positions } of searchTargets) {
+        const parent = textNode.parentNode;
+        if (!parent) continue;
         const frag = document.createDocumentFragment();
         let lastEnd = 0;
         for (const pos of positions) {
@@ -102,7 +111,7 @@ const ChatFindBar = ({ scrollerRef, onClose }: ChatFindBarProps) => {
         if (lastEnd < text.length) {
           frag.appendChild(document.createTextNode(text.slice(lastEnd)));
         }
-        parent.replaceChild(frag, node);
+        parent.replaceChild(frag, textNode);
       }
 
       marksRef.current = marks;
