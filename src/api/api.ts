@@ -3,6 +3,44 @@ import {
   MessageInterface,
 } from '@type/chat';
 import { isAzureEndpoint } from '@utils/api';
+import { getModelSupportsReasoning } from '@utils/modelLookup';
+
+/**
+ * Build the API-ready body from ConfigInterface.
+ * Strips client-only fields (providerId, reasoning_budget_tokens when unused)
+ * and conditionally includes reasoning parameters for supported models.
+ */
+const buildRequestBody = (
+  messages: MessageInterface[],
+  config: ConfigInterface,
+  overrides?: Record<string, unknown>
+): Record<string, unknown> => {
+  const {
+    providerId,
+    reasoning_effort,
+    reasoning_budget_tokens,
+    ...apiConfig
+  } = config;
+
+  const body: Record<string, unknown> = {
+    messages,
+    ...apiConfig,
+    max_tokens: config.max_tokens > 0 ? config.max_tokens : undefined,
+    ...overrides,
+  };
+
+  // Only include reasoning params when the model actually supports reasoning
+  if (getModelSupportsReasoning(config.model, providerId)) {
+    if (reasoning_effort) {
+      body.reasoning_effort = reasoning_effort;
+    }
+    if (reasoning_budget_tokens && reasoning_budget_tokens > 0) {
+      body.reasoning_budget_tokens = reasoning_budget_tokens;
+    }
+  }
+
+  return body;
+};
 
 export const getChatCompletion = async (
   endpoint: string,
@@ -37,11 +75,7 @@ export const getChatCompletion = async (
   const response = await fetch(endpoint, {
     method: 'POST',
     headers,
-    body: JSON.stringify({
-      messages,
-      ...config,
-      max_tokens: config.max_tokens > 0 ? config.max_tokens : undefined,
-    }),
+    body: JSON.stringify(buildRequestBody(messages, config)),
     signal,
   });
   if (!response.ok) throw new Error(await response.text());
@@ -82,12 +116,7 @@ export const getChatCompletionStream = async (
   const response = await fetch(endpoint, {
     method: 'POST',
     headers,
-    body: JSON.stringify({
-      messages,
-      ...config,
-      max_tokens: config.max_tokens > 0 ? config.max_tokens : undefined,
-      stream: true,
-    }),
+    body: JSON.stringify(buildRequestBody(messages, config, { stream: true })),
     signal,
   });
   if (response.status === 404 || response.status === 405) {
@@ -150,12 +179,7 @@ export const prepareStreamRequest = (
   }
   endpoint = endpoint.trim();
 
-  const body = {
-    messages,
-    ...config,
-    max_tokens: config.max_tokens > 0 ? config.max_tokens : undefined,
-    stream: true,
-  };
+  const body = buildRequestBody(messages, config, { stream: true });
 
   return { endpoint, headers, body };
 };

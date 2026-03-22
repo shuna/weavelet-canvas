@@ -68,6 +68,28 @@ const isSupportedModelId = (modelId: string) => {
   );
 };
 
+/** Heuristic: detect reasoning models by well-known ID patterns. */
+const REASONING_MODEL_RE =
+  // OpenAI o-series: o1, o1-mini, o3, o3-mini, o4-mini, etc.
+  // Uses word-boundary to avoid false positives like "proto1", "falcon-40b"
+  /(?:^|[-/])o[134](?:$|[-/])/;
+
+const REASONING_MODEL_NAMES = [
+  'deepseek-r1',
+  'deepseek-reasoner',
+  'qwq',
+] as const;
+
+export const isReasoningModel = (modelId: string): boolean => {
+  const id = modelId.toLowerCase();
+  return (
+    REASONING_MODEL_RE.test(id) ||
+    REASONING_MODEL_NAMES.some((name) => id.includes(name)) ||
+    // Claude with extended thinking (via OpenRouter)
+    (id.includes('claude') && id.includes('thinking'))
+  );
+};
+
 const normalizeModelEntry = (
   providerId: ProviderId,
   entry: unknown
@@ -101,6 +123,7 @@ const normalizeModelEntry = (
     created: toNumberValue(payload.created),
     modelType,
     streamSupport: true,
+    supportsReasoning: isReasoningModel(id),
   };
 };
 

@@ -33,6 +33,11 @@ export interface TextContentInterface {
   text: string;
 }
 
+export interface ReasoningContentInterface {
+  type: 'reasoning';
+  text: string;
+}
+
 export function strToTextContent(ob: string): TextContentInterface {
   return {
     type: 'text',
@@ -41,14 +46,18 @@ export function strToTextContent(ob: string): TextContentInterface {
 }
 
 export function isTextContent(ob: ContentInterface | undefined): ob is TextContentInterface {
-  return ob !== undefined && ob !== null && (ob as TextContentInterface).text !== undefined;
+  return ob !== undefined && ob !== null && ob.type === 'text';
 }
 
 export function isImageContent(ob: ContentInterface | undefined): ob is ImageContentInterface {
   return ob !== undefined && ob !== null && (ob as ImageContentInterface).image_url !== undefined;
 }
 
-export type ContentInterface = TextContentInterface | ImageContentInterface;
+export function isReasoningContent(ob: ContentInterface | undefined): ob is ReasoningContentInterface {
+  return ob !== undefined && ob !== null && ob.type === 'reasoning';
+}
+
+export type ContentInterface = TextContentInterface | ImageContentInterface | ReasoningContentInterface;
 
 export interface MessageInterface {
   role: Role;
@@ -131,6 +140,8 @@ export interface LocalStorageInterfaceV10ToV11
   // branchTree is inside ChatInterface, no new top-level fields
 }
 
+export type ReasoningEffort = 'low' | 'medium' | 'high';
+
 export interface ConfigInterface {
   model: ModelOptions;
   max_tokens: number;
@@ -140,6 +151,8 @@ export interface ConfigInterface {
   frequency_penalty: number;
   stream?: boolean;
   providerId?: ProviderId;
+  reasoning_effort?: ReasoningEffort;
+  reasoning_budget_tokens?: number;
 }
 
 export interface ChatHistoryInterface {

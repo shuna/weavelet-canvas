@@ -18,6 +18,7 @@ const emptyForm: Omit<CustomProviderModel, 'providerId'> = {
   completionPrice: 0,
   imagePrice: 0,
   streamSupport: true,
+  supportsReasoning: false,
 };
 
 export default function ProviderCustomModelList({
@@ -101,6 +102,7 @@ export default function ProviderCustomModelList({
       imagePrice: model.imagePrice,
       contextLength: model.contextLength,
       streamSupport: model.streamSupport,
+      supportsReasoning: model.supportsReasoning,
     });
   };
 
@@ -216,7 +218,7 @@ export default function ProviderCustomModelList({
                 className={inputClass}
               />
             </div>
-            <div className='flex items-end pb-1'>
+            <div className='flex items-end gap-3 pb-1'>
               <label className='flex items-center gap-1.5 text-xs text-gray-600 dark:text-gray-400'>
                 <input
                   type='checkbox'
@@ -225,6 +227,15 @@ export default function ProviderCustomModelList({
                   className='rounded'
                 />
                 {t('custom.streamSupport', 'Stream')}
+              </label>
+              <label className='flex items-center gap-1.5 text-xs text-gray-600 dark:text-gray-400'>
+                <input
+                  type='checkbox'
+                  checked={form.supportsReasoning ?? false}
+                  onChange={(e) => setForm({ ...form, supportsReasoning: e.target.checked })}
+                  className='rounded'
+                />
+                {t('custom.reasoning', 'Reasoning')}
               </label>
             </div>
           </div>
