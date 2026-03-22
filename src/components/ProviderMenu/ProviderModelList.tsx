@@ -218,6 +218,7 @@ export default function ProviderModelList({
                     completionPrice: model.completionPrice,
                     modelType: model.modelType,
                     streamSupport: model.streamSupport,
+                    supportsReasoning: model.supportsReasoning,
                   })
                 }
                 className='rounded'

@@ -30,6 +30,18 @@
     "label": "Streaming",
     "description": "Enable streaming to display responses in real-time as they are generated."
   },
+  "reasoningEffort": {
+    "label": "Reasoning Effort",
+    "description": "Controls how much effort the model spends on internal reasoning. Higher effort produces more thorough answers but uses more tokens.",
+    "low": "Low",
+    "medium": "Medium",
+    "high": "High",
+    "unsupported": "This model does not support reasoning configuration."
+  },
+  "reasoningBudget": {
+    "label": "Reasoning Budget (tokens)",
+    "description": "Advanced: set an explicit token budget for the model's internal reasoning. Leave at 0 to use the provider's default. (Min: 1024)"
+  },
   "imageDetail": {
     "label": "Image Detail",
     "low": "low",
@@ -52,6 +64,7 @@
     "save": "Save",
     "add": "Add",
     "cancel": "Cancel",
+    "reasoning": "Reasoning",
     "duplicateError": "This Model ID already exists for this provider"
   },
   "provider": {

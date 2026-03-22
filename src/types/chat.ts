@@ -140,6 +140,8 @@ export interface LocalStorageInterfaceV10ToV11
   // branchTree is inside ChatInterface, no new top-level fields
 }
 
+export type ReasoningEffort = 'low' | 'medium' | 'high';
+
 export interface ConfigInterface {
   model: ModelOptions;
   max_tokens: number;
@@ -149,6 +151,8 @@ export interface ConfigInterface {
   frequency_penalty: number;
   stream?: boolean;
   providerId?: ProviderId;
+  reasoning_effort?: ReasoningEffort;
+  reasoning_budget_tokens?: number;
 }
 
 export interface ChatHistoryInterface {
