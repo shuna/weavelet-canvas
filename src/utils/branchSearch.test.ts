@@ -10,6 +10,7 @@ function buildContentStore(entries: Record<string, string>): ContentStoreData {
   for (const [hash, text] of Object.entries(entries)) {
     store[hash] = {
       content: [{ type: 'text', text }],
+      refCount: 1,
     };
   }
   return store;
