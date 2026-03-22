@@ -63,7 +63,7 @@ const ResizableSidebar = ({
   );
 };
 
-const ProviderMenuInline = () => {
+const ProviderMenuInline = ({ onSettingsChanged }: { onSettingsChanged?: () => void }) => {
   const { t } = useTranslation('model');
 
   const providers = useStore((state) => state.providers);
@@ -103,25 +103,32 @@ const ProviderMenuInline = () => {
     loadModels(selectedProvider);
   }, [loadModels, selectedProvider]);
 
-  const handleSaveSettings = () => {
-    const currentProvider = providers[selectedProvider];
-    const hasConfigChanges =
-      (currentProvider?.apiKey || '') !== apiKeyInput ||
-      (currentProvider?.endpoint || '') !== endpointInput ||
-      (apiVersion || '') !== apiVersionInput;
+  // Keep refs in sync for unmount save
+  const stateRef = useRef({ selectedProvider, apiKeyInput, endpointInput, apiVersionInput });
+  stateRef.current = { selectedProvider, apiKeyInput, endpointInput, apiVersionInput };
+  const onSettingsChangedRef = useRef(onSettingsChanged);
+  onSettingsChangedRef.current = onSettingsChanged;
 
-    if (!hasConfigChanges) return;
+  // Auto-save on unmount
+  useEffect(() => {
+    return () => {
+      const s = stateRef.current;
+      const currentProviders = useStore.getState().providers;
+      const currentProvider = currentProviders[s.selectedProvider];
+      const currentApiVersion = useStore.getState().apiVersion;
+      const hasConfigChanges =
+        (currentProvider?.apiKey || '') !== s.apiKeyInput ||
+        (currentProvider?.endpoint || '') !== s.endpointInput ||
+        (currentApiVersion || '') !== s.apiVersionInput;
 
-    setProviderApiKey(selectedProvider, apiKeyInput);
-    setProviderEndpoint(selectedProvider, endpointInput);
-    setApiVersion(apiVersionInput);
-    const providerName = providers[selectedProvider]?.name || selectedProvider;
+      if (!hasConfigChanges) return;
 
-    showToast(`${providerName}: ${t('provider.saved', '設定を保存しました')}`, 'success');
-
-    const updatedConfig = { ...currentProvider, apiKey: apiKeyInput, endpoint: endpointInput };
-    refreshModels(selectedProvider, updatedConfig);
-  };
+      setProviderApiKey(s.selectedProvider, s.apiKeyInput);
+      setProviderEndpoint(s.selectedProvider, s.endpointInput);
+      setApiVersion(s.apiVersionInput);
+      onSettingsChangedRef.current?.();
+    };
+  }, []);
 
   const currentModels = models[selectedProvider] || [];
 
@@ -242,7 +249,6 @@ const ProviderMenuInline = () => {
             onEndpointChange={setEndpointInput}
             onApiVersionChange={setApiVersionInput}
             onApiKeyChange={setApiKeyInput}
-            onSave={handleSaveSettings}
           />
         </div>
       </div>

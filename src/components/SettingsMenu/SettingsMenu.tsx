@@ -140,6 +140,22 @@ const SettingsDialog = ({
 }) => {
   const { t } = useTranslation();
   const [activeTab, setActiveTab] = useState<TabId>(initialTab);
+  const settingsChangedRef = useRef(false);
+
+  const markSettingsChanged = useCallback(() => {
+    settingsChangedRef.current = true;
+  }, []);
+
+  const handleClose = useCallback(() => {
+    // Use setTimeout so unmount-saves run first, then we show toast
+    setTimeout(() => {
+      if (settingsChangedRef.current) {
+        useStore.getState().setToastStatus('success');
+        useStore.getState().setToastMessage(t('settingsSaved', '設定を保存しました'));
+        useStore.getState().setToastShow(true);
+      }
+    }, 0);
+  }, [t]);
 
   return (
     <PopupModal
@@ -147,8 +163,9 @@ const SettingsDialog = ({
       title={t('setting') as string}
       cancelButton={false}
       maxWidth='max-w-4xl'
+      handleClose={handleClose}
     >
-      <div className='flex flex-col md:flex-row h-[70vh] w-[90vw] max-w-4xl'>
+      <div className='flex flex-col md:flex-row h-[calc(90vh-8rem)] md:h-[calc(80vh-8rem)] w-[90vw] max-w-4xl'>
         {/* Sidebar - desktop: vertical, mobile: horizontal scroll */}
         <ResizableNav minWidth={80} maxWidth={200} defaultWidth={120}>
           {/* Mobile: horizontal scroll tab bar */}
@@ -188,10 +205,10 @@ const SettingsDialog = ({
         {/* Content area */}
         <div className={`flex-1 ${activeTab === 'providers' ? 'overflow-hidden' : 'overflow-y-auto p-6'}`}>
           {activeTab === 'general' && <GeneralTab />}
-          {activeTab === 'chatConfig' && <ChatConfigInline />}
-          {activeTab === 'providers' && <ProvidersTab />}
+          {activeTab === 'chatConfig' && <ChatConfigInline onSettingsChanged={markSettingsChanged} />}
+          {activeTab === 'providers' && <ProvidersTab onSettingsChanged={markSettingsChanged} />}
           {activeTab === 'proxy' && <ProxySettingsInline />}
-          {activeTab === 'prompts' && <PromptLibraryInline />}
+          {activeTab === 'prompts' && <PromptLibraryInline onSettingsChanged={markSettingsChanged} />}
           {activeTab === 'data' && <DataTab />}
         </div>
       </div>
@@ -311,8 +328,8 @@ const GeneralTab = () => {
   );
 };
 
-const ProvidersTab = () => {
-  return <ProviderMenuInline />;
+const ProvidersTab = ({ onSettingsChanged }: { onSettingsChanged?: () => void }) => {
+  return <ProviderMenuInline onSettingsChanged={onSettingsChanged} />;
 };
 
 const DataTab = () => {

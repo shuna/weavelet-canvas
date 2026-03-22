@@ -172,7 +172,7 @@ const PromptLibraryMenuPopUp = ({
 
 export { PromptLibraryInline };
 
-const PromptLibraryInline = () => {
+const PromptLibraryInline = ({ onSettingsChanged }: { onSettingsChanged?: () => void }) => {
   const { t } = useTranslation();
 
   const setPrompts = useStore((state) => state.setPrompts);
@@ -189,9 +189,26 @@ const PromptLibraryInline = () => {
     e.target.style.maxHeight = `${e.target.scrollHeight}px`;
   };
 
-  const handleSave = () => {
-    setPrompts(_prompts);
-  };
+  // Keep refs in sync for unmount save
+  const promptsRef = useRef(_prompts);
+  promptsRef.current = _prompts;
+  const onSettingsChangedRef = useRef(onSettingsChanged);
+  onSettingsChangedRef.current = onSettingsChanged;
+
+  // Auto-save on unmount
+  useEffect(() => {
+    return () => {
+      const current = promptsRef.current;
+      const stored = useStore.getState().prompts;
+      const isDifferent =
+        current.length !== stored.length ||
+        current.some((p, i) => p.id !== stored[i]?.id || p.name !== stored[i]?.name || p.prompt !== stored[i]?.prompt);
+      if (isDifferent) {
+        setPrompts(current);
+        onSettingsChangedRef.current?.();
+      }
+    };
+  }, []);
 
   const addPrompt = () => {
     _setPrompts((prev) => [...prev, { id: uuidv4(), name: '', prompt: '' }]);
@@ -281,12 +298,6 @@ const PromptLibraryInline = () => {
         <PlusIcon />
       </div>
       <div className='flex justify-center gap-3 mt-2'>
-        <button
-          className='btn btn-primary cursor-pointer text-xs'
-          onClick={handleSave}
-        >
-          {t('save', { defaultValue: 'Save' })}
-        </button>
         <button
           className='btn btn-neutral cursor-pointer text-xs'
           onClick={clearPrompts}

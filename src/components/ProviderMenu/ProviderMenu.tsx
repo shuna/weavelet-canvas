@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import ReactDOM from 'react-dom';
 import { useTranslation } from 'react-i18next';
 import useStore from '@store/store';
@@ -64,25 +64,33 @@ const ProviderMenu = ({
     loadModels(selectedProvider);
   }, [loadModels, selectedProvider]);
 
-  const handleSaveSettings = () => {
-    const currentProvider = providers[selectedProvider];
+  // Keep refs in sync for unmount save
+  const stateRef = useRef({ selectedProvider, apiKeyInput, endpointInput, apiVersionInput });
+  stateRef.current = { selectedProvider, apiKeyInput, endpointInput, apiVersionInput };
+
+  const saveSettings = useCallback(() => {
+    const s = stateRef.current;
+    const currentProviders = useStore.getState().providers;
+    const currentProvider = currentProviders[s.selectedProvider];
+    const currentApiVersion = useStore.getState().apiVersion;
     const hasConfigChanges =
-      (currentProvider?.apiKey || '') !== apiKeyInput ||
-      (currentProvider?.endpoint || '') !== endpointInput ||
-      (apiVersion || '') !== apiVersionInput;
+      (currentProvider?.apiKey || '') !== s.apiKeyInput ||
+      (currentProvider?.endpoint || '') !== s.endpointInput ||
+      (currentApiVersion || '') !== s.apiVersionInput;
 
     if (!hasConfigChanges) return;
 
-    setProviderApiKey(selectedProvider, apiKeyInput);
-    setProviderEndpoint(selectedProvider, endpointInput);
-    setApiVersion(apiVersionInput);
-    const providerName = providers[selectedProvider]?.name || selectedProvider;
+    setProviderApiKey(s.selectedProvider, s.apiKeyInput);
+    setProviderEndpoint(s.selectedProvider, s.endpointInput);
+    setApiVersion(s.apiVersionInput);
 
     showToast(`${providerName}: ${t('provider.saved', '設定を保存しました')}`, 'success');
+  }, []);
 
-    const updatedConfig = { ...currentProvider, apiKey: apiKeyInput, endpoint: endpointInput };
-    refreshModels(selectedProvider, updatedConfig);
-  };
+  // Auto-save on unmount
+  useEffect(() => {
+    return () => { saveSettings(); };
+  }, []);
 
   const currentModels = models[selectedProvider] || [];
 
@@ -210,7 +218,6 @@ const ProviderMenu = ({
                 onEndpointChange={setEndpointInput}
                 onApiVersionChange={setApiVersionInput}
                 onApiKeyChange={setApiKeyInput}
-                onSave={handleSaveSettings}
               />
             </div>
           </div>
