@@ -12,6 +12,7 @@ import {
 } from '@utils/proxyClient';
 import { parseEventSource } from '@api/helper';
 import { debugReport } from '@store/debug-store';
+import { useStreamEndStatusStore } from '@store/stream-end-status-store';
 import { showToast } from '@utils/showToast';
 import {
   buildVerifiedStatsKey,
@@ -406,6 +407,16 @@ async function recoverPendingInner(manual: boolean, debugId: string) {
 
       if (restoredThisRecord) {
         restoredMessageCount++;
+      }
+
+      // Set stream end status indicator for the recovered message
+      if (targetNodeId && restoredThisRecord) {
+        const isProxyRecovered = recoveredCount > 0;
+        const isPartial = effectiveStatus === 'interrupted' || effectiveStatus === 'failed';
+        useStreamEndStatusStore.getState().setStatus(
+          targetNodeId,
+          isPartial ? 'recovered_partial' : isProxyRecovered ? 'recovered' : 'recovered'
+        );
       }
 
       // Clear any generating sessions for this chat

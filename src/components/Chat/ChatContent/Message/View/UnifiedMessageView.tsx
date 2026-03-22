@@ -198,6 +198,7 @@ const UnifiedMessageView = memo(
                 streamingMarkdownPolicy={streamingMarkdownPolicy}
                 inlineLatex={inlineLatex}
                 isGeneratingMessage={isGeneratingMessage}
+                nodeId={nodeId}
               />
             </div>
             <ContentAttachments images={isEditState ? [] : validImageContents} />
