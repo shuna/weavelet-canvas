@@ -154,6 +154,42 @@ export function getModelCost(
   return undefined;
 }
 
+export function getModelSupportsReasoning(
+  modelId: string,
+  providerId?: ProviderId
+): boolean {
+  const state = useStore.getState();
+
+  const custom = findProviderCustomModel(state.providerCustomModels, modelId, providerId);
+  if (custom?.supportsReasoning != null) return custom.supportsReasoning;
+
+  const fav = findFavorite(state.favoriteModels, modelId, providerId);
+  if (fav?.supportsReasoning != null) return fav.supportsReasoning;
+
+  const cached = findCachedModel(state.providerModelCache, modelId, providerId);
+  if (cached?.supportsReasoning != null) return cached.supportsReasoning;
+
+  return false;
+}
+
+export function useModelSupportsReasoning(
+  modelId: string,
+  providerId?: ProviderId
+): boolean {
+  return useStore((state) => {
+    const custom = findProviderCustomModel(state.providerCustomModels, modelId, providerId);
+    if (custom?.supportsReasoning != null) return custom.supportsReasoning;
+
+    const fav = findFavorite(state.favoriteModels, modelId, providerId);
+    if (fav?.supportsReasoning != null) return fav.supportsReasoning;
+
+    const cached = findCachedModel(state.providerModelCache, modelId, providerId);
+    if (cached?.supportsReasoning != null) return cached.supportsReasoning;
+
+    return false;
+  });
+}
+
 export function isModelStreamSupported(
   modelId: string,
   providerId?: ProviderId

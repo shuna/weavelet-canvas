@@ -47,12 +47,9 @@ const editDraftCache = new Map<string, ContentInterface[]>();
 
 const cloneContent = (content: ContentInterface[]): ContentInterface[] =>
   content.map((item) =>
-    item.type === 'text'
-      ? { ...item }
-      : {
-          ...item,
-          image_url: { ...item.image_url },
-        }
+    item.type === 'image_url'
+      ? { ...item, image_url: { ...item.image_url } }
+      : { ...item }
   );
 
 export function useEditViewLogic({

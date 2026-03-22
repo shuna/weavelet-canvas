@@ -29,6 +29,7 @@ export interface ProviderModel {
   created?: number;
   modelType?: 'text' | 'image';
   streamSupport?: boolean;
+  supportsReasoning?: boolean;
 }
 
 export interface CustomProviderModel {
@@ -41,6 +42,7 @@ export interface CustomProviderModel {
   completionPrice?: number;
   imagePrice?: number;
   streamSupport?: boolean;
+  supportsReasoning?: boolean;
 }
 
 export interface FavoriteModel {
@@ -52,4 +54,5 @@ export interface FavoriteModel {
   contextLength?: number;
   modelType?: 'text' | 'image';
   streamSupport?: boolean;
+  supportsReasoning?: boolean;
 }

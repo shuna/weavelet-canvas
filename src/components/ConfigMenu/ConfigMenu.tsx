@@ -1,8 +1,8 @@
 import React, { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import PopupModal from '@components/PopupModal';
-import { ConfigInterface, ImageDetail } from '@type/chat';
-import { getModelContextInfo } from '@utils/modelLookup';
+import { ConfigInterface, ImageDetail, ReasoningEffort } from '@type/chat';
+import { getModelContextInfo, useModelSupportsReasoning } from '@utils/modelLookup';
 import { ModelOptions } from '@type/chat';
 import { isModelStreamSupported, normalizeConfigStream } from '@utils/streamSupport';
 import { clampCompletionTokens, getMaxCompletionTokensForContext } from '@utils/tokenBudget';
@@ -41,8 +41,11 @@ const ConfigMenu = ({
   );
   const [_imageDetail, _setImageDetail] = useState<ImageDetail>(imageDetail);
   const [_stream, _setStream] = useState<boolean>(config.stream !== false);
+  const [_reasoningEffort, _setReasoningEffort] = useState<ReasoningEffort | undefined>(config.reasoning_effort);
+  const [_reasoningBudget, _setReasoningBudget] = useState<number>(config.reasoning_budget_tokens ?? 0);
   const { t } = useTranslation('model');
   const isStreamSupported = isModelStreamSupported(_model, _providerId);
+  const reasoningSupported = useModelSupportsReasoning(_model, _providerId);
 
   useEffect(() => {
     if (!isStreamSupported && _stream) {
@@ -61,6 +64,8 @@ const ConfigMenu = ({
       frequency_penalty: _frequencyPenalty,
       stream: _stream,
       providerId: _providerId,
+      reasoning_effort: reasoningSupported ? _reasoningEffort : undefined,
+      reasoning_budget_tokens: reasoningSupported && _reasoningBudget >= 1024 ? _reasoningBudget : undefined,
     }));
     setImageDetail(_imageDetail);
     setIsModalOpen(false);
@@ -108,6 +113,18 @@ const ConfigMenu = ({
           _frequencyPenalty={_frequencyPenalty}
           _setFrequencyPenalty={_setFrequencyPenalty}
         />
+        {reasoningSupported && (
+          <>
+            <ReasoningEffortSelector
+              _reasoningEffort={_reasoningEffort}
+              _setReasoningEffort={_setReasoningEffort}
+            />
+            <ReasoningBudgetInput
+              _reasoningBudget={_reasoningBudget}
+              _setReasoningBudget={_setReasoningBudget}
+            />
+          </>
+        )}
         <ImageDetailSelector
           _imageDetail={_imageDetail}
           _setImageDetail={_setImageDetail}
@@ -396,6 +413,89 @@ export const ImageDetailSelector = ({
       options={imageDetailOptions}
       onChange={(value) => _setImageDetail((value ?? _imageDetail) as ImageDetail)}
     />
+  );
+};
+
+export const ReasoningEffortSelector = ({
+  _reasoningEffort,
+  _setReasoningEffort,
+}: {
+  _reasoningEffort: ReasoningEffort | undefined;
+  _setReasoningEffort: React.Dispatch<React.SetStateAction<ReasoningEffort | undefined>>;
+}) => {
+  const { t } = useTranslation('model');
+
+  const options: { value: ReasoningEffort; label: string }[] = [
+    { value: 'low', label: t('reasoningEffort.low') },
+    { value: 'medium', label: t('reasoningEffort.medium') },
+    { value: 'high', label: t('reasoningEffort.high') },
+  ];
+
+  return (
+    <div className='mt-4'>
+      <FieldLabel>{t('reasoningEffort.label')}</FieldLabel>
+      <FieldDescription>{t('reasoningEffort.description')}</FieldDescription>
+      <div className='mt-2 inline-flex rounded-lg border border-gray-300 dark:border-gray-600 overflow-hidden'>
+        {options.map((opt) => (
+          <button
+            key={opt.value}
+            type='button'
+            className={`px-4 py-1.5 text-sm font-medium transition-colors ${
+              _reasoningEffort === opt.value
+                ? 'bg-blue-600 text-white'
+                : 'bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-600'
+            }`}
+            onClick={() =>
+              _setReasoningEffort(_reasoningEffort === opt.value ? undefined : opt.value)
+            }
+          >
+            {opt.label}
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+};
+
+export const ReasoningBudgetInput = ({
+  _reasoningBudget,
+  _setReasoningBudget,
+}: {
+  _reasoningBudget: number;
+  _setReasoningBudget: React.Dispatch<React.SetStateAction<number>>;
+}) => {
+  const { t } = useTranslation('model');
+
+  return (
+    <div className='mt-4'>
+      <FieldLabel>
+        <span className='text-sm font-medium text-gray-900 dark:text-white'>
+          {t('reasoningBudget.label')}
+        </span>
+      </FieldLabel>
+      <FieldDescription>{t('reasoningBudget.description')}</FieldDescription>
+      <input
+        type='number'
+        className={`mt-2 w-full rounded-md border px-3 py-1.5 text-sm text-gray-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-blue-500 ${
+          _reasoningBudget > 0 && _reasoningBudget < 1024
+            ? 'border-amber-400 dark:border-amber-500 bg-amber-50 dark:bg-amber-900/20 focus:border-amber-500'
+            : 'border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 focus:border-blue-500'
+        }`}
+        value={_reasoningBudget || ''}
+        placeholder='0'
+        min={0}
+        step={1024}
+        onChange={(e) => {
+          const val = parseInt(e.target.value, 10);
+          _setReasoningBudget(Number.isNaN(val) ? 0 : Math.max(0, val));
+        }}
+      />
+      {_reasoningBudget > 0 && _reasoningBudget < 1024 && (
+        <p className='mt-1 text-xs text-amber-600 dark:text-amber-400'>
+          {t('reasoningBudget.minWarning', 'Value must be at least 1024. Values below 1024 will be ignored.')}
+        </p>
+      )}
+    </div>
   );
 };
 
