@@ -44,6 +44,7 @@ import {
   TextContentInterface,
 } from '@type/chat';
 import type { ResolvedProvider } from './submitHelpers';
+import { debugReport } from '@store/debug-store';
 
 const abortControllers = new Map<string, AbortController>();
 const swCancellers = new Map<string, () => void>();
@@ -59,6 +60,8 @@ interface SessionCancelMeta {
   apiKey?: string;
 }
 const sessionCancelMetas = new Map<string, SessionCancelMeta>();
+const formatDebugTime = (time = Date.now()): string =>
+  new Date(time).toISOString().slice(11, 23);
 
 export const setSessionCancelMeta = (
   sessionId: string,
@@ -688,6 +691,11 @@ export const executeSubmitStream = async ({
         const cleanup = () => {
           clearInterval(checkStop);
           deleteStreamRecord(requestId).catch(() => {});
+          debugReport(`submit:${sessionId}`, {
+            label: 'Submit Session',
+            status: 'active',
+            detail: `${formatDebugTime()} cleanup ${requestId.slice(0, 8)}`,
+          });
         };
 
         const checkStop = setInterval(() => {
@@ -695,6 +703,10 @@ export const executeSubmitStream = async ({
             swCancelledByUser = true;
             swHandle?.cancel();
             cleanup();
+            debugReport(`submit:${sessionId}`, {
+              status: 'done',
+              detail: `${formatDebugTime()} session removed before sw-done`,
+            });
             resolve();
           }
         }, 500);
@@ -711,6 +723,10 @@ export const executeSubmitStream = async ({
             cleanup();
             if (meta?.generationId) capturedGenerationId = meta.generationId;
             if (meta?.finishReason) lastFinishReason = meta.finishReason;
+            debugReport(`submit:${sessionId}`, {
+              status: 'done',
+              detail: `${formatDebugTime()} onDone ${requestId.slice(0, 8)}`,
+            });
             // ACK proxy to free KV cache
             if (meta?.proxySessionId && proxyConfig) {
               sendAck(proxyConfig, meta.proxySessionId);
@@ -722,14 +738,27 @@ export const executeSubmitStream = async ({
             if (meta?.generationId) {
               capturedGenerationId = meta.generationId;
             }
+            debugReport(`submit:${sessionId}`, {
+              status: 'error',
+              detail: `${formatDebugTime()} onError ${error}`,
+            });
             reject(new Error(error));
           },
           proxyConfig: swProxyConfig,
         }).then((handle) => {
           swHandle = handle;
           swCancellers.set(sessionId, () => handle.cancel());
+          debugReport(`submit:${sessionId}`, {
+            label: 'Submit Session',
+            status: 'active',
+            detail: `${formatDebugTime()} sw handle ready`,
+          });
         }).catch((error) => {
           cleanup();
+          debugReport(`submit:${sessionId}`, {
+            status: 'error',
+            detail: `${formatDebugTime()} startStream failed`,
+          });
           reject(error);
         });
       });

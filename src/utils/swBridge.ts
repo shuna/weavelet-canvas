@@ -4,6 +4,9 @@ import { saveRequest, cleanupStale } from './streamDb';
 let registration: ServiceWorkerRegistration | null = null;
 let controllerReady: Promise<void> | null = null;
 
+const formatDebugTime = (time = Date.now()): string =>
+  new Date(time).toISOString().slice(11, 23);
+
 export async function register(): Promise<boolean> {
   if (!('serviceWorker' in navigator)) return false;
   debugReport('sw', { label: 'Service Worker', status: 'active', detail: 'registering' });
@@ -85,6 +88,11 @@ export async function startStream(params: StartStreamParams): Promise<SwStreamHa
   } = params;
 
   debugReport('streaming', { label: 'Streaming', status: 'active', detail: requestId });
+  debugReport(`stream:${requestId}`, {
+    label: 'SW Stream',
+    status: 'active',
+    detail: `${formatDebugTime()} start`,
+  });
   // Save initial record to IndexedDB (client side too, in case SW dies before writing)
   await saveRequest({
     requestId,
@@ -115,6 +123,10 @@ export async function startStream(params: StartStreamParams): Promise<SwStreamHa
       case 'sw-done':
         cleanup();
         debugReport('streaming', { status: 'done' });
+        debugReport(`stream:${requestId}`, {
+          status: 'done',
+          detail: `${formatDebugTime()} sw-done`,
+        });
         onDone({
           proxySessionId: data.proxySessionId,
           lastProxyEventId: data.lastProxyEventId,
@@ -125,6 +137,10 @@ export async function startStream(params: StartStreamParams): Promise<SwStreamHa
       case 'sw-error':
         cleanup();
         debugReport('streaming', { status: 'error', detail: data.error });
+        debugReport(`stream:${requestId}`, {
+          status: 'error',
+          detail: `${formatDebugTime()} sw-error ${data.error || 'unknown'}`,
+        });
         onError(data.error || 'Unknown error', {
           proxySessionId: data.proxySessionId,
           lastProxyEventId: data.lastProxyEventId,
@@ -133,6 +149,10 @@ export async function startStream(params: StartStreamParams): Promise<SwStreamHa
         break;
       case 'sw-cancelled':
         cleanup();
+        debugReport(`stream:${requestId}`, {
+          status: 'error',
+          detail: `${formatDebugTime()} sw-cancelled`,
+        });
         break;
     }
   };
@@ -165,6 +185,10 @@ export async function startStream(params: StartStreamParams): Promise<SwStreamHa
 
   return {
     cancel: () => {
+      debugReport(`stream:${requestId}`, {
+        status: 'active',
+        detail: `${formatDebugTime()} cancel requested`,
+      });
       sw.controller?.postMessage({
         type: 'cancelStream',
         requestId,

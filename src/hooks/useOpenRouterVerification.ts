@@ -2,13 +2,15 @@ import { useEffect, useRef } from 'react';
 
 import { fetchGenerationStats } from '@api/openrouter';
 import useStore from '@store/store';
+import { debugReport } from '@store/debug-store';
 import { toVerifiedStats } from '@store/openrouter-stats-slice';
-import {
-  getOpenRouterVerificationRetryDelay,
-  resolveOpenRouterApiKey,
-} from '@utils/openrouterVerification';
+import { resolveOpenRouterApiKey } from '@utils/openrouterVerification';
 
 const EMPTY_PENDING_VERIFICATIONS = {};
+const NO_AUTO_RETRY_AT = Number.MAX_SAFE_INTEGER;
+
+const formatDebugTime = (time = Date.now()): string =>
+  new Date(time).toISOString().slice(11, 23);
 
 export default function useOpenRouterVerification() {
   const pendingVerifications = useStore((state) =>
@@ -57,33 +59,42 @@ export default function useOpenRouterVerification() {
             .markVerificationFailed(
               statsKey,
               'OpenRouter API key is not configured',
-              Date.now() + getOpenRouterVerificationRetryDelay(verification.attemptCount + 1)
+              NO_AUTO_RETRY_AT
             );
           continue;
         }
 
         inFlightRef.current.add(statsKey);
         useStore.getState().markVerificationFetching(statsKey);
+        debugReport(`or-verify:${statsKey}`, {
+          label: 'OpenRouter Verify',
+          status: 'active',
+          detail: `${formatDebugTime()} fetch ${verification.generationId}`,
+        });
 
         void fetchGenerationStats(verification.generationId, resolvedApiKey)
           .then((raw) => {
             if (raw) {
               useStore.getState().setVerifiedStats(statsKey, toVerifiedStats(raw));
+              debugReport(`or-verify:${statsKey}`, {
+                status: 'done',
+                detail: `${formatDebugTime()} fetched ${raw.id}`,
+              });
               return;
             }
-            const latest = useStore.getState().pendingVerifications[statsKey];
-            if (!latest) return;
             useStore
               .getState()
               .markVerificationFailed(
                 statsKey,
-                'OpenRouter generation stats not available yet',
-                Date.now() + getOpenRouterVerificationRetryDelay(latest.attemptCount)
+                'OpenRouter generation stats unavailable',
+                NO_AUTO_RETRY_AT
               );
+            debugReport(`or-verify:${statsKey}`, {
+              status: 'error',
+              detail: `${formatDebugTime()} unavailable ${verification.generationId}`,
+            });
           })
           .catch((error: unknown) => {
-            const latest = useStore.getState().pendingVerifications[statsKey];
-            if (!latest) return;
             useStore
               .getState()
               .markVerificationFailed(
@@ -91,8 +102,12 @@ export default function useOpenRouterVerification() {
                 error instanceof Error
                   ? error.message
                   : 'Failed to fetch OpenRouter generation stats',
-                Date.now() + getOpenRouterVerificationRetryDelay(latest.attemptCount)
+                NO_AUTO_RETRY_AT
               );
+            debugReport(`or-verify:${statsKey}`, {
+              status: 'error',
+              detail: `${formatDebugTime()} failed ${verification.generationId}`,
+            });
           })
           .finally(() => {
             inFlightRef.current.delete(statsKey);
@@ -101,7 +116,10 @@ export default function useOpenRouterVerification() {
     }
 
     const futureEntries = entries.filter(([, verification]) =>
-      verification.status !== 'fetching' && verification.nextAttemptAt > now
+      verification.status !== 'fetching' &&
+      Number.isFinite(verification.nextAttemptAt) &&
+      verification.nextAttemptAt > now &&
+      verification.nextAttemptAt < NO_AUTO_RETRY_AT
     );
     if (futureEntries.length === 0) {
       clearActiveTimer();

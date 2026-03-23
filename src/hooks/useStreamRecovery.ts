@@ -28,6 +28,8 @@ import {
 } from './streamRecoveryHelpers';
 
 const VISIBILITY_THRESHOLD_MS = 3000;
+const formatDebugTime = (time = Date.now()): string =>
+  new Date(time).toISOString().slice(11, 23);
 
 /** Module-level lock to prevent concurrent recoverPending calls (e.g. StrictMode double-mount) */
 let recoveryInProgress = false;
@@ -57,6 +59,11 @@ export default function useStreamRecovery() {
     const onPageShow = () => {
       if (hiddenAtRef.current) {
         hiddenAtRef.current = null;
+        debugReport('recovery-hook', {
+          label: 'Recovery Hook',
+          status: 'active',
+          detail: `${formatDebugTime()} pageshow -> recover`,
+        });
         recoverPending();
       }
     };
@@ -64,6 +71,11 @@ export default function useStreamRecovery() {
     function onVisibilityChange() {
       if (document.visibilityState === 'hidden') {
         hiddenAtRef.current = Date.now();
+        debugReport('recovery-hook', {
+          label: 'Recovery Hook',
+          status: 'active',
+          detail: `${formatDebugTime()} hidden`,
+        });
         return;
       }
 
@@ -74,6 +86,11 @@ export default function useStreamRecovery() {
       // Suppress for short background durations
       if (hiddenAt && Date.now() - hiddenAt < VISIBILITY_THRESHOLD_MS) return;
 
+      debugReport('recovery-hook', {
+        label: 'Recovery Hook',
+        status: 'active',
+        detail: `${formatDebugTime()} visible -> recover`,
+      });
       recoverPending();
     }
 
@@ -304,6 +321,9 @@ async function recoverPendingInner(manual: boolean, debugId: string) {
       }
 
       const { requestId, chatIndex, messageIndex, bufferedText } = record;
+      debugReport(debugId, {
+        detail: `${formatDebugTime()} inspect ${requestId.slice(0, 8)} m${messageIndex}`,
+      });
       let restoredThisRecord = false;
       let proxyRecoveredThisRecord = false;
 
@@ -335,6 +355,11 @@ async function recoverPendingInner(manual: boolean, debugId: string) {
       // text to an actively-streaming message overwrites the streaming content
       // hash and disconnects the live streaming buffer from the React tree.
       const effectiveStatus = resolveRecoveryStatus(record, Date.now(), hasActiveSession);
+      debugReport(`recovery-record:${requestId}`, {
+        label: 'Recovery Record',
+        status: effectiveStatus === 'streaming' ? 'active' : 'done',
+        detail: `${formatDebugTime()} status=${effectiveStatus}`,
+      });
       if (effectiveStatus === 'streaming') {
         // Still actively streaming without proxy, don't notify yet
         continue;
@@ -343,6 +368,10 @@ async function recoverPendingInner(manual: boolean, debugId: string) {
       // Apply IndexedDB buffered text (fast, local)
       const bestText = bufferedText;
       if (shouldApplyRecoveredText(currentText, bestText)) {
+        debugReport(`recovery-record:${requestId}`, {
+          status: 'active',
+          detail: `${formatDebugTime()} apply indexeddb len=${bestText.length}`,
+        });
         const updatedChats = cloneChatAtIndex(chats, chatIndex);
         const updatedMessages = updatedChats[chatIndex].messages;
         const oldMsg = updatedMessages[messageIndex];
@@ -376,6 +405,10 @@ async function recoverPendingInner(manual: boolean, debugId: string) {
           );
           if (proxyText) {
             debugReport(debugId, { detail: `Proxy recovered ${proxyText.length} chars` });
+            debugReport(`recovery-record:${requestId}`, {
+              status: 'active',
+              detail: `${formatDebugTime()} apply proxy len=${proxyText.length}`,
+            });
             const latestChats = useStore.getState().chats;
             if (latestChats) {
               const updatedChats = cloneChatAtIndex(latestChats, chatIndex);
@@ -445,6 +478,10 @@ async function recoverPendingInner(manual: boolean, debugId: string) {
       }
 
       await deleteRequest(requestId);
+      debugReport(`recovery-record:${requestId}`, {
+        status: 'done',
+        detail: `${formatDebugTime()} record deleted`,
+      });
     }
   } finally {
     clearTimeout(timeoutId);
