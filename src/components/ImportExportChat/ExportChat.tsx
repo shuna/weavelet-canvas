@@ -16,6 +16,7 @@ type ExportFormat = 'v3' | 'v1' | 'openai' | 'openrouter';
 const ExportChat = () => {
   const { t } = useTranslation();
   const [format, setFormat] = useState<ExportFormat>('v3');
+  const isExternalFormat = format === 'openai' || format === 'openrouter';
   const [useGzip, setUseGzip] = useState(true);
 
   const handleExport = async () => {
@@ -24,7 +25,7 @@ const ExportChat = () => {
     const contentStore = useStore.getState().contentStore;
 
     const filename = getToday();
-    let fileData: unknown;
+    let fileData: object;
 
     if (format === 'openai') {
       fileData = chats?.map((chat) => chatToOpenAIFormat(chat, contentStore)) ?? [];
@@ -52,7 +53,7 @@ const ExportChat = () => {
       fileData = { chats, contentStore: buildExportContentStore(contentStore), folders, version: 3 } satisfies ExportV3;
     }
 
-    if (useGzip) {
+    if (useGzip && !isExternalFormat) {
       await downloadFileGzip(fileData, filename);
     } else {
       downloadFile(fileData, filename);
