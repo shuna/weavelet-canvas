@@ -20,7 +20,7 @@ import {
   _defaultImageDetail,
   _defaultSystemMessage,
 } from '@constants/chat';
-import { getModelContextInfo } from '@utils/modelLookup';
+import { getModelConfigContextInfo } from '@utils/modelLookup';
 import { isModelStreamSupported, normalizeConfigStream } from '@utils/streamSupport';
 import { clampCompletionTokens } from '@utils/tokenBudget';
 import { ModelOptions } from '@type/chat';
@@ -97,7 +97,7 @@ const ChatConfigPopup = ({
   }, [isStreamSupported, _stream]);
 
   const handleSave = () => {
-    const modelContextLength = getModelContextInfo(_model, _providerId).contextLength;
+    const modelContextLength = getModelConfigContextInfo(_model, _providerId).contextLength;
     const nextConfig = normalizeConfigStream({
       model: _model,
       max_tokens: clampCompletionTokens(_maxToken, modelContextLength),
@@ -299,7 +299,7 @@ const ChatConfigInline = ({ onSettingsChanged }: { onSettingsChanged?: () => voi
     return () => {
       const s = stateRef.current;
       const currentConfig = useStore.getState().defaultChatConfig;
-      const modelContextLength = getModelContextInfo(s._model, s._providerId).contextLength;
+      const modelContextLength = getModelConfigContextInfo(s._model, s._providerId).contextLength;
       const nextConfig = normalizeConfigStream({
         model: s._model,
         max_tokens: clampCompletionTokens(s._maxToken, modelContextLength),

@@ -1,7 +1,10 @@
 import useStore from '@store/store';
 import type { CustomProviderModel, ProviderId, FavoriteModel, ProviderModel } from '@type/provider';
 import { isVisionModel, isAudioModel } from '@api/providerModels';
-import { UNKNOWN_MODEL_CONTEXT_LENGTH } from './tokenBudget';
+import {
+  UNKNOWN_MODEL_CONTEXT_LENGTH,
+  UNKNOWN_MODEL_UI_CONTEXT_LENGTH,
+} from './tokenBudget';
 
 export interface ModelCostEntry {
   prompt: { price: number | null; unit: number };
@@ -100,6 +103,15 @@ export function getModelMaxToken(
   providerId?: ProviderId
 ): number {
   return getModelContextInfo(modelId, providerId).contextLength;
+}
+
+export function getModelConfigContextInfo(
+  modelId: string,
+  providerId?: ProviderId
+): { contextLength: number; isFallback: boolean } {
+  const info = getModelContextInfo(modelId, providerId);
+  if (!info.isFallback) return info;
+  return { contextLength: UNKNOWN_MODEL_UI_CONTEXT_LENGTH, isFallback: true };
 }
 
 export function getModelContextInfo(

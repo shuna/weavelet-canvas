@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import {
   UNKNOWN_MODEL_CONTEXT_LENGTH,
+  UNKNOWN_MODEL_UI_CONTEXT_LENGTH,
   clampCompletionTokens,
   fitsContextWindow,
   getMaxCompletionTokensForContext,
@@ -29,5 +30,9 @@ describe('tokenBudget', () => {
 
   it('keeps the unknown-model fallback conservative', () => {
     expect(UNKNOWN_MODEL_CONTEXT_LENGTH).toBe(8192);
+  });
+
+  it('keeps the unknown-model UI fallback generous', () => {
+    expect(UNKNOWN_MODEL_UI_CONTEXT_LENGTH).toBe(128000);
   });
 });

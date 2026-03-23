@@ -220,6 +220,8 @@ export default function ProviderModelList({
                     modelType: model.modelType,
                     streamSupport: model.streamSupport,
                     supportsReasoning: model.supportsReasoning,
+                    supportsVision: model.supportsVision,
+                    supportsAudio: model.supportsAudio,
                   })
                 }
                 className='rounded'

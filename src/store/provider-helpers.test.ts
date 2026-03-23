@@ -1,8 +1,12 @@
 import { describe, expect, it } from 'vitest';
 
-import type { FavoriteModel } from '@type/provider';
+import type { FavoriteModel, ProviderModel } from '@type/provider';
 import { DEFAULT_PROVIDERS } from './provider-config';
-import { toggleFavoriteModelEntry, updateProviderConfig } from './provider-helpers';
+import {
+  backfillFavoritesFromProviderModels,
+  toggleFavoriteModelEntry,
+  updateProviderConfig,
+} from './provider-helpers';
 
 describe('provider-helpers', () => {
   it('updates only the targeted provider config field', () => {
@@ -28,5 +32,73 @@ describe('provider-helpers', () => {
 
     const removed = toggleFavoriteModelEntry(added, favorite);
     expect(removed).toEqual([]);
+  });
+
+  it('back-fills missing favorite metadata from provider models', () => {
+    const favorite: FavoriteModel = {
+      modelId: 'anthropic/claude-sonnet-4',
+      providerId: 'openrouter',
+    };
+    const providerModel: ProviderModel = {
+      id: 'anthropic/claude-sonnet-4',
+      name: 'Claude Sonnet 4',
+      providerId: 'openrouter',
+      contextLength: 200000,
+      promptPrice: 3,
+      completionPrice: 15,
+      modelType: 'text',
+      streamSupport: true,
+      supportsReasoning: false,
+      supportsVision: true,
+      supportsAudio: false,
+    };
+
+    expect(
+      backfillFavoritesFromProviderModels([favorite], 'openrouter', [providerModel])
+    ).toEqual([
+      {
+        ...favorite,
+        contextLength: 200000,
+        promptPrice: 3,
+        completionPrice: 15,
+        modelType: 'text',
+        streamSupport: true,
+        supportsReasoning: false,
+        supportsVision: true,
+        supportsAudio: false,
+      },
+    ]);
+  });
+
+  it('preserves existing favorite metadata when back-filling from provider models', () => {
+    const favorite: FavoriteModel = {
+      modelId: 'anthropic/claude-sonnet-4',
+      providerId: 'openrouter',
+      contextLength: 123456,
+      promptPrice: 9,
+      completionPrice: 21,
+      modelType: 'text',
+      streamSupport: false,
+      supportsReasoning: true,
+      supportsVision: false,
+      supportsAudio: true,
+    };
+    const providerModel: ProviderModel = {
+      id: 'anthropic/claude-sonnet-4',
+      name: 'Claude Sonnet 4',
+      providerId: 'openrouter',
+      contextLength: 200000,
+      promptPrice: 3,
+      completionPrice: 15,
+      modelType: 'image',
+      streamSupport: true,
+      supportsReasoning: false,
+      supportsVision: true,
+      supportsAudio: false,
+    };
+
+    expect(
+      backfillFavoritesFromProviderModels([favorite], 'openrouter', [providerModel])
+    ).toEqual([favorite]);
   });
 });
