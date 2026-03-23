@@ -50,34 +50,23 @@ export async function cancelGeneration(
 /**
  * Fetch generation stats from OpenRouter.
  *
- * The stats endpoint may return 404 if called too early (the generation
- * record hasn't been written yet).  The caller can pass `retries` to
- * automatically retry with exponential back-off.
+ * This function intentionally performs a single network request.
+ * Retry policy is owned by the caller/UI layer so failed lookups do not
+ * silently fan out into repeated background polling.
  */
 export async function fetchGenerationStats(
   generationId: string,
-  apiKey: string,
-  retries = 5
+  apiKey: string
 ): Promise<OpenRouterGenerationStats | null> {
-  // Initial delay — OpenRouter needs time to persist the generation record.
-  await new Promise((r) => setTimeout(r, 3000));
-  for (let attempt = 0; attempt <= retries; attempt++) {
-    if (attempt > 0) {
-      await new Promise((r) => setTimeout(r, 2000 * attempt));
-    }
-    try {
-      const res = await fetch(
-        `${OPENROUTER_BASE}/generation?id=${encodeURIComponent(generationId)}`,
-        { headers: { Authorization: `Bearer ${apiKey}` } }
-      );
-      if (res.status === 404) continue;
-      if (!res.ok) return null;
-      const json = await res.json();
-      return (json as { data: OpenRouterGenerationStats }).data ?? null;
-    } catch {
-      // Network error – retry
-    }
+  try {
+    const res = await fetch(
+      `${OPENROUTER_BASE}/generation?id=${encodeURIComponent(generationId)}`,
+      { headers: { Authorization: `Bearer ${apiKey}` } }
+    );
+    if (!res.ok) return null;
+    const json = await res.json();
+    return (json as { data: OpenRouterGenerationStats }).data ?? null;
+  } catch {
+    return null;
   }
-  return null;
 }
-
