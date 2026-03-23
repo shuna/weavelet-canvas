@@ -166,10 +166,13 @@ export const sanitizeMessagesForSubmit = (
 const OMITTED_PLACEHOLDER = '...';
 
 /**
- * Insert minimal placeholder messages where consecutive same-role messages
- * would violate the strict user/assistant alternation required by some APIs
- * (e.g. Anthropic). Rather than merging or pair-deleting, this preserves
- * both messages and inserts a lightweight filler with the opposite role.
+ * Fix role-alternation violations caused by omitted messages.
+ * Strategy differs by role for optimal context quality:
+ *   - Consecutive user messages: concatenate into one (natural prompt pattern,
+ *     avoids injecting a fake assistant turn).
+ *   - Consecutive assistant messages: insert a minimal user placeholder
+ *     to preserve turn boundaries (concatenating assistant output distorts
+ *     the model's sense of its own prior response).
  */
 const ensureRoleAlternation = (
   messages: MessageInterface[]
@@ -180,13 +183,23 @@ const ensureRoleAlternation = (
     const prev = result[result.length - 1];
     const curr = messages[i];
     if (curr.role === prev.role) {
-      const fillerRole = prev.role === 'user' ? 'assistant' : 'user';
-      result.push({
-        role: fillerRole,
-        content: [{ type: 'text', text: OMITTED_PLACEHOLDER } as TextContentInterface],
-      });
+      if (curr.role === 'user') {
+        // Concatenate consecutive user messages into one
+        result[result.length - 1] = {
+          role: 'user',
+          content: [...prev.content, ...curr.content],
+        };
+      } else {
+        // Insert a lightweight user placeholder between assistant messages
+        result.push({
+          role: 'user',
+          content: [{ type: 'text', text: OMITTED_PLACEHOLDER } as TextContentInterface],
+        });
+        result.push(curr);
+      }
+    } else {
+      result.push(curr);
     }
-    result.push(curr);
   }
   return result;
 };
