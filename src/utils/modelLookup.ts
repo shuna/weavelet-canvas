@@ -1,6 +1,6 @@
 import useStore from '@store/store';
 import type { CustomProviderModel, ProviderId, FavoriteModel, ProviderModel } from '@type/provider';
-import { isVisionModel, isAudioModel } from '@api/providerModels';
+import { isVisionModel, isAudioModel, isReasoningModel } from '@api/providerModels';
 import {
   UNKNOWN_MODEL_CONTEXT_LENGTH,
   UNKNOWN_MODEL_UI_CONTEXT_LENGTH,
@@ -172,17 +172,18 @@ export function getModelSupportsReasoning(
   providerId?: ProviderId
 ): boolean {
   const state = useStore.getState();
+  const inferred = isReasoningModel(modelId);
 
   const custom = findProviderCustomModel(state.providerCustomModels, modelId, providerId);
   if (custom?.supportsReasoning != null) return custom.supportsReasoning;
 
   const fav = findFavorite(state.favoriteModels, modelId, providerId);
-  if (fav?.supportsReasoning != null) return fav.supportsReasoning;
+  if (fav?.supportsReasoning != null) return fav.supportsReasoning || inferred;
 
   const cached = findCachedModel(state.providerModelCache, modelId, providerId);
-  if (cached?.supportsReasoning != null) return cached.supportsReasoning;
+  if (cached?.supportsReasoning != null) return cached.supportsReasoning || inferred;
 
-  return false;
+  return inferred;
 }
 
 export function useModelSupportsReasoning(
@@ -190,16 +191,17 @@ export function useModelSupportsReasoning(
   providerId?: ProviderId
 ): boolean {
   return useStore((state) => {
+    const inferred = isReasoningModel(modelId);
     const custom = findProviderCustomModel(state.providerCustomModels, modelId, providerId);
     if (custom?.supportsReasoning != null) return custom.supportsReasoning;
 
     const fav = findFavorite(state.favoriteModels, modelId, providerId);
-    if (fav?.supportsReasoning != null) return fav.supportsReasoning;
+    if (fav?.supportsReasoning != null) return fav.supportsReasoning || inferred;
 
     const cached = findCachedModel(state.providerModelCache, modelId, providerId);
-    if (cached?.supportsReasoning != null) return cached.supportsReasoning;
+    if (cached?.supportsReasoning != null) return cached.supportsReasoning || inferred;
 
-    return false;
+    return inferred;
   });
 }
 
@@ -284,9 +286,14 @@ export function useModelCapabilities(
     const custom = findProviderCustomModel(state.providerCustomModels, modelId, providerId);
     const fav = findFavorite(state.favoriteModels, modelId, providerId);
     const cached = findCachedModel(state.providerModelCache, modelId, providerId);
+    const inferredReasoning = isReasoningModel(modelId);
 
     const reasoning =
-      custom?.supportsReasoning ?? fav?.supportsReasoning ?? cached?.supportsReasoning ?? false;
+      custom?.supportsReasoning ?? (
+        fav?.supportsReasoning != null ? fav.supportsReasoning || inferredReasoning
+        : cached?.supportsReasoning != null ? cached.supportsReasoning || inferredReasoning
+        : inferredReasoning
+      );
     const vision =
       custom?.supportsVision ?? fav?.supportsVision ?? cached?.supportsVision ?? isVisionModel(modelId);
     const audio =

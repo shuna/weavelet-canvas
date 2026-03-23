@@ -15,6 +15,7 @@ import {
   getModelConfigContextInfo,
   getModelContextInfo,
   getModelCost,
+  getModelSupportsReasoning,
 } from './modelLookup';
 
 describe('modelLookup cost units', () => {
@@ -72,5 +73,40 @@ describe('modelLookup cost units', () => {
       contextLength: UNKNOWN_MODEL_UI_CONTEXT_LENGTH,
       isFallback: true,
     });
+  });
+
+  it('falls back to heuristic reasoning support for stale favorite metadata', () => {
+    vi.mocked(useStore.getState).mockReturnValue({
+      providerCustomModels: {},
+      favoriteModels: [
+        {
+          modelId: 'anthropic/claude-opus-4.6',
+          providerId: 'openrouter',
+          supportsReasoning: false,
+        },
+      ],
+      providerModelCache: {},
+    } as never);
+
+    expect(getModelSupportsReasoning('anthropic/claude-opus-4.6', 'openrouter')).toBe(true);
+  });
+
+  it('still respects explicit custom-model reasoning overrides', () => {
+    vi.mocked(useStore.getState).mockReturnValue({
+      providerCustomModels: {
+        openrouter: [
+          {
+            modelId: 'anthropic/claude-opus-4.6',
+            providerId: 'openrouter',
+            modelType: 'text',
+            supportsReasoning: false,
+          },
+        ],
+      },
+      favoriteModels: [],
+      providerModelCache: {},
+    } as never);
+
+    expect(getModelSupportsReasoning('anthropic/claude-opus-4.6', 'openrouter')).toBe(false);
   });
 });
