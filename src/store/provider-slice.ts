@@ -7,7 +7,11 @@ import {
   ProviderModel,
 } from '@type/provider';
 import { DEFAULT_PROVIDERS } from './provider-config';
-import { toggleFavoriteModelEntry, updateProviderConfig } from './provider-helpers';
+import {
+  backfillFavoritesFromProviderModels,
+  toggleFavoriteModelEntry,
+  updateProviderConfig,
+} from './provider-helpers';
 
 export interface ProviderSlice {
   providers: Record<ProviderId, ProviderConfig>;
@@ -68,21 +72,14 @@ export const createProviderSlice: StoreSlice<ProviderSlice> = (set, get) => ({
   },
   setProviderModelCache: (id: ProviderId, models: ProviderModel[]) => {
     set((prev: ProviderSlice) => {
-      // Back-fill contextLength on existing favorites that are missing it
-      const modelMap = new Map(models.map((m) => [m.id, m]));
-      let favorites = prev.favoriteModels;
-      const patched = favorites.map((fav) => {
-        if (fav.contextLength || fav.providerId !== id) return fav;
-        const cached = modelMap.get(fav.modelId);
-        return cached?.contextLength ? { ...fav, contextLength: cached.contextLength } : fav;
-      });
-      if (patched.some((f, i) => f !== favorites[i])) {
-        favorites = patched;
-      }
       return {
         ...prev,
         providerModelCache: { ...prev.providerModelCache, [id]: models },
-        favoriteModels: favorites,
+        favoriteModels: backfillFavoritesFromProviderModels(
+          prev.favoriteModels,
+          id,
+          models
+        ),
       };
     });
   },

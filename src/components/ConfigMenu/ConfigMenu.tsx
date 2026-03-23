@@ -2,7 +2,11 @@ import React, { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import PopupModal from '@components/PopupModal';
 import { ConfigInterface, ImageDetail, ReasoningEffort } from '@type/chat';
-import { getModelContextInfo, useModelSupportsReasoning, useModelCapabilities } from '@utils/modelLookup';
+import {
+  getModelConfigContextInfo,
+  useModelSupportsReasoning,
+  useModelCapabilities,
+} from '@utils/modelLookup';
 import { ModelOptions } from '@type/chat';
 import { isModelStreamSupported, normalizeConfigStream } from '@utils/streamSupport';
 import { clampCompletionTokens, getMaxCompletionTokensForContext } from '@utils/tokenBudget';
@@ -69,7 +73,7 @@ const ConfigMenu = ({
       isFirstRender.current = false;
       return;
     }
-    const modelContextLength = getModelContextInfo(_model, _providerId).contextLength;
+    const modelContextLength = getModelConfigContextInfo(_model, _providerId).contextLength;
     setConfig(normalizeConfigStream({
       max_tokens: clampCompletionTokens(_maxToken, modelContextLength),
       model: _model,
@@ -231,13 +235,13 @@ export const MaxTokenSlider = ({
   const favoriteModels = useStore((state) => state.favoriteModels) || [];
 
   const getMaxForModel = (): number => {
-    const lookupMax = getModelContextInfo(_model, _providerId).contextLength;
+    const lookupMax = getModelConfigContextInfo(_model, _providerId).contextLength;
     if (lookupMax > 0) return lookupMax;
     const fav = _providerId
       ? favoriteModels.find((f) => f.modelId === _model && f.providerId === _providerId)
       : favoriteModels.find((f) => f.modelId === _model);
     if (fav?.contextLength) return fav.contextLength;
-    return getModelContextInfo(_model, _providerId).contextLength;
+    return getModelConfigContextInfo(_model, _providerId).contextLength;
   };
 
   const maxForModel = getMaxForModel();

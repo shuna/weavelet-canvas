@@ -1,5 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { UNKNOWN_MODEL_CONTEXT_LENGTH } from './tokenBudget';
+import {
+  UNKNOWN_MODEL_CONTEXT_LENGTH,
+  UNKNOWN_MODEL_UI_CONTEXT_LENGTH,
+} from './tokenBudget';
 
 vi.mock('@store/store', () => ({
   default: {
@@ -8,7 +11,11 @@ vi.mock('@store/store', () => ({
 }));
 
 import useStore from '@store/store';
-import { getModelContextInfo, getModelCost } from './modelLookup';
+import {
+  getModelConfigContextInfo,
+  getModelContextInfo,
+  getModelCost,
+} from './modelLookup';
 
 describe('modelLookup cost units', () => {
   beforeEach(() => {
@@ -34,9 +41,35 @@ describe('modelLookup cost units', () => {
     });
   });
 
+  it('uses favorite model context length when available', () => {
+    vi.mocked(useStore.getState).mockReturnValue({
+      providerCustomModels: {},
+      favoriteModels: [
+        {
+          modelId: 'anthropic/claude-sonnet-4',
+          providerId: 'openrouter',
+          contextLength: 200000,
+        },
+      ],
+      providerModelCache: {},
+    } as never);
+
+    expect(getModelContextInfo('anthropic/claude-sonnet-4', 'openrouter')).toEqual({
+      contextLength: 200000,
+      isFallback: false,
+    });
+  });
+
   it('uses a conservative fallback context length for unknown models', () => {
     expect(getModelContextInfo('unknown-model', 'openai')).toEqual({
       contextLength: UNKNOWN_MODEL_CONTEXT_LENGTH,
+      isFallback: true,
+    });
+  });
+
+  it('uses a larger fallback context length for config UI on unknown models', () => {
+    expect(getModelConfigContextInfo('unknown-model', 'openai')).toEqual({
+      contextLength: UNKNOWN_MODEL_UI_CONTEXT_LENGTH,
       isFallback: true,
     });
   });
