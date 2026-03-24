@@ -169,15 +169,59 @@ describe('submitHelpers', () => {
       },
     ] as MessageInterface[]);
 
+    // Consecutive user messages are concatenated into one
     expect(sanitized).toEqual([
       {
         role: 'user',
-        content: [{ type: 'text', text: ' ask ' }],
+        content: [
+          { type: 'text', text: ' ask ' },
+          { type: 'image_url', image_url: { url: 'https://example.com/x.png', detail: 'low' } },
+        ],
       },
+    ]);
+  });
+
+  it('concatenates consecutive assistant messages instead of inserting fake user turns', () => {
+    const sanitized = sanitizeMessagesForSubmit([
+      textMessage('user', 'question'),
+      textMessage('assistant', 'part one'),
+      textMessage('assistant', 'part two'),
+      textMessage('user', 'follow-up'),
+    ]);
+
+    expect(sanitized).toEqual([
+      textMessage('user', 'question'),
       {
-        role: 'user',
-        content: [{ type: 'image_url', image_url: { url: 'https://example.com/x.png', detail: 'low' } }],
+        role: 'assistant',
+        content: [
+          { type: 'text', text: 'part one' },
+          { type: 'text', text: 'part two' },
+        ],
       },
+      textMessage('user', 'follow-up'),
+    ]);
+  });
+
+  it('preserves tool-use turns without merging', () => {
+    const toolCallMsg: MessageInterface = {
+      role: 'assistant',
+      content: [{ type: 'tool_call', id: 'tc-1', name: 'search', arguments: '{}' }],
+    };
+    const toolResultMsg: MessageInterface = {
+      role: 'user',
+      content: [{ type: 'tool_result', tool_call_id: 'tc-1', content: 'result' }],
+    };
+
+    const sanitized = sanitizeMessagesForSubmit([
+      textMessage('user', 'query'),
+      toolCallMsg,
+      toolResultMsg,
+    ]);
+
+    expect(sanitized).toEqual([
+      textMessage('user', 'query'),
+      toolCallMsg,
+      toolResultMsg,
     ]);
   });
 });

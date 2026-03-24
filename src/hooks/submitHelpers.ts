@@ -167,17 +167,20 @@ export const sanitizeMessagesForSubmit = (
   return ensureRoleAlternation(filtered);
 };
 
-const OMITTED_PLACEHOLDER = '...';
-
 /**
  * Fix role-alternation violations caused by omitted messages.
  *
- * Design principles:
- *   1. Consecutive user messages → concatenate into one (natural multi-instruction
- *      prompt; avoids injecting a fake assistant turn).
- *   2. Consecutive assistant messages → insert a minimal user placeholder to
- *      preserve turn boundaries (concatenating distorts model self-context).
- *   3. Tool-use turns (tool_call / tool_result) are NEVER merged or padded.
+ * Strategy — three-layer separation:
+ *   UI layer:   Users freely delete/omit individual messages.
+ *   This layer: Concatenate consecutive same-role messages to restore
+ *               valid alternation without injecting fake turns.
+ *   API layer:  Always receives correctly alternating roles.
+ *
+ * Rules:
+ *   1. Consecutive user messages     → concatenate into one.
+ *   2. Consecutive assistant messages → concatenate into one.
+ *      (Concatenated content was genuinely produced; no fabrication.)
+ *   3. Tool-use turns (tool_call / tool_result) are NEVER merged.
  *      They form structurally validated pairs and must pass through unchanged.
  */
 const ensureRoleAlternation = (
@@ -189,25 +192,16 @@ const ensureRoleAlternation = (
     const prev = result[result.length - 1];
     const curr = messages[i];
     if (curr.role === prev.role) {
-      // Never merge or pad tool-use turns
+      // Never merge tool-use turns — they are structurally indivisible
       if (hasToolContent(prev) || hasToolContent(curr)) {
         result.push(curr);
         continue;
       }
-      if (curr.role === 'user') {
-        // Concatenate consecutive user messages into one
-        result[result.length - 1] = {
-          role: 'user',
-          content: [...prev.content, ...curr.content],
-        };
-      } else {
-        // Insert a lightweight user placeholder between assistant messages
-        result.push({
-          role: 'user',
-          content: [{ type: 'text', text: OMITTED_PLACEHOLDER } as TextContentInterface],
-        });
-        result.push(curr);
-      }
+      // Concatenate consecutive same-role messages
+      result[result.length - 1] = {
+        role: curr.role,
+        content: [...prev.content, ...curr.content],
+      };
     } else {
       result.push(curr);
     }
