@@ -18,6 +18,8 @@ import {
   TextContentInterface,
   isImageContent,
   isTextContent,
+  isToolCallContent,
+  isToolResultContent,
 } from '@type/chat';
 import { FavoriteModel, ProviderConfig, ProviderId } from '@type/provider';
 import { normalizeProviderConfig } from '@store/provider-helpers';
@@ -147,6 +149,8 @@ const sanitizeMessageContent = (
   content.filter((part) => {
     if (part.type === 'reasoning') return false;
     if (isImageContent(part)) return true;
+    // Tool-call and tool-result content must always be preserved
+    if (isToolCallContent(part) || isToolResultContent(part)) return true;
     return isTextContent(part) && part.text.trim().length > 0;
   });
 
@@ -167,12 +171,14 @@ const OMITTED_PLACEHOLDER = '...';
 
 /**
  * Fix role-alternation violations caused by omitted messages.
- * Strategy differs by role for optimal context quality:
- *   - Consecutive user messages: concatenate into one (natural prompt pattern,
- *     avoids injecting a fake assistant turn).
- *   - Consecutive assistant messages: insert a minimal user placeholder
- *     to preserve turn boundaries (concatenating assistant output distorts
- *     the model's sense of its own prior response).
+ *
+ * Design principles:
+ *   1. Consecutive user messages → concatenate into one (natural multi-instruction
+ *      prompt; avoids injecting a fake assistant turn).
+ *   2. Consecutive assistant messages → insert a minimal user placeholder to
+ *      preserve turn boundaries (concatenating distorts model self-context).
+ *   3. Tool-use turns (tool_call / tool_result) are NEVER merged or padded.
+ *      They form structurally validated pairs and must pass through unchanged.
  */
 const ensureRoleAlternation = (
   messages: MessageInterface[]
@@ -183,6 +189,11 @@ const ensureRoleAlternation = (
     const prev = result[result.length - 1];
     const curr = messages[i];
     if (curr.role === prev.role) {
+      // Never merge or pad tool-use turns
+      if (hasToolContent(prev) || hasToolContent(curr)) {
+        result.push(curr);
+        continue;
+      }
       if (curr.role === 'user') {
         // Concatenate consecutive user messages into one
         result[result.length - 1] = {
@@ -204,6 +215,14 @@ const ensureRoleAlternation = (
   return result;
 };
 
+/**
+ * Returns true if the message contains tool-call or tool-result content.
+ * Tool-use turns must never be omitted or compressed — they form an
+ * indivisible request/response pair whose structure APIs validate strictly.
+ */
+const hasToolContent = (message: MessageInterface): boolean =>
+  message.content.some((part) => isToolCallContent(part) || isToolResultContent(part));
+
 const filterOmittedMessages = (
   messages: MessageInterface[],
   chatIndex: number
@@ -216,7 +235,9 @@ const filterOmittedMessages = (
   if (Object.keys(omittedNodes).length === 0) return messages;
 
   const activePath = chat.branchTree?.activePath;
-  return messages.filter((_, idx) => {
+  return messages.filter((message, idx) => {
+    // Tool-use turns are never omitted — they are structurally required
+    if (hasToolContent(message)) return true;
     const nodeId = activePath?.[idx] ?? String(idx);
     return !omittedNodes[nodeId];
   });
