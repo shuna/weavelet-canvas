@@ -1,28 +1,30 @@
 import Foundation
 import os
 
-// MARK: - Branch Snapshot (minimal diff)
+// MARK: - Branch Snapshot
 
-/// Stores only the target chat + content store entries that changed.
-/// Undo/redo applies chat + contentStoreDiff as a set.
-/// - Added/updated entries: stored with their full ContentEntry
-/// - Deleted entries: stored with refCount = 0 (tombstone)
+/// Stores the target chat + the exact content store entries it references.
+/// Undo/redo replaces the chat and overlays these entries onto the store,
+/// ensuring a self-sufficient snapshot that restores correctly from any state.
 struct BranchSnapshot {
     let currentChatID: String
     let chat: Chat
-    let contentStoreDiff: ContentStoreData  // only changed entries
+    /// Full content entries referenced by the chat's branch tree.
+    /// On apply, these are set as-is (not merged), and unreferenced entries are removed.
+    let referencedContent: ContentStoreData
 
-    /// Estimated memory size for performance monitoring
     var estimatedSize: Int {
-        let chatSize = chat.messages.count * 200  // rough estimate
-        let storeSize = contentStoreDiff.count * 500
+        let chatSize = chat.messages.count * 200
+        let storeSize = referencedContent.count * 500
         return chatSize + storeSize
     }
 }
 
 // MARK: - BranchUndoManager
 
-/// Manages undo/redo with minimal-diff snapshots.
+/// Manages undo/redo with self-sufficient snapshots.
+/// Each snapshot captures the chat + all content entries it references,
+/// so undo/redo always restores exact state regardless of intervening mutations.
 /// Limit: 50 snapshots per stack.
 class BranchUndoManager {
 
@@ -43,16 +45,12 @@ class BranchUndoManager {
     func push(
         currentChatID: String,
         chat: Chat,
-        contentStore: ContentStoreData,
-        previousContentStore: ContentStoreData
+        contentStore: ContentStoreData
     ) {
-        // Compute diff: entries that are in current but differ from previous
-        let diff = computeDiff(current: contentStore, previous: previousContentStore)
-
         let snapshot = BranchSnapshot(
             currentChatID: currentChatID,
             chat: chat,
-            contentStoreDiff: diff
+            referencedContent: Self.extractReferencedContent(chat: chat, store: contentStore)
         )
 
         past.append(snapshot)
@@ -68,21 +66,18 @@ class BranchUndoManager {
 
     /// Undo: restore the last snapshot.
     /// Returns the snapshot to apply, or nil if nothing to undo.
-    /// The caller must push a "current" snapshot to the redo stack before applying.
     func undo(
         currentChatID: String,
         currentChat: Chat,
-        currentContentStore: ContentStoreData,
-        previousContentStore: ContentStoreData
+        currentContentStore: ContentStoreData
     ) -> BranchSnapshot? {
         guard let snapshot = past.popLast() else { return nil }
 
         // Push current state to future (redo)
-        let diff = computeDiff(current: currentContentStore, previous: previousContentStore)
         future.append(BranchSnapshot(
             currentChatID: currentChatID,
             chat: currentChat,
-            contentStoreDiff: diff
+            referencedContent: Self.extractReferencedContent(chat: currentChat, store: currentContentStore)
         ))
 
         logger.debug("Undo: past=\(self.past.count), future=\(self.future.count)")
@@ -95,17 +90,15 @@ class BranchUndoManager {
     func redo(
         currentChatID: String,
         currentChat: Chat,
-        currentContentStore: ContentStoreData,
-        previousContentStore: ContentStoreData
+        currentContentStore: ContentStoreData
     ) -> BranchSnapshot? {
         guard let snapshot = future.popLast() else { return nil }
 
         // Push current state to past (undo)
-        let diff = computeDiff(current: currentContentStore, previous: previousContentStore)
         past.append(BranchSnapshot(
             currentChatID: currentChatID,
             chat: currentChat,
-            contentStoreDiff: diff
+            referencedContent: Self.extractReferencedContent(chat: currentChat, store: currentContentStore)
         ))
 
         logger.debug("Redo: past=\(self.past.count), future=\(self.future.count)")
@@ -115,7 +108,7 @@ class BranchUndoManager {
     // MARK: - Apply Snapshot
 
     /// Apply a snapshot to the current state.
-    /// Returns the updated chats and content store.
+    /// Replaces the target chat and restores exactly the content entries it references.
     static func applySnapshot(
         _ snapshot: BranchSnapshot,
         chats: [Chat],
@@ -124,19 +117,44 @@ class BranchUndoManager {
         var updatedChats = chats
         var updatedStore = contentStore
 
+        // Collect hashes referenced by the old version of this chat (to clean up)
+        let oldHashes: Set<String>
+        if let idx = updatedChats.firstIndex(where: { $0.id == snapshot.currentChatID }),
+           let tree = updatedChats[idx].branchTree {
+            oldHashes = Set(tree.nodes.values.map(\.contentHash))
+        } else {
+            oldHashes = []
+        }
+
         // Replace the target chat
         if let idx = updatedChats.firstIndex(where: { $0.id == snapshot.currentChatID }) {
             updatedChats[idx] = snapshot.chat
         }
 
-        // Apply content store diff
-        for (hash, entry) in snapshot.contentStoreDiff {
-            if entry.refCount <= 0 {
-                // Tombstone: remove
-                updatedStore.removeValue(forKey: hash)
-            } else {
-                updatedStore[hash] = entry
+        // Collect hashes referenced by the restored chat
+        let newHashes: Set<String>
+        if let tree = snapshot.chat.branchTree {
+            newHashes = Set(tree.nodes.values.map(\.contentHash))
+        } else {
+            newHashes = []
+        }
+
+        // Remove old entries no longer referenced (by any chat)
+        let removedHashes = oldHashes.subtracting(newHashes)
+        for hash in removedHashes {
+            // Only remove if no other chat references this hash
+            let referencedElsewhere = updatedChats.contains { chat in
+                guard chat.id != snapshot.currentChatID, let tree = chat.branchTree else { return false }
+                return tree.nodes.values.contains { $0.contentHash == hash }
             }
+            if !referencedElsewhere {
+                updatedStore.removeValue(forKey: hash)
+            }
+        }
+
+        // Restore referenced content entries exactly
+        for (hash, entry) in snapshot.referencedContent {
+            updatedStore[hash] = entry
         }
 
         return (updatedChats, updatedStore)
@@ -151,26 +169,15 @@ class BranchUndoManager {
 
     // MARK: - Private
 
-    /// Compute the diff between current and previous content stores.
-    /// Returns entries that were added, updated, or deleted (tombstone with refCount=0).
-    private func computeDiff(
-        current: ContentStoreData,
-        previous: ContentStoreData
-    ) -> ContentStoreData {
-        var diff: ContentStoreData = [:]
-
-        // Entries in current that differ from previous
-        for (hash, entry) in current {
-            if previous[hash] != entry {
-                diff[hash] = entry
+    /// Extract the content store entries referenced by a chat's branch tree.
+    private static func extractReferencedContent(chat: Chat, store: ContentStoreData) -> ContentStoreData {
+        guard let tree = chat.branchTree else { return [:] }
+        var referenced: ContentStoreData = [:]
+        for node in tree.nodes.values {
+            if let entry = store[node.contentHash] {
+                referenced[node.contentHash] = entry
             }
         }
-
-        // Entries deleted from previous (tombstones)
-        for (hash, _) in previous where current[hash] == nil {
-            diff[hash] = ContentEntry(content: [], refCount: 0)
-        }
-
-        return diff
+        return referenced
     }
 }

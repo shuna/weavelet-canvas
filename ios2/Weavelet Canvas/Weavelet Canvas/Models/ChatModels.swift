@@ -61,9 +61,6 @@ class ChatViewModel {
     private let persistence = PersistenceService()
     private let undoManager = BranchUndoManager()
 
-    /// Snapshot of contentStore at the last undo push point, for correct diff computation.
-    private var lastSnapshotContentStore: ContentStoreData = [:]
-
     // MARK: - UI State
 
     var selectedModelID: String = "claude-3.5-sonnet"
@@ -143,7 +140,6 @@ class ChatViewModel {
                     self.contentStore = state.contentStore
                     self.folders = state.folders
                     self.currentChatID = state.currentChatID
-                    self.lastSnapshotContentStore = state.contentStore
                 }
             }
 
@@ -462,8 +458,7 @@ class ChatViewModel {
         guard let snapshot = undoManager.undo(
             currentChatID: currentChatID!,
             currentChat: chats[chatIndex],
-            currentContentStore: contentStore,
-            previousContentStore: lastSnapshotContentStore
+            currentContentStore: contentStore
         ) else { return }
 
         let (updatedChats, updatedStore) = BranchUndoManager.applySnapshot(
@@ -471,7 +466,6 @@ class ChatViewModel {
         )
         chats = updatedChats
         contentStore = updatedStore
-        lastSnapshotContentStore = contentStore
         scheduleSave()
     }
 
@@ -480,8 +474,7 @@ class ChatViewModel {
         guard let snapshot = undoManager.redo(
             currentChatID: currentChatID!,
             currentChat: chats[chatIndex],
-            currentContentStore: contentStore,
-            previousContentStore: lastSnapshotContentStore
+            currentContentStore: contentStore
         ) else { return }
 
         let (updatedChats, updatedStore) = BranchUndoManager.applySnapshot(
@@ -489,7 +482,6 @@ class ChatViewModel {
         )
         chats = updatedChats
         contentStore = updatedStore
-        lastSnapshotContentStore = contentStore
         scheduleSave()
     }
 
@@ -553,10 +545,8 @@ class ChatViewModel {
         undoManager.push(
             currentChatID: currentChatID!,
             chat: chats[chatIndex],
-            contentStore: contentStore,
-            previousContentStore: lastSnapshotContentStore
+            contentStore: contentStore
         )
-        lastSnapshotContentStore = contentStore
     }
 
     private func stableUUID(for nodeId: String) -> UUID {
