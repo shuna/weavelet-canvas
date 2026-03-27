@@ -152,12 +152,20 @@ actor APIService {
             )
         }
 
-        // Parse SSE stream
+        // Parse SSE stream with per-chunk timeout protection (45s)
         var accumulated = ""
-        var buffer = ""
+        var lastChunkTime = ContinuousClock.now
+        let chunkTimeout: Duration = .seconds(45)
 
         for try await line in asyncBytes.lines {
             try Task.checkCancellation()
+
+            // Check if the gap since last data exceeds timeout
+            let now = ContinuousClock.now
+            if now - lastChunkTime > chunkTimeout {
+                throw APIError.chunkTimeout
+            }
+            lastChunkTime = now
 
             // SSE format: "data: {json}" or "data: [DONE]"
             if line.hasPrefix("data: ") {
@@ -295,6 +303,7 @@ enum APIError: LocalizedError {
     case httpError(status: Int, body: String)
     case invalidResponse
     case cancelled
+    case chunkTimeout
 
     var errorDescription: String? {
         switch self {
@@ -313,6 +322,8 @@ enum APIError: LocalizedError {
             return "Invalid response from API"
         case .cancelled:
             return "Request cancelled"
+        case .chunkTimeout:
+            return "Stream timed out (no data received for 45 seconds)"
         }
     }
 }

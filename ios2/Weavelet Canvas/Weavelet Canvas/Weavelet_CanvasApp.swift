@@ -22,6 +22,7 @@ struct Weavelet_CanvasApp: App {
         .onChange(of: scenePhase) { _, newPhase in
             if newPhase == .background {
                 chatViewModel.flush()
+                Task { await chatViewModel.streamRecovery.flush() }
             }
         }
     }

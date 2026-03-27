@@ -61,6 +61,7 @@ class ChatViewModel {
     private let persistence = PersistenceService()
     private let undoManager = BranchUndoManager()
     let apiService = APIService()
+    let streamRecovery = StreamRecoveryService()
 
     /// Reference to app-wide settings (set from app entry point).
     var settings: SettingsViewModel?
@@ -173,6 +174,67 @@ class ChatViewModel {
                 if self.currentChatID == nil {
                     self.currentChatID = self.chats.first?.id
                 }
+            }
+
+            // Recover any interrupted streams
+            await self.recoverPendingStreams()
+        }
+    }
+
+    /// Recover partial assistant responses from previous interrupted streams.
+    private func recoverPendingStreams() async {
+        // Mark stale .streaming records as .interrupted (updatedAt > 30s ago)
+        await streamRecovery.markStaleAsInterrupted()
+
+        let pending = await streamRecovery.allPending()
+        guard !pending.isEmpty else { return }
+
+        var recoveredCount = 0
+
+        for record in pending {
+            await MainActor.run {
+                // Find the chat
+                guard let chatIndex = chats.firstIndex(where: { $0.id == record.chatId }) else {
+                    // Chat not found — discard
+                    Task { await streamRecovery.delete(id: record.id) }
+                    return
+                }
+
+                // Find the node in the branch tree
+                guard let tree = chats[chatIndex].branchTree,
+                      let msgIndex = tree.activePath.firstIndex(of: record.nodeId) else {
+                    // Node not found — discard
+                    Task { await streamRecovery.delete(id: record.id) }
+                    return
+                }
+
+                // Check if buffered text is longer than current content
+                let node = tree.nodes[record.nodeId]!
+                let currentText = ContentStore.resolveContentText(contentStore, hash: node.contentHash)
+
+                if record.bufferedText.count > currentText.count {
+                    // Apply recovered buffer
+                    let content: [ContentItem] = [.text(record.bufferedText)]
+                    let message = Message(role: .assistant, content: content)
+                    let upsertResult = BranchService.upsertMessageAtIndex(
+                        chats: chats, chatIndex: chatIndex,
+                        messageIndex: msgIndex, message: message,
+                        contentStore: contentStore
+                    )
+                    chats = upsertResult.chats
+                    contentStore = upsertResult.contentStore
+                    recoveredCount += 1
+                }
+            }
+
+            // Always delete after processing
+            await streamRecovery.delete(id: record.id)
+        }
+
+        if recoveredCount > 0 {
+            await MainActor.run {
+                errorMessage = "Recovered \(recoveredCount) partial response\(recoveredCount > 1 ? "s" : "")"
+                scheduleSave()
             }
         }
     }
@@ -339,9 +401,11 @@ class ChatViewModel {
 
     /// Request an assistant response for the current chat.
     /// Creates an empty assistant node and streams the API response into it.
+    /// Integrates with StreamRecoveryService for crash resilience.
     private func requestAssistantResponse() {
         guard let chatIndex = currentChatIndex else { return }
         let chat = chats[chatIndex]
+        let chatId = chat.id
         let config = chat.config
         let providerId = config.providerId ?? .openai
 
@@ -355,6 +419,9 @@ class ChatViewModel {
         chats = result.chats
         contentStore = result.contentStore
 
+        // ★ Persist immediately so the node survives crashes
+        scheduleSave()
+
         // Track the new node for streaming updates
         guard let tree = chats[chatIndex].branchTree,
               let assistantNodeId = tree.activePath.last else { return }
@@ -364,6 +431,15 @@ class ChatViewModel {
             chat: chats[chatIndex],
             contentStore: contentStore
         )
+
+        // Create stream recovery record
+        let requestId = UUID().uuidString
+        let record = StreamRecord(
+            id: requestId, chatId: chatId, nodeId: assistantNodeId,
+            bufferedText: "", status: .streaming,
+            createdAt: Date(), updatedAt: Date()
+        )
+        Task { await streamRecovery.save(record) }
 
         isGenerating = true
 
@@ -376,6 +452,7 @@ class ChatViewModel {
             guard hasKey else {
                 self.isGenerating = false
                 self.errorMessage = "No API key configured for \(providerId.rawValue). Set your key in Settings → API Keys."
+                await self.streamRecovery.updateStatus(id: requestId, .failed)
                 return
             }
 
@@ -398,6 +475,9 @@ class ChatViewModel {
                         )
                         self.chats = streamResult.chats
                         self.contentStore = streamResult.contentStore
+
+                        // Buffer to disk for crash recovery (replaces, not appends)
+                        Task { await self.streamRecovery.replaceBufferedText(id: requestId, text: accumulated) }
                     }
                 )
 
@@ -419,9 +499,12 @@ class ChatViewModel {
                 self.contentStore = upsertResult.contentStore
                 self.isGenerating = false
 
+                // Mark stream as completed and clean up
+                await self.streamRecovery.updateStatus(id: requestId, .completed)
+                await self.streamRecovery.deleteCompleted()
+
                 // Token tracking
                 if let settings = self.settings, settings.countTotalTokens {
-                    // Rough estimate: ~4 chars per token for input+output
                     let totalChars = apiMessages.reduce(0) { $0 + (($1["content"] as? String)?.count ?? 0) } + finalText.count
                     settings.totalTokensUsed += max(1, totalChars / 4)
                 }
@@ -433,10 +516,12 @@ class ChatViewModel {
             } catch is CancellationError {
                 // User cancelled — keep whatever was accumulated
                 self.isGenerating = false
+                await self.streamRecovery.updateStatus(id: requestId, .interrupted)
                 self.scheduleSave()
             } catch {
                 self.isGenerating = false
                 self.errorMessage = error.localizedDescription
+                await self.streamRecovery.updateStatus(id: requestId, .failed)
                 self.scheduleSave()
             }
         }
