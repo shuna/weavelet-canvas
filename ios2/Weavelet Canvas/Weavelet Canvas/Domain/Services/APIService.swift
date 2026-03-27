@@ -152,20 +152,48 @@ actor APIService {
             )
         }
 
-        // Parse SSE stream with per-chunk timeout protection (45s)
+        // Parse SSE stream with real per-chunk timeout (45s).
+        // We race each line read against a sleep so a fully-stalled server
+        // is detected even when asyncBytes.lines never yields.
         var accumulated = ""
-        var lastChunkTime = ContinuousClock.now
         let chunkTimeout: Duration = .seconds(45)
 
-        for try await line in asyncBytes.lines {
+        // Bridge asyncBytes.lines into an AsyncStream so we can consume
+        // it from inside a throwing task group without Sendable issues.
+        let lineStream = AsyncStream<String> { cont in
+            let task = Task {
+                do {
+                    for try await line in asyncBytes.lines {
+                        cont.yield(line)
+                    }
+                    cont.finish()
+                } catch {
+                    cont.finish()
+                }
+            }
+            cont.onTermination = { _ in task.cancel() }
+        }
+        var lineIterator = lineStream.makeAsyncIterator()
+
+        while true {
             try Task.checkCancellation()
 
-            // Check if the gap since last data exceeds timeout
-            let now = ContinuousClock.now
-            if now - lastChunkTime > chunkTimeout {
-                throw APIError.chunkTimeout
+            // Race: next line vs timeout
+            let line: String? = try await withThrowingTaskGroup(of: String?.self) { group in
+                group.addTask {
+                    await lineIterator.next()
+                }
+                group.addTask {
+                    try await Task.sleep(for: chunkTimeout)
+                    throw APIError.chunkTimeout
+                }
+                // First to finish wins; cancel the other
+                let result = try await group.next()!
+                group.cancelAll()
+                return result
             }
-            lastChunkTime = now
+
+            guard let line else { break } // stream ended
 
             // SSE format: "data: {json}" or "data: [DONE]"
             if line.hasPrefix("data: ") {

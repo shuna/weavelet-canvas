@@ -7,6 +7,8 @@ actor StreamRecoveryService {
 
     private let fileURL: URL
     private var records: [String: StreamRecord] = [:]
+    /// Tracks the last accepted sequence number per record to reject out-of-order writes.
+    private var lastSequence: [String: UInt64] = [:]
     private var pendingWrite: Task<Void, Never>?
     private let debounceInterval: Duration = .milliseconds(800)
     private let logger = Logger(subsystem: "org.sstcr.WeaveletCanvas", category: "StreamRecovery")
@@ -33,9 +35,16 @@ actor StreamRecoveryService {
     }
 
     /// Replace the buffered text with the full accumulated value (not append).
-    func replaceBufferedText(id: String, text: String) {
+    /// `seq` is a monotonically increasing sequence number; out-of-order calls are ignored.
+    func replaceBufferedText(id: String, text: String, seq: UInt64 = 0) {
         ensureLoaded()
         guard records[id] != nil else { return }
+        // Reject out-of-order writes: only apply if seq >= lastSeq
+        if seq > 0 {
+            let lastSeq = lastSequence[id] ?? 0
+            guard seq >= lastSeq else { return }
+            lastSequence[id] = seq
+        }
         records[id]!.bufferedText = text
         records[id]!.updatedAt = Date()
         schedulePersist()

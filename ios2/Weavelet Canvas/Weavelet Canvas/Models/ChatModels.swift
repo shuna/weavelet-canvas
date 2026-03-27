@@ -457,6 +457,7 @@ class ChatViewModel {
             }
 
             do {
+                var chunkSeq: UInt64 = 0
                 let finalText = try await self.apiService.streamChatCompletion(
                     messages: apiMessages,
                     config: config,
@@ -476,8 +477,11 @@ class ChatViewModel {
                         self.chats = streamResult.chats
                         self.contentStore = streamResult.contentStore
 
-                        // Buffer to disk for crash recovery (replaces, not appends)
-                        Task { await self.streamRecovery.replaceBufferedText(id: requestId, text: accumulated) }
+                        // Buffer to disk for crash recovery with monotonic sequence
+                        // to prevent out-of-order writes from truncating the buffer
+                        chunkSeq += 1
+                        let seq = chunkSeq
+                        Task { await self.streamRecovery.replaceBufferedText(id: requestId, text: accumulated, seq: seq) }
                     }
                 )
 
