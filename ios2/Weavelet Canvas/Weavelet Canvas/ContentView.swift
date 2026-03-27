@@ -186,50 +186,6 @@ private struct CapabilityIcons: View {
 
 private struct ModelSelectorButton: View {
     @Bindable var viewModel: ChatViewModel
-    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
-
-    var body: some View {
-        if horizontalSizeClass == .compact {
-            // iPhone: use Menu for compact popup
-            Menu {
-                ForEach(viewModel.availableModels) { model in
-                    Button {
-                        viewModel.selectedModelID = model.id
-                    } label: {
-                        HStack {
-                            Text(model.name)
-                            if viewModel.selectedModelID == model.id {
-                                Image(systemName: "checkmark")
-                            }
-                        }
-                    }
-                }
-            } label: {
-                HStack(spacing: 5) {
-                    Text(viewModel.selectedModel?.name ?? "Model")
-                        .font(.subheadline.weight(.medium))
-                    if let model = viewModel.selectedModel {
-                        CapabilityIcons(
-                            reasoning: model.supportsReasoning,
-                            vision: model.supportsVision,
-                            audio: model.supportsAudio,
-                            size: 10
-                        )
-                    }
-                    Image(systemName: "chevron.down")
-                        .font(.caption2.weight(.semibold))
-                }
-                .foregroundStyle(.primary)
-            }
-        } else {
-            // iPad: use popover for richer UI
-            PopoverModelSelector(viewModel: viewModel)
-        }
-    }
-}
-
-private struct PopoverModelSelector: View {
-    @Bindable var viewModel: ChatViewModel
     @State private var showPicker = false
 
     var body: some View {
@@ -254,6 +210,7 @@ private struct PopoverModelSelector: View {
         }
         .popover(isPresented: $showPicker, arrowEdge: .top) {
             ModelPickerList(viewModel: viewModel, showPicker: $showPicker)
+                .presentationCompactAdaptation(.popover)
         }
     }
 }
