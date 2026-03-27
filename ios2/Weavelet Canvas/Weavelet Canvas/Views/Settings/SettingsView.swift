@@ -115,6 +115,20 @@ struct SettingsView: View {
                     Toggle("Swap panels", isOn: $settings.splitPanelSwapped)
                 }
 
+                // MARK: - Prompt Library
+                Section("Prompt Library") {
+                    NavigationLink {
+                        PromptLibraryView(settings: settings)
+                    } label: {
+                        HStack {
+                            Text("Prompt Library")
+                            Spacer()
+                            Text("\(settings.prompts.count) custom")
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                }
+
                 // MARK: - About
                 Section("About") {
                     LabeledContent("Version", value: "1.0.0")

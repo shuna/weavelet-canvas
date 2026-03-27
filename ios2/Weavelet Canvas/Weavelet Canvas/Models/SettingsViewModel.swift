@@ -223,6 +223,50 @@ final class SettingsViewModel {
         customModels[provider.rawValue] ?? []
     }
 
+    // MARK: - Prompt Library (Epic 6, Ticket 23)
+
+    /// User-created prompts (persisted as JSON in UserDefaults).
+    var prompts: [Prompt] {
+        didSet { savePrompts() }
+    }
+
+    func addPrompt(name: String, prompt: String) {
+        prompts.append(Prompt(name: name, prompt: prompt))
+    }
+
+    func removePrompt(id: String) {
+        prompts.removeAll { $0.id == id }
+    }
+
+    func updatePrompt(id: String, name: String, prompt: String) {
+        guard let idx = prompts.firstIndex(where: { $0.id == id }) else { return }
+        prompts[idx].name = name
+        prompts[idx].prompt = prompt
+    }
+
+    /// All available prompts: user prompts first, then defaults.
+    var allPrompts: [Prompt] {
+        prompts + DefaultPrompts.all
+    }
+
+    /// Filter prompts by query (name match).
+    func searchPrompts(_ query: String) -> [Prompt] {
+        let q = query.lowercased().trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !q.isEmpty else { return allPrompts }
+        return allPrompts.filter { $0.name.lowercased().contains(q) }
+    }
+
+    private func savePrompts() {
+        guard let data = try? JSONEncoder().encode(prompts) else { return }
+        defaults.set(data, forKey: "prompts")
+    }
+
+    private static func loadPrompts() -> [Prompt] {
+        guard let data = UserDefaults.standard.data(forKey: "prompts"),
+              let prompts = try? JSONDecoder().decode([Prompt].self, from: data) else { return [] }
+        return prompts
+    }
+
     // MARK: - Init
 
     private let defaults = UserDefaults.standard
@@ -255,6 +299,9 @@ final class SettingsViewModel {
         self.defaultSystemMessage = UserDefaults.standard.string(forKey: "defaultSystemMessage") ?? ""
         self.splitPanelRatio = Self.doubleWithDefault("splitPanelRatio", default: 0.5)
         self.splitPanelSwapped = UserDefaults.standard.bool(forKey: "splitPanelSwapped")
+
+        // Epic 6
+        self.prompts = Self.loadPrompts()
     }
 
     // MARK: - Persistence Helpers

@@ -62,6 +62,7 @@ struct ChatDetailView: View {
                     text: $viewModel.draftText,
                     isGenerating: viewModel.isGenerating,
                     enterToSubmit: viewModel.settings?.enterToSubmit ?? true,
+                    prompts: viewModel.settings?.allPrompts ?? [],
                     onSend: { viewModel.sendMessage() },
                     onStop: { viewModel.stopGenerating() }
                 )

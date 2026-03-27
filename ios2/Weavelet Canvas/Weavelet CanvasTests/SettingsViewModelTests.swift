@@ -222,4 +222,77 @@ struct SettingsViewModelTests {
         chatVM2.createNewChat(systemMessage: nil)
         #expect(chatVM2.chats.first!.messages.isEmpty)
     }
+
+    // MARK: - Epic 6: Prompt Library
+
+    @Test("Prompt library defaults to empty")
+    func promptLibraryDefaults() {
+        UserDefaults.standard.removeObject(forKey: "prompts")
+        let vm = SettingsViewModel()
+        #expect(vm.prompts.isEmpty)
+        #expect(!vm.allPrompts.isEmpty) // defaults exist
+        #expect(vm.allPrompts.count == DefaultPrompts.all.count)
+        UserDefaults.standard.removeObject(forKey: "prompts")
+    }
+
+    @Test("Add, update, remove prompts with persistence")
+    func promptCRUD() {
+        UserDefaults.standard.removeObject(forKey: "prompts")
+        let vm = SettingsViewModel()
+
+        vm.addPrompt(name: "Test", prompt: "Do something")
+        #expect(vm.prompts.count == 1)
+        #expect(vm.prompts[0].name == "Test")
+        #expect(vm.prompts[0].prompt == "Do something")
+
+        // Verify persistence
+        let vm2 = SettingsViewModel()
+        #expect(vm2.prompts.count == 1)
+        #expect(vm2.prompts[0].name == "Test")
+
+        // Update
+        let id = vm.prompts[0].id
+        vm.updatePrompt(id: id, name: "Updated", prompt: "New text")
+        #expect(vm.prompts[0].name == "Updated")
+        #expect(vm.prompts[0].prompt == "New text")
+
+        // Remove
+        vm.removePrompt(id: id)
+        #expect(vm.prompts.isEmpty)
+
+        UserDefaults.standard.removeObject(forKey: "prompts")
+    }
+
+    @Test("Search prompts filters by name")
+    func promptSearch() {
+        UserDefaults.standard.removeObject(forKey: "prompts")
+        let vm = SettingsViewModel()
+        vm.addPrompt(name: "Alpha", prompt: "a")
+        vm.addPrompt(name: "Beta", prompt: "b")
+
+        let all = vm.searchPrompts("")
+        #expect(all.count == 2 + DefaultPrompts.all.count)
+
+        let filtered = vm.searchPrompts("alpha")
+        #expect(filtered.count == 1)
+        #expect(filtered[0].name == "Alpha")
+
+        let noMatch = vm.searchPrompts("zzz")
+        #expect(noMatch.isEmpty)
+
+        UserDefaults.standard.removeObject(forKey: "prompts")
+    }
+
+    @Test("allPrompts includes user then defaults")
+    func allPromptsOrder() {
+        UserDefaults.standard.removeObject(forKey: "prompts")
+        let vm = SettingsViewModel()
+        vm.addPrompt(name: "Custom", prompt: "custom")
+
+        let all = vm.allPrompts
+        #expect(all.first?.name == "Custom")
+        #expect(all.last?.name == DefaultPrompts.all.last?.name)
+
+        UserDefaults.standard.removeObject(forKey: "prompts")
+    }
 }
