@@ -14,13 +14,13 @@ struct ContentView: View {
         return s
     }()
     @State private var sidebarState = SidebarState()
-    @State private var chatViewModel = ChatViewModel()
+    var chatViewModel: ChatViewModel
 
     var body: some View {
         ThreePaneView(
             state: threeColumnState,
             Sidebar: {
-                SidebarView(state: sidebarState)
+                SidebarView(state: sidebarState, chatViewModel: chatViewModel)
             },
             Detail: {
                 ChatDetailView(viewModel: chatViewModel)
@@ -28,8 +28,8 @@ struct ContentView: View {
             sidebarToolbarCenter: { _, _ in
                 EmptyView()
             },
-            sidebarToolbarTrailing: { [sidebarState] _, _ in
-                SidebarToolbarTrailing(state: sidebarState)
+            sidebarToolbarTrailing: { [sidebarState, chatViewModel] _, _ in
+                SidebarToolbarTrailing(state: sidebarState, chatViewModel: chatViewModel)
             },
             detailToolbarLeading: { [chatViewModel] _, _ in
                 DetailToolbarLeading(viewModel: chatViewModel)
@@ -71,21 +71,16 @@ struct ContentView: View {
 
 private struct SidebarToolbarTrailing: View {
     @Bindable var state: SidebarState
+    var chatViewModel: ChatViewModel
 
     var body: some View {
         HStack(spacing: 12) {
             if state.isEditing {
-                // Edit mode: move to folder + delete + done
-                Button {
-                    // batch move to folder
-                } label: {
-                    Image(systemName: "folder")
-                }
-                .disabled(state.selectedChatIDs.isEmpty)
-                .accessibilityLabel("Move to Folder")
-
+                // Edit mode: delete + done
                 Button(role: .destructive) {
-                    // batch delete selected
+                    for id in state.selectedChatIDs {
+                        chatViewModel.deleteChat(id)
+                    }
                     state.selectedChatIDs.removeAll()
                 } label: {
                     Image(systemName: "trash")
@@ -100,14 +95,14 @@ private struct SidebarToolbarTrailing: View {
             } else {
                 // Normal mode: show folder + new chat + edit
                 Button {
-                    // new folder
+                    chatViewModel.createFolder()
                 } label: {
                     Image(systemName: "folder.badge.plus")
                 }
                 .accessibilityLabel("New Folder")
 
                 Button {
-                    // new chat
+                    chatViewModel.createNewChat()
                 } label: {
                     Image(systemName: "square.and.pencil")
                 }
@@ -146,13 +141,9 @@ private struct CapabilityIcons: View {
             .overlay {
                 if !enabled {
                     // Diagonal strikethrough line
-                    GeometryReader { geo in
-                        Path { path in
-                            path.move(to: CGPoint(x: geo.size.width * 0.85, y: geo.size.height * 0.1))
-                            path.addLine(to: CGPoint(x: geo.size.width * 0.15, y: geo.size.height * 0.9))
-                        }
-                        .stroke(.quaternary, lineWidth: 1.2)
-                    }
+                    Image(systemName: "line.diagonal")
+                        .font(.system(size: size * 0.9))
+                        .foregroundStyle(.quaternary)
                 }
             }
     }
@@ -440,7 +431,7 @@ private struct InspectorContentView: View {
         Group {
             switch viewModel.viewMode {
             case .chat:
-                BranchEditorView()
+                BranchEditorView(chatViewModel: viewModel)
             case .branchEditor:
                 ChatDetailView(viewModel: viewModel, forceChat: true)
             }
@@ -449,9 +440,9 @@ private struct InspectorContentView: View {
 }
 
 #Preview("iPhone") {
-    ContentView()
+    ContentView(chatViewModel: ChatViewModel())
 }
 
 #Preview("iPad") {
-    ContentView()
+    ContentView(chatViewModel: ChatViewModel())
 }

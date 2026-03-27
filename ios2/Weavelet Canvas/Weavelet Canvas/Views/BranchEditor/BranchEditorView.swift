@@ -1,73 +1,98 @@
 import SwiftUI
 
 struct BranchEditorView: View {
-    @State var viewModel = BranchEditorViewModel()
+    var chatViewModel: ChatViewModel
+    @State var viewModel: BranchEditorViewModel?
     @State private var canvasSize: CGSize = .zero
     @State private var dragStart: CGSize? = nil
     @State private var pinchStart: CGFloat? = nil
     @State private var pinchStartOffset: CGSize? = nil
     @State private var pinchAnchor: CGPoint? = nil
 
+    private var vm: BranchEditorViewModel {
+        viewModel ?? BranchEditorViewModel(chatViewModel: chatViewModel)
+    }
+
     var body: some View {
         ZStack {
-            branchCanvas
-                .contentShape(Rectangle())
-                .simultaneousGesture(panGesture)
-                .simultaneousGesture(pinchGesture)
-                .onTapGesture {
-                    viewModel.selectedNodeIDs.removeAll()
-                }
+            if let viewModel = viewModel {
+                branchCanvas(viewModel)
+                    .contentShape(Rectangle())
+                    .simultaneousGesture(panGesture)
+                    .simultaneousGesture(pinchGesture)
+                    .onTapGesture {
+                        viewModel.selectedNodeIDs.removeAll()
+                    }
 
-            // Overlay controls
-            VStack {
-                if viewModel.isSearching {
-                    ChatFindBar(
-                        query: $viewModel.searchQuery,
-                        currentMatch: viewModel.searchCurrentMatch,
-                        totalMatches: viewModel.searchTotalMatches,
-                        onPrevious: { viewModel.searchPrevious() },
-                        onNext: { viewModel.searchNext() },
-                        onClose: {
-                            viewModel.isSearching = false
-                            viewModel.searchQuery = ""
-                        }
-                    )
-                    .padding(.top, 4)
-                }
+                // Overlay controls
+                VStack {
+                    if viewModel.isSearching {
+                        ChatFindBar(
+                            query: Binding(
+                                get: { viewModel.searchQuery },
+                                set: { viewModel.searchQuery = $0 }
+                            ),
+                            currentMatch: viewModel.searchCurrentMatch,
+                            totalMatches: viewModel.searchTotalMatches,
+                            onPrevious: { viewModel.searchPrevious() },
+                            onNext: { viewModel.searchNext() },
+                            onClose: {
+                                viewModel.isSearching = false
+                                viewModel.searchQuery = ""
+                            }
+                        )
+                        .padding(.top, 4)
+                    }
 
-                Spacer()
-
-                HStack(alignment: .bottom) {
-                    leftControls
                     Spacer()
-                    MiniMapView(
-                        viewModel: viewModel,
-                        canvasSize: canvasSize,
-                        onDrag: { newOffset in
-                            viewModel.offset = newOffset
-                        }
-                    )
+
+                    HStack(alignment: .bottom) {
+                        leftControls(viewModel)
+                        Spacer()
+                        MiniMapView(
+                            viewModel: viewModel,
+                            canvasSize: canvasSize,
+                            onDrag: { newOffset in
+                                viewModel.offset = newOffset
+                            }
+                        )
+                    }
+                    .padding(12)
                 }
-                .padding(12)
+            } else {
+                ProgressView()
             }
         }
         .background(Color(.systemGroupedBackground))
+        .onAppear {
+            if viewModel == nil {
+                viewModel = BranchEditorViewModel(chatViewModel: chatViewModel)
+            } else {
+                viewModel?.rebuildFromDomain()
+            }
+        }
+        .onChange(of: chatViewModel.messages.count) {
+            viewModel?.rebuildFromDomain()
+        }
         .onGeometryChange(for: CGSize.self) { proxy in
             proxy.size
         } action: { newSize in
             canvasSize = newSize
             if canvasSize.width > 0 {
-                viewModel.fitToView(canvasSize: canvasSize)
+                viewModel?.fitToView(canvasSize: canvasSize)
             }
         }
-        .sheet(item: $viewModel.detailNode) { node in
+        .sheet(item: Binding(
+            get: { viewModel?.detailNode },
+            set: { viewModel?.detailNode = $0 }
+        )) { node in
             MessageDetailSheet(node: node)
         }
     }
 
     // MARK: - Canvas
 
-    private var branchCanvas: some View {
+    private func branchCanvas(_ viewModel: BranchEditorViewModel) -> some View {
         ZStack(alignment: .topLeading) {
             // Edges
             ForEach(viewModel.edges) { edge in
@@ -126,6 +151,7 @@ struct BranchEditorView: View {
     private var panGesture: some Gesture {
         DragGesture()
             .onChanged { value in
+                guard let viewModel else { return }
                 if viewModel.interactionMode == .pan {
                     if dragStart == nil { dragStart = viewModel.offset }
                     viewModel.offset = CGSize(
@@ -142,6 +168,7 @@ struct BranchEditorView: View {
     private var pinchGesture: some Gesture {
         MagnifyGesture()
             .onChanged { value in
+                guard let viewModel else { return }
                 if pinchStart == nil {
                     pinchStart = viewModel.zoom
                     pinchStartOffset = viewModel.offset
@@ -164,6 +191,7 @@ struct BranchEditorView: View {
     }
 
     private func zoomCentered(by factor: CGFloat) {
+        guard let viewModel else { return }
         let oldZoom = viewModel.zoom
         let newZoom = min(max(oldZoom * factor, BranchEditorViewModel.minZoom), BranchEditorViewModel.maxZoom)
         let cx = canvasSize.width / 2
@@ -179,7 +207,7 @@ struct BranchEditorView: View {
 
     // MARK: - Left Controls
 
-    private var leftControls: some View {
+    private func leftControls(_ viewModel: BranchEditorViewModel) -> some View {
         VStack(spacing: 6) {
             controlGroup {
                 controlButton(icon: BranchInteractionMode.pan.icon,
@@ -194,9 +222,9 @@ struct BranchEditorView: View {
             }
 
             controlGroup {
-                controlButton(icon: "arrow.uturn.backward", disabled: !viewModel.canUndo) { /* undo */ }
+                controlButton(icon: "arrow.uturn.backward", disabled: !viewModel.canUndo) { viewModel.undo() }
                 Divider().frame(width: 22)
-                controlButton(icon: "arrow.uturn.forward", disabled: !viewModel.canRedo) { /* redo */ }
+                controlButton(icon: "arrow.uturn.forward", disabled: !viewModel.canRedo) { viewModel.redo() }
             }
 
             controlGroup {
@@ -237,7 +265,7 @@ struct BranchEditorView: View {
 // MARK: - Branch Node View
 
 private struct BranchNodeView: View {
-    let node: BranchNode
+    let node: UIBranchNode
     let isSelected: Bool
     let zoom: CGFloat
     let onTap: () -> Void
@@ -415,7 +443,7 @@ private struct MiniMapView: View {
 // MARK: - Message Detail Sheet
 
 private struct MessageDetailSheet: View {
-    let node: BranchNode
+    let node: UIBranchNode
     @Environment(\.dismiss) private var dismiss
 
     private var roleColor: Color {
@@ -474,8 +502,4 @@ private struct MessageDetailSheet: View {
         }
         .presentationDetents([.medium, .large])
     }
-}
-
-extension BranchNode: @retroactive Hashable {
-    func hash(into hasher: inout Hasher) { hasher.combine(id) }
 }

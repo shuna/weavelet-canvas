@@ -1,13 +1,13 @@
 import SwiftUI
 
-// MARK: - Branch Node
+// MARK: - UI Branch Node (presentation layer)
 
-struct BranchNode: Identifiable, Equatable {
-    let id: UUID
+struct UIBranchNode: Identifiable, Equatable, Hashable {
+    let id: String          // domain BranchNode id
     var role: MessageRole
     var content: String
     var label: String?
-    var parentID: UUID?
+    var parentID: String?
     var isActive: Bool = false
     var isStarred: Bool = false
     var isPinned: Bool = false
@@ -24,8 +24,8 @@ struct BranchNode: Identifiable, Equatable {
 
 struct BranchEdge: Identifiable, Equatable {
     let id: String
-    let sourceID: UUID
-    let targetID: UUID
+    let sourceID: String
+    let targetID: String
     var isActive: Bool = false
 }
 
@@ -50,13 +50,17 @@ enum BranchInteractionMode: String, CaseIterable {
     }
 }
 
-// MARK: - Branch Editor View Model
+// MARK: - Branch Editor View Model (derives from ChatViewModel)
 
 @Observable
 class BranchEditorViewModel {
-    var nodes: [BranchNode] = BranchEditorViewModel.sampleNodes
+    // Source of truth
+    private weak var chatViewModel: ChatViewModel?
+
+    // Presentation state
+    var nodes: [UIBranchNode] = []
     var edges: [BranchEdge] = []
-    var selectedNodeIDs: Set<UUID> = []
+    var selectedNodeIDs: Set<String> = []
     var interactionMode: BranchInteractionMode = .pan
     var zoom: CGFloat = 1.0
     var offset: CGSize = .zero
@@ -65,12 +69,8 @@ class BranchEditorViewModel {
     var searchCurrentMatch: Int = 0
     var searchTotalMatches: Int = 0
 
-    // Undo/Redo
-    var canUndo: Bool = false
-    var canRedo: Bool = false
-
     // Detail modal
-    var detailNode: BranchNode? = nil
+    var detailNode: UIBranchNode? = nil
 
     static let nodeWidth: CGFloat = 280
     static let nodeHeight: CGFloat = 90
@@ -79,19 +79,55 @@ class BranchEditorViewModel {
     static let minZoom: CGFloat = 0.2
     static let maxZoom: CGFloat = 3.0
 
-    init() {
+    var canUndo: Bool { chatViewModel?.canGoBack ?? false }
+    var canRedo: Bool { chatViewModel?.canGoForward ?? false }
+
+    init(chatViewModel: ChatViewModel) {
+        self.chatViewModel = chatViewModel
+        rebuildFromDomain()
+    }
+
+    // MARK: - Sync from Domain
+
+    func rebuildFromDomain() {
+        guard let vm = chatViewModel,
+              let chat = vm.currentChat,
+              let tree = chat.branchTree else {
+            nodes = []
+            edges = []
+            return
+        }
+
+        let activePath = Set(tree.activePath)
+
+        nodes = tree.nodes.values.map { node in
+            let content = ContentStore.resolveContent(vm.contentStore, hash: node.contentHash)
+            let text = content.toText()
+            return UIBranchNode(
+                id: node.id,
+                role: node.role,
+                content: text,
+                label: node.label,
+                parentID: node.parentId,
+                isActive: activePath.contains(node.id),
+                isStarred: node.starred ?? false,
+                isPinned: node.pinned ?? false
+            )
+        }
+
         buildEdges()
         layoutNodes()
     }
 
     func buildEdges() {
+        let activeSet = Set(nodes.filter(\.isActive).map(\.id))
         edges = nodes.compactMap { node in
             guard let parentID = node.parentID else { return nil }
             return BranchEdge(
                 id: "\(parentID)-\(node.id)",
                 sourceID: parentID,
                 targetID: node.id,
-                isActive: node.isActive && (nodes.first { $0.id == parentID }?.isActive ?? false)
+                isActive: activeSet.contains(node.id) && activeSet.contains(parentID)
             )
         }
     }
@@ -99,7 +135,7 @@ class BranchEditorViewModel {
     func layoutNodes() {
         guard !nodes.isEmpty else { return }
 
-        var childrenMap: [UUID: [UUID]] = [:]
+        var childrenMap: [String: [String]] = [:]
         for node in nodes {
             if let pid = node.parentID {
                 childrenMap[pid, default: []].append(node.id)
@@ -109,9 +145,8 @@ class BranchEditorViewModel {
         let nodeUnit = Self.nodeWidth + Self.nodeSpacingX
         let rowHeight: CGFloat = Self.nodeHeight + Self.nodeSpacingY
 
-        // Compute subtree width (in node units) for each node
-        var subtreeWidth: [UUID: CGFloat] = [:]
-        func computeWidth(_ id: UUID) -> CGFloat {
+        var subtreeWidth: [String: CGFloat] = [:]
+        func computeWidth(_ id: String) -> CGFloat {
             let children = childrenMap[id] ?? []
             if children.isEmpty {
                 subtreeWidth[id] = 1
@@ -125,8 +160,7 @@ class BranchEditorViewModel {
         let roots = nodes.filter { $0.parentID == nil }
         for root in roots { _ = computeWidth(root.id) }
 
-        // Assign positions: each node centered over its subtree
-        func assignPositions(_ id: UUID, depth: Int, leftX: CGFloat) {
+        func assignPositions(_ id: String, depth: Int, leftX: CGFloat) {
             let w = subtreeWidth[id] ?? 1
             let centerX = leftX + (w * nodeUnit - Self.nodeSpacingX) / 2 - Self.nodeWidth / 2
 
@@ -148,26 +182,51 @@ class BranchEditorViewModel {
         }
     }
 
-    func selectNode(_ id: UUID) {
+    // MARK: - Actions (delegate to ChatViewModel)
+
+    func selectNode(_ id: String) {
         selectedNodeIDs = [id]
     }
 
-    func toggleStarred(_ id: UUID) {
-        if let i = nodes.firstIndex(where: { $0.id == id }) {
-            nodes[i].isStarred.toggle()
+    func navigateToNode(_ id: String) {
+        guard let vm = chatViewModel,
+              let _ = vm.currentChatIndex,
+              let tree = vm.currentChat?.branchTree else { return }
+
+        let path = tree.buildPathToLeaf(from: id)
+        if let first = path.first {
+            vm.switchBranch(at: tree.rootId, to: first)
         }
+        rebuildFromDomain()
     }
 
-    func togglePinned(_ id: UUID) {
-        if let i = nodes.firstIndex(where: { $0.id == id }) {
-            nodes[i].isPinned.toggle()
-        }
+    func toggleStarred(_ id: String) {
+        guard let vm = chatViewModel, let chatIndex = vm.currentChatIndex else { return }
+        vm.chats = BranchService.toggleNodeStar(chats: vm.chats, chatIndex: chatIndex, nodeId: id)
+        vm.scheduleSave()
+        rebuildFromDomain()
     }
 
-    func deleteNode(_ id: UUID) {
-        nodes.removeAll { $0.id == id }
-        edges.removeAll { $0.sourceID == id || $0.targetID == id }
-        selectedNodeIDs.remove(id)
+    func togglePinned(_ id: String) {
+        guard let vm = chatViewModel, let chatIndex = vm.currentChatIndex else { return }
+        vm.chats = BranchService.toggleNodePin(chats: vm.chats, chatIndex: chatIndex, nodeId: id)
+        vm.scheduleSave()
+        rebuildFromDomain()
+    }
+
+    func deleteNode(_ id: String) {
+        chatViewModel?.deleteBranch(nodeId: id)
+        rebuildFromDomain()
+    }
+
+    func undo() {
+        chatViewModel?.undo()
+        rebuildFromDomain()
+    }
+
+    func redo() {
+        chatViewModel?.redo()
+        rebuildFromDomain()
     }
 
     func fitToView(canvasSize: CGSize) {
@@ -204,26 +263,5 @@ class BranchEditorViewModel {
         guard searchTotalMatches > 0 else { return }
         searchCurrentMatch = searchCurrentMatch <= 1 ? searchTotalMatches : searchCurrentMatch - 1
     }
-
-    // MARK: - Sample Data
-
-    static var sampleNodes: [BranchNode] {
-        let root = UUID()
-        let a1 = UUID()
-        let a2 = UUID()
-        let u2 = UUID()
-        let a3 = UUID()
-        let u3 = UUID()
-        let a4 = UUID()
-
-        return [
-            BranchNode(id: root, role: .user, content: "SwiftUIで3カラムレイアウトを作るには？", parentID: nil, isActive: true),
-            BranchNode(id: a1, role: .assistant, content: "NavigationSplitViewを使用するのが標準的なアプローチです。3つのカラムをsidebar, content, detailとして定義できます。", parentID: root, isActive: true),
-            BranchNode(id: u2, role: .user, content: "インスペクターペインの表示切替は？", parentID: a1, isActive: true),
-            BranchNode(id: a2, role: .assistant, content: ".inspectorモディファイアを使用します。iOS 17以降で利用可能です。", parentID: u2, isActive: true),
-            BranchNode(id: u3, role: .user, content: "カスタムの3ペインを作りたい", label: "Alternative", parentID: a1, isActive: false),
-            BranchNode(id: a3, role: .assistant, content: "GeometryReaderとHStackを組み合わせて独自に実装できます。", parentID: u3, isActive: false),
-            BranchNode(id: a4, role: .assistant, content: "もう一つの方法として、UIKitのUISplitViewControllerをSwiftUIから利用する手法もあります。", parentID: u2, isActive: false, isStarred: true),
-        ]
-    }
 }
+
