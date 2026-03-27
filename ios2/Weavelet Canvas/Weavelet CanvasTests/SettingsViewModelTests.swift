@@ -104,6 +104,23 @@ struct SettingsViewModelTests {
         for key in keys { UserDefaults.standard.removeObject(forKey: key) }
     }
 
+    @Test("Empty default model resolves to fallback")
+    func emptyModelFallback() {
+        UserDefaults.standard.removeObject(forKey: "defaultModel")
+        let vm = SettingsViewModel()
+        #expect(vm.defaultModel == "")
+        #expect(vm.resolvedDefaultModel == "claude-3.5-sonnet")
+        #expect(vm.defaultChatConfig.model == "claude-3.5-sonnet")
+
+        vm.defaultModel = "  "
+        #expect(vm.resolvedDefaultModel == "claude-3.5-sonnet")
+
+        vm.defaultModel = "custom-model"
+        #expect(vm.resolvedDefaultModel == "custom-model")
+
+        UserDefaults.standard.removeObject(forKey: "defaultModel")
+    }
+
     @Test("Default chat config persists")
     func defaultChatConfigPersistence() {
         UserDefaults.standard.removeObject(forKey: "defaultMaxTokens")

@@ -17,6 +17,7 @@ struct Weavelet_CanvasApp: App {
         WindowGroup {
             ContentView(chatViewModel: chatViewModel, settings: settings)
                 .preferredColorScheme(settings.themeMode.colorScheme)
+                .onAppear { chatViewModel.settings = settings }
         }
         .onChange(of: scenePhase) { _, newPhase in
             if newPhase == .background {

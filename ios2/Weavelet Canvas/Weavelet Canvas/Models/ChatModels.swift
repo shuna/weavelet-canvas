@@ -62,6 +62,9 @@ class ChatViewModel {
     private let undoManager = BranchUndoManager()
     let apiService = APIService()
 
+    /// Reference to app-wide settings (set from app entry point).
+    var settings: SettingsViewModel?
+
     // MARK: - UI State
 
     /// Per-chat model selection — reads/writes Chat.config.model
@@ -181,7 +184,8 @@ class ChatViewModel {
         if let sys = systemMessage, !sys.isEmpty {
             messages.append(Message(role: .system, content: [.text(sys)]))
         }
-        let chat = Chat(title: title, messages: messages, config: config ?? .default)
+        let imageDetail = settings?.defaultImageDetail ?? .auto
+        let chat = Chat(title: title, messages: messages, config: config ?? .default, imageDetail: imageDetail)
         chats.insert(chat, at: 0)
         currentChatID = chat.id
         pushNavigation(chat.id)
@@ -414,6 +418,17 @@ class ChatViewModel {
                 self.chats = upsertResult.chats
                 self.contentStore = upsertResult.contentStore
                 self.isGenerating = false
+
+                // Token tracking
+                if let settings = self.settings, settings.countTotalTokens {
+                    // Rough estimate: ~4 chars per token for input+output
+                    let totalChars = apiMessages.reduce(0) { $0 + (($1["content"] as? String)?.count ?? 0) } + finalText.count
+                    settings.totalTokensUsed += max(1, totalChars / 4)
+                }
+
+                // Auto-title generation
+                self.autoGenerateTitleIfNeeded(chatIndex: chatIndex)
+
                 self.scheduleSave()
             } catch is CancellationError {
                 // User cancelled — keep whatever was accumulated
@@ -425,6 +440,22 @@ class ChatViewModel {
                 self.scheduleSave()
             }
         }
+    }
+
+    /// Auto-generate a chat title from the first user message if autoTitle is enabled.
+    private func autoGenerateTitleIfNeeded(chatIndex: Int) {
+        guard let settings, settings.autoTitle else { return }
+        guard !chats[chatIndex].titleSet else { return }
+
+        // Use first user message text as title basis
+        let messages = self.messages
+        guard let firstUser = messages.first(where: { $0.role == .user }) else { return }
+        let text = firstUser.content
+        let title = String(text.prefix(50)).trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !title.isEmpty else { return }
+
+        chats[chatIndex].title = title.count < text.count ? title + "…" : title
+        chats[chatIndex].titleSet = true
     }
 
     func deleteMessage(_ id: UUID) {
@@ -758,7 +789,7 @@ class ChatViewModel {
             case .json:
                 data = try exportChat(chatId, visibleBranchOnly: visibleBranchOnly)
             case .openAI:
-                data = ExportImportService.exportAsOpenAI(chat: chat, contentStore: contentStore)
+                data = ExportImportService.exportAsOpenAI(chat: chat, contentStore: contentStore, visibleBranchOnly: visibleBranchOnly)
             case .openRouter:
                 data = ExportImportService.exportAsOpenRouter(chat: chat, contentStore: contentStore)
             case .markdown:

@@ -410,15 +410,18 @@ enum ExportImportService {
     /// Export a chat in OpenAI/ChatGPT conversation format.
     static func exportAsOpenAI(
         chat: Chat,
-        contentStore: ContentStoreData
+        contentStore: ContentStoreData,
+        visibleBranchOnly: Bool = true
     ) -> Data {
-        let tree = chat.branchTree
-        var mapping: [[String: Any]] = []
-
-        // Build mapping from active path messages
+        // Build mapping from active path messages (visible branch only uses active path)
         let messages: [Message]
-        if let tree {
-            messages = BranchService.materializeActivePath(tree: tree, contentStore: contentStore)
+        if let tree = chat.branchTree {
+            if visibleBranchOnly {
+                messages = BranchService.materializeActivePath(tree: tree, contentStore: contentStore)
+            } else {
+                // Export all messages in the chat (flat list)
+                messages = chat.messages
+            }
         } else {
             messages = chat.messages
         }

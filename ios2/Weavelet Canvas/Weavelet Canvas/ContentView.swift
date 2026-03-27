@@ -73,6 +73,17 @@ struct ContentView: View {
         )) { item in
             ShareSheet(items: [item.url])
         }
+        .environment(\.splitPanelSwapped, settings.splitPanelSwapped)
+        .onChange(of: settings.splitPanelRatio) { _, newRatio in
+            if !threeColumnState.inspectorWidthUserSet {
+                // Will be applied on next geometry change via the auto-sizing logic
+                // Store as a hint for ThreeColumnState
+                threeColumnState.defaultRatio = newRatio
+            }
+        }
+        .onAppear {
+            threeColumnState.defaultRatio = settings.splitPanelRatio
+        }
     }
 }
 

@@ -3,6 +3,7 @@ import SwiftUI
 struct ChatInputBar: View {
     @Binding var text: String
     let isGenerating: Bool
+    var enterToSubmit: Bool = true
     let onSend: () -> Void
     let onStop: () -> Void
 
@@ -28,6 +29,9 @@ struct ChatInputBar: View {
                     .padding(.vertical, 8)
                     .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 16))
                     .focused($isFocused)
+                    .onSubmit {
+                        if enterToSubmit && canSend { onSend() }
+                    }
 
                 // Send / Stop button
                 if isGenerating {

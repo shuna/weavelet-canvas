@@ -25,7 +25,7 @@ struct ExportSheet: View {
 
                 Section("Options") {
                     Toggle("Visible branch only", isOn: $visibleBranchOnly)
-                        .disabled(format == .openAI || format == .openRouter)
+                        .disabled(format == .openRouter)
 
                     Toggle("Gzip compression", isOn: $gzipCompress)
                         .disabled(format == .markdown)
