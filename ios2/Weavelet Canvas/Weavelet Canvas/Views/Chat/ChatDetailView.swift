@@ -1,0 +1,200 @@
+import SwiftUI
+
+struct ChatDetailView: View {
+    @Bindable var viewModel: ChatViewModel
+    var forceChat: Bool = false
+    @State private var keyboardVisible = false
+    @State private var currentMessageIndex = 0
+    @State private var scrollProxy: ScrollViewProxy?
+
+    var body: some View {
+        Group {
+            if forceChat || viewModel.viewMode == .chat {
+                chatContentView
+            } else {
+                BranchEditorView()
+            }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillShowNotification)) { _ in
+            keyboardVisible = true
+        }
+        .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillHideNotification)) { _ in
+            keyboardVisible = false
+        }
+    }
+
+    private var chatContentView: some View {
+        GeometryReader { geo in
+            ZStack {
+                messageList
+
+                if !keyboardVisible {
+                    floatingControls
+                }
+            }
+            .safeAreaInset(edge: .top, spacing: 0) {
+                if viewModel.isSearching {
+                    ChatFindBar(
+                        query: $viewModel.searchQuery,
+                        currentMatch: viewModel.searchCurrentMatch,
+                        totalMatches: viewModel.searchTotalMatches,
+                        onPrevious: { viewModel.searchPrevious() },
+                        onNext: { viewModel.searchNext() },
+                        onClose: {
+                            viewModel.isSearching = false
+                            viewModel.searchQuery = ""
+                        }
+                    )
+                }
+            }
+            .safeAreaInset(edge: .bottom, spacing: 0) {
+                VStack(spacing: 0) {
+                    // Error toast (above input bar)
+                    if let error = viewModel.errorMessage {
+                        ErrorToast(
+                            message: error,
+                            onRetry: { viewModel.retryLastMessage() },
+                            onDismiss: { withAnimation { viewModel.errorMessage = nil } }
+                        )
+                        .padding(.bottom, 6)
+                    }
+
+                    ChatInputBar(
+                        text: $viewModel.draftText,
+                        isGenerating: viewModel.isGenerating,
+                        onSend: { viewModel.sendMessage() },
+                        onStop: { viewModel.stopGenerating() }
+                    )
+                }
+                .padding(.bottom, keyboardVisible ? 0 : -max(geo.safeAreaInsets.bottom - 6, 0))
+            }
+        }
+    }
+
+    // MARK: - Floating Controls
+
+    private var floatingControls: some View {
+        VStack {
+            Spacer()
+            HStack {
+                // Left: Collapse controls
+                CollapseControls(
+                    onCollapseAll: { viewModel.collapseAll() },
+                    onExpandAll: { viewModel.expandAll() }
+                )
+                .padding(.leading, 12)
+                .padding(.bottom, 8)
+
+                Spacer()
+
+                // Right: Bubble navigation
+                BubbleNavigationControls(
+                    onScrollToTop: { scrollTo(index: 0) },
+                    onPrevious: { scrollTo(index: max(currentMessageIndex - 1, 0)) },
+                    onNext: { scrollTo(index: min(currentMessageIndex + 1, viewModel.messages.count - 1)) },
+                    onScrollToBottom: { scrollTo(index: viewModel.messages.count - 1) }
+                )
+                .padding(.trailing, 12)
+                .padding(.bottom, 8)
+            }
+        }
+    }
+
+    private func scrollTo(index: Int) {
+        guard viewModel.messages.indices.contains(index) else { return }
+        currentMessageIndex = index
+        withAnimation(.easeOut(duration: 0.3)) {
+            scrollProxy?.scrollTo(viewModel.messages[index].id, anchor: .center)
+        }
+    }
+
+    // MARK: - Message List
+
+    private var messageList: some View {
+        ScrollViewReader { proxy in
+            ScrollView {
+                LazyVStack(spacing: 0, pinnedViews: .sectionFooters) {
+                    ForEach(viewModel.messages) { message in
+                        let isEditing = Binding<Bool>(
+                            get: { viewModel.editingMessageID == message.id },
+                            set: { viewModel.editingMessageID = $0 ? message.id : nil }
+                        )
+                        Section {
+                            MessageBubble(
+                                message: message,
+                                onCopy: { viewModel.copyMessage(message) },
+                                onDelete: { viewModel.deleteMessage(message.id) },
+                                onRegenerate: { viewModel.regenerateMessage(message.id) },
+                                onToggleOmit: { viewModel.toggleOmit(message.id) },
+                                onToggleProtect: { viewModel.toggleProtect(message.id) },
+                                onChangeRole: { viewModel.changeRole(message.id, to: $0) },
+                                onToggleCollapse: { viewModel.toggleCollapse(message.id) },
+                                isEditing: isEditing,
+                                editText: $viewModel.editText
+                            )
+                            .id(message.id)
+                        } footer: {
+                            if !message.isGenerating && !message.isCollapsed {
+                                let idx = viewModel.messages.firstIndex(where: { $0.id == message.id })
+                                if isEditing.wrappedValue {
+                                    MessageEditBar(
+                                        message: message,
+                                        onSaveAndGenerate: {
+                                            viewModel.editMessage(message.id, newContent: viewModel.editText)
+                                            isEditing.wrappedValue = false
+                                            viewModel.regenerateMessage(message.id)
+                                        },
+                                        onSave: {
+                                            viewModel.editMessage(message.id, newContent: viewModel.editText)
+                                            isEditing.wrappedValue = false
+                                        },
+                                        onCancel: { isEditing.wrappedValue = false },
+                                        hasChanges: viewModel.editText != message.content
+                                    )
+                                } else {
+                                    MessageActionBar(
+                                        message: message,
+                                        onCopy: { viewModel.copyMessage(message) },
+                                        onDelete: { viewModel.deleteMessage(message.id) },
+                                        onRegenerate: { viewModel.regenerateMessage(message.id) },
+                                        onMoveUp: { viewModel.moveMessageUp(message.id) },
+                                        onMoveDown: { viewModel.moveMessageDown(message.id) },
+                                        onEdit: { isEditing.wrappedValue = true },
+                                        isFirst: idx == viewModel.messages.startIndex,
+                                        isLast: idx == viewModel.messages.index(before: viewModel.messages.endIndex)
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            .scrollDismissesKeyboard(.immediately)
+            .onTapGesture {
+                UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
+            }
+            .onChange(of: viewModel.messages.count) {
+                if let lastID = viewModel.messages.last?.id {
+                    withAnimation(.easeOut(duration: 0.3)) {
+                        proxy.scrollTo(lastID, anchor: .bottom)
+                    }
+                }
+            }
+            .onAppear { scrollProxy = proxy }
+        }
+    }
+}
+
+// MARK: - Empty State
+
+struct ChatEmptyState: View {
+    var body: some View {
+        VStack(spacing: 12) {
+            Image(systemName: "bubble.left.and.bubble.right")
+                .font(.system(size: 48))
+                .foregroundStyle(.quaternary)
+            Text("Select or start a conversation")
+                .foregroundStyle(.secondary)
+        }
+    }
+}
