@@ -5,6 +5,7 @@
 
 import SwiftUI
 import Observation
+import UniformTypeIdentifiers
 
 // MARK: - Shared State
 
@@ -392,6 +393,9 @@ private struct ChatRow: View {
 private struct MenuOptionsSection: View {
     @Binding var isExpanded: Bool
     var chatViewModel: ChatViewModel
+    @State private var showImporter = false
+    @State private var showExportAll = false
+    @State private var importError: String?
 
     var body: some View {
         VStack(spacing: 0) {
@@ -418,14 +422,14 @@ private struct MenuOptionsSection: View {
                         action: {}
                     )
                     MenuOptionButton(
-                        title: "Import / Export",
-                        icon: "square.and.arrow.up.on.square",
-                        action: {}
+                        title: "Import",
+                        icon: "square.and.arrow.down",
+                        action: { showImporter = true }
                     )
                     MenuOptionButton(
-                        title: "Sync",
-                        icon: "arrow.triangle.2.circlepath",
-                        action: {}
+                        title: "Export All",
+                        icon: "square.and.arrow.up",
+                        action: { exportAll() }
                     )
                     MenuOptionButton(
                         title: "Help",
@@ -442,6 +446,51 @@ private struct MenuOptionsSection: View {
                 .font(.caption2)
                 .foregroundStyle(.tertiary)
                 .padding(.bottom, 4)
+        }
+        .fileImporter(
+            isPresented: $showImporter,
+            allowedContentTypes: [.json],
+            allowsMultipleSelection: false
+        ) { result in
+            handleImport(result)
+        }
+        .alert("Import Error", isPresented: Binding(
+            get: { importError != nil },
+            set: { if !$0 { importError = nil } }
+        )) {
+            Button("OK") { importError = nil }
+        } message: {
+            Text(importError ?? "")
+        }
+    }
+
+    private func handleImport(_ result: Result<[URL], Error>) {
+        do {
+            let urls = try result.get()
+            guard let url = urls.first else { return }
+
+            guard url.startAccessingSecurityScopedResource() else {
+                importError = "Unable to access the selected file."
+                return
+            }
+            defer { url.stopAccessingSecurityScopedResource() }
+
+            let data = try Data(contentsOf: url)
+            try chatViewModel.importData(from: data)
+        } catch {
+            importError = error.localizedDescription
+        }
+    }
+
+    private func exportAll() {
+        do {
+            let data = try chatViewModel.exportData()
+            let url = FileManager.default.temporaryDirectory
+                .appendingPathComponent("weavelet-canvas-export.json")
+            try data.write(to: url)
+            chatViewModel.exportedFileURL = url
+        } catch {
+            chatViewModel.errorMessage = "Export failed: \(error.localizedDescription)"
         }
     }
 }

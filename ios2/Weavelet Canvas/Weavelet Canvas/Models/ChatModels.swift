@@ -60,6 +60,7 @@ class ChatViewModel {
 
     private let persistence = PersistenceService()
     private let undoManager = BranchUndoManager()
+    let apiService = APIService()
 
     // MARK: - UI State
 
@@ -327,9 +328,12 @@ class ChatViewModel {
     private var generationTask: Task<Void, Never>?
 
     /// Request an assistant response for the current chat.
-    /// Creates an empty assistant node and initiates the API call.
+    /// Creates an empty assistant node and streams the API response into it.
     private func requestAssistantResponse() {
         guard let chatIndex = currentChatIndex else { return }
+        let chat = chats[chatIndex]
+        let config = chat.config
+        let providerId = config.providerId ?? .openai
 
         // Add empty assistant node
         let emptyContent: [ContentItem] = [.text("")]
@@ -345,17 +349,52 @@ class ChatViewModel {
         guard let tree = chats[chatIndex].branchTree,
               let assistantNodeId = tree.activePath.last else { return }
 
+        // Build messages for API from active path
+        let apiMessages = APIService.buildMessagesForAPI(
+            chat: chats[chatIndex],
+            contentStore: contentStore
+        )
+
         isGenerating = true
 
         generationTask = Task { @MainActor [weak self] in
             guard let self else { return }
+
+            // Check if API key is configured
+            let hasKey = await self.apiService.getAPIKey(for: providerId) != nil
+
+            guard hasKey else {
+                self.isGenerating = false
+                self.errorMessage = "No API key configured for \(providerId.rawValue). Set your key in Settings → API Keys."
+                return
+            }
+
             do {
-                let responseText = try await self.callAPI()
+                let finalText = try await self.apiService.streamChatCompletion(
+                    messages: apiMessages,
+                    config: config,
+                    providerId: providerId,
+                    onChunk: { [weak self] accumulated in
+                        guard let self, self.isGenerating else { return }
+                        // Update the assistant node content with accumulated text (streaming)
+                        guard let chatIndex = self.currentChatIndex,
+                              let tree = self.chats[chatIndex].branchTree,
+                              let msgIndex = tree.activePath.firstIndex(of: assistantNodeId) else { return }
+
+                        // Transient update for streaming (no persist until done)
+                        let streamResult = BranchService.updateLastNodeContent(
+                            chats: self.chats, chatIndex: chatIndex,
+                            content: [.text(accumulated)], contentStore: self.contentStore
+                        )
+                        self.chats = streamResult.chats
+                        self.contentStore = streamResult.contentStore
+                    }
+                )
 
                 guard self.isGenerating else { return } // cancelled
 
-                // Update the assistant node content
-                let content: [ContentItem] = [.text(responseText)]
+                // Final commit: upsert with proper content store management
+                let content: [ContentItem] = [.text(finalText)]
                 guard let chatIndex = self.currentChatIndex,
                       let tree = self.chats[chatIndex].branchTree,
                       let msgIndex = tree.activePath.firstIndex(of: assistantNodeId) else { return }
@@ -370,28 +409,16 @@ class ChatViewModel {
                 self.contentStore = upsertResult.contentStore
                 self.isGenerating = false
                 self.scheduleSave()
+            } catch is CancellationError {
+                // User cancelled — keep whatever was accumulated
+                self.isGenerating = false
+                self.scheduleSave()
             } catch {
-                guard self.isGenerating else { return }
                 self.isGenerating = false
                 self.errorMessage = error.localizedDescription
+                self.scheduleSave()
             }
         }
-    }
-
-    /// Override point for API integration.
-    /// Currently returns a placeholder; replace with actual HTTP streaming call.
-    private func callAPI() async throws -> String {
-        // TODO: Replace with actual API call using Chat.config for model/params
-        // The architecture supports:
-        // 1. Read config from current chat: chats[currentChatIndex!].config
-        // 2. Build messages array from active path
-        // 3. Stream response via URLSession/AsyncBytes
-        // 4. Update assistant node content incrementally via updateLastNodeContent
-        // 5. Commit final content via upsertMessageAtIndex
-
-        // Placeholder: simulate network delay
-        try await Task.sleep(for: .seconds(1))
-        return "API integration pending. Configure your API key in Settings to enable responses."
     }
 
     func deleteMessage(_ id: UUID) {
