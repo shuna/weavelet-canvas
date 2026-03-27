@@ -66,7 +66,26 @@ struct ContentView: View {
                 inspector: ""
             )
         )
+        .sheet(item: Binding(
+            get: { chatViewModel.exportedFileURL.map { IdentifiableURL(url: $0) } },
+            set: { chatViewModel.exportedFileURL = $0?.url }
+        )) { item in
+            ShareSheet(items: [item.url])
+        }
     }
+}
+
+private struct IdentifiableURL: Identifiable {
+    let url: URL
+    var id: String { url.absoluteString }
+}
+
+private struct ShareSheet: UIViewControllerRepresentable {
+    let items: [Any]
+    func makeUIViewController(context: Context) -> UIActivityViewController {
+        UIActivityViewController(activityItems: items, applicationActivities: nil)
+    }
+    func updateUIViewController(_ vc: UIActivityViewController, context: Context) {}
 }
 
 private struct SidebarToolbarTrailing: View {
@@ -270,7 +289,7 @@ private struct DetailToolbarLeading: View {
         HStack(spacing: 8) {
             // Back / Forward
             Button {
-                // go back
+                viewModel.goBack()
             } label: {
                 Image(systemName: "chevron.left")
             }
@@ -278,7 +297,7 @@ private struct DetailToolbarLeading: View {
             .accessibilityLabel("Back")
 
             Button {
-                // go forward
+                viewModel.goForward()
             } label: {
                 Image(systemName: "chevron.right")
             }
@@ -315,17 +334,21 @@ private struct DetailCenterToolbar: View {
 private struct DetailToolbarTrailing: View {
     @Bindable var viewModel: ChatViewModel
     @Bindable var threeColumnState: ThreeColumnState
+    @State private var showModelSettings = false
 
     var body: some View {
         HStack(spacing: 8) {
             // Model settings (chat view only)
             if viewModel.viewMode == .chat {
                 Button {
-                    // TODO: open model settings
+                    showModelSettings = true
                 } label: {
                     Image(systemName: "slider.horizontal.3")
                 }
                 .accessibilityLabel("Model Settings")
+                .sheet(isPresented: $showModelSettings) {
+                    ModelSettingsSheet(viewModel: viewModel)
+                }
             }
 
             // Search (always)
@@ -434,6 +457,105 @@ private struct InspectorContentView: View {
                 BranchEditorView(chatViewModel: viewModel)
             case .branchEditor:
                 ChatDetailView(viewModel: viewModel, forceChat: true)
+            }
+        }
+    }
+}
+
+// MARK: - Model Settings Sheet
+
+private struct ModelSettingsSheet: View {
+    @Bindable var viewModel: ChatViewModel
+    @Environment(\.dismiss) private var dismiss
+
+    private var configBinding: Binding<ChatConfig> {
+        Binding(
+            get: {
+                guard let idx = viewModel.currentChatIndex else {
+                    return ChatConfig(model: "claude-3.5-sonnet", maxTokens: 4096, temperature: 1.0,
+                                      presencePenalty: 0, topP: 1, frequencyPenalty: 0)
+                }
+                return viewModel.chats[idx].config
+            },
+            set: { newValue in
+                guard let idx = viewModel.currentChatIndex else { return }
+                viewModel.chats[idx].config = newValue
+                viewModel.scheduleSave()
+            }
+        )
+    }
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                Section("Model") {
+                    Picker("Model", selection: Binding(
+                        get: { viewModel.selectedModelID },
+                        set: { viewModel.selectedModelID = $0 }
+                    )) {
+                        ForEach(viewModel.availableModels) { model in
+                            Text(model.name).tag(model.id)
+                        }
+                    }
+                }
+
+                Section("Parameters") {
+                    HStack {
+                        Text("Max Tokens")
+                        Spacer()
+                        TextField("", value: configBinding.maxTokens, format: .number)
+                            .keyboardType(.numberPad)
+                            .multilineTextAlignment(.trailing)
+                            .frame(width: 80)
+                    }
+
+                    VStack(alignment: .leading) {
+                        HStack {
+                            Text("Temperature")
+                            Spacer()
+                            Text(String(format: "%.2f", configBinding.wrappedValue.temperature))
+                                .foregroundStyle(.secondary)
+                        }
+                        Slider(value: configBinding.temperature, in: 0...2, step: 0.01)
+                    }
+
+                    VStack(alignment: .leading) {
+                        HStack {
+                            Text("Top P")
+                            Spacer()
+                            Text(String(format: "%.2f", configBinding.wrappedValue.topP))
+                                .foregroundStyle(.secondary)
+                        }
+                        Slider(value: configBinding.topP, in: 0...1, step: 0.01)
+                    }
+
+                    VStack(alignment: .leading) {
+                        HStack {
+                            Text("Presence Penalty")
+                            Spacer()
+                            Text(String(format: "%.2f", configBinding.wrappedValue.presencePenalty))
+                                .foregroundStyle(.secondary)
+                        }
+                        Slider(value: configBinding.presencePenalty, in: -2...2, step: 0.01)
+                    }
+
+                    VStack(alignment: .leading) {
+                        HStack {
+                            Text("Frequency Penalty")
+                            Spacer()
+                            Text(String(format: "%.2f", configBinding.wrappedValue.frequencyPenalty))
+                                .foregroundStyle(.secondary)
+                        }
+                        Slider(value: configBinding.frequencyPenalty, in: -2...2, step: 0.01)
+                    }
+                }
+            }
+            .navigationTitle("Model Settings")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Done") { dismiss() }
+                }
             }
         }
     }

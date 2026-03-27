@@ -233,11 +233,77 @@ enum ExportImportService {
         return ImportResult(chats: [result], contentStore: store, folders: [:])
     }
 
-    // MARK: - OpenAI Import (stub for v2)
+    // MARK: - OpenAI Import
 
+    /// Import OpenAI ChatGPT conversation export format.
+    /// Expects an array of objects with `title` and `mapping` (node tree with `message`).
     private static func importOpenAI(_ data: Data) throws -> ImportResult {
-        // OpenAI conversation format import - v2
-        throw ImportError.unsupportedFormat
+        let json = try JSONSerialization.jsonObject(with: data)
+        guard let conversations = json as? [[String: Any]] else {
+            throw ImportError.unsupportedFormat
+        }
+
+        var allChats: [Chat] = []
+        var store: ContentStoreData = [:]
+
+        for conversation in conversations {
+            let title = conversation["title"] as? String ?? "Imported Chat"
+            guard let mapping = conversation["mapping"] as? [String: [String: Any]] else { continue }
+
+            // Extract messages in order from the mapping tree
+            var flatMessages: [Message] = []
+            // Find root node (no parent or parent not in mapping)
+            var rootId: String?
+            for (nodeId, node) in mapping {
+                let parent = node["parent"] as? String
+                if parent == nil || mapping[parent!] == nil {
+                    rootId = nodeId
+                    break
+                }
+            }
+
+            // Walk the tree following children
+            func walkNode(_ nodeId: String) {
+                guard let node = mapping[nodeId] else { return }
+                if let msgData = node["message"] as? [String: Any],
+                   let author = msgData["author"] as? [String: Any],
+                   let roleName = author["role"] as? String,
+                   roleName != "system" {
+                    let role: Role = roleName == "assistant" ? .assistant : .user
+                    let contentData = msgData["content"] as? [String: Any]
+                    let parts = contentData?["parts"] as? [Any] ?? []
+                    let text = parts.compactMap { $0 as? String }.joined(separator: "\n")
+                    if !text.isEmpty {
+                        let msg = Message(
+                            role: role,
+                            content: [.text(text)]
+                        )
+                        flatMessages.append(msg)
+                    }
+                }
+                // Follow children
+                if let children = node["children"] as? [String] {
+                    for child in children {
+                        walkNode(child)
+                    }
+                }
+            }
+
+            if let rootId { walkNode(rootId) }
+
+            guard !flatMessages.isEmpty else { continue }
+
+            var chat = Chat(id: UUID().uuidString, title: title)
+            chat.messages = flatMessages
+            chat.branchTree = BranchService.flatMessagesToBranchTree(
+                messages: flatMessages,
+                contentStore: &store
+            )
+            allChats.append(chat)
+        }
+
+        guard !allChats.isEmpty else { throw ImportError.unsupportedFormat }
+        return ImportResult(chats: allChats, contentStore: store, folders: [:])
     }
 
     // MARK: - Normalization

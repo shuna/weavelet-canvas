@@ -106,6 +106,9 @@ private struct ChatListSection: View {
                     onDuplicateChat: { chatID in
                         chatViewModel.duplicateChat(chatID)
                     },
+                    onExportChat: { chatID in
+                        chatViewModel.exportChatToShare(chatID)
+                    },
                     onRenameFolder: { newName in
                         chatViewModel.renameFolder(entry.id, name: newName)
                     },
@@ -127,7 +130,8 @@ private struct ChatListSection: View {
                     onDelete: { chatViewModel.deleteChat(chat.id) },
                     onRename: { newTitle in chatViewModel.renameChat(chat.id, title: newTitle) },
                     onDuplicate: { chatViewModel.duplicateChat(chat.id) },
-                    onMove: { folderID in chatViewModel.moveChatToFolder(chat.id, folderID: folderID) }
+                    onMove: { folderID in chatViewModel.moveChatToFolder(chat.id, folderID: folderID) },
+                    onExport: { chatViewModel.exportChatToShare(chat.id) }
                 )
             }
         }
@@ -151,6 +155,7 @@ private struct FolderRow: View {
     let onRenameChat: (String, String) -> Void
     let onMoveChat: (String, String?) -> Void
     let onDuplicateChat: (String) -> Void
+    let onExportChat: (String) -> Void
     let onRenameFolder: (String) -> Void
     let onDeleteFolder: () -> Void
     let onChangeFolderColor: (String?) -> Void
@@ -179,7 +184,8 @@ private struct FolderRow: View {
                     onDelete: { onDeleteChat(chat.id) },
                     onRename: { newTitle in onRenameChat(chat.id, newTitle) },
                     onDuplicate: { onDuplicateChat(chat.id) },
-                    onMove: { targetFolderID in onMoveChat(chat.id, targetFolderID) }
+                    onMove: { targetFolderID in onMoveChat(chat.id, targetFolderID) },
+                    onExport: { onExportChat(chat.id) }
                 )
             }
         } label: {
@@ -266,6 +272,7 @@ private struct ChatRow: View {
     let onRename: (String) -> Void
     let onDuplicate: () -> Void
     let onMove: (String?) -> Void
+    let onExport: () -> Void
 
     @Environment(\.editMode) private var editMode
     @State private var isRenaming = false
@@ -327,7 +334,7 @@ private struct ChatRow: View {
                 }
 
                 Button {
-                    // export
+                    onExport()
                 } label: {
                     Label("Export", systemImage: "square.and.arrow.up")
                 }

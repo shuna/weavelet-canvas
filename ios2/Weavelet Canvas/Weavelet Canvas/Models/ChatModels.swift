@@ -63,15 +63,31 @@ class ChatViewModel {
 
     // MARK: - UI State
 
-    var selectedModelID: String = "claude-3.5-sonnet"
+    /// Per-chat model selection — reads/writes Chat.config.model
+    var selectedModelID: String {
+        get {
+            guard let idx = currentChatIndex else { return "claude-3.5-sonnet" }
+            return chats[idx].config.model
+        }
+        set {
+            guard let idx = currentChatIndex else { return }
+            chats[idx].config.model = newValue
+            scheduleSave()
+        }
+    }
     var availableModels: [AIModel] = AIModel.samples
     var isGenerating: Bool = false
     var isSearching: Bool = false
-    var searchQuery: String = ""
+    var searchQuery: String = "" { didSet { performSearch() } }
     var searchCurrentMatch: Int = 0
     var searchTotalMatches: Int = 0
-    var canGoBack: Bool { undoManager.canUndo }
-    var canGoForward: Bool { undoManager.canRedo }
+    /// Navigation history for back/forward between chats
+    private var navigationHistory: [String] = []
+    private var navigationIndex: Int = -1
+    private var isNavigating: Bool = false
+
+    var canGoBack: Bool { navigationIndex > 0 }
+    var canGoForward: Bool { navigationIndex < navigationHistory.count - 1 }
     var draftText: String = ""
     var viewMode: DetailViewMode = .chat
     var errorMessage: String? = nil
@@ -161,12 +177,43 @@ class ChatViewModel {
         let chat = Chat(title: title)
         chats.insert(chat, at: 0)
         currentChatID = chat.id
+        pushNavigation(chat.id)
         scheduleSave()
     }
 
     func selectChat(_ chatId: String) {
         currentChatID = chatId
+        if !isNavigating { pushNavigation(chatId) }
         scheduleSave()
+    }
+
+    func goBack() {
+        guard canGoBack else { return }
+        navigationIndex -= 1
+        isNavigating = true
+        selectChat(navigationHistory[navigationIndex])
+        isNavigating = false
+    }
+
+    func goForward() {
+        guard canGoForward else { return }
+        navigationIndex += 1
+        isNavigating = true
+        selectChat(navigationHistory[navigationIndex])
+        isNavigating = false
+    }
+
+    private func pushNavigation(_ chatId: String) {
+        // Trim forward history
+        if navigationIndex < navigationHistory.count - 1 {
+            navigationHistory.removeSubrange((navigationIndex + 1)...)
+        }
+        // Avoid duplicates at top
+        if navigationHistory.last != chatId {
+            navigationHistory.append(chatId)
+            if navigationHistory.count > 50 { navigationHistory.removeFirst() }
+        }
+        navigationIndex = navigationHistory.count - 1
     }
 
     func deleteChat(_ chatId: String) {
@@ -271,7 +318,80 @@ class ChatViewModel {
         draftText = ""
 
         scheduleSave()
-        // API integration will add assistant response here
+
+        // Request assistant response
+        requestAssistantResponse()
+    }
+
+    /// Active generation task, cancellable via stopGenerating().
+    private var generationTask: Task<Void, Never>?
+
+    /// Request an assistant response for the current chat.
+    /// Creates an empty assistant node and initiates the API call.
+    private func requestAssistantResponse() {
+        guard let chatIndex = currentChatIndex else { return }
+
+        // Add empty assistant node
+        let emptyContent: [ContentItem] = [.text("")]
+        let result = BranchService.appendNodeToActivePath(
+            chats: chats, chatIndex: chatIndex,
+            role: .assistant, content: emptyContent,
+            contentStore: contentStore
+        )
+        chats = result.chats
+        contentStore = result.contentStore
+
+        // Track the new node for streaming updates
+        guard let tree = chats[chatIndex].branchTree,
+              let assistantNodeId = tree.activePath.last else { return }
+
+        isGenerating = true
+
+        generationTask = Task { @MainActor [weak self] in
+            guard let self else { return }
+            do {
+                let responseText = try await self.callAPI()
+
+                guard self.isGenerating else { return } // cancelled
+
+                // Update the assistant node content
+                let content: [ContentItem] = [.text(responseText)]
+                guard let chatIndex = self.currentChatIndex,
+                      let tree = self.chats[chatIndex].branchTree,
+                      let msgIndex = tree.activePath.firstIndex(of: assistantNodeId) else { return }
+
+                let message = Message(role: .assistant, content: content)
+                let upsertResult = BranchService.upsertMessageAtIndex(
+                    chats: self.chats, chatIndex: chatIndex,
+                    messageIndex: msgIndex, message: message,
+                    contentStore: self.contentStore
+                )
+                self.chats = upsertResult.chats
+                self.contentStore = upsertResult.contentStore
+                self.isGenerating = false
+                self.scheduleSave()
+            } catch {
+                guard self.isGenerating else { return }
+                self.isGenerating = false
+                self.errorMessage = error.localizedDescription
+            }
+        }
+    }
+
+    /// Override point for API integration.
+    /// Currently returns a placeholder; replace with actual HTTP streaming call.
+    private func callAPI() async throws -> String {
+        // TODO: Replace with actual API call using Chat.config for model/params
+        // The architecture supports:
+        // 1. Read config from current chat: chats[currentChatIndex!].config
+        // 2. Build messages array from active path
+        // 3. Stream response via URLSession/AsyncBytes
+        // 4. Update assistant node content incrementally via updateLastNodeContent
+        // 5. Commit final content via upsertMessageAtIndex
+
+        // Placeholder: simulate network delay
+        try await Task.sleep(for: .seconds(1))
+        return "API integration pending. Configure your API key in Settings to enable responses."
     }
 
     func deleteMessage(_ id: UUID) {
@@ -378,6 +498,7 @@ class ChatViewModel {
         let current = chats[chatIndex].collapsedNodes?[nodeId] ?? false
         if chats[chatIndex].collapsedNodes == nil { chats[chatIndex].collapsedNodes = [:] }
         chats[chatIndex].collapsedNodes![nodeId] = current ? nil : true
+        scheduleSave()
     }
 
     func collapseAll() {
@@ -386,11 +507,13 @@ class ChatViewModel {
         var collapsed: [String: Bool] = [:]
         for nodeId in tree.activePath { collapsed[nodeId] = true }
         chats[chatIndex].collapsedNodes = collapsed
+        scheduleSave()
     }
 
     func expandAll() {
         guard let chatIndex = currentChatIndex else { return }
         chats[chatIndex].collapsedNodes = nil
+        scheduleSave()
     }
 
     /// Regenerate: create a sibling branch at the given message's parent,
@@ -414,11 +537,11 @@ class ChatViewModel {
         chats = result.chats
         contentStore = result.contentStore
         scheduleSave()
-        // API integration will fill the new branch node
+        requestAssistantResponse()
     }
 
     /// Regenerate all messages below the given one by truncating and
-    /// preparing for a new API continuation.
+    /// requesting a new API continuation.
     func regenerateBelow(_ id: UUID) {
         guard let chatIndex = currentChatIndex,
               let nodeId = nodeIdForUUID(id),
@@ -432,14 +555,34 @@ class ChatViewModel {
             nodeId: nodeId, contentStore: contentStore
         )
         scheduleSave()
-        // API integration will generate continuation
+        requestAssistantResponse()
     }
 
     func stopGenerating() {
+        generationTask?.cancel()
+        generationTask = nil
         isGenerating = false
     }
 
     // MARK: - Search
+
+    /// Indices of messages (in `messages`) that contain the search query.
+    private(set) var searchMatchIndices: [Int] = []
+
+    func performSearch() {
+        let query = searchQuery.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        guard !query.isEmpty else {
+            searchMatchIndices = []
+            searchTotalMatches = 0
+            searchCurrentMatch = 0
+            return
+        }
+        searchMatchIndices = messages.enumerated().compactMap { idx, msg in
+            msg.content.lowercased().contains(query) ? idx : nil
+        }
+        searchTotalMatches = searchMatchIndices.count
+        searchCurrentMatch = searchTotalMatches > 0 ? 1 : 0
+    }
 
     func searchNext() {
         guard searchTotalMatches > 0 else { return }
@@ -514,6 +657,44 @@ class ChatViewModel {
             contentStore: contentStore,
             folders: folders
         )
+    }
+
+    /// Export a single chat, optionally only the visible branch.
+    func exportChat(_ chatId: String, visibleBranchOnly: Bool = false) throws -> Data {
+        guard let chat = chats.first(where: { $0.id == chatId }) else {
+            throw ExportImportService.ImportError.unsupportedFormat
+        }
+        let prepared = ExportImportService.prepareChatForExport(
+            chat: chat,
+            sourceContentStore: contentStore,
+            visibleBranchOnly: visibleBranchOnly
+        )
+        let export = ExportImportService.ExportV3(
+            version: 3,
+            chats: [prepared.chat],
+            contentStore: ContentStore.buildExportContentStore(prepared.contentStore),
+            folders: nil
+        )
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+        return try encoder.encode(export)
+    }
+
+    /// Data ready for share sheet, set by export operations.
+    var exportedFileURL: URL? = nil
+
+    /// Export a single chat to a temp file and set exportedFileURL for share sheet.
+    func exportChatToShare(_ chatId: String) {
+        do {
+            let data = try exportChat(chatId)
+            let chatTitle = chats.first { $0.id == chatId }?.title ?? "chat"
+            let safeName = chatTitle.replacingOccurrences(of: "/", with: "-")
+            let url = FileManager.default.temporaryDirectory.appendingPathComponent("\(safeName).json")
+            try data.write(to: url)
+            exportedFileURL = url
+        } catch {
+            errorMessage = "Export failed: \(error.localizedDescription)"
+        }
     }
 
     // MARK: - Persistence
