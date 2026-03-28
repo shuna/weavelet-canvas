@@ -1,5 +1,32 @@
 import SwiftUI
 
+// MARK: - Back/Forward Navigation
+
+struct ChatNavButtons: View {
+    @Bindable var viewModel: ChatViewModel
+
+    var body: some View {
+        VStack(spacing: 0) {
+            floatingButton("chevron.left", label: "Back", disabled: !viewModel.canGoBack) { viewModel.goBack() }
+            Divider().frame(width: 20)
+            floatingButton("chevron.right", label: "Forward", disabled: !viewModel.canGoForward) { viewModel.goForward() }
+        }
+        .glassEffect(.regular.interactive())
+        .clipShape(Capsule())
+    }
+
+    private func floatingButton(_ icon: String, label: String, disabled: Bool = false, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Image(systemName: icon)
+                .font(.system(size: 14, weight: .medium))
+                .frame(width: 36, height: 36)
+                .foregroundStyle(disabled ? AnyShapeStyle(.tertiary) : AnyShapeStyle(.primary))
+        }
+        .disabled(disabled)
+        .accessibilityLabel(label)
+    }
+}
+
 // MARK: - Left: Collapse Controls
 
 struct CollapseControls: View {

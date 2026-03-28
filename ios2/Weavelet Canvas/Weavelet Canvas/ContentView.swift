@@ -178,37 +178,35 @@ struct CapabilityIcons: View {
 private struct ModelSelectorButton: View {
     @Bindable var viewModel: ChatViewModel
     var settings: SettingsViewModel?
+    var showModelSettingsEntry: Bool = false
     @State private var showPicker = false
     @State private var showProviderMenu = false
+    @State private var showModelSettings = false
 
     var body: some View {
         Button {
             showPicker.toggle()
         } label: {
             HStack(spacing: 5) {
-                Text(viewModel.selectedModel?.name ?? "Model")
+                Text(viewModel.selectedModelID.isEmpty ? "Model" : viewModel.selectedModelID)
                     .font(.subheadline.weight(.medium))
-                if let model = viewModel.selectedModel {
-                    CapabilityIcons(
-                        reasoning: model.supportsReasoning,
-                        vision: model.supportsVision,
-                        audio: model.supportsAudio,
-                        size: 10
-                    )
-                }
+                    .lineLimit(1)
                 Image(systemName: "chevron.down")
                     .font(.caption2.weight(.semibold))
             }
             .foregroundStyle(.primary)
         }
         .popover(isPresented: $showPicker, arrowEdge: .top) {
-            ModelPickerList(viewModel: viewModel, showPicker: $showPicker, showProviderMenu: $showProviderMenu)
+            ModelPickerList(viewModel: viewModel, showPicker: $showPicker, showProviderMenu: $showProviderMenu, showModelSettingsEntry: showModelSettingsEntry, showModelSettings: $showModelSettings)
                 .presentationCompactAdaptation(.popover)
         }
         .sheet(isPresented: $showProviderMenu) {
             if let settings {
                 ProviderMenuView(apiService: viewModel.apiService, settings: settings)
             }
+        }
+        .sheet(isPresented: $showModelSettings) {
+            ModelSettingsSheet(viewModel: viewModel, settings: settings)
         }
     }
 }
@@ -217,25 +215,44 @@ private struct ModelPickerList: View {
     var viewModel: ChatViewModel
     @Binding var showPicker: Bool
     @Binding var showProviderMenu: Bool
+    var showModelSettingsEntry: Bool = false
+    @Binding var showModelSettings: Bool
+
+    private var favoriteIDs: [String] {
+        viewModel.settings?.favoriteModelIDs ?? []
+    }
 
     var body: some View {
         VStack(spacing: 0) {
-            ForEach(Array(viewModel.availableModels.enumerated()), id: \.element.id) { _, model in
-                ModelPickerRow(
-                    model: model,
-                    isSelected: viewModel.selectedModelID == model.id,
-                    onSelect: {
-                        viewModel.selectedModelID = model.id
-                        showPicker = false
+            ForEach(Array(favoriteIDs.enumerated()), id: \.element) { index, modelId in
+                Button {
+                    viewModel.selectedModelID = modelId
+                    showPicker = false
+                } label: {
+                    HStack(spacing: 10) {
+                        Image(systemName: "checkmark")
+                            .font(.system(size: 12, weight: .semibold))
+                            .foregroundStyle(viewModel.selectedModelID == modelId ? Color.primary : .clear)
+                            .frame(width: 16)
+                        Text(modelId)
+                            .foregroundStyle(.primary)
+                        Spacer()
                     }
-                )
+                    .font(.subheadline)
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 10)
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
 
-                if model.id != viewModel.availableModels.last?.id {
+                if index < favoriteIDs.count - 1 {
                     Divider().padding(.leading, 42)
                 }
             }
 
-            Divider()
+            if !favoriteIDs.isEmpty {
+                Divider()
+            }
 
             Button {
                 showPicker = false
@@ -254,46 +271,32 @@ private struct ModelPickerList: View {
                 .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
+
+            if showModelSettingsEntry {
+                Divider()
+
+                Button {
+                    showPicker = false
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                        showModelSettings = true
+                    }
+                } label: {
+                    HStack {
+                        Image(systemName: "slider.horizontal.3")
+                            .frame(width: 16)
+                        Text("Model Settings")
+                        Spacer()
+                    }
+                    .font(.subheadline)
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 10)
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+            }
         }
         .padding(.vertical, 4)
         .frame(minWidth: 320)
-    }
-}
-
-private struct ModelPickerRow: View {
-    let model: AIModel
-    let isSelected: Bool
-    let onSelect: () -> Void
-
-    var body: some View {
-        Button(action: onSelect) {
-            HStack(spacing: 10) {
-                Image(systemName: "checkmark")
-                    .font(.system(size: 12, weight: .semibold))
-                    .foregroundStyle(isSelected ? Color.primary : Color.clear)
-                    .frame(width: 16)
-
-                Text(model.name)
-                    .foregroundStyle(.primary)
-
-                Spacer()
-
-                Text(model.provider)
-                    .foregroundStyle(.secondary)
-
-                CapabilityIcons(
-                    reasoning: model.supportsReasoning,
-                    vision: model.supportsVision,
-                    audio: model.supportsAudio,
-                    size: 13
-                )
-            }
-            .font(.subheadline)
-            .padding(.horizontal, 16)
-            .padding(.vertical, 10)
-            .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
     }
 }
 
@@ -301,30 +304,37 @@ private struct ModelPickerRow: View {
 
 private struct DetailToolbarLeading: View {
     @Bindable var viewModel: ChatViewModel
+    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
 
     var body: some View {
-        HStack(spacing: 8) {
-            // Back / Forward
-            Button {
-                viewModel.goBack()
-            } label: {
-                Image(systemName: "chevron.left")
-            }
-            .disabled(!viewModel.canGoBack)
-            .accessibilityLabel("Back")
-
-            Button {
-                viewModel.goForward()
-            } label: {
-                Image(systemName: "chevron.right")
-            }
-            .disabled(!viewModel.canGoForward)
-            .accessibilityLabel("Forward")
-
-            // Streaming indicator
+        if horizontalSizeClass == .compact {
+            // Compact: only streaming indicator, no back/forward (moved to branch editor)
             if viewModel.isGenerating {
                 ProgressView()
                     .controlSize(.small)
+            }
+        } else {
+            HStack(spacing: 8) {
+                Button {
+                    viewModel.goBack()
+                } label: {
+                    Image(systemName: "chevron.left")
+                }
+                .disabled(!viewModel.canGoBack)
+                .accessibilityLabel("Back")
+
+                Button {
+                    viewModel.goForward()
+                } label: {
+                    Image(systemName: "chevron.right")
+                }
+                .disabled(!viewModel.canGoForward)
+                .accessibilityLabel("Forward")
+
+                if viewModel.isGenerating {
+                    ProgressView()
+                        .controlSize(.small)
+                }
             }
         }
     }
@@ -335,11 +345,12 @@ private struct DetailToolbarLeading: View {
 private struct DetailCenterToolbar: View {
     @Bindable var viewModel: ChatViewModel
     var settings: SettingsViewModel?
+    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
 
     var body: some View {
         switch viewModel.viewMode {
         case .chat:
-            ModelSelectorButton(viewModel: viewModel, settings: settings)
+            ModelSelectorButton(viewModel: viewModel, settings: settings, showModelSettingsEntry: horizontalSizeClass == .compact)
         case .branchEditor:
             Text("Branch Editor")
                 .font(.headline)
@@ -358,8 +369,8 @@ private struct DetailToolbarTrailing: View {
 
     var body: some View {
         HStack(spacing: 8) {
-            // Model settings (chat view only)
-            if viewModel.viewMode == .chat {
+            // Model settings (chat view only, hidden on compact — moved to model dropdown)
+            if viewModel.viewMode == .chat && horizontalSizeClass != .compact {
                 Button {
                     showModelSettings = true
                 } label: {
@@ -412,42 +423,42 @@ private struct InspectorToolbarTrailing: View {
 
     var body: some View {
         HStack(spacing: 8) {
-            // Model settings (only when inspector shows chat)
-            if inspectorShowsChat {
-                Button {
-                    showModelSettings = true
-                } label: {
-                    Image(systemName: "slider.horizontal.3")
-                }
-                .accessibilityLabel("Model Settings")
-            }
-
-            // Search (always)
-            Button {
+            if horizontalSizeClass != .compact {
+                // Model settings (only when inspector shows chat, not on compact)
                 if inspectorShowsChat {
-                    viewModel.isSearching.toggle()
-                } else {
-                    // Toggle branch editor search when branch canvas is in inspector
-                    viewModel.branchEditorSearchRequested.toggle()
-                }
-            } label: {
-                Image(systemName: "magnifyingglass")
-            }
-            .accessibilityLabel("Search")
-
-            // Hide/Swap menu — on iPhone, hide "Hide Inspector" (X button handles it)
-            if horizontalSizeClass == .compact {
-                // Only show Swap if needed, no hide button (X button in leading handles close)
-                Menu {
                     Button {
-                        viewModel.viewMode = viewModel.viewMode.opposite
+                        showModelSettings = true
                     } label: {
-                        Label("Swap Panels", systemImage: "arrow.left.arrow.right")
+                        Image(systemName: "slider.horizontal.3")
+                    }
+                    .accessibilityLabel("Model Settings")
+                }
+
+                // Search
+                Button {
+                    if inspectorShowsChat {
+                        viewModel.isSearching.toggle()
+                    } else {
+                        viewModel.branchEditorSearchRequested.toggle()
                     }
                 } label: {
-                    Image(systemName: "ellipsis.circle")
-                        .font(.body)
+                    Image(systemName: "magnifyingglass")
                 }
+                .accessibilityLabel("Search")
+            } else {
+                // Compact: branch editor search only
+                Button {
+                    viewModel.branchEditorSearchRequested.toggle()
+                } label: {
+                    Image(systemName: "magnifyingglass")
+                }
+                .accessibilityLabel("Search")
+            }
+
+            // Hide/Swap menu — on iPhone, no options button (branch editor is always inspector)
+            if horizontalSizeClass == .compact {
+                // No menu on compact — swap is disabled, inspector is always branch editor
+                EmptyView()
             } else {
                 Menu {
                     Button {
@@ -480,14 +491,21 @@ private struct InspectorToolbarTrailing: View {
 private struct InspectorCenterToolbar: View {
     @Bindable var viewModel: ChatViewModel
     var settings: SettingsViewModel?
+    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
 
     var body: some View {
-        switch viewModel.viewMode {
-        case .chat:
+        if horizontalSizeClass == .compact {
+            // iPhone: inspector is always branch editor
             Text("Branch Editor")
                 .font(.headline)
-        case .branchEditor:
-            ModelSelectorButton(viewModel: viewModel, settings: settings)
+        } else {
+            switch viewModel.viewMode {
+            case .chat:
+                Text("Branch Editor")
+                    .font(.headline)
+            case .branchEditor:
+                ModelSelectorButton(viewModel: viewModel, settings: settings)
+            }
         }
     }
 }
@@ -496,14 +514,20 @@ private struct InspectorCenterToolbar: View {
 
 private struct InspectorContentView: View {
     @Bindable var viewModel: ChatViewModel
+    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
 
     var body: some View {
         Group {
-            switch viewModel.viewMode {
-            case .chat:
-                BranchEditorView(chatViewModel: viewModel)
-            case .branchEditor:
-                ChatDetailView(viewModel: viewModel, forceChat: true)
+            if horizontalSizeClass == .compact {
+                // iPhone: always show branch editor in inspector
+                BranchEditorView(chatViewModel: viewModel, showNavButtons: true)
+            } else {
+                switch viewModel.viewMode {
+                case .chat:
+                    BranchEditorView(chatViewModel: viewModel)
+                case .branchEditor:
+                    ChatDetailView(viewModel: viewModel, forceChat: true)
+                }
             }
         }
     }
@@ -515,9 +539,8 @@ private struct ModelSettingsSheet: View {
     @Bindable var viewModel: ChatViewModel
     var settings: SettingsViewModel?
     @Environment(\.dismiss) private var dismiss
-    @State private var apiKeyInputs: [ProviderId: String] = [:]
-    @State private var showingKeyFor: ProviderId?
-    @State private var newCustomModelId: String = ""
+    @State private var allModels: [ProviderId: [ProviderModel]] = [:]
+    @State private var loading = false
 
     private var configBinding: Binding<ChatConfig> {
         Binding(
@@ -536,127 +559,200 @@ private struct ModelSettingsSheet: View {
         )
     }
 
+    /// All fetched models that are in the favorites list
+    private var favoriteModels: [ProviderModel] {
+        guard let settings else { return [] }
+        let favIDs = Set(settings.favoriteModelIDs)
+        return allModels.values.flatMap { $0 }
+            .filter { favIDs.contains($0.id) }
+            .sorted { a, b in
+                let aIdx = settings.favoriteModelIDs.firstIndex(of: a.id) ?? Int.max
+                let bIdx = settings.favoriteModelIDs.firstIndex(of: b.id) ?? Int.max
+                return aIdx < bIdx
+            }
+    }
+
+    /// Favorite IDs that weren't found in any provider's model list
+    private var unmatchedFavoriteIDs: [String] {
+        guard let settings else { return [] }
+        let fetchedIDs = Set(allModels.values.flatMap { $0 }.map(\.id))
+        return settings.favoriteModelIDs.filter { !fetchedIDs.contains($0) }
+    }
+
+    /// Whether the currently selected model supports reasoning
+    private var reasoningSupported: Bool {
+        let modelId = viewModel.selectedModelID
+        // Check from fetched model metadata
+        if let model = allModels.values.flatMap({ $0 }).first(where: { $0.id == modelId }),
+           model.supportsReasoning == true {
+            return true
+        }
+        // Heuristic detection for models not in metadata (e.g. Opus)
+        return Self.isReasoningModel(modelId, providerId: configBinding.wrappedValue.providerId)
+    }
+
+    private var isOpenRouter: Bool {
+        configBinding.wrappedValue.providerId == .openrouter
+    }
+
+    private var verbositySupported: Bool {
+        isOpenRouter && viewModel.selectedModelID.lowercased().contains("claude")
+    }
+
+    /// Port of web's reasoning model detection heuristics
+    static func isReasoningModel(_ modelId: String, providerId: ProviderId?) -> Bool {
+        let id = modelId.lowercased()
+        // OpenAI o-series
+        if id.range(of: #"(?:^|[-/])o[134](?:$|[-/])"#, options: .regularExpression) != nil { return true }
+        // DeepSeek reasoning
+        if id.contains("deepseek-r1") || id.contains("deepseek-reasoner") || id.contains("qwq") { return true }
+        // Claude thinking models
+        if id.contains("claude") && id.contains("thinking") { return true }
+        // Claude 3.7+ and Claude 4+
+        if id.range(of: #"claude-(?:3\.7|4(?:\.\d+)?)(?:$|[-/:])"#, options: .regularExpression) != nil { return true }
+        if id.range(of: #"claude-(?:sonnet|opus)-4(?:\.\d+)?(?:$|[-/:])"#, options: .regularExpression) != nil { return true }
+        return false
+    }
+
     var body: some View {
         NavigationStack {
             Form {
-                Section("Provider") {
-                    Picker("Provider", selection: Binding(
-                        get: { configBinding.wrappedValue.providerId ?? .openai },
-                        set: { configBinding.wrappedValue.providerId = $0 }
-                    )) {
-                        ForEach(ProviderId.allCases, id: \.self) { provider in
-                            Text(provider.rawValue.capitalized).tag(provider)
-                        }
-                    }
-                }
-
-                Section("Model") {
-                    HStack {
-                        TextField("Model ID", text: Binding(
-                            get: { viewModel.selectedModelID },
-                            set: { viewModel.selectedModelID = $0 }
-                        ))
-                        .autocorrectionDisabled()
-                        .textInputAutocapitalization(.never)
-
-                        if let settings {
-                            Button {
-                                settings.toggleFavorite(viewModel.selectedModelID)
-                            } label: {
-                                Image(systemName: settings.isFavorite(viewModel.selectedModelID) ? "star.fill" : "star")
-                                    .foregroundStyle(settings.isFavorite(viewModel.selectedModelID) ? .yellow : .secondary)
-                            }
-                            .buttonStyle(.plain)
-                        }
-                    }
-                }
-
-                if let settings {
-                    favoriteModelsSection(settings: settings)
-                    customModelsSection(settings: settings, provider: configBinding.wrappedValue.providerId ?? .openai)
-                }
-
-                Section("API Key") {
-                    let provider = configBinding.wrappedValue.providerId ?? .openai
-                    HStack {
-                        if showingKeyFor == provider {
-                            TextField("API Key", text: apiKeyBinding(for: provider))
-                                .autocorrectionDisabled()
-                                .textInputAutocapitalization(.never)
-                                .font(.system(.body, design: .monospaced))
-                        } else {
-                            let hasKey = !(apiKeyInputs[provider]?.isEmpty ?? true)
-                            Text(hasKey ? "••••••••" : "Not set")
-                                .foregroundStyle(hasKey ? .primary : .secondary)
+                // Model Selection
+                Section {
+                    if loading {
+                        HStack {
                             Spacer()
-                            Button(hasKey ? "Edit" : "Set") {
-                                showingKeyFor = provider
-                            }
+                            ProgressView()
+                            Spacer()
                         }
-                    }
-
-                    if showingKeyFor == provider {
-                        Button("Save Key") {
-                            let key = apiKeyInputs[provider] ?? ""
-                            if !key.isEmpty {
-                                Task {
-                                    await viewModel.apiService.setAPIKey(key, for: provider)
+                    } else if favoriteModels.isEmpty && unmatchedFavoriteIDs.isEmpty {
+                        Text("No favorites yet.\nAdd favorites from Browse All Models.")
+                            .foregroundStyle(.secondary)
+                            .font(.subheadline)
+                    } else {
+                        ForEach(favoriteModels) { model in
+                            Button {
+                                viewModel.selectedModelID = model.id
+                            } label: {
+                                HStack(spacing: 10) {
+                                    Image(systemName: "checkmark")
+                                        .font(.system(size: 12, weight: .semibold))
+                                        .foregroundStyle(viewModel.selectedModelID == model.id ? Color.accentColor : .clear)
+                                        .frame(width: 16)
+                                    VStack(alignment: .leading, spacing: 2) {
+                                        Text(model.name)
+                                            .font(.subheadline)
+                                            .foregroundStyle(.primary)
+                                        Text(model.providerId.rawValue.capitalized)
+                                            .font(.caption2)
+                                            .foregroundStyle(.secondary)
+                                    }
+                                    Spacer()
+                                    CapabilityIcons(
+                                        reasoning: (model.supportsReasoning ?? false) || Self.isReasoningModel(model.id, providerId: model.providerId),
+                                        vision: model.supportsVision ?? false,
+                                        audio: model.supportsAudio ?? false,
+                                        size: 13
+                                    )
                                 }
                             }
-                            showingKeyFor = nil
+                            .swipeActions {
+                                Button(role: .destructive) {
+                                    settings?.toggleFavorite(model.id)
+                                } label: {
+                                    Label("Unfavorite", systemImage: "star.slash")
+                                }
+                            }
                         }
-                        .disabled(apiKeyInputs[provider]?.isEmpty ?? true)
+
+                        ForEach(unmatchedFavoriteIDs, id: \.self) { modelId in
+                            Button {
+                                viewModel.selectedModelID = modelId
+                            } label: {
+                                HStack(spacing: 10) {
+                                    Image(systemName: "checkmark")
+                                        .font(.system(size: 12, weight: .semibold))
+                                        .foregroundStyle(viewModel.selectedModelID == modelId ? Color.accentColor : .clear)
+                                        .frame(width: 16)
+                                    Text(modelId)
+                                        .font(.subheadline)
+                                        .foregroundStyle(.primary)
+                                    Spacer()
+                                }
+                            }
+                            .swipeActions {
+                                Button(role: .destructive) {
+                                    settings?.toggleFavorite(modelId)
+                                } label: {
+                                    Label("Unfavorite", systemImage: "star.slash")
+                                }
+                            }
+                        }
                     }
+                } header: {
+                    Text("Model")
                 }
 
+                // Parameters
                 Section("Parameters") {
-                    HStack {
-                        Text("Max Tokens")
-                        Spacer()
-                        TextField("", value: configBinding.maxTokens, format: .number)
-                            .keyboardType(.numberPad)
-                            .multilineTextAlignment(.trailing)
-                            .frame(width: 80)
-                    }
+                    sliderWithTextField(label: "Max Tokens", value: configBinding.maxTokens,
+                                        range: 0...128000, step: 1, intOnly: true)
+                    sliderWithTextField(label: "Temperature", value: configBinding.temperature,
+                                        range: 0...2, step: 0.1, format: "%.2f")
+                    sliderWithTextField(label: "Top P", value: configBinding.topP,
+                                        range: 0...1, step: 0.05, format: "%.2f")
+                    sliderWithTextField(label: "Presence Penalty", value: configBinding.presencePenalty,
+                                        range: -2...2, step: 0.1, format: "%.2f")
+                    sliderWithTextField(label: "Frequency Penalty", value: configBinding.frequencyPenalty,
+                                        range: -2...2, step: 0.1, format: "%.2f")
+                }
 
-                    VStack(alignment: .leading) {
-                        HStack {
-                            Text("Temperature")
-                            Spacer()
-                            Text(String(format: "%.2f", configBinding.wrappedValue.temperature))
-                                .foregroundStyle(.secondary)
+                // Reasoning (conditional)
+                if reasoningSupported {
+                    Section("Reasoning") {
+                        // Reasoning Effort
+                        VStack(alignment: .leading, spacing: 6) {
+                            Text("Reasoning Effort")
+                                .font(.subheadline)
+                            let efforts: [ReasoningEffort] = isOpenRouter
+                                ? [.none, .minimal, .low, .medium, .high, .xhigh]
+                                : [.low, .medium, .high]
+                            Picker("Reasoning Effort", selection: Binding(
+                                get: { configBinding.wrappedValue.reasoningEffort ?? .medium },
+                                set: { configBinding.wrappedValue.reasoningEffort = $0 }
+                            )) {
+                                ForEach(efforts, id: \.self) { effort in
+                                    Text(effort.rawValue.capitalized).tag(effort)
+                                }
+                            }
+                            .pickerStyle(.segmented)
                         }
-                        Slider(value: configBinding.temperature, in: 0...2, step: 0.01)
-                    }
 
-                    VStack(alignment: .leading) {
-                        HStack {
-                            Text("Top P")
-                            Spacer()
-                            Text(String(format: "%.2f", configBinding.wrappedValue.topP))
-                                .foregroundStyle(.secondary)
-                        }
-                        Slider(value: configBinding.topP, in: 0...1, step: 0.01)
-                    }
+                        // Reasoning Budget Tokens
+                        sliderWithTextField(label: "Budget Tokens", value: Binding(
+                            get: { Double(configBinding.wrappedValue.reasoningBudgetTokens ?? 0) },
+                            set: { configBinding.wrappedValue.reasoningBudgetTokens = Int($0) > 0 ? Int($0) : nil }
+                        ), range: 0...65536, step: 1024, intOnly: true)
 
-                    VStack(alignment: .leading) {
-                        HStack {
-                            Text("Presence Penalty")
-                            Spacer()
-                            Text(String(format: "%.2f", configBinding.wrappedValue.presencePenalty))
-                                .foregroundStyle(.secondary)
+                        // Verbosity (OpenRouter + Claude only)
+                        if verbositySupported {
+                            VStack(alignment: .leading, spacing: 6) {
+                                Text("Verbosity")
+                                    .font(.subheadline)
+                                let verbosities: [Verbosity] = isOpenRouterAdaptiveReasoning
+                                    ? [.low, .medium, .high, .max]
+                                    : [.low, .medium, .high]
+                                Picker("Verbosity", selection: Binding(
+                                    get: { configBinding.wrappedValue.verbosity ?? .medium },
+                                    set: { configBinding.wrappedValue.verbosity = $0 }
+                                )) {
+                                    ForEach(verbosities, id: \.self) { v in
+                                        Text(v.rawValue.capitalized).tag(v)
+                                    }
+                                }
+                                .pickerStyle(.segmented)
+                            }
                         }
-                        Slider(value: configBinding.presencePenalty, in: -2...2, step: 0.01)
-                    }
-
-                    VStack(alignment: .leading) {
-                        HStack {
-                            Text("Frequency Penalty")
-                            Spacer()
-                            Text(String(format: "%.2f", configBinding.wrappedValue.frequencyPenalty))
-                                .foregroundStyle(.secondary)
-                        }
-                        Slider(value: configBinding.frequencyPenalty, in: -2...2, step: 0.01)
                     }
                 }
             }
@@ -668,87 +764,83 @@ private struct ModelSettingsSheet: View {
                 }
             }
             .task {
-                // Load existing keys on appear
-                for provider in ProviderId.allCases {
-                    if let key = await viewModel.apiService.getAPIKey(for: provider) {
-                        apiKeyInputs[provider] = key
-                    }
-                }
+                await loadAllFavoriteModels()
             }
         }
+    }
+
+    private var isOpenRouterAdaptiveReasoning: Bool {
+        let id = viewModel.selectedModelID.lowercased()
+        return isOpenRouter &&
+            ((id.contains("claude") && id.contains("4.6") && id.contains("opus")) ||
+             (id.contains("claude") && id.contains("4.6") && id.contains("sonnet")))
+    }
+
+    // MARK: - Slider + TextField
+
+    @ViewBuilder
+    private func sliderWithTextField(label: String, value: Binding<Int>,
+                                      range: ClosedRange<Int>, step: Int, intOnly: Bool = false) -> some View {
+        sliderWithTextField(label: label,
+                            value: Binding(get: { Double(value.wrappedValue) }, set: { value.wrappedValue = Int($0) }),
+                            range: Double(range.lowerBound)...Double(range.upperBound),
+                            step: Double(step), intOnly: true)
     }
 
     @ViewBuilder
-    private func favoriteModelsSection(settings: SettingsViewModel) -> some View {
-        let ids = settings.favoriteModelIDs
-        if !ids.isEmpty {
-            Section("Favorites") {
-                ForEach(ids.indices, id: \.self) { i in
-                    modelRow(modelId: ids[i], settings: settings)
-                }
-            }
-        }
-    }
-
-    @ViewBuilder
-    private func customModelsSection(settings: SettingsViewModel, provider: ProviderId) -> some View {
-        let ids = settings.customModelsFor(provider)
-        Section("Custom Models (\(provider.rawValue.capitalized))") {
-            ForEach(ids.indices, id: \.self) { i in
-                modelRow(modelId: ids[i], settings: settings, removeAction: {
-                    settings.removeCustomModel(ids[i], for: provider)
-                })
-            }
+    private func sliderWithTextField(label: String, value: Binding<Double>,
+                                      range: ClosedRange<Double>, step: Double,
+                                      format: String = "%.0f", intOnly: Bool = false) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
             HStack {
-                TextField("Add custom model ID", text: $newCustomModelId)
-                    .autocorrectionDisabled()
-                    .textInputAutocapitalization(.never)
-                Button {
-                    guard !newCustomModelId.isEmpty else { return }
-                    settings.addCustomModel(newCustomModelId, for: provider)
-                    newCustomModelId = ""
-                } label: {
-                    Image(systemName: "plus.circle.fill")
-                }
-                .disabled(newCustomModelId.isEmpty)
-            }
-        }
-    }
-
-    private func modelRow(modelId: String, settings: SettingsViewModel, removeAction: (() -> Void)? = nil) -> some View {
-        Button {
-            viewModel.selectedModelID = modelId
-        } label: {
-            HStack {
-                Text(modelId).foregroundStyle(.primary)
+                Text(label)
+                    .font(.subheadline)
                 Spacer()
-                if viewModel.selectedModelID == modelId {
-                    Image(systemName: "checkmark").foregroundStyle(Color.accentColor)
-                }
-            }
-        }
-        .swipeActions {
-            Button(role: .destructive) {
-                if let removeAction {
-                    removeAction()
+                if intOnly {
+                    TextField("", value: value, format: .number)
+                        .keyboardType(.numberPad)
+                        .multilineTextAlignment(.trailing)
+                        .frame(width: 72)
+                        .font(.system(.subheadline, design: .monospaced))
+                        .foregroundStyle(.secondary)
                 } else {
-                    settings.toggleFavorite(modelId)
+                    TextField("", text: Binding(
+                        get: { String(format: format, value.wrappedValue) },
+                        set: { if let v = Double($0), range.contains(v) { value.wrappedValue = v } }
+                    ))
+                    .keyboardType(.decimalPad)
+                    .multilineTextAlignment(.trailing)
+                    .frame(width: 56)
+                    .font(.system(.subheadline, design: .monospaced))
+                    .foregroundStyle(.secondary)
                 }
-            } label: {
-                Label("Remove", systemImage: removeAction != nil ? "trash" : "star.slash")
             }
+            Slider(value: value, in: range, step: step)
         }
     }
 
-    private func apiKeyBinding(for provider: ProviderId) -> Binding<String> {
-        Binding(
-            get: { apiKeyInputs[provider] ?? "" },
-            set: { apiKeyInputs[provider] = $0 }
-        )
+    // MARK: - Loading
+
+    private func loadAllFavoriteModels() async {
+        loading = true
+        var result: [ProviderId: [ProviderModel]] = [:]
+        await withTaskGroup(of: (ProviderId, [ProviderModel]).self) { group in
+            for provider in ProviderId.allCases {
+                group.addTask {
+                    let models = (try? await viewModel.apiService.fetchModels(for: provider)) ?? []
+                    return (provider, models)
+                }
+            }
+            for await (provider, models) in group {
+                result[provider] = models
+            }
+        }
+        await MainActor.run {
+            allModels = result
+            loading = false
+        }
     }
 }
-
-// MARK: - Favorite Models Section
 
 #Preview("iPhone") {
     ContentView(chatViewModel: ChatViewModel(), settings: SettingsViewModel())

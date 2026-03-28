@@ -5,6 +5,7 @@ struct ChatDetailView: View {
 
     @Bindable var viewModel: ChatViewModel
     var forceChat: Bool = false
+    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
     @State private var keyboardVisible = false
     @State private var keyboardHeight: CGFloat = 0
     @State private var composerReservedHeight: CGFloat = 104
@@ -18,15 +19,17 @@ struct ChatDetailView: View {
             if forceChat || viewModel.viewMode == .chat {
                 chatContentView
             } else {
-                BranchEditorView(chatViewModel: viewModel)
+                BranchEditorView(chatViewModel: viewModel, showNavButtons: horizontalSizeClass == .compact)
             }
         }
         .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillShowNotification)) { notification in
             handleKeyboardWillShow(notification)
         }
         .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillHideNotification)) { _ in
-            keyboardVisible = false
-            keyboardHeight = 0
+            withAnimation(.easeOut(duration: 0.25)) {
+                keyboardVisible = false
+                keyboardHeight = 0
+            }
         }
     }
 
@@ -93,12 +96,19 @@ struct ChatDetailView: View {
     private var floatingControls: some View {
         VStack {
             Spacer()
-            HStack {
-                // Left: Collapse controls
-                CollapseControls(
-                    onCollapseAll: { viewModel.collapseAll() },
-                    onExpandAll: { viewModel.expandAll() }
-                )
+            HStack(alignment: .bottom) {
+                VStack(spacing: 6) {
+                    // Back/Forward nav on compact
+                    if horizontalSizeClass == .compact {
+                        ChatNavButtons(viewModel: viewModel)
+                    }
+
+                    // Left: Collapse controls
+                    CollapseControls(
+                        onCollapseAll: { viewModel.collapseAll() },
+                        onExpandAll: { viewModel.expandAll() }
+                    )
+                }
                 .padding(.leading, 12)
                 .padding(.bottom, 8)
 
@@ -131,11 +141,15 @@ struct ChatDetailView: View {
         ScrollViewReader { proxy in
             ScrollView {
                 LazyVStack(spacing: 0, pinnedViews: .sectionFooters) {
-                    ForEach(viewModel.messages) { message in
+                    // Top padding so first message isn't clipped by navigation bar
+                    Color.clear.frame(height: 8)
+
+                    ForEach(Array(viewModel.messages.enumerated()), id: \.element.id) { index, message in
                         let isEditing = Binding<Bool>(
                             get: { viewModel.editingMessageID == message.id },
                             set: { viewModel.editingMessageID = $0 ? message.id : nil }
                         )
+
                         Section {
                             MessageBubble(
                                 message: message,
@@ -148,6 +162,7 @@ struct ChatDetailView: View {
                                 onToggleCollapse: { viewModel.toggleCollapse(message.id) },
                                 isEditing: isEditing,
                                 editText: $viewModel.editText,
+                                showCardFooter: !message.isGenerating && !message.isCollapsed,
                                 searchQuery: viewModel.isSearching ? viewModel.searchQuery : "",
                                 isCurrentSearchMatch: isCurrentSearchMatch(message),
                                 markdownMode: viewModel.settings?.markdownMode ?? false,
@@ -165,45 +180,59 @@ struct ChatDetailView: View {
                                 let isSelected = selectedMessageID == message.id
                                 let idx = viewModel.messages.firstIndex(where: { $0.id == message.id })
                                 if isEditing.wrappedValue {
-                                    MessageEditBar(
-                                        message: message,
-                                        onSaveAndGenerate: {
-                                            viewModel.editMessage(message.id, newContent: viewModel.editText)
-                                            isEditing.wrappedValue = false
-                                            viewModel.regenerateMessage(message.id)
-                                        },
-                                        onSave: {
-                                            viewModel.editMessage(message.id, newContent: viewModel.editText)
-                                            isEditing.wrappedValue = false
-                                        },
-                                        onCancel: { isEditing.wrappedValue = false },
-                                        hasChanges: viewModel.editText != message.content
-                                    )
-                                    .onGeometryChange(for: CGFloat.self) { proxy in
-                                        proxy.size.height
-                                    } action: { newHeight in
-                                        let roundedHeight = ceil(newHeight) + 8
-                                        if abs(editBarReservedHeight - roundedHeight) > 1 {
-                                            editBarReservedHeight = roundedHeight
-                                        }
+                                    cardFooter(message: message) {
+                                        MessageEditBar(
+                                            message: message,
+                                            onSaveAndGenerate: {
+                                                viewModel.editMessage(message.id, newContent: viewModel.editText)
+                                                isEditing.wrappedValue = false
+                                                viewModel.regenerateMessage(message.id)
+                                            },
+                                            onSave: {
+                                                viewModel.editMessage(message.id, newContent: viewModel.editText)
+                                                isEditing.wrappedValue = false
+                                            },
+                                            onCancel: { isEditing.wrappedValue = false },
+                                            hasChanges: viewModel.editText != message.content
+                                        )
                                     }
-                                } else if isSelected {
-                                    MessageActionBar(
-                                        message: message,
-                                        onCopy: { viewModel.copyMessage(message) },
-                                        onDelete: { viewModel.deleteMessage(message.id) },
-                                        onRegenerate: { viewModel.regenerateMessage(message.id) },
-                                        onMoveUp: { viewModel.moveMessageUp(message.id) },
-                                        onMoveDown: { viewModel.moveMessageDown(message.id) },
-                                        onEdit: { isEditing.wrappedValue = true },
-                                        isFirst: idx == viewModel.messages.startIndex,
-                                        isLast: idx == viewModel.messages.index(before: viewModel.messages.endIndex)
-                                    )
+                                    .id("editbar-\(message.id)")
                                 } else {
-                                    // Reserve space so bubbles don't shift
-                                    Color.clear.frame(height: 44)
+                                    cardFooter(message: message) {
+                                        MessageActionBar(
+                                            message: message,
+                                            onCopy: { viewModel.copyMessage(message) },
+                                            onDelete: { viewModel.deleteMessage(message.id) },
+                                            onRegenerate: { viewModel.regenerateMessage(message.id) },
+                                            onMoveUp: { viewModel.moveMessageUp(message.id) },
+                                            onMoveDown: { viewModel.moveMessageDown(message.id) },
+                                            onEdit: { isEditing.wrappedValue = true },
+                                            isFirst: idx == viewModel.messages.startIndex,
+                                            isLast: idx == viewModel.messages.index(before: viewModel.messages.endIndex)
+                                        )
+                                        .opacity(isSelected ? 1 : 0)
+                                        .allowsHitTesting(isSelected)
+                                    }
                                 }
                             }
+                        }
+
+                        // Separator with "+" button centered on it (outside Section)
+                        if index < viewModel.messages.count - 1 {
+                            ZStack {
+                                Rectangle()
+                                    .fill(Color.primary.opacity(0.06))
+                                    .frame(height: 1)
+                                if !viewModel.isGenerating {
+                                    NewMessageButton(
+                                        viewModel: viewModel,
+                                        messageIndex: index,
+                                        nodeId: message.nodeId,
+                                        role: message.role
+                                    )
+                                }
+                            }
+                            .zIndex(1)
                         }
                     }
                 }
@@ -234,8 +263,13 @@ struct ChatDetailView: View {
                     editBarReservedHeight = 44
                     return
                 }
-                DispatchQueue.main.async {
-                    scrollToEditingMessage(anchor: UnitPoint(x: 0.5, y: 0.92))
+                // Scroll so that the edit bar is visible near the bottom
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                    if let id = editingMessageID {
+                        withAnimation(.easeOut(duration: 0.2)) {
+                            proxy.scrollTo("editbar-\(id)", anchor: .bottom)
+                        }
+                    }
                 }
             }
         }
@@ -282,9 +316,11 @@ struct ChatDetailView: View {
         keyboardVisible = true
         keyboardHeight = keyboardOverlapHeight(from: notification)
 
-        guard viewModel.editingMessageID != nil else { return }
-        DispatchQueue.main.async {
-            scrollToEditingMessage(anchor: UnitPoint(x: 0.5, y: 0.92))
+        guard let editingID = viewModel.editingMessageID else { return }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+            withAnimation(.easeOut(duration: 0.2)) {
+                scrollProxy?.scrollTo("editbar-\(editingID)", anchor: .bottom)
+            }
         }
     }
 
@@ -304,11 +340,53 @@ struct ChatDetailView: View {
         return max(0, overlap - window.safeAreaInsets.bottom)
     }
 
-    private func scrollToEditingMessage(anchor: UnitPoint) {
-        guard let editingMessageID = viewModel.editingMessageID else { return }
-        withAnimation(.easeOut(duration: 0.18)) {
-            scrollProxy?.scrollTo(editingMessageID, anchor: anchor)
+    // Card-styled footer that visually continues the message card
+    private func cardFooter<Content: View>(message: ChatMessage, @ViewBuilder content: () -> Content) -> some View {
+        let bg: Color = switch message.role {
+        case .user: Color(.secondarySystemBackground).opacity(0.7)
+        case .assistant: Color(.secondarySystemBackground)
+        case .system: Color(.tertiarySystemBackground)
         }
+        let collapseColor: Color = switch message.role {
+        case .user: Color(red: 0.22, green: 0.45, blue: 0.85)
+        case .assistant: Color(red: 0.06, green: 0.64, blue: 0.50)
+        case .system: Color(red: 0.49, green: 0.64, blue: 0.89)
+        }
+        let shape = UnevenRoundedRectangle(
+            topLeadingRadius: 0, bottomLeadingRadius: 14,
+            bottomTrailingRadius: 14, topTrailingRadius: 0
+        )
+        return HStack(spacing: 0) {
+            // Collapse bar continuation
+            Rectangle()
+                .fill(message.isCollapsed ? collapseColor.opacity(0.6) : collapseColor.opacity(0.2))
+                .frame(width: 3)
+                .clipShape(UnevenRoundedRectangle(
+                    topLeadingRadius: 0, bottomLeadingRadius: 2,
+                    bottomTrailingRadius: 2, topTrailingRadius: 0
+                ))
+                .padding(.horizontal, 7)
+
+            // Footer card
+            content()
+                .padding(.horizontal, 8)
+                .padding(.top, 4)
+                .padding(.bottom, 8)
+                .frame(maxWidth: .infinity)
+                .background(bg, in: shape)
+                .overlay {
+                    shape
+                        .stroke(Color.primary.opacity(0.06), lineWidth: 0.5)
+                        .mask {
+                            VStack(spacing: 0) {
+                                Color.clear.frame(height: 1)
+                                Color.black
+                            }
+                        }
+                }
+                .padding(.trailing, 16)
+        }
+        .padding(.bottom, 12) // Space before separator / "+" button
     }
 }
 
