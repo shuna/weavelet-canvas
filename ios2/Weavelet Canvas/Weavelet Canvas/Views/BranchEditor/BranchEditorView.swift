@@ -2,6 +2,7 @@ import SwiftUI
 
 struct BranchEditorView: View {
     var chatViewModel: ChatViewModel
+    var showNavButtons: Bool = false
     @State var viewModel: BranchEditorViewModel?
     @State private var canvasSize: CGSize = .zero
     @State private var dragStart: CGSize? = nil
@@ -217,6 +218,14 @@ struct BranchEditorView: View {
 
     private func leftControls(_ viewModel: BranchEditorViewModel) -> some View {
         VStack(spacing: 6) {
+            if showNavButtons {
+                controlGroup {
+                    controlButton(icon: "chevron.left", disabled: !chatViewModel.canGoBack) { chatViewModel.goBack() }
+                    Divider().frame(width: 22)
+                    controlButton(icon: "chevron.right", disabled: !chatViewModel.canGoForward) { chatViewModel.goForward() }
+                }
+            }
+
             controlGroup {
                 controlButton(icon: BranchInteractionMode.pan.icon,
                               active: viewModel.interactionMode == .pan) {

@@ -350,7 +350,7 @@ final class SettingsViewModel {
         self.displayChatSize = Self.boolWithDefault("displayChatSize", default: true)
         self.animateBubbleNavigation = Self.boolWithDefault("animateBubbleNavigation", default: true)
         self.enterToSubmit = Self.boolWithDefault("enterToSubmit", default: true)
-        self.markdownMode = UserDefaults.standard.bool(forKey: "markdownMode")
+        self.markdownMode = Self.boolWithDefault("markdownMode", default: true)
         self.inlineLatex = UserDefaults.standard.bool(forKey: "inlineLatex")
         self.streamingMarkdownPolicy = StreamingMarkdownPolicy(rawValue: UserDefaults.standard.string(forKey: "streamingMarkdownPolicy") ?? "") ?? .auto
         self.countTotalTokens = Self.boolWithDefault("countTotalTokens", default: true)

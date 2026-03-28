@@ -11,6 +11,7 @@ struct MessageBubble: View {
     let onToggleCollapse: () -> Void
     @Binding var isEditing: Bool
     @Binding var editText: String
+    var showCardFooter: Bool = false
     var searchQuery: String = ""
     var isCurrentSearchMatch: Bool = false
     var markdownMode: Bool = false
@@ -22,31 +23,27 @@ struct MessageBubble: View {
 
     var body: some View {
         HStack(alignment: .top, spacing: 0) {
-            // Collapse toggle bar
+            // Collapse toggle bar — role-colored
             collapseBar
 
             VStack(alignment: .leading, spacing: 0) {
                 // Header: avatar + role selector + meta buttons
                 messageHeader
 
-                // Content
-                if message.isCollapsed {
-                    collapsedPreview
-                } else {
-                    unifiedContentView
-                }
-
-                // Action bar is now a pinned section footer (sticky)
+                // Content card
+                contentCard
+                    .padding(.top, 4)
             }
+            .padding(.trailing, 16)
+            .padding(.top, 6)
+            .padding(.bottom, showCardFooter ? 0 : 6)
         }
-        .padding(.trailing, 16)
-        .padding(.vertical, 8)
-        .background(backgroundForRole)
+        .background(Color(.systemBackground))
         .opacity(message.isOmitted ? 0.5 : 1.0)
         .overlay(alignment: .leading) {
             if message.isProtected {
                 Rectangle()
-                    .fill(Color.blue)
+                    .fill(Color.blue.opacity(0.5))
                     .frame(width: 3)
             }
         }
@@ -72,37 +69,37 @@ struct MessageBubble: View {
         Button {
             onToggleCollapse()
         } label: {
-            Rectangle()
-                .fill(message.isCollapsed ? Color.accentColor : Color(.quaternaryLabel))
-                .frame(width: 3)
-                .padding(.horizontal, 6)
+            Color.clear
+                .frame(width: 17)
                 .frame(maxHeight: .infinity)
+                .overlay(alignment: .top) {
+                    Rectangle()
+                        .fill(message.isCollapsed
+                              ? avatarColor.opacity(0.6)
+                              : avatarColor.opacity(0.2))
+                        .frame(width: 3)
+                        .clipShape(UnevenRoundedRectangle(
+                            topLeadingRadius: 1.5, bottomLeadingRadius: showCardFooter ? 0 : 1.5,
+                            bottomTrailingRadius: showCardFooter ? 0 : 1.5, topTrailingRadius: 1.5
+                        ))
+                        .padding(.top, 6) // Align with avatar top
+                }
                 .contentShape(Rectangle().inset(by: -8))
         }
         .buttonStyle(.plain)
         .accessibilityLabel(message.isCollapsed ? "Expand" : "Collapse")
     }
 
-    // MARK: - Collapsed Preview
-
-    private var collapsedPreview: some View {
-        Text(String(message.content.prefix(120)))
-            .lineLimit(1)
-            .font(.subheadline)
-            .foregroundStyle(.secondary)
-            .frame(maxWidth: .infinity, alignment: .leading)
-    }
-
     // MARK: - Header
 
     private var messageHeader: some View {
         HStack(spacing: 8) {
-            // Avatar
+            // Avatar — role-colored rounded square (matching web)
             Image(systemName: message.role.icon)
-                .font(.system(size: 12, weight: .medium))
-                .foregroundStyle(avatarColor)
-                .frame(width: 24, height: 24)
-                .background(avatarColor.opacity(0.12), in: Circle())
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundStyle(.white)
+                .frame(width: 26, height: 26)
+                .background(avatarColor, in: RoundedRectangle(cornerRadius: 6))
 
             // Role selector
             Menu {
@@ -119,9 +116,9 @@ struct MessageBubble: View {
                     }
                 }
             } label: {
-                HStack(spacing: 2) {
+                HStack(spacing: 3) {
                     Text(message.role.label)
-                        .font(.caption.weight(.semibold))
+                        .font(.subheadline.weight(.semibold))
                         .foregroundStyle(.primary)
                     Image(systemName: "chevron.down")
                         .font(.system(size: 8, weight: .bold))
@@ -131,35 +128,108 @@ struct MessageBubble: View {
 
             Spacer()
 
-            // Meta buttons: omit + protect
-            HStack(spacing: 4) {
-                Button {
-                    onToggleOmit()
-                } label: {
-                    Image(systemName: message.isOmitted ? "eye.slash.fill" : "eye.slash")
-                        .font(.system(size: 13))
-                        .foregroundStyle(message.isOmitted ? Color.orange : Color(.tertiaryLabel))
-                }
-                .buttonStyle(.plain)
+            // Meta buttons — pill container (matching web frosted glass style)
+            HStack(spacing: 2) {
+                metaButton(
+                    icon: message.isOmitted ? "eye.slash.fill" : "eye.slash",
+                    activeColor: .orange,
+                    isActive: message.isOmitted,
+                    action: onToggleOmit
+                )
+                metaButton(
+                    icon: message.isProtected ? "lock.fill" : "lock.open",
+                    activeColor: .blue,
+                    isActive: message.isProtected,
+                    action: onToggleProtect
+                )
+            }
+            .padding(.horizontal, 4)
+            .padding(.vertical, 3)
+            .background(.ultraThinMaterial, in: Capsule())
+            .overlay(Capsule().stroke(Color.primary.opacity(0.06), lineWidth: 0.5))
+        }
+    }
 
-                Button {
-                    onToggleProtect()
-                } label: {
-                    Image(systemName: message.isProtected ? "lock.fill" : "lock")
-                        .font(.system(size: 13))
-                        .foregroundStyle(message.isProtected ? Color.blue : Color(.tertiaryLabel))
-                }
-                .buttonStyle(.plain)
+    private func metaButton(icon: String, activeColor: Color, isActive: Bool, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Image(systemName: icon)
+                .font(.system(size: 12, weight: .medium))
+                .foregroundStyle(isActive ? activeColor : Color(.tertiaryLabel))
+                .frame(width: 26, height: 24)
+        }
+        .buttonStyle(.plain)
+    }
+
+    // MARK: - Content Card
+
+    @ViewBuilder
+    private var contentCard: some View {
+        if message.isCollapsed {
+            collapsedPreview
+        } else {
+            VStack(alignment: .leading, spacing: 0) {
+                unifiedContentView
+                    .padding(.horizontal, 14)
+                    .padding(.top, 10)
+                    .padding(.bottom, 8)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(cardBackground, in: cardShape)
+            .overlay {
+                cardShape
+                    .stroke(Color.primary.opacity(0.06), lineWidth: 0.5)
+                    .mask {
+                        if showCardFooter {
+                            // Hide bottom stroke when footer continues the card
+                            VStack(spacing: 0) {
+                                Color.black
+                                Color.clear.frame(height: 1)
+                            }
+                        } else {
+                            Color.black
+                        }
+                    }
             }
         }
-        .padding(.bottom, 6)
+    }
+
+    private var cardShape: UnevenRoundedRectangle {
+        if showCardFooter {
+            UnevenRoundedRectangle(
+                topLeadingRadius: 14, bottomLeadingRadius: 0,
+                bottomTrailingRadius: 0, topTrailingRadius: 14
+            )
+        } else {
+            UnevenRoundedRectangle(
+                topLeadingRadius: 14, bottomLeadingRadius: 14,
+                bottomTrailingRadius: 14, topTrailingRadius: 14
+            )
+        }
+    }
+
+    private var cardBackground: Color {
+        switch message.role {
+        case .user: Color(.secondarySystemBackground).opacity(0.7)
+        case .assistant: Color(.secondarySystemBackground)
+        case .system: Color(.tertiarySystemBackground)
+        }
+    }
+
+    // MARK: - Collapsed Preview
+
+    private var collapsedPreview: some View {
+        Text(String(message.content.prefix(120)))
+            .lineLimit(2)
+            .font(.subheadline)
+            .foregroundStyle(.secondary)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.horizontal, 14)
+            .padding(.vertical, 8)
+            .background(cardBackground.opacity(0.5), in: RoundedRectangle(cornerRadius: 14))
     }
 
     // MARK: - Content
 
-    // MARK: - Unified Content (always TextEditor, disabled when not editing)
-
-    /// Whether to render markdown for this message right now.
     private var shouldRenderMarkdown: Bool {
         guard markdownMode else { return false }
         if isEditing { return false }
@@ -167,7 +237,7 @@ struct MessageBubble: View {
             switch streamingMarkdownPolicy {
             case .always: return true
             case .never: return false
-            case .auto: return false // render only after completion
+            case .auto: return false
             }
         }
         return true
@@ -178,12 +248,10 @@ struct MessageBubble: View {
         if message.isGenerating && message.content.isEmpty {
             typingIndicator
         } else if isEditing {
-            TextEditor(text: $editText)
+            TextField("", text: $editText, axis: .vertical)
                 .font(.subheadline)
-                .scrollContentBackground(.hidden)
-                .scrollDisabled(true)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .fixedSize(horizontal: false, vertical: true)
+                .textFieldStyle(.plain)
+                .frame(maxWidth: .infinity, alignment: .topLeading)
                 .tint(.accentColor)
                 .focused($isEditFieldFocused)
                 .onAppear {
@@ -205,32 +273,32 @@ struct MessageBubble: View {
         } else if shouldRenderMarkdown {
             Text(markdownAttributed(message.content))
                 .font(.subheadline)
-                .frame(maxWidth: .infinity, alignment: .leading)
+                .frame(maxWidth: .infinity, alignment: .topLeading)
                 .textSelection(.enabled)
         } else {
             Text(message.content)
                 .font(.subheadline)
-                .frame(maxWidth: .infinity, alignment: .leading)
+                .frame(maxWidth: .infinity, alignment: .topLeading)
                 .textSelection(.enabled)
         }
     }
 
-    /// Parse markdown content into AttributedString, falling back to plain text.
     private func markdownAttributed(_ text: String) -> AttributedString {
-        (try? AttributedString(markdown: text, options: .init(interpretedSyntax: .inlineOnlyPreservingWhitespace))) ?? AttributedString(text)
+        // inlineOnlyPreservingWhitespace gives best results in SwiftUI Text
+        // (`.full` merges headings/paragraphs and loses block structure)
+        if let result = try? AttributedString(markdown: text, options: .init(interpretedSyntax: .inlineOnlyPreservingWhitespace)) {
+            return result
+        }
+        return AttributedString(text)
     }
-
-    // MARK: - Edit Action Buttons
-
-    // Action bar and edit bar are pinned section footers in ChatDetailView
 
     // MARK: - Typing Indicator
 
     private var typingIndicator: some View {
-        HStack(spacing: 4) {
+        HStack(spacing: 5) {
             ForEach(0..<3, id: \.self) { i in
                 Circle()
-                    .fill(Color.secondary.opacity(0.5))
+                    .fill(avatarColor.opacity(0.5))
                     .frame(width: 6, height: 6)
                     .phaseAnimator([false, true]) { view, phase in
                         view.offset(y: phase ? -4 : 0)
@@ -242,21 +310,13 @@ struct MessageBubble: View {
         .padding(.vertical, 8)
     }
 
-    // MARK: - Styling
-
-    private var backgroundForRole: Color {
-        switch message.role {
-        case .user: Color(.systemBackground)
-        case .assistant: Color(.secondarySystemBackground)
-        case .system: Color(.tertiarySystemBackground)
-        }
-    }
+    // MARK: - Colors
 
     private var avatarColor: Color {
         switch message.role {
-        case .user: .blue
-        case .assistant: .purple
-        case .system: .gray
+        case .user: Color(red: 0.22, green: 0.45, blue: 0.85)      // Refined blue
+        case .assistant: Color(red: 0.06, green: 0.64, blue: 0.50)  // Teal/green (web)
+        case .system: Color(red: 0.49, green: 0.64, blue: 0.89)    // Soft blue
         }
     }
 }

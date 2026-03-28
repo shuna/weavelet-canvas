@@ -36,12 +36,7 @@ struct AIModel: Identifiable, Hashable {
     let supportsReasoning: Bool
     let supportsAudio: Bool
 
-    static let samples: [AIModel] = [
-        AIModel(id: "gpt-4o", name: "GPT-4o", provider: "OpenAI", supportsVision: true, supportsReasoning: false, supportsAudio: true),
-        AIModel(id: "claude-3.5-sonnet", name: "Claude 3.5 Sonnet", provider: "Anthropic", supportsVision: true, supportsReasoning: false, supportsAudio: false),
-        AIModel(id: "o1", name: "o1", provider: "OpenAI", supportsVision: false, supportsReasoning: true, supportsAudio: false),
-        AIModel(id: "gemini-pro", name: "Gemini Pro", provider: "Google", supportsVision: true, supportsReasoning: false, supportsAudio: true),
-    ]
+    static let samples: [AIModel] = []
 }
 
 // DetailViewMode is in Domain/Models/ChatTypes.swift
@@ -80,7 +75,14 @@ class ChatViewModel {
             scheduleSave()
         }
     }
-    var availableModels: [AIModel] = AIModel.samples
+    /// Models shown in the dropdown — derived from favorite IDs
+    var availableModels: [AIModel] {
+        guard let settings else { return [] }
+        return settings.favoriteModelIDs.map { id in
+            AIModel(id: id, name: id, provider: "",
+                    supportsVision: false, supportsReasoning: false, supportsAudio: false)
+        }
+    }
     var isGenerating: Bool = false
     var isSearching: Bool = false
     var searchQuery: String = "" { didSet { performSearch() } }
@@ -170,6 +172,9 @@ class ChatViewModel {
             await MainActor.run {
                 if self.chats.isEmpty {
                     self.createNewChat()
+                    #if DEBUG
+                    self.seedDebugMessages()
+                    #endif
                 }
                 if self.currentChatID == nil {
                     self.currentChatID = self.chats.first?.id
@@ -1105,6 +1110,21 @@ class ChatViewModel {
         scheduleSave()
     }
 
+    func insertMessageAfter(messageIndex: Int) {
+        guard let chatIndex = currentChatIndex else { return }
+        pushUndo()
+        let newMessage = Message(role: .user, content: [.text("")])
+        let result = BranchService.insertMessageAtIndex(
+            chats: chats, chatIndex: chatIndex,
+            messageIndex: messageIndex + 1,
+            message: newMessage,
+            contentStore: contentStore
+        )
+        chats = result.chats
+        contentStore = result.contentStore
+        scheduleSave()
+    }
+
     func createBranch(parentNodeId: String, role: Role = .user, content: [ContentItem] = [.text("")]) {
         guard let chatIndex = currentChatIndex else { return }
         pushUndo()
@@ -1129,4 +1149,26 @@ class ChatViewModel {
         contentStore = result.contentStore
         scheduleSave()
     }
+
+    #if DEBUG
+    private func seedDebugMessages() {
+        guard let chatIndex = currentChatIndex else { return }
+        let pairs: [(Role, String)] = [
+            (.user, "Hello! Can you explain how Swift concurrency works?"),
+            (.assistant, "# Swift Concurrency\n\nSwift concurrency provides a way to write **asynchronous** and **parallel** code in a structured way.\n\n## Key Concepts\n\n1. **async/await** — Suspend and resume functions\n2. **Task** — Unit of asynchronous work\n3. **Actor** — Protect mutable state from data races\n\n```swift\nfunc fetchData() async throws -> Data {\n    let (data, _) = try await URLSession.shared.data(from: url)\n    return data\n}\n```\n\nWould you like me to explain any of these in more detail?"),
+            (.user, "Yes, please explain actors."),
+            (.assistant, "An **actor** is a reference type that protects its mutable state by ensuring only one task accesses it at a time.\n\n```swift\nactor BankAccount {\n    var balance: Double = 0\n    \n    func deposit(_ amount: Double) {\n        balance += amount\n    }\n}\n```"),
+        ]
+        for (role, text) in pairs {
+            let msg = Message(role: role, content: [.text(text)])
+            let result = BranchService.insertMessageAtIndex(
+                chats: chats, chatIndex: chatIndex,
+                messageIndex: chats[chatIndex].branchTree?.activePath.count ?? 0,
+                message: msg, contentStore: contentStore
+            )
+            chats = result.chats
+            contentStore = result.contentStore
+        }
+    }
+    #endif
 }
