@@ -66,7 +66,7 @@ class ChatViewModel {
     /// Per-chat model selection — reads/writes Chat.config.model
     var selectedModelID: String {
         get {
-            guard let idx = currentChatIndex else { return "claude-3.5-sonnet" }
+            guard let idx = currentChatIndex else { return "" }
             return chats[idx].config.model
         }
         set {

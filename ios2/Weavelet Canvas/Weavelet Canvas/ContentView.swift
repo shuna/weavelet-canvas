@@ -188,7 +188,7 @@ private struct ModelSelectorButton: View {
             showPicker.toggle()
         } label: {
             HStack(spacing: 5) {
-                Text(viewModel.selectedModelID.isEmpty ? "Model" : viewModel.selectedModelID)
+                Text(viewModel.selectedModelID.isEmpty ? "Select a model" : viewModel.selectedModelID)
                     .font(.subheadline.weight(.medium))
                     .lineLimit(1)
                 Image(systemName: "chevron.down")
@@ -541,12 +541,13 @@ private struct ModelSettingsSheet: View {
     @Environment(\.dismiss) private var dismiss
     @State private var allModels: [ProviderId: [ProviderModel]] = [:]
     @State private var loading = false
+    @State private var showProviderMenu = false
 
     private var configBinding: Binding<ChatConfig> {
         Binding(
             get: {
                 guard let idx = viewModel.currentChatIndex else {
-                    return ChatConfig(model: "claude-3.5-sonnet", maxTokens: 4096, temperature: 1.0,
+                    return ChatConfig(model: "", maxTokens: 4096, temperature: 1.0,
                                       presencePenalty: 0, topP: 1, frequencyPenalty: 0)
                 }
                 return viewModel.chats[idx].config
@@ -690,7 +691,16 @@ private struct ModelSettingsSheet: View {
                         }
                     }
                 } header: {
-                    Text("Model")
+                    HStack {
+                        Text("Model")
+                        Spacer()
+                        Button {
+                            showProviderMenu = true
+                        } label: {
+                            Text("Browse All Models")
+                                .font(.caption)
+                        }
+                    }
                 }
 
                 // Parameters
@@ -706,6 +716,7 @@ private struct ModelSettingsSheet: View {
                     sliderWithTextField(label: "Frequency Penalty", value: configBinding.frequencyPenalty,
                                         range: -2...2, step: 0.1, format: "%.2f")
                 }
+                .disabled(viewModel.selectedModelID.isEmpty)
 
                 // Reasoning (conditional)
                 if reasoningSupported {
@@ -754,6 +765,7 @@ private struct ModelSettingsSheet: View {
                             }
                         }
                     }
+                    .disabled(viewModel.selectedModelID.isEmpty)
                 }
             }
             .navigationTitle("Model Settings")
@@ -761,6 +773,11 @@ private struct ModelSettingsSheet: View {
             .toolbar {
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Done") { dismiss() }
+                }
+            }
+            .sheet(isPresented: $showProviderMenu) {
+                if let settings {
+                    ProviderMenuView(apiService: viewModel.apiService, settings: settings)
                 }
             }
             .task {
