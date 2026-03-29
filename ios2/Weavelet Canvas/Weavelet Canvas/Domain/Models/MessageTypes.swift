@@ -123,7 +123,7 @@ extension ContentItem {
         return false
     }
 
-    var textValue: String? {
+    nonisolated var textValue: String? {
         switch self {
         case .text(let t): return t
         case .reasoning(let t): return t

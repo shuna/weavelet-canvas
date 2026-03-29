@@ -104,16 +104,16 @@ struct SettingsViewModelTests {
         for key in keys { UserDefaults.standard.removeObject(forKey: key) }
     }
 
-    @Test("Empty default model resolves to fallback")
+    @Test("Empty default model resolves to empty string")
     func emptyModelFallback() {
         UserDefaults.standard.removeObject(forKey: "defaultModel")
         let vm = SettingsViewModel()
         #expect(vm.defaultModel == "")
-        #expect(vm.resolvedDefaultModel == "claude-3.5-sonnet")
-        #expect(vm.defaultChatConfig.model == "claude-3.5-sonnet")
+        #expect(vm.resolvedDefaultModel == "")
+        #expect(vm.defaultChatConfig.model == "")
 
         vm.defaultModel = "  "
-        #expect(vm.resolvedDefaultModel == "claude-3.5-sonnet")
+        #expect(vm.resolvedDefaultModel == "")
 
         vm.defaultModel = "custom-model"
         #expect(vm.resolvedDefaultModel == "custom-model")

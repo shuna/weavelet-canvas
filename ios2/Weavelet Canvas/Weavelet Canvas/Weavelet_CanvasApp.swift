@@ -31,7 +31,7 @@ struct Weavelet_CanvasApp: App {
                                 .compactMap({ $0 as? UIWindowScene }).first,
                                   let window = windowScene.windows.first else { return }
                             let appBg = UIColor(named: "AppBackground")
-                            func findAndPatch(_ view: UIView) {
+                            @MainActor func findAndPatch(_ view: UIView) {
                                 if view.backgroundColor == .systemBackground {
                                     view.backgroundColor = appBg
                                     return

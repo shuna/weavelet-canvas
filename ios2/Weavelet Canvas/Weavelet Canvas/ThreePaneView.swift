@@ -78,8 +78,17 @@ final class ThreeColumnState {
     var showsDefaultInspectorButton: Bool = true
     /// Default inspector width ratio (0–1 of total width), set from settings.
     var defaultRatio: Double = 0.5
+    /// Current total width of the three-pane container, updated on geometry change.
+    var totalWidth: CGFloat = 0
     static let inspectorMinWidth: CGFloat = 240
-    static let inspectorMaxWidth: CGFloat = 600
+    /// Minimum width reserved for the detail pane so it doesn't collapse.
+    static let detailMinWidth: CGFloat = 300
+
+    /// Dynamic max width based on available space.
+    var inspectorMaxWidth: CGFloat {
+        guard totalWidth > 0 else { return 600 }
+        return max(totalWidth - Self.detailMinWidth, Self.inspectorMinWidth)
+    }
 
     func saveInspectorWidth() {
         UserDefaults.standard.set(inspectorWidth, forKey: "inspectorWidth")
@@ -258,6 +267,7 @@ struct ThreePaneView<Sidebar: View, Detail: View, Inspector: View>: View {
 
                         InspectorDragHandle(
                             inspectorWidth: $state.inspectorWidth,
+                            maxWidth: state.inspectorMaxWidth,
                             onDragEnd: { state.saveInspectorWidth() }
                         )
                     }
@@ -272,6 +282,7 @@ struct ThreePaneView<Sidebar: View, Detail: View, Inspector: View>: View {
                     if !splitPanelSwapped && state.inspectorPresented {
                         InspectorDragHandle(
                             inspectorWidth: $state.inspectorWidth,
+                            maxWidth: state.inspectorMaxWidth,
                             onDragEnd: { state.saveInspectorWidth() }
                         )
 
@@ -283,11 +294,21 @@ struct ThreePaneView<Sidebar: View, Detail: View, Inspector: View>: View {
                 .animation(.spring(duration: 0.3, bounce: 0.0), value: state.inspectorPresented)
                 .onGeometryChange(for: CGFloat.self) { proxy in
                     proxy.size.width
-                } action: { totalWidth in
-                    // Set initial inspector width from settings ratio if not user-set
-                    if !state.inspectorWidthUserSet && totalWidth > 0 {
-                        let target = totalWidth * state.defaultRatio
-                        let clamped = min(max(target, ThreeColumnState.inspectorMinWidth), ThreeColumnState.inspectorMaxWidth)
+                } action: { newTotalWidth in
+                    guard newTotalWidth > 0 else { return }
+                    let oldTotalWidth = state.totalWidth
+                    state.totalWidth = newTotalWidth
+
+                    if !state.inspectorWidthUserSet {
+                        // Initial: use settings ratio
+                        let target = newTotalWidth * state.defaultRatio
+                        let clamped = min(max(target, ThreeColumnState.inspectorMinWidth), state.inspectorMaxWidth)
+                        state.inspectorWidth = clamped
+                    } else if oldTotalWidth > 0 && oldTotalWidth != newTotalWidth {
+                        // Window resized: maintain the current ratio
+                        let ratio = state.inspectorWidth / oldTotalWidth
+                        let target = newTotalWidth * ratio
+                        let clamped = min(max(target, ThreeColumnState.inspectorMinWidth), state.inspectorMaxWidth)
                         state.inspectorWidth = clamped
                     }
                 }
@@ -361,6 +382,7 @@ struct DefaultDetailView: View {
 
 private struct InspectorDragHandle: View {
     @Binding var inspectorWidth: CGFloat
+    var maxWidth: CGFloat = 600
     var onDragEnd: (() -> Void)? = nil
     @State private var dragStartWidth: CGFloat = 0
     @GestureState private var isDragging = false
@@ -403,7 +425,7 @@ private struct InspectorDragHandle: View {
                     var transaction = Transaction()
                     transaction.disablesAnimations = true
                     withTransaction(transaction) {
-                        inspectorWidth = min(max(newWidth, ThreeColumnState.inspectorMinWidth), ThreeColumnState.inspectorMaxWidth)
+                        inspectorWidth = min(max(newWidth, ThreeColumnState.inspectorMinWidth), maxWidth)
                     }
                 }
                 .onEnded { _ in

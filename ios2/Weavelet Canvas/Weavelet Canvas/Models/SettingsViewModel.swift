@@ -146,10 +146,9 @@ final class SettingsViewModel {
         didSet { save("defaultReasoningEffort", defaultReasoningEffort?.rawValue ?? "") }
     }
 
-    /// The resolved model ID, falling back to a sensible default when blank.
+    /// The resolved model ID; empty when the user hasn't chosen one yet.
     var resolvedDefaultModel: String {
-        let trimmed = defaultModel.trimmingCharacters(in: .whitespacesAndNewlines)
-        return trimmed.isEmpty ? "claude-3.5-sonnet" : trimmed
+        defaultModel.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
     /// Build a ChatConfig from current default settings.
