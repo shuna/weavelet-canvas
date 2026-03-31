@@ -39,6 +39,22 @@ function isNodeProtected(nodeId: string | undefined, messageIndex: number): bool
   return protectedNodes[resolvedNodeId] ?? false;
 }
 
+function hasProtectedFollowingNodes(messageIndex: number): boolean {
+  const state = useStore.getState();
+  const chatIndex = state.currentChatIndex;
+  const chat = state.chats?.[chatIndex];
+  if (!chat) return false;
+  const protectedNodes =
+    state.protectedNodeMaps[String(chatIndex)] ?? chat.protectedNodes ?? {};
+  if (!protectedNodes || Object.keys(protectedNodes).length === 0) return false;
+  const totalMessages = chat.messages.length;
+  for (let i = messageIndex + 1; i < totalMessages; i++) {
+    const nid = chat.branchTree?.activePath?.[i] ?? String(i);
+    if (protectedNodes[nid]) return true;
+  }
+  return false;
+}
+
 function resolveMessageIndex(nodeId: string | undefined, fallbackIndex: number): number {
   if (!nodeId) return fallbackIndex;
   const activePath =
@@ -306,6 +322,10 @@ export function useEditViewLogic({
     const nextIndex = resolvedMessageIndex + 1;
     const chats = useStore.getState().chats!;
     const removeCount = nextIndex < chats[currentChatIndex].messages.length ? 1 : 0;
+    if (removeCount > 0 && hasProtectedFollowingNodes(resolvedMessageIndex)) {
+      showToast(i18next.t('protectedPruneStopped', { ns: 'main' }), 'warning');
+      return;
+    }
     replaceMessageAndPruneFollowing(
       currentChatIndex,
       resolvedMessageIndex,
@@ -341,6 +361,10 @@ export function useEditViewLogic({
         0,
         chats[currentChatIndex].messages.length - (resolvedMessageIndex + 1)
       );
+      if (removeCount > 0 && hasProtectedFollowingNodes(resolvedMessageIndex)) {
+        showToast(i18next.t('protectedPruneStopped', { ns: 'main' }), 'warning');
+        return;
+      }
       replaceMessageAndPruneFollowing(
         currentChatIndex,
         resolvedMessageIndex,
