@@ -10,6 +10,8 @@ import {
 import { defaultModel } from '@constants/chat';
 import { isKnownModel } from '@utils/modelLookup';
 import { hasMeaningfulContent } from '@utils/contentValidation';
+import { showToast } from '@utils/showToast';
+import i18next from 'i18next';
 
 function isChatBusy(): boolean {
   const state = useStore.getState();
@@ -239,7 +241,10 @@ export function useEditViewLogic({
     const hasSubmittableContent = hasMeaningfulContent(_content);
     if (sticky && !hasSubmittableContent) return;
     if (!sticky && isNodeBusy(nodeId)) return;
-    if (!sticky && isNodeProtected(nodeId, messageIndex)) return;
+    if (!sticky && isNodeProtected(nodeId, messageIndex)) {
+      showToast(i18next.t('protectedCannotEdit', { ns: 'main' }), 'warning');
+      return;
+    }
 
     const resolvedMessageIndex = resolveMessageIndex(nodeId, messageIndex);
 
@@ -293,7 +298,10 @@ export function useEditViewLogic({
 
   const handleGenerateNextOnly = () => {
     if (isChatBusy() || !modelValid) return;
-    if (isNodeProtected(nodeId, messageIndex)) return;
+    if (isNodeProtected(nodeId, messageIndex)) {
+      showToast(i18next.t('protectedCannotEdit', { ns: 'main' }), 'warning');
+      return;
+    }
     const resolvedMessageIndex = resolveMessageIndex(nodeId, messageIndex);
     const nextIndex = resolvedMessageIndex + 1;
     const chats = useStore.getState().chats!;
@@ -314,7 +322,10 @@ export function useEditViewLogic({
     const hasSubmittableContent = hasMeaningfulContent(_content);
     if (isChatBusy() || !modelValid) return;
     if (sticky && !hasSubmittableContent) return;
-    if (!sticky && isNodeProtected(nodeId, messageIndex)) return;
+    if (!sticky && isNodeProtected(nodeId, messageIndex)) {
+      showToast(i18next.t('protectedCannotEdit', { ns: 'main' }), 'warning');
+      return;
+    }
 
     if (sticky) {
       if (hasSubmittableContent) {

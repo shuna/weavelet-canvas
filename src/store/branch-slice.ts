@@ -1,3 +1,4 @@
+import i18next from 'i18next';
 import { StoreSlice } from './store';
 import {
   BranchClipboard,
@@ -8,6 +9,7 @@ import {
   isSplitView,
 } from '@type/chat';
 import { ContentStoreData, addContent } from '@utils/contentStore';
+import { showToast } from '@utils/showToast';
 import {
   finalizeStreamingBuffer,
   isStreamingContentHash,
@@ -548,7 +550,10 @@ export const createBranchSlice: StoreSlice<BranchSlice> = (set, get) => ({
     const resolvedNodeId = chat?.branchTree?.activePath?.[messageIndex] ?? String(messageIndex);
     const mapKey = String(chatIndex);
     const protectedNodes = get().protectedNodeMaps[mapKey] ?? chat?.protectedNodes ?? {};
-    if (protectedNodes[resolvedNodeId]) return;
+    if (protectedNodes[resolvedNodeId]) {
+      showToast(i18next.t('protectedCannotDelete', { ns: 'main' }), 'warning');
+      return;
+    }
 
     const nodeId = chat?.branchTree?.activePath?.[messageIndex];
     const preserveNode = !!nodeId && Object.values(get().generatingSessions).some(
@@ -582,20 +587,21 @@ export const createBranchSlice: StoreSlice<BranchSlice> = (set, get) => ({
     content,
     removeCount = 0
   ) => {
-    // Clamp removeCount so we never delete past a protected node
+    // Block all deletions if any following node in the range is protected
     const chat = get().chats?.[chatIndex];
     if (chat && removeCount > 0) {
       const mapKey = String(chatIndex);
       const protectedNodes = get().protectedNodeMaps[mapKey] ?? chat.protectedNodes ?? {};
       if (Object.keys(protectedNodes).length > 0) {
-        let allowed = 0;
         for (let i = 0; i < removeCount; i++) {
           const idx = messageIndex + 1 + i;
           const nodeId = chat.branchTree?.activePath?.[idx] ?? String(idx);
-          if (protectedNodes[nodeId]) break;
-          allowed++;
+          if (protectedNodes[nodeId]) {
+            showToast(i18next.t('protectedPruneStopped', { ns: 'main' }), 'warning');
+            removeCount = 0;
+            break;
+          }
         }
-        removeCount = allowed;
       }
     }
 
