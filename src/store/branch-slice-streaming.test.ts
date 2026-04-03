@@ -110,6 +110,10 @@ describe('finalizeStreamingNodesInChat', () => {
         chatIndex: 0,
         messageIndex: 1,
         targetNodeId: 'node-asst',
+        mode: 'append',
+        insertIndex: null,
+        requestPath: 'fetch',
+        startedAt: 1,
       },
     };
 
@@ -196,6 +200,10 @@ describe('finalizeStreamingNodesInChat', () => {
         chatIndex: 0,
         messageIndex: 2,
         targetNodeId: 'node-active',
+        mode: 'append',
+        insertIndex: null,
+        requestPath: 'fetch',
+        startedAt: 1,
       },
     };
 
@@ -253,6 +261,10 @@ describe('finalizeStreamingNodesInChat', () => {
         chatIndex: 1,
         messageIndex: 1,
         targetNodeId: 'node-asst',
+        mode: 'append',
+        insertIndex: null,
+        requestPath: 'fetch',
+        startedAt: 1,
       },
     };
 
