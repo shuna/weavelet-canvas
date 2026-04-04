@@ -36,14 +36,12 @@ export const createEvaluationSlice: StoreSlice<EvaluationSlice> = (set, get) => 
     const current = get().evaluationSettings[key];
     if (current === mode) return;
     set((prev: EvaluationSlice) => ({
-      ...prev,
       evaluationSettings: { ...prev.evaluationSettings, [key]: mode },
     }));
   },
 
   setEvaluationResult: (key, result) => {
     set((prev: EvaluationSlice) => ({
-      ...prev,
       evaluationResults: { ...prev.evaluationResults, [key]: result },
     }));
   },
@@ -54,14 +52,12 @@ export const createEvaluationSlice: StoreSlice<EvaluationSlice> = (set, get) => 
     const next = { ...results };
     delete next[key];
     set((prev: EvaluationSlice) => ({
-      ...prev,
       evaluationResults: next,
     }));
   },
 
   setEvaluationPending: (key, pending) => {
     set((prev: EvaluationSlice) => ({
-      ...prev,
       evaluationPending: { ...prev.evaluationPending, [key]: pending },
     }));
   },

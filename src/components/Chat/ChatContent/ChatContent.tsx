@@ -21,6 +21,7 @@ import { defaultModel, reduceMessagesToTotalToken } from '@constants/chat';
 import { showToast } from '@utils/showToast';
 
 const EMPTY_MESSAGES: never[] = [];
+const EMPTY_ACTIVE_PATH: string[] = [];
 const SCROLL_ALIGN_TOLERANCE = 0.5;
 const BOTTOM_THRESHOLD = 150;
 const KEYBOARD_VIEWPORT_DELTA_THRESHOLD = 50;
@@ -135,7 +136,7 @@ const ChatContent = ({ isChatFindOpen, onChatFindClose }: ChatContentProps = {})
     state.chats?.[state.currentChatIndex]?.id ?? ''
   );
   const activePath = useStore((state) =>
-    state.chats?.[state.currentChatIndex]?.branchTree?.activePath ?? []
+    state.chats?.[state.currentChatIndex]?.branchTree?.activePath ?? EMPTY_ACTIVE_PATH
   );
   const isCurrentChatGenerating = useStore((state) =>
     Object.values(state.generatingSessions).some((s) => s.chatId === currentChatId)
