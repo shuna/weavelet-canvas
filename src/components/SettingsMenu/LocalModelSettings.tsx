@@ -5,17 +5,30 @@ import Toggle from '@components/Toggle';
 import { SettingsGroup } from './SettingsMenu';
 import { localModelRuntime } from '@src/local-llm/runtime';
 import { EphemeralFileProvider } from '@src/local-llm/fileProvider';
-import { OpfsFileProvider } from '@src/local-llm/storage';
+import { OpfsFileProvider, getTempFileSize } from '@src/local-llm/storage';
 import { rehydrateSavedModels, deleteModel } from '@src/local-llm/storage';
 import { CURATED_MODELS } from '@src/local-llm/catalog';
 import type { CatalogModel } from '@src/local-llm/catalog';
-import { downloadCatalogModel } from '@src/local-llm/download';
-import type { DownloadProgress } from '@src/local-llm/download';
+import { downloadCatalogModel, downloadModelFiles } from '@src/local-llm/download';
+import type { DownloadProgress, DownloadCallbacks } from '@src/local-llm/download';
 import { estimateDeviceTier, getModelFit, formatBytes } from '@src/local-llm/device';
 import type { DeviceTier, ModelFitLabel } from '@src/local-llm/device';
 import { localAnalyze, localFormat } from '@api/localGeneration';
-import type { LocalModelStatus, LocalModelTask } from '@src/local-llm/types';
+import type {
+  LocalModelStatus,
+  LocalModelTask,
+  HfSearchResult,
+  GgufVariant,
+  GgufRepoResolution,
+  HfSearchQuery,
+} from '@src/local-llm/types';
 import type { SavedModelMeta } from '@src/local-llm/storage';
+import {
+  searchHfModels,
+  resolveGgufFiles,
+  resolveSearchCandidate,
+  generateSearchModelId,
+} from '@src/local-llm/hfSearch';
 
 // ---------------------------------------------------------------------------
 // Status badge
@@ -114,8 +127,10 @@ interface CatalogCardProps {
   meta: SavedModelMeta | undefined;
   runtimeStatus: LocalModelStatus;
   downloadProgress: DownloadProgress | null;
+  resumeFallbackMessage: string | null;
   onDownload: (model: CatalogModel) => void;
   onCancel: (modelId: string) => void;
+  onResume: (model: CatalogModel) => void;
   onRetry: (model: CatalogModel) => void;
   onDelete: (modelId: string) => void;
   onLoad: (model: CatalogModel) => void;
@@ -123,8 +138,8 @@ interface CatalogCardProps {
 }
 
 const CatalogCard = ({
-  model, deviceTier, meta, runtimeStatus, downloadProgress,
-  onDownload, onCancel, onRetry, onDelete, onLoad, onUnload,
+  model, deviceTier, meta, runtimeStatus, downloadProgress, resumeFallbackMessage,
+  onDownload, onCancel, onResume, onRetry, onDelete, onLoad, onUnload,
 }: CatalogCardProps) => {
   const { t } = useTranslation('main');
   const fit = getModelFit(model.recommendedDeviceTier, deviceTier);
@@ -184,9 +199,16 @@ const CatalogCard = ({
           <>
             <span className='text-xs text-amber-600 dark:text-amber-400'>
               {t('localModel.storageState.partial')}
+              {meta?.storedBytes ? ` (${t('localModel.partialSize')}: ${formatBytes(meta.storedBytes)})` : ''}
             </span>
             <button
               className='btn btn-primary text-xs px-3 py-1'
+              onClick={() => onResume(model)}
+            >
+              {t('localModel.resume')}
+            </button>
+            <button
+              className='btn btn-neutral text-xs px-3 py-1'
               onClick={() => onRetry(model)}
             >
               {t('localModel.retry')}
@@ -197,6 +219,11 @@ const CatalogCard = ({
             >
               {t('localModel.delete')}
             </button>
+            {resumeFallbackMessage && (
+              <span className='text-xs text-amber-600 dark:text-amber-400'>
+                {resumeFallbackMessage}
+              </span>
+            )}
           </>
         )}
 
@@ -316,6 +343,311 @@ const TaskAssignmentRow = ({
 };
 
 // ---------------------------------------------------------------------------
+// Support status badge (for HF search results)
+// ---------------------------------------------------------------------------
+
+const supportColors: Record<string, string> = {
+  supported: 'text-green-700 dark:text-green-400 bg-green-100 dark:bg-green-900/30',
+  'needs-manual-review': 'text-amber-700 dark:text-amber-400 bg-amber-100 dark:bg-amber-900/30',
+  unsupported: 'text-red-700 dark:text-red-400 bg-red-100 dark:bg-red-900/30',
+};
+
+const SupportBadge = ({ status, t }: { status: string; t: (k: string) => string }) => {
+  const key = status === 'needs-manual-review' ? 'needsManualReview' : status;
+  return (
+    <span className={`text-xs px-1.5 py-0.5 rounded ${supportColors[status] ?? supportColors.unsupported}`}>
+      {t(`localModel.${key}`)}
+    </span>
+  );
+};
+
+// ---------------------------------------------------------------------------
+// Variant status badge
+// ---------------------------------------------------------------------------
+
+const variantStatusColors: Record<string, string> = {
+  supported: 'text-green-700 dark:text-green-400',
+  'not-recommended': 'text-amber-700 dark:text-amber-400',
+  unsupported: 'text-red-700 dark:text-red-400',
+};
+
+// ---------------------------------------------------------------------------
+// Search result card
+// ---------------------------------------------------------------------------
+
+interface SearchResultCardProps {
+  result: HfSearchResult;
+  variants: GgufRepoResolution | null;
+  variantsLoading: boolean;
+  selectedFileName: string | null;
+  /** modelId → SavedModelMeta for all search-added models from this repo */
+  savedMetas: Record<string, SavedModelMeta>;
+  /** modelId → DownloadProgress for active downloads from this repo */
+  progresses: Record<string, DownloadProgress>;
+  /** modelId → LocalModelStatus for runtime statuses */
+  statuses: Record<string, LocalModelStatus>;
+  resumeFallbackMessage: string | null;
+  onSelectVariant: (repoId: string, fileName: string) => void;
+  onDownload: (result: HfSearchResult, variant: GgufVariant) => void;
+  onResume: (result: HfSearchResult, variant: GgufVariant) => void;
+  onRetry: (result: HfSearchResult, variant: GgufVariant) => void;
+  onCancel: (modelId: string) => void;
+  onLoad: (result: HfSearchResult, variant: GgufVariant) => void;
+  onUnload: (modelId: string) => void;
+  onDelete: (modelId: string) => void;
+}
+
+const SearchResultCard = ({
+  result, variants, variantsLoading, selectedFileName,
+  savedMetas, progresses, statuses, resumeFallbackMessage,
+  onSelectVariant, onDownload, onResume, onRetry, onCancel,
+  onLoad, onUnload, onDelete,
+}: SearchResultCardProps) => {
+  const { t } = useTranslation('main');
+  const isSupported = result.supportStatus === 'supported';
+
+  const selectedVariant = variants?.variants.find((v) => v.fileName === selectedFileName) ?? null;
+  const displaySize = selectedVariant?.size ?? result.bestCandidateSize;
+
+  // Derive model ID and state for selected variant
+  const selectedModelId = selectedVariant ? generateSearchModelId(result.repoId, selectedVariant) : null;
+  const meta = selectedModelId ? savedMetas[selectedModelId] : undefined;
+  const storageState = meta?.storageState ?? 'none';
+  const progress = selectedModelId ? progresses[selectedModelId] ?? null : null;
+  const runtimeStatus = selectedModelId ? (statuses[selectedModelId] ?? 'idle') : 'idle';
+  const isLoaded = runtimeStatus === 'ready' || runtimeStatus === 'busy';
+  const isLoading = runtimeStatus === 'loading';
+
+  const canDownload = isSupported
+    && selectedVariant?.supportStatus === 'supported'
+    && storageState === 'none'
+    && !progress;
+
+  return (
+    <div className='px-4 py-3 flex flex-col gap-2'>
+      {/* Header: repo name + support badge */}
+      <div className='flex items-center justify-between gap-2'>
+        <div className='flex items-center gap-2 min-w-0'>
+          <span className='text-sm font-medium text-gray-900 dark:text-gray-100 truncate'>
+            {result.repoId}
+          </span>
+          <SupportBadge status={result.supportStatus} t={t} />
+        </div>
+        {displaySize != null && (
+          <span className='text-xs text-gray-500 dark:text-gray-400 whitespace-nowrap'>
+            {formatBytes(displaySize)}
+          </span>
+        )}
+        {displaySize == null && (
+          <span className='text-xs text-gray-400 dark:text-gray-500 whitespace-nowrap'>
+            {t('localModel.sizeUnknown')}
+          </span>
+        )}
+      </div>
+
+      {/* Tags */}
+      {result.tags.length > 0 && (
+        <div className='flex flex-wrap gap-1'>
+          {result.tags.slice(0, 6).map((tag) => (
+            <span key={tag} className='text-xs px-1.5 py-0.5 rounded bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-400'>
+              {tag}
+            </span>
+          ))}
+        </div>
+      )}
+
+      {/* Metadata row */}
+      <div className='flex gap-3 text-xs text-gray-500 dark:text-gray-400'>
+        <span>{result.downloads.toLocaleString()} {t('localModel.hfDownloads')}</span>
+        {result.lastModified && (
+          <span>{t('localModel.hfLastModified')}: {result.lastModified.slice(0, 10)}</span>
+        )}
+      </div>
+
+      {/* Support reason for non-supported */}
+      {result.supportStatus !== 'supported' && result.supportReason && (
+        <p className='text-xs text-gray-500 dark:text-gray-400 italic'>
+          {result.supportReason}
+        </p>
+      )}
+
+      {/* Variant picker (GGUF supported repos only) */}
+      {isSupported && (
+        <div className='flex flex-col gap-2 mt-1'>
+          {variantsLoading && (
+            <span className='text-xs text-gray-500 animate-pulse'>
+              {t('localModel.loadingVariants')}
+            </span>
+          )}
+
+          {!variantsLoading && variants && variants.variants.length > 0 && (
+            <>
+              <div className='flex items-center gap-2'>
+                <select
+                  className='rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 px-2 py-1 text-xs text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-1 focus:ring-blue-500 max-w-[280px]'
+                  value={selectedFileName ?? ''}
+                  onChange={(e) => onSelectVariant(result.repoId, e.target.value)}
+                >
+                  <option value='' disabled>
+                    {t('localModel.selectVariant')}
+                  </option>
+                  {variants.variants.map((v) => (
+                    <option
+                      key={v.fileName}
+                      value={v.fileName}
+                      disabled={v.supportStatus === 'unsupported'}
+                    >
+                      {v.label}
+                      {v.recommended ? ` (${t('localModel.autoSelected')})` : ''}
+                      {v.supportStatus === 'not-recommended' ? ` - ${t('localModel.notRecommendedVariant')}` : ''}
+                      {v.supportStatus === 'unsupported' ? ` - ${t('localModel.unsupportedVariant')}` : ''}
+                    </option>
+                  ))}
+                </select>
+
+                {selectedVariant && selectedVariant.supportStatus !== 'supported' && selectedVariant.supportReason && (
+                  <span className={`text-xs ${variantStatusColors[selectedVariant.supportStatus] ?? ''}`}>
+                    {selectedVariant.supportReason}
+                  </span>
+                )}
+              </div>
+
+              {/* State-based actions for selected variant */}
+              {selectedVariant && (
+                <div className='flex items-center gap-2'>
+                  {/* Not downloaded */}
+                  {storageState === 'none' && !progress && (
+                    <button
+                      className='btn btn-primary text-xs px-3 py-1'
+                      onClick={() => onDownload(result, selectedVariant)}
+                      disabled={!canDownload}
+                    >
+                      {t('localModel.download')}
+                    </button>
+                  )}
+
+                  {/* Downloading */}
+                  {(storageState === 'downloading' || progress) && (
+                    <>
+                      <div className='flex-1'>
+                        {progress && <ProgressBar progress={progress} />}
+                        {!progress && (
+                          <span className='text-xs text-gray-500'>{t('localModel.downloading')}</span>
+                        )}
+                      </div>
+                      {selectedModelId && (
+                        <button
+                          className='btn btn-neutral text-xs px-3 py-1'
+                          onClick={() => onCancel(selectedModelId)}
+                        >
+                          {t('localModel.cancel')}
+                        </button>
+                      )}
+                    </>
+                  )}
+
+                  {/* Partial */}
+                  {storageState === 'partial' && !progress && (
+                    <>
+                      <span className='text-xs text-amber-600 dark:text-amber-400'>
+                        {t('localModel.storageState.partial')}
+                        {meta?.storedBytes ? ` (${t('localModel.partialSize')}: ${formatBytes(meta.storedBytes)})` : ''}
+                      </span>
+                      <button
+                        className='btn btn-primary text-xs px-3 py-1'
+                        onClick={() => onResume(result, selectedVariant)}
+                      >
+                        {t('localModel.resume')}
+                      </button>
+                      <button
+                        className='btn btn-neutral text-xs px-3 py-1'
+                        onClick={() => onRetry(result, selectedVariant)}
+                      >
+                        {t('localModel.retry')}
+                      </button>
+                      {selectedModelId && (
+                        <button
+                          className='btn btn-neutral text-xs px-3 py-1'
+                          onClick={() => onDelete(selectedModelId)}
+                        >
+                          {t('localModel.delete')}
+                        </button>
+                      )}
+                      {resumeFallbackMessage && (
+                        <span className='text-xs text-amber-600 dark:text-amber-400'>
+                          {resumeFallbackMessage}
+                        </span>
+                      )}
+                    </>
+                  )}
+
+                  {/* Saved, not loaded */}
+                  {storageState === 'saved' && !isLoaded && !isLoading && (
+                    <>
+                      <span className='text-xs text-green-600 dark:text-green-400'>
+                        {t('localModel.storageState.saved')}
+                      </span>
+                      <button
+                        className='btn btn-primary text-xs px-3 py-1'
+                        onClick={() => onLoad(result, selectedVariant)}
+                      >
+                        {t('localModel.load')}
+                      </button>
+                      {selectedModelId && (
+                        <button
+                          className='btn btn-neutral text-xs px-3 py-1'
+                          onClick={() => onDelete(selectedModelId)}
+                        >
+                          {t('localModel.delete')}
+                        </button>
+                      )}
+                    </>
+                  )}
+
+                  {/* Loading */}
+                  {storageState === 'saved' && isLoading && (
+                    <StatusBadge status='loading' />
+                  )}
+
+                  {/* Loaded */}
+                  {storageState === 'saved' && isLoaded && (
+                    <>
+                      <StatusBadge status={runtimeStatus} />
+                      {selectedModelId && (
+                        <button
+                          className='btn btn-neutral text-xs px-3 py-1'
+                          onClick={() => onUnload(selectedModelId)}
+                          disabled={runtimeStatus === 'busy'}
+                        >
+                          {t('localModel.unload')}
+                        </button>
+                      )}
+                    </>
+                  )}
+
+                  {/* Error */}
+                  {meta?.lastError && storageState !== 'downloading' && (
+                    <span className='text-xs text-red-600 dark:text-red-400 truncate'>
+                      {meta.lastError}
+                    </span>
+                  )}
+                </div>
+              )}
+            </>
+          )}
+
+          {!variantsLoading && variants && variants.variants.length === 0 && (
+            <span className='text-xs text-gray-500'>
+              {t('localModel.hfSearchNoResults')}
+            </span>
+          )}
+        </div>
+      )}
+    </div>
+  );
+};
+
+// ---------------------------------------------------------------------------
 // Main component
 // ---------------------------------------------------------------------------
 
@@ -352,6 +684,17 @@ const LocalModelSettings = () => {
   // Download state
   const [downloadProgresses, setDownloadProgresses] = useState<Record<string, DownloadProgress>>({});
   const abortControllers = useRef<Record<string, AbortController>>({});
+  const [resumeFallbacks, setResumeFallbacks] = useState<Record<string, string>>({});
+
+  // HF Search state
+  const [searchQuery, setSearchQuery] = useState('');
+  const [searchEngine, setSearchEngine] = useState<HfSearchQuery['engine']>('all');
+  const [searchSort, setSearchSort] = useState<HfSearchQuery['sort']>('downloads');
+  const [searchResults, setSearchResults] = useState<HfSearchResult[]>([]);
+  const [searching, setSearching] = useState(false);
+  const [variantMap, setVariantMap] = useState<Record<string, GgufRepoResolution>>({});
+  const [selectedVariants, setSelectedVariants] = useState<Record<string, string>>({});
+  const [variantLoading, setVariantLoading] = useState<Record<string, boolean>>({});
 
   // Runtime statuses for all known models (catalog + ephemeral)
   const [runtimeStatuses, setRuntimeStatuses] = useState<Record<string, LocalModelStatus>>({});
@@ -395,6 +738,12 @@ const LocalModelSettings = () => {
       for (const model of CURATED_MODELS) {
         newStatuses[model.id] = localModelRuntime.getStatus(model.id);
       }
+      // Also track search-added models
+      for (const m of useStore.getState().localModels) {
+        if (!(m.id in newStatuses)) {
+          newStatuses[m.id] = localModelRuntime.getStatus(m.id);
+        }
+      }
       setRuntimeStatuses(newStatuses);
       setEphemeralStatus(newStatuses[EPHEMERAL_MODEL_ID]);
     });
@@ -407,7 +756,13 @@ const LocalModelSettings = () => {
     if (!enabled || rehydratedRef.current) return;
     rehydratedRef.current = true;
 
-    rehydrateSavedModels(CURATED_MODELS).then((meta) => {
+    // Build rehydration entries from catalog + search-added models
+    const searchModels = useStore.getState().localModels
+      .filter((m) => m.source === 'opfs' && !CURATED_MODELS.some((c) => c.id === m.id))
+      .map((m) => ({ id: m.id, manifest: m.manifest }));
+    const entries = [...CURATED_MODELS, ...searchModels];
+
+    rehydrateSavedModels(entries).then((meta) => {
       const store = useStore.getState();
       for (const [id, m] of Object.entries(meta)) {
         store.updateSavedModelMeta(id, m);
@@ -497,6 +852,66 @@ const LocalModelSettings = () => {
   const handleRetry = useCallback((model: CatalogModel) => {
     handleDownload(model);
   }, [handleDownload]);
+
+  const handleResumeCatalog = useCallback((model: CatalogModel) => {
+    const controller = new AbortController();
+    abortControllers.current[model.id] = controller;
+
+    const store = useStore.getState();
+    store.updateSavedModelMeta(model.id, {
+      storageState: 'downloading',
+      lastError: undefined,
+    });
+
+    // Clear any previous fallback message
+    setResumeFallbacks((prev) => {
+      const { [model.id]: _, ...rest } = prev;
+      return rest;
+    });
+
+    downloadCatalogModel(model, {
+      onProgress: (p) => {
+        setDownloadProgresses((prev) => ({ ...prev, [model.id]: p }));
+      },
+      onFileComplete: (_fileName, fileSize) => {
+        const currentMeta = useStore.getState().savedModelMeta[model.id];
+        useStore.getState().updateSavedModelMeta(model.id, {
+          storedBytes: (currentMeta?.storedBytes ?? 0) + fileSize,
+          storedFiles: [...(currentMeta?.storedFiles ?? []), _fileName],
+        });
+      },
+      onComplete: (totalBytes) => {
+        useStore.getState().updateSavedModelMeta(model.id, {
+          storageState: 'saved',
+          storedBytes: totalBytes,
+          storedFiles: [...model.downloadFiles],
+          lastVerifiedAt: Date.now(),
+        });
+        setDownloadProgresses((prev) => {
+          const { [model.id]: _, ...rest } = prev;
+          return rest;
+        });
+        delete abortControllers.current[model.id];
+      },
+      onError: (error, _modelId, _fileName) => {
+        useStore.getState().updateSavedModelMeta(model.id, {
+          storageState: 'partial',
+          lastError: error.message,
+        });
+        setDownloadProgresses((prev) => {
+          const { [model.id]: _, ...rest } = prev;
+          return rest;
+        });
+        delete abortControllers.current[model.id];
+      },
+      onResumeFallback: (fileName) => {
+        setResumeFallbacks((prev) => ({
+          ...prev,
+          [model.id]: t('localModel.resumeFallback') as string,
+        }));
+      },
+    }, controller.signal, true /* resume */);
+  }, [t]);
 
   const handleDeleteCatalogModel = useCallback(async (modelId: string) => {
     if (!window.confirm(t('localModel.confirmDelete') as string)) return;
@@ -737,6 +1152,331 @@ const LocalModelSettings = () => {
     // Assignments remain — user can reassign via dropdown
   }, []);
 
+  // ----- HF Search -----
+  const handleSearch = useCallback(async () => {
+    if (!searchQuery.trim()) return;
+    setSearching(true);
+    setSearchResults([]);
+    setVariantMap({});
+    setSelectedVariants({});
+
+    try {
+      const results = await searchHfModels({
+        query: searchQuery,
+        engine: searchEngine,
+        sort: searchSort,
+      });
+      setSearchResults(results);
+
+      // Lazily resolve variants for supported GGUF repos
+      for (const r of results) {
+        if (r.supportStatus === 'supported' && (r.engine === 'wllama' || r.tags.includes('gguf'))) {
+          setVariantLoading((prev) => ({ ...prev, [r.repoId]: true }));
+          resolveGgufFiles(r.repoId).then((resolution) => {
+            setVariantLoading((prev) => ({ ...prev, [r.repoId]: false }));
+            if (resolution) {
+              setVariantMap((prev) => ({ ...prev, [r.repoId]: resolution }));
+              // Auto-select recommended
+              if (resolution.recommendedFile) {
+                setSelectedVariants((prev) => ({ ...prev, [r.repoId]: resolution.recommendedFile! }));
+              }
+              // Update bestCandidateSize if recommended
+              if (resolution.recommendedFile) {
+                const rec = resolution.variants.find((v) => v.fileName === resolution.recommendedFile);
+                if (rec) {
+                  setSearchResults((prev) =>
+                    prev.map((sr) =>
+                      sr.repoId === r.repoId ? { ...sr, bestCandidateSize: rec.size } : sr,
+                    ),
+                  );
+                }
+              }
+            } else {
+              // Resolution failed — downgrade to needs-manual-review
+              setSearchResults((prev) =>
+                prev.map((sr) =>
+                  sr.repoId === r.repoId
+                    ? { ...sr, supportStatus: 'needs-manual-review' as const, supportReason: 'Could not fetch repository details' }
+                    : sr,
+                ),
+              );
+            }
+          });
+        }
+      }
+    } catch {
+      // Search failed silently
+    } finally {
+      setSearching(false);
+    }
+  }, [searchQuery, searchEngine, searchSort]);
+
+  const handleSelectVariant = useCallback((repoId: string, fileName: string) => {
+    setSelectedVariants((prev) => ({ ...prev, [repoId]: fileName }));
+  }, []);
+
+  const handleDownloadSearchResult = useCallback((result: HfSearchResult, variant: GgufVariant) => {
+    const candidate = resolveSearchCandidate(result, variant);
+    if (!candidate) return;
+
+    const modelId = generateSearchModelId(result.repoId, variant);
+
+    // Don't duplicate in store
+    const store = useStore.getState();
+    if (!store.localModels.some((m) => m.id === modelId)) {
+      store.addLocalModel({
+        id: modelId,
+        engine: candidate.engine,
+        tasks: candidate.tasks,
+        label: candidate.label,
+        origin: result.repoId,
+        source: 'opfs',
+        manifest: candidate.manifest,
+        fileSize: candidate.estimatedSize,
+      });
+    }
+
+    store.updateSavedModelMeta(modelId, {
+      storageState: 'downloading',
+      storedBytes: 0,
+      storedFiles: [],
+      lastError: undefined,
+    });
+
+    const controller = new AbortController();
+    abortControllers.current[modelId] = controller;
+
+    downloadModelFiles(
+      {
+        modelId,
+        repo: result.repoId,
+        revision: 'main',
+        files: candidate.downloadFiles,
+      },
+      {
+        onProgress: (p) => {
+          setDownloadProgresses((prev) => ({ ...prev, [modelId]: p }));
+        },
+        onFileComplete: (_fileName, fileSize) => {
+          const currentMeta = useStore.getState().savedModelMeta[modelId];
+          useStore.getState().updateSavedModelMeta(modelId, {
+            storedBytes: (currentMeta?.storedBytes ?? 0) + fileSize,
+            storedFiles: [...(currentMeta?.storedFiles ?? []), _fileName],
+          });
+        },
+        onComplete: (totalBytes) => {
+          useStore.getState().updateSavedModelMeta(modelId, {
+            storageState: 'saved',
+            storedBytes: totalBytes,
+            storedFiles: [...candidate.downloadFiles],
+            lastVerifiedAt: Date.now(),
+          });
+          setDownloadProgresses((prev) => {
+            const { [modelId]: _, ...rest } = prev;
+            return rest;
+          });
+          delete abortControllers.current[modelId];
+        },
+        onError: (error) => {
+          useStore.getState().updateSavedModelMeta(modelId, {
+            storageState: 'partial',
+            lastError: error.message,
+          });
+          setDownloadProgresses((prev) => {
+            const { [modelId]: _, ...rest } = prev;
+            return rest;
+          });
+          delete abortControllers.current[modelId];
+        },
+      },
+      controller.signal,
+    );
+  }, []);
+
+  const handleResumeSearchModel = useCallback((result: HfSearchResult, variant: GgufVariant) => {
+    const candidate = resolveSearchCandidate(result, variant);
+    if (!candidate) return;
+    const modelId = generateSearchModelId(result.repoId, variant);
+
+    const store = useStore.getState();
+    store.updateSavedModelMeta(modelId, {
+      storageState: 'downloading',
+      lastError: undefined,
+    });
+    setResumeFallbacks((prev) => {
+      const { [modelId]: _, ...rest } = prev;
+      return rest;
+    });
+
+    const controller = new AbortController();
+    abortControllers.current[modelId] = controller;
+
+    downloadModelFiles(
+      {
+        modelId,
+        repo: result.repoId,
+        revision: 'main',
+        files: candidate.downloadFiles,
+        resume: true,
+      },
+      {
+        onProgress: (p) => {
+          setDownloadProgresses((prev) => ({ ...prev, [modelId]: p }));
+        },
+        onFileComplete: (_fileName, fileSize) => {
+          const currentMeta = useStore.getState().savedModelMeta[modelId];
+          useStore.getState().updateSavedModelMeta(modelId, {
+            storedBytes: (currentMeta?.storedBytes ?? 0) + fileSize,
+            storedFiles: [...(currentMeta?.storedFiles ?? []), _fileName],
+          });
+        },
+        onComplete: (totalBytes) => {
+          useStore.getState().updateSavedModelMeta(modelId, {
+            storageState: 'saved',
+            storedBytes: totalBytes,
+            storedFiles: [...candidate.downloadFiles],
+            lastVerifiedAt: Date.now(),
+          });
+          setDownloadProgresses((prev) => {
+            const { [modelId]: _, ...rest } = prev;
+            return rest;
+          });
+          delete abortControllers.current[modelId];
+        },
+        onError: (error) => {
+          useStore.getState().updateSavedModelMeta(modelId, {
+            storageState: 'partial',
+            lastError: error.message,
+          });
+          setDownloadProgresses((prev) => {
+            const { [modelId]: _, ...rest } = prev;
+            return rest;
+          });
+          delete abortControllers.current[modelId];
+        },
+        onResumeFallback: () => {
+          setResumeFallbacks((prev) => ({
+            ...prev,
+            [modelId]: t('localModel.resumeFallback') as string,
+          }));
+        },
+      },
+      controller.signal,
+    );
+  }, [t]);
+
+  const handleRetrySearchModel = useCallback((result: HfSearchResult, variant: GgufVariant) => {
+    // Retry = fresh download (no resume)
+    handleDownloadSearchResult(result, variant);
+  }, [handleDownloadSearchResult]);
+
+  const handleCancelSearchDownload = useCallback((modelId: string) => {
+    abortControllers.current[modelId]?.abort();
+    delete abortControllers.current[modelId];
+    setDownloadProgresses((prev) => {
+      const { [modelId]: _, ...rest } = prev;
+      return rest;
+    });
+    useStore.getState().updateSavedModelMeta(modelId, {
+      storageState: 'partial',
+      lastError: undefined,
+    });
+  }, []);
+
+  const handleLoadSearchModel = useCallback(async (result: HfSearchResult, variant: GgufVariant) => {
+    const candidate = resolveSearchCandidate(result, variant);
+    if (!candidate) return;
+    const modelId = generateSearchModelId(result.repoId, variant);
+
+    const provider = new OpfsFileProvider(modelId, candidate.manifest);
+
+    try {
+      if (localModelRuntime.isLoaded(modelId)) {
+        await localModelRuntime.unloadModel(modelId);
+      }
+
+      await localModelRuntime.loadModel(
+        {
+          id: modelId,
+          engine: candidate.engine,
+          tasks: candidate.tasks,
+          label: candidate.label,
+          origin: result.repoId,
+          source: 'opfs',
+          manifest: candidate.manifest,
+          fileSize: candidate.estimatedSize,
+        },
+        provider,
+      );
+
+      const store = useStore.getState();
+      // Ensure model definition is in store
+      if (!store.localModels.some((m) => m.id === modelId)) {
+        store.addLocalModel({
+          id: modelId,
+          engine: candidate.engine,
+          tasks: candidate.tasks,
+          label: candidate.label,
+          origin: result.repoId,
+          source: 'opfs',
+          manifest: candidate.manifest,
+          fileSize: candidate.estimatedSize,
+        });
+      }
+
+      autoAssignIfUnset(modelId, candidate.tasks);
+      setOutput('');
+    } catch (err) {
+      setLoadError((err as Error).message);
+    }
+  }, [autoAssignIfUnset]);
+
+  const handleUnloadSearchModel = useCallback(async (modelId: string) => {
+    await localModelRuntime.unloadModel(modelId);
+  }, []);
+
+  const handleDeleteSearchModel = useCallback(async (modelId: string) => {
+    if (!window.confirm(t('localModel.confirmDelete') as string)) return;
+
+    if (localModelRuntime.isLoaded(modelId)) {
+      await localModelRuntime.unloadModel(modelId);
+    }
+
+    const store = useStore.getState();
+    for (const task of ASSIGNABLE_TASKS) {
+      if (store.activeLocalModels[task] === modelId) {
+        store.setActiveLocalModel(task, null);
+      }
+    }
+
+    await deleteModel(modelId);
+    store.removeSavedModelMeta(modelId);
+    store.removeLocalModel(modelId);
+  }, [t]);
+
+  // Sync partial model storedBytes on section mount
+  useEffect(() => {
+    if (!rehydrated) return;
+    const metas = useStore.getState().savedModelMeta;
+    for (const [id, meta] of Object.entries(metas)) {
+      if (meta.storageState === 'partial') {
+        // Find a file to check .part size
+        const model = CURATED_MODELS.find((c) => c.id === id)
+          ?? useStore.getState().localModels.find((m) => m.id === id);
+        if (!model) continue;
+        const file = model.manifest.kind === 'single-file'
+          ? model.manifest.entrypoint
+          : model.manifest.requiredFiles[0];
+        if (!file) continue;
+        getTempFileSize(id, file).then((size) => {
+          if (size > 0) {
+            useStore.getState().updateSavedModelMeta(id, { storedBytes: size });
+          }
+        });
+      }
+    }
+  }, [rehydrated]);
+
   const isEphemeralReady = ephemeralStatus === 'ready' || ephemeralStatus === 'busy';
 
   // Whether test area should show: need at least one assignment that is loaded
@@ -794,14 +1534,108 @@ const LocalModelSettings = () => {
                 meta={savedModelMeta[model.id]}
                 runtimeStatus={runtimeStatuses[model.id] ?? 'idle'}
                 downloadProgress={downloadProgresses[model.id] ?? null}
+                resumeFallbackMessage={resumeFallbacks[model.id] ?? null}
                 onDownload={handleDownload}
                 onCancel={handleCancelDownload}
+                onResume={handleResumeCatalog}
                 onRetry={handleRetry}
                 onDelete={handleDeleteCatalogModel}
                 onLoad={handleLoadCatalogModel}
                 onUnload={handleUnloadCatalogModel}
               />
             ))}
+          </SettingsGroup>
+
+          {/* Hugging Face Search */}
+          <SettingsGroup label={t('localModel.hfSearch')}>
+            <div className='px-4 py-3 flex flex-col gap-3'>
+              {/* Search controls */}
+              <div className='flex gap-2'>
+                <input
+                  type='text'
+                  className='flex-1 rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 px-2 py-1 text-sm text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-1 focus:ring-blue-500'
+                  placeholder={t('localModel.hfSearchPlaceholder') as string}
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
+                />
+                <select
+                  className='rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 px-2 py-1 text-xs text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-1 focus:ring-blue-500'
+                  value={searchEngine}
+                  onChange={(e) => setSearchEngine(e.target.value as HfSearchQuery['engine'])}
+                >
+                  <option value='all'>{t('localModel.engineAll')}</option>
+                  <option value='wllama'>{t('localModel.engineWllama')}</option>
+                  <option value='transformers.js'>{t('localModel.engineTransformersJs')}</option>
+                </select>
+                <select
+                  className='rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 px-2 py-1 text-xs text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-1 focus:ring-blue-500'
+                  value={searchSort}
+                  onChange={(e) => setSearchSort(e.target.value as HfSearchQuery['sort'])}
+                >
+                  <option value='downloads'>{t('localModel.sortDownloads')}</option>
+                  <option value='lastModified'>{t('localModel.sortLastModified')}</option>
+                </select>
+              </div>
+              <button
+                className='btn btn-primary text-xs px-3 py-1 self-start'
+                onClick={handleSearch}
+                disabled={searching || !searchQuery.trim()}
+              >
+                {searching ? t('localModel.hfSearching') : t('localModel.hfSearchButton')}
+              </button>
+            </div>
+
+            {/* Search results */}
+            {searchResults.length > 0 && searchResults.map((result) => {
+              // Collect all saved metas, progresses, and statuses for models from this repo
+              const repoPrefix = `hf--${result.repoId.split('/').map((s) => s.toLowerCase().replace(/[^a-z0-9]/g, '-').replace(/-+/g, '-').replace(/^-|-$/g, '')).join('--')}--`;
+              const repoMetas: Record<string, SavedModelMeta> = {};
+              const repoProgresses: Record<string, DownloadProgress> = {};
+              const repoStatuses: Record<string, LocalModelStatus> = {};
+              for (const [id, meta] of Object.entries(savedModelMeta)) {
+                if (id.startsWith(repoPrefix)) repoMetas[id] = meta;
+              }
+              for (const [id, prog] of Object.entries(downloadProgresses)) {
+                if (id.startsWith(repoPrefix)) repoProgresses[id] = prog;
+              }
+              for (const [id, status] of Object.entries(runtimeStatuses)) {
+                if (id.startsWith(repoPrefix)) repoStatuses[id] = status;
+              }
+              // Find resume fallback for selected variant
+              const selectedFile = selectedVariants[result.repoId] ?? null;
+              const selectedVar = variantMap[result.repoId]?.variants.find((v) => v.fileName === selectedFile);
+              const selectedMid = selectedVar ? generateSearchModelId(result.repoId, selectedVar) : null;
+              const fallbackMsg = selectedMid ? (resumeFallbacks[selectedMid] ?? null) : null;
+
+              return (
+                <SearchResultCard
+                  key={result.repoId}
+                  result={result}
+                  variants={variantMap[result.repoId] ?? null}
+                  variantsLoading={variantLoading[result.repoId] ?? false}
+                  selectedFileName={selectedFile}
+                  savedMetas={repoMetas}
+                  progresses={repoProgresses}
+                  statuses={repoStatuses}
+                  resumeFallbackMessage={fallbackMsg}
+                  onSelectVariant={handleSelectVariant}
+                  onDownload={handleDownloadSearchResult}
+                  onResume={handleResumeSearchModel}
+                  onRetry={handleRetrySearchModel}
+                  onCancel={handleCancelSearchDownload}
+                  onLoad={handleLoadSearchModel}
+                  onUnload={handleUnloadSearchModel}
+                  onDelete={handleDeleteSearchModel}
+                />
+              );
+            })}
+
+            {!searching && searchResults.length === 0 && searchQuery.trim() && (
+              <div className='px-4 py-3 text-xs text-gray-500 dark:text-gray-400 text-center'>
+                {t('localModel.hfSearchNoResults')}
+              </div>
+            )}
           </SettingsGroup>
 
           {/* Imported Local Files */}

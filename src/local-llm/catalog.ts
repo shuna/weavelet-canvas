@@ -38,7 +38,7 @@ export const CURATED_MODELS: CatalogModel[] = [
     id: 'smollm2-360m-instruct-q8',
     label: 'SmolLM2 360M Instruct (Q8_0)',
     engine: 'wllama',
-    tasks: ['generation'],
+    tasks: ['generation', 'analysis'],
     huggingFaceRepo: 'HuggingFaceTB/SmolLM2-360M-Instruct-GGUF',
     revision: 'main',
     downloadFiles: ['smollm2-360m-instruct-q8_0.gguf'],
@@ -47,43 +47,93 @@ export const CURATED_MODELS: CatalogModel[] = [
       entrypoint: 'smollm2-360m-instruct-q8_0.gguf',
     },
     // 386 MB — measured from HF repo (only quantization available)
-    expectedDownloadSize: 404_750_336,
+    expectedDownloadSize: 386_404_992,
     recommendedDeviceTier: 'low',
     notes: 'Smallest recommended model. Good for basic text generation on low-end devices.',
   },
   {
-    id: 'qwen2.5-0.5b-instruct-q4km',
-    label: 'Qwen2.5 0.5B Instruct (Q4_K_M)',
+    id: 'qwen3-0.6b-q4km',
+    label: 'Qwen3 0.6B (Q4_K_M)',
     engine: 'wllama',
     tasks: ['generation', 'analysis'],
-    huggingFaceRepo: 'Qwen/Qwen2.5-0.5B-Instruct-GGUF',
+    huggingFaceRepo: 'bartowski/Qwen_Qwen3-0.6B-GGUF',
     revision: 'main',
-    downloadFiles: ['qwen2.5-0.5b-instruct-q4_k_m.gguf'],
+    downloadFiles: ['Qwen_Qwen3-0.6B-Q4_K_M.gguf'],
     manifest: {
       kind: 'single-file',
-      entrypoint: 'qwen2.5-0.5b-instruct-q4_k_m.gguf',
+      entrypoint: 'Qwen_Qwen3-0.6B-Q4_K_M.gguf',
     },
-    // 491 MB — measured from HF repo
-    expectedDownloadSize: 514_850_816,
+    // 484 MB — measured from HF repo
+    expectedDownloadSize: 484_220_320,
     recommendedDeviceTier: 'standard',
-    notes: 'Balanced size and capability. Supports generation and analysis tasks.',
+    notes: 'Balanced size and capability. Latest Qwen3 architecture with generation and analysis.',
   },
   {
-    id: 'tinyllama-1.1b-chat-q4km',
-    label: 'TinyLlama 1.1B Chat (Q4_K_M)',
+    id: 'llm-jp-3-1.8b-instruct-q4km',
+    label: 'LLM-jp-3 1.8B Instruct (Q4_K_M)',
     engine: 'wllama',
     tasks: ['generation', 'analysis'],
-    huggingFaceRepo: 'TheBloke/TinyLlama-1.1B-Chat-v1.0-GGUF',
+    huggingFaceRepo: 'alfredplpl/llm-jp-3-1.8b-instruct-gguf',
     revision: 'main',
-    downloadFiles: ['tinyllama-1.1b-chat-v1.0.Q4_K_M.gguf'],
+    downloadFiles: ['llm-jp-3-1.8b-instruct-Q4_K_M.gguf'],
     manifest: {
       kind: 'single-file',
-      entrypoint: 'tinyllama-1.1b-chat-v1.0.Q4_K_M.gguf',
+      entrypoint: 'llm-jp-3-1.8b-instruct-Q4_K_M.gguf',
     },
-    // ~670 MB — measured from HF repo
-    expectedDownloadSize: 702_545_920,
+    // 1.16 GB — measured from HF repo
+    expectedDownloadSize: 1_164_239_104,
     recommendedDeviceTier: 'high',
-    notes: 'Largest supported model. Better quality but requires more memory.',
+    notes: 'Japanese-focused model. Good quality for Japanese text generation and analysis.',
+  },
+];
+
+// ---------------------------------------------------------------------------
+// Experimental multimodal models (not mixed into text-only runtime)
+// ---------------------------------------------------------------------------
+
+export interface ExperimentalModel {
+  id: string;
+  label: string;
+  huggingFaceRepo: string;
+  category: 'multimodal';
+  notes: string;
+}
+
+/**
+ * Models tracked for future support but NOT integrated into the
+ * current text-only wllama/transformers.js runtime.
+ *
+ * These require separate vision encoders, image preprocessing,
+ * or architectures that the existing pipeline does not handle.
+ */
+export const EXPERIMENTAL_MULTIMODAL_MODELS: ExperimentalModel[] = [
+  {
+    id: 'smolvlm-256m',
+    label: 'SmolVLM 256M',
+    huggingFaceRepo: 'HuggingFaceTB/SmolVLM-256M-Instruct',
+    category: 'multimodal',
+    notes: 'Vision-language model. Requires image encoder not supported by current runtime.',
+  },
+  {
+    id: 'smolvlm-500m',
+    label: 'SmolVLM 500M',
+    huggingFaceRepo: 'HuggingFaceTB/SmolVLM-500M-Instruct',
+    category: 'multimodal',
+    notes: 'Vision-language model. Requires image encoder not supported by current runtime.',
+  },
+  {
+    id: 'qwen3.5-0.8b',
+    label: 'Qwen3.5 0.8B',
+    huggingFaceRepo: 'Qwen/Qwen3.5-0.8B',
+    category: 'multimodal',
+    notes: 'Multimodal Qwen variant. Not yet supported by browser runtime.',
+  },
+  {
+    id: 'gemma-4-e2b',
+    label: 'Gemma 4 E2B',
+    huggingFaceRepo: 'google/gemma-4-e2b-it',
+    category: 'multimodal',
+    notes: 'Multimodal Gemma variant. Not yet supported by browser runtime.',
   },
 ];
 

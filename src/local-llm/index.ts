@@ -3,14 +3,21 @@ export * from './fileProvider';
 export { LocalModelRuntime, localModelRuntime } from './runtime';
 export type { WllamaWorkerProxy, TransformersWorkerProxy } from './runtime';
 export * from './device';
-export { CURATED_MODELS, getCatalogModel } from './catalog';
-export type { CatalogModel } from './catalog';
+export { CURATED_MODELS, EXPERIMENTAL_MULTIMODAL_MODELS, getCatalogModel } from './catalog';
+export type { CatalogModel, ExperimentalModel } from './catalog';
 export {
   OpfsFileProvider,
   verifyStoredModel,
   rehydrateSavedModels,
   deleteModel,
+  getTempFileSize,
 } from './storage';
-export type { SavedModelMeta, StorageVerifyResult } from './storage';
-export { downloadCatalogModel } from './download';
-export type { DownloadProgress, DownloadCallbacks } from './download';
+export type { SavedModelMeta, StorageVerifyResult, RehydrationEntry } from './storage';
+export { downloadCatalogModel, downloadModelFiles, buildHfUrl } from './download';
+export type { DownloadProgress, DownloadCallbacks, DownloadRequest } from './download';
+export {
+  searchHfModels,
+  resolveGgufFiles,
+  resolveSearchCandidate,
+  generateSearchModelId,
+} from './hfSearch';

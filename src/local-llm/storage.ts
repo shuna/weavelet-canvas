@@ -19,7 +19,6 @@ import type {
 } from './types';
 import type { ModelFileProvider, CustomCacheAdapter } from './fileProvider';
 import { resolveUrlToManifestKey } from './fileProvider';
-import type { CatalogModel } from './catalog';
 
 // ---------------------------------------------------------------------------
 // File System Access API augmentation (createWritable not in default DOM lib)
@@ -226,6 +225,24 @@ export async function hasTempFile(
 }
 
 /**
+ * Get the size of a .part temp file.
+ * Returns 0 if no .part exists.
+ */
+export async function getTempFileSize(
+  modelId: string,
+  relativePath: string,
+): Promise<number> {
+  const dir = await getModelDir(modelId);
+  try {
+    const handle = await dir.getFileHandle(relativePath + PART_SUFFIX);
+    const file = await handle.getFile();
+    return file.size;
+  } catch {
+    return 0;
+  }
+}
+
+/**
  * Remove a .part temp file.
  */
 export async function removeTempFile(
@@ -336,15 +353,25 @@ export async function verifyStoredModel(
 // ---------------------------------------------------------------------------
 
 /**
- * Walk OPFS model dirs, verify against catalog manifests.
- * Model dirs not in catalog are ignored.
+ * Entry for rehydration — any model with an id and manifest.
+ * Works for both curated catalog models and search-added models.
+ */
+export interface RehydrationEntry {
+  id: string;
+  manifest: LocalModelManifest;
+  revision?: string;
+}
+
+/**
+ * Walk OPFS model dirs, verify against known entries.
+ * Model dirs not matching any entry are ignored.
  * Called once on LocalModelSettings first mount.
  */
 export async function rehydrateSavedModels(
-  catalog: CatalogModel[],
+  entries: RehydrationEntry[],
 ): Promise<Record<string, SavedModelMeta>> {
   const result: Record<string, SavedModelMeta> = {};
-  const catalogMap = new Map(catalog.map((c) => [c.id, c]));
+  const entryMap = new Map(entries.map((e) => [e.id, e]));
 
   let savedIds: string[];
   try {
@@ -354,10 +381,10 @@ export async function rehydrateSavedModels(
   }
 
   for (const modelId of savedIds) {
-    const catalogEntry = catalogMap.get(modelId);
-    if (!catalogEntry) continue;
+    const entry = entryMap.get(modelId);
+    if (!entry) continue;
 
-    const verifyResult = await verifyStoredModel(modelId, catalogEntry.manifest);
+    const verifyResult = await verifyStoredModel(modelId, entry.manifest);
     if (verifyResult === 'none') continue;
 
     const storedFiles = await listFiles(modelId);
@@ -376,7 +403,7 @@ export async function rehydrateSavedModels(
       storedBytes,
       storedFiles,
       lastVerifiedAt: Date.now(),
-      downloadRevision: catalogEntry.revision,
+      downloadRevision: entry.revision,
     };
   }
 
