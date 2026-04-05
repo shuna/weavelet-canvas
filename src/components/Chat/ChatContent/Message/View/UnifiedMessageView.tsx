@@ -18,6 +18,7 @@ import EditViewButtons from './EditViewButtons';
 import ContentBody from './ContentBody';
 import EvaluationPanel from './EvaluationPanel';
 import EvaluationModal from './EvaluationModal';
+import type { TabId } from './EvaluationModal';
 import PopupModal from '@components/PopupModal';
 import { useTranslation } from 'react-i18next';
 import { useModelType } from '@utils/modelLookup';
@@ -60,6 +61,7 @@ const UnifiedMessageView = memo(
     } = useSubmit();
     const [isDelete, setIsDelete] = useState(false);
     const [isEvalModalOpen, setIsEvalModalOpen] = useState(false);
+    const [evalInitialTab, setEvalInitialTab] = useState<TabId | undefined>();
 
     const currentChatIndex = useStore((state) => state.currentChatIndex);
     const removeMessageAtIndex = useStore((state) => state.removeMessageAtIndex);
@@ -139,6 +141,12 @@ const UnifiedMessageView = memo(
     };
 
     const handleEvaluate = useCallback(() => {
+      setEvalInitialTab(undefined);
+      setIsEvalModalOpen(true);
+    }, []);
+
+    const handleOpenEvalTab = useCallback((tab: TabId) => {
+      setEvalInitialTab(tab);
       setIsEvalModalOpen(true);
     }, []);
 
@@ -278,8 +286,8 @@ const UnifiedMessageView = memo(
             <ContentAttachments images={isEditState ? [] : validImageContents} />
             {nodeId && currentChatId && (
               <>
-                <EvaluationPanel chatId={currentChatId} nodeId={nodeId} phase='pre-send' />
-                <EvaluationPanel chatId={currentChatId} nodeId={nodeId} phase='post-receive' />
+                <EvaluationPanel chatId={currentChatId} nodeId={nodeId} phase='pre-send' onOpenTab={handleOpenEvalTab} />
+                <EvaluationPanel chatId={currentChatId} nodeId={nodeId} phase='post-receive' onOpenTab={handleOpenEvalTab} />
               </>
             )}
             <ContentActions
@@ -317,6 +325,7 @@ const UnifiedMessageView = memo(
                   resolvedProvider={providerInfo.resolved}
                   model={providerInfo.model}
                   setIsModalOpen={setIsEvalModalOpen}
+                  initialTab={evalInitialTab}
                 />
               );
             })()}

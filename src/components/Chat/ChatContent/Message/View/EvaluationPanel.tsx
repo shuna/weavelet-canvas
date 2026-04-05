@@ -3,11 +3,13 @@ import { useTranslation } from 'react-i18next';
 import useStore from '@store/store';
 import { evaluationResultKey, qualityAxisKeys, categoryToI18nKey, summarizeSafetyScores } from '@type/evaluation';
 import type { EvaluationResult, SafetyCheckResult, QualityEvaluationResult, QualityAxisThreshold } from '@type/evaluation';
+import type { TabId } from './EvaluationModal';
 
 interface EvaluationPanelProps {
   chatId: string;
   nodeId: string;
   phase: 'pre-send' | 'post-receive';
+  onOpenTab?: (tab: TabId) => void;
 }
 
 const ScoreBar = ({ score, label, threshold }: { score: number; label: string; threshold: QualityAxisThreshold }) => {
@@ -27,7 +29,7 @@ const ScoreBar = ({ score, label, threshold }: { score: number; label: string; t
   );
 };
 
-const SafetySection = ({ result }: { result: SafetyCheckResult }) => {
+const SafetySection = ({ result, onOpenTab }: { result: SafetyCheckResult; onOpenTab?: (tab: TabId) => void }) => {
   const { t } = useTranslation('main');
   const safetyThresholds = useStore((state) => state.safetyThresholds);
   const summary = summarizeSafetyScores(result.categoryScores, safetyThresholds);
@@ -35,58 +37,70 @@ const SafetySection = ({ result }: { result: SafetyCheckResult }) => {
     .map((cat) => t(`evaluation.category.${categoryToI18nKey(cat)}`));
 
   return (
-    <div className='flex flex-wrap items-center gap-1.5'>
-      <span className='text-xs font-semibold text-gray-600 dark:text-gray-400'>
-        {t('evaluation.safetyTitle')}
-      </span>
-      {summary.status === 'block' ? (
-        <span className='text-xs font-medium px-1.5 py-0.5 rounded bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400'>
-          {t('evaluation.flagged')}（{categories.join(' ')}）
-        </span>
-      ) : summary.status === 'review' ? (
-        <span className='text-xs font-medium px-1.5 py-0.5 rounded bg-gray-100 text-gray-700 dark:bg-gray-700/60 dark:text-gray-300'>
-          {t('evaluation.review')}（{categories.join(' ')}）
-        </span>
-      ) : (
-        <span className='text-xs font-medium px-1.5 py-0.5 rounded bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400'>
-          {t('evaluation.safe')}
-        </span>
-      )}
+    <div className='space-y-1'>
+      <button
+        type='button'
+        className='text-xs font-semibold text-blue-600 dark:text-blue-400 hover:underline cursor-pointer'
+        onClick={() => onOpenTab?.('safety')}
+      >
+        {t('evaluation.safetyTabLabel')}
+      </button>
+      <div className='pl-4'>
+        {summary.status === 'block' ? (
+          <span className='text-xs font-medium px-1.5 py-0.5 rounded bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400'>
+            {t('evaluation.flagged')}（{categories.join(' ')}）
+          </span>
+        ) : summary.status === 'review' ? (
+          <span className='text-xs font-medium px-1.5 py-0.5 rounded bg-gray-100 text-gray-700 dark:bg-gray-700/60 dark:text-gray-300'>
+            {t('evaluation.review')}（{categories.join(' ')}）
+          </span>
+        ) : (
+          <span className='text-xs font-medium px-1.5 py-0.5 rounded bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400'>
+            {t('evaluation.safe')}
+          </span>
+        )}
+      </div>
     </div>
   );
 };
 
-const QualitySummary = ({ result }: { result: QualityEvaluationResult }) => {
+const QualitySummary = ({ result, onOpenTab }: { result: QualityEvaluationResult; onOpenTab?: (tab: TabId) => void }) => {
   const { t } = useTranslation('main');
   const qualityThresholds = useStore((state) => state.qualityThresholds);
 
   return (
     <div className='space-y-1'>
-      <div className='text-xs font-semibold text-gray-600 dark:text-gray-400'>
-        {t('evaluation.qualityTitle')}
+      <button
+        type='button'
+        className='text-xs font-semibold text-blue-600 dark:text-blue-400 hover:underline cursor-pointer'
+        onClick={() => onOpenTab?.('quality')}
+      >
+        {t('evaluation.qualityTabLabel')}
+      </button>
+      <div className='pl-4 space-y-1'>
+        {result.kind === 'system'
+          ? (Object.keys(result.scores) as string[]).map((axis) => (
+              <ScoreBar
+                key={axis}
+                score={(result.scores as unknown as Record<string, number>)[axis]}
+                label={t(`evaluation.systemAxis.${axis}`)}
+                threshold={qualityThresholds[axis as keyof typeof qualityThresholds] ?? { red: 0.5, green: 0.8 }}
+              />
+            ))
+          : qualityAxisKeys.map((axis) => (
+              <ScoreBar
+                key={axis}
+                score={result.scores[axis]}
+                label={t(`evaluation.axis.${axis}`)}
+                threshold={qualityThresholds[axis]}
+              />
+            ))}
       </div>
-      {result.kind === 'system'
-        ? (Object.keys(result.scores) as string[]).map((axis) => (
-            <ScoreBar
-              key={axis}
-              score={(result.scores as unknown as Record<string, number>)[axis]}
-              label={t(`evaluation.systemAxis.${axis}`)}
-              threshold={qualityThresholds[axis as keyof typeof qualityThresholds] ?? { red: 0.5, green: 0.8 }}
-            />
-          ))
-        : qualityAxisKeys.map((axis) => (
-            <ScoreBar
-              key={axis}
-              score={result.scores[axis]}
-              label={t(`evaluation.axis.${axis}`)}
-              threshold={qualityThresholds[axis]}
-            />
-          ))}
     </div>
   );
 };
 
-const EvaluationPanel: React.FC<EvaluationPanelProps> = ({ chatId, nodeId, phase }) => {
+const EvaluationPanel: React.FC<EvaluationPanelProps> = ({ chatId, nodeId, phase, onOpenTab }) => {
   const key = evaluationResultKey(chatId, nodeId, phase);
   const result: EvaluationResult | undefined = useStore(
     (state) => state.evaluationResults[key]
@@ -103,8 +117,8 @@ const EvaluationPanel: React.FC<EvaluationPanelProps> = ({ chatId, nodeId, phase
           Evaluating...
         </div>
       )}
-      {result?.safety && <SafetySection result={result.safety} />}
-      {result?.quality && <QualitySummary result={result.quality} />}
+      {result?.safety && <SafetySection result={result.safety} onOpenTab={onOpenTab} />}
+      {result?.quality && <QualitySummary result={result.quality} onOpenTab={onOpenTab} />}
     </div>
   );
 };
