@@ -91,10 +91,10 @@
   "exportVisibleBranchOnly": "Include only the currently visible branch",
   "enterToSubmit": "Enter to submit",
   "animateBubbleNavigation": "Animation effects",
-  "proxyDescription": "Route AI response streams and safety checks through a relay server. May allow recovery of generated responses when the network connection is interrupted, and lets browser-based safety checks avoid CORS limits.",
-  "proxySettings": "Stream Relay",
-  "proxyEnabled": "Use Stream Relay",
-  "proxyEndpoint": "Relay Server URL",
+  "proxyDescription": "Route AI response streams and safety evaluation through a proxy server. This may allow recovery of generated responses when the network connection is interrupted, and lets browser-based safety evaluation avoid CORS limits.",
+  "proxySettings": "Stream Proxy",
+  "proxyEnabled": "Use Stream Proxy",
+  "proxyEndpoint": "Stream Proxy URL",
   "proxyEndpointPlaceholder": "https://stream-relay.example.com",
   "proxyAuthToken": "Auth Token",
   "proxyAuthTokenPlaceholder": "Optional bearer token",
@@ -161,7 +161,7 @@
     "general": "General",
     "chatConfig": "Chat Config",
     "providers": "AI Providers",
-    "proxy": "Stream Relay",
+    "proxy": "Stream Proxy",
     "prompts": "Prompts",
     "data": "Data",
     "evaluation": "Evaluation"
@@ -192,7 +192,7 @@
   "globalOmitOff": "Omit All",
   "stopGenerating": "Stop generating",
   "retry": "Retry",
-  "recoverFromProxy": "Recover from relay",
+  "recoverFromProxy": "Recover from Stream Proxy",
   "storageQuotaExceeded": "Storage quota exceeded. Your changes could not be saved",
   "searchDisabledDuringGeneration": "Generating...",
   "onboarding": {
@@ -247,16 +247,20 @@
     }
   },
   "evaluation": {
-    "safetyTitle": "Safety Evaluation",
-    "qualityTitle": "Quality Evaluation",
-    "safetyPreSend": "Pre-send Safety",
-    "safetyPostReceive": "Post-receive Safety",
-    "qualityPreSend": "Pre-send Quality",
-    "qualityPostReceive": "Post-receive Quality",
+    "safetyTitle": "Safety Evaluation Timing",
+    "qualityTitle": "Quality Evaluation Timing",
+    "safetyAboutTitle": "About Safety Evaluation",
+    "qualityAboutTitle": "About Quality Evaluation",
+    "safetyPreSend": "Pre-send Safety Evaluation",
+    "safetyPostReceive": "Post-receive Safety Evaluation",
+    "qualityPreSend": "Pre-send Quality Evaluation",
+    "qualityPostReceive": "Post-receive Quality Evaluation",
     "modeOff": "Off",
     "modeManual": "Manual",
     "modeAuto": "Auto",
-    "description": "Safety check uses an OpenAI Moderation API-compatible endpoint. In browser environments, configure Stream Relay to proxy safety checks around CORS limits. Quality evaluation sends the prompt/response to a separate LLM for assessment (additional API costs apply).",
+    "description": "Safety evaluation uses the OpenAI Moderation API. In browser environments, a stream proxy is required because of OpenAI cross-origin resource sharing (CORS) restrictions. Quality evaluation asks the model currently in use for each chat to evaluate the content.",
+    "safetyDescription": "Safety evaluation uses the OpenAI Moderation API. In browser environments, a stream proxy is required because of OpenAI cross-origin resource sharing (CORS) restrictions.",
+    "qualityDescription": "Quality evaluation asks the model currently in use for each chat to evaluate the content.",
     "apiErrors": {
       "invalidAuthentication": {
         "title": "401 Invalid Authentication",
@@ -296,11 +300,11 @@
       },
       "apiKeyRequired": {
         "title": "OpenAI API key not configured",
-        "description": "An OpenAI API key is required for safety checks. Please configure it in Settings > Providers > OpenAI."
+        "description": "An OpenAI API key is required for safety evaluation. Please configure it in Settings > Providers > OpenAI."
       },
       "proxyNotConfigured": {
         "title": "Proxy not configured",
-        "description": "Safety checks require a Stream Relay proxy. Please configure the proxy URL in Settings > Proxy."
+        "description": "Safety evaluation requires a Stream Proxy. Please configure the proxy URL in Settings > Proxy."
       },
       "connectionFailed": {
         "title": "Connection failed",
@@ -346,6 +350,13 @@
       "conciseness": "Conciseness",
       "instructionFollowing": "Instruction Following"
     },
+    "axisDescription": {
+      "taskCompletion": "How fully the response addresses what was requested.",
+      "faithfulness": "How well the response stays grounded in facts and context.",
+      "coherence": "How logically consistent and easy to follow the response is.",
+      "conciseness": "How well the response avoids unnecessary length while keeping needed detail.",
+      "instructionFollowing": "How closely the response follows explicit format, language, and constraint instructions."
+    },
     "category": {
       "sexual": "Sexual",
       "hate": "Hate",
@@ -361,6 +372,21 @@
       "illicit": "Illicit",
       "illicitViolent": "Illicit/Violent"
     },
+    "categoryDescription": {
+      "sexual": "Category for adult sexual content.",
+      "hate": "Category for hateful or discriminatory content targeting attributes or groups.",
+      "harassment": "Category for insulting, abusive, or harassing content toward a person.",
+      "selfHarm": "Category for general self-harm or suicide-related references.",
+      "sexualMinors": "Category for sexual content involving minors.",
+      "hateThreatening": "Category for hateful content that also includes threats.",
+      "violenceGraphic": "Category for graphic violence or gore.",
+      "violence": "Category for violence or threats of physical harm.",
+      "harassmentThreatening": "Category for harassment that includes threats toward a person.",
+      "selfHarmIntent": "Category for intent or imminent risk of self-harm.",
+      "selfHarmInstructions": "Category for instructions or methods for self-harm.",
+      "illicit": "Category for general illegal activity assistance or facilitation.",
+      "illicitViolent": "Category for illegal activity assistance involving violence."
+    },
     "openDetail": "View details",
     "modalTitle": "Evaluation Results",
     "modalCategory": "Category",
@@ -372,13 +398,17 @@
     "modalAverage": "Average",
     "phasePreSend": "Pre-send",
     "phasePostReceive": "Post-receive",
+    "safetyThresholds": "Safety Thresholds",
     "qualityThresholds": "Quality Thresholds",
     "thresholdRed": "Warning",
     "thresholdYellow": "Caution",
     "thresholdGreen": "Pass",
+    "thresholdReview": "Review",
+    "thresholdBlock": "Block",
     "noResults": "No evaluation results available",
     "notEvaluated": "Not evaluated",
     "running": "Running...",
+    "review": "Review",
     "reEvaluate": "Re-evaluate",
     "runEvaluation": "Run evaluation",
     "evaluateThisOnly": "Evaluate this message only",

@@ -44,6 +44,70 @@ export function categoryToI18nKey(cat: string): string {
 /** OpenAI Moderation API category scores */
 export type ModerationCategoryScores = Record<keyof ModerationCategories, number>;
 
+/** Per-category safety thresholds: score < review → safe, score < block → review, else → block */
+export interface SafetyCategoryThreshold {
+  review: number;
+  block: number;
+}
+
+export type SafetyThresholds = Record<keyof ModerationCategories, SafetyCategoryThreshold>;
+
+export const defaultSafetyThresholds: SafetyThresholds = {
+  sexual: { review: 0.8, block: 0.95 },
+  hate: { review: 0.7, block: 0.9 },
+  harassment: { review: 0.75, block: 0.92 },
+  'self-harm': { review: 0.55, block: 0.85 },
+  'sexual/minors': { review: 0.08, block: 0.2 },
+  'hate/threatening': { review: 0.35, block: 0.7 },
+  'violence/graphic': { review: 0.55, block: 0.82 },
+  violence: { review: 0.75, block: 0.93 },
+  'harassment/threatening': { review: 0.45, block: 0.75 },
+  'self-harm/intent': { review: 0.35, block: 0.7 },
+  'self-harm/instructions': { review: 0.2, block: 0.45 },
+  illicit: { review: 0.7, block: 0.9 },
+  'illicit/violent': { review: 0.25, block: 0.55 },
+};
+
+export type SafetyStatus = 'safe' | 'review' | 'block';
+
+export function getSafetyStatus(
+  score: number,
+  threshold: SafetyCategoryThreshold
+): SafetyStatus {
+  if (score >= threshold.block) return 'block';
+  if (score >= threshold.review) return 'review';
+  return 'safe';
+}
+
+export function summarizeSafetyScores(
+  scores: Partial<ModerationCategoryScores>,
+  thresholds: SafetyThresholds
+): {
+  status: SafetyStatus;
+  reviewCategories: (keyof ModerationCategories)[];
+  blockCategories: (keyof ModerationCategories)[];
+} {
+  const reviewCategories: (keyof ModerationCategories)[] = [];
+  const blockCategories: (keyof ModerationCategories)[] = [];
+
+  for (const category of moderationCategoryKeys) {
+    const score = scores[category];
+    if (typeof score !== 'number') continue;
+    const status = getSafetyStatus(score, thresholds[category]);
+    if (status === 'block') {
+      blockCategories.push(category);
+    } else if (status === 'review') {
+      reviewCategories.push(category);
+    }
+  }
+
+  return {
+    status: blockCategories.length > 0 ? 'block' : reviewCategories.length > 0 ? 'review' : 'safe',
+    reviewCategories,
+    blockCategories,
+  };
+}
+
 /** Result from safety check (moderation API) */
 export interface SafetyCheckResult {
   flagged: boolean;

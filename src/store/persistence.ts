@@ -68,6 +68,8 @@ export type PersistedStoreState = Omit<
   | 'verifiedStats'
   | 'pendingVerifications'
   | 'evaluationSettings'
+  | 'safetyThresholds'
+  | 'qualityThresholds'
   | 'evaluationResults'
   >,
   'chats'
@@ -104,6 +106,8 @@ const FULL_PERSIST_KEYS: (keyof PersistedStoreState)[] = [
   'verifiedStats',
   'pendingVerifications',
   'evaluationSettings',
+  'safetyThresholds',
+  'qualityThresholds',
   'evaluationResults',
 ];
 
@@ -126,6 +130,8 @@ const LOCAL_STORAGE_PERSIST_KEYS: (keyof LocalStoragePersistedState)[] = [
   'verifiedStats',
   'pendingVerifications',
   'evaluationSettings',
+  'safetyThresholds',
+  'qualityThresholds',
   'evaluationResults',
 ];
 
@@ -288,6 +294,8 @@ function buildPartializedState(state: StoreState): PersistedStoreState {
     verifiedStats: state.verifiedStats,
     pendingVerifications: state.pendingVerifications,
     evaluationSettings: state.evaluationSettings,
+    safetyThresholds: state.safetyThresholds,
+    qualityThresholds: state.qualityThresholds,
     evaluationResults: state.evaluationResults,
   };
 }
@@ -340,6 +348,8 @@ function buildLocalStoragePartializedState(
     verifiedStats: state.verifiedStats,
     pendingVerifications: state.pendingVerifications,
     evaluationSettings: state.evaluationSettings,
+    safetyThresholds: state.safetyThresholds,
+    qualityThresholds: state.qualityThresholds,
     evaluationResults: state.evaluationResults,
   };
 }

@@ -33,6 +33,34 @@ interface TabDef {
   labelKey: string;
 }
 
+const buildSettingsDialogSnapshot = () => {
+  const state = useStore.getState();
+  return JSON.stringify({
+    theme: state.theme,
+    autoTitle: state.autoTitle,
+    advancedMode: state.advancedMode,
+    inlineLatex: state.inlineLatex,
+    enterToSubmit: state.enterToSubmit,
+    animateBubbleNavigation: state.animateBubbleNavigation,
+    streamingMarkdownPolicy: state.streamingMarkdownPolicy,
+    countTotalTokens: state.countTotalTokens,
+    displayChatSize: state.displayChatSize,
+    showDebugPanel: state.showDebugPanel,
+    providers: state.providers,
+    favoriteModels: state.favoriteModels,
+    defaultChatConfig: state.defaultChatConfig,
+    defaultSystemMessage: state.defaultSystemMessage,
+    defaultImageDetail: state.defaultImageDetail,
+    prompts: state.prompts,
+    proxyEnabled: state.proxyEnabled,
+    proxyEndpoint: state.proxyEndpoint,
+    proxyAuthToken: state.proxyAuthToken,
+    evaluationSettings: state.evaluationSettings,
+    safetyThresholds: state.safetyThresholds,
+    qualityThresholds: state.qualityThresholds,
+  });
+};
+
 const tabs: TabDef[] = [
   { id: 'general', labelKey: 'settingsTab.general' },
   { id: 'providers', labelKey: 'settingsTab.providers' },
@@ -154,6 +182,7 @@ const SettingsDialog = ({
   const { t } = useTranslation();
   const [activeTab, setActiveTab] = useState<TabId>(initialTab);
   const settingsChangedRef = useRef(false);
+  const initialSnapshotRef = useRef(buildSettingsDialogSnapshot());
 
   const markSettingsChanged = useCallback(() => {
     settingsChangedRef.current = true;
@@ -162,7 +191,10 @@ const SettingsDialog = ({
   const handleClose = useCallback(() => {
     // Use setTimeout so unmount-saves run first, then we show toast
     setTimeout(() => {
-      if (settingsChangedRef.current) {
+      const changed =
+        settingsChangedRef.current ||
+        initialSnapshotRef.current !== buildSettingsDialogSnapshot();
+      if (changed) {
         useStore.getState().setToastStatus('success');
         useStore.getState().setToastMessage(t('settingsSaved', '設定を保存しました'));
         useStore.getState().setToastShow(true);
@@ -236,7 +268,7 @@ export const SectionLabel = ({ children }: { children: React.ReactNode }) => (
   </div>
 );
 
-export const SettingsGroup = ({ label, children }: { label: string; children: React.ReactNode }) => (
+export const SettingsGroup = ({ label, children }: { label: React.ReactNode; children: React.ReactNode }) => (
   <div>
     <SectionLabel>{label}</SectionLabel>
     <div className='rounded-lg border border-gray-200 dark:border-gray-600 divide-y divide-gray-200 dark:divide-gray-600'>
