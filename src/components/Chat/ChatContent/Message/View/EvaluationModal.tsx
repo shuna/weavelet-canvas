@@ -268,10 +268,10 @@ const SafetyTab = ({
                     {pct}%
                   </td>
                   <td className='py-2 text-right text-gray-500 dark:text-gray-400'>
-                    {Math.round(threshold.review * 100)}%
+                    {Math.round(threshold.review * 100)}%{t('evaluation.thresholdSuffixBelow')}
                   </td>
                   <td className='py-2 text-right text-gray-500 dark:text-gray-400'>
-                    {Math.round(threshold.block * 100)}%
+                    {Math.round(threshold.block * 100)}%{t('evaluation.thresholdSuffixBelow')}
                   </td>
                   <td className='py-2 text-center'>
                     {status === 'block' ? (
@@ -426,7 +426,7 @@ const QualityTab = ({
                     {Math.round(score * 100)}%
                   </td>
                   <td className='py-2 text-right text-gray-500 dark:text-gray-400'>
-                    {Math.round(th.red * 100)}%
+                    {Math.round(th.red * 100)}%{t('evaluation.thresholdSuffixAbove')}
                   </td>
                   <td className='py-2 text-center'>
                     <span className={`inline-block w-2.5 h-2.5 rounded-full ${dotColor}`} />

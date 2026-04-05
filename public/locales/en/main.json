@@ -396,6 +396,8 @@
     "modalThreshold": "Threshold",
     "modalThresholdPass": "Pass",
     "modalThresholdWarn": "Warning",
+    "thresholdSuffixBelow": " or below",
+    "thresholdSuffixAbove": " or above",
     "modalStatus": "Status",
     "modalAxis": "Axis",
     "modalReasoning": "Reasoning",
