@@ -131,3 +131,98 @@ export interface ClassificationLabel {
   label: string;
   score: number;
 }
+
+// ---------------------------------------------------------------------------
+// HF Search types
+// ---------------------------------------------------------------------------
+
+export type HfSupportStatus = 'supported' | 'needs-manual-review' | 'unsupported';
+export type GgufVariantStatus = 'supported' | 'not-recommended' | 'unsupported';
+
+export interface HfSearchQuery {
+  query: string;
+  engine: 'all' | 'wllama' | 'transformers.js';
+  sort: 'downloads' | 'lastModified';
+  limit?: number;
+}
+
+export interface HfRepoFile {
+  rfilename: string;
+  size: number;
+}
+
+export interface HfSearchResult {
+  repoId: string;
+  repoUrl: string;
+  description: string;
+  tags: string[];
+  downloads: number;
+  lastModified: string;
+  /**
+   * Size of recommended variant. null until resolveGgufFiles() completes.
+   * After variant resolution, updated to recommended variant's size.
+   * After user selects a variant, UI reads GgufVariant.size directly.
+   */
+  bestCandidateSize: number | null;
+  supportStatus: HfSupportStatus;
+  supportReason: string;
+  engine: LocalModelEngine | null;
+}
+
+// ---------------------------------------------------------------------------
+// GGUF Variant (per-file within a repo)
+// ---------------------------------------------------------------------------
+
+export interface GgufVariant {
+  fileName: string;
+  size: number;
+  /** Raw quantization string extracted from filename, null if unextractable */
+  rawQuantization: string | null;
+  /** Normalized: lowercase, separators → '-' (e.g. "q4-k-m") */
+  normalizedQuantization: string;
+  /** Architecture hint parsed from filename */
+  architectureHint?: string | null;
+  /** Context length hint if parseable from filename */
+  contextLengthHint?: number | null;
+  /** Per-variant support status */
+  supportStatus: GgufVariantStatus;
+  /** Reason for non-supported status */
+  supportReason?: string;
+  /** Human-readable label for UI display */
+  label: string;
+  /** Whether this is the auto-recommended pick */
+  recommended: boolean;
+}
+
+export interface GgufRepoResolution {
+  variants: GgufVariant[];
+  recommendedFile: string | null;
+}
+
+// ---------------------------------------------------------------------------
+// Resolved candidate (variant-level, ready for download)
+// ---------------------------------------------------------------------------
+
+export interface ResolvedSearchCandidate {
+  repoId: string;
+  engine: LocalModelEngine;
+  label: string;
+  manifest: LocalModelManifest;
+  downloadFiles: string[];
+  estimatedSize: number;
+  tasks: LocalModelTask[];
+  selectedFile: string;
+}
+
+// ---------------------------------------------------------------------------
+// Download UI state (derived at render time, not stored)
+// ---------------------------------------------------------------------------
+
+export type DownloadUIState =
+  | 'idle'
+  | 'downloading'
+  | 'paused'
+  | 'resuming'
+  | 'partial'
+  | 'saved'
+  | 'error';
