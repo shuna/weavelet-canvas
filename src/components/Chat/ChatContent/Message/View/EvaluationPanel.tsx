@@ -1,7 +1,7 @@
 import React from 'react';
 import { useTranslation } from 'react-i18next';
 import useStore from '@store/store';
-import { evaluationResultKey, qualityAxisKeys, categoryToI18nKey } from '@type/evaluation';
+import { evaluationResultKey, qualityAxisKeys, categoryToI18nKey, summarizeSafetyScores } from '@type/evaluation';
 import type { EvaluationResult, SafetyCheckResult, QualityEvaluationResult, QualityAxisThreshold } from '@type/evaluation';
 
 interface EvaluationPanelProps {
@@ -29,18 +29,23 @@ const ScoreBar = ({ score, label, threshold }: { score: number; label: string; t
 
 const SafetySection = ({ result }: { result: SafetyCheckResult }) => {
   const { t } = useTranslation('main');
-  const flaggedCategories = Object.entries(result.categories)
-    .filter(([, v]) => v)
-    .map(([k]) => k);
+  const safetyThresholds = useStore((state) => state.safetyThresholds);
+  const summary = summarizeSafetyScores(result.categoryScores, safetyThresholds);
+  const categories = (summary.status === 'block' ? summary.blockCategories : summary.reviewCategories)
+    .map((cat) => t(`evaluation.category.${categoryToI18nKey(cat)}`));
 
   return (
     <div className='flex flex-wrap items-center gap-1.5'>
       <span className='text-xs font-semibold text-gray-600 dark:text-gray-400'>
         {t('evaluation.safetyTitle')}
       </span>
-      {result.flagged ? (
+      {summary.status === 'block' ? (
         <span className='text-xs font-medium px-1.5 py-0.5 rounded bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400'>
-          {t('evaluation.flagged')}（{flaggedCategories.map((cat) => t(`evaluation.category.${categoryToI18nKey(cat)}`)).join(' ')}）
+          {t('evaluation.flagged')}（{categories.join(' ')}）
+        </span>
+      ) : summary.status === 'review' ? (
+        <span className='text-xs font-medium px-1.5 py-0.5 rounded bg-gray-100 text-gray-700 dark:bg-gray-700/60 dark:text-gray-300'>
+          {t('evaluation.review')}（{categories.join(' ')}）
         </span>
       ) : (
         <span className='text-xs font-medium px-1.5 py-0.5 rounded bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400'>

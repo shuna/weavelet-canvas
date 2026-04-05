@@ -77,10 +77,10 @@
   "enterToSubmit": "Enterキーを押して送信",
   "animateBubbleNavigation": "アニメーション効果",
   "submitPlaceholder": "メッセージを入力するか、[/] をクリックしてプロンプトを表示します...",
-  "proxyDescription": "AIの応答ストリームとセーフティチェックを中継サーバー経由で処理します。ネットワークが途切れた場合に生成済み応答を復旧できる場合があり、ブラウザ実行時のセーフティチェックでは CORS 回避にも使われます。",
-  "proxySettings": "ストリーム中継",
-  "proxyEnabled": "ストリーム中継を使用",
-  "proxyEndpoint": "中継サーバーURL",
+  "proxyDescription": "AIの応答ストリームと安全性評価をプロキシサーバー経由で処理します。ネットワークが途切れた場合に生成済み応答を復旧できる場合があり、ブラウザ実行時の安全性評価では CORS 回避にも使われます。",
+  "proxySettings": "ストリームプロキシ",
+  "proxyEnabled": "ストリームプロキシを使用",
+  "proxyEndpoint": "ストリームプロキシURL",
   "proxyEndpointPlaceholder": "https://stream-relay.example.com",
   "proxyAuthToken": "認証トークン",
   "proxyAuthTokenPlaceholder": "オプション: Bearerトークン",
@@ -153,7 +153,7 @@
     "general": "全般",
     "chatConfig": "チャット設定",
     "providers": "AIプロバイダー",
-    "proxy": "ストリーム中継",
+    "proxy": "ストリームプロキシ",
     "prompts": "プロンプト",
     "data": "データ",
     "evaluation": "評価"
@@ -187,7 +187,7 @@
   "globalOmitOff": "一括省略",
   "stopGenerating": "生成を停止",
   "retry": "再試行",
-  "recoverFromProxy": "中継サーバーからリカバリ",
+  "recoverFromProxy": "ストリームプロキシから復旧",
   "storageQuotaExceeded": "保存容量の上限に達したため、保存できませんでした",
   "searchDisabledDuringGeneration": "生成中...",
   "onboarding": {
@@ -242,16 +242,20 @@
     }
   },
   "evaluation": {
-    "safetyTitle": "安全性評価",
-    "qualityTitle": "品質評価",
-    "safetyPreSend": "送信前セーフティ",
-    "safetyPostReceive": "受信後セーフティ",
+    "safetyTitle": "安全性評価の実行タイミング",
+    "qualityTitle": "品質評価の実行タイミング",
+    "safetyAboutTitle": "安全性評価について",
+    "qualityAboutTitle": "品質評価について",
+    "safetyPreSend": "送信前安全性評価",
+    "safetyPostReceive": "受信後安全性評価",
     "qualityPreSend": "送信前品質評価",
     "qualityPostReceive": "受信後品質評価",
     "modeOff": "オフ",
     "modeManual": "手動",
     "modeAuto": "自動",
-    "description": "セーフティチェックはOpenAI Moderation API互換エンドポイントを使用します。ブラウザ実行時は CORS 回避のため Stream Relay を設定してください。品質評価は別途LLMに評価を依頼します（追加APIコストが発生します）。",
+    "description": "安全性評価はOpenAI モデレーションAPIを使用します。ブラウザ実行時はOpenAI オリジン間リソース共有(CORS)制約のため、ストリームプロキシが必須です。品質評価は各チャットで利用中のモデルに評価を依頼します。",
+    "safetyDescription": "安全性評価はOpenAI モデレーションAPIを使用します。ブラウザ実行時はOpenAI オリジン間リソース共有(CORS)制約のため、ストリームプロキシが必須です。",
+    "qualityDescription": "品質評価は各チャットで利用中のモデルに評価を依頼します。",
     "apiErrors": {
       "invalidAuthentication": {
         "title": "401 Invalid Authentication",
@@ -291,11 +295,11 @@
       },
       "apiKeyRequired": {
         "title": "OpenAI APIキー未設定",
-        "description": "セーフティチェックにはOpenAI APIキーが必要です。設定 > プロバイダー > OpenAI で設定してください。"
+        "description": "安全性評価にはOpenAI APIキーが必要です。設定 > プロバイダー > OpenAI で設定してください。"
       },
       "proxyNotConfigured": {
         "title": "プロキシ未設定",
-        "description": "セーフティチェックにはStream Relayプロキシが必要です。設定 > プロキシ でプロキシURLを設定してください。"
+        "description": "安全性評価にはストリームプロキシが必要です。設定 > プロキシ でプロキシURLを設定してください。"
       },
       "connectionFailed": {
         "title": "接続失敗",
@@ -345,10 +349,13 @@
     "modalAverage": "平均",
     "phasePreSend": "送信前",
     "phasePostReceive": "受信後",
+    "safetyThresholds": "安全性評価閾値",
     "qualityThresholds": "品質評価閾値",
     "thresholdRed": "警告",
     "thresholdYellow": "注意",
     "thresholdGreen": "合格",
+    "thresholdReview": "確認",
+    "thresholdBlock": "遮断",
     "noResults": "評価結果がありません",
     "axis": {
       "taskCompletion": "タスク達成度",
@@ -356,6 +363,13 @@
       "coherence": "一貫性",
       "conciseness": "簡潔性",
       "instructionFollowing": "指示遵守"
+    },
+    "axisDescription": {
+      "taskCompletion": "要求された内容にどれだけ十分に応えられているかを見ます。",
+      "faithfulness": "事実や文脈に沿っており、根拠の薄い内容が少ないかを見ます。",
+      "coherence": "内容のつながりや論理の整合性を見ます。",
+      "conciseness": "不要な冗長さが少なく、必要な情報量に収まっているかを見ます。",
+      "instructionFollowing": "形式、言語、制約などの明示的な指示に従えているかを見ます。"
     },
     "category": {
       "sexual": "性的コンテンツ",
@@ -372,8 +386,24 @@
       "illicit": "違法行為",
       "illicitViolent": "暴力を伴う違法行為"
     },
+    "categoryDescription": {
+      "sexual": "成人向けの性的内容に関する検出カテゴリです。",
+      "hate": "属性や集団に対する侮辱、差別、排除などを含む内容のカテゴリです。",
+      "harassment": "個人への攻撃的、侮辱的、嫌がらせ的な表現のカテゴリです。",
+      "selfHarm": "自傷や自殺に関する一般的な言及を含むカテゴリです。",
+      "sexualMinors": "未成年に関わる性的内容のカテゴリです。ここは厳格に扱うべきですわね。",
+      "hateThreatening": "属性や集団への脅迫を伴うヘイト表現のカテゴリです。",
+      "violenceGraphic": "生々しい暴力描写や残虐な描写のカテゴリです。",
+      "violence": "暴力行為や危害の言及を含むカテゴリです。",
+      "harassmentThreatening": "個人への脅迫を伴う攻撃的表現のカテゴリです。",
+      "selfHarmIntent": "自傷の意思や切迫した兆候を含むカテゴリです。",
+      "selfHarmInstructions": "自傷の方法や手順の提示に関するカテゴリです。",
+      "illicit": "違法行為の実行や支援に関する一般カテゴリです。",
+      "illicitViolent": "暴力を伴う違法行為の支援や実行に関するカテゴリです。"
+    },
     "notEvaluated": "未評価",
     "running": "評価中...",
+    "review": "要確認",
     "reEvaluate": "再評価",
     "runEvaluation": "評価を実行",
     "evaluateThisOnly": "このメッセージのみ評価",

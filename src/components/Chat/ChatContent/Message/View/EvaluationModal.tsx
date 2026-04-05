@@ -3,13 +3,14 @@ import { useTranslation } from 'react-i18next';
 import PopupModal from '@components/PopupModal';
 import RadarChart from './RadarChart';
 import useStore from '@store/store';
-import { evaluationResultKey, qualityAxisKeys, systemQualityAxisKeys, moderationCategoryKeys, categoryToI18nKey } from '@type/evaluation';
+import { evaluationResultKey, qualityAxisKeys, systemQualityAxisKeys, moderationCategoryKeys, categoryToI18nKey, getSafetyStatus, summarizeSafetyScores } from '@type/evaluation';
 import type { QualityEvaluationMode } from '@type/evaluation';
 import type {
   EvaluationResult,
   SafetyCheckResult,
   QualityEvaluationResult,
   QualityThresholds,
+  SafetyThresholds,
   EvaluationScope,
   EvaluationOmittedMode,
   EvaluationContextInfo,
@@ -132,6 +133,7 @@ const SafetyTab = ({
   onReEvaluate,
   error,
   onOpenProxySettings,
+  thresholds,
   scope,
   omittedMode,
   role,
@@ -143,6 +145,7 @@ const SafetyTab = ({
   onReEvaluate: () => void;
   error?: FormattedEvaluationError | null;
   onOpenProxySettings: () => void;
+  thresholds: SafetyThresholds;
   scope: EvaluationScope;
   omittedMode: EvaluationOmittedMode;
   role: string;
@@ -150,6 +153,9 @@ const SafetyTab = ({
   onOmittedModeChange: (m: EvaluationOmittedMode) => void;
 }) => {
   const { t } = useTranslation('main');
+  const summary = result
+    ? summarizeSafetyScores(result.categoryScores, thresholds)
+    : { status: 'safe' as const, reviewCategories: [], blockCategories: [] };
 
   const categoryEntries = result
     ? moderationCategoryKeys
@@ -168,12 +174,18 @@ const SafetyTab = ({
           {result && (
             <span
               className={`text-sm font-medium px-2 py-1 rounded whitespace-nowrap ${
-                result.flagged
+                summary.status === 'block'
                   ? 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400'
+                  : summary.status === 'review'
+                  ? 'bg-gray-100 text-gray-700 dark:bg-gray-700/60 dark:text-gray-300'
                   : 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400'
               }`}
             >
-              {result.flagged ? t('evaluation.flagged') : t('evaluation.safe')}
+              {summary.status === 'block'
+                ? t('evaluation.flagged')
+                : summary.status === 'review'
+                ? t('evaluation.review')
+                : t('evaluation.safe')}
             </span>
           )}
           {!result && !isRunning && (
@@ -219,8 +231,10 @@ const SafetyTab = ({
             size={400}
             invertAxis
             colorOverride={
-              result?.flagged
+              summary.status === 'block'
                 ? { fill: 'rgba(239,68,68,0.25)', stroke: 'rgb(239,68,68)' }
+                : summary.status === 'review'
+                ? { fill: 'rgba(107,114,128,0.25)', stroke: 'rgb(107,114,128)' }
                 : { fill: 'rgba(34,197,94,0.25)', stroke: 'rgb(34,197,94)' }
             }
           />
@@ -233,25 +247,32 @@ const SafetyTab = ({
           <thead>
             <tr className='text-left text-gray-500 dark:text-gray-400 border-b border-gray-200 dark:border-gray-600'>
               <th className='py-2 font-medium'>{t('evaluation.modalCategory')}</th>
+              <th className='py-2 font-medium text-right'>{t('evaluation.modalThreshold')}</th>
               <th className='py-2 font-medium text-right'>{t('evaluation.modalScore')}</th>
               <th className='py-2 font-medium text-center'>{t('evaluation.modalStatus')}</th>
             </tr>
           </thead>
           <tbody>
             {categoryEntries.map(([cat, score]) => {
-              const flagged = result?.categories[cat];
+              const threshold = thresholds[cat];
+              const status = getSafetyStatus(score, threshold);
               const pct = (score * 100).toFixed(1);
               return (
                 <tr key={cat} className='border-t border-gray-100 dark:border-gray-700'>
                   <td className='py-2 text-gray-700 dark:text-gray-300'>
                     {t(`evaluation.category.${categoryToI18nKey(cat)}`)}
                   </td>
+                  <td className='py-2 text-right text-gray-500 dark:text-gray-400'>
+                    {Math.round(threshold.review * 100)}% / {Math.round(threshold.block * 100)}%
+                  </td>
                   <td className='py-2 text-right text-gray-600 dark:text-gray-400'>
                     {pct}%
                   </td>
                   <td className='py-2 text-center'>
-                    {flagged ? (
+                    {status === 'block' ? (
                       <span className='inline-block w-2.5 h-2.5 rounded-full bg-red-500' />
+                    ) : status === 'review' ? (
+                      <span className='inline-block w-2.5 h-2.5 rounded-full bg-gray-400' />
                     ) : (
                       <span className='inline-block w-2.5 h-2.5 rounded-full bg-green-500' />
                     )}
@@ -534,6 +555,7 @@ const EvaluationModal: React.FC<EvaluationModalProps> = ({
   const [omittedMode, setOmittedMode] = useState<EvaluationOmittedMode>('respect-omitted');
 
   const setShowProxySettings = useStore((state) => state.setShowProxySettings);
+  const safetyThresholds = useStore((state) => state.safetyThresholds);
   const qualityThresholds = useStore((state) => state.qualityThresholds);
 
   const key = evaluationResultKey(chatId, nodeId, phase);
@@ -669,9 +691,15 @@ const EvaluationModal: React.FC<EvaluationModalProps> = ({
             >
               {tab.label}
               {/* Indicator dots */}
-              {tab.id === 'safety' && result?.safety && (
-                <span className={`ml-1.5 inline-block w-2 h-2 rounded-full ${result.safety.flagged ? 'bg-red-500' : 'bg-green-500'}`} />
-              )}
+              {tab.id === 'safety' && result?.safety && (() => {
+                  const summary = summarizeSafetyScores(result.safety.categoryScores, safetyThresholds);
+                  const color = summary.status === 'block'
+                    ? 'bg-red-500'
+                    : summary.status === 'review'
+                    ? 'bg-gray-400'
+                    : 'bg-green-500';
+                  return <span className={`ml-1.5 inline-block w-2 h-2 rounded-full ${color}`} />;
+                })()}
               {tab.id === 'quality' && result?.quality && (() => {
                 const q = result.quality!;
                 const scoresObj = q.scores as unknown as Record<string, number>;
@@ -699,6 +727,7 @@ const EvaluationModal: React.FC<EvaluationModalProps> = ({
               setIsModalOpen(false);
               setShowProxySettings(true);
             }}
+            thresholds={safetyThresholds}
             scope={scope}
             omittedMode={omittedMode}
             role={role}
