@@ -347,6 +347,8 @@
     "modalThreshold": "閾値",
     "modalThresholdPass": "合格",
     "modalThresholdWarn": "警告",
+    "thresholdSuffixBelow": "以下",
+    "thresholdSuffixAbove": "以上",
     "modalStatus": "状態",
     "modalAxis": "評価軸",
     "modalReasoning": "根拠",
