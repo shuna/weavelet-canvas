@@ -22,7 +22,7 @@ import type { FormattedEvaluationError } from '@utils/evaluationError';
 import { resolveEvalContext } from '@utils/evaluationContext';
 import i18next from 'i18next';
 
-type TabId = 'safety' | 'quality';
+export type TabId = 'safety' | 'quality';
 
 interface EvaluationModalProps {
   chatId: string;
@@ -34,6 +34,7 @@ interface EvaluationModalProps {
   resolvedProvider: ResolvedProvider;
   model: string;
   setIsModalOpen: React.Dispatch<React.SetStateAction<boolean>>;
+  initialTab?: TabId;
 }
 
 // ---------------------------------------------------------------------------
@@ -530,6 +531,7 @@ const EvaluationModal: React.FC<EvaluationModalProps> = ({
   resolvedProvider,
   model,
   setIsModalOpen,
+  initialTab,
 }) => {
   const { t } = useTranslation('main');
 
@@ -548,7 +550,7 @@ const EvaluationModal: React.FC<EvaluationModalProps> = ({
     return () => window.removeEventListener('resize', handleResize);
   }, []);
 
-  const [activeTab, setActiveTab] = useState<TabId>('safety');
+  const [activeTab, setActiveTab] = useState<TabId>(initialTab ?? 'safety');
   const [safetyRunning, setSafetyRunning] = useState(false);
   const [qualityRunning, setQualityRunning] = useState(false);
   const [safetyError, setSafetyError] = useState<FormattedEvaluationError | null>(null);

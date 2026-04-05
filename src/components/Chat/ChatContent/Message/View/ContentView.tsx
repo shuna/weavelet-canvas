@@ -24,6 +24,7 @@ import ContentAttachments from './ContentAttachments';
 import ContentBody from './ContentBody';
 import EvaluationPanel from './EvaluationPanel';
 import EvaluationModal from './EvaluationModal';
+import type { TabId } from './EvaluationModal';
 
 const ContentView = memo(
   ({
@@ -43,6 +44,7 @@ const ContentView = memo(
 
     const [isDelete, setIsDelete] = useState<boolean>(false);
     const [isEvalModalOpen, setIsEvalModalOpen] = useState(false);
+    const [evalInitialTab, setEvalInitialTab] = useState<TabId | undefined>();
 
     const currentChatIndex = useStore((state) => state.currentChatIndex);
     const removeMessageAtIndex = useStore((state) => state.removeMessageAtIndex);
@@ -121,6 +123,12 @@ const ContentView = memo(
     };
 
     const handleEvaluate = useCallback(() => {
+      setEvalInitialTab(undefined);
+      setIsEvalModalOpen(true);
+    }, []);
+
+    const handleOpenEvalTab = useCallback((tab: TabId) => {
+      setEvalInitialTab(tab);
       setIsEvalModalOpen(true);
     }, []);
 
@@ -169,8 +177,8 @@ const ContentView = memo(
         <ContentAttachments images={validImageContents} />
         {nodeId && currentChatId && (
           <>
-            <EvaluationPanel chatId={currentChatId} nodeId={nodeId} phase='pre-send' />
-            <EvaluationPanel chatId={currentChatId} nodeId={nodeId} phase='post-receive' />
+            <EvaluationPanel chatId={currentChatId} nodeId={nodeId} phase='pre-send' onOpenTab={handleOpenEvalTab} />
+            <EvaluationPanel chatId={currentChatId} nodeId={nodeId} phase='post-receive' onOpenTab={handleOpenEvalTab} />
           </>
         )}
         <ContentActions
@@ -204,6 +212,7 @@ const ContentView = memo(
             resolvedProvider={providerInfo.resolved}
             model={providerInfo.model}
             setIsModalOpen={setIsEvalModalOpen}
+            initialTab={evalInitialTab}
           />
         )}
       </>
