@@ -12,6 +12,10 @@ export interface LocalModelSlice {
   activeLocalModels: Partial<Record<LocalModelTask, string>>;
   /** OPFS storage metadata keyed by model ID — separate from definitions */
   savedModelMeta: Record<string, SavedModelMeta>;
+  /** IDs of local models marked as favorites (shown in chat model selector) */
+  favoriteLocalModelIds: string[];
+  /** Execution strategy for multi-model scenarios (gen + eval) */
+  localModelExecutionMode: 'sequential' | 'parallel-if-possible';
 
   setLocalModelEnabled: (enabled: boolean) => void;
   addLocalModel: (def: LocalModelDefinition) => void;
@@ -20,6 +24,8 @@ export interface LocalModelSlice {
   setActiveLocalModel: (task: LocalModelTask, modelId: string | null) => void;
   updateSavedModelMeta: (id: string, patch: Partial<SavedModelMeta>) => void;
   removeSavedModelMeta: (id: string) => void;
+  toggleFavoriteLocalModel: (id: string) => void;
+  setLocalModelExecutionMode: (mode: 'sequential' | 'parallel-if-possible') => void;
 }
 
 export const createLocalModelSlice: StoreSlice<LocalModelSlice> = (set, get) => ({
@@ -27,6 +33,8 @@ export const createLocalModelSlice: StoreSlice<LocalModelSlice> = (set, get) => 
   localModels: [],
   activeLocalModels: {},
   savedModelMeta: {},
+  favoriteLocalModelIds: [],
+  localModelExecutionMode: 'sequential',
 
   setLocalModelEnabled: (enabled) => {
     set({ localModelEnabled: enabled });
@@ -85,5 +93,18 @@ export const createLocalModelSlice: StoreSlice<LocalModelSlice> = (set, get) => 
   removeSavedModelMeta: (id) => {
     const { [id]: _, ...rest } = get().savedModelMeta;
     set({ savedModelMeta: rest });
+  },
+
+  toggleFavoriteLocalModel: (id) => {
+    const current = get().favoriteLocalModelIds;
+    if (current.includes(id)) {
+      set({ favoriteLocalModelIds: current.filter((fid) => fid !== id) });
+    } else {
+      set({ favoriteLocalModelIds: [...current, id] });
+    }
+  },
+
+  setLocalModelExecutionMode: (mode) => {
+    set({ localModelExecutionMode: mode });
   },
 });

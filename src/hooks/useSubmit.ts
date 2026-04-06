@@ -20,11 +20,14 @@ import {
   clearSubmitSessionRuntime,
   createSubmitAbortController,
   executeSubmitStream,
+  executeLocalSubmit,
   getGenerationIdFromSubmitError,
   isChatGenerating,
   stopSubmitSession,
   stopSubmitSessionsForChat,
 } from './submitRuntime';
+import { isLocalModelConfig } from './submitHelpers';
+import { prepareModelsForExecution, getEvaluationModelIds } from '@src/local-llm/orchestrator';
 import {
   buildVerifiedStatsKey,
   OPENROUTER_VERIFICATION_INITIAL_DELAY_MS,
@@ -130,6 +133,66 @@ const useSubmit = () => {
       if (!fitsContextWindow(promptTokens, modelContextLength, completionBudget))
         throw new Error(t('errors.messageExceedMaxToken') as string);
 
+      // --- Local model branch ---
+      if (isLocalModelConfig(chats[chatIndex].config)) {
+        // Gather all models for this execution unit (gen + eval)
+        const genModelId = chats[chatIndex].config.model;
+        const evalModelIds = getEvaluationModelIds();
+        const allRequired = [genModelId, ...evalModelIds].filter(Boolean);
+        await prepareModelsForExecution(allRequired);
+
+        // Pre-send evaluation (models already loaded by prepareModelsForExecution)
+        const localUserMsg = [...messages].reverse().find((m) => m.role === 'user');
+        const localEvalCtx: EvaluationContext = {
+          chatId,
+          nodeId: targetNodeId,
+          endpoint: '',
+          apiKey: undefined,
+          model: chats[chatIndex].config.model,
+        };
+        if (localUserMsg) {
+          runPreSendEvaluation(localUserMsg.content, localEvalCtx).catch(() => {});
+        }
+
+        await executeLocalSubmit({
+          sessionId,
+          chatId,
+          chatIndex,
+          messageIndex,
+          targetNodeId,
+          messages,
+          config: chats[chatIndex].config,
+          mode,
+          abortController,
+          t: (key: string) => t(key) as string,
+        });
+
+        // Post-receive evaluation for local generation
+        if (localUserMsg) {
+          const postChats = useStore.getState().chats;
+          const assistantMsg = postChats?.[chatIndex]?.messages[messageIndex];
+          if (assistantMsg) {
+            runPostReceiveEvaluation(localUserMsg.content, assistantMsg.content, localEvalCtx).catch(() => {});
+          }
+        }
+
+        // Auto-title for local generation
+        if (mode === 'append') {
+          await maybeGenerateAutoTitle({
+            chatId,
+            language: i18n.language,
+            setChats,
+            apiVersion: useStore.getState().apiVersion,
+            titleModel: useStore.getState().titleModel,
+            titleProviderId: useStore.getState().titleProviderId,
+            t: (key: string) => t(key) as string,
+            favoriteModels,
+            providers,
+            fallbackProvider,
+          });
+        }
+      } else {
+      // --- Remote model branch ---
       const resolved = resolveProviderForModel(
         chats[chatIndex].config.model,
         favoriteModels,
@@ -205,6 +268,7 @@ const useSubmit = () => {
           fallbackProvider,
         });
       }
+      } // end remote model branch
       useStore.getState().setLastSubmitContext(null, null, null, null);
     } catch (e: unknown) {
       const generationId = getGenerationIdFromSubmitError(e);

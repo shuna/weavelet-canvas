@@ -60,13 +60,14 @@ const TokenCount = React.memo(() => {
     return state.omittedNodeMaps[mapKey] ?? state.chats?.[state.currentChatIndex]?.omittedNodes ?? null;
   });
 
-  const { model, providerId } = useStore((state) =>
+  const { model, providerId, modelSource } = useStore((state) =>
     state.chats?.[state.currentChatIndex]
       ? {
           model: state.chats[state.currentChatIndex].config.model,
           providerId: state.chats[state.currentChatIndex].config.providerId,
+          modelSource: state.chats[state.currentChatIndex].config.modelSource,
         }
-      : { model: '', providerId: undefined }
+      : { model: '', providerId: undefined, modelSource: undefined as 'remote' | 'local' | undefined }
   );
 
   const favoriteModels = useStore((state) => state.favoriteModels) || [];
@@ -224,6 +225,10 @@ const TokenCount = React.memo(() => {
   };
 
   const costDisplay = useMemo(() => {
+    if (modelSource === 'local') {
+      return t('free', { ns: 'main', defaultValue: 'Free' });
+    }
+
     const result = calculateUsageCost(
       {
         promptTokens: promptTokenCount,
@@ -252,6 +257,7 @@ const TokenCount = React.memo(() => {
   }, [
     model,
     providerId,
+    modelSource,
     promptTokenCount,
     completionTokenCount,
     imageTokenCount,

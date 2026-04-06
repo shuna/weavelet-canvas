@@ -8,6 +8,7 @@ import { useCallback } from 'react';
 import useStore from '@store/store';
 import { runSafetyCheck, runQualityEvaluation } from '@api/evaluation';
 import { runLocalModeration, runLocalQualityHint } from '@api/localEvaluation';
+import { prepareModelsForExecution } from '@src/local-llm/orchestrator';
 import { evaluationResultKey } from '@type/evaluation';
 import type { EvaluationResult } from '@type/evaluation';
 import type { ContentInterface } from '@type/chat';
@@ -56,6 +57,16 @@ async function runEvaluationForPhase(
   try {
     const textToCheck = phase === 'pre-send' ? userText : (assistantText ?? '');
     const { safetyEngine, hybridRemoteOnSafe } = settings;
+
+    // Prepare local evaluation models before first use
+    if (store.localModelEnabled) {
+      const evalIds: string[] = [];
+      const moderationModelId = store.activeLocalModels['moderation'];
+      const qualityModelId = store.activeLocalModels['quality'] ?? store.activeLocalModels['generation'];
+      if (moderationModelId) evalIds.push(moderationModelId);
+      if (qualityModelId) evalIds.push(qualityModelId);
+      if (evalIds.length > 0) await prepareModelsForExecution(evalIds);
+    }
 
     if (shouldSafety && textToCheck) {
       // --- Local safety (if engine is local or hybrid) ---

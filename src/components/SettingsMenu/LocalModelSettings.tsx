@@ -60,21 +60,49 @@ const StatusBadge = ({ status }: { status: LocalModelStatus }) => {
 // ---------------------------------------------------------------------------
 
 const fitColors: Record<ModelFitLabel, string> = {
+  lightweight: 'text-blue-700 dark:text-blue-400 bg-blue-100 dark:bg-blue-900/30',
   recommended: 'text-green-700 dark:text-green-400 bg-green-100 dark:bg-green-900/30',
   heavy: 'text-amber-700 dark:text-amber-400 bg-amber-100 dark:bg-amber-900/30',
+  'very-heavy': 'text-orange-700 dark:text-orange-400 bg-orange-100 dark:bg-orange-900/30',
+  extreme: 'text-red-700 dark:text-red-400 bg-red-100 dark:bg-red-900/30',
   'not-recommended': 'text-red-700 dark:text-red-400 bg-red-100 dark:bg-red-900/30',
 };
 
 const FitBadge = ({ fit }: { fit: ModelFitLabel }) => {
   const { t } = useTranslation('main');
+  const [showTip, setShowTip] = useState(false);
   const labels: Record<ModelFitLabel, string> = {
+    lightweight: t('localModel.modelFit.lightweight'),
     recommended: t('localModel.modelFit.recommended'),
     heavy: t('localModel.modelFit.heavy'),
+    'very-heavy': t('localModel.modelFit.veryHeavy'),
+    extreme: t('localModel.modelFit.extreme'),
     'not-recommended': t('localModel.modelFit.notRecommended'),
   };
+  const reasons: Record<ModelFitLabel, string> = {
+    lightweight: t('localModel.fitReason.lightweight'),
+    recommended: t('localModel.fitReason.recommended'),
+    heavy: t('localModel.fitReason.heavy'),
+    'very-heavy': t('localModel.fitReason.veryHeavy'),
+    extreme: t('localModel.fitReason.extreme'),
+    'not-recommended': t('localModel.fitReason.notRecommended'),
+  };
   return (
-    <span className={`text-xs px-1.5 py-0.5 rounded ${fitColors[fit]}`}>
-      {labels[fit]}
+    <span className='relative inline-flex flex-shrink-0'>
+      <button
+        type='button'
+        className={`text-xs px-1.5 py-0.5 rounded whitespace-nowrap inline-flex items-center gap-0.5 ${fitColors[fit]}`}
+        onClick={() => setShowTip((v) => !v)}
+        onBlur={() => setShowTip(false)}
+      >
+        {labels[fit]}
+        <svg className='w-3 h-3 opacity-60' viewBox='0 0 16 16' fill='currentColor'><path d='M8 1a7 7 0 100 14A7 7 0 008 1zm0 2.5a1 1 0 110 2 1 1 0 010-2zM6.5 7h2v5h-2V7z'/></svg>
+      </button>
+      {showTip && (
+        <div className='absolute z-50 bottom-full mb-1 right-0 w-52 px-2.5 py-1.5 rounded-lg bg-gray-900 dark:bg-gray-700 text-white text-[11px] leading-relaxed shadow-lg pointer-events-none'>
+          {reasons[fit]}
+        </div>
+      )}
     </span>
   );
 };
@@ -128,6 +156,8 @@ interface CatalogCardProps {
   runtimeStatus: LocalModelStatus;
   downloadProgress: DownloadProgress | null;
   resumeFallbackMessage: string | null;
+  isFavorite: boolean;
+  onToggleFavorite: () => void;
   onDownload: (model: CatalogModel) => void;
   onCancel: (modelId: string) => void;
   onResume: (model: CatalogModel) => void;
@@ -139,6 +169,7 @@ interface CatalogCardProps {
 
 const CatalogCard = ({
   model, deviceTier, meta, runtimeStatus, downloadProgress, resumeFallbackMessage,
+  isFavorite, onToggleFavorite,
   onDownload, onCancel, onResume, onRetry, onDelete, onLoad, onUnload,
 }: CatalogCardProps) => {
   const { t } = useTranslation('main');
@@ -151,6 +182,15 @@ const CatalogCard = ({
     <div className='px-4 py-3 flex flex-col gap-2'>
       <div className='flex items-center justify-between gap-2'>
         <div className='flex items-center gap-2 min-w-0'>
+          {storageState === 'saved' && (
+            <input
+              type='checkbox'
+              checked={isFavorite}
+              onChange={onToggleFavorite}
+              className='h-4 w-4 rounded border-gray-300 dark:border-gray-600 text-blue-600 focus:ring-blue-500 flex-shrink-0'
+              title={isFavorite ? t('localModel.unfavorite') as string : t('localModel.favorite') as string}
+            />
+          )}
           <span className='text-sm font-medium text-gray-900 dark:text-gray-100 truncate'>
             {model.label}
           </span>
@@ -380,6 +420,7 @@ interface SearchResultCardProps {
   variants: GgufRepoResolution | null;
   variantsLoading: boolean;
   selectedFileName: string | null;
+  deviceTier: DeviceTier;
   /** modelId → SavedModelMeta for all search-added models from this repo */
   savedMetas: Record<string, SavedModelMeta>;
   /** modelId → DownloadProgress for active downloads from this repo */
@@ -387,6 +428,9 @@ interface SearchResultCardProps {
   /** modelId → LocalModelStatus for runtime statuses */
   statuses: Record<string, LocalModelStatus>;
   resumeFallbackMessage: string | null;
+  /** If this variant is already downloaded/downloading under another model ID */
+  existingModelId: string | null;
+  existingModelState?: 'saved' | 'downloading' | 'partial' | null;
   onSelectVariant: (repoId: string, fileName: string) => void;
   onDownload: (result: HfSearchResult, variant: GgufVariant) => void;
   onResume: (result: HfSearchResult, variant: GgufVariant) => void;
@@ -397,9 +441,73 @@ interface SearchResultCardProps {
   onDelete: (modelId: string) => void;
 }
 
+// ---------------------------------------------------------------------------
+// Sortable column header
+// ---------------------------------------------------------------------------
+
+const SortableColumnHeader = ({ label, field, width, currentSort, currentDir, onSort, className: extraClass }: {
+  label: string;
+  field: string;
+  width: string;
+  currentSort: string;
+  currentDir: 'asc' | 'desc';
+  onSort: (field: string, dir: 'asc' | 'desc') => void;
+  className?: string;
+}) => {
+  const isActive = currentSort === field;
+  return (
+    <span
+      className={`${extraClass ?? 'hidden sm:inline'} ${width} text-right text-[12px] cursor-pointer select-none hover:text-gray-300 ${isActive ? 'font-semibold text-gray-200' : 'font-medium text-gray-500 dark:text-gray-400'}`}
+      onClick={() => {
+        if (isActive) {
+          onSort(field, currentDir === 'desc' ? 'asc' : 'desc');
+        } else {
+          onSort(field, 'desc');
+        }
+      }}
+    >
+      {label}{isActive ? (currentDir === 'desc' ? ' ▼' : ' ▲') : ''}
+    </span>
+  );
+};
+
+// ---------------------------------------------------------------------------
+// Filter info button (tooltip for search exclusions)
+// ---------------------------------------------------------------------------
+
+const FilterInfoButton = () => {
+  const { t } = useTranslation('main');
+  const [showTip, setShowTip] = useState(false);
+  return (
+    <span className='relative inline-flex flex-shrink-0'>
+      <button
+        type='button'
+        className='inline-flex items-center gap-1 text-[10px] text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300'
+        onClick={() => setShowTip((v) => !v)}
+        onBlur={() => setShowTip(false)}
+      >
+        {t('localModel.hfSearchAboutExclusion')}
+        <svg className='w-3 h-3' viewBox='0 0 16 16' fill='currentColor'><path d='M8 1a7 7 0 100 14A7 7 0 008 1zm0 2.5a1 1 0 110 2 1 1 0 010-2zM6.5 7h2v5h-2V7z'/></svg>
+      </button>
+      {showTip && (
+        <div className='absolute z-50 top-full mt-1 right-0 w-64 px-2.5 py-1.5 rounded-lg bg-gray-900 dark:bg-gray-600 text-white text-[11px] leading-relaxed shadow-lg'>
+          {t('localModel.hfSearchFilterDetail')}
+        </div>
+      )}
+    </span>
+  );
+};
+
+/** Format download count: 1234567 → "1.23M DL", 12345 → "12.3K DL" */
+function formatDownloads(n: number): string {
+  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(2)}M DL`;
+  if (n >= 1_000) return `${(n / 1_000).toFixed(n >= 10_000 ? 1 : 2)}K DL`;
+  return `${n} DL`;
+}
+
 const SearchResultCard = ({
-  result, variants, variantsLoading, selectedFileName,
-  savedMetas, progresses, statuses, resumeFallbackMessage,
+  result, variants, variantsLoading, selectedFileName, deviceTier,
+  savedMetas, progresses, statuses, resumeFallbackMessage, existingModelId, existingModelState,
   onSelectVariant, onDownload, onResume, onRetry, onCancel,
   onLoad, onUnload, onDelete,
 }: SearchResultCardProps) => {
@@ -407,9 +515,8 @@ const SearchResultCard = ({
   const isSupported = result.supportStatus === 'supported';
 
   const selectedVariant = variants?.variants.find((v) => v.fileName === selectedFileName) ?? null;
-  const displaySize = selectedVariant?.size ?? result.bestCandidateSize;
+  const displaySize = selectedVariant ? (selectedVariant.size > 0 ? selectedVariant.size : null) : (result.bestCandidateSize && result.bestCandidateSize > 0 ? result.bestCandidateSize : null);
 
-  // Derive model ID and state for selected variant
   const selectedModelId = selectedVariant ? generateSearchModelId(result.repoId, selectedVariant) : null;
   const meta = selectedModelId ? savedMetas[selectedModelId] : undefined;
   const storageState = meta?.storageState ?? 'none';
@@ -418,228 +525,189 @@ const SearchResultCard = ({
   const isLoaded = runtimeStatus === 'ready' || runtimeStatus === 'busy';
   const isLoading = runtimeStatus === 'loading';
 
-  const canDownload = isSupported
-    && selectedVariant?.supportStatus === 'supported'
-    && storageState === 'none'
-    && !progress;
+  const isAlreadyDownloaded = existingModelId !== null;
+  const canDownload = isSupported && !isAlreadyDownloaded && selectedVariant?.supportReason !== 'Split GGUF not supported' && storageState === 'none' && !progress;
+
+  // Weight tier — based on file size, independent of device
+  const fitLabel = (() => {
+    if (selectedVariant?.supportReason === 'Split GGUF not supported') return 'not-recommended' as ModelFitLabel;
+
+    const sz = displaySize ?? 0;
+    if (sz === 0) return null;
+    const mb = sz / (1024 * 1024);
+    if (mb < 300) return 'lightweight' as ModelFitLabel;
+    if (mb < 1500) return 'recommended' as ModelFitLabel;
+    if (mb < 4000) return 'heavy' as ModelFitLabel;
+    if (mb < 8000) return 'very-heavy' as ModelFitLabel;
+    return 'extreme' as ModelFitLabel;
+  })();
+
+  // Quantization
+  const quantLabel = selectedVariant?.rawQuantization
+    ? selectedVariant.normalizedQuantization.toUpperCase()
+    : variants?.recommendedFile
+      ? variants.variants.find((v) => v.fileName === variants.recommendedFile)?.normalizedQuantization?.toUpperCase()
+      : null;
+
+  // Shared button styles
+  const btnPrimary = 'text-xs px-2.5 py-1 rounded-lg bg-blue-600 hover:bg-blue-700 text-white transition-colors disabled:opacity-50 whitespace-nowrap';
+  const btnSecondary = 'text-xs px-2 py-1 rounded-lg border border-gray-300 dark:border-gray-600 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors whitespace-nowrap';
 
   return (
-    <div className='px-4 py-3 flex flex-col gap-2'>
-      {/* Header: repo name + support badge */}
-      <div className='flex items-center justify-between gap-2'>
-        <div className='flex items-center gap-2 min-w-0'>
-          <span className='text-sm font-medium text-gray-900 dark:text-gray-100 truncate'>
-            {result.repoId}
-          </span>
-          <SupportBadge status={result.supportStatus} t={t} />
-        </div>
-        {displaySize != null && (
-          <span className='text-xs text-gray-500 dark:text-gray-400 whitespace-nowrap'>
-            {formatBytes(displaySize)}
-          </span>
-        )}
-        {displaySize == null && (
-          <span className='text-xs text-gray-400 dark:text-gray-500 whitespace-nowrap'>
-            {t('localModel.sizeUnknown')}
-          </span>
-        )}
+    <div className='flex flex-col border-b border-gray-200 dark:border-gray-600 hover:bg-gray-100 dark:hover:bg-gray-600/50 transition-colors'>
+      {/* Row 1: Model name + (desktop: quant | date | DL | size) + (mobile: size only) */}
+      <div className='flex items-center gap-2 px-3 py-1.5 min-w-0'>
+        <span className={`inline-block w-2 h-2 rounded-full flex-shrink-0 ${
+          isSupported ? 'bg-green-500' : result.supportStatus === 'needs-manual-review' ? 'bg-amber-400' : 'bg-gray-400'
+        }`} />
+        <a
+          href={result.repoUrl}
+          target='_blank'
+          rel='noopener noreferrer'
+          className='flex-1 text-sm text-gray-900 dark:text-white truncate overflow-hidden min-w-0 no-underline hover:underline'
+        >{result.repoId}</a>
+        <span className='hidden sm:inline text-[10px] text-purple-700 dark:text-purple-400 whitespace-nowrap flex-shrink-0'>
+          {quantLabel ?? '—'}
+        </span>
+        <span className='hidden sm:inline w-20 text-right text-[10px] text-gray-400 dark:text-gray-500 whitespace-nowrap flex-shrink-0'>
+          {result.lastModified ? result.lastModified.slice(0, 10) : '—'}
+        </span>
+        <span className='hidden sm:inline w-14 text-right text-[10px] text-gray-400 dark:text-gray-500 whitespace-nowrap flex-shrink-0'>
+          {formatDownloads(result.downloads)}
+        </span>
+        <span className='w-16 text-right text-[10px] text-gray-400 dark:text-gray-500 whitespace-nowrap flex-shrink-0'>
+          {displaySize != null ? formatBytes(displaySize) : '—'}
+        </span>
       </div>
 
-      {/* Tags */}
-      {result.tags.length > 0 && (
-        <div className='flex flex-wrap gap-1'>
-          {result.tags.slice(0, 6).map((tag) => (
-            <span key={tag} className='text-xs px-1.5 py-0.5 rounded bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-400'>
-              {tag}
-            </span>
+      {/* Row 2 (mobile only): Quant | Date | DL | FitBadge */}
+      <div className='sm:hidden flex items-baseline gap-2 px-3 pb-0.5 ml-5 min-w-0'>
+        <span className='text-[10px] text-purple-700 dark:text-purple-400 whitespace-nowrap flex-shrink-0'>
+          {quantLabel ?? '—'}
+        </span>
+        <span className='text-[10px] text-gray-400 dark:text-gray-500 whitespace-nowrap'>
+          {result.lastModified ? result.lastModified.slice(0, 10) : '—'}
+        </span>
+        <span className='text-[10px] text-gray-400 dark:text-gray-500 whitespace-nowrap'>
+          {formatDownloads(result.downloads)}
+        </span>
+        <span className='flex-1' />
+        {fitLabel && <FitBadge fit={fitLabel} />}
+      </div>
+      {/* Desktop: FitBadge on row 2 */}
+      {fitLabel && (
+        <div className='hidden sm:flex items-center px-3 pb-0.5 ml-5'>
+          <span className='flex-1' />
+          <FitBadge fit={fitLabel} />
+        </div>
+      )}
+
+      {/* Row 3: Tags (horizontally scrollable) */}
+      <div className='flex items-center gap-2 px-3 pb-0.5 ml-5 min-w-0'>
+        <div
+          className='flex-1 overflow-x-auto flex gap-1 min-w-0'
+          style={{ scrollbarWidth: 'none', msOverflowStyle: 'none', WebkitOverflowScrolling: 'touch' } as React.CSSProperties}
+        >
+          {result.tags.slice(0, 8).map((tag) => (
+            <span key={tag} className='text-[10px] px-1 py-0.5 rounded bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-400 whitespace-nowrap flex-shrink-0'>{tag}</span>
           ))}
         </div>
-      )}
-
-      {/* Metadata row */}
-      <div className='flex gap-3 text-xs text-gray-500 dark:text-gray-400'>
-        <span>{result.downloads.toLocaleString()} {t('localModel.hfDownloads')}</span>
-        {result.lastModified && (
-          <span>{t('localModel.hfLastModified')}: {result.lastModified.slice(0, 10)}</span>
-        )}
       </div>
 
-      {/* Support reason for non-supported */}
-      {result.supportStatus !== 'supported' && result.supportReason && (
-        <p className='text-xs text-gray-500 dark:text-gray-400 italic'>
-          {result.supportReason}
-        </p>
+      {/* Row 4: Description */}
+      {result.description && (
+        <div className='px-3 pb-1 ml-5'>
+          <span className='text-xs text-gray-500 dark:text-gray-400 line-clamp-1'>{result.description}</span>
+        </div>
       )}
 
-      {/* Variant picker (GGUF supported repos only) */}
+      {/* Variant picker + actions (aligned to model name column) */}
       {isSupported && (
-        <div className='flex flex-col gap-2 mt-1'>
+        <div className='pb-2 ml-5 flex flex-col gap-1.5'>
           {variantsLoading && (
-            <span className='text-xs text-gray-500 animate-pulse'>
-              {t('localModel.loadingVariants')}
-            </span>
+            <span className='text-xs text-gray-500 animate-pulse'>{t('localModel.loadingVariants')}</span>
           )}
 
           {!variantsLoading && variants && variants.variants.length > 0 && (
-            <>
-              <div className='flex items-center gap-2'>
-                <select
-                  className='rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 px-2 py-1 text-xs text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-1 focus:ring-blue-500 max-w-[280px]'
-                  value={selectedFileName ?? ''}
-                  onChange={(e) => onSelectVariant(result.repoId, e.target.value)}
-                >
-                  <option value='' disabled>
-                    {t('localModel.selectVariant')}
+            <div className='flex flex-wrap items-center gap-2 pr-3'>
+              <select
+                className='flex-1 min-w-[180px] max-w-[260px] rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 px-2 py-1 text-xs text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-1 focus:ring-blue-500'
+                value={selectedFileName ?? ''}
+                onChange={(e) => onSelectVariant(result.repoId, e.target.value)}
+              >
+                <option value='' disabled>{t('localModel.selectVariant')}</option>
+                {variants.variants.map((v) => (
+                  <option key={v.fileName} value={v.fileName} disabled={v.supportReason === 'Split GGUF not supported'}>
+                    {v.label}
+                    {v.supportReason === 'heavy' ? ` - ${t('localModel.modelFit.heavy')}` : ''}
+                    {v.supportReason === 'very-heavy' ? ` - ${t('localModel.modelFit.veryHeavy')}` : ''}
+                    {v.supportReason === 'extreme' ? ` - ${t('localModel.modelFit.extreme')}` : ''}
+                    {v.supportReason === 'Split GGUF not supported' ? ` - ${t('localModel.modelFit.notRecommended')}` : ''}
                   </option>
-                  {variants.variants.map((v) => (
-                    <option
-                      key={v.fileName}
-                      value={v.fileName}
-                      disabled={v.supportStatus === 'unsupported'}
-                    >
-                      {v.label}
-                      {v.recommended ? ` (${t('localModel.autoSelected')})` : ''}
-                      {v.supportStatus === 'not-recommended' ? ` - ${t('localModel.notRecommendedVariant')}` : ''}
-                      {v.supportStatus === 'unsupported' ? ` - ${t('localModel.unsupportedVariant')}` : ''}
-                    </option>
-                  ))}
-                </select>
+                ))}
+              </select>
 
-                {selectedVariant && selectedVariant.supportStatus !== 'supported' && selectedVariant.supportReason && (
-                  <span className={`text-xs ${variantStatusColors[selectedVariant.supportStatus] ?? ''}`}>
-                    {selectedVariant.supportReason}
-                  </span>
-                )}
-              </div>
-
-              {/* State-based actions for selected variant */}
-              {selectedVariant && (
-                <div className='flex items-center gap-2'>
-                  {/* Not downloaded */}
-                  {storageState === 'none' && !progress && (
-                    <button
-                      className='btn btn-primary text-xs px-3 py-1'
-                      onClick={() => onDownload(result, selectedVariant)}
-                      disabled={!canDownload}
-                    >
-                      {t('localModel.download')}
-                    </button>
-                  )}
-
-                  {/* Downloading */}
-                  {(storageState === 'downloading' || progress) && (
-                    <>
-                      <div className='flex-1'>
-                        {progress && <ProgressBar progress={progress} />}
-                        {!progress && (
-                          <span className='text-xs text-gray-500'>{t('localModel.downloading')}</span>
-                        )}
-                      </div>
-                      {selectedModelId && (
-                        <button
-                          className='btn btn-neutral text-xs px-3 py-1'
-                          onClick={() => onCancel(selectedModelId)}
-                        >
-                          {t('localModel.cancel')}
-                        </button>
-                      )}
-                    </>
-                  )}
-
-                  {/* Partial */}
-                  {storageState === 'partial' && !progress && (
-                    <>
-                      <span className='text-xs text-amber-600 dark:text-amber-400'>
-                        {t('localModel.storageState.partial')}
-                        {meta?.storedBytes ? ` (${t('localModel.partialSize')}: ${formatBytes(meta.storedBytes)})` : ''}
-                      </span>
-                      <button
-                        className='btn btn-primary text-xs px-3 py-1'
-                        onClick={() => onResume(result, selectedVariant)}
-                      >
-                        {t('localModel.resume')}
-                      </button>
-                      <button
-                        className='btn btn-neutral text-xs px-3 py-1'
-                        onClick={() => onRetry(result, selectedVariant)}
-                      >
-                        {t('localModel.retry')}
-                      </button>
-                      {selectedModelId && (
-                        <button
-                          className='btn btn-neutral text-xs px-3 py-1'
-                          onClick={() => onDelete(selectedModelId)}
-                        >
-                          {t('localModel.delete')}
-                        </button>
-                      )}
-                      {resumeFallbackMessage && (
-                        <span className='text-xs text-amber-600 dark:text-amber-400'>
-                          {resumeFallbackMessage}
-                        </span>
-                      )}
-                    </>
-                  )}
-
-                  {/* Saved, not loaded */}
-                  {storageState === 'saved' && !isLoaded && !isLoading && (
-                    <>
-                      <span className='text-xs text-green-600 dark:text-green-400'>
-                        {t('localModel.storageState.saved')}
-                      </span>
-                      <button
-                        className='btn btn-primary text-xs px-3 py-1'
-                        onClick={() => onLoad(result, selectedVariant)}
-                      >
-                        {t('localModel.load')}
-                      </button>
-                      {selectedModelId && (
-                        <button
-                          className='btn btn-neutral text-xs px-3 py-1'
-                          onClick={() => onDelete(selectedModelId)}
-                        >
-                          {t('localModel.delete')}
-                        </button>
-                      )}
-                    </>
-                  )}
-
-                  {/* Loading */}
-                  {storageState === 'saved' && isLoading && (
-                    <StatusBadge status='loading' />
-                  )}
-
-                  {/* Loaded */}
-                  {storageState === 'saved' && isLoaded && (
-                    <>
-                      <StatusBadge status={runtimeStatus} />
-                      {selectedModelId && (
-                        <button
-                          className='btn btn-neutral text-xs px-3 py-1'
-                          onClick={() => onUnload(selectedModelId)}
-                          disabled={runtimeStatus === 'busy'}
-                        >
-                          {t('localModel.unload')}
-                        </button>
-                      )}
-                    </>
-                  )}
-
-                  {/* Error */}
-                  {meta?.lastError && storageState !== 'downloading' && (
-                    <span className='text-xs text-red-600 dark:text-red-400 truncate'>
-                      {meta.lastError}
-                    </span>
-                  )}
-                </div>
+              {/* Action buttons — wrap to next line on mobile */}
+              {selectedVariant && storageState === 'none' && !progress && !isAlreadyDownloaded && (
+                <button className={`${btnPrimary} ml-auto`} onClick={() => onDownload(result, selectedVariant)} disabled={!canDownload}>{t('localModel.download')}</button>
               )}
-            </>
+              {selectedVariant && isAlreadyDownloaded && storageState === 'none' && (
+                <span className={`text-xs whitespace-nowrap ${existingModelState === 'downloading' ? 'text-blue-500 dark:text-blue-400' : 'text-green-600 dark:text-green-400'}`}>
+                  {existingModelState === 'downloading' ? t('localModel.downloading') : t('localModel.storageState.saved')}
+                </span>
+              )}
+              {selectedVariant && (storageState === 'downloading' || progress) && (
+                <>
+                  <div className='flex-1 min-w-[80px] max-w-[200px]'>
+                    {progress ? <ProgressBar progress={progress} /> : <span className='text-xs text-gray-500'>{t('localModel.downloading')}</span>}
+                  </div>
+                  {selectedModelId && <button className={btnSecondary} onClick={() => onCancel(selectedModelId)}>{t('localModel.cancel')}</button>}
+                </>
+              )}
+              {selectedVariant && storageState === 'partial' && !progress && (
+                <>
+                  <button className={btnPrimary} onClick={() => onResume(result, selectedVariant)}>{t('localModel.resume')}</button>
+                  <button className={btnSecondary} onClick={() => onRetry(result, selectedVariant)}>{t('localModel.retry')}</button>
+                  {selectedModelId && <button className={btnSecondary} onClick={() => onDelete(selectedModelId)}>{t('localModel.delete')}</button>}
+                </>
+              )}
+              {selectedVariant && storageState === 'saved' && !isLoaded && !isLoading && (
+                <>
+                  <button className={btnPrimary} onClick={() => onLoad(result, selectedVariant)}>{t('localModel.load')}</button>
+                  {selectedModelId && <button className={btnSecondary} onClick={() => onDelete(selectedModelId)}>{t('localModel.delete')}</button>}
+                </>
+              )}
+              {selectedVariant && storageState === 'saved' && isLoading && <StatusBadge status='loading' />}
+              {selectedVariant && storageState === 'saved' && isLoaded && (
+                <>
+                  <StatusBadge status={runtimeStatus} />
+                  {selectedModelId && <button className={btnSecondary} onClick={() => onUnload(selectedModelId)} disabled={runtimeStatus === 'busy'}>{t('localModel.unload')}</button>}
+                </>
+              )}
+            </div>
+          )}
+
+          {/* Partial/error info below dropdown */}
+          {selectedVariant && storageState === 'partial' && !progress && meta?.storedBytes && (
+            <span className='text-xs text-amber-600 dark:text-amber-400'>
+              {t('localModel.storageState.partial')} ({formatBytes(meta.storedBytes)})
+              {resumeFallbackMessage && ` — ${resumeFallbackMessage}`}
+            </span>
+          )}
+          {selectedVariant && selectedVariant.supportStatus !== 'supported' && selectedVariant.supportReason && (
+            <span className={`text-xs hidden sm:block ${variantStatusColors[selectedVariant.supportStatus] ?? ''}`}>
+              {selectedVariant.supportReason === 'heavy' ? t('localModel.fitReason.heavy')
+                : selectedVariant.supportReason === 'very-heavy' ? t('localModel.fitReason.veryHeavy')
+                : selectedVariant.supportReason === 'extreme' ? t('localModel.fitReason.extreme')
+                : selectedVariant.supportReason}
+            </span>
+          )}
+          {meta?.lastError && storageState !== 'downloading' && (
+            <span className='text-xs text-red-600 dark:text-red-400 truncate'>{meta.lastError}</span>
           )}
 
           {!variantsLoading && variants && variants.variants.length === 0 && (
-            <span className='text-xs text-gray-500'>
-              {t('localModel.hfSearchNoResults')}
-            </span>
+            <span className='text-xs text-gray-500'>{t('localModel.hfSearchNoResults')}</span>
           )}
         </div>
       )}
@@ -662,6 +730,8 @@ const LocalModelSettings = () => {
   const savedModelMeta = useStore((s) => s.savedModelMeta);
   const localModels = useStore((s) => s.localModels);
   const activeLocalModels = useStore((s) => s.activeLocalModels);
+  const favoriteLocalModelIds = useStore((s) => s.favoriteLocalModelIds);
+  const toggleFavoriteLocalModel = useStore((s) => s.toggleFavoriteLocalModel);
 
   // Local UI state
   const [enabled, setEnabled] = useState(localModelEnabled);
@@ -689,12 +759,23 @@ const LocalModelSettings = () => {
   // HF Search state
   const [searchQuery, setSearchQuery] = useState('');
   const [searchEngine, setSearchEngine] = useState<HfSearchQuery['engine']>('all');
-  const [searchSort, setSearchSort] = useState<HfSearchQuery['sort']>('downloads');
+  const [searchSort, setSearchSort] = useState<'downloads' | 'lastModified' | 'size'>('lastModified');
+  const [searchSortDir, setSearchSortDir] = useState<'asc' | 'desc'>('desc');
   const [searchResults, setSearchResults] = useState<HfSearchResult[]>([]);
   const [searching, setSearching] = useState(false);
   const [variantMap, setVariantMap] = useState<Record<string, GgufRepoResolution>>({});
   const [selectedVariants, setSelectedVariants] = useState<Record<string, string>>({});
   const [variantLoading, setVariantLoading] = useState<Record<string, boolean>>({});
+  const [hasSearchedOnce, setHasSearchedOnce] = useState(false);
+  /** Tracks search downloads that must remain visible regardless of search query changes */
+  const [activeSearchDownloads, setActiveSearchDownloads] = useState<Record<string, {
+    result: HfSearchResult;
+    variant: GgufVariant;
+    modelId: string;
+  }>>({});
+  const [searchNextUrl, setSearchNextUrl] = useState<string | null>(null);
+  const [searchHasMore, setSearchHasMore] = useState(false);
+  const [loadingMore, setLoadingMore] = useState(false);
 
   // Runtime statuses for all known models (catalog + ephemeral)
   const [runtimeStatuses, setRuntimeStatuses] = useState<Record<string, LocalModelStatus>>({});
@@ -786,6 +867,9 @@ const LocalModelSettings = () => {
   // ----- Catalog model actions -----
 
   const handleDownload = useCallback((model: CatalogModel) => {
+    // Prevent duplicate downloads
+    if (abortControllers.current[model.id]) return;
+
     const controller = new AbortController();
     abortControllers.current[model.id] = controller;
 
@@ -854,6 +938,8 @@ const LocalModelSettings = () => {
   }, [handleDownload]);
 
   const handleResumeCatalog = useCallback((model: CatalogModel) => {
+    if (abortControllers.current[model.id]) return;
+
     const controller = new AbortController();
     abortControllers.current[model.id] = controller;
 
@@ -1153,73 +1239,203 @@ const LocalModelSettings = () => {
   }, []);
 
   // ----- HF Search -----
+  // Resolve variants for a batch of search results
+  const resolveVariantsForResults = useCallback((results: HfSearchResult[]) => {
+    for (const r of results) {
+      if (r.supportStatus === 'supported' && (r.engine === 'wllama' || r.tags.includes('gguf'))) {
+        setVariantLoading((prev) => ({ ...prev, [r.repoId]: true }));
+        resolveGgufFiles(r.repoId).then((resolution) => {
+          setVariantLoading((prev) => ({ ...prev, [r.repoId]: false }));
+          if (resolution) {
+            setVariantMap((prev) => ({ ...prev, [r.repoId]: resolution }));
+            if (resolution.recommendedFile) {
+              setSelectedVariants((prev) => ({ ...prev, [r.repoId]: resolution.recommendedFile! }));
+            }
+            const bestVariant = resolution.recommendedFile
+              ? resolution.variants.find((v) => v.fileName === resolution.recommendedFile)
+              : resolution.variants.find((v) => v.size > 0);
+            setSearchResults((prev) =>
+              prev.map((sr) =>
+                sr.repoId === r.repoId ? {
+                  ...sr,
+                  bestCandidateSize: bestVariant?.size && bestVariant.size > 0 ? bestVariant.size : sr.bestCandidateSize,
+                  lastModified: resolution.lastModified ?? sr.lastModified,
+                } : sr,
+              ),
+            );
+          } else {
+            setSearchResults((prev) =>
+              prev.map((sr) =>
+                sr.repoId === r.repoId
+                  ? { ...sr, supportStatus: 'needs-manual-review' as const, supportReason: 'Could not resolve GGUF files from repository' }
+                  : sr,
+              ),
+            );
+          }
+        });
+      }
+    }
+  }, []);
+
   const handleSearch = useCallback(async () => {
     if (!searchQuery.trim()) return;
     setSearching(true);
+    setHasSearchedOnce(true);
     setSearchResults([]);
     setVariantMap({});
     setSelectedVariants({});
+    setSearchNextUrl(null);
+    setSearchHasMore(false);
 
     try {
-      const results = await searchHfModels({
+      // size sort is client-side only; API uses downloads as fallback
+      const apiSort = searchSort === 'size' ? 'downloads' : searchSort;
+      const { results, nextPageUrl } = await searchHfModels({
         query: searchQuery,
         engine: searchEngine,
-        sort: searchSort,
+        sort: apiSort,
+        sortDir: searchSort === 'size' ? 'desc' : searchSortDir,
+        limit: 20,
       });
-      setSearchResults(results);
-
-      // Lazily resolve variants for supported GGUF repos
-      for (const r of results) {
-        if (r.supportStatus === 'supported' && (r.engine === 'wllama' || r.tags.includes('gguf'))) {
-          setVariantLoading((prev) => ({ ...prev, [r.repoId]: true }));
-          resolveGgufFiles(r.repoId).then((resolution) => {
-            setVariantLoading((prev) => ({ ...prev, [r.repoId]: false }));
-            if (resolution) {
-              setVariantMap((prev) => ({ ...prev, [r.repoId]: resolution }));
-              // Auto-select recommended
-              if (resolution.recommendedFile) {
-                setSelectedVariants((prev) => ({ ...prev, [r.repoId]: resolution.recommendedFile! }));
-              }
-              // Update bestCandidateSize if recommended
-              if (resolution.recommendedFile) {
-                const rec = resolution.variants.find((v) => v.fileName === resolution.recommendedFile);
-                if (rec) {
-                  setSearchResults((prev) =>
-                    prev.map((sr) =>
-                      sr.repoId === r.repoId ? { ...sr, bestCandidateSize: rec.size } : sr,
-                    ),
-                  );
-                }
-              }
-            } else {
-              // Resolution failed — downgrade to needs-manual-review
-              setSearchResults((prev) =>
-                prev.map((sr) =>
-                  sr.repoId === r.repoId
-                    ? { ...sr, supportStatus: 'needs-manual-review' as const, supportReason: 'Could not fetch repository details' }
-                    : sr,
-                ),
-              );
-            }
-          });
-        }
-      }
+      // Client-side sort by size if requested (applied after variant resolution updates sizes)
+      const sorted = searchSort === 'size'
+        ? [...results].sort((a, b) => {
+            const sa = a.bestCandidateSize ?? 0;
+            const sb = b.bestCandidateSize ?? 0;
+            return searchSortDir === 'asc' ? sa - sb : sb - sa;
+          })
+        : results;
+      setSearchResults(sorted);
+      setSearchNextUrl(nextPageUrl);
+      setSearchHasMore(nextPageUrl !== null);
+      resolveVariantsForResults(sorted);
     } catch {
       // Search failed silently
     } finally {
       setSearching(false);
     }
-  }, [searchQuery, searchEngine, searchSort]);
+  }, [searchQuery, searchEngine, searchSort, searchSortDir, resolveVariantsForResults]);
+
+  // Load more results (appends to existing)
+  const handleLoadMore = useCallback(async () => {
+    if (loadingMore || !searchHasMore || !searchNextUrl) return;
+    setLoadingMore(true);
+
+    try {
+      const apiSort = searchSort === 'size' ? 'downloads' : searchSort;
+      const { results, nextPageUrl } = await searchHfModels({
+        query: searchQuery,
+        engine: searchEngine,
+        sort: apiSort,
+        sortDir: searchSort === 'size' ? 'desc' : searchSortDir,
+        nextUrl: searchNextUrl,
+      });
+      setSearchNextUrl(nextPageUrl);
+      setSearchHasMore(nextPageUrl !== null);
+      if (results.length > 0) {
+        setSearchResults((prev) => {
+          const existing = new Set(prev.map((r) => r.repoId));
+          const newResults = results.filter((r) => !existing.has(r.repoId));
+          return [...prev, ...newResults];
+        });
+        resolveVariantsForResults(results);
+      }
+    } catch {
+      setSearchHasMore(false);
+    } finally {
+      setLoadingMore(false);
+    }
+  }, [searchQuery, searchEngine, searchSort, searchSortDir, searchNextUrl, searchHasMore, loadingMore, resolveVariantsForResults]);
+
+  // Auto-load more when sentinel scrolls into view
+  const searchSentinelRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!searchHasMore || loadingMore) return;
+    const sentinel = searchSentinelRef.current;
+    if (!sentinel) return;
+
+    // Use IntersectionObserver with the nearest scrollable ancestor as root
+    // Find the scrollable parent for the observer root
+    let root: HTMLElement | null = sentinel.parentElement;
+    while (root && root.scrollHeight <= root.clientHeight + 1) {
+      root = root.parentElement;
+    }
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries[0]?.isIntersecting) {
+          handleLoadMore();
+        }
+      },
+      { root: root ?? undefined, rootMargin: '400px' },
+    );
+    observer.observe(sentinel);
+    return () => observer.disconnect();
+  }, [searchHasMore, loadingMore, handleLoadMore, searchResults.length]);
+
+  // Debounced incremental search (also re-triggers on sort/dir change)
+  useEffect(() => {
+    if (!searchQuery.trim() || searchQuery.trim().length < 2) {
+      if (searchResults.length > 0 && !searchQuery.trim()) {
+        setSearchResults([]);
+      }
+      return;
+    }
+    const timer = setTimeout(() => {
+      handleSearch();
+    }, 400);
+    return () => clearTimeout(timer);
+  }, [searchQuery, searchEngine, searchSort, searchSortDir]);
+
+  /**
+   * Check if a search variant matches an already-downloaded model (catalog or store).
+   * Compares by HF repo + file name (= same download URL).
+   * Returns the existing model ID if found, null otherwise.
+   */
+  const findExistingModelForVariant = useCallback((repoId: string, fileName: string): string | null => {
+    // Check catalog models
+    for (const cm of CURATED_MODELS) {
+      if (cm.huggingFaceRepo === repoId && cm.downloadFiles.includes(fileName)) {
+        return cm.id;
+      }
+    }
+    // Check store models (search-added) by origin + manifest entrypoint
+    const store = useStore.getState();
+    for (const m of store.localModels) {
+      if (m.origin === repoId && m.manifest.kind === 'single-file' && m.manifest.entrypoint === fileName) {
+        return m.id;
+      }
+    }
+    return null;
+  }, []);
 
   const handleSelectVariant = useCallback((repoId: string, fileName: string) => {
     setSelectedVariants((prev) => ({ ...prev, [repoId]: fileName }));
   }, []);
 
   const handleDownloadSearchResult = useCallback((result: HfSearchResult, variant: GgufVariant) => {
+    // Check if this exact file is already downloaded or downloading under a different model ID
+    const existingId = findExistingModelForVariant(result.repoId, variant.fileName);
+    if (existingId) {
+      const meta = useStore.getState().savedModelMeta[existingId];
+      if (meta?.storageState === 'saved' || meta?.storageState === 'downloading' || abortControllers.current[existingId]) {
+        return;
+      }
+    }
+
     const candidate = resolveSearchCandidate(result, variant);
     if (!candidate) return;
 
     const modelId = generateSearchModelId(result.repoId, variant);
+
+    // Prevent duplicate downloads
+    if (abortControllers.current[modelId]) return;
+
+    // Track as active search download (sticky visibility)
+    setActiveSearchDownloads((prev) => ({
+      ...prev,
+      [modelId]: { result, variant, modelId },
+    }));
 
     // Don't duplicate in store
     const store = useStore.getState();
@@ -1275,6 +1491,11 @@ const LocalModelSettings = () => {
             const { [modelId]: _, ...rest } = prev;
             return rest;
           });
+          // Remove from sticky active downloads (now in "Downloaded Models")
+          setActiveSearchDownloads((prev) => {
+            const { [modelId]: _, ...rest } = prev;
+            return rest;
+          });
           delete abortControllers.current[modelId];
         },
         onError: (error) => {
@@ -1286,6 +1507,7 @@ const LocalModelSettings = () => {
             const { [modelId]: _, ...rest } = prev;
             return rest;
           });
+          // Keep in activeSearchDownloads — user needs to see error/retry
           delete abortControllers.current[modelId];
         },
       },
@@ -1297,6 +1519,14 @@ const LocalModelSettings = () => {
     const candidate = resolveSearchCandidate(result, variant);
     if (!candidate) return;
     const modelId = generateSearchModelId(result.repoId, variant);
+
+    if (abortControllers.current[modelId]) return;
+
+    // Track as active search download (sticky visibility)
+    setActiveSearchDownloads((prev) => ({
+      ...prev,
+      [modelId]: { result, variant, modelId },
+    }));
 
     const store = useStore.getState();
     store.updateSavedModelMeta(modelId, {
@@ -1338,6 +1568,10 @@ const LocalModelSettings = () => {
             lastVerifiedAt: Date.now(),
           });
           setDownloadProgresses((prev) => {
+            const { [modelId]: _, ...rest } = prev;
+            return rest;
+          });
+          setActiveSearchDownloads((prev) => {
             const { [modelId]: _, ...rest } = prev;
             return rest;
           });
@@ -1452,6 +1686,10 @@ const LocalModelSettings = () => {
     await deleteModel(modelId);
     store.removeSavedModelMeta(modelId);
     store.removeLocalModel(modelId);
+    setActiveSearchDownloads((prev) => {
+      const { [modelId]: _, ...rest } = prev;
+      return rest;
+    });
   }, [t]);
 
   // Sync partial model storedBytes on section mount
@@ -1508,137 +1746,65 @@ const LocalModelSettings = () => {
         <span>{t('localModel.experimentalNote')}</span>
       </div>
 
-      {/* Enable toggle */}
+      {/* 1. Enable toggle + device tier */}
       <SettingsGroup label=''>
-        <Toggle
-          label={t('localModel.enabled')}
-          isChecked={enabled}
-          setIsChecked={setEnabled}
-        />
+        <div>
+          <Toggle
+            label={t('localModel.enabled')}
+            isChecked={enabled}
+            setIsChecked={setEnabled}
+          />
+          {enabled && (
+            <div className='px-4 pb-3 -mt-1 text-xs text-gray-500 dark:text-gray-400'>
+              {t('localModel.deviceTier')}: <span className='font-medium text-gray-700 dark:text-gray-300'>{tierLabels[deviceTier]}</span>
+            </div>
+          )}
+        </div>
       </SettingsGroup>
 
       {enabled && (
         <>
-          {/* Device info */}
-          <div className='px-1 text-xs text-gray-500 dark:text-gray-400'>
-            {t('localModel.deviceTier')}: <span className='font-medium text-gray-700 dark:text-gray-300'>{tierLabels[deviceTier]}</span>
-          </div>
-
-          {/* Recommended Models */}
-          <SettingsGroup label={t('localModel.recommendedModels')}>
-            {CURATED_MODELS.map((model) => (
-              <CatalogCard
-                key={model.id}
-                model={model}
-                deviceTier={deviceTier}
-                meta={savedModelMeta[model.id]}
-                runtimeStatus={runtimeStatuses[model.id] ?? 'idle'}
-                downloadProgress={downloadProgresses[model.id] ?? null}
-                resumeFallbackMessage={resumeFallbacks[model.id] ?? null}
-                onDownload={handleDownload}
-                onCancel={handleCancelDownload}
-                onResume={handleResumeCatalog}
-                onRetry={handleRetry}
-                onDelete={handleDeleteCatalogModel}
-                onLoad={handleLoadCatalogModel}
-                onUnload={handleUnloadCatalogModel}
-              />
-            ))}
-          </SettingsGroup>
-
-          {/* Hugging Face Search */}
-          <SettingsGroup label={t('localModel.hfSearch')}>
-            <div className='px-4 py-3 flex flex-col gap-3'>
-              {/* Search controls */}
-              <div className='flex gap-2'>
-                <input
-                  type='text'
-                  className='flex-1 rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 px-2 py-1 text-sm text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-1 focus:ring-blue-500'
-                  placeholder={t('localModel.hfSearchPlaceholder') as string}
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
-                />
-                <select
-                  className='rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 px-2 py-1 text-xs text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-1 focus:ring-blue-500'
-                  value={searchEngine}
-                  onChange={(e) => setSearchEngine(e.target.value as HfSearchQuery['engine'])}
-                >
-                  <option value='all'>{t('localModel.engineAll')}</option>
-                  <option value='wllama'>{t('localModel.engineWllama')}</option>
-                  <option value='transformers.js'>{t('localModel.engineTransformersJs')}</option>
-                </select>
-                <select
-                  className='rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 px-2 py-1 text-xs text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-1 focus:ring-blue-500'
-                  value={searchSort}
-                  onChange={(e) => setSearchSort(e.target.value as HfSearchQuery['sort'])}
-                >
-                  <option value='downloads'>{t('localModel.sortDownloads')}</option>
-                  <option value='lastModified'>{t('localModel.sortLastModified')}</option>
-                </select>
-              </div>
-              <button
-                className='btn btn-primary text-xs px-3 py-1 self-start'
-                onClick={handleSearch}
-                disabled={searching || !searchQuery.trim()}
-              >
-                {searching ? t('localModel.hfSearching') : t('localModel.hfSearchButton')}
-              </button>
-            </div>
-
-            {/* Search results */}
-            {searchResults.length > 0 && searchResults.map((result) => {
-              // Collect all saved metas, progresses, and statuses for models from this repo
-              const repoPrefix = `hf--${result.repoId.split('/').map((s) => s.toLowerCase().replace(/[^a-z0-9]/g, '-').replace(/-+/g, '-').replace(/^-|-$/g, '')).join('--')}--`;
-              const repoMetas: Record<string, SavedModelMeta> = {};
-              const repoProgresses: Record<string, DownloadProgress> = {};
-              const repoStatuses: Record<string, LocalModelStatus> = {};
-              for (const [id, meta] of Object.entries(savedModelMeta)) {
-                if (id.startsWith(repoPrefix)) repoMetas[id] = meta;
-              }
-              for (const [id, prog] of Object.entries(downloadProgresses)) {
-                if (id.startsWith(repoPrefix)) repoProgresses[id] = prog;
-              }
-              for (const [id, status] of Object.entries(runtimeStatuses)) {
-                if (id.startsWith(repoPrefix)) repoStatuses[id] = status;
-              }
-              // Find resume fallback for selected variant
-              const selectedFile = selectedVariants[result.repoId] ?? null;
-              const selectedVar = variantMap[result.repoId]?.variants.find((v) => v.fileName === selectedFile);
-              const selectedMid = selectedVar ? generateSearchModelId(result.repoId, selectedVar) : null;
-              const fallbackMsg = selectedMid ? (resumeFallbacks[selectedMid] ?? null) : null;
-
-              return (
-                <SearchResultCard
-                  key={result.repoId}
-                  result={result}
-                  variants={variantMap[result.repoId] ?? null}
-                  variantsLoading={variantLoading[result.repoId] ?? false}
-                  selectedFileName={selectedFile}
-                  savedMetas={repoMetas}
-                  progresses={repoProgresses}
-                  statuses={repoStatuses}
-                  resumeFallbackMessage={fallbackMsg}
-                  onSelectVariant={handleSelectVariant}
-                  onDownload={handleDownloadSearchResult}
-                  onResume={handleResumeSearchModel}
-                  onRetry={handleRetrySearchModel}
-                  onCancel={handleCancelSearchDownload}
-                  onLoad={handleLoadSearchModel}
-                  onUnload={handleUnloadSearchModel}
-                  onDelete={handleDeleteSearchModel}
-                />
+          {/* 2. Downloaded models list — only fully saved models */}
+          <SettingsGroup label={t('localModel.downloadedModels')}>
+            {(() => {
+              const completedModels = CURATED_MODELS.filter((m) =>
+                savedModelMeta[m.id]?.storageState === 'saved',
               );
-            })}
 
-            {!searching && searchResults.length === 0 && searchQuery.trim() && (
-              <div className='px-4 py-3 text-xs text-gray-500 dark:text-gray-400 text-center'>
-                {t('localModel.hfSearchNoResults')}
-              </div>
-            )}
+              if (completedModels.length === 0) {
+                return (
+                  <div className='px-4 py-6 text-center'>
+                    <p className='text-xs text-gray-400 dark:text-gray-500'>
+                      {t('localModel.noDownloadedModels')}
+                    </p>
+                  </div>
+                );
+              }
+
+              return completedModels.map((model) => (
+                <CatalogCard
+                  key={model.id}
+                  model={model}
+                  deviceTier={deviceTier}
+                  meta={savedModelMeta[model.id]}
+                  runtimeStatus={runtimeStatuses[model.id] ?? 'idle'}
+                  downloadProgress={null}
+                  resumeFallbackMessage={null}
+                  isFavorite={favoriteLocalModelIds.includes(model.id)}
+                  onToggleFavorite={() => toggleFavoriteLocalModel(model.id)}
+                  onDownload={handleDownload}
+                  onCancel={handleCancelDownload}
+                  onResume={handleResumeCatalog}
+                  onRetry={handleRetry}
+                  onDelete={handleDeleteCatalogModel}
+                  onLoad={handleLoadCatalogModel}
+                  onUnload={handleUnloadCatalogModel}
+                />
+              ));
+            })()}
           </SettingsGroup>
 
-          {/* Imported Local Files */}
+          {/* 3. Manual import */}
           <SettingsGroup label={t('localModel.importedFiles')}>
             <div className='px-4 py-3 flex flex-col gap-3'>
               <p className='text-xs text-gray-500 dark:text-gray-400'>
@@ -1690,6 +1856,211 @@ const LocalModelSettings = () => {
                   </button>
                 </div>
               )}
+            </div>
+          </SettingsGroup>
+
+          {/* Recommended models — not yet fully downloaded */}
+          {CURATED_MODELS.filter((m) => savedModelMeta[m.id]?.storageState !== 'saved').length > 0 && (
+            <SettingsGroup label={t('localModel.recommendedModels')}>
+              {CURATED_MODELS.filter((m) => savedModelMeta[m.id]?.storageState !== 'saved').map((model) => (
+                <CatalogCard
+                  key={model.id}
+                  model={model}
+                  deviceTier={deviceTier}
+                  meta={savedModelMeta[model.id]}
+                  runtimeStatus={runtimeStatuses[model.id] ?? 'idle'}
+                  downloadProgress={downloadProgresses[model.id] ?? null}
+                  resumeFallbackMessage={resumeFallbacks[model.id] ?? null}
+                  isFavorite={favoriteLocalModelIds.includes(model.id)}
+                  onToggleFavorite={() => toggleFavoriteLocalModel(model.id)}
+                  onDownload={handleDownload}
+                  onCancel={handleCancelDownload}
+                  onResume={handleResumeCatalog}
+                  onRetry={handleRetry}
+                  onDelete={handleDeleteCatalogModel}
+                  onLoad={handleLoadCatalogModel}
+                  onUnload={handleUnloadCatalogModel}
+                />
+              ))}
+            </SettingsGroup>
+          )}
+
+          {/* 4. Hugging Face Search */}
+          <SettingsGroup label=''>
+            {/* Sticky block: section label + search bar + column headers */}
+            <div className='sticky -top-6 z-10 bg-gray-50 dark:bg-gray-700 rounded-t-lg'>
+              {/* Section label row with filter info icon */}
+              <div className='flex items-center justify-between px-3 pt-2 pb-1'>
+                <span className='text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider'>
+                  {t('localModel.hfSearch')}
+                </span>
+                <FilterInfoButton />
+              </div>
+              {/* Search bar */}
+              <div className='px-3 pb-2 flex items-center gap-2'>
+                <div className='flex-1 relative'>
+                  <input
+                    type='text'
+                    className='w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-gray-100 dark:bg-gray-800 pl-3 pr-8 py-1.5 text-sm text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500'
+                    placeholder={t('localModel.hfSearchPlaceholder') as string}
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                  />
+                  {searchQuery && (
+                    <button
+                      className='absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300'
+                      onClick={() => { setSearchQuery(''); setSearchResults([]); }}
+                      type='button'
+                    >
+                      &times;
+                    </button>
+                  )}
+                </div>
+                <select
+                  className='rounded-lg border border-gray-300 dark:border-gray-600 bg-gray-100 dark:bg-gray-800 px-2 py-1.5 text-xs text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500'
+                  value={searchEngine}
+                  onChange={(e) => setSearchEngine(e.target.value as HfSearchQuery['engine'])}
+                >
+                  <option value='all'>{t('localModel.engineAll')}</option>
+                  <option value='wllama'>{t('localModel.engineWllama')}</option>
+                  <option value='transformers.js'>{t('localModel.engineTransformersJs')}</option>
+                </select>
+                {searching && (
+                  <span className='text-xs text-gray-500 animate-pulse whitespace-nowrap'>{t('localModel.hfSearching')}</span>
+                )}
+              </div>
+              {/* Column headers */}
+              {hasSearchedOnce && searchResults.length > 0 && (
+                <>
+                  {/* Desktop: headers aligned with Row 1 inline columns */}
+                  <div className='hidden sm:flex items-center gap-2 px-3 py-1 border-t border-gray-200 dark:border-gray-600'>
+                    <span className='flex-1' />
+                    <span className='text-[10px] font-medium text-gray-500 dark:text-gray-400'>{t('localModel.quantization')}</span>
+                    <SortableColumnHeader className='inline' label={t('localModel.hfLastModified')} field='lastModified' width='w-20' currentSort={searchSort} currentDir={searchSortDir} onSort={(f, d) => { setSearchSort(f as typeof searchSort); setSearchSortDir(d); }} />
+                    <SortableColumnHeader className='inline' label='DL' field='downloads' width='w-14' currentSort={searchSort} currentDir={searchSortDir} onSort={(f, d) => { setSearchSort(f as typeof searchSort); setSearchSortDir(d); }} />
+                    <SortableColumnHeader className='inline' label='Size' field='size' width='w-16' currentSort={searchSort} currentDir={searchSortDir} onSort={(f, d) => { setSearchSort(f as typeof searchSort); setSearchSortDir(d); }} />
+                  </div>
+                  {/* Mobile: compact header row */}
+                  <div className='sm:hidden flex items-center justify-end gap-3 px-3 py-1 ml-5 border-t border-gray-200 dark:border-gray-600'>
+                    <SortableColumnHeader className='inline' label={t('localModel.hfLastModified')} field='lastModified' width='' currentSort={searchSort} currentDir={searchSortDir} onSort={(f, d) => { setSearchSort(f as typeof searchSort); setSearchSortDir(d); }} />
+                    <SortableColumnHeader className='inline' label='DL' field='downloads' width='' currentSort={searchSort} currentDir={searchSortDir} onSort={(f, d) => { setSearchSort(f as typeof searchSort); setSearchSortDir(d); }} />
+                    <SortableColumnHeader className='inline' label='Size' field='size' width='' currentSort={searchSort} currentDir={searchSortDir} onSort={(f, d) => { setSearchSort(f as typeof searchSort); setSearchSortDir(d); }} />
+                  </div>
+                </>
+              )}
+              {/* No results */}
+              {hasSearchedOnce && !searching && searchResults.length === 0 && searchQuery.trim() && Object.keys(activeSearchDownloads).length === 0 && (
+                <div className='px-4 py-3 text-xs text-gray-500 dark:text-gray-400 text-center'>
+                  {t('localModel.hfSearchNoResults')}
+                </div>
+              )}
+            </div>
+
+            {/* Search results container — maintain min-height after first search to prevent layout shift */}
+            <div style={hasSearchedOnce ? { minHeight: '800px' } : undefined}>
+
+            {/* Active search downloads — always visible (downloading/partial/error) */}
+            {Object.values(activeSearchDownloads)
+              // Don't show duplicates if they're also in search results
+              .filter((d) => !searchResults.some((r) => r.repoId === d.result.repoId))
+              .map((d) => {
+                const repoMetas: Record<string, SavedModelMeta> = {};
+                const repoProgresses: Record<string, DownloadProgress> = {};
+                const repoStatuses: Record<string, LocalModelStatus> = {};
+                if (savedModelMeta[d.modelId]) repoMetas[d.modelId] = savedModelMeta[d.modelId];
+                if (downloadProgresses[d.modelId]) repoProgresses[d.modelId] = downloadProgresses[d.modelId];
+                if (runtimeStatuses[d.modelId]) repoStatuses[d.modelId] = runtimeStatuses[d.modelId];
+                const resolution = variantMap[d.result.repoId] ?? null;
+
+                return (
+                  <SearchResultCard
+                    key={`active-${d.modelId}`}
+                    result={d.result}
+                    variants={resolution}
+                    variantsLoading={false}
+                    selectedFileName={d.variant.fileName}
+                    deviceTier={deviceTier}
+                    savedMetas={repoMetas}
+                    progresses={repoProgresses}
+                    statuses={repoStatuses}
+                    resumeFallbackMessage={resumeFallbacks[d.modelId] ?? null}
+                    existingModelId={null}
+                    existingModelState={null}
+                    onSelectVariant={handleSelectVariant}
+                    onDownload={handleDownloadSearchResult}
+                    onResume={handleResumeSearchModel}
+                    onRetry={handleRetrySearchModel}
+                    onCancel={handleCancelSearchDownload}
+                    onLoad={handleLoadSearchModel}
+                    onUnload={handleUnloadSearchModel}
+                    onDelete={handleDeleteSearchModel}
+                  />
+                );
+              })
+            }
+
+            {/* Search results */}
+            {searchResults.length > 0 && searchResults.map((result) => {
+              const repoPrefix = `hf--${result.repoId.split('/').map((s) => s.toLowerCase().replace(/[^a-z0-9]/g, '-').replace(/-+/g, '-').replace(/^-|-$/g, '')).join('--')}--`;
+              const repoMetas: Record<string, SavedModelMeta> = {};
+              const repoProgresses: Record<string, DownloadProgress> = {};
+              const repoStatuses: Record<string, LocalModelStatus> = {};
+              for (const [id, meta] of Object.entries(savedModelMeta)) {
+                if (id.startsWith(repoPrefix)) repoMetas[id] = meta;
+              }
+              for (const [id, prog] of Object.entries(downloadProgresses)) {
+                if (id.startsWith(repoPrefix)) repoProgresses[id] = prog;
+              }
+              for (const [id, status] of Object.entries(runtimeStatuses)) {
+                if (id.startsWith(repoPrefix)) repoStatuses[id] = status;
+              }
+              const selectedFile = selectedVariants[result.repoId] ?? null;
+              const selectedVar = variantMap[result.repoId]?.variants.find((v) => v.fileName === selectedFile);
+              const selectedMid = selectedVar ? generateSearchModelId(result.repoId, selectedVar) : null;
+              const fallbackMsg = selectedMid ? (resumeFallbacks[selectedMid] ?? null) : null;
+              const existingId = selectedFile ? findExistingModelForVariant(result.repoId, selectedFile) : null;
+              // Show as existing if saved, downloading, or has active download
+              const existingState = existingId ? savedModelMeta[existingId]?.storageState : undefined;
+              const isExistingActive = existingId != null && (
+                existingState === 'saved' || existingState === 'downloading' || !!abortControllers.current[existingId]
+              );
+
+              return (
+                <SearchResultCard
+                  key={result.repoId}
+                  result={result}
+                  variants={variantMap[result.repoId] ?? null}
+                  variantsLoading={variantLoading[result.repoId] ?? false}
+                  selectedFileName={selectedFile}
+                  deviceTier={deviceTier}
+                  savedMetas={repoMetas}
+                  progresses={repoProgresses}
+                  statuses={repoStatuses}
+                  resumeFallbackMessage={fallbackMsg}
+                  existingModelId={isExistingActive ? existingId : null}
+                  existingModelState={isExistingActive ? (existingState as 'saved' | 'downloading' | 'partial' | null) ?? null : null}
+                  onSelectVariant={handleSelectVariant}
+                  onDownload={handleDownloadSearchResult}
+                  onResume={handleResumeSearchModel}
+                  onRetry={handleRetrySearchModel}
+                  onCancel={handleCancelSearchDownload}
+                  onLoad={handleLoadSearchModel}
+                  onUnload={handleUnloadSearchModel}
+                  onDelete={handleDeleteSearchModel}
+                />
+              );
+            })}
+
+            {/* Auto-load sentinel */}
+            {searchHasMore && searchResults.length > 0 && (
+              <div ref={searchSentinelRef} className='px-4 py-2 text-center'>
+                {loadingMore && (
+                  <span className='text-xs text-gray-500 animate-pulse'>{t('localModel.hfSearching')}</span>
+                )}
+              </div>
+            )}
+
+
             </div>
           </SettingsGroup>
 
@@ -1831,12 +2202,6 @@ const LocalModelSettings = () => {
             </SettingsGroup>
           )}
 
-          {/* No model loaded hint */}
-          {!hasAnyAssignment && ephemeralStatus === 'idle' && (
-            <p className='text-xs text-gray-400 dark:text-gray-500 text-center'>
-              {t('localModel.noModelLoaded')}
-            </p>
-          )}
         </>
       )}
     </div>

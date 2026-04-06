@@ -15,9 +15,11 @@ import type {
   LocalModelEngine,
   LocalModelTask,
   LocalModelManifest,
+  LocalModelDisplayMeta,
   HfSearchQuery,
   HfRepoFile,
   HfSearchResult,
+  HfSearchResponse,
   HfSupportStatus,
   GgufVariant,
   GgufVariantStatus,
@@ -31,8 +33,10 @@ import { formatBytes } from './device';
 // ---------------------------------------------------------------------------
 
 const HF_API_BASE = 'https://huggingface.co/api/models';
-const MAX_BROWSER_SIZE = 4 * 1024 * 1024 * 1024; // 4 GB
-const HEAVY_THRESHOLD = 2 * 1024 * 1024 * 1024;   // 2 GB
+// Size thresholds for variant classification
+const SIZE_HEAVY =    1.5 * 1024 * 1024 * 1024;  // 1.5 GB — "heavy"
+const SIZE_VERY_HEAVY = 4 * 1024 * 1024 * 1024;  // 4 GB — "very heavy"
+const SIZE_EXTREME =   8 * 1024 * 1024 * 1024;    // 8 GB — "extreme"
 const DEFAULT_LIMIT = 20;
 
 // ---------------------------------------------------------------------------
@@ -136,6 +140,7 @@ interface HfApiModel {
   library_name?: string;
   downloads?: number;
   lastModified?: string;
+  createdAt?: string;
   siblings?: Array<{ rfilename: string; size?: number }>;
   private?: boolean;
   gated?: boolean | string;
@@ -161,9 +166,18 @@ function classifyRepoSupport(
   }
 
   if (!siblings) {
+    // Search API doesn't return siblings — use tags for initial classification.
+    // Detailed file validation is deferred to resolveGgufFiles().
+    if (tags.includes('gguf')) {
+      return { status: 'supported', reason: '' };
+    }
+    if (engine === 'wllama') {
+      // Searched with GGUF filter but this repo may lack the tag — still try
+      return { status: 'supported', reason: '' };
+    }
     return {
       status: 'needs-manual-review',
-      reason: 'Could not fetch repository details',
+      reason: 'No GGUF files detected. Only GGUF models are supported.',
     };
   }
 
@@ -181,7 +195,7 @@ function classifyRepoSupport(
 
   // Check if at least one non-split GGUF is within size limit
   const hasUsable = ggufFiles.some(
-    (f) => !isSplitGguf(f.rfilename) && f.size <= MAX_BROWSER_SIZE,
+    (f) => !isSplitGguf(f.rfilename),
   );
 
   if (!hasUsable) {
@@ -199,41 +213,59 @@ function classifyRepoSupport(
 // ---------------------------------------------------------------------------
 
 /**
+ * Parse the Link header for the "next" URL.
+ * Format: `<https://huggingface.co/api/models?...>; rel="next"`
+ */
+function parseLinkNext(linkHeader: string | null): string | null {
+  if (!linkHeader) return null;
+  const match = linkHeader.match(/<([^>]+)>;\s*rel="next"/);
+  return match ? match[1] : null;
+}
+
+/**
  * Search Hugging Face Hub for models.
+ * Uses cursor-based pagination via the Link header.
  */
 export async function searchHfModels(
   query: HfSearchQuery,
-): Promise<HfSearchResult[]> {
-  const { query: q, engine, sort, limit = DEFAULT_LIMIT } = query;
+): Promise<HfSearchResponse> {
+  const { query: q, engine, sort, sortDir = 'desc', limit = DEFAULT_LIMIT, nextUrl } = query;
 
-  if (!q.trim()) return [];
+  if (!q.trim() && !nextUrl) return { results: [], nextPageUrl: null };
 
-  const params = new URLSearchParams({
-    search: q,
-    sort: sort === 'lastModified' ? 'lastModified' : 'downloads',
-    direction: '-1',
-    limit: String(limit),
-  });
-
-  // Engine-specific filters
-  if (engine === 'wllama') {
-    params.append('filter', 'gguf');
-  } else if (engine === 'transformers.js') {
-    params.append('library', 'transformers.js');
+  let fetchUrl: string;
+  if (nextUrl) {
+    fetchUrl = nextUrl;
+  } else {
+    const params = new URLSearchParams({
+      search: q,
+      sort: sort === 'lastModified' ? 'lastModified' : 'downloads',
+      direction: sortDir === 'asc' ? '1' : '-1',
+      limit: String(limit),
+    });
+    if (engine === 'wllama') {
+      params.append('filter', 'gguf');
+    } else if (engine === 'transformers.js') {
+      params.append('library', 'transformers.js');
+    }
+    fetchUrl = `${HF_API_BASE}?${params.toString()}`;
   }
 
   let data: HfApiModel[];
+  let nextPageUrl: string | null = null;
   try {
-    const response = await fetch(`${HF_API_BASE}?${params.toString()}`);
+    const response = await fetch(fetchUrl);
     if (!response.ok) {
       throw new Error(`HF API: ${response.status}`);
     }
     data = await response.json();
+    nextPageUrl = parseLinkNext(response.headers.get('Link'));
   } catch {
-    return [];
+    return { results: [], nextPageUrl: null };
   }
 
-  return data.map((model): HfSearchResult => {
+  // Filter out non-supported repos entirely (no GGUF, unsupported formats, etc.)
+  const results = data.flatMap((model): HfSearchResult[] => {
     const tags = model.tags ?? [];
     const siblings: HfRepoFile[] | null = model.siblings
       ? model.siblings
@@ -253,11 +285,14 @@ export async function searchHfModels(
 
     const { status, reason } = classifyRepoSupport(siblings, tags, detectedEngine);
 
+    // Drop unsupported and needs-manual-review repos from results
+    if (status !== 'supported') return [];
+
     // Estimate best candidate size (recommended GGUF variant)
     let bestCandidateSize: number | null = null;
-    if (status === 'supported' && siblings && detectedEngine === 'wllama') {
+    if (siblings && detectedEngine === 'wllama') {
       const ggufFiles = siblings
-        .filter((s) => s.rfilename.endsWith('.gguf') && !isSplitGguf(s.rfilename) && s.size <= MAX_BROWSER_SIZE)
+        .filter((s) => s.rfilename.endsWith('.gguf') && !isSplitGguf(s.rfilename))
         .sort((a, b) => {
           const qa = extractRawQuantization(a.rfilename);
           const qb = extractRawQuantization(b.rfilename);
@@ -270,19 +305,21 @@ export async function searchHfModels(
       }
     }
 
-    return {
+    return [{
       repoId: model.id,
       repoUrl: `https://huggingface.co/${model.id}`,
       description: model.description ?? '',
       tags,
       downloads: model.downloads ?? 0,
-      lastModified: model.lastModified ?? '',
+      lastModified: model.lastModified ?? model.createdAt ?? '',
       bestCandidateSize,
       supportStatus: status,
       supportReason: reason,
       engine: detectedEngine,
-    };
+    }];
   });
+
+  return { results, nextPageUrl };
 }
 
 // ---------------------------------------------------------------------------
@@ -298,7 +335,7 @@ export async function resolveGgufFiles(
 ): Promise<GgufRepoResolution | null> {
   let data: HfApiModel;
   try {
-    const response = await fetch(`${HF_API_BASE}/${repoId}`);
+    const response = await fetch(`${HF_API_BASE}/${repoId}?blobs=true`);
     if (!response.ok) return null;
     data = await response.json();
   } catch {
@@ -308,16 +345,16 @@ export async function resolveGgufFiles(
   if (!data.siblings) return null;
 
   const ggufSiblings = data.siblings.filter(
-    (s) => s.rfilename.endsWith('.gguf') && typeof s.size === 'number',
+    (s) => s.rfilename.endsWith('.gguf')
+      // Exclude vision projector files (not runnable models)
+      && !/mmproj/i.test(s.rfilename),
   );
 
   const variants: GgufVariant[] = [];
 
   for (const sibling of ggufSiblings) {
-    const { rfilename, size } = sibling;
-
-    // Exclude: size 0 or unknown
-    if (!size || size <= 0) continue;
+    const rfilename = sibling.rfilename;
+    const size = typeof sibling.size === 'number' ? sibling.size : 0;
 
     // Exclude: filename unparseable (empty or just extension)
     if (!rfilename || rfilename === '.gguf') continue;
@@ -334,17 +371,21 @@ export async function resolveGgufFiles(
     if (isSplitGguf(rfilename)) {
       supportStatus = 'unsupported';
       supportReason = 'Split GGUF not supported';
-    } else if (size > MAX_BROWSER_SIZE) {
-      supportStatus = 'unsupported';
-      supportReason = 'Too large for browser (> 4 GB)';
-    } else if (size > HEAVY_THRESHOLD) {
+    } else if (size > 0 && size > SIZE_EXTREME) {
       supportStatus = 'not-recommended';
-      supportReason = 'Large model, may cause issues in browser';
+      supportReason = 'extreme';
+    } else if (size > 0 && size > SIZE_VERY_HEAVY) {
+      supportStatus = 'not-recommended';
+      supportReason = 'very-heavy';
+    } else if (size > 0 && size > SIZE_HEAVY) {
+      supportStatus = 'not-recommended';
+      supportReason = 'heavy';
     }
 
+    const sizeStr = size > 0 ? formatBytes(size) : '?';
     const label = rawQuant
-      ? `${normalizedQuant.toUpperCase()} — ${formatBytes(size)}`
-      : `${rfilename} — ${formatBytes(size)}`;
+      ? `${normalizedQuant.toUpperCase()} — ${sizeStr}`
+      : `${rfilename} — ${sizeStr}`;
 
     variants.push({
       fileName: rfilename,
@@ -359,20 +400,24 @@ export async function resolveGgufFiles(
   }
 
   if (variants.length === 0) {
-    return { variants: [], recommendedFile: null };
+    return { variants: [], recommendedFile: null, lastModified: data.lastModified };
   }
 
-  // Find best recommendation among supported variants
+  // Find best recommendation: prefer supported, fall back to not-recommended (lighter first)
   const supported = variants.filter((v) => v.supportStatus === 'supported');
+  const candidates = supported.length > 0
+    ? supported
+    : variants.filter((v) => v.supportStatus === 'not-recommended');
 
-  if (supported.length === 1) {
-    supported[0].recommended = true;
-  } else if (supported.length > 1) {
-    // Sort by quantization priority
-    const sorted = [...supported].sort((a, b) => {
+  if (candidates.length === 1) {
+    candidates[0].recommended = true;
+  } else if (candidates.length > 1) {
+    // Sort by quantization priority (lighter = better), then by size ascending
+    const sorted = [...candidates].sort((a, b) => {
       const pa = QUANT_PRIORITY[a.normalizedQuantization] ?? 99;
       const pb = QUANT_PRIORITY[b.normalizedQuantization] ?? 99;
-      return pa - pb;
+      if (pa !== pb) return pa - pb;
+      return a.size - b.size; // prefer smaller
     });
     const best = variants.find((v) => v.fileName === sorted[0].fileName);
     if (best) best.recommended = true;
@@ -395,7 +440,7 @@ export async function resolveGgufFiles(
     return pa - pb;
   });
 
-  return { variants, recommendedFile };
+  return { variants, recommendedFile, lastModified: data.lastModified };
 }
 
 // ---------------------------------------------------------------------------
@@ -413,7 +458,8 @@ export function resolveSearchCandidate(
   variant: GgufVariant,
 ): ResolvedSearchCandidate | null {
   // Defensive checks
-  if (variant.supportStatus !== 'supported') return null;
+  // Only block split GGUF (structurally incompatible); size warnings are advisory
+  if (variant.supportReason === 'Split GGUF not supported') return null;
   if (!variant.fileName.endsWith('.gguf')) return null;
   if (result.engine !== 'wllama' && !result.tags.includes('gguf')) return null;
 
@@ -431,6 +477,14 @@ export function resolveSearchCandidate(
     : variant.fileName.replace(/\.gguf$/i, '');
   const label = `${repoName ?? result.repoId} (${quantLabel})`;
 
+  const displayMeta: LocalModelDisplayMeta = {
+    supportsTextInference: true,
+    quantization: variant.rawQuantization
+      ? variant.normalizedQuantization.toUpperCase()
+      : undefined,
+    sourceLabel: 'search',
+  };
+
   return {
     repoId: result.repoId,
     engine: 'wllama',
@@ -440,6 +494,7 @@ export function resolveSearchCandidate(
     estimatedSize: variant.size,
     tasks,
     selectedFile: variant.fileName,
+    displayMeta,
   };
 }
 

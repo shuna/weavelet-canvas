@@ -36,6 +36,7 @@ const isSameConfig = (left: typeof _defaultChatConfig, right: typeof _defaultCha
   left.frequency_penalty === right.frequency_penalty &&
   (left.stream !== false) === (right.stream !== false) &&
   left.providerId === right.providerId &&
+  (left.modelSource ?? undefined) === (right.modelSource ?? undefined) &&
   (left.systemPrompt ?? '') === (right.systemPrompt ?? '');
 
 const ChatConfigMenu = () => {
@@ -74,6 +75,7 @@ const ChatConfigPopup = ({
   );
   const [_model, _setModel] = useState<ModelOptions>(config.model);
   const [_providerId, _setProviderId] = useState<ProviderId | undefined>(config.providerId);
+  const [_modelSource, _setModelSource] = useState<'remote' | 'local' | undefined>(config.modelSource);
   const [_maxToken, _setMaxToken] = useState<number>(config.max_tokens);
   const [_temperature, _setTemperature] = useState<number>(config.temperature);
   const [_topP, _setTopP] = useState<number>(config.top_p);
@@ -89,7 +91,7 @@ const ChatConfigPopup = ({
   );
 
   const { t } = useTranslation('model');
-  const isStreamSupported = isModelStreamSupported(_model, _providerId);
+  const isStreamSupported = isModelStreamSupported(_model, _providerId, _modelSource);
 
   React.useEffect(() => {
     if (!isStreamSupported && _stream) {
@@ -98,7 +100,7 @@ const ChatConfigPopup = ({
   }, [isStreamSupported, _stream]);
 
   const handleSave = () => {
-    const modelContextLength = getModelConfigContextInfo(_model, _providerId).contextLength;
+    const modelContextLength = getModelConfigContextInfo(_model, _providerId, _modelSource).contextLength;
     const nextConfig = normalizeConfigStream({
       model: _model,
       max_tokens: clampCompletionTokens(_maxToken, modelContextLength),
@@ -108,6 +110,7 @@ const ChatConfigPopup = ({
       frequency_penalty: _frequencyPenalty,
       stream: _stream,
       providerId: _providerId,
+      modelSource: _modelSource,
     });
 
     if (!isSameConfig(config, nextConfig)) {
@@ -125,6 +128,7 @@ const ChatConfigPopup = ({
   const handleReset = () => {
     _setModel(_defaultChatConfig.model);
     _setProviderId(_defaultChatConfig.providerId);
+    _setModelSource(undefined);
     _setMaxToken(_defaultChatConfig.max_tokens);
     _setTemperature(_defaultChatConfig.temperature);
     _setTopP(_defaultChatConfig.top_p);
@@ -151,9 +155,11 @@ const ChatConfigPopup = ({
           _model={_model}
           _setModel={_setModel}
           _providerId={_providerId}
-          _onModelChange={(modelId, providerId) => {
+          _modelSource={_modelSource}
+          _onModelChange={(modelId, providerId, modelSource) => {
             _setModel(modelId);
             _setProviderId(providerId);
+            _setModelSource(modelSource);
           }}
           _label={t('model')}
         />
@@ -260,6 +266,7 @@ const ChatConfigInline = ({ onSettingsChanged }: { onSettingsChanged?: () => voi
   );
   const [_model, _setModel] = useState<ModelOptions>(config.model);
   const [_providerId, _setProviderId] = useState<ProviderId | undefined>(config.providerId);
+  const [_modelSource, _setModelSource] = useState<'remote' | 'local' | undefined>(config.modelSource);
   const [_maxToken, _setMaxToken] = useState<number>(config.max_tokens);
   const [_temperature, _setTemperature] = useState<number>(config.temperature);
   const [_topP, _setTopP] = useState<number>(config.top_p);
@@ -275,7 +282,7 @@ const ChatConfigInline = ({ onSettingsChanged }: { onSettingsChanged?: () => voi
   );
 
   const { t } = useTranslation('model');
-  const isStreamSupported = isModelStreamSupported(_model, _providerId);
+  const isStreamSupported = isModelStreamSupported(_model, _providerId, _modelSource);
 
   React.useEffect(() => {
     if (!isStreamSupported && _stream) {
@@ -285,11 +292,11 @@ const ChatConfigInline = ({ onSettingsChanged }: { onSettingsChanged?: () => voi
 
   // Keep refs in sync for unmount save
   const stateRef = useRef({
-    _model, _providerId, _maxToken, _temperature, _topP,
+    _model, _providerId, _modelSource, _maxToken, _temperature, _topP,
     _presencePenalty, _frequencyPenalty, _stream, _systemMessage, _imageDetail,
   });
   stateRef.current = {
-    _model, _providerId, _maxToken, _temperature, _topP,
+    _model, _providerId, _modelSource, _maxToken, _temperature, _topP,
     _presencePenalty, _frequencyPenalty, _stream, _systemMessage, _imageDetail,
   };
   const onSettingsChangedRef = useRef(onSettingsChanged);
@@ -300,7 +307,7 @@ const ChatConfigInline = ({ onSettingsChanged }: { onSettingsChanged?: () => voi
     return () => {
       const s = stateRef.current;
       const currentConfig = useStore.getState().defaultChatConfig;
-      const modelContextLength = getModelConfigContextInfo(s._model, s._providerId).contextLength;
+      const modelContextLength = getModelConfigContextInfo(s._model, s._providerId, s._modelSource).contextLength;
       const nextConfig = normalizeConfigStream({
         model: s._model,
         max_tokens: clampCompletionTokens(s._maxToken, modelContextLength),
@@ -310,6 +317,7 @@ const ChatConfigInline = ({ onSettingsChanged }: { onSettingsChanged?: () => voi
         frequency_penalty: s._frequencyPenalty,
         stream: s._stream,
         providerId: s._providerId,
+        modelSource: s._modelSource,
       });
 
       let changed = false;
@@ -334,6 +342,7 @@ const ChatConfigInline = ({ onSettingsChanged }: { onSettingsChanged?: () => voi
   const handleReset = () => {
     _setModel(_defaultChatConfig.model);
     _setProviderId(_defaultChatConfig.providerId);
+    _setModelSource(undefined);
     _setMaxToken(_defaultChatConfig.max_tokens);
     _setTemperature(_defaultChatConfig.temperature);
     _setTopP(_defaultChatConfig.top_p);
@@ -354,9 +363,11 @@ const ChatConfigInline = ({ onSettingsChanged }: { onSettingsChanged?: () => voi
         _model={_model}
         _setModel={_setModel}
         _providerId={_providerId}
-        _onModelChange={(modelId, providerId) => {
+        _modelSource={_modelSource}
+        _onModelChange={(modelId, providerId, modelSource) => {
           _setModel(modelId);
           _setProviderId(providerId);
+          _setModelSource(modelSource);
         }}
         _label={t('model')}
       />

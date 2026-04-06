@@ -10,6 +10,17 @@
  * Multi-thread support is added in Phase 8 after COOP/COEP headers are configured.
  */
 
+// ---------------------------------------------------------------------------
+// Worker environment shim
+// ---------------------------------------------------------------------------
+// @wllama/wllama internally calls absoluteUrl() which uses `document.baseURI`.
+// Workers have no `document`, so we provide a minimal shim.
+if (typeof document === 'undefined') {
+  (globalThis as unknown as Record<string, unknown>).document = {
+    baseURI: self.location.href,
+  };
+}
+
 import { Wllama } from '@wllama/wllama';
 
 // ---------------------------------------------------------------------------
