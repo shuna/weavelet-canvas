@@ -238,45 +238,78 @@ export const ModelSelector = ({
   _model,
   _setModel,
   _providerId,
+  _modelSource,
   _onModelChange,
   _label,
 }: {
   _model: ModelOptions;
   _setModel: React.Dispatch<React.SetStateAction<ModelOptions>>;
   _providerId?: ProviderId;
-  _onModelChange?: (modelId: ModelOptions, providerId: ProviderId | undefined) => void;
+  _modelSource?: 'remote' | 'local';
+  _onModelChange?: (modelId: ModelOptions, providerId: ProviderId | undefined, modelSource?: 'remote' | 'local') => void;
   _label: string;
 }) => {
   const { t } = useTranslation(['main', 'model']);
   const favoriteModels = useStore((state) => state.favoriteModels) || [];
   const providers = useStore((state) => state.providers) || {};
+  const localModels = useStore((state) => state.localModels) || [];
+  const favoriteLocalIds = useStore((state) => state.favoriteLocalModelIds) || [];
+  const savedMeta = useStore((state) => state.savedModelMeta) || {};
 
-  // Use composite key "modelId:::providerId" to disambiguate same modelId across providers
-  const modelOptionsFormatted = favoriteModels.map((fav) => ({
+  // Remote model options (composite key: "modelId:::providerId")
+  const remoteOptions = favoriteModels.map((fav) => ({
     value: `${fav.modelId}:::${fav.providerId}`,
     label: `${fav.modelId} (${providers[fav.providerId]?.name || fav.providerId})`,
   }));
 
-  // Find the current composite value using providerId for exact match
-  const currentFav = _providerId
-    ? favoriteModels.find((f) => f.modelId === _model && f.providerId === _providerId)
-    : favoriteModels.find((f) => f.modelId === _model);
-  const currentComposite = currentFav
-    ? `${currentFav.modelId}:::${currentFav.providerId}`
-    : _model;
+  // Local model options (composite key: "local:::modelId")
+  const localOptions = localModels
+    .filter((m) => favoriteLocalIds.includes(m.id) && savedMeta[m.id]?.storageState === 'saved')
+    .map((m) => ({
+      value: `local:::${m.id}`,
+      label: `${m.label} (Local${m.displayMeta?.quantization ? ' · ' + m.displayMeta.quantization : ''})`,
+    }));
+
+  const allOptions = [
+    ...remoteOptions,
+    ...localOptions,
+  ];
+
+  // Find the current composite value
+  let currentComposite: string;
+  if (_modelSource === 'local') {
+    currentComposite = `local:::${_model}`;
+  } else {
+    const currentFav = _providerId
+      ? favoriteModels.find((f) => f.modelId === _model && f.providerId === _providerId)
+      : favoriteModels.find((f) => f.modelId === _model);
+    currentComposite = currentFav
+      ? `${currentFav.modelId}:::${currentFav.providerId}`
+      : _model;
+  }
 
   return (
     <DarkSelectField
       label={_label}
       value={currentComposite}
-      options={modelOptionsFormatted}
+      options={allOptions}
       onChange={(value) => {
         if (!value) return;
-        const [modelId, providerId] = (value as string).split(':::');
-        if (_onModelChange) {
-          _onModelChange(modelId as ModelOptions, providerId as ProviderId);
+        const raw = value as string;
+        if (raw.startsWith('local:::')) {
+          const localModelId = raw.slice('local:::'.length);
+          if (_onModelChange) {
+            _onModelChange(localModelId as ModelOptions, undefined, 'local');
+          } else {
+            _setModel(localModelId as ModelOptions);
+          }
         } else {
-          _setModel(modelId as ModelOptions);
+          const [modelId, providerId] = raw.split(':::');
+          if (_onModelChange) {
+            _onModelChange(modelId as ModelOptions, providerId as ProviderId, undefined);
+          } else {
+            _setModel(modelId as ModelOptions);
+          }
         }
       }}
       placeholder={t('model:provider.noModelSelected', 'No model selected') as string}

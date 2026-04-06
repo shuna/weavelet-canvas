@@ -185,6 +185,8 @@ export interface ConfigInterface {
   verbosity?: Verbosity;
   /** Per-chat system prompt. This is the source of truth; the top system bubble is a synced view. */
   systemPrompt?: string;
+  /** Whether this chat uses a local or remote model. undefined = remote. */
+  modelSource?: 'remote' | 'local';
 }
 
 export interface ChatHistoryInterface {

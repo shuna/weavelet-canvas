@@ -17,6 +17,7 @@ import ProviderModelList from './ProviderModelList';
 import ProviderCustomModelList from './ProviderCustomModelList';
 import ProviderSettingsForm from './ProviderSettingsForm';
 import ProviderSidebar from './ProviderSidebar';
+import LocalModelListSection from './LocalModelListSection';
 
 type ViewMode = 'browse' | 'custom';
 
@@ -239,6 +240,8 @@ const ProviderMenu = ({
                   onToggleFavorite={toggleFavoriteModel}
                 />
               )}
+
+              <LocalModelListSection />
 
               <ProviderSettingsForm
                 selectedProvider={selectedProvider}

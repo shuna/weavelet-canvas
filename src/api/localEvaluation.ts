@@ -40,6 +40,9 @@ export async function runLocalModeration(text: string): Promise<LocalModerationR
     throw new Error('No local moderation model configured');
   }
 
+  // Safety net: ensure the model is loaded before attempting to use it
+  await localModelRuntime.ensureLoaded(modelId);
+
   const engine = localModelRuntime.getTransformersEngine(modelId);
   if (!engine) {
     throw new Error('Local moderation model not loaded');
@@ -112,6 +115,9 @@ export async function runLocalQualityHint(text: string): Promise<LocalQualityHin
   if (!modelId) {
     throw new Error('No local quality/generation model configured');
   }
+
+  // Safety net: ensure the model is loaded before attempting to use it
+  await localModelRuntime.ensureLoaded(modelId);
 
   const engine = localModelRuntime.getWllamaEngine(modelId);
   if (!engine) {

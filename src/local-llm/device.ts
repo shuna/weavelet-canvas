@@ -7,7 +7,7 @@
 
 export type DeviceTier = 'low' | 'standard' | 'high';
 
-export type ModelFitLabel = 'recommended' | 'heavy' | 'not-recommended';
+export type ModelFitLabel = 'lightweight' | 'recommended' | 'heavy' | 'very-heavy' | 'extreme' | 'not-recommended';
 
 /**
  * Estimate the device tier based on available browser APIs.
@@ -53,6 +53,19 @@ export function getModelFit(modelTier: DeviceTier, deviceTier: DeviceTier): Mode
  * - ≥1MB → 2 decimals (e.g. "3.45 MB")
  * - <1MB → KB
  */
+/**
+ * Check if multiple models can be loaded in parallel.
+ * Only allowed on high-tier devices with combined size < 2GB.
+ */
+export function canParallelLoad(
+  modelSizes: number[],
+  deviceTier: DeviceTier,
+): boolean {
+  if (deviceTier !== 'high') return false;
+  const totalMB = modelSizes.reduce((a, b) => a + b, 0) / (1024 * 1024);
+  return totalMB < 2048;
+}
+
 export function formatBytes(bytes: number): string {
   const mb = bytes / (1024 * 1024);
   if (mb >= 100) return `${Math.round(mb)} MB`;

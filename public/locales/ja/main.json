@@ -446,7 +446,7 @@
     "enabled": "ローカルモデルを有効化",
     "enabledDescription": "WebAssemblyを使用してブラウザ内でLLMモデルを直接実行します",
     "selectGgufFile": "GGUFモデルを選択",
-    "selectGgufHint": "コンピュータから.ggufファイルを選択してください",
+    "selectGgufHint": ".ggufファイルを選択してください",
     "modelStatus": {
       "idle": "未ロード",
       "loading": "読み込み中...",
@@ -461,6 +461,8 @@
     "unload": "モデルをアンロード",
     "output": "出力",
     "generating": "生成中...",
+    "downloadedModels": "ダウンロード済モデル",
+    "noDownloadedModels": "ダウンロード済モデルはありません。推奨モデルの一覧またはHugging Faceの検索からダウンロードしてください。",
     "noModelLoaded": "モデルが読み込まれていません。推奨モデルまたはGGUFファイルを選択して開始してください。",
     "loadError": "モデルの読み込みに失敗しました",
     "modelInfo": "モデル情報",
@@ -474,9 +476,20 @@
     "recommendedModels": "推奨モデル",
     "importedFiles": "手動インポート",
     "modelFit": {
+      "lightweight": "軽量",
       "recommended": "推奨",
       "heavy": "やや重い",
-      "notRecommended": "非推奨"
+      "veryHeavy": "重い",
+      "extreme": "非常に重い",
+      "notRecommended": "非対応"
+    },
+    "fitReason": {
+      "lightweight": "非常に小さなモデル（300 MB未満）。どのデバイスでもすぐにダウンロード・読み込みできます。",
+      "recommended": "標準的なサイズのモデル。品質とパフォーマンスのバランスが良く、多くのデバイスに適しています。",
+      "heavy": "大きなモデル（1.5〜4 GB）。数GBのRAMが必要で、低スペックデバイスでは遅くなる可能性があります。",
+      "veryHeavy": "非常に大きなモデル（4〜8 GB）。かなりのRAMが必要で、読み込みに時間がかかる場合があります。",
+      "extreme": "極めて大きなモデル（8 GB超）。デバイスのメモリを使い切るか、ブラウザで読み込めない可能性があります。",
+      "notRecommended": "このモデル形式は非対応です（分割シャードファイルなど）。"
     },
     "download": "ダウンロード",
     "downloading": "ダウンロード中...",
@@ -508,10 +521,10 @@
     "hfSearchButton": "検索",
     "hfSearchNoResults": "結果が見つかりません",
     "hfSearching": "検索中...",
-    "engineFilter": "エンジン",
-    "engineAll": "すべて",
-    "engineWllama": "wllama (GGUF)",
-    "engineTransformersJs": "Transformers.js",
+    "engineFilter": "用途",
+    "engineAll": "すべての用途",
+    "engineWllama": "テキスト生成 (GGUF)",
+    "engineTransformersJs": "分析 (ONNX)",
     "sortBy": "並び替え",
     "sortDownloads": "ダウンロード数",
     "sortLastModified": "更新日",
@@ -538,6 +551,19 @@
     "splitNotSupported": "分割 GGUF は非対応",
     "tooLargeForBrowser": "ブラウザには大きすぎます（4 GB超）",
     "variantHeavy": "大きなモデルのため、ブラウザで問題が起きる可能性があります",
-    "loadingVariants": "バリアント読み込み中..."
+    "hfSearchFilterNote": "非対応フォーマットおよびシャード分割モデルは検索結果から除外されます",
+    "hfSearchFilterDetail": "GGUF 以外のフォーマット（safetensors, PyTorch 等）およびシャード分割モデルは検索結果から除外されます。対応フォーマットは GGUF のみです。",
+    "hfSearchAboutExclusion": "結果の除外について",
+    "loadingVariants": "バリアント読み込み中...",
+    "favorite": "お気に入りに追加",
+    "unfavorite": "お気に入りから削除",
+    "localModelsGroup": "ローカルモデル",
+    "remoteModels": "リモートモデル",
+    "executionMode": "実行モード",
+    "sequential": "逐次実行",
+    "parallelIfPossible": "並列実行（可能な場合）",
+    "autoLoading": "モデルを自動読み込み中...",
+    "localGeneration": "ローカル生成",
+    "free": "無料"
   }
 }

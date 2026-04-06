@@ -78,6 +78,20 @@ export const appendToStreamingBuffer = (nodeId: string, text: string): void => {
   });
 };
 
+/**
+ * Replace the text in the streaming buffer with a full snapshot.
+ * Used by local model generation where the worker sends currentText (full text-so-far)
+ * rather than incremental deltas.
+ */
+export const setStreamingBufferText = (nodeId: string, text: string): void => {
+  const entry = streamingBuffers.get(nodeId);
+  const current = entry?.content ?? [];
+  streamingBuffers.set(nodeId, {
+    content: upsertTextContent(current, () => text),
+    reasoning: entry?.reasoning ?? '',
+  });
+};
+
 export const appendReasoningToStreamingBuffer = (nodeId: string, text: string): void => {
   const entry = streamingBuffers.get(nodeId);
   if (!entry) return;

@@ -60,8 +60,10 @@ function findCachedModel(
 
 export function getModelType(
   modelId: string,
-  providerId?: ProviderId
+  providerId?: ProviderId,
+  modelSource?: 'remote' | 'local'
 ): 'text' | 'image' {
+  if (modelSource === 'local') return 'text';
   const state = useStore.getState();
 
   const custom = findProviderCustomModel(state.providerCustomModels, modelId, providerId);
@@ -78,8 +80,10 @@ export function getModelType(
 
 export function useModelType(
   modelId: string,
-  providerId?: ProviderId
+  providerId?: ProviderId,
+  modelSource?: 'remote' | 'local'
 ): 'text' | 'image' {
+  if (modelSource === 'local') return 'text';
   return useStore((state) => {
     const custom = findProviderCustomModel(state.providerCustomModels, modelId, providerId);
     if (custom) return custom.modelType;
@@ -100,15 +104,19 @@ export function useModelType(
 
 export function getModelMaxToken(
   modelId: string,
-  providerId?: ProviderId
+  providerId?: ProviderId,
+  modelSource?: 'remote' | 'local'
 ): number {
+  if (modelSource === 'local') return 2048;
   return getModelContextInfo(modelId, providerId).contextLength;
 }
 
 export function getModelConfigContextInfo(
   modelId: string,
-  providerId?: ProviderId
+  providerId?: ProviderId,
+  modelSource?: 'remote' | 'local'
 ): { contextLength: number; isFallback: boolean } {
+  if (modelSource === 'local') return { contextLength: 2048, isFallback: false };
   const info = getModelContextInfo(modelId, providerId);
   if (!info.isFallback) return info;
   return { contextLength: UNKNOWN_MODEL_UI_CONTEXT_LENGTH, isFallback: true };
@@ -116,8 +124,10 @@ export function getModelConfigContextInfo(
 
 export function getModelContextInfo(
   modelId: string,
-  providerId?: ProviderId
+  providerId?: ProviderId,
+  modelSource?: 'remote' | 'local'
 ): { contextLength: number; isFallback: boolean } {
+  if (modelSource === 'local') return { contextLength: 2048, isFallback: false };
   const state = useStore.getState();
 
   const custom = findProviderCustomModel(state.providerCustomModels, modelId, providerId);
@@ -134,8 +144,10 @@ export function getModelContextInfo(
 
 export function getModelCost(
   modelId: string,
-  providerId?: ProviderId
+  providerId?: ProviderId,
+  modelSource?: 'remote' | 'local'
 ): ModelCostEntry | undefined {
+  if (modelSource === 'local') return undefined;
   const state = useStore.getState();
 
   const custom = findProviderCustomModel(state.providerCustomModels, modelId, providerId);
@@ -169,8 +181,10 @@ export function getModelCost(
 
 export function getModelSupportsReasoning(
   modelId: string,
-  providerId?: ProviderId
+  providerId?: ProviderId,
+  modelSource?: 'remote' | 'local'
 ): boolean {
+  if (modelSource === 'local') return false;
   const state = useStore.getState();
   const inferred = isReasoningModel(modelId);
 
@@ -188,8 +202,10 @@ export function getModelSupportsReasoning(
 
 export function useModelSupportsReasoning(
   modelId: string,
-  providerId?: ProviderId
+  providerId?: ProviderId,
+  modelSource?: 'remote' | 'local'
 ): boolean {
+  if (modelSource === 'local') return false;
   return useStore((state) => {
     const inferred = isReasoningModel(modelId);
     const custom = findProviderCustomModel(state.providerCustomModels, modelId, providerId);
@@ -207,8 +223,10 @@ export function useModelSupportsReasoning(
 
 export function isModelStreamSupported(
   modelId: string,
-  providerId?: ProviderId
+  providerId?: ProviderId,
+  modelSource?: 'remote' | 'local'
 ): boolean {
+  if (modelSource === 'local') return true;
   const state = useStore.getState();
 
   const custom = findProviderCustomModel(state.providerCustomModels, modelId, providerId);
@@ -225,8 +243,10 @@ export function isModelStreamSupported(
 
 export function getModelSupportsVision(
   modelId: string,
-  providerId?: ProviderId
+  providerId?: ProviderId,
+  modelSource?: 'remote' | 'local'
 ): boolean {
+  if (modelSource === 'local') return false;
   const state = useStore.getState();
 
   const custom = findProviderCustomModel(state.providerCustomModels, modelId, providerId);
@@ -243,8 +263,10 @@ export function getModelSupportsVision(
 
 export function getModelSupportsAudio(
   modelId: string,
-  providerId?: ProviderId
+  providerId?: ProviderId,
+  modelSource?: 'remote' | 'local'
 ): boolean {
+  if (modelSource === 'local') return false;
   const state = useStore.getState();
 
   const custom = findProviderCustomModel(state.providerCustomModels, modelId, providerId);
@@ -268,8 +290,12 @@ export interface ModelCapabilities {
 
 export function getModelCapabilities(
   modelId: string,
-  providerId?: ProviderId
+  providerId?: ProviderId,
+  modelSource?: 'remote' | 'local'
 ): ModelCapabilities {
+  if (modelSource === 'local') {
+    return { reasoning: false, vision: false, audio: false, stream: true };
+  }
   return {
     reasoning: getModelSupportsReasoning(modelId, providerId),
     vision: getModelSupportsVision(modelId, providerId),
@@ -280,8 +306,12 @@ export function getModelCapabilities(
 
 export function useModelCapabilities(
   modelId: string,
-  providerId?: ProviderId
+  providerId?: ProviderId,
+  modelSource?: 'remote' | 'local'
 ): ModelCapabilities {
+  if (modelSource === 'local') {
+    return { reasoning: false, vision: false, audio: false, stream: true };
+  }
   return useStore((state) => {
     const custom = findProviderCustomModel(state.providerCustomModels, modelId, providerId);
     const fav = findFavorite(state.favoriteModels, modelId, providerId);

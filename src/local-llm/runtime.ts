@@ -14,6 +14,8 @@ import type {
   LocalModelStatus,
   LocalModelCapabilities,
   LocalModelEngine,
+  LocalModelManifest,
+  LocalModelTask,
   GenerateOptions,
   ClassificationLabel,
 } from './types';
@@ -177,6 +179,47 @@ export class LocalModelRuntime {
     entry.worker.postMessage({ id: 0, type: 'abort' });
   }
 
+  /**
+   * Ensure a model is loaded and ready. If already loaded, returns immediately.
+   * If currently loading, waits for the load to complete.
+   * Otherwise, looks up the model definition and loads it from OPFS.
+   */
+  async ensureLoaded(modelId: string): Promise<void> {
+    if (this.isLoaded(modelId)) return;
+
+    const status = this.getStatus(modelId);
+    if (status === 'loading') {
+      return this.waitForLoad(modelId);
+    }
+
+    const def = findModelDefinition(modelId);
+    if (!def) throw new Error(`Model ${modelId} not found in store or catalog`);
+    if (def.source === 'ephemeral-file') throw new Error('Cannot auto-load ephemeral model');
+
+    // Import OpfsFileProvider lazily to avoid circular dependency
+    const { OpfsFileProvider } = await import('./storage');
+    const provider = new OpfsFileProvider(modelId, def.manifest);
+    await this.loadModel(def, provider);
+  }
+
+  /**
+   * Wait for a model that is currently loading to become ready.
+   */
+  private waitForLoad(modelId: string): Promise<void> {
+    return new Promise<void>((resolve, reject) => {
+      const unsub = this.subscribe(() => {
+        const s = this.getStatus(modelId);
+        if (s === 'ready' || s === 'busy') {
+          unsub();
+          resolve();
+        } else if (s === 'error' || s === 'idle' || s === 'unloaded') {
+          unsub();
+          reject(new Error(`Model ${modelId} failed to load (status: ${s})`));
+        }
+      });
+    });
+  }
+
   // -------------------------------------------------------------------------
   // Engine-specific proxies
   // -------------------------------------------------------------------------
@@ -334,6 +377,52 @@ export class LocalModelRuntime {
       pending.resolve(data);
     }
   }
+}
+
+// ---------------------------------------------------------------------------
+// Model definition lookup (used by ensureLoaded)
+// ---------------------------------------------------------------------------
+
+/**
+ * Find a model definition by ID.
+ * Checks the Zustand store first, then falls back to the curated catalog.
+ *
+ * Uses lazy import of store to avoid circular dependency.
+ */
+let _storeGetter: (() => { localModels: LocalModelDefinition[] }) | null = null;
+
+/** Called once by the app to wire up the store for findModelDefinition. */
+export function setRuntimeStoreGetter(getter: () => { localModels: LocalModelDefinition[] }): void {
+  _storeGetter = getter;
+}
+
+export function findModelDefinition(modelId: string): LocalModelDefinition | null {
+  if (_storeGetter) {
+    const def = _storeGetter().localModels.find((m) => m.id === modelId);
+    if (def) return def;
+  }
+
+  // Fallback: check curated catalog (import is safe — no circular dep)
+  const { CURATED_MODELS } = require('./catalog') as {
+    CURATED_MODELS: Array<{
+      id: string; engine: LocalModelEngine; tasks: LocalModelTask[];
+      label: string; huggingFaceRepo: string; manifest: LocalModelManifest;
+    }>;
+  };
+  const cat = CURATED_MODELS.find((c) => c.id === modelId);
+  if (cat) {
+    return {
+      id: cat.id,
+      engine: cat.engine,
+      tasks: cat.tasks,
+      label: cat.label,
+      origin: cat.huggingFaceRepo,
+      source: 'opfs',
+      manifest: cat.manifest,
+    };
+  }
+
+  return null;
 }
 
 // ---------------------------------------------------------------------------

@@ -62,6 +62,20 @@ export type LocalModelManifest = SingleFileManifest | MultiFileManifest;
 // Model definition (persisted in store)
 // ---------------------------------------------------------------------------
 
+// ---------------------------------------------------------------------------
+// Display metadata for UI
+// ---------------------------------------------------------------------------
+
+export interface LocalModelDisplayMeta {
+  releaseDate?: string;
+  supportsTextInference: boolean;
+  supportsVision?: boolean;
+  quantization?: string;
+  parameterSizeLabel?: string;
+  sourceLabel?: 'catalog' | 'search' | 'imported';
+  recommended?: boolean;
+}
+
 export interface LocalModelDefinition {
   id: string;
   engine: LocalModelEngine;
@@ -75,6 +89,8 @@ export interface LocalModelDefinition {
   fileSize?: number;
   /** Hint for re-selection (last chosen filename for wllama single-file) */
   lastFileName?: string;
+  /** Display metadata for UI (capabilities, quantization, etc.) */
+  displayMeta?: LocalModelDisplayMeta;
 }
 
 // ---------------------------------------------------------------------------
@@ -137,13 +153,23 @@ export interface ClassificationLabel {
 // ---------------------------------------------------------------------------
 
 export type HfSupportStatus = 'supported' | 'needs-manual-review' | 'unsupported';
+/** lightweight | standard | heavy | very-heavy | extreme */
 export type GgufVariantStatus = 'supported' | 'not-recommended' | 'unsupported';
 
 export interface HfSearchQuery {
   query: string;
   engine: 'all' | 'wllama' | 'transformers.js';
   sort: 'downloads' | 'lastModified';
+  sortDir?: 'asc' | 'desc';
   limit?: number;
+  /** Full URL for cursor-based pagination (from Link header) */
+  nextUrl?: string;
+}
+
+export interface HfSearchResponse {
+  results: HfSearchResult[];
+  /** URL for the next page, null if no more results */
+  nextPageUrl: string | null;
 }
 
 export interface HfRepoFile {
@@ -197,6 +223,8 @@ export interface GgufVariant {
 export interface GgufRepoResolution {
   variants: GgufVariant[];
   recommendedFile: string | null;
+  /** Last modified date from repo detail API */
+  lastModified?: string;
 }
 
 // ---------------------------------------------------------------------------
@@ -212,6 +240,7 @@ export interface ResolvedSearchCandidate {
   estimatedSize: number;
   tasks: LocalModelTask[];
   selectedFile: string;
+  displayMeta: LocalModelDisplayMeta;
 }
 
 // ---------------------------------------------------------------------------

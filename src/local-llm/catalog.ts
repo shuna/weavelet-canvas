@@ -8,7 +8,7 @@
  * and loading pipeline.
  */
 
-import type { LocalModelEngine, LocalModelTask, LocalModelManifest } from './types';
+import type { LocalModelEngine, LocalModelTask, LocalModelManifest, LocalModelDisplayMeta } from './types';
 import type { DeviceTier } from './device';
 
 export interface CatalogModel {
@@ -27,6 +27,8 @@ export interface CatalogModel {
   /** Minimum device tier for comfortable use. */
   recommendedDeviceTier: DeviceTier;
   notes?: string;
+  /** Display metadata for UI */
+  displayMeta?: LocalModelDisplayMeta;
 }
 
 // ---------------------------------------------------------------------------
@@ -50,6 +52,13 @@ export const CURATED_MODELS: CatalogModel[] = [
     expectedDownloadSize: 386_404_992,
     recommendedDeviceTier: 'low',
     notes: 'Smallest recommended model. Good for basic text generation on low-end devices.',
+    displayMeta: {
+      supportsTextInference: true,
+      quantization: 'Q8_0',
+      parameterSizeLabel: '360M',
+      sourceLabel: 'catalog',
+      recommended: true,
+    },
   },
   {
     id: 'qwen3-0.6b-q4km',
@@ -67,6 +76,13 @@ export const CURATED_MODELS: CatalogModel[] = [
     expectedDownloadSize: 484_220_320,
     recommendedDeviceTier: 'standard',
     notes: 'Balanced size and capability. Latest Qwen3 architecture with generation and analysis.',
+    displayMeta: {
+      supportsTextInference: true,
+      quantization: 'Q4_K_M',
+      parameterSizeLabel: '0.6B',
+      sourceLabel: 'catalog',
+      recommended: true,
+    },
   },
   {
     id: 'llm-jp-3-1.8b-instruct-q4km',
@@ -84,6 +100,13 @@ export const CURATED_MODELS: CatalogModel[] = [
     expectedDownloadSize: 1_164_239_104,
     recommendedDeviceTier: 'high',
     notes: 'Japanese-focused model. Good quality for Japanese text generation and analysis.',
+    displayMeta: {
+      supportsTextInference: true,
+      quantization: 'Q4_K_M',
+      parameterSizeLabel: '1.8B',
+      sourceLabel: 'catalog',
+      recommended: true,
+    },
   },
 ];
 

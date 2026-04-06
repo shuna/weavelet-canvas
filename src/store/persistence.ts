@@ -73,6 +73,8 @@ export type PersistedStoreState = Omit<
   | 'evaluationResults'
   | 'localModelEnabled'
   | 'localModels'
+  | 'favoriteLocalModelIds'
+  | 'localModelExecutionMode'
   | 'activeLocalModels'
   | 'savedModelMeta'
   >,
@@ -115,6 +117,8 @@ const FULL_PERSIST_KEYS: (keyof PersistedStoreState)[] = [
   'evaluationResults',
   'localModelEnabled',
   'localModels',
+  'favoriteLocalModelIds',
+  'localModelExecutionMode',
   'activeLocalModels',
   'savedModelMeta',
 ];
@@ -143,6 +147,8 @@ const LOCAL_STORAGE_PERSIST_KEYS: (keyof LocalStoragePersistedState)[] = [
   'evaluationResults',
   'localModelEnabled',
   'localModels',
+  'favoriteLocalModelIds',
+  'localModelExecutionMode',
   'activeLocalModels',
   'savedModelMeta',
 ];
@@ -311,6 +317,8 @@ function buildPartializedState(state: StoreState): PersistedStoreState {
     evaluationResults: state.evaluationResults,
     localModelEnabled: state.localModelEnabled,
     localModels: state.localModels,
+    favoriteLocalModelIds: state.favoriteLocalModelIds,
+    localModelExecutionMode: state.localModelExecutionMode,
     activeLocalModels: state.activeLocalModels,
     savedModelMeta: state.savedModelMeta,
   };
@@ -369,6 +377,8 @@ function buildLocalStoragePartializedState(
     evaluationResults: state.evaluationResults,
     localModelEnabled: state.localModelEnabled,
     localModels: state.localModels,
+    favoriteLocalModelIds: state.favoriteLocalModelIds,
+    localModelExecutionMode: state.localModelExecutionMode,
     activeLocalModels: state.activeLocalModels,
     savedModelMeta: state.savedModelMeta,
   };

@@ -186,9 +186,9 @@ const ChatViewTabs = ({
               >
                 <span className='truncate'>{t('model')}: {getModelDisplayName(chat.config.model)}</span>
                 <CapabilityIconsInline
-                  reasoning={getModelCapabilities(chat.config.model, chat.config.providerId).reasoning}
-                  vision={getModelCapabilities(chat.config.model, chat.config.providerId).vision}
-                  audio={getModelCapabilities(chat.config.model, chat.config.providerId).audio}
+                  reasoning={getModelCapabilities(chat.config.model, chat.config.providerId, chat.config.modelSource).reasoning}
+                  vision={getModelCapabilities(chat.config.model, chat.config.providerId, chat.config.modelSource).vision}
+                  audio={getModelCapabilities(chat.config.model, chat.config.providerId, chat.config.modelSource).audio}
                 />
                 <svg className='w-3 h-3 ml-1' fill='none' stroke='currentColor' viewBox='0 0 24 24'>
                   <path strokeLinecap='round' strokeLinejoin='round' strokeWidth={2} d='M19 9l-7 7-7-7' />

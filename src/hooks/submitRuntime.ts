@@ -27,6 +27,7 @@ import {
   isBufferingNode,
   isStreamingContentHash,
   notifyStreamingUpdate,
+  setStreamingBufferText,
 } from '@utils/streamingBuffer';
 import type { EventSourceDataInterface, NonStreamingResponse } from '@type/api';
 import { ThinkTagParser } from '@utils/thinkTagParser';
@@ -563,6 +564,123 @@ export const getGenerationIdFromSubmitError = (
   error: unknown
 ): string | undefined =>
   error instanceof SubmitStreamError ? error.generationId : undefined;
+
+// ---------------------------------------------------------------------------
+// Local model submit (wllama generation)
+// ---------------------------------------------------------------------------
+
+export interface ExecuteLocalSubmitParams {
+  sessionId: string;
+  chatId: string;
+  chatIndex: number;
+  messageIndex: number;
+  targetNodeId: string;
+  messages: MessageInterface[];
+  config: ConfigInterface;
+  mode: 'append' | 'midchat';
+  abortController: AbortController;
+  t: (key: string) => string;
+}
+
+export const executeLocalSubmit = async ({
+  sessionId,
+  chatId,
+  chatIndex,
+  messageIndex,
+  targetNodeId,
+  messages,
+  config,
+  mode,
+  abortController,
+}: ExecuteLocalSubmitParams): Promise<ExecuteSubmitStreamResult> => {
+  // Lazy imports to keep submitRuntime lightweight
+  const { localModelRuntime } = await import('@src/local-llm/runtime');
+  const { buildLocalPromptFromContext } = await import('./submitHelpers');
+
+  await localModelRuntime.ensureLoaded(config.model);
+  const engine = localModelRuntime.getWllamaEngine(config.model);
+  if (!engine) throw new Error('Local model engine not available');
+
+  const prompt = buildLocalPromptFromContext(
+    messages, mode, messageIndex, config.model,
+    chatIndex, config.systemPrompt,
+  );
+
+  // Initialize streaming buffer for the target node (same pattern as handleStreamEvent)
+  sessionChunkTargets.set(sessionId, { chatId, targetNodeId });
+
+  useStore.setState((state) => {
+    const chats = state.chats;
+    if (!chats) return state;
+    const chat = chats[chatIndex];
+    if (!chat?.branchTree) return state;
+
+    const updatedChats = [...chats];
+    const updatedChat = { ...chat, branchTree: { ...chat.branchTree, nodes: { ...chat.branchTree.nodes } } };
+    updatedChats[chatIndex] = updatedChat;
+    const tree = updatedChat.branchTree;
+    const node = tree.nodes[targetNodeId];
+    if (!node) return state;
+
+    let updatedContentStore = state.contentStore;
+    if (!isStreamingContentHash(node.contentHash)) {
+      updatedContentStore = { ...state.contentStore };
+      initializeStreamingBuffer(
+        targetNodeId,
+        resolveContent(updatedContentStore, node.contentHash),
+        chatId,
+      );
+      releaseContent(updatedContentStore, node.contentHash);
+      tree.nodes[targetNodeId] = {
+        ...node,
+        contentHash: createStreamingContentHash(targetNodeId),
+      };
+    } else if (!isBufferingNode(targetNodeId)) {
+      initializeStreamingBuffer(targetNodeId, [], chatId);
+    }
+
+    return {
+      ...state,
+      chats: updatedChats,
+      ...(updatedContentStore !== state.contentStore ? { contentStore: updatedContentStore } : {}),
+    };
+  });
+
+  let fullText = '';
+  try {
+    await engine.generate(
+      prompt,
+      {
+        maxTokens: config.max_tokens,
+        temperature: config.temperature,
+      },
+      (text) => {
+        if (abortController.signal.aborted) return;
+        fullText = text;
+        // wllama sends currentText (full text-so-far), not deltas —
+        // use setStreamingBufferText to replace rather than append
+        setStreamingBufferText(targetNodeId, text);
+        notifyStreamingUpdate(targetNodeId);
+      },
+    );
+  } catch (e) {
+    if ((e as Error).name === 'AbortError' || abortController.signal.aborted) {
+      // User cancelled — finalize what we have
+    } else {
+      throw e;
+    }
+  }
+
+  // Do NOT call finalizeStreamingBuffer here — the session cleanup
+  // (clearSubmitSessionRuntime → finalizeStreamingNode) handles
+  // committing the buffer to the content store and chat tree.
+
+  return {};
+};
+
+// ---------------------------------------------------------------------------
+// Remote submit stream
+// ---------------------------------------------------------------------------
 
 export const executeSubmitStream = async ({
   sessionId,

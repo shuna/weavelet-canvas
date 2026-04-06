@@ -403,3 +403,46 @@ export const maybeGenerateAutoTitle = async ({
     }, titleTokenProviderId);
   }
 };
+
+// ---------------------------------------------------------------------------
+// Local model helpers
+// ---------------------------------------------------------------------------
+
+/**
+ * Check if a chat config is targeting a local model.
+ */
+export function isLocalModelConfig(config: ConfigInterface): boolean {
+  return config.modelSource === 'local';
+}
+
+/**
+ * Build a text prompt from submit context for local wllama generation.
+ * Reuses getSubmitContextMessages() for omission, sanitization, and system prompt,
+ * then converts the structured messages to a generic text prompt.
+ *
+ * Note: This uses a generic System:/User:/Assistant: format, not model-specific
+ * prompt templates (ChatML, Alpaca, etc.). Quality may vary by model architecture.
+ */
+export function buildLocalPromptFromContext(
+  messages: MessageInterface[],
+  mode: SubmitMode,
+  messageIndex: number,
+  modelId?: string,
+  chatIndex?: number,
+  systemPrompt?: string,
+): string {
+  const contextMessages = getSubmitContextMessages(
+    messages, mode, messageIndex, modelId, chatIndex, systemPrompt,
+  );
+  return contextMessages
+    .map((m) => {
+      const text = m.content
+        .filter((c): c is TextContentInterface => c.type === 'text')
+        .map((c) => c.text)
+        .join('\n');
+      if (m.role === 'system') return `System: ${text}`;
+      if (m.role === 'user') return `User: ${text}`;
+      return `Assistant: ${text}`;
+    })
+    .join('\n\n') + '\n\nAssistant:';
+}

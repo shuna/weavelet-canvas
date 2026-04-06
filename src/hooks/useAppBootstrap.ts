@@ -18,6 +18,7 @@ import {
 } from '@store/storage/IndexedDbStorage';
 import { notifyStorageError } from '@store/storage/storageErrors';
 import { registerSnapshotFlushCallback } from '@utils/streamingBuffer';
+import { setRuntimeStoreGetter } from '@src/local-llm/runtime';
 
 function setBootPhase(phase: string) {
   const el = document.getElementById('boot-status');
@@ -108,6 +109,9 @@ const useAppBootstrap = () => {
     const bootstrap = async () => {
       setBootPhase('rehydrating store');
       await useStore.persist.rehydrate();
+
+      // Wire up local model runtime store access
+      setRuntimeStoreGetter(() => useStore.getState());
 
       const persistedFolderCount = Object.keys(useStore.getState().folders).length;
 

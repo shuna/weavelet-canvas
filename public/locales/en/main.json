@@ -451,7 +451,7 @@
     "enabled": "Enable local models",
     "enabledDescription": "Run LLM models directly in your browser using WebAssembly",
     "selectGgufFile": "Select GGUF Model",
-    "selectGgufHint": "Choose a .gguf file from your computer",
+    "selectGgufHint": "Select a .gguf file",
     "modelStatus": {
       "idle": "Not loaded",
       "loading": "Loading...",
@@ -466,6 +466,8 @@
     "unload": "Unload Model",
     "output": "Output",
     "generating": "Generating...",
+    "downloadedModels": "Downloaded Models",
+    "noDownloadedModels": "No models downloaded yet. Download a recommended model or search Hugging Face.",
     "noModelLoaded": "No model loaded. Select a recommended model or a GGUF file to get started.",
     "loadError": "Failed to load model",
     "modelInfo": "Model Info",
@@ -479,9 +481,20 @@
     "recommendedModels": "Recommended Models",
     "importedFiles": "Imported Local Files",
     "modelFit": {
+      "lightweight": "Lightweight",
       "recommended": "Recommended",
       "heavy": "Heavy",
-      "notRecommended": "Not recommended"
+      "veryHeavy": "Very Heavy",
+      "extreme": "Extreme",
+      "notRecommended": "Not supported"
+    },
+    "fitReason": {
+      "lightweight": "Very small model (< 300 MB). Fast to download and load, suitable for any device.",
+      "recommended": "Standard size model. Good balance of quality and performance for most devices.",
+      "heavy": "Large model (1.5–4 GB). Requires several GB of RAM, may be slow on low-end devices.",
+      "veryHeavy": "Very large model (4–8 GB). Requires significant RAM and may take a long time to load.",
+      "extreme": "Extremely large model (> 8 GB). May exhaust device memory or fail to load in the browser.",
+      "notRecommended": "This model format is not supported (e.g. split shard files)."
     },
     "download": "Download",
     "downloading": "Downloading...",
@@ -513,10 +526,10 @@
     "hfSearchButton": "Search",
     "hfSearchNoResults": "No results found",
     "hfSearching": "Searching...",
-    "engineFilter": "Engine",
-    "engineAll": "All",
-    "engineWllama": "wllama (GGUF)",
-    "engineTransformersJs": "Transformers.js",
+    "engineFilter": "Format",
+    "engineAll": "All Formats",
+    "engineWllama": "Text Generation (GGUF)",
+    "engineTransformersJs": "Analysis (ONNX)",
     "sortBy": "Sort",
     "sortDownloads": "Downloads",
     "sortLastModified": "Last Modified",
@@ -543,6 +556,19 @@
     "splitNotSupported": "Split GGUF not supported",
     "tooLargeForBrowser": "Too large for browser (> 4 GB)",
     "variantHeavy": "Large model, may cause issues in browser",
-    "loadingVariants": "Loading variants..."
+    "hfSearchFilterNote": "Unsupported formats and shard-split models are excluded from results",
+    "hfSearchFilterDetail": "Non-GGUF formats (safetensors, PyTorch, etc.) and shard-split GGUF models are excluded from results. Only single-file GGUF models are supported.",
+    "hfSearchAboutExclusion": "About exclusions",
+    "loadingVariants": "Loading variants...",
+    "favorite": "Add to favorites",
+    "unfavorite": "Remove from favorites",
+    "localModelsGroup": "Local Models",
+    "remoteModels": "Remote Models",
+    "executionMode": "Execution mode",
+    "sequential": "Sequential",
+    "parallelIfPossible": "Parallel (if possible)",
+    "autoLoading": "Auto-loading model...",
+    "localGeneration": "Local generation",
+    "free": "Free"
   }
 }
