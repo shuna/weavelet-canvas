@@ -175,10 +175,22 @@ export async function deleteModel(modelId: string): Promise<void> {
 
 // ---------------------------------------------------------------------------
 // Temp file operations (for streaming downloads)
+//
+// Strategy: data is written directly to the final file name.
+// A zero-byte .part marker file signals "download in progress".
+// This avoids FileSystemFileHandle.move() (unsupported on Safari/iOS)
+// and eliminates both the memory spike and storage duplication that
+// a read-all → copy → delete commit path would cause.
+//
+// Backward compat: old .part files that contain actual data (from
+// pre-marker versions) are detected by checking .part size > 0 and
+// handled with a streaming copy.
 // ---------------------------------------------------------------------------
 
 /**
- * Write a chunk to a .part temp file.
+ * Write a chunk to the target file (final name) during download.
+ * Maintains a zero-byte .part marker to signal "in progress".
+ *
  * @param append false = create/truncate, true = append
  */
 export async function writeTempChunk(
@@ -188,8 +200,9 @@ export async function writeTempChunk(
   append: boolean,
 ): Promise<void> {
   const dir = await getModelDir(modelId);
-  const partName = relativePath + PART_SUFFIX;
-  const fileHandle = await dir.getFileHandle(partName, { create: true }) as unknown as WritableFileHandle;
+
+  // Write data directly to the final file name
+  const fileHandle = await dir.getFileHandle(relativePath, { create: true }) as unknown as WritableFileHandle;
   const writable = await fileHandle.createWritable({ keepExistingData: append });
   if (append) {
     const file = await fileHandle.getFile();
@@ -197,12 +210,18 @@ export async function writeTempChunk(
   }
   await writable.write(chunk);
   await writable.close();
+
+  // Ensure .part marker exists (zero-byte sentinel = "download in progress")
+  await dir.getFileHandle(relativePath + PART_SUFFIX, { create: true });
 }
 
 /**
- * Commit a .part temp file to its final name.
- * Reads .part fully, writes final file, removes .part.
- * Integrity over performance.
+ * Commit a downloaded file: remove the .part marker.
+ *
+ * In the current design data is already at the final name, so this
+ * just deletes the marker.  For backward compat, if the .part file
+ * contains actual data (legacy format), it is streamed to the final
+ * name in constant memory before deletion.
  */
 export async function commitTempFile(
   modelId: string,
@@ -211,23 +230,40 @@ export async function commitTempFile(
   const dir = await getModelDir(modelId);
   const partName = relativePath + PART_SUFFIX;
 
-  // Read the .part file
-  const partHandle = await dir.getFileHandle(partName);
+  let partHandle: FileSystemFileHandle;
+  try {
+    partHandle = await dir.getFileHandle(partName);
+  } catch {
+    // No marker — nothing to commit
+    return;
+  }
+
   const partFile = await partHandle.getFile();
-  const data = await partFile.arrayBuffer();
 
-  // Write final file
-  const finalHandle = await dir.getFileHandle(relativePath, { create: true }) as unknown as WritableFileHandle;
-  const writable = await finalHandle.createWritable();
-  await writable.write(data);
-  await writable.close();
-
-  // Remove .part
-  await dir.removeEntry(partName);
+  if (partFile.size > 0) {
+    // Legacy .part that holds actual data — stream-copy to final name.
+    // Uses chunked reads to keep memory constant regardless of file size.
+    const finalHandle = await dir.getFileHandle(relativePath, { create: true }) as unknown as WritableFileHandle;
+    const writable = await finalHandle.createWritable();
+    const reader = (partFile.stream() as ReadableStream<Uint8Array>).getReader();
+    try {
+      for (;;) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        await writable.write(value);
+      }
+    } finally {
+      await writable.close();
+    }
+    await dir.removeEntry(partName);
+  } else {
+    // Current format: marker-only — just delete it
+    await dir.removeEntry(partName);
+  }
 }
 
 /**
- * Check if a .part temp file exists.
+ * Check if a .part marker exists (download in progress or legacy .part).
  */
 export async function hasTempFile(
   modelId: string,
@@ -243,8 +279,12 @@ export async function hasTempFile(
 }
 
 /**
- * Get the size of a .part temp file.
- * Returns 0 if no .part exists.
+ * Get the byte count downloaded so far for a file.
+ *
+ * - Legacy .part (size > 0): returns .part size (data lives there).
+ * - Current marker (size 0): returns the final file's size (data
+ *   is written directly to the final name).
+ * - No .part at all: returns 0.
  */
 export async function getTempFileSize(
   modelId: string,
@@ -252,26 +292,41 @@ export async function getTempFileSize(
 ): Promise<number> {
   const dir = await getModelDir(modelId);
   try {
-    const handle = await dir.getFileHandle(relativePath + PART_SUFFIX);
-    const file = await handle.getFile();
-    return file.size;
+    const partHandle = await dir.getFileHandle(relativePath + PART_SUFFIX);
+    const partFile = await partHandle.getFile();
+    if (partFile.size > 0) {
+      // Legacy: data lives in the .part file itself
+      return partFile.size;
+    }
+    // Current: data lives at the final name
+    const finalHandle = await dir.getFileHandle(relativePath);
+    const finalFile = await finalHandle.getFile();
+    return finalFile.size;
   } catch {
     return 0;
   }
 }
 
 /**
- * Remove a .part temp file.
+ * Remove download artifacts for a file (both .part marker and
+ * partially-written final file).
  */
 export async function removeTempFile(
   modelId: string,
   relativePath: string,
 ): Promise<void> {
   const dir = await getModelDir(modelId);
+  // Remove .part marker (or legacy data file)
   try {
     await dir.removeEntry(relativePath + PART_SUFFIX);
   } catch {
     // Already gone
+  }
+  // Remove the partially-written final file
+  try {
+    await dir.removeEntry(relativePath);
+  } catch {
+    // Already gone or never created
   }
 }
 
@@ -327,21 +382,22 @@ export async function verifyStoredModel(
     const exists = await fileExists(dir, entrypoint);
     const hasPart = await hasTempFile(modelId, entrypoint);
 
-    // 1. final missing & no .part → none
+    // 1. nothing at all → none
     if (!exists && !hasPart) return 'none';
-    // 2. final is zero-byte → invalid
+    // 2. .part marker/file present → download was in progress → partial
+    //    (covers both legacy .part-with-data and current marker-only)
+    if (hasPart) return 'partial';
+    // 3. final is zero-byte → invalid
     if (exists) {
       const size = await fileSize(dir, entrypoint);
       if (size === 0) return 'invalid';
-      // 2b. GGUF files must start with correct magic bytes
+      // 3b. GGUF files must start with correct magic bytes
       if (entrypoint.endsWith('.gguf')) {
         const file = await readFile(modelId, entrypoint);
         if (!(await hasGgufMagic(file))) return 'invalid';
       }
     }
-    // 3. .part exists but no final → partial
-    if (!exists && hasPart) return 'partial';
-    // 4. final present & non-zero → saved
+    // 4. final present, non-zero, no marker → saved
     return 'saved';
   }
 
@@ -351,21 +407,23 @@ export async function verifyStoredModel(
   let hasAnyPart = false;
 
   for (const f of requiredFiles) {
+    const partExists = await hasTempFile(modelId, f);
+    if (partExists) hasAnyPart = true;
+
     const exists = await fileExists(dir, f);
     if (exists) {
       const size = await fileSize(dir, f);
-      // 2. any requiredFile zero-byte → invalid
+      // any requiredFile zero-byte → invalid
       if (size === 0) return 'invalid';
       existingCount++;
-    } else {
-      const partExists = await hasTempFile(modelId, f);
-      if (partExists) hasAnyPart = true;
     }
   }
 
   // 1. nothing present → none
   if (existingCount === 0 && !hasAnyPart) return 'none';
-  // 3. all present & non-zero → saved
+  // 2. any .part marker → download in progress → partial
+  if (hasAnyPart) return 'partial';
+  // 3. all present & non-zero, no markers → saved
   if (existingCount === requiredFiles.length) return 'saved';
   // 4. otherwise → partial
   return 'partial';
@@ -431,6 +489,118 @@ export async function rehydrateSavedModels(
   }
 
   return result;
+}
+
+// ---------------------------------------------------------------------------
+// OPFS management — browsing, bulk clear
+// ---------------------------------------------------------------------------
+
+/** A single file entry inside OPFS (for the file browser). */
+export interface OpfsFileEntry {
+  /** File name within the model directory */
+  name: string;
+  /** Size in bytes */
+  size: number;
+  /** Whether this is a .part temp file */
+  isTemp: boolean;
+}
+
+/** A model directory entry inside OPFS (for the file browser). */
+export interface OpfsModelEntry {
+  /** Model ID (directory name) */
+  modelId: string;
+  /** Files inside this model directory */
+  files: OpfsFileEntry[];
+  /** Total size in bytes (all files including temp) */
+  totalSize: number;
+}
+
+/**
+ * Walk the entire OPFS models/ directory and return a detailed listing
+ * of every model directory and its files. Used by the file browser UI.
+ */
+export async function listAllOpfsEntries(): Promise<OpfsModelEntry[]> {
+  let modelsRoot: FileSystemDirectoryHandle;
+  try {
+    modelsRoot = await getModelsRoot();
+  } catch {
+    return [];
+  }
+
+  const entries: OpfsModelEntry[] = [];
+
+  for await (const [dirName, dirHandle] of (modelsRoot as any).entries()) {
+    if (dirHandle.kind !== 'directory') continue;
+
+    const files: OpfsFileEntry[] = [];
+    let totalSize = 0;
+
+    for await (const [fileName, fileHandle] of (dirHandle as any).entries()) {
+      if (fileHandle.kind !== 'file') continue;
+      const file: File = await fileHandle.getFile();
+      const isTemp = fileName.endsWith(PART_SUFFIX);
+      files.push({ name: fileName, size: file.size, isTemp });
+      totalSize += file.size;
+    }
+
+    entries.push({ modelId: dirName, files, totalSize });
+  }
+
+  // Sort by total size descending so largest models appear first
+  entries.sort((a, b) => b.totalSize - a.totalSize);
+  return entries;
+}
+
+/**
+ * Delete all model directories from OPFS.
+ * Returns the list of model IDs that were deleted.
+ */
+export async function clearAllModels(): Promise<string[]> {
+  const modelsRoot = await getModelsRoot();
+  const deleted: string[] = [];
+
+  for await (const [name, handle] of (modelsRoot as any).entries()) {
+    if (handle.kind === 'directory') {
+      await modelsRoot.removeEntry(name, { recursive: true });
+      deleted.push(name);
+    }
+  }
+
+  return deleted;
+}
+
+/**
+ * Delete a single file from a model directory (e.g. orphaned .part file).
+ */
+export async function deleteModelFile(
+  modelId: string,
+  fileName: string,
+): Promise<void> {
+  const dir = await getModelDir(modelId);
+  await dir.removeEntry(fileName);
+}
+
+/**
+ * Get total OPFS storage used by all models.
+ */
+export async function getTotalStorageUsed(): Promise<number> {
+  let modelsRoot: FileSystemDirectoryHandle;
+  try {
+    modelsRoot = await getModelsRoot();
+  } catch {
+    return 0;
+  }
+
+  let total = 0;
+  for await (const [, dirHandle] of (modelsRoot as any).entries()) {
+    if (dirHandle.kind !== 'directory') continue;
+    for await (const [, fileHandle] of (dirHandle as any).entries()) {
+      if (fileHandle.kind !== 'file') continue;
+      const file: File = await fileHandle.getFile();
+      total += file.size;
+    }
+  }
+  return total;
 }
 
 // ---------------------------------------------------------------------------
