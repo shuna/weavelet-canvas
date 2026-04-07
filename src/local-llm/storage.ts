@@ -201,8 +201,10 @@ export async function writeTempChunk(
 
 /**
  * Commit a .part temp file to its final name.
- * Reads .part fully, writes final file, removes .part.
- * Integrity over performance.
+ *
+ * Tries FileSystemFileHandle.move() first (atomic rename, no extra I/O).
+ * Falls back to read-all → write → delete when move() is unavailable
+ * (e.g. older Safari).
  */
 export async function commitTempFile(
   modelId: string,
@@ -211,18 +213,27 @@ export async function commitTempFile(
   const dir = await getModelDir(modelId);
   const partName = relativePath + PART_SUFFIX;
 
-  // Read the .part file
   const partHandle = await dir.getFileHandle(partName);
+
+  // Prefer move() — zero-copy atomic rename, avoids double storage + memory spike
+  if (typeof (partHandle as any).move === 'function') {
+    try {
+      await (partHandle as any).move(dir, relativePath);
+      return;
+    } catch {
+      // move() may throw on some implementations; fall through to legacy path
+    }
+  }
+
+  // Legacy path: read → write → delete (doubles storage temporarily)
   const partFile = await partHandle.getFile();
   const data = await partFile.arrayBuffer();
 
-  // Write final file
   const finalHandle = await dir.getFileHandle(relativePath, { create: true }) as unknown as WritableFileHandle;
   const writable = await finalHandle.createWritable();
   await writable.write(data);
   await writable.close();
 
-  // Remove .part
   await dir.removeEntry(partName);
 }
 
@@ -431,6 +442,118 @@ export async function rehydrateSavedModels(
   }
 
   return result;
+}
+
+// ---------------------------------------------------------------------------
+// OPFS management — browsing, bulk clear
+// ---------------------------------------------------------------------------
+
+/** A single file entry inside OPFS (for the file browser). */
+export interface OpfsFileEntry {
+  /** File name within the model directory */
+  name: string;
+  /** Size in bytes */
+  size: number;
+  /** Whether this is a .part temp file */
+  isTemp: boolean;
+}
+
+/** A model directory entry inside OPFS (for the file browser). */
+export interface OpfsModelEntry {
+  /** Model ID (directory name) */
+  modelId: string;
+  /** Files inside this model directory */
+  files: OpfsFileEntry[];
+  /** Total size in bytes (all files including temp) */
+  totalSize: number;
+}
+
+/**
+ * Walk the entire OPFS models/ directory and return a detailed listing
+ * of every model directory and its files. Used by the file browser UI.
+ */
+export async function listAllOpfsEntries(): Promise<OpfsModelEntry[]> {
+  let modelsRoot: FileSystemDirectoryHandle;
+  try {
+    modelsRoot = await getModelsRoot();
+  } catch {
+    return [];
+  }
+
+  const entries: OpfsModelEntry[] = [];
+
+  for await (const [dirName, dirHandle] of (modelsRoot as any).entries()) {
+    if (dirHandle.kind !== 'directory') continue;
+
+    const files: OpfsFileEntry[] = [];
+    let totalSize = 0;
+
+    for await (const [fileName, fileHandle] of (dirHandle as any).entries()) {
+      if (fileHandle.kind !== 'file') continue;
+      const file: File = await fileHandle.getFile();
+      const isTemp = fileName.endsWith(PART_SUFFIX);
+      files.push({ name: fileName, size: file.size, isTemp });
+      totalSize += file.size;
+    }
+
+    entries.push({ modelId: dirName, files, totalSize });
+  }
+
+  // Sort by total size descending so largest models appear first
+  entries.sort((a, b) => b.totalSize - a.totalSize);
+  return entries;
+}
+
+/**
+ * Delete all model directories from OPFS.
+ * Returns the list of model IDs that were deleted.
+ */
+export async function clearAllModels(): Promise<string[]> {
+  const modelsRoot = await getModelsRoot();
+  const deleted: string[] = [];
+
+  for await (const [name, handle] of (modelsRoot as any).entries()) {
+    if (handle.kind === 'directory') {
+      await modelsRoot.removeEntry(name, { recursive: true });
+      deleted.push(name);
+    }
+  }
+
+  return deleted;
+}
+
+/**
+ * Delete a single file from a model directory (e.g. orphaned .part file).
+ */
+export async function deleteModelFile(
+  modelId: string,
+  fileName: string,
+): Promise<void> {
+  const dir = await getModelDir(modelId);
+  await dir.removeEntry(fileName);
+}
+
+/**
+ * Get total OPFS storage used by all models.
+ */
+export async function getTotalStorageUsed(): Promise<number> {
+  let modelsRoot: FileSystemDirectoryHandle;
+  try {
+    modelsRoot = await getModelsRoot();
+  } catch {
+    return 0;
+  }
+
+  let total = 0;
+  for await (const [, dirHandle] of (modelsRoot as any).entries()) {
+    if (dirHandle.kind !== 'directory') continue;
+    for await (const [, fileHandle] of (dirHandle as any).entries()) {
+      if (fileHandle.kind !== 'file') continue;
+      const file: File = await fileHandle.getFile();
+      total += file.size;
+    }
+  }
+  return total;
 }
 
 // ---------------------------------------------------------------------------

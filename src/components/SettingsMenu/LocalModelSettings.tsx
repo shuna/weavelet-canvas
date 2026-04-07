@@ -35,6 +35,7 @@ import {
   loadSearchSession,
   clearSearchSession,
 } from './localModelSearchSession';
+import OpfsFileBrowser from './OpfsFileBrowser';
 
 // ---------------------------------------------------------------------------
 // Status badge
@@ -2637,6 +2638,19 @@ const LocalModelSettings = () => {
               ))}
             </SettingsGroup>
           )}
+
+          {/* OPFS Storage Management */}
+          <SettingsGroup label={t('localModel.opfsBrowser.title')}>
+            <div className='px-4 py-2 text-xs text-gray-500 dark:text-gray-400'>
+              {t('localModel.opfsBrowser.description')}
+            </div>
+            <OpfsFileBrowser
+              onStorageChanged={() => {
+                // Trigger rehydration refresh after storage changes
+                rehydratedRef.current = false;
+              }}
+            />
+          </SettingsGroup>
 
           {/* 4. Hugging Face Search */}
           <SettingsGroup label=''>

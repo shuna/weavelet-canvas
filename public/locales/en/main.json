@@ -580,6 +580,24 @@
       "evaluation": "Local model is running quality evaluation",
       "moderation": "Local model is running moderation",
       "test": "Local model is running test generation"
+    },
+    "opfsBrowser": {
+      "title": "Storage Management",
+      "description": "Browse and manage model files stored in your browser. Deleting files here frees up device storage.",
+      "totalUsage": "Total usage",
+      "model": "model",
+      "models": "models",
+      "refresh": "Refresh",
+      "clearAll": "Delete All",
+      "clearing": "Deleting...",
+      "empty": "No model files stored in browser storage.",
+      "tempFiles": "{{count}} temp",
+      "tempLabel": "temp",
+      "finalFiles": "file(s)",
+      "noFiles": "Empty directory",
+      "confirmDeleteModel": "Delete this model and all its files from browser storage?",
+      "confirmDeleteFile": "Delete the file {{file}}?",
+      "confirmClearAll": "Delete ALL model files from browser storage? This will free up all storage used by local models. Downloaded models will need to be re-downloaded."
     }
   }
 }
