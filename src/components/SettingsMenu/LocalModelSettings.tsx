@@ -1112,10 +1112,15 @@ const LocalModelSettings = () => {
     return unsubscribe;
   }, []);
 
-  // Rehydrate OPFS state on first mount
+  // Rehydrate OPFS state on first mount and after storage mutations.
+  // rehydrationEpoch is incremented by onStorageChanged to re-trigger.
+  const [rehydrationEpoch, setRehydrationEpoch] = useState(0);
   const rehydratedRef = useRef(false);
   useEffect(() => {
-    if (!enabled || rehydratedRef.current) return;
+    if (!enabled) return;
+    // Skip only on the very first render when already done (prevents double-fire),
+    // but always re-run when epoch changes (storage mutation).
+    if (rehydratedRef.current && rehydrationEpoch === 0) return;
     rehydratedRef.current = true;
 
     // Build rehydration entries from catalog + search-added models
@@ -1150,7 +1155,7 @@ const LocalModelSettings = () => {
     }).catch(() => {
       setRehydrated(true);
     });
-  }, [enabled]);
+  }, [enabled, rehydrationEpoch]);
 
   // ----- Auto-assignment helper (only-if-unset) -----
   const autoAssignIfUnset = useCallback((modelId: string, tasks: LocalModelTask[]) => {
@@ -2672,8 +2677,8 @@ const LocalModelSettings = () => {
             <OpfsFileBrowser
               refreshTrigger={opfsBrowserRefresh}
               onStorageChanged={() => {
-                // Trigger rehydration refresh after storage changes
-                rehydratedRef.current = false;
+                // Trigger rehydration to re-sync metadata from OPFS
+                setRehydrationEpoch((n) => n + 1);
                 bumpOpfsBrowser();
               }}
             />

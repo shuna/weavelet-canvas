@@ -10,6 +10,7 @@ import {
 import type { OpfsModelEntry } from '@src/local-llm/storage';
 import { formatBytes } from '@src/local-llm/device';
 import { localModelRuntime } from '@src/local-llm/runtime';
+import type { LocalModelTask } from '@src/local-llm/types';
 import useStore from '@store/store';
 
 // ---------------------------------------------------------------------------
@@ -78,8 +79,13 @@ const OpfsFileBrowser = ({
         await localModelRuntime.unloadModel(modelId);
       }
       await deleteModel(modelId);
-      // Clean store
+      // Clean store — metadata, definition, and task assignments
       const store = useStore.getState();
+      for (const task of Object.keys(store.activeLocalModels) as LocalModelTask[]) {
+        if (store.activeLocalModels[task] === modelId) {
+          store.setActiveLocalModel(task, null);
+        }
+      }
       store.removeSavedModelMeta(modelId);
       store.removeLocalModel(modelId);
       onStorageChanged?.();
@@ -97,6 +103,18 @@ const OpfsFileBrowser = ({
     setDeleting(`${modelId}/${fileName}`);
     try {
       await deleteModelFile(modelId, fileName);
+      // If this is a .part marker, also delete the corresponding data file
+      // (in the current design, data is written to the final name and .part
+      // is a zero-byte marker; leaving the data file would make a partial
+      // download look "saved").
+      if (fileName.endsWith('.part')) {
+        const dataFileName = fileName.slice(0, -'.part'.length);
+        try {
+          await deleteModelFile(modelId, dataFileName);
+        } catch {
+          // Data file may not exist
+        }
+      }
       onStorageChanged?.();
       await refresh();
     } catch {
