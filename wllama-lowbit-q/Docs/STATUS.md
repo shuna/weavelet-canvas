@@ -52,6 +52,60 @@ C++ ディスパッチ:
 - `LowbitQV2Metadata`: v2 GGUF メタデータ構造体
 - `BitwidthAllocatorConfig`: allocator 設定 (sizeBudget, 各ファミリーの quant type)
 
+## Phase 1a: C++/WASM ローディング — 完了 (2026-04-09)
+
+### 実装内容
+
+llama.cpp/wllama 側で lowbit-Q v2 GGUF を読み込み、SVID_1BIT と Q4_0/PASSTHROUGH の
+mixed-bit モデルをクラッシュなく動作させるための C++ 実装を追加。
+
+**新規 C++ ファイル**
+
+| ファイル | 説明 |
+|---|---|
+| `cpp/lowbit-q/lowbit-q-metadata.h` | `lowbit-q.tensor_alloc` 読み込み C API |
+| `cpp/lowbit-q/lowbit-q-metadata.c` | 手製 JSON パーサ、`llama_model_meta_val_str()` 使用 |
+
+**API 変更 (`lowbit-q-model-builder.h/c`)**
+
+`lowbit_q_lookup()` のシグネチャを変更:
+```c
+// 旧: ggml_context * → GGUF 読み込み後に単一コンテキストしか見えない問題
+// 新: llama_model * → llama_get_model_tensor() で全コンテキストを検索可能
+struct lowbit_q_layer_tensors lowbit_q_lookup(
+    const struct llama_model * model, const char * prefix);
+```
+
+**パッチスクリプト**
+
+| ファイル | 対象 | 内容 |
+|---|---|---|
+| `patches/0002-llama-loader-optional-weights.py` | `llama-model.cpp` | 7 投影テンソルを `TENSOR_NOT_REQUIRED` に変更。SVID 層は `.weight` テンソルを持たないため必須 |
+| `patches/0003-llama-build-lowbit-q-dispatch.py` | `models/llama.cpp` | `llm_build_llama` に SVID ディスパッチを追加 (Q/K/V/O/FFN gate・up・down) |
+
+**ディスパッチ方針 (patch 0003)**
+
+各投影ごとに `lowbit_q_lookup()` で SVID テンソルを探し、
+見つかれば `lowbit_q_build_mul_mat()`、なければ `build_lora_mm()` にフォールバック。
+
+FFN は gate/up/down のいずれかが SVID の場合、`build_ffn()` をバイパスして
+SiLU-gated MLP を手動で構築する。attn_output は `build_attn()` に `wo = nullptr`
+を渡し、その後 SVID カーネルを適用する。
+
+**setup.sh 更新**
+
+- 6 ファイルをコピー (旧: 4 ファイル)
+- CMakeLists.txt パッチに `lowbit-q-metadata.c` を追加
+- Step 4a/4b として patch 0002/0003 を適用
+
+**テストファイル**
+
+`src/local-llm/lowbit-q/lowbit-q-v2-dispatch.test.ts` (新規):
+- Suite 1: テンソル命名規約 (SVID → `.lowbit_q_a/b/sign`、Q4_0 → `.weight`)
+- Suite 2: allocator → 命名の対応確認
+- Suite 3: `tensor_alloc` JSON 形式と C パーサ定数との整合性
+- Suite 4: mixed GGUF 構造不変条件 (同一プレフィックスに `.weight` と `.lowbit_q_sign` が共存しない等)
+
 ## Phase 2: 統一変換パイプライン — TypeScript 側完了・C++ 側未着手
 
 ### 実装済みコンポーネント
@@ -63,7 +117,10 @@ C++ ディスパッチ:
 | v2 変換パイプライン | `convert.ts` (`convertToLowbitQV2Streaming`) | 完了 |
 | v2 GGUF writer | `ggufWriter.ts` (`writeLowbitQV2GGUF`) | 完了 |
 | Web Worker ルーティング | `lowbitQConversionWorker.ts` | 完了 (v2 デフォルト) |
-| C++ SVID lookup | `lowbit-q-model-builder.c/h` | 完了 (dispatch 設計確定) |
+| C++ SVID lookup | `lowbit-q-model-builder.c/h` | 完了 (Phase 1a 完了) |
+| C++ メタデータ読み込み | `lowbit-q-metadata.c/h` | 完了 (Phase 1a 完了) |
+| llama.cpp ローダーパッチ | `patches/0002` | 完了 (Phase 1a 完了) |
+| llama.cpp ディスパッチパッチ | `patches/0003` | 完了 (Phase 1a 完了) |
 
 ### Bitwidth Allocator 詳細
 
@@ -92,6 +149,36 @@ Llama, Qwen2, Gemma, Phi3 等に対応 (ハードコード排除済み)。
 - デフォルト: v2 (mixed-bit) パイプライン
 - v1 フォールバック: `convertMode` が明示設定かつ `allocatorConfig` 未設定の場合のみ
 
+## Phase 1a 既知制約
+
+### アーキテクチャ制約 (Phase 1b で対応予定)
+
+C++ パッチ 0002/0003 は **LLAMA アーキテクチャのみ** を対象としている。
+Qwen2, Gemma, Phi3 等の非 Llama モデルは `llm_build_X` グラフビルダーが別ファイルにあり、
+パッチが当たっていない。
+
+これによる問題を防ぐため、TypeScript 側 (`convertToLowbitQV2Streaming`) に
+arch ガードを追加した (2026-04-09):
+- `general.architecture === 'llama'` → SVID 割当を許可
+- それ以外 → SVID → Q4_0 に強制オーバーライド (ローダーエラー防止)
+- arch 不明 (メタデータなし) → 元の config を使用 (Llama GGUF の可能性が高い)
+
+非 Llama への SVID 対応は各アーキ別に patch 0002b/0003b を書く必要あり。
+Phase 1b のスコープとして扱う。
+
+### メタデータキャッシュの単一モデル前提 (Phase 1b で要検討)
+
+`lowbit_q_get_quant_type()` の静的キャッシュ (`s_cache`) は最後に見た
+`llama_model *` のみを保持する。wllama プロトタイプ (同時に 1 モデルのみロード)
+では問題ないが、マルチモデルセッションでは呼び出し順によって別モデルの
+quant type を返す可能性がある。コード内に警告コメントを記載済み。
+
+## 未実装 (Phase 1b: WASM ビルド検証)
+
+- `setup.sh --build` による実際の WASM ビルド (Docker 必須)
+- patch 0002/0003 が最新 llama.cpp に適用できることの実機確認
+- `llama_get_model_tensor()` が期待通り SVID テンソルを返すことのブラウザ確認
+
 ## 未実装 (Phase 2 C++ 側)
 
 - WebGPU ビルド有効化 (`-DGGML_WEBGPU=ON`)
@@ -111,12 +198,13 @@ Llama, Qwen2, Gemma, Phi3 等に対応 (ハードコード排除済み)。
 
 ## テスト状況
 
-108 テスト全パス (5 ファイル):
+108+ テスト (6 ファイル):
 - `allocator.test.ts`: 26 テスト (固定ルール + 予算最適化)
 - `lowbit-q.test.ts`: 32 テスト (変換 E2E)
 - `tensorFilter.test.ts`: 22 テスト
 - `qualityMetrics.test.ts`: 20 テスト
 - `validation.test.ts`: 8 テスト
+- `lowbit-q-v2-dispatch.test.ts`: Phase 1a C++ ディスパッチ契約テスト (Phase 1a 新規)
 
 `tsc --noEmit` エラーなし。
 

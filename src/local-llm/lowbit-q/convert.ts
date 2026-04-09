@@ -463,18 +463,14 @@ export async function convertToLowbitQV2Streaming(
   const { header } = await parseHeaderFromBlob(source);
   const totalTensors = header.tensors.length;
 
-  // Resolve total transformer block count for layer-position detection.
-  // Try caller-provided value first, then read from GGUF metadata.
-  //
-  // GGUF stores this under the active architecture namespace:
-  //   general.architecture → e.g. "llama", "qwen2", "gemma", "phi3"
-  //   <arch>.block_count   → block count for that architecture
-  // Hard-coding "llama.block_count" silently returns 0 for non-Llama models,
-  // which disables the first/last-layer override in the allocator.
+  // Resolve model architecture and total transformer block count.
+  const arch: string = (() => {
+    const archEntry = header.metadata.get('general.architecture');
+    return archEntry ? String(archEntry.value) : '';
+  })();
+
   const totalLayers: number = (() => {
     if (options.totalLayers !== undefined) return options.totalLayers;
-    const archEntry = header.metadata.get('general.architecture');
-    const arch = archEntry ? String(archEntry.value) : '';
     if (arch) {
       const entry = header.metadata.get(`${arch}.block_count`);
       if (entry !== undefined) return Number(entry.value as number);
@@ -482,8 +478,28 @@ export async function convertToLowbitQV2Streaming(
     return 0;
   })();
 
+  // Phase 1a scope: the C++ SVID dispatch patch (0003) only instruments the
+  // LLAMA graph builder, and the loader patch (0002) only marks projection
+  // weights optional in the LLAMA branch of llama-model.cpp.  For any other
+  // architecture that gets SVID-assigned projections the loader will fail with
+  // "tensor not found" because the .weight tensor is absent.
+  //
+  // Guard: if the GGUF declares a non-Llama architecture, override all SVID
+  // allocations to Q4_0 so the output remains loadable by unpatched builders.
+  // Unknown architecture (arch === '') is left unchanged — it is more likely a
+  // hand-crafted Llama GGUF than a patched non-Llama one.
+  const effectiveAllocatorConfig: BitwidthAllocatorConfig =
+    (arch !== '' && arch !== 'llama')
+      ? {
+          ...allocatorConfig,
+          attnQKQuant: LowbitQQuantType.Q4_0,
+          attnVOQuant: LowbitQQuantType.Q4_0,
+          ffnQuant: LowbitQQuantType.Q4_0,
+        }
+      : allocatorConfig;
+
   // --- Build allocation plan ---
-  const allocations = allocateBitwidths(header.tensors, totalLayers, allocatorConfig);
+  const allocations = allocateBitwidths(header.tensors, totalLayers, effectiveAllocatorConfig);
   const allocByName = new Map<string, TensorAllocRecord>(allocations.map((r) => [r.name, r]));
 
   // --- Process tensors ---
