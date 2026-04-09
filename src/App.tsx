@@ -12,6 +12,16 @@ import Toast from '@components/Toast';
 import LegacyCustomModelsBanner from '@components/LegacyCustomModelsBanner';
 import MigrationProgressBanner from '@components/MigrationProgressBanner';
 import OnboardingModal from '@components/Onboarding/OnboardingModal';
+import LowbitQValidationPage from '@components/LowbitQValidation/LowbitQValidationPage';
+
+function isLowbitQValidationRoute(): boolean {
+  const params = new URLSearchParams(window.location.search);
+  return (
+    window.location.pathname === '/lowbit-q-validation' ||
+    window.location.hash === '#lowbit-q-validation' ||
+    params.get('lowbit-q-validation') === '1'
+  );
+}
 
 function App() {
   const isBootstrapped = useAppBootstrap();
@@ -25,6 +35,10 @@ function App() {
 
   // Remove boot status indicator once app is ready
   document.getElementById('boot-status')?.remove();
+
+  if (isLowbitQValidationRoute()) {
+    return <LowbitQValidationPage />;
+  }
 
   return (
     <div className='overflow-hidden w-full h-full relative'>
