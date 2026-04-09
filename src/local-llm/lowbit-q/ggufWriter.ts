@@ -12,6 +12,7 @@ import {
   type GGUFTensorInfo,
   type GGUFMetadataEntry,
   type LowbitQDecomposition,
+  type LowbitQV2Metadata,
   GGUFValueType,
   GGMLType,
   LOWBIT_Q_VERSION_KEY,
@@ -22,6 +23,16 @@ import {
   LOWBIT_Q_SUFFIX_A,
   LOWBIT_Q_SUFFIX_B,
   LOWBIT_Q_SUFFIX_SIGN,
+  LOWBIT_Q_V2_FORMAT_VERSION,
+  LOWBIT_Q_SOURCE_MODEL_KEY,
+  LOWBIT_Q_SIZE_BUDGET_KEY,
+  LOWBIT_Q_TENSOR_ALLOC_KEY,
+  LOWBIT_Q_KV_CACHE_K_METHOD_KEY,
+  LOWBIT_Q_KV_CACHE_K_BITS_KEY,
+  LOWBIT_Q_KV_CACHE_V_METHOD_KEY,
+  LOWBIT_Q_KV_CACHE_V_BITS_KEY,
+  LOWBIT_Q_QUALITY_NMSE_MEAN_KEY,
+  LOWBIT_Q_QUALITY_NMSE_MAX_KEY,
 } from './types';
 
 import { fp32ToFp16 } from './dequantize';
@@ -412,4 +423,238 @@ export function writeLowbitQGGUF(options: WriteLowbitQGGUFOptions): Uint8Array {
   }
 
   return result;
+}
+
+// ---------------------------------------------------------------------------
+// v2: mixed-bit GGUF writer
+// ---------------------------------------------------------------------------
+
+/** Native re-quantized tensor (Q4_0, Q8_0) produced by the v2 pipeline */
+export interface NativeQuantTensor {
+  /** Original tensor name (unchanged) */
+  name: string;
+  /** Target ggml type (Q4_0 or Q8_0) */
+  type: GGMLType;
+  /** Tensor dimensions (same as source) */
+  dims: bigint[];
+  /** Re-quantized binary data in ggml format */
+  data: Uint8Array;
+}
+
+export interface WriteLowbitQV2GGUFOptions {
+  /** Source GGUF header (metadata + tensor info) */
+  sourceHeader: GGUFHeader;
+  /** Tensors passed through unchanged (non-weight + PASSTHROUGH weight) */
+  passthroughTensors: Map<string, { info: GGUFTensorInfo; data: Uint8Array }>;
+  /** SVID 1-bit decomposed tensors */
+  svid1bitTensors: Map<string, LowbitQTensorGroup>;
+  /** Natively re-quantized tensors (Q4_0 / Q8_0) */
+  nativeQuantTensors: NativeQuantTensor[];
+  /** v2 metadata to embed in the GGUF file */
+  v2Metadata: LowbitQV2Metadata;
+}
+
+/**
+ * Write a lowbit-Q v2 GGUF file.
+ *
+ * The v2 format extends v1 with:
+ * - Mixed-bit allocation: SVID 1-bit triplets, native Q4_0/Q8_0, or passthrough
+ * - Rich metadata: allocator decisions, KV cache params, quality metrics
+ * - Format version key set to 2 (readable by C++ code checking version > 0)
+ */
+export function writeLowbitQV2GGUF(options: WriteLowbitQV2GGUFOptions): Uint8Array {
+  const {
+    sourceHeader,
+    passthroughTensors,
+    svid1bitTensors,
+    nativeQuantTensors,
+    v2Metadata,
+  } = options;
+
+  const outputTensors: OutputTensor[] = [];
+
+  // 1. Passthrough tensors (embedding, norm, PASSTHROUGH weight)
+  for (const [name, { info, data }] of passthroughTensors) {
+    outputTensors.push({ name, type: info.type, dims: info.dims, data });
+  }
+
+  // 2. SVID 1-bit triplets (a, b, sign)
+  for (const [originalName, group] of svid1bitTensors) {
+    const { decomposition } = group;
+    const baseName = originalName.replace(/\.weight$/, '');
+    outputTensors.push({
+      name: baseName + LOWBIT_Q_SUFFIX_A,
+      type: GGMLType.F16,
+      dims: [BigInt(decomposition.outFeatures)],
+      data: float32ArrayToFp16Bytes(decomposition.a),
+    });
+    outputTensors.push({
+      name: baseName + LOWBIT_Q_SUFFIX_B,
+      type: GGMLType.F16,
+      dims: [BigInt(decomposition.inFeatures)],
+      data: float32ArrayToFp16Bytes(decomposition.b),
+    });
+    outputTensors.push({
+      name: baseName + LOWBIT_Q_SUFFIX_SIGN,
+      type: GGMLType.I8,
+      dims: [BigInt(decomposition.sign.length)],
+      data: decomposition.sign,
+    });
+  }
+
+  // 3. Natively re-quantized tensors (Q4_0, Q8_0)
+  for (const t of nativeQuantTensors) {
+    outputTensors.push({ name: t.name, type: t.type, dims: t.dims, data: t.data });
+  }
+
+  // Build v2 metadata map
+  const metadata = new Map<string, GGUFMetadataEntry>(sourceHeader.metadata);
+
+  metadata.set(LOWBIT_Q_VERSION_KEY, {
+    key: LOWBIT_Q_VERSION_KEY,
+    type: GGUFValueType.UINT32,
+    value: LOWBIT_Q_V2_FORMAT_VERSION,
+  });
+
+  metadata.set(LOWBIT_Q_PACKING_KEY, {
+    key: LOWBIT_Q_PACKING_KEY,
+    type: GGUFValueType.STRING,
+    value: LOWBIT_Q_SIGN_PACKING,
+  });
+
+  // SVID layer indices (v1 compat key, lists layers that have SVID tensors)
+  const svid1bitLayers = Array.from(
+    new Set(
+      Array.from(svid1bitTensors.keys())
+        .map((name) => {
+          const m = name.match(/(?:layers|blk)\.(\d+)\./);
+          return m ? parseInt(m[1], 10) : null;
+        })
+        .filter((idx): idx is number => idx !== null),
+    ),
+  ).sort((a, b) => a - b);
+
+  metadata.set(LOWBIT_Q_LAYERS_KEY, {
+    key: LOWBIT_Q_LAYERS_KEY,
+    type: GGUFValueType.ARRAY,
+    value: svid1bitLayers.map((idx, i) => ({
+      key: `[${i}]`,
+      type: GGUFValueType.UINT32,
+      value: idx,
+    })),
+  });
+
+  if (v2Metadata.sourceModelName) {
+    metadata.set(LOWBIT_Q_SOURCE_MODEL_KEY, {
+      key: LOWBIT_Q_SOURCE_MODEL_KEY,
+      type: GGUFValueType.STRING,
+      value: v2Metadata.sourceModelName,
+    });
+  }
+
+  if (v2Metadata.sizeBudget !== undefined) {
+    metadata.set(LOWBIT_Q_SIZE_BUDGET_KEY, {
+      key: LOWBIT_Q_SIZE_BUDGET_KEY,
+      type: GGUFValueType.FLOAT32,
+      value: v2Metadata.sizeBudget,
+    });
+  }
+
+  metadata.set(LOWBIT_Q_TENSOR_ALLOC_KEY, {
+    key: LOWBIT_Q_TENSOR_ALLOC_KEY,
+    type: GGUFValueType.STRING,
+    value: JSON.stringify(v2Metadata.tensorAllocs),
+  });
+
+  if (v2Metadata.kvCache) {
+    const kv = v2Metadata.kvCache;
+    metadata.set(LOWBIT_Q_KV_CACHE_K_METHOD_KEY, {
+      key: LOWBIT_Q_KV_CACHE_K_METHOD_KEY,
+      type: GGUFValueType.STRING,
+      value: kv.kMethod,
+    });
+    metadata.set(LOWBIT_Q_KV_CACHE_K_BITS_KEY, {
+      key: LOWBIT_Q_KV_CACHE_K_BITS_KEY,
+      type: GGUFValueType.UINT32,
+      value: kv.kBitwidth,
+    });
+    metadata.set(LOWBIT_Q_KV_CACHE_V_METHOD_KEY, {
+      key: LOWBIT_Q_KV_CACHE_V_METHOD_KEY,
+      type: GGUFValueType.STRING,
+      value: kv.vMethod,
+    });
+    metadata.set(LOWBIT_Q_KV_CACHE_V_BITS_KEY, {
+      key: LOWBIT_Q_KV_CACHE_V_BITS_KEY,
+      type: GGUFValueType.UINT32,
+      value: kv.vBitwidth,
+    });
+  }
+
+  if (v2Metadata.quality) {
+    const q = v2Metadata.quality;
+    metadata.set(LOWBIT_Q_QUALITY_NMSE_MEAN_KEY, {
+      key: LOWBIT_Q_QUALITY_NMSE_MEAN_KEY,
+      type: GGUFValueType.FLOAT32,
+      value: q.nmseMean,
+    });
+    metadata.set(LOWBIT_Q_QUALITY_NMSE_MAX_KEY, {
+      key: LOWBIT_Q_QUALITY_NMSE_MAX_KEY,
+      type: GGUFValueType.FLOAT32,
+      value: q.nmseMax,
+    });
+  }
+
+  // Binary layout (identical structure to v1)
+  const headerWriter = new GGUFBinaryWriter();
+  headerWriter.writeUint32(GGUF_MAGIC);
+  headerWriter.writeUint32(GGUF_VERSION);
+  headerWriter.writeUint64(BigInt(outputTensors.length));
+  headerWriter.writeUint64(BigInt(metadata.size));
+
+  for (const [key, entry] of metadata) {
+    writeMetadataEntry(headerWriter, key, entry);
+  }
+
+  let dataOffset = 0;
+  const tensorOffsets: bigint[] = [];
+  for (const tensor of outputTensors) {
+    tensorOffsets.push(BigInt(dataOffset));
+    dataOffset += tensor.data.length;
+    const rem = dataOffset % ALIGNMENT;
+    if (rem !== 0) dataOffset += ALIGNMENT - rem;
+  }
+
+  for (let t = 0; t < outputTensors.length; t++) {
+    const tensor = outputTensors[t];
+    headerWriter.writeString(tensor.name);
+    headerWriter.writeUint32(tensor.dims.length);
+    for (const dim of tensor.dims) {
+      headerWriter.writeUint64(dim);
+    }
+    headerWriter.writeUint32(tensor.type);
+    headerWriter.writeUint64(tensorOffsets[t]);
+  }
+
+  headerWriter.writePadding(ALIGNMENT);
+  const headerBytes = headerWriter.toUint8Array();
+
+  let totalDataSize = 0;
+  for (const tensor of outputTensors) {
+    totalDataSize += tensor.data.length;
+    const rem = totalDataSize % ALIGNMENT;
+    if (rem !== 0) totalDataSize += ALIGNMENT - rem;
+  }
+
+  const v2Result = new Uint8Array(headerBytes.length + totalDataSize);
+  v2Result.set(headerBytes, 0);
+
+  let writePos = headerBytes.length;
+  for (const tensor of outputTensors) {
+    v2Result.set(tensor.data, writePos);
+    writePos += tensor.data.length;
+    const rem = writePos % ALIGNMENT;
+    if (rem !== 0) writePos += ALIGNMENT - rem;
+  }
+
+  return v2Result;
 }

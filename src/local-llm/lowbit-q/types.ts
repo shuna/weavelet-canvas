@@ -132,8 +132,34 @@ export const LOWBIT_Q_SUFFIX_A = '.lowbit_q_a';
 export const LOWBIT_Q_SUFFIX_B = '.lowbit_q_b';
 export const LOWBIT_Q_SUFFIX_SIGN = '.lowbit_q_sign';
 
-/** Current lowbit-Q format version */
+/** Current lowbit-Q format version (v1: SVID 1-bit only) */
 export const LOWBIT_Q_FORMAT_VERSION = 1;
+
+// ---------------------------------------------------------------------------
+// Lowbit-Q v2 format constants
+// ---------------------------------------------------------------------------
+
+/** Format version 2: mixed-bit allocation + KV cache metadata */
+export const LOWBIT_Q_V2_FORMAT_VERSION = 2;
+
+/** v2: source model name (string) */
+export const LOWBIT_Q_SOURCE_MODEL_KEY = 'lowbit-q.source_model';
+/** v2: target size ratio used by allocator (float32, 0.0–1.0) */
+export const LOWBIT_Q_SIZE_BUDGET_KEY = 'lowbit-q.size_budget';
+/** v2: JSON-encoded TensorAllocRecord[] array (string) */
+export const LOWBIT_Q_TENSOR_ALLOC_KEY = 'lowbit-q.tensor_alloc';
+/** v2: KV cache K quantization method (string) */
+export const LOWBIT_Q_KV_CACHE_K_METHOD_KEY = 'lowbit-q.kv_cache.k_method';
+/** v2: KV cache K bit width (uint32) */
+export const LOWBIT_Q_KV_CACHE_K_BITS_KEY = 'lowbit-q.kv_cache.k_bitwidth';
+/** v2: KV cache V quantization method (string) */
+export const LOWBIT_Q_KV_CACHE_V_METHOD_KEY = 'lowbit-q.kv_cache.v_method';
+/** v2: KV cache V bit width (uint32) */
+export const LOWBIT_Q_KV_CACHE_V_BITS_KEY = 'lowbit-q.kv_cache.v_bitwidth';
+/** v2: weighted mean NMSE across converted tensors (float32) */
+export const LOWBIT_Q_QUALITY_NMSE_MEAN_KEY = 'lowbit-q.quality.nmse_mean';
+/** v2: maximum NMSE across converted tensors (float32) */
+export const LOWBIT_Q_QUALITY_NMSE_MAX_KEY = 'lowbit-q.quality.nmse_max';
 
 // ---------------------------------------------------------------------------
 // Legacy (onebit) format constants — for reading pre-rename GGUF files
@@ -154,6 +180,113 @@ export const LEGACY_ONEBIT_SUFFIX_SIGN = '.onebit_sign';
 
 /** Sign bit packing order: MSB first (matching OneCompression's my_pack) */
 export const LOWBIT_Q_SIGN_PACKING = 'msb_first';
+
+// ---------------------------------------------------------------------------
+// Lowbit-Q v2 quantization types and interfaces
+// ---------------------------------------------------------------------------
+
+/**
+ * Quantization type assigned to a single weight tensor.
+ * Used by the v2 bitwidth allocator.
+ */
+export enum LowbitQQuantType {
+  /** Keep tensor unchanged (embeddings, norms, critical layers) */
+  PASSTHROUGH = 'passthrough',
+  /** RTN 4-bit block quantization (ggml Q4_0 native format) */
+  Q4_0 = 'q4_0',
+  /** RTN 8-bit block quantization (ggml Q8_0 native format) */
+  Q8_0 = 'q8_0',
+  /** OneBit (arXiv:2402.11295) SVID 1-bit decomposition into (a, sign, b) triplet */
+  SVID_1BIT = 'svid_1bit',
+}
+
+/** KV cache quantization method for runtime use */
+export enum KVCacheQuantMethod {
+  /** No KV cache quantization */
+  NONE = 'none',
+  /** Per-channel quantization (KIVI K-cache style) */
+  PER_CHANNEL = 'per_channel',
+  /** Per-token quantization (KIVI V-cache style) */
+  PER_TOKEN = 'per_token',
+}
+
+/** Per-tensor allocation record (stored in v2 GGUF as JSON) */
+export interface TensorAllocRecord {
+  /** Full tensor name, e.g. "blk.0.attn_q.weight" */
+  name: string;
+  /** Quantization type assigned by the allocator */
+  quantType: LowbitQQuantType;
+  /** Tensor family classification (attn-q, ffn-gate, other, …) */
+  family: string;
+  /** Layer index extracted from name, or null */
+  layerIndex: number | null;
+  /** Whether random Hadamard rotation was applied before quantization */
+  rotationApplied: boolean;
+  /** NMSE computed at conversion time (populated when computeQuality is true) */
+  nmse?: number;
+  /** Original tensor data size in bytes */
+  originalBytes: number;
+  /** Quantized tensor data size in bytes */
+  quantizedBytes: number;
+}
+
+/** KV cache quantization parameters stored in v2 GGUF metadata */
+export interface KVCacheQuantParams {
+  kMethod: KVCacheQuantMethod;
+  kBitwidth: number;
+  vMethod: KVCacheQuantMethod;
+  vBitwidth: number;
+}
+
+/** Aggregated quality metrics stored in v2 GGUF metadata */
+export interface LowbitQQualityMetrics {
+  nmseMean: number;
+  nmseMax: number;
+  convertedTensorCount: number;
+  passthroughTensorCount: number;
+}
+
+/** Complete v2 metadata structure (serialized into GGUF KV pairs) */
+export interface LowbitQV2Metadata {
+  formatVersion: 2;
+  sourceModelName?: string;
+  /** Target size ratio used by the allocator (0.0–1.0) */
+  sizeBudget?: number;
+  kvCache?: KVCacheQuantParams;
+  tensorAllocs: TensorAllocRecord[];
+  quality?: LowbitQQualityMetrics;
+}
+
+/**
+ * Configuration for the v2 bitwidth allocator.
+ *
+ * The allocator maps tensor family + layer position → quantization type,
+ * following the strategy: first/last layers → Q4_0, attn Q/K → Q4_0,
+ * attn V/O and FFN → SVID_1BIT.
+ */
+export interface BitwidthAllocatorConfig {
+  /**
+   * Target model size as a fraction of the original (0.0–1.0).
+   * Used as a soft budget; exact achievement depends on tensor distribution.
+   */
+  sizeBudget: number;
+  /** Quantization type for the first transformer block (layer index 0) */
+  firstLayerQuant: LowbitQQuantType;
+  /** Quantization type for the last transformer block */
+  lastLayerQuant: LowbitQQuantType;
+  /** Quantization type for attention Q and K projections */
+  attnQKQuant: LowbitQQuantType;
+  /** Quantization type for attention V and output projections */
+  attnVOQuant: LowbitQQuantType;
+  /** Quantization type for FFN (gate, up, down) projections */
+  ffnQuant: LowbitQQuantType;
+  /**
+   * Apply random Hadamard rotation preprocessing (QuaRot-style).
+   * When true, rotation is absorbed into weights at conversion time
+   * (zero inference overhead). Currently not implemented; must be false.
+   */
+  applyRotation: boolean;
+}
 
 // ---------------------------------------------------------------------------
 // Lowbit-Q decomposition types
@@ -198,10 +331,26 @@ export interface ConversionStartRequest {
   type: 'start';
   /** Source GGUF file (Q8_0 or similar) */
   sourceFile: File;
-  /** Lowbit-Q conversion mode (which tensors to convert). Default: 'all' */
-  convertMode?: string;
+  /**
+   * v2: Bitwidth allocator configuration.
+   * When provided, the v2 pipeline is used (mixed-bit allocation).
+   */
+  allocatorConfig?: BitwidthAllocatorConfig;
+  /**
+   * v2: Total number of transformer blocks in the model.
+   * Required for first/last layer detection in the allocator.
+   * If not provided, the pipeline reads it from GGUF metadata (llama.block_count).
+   */
+  totalLayers?: number;
+  /** Optional source model name stored in v2 GGUF metadata */
+  sourceModelName?: string;
   /** Whether to compute per-tensor quality metrics (NMSE). Default: false */
   computeQuality?: boolean;
+  /**
+   * @deprecated Use allocatorConfig instead.
+   * v1: Lowbit-Q conversion mode (which tensors to convert). Default: 'all'
+   */
+  convertMode?: string;
 }
 
 export interface ConversionProgressMessage {

@@ -58,31 +58,101 @@
 - 旧コードを指す: `旧 onebit 実装`, `旧 onebit 変換経路`
 - 現行の総称: `lowbit-Q 実装`, `lowbit-Q metadata`
 
+## 大前提
+
+### なぜ lowbit-Q が必要か — ブラウザのリソース制約
+
+当プロジェクトは **HuggingFace 検索 → モデルダウンロード → 変換 → 推論・生成の
+全工程をブラウザ内で完結** させることを前提とする。
+
+- バックエンドサーバーを必要としない
+- 開発者が事前変換済みモデルを配布することはプロジェクトの範囲外
+- ユーザーが任意の HF モデルを選び、ブラウザ内でワンストップに利用できる
+
+ブラウザ環境には以下のリソース制約がある:
+
+| 制約 | 値 | 影響 |
+|---|---|---|
+| WASM メモリ上限 | 4 GB | モデル + KV cache + 推論バッファが収まる必要がある |
+| ダウンロードサイズ | ユーザー回線依存 | 大きなモデルは実用的でない |
+| OPFS ストレージ | ブラウザ依存 | 変換済みモデルの保存容量 |
+
+**したがって、モデルサイズ削減が最優先課題**であり、
+カスタム wllama (独自テンソル形式のロード・デコード・推論) が必要な理由はここにある。
+
+### サイズ削減と精度補償の構造
+
+サイズ削減は必然的に精度低下を伴う。当プロジェクトの戦略は:
+
+```
+サイズ削減 (ブラウザ制約への対応)
+  ├─ 重み量子化: mixed-bit (1/2/3/4-bit) で最大限圧縮
+  ├─ KV cache 量子化: 推論時メモリを削減し、より大きなモデル/長いコンテキストを許容
+  └─ 回転前処理: 同じビット幅でより多くの情報を保持 → さらなる低ビット化を可能にする
+
+精度補償 (削減に伴う品質低下への対策)
+  ├─ 重要テンソルの高精度維持 (第1/最終層、attention Q/K)
+  ├─ mixed-bit allocator による層別最適化
+  ├─ 回転前処理による outlier 軽減 (低ビットでも品質維持)
+  └─ KV cache 量子化によるコンテキスト長伸長 (メモリ余裕の品質還元)
+
+WebGPU (削減後モデルの実行省力化)
+  └─ サイズ削減されたモデルの推論を GPU で加速する
+```
+
+各技術は「サイズ削減」と「精度補償」の両面を持つ。
+例えば回転前処理は、同じビット幅での品質向上 (= 精度補償) であると同時に、
+品質を維持したままさらに低いビット幅を選択可能にする (= さらなるサイズ削減)。
+KV cache 量子化は推論時メモリ削減であると同時に、
+空いたメモリをモデル本体やコンテキスト長に振り向けることで品質向上にも寄与する。
+
+### ブラウザ完結制約による手法の制限
+
+この制約により以下の手法は **採用しない**:
+
+| 除外手法 | 理由 |
+|---|---|
+| QAT (Quantization-Aware Training) | GPU + PyTorch + 勾配降下が必須 |
+| 知識蒸留 (Knowledge Distillation) | 教師モデル + 学習パイプラインが必須 |
+| SpinQuant 学習済み回転行列 | Cayley 最適化に学習が必要 |
+| サーバーサイド Python 変換 | ブラウザ完結に反する |
+
+ブラウザ内で実行可能な手法のみを採用する:
+ブロック量子化 (RTN)、SVID 分解、経験則ベースの mixed-bit 割当、
+ランダム Hadamard 回転 (決定論的・学習不要)、
+KV cache 量子化 (オンライン処理)、
+SVID パラメータ精緻化 (ALS)。
+
 ## 現在位置
 
 現時点の `src/local-llm/lowbit-q/` と `wllama-lowbit-q/cpp/lowbit-q/` は、
 ブラウザ内変換および WASM 推論で **SVID 1-bit 経路を E2E で動かす最小構成** として成立している。
 
-ただし、`TECH-SURVEY.md` が指摘するとおり、全層一律 1-bit は品質限界が明確である。
+ただし、全層一律 1-bit ではサイズ削減は達成できるものの (1.1 GB → 252 MB, 77% 圧縮)、
+**精度低下が大きすぎて実用に耐えない**
+(`2026-04-09-SVID-Test-result.md` 参照: 全プロンプトで出力崩壊、NMSE 0.37 全テンソル均一)。
+
+また、`.wllama-fork/llama.cpp/ggml/src/ggml-webgpu/` に **WebGPU 推論バックエンド**が
+存在するがビルド未有効化であり、削減後モデルの GPU 推論が即座に利用可能な状態にある。
+
 今後は `OneCompression をそのまま移植する` のではなく、
 **OneCompression の中でブラウザ向けに効果が高い部分を選択的に吸収する** 方針を採る。
 
 ## 採用方針
 
-### 1. SVID 1-bit は維持する
+### 1. SVID 1-bit は基準線として維持する
 
 - 現在の 1-bit 変換・ロード・推論経路は残す
-- これは最小サイズ圧縮の基準線として継続的に価値がある
-- ただし、品質改善の主戦場は「SVID 単体の微修正」ではなく、
-  mixed-bit 化や前処理へ移す
+- 最大圧縮率 (77%) の基準線として継続的に価値がある
+- 新規方式は常に「サイズ」「速度」「品質」を 1-bit 基準線と比較する
 
 ### 2. OneCompression は拡張方針の参照元として使う
 
 OneCompression の取り込み方は次の通りとする。
 
 - **直接採用する対象**
-  - AutoBit 的な mixed-bit 割当
-  - rotation preprocessing
+  - AutoBit 的な mixed-bit 割当 (サイズ削減 + 精度補償)
+  - rotation preprocessing (精度補償 → さらなるサイズ削減を可能にする)
   - 必要に応じた QEP / JointQ の考え方
 - **直接採用しない対象**
   - フレームワーク全体への依存
@@ -90,52 +160,190 @@ OneCompression の取り込み方は次の通りとする。
   - ブラウザ実行と相性の悪い複雑な前処理・後処理の全面移植
 
 目的は、OneCompression に寄せることではなく、
-**ブラウザ向け独自変換器と WASM カーネルを維持したまま、低ビット品質を上げること** である。
+**ブラウザ向け独自変換器と WASM カーネルを維持したまま、
+限られたリソース内でモデルを動かすためのサイズ削減と精度補償を進めること** である。
+
+### 3. WebGPU はサイズ削減されたモデルの実行省力化として導入する
+
+- WebGPU は **サイズ削減と精度補償とは別の軸** にある
+- サイズ削減により小さくなったモデルの推論を GPU で加速するもの
+- 同じ GGUF モデル、同じ ggml 計算グラフ、同じ推論結果
+- WebGPU 対応ブラウザ → GPU ディスパッチ (10x 近い高速化の可能性)
+- 非対応ブラウザ → WASM CPU フォールバック (低速だが同一結果)
+- ggml のバックエンドレジストリ (`ggml-backend-reg.cpp`) が自動ディスパッチ
+
+**導入方針:**
+- 標準量子化型 (Q4_0/Q8_0 等) は ggml-webgpu の既存シェーダで即時 GPU 実行可能
+- lowbit-Q 1-bit カスタムカーネルは `ggml_map_custom3_inplace()` 経由のため CPU のみ
+- lowbit-Q の GPU 実行には専用 WGSL シェーダの追加実装が必要
 
 ## 実装ロードマップ
 
-`TECH-SURVEY.md` に基づき、次の順で進める。
+全施策は**サイズ削減を第一義**とし、それに伴う精度低下を補償する構造である。
 
-### Phase 1: Mixed-bit metadata と layer-wise bitwidth 割当
+### 設計原則: 統一フォーマットとカーネルの一体設計
 
-最優先。
+**mixed-bit 重み量子化、KV cache 量子化、回転前処理は全てサイズ削減に寄与する技術であり、
+個別に段階拡張するのではなく、これらを包含する統一モデルフォーマットを最初に設計する。**
 
-- `lowbit-q.version` のような単一形式 metadata から脱却し、
-  layer / tensor 単位で quantization type を保持できる形式へ拡張する
-- 1/2/3/4-bit 共存を前提に、変換パイプラインを一般化する
-- OneComp AutoBit の発想を参照しつつ、
-  ブラウザ実装に適した単純な allocator から始める
+理由:
+- 個別に Phase を分けてフォーマットを拡張すると、その都度カーネルの書き直しが発生する
+- 統一フォーマットを先に確定すれば、変換器もカーネルも一度の実装で全機能を扱える
+- 将来の拡張 (activation quantization 等) にも metadata 予約で対応可能
 
-期待効果:
+### Phase 1: lowbit-Q v2 統一フォーマット設計
 
-- 現状の「全層 1-bit」による品質悪化を直接緩和できる
-- 将来の量子化器追加に備えたフォーマット基盤になる
+最初に着手。**全ての後続実装はこのフォーマットに基づく。**
 
-### Phase 2: KV cache 量子化
+統一フォーマットが表現すべき情報:
 
-- 初手は `KIVI` 相当の単純な非対称量子化を優先する
-- TurboQuant は中期候補とし、ブラウザ移植コストを見ながら判断する
+```
+lowbit-Q v2 metadata:
+  ├─ 重み量子化 (per-tensor)
+  │   ├─ quantization type: 1-bit SVID / 2-bit / Q3_K / Q4_0 / Q8_0 / passthrough
+  │   ├─ 回転前処理適用有無 + パラメータ
+  │   └─ bitwidth allocator が決定した根拠 (テンソルファミリー、層位置)
+  ├─ KV cache 量子化
+  │   ├─ K 量子化方式 (per-channel, bitwidth)
+  │   ├─ V 量子化方式 (per-token, bitwidth)
+  │   └─ 古トークン低精度化ポリシー (オプション)
+  └─ 全体
+      ├─ format version
+      ├─ 元モデル情報
+      ├─ サイズ予算 (target size ratio)
+      └─ 品質メトリクス (変換時 NMSE 等)
+```
 
-期待効果:
+**設計の要点:**
+- metadata は GGUF の汎用 KV 形式を使い、llama.cpp 本体が無視できる形で格納
+- SVID は ggml に存在しない独自テンソル型なので独自名 (`.lowbit_q_a/b/sign`) で識別する
+- ggml ネイティブ型 (Q4_0, Q8_0, F16 等) は元の `.weight` 名を維持し GGML type で識別する
+- `lowbit-q.tensor_alloc` JSON metadata が全テンソルの割当決定の正本
+- KV cache 量子化パラメータは推論時に参照する runtime metadata として格納
+- 回転行列は変換時に weight に吸収するため、推論側への影響はテンソルデータ自体に反映済み
+- 将来の activation quantization 用に metadata namespace を予約しておく
 
-- 長文コンテキスト時のメモリ圧迫を軽減できる
-- ブラウザ実行時の 4GB 制限への耐性が上がる
+### Phase 2: 統一変換パイプラインとカーネル実装 (TypeScript 側実装済み・C++ 側進行中)
 
-### Phase 3: Rotation preprocessing
+Phase 1 のフォーマットに対する変換器とカーネルを**一括で**実装する。
+回転前処理 ([2]) と 2-3 bit SVID 拡張は Phase 3 に延期。
 
-- OneComp が取り込む SpinQuant / OSTQuant 系の考え方を参照する
-- 回転行列は変換時に weight に吸収し、実行時コストは増やさない
-- 対象は主に 3-4 bit 系の品質安定化
+**変換パイプライン (ブラウザ内):**
 
-期待効果:
+```
+入力: HF モデル (GGUF Q8_0/F16)
+  ↓
+[1] bitwidth allocator  ← Phase 2 実装済み
+    - テンソル名パターンマッチ + 層位置で量子化方式を決定
+    - サイズ予算に基づく配分最適化 (greedy: attnVO → attnQK → first/last)
+    - 第1/最終層 → Q4_0+, attention Q/K → Q4_0, FFN → 1-2 bit
+  ↓
+[2] 回転前処理 (オプション)  ← Phase 3 に延期
+    - ランダム Hadamard 回転 (QuaRot 方式、学習不要)
+    - 変換時に weight に吸収、推論時コストゼロ
+    - 適用テンソルの選定は allocator と連動
+    - 現状: applyRotation: true は未実装エラーを返す
+    - 実装要件: (1) Hadamard 行列生成 (2) W_rot = W @ H^T 計算
+      (3) attention カーネルでのオンライン活性化回転 (C++ 要変更)
+  ↓
+[3] テンソル量子化  ← Phase 2 実装済み
+    - allocator が決定した方式で各テンソルを量子化
+    - 1-bit SVID: 分解 → `prefix.lowbit_q_a/b/sign` triplet (独自名 = 独自カーネル)
+    - Q4_0: RTN ブロック量子化 → 元の `.weight` 名維持 (ggml native kernel)
+    - 2-3 bit: SVID 拡張または RTN (未実装、Phase 3)
+    - パススルー: embedding, norm, 保護対象 → 元の `.weight` 名・元の型を維持
+  ↓
+[4] KV cache パラメータ決定  ← metadata スキーマのみ定義済み、実装は Phase 3
+    - KIVI 方式のパラメータ (K per-channel, V per-token, bitwidth)
+    - TurboQuant パラメータ (将来対応予約)
+    - metadata に格納
+  ↓
+[5] lowbit-Q v2 GGUF 書き出し  ← Phase 2 実装済み
+    - 統一 metadata + 量子化済みテンソル群
+    - KV cache パラメータを runtime metadata として含む
+出力: lowbit-Q v2 GGUF
+```
 
-- 低ビット化で崩れやすい層の精度を改善できる
-- mixed-bit と組み合わせたときの品質上限を上げられる
+**テンソル識別と割当管理の設計 (Phase 2 確定):**
 
-### Phase 4: Activation quantization
+lowbit-Q v2 は同一 GGUF 内に PASSTHROUGH・Q4_0・SVID_1BIT が混在する
+独自フォーマットである。この混在を loader と kernel が誤解なく扱うために、
+識別子の配置を以下のように設計する。
 
-- weight-only と KV quantization が安定してから検討する
-- ブラウザ/WASM ではオンライン変換コストが大きいため後回しにする
+*設計原則:*
+- SVID_1BIT は ggml に存在しない独自テンソル型 → **独自名で識別**する
+- Q4_0 / Q8_0 / F16 等は ggml ネイティブ型 → **元の `.weight` 名を維持**し、
+  GGML type コードで native kernel にディスパッチする
+- どのレイヤーにどの方式を割り当てたかの**正本**は
+  `lowbit-q.tensor_alloc` JSON metadata で管理する
+
+*テンソル名と GGML type の対応:*
+
+```
+prefix.lowbit_q_a / _b / _sign → SVID_1BIT (独自カーネル)
+prefix.weight (GGML type = Q4_0) → Q4_0 再量子化 (ggml native kernel)
+prefix.weight (GGML type = F16 等) → PASSTHROUGH (元の型そのまま)
+```
+
+*C++ ディスパッチ (model builder):*
+
+```c
+lowbit_q_layer_tensors ob = lowbit_q_lookup(ctx, prefix);
+if (ob.valid) {
+    // SVID 独自名が見つかった → 独自カーネル
+    cur = lowbit_q_build_mul_mat(ctx0, ob.a, ob.b, ob.sign, cur);
+} else {
+    // SVID がない → .weight を引き、GGML type に応じて native kernel
+    cur = ggml_mul_mat(ctx0, model.layers[il].wq, cur);
+}
+```
+
+この設計により:
+- 重要レイヤー (第1/最終層、attention Q/K) を低ビット化せず保護する mixed format を自然に扱える
+- ggml の既存グラフビルダー・カーネルをそのまま活用できる
+- C++ 側は SVID 独自名の lookup のみが独自実装、残りは llama.cpp 標準パスに委ねる
+
+**カーネル (WASM + WebGPU):**
+
+一つの統一カーネルが全量子化型をディスパッチする:
+
+- 標準量子化型 (Q4_0/Q8_0 等) → ggml ネイティブカーネル (WebGPU 対応済み)
+- lowbit-Q 1-bit SVID → カスタムカーネル (WASM SIMD + WGSL シェーダ)
+- lowbit-Q 2-3 bit → カスタムカーネル (同上)
+- KV cache 量子化 → attention 経路にオンライン量子化/復元を組み込み
+
+**WebGPU 対応も含めて一度に実装する:**
+- 標準量子化型: ggml-webgpu 既存シェーダ活用
+- lowbit-Q 全ビット幅: 専用 WGSL シェーダを新規作成 (bitnet.js 参照)
+- KV cache: attention カーネル内で量子化/復元
+
+### Phase 3: 品質検証とチューニング
+
+統一パイプラインの動作確認と、サイズ vs 品質のトレードオフ調整。
+
+- TinyLlama-1.1B で各 allocator 設定を検証
+- サイズ予算ごとの品質マップ作成 (30%/40%/50%/60% of original)
+- 回転前処理の有無による品質差の計測
+- KV cache 量子化のコンテキスト長 vs 品質の検証
+- allocator の経験則を検証結果に基づきチューニング
+
+### Phase 4: Activation quantization (条件付き)
+
+- Phase 2 のカーネルと Phase 1 の metadata が安定してから検討する
+- W4A8 → W4A4 の段階的導入
+- metadata namespace は Phase 1 で予約済み
+- ブラウザ/WASM/WebGPU でのオンライン変換コストとの兼ね合いで判断する
+
+### WebGPU ビルド有効化 (Phase 2 と同時)
+
+サイズ削減されたモデルの実行省力化。Phase 2 のカーネル実装と同時に行う。
+
+- `build-local.sh` に `-DGGML_WEBGPU=ON` と `emdawnwebgpu_pkg` パス設定を追加
+- WebGPU 対応/非対応ブラウザの自動検出 + WASM CPU フォールバック
+- 標準量子化型は ggml-webgpu 既存シェーダで GPU 実行
+- lowbit-Q カスタム型は新規 WGSL シェーダで GPU 実行
+- ビルド要件: emdawnwebgpu_pkg、emsdk 4.0.3 互換検証、Python 3
+- 将来: 変換パイプライン自体の GPU オフロード (SVID power iteration 等)
 
 ## 実装原則
 
@@ -158,6 +366,13 @@ OneCompression の取り込み方は次の通りとする。
 
 - OneBit/SVID 経路は比較対象として残す
 - 新規方式は常に「サイズ」「速度」「品質」を 1-bit 基準線と比較する
+
+### WebGPU はオプショナル加速
+
+- WebGPU は必須ではなく、高速化のためのオプショナルレイヤーとして扱う
+- 全機能は WASM CPU のみで動作可能であること
+- WebGPU 非対応環境で機能が欠落してはならない
+- ggml のバックエンドディスパッチに委ねて、明示的な分岐を最小化する
 
 ## ドキュメント運用
 

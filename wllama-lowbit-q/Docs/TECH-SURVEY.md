@@ -252,6 +252,97 @@
 
 ---
 
+## D. WebGPU 推論アクセラレーション
+
+### D1. 当プロジェクトの WebGPU バックエンド (ggml-webgpu)
+
+**現状: 実装済み・ビルド未有効化**
+
+- **所在**: `.wllama-fork/llama.cpp/ggml/src/ggml-webgpu/`
+- **実装ファイル**: `ggml-webgpu.cpp` (135KB) + 14 WGSL シェーダ
+- **ビルドフラグ**: `GGML_WEBGPU=OFF` (デフォルト無効)
+- **Emscripten 依存**: `emdawnwebgpu_pkg` (Dawn WebGPU port for Emscripten)
+- **出典**: llama.cpp 本体の実験的 WebGPU バックエンド ([Issue #7773](https://github.com/ggml-org/llama.cpp/issues/7773)、メインラインには未マージ、2026-04 時点)
+
+**サポート済みオペレーション:**
+
+| カテゴリ | オペレーション | WGSL シェーダ |
+|---|---|---|
+| 行列積 | MUL_MAT | `mul_mat.tmpl.wgsl`, `mul_mat_vec.tmpl.wgsl`, `mul_mat_reg_tile.tmpl.wgsl`, `mul_mat_subgroup_matrix.tmpl.wgsl` |
+| Attention | SOFT_MAX, ROPE, SCALE | `soft_max.tmpl.wgsl`, `rope.tmpl.wgsl`, `scale.tmpl.wgsl` |
+| 正規化 | RMS_NORM | `rms_norm.wgsl` |
+| 活性化 | GLU | `glu.tmpl.wgsl` |
+| データ移動 | CPY, GET_ROWS, SET_ROWS | 各シェーダ |
+| 算術 | ADD, SUB, MUL, DIV | `bin_op.tmpl.wgsl` |
+
+**MUL_MAT がサポートする量子化型:**
+F32, F16, Q4_0, Q4_1, Q5_0, Q5_1, Q8_0, Q2_K, Q3_K, Q4_K, Q5_K, Q6_K,
+IQ1_S, IQ1_M, IQ2_XXS, IQ2_XS, IQ2_S, IQ3_XXS, IQ3_S, IQ4_NL, IQ4_XS
+
+> LLM 推論に必要なほぼ全オペレーションが WebGPU シェーダで実装済み。
+> 標準量子化型のモデルであれば、ビルドフラグ有効化だけで GPU 推論が動く可能性がある。
+
+**ビルド要件:**
+- CMake フラグ: `-DGGML_WEBGPU=ON -DEMDAWNWEBGPU_DIR=/path/to/emdawnwebgpu_pkg`
+- emsdk 4.0.3 との互換性要検証
+- Python 3 (WGSL シェーダ埋め込みスクリプト `embed_wgsl.py`)
+- ggml バックエンドレジストリが `GGML_USE_WEBGPU` 定義で自動登録
+
+**lowbit-Q カスタムカーネルとの関係:**
+現在の 1-bit sign matmul (`lowbit-q-mul-mat.c`) は `ggml_map_custom3_inplace()` を使用しており、CPU 上でのみ実行される。
+WebGPU バックエンド有効化後も、lowbit-Q 1-bit テンソルは CPU フォールバックとなる。
+GPU での 1-bit 実行には専用 WGSL シェーダの追加実装が必要。
+
+### D2. web-llm (MLC AI)
+
+- **GitHub**: [mlc-ai/web-llm](https://github.com/mlc-ai/web-llm) (v0.2.82, 2026-04 時点)
+- **方式**: Apache TVM / MLC-LLM でコンパイルした WebGPU + WASM カーネル
+- **性能**: M3 Max で Llama 3.1 8B (4-bit) 41 tok/s、Phi 3.5 mini 71 tok/s
+- **アーキテクチャ**: WASM (トークナイズ、サンプリング、制御) + WebGPU (GEMM、attention、正規化)
+- **ブラウザ適合性**: 最も成熟したブラウザ LLM 推論フレームワーク。ただし TVM コンパイル済みモデル形式が前提で、GGUF 直接読み込みは不可
+- **参考論文**: [arXiv:2412.15803](https://arxiv.org/abs/2412.15803)
+
+### D3. bitnet.js (WebGPU ネイティブ低ビット推論)
+
+- **GitHub**: [qwatts-dev/bitnet.js](https://github.com/qwatts-dev/bitnet.js), [m96-chan/0xBitNet](https://github.com/m96-chan/0xBitNet)
+- **方式**: 純 WebGPU compute shader。WASM 不使用
+- **対象**: BitNet b1.58 三値推論。16 三値重みを 1 u32 にパック、ブランチレス WGSL アンパック
+- **性能**: M2 Max で BitNet 2B-4T ~5 tok/s
+- **GGUF 対応**: HuggingFace から GGUF を直接取得・ブラウザ内パース
+- **当プロジェクトとの関係**: lowbit-Q 1-bit WebGPU シェーダの設計に直接参考にできる
+
+### D4. WASM SIMD vs WebGPU 性能比較
+
+| 環境 | TinyLlama-1.1B tok/s | 備考 |
+|---|---|---|
+| WASM SIMD (CPU) | 2-5 | 現在の wllama |
+| WebGPU (離散 GPU) | 25-40 | 10-15x 高速化 |
+| WebGPU (統合 GPU) | 10-20 | 推定値、デバイス依存 |
+
+行列積に限定した場合、512×512 以上の行列で WebGPU は WASM SIMD に対して **3-8x の高速化**。
+256×256 以下ではオーバーヘッドにより差は縮小。
+
+出典: SitePoint benchmarks (WebGPU vs WebAssembly / Transformers.js)
+
+### D5. WebGPU 仕様制約
+
+| 制約 | デフォルト値 | 影響 |
+|---|---|---|
+| `maxStorageBufferBindingSize` | 128 MiB | 1B+ パラメータモデルではバッファ分割が必要 |
+| `maxBufferSize` | 256 MiB | 大テンソルの分割ロード |
+| `maxComputeWorkgroupSizeX/Y` | 256 | GEMM タイリング設計に影響 |
+| `maxComputeInvocationsPerWorkgroup` | 256 | ワークグループサイズ上限 |
+| `maxComputeWorkgroupStorageSize` | 16 KiB | shared memory タイルサイズ制限 |
+| `maxStorageBuffersPerShaderStage` | 8 | multi-pass dispatch が必要になる場合あり |
+| Subgroup operations | Origin trial 終了、未安定 | 依存しない設計が必要 |
+
+**ブラウザ対応状況 (2026-04):**
+- Chrome: ✅ WebGPU 安定版
+- Safari: ⚠️ 限定的対応
+- Firefox: ⚠️ Nightly のみ
+
+---
+
 ## 検証結果と訂正事項
 
 元メモからの主な訂正・補足:
@@ -326,39 +417,69 @@
 
 ## 確定ロードマップ
 
+**設計方針: 統一フォーマット先行。**
+mixed-bit 重み量子化、KV cache 量子化、回転前処理は全てサイズ削減に寄与する技術であり、
+個別に段階拡張するのではなく、これらを包含する統一モデルフォーマット (lowbit-Q v2) を
+最初に設計する。フォーマットが確定していれば、カーネルは一度の実装で全機能を扱える。
+
 ```
-Phase 1: 混合ビット幅量子化
-  ├─ GGUF に layer/block ごとの quant type metadata を追加
-  ├─ OneComp AutoBit の考え方で 1/2/3/4-bit を層別に振り分け
-  └─ 現在の SVID 1-bit の品質問題を直接解決
+Phase 1: lowbit-Q v2 統一フォーマット設計
+  ├─ per-tensor 量子化型 (1-bit SVID / 2-3 bit / Q4_0 / passthrough)
+  ├─ KV cache 量子化パラメータ (KIVI: K per-channel, V per-token)
+  ├─ 回転前処理メタデータ (適用有無、パラメータ)
+  ├─ bitwidth allocator 設定 (サイズ予算、層別配分)
+  └─ 将来拡張用 namespace 予約 (activation quantization 等)
 
-Phase 2: KV cache 量子化
-  ├─ KIVI 方式 (K: per-channel, V: per-token, 2-bit) から開始
-  ├─ K/V 別精度、古いトークンの低精度化を段階導入
-  └─ TurboQuant は llama.cpp 統合状況を見て判断
+Phase 2: 統一変換パイプラインとカーネルの一括実装
+  ├─ ブラウザ内変換: allocator → 回転前処理 → テンソル量子化 → KV 設定 → GGUF 書出
+  ├─ WASM カーネル: 全量子化型ディスパッチ (1/2/3/4-bit + KV cache)
+  ├─ WebGPU シェーダ: 標準型 (ggml 既存) + lowbit-Q 全ビット幅 (新規)
+  └─ WebGPU ビルド有効化 (GGML_WEBGPU=ON, emdawnwebgpu_pkg)
 
-Phase 3: 回転前処理
-  ├─ OneComp の rotation preprocessing を変換器に統合
-  ├─ SpinQuant/OSTQuant ベースの回転行列を weight に吸収
-  └─ W4A8 安定化を狙う
+Phase 3: 品質検証とチューニング
+  ├─ サイズ予算ごとの品質マップ (30%/40%/50%/60%)
+  ├─ allocator 設定の最適化
+  ├─ KV cache 量子化のコンテキスト長 vs 品質検証
+  └─ 回転前処理の効果計測
 
 Phase 4: Activation 量子化 (条件付き)
-  ├─ W4A8 → W4A4 の段階的導入
-  └─ WASM でのオンライン Hadamard コストが見合う場合のみ
+  ├─ metadata namespace は Phase 1 で予約済み
+  └─ オンライン変換コストが見合う場合のみ
 ```
 
 ## 最終判断
 
 元メモの結論は基本的に正しい: **「別アーキテクチャ対応」ではなく「既存 Transformer 資産をブラウザ上でより小さく・長く・安定して回す」ための強化**が優先。
 
-検証で変わった点:
-1. **TurboQuant-Model は存在しない** — 第4段階を activation 量子化に差し替え
-2. **KV cache の初手は KIVI** — TurboQuant はブラウザ移植ハードルが想定より高い
-3. **BitNet b1.58 は認識すべき** — ただし PTQ パイプラインとは別軸。将来的に bitnet.cpp の WASM 移植が進めばネイティブ 1-bit モデルの直接実行も選択肢に入る
+### 根本的な動機: ブラウザのリソース制約
 
-優先順位:
-1. 混合ビット幅量子化 (OneComp AutoBit)
-2. KV cache 量子化 (KIVI → 段階的拡張)
-3. 回転前処理 (SpinQuant/OSTQuant via OneComp)
-4. Activation 量子化 (条件付き)
-5. 別アーキテクチャ系は当面保留 (RWKV の WebGPU 動向はウォッチ)
+当プロジェクトは HuggingFace 検索 → モデルダウンロード → ブラウザ内変換 → 推論・生成の
+**全工程をブラウザ内で完結**させることを前提とする。
+バックエンドサーバーや開発者による事前変換済みモデルの配布は範囲外である。
+
+ブラウザのリソース制約 (WASM 4GB, ダウンロードサイズ, OPFS) があるため、
+**モデルサイズ削減が最優先課題**であり、カスタム wllama が必要な理由はここにある。
+
+サイズ削減は精度低下を伴うため、精度補償が必要になる。
+各技術は「サイズ削減」と「精度補償」の両面を持ち、一体として設計する:
+
+- **mixed-bit**: サイズ削減 (1-4 bit) + 精度補償 (重要テンソルの高精度維持)
+- **KV cache 量子化**: メモリ削減 + コンテキスト長伸長
+- **回転前処理**: 精度補償 (outlier 軽減) → さらなる低ビット化 (= サイズ削減)
+- **WebGPU**: 削減後モデルの実行省力化
+
+### ブラウザ完結制約による除外
+
+- **QAT**: GPU + PyTorch + 勾配降下が必須
+- **知識蒸留**: 教師モデル + 学習パイプラインが必須
+- **SpinQuant 学習済み回転**: Cayley 最適化に学習が必要
+
+### 検証で変わった点
+
+1. **TurboQuant-Model は存在しない** — activation 量子化に差し替え
+2. **KV cache の初手は KIVI** — TurboQuant はブラウザ移植ハードルが想定より高い
+3. **BitNet b1.58 は認識すべき** — PTQ とは別軸。bitnet.cpp WASM 移植が進めば将来の選択肢
+4. **WebGPU バックエンドが .wllama-fork に存在する** — ビルド有効化で GPU 推論が即時利用可能
+5. **統一フォーマット先行** — mixed-bit / KV cache / 回転前処理を個別に段階拡張するのではなく、
+   包含する統一フォーマットを先に設計し、カーネルは一度だけ実装する
+6. 別アーキテクチャ系は当面保留 (RWKV の WebGPU 動向はウォッチ)
