@@ -17,9 +17,25 @@
 import { parseGGUFHeader, readTensorData, isWeightTensor, computeTensorDataSize } from './ggufParser';
 import { dequantize } from './dequantize';
 import { decompose, reconstruct, computeNMSE } from './lowbitQDecompose';
-import { writeLowbitQGGUF, type LowbitQTensorGroup } from './ggufWriter';
-import type { GGUFTensorInfo, GGUFHeader, ConversionProgress } from './types';
+import {
+  writeLowbitQGGUF,
+  writeLowbitQV2GGUF,
+  type LowbitQTensorGroup,
+  type NativeQuantTensor,
+} from './ggufWriter';
+import type {
+  GGUFTensorInfo,
+  GGUFHeader,
+  ConversionProgress,
+  LowbitQV2Metadata,
+  TensorAllocRecord,
+  LowbitQQualityMetrics,
+  BitwidthAllocatorConfig,
+} from './types';
+import { LowbitQQuantType, KVCacheQuantMethod } from './types';
 import { extractLayerIndex, classifyTensorFamily, type TensorConvertRecord } from './tensorFilter';
+import { allocateBitwidths, DEFAULT_ALLOCATOR_CONFIG } from './allocator';
+import { quantizeQ4_0 } from './q4_0Quantize';
 
 // ---------------------------------------------------------------------------
 // Public API
@@ -396,5 +412,244 @@ export function convertToLowbitQ(
     passthroughTensorCount: passthroughTensors.size,
     tensorNMSE,
     tensorRecords,
+  };
+}
+
+// ---------------------------------------------------------------------------
+// v2: mixed-bit streaming conversion
+// ---------------------------------------------------------------------------
+
+/** Extended result type for v2 conversions */
+export interface ConvertV2Result extends ConvertResult {
+  /** Allocation plan produced by the bitwidth allocator */
+  allocations: TensorAllocRecord[];
+}
+
+/**
+ * Convert a source GGUF File/Blob to lowbit-Q v2 GGUF format.
+ *
+ * Uses the bitwidth allocator to assign per-tensor quantization types:
+ *   - SVID_1BIT → OneBit (arXiv:2402.11295) SVID decomposition (a, sign, b triplet)
+ *   - Q4_0      → RTN 4-bit re-quantization (ggml native, no custom kernel)
+ *   - PASSTHROUGH → unchanged (embedding, norm, first/last layer override)
+ *
+ * Memory model: same as convertToLowbitQStreaming — tensors are streamed one
+ * by one; only one tensor's fp32 intermediate is in memory at a time.
+ */
+export async function convertToLowbitQV2Streaming(
+  source: File | Blob,
+  options: ConvertOptions & {
+    allocatorConfig?: BitwidthAllocatorConfig;
+    totalLayers?: number;
+    sourceModelName?: string;
+  } = {},
+): Promise<ConvertV2Result> {
+  const {
+    onProgress,
+    computeQuality = false,
+    allocatorConfig = DEFAULT_ALLOCATOR_CONFIG,
+    sourceModelName,
+  } = options;
+
+  // --- Parse header ---
+  onProgress?.({
+    stage: 'parsing',
+    currentTensor: 0,
+    totalTensors: 0,
+    currentTensorName: '',
+    percent: 0,
+  });
+
+  const { header } = await parseHeaderFromBlob(source);
+  const totalTensors = header.tensors.length;
+
+  // Resolve total transformer block count for layer-position detection.
+  // Try caller-provided value first, then read from GGUF metadata.
+  //
+  // GGUF stores this under the active architecture namespace:
+  //   general.architecture → e.g. "llama", "qwen2", "gemma", "phi3"
+  //   <arch>.block_count   → block count for that architecture
+  // Hard-coding "llama.block_count" silently returns 0 for non-Llama models,
+  // which disables the first/last-layer override in the allocator.
+  const totalLayers: number = (() => {
+    if (options.totalLayers !== undefined) return options.totalLayers;
+    const archEntry = header.metadata.get('general.architecture');
+    const arch = archEntry ? String(archEntry.value) : '';
+    if (arch) {
+      const entry = header.metadata.get(`${arch}.block_count`);
+      if (entry !== undefined) return Number(entry.value as number);
+    }
+    return 0;
+  })();
+
+  // --- Build allocation plan ---
+  const allocations = allocateBitwidths(header.tensors, totalLayers, allocatorConfig);
+  const allocByName = new Map<string, TensorAllocRecord>(allocations.map((r) => [r.name, r]));
+
+  // --- Process tensors ---
+  const svid1bitTensors = new Map<string, LowbitQTensorGroup>();
+  const nativeQuantTensors: NativeQuantTensor[] = [];
+  const passthroughTensors = new Map<string, { info: GGUFTensorInfo; data: Uint8Array }>();
+  const tensorNMSE = new Map<string, number>();
+  const tensorRecords: TensorConvertRecord[] = [];
+  let convertedCount = 0;
+
+  for (let t = 0; t < totalTensors; t++) {
+    const tensor = header.tensors[t];
+
+    onProgress?.({
+      stage: 'converting',
+      currentTensor: t,
+      totalTensors,
+      currentTensorName: tensor.name,
+      percent: Math.round((t / totalTensors) * 90),
+    });
+
+    const alloc = allocByName.get(tensor.name);
+    const quantType = alloc?.quantType ?? LowbitQQuantType.PASSTHROUGH;
+    const rawData = await readTensorFromBlob(source, header, tensor);
+    const tensorDataSize = rawData.byteLength;
+
+    if (quantType === LowbitQQuantType.SVID_1BIT) {
+      const totalElements = Number(tensor.dims.reduce((acc, d) => acc * d, 1n));
+      const fp32Weights = dequantize(rawData, tensor.type, totalElements);
+      const inFeatures = Number(tensor.dims[0]);
+      const outFeatures = tensor.nDims >= 2 ? Number(tensor.dims[1]) : 1;
+      const decomposition = decompose(fp32Weights, outFeatures, inFeatures);
+      const baseName = tensor.name.replace(/\.weight$/, '');
+      svid1bitTensors.set(tensor.name, { baseName, decomposition });
+      convertedCount++;
+
+      let nmse: number | null = null;
+      if (computeQuality && totalElements <= 4_000_000) {
+        const reconstructed = reconstruct(decomposition);
+        nmse = computeNMSE(fp32Weights, reconstructed);
+        tensorNMSE.set(tensor.name, nmse);
+        // Update alloc record with measured NMSE
+        if (alloc) alloc.nmse = nmse;
+      }
+
+      const lowbitQSizeBytes =
+        decomposition.outFeatures * 2 +
+        decomposition.inFeatures * 2 +
+        decomposition.sign.byteLength;
+
+      tensorRecords.push({
+        name: tensor.name,
+        layerIndex: extractLayerIndex(tensor.name),
+        family: classifyTensorFamily(tensor.name),
+        converted: true,
+        nmse,
+        originalSizeBytes: tensorDataSize,
+        lowbitQSizeBytes,
+        dims: tensor.dims.map(Number),
+      });
+    } else if (quantType === LowbitQQuantType.Q4_0) {
+      const totalElements = Number(tensor.dims.reduce((acc, d) => acc * d, 1n));
+      const fp32Weights = dequantize(rawData, tensor.type, totalElements);
+      const q4Data = quantizeQ4_0(fp32Weights);
+
+      // Keep the original tensor name (e.g. "blk.0.attn_q.weight").
+      // llama.cpp's graph builder resolves projection weights by their original
+      // .weight names; renaming them breaks model load for any layer not handled
+      // by the SVID custom path. The GGML type (Q4_0) stored in the tensor header
+      // is sufficient for native kernel dispatch — no name change needed.
+      // The lowbit-q.tensor_alloc JSON metadata records the allocation decision.
+      nativeQuantTensors.push({
+        name: tensor.name,
+        type: 2, // GGMLType.Q4_0 = 2
+        dims: tensor.dims,
+        data: q4Data,
+      });
+      convertedCount++;
+
+      tensorRecords.push({
+        name: tensor.name,
+        layerIndex: extractLayerIndex(tensor.name),
+        family: classifyTensorFamily(tensor.name),
+        converted: true,
+        nmse: null,
+        originalSizeBytes: tensorDataSize,
+        lowbitQSizeBytes: q4Data.byteLength,
+        dims: tensor.dims.map(Number),
+      });
+    } else {
+      // PASSTHROUGH: keep tensor unchanged
+      passthroughTensors.set(tensor.name, { info: tensor, data: rawData });
+
+      tensorRecords.push({
+        name: tensor.name,
+        layerIndex: extractLayerIndex(tensor.name),
+        family: classifyTensorFamily(tensor.name),
+        converted: false,
+        nmse: null,
+        originalSizeBytes: tensorDataSize,
+        lowbitQSizeBytes: null,
+        dims: tensor.dims.map(Number),
+      });
+    }
+  }
+
+  // --- Compute quality metrics ---
+  let quality: LowbitQQualityMetrics | undefined;
+  if (computeQuality && tensorNMSE.size > 0) {
+    const nmseValues = Array.from(tensorNMSE.values());
+    quality = {
+      nmseMean: nmseValues.reduce((s, v) => s + v, 0) / nmseValues.length,
+      nmseMax: Math.max(...nmseValues),
+      convertedTensorCount: convertedCount,
+      passthroughTensorCount: passthroughTensors.size,
+    };
+  }
+
+  // --- Build v2 metadata ---
+  const v2Metadata: LowbitQV2Metadata = {
+    formatVersion: 2,
+    sourceModelName,
+    sizeBudget: allocatorConfig.sizeBudget,
+    kvCache: {
+      kMethod: KVCacheQuantMethod.NONE,
+      kBitwidth: 0,
+      vMethod: KVCacheQuantMethod.NONE,
+      vBitwidth: 0,
+    },
+    tensorAllocs: allocations,
+    quality,
+  };
+
+  // --- Write v2 GGUF ---
+  onProgress?.({
+    stage: 'writing',
+    currentTensor: totalTensors,
+    totalTensors,
+    currentTensorName: '',
+    percent: 92,
+  });
+
+  const result = writeLowbitQV2GGUF({
+    sourceHeader: header,
+    passthroughTensors,
+    svid1bitTensors,
+    nativeQuantTensors,
+    v2Metadata,
+  });
+
+  onProgress?.({
+    stage: 'done',
+    currentTensor: totalTensors,
+    totalTensors,
+    currentTensorName: '',
+    percent: 100,
+  });
+
+  return {
+    data: result,
+    originalSize: source.size,
+    convertedSize: result.byteLength,
+    convertedTensorCount: convertedCount,
+    passthroughTensorCount: passthroughTensors.size,
+    tensorNMSE,
+    tensorRecords,
+    allocations,
   };
 }

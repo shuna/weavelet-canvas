@@ -1,19 +1,20 @@
 /**
  * Web Worker for lowbit-Q GGUF conversion.
  *
- * Uses the streaming conversion API: the source file is NOT read entirely
- * into memory. Instead, File.slice() reads individual tensors on demand,
- * keeping peak memory to roughly one tensor's worth of fp32 data.
+ * Routes to the v2 mixed-bit pipeline (convertToLowbitQV2Streaming) by default.
+ * Falls back to the legacy v1 pipeline (convertToLowbitQStreaming) only when
+ * explicitly requested via the deprecated `convertMode` field.
  *
  * Message protocol:
- *   Main → Worker: { id, type: 'start', sourceFile: File, convertMode?, computeQuality? }
+ *   Main → Worker: ConversionStartRequest
  *   Worker → Main: { id, type: 'progress', progress: ConversionProgress }
  *   Worker → Main: { id, type: 'done', result: Blob, originalSize, convertedSize, tensorRecords? }
  *   Worker → Main: { id, type: 'error', message: string }
  */
 
-import { convertToLowbitQStreaming } from '../local-llm/lowbit-q/convert';
+import { convertToLowbitQStreaming, convertToLowbitQV2Streaming } from '../local-llm/lowbit-q/convert';
 import { createTensorFilter, type LowbitQConvertMode } from '../local-llm/lowbit-q/tensorFilter';
+import { DEFAULT_ALLOCATOR_CONFIG } from '../local-llm/lowbit-q/allocator';
 import type {
   ConversionStartRequest,
   ConversionProgressMessage,
@@ -45,25 +46,40 @@ async function handleStart(req: ConversionStartRequest) {
       return;
     }
 
-    // Build tensor filter from convert mode
-    const convertMode = (req.convertMode ?? 'all') as LowbitQConvertMode;
-    const tensorFilter = createTensorFilter(convertMode);
-    const computeQuality = req.computeQuality ?? false;
+    const onProgress = (progress: Parameters<typeof respondProgress>[1]) => {
+      respondProgress(req.id, progress);
+    };
 
-    // Run streaming conversion — does NOT load entire file into memory.
-    // Each tensor is read via File.slice() on demand.
-    const result = await convertToLowbitQStreaming(file, {
-      onProgress: (progress) => {
-        const msg: ConversionProgressMessage = {
-          id: req.id,
-          type: 'progress',
-          progress,
-        };
-        self.postMessage(msg);
-      },
-      computeQuality,
-      tensorFilter,
-    });
+    // ---------------------------------------------------------------------------
+    // v2 path (default): mixed-bit allocator pipeline
+    // ---------------------------------------------------------------------------
+    // Use legacy v1 only when the deprecated `convertMode` field is explicitly set
+    // and no allocatorConfig is provided. This preserves backward compatibility
+    // for callers that have not yet migrated to the v2 API.
+    const useLegacyV1 = req.convertMode !== undefined && req.allocatorConfig === undefined;
+
+    let result: { data: Uint8Array; originalSize: number; convertedSize: number; tensorRecords: unknown[] };
+
+    if (useLegacyV1) {
+      // Legacy v1: uniform SVID_1BIT conversion controlled by convertMode filter
+      const convertMode = (req.convertMode ?? 'all') as LowbitQConvertMode;
+      const tensorFilter = createTensorFilter(convertMode);
+      result = await convertToLowbitQStreaming(file, {
+        onProgress,
+        computeQuality: req.computeQuality ?? false,
+        tensorFilter,
+      });
+    } else {
+      // v2: mixed-bit allocation pipeline (default for all new callers)
+      const allocatorConfig = req.allocatorConfig ?? DEFAULT_ALLOCATOR_CONFIG;
+      result = await convertToLowbitQV2Streaming(file, {
+        onProgress,
+        computeQuality: req.computeQuality ?? false,
+        allocatorConfig,
+        totalLayers: req.totalLayers,
+        sourceModelName: req.sourceModelName,
+      });
+    }
 
     // Return result as Blob
     const blob = new Blob([result.data], { type: 'application/octet-stream' });
@@ -73,14 +89,18 @@ async function handleStart(req: ConversionStartRequest) {
       result: blob,
       originalSize: result.originalSize,
       convertedSize: result.convertedSize,
-      tensorRecords: result.tensorRecords,
+      tensorRecords: result.tensorRecords as ConversionDoneMessage['tensorRecords'],
     };
     self.postMessage(msg);
   } catch (e) {
     const err = e as Error;
-    respondError(req.id,
-      `Lowbit-Q変換に失敗しました: ${err.message}`);
+    respondError(req.id, `Lowbit-Q変換に失敗しました: ${err.message}`);
   }
+}
+
+function respondProgress(id: number, progress: ConversionProgressMessage['progress']) {
+  const msg: ConversionProgressMessage = { id, type: 'progress', progress };
+  self.postMessage(msg);
 }
 
 function respondError(id: number, message: string) {
