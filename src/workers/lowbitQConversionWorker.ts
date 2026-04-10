@@ -12,7 +12,11 @@
  *   Worker → Main: { id, type: 'error', message: string }
  */
 
-import { convertToLowbitQStreaming, convertToLowbitQV2Streaming } from '../local-llm/lowbit-q/convert';
+import {
+  convertToLowbitQStreaming,
+  convertToLowbitQV2Streaming,
+  convertToLowbitQV2StreamingToOPFS,
+} from '../local-llm/lowbit-q/convert';
 import { createTensorFilter, type LowbitQConvertMode } from '../local-llm/lowbit-q/tensorFilter';
 import { DEFAULT_ALLOCATOR_CONFIG } from '../local-llm/lowbit-q/allocator';
 import type {
@@ -58,7 +62,9 @@ async function handleStart(req: ConversionStartRequest) {
     // for callers that have not yet migrated to the v2 API.
     const useLegacyV1 = req.convertMode !== undefined && req.allocatorConfig === undefined;
 
-    let result: { data: Uint8Array; originalSize: number; convertedSize: number; tensorRecords: unknown[] };
+    let result:
+      | { data: Uint8Array; originalSize: number; convertedSize: number; tensorRecords: unknown[] }
+      | { originalSize: number; convertedSize: number; tensorRecords: unknown[] };
 
     if (useLegacyV1) {
       // Legacy v1: uniform SVID_1BIT conversion controlled by convertMode filter
@@ -72,25 +78,34 @@ async function handleStart(req: ConversionStartRequest) {
     } else {
       // v2: mixed-bit allocation pipeline (default for all new callers)
       const allocatorConfig = req.allocatorConfig ?? DEFAULT_ALLOCATOR_CONFIG;
-      result = await convertToLowbitQV2Streaming(file, {
-        onProgress,
-        computeQuality: req.computeQuality ?? false,
-        allocatorConfig,
-        totalLayers: req.totalLayers,
-        sourceModelName: req.sourceModelName,
-      });
+      result = req.opfsTarget
+        ? await convertToLowbitQV2StreamingToOPFS(file, req.opfsTarget, {
+            onProgress,
+            computeQuality: req.computeQuality ?? false,
+            allocatorConfig,
+            totalLayers: req.totalLayers,
+            sourceModelName: req.sourceModelName,
+          })
+        : await convertToLowbitQV2Streaming(file, {
+            onProgress,
+            computeQuality: req.computeQuality ?? false,
+            allocatorConfig,
+            totalLayers: req.totalLayers,
+            sourceModelName: req.sourceModelName,
+          });
     }
 
-    // Return result as Blob
-    const blob = new Blob([result.data], { type: 'application/octet-stream' });
     const msg: ConversionDoneMessage = {
       id: req.id,
       type: 'done',
-      result: blob,
       originalSize: result.originalSize,
       convertedSize: result.convertedSize,
       tensorRecords: result.tensorRecords as ConversionDoneMessage['tensorRecords'],
+      persistedToOpfs: req.opfsTarget !== undefined,
     };
+    if ('data' in result) {
+      msg.result = new Blob([result.data], { type: 'application/octet-stream' });
+    }
     self.postMessage(msg);
   } catch (e) {
     const err = e as Error;

@@ -184,6 +184,12 @@ export class LowbitQConversionManager {
         id: 1,
         type: 'start',
         sourceFile,
+        opfsTarget: callbacks.allocatorConfig
+          ? {
+              modelId: generateLowbitQModelId(sourceModelId),
+              fileName: generateLowbitQFilename(sourceFile.name),
+            }
+          : undefined,
         allocatorConfig: callbacks.allocatorConfig,
         convertMode: callbacks.allocatorConfig ? undefined : callbacks.convertMode,
         computeQuality: callbacks.computeQuality,
@@ -228,7 +234,12 @@ export class LowbitQConversionManager {
             percent: 95,
           });
 
-          await saveFile(lowbitQModelId, lowbitQFileName, msg.result);
+          if (!msg.persistedToOpfs) {
+            if (!msg.result) {
+              throw new Error('変換結果 Blob がありません。');
+            }
+            await saveFile(lowbitQModelId, lowbitQFileName, msg.result);
+          }
 
           // Step 4: Build model definition
           const displayMeta: LocalModelDisplayMeta = {

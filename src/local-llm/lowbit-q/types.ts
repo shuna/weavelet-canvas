@@ -246,6 +246,51 @@ export interface KVCacheQuantParams {
   vBitwidth: number;
 }
 
+/**
+ * KV cache quantization policy used for memory estimation and future runtime use.
+ *
+ * KIVI (ICML 2024) style: Keys per-channel, Values per-token.
+ * TurboQuant (ICLR 2026) style: requires online rotation — deferred.
+ *
+ * Phase 4 scope: TypeScript estimation only. C++ runtime implementation is Phase 5.
+ */
+export interface KVQuantPolicy {
+  /** Key quantization method */
+  keyMethod: 'none' | 'per_channel_2bit' | 'per_channel_4bit';
+  /** Value quantization method */
+  valueMethod: 'none' | 'per_token_2bit' | 'per_token_4bit';
+  /**
+   * Number of "residual" tokens at sequence start kept at full precision.
+   * KIVI paper recommends keeping the first 32–128 tokens in FP16.
+   */
+  residualTokens: number;
+  /**
+   * Apply online rotation before quantization (TurboQuant/QuaRot style).
+   * Deferred to Phase 5 — requires custom WASM kernel.
+   */
+  applyRotation: boolean;
+}
+
+/** Bytes per KV element for a given policy (key side) */
+export function kvKeyBytesPerElement(policy: KVQuantPolicy): number {
+  switch (policy.keyMethod) {
+    case 'per_channel_2bit': return 2 / 8; // + negligible per-channel scale overhead
+    case 'per_channel_4bit': return 4 / 8;
+    case 'none':
+    default: return 2; // FP16
+  }
+}
+
+/** Bytes per KV element for a given policy (value side) */
+export function kvValueBytesPerElement(policy: KVQuantPolicy): number {
+  switch (policy.valueMethod) {
+    case 'per_token_2bit': return 2 / 8;
+    case 'per_token_4bit': return 4 / 8;
+    case 'none':
+    default: return 2; // FP16
+  }
+}
+
 /** Aggregated quality metrics stored in v2 GGUF metadata */
 export interface LowbitQQualityMetrics {
   nmseMean: number;
@@ -352,6 +397,14 @@ export interface ConversionStartRequest {
   totalLayers?: number;
   /** Optional source model name stored in v2 GGUF metadata */
   sourceModelName?: string;
+  /**
+   * Optional OPFS direct-write target. When set, the worker persists the
+   * converted GGUF directly to OPFS instead of returning a Blob.
+   */
+  opfsTarget?: {
+    modelId: string;
+    fileName: string;
+  };
   /** Whether to compute per-tensor quality metrics (NMSE). Default: false */
   computeQuality?: boolean;
   /**
@@ -370,12 +423,14 @@ export interface ConversionProgressMessage {
 export interface ConversionDoneMessage {
   id: number;
   type: 'done';
-  /** Resulting lowbit-Q GGUF as Blob */
-  result: Blob;
+  /** Resulting lowbit-Q GGUF as Blob (omitted when already persisted to OPFS) */
+  result?: Blob;
   /** Original size in bytes */
   originalSize: number;
   /** Converted size in bytes */
   convertedSize: number;
+  /** True when the worker already wrote the output to OPFS */
+  persistedToOpfs?: boolean;
   /** Per-tensor conversion records (populated when computeQuality is true) */
   tensorRecords?: Array<{
     name: string;

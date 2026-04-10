@@ -20,8 +20,12 @@ import { decompose, reconstruct, computeNMSE } from './lowbitQDecompose';
 import {
   writeLowbitQGGUF,
   writeLowbitQV2GGUF,
+  buildLowbitQV2Metadata,
+  buildGGUFHeaderBytes,
+  computeAlignedDataSize,
   type LowbitQTensorGroup,
   type NativeQuantTensor,
+  type OutputTensorPlan,
 } from './ggufWriter';
 import type {
   GGUFTensorInfo,
@@ -32,12 +36,25 @@ import type {
   LowbitQQualityMetrics,
   BitwidthAllocatorConfig,
 } from './types';
-import { LowbitQQuantType, KVCacheQuantMethod } from './types';
+import {
+  LowbitQQuantType,
+  KVCacheQuantMethod,
+  GGMLType,
+  GGML_BLOCK_SIZES,
+  GGML_TYPE_SIZES,
+  LOWBIT_Q_SUFFIX_A,
+  LOWBIT_Q_SUFFIX_B,
+  LOWBIT_Q_SUFFIX_SIGN,
+} from './types';
 import { extractLayerIndex, classifyTensorFamily, type TensorConvertRecord } from './tensorFilter';
-import { allocateBitwidths, DEFAULT_ALLOCATOR_CONFIG } from './allocator';
+import { allocateBitwidths, DEFAULT_ALLOCATOR_CONFIG, validateAllocations } from './allocator';
 import { quantizeQ4_0 } from './q4_0Quantize';
 import { quantizeQ3_K } from './q3_kQuantize';
 import { quantizeQ2_K } from './q2_kQuantize';
+import { writeTempChunk, commitTempFile, removeTempFile } from '../storage';
+import { fp32ToFp16 } from './dequantize';
+
+const GGUF_ALIGNMENT = 32;
 
 // ---------------------------------------------------------------------------
 // Public API
@@ -83,6 +100,7 @@ export interface ConvertResult {
  * If the header is larger, we retry with the full file.
  */
 const HEADER_INITIAL_READ = 256 * 1024; // 256KB covers most models
+const TENSOR_STREAM_CHUNK_SIZE = 4 * 1024 * 1024;
 
 /**
  * Parse the GGUF header from a File/Blob, reading only the minimum needed.
@@ -125,6 +143,90 @@ async function readTensorFromBlob(
   const slice = source.slice(absoluteOffset, absoluteOffset + size);
   const buffer = await slice.arrayBuffer();
   return new Uint8Array(buffer);
+}
+
+async function streamTensorToOpfs(
+  source: File | Blob,
+  header: GGUFHeader,
+  tensor: GGUFTensorInfo,
+  target: OPFSTarget,
+): Promise<void> {
+  const size = computeTensorDataSize(tensor);
+  const absoluteOffset = header.dataOffset + Number(tensor.offset);
+  let offset = 0;
+
+  while (offset < size) {
+    const chunkSize = Math.min(TENSOR_STREAM_CHUNK_SIZE, size - offset);
+    const chunkBuffer = await source
+      .slice(absoluteOffset + offset, absoluteOffset + offset + chunkSize)
+      .arrayBuffer();
+    await writeTempChunk(target.modelId, target.fileName, new Uint8Array(chunkBuffer), true);
+    offset += chunkSize;
+  }
+}
+
+function gcd(a: number, b: number): number {
+  let x = Math.abs(a);
+  let y = Math.abs(b);
+  while (y !== 0) {
+    const t = y;
+    y = x % y;
+    x = t;
+  }
+  return x;
+}
+
+function lcm(a: number, b: number): number {
+  return (a * b) / gcd(a, b);
+}
+
+function computeTypeChunkSizeBytes(type: GGMLType, elements: number): number {
+  const blockElems = GGML_BLOCK_SIZES[type];
+  const blockBytes = GGML_TYPE_SIZES[type];
+  if (blockElems === undefined || blockBytes === undefined) {
+    throw new Error(`Chunked conversion not supported for ggml type ${type}`);
+  }
+  return Math.ceil(elements / blockElems) * blockBytes;
+}
+
+async function streamNativeQuantTensorToOpfs(
+  source: File | Blob,
+  header: GGUFHeader,
+  tensor: GGUFTensorInfo,
+  targetType: LowbitQQuantType.Q4_0 | LowbitQQuantType.Q3_K | LowbitQQuantType.Q2_K,
+  target: OPFSTarget,
+): Promise<void> {
+  const totalElements = Number(tensor.dims.reduce((acc, d) => acc * d, 1n));
+  const sourceBlockElems = GGML_BLOCK_SIZES[tensor.type] ?? 1;
+  const targetBlockElems =
+    targetType === LowbitQQuantType.Q4_0 ? 32 : 256;
+  const processingBlockElems = lcm(sourceBlockElems, targetBlockElems);
+  const chunkElements = Math.max(
+    processingBlockElems,
+    Math.floor(TENSOR_STREAM_CHUNK_SIZE / Math.max(1, computeTypeChunkSizeBytes(tensor.type, processingBlockElems)))
+      * processingBlockElems,
+  );
+
+  const absoluteOffset = header.dataOffset + Number(tensor.offset);
+  let elementOffset = 0;
+  let byteOffset = 0;
+
+  while (elementOffset < totalElements) {
+    const elementsThisChunk = Math.min(chunkElements, totalElements - elementOffset);
+    const sourceChunkBytes = computeTypeChunkSizeBytes(tensor.type, elementsThisChunk);
+    const chunkBuffer = await source
+      .slice(absoluteOffset + byteOffset, absoluteOffset + byteOffset + sourceChunkBytes)
+      .arrayBuffer();
+    const rawChunk = new Uint8Array(chunkBuffer);
+    const fp32Chunk = dequantize(rawChunk, tensor.type, elementsThisChunk);
+    const quantizedChunk =
+      targetType === LowbitQQuantType.Q4_0 ? quantizeQ4_0(fp32Chunk) :
+      targetType === LowbitQQuantType.Q3_K ? quantizeQ3_K(fp32Chunk) :
+      quantizeQ2_K(fp32Chunk);
+    await writeTempChunk(target.modelId, target.fileName, quantizedChunk, true);
+    byteOffset += sourceChunkBytes;
+    elementOffset += elementsThisChunk;
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -427,6 +529,180 @@ export interface ConvertV2Result extends ConvertResult {
   allocations: TensorAllocRecord[];
 }
 
+export interface ConvertV2PersistResult extends Omit<ConvertV2Result, 'data'> {}
+
+interface OPFSTarget {
+  modelId: string;
+  fileName: string;
+}
+
+interface ConversionPlanningState {
+  header: GGUFHeader;
+  totalTensors: number;
+  allocations: TensorAllocRecord[];
+  allocByName: Map<string, TensorAllocRecord>;
+  effectiveAllocatorConfig: BitwidthAllocatorConfig;
+}
+
+interface PlannedTensorOutput {
+  name: string;
+  type: number;
+  dims: bigint[];
+  dataSize: number;
+}
+
+interface PlannedConversionLayout {
+  outputTensors: PlannedTensorOutput[];
+  convertedCount: number;
+  passthroughCount: number;
+}
+
+function resolveArchitectureAndAllocator(
+  header: GGUFHeader,
+  allocatorConfig: BitwidthAllocatorConfig,
+  totalLayersOverride?: number,
+): ConversionPlanningState {
+  const totalTensors = header.tensors.length;
+  const arch: string = (() => {
+    const archEntry = header.metadata.get('general.architecture');
+    return archEntry ? String(archEntry.value) : '';
+  })();
+
+  const totalLayers: number = (() => {
+    if (totalLayersOverride !== undefined) return totalLayersOverride;
+    if (arch) {
+      const entry = header.metadata.get(`${arch}.block_count`);
+      if (entry !== undefined) return Number(entry.value as number);
+    }
+    return 0;
+  })();
+
+  const effectiveAllocatorConfig: BitwidthAllocatorConfig =
+    (arch !== '' && arch !== 'llama')
+      ? {
+          ...allocatorConfig,
+          attnQKQuant: LowbitQQuantType.Q4_0,
+          attnVOQuant: LowbitQQuantType.Q4_0,
+          ffnQuant: LowbitQQuantType.Q4_0,
+        }
+      : allocatorConfig;
+
+  const allocations = allocateBitwidths(header.tensors, totalLayers, effectiveAllocatorConfig);
+  const allocByName = new Map<string, TensorAllocRecord>(allocations.map((r) => [r.name, r]));
+
+  return {
+    header,
+    totalTensors,
+    allocations,
+    allocByName,
+    effectiveAllocatorConfig,
+  };
+}
+
+function enforceAllocationValidation(allocations: TensorAllocRecord[]): void {
+  const validationWarnings = validateAllocations(allocations);
+  for (const warn of validationWarnings) {
+    if (warn.level === 'forbidden') {
+      throw new Error(
+        `[lowbit-q] FORBIDDEN allocation rejected: ${warn.message}\n` +
+        `Tensor: ${warn.tensorName}, Quant: ${warn.quantType}\n` +
+        `See COMPRESSION-RISK-MAP.md for details.`,
+      );
+    }
+    console.warn(`[lowbit-q] CAUTION: ${warn.message}`);
+  }
+}
+
+function planTensorOutputs(
+  header: GGUFHeader,
+  allocations: TensorAllocRecord[],
+): PlannedConversionLayout {
+  const allocByName = new Map<string, TensorAllocRecord>(allocations.map((r) => [r.name, r]));
+  const outputTensors: PlannedTensorOutput[] = [];
+  let convertedCount = 0;
+  let passthroughCount = 0;
+
+  for (const tensor of header.tensors) {
+    const alloc = allocByName.get(tensor.name);
+    const quantType = alloc?.quantType ?? LowbitQQuantType.PASSTHROUGH;
+    const totalElements = Number(tensor.dims.reduce((acc, d) => acc * d, 1n));
+
+    if (quantType === LowbitQQuantType.SVID_1BIT) {
+      const inFeatures = Number(tensor.dims[0]);
+      const outFeatures = tensor.nDims >= 2 ? Number(tensor.dims[1]) : 1;
+      const baseName = tensor.name.replace(/\.weight$/, '');
+      outputTensors.push({
+        name: baseName + LOWBIT_Q_SUFFIX_A,
+        type: GGMLType.F16,
+        dims: [BigInt(outFeatures)],
+        dataSize: outFeatures * 2,
+      });
+      outputTensors.push({
+        name: baseName + LOWBIT_Q_SUFFIX_B,
+        type: GGMLType.F16,
+        dims: [BigInt(inFeatures)],
+        dataSize: inFeatures * 2,
+      });
+      outputTensors.push({
+        name: baseName + LOWBIT_Q_SUFFIX_SIGN,
+        type: GGMLType.I8,
+        dims: [BigInt(Math.ceil(totalElements / 8))],
+        dataSize: Math.ceil(totalElements / 8),
+      });
+      convertedCount++;
+    } else if (
+      quantType === LowbitQQuantType.Q4_0 ||
+      quantType === LowbitQQuantType.Q3_K ||
+      quantType === LowbitQQuantType.Q2_K
+    ) {
+      const targetType =
+        quantType === LowbitQQuantType.Q4_0 ? LowbitQQuantType.Q4_0 :
+        quantType === LowbitQQuantType.Q3_K ? LowbitQQuantType.Q3_K :
+        LowbitQQuantType.Q2_K;
+      const plannedType =
+        targetType === LowbitQQuantType.Q4_0 ? 2 :
+        targetType === LowbitQQuantType.Q2_K ? 10 : 11;
+      outputTensors.push({
+        name: tensor.name,
+        type: plannedType,
+        dims: tensor.dims,
+        dataSize: computeTensorDataSize({ ...tensor, type: plannedType }),
+      });
+      convertedCount++;
+    } else {
+      outputTensors.push({
+        name: tensor.name,
+        type: tensor.type,
+        dims: tensor.dims,
+        dataSize: computeTensorDataSize(tensor),
+      });
+      passthroughCount++;
+    }
+  }
+
+  return { outputTensors, convertedCount, passthroughCount };
+}
+
+function float32ArrayToFp16Bytes(values: Float32Array): Uint8Array {
+  const result = new Uint8Array(values.length * 2);
+  const view = new DataView(result.buffer);
+  for (let i = 0; i < values.length; i++) {
+    view.setUint16(i * 2, fp32ToFp16(values[i]), true);
+  }
+  return result;
+}
+
+async function writePaddingChunk(target: OPFSTarget, payloadLength: number): Promise<void> {
+  const remainder = payloadLength % GGUF_ALIGNMENT;
+  if (remainder === 0) return;
+  await writeTempChunk(
+    target.modelId,
+    target.fileName,
+    new Uint8Array(GGUF_ALIGNMENT - remainder),
+    true,
+  );
+}
+
 /**
  * Convert a source GGUF File/Blob to lowbit-Q v2 GGUF format.
  *
@@ -435,8 +711,9 @@ export interface ConvertV2Result extends ConvertResult {
  *   - Q4_0      → RTN 4-bit re-quantization (ggml native, no custom kernel)
  *   - PASSTHROUGH → unchanged (embedding, norm, first/last layer override)
  *
- * Memory model: same as convertToLowbitQStreaming — tensors are streamed one
- * by one; only one tensor's fp32 intermediate is in memory at a time.
+ * Memory model: input parsing is streaming and fp32 intermediates are processed
+ * one tensor at a time, but the final output is still buffered in memory.
+ * PASSTHROUGH-heavy conversions therefore are not constant-memory.
  */
 export async function convertToLowbitQV2Streaming(
   source: File | Blob,
@@ -463,46 +740,13 @@ export async function convertToLowbitQV2Streaming(
   });
 
   const { header } = await parseHeaderFromBlob(source);
-  const totalTensors = header.tensors.length;
+  const {
+    totalTensors,
+    allocations,
+    allocByName,
+  } = resolveArchitectureAndAllocator(header, allocatorConfig, options.totalLayers);
 
-  // Resolve model architecture and total transformer block count.
-  const arch: string = (() => {
-    const archEntry = header.metadata.get('general.architecture');
-    return archEntry ? String(archEntry.value) : '';
-  })();
-
-  const totalLayers: number = (() => {
-    if (options.totalLayers !== undefined) return options.totalLayers;
-    if (arch) {
-      const entry = header.metadata.get(`${arch}.block_count`);
-      if (entry !== undefined) return Number(entry.value as number);
-    }
-    return 0;
-  })();
-
-  // Phase 1a scope: the C++ SVID dispatch patch (0003) only instruments the
-  // LLAMA graph builder, and the loader patch (0002) only marks projection
-  // weights optional in the LLAMA branch of llama-model.cpp.  For any other
-  // architecture that gets SVID-assigned projections the loader will fail with
-  // "tensor not found" because the .weight tensor is absent.
-  //
-  // Guard: if the GGUF declares a non-Llama architecture, override all SVID
-  // allocations to Q4_0 so the output remains loadable by unpatched builders.
-  // Unknown architecture (arch === '') is left unchanged — it is more likely a
-  // hand-crafted Llama GGUF than a patched non-Llama one.
-  const effectiveAllocatorConfig: BitwidthAllocatorConfig =
-    (arch !== '' && arch !== 'llama')
-      ? {
-          ...allocatorConfig,
-          attnQKQuant: LowbitQQuantType.Q4_0,
-          attnVOQuant: LowbitQQuantType.Q4_0,
-          ffnQuant: LowbitQQuantType.Q4_0,
-        }
-      : allocatorConfig;
-
-  // --- Build allocation plan ---
-  const allocations = allocateBitwidths(header.tensors, totalLayers, effectiveAllocatorConfig);
-  const allocByName = new Map<string, TensorAllocRecord>(allocations.map((r) => [r.name, r]));
+  enforceAllocationValidation(allocations);
 
   // --- Process tensors ---
   const svid1bitTensors = new Map<string, LowbitQTensorGroup>();
@@ -741,6 +985,376 @@ export async function convertToLowbitQV2Streaming(
     convertedSize: result.byteLength,
     convertedTensorCount: convertedCount,
     passthroughTensorCount: passthroughTensors.size,
+    tensorNMSE,
+    tensorRecords,
+    allocations,
+  };
+}
+
+/**
+ * Low-memory v2 conversion path for large files.
+ *
+ * This performs a two-pass conversion:
+ *   1. Plan output tensor sizes and optional quality metrics
+ *   2. Re-read each tensor and write the GGUF directly to OPFS in order
+ *
+ * Peak memory stays near the largest single tensor plus a small write buffer,
+ * instead of retaining the full output model in memory.
+ */
+export async function convertToLowbitQV2StreamingToOPFS(
+  source: File | Blob,
+  target: OPFSTarget,
+  options: ConvertOptions & {
+    allocatorConfig?: BitwidthAllocatorConfig;
+    totalLayers?: number;
+    sourceModelName?: string;
+  } = {},
+): Promise<ConvertV2PersistResult> {
+  const {
+    onProgress,
+    computeQuality = false,
+    allocatorConfig = DEFAULT_ALLOCATOR_CONFIG,
+    sourceModelName,
+  } = options;
+
+  onProgress?.({
+    stage: 'parsing',
+    currentTensor: 0,
+    totalTensors: 0,
+    currentTensorName: '',
+    percent: 0,
+  });
+
+  const { header } = await parseHeaderFromBlob(source);
+  const planning = resolveArchitectureAndAllocator(header, allocatorConfig, options.totalLayers);
+  const { totalTensors, allocations, allocByName } = planning;
+  enforceAllocationValidation(allocations);
+
+  const tensorNMSE = new Map<string, number>();
+  const tensorRecords: TensorConvertRecord[] = [];
+  const svidTensorNames = new Set<string>();
+  const layout = planTensorOutputs(header, allocations);
+  const plannedByName = new Map(layout.outputTensors.map((t) => [t.name, t]));
+
+  // Pass 1: with quality enabled, measure actual NMSE and exact compressed sizes.
+  // Without quality, avoid reading tensor payloads and rely on planned sizes only.
+  if (computeQuality) {
+    for (let t = 0; t < totalTensors; t++) {
+      const tensor = header.tensors[t];
+      const alloc = allocByName.get(tensor.name);
+      const quantType = alloc?.quantType ?? LowbitQQuantType.PASSTHROUGH;
+      const rawData = await readTensorFromBlob(source, header, tensor);
+      const tensorDataSize = rawData.byteLength;
+
+      onProgress?.({
+        stage: 'converting',
+        currentTensor: t,
+        totalTensors,
+        currentTensorName: `${tensor.name} (quality)`,
+        percent: Math.round((t / Math.max(totalTensors, 1)) * 45),
+      });
+
+      if (quantType === LowbitQQuantType.SVID_1BIT) {
+        const totalElements = Number(tensor.dims.reduce((acc, d) => acc * d, 1n));
+        const fp32Weights = dequantize(rawData, tensor.type, totalElements);
+        const inFeatures = Number(tensor.dims[0]);
+        const outFeatures = tensor.nDims >= 2 ? Number(tensor.dims[1]) : 1;
+        const decomposition = decompose(fp32Weights, outFeatures, inFeatures);
+        svidTensorNames.add(tensor.name);
+        const reconstructed = reconstruct(decomposition);
+        const nmse = computeNMSE(fp32Weights, reconstructed);
+        tensorNMSE.set(tensor.name, nmse);
+        if (alloc) alloc.nmse = nmse;
+        tensorRecords.push({
+          name: tensor.name,
+          layerIndex: extractLayerIndex(tensor.name),
+          family: classifyTensorFamily(tensor.name),
+          converted: true,
+          nmse,
+          originalSizeBytes: tensorDataSize,
+          lowbitQSizeBytes:
+            decomposition.outFeatures * 2 +
+            decomposition.inFeatures * 2 +
+            decomposition.sign.byteLength,
+          dims: tensor.dims.map(Number),
+        });
+      } else if (quantType === LowbitQQuantType.Q4_0) {
+        const totalElements = Number(tensor.dims.reduce((acc, d) => acc * d, 1n));
+        const fp32Weights = dequantize(rawData, tensor.type, totalElements);
+        const q4Data = quantizeQ4_0(fp32Weights);
+        const dequantized = dequantQ4_0(q4Data, totalElements);
+        const nmse = computeNMSE(fp32Weights, dequantized);
+        tensorNMSE.set(tensor.name, nmse);
+        if (alloc) alloc.nmse = nmse;
+        tensorRecords.push({
+          name: tensor.name,
+          layerIndex: extractLayerIndex(tensor.name),
+          family: classifyTensorFamily(tensor.name),
+          converted: true,
+          nmse,
+          originalSizeBytes: tensorDataSize,
+          lowbitQSizeBytes: q4Data.byteLength,
+          dims: tensor.dims.map(Number),
+        });
+      } else if (quantType === LowbitQQuantType.Q3_K) {
+        const totalElements = Number(tensor.dims.reduce((acc, d) => acc * d, 1n));
+        const fp32Weights = dequantize(rawData, tensor.type, totalElements);
+        const q3kData = quantizeQ3_K(fp32Weights);
+        const dequantized = dequantQ3_K(q3kData, totalElements);
+        const nmse = computeNMSE(fp32Weights, dequantized);
+        tensorNMSE.set(tensor.name, nmse);
+        if (alloc) alloc.nmse = nmse;
+        tensorRecords.push({
+          name: tensor.name,
+          layerIndex: extractLayerIndex(tensor.name),
+          family: classifyTensorFamily(tensor.name),
+          converted: true,
+          nmse,
+          originalSizeBytes: tensorDataSize,
+          lowbitQSizeBytes: q3kData.byteLength,
+          dims: tensor.dims.map(Number),
+        });
+      } else if (quantType === LowbitQQuantType.Q2_K) {
+        const totalElements = Number(tensor.dims.reduce((acc, d) => acc * d, 1n));
+        const fp32Weights = dequantize(rawData, tensor.type, totalElements);
+        const q2kData = quantizeQ2_K(fp32Weights);
+        const dequantized = dequantQ2_K(q2kData, totalElements);
+        const nmse = computeNMSE(fp32Weights, dequantized);
+        tensorNMSE.set(tensor.name, nmse);
+        if (alloc) alloc.nmse = nmse;
+        tensorRecords.push({
+          name: tensor.name,
+          layerIndex: extractLayerIndex(tensor.name),
+          family: classifyTensorFamily(tensor.name),
+          converted: true,
+          nmse,
+          originalSizeBytes: tensorDataSize,
+          lowbitQSizeBytes: q2kData.byteLength,
+          dims: tensor.dims.map(Number),
+        });
+      } else {
+        tensorRecords.push({
+          name: tensor.name,
+          layerIndex: extractLayerIndex(tensor.name),
+          family: classifyTensorFamily(tensor.name),
+          converted: false,
+          nmse: null,
+          originalSizeBytes: tensorDataSize,
+          lowbitQSizeBytes: null,
+          dims: tensor.dims.map(Number),
+        });
+      }
+    }
+  } else {
+    for (let t = 0; t < totalTensors; t++) {
+      const tensor = header.tensors[t];
+      const alloc = allocByName.get(tensor.name);
+      const quantType = alloc?.quantType ?? LowbitQQuantType.PASSTHROUGH;
+      const tensorDataSize = computeTensorDataSize(tensor);
+
+      onProgress?.({
+        stage: 'converting',
+        currentTensor: t,
+        totalTensors,
+        currentTensorName: `${tensor.name} (plan)`,
+        percent: Math.round((t / Math.max(totalTensors, 1)) * 20),
+      });
+
+      if (quantType === LowbitQQuantType.SVID_1BIT) {
+        svidTensorNames.add(tensor.name);
+        const baseName = tensor.name.replace(/\.weight$/, '');
+        const lowbitQSizeBytes =
+          (plannedByName.get(baseName + LOWBIT_Q_SUFFIX_A)?.dataSize ?? 0) +
+          (plannedByName.get(baseName + LOWBIT_Q_SUFFIX_B)?.dataSize ?? 0) +
+          (plannedByName.get(baseName + LOWBIT_Q_SUFFIX_SIGN)?.dataSize ?? 0);
+        tensorRecords.push({
+          name: tensor.name,
+          layerIndex: extractLayerIndex(tensor.name),
+          family: classifyTensorFamily(tensor.name),
+          converted: true,
+          nmse: null,
+          originalSizeBytes: tensorDataSize,
+          lowbitQSizeBytes,
+          dims: tensor.dims.map(Number),
+        });
+      } else if (
+        quantType === LowbitQQuantType.Q4_0 ||
+        quantType === LowbitQQuantType.Q3_K ||
+        quantType === LowbitQQuantType.Q2_K
+      ) {
+        tensorRecords.push({
+          name: tensor.name,
+          layerIndex: extractLayerIndex(tensor.name),
+          family: classifyTensorFamily(tensor.name),
+          converted: true,
+          nmse: null,
+          originalSizeBytes: tensorDataSize,
+          lowbitQSizeBytes: plannedByName.get(tensor.name)?.dataSize ?? null,
+          dims: tensor.dims.map(Number),
+        });
+      } else {
+        tensorRecords.push({
+          name: tensor.name,
+          layerIndex: extractLayerIndex(tensor.name),
+          family: classifyTensorFamily(tensor.name),
+          converted: false,
+          nmse: null,
+          originalSizeBytes: tensorDataSize,
+          lowbitQSizeBytes: null,
+          dims: tensor.dims.map(Number),
+        });
+      }
+    }
+  }
+
+  let quality: LowbitQQualityMetrics | undefined;
+  if (computeQuality && tensorNMSE.size > 0) {
+    const nmseValues = Array.from(tensorNMSE.values());
+    quality = {
+      nmseMean: nmseValues.reduce((s, v) => s + v, 0) / nmseValues.length,
+      nmseMax: Math.max(...nmseValues),
+      convertedTensorCount: tensorRecords.filter((r) => r.converted).length,
+      passthroughTensorCount: tensorRecords.filter((r) => !r.converted).length,
+    };
+  }
+
+  const v2Metadata: LowbitQV2Metadata = {
+    formatVersion: 2,
+    sourceModelName,
+    sizeBudget: allocatorConfig.sizeBudget,
+    kvCache: {
+      kMethod: KVCacheQuantMethod.NONE,
+      kBitwidth: 0,
+      vMethod: KVCacheQuantMethod.NONE,
+      vBitwidth: 0,
+    },
+    tensorAllocs: allocations,
+    quality,
+  };
+
+  const metadata = buildLowbitQV2Metadata(header, svidTensorNames, v2Metadata);
+  const headerBytes = buildGGUFHeaderBytes(
+    metadata,
+    layout.outputTensors as OutputTensorPlan[],
+  );
+  const convertedSize = headerBytes.length + computeAlignedDataSize(
+    layout.outputTensors as OutputTensorPlan[],
+  );
+
+  await removeTempFile(target.modelId, target.fileName);
+  let append = false;
+
+  try {
+    onProgress?.({
+      stage: 'writing',
+      currentTensor: 0,
+      totalTensors,
+      currentTensorName: 'GGUF header',
+      percent: 92,
+    });
+    await writeTempChunk(target.modelId, target.fileName, headerBytes, append);
+    append = true;
+
+    for (let t = 0; t < totalTensors; t++) {
+      const tensor = header.tensors[t];
+      const alloc = allocByName.get(tensor.name);
+      const quantType = alloc?.quantType ?? LowbitQQuantType.PASSTHROUGH;
+
+      onProgress?.({
+        stage: 'writing',
+        currentTensor: t + 1,
+        totalTensors,
+        currentTensorName: tensor.name,
+        percent: 92 + Math.round(((t + 1) / Math.max(totalTensors, 1)) * 7),
+      });
+
+      if (quantType === LowbitQQuantType.SVID_1BIT) {
+        const rawData = await readTensorFromBlob(source, header, tensor);
+        const totalElements = Number(tensor.dims.reduce((acc, d) => acc * d, 1n));
+        const fp32Weights = dequantize(rawData, tensor.type, totalElements);
+        const inFeatures = Number(tensor.dims[0]);
+        const outFeatures = tensor.nDims >= 2 ? Number(tensor.dims[1]) : 1;
+        const decomposition = decompose(fp32Weights, outFeatures, inFeatures);
+        const aData = float32ArrayToFp16Bytes(decomposition.a);
+        const bData = float32ArrayToFp16Bytes(decomposition.b);
+        await writeTempChunk(
+          target.modelId,
+          target.fileName,
+          aData,
+          append,
+        );
+        await writePaddingChunk(target, aData.byteLength);
+        await writeTempChunk(
+          target.modelId,
+          target.fileName,
+          bData,
+          true,
+        );
+        await writePaddingChunk(target, bData.byteLength);
+        await writeTempChunk(target.modelId, target.fileName, decomposition.sign, true);
+        await writePaddingChunk(target, decomposition.sign.byteLength);
+      } else if (quantType === LowbitQQuantType.Q4_0) {
+        await streamNativeQuantTensorToOpfs(
+          source,
+          header,
+          tensor,
+          LowbitQQuantType.Q4_0,
+          target,
+        );
+        await writePaddingChunk(
+          target,
+          computeTensorDataSize({ ...tensor, type: GGMLType.Q4_0 }),
+        );
+      } else if (quantType === LowbitQQuantType.Q3_K) {
+        await streamNativeQuantTensorToOpfs(
+          source,
+          header,
+          tensor,
+          LowbitQQuantType.Q3_K,
+          target,
+        );
+        await writePaddingChunk(
+          target,
+          computeTensorDataSize({ ...tensor, type: GGMLType.Q3_K }),
+        );
+      } else if (quantType === LowbitQQuantType.Q2_K) {
+        await streamNativeQuantTensorToOpfs(
+          source,
+          header,
+          tensor,
+          LowbitQQuantType.Q2_K,
+          target,
+        );
+        await writePaddingChunk(
+          target,
+          computeTensorDataSize({ ...tensor, type: GGMLType.Q2_K }),
+        );
+      } else {
+        await streamTensorToOpfs(source, header, tensor, target);
+        await writePaddingChunk(target, computeTensorDataSize(tensor));
+      }
+      append = true;
+    }
+
+    await commitTempFile(target.modelId, target.fileName);
+  } catch (error) {
+    await removeTempFile(target.modelId, target.fileName);
+    throw error;
+  }
+
+  onProgress?.({
+    stage: 'done',
+    currentTensor: totalTensors,
+    totalTensors,
+    currentTensorName: '',
+    percent: 100,
+  });
+
+  return {
+    originalSize: source.size,
+    convertedSize,
+    convertedTensorCount: layout.convertedCount,
+    passthroughTensorCount: layout.passthroughCount,
     tensorNMSE,
     tensorRecords,
     allocations,
