@@ -112,7 +112,12 @@ class BinaryReader {
     const len = this.readUint64();
     const bytes = this.buf.slice(this.pos, this.pos + Number(len));
     this.pos += Number(len);
-    return new TextDecoder().decode(bytes);
+    // ignoreBOM: true prevents stripping the UTF-8 BOM (U+FEFF = 0xef 0xbb 0xbf)
+    // from the start of token strings.  Without this, tokens like 0xef,0xbb,0xbf,0x2f,0x2f
+    // and 0x2f,0x2f both decode to "//" and cause GGML_ASSERT(id_to_token.size() ==
+    // token_to_id.size()) to fail when loading models such as Gemma 4 that have
+    // BOM-prefixed token variants alongside their plain-text counterparts.
+    return new TextDecoder('utf-8', { ignoreBOM: true }).decode(bytes);
   }
 
   readBytes(n: number): Uint8Array {

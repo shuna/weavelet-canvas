@@ -66,6 +66,7 @@ export enum GGMLType {
 export const GGML_BLOCK_SIZES: Partial<Record<GGMLType, number>> = {
   [GGMLType.F32]: 1,
   [GGMLType.F16]: 1,
+  [GGMLType.BF16]: 1,
   [GGMLType.Q8_0]: 32,
   [GGMLType.Q4_0]: 32,
   [GGMLType.Q4_1]: 32,
@@ -81,6 +82,7 @@ export const GGML_BLOCK_SIZES: Partial<Record<GGMLType, number>> = {
 export const GGML_TYPE_SIZES: Partial<Record<GGMLType, number>> = {
   [GGMLType.F32]: 4,
   [GGMLType.F16]: 2,
+  [GGMLType.BF16]: 2,   // bfloat16: 2 bytes per element, same as F16
   [GGMLType.Q8_0]: 34,   // 2 (scale fp16) + 32 (int8 values)
   [GGMLType.Q4_0]: 18,   // 2 (scale fp16) + 16 (4-bit values)
   [GGMLType.Q4_1]: 20,   // 2 + 2 (scale, min fp16) + 16
@@ -362,7 +364,7 @@ export interface LowbitQDecomposition {
 // ---------------------------------------------------------------------------
 
 export interface ConversionProgress {
-  stage: 'parsing' | 'converting' | 'writing' | 'done' | 'error';
+  stage: 'reading' | 'parsing' | 'converting' | 'writing' | 'done' | 'error';
   /** Current tensor index (0-based) */
   currentTensor: number;
   /** Total tensor count */
@@ -382,8 +384,15 @@ export interface ConversionProgress {
 export interface ConversionStartRequest {
   id: number;
   type: 'start';
-  /** Source GGUF file (Q8_0 or similar) */
+  /** Source GGUF file (Q8_0 or similar). Ignored when sourceUrl is set. */
   sourceFile: File;
+  /**
+   * When set, the Worker fetches the source from this URL instead of using
+   * sourceFile. This bypasses OPFS storage entirely, avoiding the Chromium
+   * ~2 GB per-file OPFS limit and the 3 GB structured-clone limit for
+   * postMessage. The Worker streams the response into an in-memory File.
+   */
+  sourceUrl?: string;
   /**
    * v2: Bitwidth allocator configuration.
    * When provided, the v2 pipeline is used (mixed-bit allocation).
@@ -407,6 +416,12 @@ export interface ConversionStartRequest {
   };
   /** Whether to compute per-tensor quality metrics (NMSE). Default: false */
   computeQuality?: boolean;
+  /**
+   * When provided, the source file is deleted from OPFS before writing the
+   * output to free quota for large models (>2 GB source + output).
+   * The File/Blob reference remains valid because OPFS getFile() returns a snapshot.
+   */
+  sourceOpfsInfo?: { modelId: string; fileName: string };
   /**
    * @deprecated Use allocatorConfig instead.
    * v1: Lowbit-Q conversion mode (which tensors to convert). Default: 'all'
