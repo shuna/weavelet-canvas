@@ -13,6 +13,8 @@ import {
   type GGUFTensorInfo,
   GGUFValueType,
   GGMLType,
+  GGML_BLOCK_SIZES,
+  GGML_TYPE_SIZES,
 } from './types';
 
 // ---------------------------------------------------------------------------
@@ -278,42 +280,27 @@ export function getMetadataArray(header: GGUFHeader, key: string): GGUFMetadataE
 
 /**
  * Compute the byte size of a tensor's data in the GGUF file.
+ *
+ * Uses GGML_BLOCK_SIZES / GGML_TYPE_SIZES tables from types.ts so that any
+ * newly supported GGML type only needs to be added there, not here.
+ * F32 and F16 are element-wise (block size = 1); all others are block-wise.
  */
 export function computeTensorDataSize(tensor: GGUFTensorInfo): number {
-  const totalElements = tensor.dims.reduce((acc, d) => acc * d, 1n);
+  const totalElements = Number(tensor.dims.reduce((acc, d) => acc * d, 1n));
 
-  switch (tensor.type) {
-    case GGMLType.F32:
-      return Number(totalElements) * 4;
-    case GGMLType.F16:
-      return Number(totalElements) * 2;
-    case GGMLType.Q8_0: {
-      // 32 elements per block, 34 bytes per block (2 fp16 scale + 32 int8)
-      const nBlocks = Math.ceil(Number(totalElements) / 32);
-      return nBlocks * 34;
+  const blockElems = GGML_BLOCK_SIZES[tensor.type];
+  const blockBytes = GGML_TYPE_SIZES[tensor.type];
+
+  if (blockElems !== undefined && blockBytes !== undefined) {
+    if (blockElems === 1) {
+      // F32, F16: element-wise
+      return totalElements * blockBytes;
     }
-    case GGMLType.Q4_0: {
-      const nBlocks = Math.ceil(Number(totalElements) / 32);
-      return nBlocks * 18;
-    }
-    case GGMLType.Q3_K: {
-      const nBlocks = Math.ceil(Number(totalElements) / 256);
-      return nBlocks * 110; // 32 (hmask) + 64 (qs) + 12 (scales) + 2 (d fp16)
-    }
-    case GGMLType.Q2_K: {
-      const nBlocks = Math.ceil(Number(totalElements) / 256);
-      return nBlocks * 84; // 2+2 (d,dmin) + 16 (scales) + 64 (qs)
-    }
-    case GGMLType.Q4_K: {
-      const nBlocks = Math.ceil(Number(totalElements) / 256);
-      return nBlocks * 144;
-    }
-    default: {
-      // Fallback: use row-major size estimation from dims
-      // For unknown types, this is a best-effort estimate
-      throw new Error(`Cannot compute data size for ggml type ${tensor.type}`);
-    }
+    const nBlocks = Math.ceil(totalElements / blockElems);
+    return nBlocks * blockBytes;
   }
+
+  throw new Error(`Cannot compute data size for ggml type ${tensor.type}`);
 }
 
 /**

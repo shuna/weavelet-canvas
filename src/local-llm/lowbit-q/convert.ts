@@ -51,7 +51,7 @@ import { allocateBitwidths, DEFAULT_ALLOCATOR_CONFIG, validateAllocations } from
 import { quantizeQ4_0 } from './q4_0Quantize';
 import { quantizeQ3_K } from './q3_kQuantize';
 import { quantizeQ2_K } from './q2_kQuantize';
-import { writeTempChunk, commitTempFile, removeTempFile } from '../storage';
+import { writeTempChunk, removeTempFile, createOPFSWritable, getOPFSFileSize } from '../storage';
 import { fp32ToFp16 } from './dequantize';
 
 const GGUF_ALIGNMENT = 32;
@@ -577,8 +577,16 @@ function resolveArchitectureAndAllocator(
     return 0;
   })();
 
+  // Non-llama architectures (qwen35, gemma4 etc.) should not use SVID_1BIT
+  // because the tensor naming might not match llama.cpp's struct-field dispatch.
+  // However, PASSTHROUGH must never be overridden — it means "keep as-is".
+  const isNonLlama = arch !== '' && arch !== 'llama';
+  const hasSVID = allocatorConfig.attnQKQuant === LowbitQQuantType.SVID_1BIT ||
+    allocatorConfig.attnVOQuant === LowbitQQuantType.SVID_1BIT ||
+    allocatorConfig.ffnQuant === LowbitQQuantType.SVID_1BIT;
+
   const effectiveAllocatorConfig: BitwidthAllocatorConfig =
-    (arch !== '' && arch !== 'llama')
+    (isNonLlama && hasSVID)
       ? {
           ...allocatorConfig,
           attnQKQuant: LowbitQQuantType.Q4_0,
@@ -1241,8 +1249,74 @@ export async function convertToLowbitQV2StreamingToOPFS(
     layout.outputTensors as OutputTensorPlan[],
   );
 
+  // Remove any existing file before starting a fresh write.
   await removeTempFile(target.modelId, target.fileName);
-  let append = false;
+
+  // Open a SINGLE writable stream for the entire conversion output.
+  // Using one stream eliminates the seek-after-getFile() pattern used by
+  // writeTempChunk, which can misalign writes on some Chrome builds and
+  // produce a file larger than expected (manifests as "Invalid typed array
+  // length" when wllama tries to allocate blob.size bytes in WASM heap).
+  const writable = await createOPFSWritable(target.modelId, target.fileName);
+
+  // Inner helpers that write directly to the single stream.
+  const writeToStream = async (data: Uint8Array): Promise<void> => {
+    await (writable as unknown as { write(d: Uint8Array): Promise<void> }).write(data);
+  };
+  const writePaddingToStream = async (payloadLength: number): Promise<void> => {
+    const rem = payloadLength % GGUF_ALIGNMENT;
+    if (rem !== 0) {
+      await writeToStream(new Uint8Array(GGUF_ALIGNMENT - rem));
+    }
+  };
+  const streamTensorToStream = async (tensor: GGUFTensorInfo): Promise<void> => {
+    const size = computeTensorDataSize(tensor);
+    const absoluteOffset = header.dataOffset + Number(tensor.offset);
+    let offset = 0;
+    while (offset < size) {
+      const chunkSize = Math.min(TENSOR_STREAM_CHUNK_SIZE, size - offset);
+      const chunkBuffer = await source
+        .slice(absoluteOffset + offset, absoluteOffset + offset + chunkSize)
+        .arrayBuffer();
+      await writeToStream(new Uint8Array(chunkBuffer));
+      offset += chunkSize;
+    }
+  };
+  const streamNativeQuantToStream = async (
+    tensor: GGUFTensorInfo,
+    targetType: LowbitQQuantType.Q4_0 | LowbitQQuantType.Q3_K | LowbitQQuantType.Q2_K,
+  ): Promise<void> => {
+    const totalElements = Number(tensor.dims.reduce((acc, d) => acc * d, 1n));
+    const sourceBlockElems = GGML_BLOCK_SIZES[tensor.type] ?? 1;
+    const targetBlockElems = targetType === LowbitQQuantType.Q4_0 ? 32 : 256;
+    const processingBlockElems = lcm(sourceBlockElems, targetBlockElems);
+    const chunkElements = Math.max(
+      processingBlockElems,
+      Math.floor(
+        TENSOR_STREAM_CHUNK_SIZE /
+        Math.max(1, computeTypeChunkSizeBytes(tensor.type, processingBlockElems)),
+      ) * processingBlockElems,
+    );
+    const absoluteOffset = header.dataOffset + Number(tensor.offset);
+    let elementOffset = 0;
+    let byteOffset = 0;
+    while (elementOffset < totalElements) {
+      const elementsThisChunk = Math.min(chunkElements, totalElements - elementOffset);
+      const sourceChunkBytes = computeTypeChunkSizeBytes(tensor.type, elementsThisChunk);
+      const chunkBuffer = await source
+        .slice(absoluteOffset + byteOffset, absoluteOffset + byteOffset + sourceChunkBytes)
+        .arrayBuffer();
+      const rawChunk = new Uint8Array(chunkBuffer);
+      const fp32Chunk = dequantize(rawChunk, tensor.type, elementsThisChunk);
+      const quantizedChunk =
+        targetType === LowbitQQuantType.Q4_0 ? quantizeQ4_0(fp32Chunk) :
+        targetType === LowbitQQuantType.Q3_K ? quantizeQ3_K(fp32Chunk) :
+        quantizeQ2_K(fp32Chunk);
+      await writeToStream(quantizedChunk);
+      byteOffset += sourceChunkBytes;
+      elementOffset += elementsThisChunk;
+    }
+  };
 
   try {
     onProgress?.({
@@ -1252,8 +1326,7 @@ export async function convertToLowbitQV2StreamingToOPFS(
       currentTensorName: 'GGUF header',
       percent: 92,
     });
-    await writeTempChunk(target.modelId, target.fileName, headerBytes, append);
-    append = true;
+    await writeToStream(headerBytes);
 
     for (let t = 0; t < totalTensors; t++) {
       const tensor = header.tensors[t];
@@ -1277,69 +1350,60 @@ export async function convertToLowbitQV2StreamingToOPFS(
         const decomposition = decompose(fp32Weights, outFeatures, inFeatures);
         const aData = float32ArrayToFp16Bytes(decomposition.a);
         const bData = float32ArrayToFp16Bytes(decomposition.b);
-        await writeTempChunk(
-          target.modelId,
-          target.fileName,
-          aData,
-          append,
-        );
-        await writePaddingChunk(target, aData.byteLength);
-        await writeTempChunk(
-          target.modelId,
-          target.fileName,
-          bData,
-          true,
-        );
-        await writePaddingChunk(target, bData.byteLength);
-        await writeTempChunk(target.modelId, target.fileName, decomposition.sign, true);
-        await writePaddingChunk(target, decomposition.sign.byteLength);
+        await writeToStream(aData);
+        await writePaddingToStream(aData.byteLength);
+        await writeToStream(bData);
+        await writePaddingToStream(bData.byteLength);
+        await writeToStream(decomposition.sign);
+        await writePaddingToStream(decomposition.sign.byteLength);
       } else if (quantType === LowbitQQuantType.Q4_0) {
-        await streamNativeQuantTensorToOpfs(
-          source,
-          header,
-          tensor,
-          LowbitQQuantType.Q4_0,
-          target,
-        );
-        await writePaddingChunk(
-          target,
+        await streamNativeQuantToStream(tensor, LowbitQQuantType.Q4_0);
+        await writePaddingToStream(
           computeTensorDataSize({ ...tensor, type: GGMLType.Q4_0 }),
         );
       } else if (quantType === LowbitQQuantType.Q3_K) {
-        await streamNativeQuantTensorToOpfs(
-          source,
-          header,
-          tensor,
-          LowbitQQuantType.Q3_K,
-          target,
-        );
-        await writePaddingChunk(
-          target,
+        await streamNativeQuantToStream(tensor, LowbitQQuantType.Q3_K);
+        await writePaddingToStream(
           computeTensorDataSize({ ...tensor, type: GGMLType.Q3_K }),
         );
       } else if (quantType === LowbitQQuantType.Q2_K) {
-        await streamNativeQuantTensorToOpfs(
-          source,
-          header,
-          tensor,
-          LowbitQQuantType.Q2_K,
-          target,
-        );
-        await writePaddingChunk(
-          target,
+        await streamNativeQuantToStream(tensor, LowbitQQuantType.Q2_K);
+        await writePaddingToStream(
           computeTensorDataSize({ ...tensor, type: GGMLType.Q2_K }),
         );
       } else {
-        await streamTensorToOpfs(source, header, tensor, target);
-        await writePaddingChunk(target, computeTensorDataSize(tensor));
+        // PASSTHROUGH: copy source bytes unchanged
+        await streamTensorToStream(tensor);
+        await writePaddingToStream(computeTensorDataSize(tensor));
       }
-      append = true;
     }
 
-    await commitTempFile(target.modelId, target.fileName);
+    await (writable as unknown as { close(): Promise<void> }).close();
+    console.info(
+      `[lowbit-q] ✓ Streaming write complete.` +
+      ` expected=${convertedSize}` +
+      ` (header=${headerBytes.length} data=${computeAlignedDataSize(layout.outputTensors as OutputTensorPlan[])})`,
+    );
   } catch (error) {
+    // Abort the writable (discards partial write) then clean up.
+    try {
+      await (writable as unknown as { abort(): Promise<void> }).abort();
+    } catch {
+      // ignore abort errors
+    }
     await removeTempFile(target.modelId, target.fileName);
     throw error;
+  }
+
+  // Post-write size verification: catches any write-size mismatch early.
+  const actualSize = await getOPFSFileSize(target.modelId, target.fileName);
+  if (actualSize !== convertedSize) {
+    console.error(
+      `[lowbit-q] ⚠️ OPFS size mismatch after write!` +
+      ` expected=${convertedSize} actual=${actualSize} diff=${actualSize - convertedSize}`,
+    );
+  } else {
+    console.info(`[lowbit-q] ✓ OPFS size verified: ${actualSize} bytes`);
   }
 
   onProgress?.({

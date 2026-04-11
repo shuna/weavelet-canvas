@@ -106,6 +106,41 @@ export async function saveFile(
 }
 
 /**
+ * Open a fresh OPFS writable stream for streaming writes.
+ *
+ * Always truncates to zero (keepExistingData: false). The caller must
+ * close() on success or abort() on failure. Using a single writable for
+ * the entire write avoids the seek-after-getFile pattern that is
+ * susceptible to stale-size races on some Chrome builds.
+ */
+export async function createOPFSWritable(
+  modelId: string,
+  relativePath: string,
+): Promise<FileSystemWritableFileStream> {
+  const dir = await getModelDir(modelId);
+  const fileHandle = await dir.getFileHandle(relativePath, { create: true }) as unknown as WritableFileHandle;
+  return fileHandle.createWritable({ keepExistingData: false });
+}
+
+/**
+ * Return the current committed size of an OPFS file in bytes.
+ * Returns 0 if the file does not exist.
+ */
+export async function getOPFSFileSize(
+  modelId: string,
+  relativePath: string,
+): Promise<number> {
+  try {
+    const dir = await getModelDir(modelId);
+    const fileHandle = await dir.getFileHandle(relativePath);
+    const file = await (fileHandle as unknown as WritableFileHandle).getFile();
+    return file.size;
+  } catch {
+    return 0;
+  }
+}
+
+/**
  * Read a file from OPFS.
  */
 export async function readFile(

@@ -583,12 +583,25 @@ export function buildLowbitQV2Metadata(
 }
 
 /**
- * Write a lowbit-Q v2 GGUF file.
+ * Write a lowbit-Q v2 GGUF file **into a single in-memory buffer**.
  *
  * The v2 format extends v1 with:
  * - Mixed-bit allocation: SVID 1-bit triplets, native Q4_0/Q8_0, or passthrough
  * - Rich metadata: allocator decisions, KV cache params, quality metrics
  * - Format version key set to 2 (readable by C++ code checking version > 0)
+ *
+ * **WARNING — full-buffer allocation**: This function allocates a single
+ * `Uint8Array` covering the entire output file and copies every tensor
+ * payload into it.  For large models (>1 GB) this will likely exceed
+ * browser memory limits or cause severe GC pressure.
+ *
+ * For production use, prefer {@link convertToLowbitQV2StreamingToOPFS} in
+ * `convert.ts`, which streams tensor data directly to OPFS via a
+ * `FileSystemWritableFileStream` with ~1 MB peak overhead per tensor.
+ *
+ * This in-memory writer is retained for:
+ * - Unit / snapshot tests that need a byte-exact GGUF buffer
+ * - Small models (< ~200 MB) where simplicity outweighs memory cost
  */
 export function writeLowbitQV2GGUF(options: WriteLowbitQV2GGUFOptions): Uint8Array {
   const {

@@ -409,21 +409,32 @@ wllama v2.3.7 が pin している llama.cpp のバージョンには
   - ブラウザ内実装コストが許容範囲
 - この条件を満たさない独自方式は研究トラックに残し、主系統には載せない
 
-### Phase 4: 独自圧縮の再導入判断 (条件付き)
+### Phase 4: Multi-Model Baseline + KV Cache Design + KIVI PoC (進行中)
 
-- Phase 3.5 までに native quant 基準線が確立していることが前提
-- OneCompression / TurboQuant / KV cache + Model の各要素を、
-  「native quant を超えられる箇所」から順に再導入する
-- 優先度は次の通り:
-  1. KV cache + Model の総メモリ最適化
-  2. TurboQuant 的な高効率 PTQ
-  3. SVID / 2-3bit 独自表現の再挑戦
-  4. rotation preprocessing
+- **前提**: Phase 3.6 で Q4_0 が TinyLlama で functionalSuccess=YES → パイプライン健全確認済み
+- **目的**: TinyLlama での Q3_K/Q2_K 失敗がモデルサイズ起因か否かを 1.7B+ で再検証
+- **実施内容**:
+  1. SmolLM2-1.7B-Instruct (llama arch) / Qwen 3.5 2B / Gemma 4 E2B の native quant E2E テスト
+     - pre-quantized GGUF (Q8_0, Q4_0, Q3_K, Q2_K) を Unsloth/bartowski から直接取得
+     - 自前変換なし — native quality の評価のみ
+  2. KV Cache + Model 総メモリ設計 (`kvCacheDesign.ts` 完了)
+     - `estimateKvCacheBytes()`, `maxSeqLenIn4GB()`, `buildStrategyMatrix()` 実装済み
+  3. KIVI 2-bit PoC (`kiviQuantize.ts` 完了、14 テスト全パス)
+     - 結論: KIVI は KV cache 専用。サイズ 23% 削減、品質は Q2_K より低い
+  4. 圧縮禁止領域の文書化 (`COMPRESSION-RISK-MAP.md` 作成済み)
+     - `validateAllocations()` による自動警告 (allocator.ts)
+  5. llama.cpp サブモジュール更新 (commit 05b3caa、gemma4/qwen35 アーキテクチャ追加)
 
-### Phase 5: Activation quantization (条件付き)
+- **残タスク**: SmolLM2 Playwright E2E テスト実行、Phase 4 評価レポート作成
 
-- Phase 2 のカーネルと Phase 1 の metadata が安定してから検討する
-- W4A8 → W4A4 の段階的導入
+### Phase 5: KV Cache C++ 実装 + Activation quantization (条件付き)
+
+- Phase 4 の native quant 結果次第で方針決定
+- KV cache KIVI C++ 統合: attention カーネル内で量子化/復元 (build_attn フック)
+  - `LowbitQQuantType.KIVI_2BIT_VALUE` / `KIVI_2BIT_KEY` enum 追加
+  - `lowbit-q.kv_cache.*` GGUF metadata キー使用
+  - PoC 実装: `src/local-llm/lowbit-q/kiviQuantize.ts` (Phase 4 で完了)
+- W4A8 → W4A4 activation quantization (条件付き)
 - metadata namespace は Phase 1 で予約済み
 - ブラウザ/WASM/WebGPU でのオンライン変換コストとの兼ね合いで判断する
 

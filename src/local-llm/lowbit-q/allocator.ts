@@ -123,6 +123,22 @@ export const Q2_K_ONLY_ALLOCATOR_CONFIG: BitwidthAllocatorConfig = {
   applyRotation: false,
 };
 
+/**
+ * PASSTHROUGH-ONLY allocator config — no re-quantization.
+ * All tensors (including weight tensors) are stored in their original format.
+ * Use for Phase 4 direct-load testing of pre-quantized GGUFs from Unsloth/bartowski.
+ * The output GGUF will be byte-identical to the source for each tensor's data blocks.
+ */
+export const PASSTHROUGH_ONLY_ALLOCATOR_CONFIG: BitwidthAllocatorConfig = {
+  sizeBudget: 1.0,
+  firstLayerQuant: LowbitQQuantType.PASSTHROUGH,
+  lastLayerQuant: LowbitQQuantType.PASSTHROUGH,
+  attnQKQuant: LowbitQQuantType.PASSTHROUGH,
+  attnVOQuant: LowbitQQuantType.PASSTHROUGH,
+  ffnQuant: LowbitQQuantType.PASSTHROUGH,
+  applyRotation: false,
+};
+
 // ---------------------------------------------------------------------------
 // Core allocator
 // ---------------------------------------------------------------------------
@@ -268,6 +284,74 @@ export function estimateTotalSize(allocs: TensorAllocRecord[]): {
   }
   const ratio = originalBytes > 0 ? quantizedBytes / originalBytes : 1;
   return { originalBytes, quantizedBytes, ratio };
+}
+
+/**
+ * Validate a tensor allocation plan for known dangerous combinations.
+ *
+ * Returns a list of warning objects. An empty list means no issues found.
+ * Call this before running conversion to surface problems early.
+ *
+ * Risk levels:
+ *   'forbidden' — do not use in production; observed output collapse in Phase 3.5
+ *   'caution'   — may degrade on small models; re-verify on 1.7B+ models
+ */
+export function validateAllocations(allocs: TensorAllocRecord[]): Array<{
+  level: 'forbidden' | 'caution';
+  tensorName: string;
+  quantType: LowbitQQuantType;
+  message: string;
+}> {
+  const warnings: Array<{ level: 'forbidden' | 'caution'; tensorName: string; quantType: LowbitQQuantType; message: string }> = [];
+
+  let q2kCount = 0;
+  let q2kForbiddenFamilies = 0;
+
+  for (const alloc of allocs) {
+    const name = alloc.name;
+    const qtype = alloc.quantType;
+
+    // FORBIDDEN: SVID_1BIT on attn_v or attn_out
+    // Phase 3.5 evidence: 40-tensor contamination → full prompt collapse on all inputs.
+    const isAttnVO = /attn_v\.|attn_out\./.test(name);
+    if (isAttnVO && qtype === LowbitQQuantType.SVID_1BIT) {
+      warnings.push({
+        level: 'forbidden',
+        tensorName: name,
+        quantType: qtype,
+        message:
+          `SVID_1BIT on ${name} is forbidden. Phase 3.5: 40 attn_v/attn_out tensors caused ` +
+          `full output collapse on all prompts. Use Q4_0 or higher for attn_v/attn_out.`,
+      });
+    }
+
+    // Track Q2_K usage for caution check
+    if (qtype === LowbitQQuantType.Q2_K) {
+      q2kCount++;
+      // Only count non-passthrough tensors that matter for quality
+      const isWeightTensor = /\.(weight|bias)$/.test(name) || !name.includes('.');
+      if (isWeightTensor) q2kForbiddenFamilies++;
+    }
+  }
+
+  // CAUTION: Q2_K applied uniformly across all (or most) tensors
+  // Phase 3.6 on TinyLlama: NMSE 0.116, token collapse observed.
+  // Likely fine on 1.7B+ models, but needs verification.
+  const totalWeight = allocs.filter(
+    (a) => a.quantType !== LowbitQQuantType.PASSTHROUGH,
+  ).length;
+  if (totalWeight > 0 && q2kCount / totalWeight > 0.8) {
+    warnings.push({
+      level: 'caution',
+      tensorName: '(all tensors)',
+      quantType: LowbitQQuantType.Q2_K,
+      message:
+        `Q2_K applied to ${q2kCount}/${totalWeight} tensors (>80%). ` +
+        `Phase 3.6 TinyLlama: token collapse observed. Re-verify on 1.7B+ models before production use.`,
+    });
+  }
+
+  return warnings;
 }
 
 // ---------------------------------------------------------------------------

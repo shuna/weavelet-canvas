@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { downloadModelFiles, type DownloadProgress } from '@src/local-llm/download';
-import { localModelRuntime, type RuntimeDiagnosticEvent, type RuntimeLogEvent } from '@src/local-llm/runtime';
+import { localModelRuntime, type RuntimeDiagnosticEvent, type RuntimeLogEvent, type RuntimeLoadProgressEvent } from '@src/local-llm/runtime';
 import { OpfsFileProvider, readFile, saveFile, verifyStoredModel } from '@src/local-llm/storage';
 import {
   FIXED_VALIDATION_MODEL,
@@ -31,6 +31,7 @@ import {
   Q4_0_ONLY_ALLOCATOR_CONFIG,
   Q3_K_ONLY_ALLOCATOR_CONFIG,
   Q2_K_ONLY_ALLOCATOR_CONFIG,
+  PASSTHROUGH_ONLY_ALLOCATOR_CONFIG,
 } from '@src/local-llm/lowbit-q/allocator';
 import type { BitwidthAllocatorConfig } from '@src/local-llm/lowbit-q/types';
 import { computeOutputQuality, type OutputQualityMetrics } from '@src/local-llm/lowbit-q/qualityMetrics';
@@ -83,6 +84,7 @@ function LowbitQValidationPage() {
   const [metadataSummary, setMetadataSummary] = useState<LowbitQMetadataSummary | null>(null);
   const [runtimeLogs, setRuntimeLogs] = useState<RuntimeLogEvent[]>([]);
   const [diagnostics, setDiagnostics] = useState<RuntimeDiagnosticEvent[]>([]);
+  const [loadProgress, setLoadProgress] = useState<RuntimeLoadProgressEvent | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
   const [selectedPromptId, setSelectedPromptId] = useState<string>(VALIDATION_PROMPTS[0].id);
   const [maxTokens, setMaxTokens] = useState<number>(96);
@@ -99,7 +101,7 @@ function LowbitQValidationPage() {
 
   // --- Diagnosis state ---
   const [selectedConvertMode, setSelectedConvertMode] = useState<LowbitQConvertMode>('all');
-  const [selectedAllocatorPreset, setSelectedAllocatorPreset] = useState<'v2-default' | 'v2-aggressive' | 'v2-conservative' | 'v2-q4only' | 'v2-q3konly' | 'v2-q2konly'>('v2-default');
+  const [selectedAllocatorPreset, setSelectedAllocatorPreset] = useState<'v2-default' | 'v2-aggressive' | 'v2-conservative' | 'v2-q4only' | 'v2-q3konly' | 'v2-q2konly' | 'v2-native-direct'>('v2-default');
   const [tensorRecords, setTensorRecords] = useState<TensorConvertRecord[]>([]);
   const [batchResults, setBatchResults] = useState<BatchRunResult[]>([]);
   const [batchRunning, setBatchRunning] = useState(false);
@@ -132,9 +134,14 @@ function LowbitQValidationPage() {
       if (event.modelId !== originalDef.id && event.modelId !== lowbitQDef.id) return;
       setDiagnostics((prev) => [event, ...prev].slice(0, 100));
     });
+    const unsubLoadProgress = localModelRuntime.subscribeLoadProgress((event) => {
+      if (event.modelId !== originalDef.id && event.modelId !== lowbitQDef.id) return;
+      setLoadProgress(event);
+    });
     return () => {
       unsubLogs();
       unsubDiagnostics();
+      unsubLoadProgress();
     };
   }, [lowbitQDef.id, originalDef.id]);
 
@@ -231,6 +238,7 @@ function LowbitQValidationPage() {
       'v2-q4only': Q4_0_ONLY_ALLOCATOR_CONFIG,
       'v2-q3konly': Q3_K_ONLY_ALLOCATOR_CONFIG,
       'v2-q2konly': Q2_K_ONLY_ALLOCATOR_CONFIG,
+      'v2-native-direct': PASSTHROUGH_ONLY_ALLOCATOR_CONFIG,
     };
     const allocatorConfig = allocatorConfigMap[selectedAllocatorPreset];
     updateStep('convert-lowbit-q', 'running', `lowbit-Q 変換中 (preset: ${selectedAllocatorPreset})`);
@@ -296,6 +304,7 @@ function LowbitQValidationPage() {
     const stepKey = variant === 'original' ? 'load-generate-original' : 'load-generate-lowbit-q';
     const provider = new OpfsFileProvider(def.id, def.manifest);
 
+    setLoadProgress(null);
     updateStep(stepKey, 'running', 'モデルをロード中');
 
     if (localModelRuntime.isLoaded(originalDef.id)) {
@@ -643,6 +652,7 @@ function LowbitQValidationPage() {
                     <option value='v2-q4only'>Q4_0-ONLY (native baseline, ~53%)</option>
                     <option value='v2-q3konly'>Q3_K-ONLY (native 3-bit baseline, ~40%)</option>
                     <option value='v2-q2konly'>Q2_K-ONLY (native 2-bit baseline, ~31%)</option>
+                    <option value='v2-native-direct'>NATIVE-DIRECT (PASSTHROUGH: pre-quantized GGUF)</option>
                   </select>
                 </label>
                 <label className='flex flex-col gap-2 text-sm'>
@@ -686,7 +696,7 @@ function LowbitQValidationPage() {
                 {selectedPrompt.prompt}
               </pre>
 
-              {(downloadProgress || conversionProgressText || actionError || batchProgress) && (
+              {(downloadProgress || conversionProgressText || loadProgress || actionError || batchProgress) && (
                 <div className='mt-4 space-y-2 text-sm text-slate-600'>
                   {downloadProgress && (
                     <div>
@@ -694,6 +704,16 @@ function LowbitQValidationPage() {
                     </div>
                   )}
                   {conversionProgressText && <div>convert: {conversionProgressText}</div>}
+                  {loadProgress && loadProgress.phase !== 'complete' && (
+                    <div className='text-blue-700'>
+                      load: {loadProgress.detail} ({loadProgress.percent}%)
+                    </div>
+                  )}
+                  {loadProgress && loadProgress.phase === 'complete' && (
+                    <div className='text-emerald-700'>
+                      load: {loadProgress.detail}
+                    </div>
+                  )}
                   {batchProgress && <div className='text-indigo-700'>batch: {batchProgress}</div>}
                   {actionError && <div className='text-rose-700'>error: {actionError}</div>}
                 </div>
