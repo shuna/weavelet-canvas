@@ -30,9 +30,10 @@ PATCH_SENTINEL = "lowbit-q-mul-mat.h"
 OLD_INCLUDE = '#include "models.h"'
 NEW_INCLUDE = '#include "models.h"\n#include "lowbit-q-mul-mat.h"'
 
-# Replace: ggml_tensor * Qcur = build_lora_mm(model.layers[il].wq, cur, model.layers[il].wq_s);
-# Note: llama.cpp added wq_s (LoRA scale) as a 3rd argument in late 2025.
-OLD_QCUR = '            ggml_tensor * Qcur = build_lora_mm(model.layers[il].wq, cur, model.layers[il].wq_s);'
+# Replace: ggml_tensor * Qcur = build_lora_mm(model.layers[il].wq, cur);
+# Note: some llama.cpp versions add wq_s (LoRA scale) as a 3rd argument.
+# wllama v2.3.7 pins a version without LoRA scale args.
+OLD_QCUR = '            ggml_tensor * Qcur = build_lora_mm(model.layers[il].wq, cur);'
 NEW_QCUR = """\
             // lowbit-Q dispatch: SVID_1BIT layers use custom kernel, others use native build_lora_mm
             ggml_tensor * Qcur;
@@ -42,11 +43,11 @@ NEW_QCUR = """\
                     model.layers[il].lowbit_q_wq_b,
                     model.layers[il].lowbit_q_wq_sign, cur);
             } else {
-                Qcur = build_lora_mm(model.layers[il].wq, cur, model.layers[il].wq_s);
+                Qcur = build_lora_mm(model.layers[il].wq, cur);
             }"""
 
-# Replace: ggml_tensor * Kcur = build_lora_mm(model.layers[il].wk, cur, model.layers[il].wk_s);
-OLD_KCUR = '            ggml_tensor * Kcur = build_lora_mm(model.layers[il].wk, cur, model.layers[il].wk_s);'
+# Replace: ggml_tensor * Kcur = build_lora_mm(model.layers[il].wk, cur);
+OLD_KCUR = '            ggml_tensor * Kcur = build_lora_mm(model.layers[il].wk, cur);'
 NEW_KCUR = """\
             ggml_tensor * Kcur;
             if (model.layers[il].lowbit_q_wk_a) {
@@ -55,11 +56,11 @@ NEW_KCUR = """\
                     model.layers[il].lowbit_q_wk_b,
                     model.layers[il].lowbit_q_wk_sign, cur);
             } else {
-                Kcur = build_lora_mm(model.layers[il].wk, cur, model.layers[il].wk_s);
+                Kcur = build_lora_mm(model.layers[il].wk, cur);
             }"""
 
-# Replace: ggml_tensor * Vcur = build_lora_mm(model.layers[il].wv, cur, model.layers[il].wv_s);
-OLD_VCUR = '            ggml_tensor * Vcur = build_lora_mm(model.layers[il].wv, cur, model.layers[il].wv_s);'
+# Replace: ggml_tensor * Vcur = build_lora_mm(model.layers[il].wv, cur);
+OLD_VCUR = '            ggml_tensor * Vcur = build_lora_mm(model.layers[il].wv, cur);'
 NEW_VCUR = """\
             ggml_tensor * Vcur;
             if (model.layers[il].lowbit_q_wv_a) {
@@ -68,7 +69,7 @@ NEW_VCUR = """\
                     model.layers[il].lowbit_q_wv_b,
                     model.layers[il].lowbit_q_wv_sign, cur);
             } else {
-                Vcur = build_lora_mm(model.layers[il].wv, cur, model.layers[il].wv_s);
+                Vcur = build_lora_mm(model.layers[il].wv, cur);
             }"""
 
 # Replace: the build_attn call
@@ -93,12 +94,12 @@ NEW_ATTN = """\
             }"""
 
 # Replace: the build_ffn call (non-MoE branch)
-# Note: llama.cpp added ffn_up_s/ffn_gate_s/ffn_down_s (LoRA scale) args in late 2025.
+# wllama v2.3.7 pins llama.cpp without LoRA scale args (uses NULL instead).
 OLD_FFN = """\
             cur = build_ffn(cur,
-                    model.layers[il].ffn_up,   model.layers[il].ffn_up_b,   model.layers[il].ffn_up_s,
-                    model.layers[il].ffn_gate, model.layers[il].ffn_gate_b, model.layers[il].ffn_gate_s,
-                    model.layers[il].ffn_down, model.layers[il].ffn_down_b, model.layers[il].ffn_down_s,
+                    model.layers[il].ffn_up,   model.layers[il].ffn_up_b,   NULL,
+                    model.layers[il].ffn_gate, model.layers[il].ffn_gate_b, NULL,
+                    model.layers[il].ffn_down, model.layers[il].ffn_down_b, NULL,
                     NULL,
                     LLM_FFN_SILU, LLM_FFN_PAR, il);"""
 NEW_FFN = """\
@@ -122,9 +123,9 @@ NEW_FFN = """\
                     model.layers[il].lowbit_q_ffn_down_sign, cur);
             } else {
                 cur = build_ffn(cur,
-                        model.layers[il].ffn_up,   model.layers[il].ffn_up_b,   model.layers[il].ffn_up_s,
-                        model.layers[il].ffn_gate, model.layers[il].ffn_gate_b, model.layers[il].ffn_gate_s,
-                        model.layers[il].ffn_down, model.layers[il].ffn_down_b, model.layers[il].ffn_down_s,
+                        model.layers[il].ffn_up,   model.layers[il].ffn_up_b,   NULL,
+                        model.layers[il].ffn_gate, model.layers[il].ffn_gate_b, NULL,
+                        model.layers[il].ffn_down, model.layers[il].ffn_down_b, NULL,
                         NULL,
                         LLM_FFN_SILU, LLM_FFN_PAR, il);
             }"""
