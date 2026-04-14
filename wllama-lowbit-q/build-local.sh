@@ -106,6 +106,7 @@ rm -rf wasm/single-thread-compat
 mkdir -p wasm/single-thread-compat
 cd wasm/single-thread-compat
 
+export EMCC_CFLAGS=""
 emcmake cmake ../.. 2>&1 | tail -3
 export EMCC_CFLAGS="$SHARED_EMCC_CFLAGS_COMPAT"
 emmake make wllama -j"$NPROC" 2>&1
