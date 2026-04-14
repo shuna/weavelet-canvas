@@ -31,7 +31,7 @@ wllama-lowbit-q/
 ### 前提条件
 
 - git
-- Docker (WASM ビルド時のみ)
+- Docker (Docker ビルド時のみ)
 
 ### 自動セットアップ
 
@@ -39,7 +39,7 @@ wllama-lowbit-q/
 # クローン + パッチ適用のみ
 ./wllama-lowbit-q/setup.sh
 
-# クローン + パッチ適用 + WASM ビルド
+# クローン + パッチ適用 + WASM ビルド (Docker)
 ./wllama-lowbit-q/setup.sh --build
 ```
 
@@ -47,8 +47,8 @@ wllama-lowbit-q/
 
 1. wllama v2.3.7 を `.wllama-fork/` にクローン
 2. llama.cpp サブモジュールを初期化
-3. `cpp/lowbit-q/` の 4 ファイルをフォークにコピー
-4. CMakeLists.txt にビルドターゲットを追加
+3. `cpp/lowbit-q/` のソースをフォークにコピー
+4. パッチを適用 (0001: CMakeLists, 0002: ローダー, 0003: グラフビルダー)
 5. (--build 指定時) Docker 経由で WASM をビルド
 
 ### 手動セットアップ
@@ -68,20 +68,86 @@ cp ../wllama-lowbit-q/cpp/lowbit-q/* cpp/lowbit-q/
 #    - include_directories に cpp/lowbit-q と llama.cpp/ggml/include を追加
 #    - add_executable に ${LOWBIT_Q_SRC} を追加
 
-# 4. WASM ビルド
+# 4. WASM ビルド (Docker)
 bash scripts/build_wasm.sh
 ```
 
-### ビルド出力の配置
+## ローカルビルド (Emscripten)
+
+Docker を使わずローカルの Emscripten でビルドする手順。
+
+### 前提条件
+
+- git
+- cmake (`brew install cmake`)
+- python3
+- Emscripten SDK (emsdk) **4.0.3**
+
+> **重要**: wllama v2.3.7 は emsdk 4.0.3 でビルドされている。
+> バージョンが異なると `-fwasm-exceptions` の ABI 非互換などにより実行時エラーが発生する。
+
+### emsdk のインストール
 
 ```bash
-# ビルド後、WASM バイナリをプロジェクトにコピー
-mkdir -p vendor/wllama
-cp .wllama-fork/esm/single-thread/wllama.wasm vendor/wllama/single-thread.wasm
-cp .wllama-fork/esm/multi-thread/wllama.wasm  vendor/wllama/multi-thread.wasm
+# emsdk をクローン
+git clone https://github.com/nicekid1/emsdk.git ~/emsdk
+cd ~/emsdk
+
+# バージョン 4.0.3 をインストール・有効化
+./emsdk install 4.0.3
+./emsdk activate 4.0.3
+
+# 環境変数を設定 (毎回のシェル起動時に必要)
+source ~/emsdk/emsdk_env.sh
 ```
 
-wllamaWorker.ts の WASM パス解決を vendor/ を参照するように変更する。
+### ビルド手順
+
+```bash
+# 1. セットアップ (クローン + パッチ適用)
+./wllama-lowbit-q/setup.sh
+
+# 2. Emscripten 環境を有効化
+source ~/emsdk/emsdk_env.sh
+
+# 3. ローカルビルド (4 バリアントすべて)
+./wllama-lowbit-q/build-local.sh
+```
+
+### ビルド出力
+
+`build-local.sh` は以下の 4 バリアントを `vendor/wllama/` に出力する:
+
+| ファイル | アドレッシング | スレッド | 用途 |
+|---------|-------------|---------|------|
+| `single-thread.wasm` | Memory64 (64-bit) | シングル | モデル >2GB 対応、SharedArrayBuffer 非対応ブラウザ |
+| `multi-thread.wasm` | Memory64 (64-bit) | マルチ | モデル >2GB 対応、標準構成 |
+| `single-thread-compat.wasm` | 32-bit | シングル | Memory64 非対応ブラウザ向け (最大 ~2GB) |
+| `multi-thread-compat.wasm` | 32-bit | マルチ | Memory64 非対応ブラウザ向け (最大 ~2GB) |
+
+`wllamaWorker.ts` がブラウザの `WebAssembly.Memory({ memory64: true })` サポートを検出し、
+自動的に Memory64 / compat バリアントを切り替える。
+
+### ⚠️ WASM と JS グルーコードの整合性
+
+**これは最も重要な制約**。WASM バイナリと `vendor/wllama/index.js` 内の JS グルーコードは
+Emscripten が同時に生成するペアであり、必ず一致させる必要がある。
+
+```
+vendor/wllama/
+├── index.js              ← WLLAMA_SINGLE_THREAD_CODE / WLLAMA_MULTI_THREAD_CODE を含む
+├── single-thread.wasm    ← index.js の JS グルーと対応
+├── multi-thread.wasm     ← index.js の JS グルーと対応
+├── single-thread-compat.wasm
+└── multi-thread-compat.wasm
+```
+
+- `.wasm` ファイルだけを差し替えると、**モデル読み込みがハングする**。
+- WASM を再ビルドした場合は、`index.js` 内の JS グルーコード
+  (`WLLAMA_SINGLE_THREAD_CODE`, `WLLAMA_MULTI_THREAD_CODE`) も
+  Emscripten が出力した新しいものに更新すること。
+- 現在リポジトリにコミットされている Memory64 WASM (`single-thread.wasm`, `multi-thread.wasm`) は
+  wllama upstream が提供するビルド済みバイナリ。compat バリアントのみローカルビルド。
 
 ## カーネル実装の詳細
 
