@@ -126,7 +126,7 @@ function getWasmPaths(useLowbitQ = false) {
 // ---------------------------------------------------------------------------
 
 interface InitRequest { id: number; type: 'init'; isLowbitQ?: boolean }
-interface LoadRequest { id: number; type: 'load'; file: File }
+interface LoadRequest { id: number; type: 'load'; file: File; expectedContextLength?: number }
 interface GenerateRequest {
   id: number;
   type: 'generate';
@@ -278,16 +278,18 @@ async function handleLoad(req: LoadRequest) {
 
     postLoadProgress('model-load', 20, `モデルをロード中 (${fileSizeMB} MB)`);
 
-    // First pass: load with minimal n_ctx to discover n_ctx_train from GGUF metadata
-    const MAX_BROWSER_CTX = 2048;
+    // Use expected context length from catalog/store if available,
+    // otherwise fall back to a safe default. Cap at MAX_BROWSER_CTX for memory safety.
+    const MAX_BROWSER_CTX = 8192;
+    const requestedCtx = Math.min(req.expectedContextLength ?? MAX_BROWSER_CTX, MAX_BROWSER_CTX);
     await wllama.loadModel([req.file], {
-      n_ctx: MAX_BROWSER_CTX,
+      n_ctx: requestedCtx,
       n_threads: 1,  // Single-thread until COOP/COEP is configured (Phase 8)
     });
 
     const info = wllama.getLoadedContextInfo();
     const nativeContextLength = info.n_ctx_train ?? info.n_ctx;
-    // The granted n_ctx is capped by MAX_BROWSER_CTX but never exceeds the model's native length
+    // The granted n_ctx may differ from what we requested; also cap to native length
     const grantedCtx = Math.min(info.n_ctx, nativeContextLength);
 
     const elapsed = ((performance.now() - loadStartTime) / 1000).toFixed(1);

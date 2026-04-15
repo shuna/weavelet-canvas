@@ -175,7 +175,12 @@ export class LocalModelRuntime {
       if (def.engine === 'wllama') {
         const file = await provider.getFile();
         console.info('[LocalModelRuntime] loading model file:', (file as File).name ?? '(blob)', 'size:', file.size);
-        const result = await this.sendRequest(def.id, { type: 'load', file }) as {
+        // Look up expected context length from catalog/store so the worker
+        // allocates the right amount of KV cache instead of a fixed default.
+        const expectedCtx = this.lookupExpectedContextLength(def.id);
+        const result = await this.sendRequest(def.id, {
+          type: 'load', file, ...(expectedCtx ? { expectedContextLength: expectedCtx } : {}),
+        }) as {
           contextLength?: number;
           nativeContextLength?: number;
         };
@@ -405,6 +410,21 @@ export class LocalModelRuntime {
         contextLength: newContextLength,
       },
     });
+  }
+
+  /**
+   * Look up expected context length from the store or catalog so the worker
+   * can allocate the right n_ctx instead of a fixed default.
+   */
+  private lookupExpectedContextLength(modelId: string): number | undefined {
+    // Check store first (persisted from a previous load)
+    if (_storeGetter) {
+      const def = _storeGetter().localModels.find((m) => m.id === modelId);
+      if (def?.displayMeta?.contextLength) return def.displayMeta.contextLength;
+    }
+    // Fallback to curated catalog
+    const cat = CURATED_MODELS.find((c) => c.id === modelId);
+    return cat?.displayMeta?.contextLength ?? undefined;
   }
 
   private createWorker(engine: LocalModelEngine): Worker {
