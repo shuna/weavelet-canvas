@@ -175,6 +175,55 @@ fi
 echo "[4/5] llama.cpp patches complete"
 
 # -----------------------------------------------------------------------
+# Step 4c: Patch wllama/WebGPU glue for local WebGPU builds
+# -----------------------------------------------------------------------
+echo "    Patching wllama WebGPU glue..."
+
+WLLAMA_TS="$FORK_DIR/src/wllama.ts"
+if [ -f "$WLLAMA_TS" ]; then
+  python3 - "$WLLAMA_TS" <<'PY'
+from pathlib import Path
+import sys
+
+path = Path(sys.argv[1])
+text = path.read_text()
+if "n_gpu_layers?: number;" not in text:
+    text = text.replace("  n_threads?: number;\n", "  n_threads?: number;\n  n_gpu_layers?: number;\n", 1)
+text = text.replace("      n_gpu_layers: 0,\n", "      n_gpu_layers: config.n_gpu_layers ?? 0,\n", 1)
+path.write_text(text)
+PY
+  echo "    wllama.ts patched for n_gpu_layers"
+else
+  echo "    WARNING: $WLLAMA_TS not found — skipping n_gpu_layers patch"
+fi
+
+WEBGPU_CPP="$FORK_DIR/llama.cpp/ggml/src/ggml-webgpu/ggml-webgpu.cpp"
+if [ -f "$WEBGPU_CPP" ]; then
+  python3 - "$WEBGPU_CPP" <<'PY'
+from pathlib import Path
+import sys
+
+path = Path(sys.argv[1])
+text = path.read_text()
+
+old = """    ctx->webgpu_global_ctx->device.GetQueue().OnSubmittedWorkDone(wgpu::CallbackMode::WaitAnyOnly,\n            [&callback_status, &callback_message](wgpu::QueueWorkDoneStatus status, wgpu::StringView message) {\n                callback_status = status;\n                callback_message = std::string(message);\n            });\n"""
+new = """#ifdef __EMSCRIPTEN__\n    ctx->webgpu_global_ctx->device.GetQueue().OnSubmittedWorkDone(wgpu::CallbackMode::WaitAnyOnly,\n            [&callback_status](wgpu::QueueWorkDoneStatus status) { callback_status = status; });\n#else\n    ctx->webgpu_global_ctx->device.GetQueue().OnSubmittedWorkDone(wgpu::CallbackMode::WaitAnyOnly,\n            [&callback_status, &callback_message](wgpu::QueueWorkDoneStatus status, wgpu::StringView message) {\n                callback_status = status;\n                callback_message = std::string(message);\n            });\n#endif\n"""
+if old in text and "__EMSCRIPTEN__" not in text[text.find(old)-80:text.find(old)+len(old)+80]:
+    text = text.replace(old, new, 1)
+
+old = """#ifdef __EMSCRIPTEN__\n    std::vector<wgpu::InstanceFeatureName> instance_features = { wgpu::InstanceFeatureName::TimedWaitAny };\n    instance_descriptor.requiredFeatureCount                  = instance_features.size();\n    instance_descriptor.requiredFeatures                      = instance_features.data();\n#else\n    instance_descriptor.capabilities.timedWaitAnyEnable   = true;\n    instance_descriptor.capabilities.timedWaitAnyMaxCount = 1;\n#endif\n"""
+new = """#ifdef __EMSCRIPTEN__\n    instance_descriptor.capabilities.timedWaitAnyEnable   = true;\n    instance_descriptor.capabilities.timedWaitAnyMaxCount = 1;\n#else\n    std::vector<wgpu::InstanceFeatureName> instance_features = { wgpu::InstanceFeatureName::TimedWaitAny };\n    instance_descriptor.requiredFeatureCount                  = instance_features.size();\n    instance_descriptor.requiredFeatures                      = instance_features.data();\n#endif\n"""
+if old in text:
+    text = text.replace(old, new, 1)
+
+path.write_text(text)
+PY
+  echo "    ggml-webgpu.cpp patched for Emscripten 4.0.10"
+else
+  echo "    WARNING: $WEBGPU_CPP not found — skipping WebGPU glue patch"
+fi
+
+# -----------------------------------------------------------------------
 # Step 5: Build WASM (optional)
 # -----------------------------------------------------------------------
 if [[ "${1:-}" == "--build" ]]; then

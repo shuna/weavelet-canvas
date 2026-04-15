@@ -19,6 +19,7 @@ export interface WllamaConfig {
 export interface LoadModelConfig {
   n_ctx?: number;
   n_threads?: number;
+  n_gpu_layers?: number;
 }
 
 export interface LoadedContextInfo {

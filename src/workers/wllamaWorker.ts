@@ -29,6 +29,7 @@ import { Wllama, type AssetsPathConfig } from '../vendor/wllama';
 
 let wllama: Wllama | null = null;
 let currentAbortController: AbortController | null = null;
+let currentWasmUsesWebGPU = false;
 
 // ---------------------------------------------------------------------------
 // WASM path resolution
@@ -87,6 +88,26 @@ function isMemory64Supported(): boolean {
   return _memory64Supported;
 }
 
+function hasWebGPUApi(): boolean {
+  try {
+    return typeof navigator !== 'undefined' && 'gpu' in navigator;
+  } catch {
+    return false;
+  }
+}
+
+async function canUseWebGPU(): Promise<boolean> {
+  if (!hasWebGPUApi()) return false;
+  try {
+    const adapter = await (navigator as Navigator & {
+      gpu: { requestAdapter: () => Promise<{ features: Set<string> } | null> };
+    }).gpu.requestAdapter();
+    return adapter?.features.has('shader-f16') ?? false;
+  } catch {
+    return false;
+  }
+}
+
 /**
  * Resolve WASM binary paths relative to the worker's location.
  *
@@ -97,12 +118,34 @@ function isMemory64Supported(): boolean {
  * - The project always uses the custom-built WASM from vendor/wllama/.
  * - Rebuilding vendor/wllama/*.wasm is therefore required for any runtime changes.
  */
-function getWasmPaths(useLowbitQ = false) {
+async function wasmAssetExists(url: string): Promise<boolean> {
+  try {
+    const res = await fetch(url, { method: 'HEAD' });
+    return res.ok;
+  } catch {
+    return false;
+  }
+}
+
+async function getWasmPaths(useLowbitQ = false) {
   const multiThread = canUseMultiThread();
   const mem64 = isMemory64Supported();
+  let webgpu = await canUseWebGPU();
 
-  const singleThreadFile = mem64 ? 'single-thread.wasm' : 'single-thread-compat.wasm';
-  const multiThreadFile = mem64 ? 'multi-thread.wasm' : 'multi-thread-compat.wasm';
+  let singleThreadFile = webgpu
+    ? 'single-thread-webgpu-compat.wasm'
+    : mem64 ? 'single-thread.wasm' : 'single-thread-compat.wasm';
+  let multiThreadFile = webgpu
+    ? 'multi-thread-webgpu-compat.wasm'
+    : mem64 ? 'multi-thread.wasm' : 'multi-thread-compat.wasm';
+
+  const singleThreadUrl = new URL(`../../vendor/wllama/${singleThreadFile}`, import.meta.url).href;
+  if (webgpu && !(await wasmAssetExists(singleThreadUrl))) {
+    webgpu = false;
+    singleThreadFile = mem64 ? 'single-thread.wasm' : 'single-thread-compat.wasm';
+    multiThreadFile = mem64 ? 'multi-thread.wasm' : 'multi-thread-compat.wasm';
+  }
+  currentWasmUsesWebGPU = webgpu;
 
   const paths: AssetsPathConfig = {
     'single-thread/wllama.wasm': new URL(
@@ -117,7 +160,7 @@ function getWasmPaths(useLowbitQ = false) {
     ).href;
   }
   console.info('[wllamaWorker] Using vendored WASM paths:', paths,
-    'isLowbitQ:', useLowbitQ, 'memory64:', mem64, 'multiThread:', multiThread);
+    'isLowbitQ:', useLowbitQ, 'memory64:', mem64, 'multiThread:', multiThread, 'webgpu:', webgpu);
   return paths;
 }
 
@@ -204,12 +247,14 @@ async function handleInit(req: InitRequest) {
   try {
     const useLowbitQ = req.isLowbitQ ?? false;
     const mem64 = isMemory64Supported();
-    const paths = getWasmPaths(useLowbitQ);
+    const paths = await getWasmPaths(useLowbitQ);
     postDiagnostic('worker-init', {
       isLowbitQ: useLowbitQ,
       wasmPaths: paths,
       multiThreadCapable: canUseMultiThread(),
       memory64Supported: mem64,
+      webgpuCapable: hasWebGPUApi(),
+      webgpuWasmSelected: currentWasmUsesWebGPU,
     });
     console.info('[wllamaWorker] init, isLowbitQ:', useLowbitQ, 'memory64:', mem64, 'WASM paths:', paths);
     wllama = new Wllama(paths, {
@@ -285,6 +330,7 @@ async function handleLoad(req: LoadRequest) {
     await wllama.loadModel([req.file], {
       n_ctx: requestedCtx,
       n_threads: 1,  // Single-thread until COOP/COEP is configured (Phase 8)
+      n_gpu_layers: currentWasmUsesWebGPU ? 999 : 0,
     });
 
     const info = wllama.getLoadedContextInfo();
