@@ -5,6 +5,7 @@ import { PromptLibraryPicker } from '@components/PromptLibraryMenu/PromptLibrary
 import { SettingsGroup } from '@components/SettingsMenu/SettingsMenu';
 import { ConfigInterface, ImageDetail, ReasoningEffort, Verbosity } from '@type/chat';
 import {
+  getModelCapabilities,
   getModelConfigContextInfo,
   useModelSupportsReasoning,
   useModelCapabilities,
@@ -26,6 +27,7 @@ import {
 } from '@utils/reasoning';
 import {
   CapabilityBadges,
+  CapabilityIconsInline,
   DarkSelectField,
   FieldLabel,
   FieldLabelWithInfo,
@@ -287,12 +289,16 @@ export const ModelSelector = ({
   const savedMeta = useStore((state) => state.savedModelMeta) || {};
 
   // Remote model options (composite key: "modelId:::providerId")
-  const remoteOptions = favoriteModels.map((fav) => ({
-    value: `${fav.modelId}:::${fav.providerId}`,
-    label: fav.modelId,
-    sublabel: providers[fav.providerId]?.name || fav.providerId,
-    icon: <ProviderIcon providerId={fav.providerId} className='w-4 h-4' />,
-  }));
+  const remoteOptions = favoriteModels.map((fav) => {
+    const caps = getModelCapabilities(fav.modelId, fav.providerId);
+    return {
+      value: `${fav.modelId}:::${fav.providerId}`,
+      label: fav.modelId,
+      sublabel: providers[fav.providerId]?.name || fav.providerId,
+      icon: <ProviderIcon providerId={fav.providerId} className='w-4 h-4' />,
+      rightIcon: <CapabilityIconsInline reasoning={caps.reasoning} vision={caps.vision} audio={caps.audio} />,
+    };
+  });
 
   // Local model options (composite key: "local:::modelId")
   // Include both store-registered models and curated catalog models that are saved & favorited
@@ -414,7 +420,7 @@ export const ModelSelector = ({
         }
       }}
       placeholder={t('model:provider.noModelSelected', 'No model selected') as string}
-      isClearable
+      isSearchable={false}
       className={className ?? 'mb-4'}
     />
   );

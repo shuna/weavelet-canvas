@@ -320,6 +320,33 @@ const ChatViewTabs = ({
 
                 return (
                 <div className='absolute top-full left-0 mt-1 min-w-[280px] max-h-[300px] overflow-y-auto bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 rounded-md shadow-lg z-[100]'>
+                  {/* Token info section */}
+                  <div className='px-3 py-2 text-xs text-gray-500 dark:text-gray-400'>
+                    <div className='flex items-center'>
+                      <span className='truncate flex-1'>
+                        <TokenCount />
+                        {isOpenRouter && creditDisplay && (
+                          <span className='text-gray-600 dark:text-gray-400'>
+                            {' / '}
+                            <span className='tabular-nums'>{creditDisplay}</span>
+                          </span>
+                        )}
+                      </span>
+                      {showRetryButton && (
+                        <button
+                          className='ml-1 rounded p-0.5 transition-colors hover:bg-gray-200 dark:hover:bg-gray-700 text-gray-500 dark:text-gray-400'
+                          onClick={(e) => { e.stopPropagation(); handleRetryVerifiedStats(); }}
+                          type='button'
+                          title='Retry'
+                        >
+                          <svg className='h-3 w-3' fill='none' stroke='currentColor' viewBox='0 0 24 24' strokeWidth={2}>
+                            <path strokeLinecap='round' strokeLinejoin='round' d='M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15' />
+                          </svg>
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                  <div className='border-t border-gray-200 dark:border-gray-600 my-1' />
                   {!hasAny ? (
                     <div className='px-3 py-2 text-sm text-gray-500'>
                       {t('provider.noModelSelected', 'モデル未選択')}
@@ -378,33 +405,6 @@ const ChatViewTabs = ({
                       <path strokeLinecap='round' strokeLinejoin='round' strokeWidth={2} d='M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4' />
                     </svg>
                     {tMain('chatSettings')}
-                  </div>
-                  {/* Token info section */}
-                  <div className='border-t border-gray-200 dark:border-gray-600 my-1' />
-                  <div className='px-3 py-2 text-xs text-gray-500 dark:text-gray-400'>
-                    <div className='flex items-center'>
-                      <span className='truncate flex-1'>
-                        <TokenCount />
-                        {isOpenRouter && creditDisplay && (
-                          <span className='text-gray-600 dark:text-gray-400'>
-                            {' / '}
-                            <span className='tabular-nums'>{creditDisplay}</span>
-                          </span>
-                        )}
-                      </span>
-                      {showRetryButton && (
-                        <button
-                          className='ml-1 rounded p-0.5 transition-colors hover:bg-gray-200 dark:hover:bg-gray-700 text-gray-500 dark:text-gray-400'
-                          onClick={(e) => { e.stopPropagation(); handleRetryVerifiedStats(); }}
-                          type='button'
-                          title='Retry'
-                        >
-                          <svg className='h-3 w-3' fill='none' stroke='currentColor' viewBox='0 0 24 24' strokeWidth={2}>
-                            <path strokeLinecap='round' strokeLinejoin='round' d='M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15' />
-                          </svg>
-                        </button>
-                      )}
-                    </div>
                   </div>
                 </div>
                 );
