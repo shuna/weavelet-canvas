@@ -60,13 +60,8 @@ const ImportPrompt = ({ hideTitle }: { hideTitle?: boolean }) => {
           ? inputRef.current.files[0].name
           : t('selectFileDescription', { ns: 'import', defaultValue: 'インポートするファイルを選択してください' })}
       </p>
-      <input
-        className='hidden'
-        type='file'
-        accept='.csv'
-        ref={inputRef}
-        onChange={() => setFileSelected(!!inputRef.current?.files?.length)}
-      />
+      {/* Native <label> trigger — avoids Chrome user-activation issues
+         with programmatic .click() inside stopPropagation portals */}
       <div className='mt-3 flex flex-col gap-2 text-xs text-gray-500 dark:text-gray-400'>
         <label className='flex items-center gap-1.5 cursor-pointer'>
           <input
@@ -90,13 +85,18 @@ const ImportPrompt = ({ hideTitle }: { hideTitle?: boolean }) => {
         </label>
       </div>
       <div className='flex items-center justify-between mt-3'>
-        <button
-          className='btn btn-small btn-neutral flex items-center gap-2 whitespace-nowrap'
-          onClick={() => inputRef.current?.click()}
-          type='button'
+        <label
+          className='btn btn-small btn-neutral flex items-center gap-2 whitespace-nowrap cursor-pointer'
         >
+          <input
+            className='absolute w-0 h-0 overflow-hidden opacity-0'
+            type='file'
+            accept='.csv'
+            ref={inputRef}
+            onChange={() => setFileSelected(!!inputRef.current?.files?.length)}
+          />
           {t('selectFile')}
-        </button>
+        </label>
         <button
           className={`btn btn-small w-32 justify-center ${fileSelected ? 'btn-primary' : 'btn-neutral cursor-not-allowed opacity-50'}`}
           onClick={handleFileUpload}

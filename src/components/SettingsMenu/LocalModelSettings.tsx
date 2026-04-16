@@ -1010,13 +1010,19 @@ const LocalModelSettings = () => {
             <div className='px-4 py-3 flex flex-col gap-3'>
               <p className='text-xs text-gray-500 dark:text-gray-400'>{t('localModel.selectGgufHint')}</p>
               <div className='flex items-center gap-3'>
-                <button
-                  className='btn btn-neutral text-sm px-4 py-1.5'
-                  onClick={() => fileInputRef.current?.click()} disabled={importedStatus === 'loading'}
+                <label
+                  className={`btn btn-neutral text-sm px-4 py-1.5 cursor-pointer${importedStatus === 'loading' ? ' opacity-50 pointer-events-none' : ''}`}
                 >
+                  <input
+                    ref={fileInputRef}
+                    type='file'
+                    accept='.gguf'
+                    className='absolute w-0 h-0 overflow-hidden opacity-0'
+                    onChange={handleFileSelect}
+                    disabled={importedStatus === 'loading'}
+                  />
                   {importedStatus === 'loading' ? t('localModel.modelStatus.loading') : t('localModel.selectGgufFile')}
-                </button>
-                <input ref={fileInputRef} type='file' accept='.gguf' className='hidden' onChange={handleFileSelect} />
+                </label>
                 {importedStatus !== 'idle' && <StatusBadge status={importedStatus} />}
               </div>
               {fileName && <div className='text-xs text-gray-600 dark:text-gray-400 truncate'>{fileName}</div>}
