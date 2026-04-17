@@ -89,7 +89,13 @@ cd .wllama-fork
 ./scripts/build_all_wasm.sh
 ```
 
-This builds all 8 variants under `wasm/`. Each directory contains:
+This builds all 8 variants under `wasm/`. The script also re-applies the
+required Emscripten/WebGPU compatibility patches to
+`llama.cpp/ggml/src/ggml-webgpu/ggml-webgpu.cpp` before the first build so the
+WebGPU variants stay reproducible even if the fork was refreshed or partially
+rebased.
+
+Each directory contains:
 - `wllama.wasm` — the WASM binary
 - `wllama.js` — the Emscripten JS glue (runtime + import definitions)
 
@@ -524,3 +530,96 @@ build in emsdk 4.0.x. After rebuilding, verify the generated WebGPU glue no
 longer reports `_emscripten_has_asyncify=()=>0`, then re-run
 `npm run build:worker`, `npm run build:tsup`, and copy the rebuilt WebGPU WASM
 plus `esm/index.js` into the main project.
+
+### 10. Call `Module._wllama_*` directly — do not use `cwrap`
+
+The inner worker (`llama-cpp.js`) calls the five wllama exports directly via
+`Module._wllama_*` instead of going through `Module.cwrap()` / `ccall()`.
+
+`applySignatureConversions` (patched by `build_all_wasm.sh`) already normalises
+every `Module._wllama_*` export across all 8 variants so that:
+
+- inputs accept plain JS Numbers (no manual BigInt conversion in JS)
+- the return value is a plain JS Number (or `Promise<Number>` for JSPI exports)
+
+A single `await` + `Number()` call therefore works uniformly across all variants:
+
+```javascript
+// Works for all 8 variants:
+wllamaMalloc = async (size, dummy) => Number(await Module._wllama_malloc(size, dummy));
+wllamaStart  = async () => Number(await Module._wllama_start());
+wllamaExit   = async () => Number(await Module._wllama_exit());
+wllamaDebug  = async () => Number(await Module._wllama_debug());
+wllamaAction = async (action, reqPtr) => {
+  const bytes = new TextEncoder().encode(action);
+  const actPtr = await wllamaMalloc(bytes.byteLength + 1, 0);
+  Module.HEAPU8.set(bytes, actPtr);
+  Module.HEAPU8[actPtr + bytes.byteLength] = 0;
+  return Number(await Module._wllama_action(actPtr, reqPtr));
+};
+```
+
+**Why not cwrap?** `cwrap`/`ccall` contain an async-detection bug specific to the
+Memory64+WebGPU combination: when `wllama_malloc` is wrapped in
+`applySignatureConversions` with `Promise.resolve(...).then(Number)` the return
+is a `Promise`, but `ccall` without `{async:true}` calls `Number(Promise)` = NaN
+synchronously. That NaN propagates as the input pointer to `wllama_action` and
+causes `BigInt(NaN)` to throw. Bypassing `cwrap` avoids this class of issue
+entirely.
+
+**When this matters:** Any change to how wllama exports are called. Do not
+reintroduce `cwrap` without also auditing the async/sync path for all 8 variants.
+
+### 11. Memory64 glue must wrap custom `wllama_*` i64 exports
+
+On `MEMORY64=1` builds, Emscripten emits an `applySignatureConversions(...)`
+helper so JavaScript can call selected i64 exports using plain Numbers. The
+generated helper does not automatically include custom `wllama_*` exports.
+
+This fork's `build_all_wasm.sh` patches the generated glue to extend
+`applySignatureConversions` for all Memory64 variants:
+
+**Memory64 + WebGPU (JSPI)** — `wllama_start/action/exit/debug` are JSPI-wrapped
+and return `Promise<BigInt>`. We use async wrappers. `wllama_malloc` is NOT JSPI
+and returns `BigInt` synchronously — we use a *sync* wrapper:
+
+```javascript
+// sync — wllama_malloc is NOT a JSPI export
+var makeWrapper_pi64i32 = f => (a0,a1) => Number(f(BigInt(a0),a1));
+// async — wllama_start/exit/debug are JSPI exports returning Promise<BigInt>
+var makeWrapper_p_async  = f => () => Promise.resolve(f()).then(v=>Number(v));
+// async — wllama_action is a JSPI export returning Promise<BigInt>
+var makeWrapper_pi64i64  = f => (a0,a1) => Promise.resolve(f(BigInt(a0),BigInt(a1))).then(v=>Number(v));
+
+wasmExports["wllama_malloc"] = makeWrapper_pi64i32(wasmExports["wllama_malloc"]);
+wasmExports["wllama_start"]  = makeWrapper_p_async(wasmExports["wllama_start"]);
+wasmExports["wllama_action"] = makeWrapper_pi64i64(wasmExports["wllama_action"]);
+wasmExports["wllama_exit"]   = makeWrapper_p_async(wasmExports["wllama_exit"]);
+wasmExports["wllama_debug"]  = makeWrapper_p_async(wasmExports["wllama_debug"]);
+```
+
+**Memory64 non-WebGPU (no JSPI)** — exports use minified names (e.g. `"x"`,
+`"y"`, `"z"`, `"A"`, `"B"`). The build script extracts these names from
+`assignWasmExports()` and injects sync-only wrappers:
+
+```javascript
+var makeWrapper_pi64i32_sync = f => (a0,a1) => Number(f(BigInt(a0),a1));
+var makeWrapper_pi64i64_sync = f => (a0,a1) => Number(f(BigInt(a0),BigInt(a1)));
+
+wasmExports["x"] = makeWrapper_pi64i32_sync(wasmExports["x"]);  // wllama_malloc
+wasmExports["y"] = makeWrapper_p(wasmExports["y"]);              // wllama_start
+wasmExports["z"] = makeWrapper_pi64i64_sync(wasmExports["z"]);  // wllama_action
+wasmExports["A"] = makeWrapper_p(wasmExports["A"]);              // wllama_exit
+wasmExports["B"] = makeWrapper_p(wasmExports["B"]);              // wllama_debug
+```
+
+(The actual minified names are discovered at build time and may differ across
+emsdk versions or after llama.cpp submodule updates.)
+
+**compat variants (32-bit)** — No `applySignatureConversions` at all; exports
+natively accept/return 32-bit Numbers. No injection needed.
+
+**When this matters:** Any `build_all_wasm.sh` run re-applies these patches
+automatically. If you upgrade emsdk or update llama.cpp and see BigInt / NaN
+errors from `wllama_malloc` or `wllama_action`, check that the patch still
+applies (the `makeWrapper_p` marker must be present in the generated glue).
