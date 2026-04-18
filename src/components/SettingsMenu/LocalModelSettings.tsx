@@ -3,13 +3,17 @@ import { useTranslation } from 'react-i18next';
 import useStore from '@store/store';
 import Toggle from '@components/Toggle';
 import { SettingsGroup } from './SettingsMenu';
-import { localModelRuntime } from '@src/local-llm/runtime';
+import {
+  localModelRuntime,
+  type WllamaEnvironmentReport,
+  type WllamaFeatureCheck,
+} from '@src/local-llm/runtime';
 import { OpfsFileProvider, deleteModel, getTempFileSize, readFile, saveFile, sha256Blob } from '@src/local-llm/storage';
 import { rehydrateSavedModels } from '@src/local-llm/storage';
 import { CURATED_MODELS } from '@src/local-llm/catalog';
 import type { CatalogModel } from '@src/local-llm/catalog';
 import { downloadCatalogModel, downloadModelFiles } from '@src/local-llm/download';
-import { detectWebGpuCapability, estimateDeviceTier, getModelFit } from '@src/local-llm/device';
+import { estimateDeviceTier, getModelFit } from '@src/local-llm/device';
 import type { DeviceTier } from '@src/local-llm/device';
 import { localAnalyze, localFormat } from '@api/localGeneration';
 import type {
@@ -36,6 +40,25 @@ import { useModelDeletion } from '@src/hooks/useModelDeletion';
 import { useHfSearch } from '@src/hooks/useHfSearch';
 
 const IMPORTED_MODEL_PREFIX = 'local-file';
+
+const MDN_FEATURE_LINKS = {
+  secureContext: 'https://developer.mozilla.org/en-US/docs/Glossary/Secure_Context',
+  memory64: 'https://developer.mozilla.org/en-US/docs/WebAssembly/Reference/JavaScript_interface',
+  jspi: 'https://developer.mozilla.org/en-US/docs/WebAssembly/Reference/JavaScript_interface',
+  sharedArrayBuffer: 'https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/SharedArrayBuffer',
+  crossOriginIsolated: 'https://developer.mozilla.org/en-US/docs/Web/API/WorkerGlobalScope/crossOriginIsolated',
+  multiThread: 'https://developer.mozilla.org/en-US/docs/Web/API/WorkerGlobalScope/crossOriginIsolated',
+  webgpuApi: 'https://developer.mozilla.org/en-US/docs/Web/API/WebGPU_API',
+  requestAdapter: 'https://developer.mozilla.org/en-US/docs/Web/API/GPU/requestAdapter',
+  shaderF16: 'https://developer.mozilla.org/en-US/docs/Web/API/GPUSupportedFeatures',
+  requestDevice: 'https://developer.mozilla.org/en-US/docs/Web/API/GPUAdapter/requestDevice',
+  webgpuPreflight: 'https://developer.mozilla.org/en-US/docs/Web/API/WebGPU_API',
+} as const;
+
+function formatEstimatedGiB(value: number | null): string {
+  if (!value || value <= 0) return '—';
+  return `${value} GB`;
+}
 
 function sanitizeModelIdSegment(value: string): string {
   return value.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 48) || 'model';
@@ -75,6 +98,8 @@ const LocalModelSettings = () => {
   const [webGpuEnabled, setWebGpuEnabled] = useState<boolean | null>(() => localModelRuntime.getWebGpuEnabled());
   const [webGpuCapable, setWebGpuCapable] = useState<boolean | null>(null);
   const [webGpuPreflighting, setWebGpuPreflighting] = useState(false);
+  const [envReport, setEnvReport] = useState<WllamaEnvironmentReport | null>(null);
+  const [showFeatureChecklist, setShowFeatureChecklist] = useState(false);
 
   // Ephemeral model state
   const [ephemeralStatus, setEphemeralStatus] = useState<LocalModelStatus>('idle');
@@ -129,6 +154,28 @@ const LocalModelSettings = () => {
           ? t('localModel.webgpuAvailable')
           : t('localModel.webgpuUnavailable');
 
+  const featureRows = useMemo(() => {
+    if (!envReport) return [];
+
+    const rows: Array<{
+      key: keyof WllamaEnvironmentReport['checks'];
+      category: string;
+      label: string;
+      docUrl: string;
+      check: WllamaFeatureCheck;
+    }> = [
+      { key: 'secureContext', category: t('localModel.featureCategoryPlatform'), label: t('localModel.featureSecureContext'), docUrl: MDN_FEATURE_LINKS.secureContext, check: envReport.checks.secureContext },
+      { key: 'memory64', category: t('localModel.featureCategoryCpuMemory'), label: t('localModel.featureMemory64'), docUrl: MDN_FEATURE_LINKS.memory64, check: envReport.checks.memory64 },
+      { key: 'sharedArrayBuffer', category: t('localModel.featureCategoryThreading'), label: t('localModel.featureSharedArrayBuffer'), docUrl: MDN_FEATURE_LINKS.sharedArrayBuffer, check: envReport.checks.sharedArrayBuffer },
+      { key: 'crossOriginIsolated', category: t('localModel.featureCategoryThreading'), label: t('localModel.featureCrossOriginIsolated'), docUrl: MDN_FEATURE_LINKS.crossOriginIsolated, check: envReport.checks.crossOriginIsolated },
+      { key: 'multiThread', category: t('localModel.featureCategoryThreading'), label: t('localModel.featureMultiThread'), docUrl: MDN_FEATURE_LINKS.multiThread, check: envReport.checks.multiThread },
+      { key: 'webgpuApi', category: t('localModel.featureCategoryWebGpu'), label: t('localModel.featureWebGpuApi'), docUrl: MDN_FEATURE_LINKS.webgpuApi, check: envReport.checks.webgpuApi },
+      { key: 'jspi', category: t('localModel.featureCategoryWebGpu'), label: t('localModel.featureJspi'), docUrl: MDN_FEATURE_LINKS.jspi, check: envReport.checks.jspi },
+      { key: 'shaderF16', category: t('localModel.featureCategoryWebGpu'), label: t('localModel.featureShaderF16'), docUrl: MDN_FEATURE_LINKS.shaderF16, check: envReport.checks.shaderF16 },
+    ];
+    return rows;
+  }, [envReport, t]);
+
   // Derive active test model from task assignments
   const generationModelId = activeLocalModels.generation ?? null;
   const analysisModelId = activeLocalModels.analysis ?? null;
@@ -150,12 +197,16 @@ const LocalModelSettings = () => {
   // Sync toggle to store
   useEffect(() => { setLocalModelEnabled(enabled); }, [enabled]);
 
-  const runWebGpuPreflight = useCallback(async (): Promise<boolean> => {
+  const runEnvironmentInspection = useCallback(async (): Promise<WllamaEnvironmentReport | null> => {
     setWebGpuPreflighting(true);
     try {
-      const ok = await localModelRuntime.preflightWllamaWebGPU();
-      setWebGpuCapable(ok);
-      return ok;
+      const report = await localModelRuntime.inspectWllamaEnvironment();
+      setEnvReport(report);
+      setWebGpuCapable(report.checks.webgpuPreflight.state === 'ok');
+      return report;
+    } catch {
+      setWebGpuCapable(false);
+      return null;
     } finally {
       setWebGpuPreflighting(false);
     }
@@ -167,30 +218,23 @@ const LocalModelSettings = () => {
         ? (action as (value: boolean) => boolean)(prev)
         : action;
       if (!prev && next && webGpuEnabled !== false) {
-        void runWebGpuPreflight();
+        void runEnvironmentInspection();
       }
       return next;
     });
-  }, [runWebGpuPreflight, webGpuEnabled]);
+  }, [runEnvironmentInspection, webGpuEnabled]);
 
   const handleWebGpuToggle = useCallback(() => {
     const next = !resolvedWebGpuEnabled;
     setWebGpuEnabled(next);
     localModelRuntime.setWebGpuEnabled(next);
-    if (next) void runWebGpuPreflight();
-  }, [resolvedWebGpuEnabled, runWebGpuPreflight]);
+    if (next) void runEnvironmentInspection();
+  }, [resolvedWebGpuEnabled, runEnvironmentInspection]);
 
   useEffect(() => {
-    let cancelled = false;
-    detectWebGpuCapability()
-      .then((capable) => {
-        if (!cancelled) setWebGpuCapable(capable);
-      })
-      .catch(() => {
-        if (!cancelled) setWebGpuCapable(false);
-      });
-    return () => { cancelled = true; };
-  }, []);
+    if (!enabled) return;
+    void runEnvironmentInspection();
+  }, [enabled, runEnvironmentInspection]);
 
   // Subscribe to runtime status changes
   useEffect(() => {
@@ -916,6 +960,114 @@ const LocalModelSettings = () => {
                 />
                 <span className="relative flex-shrink-0 w-9 h-5 bg-gray-200 dark:bg-gray-600 rounded-full peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all dark:border-gray-600 peer-checked:bg-green-500/70" />
               </label>
+
+              <div className='rounded-md border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 overflow-hidden'>
+                <div className='flex items-center justify-between gap-3 border-b border-gray-200 dark:border-gray-700 px-3 py-2'>
+                  <button
+                    type='button'
+                    onClick={() => setShowFeatureChecklist((prev) => !prev)}
+                    className='flex min-w-0 flex-1 items-center justify-between gap-3 text-left'
+                  >
+                    <span className='flex min-w-0 flex-col'>
+                      <span className='text-sm font-medium text-gray-900 dark:text-gray-200'>{t('localModel.featureChecklist')}</span>
+                      <span className='text-[11px] text-gray-500 dark:text-gray-400'>{t('localModel.featureChecklistDescription')}</span>
+                    </span>
+                    <span className='inline-flex items-center gap-1 whitespace-nowrap text-[11px] text-gray-500 dark:text-gray-400'>
+                      <span>{showFeatureChecklist ? t('localModel.featureChecklistHide') : t('localModel.featureChecklistShow')}</span>
+                      <span
+                        className={`inline-block text-xs transition-transform ${showFeatureChecklist ? 'rotate-90' : ''}`}
+                        aria-hidden='true'
+                      >
+                        ▶
+                      </span>
+                    </span>
+                  </button>
+                  <button
+                    type='button'
+                    onClick={() => { void runEnvironmentInspection(); }}
+                    disabled={webGpuPreflighting}
+                    className='rounded border border-gray-300 dark:border-gray-600 px-2 py-1 text-[11px] text-gray-700 dark:text-gray-200 disabled:opacity-50'
+                  >
+                    {t('localModel.featureChecklistRefresh')}
+                  </button>
+                </div>
+                {showFeatureChecklist && (
+                  <>
+                    <div className='px-3 py-2 border-b border-gray-200 dark:border-gray-700 text-[11px] text-gray-600 dark:text-gray-300'>
+                      <div>{t('localModel.estimatedCurrentLimit')}: <span className='font-medium text-gray-900 dark:text-gray-100'>{envReport ? `${formatEstimatedGiB(envReport.estimates.currentAppGiB)} (${envReport.estimates.currentAppPath})` : '—'}</span></div>
+                      <div>{t('localModel.estimatedCpuSingleThread')}: <span className='font-medium text-gray-900 dark:text-gray-100'>{envReport ? formatEstimatedGiB(envReport.estimates.cpuSingleThreadGiB) : '—'}</span></div>
+                      <div>{t('localModel.estimatedWebGpuSingleThread')}: <span className='font-medium text-gray-900 dark:text-gray-100'>{envReport ? formatEstimatedGiB(envReport.estimates.webgpuSingleThreadGiB) : '—'}</span></div>
+                      <div>{t('localModel.estimatedCpuMultiThread')}: <span className='font-medium text-gray-900 dark:text-gray-100'>{envReport ? formatEstimatedGiB(envReport.estimates.cpuMultiThreadGiB) : '—'}</span></div>
+                      <div>{t('localModel.estimatedWebGpuMultiThread')}: <span className='font-medium text-gray-900 dark:text-gray-100'>{envReport ? formatEstimatedGiB(envReport.estimates.webgpuMultiThreadGiB) : '—'}</span></div>
+                      <div className='mt-1 text-[10px] text-gray-500 dark:text-gray-400'>{t('localModel.estimatedLimitNote')}</div>
+                    </div>
+
+                    <div className='overflow-x-auto'>
+                      <table className='min-w-full text-left text-[11px]'>
+                        <thead className='bg-gray-50 dark:bg-gray-900/40 text-gray-600 dark:text-gray-300'>
+                          <tr>
+                            <th className='px-3 py-2 font-medium'>{t('localModel.featureColumn')}</th>
+                            <th className='px-3 py-2 font-medium'>{t('localModel.statusColumn')}</th>
+                            <th className='px-3 py-2 font-medium'>{t('localModel.detailColumn')}</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {featureRows.map((row, index) => {
+                            const tone = row.check.state === 'ok'
+                              ? 'bg-green-500'
+                              : row.check.state === 'unknown'
+                                ? 'bg-amber-400'
+                                : 'bg-red-500';
+                            const label = row.check.state === 'ok'
+                              ? t('localModel.featureStatusOk')
+                              : row.check.state === 'unknown'
+                                ? t('localModel.featureStatusUnknown')
+                                : t('localModel.featureStatusNo');
+                            const showCategory = index === 0 || featureRows[index - 1].category !== row.category;
+                            return (
+                              <React.Fragment key={row.key}>
+                                {showCategory && (
+                                  <tr className='border-t border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900/30'>
+                                    <td colSpan={3} className='px-3 py-2 font-medium text-gray-700 dark:text-gray-200'>
+                                      {row.category}
+                                    </td>
+                                  </tr>
+                                )}
+                                <tr className='border-t border-gray-200 dark:border-gray-700 align-top'>
+                                  <td className='px-3 py-2 text-gray-900 dark:text-gray-100'>
+                                    <a
+                                      href={row.docUrl}
+                                      target='_blank'
+                                      rel='noreferrer'
+                                      className='underline underline-offset-2'
+                                    >
+                                      {row.label}
+                                    </a>
+                                  </td>
+                                  <td className='px-3 py-2 text-gray-900 dark:text-gray-100'>
+                                    <span className='inline-flex items-center gap-2 whitespace-nowrap'>
+                                      <span className={`inline-block h-2.5 w-2.5 rounded-full ${tone}`} />
+                                      <span>{label}</span>
+                                    </span>
+                                  </td>
+                                  <td className='px-3 py-2 text-gray-600 dark:text-gray-300'>{row.check.detail}</td>
+                                </tr>
+                              </React.Fragment>
+                            );
+                          })}
+                          {!envReport && (
+                            <tr className='border-t border-gray-200 dark:border-gray-700'>
+                              <td colSpan={3} className='px-3 py-3 text-gray-500 dark:text-gray-400'>
+                                {webGpuPreflighting ? t('localModel.webgpuPreflightChecking') : t('localModel.featureChecklistDescription')}
+                              </td>
+                            </tr>
+                          )}
+                        </tbody>
+                      </table>
+                    </div>
+                  </>
+                )}
+              </div>
             </div>
           )}
         </div>

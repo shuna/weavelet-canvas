@@ -205,6 +205,37 @@ export interface WasmCapabilities {
   multiThread: boolean;
 }
 
+export type WllamaFeatureState = 'ok' | 'no' | 'unknown';
+
+export interface WllamaFeatureCheck {
+  state: WllamaFeatureState;
+  detail: string;
+}
+
+export interface WllamaEnvironmentReport {
+  checks: {
+    secureContext: WllamaFeatureCheck;
+    memory64: WllamaFeatureCheck;
+    jspi: WllamaFeatureCheck;
+    sharedArrayBuffer: WllamaFeatureCheck;
+    crossOriginIsolated: WllamaFeatureCheck;
+    multiThread: WllamaFeatureCheck;
+    webgpuApi: WllamaFeatureCheck;
+    requestAdapter: WllamaFeatureCheck;
+    shaderF16: WllamaFeatureCheck;
+    requestDevice: WllamaFeatureCheck;
+    webgpuPreflight: WllamaFeatureCheck;
+  };
+  estimates: {
+    cpuSingleThreadGiB: number;
+    cpuMultiThreadGiB: number | null;
+    webgpuSingleThreadGiB: number | null;
+    webgpuMultiThreadGiB: number | null;
+    currentAppGiB: number;
+    currentAppPath: string;
+  };
+}
+
 // ---------------------------------------------------------------------------
 // LocalModelRuntime
 // ---------------------------------------------------------------------------
@@ -308,6 +339,128 @@ export class LocalModelRuntime {
       worker.terminate();
       for (const [, p] of entry.pending) {
         p.reject(new Error('WebGPU preflight worker terminated'));
+      }
+      entry.pending.clear();
+      this.engines.delete(modelId);
+      this.wasmCaps.delete(modelId);
+    }
+  }
+
+  async inspectWllamaEnvironment(): Promise<WllamaEnvironmentReport> {
+    const modelId = `__wllama_env_check__:${Date.now()}`;
+    const worker = this.createWorker('wllama');
+    const entry: EngineEntry = {
+      worker,
+      engine: 'wllama',
+      status: 'loading',
+      capabilities: null,
+      nextId: 1,
+      pending: new Map(),
+      onChunk: null,
+      abortRequested: false,
+    };
+    this.engines.set(modelId, entry);
+
+    worker.onmessage = (ev: MessageEvent) => {
+      this.handleWorkerMessage(modelId, ev.data);
+    };
+
+    worker.onerror = (err: ErrorEvent) => {
+      for (const [, p] of entry.pending) {
+        p.reject(new Error(err.message));
+      }
+      entry.pending.clear();
+    };
+
+    try {
+      const raw = await this.sendRequest(modelId, {
+        type: 'inspectRuntimeFeatures',
+      }) as {
+        checks: WllamaEnvironmentReport['checks'];
+      };
+
+      const report: WllamaEnvironmentReport = {
+        checks: {
+          ...raw.checks,
+          webgpuPreflight: {
+            state: 'unknown',
+            detail: '未実施',
+          },
+        },
+        estimates: {
+          cpuSingleThreadGiB: 0,
+          cpuMultiThreadGiB: null,
+          webgpuSingleThreadGiB: null,
+          webgpuMultiThreadGiB: null,
+          currentAppGiB: 0,
+          currentAppPath: '',
+        },
+      };
+
+      const canAttemptPreflight =
+        report.checks.jspi.state === 'ok' &&
+        report.checks.requestDevice.state === 'ok';
+
+      if (canAttemptPreflight) {
+        try {
+          await this.sendRequest(modelId, {
+            type: 'init',
+            isLowbitQ: false,
+            preferMemory64: report.checks.memory64.state === 'ok',
+            allowWebGPU: true,
+          });
+          await this.sendRequest(modelId, { type: 'preflightLoadRuntime' });
+          report.checks.webgpuPreflight = {
+            state: 'ok',
+            detail: 'wllama WebGPU ランタイムの簡易ロードに成功',
+          };
+        } catch (e) {
+          report.checks.webgpuPreflight = {
+            state: 'no',
+            detail: (e as Error).message,
+          };
+        }
+      } else {
+        const blocker = [
+          report.checks.jspi.state !== 'ok' ? 'JSPI' : null,
+          report.checks.requestDevice.state !== 'ok' ? 'requestDevice' : null,
+        ].filter(Boolean).join(', ');
+        report.checks.webgpuPreflight = {
+          state: 'unknown',
+          detail: blocker ? `前提未充足: ${blocker}` : '前提未充足',
+        };
+      }
+
+      const hasMemory64 = report.checks.memory64.state === 'ok';
+      const hasMultiThread = report.checks.multiThread.state === 'ok';
+      const hasWebGpuRuntime = report.checks.webgpuPreflight.state === 'ok';
+
+      report.estimates.cpuSingleThreadGiB = hasMemory64 ? 16 : 2;
+      report.estimates.cpuMultiThreadGiB = hasMultiThread ? (hasMemory64 ? 16 : 2) : null;
+      report.estimates.webgpuSingleThreadGiB = hasWebGpuRuntime ? (hasMemory64 ? 16 : 4) : null;
+      report.estimates.webgpuMultiThreadGiB = (hasWebGpuRuntime && hasMultiThread)
+        ? (hasMemory64 ? 16 : 2)
+        : null;
+
+      const currentWebGpuGiB = report.estimates.webgpuSingleThreadGiB ?? 0;
+      if (currentWebGpuGiB > report.estimates.cpuSingleThreadGiB) {
+        report.estimates.currentAppGiB = currentWebGpuGiB;
+        report.estimates.currentAppPath = 'WebGPU 単スレッド';
+      } else if (currentWebGpuGiB === report.estimates.cpuSingleThreadGiB && currentWebGpuGiB > 0) {
+        report.estimates.currentAppGiB = currentWebGpuGiB;
+        report.estimates.currentAppPath = hasWebGpuRuntime
+          ? 'CPU 単スレッド / WebGPU 単スレッド'
+          : 'CPU 単スレッド';
+      } else {
+        report.estimates.currentAppGiB = report.estimates.cpuSingleThreadGiB;
+        report.estimates.currentAppPath = 'CPU 単スレッド';
+      }
+
+      return report;
+    } finally {
+      worker.terminate();
+      for (const [, p] of entry.pending) {
+        p.reject(new Error('Environment inspection worker terminated'));
       }
       entry.pending.clear();
       this.engines.delete(modelId);

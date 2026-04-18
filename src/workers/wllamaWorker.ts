@@ -129,6 +129,32 @@ function hasWebAssemblyJspi(): boolean {
   return typeof wasm.Suspending === 'function' && typeof wasm.promising === 'function';
 }
 
+function hasSharedArrayBufferSupport(): boolean {
+  try {
+    if (typeof SharedArrayBuffer !== 'function') return false;
+    void new SharedArrayBuffer(8);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function isWorkerCrossOriginIsolated(): boolean {
+  try {
+    return (self as unknown as { crossOriginIsolated?: boolean }).crossOriginIsolated === true;
+  } catch {
+    return false;
+  }
+}
+
+function isWorkerSecureContext(): boolean {
+  try {
+    return (self as unknown as { isSecureContext?: boolean }).isSecureContext === true;
+  } catch {
+    return false;
+  }
+}
+
 async function canUseWebGPU(allowWebGPU: boolean): Promise<boolean> {
   if (!allowWebGPU) {
     currentWebGpuSelectionReason = 'disabled-by-runtime-setting';
@@ -227,6 +253,7 @@ async function getWasmPaths(useLowbitQ = false, preferMemory64 = false, allowWeb
 // ---------------------------------------------------------------------------
 
 interface InitRequest { id: number; type: 'init'; isLowbitQ?: boolean; preferMemory64?: boolean; allowWebGPU?: boolean }
+interface InspectRuntimeFeaturesRequest { id: number; type: 'inspectRuntimeFeatures' }
 interface PreflightLoadRuntimeRequest { id: number; type: 'preflightLoadRuntime' }
 interface LoadRequest { id: number; type: 'load'; descriptor: LoadDescriptor; expectedContextLength?: number }
 interface GenerateRequest {
@@ -240,7 +267,14 @@ interface GenerateRequest {
 interface AbortRequest { id: number; type: 'abort' }
 interface UnloadRequest { id: number; type: 'unload' }
 
-type WorkerRequest = InitRequest | PreflightLoadRuntimeRequest | LoadRequest | GenerateRequest | AbortRequest | UnloadRequest;
+type WorkerRequest = InspectRuntimeFeaturesRequest | InitRequest | PreflightLoadRuntimeRequest | LoadRequest | GenerateRequest | AbortRequest | UnloadRequest;
+
+type FeatureState = 'ok' | 'no' | 'unknown';
+
+type FeatureCheck = {
+  state: FeatureState;
+  detail: string;
+};
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -260,6 +294,10 @@ function postDiagnostic(phase: string, payload: Record<string, unknown>) {
 
 function postLoadProgress(phase: string, percent: number, detail: string) {
   self.postMessage({ id: 0, type: '__load_progress', phase, percent, detail });
+}
+
+function featureCheck(state: FeatureState, detail: string): FeatureCheck {
+  return { state, detail };
 }
 
 function formatLogArgs(args: unknown[]) {
@@ -528,6 +566,105 @@ async function handleInit(req: InitRequest) {
         'ブラウザがWebAssemblyをサポートしていないか、WASMバイナリの読み込みに失敗した可能性があります。');
     }
   }
+}
+
+async function handleInspectRuntimeFeatures(req: InspectRuntimeFeaturesRequest) {
+  const checks: Record<string, FeatureCheck> = {};
+
+  const secureContext = isWorkerSecureContext();
+  checks.secureContext = secureContext
+    ? featureCheck('ok', 'Secure Context なので Service Worker や OPFS を安定して使えます。モデル保存と再読み込みの前提になります。')
+    : featureCheck('no', 'Secure Context ではないため Service Worker や OPFS に制約が出ます。保存済みモデルの再利用が不安定になります。');
+
+  const memory64 = isMemory64Supported();
+  checks.memory64 = memory64
+    ? featureCheck('ok', 'Memory64 が使えるので CPU 側の WASM ヒープを現行実装で最大 16 GB まで広げられます。大きい GGUF を載せやすくなります。')
+    : featureCheck('no', 'Memory64 がないため compat 経路になります。現行実装では CPU 単スレッドは 2 GB、WebGPU compat 単スレッドでも 4 GB 止まりです。');
+
+  const jspi = hasWebAssemblyJspi();
+  checks.jspi = jspi
+    ? featureCheck('ok', 'JSPI があるので、このアプリの WebGPU 用 wllama WASM が使う非同期初期化を通せます。GPU 実行経路の前提です。')
+    : featureCheck('no', 'JSPI がないため、このアプリの WebGPU 用 wllama WASM は初期化できません。WebGPU API が見えてもモデル実行は CPU 経路になります。');
+
+  const sab = hasSharedArrayBufferSupport();
+  checks.sharedArrayBuffer = sab
+    ? featureCheck('ok', 'SharedArrayBuffer を使えるので、worker 間でメモリ共有する multi-thread WASM の前提の一つを満たします。')
+    : featureCheck('no', 'SharedArrayBuffer がないため multi-thread WASM を使えません。モデル実行は単スレッド前提になります。');
+
+  const crossOriginIsolated = isWorkerCrossOriginIsolated();
+  checks.crossOriginIsolated = crossOriginIsolated
+    ? featureCheck('ok', 'crossOriginIsolated = true なので SharedArrayBuffer を安全に使う条件が揃います。multi-thread WASM の有効化に必要です。')
+    : featureCheck('no', 'crossOriginIsolated = false なので SharedArrayBuffer 前提の multi-thread WASM を有効にできません。');
+
+  const multiThread = canUseMultiThread();
+  if (multiThread) {
+    checks.multiThread = featureCheck('ok', 'multi-thread WASM を選べます。現行アプリはまだ n_threads=1 固定ですが、将来の並列実行条件は満たしています。');
+  } else if (!sab || !crossOriginIsolated) {
+    const missing = [
+      !sab ? 'SharedArrayBuffer' : null,
+      !crossOriginIsolated ? 'crossOriginIsolated' : null,
+    ].filter(Boolean).join(', ');
+    checks.multiThread = featureCheck('no', `multi-thread WASM を使えません。不足している前提: ${missing}`);
+  } else {
+    checks.multiThread = featureCheck('unknown', 'multi-thread WASM を使えるか断定できません。');
+  }
+
+  if (!hasWebGPUApi()) {
+    checks.webgpuApi = featureCheck('no', 'WebGPU API 自体がないため、モデルレイヤを GPU に逃がす経路を使えません。');
+    checks.requestAdapter = featureCheck('unknown', 'WebGPU API がないため GPU 候補の列挙まで進めません。');
+    checks.shaderF16 = featureCheck('unknown', 'GPU 候補を取れないため、ggml-webgpu が使う半精度演算の確認まで進めません。');
+    checks.requestDevice = featureCheck('unknown', 'GPU 候補を取れないため、モデル実行用の GPUDevice を開けません。');
+    respond(req.id, 'runtime-features', { checks });
+    return;
+  }
+
+  checks.webgpuApi = featureCheck('ok', 'WebGPU API はあります。モデルレイヤを GPU 側へ割り当てる候補があります。');
+
+  let adapter: MinimalGpuAdapter | null = null;
+  try {
+    adapter = await (navigator as Navigator & {
+      gpu: {
+        requestAdapter: () => Promise<MinimalGpuAdapter | null>;
+      };
+    }).gpu.requestAdapter();
+  } catch (e) {
+    checks.requestAdapter = featureCheck('unknown', `GPUAdapter の取得に失敗しました: ${(e as Error).message}`);
+    checks.shaderF16 = featureCheck('unknown', 'GPUAdapter を取れないため、半精度演算対応を確認できません。');
+    checks.requestDevice = featureCheck('unknown', 'GPUAdapter を取れないため、モデル実行用 GPUDevice を開けません。');
+    respond(req.id, 'runtime-features', { checks });
+    return;
+  }
+
+  if (!adapter) {
+    checks.requestAdapter = featureCheck('no', 'GPUAdapter を取得できませんでした。使える GPU 経路を選べません。');
+    checks.shaderF16 = featureCheck('unknown', 'GPUAdapter がないため、半精度演算対応を確認できません。');
+    checks.requestDevice = featureCheck('unknown', 'GPUAdapter がないため、モデル実行用 GPUDevice を開けません。');
+    respond(req.id, 'runtime-features', { checks });
+    return;
+  }
+
+  checks.requestAdapter = featureCheck('ok', 'GPUAdapter を取得できました。GPU 実行先の候補までは見えています。');
+
+  const shaderF16 = adapter.features.has('shader-f16');
+  checks.shaderF16 = shaderF16
+    ? featureCheck('ok', '現行実装は shader-f16 前提です。半精度演算を使えるので、GPU 実行時のメモリ使用量を抑えやすくなります。')
+    : featureCheck('no', 'WebGPU 一般では必須ではありませんが、このアプリの現行 ggml-webgpu 実装は shader-f16 前提です。そのため GPU 実行経路を使えません。');
+
+  if (!shaderF16) {
+    checks.requestDevice = featureCheck('no', 'shader-f16 前提を満たさないため、現行実装のモデル実行用 GPUDevice は開けません。');
+    respond(req.id, 'runtime-features', { checks });
+    return;
+  }
+
+  try {
+    const device = await adapter.requestDevice({ requiredFeatures: ['shader-f16'] });
+    device.destroy();
+    checks.requestDevice = featureCheck('ok', 'GPUDevice を開けました。JSPI も揃えば、このアプリの WebGPU 用 wllama でモデル実行を試せます。');
+  } catch (e) {
+    checks.requestDevice = featureCheck('no', `GPUDevice を開けませんでした: ${(e as Error).message}`);
+  }
+
+  respond(req.id, 'runtime-features', { checks });
 }
 
 async function handleLoad(req: LoadRequest) {
@@ -1043,6 +1180,9 @@ self.onmessage = async (ev: MessageEvent<WorkerRequest>) => {
   const req = ev.data;
 
   switch (req.type) {
+    case 'inspectRuntimeFeatures':
+      await handleInspectRuntimeFeatures(req);
+      break;
     case 'init':
       await handleInit(req);
       break;
