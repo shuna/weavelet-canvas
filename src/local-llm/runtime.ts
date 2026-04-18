@@ -241,10 +241,22 @@ export interface WllamaEnvironmentReport {
 // LocalModelRuntime
 // ---------------------------------------------------------------------------
 
+export type WasmVariantOverride =
+  | 'auto'
+  | 'single-thread'
+  | 'single-thread-compat'
+  | 'multi-thread'
+  | 'multi-thread-compat'
+  | 'single-thread-webgpu'
+  | 'single-thread-webgpu-compat'
+  | 'multi-thread-webgpu'
+  | 'multi-thread-webgpu-compat';
+
 export class LocalModelRuntime {
   private engines = new Map<string, EngineEntry>();
   private wasmCaps = new Map<string, WasmCapabilities>();
   private webGpuEnabled: boolean | null = null;
+  private wasmVariantOverride: WasmVariantOverride = 'auto';
   private listeners = new Set<() => void>();
   private logListeners = new Set<(event: RuntimeLogEvent) => void>();
   private diagnosticListeners = new Set<(event: RuntimeDiagnosticEvent) => void>();
@@ -285,6 +297,14 @@ export class LocalModelRuntime {
 
   setWebGpuEnabled(enabled: boolean | null): void {
     this.webGpuEnabled = enabled;
+  }
+
+  getWasmVariantOverride(): WasmVariantOverride {
+    return this.wasmVariantOverride;
+  }
+
+  setWasmVariantOverride(override: WasmVariantOverride): void {
+    this.wasmVariantOverride = override;
   }
 
   // -------------------------------------------------------------------------
@@ -537,6 +557,7 @@ export class LocalModelRuntime {
 
       // Init worker — pass flags so the worker can select the right WASM.
       const isLowbitQ = def.engine === 'wllama' && isLowbitQModelId(def.id);
+      const wasmVariantOverride = def.engine === 'wllama' ? this.wasmVariantOverride : 'auto';
       this.emitDiagnostic({
         modelId: def.id,
         phase: 'runtime-init-request',
@@ -546,13 +567,14 @@ export class LocalModelRuntime {
           isLowbitQ,
           preferMemory64,
           allowWebGPU,
+          wasmVariantOverride,
           forceDisableWebGPU: options.forceDisableWebGPU === true,
           webGpuSetting: this.webGpuEnabled,
           loadMode: descriptor?.mode ?? null,
         },
       });
-      console.info('[LocalModelRuntime] init worker for', def.id, 'engine:', def.engine, 'isLowbitQ:', isLowbitQ, 'preferMemory64:', preferMemory64, 'allowWebGPU:', allowWebGPU, 'loadMode:', descriptor?.mode);
-      await this.sendRequest(def.id, { type: 'init', isLowbitQ, preferMemory64, allowWebGPU });
+      console.info('[LocalModelRuntime] init worker for', def.id, 'engine:', def.engine, 'isLowbitQ:', isLowbitQ, 'preferMemory64:', preferMemory64, 'allowWebGPU:', allowWebGPU, 'wasmVariantOverride:', wasmVariantOverride, 'loadMode:', descriptor?.mode);
+      await this.sendRequest(def.id, { type: 'init', isLowbitQ, preferMemory64, allowWebGPU, wasmVariantOverride });
       console.info('[LocalModelRuntime] init done for', def.id);
 
       // Load model — engine-specific
