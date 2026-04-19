@@ -114,6 +114,18 @@ patch_emscripten_jspi_exports() {
     "$js_file"
 }
 
+# Emscripten generates Module[pthreadPoolSize] (unquoted variable lookup) instead of
+# Module["pthreadPoolSize"] (string key lookup), which silently discards the pool size.
+fix_pthread_pool_size() {
+  local js_file="$1"
+
+  if grep -q 'Module\["pthreadPoolSize"\]' "$js_file"; then
+    return
+  fi
+
+  perl -0pi -e 's/Module\[pthreadPoolSize\]/Module["pthreadPoolSize"]/g' "$js_file"
+}
+
 cd "$FORK_DIR"
 
 # ---------------------------------------------------------------------------
@@ -148,6 +160,7 @@ export EMCC_CFLAGS="$SHARED_EMCC_CFLAGS_COMPAT -pthread -sUSE_PTHREADS=1 -sPTHRE
 emmake make wllama -j"$NPROC" 2>&1
 expose_emscripten_heap_views wllama.js
 patch_emscripten_jspi_exports wllama.js
+fix_pthread_pool_size wllama.js
 
 cd "$FORK_DIR"
 
@@ -191,6 +204,7 @@ if [ "$BUILD_WEBGPU" = "1" ]; then
   emmake make wllama -j"$NPROC" 2>&1
   expose_emscripten_heap_views wllama.js
   patch_emscripten_jspi_exports wllama.js
+  fix_pthread_pool_size wllama.js
 
   cd "$FORK_DIR"
   cp wasm/single-thread-webgpu-compat/wllama.wasm "$VENDOR_DIR/single-thread-webgpu-compat.wasm"
@@ -200,6 +214,13 @@ if [ "$BUILD_WEBGPU" = "1" ]; then
     echo ""
     echo "[webgpu js] Syncing Emscripten JS glue into vendored wllama runtime..."
     mkdir -p src/single-thread src/multi-thread
+
+    # --- Step A: build WebGPU index.js ---
+    # The WebGPU JS glue uses a different WASM memory-export key ("_") than the
+    # CPU glue ("v").  They are NOT interchangeable — each must only be paired
+    # with its matching WASM variant.  We therefore produce a SEPARATE file:
+    #   src/vendor/wllama/webgpu-index.js   ← WebGPU WASM variants
+    #   src/vendor/wllama/index.js          ← CPU WASM variants (built below)
     cp wasm/single-thread-webgpu-compat/wllama.js   src/single-thread/wllama.js
     cp wasm/single-thread-webgpu-compat/wllama.wasm src/single-thread/wllama.wasm
     cp wasm/multi-thread-webgpu-compat/wllama.js    src/multi-thread/wllama.js
@@ -208,6 +229,20 @@ if [ "$BUILD_WEBGPU" = "1" ]; then
     npm run build:worker
     npm run build:tsup
     npm run build:typedef
+
+    cp esm/index.js "$REPO_ROOT/src/vendor/wllama/webgpu-index.js"
+
+    # --- Step B: restore CPU JS glue and rebuild index.js ---
+    # After the WebGPU build, bring back the CPU JS glue so that
+    # src/vendor/wllama/index.js (the default used by the app) continues to
+    # serve CPU WASM variants correctly.
+    cp wasm/single-thread-compat/wllama.js   src/single-thread/wllama.js
+    cp wasm/single-thread-compat/wllama.wasm src/single-thread/wllama.wasm
+    cp wasm/multi-thread-compat/wllama.js    src/multi-thread/wllama.js
+    cp wasm/multi-thread-compat/wllama.wasm  src/multi-thread/wllama.wasm
+
+    npm run build:worker
+    npm run build:tsup
 
     cp esm/index.js "$REPO_ROOT/src/vendor/wllama/index.js"
   fi
@@ -224,4 +259,6 @@ echo "  - build-local.sh no longer overwrites vendor/wllama/{single,multi}-threa
 echo "  - Memory64 variants are intentionally not built by this script"
 echo "  - Keep vendor/wllama/{single,multi}-thread.wasm on upstream binaries"
 echo "  - WebGPU variants are opt-in via WLLAMA_BUILD_WEBGPU=1 and may require matching Emscripten JS glue"
-echo "  - Use WLLAMA_SYNC_VENDOR_JS=1 with WebGPU builds to refresh src/vendor/wllama/index.js"
+echo "  - WLLAMA_SYNC_VENDOR_JS=1 produces BOTH src/vendor/wllama/webgpu-index.js (WebGPU glue)"
+echo "    AND src/vendor/wllama/index.js (CPU glue, restored after WebGPU build)"
+echo "  - CPU and WebGPU JS glue use different WASM memory-export keys and MUST NOT be swapped"

@@ -65,26 +65,48 @@ Variant mapping:
 
 ### Emscripten SDK
 
-**Version requirement: >= 4.0.10** (for emdawnwebgpu port support).
+Two separate SDK versions are used depending on the build target:
+
+| Build type | Required emsdk | Reason |
+|------------|----------------|--------|
+| CPU only (`single/multi-thread-compat`) | **4.0.3** | Must match upstream wllama ABI; `-fwasm-exceptions` ABI changed between 4.x and 5.x |
+| WebGPU (`*-webgpu-compat`) | **4.0.10** | Minimum version with `--use-port=emdawnwebgpu` built-in port |
+
+The automated build script (`scripts/wllama/build.sh`) enforces this split and
+will exit with an error if the wrong version is active.
 
 ```bash
+# Install both versions (one-time)
 cd ~/emsdk
-git pull
-./emsdk install 4.0.14   # or latest
-./emsdk activate 4.0.14
+./emsdk install 4.0.3
+./emsdk install 4.0.10   # or 4.0.14 — same emdawnwebgpu package
+
+# CPU builds (activate 4.0.3 first)
+./emsdk activate 4.0.3
 source emsdk_env.sh
-emcc --version  # verify
+bash scripts/wllama/build.sh
+
+# WebGPU builds (switch to 4.0.10)
+./emsdk activate 4.0.10
+source emsdk_env.sh
+WLLAMA_BUILD_WEBGPU=1 WLLAMA_SYNC_VENDOR_JS=1 bash scripts/wllama/build.sh
 ```
+
+**Note on emsdk 4.0.14:** Both 4.0.10 and 4.0.14 bundle the same emdawnwebgpu
+package (`v20250531.224602`), so either works for WebGPU builds. 4.0.10 is
+recommended for reproducibility.
 
 ### emdawnwebgpu (for WebGPU builds only)
 
-Download `emdawnwebgpu_pkg-*.zip` from
-[Dawn releases](https://github.com/aspect-build/aspect-workflows/releases)
-and extract to `deps/emdawnwebgpu_pkg/`.
+emsdk 4.0.10+ includes `emdawnwebgpu` as a **built-in port** — no separate
+download is required. The build script passes `--use-port=emdawnwebgpu` which
+auto-downloads and caches the package on first use.
 
-**Note:** The stock headers do not include Dawn-specific types used by
-llama.cpp's ggml-webgpu (e.g. `SubgroupMatrixConfig`, `DawnTogglesDescriptor`).
-See `deps/` for the patched headers that add `enabled_tags=['emscripten','dawn']`.
+The emsdk-bundled emdawnwebgpu (`v20250531.224602`) lacks several Dawn-native
+types used by newer llama.cpp (`DawnTogglesDescriptor`, `SubgroupMatrixConfig`,
+`InstanceFeatureName::TimedWaitAny`, `FeatureName::ImplicitDeviceSynchronization`).
+These are guarded with `#ifndef __EMSCRIPTEN__` in this fork's ggml-webgpu.cpp.
+See **Section 5** for details.
 
 ## Build Steps
 
@@ -395,18 +417,32 @@ the build pipeline or upgrade Emscripten and see truncated embedded code:
   "
   ```
 
-### 5. WebGPU build patches
+### 5. WebGPU build patches (ggml-webgpu.cpp)
 
-The llama.cpp `ggml-webgpu.cpp` uses some non-standard types and Dawn-specific
-APIs that require patches:
+The llama.cpp `ggml-webgpu.cpp` uses Dawn-native APIs that are absent from the
+emdawnwebgpu package bundled with emsdk 4.0.10/4.0.14 (`v20250531.224602`).
+These are guarded with `#ifndef __EMSCRIPTEN__` in this fork.
 
-- `uint` → `uint32_t` at lines 452, 453, 1422, 1423
-- Dawn headers must include `enabled_tags=['emscripten','dawn']`
-- `#ifdef __EMSCRIPTEN__ / #error` guards must be removed from generated headers
-- No-op `FreeMembers` stubs must be added for Dawn-specific types
+**APIs guarded in ggml-webgpu.cpp:**
 
-These patches are already applied in this fork. If you update `llama.cpp`
-(git submodule), you may need to re-apply them.
+| API | Reason | Action |
+|-----|--------|--------|
+| `wgpu::DawnTogglesDescriptor` | Dawn-specific toggle type, not in emdawnwebgpu | `#ifndef __EMSCRIPTEN__` (3 locations: adapter, device, instance setup) |
+| `wgpu::SubgroupMatrixConfig` (struct member) | Not in emdawnwebgpu pkg | `#ifndef __EMSCRIPTEN__` in struct definition |
+| `wgpu::AdapterPropertiesSubgroupMatrixConfigs` | Not in emdawnwebgpu pkg | `#ifndef __EMSCRIPTEN__` in adapter info block |
+| `wgpu::FeatureName::ChromiumExperimentalSubgroupMatrix` | Chrome-specific, not in emdawnwebgpu | `#ifndef __EMSCRIPTEN__` |
+| `wgpu::FeatureName::ImplicitDeviceSynchronization` | Not in emdawnwebgpu | Excluded from `required_features` for EMSCRIPTEN |
+| `wgpu::InstanceFeatureName::TimedWaitAny` | Not in emdawnwebgpu | `#ifndef __EMSCRIPTEN__` in instance setup |
+| `OnSubmittedWorkDone` callback signature | emdawnwebgpu takes `(status)`, newer Dawn takes `(status, StringView)` | `#ifdef __EMSCRIPTEN__` with one-arg lambda |
+| `uint` (bare type) | GCC extension, not standard C++ | Replaced with `uint32_t` |
+
+Additionally, `CMakeLists.txt` in `ggml-webgpu/` was patched to use
+`--use-port=emdawnwebgpu` (built-in) when `EMDAWNWEBGPU_DIR` is empty,
+and `target_link_options` changed from `PRIVATE` to `INTERFACE` so the port
+flag propagates to the final linker invocation.
+
+If you update the `llama.cpp` submodule, re-check these areas in the new
+`ggml-webgpu.cpp` — newer Dawn API changes may add or remove any of them.
 
 The wllama wrapper must also pass `LoadModelConfig.n_gpu_layers` through to
 `glue_msg_load_req`. The upstream wrapper used to send `n_gpu_layers: 0`

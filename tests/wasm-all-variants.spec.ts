@@ -172,8 +172,13 @@ test.describe('WASM all variants inference', () => {
 
         try {
           console.log(`[${label}] stage1 import`);
+          // WebGPU WASM variants require the WebGPU JS glue (different memory export key);
+          // CPU WASM variants use the CPU glue built with the same emsdk version.
+          const modulePath = allowWebGPU
+            ? '/src/vendor/wllama/webgpu-index.js'
+            : '/src/vendor/wllama/index.js';
           // @ts-ignore
-          const mod = await import('/src/vendor/wllama/index.js');
+          const mod = await import(modulePath);
           const { Wllama } = mod;
           console.log(`[${label}] stage2 imported`);
 
