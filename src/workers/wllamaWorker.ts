@@ -428,6 +428,9 @@ function forwardLog(level: string, ...args: unknown[]) {
   if (fileStageMatch) {
     currentLoadActivityAt = performance.now();
     postDiagnostic('file-load-stage', { stage: fileStageMatch[1], text });
+    if (fileStageMatch[1] === 'inner-cwrap-ready') {
+      wasmRuntimeInitialized = true;
+    }
   }
 
   const fileProgressMatch = text.match(/(?:^|\s)wllama-file-progress:(\d{1,3})(?:\s|$)/);
@@ -571,6 +574,9 @@ installConsoleForwarding();
 
 /** Recent native error/warn logs for diagnostic messages */
 const recentNativeLogs: string[] = [];
+
+/** Set to true once inner-cwrap-ready stage is seen (debug level, not in recentNativeLogs) */
+let wasmRuntimeInitialized = false;
 
 /**
  * Count of suppressed WebGPU "Failed to map error buffer" messages during the
@@ -1030,6 +1036,7 @@ async function handlePreflightLoadRuntime(req: PreflightLoadRuntimeRequest) {
   }
 
   recentNativeLogs.length = 0;
+  wasmRuntimeInitialized = false;
   currentFileCopyPercent = 0;
   currentNativeLoadPercent = 0;
   const start = performance.now();
@@ -1078,16 +1085,9 @@ async function handlePreflightLoadRuntime(req: PreflightLoadRuntimeRequest) {
         || line.includes('ggml_webgpu: Failed to get a device')
         || line.includes('ggml_webgpu: Device lost')
       );
-      const reachedRuntime = currentFileCopyPercent > 0
-        || currentNativeLoadPercent > 0
-        || recentNativeLogs.some((line) =>
-          line.includes('inner-runtime-initialized')
-          || line.includes('inner-cwrap-ready')
-          || line.includes('file-write-begin')
-          || line.includes('wllama-load-stage')
-          || line.includes('Invalid')
-          || line.includes('GGUF')
-        );
+      const reachedRuntime = wasmRuntimeInitialized
+        || currentFileCopyPercent > 0
+        || currentNativeLoadPercent > 0;
       if (webGpuDeviceFailed) {
         throw err;
       }
