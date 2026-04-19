@@ -7,6 +7,7 @@ import {
   localModelRuntime,
   type WllamaEnvironmentReport,
   type WllamaFeatureCheck,
+  type WasmVariantOverride,
 } from '@src/local-llm/runtime';
 import { OpfsFileProvider, deleteModel, getTempFileSize, readFile, saveFile, sha256Blob } from '@src/local-llm/storage';
 import { rehydrateSavedModels } from '@src/local-llm/storage';
@@ -100,6 +101,7 @@ const LocalModelSettings = () => {
   const [webGpuPreflighting, setWebGpuPreflighting] = useState(false);
   const [envReport, setEnvReport] = useState<WllamaEnvironmentReport | null>(null);
   const [showFeatureChecklist, setShowFeatureChecklist] = useState(false);
+  const [wasmVariantOverride, setWasmVariantOverrideState] = useState<WasmVariantOverride>(() => localModelRuntime.getWasmVariantOverride());
 
   // Ephemeral model state
   const [ephemeralStatus, setEphemeralStatus] = useState<LocalModelStatus>('idle');
@@ -1032,6 +1034,36 @@ const LocalModelSettings = () => {
                       <div>{t('localModel.estimatedCpuMultiThread')}: <span className='font-medium text-gray-900 dark:text-gray-100'>{envReport ? formatEstimatedGiB(envReport.estimates.cpuMultiThreadGiB) : '—'}</span></div>
                       <div>{t('localModel.estimatedWebGpuMultiThread')}: <span className='font-medium text-gray-900 dark:text-gray-100'>{envReport ? formatEstimatedGiB(envReport.estimates.webgpuMultiThreadGiB) : '—'}</span></div>
                       <div className='mt-1 text-[10px] text-gray-500 dark:text-gray-400'>{t('localModel.estimatedLimitNote')}</div>
+                    </div>
+
+                    <div
+                      data-testid='wasm-variant-override-panel'
+                      className='px-3 py-2 border-b border-gray-200 dark:border-gray-700 flex flex-col gap-1 text-[11px] text-gray-600 dark:text-gray-300'
+                    >
+                      <label className='flex items-center gap-2'>
+                        <span className='font-medium text-gray-900 dark:text-gray-100'>{t('localModel.wasmVariantOverrideLabel')}</span>
+                        <select
+                          data-testid='wasm-variant-override-select'
+                          className='rounded border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 px-2 py-1 text-[11px] text-gray-900 dark:text-gray-100'
+                          value={wasmVariantOverride}
+                          onChange={(e) => {
+                            const next = e.target.value as WasmVariantOverride;
+                            setWasmVariantOverrideState(next);
+                            localModelRuntime.setWasmVariantOverride(next);
+                          }}
+                        >
+                          <option value='auto'>{t('localModel.wasmVariantAuto')}</option>
+                          <option value='single-thread-compat'>single-thread-compat</option>
+                          <option value='single-thread'>single-thread (Memory64)</option>
+                          <option value='multi-thread-compat'>multi-thread-compat</option>
+                          <option value='multi-thread'>multi-thread (Memory64)</option>
+                          <option value='single-thread-webgpu-compat'>single-thread-webgpu-compat</option>
+                          <option value='single-thread-webgpu'>single-thread-webgpu (Memory64)</option>
+                          <option value='multi-thread-webgpu-compat'>multi-thread-webgpu-compat</option>
+                          <option value='multi-thread-webgpu'>multi-thread-webgpu (Memory64)</option>
+                        </select>
+                      </label>
+                      <div className='text-[10px] text-gray-500 dark:text-gray-400'>{t('localModel.wasmVariantOverrideNote')}</div>
                     </div>
 
                     <div className='overflow-x-auto'>

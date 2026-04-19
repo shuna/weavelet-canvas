@@ -255,11 +255,49 @@ function versionedWasmUrl(fileName: string): string {
   return url.href;
 }
 
-async function getWasmPaths(useLowbitQ = false, preferMemory64 = false, allowWebGPU = false) {
-  const multiThread = canUseMultiThread();
-  const memory64Available = isMemory64Supported();
-  const mem64 = preferMemory64 && memory64Available;
-  const webgpu = await canUseWebGPU(allowWebGPU);
+export type WasmVariantOverride =
+  | 'auto'
+  | 'single-thread'
+  | 'single-thread-compat'
+  | 'multi-thread'
+  | 'multi-thread-compat'
+  | 'single-thread-webgpu'
+  | 'single-thread-webgpu-compat'
+  | 'multi-thread-webgpu'
+  | 'multi-thread-webgpu-compat';
+
+function parseOverride(override: Exclude<WasmVariantOverride, 'auto'>): {
+  multiThread: boolean;
+  webgpu: boolean;
+  mem64: boolean;
+} {
+  const multiThread = override.startsWith('multi-thread');
+  const webgpu = override.includes('-webgpu');
+  const mem64 = !override.endsWith('-compat');
+  return { multiThread, webgpu, mem64 };
+}
+
+async function getWasmPaths(
+  useLowbitQ = false,
+  preferMemory64 = false,
+  allowWebGPU = false,
+  override: WasmVariantOverride = 'auto',
+) {
+  let multiThread: boolean;
+  let mem64: boolean;
+  let webgpu: boolean;
+
+  if (override === 'auto') {
+    multiThread = canUseMultiThread();
+    const memory64Available = isMemory64Supported();
+    mem64 = preferMemory64 && memory64Available;
+    webgpu = await canUseWebGPU(allowWebGPU);
+  } else {
+    const parsed = parseOverride(override);
+    multiThread = parsed.multiThread;
+    mem64 = parsed.mem64;
+    webgpu = parsed.webgpu;
+  }
 
   const singleThreadFile = webgpu
     ? (mem64 ? 'single-thread-webgpu.wasm' : 'single-thread-webgpu-compat.wasm')
@@ -276,7 +314,8 @@ async function getWasmPaths(useLowbitQ = false, preferMemory64 = false, allowWeb
     paths['multi-thread/wllama.wasm'] = versionedWasmUrl(multiThreadFile);
   }
   console.info('[wllamaWorker] Using vendored WASM paths:', paths,
-    'isLowbitQ:', useLowbitQ, 'memory64:', mem64, 'memory64Available:', memory64Available, 'multiThread:', multiThread, 'webgpu:', webgpu);
+    'override:', override,
+    'isLowbitQ:', useLowbitQ, 'memory64:', mem64, 'multiThread:', multiThread, 'webgpu:', webgpu);
   return paths;
 }
 
@@ -284,7 +323,7 @@ async function getWasmPaths(useLowbitQ = false, preferMemory64 = false, allowWeb
 // Message types
 // ---------------------------------------------------------------------------
 
-interface InitRequest { id: number; type: 'init'; isLowbitQ?: boolean; preferMemory64?: boolean; allowWebGPU?: boolean }
+interface InitRequest { id: number; type: 'init'; isLowbitQ?: boolean; preferMemory64?: boolean; allowWebGPU?: boolean; wasmVariantOverride?: WasmVariantOverride }
 interface InspectRuntimeFeaturesRequest { id: number; type: 'inspectRuntimeFeatures' }
 interface PreflightLoadRuntimeRequest { id: number; type: 'preflightLoadRuntime' }
 interface LoadRequest { id: number; type: 'load'; descriptor: LoadDescriptor; expectedContextLength?: number }
@@ -536,7 +575,7 @@ const recentNativeLogs: string[] = [];
 /**
  * Count of suppressed WebGPU "Failed to map error buffer" messages during the
  * current generation. The underlying condition is a known race in the ggml
- * WebGPU backend; the fork recovers from each failure (see vendor/wllama/BUILD.md
+ * WebGPU backend; the fork recovers from each failure (see vendor/wllama/WASM-BUILD.md
  * §13), so individual occurrences are noise. We suppress them from the debug
  * view and surface a single summary at generate start/end instead.
  */
@@ -560,11 +599,13 @@ async function handleInit(req: InitRequest) {
     const useLowbitQ = req.isLowbitQ ?? false;
     const preferMemory64 = req.preferMemory64 ?? false;
     const allowWebGPU = req.allowWebGPU ?? false;
+    const wasmVariantOverride = req.wasmVariantOverride ?? 'auto';
     const mem64 = isMemory64Supported();
-    const paths = await getWasmPaths(useLowbitQ, preferMemory64, allowWebGPU);
+    const paths = await getWasmPaths(useLowbitQ, preferMemory64, allowWebGPU, wasmVariantOverride);
     postDiagnostic('worker-init', {
       isLowbitQ: useLowbitQ,
       wasmPaths: paths,
+      wasmVariantOverride,
       multiThreadCapable: canUseMultiThread(),
       memory64Supported: mem64,
       memory64Selected: preferMemory64 && mem64,
@@ -574,7 +615,7 @@ async function handleInit(req: InitRequest) {
       webgpuWasmSelected: currentWasmUsesWebGPU,
       webgpuSelectionReason: currentWebGpuSelectionReason,
     });
-    console.info('[wllamaWorker] init, isLowbitQ:', useLowbitQ, 'memory64Available:', mem64, 'preferMemory64:', preferMemory64, 'allowWebGPU:', allowWebGPU, 'WASM paths:', paths);
+    console.info('[wllamaWorker] init, isLowbitQ:', useLowbitQ, 'memory64Available:', mem64, 'preferMemory64:', preferMemory64, 'allowWebGPU:', allowWebGPU, 'wasmVariantOverride:', wasmVariantOverride, 'WASM paths:', paths);
     wllama = new Wllama(paths, {
       suppressNativeLog: false,
       logger: workerLogger,
@@ -1074,7 +1115,7 @@ async function handleGenerate(req: GenerateRequest) {
   currentAbortController = new AbortController();
 
   // Reset suppression counter and announce filtering for this generation.
-  // The WebGPU "map error buffer" failures are known-recoverable (BUILD.md §13)
+  // The WebGPU "map error buffer" failures are known-recoverable (WASM-BUILD.md §13)
   // but fire 100s of times per generation — we hide them and show a summary.
   suppressedWebgpuMapErrors = 0;
   if (currentWasmUsesWebGPU) {
