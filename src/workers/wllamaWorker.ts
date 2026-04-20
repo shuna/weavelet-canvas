@@ -56,7 +56,7 @@ let currentFlashAttnCpuFallback = false;
 
 const LOAD_HEARTBEAT_MS = 5_000;
 const LOAD_NO_PROGRESS_TIMEOUT_MS = 30_000;
-const WLLAMA_WASM_ASSET_VERSION = '20260416-align-fix-2';
+const WLLAMA_WASM_ASSET_VERSION = '20260420-pr2-rename';
 
 type MinimalGpuDevice = {
   destroy: () => void;

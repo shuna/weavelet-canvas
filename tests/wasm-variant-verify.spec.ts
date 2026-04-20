@@ -22,14 +22,11 @@ import * as path from 'path';
 import * as http from 'http';
 
 const BASE_URL = 'http://localhost:5173/';
-const MODEL_DIR = '/Volumes/2TB-LLM/wllama-verification/Original';
-const WASM_ASSET_VERSION = '20260418-step3a-clean';
-
-const SMALL_MODEL_PATH = path.join(MODEL_DIR, 'SmolLM2-1.7B-Instruct-Q4_K_M.gguf');
-const LARGE_MODEL_PATH = path.join(MODEL_DIR, 'Bonsai-8B-Q2_K.gguf');
-// Compat CPU (32-bit WASM, 2 GB max): use_mmap:false copies tensors separately, so
-// effective WASM heap = 2× model size + KV cache. Q2_K (~645 MB) stays well under 2 GB.
-const COMPAT_CPU_MODEL_PATH = path.join(MODEL_DIR, 'SmolLM2-1.7B-Instruct-Q2_K.gguf');
+// 検証のための変更: PR2 後の版に合わせる。モデルは手元の 360M Q8_0 のみ使用。
+const MODEL_DIR = '/Users/suzuki/Downloads';
+const MODEL_FILE = 'smollm2-360m-instruct-q8_0.gguf';
+const MODEL_PATH = path.join(MODEL_DIR, MODEL_FILE);
+const WASM_ASSET_VERSION = '20260420-pr2-rename';
 
 interface WasmTestCase {
   label: string;
@@ -41,10 +38,9 @@ interface WasmTestCase {
 }
 
 const CASES: WasmTestCase[] = [
-  { label: 'A) SmolLM2 + WebGPU',  modelPath: SMALL_MODEL_PATH,       preferMemory64: false, allowWebGPU: true,  expectedWasm: 'single-thread-webgpu-compat.wasm' },
-  { label: 'B) Bonsai-8B + WebGPU', modelPath: LARGE_MODEL_PATH,       preferMemory64: true,  allowWebGPU: true,  expectedWasm: 'single-thread-webgpu-compat.wasm' },
-  { label: 'C) SmolLM2 + CPU',      modelPath: COMPAT_CPU_MODEL_PATH,  preferMemory64: false, allowWebGPU: false, expectedWasm: 'single-thread-cpu-compat.wasm' },
-  { label: 'D) Bonsai-8B + CPU',    modelPath: LARGE_MODEL_PATH,       preferMemory64: true,  allowWebGPU: false, expectedWasm: 'single-thread-cpu-mem64.wasm' },
+  { label: 'A) SmolLM2-360M + WebGPU → webgpu-compat', modelPath: MODEL_PATH, preferMemory64: false, allowWebGPU: true,  expectedWasm: 'single-thread-webgpu-compat.wasm' },
+  { label: 'B) SmolLM2-360M + CPU → cpu-compat',        modelPath: MODEL_PATH, preferMemory64: false, allowWebGPU: false, expectedWasm: 'single-thread-cpu-compat.wasm' },
+  { label: 'C) SmolLM2-360M + CPU → cpu-mem64',         modelPath: MODEL_PATH, preferMemory64: true,  allowWebGPU: false, expectedWasm: 'single-thread-cpu-mem64.wasm' },
 ];
 
 /** Simple file server for GGUF; avoids page.evaluate base64 conversion of large files */
@@ -73,14 +69,13 @@ function startModelServer(modelDir: string): Promise<{ port: number; close: () =
   });
 }
 
-test.describe.serial('WASM variant verification', () => {
+// Use non-serial describe so a WebGPU environment failure does not block CPU cases.
+test.describe('WASM variant verification', () => {
   let modelServer: { port: number; close: () => void };
 
   test.beforeAll(async () => {
-    for (const { modelPath } of CASES) {
-      if (!fs.existsSync(modelPath)) {
-        console.warn(`WARNING: model file not found: ${modelPath}`);
-      }
+    if (!fs.existsSync(MODEL_PATH)) {
+      console.warn(`WARNING: model file not found: ${MODEL_PATH}`);
     }
     modelServer = await startModelServer(MODEL_DIR);
     console.log(`Model server started on port ${modelServer.port}`);
@@ -125,6 +120,17 @@ test.describe.serial('WASM variant verification', () => {
 
         try {
           console.log('[STAGE 1] importing wllama');
+          // For WebGPU cases, verify the adapter is available first.
+          if (allowWebGPU) {
+            const adapter = typeof navigator !== 'undefined' && 'gpu' in navigator
+              ? await (navigator as { gpu: { requestAdapter(): Promise<unknown> } }).gpu.requestAdapter()
+              : null;
+            if (!adapter) {
+              console.log('[STAGE 1.5] WebGPU adapter unavailable — skipping WebGPU test');
+              return { success: null, generated: '', logs, errors, skipped: true, skipReason: 'WebGPU adapter unavailable' };
+            }
+            console.log('[STAGE 1.5] WebGPU adapter available');
+          }
           // WebGPU WASM variants require the WebGPU JS glue (different memory export key);
           // CPU WASM variants use the CPU glue.
           const modulePath = allowWebGPU
@@ -207,7 +213,11 @@ test.describe.serial('WASM variant verification', () => {
         console.log(`  [${level}] ${msg.slice(0, 300)}`);
       }
 
-      if (!result.success) {
+      if ((result as { skipped?: boolean }).skipped) {
+        console.log(`[${tc.label}] SKIPPED — ${(result as { skipReason?: string }).skipReason}`);
+        test.skip(true, (result as { skipReason?: string }).skipReason);
+        return;
+      } else if (!result.success) {
         console.error(`[${tc.label}] FAILED: ${result.error}`);
         if (result.stack) console.error(result.stack);
         if (result.errors.length) console.error('Errors:', result.errors.join('\n'));
