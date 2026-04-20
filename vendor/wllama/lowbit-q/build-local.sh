@@ -106,7 +106,13 @@ fi
 expose_emscripten_heap_views() {
   local js_file="$1"
 
-  if grep -q 'Module\["HEAPU8"\]=HEAPU8' "$js_file"; then
+  # Check if the patch is already applied *inside* updateMemoryViews.
+  # The replacement string starts with Module["HEAP8"] (not Module["HEAPU8"]),
+  # so we check for that prefix.  emsdk 5 single-thread natively exports
+  # Module["HEAPU8"] in the exports section (where HEAPU8 is still undefined at
+  # eval time); that bare export does NOT follow the BigUint64Array constructor
+  # and therefore won't be matched by this check.
+  if grep -qF 'HEAPU64=new BigUint64Array(b);Module["HEAP8"]=HEAP8' "$js_file"; then
     return
   fi
 
@@ -276,10 +282,9 @@ if [ "$BUILD_WEBGPU" = "1" ]; then
 
     cp esm/index.js "$REPO_ROOT/src/vendor/wllama/webgpu-index.js"
 
-    # --- Step B: restore CPU JS glue and rebuild index.js ---
-    # After the WebGPU build, bring back the CPU compat JS glue so that
-    # src/vendor/wllama/index.js (the default used by the app) continues to
-    # serve CPU WASM variants correctly.
+    # --- Step B: CPU compat glue → src/vendor/wllama/index.js ---
+    # CPU compat WASM uses wasm32 ABI (Number pointers).  This glue is the default
+    # for all cpu-compat variants and must NOT be paired with mem64 WASM.
     cp wasm/single-thread-cpu-compat/wllama.js   src/single-thread/wllama.js
     cp wasm/single-thread-cpu-compat/wllama.wasm src/single-thread/wllama.wasm
     cp wasm/multi-thread-cpu-compat/wllama.js    src/multi-thread/wllama.js
@@ -289,6 +294,30 @@ if [ "$BUILD_WEBGPU" = "1" ]; then
     npm run build:tsup
 
     cp esm/index.js "$REPO_ROOT/src/vendor/wllama/index.js"
+
+    # --- Step C: CPU mem64 glue → src/vendor/wllama/mem64-index.js ---
+    # CPU mem64 WASM uses Memory64 ABI (BigInt pointers).  A separate glue bundle
+    # is required because the embedded LLAMA_CPP_WORKER_CODE must match the WASM ABI.
+    # Using the compat glue with mem64 WASM causes "Cannot mix BigInt and other types".
+    echo ""
+    echo "[cpu-mem64 js] Verifying HEAPU64 presence in mem64 glue..."
+    grep -c 'HEAPU64' wasm/single-thread-cpu-mem64/wllama.js \
+      && echo "  HEAPU64 found — mem64 glue looks correct" \
+      || { echo "ERROR: HEAPU64 not found in single-thread-cpu-mem64/wllama.js — expose_emscripten_heap_views may have failed"; exit 1; }
+
+    cp wasm/single-thread-cpu-mem64/wllama.js   src/single-thread/wllama.js
+    cp wasm/single-thread-cpu-mem64/wllama.wasm src/single-thread/wllama.wasm
+    cp wasm/multi-thread-cpu-mem64/wllama.js    src/multi-thread/wllama.js
+    cp wasm/multi-thread-cpu-mem64/wllama.wasm  src/multi-thread/wllama.wasm
+
+    npm run build:worker
+    npm run build:tsup
+
+    cp esm/index.js "$REPO_ROOT/src/vendor/wllama/mem64-index.js"
+
+    # Verify all three glue bundles have the same public export surface.
+    node "$REPO_ROOT/scripts/wllama/verify-glue-exports.mjs" "$REPO_ROOT/src/vendor/wllama" \
+      || { echo "ERROR: glue export surface mismatch — aborting"; exit 1; }
   fi
 fi
 
@@ -302,6 +331,8 @@ echo "NOTE:"
 echo "  - Memory64 variants require browsers with WebAssembly.Memory64 support"
 echo "  - WebGPU variants are opt-in via WLLAMA_BUILD_WEBGPU=1"
 echo "  - WebGPU mem64 variants are not built (out of scope)"
-echo "  - WLLAMA_SYNC_VENDOR_JS=1 produces BOTH src/vendor/wllama/webgpu-index.js (WebGPU glue)"
-echo "    AND src/vendor/wllama/index.js (CPU glue, restored after WebGPU build)"
+echo "  - WLLAMA_SYNC_VENDOR_JS=1 produces all three glue bundles:"
+echo "      src/vendor/wllama/webgpu-index.js  (WebGPU WASM variants)"
+echo "      src/vendor/wllama/index.js          (CPU compat WASM variants)"
+echo "      src/vendor/wllama/mem64-index.js    (CPU mem64 WASM variants)"
 echo "  - CPU and WebGPU JS glue use different WASM memory-export keys and MUST NOT be swapped"

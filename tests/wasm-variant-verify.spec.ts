@@ -35,12 +35,14 @@ interface WasmTestCase {
   preferMemory64: boolean;
   allowWebGPU: boolean;
   expectedWasm: string;
+  /** Browser-accessible URL path for the JS glue bundle. Authoritative — never derive from allowWebGPU. */
+  gluePath: string;
 }
 
 const CASES: WasmTestCase[] = [
-  { label: 'A) SmolLM2-360M + WebGPU → webgpu-compat', modelPath: MODEL_PATH, preferMemory64: false, allowWebGPU: true,  expectedWasm: 'single-thread-webgpu-compat.wasm' },
-  { label: 'B) SmolLM2-360M + CPU → cpu-compat',        modelPath: MODEL_PATH, preferMemory64: false, allowWebGPU: false, expectedWasm: 'single-thread-cpu-compat.wasm' },
-  { label: 'C) SmolLM2-360M + CPU → cpu-mem64',         modelPath: MODEL_PATH, preferMemory64: true,  allowWebGPU: false, expectedWasm: 'single-thread-cpu-mem64.wasm' },
+  { label: 'A) SmolLM2-360M + WebGPU → webgpu-compat', modelPath: MODEL_PATH, preferMemory64: false, allowWebGPU: true,  expectedWasm: 'single-thread-webgpu-compat.wasm', gluePath: '/src/vendor/wllama/webgpu-index.js' },
+  { label: 'B) SmolLM2-360M + CPU → cpu-compat',        modelPath: MODEL_PATH, preferMemory64: false, allowWebGPU: false, expectedWasm: 'single-thread-cpu-compat.wasm',      gluePath: '/src/vendor/wllama/index.js' },
+  { label: 'C) SmolLM2-360M + CPU → cpu-mem64',         modelPath: MODEL_PATH, preferMemory64: true,  allowWebGPU: false, expectedWasm: 'single-thread-cpu-mem64.wasm',       gluePath: '/src/vendor/wllama/mem64-index.js' },
 ];
 
 /** Simple file server for GGUF; avoids page.evaluate base64 conversion of large files */
@@ -114,12 +116,22 @@ test.describe('WASM variant verification', () => {
         }
       });
 
-      const result = await page.evaluate(async ({ wasmUrl, modelServerUrl, modelFileName, allowWebGPU }) => {
+      const result = await page.evaluate(async ({ wasmUrl, modelServerUrl, modelFileName, allowWebGPU, gluePath }) => {
         const logs: [string, string][] = [];
         const errors: string[] = [];
 
+        const withLoadTimeout = <T>(ms: number, step: string, p: Promise<T>): Promise<T> =>
+          Promise.race([
+            p,
+            new Promise<T>((_, reject) =>
+              setTimeout(() => reject(new Error(
+                `"${step}" timed out after ${ms}ms — check WASM/glue ABI mismatch or inner worker crash`,
+              )), ms)
+            ),
+          ]);
+
         try {
-          console.log('[STAGE 1] importing wllama');
+          console.log(`[STAGE 1] importing wllama gluePath=${gluePath}`);
           // For WebGPU cases, verify the adapter is available first.
           if (allowWebGPU) {
             const adapter = typeof navigator !== 'undefined' && 'gpu' in navigator
@@ -129,15 +141,20 @@ test.describe('WASM variant verification', () => {
               console.log('[STAGE 1.5] WebGPU adapter unavailable — skipping WebGPU test');
               return { success: null, generated: '', logs, errors, skipped: true, skipReason: 'WebGPU adapter unavailable' };
             }
+            // SwiftShader known issue: JSPI callback stalls in headless Playwright.
+            const adapterInfo = (adapter as { info?: { vendor?: string; device?: string } }).info ?? {};
+            const isSwiftShader = (adapterInfo.vendor ?? '').toLowerCase().includes('google')
+              && (adapterInfo.device ?? '').toLowerCase().includes('swiftshader');
+            if (isSwiftShader) {
+              console.warn('[known-issue:swiftshader-jspi-callback-stall] WebGPU on SwiftShader skipped — JSPI callback unreliable in headless Playwright');
+              return { success: null, generated: '', logs, errors, skipped: true, skipReason: 'SwiftShader: known JSPI callback stall (swiftshader-jspi-callback-stall)' };
+            }
             console.log('[STAGE 1.5] WebGPU adapter available');
           }
-          // WebGPU WASM variants require the WebGPU JS glue (different memory export key);
-          // CPU WASM variants use the CPU glue.
-          const modulePath = allowWebGPU
-            ? '/src/vendor/wllama/webgpu-index.js'
-            : '/src/vendor/wllama/index.js';
+          // Each glue bundle embeds a different LLAMA_CPP_WORKER_CODE (compat/mem64/webgpu ABI).
+          // gluePath is authoritative — do not substitute based on allowWebGPU.
           // @ts-ignore
-          const mod = await import(modulePath);
+          const mod = await import(gluePath);
           const { Wllama } = mod;
           console.log('[STAGE 2] wllama imported');
 
@@ -170,13 +187,13 @@ test.describe('WASM variant verification', () => {
           if (magic !== 'GGUF') throw new Error(`Blob magic mismatch: expected GGUF got ${magic}`);
           const modelFile = new File([modelBlob], modelFileName, { type: 'application/octet-stream' });
 
-          console.log('[STAGE 5] calling loadModel n_gpu_layers=' + (allowWebGPU ? 999 : 0));
-          await wllama.loadModel([modelFile], {
+          console.log('[STAGE 5] calling loadModel n_gpu_layers=' + (allowWebGPU ? 999 : 0) + ' timeout=120s');
+          await withLoadTimeout(120_000, 'loadModel', wllama.loadModel([modelFile], {
             n_ctx: 64,
             n_threads: 1,
             n_gpu_layers: allowWebGPU ? 999 : 0,
             use_mmap: false,
-          });
+          }));
           console.log('[STAGE 6] loadModel complete, starting generation');
 
           let generated = '';
@@ -198,7 +215,7 @@ test.describe('WASM variant verification', () => {
           await new Promise(r => setTimeout(r, 500));
           return { success: false, error: err.message, stack: err.stack, logs, errors };
         }
-      }, { wasmUrl, modelServerUrl, modelFileName, allowWebGPU });
+      }, { wasmUrl, modelServerUrl, modelFileName, allowWebGPU, gluePath: tc.gluePath });
 
       // Print diagnostic logs
       const keyLogs = (result.logs as [string, string][]).filter(
