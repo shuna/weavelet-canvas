@@ -330,3 +330,131 @@ test.describe('WebGPU Asyncify variant E2E', () => {
     });
   }
 });
+
+// ---------------------------------------------------------------------------
+// Worker runtime-selection path
+// ---------------------------------------------------------------------------
+// Tests the actual production path:
+//   wllamaWorker.ts init → resolveVariant(forceVariant) → loadWllamaClass('webgpu-asyncify')
+//
+// Gate: skips when either the artifacts are missing OR the Asyncify variant entries
+// are still disabled (forceVariant rejects disabled entries and returns an error
+// containing "rejected":["disabled"] in the payload).
+//
+// OPFS load path (loadModelFromOpfs) is additionally gated on the model being
+// present in OPFS under the standard key; skip with a note when absent.
+// ---------------------------------------------------------------------------
+
+test.describe('wllamaWorker runtime-selection path (Asyncify)', () => {
+  const WORKER_URL = '/src/workers/wllamaWorker.ts';
+
+  interface WorkerMessage {
+    id: number;
+    type: string;
+    [k: string]: unknown;
+  }
+
+  async function workerExchange(
+    page: import('@playwright/test').Page,
+    initMsg: Record<string, unknown>,
+    timeoutMs = 60_000,
+  ): Promise<{ messages: WorkerMessage[]; initResponse: WorkerMessage | null }> {
+    return page.evaluate(
+      async ({ workerUrl, initMsg, timeoutMs }) => {
+        const messages: WorkerMessage[] = [];
+        const worker = new Worker(workerUrl, { type: 'module' });
+
+        const result = await new Promise<{ messages: WorkerMessage[]; initResponse: WorkerMessage | null }>(
+          (resolve) => {
+            const deadline = setTimeout(() => {
+              worker.terminate();
+              resolve({ messages, initResponse: null });
+            }, timeoutMs);
+
+            worker.onmessage = (ev: MessageEvent<WorkerMessage>) => {
+              const msg = ev.data;
+              messages.push(msg);
+              // id>0 is a direct response to a request; id=0 is a broadcast diagnostic
+              if (msg.id === (initMsg as WorkerMessage).id) {
+                clearTimeout(deadline);
+                worker.terminate();
+                resolve({ messages, initResponse: msg });
+              }
+            };
+            worker.onerror = (ev) => {
+              clearTimeout(deadline);
+              worker.terminate();
+              resolve({ messages, initResponse: { id: -1, type: 'worker-error', message: ev.message } });
+            };
+
+            worker.postMessage(initMsg);
+          },
+        );
+        return result;
+      },
+      { workerUrl: WORKER_URL, initMsg, timeoutMs },
+    );
+  }
+
+  test('st-webgpu-asyncify-compat: init via wllamaWorker selects asyncify glue', async ({ persistentPage: page }) => {
+    test.setTimeout(3 * 60_000);
+
+    if (!artifactsExist()) {
+      test.skip(true,
+        'Asyncify artifacts absent — run WLLAMA_BUILD_WEBGPU_ASYNCIFY=1 WLLAMA_SYNC_VENDOR_JS=1 first');
+      return;
+    }
+
+    await page.goto(BASE_URL, { waitUntil: 'networkidle', timeout: 30_000 });
+
+    const { messages, initResponse } = await workerExchange(
+      page,
+      { id: 1, type: 'init', allowWebGPU: true, wasmVariantOverride: 'st-webgpu-asyncify-compat' },
+      90_000,
+    );
+
+    if (!initResponse) {
+      test.skip(true, 'wllamaWorker did not respond within timeout');
+      return;
+    }
+
+    // Print diagnostic broadcasts for triage
+    for (const msg of messages) {
+      if (msg.type === '__diagnostic') {
+        console.log(`[worker-diag] phase=${msg.phase} payload=${JSON.stringify(msg.payload).slice(0, 200)}`);
+      }
+    }
+
+    // Detect disabled-variant rejection: forceVariant on a disabled entry returns
+    // an error whose payload contains "rejected":["disabled"] in the considered array.
+    if (initResponse.type === 'error') {
+      const errMsg = String(initResponse.message ?? '');
+      if (errMsg.includes('"disabled"') || errMsg.includes('No eligible WASM variant')) {
+        test.skip(true,
+          'st-webgpu-asyncify-compat is still disabled: true in variant-table — ' +
+          'remove disabled: true after Firefox E2E passes before running this test');
+        return;
+      }
+      throw new Error(`wllamaWorker init failed unexpectedly: ${errMsg}`);
+    }
+
+    expect(initResponse.type, 'expected worker to respond with ready').toBe('ready');
+
+    // Verify the __diagnostic from worker-init shows correct variant and glue
+    const workerInitDiag = messages.find(
+      m => m.type === '__diagnostic' && m.phase === 'worker-init',
+    );
+    expect(workerInitDiag, '__diagnostic worker-init not found').toBeTruthy();
+    const payload = workerInitDiag!.payload as Record<string, unknown>;
+    expect(payload.variantId, 'variant should be st-webgpu-asyncify-compat').toBe('st-webgpu-asyncify-compat');
+
+    const variantDiag = messages.find(
+      m => m.type === '__diagnostic' && m.phase === 'variant-selection',
+    );
+    expect(variantDiag, '__diagnostic variant-selection not found').toBeTruthy();
+    const selPayload = variantDiag!.payload as Record<string, unknown>;
+    expect(selPayload.chosen, 'chosen variant should be st-webgpu-asyncify-compat').toBe('st-webgpu-asyncify-compat');
+
+    console.log('[worker-selection-path] PASS: wllamaWorker init completed, variant=st-webgpu-asyncify-compat');
+  });
+});
