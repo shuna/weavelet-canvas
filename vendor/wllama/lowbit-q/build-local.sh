@@ -75,6 +75,10 @@ SHARED_EMCC_CFLAGS_BASE="--no-entry -O3 -msimd128 -DNDEBUG -flto=full -frtti -fw
 SHARED_EMCC_CFLAGS_COMPAT="$SHARED_EMCC_CFLAGS_BASE -sINITIAL_MEMORY=128MB -sMAXIMUM_MEMORY=2048MB"
 # Memory64 uses 64-bit linear memory indexing; 8 GB maximum covers current large model sizes.
 SHARED_EMCC_CFLAGS_MEM64="$SHARED_EMCC_CFLAGS_BASE -sINITIAL_MEMORY=128MB -sMAXIMUM_MEMORY=8589934592 -sMEMORY64=1"
+# WebGPU compat builds require JSPI: emdawnwebgpu's WaitAny implementation uses
+# Asyncify.handleAsync (#if ASYNCIFY) or needs JSPI; without either it calls abort().
+# Plain -sASYNCIFY=1 fails with this wasm-exceptions build (Binaryen pass incompatible).
+SHARED_EMCC_CFLAGS_WEBGPU_COMPAT="$SHARED_EMCC_CFLAGS_COMPAT -sJSPI=1"
 NPROC=$(sysctl -n hw.ncpu 2>/dev/null || nproc 2>/dev/null || echo 4)
 SYNC_VENDOR_JS="${WLLAMA_SYNC_VENDOR_JS:-0}"
 
@@ -267,7 +271,7 @@ if [ "$BUILD_WEBGPU" = "1" ]; then
 
   export EMCC_CFLAGS=""
   emcmake cmake ../.. "${cmake_compat_args[@]}" "${cmake_webgpu_args[@]}" 2>&1 | tail -6
-  export EMCC_CFLAGS="$SHARED_EMCC_CFLAGS_COMPAT"
+  export EMCC_CFLAGS="$SHARED_EMCC_CFLAGS_WEBGPU_COMPAT"
   emmake make wllama -j"$NPROC" 2>&1
   expose_emscripten_heap_views wllama.js
   patch_emscripten_jspi_exports wllama.js
@@ -282,10 +286,11 @@ if [ "$BUILD_WEBGPU" = "1" ]; then
 
   export EMCC_CFLAGS=""
   emcmake cmake ../.. "${cmake_compat_args[@]}" "${cmake_webgpu_args[@]}" 2>&1 | tail -6
-  export EMCC_CFLAGS="$SHARED_EMCC_CFLAGS_COMPAT -pthread -sUSE_PTHREADS=1 -sPTHREAD_POOL_SIZE=0"
+  export EMCC_CFLAGS="$SHARED_EMCC_CFLAGS_WEBGPU_COMPAT -pthread -sUSE_PTHREADS=1 -sPTHREAD_POOL_SIZE=0"
   emmake make wllama -j"$NPROC" 2>&1
   expose_emscripten_heap_views wllama.js
   patch_emscripten_jspi_exports wllama.js
+  patch_pthread_prewarm wllama.js
 
   cd "$FORK_DIR"
   cp wasm/single-thread-webgpu-compat/wllama.wasm "$VENDOR_DIR/single-thread-webgpu-compat.wasm"
