@@ -18,30 +18,38 @@ glue files are **not interchangeable** across variants:
 | Axis | Values | Notes |
 |------|--------|-------|
 | Threading | single-thread / multi-thread | Multi-thread requires COOP/COEP headers |
-| Memory64 | memory64 / compat | Memory64 allows >2 GB models; compat for older browsers |
+| Memory model | memory64 / compat | Memory64 allows >2 GB heap; compat for browsers without Memory64 |
 | WebGPU async mode | JSPI / Asyncify / none | JSPI and Asyncify are **separate build types** with separate WASM, separate glue |
 
-**JSPI WebGPU variants** additionally require `-sJSPI=1`. The llama.cpp
-`ggml-webgpu` backend requests `WGPUInstanceFeatureName_TimedWaitAny` and uses
-`Instance::WaitAny()` during adapter/device initialization. The emdawnwebgpu
-runtime rejects `TimedWaitAny` when neither Asyncify nor JSPI is enabled; in
-that case `wgpuCreateInstance()` returns null and model loading aborts at:
+Both **JSPI** and **Asyncify** WebGPU variants satisfy the emdawnwebgpu
+requirement for `TimedWaitAny`. Without one of these, the emdawnwebgpu runtime
+rejects `TimedWaitAny`, `wgpuCreateInstance()` returns null, and model loading
+aborts at:
 
 ```
 ggml-webgpu.cpp:2593: GGML_ASSERT(webgpu_ctx->instance != nullptr) failed
 ```
 
-Resulting files:
+See Pitfall #9 for details on both approaches.
+
+Build outputs per variant type:
 
 ```
-wasm/single-thread/wllama.wasm          (~2.2 MB)
-wasm/multi-thread/wllama.wasm           (~2.3 MB)
+# CPU variants (built by default)
+wasm/single-thread-cpu-mem64/wllama.wasm    (~2.2 MB)
+wasm/multi-thread-cpu-mem64/wllama.wasm     (~2.3 MB)
 wasm/single-thread-cpu-compat/wllama.wasm   (~2.2 MB)
 wasm/multi-thread-cpu-compat/wllama.wasm    (~2.2 MB)
-wasm/single-thread-webgpu/wllama.wasm   (~3.0 MB)
-wasm/multi-thread-webgpu/wllama.wasm    (~3.1 MB)
-wasm/single-thread-webgpu-compat/wllama.wasm (~2.9 MB)
-wasm/multi-thread-webgpu-compat/wllama.wasm  (~3.0 MB)
+
+# WebGPU + JSPI variants (WLLAMA_BUILD_WEBGPU=1)
+wasm/single-thread-webgpu-compat/wllama.wasm  (~2.9 MB)
+wasm/multi-thread-webgpu-compat/wllama.wasm   (~3.0 MB)
+# NOTE: single-thread-webgpu / multi-thread-webgpu (Memory64 + JSPI + WebGPU)
+# are upstream artifacts only — not built by this repo's scripts.
+
+# WebGPU + Asyncify variants (WLLAMA_BUILD_WEBGPU_ASYNCIFY=1)
+wasm/single-thread-webgpu-asyncify-compat/wllama.wasm  (~3.1 MB)
+wasm/multi-thread-webgpu-asyncify-compat/wllama.wasm   (~3.2 MB)
 ```
 
 Each variant also produces a `wllama.js` (Emscripten JS glue) file. The JS glue
@@ -51,18 +59,24 @@ main project.
 
 Variant mapping:
 
-| Runtime file in main project | WASM source | Embedded JS glue constant |
-|------------------------------|-------------|---------------------------|
-| `vendor/wllama/single-thread-cpu-mem64.wasm` | `wasm/single-thread-cpu-mem64/wllama.wasm` | `WLLAMA_SINGLE_THREAD_CODE` |
-| `vendor/wllama/multi-thread-cpu-mem64.wasm` | `wasm/multi-thread-cpu-mem64/wllama.wasm` | `WLLAMA_MULTI_THREAD_CODE` |
-| `vendor/wllama/single-thread-cpu-compat.wasm` | `wasm/single-thread-cpu-compat/wllama.wasm` | `WLLAMA_SINGLE_THREAD_COMPAT_CODE` |
-| `vendor/wllama/multi-thread-cpu-compat.wasm` | `wasm/multi-thread-cpu-compat/wllama.wasm` | `WLLAMA_MULTI_THREAD_COMPAT_CODE` |
-| `vendor/wllama/single-thread-webgpu.wasm` | `wasm/single-thread-webgpu/wllama.wasm` | `WLLAMA_SINGLE_THREAD_WEBGPU_CODE` |
-| `vendor/wllama/multi-thread-webgpu.wasm` | `wasm/multi-thread-webgpu/wllama.wasm` | `WLLAMA_MULTI_THREAD_WEBGPU_CODE` |
-| `vendor/wllama/single-thread-webgpu-compat.wasm` | `wasm/single-thread-webgpu-compat/wllama.wasm` | `WLLAMA_SINGLE_THREAD_WEBGPU_COMPAT_CODE` |
-| `vendor/wllama/multi-thread-webgpu-compat.wasm` | `wasm/multi-thread-webgpu-compat/wllama.wasm` | `WLLAMA_MULTI_THREAD_WEBGPU_COMPAT_CODE` |
-| `vendor/wllama/single-thread-webgpu-asyncify-compat.wasm` | `wasm/single-thread-webgpu-asyncify-compat/wllama.wasm` | `src/vendor/wllama/webgpu-asyncify-index.js` |
-| `vendor/wllama/multi-thread-webgpu-asyncify-compat.wasm` | `wasm/multi-thread-webgpu-asyncify-compat/wllama.wasm` | `src/vendor/wllama/webgpu-asyncify-index.js` |
+> **Glue files** are standalone JS modules under `src/vendor/wllama/` — they are
+> **not** string constants embedded inside the WASM binary. Each is loaded at
+> runtime by `wllamaWorker.ts` based on the selected variant's `glue` field in
+> `src/vendor/wllama/variant-table.ts`. See `src/vendor/wllama/glue-path.ts` for
+> the authoritative `GlueKind → file` mapping.
+
+| Runtime file in `vendor/wllama/` | WASM build source | JS glue file (`src/vendor/wllama/`) | Status |
+|----------------------------------|-------------------|-------------------------------------|--------|
+| `single-thread-cpu-mem64.wasm` | `wasm/single-thread-cpu-mem64/wllama.wasm` | `mem64-index.js` | active |
+| `multi-thread-cpu-mem64.wasm` | `wasm/multi-thread-cpu-mem64/wllama.wasm` | `mem64-index.js` | active |
+| `single-thread-cpu-compat.wasm` | `wasm/single-thread-cpu-compat/wllama.wasm` | `index.js` | active |
+| `multi-thread-cpu-compat.wasm` | `wasm/multi-thread-cpu-compat/wllama.wasm` | `index.js` | active |
+| `single-thread-webgpu.wasm` | — (upstream artifact only) | — | **not in variant-table; never selected** |
+| `multi-thread-webgpu.wasm` | — (upstream artifact only) | — | **not in variant-table; never selected** |
+| `single-thread-webgpu-compat.wasm` | `wasm/single-thread-webgpu-compat/wllama.wasm` | `webgpu-index.js` | active |
+| `multi-thread-webgpu-compat.wasm` | `wasm/multi-thread-webgpu-compat/wllama.wasm` | `webgpu-index.js` | active |
+| `single-thread-webgpu-asyncify-compat.wasm` | `wasm/single-thread-webgpu-asyncify-compat/wllama.wasm` | `webgpu-asyncify-index.js` | experimental, disabled |
+| `multi-thread-webgpu-asyncify-compat.wasm` | `wasm/multi-thread-webgpu-asyncify-compat/wllama.wasm` | `webgpu-asyncify-index.js` | experimental, disabled |
 
 ## Prerequisites
 
@@ -179,15 +193,19 @@ tools may preserve `Module["HEAPU8"]`, while a hand patch might use
 ```bash
 node <<'NODE'
 const fs = require('fs');
+// Adjust this list to the variants you actually built in this run.
+// single-thread-webgpu / multi-thread-webgpu are upstream artifacts — only
+// include them if you explicitly copied them from an upstream release.
 const variants = [
   'single-thread-cpu-mem64',
   'multi-thread-cpu-mem64',
   'single-thread-cpu-compat',
   'multi-thread-cpu-compat',
-  'single-thread-webgpu',
-  'multi-thread-webgpu',
   'single-thread-webgpu-compat',
   'multi-thread-webgpu-compat',
+  // Uncomment if Asyncify variants were built:
+  // 'single-thread-webgpu-asyncify-compat',
+  // 'multi-thread-webgpu-asyncify-compat',
 ];
 
 let changed = 0;
@@ -222,7 +240,7 @@ console.log(`Patched HEAPU8 export in ${changed} file(s)`);
 NODE
 ```
 
-Then verify all eight glue files have the patch:
+Then verify all patched glue files have the patch (use the same variant list as above):
 
 ```bash
 node <<'NODE'
@@ -232,10 +250,10 @@ const variants = [
   'multi-thread-cpu-mem64',
   'single-thread-cpu-compat',
   'multi-thread-cpu-compat',
-  'single-thread-webgpu',
-  'multi-thread-webgpu',
   'single-thread-webgpu-compat',
   'multi-thread-webgpu-compat',
+  // 'single-thread-webgpu-asyncify-compat',
+  // 'multi-thread-webgpu-asyncify-compat',
 ];
 
 for (const variant of variants) {
@@ -306,18 +324,30 @@ NODE
 Run from `vendor/wllama-src/` (one level inside the repo root):
 
 ```bash
-# Copy WASM binaries
+# CPU variants
 cp wasm/single-thread-cpu-mem64/wllama.wasm    ../vendor/wllama/single-thread-cpu-mem64.wasm
 cp wasm/multi-thread-cpu-mem64/wllama.wasm     ../vendor/wllama/multi-thread-cpu-mem64.wasm
 cp wasm/single-thread-cpu-compat/wllama.wasm   ../vendor/wllama/single-thread-cpu-compat.wasm
 cp wasm/multi-thread-cpu-compat/wllama.wasm    ../vendor/wllama/multi-thread-cpu-compat.wasm
-cp wasm/single-thread-webgpu/wllama.wasm         ../vendor/wllama/single-thread-webgpu.wasm
-cp wasm/multi-thread-webgpu/wllama.wasm          ../vendor/wllama/multi-thread-webgpu.wasm
+
+# WebGPU + JSPI compat variants (WLLAMA_BUILD_WEBGPU=1)
 cp wasm/single-thread-webgpu-compat/wllama.wasm  ../vendor/wllama/single-thread-webgpu-compat.wasm
 cp wasm/multi-thread-webgpu-compat/wllama.wasm   ../vendor/wllama/multi-thread-webgpu-compat.wasm
 
-# Copy bundled JS library
-cp esm/index.js ../src/vendor/wllama/index.js
+# WebGPU + Asyncify compat variants (WLLAMA_BUILD_WEBGPU_ASYNCIFY=1) — experimental
+# cp wasm/single-thread-webgpu-asyncify-compat/wllama.wasm  ../vendor/wllama/single-thread-webgpu-asyncify-compat.wasm
+# cp wasm/multi-thread-webgpu-asyncify-compat/wllama.wasm   ../vendor/wllama/multi-thread-webgpu-asyncify-compat.wasm
+
+# NOTE: single-thread-webgpu.wasm / multi-thread-webgpu.wasm (Memory64 + JSPI)
+# are upstream artifacts — they are NOT built by this repo's scripts.
+# Do NOT copy them from local build output.
+
+# Copy JS glue bundles
+cp esm/index.js    ../src/vendor/wllama/index.js
+cp esm/mem64.js    ../src/vendor/wllama/mem64-index.js
+cp esm/webgpu.js   ../src/vendor/wllama/webgpu-index.js
+# Asyncify glue (only when WLLAMA_BUILD_WEBGPU_ASYNCIFY=1):
+# cp esm/webgpu-asyncify.js  ../src/vendor/wllama/webgpu-asyncify-index.js
 ```
 
 ### Step 5: Verify the main project copy
@@ -327,15 +357,19 @@ Run these checks from `vendor/wllama-src/` after copying:
 ```bash
 node <<'NODE'
 const fs = require('fs');
+// Add or remove pairs to match what you actually built and copied this run.
+// Do NOT include single-thread-webgpu / multi-thread-webgpu — those are
+// upstream artifacts, not produced by this repo's build scripts.
 const wasmPairs = [
   ['wasm/single-thread-cpu-mem64/wllama.wasm',   '../vendor/wllama/single-thread-cpu-mem64.wasm'],
   ['wasm/multi-thread-cpu-mem64/wllama.wasm',    '../vendor/wllama/multi-thread-cpu-mem64.wasm'],
   ['wasm/single-thread-cpu-compat/wllama.wasm',  '../vendor/wllama/single-thread-cpu-compat.wasm'],
   ['wasm/multi-thread-cpu-compat/wllama.wasm',   '../vendor/wllama/multi-thread-cpu-compat.wasm'],
-  ['wasm/single-thread-webgpu/wllama.wasm', '../vendor/wllama/single-thread-webgpu.wasm'],
-  ['wasm/multi-thread-webgpu/wllama.wasm', '../vendor/wllama/multi-thread-webgpu.wasm'],
   ['wasm/single-thread-webgpu-compat/wllama.wasm', '../vendor/wllama/single-thread-webgpu-compat.wasm'],
-  ['wasm/multi-thread-webgpu-compat/wllama.wasm', '../vendor/wllama/multi-thread-webgpu-compat.wasm'],
+  ['wasm/multi-thread-webgpu-compat/wllama.wasm',  '../vendor/wllama/multi-thread-webgpu-compat.wasm'],
+  // Uncomment if Asyncify variants were built and copied:
+  // ['wasm/single-thread-webgpu-asyncify-compat/wllama.wasm', '../vendor/wllama/single-thread-webgpu-asyncify-compat.wasm'],
+  // ['wasm/multi-thread-webgpu-asyncify-compat/wllama.wasm',  '../vendor/wllama/multi-thread-webgpu-asyncify-compat.wasm'],
 ];
 
 for (const [src, dst] of wasmPairs) {
@@ -346,13 +380,23 @@ for (const [src, dst] of wasmPairs) {
   }
 }
 
-const embedded = fs.readFileSync('esm/index.js', 'utf8');
-const vendored = fs.readFileSync('../src/vendor/wllama/index.js', 'utf8');
-if (embedded !== vendored) {
-  throw new Error('../src/vendor/wllama/index.js is not the current esm/index.js');
+// Verify JS glue bundles
+const gluePairs = [
+  ['esm/index.js',           '../src/vendor/wllama/index.js'],
+  ['esm/mem64.js',           '../src/vendor/wllama/mem64-index.js'],
+  ['esm/webgpu.js',          '../src/vendor/wllama/webgpu-index.js'],
+  // ['esm/webgpu-asyncify.js', '../src/vendor/wllama/webgpu-asyncify-index.js'],
+];
+
+for (const [src, dst] of gluePairs) {
+  const a = fs.readFileSync(src, 'utf8');
+  const b = fs.readFileSync(dst, 'utf8');
+  if (a !== b) {
+    throw new Error(`${dst} does not match ${src}`);
+  }
 }
 
-console.log('OK: vendored WASM and JS artifacts match the current build');
+console.log('OK: vendored WASM and JS glue artifacts match the current build');
 NODE
 ```
 
@@ -369,10 +413,13 @@ after Step 1 (WASM build).
 
 ### 2. Every runtime variant requires separate JS glue
 
-The vendored wllama library embeds **8 JS glue variants**:
-- single-thread / multi-thread
-- Memory64 / compat
-- WebGPU / no-WebGPU
+This repo uses **4 distinct JS glue bundles** (not one per WASM, but one per
+execution mode). Single-thread and multi-thread WASM of the same mode share the
+same glue file:
+- `index.js` — CPU compat (wasm32, no WebGPU)
+- `mem64-index.js` — CPU Memory64
+- `webgpu-index.js` — WebGPU + JSPI compat
+- `webgpu-asyncify-index.js` — WebGPU + Asyncify compat (experimental)
 
 Memory64 glue uses 64-bit pointer conversion and creates Memory64 WASM memory.
 Compat glue uses 32-bit pointer conversion and regular WASM memory. WebGPU glue
@@ -562,7 +609,7 @@ correctly by:
 - Passing `--use-port=` via `-DCMAKE_EXE_LINKER_FLAGS` for WebGPU builds
 - Setting `EMCC_CFLAGS` with other flags only during `emmake make`
 
-### 9. WebGPU requires JSPI for TimedWaitAny
+### 9. WebGPU requires JSPI or Asyncify for TimedWaitAny
 
 `ggml-webgpu.cpp` creates the WebGPU instance with:
 
@@ -573,8 +620,8 @@ std::vector<wgpu::InstanceFeatureName> instance_features = {
 ```
 
 The emdawnwebgpu implementation validates that `TimedWaitAny` is only enabled
-when Asyncify or JSPI is available. If WebGPU builds are produced without
-JSPI or Asyncify, the generated glue contains:
+when Asyncify or JSPI is available. If WebGPU builds are produced without either,
+the generated glue contains:
 
 ```javascript
 _emscripten_has_asyncify=()=>0
@@ -582,41 +629,83 @@ _emscripten_has_asyncify=()=>0
 
 and `wgpuCreateInstance()` returns null before adapter selection starts.
 
-**Fix applied in this fork:** `scripts/build_all_wasm.sh` appends
-`-sJSPI=1` only for WebGPU variants. Plain `-sASYNCIFY=1` is not used here
-because Binaryen's Asyncify pass fails with this wasm-exceptions + memory64
-build in emsdk 4.0.x. After rebuilding, verify the generated WebGPU glue no
-longer reports `_emscripten_has_asyncify=()=>0`, then re-run
-`npm run build:worker`, `npm run build:tsup`, and copy the rebuilt WebGPU WASM
-plus `esm/index.js` into the main project.
+**Two supported approaches:**
 
-### 10. Call `Module._wllama_*` directly — do not use `cwrap`
+**A) JSPI** (`-sJSPI=1`, used by `*-webgpu-compat.wasm`): The JSPI-enabled WebGPU
+variants use `-sJSPI=1`. This is what `WLLAMA_BUILD_WEBGPU=1` produces. Requires
+JSPI browser support (Chrome 117+; not yet available in Firefox or Safari as of
+emsdk 5.0.x).
+
+**B) Asyncify** (`-sASYNCIFY=1`, used by `*-webgpu-asyncify-compat.wasm`): The
+Asyncify-enabled WebGPU variants use `-sASYNCIFY=1` with `-DGGML_WEBGPU_JSPI=OFF`.
+**Asyncify is incompatible with `-fwasm-exceptions`** (Binaryen's Asyncify pass
+cannot instrument native EH blocks). Fix: the Asyncify build removes
+`-fwasm-exceptions` from `SHARED_EMCC_CFLAGS_ASYNCIFY_BASE` and uses
+Emscripten's JS-based exception handling instead. This means the Asyncify WASM
+uses a different exception ABI from the JSPI/CPU variants; performance impact is
+acceptable because GPU offload dominates the cost. Additionally:
+- `-sASSERTIONS=1` is required to disable `MINIFY_WASM_IMPORTS_AND_EXPORTS` which
+  would otherwise rename `asyncify_start_unwind` in the WASM but fail to update
+  the JS reference (causing `TypeError: _asyncify_start_unwind is not a function`).
+- `-sIMPORTED_MEMORY` is required by emdawnwebgpu; for Asyncify builds it is not
+  auto-configured (unlike JSPI builds).
+
+After rebuilding either variant, verify the generated WebGPU glue no longer
+contains `_emscripten_has_asyncify=()=>0`.
+
+### 10. Call `Module._wllama_*` directly — do not use `cwrap`; Asyncify needs `_callWasm`
 
 The inner worker (`llama-cpp.js`) calls the five wllama exports directly via
 `Module._wllama_*` instead of going through `Module.cwrap()` / `ccall()`.
 
 `applySignatureConversions` (patched by `build_all_wasm.sh`) already normalises
-every `Module._wllama_*` export across all 8 variants so that:
+every `Module._wllama_*` export across CPU and JSPI WebGPU variants so that:
 
 - inputs accept plain JS Numbers (no manual BigInt conversion in JS)
 - the return value is a plain JS Number (or `Promise<Number>` for JSPI exports)
 
-A single `await` + `Number()` call therefore works uniformly across all variants:
+For CPU and JSPI variants a single `await` + `Number()` call works:
 
 ```javascript
-// Works for all 8 variants:
 wllamaMalloc = async (size, dummy) => Number(await Module._wllama_malloc(size, dummy));
 wllamaStart  = async () => Number(await Module._wllama_start());
-wllamaExit   = async () => Number(await Module._wllama_exit());
-wllamaDebug  = async () => Number(await Module._wllama_debug());
-wllamaAction = async (action, reqPtr) => {
-  const bytes = new TextEncoder().encode(action);
-  const actPtr = await wllamaMalloc(bytes.byteLength + 1, 0);
-  Module.HEAPU8.set(bytes, actPtr);
-  Module.HEAPU8[actPtr + bytes.byteLength] = 0;
-  return Number(await Module._wllama_action(actPtr, reqPtr));
-};
+// etc.
 ```
+
+**Asyncify variants require a different calling convention.** With `-sASYNCIFY=1`,
+`Module._wllama_action(...)` returns **synchronously** (WASM internally
+unwinds/rewinds). The actual async result is obtained via
+`Module['Asyncify'].whenDone()`, but only when `Module['Asyncify'].currData !== null`
+after the call (i.e. a suspension actually occurred). If `currData` is null the
+function completed synchronously and the return value is directly usable.
+
+`llama-cpp.js` uses the `_callWasm` helper to unify all three cases:
+
+```javascript
+const _isAsyncify = typeof Module['Asyncify'] !== 'undefined'
+  && typeof Module['Asyncify'].whenDone === 'function';
+
+const _callWasm = _isAsyncify
+  ? async (fn, ...args) => {
+      const syncResult = fn(...args);
+      if (Module['Asyncify'].currData !== null) {
+        return Module['Asyncify'].whenDone();
+      }
+      return syncResult;
+    }
+  : async (fn, ...args) => fn(...args);  // CPU / JSPI: await on the result is sufficient
+
+// Then all variants use _callWasm uniformly:
+wllamaMalloc = async (size, dummy) =>
+  _fromWasmAddr(await _callWasm(Module._wllama_malloc, _toWasmAddr(size), dummy));
+wllamaStart  = async () => ptrToString(await _callWasm(Module._wllama_start));
+// etc.
+```
+
+**Never call `whenDone()` unconditionally** — if a wllama function completes
+synchronously (common for Asyncify builds where no GPU call is in flight),
+`whenDone()` throws: _"Tried to wait for an async operation when none is in
+progress"_.
 
 **Why not cwrap?** `cwrap`/`ccall` contain an async-detection bug specific to the
 Memory64+WebGPU combination: when `wllama_malloc` is wrapped in

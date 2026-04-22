@@ -18,31 +18,37 @@ WASM バリアントは、同じビルドバリアントから生成された Em
 | 軸 | 値 | 注記 |
 |------|--------|-------|
 | スレッド | single-thread / multi-thread | multi-thread には COOP/COEP ヘッダーが必要 |
-| Memory64 | memory64 / compat | Memory64 は 2 GB 超のモデルに対応、compat は古いブラウザ向け |
-| WebGPU | webgpu / no-webgpu | Dawn/emdawnwebgpu による GPU アクセラレーション |
+| メモリモデル | memory64 / compat | Memory64 は 2 GB 超のヒープに対応、compat は Memory64 非対応ブラウザ向け |
+| WebGPU 非同期モード | JSPI / Asyncify / なし | JSPI と Asyncify は**別ビルド**で、WASM も glue も共有しない |
 
-WebGPU バリアントでは追加で `-sJSPI=1` が必要です。llama.cpp の
-`ggml-webgpu` バックエンドは `WGPUInstanceFeatureName_TimedWaitAny` を要求し、
-アダプタおよびデバイスの初期化中に `Instance::WaitAny()` を使います。
-emdawnwebgpu ランタイムは、Asyncify も JSPI も有効でない場合
-`TimedWaitAny` を拒否します。この場合 `wgpuCreateInstance()` は null を返し、
-モデル読み込みは次の箇所で中断されます。
+**JSPI** と **Asyncify** のどちらも emdawnwebgpu の `TimedWaitAny` 要件を満たします。
+いずれも有効でない場合、emdawnwebgpu ランタイムは `TimedWaitAny` を拒否し、
+`wgpuCreateInstance()` は null を返してモデル読み込みが次の箇所で中断されます。
 
 ```text
 ggml-webgpu.cpp:2593: GGML_ASSERT(webgpu_ctx->instance != nullptr) failed
 ```
 
-生成されるファイル:
+詳細は既知の落とし穴 #9 を参照してください。
+
+バリアント種別ごとのビルド出力:
 
 ```text
-wasm/single-thread/wllama.wasm          (~2.2 MB)
-wasm/multi-thread/wllama.wasm           (~2.3 MB)
+# CPU バリアント（デフォルトでビルドされる）
+wasm/single-thread-cpu-mem64/wllama.wasm    (~2.2 MB)
+wasm/multi-thread-cpu-mem64/wllama.wasm     (~2.3 MB)
 wasm/single-thread-cpu-compat/wllama.wasm   (~2.2 MB)
 wasm/multi-thread-cpu-compat/wllama.wasm    (~2.2 MB)
-wasm/single-thread-webgpu/wllama.wasm   (~3.0 MB)
-wasm/multi-thread-webgpu/wllama.wasm    (~3.1 MB)
-wasm/single-thread-webgpu-compat/wllama.wasm (~2.9 MB)
-wasm/multi-thread-webgpu-compat/wllama.wasm  (~3.0 MB)
+
+# WebGPU + JSPI compat バリアント（WLLAMA_BUILD_WEBGPU=1）
+wasm/single-thread-webgpu-compat/wllama.wasm  (~2.9 MB)
+wasm/multi-thread-webgpu-compat/wllama.wasm   (~3.0 MB)
+# 注: single-thread-webgpu / multi-thread-webgpu（Memory64 + JSPI + WebGPU）は
+# upstream artifact のみ。このリポジトリのスクリプトではビルドしない。
+
+# WebGPU + Asyncify compat バリアント（WLLAMA_BUILD_WEBGPU_ASYNCIFY=1）— experimental
+wasm/single-thread-webgpu-asyncify-compat/wllama.wasm  (~3.1 MB)
+wasm/multi-thread-webgpu-asyncify-compat/wllama.wasm   (~3.2 MB)
 ```
 
 各バリアントは `wllama.js`（Emscripten の JS glue）も生成します。この JS glue は
@@ -51,16 +57,24 @@ Memory64/compat/WebGPU の各バリアント間で互換ではありません。
 
 バリアント対応表:
 
-| メインプロジェクト内のランタイムファイル | WASM ソース | 埋め込まれる JS glue 定数 |
-|------------------------------|-------------|---------------------------|
-| `vendor/wllama/single-thread-cpu-mem64.wasm` | `wasm/single-thread-cpu-mem64/wllama.wasm` | `WLLAMA_SINGLE_THREAD_CODE` |
-| `vendor/wllama/multi-thread-cpu-mem64.wasm` | `wasm/multi-thread-cpu-mem64/wllama.wasm` | `WLLAMA_MULTI_THREAD_CODE` |
-| `vendor/wllama/single-thread-cpu-compat.wasm` | `wasm/single-thread-cpu-compat/wllama.wasm` | `WLLAMA_SINGLE_THREAD_COMPAT_CODE` |
-| `vendor/wllama/multi-thread-cpu-compat.wasm` | `wasm/multi-thread-cpu-compat/wllama.wasm` | `WLLAMA_MULTI_THREAD_COMPAT_CODE` |
-| `vendor/wllama/single-thread-webgpu.wasm` | `wasm/single-thread-webgpu/wllama.wasm` | `WLLAMA_SINGLE_THREAD_WEBGPU_CODE` |
-| `vendor/wllama/multi-thread-webgpu.wasm` | `wasm/multi-thread-webgpu/wllama.wasm` | `WLLAMA_MULTI_THREAD_WEBGPU_CODE` |
-| `vendor/wllama/single-thread-webgpu-compat.wasm` | `wasm/single-thread-webgpu-compat/wllama.wasm` | `WLLAMA_SINGLE_THREAD_WEBGPU_COMPAT_CODE` |
-| `vendor/wllama/multi-thread-webgpu-compat.wasm` | `wasm/multi-thread-webgpu-compat/wllama.wasm` | `WLLAMA_MULTI_THREAD_WEBGPU_COMPAT_CODE` |
+> **glue ファイル**は `src/vendor/wllama/` 配下のスタンドアロン JS モジュールです。
+> WASM バイナリに埋め込まれた文字列定数ではありません。`wllamaWorker.ts` が
+> `src/vendor/wllama/variant-table.ts` の `glue` フィールドに基づいて実行時に
+> ロードします。`GlueKind → ファイル` の対応表は
+> `src/vendor/wllama/glue-path.ts` が正本です。
+
+| `vendor/wllama/` 内のランタイムファイル | WASM ビルドソース | JS glue ファイル（`src/vendor/wllama/`） | ステータス |
+|----------------------------------------|-------------------|-----------------------------------------|------------|
+| `single-thread-cpu-mem64.wasm` | `wasm/single-thread-cpu-mem64/wllama.wasm` | `mem64-index.js` | active |
+| `multi-thread-cpu-mem64.wasm` | `wasm/multi-thread-cpu-mem64/wllama.wasm` | `mem64-index.js` | active |
+| `single-thread-cpu-compat.wasm` | `wasm/single-thread-cpu-compat/wllama.wasm` | `index.js` | active |
+| `multi-thread-cpu-compat.wasm` | `wasm/multi-thread-cpu-compat/wllama.wasm` | `index.js` | active |
+| `single-thread-webgpu.wasm` | —（upstream artifact のみ） | — | **variant-table にエントリなし；選択されない** |
+| `multi-thread-webgpu.wasm` | —（upstream artifact のみ） | — | **variant-table にエントリなし；選択されない** |
+| `single-thread-webgpu-compat.wasm` | `wasm/single-thread-webgpu-compat/wllama.wasm` | `webgpu-index.js` | active |
+| `multi-thread-webgpu-compat.wasm` | `wasm/multi-thread-webgpu-compat/wllama.wasm` | `webgpu-index.js` | active |
+| `single-thread-webgpu-asyncify-compat.wasm` | `wasm/single-thread-webgpu-asyncify-compat/wllama.wasm` | `webgpu-asyncify-index.js` | experimental, disabled |
+| `multi-thread-webgpu-asyncify-compat.wasm` | `wasm/multi-thread-webgpu-asyncify-compat/wllama.wasm` | `webgpu-asyncify-index.js` | experimental, disabled |
 
 ## 前提条件
 
@@ -179,15 +193,19 @@ HEAPU64=new BigUint64Array(b)Module["HEAPU8"]=HEAPU8
 ```bash
 node <<'NODE'
 const fs = require('fs');
+// このリストは実際にビルドしたバリアントに合わせて調整してください。
+// single-thread-webgpu / multi-thread-webgpu は upstream artifact なので
+// upstream リリースから明示的にコピーした場合のみ含めてください。
 const variants = [
   'single-thread-cpu-mem64',
   'multi-thread-cpu-mem64',
   'single-thread-cpu-compat',
   'multi-thread-cpu-compat',
-  'single-thread-webgpu',
-  'multi-thread-webgpu',
   'single-thread-webgpu-compat',
   'multi-thread-webgpu-compat',
+  // Asyncify バリアントをビルドした場合はコメントを外す:
+  // 'single-thread-webgpu-asyncify-compat',
+  // 'multi-thread-webgpu-asyncify-compat',
 ];
 
 let changed = 0;
@@ -222,7 +240,8 @@ console.log(`Patched HEAPU8 export in ${changed} file(s)`);
 NODE
 ```
 
-続いて、8 個すべての glue ファイルにパッチが入っていることを確認します。
+続いて、パッチを当てた glue ファイルすべてに適用されていることを確認します
+（上と同じ variants リストを使用）。
 
 ```bash
 node <<'NODE'
@@ -232,10 +251,10 @@ const variants = [
   'multi-thread-cpu-mem64',
   'single-thread-cpu-compat',
   'multi-thread-cpu-compat',
-  'single-thread-webgpu',
-  'multi-thread-webgpu',
   'single-thread-webgpu-compat',
   'multi-thread-webgpu-compat',
+  // 'single-thread-webgpu-asyncify-compat',
+  // 'multi-thread-webgpu-asyncify-compat',
 ];
 
 for (const variant of variants) {
@@ -309,18 +328,30 @@ NODE
 `vendor/wllama-src/` から実行します（リポジトリルートの 1 階層内側）。
 
 ```bash
-# WASM バイナリをコピー
+# CPU バリアント
 cp wasm/single-thread-cpu-mem64/wllama.wasm    ../vendor/wllama/single-thread-cpu-mem64.wasm
 cp wasm/multi-thread-cpu-mem64/wllama.wasm     ../vendor/wllama/multi-thread-cpu-mem64.wasm
 cp wasm/single-thread-cpu-compat/wllama.wasm   ../vendor/wllama/single-thread-cpu-compat.wasm
 cp wasm/multi-thread-cpu-compat/wllama.wasm    ../vendor/wllama/multi-thread-cpu-compat.wasm
-cp wasm/single-thread-webgpu/wllama.wasm         ../vendor/wllama/single-thread-webgpu.wasm
-cp wasm/multi-thread-webgpu/wllama.wasm          ../vendor/wllama/multi-thread-webgpu.wasm
+
+# WebGPU + JSPI compat バリアント（WLLAMA_BUILD_WEBGPU=1）
 cp wasm/single-thread-webgpu-compat/wllama.wasm  ../vendor/wllama/single-thread-webgpu-compat.wasm
 cp wasm/multi-thread-webgpu-compat/wllama.wasm   ../vendor/wllama/multi-thread-webgpu-compat.wasm
 
-# bundle 済み JS ライブラリをコピー
-cp esm/index.js ../src/vendor/wllama/index.js
+# WebGPU + Asyncify compat バリアント（WLLAMA_BUILD_WEBGPU_ASYNCIFY=1）— experimental
+# cp wasm/single-thread-webgpu-asyncify-compat/wllama.wasm  ../vendor/wllama/single-thread-webgpu-asyncify-compat.wasm
+# cp wasm/multi-thread-webgpu-asyncify-compat/wllama.wasm   ../vendor/wllama/multi-thread-webgpu-asyncify-compat.wasm
+
+# 注意: single-thread-webgpu.wasm / multi-thread-webgpu.wasm（Memory64 + JSPI）は
+# upstream artifact であり、このリポジトリのスクリプトではビルドしません。
+# ローカルビルド出力からコピーしないでください。
+
+# JS glue バンドルをコピー
+cp esm/index.js    ../src/vendor/wllama/index.js
+cp esm/mem64.js    ../src/vendor/wllama/mem64-index.js
+cp esm/webgpu.js   ../src/vendor/wllama/webgpu-index.js
+# Asyncify glue（WLLAMA_BUILD_WEBGPU_ASYNCIFY=1 の場合のみ）:
+# cp esm/webgpu-asyncify.js  ../src/vendor/wllama/webgpu-asyncify-index.js
 ```
 
 ### 手順 5: メインプロジェクトへコピーした内容を検証する
@@ -330,15 +361,18 @@ cp esm/index.js ../src/vendor/wllama/index.js
 ```bash
 node <<'NODE'
 const fs = require('fs');
+// 実際にビルドしてコピーしたペアに合わせて調整してください。
+// single-thread-webgpu / multi-thread-webgpu は upstream artifact なので含めません。
 const wasmPairs = [
   ['wasm/single-thread-cpu-mem64/wllama.wasm',   '../vendor/wllama/single-thread-cpu-mem64.wasm'],
   ['wasm/multi-thread-cpu-mem64/wllama.wasm',    '../vendor/wllama/multi-thread-cpu-mem64.wasm'],
   ['wasm/single-thread-cpu-compat/wllama.wasm',  '../vendor/wllama/single-thread-cpu-compat.wasm'],
   ['wasm/multi-thread-cpu-compat/wllama.wasm',   '../vendor/wllama/multi-thread-cpu-compat.wasm'],
-  ['wasm/single-thread-webgpu/wllama.wasm', '../vendor/wllama/single-thread-webgpu.wasm'],
-  ['wasm/multi-thread-webgpu/wllama.wasm', '../vendor/wllama/multi-thread-webgpu.wasm'],
   ['wasm/single-thread-webgpu-compat/wllama.wasm', '../vendor/wllama/single-thread-webgpu-compat.wasm'],
-  ['wasm/multi-thread-webgpu-compat/wllama.wasm', '../vendor/wllama/multi-thread-webgpu-compat.wasm'],
+  ['wasm/multi-thread-webgpu-compat/wllama.wasm',  '../vendor/wllama/multi-thread-webgpu-compat.wasm'],
+  // Asyncify バリアントをビルド・コピーした場合はコメントを外す:
+  // ['wasm/single-thread-webgpu-asyncify-compat/wllama.wasm', '../vendor/wllama/single-thread-webgpu-asyncify-compat.wasm'],
+  // ['wasm/multi-thread-webgpu-asyncify-compat/wllama.wasm',  '../vendor/wllama/multi-thread-webgpu-asyncify-compat.wasm'],
 ];
 
 for (const [src, dst] of wasmPairs) {
@@ -349,13 +383,23 @@ for (const [src, dst] of wasmPairs) {
   }
 }
 
-const embedded = fs.readFileSync('esm/index.js', 'utf8');
-const vendored = fs.readFileSync('../src/vendor/wllama/index.js', 'utf8');
-if (embedded !== vendored) {
-  throw new Error('../src/vendor/wllama/index.js is not the current esm/index.js');
+// JS glue バンドルの検証
+const gluePairs = [
+  ['esm/index.js',           '../src/vendor/wllama/index.js'],
+  ['esm/mem64.js',           '../src/vendor/wllama/mem64-index.js'],
+  ['esm/webgpu.js',          '../src/vendor/wllama/webgpu-index.js'],
+  // ['esm/webgpu-asyncify.js', '../src/vendor/wllama/webgpu-asyncify-index.js'],
+];
+
+for (const [src, dst] of gluePairs) {
+  const a = fs.readFileSync(src, 'utf8');
+  const b = fs.readFileSync(dst, 'utf8');
+  if (a !== b) {
+    throw new Error(`${dst} が ${src} と一致しません`);
+  }
 }
 
-console.log('OK: vendored WASM and JS artifacts match the current build');
+console.log('OK: vendored WASM and JS glue artifacts match the current build');
 NODE
 ```
 
@@ -372,10 +416,12 @@ NODE
 
 ### 2. 各ランタイムバリアントにはそれぞれ専用の JS glue が必要
 
-vendor 化された wllama ライブラリは **8 種類の JS glue バリアント**を埋め込みます。
-- single-thread / multi-thread
-- Memory64 / compat
-- WebGPU / no-WebGPU
+このリポジトリでは **4 種類の JS glue バンドル**を使います（WASM ファイルごとではなく
+実行モードごとに 1 つ。single-thread と multi-thread の同モード WASM は同じ glue を共有）。
+- `index.js` — CPU compat（wasm32、WebGPU なし）
+- `mem64-index.js` — CPU Memory64
+- `webgpu-index.js` — WebGPU + JSPI compat
+- `webgpu-asyncify-index.js` — WebGPU + Asyncify compat（experimental）
 
 Memory64 用 glue は 64-bit ポインタ変換を使い、Memory64 の WASM メモリを生成します。
 compat 用 glue は 32-bit ポインタ変換を使い、通常の WASM メモリを生成します。
@@ -565,7 +611,7 @@ emdawnwebgpu 用の `--use-port=` フラグは `EMCC_CFLAGS` ではなく
 - WebGPU ビルドでは `-DCMAKE_EXE_LINKER_FLAGS` 経由で `--use-port=` を渡す
 - それ以外のフラグを含む `EMCC_CFLAGS` は `emmake make` 実行時にだけ設定する
 
-### 9. WebGPU には TimedWaitAny のために JSPI が必要
+### 9. WebGPU には JSPI または Asyncify が必要（TimedWaitAny のため）
 
 `ggml-webgpu.cpp` は次のようにして WebGPU instance を作成します。
 
@@ -576,8 +622,8 @@ std::vector<wgpu::InstanceFeatureName> instance_features = {
 ```
 
 emdawnwebgpu 実装は、`TimedWaitAny` を Asyncify または JSPI が有効な場合に限って
-許可します。JSPI も Asyncify もない状態で WebGPU ビルドを作ると、生成された glue
-には次のコードが入り、
+許可します。どちらも有効でない状態で WebGPU ビルドを作ると、生成された glue には
+次のコードが入り、
 
 ```javascript
 _emscripten_has_asyncify=()=>0
@@ -585,41 +631,79 @@ _emscripten_has_asyncify=()=>0
 
 `wgpuCreateInstance()` はアダプタ選択開始前に null を返します。
 
-**この fork での対処:** `scripts/build_all_wasm.sh` は、WebGPU バリアントに対してのみ
-`-sJSPI=1` を追加します。ここでは plain な `-sASYNCIFY=1` は使いません。理由は、
-emsdk 4.0.x において、この wasm-exceptions + memory64 ビルドでは Binaryen の
-Asyncify pass が失敗するためです。再ビルド後は、生成された WebGPU glue に
-`_emscripten_has_asyncify=()=>0` が残っていないことを確認し、その後
-`npm run build:worker`, `npm run build:tsup` を実行し、再ビルドした WebGPU WASM と
-`esm/index.js` をメインプロジェクトへコピーしてください。
+**2 つのサポート方式:**
 
-### 10. `Module._wllama_*` を直接呼ぶ。`cwrap` は使わない
+**A) JSPI** (`-sJSPI=1`、`*-webgpu-compat.wasm` で使用): `WLLAMA_BUILD_WEBGPU=1` が生成する
+WebGPU compat バリアントで使います。JSPI 対応ブラウザ（Chrome 117+）が必要です。
+Firefox・Safari では現時点（emsdk 5.0.x）では未対応。
+
+**B) Asyncify** (`-sASYNCIFY=1`、`*-webgpu-asyncify-compat.wasm` で使用): `WLLAMA_BUILD_WEBGPU_ASYNCIFY=1` が生成する Asyncify WebGPU バリアントで使います。
+**Asyncify は `-fwasm-exceptions` と非互換**です（Binaryen の Asyncify pass が
+native EH ブロックをインストルメントできない）。対処として、Asyncify ビルドは
+`SHARED_EMCC_CFLAGS_ASYNCIFY_BASE` から `-fwasm-exceptions` を除去し、
+Emscripten の JS ベース例外ハンドリングを使います。JSPI/CPU バリアントとは
+例外 ABI が異なりますが、GPU オフロードがコストを支配するため許容範囲です。
+さらに以下も必要です。
+- `-sASSERTIONS=1`: `MINIFY_WASM_IMPORTS_AND_EXPORTS` を無効化するために必要。
+  これがないと `asyncify_start_unwind` が WASM 内でリネームされても JS 側が
+  更新されず `TypeError: _asyncify_start_unwind is not a function` が発生する。
+- `-sIMPORTED_MEMORY`: emdawnwebgpu が imported memory を要求するため必要。
+  Asyncify ビルドでは JSPI ビルドと異なり自動設定されない。
+
+いずれのバリアントを再ビルドした後も、生成された WebGPU glue に
+`_emscripten_has_asyncify=()=>0` が残っていないことを確認してください。
+
+### 10. `Module._wllama_*` を直接呼ぶ。`cwrap` は使わない。Asyncify には `_callWasm` が必要
 
 内部 worker（`llama-cpp.js`）は、5 つの wllama export を
 `Module.cwrap()` / `ccall()` 経由ではなく、`Module._wllama_*` で直接呼びます。
 
-`applySignatureConversions`（`build_all_wasm.sh` でパッチされる）は、8 バリアントすべてで
-各 `Module._wllama_*` export を正規化しており、次を保証します。
+`applySignatureConversions`（`build_all_wasm.sh` でパッチされる）は、CPU および
+JSPI WebGPU バリアントの各 `Module._wllama_*` export を正規化しており、次を保証します。
 
 - 入力は plain な JS Number を受け取れる（JS 側で手作業の BigInt 変換は不要）
 - 戻り値は plain な JS Number（または JSPI export では `Promise<Number>`）
 
-そのため、単一の `await` + `Number()` 呼び出しで全バリアントを統一的に扱えます。
+CPU・JSPI バリアントでは単一の `await` + `Number()` 呼び出しが動きます。
 
 ```javascript
-// 8 バリアントすべてで動く
 wllamaMalloc = async (size, dummy) => Number(await Module._wllama_malloc(size, dummy));
 wllamaStart  = async () => Number(await Module._wllama_start());
-wllamaExit   = async () => Number(await Module._wllama_exit());
-wllamaDebug  = async () => Number(await Module._wllama_debug());
-wllamaAction = async (action, reqPtr) => {
-  const bytes = new TextEncoder().encode(action);
-  const actPtr = await wllamaMalloc(bytes.byteLength + 1, 0);
-  Module.HEAPU8.set(bytes, actPtr);
-  Module.HEAPU8[actPtr + bytes.byteLength] = 0;
-  return Number(await Module._wllama_action(actPtr, reqPtr));
-};
+// etc.
 ```
+
+**Asyncify バリアントは異なる呼び出し規約が必要です。** `-sASYNCIFY=1` では、
+`Module._wllama_action(...)` は**同期的に返ります**（WASM 内部で unwind/rewind が発生）。
+実際の非同期結果は `Module['Asyncify'].whenDone()` 経由で取得しますが、呼び出し後に
+`Module['Asyncify'].currData !== null` の場合のみです（サスペンションが実際に発生した場合）。
+`currData` が null の場合は関数が同期的に完了しており、戻り値をそのまま使えます。
+
+`llama-cpp.js` は `_callWasm` ヘルパーで 3 パターンを統一しています。
+
+```javascript
+const _isAsyncify = typeof Module['Asyncify'] !== 'undefined'
+  && typeof Module['Asyncify'].whenDone === 'function';
+
+const _callWasm = _isAsyncify
+  ? async (fn, ...args) => {
+      const syncResult = fn(...args);
+      if (Module['Asyncify'].currData !== null) {
+        return Module['Asyncify'].whenDone();
+      }
+      return syncResult;
+    }
+  : async (fn, ...args) => fn(...args);  // CPU / JSPI: await で十分
+
+// 全バリアントで統一的に使用:
+wllamaMalloc = async (size, dummy) =>
+  _fromWasmAddr(await _callWasm(Module._wllama_malloc, _toWasmAddr(size), dummy));
+wllamaStart  = async () => ptrToString(await _callWasm(Module._wllama_start));
+// etc.
+```
+
+**`whenDone()` を無条件で呼んではいけません。** wllama 関数が同期的に完了した場合
+（GPU 呼び出しなしで完了する Asyncify ビルドでよくある）、`whenDone()` は
+_"Tried to wait for an async operation when none is in progress"_ で失敗します。
 
 **なぜ cwrap を使わないのか:** `cwrap` / `ccall` には Memory64+WebGPU の組み合わせで
 だけ起きる async 判定バグがあります。`wllama_malloc` が
