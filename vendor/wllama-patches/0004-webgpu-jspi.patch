@@ -1,8 +1,7 @@
-diff --git a/ggml/src/ggml-webgpu/ggml-webgpu.cpp b/ggml/src/ggml-webgpu/ggml-webgpu.cpp
-index 9e8cbc4..1e191c7 100644
---- a/ggml/src/ggml-webgpu/ggml-webgpu.cpp
-+++ b/ggml/src/ggml-webgpu/ggml-webgpu.cpp
-@@ -261,9 +261,11 @@ struct webgpu_context_struct {
+diff --git a/llama.cpp/ggml/src/ggml-webgpu/ggml-webgpu.cpp b/llama.cpp/ggml/src/ggml-webgpu/ggml-webgpu.cpp
+--- a/llama.cpp/ggml/src/ggml-webgpu/ggml-webgpu.cpp
++++ b/llama.cpp/ggml/src/ggml-webgpu/ggml-webgpu.cpp
+@@ -261,9 +261,11 @@
      wgpu::Queue    queue;
      wgpu::Limits   limits;
  
@@ -16,7 +15,7 @@ index 9e8cbc4..1e191c7 100644
  
      // Separate this out from limits since on some Metal systems, the limit returned by
      // querying the limits is higher than the actual allowed maximum.
-@@ -449,8 +451,8 @@ static void ggml_backend_webgpu_wait(webgpu_context &                         ct
+@@ -449,8 +451,8 @@
      // If we have too many in-flight submissions, wait on the oldest one first. If there are many threads,
      // inflight_max may be 0, meaning that we must wait on all futures.
      uint64_t timeout_ms       = block ? UINT64_MAX : 0;
@@ -27,13 +26,13 @@ index 9e8cbc4..1e191c7 100644
      while (futures.size() >= inflight_max && futures.size() > 0) {
          ctx->instance.WaitAny(futures[0].futures.size(), futures[0].futures.data(), UINT64_MAX);
          futures.erase(futures.begin());
-@@ -530,6 +532,16 @@ static webgpu_submission_futures ggml_backend_webgpu_submit(webgpu_context ctx,
+@@ -530,8 +532,18 @@
  
      std::vector<wgpu::FutureWaitInfo> futures;
  
 +#ifdef __EMSCRIPTEN__
-+    wgpu::Future p_f = ctx->queue.OnSubmittedWorkDone(
-+        wgpu::CallbackMode::AllowSpontaneous,
+     wgpu::Future p_f = ctx->queue.OnSubmittedWorkDone(
+         wgpu::CallbackMode::AllowSpontaneous,
 +        [ctx, params_bufs](wgpu::QueueWorkDoneStatus status, wgpu::StringView) {
 +            if (status != wgpu::QueueWorkDoneStatus::Success) {
 +                GGML_LOG_ERROR("ggml_webgpu: Failed to submit commands\n");
@@ -41,10 +40,12 @@ index 9e8cbc4..1e191c7 100644
 +            ctx->param_buf_pool.free_bufs({ params_bufs });
 +        });
 +#else
-     wgpu::Future p_f = ctx->queue.OnSubmittedWorkDone(
-         wgpu::CallbackMode::AllowSpontaneous,
++    wgpu::Future p_f = ctx->queue.OnSubmittedWorkDone(
++        wgpu::CallbackMode::AllowSpontaneous,
          [ctx, params_bufs](wgpu::QueueWorkDoneStatus status, wgpu::StringView message) {
-@@ -539,6 +551,7 @@ static webgpu_submission_futures ggml_backend_webgpu_submit(webgpu_context ctx,
+             if (status != wgpu::QueueWorkDoneStatus::Success) {
+                 GGML_LOG_ERROR("ggml_webgpu: Failed to submit commands: %s\n", std::string(message).c_str());
+@@ -539,6 +551,7 @@
              // Free the staged buffers
              ctx->param_buf_pool.free_bufs({ params_bufs });
          });
@@ -52,7 +53,7 @@ index 9e8cbc4..1e191c7 100644
      futures.push_back({ p_f });
  
      for (const auto & bufs : set_rows_error_bufs) {
-@@ -987,6 +1000,7 @@ static webgpu_command ggml_webgpu_mul_mat(webgpu_context & ctx,
+@@ -987,6 +1000,7 @@
              uint32_t wg_m;
              uint32_t wg_n;
              if (ctx->supports_subgroup_matrix) {
@@ -60,7 +61,7 @@ index 9e8cbc4..1e191c7 100644
                  // The total number of subgroups/workgroups needed per matrix.
                  uint32_t wg_m_sg_tile =
                      WEBGPU_MUL_MAT_SUBGROUP_M * WEBGPU_MUL_MAT_SUBGROUP_MATRIX_M * ctx->subgroup_matrix_config.M;
-@@ -994,6 +1008,7 @@ static webgpu_command ggml_webgpu_mul_mat(webgpu_context & ctx,
+@@ -994,6 +1008,7 @@
                  uint32_t wg_n_sg_tile =
                      WEBGPU_MUL_MAT_SUBGROUP_N * WEBGPU_MUL_MAT_SUBGROUP_MATRIX_N * ctx->subgroup_matrix_config.N;
                  wg_n = (dst->ne[1] + wg_n_sg_tile - 1) / wg_n_sg_tile;
@@ -68,7 +69,7 @@ index 9e8cbc4..1e191c7 100644
              } else {
                  uint32_t tile_m_s = WEBGPU_MUL_MAT_TILE_M * WEBGPU_MUL_MAT_WG_SIZE_M;
                  uint32_t tile_n_s = WEBGPU_MUL_MAT_TILE_N * WEBGPU_MUL_MAT_WG_SIZE_N;
-@@ -1419,8 +1434,8 @@ static ggml_status ggml_backend_webgpu_graph_compute(ggml_backend_t backend, str
+@@ -1419,8 +1434,8 @@
              commands.push_back(*cmd);
          }
          // compute the batch size based on the number of inflight threads
@@ -79,7 +80,7 @@ index 9e8cbc4..1e191c7 100644
                                           WEBGPU_COMMAND_SUBMIT_BATCH_SIZE);
          if (commands.size() >= batch_size) {
              futures.push_back(ggml_backend_webgpu_submit(ctx, commands));
-@@ -1529,6 +1544,14 @@ static void ggml_backend_webgpu_buffer_set_tensor(ggml_backend_buffer_t buffer,
+@@ -1529,6 +1544,14 @@
      } else {
          // wait for WriteBuffer to complete
          webgpu_ctx->instance.WaitAny(
@@ -94,7 +95,7 @@ index 9e8cbc4..1e191c7 100644
              webgpu_ctx->queue.OnSubmittedWorkDone(wgpu::CallbackMode::AllowSpontaneous,
                                                    [](wgpu::QueueWorkDoneStatus status, wgpu::StringView message) {
                                                        if (status != wgpu::QueueWorkDoneStatus::Success) {
-@@ -1536,6 +1559,7 @@ static void ggml_backend_webgpu_buffer_set_tensor(ggml_backend_buffer_t buffer,
+@@ -1536,6 +1559,7 @@
                                                                           std::string(message).c_str());
                                                        }
                                                    }),
@@ -102,7 +103,7 @@ index 9e8cbc4..1e191c7 100644
              UINT64_MAX);
      }
      WEBGPU_CPU_PROFILE_TOTAL_END(set_tensor, webgpu_ctx);
-@@ -1766,9 +1790,11 @@ static void ggml_webgpu_init_mul_mat_pipeline(webgpu_context & webgpu_ctx) {
+@@ -1766,9 +1790,11 @@
          sg_matrix_repls["WEBGPU_SUBGROUP_N"]        = std::to_string(WEBGPU_MUL_MAT_SUBGROUP_N);
          sg_matrix_repls["WEBGPU_SUBGROUP_MATRIX_M"] = std::to_string(WEBGPU_MUL_MAT_SUBGROUP_MATRIX_M);
          sg_matrix_repls["WEBGPU_SUBGROUP_MATRIX_N"] = std::to_string(WEBGPU_MUL_MAT_SUBGROUP_MATRIX_N);
@@ -114,7 +115,7 @@ index 9e8cbc4..1e191c7 100644
  
          std::string proc_mul_mat_subgroup_matrix_f32_f32 =
              ggml_webgpu_process_shader_repls(wgsl_mul_mat_subgroup_matrix_f32_f32, sg_matrix_repls);
-@@ -2385,12 +2411,14 @@ static ggml_backend_dev_t ggml_backend_webgpu_reg_get_device(ggml_backend_reg_t
+@@ -2385,12 +2411,14 @@
      webgpu_context ctx = reg_ctx->webgpu_ctx;
  
      // TODO: track need for these toggles: https://issues.chromium.org/issues/42251215
@@ -130,7 +131,7 @@ index 9e8cbc4..1e191c7 100644
      ctx->instance.WaitAny(ctx->instance.RequestAdapter(
                                &options, wgpu::CallbackMode::AllowSpontaneous,
                                [&ctx](wgpu::RequestAdapterStatus status, wgpu::Adapter adapter, const char * message) {
-@@ -2406,11 +2434,7 @@ static ggml_backend_dev_t ggml_backend_webgpu_reg_get_device(ggml_backend_reg_t
+@@ -2406,11 +2434,7 @@
      ctx->adapter.GetLimits(&ctx->limits);
      ctx->max_wg_size_x = 288;  // default value
  
@@ -143,7 +144,7 @@ index 9e8cbc4..1e191c7 100644
      ctx->adapter.GetInfo(&info);
  
      wgpu::SupportedFeatures features;
-@@ -2420,7 +2444,11 @@ static ggml_backend_dev_t ggml_backend_webgpu_reg_get_device(ggml_backend_reg_t
+@@ -2420,7 +2444,11 @@
  
      // Only support square f16 matrices of size 8 or 16 for now
      bool valid_subgroup_matrix_config = false;
@@ -155,7 +156,7 @@ index 9e8cbc4..1e191c7 100644
          for (size_t i = 0; i < subgroup_matrix_configs.configCount; i++) {
              const wgpu::SubgroupMatrixConfig config = subgroup_matrix_configs.configs[i];
              if (config.M == config.N && config.N == config.K && (config.K == 8 || config.K == 16) &&
-@@ -2432,6 +2460,7 @@ static ggml_backend_dev_t ggml_backend_webgpu_reg_get_device(ggml_backend_reg_t
+@@ -2432,6 +2460,7 @@
              }
          }
      }
@@ -163,7 +164,7 @@ index 9e8cbc4..1e191c7 100644
  
      // For subgroup matrix code to be the most efficient, we would like the subgroup size to be consistent and accurate.
      // Unfortunately, that is not possible, so we use the maximum subgroup size reported by the adapter.
-@@ -2439,11 +2468,16 @@ static ggml_backend_dev_t ggml_backend_webgpu_reg_get_device(ggml_backend_reg_t
+@@ -2439,11 +2468,16 @@
      ctx->supports_subgroup_matrix = valid_subgroup_matrix_config;
  
      // Initialize device
@@ -182,7 +183,7 @@ index 9e8cbc4..1e191c7 100644
      }
  
  #ifdef GGML_WEBGPU_GPU_PROFILE
-@@ -2451,18 +2485,7 @@ static ggml_backend_dev_t ggml_backend_webgpu_reg_get_device(ggml_backend_reg_t
+@@ -2451,18 +2485,7 @@
  #endif
  
      // Enable Dawn-specific toggles to increase native performance
@@ -202,7 +203,7 @@ index 9e8cbc4..1e191c7 100644
      wgpu::DeviceDescriptor dev_desc;
      dev_desc.requiredLimits       = &ctx->limits;
      dev_desc.requiredFeatures     = required_features.data();
-@@ -2480,7 +2503,17 @@ static ggml_backend_dev_t ggml_backend_webgpu_reg_get_device(ggml_backend_reg_t
+@@ -2480,7 +2503,17 @@
              GGML_ABORT("ggml_webgpu: Device error! Reason: %d, Message: %s\n", static_cast<int>(reason),
                         std::string(message).c_str());
          });
@@ -220,7 +221,7 @@ index 9e8cbc4..1e191c7 100644
      ctx->instance.WaitAny(ctx->adapter.RequestDevice(
                                &dev_desc, wgpu::CallbackMode::AllowSpontaneous,
                                [ctx](wgpu::RequestDeviceStatus status, wgpu::Device device, wgpu::StringView message) {
-@@ -2578,16 +2611,20 @@ ggml_backend_reg_t ggml_backend_webgpu_reg() {
+@@ -2578,16 +2611,20 @@
      ctx.name         = GGML_WEBGPU_NAME;
      ctx.device_count = 1;
  
@@ -247,3 +248,23 @@ index 9e8cbc4..1e191c7 100644
  
      webgpu_ctx->instance = wgpu::CreateInstance(&instance_descriptor);
      GGML_ASSERT(webgpu_ctx->instance != nullptr);
+diff --git a/llama.cpp/ggml/src/ggml-webgpu/CMakeLists.txt b/llama.cpp/ggml/src/ggml-webgpu/CMakeLists.txt
+--- a/llama.cpp/ggml/src/ggml-webgpu/CMakeLists.txt
++++ b/llama.cpp/ggml/src/ggml-webgpu/CMakeLists.txt
+@@ -39,8 +39,14 @@
+ if(EMSCRIPTEN)
+     set(EMDAWNWEBGPU_DIR "" CACHE PATH "Path to emdawnwebgpu_pkg")
+ 
+-    target_compile_options(ggml-webgpu PRIVATE "--use-port=${EMDAWNWEBGPU_DIR}/emdawnwebgpu.port.py")
+-    target_link_options(ggml-webgpu PRIVATE "--use-port=${EMDAWNWEBGPU_DIR}/emdawnwebgpu.port.py")
++    if(EMDAWNWEBGPU_DIR STREQUAL "")
++        # Use built-in Emscripten port (emsdk 4.0.10+)
++        set(_EMDAWNWEBGPU_PORT_FLAG "--use-port=emdawnwebgpu")
++    else()
++        set(_EMDAWNWEBGPU_PORT_FLAG "--use-port=${EMDAWNWEBGPU_DIR}/emdawnwebgpu.port.py")
++    endif()
++    target_compile_options(ggml-webgpu PRIVATE "${_EMDAWNWEBGPU_PORT_FLAG}")
++    target_link_options(ggml-webgpu INTERFACE "${_EMDAWNWEBGPU_PORT_FLAG}")
+ else()
+     find_package(Dawn REQUIRED)
+     set(DawnWebGPU_TARGET dawn::webgpu_dawn)

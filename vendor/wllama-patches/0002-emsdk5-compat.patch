@@ -1,8 +1,19 @@
-diff --git a/ggml/src/ggml-backend.cpp b/ggml/src/ggml-backend.cpp
-index eeaf35c..ea9728c 100644
---- a/ggml/src/ggml-backend.cpp
-+++ b/ggml/src/ggml-backend.cpp
-@@ -1631,7 +1631,7 @@ ggml_backend_sched_t ggml_backend_sched_new(
+diff --git a/cpp/wllama.cpp b/cpp/wllama.cpp
+--- a/cpp/wllama.cpp
++++ b/cpp/wllama.cpp
+@@ -171,7 +171,7 @@
+ #ifdef __EMSCRIPTEN__
+     auto i = mallinfo();
+     unsigned int total_mem = get_mem_total();
+-    unsigned int dynamic_top = (unsigned int)sbrk(0);
++    uintptr_t dynamic_top = (uintptr_t)sbrk(0);
+     return total_mem - dynamic_top + i.fordblks;
+ #else
+     return 0;
+diff --git a/llama.cpp/ggml/src/ggml-backend.cpp b/llama.cpp/ggml/src/ggml-backend.cpp
+--- a/llama.cpp/ggml/src/ggml-backend.cpp
++++ b/llama.cpp/ggml/src/ggml-backend.cpp
+@@ -1631,7 +1631,7 @@
      sched->prev_leaf_backend_ids = (int *) calloc(nodes_size, sizeof(sched->prev_leaf_backend_ids[0]));
  
      sched->context_buffer_size = ggml_sched_max_splits*GGML_SCHED_MAX_SPLIT_INPUTS*2*sizeof(struct ggml_tensor) + ggml_graph_overhead_custom(graph_size, false);
@@ -11,7 +22,7 @@ index eeaf35c..ea9728c 100644
  
      const int initial_splits_capacity = 16;
      sched->splits = (ggml_backend_sched_split *) calloc(initial_splits_capacity, sizeof(sched->splits[0]));
-@@ -1676,7 +1676,7 @@ void ggml_backend_sched_free(ggml_backend_sched_t sched) {
+@@ -1676,7 +1676,7 @@
      free(sched->leaf_backend_ids);
      free(sched->prev_node_backend_ids);
      free(sched->prev_leaf_backend_ids);
