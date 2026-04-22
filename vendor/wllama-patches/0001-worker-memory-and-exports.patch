@@ -1,0 +1,382 @@
+diff --git a/src/workers-code/llama-cpp.js b/src/workers-code/llama-cpp.js
+--- a/src/workers-code/llama-cpp.js
++++ b/src/workers-code/llama-cpp.js
+@@ -7,6 +7,28 @@
+ 
+ let Module = null;
+ 
++// Memory64 WASM builds use i64 (BigInt) for pointer/size_t at the JS boundary.
++// These helpers centralise the Number↔BigInt conversion so the rest of the
++// worker code can stay type-agnostic.
++const _isMem64 = /mem64/.test(String(RUN_OPTIONS?.pathConfig?.['wllama.wasm'] || ''));
++const _toWasmAddr = _isMem64 ? (n) => BigInt(n) : (n) => n;
++const _fromWasmAddr = (p) => (typeof p === 'bigint') ? Number(p) : p;
++
++self.onunhandledrejection = (event) => {
++  const reason = event.reason;
++  const detail = reason instanceof Error
++    ? `${reason.name}: ${reason.message}\n${reason.stack || ''}`
++    : String(reason);
++  msg({ verb: 'console.error', args: [`wllama-inner-unhandledrejection: ${detail}`] });
++};
++
++self.onerror = (message, source, lineno, colno, error) => {
++  const detail = error instanceof Error
++    ? `${error.name}: ${error.message}\n${error.stack || ''}`
++    : String(message);
++  msg({ verb: 'console.error', args: [`wllama-inner-error: ${detail} at ${source || '(unknown)'}:${lineno || 0}:${colno || 0}`] });
++};
++
+ //////////////////////////////////////////////////////////////
+ // UTILS
+ //////////////////////////////////////////////////////////////
+@@ -76,27 +98,44 @@
+ };
+ 
+ // Get the memory to be used by wasm. (Only used in multi-thread mode)
+-// Because we have a weird OOM issue on iOS, we need to try some values
++// Returns null for Memory64 builds — the Emscripten Memory64 glue creates
++// the correct i64-indexed shared memory itself (address:"i64" + BigInt pages).
++// For compat (wasm32) builds, pre-allocate and cap at 32768 pages (2GiB) to fix
++// a LinkError: the compat glue defaults to maximum:65536 (4GiB) which exceeds
++// the wasm32 memory import limit.
++// Steps down on failure for iOS OOM.
+ // See: https://github.com/emscripten-core/emscripten/issues/19144
+ //      https://github.com/godotengine/godot/issues/70621
+ const getWasmMemory = () => {
+-  let minBytes = 128 * 1024 * 1024;
+-  let maxBytes = 4096 * 1024 * 1024;
+-  let stepBytes = 128 * 1024 * 1024;
+-  while (maxBytes > minBytes) {
++  const wasmPath = String((RUN_OPTIONS.pathConfig || {})['wllama.wasm'] || '');
++  const isCompat = /-compat(\.wasm|[?#]|$)/.test(wasmPath);
++
++  if (!isCompat) {
++    // Memory64 builds: return null so the Emscripten glue handles memory creation.
++    // Providing an external i32 memory here causes LinkError: cannot import i32 memory as i64.
++    return null;
++  }
++
++  // compat (wasm32) builds: provide i32 shared memory capped at 32768 pages (2GiB).
++  const PAGE_SIZE = 65536;
++  const minBytes = 128 * 1024 * 1024;
++  const maxStart = 2 * 1024 * 1024 * 1024;  // 2GiB = 32768 pages (wasm32 hard limit)
++  const stepBytes = 128 * 1024 * 1024;
++
++  let maxBytes = maxStart;
++  while (maxBytes >= minBytes) {
+     try {
+-      const wasmMemory = new WebAssembly.Memory({
+-        initial: minBytes / 65536,
+-        maximum: maxBytes / 65536,
++      return new WebAssembly.Memory({
++        initial: minBytes / PAGE_SIZE,
++        maximum: maxBytes / PAGE_SIZE,
+         shared: true,
+       });
+-      return wasmMemory;
+     } catch (e) {
+       maxBytes -= stepBytes;
+       continue; // retry
+     }
+   }
+-  throw new Error('Cannot allocate WebAssembly.Memory');
++  throw new Error('Cannot allocate WebAssembly.Memory for compat multi-thread build');
+ };
+ 
+ //////////////////////////////////////////////////////////////
+@@ -127,6 +166,23 @@
+ const fsIdToFile = {}; // map ID => File
+ let currFileId = 0;
+ 
++//////////////////////////////////////////////////////////////
++// OPFS DIRECT STATE
++//////////////////////////////////////////////////////////////
++
++/** map memfsName → { handle: FileSystemSyncAccessHandle, size: number } */
++const opfsHandles = {};
++let opfsReadCount = 0;
++let opfsBytesRead = 0;
++
++/** Close all OPFS SyncAccessHandles (safe to call multiple times). */
++const closeAllOpfsHandles = () => {
++  for (const name of Object.keys(opfsHandles)) {
++    try { opfsHandles[name].handle.close(); } catch {}
++    delete opfsHandles[name];
++  }
++};
++
+ // Patch and redirect memfs calls to wllama
+ const patchMEMFS = () => {
+   const m = Module;
+@@ -147,7 +203,7 @@
+     }
+   };
+ 
+-  // replace "read" functions
++  // replace "read" functions — OPFS direct handles take priority
+   m.MEMFS.stream_ops.read = function (
+     stream,
+     buffer,
+@@ -155,6 +211,17 @@
+     length,
+     position
+   ) {
++    const name = stream.node.name;
++    if (opfsHandles[name]) {
++      const { handle, size } = opfsHandles[name];
++      if (position >= size) return 0;
++      const readLen = Math.min(size - position, length);
++      const view = new Uint8Array(buffer.buffer, buffer.byteOffset + offset, readLen);
++      const bytesRead = handle.read(view, { at: position });
++      opfsReadCount++;
++      opfsBytesRead += bytesRead;
++      return bytesRead;
++    }
+     patchStream(stream);
+     return m.MEMFS.stream_ops._read(stream, buffer, offset, length, position);
+   };
+@@ -162,15 +229,20 @@
+ 
+   // replace "llseek" functions
+   m.MEMFS.stream_ops.llseek = function (stream, offset, whence) {
+-    patchStream(stream);
++    if (!opfsHandles[stream.node.name]) patchStream(stream);
+     return m.MEMFS.stream_ops._llseek(stream, offset, whence);
+   };
+   m.MEMFS.ops_table.file.stream.llseek = m.MEMFS.stream_ops.llseek;
+ 
+   // replace "mmap" functions
+   m.MEMFS.stream_ops.mmap = function (stream, length, position, prot, flags) {
+-    patchStream(stream);
+     const name = stream.node.name;
++    if (opfsHandles[name]) {
++      // use_mmap: false should prevent llama.cpp from calling mmap on OPFS files.
++      msg({ verb: 'console.error', args: ['[opfs-direct] OPFS file hit mmap — use_mmap:false not propagated?', name] });
++      throw new Error('mmap not supported for OPFS-direct files (use use_mmap: false)');
++    }
++    patchStream(stream);
+     if (fsNameToFile[name]) {
+       const f = fsNameToFile[name];
+       return {
+@@ -194,7 +266,18 @@
+     throw new Error('File size must be bigger than 0');
+   }
+   const m = Module;
+-  const ptr = m.mmapAlloc(size);
++  // mmapAlloc(size) → _emscripten_builtin_memalign(65536, size).  For mem64
++  // both the alignment and size arguments are i64; alignMemory() inside
++  // mmapAlloc is pure JS math so it accepts Number, but the downstream WASM
++  // call needs BigInt.  We bypass the JS wrapper and call the WASM directly.
++  let ptr;
++  if (_isMem64) {
++    const aligned = Math.ceil(size / 65536) * 65536;
++    ptr = _fromWasmAddr(m._emscripten_builtin_memalign(_toWasmAddr(65536), _toWasmAddr(aligned)));
++    if (ptr) m.HEAPU8.fill(0, ptr, ptr + aligned);
++  } else {
++    ptr = m.mmapAlloc(size);
++  }
+   const file = {
+     ptr: ptr,
+     size: size,
+@@ -227,21 +310,30 @@
+ // MAIN CODE
+ //////////////////////////////////////////////////////////////
+ 
+-const callWrapper = (name, ret, args) => {
+-  const fn = Module.cwrap(name, ret, args);
+-  return async (action, req) => {
+-    let result;
+-    try {
+-      if (args.length === 2) {
+-        result = await fn(action, req);
+-      } else {
+-        result = fn();
+-      }
+-    } catch (ex) {
+-      console.error(ex);
+-      throw ex;
+-    }
+-    return result;
++const unwrapPtr = async (value) => {
++  const resolved = await value;
++  if (typeof resolved === 'bigint') {
++    return Number(resolved);
++  }
++  return resolved;
++};
++
++const ptrToString = async (value) => {
++  const ptr = await unwrapPtr(value);
++  return ptr ? Module.UTF8ToString(ptr) : null;
++};
++
++const actionToHeap = (action) => {
++  const stack = Module.stackSave();
++  const bytes = new TextEncoder().encode(action);
++  // stackAlloc takes i64 size in mem64 and returns an i64 address; convert
++  // to Number before using as a HEAPU8 byte index.
++  const actionPtr = _fromWasmAddr(Module.stackAlloc(_toWasmAddr(bytes.byteLength + 1)));
++  Module.HEAPU8.set(bytes, actionPtr);
++  Module.HEAPU8[actionPtr + bytes.byteLength] = 0;
++  return {
++    actionPtr,
++    restore: () => Module.stackRestore(stack),
+   };
+ };
+ 
+@@ -257,34 +349,126 @@
+   if (verb === 'module.init') {
+     const argMainScriptBlob = args[0];
+     try {
++      msg({ verb: 'console.debug', args: ['wllama-file-stage:inner-module-init-received'] });
+       Module = getWModuleConfig(argMainScriptBlob);
+-      Module.onRuntimeInitialized = () => {
+-        // async call once module is ready
++      msg({ verb: 'console.debug', args: ['wllama-file-stage:inner-module-config-ready'] });
++      Module.onRuntimeInitialized = async () => {
++        msg({ verb: 'console.debug', args: ['wllama-file-stage:inner-runtime-initialized'] });
+         // init FS
+         patchMEMFS();
+-        // init cwrap
+-        const pointer = 'number';
+-        // TODO: note sure why emscripten cannot bind if there is only 1 argument
+-        wllamaMalloc = callWrapper('wllama_malloc', pointer, [
+-          'number',
+-          pointer,
+-        ]);
+-        wllamaStart = callWrapper('wllama_start', 'string', []);
+-        wllamaAction = callWrapper('wllama_action', pointer, [
+-          'string',
+-          pointer,
+-        ]);
+-        wllamaExit = callWrapper('wllama_exit', 'string', []);
+-        wllamaDebug = callWrapper('wllama_debug', 'string', []);
++        msg({ verb: 'console.debug', args: ['wllama-file-stage:inner-memfs-patched'] });
++        // init cwrap — direct Module._wllama_* calls (CPU builds; JSPI adapter in PR2)
++        // _wllama_malloc / _wllama_action take pointer/size_t arguments.
++        // In mem64 builds those are i64 (BigInt) at the JS↔WASM boundary.
++        //
++        // Asyncify builds: Module._wllama_* are synchronous wrappers that trigger
++        // the Asyncify unwind/rewind cycle internally. After calling the export, the
++        // actual return value is obtained via Module['Asyncify'].whenDone() which
++        // resolves when the WASM function truly completes (after all async imports
++        // like emwgpuWaitAny have been awaited and the stack has been rewound).
++        const _isAsyncify = typeof Module['Asyncify'] !== 'undefined'
++          && typeof Module['Asyncify'].whenDone === 'function';
++        // Asyncify: after calling a WASM export, check currData to determine if the
++        // function suspended for an async operation. If currData is non-null, the WASM
++        // is waiting on an async import (e.g. emwgpuWaitAny); use whenDone() to await
++        // the result. If currData is null, the function completed synchronously; return
++        // the synchronous return value directly.
++        const _callWasm = _isAsyncify
++          ? async (fn, ...args) => {
++              const syncResult = fn(...args);
++              if (Module['Asyncify'].currData !== null) {
++                return Module['Asyncify'].whenDone();
++              }
++              return syncResult;
++            }
++          : async (fn, ...args) => fn(...args);
++        wllamaMalloc = async (size, dummy) =>
++          _fromWasmAddr(await _callWasm(Module._wllama_malloc, _toWasmAddr(size), dummy));
++        wllamaStart = async () => await ptrToString(await _callWasm(Module._wllama_start));
++        wllamaAction = async (action, reqPtr) => {
++          const { actionPtr, restore } = actionToHeap(action);
++          try {
++            return _fromWasmAddr(
++              await _callWasm(Module._wllama_action, _toWasmAddr(actionPtr), _toWasmAddr(reqPtr))
++            );
++          } finally {
++            restore();
++          }
++        };
++        wllamaExit = async () => await ptrToString(await _callWasm(Module._wllama_exit));
++        wllamaDebug = async () => await ptrToString(await _callWasm(Module._wllama_debug));
++        msg({ verb: 'console.debug', args: ['wllama-file-stage:inner-cwrap-ready'] });
++        // Pre-warm pthread Workers so they finish loading their WASM module before the
++        // first ggml_barrier call during decode. Without this, lazily-spawned Workers
++        // may still be loading when the main thread reaches the barrier → deadlock.
++        if (typeof Module['__pthreadPrewarm'] === 'function') {
++          msg({ verb: 'console.debug', args: ['wllama-file-stage:inner-pthread-prewarm-start'] });
++          await Module['__pthreadPrewarm']();
++          msg({ verb: 'console.debug', args: ['wllama-file-stage:inner-pthread-prewarm-done'] });
++        }
+         msg({ callbackId, result: null });
+       };
++      msg({ verb: 'console.debug', args: ['wllama-file-stage:inner-wmodule-init-begin'] });
+       wModuleInit();
++      msg({ verb: 'console.debug', args: ['wllama-file-stage:inner-wmodule-init-returned'] });
+     } catch (err) {
+       msg({ callbackId, err });
+     }
+     return;
+   }
+ 
++  if (verb === 'fs.opfs-setup') {
++    // Set up OPFS SyncAccessHandles for OPFS-direct model loading.
++    // shards: Array<{ memfsName: string; opfsFilename: string }>
++    const modelId = args[0];
++    const shards = args[1];
++    try {
++      const root = await navigator.storage.getDirectory();
++      const modelsDir = await root.getDirectoryHandle('models');
++      const modelDir = await modelsDir.getDirectoryHandle(modelId);
++      for (const shard of shards) {
++        const fh = await modelDir.getFileHandle(shard.opfsFilename);
++        const handle = await fh.createSyncAccessHandle();
++        const size = handle.getSize();
++        Module['FS_createDataFile'](
++          '/models',
++          shard.memfsName,
++          new ArrayBuffer(0),
++          true,
++          true,
++          true
++        );
++        const node = Module.FS.lookupPath('/models/' + shard.memfsName).node;
++        node.usedBytes = size;
++        opfsHandles[shard.memfsName] = { handle, size };
++      }
++      msg({ callbackId, result: { ok: true, shardCount: shards.length } });
++    } catch (err) {
++      closeAllOpfsHandles();
++      msg({ callbackId, err });
++    }
++    return;
++  }
++
++  if (verb === 'fs.opfs-cleanup') {
++    try {
++      closeAllOpfsHandles();
++      msg({ callbackId, result: { ok: true } });
++    } catch (err) {
++      msg({ callbackId, err });
++    }
++    return;
++  }
++
++  if (verb === 'fs.opfs-stats') {
++    try {
++      msg({ callbackId, result: { opfsReadCount, opfsBytesRead } });
++    } catch (err) {
++      msg({ callbackId, err });
++    }
++    return;
++  }
++
+   if (verb === 'fs.alloc') {
+     const argFilename = args[0];
+     const argSize = args[1];
+@@ -346,6 +530,11 @@
+       const outputPtr = await wllamaAction(argAction, inputPtr);
+       // length of output buffer is written at the first 4 bytes of input buffer
+       const outputLen = new Uint32Array(Module.HEAPU8.buffer, inputPtr, 1)[0];
++      if (!outputPtr) {
++        throw new Error(
++          `wllama_action returned null for action="${argAction}" (outputLen=${outputLen})`
++        );
++      }
+       // copy the output buffer to JS heap
+       const outputBuffer = new Uint8Array(outputLen);
+       const outputSrcView = new Uint8Array(

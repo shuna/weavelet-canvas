@@ -1,0 +1,219 @@
+diff --git a/src/wllama.ts b/src/wllama.ts
+--- a/src/wllama.ts
++++ b/src/wllama.ts
+@@ -87,11 +87,14 @@
+ }
+ 
+ export interface LoadModelConfig {
++  use_mmap?: boolean;
++  use_mlock?: boolean;
+   seed?: number;
+   n_ctx?: number;
+   n_batch?: number;
+   // by default, on multi-thread build, we take half number of available threads (hardwareConcurrency / 2)
+   n_threads?: number;
++  n_gpu_layers?: number;
+   embeddings?: boolean;
+   offload_kqv?: boolean;
+   pooling_type?:
+@@ -631,6 +634,142 @@
+       flash_attn: config.flash_attn,
+       swa_full: true, // TODO: properly support SWA
+     });
++    this.applyLoadedContext(loadResult, config);
++  }
++
++  /**
++   * Initialize the runtime without loading a model. Used by preflight checks that
++   * validate wasm/glue exports without exercising the Blob[] loading path.
++   */
++  async preflightInit(
++    config: Pick<LoadModelConfig, 'n_threads'> = {}
++  ): Promise<void> {
++    if (this.proxy) {
++      throw new WllamaError('Module is already initialized', 'load_error');
++    }
++    await this.initializeProxy(config, []);
++    const proxy = this.proxy as unknown as ProxyToWorker;
++    const startResult: any = await proxy.wllamaStart();
++    if (!startResult.success) {
++      throw new WllamaError(
++        `Error while calling start function, result = ${startResult}`
++      );
++    }
++  }
++
++  /**
++   * Load a model whose shards already exist in OPFS under:
++   *   /models/{modelId}/{shardPath}
++   *
++   * The inner worker opens SyncAccessHandles directly and avoids copying the
++   * GGUF bytes into JS Blob/File memory.
++   */
++  async loadModelFromOpfs(
++    modelId: string,
++    shardPaths: string[],
++    config: LoadModelConfig = {}
++  ): Promise<void> {
++    if (shardPaths.length === 0) {
++      throw new WllamaError('OPFS model must contain at least one shard', 'load_error');
++    }
++    const sortedShardFiles = shardPaths.map((name) => new File([], name));
++    sortFileByShard(sortedShardFiles);
++    if (this.proxy) {
++      throw new WllamaError('Module is already initialized', 'load_error');
++    }
++
++    await this.initializeProxy(config, []);
++    const proxy = this.proxy as unknown as ProxyToWorker;
++
++    const modelFiles = sortedShardFiles.map(({ name: opfsFilename }, i) => ({
++      memfsName: `model-${i}.gguf`,
++      opfsFilename,
++    }));
++    await proxy.opfsSetup(modelId, modelFiles);
++
++    const startResult: any = await proxy.wllamaStart();
++    if (!startResult.success) {
++      throw new WllamaError(
++        `Error while calling start function, result = ${startResult}`
++      );
++    }
++
++    const loadResult: GlueMsgLoadRes = await proxy.wllamaAction('load', {
++      _name: 'load_req',
++      use_mmap: config.use_mmap ?? false,
++      use_mlock: config.use_mlock ?? false,
++      n_gpu_layers: config.n_gpu_layers ?? 0,
++      seed: config.seed || Math.floor(Math.random() * 100000),
++      n_ctx: config.n_ctx || 1024,
++      n_threads: this.useMultiThread ? this.nbThreads : 1,
++      n_ctx_auto: false,
++      model_paths: modelFiles.map((f) => `models/${f.memfsName}`),
++      embeddings: config.embeddings,
++      offload_kqv: config.offload_kqv,
++      n_batch: config.n_batch,
++      pooling_type: config.pooling_type as string,
++      rope_scaling_type: config.rope_scaling_type as string,
++      rope_freq_base: config.rope_freq_base,
++      rope_freq_scale: config.rope_freq_scale,
++      yarn_ext_factor: config.yarn_ext_factor,
++      yarn_attn_factor: config.yarn_attn_factor,
++      yarn_beta_fast: config.yarn_beta_fast,
++      yarn_beta_slow: config.yarn_beta_slow,
++      yarn_orig_ctx: config.yarn_orig_ctx,
++      cache_type_k: config.cache_type_k as string,
++      cache_type_v: config.cache_type_v as string,
++      n_seq_max: 1,
++      flash_attn: config.flash_attn,
++      swa_full: true,
++    });
++    this.applyLoadedContext(loadResult, config);
++  }
++
++  private async initializeProxy(
++    config: Pick<LoadModelConfig, 'n_threads'>,
++    modelFiles: { name: string; blob: Blob }[]
++  ): Promise<void> {
++    const supportMultiThread = await isSupportMultiThread();
++    if (!supportMultiThread) {
++      this.logger().warn(
++        'Multi-threads are not supported in this environment, falling back to single-thread'
++      );
++    }
++    const hasPathMultiThread = !!this.pathConfig['multi-thread/wllama.wasm'];
++    if (!hasPathMultiThread) {
++      this.logger().warn(
++        'Missing paths to "multi-thread/wllama.wasm", falling back to single-thread'
++      );
++    }
++    const hwConccurency = Math.floor((navigator.hardwareConcurrency || 1) / 2);
++    const nbThreads = config.n_threads ?? hwConccurency;
++    this.nbThreads = nbThreads;
++    this.useMultiThread =
++      supportMultiThread && hasPathMultiThread && nbThreads > 1;
++    const mPathConfig = this.useMultiThread
++      ? {
++          'wllama.wasm': absoluteUrl(
++            this.pathConfig['multi-thread/wllama.wasm']!!
++          ),
++        }
++      : {
++          'wllama.wasm': absoluteUrl(
++            this.pathConfig['single-thread/wllama.wasm']
++          ),
++        };
++    this.proxy = new ProxyToWorker(
++      mPathConfig,
++      this.useMultiThread ? nbThreads : 1,
++      this.config.suppressNativeLog ?? false,
++      this.logger()
++    );
++    await this.proxy.moduleInit(modelFiles);
++  }
++
++  private applyLoadedContext(
++    loadResult: GlueMsgLoadRes,
++    config: LoadModelConfig
++  ): void {
+     const loadedCtxInfo: LoadedContextInfo = {
+       ...loadResult,
+       metadata: {},
+diff --git a/src/worker.ts b/src/worker.ts
+--- a/src/worker.ts
++++ b/src/worker.ts
+@@ -32,6 +32,9 @@
+     | 'module.init'
+     | 'fs.alloc'
+     | 'fs.write'
++    | 'fs.opfs-setup'
++    | 'fs.opfs-cleanup'
++    | 'fs.opfs-stats'
+     | 'wllama.start'
+     | 'wllama.action'
+     | 'wllama.exit'
+@@ -72,7 +75,7 @@
+     this.suppressNativeLog = suppressNativeLog;
+   }
+ 
+-  async moduleInit(ggufFiles: { name: string; blob: Blob }[]): Promise<void> {
++  async moduleInit(ggufFiles: { name: string; blob: Blob }[] = []): Promise<void> {
+     if (!this.pathConfig['wllama.wasm']) {
+       throw new Error('"single-thread/wllama.wasm" is missing from pathConfig');
+     }
+@@ -114,8 +117,35 @@
+     );
+ 
+     return res;
++  }
++
++  async opfsSetup(
++    modelId: string,
++    shards: { memfsName: string; opfsFilename: string }[]
++  ): Promise<{ ok: true; shardCount: number }> {
++    return await this.pushTask({
++      verb: 'fs.opfs-setup',
++      args: [modelId, shards],
++      callbackId: this.taskId++,
++    });
++  }
++
++  async opfsCleanup(): Promise<{ ok: true }> {
++    return await this.pushTask({
++      verb: 'fs.opfs-cleanup',
++      args: [],
++      callbackId: this.taskId++,
++    });
+   }
+ 
++  async opfsStats(): Promise<{ opfsReadCount: number; opfsBytesRead: number }> {
++    return await this.pushTask({
++      verb: 'fs.opfs-stats',
++      args: [],
++      callbackId: this.taskId++,
++    });
++  }
++
+   async wllamaStart(): Promise<number> {
+     const result = await this.pushTask({
+       verb: 'wllama.start',
