@@ -30,13 +30,15 @@ const AssistantPrefillSeed = ({ nodeId }: Props) => {
       <button
         type='button'
         onClick={() => setOpen((v) => !v)}
-        className='flex items-center gap-1.5 text-xs text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300 transition-colors py-0.5 select-none'
+        className='group flex items-center gap-1.5 text-xs text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300 transition-colors py-0.5 select-none'
         aria-expanded={open}
       >
         <DownChevronArrow
           className={`w-3 h-3 transition-transform duration-150 ${open ? '' : '-rotate-90'}`}
         />
-        <span>{t('assistantPrefill.label')}</span>
+        <span className={open ? '' : 'hidden group-hover:inline'}>
+          {t('assistantPrefill.label')}
+        </span>
         {hasContent && !open && (
           <span className='ml-1 px-1.5 py-0.5 text-[10px] font-medium bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300 rounded-full leading-none'>
             {t('assistantPrefill.badge')}
