@@ -226,9 +226,10 @@ const EditViewButtons = memo(
             {sticky && (
               <button
                 className={`btn btn-small btn-neutral ${
-                  isCurrentChatGenerating ? 'cursor-not-allowed opacity-40' : ''
+                  isCurrentChatGenerating || !canSubmitDraft ? 'cursor-not-allowed opacity-40' : ''
                 }`}
                 onClick={handleSave}
+                disabled={isCurrentChatGenerating || !canSubmitDraft}
                 aria-label={t('save') as string}
               >
                 {t('save')}
