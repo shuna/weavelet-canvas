@@ -189,19 +189,30 @@ describe('prepareStreamRequest reasoning payloads', () => {
     expect(body).not.toHaveProperty('reasoning');
   });
 
-  it('omits reasoning config when effort is none', () => {
+  it.each([
+    'anthropic/claude-opus-4.7',
+    'anthropic/claude-opus-4.8',
+    'anthropic/claude-fable-5',
+    'anthropic/claude-opus-5.5',
+  ])('explicitly disables reasoning for default-on OpenRouter model %s', (model) => {
     const { body } = prepareStreamRequest(
       'https://openrouter.ai/api/v1/chat/completions',
       messages,
       {
         ...baseConfig,
-        model: 'anthropic/claude-opus-4.6',
+        model,
         providerId: 'openrouter',
         reasoning_effort: 'none',
+        reasoning_budget_tokens: 4096,
       }
     );
 
-    expect(body).not.toHaveProperty('reasoning');
+    expect(body).toMatchObject({
+      reasoning: {
+        enabled: false,
+      },
+    });
+    expect((body as { reasoning: object }).reasoning).not.toHaveProperty('max_tokens');
   });
 
   it('includes verbosity for OpenRouter requests', () => {

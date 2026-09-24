@@ -29,6 +29,7 @@ const ChatHistoryList = ({
   onHistorySelect?: (query: string) => void;
 }) => {
   const currentChatIndex = useStore((state) => state.currentChatIndex);
+  const hideSideMenu = useStore((state) => state.hideSideMenu);
   const displayChatSize = useStore((state) => state.displayChatSize);
   const setChats = useStore((state) => state.setChats);
   const setFolders = useStore((state) => state.setFolders);
@@ -62,6 +63,7 @@ const ChatHistoryList = ({
   const chatsRef = useRef<ChatInterface[]>(useStore.getState().chats || []);
   const foldersRef = useRef<FolderCollection>(useStore.getState().folders);
   const filterRef = useRef<string>(filter);
+  const listRef = useRef<HTMLDivElement>(null);
 
   const updateFolders = useRef(() => {
     const _folders: ChatHistoryFolderInterface = {};
@@ -221,6 +223,25 @@ const ChatHistoryList = ({
     updateFolders();
   }, [filter]);
 
+  useEffect(() => {
+    if (hideSideMenu) return;
+
+    const frame = requestAnimationFrame(() => {
+      const list = listRef.current;
+      const activeChat = list?.querySelector<HTMLElement>('[aria-current="page"]');
+      if (!list || !activeChat) return;
+
+      const listRect = list.getBoundingClientRect();
+      const chatRect = activeChat.getBoundingClientRect();
+      list.scrollTo({
+        top: list.scrollTop + chatRect.top - listRect.top - (list.clientHeight - chatRect.height) / 2,
+        behavior: 'smooth',
+      });
+    });
+
+    return () => cancelAnimationFrame(frame);
+  }, [hideSideMenu]);
+
   const handleDrop = (e: React.DragEvent<HTMLDivElement>) => {
     if (e.dataTransfer) {
       e.stopPropagation();
@@ -253,6 +274,7 @@ const ChatHistoryList = ({
 
   return (
     <div
+      ref={listRef}
       className={`flex flex-1 flex-col overflow-y-auto overscroll-contain border-b border-gray-200 dark:border-white/20 ${
         isHover ? 'bg-gray-200/70 dark:bg-gray-800/40' : ''
       }`}

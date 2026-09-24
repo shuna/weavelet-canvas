@@ -21,11 +21,11 @@ const ChatHistoryClass = {
   normal:
     'group relative flex items-center gap-3 break-all rounded-md bg-transparent px-2 py-2 text-gray-700 transition-opacity hover:bg-gray-50 hover:pr-4 dark:bg-transparent dark:text-gray-100 dark:hover:bg-gray-850',
   active:
-    'group relative flex items-center gap-3 break-all rounded-md bg-gray-200 px-2 py-2 pr-14 text-gray-800 transition-opacity hover:bg-gray-200 dark:bg-gray-800 dark:text-gray-100 dark:hover:bg-gray-800',
+    'group relative flex items-center gap-3 break-all rounded-md bg-gray-300 px-2 py-2 pr-14 text-gray-900 transition-opacity hover:bg-gray-300 dark:bg-gray-700 dark:text-white dark:hover:bg-gray-700',
   normalGradient:
     'absolute inset-y-0 right-0 z-10 w-8 bg-gradient-to-l from-transparent group-hover:from-gray-50 dark:from-transparent dark:group-hover:from-gray-850',
   activeGradient:
-    'absolute inset-y-0 right-0 z-10 w-8 bg-gradient-to-l from-gray-200 dark:from-gray-800',
+    'absolute inset-y-0 right-0 z-10 w-8 bg-gradient-to-l from-gray-300 dark:from-gray-700',
 };
 
 const ChatHistory = React.memo(
@@ -204,6 +204,7 @@ const ChatHistory = React.memo(
         className={`${
           active ? ChatHistoryClass.active : ChatHistoryClass.normal
         } cursor-pointer opacity-100 ${selectedChats.includes(chatIndex) ? 'bg-blue-500' : ''}`}
+        aria-current={active ? 'page' : undefined}
         onClick={() => {
           if (!active) {
             const state = useStore.getState();

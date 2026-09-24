@@ -67,21 +67,18 @@ const buildRequestBody = (
       // OpenRouter unified reasoning object
       const reasoning: Record<string, unknown> = {};
       const isEffortClaude = isOpenRouterClaudeEffortModel(config.model, providerId);
-      if (reasoning_budget_tokens && reasoning_budget_tokens > 0 && !isEffortClaude) {
+      if (reasoning_effort === 'none') {
+        reasoning.enabled = false;
+      } else if (reasoning_budget_tokens && reasoning_budget_tokens > 0 && !isEffortClaude) {
         // Explicit budget takes precedence — except on Claude 4.7+/Fable,
         // where budget_tokens is removed and effort is the supported control
         reasoning.max_tokens = reasoning_budget_tokens;
       } else if (reasoning_effort) {
         if (isEffortClaude) {
-          if (reasoning_effort !== 'none') {
-            // "minimal" doesn't exist on Anthropic's effort scale — clamp to low
-            reasoning.effort =
-              reasoning_effort === 'minimal' ? 'low' : reasoning_effort;
-          }
-        } else if (
-          isOpenRouterAdaptiveReasoningModel(config.model, providerId) &&
-          reasoning_effort !== 'none'
-        ) {
+          // "minimal" doesn't exist on Anthropic's effort scale — clamp to low
+          reasoning.effort =
+            reasoning_effort === 'minimal' ? 'low' : reasoning_effort;
+        } else if (isOpenRouterAdaptiveReasoningModel(config.model, providerId)) {
           reasoning.enabled = true;
         } else if (needsMaxTokensOnly(config.model)) {
           // Claude etc. only support max_tokens, not effort — convert
