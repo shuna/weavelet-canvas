@@ -1,4 +1,25 @@
+import type { ReasoningEffort, Verbosity } from '@type/chat';
 import type { ProviderId } from '@type/provider';
+
+export const getEffectiveReasoningEffort = (
+  effort: ReasoningEffort | undefined,
+  providerId: ProviderId | undefined,
+  reasoningRequired: boolean
+): ReasoningEffort | undefined => {
+  if (!effort) return effort;
+  if (providerId === 'openrouter') {
+    return reasoningRequired && effort === 'none' ? 'low' : effort;
+  }
+  return effort === 'low' || effort === 'medium' || effort === 'high'
+    ? effort
+    : 'medium';
+};
+
+export const getEffectiveVerbosity = (
+  verbosity: Verbosity | undefined,
+  allowMax: boolean
+): Verbosity | undefined =>
+  verbosity === 'max' && !allowMax ? 'medium' : verbosity;
 
 const normalizeModelId = (modelId: string): string => modelId.toLowerCase();
 

@@ -23,6 +23,8 @@ import { OpfsFileProvider } from '@src/local-llm/storage';
 import { ProviderId } from '@type/provider';
 import { ProviderIcon, LocalChipIcon } from '@icon/ProviderIcons';
 import {
+  getEffectiveReasoningEffort,
+  getEffectiveVerbosity,
   isOpenRouterAdaptiveReasoningModel,
   isOpenRouterClaudeVerbosityModel,
   isOpenRouterFusionModel,
@@ -204,9 +206,17 @@ const ConfigMenu = ({
   const reasoningRequired = useModelRequiresReasoning(_model, _providerId);
   const capabilities = useModelCapabilities(_model, _providerId);
   const verbositySupported = isOpenRouterClaudeVerbosityModel(_model, _providerId);
+  const maxVerbositySupported = supportsMaxVerbosity(_model, _providerId);
   const isFusion = isOpenRouterFusionModel(_model, _providerId);
-  const latestDraftRef = useRef<ConfigInterface>(config);
-  const latestImageDetailRef = useRef<ImageDetail>(imageDetail);
+  const effectiveReasoningEffort = getEffectiveReasoningEffort(
+    _reasoningEffort,
+    _providerId,
+    reasoningRequired
+  );
+  const effectiveVerbosity = getEffectiveVerbosity(
+    _verbosity,
+    maxVerbositySupported
+  );
 
   useEffect(() => {
     if (!isStreamSupported && _stream) {
@@ -216,7 +226,7 @@ const ConfigMenu = ({
 
   useEffect(() => {
     const modelContextLength = getModelConfigContextInfo(_model, _providerId, _modelSource).contextLength;
-    latestDraftRef.current = normalizeConfigStream({
+    setConfig(normalizeConfigStream({
       max_tokens: clampCompletionTokens(_maxToken, modelContextLength),
       model: _model,
       temperature: _temperature,
@@ -226,19 +236,17 @@ const ConfigMenu = ({
       stream: _stream,
       providerId: _providerId,
       modelSource: _modelSource,
-      reasoning_effort: reasoningSupported ? _reasoningEffort : undefined,
+      reasoning_effort: reasoningSupported ? effectiveReasoningEffort : undefined,
       reasoning_budget_tokens: reasoningSupported && _reasoningBudget >= 1024 ? _reasoningBudget : undefined,
-      verbosity: verbositySupported ? _verbosity : undefined,
+      verbosity: verbositySupported ? effectiveVerbosity : undefined,
       force_reasoning: reasoningForced || undefined,
       systemPrompt: _systemPrompt || undefined,
-    });
-    latestImageDetailRef.current = _imageDetail;
-  }, [_maxToken, _model, _providerId, _modelSource, _temperature, _presencePenalty, _topP, _frequencyPenalty, _imageDetail, _stream, _reasoningEffort, _reasoningBudget, _verbosity, _systemPrompt, reasoningSupported, reasoningForced, verbositySupported]);
+    }));
+  }, [_maxToken, _model, _providerId, _modelSource, _temperature, _presencePenalty, _topP, _frequencyPenalty, _stream, _reasoningEffort, _reasoningBudget, _verbosity, _systemPrompt, reasoningSupported, reasoningForced, reasoningRequired, verbositySupported, maxVerbositySupported]);
 
-  const applyDraft = () => {
-    setConfig(latestDraftRef.current);
-    setImageDetail(latestImageDetailRef.current);
-  };
+  useEffect(() => {
+    if (_imageDetail !== imageDetail) setImageDetail(_imageDetail);
+  }, [_imageDetail]);
 
   return (
     <PopupModal
@@ -246,7 +254,6 @@ const ConfigMenu = ({
       setIsModalOpen={setIsModalOpen}
       cancelButton={false}
       maxWidth='max-w-4xl'
-      handleClose={applyDraft}
     >
       <div className='p-6 flex flex-col gap-5 w-[90vw] max-w-4xl'>
         <div>
@@ -824,11 +831,11 @@ export const ReasoningEffortSelector = ({
         { value: 'high', label: t('reasoningEffort.high') },
       ];
 
-  // Reset to medium if current value isn't available for this provider
-  const validValues = new Set(options.map((o) => o.value));
-  if (_reasoningEffort && !validValues.has(_reasoningEffort)) {
-    _setReasoningEffort(reasoningRequired ? 'low' : DEFAULT_REASONING_EFFORT);
-  }
+  const effectiveReasoningEffort = getEffectiveReasoningEffort(
+    _reasoningEffort,
+    _providerId,
+    reasoningRequired
+  );
 
   return (
     <div className='mt-3'>
@@ -845,7 +852,7 @@ export const ReasoningEffortSelector = ({
       </FieldLabelWithInfo>
       <SegmentedControl
         options={options}
-        value={_reasoningEffort}
+        value={effectiveReasoningEffort}
         onChange={(value) => _setReasoningEffort(value as ReasoningEffort)}
       />
     </div>
@@ -896,10 +903,7 @@ export const VerbositySelector = ({
     ...(allowMax ? [{ value: 'max' as const, label: t('verbosity.max') }] : []),
   ];
 
-  const validValues = new Set(options.map((option) => option.value));
-  if (_verbosity && !validValues.has(_verbosity)) {
-    _setVerbosity(DEFAULT_VERBOSITY);
-  }
+  const effectiveVerbosity = getEffectiveVerbosity(_verbosity, allowMax);
 
   return (
     <div className='mt-3'>
@@ -914,7 +918,7 @@ export const VerbositySelector = ({
       </FieldLabelWithInfo>
       <SegmentedControl
         options={options}
-        value={_verbosity}
+        value={effectiveVerbosity}
         onChange={(value) => _setVerbosity(value as Verbosity)}
       />
     </div>

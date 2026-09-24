@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  getEffectiveReasoningEffort,
+  getEffectiveVerbosity,
   isClaudeReasoningModel,
   isOpenRouterAdaptiveReasoningModel,
   isOpenRouterClaudeEffortModel,
@@ -8,6 +10,21 @@ import {
   isOpenRouterFusionModel,
   supportsMaxVerbosity,
 } from './reasoning';
+
+describe('effective model settings', () => {
+  it('temporarily clamps mandatory reasoning without losing none', () => {
+    const preferred = 'none' as const;
+
+    expect(getEffectiveReasoningEffort(preferred, 'openrouter', false)).toBe('none');
+    expect(getEffectiveReasoningEffort(preferred, 'openrouter', true)).toBe('low');
+    expect(getEffectiveReasoningEffort(preferred, 'openrouter', false)).toBe('none');
+  });
+
+  it('temporarily clamps unsupported max verbosity', () => {
+    expect(getEffectiveVerbosity('max', false)).toBe('medium');
+    expect(getEffectiveVerbosity('max', true)).toBe('max');
+  });
+});
 
 describe('reasoning model helpers', () => {
   it('detects Claude reasoning-capable model families', () => {
