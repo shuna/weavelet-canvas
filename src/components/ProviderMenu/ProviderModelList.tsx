@@ -252,6 +252,7 @@ export default function ProviderModelList({
                       modelType: model.modelType,
                       streamSupport: model.streamSupport,
                       supportsReasoning: model.supportsReasoning,
+                      reasoningMandatory: model.reasoningMandatory,
                       supportsVision: model.supportsVision,
                       supportsAudio: model.supportsAudio,
                     })

@@ -77,6 +77,7 @@ const enrichFavoriteModel = (
     modelType: favorite.modelType ?? providerModel.modelType,
     streamSupport: favorite.streamSupport ?? providerModel.streamSupport,
     supportsReasoning: favorite.supportsReasoning ?? providerModel.supportsReasoning,
+    reasoningMandatory: favorite.reasoningMandatory ?? providerModel.reasoningMandatory,
     supportsVision: favorite.supportsVision ?? providerModel.supportsVision,
     supportsAudio: favorite.supportsAudio ?? providerModel.supportsAudio,
   };

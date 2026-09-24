@@ -30,6 +30,7 @@ export interface ProviderModel {
   modelType?: 'text' | 'image';
   streamSupport?: boolean;
   supportsReasoning?: boolean;
+  reasoningMandatory?: boolean;
   supportsVision?: boolean;
   supportsAudio?: boolean;
 }
@@ -59,6 +60,7 @@ export interface FavoriteModel {
   modelType?: 'text' | 'image';
   streamSupport?: boolean;
   supportsReasoning?: boolean;
+  reasoningMandatory?: boolean;
   supportsVision?: boolean;
   supportsAudio?: boolean;
 }

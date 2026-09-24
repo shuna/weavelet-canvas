@@ -1,5 +1,6 @@
-import { describe, it, expect } from 'vitest';
-import { isReasoningModel } from './providerModels';
+import { describe, it, expect, vi } from 'vitest';
+import { fetchProviderModels, isReasoningModel } from './providerModels';
+import type { ProviderConfig } from '@type/provider';
 
 describe('isReasoningModel', () => {
   // Should match
@@ -52,4 +53,34 @@ describe('isReasoningModel', () => {
       expect(isReasoningModel(id)).toBe(false);
     });
   }
+});
+
+describe('fetchProviderModels', () => {
+  it('preserves OpenRouter mandatory reasoning metadata', async () => {
+    const response = {
+      data: [{
+        id: 'anthropic/claude-opus-5.5',
+        name: 'Claude Opus 5.5',
+        supported_parameters: ['reasoning'],
+        reasoning: { mandatory: true },
+      }],
+    };
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+      ok: true,
+      json: vi.fn().mockResolvedValue(response),
+    }));
+
+    const provider: ProviderConfig = {
+      id: 'openrouter',
+      name: 'OpenRouter',
+      endpoint: 'https://openrouter.ai/api/v1/chat/completions',
+      modelsEndpoint: 'https://openrouter.ai/api/v1/models',
+      modelsRequireAuth: false,
+    };
+
+    await expect(fetchProviderModels(provider)).resolves.toMatchObject([
+      { id: 'anthropic/claude-opus-5.5', reasoningMandatory: true },
+    ]);
+    vi.unstubAllGlobals();
+  });
 });

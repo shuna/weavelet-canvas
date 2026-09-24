@@ -6,10 +6,12 @@ vi.mock('@utils/api', () => ({
 
 vi.mock('@utils/modelLookup', () => ({
   getModelSupportsReasoning: vi.fn(() => false),
+  getModelRequiresReasoning: vi.fn(() => false),
 }));
 
 import { prepareStreamRequest } from './api';
 import { getModelSupportsReasoning } from '@utils/modelLookup';
+import { getModelRequiresReasoning } from '@utils/modelLookup';
 import type { ConfigInterface, MessageInterface } from '@type/chat';
 
 const baseConfig: ConfigInterface = {
@@ -29,6 +31,7 @@ const messages: MessageInterface[] = [
 describe('prepareStreamRequest reasoning payloads', () => {
   beforeEach(() => {
     vi.mocked(getModelSupportsReasoning).mockReturnValue(true);
+    vi.mocked(getModelRequiresReasoning).mockReturnValue(false);
   });
 
   it('uses adaptive reasoning for OpenRouter Claude 4.6 models when no explicit budget is set', () => {
@@ -190,10 +193,10 @@ describe('prepareStreamRequest reasoning payloads', () => {
   });
 
   it.each([
+    'anthropic/claude-opus-4.6',
     'anthropic/claude-opus-4.7',
     'anthropic/claude-opus-4.8',
-    'anthropic/claude-fable-5',
-    'anthropic/claude-opus-5.5',
+    'anthropic/claude-opus-5',
   ])('explicitly disables reasoning for default-on OpenRouter model %s', (model) => {
     const { body } = prepareStreamRequest(
       'https://openrouter.ai/api/v1/chat/completions',
@@ -213,6 +216,23 @@ describe('prepareStreamRequest reasoning payloads', () => {
       },
     });
     expect((body as { reasoning: object }).reasoning).not.toHaveProperty('max_tokens');
+  });
+
+  it('uses the lowest effort when OpenRouter marks reasoning as mandatory', () => {
+    vi.mocked(getModelRequiresReasoning).mockReturnValue(true);
+
+    const { body } = prepareStreamRequest(
+      'https://openrouter.ai/api/v1/chat/completions',
+      messages,
+      {
+        ...baseConfig,
+        model: 'anthropic/claude-opus-5.5',
+        providerId: 'openrouter',
+        reasoning_effort: 'none',
+      }
+    );
+
+    expect(body).toMatchObject({ reasoning: { effort: 'low' } });
   });
 
   it('includes verbosity for OpenRouter requests', () => {

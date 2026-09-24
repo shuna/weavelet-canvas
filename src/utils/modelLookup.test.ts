@@ -15,6 +15,7 @@ import {
   getModelConfigContextInfo,
   getModelContextInfo,
   getModelCost,
+  getModelRequiresReasoning,
   getModelSupportsReasoning,
 } from './modelLookup';
 
@@ -108,5 +109,27 @@ describe('modelLookup cost units', () => {
     } as never);
 
     expect(getModelSupportsReasoning('anthropic/claude-opus-4.6', 'openrouter')).toBe(false);
+  });
+
+  it('reads mandatory reasoning from provider metadata', () => {
+    vi.mocked(useStore.getState).mockReturnValue({
+      providerCustomModels: {},
+      favoriteModels: [],
+      providerModelCache: {
+        openrouter: [{
+          id: 'anthropic/claude-opus-5.5',
+          name: 'Claude Opus 5.5',
+          providerId: 'openrouter',
+          reasoningMandatory: true,
+        }],
+      },
+    } as never);
+
+    expect(getModelRequiresReasoning('anthropic/claude-opus-5.5', 'openrouter')).toBe(true);
+  });
+
+  it('recognizes Opus 5.5 before provider metadata is refreshed', () => {
+    expect(getModelRequiresReasoning('anthropic/claude-opus-5.5', 'openrouter')).toBe(true);
+    expect(getModelRequiresReasoning('anthropic/claude-opus-5', 'openrouter')).toBe(false);
   });
 });

@@ -4,7 +4,10 @@ import {
   ReasoningEffort,
 } from '@type/chat';
 import { isAzureEndpoint } from '@utils/api';
-import { getModelSupportsReasoning } from '@utils/modelLookup';
+import {
+  getModelRequiresReasoning,
+  getModelSupportsReasoning,
+} from '@utils/modelLookup';
 import {
   isOpenRouterAdaptiveReasoningModel,
   isOpenRouterClaudeEffortModel,
@@ -68,7 +71,11 @@ const buildRequestBody = (
       const reasoning: Record<string, unknown> = {};
       const isEffortClaude = isOpenRouterClaudeEffortModel(config.model, providerId);
       if (reasoning_effort === 'none') {
-        reasoning.enabled = false;
+        if (getModelRequiresReasoning(config.model, providerId)) {
+          reasoning.effort = 'low';
+        } else {
+          reasoning.enabled = false;
+        }
       } else if (reasoning_budget_tokens && reasoning_budget_tokens > 0 && !isEffortClaude) {
         // Explicit budget takes precedence — except on Claude 4.7+/Fable,
         // where budget_tokens is removed and effort is the supported control

@@ -7,6 +7,7 @@ import { ConfigInterface, ImageDetail, ReasoningEffort, Verbosity } from '@type/
 import {
   getModelCapabilities,
   getModelConfigContextInfo,
+  useModelRequiresReasoning,
   useModelSupportsReasoning,
   useModelCapabilities,
 } from '@utils/modelLookup';
@@ -200,6 +201,7 @@ const ConfigMenu = ({
   const reasoningDetected = useModelSupportsReasoning(_model, _providerId);
   const reasoningForced = !reasoningDetected && _modelSource !== 'local' && _forceReasoning;
   const reasoningSupported = reasoningDetected || reasoningForced;
+  const reasoningRequired = useModelRequiresReasoning(_model, _providerId);
   const capabilities = useModelCapabilities(_model, _providerId);
   const verbositySupported = isOpenRouterClaudeVerbosityModel(_model, _providerId);
   const isFusion = isOpenRouterFusionModel(_model, _providerId);
@@ -340,6 +342,7 @@ const ConfigMenu = ({
                 _setReasoningEffort={_setReasoningEffort}
                 _model={_model}
                 _providerId={_providerId}
+                reasoningRequired={reasoningRequired}
               />
             </ConfigFieldCell>
             <ConfigFieldCell>
@@ -791,11 +794,13 @@ export const ReasoningEffortSelector = ({
   _setReasoningEffort,
   _model,
   _providerId,
+  reasoningRequired,
 }: {
   _reasoningEffort: ReasoningEffort | undefined;
   _setReasoningEffort: React.Dispatch<React.SetStateAction<ReasoningEffort | undefined>>;
   _model: ModelOptions;
   _providerId?: ProviderId;
+  reasoningRequired: boolean;
 }) => {
   const { t } = useTranslation('model');
 
@@ -804,7 +809,9 @@ export const ReasoningEffortSelector = ({
 
   const options: { value: ReasoningEffort; label: string }[] = isOpenRouter
     ? [
-        { value: 'none', label: t('reasoningEffort.none') },
+        ...(!reasoningRequired
+          ? [{ value: 'none' as const, label: t('reasoningEffort.none') }]
+          : []),
         { value: 'minimal', label: t('reasoningEffort.minimal') },
         { value: 'low', label: t('reasoningEffort.low') },
         { value: 'medium', label: t('reasoningEffort.medium') },
@@ -820,7 +827,7 @@ export const ReasoningEffortSelector = ({
   // Reset to medium if current value isn't available for this provider
   const validValues = new Set(options.map((o) => o.value));
   if (_reasoningEffort && !validValues.has(_reasoningEffort)) {
-    _setReasoningEffort(DEFAULT_REASONING_EFFORT);
+    _setReasoningEffort(reasoningRequired ? 'low' : DEFAULT_REASONING_EFFORT);
   }
 
   return (

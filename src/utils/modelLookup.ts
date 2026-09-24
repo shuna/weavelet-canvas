@@ -10,6 +10,13 @@ import { getCatalogModel } from '@src/local-llm/catalog';
 
 const DEFAULT_LOCAL_MODEL_CONTEXT_LENGTH = 2048;
 
+const inferMandatoryReasoning = (
+  modelId: string,
+  providerId?: ProviderId
+): boolean =>
+  providerId === 'openrouter' &&
+  /claude-opus-5[.-]5(?:$|:)/.test(modelId.toLowerCase());
+
 export interface ModelCostEntry {
   prompt: { price: number | null; unit: number };
   completion: { price: number | null; unit: number };
@@ -250,6 +257,29 @@ export function useModelSupportsReasoning(
     if (cached?.supportsReasoning != null) return cached.supportsReasoning || inferred;
 
     return inferred;
+  });
+}
+
+export function getModelRequiresReasoning(
+  modelId: string,
+  providerId?: ProviderId
+): boolean {
+  const state = useStore.getState();
+  const favorite = findFavorite(state.favoriteModels, modelId, providerId);
+  const cached = findCachedModel(state.providerModelCache, modelId, providerId);
+  return favorite?.reasoningMandatory ?? cached?.reasoningMandatory ??
+    inferMandatoryReasoning(modelId, providerId);
+}
+
+export function useModelRequiresReasoning(
+  modelId: string,
+  providerId?: ProviderId
+): boolean {
+  return useStore((state) => {
+    const favorite = findFavorite(state.favoriteModels, modelId, providerId);
+    const cached = findCachedModel(state.providerModelCache, modelId, providerId);
+    return favorite?.reasoningMandatory ?? cached?.reasoningMandatory ??
+      inferMandatoryReasoning(modelId, providerId);
   });
 }
 

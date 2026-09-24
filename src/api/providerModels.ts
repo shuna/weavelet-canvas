@@ -16,6 +16,7 @@ type ProviderModelPayload = {
   pricing?: unknown;
   architecture?: unknown;
   supported_parameters?: unknown;
+  reasoning?: unknown;
 };
 
 type ProviderModelListPayload = {
@@ -146,6 +147,7 @@ const normalizeModelEntry = (
     supportedParameters?.some(
       (param) => param === 'reasoning' || param === 'include_reasoning'
     ) ?? false;
+  const reasoning = isRecord(payload.reasoning) ? payload.reasoning : {};
 
   return {
     id,
@@ -160,6 +162,7 @@ const normalizeModelEntry = (
     modelType,
     streamSupport: true,
     supportsReasoning: declaresReasoning || isReasoningModel(id),
+    reasoningMandatory: reasoning.mandatory === true,
     supportsVision: modelType === 'image' || isVisionModel(id),
     supportsAudio: isAudioModel(id),
   };
