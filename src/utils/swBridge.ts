@@ -4,6 +4,13 @@ import { saveRequest, cleanupStale } from './streamDb';
 let registration: ServiceWorkerRegistration | null = null;
 let controllerReady: Promise<void> | null = null;
 
+// Firefox may terminate a Service Worker roughly a minute after the event that
+// started a long-running stream, even while the event's waitUntil() promise is
+// still pending. A fresh window -> Service Worker message resets that lifetime.
+const HEARTBEAT_INTERVAL_MS = 10_000;
+const HEARTBEAT_ACK_TIMEOUT_MS = 4_000;
+const MAX_MISSED_HEARTBEATS = 2;
+
 const formatDebugTime = (time = Date.now()): string =>
   new Date(time).toISOString().slice(11, 23);
 
@@ -112,6 +119,82 @@ export async function startStream(params: StartStreamParams): Promise<SwStreamHa
   // navigator.serviceWorker.onmessage.
   const channel = new MessageChannel();
   let cleanedUp = false;
+  let heartbeatTimer: ReturnType<typeof setInterval> | undefined;
+  let missedHeartbeats = 0;
+  const heartbeatChannels = new Set<MessageChannel>();
+  const heartbeatTimeouts = new Set<ReturnType<typeof setTimeout>>();
+
+  const controller = sw.controller;
+  if (!controller) {
+    channel.port1.close();
+    throw new Error('Service Worker controller not available');
+  }
+
+  const failHeartbeat = (reason: string) => {
+    if (cleanedUp) return;
+    debugReport(`stream:${requestId}`, {
+      status: 'error',
+      detail: `${formatDebugTime()} heartbeat failed: ${reason}`,
+    });
+    cleanup();
+    onError(`Service Worker stream lost: ${reason}`);
+  };
+
+  const sendHeartbeat = () => {
+    if (cleanedUp) return;
+
+    const heartbeatChannel = new MessageChannel();
+    heartbeatChannels.add(heartbeatChannel);
+    let settled = false;
+
+    const dispose = () => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timeout);
+      heartbeatTimeouts.delete(timeout);
+      heartbeatChannels.delete(heartbeatChannel);
+      heartbeatChannel.port1.close();
+    };
+
+    const timeout = setTimeout(() => {
+      dispose();
+      missedHeartbeats += 1;
+      if (missedHeartbeats >= MAX_MISSED_HEARTBEATS) {
+        failHeartbeat('heartbeat acknowledgement timed out');
+      }
+    }, HEARTBEAT_ACK_TIMEOUT_MS);
+    heartbeatTimeouts.add(timeout);
+
+    heartbeatChannel.port1.onmessage = (event: MessageEvent) => {
+      if (settled) return;
+      const data = event.data;
+      dispose();
+      if (
+        !data ||
+        data.type !== 'sw-heartbeat-ack' ||
+        data.requestId !== requestId ||
+        data.active !== true
+      ) {
+        failHeartbeat('stream is no longer active in the Service Worker');
+        return;
+      }
+      missedHeartbeats = 0;
+    };
+
+    try {
+      controller.postMessage(
+        { type: 'keepStreamAlive', requestId },
+        [heartbeatChannel.port2]
+      );
+    } catch (error) {
+      dispose();
+      failHeartbeat(error instanceof Error ? error.message : String(error));
+    }
+  };
+
+  const handleVisibilityChange = () => {
+    if (document.visibilityState === 'visible') sendHeartbeat();
+  };
 
   channel.port1.onmessage = (event: MessageEvent) => {
     const data = event.data;
@@ -188,13 +271,17 @@ export async function startStream(params: StartStreamParams): Promise<SwStreamHa
   function cleanup() {
     if (cleanedUp) return;
     cleanedUp = true;
+    if (heartbeatTimer) clearInterval(heartbeatTimer);
+    if (typeof document !== 'undefined') {
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    }
+    for (const timeout of heartbeatTimeouts) clearTimeout(timeout);
+    heartbeatTimeouts.clear();
+    for (const heartbeatChannel of heartbeatChannels) {
+      heartbeatChannel.port1.close();
+    }
+    heartbeatChannels.clear();
     channel.port1.close();
-  }
-
-  const controller = sw.controller;
-  if (!controller) {
-    cleanup();
-    throw new Error('Service Worker controller not available');
   }
 
   // Send startStream to SW with port2 transferred
@@ -213,6 +300,11 @@ export async function startStream(params: StartStreamParams): Promise<SwStreamHa
     [channel.port2],
   );
 
+  heartbeatTimer = setInterval(sendHeartbeat, HEARTBEAT_INTERVAL_MS);
+  if (typeof document !== 'undefined') {
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+  }
+
   return {
     cancel: () => {
       debugReport(`stream:${requestId}`, {
@@ -230,7 +322,7 @@ export async function startStream(params: StartStreamParams): Promise<SwStreamHa
         status: 'done',
         detail: requestId,
       });
-      sw.controller?.postMessage({
+      controller.postMessage({
         type: 'cancelStream',
         requestId,
       });
