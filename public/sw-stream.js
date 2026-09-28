@@ -346,6 +346,9 @@ async function handleStartStream(msg, port) {
   let lastProxyEventId = 0;
   let generationId = null;
   let finishReason = null;
+  let sawDoneMarker = false;
+  let sawProxyDone = false;
+  let reader = null;
   const thinkParser = createThinkTagParser();
 
   // Save initial record
@@ -464,7 +467,7 @@ async function handleStartStream(msg, port) {
       return;
     }
 
-    const reader = response.body.getReader();
+    reader = response.body.getReader();
     const decoder = new TextDecoder();
     let partial = '';
     let reading = true;
@@ -517,6 +520,10 @@ async function handleStartStream(msg, port) {
           if (evt.id > lastProxyEventId) lastProxyEventId = evt.id;
 
           if (evt.eventType === 'done') {
+            if (!evt.meta || evt.meta.complete !== true) {
+              throw new Error('Proxy stream ended without a complete marker');
+            }
+            sawProxyDone = true;
             postDebug('proxy done event lastEventId=' + lastProxyEventId);
             reading = false;
             break;
@@ -562,6 +569,7 @@ async function handleStartStream(msg, port) {
             }
 
             if (llmParsed.done) {
+              sawDoneMarker = true;
               postDebug(
                 'llm done marker read#' + readCount +
                 ' text=' + totalTextChars +
@@ -587,6 +595,7 @@ async function handleStartStream(msg, port) {
       if (llmPartial) {
         postDebug('flush llmPartial len=' + llmPartial.length);
         const llmFlushed = parseEventSource(llmPartial, true);
+        if (llmFlushed.done) sawDoneMarker = true;
         const fr = extractFinishReason(llmFlushed.events);
         if (fr) finishReason = fr;
         const reasoning = extractReasoning(llmFlushed.events);
@@ -623,6 +632,9 @@ async function handleStartStream(msg, port) {
         postToClient({ type: 'sw-chunk', requestId, text: proxyThinkRemaining.content });
         bufferedText += proxyThinkRemaining.content;
       }
+      if (!sawProxyDone) {
+        throw new Error('Proxy stream ended before its completion marker');
+      }
     } else {
       // --- Direct mode: existing LLM SSE parsing ---
       var _chunkNum = 0, _totalText = 0, _totalReasoning = 0;
@@ -638,6 +650,7 @@ async function handleStartStream(msg, port) {
         );
         const chunk = partial + decoder.decode(done ? undefined : value, { stream: !done });
         const parsed = parseEventSource(chunk, done);
+        if (parsed.done) sawDoneMarker = true;
         partial = parsed.partial;
 
         if (!generationId) {
@@ -705,6 +718,9 @@ async function handleStartStream(msg, port) {
         postToClient({ type: 'sw-chunk', requestId, text: directThinkRemaining.content });
         bufferedText += directThinkRemaining.content;
       }
+      if (!sawDoneMarker && !finishReason) {
+        throw new Error('Streaming response ended before a completion marker');
+      }
     }
 
     postDebug('flush buffered start len=' + bufferedText.length);
@@ -757,6 +773,10 @@ async function handleStartStream(msg, port) {
     if (flushTimer) {
       clearTimeout(flushTimer);
     }
+    if (reader) {
+      try { await reader.cancel(); } catch { /* already closed */ }
+      try { reader.releaseLock(); } catch { /* already released */ }
+    }
     activeStreams.delete(requestId);
   }
 }
@@ -793,6 +813,20 @@ self.addEventListener('message', (event) => {
         });
       event.waitUntil(streamTask);
     }
+  } else if (msg.type === 'keepStreamAlive') {
+    // The message event itself refreshes Firefox's Service Worker lifetime.
+    // Reply over the one-shot port so the page can distinguish the original
+    // live worker from a restarted worker with an empty activeStreams map.
+    const heartbeatPort = event.ports && event.ports[0];
+    if (heartbeatPort) {
+      heartbeatPort.postMessage({
+        type: 'sw-heartbeat-ack',
+        requestId: msg.requestId,
+        active: activeStreams.has(msg.requestId),
+      });
+      heartbeatPort.close();
+    }
+    event.waitUntil(Promise.resolve());
   } else if (msg.type === 'cancelStream') {
     const controller = activeStreams.get(msg.requestId);
     if (controller) {
