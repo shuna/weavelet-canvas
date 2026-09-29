@@ -16,6 +16,7 @@ const providerLabels: Record<CloudSyncProviderType, string> = {
 const CloudSync = () => {
   const selectedProvider = useCloudAuthStore((s) => s.provider);
   const cloudSync = useCloudAuthStore((s) => s.cloudSync);
+  const syncStatus = useCloudAuthStore((s) => s.syncStatus);
   const setProvider = useCloudAuthStore((s) => s.setProvider);
 
   const [returningFromGoogle] = useState(() => new URLSearchParams(location.search).get('google-sync') === 'return');
@@ -39,7 +40,6 @@ const CloudSync = () => {
         className='flex cursor-pointer items-center gap-3 rounded-md px-2 py-2 text-sm text-gray-700 transition-colors duration-200 hover:bg-gray-100 dark:text-white dark:hover:bg-gray-500/10'
         onClick={() => {
           setExpanded((v) => !v);
-          if (expanded) setSetupProvider(null);
         }}
       >
         <RefreshIcon className='w-4 h-4' />
@@ -50,6 +50,9 @@ const CloudSync = () => {
           </span>
         )}
       </a>
+      {showingProvider === 'google' && googleClientId && (
+        <GoogleSync clientId={googleClientId} openOnMount={returningFromGoogle} showEntry={expanded} />
+      )}
 
       {expanded && (
         <div className='px-2 pb-2'>
@@ -58,7 +61,7 @@ const CloudSync = () => {
             <>
               {showingProvider === 'google' ? (
                 googleClientId ? (
-                  <GoogleSync clientId={googleClientId} openOnMount={returningFromGoogle} />
+                  null
                 ) : (
                   <div className='text-xs text-amber-600 dark:text-amber-400'>
                     VITE_GOOGLE_CLIENT_ID 未設定
@@ -70,6 +73,7 @@ const CloudSync = () => {
               {!isActive && (
                 <button
                   type='button'
+                  disabled={syncStatus === 'syncing'}
                   onClick={() => setSetupProvider(null)}
                   className='mt-1 text-xs text-gray-400 hover:text-gray-600 dark:hover:text-gray-300'
                 >

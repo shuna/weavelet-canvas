@@ -1,3 +1,4 @@
+import { measure, recordMetric } from './metrics';
 import { beginTransfer } from './progress';
 import { googleFetch } from '@api/google-auth';
 import { createMultipartRelatedBody } from '@api/helper';
@@ -16,15 +17,29 @@ export class DriveTransport {
     return googleFetch(url, this.token(), init);
   }
   private async json(url: string, init?: RequestInit): Promise<any> {
+    const started = performance.now();
     const response = await this.request(url, init);
     if (!response.ok) throw new Error(`Google Drive ${response.status}: ${response.statusText}`);
-    return response.json();
+    const text = await response.text();
+    recordMetric('drive', started, typeof init?.body === 'string' ? new TextEncoder().encode(init.body).length : 0, new TextEncoder().encode(text).length);
+    return JSON.parse(text);
   }
-  async id(): Promise<string> {
-    const data = await this.json(`${API}/files/generateIds?count=1&space=drive&type=files`);
-    if (typeof data.ids?.[0] !== 'string') throw new Error('Drive did not return a file ID.');
-    return data.ids[0];
+
+  async ids(count: number): Promise<string[]> {
+    if (!Number.isInteger(count) || count < 1) throw new Error('Invalid Drive ID count.');
+    const ids: string[] = [];
+    while (ids.length < count) {
+      const batch = Math.min(1000, count - ids.length);
+      const data = await measure('ids', () => this.json(`${API}/files/generateIds?count=${batch}&space=drive&type=files`));
+      if (!Array.isArray(data.ids) || data.ids.length !== batch || data.ids.some((id: unknown) => typeof id !== 'string' || !id)) {
+        throw new Error('Drive did not return the requested file IDs.');
+      }
+      ids.push(...data.ids);
+    }
+    if (new Set(ids).size !== count) throw new Error('Drive returned duplicate file IDs.');
+    return ids;
   }
+  async id(): Promise<string> { return (await this.ids(1))[0]; }
   async metadata(id: string): Promise<DriveFile> {
     return this.json(`${API}/files/${encodeURIComponent(id)}?fields=id,name,mimeType,appProperties,trashed`).then((file) => {
       if (file.trashed) throw new Error('Sync folder was deleted.');
@@ -40,10 +55,12 @@ export class DriveTransport {
   }
   async read(id: string): Promise<Uint8Array> {
     const finish = beginTransfer('download');
+    const started = performance.now();
     const response = await this.request(`${API}/files/${encodeURIComponent(id)}?alt=media`);
     if (!response.ok) throw new Error(`Google Drive ${response.status}: ${response.statusText}`);
     const bytes = new Uint8Array(await response.arrayBuffer());
     finish(bytes.length);
+    recordMetric('drive', started, 0, bytes.length);
     return bytes;
   }
   async put(id: string, dataset: string, kind: string, bytes: Uint8Array): Promise<void> {
@@ -52,9 +69,9 @@ export class DriveTransport {
     const body = createMultipartRelatedBody({ id, name: file.name, mimeType: file.type,
       parents: [dataset], appProperties: { dataset, kind } }, file, boundary);
     const finish = beginTransfer('upload');
-    const response = await this.request('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart', {
+    const response = await measure('drive', () => this.request('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart', {
       method: 'POST', headers: { 'Content-Type': `multipart/related; boundary=${boundary}` }, body,
-    });
+    }), body.size);
     // A pre-generated ID makes retry after a lost response idempotent. Verify it is our exact ciphertext.
     if (response.status === 409) {
       if (await digest(await this.read(id)) !== await digest(bytes)) throw new Error('Drive file ID collision.');

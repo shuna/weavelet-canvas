@@ -55,3 +55,16 @@ it('lists encrypted folders and legacy files without exposing internal encrypted
   expect(q).toContain('weaveletSync');
   expect(q).toContain("name contains '.json'");
 });
+
+it('batches generated IDs within the Drive limit and rejects duplicate responses', async () => {
+  const fetch = vi.fn().mockResolvedValueOnce(json({ ids: Array.from({ length: 1000 }, (_, i) => `id-${i}`) }))
+    .mockResolvedValueOnce(json({ ids: ['last'] }));
+  vi.stubGlobal('fetch', fetch);
+  const drive = new DriveTransport(() => 'token');
+  expect(await drive.ids(1001)).toHaveLength(1001);
+  expect(fetch.mock.calls.map(c => new URL(c[0]).searchParams.get('count'))).toEqual(['1000', '1']);
+  fetch.mockResolvedValueOnce(json({ ids: ['same', 'same'] }));
+  await expect(drive.ids(2)).rejects.toThrow('duplicate');
+  fetch.mockResolvedValueOnce(json({ ids: [] }));
+  await expect(drive.ids(2)).rejects.toThrow('requested');
+});

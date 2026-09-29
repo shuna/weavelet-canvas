@@ -27,7 +27,7 @@ test('encrypted Drive creation, incremental autosave and unlock after browser re
   await page.route('https://{www,content}.googleapis.com/**', async (route) => {
     const request = route.request();
     const url = new URL(request.url());
-    if (url.pathname.endsWith('/generateIds')) return route.fulfill({ json: { ids: [`file-${++next}`] } });
+    if (url.pathname.endsWith('/generateIds')) return route.fulfill({ json: { ids: Array.from({ length: Number(url.searchParams.get('count') ?? 1) }, () => `file-${++next}`) } });
     if (url.pathname.endsWith('/startPageToken')) return route.fulfill({ json: { startPageToken: String(changes.length) } });
     if (url.pathname.endsWith('/changes')) return route.fulfill({ json: {
       changes: changes.slice(Number(url.searchParams.get('pageToken'))), newStartPageToken: String(changes.length),
@@ -135,10 +135,21 @@ test('encrypted Drive creation, incremental autosave and unlock after browser re
   expect(bounds!.y + bounds!.height).toBeLessThanOrEqual(844);
   await page.screenshot({ path: testInfo.outputPath('sync-progress-mobile.png') });
   await page.setViewportSize({ width: 1440, height: 900 });
+  await page.getByRole('button', { name: 'close modal', exact: true }).click();
+  await expect(page.getByRole('button', { name: '同期の進捗を表示', exact: true })).toBeVisible();
+  await page.evaluate(async () => {
+    const { default: store } = await import('/src/store/store.ts');
+    const chats = structuredClone(store.getState().chats!);
+    chats[0].title = 'EDIT DURING INITIAL';
+    store.getState().setChats(chats);
+  });
+  await page.getByRole('button', { name: '同期の進捗を表示', exact: true }).click();
+  await expect(progress).toContainText('1 / 2 ファイル完了');
   releaseInitialCommit();
   await expect(guidance).toContainText('変更は暗号化して自動保存されます。');
   await expect(progress).toHaveCount(0);
-  expect(uploads.filter((u) => u.metadata.appProperties.kind === 'commit')).toHaveLength(1);
+  await expect.poll(() => uploads.filter(u => u.metadata.appProperties.kind === 'commit').length).toBe(2);
+  expect(await page.evaluate(async () => (await import('/src/store/store.ts')).default.getState().chats![0].title)).toBe('EDIT DURING INITIAL');
   await page.getByRole('button', { name: 'close modal', exact: true }).click();
   await page.getByRole('button', { name: 'メニューを開く', exact: true }).click();
   const before = uploads.length;
@@ -148,7 +159,7 @@ test('encrypted Drive creation, incremental autosave and unlock after browser re
     chats[0].title = 'PRIVATE BROWSER TITLE';
     store.getState().setChats(chats);
   });
-  await expect.poll(() => uploads.filter((u) => u.metadata.appProperties.kind === 'commit').length).toBe(2);
+  await expect.poll(() => uploads.filter((u) => u.metadata.appProperties.kind === 'commit').length).toBe(3);
   expect(uploads.slice(before).reduce((total, u) => total + u.bytes.length, 0)).toBeLessThan(2000);
   for (const upload of uploads) expect(upload.bytes.toString()).not.toContain('PRIVATE BROWSER TITLE');
   await page.reload();
@@ -204,4 +215,22 @@ test('encrypted Drive creation, incremental autosave and unlock after browser re
   })).toEqual({ title: 'legacy imported title', confirmed: false });
   expect(uploads).toHaveLength(beforeLegacyRead);
   await page.screenshot({ path: testInfo.outputPath('encrypted-sync.png') });
+});
+
+
+test('large sync compression runs in a worker while the UI event loop remains responsive', async ({ page }) => {
+  await page.goto('/');
+  const result = await page.evaluate(async () => {
+    const { encodeAsync } = await import('/src/store/storage/google/encodeAsync.ts');
+    const { decode } = await import('/src/store/storage/google/crypto.ts');
+    const value = { text: 'synthetic responsive sync '.repeat(200_000) };
+    let ticks = 0;
+    const timer = setInterval(() => ticks++, 10);
+    try {
+      const bytes = await encodeAsync(value);
+      return { ticks, matches: decode<{ text: string }>(bytes).text === value.text };
+    } finally { clearInterval(timer); }
+  });
+  expect(result.matches).toBe(true);
+  expect(result.ticks).toBeGreaterThan(0);
 });

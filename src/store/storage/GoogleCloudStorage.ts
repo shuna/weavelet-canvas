@@ -52,6 +52,7 @@ async function persistChatSnapshot(snapshot: Snapshot) {
   });
 }
 export async function createEncryptedGoogleSync(passphrase: string, snapshot: Snapshot) {
+  snapshot = structuredClone(snapshot);
   lockGoogleSync();
   await persistChatSnapshot(snapshot);
   const created = await EncryptedDriveSync.create(transport(), passphrase);
@@ -142,6 +143,11 @@ if (typeof window !== 'undefined') {
   document.addEventListener('visibilitychange', () => {
     if (document.visibilityState === 'hidden') flush();
   });
+}
+
+// Queue edits made while an initial/manual upload was in progress using the normal debounce/outbox path.
+export async function queueGoogleSyncSnapshot(snapshot: Snapshot) {
+  await storage.setItem(useStore.persist.getOptions().name!, snapshot);
 }
 
 export const resetPendingCloudSyncForTests = lockGoogleSync;

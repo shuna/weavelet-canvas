@@ -1,0 +1,474 @@
+{
+  "before": {
+    "inputBytes": 33554663,
+    "mock": {
+      "latencyMs": 20,
+      "bytesPerSecond": 5242880
+    },
+    "first": {
+      "ms": 383611.51775,
+      "requests": 26,
+      "bytes": 1973819,
+      "peak": 1,
+      "metrics": {
+        "encrypt": {
+          "calls": 24,
+          "ms": 101.18741599995212,
+          "inputBytes": 74055210,
+          "outputBytes": 74055882
+        },
+        "serialize": {
+          "calls": 16,
+          "ms": 1483.9019989999788,
+          "inputBytes": 909337891,
+          "outputBytes": 909337891
+        },
+        "compress": {
+          "calls": 16,
+          "ms": 380712.223628,
+          "inputBytes": 909337891,
+          "outputBytes": 74055178
+        },
+        "cache": {
+          "calls": 15,
+          "ms": 112.73091600002596,
+          "inputBytes": 72082362,
+          "outputBytes": 0
+        },
+        "records": {
+          "calls": 1,
+          "ms": 73.03254199999998,
+          "inputBytes": 0,
+          "outputBytes": 0
+        }
+      }
+    },
+    "delta": {
+      "ms": 292632.316375,
+      "requests": 6,
+      "bytes": 260,
+      "metrics": {
+        "records": {
+          "calls": 1,
+          "ms": 152.41633400000865,
+          "inputBytes": 0,
+          "outputBytes": 0
+        },
+        "cache": {
+          "calls": 7,
+          "ms": 11.659876000136137,
+          "inputBytes": 27863582,
+          "outputBytes": 0
+        },
+        "serialize": {
+          "calls": 8,
+          "ms": 1004.8559590000659,
+          "inputBytes": 503330597,
+          "outputBytes": 503330597
+        },
+        "compress": {
+          "calls": 8,
+          "ms": 290337.669708,
+          "inputBytes": 503330597,
+          "outputBytes": 27863618
+        },
+        "encrypt": {
+          "calls": 8,
+          "ms": 18.272918999718968,
+          "inputBytes": 27863618,
+          "outputBytes": 27863842
+        }
+      }
+    }
+  },
+  "afterVariants": [
+    {
+      "partBytes": 262144,
+      "concurrency": 1,
+      "inputBytes": 33554663,
+      "mock": {
+        "latencyMs": 20,
+        "bytesPerSecond": 5242880
+      },
+      "first": {
+        "ms": 21089.735416,
+        "requests": 17,
+        "bytes": 1973635,
+        "peak": 1,
+        "uploadMs": 573.6701670000002,
+        "metrics": {
+          "encrypt": {
+            "calls": 25,
+            "ms": 6.195250000008059,
+            "inputBytes": 3947980,
+            "outputBytes": 3948680
+          },
+          "serialize": {
+            "calls": 16,
+            "ms": 43.733748000007665,
+            "inputBytes": 33558052,
+            "outputBytes": 33558052
+          },
+          "compress": {
+            "calls": 16,
+            "ms": 19885.65004199999,
+            "inputBytes": 33558052,
+            "outputBytes": 1974990
+          },
+          "cache": {
+            "calls": 25,
+            "ms": 12.675624999999172,
+            "inputBytes": 3948620,
+            "outputBytes": 0
+          },
+          "records": {
+            "calls": 1,
+            "ms": 207.28887499999996,
+            "inputBytes": 33554664,
+            "outputBytes": 33554661
+          },
+          "decrypt": {
+            "calls": 9,
+            "ms": 1.8164580000011483,
+            "inputBytes": 1973270,
+            "outputBytes": 0
+          }
+        }
+      },
+      "delta": {
+        "ms": 255.83929199999693,
+        "requests": 4,
+        "bytes": 192,
+        "metrics": {
+          "records": {
+            "calls": 1,
+            "ms": 119.85566699999981,
+            "inputBytes": 33554663,
+            "outputBytes": 33554660
+          },
+          "cache": {
+            "calls": 8,
+            "ms": 1.6772089999976743,
+            "inputBytes": 3160,
+            "outputBytes": 0
+          },
+          "serialize": {
+            "calls": 7,
+            "ms": 0.11824999999225838,
+            "inputBytes": 4232,
+            "outputBytes": 4232
+          },
+          "compress": {
+            "calls": 7,
+            "ms": 2.0097510000014154,
+            "inputBytes": 4232,
+            "outputBytes": 2964
+          },
+          "encrypt": {
+            "calls": 7,
+            "ms": 0.9095399999969231,
+            "inputBytes": 2964,
+            "outputBytes": 3160
+          },
+          "decrypt": {
+            "calls": 1,
+            "ms": 0.04400000000168802,
+            "inputBytes": 192,
+            "outputBytes": 0
+          }
+        }
+      }
+    },
+    {
+      "partBytes": 1048576,
+      "concurrency": 1,
+      "inputBytes": 33554663,
+      "mock": {
+        "latencyMs": 20,
+        "bytesPerSecond": 5242880
+      },
+      "first": {
+        "ms": 15697.204,
+        "requests": 11,
+        "bytes": 1973503,
+        "peak": 1,
+        "uploadMs": 441.8523750000004,
+        "metrics": {
+          "encrypt": {
+            "calls": 13,
+            "ms": 4.01337499999903,
+            "inputBytes": 3947946,
+            "outputBytes": 3948310
+          },
+          "serialize": {
+            "calls": 10,
+            "ms": 40.06645599999888,
+            "inputBytes": 33557754,
+            "outputBytes": 33557754
+          },
+          "compress": {
+            "calls": 10,
+            "ms": 14732.224374000001,
+            "inputBytes": 33557754,
+            "outputBytes": 1974896
+          },
+          "cache": {
+            "calls": 13,
+            "ms": 10.022167999999567,
+            "inputBytes": 3948250,
+            "outputBytes": 0
+          },
+          "records": {
+            "calls": 1,
+            "ms": 152.73375000000004,
+            "inputBytes": 33554664,
+            "outputBytes": 33554661
+          },
+          "decrypt": {
+            "calls": 3,
+            "ms": 1.0919579999972484,
+            "inputBytes": 1973144,
+            "outputBytes": 0
+          }
+        }
+      },
+      "delta": {
+        "ms": 311.14966599999934,
+        "requests": 4,
+        "bytes": 192,
+        "metrics": {
+          "records": {
+            "calls": 1,
+            "ms": 152.0424579999999,
+            "inputBytes": 33554663,
+            "outputBytes": 33554660
+          },
+          "cache": {
+            "calls": 8,
+            "ms": 1.9035009999988688,
+            "inputBytes": 3154,
+            "outputBytes": 0
+          },
+          "serialize": {
+            "calls": 7,
+            "ms": 0.1615830000009737,
+            "inputBytes": 4223,
+            "outputBytes": 4223
+          },
+          "compress": {
+            "calls": 7,
+            "ms": 2.1047510000007605,
+            "inputBytes": 4223,
+            "outputBytes": 2958
+          },
+          "encrypt": {
+            "calls": 7,
+            "ms": 0.7558329999992566,
+            "inputBytes": 2958,
+            "outputBytes": 3154
+          },
+          "decrypt": {
+            "calls": 1,
+            "ms": 0.04395899999872199,
+            "inputBytes": 192,
+            "outputBytes": 0
+          }
+        }
+      }
+    },
+    {
+      "partBytes": 262144,
+      "concurrency": 2,
+      "inputBytes": 33554663,
+      "mock": {
+        "latencyMs": 20,
+        "bytesPerSecond": 5242880
+      },
+      "first": {
+        "ms": 14184.16175,
+        "requests": 17,
+        "bytes": 1973683,
+        "peak": 2,
+        "uploadMs": 311.28612500000054,
+        "metrics": {
+          "encrypt": {
+            "calls": 25,
+            "ms": 8.107792999998537,
+            "inputBytes": 3948086,
+            "outputBytes": 3948786
+          },
+          "serialize": {
+            "calls": 16,
+            "ms": 37.03033599999992,
+            "inputBytes": 33558052,
+            "outputBytes": 33558052
+          },
+          "compress": {
+            "calls": 16,
+            "ms": 13375.822247999997,
+            "inputBytes": 33558052,
+            "outputBytes": 1975048
+          },
+          "cache": {
+            "calls": 25,
+            "ms": 16.59391900000037,
+            "inputBytes": 3948726,
+            "outputBytes": 0
+          },
+          "records": {
+            "calls": 1,
+            "ms": 126.91575,
+            "inputBytes": 33554664,
+            "outputBytes": 33554661
+          },
+          "decrypt": {
+            "calls": 9,
+            "ms": 2.025961000001189,
+            "inputBytes": 1973318,
+            "outputBytes": 0
+          }
+        }
+      },
+      "delta": {
+        "ms": 399.8611659999988,
+        "requests": 4,
+        "bytes": 192,
+        "metrics": {
+          "records": {
+            "calls": 1,
+            "ms": 233.06204099999923,
+            "inputBytes": 33554663,
+            "outputBytes": 33554660
+          },
+          "cache": {
+            "calls": 8,
+            "ms": 1.8202499999970314,
+            "inputBytes": 3174,
+            "outputBytes": 0
+          },
+          "serialize": {
+            "calls": 7,
+            "ms": 0.2322489999987738,
+            "inputBytes": 4232,
+            "outputBytes": 4232
+          },
+          "compress": {
+            "calls": 7,
+            "ms": 1.794834999998784,
+            "inputBytes": 4232,
+            "outputBytes": 2978
+          },
+          "encrypt": {
+            "calls": 7,
+            "ms": 0.9258319999989908,
+            "inputBytes": 2978,
+            "outputBytes": 3174
+          },
+          "decrypt": {
+            "calls": 1,
+            "ms": 0.09579200000007404,
+            "inputBytes": 192,
+            "outputBytes": 0
+          }
+        }
+      }
+    },
+    {
+      "partBytes": 1048576,
+      "concurrency": 2,
+      "inputBytes": 33554663,
+      "mock": {
+        "latencyMs": 20,
+        "bytesPerSecond": 5242880
+      },
+      "first": {
+        "ms": 14662.636959,
+        "requests": 11,
+        "bytes": 1973352,
+        "peak": 2,
+        "uploadMs": 242.23708299999998,
+        "metrics": {
+          "encrypt": {
+            "calls": 13,
+            "ms": 4.412333999997543,
+            "inputBytes": 3947644,
+            "outputBytes": 3948008
+          },
+          "serialize": {
+            "calls": 10,
+            "ms": 44.974626000001194,
+            "inputBytes": 33557754,
+            "outputBytes": 33557754
+          },
+          "compress": {
+            "calls": 10,
+            "ms": 13880.273207,
+            "inputBytes": 33557754,
+            "outputBytes": 1974752
+          },
+          "cache": {
+            "calls": 13,
+            "ms": 10.32641799999999,
+            "inputBytes": 3947948,
+            "outputBytes": 0
+          },
+          "records": {
+            "calls": 1,
+            "ms": 147.3175,
+            "inputBytes": 33554664,
+            "outputBytes": 33554661
+          },
+          "decrypt": {
+            "calls": 3,
+            "ms": 1.1066659999978583,
+            "inputBytes": 1972986,
+            "outputBytes": 0
+          }
+        }
+      },
+      "delta": {
+        "ms": 256.08508299999994,
+        "requests": 4,
+        "bytes": 192,
+        "metrics": {
+          "records": {
+            "calls": 1,
+            "ms": 115.46491600000081,
+            "inputBytes": 33554663,
+            "outputBytes": 33554660
+          },
+          "cache": {
+            "calls": 8,
+            "ms": 1.6463739999981044,
+            "inputBytes": 3158,
+            "outputBytes": 0
+          },
+          "serialize": {
+            "calls": 7,
+            "ms": 0.15891600000031758,
+            "inputBytes": 4223,
+            "outputBytes": 4223
+          },
+          "compress": {
+            "calls": 7,
+            "ms": 1.5117500000014843,
+            "inputBytes": 4223,
+            "outputBytes": 2962
+          },
+          "encrypt": {
+            "calls": 7,
+            "ms": 0.901917000001049,
+            "inputBytes": 2962,
+            "outputBytes": 3158
+          },
+          "decrypt": {
+            "calls": 1,
+            "ms": 0.04137500000069849,
+            "inputBytes": 192,
+            "outputBytes": 0
+          }
+        }
+      }
+    }
+  ]
+}

@@ -1,3 +1,4 @@
+import { recordMetric } from './metrics';
 import { compressToUint8Array, decompressFromUint8Array } from 'lz-string';
 
 const encoder = new TextEncoder();
@@ -26,6 +27,7 @@ async function passwordKey(password: string, salt: Uint8Array, iterations: numbe
 
 // Bind ciphertext to its dataset and file ID to reject file substitution.
 export async function encrypt(key: CryptoKey, bytes: Uint8Array, context: string): Promise<Uint8Array> {
+  const started = performance.now();
   const iv = crypto.getRandomValues(new Uint8Array(12));
   const ciphertext = new Uint8Array(await crypto.subtle.encrypt(
     { name: 'AES-GCM', iv, additionalData: encoder.encode(context), tagLength: 128 }, key, bytes
@@ -33,10 +35,12 @@ export async function encrypt(key: CryptoKey, bytes: Uint8Array, context: string
   const result = new Uint8Array(iv.length + ciphertext.length);
   result.set(iv);
   result.set(ciphertext, iv.length);
+  recordMetric('encrypt', started, bytes.length, result.length);
   return result;
 }
 
 export async function decrypt(key: CryptoKey, bytes: Uint8Array, context: string): Promise<Uint8Array> {
+  const started = performance.now();
   if (bytes.length < 28) throw new Error('Invalid encrypted sync file.');
   try {
     return new Uint8Array(await crypto.subtle.decrypt(
@@ -45,7 +49,7 @@ export async function decrypt(key: CryptoKey, bytes: Uint8Array, context: string
     ));
   } catch {
     throw new Error('Unable to decrypt sync data: incorrect passphrase or damaged file.');
-  }
+  } finally { recordMetric('decrypt', started, bytes.length); }
 }
 
 export async function createKeyEnvelope(password: string, dataset: string) {
@@ -76,7 +80,16 @@ export async function unlockKey(envelope: KeyEnvelope, password: string, dataset
   return key;
 }
 
-export const encode = (value: unknown): Uint8Array => compressToUint8Array(JSON.stringify(value));
+export const encode = (value: unknown): Uint8Array => {
+  const started = performance.now();
+  const json = JSON.stringify(value);
+  const size = encoder.encode(json).length;
+  recordMetric('serialize', started, size, size);
+  const compressStarted = performance.now();
+  const bytes = compressToUint8Array(json);
+  recordMetric('compress', compressStarted, size, bytes.length);
+  return bytes;
+};
 export function decode<T>(bytes: Uint8Array): T {
   const json = decompressFromUint8Array(bytes);
   if (!json) throw new Error('Invalid compressed sync data.');

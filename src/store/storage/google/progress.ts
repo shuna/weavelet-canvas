@@ -1,3 +1,4 @@
+import { getSyncMetrics, resetSyncMetrics } from './metrics';
 import { create } from 'zustand';
 
 export type SyncPhase = 'preparing' | 'key' | 'folder' | 'checking' | 'downloading' | 'encrypting' | 'uploading' | 'saving' | 'verifying';
@@ -11,12 +12,18 @@ const initial = () => ({
 // Progress is transient UI state; never persist it alongside chat data or credentials.
 export const useGoogleSyncProgress = create(initial);
 let operation = 0;
+let intervals: Record<'upload' | 'download', [number, number][]> = { upload: [], download: [] };
 export async function withSyncProgress<T>(work: () => Promise<T>): Promise<T> {
   const current = ++operation;
+  resetSyncMetrics();
+  intervals = { upload: [], download: [] };
   useGoogleSyncProgress.setState({ ...initial(), active: true });
   try { return await work(); }
   finally {
-    if (current === operation) useGoogleSyncProgress.setState({ active: false });
+    if (current === operation) {
+      useGoogleSyncProgress.setState({ active: false });
+      console.info('[Google sync metrics]', getSyncMetrics());
+    }
   }
 }
 export function syncPhase(phase: SyncPhase, totalFiles?: number, totalBytes?: number) {
@@ -32,9 +39,14 @@ export function beginTransfer(direction: 'upload' | 'download') {
   const started = performance.now();
   return (bytes: number) => {
     if (current !== operation || !useGoogleSyncProgress.getState().active) return;
-    const elapsed = Math.max(1, performance.now() - started);
+    const ranges = intervals[direction];
+    ranges.push([started, performance.now()]);
+    ranges.sort((a, b) => a[0] - b[0]);
+    let elapsed = 0, end = -Infinity;
+    for (const [from, to] of ranges) { elapsed += Math.max(0, to - Math.max(from, end)); end = Math.max(end, to); }
+    elapsed = Math.max(1, elapsed);
     useGoogleSyncProgress.setState(s => direction === 'upload'
-      ? { uploadedBytes: s.uploadedBytes + bytes, uploadMs: s.uploadMs + elapsed }
-      : { downloadedBytes: s.downloadedBytes + bytes, downloadMs: s.downloadMs + elapsed, downloadedFiles: s.downloadedFiles + 1 });
+      ? { uploadedBytes: s.uploadedBytes + bytes, uploadMs: elapsed }
+      : { downloadedBytes: s.downloadedBytes + bytes, downloadMs: elapsed, downloadedFiles: s.downloadedFiles + 1 });
   };
 }

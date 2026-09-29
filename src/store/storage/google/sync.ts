@@ -1,15 +1,16 @@
+import { encodeAsync } from './encodeAsync';
 import { syncPhase, uploadedFile } from './progress';
 import { createKeyEnvelope, unlockKey, encode, decode, encrypt, decrypt, digest, type KeyEnvelope } from './crypto';
-import { toRecords, fromRecords, diffRecords, applyChanges, type Records, type Snapshot, type Change } from './records';
+import { toRecords, fromRecords, hashRecords, diffHashedRecords, applyChanges, type Records, type Snapshot, type Change } from './records';
 import { DriveTransport, SYNC_FOLDER_TYPE, type DriveFile } from './transport';
-import { syncCache } from './cache';
+import { syncCache, readSyncEntries, writeSyncCache } from './cache';
 
 interface Commit { version: 1; parents: string[]; changes: Change[] }
 interface Pending {
   id: string;
   commit: Commit;
   baseline: Records;
-  files: { id: string; kind: string; bytes: number[]; sent: boolean }[];
+  files: { id: string; kind: string; size: number; bytes?: Uint8Array; sent: boolean }[];
 }
 interface Cache {
   version: 1;
@@ -19,7 +20,16 @@ interface Cache {
   pending?: Pending;
 }
 const emptyCache = (): Cache => ({ version: 1, commits: {} });
-const PART_BYTES = 256 * 1024;
+const PART_BYTES = 1024 * 1024;
+const INLINE_BYTES = 256 * 1024;
+export interface SyncTransferOptions { partBytes?: number; concurrency?: 1 | 2 }
+interface StoredCache {
+  version: 2;
+  commits: string[];
+  token?: string;
+  baseline?: Records;
+  pending?: { id: string; baseline: Records; files: { id: string; kind: string; size: number }[] };
+}
 
 export class EncryptedDriveSync {
   private cache: Cache = emptyCache();
@@ -28,7 +38,9 @@ export class EncryptedDriveSync {
   private closed = false;
   private cacheFingerprint?: string;
   private loading = new Set<string>();
-  constructor(readonly dataset: string, private drive: DriveTransport) {}
+  private persistedCommits = new Set<string>();
+  private encodedCommits = new Map<string, Uint8Array>();
+  constructor(readonly dataset: string, private drive: DriveTransport, private options: SyncTransferOptions = {}) {}
 
   private context(id: string) { return `${this.dataset}:${id}`; }
   private requireKey(): CryptoKey {
@@ -36,11 +48,57 @@ export class EncryptedDriveSync {
     return this.key;
   }
   close() { this.closed = true; this.key = undefined; }
-  private async save() {
-    const bytes = await encrypt(this.requireKey(), encode(this.cache), this.context('cache'));
-    await syncCache(this.dataset, bytes);
+  private async save(remove: string[] = []) {
+    const entries: [string, Uint8Array][] = [];
+    const commits = { ...this.cache.commits };
+    const pending = this.cache.pending;
+    if (pending) commits[pending.id] = pending.commit;
+    for (const [id, commit] of Object.entries(commits)) {
+      if (this.persistedCommits.has(id)) continue;
+      entries.push([`commit:${id}`, await encrypt(this.requireKey(), this.encodedCommits.get(id) ?? encode(commit), this.context(`commit:${id}`))]);
+    }
+    for (const file of pending?.files ?? []) {
+      if (file.bytes) entries.push([`outbox:${file.id}`, file.bytes]);
+      if (file.sent) entries.push([`ack:${file.id}`, await encrypt(this.requireKey(), encode(pending!.id), this.context(`ack:${file.id}`))]);
+    }
+    const stored: StoredCache = {
+      version: 2, commits: Object.keys(this.cache.commits), token: this.cache.token, baseline: this.cache.baseline,
+      pending: pending && { id: pending.id, baseline: pending.baseline,
+        files: pending.files.map(({ id, kind, size }) => ({ id, kind, size })) },
+    };
+    const bytes = await encrypt(this.requireKey(), encode(stored), this.context('cache'));
+    // Publishing the outbox and its immutable ciphertext is one durable transaction.
+    await writeSyncCache(this.dataset, bytes, entries, remove);
+    for (const id of Object.keys(commits)) { this.persistedCommits.add(id); this.encodedCommits.delete(id); }
+    for (const file of pending?.files ?? []) delete file.bytes;
     this.cacheFingerprint = await digest(bytes);
   }
+  private async loadCache(bytes: Uint8Array) {
+    const stored = decode<StoredCache | Cache>(await decrypt(this.requireKey(), bytes, this.context('cache')));
+    if (stored.version === 1) {
+      // Upgrade legacy outboxes without regenerating a single ID or ciphertext byte.
+      this.cache = stored;
+      if (stored.baseline) this.cache.baseline = await hashRecords(stored.baseline);
+      if (stored.pending) {
+        stored.pending.baseline = await hashRecords(stored.pending.baseline);
+        for (const file of stored.pending.files) { file.bytes = new Uint8Array(file.bytes!); file.size = file.bytes.length; }
+      }
+      await this.save();
+      return;
+    }
+    if (stored.version !== 2 || !Array.isArray(stored.commits)) throw new Error('Unsupported local sync cache.');
+    const ids = [...new Set([...stored.commits, ...(stored.pending ? [stored.pending.id] : [])])];
+    const values = await readSyncEntries(this.dataset, ids.map(id => `commit:${id}`));
+    const commits: Record<string, Commit> = {};
+    for (let i = 0; i < ids.length; i++) {
+      if (!values[i]) throw new Error('Missing local sync commit.');
+      commits[ids[i]] = decode<Commit>(await decrypt(this.requireKey(), values[i]!, this.context(`commit:${ids[i]}`)));
+      this.persistedCommits.add(ids[i]);
+    }
+    this.cache = { version: 1, commits: Object.fromEntries(stored.commits.map(id => [id, commits[id]])), token: stored.token, baseline: stored.baseline,
+      pending: stored.pending && { ...stored.pending, commit: commits[stored.pending.id], files: stored.pending.files.map(f => ({ ...f, sent: false })) } };
+  }
+
   private run<T>(work: () => Promise<T>): Promise<T> {
     const task = async () => {
       const guarded = async () => {
@@ -52,11 +110,20 @@ export class EncryptedDriveSync {
           if (this.cacheFingerprint && this.cacheFingerprint !== fingerprint) {
             throw new Error('Another tab changed the sync state. Reload this tab before resuming.');
           }
-          this.cacheFingerprint = fingerprint;
-          this.cache = decode<Cache>(await decrypt(this.requireKey(), cached, this.context('cache')));
-          if (this.cache.version !== 1) throw new Error('Unsupported local sync cache.');
         }
-        return work();
+        try {
+          if (cached && !this.cacheFingerprint) {
+            this.cacheFingerprint = await digest(cached);
+            await this.loadCache(cached);
+          }
+          return await work();
+        }
+        catch (error) {
+          // A failed transaction must be retried from durable state, not half-mutated in-memory metadata.
+          this.cacheFingerprint = undefined;
+          this.cache = emptyCache(); this.persistedCommits.clear(); this.encodedCommits.clear();
+          throw error;
+        }
       };
       return typeof navigator !== 'undefined' && navigator.locks
         ? navigator.locks.request(`weavelet-google-sync:${this.dataset}`, guarded)
@@ -67,16 +134,15 @@ export class EncryptedDriveSync {
     return result;
   }
 
-  static async create(drive: DriveTransport, password: string): Promise<{ session: EncryptedDriveSync; file: DriveFile }> {
+  static async create(drive: DriveTransport, password: string, options: SyncTransferOptions = {}): Promise<{ session: EncryptedDriveSync; file: DriveFile }> {
     // Derive the key before creating remote files, so invalid passphrases cannot create empty folders.
-    const dataset = await drive.id();
+    const [dataset, header] = await drive.ids(2);
     syncPhase('key');
     const { key, envelope } = await createKeyEnvelope(password, dataset);
-    const header = await drive.id();
     syncPhase('folder');
     const file = await drive.folder(dataset, header);
     await drive.put(header, dataset, 'key', new TextEncoder().encode(JSON.stringify(envelope)));
-    const session = new EncryptedDriveSync(dataset, drive);
+    const session = new EncryptedDriveSync(dataset, drive, options);
     session.key = key;
     await session.save();
     return { session, file };
@@ -99,23 +165,30 @@ export class EncryptedDriveSync {
     this.loading.add(id);
     try {
     syncPhase('downloading');
-    const manifest = decode<{ version: number; parts: string[] }>(await decrypt(
-      this.requireKey(), await this.drive.read(id), this.context(id)
-    ));
-    if (manifest.version !== 1 || !Array.isArray(manifest.parts) || !manifest.parts.length ||
-        manifest.parts.some((p) => typeof p !== 'string')) throw new Error('Invalid sync commit.');
-    const chunks = [];
-    let size = 0;
-    for (const part of manifest.parts) {
-      const bytes = await decrypt(this.requireKey(), await this.drive.read(part), this.context(part));
-      chunks.push(bytes); size += bytes.length;
+    const encoded = await decrypt(this.requireKey(), await this.drive.read(id), this.context(id));
+    const manifest = decode<{ version: number; parts?: string[]; parents?: string[]; changes?: Change[] }>(encoded);
+    let payload: Uint8Array;
+    let commit: Commit;
+    if (manifest.version === 2) {
+      commit = { version: 1, parents: manifest.parents!, changes: manifest.changes! };
+      payload = encode(commit);
+    } else {
+      if (manifest.version !== 1 || !Array.isArray(manifest.parts) || !manifest.parts.length ||
+          manifest.parts.some(p => typeof p !== 'string')) throw new Error('Invalid sync commit.');
+      const chunks = [];
+      let size = 0;
+      for (const part of manifest.parts) {
+        const bytes = await decrypt(this.requireKey(), await this.drive.read(part), this.context(part));
+        chunks.push(bytes); size += bytes.length;
+      }
+      payload = new Uint8Array(size);
+      let offset = 0;
+      for (const bytes of chunks) { payload.set(bytes, offset); offset += bytes.length; }
+      commit = decode<Commit>(payload);
     }
-    const payload = new Uint8Array(size);
-    let offset = 0;
-    for (const bytes of chunks) { payload.set(bytes, offset); offset += bytes.length; }
-    const commit = decode<Commit>(payload);
     if (commit.version !== 1 || !Array.isArray(commit.parents) || !Array.isArray(commit.changes) ||
-        commit.parents.some((p) => typeof p !== 'string' || p === id)) throw new Error('Invalid sync commit.');
+        commit.parents.some(p => typeof p !== 'string' || p === id)) throw new Error('Invalid sync commit.');
+    this.encodedCommits.set(id, payload);
     // Load parents even if Drive's changes feed has not exposed them yet.
     for (const parent of commit.parents) await this.loadCommit(parent);
     this.cache.commits[id] = commit;
@@ -190,36 +263,58 @@ export class EncryptedDriveSync {
   private async sendPending() {
     const pending = this.cache.pending;
     if (!pending) return;
-    const remaining = pending.files.filter(file => !file.sent);
-    syncPhase('uploading', remaining.length, remaining.reduce((total, file) => total + file.bytes.length, 0));
-    for (const file of pending.files) {
-      this.requireKey();
-      if (file.sent) continue;
-      await this.drive.put(file.id, this.dataset, file.kind, new Uint8Array(file.bytes));
-      file.sent = true;
-      uploadedFile(file.bytes.length);
-      await this.save();
+    const acks = await readSyncEntries(this.dataset, pending.files.map(f => `ack:${f.id}`));
+    for (let i = 0; i < acks.length; i++) if (acks[i]) {
+      const id = decode<string>(await decrypt(this.requireKey(), acks[i]!, this.context(`ack:${pending.files[i].id}`)));
+      if (id !== pending.id) throw new Error('Invalid upload completion record.');
+      pending.files[i].sent = true;
     }
+    const remaining = pending.files.filter(file => !file.sent);
+    syncPhase('uploading', remaining.length, remaining.reduce((total, file) => total + file.size, 0));
+    const send = async (file: Pending['files'][number]) => {
+      this.requireKey();
+      const [bytes] = await readSyncEntries(this.dataset, [`outbox:${file.id}`]);
+      if (!bytes || bytes.length !== file.size) throw new Error('Missing local upload data.');
+      await decrypt(this.requireKey(), bytes, this.context(file.id));
+      await this.drive.put(file.id, this.dataset, file.kind, bytes);
+      // Only the tiny authenticated acknowledgement changes after each upload.
+      const ack = await encrypt(this.requireKey(), encode(pending.id), this.context(`ack:${file.id}`));
+      await writeSyncCache(this.dataset, undefined, [[`ack:${file.id}`, ack]]);
+      file.sent = true;
+      uploadedFile(file.size);
+    };
+    const parts = remaining.filter(file => file.kind !== 'commit');
+    const concurrency = this.options.concurrency ?? 2;
+    for (let i = 0; i < parts.length; i += concurrency) {
+      const results = await Promise.allSettled(parts.slice(i, i + concurrency).map(send));
+      const failed = results.find((r): r is PromiseRejectedResult => r.status === 'rejected');
+      if (failed) throw failed.reason;
+    }
+    // The commit is the publication boundary: never publish incomplete data.
+    for (const file of remaining.filter(file => file.kind === 'commit')) await send(file);
+    syncPhase('saving');
     this.cache.commits[pending.id] = pending.commit;
     this.cache.baseline = pending.baseline;
     delete this.cache.pending;
-    await this.save();
+    await this.save(pending.files.flatMap(f => [`outbox:${f.id}`, `ack:${f.id}`]));
   }
   private async prepare(changes: Change[], baseline: Records) {
     syncPhase('encrypting');
-    const id = await this.drive.id();
     const commit: Commit = { version: 1, parents: this.heads(), changes };
-    const payload = encode(commit);
+    const payload = changes.reduce((size, change) => size + (change.after?.length ?? 0), 0) > INLINE_BYTES
+      ? await encodeAsync(commit) : encode(commit);
+    const inline = commit.parents.length > 0 && payload.length <= INLINE_BYTES;
+    const partBytes = this.options.partBytes ?? PART_BYTES;
+    const [id, ...parts] = await this.drive.ids(inline ? 1 : 1 + Math.ceil(payload.length / partBytes));
     const files: Pending['files'] = [];
-    for (let start = 0; start < payload.length; start += PART_BYTES) {
-      const part = await this.drive.id();
-      files.push({ id: part, kind: 'part', sent: false,
-        bytes: [...await encrypt(this.requireKey(), payload.slice(start, start + PART_BYTES), this.context(part))] });
+    for (let i = 0; i < parts.length; i++) {
+      const bytes = await encrypt(this.requireKey(), payload.slice(i * partBytes, (i + 1) * partBytes), this.context(parts[i]));
+      files.push({ id: parts[i], kind: 'part', bytes, size: bytes.length, sent: false });
     }
-    files.push({ id, kind: 'commit', sent: false, bytes: [...await encrypt(this.requireKey(),
-      encode({ version: 1, parts: files.map((f) => f.id) }), this.context(id))] });
+    const bytes = await encrypt(this.requireKey(), encode(inline ? { ...commit, version: 2 } : { version: 1, parts }), this.context(id));
+    files.push({ id, kind: 'commit', bytes, size: bytes.length, sent: false });
+    this.encodedCommits.set(id, payload);
     this.cache.pending = { id, commit, baseline, files };
-    // Persist ciphertext and pre-generated IDs before the first upload. A retry sends identical bytes.
     await this.save();
   }
 
@@ -231,8 +326,9 @@ export class EncryptedDriveSync {
       await this.refresh();
       const remote = await this.remote();
       if (!replace && !this.cache.baseline) throw new Error('Choose upload or download before enabling automatic sync.');
-      const base = replace ? remote : this.cache.baseline!;
-      const changes = (await diffRecords(base, local)).filter((change) => {
+      const base = replace ? await hashRecords(remote) : this.cache.baseline!;
+      const localHashes = await hashRecords(local);
+      const changes = diffHashedRecords(base, local, localHashes).filter((change) => {
         // Content and assets are immutable and may be referenced by another device. Never GC them from a local snapshot.
         const path = JSON.parse(change.key);
         return change.after !== null || (path[0] !== 'content' && path[0] !== 'assets');
@@ -243,12 +339,12 @@ export class EncryptedDriveSync {
       const merged = await applyChanges(remote, changes);
       await fromRecords(merged); // Validate references before publishing the commit.
       if (changes.length) {
-        await this.prepare(changes, local);
+        await this.prepare(changes, localHashes);
         await this.sendPending();
         await this.refresh();
         await this.remote(); // Detect concurrent conflicting publications; never report them as synced.
       } else {
-        this.cache.baseline = local;
+        this.cache.baseline = localHashes;
         await this.save();
       }
     });
@@ -266,7 +362,7 @@ export class EncryptedDriveSync {
   // Call only after the existing local persistence has accepted the downloaded state.
   async acceptLocal(snapshot: Snapshot): Promise<void> {
     syncPhase('saving');
-    const baseline = await toRecords(snapshot);
+    const baseline = await hashRecords(await toRecords(snapshot));
     await this.run(async () => { this.cache.baseline = baseline; await this.save(); });
   }
 }
