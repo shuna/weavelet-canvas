@@ -100,7 +100,7 @@ test('encrypted Drive creation, incremental autosave and unlock after browser re
   await page.getByText('クラウド同期', { exact: false }).click();
   await expect(page.getByText('新しい同期用パスフレーズを12文字以上で入力してください。', { exact: true })).toBeVisible();
   await expect(page.getByText('暗号化同期はロックされています。', { exact: true })).not.toBeVisible();
-  const operation = page.locator('select').filter({ has: page.locator('option[value="resume"]') });
+  const operation = page.getByRole('combobox', { name: '実行する操作', exact: true });
   const create = page.getByRole('button', { name: '暗号化した同期フォルダーを作成', exact: true });
   const guidance = page.locator('#google-sync-guidance');
   await expect(create).toBeDisabled();
@@ -302,6 +302,15 @@ test('encrypted Drive creation, incremental autosave and unlock after browser re
     await pauseGoogleSync();
     (await import('/src/store/cloud-auth-store.ts')).default.getState().setSyncTargetConfirmed(false);
   });
+  await page.reload();
+  await expect.poll(() => page.evaluate(async () => (await import('/src/store/cloud-auth-store.ts')).default.getState().syncStatus)).toBe('locked');
+  await page.getByText('クラウド同期', { exact: false }).click();
+  await expect(operation).toHaveValue('pull');
+  await expect(operation.locator('option:checked')).toHaveText('既存の同期フォルダー・旧形式ファイルを選択');
+  await expect(operation.locator('option[value="resume"]')).toHaveCount(0);
+  await expect(page.getByRole('radio', { name: 'Renamed on Drive', exact: true })).toBeVisible();
+  await expect(page.getByRole('radio', { name: 'Project sync (2)', exact: true })).toBeVisible();
+  await page.locator('#google-sync-passphrase').fill('browser test passphrase');
   await page.evaluate(async () => {
     const { default: store } = await import('/src/store/store.ts');
     const chats = structuredClone(store.getState().chats!);
