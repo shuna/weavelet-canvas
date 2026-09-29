@@ -1,3 +1,4 @@
+import { forgetSyncKeys } from '@store/storage/google/cache';
 import React, { useImperativeHandle, forwardRef } from 'react';
 import { useTranslation } from 'react-i18next';
 
@@ -102,6 +103,7 @@ const GoogleSyncButton = forwardRef<
 
   const logout = async () => {
     try {
+      await forgetSyncKeys();
       await disconnectGoogle();
     } catch (error) {
       showToast((error as Error).message, 'error');

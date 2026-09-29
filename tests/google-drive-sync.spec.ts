@@ -118,9 +118,7 @@ test('encrypted Drive creation, incremental autosave and unlock after browser re
   await page.getByRole('radio', { name: 'legacy.json' }).check();
   await expect(page.getByText('ファイルサイズ: 2 KB', { exact: true })).toBeVisible();
   await expect(page.locator('#google-sync-passphrase')).toHaveCount(0);
-  await operation.selectOption('push');
-  await expect(page.getByRole('radio')).toHaveCount(0);
-  await expect(page.getByRole('button', { name: 'ローカル状態でクラウドを上書き', exact: true })).toBeDisabled();
+  await expect(operation.locator('option[value="push"]')).toHaveCount(0);
   await operation.selectOption('create');
   await expect(create).toBeEnabled();
   await page.screenshot({ path: testInfo.outputPath('create-ready.png') });
@@ -177,24 +175,16 @@ test('encrypted Drive creation, incremental autosave and unlock after browser re
   await expect.poll(() => uploads.filter((u) => u.metadata.appProperties.kind === 'commit').length).toBe(3);
   expect(uploads.slice(before).reduce((total, u) => total + u.bytes.length, 0)).toBeLessThan(2000);
   for (const upload of uploads) expect(upload.bytes.toString()).not.toContain('PRIVATE BROWSER TITLE');
+  const savedTarget = await page.evaluate(async () => (await import('/src/store/cloud-auth-store.ts')).default.getState().fileId);
   await page.reload();
+  await expect.poll(() => page.evaluate(async () => (await import('/src/store/cloud-auth-store.ts')).default.getState().syncStatus)).toBe('synced');
+  expect(await page.evaluate(async () => (await import('/src/store/cloud-auth-store.ts')).default.getState().fileId)).toBe(savedTarget);
+  await expect(page.getByRole('button', { name: 'close modal', exact: true })).toHaveCount(0);
   await page.getByText('クラウド同期', { exact: false }).click();
-  await expect(guidance).toContainText('既存の同期フォルダーのパスフレーズを入力してください。');
-  await expect(page.getByText('暗号化同期はロックされています。', { exact: true })).not.toBeVisible();
-  const count = uploads.length;
-  await page.locator('select').filter({ has: page.locator('option[value="resume"]') }).selectOption('resume');
-  await expect(guidance).toContainText('既存の同期フォルダーのパスフレーズを入力してください。');
-  await page.locator('#google-sync-passphrase').fill('wrong passphrase');
-  await page.getByRole('button', { name: 'ロック解除して同期を再開', exact: true }).click();
-  await expect(page.getByText('同期を完了できませんでした。ローカルデータは保存されています。', { exact: true })).toBeVisible();
-  expect(uploads).toHaveLength(count);
-  await page.locator('#google-sync-passphrase').fill('browser test passphrase');
-  await page.getByRole('button', { name: 'ロック解除して同期を再開', exact: true }).click();
   await expect(guidance).toContainText('変更は暗号化して自動保存されます。');
   await expect(operation.locator('option:checked')).toHaveText('自動同期（有効）');
-  await expect(page.getByRole('button', { name: 'ロック解除して同期を再開', exact: true })).toHaveCount(0);
-  await expect(page.getByRole('button', { name: '自動同期（有効）', exact: true })).toHaveCount(0);
   await expect(page.locator('#google-sync-passphrase')).toHaveCount(0);
+  await expect(operation.locator('option[value="pull"], option[value="push"]')).toHaveCount(0);
   expect(await page.evaluate(() => JSON.stringify(localStorage))).not.toContain('browser test passphrase');
   await page.evaluate(async () => {
     const { default: auth } = await import('/src/store/cloud-auth-store.ts');
@@ -206,15 +196,76 @@ test('encrypted Drive creation, incremental autosave and unlock after browser re
   await expect(operation.locator('option:checked')).toHaveText('自動同期（有効）');
   await expect(page.getByRole('button', { name: '同期を再試行', exact: true })).toHaveCount(0);
 
-  await operation.selectOption('pull');
-  await page.getByRole('radio', { name: 'legacy.json' }).check();
-  await operation.selectOption('push');
-  await expect(page.getByRole('radio')).toHaveCount(0);
-  await expect(page.getByText('ファイル名: legacy.json', { exact: true })).toHaveCount(0);
-  await page.getByRole('button', { name: 'ローカル状態でクラウドを上書き', exact: true }).click();
-  await expect(guidance).toContainText('暗号化同期フォルダーを更新します。');
-  expect(uploads.some(u => u.metadata.parents.includes('legacy-file'))).toBe(false);
+  // Simulate an independently published encrypted remote edit without advancing this device's cache.
+  const folderCommitCount = uploads.filter(u => u.metadata.appProperties.kind === 'commit').length;
+  await page.evaluate(async () => {
+    const store = (await import('/src/store/store.ts')).default;
+    store.getState().setFolders({ folder: { id: 'folder', name: 'Shared folder', expanded: true, order: 0 } });
+    const chats = structuredClone(store.getState().chats!); chats[0].folder = 'folder'; store.getState().setChats(chats);
+  });
+  await expect.poll(() => uploads.filter(u => u.metadata.appProperties.kind === 'commit').length).toBe(folderCommitCount + 1);
+  await expect(guidance).toContainText('変更は暗号化して自動保存されます。');
+  const parent = uploads.filter(u => u.metadata.appProperties.kind === 'commit').at(-1)!.metadata.id;
+  await page.evaluate(async parent => {
+    const store = (await import('/src/store/store.ts')).default;
+    const auth = (await import('/src/store/cloud-auth-store.ts')).default.getState();
+    const { createPartializedState } = await import('/src/store/persistence.ts');
+    const { STORE_VERSION } = await import('/src/store/version.ts');
+    const { toRecords, diffRecords } = await import('/src/store/storage/google/records.ts');
+    const { encrypt, encode } = await import('/src/store/storage/google/crypto.ts');
+    const { rememberedSyncKey } = await import('/src/store/storage/google/cache.ts');
+    const { DriveTransport } = await import('/src/store/storage/google/transport.ts');
+    const original = { state: structuredClone(createPartializedState(store.getState())), version: STORE_VERSION };
+    const remote = structuredClone(original);
+    remote.state.chats![0].title = 'REMOTE CONFLICT'; remote.state.folders!.folder.name = 'Remote folder';
+    const drive = new DriveTransport(() => auth.googleAccessToken!);
+    const [id] = await drive.ids(1);
+    const changes = await diffRecords(await toRecords(original), await toRecords(remote));
+    await drive.put(id, auth.fileId!, 'commit', await encrypt((await rememberedSyncKey(auth.fileId!))!,
+      encode({ version: 2, parents: [parent], changes }), `${auth.fileId}:${id}`));
+    const chats = structuredClone(store.getState().chats!); chats[0].title = 'LOCAL CONFLICT'; store.getState().setChats(chats);
+    store.getState().setFolders({ folder: { id: 'folder', name: 'Local folder', expanded: true, order: 0 } });
+  }, parent);
+  await expect(page.getByRole('button', { name: 'マージ（両方を保持）', exact: true })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'この端末の内容を優先', exact: true })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'クラウドの内容を優先', exact: true })).toBeVisible();
+  await page.getByRole('button', { name: 'マージ（両方を保持）', exact: true }).click();
+  await expect(guidance).toContainText('変更は暗号化して自動保存されます。');
+  const merged = await page.evaluate(async () => {
+    const state = (await import('/src/store/store.ts')).default.getState();
+    return { titles: state.chats!.map(c => c.title).sort(), folders: Object.values(state.folders).map(f => f.name).sort() };
+  });
+  expect(merged).toEqual({ titles: ['LOCAL CONFLICT', 'REMOTE CONFLICT'], folders: ['Local folder', 'Remote folder'] });
+  await expect(page.locator('a[data-sync-changed="true"]')).toHaveCount(2);
+  await expect(page.locator('div[data-sync-changed="true"]')).toHaveCount(2);
+  const beforeUnsentTitle = await page.evaluate(async () => (await import('/src/store/store.ts')).default.getState().chats![0].title);
 
+  const remoteParent = uploads.filter(u => u.metadata.appProperties.kind === 'commit').at(-1)!.metadata.id;
+  const remoteTheme = await page.evaluate(async parent => {
+    const auth = (await import('/src/store/cloud-auth-store.ts')).default.getState();
+    const theme = (await import('/src/store/store.ts')).default.getState().theme;
+    const next = theme === 'dark' ? 'light' : 'dark';
+    const { DriveTransport } = await import('/src/store/storage/google/transport.ts');
+    const { rememberedSyncKey } = await import('/src/store/storage/google/cache.ts');
+    const { digest, encode, encrypt } = await import('/src/store/storage/google/crypto.ts');
+    const drive = new DriveTransport(() => auth.googleAccessToken!);
+    const [id] = await drive.ids(1);
+    await drive.put(id, auth.fileId!, 'commit', await encrypt((await rememberedSyncKey(auth.fileId!))!,
+      encode({ version: 2, parents: [parent], changes: [{ key: '["state","theme"]', before: await digest(JSON.stringify(theme)), after: JSON.stringify(next) }] }), `${auth.fileId}:${id}`));
+    return next;
+  }, remoteParent);
+  await page.reload();
+  await expect.poll(() => page.evaluate(async () => (await import('/src/store/store.ts')).default.getState().theme)).toBe(remoteTheme);
+  await expect(page.getByRole('button', { name: 'close modal', exact: true })).toHaveCount(0);
+  await page.getByText('クラウド同期', { exact: false }).click();
+  await expect(guidance).toContainText('変更は暗号化して自動保存されます。');
+
+  // A fresh/unconfirmed target retains the explicit import path for legacy data and existing folders.
+  await page.evaluate(async () => {
+    const { pauseGoogleSync } = await import('/src/store/storage/GoogleCloudStorage.ts');
+    await pauseGoogleSync();
+    (await import('/src/store/cloud-auth-store.ts')).default.getState().setSyncTargetConfirmed(false);
+  });
   await page.evaluate(async () => {
     const { default: store } = await import('/src/store/store.ts');
     const chats = structuredClone(store.getState().chats!);
@@ -228,7 +279,8 @@ test('encrypted Drive creation, incremental autosave and unlock after browser re
   expect(await page.evaluate(async () => {
     const { default: store } = await import('/src/store/store.ts');
     return store.getState().chats![0].title;
-  })).toBe('PRIVATE BROWSER TITLE');
+  })).toBe(beforeUnsentTitle);
+  await page.evaluate(async () => (await import('/src/store/cloud-auth-store.ts')).default.getState().setSyncTargetConfirmed(false));
   await page.getByText('Google Drive Sync', { exact: true }).click();
   await operation.selectOption('pull');
   await page.getByRole('radio', { name: 'legacy.json' }).check();

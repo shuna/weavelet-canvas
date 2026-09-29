@@ -1,3 +1,4 @@
+import { SyncConflictError } from './conflicts';
 import { recordMetric } from './metrics';
 import type { StorageValue } from 'zustand/middleware';
 import type { PersistedStoreState } from '@store/persistence';
@@ -190,7 +191,7 @@ export async function applyChanges(records: Records, changes: Change[]): Promise
     const current = result[change.key];
     if ((current ?? null) !== change.after &&
         (current === undefined ? null : await digest(current)) !== change.before) {
-      throw new Error('Concurrent edits conflict. Sync stopped; both copies are preserved.');
+      throw new SyncConflictError([change.key]);
     }
     if (change.after === null) delete result[change.key];
     else result[change.key] = change.after;

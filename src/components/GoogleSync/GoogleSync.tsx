@@ -1,3 +1,4 @@
+import { SyncConflictError, useSyncReview, type Resolution } from '@store/storage/google/conflicts';
 import { withSyncProgress, syncPhase } from '@store/storage/google/progress';
 import GoogleSyncProgress from './GoogleSyncProgress';
 import { createPortal } from 'react-dom';
@@ -19,8 +20,8 @@ import {
 import { getFiles, stateToFile } from '@utils/google-api';
 import createGoogleCloudStorage, {
   isGoogleSyncUnlocked, unlockGoogleSync, createEncryptedGoogleSync,
-  pullEncryptedGoogleSync, pushEncryptedGoogleSync, acceptGoogleSyncLocal,
-  pauseGoogleSync, queueGoogleSyncSnapshot,
+  pullEncryptedGoogleSync, acceptGoogleSyncLocal,
+  pauseGoogleSync, queueGoogleSyncSnapshot, restoreGoogleSync, resumeGoogleSync, resolveGoogleSyncConflict,
 } from '@store/storage/GoogleCloudStorage';
 import { SYNC_FOLDER_TYPE } from '@store/storage/google/transport';
 import {
@@ -55,7 +56,6 @@ type SyncOperation =
   | 'create'
   | 'resume'
   | 'pull'
-  | 'push'
   | 'disconnect';
 
 type SyncActivity =
@@ -100,8 +100,10 @@ const formatFileSize = (value: string | undefined, locale?: string): string => {
 const actionButtonClass =
   'btn btn-primary disabled:pointer-events-none disabled:cursor-not-allowed disabled:opacity-50 disabled:saturate-50';
 
-const resolveGoogleSyncErrorStatus = (error: unknown): SyncStatus =>
-  isGoogleAuthError(error) ? 'unauthenticated' : 'error';
+const resolveGoogleSyncErrorStatus = (error: unknown): SyncStatus => {
+  if (error instanceof SyncConflictError) useSyncReview.setState({ conflict: true });
+  return isGoogleAuthError(error) ? 'unauthenticated' : 'error';
+};
 
 const normalizeRemotePersistedState = (
   snapshot: unknown
@@ -201,7 +203,7 @@ const GoogleSync = ({ clientId, openOnMount = false, showEntry = true }: { clien
     });
   };
 
-  const [isModalOpen, setIsModalOpen] = useState<boolean>((cloudSync && showEntry) || openOnMount);
+  const [isModalOpen, setIsModalOpen] = useState<boolean>(openOnMount);
   const [files, setFiles] = useState<GoogleFileResource[]>([]);
   const isSilentRefresh = useRef(false);
   useEffect(() => { if (showEntry && cloudSync) setIsModalOpen(true); }, [showEntry]);
@@ -221,10 +223,12 @@ const GoogleSync = ({ clientId, openOnMount = false, showEntry = true }: { clien
         if (_files) {
           setFiles(_files);
           const target = _files.find((file) => file.id === fileId && file.mimeType === SYNC_FOLDER_TYPE)
-            ?? _files.find((file) => file.mimeType === SYNC_FOLDER_TYPE);
+            ?? (!syncTargetConfirmed ? _files.find((file) => file.mimeType === SYNC_FOLDER_TYPE) : undefined);
           if (target && target.id !== fileId) setFileId(target.id);
-          if (syncTargetConfirmed && isGoogleSyncUnlocked(fileId)) {
+          if (syncTargetConfirmed && !target) throw new Error('The previous sync folder is unavailable.');
+          if (syncTargetConfirmed && fileId && await restoreGoogleSync(fileId)) {
             enableCloudPersistence();
+            await resumeGoogleSync();
             setSyncStatus('synced');
           } else {
             enableLocalPersistence();
@@ -338,6 +342,8 @@ const GooglePopup = ({
   const [selectedOperation, setSelectedOperation] =
     useState<SyncOperation>(() => syncTargetConfirmed && currentFileId ? 'resume' : 'connect');
   const [activity, setActivity] = useState<SyncActivity>(null);
+  const conflict = useSyncReview(state => state.conflict);
+  useEffect(() => { if (conflict) setIsModalOpen(true); }, [conflict]);
   const [passphrase, setPassphrase] = useState('');
   const [confirmation, setConfirmation] = useState('');
   const snapshot = () => ({ state: createPartializedState(useStore.getState()), version: STORE_VERSION });
@@ -388,14 +394,14 @@ const GooglePopup = ({
   const selectedFile = selectedOperation === 'pull' ? files.find((file) => file.id === _fileId) : syncFile;
   const operationFileId = selectedFile?.id ?? '';
   const needsPassphrase = selectedOperation === 'create' ||
-    (['resume', 'pull', 'push'].includes(selectedOperation) && selectedFile?.mimeType === SYNC_FOLDER_TYPE &&
+    (['resume', 'pull'].includes(selectedOperation) && selectedFile?.mimeType === SYNC_FOLDER_TYPE &&
       !isGoogleSyncUnlocked(operationFileId));
   const inputIssue = selectedOperation === 'create'
     ? !passphrase ? 'guidance.enterNewPassphrase'
       : passphrase.length < 12 ? 'guidance.passphraseTooShort'
       : !confirmation ? 'guidance.confirmPassphrase'
       : passphrase !== confirmation ? 'encryption.mismatch' : undefined
-    : ['resume', 'pull', 'push'].includes(selectedOperation) && !selectedFile
+    : ['resume', 'pull'].includes(selectedOperation) && !selectedFile
       ? selectedOperation === 'pull' ? 'guidance.selectInput' : 'guidance.createOrRead'
       : needsPassphrase && !passphrase ? 'guidance.enterPassphrase' : undefined;
 
@@ -471,24 +477,6 @@ const GooglePopup = ({
     }
   };
 
-  const overwriteRemoteWithLocal = async () => {
-    if (!operationFileId || !googleAccessToken) return;
-    try {
-      setBusyActivity('syncing');
-      setSyncStatus('syncing');
-      await unlockSelected();
-      await pushEncryptedGoogleSync(snapshot(), true);
-      activateCloudSyncTarget(operationFileId);
-      const _files = await getFiles(googleAccessToken);
-      if (_files) setFiles(_files);
-      showToast(t('toast.push'), 'success');
-      setSyncStatus('synced');
-    } catch (e: unknown) {
-      setSyncStatus(resolveGoogleSyncErrorStatus(e));
-      showToast((e as Error).message, 'error');
-    }
-  };
-
   const createSyncFile = async () => {
     if (!googleAccessToken) return;
     try {
@@ -508,6 +496,18 @@ const GooglePopup = ({
     } catch (e: unknown) {
       setSyncStatus(resolveGoogleSyncErrorStatus(e));
       showToast((e as Error).message, 'error');
+    }
+  };
+
+  const resolveConflict = async (mode: Resolution) => {
+    try {
+      setSyncStatus('syncing');
+      await withSyncProgress(() => resolveGoogleSyncConflict(mode));
+      setSelectedOperation('resume');
+      setSyncStatus('synced');
+    } catch (error) {
+      setSyncStatus(resolveGoogleSyncErrorStatus(error));
+      showToast((error as Error).message, 'error');
     }
   };
 
@@ -538,8 +538,8 @@ const GooglePopup = ({
     : needsReconnect
       ? ['reconnect', 'disconnect']
       : syncFile && syncTargetConfirmed
-        ? ['resume', 'create', 'pull', 'push', 'disconnect']
-        : ['create', 'resume', 'pull', 'push', 'disconnect'];
+        ? ['resume', 'create', 'disconnect']
+        : ['create', 'resume', 'pull', 'disconnect'];
 
   useEffect(() => {
     const fallbackOperation = availableOperations[0];
@@ -559,8 +559,8 @@ const GooglePopup = ({
       try {
         setSyncStatus('syncing');
         await unlockSelected();
-        await pushEncryptedGoogleSync(snapshot());
         activateCloudSyncTarget(operationFileId);
+        await resumeGoogleSync();
         setSyncStatus('synced');
       } catch (error) {
         setSyncStatus(resolveGoogleSyncErrorStatus(error));
@@ -576,16 +576,12 @@ const GooglePopup = ({
       await applyRemoteToLocal();
       return;
     }
-    if (selectedOperation === 'push') {
-      await overwriteRemoteWithLocal();
-      return;
-    }
     stopSyncing();
   };
 
   const runSelectedOperation = async () => {
     if (isBusy || inputIssue) return;
-    if (['create', 'resume', 'pull', 'push'].includes(selectedOperation)) {
+    if (['create', 'resume', 'pull'].includes(selectedOperation)) {
       await withSyncProgress(performSelectedOperation);
     } else {
       await performSelectedOperation();
@@ -598,7 +594,6 @@ const GooglePopup = ({
     create: 'actions.createDescription',
     resume: automaticSyncActive ? 'guidance.active' : syncUnlocked ? 'actions.retryDescription' : 'actions.resumeDescription',
     pull: 'actions.pullDescription',
-    push: 'actions.pushDescription',
     disconnect: 'actions.disconnectDescription',
   } satisfies Record<SyncOperation, string>;
 
@@ -608,21 +603,18 @@ const GooglePopup = ({
     create: 'operations.create',
     resume: automaticSyncActive ? 'operations.active' : syncUnlocked ? 'operations.retry' : 'operations.resume',
     pull: 'operations.pull',
-    push: 'operations.push',
     disconnect: 'operations.disconnect',
   } satisfies Record<SyncOperation, string>;
 
   const syncDirection =
     selectedOperation === 'pull'
       ? ({ mobile: 'down', desktop: 'left' } as const)
-      : selectedOperation === 'push'
-        ? ({ mobile: 'up', desktop: 'right' } as const)
-        : null;
+      : null;
 
   const readyMessageKey = {
     connect: 'guidance.connect', reconnect: 'guidance.reconnect', create: 'guidance.create',
     resume: automaticSyncActive ? 'guidance.active' : syncUnlocked ? 'guidance.retry' : 'guidance.resume',
-    pull: 'guidance.pull', push: 'guidance.push', disconnect: 'guidance.disconnect',
+    pull: 'guidance.pull', disconnect: 'guidance.disconnect',
   } satisfies Record<SyncOperation, string>;
   const statusMessageKey = isBusy
     ? activity === 'downloading' ? 'status.downloading'
@@ -647,7 +639,7 @@ const GooglePopup = ({
         </div>
       }
       footerEndContent={
-        isBusy || (selectedOperation === 'resume' && automaticSyncActive) ? null : connected ? (
+        isBusy || conflict || (selectedOperation === 'resume' && automaticSyncActive) ? null : connected ? (
           <button
             type='button'
             className={actionButtonClass}
@@ -696,6 +688,15 @@ const GooglePopup = ({
             setIsModalOpen(true);
           }}
         />
+        {conflict && <div role='alert' className='w-full max-w-2xl rounded border border-amber-500 p-4 text-left'>
+          <p>{t('conflict.description')}</p>
+          <div className='mt-3 flex flex-wrap gap-2'>
+            {(['merge', 'local', 'cloud'] as const).map(mode => <button key={mode} type='button'
+              className={actionButtonClass} disabled={isBusy} onClick={() => void resolveConflict(mode)}>
+              {t(`conflict.${mode}`)}
+            </button>)}
+          </div>
+        </div>}
         <div className='w-full max-w-2xl rounded-lg border border-gray-200 bg-white/80 p-4 text-left dark:border-gray-600 dark:bg-gray-800/40'>
           <div className='mb-2 text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400'>
             {t('labels.operation')}
@@ -704,7 +705,7 @@ const GooglePopup = ({
             className='w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-emerald-500 dark:border-gray-500 dark:bg-gray-700 dark:text-white'
             value={selectedOperation}
             onChange={(e) => setSelectedOperation(e.target.value as SyncOperation)}
-            disabled={isBusy}
+            disabled={isBusy || conflict}
           >
             {availableOperations.map((operation) => (
               <option key={operation} value={operation}>

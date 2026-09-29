@@ -2,9 +2,9 @@ import { recordMetric } from './metrics';
 // Only this sync-private database changes. Existing chat IndexedDB/localStorage remain untouched.
 async function openCache() {
   return new Promise<IDBDatabase>((resolve, reject) => {
-    const request = indexedDB.open('weavelet-google-sync', 2);
+    const request = indexedDB.open('weavelet-google-sync', 3);
     request.onupgradeneeded = () => {
-      for (const name of ['sessions', 'entries']) {
+      for (const name of ['sessions', 'entries', 'keys']) {
         if (!request.result.objectStoreNames.contains(name)) request.result.createObjectStore(name);
       }
     };
@@ -51,4 +51,28 @@ export async function syncCache(id: string, value?: Uint8Array): Promise<Uint8Ar
       tx.onabort = tx.onerror = () => reject(tx.error ?? new Error('Unable to read sync progress.'));
     });
   } finally { db.close(); recordMetric('cache', started); }
+}
+
+// CryptoKey is structured-cloned by IndexedDB; raw key bytes and passphrases are never stored here.
+export async function rememberedSyncKey(dataset: string, key?: CryptoKey): Promise<CryptoKey | undefined> {
+  const db = await openCache();
+  try {
+    return await new Promise((resolve, reject) => {
+      const tx = db.transaction('keys', key ? 'readwrite' : 'readonly');
+      const request = key ? tx.objectStore('keys').put(key, dataset) : tx.objectStore('keys').get(dataset);
+      tx.oncomplete = () => resolve(key ?? request.result);
+      tx.onabort = tx.onerror = () => reject(tx.error ?? new Error('Unable to access remembered sync key.'));
+    });
+  } finally { db.close(); }
+}
+export async function forgetSyncKeys() {
+  const db = await openCache();
+  try {
+    await new Promise<void>((resolve, reject) => {
+      const tx = db.transaction('keys', 'readwrite');
+      tx.objectStore('keys').clear();
+      tx.oncomplete = () => resolve();
+      tx.onabort = tx.onerror = () => reject(tx.error ?? new Error('Unable to forget sync keys.'));
+    });
+  } finally { db.close(); }
 }

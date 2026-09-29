@@ -1,3 +1,4 @@
+import { useSyncReview } from '@store/storage/google/conflicts';
 import React, { useEffect, useRef, useState } from 'react';
 
 import useInitialiseNewChat from '@hooks/useInitialiseNewChat';
@@ -53,6 +54,7 @@ const ChatHistory = React.memo(
     const active = useStore((state) => state.currentChatIndex === chatIndex);
 
     const chatId = useStore((state) => state.chats?.[chatIndex]?.id ?? '');
+    const syncChanged = useSyncReview(state => state.chats.includes(chatId));
     const isThisChatGenerating = useStore((state) =>
       Object.values(state.generatingSessions).some((s) => s.chatId === chatId)
     );
@@ -204,8 +206,12 @@ const ChatHistory = React.memo(
         className={`${
           active ? ChatHistoryClass.active : ChatHistoryClass.normal
         } cursor-pointer opacity-100 ${selectedChats.includes(chatIndex) ? 'bg-blue-500' : ''}`}
+        data-sync-changed={syncChanged || undefined}
+        style={syncChanged ? { outline: '2px solid #f59e0b', outlineOffset: '-2px' } : undefined}
+        aria-description={syncChanged ? '同期で変更されたチャット' : undefined}
         aria-current={active ? 'page' : undefined}
         onClick={() => {
+          useSyncReview.setState(state => ({ chats: state.chats.filter(id => id !== chatId) }));
           if (!active) {
             const state = useStore.getState();
             const destChat = state.chats?.[chatIndex];

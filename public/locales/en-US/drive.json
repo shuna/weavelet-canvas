@@ -51,7 +51,7 @@
     "disconnectDescription": "This only stops syncing and signs out of Google for this app. Your local chats remain on this device, and your Google Drive files are not deleted or cleared.",
     "resumeDescription": "Unlock and upload pending changes from this device. On a new device, download the cloud data first."
   },
-  "notice": "Your passphrase is used only on this device. Sync waits for unlock after restart. Conflicting edits stop sync instead of silently overwriting data.",
+  "notice": "The key is saved in this browser to resume sync after reload. The passphrase is not saved. Conflicting edits stop for your review.",
   "privacy": "Your privacy is important to us. To protect it, Weavelet Canvas only requests non-sensitive access, which means it can only create, view, and manage its own files and folders.",
   "toast": {
     "sync": "Sync successful!",
@@ -113,5 +113,12 @@
     "measurement": "Percentage applies to the current upload phase. Sizes and average transfer speeds update when each file completes. Phases with unknown totals have no percentage.",
     "open": "Show sync progress",
     "failed": "View sync error"
-  }
+  },
+  "conflict": {
+    "description": "Changes to the same fields conflict. Keeping both preserves conflicting chats and folders as separate copies; conflicting settings use this device’s values.",
+    "merge": "Merge (keep both)",
+    "local": "Use this device’s contents",
+    "cloud": "Use cloud contents"
+  },
+  "backendNotice": "Google credentials are encrypted on Cloudflare and refreshed automatically. Conversations are encrypted in the browser. The sync key is remembered in this browser; the passphrase is neither stored nor sent."
 }

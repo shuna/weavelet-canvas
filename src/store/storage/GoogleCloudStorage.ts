@@ -3,7 +3,7 @@ import type { PersistStorage } from 'zustand/middleware';
 import { createJSONStorage } from 'zustand/middleware';
 import useCloudAuthStore from '@store/cloud-auth-store';
 import useStore from '@store/store';
-import { createLocalStoragePartializedState } from '@store/persistence';
+import { createLocalStoragePartializedState, createPartializedState, hydrateFromPersistedStoreState, migratePersistedState, type PersistedStoreState } from '@store/persistence';
 import { hasActiveStreamingBuffers } from '@utils/streamingBuffer';
 import { isGoogleAuthError } from '@api/google-api';
 import { showToast } from '@utils/showToast';
@@ -11,13 +11,18 @@ import compressedStorage from './CompressedStorage';
 import { saveChatData } from './IndexedDbStorage';
 import { EncryptedDriveSync } from './google/sync';
 import { DriveTransport } from './google/transport';
-import type { Snapshot } from './google/records';
+import { toRecords, type Snapshot } from './google/records';
+import { SyncConflictError, useSyncReview, markSyncChanges, type Resolution } from './google/conflicts';
+import { STORE_VERSION } from '@store/version';
 
 let session: EncryptedDriveSync | undefined;
 let pending: { value: Snapshot; session: EncryptedDriveSync } | undefined;
 let timer: ReturnType<typeof setTimeout> | undefined;
 let inFlight: Promise<void> | undefined;
 let suspended = true;
+let applyingRemote = false;
+let keyGeneration = 0;
+let restoring: { id: string; promise: Promise<boolean> } | undefined;
 let lastQueuedState: unknown;
 const local = createJSONStorage(() => compressedStorage)!;
 
@@ -33,6 +38,8 @@ export async function pauseGoogleSync() {
 }
 export const isGoogleSyncUnlocked = (id?: string) => !!session && session.dataset === id;
 export function lockGoogleSync() {
+  keyGeneration++;
+  useSyncReview.setState({ conflict: false, chats: [], folders: [] });
   suspended = true;
   lastQueuedState = undefined;
   session?.close(); session = undefined; pending = undefined;
@@ -45,6 +52,74 @@ export async function unlockGoogleSync(id: string, passphrase: string) {
   await next.unlock(passphrase);
   session = next;
 }
+export async function restoreGoogleSync(id: string): Promise<boolean> {
+  if (isGoogleSyncUnlocked(id)) return true;
+  if (restoring?.id === id) return restoring.promise;
+  const generation = keyGeneration;
+  const promise = (async () => {
+    const next = new EncryptedDriveSync(id, transport());
+    if (!await next.restoreKey() || generation !== keyGeneration) return false;
+    lockGoogleSync();
+    session = next;
+    return true;
+  })();
+  restoring = { id, promise };
+  try { return await promise; }
+  finally { if (restoring?.promise === promise) restoring = undefined; }
+}
+const currentSnapshot = (): Snapshot => ({ state: createPartializedState(useStore.getState()), version: STORE_VERSION });
+const sameSnapshot = async (a: Snapshot, b: Snapshot) => {
+  const left = await toRecords(a), right = await toRecords(b);
+  return Object.keys(left).length === Object.keys(right).length && Object.keys(left).every(key => left[key] === right[key]);
+};
+async function applySyncedSnapshot(target: EncryptedDriveSync, before: Snapshot, received: Snapshot) {
+  const observed = useStore.getState();
+  if (target !== session || !await sameSnapshot(before, currentSnapshot()) || observed !== useStore.getState()) return false;
+  const state = useStore.getState();
+  const selectedId = state.chats?.[state.currentChatIndex]?.id;
+  const hydrated = hydrateFromPersistedStoreState(state,
+    migratePersistedState(structuredClone(received.state), received.version ?? STORE_VERSION) as Partial<PersistedStoreState>);
+  if (selectedId && hydrated.chats) {
+    const index = hydrated.chats.findIndex(chat => chat.id === selectedId);
+    if (index >= 0) hydrated.currentChatIndex = index;
+  }
+  applyingRemote = true;
+  try {
+    useStore.setState(hydrated);
+    await persistChatSnapshot(currentSnapshot());
+    await target.acceptLocal(received);
+    await markSyncChanges(before, received);
+    if (!await sameSnapshot(received, currentSnapshot())) pending = { session: target, value: structuredClone(currentSnapshot()) };
+  } finally { applyingRemote = false; }
+  return true;
+}
+async function synchronize(target: EncryptedDriveSync, snapshot: Snapshot) {
+  await target.push(snapshot);
+  const received = await target.pull();
+  if (await sameSnapshot(snapshot, received)) return;
+  if (!await applySyncedSnapshot(target, snapshot, received) && target === session) {
+    pending = { session: target, value: structuredClone(currentSnapshot()) };
+  }
+}
+export async function resumeGoogleSync() {
+  lastQueuedState = undefined;
+  useStore.persist.setOptions({ storage: createGoogleCloudStorage(), partialize: state => createPartializedState(state) });
+  await queueGoogleSyncSnapshot(currentSnapshot());
+  await flushPendingCloudSync();
+}
+export async function resolveGoogleSyncConflict(mode: Resolution) {
+  await pauseGoogleSync();
+  const target = session;
+  if (!target) throw new Error('Unlock Google sync first.');
+  const before = structuredClone(currentSnapshot());
+  const resolved = await target.resolve(before, mode);
+  if (!await applySyncedSnapshot(target, before, resolved)) {
+    throw new Error('Local data changed during conflict resolution. Review the latest changes before retrying.');
+  }
+  useSyncReview.setState({ conflict: false });
+  await resumeGoogleSync();
+}
+
 async function persistChatSnapshot(snapshot: Snapshot) {
   if (snapshot.state.chats) await saveChatData({
     chats: snapshot.state.chats, contentStore: snapshot.state.contentStore ?? {},
@@ -81,6 +156,7 @@ const schedule = () => {
 const reportFailure = (error: unknown) => {
   const auth = useCloudAuthStore.getState();
   if (auth.provider !== 'google' || !auth.cloudSync) return;
+  if (error instanceof SyncConflictError) useSyncReview.setState({ conflict: true });
   auth.setSyncStatus(isGoogleAuthError(error) ? 'unauthenticated' : 'error');
   showToast(error instanceof Error ? error.message : String(error), 'error');
 };
@@ -107,8 +183,8 @@ export async function flushPendingCloudSync(): Promise<void> {
   inFlight = withSyncProgress(async () => {
     try {
       auth.setSyncStatus('syncing');
-      await persistChatSnapshot(next.value);
-      await next.session.push(next.value);
+      await synchronize(next.session, next.value);
+      useSyncReview.setState({ conflict: false });
       if (session === next.session) auth.setSyncStatus('synced');
     } catch (error) {
       if (session === next.session) pending ??= next;
@@ -126,7 +202,7 @@ const storage: PersistStorage<unknown> = {
   setItem: async (name, value) => {
     await local.setItem(name, { ...value, state: createLocalStoragePartializedState(useStore.getState()) });
     const auth = useCloudAuthStore.getState();
-    if (suspended || !session || session.dataset !== auth.fileId || auth.provider !== 'google' || !auth.cloudSync || !auth.syncTargetConfirmed) return;
+    if (applyingRemote || suspended || !session || session.dataset !== auth.fileId || auth.provider !== 'google' || !auth.cloudSync || !auth.syncTargetConfirmed) return;
     if (value.state === lastQueuedState) return;
     lastQueuedState = value.state;
     pending = { session, value: structuredClone(value) as Snapshot };

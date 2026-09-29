@@ -3,7 +3,7 @@ const mocks = vi.hoisted(() => ({
   state: { provider: 'google', cloudSync: true, syncTargetConfirmed: true, googleAccessToken: 'token-1',
     fileId: 'file-1', syncStatus: 'synced', setSyncStatus: vi.fn() },
   local: { getItem: vi.fn(), setItem: vi.fn(), removeItem: vi.fn() },
-  push: vi.fn(), unlock: vi.fn(), close: vi.fn(), toast: vi.fn(), streaming: false,
+  restoreKey: vi.fn(), push: vi.fn(), unlock: vi.fn(), close: vi.fn(), toast: vi.fn(), streaming: false,
 }));
 vi.mock('@store/cloud-auth-store', () => ({ default: { getState: () => mocks.state } }));
 vi.mock('@store/store', () => ({ default: { getState: () => ({ theme: 'dark' }) } }));
@@ -17,11 +17,13 @@ vi.mock('./google/sync', () => ({
   EncryptedDriveSync: class {
     constructor(public dataset: string) {}
     unlock = mocks.unlock;
+    restoreKey = mocks.restoreKey;
     push = mocks.push;
+    pull = async () => mocks.push.mock.calls[mocks.push.mock.calls.length - 1][0];
     close = mocks.close;
   },
 }));
-import createGoogleCloudStorage, { flushPendingCloudSync, lockGoogleSync, unlockGoogleSync } from './GoogleCloudStorage';
+import createGoogleCloudStorage, { flushPendingCloudSync, lockGoogleSync, unlockGoogleSync, restoreGoogleSync, isGoogleSyncUnlocked } from './GoogleCloudStorage';
 const storage = () => createGoogleCloudStorage<{ count: number }>();
 
 describe('GoogleCloudStorage encrypted upload scheduling', () => {
@@ -95,5 +97,28 @@ describe('GoogleCloudStorage encrypted upload scheduling', () => {
     await vi.advanceTimersByTimeAsync(5000);
     expect(mocks.push).not.toHaveBeenCalled();
     expect(mocks.local.setItem).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe('remembered sync startup', () => {
+  afterEach(() => { lockGoogleSync(); vi.useRealTimers(); });
+  it('coalesces overlapping startup effects so they do not close each other’s restored key', async () => {
+    lockGoogleSync();
+    let finish!: (value: boolean) => void;
+    mocks.restoreKey.mockReset().mockImplementation(() => new Promise<boolean>(resolve => { finish = resolve; }));
+    const first = restoreGoogleSync('remembered'), second = restoreGoogleSync('remembered');
+    expect(mocks.restoreKey).toHaveBeenCalledTimes(1);
+    finish(true);
+    expect(await Promise.all([first, second])).toEqual([true, true]);
+    expect(isGoogleSyncUnlocked('remembered')).toBe(true);
+  });
+  it('does not restore a key after the user has locked or disconnected during startup', async () => {
+    lockGoogleSync();
+    let finish!: (value: boolean) => void;
+    mocks.restoreKey.mockReset().mockImplementation(() => new Promise<boolean>(resolve => { finish = resolve; }));
+    const restoring = restoreGoogleSync('remembered');
+    lockGoogleSync(); finish(true);
+    expect(await restoring).toBe(false);
+    expect(isGoogleSyncUnlocked('remembered')).toBe(false);
   });
 });

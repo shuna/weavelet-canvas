@@ -1,11 +1,13 @@
+import { SyncConflictError, type Resolution } from './conflicts';
+import { mergeSyncRecords } from './merge';
 import { encodeAsync } from './encodeAsync';
 import { syncPhase, uploadedFile } from './progress';
 import { createKeyEnvelope, unlockKey, encode, decode, encrypt, decrypt, digest, type KeyEnvelope } from './crypto';
-import { toRecords, fromRecords, hashRecords, diffHashedRecords, applyChanges, type Records, type Snapshot, type Change } from './records';
+import { toRecords, fromRecords, hashRecords, diffHashedRecords, applyChanges, type Records, type Snapshot, type Change, diffRecords } from './records';
 import { DriveTransport, SYNC_FOLDER_TYPE, type DriveFile } from './transport';
-import { syncCache, readSyncEntries, writeSyncCache } from './cache';
+import { syncCache, readSyncEntries, writeSyncCache, rememberedSyncKey } from './cache';
 
-interface Commit { version: 1; parents: string[]; changes: Change[] }
+interface Commit { version: 1; parents: string[]; changes: Change[]; resolutions?: Record<string, (string | null)[]> }
 interface Pending {
   id: string;
   commit: Commit;
@@ -37,6 +39,7 @@ export class EncryptedDriveSync {
   private queue: Promise<unknown> = Promise.resolve();
   private closed = false;
   private cacheFingerprint?: string;
+  private remoteConflicts: Record<string, (string | null)[]> = {};
   private loading = new Set<string>();
   private persistedCommits = new Set<string>();
   private encodedCommits = new Map<string, Uint8Array>();
@@ -145,6 +148,7 @@ export class EncryptedDriveSync {
     const session = new EncryptedDriveSync(dataset, drive, options);
     session.key = key;
     await session.save();
+    await rememberedSyncKey(dataset, key);
     return { session, file };
   }
   async unlock(password: string): Promise<void> {
@@ -157,6 +161,18 @@ export class EncryptedDriveSync {
     syncPhase('key');
     this.key = await unlockKey(envelope, password, this.dataset);
     this.closed = false;
+    await rememberedSyncKey(this.dataset, this.key);
+  }
+  async restoreKey(): Promise<boolean> {
+    const key = await rememberedSyncKey(this.dataset);
+    if (!key) return false;
+    if (key.type !== 'secret' || key.extractable || key.algorithm.name !== 'AES-GCM' ||
+        (key.algorithm as AesKeyAlgorithm).length !== 256 || !key.usages.includes('encrypt') || !key.usages.includes('decrypt')) {
+      throw new Error('Invalid remembered sync key.');
+    }
+    this.key = key;
+    this.closed = false;
+    return true;
   }
 
   private async loadCommit(id: string): Promise<void> {
@@ -166,11 +182,11 @@ export class EncryptedDriveSync {
     try {
     syncPhase('downloading');
     const encoded = await decrypt(this.requireKey(), await this.drive.read(id), this.context(id));
-    const manifest = decode<{ version: number; parts?: string[]; parents?: string[]; changes?: Change[] }>(encoded);
+    const manifest = decode<{ version: number; parts?: string[]; parents?: string[]; changes?: Change[]; resolutions?: Commit['resolutions'] }>(encoded);
     let payload: Uint8Array;
     let commit: Commit;
     if (manifest.version === 2) {
-      commit = { version: 1, parents: manifest.parents!, changes: manifest.changes! };
+      commit = { version: 1, parents: manifest.parents!, changes: manifest.changes!, ...(manifest.resolutions ? { resolutions: manifest.resolutions } : {}) };
       payload = encode(commit);
     } else {
       if (manifest.version !== 1 || !Array.isArray(manifest.parts) || !manifest.parts.length ||
@@ -218,17 +234,25 @@ export class EncryptedDriveSync {
     const parents = new Set(Object.values(this.cache.commits).flatMap((c) => c.parents));
     return Object.keys(this.cache.commits).filter((id) => !parents.has(id)).sort();
   }
-  private async remote(): Promise<Records> {
+  private async remote(allowConflicts = false, tips?: string[]): Promise<Records> {
     syncPhase('verifying');
     // ponytail: replay retained commits; add checkpoint compaction when history replay becomes costly.
     const histories = new Map<string, { id: string; value: string | null }[]>();
     const ancestors = new Map<string, Set<string>>();
-    const remaining = new Set(Object.keys(this.cache.commits).sort());
+    const reachable = new Set<string>();
+    const visit = (id: string) => {
+      if (reachable.has(id)) return;
+      const commit = this.cache.commits[id];
+      if (!commit) throw new Error('Missing sync history.');
+      reachable.add(id); commit.parents.forEach(visit);
+    };
+    (tips ?? this.heads()).forEach(visit);
+    const remaining = new Set([...reachable].sort());
     const latest = (versions: { id: string; value: string | null }[]) =>
       versions.filter((v) => !versions.some((other) => ancestors.get(other.id)?.has(v.id)));
     const valueOf = (versions: { value: string | null }[]) => {
       const values = new Set(versions.map((v) => v.value));
-      if (values.size > 1) throw new Error('Concurrent edits conflict. Sync stopped; both copies are preserved.');
+      if (values.size > 1) throw new SyncConflictError([]);
       return versions[0]?.value ?? null;
     };
     while (remaining.size) {
@@ -244,7 +268,15 @@ export class EncryptedDriveSync {
           if (!change || typeof change.key !== 'string' || keys.has(change.key)) throw new Error('Invalid sync change.');
           keys.add(change.key);
           const history = histories.get(change.key) ?? [];
-          const parentValue = valueOf(latest(history.filter((v) => preceding.has(v.id))));
+          const parents = latest(history.filter((v) => preceding.has(v.id)));
+          let parentValue: string | null;
+          if (commit.resolutions?.[change.key]) {
+            const expected = [...new Set(await Promise.all(parents.map(v => v.value === null ? null : digest(v.value))))].sort();
+            if (expected.length < 2 || JSON.stringify(expected) !== JSON.stringify([...commit.resolutions[change.key]].sort())) {
+              throw new Error('Invalid conflict resolution parents.');
+            }
+            parentValue = parents[0]?.value ?? null;
+          } else parentValue = valueOf(parents);
           await applyChanges(parentValue === null ? {} : { [change.key]: parentValue }, [change]);
           history.push({ id, value: change.after });
           histories.set(change.key, history);
@@ -254,10 +286,16 @@ export class EncryptedDriveSync {
       if (!progress) throw new Error('Missing or cyclic sync history.');
     }
     const records: Records = {};
+    const conflicts: Record<string, (string | null)[]> = {};
     for (const [key, history] of histories) {
-      const value = valueOf(latest(history));
+      const versions = latest(history);
+      const values = [...new Set(versions.map(v => v.value))];
+      if (values.length > 1) conflicts[key] = await Promise.all(values.map(v => v === null ? null : digest(v)));
+      const value = versions[0]?.value ?? null;
       if (value !== null) records[key] = value;
     }
+    this.remoteConflicts = conflicts;
+    if (!allowConflicts && Object.keys(conflicts).length) throw new SyncConflictError(Object.keys(conflicts));
     return records;
   }
   private async sendPending() {
@@ -298,9 +336,9 @@ export class EncryptedDriveSync {
     delete this.cache.pending;
     await this.save(pending.files.flatMap(f => [`outbox:${f.id}`, `ack:${f.id}`]));
   }
-  private async prepare(changes: Change[], baseline: Records) {
+  private async prepare(changes: Change[], baseline: Records, resolutions?: Commit['resolutions']) {
     syncPhase('encrypting');
-    const commit: Commit = { version: 1, parents: this.heads(), changes };
+    const commit: Commit = { version: 1, parents: this.heads(), changes, ...(resolutions ? { resolutions } : {}) };
     const payload = changes.reduce((size, change) => size + (change.after?.length ?? 0), 0) > INLINE_BYTES
       ? await encodeAsync(commit) : encode(commit);
     const inline = commit.parents.length > 0 && payload.length <= INLINE_BYTES;
@@ -337,7 +375,12 @@ export class EncryptedDriveSync {
         throw new Error('Cloud sync skipped because the snapshot would erase all chats.');
       }
       const merged = await applyChanges(remote, changes);
-      await fromRecords(merged); // Validate references before publishing the commit.
+      try { await fromRecords(merged); }
+      catch (error) {
+        // Two valid edits can conflict structurally (for example, deleting a branch another device extends).
+        await fromRecords(local); await fromRecords(remote);
+        throw new SyncConflictError(changes.map(change => change.key));
+      }
       if (changes.length) {
         await this.prepare(changes, localHashes);
         await this.sendPending();
@@ -347,6 +390,44 @@ export class EncryptedDriveSync {
         this.cache.baseline = localHashes;
         await this.save();
       }
+    });
+  }
+
+  async resolve(snapshot: Snapshot, mode: Resolution): Promise<Snapshot> {
+    const local = await toRecords(snapshot);
+    return this.run(async () => {
+      await this.sendPending();
+      await this.refresh();
+      const remote = await this.remote(true);
+      const resolutions = this.remoteConflicts;
+      let cloud = remote;
+      if (Object.keys(resolutions).length) {
+        // Each head is a complete view. Merge coherent views rather than picking unrelated node fields.
+        const heads = this.heads();
+        const ancestors = (id: string, found = new Set<string>()): Set<string> => {
+          if (!found.has(id)) { found.add(id); this.cache.commits[id].parents.forEach(p => ancestors(p, found)); }
+          return found;
+        };
+        const sets = heads.map(id => ancestors(id));
+        const common = [...sets[0]].filter(id => sets.every(set => set.has(id)));
+        const base = common.length ? await hashRecords(await this.remote(false, common)) : {};
+        cloud = await this.remote(false, [heads[0]]);
+        for (const head of heads.slice(1)) cloud = await mergeSyncRecords(base, cloud, await this.remote(false, [head]));
+      }
+      const chosen = mode === 'local' ? local : mode === 'cloud' ? cloud
+        : await mergeSyncRecords(this.cache.baseline ?? {}, local, cloud);
+      const result = await fromRecords(chosen);
+      const changes = await diffRecords(remote, chosen);
+      for (const key of Object.keys(resolutions)) if (!changes.some(change => change.key === key)) {
+        changes.push({ key, before: remote[key] === undefined ? null : await digest(remote[key]), after: chosen[key] ?? null });
+      }
+      if (changes.length) {
+        await this.prepare(changes, await hashRecords(local), Object.keys(resolutions).length ? resolutions : undefined);
+        await this.sendPending();
+        await this.refresh();
+        await this.remote();
+      }
+      return result;
     });
   }
 
