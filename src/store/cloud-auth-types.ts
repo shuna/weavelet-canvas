@@ -7,6 +7,7 @@ export const CLOUD_AUTH_STORAGE_VERSION = 3;
 
 export interface CloudProviderSyncState {
   sessionToken?: string;
+  connectionId?: string;
   refreshToken?: string;
   targetId?: string;
   targetLabel?: string;
@@ -45,6 +46,7 @@ export const createCloudProviderSyncState = (
   partial?: Partial<CloudProviderSyncState>
 ): CloudProviderSyncState => ({
   sessionToken: partial?.sessionToken,
+  connectionId: partial?.connectionId,
   refreshToken: partial?.refreshToken,
   targetId: partial?.targetId,
   targetLabel: partial?.targetLabel,

@@ -1,3 +1,4 @@
+import { googleFetch, getGoogleAccessToken } from './google-auth';
 import { debounce } from 'lodash';
 import { decompress } from 'lz-string';
 import { StorageValue } from 'zustand/middleware';
@@ -31,8 +32,9 @@ export const createDriveFile = async (
   };
   const requestBody = createMultipartRelatedBody(metadata, file, boundary);
 
-  const response = await fetch(
+  const response = await googleFetch(
     'https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart',
+    accessToken,
     {
       method: 'POST',
       headers: {
@@ -58,8 +60,9 @@ export const getDriveFile = async <S>(
   fileId: string,
   accessToken: string
 ): Promise<StorageValue<S>> => {
-  const response = await fetch(
+  const response = await googleFetch(
     `https://content.googleapis.com/drive/v3/files/${fileId}?alt=media`,
+    accessToken,
     {
       method: 'GET',
       headers: {
@@ -68,6 +71,7 @@ export const getDriveFile = async <S>(
       },
     }
   );
+  if (!response.ok) throw new Error(`Error downloading file: ${response.status} ${response.statusText}`);
   const text = await response.text();
   // Auto-detect: if it starts with { it's uncompressed JSON (backward compat)
   const firstChar = text.charAt(0);
@@ -86,8 +90,9 @@ export const getDriveFileTyped = async (
 export const listDriveFiles = async (
   accessToken: string
 ): Promise<GoogleFileList> => {
-  const response = await fetch(
+  const response = await googleFetch(
     'https://www.googleapis.com/drive/v3/files?orderBy=modifiedTime desc&fields=nextPageToken,kind,incompleteSearch,files(id,kind,name,mimeType,modifiedTime,size)',
+    accessToken,
     {
       method: 'GET',
       headers: {
@@ -112,8 +117,9 @@ export const updateDriveFile = async (
   fileId: string,
   accessToken: string
 ): Promise<GoogleFileResource> => {
-  const response = await fetch(
+  const response = await googleFetch(
     `https://www.googleapis.com/upload/drive/v3/files/${fileId}`,
+    accessToken,
     {
       method: 'PATCH',
       headers: {
@@ -137,8 +143,9 @@ export const updateDriveFileName = async (
   fileId: string,
   accessToken: string
 ) => {
-  const response = await fetch(
+  const response = await googleFetch(
     `https://www.googleapis.com/drive/v3/files/${fileId}`,
+    accessToken,
     {
       method: 'PATCH',
       headers: {
@@ -158,8 +165,9 @@ export const updateDriveFileName = async (
 };
 
 export const deleteDriveFile = async (fileId: string, accessToken: string) => {
-  const response = await fetch(
+  const response = await googleFetch(
     `https://www.googleapis.com/drive/v3/files/${fileId}`,
+    accessToken,
     {
       method: 'DELETE',
       headers: {
@@ -179,8 +187,9 @@ export const deleteDriveFile = async (fileId: string, accessToken: string) => {
 };
 
 export const validateGoogleOath2AccessToken = async (accessToken: string) => {
+  const token = await getGoogleAccessToken(accessToken);
   const response = await fetch(
-    `https://oauth2.googleapis.com/tokeninfo?access_token=${accessToken}`
+    `https://oauth2.googleapis.com/tokeninfo?access_token=${encodeURIComponent(token)}`
   );
   if (!response.ok) return false;
   const result: GoogleTokenInfo = await response.json();

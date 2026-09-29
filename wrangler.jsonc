@@ -1,0 +1,25 @@
+{
+  "name": "betterchatgpt-plus",
+  "pages_build_output_dir": "dist",
+  "compatibility_date": "2026-09-29",
+  "compatibility_flags": [
+    "nodejs_compat"
+  ],
+  "vars": {
+    "APP_ORIGIN": "https://betterchatgpt-plus.pages.dev",
+    "ACCESS_ISSUER": "https://werty2.cloudflareaccess.com",
+    "ACCESS_AUD": "d00dc09f88c8b94571c452b6a81908b2356e3f21c06aef07077f7e8707866831",
+    "GOOGLE_CLIENT_ID": "1003184947880-m1fp9ca67gtp6m26tc28gfens7tl0c0e.apps.googleusercontent.com",
+    "VITE_GOOGLE_CLIENT_ID": "1003184947880-m1fp9ca67gtp6m26tc28gfens7tl0c0e.apps.googleusercontent.com",
+    "YARN_ENABLE_IMMUTABLE_INSTALLS": "false",
+    "VITE_GOOGLE_AUTH_BACKEND": "true"
+  },
+  "d1_databases": [
+    {
+      "binding": "GOOGLE_AUTH_DB",
+      "database_name": "weavelet-google-auth",
+      "database_id": "a3d5b7fd-8a6d-462e-b98c-cf77fd6f2d8e",
+      "migrations_dir": "migrations"
+    }
+  ]
+}

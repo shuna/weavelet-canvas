@@ -5,7 +5,6 @@ import {
   getDriveFile,
   isGoogleAuthError,
   updateDriveFile,
-  validateGoogleOath2AccessToken,
 } from '@api/google-api';
 import { showToast } from '@utils/showToast';
 import type { CloudSyncProvider, CloudSyncTarget } from '../types';
@@ -30,11 +29,7 @@ export const validateGoogleCloudSync = () => {
   const { googleAccessToken, fileId } = useCloudAuthStore.getState();
   if (!googleAccessToken || !fileId) return false;
 
-  try {
-    return validateGoogleOath2AccessToken(googleAccessToken);
-  } catch {
-    return false;
-  }
+  return true;
 };
 
 export const createGoogleCloudProvider = <S>(): CloudSyncProvider<S> => ({
@@ -44,7 +39,7 @@ export const createGoogleCloudProvider = <S>(): CloudSyncProvider<S> => ({
     await updateDriveFile(file, target.fileId, target.accessToken);
   },
   removeItem: async (name, target) => {
-    await deleteDriveFile(target.accessToken, target.fileId);
+    await deleteDriveFile(target.fileId, target.accessToken);
   },
   isAuthError: isGoogleAuthError,
   setSyncStatus: (status) => {

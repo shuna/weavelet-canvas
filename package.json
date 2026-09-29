@@ -40,6 +40,7 @@
     "prebuild": "yarn install",
     "build": "tsc && vite build",
     "test": "vitest run",
+    "typecheck:cloud": "tsc -p functions/tsconfig.json",
     "preview": "vite preview",
     "electron": "concurrently -k \"BROWSER=none yarn dev\" \"wait-on tcp:5173 && electron .\"",
     "pack": "yarn build && electron-builder --dir",
@@ -95,6 +96,7 @@
     "i18next": "^22.4.11",
     "i18next-browser-languagedetector": "^7.0.1",
     "i18next-http-backend": "^2.1.1",
+    "jose": "^6",
     "jspdf": "^2.5.1",
     "katex": "^0.16.4",
     "lodash": "^4.17.21",
@@ -116,6 +118,7 @@
     "zustand": "^4.3.6"
   },
   "devDependencies": {
+    "@cloudflare/workers-types": "^5.20260929.1",
     "@playwright/test": "^1.59.1",
     "@tailwindcss/typography": "^0.5.9",
     "@types/diff-match-patch": "^1.0.36",
