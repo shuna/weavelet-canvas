@@ -54,3 +54,7 @@ src/vendor/wllama/*.wasm
 
 .playwright-firefox-profile/
 firefox-verify.png
+
+# Cloudflare local credentials and generated build state
+.dev.vars*
+.wrangler/

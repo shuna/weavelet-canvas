@@ -3,6 +3,7 @@ import { GoogleOAuthProvider } from '@react-oauth/google';
 import { useTranslation } from 'react-i18next';
 
 import useStore from '@store/store';
+import { usesGoogleAuthBackend } from '@api/google-auth';
 import useGStore from '@store/cloud-auth-store';
 import { showToast } from '@utils/showToast';
 
@@ -202,7 +203,14 @@ const GoogleSync = ({ clientId }: { clientId: string }) => {
   const isSilentRefresh = useRef(false);
 
   const initialiseState = async (_googleAccessToken: string, options?: { openModal?: boolean }) => {
-    const validated = await validateGoogleOath2AccessToken(_googleAccessToken);
+    let validated;
+    try {
+      validated = await validateGoogleOath2AccessToken(_googleAccessToken);
+    } catch (error) {
+      setSyncStatus('unauthenticated');
+      showToast((error as Error).message, 'error');
+      return;
+    }
     if (validated) {
       try {
         const _files = await getFiles(_googleAccessToken);
@@ -596,7 +604,7 @@ const GooglePopup = ({
         <div className='w-full max-w-2xl rounded-lg border border-gray-300 bg-gray-50/90 px-4 py-4 text-left dark:border-gray-600 dark:bg-gray-800/50'>
           <p className='text-sm text-gray-900 dark:text-gray-100'>{t('tagline')}</p>
           <p className='mt-3 text-xs text-gray-700 dark:text-gray-300'>{t('privacy')}</p>
-          <p className='mt-3 text-xs text-gray-700 dark:text-gray-300'>{t('notice')}</p>
+          <p className='mt-3 text-xs text-gray-700 dark:text-gray-300'>{t(usesGoogleAuthBackend ? 'backendNotice' : 'notice')}</p>
         </div>
         <GoogleSyncButton
           ref={syncButtonRef}

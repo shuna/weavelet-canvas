@@ -45,6 +45,7 @@
     "disconnectDescription": "This only stops syncing and signs out of Google for this app. Your local chats remain on this device, and your Google Drive files are not deleted or cleared."
   },
   "notice": "Note: Your session will be automatically refreshed while your Google account is active. You may need to re-login if your Google session expires. To avoid your cloud data being overwritten, do not use Weavelet Canvas on more than one device at the same time.",
+  "backendNotice": "Connection credentials are encrypted and stored on Cloudflare to renew Google access automatically. Conversation data stays in Google Drive. Reconnect if consent is revoked or your site login expires. Avoid editing on multiple devices at the same time to prevent overwrites.",
   "privacy": "Your privacy is important to us. To protect it, Weavelet Canvas only requests non-sensitive access, which means it can only create, view, and manage its own files and folders.",
   "toast": {
     "sync": "Sync successful!",
