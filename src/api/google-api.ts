@@ -90,16 +90,18 @@ export const getDriveFileTyped = async (
   return await getDriveFile(fileId, accessToken);
 };
 
-export const listDriveFiles = async (
-  accessToken: string
+const listDriveFilesMatching = async (
+  accessToken: string,
+  q: string,
+  fields = 'id,kind,name,mimeType,modifiedTime,size'
 ): Promise<GoogleFileList> => {
   const files: GoogleFileResource[] = [];
   let pageToken: string | undefined;
   do {
     const params = new URLSearchParams({
-      q: "trashed = false and (mimeType = 'application/json' or appProperties has { key='weaveletSync' and value='1' } or (mimeType = 'application/octet-stream' and name contains '.json'))",
+      q,
       orderBy: 'modifiedTime desc', pageSize: '1000',
-      fields: 'nextPageToken,incompleteSearch,files(id,kind,name,mimeType,modifiedTime,size)',
+      fields: `nextPageToken,incompleteSearch,files(${fields})`,
     });
     if (pageToken) params.set('pageToken', pageToken);
     const response = await googleFetch(`https://www.googleapis.com/drive/v3/files?${params}`, accessToken, {
@@ -112,6 +114,23 @@ export const listDriveFiles = async (
     pageToken = page.nextPageToken;
   } while (pageToken);
   return { files, kind: 'drive#fileList', incompleteSearch: false };
+};
+
+export const listDriveFiles = (accessToken: string): Promise<GoogleFileList> =>
+  listDriveFilesMatching(accessToken,
+    "trashed = false and (mimeType = 'application/json' or appProperties has { key='weaveletSync' and value='1' } or (mimeType = 'application/octet-stream' and name contains '.json'))");
+
+// Encrypted sync folders are flat. Include data, commit and key files, excluding trash.
+export const getDriveFolderSize = async (folderId: string, accessToken: string): Promise<string> => {
+  const escaped = folderId.replace(/['\\]/g, '\\$&');
+  const { files } = await listDriveFilesMatching(accessToken,
+    `'${escaped}' in parents and trashed = false and mimeType != 'application/vnd.google-apps.folder'`, 'id,size');
+  let total = 0n;
+  for (const file of files) {
+    if (!file.size || !/^\d+$/.test(file.size)) throw new Error('Unable to determine sync folder size.');
+    total += BigInt(file.size);
+  }
+  return total.toString();
 };
 
 export const updateDriveFile = async (

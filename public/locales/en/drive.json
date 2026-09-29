@@ -20,6 +20,7 @@
     "updatedAt": "Updated",
     "fileId": "File ID",
     "fileName": "File name",
+    "folderSize": "Total size in folder",
     "fileSize": "File size",
     "unknownDate": "Unknown",
     "unknownSize": "Unknown",
