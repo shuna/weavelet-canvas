@@ -344,6 +344,7 @@ const GooglePopup = ({
   const [selectedOperation, setSelectedOperation] =
     useState<SyncOperation>(() => syncTargetConfirmed && currentFileId ? 'resume' : 'connect');
   const [activity, setActivity] = useState<SyncActivity>(null);
+  const operationChosen = useRef(false);
   const conflict = useSyncReview(state => state.conflict);
   useEffect(() => { if (conflict) setIsModalOpen(true); }, [conflict]);
   const [passphrase, setPassphrase] = useState('');
@@ -565,16 +566,20 @@ const GooglePopup = ({
     ? ['connect']
     : needsReconnect
       ? ['reconnect', 'disconnect']
-      : syncFile && syncTargetConfirmed
+      : syncTargetConfirmed
         ? ['resume', 'create', 'disconnect']
-        : ['create', 'resume', 'pull', 'disconnect'];
+        : syncFile ? ['pull', 'create', 'disconnect'] : ['create', 'pull', 'disconnect'];
 
   useEffect(() => {
+    if (!operationChosen.current && connected && !isBusy && !syncTargetConfirmed && syncFile && !passphrase && folderNameDraft === undefined) {
+      setSelectedOperation('pull');
+      return;
+    }
     const fallbackOperation = availableOperations[0];
     if (!availableOperations.includes(selectedOperation) && fallbackOperation) {
       setSelectedOperation(fallbackOperation);
     }
-  }, [availableOperations, selectedOperation]);
+  }, [availableOperations, selectedOperation, connected, isBusy, syncTargetConfirmed, syncFile, passphrase, folderNameDraft]);
 
   const performSelectedOperation = async () => {
     if (isBusy || inputIssue) return;
@@ -730,12 +735,13 @@ const GooglePopup = ({
           <select
             className='w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-emerald-500 dark:border-gray-500 dark:bg-gray-700 dark:text-white'
             value={selectedOperation}
-            onChange={(e) => setSelectedOperation(e.target.value as SyncOperation)}
+            aria-label={t('labels.operation') as string}
+            onChange={(e) => { operationChosen.current = true; setSelectedOperation(e.target.value as SyncOperation); }}
             disabled={isBusy || conflict}
           >
             {availableOperations.map((operation) => (
               <option key={operation} value={operation}>
-                {t(operationLabelKey[operation])}
+                {t(operation === 'pull' ? 'operations.selectInput' : operationLabelKey[operation])}
               </option>
             ))}
           </select>

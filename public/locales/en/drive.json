@@ -39,7 +39,8 @@
     "pull": "Overwrite local with cloud state",
     "push": "Overwrite cloud with local state",
     "disconnect": "Stop syncing",
-    "resume": "Unlock and resume sync"
+    "resume": "Unlock and resume sync",
+    "selectInput": "Choose an existing sync folder or legacy file"
   },
   "actions": {
     "retryDescription": "Sync is already unlocked. Send this device’s pending changes.",
