@@ -1,3 +1,4 @@
+import { useSyncReview } from '@store/storage/google/conflicts';
 import React, { useEffect, useRef, useState } from 'react';
 import useStore from '@store/store';
 
@@ -37,6 +38,7 @@ const ChatFolder = ({
   lastSelectedIndex: number | null;
   setLastSelectedIndex: (index: number) => void;
 }) => {
+  const syncChanged = useSyncReview(state => state.folders.includes(folderId));
   const folderName = useStore((state) => state.folders[folderId]?.name);
   const isExpanded = useStore((state) => state.folders[folderId]?.expanded);
   const color = useStore((state) => state.folders[folderId]?.color);
@@ -147,6 +149,7 @@ const ChatFolder = ({
   };
 
   const toggleExpanded = () => {
+    useSyncReview.setState(state => ({ folders: state.folders.filter(id => id !== folderId) }));
     const updatedFolders: FolderCollection = JSON.parse(
       JSON.stringify(useStore.getState().folders)
     );
@@ -168,7 +171,9 @@ const ChatFolder = ({
       onDragLeave={handleDragLeave}
     >
       <div
-        style={{ background: color || '' }}
+        data-sync-changed={syncChanged || undefined}
+        aria-description={syncChanged ? '同期で変更されたフォルダー' : undefined}
+        style={{ background: color || '', ...(syncChanged ? { outline: '2px solid #f59e0b', outlineOffset: '-2px' } : {}) }}
         className={`${
           color ? '' : 'bg-gray-50 hover:bg-gray-100 dark:bg-transparent dark:hover:bg-gray-850'
         } parent-sibling relative flex cursor-pointer items-center gap-3 break-all rounded-md py-2 pl-2 pr-1 text-gray-700 transition-colors dark:text-gray-100`}
