@@ -1,0 +1,18 @@
+<!doctype html>
+<html lang="ja">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Google Drive に接続</title>
+    <style>
+      body { font-family: system-ui, sans-serif; max-width: 28rem; margin: 4rem auto; padding: 1.5rem; line-height: 1.7; }
+      button { font: inherit; padding: .7rem 1.2rem; cursor: pointer; }
+    </style>
+  </head>
+  <body>
+    <h1>Google Drive に接続</h1>
+    <p id="status" role="status">認証の準備中です。</p>
+    <button id="connect" disabled>Google で続行</button>
+    <script type="module" src="/src/google-auth-page.ts"></script>
+  </body>
+</html>

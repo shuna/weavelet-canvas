@@ -2,3 +2,15 @@
   Cross-Origin-Opener-Policy: same-origin
   Cross-Origin-Embedder-Policy: credentialless
   Cross-Origin-Resource-Policy: same-origin
+
+# OAuth needs popup communication; keep the main app isolated for local models.
+/google-auth
+  ! Cross-Origin-Opener-Policy
+  ! Cross-Origin-Embedder-Policy
+  Cache-Control: no-store
+  Referrer-Policy: no-referrer
+/google-auth.html
+  ! Cross-Origin-Opener-Policy
+  ! Cross-Origin-Embedder-Policy
+  Cache-Control: no-store
+  Referrer-Policy: no-referrer
