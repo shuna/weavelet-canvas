@@ -1,3 +1,4 @@
+import { beginTransfer } from './progress';
 import { googleFetch } from '@api/google-auth';
 import { createMultipartRelatedBody } from '@api/helper';
 import type { GoogleFileResource } from '@type/google-api';
@@ -38,15 +39,19 @@ export class DriveTransport {
     });
   }
   async read(id: string): Promise<Uint8Array> {
+    const finish = beginTransfer('download');
     const response = await this.request(`${API}/files/${encodeURIComponent(id)}?alt=media`);
     if (!response.ok) throw new Error(`Google Drive ${response.status}: ${response.statusText}`);
-    return new Uint8Array(await response.arrayBuffer());
+    const bytes = new Uint8Array(await response.arrayBuffer());
+    finish(bytes.length);
+    return bytes;
   }
   async put(id: string, dataset: string, kind: string, bytes: Uint8Array): Promise<void> {
     const boundary = `weavelet-${crypto.randomUUID()}`;
     const file = new File([bytes], `${id}.bin`, { type: 'application/octet-stream' });
     const body = createMultipartRelatedBody({ id, name: file.name, mimeType: file.type,
       parents: [dataset], appProperties: { dataset, kind } }, file, boundary);
+    const finish = beginTransfer('upload');
     const response = await this.request('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart', {
       method: 'POST', headers: { 'Content-Type': `multipart/related; boundary=${boundary}` }, body,
     });
@@ -56,6 +61,7 @@ export class DriveTransport {
       return;
     }
     if (!response.ok) throw new Error(`Google Drive ${response.status}: ${response.statusText}`);
+    finish(bytes.length);
   }
   async startToken(): Promise<string> {
     return (await this.json(`${API}/changes/startPageToken`)).startPageToken;

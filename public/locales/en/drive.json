@@ -90,5 +90,22 @@
     "pull": "Check the source, then press the button to replace local data with cloud data.",
     "push": "Press the upload button to update the encrypted sync folder with local data.",
     "disconnect": "Press the Stop syncing button."
+  },
+  "progress": {
+    "preparing": "Preparing local data",
+    "key": "Preparing encryption key",
+    "folder": "Creating encrypted folder",
+    "checking": "Checking cloud changes",
+    "downloading": "Downloading and decrypting files",
+    "encrypting": "Compressing and encrypting changes",
+    "uploading": "Uploading encrypted files",
+    "saving": "Saving local data",
+    "verifying": "Verifying sync results",
+    "files": "{{done}} / {{total}} files complete",
+    "downloadedFiles": "{{count}} files downloaded",
+    "sent": "Uploaded",
+    "received": "Downloaded",
+    "measuring": "Measuring",
+    "measurement": "Percentage applies to the current upload phase. Sizes and average transfer speeds update when each file completes. Phases with unknown totals have no percentage."
   }
 }

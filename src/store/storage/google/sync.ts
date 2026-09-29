@@ -1,3 +1,4 @@
+import { syncPhase, uploadedFile } from './progress';
 import { createKeyEnvelope, unlockKey, encode, decode, encrypt, decrypt, digest, type KeyEnvelope } from './crypto';
 import { toRecords, fromRecords, diffRecords, applyChanges, type Records, type Snapshot, type Change } from './records';
 import { DriveTransport, SYNC_FOLDER_TYPE, type DriveFile } from './transport';
@@ -69,8 +70,10 @@ export class EncryptedDriveSync {
   static async create(drive: DriveTransport, password: string): Promise<{ session: EncryptedDriveSync; file: DriveFile }> {
     // Derive the key before creating remote files, so invalid passphrases cannot create empty folders.
     const dataset = await drive.id();
+    syncPhase('key');
     const { key, envelope } = await createKeyEnvelope(password, dataset);
     const header = await drive.id();
+    syncPhase('folder');
     const file = await drive.folder(dataset, header);
     await drive.put(header, dataset, 'key', new TextEncoder().encode(JSON.stringify(envelope)));
     const session = new EncryptedDriveSync(dataset, drive);
@@ -83,7 +86,9 @@ export class EncryptedDriveSync {
     if (file.mimeType !== SYNC_FOLDER_TYPE || file.appProperties?.weaveletSync !== '1' || !file.appProperties.headerId) {
       throw new Error('Legacy sync files are read-only. Create a new encrypted sync folder.');
     }
+    syncPhase('downloading');
     const envelope = JSON.parse(new TextDecoder().decode(await this.drive.read(file.appProperties.headerId))) as KeyEnvelope;
+    syncPhase('key');
     this.key = await unlockKey(envelope, password, this.dataset);
     this.closed = false;
   }
@@ -93,6 +98,7 @@ export class EncryptedDriveSync {
     if (this.loading.has(id)) throw new Error('Cyclic sync history.');
     this.loading.add(id);
     try {
+    syncPhase('downloading');
     const manifest = decode<{ version: number; parts: string[] }>(await decrypt(
       this.requireKey(), await this.drive.read(id), this.context(id)
     ));
@@ -117,6 +123,7 @@ export class EncryptedDriveSync {
   }
 
   private async refresh(): Promise<void> {
+    syncPhase('checking');
     if (!this.cache.token) {
       const token = await this.drive.startToken();
       for (const id of await this.drive.commits(this.dataset)) await this.loadCommit(id);
@@ -139,6 +146,7 @@ export class EncryptedDriveSync {
     return Object.keys(this.cache.commits).filter((id) => !parents.has(id)).sort();
   }
   private async remote(): Promise<Records> {
+    syncPhase('verifying');
     // ponytail: replay retained commits; add checkpoint compaction when history replay becomes costly.
     const histories = new Map<string, { id: string; value: string | null }[]>();
     const ancestors = new Map<string, Set<string>>();
@@ -182,11 +190,14 @@ export class EncryptedDriveSync {
   private async sendPending() {
     const pending = this.cache.pending;
     if (!pending) return;
+    const remaining = pending.files.filter(file => !file.sent);
+    syncPhase('uploading', remaining.length, remaining.reduce((total, file) => total + file.bytes.length, 0));
     for (const file of pending.files) {
       this.requireKey();
       if (file.sent) continue;
       await this.drive.put(file.id, this.dataset, file.kind, new Uint8Array(file.bytes));
       file.sent = true;
+      uploadedFile(file.bytes.length);
       await this.save();
     }
     this.cache.commits[pending.id] = pending.commit;
@@ -195,6 +206,7 @@ export class EncryptedDriveSync {
     await this.save();
   }
   private async prepare(changes: Change[], baseline: Records) {
+    syncPhase('encrypting');
     const id = await this.drive.id();
     const commit: Commit = { version: 1, parents: this.heads(), changes };
     const payload = encode(commit);
@@ -212,6 +224,7 @@ export class EncryptedDriveSync {
   }
 
   async push(snapshot: Snapshot, replace = false): Promise<void> {
+    syncPhase('preparing');
     const local = await toRecords(snapshot);
     return this.run(async () => {
       await this.sendPending();
@@ -252,6 +265,7 @@ export class EncryptedDriveSync {
   }
   // Call only after the existing local persistence has accepted the downloaded state.
   async acceptLocal(snapshot: Snapshot): Promise<void> {
+    syncPhase('saving');
     const baseline = await toRecords(snapshot);
     await this.run(async () => { this.cache.baseline = baseline; await this.save(); });
   }

@@ -1,3 +1,4 @@
+import { beginTransfer } from '@store/storage/google/progress';
 import { googleFetch, getGoogleAccessToken } from './google-auth';
 import { debounce } from 'lodash';
 import { decompress } from 'lz-string';
@@ -60,6 +61,7 @@ export const getDriveFile = async <S>(
   fileId: string,
   accessToken: string
 ): Promise<StorageValue<S>> => {
+  const finish = beginTransfer('download');
   const response = await googleFetch(
     `https://content.googleapis.com/drive/v3/files/${fileId}?alt=media`,
     accessToken,
@@ -73,6 +75,7 @@ export const getDriveFile = async <S>(
   );
   if (!response.ok) throw new Error(`Google Drive ${response.status}: ${response.statusText}`);
   const text = await response.text();
+  finish(new TextEncoder().encode(text).byteLength);
   // Auto-detect: if it starts with { it's uncompressed JSON (backward compat)
   const firstChar = text.charAt(0);
   const json = firstChar === '{' ? text : decompress(text);

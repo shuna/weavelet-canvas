@@ -1,3 +1,4 @@
+import { withSyncProgress } from './google/progress';
 import type { PersistStorage } from 'zustand/middleware';
 import { createJSONStorage } from 'zustand/middleware';
 import useCloudAuthStore from '@store/cloud-auth-store';
@@ -102,7 +103,7 @@ export async function flushPendingCloudSync(): Promise<void> {
   if (next.session !== session || auth.provider !== 'google' || !auth.cloudSync ||
       !auth.syncTargetConfirmed || auth.fileId !== next.session.dataset) return;
   pending = undefined;
-  inFlight = (async () => {
+  inFlight = withSyncProgress(async () => {
     try {
       auth.setSyncStatus('syncing');
       await persistChatSnapshot(next.value);
@@ -112,7 +113,7 @@ export async function flushPendingCloudSync(): Promise<void> {
       if (session === next.session) pending ??= next;
       throw error;
     }
-  })();
+  });
   try { await inFlight; }
   finally { inFlight = undefined; }
   if (pending) schedule();

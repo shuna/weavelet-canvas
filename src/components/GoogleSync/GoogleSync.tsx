@@ -1,3 +1,5 @@
+import { withSyncProgress, syncPhase } from '@store/storage/google/progress';
+import GoogleSyncProgress from './GoogleSyncProgress';
 import React, { useEffect, useRef, useState } from 'react';
 import { GoogleOAuthProvider } from '@react-oauth/google';
 import { useTranslation } from 'react-i18next';
@@ -410,6 +412,7 @@ const GooglePopup = ({
       await pauseGoogleSync();
       const encrypted = selectedFile?.mimeType === SYNC_FOLDER_TYPE;
       if (encrypted) await unlockSelected();
+      else syncPhase('downloading');
       const remoteStorageValue = encrypted
         ? await pullEncryptedGoogleSync()
         : await getDriveFileTyped(_fileId, googleAccessToken);
@@ -423,6 +426,7 @@ const GooglePopup = ({
         remotePersistedState
       );
 
+      syncPhase('saving');
       // Keep the local format and persist chat data before publishing the hydrated state.
       await saveChatData(createPersistedChatDataState({ ...useStore.getState(), ...hydratedState }));
       useStore.persist.setOptions({
@@ -527,7 +531,7 @@ const GooglePopup = ({
     }
   }, [availableOperations, selectedOperation]);
 
-  const runSelectedOperation = async () => {
+  const performSelectedOperation = async () => {
     if (isBusy || inputIssue) return;
     if (selectedOperation === 'connect' || selectedOperation === 'reconnect') {
       startSyncing();
@@ -559,6 +563,15 @@ const GooglePopup = ({
       return;
     }
     stopSyncing();
+  };
+
+  const runSelectedOperation = async () => {
+    if (isBusy || inputIssue) return;
+    if (['create', 'resume', 'pull', 'push'].includes(selectedOperation)) {
+      await withSyncProgress(performSelectedOperation);
+    } else {
+      await performSelectedOperation();
+    }
   };
 
   const operationDescriptionKey = {
@@ -611,11 +624,12 @@ const GooglePopup = ({
           <div id='google-sync-guidance' role='status' className='text-sm text-gray-600 dark:text-gray-300'>
             {syncStatus === 'error' && <p>{t('encryption.failed')}</p>}
             <p>{t(statusMessageKey)}</p>
+            {isBusy && <GoogleSyncProgress />}
           </div>
         </div>
       }
       footerEndContent={
-        connected ? (
+        isBusy ? null : connected ? (
           <button
             type='button'
             className={actionButtonClass}
