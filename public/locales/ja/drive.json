@@ -16,7 +16,7 @@
     "fileSelection": "クラウドファイルの選択",
     "operation": "実行する操作",
     "currentTarget": "現在の同期対象",
-    "syncingFileId": "同期中のファイルID",
+    "syncingFolderId": "同期先のフォルダーID",
     "updatedAt": "更新日時",
     "fileId": "ファイルID",
     "fileName": "ファイル名",
