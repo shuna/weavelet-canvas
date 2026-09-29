@@ -126,11 +126,11 @@ async function persistChatSnapshot(snapshot: Snapshot) {
     branchClipboard: snapshot.state.branchClipboard ?? null,
   });
 }
-export async function createEncryptedGoogleSync(passphrase: string, snapshot: Snapshot) {
+export async function createEncryptedGoogleSync(passphrase: string, snapshot: Snapshot, folderName?: string) {
   snapshot = structuredClone(snapshot);
   lockGoogleSync();
   await persistChatSnapshot(snapshot);
-  const created = await EncryptedDriveSync.create(transport(), passphrase);
+  const created = await EncryptedDriveSync.create(transport(), passphrase, { folderName });
   session = created.session;
   await session.push(snapshot, true);
   return created.file;

@@ -1,5 +1,5 @@
 import { afterEach, expect, it, vi } from 'vitest';
-import { DriveTransport } from './transport';
+import { DriveTransport, nextSyncFolderName, DEFAULT_SYNC_FOLDER_NAME } from './transport';
 import { listDriveFiles, getDriveFolderSize } from '@api/google-api';
 const json = (data: unknown, status = 200) => new Response(JSON.stringify(data), { status });
 afterEach(() => vi.unstubAllGlobals());
@@ -89,4 +89,19 @@ it('reports empty folders as zero and rejects unknown or incomplete size totals'
   expect(await getDriveFolderSize('empty', 'token')).toBe('0');
   await expect(getDriveFolderSize('unknown', 'token')).rejects.toThrow('determine');
   await expect(getDriveFolderSize('partial', 'token')).rejects.toThrow('Incomplete');
+});
+
+
+it('suggests unused folder names and sends editable names without changing identity', async () => {
+  expect(nextSyncFolderName(DEFAULT_SYNC_FOLDER_NAME, [])).toBe(DEFAULT_SYNC_FOLDER_NAME);
+  expect(nextSyncFolderName(DEFAULT_SYNC_FOLDER_NAME, [DEFAULT_SYNC_FOLDER_NAME, `${DEFAULT_SYNC_FOLDER_NAME} (2)`])).toBe(`${DEFAULT_SYNC_FOLDER_NAME} (3)`);
+  expect(nextSyncFolderName('  私の同期  ', ['私の同期'])).toBe('私の同期 (2)');
+  expect(nextSyncFolderName('Custom', [DEFAULT_SYNC_FOLDER_NAME])).toBe('Custom');
+  const fetch = vi.fn().mockResolvedValue(json({ id: 'folder', name: 'Custom name' }));
+  vi.stubGlobal('fetch', fetch);
+  const drive = new DriveTransport(() => 'token');
+  await drive.folder('folder', 'header', '  Custom name  ');
+  expect(JSON.parse(fetch.mock.calls[0][1].body)).toMatchObject({ id: 'folder', name: 'Custom name', appProperties: { headerId: 'header', weaveletSync: '1' } });
+  await expect(drive.folder('folder', 'header', '  ')).rejects.toThrow('name');
+  expect(fetch).toHaveBeenCalledTimes(1);
 });

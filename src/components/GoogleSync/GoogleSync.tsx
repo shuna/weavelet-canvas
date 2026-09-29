@@ -12,6 +12,8 @@ import useGStore from '@store/cloud-auth-store';
 import { showToast } from '@utils/showToast';
 
 import {
+  listDriveFiles,
+  updateDriveFileName,
   getDriveFileTyped,
   getDriveFolderSize,
   isGoogleAuthError,
@@ -23,7 +25,7 @@ import createGoogleCloudStorage, {
   pullEncryptedGoogleSync, acceptGoogleSyncLocal,
   pauseGoogleSync, queueGoogleSyncSnapshot, restoreGoogleSync, resumeGoogleSync, resolveGoogleSyncConflict,
 } from '@store/storage/GoogleCloudStorage';
-import { SYNC_FOLDER_TYPE } from '@store/storage/google/transport';
+import { SYNC_FOLDER_TYPE, DEFAULT_SYNC_FOLDER_NAME, nextSyncFolderName } from '@store/storage/google/transport';
 import {
   createPersistedChatDataState,
   createLocalStoragePartializedState,
@@ -346,6 +348,10 @@ const GooglePopup = ({
   useEffect(() => { if (conflict) setIsModalOpen(true); }, [conflict]);
   const [passphrase, setPassphrase] = useState('');
   const [confirmation, setConfirmation] = useState('');
+  const [folderNameDraft, setFolderNameDraft] = useState<string>();
+  const folderNames = files.filter(file => file.mimeType === SYNC_FOLDER_TYPE).map(file => file.name);
+  const folderName = folderNameDraft ?? nextSyncFolderName(DEFAULT_SYNC_FOLDER_NAME, folderNames);
+  const proposedFolderName = nextSyncFolderName(folderName, folderNames);
   const snapshot = () => ({ state: createPartializedState(useStore.getState()), version: STORE_VERSION });
   const unlockSelected = async () => {
     await pauseGoogleSync();
@@ -397,13 +403,31 @@ const GooglePopup = ({
     (['resume', 'pull'].includes(selectedOperation) && selectedFile?.mimeType === SYNC_FOLDER_TYPE &&
       !isGoogleSyncUnlocked(operationFileId));
   const inputIssue = selectedOperation === 'create'
-    ? !passphrase ? 'guidance.enterNewPassphrase'
+    ? !folderName.trim() ? 'guidance.enterFolderName'
+      : !passphrase ? 'guidance.enterNewPassphrase'
       : passphrase.length < 12 ? 'guidance.passphraseTooShort'
       : !confirmation ? 'guidance.confirmPassphrase'
       : passphrase !== confirmation ? 'encryption.mismatch' : undefined
     : ['resume', 'pull'].includes(selectedOperation) && !selectedFile
       ? selectedOperation === 'pull' ? 'guidance.selectInput' : 'guidance.createOrRead'
       : needsPassphrase && !passphrase ? 'guidance.enterPassphrase' : undefined;
+
+  // Names are metadata; refreshing them must not pause or change the sync session.
+  useEffect(() => {
+    if (!isModalOpen || !googleAccessToken) return;
+    let cancelled = false;
+    const refreshNames = async () => {
+      try {
+        const result = await listDriveFiles(googleAccessToken);
+        if (!cancelled) setFiles(result.files);
+      } catch (error) {
+        if (!cancelled) showToast((error as Error).message, 'error');
+      }
+    };
+    void refreshNames();
+    window.addEventListener('focus', refreshNames);
+    return () => { cancelled = true; window.removeEventListener('focus', refreshNames); };
+  }, [isModalOpen, googleAccessToken]);
 
   const refreshCloudFiles = async () => {
     if (!googleAccessToken || isBusy) return;
@@ -482,9 +506,13 @@ const GooglePopup = ({
     try {
       setBusyActivity('syncing');
       setSyncStatus('syncing');
+      if (!folderName.trim()) throw new Error(t('guidance.enterFolderName') as string);
       if (passphrase !== confirmation) throw new Error(t('encryption.mismatch') as string);
+      const latest = (await listDriveFiles(googleAccessToken)).files;
+      const name = nextSyncFolderName(folderNameDraft ?? DEFAULT_SYNC_FOLDER_NAME, latest.filter(file => file.mimeType === SYNC_FOLDER_TYPE).map(file => file.name));
       await pauseGoogleSync();
-      const createdFile = await createEncryptedGoogleSync(passphrase, snapshot());
+      const createdFile = await createEncryptedGoogleSync(passphrase, snapshot(), name);
+      setFolderNameDraft(undefined);
       setPassphrase('');
       setConfirmation('');
       const _files = await getFiles(googleAccessToken);
@@ -663,9 +691,7 @@ const GooglePopup = ({
     >
       <div
         aria-busy={isBusy}
-        className={`border-b border-gray-200 p-6 text-sm text-gray-900 dark:border-gray-600 dark:text-gray-300 ${
-          isBusy ? 'pointer-events-none select-none opacity-60' : ''
-        } flex flex-col items-center gap-4 text-center`}
+        className='border-b border-gray-200 p-6 text-sm text-gray-900 dark:border-gray-600 dark:text-gray-300 flex flex-col items-center gap-4 text-center'
       >
         <div className='w-full max-w-2xl rounded-lg border border-gray-300 bg-gray-50/90 px-4 py-4 text-left dark:border-gray-600 dark:bg-gray-800/50'>
           <p className='text-sm text-gray-900 dark:text-gray-100'>{t('tagline')}</p>
@@ -717,6 +743,18 @@ const GooglePopup = ({
             {t(operationDescriptionKey[selectedOperation])}
           </div>
         </div>
+        {connected && selectedOperation === 'create' && <div className='w-full max-w-2xl text-left'>
+          <label className='block text-sm' htmlFor='google-sync-folder-name'>{t('labels.folderName')}</label>
+          <input id='google-sync-folder-name' list='google-sync-folder-names' type='text'
+            className='mt-1 w-full rounded border border-gray-300 bg-transparent px-3 py-2'
+            value={folderName} onChange={event => setFolderNameDraft(event.target.value)} disabled={isBusy}
+            aria-describedby='google-sync-folder-name-help' />
+          <datalist id='google-sync-folder-names'>
+            {[...new Set([DEFAULT_SYNC_FOLDER_NAME, ...folderNames].map(name => nextSyncFolderName(name, folderNames)))].map(name => <option key={name} value={name} />)}
+          </datalist>
+          <p id='google-sync-folder-name-help' className='mt-2 text-xs'>{t('encryption.folderNameHelp')}</p>
+          {folderName.trim() && proposedFolderName !== folderName.trim() && <p className='mt-1 text-xs'>{t('encryption.folderNameAdjusted', { name: proposedFolderName })}</p>}
+        </div>}
         {connected && needsPassphrase && (
           <div className='w-full max-w-2xl text-left'>
             <label className='block text-sm' htmlFor='google-sync-passphrase'>{t('encryption.passphrase')}</label>
@@ -786,6 +824,7 @@ const GooglePopup = ({
                         syncing={isBusy}
                         selectable={selectedOperation === 'pull'}
                         onSelect={_setFileId}
+                        onRename={(id, name) => setFiles(current => current.map(file => file.id === id ? { ...file, name } : file))}
                       />
                     ))
                   )}
@@ -804,17 +843,30 @@ const GooglePopup = ({
   );
 };
 
-const FileSelector = ({ file, selected, current, syncing, selectable, onSelect }: {
+const FileSelector = ({ file, selected, current, syncing, selectable, onSelect, onRename }: {
   file: GoogleFileResource;
   selected: boolean;
   current: boolean;
   syncing: boolean;
   selectable: boolean;
   onSelect: React.Dispatch<React.SetStateAction<string>>;
+  onRename: (id: string, name: string) => void;
 }) => {
   const { t, i18n } = useTranslation(['drive']);
   const googleAccessToken = useGStore((state) => state.googleAccessToken);
   const isFolder = file.mimeType === SYNC_FOLDER_TYPE;
+  const [nameDraft, setNameDraft] = useState<string>();
+  const [renaming, setRenaming] = useState(false);
+  const rename = async () => {
+    if (!googleAccessToken || !nameDraft?.trim()) return;
+    const name = nameDraft.trim();
+    setRenaming(true);
+    try {
+      await updateDriveFileName(name, file.id, googleAccessToken);
+      onRename(file.id, name); setNameDraft(undefined);
+    } catch (error) { showToast((error as Error).message, 'error'); }
+    finally { setRenaming(false); }
+  };
   const [folderSize, setFolderSize] = useState<string>();
   const [sizeError, setSizeError] = useState<string>();
   useEffect(() => {
@@ -831,18 +883,27 @@ const FileSelector = ({ file, selected, current, syncing, selectable, onSelect }
   const size = formatFileSize(isFolder ? folderSize : file.size, i18n.language);
   const updated = formatDateTime(file.modifiedTime, i18n.language);
   return (
-    <label className='mb-2 flex w-full min-w-0 items-start gap-3 rounded-lg border border-gray-300 px-3 py-3 text-sm dark:border-gray-600'>
+    <div className='mb-2 flex w-full min-w-0 items-start gap-3 rounded-lg border border-gray-300 px-3 py-3 text-sm dark:border-gray-600'>
       {selectable && <input type='radio' name='google-sync-input' aria-label={file.name}
         checked={selected} disabled={syncing} onChange={() => onSelect(file.id)} />}
       <div className='min-w-0 flex-1 break-all text-xs'>
         {current && <div className='font-semibold'>{t('labels.currentTarget')}</div>}
-        <div>{t('labels.fileName')}: {file.name}</div>
+        {isFolder ? <div>
+          <label htmlFor={`sync-folder-name-${file.id}`}>{t('labels.folderName')}</label>
+          <div className='mt-1 flex gap-2'>
+            <input id={`sync-folder-name-${file.id}`} type='text' className='min-w-0 flex-1 rounded border border-gray-300 bg-transparent px-2 py-1'
+              value={nameDraft ?? file.name} onChange={event => setNameDraft(event.target.value)} disabled={renaming} />
+            <button type='button' onClick={() => void rename()} disabled={renaming || !nameDraft?.trim() || nameDraft.trim() === file.name}
+              className='shrink-0 rounded border px-2 disabled:opacity-40'>{t('button.renameFolder')}</button>
+          </div>
+          {nameDraft !== undefined && nameDraft !== file.name && <div className='mt-1'>{t('labels.currentFolderName', { name: file.name })}</div>}
+        </div> : <div>{t('labels.fileName')}: {file.name}</div>}
         <div>{t(isFolder ? 'labels.folderSize' : 'labels.fileSize')}: {size === 'Unknown' ? t('labels.unknownSize') : size}</div>
         {sizeError && <div role='status' className='text-amber-700 dark:text-amber-400'>{sizeError}</div>}
         <div>{t('labels.updatedAt')}: {updated === 'Unknown' ? t('labels.unknownDate') : updated}</div>
         {file.mimeType !== SYNC_FOLDER_TYPE && <p className='mt-2'>{t('encryption.legacy')}</p>}
       </div>
-    </label>
+    </div>
   );
 };
 

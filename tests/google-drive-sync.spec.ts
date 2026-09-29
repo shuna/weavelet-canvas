@@ -19,6 +19,7 @@ test('encrypted Drive creation, incremental autosave and unlock after browser re
   let releaseInitialCommit!: () => void;
   const initialCommitResponse = new Promise<void>(resolve => { releaseInitialCommit = resolve; });
   let holdInitialCommit = true;
+  let heldCommitResponse = initialCommitResponse;
   await page.route('https://accounts.google.com/**', (route) => route.fulfill({
     contentType: 'application/javascript',
     body: 'window.google={accounts:{oauth2:{initTokenClient:()=>({requestAccessToken:()=>{}}),revoke:()=>{}}}};',
@@ -47,7 +48,7 @@ test('encrypted Drive creation, incremental autosave and unlock after browser re
       changes.push({ fileId: metadata.id, file: metadata });
       if (metadata.appProperties.kind === 'commit' && holdInitialCommit) {
         holdInitialCommit = false;
-        await initialCommitResponse;
+        await heldCommitResponse;
       }
       return route.fulfill({ json: { id: metadata.id } });
     }
@@ -69,6 +70,10 @@ test('encrypted Drive creation, incremental autosave and unlock after browser re
       return route.fulfill({ json: { files: listed, incompleteSearch: false } });
     }
     const file = files.get(url.pathname.split('/').at(-1)!);
+    if (file && request.method() === 'PATCH') {
+      Object.assign(file.metadata, request.postDataJSON());
+      return route.fulfill({ json: file.metadata });
+    }
     if (file) return url.searchParams.get('alt') === 'media'
       ? route.fulfill({ contentType: 'application/octet-stream', body: file.bytes })
       : route.fulfill({ json: file.metadata });
@@ -99,6 +104,7 @@ test('encrypted Drive creation, incremental autosave and unlock after browser re
   const create = page.getByRole('button', { name: '暗号化した同期フォルダーを作成', exact: true });
   const guidance = page.locator('#google-sync-guidance');
   await expect(create).toBeDisabled();
+  await expect(page.locator('#google-sync-folder-name')).toHaveValue('Weavelet encrypted sync');
   await expect(page.getByRole('radio')).toHaveCount(0);
   await expect(page.getByText('現在のローカルデータ', { exact: true })).toBeVisible();
   await page.locator('#google-sync-passphrase').fill('short');
@@ -121,6 +127,14 @@ test('encrypted Drive creation, incremental autosave and unlock after browser re
   await expect(operation.locator('option[value="push"]')).toHaveCount(0);
   await operation.selectOption('create');
   await expect(create).toBeEnabled();
+  await page.locator('#google-sync-folder-name').fill('');
+  await expect(create).toBeDisabled();
+  await expect(guidance).toContainText('同期フォルダーの名前を入力してください。');
+  await page.locator('#google-sync-folder-name').fill('Project sync');
+  // Simulate folders appearing after the initial listing; creation rechecks names.
+  for (const [index, name] of ['Project sync', 'Project sync (2)'].entries()) {
+    files.set(`existing-${index}`, { metadata: { id: `existing-${index}`, name, mimeType: 'application/vnd.google-apps.folder', appProperties: { weaveletSync: '1', headerId: 'unused' } }, bytes: Buffer.alloc(0) });
+  }
   await page.screenshot({ path: testInfo.outputPath('create-ready.png') });
   await create.click();
   const progress = page.getByTestId('google-sync-progress');
@@ -166,6 +180,9 @@ test('encrypted Drive creation, incremental autosave and unlock after browser re
   await page.getByRole('button', { name: 'close modal', exact: true }).click();
   await page.getByRole('button', { name: 'メニューを開く', exact: true }).click();
   const before = uploads.length;
+  let releaseRenameCommit!: () => void;
+  heldCommitResponse = new Promise<void>(resolve => { releaseRenameCommit = resolve; });
+  holdInitialCommit = true;
   await page.evaluate(async () => {
     const { default: store } = await import('/src/store/store.ts');
     const chats = structuredClone(store.getState().chats!);
@@ -173,6 +190,25 @@ test('encrypted Drive creation, incremental autosave and unlock after browser re
     store.getState().setChats(chats);
   });
   await expect.poll(() => uploads.filter((u) => u.metadata.appProperties.kind === 'commit').length).toBe(3);
+  await page.getByRole('button', { name: '同期の進捗を表示', exact: true }).click();
+  const targetId = await page.evaluate(async () => (await import('/src/store/cloud-auth-store.ts')).default.getState().fileId);
+  const nameInput = page.locator(`[id="sync-folder-name-${targetId}"]`);
+  await expect(nameInput).toHaveValue('Project sync (3)');
+  await nameInput.fill('Renamed during sync');
+  await page.getByRole('button', { name: '名前を変更', exact: true }).click();
+  await expect.poll(() => files.get(targetId!)!.metadata.name).toBe('Renamed during sync');
+  expect(await page.evaluate(async () => (await import('/src/store/cloud-auth-store.ts')).default.getState().syncStatus)).toBe('syncing');
+  releaseRenameCommit();
+  await expect(guidance).toContainText('変更は暗号化して自動保存されます。');
+  files.get(targetId!)!.metadata.name = 'Renamed on Drive';
+  await page.evaluate(() => window.dispatchEvent(new Event('focus')));
+  await expect(nameInput).toHaveValue('Renamed on Drive');
+  await operation.selectOption('create');
+  await expect(page.locator('#google-sync-folder-name')).toHaveValue('Weavelet encrypted sync');
+  await page.locator('#google-sync-folder-name').fill('Project sync');
+  await expect(page.getByText('作成する名前: Project sync (3)', { exact: true })).toBeVisible();
+  await operation.selectOption('resume');
+
   expect(uploads.slice(before).reduce((total, u) => total + u.bytes.length, 0)).toBeLessThan(2000);
   for (const upload of uploads) expect(upload.bytes.toString()).not.toContain('PRIVATE BROWSER TITLE');
   const savedTarget = await page.evaluate(async () => (await import('/src/store/cloud-auth-store.ts')).default.getState().fileId);
@@ -273,7 +309,7 @@ test('encrypted Drive creation, incremental autosave and unlock after browser re
     store.getState().setChats(chats);
   });
   await page.locator('select').filter({ has: page.locator('option[value="pull"]') }).selectOption('pull');
-  await page.getByRole('radio', { name: /^Weavelet encrypted sync \(file-\d+\)$/ }).check();
+  await page.getByRole('radio', { name: 'Renamed on Drive', exact: true }).check();
   await page.getByRole('button', { name: 'クラウド状態でローカルを上書き', exact: true }).click();
   await expect(page.getByRole('button', { name: 'close modal', exact: true })).toHaveCount(0);
   expect(await page.evaluate(async () => {

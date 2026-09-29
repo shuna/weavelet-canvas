@@ -137,13 +137,13 @@ export class EncryptedDriveSync {
     return result;
   }
 
-  static async create(drive: DriveTransport, password: string, options: SyncTransferOptions = {}): Promise<{ session: EncryptedDriveSync; file: DriveFile }> {
+  static async create(drive: DriveTransport, password: string, options: SyncTransferOptions & { folderName?: string } = {}): Promise<{ session: EncryptedDriveSync; file: DriveFile }> {
     // Derive the key before creating remote files, so invalid passphrases cannot create empty folders.
     const [dataset, header] = await drive.ids(2);
     syncPhase('key');
     const { key, envelope } = await createKeyEnvelope(password, dataset);
     syncPhase('folder');
-    const file = await drive.folder(dataset, header);
+    const file = await drive.folder(dataset, header, options.folderName);
     await drive.put(header, dataset, 'key', new TextEncoder().encode(JSON.stringify(envelope)));
     const session = new EncryptedDriveSync(dataset, drive, options);
     session.key = key;
