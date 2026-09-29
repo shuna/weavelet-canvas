@@ -57,6 +57,11 @@ test('encrypted Drive creation, incremental autosave and unlock after browser re
         files.set(metadata.id, { metadata, bytes: Buffer.alloc(0) });
         return route.fulfill({ json: metadata });
       }
+      if (url.searchParams.get('fields')?.includes('files(id,size)')) {
+        const folderId = url.searchParams.get('q')!.match(/^'([^']+)' in parents/)![1];
+        const children = [...files.values()].filter(({ metadata }) => metadata.parents?.includes(folderId));
+        return route.fulfill({ json: { files: children.map(({ metadata, bytes }) => ({ id: metadata.id, size: String(bytes.length) })) } });
+      }
       const commitQuery = url.searchParams.get('q')?.includes("key='kind'");
       const listed = [...files.values()].filter(({ metadata }) => commitQuery
         ? metadata.appProperties?.kind === 'commit'
@@ -150,6 +155,13 @@ test('encrypted Drive creation, incremental autosave and unlock after browser re
   await expect(progress).toHaveCount(0);
   await expect.poll(() => uploads.filter(u => u.metadata.appProperties.kind === 'commit').length).toBe(2);
   expect(await page.evaluate(async () => (await import('/src/store/store.ts')).default.getState().chats![0].title)).toBe('EDIT DURING INITIAL');
+  const total = uploads.reduce((sum, upload) => sum + upload.bytes.length, 0);
+  const units = ['B', 'KB', 'MB'];
+  const unit = total < 1024 ? 0 : total < 1024 * 1024 ? 1 : 2;
+  const value = total / 1024 ** unit;
+  const formatted = new Intl.NumberFormat('ja', { maximumFractionDigits: value >= 100 || unit === 0 ? 0 : value >= 10 ? 1 : 2 }).format(value);
+  await expect(page.getByText(`フォルダー内の合計サイズ: ${formatted} ${units[unit]}`, { exact: true })).toBeVisible();
+
   await page.getByRole('button', { name: 'close modal', exact: true }).click();
   await page.getByRole('button', { name: 'メニューを開く', exact: true }).click();
   const before = uploads.length;

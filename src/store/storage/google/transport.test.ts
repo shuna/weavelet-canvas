@@ -1,6 +1,6 @@
 import { afterEach, expect, it, vi } from 'vitest';
 import { DriveTransport } from './transport';
-import { listDriveFiles } from '@api/google-api';
+import { listDriveFiles, getDriveFolderSize } from '@api/google-api';
 const json = (data: unknown, status = 200) => new Response(JSON.stringify(data), { status });
 afterEach(() => vi.unstubAllGlobals());
 
@@ -67,4 +67,26 @@ it('batches generated IDs within the Drive limit and rejects duplicate responses
   await expect(drive.ids(2)).rejects.toThrow('duplicate');
   fetch.mockResolvedValueOnce(json({ ids: [] }));
   await expect(drive.ids(2)).rejects.toThrow('requested');
+});
+
+it('sums every page of folder metadata including key, data and commit sizes without downloading files', async () => {
+  const fetch = vi.fn().mockResolvedValueOnce(json({ files: [{ id: 'key', size: '353' }, { id: 'part', size: '1048604' }], nextPageToken: 'next' }))
+    .mockResolvedValueOnce(json({ files: [{ id: 'commit', size: '200' }] }));
+  vi.stubGlobal('fetch', fetch);
+  expect(await getDriveFolderSize('dataset', 'token')).toBe('1049157');
+  const urls = fetch.mock.calls.map(c => new URL(c[0]));
+  expect(urls[0].searchParams.get('q')).toContain("'dataset' in parents and trashed = false");
+  expect(urls[0].searchParams.get('fields')).toBe('nextPageToken,incompleteSearch,files(id,size)');
+  expect(urls[1].searchParams.get('pageToken')).toBe('next');
+  expect(urls.every(url => url.pathname.endsWith('/files') && !url.searchParams.has('alt'))).toBe(true);
+});
+
+it('reports empty folders as zero and rejects unknown or incomplete size totals', async () => {
+  const fetch = vi.fn().mockResolvedValueOnce(json({ files: [] }))
+    .mockResolvedValueOnce(json({ files: [{ id: 'missing-size' }] }))
+    .mockResolvedValueOnce(json({ files: [{ size: '10' }], incompleteSearch: true }));
+  vi.stubGlobal('fetch', fetch);
+  expect(await getDriveFolderSize('empty', 'token')).toBe('0');
+  await expect(getDriveFolderSize('unknown', 'token')).rejects.toThrow('determine');
+  await expect(getDriveFolderSize('partial', 'token')).rejects.toThrow('Incomplete');
 });

@@ -20,6 +20,7 @@
     "updatedAt": "更新日時",
     "fileId": "ファイルID",
     "fileName": "ファイル名",
+    "folderSize": "フォルダー内の合計サイズ",
     "fileSize": "ファイルサイズ",
     "unknownDate": "不明",
     "unknownSize": "不明",

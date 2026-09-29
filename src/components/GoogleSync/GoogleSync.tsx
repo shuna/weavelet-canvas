@@ -12,6 +12,7 @@ import { showToast } from '@utils/showToast';
 
 import {
   getDriveFileTyped,
+  getDriveFolderSize,
   isGoogleAuthError,
   validateGoogleOath2AccessToken,
 } from '@api/google-api';
@@ -805,7 +806,22 @@ const FileSelector = ({ file, selected, current, syncing, selectable, onSelect }
   onSelect: React.Dispatch<React.SetStateAction<string>>;
 }) => {
   const { t, i18n } = useTranslation(['drive']);
-  const size = formatFileSize(file.size, i18n.language);
+  const googleAccessToken = useGStore((state) => state.googleAccessToken);
+  const isFolder = file.mimeType === SYNC_FOLDER_TYPE;
+  const [folderSize, setFolderSize] = useState<string>();
+  const [sizeError, setSizeError] = useState<string>();
+  useEffect(() => {
+    if (!isFolder || !googleAccessToken || syncing) return;
+    let cancelled = false;
+    setFolderSize(undefined);
+    setSizeError(undefined);
+    getDriveFolderSize(file.id, googleAccessToken).then(
+      size => { if (!cancelled) setFolderSize(size); },
+      error => { if (!cancelled) setSizeError((error as Error).message); }
+    );
+    return () => { cancelled = true; };
+  }, [file.id, file, isFolder, googleAccessToken, syncing]);
+  const size = formatFileSize(isFolder ? folderSize : file.size, i18n.language);
   const updated = formatDateTime(file.modifiedTime, i18n.language);
   return (
     <label className='mb-2 flex w-full min-w-0 items-start gap-3 rounded-lg border border-gray-300 px-3 py-3 text-sm dark:border-gray-600'>
@@ -814,7 +830,8 @@ const FileSelector = ({ file, selected, current, syncing, selectable, onSelect }
       <div className='min-w-0 flex-1 break-all text-xs'>
         {current && <div className='font-semibold'>{t('labels.currentTarget')}</div>}
         <div>{t('labels.fileName')}: {file.name}</div>
-        <div>{t('labels.fileSize')}: {size === 'Unknown' ? t('labels.unknownSize') : size}</div>
+        <div>{t(isFolder ? 'labels.folderSize' : 'labels.fileSize')}: {size === 'Unknown' ? t('labels.unknownSize') : size}</div>
+        {sizeError && <div role='status' className='text-amber-700 dark:text-amber-400'>{sizeError}</div>}
         <div>{t('labels.updatedAt')}: {updated === 'Unknown' ? t('labels.unknownDate') : updated}</div>
         {file.mimeType !== SYNC_FOLDER_TYPE && <p className='mt-2'>{t('encryption.legacy')}</p>}
       </div>
