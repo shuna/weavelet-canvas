@@ -30,7 +30,9 @@ export class DriveTransport {
     const ids: string[] = [];
     while (ids.length < count) {
       const batch = Math.min(1000, count - ids.length);
-      const data = await measure('ids', () => this.json(`${API}/files/generateIds?count=${batch}&space=drive&type=files`));
+      const started = performance.now();
+      const data = await this.json(`${API}/files/generateIds?count=${batch}&space=drive&type=files`);
+      recordMetric('ids', started, 0, new TextEncoder().encode(JSON.stringify(data)).length);
       if (!Array.isArray(data.ids) || data.ids.length !== batch || data.ids.some((id: unknown) => typeof id !== 'string' || !id)) {
         throw new Error('Drive did not return the requested file IDs.');
       }
