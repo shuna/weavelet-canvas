@@ -122,4 +122,58 @@ describe('createCloudPersistStorage', () => {
     expect(state.notifyError).not.toHaveBeenCalled();
   });
 
+  it('recovers after size rejection and does not reopen the same guard toast', async () => {
+    const { provider, state } = buildProvider();
+    const controller = createCloudPersistStorage(provider);
+    const oversized = { state: { text: 'x'.repeat(2_000_001) }, version: 1 };
+    // Toast updates also trigger persistence in the application.
+    state.notifyError.mockImplementation(() => {
+      void controller.storage.setItem('test', oversized);
+    });
+    await controller.storage.setItem('test', oversized);
+    await controller.flushPendingCloudSync();
+    await vi.advanceTimersByTimeAsync(5000);
+    expect(state.notifyError).toHaveBeenCalledTimes(1);
+    expect(state.writeItem).not.toHaveBeenCalled();
+    expect(vi.getTimerCount()).toBe(0);
+
+    await controller.storage.setItem('test', { state: { text: 'valid' }, version: 1 });
+    await Promise.all([
+      controller.flushPendingCloudSync(),
+      controller.flushPendingCloudSync(),
+    ]);
+    expect(state.writeItem).toHaveBeenCalledTimes(1);
+
+    await controller.storage.setItem('test', oversized);
+    await controller.flushPendingCloudSync();
+    expect(state.notifyError).toHaveBeenCalledTimes(2);
+    controller.resetPendingCloudSyncForTests();
+  });
+
+  it('releases the pending flush when the target disappears', async () => {
+    const { provider, state } = buildProvider();
+    const getTarget = vi.spyOn(provider, 'getTarget');
+    const controller = createCloudPersistStorage(provider);
+    const value = { state: { text: 'valid' }, version: 1 };
+    await controller.storage.setItem('test', value);
+    getTarget.mockReturnValueOnce(null);
+    await controller.flushPendingCloudSync();
+    await controller.storage.setItem('test', value);
+    await controller.flushPendingCloudSync();
+    expect(state.writeItem).toHaveBeenCalledTimes(1);
+  });
+
+  it('reports serialization failures and permits a subsequent upload', async () => {
+    const { provider, state } = buildProvider();
+    const controller = createCloudPersistStorage(provider);
+    await controller.storage.setItem('test', {
+      state: { toJSON: () => { throw new Error('Cannot serialize'); } }, version: 1,
+    });
+    await controller.flushPendingCloudSync();
+    expect(state.notifyError).toHaveBeenCalledWith('Cannot serialize');
+    await controller.storage.setItem('test', { state: { text: 'valid' }, version: 1 });
+    await controller.flushPendingCloudSync();
+    expect(state.writeItem).toHaveBeenCalledTimes(1);
+  });
+
 });
