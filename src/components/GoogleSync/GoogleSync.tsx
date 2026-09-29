@@ -173,7 +173,7 @@ const SyncDirectionInline = ({
   );
 };
 
-const GoogleSync = ({ clientId }: { clientId: string }) => {
+const GoogleSync = ({ clientId, openOnMount = false }: { clientId: string; openOnMount?: boolean }) => {
   const { t } = useTranslation(['drive']);
 
   const fileId = useGStore((state) => state.fileId);
@@ -198,7 +198,7 @@ const GoogleSync = ({ clientId }: { clientId: string }) => {
     });
   };
 
-  const [isModalOpen, setIsModalOpen] = useState<boolean>(cloudSync);
+  const [isModalOpen, setIsModalOpen] = useState<boolean>(cloudSync || openOnMount);
   const [files, setFiles] = useState<GoogleFileResource[]>([]);
   const isSilentRefresh = useRef(false);
 

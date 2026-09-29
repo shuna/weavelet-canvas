@@ -6,9 +6,9 @@ import useGStore from '@store/cloud-auth-store';
 import useStore from '@store/store';
 import { showToast } from '@utils/showToast';
 import { createJSONStorage } from 'zustand/middleware';
-import { createLocalStoragePartializedState } from '@store/persistence';
-import { connectGoogle, disconnectGoogle, getGoogleAccessToken, usesGoogleAuthBackend } from '@api/google-auth';
-import { requestGoogleCode } from '@api/google-popup';
+import { createLocalStoragePartializedState, createPersistedChatDataState } from '@store/persistence';
+import { disconnectGoogle, getGoogleAccessToken, usesGoogleAuthBackend } from '@api/google-auth';
+import { saveChatData } from '@store/storage/IndexedDbStorage';
 import compressedStorage from '@store/storage/CompressedStorage';
 
 export interface GoogleSyncButtonHandle {
@@ -51,12 +51,9 @@ const GoogleSyncButton = forwardRef<
 
   const codeLogin = async () => {
     try {
-      const token = await connectGoogle(await requestGoogleCode());
-      setSyncTargetConfirmed(false);
-      setGoogleAccessToken(token);
-      setCloudSync(true);
-      loginHandler?.();
-      showToast(t('toast.sync'), 'success');
+      await saveChatData(createPersistedChatDataState(useStore.getState()));
+      sessionStorage.setItem('google-auth-started', String(Date.now()));
+      window.location.assign('/google-auth.html');
     } catch (error) {
       setSyncStatus('unauthenticated');
       showToast((error as Error).message, 'error');

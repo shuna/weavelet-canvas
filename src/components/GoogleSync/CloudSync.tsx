@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 
 import useCloudAuthStore from '@store/cloud-auth-store';
 import type { CloudSyncProvider as CloudSyncProviderType } from '@store/cloud-auth-types';
@@ -18,9 +18,16 @@ const CloudSync = () => {
   const cloudSync = useCloudAuthStore((s) => s.cloudSync);
   const setProvider = useCloudAuthStore((s) => s.setProvider);
 
-  const [expanded, setExpanded] = useState(false);
+  const [returningFromGoogle] = useState(() => new URLSearchParams(location.search).get('google-sync') === 'return');
+  const [expanded, setExpanded] = useState(returningFromGoogle);
+  useEffect(() => {
+    if (!returningFromGoogle) return;
+    const url = new URL(location.href);
+    url.searchParams.delete('google-sync');
+    history.replaceState(history.state, '', url);
+  }, [returningFromGoogle]);
   // Track when user picked a provider to set up (before cloudSync is true)
-  const [setupProvider, setSetupProvider] = useState<CloudSyncProviderType | null>(null);
+  const [setupProvider, setSetupProvider] = useState<CloudSyncProviderType | null>(returningFromGoogle ? 'google' : null);
 
   const isActive = cloudSync;
   // Show the provider panel when active OR when user is in setup flow
@@ -51,7 +58,7 @@ const CloudSync = () => {
             <>
               {showingProvider === 'google' ? (
                 googleClientId ? (
-                  <GoogleSync clientId={googleClientId} />
+                  <GoogleSync clientId={googleClientId} openOnMount={returningFromGoogle} />
                 ) : (
                   <div className='text-xs text-amber-600 dark:text-amber-400'>
                     VITE_GOOGLE_CLIENT_ID 未設定
