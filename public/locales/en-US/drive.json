@@ -8,7 +8,8 @@
     "confirm": "Confirm selection",
     "pull": "Load selected cloud file",
     "push": "Overwrite cloud with local data",
-    "refreshFiles": "Refresh cloud files"
+    "refreshFiles": "Refresh cloud files",
+    "renameFolder": "Rename"
   },
   "labels": {
     "localState": "Current local data",
@@ -25,7 +26,9 @@
     "unknownDate": "Unknown",
     "unknownSize": "Unknown",
     "noFiles": "No cloud files available",
-    "inputSource": "Source to read (legacy files are read-only)"
+    "inputSource": "Source to read (legacy files are read-only)",
+    "folderName": "Folder name",
+    "currentFolderName": "Name on Drive: {{name}}"
   },
   "operations": {
     "active": "Automatic sync (enabled)",
@@ -76,7 +79,9 @@
     "mismatch": "Passphrases do not match.",
     "locked": "Encrypted sync is locked.",
     "failed": "Sync did not complete. Local data remains saved.",
-    "disconnectBeforeDelete": "Disconnect before deleting the current sync target."
+    "disconnectBeforeDelete": "Disconnect before deleting the current sync target.",
+    "folderNameHelp": "Choose or enter a name. An existing sync folder with the same name adds a number when creating the new folder; it is not overwritten.",
+    "folderNameAdjusted": "Name to create: {{name}}"
   },
   "guidance": {
     "retry": "Press “Retry sync”.",
@@ -93,7 +98,8 @@
     "active": "Changes are encrypted and saved automatically. You can close this dialog.",
     "pull": "Check the source, then press the button to replace local data with cloud data.",
     "push": "Press the upload button to update the encrypted sync folder with local data.",
-    "disconnect": "Press the Stop syncing button."
+    "disconnect": "Press the Stop syncing button.",
+    "enterFolderName": "Enter a sync folder name."
   },
   "progress": {
     "preparing": "Preparing local data",

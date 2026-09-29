@@ -8,7 +8,8 @@
     "confirm": "選択を確定",
     "pull": "選択したクラウドを読み込む",
     "push": "ローカル状態でクラウドを上書き",
-    "refreshFiles": "クラウドファイル情報を更新"
+    "refreshFiles": "クラウドファイル情報を更新",
+    "renameFolder": "名前を変更"
   },
   "labels": {
     "localState": "現在のローカルデータ",
@@ -25,7 +26,9 @@
     "unknownDate": "不明",
     "unknownSize": "不明",
     "noFiles": "利用可能なクラウドファイルがありません",
-    "inputSource": "読み込み元（旧形式ファイルは入力専用）"
+    "inputSource": "読み込み元（旧形式ファイルは入力専用）",
+    "folderName": "フォルダー名",
+    "currentFolderName": "Drive上の名前: {{name}}"
   },
   "operations": {
     "active": "自動同期（有効）",
@@ -77,7 +80,9 @@
     "mismatch": "パスフレーズが一致しません。",
     "locked": "暗号化同期はロックされています。",
     "failed": "同期を完了できませんでした。ローカルデータは保存されています。",
-    "disconnectBeforeDelete": "現在の同期先を削除する前に同期を停止してください。"
+    "disconnectBeforeDelete": "現在の同期先を削除する前に同期を停止してください。",
+    "folderNameHelp": "名前は自由に変更できます。同名の同期フォルダーがある場合、作成時に連番を付けます。既存フォルダーへの書き込みにはなりません。",
+    "folderNameAdjusted": "作成する名前: {{name}}"
   },
   "guidance": {
     "retry": "「同期を再試行」ボタンを押してください。",
@@ -94,7 +99,8 @@
     "active": "変更は暗号化して自動保存されます。この画面を閉じて利用できます。",
     "pull": "読み込み元を確認し、「クラウド状態でローカルを上書き」ボタンを押してください。",
     "push": "「ローカル状態でクラウドを上書き」ボタンを押すと、暗号化同期フォルダーを更新します。",
-    "disconnect": "「同期を停止」ボタンを押してください。"
+    "disconnect": "「同期を停止」ボタンを押してください。",
+    "enterFolderName": "同期フォルダーの名前を入力してください。"
   },
   "progress": {
     "preparing": "ローカルデータを準備しています",

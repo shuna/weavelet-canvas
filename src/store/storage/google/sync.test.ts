@@ -21,8 +21,8 @@ class FakeDrive {
   loseResponse?: string;
   async id() { return `f${++this.next}`; }
   async ids(count: number) { return Array.from({ length: count }, () => `f${++this.next}`); }
-  async folder(id: string, headerId: string): Promise<DriveFile> {
-    const metadata = { id, kind: 'drive#file', name: 'Weavelet encrypted sync', mimeType: SYNC_FOLDER_TYPE,
+  async folder(id: string, headerId: string, name = 'Weavelet encrypted sync'): Promise<DriveFile> {
+    const metadata = { id, kind: 'drive#file', name, mimeType: SYNC_FOLDER_TYPE,
       appProperties: { weaveletSync: '1', headerId } };
     this.files.set(id, { bytes: new Uint8Array(), metadata });
     return metadata;
@@ -490,4 +490,16 @@ it.each(['title', 'message'])('resumes an interrupted %s merge publication witho
     expect(Object.values(resolved.state.chats![0].branchTree!.nodes)).toHaveLength(2);
   }
   expect(drive.writes).toHaveLength(count);
+});
+
+
+it('creates a named folder and restores its key after a remote rename using the same ID', async () => {
+  const drive = new FakeDrive();
+  const { session, file } = await EncryptedDriveSync.create(drive.transport(), PASSWORD, { folderName: 'My sync' });
+  expect(file.name).toBe('My sync');
+  await session.push(snapshot(), true);
+  drive.files.get(file.id)!.metadata.name = 'Renamed on Drive';
+  const reloaded = new EncryptedDriveSync(file.id, drive.transport());
+  expect(await reloaded.restoreKey()).toBe(true);
+  expect(await toRecords(await reloaded.pull())).toEqual(await toRecords(snapshot()));
 });

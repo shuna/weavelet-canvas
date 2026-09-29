@@ -5,6 +5,15 @@ import { createMultipartRelatedBody } from '@api/helper';
 import type { GoogleFileResource } from '@type/google-api';
 import { digest } from './crypto';
 
+export const DEFAULT_SYNC_FOLDER_NAME = 'Weavelet encrypted sync';
+export function nextSyncFolderName(name: string, names: string[]): string {
+  const base = name.trim();
+  const used = new Set(names);
+  let candidate = base, suffix = 2;
+  while (used.has(candidate)) candidate = `${base} (${suffix++})`;
+  return candidate;
+}
+
 export const SYNC_FOLDER_TYPE = 'application/vnd.google-apps.folder';
 const API = 'https://www.googleapis.com/drive/v3';
 export interface DriveFile extends GoogleFileResource {
@@ -48,10 +57,11 @@ export class DriveTransport {
       return file;
     });
   }
-  async folder(id: string, headerId: string): Promise<DriveFile> {
+  async folder(id: string, headerId: string, name = `${DEFAULT_SYNC_FOLDER_NAME} (${id})`): Promise<DriveFile> {
+    if (!name.trim()) throw new Error('Enter a sync folder name.');
     return this.json(`${API}/files?fields=id,name,mimeType,appProperties`, {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ id, name: `Weavelet encrypted sync (${id})`, mimeType: SYNC_FOLDER_TYPE,
+      body: JSON.stringify({ id, name: name.trim(), mimeType: SYNC_FOLDER_TYPE,
         appProperties: { weaveletSync: '1', headerId } }),
     });
   }
