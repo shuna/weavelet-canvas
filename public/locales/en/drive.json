@@ -28,6 +28,8 @@
     "inputSource": "Source to read (legacy files are read-only)"
   },
   "operations": {
+    "active": "Automatic sync (enabled)",
+    "retry": "Retry sync",
     "connect": "Connect Google Drive Sync",
     "reconnect": "Re-login to Google Drive",
     "create": "Create encrypted sync folder",
@@ -37,6 +39,7 @@
     "resume": "Unlock and resume sync"
   },
   "actions": {
+    "retryDescription": "Sync is already unlocked. Send this device’s pending changes.",
     "connectDescription": "Connect Google Drive so this device can sync chats and settings.",
     "reconnectDescription": "Your Google session has expired. Sign in again to resume syncing.",
     "createDescription": "Create a new encrypted sync folder from the current chats and settings. Legacy files are left unchanged.",
@@ -77,6 +80,7 @@
     "disconnectBeforeDelete": "Disconnect before deleting the current sync target."
   },
   "guidance": {
+    "retry": "Press “Retry sync”.",
     "enterNewPassphrase": "Enter a new sync passphrase with at least 12 characters.",
     "passphraseTooShort": "The passphrase is shorter than 12 characters. Enter at least 12 characters.",
     "confirmPassphrase": "Enter the same passphrase in the confirmation field.",
