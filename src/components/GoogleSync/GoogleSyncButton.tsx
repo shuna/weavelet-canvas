@@ -8,6 +8,7 @@ import { showToast } from '@utils/showToast';
 import { createJSONStorage } from 'zustand/middleware';
 import { createLocalStoragePartializedState } from '@store/persistence';
 import { connectGoogle, disconnectGoogle, getGoogleAccessToken, usesGoogleAuthBackend } from '@api/google-auth';
+import { requestGoogleCode } from '@api/google-popup';
 import compressedStorage from '@store/storage/CompressedStorage';
 
 export interface GoogleSyncButtonHandle {
@@ -48,28 +49,19 @@ const GoogleSyncButton = forwardRef<
     scope: 'https://www.googleapis.com/auth/drive.file',
   });
 
-  const codeLogin = useGoogleLogin({
-    flow: 'auth-code',
-    scope: 'openid https://www.googleapis.com/auth/drive.file',
-    onSuccess: async ({ code }) => {
-      try {
-        const token = await connectGoogle(code);
-        setSyncTargetConfirmed(false);
-        setGoogleAccessToken(token);
-        setCloudSync(true);
-        loginHandler?.();
-        showToast(t('toast.sync'), 'success');
-      } catch (error) {
-        setSyncStatus('unauthenticated');
-        showToast((error as Error).message, 'error');
-      }
-    },
-    onError: () => {
+  const codeLogin = async () => {
+    try {
+      const token = await connectGoogle(await requestGoogleCode());
+      setSyncTargetConfirmed(false);
+      setGoogleAccessToken(token);
+      setCloudSync(true);
+      loginHandler?.();
+      showToast(t('toast.sync'), 'success');
+    } catch (error) {
       setSyncStatus('unauthenticated');
-      showToast('Google connection failed', 'error');
-    },
-    onNonOAuthError: () => setSyncStatus('unauthenticated'),
-  });
+      showToast((error as Error).message, 'error');
+    }
+  };
 
   const silentLogin = useGoogleLogin({
     onSuccess: ({ access_token }) => {
@@ -83,7 +75,7 @@ const GoogleSyncButton = forwardRef<
 
   const connect = () => {
     setSyncStatus('syncing');
-    if (usesGoogleAuthBackend) codeLogin();
+    if (usesGoogleAuthBackend) void codeLogin();
     else login();
   };
   const refresh = async () => {

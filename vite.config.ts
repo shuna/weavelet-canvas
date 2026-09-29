@@ -46,6 +46,7 @@ export default defineConfig({
   build: {
     chunkSizeWarningLimit: 1200,
     rollupOptions: {
+      input: { main: new URL('./index.html', import.meta.url).pathname, googleAuth: new URL('./google-auth.html', import.meta.url).pathname },
       onwarn(warning, warn) {
         if (
           warning.code === 'MODULE_LEVEL_DIRECTIVE' &&
