@@ -36,7 +36,7 @@ export const createGoogleCloudProvider = <S>(): CloudSyncProvider<S> => ({
   getTarget: getCloudSyncTarget,
   readItem: async (name, target) => getDriveFile(target.fileId, target.accessToken),
   writeItem: async (name, file, target) => {
-    await updateDriveFile(file, target.fileId, target.accessToken);
+    throw new Error('Legacy Google sync uploads are disabled. Use encrypted Google sync.');
   },
   removeItem: async (name, target) => {
     await deleteDriveFile(target.fileId, target.accessToken);

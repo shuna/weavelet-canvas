@@ -28,24 +28,26 @@
   "operations": {
     "connect": "Connect Google Drive Sync",
     "reconnect": "Re-login to Google Drive",
-    "create": "Create new file",
+    "create": "Create encrypted sync folder",
     "pull": "Overwrite local with cloud state",
     "push": "Overwrite cloud with local state",
-    "disconnect": "Stop syncing"
+    "disconnect": "Stop syncing",
+    "resume": "Unlock and resume sync"
   },
   "actions": {
     "connectDescription": "Connect Google Drive so this device can sync chats and settings.",
     "reconnectDescription": "Your Google session has expired. Sign in again to resume syncing.",
-    "createDescription": "Create a new Google Drive file from the current local state and make it the sync target.",
+    "createDescription": "Create a new encrypted sync folder from the current chats and settings. Legacy files are left unchanged.",
     "pullTitle": "Load the selected Google Drive file into this device",
     "pullDescription": "This replaces the current local chats and settings with the selected cloud file, then continues syncing with that file.",
     "pushTitle": "Force overwrite the selected Google Drive file with this device's local data",
     "pushDescription": "Use this when the local state is the source of truth and you want to replace the cloud copy immediately.",
     "disconnectTitle": "Disconnect Google Drive Sync",
-    "disconnectDescription": "This only stops syncing and signs out of Google for this app. Your local chats remain on this device, and your Google Drive files are not deleted or cleared."
+    "disconnectDescription": "This only stops syncing and signs out of Google for this app. Your local chats remain on this device, and your Google Drive files are not deleted or cleared.",
+    "resumeDescription": "Unlock and upload pending changes from this device. On a new device, download the cloud data first."
   },
-  "notice": "Note: Your session will be automatically refreshed while your Google account is active. You may need to re-login if your Google session expires. To avoid your cloud data being overwritten, do not use Weavelet Canvas on more than one device at the same time.",
-  "backendNotice": "Connection credentials are encrypted and stored on Cloudflare to renew Google access automatically. Conversation data stays in Google Drive. Reconnect if consent is revoked or your site login expires. Avoid editing on multiple devices at the same time to prevent overwrites.",
+  "notice": "Your passphrase is used only on this device. Sync waits for unlock after restart. Conflicting edits stop sync instead of silently overwriting data.",
+  "backendNotice": "Google connection credentials are encrypted on Cloudflare for automatic renewal. Conversation data is encrypted in your browser before upload to Google Drive. Your passphrase is never sent to the server. Unlock after restarting the browser.",
   "privacy": "Your privacy is important to us. To protect it, Weavelet Canvas only requests non-sensitive access, which means it can only create, view, and manage its own files and folders.",
   "toast": {
     "sync": "Sync successful!",
@@ -61,5 +63,15 @@
     "idleConnected": "Auto-sync target is confirmed.",
     "idleAwaitingChoice": "Auto-sync is waiting for you to choose the sync direction.",
     "idleDisconnected": "Google Drive Sync is not connected."
+  },
+  "encryption": {
+    "passphrase": "Sync passphrase",
+    "confirm": "Confirm passphrase",
+    "help": "Use at least 12 characters when creating a folder. Use the same passphrase on other devices. Lost passphrases cannot be recovered. Google can still see file sizes and update times.",
+    "legacy": "Legacy files are read-only. To migrate, download the legacy file and create an encrypted folder. The old file is not deleted automatically.",
+    "mismatch": "Passphrases do not match.",
+    "locked": "Encrypted sync is locked.",
+    "failed": "Sync did not complete. Local data remains saved.",
+    "disconnectBeforeDelete": "Disconnect before deleting the current sync target."
   }
 }

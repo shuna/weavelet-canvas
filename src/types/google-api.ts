@@ -26,4 +26,4 @@ export interface GoogleFileList {
   files: GoogleFileResource[];
 }
 
-export type SyncStatus = 'unauthenticated' | 'syncing' | 'synced';
+export type SyncStatus = 'unauthenticated' | 'syncing' | 'synced' | 'locked' | 'error';
