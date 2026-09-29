@@ -72,6 +72,8 @@ test('encrypted Drive creation, incremental autosave and unlock after browser re
     auth.getState().setCloudSync(true);
   });
   await page.getByText('クラウド同期', { exact: false }).click();
+  await expect(page.getByText('同期方向を選ぶまで自動保存は保留されています。', { exact: true })).toBeVisible();
+  await expect(page.getByText('暗号化同期はロックされています。', { exact: true })).not.toBeVisible();
   await page.locator('#google-sync-passphrase').fill('browser test passphrase');
   await page.locator('#google-sync-confirm').fill('browser test passphrase');
   await page.getByRole('button', { name: '暗号化した同期フォルダーを作成', exact: true }).click();
@@ -90,9 +92,11 @@ test('encrypted Drive creation, incremental autosave and unlock after browser re
   for (const upload of uploads) expect(upload.bytes.toString()).not.toContain('PRIVATE BROWSER TITLE');
   await page.reload();
   await page.getByText('クラウド同期', { exact: false }).click();
-  await expect(page.getByText('暗号化同期はロックされています。', { exact: true })).toBeVisible();
+  await expect(page.getByText('同期方向を選ぶまで自動保存は保留されています。', { exact: true })).toBeVisible();
+  await expect(page.getByText('暗号化同期はロックされています。', { exact: true })).not.toBeVisible();
   const count = uploads.length;
   await page.locator('select').filter({ has: page.locator('option[value="resume"]') }).selectOption('resume');
+  await expect(page.getByText('暗号化同期はロックされています。', { exact: true })).toBeVisible();
   await page.locator('#google-sync-passphrase').fill('wrong passphrase');
   await page.getByRole('button', { name: 'ロック解除して同期を再開', exact: true }).click();
   await expect(page.getByText('同期を完了できませんでした。ローカルデータは保存されています。', { exact: true })).toBeVisible();

@@ -228,7 +228,8 @@ const GoogleSync = ({ clientId, openOnMount = false }: { clientId: string; openO
             setSyncStatus('synced');
           } else {
             enableLocalPersistence();
-            setSyncStatus('locked');
+            const target = _files.find((file) => file.id === fileId) ?? _files[0];
+            setSyncStatus(target?.mimeType === SYNC_FOLDER_TYPE ? 'locked' : 'synced');
           }
           // Open modal so user can choose Pull/Push direction (skip for silent refresh)
           if (options?.openModal) {
@@ -604,7 +605,9 @@ const GooglePopup = ({
         <div className='flex min-h-[1.5rem] items-center gap-3 text-left'>
           {isBusy ? <SyncIcon status='syncing' /> : <div className='h-4 w-4' />}
           <span className='text-sm text-gray-600 dark:text-gray-300'>
-            {t(syncStatus === 'locked' ? 'encryption.locked' : syncStatus === 'error' ? 'encryption.failed' : statusMessageKey)}
+            {t(syncStatus === 'locked'
+              ? selectedOperation === 'create' ? 'status.idleAwaitingChoice' : 'encryption.locked'
+              : syncStatus === 'error' ? 'encryption.failed' : statusMessageKey)}
           </span>
         </div>
       }
