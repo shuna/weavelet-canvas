@@ -116,9 +116,15 @@
     "failed": "View sync error"
   },
   "conflict": {
-    "description": "Changes to the same fields conflict. Keeping both preserves conflicting chats and folders as separate copies; conflicting settings use this device’s values.",
+    "description": "Conflicting messages become branches within the chat; matching branches are combined. Conflicting chat metadata or folders are kept as separate copies. Conflicting settings use this device’s values.",
     "merge": "Merge (keep both)",
     "local": "Use this device’s contents",
     "cloud": "Use cloud contents"
+  },
+  "review": {
+    "description": "Sync changed this chat. Review its other branches too.",
+    "chatDone": "Mark chat as reviewed",
+    "nodeDone": "Mark sync change as reviewed",
+    "folderDone": "Mark folder change as reviewed"
   }
 }

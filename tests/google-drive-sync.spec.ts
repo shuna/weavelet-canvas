@@ -314,3 +314,61 @@ test('large sync compression runs in a worker while the UI event loop remains re
   expect(result.matches).toBe(true);
   expect(result.ticks).toBeGreaterThan(0);
 });
+
+test('message conflicts share a chat and review highlights remain until acknowledged', async ({ page }, testInfo) => {
+  await page.goto('/');
+  await page.getByText('すべてスキップ', { exact: true }).click();
+  await page.getByRole('button', { name: 'close modal', exact: true }).click();
+  await page.evaluate(async () => {
+    const store = (await import('/src/store/store.ts')).default;
+    const { toRecords, fromRecords, hashRecords } = await import('/src/store/storage/google/records.ts');
+    const { mergeSyncRecords } = await import('/src/store/storage/google/merge.ts');
+    const { markSyncChanges } = await import('/src/store/storage/google/conflicts.ts');
+    const { addContent } = await import('/src/utils/contentStore.ts');
+    const { materializeActivePath } = await import('/src/utils/branchUtils.ts');
+    const { createPartializedState, createPersistedChatDataState } = await import('/src/store/persistence.ts');
+    const { saveChatData } = await import('/src/store/storage/IndexedDbStorage.ts');
+    const { STORE_VERSION } = await import('/src/store/version.ts');
+    const original = { state: structuredClone(createPartializedState(store.getState())), version: STORE_VERSION };
+    original.state.chats = [original.state.chats![0]];
+    const chat = original.state.chats[0]; chat.title = 'Message merge review'; chat.folder = 'review-folder';
+    original.state.folders = { 'review-folder': { id: 'review-folder', name: 'Review folder', expanded: true, order: 0 } };
+    const texts = ['Merge root', 'Original message', 'Shared continuation'];
+    chat.branchTree = { rootId: 'a', activePath: ['a', 'b', 'c'], nodes: {} };
+    for (const [index, id] of ['a', 'b', 'c'].entries()) chat.branchTree.nodes[id] = {
+      id, parentId: index ? ['a', 'b'][index - 1] : null, role: 'user', createdAt: index,
+      contentHash: addContent(original.state.contentStore!, [{ type: 'text', text: texts[index] }]),
+    };
+    const local = structuredClone(original), remote = structuredClone(original);
+    local.state.chats![0].branchTree!.nodes.b.contentHash = addContent(local.state.contentStore!, [{ type: 'text', text: 'Local message version' }]);
+    remote.state.chats![0].branchTree!.nodes.b.contentHash = addContent(remote.state.contentStore!, [{ type: 'text', text: 'Cloud message version' }]);
+    const merged = await fromRecords(await mergeSyncRecords(await hashRecords(await toRecords(original)), await toRecords(local), await toRecords(remote)));
+    for (const chat of merged.state.chats!) chat.messages = materializeActivePath(chat.branchTree!, merged.state.contentStore!);
+    store.setState({ ...merged.state, currentChatIndex: 0, chatActiveView: 'chat' });
+    await markSyncChanges(local, merged);
+    await saveChatData(createPersistedChatDataState(store.getState()));
+  });
+  await expect(page.getByText('Local message version', { exact: true })).toBeVisible();
+  await expect(page.locator('[data-sync-node-changed="true"]')).not.toHaveCount(0);
+  await page.reload();
+  await expect(page.getByText('Local message version', { exact: true })).toBeVisible();
+  await expect(page.locator('[data-sync-node-changed="true"]')).not.toHaveCount(0);
+  await page.getByRole('button', { name: 'Previous branch', exact: true }).click();
+  await expect(page.getByText('Cloud message version', { exact: true })).toBeVisible();
+  await expect(page.getByText('Shared continuation', { exact: true })).toBeVisible();
+  await page.screenshot({ path: testInfo.outputPath('message-merge-highlight.png') });
+  await page.getByRole('button', { name: '分岐エディタ', exact: true }).click();
+  await expect(page.locator('.react-flow__node [data-sync-node-changed="true"]')).not.toHaveCount(0);
+  await page.screenshot({ path: testInfo.outputPath('branch-merge-highlight.png') });
+  await page.getByRole('button', { name: 'チャット', exact: true }).click();
+  await page.getByRole('button', { name: '同期の変更を確認済みにする', exact: true }).first().click();
+  await page.getByRole('button', { name: 'このチャットを確認済みにする', exact: true }).click();
+  await expect(page.locator('[data-sync-node-changed="true"]')).toHaveCount(0);
+  await expect(page.locator('a[data-sync-changed="true"]')).toHaveCount(0);
+  await page.getByRole('button', { name: 'フォルダーの変更を確認済みにする', exact: true }).click();
+  await expect(page.locator('div[data-sync-changed="true"]')).toHaveCount(0);
+  await expect.poll(() => page.evaluate(async () => (await (await import('/src/store/storage/IndexedDbStorage.ts')).loadChatData())?.chats[0].branchTree?.activePath[1])).toBe('b');
+  await page.reload();
+  await expect(page.getByText('Cloud message version', { exact: true })).toBeVisible();
+  await expect(page.locator('[data-sync-node-changed="true"]')).toHaveCount(0);
+});

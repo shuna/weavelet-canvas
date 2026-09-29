@@ -211,7 +211,6 @@ const ChatHistory = React.memo(
         aria-description={syncChanged ? '同期で変更されたチャット' : undefined}
         aria-current={active ? 'page' : undefined}
         onClick={() => {
-          useSyncReview.setState(state => ({ chats: state.chats.filter(id => id !== chatId) }));
           if (!active) {
             const state = useStore.getState();
             const destChat = state.chats?.[chatIndex];

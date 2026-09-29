@@ -1,3 +1,4 @@
+import { useSyncReview } from '@store/storage/google/conflicts';
 import { forgetSyncKeys } from '@store/storage/google/cache';
 import React, { useImperativeHandle, forwardRef } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -110,6 +111,7 @@ const GoogleSyncButton = forwardRef<
       return;
     }
     lockGoogleSync();
+    useSyncReview.setState({ chats: [], folders: [], nodes: {} });
     setGoogleAccessToken(undefined);
     setSyncStatus('unauthenticated');
     setCloudSync(false);

@@ -1,3 +1,4 @@
+import { useSyncReview, acknowledgeSyncChat } from '@store/storage/google/conflicts';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import useStore from '@store/store';
 import { useTranslation } from 'react-i18next';
@@ -119,6 +120,8 @@ const ChatContent = ({ isChatFindOpen, onChatFindClose }: ChatContentProps = {})
       ? (state.chats[state.currentChatIndex].messages ?? EMPTY_MESSAGES)
       : EMPTY_MESSAGES
   );
+  const reviewChatId = useStore(state => state.chats?.[state.currentChatIndex]?.id ?? '');
+  const syncChanged = useSyncReview(state => state.chats.includes(reviewChatId));
   const currentChatIndex = useStore((state) => state.currentChatIndex);
   const stickyIndex = useStore((state) =>
     state.chats &&
@@ -723,6 +726,7 @@ const ChatContent = ({ isChatFindOpen, onChatFindClose }: ChatContentProps = {})
           className='h-full overflow-y-auto overscroll-contain'
           data-chat-scroller
         >
+          {syncChanged && <div role='status' className='flex items-center justify-between gap-3 px-7 py-2 text-sm text-amber-800 bg-amber-50 dark:bg-gray-700 dark:text-amber-200'><span>{t('drive:review.description')}</span><button type='button' className='shrink-0 underline' onClick={() => acknowledgeSyncChat(reviewChatId)}>{t('drive:review.chatDone')}</button></div>}
           <div data-message-list>
             {items.map((item, index) => (
               <div key={computeItemKey(index)} data-item-index={index}>

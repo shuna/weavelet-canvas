@@ -1,4 +1,5 @@
 import { useSyncReview } from '@store/storage/google/conflicts';
+import { useTranslation } from 'react-i18next';
 import React, { useEffect, useRef, useState } from 'react';
 import useStore from '@store/store';
 
@@ -38,6 +39,7 @@ const ChatFolder = ({
   lastSelectedIndex: number | null;
   setLastSelectedIndex: (index: number) => void;
 }) => {
+  const { t } = useTranslation('drive');
   const syncChanged = useSyncReview(state => state.folders.includes(folderId));
   const folderName = useStore((state) => state.folders[folderId]?.name);
   const isExpanded = useStore((state) => state.folders[folderId]?.expanded);
@@ -149,7 +151,6 @@ const ChatFolder = ({
   };
 
   const toggleExpanded = () => {
-    useSyncReview.setState(state => ({ folders: state.folders.filter(id => id !== folderId) }));
     const updatedFolders: FolderCollection = JSON.parse(
       JSON.stringify(useStore.getState().folders)
     );
@@ -313,6 +314,7 @@ const ChatFolder = ({
           )}
         </div>
       </div>
+      {syncChanged && <button type='button' className='px-2 text-xs text-amber-700 dark:text-amber-300' onClick={() => useSyncReview.setState(state => ({ folders: state.folders.filter(id => id !== folderId) }))}>{t('review.folderDone')}</button>}
       <div className='parent ml-3 flex flex-col gap-1 border-l-2 border-gray-200 pl-1 dark:border-gray-700'>
         {isExpanded && <NewChat folder={folderId} />}
         {isExpanded &&

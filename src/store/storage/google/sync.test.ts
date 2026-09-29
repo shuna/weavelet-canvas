@@ -458,11 +458,13 @@ it('preserves both valid branches when deleting a node conflicts with extending 
   (globalThis as any).indexedDB = dbB;
   await expect(b.push(local)).rejects.toThrow('conflict');
   const result = await b.resolve(local, 'merge');
-  expect(result.state.chats!.map(c => Object.keys(c.branchTree!.nodes).length).sort()).toEqual([1, 3]);
+  expect(result.state.chats).toHaveLength(1);
+  expect(Object.keys(result.state.chats![0].branchTree!.nodes)).toHaveLength(3);
+  expect(result.state.chats![0].branchTree!.activePath).toEqual(['n1']);
   await b.acceptLocal(result); await b.push(result);
 });
 
-it('resumes an interrupted merge publication without duplicating the preserved chat', async () => {
+it.each(['title', 'message'])('resumes an interrupted %s merge publication without duplicating preserved data', async kind => {
   const drive = new FakeDrive();
   const dbA = new IDBFactory(); (globalThis as any).indexedDB = dbA;
   const original = snapshot();
@@ -470,7 +472,10 @@ it('resumes an interrupted merge publication without duplicating the preserved c
   const dbB = new IDBFactory(); (globalThis as any).indexedDB = dbB;
   const b = new EncryptedDriveSync(file.id, drive.transport()); await b.unlock(PASSWORD); await b.acceptLocal(await b.pull());
   const remote = structuredClone(original), local = structuredClone(original);
-  remote.state.chats![0].title = 'Cloud'; local.state.chats![0].title = 'Local';
+  if (kind === 'title') { remote.state.chats![0].title = 'Cloud'; local.state.chats![0].title = 'Local'; }
+  else for (const [state, text] of [[remote, 'Cloud'], [local, 'Local']] as const) {
+    state.state.chats![0].branchTree!.nodes.n1.contentHash = addContent(state.state.contentStore!, [{ type: 'text', text }]);
+  }
   (globalThis as any).indexedDB = dbA; await a.push(remote);
   (globalThis as any).indexedDB = dbB;
   await expect(b.push(local)).rejects.toThrow('conflict');
@@ -479,6 +484,10 @@ it('resumes an interrupted merge publication without duplicating the preserved c
   const count = drive.writes.length;
   const reloaded = new EncryptedDriveSync(file.id, drive.transport()); await reloaded.restoreKey();
   const resolved = await reloaded.resolve(local, 'merge');
-  expect(resolved.state.chats!.map(chat => chat.title).sort()).toEqual(['Cloud', 'Local']);
+  if (kind === 'title') expect(resolved.state.chats!.map(chat => chat.title).sort()).toEqual(['Cloud', 'Local']);
+  else {
+    expect(resolved.state.chats).toHaveLength(1);
+    expect(Object.values(resolved.state.chats![0].branchTree!.nodes)).toHaveLength(2);
+  }
   expect(drive.writes).toHaveLength(count);
 });

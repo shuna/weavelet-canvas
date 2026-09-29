@@ -1,3 +1,5 @@
+import { useSyncReview, acknowledgeSyncNode } from '@store/storage/google/conflicts';
+import { useTranslation } from 'react-i18next';
 import React, { memo, useCallback, useRef } from 'react';
 import { Handle, Position, NodeProps } from 'reactflow';
 import useStore from '@store/store';
@@ -10,6 +12,9 @@ const roleBadgeColors: Record<string, string> = {
 };
 
 const MessageNode = memo(({ data, id }: NodeProps<MessageNodeData>) => {
+  const { t } = useTranslation('drive');
+  const chatId = useStore(state => state.chats?.[data.chatIndex]?.id ?? '');
+  const syncChanged = useSyncReview(state => (state.nodes[chatId] ?? []).includes(id));
   const hoveredNodeId = useStore((state) => state.hoveredNodeId);
   const setHoveredNodeId = useStore((state) => state.setHoveredNodeId);
   const toggleNodeStar = useStore((state) => state.toggleNodeStar);
@@ -71,10 +76,12 @@ const MessageNode = memo(({ data, id }: NodeProps<MessageNodeData>) => {
           ? 'bg-gray-100 dark:bg-gray-600'
           : 'border-gray-400 dark:border-gray-500 bg-gray-200 dark:bg-gray-700 opacity-50'
       } ${isHovered ? 'outline outline-[3px] outline-blue-400 outline-offset-0' : ''} ${searchHighlightClass}`}
-      style={(data.isActive || isSearchMatch || isCurrentSearchResult || isCompareTarget) ? { borderColor } : undefined}
+      data-sync-node-changed={syncChanged || undefined}
+      style={{ borderColor, ...(syncChanged ? { outline: '2px solid #f59e0b', outlineOffset: '2px', opacity: 1 } : {}) }}
       onMouseEnter={handleMouseEnter}
       onMouseLeave={handleMouseLeave}
     >
+      {syncChanged && <button type='button' className='nodrag text-xs text-amber-700 dark:text-amber-300' onClick={event => { event.stopPropagation(); acknowledgeSyncNode(chatId, id); }}>{t('review.nodeDone')}</button>}
       <Handle type='target' position={Position.Top} className='!bg-gray-400' />
       {/* Header: click navigates to chat */}
       <div className='flex items-center gap-2 mb-1 cursor-pointer' data-node-header>
