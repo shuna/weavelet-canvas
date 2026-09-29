@@ -152,6 +152,9 @@ test('encrypted Drive creation, incremental autosave and unlock after browser re
   await expect(progress).toContainText('1 / 2 ファイル完了');
   releaseInitialCommit();
   await expect(guidance).toContainText('変更は暗号化して自動保存されます。');
+  await expect(operation.locator('option:checked')).toHaveText('自動同期（有効）');
+  await expect(page.getByRole('button', { name: 'ロック解除して同期を再開', exact: true })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: '自動同期（有効）', exact: true })).toHaveCount(0);
   await expect(progress).toHaveCount(0);
   await expect.poll(() => uploads.filter(u => u.metadata.appProperties.kind === 'commit').length).toBe(2);
   expect(await page.evaluate(async () => (await import('/src/store/store.ts')).default.getState().chats![0].title)).toBe('EDIT DURING INITIAL');
@@ -176,7 +179,7 @@ test('encrypted Drive creation, incremental autosave and unlock after browser re
   for (const upload of uploads) expect(upload.bytes.toString()).not.toContain('PRIVATE BROWSER TITLE');
   await page.reload();
   await page.getByText('クラウド同期', { exact: false }).click();
-  await expect(page.getByText('新しい同期用パスフレーズを12文字以上で入力してください。', { exact: true })).toBeVisible();
+  await expect(guidance).toContainText('既存の同期フォルダーのパスフレーズを入力してください。');
   await expect(page.getByText('暗号化同期はロックされています。', { exact: true })).not.toBeVisible();
   const count = uploads.length;
   await page.locator('select').filter({ has: page.locator('option[value="resume"]') }).selectOption('resume');
@@ -188,8 +191,21 @@ test('encrypted Drive creation, incremental autosave and unlock after browser re
   await page.locator('#google-sync-passphrase').fill('browser test passphrase');
   await page.getByRole('button', { name: 'ロック解除して同期を再開', exact: true }).click();
   await expect(guidance).toContainText('変更は暗号化して自動保存されます。');
+  await expect(operation.locator('option:checked')).toHaveText('自動同期（有効）');
+  await expect(page.getByRole('button', { name: 'ロック解除して同期を再開', exact: true })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: '自動同期（有効）', exact: true })).toHaveCount(0);
   await expect(page.locator('#google-sync-passphrase')).toHaveCount(0);
   expect(await page.evaluate(() => JSON.stringify(localStorage))).not.toContain('browser test passphrase');
+  await page.evaluate(async () => {
+    const { default: auth } = await import('/src/store/cloud-auth-store.ts');
+    auth.getState().setSyncStatus('error');
+  });
+  await expect(operation.locator('option:checked')).toHaveText('同期を再試行');
+  await expect(page.locator('#google-sync-passphrase')).toHaveCount(0);
+  await page.getByRole('button', { name: '同期を再試行', exact: true }).click();
+  await expect(operation.locator('option:checked')).toHaveText('自動同期（有効）');
+  await expect(page.getByRole('button', { name: '同期を再試行', exact: true })).toHaveCount(0);
+
   await operation.selectOption('pull');
   await page.getByRole('radio', { name: 'legacy.json' }).check();
   await operation.selectOption('push');

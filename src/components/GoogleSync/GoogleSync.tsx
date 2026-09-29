@@ -336,7 +336,7 @@ const GooglePopup = ({
     useGStore.getState().fileId || ''
   );
   const [selectedOperation, setSelectedOperation] =
-    useState<SyncOperation>('connect');
+    useState<SyncOperation>(() => syncTargetConfirmed && currentFileId ? 'resume' : 'connect');
   const [activity, setActivity] = useState<SyncActivity>(null);
   const [passphrase, setPassphrase] = useState('');
   const [confirmation, setConfirmation] = useState('');
@@ -382,6 +382,9 @@ const GooglePopup = ({
 
   const syncFile = files.find((file) => file.id === currentFileId && file.mimeType === SYNC_FOLDER_TYPE)
     ?? files.find((file) => file.mimeType === SYNC_FOLDER_TYPE);
+  const syncUnlocked = !!syncFile && isGoogleSyncUnlocked(syncFile.id);
+  const automaticSyncActive = syncUnlocked && syncTargetConfirmed && currentFileId === syncFile?.id &&
+    (syncStatus === 'synced' || syncStatus === 'syncing');
   const selectedFile = selectedOperation === 'pull' ? files.find((file) => file.id === _fileId) : syncFile;
   const operationFileId = selectedFile?.id ?? '';
   const needsPassphrase = selectedOperation === 'create' ||
@@ -534,7 +537,9 @@ const GooglePopup = ({
     ? ['connect']
     : needsReconnect
       ? ['reconnect', 'disconnect']
-      : ['create', 'resume', 'pull', 'push', 'disconnect'];
+      : syncFile && syncTargetConfirmed
+        ? ['resume', 'create', 'pull', 'push', 'disconnect']
+        : ['create', 'resume', 'pull', 'push', 'disconnect'];
 
   useEffect(() => {
     const fallbackOperation = availableOperations[0];
@@ -550,6 +555,7 @@ const GooglePopup = ({
       return;
     }
     if (selectedOperation === 'resume') {
+      if (automaticSyncActive) return;
       try {
         setSyncStatus('syncing');
         await unlockSelected();
@@ -590,7 +596,7 @@ const GooglePopup = ({
     connect: 'actions.connectDescription',
     reconnect: 'actions.reconnectDescription',
     create: 'actions.createDescription',
-    resume: 'actions.resumeDescription',
+    resume: automaticSyncActive ? 'guidance.active' : syncUnlocked ? 'actions.retryDescription' : 'actions.resumeDescription',
     pull: 'actions.pullDescription',
     push: 'actions.pushDescription',
     disconnect: 'actions.disconnectDescription',
@@ -600,7 +606,7 @@ const GooglePopup = ({
     connect: 'operations.connect',
     reconnect: 'operations.reconnect',
     create: 'operations.create',
-    resume: 'operations.resume',
+    resume: automaticSyncActive ? 'operations.active' : syncUnlocked ? 'operations.retry' : 'operations.resume',
     pull: 'operations.pull',
     push: 'operations.push',
     disconnect: 'operations.disconnect',
@@ -615,7 +621,7 @@ const GooglePopup = ({
 
   const readyMessageKey = {
     connect: 'guidance.connect', reconnect: 'guidance.reconnect', create: 'guidance.create',
-    resume: syncStatus === 'synced' && isGoogleSyncUnlocked(operationFileId) && syncTargetConfirmed ? 'guidance.active' : 'guidance.resume',
+    resume: automaticSyncActive ? 'guidance.active' : syncUnlocked ? 'guidance.retry' : 'guidance.resume',
     pull: 'guidance.pull', push: 'guidance.push', disconnect: 'guidance.disconnect',
   } satisfies Record<SyncOperation, string>;
   const statusMessageKey = isBusy
@@ -641,7 +647,7 @@ const GooglePopup = ({
         </div>
       }
       footerEndContent={
-        isBusy ? null : connected ? (
+        isBusy || (selectedOperation === 'resume' && automaticSyncActive) ? null : connected ? (
           <button
             type='button'
             className={actionButtonClass}
