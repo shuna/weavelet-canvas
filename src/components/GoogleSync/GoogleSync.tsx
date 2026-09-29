@@ -1,5 +1,6 @@
 import { withSyncProgress, syncPhase } from '@store/storage/google/progress';
 import GoogleSyncProgress from './GoogleSyncProgress';
+import { createPortal } from 'react-dom';
 import React, { useEffect, useRef, useState } from 'react';
 import { GoogleOAuthProvider } from '@react-oauth/google';
 import { useTranslation } from 'react-i18next';
@@ -18,7 +19,7 @@ import { getFiles, stateToFile } from '@utils/google-api';
 import createGoogleCloudStorage, {
   isGoogleSyncUnlocked, unlockGoogleSync, createEncryptedGoogleSync,
   pullEncryptedGoogleSync, pushEncryptedGoogleSync, acceptGoogleSyncLocal,
-  pauseGoogleSync,
+  pauseGoogleSync, queueGoogleSyncSnapshot,
 } from '@store/storage/GoogleCloudStorage';
 import { SYNC_FOLDER_TYPE } from '@store/storage/google/transport';
 import {
@@ -174,7 +175,7 @@ const SyncDirectionInline = ({
   );
 };
 
-const GoogleSync = ({ clientId, openOnMount = false }: { clientId: string; openOnMount?: boolean }) => {
+const GoogleSync = ({ clientId, openOnMount = false, showEntry = true }: { clientId: string; openOnMount?: boolean; showEntry?: boolean }) => {
   const { t } = useTranslation(['drive']);
 
   const fileId = useGStore((state) => state.fileId);
@@ -199,9 +200,10 @@ const GoogleSync = ({ clientId, openOnMount = false }: { clientId: string; openO
     });
   };
 
-  const [isModalOpen, setIsModalOpen] = useState<boolean>(cloudSync || openOnMount);
+  const [isModalOpen, setIsModalOpen] = useState<boolean>((cloudSync && showEntry) || openOnMount);
   const [files, setFiles] = useState<GoogleFileResource[]>([]);
   const isSilentRefresh = useRef(false);
+  useEffect(() => { if (showEntry && cloudSync) setIsModalOpen(true); }, [showEntry]);
 
   const initialiseState = async (_googleAccessToken: string, options?: { openModal?: boolean }) => {
     let validated;
@@ -244,7 +246,7 @@ const GoogleSync = ({ clientId, openOnMount = false }: { clientId: string; openO
   useEffect(() => {
     if (googleAccessToken) {
       setSyncStatus('syncing');
-      const openModal = !isSilentRefresh.current;
+      const openModal = !isSilentRefresh.current && (showEntry || openOnMount);
       isSilentRefresh.current = false;
       initialiseState(googleAccessToken, { openModal });
     }
@@ -252,7 +254,7 @@ const GoogleSync = ({ clientId, openOnMount = false }: { clientId: string; openO
 
   return (
     <GoogleOAuthProvider clientId={clientId}>
-      <div
+      {showEntry && <div
         className='flex cursor-pointer items-center gap-3 rounded-md px-2 py-2 text-sm text-gray-700 transition-colors duration-200 hover:bg-gray-100 dark:text-white dark:hover:bg-gray-500/10'
         onClick={() => {
           setIsModalOpen(true);
@@ -260,25 +262,33 @@ const GoogleSync = ({ clientId, openOnMount = false }: { clientId: string; openO
       >
         <GoogleIcon /> {t('name')}
         {cloudSync && <SyncIcon status={syncStatus} />}
-      </div>
-      {isModalOpen && (
-        <GooglePopup
+      </div>}
+      {!isModalOpen && (syncStatus === 'syncing' || syncStatus === 'error') && createPortal(
+        <button type='button' onClick={() => setIsModalOpen(true)}
+          className='fixed bottom-4 right-4 z-[60] flex items-center gap-2 rounded-lg bg-emerald-700 px-4 py-3 text-sm text-white shadow-lg'
+          aria-label={t('progress.open') as string}>
+          <SyncIcon status={syncStatus} />{t(syncStatus === 'error' ? 'progress.failed' : 'progress.open')}
+        </button>, document.body
+      )}
+      <GooglePopup
+          isModalOpen={isModalOpen}
           setIsModalOpen={setIsModalOpen}
           files={files}
           setFiles={setFiles}
           isSilentRefresh={isSilentRefresh}
         />
-      )}
     </GoogleOAuthProvider>
   );
 };
 
 const GooglePopup = ({
+  isModalOpen,
   setIsModalOpen,
   files,
   setFiles,
   isSilentRefresh,
 }: {
+  isModalOpen: boolean;
   setIsModalOpen: React.Dispatch<React.SetStateAction<boolean>>;
   files: GoogleFileResource[];
   setFiles: React.Dispatch<React.SetStateAction<GoogleFileResource[]>>;
@@ -488,6 +498,7 @@ const GooglePopup = ({
       const _files = await getFiles(googleAccessToken);
       if (_files) setFiles(_files);
       activateCloudSyncTarget(createdFile.id);
+      await queueGoogleSyncSnapshot(snapshot());
       setSelectedOperation('resume');
       setSyncStatus('synced');
     } catch (e: unknown) {
@@ -612,12 +623,12 @@ const GooglePopup = ({
       : activity === 'checking' ? 'status.checking' : 'status.syncing'
     : inputIssue ?? readyMessageKey[selectedOperation];
 
+  if (!isModalOpen) return null;
   return (
     <PopupModal
       title={t('name') as string}
       setIsModalOpen={setIsModalOpen}
       cancelButton={false}
-      disableClose={isBusy}
       footerStartContent={
         <div className='flex min-h-[1.5rem] items-center gap-3 text-left'>
           {isBusy ? <SyncIcon status='syncing' /> : <div className='h-4 w-4' />}

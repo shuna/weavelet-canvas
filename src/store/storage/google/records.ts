@@ -1,3 +1,4 @@
+import { recordMetric } from './metrics';
 import type { StorageValue } from 'zustand/middleware';
 import type { PersistedStoreState } from '@store/persistence';
 import type { BranchNode, ContentInterface } from '@type/chat';
@@ -33,7 +34,9 @@ function resolveStrict(store: ContentStoreData, hash: string, visited = new Set<
 
 export async function toRecords(snapshot: Snapshot): Promise<Records> {
   // JSON also removes undefined fields, exactly as the existing persistence format does.
-  const copy = JSON.parse(JSON.stringify(snapshot)) as Snapshot;
+  const started = performance.now();
+  const serialized = JSON.stringify(snapshot);
+  const copy = JSON.parse(serialized) as Snapshot;
   const state = copy.state;
   const records: Records = Object.create(null);
   const source = state.contentStore ?? {};
@@ -91,6 +94,7 @@ export async function toRecords(snapshot: Snapshot): Promise<Records> {
   flatten({ version: copy.version ?? 0, state, chats, order }, []);
   for (const [id, parts] of Object.entries(content)) records[JSON.stringify(['content', id])] = canonical(parts);
   for (const [id, url] of Object.entries(assets)) records[JSON.stringify(['assets', id])] = JSON.stringify(url);
+  recordMetric('records', started, new TextEncoder().encode(serialized).length, Object.values(records).reduce((n, value) => n + new TextEncoder().encode(value).length, 0));
   return records;
 }
 
@@ -192,4 +196,19 @@ export async function applyChanges(records: Records, changes: Change[]): Promise
     else result[change.key] = change.after;
   }
   return result;
+}
+
+// The baseline only needs equality/precondition hashes, not a second copy of every image/body.
+export async function hashRecords(records: Records): Promise<Records> {
+  const hashes: Records = {};
+  for (const [key, value] of Object.entries(records)) hashes[key] = await digest(value);
+  return hashes;
+}
+export function diffHashedRecords(before: Records, after: Records, hashes: Records): Change[] {
+  const changes: Change[] = [];
+  for (const key of new Set([...Object.keys(before), ...Object.keys(after)])) {
+    if (before[key] === hashes[key]) continue;
+    changes.push({ key, before: before[key] ?? null, after: after[key] ?? null });
+  }
+  return changes;
 }

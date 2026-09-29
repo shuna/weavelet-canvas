@@ -2,9 +2,10 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { IDBFactory } from 'fake-indexeddb';
 import { EncryptedDriveSync } from './sync';
 import { DriveTransport, SYNC_FOLDER_TYPE, type DriveFile } from './transport';
-import { createKeyEnvelope, decrypt, encrypt, unlockKey } from './crypto';
+import { createKeyEnvelope, decrypt, encrypt, unlockKey, encode } from './crypto';
 import { toRecords, fromRecords, diffRecords } from './records';
 import type { Snapshot } from './records';
+import * as cacheStorage from './cache';
 import { addContent, addContentDelta } from '@utils/contentStore';
 import type { ChatInterface } from '@type/chat';
 
@@ -15,9 +16,11 @@ class FakeDrive {
   events: { fileId: string; file: DriveFile }[] = [];
   writes: { id: string; kind: string; bytes: Uint8Array }[] = [];
   reads: string[] = [];
+  attempts: string[] = [];
   failKind?: string;
   loseResponse?: string;
   async id() { return `f${++this.next}`; }
+  async ids(count: number) { return Array.from({ length: count }, () => `f${++this.next}`); }
   async folder(id: string, headerId: string): Promise<DriveFile> {
     const metadata = { id, kind: 'drive#file', name: 'Weavelet encrypted sync', mimeType: SYNC_FOLDER_TYPE,
       appProperties: { weaveletSync: '1', headerId } };
@@ -26,6 +29,7 @@ class FakeDrive {
   }
   async metadata(id: string) { return this.files.get(id)!.metadata; }
   async put(id: string, dataset: string, kind: string, bytes: Uint8Array) {
+    this.attempts.push(id);
     if (this.failKind === kind) throw new Error('network interrupted');
     const old = this.files.get(id);
     if (old) { expect(old.bytes).toEqual(bytes); return; }
@@ -119,7 +123,7 @@ it('uploads only a small title delta and downloads only new encrypted packs on s
   changed.state.chats![0].title = 'NEW PRIVATE TITLE';
   await session.push(changed);
   const writes = drive.writes.slice(before);
-  expect(writes.map((w) => w.kind)).toEqual(['part', 'commit']);
+  expect(writes.map((w) => w.kind)).toEqual(['commit']);
   expect(writes.reduce((sum, w) => sum + w.bytes.length, 0)).toBeLessThan(1500);
   for (const file of drive.files.values()) {
     expect(new TextDecoder().decode(file.bytes)).not.toContain('PRIVATE');
@@ -132,7 +136,7 @@ it('uploads only a small title delta and downloads only new encrypted packs on s
   await session.pull();
   expect(drive.reads).toEqual([]);
   await session.push(changed);
-  expect(drive.writes.length).toBe(before + 2);
+  expect(drive.writes.length).toBe(before + 1);
   // Another browser reconstructs from encrypted Drive files alone.
   cache();
   const remote = new EncryptedDriveSync(file.id, drive.transport());
@@ -223,7 +227,7 @@ it('blocks empty-chat uploads and never advances past damaged ciphertext', async
 
 it('splits a large initial upload into bounded encrypted parts without the old full-snapshot size limit', async () => {
   const drive = new FakeDrive();
-  const { session } = await EncryptedDriveSync.create(drive.transport(), PASSWORD);
+  const { session } = await EncryptedDriveSync.create(drive.transport(), PASSWORD, { partBytes: 256 * 1024 });
   const large = snapshot();
   const alphabet = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
   const chunks: string[] = [];
@@ -291,4 +295,86 @@ it('stops a stale tab when another tab has advanced its shared sync cache', asyn
   await b.unlock(PASSWORD);
   await b.pull();
   await expect(a.push(snapshot())).rejects.toThrow('Another tab');
+});
+
+it('migrates a legacy encrypted cache/outbox and keeps IDs, ciphertext and completed files', async () => {
+  const drive = new FakeDrive();
+  const { file } = await EncryptedDriveSync.create(drive.transport(), PASSWORD);
+  const header = drive.files.get(file.appProperties!.headerId)!;
+  const key = await unlockKey(JSON.parse(new TextDecoder().decode(header.bytes)), PASSWORD, file.id);
+  const original = snapshot(true);
+  const records = await toRecords(original);
+  const commit = { version: 1, parents: [], changes: await diffRecords({}, records) };
+  const [id, part] = await drive.ids(2);
+  const partBytes = await encrypt(key, encode(commit), `${file.id}:${part}`);
+  const commitBytes = await encrypt(key, encode({ version: 1, parts: [part] }), `${file.id}:${id}`);
+  await drive.put(part, file.id, 'part', partBytes);
+  await cacheStorage.syncCache(file.id, await encrypt(key, encode({ version: 1, commits: {}, pending: {
+    id, commit, baseline: records, files: [
+      { id: part, kind: 'part', bytes: [...partBytes], sent: true },
+      { id, kind: 'commit', bytes: [...commitBytes], sent: false },
+    ],
+  } }), `${file.id}:cache`));
+  const resumed = new EncryptedDriveSync(file.id, drive.transport());
+  await resumed.unlock(PASSWORD);
+  await resumed.push(original, true);
+  expect(drive.attempts.filter(attempt => attempt === part)).toHaveLength(1);
+  expect(drive.files.get(id)!.bytes).toEqual(commitBytes);
+  expect(await toRecords(await resumed.pull())).toEqual(records);
+});
+
+it('awaits both bounded uploads on failure, publishes nothing incomplete and resumes only missing parts', async () => {
+  const drive = new FakeDrive();
+  const original = snapshot();
+  const node = original.state.chats![0].branchTree!.nodes.n1;
+  const random = Array.from(crypto.getRandomValues(new Uint8Array(60_000)), n => String.fromCharCode(32 + n % 90)).join('');
+  node.contentHash = addContent(original.state.contentStore!, [{ type: 'text', text: random }]);
+  const { session, file } = await EncryptedDriveSync.create(drive.transport(), PASSWORD, { partBytes: 16 * 1024, concurrency: 2 });
+  const put = drive.put.bind(drive);
+  let active = 0, peak = 0, fail = true;
+  drive.put = async (id, dataset, kind, bytes) => {
+    if (kind !== 'part') return put(id, dataset, kind, bytes);
+    active++; peak = Math.max(peak, active);
+    const shouldFail = fail; fail = false;
+    try {
+      await new Promise(resolve => setTimeout(resolve, 5));
+      if (shouldFail) throw new Error('interrupted');
+      await put(id, dataset, kind, bytes);
+    } finally { active--; }
+  };
+  await expect(session.push(original, true)).rejects.toThrow('interrupted');
+  expect(peak).toBe(2); expect(active).toBe(0);
+  expect(drive.writes.filter(w => w.kind === 'commit')).toHaveLength(0);
+  const completed = drive.writes.filter(w => w.kind === 'part').map(w => w.id);
+  expect(completed).toHaveLength(1);
+  const readerDb = globalThis.indexedDB;
+  cache();
+  const reader = new EncryptedDriveSync(file.id, drive.transport());
+  await reader.unlock(PASSWORD);
+  await expect(reader.pull()).rejects.toThrow('no completed upload');
+  (globalThis as any).indexedDB = readerDb;
+  const resumed = new EncryptedDriveSync(file.id, drive.transport(), { concurrency: 2 });
+  await resumed.unlock(PASSWORD); await resumed.push(original, true);
+  for (const id of completed) expect(drive.attempts.filter(attempt => attempt === id)).toHaveLength(1);
+  expect(await toRecords(await resumed.pull())).toEqual(await toRecords(original));
+});
+
+it('retries an uploaded part with identical ciphertext when its acknowledgement could not be saved', async () => {
+  const drive = new FakeDrive();
+  const { session, file } = await EncryptedDriveSync.create(drive.transport(), PASSWORD);
+  const write = cacheStorage.writeSyncCache;
+  let fail = true;
+  const spy = vi.spyOn(cacheStorage, 'writeSyncCache').mockImplementation(async (id, value, entries, remove) => {
+    if (fail && !value && entries?.some(([key]) => key.startsWith('ack:'))) { fail = false; throw new Error('disk failure'); }
+    return write(id, value, entries, remove);
+  });
+  try { await expect(session.push(snapshot(), true)).rejects.toThrow('disk failure'); }
+  finally { spy.mockRestore(); }
+  const part = drive.writes.find(w => w.kind === 'part')!;
+  expect(drive.writes.filter(w => w.kind === 'commit')).toHaveLength(0);
+  const resumed = new EncryptedDriveSync(file.id, drive.transport());
+  await resumed.unlock(PASSWORD); await resumed.push(snapshot(), true);
+  expect(drive.attempts.filter(id => id === part.id)).toHaveLength(2);
+  expect(drive.files.get(part.id)!.bytes).toEqual(part.bytes);
+  expect(drive.writes.filter(w => w.kind === 'commit')).toHaveLength(1);
 });

@@ -38,3 +38,16 @@ it('does not count late callbacks in a subsequent sync or present unknown totals
     expect(useGoogleSyncProgress.getState()).toMatchObject({ totalBytes: undefined, totalFiles: undefined, downloadedBytes: 0 });
   });
 });
+
+it('counts overlapping successful transfers once for aggregate throughput', async () => {
+  let now = 0;
+  vi.spyOn(performance, 'now').mockImplementation(() => now);
+  await withSyncProgress(async () => {
+    const first = beginTransfer('upload');
+    now = 100;
+    const second = beginTransfer('upload');
+    now = 500; second(200);
+    now = 1000; first(300);
+    expect(useGoogleSyncProgress.getState()).toMatchObject({ uploadedBytes: 500, uploadMs: 1000 });
+  });
+});
