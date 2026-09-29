@@ -8,10 +8,8 @@ import useGStore from '@store/cloud-auth-store';
 import { showToast } from '@utils/showToast';
 
 import {
-  deleteDriveFile,
   getDriveFileTyped,
   isGoogleAuthError,
-  updateDriveFileName,
   validateGoogleOath2AccessToken,
 } from '@api/google-api';
 import { getFiles, stateToFile } from '@utils/google-api';
@@ -40,9 +38,6 @@ import GoogleIcon from '@icon/GoogleIcon';
 import TickIcon from '@icon/TickIcon';
 import RefreshIcon from '@icon/RefreshIcon';
 import DownArrow from '@icon/DownArrow';
-import EditIcon from '@icon/EditIcon';
-import CrossIcon from '@icon/CrossIcon';
-import DeleteIcon from '@icon/DeleteIcon';
 
 import { GoogleFileResource, SyncStatus } from '@type/google-api';
 import { createJSONStorage } from 'zustand/middleware';
@@ -220,15 +215,14 @@ const GoogleSync = ({ clientId, openOnMount = false }: { clientId: string; openO
         const _files = await getFiles(_googleAccessToken);
         if (_files) {
           setFiles(_files);
-          if (_files.length > 0 && !_files.some((f) => f.id === fileId)) {
-            setFileId(_files[0].id);
-          }
+          const target = _files.find((file) => file.id === fileId && file.mimeType === SYNC_FOLDER_TYPE)
+            ?? _files.find((file) => file.mimeType === SYNC_FOLDER_TYPE);
+          if (target && target.id !== fileId) setFileId(target.id);
           if (syncTargetConfirmed && isGoogleSyncUnlocked(fileId)) {
             enableCloudPersistence();
             setSyncStatus('synced');
           } else {
             enableLocalPersistence();
-            const target = _files.find((file) => file.id === fileId) ?? _files[0];
             setSyncStatus(target?.mimeType === SYNC_FOLDER_TYPE ? 'locked' : 'synced');
           }
           // Open modal so user can choose Pull/Push direction (skip for silent refresh)
@@ -336,7 +330,7 @@ const GooglePopup = ({
   const snapshot = () => ({ state: createPartializedState(useStore.getState()), version: STORE_VERSION });
   const unlockSelected = async () => {
     await pauseGoogleSync();
-    await unlockGoogleSync(_fileId, passphrase);
+    await unlockGoogleSync(operationFileId, passphrase);
     setPassphrase('');
     setConfirmation('');
   };
@@ -373,8 +367,21 @@ const GooglePopup = ({
     });
   };
 
-  const selectedFile = files.find((file) => file.id === _fileId);
-  const disableCloudSelection = selectedOperation === 'create';
+  const syncFile = files.find((file) => file.id === currentFileId && file.mimeType === SYNC_FOLDER_TYPE)
+    ?? files.find((file) => file.mimeType === SYNC_FOLDER_TYPE);
+  const selectedFile = selectedOperation === 'pull' ? files.find((file) => file.id === _fileId) : syncFile;
+  const operationFileId = selectedFile?.id ?? '';
+  const needsPassphrase = selectedOperation === 'create' ||
+    (['resume', 'pull', 'push'].includes(selectedOperation) && selectedFile?.mimeType === SYNC_FOLDER_TYPE &&
+      !isGoogleSyncUnlocked(operationFileId));
+  const inputIssue = selectedOperation === 'create'
+    ? !passphrase ? 'guidance.enterNewPassphrase'
+      : passphrase.length < 12 ? 'guidance.passphraseTooShort'
+      : !confirmation ? 'guidance.confirmPassphrase'
+      : passphrase !== confirmation ? 'encryption.mismatch' : undefined
+    : ['resume', 'pull', 'push'].includes(selectedOperation) && !selectedFile
+      ? selectedOperation === 'pull' ? 'guidance.selectInput' : 'guidance.createOrRead'
+      : needsPassphrase && !passphrase ? 'guidance.enterPassphrase' : undefined;
 
   const refreshCloudFiles = async () => {
     if (!googleAccessToken || isBusy) return;
@@ -425,7 +432,7 @@ const GooglePopup = ({
       useStore.setState(hydratedState);
       if (encrypted) {
         await acceptGoogleSyncLocal(snapshot());
-        activateCloudSyncTarget(_fileId);
+        activateCloudSyncTarget(operationFileId);
       } else {
         setSyncTargetConfirmed(false);
       }
@@ -447,13 +454,13 @@ const GooglePopup = ({
   };
 
   const overwriteRemoteWithLocal = async () => {
-    if (!_fileId || !googleAccessToken) return;
+    if (!operationFileId || !googleAccessToken) return;
     try {
       setBusyActivity('syncing');
       setSyncStatus('syncing');
       await unlockSelected();
       await pushEncryptedGoogleSync(snapshot(), true);
-      activateCloudSyncTarget(_fileId);
+      activateCloudSyncTarget(operationFileId);
       const _files = await getFiles(googleAccessToken);
       if (_files) setFiles(_files);
       showToast(t('toast.push'), 'success');
@@ -477,6 +484,7 @@ const GooglePopup = ({
       const _files = await getFiles(googleAccessToken);
       if (_files) setFiles(_files);
       activateCloudSyncTarget(createdFile.id);
+      setSelectedOperation('resume');
       setSyncStatus('synced');
     } catch (e: unknown) {
       setSyncStatus(resolveGoogleSyncErrorStatus(e));
@@ -520,7 +528,7 @@ const GooglePopup = ({
   }, [availableOperations, selectedOperation]);
 
   const runSelectedOperation = async () => {
-    if (isBusy) return;
+    if (isBusy || inputIssue) return;
     if (selectedOperation === 'connect' || selectedOperation === 'reconnect') {
       startSyncing();
       return;
@@ -530,7 +538,7 @@ const GooglePopup = ({
         setSyncStatus('syncing');
         await unlockSelected();
         await pushEncryptedGoogleSync(snapshot());
-        activateCloudSyncTarget(_fileId);
+        activateCloudSyncTarget(operationFileId);
         setSyncStatus('synced');
       } catch (error) {
         setSyncStatus(resolveGoogleSyncErrorStatus(error));
@@ -580,20 +588,16 @@ const GooglePopup = ({
         ? ({ mobile: 'up', desktop: 'right' } as const)
         : null;
 
-  const statusMessageKey =
-    activity === 'downloading'
-      ? 'status.downloading'
-      : activity === 'authenticating'
-        ? 'status.authenticating'
-        : activity === 'checking'
-          ? 'status.checking'
-          : isBusy
-            ? 'status.syncing'
-            : syncTargetConfirmed
-              ? 'status.idleConnected'
-              : connected
-                ? 'status.idleAwaitingChoice'
-                : 'status.idleDisconnected';
+  const readyMessageKey = {
+    connect: 'guidance.connect', reconnect: 'guidance.reconnect', create: 'guidance.create',
+    resume: syncStatus === 'synced' && isGoogleSyncUnlocked(operationFileId) && syncTargetConfirmed ? 'guidance.active' : 'guidance.resume',
+    pull: 'guidance.pull', push: 'guidance.push', disconnect: 'guidance.disconnect',
+  } satisfies Record<SyncOperation, string>;
+  const statusMessageKey = isBusy
+    ? activity === 'downloading' ? 'status.downloading'
+      : activity === 'authenticating' ? 'status.authenticating'
+      : activity === 'checking' ? 'status.checking' : 'status.syncing'
+    : inputIssue ?? readyMessageKey[selectedOperation];
 
   return (
     <PopupModal
@@ -604,11 +608,10 @@ const GooglePopup = ({
       footerStartContent={
         <div className='flex min-h-[1.5rem] items-center gap-3 text-left'>
           {isBusy ? <SyncIcon status='syncing' /> : <div className='h-4 w-4' />}
-          <span className='text-sm text-gray-600 dark:text-gray-300'>
-            {t(syncStatus === 'locked'
-              ? selectedOperation === 'create' ? 'status.idleAwaitingChoice' : 'encryption.locked'
-              : syncStatus === 'error' ? 'encryption.failed' : statusMessageKey)}
-          </span>
+          <div id='google-sync-guidance' role='status' className='text-sm text-gray-600 dark:text-gray-300'>
+            {syncStatus === 'error' && <p>{t('encryption.failed')}</p>}
+            <p>{t(statusMessageKey)}</p>
+          </div>
         </div>
       }
       footerEndContent={
@@ -617,12 +620,8 @@ const GooglePopup = ({
             type='button'
             className={actionButtonClass}
             onClick={runSelectedOperation}
-            disabled={
-              isBusy ||
-              ((selectedOperation === 'pull' || selectedOperation === 'push' || selectedOperation === 'resume') && !_fileId) ||
-              ((selectedOperation === 'push' || selectedOperation === 'resume') && selectedFile?.mimeType !== SYNC_FOLDER_TYPE) ||
-              (selectedOperation === 'create' && (passphrase.length < 12 || passphrase !== confirmation))
-            }
+            aria-describedby='google-sync-guidance'
+            disabled={isBusy || !!inputIssue}
           >
             {t(operationLabelKey[selectedOperation])}
           </button>
@@ -685,24 +684,21 @@ const GooglePopup = ({
             {t(operationDescriptionKey[selectedOperation])}
           </div>
         </div>
-        {connected && ['create', 'resume', 'pull', 'push'].includes(selectedOperation) && (
+        {connected && needsPassphrase && (
           <div className='w-full max-w-2xl text-left'>
             <label className='block text-sm' htmlFor='google-sync-passphrase'>{t('encryption.passphrase')}</label>
-            <input id='google-sync-passphrase' type='password' autoComplete='off'
+            <input id='google-sync-passphrase' type='password' autoComplete='off' aria-describedby='google-sync-guidance'
               className='mt-1 w-full rounded border border-gray-300 bg-transparent px-3 py-2'
               value={passphrase} onChange={(e) => setPassphrase(e.target.value)} disabled={isBusy} />
             {selectedOperation === 'create' && (
               <>
                 <label className='mt-3 block text-sm' htmlFor='google-sync-confirm'>{t('encryption.confirm')}</label>
-                <input id='google-sync-confirm' type='password' autoComplete='off'
+                <input id='google-sync-confirm' type='password' autoComplete='off' aria-describedby='google-sync-guidance'
                   className='mt-1 w-full rounded border border-gray-300 bg-transparent px-3 py-2'
                   value={confirmation} onChange={(e) => setConfirmation(e.target.value)} disabled={isBusy} />
               </>
             )}
             <p className='mt-2 text-xs'>{t('encryption.help')}</p>
-            {selectedFile && selectedFile.mimeType !== SYNC_FOLDER_TYPE && selectedOperation !== 'create' && (
-              <p className='mt-2 text-xs'>{t('encryption.legacy')}</p>
-            )}
           </div>
         )}
         {connected && (
@@ -727,7 +723,7 @@ const GooglePopup = ({
               <div className='order-1 rounded-lg border border-gray-200 bg-gray-100/80 p-3 md:order-2 dark:border-gray-600 dark:bg-gray-800/60'>
                 <div className='mb-2 flex items-center justify-between gap-3'>
                   <div className='text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400'>
-                    {t('labels.selectedFile')}
+                    {t(selectedOperation === 'pull' ? 'labels.inputSource' : 'labels.currentTarget')}
                   </div>
                   <button
                     type='button'
@@ -743,22 +739,20 @@ const GooglePopup = ({
                   </button>
                 </div>
                 <div className='max-h-72 overflow-y-auto pr-1'>
-                  {files.length === 0 ? (
+                  {(selectedOperation === 'pull' ? files : syncFile ? [syncFile] : []).length === 0 ? (
                     <div className='rounded-md border border-dashed border-gray-300 px-3 py-4 text-sm text-gray-500 dark:border-gray-600 dark:text-gray-400'>
                       {t('labels.noFiles')}
                     </div>
                   ) : (
-                    files.map((file) => (
+                    (selectedOperation === 'pull' ? files : syncFile ? [syncFile] : []).map((file) => (
                       <FileSelector
                         key={file.id}
                         file={file}
-                        selected={!disableCloudSelection && _fileId === file.id}
+                        selected={selectedOperation === 'pull' && _fileId === file.id}
                         current={syncTargetConfirmed && currentFileId === file.id}
                         syncing={isBusy}
-                        selectionDisabled={disableCloudSelection}
+                        selectable={selectedOperation === 'pull'}
                         onSelect={_setFileId}
-                        onFilesChange={setFiles}
-                        onActivityChange={setBusyActivity}
                       />
                     ))
                   )}
@@ -777,173 +771,28 @@ const GooglePopup = ({
   );
 };
 
-const FileSelector = ({
-  file,
-  selected,
-  current,
-  syncing,
-  selectionDisabled,
-  onSelect,
-  onFilesChange,
-  onActivityChange,
-}: {
+const FileSelector = ({ file, selected, current, syncing, selectable, onSelect }: {
   file: GoogleFileResource;
   selected: boolean;
   current: boolean;
   syncing: boolean;
-  selectionDisabled: boolean;
+  selectable: boolean;
   onSelect: React.Dispatch<React.SetStateAction<string>>;
-  onFilesChange: React.Dispatch<React.SetStateAction<GoogleFileResource[]>>;
-  onActivityChange: (activity: Exclude<SyncActivity, null>) => void;
 }) => {
   const { t, i18n } = useTranslation(['drive']);
-  const setSyncStatus = useGStore((state) => state.setSyncStatus);
-
-  const [isEditing, setIsEditing] = useState(false);
-  const [isDeleting, setIsDeleting] = useState(false);
-  const [_name, _setName] = useState(file.name);
-
-  const formattedUpdatedAt = formatDateTime(file.modifiedTime, i18n.language);
-  const formattedSize = formatFileSize(file.size, i18n.language);
-
-  const updateFileName = async () => {
-    if (syncing) return;
-    setIsEditing(false);
-    const accessToken = useGStore.getState().googleAccessToken;
-    if (!accessToken) return;
-
-    try {
-      onActivityChange('syncing');
-      setSyncStatus('syncing');
-      const newFileName = file.mimeType === SYNC_FOLDER_TYPE || _name.endsWith('.json') ? _name : `${_name}.json`;
-      await updateDriveFileName(newFileName, file.id, accessToken);
-      const updatedFiles = await getFiles(accessToken);
-      if (updatedFiles) onFilesChange(updatedFiles);
-      setSyncStatus('synced');
-    } catch (e: unknown) {
-      setSyncStatus(resolveGoogleSyncErrorStatus(e));
-      showToast((e as Error).message, 'error');
-    }
-  };
-
-  const deleteFile = async () => {
-    if (syncing) return;
-    setIsDeleting(false);
-    const accessToken = useGStore.getState().googleAccessToken;
-    if (!accessToken) return;
-
-    try {
-      onActivityChange('checking');
-      setSyncStatus('syncing');
-      if (current) throw new Error(t('encryption.disconnectBeforeDelete') as string);
-      await deleteDriveFile(file.id, accessToken);
-      const updatedFiles = await getFiles(accessToken);
-      if (updatedFiles) onFilesChange(updatedFiles);
-      if (selected) {
-        onSelect(updatedFiles?.[0]?.id ?? '');
-      }
-      setSyncStatus('synced');
-    } catch (e: unknown) {
-      setSyncStatus(resolveGoogleSyncErrorStatus(e));
-      showToast((e as Error).message, 'error');
-    }
-  };
-
+  const size = formatFileSize(file.size, i18n.language);
+  const updated = formatDateTime(file.modifiedTime, i18n.language);
   return (
-    <label
-      className={`mb-2 flex w-full min-w-0 items-start gap-3 overflow-hidden rounded-lg border px-3 py-3 text-sm ${
-        selected
-          ? 'border-emerald-400 bg-emerald-50/80 ring-1 ring-emerald-400/70 dark:border-emerald-500/70 dark:bg-gray-800/90 dark:ring-emerald-500/60'
-          : 'border-gray-200 bg-white/80 dark:border-gray-600 dark:bg-gray-800/40'
-      } ${syncing ? 'cursor-not-allowed opacity-60' : 'cursor-pointer'}`}
-    >
-      <input
-        type='radio'
-        checked={selected}
-        className='mt-1 h-4 w-4'
-        onChange={() => {
-          if (!syncing && !selectionDisabled) onSelect(file.id);
-        }}
-        disabled={syncing || selectionDisabled}
-      />
-      <div className='min-w-0 flex-1 text-left'>
-        {isEditing ? (
-          <input
-            type='text'
-            className='h-8 w-full rounded-md bg-gray-200 px-3 text-sm text-gray-800 focus:outline-none dark:bg-gray-600 dark:text-white'
-            value={_name}
-            onChange={(e) => _setName(e.target.value)}
-          />
-        ) : (
-          current && (
-            <div className='font-semibold text-emerald-700 dark:text-emerald-300'>
-              {t('labels.currentTarget')}
-            </div>
-          )
-        )}
-        <div className='mt-1 break-all text-xs text-gray-600 dark:text-gray-100'>
-          {t('labels.fileId')}: {file.id}
-        </div>
-        <div className='mt-1 break-all text-xs text-gray-600 dark:text-gray-100'>
-          {t('labels.fileName')}: {file.name}
-        </div>
-        <div className='mt-1 text-xs text-gray-600 dark:text-gray-100'>
-          {t('labels.fileSize')}:{' '}
-          {formattedSize === 'Unknown' ? t('labels.unknownSize') : formattedSize}
-        </div>
-        <div className='mt-1 text-xs text-gray-600 dark:text-gray-100'>
-          {t('labels.updatedAt')}:{' '}
-          {formattedUpdatedAt === 'Unknown' ? t('labels.unknownDate') : formattedUpdatedAt}
-        </div>
+    <label className='mb-2 flex w-full min-w-0 items-start gap-3 rounded-lg border border-gray-300 px-3 py-3 text-sm dark:border-gray-600'>
+      {selectable && <input type='radio' name='google-sync-input' aria-label={file.name}
+        checked={selected} disabled={syncing} onChange={() => onSelect(file.id)} />}
+      <div className='min-w-0 flex-1 break-all text-xs'>
+        {current && <div className='font-semibold'>{t('labels.currentTarget')}</div>}
+        <div>{t('labels.fileName')}: {file.name}</div>
+        <div>{t('labels.fileSize')}: {size === 'Unknown' ? t('labels.unknownSize') : size}</div>
+        <div>{t('labels.updatedAt')}: {updated === 'Unknown' ? t('labels.unknownDate') : updated}</div>
+        {file.mimeType !== SYNC_FOLDER_TYPE && <p className='mt-2'>{t('encryption.legacy')}</p>}
       </div>
-      {isEditing || isDeleting ? (
-        <div className='shrink-0 flex gap-1'>
-          <button
-            type='button'
-            className={syncing ? 'cursor-not-allowed' : 'cursor-pointer'}
-            onClick={() => {
-              if (isEditing) updateFileName();
-              if (isDeleting) deleteFile();
-            }}
-          >
-            <TickIcon />
-          </button>
-          <button
-            type='button'
-            className={syncing ? 'cursor-not-allowed' : 'cursor-pointer'}
-            onClick={() => {
-              if (!syncing) {
-                setIsEditing(false);
-                setIsDeleting(false);
-                _setName(file.name);
-              }
-            }}
-          >
-            <CrossIcon />
-          </button>
-        </div>
-      ) : (
-        <div className='shrink-0 flex gap-1'>
-          <button
-            type='button'
-            className={syncing ? 'cursor-not-allowed' : 'cursor-pointer'}
-            onClick={() => {
-              if (!syncing) setIsEditing(true);
-            }}
-          >
-            <EditIcon />
-          </button>
-          <button
-            type='button'
-            className={syncing ? 'cursor-not-allowed' : 'cursor-pointer'}
-            onClick={() => {
-              if (!syncing) setIsDeleting(true);
-            }}
-          >
-            <DeleteIcon />
-          </button>
-        </div>
-      )}
     </label>
   );
 };

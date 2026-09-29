@@ -23,7 +23,8 @@
     "fileSize": "File size",
     "unknownDate": "Unknown",
     "unknownSize": "Unknown",
-    "noFiles": "No cloud files available"
+    "noFiles": "No cloud files available",
+    "inputSource": "Source to read (legacy files are read-only)"
   },
   "operations": {
     "connect": "Connect Google Drive Sync",
@@ -39,9 +40,9 @@
     "reconnectDescription": "Your Google session has expired. Sign in again to resume syncing.",
     "createDescription": "Create a new encrypted sync folder from the current chats and settings. Legacy files are left unchanged.",
     "pullTitle": "Load the selected Google Drive file into this device",
-    "pullDescription": "This replaces the current local chats and settings with the selected cloud file, then continues syncing with that file.",
+    "pullDescription": "Replace local conversations and settings with the selected source. Legacy files are read-only. Reading an encrypted folder enables sync with that folder.",
     "pushTitle": "Force overwrite the selected Google Drive file with this device's local data",
-    "pushDescription": "Use this when the local state is the source of truth and you want to replace the cloud copy immediately.",
+    "pushDescription": "Update the current encrypted sync folder with local conversations and settings. Legacy files are never written.",
     "disconnectTitle": "Disconnect Google Drive Sync",
     "disconnectDescription": "This only stops syncing and signs out of Google for this app. Your local chats remain on this device, and your Google Drive files are not deleted or cleared.",
     "resumeDescription": "Unlock and upload pending changes from this device. On a new device, download the cloud data first."
@@ -73,5 +74,21 @@
     "locked": "Encrypted sync is locked.",
     "failed": "Sync did not complete. Local data remains saved.",
     "disconnectBeforeDelete": "Disconnect before deleting the current sync target."
+  },
+  "guidance": {
+    "enterNewPassphrase": "Enter a new sync passphrase with at least 12 characters.",
+    "passphraseTooShort": "The passphrase is shorter than 12 characters. Enter at least 12 characters.",
+    "confirmPassphrase": "Enter the same passphrase in the confirmation field.",
+    "enterPassphrase": "Enter the passphrase for the existing encrypted sync folder.",
+    "selectInput": "Select a source to read.",
+    "createOrRead": "Create an encrypted sync folder or read an existing encrypted folder first.",
+    "connect": "Press the Connect to Google Drive button.",
+    "reconnect": "Press the Reconnect to Google Drive button.",
+    "create": "Both entries match. Press the Create encrypted sync folder button.",
+    "resume": "Press the Unlock and resume sync button.",
+    "active": "Changes are encrypted and saved automatically. You can close this dialog.",
+    "pull": "Check the source, then press the button to replace local data with cloud data.",
+    "push": "Press the upload button to update the encrypted sync folder with local data.",
+    "disconnect": "Press the Stop syncing button."
   }
 }
