@@ -16,6 +16,9 @@ test('encrypted Drive creation, incremental autosave and unlock after browser re
   const changes: { fileId: string; file: any }[] = [];
   const uploads: { metadata: any; bytes: Buffer }[] = [];
   let next = 0;
+  let releaseInitialCommit!: () => void;
+  const initialCommitResponse = new Promise<void>(resolve => { releaseInitialCommit = resolve; });
+  let holdInitialCommit = true;
   await page.route('https://accounts.google.com/**', (route) => route.fulfill({
     contentType: 'application/javascript',
     body: 'window.google={accounts:{oauth2:{initTokenClient:()=>({requestAccessToken:()=>{}}),revoke:()=>{}}}};',
@@ -42,6 +45,10 @@ test('encrypted Drive creation, incremental autosave and unlock after browser re
       files.set(metadata.id, { metadata, bytes });
       uploads.push({ metadata, bytes });
       changes.push({ fileId: metadata.id, file: metadata });
+      if (metadata.appProperties.kind === 'commit' && holdInitialCommit) {
+        holdInitialCommit = false;
+        await initialCommitResponse;
+      }
       return route.fulfill({ json: { id: metadata.id } });
     }
     if (url.pathname.endsWith('/files')) {
@@ -113,9 +120,27 @@ test('encrypted Drive creation, incremental autosave and unlock after browser re
   await expect(create).toBeEnabled();
   await page.screenshot({ path: testInfo.outputPath('create-ready.png') });
   await create.click();
+  const progress = page.getByTestId('google-sync-progress');
+  await expect(progress).toContainText('1 / 2 ファイル完了');
+  await expect(progress).toContainText(/[KM]B\/s/);
+  const percent = Number(await progress.getByRole('progressbar').getAttribute('value'));
+  expect(percent).toBeGreaterThan(0);
+  expect(percent).toBeLessThan(100);
+  await page.screenshot({ path: testInfo.outputPath('sync-progress.png') });
+  await page.setViewportSize({ width: 390, height: 844 });
+  await expect(progress).toBeInViewport();
+  const bounds = await progress.boundingBox();
+  expect(bounds!.x).toBeGreaterThanOrEqual(0);
+  expect(bounds!.x + bounds!.width).toBeLessThanOrEqual(390);
+  expect(bounds!.y + bounds!.height).toBeLessThanOrEqual(844);
+  await page.screenshot({ path: testInfo.outputPath('sync-progress-mobile.png') });
+  await page.setViewportSize({ width: 1440, height: 900 });
+  releaseInitialCommit();
   await expect(guidance).toContainText('変更は暗号化して自動保存されます。');
+  await expect(progress).toHaveCount(0);
   expect(uploads.filter((u) => u.metadata.appProperties.kind === 'commit')).toHaveLength(1);
   await page.getByRole('button', { name: 'close modal', exact: true }).click();
+  await page.getByRole('button', { name: 'メニューを開く', exact: true }).click();
   const before = uploads.length;
   await page.evaluate(async () => {
     const { default: store } = await import('/src/store/store.ts');
