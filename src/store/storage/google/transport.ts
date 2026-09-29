@@ -51,7 +51,7 @@ export class DriveTransport {
   async folder(id: string, headerId: string): Promise<DriveFile> {
     return this.json(`${API}/files?fields=id,name,mimeType,appProperties`, {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ id, name: 'Weavelet encrypted sync', mimeType: SYNC_FOLDER_TYPE,
+      body: JSON.stringify({ id, name: `Weavelet encrypted sync (${id})`, mimeType: SYNC_FOLDER_TYPE,
         appProperties: { weaveletSync: '1', headerId } }),
     });
   }

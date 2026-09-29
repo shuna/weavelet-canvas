@@ -206,7 +206,7 @@ test('encrypted Drive creation, incremental autosave and unlock after browser re
     store.getState().setChats(chats);
   });
   await page.locator('select').filter({ has: page.locator('option[value="pull"]') }).selectOption('pull');
-  await page.getByRole('radio', { name: 'Weavelet encrypted sync' }).check();
+  await page.getByRole('radio', { name: /^Weavelet encrypted sync \(file-\d+\)$/ }).check();
   await page.getByRole('button', { name: 'クラウド状態でローカルを上書き', exact: true }).click();
   await expect(page.getByRole('button', { name: 'close modal', exact: true })).toHaveCount(0);
   expect(await page.evaluate(async () => {
