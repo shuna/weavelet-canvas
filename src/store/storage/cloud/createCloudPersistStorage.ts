@@ -30,6 +30,7 @@ export const createCloudPersistStorage = <S>(
   let flushTimer: ReturnType<typeof setTimeout> | null = null;
   let flushInFlight: Promise<void> | null = null;
   let listenersRegistered = false;
+  let lastGuardMessage: string | null = null;
   let lastSuccessfulUploadMetrics: CloudSyncMetrics | null = null;
 
   const clearFlushTimer = () => {
@@ -39,7 +40,10 @@ export const createCloudPersistStorage = <S>(
   };
 
   const notifyCloudSyncGuard = (message: string) => {
-    provider.notifyError(message);
+    if (message !== lastGuardMessage) {
+      lastGuardMessage = message;
+      provider.notifyError(message);
+    }
     provider.setSyncStatus('synced');
   };
 
@@ -85,27 +89,28 @@ export const createCloudPersistStorage = <S>(
     const nextUpload = pendingUpload;
     pendingUpload = null;
 
-    flushInFlight = (async () => {
-      const target = provider.getTarget();
-      if (!target) {
-        return;
-      }
-
-      const metrics = computeCloudSyncMetrics(nextUpload.value);
-      const guardMessage = getCloudSyncGuardMessage(
-        nextUpload.value,
-        metrics,
-        lastSuccessfulUploadMetrics,
-        guardOptions?.maxCompressedBytes
-      );
-      if (guardMessage) {
-        notifyCloudSyncGuard(guardMessage);
-        return;
-      }
-
-      const compressed = compress(JSON.stringify(nextUpload.value)) ?? '';
-
+    // Defer execution so even a synchronous guard return clears the assigned promise.
+    flushInFlight = Promise.resolve().then(async () => {
       try {
+        const target = provider.getTarget();
+        if (!target) {
+          return;
+        }
+
+        const metrics = computeCloudSyncMetrics(nextUpload.value);
+        const guardMessage = getCloudSyncGuardMessage(
+          nextUpload.value,
+          metrics,
+          lastSuccessfulUploadMetrics,
+          guardOptions?.maxCompressedBytes
+        );
+        if (guardMessage) {
+          notifyCloudSyncGuard(guardMessage);
+          return;
+        }
+
+        const compressed = compress(JSON.stringify(nextUpload.value)) ?? '';
+
         provider.setSyncStatus('syncing');
         const writeResult = await provider.writeItem(
           nextUpload.name,
@@ -120,6 +125,7 @@ export const createCloudPersistStorage = <S>(
         } else {
           lastSuccessfulUploadMetrics = metrics;
         }
+        lastGuardMessage = null;
         provider.setSyncStatus('synced');
       } catch (e: unknown) {
         provider.notifyError((e as Error).message);
@@ -132,7 +138,7 @@ export const createCloudPersistStorage = <S>(
           scheduleFlush();
         }
       }
-    })();
+    });
 
     await flushInFlight;
   };
@@ -142,6 +148,7 @@ export const createCloudPersistStorage = <S>(
     clearFlushTimer();
     flushInFlight = null;
     lastSuccessfulUploadMetrics = null;
+    lastGuardMessage = null;
   };
 
   const persistStorage: PersistStorage<S> = {
