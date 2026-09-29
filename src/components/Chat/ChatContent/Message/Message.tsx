@@ -1,3 +1,5 @@
+import { useSyncReview, acknowledgeSyncNode } from '@store/storage/google/conflicts';
+import { useTranslation } from 'react-i18next';
 import React, { useCallback } from 'react';
 import useStore from '@store/store';
 
@@ -71,6 +73,10 @@ const Message = React.memo(
       const chat = state.chats?.[state.currentChatIndex];
       return chat?.branchTree?.activePath?.[messageIndex] ?? String(messageIndex);
     });
+
+    const { t } = useTranslation('drive');
+    const chatId = useStore(state => state.chats?.[state.currentChatIndex]?.id ?? '');
+    const syncChanged = useSyncReview(state => !!resolvedNodeId && (state.nodes[chatId] ?? []).includes(resolvedNodeId));
 
     const isCollapsed = useStore((state) => {
       if (sticky || !resolvedNodeId) return false;
@@ -158,10 +164,13 @@ const Message = React.memo(
         }${isOmitted ? ' opacity-50' : ''}${
           isProtected ? ' ring-2 ring-inset ring-blue-400/30 dark:ring-blue-500/25' : ''
         }`}
+        data-sync-node-changed={syncChanged || undefined}
+        style={syncChanged ? { outline: '2px solid #f59e0b', outlineOffset: '-2px' } : undefined}
         onMouseEnter={handleMouseEnter}
         onMouseLeave={handleMouseLeave}
         onClick={handleClick}
       >
+        {syncChanged && <button type='button' className='relative z-10 px-7 pt-2 text-xs text-amber-700 dark:text-amber-300' onClick={event => { event.stopPropagation(); acknowledgeSyncNode(chatId, resolvedNodeId!); }}>{t('review.nodeDone')}</button>}
         {!sticky && (
           <CollapseToggle
             isCollapsed={isCollapsed}

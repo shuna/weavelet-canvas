@@ -39,7 +39,7 @@ export async function pauseGoogleSync() {
 export const isGoogleSyncUnlocked = (id?: string) => !!session && session.dataset === id;
 export function lockGoogleSync() {
   keyGeneration++;
-  useSyncReview.setState({ conflict: false, chats: [], folders: [] });
+  useSyncReview.setState({ conflict: false });
   suspended = true;
   lastQueuedState = undefined;
   session?.close(); session = undefined; pending = undefined;
