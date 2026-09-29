@@ -10,6 +10,7 @@ import { createLocalStoragePartializedState, createPersistedChatDataState } from
 import { disconnectGoogle, getGoogleAccessToken, usesGoogleAuthBackend } from '@api/google-auth';
 import { saveChatData } from '@store/storage/IndexedDbStorage';
 import compressedStorage from '@store/storage/CompressedStorage';
+import { lockGoogleSync } from '@store/storage/GoogleCloudStorage';
 
 export interface GoogleSyncButtonHandle {
   connect: () => void;
@@ -106,6 +107,7 @@ const GoogleSyncButton = forwardRef<
       showToast((error as Error).message, 'error');
       return;
     }
+    lockGoogleSync();
     setGoogleAccessToken(undefined);
     setSyncStatus('unauthenticated');
     setCloudSync(false);
@@ -115,7 +117,7 @@ const GoogleSyncButton = forwardRef<
       storage: createJSONStorage(() => compressedStorage),
       partialize: (state) => createLocalStoragePartializedState(state),
     });
-    useStore.persist.rehydrate();
+
     showToast(t('toast.stop'), 'success');
   };
 

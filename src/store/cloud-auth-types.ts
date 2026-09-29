@@ -40,7 +40,7 @@ export const isCloudSyncProvider = (value: unknown): value is CloudSyncProvider 
   value === 'google' || value === 'cloudkit';
 
 export const isSyncStatus = (value: unknown): value is SyncStatus =>
-  value === 'unauthenticated' || value === 'syncing' || value === 'synced';
+  value === 'unauthenticated' || value === 'syncing' || value === 'synced' || value === 'locked' || value === 'error';
 
 export const createCloudProviderSyncState = (
   partial?: Partial<CloudProviderSyncState>

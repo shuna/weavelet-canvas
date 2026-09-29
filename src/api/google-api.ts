@@ -71,7 +71,7 @@ export const getDriveFile = async <S>(
       },
     }
   );
-  if (!response.ok) throw new Error(`Error downloading file: ${response.status} ${response.statusText}`);
+  if (!response.ok) throw new Error(`Google Drive ${response.status}: ${response.statusText}`);
   const text = await response.text();
   // Auto-detect: if it starts with { it's uncompressed JSON (backward compat)
   const firstChar = text.charAt(0);
@@ -90,26 +90,25 @@ export const getDriveFileTyped = async (
 export const listDriveFiles = async (
   accessToken: string
 ): Promise<GoogleFileList> => {
-  const response = await googleFetch(
-    'https://www.googleapis.com/drive/v3/files?orderBy=modifiedTime desc&fields=nextPageToken,kind,incompleteSearch,files(id,kind,name,mimeType,modifiedTime,size)',
-    accessToken,
-    {
-      method: 'GET',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${accessToken}`,
-      },
-    }
-  );
-
-  if (!response.ok) {
-    throw new Error(
-      `Error listing google drive files: ${response.status} ${response.statusText}`
-    );
-  }
-
-  const result: GoogleFileList = await response.json();
-  return result;
+  const files: GoogleFileResource[] = [];
+  let pageToken: string | undefined;
+  do {
+    const params = new URLSearchParams({
+      q: "trashed = false and (mimeType = 'application/json' or appProperties has { key='weaveletSync' and value='1' } or (mimeType = 'application/octet-stream' and name contains '.json'))",
+      orderBy: 'modifiedTime desc', pageSize: '1000',
+      fields: 'nextPageToken,incompleteSearch,files(id,kind,name,mimeType,modifiedTime,size)',
+    });
+    if (pageToken) params.set('pageToken', pageToken);
+    const response = await googleFetch(`https://www.googleapis.com/drive/v3/files?${params}`, accessToken, {
+      headers: { Authorization: `Bearer ${accessToken}` },
+    });
+    if (!response.ok) throw new Error(`Error listing google drive files: ${response.status} ${response.statusText}`);
+    const page: GoogleFileList = await response.json();
+    if (page.incompleteSearch) throw new Error('Incomplete Google Drive listing.');
+    files.push(...page.files);
+    pageToken = page.nextPageToken;
+  } while (pageToken);
+  return { files, kind: 'drive#fileList', incompleteSearch: false };
 };
 
 export const updateDriveFile = async (
@@ -150,6 +149,7 @@ export const updateDriveFileName = async (
       method: 'PATCH',
       headers: {
         Authorization: `Bearer ${accessToken}`,
+        'Content-Type': 'application/json',
       },
       body: JSON.stringify({ name: fileName }),
     }

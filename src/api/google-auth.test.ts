@@ -20,6 +20,24 @@ describe('automatic Google token renewal', () => {
     await expect(googleFetch('https://www.googleapis.com/drive/v3/files', 'old', { method: 'PATCH' })).rejects.toThrow('connection changed');
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });
+  it('renews backend credentials for encrypted Drive uploads', async () => {
+    const { DriveTransport } = await import('../store/storage/google/transport');
+    fetchMock.mockResolvedValueOnce(session())
+      .mockResolvedValueOnce(new Response('', { status: 401 }))
+      .mockResolvedValueOnce(session('renewed'))
+      .mockResolvedValueOnce(new Response('ok'));
+    await new DriveTransport(() => 'expired').put('file', 'dataset', 'part', new Uint8Array([1]));
+    expect(fetchMock.mock.calls.filter(([url]) => url === '/api/google/token')).toHaveLength(2);
+    expect(fetchMock.mock.calls.at(-1)?.[1].headers.get('Authorization')).toBe('Bearer renewed');
+    expect(fetchMock.mock.calls[1][1].body).toBe(fetchMock.mock.calls[3][1].body);
+  });
+  it('stops encrypted uploads when the backend connection changed', async () => {
+    const { DriveTransport } = await import('../store/storage/google/transport');
+    fetchMock.mockResolvedValueOnce(session('other-token', 'another-connection'));
+    await expect(new DriveTransport(() => 'old').put('file', 'dataset', 'part', new Uint8Array([1])))
+      .rejects.toThrow('connection changed');
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
   it('does not turn an Access login page into a successful token response', async () => {
     const { getGoogleAccessToken } = await import('./google-auth');
     fetchMock.mockResolvedValueOnce(new Response('<html>Login</html>', { headers: { 'Content-Type': 'text/html' } }));

@@ -8,16 +8,19 @@ import useGStore from '@store/cloud-auth-store';
 import { showToast } from '@utils/showToast';
 
 import {
-  createDriveFile,
   deleteDriveFile,
   getDriveFileTyped,
   isGoogleAuthError,
-  updateDriveFile,
   updateDriveFileName,
   validateGoogleOath2AccessToken,
 } from '@api/google-api';
 import { getFiles, stateToFile } from '@utils/google-api';
-import createGoogleCloudStorage from '@store/storage/GoogleCloudStorage';
+import createGoogleCloudStorage, {
+  isGoogleSyncUnlocked, unlockGoogleSync, createEncryptedGoogleSync,
+  pullEncryptedGoogleSync, pushEncryptedGoogleSync, acceptGoogleSyncLocal,
+  pauseGoogleSync,
+} from '@store/storage/GoogleCloudStorage';
+import { SYNC_FOLDER_TYPE } from '@store/storage/google/transport';
 import {
   createPersistedChatDataState,
   createLocalStoragePartializedState,
@@ -51,6 +54,7 @@ type SyncOperation =
   | 'connect'
   | 'reconnect'
   | 'create'
+  | 'resume'
   | 'pull'
   | 'push'
   | 'disconnect';
@@ -98,7 +102,7 @@ const actionButtonClass =
   'btn btn-primary disabled:pointer-events-none disabled:cursor-not-allowed disabled:opacity-50 disabled:saturate-50';
 
 const resolveGoogleSyncErrorStatus = (error: unknown): SyncStatus =>
-  isGoogleAuthError(error) ? 'unauthenticated' : 'synced';
+  isGoogleAuthError(error) ? 'unauthenticated' : 'error';
 
 const normalizeRemotePersistedState = (
   snapshot: unknown
@@ -216,33 +220,24 @@ const GoogleSync = ({ clientId, openOnMount = false }: { clientId: string; openO
         const _files = await getFiles(_googleAccessToken);
         if (_files) {
           setFiles(_files);
-          if (_files.length === 0) {
-            // _files is empty, create new file in google drive and push local state
-            const googleFile = await createDriveFile(
-              stateToFile(),
-              _googleAccessToken
-            );
-            setFileId(googleFile.id);
-          } else {
-            if (_files.findIndex((f) => f.id === fileId) !== -1) {
-              setFileId(fileId);
-            } else {
-              setFileId(_files[0].id);
-            }
+          if (_files.length > 0 && !_files.some((f) => f.id === fileId)) {
+            setFileId(_files[0].id);
           }
-          if (syncTargetConfirmed) {
+          if (syncTargetConfirmed && isGoogleSyncUnlocked(fileId)) {
             enableCloudPersistence();
+            setSyncStatus('synced');
           } else {
             enableLocalPersistence();
+            setSyncStatus('locked');
           }
-          setSyncStatus('synced');
           // Open modal so user can choose Pull/Push direction (skip for silent refresh)
           if (options?.openModal) {
             setIsModalOpen(true);
           }
         }
       } catch (e: unknown) {
-        console.log(e);
+        setSyncStatus(resolveGoogleSyncErrorStatus(e));
+        showToast((e as Error).message, 'error');
       }
     } else {
       setSyncStatus('unauthenticated');
@@ -302,7 +297,7 @@ const GooglePopup = ({
   const setSyncTargetConfirmed = useGStore((state) => state.setSyncTargetConfirmed);
   const syncTargetConfirmed = useGStore((state) => state.syncTargetConfirmed);
   const currentFileId = useGStore((state) => state.fileId);
-  const localFileSize = formatFileSize(String(stateToFile().size), navigator.language);
+  const [localFileSize] = useState(() => formatFileSize(String(stateToFile().size), navigator.language));
 
   const syncButtonRef = useRef<GoogleSyncButtonHandle>(null);
   const refreshIntervalRef = useRef<number>();
@@ -335,6 +330,15 @@ const GooglePopup = ({
   const [selectedOperation, setSelectedOperation] =
     useState<SyncOperation>('connect');
   const [activity, setActivity] = useState<SyncActivity>(null);
+  const [passphrase, setPassphrase] = useState('');
+  const [confirmation, setConfirmation] = useState('');
+  const snapshot = () => ({ state: createPartializedState(useStore.getState()), version: STORE_VERSION });
+  const unlockSelected = async () => {
+    await pauseGoogleSync();
+    await unlockGoogleSync(_fileId, passphrase);
+    setPassphrase('');
+    setConfirmation('');
+  };
 
   const isBusy = syncStatus === 'syncing';
 
@@ -395,7 +399,12 @@ const GooglePopup = ({
     try {
       setBusyActivity('downloading');
       setSyncStatus('syncing');
-      const remoteStorageValue = await getDriveFileTyped(_fileId, googleAccessToken);
+      await pauseGoogleSync();
+      const encrypted = selectedFile?.mimeType === SYNC_FOLDER_TYPE;
+      if (encrypted) await unlockSelected();
+      const remoteStorageValue = encrypted
+        ? await pullEncryptedGoogleSync()
+        : await getDriveFileTyped(_fileId, googleAccessToken);
       const normalizedRemote = normalizeRemotePersistedState(remoteStorageValue);
       const remotePersistedState = migratePersistedState(
         structuredClone(normalizedRemote.state),
@@ -406,9 +415,19 @@ const GooglePopup = ({
         remotePersistedState
       );
 
+      // Keep the local format and persist chat data before publishing the hydrated state.
+      await saveChatData(createPersistedChatDataState({ ...useStore.getState(), ...hydratedState }));
+      useStore.persist.setOptions({
+        storage: createJSONStorage(() => compressedStorage),
+        partialize: (state) => createLocalStoragePartializedState(state),
+      });
       useStore.setState(hydratedState);
-      await saveChatData(createPersistedChatDataState(useStore.getState()));
-      activateCloudSyncTarget(_fileId);
+      if (encrypted) {
+        await acceptGoogleSyncLocal(snapshot());
+        activateCloudSyncTarget(_fileId);
+      } else {
+        setSyncTargetConfirmed(false);
+      }
 
       if (needsDataMigration()) {
         useStore.getState().setMigrationUiState({
@@ -431,8 +450,9 @@ const GooglePopup = ({
     try {
       setBusyActivity('syncing');
       setSyncStatus('syncing');
+      await unlockSelected();
+      await pushEncryptedGoogleSync(snapshot(), true);
       activateCloudSyncTarget(_fileId);
-      await updateDriveFile(stateToFile(), _fileId, googleAccessToken);
       const _files = await getFiles(googleAccessToken);
       if (_files) setFiles(_files);
       showToast(t('toast.push'), 'success');
@@ -448,7 +468,11 @@ const GooglePopup = ({
     try {
       setBusyActivity('syncing');
       setSyncStatus('syncing');
-      const createdFile = await createDriveFile(stateToFile(), googleAccessToken);
+      if (passphrase !== confirmation) throw new Error(t('encryption.mismatch') as string);
+      await pauseGoogleSync();
+      const createdFile = await createEncryptedGoogleSync(passphrase, snapshot());
+      setPassphrase('');
+      setConfirmation('');
       const _files = await getFiles(googleAccessToken);
       if (_files) setFiles(_files);
       activateCloudSyncTarget(createdFile.id);
@@ -485,7 +509,7 @@ const GooglePopup = ({
     ? ['connect']
     : needsReconnect
       ? ['reconnect', 'disconnect']
-      : ['create', 'pull', 'push', 'disconnect'];
+      : ['create', 'resume', 'pull', 'push', 'disconnect'];
 
   useEffect(() => {
     const fallbackOperation = availableOperations[0];
@@ -498,6 +522,19 @@ const GooglePopup = ({
     if (isBusy) return;
     if (selectedOperation === 'connect' || selectedOperation === 'reconnect') {
       startSyncing();
+      return;
+    }
+    if (selectedOperation === 'resume') {
+      try {
+        setSyncStatus('syncing');
+        await unlockSelected();
+        await pushEncryptedGoogleSync(snapshot());
+        activateCloudSyncTarget(_fileId);
+        setSyncStatus('synced');
+      } catch (error) {
+        setSyncStatus(resolveGoogleSyncErrorStatus(error));
+        showToast((error as Error).message, 'error');
+      }
       return;
     }
     if (selectedOperation === 'create') {
@@ -519,6 +556,7 @@ const GooglePopup = ({
     connect: 'actions.connectDescription',
     reconnect: 'actions.reconnectDescription',
     create: 'actions.createDescription',
+    resume: 'actions.resumeDescription',
     pull: 'actions.pullDescription',
     push: 'actions.pushDescription',
     disconnect: 'actions.disconnectDescription',
@@ -528,6 +566,7 @@ const GooglePopup = ({
     connect: 'operations.connect',
     reconnect: 'operations.reconnect',
     create: 'operations.create',
+    resume: 'operations.resume',
     pull: 'operations.pull',
     push: 'operations.push',
     disconnect: 'operations.disconnect',
@@ -565,7 +604,7 @@ const GooglePopup = ({
         <div className='flex min-h-[1.5rem] items-center gap-3 text-left'>
           {isBusy ? <SyncIcon status='syncing' /> : <div className='h-4 w-4' />}
           <span className='text-sm text-gray-600 dark:text-gray-300'>
-            {t(statusMessageKey)}
+            {t(syncStatus === 'locked' ? 'encryption.locked' : syncStatus === 'error' ? 'encryption.failed' : statusMessageKey)}
           </span>
         </div>
       }
@@ -577,8 +616,9 @@ const GooglePopup = ({
             onClick={runSelectedOperation}
             disabled={
               isBusy ||
-              ((selectedOperation === 'pull' || selectedOperation === 'push') &&
-                !_fileId)
+              ((selectedOperation === 'pull' || selectedOperation === 'push' || selectedOperation === 'resume') && !_fileId) ||
+              ((selectedOperation === 'push' || selectedOperation === 'resume') && selectedFile?.mimeType !== SYNC_FOLDER_TYPE) ||
+              (selectedOperation === 'create' && (passphrase.length < 12 || passphrase !== confirmation))
             }
           >
             {t(operationLabelKey[selectedOperation])}
@@ -642,6 +682,26 @@ const GooglePopup = ({
             {t(operationDescriptionKey[selectedOperation])}
           </div>
         </div>
+        {connected && ['create', 'resume', 'pull', 'push'].includes(selectedOperation) && (
+          <div className='w-full max-w-2xl text-left'>
+            <label className='block text-sm' htmlFor='google-sync-passphrase'>{t('encryption.passphrase')}</label>
+            <input id='google-sync-passphrase' type='password' autoComplete='off'
+              className='mt-1 w-full rounded border border-gray-300 bg-transparent px-3 py-2'
+              value={passphrase} onChange={(e) => setPassphrase(e.target.value)} disabled={isBusy} />
+            {selectedOperation === 'create' && (
+              <>
+                <label className='mt-3 block text-sm' htmlFor='google-sync-confirm'>{t('encryption.confirm')}</label>
+                <input id='google-sync-confirm' type='password' autoComplete='off'
+                  className='mt-1 w-full rounded border border-gray-300 bg-transparent px-3 py-2'
+                  value={confirmation} onChange={(e) => setConfirmation(e.target.value)} disabled={isBusy} />
+              </>
+            )}
+            <p className='mt-2 text-xs'>{t('encryption.help')}</p>
+            {selectedFile && selectedFile.mimeType !== SYNC_FOLDER_TYPE && selectedOperation !== 'create' && (
+              <p className='mt-2 text-xs'>{t('encryption.legacy')}</p>
+            )}
+          </div>
+        )}
         {connected && (
           <div className='flex w-full max-w-2xl flex-col gap-4 items-stretch text-left'>
             <div className='relative flex flex-col gap-3 md:grid md:grid-cols-2'>
@@ -690,7 +750,7 @@ const GooglePopup = ({
                         key={file.id}
                         file={file}
                         selected={!disableCloudSelection && _fileId === file.id}
-                        current={currentFileId === file.id}
+                        current={syncTargetConfirmed && currentFileId === file.id}
                         syncing={isBusy}
                         selectionDisabled={disableCloudSelection}
                         onSelect={_setFileId}
@@ -752,7 +812,7 @@ const FileSelector = ({
     try {
       onActivityChange('syncing');
       setSyncStatus('syncing');
-      const newFileName = _name.endsWith('.json') ? _name : `${_name}.json`;
+      const newFileName = file.mimeType === SYNC_FOLDER_TYPE || _name.endsWith('.json') ? _name : `${_name}.json`;
       await updateDriveFileName(newFileName, file.id, accessToken);
       const updatedFiles = await getFiles(accessToken);
       if (updatedFiles) onFilesChange(updatedFiles);
@@ -772,6 +832,7 @@ const FileSelector = ({
     try {
       onActivityChange('checking');
       setSyncStatus('syncing');
+      if (current) throw new Error(t('encryption.disconnectBeforeDelete') as string);
       await deleteDriveFile(file.id, accessToken);
       const updatedFiles = await getFiles(accessToken);
       if (updatedFiles) onFilesChange(updatedFiles);
@@ -886,6 +947,8 @@ const FileSelector = ({
 
 const SyncIcon = ({ status }: { status: SyncStatus }) => {
   const statusToIcon = {
+    locked: <span aria-label='Locked'>🔒</span>,
+    error: <span aria-label='Sync failed'>!</span>,
     unauthenticated: (
       <div className='bg-red-600/80 rounded-full w-4 h-4 text-xs flex justify-center items-center'>
         !
