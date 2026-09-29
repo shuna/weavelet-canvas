@@ -16,7 +16,7 @@
     "fileSelection": "Cloud file selection",
     "operation": "Action to run",
     "currentTarget": "Current sync target",
-    "syncingFileId": "Syncing file ID",
+    "syncingFolderId": "Sync folder ID",
     "updatedAt": "Updated",
     "fileId": "File ID",
     "fileName": "File name",

@@ -749,7 +749,7 @@ const GooglePopup = ({
                   {localFileSize === 'Unknown' ? t('labels.unknownSize') : localFileSize}
                 </div>
                 <div className='text-xs text-gray-600 dark:text-gray-400 break-all'>
-                  {t('labels.syncingFileId')}:{' '}
+                  {t('labels.syncingFolderId')}:{' '}
                   {syncTargetConfirmed && currentFileId ? currentFileId : '-'}
                 </div>
               </div>
