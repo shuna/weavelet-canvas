@@ -26,11 +26,11 @@ export async function withSyncProgress<T>(work: () => Promise<T>): Promise<T> {
     }
   }
 }
-export function syncPhase(phase: SyncPhase, totalFiles?: number, totalBytes?: number) {
+export function syncPhase(phase: SyncPhase, totalFiles?: number, totalBytes?: number, completedFiles = 0) {
   if (!useGoogleSyncProgress.getState().active) return;
-  useGoogleSyncProgress.setState({ phase, totalFiles, totalBytes, completedFiles: 0, completedBytes: 0 });
+  useGoogleSyncProgress.setState({ phase, totalFiles, totalBytes, completedFiles, completedBytes: 0 });
 }
-export function uploadedFile(bytes: number) {
+export function completedFile(bytes: number) {
   if (!useGoogleSyncProgress.getState().active) return;
   useGoogleSyncProgress.setState(s => ({ completedFiles: s.completedFiles + 1, completedBytes: s.completedBytes + bytes }));
 }

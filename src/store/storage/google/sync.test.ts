@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { IDBFactory } from 'fake-indexeddb';
 import { EncryptedDriveSync } from './sync';
+import { useGoogleSyncProgress, withSyncProgress } from './progress';
 import { DriveTransport, SYNC_FOLDER_TYPE, type DriveFile } from './transport';
 import { createKeyEnvelope, decrypt, encrypt, unlockKey, encode } from './crypto';
 import { toRecords, fromRecords, diffRecords } from './records';
@@ -245,6 +246,38 @@ it('splits a large initial upload into bounded encrypted parts without the old f
   expect(parts.every((p) => p.bytes.length <= 256 * 1024 + 28)).toBe(true);
   expect(await toRecords(await session.pull())).toEqual(await toRecords(large));
 }, 20_000);
+
+it('counts all required commit and part files before reporting download progress', async () => {
+  const drive = new FakeDrive();
+  const { session, file } = await EncryptedDriveSync.create(drive.transport(), PASSWORD, { partBytes: 16 * 1024 });
+  const state = snapshot();
+  const random = Array.from(crypto.getRandomValues(new Uint8Array(60_000)), n => String.fromCharCode(32 + n % 90)).join('');
+  state.state.chats![0].branchTree!.nodes.n1.contentHash = addContent(state.state.contentStore!, [{ type: 'text', text: random }]);
+  await session.push(state, true);
+  const parts = drive.writes.filter(w => w.kind === 'part').map(w => w.id);
+  expect(parts.length).toBeGreaterThan(1);
+  cache();
+  const receiver = new EncryptedDriveSync(file.id, drive.transport());
+  await receiver.unlock(PASSWORD);
+  const read = drive.read.bind(drive);
+  let release!: () => void;
+  let reached!: () => void;
+  const held = new Promise<void>(resolve => { release = resolve; });
+  const secondPart = new Promise<void>(resolve => { reached = resolve; });
+  let partReads = 0;
+  drive.read = async id => {
+    if (parts.includes(id) && ++partReads === 2) { reached(); await held; }
+    return read(id);
+  };
+  const pulling = withSyncProgress(() => receiver.pull());
+  await secondPart;
+  expect(useGoogleSyncProgress.getState()).toMatchObject({
+    active: true, phase: 'downloading', totalFiles: parts.length + 1, completedFiles: 2,
+  });
+  release();
+  await pulling;
+  expect(drive.reads.filter(id => id === drive.writes.find(w => w.kind === 'commit')!.id)).toHaveLength(1);
+});
 
 it.each([false, true])('detects genuinely concurrent publications (same field: %s) without losing either commit', async (conflict) => {
   const drive = new FakeDrive();

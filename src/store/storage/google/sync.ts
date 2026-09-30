@@ -1,13 +1,14 @@
 import { SyncConflictError, type Resolution } from './conflicts';
 import { mergeSyncRecords } from './merge';
 import { encodeAsync, decodeAsync, toRecordsAsync as toRecords, fromRecordsAsync as fromRecords, hashRecordsAsync as hashRecords } from './processing';
-import { syncPhase, uploadedFile } from './progress';
+import { syncPhase, completedFile } from './progress';
 import { createKeyEnvelope, unlockKey, encode, decode, encrypt, decrypt, digest, type KeyEnvelope } from './crypto';
 import { diffHashedRecords, applyChanges, type Records, type Snapshot, type Change, diffRecords } from './records';
 import { DriveTransport, SYNC_FOLDER_TYPE, type DriveFile } from './transport';
 import { syncCache, readSyncEntries, writeSyncCache, rememberedSyncKey } from './cache';
 
 interface Commit { version: 1; parents: string[]; changes: Change[]; resolutions?: Record<string, (string | null)[]> }
+interface CommitManifest { version: number; parts?: string[]; parents?: string[]; changes?: Change[]; resolutions?: Commit['resolutions'] }
 interface Pending {
   id: string;
   commit: Commit;
@@ -175,26 +176,32 @@ export class EncryptedDriveSync {
     return true;
   }
 
-  private async loadCommit(id: string): Promise<void> {
+  private async downloadManifest(id: string): Promise<CommitManifest> {
+    const encoded = await decrypt(this.requireKey(), await this.drive.read(id), this.context(id));
+    const manifest = await decodeAsync<CommitManifest>(encoded);
+    if (manifest.version !== 2 && (manifest.version !== 1 || !Array.isArray(manifest.parts) || !manifest.parts.length ||
+        manifest.parts.some(p => typeof p !== 'string'))) throw new Error('Invalid sync commit.');
+    return manifest;
+  }
+
+  private async loadCommit(id: string, manifests: Map<string, CommitManifest>): Promise<void> {
     if (this.cache.commits[id]) return;
     if (this.loading.has(id)) throw new Error('Cyclic sync history.');
     this.loading.add(id);
     try {
-    syncPhase('downloading');
-    const encoded = await decrypt(this.requireKey(), await this.drive.read(id), this.context(id));
-    const manifest = await decodeAsync<{ version: number; parts?: string[]; parents?: string[]; changes?: Change[]; resolutions?: Commit['resolutions'] }>(encoded);
+    const manifest = manifests.get(id) ?? await this.downloadManifest(id);
+    if (!manifests.has(id)) syncPhase('downloading'); // A parent absent from the listing makes the total unknown.
     let payload: Uint8Array;
     let commit: Commit;
     if (manifest.version === 2) {
       commit = { version: 1, parents: manifest.parents!, changes: manifest.changes!, ...(manifest.resolutions ? { resolutions: manifest.resolutions } : {}) };
       payload = await encodeAsync(commit);
     } else {
-      if (manifest.version !== 1 || !Array.isArray(manifest.parts) || !manifest.parts.length ||
-          manifest.parts.some(p => typeof p !== 'string')) throw new Error('Invalid sync commit.');
       const chunks = [];
       let size = 0;
-      for (const part of manifest.parts) {
+      for (const part of manifest.parts!) {
         const bytes = await decrypt(this.requireKey(), await this.drive.read(part), this.context(part));
+        completedFile(bytes.length);
         chunks.push(bytes); size += bytes.length;
       }
       payload = new Uint8Array(size);
@@ -206,25 +213,39 @@ export class EncryptedDriveSync {
         commit.parents.some(p => typeof p !== 'string' || p === id)) throw new Error('Invalid sync commit.');
     this.encodedCommits.set(id, payload);
     // Load parents even if Drive's changes feed has not exposed them yet.
-    for (const parent of commit.parents) await this.loadCommit(parent);
+    for (const parent of commit.parents) await this.loadCommit(parent, manifests);
     this.cache.commits[id] = commit;
     } finally { this.loading.delete(id); }
   }
 
   private async refresh(): Promise<void> {
     syncPhase('checking');
+    const ids = new Set<string>();
     if (!this.cache.token) {
       const token = await this.drive.startToken();
-      for (const id of await this.drive.commits(this.dataset)) await this.loadCommit(id);
+      for (const id of await this.drive.commits(this.dataset)) ids.add(id);
       this.cache.token = token;
     }
     const page = await this.drive.changes(this.cache.token!);
     for (const change of page.changes) {
-      if ((change.removed || change.file?.trashed) && (this.cache.commits[change.fileId] || change.fileId === this.dataset)) {
+      if ((change.removed || change.file?.trashed) && (this.cache.commits[change.fileId] || ids.has(change.fileId) || change.fileId === this.dataset)) {
         throw new Error('Sync history was deleted from Drive; sync stopped.');
       }
       if (change.file?.appProperties?.dataset === this.dataset && change.file.appProperties.kind === 'commit' &&
-          !change.removed && !change.file.trashed) await this.loadCommit(change.fileId);
+          !change.removed && !change.file.trashed) ids.add(change.fileId);
+    }
+    const missing = [...ids].filter(id => !this.cache.commits[id]);
+    if (missing.length) {
+      syncPhase('downloading');
+      const manifests = new Map<string, CommitManifest>();
+      let partCount = 0;
+      for (const id of missing) {
+        const manifest = await this.downloadManifest(id);
+        manifests.set(id, manifest);
+        if (manifest.version === 1) partCount += manifest.parts!.length;
+      }
+      syncPhase('downloading', missing.length + partCount, undefined, missing.length);
+      for (const id of missing) await this.loadCommit(id, manifests);
     }
     this.cache.token = page.token;
     // Cursor and downloaded commits are committed together. Failed reads never advance the durable cursor.
@@ -319,7 +340,7 @@ export class EncryptedDriveSync {
       const ack = await encrypt(this.requireKey(), encode(pending.id), this.context(`ack:${file.id}`));
       await writeSyncCache(this.dataset, undefined, [[`ack:${file.id}`, ack]]);
       file.sent = true;
-      uploadedFile(file.size);
+      completedFile(file.size);
     };
     const parts = remaining.filter(file => file.kind !== 'commit');
     const concurrency = this.options.concurrency ?? 2;

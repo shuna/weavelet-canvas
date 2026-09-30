@@ -191,8 +191,8 @@ const GoogleSync = ({ clientId, openOnMount = false, showEntry = true }: { clien
   const setSyncStatus = useGStore((state) => state.setSyncStatus);
   const syncTargetConfirmed = useGStore((state) => state.syncTargetConfirmed);
   const progress = useGoogleSyncProgress();
-  const progressPercent = progress.active && progress.totalBytes && progress.totalBytes > 0
-    ? Math.min(100, Math.floor(progress.completedBytes / progress.totalBytes * 100)) : undefined;
+  const transferFileTotal = progress.active && (progress.phase === 'uploading' || progress.phase === 'downloading')
+    ? progress.totalFiles : undefined;
 
   const enableCloudPersistence = () => {
     useStore.persist.setOptions({
@@ -280,10 +280,10 @@ const GoogleSync = ({ clientId, openOnMount = false, showEntry = true }: { clien
           aria-label={t(syncStatus === 'error' ? 'progress.failed' : 'progress.open') as string}>
           <SyncIcon status={syncStatus} />
           {t(syncStatus === 'error' ? 'progress.failed' : progress.active ? `progress.${progress.phase}` : 'progress.open')}
-          {syncStatus === 'syncing' && <progress
+          {syncStatus === 'syncing' && transferFileTotal !== undefined && transferFileTotal > 0 && <progress
             className='absolute inset-x-0 bottom-0 h-1 w-full accent-emerald-300'
-            max={100} value={progressPercent}
-            aria-label={t(progress.active ? `progress.${progress.phase}` : 'progress.open') as string} />}
+            max={transferFileTotal} value={progress.completedFiles}
+            aria-label={t(`progress.${progress.phase}`) as string} />}
         </button>, document.body
       )}
       <GooglePopup
