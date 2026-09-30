@@ -1,11 +1,10 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
-import { toRecords, type Snapshot } from './records';
+import type { Snapshot } from './records';
+import { toRecordsAsync as toRecords } from './processing';
+export { SyncConflictError } from './records';
 
 export type Resolution = 'merge' | 'local' | 'cloud';
-export class SyncConflictError extends Error {
-  constructor(readonly keys: string[]) { super('Concurrent edits conflict. Both copies are preserved.'); }
-}
 export const useSyncReview = create(persist(() => ({
   conflict: false,
   chats: [] as string[],

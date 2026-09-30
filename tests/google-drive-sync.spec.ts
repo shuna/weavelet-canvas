@@ -343,21 +343,67 @@ test('encrypted Drive creation, incremental autosave and unlock after browser re
 });
 
 
-test('large sync compression runs in a worker while the UI event loop remains responsive', async ({ page }) => {
+test('large sync processing preserves data while keeping the UI event loop responsive', async ({ page }, testInfo) => {
   await page.goto('/');
   const result = await page.evaluate(async () => {
-    const { encodeAsync } = await import('/src/store/storage/google/encodeAsync.ts');
+    const processing = await import('/src/store/storage/google/processing.ts');
+    const { toRecords, fromRecords, sameSnapshot } = await import('/src/store/storage/google/records.ts');
     const { decode } = await import('/src/store/storage/google/crypto.ts');
-    const value = { text: 'synthetic responsive sync '.repeat(200_000) };
-    let ticks = 0;
-    const timer = setInterval(() => ticks++, 10);
-    try {
-      const bytes = await encodeAsync(value);
-      return { ticks, matches: decode<{ text: string }>(bytes).text === value.text };
-    } finally { clearInterval(timer); }
+    // Identical to the pre-fix 60 MiB probe; no personal data or Drive traffic.
+    const snapshot = { version: 1, state: { chats: Array.from({ length: 30 }, (_, i) => ({
+      id: `bench-${i}`, title: `synthetic ${i}`, messages: [{ role: 'user', content: [
+        { type: 'text', text: '0123456789abcdefghijklmnopqrstuv'.repeat(65536) },
+      ] }],
+    })), contentStore: {} } };
+    const inputBytes = new TextEncoder().encode(JSON.stringify(snapshot)).length;
+    async function measure<T>(work: () => T | Promise<T>) {
+      let maxGap = 0, last = performance.now(), ticks = 0;
+      const timer = setInterval(() => {
+        const now = performance.now(); maxGap = Math.max(maxGap, now - last); last = now; ticks++;
+      }, 10);
+      try {
+        await new Promise(resolve => setTimeout(resolve, 30));
+        const start = performance.now();
+        const value = await work();
+        const ms = performance.now() - start;
+        await new Promise(resolve => setTimeout(resolve, 30));
+        return { value, stats: { ms: Math.round(ms), maxEventLoopGapMs: Math.round(maxGap), ticks } };
+      } finally { clearInterval(timer); }
+    }
+    const before = await measure(() => toRecords(snapshot));
+    const after = await measure(() => processing.toRecordsAsync(snapshot));
+    const encoded = await measure(() => processing.encodeAsync({ version: 1, parents: [],
+      changes: Object.entries(after.value).map(([key, value]) => ({ key, before: null, after: value })),
+    }));
+    const decodeBefore = await measure(() => decode(encoded.value));
+    const decodeAfter = await measure(() => processing.decodeAsync(encoded.value));
+    const restoreBefore = await measure(() => fromRecords(before.value));
+    const restoreAfter = await measure(() => processing.fromRecordsAsync(after.value));
+    const compareBefore = await measure(() => sameSnapshot([snapshot, snapshot]));
+    const compareAfter = await measure(() => processing.sameSnapshotAsync(snapshot, snapshot));
+    const edited = structuredClone(snapshot); edited.state.chats[0].title = 'edited';
+    const detectsEdit = !await processing.sameSnapshotAsync(snapshot, edited);
+    const rejectsInvalid = await processing.decodeAsync(new Uint8Array([0])).then(() => false, () => true);
+    const rejectsUnsafe = await processing.fromRecordsAsync({ '["__proto__"]': '{}' }).then(() => false, () => true);
+    return {
+      inputBytes, compressedBytes: encoded.value.length,
+      before: { records: before.stats, decode: decodeBefore.stats, restore: restoreBefore.stats, compare: compareBefore.stats },
+      after: { records: after.stats, encode: encoded.stats, decode: decodeAfter.stats, restore: restoreAfter.stats, compare: compareAfter.stats },
+      matches: JSON.stringify(before.value) === JSON.stringify(after.value) &&
+        JSON.stringify(decodeBefore.value) === JSON.stringify(decodeAfter.value) &&
+        JSON.stringify(restoreBefore.value) === JSON.stringify(restoreAfter.value) && compareAfter.value,
+      detectsEdit, rejectsInvalid, rejectsUnsafe,
+    };
   });
+  await testInfo.attach('sync-worker-measurements', { body: JSON.stringify(result, null, 2), contentType: 'application/json' });
+  console.info('SYNC_WORKER_BENCH', JSON.stringify(result));
   expect(result.matches).toBe(true);
-  expect(result.ticks).toBeGreaterThan(0);
+  expect(result.detectsEdit).toBe(true);
+  expect(result.rejectsInvalid).toBe(true);
+  expect(result.rejectsUnsafe).toBe(true);
+  expect(result.compressedBytes).toBeGreaterThan(0); // decode must not detach the cache's input buffer.
+  expect(result.after.records.maxEventLoopGapMs).toBeLessThan(result.before.records.maxEventLoopGapMs * 0.8);
+  expect(result.after.compare.maxEventLoopGapMs).toBeLessThan(result.before.compare.maxEventLoopGapMs * 0.8);
 });
 
 test('message conflicts share a chat and review highlights remain until acknowledged', async ({ page }, testInfo) => {

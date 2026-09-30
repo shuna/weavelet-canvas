@@ -1,9 +1,9 @@
 import { SyncConflictError, type Resolution } from './conflicts';
 import { mergeSyncRecords } from './merge';
-import { encodeAsync } from './encodeAsync';
+import { encodeAsync, decodeAsync, toRecordsAsync as toRecords, fromRecordsAsync as fromRecords, hashRecordsAsync as hashRecords } from './processing';
 import { syncPhase, uploadedFile } from './progress';
 import { createKeyEnvelope, unlockKey, encode, decode, encrypt, decrypt, digest, type KeyEnvelope } from './crypto';
-import { toRecords, fromRecords, hashRecords, diffHashedRecords, applyChanges, type Records, type Snapshot, type Change, diffRecords } from './records';
+import { diffHashedRecords, applyChanges, type Records, type Snapshot, type Change, diffRecords } from './records';
 import { DriveTransport, SYNC_FOLDER_TYPE, type DriveFile } from './transport';
 import { syncCache, readSyncEntries, writeSyncCache, rememberedSyncKey } from './cache';
 
@@ -58,7 +58,7 @@ export class EncryptedDriveSync {
     if (pending) commits[pending.id] = pending.commit;
     for (const [id, commit] of Object.entries(commits)) {
       if (this.persistedCommits.has(id)) continue;
-      entries.push([`commit:${id}`, await encrypt(this.requireKey(), this.encodedCommits.get(id) ?? encode(commit), this.context(`commit:${id}`))]);
+      entries.push([`commit:${id}`, await encrypt(this.requireKey(), this.encodedCommits.get(id) ?? await encodeAsync(commit), this.context(`commit:${id}`))]);
     }
     for (const file of pending?.files ?? []) {
       if (file.bytes) entries.push([`outbox:${file.id}`, file.bytes]);
@@ -69,7 +69,7 @@ export class EncryptedDriveSync {
       pending: pending && { id: pending.id, baseline: pending.baseline,
         files: pending.files.map(({ id, kind, size }) => ({ id, kind, size })) },
     };
-    const bytes = await encrypt(this.requireKey(), encode(stored), this.context('cache'));
+    const bytes = await encrypt(this.requireKey(), await encodeAsync(stored), this.context('cache'));
     // Publishing the outbox and its immutable ciphertext is one durable transaction.
     await writeSyncCache(this.dataset, bytes, entries, remove);
     for (const id of Object.keys(commits)) { this.persistedCommits.add(id); this.encodedCommits.delete(id); }
@@ -77,7 +77,7 @@ export class EncryptedDriveSync {
     this.cacheFingerprint = await digest(bytes);
   }
   private async loadCache(bytes: Uint8Array) {
-    const stored = decode<StoredCache | Cache>(await decrypt(this.requireKey(), bytes, this.context('cache')));
+    const stored = await decodeAsync<StoredCache | Cache>(await decrypt(this.requireKey(), bytes, this.context('cache')));
     if (stored.version === 1) {
       // Upgrade legacy outboxes without regenerating a single ID or ciphertext byte.
       this.cache = stored;
@@ -95,7 +95,7 @@ export class EncryptedDriveSync {
     const commits: Record<string, Commit> = {};
     for (let i = 0; i < ids.length; i++) {
       if (!values[i]) throw new Error('Missing local sync commit.');
-      commits[ids[i]] = decode<Commit>(await decrypt(this.requireKey(), values[i]!, this.context(`commit:${ids[i]}`)));
+      commits[ids[i]] = await decodeAsync<Commit>(await decrypt(this.requireKey(), values[i]!, this.context(`commit:${ids[i]}`)));
       this.persistedCommits.add(ids[i]);
     }
     this.cache = { version: 1, commits: Object.fromEntries(stored.commits.map(id => [id, commits[id]])), token: stored.token, baseline: stored.baseline,
@@ -182,12 +182,12 @@ export class EncryptedDriveSync {
     try {
     syncPhase('downloading');
     const encoded = await decrypt(this.requireKey(), await this.drive.read(id), this.context(id));
-    const manifest = decode<{ version: number; parts?: string[]; parents?: string[]; changes?: Change[]; resolutions?: Commit['resolutions'] }>(encoded);
+    const manifest = await decodeAsync<{ version: number; parts?: string[]; parents?: string[]; changes?: Change[]; resolutions?: Commit['resolutions'] }>(encoded);
     let payload: Uint8Array;
     let commit: Commit;
     if (manifest.version === 2) {
       commit = { version: 1, parents: manifest.parents!, changes: manifest.changes!, ...(manifest.resolutions ? { resolutions: manifest.resolutions } : {}) };
-      payload = encode(commit);
+      payload = await encodeAsync(commit);
     } else {
       if (manifest.version !== 1 || !Array.isArray(manifest.parts) || !manifest.parts.length ||
           manifest.parts.some(p => typeof p !== 'string')) throw new Error('Invalid sync commit.');
@@ -200,7 +200,7 @@ export class EncryptedDriveSync {
       payload = new Uint8Array(size);
       let offset = 0;
       for (const bytes of chunks) { payload.set(bytes, offset); offset += bytes.length; }
-      commit = decode<Commit>(payload);
+      commit = await decodeAsync<Commit>(payload);
     }
     if (commit.version !== 1 || !Array.isArray(commit.parents) || !Array.isArray(commit.changes) ||
         commit.parents.some(p => typeof p !== 'string' || p === id)) throw new Error('Invalid sync commit.');
@@ -339,8 +339,7 @@ export class EncryptedDriveSync {
   private async prepare(changes: Change[], baseline: Records, resolutions?: Commit['resolutions']) {
     syncPhase('encrypting');
     const commit: Commit = { version: 1, parents: this.heads(), changes, ...(resolutions ? { resolutions } : {}) };
-    const payload = changes.reduce((size, change) => size + (change.after?.length ?? 0), 0) > INLINE_BYTES
-      ? await encodeAsync(commit) : encode(commit);
+    const payload = await encodeAsync(commit);
     const inline = commit.parents.length > 0 && payload.length <= INLINE_BYTES;
     const partBytes = this.options.partBytes ?? PART_BYTES;
     const [id, ...parts] = await this.drive.ids(inline ? 1 : 1 + Math.ceil(payload.length / partBytes));
@@ -349,7 +348,7 @@ export class EncryptedDriveSync {
       const bytes = await encrypt(this.requireKey(), payload.slice(i * partBytes, (i + 1) * partBytes), this.context(parts[i]));
       files.push({ id: parts[i], kind: 'part', bytes, size: bytes.length, sent: false });
     }
-    const bytes = await encrypt(this.requireKey(), encode(inline ? { ...commit, version: 2 } : { version: 1, parts }), this.context(id));
+    const bytes = await encrypt(this.requireKey(), await encodeAsync(inline ? { ...commit, version: 2 } : { version: 1, parts }), this.context(id));
     files.push({ id, kind: 'commit', bytes, size: bytes.length, sent: false });
     this.encodedCommits.set(id, payload);
     this.cache.pending = { id, commit, baseline, files };

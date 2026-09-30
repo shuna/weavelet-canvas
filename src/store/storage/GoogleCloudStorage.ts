@@ -11,7 +11,8 @@ import compressedStorage from './CompressedStorage';
 import { saveChatData } from './IndexedDbStorage';
 import { EncryptedDriveSync } from './google/sync';
 import { DriveTransport } from './google/transport';
-import { toRecords, type Snapshot } from './google/records';
+import type { Snapshot } from './google/records';
+import { sameSnapshotAsync as sameSnapshot } from './google/processing';
 import { SyncConflictError, useSyncReview, markSyncChanges, type Resolution } from './google/conflicts';
 import { STORE_VERSION } from '@store/version';
 
@@ -68,10 +69,6 @@ export async function restoreGoogleSync(id: string): Promise<boolean> {
   finally { if (restoring?.promise === promise) restoring = undefined; }
 }
 const currentSnapshot = (): Snapshot => ({ state: createPartializedState(useStore.getState()), version: STORE_VERSION });
-const sameSnapshot = async (a: Snapshot, b: Snapshot) => {
-  const left = await toRecords(a), right = await toRecords(b);
-  return Object.keys(left).length === Object.keys(right).length && Object.keys(left).every(key => left[key] === right[key]);
-};
 async function applySyncedSnapshot(target: EncryptedDriveSync, before: Snapshot, received: Snapshot) {
   const observed = useStore.getState();
   if (target !== session || !await sameSnapshot(before, currentSnapshot()) || observed !== useStore.getState()) return false;
