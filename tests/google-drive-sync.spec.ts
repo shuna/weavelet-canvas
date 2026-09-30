@@ -193,6 +193,11 @@ test('encrypted Drive creation, incremental autosave and unlock after browser re
   const syncBanner = page.locator('[data-google-sync-banner]');
   await expect(syncBanner).toBeVisible();
   await expect(syncBanner.locator('progress')).toBeVisible();
+  expect(await syncBanner.locator('progress').evaluate((element: HTMLProgressElement) => [element.value, element.max]))
+    .toEqual(await page.evaluate(async () => {
+      const progress = (await import('/src/store/storage/google/progress.ts')).useGoogleSyncProgress.getState();
+      return [progress.completedFiles, progress.totalFiles];
+    }));
   expect(await syncBanner.evaluate((element) => element.getBoundingClientRect().top)).toBe(0);
   expect(await page.locator('#root').evaluate((element) => getComputedStyle(element).paddingTop)).toBe('32px');
   await page.getByRole('button', { name: '同期の進捗を表示', exact: true }).click();

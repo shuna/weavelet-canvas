@@ -118,7 +118,7 @@
     "sent": "Uploaded",
     "received": "Downloaded",
     "measuring": "Measuring",
-    "measurement": "Percentage applies to the current upload phase. Sizes and average transfer speeds update when each file completes. Phases with unknown totals have no percentage.",
+    "measurement": "Percentage is based on files completed in the current transfer. Average transfer speeds update when each file completes. Phases with unknown totals have no percentage.",
     "open": "Show sync progress",
     "failed": "View sync error"
   },

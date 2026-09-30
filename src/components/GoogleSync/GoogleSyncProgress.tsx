@@ -9,8 +9,8 @@ export default function GoogleSyncProgress() {
   const { t } = useTranslation('drive');
   const progress = useGoogleSyncProgress();
   if (!progress.active) return null;
-  const percent = progress.totalBytes && progress.totalBytes > 0
-    ? Math.min(100, Math.floor(progress.completedBytes / progress.totalBytes * 100)) : undefined;
+  const percent = progress.totalFiles && progress.totalFiles > 0
+    ? Math.min(100, Math.floor(progress.completedFiles / progress.totalFiles * 100)) : undefined;
   return (
     <div className='mt-2 space-y-1 text-xs' data-testid='google-sync-progress'>
       <div>{t(`progress.${progress.phase}`)}{percent !== undefined && ` — ${percent}%`}</div>
@@ -18,7 +18,7 @@ export default function GoogleSyncProgress() {
         aria-label={t(`progress.${progress.phase}`) as string} />
       {progress.totalFiles !== undefined && (
         <div>{t('progress.files', { done: progress.completedFiles, total: progress.totalFiles })}
-          {' · '}{size(progress.completedBytes)} / {size(progress.totalBytes ?? 0)}</div>
+          {progress.totalBytes !== undefined && <>{' · '}{size(progress.completedBytes)} / {size(progress.totalBytes)}</>}</div>
       )}
       {progress.downloadedFiles > 0 && <div>{t('progress.downloadedFiles', { count: progress.downloadedFiles })}</div>}
       <div>{t('progress.sent')}: {size(progress.uploadedBytes)}
