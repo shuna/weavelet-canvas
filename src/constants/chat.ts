@@ -37,6 +37,8 @@ export const _defaultChatConfig: ConfigInterface = {
   top_p: 1,
   frequency_penalty: 0,
   stream: true,
+  reasoning_effort: 'none',
+  reasoning_budget_tokens: 0,
 };
 
 export const generateDefaultChat = (
@@ -51,6 +53,8 @@ export const generateDefaultChat = (
     messages: [],
     config: normalizeConfigStream({
       ...state.defaultChatConfig,
+      reasoning_effort: state.defaultChatConfig.reasoning_effort ?? 'none',
+      reasoning_budget_tokens: state.defaultChatConfig.reasoning_budget_tokens ?? 0,
       systemPrompt,
     }),
     titleSet: false,
