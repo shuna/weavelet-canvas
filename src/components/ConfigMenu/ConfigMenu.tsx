@@ -44,7 +44,7 @@ import {
 } from './fields';
 
 const DEFAULT_REASONING_BUDGET = 0;
-const DEFAULT_REASONING_EFFORT: ReasoningEffort = 'medium';
+const DEFAULT_REASONING_EFFORT: ReasoningEffort = 'none';
 const DEFAULT_VERBOSITY: Verbosity = 'medium';
 
 const ConfigFieldCell = ({ children }: { children: React.ReactNode }) => (
@@ -238,7 +238,7 @@ const ConfigMenu = ({
       providerId: _providerId,
       modelSource: _modelSource,
       reasoning_effort: reasoningSupported ? effectiveReasoningEffort : undefined,
-      reasoning_budget_tokens: reasoningSupported && _reasoningBudget >= 1024 ? _reasoningBudget : undefined,
+      reasoning_budget_tokens: reasoningSupported ? _reasoningBudget : undefined,
       verbosity: verbositySupported ? effectiveVerbosity : undefined,
       force_reasoning: reasoningForced || undefined,
       systemPrompt: _systemPrompt || undefined,
@@ -839,6 +839,9 @@ export const ReasoningEffortSelector = ({
         { value: 'xhigh', label: t('reasoningEffort.xhigh') },
       ]
     : [
+        ...(!reasoningRequired
+          ? [{ value: 'none' as const, label: t('reasoningEffort.none') }]
+          : []),
         { value: 'low', label: t('reasoningEffort.low') },
         { value: 'medium', label: t('reasoningEffort.medium') },
         { value: 'high', label: t('reasoningEffort.high') },

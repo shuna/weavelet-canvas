@@ -10,6 +10,7 @@ export const getEffectiveReasoningEffort = (
   if (providerId === 'openrouter') {
     return reasoningRequired && effort === 'none' ? 'low' : effort;
   }
+  if (effort === 'none' && !reasoningRequired) return 'none';
   return effort === 'low' || effort === 'medium' || effort === 'high'
     ? effort
     : 'medium';

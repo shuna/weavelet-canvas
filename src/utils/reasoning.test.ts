@@ -16,6 +16,7 @@ describe('effective model settings', () => {
     const preferred = 'none' as const;
 
     expect(getEffectiveReasoningEffort(preferred, 'openrouter', false)).toBe('none');
+    expect(getEffectiveReasoningEffort(preferred, 'openai', false)).toBe('none');
     expect(getEffectiveReasoningEffort(preferred, 'openrouter', true)).toBe('low');
     expect(getEffectiveReasoningEffort(preferred, 'openrouter', false)).toBe('none');
   });
