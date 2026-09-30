@@ -358,8 +358,8 @@ const AxisProgressBadge = ({ state }: { state?: AxisProgressState }) => {
   if (!state || state === 'done') return null;
   if (state === 'generating') {
     return (
-      <span className='inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded bg-blue-100 dark:bg-blue-800/40 text-blue-600 dark:text-blue-400 animate-pulse'>
-        <svg className='w-2.5 h-2.5 animate-spin' viewBox='0 0 16 16' fill='none'>
+      <span className='inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded bg-blue-100 dark:bg-blue-800/40 text-blue-600 dark:text-blue-400'>
+        <svg className='w-2.5 h-2.5' viewBox='0 0 16 16' fill='none'>
           <circle cx='8' cy='8' r='6' stroke='currentColor' strokeWidth='2' strokeDasharray='28' strokeDashoffset='8' />
         </svg>
         {t('evaluation.axisGenerating')}

@@ -1,4 +1,4 @@
-import { useCallback, useSyncExternalStore } from 'react';
+import { useCallback, useRef, useSyncExternalStore } from 'react';
 import {
   peekBufferedReasoning,
   subscribeToStreaming,
@@ -16,20 +16,26 @@ const EMPTY_UNSUB = () => {};
  * re-renders on each chunk — the Zustand store is not involved.
  */
 export function useStreamingReasoning(
-  nodeId: string | undefined
+  nodeId: string | undefined,
+  visible = true,
+  expanded = true
 ): string | undefined {
+  const snapshot = useRef<{ nodeId: string | undefined; value: string | undefined }>({ nodeId, value: undefined });
+  if (snapshot.current.nodeId !== nodeId) snapshot.current = { nodeId, value: undefined };
   const subscribe = useCallback(
     (callback: () => void) => {
-      if (!nodeId) return EMPTY_UNSUB;
-      return subscribeToStreaming(nodeId, callback);
+      if (!nodeId || !visible) return EMPTY_UNSUB;
+      return subscribeToStreaming(nodeId, callback, 250, true, !expanded);
     },
-    [nodeId]
+    [nodeId, visible, expanded]
   );
 
   const getSnapshot = useCallback(() => {
     if (!nodeId) return undefined;
-    return peekBufferedReasoning(nodeId);
-  }, [nodeId]);
+    if (!visible || (!expanded && snapshot.current.value)) return snapshot.current.value;
+    snapshot.current.value = peekBufferedReasoning(nodeId);
+    return snapshot.current.value;
+  }, [nodeId, visible, expanded]);
 
   return useSyncExternalStore(subscribe, getSnapshot);
 }

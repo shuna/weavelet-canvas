@@ -74,16 +74,11 @@ export const setSessionCancelMeta = (
   sessionCancelMetas.set(sessionId, { ...existing, ...patch });
 };
 
-// Align chunk flushes with the display refresh rate (VSync).
-// Falls back to ~16ms setTimeout for environments without rAF (tests / SSR).
-const scheduleFlush: (cb: () => void) => number =
-  typeof requestAnimationFrame === 'function'
-    ? requestAnimationFrame
-    : (cb) => setTimeout(cb, 16) as unknown as number;
-const cancelFlush: (id: number) => void =
-  typeof cancelAnimationFrame === 'function'
-    ? cancelAnimationFrame
-    : (id) => clearTimeout(id);
+// Buffer incoming chunks independently of painting, including in hidden tabs.
+// Display notifications have separate 150ms / 250ms limits in streamingBuffer.
+const scheduleFlush = (cb: () => void): number =>
+  setTimeout(cb, 16) as unknown as number;
+const cancelFlush = (id: number): void => clearTimeout(id);
 const SYSTEM_MESSAGE_UNSUPPORTED_PATTERNS = [
   /does not support.*system/i,
   /system.*not supported/i,

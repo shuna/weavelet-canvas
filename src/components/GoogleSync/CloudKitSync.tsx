@@ -1,3 +1,4 @@
+import SyncDots from './SyncDots';
 import React, { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { createJSONStorage } from 'zustand/middleware';
@@ -44,9 +45,7 @@ const SyncIcon = ({ status }: { status: SyncStatus }) => {
   }
   if (status === 'syncing') {
     return (
-      <div className='rounded-full bg-gray-600/80 p-1 animate-spin'>
-        <RefreshIcon className='h-2 w-2' />
-      </div>
+      <SyncDots label='同期中' />
     );
   }
   return (

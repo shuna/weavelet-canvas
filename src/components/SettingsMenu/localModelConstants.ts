@@ -7,9 +7,9 @@ import type { DeviceTier, ModelFitLabel } from '@src/local-llm/device';
 // Color maps
 export const statusColors: Record<LocalModelStatus, string> = {
   idle: 'bg-gray-300 dark:bg-gray-600',
-  loading: 'bg-yellow-400 animate-pulse',
+  loading: 'bg-yellow-400',
   ready: 'bg-green-500',
-  busy: 'bg-blue-500 animate-pulse',
+  busy: 'bg-blue-500',
   error: 'bg-red-500',
   unloaded: 'bg-gray-300 dark:bg-gray-600',
 };

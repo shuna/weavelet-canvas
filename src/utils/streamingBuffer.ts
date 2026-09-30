@@ -127,6 +127,7 @@ export const finalizeStreamingBuffer = (nodeId: string): ContentInterface[] => {
     : content;
 
   streamingBuffers.delete(nodeId);
+  clearStreamingNotification(nodeId);
   streamingListeners.delete(nodeId);
   nodeToChatId.delete(nodeId);
   return result;
@@ -140,6 +141,7 @@ export const getStreamingChatIds = (): Set<string> => new Set(nodeToChatId.value
 export const isBufferingNode = (nodeId: string): boolean => streamingBuffers.has(nodeId);
 
 export const clearStreamingBuffersForTest = (): void => {
+  for (const nodeId of streamingListeners.keys()) clearStreamingNotification(nodeId);
   streamingBuffers.clear();
   streamingListeners.clear();
   nodeToChatId.clear();
@@ -187,25 +189,70 @@ export const stopSnapshotFlush = (): void => {
 // Streaming subscription (useSyncExternalStore support)
 // ---------------------------------------------------------------------------
 
-const streamingListeners = new Map<string, Set<() => void>>();
+interface StreamingListener {
+  notify: () => void;
+  clear: () => void;
+}
+const streamingListeners = new Map<string, Set<StreamingListener>>();
+
+const clearStreamingNotification = (nodeId: string): void => {
+  streamingListeners.get(nodeId)?.forEach(listener => listener.clear());
+};
 
 export const notifyStreamingUpdate = (nodeId: string): void => {
-  streamingListeners.get(nodeId)?.forEach((cb) => cb());
+  streamingListeners.get(nodeId)?.forEach(listener => listener.notify());
 };
 
 export const subscribeToStreaming = (
   nodeId: string,
-  callback: () => void
+  callback: () => void,
+  interval = 150,
+  reasoning = false,
+  firstOnly = false
 ): (() => void) => {
   let listeners = streamingListeners.get(nodeId);
   if (!listeners) {
     listeners = new Set();
     streamingListeners.set(nodeId, listeners);
   }
-  listeners.add(callback);
+  const read = () => {
+    if (reasoning) return peekBufferedReasoning(nodeId);
+    const first = peekBufferedContent(nodeId)?.[0];
+    return first && isTextContent(first) ? first.text : undefined;
+  };
+  let published = read();
+  let lastPublished = -Infinity;
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const clear = () => { clearTimeout(timer); timer = undefined; };
+  const publish = () => {
+    clear();
+    if (typeof document !== 'undefined' && document.hidden) return;
+    const next = read();
+    if (next === published) return;
+    published = next;
+    lastPublished = Date.now();
+    callback();
+  };
+  const notify = () => {
+    if ((firstOnly && published) || timer || read() === published ||
+        (typeof document !== 'undefined' && document.hidden)) return;
+    const elapsed = Date.now() - lastPublished;
+    if (elapsed >= interval) publish();
+    else timer = setTimeout(publish, interval - elapsed);
+  };
+  const listener = { notify, clear };
+  listeners.add(listener);
+  const onVisibilityChange = () => {
+    clear();
+    lastPublished = -Infinity;
+    if (!document.hidden) notify();
+  };
+  if (typeof document !== 'undefined') document.addEventListener('visibilitychange', onVisibilityChange);
   return () => {
-    listeners!.delete(callback);
-    if (listeners!.size === 0) streamingListeners.delete(nodeId);
+    clear();
+    if (typeof document !== 'undefined') document.removeEventListener('visibilitychange', onVisibilityChange);
+    listeners!.delete(listener);
+    if (!listeners!.size) streamingListeners.delete(nodeId);
   };
 };
 

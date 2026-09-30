@@ -1,15 +1,22 @@
 import React, { memo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { useStreamingReasoning } from '@hooks/useStreamingReasoning';
 
 const CollapsibleReasoning = memo(function CollapsibleReasoning({
   reasoning,
   isGenerating,
+  nodeId,
+  visible,
 }: {
   reasoning: string;
   isGenerating: boolean;
+  nodeId?: string;
+  visible: boolean;
 }) {
   const [isOpen, setIsOpen] = useState(false);
   const { t } = useTranslation('model');
+  const streamingReasoning = useStreamingReasoning(isGenerating ? nodeId : undefined, visible && isOpen);
+  const displayedReasoning = streamingReasoning ?? reasoning;
 
   if (!reasoning) return null;
 
@@ -32,14 +39,14 @@ const CollapsibleReasoning = memo(function CollapsibleReasoning({
         <span>
           {t('reasoning.label', 'Thinking')}
           {isGenerating && (
-            <span className='ml-1 animate-pulse'>...</span>
+            <span className='ml-1'>...</span>
           )}
         </span>
       </button>
       {isOpen && (
         <div className='mt-1.5 pl-4 border-l-2 border-gray-200 dark:border-gray-700'>
           <pre className='text-xs text-gray-600 dark:text-gray-400 whitespace-pre-wrap break-words font-sans leading-relaxed max-h-96 overflow-y-auto'>
-            {reasoning}
+            {displayedReasoning}
           </pre>
         </div>
       )}
