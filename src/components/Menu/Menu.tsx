@@ -1,5 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import useStore from '@store/store';
+import { useTranslation } from 'react-i18next';
+import { useSyncReview, acknowledgeAllSyncChanges } from '@store/storage/google/conflicts';
 
 import NewChat from './NewChat';
 import NewFolder from './NewFolder';
@@ -13,6 +15,11 @@ import MenuIcon from '@icon/MenuIcon';
 import useSwipeGesture from '@hooks/useSwipeGesture';
 
 const Menu = () => {
+  const { t } = useTranslation('drive');
+  const hasSyncChanges = useSyncReview(state =>
+    state.chats.length > 0 || state.folders.length > 0 ||
+    Object.values(state.nodes).some(nodes => nodes.length > 0)
+  );
   const hideSideMenu = useStore((state) => state.hideSideMenu);
   const setHideSideMenu = useStore((state) => state.setHideSideMenu);
   const menuWidth = useStore((state) => state.menuWidth);
@@ -95,6 +102,15 @@ const Menu = () => {
                 <NewFolder />
               </div>
               <ChatSearch filter={filter} setFilter={setFilter} onSearchFocusChange={setSearchFocused} externalQuery={externalQuery} />
+              {hasSyncChanges && (
+                <button
+                  type='button'
+                  className='shrink-0 rounded-md px-2 py-2 text-left text-xs text-amber-700 hover:bg-gray-200 dark:text-amber-300 dark:hover:bg-gray-800'
+                  onClick={acknowledgeAllSyncChanges}
+                >
+                  {t('review.allDone')}
+                </button>
+              )}
               <ChatHistoryList filter={filter} setFilter={setFilter} searchFocused={searchFocused} onHistorySelect={(q) => {
                 setExternalQuery(q);
                 // Reset to allow re-selection of the same query
