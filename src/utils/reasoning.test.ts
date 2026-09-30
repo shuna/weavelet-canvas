@@ -66,10 +66,15 @@ describe('reasoning model helpers', () => {
   });
 
   it('detects OpenRouter Claude verbosity support and max verbosity support', () => {
-    expect(isOpenRouterClaudeVerbosityModel('anthropic/claude-sonnet-4', 'openrouter')).toBe(true);
-    expect(isOpenRouterClaudeVerbosityModel('anthropic/claude-sonnet-4', 'openai')).toBe(false);
+    expect(isOpenRouterClaudeVerbosityModel('anthropic/claude-opus-4.5', 'openrouter')).toBe(true);
+    expect(isOpenRouterClaudeVerbosityModel('anthropic/claude-sonnet-4.6', 'openrouter')).toBe(true);
+    expect(isOpenRouterClaudeVerbosityModel('anthropic/claude-sonnet-4', 'openrouter')).toBe(false);
+    expect(isOpenRouterClaudeVerbosityModel('anthropic/claude-sonnet-4.6', 'openai')).toBe(false);
     expect(supportsMaxVerbosity('anthropic/claude-opus-4.6', 'openrouter')).toBe(true);
+    expect(supportsMaxVerbosity('anthropic/claude-sonnet-4.6', 'openrouter')).toBe(true);
+    expect(supportsMaxVerbosity('anthropic/claude-haiku-4.6', 'openrouter')).toBe(false);
     expect(supportsMaxVerbosity('anthropic/claude-sonnet-4', 'openrouter')).toBe(false);
+    expect(supportsMaxVerbosity('anthropic/claude-opus-4.5', 'openrouter')).toBe(false);
   });
 
   it('detects the OpenRouter Fusion alias only on OpenRouter', () => {

@@ -11,6 +11,9 @@ import {
 import {
   isOpenRouterAdaptiveReasoningModel,
   isOpenRouterClaudeEffortModel,
+  getEffectiveVerbosity,
+  isOpenRouterClaudeVerbosityModel,
+  supportsMaxVerbosity,
 } from '@utils/reasoning';
 
 /** Effort values only supported by OpenRouter's unified reasoning API. */
@@ -53,6 +56,7 @@ const buildRequestBody = (
     reasoning_budget_tokens,
     verbosity,
     force_reasoning,
+    modelSettings,
     ...apiConfig
   } = config;
 
@@ -109,8 +113,8 @@ const buildRequestBody = (
     }
   }
 
-  if (providerId === 'openrouter' && verbosity) {
-    body.verbosity = verbosity;
+  if (isOpenRouterClaudeVerbosityModel(config.model, providerId) && verbosity) {
+    body.verbosity = getEffectiveVerbosity(verbosity, supportsMaxVerbosity(config.model, providerId));
   }
 
   return body;

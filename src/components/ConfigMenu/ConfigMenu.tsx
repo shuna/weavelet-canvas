@@ -18,6 +18,7 @@ import { _defaultChatConfig } from '@constants/chat';
 import { SYSTEM_PROMPT_PRESETS } from '@constants/systemPromptPresets';
 import useStore from '@store/store';
 import { resolveChatModel } from '@utils/chatModelResolution';
+import { switchConfigModel } from '@utils/modelSettings';
 import { CURATED_MODELS } from '@src/local-llm/catalog';
 import { localModelRuntime } from '@src/local-llm/runtime';
 import { OpfsFileProvider } from '@src/local-llm/storage';
@@ -199,6 +200,7 @@ const ConfigMenu = ({
   const [_verbosity, _setVerbosity] = useState<Verbosity | undefined>(config.verbosity ?? DEFAULT_VERBOSITY);
   const [_forceReasoning, _setForceReasoning] = useState<boolean>(config.force_reasoning ?? false);
   const [_systemPrompt, _setSystemPrompt] = useState<string>(config.systemPrompt ?? '');
+  const [_modelSettings, _setModelSettings] = useState(config.modelSettings ?? {});
   const { t } = useTranslation('model');
   const isStreamSupported = isModelStreamSupported(_model, _providerId, _modelSource);
   const reasoningDetected = useModelSupportsReasoning(_model, _providerId);
@@ -242,8 +244,9 @@ const ConfigMenu = ({
       verbosity: verbositySupported ? effectiveVerbosity : undefined,
       force_reasoning: reasoningForced || undefined,
       systemPrompt: _systemPrompt || undefined,
+      modelSettings: _modelSettings,
     }));
-  }, [_maxToken, _model, _providerId, _modelSource, _temperature, _presencePenalty, _topP, _frequencyPenalty, _stream, _reasoningEffort, _reasoningBudget, _verbosity, _systemPrompt, reasoningSupported, reasoningForced, reasoningRequired, verbositySupported, maxVerbositySupported]);
+  }, [_maxToken, _model, _providerId, _modelSource, _temperature, _presencePenalty, _topP, _frequencyPenalty, _stream, _reasoningEffort, _reasoningBudget, _verbosity, _systemPrompt, _modelSettings, reasoningSupported, reasoningForced, reasoningRequired, verbositySupported, maxVerbositySupported]);
 
   useEffect(() => {
     if (_imageDetail !== imageDetail) setImageDetail(_imageDetail);
@@ -264,9 +267,29 @@ const ConfigMenu = ({
             _providerId={_providerId}
             _modelSource={_modelSource}
             _onModelChange={(modelId, providerId, modelSource) => {
-              _setModel(modelId);
-              _setProviderId(providerId);
-              _setModelSource(modelSource);
+              const next = switchConfigModel({
+                model: _model, providerId: _providerId, modelSource: _modelSource,
+                max_tokens: _maxToken, temperature: _temperature,
+                presence_penalty: _presencePenalty, top_p: _topP,
+                frequency_penalty: _frequencyPenalty, stream: _stream,
+                reasoning_effort: _reasoningEffort, reasoning_budget_tokens: _reasoningBudget,
+                verbosity: _verbosity, force_reasoning: _forceReasoning,
+                modelSettings: _modelSettings,
+              }, { model: modelId, providerId, modelSource });
+              _setModel(next.model);
+              _setProviderId(next.providerId);
+              _setModelSource(next.modelSource);
+              _setMaxToken(next.max_tokens);
+              _setTemperature(next.temperature);
+              _setPresencePenalty(next.presence_penalty);
+              _setTopP(next.top_p);
+              _setFrequencyPenalty(next.frequency_penalty);
+              _setStream(next.stream !== false);
+              _setReasoningEffort(next.reasoning_effort ?? DEFAULT_REASONING_EFFORT);
+              _setReasoningBudget(next.reasoning_budget_tokens ?? DEFAULT_REASONING_BUDGET);
+              _setVerbosity(next.verbosity ?? DEFAULT_VERBOSITY);
+              _setForceReasoning(next.force_reasoning ?? false);
+              _setModelSettings(next.modelSettings ?? {});
             }}
             _label={t('model')}
             className=''

@@ -171,6 +171,19 @@ export interface LocalStorageInterfaceV10ToV11
 export type ReasoningEffort = 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh';
 export type Verbosity = 'low' | 'medium' | 'high' | 'max';
 
+export interface ModelSettings {
+  max_tokens: number;
+  temperature: number;
+  presence_penalty: number;
+  top_p: number;
+  frequency_penalty: number;
+  stream?: boolean;
+  reasoning_effort?: ReasoningEffort;
+  reasoning_budget_tokens?: number;
+  verbosity?: Verbosity;
+  force_reasoning?: boolean;
+}
+
 export interface ConfigInterface {
   model: ModelOptions;
   max_tokens: number;
@@ -189,6 +202,8 @@ export interface ConfigInterface {
   systemPrompt?: string;
   /** Whether this chat uses a local or remote model. undefined = remote. */
   modelSource?: 'remote' | 'local';
+  /** Generation settings saved per model and provider in this chat. */
+  modelSettings?: Record<string, ModelSettings>;
 }
 
 export interface ChatHistoryInterface {

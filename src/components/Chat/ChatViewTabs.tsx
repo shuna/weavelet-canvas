@@ -28,6 +28,7 @@ import type {
 } from '@store/openrouter-stats-slice';
 import { CURATED_MODELS } from '@src/local-llm/catalog';
 import { localModelRuntime } from '@src/local-llm/runtime';
+import { switchConfigModel } from '@utils/modelSettings';
 import { OpfsFileProvider } from '@src/local-llm/storage';
 
 const ChatViewTabs = ({
@@ -159,12 +160,10 @@ const ChatViewTabs = ({
     const chats = useStore.getState().chats;
     if (!chats) return;
     const updatedChats = cloneChatAtIndex(chats, currentChatIndex);
-    updatedChats[currentChatIndex].config = normalizeConfigStream({
-      ...updatedChats[currentChatIndex].config,
-      model: modelId as ModelOptions,
-      providerId,
-      modelSource,
-    });
+    updatedChats[currentChatIndex].config = normalizeConfigStream(switchConfigModel(
+      updatedChats[currentChatIndex].config,
+      { model: modelId as ModelOptions, providerId, modelSource }
+    ));
     setChats(updatedChats);
     setIsModelDropdownOpen(false);
 
