@@ -1,5 +1,5 @@
 import { SyncConflictError, useSyncReview, type Resolution } from '@store/storage/google/conflicts';
-import { withSyncProgress, syncPhase } from '@store/storage/google/progress';
+import { withSyncProgress, syncPhase, useGoogleSyncProgress } from '@store/storage/google/progress';
 import GoogleSyncProgress from './GoogleSyncProgress';
 import { createPortal } from 'react-dom';
 import React, { useEffect, useRef, useState } from 'react';
@@ -190,6 +190,9 @@ const GoogleSync = ({ clientId, openOnMount = false, showEntry = true }: { clien
   const cloudSync = useGStore((state) => state.cloudSync);
   const setSyncStatus = useGStore((state) => state.setSyncStatus);
   const syncTargetConfirmed = useGStore((state) => state.syncTargetConfirmed);
+  const progress = useGoogleSyncProgress();
+  const progressPercent = progress.active && progress.totalBytes && progress.totalBytes > 0
+    ? Math.min(100, Math.floor(progress.completedBytes / progress.totalBytes * 100)) : undefined;
 
   const enableCloudPersistence = () => {
     useStore.persist.setOptions({
@@ -272,9 +275,15 @@ const GoogleSync = ({ clientId, openOnMount = false, showEntry = true }: { clien
       </div>}
       {!isModalOpen && (syncStatus === 'syncing' || syncStatus === 'error') && createPortal(
         <button type='button' onClick={() => setIsModalOpen(true)}
-          className='fixed bottom-4 right-4 z-[60] flex items-center gap-2 rounded-lg bg-emerald-700 px-4 py-3 text-sm text-white shadow-lg'
-          aria-label={t('progress.open') as string}>
-          <SyncIcon status={syncStatus} />{t(syncStatus === 'error' ? 'progress.failed' : 'progress.open')}
+          data-google-sync-banner
+          className={`fixed inset-x-0 top-0 z-[60] flex h-8 items-center justify-center gap-2 px-3 pb-1 text-xs text-white shadow-sm ${syncStatus === 'error' ? 'bg-red-700' : 'bg-emerald-700'}`}
+          aria-label={t(syncStatus === 'error' ? 'progress.failed' : 'progress.open') as string}>
+          <SyncIcon status={syncStatus} />
+          {t(syncStatus === 'error' ? 'progress.failed' : progress.active ? `progress.${progress.phase}` : 'progress.open')}
+          {syncStatus === 'syncing' && <progress
+            className='absolute inset-x-0 bottom-0 h-1 w-full accent-emerald-300'
+            max={100} value={progressPercent}
+            aria-label={t(progress.active ? `progress.${progress.phase}` : 'progress.open') as string} />}
         </button>, document.body
       )}
       <GooglePopup
