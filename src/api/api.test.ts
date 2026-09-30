@@ -253,7 +253,7 @@ describe('prepareStreamRequest reasoning payloads', () => {
       messages,
       {
         ...baseConfig,
-        model: 'anthropic/claude-sonnet-4',
+        model: 'anthropic/claude-opus-4.5',
         providerId: 'openrouter',
         verbosity: 'high',
       }
@@ -262,5 +262,22 @@ describe('prepareStreamRequest reasoning payloads', () => {
     expect(body).toMatchObject({
       verbosity: 'high',
     });
+  });
+
+  it('clamps unsupported max verbosity and keeps saved model settings out of the request', () => {
+    const { body } = prepareStreamRequest(
+      'https://openrouter.ai/api/v1/chat/completions',
+      messages,
+      {
+        ...baseConfig,
+        model: 'anthropic/claude-opus-4.5',
+        providerId: 'openrouter',
+        verbosity: 'max',
+        modelSettings: { other: { ...baseConfig, verbosity: 'max' } },
+      }
+    );
+
+    expect(body).toMatchObject({ verbosity: 'medium' });
+    expect(body).not.toHaveProperty('modelSettings');
   });
 });

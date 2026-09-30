@@ -5,6 +5,7 @@ import useStore from '@store/store';
 import ConfigMenu from '@components/ConfigMenu';
 import { ChatInterface, ConfigInterface, ImageDetail } from '@type/chat';
 import { _defaultChatConfig } from '@constants/chat';
+import { switchConfigModel } from '@utils/modelSettings';
 import { ModelOptions } from '@type/chat';
 import type { ProviderId } from '@type/provider';
 import { cloneChatAtIndex } from '@utils/chatShallowClone';
@@ -64,12 +65,10 @@ const ChatTitle = React.memo(() => {
     const chats = useStore.getState().chats;
     if (!chats) return;
     const updatedChats = cloneChatAtIndex(chats, currentChatIndex);
-    updatedChats[currentChatIndex].config = normalizeConfigStream({
-      ...updatedChats[currentChatIndex].config,
-      model: modelId as ModelOptions,
-      providerId,
-      modelSource,
-    });
+    updatedChats[currentChatIndex].config = normalizeConfigStream(switchConfigModel(
+      updatedChats[currentChatIndex].config,
+      { model: modelId as ModelOptions, providerId, modelSource }
+    ));
     setChats(updatedChats);
     setIsModelDropdownOpen(false);
 

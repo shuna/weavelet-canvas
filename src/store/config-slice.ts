@@ -17,7 +17,15 @@ const isSameConfig = (
   left.presence_penalty === right.presence_penalty &&
   left.top_p === right.top_p &&
   left.frequency_penalty === right.frequency_penalty &&
-  (left.stream !== false) === (right.stream !== false);
+  (left.stream !== false) === (right.stream !== false) &&
+  left.providerId === right.providerId &&
+  left.modelSource === right.modelSource &&
+  left.reasoning_effort === right.reasoning_effort &&
+  left.reasoning_budget_tokens === right.reasoning_budget_tokens &&
+  left.verbosity === right.verbosity &&
+  left.force_reasoning === right.force_reasoning &&
+  left.systemPrompt === right.systemPrompt &&
+  left.modelSettings === right.modelSettings;
 
 export interface ConfigSlice {
   openConfig: boolean;
