@@ -1,7 +1,5 @@
-import React from 'react';
 import useStore from '@store/store';
 import { buildPathToLeaf, getSiblingsOf } from '@utils/branchUtils';
-import { isSplitView } from '@type/chat';
 
 const BranchSwitcher = ({
   chatIndex,
@@ -12,9 +10,7 @@ const BranchSwitcher = ({
 }) => {
   const switchBranchAtNode = useStore((state) => state.switchBranchAtNode);
   const pushNavigationEntry = useStore((state) => state.pushNavigationEntry);
-  const setBranchEditorFocusNodeId = useStore((state) => state.setBranchEditorFocusNodeId);
   const chatActiveView = useStore((state) => state.chatActiveView);
-  const navigateToBranchEditor = useStore((state) => state.navigateToBranchEditor);
   const chat = useStore((state) => state.chats?.[chatIndex]);
   const branchTree = chat?.branchTree;
 
@@ -68,28 +64,20 @@ const BranchSwitcher = ({
           />
         </svg>
       </button>
-      <button
-        className='tabular-nums hover:text-blue-500 dark:hover:text-blue-400 cursor-pointer'
-        onClick={() => {
-          if (chat) {
-            const currentPath = chat.branchTree?.activePath ?? [];
-            pushNavigationEntry({
-              chatId: chat.id,
-              activePath: [...currentPath],
-              focusedNodeId: nodeId,
-              viewContext: isSplitView(chatActiveView) ? chatActiveView : 'branch-editor',
-              source: 'branch-editor',
-            });
-          }
-          setBranchEditorFocusNodeId(nodeId);
-          if (!isSplitView(chatActiveView)) {
-            navigateToBranchEditor();
-          }
+      <select
+        className='bg-transparent tabular-nums hover:text-blue-500 dark:hover:text-blue-400 cursor-pointer'
+        value={nodeId}
+        onChange={(event) => {
+          if (event.target.value !== nodeId) handleSwitch(event.target.value);
         }}
-        title='ブランチエディタで表示'
+        aria-label='分岐を選択'
       >
-        {currentIdx + 1}/{total}
-      </button>
+        {siblings.map((sibling, index) => (
+          <option key={sibling.id} value={sibling.id}>
+            {index + 1}/{total}
+          </option>
+        ))}
+      </select>
       <button
         className='p-0.5 hover:text-gray-700 dark:hover:text-gray-200 disabled:opacity-30'
         onClick={handleNext}
