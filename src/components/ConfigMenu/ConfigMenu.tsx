@@ -17,6 +17,7 @@ import { clampCompletionTokens, getMaxCompletionTokensForContext } from '@utils/
 import { _defaultChatConfig } from '@constants/chat';
 import { SYSTEM_PROMPT_PRESETS } from '@constants/systemPromptPresets';
 import useStore from '@store/store';
+import { resolveChatModel } from '@utils/chatModelResolution';
 import { CURATED_MODELS } from '@src/local-llm/catalog';
 import { localModelRuntime } from '@src/local-llm/runtime';
 import { OpfsFileProvider } from '@src/local-llm/storage';
@@ -398,6 +399,7 @@ export const ModelSelector = ({
   const localModels = useStore((state) => state.localModels) || [];
   const favoriteLocalIds = useStore((state) => state.favoriteLocalModelIds) || [];
   const savedMeta = useStore((state) => state.savedModelMeta) || {};
+  const chatModel = useStore((state) => resolveChatModel(state.currentChatIndex, state));
 
   // Remote model options (composite key: "modelId:::providerId")
   const remoteOptions = favoriteModels.map((fav) => {
@@ -469,6 +471,17 @@ export const ModelSelector = ({
     ...remoteOptions,
     ...localOptions,
   ];
+  const availableModelId = chatModel.status === 'available'
+    ? 'modelId' in chatModel.match.model ? chatModel.match.model.modelId : chatModel.match.model.id
+    : undefined;
+  if (chatModel.status === 'available' && _model === availableModelId && (!_providerId || _providerId === chatModel.match.providerId)) {
+    allOptions.push({
+      value: `${_model}:::${chatModel.match.providerId}`,
+      label: _model,
+      sublabel: `${providers[chatModel.match.providerId]?.name || chatModel.match.providerId} · ${t('provider.chatOnly', 'このチャットのみ')}`,
+      icon: <ProviderIcon providerId={chatModel.match.providerId} className='w-4 h-4' />,
+    });
+  }
 
   // Find the current composite value
   let currentComposite: string;
@@ -480,7 +493,7 @@ export const ModelSelector = ({
       : favoriteModels.find((f) => f.modelId === _model);
     currentComposite = currentFav
       ? `${currentFav.modelId}:::${currentFav.providerId}`
-      : _model;
+      : chatModel.status === 'available' && _model === availableModelId ? `${_model}:::${chatModel.match.providerId}` : _model;
   }
 
   return (
@@ -530,7 +543,7 @@ export const ModelSelector = ({
           }
         }
       }}
-      placeholder={t('model:provider.noModelSelected', 'No model selected') as string}
+      placeholder={_model ? t('provider.modelUnmatched', 'Model could not be matched') as string : t('provider.noModelSelected', 'No model selected') as string}
       isSearchable={false}
       className={className ?? 'mb-4'}
     />

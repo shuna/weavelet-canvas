@@ -7,6 +7,7 @@ import MenuIcon from '@icon/MenuIcon';
 import ConfigMenu from '@components/ConfigMenu';
 import { CapabilityIconsInline } from '@components/ConfigMenu/fields';
 import { getModelCapabilities, useModelCapabilities } from '@utils/modelLookup';
+import { resolveChatModel } from '@utils/chatModelResolution';
 import { ChatInterface, ChatView, ConfigInterface, ImageDetail, isSplitView } from '@type/chat';
 import { _defaultChatConfig } from '@constants/chat';
 import { ModelOptions } from '@type/chat';
@@ -78,6 +79,9 @@ const ChatViewTabs = ({
 
   // OpenRouter credit balance
   const currentProviderId = chat?.config?.providerId;
+  const modelResolution = useStore((state) => resolveChatModel(state.currentChatIndex, state));
+  const displayProviderId = modelResolution.status === 'available' || modelResolution.status === 'favorite'
+    ? modelResolution.match.providerId : undefined;
   const isOpenRouter = currentProviderId === 'openrouter';
   const creditBalance = useStore((state) => state.creditBalance);
   const creditBalanceFetching = useStore((state) => state.creditBalanceFetching);
@@ -197,9 +201,10 @@ const ChatViewTabs = ({
       if (catalogModel) return catalogModel.label;
       return modelId;
     }
-    const fav = favoriteModels.find(f => f.modelId === modelId);
-    if (fav) return modelId;
-    return t('provider.noModelSelected', 'モデル未選択') as string;
+    if (modelResolution.status === 'unspecified') return t('provider.noModelSelected', 'モデル未選択') as string;
+    if (modelResolution.status === 'unmatched') return `${modelId} (${t('provider.modelUnmatched', 'モデル照合不可')})`;
+    if (modelResolution.status === 'available') return `${modelId} (${t('provider.chatOnly', 'このチャットのみ')})`;
+    return modelId;
   };
 
   useEffect(() => {
@@ -272,8 +277,8 @@ const ChatViewTabs = ({
               >
                 {chat.config.modelSource === 'local'
                   ? <WasmChipIcon caps={wasmCaps} className='w-4 h-4 shrink-0' />
-                  : chat.config.providerId
-                    ? <ProviderIcon providerId={chat.config.providerId} className='w-4 h-4 shrink-0 text-gray-400 dark:text-gray-500' />
+                  : displayProviderId
+                    ? <ProviderIcon providerId={displayProviderId} className='w-4 h-4 shrink-0 text-gray-400 dark:text-gray-500' />
                     : null}
                 <span className='truncate'>{getModelDisplayName(chat.config.model, chat.config.modelSource)}</span>
                 <CapabilityIconsInline

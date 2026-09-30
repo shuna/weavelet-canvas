@@ -1,6 +1,7 @@
 import React, { memo, useCallback, useState } from 'react';
 import useStore from '@store/store';
 import useSubmit from '@hooks/useSubmit';
+import { confirmChatModelFavorite } from '@utils/chatModelResolution';
 import { resolveProviderForModel, type ResolvedProvider } from '@hooks/submitHelpers';
 import {
   ContentInterface,
@@ -129,6 +130,7 @@ const UnifiedMessageView = memo(
         useStore.getState().chats![currentChatIndex].messages.length
       );
       if (!plan) return;
+      if (!confirmChatModelFavorite(currentChatIndex)) return;
       if (plan.removeIndex >= 0) {
         removeMessageAtIndex(currentChatIndex, plan.removeIndex);
       }

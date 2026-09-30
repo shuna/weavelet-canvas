@@ -125,6 +125,9 @@
     "colPrice": "Price (In/Out)",
     "tabBrowse": "Official",
     "noModelSelected": "No model selected",
+    "modelUnmatched": "Model could not be matched",
+    "chatOnly": "This chat only",
+    "addFavoriteToContinue": "Add {{model}} to favorites and continue?",
     "keySaved": "API key saved"
   },
   "fusion": {
