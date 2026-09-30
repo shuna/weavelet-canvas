@@ -4,7 +4,7 @@ import { useRef, useState } from 'react';
 import { countTokens, limitMessageTokens, loadEncoder } from '@utils/messageUtils';
 import { hasMeaningfulMessageContent } from '@utils/contentValidation';
 import { getModelContextInfo } from '@utils/modelLookup';
-import { confirmChatModelFavorite } from '@utils/chatModelResolution';
+import { confirmChatModelFavorite, resolveChatModel } from '@utils/chatModelResolution';
 import { fitsContextWindow, getPromptBudgetForContext } from '@utils/tokenBudget';
 import {
   applySubmitTokenUsage,
@@ -65,6 +65,13 @@ const useSubmit = () => {
     const chatIndex = currentChatIndex;
     const chatId = chats[chatIndex]?.id;
     if (!chatId) return;
+    const modelResolution = resolveChatModel(chatIndex);
+    const submitConfig = {
+      ...chats[chatIndex].config,
+      providerId: chats[chatIndex].config.providerId ??
+        (modelResolution.status === 'favorite' || modelResolution.status === 'available'
+          ? modelResolution.match.providerId : undefined),
+    };
 
     // Same-chat guard
     if (isChatGenerating(chatId)) return;
@@ -103,9 +110,9 @@ const useSubmit = () => {
         updatedChats[chatIndex].messages,
         mode,
         messageIndex,
-        chats[chatIndex].config.model,
+        submitConfig.model,
         chatIndex,
-        chats[chatIndex].config.systemPrompt
+        submitConfig.systemPrompt
       );
 
       if (contextMessages.length === 0)
@@ -113,25 +120,25 @@ const useSubmit = () => {
       if (!hasMeaningfulMessageContent(contextMessages))
         throw new Error(t('errors.noMessagesSubmitted') as string);
 
-      const isLocal = isLocalModelConfig(chats[chatIndex].config);
+      const isLocal = isLocalModelConfig(submitConfig);
 
       await loadEncoder();
       const { contextLength: modelContextLength } = getModelContextInfo(
-        chats[chatIndex].config.model,
-        chats[chatIndex].config.providerId,
-        chats[chatIndex].config.modelSource
+        submitConfig.model,
+        submitConfig.providerId,
+        submitConfig.modelSource
       );
-      const completionBudget = chats[chatIndex].config.max_tokens;
+      const completionBudget = submitConfig.max_tokens;
       const promptBudget = getPromptBudgetForContext(modelContextLength, completionBudget);
       const messages = await limitMessageTokens(
         contextMessages,
         promptBudget,
-        chats[chatIndex].config.model
+        submitConfig.model
       );
       if (messages.length === 0)
         throw new Error(t('errors.messageExceedMaxToken') as string);
 
-      const promptTokens = await countTokens(messages, chats[chatIndex].config.model);
+      const promptTokens = await countTokens(messages, submitConfig.model);
       if (!fitsContextWindow(promptTokens, modelContextLength, completionBudget))
         throw new Error(t('errors.messageExceedMaxToken') as string);
 
@@ -139,11 +146,11 @@ const useSubmit = () => {
       const resolved = isLocal
         ? undefined
         : resolveProviderForModel(
-            chats[chatIndex].config.model,
+            submitConfig.model,
             useStore.getState().favoriteModels,
             useStore.getState().providers,
             fallbackProvider,
-            chats[chatIndex].config.providerId
+            submitConfig.providerId
           );
 
       // Pre-send evaluation (async, non-blocking)
@@ -153,12 +160,12 @@ const useSubmit = () => {
         nodeId: targetNodeId,
         endpoint: resolved?.endpoint ?? '',
         apiKey: resolved?.key,
-        model: chats[chatIndex].config.model,
+        model: submitConfig.model,
       };
 
       if (isLocal) {
         const evalModelIds = await getEvaluationModelIds();
-        const allRequired = [chats[chatIndex].config.model, ...evalModelIds].filter(Boolean);
+        const allRequired = [submitConfig.model, ...evalModelIds].filter(Boolean);
         await prepareModelsForExecution(allRequired);
       }
 
@@ -188,7 +195,7 @@ const useSubmit = () => {
           messageIndex,
           targetNodeId,
           messages,
-          config: chats[chatIndex].config,
+          config: submitConfig,
           mode,
           abortController,
           t: (key: string) => t(key) as string,
@@ -202,7 +209,7 @@ const useSubmit = () => {
           messageIndex,
           targetNodeId,
           messages,
-          config: chats[chatIndex].config,
+          config: submitConfig,
           resolvedProvider: resolved!,
           abortController,
           apiVersion: useStore.getState().apiVersion,
@@ -222,7 +229,7 @@ const useSubmit = () => {
 
       if (
         streamResult.generationId &&
-        chats[chatIndex].config.providerId === 'openrouter'
+        submitConfig.providerId === 'openrouter'
       ) {
         useStore.getState().queueVerification(
           buildVerifiedStatsKey(chatId, targetNodeId),
@@ -254,7 +261,7 @@ const useSubmit = () => {
       const generationId = getGenerationIdFromSubmitError(e);
       if (
         generationId &&
-        chats[chatIndex].config.providerId === 'openrouter'
+        submitConfig.providerId === 'openrouter'
       ) {
         useStore.getState().queueVerification(
           buildVerifiedStatsKey(chatId, targetNodeId),
