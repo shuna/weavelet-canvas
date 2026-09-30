@@ -1,4 +1,3 @@
-import { SyncConflictError } from './conflicts';
 import { recordMetric } from './metrics';
 import type { StorageValue } from 'zustand/middleware';
 import type { PersistedStoreState } from '@store/persistence';
@@ -7,11 +6,20 @@ import { addContent, type ContentStoreData } from '@utils/contentStore';
 import DiffMatchPatch from 'diff-match-patch';
 import { digest } from './crypto';
 
+export class SyncConflictError extends Error {
+  constructor(readonly keys: string[]) { super('Concurrent edits conflict. Both copies are preserved.'); }
+}
+
 export type Snapshot = StorageValue<Partial<PersistedStoreState>>;
 export type Records = Record<string, string>;
 export type Change = { key: string; before: string | null; after: string | null };
 const dmp = new DiffMatchPatch();
 const forbidden = new Set(['__proto__', 'prototype', 'constructor']);
+
+export async function sameSnapshot([a, b]: [Snapshot, Snapshot]): Promise<boolean> {
+  const left = await toRecords(a), right = await toRecords(b);
+  return Object.keys(left).length === Object.keys(right).length && Object.keys(left).every(key => left[key] === right[key]);
+}
 
 function canonical(value: any): string {
   if (Array.isArray(value)) return `[${value.map(canonical).join(',')}]`;

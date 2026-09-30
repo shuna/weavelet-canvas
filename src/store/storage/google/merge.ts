@@ -1,7 +1,8 @@
 import { mergeBranches } from './mergeBranches';
 import type { BranchTree } from '@type/chat';
 import { digest } from './crypto';
-import { fromRecords, toRecords, type Records } from './records';
+import type { Records } from './records';
+import { fromRecordsAsync as fromRecords, toRecordsAsync as toRecords } from './processing';
 
 // Merge independent fields and message branches. Conflicting metadata retains complete copies.
 // Settings conflicts use the local value; the resolution UI states this explicitly.
