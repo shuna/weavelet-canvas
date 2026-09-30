@@ -4,6 +4,7 @@ import { useRef, useState } from 'react';
 import { countTokens, limitMessageTokens, loadEncoder } from '@utils/messageUtils';
 import { hasMeaningfulMessageContent } from '@utils/contentValidation';
 import { getModelContextInfo } from '@utils/modelLookup';
+import { confirmChatModelFavorite } from '@utils/chatModelResolution';
 import { fitsContextWindow, getPromptBudgetForContext } from '@utils/tokenBudget';
 import {
   applySubmitTokenUsage,
@@ -49,8 +50,6 @@ const useSubmit = () => {
   const setError = useStore((state) => state.setError);
   const apiEndpoint = useStore((state) => state.apiEndpoint);
   const apiKey = useStore((state) => state.apiKey);
-  const favoriteModels = useStore((state) => state.favoriteModels) || [];
-  const providers = useStore((state) => state.providers) || {};
   const currentChatIndex = useStore((state) => state.currentChatIndex);
   const setChats = useStore((state) => state.setChats);
   const applyBranchState = useStore((state) => state.applyBranchState);
@@ -141,8 +140,8 @@ const useSubmit = () => {
         ? undefined
         : resolveProviderForModel(
             chats[chatIndex].config.model,
-            favoriteModels,
-            providers,
+            useStore.getState().favoriteModels,
+            useStore.getState().providers,
             fallbackProvider,
             chats[chatIndex].config.providerId
           );
@@ -245,8 +244,8 @@ const useSubmit = () => {
           titleModel: useStore.getState().titleModel,
           titleProviderId: useStore.getState().titleProviderId,
           t: (key: string) => t(key) as string,
-          favoriteModels,
-          providers,
+          favoriteModels: useStore.getState().favoriteModels,
+          providers: useStore.getState().providers,
           fallbackProvider,
         });
       }
@@ -323,6 +322,7 @@ const useSubmit = () => {
     const chatIndex = useStore.getState().currentChatIndex;
     const config = chats?.[chatIndex]?.config;
     if (!config) return;
+    if (!confirmChatModelFavorite(chatIndex)) return;
     await runSubmitWithConfirmation(
       () => runSubmit('append'),
       config.model,
@@ -336,6 +336,7 @@ const useSubmit = () => {
     const chatIndex = useStore.getState().currentChatIndex;
     const config = chats?.[chatIndex]?.config;
     if (!config) return;
+    if (!confirmChatModelFavorite(chatIndex)) return;
     await runSubmitWithConfirmation(
       () => runSubmit('midchat', insertIndex),
       config.model,
@@ -353,6 +354,7 @@ const useSubmit = () => {
 
     const chats = useStore.getState().chats;
     if (!chats) return;
+    if (!confirmChatModelFavorite(currentChatIndex)) return;
 
     if (lastSubmitMode === 'append') {
       const chat = chats[currentChatIndex];

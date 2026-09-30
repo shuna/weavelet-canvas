@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import useStore from '@store/store';
 import useSubmit from '@hooks/useSubmit';
+import { confirmChatModelFavorite } from '@utils/chatModelResolution';
 import PopupModal from '@components/PopupModal';
 
 import PlusIcon from '@icon/PlusIcon';
@@ -96,6 +97,7 @@ const NewMessageButton = React.memo(
 
     const handleBranchGenerate = async () => {
       if (!nodeId) return;
+      if (!confirmChatModelFavorite(currentChatIndex)) return;
       createBranch(currentChatIndex, nodeId, undefined);
       setIsMenuOpen(false);
       await handleSubmit();

@@ -8,7 +8,7 @@ import {
   isImageContent,
 } from '@type/chat';
 import { defaultModel } from '@constants/chat';
-import { isKnownModel } from '@utils/modelLookup';
+import { resolveChatModel, confirmChatModelFavorite } from '@utils/chatModelResolution';
 import { hasMeaningfulContent } from '@utils/contentValidation';
 import { showToast } from '@utils/showToast';
 import i18next from 'i18next';
@@ -147,7 +147,7 @@ export function useEditViewLogic({
       modelSource: config?.modelSource,
     };
   });
-  const favoriteModels = useStore((state) => state.favoriteModels) || [];
+  const modelStatus = useStore((state) => resolveChatModel(state.currentChatIndex, state).status);
   const currentChatId = useStore((state) => state.chats?.[state.currentChatIndex]?.id ?? '');
   const isGeneratingMessage = useStore((state) =>
     !!nodeId &&
@@ -155,12 +155,7 @@ export function useEditViewLogic({
       (session) => session.chatId === currentChatId && session.targetNodeId === nodeId
     )
   );
-  const modelValid = !!model && (
-    modelSource === 'local' ||
-    favoriteModels.some((f) =>
-      f.modelId === model && (providerId ? f.providerId === providerId : true)
-    ) || isKnownModel(model)
-  );
+  const modelValid = !!model && modelStatus !== 'unmatched' && modelStatus !== 'unspecified';
 
   const [_content, setContentState] = useState<ContentInterface[]>(
     () => cloneContent(editDraftCache.get(editSessionKey) ?? content)
@@ -291,6 +286,7 @@ export function useEditViewLogic({
       showToast(i18next.t('protectedCannotEdit', { ns: 'main' }), 'warning');
       return;
     }
+    if (resolveChatModel(currentChatIndex).status === 'available' && !confirmChatModelFavorite(currentChatIndex)) return;
 
     const resolvedMessageIndex = resolveMessageIndex(nodeId, messageIndex);
 
@@ -313,6 +309,7 @@ export function useEditViewLogic({
 
   const handleBranchOnly = () => {
     if (sticky || isNodeBusy(nodeId)) return;
+    if (resolveChatModel(currentChatIndex).status === 'available' && !confirmChatModelFavorite(currentChatIndex)) return;
     const { ensureBranchTree, createBranch } = useStore.getState();
     ensureBranchTree(currentChatIndex);
     const activeNodeId =
@@ -328,6 +325,7 @@ export function useEditViewLogic({
 
   const handleBranchGenerate = () => {
     if (isChatBusy() || !modelValid || sticky || isNodeBusy(nodeId)) return;
+    if (!confirmChatModelFavorite(currentChatIndex)) return;
     const { ensureBranchTree, createBranch } = useStore.getState();
     ensureBranchTree(currentChatIndex);
     const activeNodeId =
@@ -360,6 +358,7 @@ export function useEditViewLogic({
         return;
       }
     }
+    if (!confirmChatModelFavorite(currentChatIndex)) return;
     replaceMessageAndPruneFollowing(
       currentChatIndex,
       resolvedMessageIndex,
@@ -380,6 +379,7 @@ export function useEditViewLogic({
       showToast(i18next.t('protectedCannotEdit', { ns: 'main' }), 'warning');
       return;
     }
+    if (!confirmChatModelFavorite(currentChatIndex)) return;
 
     if (sticky) {
       if (hasSubmittableContent) {
