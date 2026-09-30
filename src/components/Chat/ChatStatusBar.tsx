@@ -128,7 +128,7 @@ const ChatStatusBar = React.memo(() => {
             aria-label={t('stopGenerating') as string}
           >
             <span
-              className={`inline-block h-2 w-2 rounded-full animate-pulse ${
+              className={`inline-block h-2 w-2 rounded-full ${
                 isProxyMode
                   ? 'bg-indigo-400 dark:bg-indigo-400'
                   : 'bg-green-400 dark:bg-green-400'

@@ -1,4 +1,4 @@
-import { useCallback, useSyncExternalStore } from 'react';
+import { useCallback, useRef, useSyncExternalStore } from 'react';
 import {
   peekBufferedContent,
   subscribeToStreaming,
@@ -17,23 +17,28 @@ const EMPTY_UNSUB = () => {};
  * re-renders on each chunk — the Zustand store is not involved.
  */
 export function useStreamingText(
-  nodeId: string | undefined
+  nodeId: string | undefined,
+  visible = true
 ): string | undefined {
+  const snapshot = useRef<{ nodeId: string | undefined; value: string | undefined }>({ nodeId, value: undefined });
+  if (snapshot.current.nodeId !== nodeId) snapshot.current = { nodeId, value: undefined };
   const subscribe = useCallback(
     (callback: () => void) => {
-      if (!nodeId) return EMPTY_UNSUB;
+      if (!nodeId || !visible) return EMPTY_UNSUB;
       return subscribeToStreaming(nodeId, callback);
     },
-    [nodeId]
+    [nodeId, visible]
   );
 
   const getSnapshot = useCallback(() => {
     if (!nodeId) return undefined;
+    if (!visible) return snapshot.current.value;
     const content = peekBufferedContent(nodeId);
     if (!content || content.length === 0) return undefined;
     const first = content[0];
-    return isTextContent(first) ? first.text : undefined;
-  }, [nodeId]);
+    snapshot.current.value = isTextContent(first) ? first.text : undefined;
+    return snapshot.current.value;
+  }, [nodeId, visible]);
 
   return useSyncExternalStore(subscribe, getSnapshot);
 }

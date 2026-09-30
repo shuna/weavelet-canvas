@@ -247,7 +247,7 @@ export const DownloadedModelRow = ({
         )}
 
         {isLoading && (
-          <span className='flex-shrink-0 text-xs text-gray-500 dark:text-gray-400 animate-pulse'>
+          <span className='flex-shrink-0 text-xs text-gray-500 dark:text-gray-400'>
             {t('localModel.modelStatus.loading')}
           </span>
         )}
@@ -303,7 +303,7 @@ export const DownloadingModelRow = ({
       <div className='flex items-center gap-3'>
         <div className='flex-shrink-0 w-5 flex justify-center'>
           {isActivelyDownloading && (
-            <span className='inline-block w-2.5 h-2.5 rounded-full bg-blue-500 animate-pulse' />
+            <span className='inline-block w-2.5 h-2.5 rounded-full bg-blue-500' />
           )}
           {isInterrupted && !hasError && (
             <span className='inline-block w-2.5 h-2.5 rounded-full bg-yellow-400' />

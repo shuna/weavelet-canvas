@@ -6,8 +6,6 @@ import { useStreamEndStatusStore, type StreamEndReason } from '@store/stream-end
 
 const MarkdownRenderer = React.lazy(() => import('./MarkdownRenderer'));
 
-const RENDER_DELAY_THRESHOLD_MS = 400;
-
 const skeletonWidths = ['w-full', 'w-5/6', 'w-4/5', 'w-3/4', 'w-full', 'w-5/6', 'w-2/3', 'w-3/4'];
 
 const MarkdownSkeleton = ({ charCount, newlineCount }: { charCount: number; newlineCount: number }) => {
@@ -18,7 +16,7 @@ const MarkdownSkeleton = ({ charCount, newlineCount }: { charCount: number; newl
       {Array.from({ length: lineCount }, (_, i) => (
         <div
           key={i}
-          className={`h-4 rounded bg-gray-200 dark:bg-gray-700 animate-pulse mb-2 ${skeletonWidths[i % skeletonWidths.length]}`}
+          className={`h-4 rounded bg-gray-200 dark:bg-gray-700 mb-2 ${skeletonWidths[i % skeletonWidths.length]}`}
         />
       ))}
     </div>
@@ -92,49 +90,31 @@ const ContentBody = memo(function ContentBody({
   });
   const deferredContent = useDeferredValue(currentTextContent);
   const [debouncedContent, setDebouncedContent] = useState(currentTextContent);
-  const renderContent = streamingMode === 'debounced' ? debouncedContent : deferredContent;
-  const isStale = renderContent !== currentTextContent;
-  const shouldShowRenderingBadge = isStale && !isGeneratingMessage;
-  const [showRenderingBadge, setShowRenderingBadge] = useState(false);
-  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const renderContent = !isGeneratingMessage ? currentTextContent
+    : streamingMode === 'debounced' ? debouncedContent : deferredContent;
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  const latestContent = useRef(currentTextContent);
+  latestContent.current = currentTextContent;
+
   useEffect(() => {
-    if (debounceRef.current) {
-      clearTimeout(debounceRef.current);
-      debounceRef.current = null;
-    }
-
-    if (streamingMode !== 'debounced') {
-      setDebouncedContent(currentTextContent);
-      return;
-    }
-
-    debounceRef.current = setTimeout(() => {
-      setDebouncedContent(currentTextContent);
-    }, 250);
-
+    setDebouncedContent(latestContent.current);
     return () => {
       if (debounceRef.current) clearTimeout(debounceRef.current);
+      debounceRef.current = null;
     };
-  }, [currentTextContent, streamingMode]);
+  }, [streamingMode]);
 
   useEffect(() => {
-    if (shouldShowRenderingBadge) {
-      timerRef.current = setTimeout(() => {
-        setShowRenderingBadge(true);
-      }, RENDER_DELAY_THRESHOLD_MS);
-    } else {
-      if (timerRef.current) {
-        clearTimeout(timerRef.current);
-        timerRef.current = null;
-      }
-      setShowRenderingBadge(false);
+    if (streamingMode !== 'debounced' || debouncedContent === currentTextContent) return;
+    // Keep the deadline when more text arrives, so continuous streams keep moving.
+    if (!debounceRef.current) {
+      debounceRef.current = setTimeout(() => {
+        debounceRef.current = null;
+        setDebouncedContent(latestContent.current);
+      }, 250);
     }
-    return () => {
-      if (timerRef.current) clearTimeout(timerRef.current);
-    };
-  }, [shouldShowRenderingBadge]);
+  }, [currentTextContent, streamingMode, debouncedContent]);
 
   const wasGenerating = useRef(false);
   useEffect(() => {
@@ -153,15 +133,10 @@ const ContentBody = memo(function ContentBody({
           {isGeneratingMessage && streamingMode === 'plain' ? (
             <span className='whitespace-pre-wrap'>
               {currentTextContent}
-              <span className='inline-block animate-pulse text-gray-500 dark:text-gray-400'>▌</span>
+              <span className='inline-block text-gray-500 dark:text-gray-400'>▌</span>
             </span>
           ) : (
             <>
-              {showRenderingBadge && (
-                <span className='inline-block text-xs text-gray-400 dark:text-gray-500 mb-1 animate-pulse'>
-                  描画中...
-                </span>
-              )}
               <Suspense fallback={<MarkdownSkeleton charCount={currentTextContent.length} newlineCount={(currentTextContent.match(/\n/g) || []).length} />}>
                 <MarkdownRenderer
                   content={renderContent}
@@ -169,7 +144,7 @@ const ContentBody = memo(function ContentBody({
                 />
               </Suspense>
               {isGeneratingMessage && (
-                <span className='inline-block animate-pulse text-gray-500 dark:text-gray-400'>▌</span>
+                <span className='inline-block text-gray-500 dark:text-gray-400'>▌</span>
               )}
             </>
           )}
@@ -177,7 +152,7 @@ const ContentBody = memo(function ContentBody({
       ) : (
         <span className='whitespace-pre-wrap'>
           {currentTextContent}
-          {isGeneratingMessage && <span className='animate-pulse'>▌</span>}
+          {isGeneratingMessage && <span>▌</span>}
         </span>
       )}
       {!isGeneratingMessage && <StreamEndIndicator nodeId={nodeId} />}

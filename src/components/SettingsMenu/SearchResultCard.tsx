@@ -123,7 +123,7 @@ const SearchResultCard = ({
       {isSupported && (
         <div className='pb-2 ml-5 flex flex-col gap-1.5'>
           {variantsLoading && (
-            <span className='text-xs text-gray-500 animate-pulse'>{t('localModel.loadingVariants')}</span>
+            <span className='text-xs text-gray-500'>{t('localModel.loadingVariants')}</span>
           )}
 
           {!variantsLoading && variants && variants.variants.length > 0 && (

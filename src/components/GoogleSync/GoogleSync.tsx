@@ -1,5 +1,7 @@
+import SyncDots from './SyncDots';
+import { useSyncProgressDisplay } from '@hooks/useSyncProgressDisplay';
 import { SyncConflictError, useSyncReview, type Resolution } from '@store/storage/google/conflicts';
-import { withSyncProgress, syncPhase, useGoogleSyncProgress } from '@store/storage/google/progress';
+import { withSyncProgress, syncPhase } from '@store/storage/google/progress';
 import GoogleSyncProgress from './GoogleSyncProgress';
 import { createPortal } from 'react-dom';
 import React, { useEffect, useRef, useState } from 'react';
@@ -190,7 +192,7 @@ const GoogleSync = ({ clientId, openOnMount = false, showEntry = true }: { clien
   const cloudSync = useGStore((state) => state.cloudSync);
   const setSyncStatus = useGStore((state) => state.setSyncStatus);
   const syncTargetConfirmed = useGStore((state) => state.syncTargetConfirmed);
-  const progress = useGoogleSyncProgress();
+  const progress = useSyncProgressDisplay();
   const transferFileTotal = progress.active && (progress.phase === 'uploading' || progress.phase === 'downloading')
     ? progress.totalFiles : undefined;
 
@@ -821,7 +823,7 @@ const GooglePopup = ({
                     aria-label={t('button.refreshFiles') as string}
                     title={t('button.refreshFiles') as string}
                   >
-                    <RefreshIcon className={isBusy ? 'animate-spin' : ''} />
+                    {isBusy ? <SyncDots label={t('progress.preparing')} /> : <RefreshIcon />}
                   </button>
                 </div>
                 <div className='max-h-72 overflow-y-auto pr-1'>
@@ -932,9 +934,7 @@ const SyncIcon = ({ status }: { status: SyncStatus }) => {
       </div>
     ),
     syncing: (
-      <div className='rounded-full bg-gray-600/80 p-1 animate-spin'>
-        <RefreshIcon className='h-2 w-2' />
-      </div>
+      <SyncDots label='同期中' />
     ),
     synced: (
       <div className='bg-gray-600/80 rounded-full p-1'>

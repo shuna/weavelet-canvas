@@ -5,7 +5,6 @@ import PlusIcon from '@icon/PlusIcon';
 import MenuIcon from '@icon/MenuIcon';
 import SearchIcon from '@icon/SearchIcon';
 import useAddChat from '@hooks/useAddChat';
-import { stopSessionsForChat } from '@hooks/useSubmit';
 
 interface MobileBarProps {
   onSearchOpen?: () => void;
@@ -22,21 +21,6 @@ const MobileBar = ({ onSearchOpen, extraButtons }: MobileBarProps) => {
       ? state.chats[state.currentChatIndex].title
       : 'New Chat'
   );
-
-  const currentChatId = useStore((state) =>
-    state.chats &&
-    state.chats.length > 0 &&
-    state.currentChatIndex >= 0 &&
-    state.currentChatIndex < state.chats.length
-      ? state.chats[state.currentChatIndex].id
-      : ''
-  );
-
-  const isCurrentChatGenerating = useStore((state) =>
-    Object.values(state.generatingSessions).some((s) => s.chatId === currentChatId)
-  );
-
-  const isProxyMode = useStore((state) => state.proxyEnabled && !!state.proxyEndpoint);
 
   const addChat = useAddChat();
 
@@ -57,25 +41,6 @@ const MobileBar = ({ onSearchOpen, extraButtons }: MobileBarProps) => {
       <h1 className='flex-1 text-center text-base font-normal px-2 truncate min-w-0'>
         {chatTitle}
       </h1>
-      {isCurrentChatGenerating && (
-        <button
-          type='button'
-          className='flex shrink-0 items-center gap-1.5 px-2 cursor-pointer'
-          onClick={() => { if (currentChatId) stopSessionsForChat(currentChatId); }}
-          aria-label='生成を停止'
-        >
-          <span
-            className={`inline-block h-2 w-2 rounded-full animate-pulse ${
-              isProxyMode
-                ? 'bg-indigo-400 dark:bg-indigo-400'
-                : 'bg-green-400 dark:bg-green-400'
-            }`}
-          />
-          <span className='text-xs text-gray-400 dark:text-gray-500 whitespace-nowrap'>
-            {isProxyMode ? 'proxy' : ''}
-          </span>
-        </button>
-      )}
       {onSearchOpen && (
         <button
           type='button'
