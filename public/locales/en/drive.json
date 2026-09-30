@@ -129,6 +129,7 @@
     "cloud": "Use cloud contents"
   },
   "review": {
+    "allDone": "Mark all chats as reviewed",
     "description": "Sync changed this chat. Review its other branches too.",
     "chatDone": "Mark chat as reviewed",
     "nodeDone": "Mark sync change as reviewed",

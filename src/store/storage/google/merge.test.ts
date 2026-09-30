@@ -112,3 +112,20 @@ it('keeps node review markers until explicit acknowledgement, including across r
   expect(useSyncReview.getState().chats).not.toContain('chat');
   expect(useSyncReview.getState().nodes.chat).toEqual([]);
 });
+
+
+it('acknowledges all chats, folders and branch nodes persistently without resolving conflicts', async () => {
+  const { useSyncReview, acknowledgeAllSyncChanges, markSyncChanges } = await import('./conflicts');
+  useSyncReview.setState({ conflict: true, chats: ['chat', 'hidden-chat'], folders: ['folder'], nodes: { chat: ['b'], 'hidden-chat': ['x'] } });
+  acknowledgeAllSyncChanges();
+  expect(useSyncReview.getState()).toEqual({ conflict: true, chats: [], folders: [], nodes: {} });
+  await useSyncReview.persist.rehydrate();
+  expect(useSyncReview.getState()).toEqual({ conflict: true, chats: [], folders: [], nodes: {} });
+  const before = snapshot(), after = structuredClone(before);
+  node(after, 'b', 'a', 'new sync change');
+  await markSyncChanges(before, after);
+  expect(useSyncReview.getState().chats).toEqual(['chat']);
+  expect(useSyncReview.getState().nodes.chat).toEqual(['b']);
+  acknowledgeAllSyncChanges();
+  useSyncReview.setState({ conflict: false });
+});
