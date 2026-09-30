@@ -65,7 +65,8 @@ const BranchSwitcher = ({
         </svg>
       </button>
       <select
-        className='bg-transparent tabular-nums hover:text-blue-500 dark:hover:text-blue-400 cursor-pointer'
+        className='appearance-none border-0 bg-transparent p-0 text-center tabular-nums hover:text-blue-500 dark:hover:text-blue-400 cursor-pointer'
+        style={{ width: `${String(total).length + 1}ch` }}
         value={nodeId}
         onChange={(event) => {
           if (event.target.value !== nodeId) handleSwitch(event.target.value);
@@ -74,7 +75,7 @@ const BranchSwitcher = ({
       >
         {siblings.map((sibling, index) => (
           <option key={sibling.id} value={sibling.id}>
-            {index + 1}/{total}
+            {index + 1}
           </option>
         ))}
       </select>
