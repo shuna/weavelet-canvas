@@ -463,3 +463,13 @@
 .overtype-container[data-mode="normal"] .overtype-wrapper .overtype-preview em {
   font-style: normal !important;
 }
+
+/* iOS zooms the page when focusing an editable field with text smaller than 16px. */
+@media (pointer: coarse) {
+  input,
+  textarea,
+  select,
+  [contenteditable="true"] {
+    font-size: 16px !important;
+  }
+}
