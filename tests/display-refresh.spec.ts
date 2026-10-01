@@ -128,6 +128,9 @@ test('sync banner overlays below the view bar without moving the layout', async 
   await expect(anchor).toBeAttached();
   for (const width of [1440, 390]) {
     await page.setViewportSize({ width, height: 900 });
+    if (width === 390) {
+      await expect.poll(() => anchor.evaluate(el => el.parentElement!.getBoundingClientRect().left)).toBe(0);
+    }
     await page.evaluate(() => (window as any).setBannerStatus('synced'));
     await expect(page.locator('[data-google-sync-banner]')).toHaveCount(0);
     const before = await anchor.evaluate(el => el.parentElement!.getBoundingClientRect().toJSON());
