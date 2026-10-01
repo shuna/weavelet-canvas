@@ -193,6 +193,10 @@ const GoogleSync = ({ clientId, openOnMount = false, showEntry = true }: { clien
   const setSyncStatus = useGStore((state) => state.setSyncStatus);
   const syncTargetConfirmed = useGStore((state) => state.syncTargetConfirmed);
   const progress = useSyncProgressDisplay();
+  const [bannerTarget, setBannerTarget] = useState<HTMLElement | null>(null);
+  useEffect(() => {
+    setBannerTarget(document.getElementById('google-sync-banner-overlay'));
+  }, []);
   const transferFileTotal = progress.active && (progress.phase === 'uploading' || progress.phase === 'downloading')
     ? progress.totalFiles : undefined;
 
@@ -275,18 +279,18 @@ const GoogleSync = ({ clientId, openOnMount = false, showEntry = true }: { clien
         <GoogleIcon /> {t('name')}
         {cloudSync && <SyncIcon status={syncStatus} />}
       </div>}
-      {!isModalOpen && (syncStatus === 'syncing' || syncStatus === 'error') && createPortal(
+      {bannerTarget && !isModalOpen && (syncStatus === 'syncing' || syncStatus === 'error') && createPortal(
         <button type='button' onClick={() => setIsModalOpen(true)}
           data-google-sync-banner
-          className={`fixed inset-x-0 top-0 z-[60] flex h-8 items-center justify-center gap-2 px-3 pb-1 text-xs text-white shadow-sm ${syncStatus === 'error' ? 'bg-red-700' : 'bg-emerald-700'}`}
+          className={`absolute inset-x-0 top-0 flex h-6 items-center justify-center gap-1 px-3 text-xs text-white shadow-sm ${syncStatus === 'error' ? 'bg-red-700' : 'bg-emerald-700'}`}
           aria-label={t(syncStatus === 'error' ? 'progress.failed' : 'progress.open') as string}>
-          <SyncIcon status={syncStatus} />
           {t(syncStatus === 'error' ? 'progress.failed' : progress.active ? `progress.${progress.phase}` : 'progress.open')}
+          <SyncIcon status={syncStatus} />
           {syncStatus === 'syncing' && transferFileTotal !== undefined && transferFileTotal > 0 && <progress
             className='absolute inset-x-0 bottom-0 h-1 w-full accent-emerald-300'
             max={transferFileTotal} value={progress.completedFiles}
             aria-label={t(`progress.${progress.phase}`) as string} />}
-        </button>, document.body
+        </button>, bannerTarget
       )}
       <GooglePopup
           isModalOpen={isModalOpen}

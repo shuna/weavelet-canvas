@@ -37,7 +37,10 @@ const Chat = () => {
         extraButtons={showPWANav ? <NavigationButtons /> : undefined}
       />
       <main className='relative h-full w-full transition-width flex flex-col overflow-hidden items-stretch flex-1'>
-        <ChatViewTabs activeView={effectiveView} setActiveView={setActiveView} />
+        <div className='relative shrink-0'>
+          <ChatViewTabs activeView={effectiveView} setActiveView={setActiveView} />
+          <div id='google-sync-banner-overlay' className='absolute inset-x-0 top-full z-[60]' />
+        </div>
         {isSplitView(effectiveView) ? (
           <SplitView direction={effectiveView === 'split-horizontal' ? 'horizontal' : 'vertical'} />
         ) : (
