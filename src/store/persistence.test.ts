@@ -18,6 +18,8 @@ import {
   createPartializedState,
   createPersistedChatDataState,
   hydrateFromPersistedStoreState,
+  prepareHydratedState,
+  finishHydratedState,
   migratePersistedState,
   rehydrateStoreState,
   setIndexedDbMigrationComplete,
@@ -174,6 +176,23 @@ describe('persistence', () => {
 
     expect('chats' in partialized).toBe(true);
     expect('contentStore' in partialized).toBe(true);
+  });
+
+  it('prepares remote hydration with the same defaults and repairs without mutating live inputs', async () => {
+    for (const omitContentStore of [false, true]) {
+      const base = buildStoreState();
+      const remote: Partial<ReturnType<typeof createPartializedState>> = createPartializedState(buildStoreState() as never);
+      if (omitContentStore) {
+        remote.contentStore = undefined;
+        remote.chats![0].branchTree!.nodes['node-1'].contentHash = createStreamingContentHash('node-1');
+        remote.chats![0].branchTree!.nodes['node-2'].contentHash = createStreamingContentHash('node-2');
+      }
+      const original = structuredClone(remote);
+      const expected = hydrateFromPersistedStoreState(structuredClone(base) as never, structuredClone(remote));
+      const prepared = await prepareHydratedState(base as never, remote);
+      expect(finishHydratedState(prepared)).toEqual(expected);
+      expect(remote).toEqual(original);
+    }
   });
 
   it('rehydrates current chat index and materializes branch-tree messages', () => {

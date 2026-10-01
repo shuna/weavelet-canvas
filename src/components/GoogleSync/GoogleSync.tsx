@@ -30,7 +30,8 @@ import {
   createPersistedChatDataState,
   createLocalStoragePartializedState,
   createPartializedState,
-  hydrateFromPersistedStoreState,
+  prepareHydratedState,
+  finishHydratedState,
   migratePersistedState,
   needsDataMigration,
   PersistedStoreState,
@@ -463,13 +464,13 @@ const GooglePopup = ({
         : await getDriveFileTyped(_fileId, googleAccessToken);
       const normalizedRemote = normalizeRemotePersistedState(remoteStorageValue);
       const remotePersistedState = migratePersistedState(
-        structuredClone(normalizedRemote.state),
+        normalizedRemote.state,
         normalizedRemote.version
       ) as Partial<PersistedStoreState>;
-      const hydratedState = hydrateFromPersistedStoreState(
-        useStore.getState(),
-        remotePersistedState
-      );
+      const observed = useStore.getState();
+      const prepared = await prepareHydratedState(observed, remotePersistedState);
+      if (observed !== useStore.getState()) throw new Error('Local data changed while preparing the downloaded snapshot. Retry with the latest changes.');
+      const hydratedState = finishHydratedState(prepared);
 
       syncPhase('saving');
       // Keep the local format and persist chat data before publishing the hydrated state.

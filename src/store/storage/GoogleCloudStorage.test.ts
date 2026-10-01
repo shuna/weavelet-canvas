@@ -65,6 +65,27 @@ describe('GoogleCloudStorage encrypted upload scheduling', () => {
     expect(mocks.push).toHaveBeenCalledTimes(2);
   });
 
+  it('coalesces pending copies and freezes the selected snapshot before upload', async () => {
+    const clone = vi.spyOn(globalThis, 'structuredClone');
+    const first = { state: { count: 1 }, version: 1 };
+    const latest = { state: { count: 2 }, version: 1 };
+    let finish!: () => void;
+    mocks.push.mockImplementationOnce(() => new Promise<void>(resolve => { finish = resolve; }));
+    try {
+      await storage().setItem('test', first);
+      await storage().setItem('test', latest);
+      expect(clone.mock.calls.some(([value]) => value === first || value === latest)).toBe(false);
+      const sending = flushPendingCloudSync();
+      expect(mocks.push).toHaveBeenCalledTimes(1);
+      const sent = mocks.push.mock.calls[0][0];
+      latest.state.count = 99;
+      expect(sent.state.count).toBe(2);
+      expect(clone.mock.calls.filter(([value]) => value === latest)).toHaveLength(1);
+      finish();
+      await sending;
+    } finally { clone.mockRestore(); }
+  });
+
   it('does not send queued data to a different target or provider', async () => {
     await storage().setItem('test', { state: { count: 3 } });
     mocks.state.fileId = 'file-2';

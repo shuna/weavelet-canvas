@@ -1,6 +1,11 @@
 import { encode, decode } from './crypto';
 import { toRecords, fromRecords, hashRecords, sameSnapshot, type Snapshot, type Records } from './records';
 import { mergeSyncMetrics } from './metrics';
+import { replayHistory } from './replay';
+import { decodeParts } from './decodeParts';
+import { SyncConflictError } from './records';
+import { prepareHydratedData } from '../../rehydrateData';
+import { prepareSave } from '../prepareSave';
 
 // Keep whole-snapshot CPU work off the UI thread. Only environments without Workers
 // (including unit tests) use the same implementations directly.
@@ -11,7 +16,8 @@ function processAsync<T>(operation: string, value: unknown, fallback: () => T | 
     worker.onmessage = ({ data }) => {
       worker.terminate();
       mergeSyncMetrics(data.metrics);
-      if (data.error) reject(new Error(data.error));
+      if (data.conflictKeys) reject(new SyncConflictError(data.conflictKeys));
+      else if (data.error) reject(new Error(data.error));
       else resolve(data.value);
     };
     worker.onerror = worker.onmessageerror = () => {
@@ -31,3 +37,7 @@ export const toRecordsAsync = (value: Snapshot) => processAsync('toRecords', val
 export const fromRecordsAsync = (value: Records) => processAsync('fromRecords', value, () => fromRecords(value));
 export const hashRecordsAsync = (value: Records) => processAsync('hashRecords', value, () => hashRecords(value));
 export const sameSnapshotAsync = (a: Snapshot, b: Snapshot) => processAsync('sameSnapshot', [a, b], () => sameSnapshot([a, b]));
+export const replayHistoryAsync = (value: Parameters<typeof replayHistory>[0]) => processAsync('replayHistory', value, () => replayHistory(value));
+export const decodePartsAsync = <T>(value: Uint8Array[]) => processAsync('decodeParts', value, () => decodeParts<T>(value));
+export const prepareHydratedDataAsync = (value: Parameters<typeof prepareHydratedData>[0]) => processAsync('prepareHydratedData', value, () => prepareHydratedData(structuredClone(value)));
+export const prepareSaveAsync = (value: Parameters<typeof prepareSave>[0]) => processAsync('prepareSave', value, () => prepareSave(structuredClone(value)));

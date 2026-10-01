@@ -1,13 +1,13 @@
 import { SyncConflictError, type Resolution } from './conflicts';
 import { mergeSyncRecords } from './merge';
-import { encodeAsync, decodeAsync, toRecordsAsync as toRecords, fromRecordsAsync as fromRecords, hashRecordsAsync as hashRecords } from './processing';
+import { replayHistoryAsync, decodePartsAsync, encodeAsync, decodeAsync, toRecordsAsync as toRecords, fromRecordsAsync as fromRecords, hashRecordsAsync as hashRecords } from './processing';
 import { syncPhase, uploadedFile } from './progress';
 import { createKeyEnvelope, unlockKey, encode, decode, encrypt, decrypt, digest, type KeyEnvelope } from './crypto';
 import { diffHashedRecords, applyChanges, type Records, type Snapshot, type Change, diffRecords } from './records';
 import { DriveTransport, SYNC_FOLDER_TYPE, type DriveFile } from './transport';
 import { syncCache, readSyncEntries, writeSyncCache, rememberedSyncKey } from './cache';
 
-interface Commit { version: 1; parents: string[]; changes: Change[]; resolutions?: Record<string, (string | null)[]> }
+import type { Commit } from './replay';
 interface Pending {
   id: string;
   commit: Commit;
@@ -192,15 +192,13 @@ export class EncryptedDriveSync {
       if (manifest.version !== 1 || !Array.isArray(manifest.parts) || !manifest.parts.length ||
           manifest.parts.some(p => typeof p !== 'string')) throw new Error('Invalid sync commit.');
       const chunks = [];
-      let size = 0;
       for (const part of manifest.parts) {
         const bytes = await decrypt(this.requireKey(), await this.drive.read(part), this.context(part));
-        chunks.push(bytes); size += bytes.length;
+        chunks.push(bytes);
       }
-      payload = new Uint8Array(size);
-      let offset = 0;
-      for (const bytes of chunks) { payload.set(bytes, offset); offset += bytes.length; }
-      commit = await decodeAsync<Commit>(payload);
+      const decoded = await decodePartsAsync<Commit>(chunks);
+      payload = decoded.bytes;
+      commit = decoded.value;
     }
     if (commit.version !== 1 || !Array.isArray(commit.parents) || !Array.isArray(commit.changes) ||
         commit.parents.some(p => typeof p !== 'string' || p === id)) throw new Error('Invalid sync commit.');
@@ -236,68 +234,12 @@ export class EncryptedDriveSync {
   }
   private async remote(allowConflicts = false, tips?: string[]): Promise<Records> {
     syncPhase('verifying');
-    // ponytail: replay retained commits; add checkpoint compaction when history replay becomes costly.
-    const histories = new Map<string, { id: string; value: string | null }[]>();
-    const ancestors = new Map<string, Set<string>>();
-    const reachable = new Set<string>();
-    const visit = (id: string) => {
-      if (reachable.has(id)) return;
-      const commit = this.cache.commits[id];
-      if (!commit) throw new Error('Missing sync history.');
-      reachable.add(id); commit.parents.forEach(visit);
-    };
-    (tips ?? this.heads()).forEach(visit);
-    const remaining = new Set([...reachable].sort());
-    const latest = (versions: { id: string; value: string | null }[]) =>
-      versions.filter((v) => !versions.some((other) => ancestors.get(other.id)?.has(v.id)));
-    const valueOf = (versions: { value: string | null }[]) => {
-      const values = new Set(versions.map((v) => v.value));
-      if (values.size > 1) throw new SyncConflictError([]);
-      return versions[0]?.value ?? null;
-    };
-    while (remaining.size) {
-      let progress = false;
-      for (const id of remaining) {
-        const commit = this.cache.commits[id];
-        if (!commit.parents.every((p) => ancestors.has(p))) continue;
-        const preceding = new Set(commit.parents);
-        for (const parent of commit.parents) for (const ancestor of ancestors.get(parent)!) preceding.add(ancestor);
-        ancestors.set(id, preceding);
-        const keys = new Set<string>();
-        for (const change of commit.changes) {
-          if (!change || typeof change.key !== 'string' || keys.has(change.key)) throw new Error('Invalid sync change.');
-          keys.add(change.key);
-          const history = histories.get(change.key) ?? [];
-          const parents = latest(history.filter((v) => preceding.has(v.id)));
-          let parentValue: string | null;
-          if (commit.resolutions?.[change.key]) {
-            const expected = [...new Set(await Promise.all(parents.map(v => v.value === null ? null : digest(v.value))))].sort();
-            if (expected.length < 2 || JSON.stringify(expected) !== JSON.stringify([...commit.resolutions[change.key]].sort())) {
-              throw new Error('Invalid conflict resolution parents.');
-            }
-            parentValue = parents[0]?.value ?? null;
-          } else parentValue = valueOf(parents);
-          await applyChanges(parentValue === null ? {} : { [change.key]: parentValue }, [change]);
-          history.push({ id, value: change.after });
-          histories.set(change.key, history);
-        }
-        remaining.delete(id); progress = true;
-      }
-      if (!progress) throw new Error('Missing or cyclic sync history.');
-    }
-    const records: Records = {};
-    const conflicts: Record<string, (string | null)[]> = {};
-    for (const [key, history] of histories) {
-      const versions = latest(history);
-      const values = [...new Set(versions.map(v => v.value))];
-      if (values.length > 1) conflicts[key] = await Promise.all(values.map(v => v === null ? null : digest(v)));
-      const value = versions[0]?.value ?? null;
-      if (value !== null) records[key] = value;
-    }
+    const { records, conflicts } = await replayHistoryAsync({ commits: this.cache.commits, tips: tips ?? this.heads() });
     this.remoteConflicts = conflicts;
     if (!allowConflicts && Object.keys(conflicts).length) throw new SyncConflictError(Object.keys(conflicts));
     return records;
   }
+
   private async sendPending() {
     const pending = this.cache.pending;
     if (!pending) return;
