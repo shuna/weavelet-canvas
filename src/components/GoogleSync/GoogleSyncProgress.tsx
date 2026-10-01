@@ -1,4 +1,5 @@
 import { useTranslation } from 'react-i18next';
+import { phaseProgress } from '@store/storage/google/progress';
 import { useSyncProgressDisplay } from '@hooks/useSyncProgressDisplay';
 
 const size = (bytes: number) => bytes >= 1024 * 1024
@@ -9,13 +10,17 @@ export default function GoogleSyncProgress() {
   const { t } = useTranslation('drive');
   const progress = useSyncProgressDisplay();
   if (!progress.active) return null;
-  const percent = progress.totalFiles && progress.totalFiles > 0
-    ? Math.min(100, Math.floor(progress.completedFiles / progress.totalFiles * 100)) : undefined;
+  const fraction = phaseProgress(progress);
+  const percent = fraction === undefined ? undefined : Math.floor(fraction * 100);
+  const overallPercent = Math.floor(progress.overallProgress * 100);
   return (
     <div className='mt-2 space-y-1 text-xs' data-testid='google-sync-progress'>
       <div>{t(`progress.${progress.phase}`)}{percent !== undefined && ` — ${percent}%`}</div>
-      <progress className='h-2 w-full accent-emerald-500' max={100} value={percent ?? 0}
+      <progress className='block h-1 w-full accent-emerald-500' max={100} value={percent}
         aria-label={t(`progress.${progress.phase}`) as string} />
+      <div>{t('progress.overall')} — {overallPercent}%</div>
+      <progress className='block h-1 w-full accent-emerald-600' max={100} value={overallPercent}
+        aria-label={t('progress.overall') as string} />
       {progress.totalFiles !== undefined && (
         <div>{t('progress.files', { done: progress.completedFiles, total: progress.totalFiles })}
           {progress.totalBytes !== undefined && <>{' · '}{size(progress.completedBytes)} / {size(progress.totalBytes)}</>}</div>

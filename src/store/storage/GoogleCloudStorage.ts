@@ -1,4 +1,4 @@
-import { withSyncProgress } from './google/progress';
+import { withSyncProgress, syncStage } from './google/progress';
 import type { PersistStorage } from 'zustand/middleware';
 import { createJSONStorage } from 'zustand/middleware';
 import useCloudAuthStore from '@store/cloud-auth-store';
@@ -93,12 +93,14 @@ async function applySyncedSnapshot(target: EncryptedDriveSync, before: Snapshot,
   return true;
 }
 async function synchronize(target: EncryptedDriveSync, snapshot: Snapshot) {
-  await target.push(snapshot);
-  const received = await target.pull();
-  if (await sameSnapshot(snapshot, received)) return;
-  if (!await applySyncedSnapshot(target, snapshot, received) && target === session) {
-    pending = { session: target, value: currentSnapshot() };
-  }
+  await syncStage(0, 3, () => target.push(snapshot));
+  const received = await syncStage(1, 3, () => target.pull());
+  await syncStage(2, 3, async () => {
+    if (await sameSnapshot(snapshot, received)) return;
+    if (!await applySyncedSnapshot(target, snapshot, received) && target === session) {
+      pending = { session: target, value: currentSnapshot() };
+    }
+  });
 }
 export async function resumeGoogleSync() {
   lastQueuedState = undefined;
@@ -111,12 +113,12 @@ export async function resolveGoogleSyncConflict(mode: Resolution) {
   const target = session;
   if (!target) throw new Error('Unlock Google sync first.');
   const before = structuredClone(currentSnapshot());
-  const resolved = await target.resolve(before, mode);
-  if (!await applySyncedSnapshot(target, before, resolved)) {
+  const resolved = await syncStage(0, 3, () => target.resolve(before, mode));
+  if (!await syncStage(1, 3, () => applySyncedSnapshot(target, before, resolved))) {
     throw new Error('Local data changed during conflict resolution. Review the latest changes before retrying.');
   }
   useSyncReview.setState({ conflict: false });
-  await resumeGoogleSync();
+  await syncStage(2, 3, () => resumeGoogleSync());
 }
 
 async function persistChatSnapshot(snapshot: Snapshot) {
@@ -129,9 +131,9 @@ export async function createEncryptedGoogleSync(passphrase: string, snapshot: Sn
   snapshot = structuredClone(snapshot);
   lockGoogleSync();
   await persistChatSnapshot(snapshot);
-  const created = await EncryptedDriveSync.create(transport(), passphrase, { folderName });
+  const created = await syncStage(0, 2, () => EncryptedDriveSync.create(transport(), passphrase, { folderName }));
   session = created.session;
-  await session.push(snapshot, true);
+  await syncStage(1, 2, () => created.session.push(snapshot, true));
   return created.file;
 }
 export async function pullEncryptedGoogleSync(): Promise<Snapshot> {

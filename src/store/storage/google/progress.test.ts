@@ -1,5 +1,5 @@
 import { afterEach, expect, it, vi } from 'vitest';
-import { beginTransfer, syncPhase, completedFile, useGoogleSyncProgress, withSyncProgress } from './progress';
+import { beginTransfer, syncStage, phaseProgress, syncPhase, completedFile, useGoogleSyncProgress, withSyncProgress } from './progress';
 import { DriveTransport } from './transport';
 
 afterEach(() => { vi.restoreAllMocks(); vi.unstubAllGlobals(); });
@@ -50,4 +50,47 @@ it('counts overlapping successful transfers once for aggregate throughput', asyn
     now = 1000; first(300);
     expect(useGoogleSyncProgress.getState()).toMatchObject({ uploadedBytes: 500, uploadMs: 1000 });
   });
+});
+
+it('combines stage counts and file counts while reserving later verification and saving', async () => {
+  await withSyncProgress(async () => {
+    await syncStage(0, 3, async () => {
+      await syncStage(0, 2, async () => {
+        syncPhase('uploading', 4);
+        completedFile(10);
+        expect(phaseProgress(useGoogleSyncProgress.getState())).toBe(0.25);
+        expect(useGoogleSyncProgress.getState().overallProgress).toBeCloseTo(1 / 24);
+        for (let i = 0; i < 3; i++) completedFile(10);
+        expect(useGoogleSyncProgress.getState().overallProgress).toBeCloseTo(1 / 6);
+      });
+      await syncStage(1, 2, async () => {
+        syncPhase('verifying');
+        expect(phaseProgress(useGoogleSyncProgress.getState())).toBeUndefined();
+        expect(useGoogleSyncProgress.getState().overallProgress).toBeCloseTo(1 / 6);
+      });
+    });
+    expect(useGoogleSyncProgress.getState().overallProgress).toBeCloseTo(1 / 3);
+    await syncStage(1, 3, async () => {
+      // Nested progress wrappers must retain the operation and its stage range.
+      await withSyncProgress(async () => {
+        syncPhase('downloading', 2);
+        completedFile(10);
+        expect(useGoogleSyncProgress.getState().overallProgress).toBeCloseTo(0.5);
+      });
+      expect(useGoogleSyncProgress.getState().active).toBe(true);
+    });
+    await syncStage(2, 3, async () => {
+      syncPhase('saving', 1);
+      completedFile(10);
+      expect(useGoogleSyncProgress.getState().overallProgress).toBeLessThan(1);
+    });
+    expect(useGoogleSyncProgress.getState().overallProgress).toBeLessThan(1);
+  });
+  expect(useGoogleSyncProgress.getState()).toMatchObject({ active: false, overallProgress: 1 });
+  await expect(withSyncProgress(() => syncStage(0, 2, async () => {
+    syncPhase('uploading', 1);
+    completedFile(10);
+    throw new Error('failed');
+  }))).rejects.toThrow('failed');
+  expect(useGoogleSyncProgress.getState()).toMatchObject({ active: false, overallProgress: 0.5 });
 });

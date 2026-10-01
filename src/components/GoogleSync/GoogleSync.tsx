@@ -1,7 +1,7 @@
 import SyncDots from './SyncDots';
 import { useSyncProgressDisplay } from '@hooks/useSyncProgressDisplay';
 import { SyncConflictError, useSyncReview, type Resolution } from '@store/storage/google/conflicts';
-import { withSyncProgress, syncPhase } from '@store/storage/google/progress';
+import { withSyncProgress, syncPhase, syncStage, phaseProgress } from '@store/storage/google/progress';
 import GoogleSyncProgress from './GoogleSyncProgress';
 import { createPortal } from 'react-dom';
 import React, { useEffect, useRef, useState } from 'react';
@@ -198,8 +198,8 @@ const GoogleSync = ({ clientId, openOnMount = false, showEntry = true }: { clien
   useEffect(() => {
     setBannerTarget(document.getElementById('google-sync-banner-overlay'));
   }, []);
-  const transferFileTotal = progress.active && (progress.phase === 'uploading' || progress.phase === 'downloading')
-    ? progress.totalFiles : undefined;
+  const fraction = phaseProgress(progress);
+  const overallPercent = Math.floor(progress.overallProgress * 100);
 
   const enableCloudPersistence = () => {
     useStore.persist.setOptions({
@@ -287,10 +287,15 @@ const GoogleSync = ({ clientId, openOnMount = false, showEntry = true }: { clien
           aria-label={t(syncStatus === 'error' ? 'progress.failed' : 'progress.open') as string}>
           {t(syncStatus === 'error' ? 'progress.failed' : progress.active ? `progress.${progress.phase}` : 'progress.open')}
           <SyncIcon status={syncStatus} />
-          {syncStatus === 'syncing' && transferFileTotal !== undefined && transferFileTotal > 0 && <progress
-            className='absolute inset-x-0 bottom-0 h-1 w-full accent-emerald-300'
-            max={transferFileTotal} value={progress.completedFiles}
-            aria-label={t(`progress.${progress.phase}`) as string} />}
+          {syncStatus === 'syncing' && progress.active && <>
+            <span>{t('progress.overall')} {overallPercent}%</span>
+            <div className='absolute inset-x-0 bottom-0 flex flex-col gap-px'>
+              <progress className='h-0.5 w-full accent-emerald-300' max={1} value={fraction}
+                aria-label={t(`progress.${progress.phase}`) as string} />
+              <progress className='h-0.5 w-full accent-emerald-100' max={1} value={progress.overallProgress}
+                aria-label={t('progress.overall') as string} />
+            </div>
+          </>}
         </button>, bannerTarget
       )}
       <GooglePopup
@@ -474,41 +479,42 @@ const GooglePopup = ({
       const encrypted = selectedFile?.mimeType === SYNC_FOLDER_TYPE;
       if (encrypted) await unlockSelected();
       else syncPhase('downloading');
-      const remoteStorageValue = encrypted
-        ? await pullEncryptedGoogleSync()
-        : await getDriveFileTyped(_fileId, googleAccessToken);
-      const normalizedRemote = normalizeRemotePersistedState(remoteStorageValue);
-      const remotePersistedState = migratePersistedState(
-        normalizedRemote.state,
-        normalizedRemote.version
-      ) as Partial<PersistedStoreState>;
-      const observed = useStore.getState();
-      const prepared = await prepareHydratedState(observed, remotePersistedState);
-      if (observed !== useStore.getState()) throw new Error('Local data changed while preparing the downloaded snapshot. Retry with the latest changes.');
-      const hydratedState = finishHydratedState(prepared);
+      const remoteStorageValue = await syncStage(0, 2, () => encrypted
+        ? pullEncryptedGoogleSync()
+        : getDriveFileTyped(_fileId, googleAccessToken));
+      await syncStage(1, 2, async () => {
+        const normalizedRemote = normalizeRemotePersistedState(remoteStorageValue);
+        const remotePersistedState = migratePersistedState(
+          normalizedRemote.state,
+          normalizedRemote.version
+        ) as Partial<PersistedStoreState>;
+        const observed = useStore.getState();
+        const prepared = await prepareHydratedState(observed, remotePersistedState);
+        if (observed !== useStore.getState()) throw new Error('Local data changed while preparing the downloaded snapshot. Retry with the latest changes.');
+        const hydratedState = finishHydratedState(prepared);
 
-      syncPhase('saving');
-      // Keep the local format and persist chat data before publishing the hydrated state.
-      await saveChatData(createPersistedChatDataState({ ...useStore.getState(), ...hydratedState }));
-      useStore.persist.setOptions({
-        storage: createJSONStorage(() => compressedStorage),
-        partialize: (state) => createLocalStoragePartializedState(state),
-      });
-      useStore.setState(hydratedState);
-      if (encrypted) {
-        await acceptGoogleSyncLocal(snapshot());
-        activateCloudSyncTarget(operationFileId);
-      } else {
-        setSyncTargetConfirmed(false);
-      }
-
-      if (needsDataMigration()) {
-        useStore.getState().setMigrationUiState({
-          visible: true,
-          status: 'needs-export-import',
+        syncPhase('saving');
+        // Keep the local format and persist chat data before publishing the hydrated state.
+        await saveChatData(createPersistedChatDataState({ ...useStore.getState(), ...hydratedState }));
+        useStore.persist.setOptions({
+          storage: createJSONStorage(() => compressedStorage),
+          partialize: (state) => createLocalStoragePartializedState(state),
         });
-      }
+        useStore.setState(hydratedState);
+        if (encrypted) {
+          await acceptGoogleSyncLocal(snapshot());
+          activateCloudSyncTarget(operationFileId);
+        } else {
+          setSyncTargetConfirmed(false);
+        }
 
+        if (needsDataMigration()) {
+          useStore.getState().setMigrationUiState({
+            visible: true,
+            status: 'needs-export-import',
+          });
+        }
+      });
       showToast(t('toast.pull'), 'success');
       setIsModalOpen(false);
       setSyncStatus('synced');

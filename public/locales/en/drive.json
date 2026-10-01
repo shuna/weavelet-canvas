@@ -118,9 +118,10 @@
     "sent": "Uploaded",
     "received": "Downloaded",
     "measuring": "Measuring",
-    "measurement": "Percentage is based on files completed in the current transfer. Average transfer speeds update when each file completes. Phases with unknown totals have no percentage.",
+    "measurement": "Overall progress is calculated from workflow stages and completed files within each stage. Stages with unknown file totals show ongoing activity. Average transfer speeds update when files complete.",
     "open": "Show sync progress",
-    "failed": "View sync error"
+    "failed": "View sync error",
+    "overall": "Overall"
   },
   "conflict": {
     "description": "Conflicting messages become branches within the chat; matching branches are combined. Conflicting chat metadata or folders are kept as separate copies. Conflicting settings use this device’s values.",
