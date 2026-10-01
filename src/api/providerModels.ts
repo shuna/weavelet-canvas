@@ -12,6 +12,7 @@ type ProviderModelPayload = {
   name?: unknown;
   context_length?: unknown;
   context_window?: unknown;
+  top_provider?: unknown;
   created?: unknown;
   pricing?: unknown;
   architecture?: unknown;
@@ -156,6 +157,9 @@ const normalizeModelEntry = (
     contextLength:
       toNumberValue(payload.context_length) ??
       toNumberValue(payload.context_window),
+    maxCompletionTokens: toNumberValue(
+      isRecord(payload.top_provider) ? payload.top_provider.max_completion_tokens : undefined
+    ),
     promptPrice,
     completionPrice,
     created: toNumberValue(payload.created),

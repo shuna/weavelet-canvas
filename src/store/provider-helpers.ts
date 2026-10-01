@@ -72,6 +72,7 @@ const enrichFavoriteModel = (
   return {
     ...favorite,
     contextLength: favorite.contextLength ?? providerModel.contextLength,
+    maxCompletionTokens: favorite.maxCompletionTokens ?? providerModel.maxCompletionTokens,
     promptPrice: favorite.promptPrice ?? providerModel.promptPrice,
     completionPrice: favorite.completionPrice ?? providerModel.completionPrice,
     modelType: favorite.modelType ?? providerModel.modelType,

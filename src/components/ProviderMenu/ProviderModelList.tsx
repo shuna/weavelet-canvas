@@ -247,6 +247,7 @@ export default function ProviderModelList({
                       modelId: model.id,
                       providerId: model.providerId,
                       contextLength: model.contextLength,
+                      maxCompletionTokens: model.maxCompletionTokens,
                       promptPrice: model.promptPrice,
                       completionPrice: model.completionPrice,
                       modelType: model.modelType,

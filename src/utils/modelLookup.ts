@@ -5,6 +5,8 @@ import {
   UNKNOWN_MODEL_CONTEXT_LENGTH,
   UNKNOWN_MODEL_UI_CONTEXT_LENGTH,
 } from './tokenBudget';
+import { defaultUserMaxToken } from '@constants/chat';
+import { getMaxCompletionTokensForContext } from './tokenBudget';
 import { localModelRuntime } from '@src/local-llm/runtime';
 import { getCatalogModel } from '@src/local-llm/catalog';
 
@@ -413,4 +415,22 @@ export function isKnownModel(modelId: string): boolean {
   }
 
   return false;
+}
+
+export function getModelDefaultMaxTokens(
+  modelId: string,
+  providerId?: ProviderId,
+  modelSource?: 'remote' | 'local'
+): number {
+  const context = getModelContextInfo(modelId, providerId, modelSource);
+  const state = useStore.getState();
+  const outputLimit = modelSource === 'local' ? undefined : [
+    findProviderCustomModel(state.providerCustomModels, modelId, providerId),
+    findFavorite(state.favoriteModels, modelId, providerId),
+    findCachedModel(state.providerModelCache, modelId, providerId),
+  ].map((model) => model?.maxCompletionTokens)
+    .find((limit) => limit != null && Number.isFinite(limit) && limit > 0);
+  const contextLimit = getMaxCompletionTokensForContext(context.contextLength);
+  if (outputLimit != null) return context.isFallback ? outputLimit : Math.min(outputLimit, contextLimit);
+  return context.isFallback ? defaultUserMaxToken : contextLimit;
 }

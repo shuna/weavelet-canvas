@@ -24,6 +24,7 @@ export interface ProviderModel {
   name: string;
   providerId: ProviderId;
   contextLength?: number;
+  maxCompletionTokens?: number;
   promptPrice?: number;
   completionPrice?: number;
   created?: number;
@@ -41,6 +42,7 @@ export interface CustomProviderModel {
   name?: string;
   modelType: 'text' | 'image';
   contextLength?: number;
+  maxCompletionTokens?: number;
   promptPrice?: number;
   completionPrice?: number;
   imagePrice?: number;
@@ -57,6 +59,7 @@ export interface FavoriteModel {
   completionPrice?: number;
   imagePrice?: number;
   contextLength?: number;
+  maxCompletionTokens?: number;
   modelType?: 'text' | 'image';
   streamSupport?: boolean;
   supportsReasoning?: boolean;
