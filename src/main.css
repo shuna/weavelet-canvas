@@ -35,10 +35,6 @@
     height: 100dvh;
   }
 
-  body:has(> [data-google-sync-banner]) #root {
-    padding-top: 2rem;
-  }
-
   .markdown table,
   .overtype-preview table {
     --tw-border-spacing-x: 0px;

@@ -105,3 +105,40 @@ test('compact mobile layout shows one receiving indicator and retains stop', asy
   await stop.click();
   await expect(stop).toHaveCount(0);
 });
+
+test('sync banner overlays below the view bar without moving the layout', async ({ page }) => {
+  await page.goto('/', { waitUntil: 'domcontentloaded' });
+  await page.getByRole('button', { name: 'Skip All', exact: true }).click();
+  await page.locator('#modal-root').getByRole('button', { name: 'close modal', exact: true }).click();
+  await page.evaluate(async () => {
+    const load = (path: string) => import(/* @vite-ignore */ path);
+    const source = await (await fetch('/src/components/GoogleSync/GoogleSync.tsx')).text();
+    const reactPath = source.match(/from "([^"\n]*\/react\.js[^"\n]*)"/)![1];
+    const authPath = source.match(/from ['"]([^'"\n]*\/cloud-auth-store\.ts[^'"\n]*)['"]/)![1];
+    const React = (await load(reactPath)).default;
+    const { createRoot } = (await load('/node_modules/.vite/deps/react-dom_client.js')).default;
+    const { default: GoogleSync } = await load('/src/components/GoogleSync/GoogleSync.tsx');
+    const { default: auth } = await load(authPath);
+    const element = document.createElement('div');
+    document.body.append(element);
+    createRoot(element).render(React.createElement(GoogleSync, { clientId: 'test', showEntry: false }));
+    (window as any).setBannerStatus = (syncStatus: string) => auth.setState({ syncStatus });
+  });
+  const anchor = page.locator('#google-sync-banner-overlay');
+  await expect(anchor).toBeAttached();
+  for (const width of [1440, 390]) {
+    await page.setViewportSize({ width, height: 900 });
+    await page.evaluate(() => (window as any).setBannerStatus('synced'));
+    await expect(page.locator('[data-google-sync-banner]')).toHaveCount(0);
+    const before = await anchor.evaluate(el => el.parentElement!.getBoundingClientRect().toJSON());
+    await page.evaluate(() => (window as any).setBannerStatus('syncing'));
+    const banner = page.locator('[data-google-sync-banner]');
+    await expect(banner).toBeVisible();
+    const after = await anchor.evaluate(el => el.parentElement!.getBoundingClientRect().toJSON());
+    expect(after).toEqual(before);
+    const bounds = await banner.boundingBox();
+    expect(bounds!.y).toBeCloseTo(before.bottom);
+    expect(bounds!.height).toBe(24);
+    expect(await banner.evaluate(el => el.lastElementChild!.getAttribute('role'))).toBe('img');
+  }
+});
