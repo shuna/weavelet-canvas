@@ -105,3 +105,23 @@ it('suggests unused folder names and sends editable names without changing ident
   await expect(drive.folder('folder', 'header', '  ')).rejects.toThrow('name');
   expect(fetch).toHaveBeenCalledTimes(1);
 });
+
+it('lists all live pack indexes separately from commits', async () => {
+  const fetch = vi.fn().mockResolvedValueOnce(json({ files: [{ id: 'pack1' }], nextPageToken: 'next' }))
+    .mockResolvedValueOnce(json({ files: [{ id: 'pack2' }] }));
+  vi.stubGlobal('fetch', fetch);
+  expect(await new DriveTransport(() => 'token').packs('dataset')).toEqual(['pack1', 'pack2']);
+  expect(new URL(fetch.mock.calls[0][0]).searchParams.get('q')).toContain("value='pack'");
+});
+
+it('retries source deletion idempotently but preserves authentication and server errors', async () => {
+  const fetch = vi.fn().mockResolvedValueOnce(new Response(null, { status: 204 }))
+    .mockResolvedValueOnce(new Response(null, { status: 404 }))
+    .mockResolvedValueOnce(new Response(null, { status: 403 }));
+  vi.stubGlobal('fetch', fetch);
+  const drive = new DriveTransport(() => 'token');
+  await drive.remove('source');
+  await drive.remove('source');
+  await expect(drive.remove('source')).rejects.toThrow('403');
+  expect(fetch.mock.calls[0][1].method).toBe('DELETE');
+});

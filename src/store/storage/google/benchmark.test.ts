@@ -34,6 +34,7 @@ it.skipIf(!process.env.SYNC_BENCH)('measures a 32 MiB initial snapshot and one t
     async read(id: string) { await wait(); return files.get(id)!.data.slice(); },
     async startToken() { await wait(); return String(events.length); },
     async commits() { await wait(); return [...files.values()].filter(f => f.metadata.appProperties.kind === 'commit').map(f => f.metadata.id); },
+    async packs() { await wait(); return []; },
     async changes(token: string) { await wait(); return { token: String(events.length), changes: events.slice(Number(token)) }; },
   } as unknown as DriveTransport;
   const image = 'data:image/png;base64,' + randomBytes(1536 * 1024).toString('base64');

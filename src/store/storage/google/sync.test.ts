@@ -2,8 +2,8 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { IDBFactory } from 'fake-indexeddb';
 import { EncryptedDriveSync } from './sync';
 import { useGoogleSyncProgress, withSyncProgress } from './progress';
-import { DriveTransport, SYNC_FOLDER_TYPE, type DriveFile } from './transport';
-import { createKeyEnvelope, decrypt, encrypt, unlockKey, encode } from './crypto';
+import { DriveTransport, DriveNotFoundError, SYNC_FOLDER_TYPE, type DriveFile } from './transport';
+import { createKeyEnvelope, decrypt, encrypt, unlockKey, encode, digest } from './crypto';
 import { toRecords, fromRecords, diffRecords } from './records';
 import type { Snapshot } from './records';
 import * as cacheStorage from './cache';
@@ -14,7 +14,7 @@ const PASSWORD = 'test-only long passphrase';
 class FakeDrive {
   next = 0;
   files = new Map<string, { bytes: Uint8Array; metadata: DriveFile }>();
-  events: { fileId: string; file: DriveFile }[] = [];
+  events: { fileId: string; file?: DriveFile; removed?: boolean }[] = [];
   writes: { id: string; kind: string; bytes: Uint8Array }[] = [];
   reads: string[] = [];
   attempts: string[] = [];
@@ -43,11 +43,15 @@ class FakeDrive {
   async read(id: string) {
     this.reads.push(id);
     const file = this.files.get(id);
-    if (!file) throw new Error('404 missing file');
+    if (!file) throw new DriveNotFoundError('404 missing file');
     return file.bytes.slice();
   }
   async startToken() { return String(this.events.length); }
   async commits(dataset: string) { return [...this.files.values()].filter((f) => f.metadata.appProperties?.dataset === dataset && f.metadata.appProperties.kind === 'commit').map((f) => f.metadata.id); }
+  async packs(dataset: string) { return [...this.files.values()].filter(f => f.metadata.appProperties?.dataset === dataset && f.metadata.appProperties.kind === 'pack').map(f => f.metadata.id); }
+  async remove(id: string) {
+    if (this.files.delete(id)) this.events.push({ fileId: id, removed: true });
+  }
   async changes(token: string) { return { token: String(this.events.length), changes: this.events.slice(Number(token)) }; }
   transport() { return this as unknown as DriveTransport; }
 }
@@ -536,3 +540,244 @@ it('creates a named folder and restores its key after a remote rename using the 
   expect(await reloaded.restoreKey()).toBe(true);
   expect(await toRecords(await reloaded.pull())).toEqual(await toRecords(snapshot()));
 });
+
+// Build real encrypted history without paying for an autosave/replay for every fixture edit.
+async function appendHistory(drive: FakeDrive, file: DriveFile, state: Snapshot, parent: string, count: number) {
+  const key = (await cacheStorage.rememberedSyncKey(file.id))!;
+  for (let i = 0; i < count; i++) {
+    const id = await drive.id();
+    const before = await digest(JSON.stringify(state.state.chats![0].title));
+    state.state.chats![0].title = `revision-${id}`;
+    const commit = { version: 2, parents: [parent], changes: [{ key: '["chats","chat-a","title"]', before,
+      after: JSON.stringify(state.state.chats![0].title) }] };
+    await drive.put(id, file.id, 'commit', await encrypt(key, encode(commit), `${file.id}:${id}`));
+    parent = id;
+  }
+  return parent;
+}
+async function retainedHistory(count = 128) {
+  const drive = new FakeDrive();
+  const { session, file } = await EncryptedDriveSync.create(drive.transport(), PASSWORD);
+  const original = snapshot(), state = structuredClone(original);
+  await session.push(state, true);
+  const first = drive.writes.find(w => w.kind === 'commit')!.id;
+  const last = await appendHistory(drive, file, state, first, count - 1);
+  return { drive, session, file, original, state, last };
+}
+
+it('compacts at 128 commits, retains exact history and skips pack payloads for cached readers', async () => {
+  const { drive, session, file, state, last } = await retainedHistory(127);
+  await session.push(state, true);
+  expect(await drive.commits(file.id)).toHaveLength(127);
+  expect(await drive.packs(file.id)).toHaveLength(0);
+  await appendHistory(drive, file, state, last, 1);
+  const writerDb = globalThis.indexedDB;
+  cache();
+  const cachedDb = globalThis.indexedDB;
+  const cached = new EncryptedDriveSync(file.id, drive.transport());
+  await cached.unlock(PASSWORD);
+  const beforeReads = drive.reads.length;
+  expect(await toRecords(await cached.pull())).toEqual(await toRecords(state));
+  expect(drive.reads.length - beforeReads).toBe(129); // 128 commits plus the initial multipart data.
+  await cached.acceptLocal(state);
+  (globalThis as any).indexedDB = writerDb;
+  const before = drive.writes.length;
+  await session.push(state, true);
+  const writes = drive.writes.slice(before);
+  expect(writes.map(w => w.kind)).toEqual(['pack-part', 'pack']);
+  expect(await drive.commits(file.id)).toHaveLength(0);
+  expect([...drive.files.values()].filter(f => f.metadata.appProperties?.kind === 'part')).toHaveLength(0);
+  const packs = await drive.packs(file.id);
+  expect(packs).toHaveLength(1);
+  expect(writes.every(w => w.bytes.length <= 4 * 1024 * 1024)).toBe(true);
+  (globalThis as any).indexedDB = cachedDb;
+  drive.reads = [];
+  expect(await toRecords(await cached.pull())).toEqual(await toRecords(state));
+  expect(drive.reads).toEqual(packs); // Index only: no retransmission of known history.
+  drive.reads = [];
+  await cached.pull();
+  expect(drive.reads).toEqual([]);
+  cache();
+  const fresh = new EncryptedDriveSync(file.id, drive.transport());
+  await fresh.unlock(PASSWORD);
+  drive.reads = [];
+  expect(await toRecords(await fresh.pull())).toEqual(await toRecords(state));
+  expect(drive.reads).toHaveLength(2); // One index plus one payload instead of 129 media requests.
+}, 30_000);
+
+it.each(['pack-part', 'pack', 'delete'])('resumes compaction after a lost %s response without changing ciphertext or losing history', async failure => {
+  const { drive, session, file, state } = await retainedHistory();
+  if (failure === 'delete') {
+    const remove = drive.remove.bind(drive);
+    let fail = true;
+    drive.remove = async id => { await remove(id); if (fail) { fail = false; throw new Error('response lost'); } };
+  } else drive.loseResponse = failure;
+  await expect(session.push(state, true)).rejects.toThrow('response lost');
+  if (failure !== 'delete') expect(await drive.commits(file.id)).toHaveLength(128);
+  const prepared = drive.writes.filter(w => w.kind.startsWith('pack'));
+  const resumed = new EncryptedDriveSync(file.id, drive.transport());
+  expect(await resumed.restoreKey()).toBe(true);
+  expect(await toRecords(await resumed.pull())).toEqual(await toRecords(state));
+  expect(await drive.commits(file.id)).toHaveLength(0);
+  expect(await drive.packs(file.id)).toHaveLength(1);
+  for (const file of prepared) expect(drive.files.get(file.id)!.bytes).toEqual(file.bytes);
+  expect(drive.writes.filter(w => w.kind === 'pack-part')).toHaveLength(1);
+  expect(drive.writes.filter(w => w.kind === 'pack')).toHaveLength(1);
+}, 30_000);
+
+it('never deletes sources when pack readback authentication fails', async () => {
+  const { drive, session, file, state } = await retainedHistory();
+  const read = drive.read.bind(drive);
+  let damage = true;
+  drive.read = async id => {
+    const bytes = await read(id);
+    if (damage && drive.files.get(id)?.metadata.appProperties?.kind === 'pack-part') bytes[20] ^= 1;
+    return bytes;
+  };
+  await expect(session.push(state, true)).rejects.toThrow('decrypt');
+  expect(await drive.commits(file.id)).toHaveLength(128);
+  damage = false;
+  expect(await toRecords(await session.pull())).toEqual(await toRecords(state));
+  expect(await drive.commits(file.id)).toHaveLength(0);
+}, 30_000);
+
+it('merges small packs again and lets an offline reader recover through the replacement index', async () => {
+  const { drive, session, file, state, last } = await retainedHistory();
+  await session.push(state, true);
+  const writerDb = globalThis.indexedDB;
+  cache();
+  const readerDb = globalThis.indexedDB;
+  const reader = new EncryptedDriveSync(file.id, drive.transport());
+  await reader.unlock(PASSWORD);
+  await reader.acceptLocal(await reader.pull());
+  const oldPack = (await drive.packs(file.id))[0];
+  (globalThis as any).indexedDB = writerDb;
+  await appendHistory(drive, file, state, last, 128);
+  await session.push(state, true);
+  expect(await drive.packs(file.id)).toHaveLength(1);
+  expect(drive.files.has(oldPack)).toBe(false);
+  (globalThis as any).indexedDB = readerDb;
+  // These new commits require a payload once; a later replacement containing only known entries does not.
+  expect(await toRecords(await reader.pull())).toEqual(await toRecords(state));
+  drive.reads = [];
+  await reader.pull();
+  expect(drive.reads).toEqual([]);
+  cache();
+  const fresh = new EncryptedDriveSync(file.id, drive.transport());
+  await fresh.unlock(PASSWORD);
+  expect(await toRecords(await fresh.pull())).toEqual(await toRecords(state));
+}, 30_000);
+
+it('preserves offline disjoint edits and still rejects conflicting edits after source deletion', async () => {
+  const { drive, session, file, state, original } = await retainedHistory();
+  const writerDb = globalThis.indexedDB;
+  cache();
+  const offlineDb = globalThis.indexedDB;
+  const offline = new EncryptedDriveSync(file.id, drive.transport());
+  await offline.unlock(PASSWORD);
+  await offline.acceptLocal(original);
+  (globalThis as any).indexedDB = writerDb;
+  await session.push(state, true);
+  (globalThis as any).indexedDB = offlineDb;
+  const local = structuredClone(original);
+  local.state.theme = 'light';
+  await offline.push(local);
+  const combined = await offline.pull();
+  expect(combined.state.theme).toBe('light');
+  expect(combined.state.chats![0].title).toBe(state.state.chats![0].title);
+  local.state.chats![0].title = 'offline edit';
+  const before = drive.writes.length;
+  await expect(offline.push(local)).rejects.toThrow('conflict');
+  expect(drive.writes).toHaveLength(before);
+}, 30_000);
+
+it('recovers a source-part deletion race through the live pack index', async () => {
+  const { drive, session, file, state } = await retainedHistory();
+  const writerDb = globalThis.indexedDB;
+  cache();
+  const readerDb = globalThis.indexedDB;
+  const reader = new EncryptedDriveSync(file.id, drive.transport());
+  await reader.unlock(PASSWORD);
+  const read = drive.read.bind(drive);
+  let race = true;
+  drive.read = async id => {
+    if (race && drive.files.get(id)?.metadata.appProperties?.kind === 'part') {
+      race = false;
+      (globalThis as any).indexedDB = writerDb;
+      await session.push(state, true);
+      (globalThis as any).indexedDB = readerDb;
+    }
+    return read(id);
+  };
+  // Independent devices have separate lock managers; this fixture shares Node's global navigator.
+  vi.stubGlobal('navigator', { locks: undefined });
+  try { expect(await toRecords(await reader.pull())).toEqual(await toRecords(state)); }
+  finally { vi.unstubAllGlobals(); }
+}, 30_000);
+
+it('continues to stop on uncovered history deletion', async () => {
+  const { drive, session, file, state, last } = await retainedHistory(2);
+  await session.pull();
+  await drive.remove(last);
+  await expect(session.pull()).rejects.toThrow('history was deleted');
+  expect(await drive.packs(file.id)).toHaveLength(0);
+});
+
+it('resumes cleanup when another device has already replaced its published pack', async () => {
+  const { drive, session, file, state, last } = await retainedHistory();
+  const writerDb = globalThis.indexedDB;
+  const remove = drive.remove.bind(drive);
+  let fail = true;
+  drive.remove = async id => {
+    await remove(id);
+    if (fail) { fail = false; throw new Error('delete response lost'); }
+  };
+  await expect(session.push(state, true)).rejects.toThrow('response lost');
+  const originalPack = (await drive.packs(file.id))[0];
+  cache();
+  const other = new EncryptedDriveSync(file.id, drive.transport());
+  await other.unlock(PASSWORD);
+  await appendHistory(drive, file, state, last, 128);
+  await other.push(state, true);
+  expect(drive.files.has(originalPack)).toBe(false);
+  (globalThis as any).indexedDB = writerDb;
+  const resumed = new EncryptedDriveSync(file.id, drive.transport());
+  await resumed.restoreKey();
+  expect(await toRecords(await resumed.pull())).toEqual(await toRecords(state));
+  expect(await drive.commits(file.id)).toHaveLength(0);
+  expect(await drive.packs(file.id)).toHaveLength(1);
+}, 30_000);
+
+it('keeps simultaneously published packs safe and consolidates their duplicate history later', async () => {
+  const { drive, session, file, state, last } = await retainedHistory();
+  const writerDb = globalThis.indexedDB;
+  cache();
+  const otherDb = globalThis.indexedDB;
+  const other = new EncryptedDriveSync(file.id, drive.transport());
+  await other.unlock(PASSWORD);
+  await other.acceptLocal(await other.pull());
+  (globalThis as any).indexedDB = writerDb;
+  const put = drive.put.bind(drive);
+  let overlap = true;
+  drive.put = async (id, dataset, kind, bytes) => {
+    if (overlap && kind === 'pack') {
+      overlap = false;
+      (globalThis as any).indexedDB = otherDb;
+      try { await other.push(state); }
+      finally { (globalThis as any).indexedDB = writerDb; }
+    }
+    return put(id, dataset, kind, bytes);
+  };
+  vi.stubGlobal('navigator', { locks: undefined });
+  try { await session.push(state, true); }
+  finally { vi.unstubAllGlobals(); }
+  expect(await drive.packs(file.id)).toHaveLength(2);
+  expect(await drive.commits(file.id)).toHaveLength(0);
+  await appendHistory(drive, file, state, last, 128);
+  await session.push(state, true);
+  expect(await drive.packs(file.id)).toHaveLength(1);
+  cache();
+  const reader = new EncryptedDriveSync(file.id, drive.transport());
+  await reader.unlock(PASSWORD);
+  expect(await toRecords(await reader.pull())).toEqual(await toRecords(state));
+}, 30_000);
