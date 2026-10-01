@@ -12,6 +12,10 @@ export const useSyncReview = create(persist(() => ({
   nodes: {} as Record<string, string[]>,
 }), { name: 'weavelet-sync-review', partialize: ({ chats, folders, nodes }) => ({ chats, folders, nodes }) }));
 
+export function acknowledgeAllSyncChanges() {
+  useSyncReview.setState({ chats: [], folders: [], nodes: {} });
+}
+
 export function acknowledgeSyncChat(chatId: string) {
   useSyncReview.setState(state => ({ chats: state.chats.filter(id => id !== chatId), nodes: { ...state.nodes, [chatId]: [] } }));
 }

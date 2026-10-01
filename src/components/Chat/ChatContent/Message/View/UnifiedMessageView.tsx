@@ -1,6 +1,7 @@
-import React, { memo, useCallback, useState } from 'react';
+import React, { memo, useCallback, useEffect, useState } from 'react';
 import useStore from '@store/store';
 import useSubmit from '@hooks/useSubmit';
+import { confirmChatModelFavorite } from '@utils/chatModelResolution';
 import { resolveProviderForModel, type ResolvedProvider } from '@hooks/submitHelpers';
 import {
   ContentInterface,
@@ -129,6 +130,7 @@ const UnifiedMessageView = memo(
         useStore.getState().chats![currentChatIndex].messages.length
       );
       if (!plan) return;
+      if (!confirmChatModelFavorite(currentChatIndex)) return;
       if (plan.removeIndex >= 0) {
         removeMessageAtIndex(currentChatIndex, plan.removeIndex);
       }
@@ -171,8 +173,16 @@ const UnifiedMessageView = memo(
       };
     }, [currentChatIndex]);
 
-    const streamingText = useStreamingText(isGeneratingMessage ? nodeId : undefined);
-    const streamingReasoning = useStreamingReasoning(isGeneratingMessage ? nodeId : undefined);
+    const [contentElement, setContentElement] = useState<HTMLDivElement | null>(null);
+    const [streamVisible, setStreamVisible] = useState(true);
+    useEffect(() => {
+      if (!isGeneratingMessage || !contentElement) return;
+      const observer = new IntersectionObserver(([entry]) => setStreamVisible(entry.isIntersecting));
+      observer.observe(contentElement);
+      return () => observer.disconnect();
+    }, [isGeneratingMessage, contentElement]);
+    const streamingText = useStreamingText(isGeneratingMessage ? nodeId : undefined, streamVisible);
+    const streamingReasoning = useStreamingReasoning(isGeneratingMessage ? nodeId : undefined, streamVisible, false);
     // Resolve reasoning: from streaming buffer during generation, from persisted content otherwise
     const persistedReasoning = Array.isArray(content)
       ? content.filter(isReasoningContent).map((c) => c.text).join('')
@@ -197,7 +207,7 @@ const UnifiedMessageView = memo(
     return (
       <>
         {isEditState ? (
-          <div className={contentSurfaceClass}>
+          <div ref={setContentElement} className={contentSurfaceClass}>
             <div className={contentMinHeightClass}>
               <OverTypeEditor
                 value={displayValue}
@@ -260,10 +270,12 @@ const UnifiedMessageView = memo(
             )}
           </div>
         ) : (
-          <div className={`${contentSurfaceClass} relative`}>
+          <div ref={setContentElement} className={`${contentSurfaceClass} relative`}>
             {role === 'assistant' && currentReasoning && (
               <CollapsibleReasoning
                 reasoning={currentReasoning}
+                nodeId={nodeId}
+                visible={streamVisible}
                 isGenerating={isGeneratingMessage}
               />
             )}

@@ -13,6 +13,7 @@ import { prepareStreamRequest } from './api';
 import { getModelSupportsReasoning } from '@utils/modelLookup';
 import { getModelRequiresReasoning } from '@utils/modelLookup';
 import type { ConfigInterface, MessageInterface } from '@type/chat';
+import { _defaultChatConfig } from '@constants/chat';
 
 const baseConfig: ConfigInterface = {
   model: 'gpt-4o',
@@ -32,6 +33,17 @@ describe('prepareStreamRequest reasoning payloads', () => {
   beforeEach(() => {
     vi.mocked(getModelSupportsReasoning).mockReturnValue(true);
     vi.mocked(getModelRequiresReasoning).mockReturnValue(false);
+  });
+
+  it('disables optional OpenRouter reasoning with the new chat defaults', () => {
+    const { body } = prepareStreamRequest(
+      'https://openrouter.ai/api/v1/chat/completions',
+      messages,
+      { ..._defaultChatConfig, model: 'anthropic/claude-opus-4.6', providerId: 'openrouter' }
+    );
+
+    expect(body).toMatchObject({ reasoning: { enabled: false } });
+    expect((body as { reasoning: object }).reasoning).not.toHaveProperty('max_tokens');
   });
 
   it('uses adaptive reasoning for OpenRouter Claude 4.6 models when no explicit budget is set', () => {
@@ -241,7 +253,7 @@ describe('prepareStreamRequest reasoning payloads', () => {
       messages,
       {
         ...baseConfig,
-        model: 'anthropic/claude-sonnet-4',
+        model: 'anthropic/claude-opus-4.5',
         providerId: 'openrouter',
         verbosity: 'high',
       }
@@ -250,5 +262,22 @@ describe('prepareStreamRequest reasoning payloads', () => {
     expect(body).toMatchObject({
       verbosity: 'high',
     });
+  });
+
+  it('clamps unsupported max verbosity and keeps saved model settings out of the request', () => {
+    const { body } = prepareStreamRequest(
+      'https://openrouter.ai/api/v1/chat/completions',
+      messages,
+      {
+        ...baseConfig,
+        model: 'anthropic/claude-opus-4.5',
+        providerId: 'openrouter',
+        verbosity: 'max',
+        modelSettings: { other: { ...baseConfig, verbosity: 'max' } },
+      }
+    );
+
+    expect(body).toMatchObject({ verbosity: 'medium' });
+    expect(body).not.toHaveProperty('modelSettings');
   });
 });

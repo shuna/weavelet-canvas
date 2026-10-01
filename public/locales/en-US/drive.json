@@ -129,9 +129,48 @@
   },
   "backendNotice": "Google credentials are encrypted on Cloudflare and refreshed automatically. Conversations are encrypted in the browser. The sync key is remembered in this browser; the passphrase is neither stored nor sent.",
   "review": {
+    "allDone": "Mark all chats as reviewed",
     "description": "Sync changed this chat. Review its other branches too.",
     "chatDone": "Mark chat as reviewed",
     "nodeDone": "Mark sync change as reviewed",
     "folderDone": "Mark folder change as reviewed"
+  },
+  "debug": {
+    "title": "Google Drive sync",
+    "noMeasurement": "No measurement",
+    "result": {
+      "running": "Running",
+      "completed": "Completed",
+      "failed": "Failed"
+    },
+    "elapsed": "Total sync: {{time}}",
+    "normal": "Normal transfer: ↑ {{sent}} / ↓ {{received}}",
+    "compactionBytes": "Compaction upload: {{sent}} / Readback before deletion: {{received}}",
+    "packBytes": "Pack download: index {{index}} / payload {{body}}",
+    "packAccess": "Pack payload: skipped {{skipped}} / downloaded {{read}} (excluding verification)",
+    "processing": "Cumulative processing: compression {{compression}} / crypto {{crypto}} / local reads and writes {{cache}}",
+    "compaction": "This sync compaction decision",
+    "completedGroups": "Completed {{groups}} groups",
+    "compactionStatus": {
+      "notChecked": "Not checked",
+      "skipped": "Skipped",
+      "running": "Running",
+      "completed": "Completed",
+      "interrupted": "Interrupted; awaiting retry"
+    },
+    "compactionReason": {
+      "belowThreshold": "Unpacked history below threshold",
+      "liveBelowThreshold": "Live Drive sources below threshold",
+      "new": "New compaction",
+      "resume": "Resuming prepared compaction"
+    },
+    "lastCompaction": "Last group ({{time}}): source files {{before}} → new files {{after}} / {{reduction}} fewer",
+    "observation": "History last observed: {{time}}",
+    "history": "Unpacked {{count}} / threshold {{threshold}} commits · {{excess}} beyond target",
+    "packs": "Packed: {{indexes}} indexes / {{bodies}} payload files · {{small}} packs below 1 MiB",
+    "reference": "Reference minimum payload files {{files}} / {{excess}} excess (estimate)",
+    "cleanup": "Source deletion checks remaining: {{count}} (may include already deleted sources)",
+    "measurement": "Sizes and rates count completed file payloads, excluding HTTP headers and failed transfers. Overlapping transfer time is counted once; processing times are cumulative.",
+    "referenceHelp": "The reference estimates packing existing compressed payloads into 4 MiB files. It excludes indexes, unpacked history and recompression effects; it is not a global optimum."
   }
 }

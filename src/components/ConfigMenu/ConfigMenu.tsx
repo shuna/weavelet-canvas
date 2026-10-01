@@ -11,12 +11,15 @@ import {
   useModelSupportsReasoning,
   useModelCapabilities,
 } from '@utils/modelLookup';
+import { getModelDefaultMaxTokens } from '@utils/modelLookup';
 import { ModelOptions } from '@type/chat';
 import { isModelStreamSupported, normalizeConfigStream } from '@utils/streamSupport';
 import { clampCompletionTokens, getMaxCompletionTokensForContext } from '@utils/tokenBudget';
 import { _defaultChatConfig } from '@constants/chat';
 import { SYSTEM_PROMPT_PRESETS } from '@constants/systemPromptPresets';
 import useStore from '@store/store';
+import { resolveChatModel } from '@utils/chatModelResolution';
+import { switchConfigModel } from '@utils/modelSettings';
 import { CURATED_MODELS } from '@src/local-llm/catalog';
 import { localModelRuntime } from '@src/local-llm/runtime';
 import { OpfsFileProvider } from '@src/local-llm/storage';
@@ -43,7 +46,7 @@ import {
 } from './fields';
 
 const DEFAULT_REASONING_BUDGET = 0;
-const DEFAULT_REASONING_EFFORT: ReasoningEffort = 'medium';
+const DEFAULT_REASONING_EFFORT: ReasoningEffort = 'none';
 const DEFAULT_VERBOSITY: Verbosity = 'medium';
 
 const ConfigFieldCell = ({ children }: { children: React.ReactNode }) => (
@@ -179,7 +182,7 @@ const ConfigMenu = ({
   imageDetail: ImageDetail;
   setImageDetail: (imageDetail: ImageDetail) => void;
 }) => {
-  const [_maxToken, _setMaxToken] = useState<number>(config.max_tokens);
+  const [_maxToken, _setMaxToken] = useState<number>(normalizeConfigStream(config).max_tokens);
   const [_model, _setModel] = useState<ModelOptions>(config.model);
   const [_providerId, _setProviderId] = useState<ProviderId | undefined>(config.providerId);
   const [_modelSource, _setModelSource] = useState<'remote' | 'local' | undefined>(config.modelSource);
@@ -198,6 +201,7 @@ const ConfigMenu = ({
   const [_verbosity, _setVerbosity] = useState<Verbosity | undefined>(config.verbosity ?? DEFAULT_VERBOSITY);
   const [_forceReasoning, _setForceReasoning] = useState<boolean>(config.force_reasoning ?? false);
   const [_systemPrompt, _setSystemPrompt] = useState<string>(config.systemPrompt ?? '');
+  const [_modelSettings, _setModelSettings] = useState(config.modelSettings ?? {});
   const { t } = useTranslation('model');
   const isStreamSupported = isModelStreamSupported(_model, _providerId, _modelSource);
   const reasoningDetected = useModelSupportsReasoning(_model, _providerId);
@@ -237,12 +241,13 @@ const ConfigMenu = ({
       providerId: _providerId,
       modelSource: _modelSource,
       reasoning_effort: reasoningSupported ? effectiveReasoningEffort : undefined,
-      reasoning_budget_tokens: reasoningSupported && _reasoningBudget >= 1024 ? _reasoningBudget : undefined,
+      reasoning_budget_tokens: reasoningSupported ? _reasoningBudget : undefined,
       verbosity: verbositySupported ? effectiveVerbosity : undefined,
       force_reasoning: reasoningForced || undefined,
       systemPrompt: _systemPrompt || undefined,
+      modelSettings: _modelSettings,
     }));
-  }, [_maxToken, _model, _providerId, _modelSource, _temperature, _presencePenalty, _topP, _frequencyPenalty, _stream, _reasoningEffort, _reasoningBudget, _verbosity, _systemPrompt, reasoningSupported, reasoningForced, reasoningRequired, verbositySupported, maxVerbositySupported]);
+  }, [_maxToken, _model, _providerId, _modelSource, _temperature, _presencePenalty, _topP, _frequencyPenalty, _stream, _reasoningEffort, _reasoningBudget, _verbosity, _systemPrompt, _modelSettings, reasoningSupported, reasoningForced, reasoningRequired, verbositySupported, maxVerbositySupported]);
 
   useEffect(() => {
     if (_imageDetail !== imageDetail) setImageDetail(_imageDetail);
@@ -263,9 +268,29 @@ const ConfigMenu = ({
             _providerId={_providerId}
             _modelSource={_modelSource}
             _onModelChange={(modelId, providerId, modelSource) => {
-              _setModel(modelId);
-              _setProviderId(providerId);
-              _setModelSource(modelSource);
+              const next = switchConfigModel({
+                model: _model, providerId: _providerId, modelSource: _modelSource,
+                max_tokens: _maxToken, temperature: _temperature,
+                presence_penalty: _presencePenalty, top_p: _topP,
+                frequency_penalty: _frequencyPenalty, stream: _stream,
+                reasoning_effort: _reasoningEffort, reasoning_budget_tokens: _reasoningBudget,
+                verbosity: _verbosity, force_reasoning: _forceReasoning,
+                modelSettings: _modelSettings,
+              }, { model: modelId, providerId, modelSource });
+              _setModel(next.model);
+              _setProviderId(next.providerId);
+              _setModelSource(next.modelSource);
+              _setMaxToken(next.max_tokens);
+              _setTemperature(next.temperature);
+              _setPresencePenalty(next.presence_penalty);
+              _setTopP(next.top_p);
+              _setFrequencyPenalty(next.frequency_penalty);
+              _setStream(next.stream !== false);
+              _setReasoningEffort(next.reasoning_effort ?? DEFAULT_REASONING_EFFORT);
+              _setReasoningBudget(next.reasoning_budget_tokens ?? DEFAULT_REASONING_BUDGET);
+              _setVerbosity(next.verbosity ?? DEFAULT_VERBOSITY);
+              _setForceReasoning(next.force_reasoning ?? false);
+              _setModelSettings(next.modelSettings ?? {});
             }}
             _label={t('model')}
             className=''
@@ -398,6 +423,7 @@ export const ModelSelector = ({
   const localModels = useStore((state) => state.localModels) || [];
   const favoriteLocalIds = useStore((state) => state.favoriteLocalModelIds) || [];
   const savedMeta = useStore((state) => state.savedModelMeta) || {};
+  const chatModel = useStore((state) => resolveChatModel(state.currentChatIndex, state));
 
   // Remote model options (composite key: "modelId:::providerId")
   const remoteOptions = favoriteModels.map((fav) => {
@@ -469,6 +495,17 @@ export const ModelSelector = ({
     ...remoteOptions,
     ...localOptions,
   ];
+  const availableModelId = chatModel.status === 'available'
+    ? 'modelId' in chatModel.match.model ? chatModel.match.model.modelId : chatModel.match.model.id
+    : undefined;
+  if (chatModel.status === 'available' && _model === availableModelId && (!_providerId || _providerId === chatModel.match.providerId)) {
+    allOptions.push({
+      value: `${_model}:::${chatModel.match.providerId}`,
+      label: _model,
+      sublabel: `${providers[chatModel.match.providerId]?.name || chatModel.match.providerId} · ${t('provider.chatOnly', 'このチャットのみ')}`,
+      icon: <ProviderIcon providerId={chatModel.match.providerId} className='w-4 h-4' />,
+    });
+  }
 
   // Find the current composite value
   let currentComposite: string;
@@ -480,7 +517,7 @@ export const ModelSelector = ({
       : favoriteModels.find((f) => f.modelId === _model);
     currentComposite = currentFav
       ? `${currentFav.modelId}:::${currentFav.providerId}`
-      : _model;
+      : chatModel.status === 'available' && _model === availableModelId ? `${_model}:::${chatModel.match.providerId}` : _model;
   }
 
   return (
@@ -530,7 +567,7 @@ export const ModelSelector = ({
           }
         }
       }}
-      placeholder={t('model:provider.noModelSelected', 'No model selected') as string}
+      placeholder={_model ? t('provider.modelUnmatched', 'Model could not be matched') as string : t('provider.noModelSelected', 'No model selected') as string}
       isSearchable={false}
       className={className ?? 'mb-4'}
     />
@@ -581,7 +618,7 @@ export const MaxTokenSlider = ({
       max={maxCompletionForModel}
       step={1}
       description={t('token.description')}
-      defaultValue={_defaultChatConfig.max_tokens}
+      defaultValue={getModelDefaultMaxTokens(_model, _providerId, _modelSource)}
     />
   );
 };
@@ -826,6 +863,9 @@ export const ReasoningEffortSelector = ({
         { value: 'xhigh', label: t('reasoningEffort.xhigh') },
       ]
     : [
+        ...(!reasoningRequired
+          ? [{ value: 'none' as const, label: t('reasoningEffort.none') }]
+          : []),
         { value: 'low', label: t('reasoningEffort.low') },
         { value: 'medium', label: t('reasoningEffort.medium') },
         { value: 'high', label: t('reasoningEffort.high') },

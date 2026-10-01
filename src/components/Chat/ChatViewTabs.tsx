@@ -7,6 +7,7 @@ import MenuIcon from '@icon/MenuIcon';
 import ConfigMenu from '@components/ConfigMenu';
 import { CapabilityIconsInline } from '@components/ConfigMenu/fields';
 import { getModelCapabilities, useModelCapabilities } from '@utils/modelLookup';
+import { resolveChatModel } from '@utils/chatModelResolution';
 import { ChatInterface, ChatView, ConfigInterface, ImageDetail, isSplitView } from '@type/chat';
 import { _defaultChatConfig } from '@constants/chat';
 import { ModelOptions } from '@type/chat';
@@ -27,6 +28,7 @@ import type {
 } from '@store/openrouter-stats-slice';
 import { CURATED_MODELS } from '@src/local-llm/catalog';
 import { localModelRuntime } from '@src/local-llm/runtime';
+import { switchConfigModel } from '@utils/modelSettings';
 import { OpfsFileProvider } from '@src/local-llm/storage';
 
 const ChatViewTabs = ({
@@ -78,6 +80,9 @@ const ChatViewTabs = ({
 
   // OpenRouter credit balance
   const currentProviderId = chat?.config?.providerId;
+  const modelResolution = useStore((state) => resolveChatModel(state.currentChatIndex, state));
+  const displayProviderId = modelResolution.status === 'available' || modelResolution.status === 'favorite'
+    ? modelResolution.match.providerId : undefined;
   const isOpenRouter = currentProviderId === 'openrouter';
   const creditBalance = useStore((state) => state.creditBalance);
   const creditBalanceFetching = useStore((state) => state.creditBalanceFetching);
@@ -155,12 +160,10 @@ const ChatViewTabs = ({
     const chats = useStore.getState().chats;
     if (!chats) return;
     const updatedChats = cloneChatAtIndex(chats, currentChatIndex);
-    updatedChats[currentChatIndex].config = normalizeConfigStream({
-      ...updatedChats[currentChatIndex].config,
-      model: modelId as ModelOptions,
-      providerId,
-      modelSource,
-    });
+    updatedChats[currentChatIndex].config = normalizeConfigStream(switchConfigModel(
+      updatedChats[currentChatIndex].config,
+      { model: modelId as ModelOptions, providerId, modelSource }
+    ));
     setChats(updatedChats);
     setIsModelDropdownOpen(false);
 
@@ -197,9 +200,10 @@ const ChatViewTabs = ({
       if (catalogModel) return catalogModel.label;
       return modelId;
     }
-    const fav = favoriteModels.find(f => f.modelId === modelId);
-    if (fav) return modelId;
-    return t('provider.noModelSelected', 'モデル未選択') as string;
+    if (modelResolution.status === 'unspecified') return t('provider.noModelSelected', 'モデル未選択') as string;
+    if (modelResolution.status === 'unmatched') return `${modelId} (${t('provider.modelUnmatched', 'モデル照合不可')})`;
+    if (modelResolution.status === 'available') return `${modelId} (${t('provider.chatOnly', 'このチャットのみ')})`;
+    return modelId;
   };
 
   useEffect(() => {
@@ -272,8 +276,8 @@ const ChatViewTabs = ({
               >
                 {chat.config.modelSource === 'local'
                   ? <WasmChipIcon caps={wasmCaps} className='w-4 h-4 shrink-0' />
-                  : chat.config.providerId
-                    ? <ProviderIcon providerId={chat.config.providerId} className='w-4 h-4 shrink-0 text-gray-400 dark:text-gray-500' />
+                  : displayProviderId
+                    ? <ProviderIcon providerId={displayProviderId} className='w-4 h-4 shrink-0 text-gray-400 dark:text-gray-500' />
                     : null}
                 <span className='truncate'>{getModelDisplayName(chat.config.model, chat.config.modelSource)}</span>
                 <CapabilityIconsInline
@@ -428,7 +432,7 @@ const ChatViewTabs = ({
               aria-label={String(tMain('stopGenerating'))}
             >
               <span
-                className={`inline-block h-2 w-2 rounded-full animate-pulse ${
+                className={`inline-block h-2 w-2 rounded-full ${
                   isProxyMode
                     ? 'bg-indigo-400 dark:bg-indigo-400'
                     : 'bg-green-400 dark:bg-green-400'

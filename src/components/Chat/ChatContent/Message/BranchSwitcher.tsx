@@ -64,20 +64,23 @@ const BranchSwitcher = ({
           />
         </svg>
       </button>
-      <select
-        className='bg-transparent tabular-nums hover:text-blue-500 dark:hover:text-blue-400 cursor-pointer'
-        value={nodeId}
-        onChange={(event) => {
-          if (event.target.value !== nodeId) handleSwitch(event.target.value);
-        }}
-        aria-label='分岐を選択'
-      >
-        {siblings.map((sibling, index) => (
-          <option key={sibling.id} value={sibling.id}>
-            {index + 1}/{total}
-          </option>
-        ))}
-      </select>
+      <span className='relative tabular-nums hover:text-blue-500 dark:hover:text-blue-400 focus-within:outline focus-within:outline-2 focus-within:outline-blue-500'>
+        <span aria-hidden='true'>{currentIdx + 1}/{total}</span>
+        <select
+          className='absolute inset-0 h-full w-full cursor-pointer opacity-0'
+          value={nodeId}
+          onChange={(event) => {
+            if (event.target.value !== nodeId) handleSwitch(event.target.value);
+          }}
+          aria-label='分岐を選択'
+        >
+          {siblings.map((sibling, index) => (
+            <option key={sibling.id} value={sibling.id}>
+              {index + 1}
+            </option>
+          ))}
+        </select>
+      </span>
       <button
         className='p-0.5 hover:text-gray-700 dark:hover:text-gray-200 disabled:opacity-30'
         onClick={handleNext}

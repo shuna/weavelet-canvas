@@ -1,3 +1,4 @@
+import { startSyncDiagnostics, finishSyncDiagnostics, recordSyncTransfer, type TransferPurpose } from './diagnostics';
 import { getSyncMetrics, resetSyncMetrics } from './metrics';
 import { create } from 'zustand';
 
@@ -15,30 +16,35 @@ let operation = 0;
 let intervals: Record<'upload' | 'download', [number, number][]> = { upload: [], download: [] };
 export async function withSyncProgress<T>(work: () => Promise<T>): Promise<T> {
   const current = ++operation;
+  const started = performance.now();
+  let result: 'completed' | 'failed' = 'failed';
+  startSyncDiagnostics();
   resetSyncMetrics();
   intervals = { upload: [], download: [] };
   useGoogleSyncProgress.setState({ ...initial(), active: true });
-  try { return await work(); }
+  try { const value = await work(); result = 'completed'; return value; }
   finally {
     if (current === operation) {
       useGoogleSyncProgress.setState({ active: false });
+      finishSyncDiagnostics(result, performance.now() - started, getSyncMetrics());
       console.info('[Google sync metrics]', getSyncMetrics());
     }
   }
 }
-export function syncPhase(phase: SyncPhase, totalFiles?: number, totalBytes?: number) {
+export function syncPhase(phase: SyncPhase, totalFiles?: number, totalBytes?: number, completedFiles = 0) {
   if (!useGoogleSyncProgress.getState().active) return;
-  useGoogleSyncProgress.setState({ phase, totalFiles, totalBytes, completedFiles: 0, completedBytes: 0 });
+  useGoogleSyncProgress.setState({ phase, totalFiles, totalBytes, completedFiles, completedBytes: 0 });
 }
-export function uploadedFile(bytes: number) {
+export function completedFile(bytes: number) {
   if (!useGoogleSyncProgress.getState().active) return;
   useGoogleSyncProgress.setState(s => ({ completedFiles: s.completedFiles + 1, completedBytes: s.completedBytes + bytes }));
 }
-export function beginTransfer(direction: 'upload' | 'download') {
+export function beginTransfer(direction: 'upload' | 'download', purpose: TransferPurpose = 'normal') {
   const current = operation;
   const started = performance.now();
   return (bytes: number) => {
     if (current !== operation || !useGoogleSyncProgress.getState().active) return;
+    recordSyncTransfer(direction, bytes, purpose);
     const ranges = intervals[direction];
     ranges.push([started, performance.now()]);
     ranges.sort((a, b) => a[0] - b[0]);

@@ -104,6 +104,9 @@
     "colContext": "コンテキスト",
     "colPrice": "価格 (入力/出力)",
     "noModelSelected": "モデル未選択",
+    "modelUnmatched": "モデル照合不可",
+    "chatOnly": "このチャットのみ",
+    "addFavoriteToContinue": "{{model}} をお気に入りに追加して続行しますか？",
     "keySaved": "APIキーを保存しました"
   },
   "fusion": {

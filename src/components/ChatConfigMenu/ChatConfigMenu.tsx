@@ -5,9 +5,12 @@ import { useTranslation } from 'react-i18next';
 import PopupModal from '@components/PopupModal';
 import {
   FrequencyPenaltySlider,
+  ForceReasoningToggle,
   MaxTokenSlider,
   ModelSelector,
   PresencePenaltySlider,
+  ReasoningBudgetInput,
+  ReasoningEffortSelector,
   SystemPromptField,
   TemperatureSlider,
   TopPSlider,
@@ -19,10 +22,12 @@ import {
   _defaultImageDetail,
   _defaultSystemMessage,
 } from '@constants/chat';
-import { getModelConfigContextInfo } from '@utils/modelLookup';
+import { getModelConfigContextInfo, useModelRequiresReasoning, useModelSupportsReasoning } from '@utils/modelLookup';
+import { getEffectiveReasoningEffort } from '@utils/reasoning';
 import { isModelStreamSupported, normalizeConfigStream } from '@utils/streamSupport';
 import { clampCompletionTokens } from '@utils/tokenBudget';
-import { ModelOptions } from '@type/chat';
+import { savedModelSettings, switchConfigModel } from '@utils/modelSettings';
+import { ModelOptions, ReasoningEffort } from '@type/chat';
 import { ImageDetail } from '@type/chat';
 import type { ProviderId } from '@type/provider';
 
@@ -36,6 +41,10 @@ const isSameConfig = (left: typeof _defaultChatConfig, right: typeof _defaultCha
   (left.stream !== false) === (right.stream !== false) &&
   left.providerId === right.providerId &&
   (left.modelSource ?? undefined) === (right.modelSource ?? undefined) &&
+  left.reasoning_effort === right.reasoning_effort &&
+  left.reasoning_budget_tokens === right.reasoning_budget_tokens &&
+  left.force_reasoning === right.force_reasoning &&
+  left.modelSettings === right.modelSettings &&
   (left.systemPrompt ?? '') === (right.systemPrompt ?? '');
 
 /** Wrapper that provides consistent cell padding inside SettingsGroup and neutralizes field-internal margins */
@@ -64,6 +73,12 @@ const ChatConfigFields = ({
   _setPresencePenalty,
   _frequencyPenalty,
   _setFrequencyPenalty,
+  _reasoningEffort,
+  _setReasoningEffort,
+  _reasoningBudget,
+  _setReasoningBudget,
+  _forceReasoning,
+  _setForceReasoning,
 }: {
   _systemMessage: string;
   _setSystemMessage: React.Dispatch<React.SetStateAction<string>>;
@@ -82,8 +97,16 @@ const ChatConfigFields = ({
   _setPresencePenalty: React.Dispatch<React.SetStateAction<number>>;
   _frequencyPenalty: number;
   _setFrequencyPenalty: React.Dispatch<React.SetStateAction<number>>;
+  _reasoningEffort: ReasoningEffort | undefined;
+  _setReasoningEffort: React.Dispatch<React.SetStateAction<ReasoningEffort | undefined>>;
+  _reasoningBudget: number;
+  _setReasoningBudget: React.Dispatch<React.SetStateAction<number>>;
+  _forceReasoning: boolean;
+  _setForceReasoning: React.Dispatch<React.SetStateAction<boolean>>;
 }) => {
   const { t } = useTranslation('model');
+  const reasoningDetected = useModelSupportsReasoning(_model, _providerId);
+  const reasoningRequired = useModelRequiresReasoning(_model, _providerId);
 
   return (
     <div className='flex flex-col gap-5'>
@@ -135,6 +158,23 @@ const ChatConfigFields = ({
           />
         </FieldCell>
       </SettingsGroup>
+      {!reasoningDetected && _modelSource !== 'local' && (
+        <ForceReasoningToggle _forceReasoning={_forceReasoning} _setForceReasoning={_setForceReasoning} />
+      )}
+      <SettingsGroup label={t('section.reasoning')}>
+        <FieldCell>
+          <ReasoningEffortSelector
+            _reasoningEffort={_reasoningEffort}
+            _setReasoningEffort={_setReasoningEffort}
+            _model={_model}
+            _providerId={_providerId}
+            reasoningRequired={reasoningRequired}
+          />
+        </FieldCell>
+        <FieldCell>
+          <ReasoningBudgetInput _reasoningBudget={_reasoningBudget} _setReasoningBudget={_setReasoningBudget} />
+        </FieldCell>
+      </SettingsGroup>
     </div>
   );
 };
@@ -176,7 +216,7 @@ const ChatConfigPopup = ({
   const [_model, _setModel] = useState<ModelOptions>(config.model);
   const [_providerId, _setProviderId] = useState<ProviderId | undefined>(config.providerId);
   const [_modelSource, _setModelSource] = useState<'remote' | 'local' | undefined>(config.modelSource);
-  const [_maxToken, _setMaxToken] = useState<number>(config.max_tokens);
+  const [_maxToken, _setMaxToken] = useState<number>(normalizeConfigStream(config).max_tokens);
   const [_temperature, _setTemperature] = useState<number>(config.temperature);
   const [_topP, _setTopP] = useState<number>(config.top_p);
   const [_presencePenalty, _setPresencePenalty] = useState<number>(
@@ -185,13 +225,18 @@ const ChatConfigPopup = ({
   const [_frequencyPenalty, _setFrequencyPenalty] = useState<number>(
     config.frequency_penalty
   );
+  const [_reasoningEffort, _setReasoningEffort] = useState<ReasoningEffort | undefined>(config.reasoning_effort ?? 'none');
+  const [_reasoningBudget, _setReasoningBudget] = useState<number>(config.reasoning_budget_tokens ?? 0);
+  const [_forceReasoning, _setForceReasoning] = useState<boolean>(config.force_reasoning ?? false);
   const [_stream, _setStream] = useState<boolean>(config.stream !== false);
+  const [_modelSettings, _setModelSettings] = useState(config.modelSettings ?? {});
   const [_imageDetail, _setImageDetail] = useState<ImageDetail>(
     useStore.getState().defaultImageDetail
   );
 
   const { t } = useTranslation('model');
   const isStreamSupported = isModelStreamSupported(_model, _providerId, _modelSource);
+  const reasoningRequired = useModelRequiresReasoning(_model, _providerId);
 
   React.useEffect(() => {
     if (!isStreamSupported && _stream) {
@@ -202,6 +247,11 @@ const ChatConfigPopup = ({
   const handleSave = () => {
     const modelContextLength = getModelConfigContextInfo(_model, _providerId, _modelSource).contextLength;
     const nextConfig = normalizeConfigStream({
+      ...config,
+      ...savedModelSettings(
+        { ...config, modelSettings: _modelSettings },
+        { model: _model, providerId: _providerId, modelSource: _modelSource }
+      ),
       model: _model,
       max_tokens: clampCompletionTokens(_maxToken, modelContextLength),
       temperature: _temperature,
@@ -211,6 +261,10 @@ const ChatConfigPopup = ({
       stream: _stream,
       providerId: _providerId,
       modelSource: _modelSource,
+      reasoning_effort: getEffectiveReasoningEffort(_reasoningEffort, _providerId, reasoningRequired),
+      reasoning_budget_tokens: _reasoningBudget,
+      force_reasoning: _forceReasoning || undefined,
+      modelSettings: _modelSettings,
     });
 
     if (!isSameConfig(config, nextConfig)) {
@@ -234,7 +288,11 @@ const ChatConfigPopup = ({
     _setTopP(_defaultChatConfig.top_p);
     _setPresencePenalty(_defaultChatConfig.presence_penalty);
     _setFrequencyPenalty(_defaultChatConfig.frequency_penalty);
+    _setReasoningEffort(_defaultChatConfig.reasoning_effort ?? 'none');
+    _setReasoningBudget(_defaultChatConfig.reasoning_budget_tokens ?? 0);
+    _setForceReasoning(false);
     _setStream(_defaultChatConfig.stream !== false);
+    _setModelSettings({});
     _setImageDetail(_defaultImageDetail);
     _setSystemMessage(_defaultSystemMessage);
     _setImageDetail(_defaultImageDetail);
@@ -255,9 +313,28 @@ const ChatConfigPopup = ({
           _providerId={_providerId}
           _modelSource={_modelSource}
           _onModelChange={(modelId, providerId, modelSource) => {
-            _setModel(modelId);
-            _setProviderId(providerId);
-            _setModelSource(modelSource);
+            const next = switchConfigModel({
+              model: _model, providerId: _providerId, modelSource: _modelSource,
+              max_tokens: _maxToken, temperature: _temperature,
+              top_p: _topP, presence_penalty: _presencePenalty,
+              frequency_penalty: _frequencyPenalty, stream: _stream,
+              reasoning_effort: _reasoningEffort, reasoning_budget_tokens: _reasoningBudget,
+              force_reasoning: _forceReasoning,
+              modelSettings: _modelSettings,
+            }, { model: modelId, providerId, modelSource });
+            _setModel(next.model);
+            _setProviderId(next.providerId);
+            _setModelSource(next.modelSource);
+            _setMaxToken(next.max_tokens);
+            _setTemperature(next.temperature);
+            _setTopP(next.top_p);
+            _setPresencePenalty(next.presence_penalty);
+            _setFrequencyPenalty(next.frequency_penalty);
+            _setStream(next.stream !== false);
+            _setReasoningEffort(next.reasoning_effort ?? 'none');
+            _setReasoningBudget(next.reasoning_budget_tokens ?? 0);
+            _setForceReasoning(next.force_reasoning ?? false);
+            _setModelSettings(next.modelSettings ?? {});
           }}
           _maxToken={_maxToken}
           _setMaxToken={_setMaxToken}
@@ -269,6 +346,12 @@ const ChatConfigPopup = ({
           _setPresencePenalty={_setPresencePenalty}
           _frequencyPenalty={_frequencyPenalty}
           _setFrequencyPenalty={_setFrequencyPenalty}
+          _reasoningEffort={_reasoningEffort}
+          _setReasoningEffort={_setReasoningEffort}
+          _reasoningBudget={_reasoningBudget}
+          _setReasoningBudget={_setReasoningBudget}
+          _forceReasoning={_forceReasoning}
+          _setForceReasoning={_setForceReasoning}
         />
         <div className='flex gap-3 mt-5'>
           <button
@@ -301,7 +384,7 @@ const ChatConfigInline = ({ onSettingsChanged }: { onSettingsChanged?: () => voi
   const [_model, _setModel] = useState<ModelOptions>(config.model);
   const [_providerId, _setProviderId] = useState<ProviderId | undefined>(config.providerId);
   const [_modelSource, _setModelSource] = useState<'remote' | 'local' | undefined>(config.modelSource);
-  const [_maxToken, _setMaxToken] = useState<number>(config.max_tokens);
+  const [_maxToken, _setMaxToken] = useState<number>(normalizeConfigStream(config).max_tokens);
   const [_temperature, _setTemperature] = useState<number>(config.temperature);
   const [_topP, _setTopP] = useState<number>(config.top_p);
   const [_presencePenalty, _setPresencePenalty] = useState<number>(
@@ -310,13 +393,18 @@ const ChatConfigInline = ({ onSettingsChanged }: { onSettingsChanged?: () => voi
   const [_frequencyPenalty, _setFrequencyPenalty] = useState<number>(
     config.frequency_penalty
   );
+  const [_reasoningEffort, _setReasoningEffort] = useState<ReasoningEffort | undefined>(config.reasoning_effort ?? 'none');
+  const [_reasoningBudget, _setReasoningBudget] = useState<number>(config.reasoning_budget_tokens ?? 0);
+  const [_forceReasoning, _setForceReasoning] = useState<boolean>(config.force_reasoning ?? false);
   const [_stream, _setStream] = useState<boolean>(config.stream !== false);
+  const [_modelSettings, _setModelSettings] = useState(config.modelSettings ?? {});
   const [_imageDetail, _setImageDetail] = useState<ImageDetail>(
     useStore.getState().defaultImageDetail
   );
 
   const { t } = useTranslation('model');
   const isStreamSupported = isModelStreamSupported(_model, _providerId, _modelSource);
+  const reasoningRequired = useModelRequiresReasoning(_model, _providerId);
 
   React.useEffect(() => {
     if (!isStreamSupported && _stream) {
@@ -327,11 +415,13 @@ const ChatConfigInline = ({ onSettingsChanged }: { onSettingsChanged?: () => voi
   // Keep refs in sync for unmount save
   const stateRef = useRef({
     _model, _providerId, _modelSource, _maxToken, _temperature, _topP,
-    _presencePenalty, _frequencyPenalty, _stream, _systemMessage, _imageDetail,
+    _presencePenalty, _frequencyPenalty, _reasoningEffort, _reasoningBudget,
+    _forceReasoning, reasoningRequired, _stream, _systemMessage, _imageDetail, _modelSettings,
   });
   stateRef.current = {
     _model, _providerId, _modelSource, _maxToken, _temperature, _topP,
-    _presencePenalty, _frequencyPenalty, _stream, _systemMessage, _imageDetail,
+    _presencePenalty, _frequencyPenalty, _reasoningEffort, _reasoningBudget,
+    _forceReasoning, reasoningRequired, _stream, _systemMessage, _imageDetail, _modelSettings,
   };
   const onSettingsChangedRef = useRef(onSettingsChanged);
   onSettingsChangedRef.current = onSettingsChanged;
@@ -343,6 +433,11 @@ const ChatConfigInline = ({ onSettingsChanged }: { onSettingsChanged?: () => voi
       const currentConfig = useStore.getState().defaultChatConfig;
       const modelContextLength = getModelConfigContextInfo(s._model, s._providerId, s._modelSource).contextLength;
       const nextConfig = normalizeConfigStream({
+        ...currentConfig,
+        ...savedModelSettings(
+          { ...currentConfig, modelSettings: s._modelSettings },
+          { model: s._model, providerId: s._providerId, modelSource: s._modelSource }
+        ),
         model: s._model,
         max_tokens: clampCompletionTokens(s._maxToken, modelContextLength),
         temperature: s._temperature,
@@ -352,6 +447,10 @@ const ChatConfigInline = ({ onSettingsChanged }: { onSettingsChanged?: () => voi
         stream: s._stream,
         providerId: s._providerId,
         modelSource: s._modelSource,
+        reasoning_effort: getEffectiveReasoningEffort(s._reasoningEffort, s._providerId, s.reasoningRequired),
+        reasoning_budget_tokens: s._reasoningBudget,
+        force_reasoning: s._forceReasoning || undefined,
+        modelSettings: s._modelSettings,
       });
 
       let changed = false;
@@ -382,7 +481,11 @@ const ChatConfigInline = ({ onSettingsChanged }: { onSettingsChanged?: () => voi
     _setTopP(_defaultChatConfig.top_p);
     _setPresencePenalty(_defaultChatConfig.presence_penalty);
     _setFrequencyPenalty(_defaultChatConfig.frequency_penalty);
+    _setReasoningEffort(_defaultChatConfig.reasoning_effort ?? 'none');
+    _setReasoningBudget(_defaultChatConfig.reasoning_budget_tokens ?? 0);
+    _setForceReasoning(false);
     _setStream(_defaultChatConfig.stream !== false);
+    _setModelSettings({});
     _setImageDetail(_defaultImageDetail);
     _setSystemMessage(_defaultSystemMessage);
   };
@@ -397,9 +500,28 @@ const ChatConfigInline = ({ onSettingsChanged }: { onSettingsChanged?: () => voi
         _providerId={_providerId}
         _modelSource={_modelSource}
         _onModelChange={(modelId, providerId, modelSource) => {
-          _setModel(modelId);
-          _setProviderId(providerId);
-          _setModelSource(modelSource);
+          const next = switchConfigModel({
+            model: _model, providerId: _providerId, modelSource: _modelSource,
+            max_tokens: _maxToken, temperature: _temperature,
+            top_p: _topP, presence_penalty: _presencePenalty,
+            frequency_penalty: _frequencyPenalty, stream: _stream,
+            reasoning_effort: _reasoningEffort, reasoning_budget_tokens: _reasoningBudget,
+            force_reasoning: _forceReasoning,
+            modelSettings: _modelSettings,
+          }, { model: modelId, providerId, modelSource });
+          _setModel(next.model);
+          _setProviderId(next.providerId);
+          _setModelSource(next.modelSource);
+          _setMaxToken(next.max_tokens);
+          _setTemperature(next.temperature);
+          _setTopP(next.top_p);
+          _setPresencePenalty(next.presence_penalty);
+          _setFrequencyPenalty(next.frequency_penalty);
+          _setStream(next.stream !== false);
+          _setReasoningEffort(next.reasoning_effort ?? 'none');
+          _setReasoningBudget(next.reasoning_budget_tokens ?? 0);
+          _setForceReasoning(next.force_reasoning ?? false);
+          _setModelSettings(next.modelSettings ?? {});
         }}
         _maxToken={_maxToken}
         _setMaxToken={_setMaxToken}
@@ -411,6 +533,12 @@ const ChatConfigInline = ({ onSettingsChanged }: { onSettingsChanged?: () => voi
         _setPresencePenalty={_setPresencePenalty}
         _frequencyPenalty={_frequencyPenalty}
         _setFrequencyPenalty={_setFrequencyPenalty}
+        _reasoningEffort={_reasoningEffort}
+        _setReasoningEffort={_setReasoningEffort}
+        _reasoningBudget={_reasoningBudget}
+        _setReasoningBudget={_setReasoningBudget}
+        _forceReasoning={_forceReasoning}
+        _setForceReasoning={_setForceReasoning}
       />
       <div className='flex gap-3 mt-5'>
         <button

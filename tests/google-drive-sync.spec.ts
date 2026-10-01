@@ -63,9 +63,9 @@ test('encrypted Drive creation, incremental autosave and unlock after browser re
         const children = [...files.values()].filter(({ metadata }) => metadata.parents?.includes(folderId));
         return route.fulfill({ json: { files: children.map(({ metadata, bytes }) => ({ id: metadata.id, size: String(bytes.length) })) } });
       }
-      const commitQuery = url.searchParams.get('q')?.includes("key='kind'");
-      const listed = [...files.values()].filter(({ metadata }) => commitQuery
-        ? metadata.appProperties?.kind === 'commit'
+      const kind = url.searchParams.get('q')?.match(/key='kind' and value='([^']+)'/)?.[1];
+      const listed = [...files.values()].filter(({ metadata }) => kind
+        ? metadata.appProperties?.kind === kind
         : metadata.appProperties?.weaveletSync === '1' || metadata.mimeType === 'application/json').map(({ metadata }) => metadata);
       return route.fulfill({ json: { files: listed, incompleteSearch: false } });
     }
@@ -190,6 +190,16 @@ test('encrypted Drive creation, incremental autosave and unlock after browser re
     store.getState().setChats(chats);
   });
   await expect.poll(() => uploads.filter((u) => u.metadata.appProperties.kind === 'commit').length).toBe(3);
+  const syncBanner = page.locator('[data-google-sync-banner]');
+  await expect(syncBanner).toBeVisible();
+  await expect(syncBanner.locator('progress')).toBeVisible();
+  expect(await syncBanner.locator('progress').evaluate((element: HTMLProgressElement) => [element.value, element.max]))
+    .toEqual(await page.evaluate(async () => {
+      const progress = (await import('/src/store/storage/google/progress.ts')).useGoogleSyncProgress.getState();
+      return [progress.completedFiles, progress.totalFiles];
+    }));
+  expect(await syncBanner.evaluate((element) => element.getBoundingClientRect().top)).toBe(0);
+  expect(await page.locator('#root').evaluate((element) => getComputedStyle(element).paddingTop)).toBe('32px');
   await page.getByRole('button', { name: '同期の進捗を表示', exact: true }).click();
   const targetId = await page.evaluate(async () => (await import('/src/store/cloud-auth-store.ts')).default.getState().fileId);
   const nameInput = page.locator(`[id="sync-folder-name-${targetId}"]`);
@@ -386,8 +396,13 @@ test('large sync processing preserves data while keeping the UI event loop respo
     const restoreAfter = await measure(() => processing.fromRecordsAsync(after.value));
     const compareBefore = await measure(() => sameSnapshot([snapshot, snapshot]));
     const compareAfter = await measure(() => processing.sameSnapshotAsync(snapshot, snapshot));
-    const saveBefore = await measure(() => prepareSave(snapshot.state));
-    const saveAfter = await measure(() => processing.prepareSaveAsync(snapshot.state));
+    // Short tasks are sensitive to GC and timer rounding; compare median gaps over three runs.
+    async function medianMeasure<T>(work: () => T | Promise<T>) {
+      const runs = [await measure(work), await measure(work), await measure(work)];
+      return runs.sort((a, b) => a.stats.maxEventLoopGapMs - b.stats.maxEventLoopGapMs)[1];
+    }
+    const saveBefore = await medianMeasure(() => prepareSave(snapshot.state));
+    const saveAfter = await medianMeasure(() => processing.prepareSaveAsync(snapshot.state));
     const { saveChatData } = await import('/src/store/storage/IndexedDbStorage.ts');
     const localSave = await measure(() => saveChatData(snapshot.state));
     // Many nodes, rather than only a few very large text fields.
@@ -511,4 +526,80 @@ test('message conflicts share a chat and review highlights remain until acknowle
   await page.reload();
   await expect(page.getByText('Cloud message version', { exact: true })).toBeVisible();
   await expect(page.locator('[data-sync-node-changed="true"]')).toHaveCount(0);
+});
+
+test('history compaction restores from Drive packs using real Workers and IndexedDB', async ({ page }) => {
+  test.setTimeout(120_000);
+  await page.goto('/');
+  const result = await page.evaluate(async () => {
+    const { EncryptedDriveSync } = await import('/src/store/storage/google/sync.ts');
+    const { DriveNotFoundError, SYNC_FOLDER_TYPE } = await import('/src/store/storage/google/transport.ts');
+    const { encode, encrypt, digest } = await import('/src/store/storage/google/crypto.ts');
+    const { rememberedSyncKey } = await import('/src/store/storage/google/cache.ts');
+    const { toRecords } = await import('/src/store/storage/google/records.ts');
+    const files = new Map<string, { bytes: Uint8Array; metadata: any }>();
+    const events: any[] = [];
+    const reads: string[] = [];
+    let next = 0;
+    const prefix = crypto.randomUUID();
+    const list = (dataset: string, kind: string) => [...files.values()].filter(f =>
+      f.metadata.appProperties?.dataset === dataset && f.metadata.appProperties.kind === kind).map(f => f.metadata.id);
+    const drive = {
+      async ids(count: number) { return Array.from({ length: count }, () => `${prefix}-${++next}`); },
+      async folder(id: string, headerId: string) {
+        const metadata = { id, mimeType: SYNC_FOLDER_TYPE, appProperties: { weaveletSync: '1', headerId } };
+        files.set(id, { bytes: new Uint8Array(), metadata }); return metadata;
+      },
+      async metadata(id: string) { return files.get(id)!.metadata; },
+      async put(id: string, dataset: string, kind: string, bytes: Uint8Array) {
+        const metadata = { id, appProperties: { dataset, kind } };
+        files.set(id, { bytes: bytes.slice(), metadata }); events.push({ fileId: id, file: metadata });
+      },
+      async read(id: string) { reads.push(id); if (!files.has(id)) throw new DriveNotFoundError('404'); return files.get(id)!.bytes.slice(); },
+      async startToken() { return String(events.length); },
+      async changes(token: string) { return { token: String(events.length), changes: events.slice(Number(token)) }; },
+      async commits(dataset: string) { return list(dataset, 'commit'); },
+      async packs(dataset: string) { return list(dataset, 'pack'); },
+      async remove(id: string) { if (files.delete(id)) events.push({ fileId: id, removed: true }); },
+    };
+    const state = { version: 18, state: { chats: [{ id: 'chat', title: 'initial', messages: [{ role: 'user',
+      content: [{ type: 'text', text: 'retained message' }] }] }], contentStore: {}, theme: 'dark' } };
+    const { session, file } = await EncryptedDriveSync.create(drive, 'browser compaction test password');
+    await session.push(state, true);
+    let parent = (await drive.commits(file.id))[0];
+    const key = (await rememberedSyncKey(file.id))!;
+    for (let i = 0; i < 127; i++) {
+      const [id] = await drive.ids(1);
+      const before = await digest(JSON.stringify(state.state.chats[0].title));
+      state.state.chats[0].title = `edit-${i}`;
+      const commit = { version: 2, parents: [parent], changes: [{ key: '["chats","chat","title"]', before,
+        after: JSON.stringify(state.state.chats[0].title) }] };
+      await drive.put(id, file.id, 'commit', await encrypt(key, encode(commit), `${file.id}:${id}`)); parent = id;
+    }
+    await session.push(state, true);
+    const rawFiles = (await drive.commits(file.id)).length;
+    const packFiles = (await drive.packs(file.id)).length;
+    reads.length = 0;
+    await session.pull();
+    const cachedReads = reads.length;
+    session.close();
+    // Simulate a fresh history cache while keeping the actual non-extractable remembered key.
+    await new Promise<void>((resolve, reject) => {
+      const request = indexedDB.open('weavelet-google-sync', 3);
+      request.onsuccess = () => {
+        const db = request.result, tx = db.transaction('sessions', 'readwrite');
+        tx.objectStore('sessions').delete(file.id);
+        tx.oncomplete = () => { db.close(); resolve(); };
+        tx.onabort = () => { db.close(); reject(tx.error); };
+      };
+      request.onerror = () => reject(request.error);
+    });
+    const reader = new EncryptedDriveSync(file.id, drive);
+    await reader.restoreKey();
+    reads.length = 0;
+    const restored = await reader.pull();
+    return { rawFiles, packFiles, cachedReads, freshReads: reads.length,
+      equal: JSON.stringify(await toRecords(restored)) === JSON.stringify(await toRecords(state)) };
+  });
+  expect(result).toEqual({ rawFiles: 0, packFiles: 1, cachedReads: 0, freshReads: 2, equal: true });
 });

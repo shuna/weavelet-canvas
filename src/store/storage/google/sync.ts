@@ -1,18 +1,27 @@
+import { reportSyncHistory, reportCompaction, recordPackAccess, useGoogleSyncDiagnostics } from './diagnostics';
 import { SyncConflictError, type Resolution } from './conflicts';
 import { mergeSyncRecords } from './merge';
 import { replayHistoryAsync, decodePartsAsync, encodeAsync, decodeAsync, toRecordsAsync as toRecords, fromRecordsAsync as fromRecords, hashRecordsAsync as hashRecords } from './processing';
-import { syncPhase, uploadedFile } from './progress';
+import { syncPhase, completedFile } from './progress';
 import { createKeyEnvelope, unlockKey, encode, decode, encrypt, decrypt, digest, type KeyEnvelope } from './crypto';
 import { diffHashedRecords, applyChanges, type Records, type Snapshot, type Change, diffRecords } from './records';
-import { DriveTransport, SYNC_FOLDER_TYPE, type DriveFile } from './transport';
+import { DriveTransport, DriveNotFoundError, SYNC_FOLDER_TYPE, type DriveFile } from './transport';
 import { syncCache, readSyncEntries, writeSyncCache, rememberedSyncKey } from './cache';
 
 import type { Commit } from './replay';
+interface CommitManifest { version: number; parts?: string[]; parents?: string[]; changes?: Change[]; resolutions?: Commit['resolutions'] }
 interface Pending {
   id: string;
   commit: Commit;
   baseline: Records;
   files: { id: string; kind: string; size: number; bytes?: Uint8Array; sent: boolean }[];
+}
+interface PackManifest { version: 1; commits: Record<string, string>; parts: string[]; bytes: number }
+interface Compaction {
+  id: string;
+  manifest: PackManifest;
+  files: Pending['files'];
+  remove: string[];
 }
 interface Cache {
   version: 1;
@@ -20,10 +29,15 @@ interface Cache {
   token?: string;
   baseline?: Records;
   pending?: Pending;
+  packs?: Record<string, PackManifest>;
+  parts?: Record<string, string[]>;
+  compaction?: Compaction;
 }
 const emptyCache = (): Cache => ({ version: 1, commits: {} });
 const PART_BYTES = 1024 * 1024;
 const INLINE_BYTES = 256 * 1024;
+const PACK_BYTES = 4 * 1024 * 1024 - 28; // Includes the AES-GCM overhead within a 4 MiB Drive file.
+const COMPACT_COMMITS = 128;
 export interface SyncTransferOptions { partBytes?: number; concurrency?: 1 | 2 }
 interface StoredCache {
   version: 2;
@@ -31,6 +45,9 @@ interface StoredCache {
   token?: string;
   baseline?: Records;
   pending?: { id: string; baseline: Records; files: { id: string; kind: string; size: number }[] };
+  packs?: Cache['packs'];
+  parts?: Cache['parts'];
+  compaction?: Omit<Compaction, 'files'> & { files: { id: string; kind: string; size: number }[] };
 }
 
 export class EncryptedDriveSync {
@@ -60,21 +77,30 @@ export class EncryptedDriveSync {
       if (this.persistedCommits.has(id)) continue;
       entries.push([`commit:${id}`, await encrypt(this.requireKey(), this.encodedCommits.get(id) ?? await encodeAsync(commit), this.context(`commit:${id}`))]);
     }
-    for (const file of pending?.files ?? []) {
+    const uploads = [pending, this.cache.compaction].filter((p): p is Pending | Compaction => !!p);
+    for (const upload of uploads) for (const file of upload.files) {
       if (file.bytes) entries.push([`outbox:${file.id}`, file.bytes]);
-      if (file.sent) entries.push([`ack:${file.id}`, await encrypt(this.requireKey(), encode(pending!.id), this.context(`ack:${file.id}`))]);
+      if (file.sent) entries.push([`ack:${file.id}`, await encrypt(this.requireKey(), encode(upload.id), this.context(`ack:${file.id}`))]);
     }
     const stored: StoredCache = {
       version: 2, commits: Object.keys(this.cache.commits), token: this.cache.token, baseline: this.cache.baseline,
       pending: pending && { id: pending.id, baseline: pending.baseline,
         files: pending.files.map(({ id, kind, size }) => ({ id, kind, size })) },
+      packs: this.cache.packs, parts: this.cache.parts,
+      compaction: this.cache.compaction && { ...this.cache.compaction,
+        files: this.cache.compaction.files.map(({ id, kind, size }) => ({ id, kind, size })) },
     };
     const bytes = await encrypt(this.requireKey(), await encodeAsync(stored), this.context('cache'));
     // Publishing the outbox and its immutable ciphertext is one durable transaction.
     await writeSyncCache(this.dataset, bytes, entries, remove);
     for (const id of Object.keys(commits)) { this.persistedCommits.add(id); this.encodedCommits.delete(id); }
-    for (const file of pending?.files ?? []) delete file.bytes;
+    for (const upload of uploads) for (const file of upload.files) delete file.bytes;
     this.cacheFingerprint = await digest(bytes);
+    const packs = Object.values(this.cache.packs ?? {});
+    const covered = new Set(packs.flatMap(pack => Object.keys(pack.commits)));
+    reportSyncHistory({ unaggregated: Object.keys(this.cache.commits).filter(id => !covered.has(id)).length,
+      threshold: COMPACT_COMMITS, partBytes: PACK_BYTES, packs: packs.map(pack => ({ bytes: pack.bytes, parts: pack.parts.length })),
+      cleanupTargets: this.cache.compaction?.remove.length ?? 0 });
   }
   private async loadCache(bytes: Uint8Array) {
     const stored = await decodeAsync<StoredCache | Cache>(await decrypt(this.requireKey(), bytes, this.context('cache')));
@@ -99,7 +125,9 @@ export class EncryptedDriveSync {
       this.persistedCommits.add(ids[i]);
     }
     this.cache = { version: 1, commits: Object.fromEntries(stored.commits.map(id => [id, commits[id]])), token: stored.token, baseline: stored.baseline,
-      pending: stored.pending && { ...stored.pending, commit: commits[stored.pending.id], files: stored.pending.files.map(f => ({ ...f, sent: false })) } };
+      pending: stored.pending && { ...stored.pending, commit: commits[stored.pending.id], files: stored.pending.files.map(f => ({ ...f, sent: false })) },
+      packs: stored.packs, parts: stored.parts,
+      compaction: stored.compaction && { ...stored.compaction, files: stored.compaction.files.map(f => ({ ...f, sent: false })) } };
   }
 
   private run<T>(work: () => Promise<T>): Promise<T> {
@@ -175,25 +203,33 @@ export class EncryptedDriveSync {
     return true;
   }
 
-  private async loadCommit(id: string): Promise<void> {
+  private async downloadManifest(id: string): Promise<CommitManifest> {
+    const encoded = await decrypt(this.requireKey(), await this.drive.read(id), this.context(id));
+    const manifest = await decodeAsync<CommitManifest>(encoded);
+    if (manifest.version !== 2 && (manifest.version !== 1 || !Array.isArray(manifest.parts) || !manifest.parts.length ||
+        manifest.parts.some(p => typeof p !== 'string'))) throw new Error('Invalid sync commit.');
+    return manifest;
+  }
+
+  private async loadCommit(id: string, manifests: Map<string, CommitManifest>): Promise<void> {
     if (this.cache.commits[id]) return;
     if (this.loading.has(id)) throw new Error('Cyclic sync history.');
     this.loading.add(id);
     try {
-    syncPhase('downloading');
-    const encoded = await decrypt(this.requireKey(), await this.drive.read(id), this.context(id));
-    const manifest = await decodeAsync<{ version: number; parts?: string[]; parents?: string[]; changes?: Change[]; resolutions?: Commit['resolutions'] }>(encoded);
+    const packed = Object.entries(this.cache.packs ?? {}).find(([, pack]) => Object.hasOwn(pack.commits, id));
+    if (packed) { await this.loadPack(packed[1]); return; }
+    const manifest = manifests.get(id) ?? await this.downloadManifest(id);
+    if (!manifests.has(id)) syncPhase('downloading'); // A parent absent from the listing makes the total unknown.
     let payload: Uint8Array;
     let commit: Commit;
     if (manifest.version === 2) {
       commit = { version: 1, parents: manifest.parents!, changes: manifest.changes!, ...(manifest.resolutions ? { resolutions: manifest.resolutions } : {}) };
       payload = await encodeAsync(commit);
     } else {
-      if (manifest.version !== 1 || !Array.isArray(manifest.parts) || !manifest.parts.length ||
-          manifest.parts.some(p => typeof p !== 'string')) throw new Error('Invalid sync commit.');
       const chunks = [];
-      for (const part of manifest.parts) {
+      for (const part of manifest.parts!) {
         const bytes = await decrypt(this.requireKey(), await this.drive.read(part), this.context(part));
+        completedFile(bytes.length);
         chunks.push(bytes);
       }
       const decoded = await decodePartsAsync<Commit>(chunks);
@@ -203,30 +239,133 @@ export class EncryptedDriveSync {
     if (commit.version !== 1 || !Array.isArray(commit.parents) || !Array.isArray(commit.changes) ||
         commit.parents.some(p => typeof p !== 'string' || p === id)) throw new Error('Invalid sync commit.');
     this.encodedCommits.set(id, payload);
+    (this.cache.parts ??= {})[id] = manifest.parts ?? [];
     // Load parents even if Drive's changes feed has not exposed them yet.
-    for (const parent of commit.parents) await this.loadCommit(parent);
+    for (const parent of commit.parents) await this.loadCommit(parent, manifests);
     this.cache.commits[id] = commit;
     } finally { this.loading.delete(id); }
   }
 
-  private async refresh(): Promise<void> {
-    syncPhase('checking');
-    if (!this.cache.token) {
-      const token = await this.drive.startToken();
-      for (const id of await this.drive.commits(this.dataset)) await this.loadCommit(id);
-      this.cache.token = token;
+  private async readPackManifest(id: string): Promise<PackManifest> {
+    const pack = await decodeAsync<PackManifest>(await decrypt(this.requireKey(), await this.drive.read(id, 'pack-index'), this.context(id)));
+    if (pack.version !== 1 || !pack.commits || typeof pack.commits !== 'object' || Array.isArray(pack.commits) ||
+        !Object.keys(pack.commits).length || Object.entries(pack.commits).some(([id, hash]) =>
+          !/^[A-Za-z0-9_-]+$/.test(id) || ['__proto__', 'constructor', 'prototype'].includes(id) ||
+          typeof hash !== 'string' || !/^[a-f0-9]{64}$/.test(hash)) ||
+        !Array.isArray(pack.parts) || !pack.parts.length || pack.parts.some(part => typeof part !== 'string' || !part) ||
+        new Set(pack.parts).size !== pack.parts.length || !Number.isSafeInteger(pack.bytes) || pack.bytes < 1) {
+      throw new Error('Invalid sync pack.');
     }
-    const page = await this.drive.changes(this.cache.token!);
-    for (const change of page.changes) {
-      if ((change.removed || change.file?.trashed) && (this.cache.commits[change.fileId] || change.fileId === this.dataset)) {
+    return pack;
+  }
+  private async loadPack(pack: PackManifest, verify = false): Promise<void> {
+    const missing = Object.keys(pack.commits).some(commit => !this.cache.commits[commit]);
+    // Authenticate the index against retained commits without downloading known payloads again.
+    for (const [commit, hash] of Object.entries(pack.commits)) if (this.cache.commits[commit] &&
+        await digest(await encodeAsync(this.cache.commits[commit])) !== hash) throw new Error('Sync pack history mismatch.');
+    if (!missing && !verify) { recordPackAccess(true); return; }
+    syncPhase('downloading');
+    const chunks: Uint8Array[] = [];
+    let size = 0;
+    for (const part of pack.parts) {
+      const bytes = await decrypt(this.requireKey(), await this.drive.read(part, verify ? 'verification' : 'pack'), this.context(part));
+      chunks.push(bytes); size += bytes.length;
+    }
+    if (size !== pack.bytes) throw new Error('Incomplete sync pack.');
+    const { value: data } = await decodePartsAsync<{ version: number; commits: Record<string, Commit> }>(chunks);
+    if (data.version !== 1 || !data.commits || Object.keys(data.commits).length !== Object.keys(pack.commits).length) {
+      throw new Error('Invalid sync pack.');
+    }
+    const encoded = new Map<string, Uint8Array>();
+    for (const [commit, hash] of Object.entries(pack.commits)) {
+      const value = data.commits[commit];
+      if (!Object.hasOwn(data.commits, commit) || !value || value.version !== 1 || !Array.isArray(value.parents) ||
+          value.parents.some(parent => typeof parent !== 'string' || parent === commit) || !Array.isArray(value.changes)) {
+        throw new Error('Invalid packed commit.');
+      }
+      const bytes = await encodeAsync(value);
+      if (await digest(bytes) !== hash) throw new Error('Sync pack history mismatch.');
+      encoded.set(commit, bytes);
+    }
+    if (!verify) recordPackAccess(false);
+    // Never cache half a pack after failed authentication.
+    for (const [commit, bytes] of encoded) {
+      this.cache.commits[commit] = data.commits[commit];
+      if (!this.persistedCommits.has(commit)) this.encodedCommits.set(commit, bytes);
+    }
+  }
+  private async discoverPacks(): Promise<void> {
+    const ids = await this.drive.packs(this.dataset);
+    const packs = this.cache.packs ??= {};
+    for (const id of Object.keys(packs)) if (!ids.includes(id)) delete packs[id];
+    for (const id of ids) {
+      const pack = packs[id] ?? await this.readPackManifest(id);
+      await this.loadPack(pack);
+      packs[id] = pack;
+    }
+  }
+  private packedCommits(): Set<string> {
+    return new Set(Object.values(this.cache.packs ?? {}).flatMap(pack => Object.keys(pack.commits)));
+  }
+  private async refresh(retry = true): Promise<void> {
+    try {
+      syncPhase('checking');
+      const ids = new Set<string>();
+      if (!this.cache.token) {
+        const token = await this.drive.startToken();
+        await this.discoverPacks();
+        for (const id of await this.drive.commits(this.dataset)) ids.add(id);
+        this.cache.token = token;
+      }
+      const page = await this.drive.changes(this.cache.token!);
+      const removed = new Set(page.changes.filter(change => change.removed || change.file?.trashed).map(change => change.fileId));
+      if (removed.has(this.dataset)) throw new Error('Sync folder was deleted from Drive; sync stopped.');
+      const oldPacks = this.cache.packs ?? {};
+      const removedPacks = Object.entries(oldPacks).filter(([id]) => removed.has(id));
+      const packChanged = page.changes.some(change => change.file?.appProperties?.dataset === this.dataset &&
+        change.file.appProperties.kind === 'pack') || removedPacks.length > 0;
+      // Query live indexes rather than reading stale creation events followed by deletion events.
+      if (packChanged || [...removed].some(id => this.cache.commits[id] || ids.has(id))) await this.discoverPacks();
+      const covered = this.packedCommits();
+      for (const [, pack] of removedPacks) if (Object.keys(pack.commits).some(id => !covered.has(id))) {
         throw new Error('Sync history was deleted from Drive; sync stopped.');
       }
-      if (change.file?.appProperties?.dataset === this.dataset && change.file.appProperties.kind === 'commit' &&
-          !change.removed && !change.file.trashed) await this.loadCommit(change.fileId);
+      for (const id of removed) {
+        if ((this.cache.commits[id] || ids.has(id)) && !covered.has(id)) {
+          throw new Error('Sync history was deleted from Drive; sync stopped.');
+        }
+        ids.delete(id);
+      }
+      for (const change of page.changes) {
+        if (change.file?.appProperties?.dataset === this.dataset && change.file.appProperties.kind === 'commit' &&
+            !removed.has(change.fileId)) ids.add(change.fileId);
+      }
+      const missing = [...ids].filter(id => !this.cache.commits[id]);
+      if (missing.length) {
+        syncPhase('downloading');
+        const manifests = new Map<string, CommitManifest>();
+        let partCount = 0;
+        for (const id of missing) {
+          if (covered.has(id)) continue;
+          const manifest = await this.downloadManifest(id);
+          manifests.set(id, manifest);
+          if (manifest.version === 1) partCount += manifest.parts!.length;
+        }
+        syncPhase('downloading', missing.length + partCount, undefined, missing.length);
+        for (const id of missing) await this.loadCommit(id, manifests);
+      }
+      for (const commit of Object.values(this.cache.commits)) for (const parent of commit.parents) {
+        if (!this.cache.commits[parent]) await this.loadCommit(parent, new Map());
+      }
+      this.cache.token = page.token;
+      // Cursor and downloaded commits are committed together. Failed reads never advance the durable cursor.
+      await this.save();
+    } catch (error) {
+      // A reader may race source deletion after listing or while fetching an old multipart commit.
+      if (!retry || !(error instanceof DriveNotFoundError)) throw error;
+      await this.discoverPacks();
+      await this.refresh(false);
     }
-    this.cache.token = page.token;
-    // Cursor and downloaded commits are committed together. Failed reads never advance the durable cursor.
-    await this.save();
   }
   private heads(): string[] {
     const parents = new Set(Object.values(this.cache.commits).flatMap((c) => c.parents));
@@ -239,10 +378,7 @@ export class EncryptedDriveSync {
     if (!allowConflicts && Object.keys(conflicts).length) throw new SyncConflictError(Object.keys(conflicts));
     return records;
   }
-
-  private async sendPending() {
-    const pending = this.cache.pending;
-    if (!pending) return;
+  private async sendFiles(pending: Pick<Pending, 'id' | 'files'>, publication: string) {
     const acks = await readSyncEntries(this.dataset, pending.files.map(f => `ack:${f.id}`));
     for (let i = 0; i < acks.length; i++) if (acks[i]) {
       const id = decode<string>(await decrypt(this.requireKey(), acks[i]!, this.context(`ack:${pending.files[i].id}`)));
@@ -261,9 +397,9 @@ export class EncryptedDriveSync {
       const ack = await encrypt(this.requireKey(), encode(pending.id), this.context(`ack:${file.id}`));
       await writeSyncCache(this.dataset, undefined, [[`ack:${file.id}`, ack]]);
       file.sent = true;
-      uploadedFile(file.size);
+      completedFile(file.size);
     };
-    const parts = remaining.filter(file => file.kind !== 'commit');
+    const parts = remaining.filter(file => file.kind !== publication);
     const concurrency = this.options.concurrency ?? 2;
     for (let i = 0; i < parts.length; i += concurrency) {
       const results = await Promise.allSettled(parts.slice(i, i + concurrency).map(send));
@@ -271,12 +407,111 @@ export class EncryptedDriveSync {
       if (failed) throw failed.reason;
     }
     // The commit is the publication boundary: never publish incomplete data.
-    for (const file of remaining.filter(file => file.kind === 'commit')) await send(file);
+    for (const file of remaining.filter(file => file.kind === publication)) await send(file);
+  }
+  private async sendPending() {
+    const pending = this.cache.pending;
+    if (!pending) return;
+    await this.sendFiles(pending, 'commit');
     syncPhase('saving');
+    (this.cache.parts ??= {})[pending.id] = pending.files.filter(file => file.kind === 'part').map(file => file.id);
     this.cache.commits[pending.id] = pending.commit;
     this.cache.baseline = pending.baseline;
     delete this.cache.pending;
     await this.save(pending.files.flatMap(f => [`outbox:${f.id}`, `ack:${f.id}`]));
+  }
+  private async finishCompaction() {
+    const pending = this.cache.compaction;
+    if (!pending) return;
+    if (useGoogleSyncDiagnostics.getState().compaction.status !== 'running') {
+      reportCompaction({ status: 'running', reason: 'resume', sourceFiles: pending.remove.length, newFiles: pending.files.length });
+    }
+    await this.sendFiles(pending, 'pack');
+    try {
+      const manifest = await this.readPackManifest(pending.id);
+      if (await digest(await encodeAsync(manifest)) !== await digest(await encodeAsync(pending.manifest))) {
+        throw new Error('Sync pack publication mismatch.');
+      }
+      // Read back every byte before the first irreversible deletion, including on a resumed run.
+      await this.loadPack(manifest, true);
+      (this.cache.packs ??= {})[pending.id] = manifest;
+    } catch (error) {
+      if (!(error instanceof DriveNotFoundError)) throw error;
+      // Another device can consolidate this published pack before its owner finishes cleanup.
+      await this.discoverPacks();
+      const replacements = Object.values(this.cache.packs ?? {}).filter(pack =>
+        Object.keys(pack.commits).some(id => Object.hasOwn(pending.manifest.commits, id)));
+      for (const [id, hash] of Object.entries(pending.manifest.commits)) if (!replacements.some(pack => pack.commits[id] === hash)) {
+        throw new Error('Missing compacted sync history.');
+      }
+      for (const pack of replacements) await this.loadPack(pack, true);
+    }
+    await this.remote();
+    syncPhase('saving');
+    const concurrency = this.options.concurrency ?? 2;
+    for (let i = 0; i < pending.remove.length; i += concurrency) {
+      const results = await Promise.allSettled(pending.remove.slice(i, i + concurrency).map(id => this.drive.remove(id)));
+      const failed = results.find((r): r is PromiseRejectedResult => r.status === 'rejected');
+      if (failed) throw failed.reason;
+    }
+    for (const id of pending.remove) {
+      delete this.cache.packs?.[id];
+      delete this.cache.parts?.[id];
+    }
+    delete this.cache.compaction;
+    await this.save(pending.files.flatMap(file => [`outbox:${file.id}`, `ack:${file.id}`]));
+    reportCompaction({ status: 'completed', sourceFiles: pending.remove.length, newFiles: pending.files.length });
+  }
+  private async compact() {
+    await this.finishCompaction();
+    const covered = this.packedCommits();
+    if (Object.keys(this.cache.commits).filter(id => !covered.has(id)).length < COMPACT_COMMITS) {
+      reportCompaction({ status: 'skipped', reason: 'belowThreshold' }); return;
+    }
+    // Capture live sources once. Commits published by another device later are never deletion targets.
+    await this.discoverPacks();
+    const raw = await this.drive.commits(this.dataset);
+    if (raw.length < COMPACT_COMMITS) { reportCompaction({ status: 'skipped', reason: 'liveBelowThreshold' }); return; }
+    const groups: { commits: string[]; sources: string[]; size: number }[] = [];
+    let group = { commits: [] as string[], sources: [] as string[], size: 0 };
+    for (const id of raw.sort()) {
+      const commit = this.cache.commits[id];
+      if (!commit) continue; // A concurrent publication belongs to the next synchronization.
+      const size = Math.max((await encodeAsync(commit)).length, id.length + 128);
+      if (group.commits.length && group.size + size > PACK_BYTES) {
+        groups.push(group); group = { commits: [], sources: [], size: 0 };
+      }
+      const parts = this.cache.parts?.[id] ?? (await this.downloadManifest(id)).parts ?? [];
+      group.commits.push(id); group.sources.push(id, ...parts); group.size += size;
+    }
+    if (group.commits.length) groups.push(group);
+    // Fold small existing packs into the new group; do not rewrite full packs on every edit.
+    for (const [id, pack] of Object.entries(this.cache.packs ?? {})) {
+      const size = Math.max(pack.bytes, Object.keys(pack.commits).reduce((sum, commit) => sum + commit.length + 128, 0));
+      const target = groups.find(group => group.size + size <= PACK_BYTES);
+      if (!target) continue;
+      target.commits.push(...Object.keys(pack.commits)); target.sources.push(id, ...pack.parts); target.size += size;
+    }
+    for (const group of groups) {
+      const commits = Object.fromEntries([...new Set(group.commits)].sort().map(id => [id, this.cache.commits[id]]));
+      const payload = await encodeAsync({ version: 1, commits });
+      const hashes: Record<string, string> = {};
+      for (const [id, commit] of Object.entries(commits)) hashes[id] = await digest(await encodeAsync(commit));
+      const [id, ...parts] = await this.drive.ids(1 + Math.ceil(payload.length / PACK_BYTES));
+      const files: Pending['files'] = [];
+      for (let i = 0; i < parts.length; i++) {
+        const bytes = await encrypt(this.requireKey(), payload.slice(i * PACK_BYTES, (i + 1) * PACK_BYTES), this.context(parts[i]));
+        files.push({ id: parts[i], kind: 'pack-part', bytes, size: bytes.length, sent: false });
+      }
+      const manifest: PackManifest = { version: 1, commits: hashes, parts, bytes: payload.length };
+      const bytes = await encrypt(this.requireKey(), await encodeAsync(manifest), this.context(id));
+      if (bytes.length > PACK_BYTES + 28) throw new Error('Sync pack index too large.');
+      files.push({ id, kind: 'pack', bytes, size: bytes.length, sent: false });
+      this.cache.compaction = { id, manifest, files, remove: [...new Set(group.sources)] };
+      await this.save();
+      reportCompaction({ status: 'running', reason: 'new', sourceFiles: this.cache.compaction.remove.length, newFiles: files.length });
+      await this.finishCompaction();
+    }
   }
   private async prepare(changes: Change[], baseline: Records, resolutions?: Commit['resolutions']) {
     syncPhase('encrypting');
@@ -302,6 +537,7 @@ export class EncryptedDriveSync {
     const local = await toRecords(snapshot);
     return this.run(async () => {
       await this.sendPending();
+      await this.finishCompaction();
       await this.refresh();
       const remote = await this.remote();
       if (!replace && !this.cache.baseline) throw new Error('Choose upload or download before enabling automatic sync.');
@@ -331,6 +567,7 @@ export class EncryptedDriveSync {
         this.cache.baseline = localHashes;
         await this.save();
       }
+      await this.compact();
     });
   }
 
@@ -338,6 +575,7 @@ export class EncryptedDriveSync {
     const local = await toRecords(snapshot);
     return this.run(async () => {
       await this.sendPending();
+      await this.finishCompaction();
       await this.refresh();
       const remote = await this.remote(true);
       const resolutions = this.remoteConflicts;
@@ -368,6 +606,7 @@ export class EncryptedDriveSync {
         await this.refresh();
         await this.remote();
       }
+      await this.compact();
       return result;
     });
   }
@@ -375,6 +614,7 @@ export class EncryptedDriveSync {
   async pull(): Promise<Snapshot> {
     return this.run(async () => {
       await this.sendPending();
+      await this.finishCompaction();
       await this.refresh();
       const records = await this.remote();
       if (!Object.keys(records).length) throw new Error('This encrypted folder has no completed upload yet.');

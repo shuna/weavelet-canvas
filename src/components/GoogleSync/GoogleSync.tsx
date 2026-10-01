@@ -1,3 +1,5 @@
+import SyncDots from './SyncDots';
+import { useSyncProgressDisplay } from '@hooks/useSyncProgressDisplay';
 import { SyncConflictError, useSyncReview, type Resolution } from '@store/storage/google/conflicts';
 import { withSyncProgress, syncPhase } from '@store/storage/google/progress';
 import GoogleSyncProgress from './GoogleSyncProgress';
@@ -191,6 +193,13 @@ const GoogleSync = ({ clientId, openOnMount = false, showEntry = true }: { clien
   const cloudSync = useGStore((state) => state.cloudSync);
   const setSyncStatus = useGStore((state) => state.setSyncStatus);
   const syncTargetConfirmed = useGStore((state) => state.syncTargetConfirmed);
+  const progress = useSyncProgressDisplay();
+  const [bannerTarget, setBannerTarget] = useState<HTMLElement | null>(null);
+  useEffect(() => {
+    setBannerTarget(document.getElementById('google-sync-banner-overlay'));
+  }, []);
+  const transferFileTotal = progress.active && (progress.phase === 'uploading' || progress.phase === 'downloading')
+    ? progress.totalFiles : undefined;
 
   const enableCloudPersistence = () => {
     useStore.persist.setOptions({
@@ -271,12 +280,18 @@ const GoogleSync = ({ clientId, openOnMount = false, showEntry = true }: { clien
         <GoogleIcon /> {t('name')}
         {cloudSync && <SyncIcon status={syncStatus} />}
       </div>}
-      {!isModalOpen && (syncStatus === 'syncing' || syncStatus === 'error') && createPortal(
+      {bannerTarget && !isModalOpen && (syncStatus === 'syncing' || syncStatus === 'error') && createPortal(
         <button type='button' onClick={() => setIsModalOpen(true)}
-          className='fixed bottom-4 right-4 z-[60] flex items-center gap-2 rounded-lg bg-emerald-700 px-4 py-3 text-sm text-white shadow-lg'
-          aria-label={t('progress.open') as string}>
-          <SyncIcon status={syncStatus} />{t(syncStatus === 'error' ? 'progress.failed' : 'progress.open')}
-        </button>, document.body
+          data-google-sync-banner
+          className={`absolute inset-x-0 top-0 flex h-6 items-center justify-center gap-1 px-3 text-xs text-white shadow-sm ${syncStatus === 'error' ? 'bg-red-700' : 'bg-emerald-700'}`}
+          aria-label={t(syncStatus === 'error' ? 'progress.failed' : 'progress.open') as string}>
+          {t(syncStatus === 'error' ? 'progress.failed' : progress.active ? `progress.${progress.phase}` : 'progress.open')}
+          <SyncIcon status={syncStatus} />
+          {syncStatus === 'syncing' && transferFileTotal !== undefined && transferFileTotal > 0 && <progress
+            className='absolute inset-x-0 bottom-0 h-1 w-full accent-emerald-300'
+            max={transferFileTotal} value={progress.completedFiles}
+            aria-label={t(`progress.${progress.phase}`) as string} />}
+        </button>, bannerTarget
       )}
       <GooglePopup
           isModalOpen={isModalOpen}
@@ -813,7 +828,7 @@ const GooglePopup = ({
                     aria-label={t('button.refreshFiles') as string}
                     title={t('button.refreshFiles') as string}
                   >
-                    <RefreshIcon className={isBusy ? 'animate-spin' : ''} />
+                    {isBusy ? <SyncDots label={t('progress.preparing')} /> : <RefreshIcon />}
                   </button>
                 </div>
                 <div className='max-h-72 overflow-y-auto pr-1'>
@@ -924,9 +939,7 @@ const SyncIcon = ({ status }: { status: SyncStatus }) => {
       </div>
     ),
     syncing: (
-      <div className='rounded-full bg-gray-600/80 p-1 animate-spin'>
-        <RefreshIcon className='h-2 w-2' />
-      </div>
+      <SyncDots label='同期中' />
     ),
     synced: (
       <div className='bg-gray-600/80 rounded-full p-1'>

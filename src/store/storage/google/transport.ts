@@ -1,3 +1,4 @@
+import type { TransferPurpose } from './diagnostics';
 import { measure, recordMetric } from './metrics';
 import { beginTransfer } from './progress';
 import { googleFetch } from '@api/google-auth';
@@ -19,6 +20,7 @@ const API = 'https://www.googleapis.com/drive/v3';
 export interface DriveFile extends GoogleFileResource {
   appProperties?: Record<string, string>;
 }
+export class DriveNotFoundError extends Error {}
 export class DriveTransport {
   constructor(private token: () => string) {}
 
@@ -65,10 +67,11 @@ export class DriveTransport {
         appProperties: { weaveletSync: '1', headerId } }),
     });
   }
-  async read(id: string): Promise<Uint8Array> {
-    const finish = beginTransfer('download');
+  async read(id: string, purpose: TransferPurpose = 'normal'): Promise<Uint8Array> {
+    const finish = beginTransfer('download', purpose);
     const started = performance.now();
     const response = await this.request(`${API}/files/${encodeURIComponent(id)}?alt=media`);
+    if (response.status === 404) throw new DriveNotFoundError('Google Drive 404: missing sync file.');
     if (!response.ok) throw new Error(`Google Drive ${response.status}: ${response.statusText}`);
     const bytes = new Uint8Array(await response.arrayBuffer());
     finish(bytes.length);
@@ -80,7 +83,7 @@ export class DriveTransport {
     const file = new File([bytes], `${id}.bin`, { type: 'application/octet-stream' });
     const body = createMultipartRelatedBody({ id, name: file.name, mimeType: file.type,
       parents: [dataset], appProperties: { dataset, kind } }, file, boundary);
-    const finish = beginTransfer('upload');
+    const finish = beginTransfer('upload', kind === 'pack' || kind === 'pack-part' ? 'compaction' : 'normal');
     const response = await measure('drive', () => this.request('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart', {
       method: 'POST', headers: { 'Content-Type': `multipart/related; boundary=${boundary}` }, body,
     }), body.size);
@@ -96,11 +99,22 @@ export class DriveTransport {
     return (await this.json(`${API}/changes/startPageToken`)).startPageToken;
   }
   async commits(dataset: string): Promise<string[]> {
+    return this.listKind(dataset, 'commit');
+  }
+  async packs(dataset: string): Promise<string[]> {
+    return this.listKind(dataset, 'pack');
+  }
+  async remove(id: string): Promise<void> {
+    const response = await this.request(`${API}/files/${encodeURIComponent(id)}`, { method: 'DELETE' });
+    // Deleting the captured source set is safe to retry after a lost response.
+    if (!response.ok && response.status !== 404) throw new Error(`Google Drive ${response.status}: ${response.statusText}`);
+  }
+  private async listKind(dataset: string, kind: 'commit' | 'pack'): Promise<string[]> {
     const ids: string[] = [];
     let pageToken: string | undefined;
     do {
       const params = new URLSearchParams({
-        q: `'${dataset.replace(/['\\]/g, '\\$&')}' in parents and trashed = false and appProperties has { key='kind' and value='commit' }`,
+        q: `'${dataset.replace(/['\\]/g, '\\$&')}' in parents and trashed = false and appProperties has { key='kind' and value='${kind}' }`,
         fields: 'nextPageToken,incompleteSearch,files(id)', pageSize: '1000',
       });
       if (pageToken) params.set('pageToken', pageToken);

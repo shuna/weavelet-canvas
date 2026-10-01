@@ -5,10 +5,12 @@ import useStore from '@store/store';
 import ConfigMenu from '@components/ConfigMenu';
 import { ChatInterface, ConfigInterface, ImageDetail } from '@type/chat';
 import { _defaultChatConfig } from '@constants/chat';
+import { switchConfigModel } from '@utils/modelSettings';
 import { ModelOptions } from '@type/chat';
 import type { ProviderId } from '@type/provider';
 import { cloneChatAtIndex } from '@utils/chatShallowClone';
 import { normalizeConfigStream } from '@utils/streamSupport';
+import { resolveChatModel } from '@utils/chatModelResolution';
 import { CURATED_MODELS } from '@src/local-llm/catalog';
 import { localModelRuntime } from '@src/local-llm/runtime';
 import { OpfsFileProvider } from '@src/local-llm/storage';
@@ -20,6 +22,7 @@ const ChatTitle = React.memo(() => {
   const localModels = useStore((state) => state.localModels) || [];
   const favoriteLocalIds = useStore((state) => state.favoriteLocalModelIds) || [];
   const savedMeta = useStore((state) => state.savedModelMeta) || {};
+  const modelResolution = useStore((state) => resolveChatModel(state.currentChatIndex, state));
   const chat = useStore(
     (state) =>
       state.chats &&
@@ -62,12 +65,10 @@ const ChatTitle = React.memo(() => {
     const chats = useStore.getState().chats;
     if (!chats) return;
     const updatedChats = cloneChatAtIndex(chats, currentChatIndex);
-    updatedChats[currentChatIndex].config = normalizeConfigStream({
-      ...updatedChats[currentChatIndex].config,
-      model: modelId as ModelOptions,
-      providerId,
-      modelSource,
-    });
+    updatedChats[currentChatIndex].config = normalizeConfigStream(switchConfigModel(
+      updatedChats[currentChatIndex].config,
+      { model: modelId as ModelOptions, providerId, modelSource }
+    ));
     setChats(updatedChats);
     setIsModelDropdownOpen(false);
 
@@ -104,16 +105,11 @@ const ChatTitle = React.memo(() => {
       if (catalogModel) return `${catalogModel.label} (Local)`;
       return `${modelId} (Local)`;
     }
-    const fav = providerId
-      ? favoriteModels.find((f) => f.modelId === modelId && f.providerId === providerId)
-      : favoriteModels.find((f) => f.modelId === modelId);
-    if (fav) {
-      return `${modelId} (${providers[fav.providerId]?.name || fav.providerId})`;
-    }
-    if (providerId) {
-      return `${modelId} (${providers[providerId]?.name || providerId})`;
-    }
-    return modelId || (t('provider.noModelSelected', 'モデル未選択') as string);
+    if (modelResolution.status === 'unspecified') return t('provider.noModelSelected', 'モデル未選択') as string;
+    if (modelResolution.status === 'unmatched') return `${modelId} (${t('provider.modelUnmatched', 'モデル照合不可')})`;
+    const resolvedProviderId = providerId ?? (modelResolution.status === 'available' || modelResolution.status === 'favorite' ? modelResolution.match.providerId : undefined);
+    const name = providers[resolvedProviderId!]?.name || resolvedProviderId;
+    return `${modelId} (${name}${modelResolution.status === 'available' ? ` · ${t('provider.chatOnly', 'このチャットのみ')}` : ''})`;
   };
 
   // Close dropdown on outside click

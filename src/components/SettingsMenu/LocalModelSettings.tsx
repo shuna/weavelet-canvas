@@ -1436,7 +1436,7 @@ const LocalModelSettings = () => {
                   <option value='transformers.js'>{t('localModel.engineTransformersJs')}</option>
                 </select>
                 {hfSearch.searching && (
-                  <span className='text-xs text-gray-500 animate-pulse whitespace-nowrap'>{t('localModel.hfSearching')}</span>
+                  <span className='text-xs text-gray-500 whitespace-nowrap'>{t('localModel.hfSearching')}</span>
                 )}
               </div>
               {hfSearch.hasSearchedOnce && hfSearch.searchResults.length > 0 && (
@@ -1534,7 +1534,7 @@ const LocalModelSettings = () => {
               {hfSearch.searchHasMore && hfSearch.searchResults.length > 0 && (
                 <div ref={hfSearch.searchSentinelRef} className='px-4 py-2 text-center'>
                   {hfSearch.loadingMore && (
-                    <span className='text-xs text-gray-500 animate-pulse'>{t('localModel.hfSearching')}</span>
+                    <span className='text-xs text-gray-500'>{t('localModel.hfSearching')}</span>
                   )}
                 </div>
               )}

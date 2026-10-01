@@ -10,6 +10,7 @@ export const getEffectiveReasoningEffort = (
   if (providerId === 'openrouter') {
     return reasoningRequired && effort === 'none' ? 'low' : effort;
   }
+  if (effort === 'none' && !reasoningRequired) return 'none';
   return effort === 'low' || effort === 'medium' || effort === 'high'
     ? effort
     : 'medium';
@@ -90,12 +91,25 @@ export const isOpenRouterClaudeEffortModel = (
 export const isOpenRouterClaudeVerbosityModel = (
   modelId: string,
   providerId?: ProviderId
-): boolean => providerId === 'openrouter' && normalizeModelId(modelId).includes('claude');
+): boolean => {
+  if (providerId !== 'openrouter') return false;
+  const id = normalizeModelId(modelId);
+  const version = getClaudeVersion(id);
+  if (version === undefined) return false;
+  if (id.includes('opus')) return version >= 4.5;
+  if (id.includes('sonnet')) return version >= 4.6;
+  return /(?:fable|mythos)/.test(id) && version >= 5;
+};
 
 export const supportsMaxVerbosity = (
   modelId: string,
   providerId?: ProviderId
-): boolean => isOpenRouterAdaptiveReasoningModel(modelId, providerId);
+): boolean => {
+  if (!isOpenRouterClaudeVerbosityModel(modelId, providerId)) return false;
+  const id = normalizeModelId(modelId);
+  const version = getClaudeVersion(id);
+  return version !== undefined && version >= 4.6;
+};
 
 /**
  * OpenRouter's Fusion alias runs a multi-model panel plus a judge call on top

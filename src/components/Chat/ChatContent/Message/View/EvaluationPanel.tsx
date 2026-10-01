@@ -23,7 +23,7 @@ const ScoreBar = ({ score, label, threshold, axisState }: { score: number; label
         {label}
       </span>
       {axisState && axisState !== 'done' ? (
-        <span className={`flex-1 text-[10px] ${axisState === 'generating' ? 'text-blue-500 dark:text-blue-400 animate-pulse' : 'text-gray-400 dark:text-gray-500'}`}>
+        <span className={`flex-1 text-[10px] ${axisState === 'generating' ? 'text-blue-500 dark:text-blue-400' : 'text-gray-400 dark:text-gray-500'}`}>
           {axisState === 'generating' ? t('evaluation.axisGenerating') : t('evaluation.axisWaiting')}
         </span>
       ) : (
@@ -152,7 +152,7 @@ const EvaluationPanel: React.FC<EvaluationPanelProps> = ({ chatId, nodeId, phase
   return (
     <div className='mt-1 rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/50 p-3 space-y-3'>
       {pending && (
-        <div className='text-xs text-gray-500 dark:text-gray-400 animate-pulse'>
+        <div className='text-xs text-gray-500 dark:text-gray-400'>
           Evaluating...
         </div>
       )}

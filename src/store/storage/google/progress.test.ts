@@ -1,5 +1,5 @@
 import { afterEach, expect, it, vi } from 'vitest';
-import { beginTransfer, syncPhase, uploadedFile, useGoogleSyncProgress, withSyncProgress } from './progress';
+import { beginTransfer, syncPhase, completedFile, useGoogleSyncProgress, withSyncProgress } from './progress';
 import { DriveTransport } from './transport';
 
 afterEach(() => { vi.restoreAllMocks(); vi.unstubAllGlobals(); });
@@ -15,7 +15,7 @@ it('reports payload bytes and time only for completed transfers and stops on err
   await expect(withSyncProgress(async () => {
     syncPhase('uploading', 2, 2048);
     await drive.put('part', 'dataset', 'part', new Uint8Array(1024));
-    uploadedFile(1024);
+    completedFile(1024);
     await drive.read('key');
     expect(useGoogleSyncProgress.getState()).toMatchObject({
       active: true, totalBytes: 2048, completedBytes: 1024, completedFiles: 1,
