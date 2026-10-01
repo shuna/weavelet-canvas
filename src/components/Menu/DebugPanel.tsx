@@ -1,4 +1,5 @@
 import React from 'react';
+import GoogleSyncDiagnostics from './GoogleSyncDiagnostics';
 import { useTranslation } from 'react-i18next';
 import useStore from '@store/store';
 import { useDebugStore, DebugStatus } from '@store/debug-store';
@@ -141,6 +142,7 @@ const DebugPanel = () => {
           <SwToggle />
         </div>
       </div>
+      <GoogleSyncDiagnostics />
       <div className='max-h-32 overflow-y-auto space-y-0.5'>
         {sorted.length === 0 ? (
           <div className='text-[11px] text-gray-400 dark:text-gray-500 italic'>

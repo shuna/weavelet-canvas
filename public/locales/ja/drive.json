@@ -134,5 +134,43 @@
     "chatDone": "このチャットを確認済みにする",
     "nodeDone": "同期の変更を確認済みにする",
     "folderDone": "フォルダーの変更を確認済みにする"
+  },
+  "debug": {
+    "title": "Google Drive 同期",
+    "noMeasurement": "計測なし",
+    "result": {
+      "running": "処理中",
+      "completed": "完了",
+      "failed": "失敗"
+    },
+    "elapsed": "同期全体: {{time}}",
+    "normal": "通常の送受信: ↑ {{sent}} / ↓ {{received}}",
+    "compactionBytes": "集約の送信: {{sent}} / 削除前の検証受信: {{received}}",
+    "packBytes": "集約の取得: 索引 {{index}} / 本体 {{body}}",
+    "packAccess": "集約本体: 取得省略 {{skipped}}回 / 取得 {{read}}回（検証を除く）",
+    "processing": "処理時間（累計）: 圧縮 {{compression}} / 暗号処理 {{crypto}} / ローカル保存・読込 {{cache}}",
+    "compaction": "今回の集約判断",
+    "completedGroups": "完了 {{groups}}グループ",
+    "compactionStatus": {
+      "notChecked": "未判定",
+      "skipped": "見送り",
+      "running": "実施中",
+      "completed": "実施済み",
+      "interrupted": "中断・再開待ち"
+    },
+    "compactionReason": {
+      "belowThreshold": "未集約履歴が閾値未満",
+      "liveBelowThreshold": "Drive上の対象が閾値未満",
+      "new": "新しい集約",
+      "resume": "準備済みの集約を再開"
+    },
+    "lastCompaction": "直近の集約（{{time}}）: 対象元ファイル {{before}} → 新規 {{after}} / {{reduction}}削減",
+    "observation": "履歴の最終確認: {{time}}",
+    "history": "未集約 {{count}} / 閾値 {{threshold}}件 · 基準超過 {{excess}}件",
+    "packs": "集約済み: 索引 {{indexes}} / 本体 {{bodies}}ファイル · 1 MiB未満の集約 {{small}}個",
+    "reference": "本体の参考最小数 {{files}} / 現状との差 {{excess}}ファイル（推定）",
+    "cleanup": "元ファイルの削除確認対象: {{count}}（既に削除済みの対象を含む場合があります）",
+    "measurement": "容量と速度は完了したファイル本体を計測します。HTTPヘッダー、失敗した転送は含みません。並行通信の時間は重複を除き、処理時間は累計で表示します。",
+    "referenceHelp": "参考最小数は集約済みの圧縮量を4 MiBの本体へ詰めた場合の推定です。索引・未集約履歴・再圧縮効果を含まず、全体の最適値ではありません。"
   }
 }
