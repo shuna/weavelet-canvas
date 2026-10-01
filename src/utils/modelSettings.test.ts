@@ -1,9 +1,16 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { _defaultChatConfig } from '@constants/chat';
+import useStore from '@store/store';
 import { switchConfigModel } from './modelSettings';
 
 describe('model settings', () => {
   it('keeps generation settings separate by provider and restores them after switching', () => {
+    vi.spyOn(useStore, 'getState').mockReturnValue({
+      providerCustomModels: {}, favoriteModels: [],
+      providerModelCache: { openrouter: [{
+        id: 'anthropic/claude-sonnet-4', contextLength: 200000, maxCompletionTokens: 64000,
+      }] },
+    } as never);
     const opus = {
       ..._defaultChatConfig,
       model: 'anthropic/claude-opus-4.6',
@@ -14,15 +21,19 @@ describe('model settings', () => {
     const sonnet = switchConfigModel(opus, {
       model: 'anthropic/claude-sonnet-4', providerId: 'openrouter',
     });
+    expect(sonnet.max_tokens).toBe(64000);
     expect(sonnet.temperature).toBe(1);
     expect(sonnet.verbosity).toBeUndefined();
 
-    const editedSonnet = { ...sonnet, temperature: 0.7, verbosity: 'low' as const };
+    const editedSonnet = { ...sonnet, max_tokens: 12000, temperature: 0.7, verbosity: 'low' as const };
     const restored = switchConfigModel(editedSonnet, {
       model: opus.model, providerId: opus.providerId,
     });
     expect(restored.temperature).toBe(0.3);
     expect(restored.verbosity).toBe('max');
+    expect(switchConfigModel(restored, {
+      model: sonnet.model, providerId: 'openrouter',
+    }).max_tokens).toBe(12000);
     expect(switchConfigModel(restored, {
       model: sonnet.model, providerId: 'openrouter',
     }).verbosity).toBe('low');

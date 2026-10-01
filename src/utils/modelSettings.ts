@@ -1,4 +1,5 @@
 import { _defaultChatConfig } from '@constants/chat';
+import { getModelDefaultMaxTokens } from './modelLookup';
 import type { ConfigInterface, ModelSettings } from '@type/chat';
 
 const modelKey = ({ model, providerId, modelSource }: Pick<ConfigInterface, 'model' | 'providerId' | 'modelSource'>) =>
@@ -23,7 +24,10 @@ export const savedModelSettings = (
 ): ModelSettings =>
   modelKey(config) === modelKey(target)
     ? pickModelSettings(config)
-    : config.modelSettings?.[modelKey(target)] ?? pickModelSettings(_defaultChatConfig);
+    : config.modelSettings?.[modelKey(target)] ?? {
+        ...pickModelSettings(_defaultChatConfig),
+        max_tokens: getModelDefaultMaxTokens(target.model, target.providerId, target.modelSource),
+      };
 
 export const switchConfigModel = (
   config: ConfigInterface,

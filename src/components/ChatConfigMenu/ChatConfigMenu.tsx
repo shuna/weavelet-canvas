@@ -216,7 +216,7 @@ const ChatConfigPopup = ({
   const [_model, _setModel] = useState<ModelOptions>(config.model);
   const [_providerId, _setProviderId] = useState<ProviderId | undefined>(config.providerId);
   const [_modelSource, _setModelSource] = useState<'remote' | 'local' | undefined>(config.modelSource);
-  const [_maxToken, _setMaxToken] = useState<number>(config.max_tokens);
+  const [_maxToken, _setMaxToken] = useState<number>(normalizeConfigStream(config).max_tokens);
   const [_temperature, _setTemperature] = useState<number>(config.temperature);
   const [_topP, _setTopP] = useState<number>(config.top_p);
   const [_presencePenalty, _setPresencePenalty] = useState<number>(
@@ -384,7 +384,7 @@ const ChatConfigInline = ({ onSettingsChanged }: { onSettingsChanged?: () => voi
   const [_model, _setModel] = useState<ModelOptions>(config.model);
   const [_providerId, _setProviderId] = useState<ProviderId | undefined>(config.providerId);
   const [_modelSource, _setModelSource] = useState<'remote' | 'local' | undefined>(config.modelSource);
-  const [_maxToken, _setMaxToken] = useState<number>(config.max_tokens);
+  const [_maxToken, _setMaxToken] = useState<number>(normalizeConfigStream(config).max_tokens);
   const [_temperature, _setTemperature] = useState<number>(config.temperature);
   const [_topP, _setTopP] = useState<number>(config.top_p);
   const [_presencePenalty, _setPresencePenalty] = useState<number>(

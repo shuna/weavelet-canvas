@@ -11,7 +11,10 @@ vi.mock('@store/store', () => ({
 }));
 
 import useStore from '@store/store';
+import { normalizeConfigStream } from './streamSupport';
+import { _defaultChatConfig } from '@constants/chat';
 import {
+  getModelDefaultMaxTokens,
   getModelConfigContextInfo,
   getModelContextInfo,
   getModelCost,
@@ -131,5 +134,31 @@ describe('modelLookup cost units', () => {
   it('recognizes Opus 5.5 before provider metadata is refreshed', () => {
     expect(getModelRequiresReasoning('anthropic/claude-opus-5.5', 'openrouter')).toBe(true);
     expect(getModelRequiresReasoning('anthropic/claude-opus-5', 'openrouter')).toBe(false);
+  });
+});
+
+describe('model completion defaults', () => {
+  it('prefers output limits, then known context budgets, then 4000', () => {
+    vi.mocked(useStore.getState).mockReturnValue({
+      providerCustomModels: {},
+      favoriteModels: [],
+      providerModelCache: { openrouter: [
+        { id: 'output', contextLength: 200000, maxCompletionTokens: 32000 },
+        { id: 'context', contextLength: 10000 },
+        { id: 'small', contextLength: 2000, maxCompletionTokens: 4000 },
+        { id: 'invalid', maxCompletionTokens: -1 },
+        { id: 'output-only', maxCompletionTokens: 16000 },
+      ] },
+    } as never);
+    expect(getModelDefaultMaxTokens('output', 'openrouter')).toBe(32000);
+    expect(getModelDefaultMaxTokens('context', 'openrouter')).toBe(9000);
+    expect(getModelDefaultMaxTokens('small', 'openrouter')).toBe(1800);
+    expect(getModelDefaultMaxTokens('unknown', 'openrouter')).toBe(4000);
+    expect(getModelDefaultMaxTokens('invalid', 'openrouter')).toBe(4000);
+    expect(getModelDefaultMaxTokens('output-only', 'openrouter')).toBe(16000);
+    const config = { ..._defaultChatConfig, model: 'output', providerId: 'openrouter' as const };
+    expect(normalizeConfigStream(config).max_tokens).toBe(32000);
+    expect(normalizeConfigStream({ ...config, max_tokens: 1000 }).max_tokens).toBe(1000);
+    expect(normalizeConfigStream({ ...config, max_tokens: 0 }).max_tokens).toBe(0);
   });
 });

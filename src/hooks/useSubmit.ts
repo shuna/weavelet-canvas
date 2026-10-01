@@ -1,3 +1,4 @@
+import { normalizeConfigStream } from '@utils/streamSupport';
 import useStore from '@store/store';
 import { useTranslation } from 'react-i18next';
 import { useRef, useState } from 'react';
@@ -66,12 +67,12 @@ const useSubmit = () => {
     const chatId = chats[chatIndex]?.id;
     if (!chatId) return;
     const modelResolution = resolveChatModel(chatIndex);
-    const submitConfig = {
+    const submitConfig = normalizeConfigStream({
       ...chats[chatIndex].config,
       providerId: chats[chatIndex].config.providerId ??
         (modelResolution.status === 'favorite' || modelResolution.status === 'available'
           ? modelResolution.match.providerId : undefined),
-    };
+    });
 
     // Same-chat guard
     if (isChatGenerating(chatId)) return;

@@ -11,6 +11,7 @@ import {
   useModelSupportsReasoning,
   useModelCapabilities,
 } from '@utils/modelLookup';
+import { getModelDefaultMaxTokens } from '@utils/modelLookup';
 import { ModelOptions } from '@type/chat';
 import { isModelStreamSupported, normalizeConfigStream } from '@utils/streamSupport';
 import { clampCompletionTokens, getMaxCompletionTokensForContext } from '@utils/tokenBudget';
@@ -181,7 +182,7 @@ const ConfigMenu = ({
   imageDetail: ImageDetail;
   setImageDetail: (imageDetail: ImageDetail) => void;
 }) => {
-  const [_maxToken, _setMaxToken] = useState<number>(config.max_tokens);
+  const [_maxToken, _setMaxToken] = useState<number>(normalizeConfigStream(config).max_tokens);
   const [_model, _setModel] = useState<ModelOptions>(config.model);
   const [_providerId, _setProviderId] = useState<ProviderId | undefined>(config.providerId);
   const [_modelSource, _setModelSource] = useState<'remote' | 'local' | undefined>(config.modelSource);
@@ -617,7 +618,7 @@ export const MaxTokenSlider = ({
       max={maxCompletionForModel}
       step={1}
       description={t('token.description')}
-      defaultValue={_defaultChatConfig.max_tokens}
+      defaultValue={getModelDefaultMaxTokens(_model, _providerId, _modelSource)}
     />
   );
 };
