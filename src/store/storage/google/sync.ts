@@ -2,7 +2,7 @@ import { reportSyncHistory, reportCompaction, recordPackAccess, useGoogleSyncDia
 import { SyncConflictError, type Resolution } from './conflicts';
 import { mergeSyncRecords } from './merge';
 import { replayHistoryAsync, decodePartsAsync, encodeAsync, decodeAsync, toRecordsAsync as toRecords, fromRecordsAsync as fromRecords, hashRecordsAsync as hashRecords } from './processing';
-import { syncPhase, completedFile } from './progress';
+import { syncPhase, completedFile, syncStage } from './progress';
 import { createKeyEnvelope, unlockKey, encode, decode, encrypt, decrypt, digest, type KeyEnvelope } from './crypto';
 import { diffHashedRecords, applyChanges, type Records, type Snapshot, type Change, diffRecords } from './records';
 import { DriveTransport, DriveNotFoundError, SYNC_FOLDER_TYPE, type DriveFile } from './transport';
@@ -264,12 +264,13 @@ export class EncryptedDriveSync {
     for (const [commit, hash] of Object.entries(pack.commits)) if (this.cache.commits[commit] &&
         await digest(await encodeAsync(this.cache.commits[commit])) !== hash) throw new Error('Sync pack history mismatch.');
     if (!missing && !verify) { recordPackAccess(true); return; }
-    syncPhase('downloading');
+    syncPhase('downloading', pack.parts.length);
     const chunks: Uint8Array[] = [];
     let size = 0;
     for (const part of pack.parts) {
       const bytes = await decrypt(this.requireKey(), await this.drive.read(part, verify ? 'verification' : 'pack'), this.context(part));
       chunks.push(bytes); size += bytes.length;
+      completedFile(bytes.length);
     }
     if (size !== pack.bytes) throw new Error('Incomplete sync pack.');
     const { value: data } = await decodePartsAsync<{ version: number; commits: Record<string, Commit> }>(chunks);
@@ -520,13 +521,16 @@ export class EncryptedDriveSync {
     const inline = commit.parents.length > 0 && payload.length <= INLINE_BYTES;
     const partBytes = this.options.partBytes ?? PART_BYTES;
     const [id, ...parts] = await this.drive.ids(inline ? 1 : 1 + Math.ceil(payload.length / partBytes));
+    syncPhase('encrypting', parts.length + 1);
     const files: Pending['files'] = [];
     for (let i = 0; i < parts.length; i++) {
       const bytes = await encrypt(this.requireKey(), payload.slice(i * partBytes, (i + 1) * partBytes), this.context(parts[i]));
       files.push({ id: parts[i], kind: 'part', bytes, size: bytes.length, sent: false });
+      completedFile(bytes.length);
     }
     const bytes = await encrypt(this.requireKey(), await encodeAsync(inline ? { ...commit, version: 2 } : { version: 1, parts }), this.context(id));
     files.push({ id, kind: 'commit', bytes, size: bytes.length, sent: false });
+    completedFile(bytes.length);
     this.encodedCommits.set(id, payload);
     this.cache.pending = { id, commit, baseline, files };
     await this.save();
@@ -534,91 +538,107 @@ export class EncryptedDriveSync {
 
   async push(snapshot: Snapshot, replace = false): Promise<void> {
     syncPhase('preparing');
-    const local = await toRecords(snapshot);
+    const local = await syncStage(0, 8, () => toRecords(snapshot));
     return this.run(async () => {
-      await this.sendPending();
-      await this.finishCompaction();
-      await this.refresh();
-      const remote = await this.remote();
-      if (!replace && !this.cache.baseline) throw new Error('Choose upload or download before enabling automatic sync.');
-      const base = replace ? await hashRecords(remote) : this.cache.baseline!;
-      const localHashes = await hashRecords(local);
-      const changes = diffHashedRecords(base, local, localHashes).filter((change) => {
-        // Content and assets are immutable and may be referenced by another device. Never GC them from a local snapshot.
-        const path = JSON.parse(change.key);
-        return change.after !== null || (path[0] !== 'content' && path[0] !== 'assets');
+      await syncStage(1, 8, async () => { await this.sendPending(); await this.finishCompaction(); });
+      await syncStage(2, 8, () => this.refresh());
+      const remote = await syncStage(3, 8, () => this.remote());
+      const { localHashes, changes } = await syncStage(4, 8, async () => {
+        syncPhase('preparing');
+        if (!replace && !this.cache.baseline) throw new Error('Choose upload or download before enabling automatic sync.');
+        const base = replace ? await hashRecords(remote) : this.cache.baseline!;
+        const localHashes = await hashRecords(local);
+        const changes = diffHashedRecords(base, local, localHashes).filter((change) => {
+          // Content and assets are immutable and may be referenced by another device. Never GC them from a local snapshot.
+          const path = JSON.parse(change.key);
+          return change.after !== null || (path[0] !== 'content' && path[0] !== 'assets');
+        });
+        if (snapshot.state.chats?.length === 0 && Object.keys(remote).some((key) => JSON.parse(key)[0] === 'chats' && JSON.parse(key).length > 1)) {
+          throw new Error('Cloud sync skipped because the snapshot would erase all chats.');
+        }
+        const merged = await applyChanges(remote, changes);
+        try { await fromRecords(merged); }
+        catch (error) {
+          // Two valid edits can conflict structurally (for example, deleting a branch another device extends).
+          await fromRecords(local); await fromRecords(remote);
+          throw new SyncConflictError(changes.map(change => change.key));
+        }
+        return { localHashes, changes };
       });
-      if (snapshot.state.chats?.length === 0 && Object.keys(remote).some((key) => JSON.parse(key)[0] === 'chats' && JSON.parse(key).length > 1)) {
-        throw new Error('Cloud sync skipped because the snapshot would erase all chats.');
-      }
-      const merged = await applyChanges(remote, changes);
-      try { await fromRecords(merged); }
-      catch (error) {
-        // Two valid edits can conflict structurally (for example, deleting a branch another device extends).
-        await fromRecords(local); await fromRecords(remote);
-        throw new SyncConflictError(changes.map(change => change.key));
-      }
-      if (changes.length) {
-        await this.prepare(changes, localHashes);
-        await this.sendPending();
-        await this.refresh();
-        await this.remote(); // Detect concurrent conflicting publications; never report them as synced.
-      } else {
-        this.cache.baseline = localHashes;
-        await this.save();
-      }
-      await this.compact();
+      await syncStage(5, 8, async () => {
+        if (changes.length) {
+          await syncStage(0, 2, () => this.prepare(changes, localHashes));
+          await syncStage(1, 2, () => this.sendPending());
+        } else {
+          this.cache.baseline = localHashes;
+          await this.save();
+        }
+      });
+      await syncStage(6, 8, async () => {
+        if (changes.length) {
+          await this.refresh();
+          await this.remote(); // Detect concurrent conflicting publications before reporting success.
+        }
+      });
+      await syncStage(7, 8, () => this.compact());
     });
   }
 
   async resolve(snapshot: Snapshot, mode: Resolution): Promise<Snapshot> {
-    const local = await toRecords(snapshot);
+    const local = await syncStage(0, 8, () => toRecords(snapshot));
     return this.run(async () => {
-      await this.sendPending();
-      await this.finishCompaction();
-      await this.refresh();
-      const remote = await this.remote(true);
-      const resolutions = this.remoteConflicts;
-      let cloud = remote;
-      if (Object.keys(resolutions).length) {
-        // Each head is a complete view. Merge coherent views rather than picking unrelated node fields.
-        const heads = this.heads();
-        const ancestors = (id: string, found = new Set<string>()): Set<string> => {
-          if (!found.has(id)) { found.add(id); this.cache.commits[id].parents.forEach(p => ancestors(p, found)); }
-          return found;
-        };
-        const sets = heads.map(id => ancestors(id));
-        const common = [...sets[0]].filter(id => sets.every(set => set.has(id)));
-        const base = common.length ? await hashRecords(await this.remote(false, common)) : {};
-        cloud = await this.remote(false, [heads[0]]);
-        for (const head of heads.slice(1)) cloud = await mergeSyncRecords(base, cloud, await this.remote(false, [head]));
-      }
-      const chosen = mode === 'local' ? local : mode === 'cloud' ? cloud
-        : await mergeSyncRecords(this.cache.baseline ?? {}, local, cloud);
-      const result = await fromRecords(chosen);
-      const changes = await diffRecords(remote, chosen);
-      for (const key of Object.keys(resolutions)) if (!changes.some(change => change.key === key)) {
-        changes.push({ key, before: remote[key] === undefined ? null : await digest(remote[key]), after: chosen[key] ?? null });
-      }
-      if (changes.length) {
-        await this.prepare(changes, await hashRecords(local), Object.keys(resolutions).length ? resolutions : undefined);
-        await this.sendPending();
-        await this.refresh();
-        await this.remote();
-      }
-      await this.compact();
+      await syncStage(1, 8, async () => { await this.sendPending(); await this.finishCompaction(); });
+      await syncStage(2, 8, () => this.refresh());
+      const remote = await syncStage(3, 8, () => this.remote(true));
+      const { result, changes, resolutions } = await syncStage(4, 8, async () => {
+        const resolutions = this.remoteConflicts;
+        let cloud = remote;
+        if (Object.keys(resolutions).length) {
+          // Each head is a complete view. Merge coherent views rather than picking unrelated node fields.
+          const heads = this.heads();
+          const ancestors = (id: string, found = new Set<string>()): Set<string> => {
+            if (!found.has(id)) { found.add(id); this.cache.commits[id].parents.forEach(p => ancestors(p, found)); }
+            return found;
+          };
+          const sets = heads.map(id => ancestors(id));
+          const common = [...sets[0]].filter(id => sets.every(set => set.has(id)));
+          const base = common.length ? await hashRecords(await this.remote(false, common)) : {};
+          cloud = await this.remote(false, [heads[0]]);
+          for (const head of heads.slice(1)) cloud = await mergeSyncRecords(base, cloud, await this.remote(false, [head]));
+        }
+        const chosen = mode === 'local' ? local : mode === 'cloud' ? cloud
+          : await mergeSyncRecords(this.cache.baseline ?? {}, local, cloud);
+        const result = await fromRecords(chosen);
+        const changes = await diffRecords(remote, chosen);
+        for (const key of Object.keys(resolutions)) if (!changes.some(change => change.key === key)) {
+          changes.push({ key, before: remote[key] === undefined ? null : await digest(remote[key]), after: chosen[key] ?? null });
+        }
+        return { result, changes, resolutions };
+      });
+      await syncStage(5, 8, async () => {
+        if (changes.length) {
+          await syncStage(0, 2, async () => this.prepare(changes, await hashRecords(local), Object.keys(resolutions).length ? resolutions : undefined));
+          await syncStage(1, 2, () => this.sendPending());
+        }
+      });
+      await syncStage(6, 8, async () => {
+        if (changes.length) {
+          await this.refresh();
+          await this.remote(); // Detect concurrent conflicting publications before reporting success.
+        }
+      });
+      await syncStage(7, 8, () => this.compact());
       return result;
     });
   }
 
   async pull(): Promise<Snapshot> {
     return this.run(async () => {
-      await this.sendPending();
-      await this.finishCompaction();
-      await this.refresh();
-      const records = await this.remote();
+      await syncStage(0, 4, async () => { await this.sendPending(); await this.finishCompaction(); });
+      await syncStage(1, 4, () => this.refresh());
+      const records = await syncStage(2, 4, () => this.remote());
       if (!Object.keys(records).length) throw new Error('This encrypted folder has no completed upload yet.');
-      return fromRecords(records);
+      return syncStage(3, 4, () => fromRecords(records));
     });
   }
   // Call only after the existing local persistence has accepted the downloaded state.

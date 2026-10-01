@@ -140,7 +140,11 @@ test('encrypted Drive creation, incremental autosave and unlock after browser re
   const progress = page.getByTestId('google-sync-progress');
   await expect(progress).toContainText('1 / 2 ファイル完了');
   await expect(progress).toContainText(/[KM]B\/s/);
-  const percent = Number(await progress.getByRole('progressbar').getAttribute('value'));
+  await expect(progress.getByRole('progressbar')).toHaveCount(2);
+  const percent = Number(await progress.getByRole('progressbar').first().getAttribute('value'));
+  const overall = Number(await progress.getByRole('progressbar', { name: '全体', exact: true }).getAttribute('value'));
+  expect(overall).toBeGreaterThan(0);
+  expect(overall).toBeLessThan(100);
   expect(percent).toBeGreaterThan(0);
   expect(percent).toBeLessThan(100);
   await page.screenshot({ path: testInfo.outputPath('sync-progress.png') });
@@ -192,12 +196,17 @@ test('encrypted Drive creation, incremental autosave and unlock after browser re
   await expect.poll(() => uploads.filter((u) => u.metadata.appProperties.kind === 'commit').length).toBe(3);
   const syncBanner = page.locator('[data-google-sync-banner]');
   await expect(syncBanner).toBeVisible();
-  await expect(syncBanner.locator('progress')).toBeVisible();
-  expect(await syncBanner.locator('progress').evaluate((element: HTMLProgressElement) => [element.value, element.max]))
+  await expect(syncBanner.locator('progress')).toHaveCount(2);
+  await expect(syncBanner.locator('progress').first()).toBeVisible();
+  expect(await syncBanner.locator('progress').first().evaluate((element: HTMLProgressElement) => [element.value, element.max]))
     .toEqual(await page.evaluate(async () => {
       const progress = (await import('/src/store/storage/google/progress.ts')).useGoogleSyncProgress.getState();
-      return [progress.completedFiles, progress.totalFiles];
+      return [progress.completedFiles / progress.totalFiles!, 1];
     }));
+  const overallBar = syncBanner.getByRole('progressbar', { name: '全体', exact: true });
+  await expect(overallBar).toBeVisible();
+  expect(await overallBar.evaluate((element: HTMLProgressElement) => element.value)).toBeLessThan(1);
+  expect(await syncBanner.locator('progress').evaluateAll(elements => elements.map(element => element.getBoundingClientRect().height))).toEqual([2, 2]);
   const viewBarBottom = await page.locator('#google-sync-banner-overlay').evaluate(element => element.parentElement!.getBoundingClientRect().bottom);
   expect(await syncBanner.evaluate((element) => element.getBoundingClientRect().top)).toBe(viewBarBottom);
   expect(await syncBanner.evaluate((element) => element.getBoundingClientRect().height)).toBe(24);
