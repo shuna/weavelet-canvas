@@ -198,8 +198,10 @@ test('encrypted Drive creation, incremental autosave and unlock after browser re
       const progress = (await import('/src/store/storage/google/progress.ts')).useGoogleSyncProgress.getState();
       return [progress.completedFiles, progress.totalFiles];
     }));
-  expect(await syncBanner.evaluate((element) => element.getBoundingClientRect().top)).toBe(0);
-  expect(await page.locator('#root').evaluate((element) => getComputedStyle(element).paddingTop)).toBe('32px');
+  const viewBarBottom = await page.locator('#google-sync-banner-overlay').evaluate(element => element.parentElement!.getBoundingClientRect().bottom);
+  expect(await syncBanner.evaluate((element) => element.getBoundingClientRect().top)).toBe(viewBarBottom);
+  expect(await syncBanner.evaluate((element) => element.getBoundingClientRect().height)).toBe(24);
+  expect(await page.locator('#root').evaluate((element) => getComputedStyle(element).paddingTop)).toBe('0px');
   await page.getByRole('button', { name: '同期の進捗を表示', exact: true }).click();
   const targetId = await page.evaluate(async () => (await import('/src/store/cloud-auth-store.ts')).default.getState().fileId);
   const nameInput = page.locator(`[id="sync-folder-name-${targetId}"]`);
@@ -359,6 +361,11 @@ test('large sync processing preserves data while keeping the UI event loop respo
     const processing = await import('/src/store/storage/google/processing.ts');
     const { toRecords, fromRecords, sameSnapshot } = await import('/src/store/storage/google/records.ts');
     const { decode } = await import('/src/store/storage/google/crypto.ts');
+    const { prepareSave } = await import('/src/store/storage/prepareSave.ts');
+    const { prepareHydratedData } = await import('/src/store/rehydrateData.ts');
+    const { replayHistory } = await import('/src/store/storage/google/replay.ts');
+    const { decodeParts } = await import('/src/store/storage/google/decodeParts.ts');
+    const { SyncConflictError } = await import('/src/store/storage/google/records.ts');
     // Identical to the pre-fix 60 MiB probe; no personal data or Drive traffic.
     const snapshot = { version: 1, state: { chats: Array.from({ length: 30 }, (_, i) => ({
       id: `bench-${i}`, title: `synthetic ${i}`, messages: [{ role: 'user', content: [
@@ -391,6 +398,43 @@ test('large sync processing preserves data while keeping the UI event loop respo
     const restoreAfter = await measure(() => processing.fromRecordsAsync(after.value));
     const compareBefore = await measure(() => sameSnapshot([snapshot, snapshot]));
     const compareAfter = await measure(() => processing.sameSnapshotAsync(snapshot, snapshot));
+    // Short tasks are sensitive to GC and timer rounding; compare median gaps over three runs.
+    async function medianMeasure<T>(work: () => T | Promise<T>) {
+      const runs = [await measure(work), await measure(work), await measure(work)];
+      return runs.sort((a, b) => a.stats.maxEventLoopGapMs - b.stats.maxEventLoopGapMs)[1];
+    }
+    const saveBefore = await medianMeasure(() => prepareSave(snapshot.state));
+    const saveAfter = await medianMeasure(() => processing.prepareSaveAsync(snapshot.state));
+    const { saveChatData } = await import('/src/store/storage/IndexedDbStorage.ts');
+    const localSave = await measure(() => saveChatData(snapshot.state));
+    // Many nodes, rather than only a few very large text fields.
+    const hydration = { savedIndex: 0, base: {}, persisted: {
+      contentStore: { content: { content: [{ type: 'text', text: 'synthetic node' }], refCount: 30000 } },
+      chats: Array.from({ length: 3000 }, (_, i) => ({ id: `tree-${i}`, title: 'synthetic', config: { systemPrompt: '' },
+        branchTree: { rootId: 'n0', activePath: Array.from({ length: 10 }, (_, n) => `n${n}`),
+          nodes: Object.fromEntries(Array.from({ length: 10 }, (_, n) => [`n${n}`, {
+            id: `n${n}`, parentId: n ? `n${n - 1}` : null, role: 'user', contentHash: 'content', createdAt: 0,
+          }])) },
+      })),
+    } };
+    const hydrateBefore = await measure(() => prepareHydratedData(structuredClone(hydration)));
+    const hydrateAfter = await measure(() => processing.prepareHydratedDataAsync(hydration));
+    const history = { tips: ['initial'], commits: { initial: { version: 1, parents: [],
+      changes: Array.from({ length: 30000 }, (_, i) => ({ key: JSON.stringify(['chats', `c${i}`, 'title']), before: null, after: '"synthetic"' })),
+    } } };
+    const replayBefore = await measure(() => replayHistory(history));
+    const replayAfter = await measure(() => processing.replayHistoryAsync(history));
+    const parts = [encoded.value.slice(0, 10000), encoded.value.slice(10000)];
+    const partsBefore = await measure(() => decodeParts(parts));
+    const partsAfter = await measure(() => processing.decodePartsAsync(parts));
+    const conflictTyped = await processing.replayHistoryAsync({ tips: ['bad'], commits: { bad: {
+      version: 1, parents: [], changes: [{ key: 'key', before: 'missing', after: '"value"' }],
+    } } }).then(() => false, error => error instanceof SyncConflictError && error.keys[0] === 'key');
+    const source = { chats: [{ id: 'captured', title: 'before' }], contentStore: {} };
+    const capture = processing.prepareSaveAsync(source);
+    source.chats[0].title = 'edited during preparation';
+    const captured = await capture;
+    const captureMatches = captured.data.chats[0].title === 'before' && captured.fingerprints[0][1] === JSON.stringify(captured.data.chats[0]);
     const edited = structuredClone(snapshot); edited.state.chats[0].title = 'edited';
     const detectsEdit = !await processing.sameSnapshotAsync(snapshot, edited);
     const rejectsInvalid = await processing.decodeAsync(new Uint8Array([0])).then(() => false, () => true);
@@ -402,7 +446,13 @@ test('large sync processing preserves data while keeping the UI event loop respo
       matches: JSON.stringify(before.value) === JSON.stringify(after.value) &&
         JSON.stringify(decodeBefore.value) === JSON.stringify(decodeAfter.value) &&
         JSON.stringify(restoreBefore.value) === JSON.stringify(restoreAfter.value) && compareAfter.value,
-      detectsEdit, rejectsInvalid, rejectsUnsafe,
+      detectsEdit, rejectsInvalid, rejectsUnsafe, conflictTyped, captureMatches,
+      remainingBefore: { savePreparation: saveBefore.stats, hydration: hydrateBefore.stats, replay: replayBefore.stats, parts: partsBefore.stats },
+      remainingAfter: { savePreparation: saveAfter.stats, hydration: hydrateAfter.stats, replay: replayAfter.stats, parts: partsAfter.stats, localSave: localSave.stats },
+      remainingMatches: JSON.stringify(saveBefore.value) === JSON.stringify(saveAfter.value) &&
+        JSON.stringify(hydrateBefore.value) === JSON.stringify(hydrateAfter.value) &&
+        JSON.stringify(replayBefore.value) === JSON.stringify(replayAfter.value) &&
+        JSON.stringify(partsBefore.value.value) === JSON.stringify(partsAfter.value.value),
     };
   });
   await testInfo.attach('sync-worker-measurements', { body: JSON.stringify(result, null, 2), contentType: 'application/json' });
@@ -411,6 +461,12 @@ test('large sync processing preserves data while keeping the UI event loop respo
   expect(result.detectsEdit).toBe(true);
   expect(result.rejectsInvalid).toBe(true);
   expect(result.rejectsUnsafe).toBe(true);
+  expect(result.remainingMatches).toBe(true);
+  expect(result.conflictTyped).toBe(true);
+  expect(result.captureMatches).toBe(true);
+  for (const stage of ['savePreparation', 'replay', 'parts'] as const) {
+    expect(result.remainingAfter[stage].maxEventLoopGapMs).toBeLessThan(result.remainingBefore[stage].maxEventLoopGapMs * 0.9);
+  }
   expect(result.compressedBytes).toBeGreaterThan(0); // decode must not detach the cache's input buffer.
   expect(result.after.records.maxEventLoopGapMs).toBeLessThan(result.before.records.maxEventLoopGapMs * 0.8);
   expect(result.after.compare.maxEventLoopGapMs).toBeLessThan(result.before.compare.maxEventLoopGapMs * 0.8);

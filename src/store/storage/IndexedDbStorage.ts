@@ -1,3 +1,5 @@
+import { findPersistedDataIntegrityErrors, computeChatFingerprint } from './prepareSave';
+import { prepareSaveAsync } from './google/processing';
 import {
   getStreamingChatIds,
   isStreamingContentHash,
@@ -265,87 +267,6 @@ function collectReferencedHashes(
     }
   }
   return refs;
-}
-
-function findPersistedDataIntegrityErrors(
-  chats: PersistedChat[],
-  contentStore: ContentStoreData,
-  clipboard: BranchClipboard | null,
-  options: { allowTransientStreamingHashes?: boolean } = {}
-): string[] {
-  const errors: string[] = [];
-  const seenChatIds = new Set<string>();
-
-  const checkContentHash = (hash: unknown, owner: string) => {
-    // A page can close between persisting a streaming placeholder and the
-    // final buffered snapshot. Rehydration already replaces these known
-    // transient references with recoverable empty content. Let that repair
-    // run instead of classifying the whole committed snapshot as corrupt.
-    if (
-      options.allowTransientStreamingHashes &&
-      typeof hash === 'string' &&
-      isStreamingContentHash(hash)
-    ) {
-      return;
-    }
-    if (typeof hash !== 'string' || !contentStore[hash]) {
-      errors.push(`Missing contentHash for ${owner}: ${String(hash)}`);
-      return;
-    }
-    const visited = new Set<string>();
-    let current = hash;
-    while (contentStore[current]?.delta) {
-      if (visited.has(current)) {
-        errors.push(`Circular delta chain for ${owner}: ${hash}`);
-        return;
-      }
-      visited.add(current);
-      current = contentStore[current].delta!.baseHash;
-      if (!contentStore[current]) {
-        errors.push(`Missing delta base for ${owner}: ${current}`);
-        return;
-      }
-    }
-  };
-
-  for (const chat of chats) {
-    if (!chat || typeof chat.id !== 'string' || chat.id.length === 0) {
-      errors.push('Chat has an invalid id');
-      continue;
-    }
-    if (seenChatIds.has(chat.id)) {
-      errors.push(`Duplicate chat id: ${chat.id}`);
-    }
-    seenChatIds.add(chat.id);
-
-    if (!chat.branchTree) continue;
-    if (
-      !chat.branchTree.nodes ||
-      typeof chat.branchTree.nodes !== 'object' ||
-      Array.isArray(chat.branchTree.nodes)
-    ) {
-      errors.push(`Invalid branchTree nodes: ${chat.id}`);
-      continue;
-    }
-    for (const node of Object.values(chat.branchTree.nodes)) {
-      checkContentHash(node?.contentHash, `chat ${chat.id}`);
-    }
-  }
-
-  if (
-    clipboard &&
-    (!clipboard.nodes ||
-      typeof clipboard.nodes !== 'object' ||
-      Array.isArray(clipboard.nodes))
-  ) {
-    errors.push('Invalid branch clipboard nodes');
-  } else if (clipboard?.nodes) {
-    for (const node of Object.values(clipboard.nodes)) {
-      checkContentHash(node?.contentHash, 'branch clipboard');
-    }
-  }
-
-  return errors;
 }
 
 function repairMissingContentReferences(
@@ -1000,13 +921,6 @@ export const collectIndexedDbRecoverySnapshot = (
  */
 let previousChatSnapshot: Map<string, string> = new Map(); // id → JSON hash of chat
 
-function computeChatFingerprint(chat: PersistedChat): string {
-  // Use JSON.stringify to capture ALL persisted fields (title, config, folder,
-  // imageDetail, collapsedNodes, branchTree, messages, etc.).
-  // This ensures any field change triggers a differential write.
-  return JSON.stringify(chat);
-}
-
 /**
  * Save chat data using the generation-based commit protocol:
  * 1. Write content-store (superset — entries with refCount<=0 retained)
@@ -1038,10 +952,11 @@ const saveChatDataUnlocked = async (data: PersistedChatData): Promise<void> => {
   }
   currentGeneration = Math.max(currentGeneration, diskMeta?.generation ?? 0);
   const nextGen = currentGeneration + 1;
-  const chats = (data.chats ?? []) as PersistedChat[];
-  const contentStore = data.contentStore ?? {};
-  const clipboard = data.branchClipboard ?? null;
-  const integrityErrors = findPersistedDataIntegrityErrors(chats, contentStore, clipboard);
+  const prepared = await prepareSaveAsync(data);
+  const chats = (prepared.data.chats ?? []) as PersistedChat[];
+  const contentStore = prepared.data.contentStore ?? {};
+  const clipboard = prepared.data.branchClipboard ?? null;
+  const integrityErrors = prepared.errors;
   if (integrityErrors.length > 0) {
     throw new Error(`Refusing to persist inconsistent chat data: ${integrityErrors.join('; ')}`);
   }
@@ -1049,14 +964,13 @@ const saveChatDataUnlocked = async (data: PersistedChatData): Promise<void> => {
     throw new Error('Refusing to replace a non-empty committed store with an empty chat list');
   }
 
-  // Content store is already a superset: deferred GC entries (refCount<=0)
-  // are still present in the store, so no separate superset build is needed.
-  const supersetStore = buildSupersetForCommit(contentStore);
+  // Worker preparation already captured an owned snapshot, including pending-GC
+  // entries. No second main-thread copy is needed for the commit superset.
 
   // Step 1: Write content-store (superset) first
   await withTransaction('readwrite', async (store) => {
     await idbPut(store, CONTENT_STORE_KEY, {
-      data: supersetStore,
+      data: contentStore,
       generation: nextGen,
     } satisfies ContentStoreRecord);
   });
@@ -1065,8 +979,9 @@ const saveChatDataUnlocked = async (data: PersistedChatData): Promise<void> => {
   // Only write chats whose fingerprint differs from last save
   const changedChatIds: string[] = [];
   const newSnapshot = new Map<string, string>();
+  const fingerprints = new Map(prepared.fingerprints);
   for (const chat of chats) {
-    const fp = computeChatFingerprint(chat);
+    const fp = fingerprints.get(chat.id)!;
     newSnapshot.set(chat.id, fp);
     if (previousChatSnapshot.get(chat.id) !== fp) {
       changedChatIds.push(chat.id);
@@ -1109,7 +1024,7 @@ const saveChatDataUnlocked = async (data: PersistedChatData): Promise<void> => {
     const protectedHashes = collectReferencedHashes(chats, clipboard);
     // Flush from in-memory snapshot (keeps Zustand contentStore clean for
     // future snapshots) and clear the global pending set.
-    flushPendingGC(contentStore, protectedHashes);
+    flushPendingGC(data.contentStore ?? {}, protectedHashes);
 
     await withTransaction('readwrite', async (store) => {
       const record = await idbGet<ContentStoreRecord>(store, CONTENT_STORE_KEY);

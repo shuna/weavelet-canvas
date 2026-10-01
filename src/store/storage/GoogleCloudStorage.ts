@@ -3,7 +3,7 @@ import type { PersistStorage } from 'zustand/middleware';
 import { createJSONStorage } from 'zustand/middleware';
 import useCloudAuthStore from '@store/cloud-auth-store';
 import useStore from '@store/store';
-import { createLocalStoragePartializedState, createPartializedState, hydrateFromPersistedStoreState, migratePersistedState, type PersistedStoreState } from '@store/persistence';
+import { createLocalStoragePartializedState, createPartializedState, prepareHydratedState, finishHydratedState, migratePersistedState, type PersistedStoreState } from '@store/persistence';
 import { hasActiveStreamingBuffers } from '@utils/streamingBuffer';
 import { isGoogleAuthError } from '@api/google-api';
 import { showToast } from '@utils/showToast';
@@ -74,8 +74,10 @@ async function applySyncedSnapshot(target: EncryptedDriveSync, before: Snapshot,
   if (target !== session || !await sameSnapshot(before, currentSnapshot()) || observed !== useStore.getState()) return false;
   const state = useStore.getState();
   const selectedId = state.chats?.[state.currentChatIndex]?.id;
-  const hydrated = hydrateFromPersistedStoreState(state,
-    migratePersistedState(structuredClone(received.state), received.version ?? STORE_VERSION) as Partial<PersistedStoreState>);
+  const prepared = await prepareHydratedState(state,
+    migratePersistedState(received.state, received.version ?? STORE_VERSION) as Partial<PersistedStoreState>);
+  if (target !== session || state !== useStore.getState()) return false;
+  const hydrated = finishHydratedState(prepared);
   if (selectedId && hydrated.chats) {
     const index = hydrated.chats.findIndex(chat => chat.id === selectedId);
     if (index >= 0) hydrated.currentChatIndex = index;
@@ -86,7 +88,7 @@ async function applySyncedSnapshot(target: EncryptedDriveSync, before: Snapshot,
     await persistChatSnapshot(currentSnapshot());
     await target.acceptLocal(received);
     await markSyncChanges(before, received);
-    if (!await sameSnapshot(received, currentSnapshot())) pending = { session: target, value: structuredClone(currentSnapshot()) };
+    if (!await sameSnapshot(received, currentSnapshot())) pending = { session: target, value: currentSnapshot() };
   } finally { applyingRemote = false; }
   return true;
 }
@@ -95,7 +97,7 @@ async function synchronize(target: EncryptedDriveSync, snapshot: Snapshot) {
   const received = await target.pull();
   if (await sameSnapshot(snapshot, received)) return;
   if (!await applySyncedSnapshot(target, snapshot, received) && target === session) {
-    pending = { session: target, value: structuredClone(currentSnapshot()) };
+    pending = { session: target, value: currentSnapshot() };
   }
 }
 export async function resumeGoogleSync() {
@@ -179,6 +181,8 @@ export async function flushPendingCloudSync(): Promise<void> {
   pending = undefined;
   inFlight = withSyncProgress(async () => {
     try {
+      // Freeze only the snapshot that will actually be sent, before yielding.
+      next.value = structuredClone(next.value);
       auth.setSyncStatus('syncing');
       await synchronize(next.session, next.value);
       useSyncReview.setState({ conflict: false });
@@ -202,7 +206,7 @@ const storage: PersistStorage<unknown> = {
     if (applyingRemote || suspended || !session || session.dataset !== auth.fileId || auth.provider !== 'google' || !auth.cloudSync || !auth.syncTargetConfirmed) return;
     if (value.state === lastQueuedState) return;
     lastQueuedState = value.state;
-    pending = { session, value: structuredClone(value) as Snapshot };
+    pending = { session, value: value as Snapshot };
     // Failed uploads remain queued; an explicit resume retries them instead of a toast loop on every UI update.
     if (auth.syncStatus !== 'error' && auth.syncStatus !== 'unauthenticated') schedule();
   },
