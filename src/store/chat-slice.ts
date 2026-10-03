@@ -20,7 +20,7 @@ export interface ChatSlice {
   lastSubmitChatId: string | null;
   folders: FolderCollection;
   setMessages: (messages: MessageInterface[]) => void;
-  setChats: (chats: ChatInterface[]) => void;
+  setChats: (chats: ChatInterface[], options?: { preserveBranchHistory?: boolean }) => void;
   setCurrentChatIndex: (currentChatIndex: number) => void;
   setError: (error: string) => void;
   setLastSubmitContext: (
@@ -107,8 +107,23 @@ export const createChatSlice: StoreSlice<ChatSlice> = (set, get) => {
         messages: messages,
       }));
     },
-    setChats: (chats: ChatInterface[]) => {
+    setChats: (chats: ChatInterface[], options) => {
       try {
+        if (!options?.preserveBranchHistory && get().chats) {
+          const previousById = new Map(get().chats!.map((chat) => [chat.id, chat]));
+          const nextById = new Map(chats.map((chat) => [chat.id, chat]));
+          const changedIds = new Set<string>();
+          for (const chat of get().chats!) {
+            const next = nextById.get(chat.id);
+            if (!next || chat.messages !== next.messages || chat.branchTree !== next.branchTree) {
+              changedIds.add(chat.id);
+            }
+          }
+          for (const chat of chats) {
+            if (!previousById.has(chat.id)) changedIds.add(chat.id);
+          }
+          get().invalidateBranchHistory([...changedIds]);
+        }
         set((prev: ChatSlice) => {
           const sameOrder = hasSameChatOrder(prev.chats, chats);
           return {
@@ -220,6 +235,7 @@ export const createChatSlice: StoreSlice<ChatSlice> = (set, get) => {
         chat.messages = materializeActivePath(tree, contentStore);
       }
 
+      get().invalidateBranchHistory([chat.id]);
       set((prev: ChatSlice) => ({ ...prev, chats: updated, contentStore } as any));
     },
     setFolders: (folders: FolderCollection) => {

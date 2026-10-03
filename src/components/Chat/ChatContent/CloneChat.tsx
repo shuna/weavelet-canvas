@@ -14,6 +14,8 @@ const CloneChat = React.memo(() => {
 
   const setChats = useStore((state) => state.setChats);
   const setCurrentChatIndex = useStore((state) => state.setCurrentChatIndex);
+  const pushNavigationEntry = useStore((state) => state.pushNavigationEntry);
+  const captureCurrentNavigationEntry = useStore((state) => state.captureCurrentNavigationEntry);
 
   const [cloned, setCloned] = useState<boolean>(false);
   const [isModalOpen, setIsModalOpen] = useState<boolean>(false);
@@ -53,8 +55,10 @@ const CloneChat = React.memo(() => {
       const updatedChats = chats.slice();
       updatedChats.unshift(clonedChat);
 
+      captureCurrentNavigationEntry();
       setChats(updatedChats);
       useStore.setState({ contentStore });
+      pushNavigationEntry({ chatId: clonedChat.id, activePath: [...(clonedChat.branchTree?.activePath ?? [])], viewContext: useStore.getState().chatActiveView, source: 'chat-switch' });
       setCurrentChatIndex(0);
       setIsModalOpen(false);
       setCloned(true);

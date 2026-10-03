@@ -3,13 +3,22 @@ import { StoreSlice } from './store';
 import { ChatView } from '@type/chat';
 import { buildPathToLeaf } from '@utils/branchUtils';
 
+export interface NavScrollAnchor {
+  firstVisibleItemIndex: number;
+  offsetWithinItem: number;
+  wasAtBottom: boolean;
+  nodeId?: string;
+  scrollTop?: number;
+}
+
 export interface NavEntry {
   key: string;
   chatId: string;
   activePath: string[];
   focusedNodeId?: string;
   viewContext?: ChatView;
-  source: 'init' | 'branch-switch' | 'search' | 'grep' | 'branch-editor' | 'scroll' | 'chat-switch' | 'chat-click';
+  scrollAnchor?: NavScrollAnchor;
+  source: 'init' | 'branch-switch' | 'search' | 'grep' | 'branch-editor' | 'scroll' | 'chat-switch' | 'chat-click' | 'view-switch';
 }
 
 export interface NavigationSlice {
@@ -20,6 +29,8 @@ export interface NavigationSlice {
 
   isRestoringNavigation: boolean;
   pushNavigationEntry: (entry: Omit<NavEntry, 'key'>) => void;
+  captureCurrentNavigationEntry: () => void;
+  updateCurrentNavigationEntryAnchor: () => void;
   restoreNavigationEntry: (entry: NavEntry) => void;
   navBack: () => void;
   navForward: () => void;
@@ -29,6 +40,38 @@ export interface NavigationSlice {
 }
 
 const MAX_HISTORY = 100;
+let restoreTimer: ReturnType<typeof setTimeout> | null = null;
+
+function captureVisibleAnchor(chatId: string, get: () => any): boolean {
+  if (typeof document === 'undefined') return false;
+  const state = get();
+  if (state.chats?.[state.currentChatIndex]?.id !== chatId) return false;
+  const scroller = Array.from(document.querySelectorAll<HTMLElement>('[data-chat-scroller]'))
+    .find((element) => element.dataset.chatId === chatId);
+  if (!scroller || scroller.clientHeight === 0) return false;
+  const wasAtBottom = scroller.scrollTop >= scroller.scrollHeight - scroller.clientHeight - 0.5;
+  let firstVisibleItemIndex = -1;
+  let offsetWithinItem = 0;
+  let nodeId: string | undefined;
+  const top = scroller.getBoundingClientRect().top;
+  for (const item of scroller.querySelectorAll<HTMLElement>('[data-item-index]')) {
+    const rect = item.getBoundingClientRect();
+    if (rect.bottom > top) {
+      firstVisibleItemIndex = Number(item.dataset.itemIndex);
+      offsetWithinItem = top - rect.top;
+      nodeId = item.dataset.nodeId;
+      break;
+    }
+  }
+  state.saveChatScrollAnchor?.(chatId, { firstVisibleItemIndex, offsetWithinItem, wasAtBottom, nodeId, scrollTop: scroller.scrollTop });
+  return true;
+}
+
+function withSavedAnchor(entry: NavEntry, get: () => any): NavEntry {
+  if (!captureVisibleAnchor(entry.chatId, get) && entry.scrollAnchor) return entry;
+  const anchor = get().getChatScrollAnchor?.(entry.chatId);
+  return anchor ? { ...entry, scrollAnchor: { ...anchor } } : entry;
+}
 
 function resolveChatIndex(
   chats: Array<{ id: string }> | null | undefined,
@@ -77,13 +120,26 @@ export const createNavigationSlice: StoreSlice<NavigationSlice> = (
   },
 
   pushNavigationEntry: (partial) => {
+    // A user navigation supersedes an unfinished visual restoration.  Back/
+    // forward do not use this path, so their multi-step restoration retains
+    // its existing anchors.
+    if (get().isRestoringNavigation) {
+      if (restoreTimer) clearTimeout(restoreTimer);
+      restoreTimer = null;
+      set({ isRestoringNavigation: false });
+    }
     const key = uuidv4();
-    const entry: NavEntry = { ...partial, key };
     const current = get().navHistoryCurrent;
+    if (current && partial.source !== 'scroll') get().captureCurrentNavigationEntry();
+    const capturedCurrent = get().navHistoryCurrent;
+    const rawEntry: NavEntry = { ...partial, key };
+    const entry = partial.source === 'scroll' || partial.chatId !== capturedCurrent?.chatId
+      ? withSavedAnchor(rawEntry, get)
+      : rawEntry;
     const past = [...get().navHistoryPast];
 
-    if (current) {
-      past.push(current);
+    if (capturedCurrent) {
+      past.push(capturedCurrent);
       if (past.length > MAX_HISTORY) past.shift();
     }
 
@@ -98,7 +154,19 @@ export const createNavigationSlice: StoreSlice<NavigationSlice> = (
     });
   },
 
+  captureCurrentNavigationEntry: () => {
+    if (get().isRestoringNavigation) return;
+    const current = get().navHistoryCurrent;
+    if (!current) return;
+    set({ navHistoryCurrent: withSavedAnchor(current, get) });
+  },
+
+  updateCurrentNavigationEntryAnchor: () => {
+    get().captureCurrentNavigationEntry();
+  },
+
   restoreNavigationEntry: (entry) => {
+    if (restoreTimer) clearTimeout(restoreTimer);
     set({ isRestoringNavigation: true });
 
     const chats = get().chats;
@@ -134,10 +202,13 @@ export const createNavigationSlice: StoreSlice<NavigationSlice> = (
     // Restore focus node (transient)
     if (entry.focusedNodeId) {
       get().setBranchEditorFocusNodeId(entry.focusedNodeId);
+      if (entry.viewContext === 'chat' && !entry.scrollAnchor) {
+        get().setPendingChatFocus({ chatIndex: idx, nodeId: entry.focusedNodeId });
+      }
     }
 
     // Clear flag after a delay to allow scroll events from restore to settle
-    setTimeout(() => set({ isRestoringNavigation: false }), 500);
+    restoreTimer = setTimeout(() => set({ isRestoringNavigation: false }), 1200);
   },
 
   navBack: () => {
@@ -158,12 +229,14 @@ export const createNavigationSlice: StoreSlice<NavigationSlice> = (
     }
     if (resolveChatIndex(get().chats, target.chatId) < 0) return;
 
-    const future = [current, ...get().navHistoryFuture];
+    get().captureCurrentNavigationEntry();
+    const future = [get().navHistoryCurrent!, ...get().navHistoryFuture];
 
     set({
       navHistoryPast: newPast,
       navHistoryCurrent: target,
       navHistoryFuture: future,
+      isRestoringNavigation: true,
     });
 
     get().restoreNavigationEntry(target);
@@ -186,12 +259,14 @@ export const createNavigationSlice: StoreSlice<NavigationSlice> = (
     }
     if (resolveChatIndex(get().chats, target.chatId) < 0) return;
 
-    const past = [...get().navHistoryPast, current];
+    get().captureCurrentNavigationEntry();
+    const past = [...get().navHistoryPast, get().navHistoryCurrent!];
 
     set({
       navHistoryPast: past,
       navHistoryCurrent: target,
       navHistoryFuture: newFuture,
+      isRestoringNavigation: true,
     });
 
     get().restoreNavigationEntry(target);

@@ -7,6 +7,8 @@ import { ChatInterface } from '@type/chat';
 const useAddChat = () => {
   const setChats = useStore((state) => state.setChats);
   const setCurrentChatIndex = useStore((state) => state.setCurrentChatIndex);
+  const pushNavigationEntry = useStore((state) => state.pushNavigationEntry);
+  const captureCurrentNavigationEntry = useStore((state) => state.captureCurrentNavigationEntry);
 
   const addChat = (folder?:string) => {
     const chats = useStore.getState().chats;
@@ -20,8 +22,11 @@ const useAddChat = () => {
         title = `New Chat ${titleIndex}`;
       }
 
-      updatedChats.unshift(generateDefaultChat(title, folder));
+      const chat = generateDefaultChat(title, folder);
+      updatedChats.unshift(chat);
+      captureCurrentNavigationEntry();
       setChats(updatedChats);
+      pushNavigationEntry({ chatId: chat.id, activePath: [...(chat.branchTree?.activePath ?? [])], viewContext: useStore.getState().chatActiveView, source: 'chat-switch' });
       setCurrentChatIndex(0);
     }
   };

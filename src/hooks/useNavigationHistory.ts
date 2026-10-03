@@ -32,7 +32,7 @@ export default function useNavigationHistory() {
 
     const unsub = useStore.subscribe((state, prevState) => {
       const currentKey = state.navHistoryCurrent?.key ?? null;
-      if (currentKey && currentKey !== prevCurrentKey && !isRestoringRef.current) {
+      if (currentKey && currentKey !== prevCurrentKey && !isRestoringRef.current && !state.isRestoringNavigation) {
         prevCurrentKey = currentKey;
         history.pushState({ navKey: currentKey }, '');
       } else {
@@ -53,16 +53,20 @@ export default function useNavigationHistory() {
         const futureKeys = state.navHistoryFuture.map((e) => e.key);
 
         if (pastKeys.includes(navKey)) {
+          let remaining = pastKeys.length;
           while (
             useStore.getState().navHistoryCurrent?.key !== navKey &&
-            useStore.getState().canNavBack()
+            useStore.getState().canNavBack() &&
+            remaining-- > 0
           ) {
             useStore.getState().navBack();
           }
         } else if (futureKeys.includes(navKey)) {
+          let remaining = futureKeys.length;
           while (
             useStore.getState().navHistoryCurrent?.key !== navKey &&
-            useStore.getState().canNavForward()
+            useStore.getState().canNavForward() &&
+            remaining-- > 0
           ) {
             useStore.getState().navForward();
           }

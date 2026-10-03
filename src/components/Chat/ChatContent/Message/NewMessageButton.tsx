@@ -35,6 +35,8 @@ const NewMessageButton = React.memo(
     const setChats = useStore((state) => state.setChats);
     const currentChatIndex = useStore((state) => state.currentChatIndex);
     const setCurrentChatIndex = useStore((state) => state.setCurrentChatIndex);
+    const pushNavigationEntry = useStore((state) => state.pushNavigationEntry);
+    const captureCurrentNavigationEntry = useStore((state) => state.captureCurrentNavigationEntry);
     const insertMessageAtIndex = useStore((state) => state.insertMessageAtIndex);
     const createBranch = useStore((state) => state.createBranch);
     const [isMenuOpen, setIsMenuOpen] = useState(false);
@@ -76,8 +78,11 @@ const NewMessageButton = React.memo(
           title = `New Chat ${titleIndex}`;
         }
 
-        updatedChats.unshift(generateDefaultChat(title));
+        const chat = generateDefaultChat(title);
+        updatedChats.unshift(chat);
+        captureCurrentNavigationEntry();
         setChats(updatedChats);
+        pushNavigationEntry({ chatId: chat.id, activePath: [...(chat.branchTree?.activePath ?? [])], viewContext: useStore.getState().chatActiveView, source: 'chat-switch' });
         setCurrentChatIndex(0);
       }
     };
