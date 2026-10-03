@@ -79,6 +79,19 @@ const ChatFindBar = ({ scrollerRef, onClose }: ChatFindBarProps) => {
   const contentStore = useStore((s) => s.contentStore);
   const switchActivePathSilent = useStore((s) => s.switchActivePathSilent);
   const pushNavigationEntry = useStore((s) => s.pushNavigationEntry);
+  const chatActiveView = useStore((s) => s.chatActiveView);
+
+  const pushVisibleSearchEntry = useCallback(() => {
+    const state = useStore.getState();
+    const chat = state.chats?.[state.currentChatIndex];
+    if (!chat) return;
+    pushNavigationEntry({
+      chatId: chat.id,
+      activePath: [...(chat.branchTree?.activePath ?? [])],
+      viewContext: state.chatActiveView,
+      source: 'search',
+    });
+  }, [pushNavigationEntry]);
 
   const hasQuery = query.trim().length > 0;
 
@@ -203,12 +216,13 @@ const ChatFindBar = ({ scrollerRef, onClose }: ChatFindBarProps) => {
       if (marks.length > 0) {
         setCurrentIndex(0);
         marks[0].classList.add(MARK_ACTIVE_CLASS);
+        pushVisibleSearchEntry();
         scrollMarkIntoView(marks[0], scrollerRef.current);
       } else {
         setCurrentIndex(-1);
       }
     },
-    [scrollerRef, clearHighlights]
+    [scrollerRef, clearHighlights, pushVisibleSearchEntry]
   );
 
   // ---------- Data-level search ("allNodes" scope) ----------
@@ -249,6 +263,7 @@ const ChatFindBar = ({ scrollerRef, onClose }: ChatFindBarProps) => {
         chatId: currentChatId,
         activePath: newPath,
         focusedNodeId: result.nodeId,
+        viewContext: chatActiveView,
         source: 'search',
       });
 
@@ -260,7 +275,7 @@ const ChatFindBar = ({ scrollerRef, onClose }: ChatFindBarProps) => {
         applyDomHighlightAndScroll(q);
       }, 200);
     },
-    [branchTree, currentChatIndex, currentChatId, switchActivePathSilent, pushNavigationEntry]
+    [branchTree, currentChatIndex, currentChatId, switchActivePathSilent, pushNavigationEntry, chatActiveView]
   );
 
   /** Apply DOM highlights and scroll to the first match after a path switch. */
@@ -351,6 +366,7 @@ const ChatFindBar = ({ scrollerRef, onClose }: ChatFindBarProps) => {
           marks[currentIndex].classList.remove(MARK_ACTIVE_CLASS);
         }
         marks[newIndex].classList.add(MARK_ACTIVE_CLASS);
+        pushVisibleSearchEntry();
         scrollMarkIntoView(marks[newIndex], scrollerRef.current);
         setCurrentIndex(newIndex);
       } else {
@@ -361,7 +377,7 @@ const ChatFindBar = ({ scrollerRef, onClose }: ChatFindBarProps) => {
         navigateToNodeResult(result, query);
       }
     },
-    [scope, currentIndex, scrollerRef, nodeResults, query, navigateToNodeResult]
+    [scope, currentIndex, scrollerRef, nodeResults, query, navigateToNodeResult, pushVisibleSearchEntry]
   );
 
   const goNext = useCallback(() => {

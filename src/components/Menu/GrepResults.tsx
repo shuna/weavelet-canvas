@@ -181,6 +181,7 @@ const GrepResultGroup = ({ result, query }: { result: GrepResult; query: string 
         chatId: chat.id,
         activePath: destPath,
         focusedNodeId: nodeId,
+        viewContext: useStore.getState().chatActiveView,
         source: 'grep',
       });
     }

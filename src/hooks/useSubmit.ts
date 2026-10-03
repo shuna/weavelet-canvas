@@ -54,6 +54,7 @@ const useSubmit = () => {
   const currentChatIndex = useStore((state) => state.currentChatIndex);
   const setChats = useStore((state) => state.setChats);
   const applyBranchState = useStore((state) => state.applyBranchState);
+  const invalidateBranchHistory = useStore((state) => state.invalidateBranchHistory);
   const fallbackProvider: ResolvedProvider = { endpoint: apiEndpoint, key: apiKey };
   const [isUnknownContextConfirmOpen, setIsUnknownContextConfirmOpen] = useState(false);
   const [unknownContextConfirmMessage, setUnknownContextConfirmMessage] = useState('');
@@ -87,7 +88,8 @@ const useSubmit = () => {
       useStore.getState().contentStore,
       insertIndex
     );
-    applyBranchState(updatedChats, contentStore);
+    applyBranchState(updatedChats, contentStore, { recordHistory: false });
+    invalidateBranchHistory([chatId]);
 
     const session = buildGeneratingSession(
       sessionId,

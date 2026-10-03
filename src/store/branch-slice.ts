@@ -10,6 +10,7 @@ import {
   isSplitView,
 } from '@type/chat';
 import { ContentStoreData, addContent } from '@utils/contentStore';
+import { materializeActivePath } from '@utils/branchUtils';
 import { showToast } from '@utils/showToast';
 import {
   finalizeStreamingBuffer,
@@ -102,17 +103,120 @@ export interface ScrollAnchor {
   wasAtBottom: boolean;
 }
 
+interface BranchChatSnapshot {
+  id: string;
+  messages: ChatInterface['messages'];
+  branchTree: ChatInterface['branchTree'];
+  expectedActivePath?: string[];
+}
+
 interface BranchSnapshot {
-  chats: ChatInterface[];
+  chats: BranchChatSnapshot[];
   contentStore: ContentStoreData;
 }
 
 const HISTORY_LIMIT = 50;
 
+const changedBranchChatIds = (
+  previous: ChatInterface[],
+  next: ChatInterface[]
+) => {
+  const nextById = new Map(next.map((chat) => [chat.id, chat]));
+  const previousById = new Map(previous.map((chat) => [chat.id, chat]));
+  const ids = new Set<string>();
+  for (const chat of previous) {
+    const updated = nextById.get(chat.id);
+    if (!updated || chat.messages !== updated.messages || chat.branchTree !== updated.branchTree) {
+      ids.add(chat.id);
+    }
+  }
+  for (const chat of next) {
+    if (!previousById.has(chat.id)) ids.add(chat.id);
+  }
+  return [...ids];
+};
+
+const snapshotContentStore = (
+  chats: BranchChatSnapshot[],
+  contentStore: ContentStoreData
+) => {
+  const snapshot: ContentStoreData = {};
+  const add = (hash: string) => {
+    const entry = contentStore[hash];
+    if (snapshot[hash] || !entry) return;
+    snapshot[hash] = structuredClone(entry);
+    if (entry.delta) add(entry.delta.baseHash);
+  };
+  for (const chat of chats) {
+    Object.values(chat.branchTree?.nodes ?? {}).forEach((node) => add(node.contentHash));
+  }
+  return snapshot;
+};
+
+const createBranchSnapshot = (
+  chats: ChatInterface[],
+  contentStore: ContentStoreData,
+  chatIds: string[],
+  expectedChats: ChatInterface[] = chats
+): BranchSnapshot => {
+  const ids = new Set(chatIds);
+  const expectedById = new Map(expectedChats.map((chat) => [chat.id, chat]));
+  const snapshotChats = chats
+    .filter((chat) => ids.has(chat.id))
+    .map((chat) => ({
+      id: chat.id,
+      messages: structuredClone(chat.messages),
+      branchTree: structuredClone(chat.branchTree),
+      expectedActivePath: expectedById.get(chat.id)?.branchTree?.activePath.slice(),
+    }));
+  return {
+    chats: snapshotChats,
+    contentStore: snapshotContentStore(snapshotChats, contentStore),
+  };
+};
+
+const isUsableActivePath = (
+  tree: NonNullable<ChatInterface['branchTree']>,
+  path: string[]
+) => path.length > 0 && path.every((id, index) => {
+  const node = tree.nodes[id];
+  return !!node && (index === 0 ? node.parentId === null : node.parentId === path[index - 1]);
+});
+
+const pathsEqual = (first: string[], second: string[]) =>
+  first.length === second.length && first.every((id, index) => id === second[index]);
+
+const restoreBranchSnapshot = (
+  chats: ChatInterface[],
+  contentStore: ContentStoreData,
+  snapshot: BranchSnapshot
+) => {
+  const snapshots = new Map(snapshot.chats.map((chat) => [chat.id, chat]));
+  const restored = chats.map((chat) => {
+    const saved = snapshots.get(chat.id);
+    if (!saved) return chat;
+    if (!saved.branchTree) return { ...chat, messages: structuredClone(saved.messages), branchTree: undefined };
+    const branchTree = structuredClone(saved.branchTree);
+    const currentPath = chat.branchTree?.activePath;
+    if (currentPath && saved.expectedActivePath &&
+      !pathsEqual(currentPath, saved.expectedActivePath) &&
+      isUsableActivePath(branchTree, currentPath)) {
+      branchTree.activePath = currentPath.slice();
+    }
+    return { ...chat, branchTree, messages: materializeActivePath(branchTree, contentStore) };
+  });
+  return restored;
+};
+
 export interface BranchSlice {
   contentStore: ContentStoreData;
   setContentStore: (contentStore: ContentStoreData) => void;
-  applyBranchState: (chats: ChatInterface[], contentStore: ContentStoreData) => void;
+  applyBranchState: (
+    chats: ChatInterface[],
+    contentStore: ContentStoreData,
+    options?: { recordHistory?: boolean }
+  ) => void;
+  invalidateBranchHistory: (chatIds: string[]) => void;
   branchHistoryPast: BranchSnapshot[];
   branchHistoryFuture: BranchSnapshot[];
   undoBranch: () => void;
@@ -239,17 +343,27 @@ export const createBranchSlice: StoreSlice<BranchSlice> = (set, get) => ({
   setContentStore: (contentStore) => {
     set({ contentStore });
   },
-  applyBranchState: (chats, contentStore) => {
-    // Save snapshot for undo before applying
+  applyBranchState: (chats, contentStore, options) => {
     const prevChats = get().chats;
-    const prevContentStore = get().contentStore;
-    if (prevChats) {
-      const past = [...get().branchHistoryPast, { chats: prevChats, contentStore: prevContentStore }];
+    const changedIds = prevChats ? changedBranchChatIds(prevChats, chats) : [];
+    if (options?.recordHistory !== false && prevChats && changedIds.length > 0) {
+      const past = [...get().branchHistoryPast, createBranchSnapshot(
+        prevChats, get().contentStore, changedIds, chats
+      )];
       if (past.length > HISTORY_LIMIT) past.shift();
       set({ branchHistoryPast: past, branchHistoryFuture: [] });
     }
-    get().setChats(chats);
+    get().setChats(chats, { preserveBranchHistory: true });
     set({ contentStore });
+  },
+  invalidateBranchHistory: (chatIds) => {
+    if (chatIds.length === 0) return;
+    const ids = new Set(chatIds);
+    const touches = (snapshot: BranchSnapshot) => snapshot.chats.some((chat) => ids.has(chat.id));
+    set({
+      branchHistoryPast: get().branchHistoryPast.filter((snapshot) => !touches(snapshot)),
+      branchHistoryFuture: get().branchHistoryFuture.filter((snapshot) => !touches(snapshot)),
+    });
   },
   branchHistoryPast: [],
   branchHistoryFuture: [],
@@ -258,33 +372,51 @@ export const createBranchSlice: StoreSlice<BranchSlice> = (set, get) => ({
     if (past.length === 0) return;
     const snapshot = past[past.length - 1];
     const currentChats = get().chats;
+    if (!currentChats || snapshot.chats.some((chat) =>
+      !currentChats.some((current) => current.id === chat.id) ||
+      Object.values(get().generatingSessions).some((session) => session.chatId === chat.id)
+    )) return;
     const currentContentStore = get().contentStore;
+    const current = createBranchSnapshot(
+      currentChats, currentContentStore, snapshot.chats.map((chat) => chat.id),
+      restoreBranchSnapshot(currentChats, currentContentStore, snapshot)
+    );
+    const contentStore = { ...snapshot.contentStore, ...currentContentStore };
     set({
       branchHistoryPast: past.slice(0, -1),
-      branchHistoryFuture: currentChats
-        ? [...get().branchHistoryFuture, { chats: currentChats, contentStore: currentContentStore }]
-        : get().branchHistoryFuture,
+      branchHistoryFuture: [...get().branchHistoryFuture, current],
     });
-    get().setChats(snapshot.chats);
-    set({ contentStore: snapshot.contentStore });
+    get().setChats(restoreBranchSnapshot(currentChats, contentStore, snapshot), { preserveBranchHistory: true });
+    set({ contentStore });
   },
   redoBranch: () => {
     const future = get().branchHistoryFuture;
     if (future.length === 0) return;
     const snapshot = future[future.length - 1];
     const currentChats = get().chats;
+    if (!currentChats || snapshot.chats.some((chat) =>
+      !currentChats.some((current) => current.id === chat.id) ||
+      Object.values(get().generatingSessions).some((session) => session.chatId === chat.id)
+    )) return;
     const currentContentStore = get().contentStore;
+    const current = createBranchSnapshot(
+      currentChats, currentContentStore, snapshot.chats.map((chat) => chat.id),
+      restoreBranchSnapshot(currentChats, currentContentStore, snapshot)
+    );
+    const contentStore = { ...snapshot.contentStore, ...currentContentStore };
     set({
       branchHistoryFuture: future.slice(0, -1),
-      branchHistoryPast: currentChats
-        ? [...get().branchHistoryPast, { chats: currentChats, contentStore: currentContentStore }]
-        : get().branchHistoryPast,
+      branchHistoryPast: [...get().branchHistoryPast, current],
     });
-    get().setChats(snapshot.chats);
-    set({ contentStore: snapshot.contentStore });
+    get().setChats(restoreBranchSnapshot(currentChats, contentStore, snapshot), { preserveBranchHistory: true });
+    set({ contentStore });
   },
-  canUndoBranch: () => get().branchHistoryPast.length > 0,
-  canRedoBranch: () => get().branchHistoryFuture.length > 0,
+  canUndoBranch: () => get().branchHistoryPast.length > 0 && !Object.values(get().generatingSessions).some(
+    (session) => get().branchHistoryPast.at(-1)?.chats.some((chat) => chat.id === session.chatId)
+  ),
+  canRedoBranch: () => get().branchHistoryFuture.length > 0 && !Object.values(get().generatingSessions).some(
+    (session) => get().branchHistoryFuture.at(-1)?.chats.some((chat) => chat.id === session.chatId)
+  ),
   branchClipboard: null,
   branchEditorFocusNodeId: null,
   setBranchEditorFocusNodeId: (nodeId) => {
@@ -377,9 +509,18 @@ export const createBranchSlice: StoreSlice<BranchSlice> = (set, get) => ({
     set({ multiViewPrimaryChatIndex: index });
   },
   moveBranchSequence: (sourceChatIndex, fromNodeId, toNodeId, targetChatIndex, afterNodeId) => {
-    get().copyBranchSequence(sourceChatIndex, fromNodeId, toNodeId);
-    get().pasteBranchSequence(targetChatIndex, afterNodeId);
-    get().deleteBranch(sourceChatIndex, fromNodeId);
+    const chats = get().chats;
+    if (!chats) return;
+    const clipboard = copyBranchSequenceState(chats, sourceChatIndex, fromNodeId, toNodeId);
+    if (!clipboard) return;
+    const pasted = pasteBranchSequenceState(
+      chats, targetChatIndex, afterNodeId, clipboard, get().contentStore
+    );
+    const result = deleteBranchState(
+      pasted.chats, sourceChatIndex, fromNodeId, pasted.contentStore
+    );
+    set({ branchClipboard: clipboard });
+    get().applyBranchState(result.chats, result.contentStore);
   },
   activateFolderOverview: (folderId) => {
     const chats = get().chats;
@@ -423,7 +564,7 @@ export const createBranchSlice: StoreSlice<BranchSlice> = (set, get) => ({
       chatIndex,
       get().contentStore
     );
-    get().applyBranchState(updatedChats, contentStore);
+    get().applyBranchState(updatedChats, contentStore, { recordHistory: false });
   },
 
   createBranch: (chatIndex, fromNodeId, newContent) => {
@@ -444,7 +585,8 @@ export const createBranchSlice: StoreSlice<BranchSlice> = (set, get) => ({
     const chats = finalizeStreamingNodesInChat(get().chats!, chatIndex, contentStore, sessions);
     get().applyBranchState(
       switchBranchAtNodeState(chats, chatIndex, nodeId, contentStore),
-      contentStore
+      contentStore,
+      { recordHistory: false }
     );
   },
 
@@ -454,7 +596,8 @@ export const createBranchSlice: StoreSlice<BranchSlice> = (set, get) => ({
     const chats = finalizeStreamingNodesInChat(get().chats!, chatIndex, contentStore, sessions);
     get().applyBranchState(
       switchActivePathState(chats, chatIndex, newPath, contentStore),
-      contentStore
+      contentStore,
+      { recordHistory: false }
     );
   },
 
@@ -463,7 +606,7 @@ export const createBranchSlice: StoreSlice<BranchSlice> = (set, get) => ({
     const sessions = get().generatingSessions;
     const chats = finalizeStreamingNodesInChat(get().chats!, chatIndex, contentStore, sessions);
     const updated = switchActivePathState(chats, chatIndex, newPath, contentStore);
-    get().setChats(updated);
+    get().setChats(updated, { preserveBranchHistory: true });
     set({ contentStore });
   },
 

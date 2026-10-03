@@ -4,6 +4,7 @@ import useStore from '@store/store';
 const CollapseAllButtons = React.memo(() => {
   const currentChatIndex = useStore((state) => state.currentChatIndex);
   const setAllCollapsed = useStore((state) => state.setAllCollapsed);
+  const pushNavigationEntry = useStore((state) => state.pushNavigationEntry);
   const { hasMessages, orphanCount, focusOrphanNode } = useStore((state) => {
     const chat =
       state.chats &&
@@ -41,6 +42,16 @@ const CollapseAllButtons = React.memo(() => {
             if (!focusOrphanNode) return;
             const state = useStore.getState();
             state.ensureBranchTree(currentChatIndex);
+            const chat = state.chats?.[currentChatIndex];
+            if (chat?.branchTree) {
+              pushNavigationEntry({
+                chatId: chat.id,
+                activePath: [...chat.branchTree.activePath],
+                focusedNodeId: focusOrphanNode,
+                viewContext: 'branch-editor',
+                source: 'branch-editor',
+              });
+            }
             state.setBranchEditorFocusNodeId(focusOrphanNode);
             state.navigateToBranchEditor();
           }}

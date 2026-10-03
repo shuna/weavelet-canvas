@@ -78,6 +78,7 @@ export const createSearchSlice: StoreSlice<SearchSlice> = (set, get) => ({
 
     if (shouldNavigateToCurrentResult) {
       get().setBranchEditorFocusNodeId(currentResultNodeId);
+      pushSearchNavEntry(get, results[currentResultIndex]);
       navigateToResult(get, results[currentResultIndex]);
     }
   },
@@ -157,6 +158,7 @@ function pushSearchNavEntry(
     chatId: chat.id,
     activePath: newPath,
     focusedNodeId: result.nodeId,
+    viewContext: state.chatActiveView,
     source: 'search' as const,
   });
 }

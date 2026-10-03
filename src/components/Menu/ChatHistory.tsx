@@ -50,6 +50,7 @@ const ChatHistory = React.memo(
     const initialiseNewChat = useInitialiseNewChat();
     const setCurrentChatIndex = useStore((state) => state.setCurrentChatIndex);
     const pushNavigationEntry = useStore((state) => state.pushNavigationEntry);
+    const captureCurrentNavigationEntry = useStore((state) => state.captureCurrentNavigationEntry);
     const setChats = useStore((state) => state.setChats);
     const active = useStore((state) => state.currentChatIndex === chatIndex);
 
@@ -186,8 +187,10 @@ const ChatHistory = React.memo(
         const updatedChats = chats.slice();
         updatedChats.unshift(clonedChat);
 
+        captureCurrentNavigationEntry();
         setChats(updatedChats);
         useStore.setState({ contentStore });
+        pushNavigationEntry({ chatId: clonedChat.id, activePath: [...(clonedChat.branchTree?.activePath ?? [])], viewContext: useStore.getState().chatActiveView, source: 'chat-switch' });
         setCurrentChatIndex(0);
       }
     };

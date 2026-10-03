@@ -93,6 +93,26 @@ export function scrollViewportToBottom(
   onBottomStateChange(true);
 }
 
+export function getBubbleNavigationTargets(scroller: Pick<HTMLElement,
+  'getBoundingClientRect' | 'querySelectorAll' | 'scrollTop' | 'scrollHeight' | 'clientHeight'
+> | null): { previous: number; next: number } {
+  let previous = -1;
+  let next = -1;
+  if (!scroller) return { previous, next };
+
+  const viewportTop = scroller.getBoundingClientRect().top;
+  const maxScrollTop = Math.max(0, scroller.scrollHeight - scroller.clientHeight);
+  for (const item of Array.from(scroller.querySelectorAll<HTMLElement>(MESSAGE_ITEM_SELECTOR))) {
+    const index = Number(item.dataset.itemIndex);
+    const top = item.getBoundingClientRect().top - viewportTop;
+    if (top < -SCROLL_ALIGN_TOLERANCE) previous = index;
+    if (next < 0 && Math.min(scroller.scrollTop + top, maxScrollTop) > scroller.scrollTop + SCROLL_ALIGN_TOLERANCE) {
+      next = index;
+    }
+  }
+  return { previous, next };
+}
+
 function isEditableTarget(target: EventTarget | null): boolean {
   if (!(target instanceof HTMLElement)) return false;
   return (
@@ -143,7 +163,11 @@ const ChatContent = ({ isChatFindOpen, onChatFindClose }: ChatContentProps = {})
     Object.values(state.generatingSessions).some((s) => s.chatId === currentChatId)
   );
   const pushNavigationEntry = useStore((state) => state.pushNavigationEntry);
+  const captureCurrentNavigationEntry = useStore((state) => state.captureCurrentNavigationEntry);
+  const updateCurrentNavigationEntryAnchor = useStore((state) => state.updateCurrentNavigationEntryAnchor);
   const chatActiveView = useStore((state) => state.chatActiveView);
+  const navEntry = useStore((state) => state.navHistoryCurrent);
+  const isRestoringNavigation = useStore((state) => state.isRestoringNavigation);
 
   const model = useStore((state) =>
     state.chats &&
@@ -262,9 +286,12 @@ const ChatContent = ({ isChatFindOpen, onChatFindClose }: ChatContentProps = {})
   // Scroll anchor tracking (local refs, saved to store on departure)
   const saveChatScrollAnchor = useStore((state) => state.saveChatScrollAnchor);
   const getChatScrollAnchor = useStore((state) => state.getChatScrollAnchor);
-  const anchorRef = useRef({ firstVisibleItemIndex: 0, offsetWithinItem: 0, wasAtBottom: true });
+  const anchorRef = useRef({ firstVisibleItemIndex: 0, offsetWithinItem: 0, wasAtBottom: true, nodeId: undefined as string | undefined, scrollTop: 0 });
   const atBottomRef = useRef(true);
   const pendingEditStateSyncRef = useRef<number | null>(null);
+  const saveAnchorTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const explicitScrollNavigationRef = useRef(false);
+  const explicitScrollClearRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Scroll-based navigation history tracking
   const prevTopBubbleNodeIdRef = useRef<string | null>(null);
@@ -281,58 +308,16 @@ const ChatContent = ({ isChatFindOpen, onChatFindClose }: ChatContentProps = {})
     return result;
   }, [messages, advancedMode]);
 
-  const getViewportBubbleState = useCallback(() => {
-    if (!scrollerRef.current || items.length === 0) {
-      return { currentIndex: -1, insideBubble: false };
-    }
-
-    const scrollerRect = scrollerRef.current.getBoundingClientRect();
-    const viewportTop = scrollerRect.top + SCROLL_ALIGN_TOLERANCE;
-    const renderedItems = Array.from(
-      scrollerRef.current.querySelectorAll<HTMLElement>('[data-item-index]')
-    );
-
-    for (const item of renderedItems) {
-      const itemIndex = Number(item.dataset.itemIndex);
-      if (Number.isNaN(itemIndex)) continue;
-      const itemRect = item.getBoundingClientRect();
-      if (itemRect.top <= viewportTop && itemRect.bottom > viewportTop) {
-        return {
-          currentIndex: Math.min(Math.max(itemIndex, 0), items.length - 1),
-          insideBubble: viewportTop - itemRect.top > SCROLL_ALIGN_TOLERANCE,
-        };
-      }
-    }
-
-    const fallbackIndex = Math.min(
-      Math.max(anchorRef.current.firstVisibleItemIndex, 0),
-      items.length - 1
-    );
-    return {
-      currentIndex: fallbackIndex,
-      insideBubble: anchorRef.current.offsetWithinItem > SCROLL_ALIGN_TOLERANCE,
-    };
-  }, [items.length]);
-
   const updateBubbleNavigationState = useCallback(() => {
-    const { currentIndex, insideBubble } = getViewportBubbleState();
-    if (currentIndex < 0) {
-      setBubbleNavigationState({ canMoveUp: false, canMoveDown: false });
-      return;
-    }
-
-    setBubbleNavigationState({
-      canMoveUp: currentIndex > 0 || (currentIndex === 0 && insideBubble),
-      canMoveDown: currentIndex < items.length - 1,
-    });
-  }, [getViewportBubbleState, items.length]);
+    const { previous, next } = getBubbleNavigationTargets(scrollerRef.current);
+    setBubbleNavigationState({ canMoveUp: previous >= 0, canMoveDown: next >= 0 });
+  }, []);
 
   // Save scroll anchor to store (called on chat departure / unmount)
   const saveCurrentAnchor = useCallback(() => {
     if (!currentChatId) return;
     saveChatScrollAnchor(currentChatId, {
       ...anchorRef.current,
-      wasAtBottom: atBottomRef.current,
     });
   }, [currentChatId, saveChatScrollAnchor]);
 
@@ -342,7 +327,6 @@ const ChatContent = ({ isChatFindOpen, onChatFindClose }: ChatContentProps = {})
     if (prevChatIdRef.current && prevChatIdRef.current !== currentChatId) {
       saveChatScrollAnchor(prevChatIdRef.current, {
         ...anchorRef.current,
-        wasAtBottom: atBottomRef.current,
       });
     }
     prevChatIdRef.current = currentChatId;
@@ -362,26 +346,44 @@ const ChatContent = ({ isChatFindOpen, onChatFindClose }: ChatContentProps = {})
     if (!scroller) return;
 
     const onScroll = () => {
+      if (scroller.clientHeight === 0) {
+        setBubbleNavigationState({ canMoveUp: false, canMoveDown: false });
+        return;
+      }
       const isBottom = scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight < BOTTOM_THRESHOLD;
       const isTop = scroller.scrollTop < BOTTOM_THRESHOLD;
       setAtBottom(isBottom);
       setAtTop(isTop);
       atBottomRef.current = isBottom;
 
-      // Anchor update
-      if (!isBottom) {
-        const scrollerRect = scroller.getBoundingClientRect();
-        const nodeItems = scroller.querySelectorAll<HTMLElement>(MESSAGE_ITEM_SELECTOR);
-        for (const item of nodeItems) {
-          const rect = item.getBoundingClientRect();
-          if (rect.bottom > scrollerRect.top) {
-            anchorRef.current.firstVisibleItemIndex = Number(item.dataset.itemIndex);
-            anchorRef.current.offsetWithinItem = scrollerRect.top - rect.top;
-            break;
-          }
+      // Anchor update must remain exact even within the visual "at bottom" threshold.
+      const scrollerRect = scroller.getBoundingClientRect();
+      const nodeItems = scroller.querySelectorAll<HTMLElement>(MESSAGE_ITEM_SELECTOR);
+      anchorRef.current.scrollTop = scroller.scrollTop;
+      anchorRef.current.wasAtBottom = scroller.scrollTop >= scroller.scrollHeight - scroller.clientHeight - SCROLL_ALIGN_TOLERANCE;
+      let foundAnchorItem = false;
+      for (const item of nodeItems) {
+        const rect = item.getBoundingClientRect();
+        if (rect.bottom > scrollerRect.top) {
+          anchorRef.current.firstVisibleItemIndex = Number(item.dataset.itemIndex);
+          anchorRef.current.offsetWithinItem = scrollerRect.top - rect.top;
+          anchorRef.current.nodeId = item.dataset.nodeId;
+          foundAnchorItem = true;
+          break;
         }
       }
-      anchorRef.current.wasAtBottom = isBottom;
+      if (!foundAnchorItem) {
+        anchorRef.current.firstVisibleItemIndex = -1;
+        anchorRef.current.offsetWithinItem = 0;
+        anchorRef.current.nodeId = undefined;
+      }
+
+      // Keep navigation departures accurate without writing on every scroll event.
+      if (saveAnchorTimerRef.current) clearTimeout(saveAnchorTimerRef.current);
+      saveAnchorTimerRef.current = setTimeout(() => {
+        saveAnchorTimerRef.current = null;
+        saveCurrentAnchor();
+      }, SCROLL_NAV_DEBOUNCE_MS);
 
       updateBubbleNavigationState();
 
@@ -395,6 +397,11 @@ const ChatContent = ({ isChatFindOpen, onChatFindClose }: ChatContentProps = {})
           const state = useStore.getState();
           if (state.isRestoringNavigation) return;
           if (Object.values(state.generatingSessions).some((s: any) => s.chatId === currentChatId)) return;
+          if (explicitScrollNavigationRef.current) {
+            explicitScrollNavigationRef.current = false;
+            updateCurrentNavigationEntryAnchor();
+            return;
+          }
           if (prevTopBubbleNodeIdRef.current === null) {
             // First detection after mount / chat switch — just record, don't push
             prevTopBubbleNodeIdRef.current = topNodeId;
@@ -418,11 +425,18 @@ const ChatContent = ({ isChatFindOpen, onChatFindClose }: ChatContentProps = {})
     onScroll();
 
     scroller.addEventListener('scroll', onScroll, { passive: true });
+    const observer = new ResizeObserver(updateBubbleNavigationState);
+    observer.observe(scroller);
+    const messageList = scroller.querySelector('[data-message-list]');
+    if (messageList) observer.observe(messageList);
     return () => {
+      observer.disconnect();
       scroller.removeEventListener('scroll', onScroll);
       if (scrollNavDebounceRef.current) clearTimeout(scrollNavDebounceRef.current);
+      if (saveAnchorTimerRef.current) clearTimeout(saveAnchorTimerRef.current);
+      if (explicitScrollClearRef.current) clearTimeout(explicitScrollClearRef.current);
     };
-  }, [scrollerElement, updateBubbleNavigationState, activePath, items, currentChatId, pushNavigationEntry]);
+  }, [scrollerElement, updateBubbleNavigationState, activePath, items, currentChatId, pushNavigationEntry, updateCurrentNavigationEntryAnchor]);
 
   // --- Streaming auto-follow via ResizeObserver ---
   // Track atBottom via ref so the observer can read it without being a dependency.
@@ -509,8 +523,75 @@ const ChatContent = ({ isChatFindOpen, onChatFindClose }: ChatContentProps = {})
     });
   }, [pendingChatFocus, currentChatIndex, activePath, items, clearPendingChatFocus]);
 
+  // A history entry owns its exact viewport anchor.  Layout can settle after
+  // React has rendered, so observe it briefly and always stop on interaction.
+  useEffect(() => {
+    if (!isRestoringNavigation || navEntry?.chatId !== currentChatId || !navEntry.scrollAnchor) return;
+
+    let frame = 0;
+    let stopped = false;
+    const restore = () => {
+      const scroller = scrollerRef.current;
+      const anchor = navEntry.scrollAnchor;
+      if (stopped || !scroller || !anchor || scroller.clientHeight === 0) return;
+      if (anchor.wasAtBottom) {
+        scroller.scrollTop = scroller.scrollHeight;
+        return;
+      }
+      if (!anchor.nodeId && anchor.firstVisibleItemIndex < 0 && anchor.scrollTop != null) {
+        scroller.scrollTop = anchor.scrollTop;
+        return;
+      }
+      const item = anchor.nodeId
+        ? Array.from(scroller.querySelectorAll<HTMLElement>('[data-node-id]')).find((element) => element.dataset.nodeId === anchor.nodeId)
+        : scroller.querySelector<HTMLElement>(`[data-item-index="${anchor.firstVisibleItemIndex}"]`);
+      if (!item) {
+        if (anchor.scrollTop != null) scroller.scrollTop = anchor.scrollTop;
+        return;
+      }
+      const scrollerTop = scroller.getBoundingClientRect().top;
+      scroller.scrollTop += item.getBoundingClientRect().top - scrollerTop + anchor.offsetWithinItem;
+    };
+    const observer = new ResizeObserver(restore);
+    const mutations = new MutationObserver(restore);
+    const scroller = scrollerRef.current;
+    if (!scroller) return;
+    observer.observe(scroller);
+    const list = scroller?.querySelector('[data-message-list]');
+    if (list) {
+      observer.observe(list);
+      mutations.observe(list, { childList: true, subtree: true });
+    }
+    const stop = (fromInteraction = false) => {
+      if (stopped) return;
+      stopped = true;
+      cancelAnimationFrame(frame);
+      observer.disconnect();
+      mutations.disconnect();
+      if (fromInteraction && useStore.getState().navHistoryCurrent?.key === navEntry.key) {
+        useStore.setState({ isRestoringNavigation: false });
+      }
+    };
+    const stopForUser = () => stop(true);
+    scroller?.addEventListener('wheel', stopForUser, { passive: true });
+    scroller?.addEventListener('touchstart', stopForUser, { passive: true });
+    scroller?.addEventListener('pointerdown', stopForUser, { passive: true });
+    window.addEventListener('keydown', stopForUser);
+    frame = requestAnimationFrame(restore);
+    const timeout = window.setTimeout(stop, 1100);
+    return () => {
+      window.clearTimeout(timeout);
+      scroller?.removeEventListener('wheel', stopForUser);
+      scroller?.removeEventListener('touchstart', stopForUser);
+      scroller?.removeEventListener('pointerdown', stopForUser);
+      window.removeEventListener('keydown', stopForUser);
+      stop();
+    };
+  }, [isRestoringNavigation, navEntry, currentChatId]);
+
   // Restore saved scroll anchor on chat switch (when no pendingChatFocus)
   useEffect(() => {
+    if (isRestoringNavigation) return;
     if (pendingChatFocus && pendingChatFocus.chatIndex === currentChatIndex) return;
 
     const anchor = getChatScrollAnchor(currentChatId);
@@ -538,52 +619,64 @@ const ChatContent = ({ isChatFindOpen, onChatFindClose }: ChatContentProps = {})
     updateBubbleNavigationState();
   }, [currentChatIndex, items.length, updateBubbleNavigationState]);
 
+  const recordExplicitScrollNavigation = useCallback(() => {
+    const state = useStore.getState();
+    const chat = state.chats?.[state.currentChatIndex];
+    if (!chat) return;
+    captureCurrentNavigationEntry();
+    pushNavigationEntry({
+      chatId: chat.id,
+      activePath: [...(chat.branchTree?.activePath ?? [])],
+      viewContext: state.chatActiveView,
+      source: 'scroll',
+    });
+    explicitScrollNavigationRef.current = true;
+    if (explicitScrollClearRef.current) clearTimeout(explicitScrollClearRef.current);
+    explicitScrollClearRef.current = setTimeout(() => {
+      explicitScrollNavigationRef.current = false;
+      explicitScrollClearRef.current = null;
+    }, 1000);
+  }, [captureCurrentNavigationEntry, pushNavigationEntry]);
+
   const handleScrollToTop = useCallback(() => {
     const scroller = scrollerRef.current;
-    if (!scroller) return;
+    if (!scroller || scroller.scrollTop <= SCROLL_ALIGN_TOLERANCE) return;
+    recordExplicitScrollNavigation();
     scroller.scrollTo({
       top: 0,
       behavior: animateBubbleNavigation ? 'smooth' : 'auto',
     });
-  }, [animateBubbleNavigation]);
+  }, [animateBubbleNavigation, recordExplicitScrollNavigation]);
 
   const handleScrollToBottom = useCallback(() => {
     const scroller = scrollerRef.current;
-    if (!scroller) return;
+    if (!scroller || scroller.scrollTop >= scroller.scrollHeight - scroller.clientHeight - SCROLL_ALIGN_TOLERANCE) return;
+    recordExplicitScrollNavigation();
     scroller.scrollTo({
       top: scroller.scrollHeight,
       behavior: animateBubbleNavigation ? 'smooth' : 'auto',
     });
-  }, [animateBubbleNavigation]);
+  }, [animateBubbleNavigation, recordExplicitScrollNavigation]);
 
   const scrollToBubbleAtIndex = useCallback((index: number) => {
     if (index < 0 || index >= items.length) return;
     const scroller = scrollerRef.current;
     const item = scroller?.querySelector<HTMLElement>(`[data-item-index="${index}"]`);
     if (!item) return;
+    recordExplicitScrollNavigation();
     item.scrollIntoView({
       block: 'start',
       behavior: animateBubbleNavigation ? 'smooth' : 'auto',
     });
-  }, [animateBubbleNavigation, items.length]);
-
-  const getTopAlignedBubbleIndex = useCallback(() => {
-    const { currentIndex, insideBubble } = getViewportBubbleState();
-    if (currentIndex < 0) return -1;
-    return insideBubble ? Math.min(currentIndex + 1, items.length - 1) : currentIndex;
-  }, [getViewportBubbleState, items.length]);
+  }, [animateBubbleNavigation, items.length, recordExplicitScrollNavigation]);
 
   const handleScrollToPreviousBubble = useCallback(() => {
-    const topAlignedIndex = getTopAlignedBubbleIndex();
-    if (topAlignedIndex <= 0) return;
-    scrollToBubbleAtIndex(topAlignedIndex - 1);
-  }, [getTopAlignedBubbleIndex, scrollToBubbleAtIndex]);
+    scrollToBubbleAtIndex(getBubbleNavigationTargets(scrollerRef.current).previous);
+  }, [scrollToBubbleAtIndex]);
 
   const handleScrollToNextBubble = useCallback(() => {
-    const topAlignedIndex = getTopAlignedBubbleIndex();
-    if (topAlignedIndex < 0 || topAlignedIndex >= items.length - 1) return;
-    scrollToBubbleAtIndex(topAlignedIndex + 1);
-  }, [getTopAlignedBubbleIndex, items.length, scrollToBubbleAtIndex]);
+    scrollToBubbleAtIndex(getBubbleNavigationTargets(scrollerRef.current).next);
+  }, [scrollToBubbleAtIndex]);
 
   const { canMoveUp, canMoveDown } = bubbleNavigationState;
 
@@ -725,11 +818,12 @@ const ChatContent = ({ isChatFindOpen, onChatFindClose }: ChatContentProps = {})
           key={currentChatIndex}
           className='h-full overflow-y-auto overscroll-contain'
           data-chat-scroller
+          data-chat-id={currentChatId}
         >
           {syncChanged && <div role='status' className='flex items-center justify-between gap-3 px-7 py-2 text-sm text-amber-800 bg-amber-50 dark:bg-gray-700 dark:text-amber-200'><span>{t('drive:review.description')}</span><button type='button' className='shrink-0 underline' onClick={() => acknowledgeSyncChat(reviewChatId)}>{t('drive:review.chatDone')}</button></div>}
           <div data-message-list>
             {items.map((item, index) => (
-              <div key={computeItemKey(index)} data-item-index={index}>
+              <div key={computeItemKey(index)} data-item-index={index} data-node-id={activePath[item.originalIndex]}>
                 <Message
                   role={item.message.role}
                   content={item.message.content}

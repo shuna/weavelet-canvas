@@ -1,4 +1,4 @@
-import React, { Suspense, useState } from 'react';
+import React, { Suspense, useEffect, useRef, useState } from 'react';
 import useStore from '@store/store';
 import { isSplitView } from '@type/chat';
 
@@ -20,12 +20,30 @@ const Chat = () => {
   const menuWidth = useStore((state) => state.menuWidth);
   const activeView = useStore((state) => state.chatActiveView);
   const setActiveView = useStore((state) => state.setChatActiveView);
+  const currentChat = useStore((state) => state.chats?.[state.currentChatIndex]);
+  const pushNavigationEntry = useStore((state) => state.pushNavigationEntry);
+  const isRestoringNavigation = useStore((state) => state.isRestoringNavigation);
   const isDesktop = useIsDesktop();
   const desktopOffset = isDesktop && !hideSideMenu ? `${menuWidth}px` : '0';
   const [isChatFindOpen, setIsChatFindOpen] = useState(false);
   const showPWANav = React.useMemo(() => isPWA(), []);
 
   useNavigationHistory();
+  const previousViewRef = useRef(activeView);
+
+  useEffect(() => {
+    if (previousViewRef.current === activeView) return;
+    previousViewRef.current = activeView;
+    if (isRestoringNavigation || !currentChat) return;
+    const currentEntry = useStore.getState().navHistoryCurrent;
+    if (currentEntry?.chatId === currentChat.id && currentEntry.viewContext === activeView) return;
+    pushNavigationEntry({
+      chatId: currentChat.id,
+      activePath: [...(currentChat.branchTree?.activePath ?? [])],
+      viewContext: activeView,
+      source: 'view-switch',
+    });
+  }, [activeView, currentChat, isRestoringNavigation, pushNavigationEntry]);
 
   // Mobile fallback: split views degrade to chat view
   const effectiveView = !isDesktop && isSplitView(activeView) ? 'chat' : activeView;

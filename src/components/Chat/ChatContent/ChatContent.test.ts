@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  getBubbleNavigationTargets,
   isEditingMessageElement,
   scrollViewportToBottom,
   shouldShowHiddenMessagesWarning,
@@ -96,5 +97,41 @@ describe('scrollViewportToBottom', () => {
 
     expect(scroller.scrollTop).toBe(960);
     expect(updates).toEqual([true]);
+  });
+});
+
+
+describe('getBubbleNavigationTargets', () => {
+  const targets = (scrollTop: number, tops = [0, 200, 400], maxScrollTop = 600) =>
+    getBubbleNavigationTargets({
+      scrollTop,
+      scrollHeight: maxScrollTop + 300,
+      clientHeight: 300,
+      getBoundingClientRect: () => ({ top: 50 } as DOMRect),
+      querySelectorAll: () => tops.map((top, index) => ({
+        dataset: { itemIndex: String(index) },
+        getBoundingClientRect: () => ({ top: 50 + top - scrollTop }),
+      })) as unknown as NodeListOf<HTMLElement>,
+    });
+
+  it('uses the adjacent bubble without skipping when partway through a bubble', () => {
+    expect(targets(0)).toEqual({ previous: -1, next: 1 });
+    expect(targets(100)).toEqual({ previous: 0, next: 1 });
+    expect(targets(200)).toEqual({ previous: 0, next: 2 });
+    expect(targets(300)).toEqual({ previous: 1, next: 2 });
+    expect(targets(450)).toEqual({ previous: 2, next: -1 });
+  });
+
+  it('uses actual positions after the final bubble and ignores alignment rounding', () => {
+    expect(targets(600)).toEqual({ previous: 2, next: -1 });
+    expect(targets(200.25)).toEqual({ previous: 0, next: 2 });
+    expect(targets(199.75)).toEqual({ previous: 0, next: 2 });
+  });
+
+  it('disables moves with no reachable scroll destination', () => {
+    expect(targets(250, [0, 200, 400], 250)).toEqual({ previous: 1, next: -1 });
+    expect(targets(0, [0, 200], 0)).toEqual({ previous: -1, next: -1 });
+    expect(targets(0, [])).toEqual({ previous: -1, next: -1 });
+    expect(getBubbleNavigationTargets(null)).toEqual({ previous: -1, next: -1 });
   });
 });

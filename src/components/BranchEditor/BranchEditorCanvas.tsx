@@ -31,8 +31,8 @@ import BranchSearchBar from './BranchSearchBar';
 import { useTranslation } from 'react-i18next';
 
 const UndoRedoControls = () => {
-  const canUndo = useStore((state) => state.branchHistoryPast.length > 0);
-  const canRedo = useStore((state) => state.branchHistoryFuture.length > 0);
+  const canUndo = useStore((state) => state.canUndoBranch());
+  const canRedo = useStore((state) => state.canRedoBranch());
   const undoBranch = useStore((state) => state.undoBranch);
   const redoBranch = useStore((state) => state.redoBranch);
 
@@ -115,8 +115,8 @@ const ConversationEditMenu = ({ entries }: { entries: MultiLayoutEntry[] }) => {
   const pruneHiddenNodes = useStore((state) => state.pruneHiddenNodes);
   const isSearchOpen = useStore((state) => state.isSearchOpen);
   const toggleSearch = useStore((state) => state.toggleSearch);
-  const canUndo = useStore((state) => state.branchHistoryPast.length > 0);
-  const canRedo = useStore((state) => state.branchHistoryFuture.length > 0);
+  const canUndo = useStore((state) => state.canUndoBranch());
+  const canRedo = useStore((state) => state.canRedoBranch());
   const undoBranch = useStore((state) => state.undoBranch);
   const redoBranch = useStore((state) => state.redoBranch);
   const btnRef = React.useRef<HTMLButtonElement>(null);
@@ -628,6 +628,14 @@ const BranchEditorCanvas = ({
       const chat = chats?.[chatIndex];
       if (chat?.branchTree) {
         const newPath = buildPathToLeaf(chat.branchTree, nodeId);
+        const currentView = useStore.getState().chatActiveView;
+        pushNavigationEntry({
+          chatId: chat.id,
+          activePath: newPath,
+          focusedNodeId: nodeId,
+          viewContext: isSplitView(currentView) ? currentView : 'chat',
+          source: 'branch-editor',
+        });
         switchActivePath(chatIndex, newPath);
       }
       setCurrentChatIndex(chatIndex);
@@ -637,7 +645,7 @@ const BranchEditorCanvas = ({
       }
       setPendingChatFocus({ chatIndex, nodeId });
     },
-    [chats, ensureBranchTree, switchActivePath, setCurrentChatIndex, setChatActiveView, setPendingChatFocus]
+    [chats, ensureBranchTree, switchActivePath, setCurrentChatIndex, setChatActiveView, setPendingChatFocus, pushNavigationEntry]
   );
 
   const onNodeClick = useCallback(
@@ -651,21 +659,18 @@ const BranchEditorCanvas = ({
       const target = event.target as HTMLElement;
       const isHeaderClick = !!target.closest('[data-node-header]');
 
-      // Record the destination view context (chat for header clicks, current view otherwise)
-      const currentView = useStore.getState().chatActiveView;
-      pushNavigationEntry({
-        chatId: chat.id,
-        activePath: newPath,
-        focusedNodeId: node.id,
-        viewContext: isHeaderClick && !isSplitView(currentView) ? 'chat' : currentView,
-        source: 'branch-editor',
-      });
-
-      switchActivePath(nodeChatIndex, newPath);
-
       if (isHeaderClick) {
         navigateToChat(nodeChatIndex, node.id);
       } else {
+        const currentView = useStore.getState().chatActiveView;
+        pushNavigationEntry({
+          chatId: chat.id,
+          activePath: newPath,
+          focusedNodeId: node.id,
+          viewContext: currentView,
+          source: 'branch-editor',
+        });
+        switchActivePath(nodeChatIndex, newPath);
         setSelectedNodeForModal({ nodeId: node.id, chatIndex: nodeChatIndex });
       }
     },
@@ -676,16 +681,6 @@ const BranchEditorCanvas = ({
     (_: React.MouseEvent, node: Node<MessageNodeData>) => {
       const nodeChatIndex = node.data.chatIndex >= 0 ? node.data.chatIndex : primaryChatIndex;
       const chat = chats?.[nodeChatIndex];
-      if (chat?.branchTree) {
-        const newPath = buildPathToLeaf(chat.branchTree, node.id);
-        pushNavigationEntry({
-          chatId: chat.id,
-          activePath: newPath,
-          focusedNodeId: node.id,
-          viewContext: 'chat',
-          source: 'branch-editor',
-        });
-      }
       navigateToChat(nodeChatIndex, node.id);
     },
     [chats, primaryChatIndex, navigateToChat, pushNavigationEntry]
