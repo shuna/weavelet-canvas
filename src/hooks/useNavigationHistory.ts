@@ -32,12 +32,18 @@ export default function useNavigationHistory() {
 
     const unsub = useStore.subscribe((state, prevState) => {
       const currentKey = state.navHistoryCurrent?.key ?? null;
-      if (currentKey && currentKey !== prevCurrentKey && !isRestoringRef.current && !state.isRestoringNavigation) {
-        prevCurrentKey = currentKey;
-        history.pushState({ navKey: currentKey }, '');
-      } else {
-        prevCurrentKey = currentKey;
+      if (currentKey && currentKey !== prevCurrentKey && !isRestoringRef.current) {
+        if (state.isRestoringNavigation) {
+          // Toolbar and branch-editor controls use the same store actions.
+          const pastIndex = prevState.navHistoryPast.findIndex((entry) => entry.key === currentKey);
+          const futureIndex = prevState.navHistoryFuture.findIndex((entry) => entry.key === currentKey);
+          if (pastIndex >= 0) history.go(pastIndex - prevState.navHistoryPast.length);
+          else if (futureIndex >= 0) history.go(futureIndex + 1);
+        } else {
+          history.pushState({ navKey: currentKey }, '');
+        }
       }
+      prevCurrentKey = currentKey;
     });
 
     const handlePopState = (event: PopStateEvent) => {
@@ -51,6 +57,22 @@ export default function useNavigationHistory() {
       if (entry) {
         const pastKeys = state.navHistoryPast.map((e) => e.key);
         const futureKeys = state.navHistoryFuture.map((e) => e.key);
+
+        // Keep the native history index aligned when a chat has been deleted.
+        if (!state.chats?.some((chat) => chat.id === entry.chatId)) {
+          const pastIndex = pastKeys.indexOf(navKey);
+          const futureIndex = futureKeys.indexOf(navKey);
+          const candidates = pastIndex >= 0
+            ? state.navHistoryPast.slice(0, pastIndex).reverse()
+            : futureIndex >= 0 ? state.navHistoryFuture.slice(futureIndex + 1) : [];
+          const next = candidates.findIndex((candidate) => state.chats?.some((chat) => chat.id === candidate.chatId));
+          const distance = next >= 0 ? next + 1 : pastIndex >= 0 ? pastKeys.length - pastIndex : -(futureIndex + 1);
+          if (pastIndex >= 0 || futureIndex >= 0) {
+            history.go(next >= 0 && pastIndex >= 0 ? -distance : distance);
+          }
+          isRestoringRef.current = false;
+          return;
+        }
 
         if (pastKeys.includes(navKey)) {
           let remaining = pastKeys.length;

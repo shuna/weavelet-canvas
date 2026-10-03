@@ -14,7 +14,7 @@ interface ScrollToBottomButtonProps {
   scrollToBottom: () => void;
 }
 
-const baseButtonClass =
+export const baseButtonClass =
   'flex h-10 w-10 items-center justify-center cursor-pointer rounded-full border border-gray-300 bg-gray-200/80 text-gray-600 shadow-sm backdrop-blur-2xl supports-[backdrop-filter]:bg-gray-200/45 transition-colors hover:bg-gray-300/85 disabled:cursor-default disabled:opacity-40 dark:border-white/10 dark:bg-white/8 dark:text-gray-200 dark:hover:bg-white/18 dark:supports-[backdrop-filter]:bg-white/5';
 
 const ScrollToBottomButton = React.memo(({

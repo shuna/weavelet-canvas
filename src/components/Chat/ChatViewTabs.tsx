@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next';
 import { shallow } from 'zustand/shallow';
 import useStore from '@store/store';
 import BranchIcon from '@icon/BranchIcon';
+import NavigationButtons from './NavigationButtons';
 import MenuIcon from '@icon/MenuIcon';
 import ConfigMenu from '@components/ConfigMenu';
 import { CapabilityIconsInline } from '@components/ConfigMenu/fields';
@@ -261,6 +262,8 @@ const ChatViewTabs = ({
               <MenuIcon className='h-4 w-4' />
             </button>
           )}
+
+          <div className='hidden md:block'><NavigationButtons /></div>
 
           {/* Left: Model dropdown & options */}
           {advancedMode && chat && (

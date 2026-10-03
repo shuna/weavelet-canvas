@@ -9,7 +9,8 @@ import SplitView from './SplitView';
 import ChatViewTabs from './ChatViewTabs';
 import NavigationButtons from './NavigationButtons';
 import useIsDesktop from '@hooks/useIsDesktop';
-import useNavigationHistory, { isPWA } from '@hooks/useNavigationHistory';
+import useNavigationHistory from '@hooks/useNavigationHistory';
+import UndoRedoButtons from './UndoRedoButtons';
 
 const BranchEditorView = React.lazy(
   () => import('@components/BranchEditor/BranchEditorView')
@@ -26,7 +27,6 @@ const Chat = () => {
   const isDesktop = useIsDesktop();
   const desktopOffset = isDesktop && !hideSideMenu ? `${menuWidth}px` : '0';
   const [isChatFindOpen, setIsChatFindOpen] = useState(false);
-  const showPWANav = React.useMemo(() => isPWA(), []);
 
   useNavigationHistory();
   const previousViewRef = useRef(activeView);
@@ -52,11 +52,12 @@ const Chat = () => {
     <div className='flex h-full flex-1 flex-col' style={{ paddingLeft: desktopOffset }}>
       <MobileBar
         onSearchOpen={() => setIsChatFindOpen(true)}
-        extraButtons={showPWANav ? <NavigationButtons /> : undefined}
+        extraButtons={<NavigationButtons />}
       />
       <main className='relative h-full w-full transition-width flex flex-col overflow-hidden items-stretch flex-1'>
         <div className='relative shrink-0'>
           <ChatViewTabs activeView={effectiveView} setActiveView={setActiveView} />
+          <UndoRedoButtons />
           <div id='google-sync-banner-overlay' className='absolute inset-x-0 top-full z-[60]' />
         </div>
         {isSplitView(effectiveView) ? (
