@@ -1,7 +1,6 @@
 import { v4 as uuidv4 } from 'uuid';
 import { StoreSlice } from './store';
 import { ChatView } from '@type/chat';
-import { buildPathToLeaf } from '@utils/branchUtils';
 
 export interface NavScrollAnchor {
   firstVisibleItemIndex: number;
@@ -185,9 +184,11 @@ export const createNavigationSlice: StoreSlice<NavigationSlice> = (
     if (entry.activePath.length > 0) {
       const chat = chats![idx];
       if (chat.branchTree) {
-        // Verify the path is still valid by checking first node exists
-        const firstNode = entry.activePath[0];
-        if (chat.branchTree.nodes[firstNode]) {
+        const tree = chat.branchTree;
+        const validPath = entry.activePath.every((id, index) =>
+          tree.nodes[id]?.parentId === (index === 0 ? null : entry.activePath[index - 1])
+        );
+        if (validPath) {
           get().switchActivePathSilent(idx, entry.activePath);
         }
         // else: path invalid, keep current activePath
@@ -216,21 +217,13 @@ export const createNavigationSlice: StoreSlice<NavigationSlice> = (
     const current = get().navHistoryCurrent;
     if (past.length === 0 || !current) return;
 
-    const newPast = [...past];
-    let target = newPast.pop()!;
-
-    // Skip entries whose chat no longer exists
-    while (
-      target &&
-      resolveChatIndex(get().chats, target.chatId) < 0 &&
-      newPast.length > 0
-    ) {
-      target = newPast.pop()!;
-    }
-    if (resolveChatIndex(get().chats, target.chatId) < 0) return;
+    const targetIndex = past.map((entry) => resolveChatIndex(get().chats, entry.chatId) >= 0).lastIndexOf(true);
+    if (targetIndex < 0) return;
+    const target = past[targetIndex];
+    const newPast = past.slice(0, targetIndex);
 
     get().captureCurrentNavigationEntry();
-    const future = [get().navHistoryCurrent!, ...get().navHistoryFuture];
+    const future = [...past.slice(targetIndex + 1), get().navHistoryCurrent!, ...get().navHistoryFuture];
 
     set({
       navHistoryPast: newPast,
@@ -247,20 +240,13 @@ export const createNavigationSlice: StoreSlice<NavigationSlice> = (
     const current = get().navHistoryCurrent;
     if (future.length === 0 || !current) return;
 
-    const newFuture = [...future];
-    let target = newFuture.shift()!;
-
-    while (
-      target &&
-      resolveChatIndex(get().chats, target.chatId) < 0 &&
-      newFuture.length > 0
-    ) {
-      target = newFuture.shift()!;
-    }
-    if (resolveChatIndex(get().chats, target.chatId) < 0) return;
+    const targetIndex = future.findIndex((entry) => resolveChatIndex(get().chats, entry.chatId) >= 0);
+    if (targetIndex < 0) return;
+    const target = future[targetIndex];
+    const newFuture = future.slice(targetIndex + 1);
 
     get().captureCurrentNavigationEntry();
-    const past = [...get().navHistoryPast, get().navHistoryCurrent!];
+    const past = [...get().navHistoryPast, get().navHistoryCurrent!, ...future.slice(0, targetIndex)];
 
     set({
       navHistoryPast: past,
@@ -272,6 +258,6 @@ export const createNavigationSlice: StoreSlice<NavigationSlice> = (
     get().restoreNavigationEntry(target);
   },
 
-  canNavBack: () => get().navHistoryPast.length > 0,
-  canNavForward: () => get().navHistoryFuture.length > 0,
+  canNavBack: () => get().navHistoryPast.some((entry) => resolveChatIndex(get().chats, entry.chatId) >= 0),
+  canNavForward: () => get().navHistoryFuture.some((entry) => resolveChatIndex(get().chats, entry.chatId) >= 0),
 });

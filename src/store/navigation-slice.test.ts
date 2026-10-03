@@ -7,8 +7,8 @@ type TestState = NavigationSlice & Record<string, any>;
 function createState() {
   let state: TestState = {
     chats: [
-      { id: 'chat-a', branchTree: { activePath: ['a'], nodes: { a: {} } } },
-      { id: 'chat-b', branchTree: { activePath: ['b'], nodes: { b: {} } } },
+      { id: 'chat-a', branchTree: { activePath: ['a'], nodes: { a: { parentId: null } } } },
+      { id: 'chat-b', branchTree: { activePath: ['b'], nodes: { b: { parentId: null } } } },
     ],
     currentChatIndex: 0,
     chatActiveView: 'chat',
@@ -70,4 +70,44 @@ describe('navigation-slice', () => {
     expect(get().isRestoringNavigation).toBe(false);
     expect(get().navHistoryPast[0].scrollAnchor?.offsetWithinItem).toBe(321);
   });
+  it('skips deleted chats in both directions while retaining native history distances', () => {
+    const get = createState();
+    get().pushNavigationEntry({ chatId: 'chat-a', activePath: ['a'], source: 'chat-switch' });
+    const firstKey = get().navHistoryCurrent!.key;
+    get().pushNavigationEntry({ chatId: 'deleted-chat', activePath: [], source: 'chat-switch' });
+    const deletedKey = get().navHistoryCurrent!.key;
+    get().pushNavigationEntry({ chatId: 'chat-b', activePath: ['b'], source: 'chat-switch' });
+    const lastKey = get().navHistoryCurrent!.key;
+
+    get().navBack();
+    expect(get().navHistoryCurrent!.key).toBe(firstKey);
+    expect(get().navHistoryFuture.map((entry) => entry.key)).toEqual([deletedKey, lastKey]);
+    expect(get().canNavForward()).toBe(true);
+    get().navForward();
+    expect(get().navHistoryCurrent!.key).toBe(lastKey);
+    expect(get().navHistoryPast.map((entry) => entry.key)).toEqual([firstKey, deletedKey]);
+  });
+
+  it('disables directions containing only deleted chats', () => {
+    const get = createState();
+    get().pushNavigationEntry({ chatId: 'deleted-chat', activePath: [], source: 'chat-switch' });
+    get().pushNavigationEntry({ chatId: 'chat-a', activePath: ['a'], source: 'chat-switch' });
+    expect(get().canNavBack()).toBe(false);
+    get().navBack();
+    expect(get().navHistoryCurrent!.chatId).toBe('chat-a');
+    get().navHistoryFuture = [...get().navHistoryPast];
+    expect(get().canNavForward()).toBe(false);
+  });
+
+  it('does not restore a path containing deleted or reparented bubbles', () => {
+    const get = createState();
+    get().chats[0].branchTree.nodes.b = { parentId: 'other-parent' };
+    for (const activePath of [['a', 'deleted'], ['a', 'b']]) {
+      get().restoreNavigationEntry({ key: 'stale', chatId: 'chat-a', activePath, source: 'branch-switch' });
+    }
+    expect(get().switchActivePathSilent).not.toHaveBeenCalled();
+    get().restoreNavigationEntry({ key: 'valid', chatId: 'chat-a', activePath: ['a'], source: 'branch-switch' });
+    expect(get().switchActivePathSilent).toHaveBeenCalledWith(0, ['a']);
+  });
+
 });

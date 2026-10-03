@@ -71,8 +71,8 @@ const UndoRedoControls = () => {
 };
 
 const NavBackForwardControls = () => {
-  const canBack = useStore((state) => state.navHistoryPast.length > 0);
-  const canForward = useStore((state) => state.navHistoryFuture.length > 0);
+  const canBack = useStore((state) => state.canNavBack());
+  const canForward = useStore((state) => state.canNavForward());
   const navBack = useStore((state) => state.navBack);
   const navForward = useStore((state) => state.navForward);
 
