@@ -1,5 +1,8 @@
 {
   "save": "Save",
+  "branchSwipeDirection": "Branch swipe direction",
+  "branchSwipeDirection.leftNext": "Left: next · Right: previous",
+  "branchSwipeDirection.rightNext": "Left: previous · Right: next",
   "generate": "Generate",
   "generateBelow": "Generate All Below",
   "cancel": "Cancel",

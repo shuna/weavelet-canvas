@@ -1,5 +1,7 @@
 import { useEffect, useRef } from 'react';
 import { createBranchSwipeMotion, BranchSwipeMotion } from './branchSwipeMotion';
+import { resolveBranchSwipeDirection } from '@utils/branchUtils';
+import type { BranchSwipeDirection } from '@type/chat';
 
 // Native touchmove must be non-passive to suppress scrolling only after a
 // horizontal gesture is established. React's touch listeners are passive.
@@ -11,6 +13,7 @@ export function bindMessageBranchSwipe(
     width?: () => number;
     move?: (distance: number) => void;
     cancel?: () => void;
+    preference?: () => BranchSwipeDirection;
   } = {}
 ) {
   let start: { x: number; y: number } | null = null;
@@ -78,7 +81,7 @@ export function bindMessageBranchSwipe(
       const distanceCommit = Math.abs(dx) >= width * .30;
       const flickCommit = Math.abs(dx) >= width * .08 && Math.abs(velocity) >= .55 && Math.sign(dx) === Math.sign(velocity);
       motionOptions.move?.(dx);
-      onSwipe(Math.abs(dx) > Math.abs(dy) * 1.5 && (distanceCommit || flickCommit) ? (dx < 0 ? 'previous' : 'next') : null);
+      onSwipe(Math.abs(dx) > Math.abs(dy) * 1.5 && (distanceCommit || flickCommit) ? resolveBranchSwipeDirection(dx, motionOptions.preference?.()) : null);
     } else if (horizontal) {
       motionOptions.cancel?.();
     }
@@ -118,6 +121,7 @@ export default function useMessageBranchSwipe(chatIndex: number, nodeId?: string
         return !!motion.current;
       },
       width: () => motion.current?.width ?? 0,
+      preference: () => motion.current?.preference ?? 'left-next',
       move: distance => motion.current?.move(distance),
       cancel: () => motion.current?.finish(null),
     });

@@ -31,6 +31,8 @@ test('bubble swipe selects the previous/next branch and its continuation', async
     const tree = { nodes, rootId: 'root', activePath: ['root', 'a', 'a-tail'] };
     const chat = { ...generateDefaultChat('Swipe test'), branchTree: tree, messages: materializeActivePath(tree, contentStore) };
     store.getState().setOnboardingCompleted(true);
+    if (store.getState().branchSwipeDirection !== 'left-next') throw new Error('Default must select next on left swipe');
+    store.getState().setBranchSwipeDirection('right-next');
     store.setState({ chats: [chat], currentChatIndex: 0, contentStore, hideSideMenu: true, markdownMode: true });
   });
 
@@ -118,4 +120,39 @@ test('bubble swipe selects the previous/next branch and its continuation', async
   expect(await path()).toEqual(['root', 'a', 'a-tail']);
   await expect(page.locator('[data-branch-swipe-preview]')).toHaveCount(0);
   expect(await page.locator('[data-message-list]').evaluate(element => (element as HTMLElement).style.height)).toBe('');
+
+  await page.evaluate(async () => {
+    const { default: store } = await import(/* @vite-ignore */ '/src/store/store.ts');
+    const { default: i18n } = await import(/* @vite-ignore */ '/src/i18n.ts');
+    await i18n.changeLanguage('ja');
+    store.getState().setHideMenuOptions(false);
+    store.getState().setHideSideMenu(false);
+  });
+  await page.getByText('設定', { exact: true }).click();
+  const directionSelect = page.getByLabel('分岐スワイプの方向', { exact: true });
+  await expect(directionSelect).toHaveValue('right-next');
+  await directionSelect.selectOption('left-next');
+  await page.getByRole('button', { name: 'close modal', exact: true }).click();
+  await page.evaluate(async () => {
+    const { default: store } = await import(/* @vite-ignore */ '/src/store/store.ts');
+    store.getState().setHideSideMenu(true);
+  });
+  await expect(directionSelect).toHaveCount(0);
+  await expect.poll(() => page.locator('#menu').evaluate(element => element.getBoundingClientRect().right)).toBeLessThanOrEqual(0);
+  await swipe('a', -130);
+  expect(await path()).toEqual(['root', 'b', 'b-tail']);
+  await swipe('b', 130);
+  expect(await path()).toEqual(['root', 'a', 'a-tail']);
+  await page.evaluate(async () => {
+    const { default: store } = await import(/* @vite-ignore */ '/src/store/store.ts');
+    store.getState().setHideSideMenu(false);
+  });
+  await page.getByText('設定', { exact: true }).click();
+  await directionSelect.selectOption('right-next');
+  await page.getByRole('button', { name: 'close modal', exact: true }).click();
+  await page.reload({ waitUntil: 'domcontentloaded' });
+  await expect.poll(() => page.evaluate(async () => {
+    const { default: store } = await import(/* @vite-ignore */ '/src/store/store.ts');
+    return store.getState().branchSwipeDirection;
+  })).toBe('right-next');
 });

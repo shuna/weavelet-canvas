@@ -1,9 +1,10 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { bindMessageBranchSwipe } from './useMessageBranchSwipe';
+import type { BranchSwipeDirection } from '@type/chat';
 
 afterEach(() => { vi.unstubAllGlobals(); vi.restoreAllMocks(); });
 
-function setup() {
+function setup(preference?: BranchSwipeDirection) {
   let selection = '';
   let time = 0;
   vi.spyOn(performance, 'now').mockImplementation(() => time);
@@ -17,7 +18,7 @@ function setup() {
   const move = vi.fn();
   const cancel = vi.fn();
   const begin = vi.fn(() => true);
-  const cleanup = bindMessageBranchSwipe(element as unknown as HTMLElement, switchBranch, { width: () => 300, move, cancel, begin });
+  const cleanup = bindMessageBranchSwipe(element as unknown as HTMLElement, switchBranch, { width: () => 300, move, cancel, begin, ...(preference ? { preference: () => preference } : {}) });
   const touch = (type: string, x: number, y: number, count = 1, target: unknown = element) => {
     time += 20;
     const event = new Event(type, { cancelable: true });
@@ -41,14 +42,14 @@ describe('message branch swipe', () => {
     expect(switchBranch).not.toHaveBeenCalled();
     expect(move).toHaveBeenCalledWith(-100);
     touch('touchend', 100, 105);
-    expect(switchBranch.mock.calls).toEqual([['previous']]);
+    expect(switchBranch.mock.calls).toEqual([['next']]);
     const click = new Event('click', { cancelable: true });
     element.dispatchEvent(click);
     expect(click.defaultPrevented).toBe(true);
     touch('touchstart', 100, 100);
     touch('touchmove', 200, 100);
     touch('touchend', 200, 100);
-    expect(switchBranch.mock.calls).toEqual([['previous'], ['next']]);
+    expect(switchBranch.mock.calls).toEqual([['next'], ['previous']]);
   });
 
   it('leaves vertical and diagonal scrolling alone, even if it later turns horizontal', () => {
@@ -129,12 +130,12 @@ describe('message branch swipe', () => {
     touch('touchstart', 200, 100);
     touch('touchmove', 170, 100);
     touch('touchend', 170, 100);
-    expect(switchBranch.mock.calls).toEqual([['previous']]);
+    expect(switchBranch.mock.calls).toEqual([['next']]);
     touch('touchstart', 200, 100);
     touch('touchmove', 170, 100);
     advance(200);
     touch('touchend', 170, 100);
-    expect(switchBranch.mock.calls).toEqual([['previous'], [null]]);
+    expect(switchBranch.mock.calls).toEqual([['next'], [null]]);
   });
 
   it('still commits past the distance threshold after holding', () => {
@@ -143,6 +144,17 @@ describe('message branch swipe', () => {
     touch('touchmove', 210, 100);
     advance(200);
     touch('touchend', 210, 100);
-    expect(switchBranch.mock.calls).toEqual([['next']]);
+    expect(switchBranch.mock.calls).toEqual([['previous']]);
+  });
+
+  it('can reverse the mapping through the preference', () => {
+    const { touch, switchBranch } = setup('right-next');
+    touch('touchstart', 200, 100);
+    touch('touchmove', 100, 100);
+    touch('touchend', 100, 100);
+    touch('touchstart', 100, 100);
+    touch('touchmove', 200, 100);
+    touch('touchend', 200, 100);
+    expect(switchBranch.mock.calls).toEqual([['previous'], ['next']]);
   });
 });
