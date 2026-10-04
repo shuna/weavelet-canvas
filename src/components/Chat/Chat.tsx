@@ -57,9 +57,13 @@ const Chat = () => {
       <main className='relative h-full w-full transition-width flex flex-col overflow-hidden items-stretch flex-1'>
         <div className='relative shrink-0'>
           <ChatViewTabs activeView={effectiveView} setActiveView={setActiveView} />
-          <UndoRedoButtons />
           <div id='google-sync-banner-overlay' className='absolute inset-x-0 top-full z-[60]' />
         </div>
+        {effectiveView === 'branch-editor' && (
+          <div className='absolute left-2 bottom-2 z-30 flex flex-col gap-1.5 md:left-4 md:bottom-3'>
+            <UndoRedoButtons />
+          </div>
+        )}
         {isSplitView(effectiveView) ? (
           <SplitView direction={effectiveView === 'split-horizontal' ? 'horizontal' : 'vertical'} />
         ) : (
