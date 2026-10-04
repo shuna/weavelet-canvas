@@ -1,5 +1,4 @@
-import useStore from '@store/store';
-import { buildPathToLeaf, getSiblingsOf } from '@utils/branchUtils';
+import useBranchNavigation from '@hooks/useBranchNavigation';
 
 const BranchSwitcher = ({
   chatIndex,
@@ -8,32 +7,10 @@ const BranchSwitcher = ({
   chatIndex: number;
   nodeId: string;
 }) => {
-  const switchBranchAtNode = useStore((state) => state.switchBranchAtNode);
-  const pushNavigationEntry = useStore((state) => state.pushNavigationEntry);
-  const chatActiveView = useStore((state) => state.chatActiveView);
-  const chat = useStore((state) => state.chats?.[chatIndex]);
-  const branchTree = chat?.branchTree;
-
-  if (!branchTree) return null;
-
-  const siblings = getSiblingsOf(branchTree, nodeId);
-
-  const currentIdx = siblings.findIndex((s) => s.id === nodeId);
+  const { siblings, currentIdx, switchTo: handleSwitch } = useBranchNavigation(chatIndex, nodeId);
   const total = siblings.length;
 
   if (total <= 1) return null;
-
-  const handleSwitch = (targetNodeId: string) => {
-    if (!chat || !branchTree) return;
-    const newPath = buildPathToLeaf(branchTree, targetNodeId);
-    pushNavigationEntry({
-      chatId: chat.id,
-      activePath: newPath,
-      viewContext: chatActiveView,
-      source: 'branch-switch',
-    });
-    switchBranchAtNode(chatIndex, targetNodeId);
-  };
 
   const handlePrev = () => {
     if (currentIdx > 0) handleSwitch(siblings[currentIdx - 1].id);
