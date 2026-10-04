@@ -1,6 +1,6 @@
 import { useSyncReview, acknowledgeSyncNode } from '@store/storage/google/conflicts';
 import { useTranslation } from 'react-i18next';
-import React, { useCallback } from 'react';
+import React, { useCallback, useState } from 'react';
 import useStore from '@store/store';
 
 import Avatar from './Avatar';
@@ -11,6 +11,8 @@ import RoleSelector from './RoleSelector';
 import useIsDesktop from '@hooks/useIsDesktop';
 import useCanHover from '@hooks/useCanHover';
 import MetaActions from './View/MetaActions';
+import EvaluationModal, { type TabId } from './View/EvaluationModal';
+import { resolveProviderForModel } from '@hooks/submitHelpers';
 import AssistantPrefillSeed from '../AssistantPrefillSeed';
 import { STICKY_PREFILL_KEY } from '@store/input-slice';
 import useMessageBranchSwipe from '@hooks/useMessageBranchSwipe';
@@ -78,6 +80,18 @@ const Message = React.memo(
     const { t } = useTranslation('drive');
     const swipeRef = useMessageBranchSwipe(currentChatIndex, sticky ? undefined : resolvedNodeId);
     const chatId = useStore(state => state.chats?.[state.currentChatIndex]?.id ?? '');
+    const isGeneratingMessage = useStore((state) =>
+      !!resolvedNodeId && Object.values(state.generatingSessions).some(
+        (session) => session.chatId === chatId && session.targetNodeId === resolvedNodeId
+      )
+    );
+    const [isEvalModalOpen, setIsEvalModalOpen] = useState(false);
+    const [evalInitialTab, setEvalInitialTab] = useState<TabId | undefined>();
+    const handleOpenEvalTab = useCallback((tab?: TabId) => {
+      setEvalInitialTab(tab);
+      setIsEvalModalOpen(true);
+    }, []);
+
     const syncChanged = useSyncReview(state => !!resolvedNodeId && (state.nodes[chatId] ?? []).includes(resolvedNodeId));
 
     const isCollapsed = useStore((state) => {
@@ -216,6 +230,8 @@ const Message = React.memo(
                     messageIndex={messageIndex}
                     isOmitted={isOmitted}
                     isProtected={isProtected}
+                    showEvaluateButton={!isGeneratingMessage}
+                    onEvaluate={() => handleOpenEvalTab()}
                   />
                 </div>
               </div>
@@ -233,6 +249,7 @@ const Message = React.memo(
                     messageIndex={messageIndex}
                     nodeId={resolvedNodeId}
                     sticky={sticky}
+                    onOpenEvalTab={handleOpenEvalTab}
                   />
                 )}
               </div>
@@ -242,6 +259,32 @@ const Message = React.memo(
             </>
           )}
         </div>
+        {isEvalModalOpen && resolvedNodeId && chatId && (() => {
+          const state = useStore.getState();
+          const chat = state.chats?.[currentChatIndex];
+          if (!chat) return null;
+          const resolvedIndex = chat.branchTree?.activePath.indexOf(resolvedNodeId) ?? -1;
+          return (
+            <EvaluationModal
+              chatId={chatId}
+              nodeId={resolvedNodeId}
+              chatIndex={currentChatIndex}
+              messageIndex={resolvedIndex >= 0 ? resolvedIndex : messageIndex}
+              phase={role === 'user' ? 'pre-send' : 'post-receive'}
+              role={role}
+              resolvedProvider={resolveProviderForModel(
+                chat.config.model,
+                state.favoriteModels || [],
+                state.providers || {},
+                { endpoint: state.apiEndpoint, key: state.apiKey },
+                chat.config.providerId
+              )}
+              model={chat.config.model}
+              setIsModalOpen={setIsEvalModalOpen}
+              initialTab={evalInitialTab}
+            />
+          );
+        })()}
         {isCollapsed && (
           <div className='absolute bottom-0 left-0 right-0 h-6 bg-gradient-to-t from-white/90 dark:from-gray-800/90 to-transparent pointer-events-none' />
         )}

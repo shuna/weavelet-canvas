@@ -3,6 +3,7 @@ import useStore from '@store/store';
 
 import EditView from './View/EditView';
 import UnifiedMessageView from './View/UnifiedMessageView';
+import type { TabId } from './View/EvaluationModal';
 import { ContentInterface } from '@type/chat';
 
 const editStateCache = new Map<string, boolean>();
@@ -35,12 +36,14 @@ const MessageContent = ({
   messageIndex,
   nodeId,
   sticky = false,
+  onOpenEvalTab,
 }: {
   role: string;
   content: ContentInterface[];
   messageIndex: number;
   nodeId?: string;
   sticky?: boolean;
+  onOpenEvalTab?: (tab?: TabId) => void;
 }) => {
   const currentChatIndex = useStore((state) => state.currentChatIndex);
   const advancedMode = useStore((state) => state.advancedMode);
@@ -90,6 +93,7 @@ const MessageContent = ({
           messageIndex={messageIndex}
           nodeId={nodeId}
           isEditState={isEditState}
+          onOpenEvalTab={onOpenEvalTab}
           editSessionKey={editSessionKey}
         />
       )}
