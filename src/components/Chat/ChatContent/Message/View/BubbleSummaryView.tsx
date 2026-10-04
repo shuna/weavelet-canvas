@@ -19,7 +19,7 @@ export default function BubbleSummaryView({ nodeId, children }: { nodeId?: strin
     </div>
     <div hidden={tab !== 'original'}>{children}</div>
   </>;
-  return <section className='rounded-2xl border border-black/10 p-3 text-gray-800 dark:border-white/10 dark:text-gray-100' onClick={event => event.stopPropagation()}>
+  return <section className='text-gray-800 dark:text-gray-100' onClick={event => event.stopPropagation()}>
     {candidates.length > 1 && <label className='mb-3 block text-xs'>保存済み要約 <select aria-label='保存済み要約' className='rounded border bg-transparent p-1' value={summary.id} onChange={event => { const value = candidates.find(item => item.id === event.target.value); if (value) choose(chat.id, value, tab === 'summary'); }}>{candidates.map(value => <option key={value.id} value={value.id}>{value.sources.length}件 · {value.text.slice(0, 32)}</option>)}</select></label>}
     <div>
       <div hidden={tab !== 'original'}>{children}</div>

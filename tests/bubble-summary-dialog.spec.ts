@@ -111,8 +111,7 @@ test('summary dialog selects previews, disables empty selection and saves genera
   const surface = await summarySurface.evaluate(element => ({ background: getComputedStyle(element).backgroundColor, color: getComputedStyle(element).color, border: getComputedStyle(element.closest('section')!).borderColor, width: getComputedStyle(element.closest('section')!).borderTopWidth }));
   expect(surface.background).toBe('rgba(32, 33, 35, 0.2)');
   expect(surface.color).toBe('rgb(236, 236, 241)');
-  expect(surface.border).toBe('rgba(255, 255, 255, 0.1)');
-  expect(surface.width).toBe('1px');
+  expect(surface.width).toBe('0px');
   await page.screenshot({ path: '/tmp/weavelet-summary-capsule-dark.jpg' });
   await originalButton.click();
   await expect(page.getByText('Original a', { exact: true })).toBeVisible();
