@@ -40,7 +40,15 @@ describe('OpenRouter request controls', () => {
     const initial = prepareStreamRequest(endpoint, messages, bodyConfig);
     expect(initial.headers['X-OpenRouter-Cache']).toBe(mode === 'inherit' ? undefined : String(mode === 'on'));
     const regenerated = prepareStreamRequest(endpoint, messages, bodyConfig, undefined, undefined, undefined, { regenerate: true });
-    expect(regenerated.headers['X-OpenRouter-Cache']).toBe(mode === 'on' ? 'true' : 'false');
+    expect(regenerated.headers['X-OpenRouter-Cache']).toBe(mode === 'inherit' ? undefined : String(mode === 'on'));
+    if (mode === 'inherit') expect(regenerated.headers).toEqual(initial.headers);
+  });
+  it('does not invent response-cache settings for regeneration of legacy chats', () => {
+    const legacy = { ...config, openRouter: undefined };
+    const normal = prepareStreamRequest(endpoint, messages, legacy);
+    const regenerate = prepareStreamRequest(endpoint, messages, legacy, undefined, undefined, undefined, { regenerate: true });
+    expect(regenerate).toEqual(normal);
+    expect(regenerate.headers).not.toHaveProperty('X-OpenRouter-Cache');
   });
   it('adds growing-conversation cache control and never manufactures a missing system prefix', () => {
     expect(prepareStreamRequest(endpoint, messages, { ...config, openRouter: { promptCache: { mode: 'claude-conversation' } } }).body).toMatchObject({ cache_control: { type: 'ephemeral' } });
