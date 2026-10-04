@@ -36,10 +36,7 @@ export default function BubbleSummaryView({ nodeId, children }: { nodeId?: strin
     <div hidden={tab !== 'original'}>{children}</div>
   </>;
   return <section className='rounded-2xl border border-black/10 p-3 text-gray-800 dark:border-white/10 dark:text-gray-100' onClick={event => event.stopPropagation()}>
-    <div className='mb-3 flex flex-wrap items-center justify-between gap-3'>
-      <span className='text-xs text-gray-500 dark:text-gray-400'>対象 {summary.sources.length}件</span>
-      {candidates.length > 1 && <label className='text-xs'>保存済み要約 <select aria-label='保存済み要約' className='rounded border bg-transparent p-1' value={summary.id} onChange={event => { const value = candidates.find(item => item.id === event.target.value); if (value) choose(chat.id, value); }}>{candidates.map(value => <option key={value.id} value={value.id}>{value.sources.length}件 · {value.text.slice(0, 32)}</option>)}</select></label>}
-    </div>
+    {candidates.length > 1 && <label className='mb-3 block text-xs'>保存済み要約 <select aria-label='保存済み要約' className='rounded border bg-transparent p-1' value={summary.id} onChange={event => { const value = candidates.find(item => item.id === event.target.value); if (value) choose(chat.id, value); }}>{candidates.map(value => <option key={value.id} value={value.id}>{value.sources.length}件 · {value.text.slice(0, 32)}</option>)}</select></label>}
     <div>
       <div hidden={tab !== 'original'}>{children}</div>
       <div hidden={tab !== 'summary'} className='whitespace-pre-wrap break-words rounded-2xl bg-white/60 p-4 text-gray-800 shadow-sm ring-1 ring-black/5 dark:bg-gray-900/20 dark:text-gray-100 dark:ring-white/10'>{summary.text}</div>
