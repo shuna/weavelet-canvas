@@ -11,10 +11,10 @@ import { readFileSync } from 'fs';
 import { join } from 'path';
 
 // Extract and eval the createThinkTagParser function from sw-stream.js
-function loadSwThinkTagParser(): { process: (text: string) => { content: string; reasoning: string }; flush: () => { content: string; reasoning: string } } {
+function loadSwThinkTagParser(): { process: (text: string) => { content: string; reasoning: string }; flush: () => { content: string; reasoning: string }; checkpoint: () => { state: 'outside' | 'inside'; pending: string }; restore: (checkpoint: { state: 'outside' | 'inside'; pending: string }) => void } {
   const swSource = readFileSync(join(__dirname, '../../public/sw-stream.js'), 'utf-8');
   const match = swSource.match(
-    /function createThinkTagParser\(\)[\s\S]*?return \{ process, flush \};\s*\}/
+    /function createThinkTagParser\(\)[\s\S]*?return \{ process, flush, checkpoint, restore \};\s*\}/
   );
   if (!match) throw new Error('Could not extract createThinkTagParser from sw-stream.js');
   // eslint-disable-next-line no-new-func

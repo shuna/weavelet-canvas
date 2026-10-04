@@ -1,6 +1,6 @@
 import { showToast } from '@utils/showToast';
 
-import type { ChatInterface, MessageInterface, TextContentInterface } from '@type/chat';
+import type { ChatInterface, MessageInterface, TextContentInterface, ReasoningContentInterface } from '@type/chat';
 import { isTextContent } from '@type/chat';
 import type { StreamRecord } from '@utils/streamDb';
 
@@ -15,21 +15,28 @@ export const getCurrentMessageText = (message: MessageInterface | undefined): st
 
 export const shouldApplyRecoveredText = (
   currentText: string,
-  bufferedText: string
-): boolean => bufferedText.length > currentText.length;
+  bufferedText: string,
+  currentReasoning = '',
+  bufferedReasoning = ''
+): boolean => bufferedText.length > currentText.length || bufferedReasoning.length > currentReasoning.length;
 
 export const buildRecoveredMessage = (
   message: MessageInterface,
-  bufferedText: string
+  bufferedText: string,
+  bufferedReasoning = ''
 ): MessageInterface => {
   const firstContent = message.content[0];
   const recoveredContent: TextContentInterface = isTextContent(firstContent)
     ? { ...firstContent, text: bufferedText }
     : { type: 'text', text: bufferedText };
 
+  const existingReasoning = message.content.find((content): content is ReasoningContentInterface => content.type === 'reasoning');
+  const reasoning = bufferedReasoning
+    ? { type: 'reasoning' as const, text: bufferedReasoning }
+    : existingReasoning;
   return {
     ...message,
-    content: [recoveredContent, ...message.content.slice(1)],
+    content: [recoveredContent, ...(reasoning ? [reasoning] : []), ...message.content.slice(1).filter((content) => content.type !== 'reasoning')],
   };
 };
 

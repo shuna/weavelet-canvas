@@ -264,7 +264,16 @@ function createThinkTagParser() {
     return { content: remaining, reasoning: '' };
   }
 
-  return { process, flush };
+  function checkpoint() {
+    return { state, pending };
+  }
+
+  function restore(value) {
+    state = value.state;
+    pending = value.pending;
+  }
+
+  return { process, flush, checkpoint, restore };
 }
 
 /** Extract the last non-null finish_reason from events. */
@@ -320,7 +329,7 @@ function parseProxySse(text, flush) {
       }
     }
 
-    if (eventType === 'done' || eventType === 'error' || eventType === 'interrupted' || eventType === 'waiting') {
+    if (eventType === 'done' || eventType === 'error' || eventType === 'interrupted' || eventType === 'waiting' || eventType === 'cache-miss') {
       try {
         events.push({ id, eventType, meta: JSON.parse(dataLine) });
       } catch {
@@ -348,6 +357,7 @@ async function handleStartStream(msg, port) {
   const controller = new AbortController();
   activeStreams.set(requestId, controller);
   let bufferedText = '';
+  let bufferedReasoning = '';
   let flushTimer = null;
   let flushChain = Promise.resolve();
   let lastProxyEventId = 0;
@@ -385,7 +395,10 @@ async function handleStartStream(msg, port) {
     }
   }
   let sawDoneMarker = false;
+  let upstreamStarted = false;
   let sawProxyDone = false;
+  let completed = false;
+  let llmPartial = '';
   let reader = null;
   const thinkParser = createThinkTagParser();
 
@@ -395,6 +408,10 @@ async function handleStartStream(msg, port) {
     chatIndex: msg.chatIndex,
     messageIndex: msg.messageIndex,
     bufferedText: '',
+    bufferedReasoning: '',
+    llmSsePartial: '',
+    thinkTagCheckpoint: { state: 'outside', pending: '' },
+    llmDone: false,
     status: 'streaming',
     createdAt: Date.now(),
     updatedAt: Date.now(),
@@ -428,10 +445,24 @@ async function handleStartStream(msg, port) {
     }
 
     const snapshot = bufferedText;
+    const reasoningSnapshot = bufferedReasoning;
     const eventIdSnapshot = lastProxyEventId;
+    const llmPartialSnapshot = llmPartial;
+    const thinkTagCheckpoint = thinkParser.checkpoint();
+    const generationIdSnapshot = generationId;
+    const llmDoneSnapshot = sawDoneMarker;
+    const completedSnapshot = completed;
     flushChain = flushChain
       .then(async () => {
-        const updates = { bufferedText: snapshot };
+        const updates = {
+          bufferedText: snapshot,
+          bufferedReasoning: reasoningSnapshot,
+          llmSsePartial: llmPartialSnapshot,
+          thinkTagCheckpoint,
+          generationId: generationIdSnapshot,
+          llmDone: llmDoneSnapshot,
+          ...(completedSnapshot ? { status: 'completed' } : {}),
+        };
         if (proxyMode) updates.lastProxyEventId = eventIdSnapshot;
         await dbUpdate(requestId, updates);
       })
@@ -469,12 +500,15 @@ async function handleStartStream(msg, port) {
 
   try {
     postDebug('fetch start ' + fetchEndpoint);
-    const response = await fetch(fetchEndpoint, {
-      method: 'POST',
-      headers: fetchHeaders,
-      body: fetchBody,
-      signal: controller.signal,
-    });
+    const headerTimer = setTimeout(() => controller.abort(), 45_000);
+    let response;
+    try {
+      response = await fetch(fetchEndpoint, {
+        method: 'POST', headers: fetchHeaders, body: fetchBody, signal: controller.signal,
+      });
+    } finally {
+      clearTimeout(headerTimer);
+    }
     postDebug('fetch response ' + response.status);
 
     if (!response.ok) {
@@ -533,6 +567,7 @@ async function handleStartStream(msg, port) {
         new Promise((_, reject) => {
           timer = setTimeout(() => {
             postDebug('read#' + nextRead + ' timeout fired', 'error');
+            controller.abort();
             reject(new Error('Chunk timeout: no data received for 45s'));
           }, CHUNK_TIMEOUT_MS);
         }),
@@ -541,8 +576,6 @@ async function handleStartStream(msg, port) {
 
     if (proxyMode) {
       // --- Proxy mode: parse proxy SSE, unwrap, then parse LLM SSE ---
-      let llmPartial = '';
-
       while (reading) {
         const { done, value } = await readWithTimeout();
         readCount++;
@@ -579,6 +612,10 @@ async function handleStartStream(msg, port) {
             const llmChunk = llmPartial + evt.rawText;
             const llmParsed = parseEventSource(llmChunk, false);
             llmPartial = llmParsed.partial;
+            if (llmParsed.events.length || llmParsed.done) {
+              upstreamStarted = true;
+              postToClient({ type: 'sw-chunk', requestId, text: '', upstreamStarted: true });
+            }
             observeUsage(llmParsed.events);
 
             if (!generationId) {
@@ -592,6 +629,7 @@ async function handleStartStream(msg, port) {
             const reasoning = extractReasoning(llmParsed.events);
             if (reasoning) {
               totalReasoningChars += reasoning.length;
+              bufferedReasoning += reasoning;
               postToClient({ type: 'sw-chunk', requestId, text: '', reasoning, generationId });
             }
             const rawText = extractText(llmParsed.events);
@@ -599,6 +637,7 @@ async function handleStartStream(msg, port) {
               const parsed = thinkParser.process(rawText);
               if (parsed.reasoning) {
                 totalReasoningChars += parsed.reasoning.length;
+                bufferedReasoning += parsed.reasoning;
                 postToClient({ type: 'sw-chunk', requestId, text: '', reasoning: parsed.reasoning, generationId });
               }
               if (parsed.content) {
@@ -616,8 +655,7 @@ async function handleStartStream(msg, port) {
                 ' text=' + totalTextChars +
                 ' reasoning=' + totalReasoningChars
               );
-              reading = false;
-              break;
+              // The proxy terminal event is authoritative. Keep reading it.
             }
           }
         }
@@ -632,6 +670,10 @@ async function handleStartStream(msg, port) {
         }
       }
 
+      // EOF/error is recoverable; retain raw parser state for a replay.
+      if (!sawProxyDone || !sawDoneMarker) {
+        throw new Error('Proxy stream ended before complete outer and inner markers');
+      }
       // Flush any remaining partial LLM SSE
       if (llmPartial) {
         postDebug('flush llmPartial len=' + llmPartial.length);
@@ -642,6 +684,7 @@ async function handleStartStream(msg, port) {
         const reasoning = extractReasoning(llmFlushed.events);
         if (reasoning) {
           totalReasoningChars += reasoning.length;
+          bufferedReasoning += reasoning;
           postToClient({ type: 'sw-chunk', requestId, text: '', reasoning });
         }
         const rawFlushText = extractText(llmFlushed.events);
@@ -649,6 +692,7 @@ async function handleStartStream(msg, port) {
           const parsed = thinkParser.process(rawFlushText);
           if (parsed.reasoning) {
             totalReasoningChars += parsed.reasoning.length;
+            bufferedReasoning += parsed.reasoning;
             postToClient({ type: 'sw-chunk', requestId, text: '', reasoning: parsed.reasoning });
           }
           if (parsed.content) {
@@ -666,15 +710,13 @@ async function handleStartStream(msg, port) {
       );
       if (proxyThinkRemaining.reasoning) {
         totalReasoningChars += proxyThinkRemaining.reasoning.length;
+        bufferedReasoning += proxyThinkRemaining.reasoning;
         postToClient({ type: 'sw-chunk', requestId, text: '', reasoning: proxyThinkRemaining.reasoning });
       }
       if (proxyThinkRemaining.content) {
         totalTextChars += proxyThinkRemaining.content.length;
         postToClient({ type: 'sw-chunk', requestId, text: proxyThinkRemaining.content });
         bufferedText += proxyThinkRemaining.content;
-      }
-      if (!sawProxyDone) {
-        throw new Error('Proxy stream ended before its completion marker');
       }
     } else {
       // --- Direct mode: existing LLM SSE parsing ---
@@ -710,6 +752,7 @@ async function handleStartStream(msg, port) {
         if (reasoning) {
           _totalReasoning += reasoning.length;
           totalReasoningChars += reasoning.length;
+          bufferedReasoning += reasoning;
           postToClient({ type: 'sw-chunk', requestId, text: '', reasoning, generationId });
         }
         const rawDirectText = extractText(parsed.events);
@@ -718,6 +761,7 @@ async function handleStartStream(msg, port) {
           if (thinkParsed.reasoning) {
             _totalReasoning += thinkParsed.reasoning.length;
             totalReasoningChars += thinkParsed.reasoning.length;
+            bufferedReasoning += thinkParsed.reasoning;
             postToClient({ type: 'sw-chunk', requestId, text: '', reasoning: thinkParsed.reasoning, generationId });
           }
           if (thinkParsed.content) {
@@ -753,6 +797,7 @@ async function handleStartStream(msg, port) {
       );
       if (directThinkRemaining.reasoning) {
         totalReasoningChars += directThinkRemaining.reasoning.length;
+        bufferedReasoning += directThinkRemaining.reasoning;
         postToClient({ type: 'sw-chunk', requestId, text: '', reasoning: directThinkRemaining.reasoning });
       }
       if (directThinkRemaining.content) {
@@ -765,14 +810,11 @@ async function handleStartStream(msg, port) {
       }
     }
 
+    completed = true;
     postDebug('flush buffered start len=' + bufferedText.length);
     await flushBufferedText();
     postDebug('flush buffered done len=' + bufferedText.length);
-    // Stream completed — delete the recovery record since we'll notify the
-    // client directly.  Using delete instead of dbUpdate avoids a get-put
-    // race where a concurrent client delete could be undone by a later put.
-    await dbDelete(requestId).catch(function() {});
-    postDebug('record deleted');
+    // The window ACKs only after it applies the terminal state to the UI.
     postDebug(
       'posting sw-done generation=' + (generationId || '-') +
       ' finish=' + (finishReason || '-')
@@ -800,10 +842,8 @@ async function handleStartStream(msg, port) {
     );
     await flushBufferedText();
     postDebug('flush buffered after error len=' + bufferedText.length);
-    // For errors/cancellation, also delete — the client gets notified via
-    // sw-error/sw-cancelled and can decide how to handle it.
-    await dbDelete(requestId).catch(function() {});
-    postDebug('record deleted after error');
+    // Keep partial state after transport failure; startup recovery owns deletion.
+    await dbUpdate(requestId, { status: isAbort ? 'interrupted' : 'failed', error: error });
     postToClient({
       type: isAbort ? 'sw-cancelled' : 'sw-error',
       requestId,
