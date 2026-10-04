@@ -28,6 +28,7 @@ const MetaActions = memo(
 
     return (
       <div className='pointer-events-none flex items-center gap-1 opacity-0 transition-opacity group-hover:pointer-events-auto group-hover:opacity-100'>
+        <BubbleSummaryControls messageIndex={messageIndex} />
         <div role='group' aria-label='バブル操作' className='flex items-center gap-0.5 rounded-full bg-white/80 px-1.5 py-0.5 shadow-sm ring-1 ring-black/5 backdrop-blur-sm dark:bg-gray-800/80 dark:ring-white/10'>
           {showEvaluateButton && (
             <button
@@ -59,7 +60,6 @@ const MetaActions = memo(
           >
             <OmitIcon className='h-3.5 w-3.5' />
           </button>
-          <BubbleSummaryControls messageIndex={messageIndex} />
           <button
             type='button'
             className={`rounded-full p-1 transition-colors ${

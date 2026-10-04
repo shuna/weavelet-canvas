@@ -3,10 +3,11 @@ import { test, expect } from '@playwright/test';
 test.use({ headless: true, baseURL: process.env.PLAYWRIGHT_BASE_URL ?? 'http://127.0.0.1:5175', launchOptions: { executablePath: process.env.PLAYWRIGHT_CHROME_EXECUTABLE } });
 
 test('summary dialog selects previews, disables empty selection and saves generated summary', async ({ page }) => {
+  const summaryMarkdown = '## Generated summary\n\n**Important**\n\n- First item\n- Second item';
   let requests = 0;
   await page.route('https://summary.test/**', route => ++requests === 1
     ? route.fulfill({ status: 503, body: 'Summary service unavailable' })
-    : route.fulfill({ json: { choices: [{ message: { content: 'Generated summary' } }] } }));
+    : route.fulfill({ json: { choices: [{ message: { content: summaryMarkdown } }] } }));
   await page.goto('/');
   await page.evaluate(async () => {
     const load = (path: string) => import(/* @vite-ignore */ path);
@@ -20,7 +21,7 @@ test('summary dialog selects previews, disables empty selection and saves genera
     const chat = { ...generateDefaultChat('Summary test'), branchTree: tree, messages: materializeActivePath(tree, contentStore) };
     chat.config.model = 'gpt-4o';
     store.getState().setOnboardingCompleted(true);
-    store.setState({ chats: [chat], currentChatIndex: 0, contentStore, hideSideMenu: true, apiEndpoint: 'https://summary.test/v1/chat/completions', apiKey: 'test', providers: {}, favoriteModels: [], omittedNodeMaps: {}, generatingSessions: {} });
+    store.setState({ chats: [chat], currentChatIndex: 0, contentStore, hideSideMenu: true, markdownMode: true, apiEndpoint: 'https://summary.test/v1/chat/completions', apiKey: 'test', providers: {}, favoriteModels: [], omittedNodeMaps: {}, generatingSessions: {} });
     document.documentElement.classList.add('dark');
   });
   const bubble = page.locator('[data-node-id="b"]').first();
@@ -61,18 +62,25 @@ test('summary dialog selects previews, disables empty selection and saves genera
     const { default: store } = await import(/* @vite-ignore */ '/src/store/store.ts');
     return store.getState().chats[0].summaries;
   });
-  expect(saved).toMatchObject([{ text: 'Generated summary', useForSubmit: false, sources: [{ nodeId: 'a' }, { nodeId: 'b' }] }]);
-  const capsule = bubble.getByRole('group', { name: 'バブル操作' });
+  expect(saved).toMatchObject([{ text: summaryMarkdown, useForSubmit: true, sources: [{ nodeId: 'a' }, { nodeId: 'b' }] }]);
+  const capsule = bubble.getByRole('group', { name: '要約操作' });
   const originalButton = capsule.getByRole('button', { name: '原文', exact: true });
   const summaryButton = capsule.getByRole('button', { name: '要約', exact: true });
   await bubble.hover();
+  const otherCapsule = bubble.getByRole('group', { name: 'バブル操作' });
+  expect((await capsule.boundingBox())!.x + (await capsule.boundingBox())!.width).toBeLessThan((await otherCapsule.boundingBox())!.x);
   await expect(originalButton).toHaveAttribute('aria-pressed', 'false');
   await expect(summaryButton).toHaveAttribute('aria-pressed', 'true');
   await expect(capsule.getByRole('button', { name: '要約を作成', exact: true })).toHaveCount(0);
   await expect(bubble.getByRole('tablist')).toHaveCount(0);
-  await expect(bubble.getByText('原文 · 送信に使用', { exact: true })).toBeVisible();
+  await expect(bubble.getByText('送信：', { exact: true })).toHaveCount(0);
+  await expect(bubble.getByText(/概算.*トークン/)).toHaveCount(0);
   const summaryText = bubble.getByText('Generated summary', { exact: true });
-  const surface = await summaryText.evaluate(element => ({ background: getComputedStyle(element).backgroundColor, color: getComputedStyle(element).color, border: getComputedStyle(element.closest('section')!).borderColor, width: getComputedStyle(element.closest('section')!).borderTopWidth }));
+  await expect(bubble.getByRole('heading', { name: 'Generated summary', level: 2 })).toBeVisible();
+  await expect(bubble.locator('strong').filter({ hasText: 'Important' })).toBeVisible();
+  await expect(bubble.getByRole('listitem')).toHaveText(['First item', 'Second item']);
+  const summarySurface = bubble.locator('[data-summary-content]');
+  const surface = await summarySurface.evaluate(element => ({ background: getComputedStyle(element).backgroundColor, color: getComputedStyle(element).color, border: getComputedStyle(element.closest('section')!).borderColor, width: getComputedStyle(element.closest('section')!).borderTopWidth }));
   expect(surface.background).toBe('rgba(32, 33, 35, 0.2)');
   expect(surface.color).toBe('rgb(236, 236, 241)');
   expect(surface.border).toBe('rgba(255, 255, 255, 0.1)');
@@ -82,10 +90,13 @@ test('summary dialog selects previews, disables empty selection and saves genera
   await expect(page.getByText('Original a', { exact: true })).toBeVisible();
   await expect(page.getByText('Original b', { exact: true })).toBeVisible();
   await expect(summaryText).toBeHidden();
+  expect(await page.evaluate(async () => { const { default: store } = await import(/* @vite-ignore */ '/src/store/store.ts'); return store.getState().chats[0].summaries[0].useForSubmit; })).toBe(false);
   await summaryButton.click();
+  expect(await page.evaluate(async () => { const { default: store } = await import(/* @vite-ignore */ '/src/store/store.ts'); return store.getState().chats[0].summaries[0].useForSubmit; })).toBe(true);
   await expect(summaryText).toBeVisible();
   await expect(page.getByText('Original a', { exact: true })).toBeHidden();
-  await expect(bubble.getByText('原文 · 送信に使用', { exact: true })).toBeVisible();
+  await expect(bubble.getByText('送信：', { exact: true })).toHaveCount(0);
+  await expect(bubble.getByText(/概算.*トークン/)).toHaveCount(0);
   await summaryButton.click();
   await expect(modal.getByText('要約の対象を選択', { exact: true })).toBeVisible();
   await expect(first).toBeChecked();
@@ -94,13 +105,16 @@ test('summary dialog selects previews, disables empty selection and saves genera
   await expect(summaryText).toBeVisible();
   const firstBubble = page.locator('[data-node-id="a"]').first();
   await firstBubble.hover();
-  await firstBubble.getByRole('group', { name: 'バブル操作' }).getByRole('button', { name: '要約', exact: true }).click();
+  await firstBubble.getByRole('group', { name: '要約操作' }).getByRole('button', { name: '要約', exact: true }).click();
   await expect(first).toBeChecked();
   await expect(second).toBeChecked();
   await expect(generate).toBeEnabled();
   await modal.getByRole('button', { name: 'キャンセル', exact: true }).click();
+  await page.evaluate(async () => { const { useSummaryDisplay } = await import(/* @vite-ignore */ '/src/components/Chat/ChatContent/Message/View/bubbleSummaryDisplay.ts'); useSummaryDisplay.setState({ chosen: {} }); });
+  await expect(summaryText).toBeVisible();
+  await expect(summaryButton).toHaveAttribute('aria-pressed', 'true');
   await page.evaluate(() => document.documentElement.classList.remove('dark'));
-  await expect(summaryText).toHaveCSS('color', 'rgb(52, 53, 65)');
-  await expect(summaryText).toHaveCSS('background-color', 'rgba(255, 255, 255, 0.6)');
+  await expect(summarySurface).toHaveCSS('color', 'rgb(52, 53, 65)');
+  await expect(summarySurface).toHaveCSS('background-color', 'rgba(255, 255, 255, 0.6)');
   await page.screenshot({ path: '/tmp/weavelet-summary-capsule-light.jpg' });
 });
