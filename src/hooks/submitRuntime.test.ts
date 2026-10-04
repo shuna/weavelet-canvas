@@ -16,6 +16,7 @@ import { clearStreamingBuffersForTest } from '@utils/streamingBuffer';
 import { useStreamEndStatusStore } from '@store/stream-end-status-store';
 import * as swBridge from '@utils/swBridge';
 import { prepareStreamRequest } from '@api/api';
+import { IDBFactory, IDBKeyRange } from 'fake-indexeddb';
 
 // ---------------------------------------------------------------------------
 // Mock zustand store
@@ -597,6 +598,34 @@ describe('stream end status via SW path', () => {
     proxyEnabled: true,
     proxyEndpoint: 'https://proxy.test',
     proxyAuthToken: '',
+  });
+
+  it.each([
+    { id: 'generation-started', choices: [] },
+    { choices: [{ delta: {}, finish_reason: 'stop' }] },
+    { choices: [{ delta: {} }] },
+  ])('does not resend a proxy POST after an upstream event without display text: %j', async (event) => {
+    const sessionId = 'sess-proxy-no-retry';
+    mockState = makeMockState(sessionId);
+    vi.mocked(swBridge.waitForController).mockResolvedValue(false);
+    vi.mocked(prepareStreamRequest as any).mockReturnValue({ endpoint: 'https://example.com/v1/chat/completions', headers: {}, body: {} });
+    vi.stubGlobal('indexedDB', new IDBFactory());
+    vi.stubGlobal('IDBKeyRange', IDBKeyRange);
+    const proxyEvents = `id: 1\ndata: ${JSON.stringify(`data: ${JSON.stringify(event)}\n\n`)}\n\nevent: error\ndata: {"error":"This model does not support system messages","complete":false}\n\n`;
+    const fetchMock = vi.fn(async () => new Response(proxyEvents));
+    vi.stubGlobal('fetch', fetchMock);
+    try {
+      await expect(executeSubmitStream({
+        sessionId, chatId: 'chat-1', chatIndex: 0, messageIndex: 0, targetNodeId: 'node-assistant',
+        messages: [{ role: 'system', content: [{ type: 'text', text: 'instruction' }] }, { role: 'user', content: [{ type: 'text', text: 'hi' }] }],
+        config: { model: 'test', max_tokens: 100, temperature: 1, presence_penalty: 0, top_p: 1, frequency_penalty: 0, stream: true },
+        resolvedProvider: { endpoint: 'https://example.com/v1/chat/completions', key: 'secret' },
+        abortController: new AbortController(), t: key => key,
+      })).rejects.toThrow('does not support system messages');
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+    } finally {
+      vi.unstubAllGlobals();
+    }
   });
 
   it('preserves interrupted status when user cancels on SW path', async () => {

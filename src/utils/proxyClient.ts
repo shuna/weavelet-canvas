@@ -53,13 +53,20 @@ export function fetchViaProxy(
  *
  * Best-effort — KV TTL will clean up eventually if the request fails.
  */
+export interface ProxyCancelResult {
+  localAbortRequested: boolean;
+  providerCancel: 'not-requested' | 'succeeded' | 'failed';
+}
+
 export async function sendCancel(
   config: ProxyConfig,
   sessionId: string,
   providerCancel?: { generationId: string; apiKey: string }
-): Promise<void> {
+): Promise<ProxyCancelResult | null> {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 5_000);
   try {
-    await fetch(
+    const response = await fetch(
       `${config.endpoint}/api/cancel/${encodeURIComponent(sessionId)}`,
       {
         method: 'POST',
@@ -68,10 +75,16 @@ export async function sendCancel(
           ...authHeaders(config),
         },
         body: JSON.stringify({ providerCancel }),
+        signal: controller.signal,
       }
     );
+    if (!response.ok) { await response.body?.cancel().catch(() => {}); return null; }
+    return await response.json().catch(() => null);
   } catch {
     // Best-effort — the Worker may have already finished
+    return null;
+  } finally {
+    clearTimeout(timeout);
   }
 }
 
@@ -82,17 +95,25 @@ export async function sendCancel(
 export async function sendAck(
   config: ProxyConfig,
   sessionId: string
-): Promise<void> {
+): Promise<boolean> {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 5_000);
   try {
-    await fetch(
+    const response = await fetch(
       `${config.endpoint}/api/ack/${encodeURIComponent(sessionId)}`,
       {
         method: 'POST',
         headers: authHeaders(config),
+        signal: controller.signal,
       }
     );
+    if (!response.ok) { await response.body?.cancel().catch(() => {}); return false; }
+    return Boolean((await response.json().catch(() => null))?.deleted);
   } catch {
     // Best-effort — KV TTL will clean up eventually
+    return false;
+  } finally {
+    clearTimeout(timeout);
   }
 }
 
@@ -107,15 +128,34 @@ export async function recoverFromProxy(
   signal?: AbortSignal
 ): Promise<ReadableStream<Uint8Array> | null> {
   try {
-    const res = await fetch(
-      `${config.endpoint}/api/recover/${encodeURIComponent(sessionId)}?lastEventId=${lastEventId}`,
-      { headers: authHeaders(config), signal }
-    );
-    if (!res.ok || !res.body) return null;
+    const res = await fetchProxyRecovery(config, sessionId, lastEventId, signal);
+    if (!res.ok || !res.body) {
+      await res.body?.cancel().catch(() => {});
+      return null;
+    }
     return res.body;
   } catch {
     return null;
   }
+}
+
+export function fetchProxyRecovery(
+  config: ProxyConfig,
+  sessionId: string,
+  lastEventId: number,
+  signal?: AbortSignal
+): Promise<Response> {
+  return fetch(
+    `${config.endpoint}/api/recover/${encodeURIComponent(sessionId)}?lastEventId=${lastEventId}`,
+    { headers: authHeaders(config), signal }
+  );
+}
+
+export function retryAfterMessage(value: string | null, now = Date.now()): string | undefined {
+  if (!value) return undefined;
+  const seconds = Number(value);
+  const delay = Number.isFinite(seconds) ? seconds * 1000 : Date.parse(value) - now;
+  return Number.isFinite(delay) && delay > 0 ? `Retry after ${Math.ceil(delay / 1000)} seconds` : undefined;
 }
 
 /**
@@ -147,7 +187,7 @@ export interface ProxySseEvent {
   /** The raw text chunk from the LLM (for data events) */
   rawText?: string;
   /** Metadata for done/error events */
-  meta?: { totalChunks: number; complete: boolean; error?: string; openRouterObservation?: OpenRouterObservation };
+  meta?: { totalChunks: number; complete: boolean; error?: string; reason?: string; cacheCapability?: 'available' | 'overflow'; openRouterObservation?: OpenRouterObservation };
 }
 
 /**
@@ -192,7 +232,7 @@ export function parseProxySse(
       }
     }
 
-    if (eventType === 'done' || eventType === 'error' || eventType === 'interrupted' || eventType === 'waiting') {
+    if (eventType === 'done' || eventType === 'error' || eventType === 'interrupted' || eventType === 'waiting' || eventType === 'cache-miss') {
       try {
         events.push({ id, eventType, meta: JSON.parse(dataLine) });
       } catch {

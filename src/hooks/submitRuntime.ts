@@ -13,13 +13,14 @@ import { upsertActivePathMessage } from '@utils/branchUtils';
 import { materializeActivePath } from '@utils/branchUtils';
 import { addContent, releaseContent, resolveContent } from '@utils/contentStore';
 import {
-  appendText as appendStreamText,
   deleteRequest as deleteStreamRecord,
   saveRequest as saveStreamRecord,
   setGenerationId as setStreamGenerationId,
   setStreamObservation,
+  updateStatus as updateStreamStatus,
+  saveProxyCheckpoint,
 } from '@utils/streamDb';
-import { getProxyConfig, sendAck, sendCancel, parseProxySse, type ProxyConfig } from '@utils/proxyClient';
+import { getProxyConfig, sendAck, sendCancel, parseProxySse, retryAfterMessage, type ProxyConfig } from '@utils/proxyClient';
 import { cancelGeneration } from '@api/openrouter';
 import {
   appendToStreamingBuffer,
@@ -752,6 +753,7 @@ export const executeSubmitStream = async ({
   const proxyConfig = getProxyConfig();
   let capturedGenerationId: string | undefined;
   let lastFinishReason: string | undefined;
+  let completedProxy: { requestId: string; sessionId: string; config: ProxyConfig } | undefined;
 
   // Parser for <think>...</think> tags in content (used by open-source models
   // on Together AI, Fireworks, Groq, etc.)
@@ -774,7 +776,11 @@ export const executeSubmitStream = async ({
       if (requestId) void setStreamObservation(requestId, patch).catch(() => {});
     },
   };
-  const observeUsage = (usage: unknown) => requestContext.onObservation?.(observeOpenRouterUsage(usage));
+  let upstreamDataStarted = false;
+  const observeUsage = (usage: unknown) => {
+    if (usage) upstreamDataStarted = true;
+    requestContext.onObservation?.(observeOpenRouterUsage(usage));
+  };
   const runRequest = async (requestMessages: MessageInterface[]) => {
     if (!isStreamSupported) {
       let data;
@@ -846,7 +852,8 @@ export const executeSubmitStream = async ({
       throw new Error(t('noApiKeyWarning'));
     }
 
-    const onChunk = (text: string, meta?: { generationId?: string; reasoning?: string; openRouterObservation?: import('@type/chat').OpenRouterObservation }) => {
+    const onChunk = (text: string, meta?: { generationId?: string; reasoning?: string; upstreamStarted?: boolean; openRouterObservation?: import('@type/chat').OpenRouterObservation }) => {
+      if (text || meta?.reasoning || meta?.generationId || meta?.upstreamStarted || meta?.openRouterObservation) upstreamDataStarted = true;
       if (meta?.openRouterObservation) requestContext.onObservation?.(meta.openRouterObservation);
       if (meta?.generationId && !capturedGenerationId) {
         capturedGenerationId = meta.generationId;
@@ -869,6 +876,7 @@ export const executeSubmitStream = async ({
     };
 
     const onReasoningChunk = (text: string) => {
+      if (text) upstreamDataStarted = true;
       writeReasoningChunk(chatId, targetNodeId, text);
     };
 
@@ -908,9 +916,9 @@ export const executeSubmitStream = async ({
         let swHandle: swBridge.SwStreamHandle | undefined;
         sessionRequestIds.set(sessionId, requestId);
 
-        const cleanup = () => {
+        const cleanup = (completed = false) => {
           clearInterval(checkStop);
-          deleteStreamRecord(requestId).catch(() => {});
+          if (completed) deleteStreamRecord(requestId).catch(() => {});
           debugReport(`submit:${sessionId}`, {
             label: 'Submit Session',
             status: 'active',
@@ -950,7 +958,7 @@ export const executeSubmitStream = async ({
             });
             // ACK proxy to free KV cache
             if (meta?.proxySessionId && proxyConfig) {
-              sendAck(proxyConfig, meta.proxySessionId);
+              completedProxy = { requestId, sessionId: meta.proxySessionId, config: proxyConfig };
             }
             resolve();
           },
@@ -1021,9 +1029,16 @@ export const executeSubmitStream = async ({
         acknowledged: false,
         proxySessionId,
         lastProxyEventId: 0,
+        bufferedReasoning: '',
+        llmSsePartial: '',
+        thinkTagCheckpoint: { state: 'outside', pending: '' },
+        llmDone: false,
       });
 
-      const res = await fetch(`${proxyConfig.endpoint}/api/stream`, {
+      const headerTimeout = setTimeout(() => abortController.abort(), 45_000);
+      let res: Response;
+      try {
+        res = await fetch(`${proxyConfig.endpoint}/api/stream`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -1037,11 +1052,14 @@ export const executeSubmitStream = async ({
           body: prepared.body,
           sessionId: proxySessionId,
         }),
-        signal: abortController.signal,
-      });
+          signal: abortController.signal,
+        });
+      } finally {
+        clearTimeout(headerTimeout);
+      }
 
       if (!res.ok) {
-        const errBody = await res.text();
+        const errBody = (await res.text()).slice(0, 8192);
         // Cloudflare platform errors (e.g. 530/1016 DNS failure) return HTML,
         // not JSON. Detect these and provide a user-friendly message.
         const isCloudflareError =
@@ -1054,7 +1072,7 @@ export const executeSubmitStream = async ({
             `Proxy error (${code}): The LLM API endpoint is unreachable. Check the URL and try again.`
           );
         }
-        throw new Error(errBody);
+        throw new Error(retryAfterMessage(res.headers.get('Retry-After')) ?? errBody);
       }
 
       if (!res.body) throw new Error('Proxy returned no body');
@@ -1065,30 +1083,39 @@ export const executeSubmitStream = async ({
       let partial = '';
       let llmPartial = '';
       let reading = true;
+      let proxyCompleted = false;
+      let llmCompleted = false;
       const CHUNK_TIMEOUT_MS = 45_000;
 
       // Periodic streamDb flush (mirrors SW's FLUSH_INTERVAL_MS = 800)
       const DB_FLUSH_INTERVAL_MS = 800;
       let dbBuffered = '';
+      let dbReasoning = '';
       let dbLastProxyEventId = 0;
+      const checkpointThinkParser = new ThinkTagParser();
       let dbFlushTimer: ReturnType<typeof setTimeout> | null = null;
       let dbFlushChain = Promise.resolve();
 
       function flushDbBuffer() {
         if (dbFlushTimer) { clearTimeout(dbFlushTimer); dbFlushTimer = null; }
         const snapshot = dbBuffered;
+        const reasoningSnapshot = dbReasoning;
         const eventIdSnapshot = dbLastProxyEventId;
-        if (!snapshot) return;
-        dbBuffered = '';
+        const llmPartialSnapshot = llmPartial;
+        const thinkCheckpoint = checkpointThinkParser.checkpoint();
+        const generationIdSnapshot = capturedGenerationId;
+        const llmDoneSnapshot = llmCompleted;
+        if (!snapshot && !reasoningSnapshot && !llmPartialSnapshot && eventIdSnapshot === 0) return;
         dbFlushChain = dbFlushChain
-          .then(() =>
-            appendStreamText(
-              requestId,
-              snapshot,
-              eventIdSnapshot,
-              capturedGenerationId
-            )
-          )
+          .then(() => saveProxyCheckpoint(requestId, {
+            bufferedText: snapshot,
+            bufferedReasoning: reasoningSnapshot,
+            lastProxyEventId: eventIdSnapshot,
+            llmSsePartial: llmPartialSnapshot,
+            thinkTagCheckpoint: thinkCheckpoint,
+            generationId: generationIdSnapshot,
+            llmDone: llmDoneSnapshot,
+          }))
           .catch(() => {});
       }
 
@@ -1103,7 +1130,10 @@ export const executeSubmitStream = async ({
           reader.read().finally(() => clearTimeout(timer)),
           new Promise<never>((_, reject) => {
             timer = setTimeout(
-              () => reject(new Error('Chunk timeout: no data received for 45s')),
+              () => {
+                abortController.abort();
+                reject(new Error('Chunk timeout: no data received for 45s'));
+              },
               CHUNK_TIMEOUT_MS
             );
           }),
@@ -1118,9 +1148,12 @@ export const executeSubmitStream = async ({
           partial = proxySse.partial;
 
           for (const evt of proxySse.events) {
+            // Only fully parsed outer events advance the recovery cursor.
             if (evt.id > dbLastProxyEventId) dbLastProxyEventId = evt.id;
             if (evt.eventType === 'done') {
               if (evt.meta?.openRouterObservation) requestContext.onObservation?.(evt.meta.openRouterObservation);
+              if (evt.meta?.complete !== true) throw new Error('Proxy stream ended without a complete marker');
+              proxyCompleted = true;
               reading = false;
               break;
             }
@@ -1131,6 +1164,7 @@ export const executeSubmitStream = async ({
               const llmChunk = llmPartial + evt.rawText;
               const llmParsed = parseEventSource(llmChunk, false);
               llmPartial = llmParsed.partial;
+              if (llmParsed.events.length || llmParsed.done) upstreamDataStarted = true;
 
               if (!capturedGenerationId) {
                 for (const e of llmParsed.events) {
@@ -1161,14 +1195,16 @@ export const executeSubmitStream = async ({
                 ''
               );
               if (reasoningString) onReasoningChunk(reasoningString);
+              dbReasoning += reasoningString;
               if (resultString) {
                 onChunk(resultString);
-                dbBuffered += resultString;
+                const parsedContent = checkpointThinkParser.process(resultString);
+                dbBuffered += parsedContent.content;
+                dbReasoning += parsedContent.reasoning;
                 scheduleDbFlush();
               }
               if (llmParsed.done) {
-                reading = false;
-                break;
+                llmCompleted = true;
               }
             }
           }
@@ -1176,8 +1212,8 @@ export const executeSubmitStream = async ({
           if (done) reading = false;
         }
 
-        // Flush remaining LLM partial
-        if (llmPartial) {
+        // Only a confirmed outer completion makes unfinished parser state final.
+        if (proxyCompleted && llmCompleted && llmPartial) {
           const llmFlushed = parseEventSource(llmPartial, true);
           let flushReasoningString = '';
           const resultString = llmFlushed.events.reduce(
@@ -1195,20 +1231,33 @@ export const executeSubmitStream = async ({
             ''
           );
           if (flushReasoningString) onReasoningChunk(flushReasoningString);
+          dbReasoning += flushReasoningString;
           if (resultString) {
             onChunk(resultString);
-            dbBuffered += resultString;
+            const parsedContent = checkpointThinkParser.process(resultString);
+            dbBuffered += parsedContent.content;
+            dbReasoning += parsedContent.reasoning;
           }
         }
+        if (!proxyCompleted || !llmCompleted) {
+          throw new Error('Proxy stream ended before complete outer and inner markers');
+        }
       } finally {
-        reader.cancel();
+        await reader.cancel().catch(() => {});
         reader.releaseLock();
         // Final streamDb flush
         flushDbBuffer();
         await dbFlushChain;
-        // ACK proxy to free KV cache (best-effort, even on error/abort)
-        sendAck(proxyConfig, proxySessionId);
-        deleteStreamRecord(requestId).catch(() => {});
+        if (proxyCompleted && llmCompleted) {
+          const finalThink = checkpointThinkParser.flush();
+          dbBuffered += finalThink.content;
+          dbReasoning += finalThink.reasoning;
+          flushDbBuffer();
+          await dbFlushChain;
+          completedProxy = { requestId, sessionId: proxySessionId, config: proxyConfig };
+        } else {
+          void updateStreamStatus(requestId, abortController.signal.aborted ? 'interrupted' : 'failed');
+        }
       }
 
       return;
@@ -1250,6 +1299,7 @@ export const executeSubmitStream = async ({
         const { done, value } = await readWithTimeout();
         const chunk = partial + decoder.decode(done ? undefined : value, { stream: !done });
         const parsed = parseEventSource(chunk, done);
+        if (parsed.events.length || parsed.done) upstreamDataStarted = true;
         partial = parsed.partial;
 
         if (!capturedGenerationId) {
@@ -1296,7 +1346,7 @@ export const executeSubmitStream = async ({
   try {
     await runRequest(messages);
   } catch (error) {
-    if (!shouldRetryWithoutSystemMessages(error, messages)) {
+    if (upstreamDataStarted || !shouldRetryWithoutSystemMessages(error, messages)) {
       // Determine end reason from the error type
       const isAbort = error instanceof Error && error.name === 'AbortError';
       const endReason: StreamEndReason = isAbort ? 'interrupted' : 'error';
@@ -1318,6 +1368,11 @@ export const executeSubmitStream = async ({
     if (remaining.content) queueChunkToStore(chatId, targetNodeId, remaining.content);
     flushQueuedChunks(chatId, targetNodeId);
     finalizeStreamingNode(chatId, targetNodeId);
+  }
+
+  if (completedProxy) {
+    await sendAck(completedProxy.config, completedProxy.sessionId);
+    await deleteStreamRecord(completedProxy.requestId);
   }
 
   // Stream completed successfully — determine the reason

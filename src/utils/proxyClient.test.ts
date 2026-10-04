@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { parseProxySse } from './proxyClient';
+import { parseProxySse, retryAfterMessage } from './proxyClient';
 
 describe('parseProxySse', () => {
   it('parses a single data event', () => {
@@ -62,6 +62,13 @@ describe('parseProxySse', () => {
     expect(result.events).toHaveLength(1);
     expect(result.events[0].eventType).toBe('interrupted');
     expect(result.events[0].meta?.complete).toBe(false);
+  });
+
+  it('parses a split cache-miss terminal without treating it as data', () => {
+    const first = parseProxySse('event: cache-miss\ndata: {"complete":fal');
+    expect(first.events).toHaveLength(0);
+    const second = parseProxySse(first.partial + 'se,"reason":"evicted"}\n\n');
+    expect(second.events[0]).toMatchObject({ eventType: 'cache-miss', meta: { complete: false } });
   });
 
   it('handles \\r\\n line endings', () => {
@@ -142,5 +149,12 @@ describe('parseProxySse', () => {
     expect(result.events[0].rawText).toBe('chunk1');
     expect(result.events[1].rawText).toBe('chunk2');
     expect(result.events[2].eventType).toBe('done');
+  });
+});
+
+describe('retryAfterMessage', () => {
+  it('preserves both seconds and HTTP-date retry delays for display', () => {
+    expect(retryAfterMessage('3', 0)).toBe('Retry after 3 seconds');
+    expect(retryAfterMessage('Thu, 01 Jan 1970 00:00:05 GMT', 0)).toBe('Retry after 5 seconds');
   });
 });

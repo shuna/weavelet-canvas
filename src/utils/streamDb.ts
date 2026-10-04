@@ -16,6 +16,21 @@ export interface StreamRecord {
   lastProxyEventId?: number;
   /** OpenRouter generation ID when present in the upstream stream */
   generationId?: string;
+  bufferedReasoning?: string;
+  llmSsePartial?: string;
+  thinkTagCheckpoint?: { state: 'outside' | 'inside'; pending: string };
+  llmDone?: boolean;
+}
+
+export interface ProxyCheckpoint {
+  bufferedText: string;
+  bufferedReasoning: string;
+  lastProxyEventId: number;
+  llmSsePartial: string;
+  thinkTagCheckpoint: { state: 'outside' | 'inside'; pending: string };
+  generationId?: string;
+  llmDone?: boolean;
+  openRouterObservation?: OpenRouterObservation;
 }
 
 const DB_NAME = 'sw-stream-db';
@@ -50,10 +65,19 @@ function reqToPromise<T>(request: IDBRequest<T>): Promise<T> {
   });
 }
 
+function transactionDone(transaction: IDBTransaction, db: IDBDatabase): Promise<void> {
+  return new Promise((resolve, reject) => {
+    transaction.oncomplete = () => { db.close(); resolve(); };
+    transaction.onerror = () => { db.close(); reject(transaction.error); };
+    transaction.onabort = () => { db.close(); reject(transaction.error); };
+  });
+}
+
 export async function saveRequest(record: StreamRecord): Promise<void> {
   const db = await openDb();
-  await reqToPromise(tx(db, 'readwrite').put(record));
-  db.close();
+  const transaction = db.transaction(STORE_NAME, 'readwrite');
+  transaction.objectStore(STORE_NAME).put(record);
+  await transactionDone(transaction, db);
 }
 
 export async function getRequest(requestId: string): Promise<StreamRecord | undefined> {
@@ -84,6 +108,30 @@ export async function appendText(
     await reqToPromise(store.put(record));
   }
   db.close();
+}
+
+/** Persist the recovery cursor and every parser state from the same stream point. */
+export async function saveProxyCheckpoint(
+  requestId: string,
+  checkpoint: ProxyCheckpoint
+): Promise<void> {
+  const db = await openDb();
+  const transaction = db.transaction(STORE_NAME, 'readwrite');
+  const store = transaction.objectStore(STORE_NAME);
+  const record: StreamRecord | undefined = await reqToPromise(store.get(requestId));
+  if (record) {
+    store.put({ ...record, ...checkpoint, updatedAt: Date.now() });
+  }
+  await transactionDone(transaction, db);
+}
+
+export async function markAcknowledged(requestId: string): Promise<void> {
+  const db = await openDb();
+  const transaction = db.transaction(STORE_NAME, 'readwrite');
+  const store = transaction.objectStore(STORE_NAME);
+  const record: StreamRecord | undefined = await reqToPromise(store.get(requestId));
+  if (record) store.put({ ...record, acknowledged: true, updatedAt: Date.now() });
+  await transactionDone(transaction, db);
 }
 
 export async function setGenerationId(

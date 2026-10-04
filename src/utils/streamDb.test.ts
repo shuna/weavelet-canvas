@@ -13,6 +13,7 @@ import {
   updateStatus,
   getAllPending,
   deleteRequest,
+  saveProxyCheckpoint,
   cleanupStale,
   type StreamRecord,
 } from './streamDb';
@@ -168,6 +169,14 @@ describe('cleanupStale', () => {
 });
 
 describe('proxy recovery fields', () => {
+  it('persists parser state and cursor in one checkpoint', async () => {
+    await saveRequest(makeRecord({ requestId: 'checkpoint-1' }));
+    await saveProxyCheckpoint('checkpoint-1', {
+      bufferedText: 'visible', bufferedReasoning: 'thought', lastProxyEventId: 7,
+      llmSsePartial: 'data: {"x"', thinkTagCheckpoint: { state: 'inside', pending: '</thi' },
+    });
+    expect(await getRequest('checkpoint-1')).toMatchObject({ bufferedText: 'visible', bufferedReasoning: 'thought', lastProxyEventId: 7, llmSsePartial: 'data: {"x"', thinkTagCheckpoint: { state: 'inside', pending: '</thi' } });
+  });
   it('persists proxySessionId and lastProxyEventId', async () => {
     await saveRequest(
       makeRecord({
