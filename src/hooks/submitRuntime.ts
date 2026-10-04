@@ -1,3 +1,5 @@
+import { isOpenRouterEndpoint, observeOpenRouterHeaders, observeOpenRouterUsage, type OpenRouterRequestContext } from '@utils/openrouterControls';
+import { recordOpenRouterObservation } from '@utils/openrouterObservation';
 import useStore from '@store/store';
 import {
   getChatCompletion,
@@ -15,6 +17,7 @@ import {
   deleteRequest as deleteStreamRecord,
   saveRequest as saveStreamRecord,
   setGenerationId as setStreamGenerationId,
+  setStreamObservation,
 } from '@utils/streamDb';
 import { sendAck, sendCancel, parseProxySse, type ProxyConfig } from '@utils/proxyClient';
 import { cancelGeneration } from '@api/openrouter';
@@ -524,6 +527,7 @@ export const queueChunkToStore = (
 };
 
 type ExecuteSubmitStreamParams = {
+  regenerate?: boolean;
   sessionId: string;
   chatId: string;
   chatIndex: number;
@@ -751,6 +755,7 @@ export const executeSubmitStream = async ({
   abortController,
   apiVersion,
   t,
+  regenerate = false,
 }: ExecuteSubmitStreamParams): Promise<ExecuteSubmitStreamResult> => {
   sessionChunkTargets.set(sessionId, { chatId, targetNodeId });
   const isStreamSupported = getEffectiveStreamEnabled(config);
@@ -770,6 +775,16 @@ export const executeSubmitStream = async ({
     apiKey: isOpenRouter ? (resolvedProvider.key || undefined) : undefined,
     proxyConfig,
   });
+  const requestContext: OpenRouterRequestContext = {
+    chatId, regenerate,
+    onObservation: patch => {
+      if (!isOpenRouterEndpoint(resolvedProvider.endpoint)) return;
+      recordOpenRouterObservation(chatId, targetNodeId, patch);
+      const requestId = sessionRequestIds.get(sessionId);
+      if (requestId) void setStreamObservation(requestId, patch).catch(() => {});
+    },
+  };
+  const observeUsage = (usage: unknown) => requestContext.onObservation?.(observeOpenRouterUsage(usage));
   const runRequest = async (requestMessages: MessageInterface[]) => {
     if (!isStreamSupported) {
       let data;
@@ -786,7 +801,8 @@ export const executeSubmitStream = async ({
           undefined,
           undefined,
           apiVersion,
-          signal
+          signal,
+          requestContext
         );
       } else {
         data = await getChatCompletion(
@@ -796,7 +812,8 @@ export const executeSubmitStream = async ({
           resolvedProvider.key,
           undefined,
           apiVersion,
-          signal
+          signal,
+          requestContext
         );
       }
 
@@ -839,7 +856,8 @@ export const executeSubmitStream = async ({
       throw new Error(t('noApiKeyWarning'));
     }
 
-    const onChunk = (text: string, meta?: { generationId?: string; reasoning?: string }) => {
+    const onChunk = (text: string, meta?: { generationId?: string; reasoning?: string; openRouterObservation?: import('@type/chat').OpenRouterObservation }) => {
+      if (meta?.openRouterObservation) requestContext.onObservation?.(meta.openRouterObservation);
       if (meta?.generationId && !capturedGenerationId) {
         capturedGenerationId = meta.generationId;
         setSessionCancelMeta(sessionId, { generationId: capturedGenerationId });
@@ -875,7 +893,8 @@ export const executeSubmitStream = async ({
         config,
         resolvedProvider.key,
         undefined,
-        apiVersion
+        apiVersion,
+        requestContext
       );
 
       // Build proxy bridge config for SW if proxy is configured
@@ -931,6 +950,7 @@ export const executeSubmitStream = async ({
           messageIndex,
           onChunk,
           onDone: (meta) => {
+            if (meta?.openRouterObservation) requestContext.onObservation?.(meta.openRouterObservation);
             cleanup();
             if (meta?.generationId) capturedGenerationId = meta.generationId;
             if (meta?.finishReason) lastFinishReason = meta.finishReason;
@@ -945,6 +965,7 @@ export const executeSubmitStream = async ({
             resolve();
           },
           onError: (error, meta) => {
+            if (meta?.openRouterObservation) requestContext.onObservation?.(meta.openRouterObservation);
             cleanup();
             if (meta?.generationId) {
               capturedGenerationId = meta.generationId;
@@ -992,8 +1013,11 @@ export const executeSubmitStream = async ({
         config,
         resolvedProvider.key,
         undefined,
-        apiVersion
+        apiVersion,
+        requestContext
       );
+
+      sessionRequestIds.set(sessionId, requestId);
 
       // Write initial streamDb record so useStreamRecovery can find this session
       await saveStreamRecord({
@@ -1045,6 +1069,7 @@ export const executeSubmitStream = async ({
 
       if (!res.body) throw new Error('Proxy returned no body');
 
+      requestContext.onObservation?.(observeOpenRouterHeaders(res.headers));
       const reader = res.body.getReader();
       const decoder = new TextDecoder();
       let partial = '';
@@ -1105,6 +1130,7 @@ export const executeSubmitStream = async ({
           for (const evt of proxySse.events) {
             if (evt.id > dbLastProxyEventId) dbLastProxyEventId = evt.id;
             if (evt.eventType === 'done') {
+              if (evt.meta?.openRouterObservation) requestContext.onObservation?.(evt.meta.openRouterObservation);
               reading = false;
               break;
             }
@@ -1129,6 +1155,7 @@ export const executeSubmitStream = async ({
               let reasoningString = '';
               const resultString = llmParsed.events.reduce(
                 (output: string, current) => {
+                  observeUsage(current.usage);
                   if (!current.choices?.[0]?.delta) return output;
                   if (current.choices[0]?.finish_reason) {
                     lastFinishReason = current.choices[0].finish_reason;
@@ -1165,6 +1192,7 @@ export const executeSubmitStream = async ({
           let flushReasoningString = '';
           const resultString = llmFlushed.events.reduce(
             (output: string, current) => {
+              observeUsage(current.usage);
               if (!current.choices?.[0]?.delta) return output;
               const reasoning = extractReasoningFromEvent(current);
               if (reasoning) flushReasoningString += reasoning;
@@ -1204,7 +1232,8 @@ export const executeSubmitStream = async ({
       resolvedProvider.key || undefined,
       undefined,
       apiVersion,
-      abortController.signal
+      abortController.signal,
+      requestContext
     );
 
     if (!stream) return;
@@ -1246,6 +1275,7 @@ export const executeSubmitStream = async ({
 
         let reasoningString = '';
         const resultString = parsed.events.reduce((output: string, current) => {
+          observeUsage(current.usage);
           if (!current.choices?.[0]?.delta) return output;
           if (current.choices[0]?.finish_reason) {
             lastFinishReason = current.choices[0].finish_reason;

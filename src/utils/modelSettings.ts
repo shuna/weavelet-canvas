@@ -5,7 +5,12 @@ import type { ConfigInterface, ModelSettings } from '@type/chat';
 const modelKey = ({ model, providerId, modelSource }: Pick<ConfigInterface, 'model' | 'providerId' | 'modelSource'>) =>
   JSON.stringify([modelSource === 'local' ? 'local' : 'remote', providerId ?? '', model]);
 
+export const defaultOpenRouterSettings = (): NonNullable<ConfigInterface['openRouter']> => ({
+  responseCache: { mode: 'off' }, stickySession: true,
+});
+
 export const pickModelSettings = (config: ConfigInterface): ModelSettings => ({
+  openRouter: config.openRouter ? structuredClone(config.openRouter) : undefined,
   max_tokens: config.max_tokens,
   temperature: config.temperature,
   presence_penalty: config.presence_penalty,
@@ -21,13 +26,17 @@ export const pickModelSettings = (config: ConfigInterface): ModelSettings => ({
 export const savedModelSettings = (
   config: ConfigInterface,
   target: Pick<ConfigInterface, 'model' | 'providerId' | 'modelSource'>
-): ModelSettings =>
-  modelKey(config) === modelKey(target)
-    ? pickModelSettings(config)
-    : config.modelSettings?.[modelKey(target)] ?? {
-        ...pickModelSettings(_defaultChatConfig),
-        max_tokens: getModelDefaultMaxTokens(target.model, target.providerId, target.modelSource),
-      };
+): ModelSettings => {
+  if (modelKey(config) === modelKey(target)) return pickModelSettings(config);
+  const saved = config.modelSettings?.[modelKey(target)];
+  if (saved) return { ...saved, openRouter: saved.openRouter ? structuredClone(saved.openRouter) : undefined };
+  return {
+    ...pickModelSettings(_defaultChatConfig),
+    openRouter: target.providerId === 'openrouter' && target.modelSource !== 'local'
+      ? defaultOpenRouterSettings() : undefined,
+    max_tokens: getModelDefaultMaxTokens(target.model, target.providerId, target.modelSource),
+  };
+};
 
 export const switchConfigModel = (
   config: ConfigInterface,

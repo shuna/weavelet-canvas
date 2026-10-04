@@ -95,6 +95,7 @@ const activeStreams = new Map<string, ActiveStream>();
 
 /** Metadata stored in the first line of the NDJSON KV value */
 interface SessionMeta {
+  openRouterObservation?: Record<string, string | number>;
   totalChunks: number;
   done: boolean;
   error?: string;
@@ -110,6 +111,7 @@ const CORS_HEADERS: Record<string, string> = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Methods': 'GET, POST, DELETE, OPTIONS',
   'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+  'Access-Control-Expose-Headers': 'X-OpenRouter-Cache-Status, X-OpenRouter-Cache-Age, X-OpenRouter-Cache-TTL, X-OpenRouter-Cache-Source-Id, X-Generation-Id',
 };
 
 function withCORS(response: Response): Response {
@@ -272,6 +274,12 @@ async function handleStream(
     return jsonResponse({ error: 'LLM API returned no body' }, 502);
   }
 
+  const openRouterObservation: Record<string, string | number> = {};
+  for (const [key, name] of Object.entries({ responseCacheStatus: 'X-OpenRouter-Cache-Status', responseCacheAge: 'X-OpenRouter-Cache-Age', responseCacheTTL: 'X-OpenRouter-Cache-TTL', responseCacheSourceId: 'X-OpenRouter-Cache-Source-Id', generationId: 'X-Generation-Id' })) {
+    const value = llmRes.headers.get(name);
+    if (value !== null) openRouterObservation[key] = ['responseCacheAge', 'responseCacheTTL'].includes(key) ? Number(value) : value;
+  }
+
   // Write-back cache: chunks are buffered in memory as pre-serialized NDJSON
   // lines. Only a single KV write happens at stream completion.
   // Each chunk is JSON.stringify'd on arrival (O(chunk_size)), so the final
@@ -300,6 +308,7 @@ async function handleStream(
       // chunks — prevents the final write from racing this one.
       const immediateMeta: SessionMeta = {
         totalChunks: eventId,
+        openRouterObservation,
         done: false,
         streaming: true,
       };
@@ -308,6 +317,7 @@ async function handleStream(
       snapshotTimer = setInterval(async () => {
         const meta: SessionMeta = {
           totalChunks: eventId,
+          openRouterObservation,
           done: false,
           streaming: true,
         };
@@ -349,6 +359,7 @@ async function handleStream(
       // Send completion event with metadata
       const donePayload = JSON.stringify({
         totalChunks: eventId,
+        openRouterObservation,
         complete: true,
       });
       if (!clientGone) {
@@ -364,6 +375,7 @@ async function handleStream(
       streamError = (e as Error).message;
       const errPayload = JSON.stringify({
         totalChunks: eventId,
+        openRouterObservation,
         complete: false,
         error: streamError,
       });
@@ -399,6 +411,7 @@ async function handleStream(
         }
         const meta: SessionMeta = {
           totalChunks: eventId,
+          openRouterObservation,
           done: !streamError,
           streaming: false,
           ...(streamError ? { error: streamError } : {}),
@@ -411,7 +424,12 @@ async function handleStream(
   // waitUntil ensures the Worker stays alive even after client disconnects
   ctx.waitUntil(processStream());
 
-  return sseResponse(readable);
+  const response = sseResponse(readable);
+  for (const name of ['X-OpenRouter-Cache-Status', 'X-OpenRouter-Cache-Age', 'X-OpenRouter-Cache-TTL', 'X-OpenRouter-Cache-Source-Id', 'X-Generation-Id']) {
+    const value = llmRes.headers.get(name);
+    if (value !== null) response.headers.set(name, value);
+  }
+  return response;
 }
 
 // ---------------------------------------------------------------------------
@@ -542,6 +560,7 @@ async function handleRecover(
           await writer.write(
             enc.encode(`event: done\ndata: ${JSON.stringify({
               totalChunks: meta.totalChunks,
+              openRouterObservation: meta.openRouterObservation,
               complete: true,
             })}\n\n`)
           );
@@ -552,6 +571,7 @@ async function handleRecover(
           await writer.write(
             enc.encode(`event: error\ndata: ${JSON.stringify({
               totalChunks: meta.totalChunks,
+              openRouterObservation: meta.openRouterObservation,
               complete: false,
               error: meta.error,
             })}\n\n`)
@@ -567,6 +587,7 @@ async function handleRecover(
             await writer.write(
               enc.encode(`event: interrupted\ndata: ${JSON.stringify({
                 totalChunks: meta.totalChunks,
+                openRouterObservation: meta.openRouterObservation,
                 complete: false,
               })}\n\n`)
             );
@@ -588,6 +609,7 @@ async function handleRecover(
         await writer.write(
           enc.encode(`event: interrupted\ndata: ${JSON.stringify({
             totalChunks: meta.totalChunks,
+            openRouterObservation: meta.openRouterObservation,
             complete: false,
           })}\n\n`)
         );

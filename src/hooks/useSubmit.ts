@@ -1,3 +1,5 @@
+import i18next from 'i18next';
+import { hardOpenRouterConstraints } from '@utils/openrouterControls';
 import { normalizeConfigStream } from '@utils/streamSupport';
 import useStore from '@store/store';
 import { useTranslation } from 'react-i18next';
@@ -60,7 +62,7 @@ const useSubmit = () => {
   const [unknownContextConfirmMessage, setUnknownContextConfirmMessage] = useState('');
   const pendingSubmitRef = useRef<(() => Promise<void>) | null>(null);
 
-  const runSubmit = async (mode: SubmitMode, insertIndex: number | null = null) => {
+  const runSubmit = async (mode: SubmitMode, insertIndex: number | null = null, regenerate = false) => {
     const chats = useStore.getState().chats;
     if (!chats) return;
 
@@ -156,6 +158,10 @@ const useSubmit = () => {
             submitConfig.providerId
           );
 
+      const evaluationSettings = useStore.getState().evaluationSettings;
+      if (hardOpenRouterConstraints(submitConfig.openRouter) && evaluationSettings.safetyPreSend === 'auto' && evaluationSettings.safetyEngine !== 'local') {
+        throw new Error(i18next.t('model:openRouter.errors.safety') as string);
+      }
       // Pre-send evaluation (async, non-blocking)
       const userMsg = [...messages].reverse().find((m) => m.role === 'user');
       const evalCtx: EvaluationContext = {
@@ -164,6 +170,7 @@ const useSubmit = () => {
         endpoint: resolved?.endpoint ?? '',
         apiKey: resolved?.key,
         model: submitConfig.model,
+        openRouter: submitConfig.openRouter,
       };
 
       if (isLocal) {
@@ -214,6 +221,7 @@ const useSubmit = () => {
           messages,
           config: submitConfig,
           resolvedProvider: resolved!,
+          regenerate,
           abortController,
           apiVersion: useStore.getState().apiVersion,
           t: (key: string) => t(key) as string,
@@ -251,6 +259,7 @@ const useSubmit = () => {
           language: i18n.language,
           setChats,
           apiVersion: useStore.getState().apiVersion,
+          sourceConfig: submitConfig,
           titleModel: useStore.getState().titleModel,
           titleProviderId: useStore.getState().titleProviderId,
           t: (key: string) => t(key) as string,
@@ -327,33 +336,24 @@ const useSubmit = () => {
     setUnknownContextConfirmMessage('');
   };
 
-  const handleSubmit = async () => {
+  const submitWithConfirmation = async (mode: SubmitMode, insertIndex: number | null, regenerate = false) => {
     const chats = useStore.getState().chats;
     const chatIndex = useStore.getState().currentChatIndex;
     const config = chats?.[chatIndex]?.config;
     if (!config) return;
     if (!confirmChatModelFavorite(chatIndex)) return;
     await runSubmitWithConfirmation(
-      () => runSubmit('append'),
+      () => runSubmit(mode, insertIndex, regenerate),
       config.model,
       config.providerId,
       config.modelSource
     );
   };
 
-  const handleSubmitMidChat = async (insertIndex: number) => {
-    const chats = useStore.getState().chats;
-    const chatIndex = useStore.getState().currentChatIndex;
-    const config = chats?.[chatIndex]?.config;
-    if (!config) return;
-    if (!confirmChatModelFavorite(chatIndex)) return;
-    await runSubmitWithConfirmation(
-      () => runSubmit('midchat', insertIndex),
-      config.model,
-      config.providerId,
-      config.modelSource
-    );
-  };
+  const handleSubmit = () => submitWithConfirmation('append', null);
+  const handleSubmitMidChat = (insertIndex: number) => submitWithConfirmation('midchat', insertIndex);
+  const handleRegenerate = (mode: SubmitMode, insertIndex: number | null = null) =>
+    submitWithConfirmation(mode, insertIndex, true);
 
   const handleRetry = async () => {
     const { lastSubmitMode, lastSubmitIndex, lastSubmitChatIndex, lastSubmitChatId } = useStore.getState();
@@ -388,6 +388,7 @@ const useSubmit = () => {
   return {
     handleSubmit,
     handleSubmitMidChat,
+    handleRegenerate,
     handleRetry,
     error,
     isUnknownContextConfirmOpen,

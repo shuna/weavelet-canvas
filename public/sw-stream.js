@@ -49,11 +49,18 @@ async function dbGet(requestId) {
 }
 
 async function dbUpdate(requestId, updates) {
-  const record = await dbGet(requestId);
-  if (record) {
-    Object.assign(record, updates, { updatedAt: Date.now() });
-    await dbPut(record);
-  }
+  const db = await openDb();
+  return new Promise((resolve, reject) => {
+    const transaction = db.transaction(STORE_NAME, 'readwrite');
+    const store = transaction.objectStore(STORE_NAME);
+    const req = store.get(requestId);
+    req.onsuccess = () => {
+      if (req.result) store.put({ ...req.result, ...updates, updatedAt: Date.now() });
+    };
+    transaction.oncomplete = () => { db.close(); resolve(); };
+    transaction.onerror = () => { db.close(); reject(transaction.error); };
+    transaction.onabort = () => { db.close(); reject(transaction.error); };
+  });
 }
 
 async function dbDelete(requestId) {
@@ -346,6 +353,37 @@ async function handleStartStream(msg, port) {
   let lastProxyEventId = 0;
   let generationId = null;
   let finishReason = null;
+  let openRouterObservation = {};
+  function observeHeaders(headers) {
+    const patch = {};
+    const status = headers.get('X-OpenRouter-Cache-Status');
+    if (status === 'HIT' || status === 'MISS') patch.responseCacheStatus = status;
+    for (const [key, header] of Object.entries({ responseCacheAge: 'X-OpenRouter-Cache-Age', responseCacheTTL: 'X-OpenRouter-Cache-TTL' })) {
+      const value = headers.get(header);
+      if (value !== null && Number.isFinite(Number(value))) patch[key] = Number(value);
+    }
+    const source = headers.get('X-OpenRouter-Cache-Source-Id');
+    if (source) patch.responseCacheSourceId = source;
+    observe(patch);
+  }
+  function observe(patch) {
+    if (!patch || !Object.keys(patch).length) return;
+    openRouterObservation = { ...openRouterObservation, ...patch };
+    void dbUpdate(requestId, { openRouterObservation });
+    postToClient({ type: 'sw-chunk', requestId, text: '', openRouterObservation });
+  }
+  function observeUsage(events) {
+    for (const e of events) {
+      if (!e.usage) continue;
+      const u = e.usage;
+      const d = u.prompt_tokens_details || {};
+      const patch = {};
+      for (const [key, value] of Object.entries({ promptTokens: u.prompt_tokens, completionTokens: u.completion_tokens, cost: u.cost, cachedTokens: d.cached_tokens, cacheWriteTokens: d.cache_write_tokens })) {
+        if (typeof value === 'number' && Number.isFinite(value) && value >= 0) patch[key] = value;
+      }
+      observe(patch);
+    }
+  }
   let sawDoneMarker = false;
   let sawProxyDone = false;
   let reader = null;
@@ -467,6 +505,7 @@ async function handleStartStream(msg, port) {
       return;
     }
 
+    observeHeaders(response.headers);
     reader = response.body.getReader();
     const decoder = new TextDecoder();
     let partial = '';
@@ -520,6 +559,7 @@ async function handleStartStream(msg, port) {
           if (evt.id > lastProxyEventId) lastProxyEventId = evt.id;
 
           if (evt.eventType === 'done') {
+            observe(evt.meta && evt.meta.openRouterObservation);
             if (!evt.meta || evt.meta.complete !== true) {
               throw new Error('Proxy stream ended without a complete marker');
             }
@@ -539,6 +579,7 @@ async function handleStartStream(msg, port) {
             const llmChunk = llmPartial + evt.rawText;
             const llmParsed = parseEventSource(llmChunk, false);
             llmPartial = llmParsed.partial;
+            observeUsage(llmParsed.events);
 
             if (!generationId) {
               generationId = extractGenerationId(llmParsed.events);
@@ -652,6 +693,7 @@ async function handleStartStream(msg, port) {
         const parsed = parseEventSource(chunk, done);
         if (parsed.done) sawDoneMarker = true;
         partial = parsed.partial;
+        observeUsage(parsed.events);
 
         if (!generationId) {
           generationId = extractGenerationId(parsed.events);
@@ -740,6 +782,7 @@ async function handleStartStream(msg, port) {
       requestId,
       generationId,
       finishReason,
+      openRouterObservation,
       ...(proxyMode ? { proxySessionId: proxyConfig.sessionId, lastProxyEventId } : {}),
     });
     postDebug('posted sw-done', 'done');
@@ -767,6 +810,7 @@ async function handleStartStream(msg, port) {
       error,
       isTimeout: isTimeout || false,
       generationId,
+      openRouterObservation,
       ...(proxyMode ? { proxySessionId: proxyConfig.sessionId, lastProxyEventId } : {}),
     });
   } finally {

@@ -1,3 +1,5 @@
+import { recordOpenRouterObservation } from '@utils/openrouterObservation';
+import { observeOpenRouterUsage } from '@utils/openrouterControls';
 import { useEffect, useRef } from 'react';
 import useStore from '@store/store';
 import { getAllPending, deleteRequest, StreamRecord } from '@utils/streamDb';
@@ -253,6 +255,7 @@ async function readProxyRecoveryStream(
           break;
         }
         if (evt.eventType === 'done' || evt.eventType === 'error') {
+          if (evt.meta?.openRouterObservation) record.openRouterObservation = { ...record.openRouterObservation, ...evt.meta.openRouterObservation };
           shouldBreak = true;
           break;
         }
@@ -266,6 +269,7 @@ async function readProxyRecoveryStream(
           llmPartial = llmParsed.partial;
 
           for (const llmEvt of llmParsed.events) {
+            record.openRouterObservation = { ...record.openRouterObservation, ...observeOpenRouterUsage(llmEvt.usage) };
             const content = llmEvt.choices?.[0]?.delta?.content;
             if (content) recoveredText += content;
           }
@@ -279,6 +283,7 @@ async function readProxyRecoveryStream(
     if (llmPartial) {
       const flushed = parseEventSource(llmPartial, true);
       for (const llmEvt of flushed.events) {
+        record.openRouterObservation = { ...record.openRouterObservation, ...observeOpenRouterUsage(llmEvt.usage) };
         const content = llmEvt.choices?.[0]?.delta?.content;
         if (content) recoveredText += content;
       }
@@ -509,6 +514,9 @@ async function recoverPendingInner(manual: boolean, debugId: string) {
 
       const latestChat = useStore.getState().chats?.[chatIndex];
       const targetNodeId = latestChat?.branchTree?.activePath?.[messageIndex];
+      const observationChat = useStore.getState().chats?.[chatIndex];
+      const observationNode = observationChat?.branchTree?.activePath[messageIndex];
+      if (observationChat && observationNode && record.openRouterObservation) recordOpenRouterObservation(observationChat.id, observationNode, record.openRouterObservation);
       if (
         record.generationId &&
         latestChat?.config.providerId === 'openrouter' &&

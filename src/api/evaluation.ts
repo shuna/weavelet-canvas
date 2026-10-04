@@ -1,3 +1,6 @@
+import { applyOpenRouterControls, assertAuxiliaryEndpoint, hardOpenRouterConstraints } from '@utils/openrouterControls';
+import type { OpenRouterChatSettings } from '@type/chat';
+import i18next from 'i18next';
 /**
  * Evaluation API utilities:
  * A) Safety check via OpenAI-compatible Moderation API
@@ -49,7 +52,9 @@ export function resolveOpenAiCredentials(): { endpoint: string; apiKey: string }
  */
 export async function runSafetyCheck(
   text: string,
+  openRouter?: OpenRouterChatSettings,
 ): Promise<SafetyCheckResult> {
+  if (hardOpenRouterConstraints(openRouter)) throw new Error(i18next.t('model:openRouter.errors.safety') as string);
   const { endpoint, apiKey } = resolveOpenAiCredentials();
   const moderationUrl = deriveBaseUrl(endpoint) + '/moderations';
   const { proxyEndpoint, proxyAuthToken } = useStore.getState();
@@ -263,7 +268,8 @@ export async function runQualityEvaluation(
   model: string,
   apiKey?: string,
   language?: string,
-  evaluationMode?: QualityEvaluationMode
+  evaluationMode?: QualityEvaluationMode,
+  openRouter?: OpenRouterChatSettings
 ): Promise<QualityEvaluationResult> {
   if (!model) {
     throw new Error('[EVAL_MODEL_NOT_SELECTED]');
@@ -279,6 +285,7 @@ export async function runQualityEvaluation(
     ? endpoint
     : deriveBaseUrl(endpoint) + '/chat/completions';
 
+  assertAuxiliaryEndpoint(openRouter, chatUrl);
   // Only include response_format for providers known to support JSON mode.
   // Sending it to unsupported providers can cause 4xx errors.
   const supportsJsonMode = /openai\.com|openrouter\.ai|together\.xyz|fireworks\.ai|groq\.com|mistral\.ai|deepinfra\.com/i.test(chatUrl);
@@ -292,6 +299,7 @@ export async function runQualityEvaluation(
     body.response_format = { type: 'json_object' };
   }
 
+  applyOpenRouterControls(chatUrl, { model, max_tokens: 0, temperature: 0, top_p: 1, presence_penalty: 0, frequency_penalty: 0, openRouter: { routing: hardOpenRouterConstraints(openRouter), responseCache: { mode: 'off' } } }, body, headers, { auxiliary: true });
   const response = await fetch(chatUrl, {
     method: 'POST',
     headers,

@@ -20,6 +20,7 @@ export interface ProviderConfig {
 }
 
 export interface ProviderModel {
+  supportedParameters?: string[];
   id: string;
   name: string;
   providerId: ProviderId;

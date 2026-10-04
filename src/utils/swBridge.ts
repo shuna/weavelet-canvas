@@ -1,3 +1,4 @@
+import type { OpenRouterObservation } from '@type/chat';
 import { debugReport } from '@store/debug-store';
 import { saveRequest, cleanupStale } from './streamDb';
 
@@ -73,9 +74,9 @@ export interface StartStreamParams {
   body: object;
   chatIndex: number;
   messageIndex: number;
-  onChunk: (text: string, meta?: { generationId?: string; reasoning?: string }) => void;
-  onDone: (meta?: { proxySessionId?: string; lastProxyEventId?: number; generationId?: string; finishReason?: string }) => void;
-  onError: (error: string, meta?: { proxySessionId?: string; lastProxyEventId?: number; generationId?: string }) => void;
+  onChunk: (text: string, meta?: { generationId?: string; reasoning?: string; openRouterObservation?: OpenRouterObservation }) => void;
+  onDone: (meta?: { proxySessionId?: string; lastProxyEventId?: number; generationId?: string; finishReason?: string; openRouterObservation?: OpenRouterObservation }) => void;
+  onError: (error: string, meta?: { proxySessionId?: string; lastProxyEventId?: number; generationId?: string; openRouterObservation?: OpenRouterObservation }) => void;
   /** When set, SW routes the request through the proxy worker */
   proxyConfig?: ProxyStreamConfig;
 }
@@ -209,7 +210,7 @@ export async function startStream(params: StartStreamParams): Promise<SwStreamHa
         });
         break;
       case 'sw-chunk':
-        onChunk(data.text, { generationId: data.generationId, reasoning: data.reasoning });
+        onChunk(data.text, { generationId: data.generationId, reasoning: data.reasoning, openRouterObservation: data.openRouterObservation });
         break;
       case 'sw-done':
         cleanup();
@@ -227,6 +228,7 @@ export async function startStream(params: StartStreamParams): Promise<SwStreamHa
           proxySessionId: data.proxySessionId,
           lastProxyEventId: data.lastProxyEventId,
           generationId: data.generationId,
+          openRouterObservation: data.openRouterObservation,
           finishReason: data.finishReason,
         });
         break;
@@ -246,6 +248,7 @@ export async function startStream(params: StartStreamParams): Promise<SwStreamHa
           proxySessionId: data.proxySessionId,
           lastProxyEventId: data.lastProxyEventId,
           generationId: data.generationId,
+          openRouterObservation: data.openRouterObservation,
         });
         break;
       case 'sw-cancelled':

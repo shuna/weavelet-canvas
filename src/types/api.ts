@@ -1,4 +1,5 @@
 export interface EventSourceDataInterface {
+  usage?: unknown;
   choices: EventSourceDataChoices[];
   created: number;
   id: string;
@@ -41,6 +42,7 @@ export interface NonStreamingChoice {
 }
 
 export interface NonStreamingResponse {
+  usage?: unknown;
   id: string;
   choices: NonStreamingChoice[];
   model: string;

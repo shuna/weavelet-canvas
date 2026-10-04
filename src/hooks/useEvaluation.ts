@@ -1,3 +1,4 @@
+import { showToast } from '@utils/showToast';
 /**
  * Hook for running evaluations on chat messages.
  * Integrates with the submit flow for auto-evaluation and
@@ -28,6 +29,7 @@ export interface EvaluationContext {
   endpoint: string;
   apiKey?: string;
   model: string;
+  openRouter?: import('@type/chat').OpenRouterChatSettings;
 }
 
 async function runEvaluationForPhase(
@@ -94,9 +96,10 @@ async function runEvaluationForPhase(
 
       if (shouldRunRemote) {
         try {
-          result.safety = await runSafetyCheck(textToCheck);
+          result.safety = await runSafetyCheck(textToCheck, ctx.openRouter);
         } catch (e) {
           console.warn('[evaluation] remote safety check failed:', e);
+          showToast(e instanceof Error ? e.message : String(e), 'error');
         }
       }
     }
@@ -132,10 +135,13 @@ async function runEvaluationForPhase(
             ctx.endpoint,
             ctx.model,
             ctx.apiKey,
-            i18next.language
+            i18next.language,
+            undefined,
+            ctx.openRouter
           );
         } catch (e) {
           console.warn('[evaluation] quality evaluation failed:', e);
+          showToast(e instanceof Error ? e.message : String(e), 'error');
         }
       }
     }
@@ -193,7 +199,7 @@ export function useEvaluation() {
       const key = evaluationResultKey(chatId, nodeId, phase);
       store.setEvaluationPending(key, true);
       try {
-        const safety = await runSafetyCheck(text);
+        const safety = await runSafetyCheck(text, store.chats?.find(c => c.id === chatId)?.config.openRouter);
         const existing = store.evaluationResults[key];
         store.setEvaluationResult(key, {
           ...existing,
@@ -250,7 +256,9 @@ export function useEvaluation() {
             resolvedProvider.endpoint,
             model,
             resolvedProvider.key,
-            i18next.language
+            i18next.language,
+            undefined,
+            store.chats?.find(c => c.id === chatId)?.config.openRouter
           );
           const existing = store.evaluationResults[key];
           store.setEvaluationResult(key, {

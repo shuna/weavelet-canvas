@@ -41,7 +41,7 @@ const ContentView = memo(
     messageIndex: number;
     nodeId?: string;
   }) => {
-    const { handleSubmit, handleSubmitMidChat } = useSubmit();
+    const { handleRegenerate } = useSubmit();
 
     const [isDelete, setIsDelete] = useState<boolean>(false);
     const [isEvalModalOpen, setIsEvalModalOpen] = useState(false);
@@ -117,11 +117,7 @@ const ContentView = memo(
         removeMessageAtIndex(currentChatIndex, plan.removeIndex);
       }
 
-      if (plan.submitMode === 'append') {
-        handleSubmit();
-      } else {
-        handleSubmitMidChat(plan.insertIndex);
-      }
+      handleRegenerate(plan.submitMode === 'append' ? 'append' : 'midchat', plan.insertIndex);
     };
 
     const handleEvaluate = useCallback(() => {
