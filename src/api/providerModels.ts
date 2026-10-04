@@ -154,6 +154,7 @@ const normalizeModelEntry = (
     id,
     name,
     providerId,
+    supportedParameters,
     contextLength:
       toNumberValue(payload.context_length) ??
       toNumberValue(payload.context_window),

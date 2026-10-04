@@ -11,6 +11,7 @@ const isSameConfig = (
   left: ConfigInterface,
   right: ConfigInterface
 ) =>
+  left.openRouter === right.openRouter &&
   left.model === right.model &&
   left.max_tokens === right.max_tokens &&
   left.temperature === right.temperature &&

@@ -91,6 +91,7 @@ export interface MessageInterface {
 }
 
 export interface BranchNode {
+  openRouterObservation?: OpenRouterObservation;
   id: string;
   parentId: string | null;
   role: Role;
@@ -171,7 +172,41 @@ export interface LocalStorageInterfaceV10ToV11
 export type ReasoningEffort = 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh';
 export type Verbosity = 'low' | 'medium' | 'high' | 'max';
 
+export interface OpenRouterChatSettings {
+  routing?: {
+    order?: string[];
+    only?: string[];
+    ignore?: string[];
+    sort?: 'price' | 'throughput' | 'latency';
+    allow_fallbacks?: boolean;
+    require_parameters?: boolean;
+    max_price?: { prompt?: number; completion?: number };
+    data_collection?: 'allow' | 'deny';
+    zdr?: boolean;
+  };
+  promptCache?: {
+    mode: 'provider-default' | 'claude-conversation' | 'claude-system';
+    ttl?: '5m' | '1h';
+  };
+  responseCache?: { mode: 'inherit' | 'off' | 'on'; ttlSeconds?: number };
+  stickySession?: boolean;
+}
+
+export interface OpenRouterObservation {
+  generationId?: string;
+  promptTokens?: number;
+  completionTokens?: number;
+  cost?: number;
+  cachedTokens?: number;
+  cacheWriteTokens?: number;
+  responseCacheStatus?: 'HIT' | 'MISS';
+  responseCacheAge?: number;
+  responseCacheTTL?: number;
+  responseCacheSourceId?: string;
+}
+
 export interface ModelSettings {
+  openRouter?: OpenRouterChatSettings;
   max_tokens: number;
   temperature: number;
   presence_penalty: number;
@@ -185,6 +220,7 @@ export interface ModelSettings {
 }
 
 export interface ConfigInterface {
+  openRouter?: OpenRouterChatSettings;
   model: ModelOptions;
   max_tokens: number;
   temperature: number;

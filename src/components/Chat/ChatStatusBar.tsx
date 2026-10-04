@@ -28,6 +28,19 @@ const ChatStatusBar = React.memo(() => {
   );
   const isOpenRouter = providerId === 'openrouter';
 
+  const observation = useStore(state => {
+    const tree = state.chats?.[state.currentChatIndex]?.branchTree;
+    const nodeId = tree?.activePath.slice().reverse().find(id => tree.nodes[id]?.role === 'assistant');
+    return nodeId ? tree?.nodes[nodeId]?.openRouterObservation : undefined;
+  });
+  const observationTitle = observation ? [
+    `${t('model:openRouter.cacheStatus')}: ${observation.responseCacheStatus ?? t('model:openRouter.unknown')}`,
+    `${t('model:openRouter.cachedTokens')}: ${observation.cachedTokens ?? t('model:openRouter.unknown')}`,
+    `${t('model:openRouter.cacheWriteTokens')}: ${observation.cacheWriteTokens ?? t('model:openRouter.unknown')}`,
+    `${t('model:openRouter.billedTokens')}: ${observation.promptTokens ?? '?'} / ${observation.completionTokens ?? '?'}`,
+    `${t('model:openRouter.cost')}: ${observation.cost === undefined ? t('model:openRouter.unknown') : '$' + observation.cost}`,
+  ].join('\n') : '';
+
   const isProxyMode = useStore((state) => state.proxyEnabled && !!state.proxyEndpoint);
 
   const creditBalance = useStore((state) => state.creditBalance);
@@ -112,6 +125,12 @@ const ChatStatusBar = React.memo(() => {
       <div className='relative flex items-center justify-center min-h-[20px]'>
         <span className='truncate max-w-[calc(100%-3rem)]'>
           <TokenCount />
+          {isOpenRouter && observation && <span className='ml-2 tabular-nums' title={observationTitle}>
+            {t('model:openRouter.observed')}: {observation.promptTokens ?? '?'}+{observation.completionTokens ?? '?'}
+            {' · '}{t('model:openRouter.cacheStatus')}: {observation.responseCacheStatus ?? t('model:openRouter.unknown')}
+            {' · '}{t('model:openRouter.cachedTokens')}: {observation.cachedTokens ?? '?'}
+            {' / '}{t('model:openRouter.cacheWriteTokens')}: {observation.cacheWriteTokens ?? '?'}
+          </span>}
           {isOpenRouter && creditDisplay && (
             <span className='text-gray-600 dark:text-gray-400'>
               {' / '}

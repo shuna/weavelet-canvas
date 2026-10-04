@@ -1,3 +1,4 @@
+import { applyOpenRouterControls, observeOpenRouterHeaders, observeOpenRouterUsage, type OpenRouterRequestContext } from '@utils/openrouterControls';
 import {
   ConfigInterface,
   MessageInterface,
@@ -57,6 +58,9 @@ const buildRequestBody = (
     verbosity,
     force_reasoning,
     modelSettings,
+    openRouter,
+    systemPrompt,
+    modelSource,
     ...apiConfig
   } = config;
 
@@ -127,7 +131,8 @@ export const getChatCompletion = async (
   apiKey?: string,
   customHeaders?: Record<string, string>,
   apiVersionToUse?: string,
-  signal?: AbortSignal
+  signal?: AbortSignal,
+  context?: OpenRouterRequestContext
 ) => {
   const headers: HeadersInit = {
     'Content-Type': 'application/json',
@@ -150,15 +155,18 @@ export const getChatCompletion = async (
   }
   endpoint = endpoint.trim();
 
+  const body = buildRequestBody(messages, config, { stream: false });
+  applyOpenRouterControls(endpoint, config, body, headers as Record<string, string>, context);
   const response = await fetch(endpoint, {
     method: 'POST',
     headers,
-    body: JSON.stringify(buildRequestBody(messages, config)),
+    body: JSON.stringify(body),
     signal,
   });
   if (!response.ok) throw new Error(await response.text());
 
   const data = await response.json();
+  context?.onObservation?.({ ...observeOpenRouterHeaders(response.headers), ...observeOpenRouterUsage(data.usage) });
   return data;
 };
 
@@ -169,7 +177,8 @@ export const getChatCompletionStream = async (
   apiKey?: string,
   customHeaders?: Record<string, string>,
   apiVersionToUse?: string,
-  signal?: AbortSignal
+  signal?: AbortSignal,
+  context?: OpenRouterRequestContext
 ) => {
   const headers: HeadersInit = {
     'Content-Type': 'application/json',
@@ -191,10 +200,12 @@ export const getChatCompletionStream = async (
     }
   }
   endpoint = endpoint.trim();
+  const body = buildRequestBody(messages, config, { stream: true });
+  applyOpenRouterControls(endpoint, config, body, headers as Record<string, string>, context);
   const response = await fetch(endpoint, {
     method: 'POST',
     headers,
-    body: JSON.stringify(buildRequestBody(messages, config, { stream: true })),
+    body: JSON.stringify(body),
     signal,
   });
   if (response.status === 404 || response.status === 405) {
@@ -224,6 +235,7 @@ export const getChatCompletionStream = async (
     throw new Error(error);
   }
 
+  context?.onObservation?.(observeOpenRouterHeaders(response.headers));
   const stream = response.body;
   return stream;
 };
@@ -234,7 +246,8 @@ export const prepareStreamRequest = (
   config: ConfigInterface,
   apiKey?: string,
   customHeaders?: Record<string, string>,
-  apiVersionToUse?: string
+  apiVersionToUse?: string,
+  context?: OpenRouterRequestContext
 ): { endpoint: string; headers: Record<string, string>; body: object } => {
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
@@ -259,5 +272,6 @@ export const prepareStreamRequest = (
 
   const body = buildRequestBody(messages, config, { stream: true });
 
+  applyOpenRouterControls(endpoint, config, body, headers, context);
   return { endpoint, headers, body };
 };

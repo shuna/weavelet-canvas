@@ -1,3 +1,4 @@
+import type { OpenRouterObservation } from '@type/chat';
 /**
  * Client utilities for the Weavelet Stream Proxy (Cloudflare Worker).
  *
@@ -123,7 +124,7 @@ export interface ProxySseEvent {
   /** The raw text chunk from the LLM (for data events) */
   rawText?: string;
   /** Metadata for done/error events */
-  meta?: { totalChunks: number; complete: boolean; error?: string };
+  meta?: { totalChunks: number; complete: boolean; error?: string; openRouterObservation?: OpenRouterObservation };
 }
 
 /**

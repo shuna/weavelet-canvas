@@ -1,4 +1,6 @@
+import type { OpenRouterObservation } from '@type/chat';
 export interface StreamRecord {
+  openRouterObservation?: OpenRouterObservation;
   requestId: string;
   chatIndex: number;
   messageIndex: number;
@@ -140,4 +142,20 @@ export async function cleanupStale(maxAgeMs: number = 3600000): Promise<void> {
     }
   }
   db.close();
+}
+
+export async function setStreamObservation(requestId: string, patch: OpenRouterObservation): Promise<void> {
+  const db = await openDb();
+  const transaction = db.transaction(STORE_NAME, 'readwrite');
+  const store = transaction.objectStore(STORE_NAME);
+  const request = store.get(requestId);
+  await new Promise<void>((resolve, reject) => {
+    transaction.oncomplete = () => { db.close(); resolve(); };
+    transaction.onerror = () => { db.close(); reject(transaction.error); };
+    transaction.onabort = () => { db.close(); reject(transaction.error); };
+    request.onsuccess = () => {
+      const record = request.result as StreamRecord | undefined;
+      if (record) store.put({ ...record, openRouterObservation: { ...record.openRouterObservation, ...patch }, updatedAt: Date.now() });
+    };
+  });
 }

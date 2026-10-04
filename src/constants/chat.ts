@@ -52,7 +52,7 @@ export const generateDefaultChat = (
     title: title ? title : 'New Chat',
     messages: [],
     config: normalizeConfigStream({
-      ...state.defaultChatConfig,
+      ...structuredClone(state.defaultChatConfig),
       reasoning_effort: state.defaultChatConfig.reasoning_effort ?? 'none',
       reasoning_budget_tokens: state.defaultChatConfig.reasoning_budget_tokens ?? 0,
       systemPrompt,

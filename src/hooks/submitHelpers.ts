@@ -1,3 +1,4 @@
+import { assertAuxiliaryEndpoint, hardOpenRouterConstraints } from '@utils/openrouterControls';
 import { getChatCompletion } from '@api/api';
 import { officialAPIEndpoint } from '@constants/auth';
 import useStore from '@store/store';
@@ -253,6 +254,16 @@ export const applySubmitTokenUsage = async (
   if (assistantMessageIndex < 0) return;
 
   const config = chat.config;
+  const observation = chat.branchTree?.nodes[targetNodeId]?.openRouterObservation;
+  if (observation?.promptTokens !== undefined && observation.completionTokens !== undefined) {
+    const key = config.providerId ? `${config.model}:::${config.providerId}` : config.model;
+    const total = state.totalTokenUsed[key] ?? { promptTokens: 0, completionTokens: 0, imageTokens: 0 };
+    state.setTotalTokenUsed({ ...state.totalTokenUsed, [key]: {
+      ...total, promptTokens: total.promptTokens + observation.promptTokens,
+      completionTokens: total.completionTokens + observation.completionTokens,
+    } });
+    return;
+  }
   const messages = chat.messages;
   const assistantMessage = messages[assistantMessageIndex];
   if (!assistantMessage) return;
@@ -296,7 +307,7 @@ export const generateTitleForChat = async (
   try {
     const titleModel = deps.titleModel ?? modelConfig.model;
     const titleProviderId = deps.titleModel ? deps.titleProviderId : modelConfig.providerId;
-    const titleChatConfig = { ...modelConfig, model: titleModel, providerId: titleProviderId };
+    const titleChatConfig = { ...modelConfig, model: titleModel, providerId: titleProviderId, openRouter: { routing: hardOpenRouterConstraints(modelConfig.openRouter), responseCache: { mode: 'off' as const } } };
     const resolved = resolveProviderForModel(
       titleModel,
       deps.favoriteModels,
@@ -305,6 +316,7 @@ export const generateTitleForChat = async (
       titleProviderId
     );
 
+    assertAuxiliaryEndpoint(modelConfig.openRouter, resolved.endpoint);
     if ((!resolved.key || resolved.key.length === 0) && resolved.endpoint === officialAPIEndpoint) {
       throw new Error(deps.t('noApiKeyWarning'));
     }
@@ -315,7 +327,9 @@ export const generateTitleForChat = async (
       titleChatConfig,
       resolved.key,
       undefined,
-      deps.apiVersion
+      deps.apiVersion,
+      undefined,
+      { auxiliary: true }
     );
     return data.choices[0].message.content;
   } catch (error: unknown) {
@@ -351,6 +365,7 @@ export const setGeneratedTitle = (
 };
 
 type AutoTitleDeps = TitleGenerationDeps & {
+  sourceConfig?: ConfigInterface;
   chatId: string;
   language: string;
   setChats: (chats: ChatInterface[]) => void;
@@ -360,6 +375,7 @@ export const maybeGenerateAutoTitle = async ({
   chatId,
   language,
   setChats,
+  sourceConfig,
   ...deps
 }: AutoTitleDeps) => {
   const state = useStore.getState();
@@ -387,7 +403,7 @@ export const maybeGenerateAutoTitle = async ({
 
   const updatedChats = cloneChatAtIndex(titleChats, titleChatIndex);
   let title = (
-    await generateTitleForChat([promptMessage], updatedChats[titleChatIndex].config, deps)
+    await generateTitleForChat([promptMessage], sourceConfig ?? updatedChats[titleChatIndex].config, deps)
   ).trim();
   if (title.startsWith('"') && title.endsWith('"')) title = title.slice(1, -1);
   setGeneratedTitle(updatedChats, titleChatIndex, title);

@@ -51,8 +51,7 @@ const UnifiedMessageView = memo(
     const contentMinHeightClass = 'min-h-[5.25rem]';
     const { t } = useTranslation();
     const {
-      handleSubmit,
-      handleSubmitMidChat,
+      handleRegenerate,
       isUnknownContextConfirmOpen,
       setIsUnknownContextConfirmOpen,
       unknownContextConfirmMessage,
@@ -134,11 +133,7 @@ const UnifiedMessageView = memo(
       if (plan.removeIndex >= 0) {
         removeMessageAtIndex(currentChatIndex, plan.removeIndex);
       }
-      if (plan.submitMode === 'append') {
-        handleSubmit();
-      } else {
-        handleSubmitMidChat(plan.insertIndex);
-      }
+      handleRegenerate(plan.submitMode === 'append' ? 'append' : 'midchat', plan.insertIndex);
     };
 
     const handleEvaluate = useCallback(() => {

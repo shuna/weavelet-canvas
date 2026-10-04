@@ -1,3 +1,6 @@
+import OpenRouterFields from '@components/ConfigMenu/OpenRouterFields';
+import { validateOpenRouterSettings } from '@utils/openrouterControls';
+import { showToast } from '@utils/showToast';
 import React, { useEffect, useRef, useState } from 'react';
 import useStore from '@store/store';
 import { useTranslation } from 'react-i18next';
@@ -32,6 +35,7 @@ import { ImageDetail } from '@type/chat';
 import type { ProviderId } from '@type/provider';
 
 const isSameConfig = (left: typeof _defaultChatConfig, right: typeof _defaultChatConfig) =>
+  left.openRouter === right.openRouter &&
   left.model === right.model &&
   left.max_tokens === right.max_tokens &&
   left.temperature === right.temperature &&
@@ -56,6 +60,8 @@ const FieldCell = ({ children }: { children: React.ReactNode }) => (
 
 /** Shared field layout used by both ChatConfigPopup and ChatConfigInline */
 const ChatConfigFields = ({
+  _openRouter,
+  _setOpenRouter,
   _systemMessage,
   _setSystemMessage,
   _model,
@@ -80,6 +86,8 @@ const ChatConfigFields = ({
   _forceReasoning,
   _setForceReasoning,
 }: {
+  _openRouter?: import('@type/chat').OpenRouterChatSettings;
+  _setOpenRouter: React.Dispatch<React.SetStateAction<import('@type/chat').OpenRouterChatSettings | undefined>>;
   _systemMessage: string;
   _setSystemMessage: React.Dispatch<React.SetStateAction<string>>;
   _model: ModelOptions;
@@ -110,6 +118,7 @@ const ChatConfigFields = ({
 
   return (
     <div className='flex flex-col gap-5'>
+      {_providerId === 'openrouter' && _modelSource !== 'local' && <OpenRouterFields key={_model} model={_model} value={_openRouter} onChange={_setOpenRouter} isDefault />}
       <ModelSelector
         _model={_model}
         _setModel={_setModel}
@@ -229,6 +238,7 @@ const ChatConfigPopup = ({
   const [_reasoningBudget, _setReasoningBudget] = useState<number>(config.reasoning_budget_tokens ?? 0);
   const [_forceReasoning, _setForceReasoning] = useState<boolean>(config.force_reasoning ?? false);
   const [_stream, _setStream] = useState<boolean>(config.stream !== false);
+  const [_openRouter, _setOpenRouter] = useState(config.openRouter);
   const [_modelSettings, _setModelSettings] = useState(config.modelSettings ?? {});
   const [_imageDetail, _setImageDetail] = useState<ImageDetail>(
     useStore.getState().defaultImageDetail
@@ -245,6 +255,8 @@ const ChatConfigPopup = ({
   }, [isStreamSupported, _stream]);
 
   const handleSave = () => {
+    const error = _providerId === 'openrouter' ? validateOpenRouterSettings(_openRouter, _model) : undefined;
+    if (error) { showToast(t(error) as string, 'error'); return; }
     const modelContextLength = getModelConfigContextInfo(_model, _providerId, _modelSource).contextLength;
     const nextConfig = normalizeConfigStream({
       ...config,
@@ -264,6 +276,7 @@ const ChatConfigPopup = ({
       reasoning_effort: getEffectiveReasoningEffort(_reasoningEffort, _providerId, reasoningRequired),
       reasoning_budget_tokens: _reasoningBudget,
       force_reasoning: _forceReasoning || undefined,
+      openRouter: _openRouter,
       modelSettings: _modelSettings,
     });
 
@@ -292,6 +305,7 @@ const ChatConfigPopup = ({
     _setReasoningBudget(_defaultChatConfig.reasoning_budget_tokens ?? 0);
     _setForceReasoning(false);
     _setStream(_defaultChatConfig.stream !== false);
+    _setOpenRouter(undefined);
     _setModelSettings({});
     _setImageDetail(_defaultImageDetail);
     _setSystemMessage(_defaultSystemMessage);
@@ -306,7 +320,9 @@ const ChatConfigPopup = ({
     >
       <div className='p-6 border-b border-gray-200 dark:border-gray-600 w-[90vw] max-w-full text-sm text-gray-900 dark:text-gray-300'>
         <ChatConfigFields
-          _systemMessage={_systemMessage}
+          _openRouter={_openRouter}
+        _setOpenRouter={_setOpenRouter}
+        _systemMessage={_systemMessage}
           _setSystemMessage={_setSystemMessage}
           _model={_model}
           _setModel={_setModel}
@@ -320,6 +336,7 @@ const ChatConfigPopup = ({
               frequency_penalty: _frequencyPenalty, stream: _stream,
               reasoning_effort: _reasoningEffort, reasoning_budget_tokens: _reasoningBudget,
               force_reasoning: _forceReasoning,
+              openRouter: _openRouter,
               modelSettings: _modelSettings,
             }, { model: modelId, providerId, modelSource });
             _setModel(next.model);
@@ -334,6 +351,7 @@ const ChatConfigPopup = ({
             _setReasoningEffort(next.reasoning_effort ?? 'none');
             _setReasoningBudget(next.reasoning_budget_tokens ?? 0);
             _setForceReasoning(next.force_reasoning ?? false);
+            _setOpenRouter(next.openRouter);
             _setModelSettings(next.modelSettings ?? {});
           }}
           _maxToken={_maxToken}
@@ -397,6 +415,7 @@ const ChatConfigInline = ({ onSettingsChanged }: { onSettingsChanged?: () => voi
   const [_reasoningBudget, _setReasoningBudget] = useState<number>(config.reasoning_budget_tokens ?? 0);
   const [_forceReasoning, _setForceReasoning] = useState<boolean>(config.force_reasoning ?? false);
   const [_stream, _setStream] = useState<boolean>(config.stream !== false);
+  const [_openRouter, _setOpenRouter] = useState(config.openRouter);
   const [_modelSettings, _setModelSettings] = useState(config.modelSettings ?? {});
   const [_imageDetail, _setImageDetail] = useState<ImageDetail>(
     useStore.getState().defaultImageDetail
@@ -416,12 +435,12 @@ const ChatConfigInline = ({ onSettingsChanged }: { onSettingsChanged?: () => voi
   const stateRef = useRef({
     _model, _providerId, _modelSource, _maxToken, _temperature, _topP,
     _presencePenalty, _frequencyPenalty, _reasoningEffort, _reasoningBudget,
-    _forceReasoning, reasoningRequired, _stream, _systemMessage, _imageDetail, _modelSettings,
+    _forceReasoning, reasoningRequired, _stream, _systemMessage, _imageDetail, _modelSettings, _openRouter,
   });
   stateRef.current = {
     _model, _providerId, _modelSource, _maxToken, _temperature, _topP,
     _presencePenalty, _frequencyPenalty, _reasoningEffort, _reasoningBudget,
-    _forceReasoning, reasoningRequired, _stream, _systemMessage, _imageDetail, _modelSettings,
+    _forceReasoning, reasoningRequired, _stream, _systemMessage, _imageDetail, _modelSettings, _openRouter,
   };
   const onSettingsChangedRef = useRef(onSettingsChanged);
   onSettingsChangedRef.current = onSettingsChanged;
@@ -430,6 +449,8 @@ const ChatConfigInline = ({ onSettingsChanged }: { onSettingsChanged?: () => voi
   useEffect(() => {
     return () => {
       const s = stateRef.current;
+      const error = s._providerId === 'openrouter' ? validateOpenRouterSettings(s._openRouter, s._model) : undefined;
+      if (error) { showToast(t(error) as string, 'error'); return; }
       const currentConfig = useStore.getState().defaultChatConfig;
       const modelContextLength = getModelConfigContextInfo(s._model, s._providerId, s._modelSource).contextLength;
       const nextConfig = normalizeConfigStream({
@@ -450,6 +471,7 @@ const ChatConfigInline = ({ onSettingsChanged }: { onSettingsChanged?: () => voi
         reasoning_effort: getEffectiveReasoningEffort(s._reasoningEffort, s._providerId, s.reasoningRequired),
         reasoning_budget_tokens: s._reasoningBudget,
         force_reasoning: s._forceReasoning || undefined,
+        openRouter: s._openRouter,
         modelSettings: s._modelSettings,
       });
 
@@ -485,6 +507,7 @@ const ChatConfigInline = ({ onSettingsChanged }: { onSettingsChanged?: () => voi
     _setReasoningBudget(_defaultChatConfig.reasoning_budget_tokens ?? 0);
     _setForceReasoning(false);
     _setStream(_defaultChatConfig.stream !== false);
+    _setOpenRouter(undefined);
     _setModelSettings({});
     _setImageDetail(_defaultImageDetail);
     _setSystemMessage(_defaultSystemMessage);
@@ -493,6 +516,8 @@ const ChatConfigInline = ({ onSettingsChanged }: { onSettingsChanged?: () => voi
   return (
     <div className='text-sm text-gray-900 dark:text-gray-300'>
       <ChatConfigFields
+        _openRouter={_openRouter}
+        _setOpenRouter={_setOpenRouter}
         _systemMessage={_systemMessage}
         _setSystemMessage={_setSystemMessage}
         _model={_model}
@@ -507,6 +532,7 @@ const ChatConfigInline = ({ onSettingsChanged }: { onSettingsChanged?: () => voi
             frequency_penalty: _frequencyPenalty, stream: _stream,
             reasoning_effort: _reasoningEffort, reasoning_budget_tokens: _reasoningBudget,
             force_reasoning: _forceReasoning,
+            openRouter: _openRouter,
             modelSettings: _modelSettings,
           }, { model: modelId, providerId, modelSource });
           _setModel(next.model);
@@ -521,6 +547,7 @@ const ChatConfigInline = ({ onSettingsChanged }: { onSettingsChanged?: () => voi
           _setReasoningEffort(next.reasoning_effort ?? 'none');
           _setReasoningBudget(next.reasoning_budget_tokens ?? 0);
           _setForceReasoning(next.force_reasoning ?? false);
+          _setOpenRouter(next.openRouter);
           _setModelSettings(next.modelSettings ?? {});
         }}
         _maxToken={_maxToken}

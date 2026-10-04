@@ -1,3 +1,5 @@
+import OpenRouterFields from './OpenRouterFields';
+import { validateOpenRouterSettings } from '@utils/openrouterControls';
 import React, { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import PopupModal from '@components/PopupModal';
@@ -201,6 +203,7 @@ const ConfigMenu = ({
   const [_verbosity, _setVerbosity] = useState<Verbosity | undefined>(config.verbosity ?? DEFAULT_VERBOSITY);
   const [_forceReasoning, _setForceReasoning] = useState<boolean>(config.force_reasoning ?? false);
   const [_systemPrompt, _setSystemPrompt] = useState<string>(config.systemPrompt ?? '');
+  const [_openRouter, _setOpenRouter] = useState(config.openRouter);
   const [_modelSettings, _setModelSettings] = useState(config.modelSettings ?? {});
   const { t } = useTranslation('model');
   const isStreamSupported = isModelStreamSupported(_model, _providerId, _modelSource);
@@ -230,6 +233,7 @@ const ConfigMenu = ({
 
   useEffect(() => {
     const modelContextLength = getModelConfigContextInfo(_model, _providerId, _modelSource).contextLength;
+    if (_providerId === 'openrouter' && validateOpenRouterSettings(_openRouter, _model)) return;
     setConfig(normalizeConfigStream({
       max_tokens: clampCompletionTokens(_maxToken, modelContextLength),
       model: _model,
@@ -245,9 +249,10 @@ const ConfigMenu = ({
       verbosity: verbositySupported ? effectiveVerbosity : undefined,
       force_reasoning: reasoningForced || undefined,
       systemPrompt: _systemPrompt || undefined,
+      openRouter: _openRouter,
       modelSettings: _modelSettings,
     }));
-  }, [_maxToken, _model, _providerId, _modelSource, _temperature, _presencePenalty, _topP, _frequencyPenalty, _stream, _reasoningEffort, _reasoningBudget, _verbosity, _systemPrompt, _modelSettings, reasoningSupported, reasoningForced, reasoningRequired, verbositySupported, maxVerbositySupported]);
+  }, [_maxToken, _model, _providerId, _modelSource, _temperature, _presencePenalty, _topP, _frequencyPenalty, _stream, _reasoningEffort, _reasoningBudget, _verbosity, _systemPrompt, _modelSettings, _openRouter, reasoningSupported, reasoningForced, reasoningRequired, verbositySupported, maxVerbositySupported]);
 
   useEffect(() => {
     if (_imageDetail !== imageDetail) setImageDetail(_imageDetail);
@@ -261,6 +266,7 @@ const ConfigMenu = ({
       maxWidth='max-w-4xl'
     >
       <div className='p-6 flex flex-col gap-5 w-[90vw] max-w-4xl'>
+        {_providerId === 'openrouter' && _modelSource !== 'local' && <OpenRouterFields key={_model} model={_model} value={_openRouter} onChange={_setOpenRouter} />}
         <div>
           <ModelSelector
             _model={_model}
@@ -275,6 +281,7 @@ const ConfigMenu = ({
                 frequency_penalty: _frequencyPenalty, stream: _stream,
                 reasoning_effort: _reasoningEffort, reasoning_budget_tokens: _reasoningBudget,
                 verbosity: _verbosity, force_reasoning: _forceReasoning,
+                openRouter: _openRouter,
                 modelSettings: _modelSettings,
               }, { model: modelId, providerId, modelSource });
               _setModel(next.model);
@@ -290,6 +297,7 @@ const ConfigMenu = ({
               _setReasoningBudget(next.reasoning_budget_tokens ?? DEFAULT_REASONING_BUDGET);
               _setVerbosity(next.verbosity ?? DEFAULT_VERBOSITY);
               _setForceReasoning(next.force_reasoning ?? false);
+              _setOpenRouter(next.openRouter);
               _setModelSettings(next.modelSettings ?? {});
             }}
             _label={t('model')}
