@@ -1,40 +1,53 @@
 import { useEffect, useRef } from 'react';
-import useBranchNavigation from './useBranchNavigation';
+import { createBranchSwipeMotion, BranchSwipeMotion } from './branchSwipeMotion';
 
 // Native touchmove must be non-passive to suppress scrolling only after a
 // horizontal gesture is established. React's touch listeners are passive.
 export function bindMessageBranchSwipe(
   element: HTMLElement,
-  onSwipe: (direction: 'previous' | 'next') => void
+  onSwipe: (direction: 'previous' | 'next' | null) => void,
+  motionOptions: {
+    begin?: () => boolean;
+    width?: () => number;
+    move?: (distance: number) => void;
+    cancel?: () => void;
+  } = {}
 ) {
   let start: { x: number; y: number } | null = null;
   let horizontal = false;
-  let suppressClick = false;
+  let suppressClickUntil = 0;
+  let samples: { x: number; time: number }[] = [];
 
   const reset = () => {
     start = null;
     horizontal = false;
+    samples = [];
+  };
+  const cancel = () => {
+    if (horizontal) motionOptions.cancel?.();
+    reset();
   };
   const onStart = (event: TouchEvent) => {
-    reset();
-    suppressClick = false;
+    cancel();
+    suppressClickUntil = 0;
     if (event.touches.length !== 1) return;
     const touch = event.touches[0];
     // Leave edge gestures to the sidebar and browser navigation.
     if (touch.clientX <= 20 || touch.clientX >= window.innerWidth - 20) return;
     const target = event.target as HTMLElement;
-    if (target.closest('button, a, input, textarea, select, [contenteditable="true"], pre, code, table, [role="slider"]')) return;
+    if (target.closest('button, a, input, textarea, select, img, [contenteditable="true"], pre, code, table, [role="slider"], [role="button"]')) return;
     if (element.querySelector('textarea, [contenteditable="true"]')) return;
     if (window.getSelection()?.toString()) return;
     for (let current: HTMLElement | null = target; current && current !== element; current = current.parentElement) {
       if (current.scrollWidth > current.clientWidth && /auto|scroll/.test(getComputedStyle(current).overflowX)) return;
     }
     start = { x: touch.clientX, y: touch.clientY };
+    samples = [{ x: touch.clientX, time: performance.now() }];
   };
   const onMove = (event: TouchEvent) => {
     if (!start) return;
     if (event.touches.length !== 1 || window.getSelection()?.toString()) {
-      reset();
+      cancel();
       return;
     }
     const dx = event.touches[0].clientX - start.x;
@@ -45,24 +58,35 @@ export function bindMessageBranchSwipe(
         reset();
         return;
       }
+      if (motionOptions.begin && !motionOptions.begin()) { reset(); return; }
       horizontal = true;
-      suppressClick = true;
     }
+    const now = performance.now();
+    samples.push({ x: event.touches[0].clientX, time: now });
+    samples = samples.filter(sample => now - sample.time <= 100);
+    suppressClickUntil = Date.now() + 500;
     if (event.cancelable) event.preventDefault();
+    motionOptions.move?.(dx);
   };
   const onEnd = (event: TouchEvent) => {
     if (start && horizontal && event.changedTouches.length === 1 && !window.getSelection()?.toString()) {
       const dx = event.changedTouches[0].clientX - start.x;
       const dy = event.changedTouches[0].clientY - start.y;
-      if (Math.abs(dx) >= 64 && Math.abs(dx) > Math.abs(dy) * 1.5) {
-        onSwipe(dx < 0 ? 'previous' : 'next');
-      }
+      const width = motionOptions.width?.() ?? element.clientWidth;
+      const first = samples[0];
+      const velocity = first ? (event.changedTouches[0].clientX - first.x) / Math.max(1, performance.now() - first.time) : 0;
+      const distanceCommit = Math.abs(dx) >= width * .30;
+      const flickCommit = Math.abs(dx) >= width * .08 && Math.abs(velocity) >= .55 && Math.sign(dx) === Math.sign(velocity);
+      motionOptions.move?.(dx);
+      onSwipe(Math.abs(dx) > Math.abs(dy) * 1.5 && (distanceCommit || flickCommit) ? (dx < 0 ? 'previous' : 'next') : null);
+    } else if (horizontal) {
+      motionOptions.cancel?.();
     }
     reset();
   };
   const onClick = (event: MouseEvent) => {
-    if (!suppressClick) return;
-    suppressClick = false;
+    if (Date.now() >= suppressClickUntil) return;
+    suppressClickUntil = 0;
     event.preventDefault();
     event.stopPropagation();
   };
@@ -70,32 +94,35 @@ export function bindMessageBranchSwipe(
   element.addEventListener('touchstart', onStart, { passive: true });
   element.addEventListener('touchmove', onMove, { passive: false });
   element.addEventListener('touchend', onEnd);
-  element.addEventListener('touchcancel', reset);
+  element.addEventListener('touchcancel', cancel);
   element.addEventListener('click', onClick, true);
   return () => {
+    cancel();
     element.removeEventListener('touchstart', onStart);
     element.removeEventListener('touchmove', onMove);
     element.removeEventListener('touchend', onEnd);
-    element.removeEventListener('touchcancel', reset);
+    element.removeEventListener('touchcancel', cancel);
     element.removeEventListener('click', onClick, true);
   };
 }
 
 export default function useMessageBranchSwipe(chatIndex: number, nodeId?: string) {
   const ref = useRef<HTMLDivElement>(null);
-  const { siblings, currentIdx, switchTo } = useBranchNavigation(chatIndex, nodeId);
-  const navigation = useRef({ siblings, currentIdx, switchTo });
-  navigation.current = { siblings, currentIdx, switchTo };
-  const enabled = currentIdx >= 0 && siblings.length > 1;
+  const motion = useRef<BranchSwipeMotion | null>(null);
 
   useEffect(() => {
-    if (!enabled || !ref.current) return;
-    return bindMessageBranchSwipe(ref.current, (direction) => {
-      const { siblings, currentIdx, switchTo } = navigation.current;
-      const target = siblings[currentIdx + (direction === 'next' ? 1 : -1)];
-      if (target) switchTo(target.id);
+    if (!nodeId || !ref.current) return;
+    const unbind = bindMessageBranchSwipe(ref.current, direction => motion.current?.finish(direction), {
+      begin: () => {
+        motion.current = createBranchSwipeMotion(ref.current!, chatIndex, nodeId);
+        return !!motion.current;
+      },
+      width: () => motion.current?.width ?? 0,
+      move: distance => motion.current?.move(distance),
+      cancel: () => motion.current?.finish(null),
     });
-  }, [enabled, nodeId, chatIndex]);
+    return () => { unbind(); motion.current?.dispose(); };
+  }, [nodeId, chatIndex]);
 
   return ref;
 }
