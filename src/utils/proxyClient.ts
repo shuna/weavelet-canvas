@@ -1,3 +1,4 @@
+import useStore from '@store/store';
 import type { OpenRouterObservation } from '@type/chat';
 /**
  * Client utilities for the Weavelet Stream Proxy (Cloudflare Worker).
@@ -22,6 +23,28 @@ export interface ProxyConfig {
 function authHeaders(config: ProxyConfig): Record<string, string> {
   if (!config.authToken) return {};
   return { Authorization: `Bearer ${config.authToken}` };
+}
+
+export function getProxyConfig(): ProxyConfig | undefined {
+  const { proxyEnabled, proxyEndpoint, proxyAuthToken } = useStore.getState();
+  const endpoint = proxyEndpoint?.trim().replace(/\/+$/, '');
+  if (!proxyEnabled || !endpoint) return undefined;
+  return { endpoint, authToken: proxyAuthToken || undefined };
+}
+
+export function fetchViaProxy(
+  config: ProxyConfig | undefined,
+  endpoint: string,
+  headers: Record<string, string>,
+  body: unknown,
+  signal?: AbortSignal
+): Promise<Response> {
+  return fetch(config ? `${config.endpoint}/api/request` : endpoint, {
+    method: 'POST',
+    headers: config ? { 'Content-Type': 'application/json', ...authHeaders(config) } : headers,
+    body: JSON.stringify(config ? { endpoint, headers, body } : body),
+    signal,
+  });
 }
 
 /**

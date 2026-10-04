@@ -1,10 +1,12 @@
 import i18next from 'i18next';
+import useStore from '@store/store';
 import type { ConfigInterface, MessageInterface, OpenRouterChatSettings, OpenRouterObservation } from '@type/chat';
 
 export interface OpenRouterRequestContext {
   chatId?: string;
   regenerate?: boolean;
   auxiliary?: boolean;
+  viaProxy?: boolean;
   onObservation?: (observation: OpenRouterObservation) => void;
 }
 
@@ -15,10 +17,15 @@ export const isOpenRouterEndpoint = (endpoint: string): boolean => {
   } catch { return false; }
 };
 
-export function validateOpenRouterSettings(settings: OpenRouterChatSettings | undefined, model?: string): string | undefined {
+export function canUseOpenRouterResponseCache(): boolean {
+  const state = useStore.getState();
+  return state.proxyEnabled && !!state.proxyEndpoint?.trim();
+}
+
+export function validateOpenRouterSettings(settings: OpenRouterChatSettings | undefined, model?: string, responseCacheEnabled = true): string | undefined {
   if (settings === undefined) return;
   const object = (v: unknown) => typeof v === 'object' && v !== null && !Array.isArray(v);
-  if (!object(settings) || [settings.routing, settings.promptCache, settings.responseCache].some(v => v !== undefined && !object(v))) return 'openRouter.errors.invalid';
+  if (!object(settings) || [settings.routing, settings.promptCache, ...(responseCacheEnabled ? [settings.responseCache] : [])].some(v => v !== undefined && !object(v))) return 'openRouter.errors.invalid';
   const r = settings.routing;
   if (r) {
     if (r.max_price !== undefined && !object(r.max_price)) return 'openRouter.errors.price';
@@ -39,16 +46,15 @@ export function validateOpenRouterSettings(settings: OpenRouterChatSettings | un
     if (p.mode !== 'provider-default' && model !== undefined && !model.startsWith('anthropic/claude-')) return 'openRouter.errors.model';
   }
   const c = settings.responseCache;
-  if (c) {
+  if (c && responseCacheEnabled) {
     if (!['inherit', 'off', 'on'].includes(c.mode)) return 'openRouter.errors.invalid';
     if (c.ttlSeconds !== undefined && (!Number.isInteger(c.ttlSeconds) || c.ttlSeconds < 1 || c.ttlSeconds > 86400)) return 'openRouter.errors.ttl';
 
   }
-  if (r?.zdr && c?.mode !== 'off') return 'openRouter.errors.zdr';
 }
 
 export function hardOpenRouterConstraints(settings?: OpenRouterChatSettings): OpenRouterChatSettings['routing'] {
-  const error = validateOpenRouterSettings(settings);
+  const error = validateOpenRouterSettings(settings, undefined, false);
   if (error) throw new Error(i18next.t(`model:${error}`) as string);
   const r = settings?.routing;
   if (!r) return;
@@ -74,7 +80,7 @@ export function applyOpenRouterControls(
     if (settings && config.providerId === 'openrouter') throw new Error(i18next.t('model:openRouter.errors.endpoint') as string);
     return;
   }
-  const error = validateOpenRouterSettings(settings, config.model);
+  const error = validateOpenRouterSettings(settings, config.model, context?.viaProxy === true);
   if (error) throw new Error(i18next.t(`model:${error}`) as string);
   const routing = context?.auxiliary ? hardOpenRouterConstraints(settings) : settings?.routing;
   if (routing) {
@@ -97,6 +103,7 @@ export function applyOpenRouterControls(
       });
     }
   }
+  if (!context?.viaProxy) return;
   const c = settings?.responseCache;
   if (context?.auxiliary || settings?.routing?.zdr || c?.mode === 'off') headers['X-OpenRouter-Cache'] = 'false';
   else if (c?.mode === 'on') {

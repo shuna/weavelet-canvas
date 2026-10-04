@@ -1,5 +1,5 @@
 import OpenRouterFields from './OpenRouterFields';
-import { validateOpenRouterSettings } from '@utils/openrouterControls';
+import { validateOpenRouterSettings, canUseOpenRouterResponseCache } from '@utils/openrouterControls';
 import React, { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import PopupModal from '@components/PopupModal';
@@ -233,7 +233,7 @@ const ConfigMenu = ({
 
   useEffect(() => {
     const modelContextLength = getModelConfigContextInfo(_model, _providerId, _modelSource).contextLength;
-    if (_providerId === 'openrouter' && validateOpenRouterSettings(_openRouter, _model)) return;
+    if (_providerId === 'openrouter' && validateOpenRouterSettings(_openRouter, _model, canUseOpenRouterResponseCache())) return;
     setConfig(normalizeConfigStream({
       max_tokens: clampCompletionTokens(_maxToken, modelContextLength),
       model: _model,

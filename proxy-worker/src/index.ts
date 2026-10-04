@@ -483,6 +483,33 @@ async function handleModeration(request: Request): Promise<Response> {
   );
 }
 
+async function handleRequest(request: Request): Promise<Response> {
+  let parsed: Omit<StreamRequest, 'sessionId'>;
+  try {
+    parsed = await request.json() as Omit<StreamRequest, 'sessionId'>;
+  } catch {
+    return jsonResponse({ error: 'Invalid JSON body' }, 400);
+  }
+  if (typeof parsed?.endpoint !== 'string' || !parsed.endpoint || !isStringRecord(parsed.headers)) {
+    return jsonResponse({ error: 'endpoint and string headers are required' }, 400);
+  }
+  let upstream: Response;
+  try {
+    upstream = await fetch(parsed.endpoint, {
+      method: 'POST', headers: parsed.headers, body: JSON.stringify(parsed.body),
+      signal: request.signal,
+    });
+  } catch (e) {
+    return jsonResponse({ error: `Failed to reach LLM API: ${(e as Error).message}` }, 502);
+  }
+  const headers = new Headers();
+  for (const name of ['Content-Type', 'X-OpenRouter-Cache-Status', 'X-OpenRouter-Cache-Age', 'X-OpenRouter-Cache-TTL', 'X-OpenRouter-Cache-Source-Id', 'X-Generation-Id']) {
+    const value = upstream.headers.get(name);
+    if (value !== null) headers.set(name, value);
+  }
+  return withCORS(new Response(upstream.body, { status: upstream.status, headers }));
+}
+
 // ---------------------------------------------------------------------------
 // Recovery handler - replays missed chunks from KV (with polling)
 // ---------------------------------------------------------------------------
@@ -748,6 +775,10 @@ export default {
     // POST /api/stream - Start proxied SSE stream
     if (url.pathname === '/api/stream' && request.method === 'POST') {
       return handleStream(request, env, ctx);
+    }
+
+    if (url.pathname === '/api/request' && request.method === 'POST') {
+      return handleRequest(request);
     }
 
     // POST /api/moderation - Forward a moderation request

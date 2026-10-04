@@ -20,7 +20,7 @@ afterEach(() => { vi.restoreAllMocks(); vi.unstubAllGlobals(); });
 describe('OpenRouter request controls', () => {
   it('maps nested settings, caches only a copy, and refreshes explicit regeneration', () => {
     const original = structuredClone(messages);
-    const prepared = prepareStreamRequest(endpoint, messages, config, 'key', undefined, undefined, { chatId: 'chat-1', regenerate: true });
+    const prepared = prepareStreamRequest(endpoint, messages, config, 'key', undefined, undefined, { chatId: 'chat-1', regenerate: true, viaProxy: true });
     expect(prepared.body).toMatchObject({ provider: { only: ['anthropic'], allow_fallbacks: false, max_price: { prompt: 0 } }, session_id: 'weavelet:chat-1' });
     expect(prepared.body).not.toHaveProperty('openRouter');
     expect((prepared.body as { messages: unknown[] }).messages[0]).toMatchObject({ content: [{ cache_control: { type: 'ephemeral', ttl: '1h' } }] });
@@ -37,11 +37,23 @@ describe('OpenRouter request controls', () => {
   });
   it.each(['inherit', 'off', 'on'] as const)('preserves %s response-cache semantics', mode => {
     const bodyConfig = { ...config, openRouter: { responseCache: { mode } } };
-    const initial = prepareStreamRequest(endpoint, messages, bodyConfig);
+    const initial = prepareStreamRequest(endpoint, messages, bodyConfig, undefined, undefined, undefined, { viaProxy: true });
     expect(initial.headers['X-OpenRouter-Cache']).toBe(mode === 'inherit' ? undefined : String(mode === 'on'));
-    const regenerated = prepareStreamRequest(endpoint, messages, bodyConfig, undefined, undefined, undefined, { regenerate: true });
+    const regenerated = prepareStreamRequest(endpoint, messages, bodyConfig, undefined, undefined, undefined, { regenerate: true, viaProxy: true });
     expect(regenerated.headers['X-OpenRouter-Cache']).toBe(mode === 'inherit' ? undefined : String(mode === 'on'));
     if (mode === 'inherit') expect(regenerated.headers).toEqual(initial.headers);
+  });
+  it.each(['inherit', 'off', 'on'] as const)('keeps saved %s cache settings but omits controls on direct requests', async mode => {
+    const saved = { ...config, openRouter: { ...config.openRouter, responseCache: { mode, ttlSeconds: 75 } } };
+    const original = structuredClone(saved);
+    const prepared = prepareStreamRequest(endpoint, messages, saved, undefined, undefined, undefined, { regenerate: true });
+    expect(Object.keys(prepared.headers).filter(key => key.startsWith('X-OpenRouter-Cache'))).toEqual([]);
+    expect(prepared.body).toHaveProperty('provider');
+    expect(saved).toEqual(original);
+    const fetcher = vi.fn().mockResolvedValue(new Response(JSON.stringify({ choices: [] })));
+    vi.stubGlobal('fetch', fetcher);
+    await getChatCompletion(endpoint, messages, saved, undefined, undefined, undefined, undefined, { viaProxy: true });
+    expect(Object.keys(fetcher.mock.calls[0][1].headers).filter(key => key.startsWith('X-OpenRouter-Cache'))).toEqual([]);
   });
   it('does not invent response-cache settings for regeneration of legacy chats', () => {
     const legacy = { ...config, openRouter: undefined };
@@ -69,8 +81,8 @@ describe('OpenRouter request controls', () => {
     expect(validateOpenRouterSettings({ routing: { order: ['b'], only: ['a'] } })).toBeDefined();
     expect(validateOpenRouterSettings({ routing: { max_price: { prompt: 0 } } })).toBeUndefined();
     expect(validateOpenRouterSettings({ promptCache: { mode: 'claude-system' } }, 'openai/gpt-4.1')).toBeDefined();
-    expect(validateOpenRouterSettings({ routing: { zdr: true }, responseCache: { mode: 'on' } })).toBeDefined();
-    expect(prepareStreamRequest(endpoint, messages, { ...config, openRouter: { routing: { zdr: true }, responseCache: { mode: 'off' } } }).headers['X-OpenRouter-Cache']).toBe('false');
+    expect(validateOpenRouterSettings({ routing: { zdr: true }, responseCache: { mode: 'on' } })).toBeUndefined();
+    expect(prepareStreamRequest(endpoint, messages, { ...config, openRouter: { routing: { zdr: true }, responseCache: { mode: 'on' } } }, undefined, undefined, undefined, { viaProxy: true }).headers['X-OpenRouter-Cache']).toBe('false');
   });
   it('gives stream and non-stream calls the same controls and reports zero usage', async () => {
     const fetcher = vi.fn().mockImplementation(async () => new Response(JSON.stringify({ choices: [], usage: { prompt_tokens: 0, completion_tokens: 0, cost: 0, prompt_tokens_details: { cached_tokens: 0, cache_write_tokens: 0 } } }), { headers: { 'X-OpenRouter-Cache-Status': 'HIT' } }));
@@ -134,7 +146,35 @@ describe('auxiliary constraints and observations', () => {
     const request = fetcher.mock.calls[0][1];
     expect(JSON.parse(request.body)).toMatchObject({ provider: { only: ['anthropic'], max_price: { prompt: 0 } } });
     expect(JSON.parse(request.body)).not.toHaveProperty('cache_control');
-    expect(request.headers['X-OpenRouter-Cache']).toBe('false');
+    expect(request.headers).not.toHaveProperty('X-OpenRouter-Cache');
+  });
+  it('routes non-stream, raw stream, title and quality requests through the configured proxy', async () => {
+    vi.mocked(useStore.getState).mockReturnValue({ proxyEnabled: true, proxyEndpoint: ' https://proxy.test/ ', proxyAuthToken: 'proxy-token', providerCustomModels: {}, favoriteModels: [], providerModelCache: {} } as never);
+    const fetcher = vi.fn().mockImplementation(async () => new Response(JSON.stringify({ choices: [{ message: { content: '{"scores":{"taskCompletion":1}}' } }] }), { headers: { 'X-OpenRouter-Cache-Status': 'HIT', 'X-OpenRouter-Cache-Age': '0' } }));
+    vi.stubGlobal('fetch', fetcher);
+    const observe = vi.fn();
+    await getChatCompletion(endpoint, messages, config, 'key', undefined, undefined, undefined, { regenerate: true, onObservation: observe });
+    await getChatCompletionStream(endpoint, messages, config, 'key');
+    await generateTitleForChat(messages, config, { titleModel: 'openai/gpt-4.1', titleProviderId: 'openrouter', favoriteModels: [], providers: { openrouter: { id: 'openrouter', name: 'OpenRouter', endpoint, modelsRequireAuth: true, apiKey: 'key' } }, fallbackProvider: { endpoint, key: 'key' }, t: key => key });
+    const quality = await runQualityEvaluation('user', 'answer', endpoint, 'openai/gpt-4.1', 'key', 'en', undefined, config.openRouter);
+    expect(quality.scores).toMatchObject({ taskCompletion: 1 });
+    expect(observe).toHaveBeenCalledWith(expect.objectContaining({ responseCacheStatus: 'HIT', responseCacheAge: 0 }));
+    const envelopes = fetcher.mock.calls.map(([url, init]) => {
+      expect(url).toBe('https://proxy.test/api/request');
+      expect(init.headers).toEqual({ 'Content-Type': 'application/json', Authorization: 'Bearer proxy-token' });
+      const parsed = JSON.parse(init.body);
+      expect(parsed.endpoint).toBe(endpoint);
+      expect(parsed.headers.Authorization).toBe('Bearer key');
+      expect(parsed.body.provider.only).toEqual(['anthropic']);
+      return parsed;
+    });
+    expect(envelopes[0].headers).toMatchObject({ 'X-OpenRouter-Cache': 'true', 'X-OpenRouter-Cache-TTL': '60', 'X-OpenRouter-Cache-Clear': 'true' });
+    expect(envelopes[1].body.stream).toBe(true);
+    for (const envelope of envelopes.slice(2)) {
+      expect(envelope.headers['X-OpenRouter-Cache']).toBe('false');
+      expect(envelope.headers).not.toHaveProperty('X-OpenRouter-Cache-TTL');
+      expect(envelope.body).not.toHaveProperty('cache_control');
+    }
   });
   it('distinguishes absent usage from zero and ignores invalid numeric observations', () => {
     expect(observeOpenRouterUsage(undefined)).toEqual({});

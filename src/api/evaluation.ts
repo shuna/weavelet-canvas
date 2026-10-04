@@ -11,7 +11,7 @@ import type { SafetyCheckResult, QualityEvaluationResult, QualityScores, SystemQ
 import { qualityAxisKeys, systemQualityAxisKeys } from '@type/evaluation';
 import useStore from '@store/store';
 import { DEFAULT_PROVIDERS } from '@store/provider-config';
-import { runModerationViaProxy } from '@utils/proxyClient';
+import { getProxyConfig, fetchViaProxy, runModerationViaProxy } from '@utils/proxyClient';
 
 // ---------------------------------------------------------------------------
 // A) Safety Check — OpenAI Moderation API
@@ -299,12 +299,9 @@ export async function runQualityEvaluation(
     body.response_format = { type: 'json_object' };
   }
 
-  applyOpenRouterControls(chatUrl, { model, max_tokens: 0, temperature: 0, top_p: 1, presence_penalty: 0, frequency_penalty: 0, openRouter: { routing: hardOpenRouterConstraints(openRouter), responseCache: { mode: 'off' } } }, body, headers, { auxiliary: true });
-  const response = await fetch(chatUrl, {
-    method: 'POST',
-    headers,
-    body: JSON.stringify(body),
-  }).catch((e) => {
+  const proxyConfig = getProxyConfig();
+  applyOpenRouterControls(chatUrl, { model, max_tokens: 0, temperature: 0, top_p: 1, presence_penalty: 0, frequency_penalty: 0, openRouter: { routing: hardOpenRouterConstraints(openRouter), responseCache: { mode: 'off' } } }, body, headers, { auxiliary: true, viaProxy: !!proxyConfig });
+  const response = await fetchViaProxy(proxyConfig, chatUrl, headers, body).catch((e) => {
     throw new Error(`[EVAL_QUALITY_CONNECTION_FAILED] url=${chatUrl} detail=${e.message}`);
   });
 

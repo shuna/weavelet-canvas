@@ -1,5 +1,5 @@
 import OpenRouterFields from '@components/ConfigMenu/OpenRouterFields';
-import { validateOpenRouterSettings } from '@utils/openrouterControls';
+import { validateOpenRouterSettings, canUseOpenRouterResponseCache } from '@utils/openrouterControls';
 import { showToast } from '@utils/showToast';
 import React, { useEffect, useRef, useState } from 'react';
 import useStore from '@store/store';
@@ -255,7 +255,7 @@ const ChatConfigPopup = ({
   }, [isStreamSupported, _stream]);
 
   const handleSave = () => {
-    const error = _providerId === 'openrouter' ? validateOpenRouterSettings(_openRouter, _model) : undefined;
+    const error = _providerId === 'openrouter' ? validateOpenRouterSettings(_openRouter, _model, canUseOpenRouterResponseCache()) : undefined;
     if (error) { showToast(t(error) as string, 'error'); return; }
     const modelContextLength = getModelConfigContextInfo(_model, _providerId, _modelSource).contextLength;
     const nextConfig = normalizeConfigStream({
@@ -449,7 +449,7 @@ const ChatConfigInline = ({ onSettingsChanged }: { onSettingsChanged?: () => voi
   useEffect(() => {
     return () => {
       const s = stateRef.current;
-      const error = s._providerId === 'openrouter' ? validateOpenRouterSettings(s._openRouter, s._model) : undefined;
+      const error = s._providerId === 'openrouter' ? validateOpenRouterSettings(s._openRouter, s._model, canUseOpenRouterResponseCache()) : undefined;
       if (error) { showToast(t(error) as string, 'error'); return; }
       const currentConfig = useStore.getState().defaultChatConfig;
       const modelContextLength = getModelConfigContextInfo(s._model, s._providerId, s._modelSource).contextLength;

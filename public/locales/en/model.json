@@ -160,7 +160,7 @@
     "allow": "Allow",
     "deny": "Exclude",
     "zdr": "Require ZDR providers",
-    "zdrHelp": "Enabling ZDR also turns response caching off. Local history and proxy recovery storage are separate. Account restrictions still apply.",
+    "zdrHelp": "Require ZDR providers and disable response caching where cache controls are supported. Saved cache settings are retained on direct connections. Local history and proxy recovery storage are separate; account restrictions still apply.",
     "promptCache": "Input caching",
     "providerDefault": "Use provider defaults",
     "claudeConversation": "Claude: growing conversation",
@@ -200,6 +200,18 @@
     },
     "chooseProvider": "Add from providers",
     "providerLoadError": "Could not load providers. You can still enter slugs manually.",
-    "requireParametersHelp": "Use this during validation when unsupported generation settings should cause a detectable failure. Only providers supporting every sent parameter are eligible; the request fails if none qualify. For ordinary chats, leave this on “Use OpenRouter settings”."
+    "requireParametersHelp": "Use this during validation when unsupported generation settings should cause a detectable failure. Only providers supporting every sent parameter are eligible; the request fails if none qualify. For ordinary chats, leave this on “Use OpenRouter settings”.",
+    "help": {
+      "selection": "Select automatic routing or sort providers by price, throughput, or latency.",
+      "allow_fallbacks": "Allow another eligible provider when the preferred one is unavailable. Inherit uses OpenRouter settings.",
+      "promptPrice": "Maximum input price in USD per million tokens. Empty means no request-level limit; 0 permits free input only.",
+      "completionPrice": "Maximum output price in USD per million tokens. Empty means no request-level limit; 0 permits free output only.",
+      "data_collection": "Exclude providers that may retain data, or inherit the OpenRouter account policy. Account restrictions still apply.",
+      "promptTTL": "Requested Claude input-cache lifetime. Availability and actual cache hits depend on the endpoint.",
+      "responseTTL": "Requested response-cache lifetime in seconds (1–86400). Empty uses 300 seconds.",
+      "stickySession": "Use the chat ID as the routing session ID to encourage reuse of the same provider. This does not store chat history remotely."
+    },
+    "directCacheDisabled": "Disabled for direct connections because response-cache control headers are blocked. Saved values are retained but not sent. They become available again through the Proxy.",
+    "zdrCacheDisabled": "Response caching is sent as off while ZDR is enabled."
   }
 }
