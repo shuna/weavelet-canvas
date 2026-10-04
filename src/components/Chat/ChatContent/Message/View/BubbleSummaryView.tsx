@@ -1,4 +1,4 @@
-import { useEffect, useState, type ReactNode } from 'react';
+import { lazy, Suspense, useEffect, useState, type ReactNode } from 'react';
 import useStore from '@store/store';
 import { getAppliedBubbleSummaries } from '@utils/bubbleSummary';
 import countTokens from '@utils/messageUtils';
@@ -6,8 +6,12 @@ import type { MessageInterface } from '@type/chat';
 
 import { useBubbleSummary, useSummaryDisplay } from './bubbleSummaryDisplay';
 
+const MarkdownRenderer = lazy(() => import('./MarkdownRenderer'));
+
 export default function BubbleSummaryView({ nodeId, children }: { nodeId?: string; children: ReactNode }) {
   const { chat, candidates, summary, effectiveChat, generating, range, tab } = useBubbleSummary(nodeId);
+  const markdownMode = useStore(state => state.markdownMode);
+  const inlineLatex = useStore(state => state.inlineLatex);
   const choose = useSummaryDisplay(state => state.choose);
   const applied = effectiveChat ? getAppliedBubbleSummaries(effectiveChat, chat?.messages.length, generating) : [];
   const sendingSummary = applied.some(value => value.summary.id === summary?.id);
@@ -39,7 +43,11 @@ export default function BubbleSummaryView({ nodeId, children }: { nodeId?: strin
     {candidates.length > 1 && <label className='mb-3 block text-xs'>保存済み要約 <select aria-label='保存済み要約' className='rounded border bg-transparent p-1' value={summary.id} onChange={event => { const value = candidates.find(item => item.id === event.target.value); if (value) choose(chat.id, value); }}>{candidates.map(value => <option key={value.id} value={value.id}>{value.sources.length}件 · {value.text.slice(0, 32)}</option>)}</select></label>}
     <div>
       <div hidden={tab !== 'original'}>{children}</div>
-      <div hidden={tab !== 'summary'} className='whitespace-pre-wrap break-words rounded-2xl bg-white/60 p-4 text-gray-800 shadow-sm ring-1 ring-black/5 dark:bg-gray-900/20 dark:text-gray-100 dark:ring-white/10'>{summary.text}</div>
+      <div hidden={tab !== 'summary'} data-summary-content className='break-words rounded-2xl bg-white/60 p-4 text-gray-800 shadow-sm ring-1 ring-black/5 dark:bg-gray-900/20 dark:text-gray-100 dark:ring-white/10'>
+        <div className='markdown prose w-full max-w-full break-words dark:prose-invert'>
+          {markdownMode ? <Suspense fallback={<span className='whitespace-pre-wrap'>{summary.text}</span>}><MarkdownRenderer content={summary.text} inlineLatex={inlineLatex} /></Suspense> : <span className='whitespace-pre-wrap'>{summary.text}</span>}
+        </div>
+      </div>
     </div>
     <div className='mt-3 flex flex-wrap items-center gap-2 border-t border-black/10 pt-3 text-xs dark:border-white/10'>
       <span>送信：</span>
