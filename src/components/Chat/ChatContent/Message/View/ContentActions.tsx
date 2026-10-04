@@ -6,8 +6,6 @@ import EvaluateIcon from '@icon/EvaluateIcon';
 
 import RefreshButton from './Button/RefreshButton';
 import RegenerateNextButton from './Button/RegenerateNextButton';
-import UpButton from './Button/UpButton';
-import DownButton from './Button/DownButton';
 import CopyButton from './Button/CopyButton';
 import EditButton from './Button/EditButton';
 import DeleteButton from './Button/DeleteButton';
@@ -67,6 +65,34 @@ export default function ContentActions({
           />
         )}
       </div>
+      {!isDelete && (
+        <div className='absolute right-2 top-1/2 -translate-y-1/2 flex shrink-0 flex-col items-center gap-1 text-gray-500 dark:text-gray-400 md:right-3'>
+          {messageIndex !== 0 && (
+            <button
+              type='button'
+              className='p-0.5 hover:text-gray-700 dark:hover:text-gray-200'
+              aria-label='shift message up'
+              onClick={onMoveUp}
+            >
+              <svg className='w-3.5 h-3.5' aria-hidden='true' viewBox='0 0 24 24' fill='none' stroke='currentColor'>
+                <path strokeLinecap='round' strokeLinejoin='round' strokeWidth='2' d='m5 15 7-7 7 7' />
+              </svg>
+            </button>
+          )}
+          {messageIndex !== lastMessageIndex && !(messageIndex === 0 && role === 'system') && (
+            <button
+              type='button'
+              className='p-0.5 hover:text-gray-700 dark:hover:text-gray-200'
+              aria-label='shift message down'
+              onClick={onMoveDown}
+            >
+              <svg className='w-3.5 h-3.5' aria-hidden='true' viewBox='0 0 24 24' fill='none' stroke='currentColor'>
+                <path strokeLinecap='round' strokeLinejoin='round' strokeWidth='2' d='m5 9 7 7 7-7' />
+              </svg>
+            </button>
+          )}
+        </div>
+      )}
       <div className='pointer-events-none translate-y-1 opacity-0 transition duration-150 group-hover:pointer-events-auto group-hover:translate-y-0 group-hover:opacity-100'>
       <div className='relative isolate flex shrink-0 overflow-hidden rounded-full border border-gray-300 bg-gray-200/80 shadow-sm backdrop-blur-2xl supports-[backdrop-filter]:bg-gray-200/45 transition duration-150 dark:border-white/10 dark:bg-white/8 dark:supports-[backdrop-filter]:bg-white/5'>
         <div className='relative z-10 flex flex-nowrap items-center justify-center gap-1.5 px-1.5 py-1.5 text-gray-600 md:gap-2 md:px-2 md:py-2 dark:text-gray-200'>
@@ -78,11 +104,6 @@ export default function ContentActions({
               {!isCurrentChatGenerating && role === 'user' && (
                 <RegenerateNextButton onClick={onRefresh} />
               )}
-              {messageIndex !== 0 && <UpButton onClick={onMoveUp} />}
-              {messageIndex !== lastMessageIndex && !(messageIndex === 0 && role === 'system') && (
-                <DownButton onClick={onMoveDown} />
-              )}
-
               <CopyButton onClick={onCopy} />
               {!isGeneratingMessage && <EditButton setIsEdit={setIsEdit} disabled={isProtected} />}
               <DeleteButton setIsDelete={setIsDelete} disabled={isProtected} />
