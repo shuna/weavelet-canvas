@@ -82,7 +82,6 @@ function SummaryDialog({ messageIndex, initialSummary, setOpen }: { messageIndex
       const saved = { ...summary, text };
       latest.saveBubbleSummary(chat.id, saved);
       useSummaryDisplay.getState().choose(chat.id, saved);
-      useSummaryDisplay.getState().select(`${chat.id}:${summary.id}`, 'summary');
       setOpen(false);
     } catch (failure) {
       if (!abort.signal.aborted) setError(failure instanceof Error ? failure.message : '要約を生成できませんでした。');
@@ -92,7 +91,7 @@ function SummaryDialog({ messageIndex, initialSummary, setOpen }: { messageIndex
     footerEndContent={<><button type='button' className='btn btn-neutral' onClick={close}>{busy ? '生成を中止' : 'キャンセル'}</button><button type='button' className={`btn ${busy || reason ? 'btn-neutral cursor-not-allowed opacity-50' : 'btn-primary'}`} disabled={busy || !!reason} onClick={() => void generate()}>{busy ? '生成中…' : '要約を生成'}</button></>}>
     <div className='min-w-[18rem] space-y-3 p-5 text-sm text-gray-900 dark:text-gray-300'>
       <div className='flex flex-wrap gap-3'>{(['single', 'through', 'range'] as const).map(value => <label key={value} className='flex cursor-pointer items-center gap-1 text-gray-600 dark:text-gray-400'><input type='radio' className='accent-blue-600' name='summary-mode' checked={mode === value} disabled={busy} onChange={() => chooseMode(value)} />{value === 'single' ? 'このバブル' : value === 'through' ? 'ここまで' : '選択範囲'}</label>)}</div>
-      <p className='text-xs text-gray-500 dark:text-gray-400'>原文は保持されます。生成後は原文送信のまま、要約タブで結果を確認できます。先頭のシステム指示は要約しません。</p>
+      <p className='text-xs text-gray-500 dark:text-gray-400'>原文は保持されます。生成後は要約を表示・送信します。「原文」で原文の表示・送信に戻せます。先頭のシステム指示は要約しません。</p>
       <div className='max-h-72 space-y-2 overflow-y-auto'>{path.map((id, index) => <label key={id} className={`flex items-start gap-2 rounded border p-2 ${selected.includes(id) && eligible(index) && candidate(index) ? 'border-gray-300 text-gray-900 dark:border-gray-500 dark:text-gray-300' : 'border-gray-200 text-gray-400 dark:border-gray-600 dark:text-gray-500'}`}>
         <input type='checkbox' className='mt-0.5 accent-blue-600' aria-label={`バブル${index + 1}を要約に含める`} checked={selected.includes(id)} disabled={busy || !candidate(index) || (!eligible(index) && !selected.includes(id))} onChange={() => {
           setSelected(current => current.includes(id) ? current.filter(value => value !== id) : [...current, id]);

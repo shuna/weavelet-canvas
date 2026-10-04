@@ -20,7 +20,7 @@ beforeEach(() => {
   state.value = { chats: [makeChat()], omittedNodeMaps: {}, generatingSessions: {} };
   const set = (value: any) => Object.assign(state.value, typeof value === 'function' ? value(state.value) : value);
   Object.assign(state.value, createChatSlice(set, () => state.value));
-  useSummaryDisplay.setState({ tabs: {}, chosen: {} });
+  useSummaryDisplay.setState({ chosen: {} });
 });
 
 describe('summary persistence and send selection', () => {
@@ -48,14 +48,18 @@ describe('summary persistence and send selection', () => {
     const messages = getSubmitContextMessages(state.value.chats[0].messages, 'midchat', 1, 'gpt-4o', 0);
     expect(messages[0].content[0]).toEqual({ type: 'text', text: 'A' });
   });
-  it('keeps summary view choices independent and exposes originals after overlapping view changes', () => {
+  it('couples display choices to persisted send state and clears overlapping summaries', () => {
     const ab = state.value.chats[0].summaries[0];
     const b = summary('b', [source('b', 'a', 'B')]);
+    state.value.saveBubbleSummary('chat', b);
     useSummaryDisplay.getState().choose('chat', ab);
-    useSummaryDisplay.getState().select('chat:ab', 'summary');
+    expect(state.value.chats[0].summaries.map((item: BubbleSummary) => item.useForSubmit)).toEqual([true, false]);
     useSummaryDisplay.getState().choose('chat', b);
-    expect(useSummaryDisplay.getState().tabs['chat:ab']).toBe('original');
-    expect(state.value.chats[0].summaries[0].useForSubmit).toBe(true);
+    expect(state.value.chats[0].summaries.map((item: BubbleSummary) => item.useForSubmit)).toEqual([false, true]);
+    expect(getSubmitContextMessages(state.value.chats[0].messages, 'append', 3, 'gpt-4o', 0).flatMap(message => message.content)).toContainEqual({ type: 'text', text: 'Past conversation summary:\nb summary' });
+    useSummaryDisplay.getState().choose('chat', b, false);
+    expect(state.value.chats[0].summaries.map((item: BubbleSummary) => item.useForSubmit)).toEqual([false, false]);
+    expect(getSubmitContextMessages(state.value.chats[0].messages, 'append', 3, 'gpt-4o', 0).flatMap(message => message.content)).toContainEqual({ type: 'text', text: 'B' });
   });
   it('excludes hidden-branch source snapshots and target flags from visible-only export', () => {
     const chat = state.value.chats[0];

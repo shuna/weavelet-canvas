@@ -62,7 +62,7 @@ test('summary dialog selects previews, disables empty selection and saves genera
     const { default: store } = await import(/* @vite-ignore */ '/src/store/store.ts');
     return store.getState().chats[0].summaries;
   });
-  expect(saved).toMatchObject([{ text: summaryMarkdown, useForSubmit: false, sources: [{ nodeId: 'a' }, { nodeId: 'b' }] }]);
+  expect(saved).toMatchObject([{ text: summaryMarkdown, useForSubmit: true, sources: [{ nodeId: 'a' }, { nodeId: 'b' }] }]);
   const capsule = bubble.getByRole('group', { name: '要約操作' });
   const originalButton = capsule.getByRole('button', { name: '原文', exact: true });
   const summaryButton = capsule.getByRole('button', { name: '要約', exact: true });
@@ -73,7 +73,8 @@ test('summary dialog selects previews, disables empty selection and saves genera
   await expect(summaryButton).toHaveAttribute('aria-pressed', 'true');
   await expect(capsule.getByRole('button', { name: '要約を作成', exact: true })).toHaveCount(0);
   await expect(bubble.getByRole('tablist')).toHaveCount(0);
-  await expect(bubble.getByText('原文 · 送信に使用', { exact: true })).toBeVisible();
+  await expect(bubble.getByText('送信：', { exact: true })).toHaveCount(0);
+  await expect(bubble.getByText(/概算.*トークン/)).toHaveCount(0);
   const summaryText = bubble.getByText('Generated summary', { exact: true });
   await expect(bubble.getByRole('heading', { name: 'Generated summary', level: 2 })).toBeVisible();
   await expect(bubble.locator('strong').filter({ hasText: 'Important' })).toBeVisible();
@@ -89,10 +90,13 @@ test('summary dialog selects previews, disables empty selection and saves genera
   await expect(page.getByText('Original a', { exact: true })).toBeVisible();
   await expect(page.getByText('Original b', { exact: true })).toBeVisible();
   await expect(summaryText).toBeHidden();
+  expect(await page.evaluate(async () => { const { default: store } = await import(/* @vite-ignore */ '/src/store/store.ts'); return store.getState().chats[0].summaries[0].useForSubmit; })).toBe(false);
   await summaryButton.click();
+  expect(await page.evaluate(async () => { const { default: store } = await import(/* @vite-ignore */ '/src/store/store.ts'); return store.getState().chats[0].summaries[0].useForSubmit; })).toBe(true);
   await expect(summaryText).toBeVisible();
   await expect(page.getByText('Original a', { exact: true })).toBeHidden();
-  await expect(bubble.getByText('原文 · 送信に使用', { exact: true })).toBeVisible();
+  await expect(bubble.getByText('送信：', { exact: true })).toHaveCount(0);
+  await expect(bubble.getByText(/概算.*トークン/)).toHaveCount(0);
   await summaryButton.click();
   await expect(modal.getByText('要約の対象を選択', { exact: true })).toBeVisible();
   await expect(first).toBeChecked();
@@ -106,6 +110,9 @@ test('summary dialog selects previews, disables empty selection and saves genera
   await expect(second).toBeChecked();
   await expect(generate).toBeEnabled();
   await modal.getByRole('button', { name: 'キャンセル', exact: true }).click();
+  await page.evaluate(async () => { const { useSummaryDisplay } = await import(/* @vite-ignore */ '/src/components/Chat/ChatContent/Message/View/bubbleSummaryDisplay.ts'); useSummaryDisplay.setState({ chosen: {} }); });
+  await expect(summaryText).toBeVisible();
+  await expect(summaryButton).toHaveAttribute('aria-pressed', 'true');
   await page.evaluate(() => document.documentElement.classList.remove('dark'));
   await expect(summarySurface).toHaveCSS('color', 'rgb(52, 53, 65)');
   await expect(summarySurface).toHaveCSS('background-color', 'rgba(255, 255, 255, 0.6)');
