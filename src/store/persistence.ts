@@ -45,6 +45,7 @@ export type PersistedStoreState = Omit<
   | 'menuWidth'
   | 'defaultImageDetail'
   | 'animateBubbleNavigation'
+  | 'branchSwipeDirection'
   | 'providers'
   | 'favoriteModels'
   | 'branchClipboard'
@@ -96,7 +97,7 @@ const FULL_PERSIST_KEYS: (keyof PersistedStoreState)[] = [
   'titleModel', 'titleProviderId', 'advancedMode', 'prompts', 'defaultChatConfig', 'defaultSystemMessage',
   'hideMenuOptions', 'hideSideMenu', 'folders', 'enterToSubmit',
   'inlineLatex', 'markdownMode', 'streamingMarkdownPolicy', 'totalTokenUsed', 'countTotalTokens',
-  'displayChatSize', 'menuWidth', 'defaultImageDetail', 'animateBubbleNavigation',
+  'displayChatSize', 'menuWidth', 'defaultImageDetail', 'animateBubbleNavigation', 'branchSwipeDirection',
   'providers', 'favoriteModels',
   'branchClipboard', 'contentStore', 'providerModelCache',
   'providerCustomModels', '_legacyCustomModels',
@@ -126,7 +127,7 @@ const LOCAL_STORAGE_PERSIST_KEYS: (keyof LocalStoragePersistedState)[] = [
   'titleModel', 'titleProviderId', 'advancedMode', 'prompts', 'defaultChatConfig', 'defaultSystemMessage',
   'hideMenuOptions', 'hideSideMenu', 'folders', 'enterToSubmit',
   'inlineLatex', 'markdownMode', 'streamingMarkdownPolicy', 'totalTokenUsed', 'countTotalTokens',
-  'displayChatSize', 'menuWidth', 'defaultImageDetail', 'animateBubbleNavigation',
+  'displayChatSize', 'menuWidth', 'defaultImageDetail', 'animateBubbleNavigation', 'branchSwipeDirection',
   'providers', 'favoriteModels',
   'providerModelCache',
   'providerCustomModels', '_legacyCustomModels',
@@ -245,6 +246,7 @@ function buildPartializedState(state: StoreState): PersistedStoreState {
     menuWidth: state.menuWidth,
     defaultImageDetail: state.defaultImageDetail,
     animateBubbleNavigation: state.animateBubbleNavigation,
+    branchSwipeDirection: state.branchSwipeDirection,
 
     providers: state.providers,
     favoriteModels: state.favoriteModels,
@@ -307,6 +309,7 @@ function buildLocalStoragePartializedState(
     menuWidth: state.menuWidth,
     defaultImageDetail: state.defaultImageDetail,
     animateBubbleNavigation: state.animateBubbleNavigation,
+    branchSwipeDirection: state.branchSwipeDirection,
 
     providers: state.providers,
     favoriteModels: state.favoriteModels,

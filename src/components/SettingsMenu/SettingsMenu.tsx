@@ -16,7 +16,7 @@ import ProviderMenuInline from '@components/ProviderMenu/ProviderMenuInline';
 import { ProxySettingsInline } from './ProxySettings';
 import { ChatConfigInline } from '@components/ChatConfigMenu/ChatConfigMenu';
 import { isModelStreamSupported } from '@utils/streamSupport';
-import { ImageDetail } from '@type/chat';
+import { BranchSwipeDirection, ImageDetail } from '@type/chat';
 import Toggle from '@components/Toggle';
 import { PromptLibraryInline } from '@components/PromptLibraryMenu/PromptLibraryMenu';
 import ImportChat from '@components/ImportExportChat/ImportChat';
@@ -41,6 +41,7 @@ const buildSettingsDialogSnapshot = () => {
     inlineLatex: state.inlineLatex,
     enterToSubmit: state.enterToSubmit,
     animateBubbleNavigation: state.animateBubbleNavigation,
+    branchSwipeDirection: state.branchSwipeDirection,
     streamingMarkdownPolicy: state.streamingMarkdownPolicy,
     countTotalTokens: state.countTotalTokens,
     displayChatSize: state.displayChatSize,
@@ -388,6 +389,21 @@ const DefaultImageDetailSelect = () => {
   );
 };
 
+const BranchSwipeDirectionSelect = () => {
+  const { t } = useTranslation();
+  const direction = useStore(state => state.branchSwipeDirection);
+  const setDirection = useStore(state => state.setBranchSwipeDirection);
+  return (
+    <div className='flex flex-wrap items-center justify-between gap-3 px-4 py-3'>
+      <label htmlFor='branch-swipe-direction' className='text-sm font-medium text-gray-900 dark:text-gray-300'>{t('branchSwipeDirection')}</label>
+      <select id='branch-swipe-direction' className='max-w-full rounded-md border border-gray-300 bg-white px-3 py-1.5 text-sm dark:border-gray-600 dark:bg-gray-800 dark:text-gray-300' value={direction} onChange={event => setDirection(event.target.value as BranchSwipeDirection)}>
+        <option value='left-next'>{t('branchSwipeDirection.leftNext')}</option>
+        <option value='right-next'>{t('branchSwipeDirection.rightNext')}</option>
+      </select>
+    </div>
+  );
+};
+
 const GeneralTab = () => {
   const { t } = useTranslation();
   return (
@@ -407,6 +423,7 @@ const GeneralTab = () => {
 
       <SettingsGroup label={t('settingsSection.display')}>
         <StoreToggle stateKey='animateBubbleNavigation' setterKey='setAnimateBubbleNavigation' i18nKey='animateBubbleNavigation' />
+        <BranchSwipeDirectionSelect />
         <StoreToggle stateKey='displayChatSize' setterKey='setDisplayChatSize' i18nKey='displayChatSize' i18nNs='main' />
         <TotalTokenCostToggle />
         <StoreToggle stateKey='showDebugPanel' setterKey='setShowDebugPanel' i18nKey='showDebugPanel' i18nNs='main' />

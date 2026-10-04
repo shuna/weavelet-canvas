@@ -89,6 +89,7 @@ const buildStoreState = () => {
     inlineLatex: false,
     markdownMode: true,
     streamingMarkdownPolicy: 'auto',
+    branchSwipeDirection: 'left-next',
     totalTokenUsed: {},
     countTotalTokens: false,
     displayChatSize: false,
@@ -122,6 +123,15 @@ describe('persistence', () => {
   beforeEach(() => {
     clearStreamingBuffersForTest();
     setIndexedDbMigrationComplete(false);
+  });
+
+  it('persists both swipe preferences and invalidates the cached snapshot when they change', () => {
+    const state = buildStoreState();
+    expect(createPartializedState(state as never).branchSwipeDirection).toBe('left-next');
+    expect(createLocalStoragePartializedState(state as never).branchSwipeDirection).toBe('left-next');
+    state.branchSwipeDirection = 'right-next';
+    expect(createPartializedState(state as never).branchSwipeDirection).toBe('right-next');
+    expect(createLocalStoragePartializedState(state as never).branchSwipeDirection).toBe('right-next');
   });
 
   it('finalizes streaming marker nodes when building a full snapshot', () => {

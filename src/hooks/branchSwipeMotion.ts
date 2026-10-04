@@ -2,12 +2,14 @@ import { createElement } from 'react';
 import { createRoot } from 'react-dom/client';
 import { flushSync } from 'react-dom';
 import useStore from '@store/store';
-import { buildPathToLeaf, getSiblingsOf } from '@utils/branchUtils';
+import { buildPathToLeaf, getSiblingsOf, resolveBranchSwipeDirection } from '@utils/branchUtils';
+import type { BranchSwipeDirection } from '@type/chat';
 import BranchSwipePreview from '@components/Chat/ChatContent/Message/BranchSwipePreview';
 
 type Direction = 'previous' | 'next';
 export interface BranchSwipeMotion {
   width: number;
+  preference: BranchSwipeDirection;
   move: (distance: number) => void;
   finish: (direction: Direction | null) => void;
   dispose: () => void;
@@ -15,6 +17,7 @@ export interface BranchSwipeMotion {
 
 export function createBranchSwipeMotion(element: HTMLElement, chatIndex: number, nodeId: string): BranchSwipeMotion | null {
   const state = useStore.getState();
+  const preference = state.branchSwipeDirection;
   const chat = state.chats?.[chatIndex];
   const tree = chat?.branchTree;
   const item = element.closest<HTMLElement>('[data-item-index]');
@@ -48,6 +51,7 @@ export function createBranchSwipeMotion(element: HTMLElement, chatIndex: number,
   scroller.style.overflowAnchor = 'none';
   let targetId: string | undefined;
   let direction: Direction | null = null;
+  let movementSign = 1;
   let timer: ReturnType<typeof setTimeout> | undefined;
   let disposed = false;
   let closing = false;
@@ -78,13 +82,13 @@ export function createBranchSwipeMotion(element: HTMLElement, chatIndex: number,
       source.style.pointerEvents = 'none';
     }
     host.style.transition = transition;
-    host.style.transform = `translateX(${distance + (direction === 'previous' ? width : -width)}px)`;
+    host.style.transform = `translateX(${distance - movementSign * width}px)`;
   };
   const finish = (requested: Direction | null) => {
     if (closing || disposed) return;
     closing = true;
     const accepted = requested === direction && !!targetId;
-    translate(accepted ? (direction === 'previous' ? -width : width) : 0, true);
+    translate(accepted ? movementSign * width : 0, true);
     timer = setTimeout(() => {
       const current = useStore.getState();
       // Navigation, edits or sync that replaced the tree cancel this gesture.
@@ -112,9 +116,11 @@ export function createBranchSwipeMotion(element: HTMLElement, chatIndex: number,
   };
   return {
     width,
+    preference,
     move: dx => {
       if (closing || disposed) return;
-      const nextDirection = dx < 0 ? 'previous' : 'next';
+      movementSign = dx < 0 ? -1 : 1;
+      const nextDirection = resolveBranchSwipeDirection(dx, preference);
       if (nextDirection !== direction) {
         direction = nextDirection;
         targetId = siblings[index + (direction === 'previous' ? -1 : 1)]?.id;

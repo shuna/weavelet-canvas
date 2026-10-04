@@ -17,6 +17,7 @@ export type Content = 'text' | 'image_url';
 export type ImageDetail = 'low' | 'high' | 'auto';
 export const imageDetails: ImageDetail[] = ['low', 'high', 'auto'];
 export type StreamingMarkdownPolicy = 'auto' | 'always' | 'never';
+export type BranchSwipeDirection = 'left-next' | 'right-next';
 export type Role = 'user' | 'assistant' | 'system';
 export const roles: Role[] = ['user', 'assistant', 'system'];
 
