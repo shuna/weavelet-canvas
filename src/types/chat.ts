@@ -131,6 +131,23 @@ export interface ChatInterface {
   collapsedNodes?: Record<string, boolean>;
   omittedNodes?: Record<string, boolean>;
   protectedNodes?: Record<string, boolean>;
+  summaryTargets?: Record<string, boolean>;
+  summaries?: BubbleSummary[];
+}
+
+export interface BubbleSummarySource {
+  nodeId: string;
+  parentId: string | null;
+  role: 'user' | 'assistant';
+  textParts: string[];
+}
+
+export interface BubbleSummary {
+  id: string;
+  mode: 'single' | 'through' | 'range';
+  sources: BubbleSummarySource[];
+  text: string;
+  useForSubmit: boolean;
 }
 
 export interface BranchClipboard {
