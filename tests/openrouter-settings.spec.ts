@@ -19,7 +19,7 @@ test('chat and default settings persist model-scoped controls and enforce ZDR', 
     const { _defaultChatConfig } = await load('/src/constants/chat.ts');
     const { default: i18n } = await load('/src/i18n.ts');
     await i18n.changeLanguage('en');
-    const config = { ..._defaultChatConfig, model: 'anthropic/claude-sonnet-4', providerId: 'openrouter', modelSource: 'remote', openRouter: { responseCache: { mode: 'off' }, stickySession: true } };
+    const config = { ..._defaultChatConfig, stream: false, model: 'anthropic/claude-sonnet-4', providerId: 'openrouter', modelSource: 'remote', openRouter: { responseCache: { mode: 'off' }, stickySession: true } };
     useStore.getState().setOnboardingCompleted(true);
     useStore.setState({ proxyEnabled: true, proxyEndpoint: 'https://proxy.test', defaultChatConfig: config, favoriteModels: [
       { modelId: config.model, providerId: 'openrouter' }, { modelId: 'openai/gpt-4.1', providerId: 'openrouter' },

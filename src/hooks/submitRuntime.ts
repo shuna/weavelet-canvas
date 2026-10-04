@@ -19,7 +19,7 @@ import {
   setGenerationId as setStreamGenerationId,
   setStreamObservation,
 } from '@utils/streamDb';
-import { sendAck, sendCancel, parseProxySse, type ProxyConfig } from '@utils/proxyClient';
+import { getProxyConfig, sendAck, sendCancel, parseProxySse, type ProxyConfig } from '@utils/proxyClient';
 import { cancelGeneration } from '@api/openrouter';
 import {
   appendToStreamingBuffer,
@@ -541,16 +541,6 @@ type ExecuteSubmitStreamParams = {
   t: (key: string) => string;
 };
 
-/** Resolve proxy config from store, returns undefined if not configured or disabled */
-function getProxyConfig(): ProxyConfig | undefined {
-  const { proxyEnabled, proxyEndpoint, proxyAuthToken } = useStore.getState();
-  if (!proxyEnabled || !proxyEndpoint) return undefined;
-  return {
-    endpoint: proxyEndpoint.replace(/\/+$/, ''),
-    authToken: proxyAuthToken || undefined,
-  };
-}
-
 export interface ExecuteSubmitStreamResult {
   generationId?: string;
 }
@@ -776,7 +766,7 @@ export const executeSubmitStream = async ({
     proxyConfig,
   });
   const requestContext: OpenRouterRequestContext = {
-    chatId, regenerate, viaProxy: !!proxyConfig && isStreamSupported,
+    chatId, regenerate, viaProxy: !!proxyConfig,
     onObservation: patch => {
       if (!isOpenRouterEndpoint(resolvedProvider.endpoint)) return;
       recordOpenRouterObservation(chatId, targetNodeId, patch);

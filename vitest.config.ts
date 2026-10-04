@@ -3,7 +3,7 @@ import { defineConfig } from 'vitest/config';
 export default defineConfig({
   test: {
     environment: 'node',
-    include: ['src/**/*.test.ts', 'tests/cloudflare-google-auth.test.ts'],
+    include: ['src/**/*.test.ts', 'proxy-worker/tests/**/*.test.ts', 'tests/cloudflare-google-auth.test.ts'],
     setupFiles: ['./vitest.setup.ts'],
   },
   resolve: {

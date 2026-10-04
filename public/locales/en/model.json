@@ -212,7 +212,6 @@
       "stickySession": "Use the chat ID as the routing session ID to encourage reuse of the same provider. This does not store chat history remotely."
     },
     "directCacheDisabled": "Disabled for direct connections because response-cache control headers are blocked. Saved values are retained but not sent. They become available again through the Proxy.",
-    "nonStreamingCacheDisabled": "Disabled because non-streaming requests currently use a direct connection. Saved values are retained but not sent.",
     "zdrCacheDisabled": "Response caching is sent as off while ZDR is enabled."
   }
 }

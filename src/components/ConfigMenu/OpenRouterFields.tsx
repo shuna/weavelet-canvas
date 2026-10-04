@@ -6,16 +6,15 @@ import { defaultOpenRouterSettings } from '@utils/modelSettings';
 import useStore from '@store/store';
 import { FieldLabelWithInfo, InfoTooltip, ResetButton } from './fields';
 
-export default function OpenRouterFields({ value, onChange, model, isDefault = false, streamEnabled = true }: {
+export default function OpenRouterFields({ value, onChange, model, isDefault = false }: {
   value?: OpenRouterChatSettings;
   onChange: (value: OpenRouterChatSettings) => void;
   model: string;
   isDefault?: boolean;
-  streamEnabled?: boolean;
 }) {
   const { t } = useTranslation('model');
   const proxyAvailable = useStore(state => state.proxyEnabled && !!state.proxyEndpoint?.trim());
-  const responseCacheAvailable = proxyAvailable && streamEnabled;
+  const responseCacheAvailable = proxyAvailable;
   const [expanded, setExpanded] = useState(false);
   const [providers, setProviders] = useState<{ slug: string; name: string }[]>([]);
   const [providerError, setProviderError] = useState(false);
@@ -45,7 +44,7 @@ export default function OpenRouterFields({ value, onChange, model, isDefault = f
   const description = (name: string) => {
     const existing: Record<string, string> = { order: 'slugHelp', only: 'slugHelp', ignore: 'slugHelp', require_parameters: 'requireParametersHelp', zdr: 'zdrHelp', promptCache: isClaude ? 'cacheUnknown' : 'cacheUnsupported', responseCache: 'responseHelp' };
     return [label(existing[name] ?? `help.${name}`),
-      ...(['responseCache', 'responseTTL'].includes(name) ? [!proxyAvailable ? label('directCacheDisabled') : !streamEnabled ? label('nonStreamingCacheDisabled') : r.zdr ? label('zdrCacheDisabled') : ''] : []),
+      ...(['responseCache', 'responseTTL'].includes(name) ? [!proxyAvailable ? label('directCacheDisabled') : r.zdr ? label('zdrCacheDisabled') : ''] : []),
       ...(name === 'promptTTL' && !isClaude ? [label('cacheUnsupported')] : []),
       ...(['order', 'only', 'ignore'].includes(name) && providerError ? [label('providerLoadError')] : []),
     ].filter(Boolean).join(' ');

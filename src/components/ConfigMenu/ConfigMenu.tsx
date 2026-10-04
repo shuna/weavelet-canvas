@@ -233,7 +233,7 @@ const ConfigMenu = ({
 
   useEffect(() => {
     const modelContextLength = getModelConfigContextInfo(_model, _providerId, _modelSource).contextLength;
-    if (_providerId === 'openrouter' && validateOpenRouterSettings(_openRouter, _model, canUseOpenRouterResponseCache(_stream))) return;
+    if (_providerId === 'openrouter' && validateOpenRouterSettings(_openRouter, _model, canUseOpenRouterResponseCache())) return;
     setConfig(normalizeConfigStream({
       max_tokens: clampCompletionTokens(_maxToken, modelContextLength),
       model: _model,
@@ -266,7 +266,7 @@ const ConfigMenu = ({
       maxWidth='max-w-4xl'
     >
       <div className='p-6 flex flex-col gap-5 w-[90vw] max-w-4xl'>
-        {_providerId === 'openrouter' && _modelSource !== 'local' && <OpenRouterFields key={_model} model={_model} value={_openRouter} onChange={_setOpenRouter} streamEnabled={_stream} />}
+        {_providerId === 'openrouter' && _modelSource !== 'local' && <OpenRouterFields key={_model} model={_model} value={_openRouter} onChange={_setOpenRouter} />}
         <div>
           <ModelSelector
             _model={_model}

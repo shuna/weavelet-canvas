@@ -148,6 +148,34 @@ describe('auxiliary constraints and observations', () => {
     expect(JSON.parse(request.body)).not.toHaveProperty('cache_control');
     expect(request.headers).not.toHaveProperty('X-OpenRouter-Cache');
   });
+  it('routes non-stream, raw stream, title and quality requests through the configured proxy', async () => {
+    vi.mocked(useStore.getState).mockReturnValue({ proxyEnabled: true, proxyEndpoint: ' https://proxy.test/ ', proxyAuthToken: 'proxy-token', providerCustomModels: {}, favoriteModels: [], providerModelCache: {} } as never);
+    const fetcher = vi.fn().mockImplementation(async () => new Response(JSON.stringify({ choices: [{ message: { content: '{"scores":{"taskCompletion":1}}' } }] }), { headers: { 'X-OpenRouter-Cache-Status': 'HIT', 'X-OpenRouter-Cache-Age': '0' } }));
+    vi.stubGlobal('fetch', fetcher);
+    const observe = vi.fn();
+    await getChatCompletion(endpoint, messages, config, 'key', undefined, undefined, undefined, { regenerate: true, onObservation: observe });
+    await getChatCompletionStream(endpoint, messages, config, 'key');
+    await generateTitleForChat(messages, config, { titleModel: 'openai/gpt-4.1', titleProviderId: 'openrouter', favoriteModels: [], providers: { openrouter: { id: 'openrouter', name: 'OpenRouter', endpoint, modelsRequireAuth: true, apiKey: 'key' } }, fallbackProvider: { endpoint, key: 'key' }, t: key => key });
+    const quality = await runQualityEvaluation('user', 'answer', endpoint, 'openai/gpt-4.1', 'key', 'en', undefined, config.openRouter);
+    expect(quality.scores).toMatchObject({ taskCompletion: 1 });
+    expect(observe).toHaveBeenCalledWith(expect.objectContaining({ responseCacheStatus: 'HIT', responseCacheAge: 0 }));
+    const envelopes = fetcher.mock.calls.map(([url, init]) => {
+      expect(url).toBe('https://proxy.test/api/request');
+      expect(init.headers).toEqual({ 'Content-Type': 'application/json', Authorization: 'Bearer proxy-token' });
+      const parsed = JSON.parse(init.body);
+      expect(parsed.endpoint).toBe(endpoint);
+      expect(parsed.headers.Authorization).toBe('Bearer key');
+      expect(parsed.body.provider.only).toEqual(['anthropic']);
+      return parsed;
+    });
+    expect(envelopes[0].headers).toMatchObject({ 'X-OpenRouter-Cache': 'true', 'X-OpenRouter-Cache-TTL': '60', 'X-OpenRouter-Cache-Clear': 'true' });
+    expect(envelopes[1].body.stream).toBe(true);
+    for (const envelope of envelopes.slice(2)) {
+      expect(envelope.headers['X-OpenRouter-Cache']).toBe('false');
+      expect(envelope.headers).not.toHaveProperty('X-OpenRouter-Cache-TTL');
+      expect(envelope.body).not.toHaveProperty('cache_control');
+    }
+  });
   it('distinguishes absent usage from zero and ignores invalid numeric observations', () => {
     expect(observeOpenRouterUsage(undefined)).toEqual({});
     expect(observeOpenRouterUsage({ prompt_tokens: 0, completion_tokens: 0, cost: 0 })).toEqual({ promptTokens: 0, completionTokens: 0, cost: 0 });

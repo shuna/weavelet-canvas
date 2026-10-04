@@ -17,9 +17,9 @@ export const isOpenRouterEndpoint = (endpoint: string): boolean => {
   } catch { return false; }
 };
 
-export function canUseOpenRouterResponseCache(streamEnabled = true): boolean {
+export function canUseOpenRouterResponseCache(): boolean {
   const state = useStore.getState();
-  return streamEnabled && state.proxyEnabled && !!state.proxyEndpoint?.trim();
+  return state.proxyEnabled && !!state.proxyEndpoint?.trim();
 }
 
 export function validateOpenRouterSettings(settings: OpenRouterChatSettings | undefined, model?: string, responseCacheEnabled = true): string | undefined {

@@ -1,3 +1,4 @@
+import { getProxyConfig, fetchViaProxy } from '@utils/proxyClient';
 import { applyOpenRouterControls, observeOpenRouterHeaders, observeOpenRouterUsage, type OpenRouterRequestContext } from '@utils/openrouterControls';
 import {
   ConfigInterface,
@@ -156,13 +157,9 @@ export const getChatCompletion = async (
   endpoint = endpoint.trim();
 
   const body = buildRequestBody(messages, config, { stream: false });
-  applyOpenRouterControls(endpoint, config, body, headers as Record<string, string>, { ...context, viaProxy: false });
-  const response = await fetch(endpoint, {
-    method: 'POST',
-    headers,
-    body: JSON.stringify(body),
-    signal,
-  });
+  const proxyConfig = getProxyConfig();
+  applyOpenRouterControls(endpoint, config, body, headers as Record<string, string>, { ...context, viaProxy: !!proxyConfig });
+  const response = await fetchViaProxy(proxyConfig, endpoint, headers as Record<string, string>, body, signal);
   if (!response.ok) throw new Error(await response.text());
 
   const data = await response.json();
@@ -201,13 +198,9 @@ export const getChatCompletionStream = async (
   }
   endpoint = endpoint.trim();
   const body = buildRequestBody(messages, config, { stream: true });
-  applyOpenRouterControls(endpoint, config, body, headers as Record<string, string>, { ...context, viaProxy: false });
-  const response = await fetch(endpoint, {
-    method: 'POST',
-    headers,
-    body: JSON.stringify(body),
-    signal,
-  });
+  const proxyConfig = getProxyConfig();
+  applyOpenRouterControls(endpoint, config, body, headers as Record<string, string>, { ...context, viaProxy: !!proxyConfig });
+  const response = await fetchViaProxy(proxyConfig, endpoint, headers as Record<string, string>, body, signal);
   if (response.status === 404 || response.status === 405) {
     const text = await response.text();
 
