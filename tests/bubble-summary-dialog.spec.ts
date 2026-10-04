@@ -4,10 +4,13 @@ test.use({ headless: true, baseURL: process.env.PLAYWRIGHT_BASE_URL ?? 'http://1
 
 test('summary dialog selects previews, disables empty selection and saves generated summary', async ({ page }) => {
   const summaryMarkdown = '## Generated summary\n\n**Important**\n\n- First item\n- Second item';
+  let finishSummary: (() => void) | undefined;
   let requests = 0;
-  await page.route('https://summary.test/**', route => ++requests === 1
-    ? route.fulfill({ status: 503, body: 'Summary service unavailable' })
-    : route.fulfill({ json: { choices: [{ message: { content: summaryMarkdown } }] } }));
+  await page.route('https://summary.test/**', async route => {
+    if (++requests === 1) return route.fulfill({ status: 503, body: 'Summary service unavailable' });
+    await new Promise<void>(resolve => { finishSummary = resolve; });
+    await route.fulfill({ json: { choices: [{ message: { content: summaryMarkdown } }] } });
+  });
   await page.goto('/');
   await page.evaluate(async () => {
     const load = (path: string) => import(/* @vite-ignore */ path);
@@ -56,6 +59,31 @@ test('summary dialog selects previews, disables empty selection and saves genera
   await expect(modal.getByText('Summary service unavailable', { exact: true })).toBeVisible();
   await expect(generate).toBeEnabled();
   await generate.click();
+  await expect(bubble.getByRole('status')).toContainText('要約中');
+  await modal.getByRole('button', { name: 'close modal', exact: true }).click();
+  await page.mouse.move(0, 0);
+  await expect(bubble.getByRole('status')).toBeVisible();
+  const dots = bubble.getByRole('img', { name: '要約生成中' });
+  const initialDots = await dots.textContent();
+  await expect.poll(() => dots.textContent()).not.toBe(initialDots);
+  await page.evaluate(async () => {
+    const load = (path: string) => import(/* @vite-ignore */ path);
+    const { default: store } = await load('/src/store/store.ts');
+    const { generateDefaultChat } = await load('/src/constants/chat.ts');
+    store.setState({ chats: [...store.getState().chats, generateDefaultChat('Other chat')], currentChatIndex: 1 });
+  });
+  await expect(page.getByRole('status').filter({ hasText: '要約中' })).toHaveCount(0);
+  await page.evaluate(async () => { const { default: store } = await import(/* @vite-ignore */ '/src/store/store.ts'); store.setState({ currentChatIndex: 0 }); });
+  await expect(bubble.getByRole('status')).toBeVisible();
+  await bubble.getByRole('button', { name: '要約を作成', exact: true }).click();
+  await expect(modal.getByRole('button', { name: '生成中…', exact: true })).toBeDisabled();
+  await expect(modal.getByRole('radio', { name: 'ここまで', exact: true })).toBeChecked();
+  await expect(first).toBeChecked();
+  await expect(second).toBeChecked();
+  await modal.getByRole('button', { name: '閉じる', exact: true }).click();
+  expect(requests).toBe(2);
+  finishSummary!();
+  await expect(bubble.getByRole('status')).toHaveCount(0);
   await expect(modal.getByText('要約の対象を選択', { exact: true })).toHaveCount(0);
   await expect(page.getByText('Generated summary', { exact: true })).toBeVisible();
   const saved = await page.evaluate(async () => {
