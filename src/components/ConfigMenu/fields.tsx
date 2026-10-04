@@ -1,4 +1,5 @@
-import React, { useId, useState, useRef, useEffect } from 'react';
+import React, { useId, useState, useRef, useEffect, useLayoutEffect } from 'react';
+import { createPortal } from 'react-dom';
 import Select, { GroupBase, StylesConfig } from 'react-select';
 
 type SelectOption<T extends string> = {
@@ -70,54 +71,81 @@ export const FieldDescription = ({ children }: { children: React.ReactNode }) =>
 );
 
 export const InfoTooltip = ({ text }: { text: React.ReactNode }) => {
-  const [open, setOpen] = useState(false);
+  const [pinned, setPinned] = useState(false);
+  const [hovered, setHovered] = useState(false);
+  const [position, setPosition] = useState({ left: 0, top: 0 });
   const ref = useRef<HTMLDivElement>(null);
+  const tooltipRef = useRef<HTMLDivElement>(null);
+  const id = useId();
+  const open = pinned || hovered;
+
+  useLayoutEffect(() => {
+    if (!open) return;
+    const place = () => {
+      const rect = ref.current?.getBoundingClientRect();
+      if (!rect) return;
+      const width = Math.min(256, window.innerWidth - 24);
+      const height = tooltipRef.current?.offsetHeight ?? 0;
+      setPosition({
+        left: Math.max(12, Math.min(rect.left, window.innerWidth - width - 12)),
+        top: Math.max(12, rect.bottom + height + 8 <= window.innerHeight ? rect.bottom + 8 : rect.top - height - 8),
+      });
+    };
+    place();
+    window.addEventListener('resize', place);
+    window.addEventListener('scroll', place, true);
+    return () => {
+      window.removeEventListener('resize', place);
+      window.removeEventListener('scroll', place, true);
+    };
+  }, [open, text]);
 
   useEffect(() => {
     if (!open) return;
-    const handler = (e: MouseEvent | TouchEvent) => {
-      if (ref.current && !ref.current.contains(e.target as Node)) {
-        setOpen(false);
+    const close = (e: MouseEvent | TouchEvent) => {
+      if (!ref.current?.contains(e.target as Node) && !tooltipRef.current?.contains(e.target as Node)) {
+        setPinned(false); setHovered(false);
       }
     };
-    document.addEventListener('mousedown', handler);
-    document.addEventListener('touchstart', handler);
+    const key = (e: KeyboardEvent) => { if (e.key === 'Escape') { setPinned(false); setHovered(false); } };
+    document.addEventListener('mousedown', close);
+    document.addEventListener('touchstart', close);
+    document.addEventListener('keydown', key);
     return () => {
-      document.removeEventListener('mousedown', handler);
-      document.removeEventListener('touchstart', handler);
+      document.removeEventListener('mousedown', close);
+      document.removeEventListener('touchstart', close);
+      document.removeEventListener('keydown', key);
     };
   }, [open]);
 
   return (
-    <div className='relative inline-flex ml-1' ref={ref}>
-      <button
-        type='button'
+    <div className='relative inline-flex ml-1' ref={ref} onMouseEnter={() => setHovered(true)} onMouseLeave={() => setHovered(false)}>
+      <button type='button'
         className='inline-flex items-center justify-center w-4 h-4 rounded-full text-gray-400 hover:text-gray-600 dark:text-gray-500 dark:hover:text-gray-300 transition-colors'
-        onClick={() => setOpen(!open)}
-        aria-label='Info'
-      >
+        onClick={() => setPinned(v => !v)} aria-label='Info' aria-expanded={open} aria-describedby={open ? id : undefined}>
         <svg width='14' height='14' viewBox='0 0 20 20' fill='currentColor'>
           <path fillRule='evenodd' d='M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z' clipRule='evenodd' />
         </svg>
       </button>
-      {open && (
-        <div className='absolute z-50 left-6 top-0 w-64 p-2 text-xs text-gray-700 dark:text-gray-200 bg-white dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-lg shadow-lg'>
-          {text}
-        </div>
-      )}
+      {open && createPortal(<div ref={tooltipRef} id={id} role='tooltip'
+        style={{ ...position, width: 'min(256px, calc(100vw - 24px))' }}
+        className='fixed z-[10001] max-h-[calc(100vh-24px)] overflow-auto p-2 text-xs font-normal text-gray-700 dark:text-gray-200 bg-white dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-lg shadow-lg'>
+        {text}
+      </div>, document.body)}
     </div>
   );
 };
 
-export const ResetButton = ({ onClick, visible = true }: { onClick: () => void; visible?: boolean }) => (
+export const ResetButton = ({ onClick, visible = true, disabled = false }: { onClick: () => void; visible?: boolean; disabled?: boolean }) => (
   <button
     type='button'
-    className={`inline-flex items-center justify-center w-4 h-4 rounded-full transition-colors ${
+    className={`inline-flex items-center justify-center w-4 h-4 rounded-full transition-colors disabled:opacity-40 disabled:cursor-not-allowed ${
       visible
         ? 'text-gray-400 hover:text-gray-600 dark:text-gray-500 dark:hover:text-gray-300'
         : 'text-transparent pointer-events-none'
     }`}
     onClick={onClick}
+    disabled={disabled}
     aria-label='Reset to default'
   >
     <svg width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='currentColor' strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'>
@@ -132,18 +160,20 @@ export const FieldLabelWithInfo = ({
   description,
   onReset,
   showReset,
+  disabled = false,
 }: {
   children: React.ReactNode;
   description?: React.ReactNode;
   onReset?: () => void;
   showReset?: boolean;
+  disabled?: boolean;
 }) => (
-  <label className='flex items-center flex-1 text-sm font-medium text-gray-900 dark:text-white'>
+  <label className={`flex items-center flex-1 text-sm font-medium ${disabled ? 'text-gray-400 dark:text-gray-500' : 'text-gray-900 dark:text-white'}`}>
     <span className='flex items-center'>
       {children}
       {description && <InfoTooltip text={description} />}
     </span>
-    {onReset && <span className='ml-auto'><ResetButton onClick={onReset} visible={showReset} /></span>}
+    {onReset && <span className='ml-auto'><ResetButton onClick={onReset} visible={showReset} disabled={disabled} /></span>}
   </label>
 );
 

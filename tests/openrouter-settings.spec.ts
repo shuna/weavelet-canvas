@@ -1,6 +1,6 @@
 import { test, expect } from '@playwright/test';
 
-test.use({ headless: true, baseURL: process.env.PLAYWRIGHT_BASE_URL ?? 'http://127.0.0.1:5175',
+test.use({ headless: true, hasTouch: true, baseURL: process.env.PLAYWRIGHT_BASE_URL ?? 'http://127.0.0.1:5175',
   launchOptions: { executablePath: process.env.PLAYWRIGHT_CHROME_EXECUTABLE } });
 
 test('chat and default settings persist model-scoped controls and enforce ZDR', async ({ page }) => {
@@ -21,13 +21,14 @@ test('chat and default settings persist model-scoped controls and enforce ZDR', 
     await i18n.changeLanguage('en');
     const config = { ..._defaultChatConfig, model: 'anthropic/claude-sonnet-4', providerId: 'openrouter', modelSource: 'remote', openRouter: { responseCache: { mode: 'off' }, stickySession: true } };
     useStore.getState().setOnboardingCompleted(true);
-    useStore.setState({ defaultChatConfig: config, favoriteModels: [
+    useStore.setState({ proxyEnabled: true, proxyEndpoint: 'https://proxy.test', defaultChatConfig: config, favoriteModels: [
       { modelId: config.model, providerId: 'openrouter' }, { modelId: 'openai/gpt-4.1', providerId: 'openrouter' },
     ] });
     const element = document.createElement('div'); element.id = 'or-settings-check'; document.body.append(element);
     let root = createRoot(element);
     const state = (window as any).orSettings = {
       saved: config,
+      proxy: (enabled: boolean) => useStore.setState({ proxyEnabled: enabled }),
       mount: (kind: string) => {
         root.unmount(); root = createRoot(element);
         if (kind === 'chat') root.render(React.createElement(ConfigMenu, { config, setConfig: (value: unknown) => state.saved = value, setIsModalOpen() {}, imageDetail: 'auto', setImageDetail() {} }));
@@ -43,7 +44,11 @@ test('chat and default settings persist model-scoped controls and enforce ZDR', 
   await expect(fields).toContainText('OpenRouter');
   await expect(fields.getByRole('button', { name: 'OpenRouter', exact: true })).toHaveAttribute('aria-expanded', 'false');
   await fields.getByRole('button', { name: 'OpenRouter', exact: true }).click();
-  await expect(fields).toContainText('Use this during validation');
+  const requiredInfo = fields.getByLabel('Require all requested parameters', { exact: true }).locator('..').getByRole('button', { name: 'Info' });
+  await requiredInfo.hover();
+  await expect(page.getByRole('tooltip')).toContainText('Use this during validation');
+  await page.mouse.move(0, 0);
+  await expect(page.getByRole('tooltip')).toHaveCount(0);
   const allowed = fields.locator('input[placeholder]').nth(1);
   await fields.getByRole('combobox', { name: 'Allowed providers (slugs) — Add from providers', exact: true }).selectOption('anthropic');
   await expect(allowed).toHaveValue('anthropic');
@@ -56,6 +61,19 @@ test('chat and default settings persist model-scoped controls and enforce ZDR', 
   await allowed.fill('anthropic');
   await selects.nth(5).selectOption('on');
   await expect.poll(() => page.evaluate(() => (window as any).orSettings.saved.openRouter)).toMatchObject({ routing: { only: ['anthropic'] }, responseCache: { mode: 'on' } });
+  await page.evaluate(() => (window as any).orSettings.proxy(false));
+  await expect(selects.nth(5)).toBeDisabled();
+  await expect(selects.nth(5)).toHaveValue('on');
+  await expect(fields.getByLabel('Response cache lifetime (seconds)', { exact: true })).toBeDisabled();
+  const cacheRow = selects.nth(5).locator('..');
+  await expect(cacheRow.getByRole('button', { name: 'Reset to default' })).toBeDisabled();
+  await cacheRow.getByRole('button', { name: 'Info' }).tap();
+  await expect(page.getByRole('tooltip')).toContainText('Saved values are retained but not sent');
+  await page.mouse.move(0, 0);
+  await page.keyboard.press('Escape');
+  await page.evaluate(() => (window as any).orSettings.proxy(true));
+  await expect(selects.nth(5)).toBeEnabled();
+  await expect(selects.nth(5)).toHaveValue('on');
   await fields.getByRole('switch').first().click();
   await expect(selects.nth(5)).toBeDisabled();
   await expect.poll(() => page.evaluate(() => (window as any).orSettings.saved.openRouter)).toMatchObject({ routing: { zdr: true }, responseCache: { mode: 'off' } });

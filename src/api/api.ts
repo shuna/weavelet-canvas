@@ -156,7 +156,7 @@ export const getChatCompletion = async (
   endpoint = endpoint.trim();
 
   const body = buildRequestBody(messages, config, { stream: false });
-  applyOpenRouterControls(endpoint, config, body, headers as Record<string, string>, context);
+  applyOpenRouterControls(endpoint, config, body, headers as Record<string, string>, { ...context, viaProxy: false });
   const response = await fetch(endpoint, {
     method: 'POST',
     headers,
@@ -201,7 +201,7 @@ export const getChatCompletionStream = async (
   }
   endpoint = endpoint.trim();
   const body = buildRequestBody(messages, config, { stream: true });
-  applyOpenRouterControls(endpoint, config, body, headers as Record<string, string>, context);
+  applyOpenRouterControls(endpoint, config, body, headers as Record<string, string>, { ...context, viaProxy: false });
   const response = await fetch(endpoint, {
     method: 'POST',
     headers,

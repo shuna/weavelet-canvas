@@ -1,5 +1,5 @@
 import OpenRouterFields from './OpenRouterFields';
-import { validateOpenRouterSettings } from '@utils/openrouterControls';
+import { validateOpenRouterSettings, canUseOpenRouterResponseCache } from '@utils/openrouterControls';
 import React, { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import PopupModal from '@components/PopupModal';
@@ -233,7 +233,7 @@ const ConfigMenu = ({
 
   useEffect(() => {
     const modelContextLength = getModelConfigContextInfo(_model, _providerId, _modelSource).contextLength;
-    if (_providerId === 'openrouter' && validateOpenRouterSettings(_openRouter, _model)) return;
+    if (_providerId === 'openrouter' && validateOpenRouterSettings(_openRouter, _model, canUseOpenRouterResponseCache(_stream))) return;
     setConfig(normalizeConfigStream({
       max_tokens: clampCompletionTokens(_maxToken, modelContextLength),
       model: _model,
@@ -266,7 +266,7 @@ const ConfigMenu = ({
       maxWidth='max-w-4xl'
     >
       <div className='p-6 flex flex-col gap-5 w-[90vw] max-w-4xl'>
-        {_providerId === 'openrouter' && _modelSource !== 'local' && <OpenRouterFields key={_model} model={_model} value={_openRouter} onChange={_setOpenRouter} />}
+        {_providerId === 'openrouter' && _modelSource !== 'local' && <OpenRouterFields key={_model} model={_model} value={_openRouter} onChange={_setOpenRouter} streamEnabled={_stream} />}
         <div>
           <ModelSelector
             _model={_model}

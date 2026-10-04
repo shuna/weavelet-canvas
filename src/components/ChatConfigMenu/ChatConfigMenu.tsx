@@ -1,5 +1,5 @@
 import OpenRouterFields from '@components/ConfigMenu/OpenRouterFields';
-import { validateOpenRouterSettings } from '@utils/openrouterControls';
+import { validateOpenRouterSettings, canUseOpenRouterResponseCache } from '@utils/openrouterControls';
 import { showToast } from '@utils/showToast';
 import React, { useEffect, useRef, useState } from 'react';
 import useStore from '@store/store';
@@ -60,6 +60,7 @@ const FieldCell = ({ children }: { children: React.ReactNode }) => (
 
 /** Shared field layout used by both ChatConfigPopup and ChatConfigInline */
 const ChatConfigFields = ({
+  _stream,
   _openRouter,
   _setOpenRouter,
   _systemMessage,
@@ -86,6 +87,7 @@ const ChatConfigFields = ({
   _forceReasoning,
   _setForceReasoning,
 }: {
+  _stream: boolean;
   _openRouter?: import('@type/chat').OpenRouterChatSettings;
   _setOpenRouter: React.Dispatch<React.SetStateAction<import('@type/chat').OpenRouterChatSettings | undefined>>;
   _systemMessage: string;
@@ -118,7 +120,7 @@ const ChatConfigFields = ({
 
   return (
     <div className='flex flex-col gap-5'>
-      {_providerId === 'openrouter' && _modelSource !== 'local' && <OpenRouterFields key={_model} model={_model} value={_openRouter} onChange={_setOpenRouter} isDefault />}
+      {_providerId === 'openrouter' && _modelSource !== 'local' && <OpenRouterFields key={_model} model={_model} value={_openRouter} onChange={_setOpenRouter} streamEnabled={_stream} isDefault />}
       <ModelSelector
         _model={_model}
         _setModel={_setModel}
@@ -255,7 +257,7 @@ const ChatConfigPopup = ({
   }, [isStreamSupported, _stream]);
 
   const handleSave = () => {
-    const error = _providerId === 'openrouter' ? validateOpenRouterSettings(_openRouter, _model) : undefined;
+    const error = _providerId === 'openrouter' ? validateOpenRouterSettings(_openRouter, _model, canUseOpenRouterResponseCache(_stream)) : undefined;
     if (error) { showToast(t(error) as string, 'error'); return; }
     const modelContextLength = getModelConfigContextInfo(_model, _providerId, _modelSource).contextLength;
     const nextConfig = normalizeConfigStream({
@@ -320,6 +322,7 @@ const ChatConfigPopup = ({
     >
       <div className='p-6 border-b border-gray-200 dark:border-gray-600 w-[90vw] max-w-full text-sm text-gray-900 dark:text-gray-300'>
         <ChatConfigFields
+          _stream={_stream}
           _openRouter={_openRouter}
         _setOpenRouter={_setOpenRouter}
         _systemMessage={_systemMessage}
@@ -449,7 +452,7 @@ const ChatConfigInline = ({ onSettingsChanged }: { onSettingsChanged?: () => voi
   useEffect(() => {
     return () => {
       const s = stateRef.current;
-      const error = s._providerId === 'openrouter' ? validateOpenRouterSettings(s._openRouter, s._model) : undefined;
+      const error = s._providerId === 'openrouter' ? validateOpenRouterSettings(s._openRouter, s._model, canUseOpenRouterResponseCache(s._stream)) : undefined;
       if (error) { showToast(t(error) as string, 'error'); return; }
       const currentConfig = useStore.getState().defaultChatConfig;
       const modelContextLength = getModelConfigContextInfo(s._model, s._providerId, s._modelSource).contextLength;
@@ -516,6 +519,7 @@ const ChatConfigInline = ({ onSettingsChanged }: { onSettingsChanged?: () => voi
   return (
     <div className='text-sm text-gray-900 dark:text-gray-300'>
       <ChatConfigFields
+          _stream={_stream}
         _openRouter={_openRouter}
         _setOpenRouter={_setOpenRouter}
         _systemMessage={_systemMessage}

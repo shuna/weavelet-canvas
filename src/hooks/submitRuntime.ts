@@ -776,7 +776,7 @@ export const executeSubmitStream = async ({
     proxyConfig,
   });
   const requestContext: OpenRouterRequestContext = {
-    chatId, regenerate,
+    chatId, regenerate, viaProxy: !!proxyConfig && isStreamSupported,
     onObservation: patch => {
       if (!isOpenRouterEndpoint(resolvedProvider.endpoint)) return;
       recordOpenRouterObservation(chatId, targetNodeId, patch);

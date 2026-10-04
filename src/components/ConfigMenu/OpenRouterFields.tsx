@@ -3,15 +3,19 @@ import { useTranslation } from 'react-i18next';
 import type { OpenRouterChatSettings } from '@type/chat';
 import { validateOpenRouterSettings } from '@utils/openrouterControls';
 import { defaultOpenRouterSettings } from '@utils/modelSettings';
-import { FieldLabelWithInfo, ResetButton } from './fields';
+import useStore from '@store/store';
+import { FieldLabelWithInfo, InfoTooltip, ResetButton } from './fields';
 
-export default function OpenRouterFields({ value, onChange, model, isDefault = false }: {
+export default function OpenRouterFields({ value, onChange, model, isDefault = false, streamEnabled = true }: {
   value?: OpenRouterChatSettings;
   onChange: (value: OpenRouterChatSettings) => void;
   model: string;
   isDefault?: boolean;
+  streamEnabled?: boolean;
 }) {
   const { t } = useTranslation('model');
+  const proxyAvailable = useStore(state => state.proxyEnabled && !!state.proxyEndpoint?.trim());
+  const responseCacheAvailable = proxyAvailable && streamEnabled;
   const [expanded, setExpanded] = useState(false);
   const [providers, setProviders] = useState<{ slug: string; name: string }[]>([]);
   const [providerError, setProviderError] = useState(false);
@@ -34,11 +38,19 @@ export default function OpenRouterFields({ value, onChange, model, isDefault = f
   const r = settings.routing ?? {};
   const [slugs, setSlugs] = useState({ order: r.order?.join(', ') ?? '', only: r.only?.join(', ') ?? '', ignore: r.ignore?.join(', ') ?? '' });
   const routing = (patch: Partial<NonNullable<OpenRouterChatSettings['routing']>>) => onChange({ ...settings, routing: { ...r, ...patch } });
-  const fieldClass = 'w-full rounded border border-gray-400/50 bg-white dark:bg-gray-700 text-gray-900 dark:text-white placeholder:text-gray-500 dark:placeholder:text-gray-400 px-2 py-1.5 text-sm';
+  const fieldClass = 'w-full rounded border border-gray-400/50 bg-white dark:bg-gray-700 text-gray-900 dark:text-white placeholder:text-gray-500 dark:placeholder:text-gray-400 px-2 py-1.5 text-sm disabled:text-gray-400 dark:disabled:text-gray-500 disabled:bg-gray-100 dark:disabled:bg-gray-800 disabled:cursor-not-allowed';
   const label = (name: string) => t(`openRouter.${name}`) as string;
-  const error = validateOpenRouterSettings(value, model);
+  const error = validateOpenRouterSettings(value, model, responseCacheAvailable);
   const isClaude = model.startsWith('anthropic/claude-');
-  const fieldLabel = (name: string, reset: () => void) => <FieldLabelWithInfo onReset={reset}>{label(name)}</FieldLabelWithInfo>;
+  const description = (name: string) => {
+    const existing: Record<string, string> = { order: 'slugHelp', only: 'slugHelp', ignore: 'slugHelp', require_parameters: 'requireParametersHelp', zdr: 'zdrHelp', promptCache: isClaude ? 'cacheUnknown' : 'cacheUnsupported', responseCache: 'responseHelp' };
+    return [label(existing[name] ?? `help.${name}`),
+      ...(['responseCache', 'responseTTL'].includes(name) ? [!proxyAvailable ? label('directCacheDisabled') : !streamEnabled ? label('nonStreamingCacheDisabled') : r.zdr ? label('zdrCacheDisabled') : ''] : []),
+      ...(name === 'promptTTL' && !isClaude ? [label('cacheUnsupported')] : []),
+      ...(['order', 'only', 'ignore'].includes(name) && providerError ? [label('providerLoadError')] : []),
+    ].filter(Boolean).join(' ');
+  };
+  const fieldLabel = (name: string, reset: () => void, disabled = false) => <FieldLabelWithInfo description={description(name)} onReset={reset} disabled={disabled}>{label(name)}</FieldLabelWithInfo>;
   const setSlug = (name: 'order' | 'only' | 'ignore', text: string) => {
     const list = [...new Set(text.split(',').map(v => v.trim()).filter(Boolean))];
     setSlugs(prev => ({ ...prev, [name]: text }));
@@ -66,10 +78,10 @@ export default function OpenRouterFields({ value, onChange, model, isDefault = f
       <button type='button' aria-expanded={expanded} onClick={() => setExpanded(v => !v)} className='inline-flex items-center gap-2'>
         <span aria-hidden='true'>{expanded ? '▾' : '▸'}</span>OpenRouter
       </button>
-      <span className='ml-3'><ResetButton onClick={() => { onChange(defaultOpenRouterSettings()); setSlugs({ order: '', only: '', ignore: '' }); }} /></span>
+      <InfoTooltip text={<>{label(isDefault ? 'defaultScope' : 'scope')} {label('constraintsHelp')} <a className='underline' href='https://openrouter.ai/docs/guides/routing/provider-selection' target='_blank' rel='noreferrer'>{label('documentation')}</a></>} />
+      <span className='ml-3'><ResetButton onClick={() => { onChange({ ...defaultOpenRouterSettings(), ...(!responseCacheAvailable ? { responseCache: settings.responseCache } : {}) }); setSlugs({ order: '', only: '', ignore: '' }); }} /></span>
     </legend>
     {expanded && <div className='flex flex-col gap-3'>
-      <p className='text-xs text-gray-500 dark:text-gray-300'>{label(isDefault ? 'defaultScope' : 'scope')}</p>
       <div>{fieldLabel('selection', () => { routing({ order: undefined, sort: undefined }); setSlugs(prev => ({ ...prev, order: '' })); })}
         <select aria-label={label('selection')} className={fieldClass} value={r.order?.length ? 'order' : r.sort ?? ''} onChange={e => {
           routing({ order: undefined, sort: e.target.value === 'order' || e.target.value === '' ? undefined : e.target.value as typeof r.sort });
@@ -88,10 +100,7 @@ export default function OpenRouterFields({ value, onChange, model, isDefault = f
         </select>
         <input aria-label={label(name)} className={fieldClass} value={slugs[name]} placeholder='anthropic, google-vertex' onChange={e => setSlug(name, e.target.value)} />
       </div>)}
-      <p className='text-xs text-gray-500 dark:text-gray-300'>{label('slugHelp')}</p>
-      {providerError && <p role='status' className='text-xs text-gray-500 dark:text-gray-300'>{label('providerLoadError')}</p>}
       {triState('allow_fallbacks')}{triState('require_parameters')}
-      <p className='text-xs text-gray-500 dark:text-gray-300'>{label('requireParametersHelp')}</p>
       <div className='grid grid-cols-2 gap-3'>{(['prompt', 'completion'] as const).map(name => <div key={name}>{fieldLabel(`${name}Price`, () => routing({ max_price: { ...r.max_price, [name]: undefined } }))}
         <input aria-label={label(`${name}Price`)} type='number' min='0' step='any' className={fieldClass} value={r.max_price?.[name] ?? ''} onChange={e => routing({ max_price: { ...r.max_price, [name]: e.target.value === '' ? undefined : e.target.valueAsNumber } })} />
       </div>)}</div>
@@ -100,8 +109,7 @@ export default function OpenRouterFields({ value, onChange, model, isDefault = f
           <option value=''>{label('inherit')}</option><option value='allow'>{label('allow')}</option><option value='deny'>{label('deny')}</option>
         </select>
       </div>
-      {switchField('zdr', r.zdr === true, checked => onChange({ ...settings, routing: { ...r, zdr: checked ? true : undefined }, ...(checked ? { responseCache: { mode: 'off' } } : {}) }), () => routing({ zdr: undefined }))}
-      <p className='text-xs text-gray-500 dark:text-gray-300'>{label('zdrHelp')}</p>
+      {switchField('zdr', r.zdr === true, checked => onChange({ ...settings, routing: { ...r, zdr: checked ? true : undefined }, ...(checked && responseCacheAvailable ? { responseCache: { mode: 'off' } } : {}) }), () => routing({ zdr: undefined }))}
       <div>{fieldLabel('promptCache', () => onChange({ ...settings, promptCache: undefined }))}
         <select aria-label={label('promptCache')} className={fieldClass} value={settings.promptCache?.mode ?? 'provider-default'} onChange={e => onChange({ ...settings, promptCache: { mode: e.target.value as NonNullable<OpenRouterChatSettings['promptCache']>['mode'], ttl: settings.promptCache?.ttl } })}>
           <option value='provider-default'>{label('providerDefault')}</option>
@@ -109,24 +117,20 @@ export default function OpenRouterFields({ value, onChange, model, isDefault = f
           <option value='claude-system' disabled={!isClaude}>{label('claudeSystem')}</option>
         </select>
       </div>
-      <p className='text-xs text-gray-500 dark:text-gray-300'>{label(isClaude ? 'cacheUnknown' : 'cacheUnsupported')}</p>
-      {settings.promptCache && settings.promptCache.mode !== 'provider-default' && <div>{fieldLabel('promptTTL', () => onChange({ ...settings, promptCache: { ...settings.promptCache!, ttl: undefined } }))}
-        <select aria-label={label('promptTTL')} className={fieldClass} value={settings.promptCache.ttl ?? '5m'} onChange={e => onChange({ ...settings, promptCache: { ...settings.promptCache!, ttl: e.target.value as '5m' | '1h' } })}>
+      {settings.promptCache && settings.promptCache.mode !== 'provider-default' && <div>{fieldLabel('promptTTL', () => onChange({ ...settings, promptCache: { ...settings.promptCache!, ttl: undefined } }), !isClaude)}
+        <select disabled={!isClaude} aria-label={label('promptTTL')} className={fieldClass} value={settings.promptCache.ttl ?? '5m'} onChange={e => onChange({ ...settings, promptCache: { ...settings.promptCache!, ttl: e.target.value as '5m' | '1h' } })}>
           <option value='5m'>{label('fiveMinutes')}</option><option value='1h'>{label('oneHour')}</option>
         </select>
       </div>}
-      <div>{fieldLabel('responseCache', () => onChange({ ...settings, responseCache: { mode: 'off' } }))}
-        <select aria-label={label('responseCache')} className={fieldClass} disabled={r.zdr === true} value={settings.responseCache?.mode ?? 'inherit'} onChange={e => onChange({ ...settings, responseCache: { mode: e.target.value as 'inherit' | 'off' | 'on', ttlSeconds: settings.responseCache?.ttlSeconds } })}>
+      <div>{fieldLabel('responseCache', () => onChange({ ...settings, responseCache: { mode: 'off' } }), !responseCacheAvailable || r.zdr === true)}
+        <select aria-label={label('responseCache')} className={fieldClass} disabled={!responseCacheAvailable || r.zdr === true} value={settings.responseCache?.mode ?? 'inherit'} onChange={e => onChange({ ...settings, responseCache: { mode: e.target.value as 'inherit' | 'off' | 'on', ttlSeconds: settings.responseCache?.ttlSeconds } })}>
           <option value='inherit'>{label('inherit')}</option><option value='off'>{label('off')}</option><option value='on'>{label('on')}</option>
         </select>
       </div>
-      {settings.responseCache?.mode === 'on' && <div>{fieldLabel('responseTTL', () => onChange({ ...settings, responseCache: { ...settings.responseCache!, ttlSeconds: undefined } }))}
-        <input aria-label={label('responseTTL')} type='number' min='1' max='86400' step='1' className={fieldClass} value={settings.responseCache.ttlSeconds ?? 300} onChange={e => onChange({ ...settings, responseCache: { ...settings.responseCache!, ttlSeconds: e.target.value === '' ? undefined : e.target.valueAsNumber } })} />
+      {settings.responseCache?.mode === 'on' && <div>{fieldLabel('responseTTL', () => onChange({ ...settings, responseCache: { ...settings.responseCache!, ttlSeconds: undefined } }), !responseCacheAvailable || r.zdr === true)}
+        <input disabled={!responseCacheAvailable || r.zdr === true} aria-label={label('responseTTL')} type='number' min='1' max='86400' step='1' className={fieldClass} value={settings.responseCache.ttlSeconds ?? 300} onChange={e => onChange({ ...settings, responseCache: { ...settings.responseCache!, ttlSeconds: e.target.value === '' ? undefined : e.target.valueAsNumber } })} />
       </div>}
-      <p className='text-xs text-gray-500 dark:text-gray-300'>{label('responseHelp')}</p>
       {switchField('stickySession', settings.stickySession === true, checked => onChange({ ...settings, stickySession: checked }), () => onChange({ ...settings, stickySession: true }))}
-      <p className='text-xs text-gray-500 dark:text-gray-300'>{label('constraintsHelp')}</p>
-      <a className='text-xs underline' href='https://openrouter.ai/docs/guides/routing/provider-selection' target='_blank' rel='noreferrer'>{label('documentation')}</a>
     </div>}
     {error && <p role='alert' className='text-sm text-red-500'>{t(error)}</p>}
   </fieldset>;
