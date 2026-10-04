@@ -98,7 +98,7 @@ export function applyOpenRouterControls(
     }
   }
   const c = settings?.responseCache;
-  if (context?.auxiliary || settings?.routing?.zdr || c?.mode === 'off' || (context?.regenerate && c?.mode !== 'on')) headers['X-OpenRouter-Cache'] = 'false';
+  if (context?.auxiliary || settings?.routing?.zdr || c?.mode === 'off') headers['X-OpenRouter-Cache'] = 'false';
   else if (c?.mode === 'on') {
     headers['X-OpenRouter-Cache'] = 'true';
     headers['X-OpenRouter-Cache-TTL'] = String(c.ttlSeconds ?? 300);

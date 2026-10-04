@@ -59,7 +59,7 @@
     "order": "Preferred provider order (slugs)",
     "only": "Allowed providers (slugs)",
     "ignore": "Excluded providers (slugs)",
-    "slugHelp": "Comma-separated provider slugs, not model authors. Preferred order takes priority over session stickiness.",
+    "slugHelp": "Add providers from the list or enter comma-separated slugs, including region and variant slugs. The list includes all providers and does not guarantee support for this model. Explicit order takes precedence over sticky routing.",
     "allow_fallbacks": "Allow fallback providers",
     "require_parameters": "Require all requested parameters",
     "yes": "Yes",
@@ -84,7 +84,7 @@
     "off": "Off",
     "on": "On",
     "responseTTL": "Response cache lifetime (seconds)",
-    "responseHelp": "Identical requests may return the same answer. Explicit regeneration requests a fresh answer. Server presets can disable caching.",
+    "responseHelp": "Identical requests may return the same answer. Regeneration refreshes the cache when caching is on; inherited settings remain inherited. Server presets can disable caching.",
     "stickySession": "Use a chat-specific session for routing",
     "constraintsHelp": "Allowed/excluded providers, price ceilings and data restrictions also apply when sending this chat’s content for titles or external evaluation. Incompatible auxiliary requests are blocked.",
     "documentation": "OpenRouter documentation",
@@ -107,6 +107,9 @@
       "endpoint": "OpenRouter controls require a verified OpenRouter API endpoint.",
       "auxiliary": "This auxiliary request cannot enforce the chat’s OpenRouter restrictions.",
       "safety": "External safety evaluation cannot enforce these OpenRouter restrictions. Change the evaluation or routing settings before submitting."
-    }
+    },
+    "chooseProvider": "Add from providers",
+    "providerLoadError": "Could not load providers. You can still enter slugs manually.",
+    "requireParametersHelp": "Use this during validation when unsupported generation settings should cause a detectable failure. Only providers supporting every sent parameter are eligible; the request fails if none qualify. For ordinary chats, leave this on “Use OpenRouter settings”."
   }
 }

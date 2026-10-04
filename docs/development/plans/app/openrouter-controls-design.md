@@ -152,7 +152,7 @@ body変換は履歴選択と上限調整の後に行い、入力配列を直接�
 | off | `X-OpenRouter-Cache: false` |
 | on | `X-OpenRouter-Cache: true`と`X-OpenRouter-Cache-TTL` |
 | onで明示再生成 | 上記に`X-OpenRouter-Cache-Clear: true`を追加 |
-| inheritで明示再生成 | `X-OpenRouter-Cache: false`。保存設定自体は変更しない |
+| inheritで明示再生成 | キャッシュ用headerを送らず、通常送信と同じ設定を継承する |
 | ZDR指定あり | 回答キャッシュは実効off。on／inheritの指定と併用させない |
 
 再生成は新しい回答を求める操作として扱う。onの場合は該当キャッシュ一件を更新し、全キャッシュ削除は行わない。preset側の明示offは要求のonより優先するため、オン表示は「要求した設定」でありヒット保証ではない。[回答キャッシュ仕様](https://openrouter.ai/docs/guides/features/response-caching)
@@ -262,3 +262,10 @@ Astra Mediumの独立監査で、末尾再生成のfresh指定欠落、Service W
 - 有料のOpenRouter実API、proxyのデプロイ、再起動を伴う全保存経路の手動往復は未実施。実際のcache MISS→HIT、provider別入力cache対応、CORS公開や請求値の実測は未検証。
 
 Swift実装は変更していない。構造化出力とツール呼び出しは今回の対象外。
+
+
+### 再生成時の未指定設定（2026年10月4日修正）
+
+未指定・inheritの回答キャッシュ設定は再生成でも継承し、`X-OpenRouter-Cache: false`へ変換しない。明示onの再生成だけClearを送る。ブラウザの実API接続を無効なテストキーで確認し、未指定の通常送信は401まで到達、従来の再生成は追加CacheヘッダーでCORS失敗、修正後の再生成は通常送信と同じ401まで到達した。
+
+OpenRouterの現時点のCORS応答はCache系要求ヘッダーを許可していない。明示on/offのヘッダー制御はこの外部制約の影響を受ける。直接／proxy経路で設定を削除・変更して迂回する対応は行わない。
