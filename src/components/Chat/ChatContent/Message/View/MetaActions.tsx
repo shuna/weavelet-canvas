@@ -5,6 +5,7 @@ import OmitIcon from '@icon/OmitIcon';
 import ProtectedIcon from '@icon/ProtectedIcon';
 import EvaluateIcon from '@icon/EvaluateIcon';
 import BubbleSummaryControls from './BubbleSummaryControls';
+import { useBubbleSummaryJob } from './bubbleSummaryGeneration';
 
 const MetaActions = memo(
   ({
@@ -24,10 +25,13 @@ const MetaActions = memo(
     const currentChatIndex = useStore((state) => state.currentChatIndex);
     const toggleOmitNode = useStore((state) => state.toggleOmitNode);
     const toggleProtectNode = useStore((state) => state.toggleProtectNode);
+    const chatId = useStore(state => state.chats?.[state.currentChatIndex]?.id);
+    const nodeId = useStore(state => state.chats?.[state.currentChatIndex]?.branchTree?.activePath[messageIndex]);
+    const job = useBubbleSummaryJob(chatId, nodeId);
 
 
     return (
-      <div className='pointer-events-none flex items-center gap-1 opacity-0 transition-opacity group-hover:pointer-events-auto group-hover:opacity-100'>
+      <div className={`flex items-center gap-1 transition-opacity ${job?.busy || job?.error ? 'pointer-events-auto opacity-100' : 'pointer-events-none opacity-0 group-hover:pointer-events-auto group-hover:opacity-100'}`}>
         <BubbleSummaryControls messageIndex={messageIndex} />
         <div role='group' aria-label='バブル操作' className='flex items-center gap-0.5 rounded-full bg-white/80 px-1.5 py-0.5 shadow-sm ring-1 ring-black/5 backdrop-blur-sm dark:bg-gray-800/80 dark:ring-white/10'>
           {showEvaluateButton && (
