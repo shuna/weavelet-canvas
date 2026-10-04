@@ -4,6 +4,7 @@ import { ensureUniqueChatIds } from '@utils/chatIdentity';
 import { addContent, validateDeltaIntegrity, type ContentStoreData } from '@utils/contentStore';
 import { isStreamingContentHash } from '@utils/streamingBuffer';
 import type { ChatInterface } from '@type/chat';
+import { isBubbleSummary } from '@utils/bubbleSummary';
 import { normalizeProviderConfigs } from './provider-helpers';
 import type { StoreState } from './store';
 import type { PersistedStoreState } from './persistence';
@@ -79,6 +80,9 @@ export const rehydrateData = (state: StoreState, savedIndex: number) => {
   validateDeltaIntegrity(contentStore);
   const repairedChatTitles: string[] = [];
   state.chats?.forEach((chat: ChatInterface) => {
+    if (!Array.isArray(chat.summaries)) chat.summaries = undefined;
+    else chat.summaries = chat.summaries.filter(isBubbleSummary);
+    if (!chat.summaryTargets || typeof chat.summaryTargets !== 'object' || Array.isArray(chat.summaryTargets)) chat.summaryTargets = undefined;
     if (!chat.messages) chat.messages = [];
     if (chat.branchTree) {
       try {

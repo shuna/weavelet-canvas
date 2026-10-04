@@ -10,6 +10,7 @@ import {
   MessageInterface,
   strToTextContent,
 } from '@type/chat';
+import { isBubbleSummary } from '@utils/bubbleSummary';
 import { roles } from '@type/chat';
 import {
   defaultModel,
@@ -117,12 +118,15 @@ export const validateAndFixChats = (chats: unknown): chats is ChatInterface[] =>
 
     if (!validateMessage(mutableChat.messages)) return false;
     if (!validateAndFixChatConfig(mutableChat.config)) return false;
+    if (mutableChat.summaryTargets !== undefined && (!isRecord(mutableChat.summaryTargets) || Object.values(mutableChat.summaryTargets).some(value => typeof value !== 'boolean'))) return false;
+    if (mutableChat.summaries !== undefined && (!Array.isArray(mutableChat.summaries) || !mutableChat.summaries.every(isBubbleSummary))) return false;
   }
 
   ensureUniqueChatIds(chats as ChatInterface[]);
 
   return true;
 };
+
 
 const validateMessage = (messages: unknown): messages is MessageInterface[] => {
   if (!Array.isArray(messages)) return false;

@@ -1,9 +1,10 @@
 import { v4 as uuidv4 } from 'uuid';
 import { StoreSlice } from './store';
-import { ChatInterface, FolderCollection, GeneratingSession, MessageInterface, TextContentInterface } from '@type/chat';
+import { BubbleSummary, ChatInterface, FolderCollection, GeneratingSession, MessageInterface, TextContentInterface } from '@type/chat';
 import { notifyStorageError, setLocalStorageItem } from './storage/storageErrors';
 import { addContent } from '@utils/contentStore';
 import { materializeActivePath } from '@utils/branchUtils';
+import { isBubbleSummary, isSummaryEligible } from '@utils/bubbleSummary';
 
 export interface ChatSlice {
   messages: MessageInterface[];
@@ -39,12 +40,15 @@ export interface ChatSlice {
   setAllCollapsed: (chatIndex: number, collapsed: boolean) => void;
   toggleOmitNode: (chatIndex: number, messageIndex: number) => void;
   toggleProtectNode: (chatIndex: number, messageIndex: number) => void;
+  toggleSummaryTarget: (chatIndex: number, messageIndex: number) => void;
+  saveBubbleSummary: (chatId: string, summary: BubbleSummary) => void;
+  setSummaryForSubmit: (chatId: string, summaryId: string, use: boolean) => void;
   setAllOmitted: (chatIndex: number, omitted: boolean) => void;
 }
 
 const getMapKey = (chatIndex: number) => String(chatIndex);
 
-type NodeMapField = 'collapsedNodes' | 'omittedNodes' | 'protectedNodes';
+type NodeMapField = 'collapsedNodes' | 'omittedNodes' | 'protectedNodes' | 'summaryTargets';
 
 /** Produce a new chats array with updated node-map field for one chat. */
 const updateChatNodeField = (
@@ -380,6 +384,34 @@ export const createChatSlice: StoreSlice<ChatSlice> = (set, get) => {
           [mapKey]: next,
         },
       }));
+    },
+    toggleSummaryTarget: (chatIndex: number, messageIndex: number) => {
+      const chats = get().chats;
+      const chat = chats?.[chatIndex];
+      const nodeId = chat?.branchTree?.activePath[messageIndex] ?? String(messageIndex);
+      if (!chats || !chat || !isSummaryEligible(chat.messages[messageIndex])) return;
+      const summaryTargets = { ...(chat.summaryTargets ?? {}) };
+      if (summaryTargets[nodeId]) delete summaryTargets[nodeId]; else summaryTargets[nodeId] = true;
+      set({ chats: updateChatNodeField(chats, chatIndex, 'summaryTargets', summaryTargets) });
+    },
+    saveBubbleSummary: (chatId: string, summary: BubbleSummary) => {
+      const chats = get().chats;
+      if (!chats || !isBubbleSummary(summary)) return;
+      set({ chats: chats.map(chat => chat.id !== chatId ? chat : {
+        ...chat,
+        summaries: [...(Array.isArray(chat.summaries) ? chat.summaries.filter(item => item.id !== summary.id) : []), summary],
+      }) });
+    },
+    setSummaryForSubmit: (chatId: string, summaryId: string, use: boolean) => {
+      const chats = get().chats;
+      if (!chats) return;
+      set({ chats: chats.map(chat => {
+        if (chat.id !== chatId || !Array.isArray(chat.summaries)) return chat;
+        const chosen = chat.summaries.find(summary => summary.id === summaryId);
+        if (!chosen) return chat;
+        const overlaps = (left: BubbleSummary, right: BubbleSummary) => left.sources.some(source => right.sources.some(other => source.nodeId === other.nodeId));
+        return { ...chat, summaries: chat.summaries.map(summary => ({ ...summary, useForSubmit: summary.id === summaryId ? use : overlaps(summary, chosen) ? false : summary.useForSubmit })) };
+      }) });
     },
     setAllOmitted: (chatIndex: number, omitted: boolean) => {
       const chats = get().chats;

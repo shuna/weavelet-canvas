@@ -73,13 +73,23 @@ export async function mergeSyncRecords(base: Records, local: Records, cloud: Rec
     put(['branchTree', 'rootId'], tree.rootId); put(['branchTree', 'activePath'], tree.activePath);
     if (!Object.keys(tree.nodes).length) put(['branchTree', 'nodes'], {});
     for (const node of Object.values(tree.nodes)) for (const [field, value] of Object.entries(node)) put(['branchTree', 'nodes', node.id, field], value);
-    for (const field of ['collapsedNodes', 'omittedNodes', 'protectedNodes'] as const) {
+    for (const field of ['collapsedNodes', 'omittedNodes', 'protectedNodes', 'summaryTargets'] as const) {
       for (const [source, ids] of [[remote, cloudIds], [chat, localIds]] as const) {
         for (const id of Object.keys(source[field] ?? {})) {
           const value = merged[JSON.stringify(['chats', chat.id, field, id])];
           if (ids[id] && ids[id] !== id && value !== undefined) put([field, ids[id]], JSON.parse(value));
         }
       }
+    }
+    const summaryKey = JSON.stringify(['chats', chat.id, 'summaries']);
+    const encodedSummaries = merged[summaryKey];
+    if (encodedSummaries) {
+      const source = encodedSummaries === local[summaryKey] ? chat : remote;
+      const ids = source === chat ? localIds : cloudIds;
+      try {
+        const summaries = JSON.parse(encodedSummaries);
+        if (Array.isArray(summaries)) put(['summaries'], summaries.map(summary => ({ ...summary, sources: Array.isArray(summary?.sources) ? summary.sources.map((item: any) => ({ ...item, nodeId: ids[item.nodeId] ?? item.nodeId, parentId: item.parentId === null ? null : (ids[item.parentId] ?? item.parentId) })) : summary?.sources })));
+      } catch { /* invalid persisted summaries remain unusable and are rejected at hydration/use */ }
     }
   }
   // Immutable content and images from both versions are needed by preserved copies.
