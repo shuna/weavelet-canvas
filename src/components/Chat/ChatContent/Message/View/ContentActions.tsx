@@ -1,15 +1,12 @@
 import React from 'react';
-import { useTranslation } from 'react-i18next';
 import TickIcon from '@icon/TickIcon';
 import CrossIcon from '@icon/CrossIcon';
-import EvaluateIcon from '@icon/EvaluateIcon';
 
 import RefreshButton from './Button/RefreshButton';
 import RegenerateNextButton from './Button/RegenerateNextButton';
 import CopyButton from './Button/CopyButton';
 import EditButton from './Button/EditButton';
 import DeleteButton from './Button/DeleteButton';
-import BaseButton from './Button/BaseButton';
 import BranchSwitcher from '../BranchSwitcher';
 
 type ContentActionsProps = {
@@ -22,7 +19,6 @@ type ContentActionsProps = {
   isProtected: boolean;
   isGeneratingMessage: boolean;
   isCurrentChatGenerating: boolean;
-  showEvaluateButton: boolean;
   setIsEdit: React.Dispatch<React.SetStateAction<boolean>>;
   setIsDelete: React.Dispatch<React.SetStateAction<boolean>>;
   onRefresh: () => void;
@@ -30,7 +26,6 @@ type ContentActionsProps = {
   onMoveDown: () => void;
   onCopy: () => void;
   onDelete: () => void;
-  onEvaluate: () => void;
 };
 
 export default function ContentActions({
@@ -43,7 +38,6 @@ export default function ContentActions({
   isProtected,
   isGeneratingMessage,
   isCurrentChatGenerating,
-  showEvaluateButton,
   setIsEdit,
   setIsDelete,
   onRefresh,
@@ -51,10 +45,7 @@ export default function ContentActions({
   onMoveDown,
   onCopy,
   onDelete,
-  onEvaluate,
 }: ContentActionsProps) {
-  const { t } = useTranslation('main');
-
   return (
     <div className='sticky bottom-2 z-20 mt-2.5 flex min-h-[2.75rem] items-center justify-center gap-2 px-2 md:bottom-3 md:px-3'>
       <div className='absolute left-2 top-1/2 -translate-y-1/2 min-w-0 shrink-0 md:left-3 pointer-events-auto'>
@@ -107,13 +98,6 @@ export default function ContentActions({
               <CopyButton onClick={onCopy} />
               {!isGeneratingMessage && <EditButton setIsEdit={setIsEdit} disabled={isProtected} />}
               <DeleteButton setIsDelete={setIsDelete} disabled={isProtected} />
-              {showEvaluateButton && !isGeneratingMessage && (
-                <BaseButton
-                  icon={<EvaluateIcon />}
-                  onClick={onEvaluate}
-                  buttonProps={{ 'aria-label': t('evaluation.modalTitle') as string }}
-                />
-              )}
             </>
           )}
           {isDelete && (

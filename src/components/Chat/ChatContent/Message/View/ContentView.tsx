@@ -120,11 +120,6 @@ const ContentView = memo(
       handleRegenerate(plan.submitMode === 'append' ? 'append' : 'midchat', plan.insertIndex);
     };
 
-    const handleEvaluate = useCallback(() => {
-      setEvalInitialTab(undefined);
-      setIsEvalModalOpen(true);
-    }, []);
-
     const handleOpenEvalTab = useCallback((tab: TabId) => {
       setEvalInitialTab(tab);
       setIsEvalModalOpen(true);
@@ -189,7 +184,6 @@ const ContentView = memo(
           isProtected={isProtected}
           isGeneratingMessage={isGeneratingMessage}
           isCurrentChatGenerating={isCurrentChatGenerating}
-          showEvaluateButton={true}
           setIsEdit={setIsEdit}
           setIsDelete={setIsDelete}
           onRefresh={handleRefresh}
@@ -197,7 +191,6 @@ const ContentView = memo(
           onMoveDown={handleMoveDown}
           onCopy={handleCopy}
           onDelete={handleDelete}
-          onEvaluate={handleEvaluate}
         />
         {isEvalModalOpen && nodeId && currentChatId && providerInfo && (
           <EvaluationModal
