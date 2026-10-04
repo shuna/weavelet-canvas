@@ -47,7 +47,7 @@ function SummaryDialog({ messageIndex, initialSummary, setOpen }: { messageIndex
   const continuous = indices.length > 0 && indices.length === selected.length && indices[indices.length - 1] - indices[0] + 1 === indices.length;
   const valid = continuous && indices.every(index => eligible(index) && candidate(index)) && (mode !== 'single' || indices.length === 1);
   const local = isLocalModelConfig(chat.config);
-  const reason = local ? 'ローカルモデルでは要約生成を利用できません。' : !chat.config.model ? 'チャットのモデルを選択してください。' : !valid ? '同じ経路の連続した通常テキストを選択してください。不可視・画像・ツール・生成中のバブルは対象外です。' : '';
+  const reason = local ? 'ローカルモデルでは要約生成を利用できません。' : !chat.config.model ? 'チャットのモデルを選択してください。' : !selected.length ? '要約するバブルを選択してください。' : !valid ? '同じ経路の連続した通常テキストを選択してください。不可視・画像・ツール・生成中のバブルは対象外です。' : '';
   const generate = async () => {
     if (busy || reason) return;
     const state = useStore.getState();
@@ -76,12 +76,12 @@ function SummaryDialog({ messageIndex, initialSummary, setOpen }: { messageIndex
     } finally { if (!abort.signal.aborted) setBusy(false); }
   };
   return <PopupModal title='要約の対象を選択' setIsModalOpen={setOpen} handleClose={close} handleClickBackdrop={close} cancelButton={false}
-    footerEndContent={<><button type='button' className='btn btn-neutral' onClick={close}>{busy ? '生成を中止' : 'キャンセル'}</button><button type='button' className='btn btn-primary' disabled={busy || !!reason} onClick={() => void generate()}>{busy ? '生成中…' : '要約を生成'}</button></>}>
-    <div className='min-w-[18rem] space-y-3 p-5 text-sm'>
-      <div className='flex flex-wrap gap-3'>{(['single', 'through', 'range'] as const).map(value => <label key={value} className='flex items-center gap-1'><input type='radio' name='summary-mode' checked={mode === value} disabled={busy} onChange={() => chooseMode(value)} />{value === 'single' ? 'このバブル' : value === 'through' ? 'ここまで' : '選択範囲'}</label>)}</div>
-      <p className='text-xs text-gray-500'>原文は保持されます。生成後は原文送信のまま、要約タブで結果を確認できます。先頭のシステム指示は要約しません。</p>
-      <div className='max-h-72 space-y-2 overflow-y-auto'>{path.map((id, index) => <label key={id} className={`flex items-start gap-2 rounded border p-2 ${eligible(index) ? '' : 'opacity-50'}`}>
-        <input type='checkbox' aria-label={`バブル${index + 1}を要約に含める`} checked={selected.includes(id)} disabled={busy || !candidate(index) || (!eligible(index) && !selected.includes(id))} onChange={() => {
+    footerEndContent={<><button type='button' className='btn btn-neutral' onClick={close}>{busy ? '生成を中止' : 'キャンセル'}</button><button type='button' className={`btn ${busy || reason ? 'btn-neutral cursor-not-allowed opacity-50' : 'btn-primary'}`} disabled={busy || !!reason} onClick={() => void generate()}>{busy ? '生成中…' : '要約を生成'}</button></>}>
+    <div className='min-w-[18rem] space-y-3 p-5 text-sm text-gray-900 dark:text-gray-300'>
+      <div className='flex flex-wrap gap-3'>{(['single', 'through', 'range'] as const).map(value => <label key={value} className='flex cursor-pointer items-center gap-1 text-gray-600 dark:text-gray-400'><input type='radio' className='accent-blue-600' name='summary-mode' checked={mode === value} disabled={busy} onChange={() => chooseMode(value)} />{value === 'single' ? 'このバブル' : value === 'through' ? 'ここまで' : '選択範囲'}</label>)}</div>
+      <p className='text-xs text-gray-500 dark:text-gray-400'>原文は保持されます。生成後は原文送信のまま、要約タブで結果を確認できます。先頭のシステム指示は要約しません。</p>
+      <div className='max-h-72 space-y-2 overflow-y-auto'>{path.map((id, index) => <label key={id} className={`flex items-start gap-2 rounded border p-2 ${selected.includes(id) && eligible(index) && candidate(index) ? 'border-gray-300 text-gray-900 dark:border-gray-500 dark:text-gray-300' : 'border-gray-200 text-gray-400 dark:border-gray-600 dark:text-gray-500'}`}>
+        <input type='checkbox' className='mt-0.5 accent-blue-600' aria-label={`バブル${index + 1}を要約に含める`} checked={selected.includes(id)} disabled={busy || !candidate(index) || (!eligible(index) && !selected.includes(id))} onChange={() => {
           setSelected(current => current.includes(id) ? current.filter(value => value !== id) : [...current, id]);
           if (mode === 'range') {
             const current = useStore.getState(); const targetIndex = current.chats?.findIndex(value => value.id === chat.id) ?? -1;
@@ -90,7 +90,7 @@ function SummaryDialog({ messageIndex, initialSummary, setOpen }: { messageIndex
         }} />
         <span><strong>{index + 1}. {chat.messages[index]?.role === 'user' ? 'ユーザー' : chat.messages[index]?.role === 'assistant' ? 'アシスタント' : 'システム'}</strong><span className='block whitespace-pre-wrap break-words text-xs'>{chat.messages[index]?.content.filter(isTextContent).map(value => value.text).join('\n').slice(0, 240)}</span></span>
       </label>)}</div>
-      <p aria-live='polite' className='text-xs text-amber-700 dark:text-amber-300'>{error || reason || `対象 ${selected.length}件`}</p>
+      <p aria-live='polite' className='text-xs text-gray-500 dark:text-gray-400'>{error || reason || `対象 ${selected.length}件`}</p>
     </div>
   </PopupModal>;
 }
