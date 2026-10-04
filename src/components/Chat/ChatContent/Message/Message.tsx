@@ -13,6 +13,7 @@ import useCanHover from '@hooks/useCanHover';
 import MetaActions from './View/MetaActions';
 import AssistantPrefillSeed from '../AssistantPrefillSeed';
 import { STICKY_PREFILL_KEY } from '@store/input-slice';
+import useMessageBranchSwipe from '@hooks/useMessageBranchSwipe';
 
 const backgroundStyle = ['dark:bg-gray-800', 'bg-gray-50 dark:bg-gray-650'];
 
@@ -75,6 +76,7 @@ const Message = React.memo(
     });
 
     const { t } = useTranslation('drive');
+    const swipeRef = useMessageBranchSwipe(currentChatIndex, sticky ? undefined : resolvedNodeId);
     const chatId = useStore(state => state.chats?.[state.currentChatIndex]?.id ?? '');
     const syncChanged = useSyncReview(state => !!resolvedNodeId && (state.nodes[chatId] ?? []).includes(resolvedNodeId));
 
@@ -217,7 +219,7 @@ const Message = React.memo(
                   />
                 </div>
               </div>
-              <div className='min-w-0'>
+              <div className='min-w-0' ref={swipeRef}>
                 {isCollapsed ? (
                   <div className={contentSurfaceClass}>
                     <div className='h-[4.5rem] overflow-hidden py-0 text-sm leading-6 text-gray-700 dark:text-gray-200 whitespace-pre-wrap break-words line-clamp-3'>
