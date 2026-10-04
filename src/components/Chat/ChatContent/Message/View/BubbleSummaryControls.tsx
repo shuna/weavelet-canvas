@@ -5,13 +5,24 @@ import useStore from '@store/store';
 import { generateBubbleSummary, isLocalModelConfig } from '@hooks/submitHelpers';
 import { isSummaryEligible, resolveValidSummary } from '@utils/bubbleSummary';
 import { BubbleSummary, isTextContent } from '@type/chat';
-import { useSummaryDisplay } from './bubbleSummaryDisplay';
+import { useBubbleSummary, useSummaryDisplay } from './bubbleSummaryDisplay';
 
-export default function BubbleSummaryControls({ messageIndex, initialSummary }: { messageIndex: number; initialSummary?: BubbleSummary }) {
+export default function BubbleSummaryControls({ messageIndex }: { messageIndex: number }) {
   const [open, setOpen] = useState(false);
+  const nodeId = useStore(state => state.chats?.[state.currentChatIndex]?.branchTree?.activePath[messageIndex]);
+  const { chat, summary, range, tab, changeTab, effectiveChat, generating } = useBubbleSummary(nodeId);
+  const target = !!chat?.summaryTargets?.[nodeId ?? String(messageIndex)];
+  const canSelect = !!chat && isSummaryEligible(chat.messages[messageIndex]) && !effectiveChat?.omittedNodes?.[nodeId ?? String(messageIndex)] && !generating.includes(nodeId ?? '');
+  const buttonClass = (active: boolean) => `rounded-full px-2 py-1 text-xs transition-colors ${active ? 'bg-gray-100 text-gray-700 dark:bg-gray-700 dark:text-gray-200' : 'text-gray-400 hover:text-gray-600 dark:text-gray-500 dark:hover:text-gray-300'}`;
   return <>
-    <button type='button' className='rounded-full px-2 py-1 text-xs text-violet-600 dark:text-violet-300' onClick={event => { event.stopPropagation(); setOpen(true); }} aria-label='要約を作成'>要約を作成</button>
-    {open && <SummaryDialog messageIndex={messageIndex} initialSummary={initialSummary} setOpen={setOpen} />}
+    {summary ? <>
+      <button type='button' className={buttonClass(tab === 'original')} aria-pressed={tab === 'original'} onClick={event => { event.stopPropagation(); changeTab('original'); }}>原文</button>
+      <button type='button' className={buttonClass(tab === 'summary')} aria-pressed={tab === 'summary'} onClick={event => { event.stopPropagation(); if (range && tab === 'original') changeTab('summary'); else setOpen(true); }}>要約</button>
+    </> : <>
+      <button type='button' className={buttonClass(target)} aria-pressed={target} disabled={!target && !canSelect} aria-label={target ? '要約対象から外す' : '要約に含める'} title={target ? '要約対象から外す' : '要約に含める'} onClick={event => { event.stopPropagation(); useStore.getState().toggleSummaryTarget(useStore.getState().currentChatIndex, messageIndex); }}>要約</button>
+      <button type='button' className={buttonClass(false)} onClick={event => { event.stopPropagation(); setOpen(true); }} aria-label='要約を作成'>要約を作成</button>
+    </>}
+    {open && <SummaryDialog messageIndex={summary ? chat?.branchTree?.activePath.indexOf(summary.sources[summary.sources.length - 1]?.nodeId) ?? -1 : messageIndex} initialSummary={summary} setOpen={setOpen} />}
   </>;
 }
 
