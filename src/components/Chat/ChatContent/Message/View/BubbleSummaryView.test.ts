@@ -17,6 +17,9 @@ it('shows compact text in the same pane as readable summaries and hides original
       expect(html).toContain('Compressed');
       expect(html).toContain('圧縮を編集');
       expect(html).not.toContain('<details');
+      expect(html).not.toContain('送信トークンの推定');
+      expect(html).not.toContain('圧縮は実験機能です');
+      expect(html).not.toContain('生成時のモデル');
     }
   }
 });
