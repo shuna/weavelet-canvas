@@ -476,7 +476,13 @@
 
 .bubble-message-layout { container: bubble / inline-size; }
 .summary-format-inline { display: none; }
-.summary-format-dropdown .summary-format-options { position: absolute; right: 0; top: 100%; z-index: 50; margin-top: 4px; min-width: 144px; flex-direction: column; border-radius: 8px; }
+.summary-format-dropdown .summary-format-options { position: absolute; right: 0; top: 100%; z-index: 50; margin-top: 4px; width: max-content; flex-direction: column; gap: 0; border-radius: 8px; background-color: white; }
+.summary-format-dropdown .summary-format-options > button { padding: 6px 12px; border-radius: 4px; text-align: left; font-size: 14px; line-height: 20px; color: rgb(55 65 81); }
+.summary-format-dropdown .summary-format-options > button:hover { background-color: rgb(243 244 246); }
+.summary-format-dropdown .summary-format-options > button > .flex { justify-content: flex-start; }
+.dark .summary-format-dropdown .summary-format-options { background-color: rgb(31 41 55); }
+.dark .summary-format-dropdown .summary-format-options > button { color: rgb(229 231 235); }
+.dark .summary-format-dropdown .summary-format-options > button:hover { background-color: rgb(55 65 81); }
 @container bubble (min-width: 520px) {
   .summary-format-dropdown { display: none; }
   .summary-format-inline { display: block; flex-shrink: 0; }
