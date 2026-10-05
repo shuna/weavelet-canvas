@@ -172,6 +172,9 @@
     "reference": "Reference minimum payload files {{files}} / {{excess}} excess (estimate)",
     "cleanup": "Source deletion checks remaining: {{count}} (may include already deleted sources)",
     "measurement": "Sizes and rates count completed file payloads, excluding HTTP headers and failed transfers. Overlapping transfer time is counted once; processing times are cumulative.",
-    "referenceHelp": "The reference estimates packing existing compressed payloads into 4 MiB files. It excludes indexes, unpacked history and recompression effects; it is not a global optimum."
+    "referenceHelp": "The reference estimates packing existing compressed payloads into 4 MiB files. It excludes indexes, unpacked history and recompression effects; it is not a global optimum.",
+    "compactNow": "Compact files now",
+    "compacting": "Compacting files",
+    "compactCompleted": "Sync file compaction completed."
   }
 }

@@ -21,6 +21,16 @@
     "confirmReplaceAll": "This will delete all local conversations, then replace them with the imported data. Continue?",
     "confirmReplaceAllWithSettings": "This will delete all local conversations and settings, then replace them with the imported data. Continue?",
     "reduceMessagesSuccess": "{{count}} messages were reduced.",
-    "partialImportMessages": "expected {{total}} messages but found {{count}}"
-  }
-  
+    "partialImportMessages": "expected {{total}} messages but found {{count}}",
+    "drive": {
+      "title": "Upload export to Google Drive only",
+      "description": "Add this export to an encrypted sync folder without importing it into local chats. Existing Drive chats are preserved.",
+      "connect": "Connect Google Drive in sync settings first.",
+      "loadFolders": "Load sync folders",
+      "folder": "Destination sync folder",
+      "selectFolder": "Select a folder",
+      "passphrase": "Folder passphrase (optional if remembered)",
+      "upload": "Convert and upload to Drive",
+      "completed": "Export uploaded to Drive. Local chats have not changed."
+    }
+}

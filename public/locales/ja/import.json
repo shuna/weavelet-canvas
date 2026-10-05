@@ -21,5 +21,16 @@
     "confirmReplaceAll": "ローカルの会話をすべて削除して、インポート内容で置き換えます。続行しますか？",
     "confirmReplaceAllWithSettings": "ローカルの会話および設定をすべて削除して、インポート内容で置き換えます。続行しますか？",
     "reduceMessagesSuccess": "{{count}}件のメッセージが削減されました。",
-    "partialImportMessages": "{{total}}件のメッセージを想定していましたが、{{count}}件しか見つかりませんでした"
-  }
+    "partialImportMessages": "{{total}}件のメッセージを想定していましたが、{{count}}件しか見つかりませんでした",
+    "drive": {
+      "title": "Google Driveへ同期専用アップロード",
+      "description": "ローカルのチャットに読み込まず、エクスポートを暗号化同期フォルダへ追加します。Driveの既存チャットは保持します。",
+      "connect": "先に同期設定でGoogle Driveへ接続してください。",
+      "loadFolders": "同期フォルダを取得",
+      "folder": "アップロード先の同期フォルダ",
+      "selectFolder": "フォルダを選択",
+      "passphrase": "フォルダのパスフレーズ（保存済みなら省略可）",
+      "upload": "変換してDriveへアップロード",
+      "completed": "Driveへのアップロードが完了しました。ローカルのチャットは変更していません。"
+    }
+}

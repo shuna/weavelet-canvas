@@ -150,6 +150,35 @@ export async function pushEncryptedGoogleSync(snapshot: Snapshot, replace = fals
   await session.push(snapshot, replace);
 }
 
+async function runManualDriveOperation(work: () => Promise<void>) {
+  while (inFlight) await inFlight;
+  const operation = withSyncProgress(work);
+  inFlight = operation;
+  try { await operation; }
+  finally {
+    if (inFlight === operation) inFlight = undefined;
+    if (pending && !suspended) schedule();
+  }
+}
+
+export async function compactGoogleSyncHistory() {
+  const target = session;
+  if (!target) throw new Error('Unlock Google sync first.');
+  await runManualDriveOperation(() => target.compactHistory());
+}
+
+// A separate session never applies imported data or changes the active sync target.
+export async function importGoogleSyncSnapshot(id: string, passphrase: string, snapshot: Snapshot) {
+  await runManualDriveOperation(async () => {
+    const current = session?.dataset === id ? session : undefined;
+    const target = current ?? new EncryptedDriveSync(id, transport());
+    try {
+      if (!current && !await target.restoreKey()) await target.unlock(passphrase);
+      await target.importSnapshot(snapshot);
+    } finally { if (!current) target.close(); }
+  });
+}
+
 const schedule = () => {
   clearTimeout(timer);
   timer = setTimeout(flushAndReport, 5000);
