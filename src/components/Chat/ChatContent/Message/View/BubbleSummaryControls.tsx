@@ -41,10 +41,13 @@ export default function BubbleSummaryControls({ messageIndex }: { messageIndex: 
           event.stopPropagation();
           if (menuRef.current) menuRef.current.open = false;
           if (job?.busy) return;
-          if (range && (value === 'compact' ? compact : readable)) { changeTab(value); return; }
+          const saved = range && (value === 'compact' ? compact : readable);
+          const regenerate = !!saved && tab === value && !!event.currentTarget.closest('details');
+          if (saved && !regenerate) { changeTab(value); return; }
+          if (regenerate && !window.confirm(`表示中の${label}を再処理しますか？`)) return;
           if (!chat || !effectiveChat || !nodeId || !isSummaryEligible(chat.messages[messageIndex]) || effectiveChat.omittedNodes?.[nodeId] || generating.includes(nodeId)) return;
           const state = useStore.getState();
-          void startBubbleSummary(effectiveChat, [messageIndex], 'single', nodeId, { favoriteModels: state.favoriteModels, providers: state.providers, fallbackProvider: { endpoint: state.apiEndpoint, key: state.apiKey }, apiVersion: state.apiVersion, summaryConfig: state.bubbleSummaryConfig, summaryFormat: value === 'compact' ? 'compact' : undefined, t });
+          void startBubbleSummary(effectiveChat, regenerate && range ? Array.from({ length: range.last - range.first + 1 }, (_, index) => range.first + index) : [messageIndex], regenerate && saved ? saved.mode : 'single', regenerate && saved ? saved.sources[saved.sources.length - 1].nodeId : nodeId, { favoriteModels: state.favoriteModels, providers: state.providers, fallbackProvider: { endpoint: state.apiEndpoint, key: state.apiKey }, apiVersion: state.apiVersion, summaryConfig: state.bubbleSummaryConfig, summaryFormat: value === 'compact' ? 'compact' : undefined, t });
         }}><svg aria-hidden='true' className='summary-option-icon' viewBox='0 0 24 24' fill='none' stroke='currentColor' strokeWidth='1.8' strokeLinecap='round' strokeLinejoin='round'><path d={value === 'compact' ? 'M3 6l4 6-4 6M21 6l-4 6 4 6M7 12h10M10 7h4M10 17h4' : 'M5 6h14M5 12h14M5 18h8'} /></svg><span className='relative inline-block'><span className={busy ? 'summary-busy-label' : ''}>{label}</span>{busy && <span role='status' className='summary-inline-progress absolute left-1/2 top-full -mt-1 -translate-x-1/2 text-[8px] leading-[6px]'><SyncDots label={`${label}生成中`} /></span>}</span><span className='summary-option-stats ml-auto text-xs'>({tokenLabel(value)})</span></button>;
       })}
 
