@@ -1,9 +1,8 @@
-import { lazy, Suspense, useEffect, useState, type ReactNode } from 'react';
+import { lazy, Suspense, useState, type ReactNode } from 'react';
 import useStore from '@store/store';
-import { countTokens, loadEncoder } from '@utils/messageUtils';
 import OverTypeEditor from './OverTypeEditor';
 import type { BubbleSummary } from '@type/chat';
-import { bubbleSummarySubmitMessage, normalizeBubbleSummaryText } from '@utils/bubbleSummary';
+import { normalizeBubbleSummaryText } from '@utils/bubbleSummary';
 
 import { useBubbleSummary, useSummaryDisplay } from './bubbleSummaryDisplay';
 
@@ -15,16 +14,6 @@ export default function BubbleSummaryView({ nodeId, isCollapsed = false, childre
   const inlineLatex = useStore(state => state.inlineLatex);
   const choose = useSummaryDisplay(state => state.choose);
   const anchor = summary?.sources[summary.sources.length - 1]?.nodeId === nodeId;
-  const [tokens, setTokens] = useState<{ original: number; compact: number }>();
-  useEffect(() => {
-    let current = true;
-    setTokens(undefined);
-    if (anchor && summary?.format === 'compact' && chat && range) {
-      loadEncoder().then(() => Promise.all([countTokens(chat.messages.slice(range.first, range.last + 1), chat.config.model), countTokens([bubbleSummarySubmitMessage(summary)], chat.config.model)]))
-        .then(([original, compact]) => { if (current) setTokens({ original, compact }); }).catch(() => {});
-    }
-    return () => { current = false; };
-  }, [anchor, chat, summary, range?.first, range?.last]);
   if (!summary || !chat || !nodeId) return <>{children}</>;
   if (!anchor) return <>
     <div className='mb-2 flex flex-wrap items-center gap-2 text-xs text-gray-500 dark:text-gray-400'>
@@ -40,7 +29,6 @@ export default function BubbleSummaryView({ nodeId, isCollapsed = false, childre
       <div hidden={tab !== 'original'}>{children}</div>
       <div hidden={tab === 'original'}>
         <SummaryText key={`${summary.id}:${tab}`} chatId={chat.id} summary={summary} isCollapsed={isCollapsed} markdownMode={markdownMode} inlineLatex={inlineLatex} />
-        {summary.format === 'compact' && <div className='mt-2 text-xs text-gray-500 dark:text-gray-400'>{tokens && <p>送信トークンの推定（{chat.config.model}）: 原文 {tokens.original} → 圧縮 {tokens.compact} · {tokens.original > tokens.compact ? `${tokens.original - tokens.compact}削減` : '削減なし'}。APIの実測値とは異なる場合があります。</p>}<p>圧縮は実験機能です。原文と異なる後続応答になる場合があります。生成時のモデル: {summary.generation?.model ?? '記録なし'}</p></div>}
       </div>
     </div>
     {(!range || (summary.useForSubmit && tab === 'original')) && <p className='mt-2 text-xs text-gray-500 dark:text-gray-400' aria-live='polite'>{!range ? '原文を表示・送信します。要約の更新が必要です（原文・対象・不可視・生成状態を確認してください）。' : '要約の対象が重複しているため原文を表示・送信します。要約を選び直してください。'}</p>}
