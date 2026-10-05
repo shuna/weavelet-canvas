@@ -1,3 +1,4 @@
+import DriveImport from './DriveImport';
 import React, { useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { showToast } from '@utils/showToast';
@@ -7,7 +8,8 @@ const ImportChat = ({ hideTitle }: { hideTitle?: boolean }) => {
   const { t } = useTranslation(['main', 'import']);
   const inputRef = useRef<HTMLInputElement>(null);
   const [mode, setMode] = useState<ImportMode>('append');
-  const [fileSelected, setFileSelected] = useState(false);
+  const [file, setFile] = useState<File>();
+  const fileSelected = !!file;
   const [includeSettings, setIncludeSettings] = useState(false);
   const [alert, setAlert] = useState<{
     message: string;
@@ -104,7 +106,7 @@ const ImportChat = ({ hideTitle }: { hideTitle?: boolean }) => {
             type='file'
             accept='.json,.json.gz,.gz'
             ref={inputRef}
-            onChange={() => setFileSelected(!!inputRef.current?.files?.length)}
+            onChange={() => setFile(inputRef.current?.files?.[0])}
           />
           {t('selectFile')}
         </label>
@@ -117,6 +119,7 @@ const ImportChat = ({ hideTitle }: { hideTitle?: boolean }) => {
           {t('import')}
         </button>
       </div>
+      <DriveImport file={file} />
       {alert && (
         <div
           className={`relative py-2 px-3 w-full mt-3 border rounded-md text-gray-600 dark:text-gray-100 text-sm whitespace-pre-wrap ${

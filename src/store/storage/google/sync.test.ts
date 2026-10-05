@@ -808,3 +808,40 @@ it('keeps simultaneously published packs safe and consolidates their duplicate h
   await reader.unlock(PASSWORD);
   expect(await toRecords(await reader.pull())).toEqual(await toRecords(state));
 }, 30_000);
+
+
+it('manually compacts below the automatic threshold and preserves the exact snapshot', async () => {
+  const { drive, session, file, state } = await retainedHistory(3);
+  const before = await toRecords(await session.pull());
+  await session.compactHistory();
+  expect(await drive.commits(file.id)).toHaveLength(0);
+  expect(await drive.packs(file.id)).toHaveLength(1);
+  expect(await toRecords(await session.pull())).toEqual(before);
+  cache();
+  const fresh = new EncryptedDriveSync(file.id, drive.transport());
+  await fresh.unlock(PASSWORD);
+  expect(await toRecords(await fresh.pull())).toEqual(await toRecords(state));
+});
+
+it('Drive-only import preserves remote chats, settings and the local sync baseline', async () => {
+  const drive = new FakeDrive();
+  const local = snapshot();
+  const { session, file } = await EncryptedDriveSync.create(drive.transport(), PASSWORD);
+  await session.push(local, true);
+  const imported = snapshot();
+  imported.state.chats![0].id = 'imported-chat';
+  imported.state.chats![0].title = 'Imported';
+  delete imported.state.theme;
+  await session.importSnapshot(imported);
+  expect(local.state.chats).toHaveLength(1);
+  let result = await session.pull();
+  expect(result.state.chats!.map(chat => chat.id).sort()).toEqual(['chat-a', 'imported-chat']);
+  expect(result.state.theme).toBe('dark');
+  // Unchanged local data must not erase the import on the next automatic upload.
+  await session.push(local);
+  expect((await session.pull()).state.chats).toHaveLength(2);
+  cache();
+  const fresh = new EncryptedDriveSync(file.id, drive.transport());
+  await fresh.unlock(PASSWORD);
+  expect((await fresh.pull()).state.chats).toHaveLength(2);
+});

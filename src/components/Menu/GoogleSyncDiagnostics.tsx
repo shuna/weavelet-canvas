@@ -1,3 +1,7 @@
+import { useState } from 'react';
+import useCloudAuthStore from '@store/cloud-auth-store';
+import { compactGoogleSyncHistory, isGoogleSyncUnlocked } from '@store/storage/GoogleCloudStorage';
+import { showToast } from '@utils/showToast';
 import { useTranslation } from 'react-i18next';
 import { useGoogleSyncDiagnostics } from '@store/storage/google/diagnostics';
 import { useGoogleSyncProgress } from '@store/storage/google/progress';
@@ -11,6 +15,8 @@ const speed = (bytes: number, ms: number) => ms > 0 ? `${size(bytes * 1000 / ms)
 export default function GoogleSyncDiagnostics() {
   const { t } = useTranslation('drive');
   const diagnostics = useGoogleSyncDiagnostics();
+  const folderId = useCloudAuthStore(state => state.fileId);
+  const [compacting, setCompacting] = useState(false);
   const progress = useGoogleSyncProgress();
   const metrics = diagnostics.active ? getSyncMetrics() : diagnostics.metrics;
   const history = diagnostics.history;
@@ -46,6 +52,13 @@ export default function GoogleSyncDiagnostics() {
         <div>{t('debug.reference', { files: history.referenceFiles, excess: history.excessPayloadFiles })}</div>
         <div>{t('debug.cleanup', { count: history.cleanupTargets })}</div>
       </div>}
+      <button className='btn btn-small btn-neutral mt-2' disabled={compacting || progress.active || !isGoogleSyncUnlocked(folderId ?? undefined)}
+        onClick={async () => {
+          setCompacting(true);
+          try { await compactGoogleSyncHistory(); showToast(t('debug.compactCompleted'), 'success'); }
+          catch (error) { showToast(error instanceof Error ? error.message : String(error), 'error'); }
+          finally { setCompacting(false); }
+        }}>{t(compacting ? 'debug.compacting' : 'debug.compactNow')}</button>
       <p className='mt-1 text-gray-500 dark:text-gray-400'>{t('debug.measurement')}</p>
       <p className='mt-1 text-gray-500 dark:text-gray-400'>{t('debug.referenceHelp')}</p>
     </details>

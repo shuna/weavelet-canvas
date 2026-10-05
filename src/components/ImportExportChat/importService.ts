@@ -186,7 +186,7 @@ const warnUnsupportedModels = (chats: unknown[], t: Translator) => {
   return true;
 };
 
-const readImportFile = async (file: File): Promise<string> => {
+export const readImportFile = async (file: File): Promise<string> => {
   if (file.name.endsWith('.gz') && typeof DecompressionStream !== 'undefined') {
     const ds = new DecompressionStream('gzip');
     const decompressedStream = file.stream().pipeThrough(ds);

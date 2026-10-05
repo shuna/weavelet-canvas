@@ -13,7 +13,7 @@ interface CommitManifest { version: number; parts?: string[]; parents?: string[]
 interface Pending {
   id: string;
   commit: Commit;
-  baseline: Records;
+  baseline?: Records;
   files: { id: string; kind: string; size: number; bytes?: Uint8Array; sent: boolean }[];
 }
 interface PackManifest { version: 1; commits: Record<string, string>; parts: string[]; bytes: number }
@@ -44,7 +44,7 @@ interface StoredCache {
   commits: string[];
   token?: string;
   baseline?: Records;
-  pending?: { id: string; baseline: Records; files: { id: string; kind: string; size: number }[] };
+  pending?: { id: string; baseline?: Records; files: { id: string; kind: string; size: number }[] };
   packs?: Cache['packs'];
   parts?: Cache['parts'];
   compaction?: Omit<Compaction, 'files'> & { files: { id: string; kind: string; size: number }[] };
@@ -109,7 +109,7 @@ export class EncryptedDriveSync {
       this.cache = stored;
       if (stored.baseline) this.cache.baseline = await hashRecords(stored.baseline);
       if (stored.pending) {
-        stored.pending.baseline = await hashRecords(stored.pending.baseline);
+        if (stored.pending.baseline) stored.pending.baseline = await hashRecords(stored.pending.baseline);
         for (const file of stored.pending.files) { file.bytes = new Uint8Array(file.bytes!); file.size = file.bytes.length; }
       }
       await this.save();
@@ -463,16 +463,16 @@ export class EncryptedDriveSync {
     await this.save(pending.files.flatMap(file => [`outbox:${file.id}`, `ack:${file.id}`]));
     reportCompaction({ status: 'completed', sourceFiles: pending.remove.length, newFiles: pending.files.length });
   }
-  private async compact() {
+  private async compact(force = false) {
     await this.finishCompaction();
     const covered = this.packedCommits();
-    if (Object.keys(this.cache.commits).filter(id => !covered.has(id)).length < COMPACT_COMMITS) {
+    if (Object.keys(this.cache.commits).filter(id => !covered.has(id)).length < (force ? 1 : COMPACT_COMMITS)) {
       reportCompaction({ status: 'skipped', reason: 'belowThreshold' }); return;
     }
     // Capture live sources once. Commits published by another device later are never deletion targets.
     await this.discoverPacks();
     const raw = await this.drive.commits(this.dataset);
-    if (raw.length < COMPACT_COMMITS) { reportCompaction({ status: 'skipped', reason: 'liveBelowThreshold' }); return; }
+    if (raw.length < (force ? 1 : COMPACT_COMMITS)) { reportCompaction({ status: 'skipped', reason: 'liveBelowThreshold' }); return; }
     const groups: { commits: string[]; sources: string[]; size: number }[] = [];
     let group = { commits: [] as string[], sources: [] as string[], size: 0 };
     for (const id of raw.sort()) {
@@ -514,7 +514,7 @@ export class EncryptedDriveSync {
       await this.finishCompaction();
     }
   }
-  private async prepare(changes: Change[], baseline: Records, resolutions?: Commit['resolutions']) {
+  private async prepare(changes: Change[], baseline: Records | undefined, resolutions?: Commit['resolutions']) {
     syncPhase('encrypting');
     const commit: Commit = { version: 1, parents: this.heads(), changes, ...(resolutions ? { resolutions } : {}) };
     const payload = await encodeAsync(commit);
@@ -534,6 +534,34 @@ export class EncryptedDriveSync {
     this.encodedCommits.set(id, payload);
     this.cache.pending = { id, commit, baseline, files };
     await this.save();
+  }
+
+  // Import into Drive only: preserve the local sync baseline and all remote entities.
+  async importSnapshot(snapshot: Snapshot): Promise<void> {
+    const local = await syncStage(0, 6, () => toRecords(snapshot));
+    await this.run(async () => {
+      await syncStage(1, 6, async () => { await this.sendPending(); await this.finishCompaction(); });
+      await syncStage(2, 6, () => this.refresh());
+      const remote = await syncStage(3, 6, () => this.remote());
+      await syncStage(4, 6, async () => {
+        const merged = await mergeSyncRecords({}, local, remote);
+        const changes = await diffRecords(remote, merged);
+        if (changes.length) {
+          await this.prepare(changes, this.cache.baseline);
+          await this.sendPending();
+        }
+      });
+      await syncStage(5, 6, async () => { await this.refresh(); await this.remote(); await this.compact(); });
+    });
+  }
+
+  async compactHistory(): Promise<void> {
+    await this.run(async () => {
+      await syncStage(0, 4, async () => { await this.sendPending(); await this.finishCompaction(); });
+      await syncStage(1, 4, () => this.refresh());
+      await syncStage(2, 4, () => this.remote());
+      await syncStage(3, 4, () => this.compact(true));
+    });
   }
 
   async push(snapshot: Snapshot, replace = false): Promise<void> {
