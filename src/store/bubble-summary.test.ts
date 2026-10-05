@@ -82,6 +82,15 @@ describe('summary persistence and send selection', () => {
     expect(state.value.chats[0].summaries.every((value: BubbleSummary) => !value.useForSubmit)).toBe(true);
     expect(state.value.chats[0].messages).toEqual(original);
   });
+  it('deletes only the selected summary version and returns submission to originals', () => {
+    const chat = state.value.chats[0];
+    const original = structuredClone(chat.messages);
+    state.value.saveBubbleSummary('chat', { ...chat.summaries[0], id: 'compact', format: 'compact', useForSubmit: false });
+    state.value.removeBubbleSummary('chat', 'ab');
+    expect(state.value.chats[0].summaries.map((value: BubbleSummary) => value.id)).toEqual(['compact']);
+    expect(state.value.chats[0].messages).toEqual(original);
+    expect(getSubmitContextMessages(original, 'append', 3, 'gpt-4o', 0).flatMap(message => message.content)).toEqual(original.flatMap((message: { content: unknown[] }) => message.content));
+  });
   it('excludes hidden-branch source snapshots and target flags from visible-only export', () => {
     const chat = state.value.chats[0];
     chat.branchTree.nodes.hidden = { id: 'hidden', parentId: 'a', role: 'user', contentHash: 'hidden', createdAt: 1 };
