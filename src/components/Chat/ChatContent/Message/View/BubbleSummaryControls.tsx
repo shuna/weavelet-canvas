@@ -65,6 +65,7 @@ export default function BubbleSummaryControls({ messageIndex }: { messageIndex: 
 
     </details>
     <div className='summary-format-inline'><span className='mr-2 whitespace-nowrap text-xs text-gray-500 dark:text-gray-400' title='送信内容の推定トークン数・原文からの節約率'>{tokenLabel(tab === 'compact' ? 'compact' : tab === 'summary' ? 'summary' : 'original')}</span>{controls}</div>
+    {job?.warning && <InfoTooltip text={job.warning} />}
     {open && <SummaryDialog messageIndex={summary ? chat?.branchTree?.activePath.indexOf(summary.sources[summary.sources.length - 1]?.nodeId) ?? -1 : messageIndex} initialSummary={summary} initialFormat={dialogFormat} setOpen={setOpen} />}
   </>;
 }
