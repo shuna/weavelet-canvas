@@ -1,3 +1,16 @@
+import { buildBubbleSummaryPrompt as downstreamCandidate5 } from '../../docs/development/evaluations/bubble-summary-downstream-2026-10-06/candidate5-bubbleSummaryPrompt';
+import { buildBubbleSummaryPrompt as downstreamCandidate4 } from '../../docs/development/evaluations/bubble-summary-downstream-2026-10-06/candidate4-bubbleSummaryPrompt';
+import downstreamCorpus4 from '../../docs/development/evaluations/bubble-summary-downstream-2026-10-06/cases-v4.json';
+import countTokens from '../../src/utils/messageUtils';
+import { buildBubbleSummaryPrompt as downstreamCandidate3 } from '../../docs/development/evaluations/bubble-summary-downstream-2026-10-06/candidate3-bubbleSummaryPrompt';
+import { candidateSubmitMessage } from '../../docs/development/evaluations/bubble-summary-downstream-2026-10-06/candidate-bubbleSummarySubmitMessage';
+import downstreamCorpus3 from '../../docs/development/evaluations/bubble-summary-downstream-2026-10-06/cases-v3.json';
+import { buildBubbleSummaryPrompt as downstreamCandidate2 } from '../../docs/development/evaluations/bubble-summary-downstream-2026-10-06/candidate2-bubbleSummaryPrompt';
+import downstreamCorpus2 from '../../docs/development/evaluations/bubble-summary-downstream-2026-10-06/cases-v2.json';
+import { buildBubbleSummaryPrompt as downstreamBaseline } from '../../docs/development/evaluations/bubble-summary-downstream-2026-10-06/baseline-bubbleSummaryPrompt';
+import { buildBubbleSummaryPrompt as downstreamCandidate } from '../../docs/development/evaluations/bubble-summary-downstream-2026-10-06/candidate-bubbleSummaryPrompt';
+import downstreamCorpus from '../../docs/development/evaluations/bubble-summary-downstream-2026-10-06/cases.json';
+import { buildBubbleSummaryPrompt as extremePrompt } from '../../docs/development/evaluations/bubble-summary-extreme-2026-10-06/candidate-bubbleSummaryPrompt';
 // Manual, dev-server-only experiment. Never include real chat content or credentials in records.
 import store from '../../src/store/store';
 import { compressToUTF16, decompressFromUTF16 } from 'lz-string';
@@ -60,7 +73,7 @@ async function call(phase: string, item: any, repeat: number, config: ConfigInte
   try {
     const data = await getChatCompletion(endpoint, messages, effective, key, undefined, undefined, controller?.signal, { auxiliary: true });
     const usage = data.usage;
-    if (!usage || typeof usage.prompt_tokens !== 'number' || typeof usage.completion_tokens !== 'number') throw new Error('APIが使用トークンを返さないため停止します。');
+    if (!usage || typeof usage.prompt_tokens !== 'number' || typeof usage.completion_tokens !== 'number') throw new Error(`APIが使用トークンを返さないため停止します（APIエラーコード: ${data.error?.code ?? 'なし'}）。`);
     const accounted = typeof usage.cost === 'number' ? usage.cost : free ? 0 : usage.prompt_tokens * 0.00000625 + usage.completion_tokens * 0.000025;
     const result = { phase, case_id: item.id, repeat, started, completed: new Date().toISOString(), endpoint, config: effective, input: messages, source: item.input, semantic_checks: item.semantic_checks, output: data.choices?.[0]?.message?.content ?? '', finish_reason: data.choices?.[0]?.finish_reason, model_returned: data.model, provider_returned: data.provider, response_id: data.id, usage, accounted_cost: accounted, judgment: '未判定：意味条件と後続応答をレビューする', ...extra };
     Object.assign(entry, result); delete entry.pending; return entry;
@@ -139,6 +152,70 @@ $('run').onclick = async () => {
           }
         });
       }
+    } else if (phase === 'compact-downstream-v4' || phase === 'compact-downstream-v5') {
+      if (!compactExperiment) throw new Error('既存の圧縮検証台帳 experiment=compact を使用してください。');
+      for (const item of downstreamCorpus4.cases) for (let rep = 0; rep < 2; rep++) jobs.push(async () => {
+        const done = (condition: string) => records.find(r => r.phase === phase && r.case_id === item.id && r.repeat === rep && r.condition === condition && r.finish_reason === 'stop' && r.usage);
+        const prior = (condition: string) => records.find(r => ['compact-downstream', 'compact-extreme'].includes(r.phase) && r.case_id === item.id && r.repeat === rep && r.condition === condition && (r.probe === undefined || r.probe === 0) && r.finish_reason === 'stop' && r.usage);
+        const extra = { style_checks: item.style_checks, split: item.split, evaluation_version: { baseline_snapshot: 'baseline-bubbleSummaryPrompt.ts', prompt_snapshot: phase.endsWith('v5') ? 'candidate5-bubbleSummaryPrompt.ts' : 'candidate4-bubbleSummaryPrompt.ts', directory: 'bubble-summary-downstream-2026-10-06', base_commit: '016b70d', history_replacement: 'src/utils/bubbleSummary.ts at 016b70d', automatic_selection: 'replacementTokens < originalTokens, same as startBubbleSummary' } };
+        const candidate = done('summary-candidate') ?? await call(phase, item, rep, base, promptMessages(item, false, messages => (phase.endsWith('v5') ? downstreamCandidate5 : downstreamCandidate4)(messages, 'compact')), { ...extra, condition: 'summary-candidate' });
+        if (candidate.finish_reason !== 'stop') throw new Error('未完了の圧縮を後続応答へ渡せません。');
+        const original = messagesFor(item.input), compact = replacement(item, candidate.output, applyBubbleSummariesForSubmit, 'compact');
+        const [originalTokens, replacementTokens] = await Promise.all([countTokens(original, base.model), countTokens(compact, base.model)]);
+        if (!done('follow-original') && !prior('follow-original')) await call(phase, item, rep, base, [...original, ...messagesFor({ role: 'user', content: item.followups[0] })], { ...extra, condition: 'follow-original' });
+        if (!done('follow-effective')) await call(phase, item, rep, base, [...(replacementTokens < originalTokens ? compact : original), ...messagesFor({ role: 'user', content: item.followups[0] })], { ...extra, condition: 'follow-effective', probe: 0, summary_response_id: candidate.response_id, originalTokens, replacementTokens, effective_history: replacementTokens < originalTokens ? 'compact' : 'original', comparator_response_id: prior('follow-original')?.response_id });
+      });
+    } else if (phase === 'compact-downstream-v3' || phase === 'compact-downstream-free') {
+      if (!compactExperiment) throw new Error('既存の圧縮検証台帳 experiment=compact を使用してください。');
+      const free = phase.endsWith('-free');
+      const meta = free ? (await (await fetch('https://openrouter.ai/api/v1/models')).json()).data.find((m: any) => m.id === 'google/gemma-4-31b-it:free') : undefined;
+      if (free && (!meta || Number(meta.pricing.prompt) !== 0 || Number(meta.pricing.completion) !== 0)) throw new Error('無料提供を確認できません。');
+      const configs = free ? [0.2, 1].map(temperature => ({ ...base, model: meta.id, temperature })) : [base];
+      const cases = free ? downstreamCorpus3.cases.filter(c => c.id === 'T10') : downstreamCorpus3.cases;
+      for (const config of configs) for (const item of cases) for (let rep = 0; rep < (free ? 2 : 3); rep++) jobs.push(async () => {
+        const done = (condition: string, probe?: number) => records.find(r => r.phase === phase && r.case_id === item.id && r.repeat === rep && r.condition === condition && r.probe === probe && r.config.model === config.model && r.config.temperature === config.temperature && r.finish_reason === 'stop' && r.usage);
+        const prior = (condition: string, probe?: number) => free || !['summary-baseline', 'follow-original', 'follow-baseline'].includes(condition) ? undefined : records.find(r => ['compact-downstream-v2', 'compact-downstream'].includes(r.phase) && r.case_id === item.id && r.repeat === rep && r.condition === condition && r.probe === probe && r.finish_reason === 'stop' && r.usage);
+        const extra = { style_checks: item.style_checks, split: item.split, model_metadata: meta && { id: meta.id, pricing: meta.pricing, supported_parameters: meta.supported_parameters }, evaluation_version: { baseline_snapshot: 'baseline-bubbleSummaryPrompt.ts', prompt_snapshot: free ? 'candidate5-bubbleSummaryPrompt.ts' : 'candidate3-bubbleSummaryPrompt.ts', directory: 'bubble-summary-downstream-2026-10-06', base_commit: '016b70d', history_replacement: free ? 'src/utils/bubbleSummary.ts at 016b70d, forced diagnostic replacement' : 'candidate-bubbleSummarySubmitMessage.ts' } };
+        const baseline = prior('summary-baseline') ?? done('summary-baseline') ?? await call(phase, item, rep, config, promptMessages(item, false, messages => downstreamBaseline(messages, 'compact')), { ...extra, condition: 'summary-baseline' });
+        const candidate = done('summary-candidate') ?? await call(phase, item, rep, config, promptMessages(item, false, messages => (free ? downstreamCandidate5 : downstreamCandidate3)(messages, 'compact')), { ...extra, condition: 'summary-candidate' });
+        if (baseline.finish_reason !== 'stop' || candidate.finish_reason !== 'stop') throw new Error('未完了の圧縮を後続応答へ渡せません。');
+        for (let probe = 0; probe < (free ? 1 : item.followups.length); probe++) for (const condition of ['follow-original', 'follow-baseline', 'follow-candidate']) if (!done(condition, probe) && !prior(condition, probe)) {
+          const source = condition === 'follow-baseline' ? baseline : candidate;
+          const history = condition === 'follow-original' ? messagesFor(item.input) : condition === 'follow-baseline' || free ? replacement(item, source.output, applyBubbleSummariesForSubmit, 'compact') : [candidateSubmitMessage({ id: 'eval', text: source.output, format: 'compact', mode: 'single', useForSubmit: true, sources: [] })];
+          await call(phase, item, rep, config, [...history, ...messagesFor({ role: 'user', content: item.followups[probe] })], { ...extra, condition, probe, summary_response_id: condition === 'follow-original' ? undefined : source.response_id, comparator_response_ids: ['follow-original', 'follow-baseline'].map(c => prior(c, probe)?.response_id).filter(Boolean) });
+        }
+      });
+    } else if (phase === 'compact-downstream' || phase === 'compact-downstream-v2') {
+      if (!compactExperiment) throw new Error('既存の圧縮検証台帳 experiment=compact を使用してください。');
+      for (const item of (phase.endsWith('-v2') ? downstreamCorpus2 : downstreamCorpus).cases) for (let rep = 0; rep < 3; rep++) jobs.push(async () => {
+        const done = (condition: string, probe?: number) => records.find(r => r.phase === phase && r.case_id === item.id && r.repeat === rep && r.condition === condition && r.probe === probe && r.finish_reason === 'stop' && r.usage);
+        const extra = { style_checks: item.style_checks, split: item.split, evaluation_version: { baseline_snapshot: 'baseline-bubbleSummaryPrompt.ts', prompt_snapshot: phase.endsWith('-v2') ? 'candidate2-bubbleSummaryPrompt.ts' : 'candidate-bubbleSummaryPrompt.ts', directory: 'bubble-summary-downstream-2026-10-06', base_commit: '016b70d', history_replacement: 'src/utils/bubbleSummary.ts at 016b70d' } };
+        const baseline = done('summary-baseline') ?? await call(phase, item, rep, base, promptMessages(item, false, messages => downstreamBaseline(messages, 'compact')), { ...extra, condition: 'summary-baseline' });
+        const candidate = done('summary-candidate') ?? await call(phase, item, rep, base, promptMessages(item, false, messages => (phase.endsWith('-v2') ? downstreamCandidate2 : downstreamCandidate)(messages, 'compact')), { ...extra, condition: 'summary-candidate' });
+        if (baseline.finish_reason !== 'stop' || candidate.finish_reason !== 'stop') throw new Error('未完了の圧縮を後続応答へ渡せません。');
+        for (let probe = 0; probe < item.followups.length; probe++) for (const condition of ['follow-original', 'follow-baseline', 'follow-candidate']) if (!done(condition, probe)) {
+          const source = condition === 'follow-baseline' ? baseline : candidate;
+          await call(phase, item, rep, base, [...(condition === 'follow-original' ? messagesFor(item.input) : replacement(item, source.output, applyBubbleSummariesForSubmit, 'compact')), ...messagesFor({ role: 'user', content: item.followups[probe] })], { ...extra, condition, probe, summary_response_id: condition === 'follow-original' ? undefined : source.response_id });
+        }
+      });
+    } else if (phase === 'compact-extreme') {
+      if (!compactExperiment) throw new Error('既存の圧縮検証台帳 experiment=compact を使用してください。');
+      const unseen = [
+        { id: 'E01', input: { role: 'user', content: '創作の編集者として答えてください。舞台は月面の架空都市です。空気がないという現実性の指摘は不要。地の文は淡々と常体、人物の台詞は「戻れるとは、まだ言ってない」に込めた留保を維持。提案は二つまで。今の返答だけ100字以内、見出しなし。' }, followup: '帰還を巡る次の場面の案を出して。', style_checks: { max_100_characters: true, no_heading: true } },
+        { id: 'E02', input: { role: 'user', content: ('更新案Aは待機30秒、Bは待機45秒という例です。初期値は5秒、許容範囲は5〜60秒。まだ計測していません。説明には案Aと案Bの両方を比較してください。'.repeat(8)) + '補足：採用はAです。Bは未採用。計測済みとは書かないでください。今回だけ2文、です・ます調で答えてください。' }, followup: '採用した設定と次に必要な作業を教えて。', style_checks: { two_sentences: true, polite: true } },
+      ];
+      const selected = [...compactCorpus.cases.filter(c => ['T01', 'T05', 'T06', 'T10', 'T13', 'T14'].includes(c.id)), ...unseen];
+      for (const item of selected) for (let rep = 0; rep < 2; rep++) jobs.push(async () => {
+        const done = (condition: string) => records.find(r => r.phase === phase && r.case_id === item.id && r.repeat === rep && r.condition === condition && r.usage);
+        const extra = { style_checks: item.style_checks, evaluation_version: { prompt_snapshot: 'candidate-bubbleSummaryPrompt.ts', base_commit: 'b52f3ad', history_replacement: 'src/utils/bubbleSummary.ts' } };
+        const baseline = done('summary-baseline') ?? await call(phase, item, rep, base, promptMessages(item, false, messages => buildBubbleSummaryPrompt(messages, 'compact')), { ...extra, condition: 'summary-baseline' });
+        const candidate = done('summary-extreme') ?? await call(phase, item, rep, base, promptMessages(item, false, messages => extremePrompt(messages, 'compact')), { ...extra, condition: 'summary-extreme' });
+        if (baseline.finish_reason !== 'stop' || candidate.finish_reason !== 'stop') return;
+        for (const condition of ['follow-original', 'follow-baseline', 'follow-extreme']) if (!done(condition)) {
+          const source = condition === 'follow-baseline' ? baseline : candidate;
+          await call(phase, item, rep, base, [...(condition === 'follow-original' ? messagesFor(item.input) : replacement(item, source.output, applyBubbleSummariesForSubmit, 'compact')), ...messagesFor({ role: 'user', content: item.followup })], { ...extra, condition, summary_response_id: condition === 'follow-original' ? undefined : source.response_id });
+        }
+      });
     } else if (phase === 'compact-v5-validation') {
       for (const item of compactCorpus.cases.filter(c => c.split === 'validation')) for (let rep = 0; rep < 2; rep++) jobs.push(async () => {
         const done = (condition: string) => records.find(r => r.phase === phase && r.case_id === item.id && r.repeat === rep && r.condition === condition && r.usage);
