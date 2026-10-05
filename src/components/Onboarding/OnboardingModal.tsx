@@ -1,3 +1,4 @@
+import { InfoTooltip } from '@components/ConfigMenu/fields';
 import React, { useState } from 'react';
 import ReactDOM from 'react-dom';
 import { useTranslation } from 'react-i18next';
@@ -56,9 +57,7 @@ const OnboardingModal = () => {
           <p className='text-gray-700 dark:text-gray-300'>
             {t('onboarding.apiSetup.description')}
           </p>
-          <div className='bg-gray-100 dark:bg-gray-600 rounded-lg p-3 text-sm text-gray-600 dark:text-gray-300'>
-            {t('onboarding.apiSetup.hint')}
-          </div>
+          <div className='flex items-center text-sm text-gray-600 dark:text-gray-300'>{t('onboarding.apiSetup.title')}<InfoTooltip text={t('onboarding.apiSetup.hint')} /></div>
         </div>
       ),
     },
@@ -69,9 +68,7 @@ const OnboardingModal = () => {
           <p className='text-gray-700 dark:text-gray-300'>
             {t('onboarding.modelSelection.description')}
           </p>
-          <div className='bg-gray-100 dark:bg-gray-600 rounded-lg p-3 text-sm text-gray-600 dark:text-gray-300'>
-            {t('onboarding.modelSelection.hint')}
-          </div>
+          <div className='flex items-center text-sm text-gray-600 dark:text-gray-300'>{t('onboarding.modelSelection.title')}<InfoTooltip text={t('onboarding.modelSelection.hint')} /></div>
         </div>
       ),
     },

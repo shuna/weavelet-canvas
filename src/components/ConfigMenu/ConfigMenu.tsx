@@ -260,6 +260,26 @@ const ConfigMenu = ({
     if (_imageDetail !== imageDetail) setImageDetail(_imageDetail);
   }, [_imageDetail]);
 
+  const handleReset = () => {
+    _setModel(_defaultChatConfig.model);
+    _setProviderId(_defaultChatConfig.providerId);
+    _setModelSource(undefined);
+    _setMaxToken(_defaultChatConfig.max_tokens);
+    _setTemperature(_defaultChatConfig.temperature);
+    _setTopP(_defaultChatConfig.top_p);
+    _setPresencePenalty(_defaultChatConfig.presence_penalty);
+    _setFrequencyPenalty(_defaultChatConfig.frequency_penalty);
+    _setStream(_defaultChatConfig.stream !== false);
+    _setReasoningEffort(DEFAULT_REASONING_EFFORT);
+    _setReasoningBudget(DEFAULT_REASONING_BUDGET);
+    _setVerbosity(DEFAULT_VERBOSITY);
+    _setForceReasoning(false);
+    _setOpenRouter(undefined);
+    _setModelSettings({});
+    _setSystemPrompt('');
+    _setImageDetail('auto');
+  };
+
   return (
     <PopupModal
       title={auxiliary ? '要約のモデル・生成設定' : t('configuration') as string}
@@ -306,6 +326,7 @@ const ConfigMenu = ({
             _label={t('model')}
             className=''
           />
+          {auxiliary && <div className='flex justify-end'><ResetButton visible={_model !== _defaultChatConfig.model || _providerId !== _defaultChatConfig.providerId} onClick={() => { _setModel(_defaultChatConfig.model); _setProviderId(_defaultChatConfig.providerId); _setModelSource(undefined); }} /></div>}
           <CapabilityBadges
             reasoning={capabilities.reasoning}
             vision={capabilities.vision}
@@ -332,7 +353,8 @@ const ConfigMenu = ({
           )}
         </div>
 
-        {auxiliary ? <p className='text-xs text-gray-500'>要約専用の設定です。モデルを切り替えると、そのモデルで設定した値に戻ります。要約には共通の要約プロンプトを使用します。</p> : <SystemPromptField systemPrompt={_systemPrompt} setSystemPrompt={_setSystemPrompt} />}
+        {auxiliary && <div className='flex justify-end'><button type='button' className='btn btn-neutral' onClick={handleReset}>{t('resetToDefault')}</button></div>}
+        {auxiliary ? <div className='flex items-center text-xs text-gray-500 dark:text-gray-400'>要約専用設定<InfoTooltip text='要約専用の設定です。モデルを切り替えると、そのモデルで設定した値に戻ります。要約には共通の要約プロンプトを使用します。' /></div> : <SystemPromptField systemPrompt={_systemPrompt} setSystemPrompt={_setSystemPrompt} />}
 
         <SettingsGroup label={t('section.generation')}>
           <ConfigFieldCell>
@@ -828,7 +850,7 @@ export const ForceReasoningToggle = ({
   const { t } = useTranslation('model');
 
   return (
-    <label className='flex items-center gap-2 cursor-pointer select-none'>
+    <div className='flex items-center gap-2'><label className='flex items-center gap-2 cursor-pointer select-none'>
       <input
         type='checkbox'
         className='w-4 h-4 rounded border-gray-400/50 accent-blue-600 cursor-pointer'
@@ -838,8 +860,7 @@ export const ForceReasoningToggle = ({
       <span className='text-sm font-medium text-gray-900 dark:text-white'>
         {t('forceReasoning.label', 'Force reasoning parameters')}
       </span>
-      <InfoTooltip text={t('forceReasoning.description')} />
-    </label>
+    </label><InfoTooltip text={t('forceReasoning.description')} /><ResetButton visible={_forceReasoning} onClick={() => _setForceReasoning(false)} /></div>
   );
 };
 

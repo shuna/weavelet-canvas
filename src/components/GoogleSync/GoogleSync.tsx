@@ -1,3 +1,4 @@
+import { InfoTooltip } from '@components/ConfigMenu/fields';
 import SyncDots from './SyncDots';
 import { withoutBrowserLocalSettings } from '@store/storage/google/settings';
 import { useSyncProgressDisplay } from '@hooks/useSyncProgressDisplay';
@@ -773,15 +774,13 @@ const GooglePopup = ({
           </div>
         </div>
         {connected && selectedOperation === 'create' && <div className='w-full max-w-2xl text-left'>
-          <label className='block text-sm' htmlFor='google-sync-folder-name'>{t('labels.folderName')}</label>
+          <div className='flex items-center'><label className='text-sm' htmlFor='google-sync-folder-name'>{t('labels.folderName')}</label><InfoTooltip text={t('encryption.folderNameHelp')} /></div>
           <input id='google-sync-folder-name' list='google-sync-folder-names' type='text'
             className='mt-1 w-full rounded border border-gray-300 bg-transparent px-3 py-2'
-            value={folderName} onChange={event => setFolderNameDraft(event.target.value)} disabled={isBusy}
-            aria-describedby='google-sync-folder-name-help' />
+            value={folderName} onChange={event => setFolderNameDraft(event.target.value)} disabled={isBusy} />
           <datalist id='google-sync-folder-names'>
             {[...new Set([DEFAULT_SYNC_FOLDER_NAME, ...folderNames].map(name => nextSyncFolderName(name, folderNames)))].map(name => <option key={name} value={name} />)}
           </datalist>
-          <p id='google-sync-folder-name-help' className='mt-2 text-xs'>{t('encryption.folderNameHelp')}</p>
           {folderName.trim() && proposedFolderName !== folderName.trim() && <p className='mt-1 text-xs'>{t('encryption.folderNameAdjusted', { name: proposedFolderName })}</p>}
         </div>}
         {connected && needsPassphrase && (
