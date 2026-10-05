@@ -37,7 +37,7 @@ export async function startBubbleSummary(chat: ChatInterface, indices: number[],
     if (!resolveValidSummary({ ...value, omittedNodes: latest.omittedNodeMaps[String(index)] ?? value.omittedNodes }, { ...summary, text }, generating)) throw new Error('対象の原文や状態が変わりました。対象を確認して生成し直してください。');
     const saved = { ...summary, text };
     latest.saveBubbleSummary(chat.id, saved);
-    useSummaryDisplay.getState().choose(chat.id, saved, saved.format !== 'compact');
+    useSummaryDisplay.getState().choose(chat.id, saved, true);
     return true;
   } catch (failure) {
     error = failure instanceof Error ? failure.message : '要約を生成できませんでした。';
