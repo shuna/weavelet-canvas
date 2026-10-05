@@ -29,7 +29,7 @@ test('summary dialog selects previews, disables empty selection and saves genera
   });
   const bubble = page.locator('[data-node-id="b"]').first();
   await bubble.hover();
-  await bubble.getByRole('button', { name: '要約', exact: true }).click();
+  await bubble.getByRole('button', { name: '要約・圧縮の詳細設定', exact: true }).click();
   const modal = page.locator('#modal-root');
   const first = modal.getByRole('checkbox', { name: 'バブル1を要約に含める' });
   const second = modal.getByRole('checkbox', { name: 'バブル2を要約に含める' });
@@ -78,7 +78,7 @@ test('summary dialog selects previews, disables empty selection and saves genera
   await expect(page.getByRole('img', { name: '要約生成中' })).toHaveCount(0);
   await page.evaluate(async () => { const { default: store } = await import(/* @vite-ignore */ '/src/store/store.ts'); store.setState({ currentChatIndex: 0 }); });
   await expect(bubble.getByRole('status')).toBeVisible();
-  await bubble.getByRole('button', { name: '要約', exact: true }).click();
+  await bubble.getByRole('button', { name: '要約・圧縮の詳細設定', exact: true }).click();
   await expect(modal.getByRole('button', { name: '生成中…', exact: true })).toBeDisabled();
   await expect(modal.getByRole('radio', { name: 'ここまで', exact: true })).toBeChecked();
   await expect(first).toBeChecked();
@@ -145,7 +145,7 @@ test('summary dialog selects previews, disables empty selection and saves genera
   await expect(bubble.getByText('送信：', { exact: true })).toHaveCount(0);
   await expect(bubble.getByText(/概算.*トークン/)).toHaveCount(0);
   const idleCapsuleSize = await capsule.boundingBox();
-  await summaryButton.click();
+  await capsule.getByRole('button', { name: '要約・圧縮の詳細設定' }).click();
   await expect(modal.getByText('要約の対象を選択', { exact: true })).toBeVisible();
   await expect(first).toBeChecked();
   await expect(second).toBeChecked();
@@ -164,7 +164,7 @@ test('summary dialog selects previews, disables empty selection and saves genera
   await expect(summaryText).toBeVisible();
   const firstBubble = page.locator('[data-node-id="a"]').first();
   await firstBubble.hover();
-  await firstBubble.getByRole('group', { name: '要約操作' }).getByRole('button', { name: '要約', exact: true }).click();
+  await firstBubble.getByRole('group', { name: '要約操作' }).getByRole('button', { name: '要約・圧縮の詳細設定', exact: true }).click();
   await expect(first).toBeChecked();
   await expect(second).toBeChecked();
   await expect(generate).toBeEnabled();

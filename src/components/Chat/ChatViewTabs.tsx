@@ -6,6 +6,7 @@ import BranchIcon from '@icon/BranchIcon';
 import NavigationButtons from './NavigationButtons';
 import MenuIcon from '@icon/MenuIcon';
 import ConfigMenu from '@components/ConfigMenu';
+import SummarySettings from '@components/SummarySettings';
 import { CapabilityIconsInline } from '@components/ConfigMenu/fields';
 import { getModelCapabilities, useModelCapabilities } from '@utils/modelLookup';
 import { resolveChatModel } from '@utils/chatModelResolution';
@@ -66,6 +67,7 @@ const ChatViewTabs = ({
   const setSplitPanelSwapped = useStore((state) => state.setSplitPanelSwapped);
   const branchEditorSyncEnabled = useStore((state) => state.branchEditorSyncEnabled);
   const setBranchEditorSyncEnabled = useStore((state) => state.setBranchEditorSyncEnabled);
+  const [summarySettingsOpen, setSummarySettingsOpen] = useState(false);
   const [isModalOpen, setIsModalOpen] = useState<boolean>(false);
   const [isModelDropdownOpen, setIsModelDropdownOpen] = useState<boolean>(false);
   const [isLayoutDropdownOpen, setIsLayoutDropdownOpen] = useState<boolean>(false);
@@ -359,6 +361,17 @@ const ChatViewTabs = ({
                     </div>
                   </div>
                   <div className='border-t border-gray-200 dark:border-gray-600 my-1' />
+                  <div
+                    className='px-3 py-2 text-sm cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-700 flex items-center gap-1.5'
+                    onClick={() => { setIsModelDropdownOpen(false); setIsModalOpen(true); }}
+                  >
+                    <svg className='w-4 h-4' fill='none' stroke='currentColor' viewBox='0 0 24 24'>
+                      <path strokeLinecap='round' strokeLinejoin='round' strokeWidth={2} d='M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4' />
+                    </svg>
+                    {tMain('chatSettings')}
+                  </div>
+                  <button type='button' className='w-full px-3 py-2 text-left text-sm hover:bg-gray-100 dark:hover:bg-gray-700' onClick={() => { setIsModelDropdownOpen(false); setSummarySettingsOpen(true); }}>要約・圧縮設定</button>
+                  <div className='border-t border-gray-200 dark:border-gray-600 my-1' />
                   {!hasAny ? (
                     <div className='px-3 py-2 text-sm text-gray-500'>
                       {t('provider.noModelSelected', 'モデル未選択')}
@@ -409,15 +422,7 @@ const ChatViewTabs = ({
                     </>
                   )}
                   <div className='border-t border-gray-200 dark:border-gray-600 my-1' />
-                  <div
-                    className='px-3 py-2 text-sm cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-700 flex items-center gap-1.5'
-                    onClick={() => { setIsModelDropdownOpen(false); setIsModalOpen(true); }}
-                  >
-                    <svg className='w-4 h-4' fill='none' stroke='currentColor' viewBox='0 0 24 24'>
-                      <path strokeLinecap='round' strokeLinejoin='round' strokeWidth={2} d='M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4' />
-                    </svg>
-                    {tMain('chatSettings')}
-                  </div>
+
                 </div>
                 );
               })()}
@@ -568,6 +573,7 @@ const ChatViewTabs = ({
           )}
         </div>
       </div>
+      {summarySettingsOpen && chat && <SummarySettings config={chat.config} setOpen={setSummarySettingsOpen} />}
       {isModalOpen && chat && (
         <ConfigMenu
           setIsModalOpen={setIsModalOpen}

@@ -48,7 +48,7 @@ it('does not save a result when its source changed while the request was pending
   expect(useSummaryGeneration.getState().jobs['chat:a'].error).toContain('原文や状態が変わりました');
 });
 
-it('keeps the readable version and saves compact output without automatically sending it', async () => {
+it('keeps the readable version and selects compact output after generation', async () => {
   const value = mocks.state.chats[0];
   value.summaries = [{ id: 'readable', mode: 'single', sources: [{ nodeId: 'a', parentId: null, role: 'user', textParts: ['Original'] }], text: 'Readable', useForSubmit: false }];
   mocks.generate.mockResolvedValue('Compact');
@@ -56,5 +56,5 @@ it('keeps the readable version and saves compact output without automatically se
   const saved = mocks.save.mock.calls[0][1];
   expect(saved).toMatchObject({ format: 'compact', text: 'Compact', useForSubmit: false });
   expect(saved.id).not.toBe('readable');
-  expect(mocks.choose).toHaveBeenCalledWith('chat', saved, false);
+  expect(mocks.choose).toHaveBeenCalledWith('chat', saved, true);
 });

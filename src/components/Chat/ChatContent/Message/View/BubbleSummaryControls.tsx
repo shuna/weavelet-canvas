@@ -1,8 +1,8 @@
 import { useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import PopupModal from '@components/PopupModal';
-import ConfigMenu from '@components/ConfigMenu';
-import { _defaultChatConfig } from '@constants/chat';
+import { SummarySettingsFields } from '@components/SummarySettings';
+import SettingIcon from '@icon/SettingIcon';
 import useStore from '@store/store';
 import { isLocalModelConfig } from '@hooks/submitHelpers';
 import { isSummaryEligible } from '@utils/bubbleSummary';
@@ -13,10 +13,11 @@ import SyncDots from '@components/GoogleSync/SyncDots';
 import { startBubbleSummary, useBubbleSummaryJob, useSummaryGeneration } from './bubbleSummaryGeneration';
 
 export default function BubbleSummaryControls({ messageIndex }: { messageIndex: number }) {
+  const { t } = useTranslation();
   const [open, setOpen] = useState(false);
   const [dialogFormat, setDialogFormat] = useState<'compact' | undefined>();
   const nodeId = useStore(state => state.chats?.[state.currentChatIndex]?.branchTree?.activePath[messageIndex]);
-  const { chat, summary, range, readable, compact, tab, changeTab } = useBubbleSummary(nodeId);
+  const { chat, summary, range, readable, compact, tab, changeTab, effectiveChat, generating } = useBubbleSummary(nodeId);
   const job = useBubbleSummaryJob(chat?.id, nodeId);
   const buttonClass = (active: boolean) => `rounded-full px-2 py-1 text-xs transition-colors ${active ? 'bg-gray-100 text-gray-700 dark:bg-gray-700 dark:text-gray-200' : 'text-gray-400 hover:text-gray-600 dark:text-gray-500 dark:hover:text-gray-300'}`;
   return <>
@@ -25,9 +26,17 @@ export default function BubbleSummaryControls({ messageIndex }: { messageIndex: 
       {(['summary', 'compact'] as const).map(value => {
         const busy = !!job?.busy && (job.format === 'compact' ? 'compact' : 'summary') === value;
         const label = value === 'compact' ? '圧縮' : '要約';
-        return <button key={value} type='button' aria-label={label} aria-busy={busy} className={buttonClass(tab === value)} aria-pressed={tab === value} onClick={event => { event.stopPropagation(); if (!job?.busy && range && (value === 'compact' ? compact : readable) && tab !== value) changeTab(value); else { setDialogFormat(value === 'compact' ? 'compact' : undefined); setOpen(true); } }}><span className='relative inline-block'><span className={busy ? 'inline-block -translate-y-0.5' : ''}>{label}</span>{busy && <span role='status' className='absolute left-1/2 top-full -mt-1 -translate-x-1/2 text-[8px] leading-[6px]'><SyncDots label={`${label}生成中`} /></span>}</span></button>;
+        return <button key={value} type='button' aria-label={label} aria-busy={busy} className={buttonClass(tab === value)} aria-pressed={tab === value} onClick={event => {
+          event.stopPropagation();
+          if (job?.busy) return;
+          if (range && (value === 'compact' ? compact : readable)) { changeTab(value); return; }
+          if (!chat || !effectiveChat || !nodeId || !isSummaryEligible(chat.messages[messageIndex]) || effectiveChat.omittedNodes?.[nodeId] || generating.includes(nodeId)) return;
+          const state = useStore.getState();
+          void startBubbleSummary(effectiveChat, [messageIndex], 'single', nodeId, { favoriteModels: state.favoriteModels, providers: state.providers, fallbackProvider: { endpoint: state.apiEndpoint, key: state.apiKey }, apiVersion: state.apiVersion, summaryConfig: state.bubbleSummaryConfig, summaryFormat: value === 'compact' ? 'compact' : undefined, t });
+        }}><span className='relative inline-block'><span className={busy ? 'inline-block -translate-y-0.5' : ''}>{label}</span>{busy && <span role='status' className='absolute left-1/2 top-full -mt-1 -translate-x-1/2 text-[8px] leading-[6px]'><SyncDots label={`${label}生成中`} /></span>}</span></button>;
       })}
 
+    <button type='button' aria-label='要約・圧縮の詳細設定' className={buttonClass(false)} onClick={event => { event.stopPropagation(); setDialogFormat(tab === 'compact' ? 'compact' : undefined); setOpen(true); }}><SettingIcon className='h-3 w-3' /></button>
     {job?.error && <button type='button' className='px-1 text-xs text-gray-500 dark:text-gray-400' title={job.error} onClick={event => { event.stopPropagation(); setOpen(true); }}>要約失敗</button>}
     </div>
     {open && <SummaryDialog messageIndex={summary ? chat?.branchTree?.activePath.indexOf(summary.sources[summary.sources.length - 1]?.nodeId) ?? -1 : messageIndex} initialSummary={summary} initialFormat={dialogFormat} setOpen={setOpen} />}
@@ -46,7 +55,6 @@ function SummaryDialog({ messageIndex, initialSummary, initialFormat, setOpen }:
   const [selected, setSelected] = useState<string[]>(() => job ? job.sourceNodeIds : initialSummary ? initialSummary.sources.map(source => source.nodeId) : endpoint ? [endpoint] : []);
   const summaryConfig = useStore(state => state.bubbleSummaryConfig);
   const [format, setFormat] = useState<'compact' | undefined>(job ? job.format : initialFormat);
-  const [settingsOpen, setSettingsOpen] = useState(false);
   const busy = !!job?.busy;
   const close = () => setOpen(false);
   if (!chat?.branchTree) return null;
@@ -75,21 +83,16 @@ function SummaryDialog({ messageIndex, initialSummary, initialFormat, setOpen }:
     void startBubbleSummary(effectiveChat, indices, mode, endpoint!, { favoriteModels: state.favoriteModels, providers: state.providers, fallbackProvider: { endpoint: state.apiEndpoint, key: state.apiKey }, apiVersion: state.apiVersion, summaryConfig: state.bubbleSummaryConfig, summaryFormat: format, t });
     if (useSummaryGeneration.getState().jobs[`${chat.id}:${endpoint}`]?.busy) setOpen(false);
   };
-  if (settingsOpen) return <ConfigMenu auxiliary config={summaryConfig ?? generationConfig} setConfig={useStore.getState().setBubbleSummaryConfig} imageDetail='auto' setImageDetail={() => {}} setIsModalOpen={setSettingsOpen} />;
+
   return <PopupModal title='要約の対象を選択' setIsModalOpen={setOpen} handleClose={close} handleClickBackdrop={close} cancelButton={false}
     footerEndContent={<><button type='button' className='btn btn-neutral' onClick={close}>{busy ? '閉じる' : 'キャンセル'}</button><button type='button' className={`btn ${busy || reason ? 'btn-neutral cursor-not-allowed opacity-50' : 'btn-primary'}`} disabled={busy || !!reason} onClick={() => void generate()}>{busy ? '生成中…' : '要約を生成'}</button></>}>
     <div className='min-w-[18rem] space-y-3 p-5 text-sm text-gray-900 dark:text-gray-300'>
       <div className='flex flex-wrap gap-3'>{(['single', 'through', 'range'] as const).map(value => <label key={value} className='flex cursor-pointer items-center gap-1 text-gray-600 dark:text-gray-400'><input type='radio' className='accent-blue-600' name='summary-mode' checked={mode === value} disabled={busy} onChange={() => chooseMode(value)} />{value === 'single' ? 'このバブル' : value === 'through' ? 'ここまで' : '選択範囲'}</label>)}</div>
       <label className='block'>要約の形式 <select aria-label='要約の形式' className='rounded border bg-transparent p-1' value={format ?? 'readable'} disabled={busy} onChange={event => setFormat(event.target.value === 'compact' ? 'compact' : undefined)}><option value='readable'>読みやすい要約</option><option value='compact'>AI投入用の圧縮（実験）</option></select></label>
-      {format === 'compact' && <p className='text-xs'>文体・ニュアンスの保持を試みます。原文と異なる内容や後続応答になる場合があります。生成後に内容を確認し、「圧縮」に切り替えると表示・送信に使用します。原文は「原文」で確認できます。短い入力ではトークンが増える場合があります。</p>}
-      <p className='text-xs text-gray-500 dark:text-gray-400'>原文は保持されます。読みやすい要約は生成後に表示・送信します。未生成の「要約」「圧縮」を選ぶと作成画面を開きます。「原文」で原文の表示・送信に戻せます。先頭のシステム指示は要約しません。</p>
+      {format === 'compact' && <p className='text-xs'>文体・ニュアンスの保持を試みます。原文と異なる内容や後続応答になる場合があります。生成後は圧縮文を表示・送信に使用します。内容を確認してください。原文は「原文」で確認できます。短い入力ではトークンが増える場合があります。</p>}
+      <p className='text-xs text-gray-500 dark:text-gray-400'>原文は保持されます。読みやすい要約は生成後に表示・送信します。未生成の「要約」「圧縮」はそのバブルのみをすぐに生成します。歯車から対象範囲を設定できます。「原文」で原文の表示・送信に戻せます。先頭のシステム指示は要約しません。</p>
       {initialSummary?.generation && <p className='break-all text-xs text-gray-500 dark:text-gray-400'>表示中の要約を生成した設定: {initialSummary.generation.model} · {initialSummary.generation.providerId ?? '既定のAPI'} · 温度 {initialSummary.generation.settings.temperature} · 出力上限 {initialSummary.generation.settings.max_tokens || 'モデル既定'} · 思考 {initialSummary.generation.settings.reasoning_effort ?? 'モデル既定'}</p>}
-      <fieldset disabled={busy} className='space-y-2 rounded border border-gray-200 p-3 dark:border-gray-600'>
-        <legend className='px-1'>要約の生成設定</legend>
-        <label className='flex items-center gap-2'><input type='checkbox' checked={!!summaryConfig} onChange={event => useStore.getState().setBubbleSummaryConfig(event.target.checked ? { ...(local ? _defaultChatConfig : chat.config) } : undefined)} />要約専用のモデル・設定を使う（全チャット共通）</label>
-        <p className='break-all text-xs'>{summaryConfig ? '要約専用' : 'チャット設定を使用'}: {generationConfig.model} · {generationConfig.providerId ?? '既定のAPI'} · 温度 {generationConfig.temperature} · 出力上限 {generationConfig.max_tokens || 'モデル既定'} · 思考 {generationConfig.reasoning_effort ?? 'モデル既定'}</p>
-        {summaryConfig && <button type='button' className='btn btn-neutral' onClick={() => setSettingsOpen(true)}>モデル・生成パラメータを調整</button>}
-      </fieldset>
+      <SummarySettingsFields config={chat.config} disabled={busy} />
       <div className='max-h-72 space-y-2 overflow-y-auto'>{path.map((id, index) => <label key={id} className={`flex items-start gap-2 rounded border p-2 ${selected.includes(id) && eligible(index) && candidate(index) ? 'border-gray-300 text-gray-900 dark:border-gray-500 dark:text-gray-300' : 'border-gray-200 text-gray-400 dark:border-gray-600 dark:text-gray-500'}`}>
         <input type='checkbox' className='mt-0.5 accent-blue-600' aria-label={`バブル${index + 1}を要約に含める`} checked={selected.includes(id)} disabled={busy || !candidate(index) || (!eligible(index) && !selected.includes(id))} onChange={() => {
           setSelected(current => current.includes(id) ? current.filter(value => value !== id) : [...current, id]);
