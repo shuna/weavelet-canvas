@@ -241,6 +241,7 @@ const EditViewButtons = memo(
             {/* Non-sticky user: Branch group (green) + Overwrite group (red) */}
             {!sticky && isUser && (
               <>
+                {textOnly && <button type='button' className='btn btn-small btn-primary' onClick={handleBranchGenerate} disabled={isGenerateDisabled || noModel || !canSubmitDraft} aria-label={t('generate') as string}>{t('generate')}</button>}
                 {/* === Branch group (green, non-destructive) === */}
                 {!textOnly && <div className='relative flex items-stretch' ref={branchMenuRef}>
                   <button

@@ -4,7 +4,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { applyBubbleSummariesForSubmit } from '@utils/bubbleSummary';
 import { useEditViewLogic } from './useEditViewLogic';
 
-const mocks = vi.hoisted(() => ({ save: vi.fn(), submit: vi.fn(), append: vi.fn(), summarySave: vi.fn(), remove: vi.fn(), midchat: vi.fn(), state: {} as any }));
+const mocks = vi.hoisted(() => ({ save: vi.fn(), submit: vi.fn(), append: vi.fn(), summarySave: vi.fn(), remove: vi.fn(), midchat: vi.fn(), truncate: vi.fn(), state: {} as any }));
 vi.mock('@hooks/useSubmit', () => ({ default: () => ({ handleSubmit: mocks.submit, handleSubmitMidChat: mocks.midchat }) }));
 vi.mock('@utils/chatModelResolution', () => ({
   resolveChatModel: () => ({ status: 'available' }),
@@ -19,6 +19,7 @@ vi.mock('@store/store', () => {
     omittedNodeMaps: {},
     saveBubbleSummary: mocks.summarySave,
     removeMessageAtIndex: mocks.remove,
+    truncateActivePathAt: mocks.truncate,
     enterToSubmit: true,
     upsertWithAutoBranch: mocks.save,
     appendNodeToActivePath: mocks.append,
@@ -84,7 +85,7 @@ describe('editing the selected summary through the common editor', () => {
     mocks.summarySave.mockImplementation((_chatId, summary) => { state.chats[0].summaries = [summary]; });
     mocks.remove.mockImplementation((_index, messageIndex) => state.chats[0].messages.splice(messageIndex, 1));
     let logic!: ReturnType<typeof useEditViewLogic>;
-    renderToString(React.createElement(() => { logic = useEditViewLogic({ content: [{ type: 'text', text: 'Edited displayed text' }], setIsEdit: vi.fn(), messageIndex: 1, summaryId: 'summary', editSessionKey: `summary-${format}-${mocks.summarySave.mock.calls.length}` }); return null; }));
+    renderToString(React.createElement(() => { logic = useEditViewLogic({ content: [{ type: 'text', text: 'Edited displayed text' }], setIsEdit: vi.fn(), messageIndex: 1, nodeId: '1', summaryId: 'summary', editSessionKey: `summary-${format}-${mocks.summarySave.mock.calls.length}` }); return null; }));
     return { logic, state };
   }
   it.each([undefined, 'compact' as const])('saves %s without rewriting its original bubbles', format => {
@@ -105,6 +106,16 @@ describe('editing the selected summary through the common editor', () => {
     const sent = applyBubbleSummariesForSubmit(state.chats[0], 2);
     expect(sent).toHaveLength(1);
     expect(sent[0].content).toContainEqual({ type: 'text', text: expect.stringContaining('Edited displayed text') });
+  });
+  it.each([undefined, 'compact' as const])('generates a new response from %s without deleting existing responses', format => {
+    const { logic, state } = harness(format);
+    const originals = structuredClone(state.chats[0].messages);
+    logic.handleBranchGenerate();
+    expect(mocks.summarySave).toHaveBeenCalledWith('chat', expect.objectContaining({ text: 'Edited displayed text' }));
+    expect(mocks.truncate).toHaveBeenCalledWith(0, '1');
+    expect(mocks.submit).toHaveBeenCalledTimes(1);
+    expect(mocks.remove).not.toHaveBeenCalled();
+    expect(state.chats[0].messages).toEqual(originals);
   });
   it('refuses stale or deselected summary edits and generation', () => {
     const { logic, state } = harness('compact');

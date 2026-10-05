@@ -16,10 +16,8 @@ export default function BubbleSummaryControls({ messageIndex }: { messageIndex: 
   const [open, setOpen] = useState(false);
   const [dialogFormat, setDialogFormat] = useState<'compact' | undefined>();
   const nodeId = useStore(state => state.chats?.[state.currentChatIndex]?.branchTree?.activePath[messageIndex]);
-  const { chat, summary, range, readable, compact, tab, changeTab, effectiveChat, generating } = useBubbleSummary(nodeId);
+  const { chat, summary, range, readable, compact, tab, changeTab } = useBubbleSummary(nodeId);
   const job = useBubbleSummaryJob(chat?.id, nodeId);
-  const target = !!chat?.summaryTargets?.[nodeId ?? String(messageIndex)];
-  const canSelect = !!chat && isSummaryEligible(chat.messages[messageIndex]) && !effectiveChat?.omittedNodes?.[nodeId ?? String(messageIndex)] && !generating.includes(nodeId ?? '');
   const buttonClass = (active: boolean) => `rounded-full px-2 py-1 text-xs transition-colors ${active ? 'bg-gray-100 text-gray-700 dark:bg-gray-700 dark:text-gray-200' : 'text-gray-400 hover:text-gray-600 dark:text-gray-500 dark:hover:text-gray-300'}`;
   return <>
     <div role='group' aria-label='要約操作' className='flex items-center gap-0.5 rounded-full bg-white/80 px-1.5 py-0.5 shadow-sm ring-1 ring-black/5 backdrop-blur-sm dark:bg-gray-800/80 dark:ring-white/10'>
@@ -29,7 +27,7 @@ export default function BubbleSummaryControls({ messageIndex }: { messageIndex: 
         const label = value === 'compact' ? '圧縮' : '要約';
         return <button key={value} type='button' aria-label={label} aria-busy={busy} className={buttonClass(tab === value)} aria-pressed={tab === value} onClick={event => { event.stopPropagation(); if (!job?.busy && range && (value === 'compact' ? compact : readable) && tab !== value) changeTab(value); else { setDialogFormat(value === 'compact' ? 'compact' : undefined); setOpen(true); } }}><span className='relative inline-block'><span className={busy ? 'inline-block -translate-y-0.5' : ''}>{label}</span>{busy && <span role='status' className='absolute left-1/2 top-full -mt-1 -translate-x-1/2 text-[8px] leading-[6px]'><SyncDots label={`${label}生成中`} /></span>}</span></button>;
       })}
-    {!summary && <button type='button' className={buttonClass(target)} aria-pressed={target} disabled={!!job?.busy || (!target && !canSelect)} aria-label={target ? '要約対象から外す' : '要約に含める'} title={target ? '要約対象から外す' : '要約に含める'} onClick={event => { event.stopPropagation(); useStore.getState().toggleSummaryTarget(useStore.getState().currentChatIndex, messageIndex); }}>対象</button>}
+
     {job?.error && <button type='button' className='px-1 text-xs text-gray-500 dark:text-gray-400' title={job.error} onClick={event => { event.stopPropagation(); setOpen(true); }}>要約失敗</button>}
     </div>
     {open && <SummaryDialog messageIndex={summary ? chat?.branchTree?.activePath.indexOf(summary.sources[summary.sources.length - 1]?.nodeId) ?? -1 : messageIndex} initialSummary={summary} initialFormat={dialogFormat} setOpen={setOpen} />}
