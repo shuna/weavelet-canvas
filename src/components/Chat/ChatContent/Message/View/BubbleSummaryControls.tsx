@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import PopupModal from '@components/PopupModal';
 import useStore from '@store/store';
@@ -8,7 +8,7 @@ import { BubbleSummary, isTextContent } from '@type/chat';
 import { useBubbleSummary } from './bubbleSummaryDisplay';
 
 import SyncDots from '@components/GoogleSync/SyncDots';
-import { startBubbleSummary, useBubbleSummaryJob } from './bubbleSummaryGeneration';
+import { startBubbleSummary, useBubbleSummaryJob, useSummaryGeneration } from './bubbleSummaryGeneration';
 
 export default function BubbleSummaryControls({ messageIndex }: { messageIndex: number }) {
   const [open, setOpen] = useState(false);
@@ -22,10 +22,10 @@ export default function BubbleSummaryControls({ messageIndex }: { messageIndex: 
     <div role='group' aria-label='要約操作' className='flex items-center gap-0.5 rounded-full bg-white/80 px-1.5 py-0.5 shadow-sm ring-1 ring-black/5 backdrop-blur-sm dark:bg-gray-800/80 dark:ring-white/10'>
     {summary ? <>
       <button type='button' className={buttonClass(tab === 'original')} aria-pressed={tab === 'original'} onClick={event => { event.stopPropagation(); changeTab('original'); }}>原文</button>
-      <button type='button' className={buttonClass(tab === 'summary')} aria-pressed={tab === 'summary'} onClick={event => { event.stopPropagation(); if (range && tab === 'original') changeTab('summary'); else setOpen(true); }}>要約</button>
+      <button type='button' hidden={!!job?.busy} className={buttonClass(tab === 'summary')} aria-pressed={tab === 'summary'} onClick={event => { event.stopPropagation(); if (range && tab === 'original') changeTab('summary'); else setOpen(true); }}>要約</button>
       {job?.busy && <span role='status' className='flex items-center text-xs text-gray-500 dark:text-gray-400'>要約中<SyncDots label='要約生成中' /></span>}
     </> : <>
-      <button type='button' className={buttonClass(target)} aria-pressed={target} disabled={!target && !canSelect} aria-label={target ? '要約対象から外す' : '要約に含める'} title={target ? '要約対象から外す' : '要約に含める'} onClick={event => { event.stopPropagation(); useStore.getState().toggleSummaryTarget(useStore.getState().currentChatIndex, messageIndex); }}>要約</button>
+      <button type='button' hidden={!!job?.busy} className={buttonClass(target)} aria-pressed={target} disabled={!target && !canSelect} aria-label={target ? '要約対象から外す' : '要約に含める'} title={target ? '要約対象から外す' : '要約に含める'} onClick={event => { event.stopPropagation(); useStore.getState().toggleSummaryTarget(useStore.getState().currentChatIndex, messageIndex); }}>要約</button>
       {job?.busy && <span role='status' className='flex items-center text-xs text-gray-500 dark:text-gray-400'>要約中<SyncDots label='要約生成中' /></span>}
       <button type='button' className={buttonClass(false)} onClick={event => { event.stopPropagation(); setOpen(true); }} aria-label='要約を作成'>要約を作成</button>
     </>}
@@ -43,11 +43,9 @@ function SummaryDialog({ messageIndex, initialSummary, setOpen }: { messageIndex
   const sessions = useStore(state => state.generatingSessions);
   const endpoint = initialChat?.branchTree?.activePath[messageIndex];
   const job = useBubbleSummaryJob(initialChat?.id, endpoint);
-  const [mode, setMode] = useState<BubbleSummary['mode']>(job?.busy ? job.mode : initialSummary?.mode ?? 'single');
-  const [selected, setSelected] = useState<string[]>(() => job?.busy ? job.sourceNodeIds : initialSummary ? initialSummary.sources.map(source => source.nodeId) : endpoint ? [endpoint] : []);
+  const [mode, setMode] = useState<BubbleSummary['mode']>(job ? job.mode : initialSummary?.mode ?? 'single');
+  const [selected, setSelected] = useState<string[]>(() => job ? job.sourceNodeIds : initialSummary ? initialSummary.sources.map(source => source.nodeId) : endpoint ? [endpoint] : []);
   const busy = !!job?.busy;
-  const mounted = useRef(true);
-  useEffect(() => { mounted.current = true; return () => { mounted.current = false; }; }, []);
   const close = () => setOpen(false);
   if (!chat?.branchTree) return null;
   const path = chat.branchTree.activePath;
@@ -68,11 +66,11 @@ function SummaryDialog({ messageIndex, initialSummary, setOpen }: { messageIndex
   const valid = continuous && indices.every(index => eligible(index) && candidate(index)) && (mode !== 'single' || indices.length === 1);
   const local = isLocalModelConfig(chat.config);
   const reason = local ? 'ローカルモデルでは要約生成を利用できません。' : !chat.config.model ? 'チャットのモデルを選択してください。' : !selected.length ? '要約するバブルを選択してください。' : !valid ? '同じ経路の連続した通常テキストを選択してください。不可視・画像・ツール・生成中のバブルは対象外です。' : '';
-  const generate = async () => {
+  const generate = () => {
     if (busy || reason) return;
     const state = useStore.getState();
-    const saved = await startBubbleSummary(effectiveChat, indices, mode, endpoint!, { favoriteModels: state.favoriteModels, providers: state.providers, fallbackProvider: { endpoint: state.apiEndpoint, key: state.apiKey }, apiVersion: state.apiVersion, t });
-    if (saved && mounted.current) setOpen(false);
+    void startBubbleSummary(effectiveChat, indices, mode, endpoint!, { favoriteModels: state.favoriteModels, providers: state.providers, fallbackProvider: { endpoint: state.apiEndpoint, key: state.apiKey }, apiVersion: state.apiVersion, t });
+    if (useSummaryGeneration.getState().jobs[`${chat.id}:${endpoint}`]?.busy) setOpen(false);
   };
   return <PopupModal title='要約の対象を選択' setIsModalOpen={setOpen} handleClose={close} handleClickBackdrop={close} cancelButton={false}
     footerEndContent={<><button type='button' className='btn btn-neutral' onClick={close}>{busy ? '閉じる' : 'キャンセル'}</button><button type='button' className={`btn ${busy || reason ? 'btn-neutral cursor-not-allowed opacity-50' : 'btn-primary'}`} disabled={busy || !!reason} onClick={() => void generate()}>{busy ? '生成中…' : '要約を生成'}</button></>}>
