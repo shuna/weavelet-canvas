@@ -19,9 +19,9 @@ export default function BubbleSummaryControls({ messageIndex }: { messageIndex: 
   const nodeId = useStore(state => state.chats?.[state.currentChatIndex]?.branchTree?.activePath[messageIndex]);
   const { chat, summary, range, readable, compact, tab, changeTab, effectiveChat, generating } = useBubbleSummary(nodeId);
   const job = useBubbleSummaryJob(chat?.id, nodeId);
-  const buttonClass = (active: boolean) => `rounded-full px-2 py-1 text-xs transition-colors ${active ? 'bg-gray-100 text-gray-700 dark:bg-gray-700 dark:text-gray-200' : 'text-gray-400 hover:text-gray-600 dark:text-gray-500 dark:hover:text-gray-300'}`;
+  const buttonClass = (active: boolean) => `shrink-0 whitespace-nowrap rounded-full px-2 py-1 text-xs transition-colors ${active ? 'bg-gray-100 text-gray-700 dark:bg-gray-700 dark:text-gray-200' : 'text-gray-400 hover:text-gray-600 dark:text-gray-500 dark:hover:text-gray-300'}`;
   return <>
-    <div role='group' aria-label='要約操作' className='flex items-center gap-0.5 rounded-full bg-white/80 px-1.5 py-0.5 shadow-sm ring-1 ring-black/5 backdrop-blur-sm dark:bg-gray-800/80 dark:ring-white/10'>
+    <div role='group' aria-label='要約操作' className='flex shrink-0 items-center gap-0.5 rounded-full bg-white/80 px-1.5 py-0.5 shadow-sm ring-1 ring-black/5 backdrop-blur-sm dark:bg-gray-800/80 dark:ring-white/10'>
       <button type='button' className={buttonClass(tab === 'original')} aria-pressed={tab === 'original'} onClick={event => { event.stopPropagation(); changeTab('original'); }}>原文</button>
       {(['summary', 'compact'] as const).map(value => {
         const busy = !!job?.busy && (job.format === 'compact' ? 'compact' : 'summary') === value;
