@@ -10,10 +10,6 @@ export default function BubbleSummaryView({ nodeId, isCollapsed = false, childre
   const anchor = summary?.sources[summary.sources.length - 1]?.nodeId === nodeId;
   if (!summary || !chat || !nodeId) return <>{children}</>;
   if (!anchor) return <>
-    <div className='mb-2 flex flex-wrap items-center gap-2 text-xs text-gray-500 dark:text-gray-400'>
-      <span>要約範囲に含まれます（{summary.sources.length}件）</span>
-      {!range && <span>要約の更新が必要です。原文を表示します。</span>}
-    </div>
     <div hidden={tab !== 'original'}>{children}</div>
   </>;
   const preview = normalizeBubbleSummaryText(summary.text).replace(/\s+/g, ' ').trim();

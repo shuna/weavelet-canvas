@@ -12,6 +12,7 @@ it('shows compact text in the same pane as readable summaries and hides original
   for (const nodeId of ['a', 'b']) {
     const html = renderToStaticMarkup(createElement(BubbleSummaryView, { nodeId, children: 'Original', renderSummary }));
     expect(html).toContain('<div hidden="">Original</div>');
+    expect(html).not.toContain('要約範囲に含まれます');
     if (nodeId === 'b') {
       expect(html).toContain('data-summary-content');
       expect(html).toContain('Compressed');
