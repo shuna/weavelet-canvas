@@ -1,6 +1,22 @@
 import type { BubbleSummary, ChatInterface, MessageInterface } from '@type/chat';
 import { isTextContent, isToolCallContent, isToolResultContent } from '@type/chat';
 
+// Decode only complete JSON output; ordinary Markdown and literal code escapes stay intact.
+export const normalizeBubbleSummaryText = (text: string): string => {
+  const trimmed = text.trim();
+  const json = trimmed.replace(/^```(?:json)?\s*\n([\s\S]*?)\n```$/i, '$1');
+  try {
+    const value: unknown = JSON.parse(json);
+    if (typeof value === 'string') return value.trim();
+    const messages = Array.isArray(value) ? value : [value];
+    if (messages.length && messages.every(message => message && typeof message === 'object'
+      && (message.role === 'user' || message.role === 'assistant') && typeof message.content === 'string')) {
+      return messages.map(message => message.role === 'assistant' ? `アシスタント：\n${message.content}` : message.content).join('\n\n').trim();
+    }
+  } catch { /* Not serialized output: preserve the original text. */ }
+  return trimmed;
+};
+
 const textParts = (message: MessageInterface | undefined): string[] | null => {
   if (!message?.content?.length || !message.content.every(isTextContent)) return null;
   const parts = message.content.map(value => value.text);
@@ -53,7 +69,7 @@ export const applyBubbleSummariesForSubmit = (chat: ChatInterface, messageIndex:
   const result: MessageInterface[] = [];
   for (let index = 0; index < source.length; index++) {
     const replacement = starts.get(index);
-    if (replacement) { result.push({ role: 'user', content: [{ type: 'text', text: `Past conversation summary:\n${replacement.summary.text}` }] }); index = replacement.range.last; continue; }
+    if (replacement) { result.push({ role: 'user', content: [{ type: 'text', text: `Past conversation summary:\n${normalizeBubbleSummaryText(replacement.summary.text)}` }] }); index = replacement.range.last; continue; }
     if (chat.omittedNodes?.[path[index]] && !hasTool(source[index])) continue;
     result.push(source[index]);
   }
