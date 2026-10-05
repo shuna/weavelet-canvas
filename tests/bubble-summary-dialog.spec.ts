@@ -62,7 +62,7 @@ test('summary dialog selects previews, disables empty selection and saves genera
   await expect(generate).toBeEnabled();
   await generate.click();
   await expect(bubble.getByRole('img', { name: '要約生成中' })).toBeVisible();
-  await expect(bubble.getByRole('button', { name: /要約に含める|要約対象から外す/ })).toBeDisabled();
+  await expect(bubble.getByRole('button', { name: /要約に含める|要約対象から外す/ })).toHaveCount(0);
   await expect(modal.getByText('要約の対象を選択', { exact: true })).toHaveCount(0);
   await page.mouse.move(0, 0);
   await expect(bubble.getByRole('status')).toBeVisible();

@@ -344,8 +344,16 @@ export function useEditViewLogic({
   };
 
   const handleBranchGenerate = () => {
-    if (summaryId || isChatBusy() || !modelValid || sticky || isNodeBusy(nodeId)) return;
+    if (isChatBusy() || !modelValid || sticky || isNodeBusy(nodeId)) return;
     if (!confirmChatModelFavorite(currentChatIndex)) return;
+    if (summaryId) {
+      const chat = useStore.getState().chats?.[currentChatIndex];
+      const anchor = nodeId ?? chat?.branchTree?.activePath[resolveMessageIndex(nodeId, messageIndex)];
+      if (!anchor || !commitSummary()) return;
+      useStore.getState().truncateActivePathAt(currentChatIndex, anchor);
+      handleSubmit();
+      return;
+    }
     const { ensureBranchTree, createBranch } = useStore.getState();
     ensureBranchTree(currentChatIndex);
     const activeNodeId =
