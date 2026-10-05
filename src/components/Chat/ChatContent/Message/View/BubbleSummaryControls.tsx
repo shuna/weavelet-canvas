@@ -1,5 +1,6 @@
+import useSummaryTokenCounts, { summaryTokenLabel } from './useSummaryTokenCounts';
 import { InfoTooltip, ResetButton } from '@components/ConfigMenu/fields';
-import { useRef, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import PopupModal from '@components/PopupModal';
 import { SummarySettingsFields } from '@components/SummarySettings';
@@ -22,10 +23,17 @@ export default function BubbleSummaryControls({ messageIndex }: { messageIndex: 
   const nodeId = useStore(state => state.chats?.[state.currentChatIndex]?.branchTree?.activePath[messageIndex]);
   const { chat, summary, range, readable, compact, tab, changeTab, effectiveChat, generating } = useBubbleSummary(nodeId);
   const job = useBubbleSummaryJob(chat?.id, nodeId);
+  const originals = useMemo(() => chat?.messages.slice(range?.first ?? messageIndex, (range?.last ?? messageIndex) + 1) ?? [], [chat?.messages, range?.first, range?.last, messageIndex]);
+  const counts = useSummaryTokenCounts(originals, chat?.config?.model ?? '', range ? readable : undefined, range ? compact : undefined);
+  const tokenLabel = (value: 'original' | 'summary' | 'compact') => {
+    if (value !== 'original' && !(range && (value === 'summary' ? readable : compact))) return '未処理';
+    const tokens = counts?.[value];
+    return tokens === undefined ? '計算中…' : summaryTokenLabel(tokens, counts!.original, value === 'original');
+  };
   const buttonClass = (active: boolean) => `shrink-0 whitespace-nowrap rounded-full px-2 py-1 text-xs transition-colors ${active ? 'bg-gray-100 text-gray-700 dark:bg-gray-700 dark:text-gray-200' : 'text-gray-400 hover:text-gray-600 dark:text-gray-500 dark:hover:text-gray-300'}`;
   const controls = (
       <div role='group' aria-label='要約操作' className='summary-format-options flex gap-0.5 bg-white/80 p-1 shadow-sm ring-1 ring-black/5 dark:bg-gray-800/80 dark:ring-white/10'>
-      <button type='button' className={buttonClass(tab === 'original')} aria-pressed={tab === 'original'} onClick={event => { event.stopPropagation(); changeTab('original'); if (menuRef.current) menuRef.current.open = false; }}><svg aria-hidden='true' className='summary-option-icon' viewBox='0 0 24 24' fill='none' stroke='currentColor' strokeWidth='1.8' strokeLinecap='round' strokeLinejoin='round'><path d='M14 3H6v18h12V7l-4-4ZM14 3v5h4M9 12h6M9 16h6' /></svg>原文</button>
+      <button type='button' className={buttonClass(tab === 'original')} aria-pressed={tab === 'original'} onClick={event => { event.stopPropagation(); changeTab('original'); if (menuRef.current) menuRef.current.open = false; }}><svg aria-hidden='true' className='summary-option-icon' viewBox='0 0 24 24' fill='none' stroke='currentColor' strokeWidth='1.8' strokeLinecap='round' strokeLinejoin='round'><path d='M14 3H6v18h12V7l-4-4ZM14 3v5h4M9 12h6M9 16h6' /></svg>原文<span className='summary-option-stats ml-auto text-xs'>({tokenLabel('original')})</span></button>
       {(['summary', 'compact'] as const).map(value => {
         const busy = !!job?.busy && (job.format === 'compact' ? 'compact' : 'summary') === value;
         const label = value === 'compact' ? '圧縮' : '要約';
@@ -37,7 +45,7 @@ export default function BubbleSummaryControls({ messageIndex }: { messageIndex: 
           if (!chat || !effectiveChat || !nodeId || !isSummaryEligible(chat.messages[messageIndex]) || effectiveChat.omittedNodes?.[nodeId] || generating.includes(nodeId)) return;
           const state = useStore.getState();
           void startBubbleSummary(effectiveChat, [messageIndex], 'single', nodeId, { favoriteModels: state.favoriteModels, providers: state.providers, fallbackProvider: { endpoint: state.apiEndpoint, key: state.apiKey }, apiVersion: state.apiVersion, summaryConfig: state.bubbleSummaryConfig, summaryFormat: value === 'compact' ? 'compact' : undefined, t });
-        }}><svg aria-hidden='true' className='summary-option-icon' viewBox='0 0 24 24' fill='none' stroke='currentColor' strokeWidth='1.8' strokeLinecap='round' strokeLinejoin='round'><path d={value === 'compact' ? 'M3 6l4 6-4 6M21 6l-4 6 4 6M7 12h10M10 7h4M10 17h4' : 'M5 6h14M5 12h14M5 18h8'} /></svg><span className='relative inline-block'><span className={busy ? 'inline-block -translate-y-0.5' : ''}>{label}</span>{busy && <span role='status' className='absolute left-1/2 top-full -mt-1 -translate-x-1/2 text-[8px] leading-[6px]'><SyncDots label={`${label}生成中`} /></span>}</span></button>;
+        }}><svg aria-hidden='true' className='summary-option-icon' viewBox='0 0 24 24' fill='none' stroke='currentColor' strokeWidth='1.8' strokeLinecap='round' strokeLinejoin='round'><path d={value === 'compact' ? 'M3 6l4 6-4 6M21 6l-4 6 4 6M7 12h10M10 7h4M10 17h4' : 'M5 6h14M5 12h14M5 18h8'} /></svg><span className='relative inline-block'><span className={busy ? 'summary-busy-label' : ''}>{label}</span>{busy && <span role='status' className='summary-inline-progress absolute left-1/2 top-full -mt-1 -translate-x-1/2 text-[8px] leading-[6px]'><SyncDots label={`${label}生成中`} /></span>}</span><span className='summary-option-stats ml-auto text-xs'>({tokenLabel(value)})</span></button>;
       })}
 
     <button type='button' aria-label='要約・圧縮の詳細設定' className={buttonClass(false)} onClick={event => { event.stopPropagation(); setDialogFormat(tab === 'compact' ? 'compact' : undefined); setOpen(true); if (menuRef.current) menuRef.current.open = false; }}><span className='flex items-center justify-center gap-1'><SettingIcon className='h-3 w-3' /><span className='summary-details-label'>詳細設定</span></span></button>
@@ -47,13 +55,13 @@ export default function BubbleSummaryControls({ messageIndex }: { messageIndex: 
   return <>
     <details ref={menuRef} className='summary-format-dropdown relative shrink-0' onClick={event => event.stopPropagation()} onKeyDown={event => { if (event.key === 'Escape' && menuRef.current) menuRef.current.open = false; }}>
       <summary aria-label='表示形式' className='flex h-[26px] cursor-pointer list-none items-center gap-1 whitespace-nowrap rounded-full bg-white/80 px-2.5 py-1 text-xs text-gray-600 shadow-sm ring-1 ring-black/5 dark:bg-gray-800/80 dark:text-gray-300 dark:ring-white/10 [&::-webkit-details-marker]:hidden'>
-        <span className='relative inline-block'><span className={job?.busy ? 'inline-block -translate-y-0.5' : ''}>{job?.busy ? job.format === 'compact' ? '圧縮' : '要約' : tab === 'compact' ? '圧縮' : tab === 'summary' ? '要約' : '原文'}</span>{job?.busy && <span role='status' className='absolute left-1/2 top-full -mt-1 -translate-x-1/2 text-[8px] leading-[6px]'><SyncDots label={job.format === 'compact' ? '圧縮生成中' : '要約生成中'} /></span>}</span>
-        <DownChevronArrow />
+        <span>{job?.busy ? job.format === 'compact' ? '圧縮' : '要約' : tab === 'compact' ? '圧縮' : tab === 'summary' ? '要約' : '原文'}</span>
+        <span className='flex h-3 w-3 shrink-0 items-center justify-center'>{job?.busy ? <span role='status' className='text-[8px]'><SyncDots label={job.format === 'compact' ? '圧縮生成中' : '要約生成中'} /></span> : <DownChevronArrow />}</span>
       </summary>
       {controls}
 
     </details>
-    <div className='summary-format-inline'>{controls}</div>
+    <div className='summary-format-inline'><span className='mr-2 whitespace-nowrap text-xs text-gray-500 dark:text-gray-400' title='送信内容の推定トークン数・原文からの節約率'>{tokenLabel(tab === 'compact' ? 'compact' : tab === 'summary' ? 'summary' : 'original')}</span>{controls}</div>
     {open && <SummaryDialog messageIndex={summary ? chat?.branchTree?.activePath.indexOf(summary.sources[summary.sources.length - 1]?.nodeId) ?? -1 : messageIndex} initialSummary={summary} initialFormat={dialogFormat} setOpen={setOpen} />}
   </>;
 }
