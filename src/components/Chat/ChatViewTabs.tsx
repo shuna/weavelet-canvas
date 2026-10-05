@@ -370,7 +370,7 @@ const ChatViewTabs = ({
                     </svg>
                     {tMain('chatSettings')}
                   </div>
-                  <button type='button' className='w-full px-3 py-2 text-left text-sm hover:bg-gray-100 dark:hover:bg-gray-700' onClick={() => { setIsModelDropdownOpen(false); setSummarySettingsOpen(true); }}>要約・圧縮設定</button>
+                  <button type='button' className='w-full px-3 py-2 text-left text-sm hover:bg-gray-100 dark:hover:bg-gray-700 flex items-center gap-1.5' onClick={() => { setIsModelDropdownOpen(false); setSummarySettingsOpen(true); }}><svg aria-hidden='true' className='w-4 h-4 shrink-0' fill='none' stroke='currentColor' viewBox='0 0 24 24'><path strokeLinecap='round' strokeLinejoin='round' strokeWidth={2} d='M4 5h16M4 10h16M4 15h10M4 20h6' /></svg>要約・圧縮設定</button>
                   <div className='border-t border-gray-200 dark:border-gray-600 my-1' />
                   {!hasAny ? (
                     <div className='px-3 py-2 text-sm text-gray-500'>
