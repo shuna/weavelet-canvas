@@ -18,10 +18,10 @@ beforeEach(() => {
  const chat = { id: 'chat', messages: [{ role: 'user', content: [{ type: 'text', text: 'Original' }] }] };
  mocks.value = { chat, effectiveChat: chat, generating: [], tab: 'original', changeTab: mocks.change };
 });
-function click(format: number) {
+function click(format: number, dropdown = true) {
  const view = Controls({ messageIndex: 0 });
  const group = (view.props.children as any[])[0].props.children[1];
- group.props.children[1][format].props.onClick({ stopPropagation: vi.fn() });
+ group.props.children[1][format].props.onClick({ stopPropagation: vi.fn(), currentTarget: { closest: () => dropdown ? {} : null } });
 }
 it.each([0, 1])('starts format %s immediately for only the clicked bubble', format => {
  click(format);
@@ -37,4 +37,29 @@ it('does not start another job while busy or for omitted sources', () => {
  mocks.job = { busy: true }; click(0);
  mocks.job = undefined; mocks.value.effectiveChat.omittedNodes = { a: true }; click(1);
  expect(mocks.start).not.toHaveBeenCalled();
+});
+
+it.each([0, 1])('confirms repeat processing of the displayed saved format %s and preserves its range', format => {
+ const confirm = vi.fn().mockReturnValue(false);
+ vi.stubGlobal('window', { confirm });
+ const saved = { id: 'saved', mode: 'through', sources: [{ nodeId: 'a' }, { nodeId: 'b' }] };
+ mocks.value.range = { first: 0, last: 1 };
+ mocks.value[format ? 'compact' : 'readable'] = saved;
+ mocks.value.tab = format ? 'compact' : 'summary';
+ click(format);
+ expect(confirm).toHaveBeenCalledOnce();
+ expect(mocks.start).not.toHaveBeenCalled();
+ expect(mocks.change).not.toHaveBeenCalled();
+ confirm.mockReturnValue(true);
+ click(format);
+ expect(mocks.start).toHaveBeenCalledWith(mocks.value.effectiveChat, [0, 1], 'through', 'b', expect.objectContaining({ summaryFormat: format ? 'compact' : undefined }));
+ vi.unstubAllGlobals();
+});
+it('keeps the inline capsule selection behavior without confirming or regenerating', () => {
+ const confirm = vi.fn();
+ vi.stubGlobal('window', { confirm });
+ mocks.value.range = { first: 0, last: 0 }; mocks.value.readable = { id: 'saved' }; mocks.value.tab = 'summary';
+ click(0, false);
+ expect(confirm).not.toHaveBeenCalled(); expect(mocks.start).not.toHaveBeenCalled(); expect(mocks.change).toHaveBeenCalledWith('summary');
+ vi.unstubAllGlobals();
 });
