@@ -5,6 +5,7 @@
  * Uses fake-indexeddb polyfill injected into globalThis.
  */
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
+import * as processing from './google/processing';
 import { IDBFactory, IDBKeyRange } from 'fake-indexeddb';
 
 // Polyfill indexedDB + window into globalThis before importing IndexedDbStorage
@@ -235,9 +236,17 @@ describe('loadSplitData crash recovery', () => {
     await compressSingleChat('packed-b');
     _resetInternalState();
 
-    const result = await loadChatData(baseState);
+    const progress = vi.fn();
+    const result = await loadChatData(baseState, progress);
 
     expect(result?.loadStatus).toBe('ok');
+    expect(progress.mock.calls.map(([value]) => value).filter(value => value.stage === 'restoringChats')).toEqual([
+      { stage: 'restoringChats', completed: 0, total: 3 },
+      { stage: 'restoringChats', completed: 1, total: 3 },
+      { stage: 'restoringChats', completed: 2, total: 3 },
+      { stage: 'restoringChats', completed: 3, total: 3 },
+    ]);
+    expect(progress).toHaveBeenLastCalledWith({ stage: 'fingerprinting', completed: 3, total: 3 });
     expect(result?.chats?.map((chat) => chat.id)).toEqual([
       'active',
       'packed-a',
@@ -1028,3 +1037,61 @@ describe('compression scheduler', () => {
 });
 
 // ─── Performance ───
+
+describe('startup lock contention', () => {
+  it('does not hold the cross-window lock during save preparation', async () => {
+    const data = { chats: [makeChat('chat-a', ['h1'])], contentStore: { h1: textEntry('one') }, branchClipboard: null };
+    await saveChatData(data);
+    let release!: () => void;
+    let started!: () => void;
+    const gate = new Promise<void>(resolve => { release = resolve; });
+    const preparing = new Promise<void>(resolve => { started = resolve; });
+    const original = processing.prepareSaveAsync;
+    const prepare = vi.spyOn(processing, 'prepareSaveAsync').mockImplementationOnce(async value => {
+      started();
+      await gate;
+      return original(value);
+    });
+    const request = vi.fn((_name, _options, run) => run());
+    vi.stubGlobal('navigator', { locks: { request } });
+    const saving = saveChatData(data);
+    try {
+      await preparing;
+      expect(request).not.toHaveBeenCalled();
+      expect((await loadChatData(baseState))?.loadStatus).toBe('ok');
+      release();
+      await saving;
+      expect(request).toHaveBeenCalledTimes(2);
+    } finally {
+      release();
+      await saving;
+      prepare.mockRestore();
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it('reports a stalled lock after 30 seconds without modifying stored records', async () => {
+    await saveChatData({ chats: [makeChat('chat-a', ['h1'])], contentStore: { h1: textEntry('one') }, branchClipboard: null });
+    const before = await idbGet('meta');
+    let started!: () => void;
+    const waiting = new Promise<void>(resolve => { started = resolve; });
+    vi.stubGlobal('navigator', { locks: { request: vi.fn((_name, options) => new Promise((_resolve, reject) => {
+      options.signal.addEventListener('abort', () => reject(new DOMException('Aborted', 'AbortError')));
+      started();
+    })) } });
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+    try {
+      const progress = vi.fn();
+      const failed = expect(loadChatData(baseState, progress)).rejects.toThrow('30秒');
+      await waiting;
+      expect(progress).toHaveBeenLastCalledWith({ stage: 'lock' });
+      await vi.advanceTimersByTimeAsync(30_000);
+      await failed;
+      expect(await idbGet('meta')).toEqual(before);
+      expect(await idbGet('chat:chat-a')).toBeDefined();
+    } finally {
+      vi.useRealTimers();
+      vi.unstubAllGlobals();
+    }
+  });
+});

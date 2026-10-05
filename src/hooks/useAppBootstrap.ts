@@ -5,13 +5,15 @@ import i18n from '../i18n';
 import { Theme } from '@type/theme';
 import useInitialiseNewChat from './useInitialiseNewChat';
 import {
-  applyPersistedChatDataState,
+  prepareHydratedState,
+  finishHydratedState,
   createPersistedChatDataState,
   setIndexedDbMigrationComplete,
   needsDataMigration,
 } from '@store/persistence';
 import {
   loadChatData,
+  type ChatDataLoadProgress,
   saveChatData,
   initCompressionScheduler,
   notifyActiveChatChanged,
@@ -24,6 +26,7 @@ import { setRuntimeStoreGetter } from '@src/local-llm/runtime';
 const useAppBootstrap = () => {
   const [isBootstrapped, setIsBootstrapped] = useState(false);
   const [bootPhase, setBootPhase] = useState('restoring');
+  const [bootProgress, setBootProgress] = useState<ChatDataLoadProgress>();
   const initialiseNewChat = useInitialiseNewChat();
   const setChats = useStore((state) => state.setChats);
   const setTheme = useStore((state) => state.setTheme);
@@ -113,6 +116,7 @@ const useAppBootstrap = () => {
     const bootstrap = async () => {
       setBootPhase('restoring');
       await useStore.persist.rehydrate();
+      if (cancelled) return;
 
       // Wire up local model runtime store access
       setRuntimeStoreGetter(() => useStore.getState());
@@ -140,7 +144,9 @@ const useAppBootstrap = () => {
       let indexedDbLoadErrors: string[] = [];
       try {
         setBootPhase('loading');
-        indexedDbChatData = await loadChatData(useStore.getState());
+        indexedDbChatData = await loadChatData(useStore.getState(), progress => {
+          if (!cancelled) setBootProgress(progress);
+        });
       } catch (error) {
         indexedDbLoadFailed = true;
         indexedDbLoadErrors = [error instanceof Error ? error.message : String(error)];
@@ -173,11 +179,15 @@ const useAppBootstrap = () => {
         }
       } else if (indexedDbChatData) {
         setIndexedDbMigrationComplete(true);
-        const nextState = { ...useStore.getState() };
-        applyPersistedChatDataState(nextState, indexedDbChatData);
+        setBootPhase('finalizing');
+        setBootProgress(undefined);
+        const prepared = await prepareHydratedState(useStore.getState(), indexedDbChatData);
+        if (cancelled) return;
+        const nextState = finishHydratedState(prepared);
         useStore.setState({
           chats: nextState.chats,
           contentStore: nextState.contentStore,
+          branchClipboard: nextState.branchClipboard,
           currentChatIndex: nextState.currentChatIndex,
         });
         setChatDataWritesBlocked(false);
@@ -230,6 +240,7 @@ const useAppBootstrap = () => {
         }
       }
 
+      setBootProgress(undefined);
       setBootPhase('finalizing');
 
       // Check if persisted data needs schema migration
@@ -320,7 +331,7 @@ const useAppBootstrap = () => {
     };
   }, [initialiseNewChat, setApiKey, setChats, setCurrentChatIndex, setTheme]);
 
-  return { isBootstrapped, bootPhase };
+  return { isBootstrapped, bootPhase, bootProgress };
 };
 
 export default useAppBootstrap;
