@@ -45,7 +45,7 @@ export default function BubbleSummaryControls({ messageIndex }: { messageIndex: 
   );
   return <>
     <details ref={menuRef} className='summary-format-dropdown relative shrink-0' onClick={event => event.stopPropagation()} onKeyDown={event => { if (event.key === 'Escape' && menuRef.current) menuRef.current.open = false; }}>
-      <summary aria-label='表示形式' className='flex cursor-pointer list-none items-center gap-1 whitespace-nowrap rounded-full bg-white/80 px-2.5 py-1 text-xs text-gray-600 shadow-sm ring-1 ring-black/5 dark:bg-gray-800/80 dark:text-gray-300 dark:ring-white/10 [&::-webkit-details-marker]:hidden'>
+      <summary aria-label='表示形式' className='flex h-[26px] cursor-pointer list-none items-center gap-1 whitespace-nowrap rounded-full bg-white/80 px-2.5 py-1 text-xs text-gray-600 shadow-sm ring-1 ring-black/5 dark:bg-gray-800/80 dark:text-gray-300 dark:ring-white/10 [&::-webkit-details-marker]:hidden'>
         <span className='relative inline-block'><span className={job?.busy ? 'inline-block -translate-y-0.5' : ''}>{job?.busy ? job.format === 'compact' ? '圧縮' : '要約' : tab === 'compact' ? '圧縮' : tab === 'summary' ? '要約' : '原文'}</span>{job?.busy && <span role='status' className='absolute left-1/2 top-full -mt-1 -translate-x-1/2 text-[8px] leading-[6px]'><SyncDots label={job.format === 'compact' ? '圧縮生成中' : '要約生成中'} /></span>}</span>
         <DownChevronArrow />
       </summary>
