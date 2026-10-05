@@ -27,6 +27,7 @@ import {
 } from './persistence';
 import { DEFAULT_PROVIDERS } from './provider-config';
 import { STORE_VERSION } from './version';
+import { BROWSER_LOCAL_SETTINGS, withoutBrowserLocalSettings } from './storage/google/settings';
 
 const buildStoreState = () => {
   const contentStore = {};
@@ -123,6 +124,22 @@ describe('persistence', () => {
   beforeEach(() => {
     clearStreamingBuffersForTest();
     setIndexedDbMigrationComplete(false);
+  });
+
+  it('keeps browser preferences in local storage and preserves them when applying Drive settings', async () => {
+    const preferences = {
+      hideMenuOptions: true, hideSideMenu: true, menuWidth: 320,
+      splitPanelRatio: 0.7, splitPanelSwapped: true, chatActiveView: 'split-horizontal' as const,
+      showDebugPanel: true, proxyEnabled: true,
+    };
+    const base = { ...buildStoreState(), ...preferences };
+    const saved = createLocalStoragePartializedState(base as never);
+    for (const key of BROWSER_LOCAL_SETTINGS) expect(saved[key]).toEqual(preferences[key]);
+    const received = withoutBrowserLocalSettings({ ...preferences, hideSideMenu: false, proxyEnabled: false, theme: 'light' });
+    const hydrated = finishHydratedState(await prepareHydratedState(base as never, received));
+    const applied = { ...base, ...hydrated };
+    for (const key of BROWSER_LOCAL_SETTINGS) expect(applied[key]).toEqual(preferences[key]);
+    expect(applied.theme).toBe('light');
   });
 
   it('persists both swipe preferences and invalidates the cached snapshot when they change', () => {

@@ -1,4 +1,5 @@
 import { recordMetric } from './metrics';
+import { withoutBrowserLocalSettings } from './settings';
 import type { StorageValue } from 'zustand/middleware';
 import type { PersistedStoreState } from '@store/persistence';
 import type { BranchNode, ContentInterface } from '@type/chat';
@@ -46,7 +47,7 @@ export async function toRecords(snapshot: Snapshot): Promise<Records> {
   const started = performance.now();
   const serialized = JSON.stringify(snapshot);
   const copy = JSON.parse(serialized) as Snapshot;
-  const state = copy.state;
+  const state = withoutBrowserLocalSettings(copy.state);
   const records: Records = Object.create(null);
   const source = state.contentStore ?? {};
   const contentIds = new Map<string, string>();
@@ -176,7 +177,7 @@ export async function fromRecords(records: Records): Promise<Snapshot> {
     chats.push(chat);
   }
   for (const node of Object.values(root.state.branchClipboard?.nodes ?? {}) as BranchNode[]) await restore(node);
-  return { version: root.version, state: { ...root.state, chats, contentStore: store } };
+  return { version: root.version, state: { ...withoutBrowserLocalSettings(root.state), chats, contentStore: store } };
 }
 
 export async function diffRecords(before: Records, after: Records): Promise<Change[]> {
