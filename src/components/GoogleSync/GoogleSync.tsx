@@ -286,15 +286,15 @@ const GoogleSync = ({ clientId, openOnMount = false, showEntry = true }: { clien
           data-google-sync-banner
           className={`absolute inset-x-0 top-0 flex h-6 items-center justify-center gap-1 px-3 text-xs text-white shadow-sm ${syncStatus === 'error' ? 'bg-red-700' : 'bg-emerald-700'}`}
           aria-label={t(syncStatus === 'error' ? 'progress.failed' : 'progress.open') as string}>
+          {syncStatus === 'syncing' && progress.active && <span>{t('progress.overall')} {overallPercent}%</span>}
           {t(syncStatus === 'error' ? 'progress.failed' : progress.active ? `progress.${progress.phase}` : 'progress.open')}
           <SyncIcon status={syncStatus} />
           {syncStatus === 'syncing' && progress.active && <>
-            <span>{t('progress.overall')} {overallPercent}%</span>
             <div className='absolute inset-x-0 bottom-0 flex flex-col gap-px'>
-              <progress className='h-0.5 w-full accent-emerald-300' max={1} value={fraction}
-                aria-label={t(`progress.${progress.phase}`) as string} />
               <progress className='h-0.5 w-full accent-emerald-100' max={1} value={progress.overallProgress}
                 aria-label={t('progress.overall') as string} />
+              <progress className='h-0.5 w-full accent-emerald-300' max={1} value={fraction}
+                aria-label={t(`progress.${progress.phase}`) as string} />
             </div>
           </>}
         </button>, bannerTarget

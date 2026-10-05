@@ -141,7 +141,8 @@ test('encrypted Drive creation, incremental autosave and unlock after browser re
   await expect(progress).toContainText('1 / 2 ファイル完了');
   await expect(progress).toContainText(/[KM]B\/s/);
   await expect(progress.getByRole('progressbar')).toHaveCount(2);
-  const percent = Number(await progress.getByRole('progressbar').first().getAttribute('value'));
+  await expect(progress.getByRole('progressbar').first()).toHaveAttribute('aria-label', '全体');
+  const percent = Number(await progress.getByRole('progressbar').nth(1).getAttribute('value'));
   const overall = Number(await progress.getByRole('progressbar', { name: '全体', exact: true }).getAttribute('value'));
   expect(overall).toBeGreaterThan(0);
   expect(overall).toBeLessThan(100);
@@ -198,7 +199,8 @@ test('encrypted Drive creation, incremental autosave and unlock after browser re
   await expect(syncBanner).toBeVisible();
   await expect(syncBanner.locator('progress')).toHaveCount(2);
   await expect(syncBanner.locator('progress').first()).toBeVisible();
-  expect(await syncBanner.locator('progress').first().evaluate((element: HTMLProgressElement) => [element.value, element.max]))
+  await expect(syncBanner.locator('progress').first()).toHaveAttribute('aria-label', '全体');
+  expect(await syncBanner.locator('progress').nth(1).evaluate((element: HTMLProgressElement) => [element.value, element.max]))
     .toEqual(await page.evaluate(async () => {
       const progress = (await import('/src/store/storage/google/progress.ts')).useGoogleSyncProgress.getState();
       return [progress.completedFiles / progress.totalFiles!, 1];
