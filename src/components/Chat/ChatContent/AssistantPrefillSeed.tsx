@@ -1,3 +1,4 @@
+import { InfoTooltip } from '@components/ConfigMenu/fields';
 import React, { useRef, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import useStore from '@store/store';
@@ -63,9 +64,7 @@ const AssistantPrefillSeed = ({ nodeId }: Props) => {
               'focus:outline-none focus:ring-1 focus:ring-blue-400 dark:focus:ring-blue-500',
             ].join(' ')}
           />
-          <p className='mt-0.5 text-[11px] text-gray-400 dark:text-gray-500'>
-            {t('assistantPrefill.hint')}
-          </p>
+          <div className='flex items-center gap-1 text-xs text-gray-500 dark:text-gray-400'>{t('assistantPrefill.label')}<InfoTooltip text={t('assistantPrefill.hint')} /></div>
           {hasContent && (
             <span className='inline-flex items-center mt-0.5 px-2 py-0.5 text-[11px] font-medium bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300 rounded-full'>
               {t('assistantPrefill.badge')}

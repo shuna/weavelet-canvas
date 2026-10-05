@@ -1,3 +1,4 @@
+import { InfoTooltip } from '@components/ConfigMenu/fields';
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import useCloudAuthStore from '@store/cloud-auth-store';
@@ -25,7 +26,7 @@ export default function DriveImport({ file }: { file?: File }) {
   };
   return <details className='mt-3 text-xs text-gray-600 dark:text-gray-300'>
     <summary className='cursor-pointer'>{t('drive.title')}</summary>
-    <p className='my-2'>{t('drive.description')}</p>
+    <div className='flex items-center gap-1 text-xs text-gray-500 dark:text-gray-400'>{t('drive.title')}<InfoTooltip text={t('drive.description')} /></div>
     {!token ? <p>{t('drive.connect')}</p> : <div className='space-y-2'>
       <button className='btn btn-small btn-neutral' disabled={busy || active} onClick={() => void run(async () => {
         const result = await listDriveFiles(token);

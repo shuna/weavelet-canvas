@@ -1,3 +1,4 @@
+import { InfoTooltip } from '@components/ConfigMenu/fields';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import useStore from '@store/store';
@@ -964,7 +965,7 @@ const LocalModelSettings = () => {
       {/* Experimental notice */}
       <div className='flex items-start gap-2 rounded-lg border border-amber-300 dark:border-amber-600 bg-amber-50 dark:bg-amber-900/20 p-3 text-xs text-amber-800 dark:text-amber-300'>
         <span className='font-semibold whitespace-nowrap'>{t('localModel.experimental')}</span>
-        <span>{t('localModel.experimentalNote')}</span>
+        <InfoTooltip text={t('localModel.experimentalNote')} />
       </div>
 
       {/* 1. Enable toggle + device tier */}
@@ -999,7 +1000,6 @@ const LocalModelSettings = () => {
                   >
                     <span className='flex min-w-0 flex-col'>
                       <span className='text-sm font-medium text-gray-900 dark:text-gray-200'>{t('localModel.featureChecklist')}</span>
-                      <span className='text-[11px] text-gray-500 dark:text-gray-400'>{t('localModel.featureChecklistDescription')}</span>
                     </span>
                     <span className='inline-flex items-center gap-1 whitespace-nowrap text-[11px] text-gray-500 dark:text-gray-400'>
                       <span>{showFeatureChecklist ? t('localModel.featureChecklistHide') : t('localModel.featureChecklistShow')}</span>
@@ -1011,6 +1011,7 @@ const LocalModelSettings = () => {
                       </span>
                     </span>
                   </button>
+                  <InfoTooltip text={t('localModel.featureChecklistDescription')} />
                   <button
                     type='button'
                     onClick={() => { void runEnvironmentInspection(); }}
@@ -1028,7 +1029,7 @@ const LocalModelSettings = () => {
                       <div>{t('localModel.estimatedWebGpuSingleThread')}: <span className='font-medium text-gray-900 dark:text-gray-100'>{envReport ? formatEstimatedGiB(envReport.estimates.webgpuSingleThreadGiB) : '—'}</span></div>
                       <div>{t('localModel.estimatedCpuMultiThread')}: <span className='font-medium text-gray-900 dark:text-gray-100'>{envReport ? formatEstimatedGiB(envReport.estimates.cpuMultiThreadGiB) : '—'}</span></div>
                       <div>{t('localModel.estimatedWebGpuMultiThread')}: <span className='font-medium text-gray-900 dark:text-gray-100'>{envReport ? formatEstimatedGiB(envReport.estimates.webgpuMultiThreadGiB) : '—'}</span></div>
-                      <div className='mt-1 text-[10px] text-gray-500 dark:text-gray-400'>{t('localModel.estimatedLimitNote')}</div>
+                      <div className='flex items-center gap-1 text-xs text-gray-500 dark:text-gray-400'>{t('localModel.deviceTier')}<InfoTooltip text={t('localModel.estimatedLimitNote')} /></div>
                     </div>
 
                     <div
@@ -1056,7 +1057,7 @@ const LocalModelSettings = () => {
                           <option value='mt-webgpu-jspi-compat'>mt-webgpu-jspi-compat</option>
                         </select>
                       </label>
-                      <div className='text-[10px] text-gray-500 dark:text-gray-400'>{t('localModel.wasmVariantOverrideNote')}</div>
+                      <div className='flex items-center gap-1 text-xs text-gray-500 dark:text-gray-400'>{t('localModel.featureChecklist')}<InfoTooltip text={t('localModel.wasmVariantOverrideNote')} /></div>
                     </div>
 
                     <div className='overflow-x-auto'>
@@ -1119,7 +1120,7 @@ const LocalModelSettings = () => {
                           {!envReport && (
                             <tr className='border-t border-gray-200 dark:border-gray-700'>
                               <td colSpan={3} className='px-3 py-3 text-gray-500 dark:text-gray-400'>
-                                {webGpuPreflighting ? t('localModel.webgpuPreflightChecking') : t('localModel.featureChecklistDescription')}
+                                {webGpuPreflighting ? t('localModel.webgpuPreflightChecking') : <InfoTooltip text={t('localModel.featureChecklistDescription')} />}
                               </td>
                             </tr>
                           )}
@@ -1335,7 +1336,7 @@ const LocalModelSettings = () => {
           {/* 3. Manual import */}
           <SettingsGroup label={t('localModel.importedFiles')}>
             <div className='px-4 py-3 flex flex-col gap-3'>
-              <p className='text-xs text-gray-500 dark:text-gray-400'>{t('localModel.selectGgufHint')}</p>
+              <div className='flex items-center gap-1 text-xs text-gray-500 dark:text-gray-400'>{t('localModel.importedFiles')}<InfoTooltip text={t('localModel.selectGgufHint')} /></div>
               <div className='flex items-center gap-3'>
                 <label
                   className={`btn btn-neutral text-sm px-4 py-1.5 cursor-pointer${importedStatus === 'loading' ? ' opacity-50 pointer-events-none' : ''}`}
@@ -1394,7 +1395,7 @@ const LocalModelSettings = () => {
 
           {/* OPFS Storage Management */}
           <SettingsGroup label={t('localModel.opfsBrowser.title')}>
-            <div className='px-4 py-2 text-xs text-gray-500 dark:text-gray-400'>{t('localModel.opfsBrowser.description')}</div>
+            <div className='px-4 py-2 flex items-center gap-1 text-xs text-gray-500 dark:text-gray-400'>{t('localModel.opfsBrowser.title')}<InfoTooltip text={t('localModel.opfsBrowser.description')} /></div>
             <OpfsFileBrowser
               refreshTrigger={opfsBrowserRefresh}
               onStorageChanged={() => {
