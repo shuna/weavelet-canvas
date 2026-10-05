@@ -1,4 +1,13 @@
 {
+  "bootstrap": {
+    "title": "Opening your workspace",
+    "restoring": "Restoring settings…",
+    "loading": "Loading saved conversations…",
+    "saving": "Saving conversations on this device…",
+    "finalizing": "Preparing the workspace…",
+    "description": "Preparing saved data. Large conversation histories may take longer to load.",
+    "waiting": "Still waiting for data to finish loading ({{seconds}} seconds). Please keep this window open."
+  },
   "save": "Save",
   "generate": "Generate",
   "generateBelow": "Generate All Below",

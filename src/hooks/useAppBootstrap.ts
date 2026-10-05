@@ -21,13 +21,9 @@ import { notifyStorageError } from '@store/storage/storageErrors';
 import { registerSnapshotFlushCallback } from '@utils/streamingBuffer';
 import { setRuntimeStoreGetter } from '@src/local-llm/runtime';
 
-function setBootPhase(phase: string) {
-  const el = document.getElementById('boot-status');
-  if (el) el.textContent = phase;
-}
-
 const useAppBootstrap = () => {
   const [isBootstrapped, setIsBootstrapped] = useState(false);
+  const [bootPhase, setBootPhase] = useState('restoring');
   const initialiseNewChat = useInitialiseNewChat();
   const setChats = useStore((state) => state.setChats);
   const setTheme = useStore((state) => state.setTheme);
@@ -115,7 +111,7 @@ const useAppBootstrap = () => {
     };
 
     const bootstrap = async () => {
-      setBootPhase('rehydrating store');
+      setBootPhase('restoring');
       await useStore.persist.rehydrate();
 
       // Wire up local model runtime store access
@@ -143,7 +139,7 @@ const useAppBootstrap = () => {
       let indexedDbLoadFailed = false;
       let indexedDbLoadErrors: string[] = [];
       try {
-        setBootPhase('loading chat data');
+        setBootPhase('loading');
         indexedDbChatData = await loadChatData(useStore.getState());
       } catch (error) {
         indexedDbLoadFailed = true;
@@ -199,6 +195,7 @@ const useAppBootstrap = () => {
         // First launch with IndexedDB: move existing chat data to IndexedDB
         const chatDataState = createPersistedChatDataState(useStore.getState());
         try {
+          setBootPhase('saving');
           setChatDataWritesBlocked(false);
           await saveChatData(chatDataState);
           setIndexedDbMigrationComplete(true);
@@ -323,7 +320,7 @@ const useAppBootstrap = () => {
     };
   }, [initialiseNewChat, setApiKey, setChats, setCurrentChatIndex, setTheme]);
 
-  return isBootstrapped;
+  return { isBootstrapped, bootPhase };
 };
 
 export default useAppBootstrap;
