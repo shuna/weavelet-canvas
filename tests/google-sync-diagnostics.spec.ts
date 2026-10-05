@@ -1,6 +1,6 @@
 import { test, expect } from '@playwright/test';
 
-test.use({ headless: true, locale: 'ja-JP', baseURL: process.env.WEAVELET_TEST_URL ?? 'http://localhost:5189',
+test.use({ headless: true, hasTouch: true, locale: 'ja-JP', baseURL: process.env.WEAVELET_TEST_URL ?? 'http://localhost:5189',
   launchOptions: { executablePath: process.env.PLAYWRIGHT_CHROME_EXECUTABLE } });
 
 test('shows measured sync costs, compaction and an explicitly estimated reference in the debug panel', async ({ page }) => {
@@ -38,17 +38,31 @@ test('shows measured sync costs, compaction and an explicitly estimated referenc
   await expect(view.getByText('本体の参考最小数（推定）', { exact: true })).toBeVisible();
   await expect(view.getByText('参考最小数との差（ファイル）', { exact: true })).toBeVisible();
   await expect(view.getByText(/HTTPヘッダー、失敗した転送は含みません/)).toHaveCount(0);
-  const info = view.getByRole('button', { name: '計測方法と参考値について' });
+  const info = view.getByRole('button', { name: 'Info', exact: true });
+  const tooltip = page.getByRole('tooltip');
+  const height = await view.evaluate(element => element.getBoundingClientRect().height);
   await expect(info).toHaveAttribute('aria-expanded', 'false');
-  await info.click();
-  await expect(info).toHaveAttribute('aria-expanded', 'true');
-  await expect(view.getByText(/全体の最適値ではありません/)).toBeVisible();
-  await expect(view.getByText(/HTTPヘッダー、失敗した転送は含みません/)).toBeVisible();
-  expect(await view.evaluate(element => element.scrollWidth <= element.clientWidth)).toBe(true);
-  await view.screenshot({ path: 'test-results/google-sync-details-info.png' });
+  await info.hover();
+  await expect(tooltip).toBeVisible();
+  await expect(tooltip).toContainText('HTTPヘッダー、失敗した転送は含みません');
+  expect(await view.evaluate(element => element.getBoundingClientRect().height)).toBe(height);
+  expect(await tooltip.evaluate(element => {
+    const rect = element.getBoundingClientRect();
+    return rect.left >= 0 && rect.right <= window.innerWidth && rect.top >= 0 && rect.bottom <= window.innerHeight;
+  })).toBe(true);
+  await view.getByRole('heading', { name: '通信', exact: true }).hover();
+  await expect(tooltip).toHaveCount(0);
+  await info.tap();
+  await expect(tooltip).toBeVisible();
+  await expect(tooltip).toContainText('全体の最適値ではありません');
+  await page.screenshot({ path: 'test-results/google-sync-details-info.png' });
+  await view.getByRole('heading', { name: '通信', exact: true }).tap();
+  await expect(tooltip).toHaveCount(0);
   await info.focus();
   await page.keyboard.press('Enter');
+  await expect(tooltip).toBeVisible();
+  await page.keyboard.press('Escape');
   await expect(info).toHaveAttribute('aria-expanded', 'false');
-  await expect(view.getByText(/HTTPヘッダー、失敗した転送は含みません/)).toHaveCount(0);
+  await expect(tooltip).toHaveCount(0);
   await view.screenshot({ path: 'test-results/google-sync-details.png' });
 });
