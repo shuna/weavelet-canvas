@@ -1,5 +1,5 @@
 {
-  "evaluation_method": "既存24件のtrial_summaryは同一担当の自己点検。追加12件は事前定義した意味条件で実API評価予定。development/holdoutを分離し、参考文言との一致を品質判定に使わない。",
+  "evaluation_method": "既存24件のtrial_summaryは同一担当の自己点検であり正解データではない。追加12件を含む実API評価の記録はdocs/development/evaluations/bubble-summary-2026-10-05/report.md。development/holdoutを分離し、事前の意味条件と置換後の応答で評価した。参考文言との一致を品質判定に使わない。",
   "case_count": 36,
   "ratio_definition": "50%/25%は意味単位の構成を示す。トークン数の厳密な配分ではない。",
   "cases": [

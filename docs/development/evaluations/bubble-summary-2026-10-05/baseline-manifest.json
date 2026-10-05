@@ -15,7 +15,7 @@
   "primary_model": "anthropic/claude-opus-4.6",
   "endpoint": "https://openrouter.ai/api/v1/chat/completions",
   "main_compatibility_commit": "81f86947a8ced3fc731931f79ce380ade5c83b16",
-  "final_base_commit": "254c38b46f22544d44f0be67e3a8a47cff8ae29c",
+  "final_base_commit": "95bbf24ab9f5b2b652bc499f501b647950db9849",
   "prompt_snapshots": {
     "candidate1-bubbleSummaryPrompt.ts": "96c669ce42d2cae3e65e55ea92f7746e848757781eb83b682a6017b227bafbae",
     "candidate2-bubbleSummaryPrompt.ts": "d5a55ac16fddef3c7b3165a8b7eda0197dcf88a7c03982facb98eb3c44650554",
