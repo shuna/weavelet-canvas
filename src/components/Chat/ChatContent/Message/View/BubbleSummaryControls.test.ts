@@ -1,7 +1,8 @@
 import { beforeEach, expect, it, vi } from 'vitest';
 import Controls from './BubbleSummaryControls';
 const mocks = vi.hoisted(() => ({ value: {} as any, job: undefined as any, start: vi.fn(), open: vi.fn(), change: vi.fn() }));
-vi.mock('react', async importOriginal => ({ ...await importOriginal<any>(), useState: () => [false, mocks.open], useRef: () => ({ current: null }) }));
+vi.mock('react', async importOriginal => ({ ...await importOriginal<any>(), useState: () => [false, mocks.open], useMemo: (factory: any) => factory(), useRef: () => ({ current: null }) }));
+vi.mock('./useSummaryTokenCounts', () => ({ default: () => undefined, summaryTokenLabel: () => '' }));
 vi.mock('react-i18next', () => ({ useTranslation: () => ({ t: (key: string) => key }) }));
 vi.mock('@components/PopupModal', () => ({ default: () => null }));
 vi.mock('@components/SummarySettings', () => ({ SummarySettingsFields: () => null }));
