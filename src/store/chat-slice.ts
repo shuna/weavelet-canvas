@@ -41,6 +41,7 @@ export interface ChatSlice {
   toggleOmitNode: (chatIndex: number, messageIndex: number) => void;
   toggleProtectNode: (chatIndex: number, messageIndex: number) => void;
   toggleSummaryTarget: (chatIndex: number, messageIndex: number) => void;
+  removeBubbleSummary: (chatId: string, summaryId: string) => void;
   saveBubbleSummary: (chatId: string, summary: BubbleSummary) => void;
   setSummaryForSubmit: (chatId: string, summaryId: string, use: boolean) => void;
   setAllOmitted: (chatIndex: number, omitted: boolean) => void;
@@ -393,6 +394,10 @@ export const createChatSlice: StoreSlice<ChatSlice> = (set, get) => {
       const summaryTargets = { ...(chat.summaryTargets ?? {}) };
       if (summaryTargets[nodeId]) delete summaryTargets[nodeId]; else summaryTargets[nodeId] = true;
       set({ chats: updateChatNodeField(chats, chatIndex, 'summaryTargets', summaryTargets) });
+    },
+    removeBubbleSummary: (chatId, summaryId) => {
+      const chats = get().chats;
+      if (chats) set({ chats: chats.map(chat => chat.id === chatId ? { ...chat, summaries: chat.summaries?.filter(summary => summary.id !== summaryId) } : chat) });
     },
     saveBubbleSummary: (chatId: string, summary: BubbleSummary) => {
       const chats = get().chats;

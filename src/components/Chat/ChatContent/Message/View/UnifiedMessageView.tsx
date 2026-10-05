@@ -36,6 +36,7 @@ const UnifiedMessageView = memo(
     isEditState,
     editSessionKey,
     onOpenEvalTab,
+    summaryId,
   }: {
     role: string;
     content: ContentInterface[];
@@ -43,6 +44,7 @@ const UnifiedMessageView = memo(
     messageIndex: number;
     nodeId?: string;
     isEditState: boolean;
+    summaryId?: string;
     editSessionKey: string;
     onOpenEvalTab?: (tab?: TabId) => void;
   }) => {
@@ -100,6 +102,7 @@ const UnifiedMessageView = memo(
       nodeId,
       sticky: false,
       editSessionKey,
+      summaryId,
     });
     const isImageModel = useModelType(editLogic.model, editLogic.providerId) === 'image';
 
@@ -114,7 +117,8 @@ const UnifiedMessageView = memo(
 
     // ContentView handlers
     const handleDelete = () => {
-      removeMessageAtIndex(currentChatIndex, resolveCurrentMessageIndex());
+      if (summaryId) useStore.getState().removeBubbleSummary(currentChatId, summaryId);
+      else removeMessageAtIndex(currentChatIndex, resolveCurrentMessageIndex());
     };
     const handleMove = (direction: 'up' | 'down') => {
       moveMessage(currentChatIndex, resolveCurrentMessageIndex(), direction);
@@ -187,6 +191,7 @@ const UnifiedMessageView = memo(
             </div>
             <EditViewButtons
               sticky={false}
+              textOnly={!!summaryId}
               handleFileChange={editLogic.handleFileChange}
               handleImageDetailChange={editLogic.handleImageDetailChange}
               handleRemoveImage={editLogic.handleRemoveImage}
@@ -251,7 +256,7 @@ const UnifiedMessageView = memo(
               />
             </div>
             <ContentAttachments images={isEditState ? [] : validImageContents} />
-            {nodeId && currentChatId && (
+            {nodeId && currentChatId && !summaryId && (
               <>
                 <EvaluationPanel chatId={currentChatId} nodeId={nodeId} phase='pre-send' onOpenTab={onOpenEvalTab} />
                 <EvaluationPanel chatId={currentChatId} nodeId={nodeId} phase='post-receive' onOpenTab={onOpenEvalTab} />

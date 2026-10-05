@@ -15,6 +15,7 @@ import CommandPrompt from '../CommandPrompt';
 const EditViewButtons = memo(
   ({
     sticky = false,
+    textOnly = false,
     handleFileChange,
     handleImageDetailChange,
     handleRemoveImage,
@@ -41,6 +42,7 @@ const EditViewButtons = memo(
     role,
   }: {
     sticky?: boolean;
+    textOnly?: boolean;
     handleFileChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
     handleImageDetailChange: (index: number, e: string) => void;
     handleRemoveImage: (index: number) => void;
@@ -84,7 +86,7 @@ const EditViewButtons = memo(
         ? state.chats[state.currentChatIndex].messages.length - 1
         : 0
     );
-    const isImageModel = useModelType(model, providerId) === 'image';
+    const isImageModel = useModelType(model, providerId) === 'image' && !textOnly;
     const isAssistant = role === 'assistant';
     const isUser = role === 'user';
     const isNotLast = !sticky && messageIndex < lastMessageIndex;
@@ -240,7 +242,7 @@ const EditViewButtons = memo(
             {!sticky && isUser && (
               <>
                 {/* === Branch group (green, non-destructive) === */}
-                <div className='relative flex items-stretch' ref={branchMenuRef}>
+                {!textOnly && <div className='relative flex items-stretch' ref={branchMenuRef}>
                   <button
                     className={`btn btn-small btn-primary rounded-r-none border-r-0 ${
                       isGenerateDisabled || noModel ? 'cursor-not-allowed opacity-40' : ''
@@ -275,7 +277,7 @@ const EditViewButtons = memo(
                       {t('saveAsBranch')}
                     </button>
                   </div>
-                </div>
+                </div>}
 
                 {/* === Overwrite group (red, destructive) === */}
                 <div className='relative flex items-stretch' ref={generateMenuRef}>
