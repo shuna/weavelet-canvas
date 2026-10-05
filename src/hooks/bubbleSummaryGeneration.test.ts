@@ -57,3 +57,8 @@ describe('bubble summary auxiliary generation', () => {
     expect(original).toEqual(before);
   });
 });
+
+it('normalizes serialized output before returning it for storage', async () => {
+  mocks.completion.mockResolvedValue({ choices: [{ message: { content: JSON.stringify({ role: 'user', content: '# 要約\n\n本文' }) } }] });
+  expect(await generateBubbleSummary(chat(), [0], deps)).toBe('# 要約\n\n本文');
+});

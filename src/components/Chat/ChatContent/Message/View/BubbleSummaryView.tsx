@@ -1,5 +1,6 @@
 import { lazy, Suspense, type ReactNode } from 'react';
 import useStore from '@store/store';
+import { normalizeBubbleSummaryText } from '@utils/bubbleSummary';
 
 import { useBubbleSummary, useSummaryDisplay } from './bubbleSummaryDisplay';
 
@@ -19,15 +20,16 @@ export default function BubbleSummaryView({ nodeId, isCollapsed = false, childre
     </div>
     <div hidden={tab !== 'original'}>{children}</div>
   </>;
-  const previewText = summary.text.replace(/\s+/g, ' ').trim();
+  const text = normalizeBubbleSummaryText(summary.text);
+  const previewText = text.replace(/\s+/g, ' ').trim();
   const collapsedPreview = previewText.length > 280 ? `${previewText.slice(0, 280)}...` : previewText;
   return <section className='text-gray-800 dark:text-gray-100' onClick={event => event.stopPropagation()}>
-    {candidates.length > 1 && <label className='mb-3 block text-xs'>保存済み要約 <select aria-label='保存済み要約' className='rounded border bg-transparent p-1' value={summary.id} onChange={event => { const value = candidates.find(item => item.id === event.target.value); if (value) choose(chat.id, value, tab === 'summary'); }}>{candidates.map(value => <option key={value.id} value={value.id}>{value.sources.length}件 · {value.text.slice(0, 32)}</option>)}</select></label>}
+    {candidates.length > 1 && <label className='mb-3 block text-xs'>保存済み要約 <select aria-label='保存済み要約' className='rounded border bg-transparent p-1' value={summary.id} onChange={event => { const value = candidates.find(item => item.id === event.target.value); if (value) choose(chat.id, value, tab === 'summary'); }}>{candidates.map(value => <option key={value.id} value={value.id}>{value.sources.length}件 · {normalizeBubbleSummaryText(value.text).slice(0, 32)}</option>)}</select></label>}
     <div>
       <div hidden={tab !== 'original'}>{children}</div>
       <div hidden={tab !== 'summary'} data-summary-content className={`break-words rounded-2xl bg-white/60 text-gray-800 shadow-sm ring-1 ring-black/5 dark:bg-gray-900/20 dark:text-gray-100 dark:ring-white/10 ${isCollapsed ? 'px-4 pt-2.5 pb-2 md:px-5 md:pt-3 md:pb-2.5' : 'p-4'}`}>
         {isCollapsed ? <div data-summary-preview className='h-[4.5rem] overflow-hidden py-0 text-sm leading-6 text-gray-700 dark:text-gray-200 whitespace-pre-wrap break-words line-clamp-3'>{collapsedPreview}</div> : <div className='markdown prose w-full max-w-full break-words dark:prose-invert'>
-          {markdownMode ? <Suspense fallback={<span className='whitespace-pre-wrap'>{summary.text}</span>}><MarkdownRenderer content={summary.text} inlineLatex={inlineLatex} /></Suspense> : <span className='whitespace-pre-wrap'>{summary.text}</span>}
+          {markdownMode ? <Suspense fallback={<span className='whitespace-pre-wrap'>{text}</span>}><MarkdownRenderer content={text} inlineLatex={inlineLatex} /></Suspense> : <span className='whitespace-pre-wrap'>{text}</span>}
         </div>}
       </div>
     </div>

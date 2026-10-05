@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { ChatInterface, MessageInterface } from '@type/chat';
-import { applyBubbleSummariesForSubmit, resolveValidSummary } from './bubbleSummary';
+import { applyBubbleSummariesForSubmit, normalizeBubbleSummaryText, resolveValidSummary } from './bubbleSummary';
 
 const message = (role: 'user' | 'assistant' | 'system', text: string): MessageInterface => ({ role, content: [{ type: 'text', text }] });
 const chat = (): ChatInterface => ({
@@ -59,4 +59,21 @@ it('never replaces image or tool content, and keeps omitted tool exchanges', () 
   expect(applyBubbleSummariesForSubmit(value, 4)[0].content).toHaveLength(2);
   value.messages[2].content = [{ type: 'tool_result', tool_call_id: 'tool', content: 'result' }];
   expect(applyBubbleSummariesForSubmit(value, 4).some(message => message.content.some(part => part.type === 'tool_result'))).toBe(true);
+});
+
+describe('serialized summary output', () => {
+  it('decodes message wrappers, arrays, fenced JSON and JSON strings', () => {
+    const content = '# 要約\n\n条件を保持';
+    expect(normalizeBubbleSummaryText(JSON.stringify({ role: 'user', content }))).toBe(content);
+    expect(normalizeBubbleSummaryText('```json\n' + JSON.stringify({ role: 'user', content }) + '\n```')).toBe(content);
+    expect(normalizeBubbleSummaryText(JSON.stringify(content))).toBe(content);
+    expect(normalizeBubbleSummaryText(JSON.stringify([{ role: 'user', content }, { role: 'assistant', content: '提案' }]))).toBe(content + '\n\nアシスタント：\n提案');
+    const value = chat(); value.summaries![0].text = JSON.stringify({ role: 'user', content });
+    expect(applyBubbleSummariesForSubmit(value, 4)[0].content).toEqual([{ type: 'text', text: 'Past conversation summary:\n' + content }]);
+  });
+  it('preserves Markdown, literal escapes, unrelated JSON and incomplete output', () => {
+    for (const text of ['# 要約\n\n本文', String.raw`コードの \n を保持`, '{"setting":true}', '{"role":"user","content":"unfinished']) {
+      expect(normalizeBubbleSummaryText(text)).toBe(text);
+    }
+  });
 });

@@ -27,7 +27,7 @@ import {
 import { FavoriteModel, ProviderConfig, ProviderId } from '@type/provider';
 import { normalizeProviderConfig } from '@store/provider-helpers';
 import { applyBubbleSummariesForSubmit } from '@utils/bubbleSummary';
-import { isSummaryEligible } from '@utils/bubbleSummary';
+import { isSummaryEligible, normalizeBubbleSummaryText } from '@utils/bubbleSummary';
 import { buildBubbleSummaryPrompt } from '@utils/bubbleSummaryPrompt';
 
 type ProviderMap = Partial<Record<ProviderId, ProviderConfig>>;
@@ -363,7 +363,7 @@ export const generateBubbleSummary = async (
   const context = getModelContextInfo(model, chat.config.providerId, chat.config.modelSource).contextLength;
   if (!fitsContextWindow(await countTokens(request, model), context, chat.config.max_tokens)) throw new Error('要約対象がモデルのコンテキスト上限を超えています');
   const data = await getChatCompletion(resolved.endpoint, request, config, resolved.key, undefined, deps.apiVersion, signal, { auxiliary: true });
-  const text = data.choices[0]?.message.content?.trim();
+  const text = normalizeBubbleSummaryText(data.choices[0]?.message.content ?? '');
   if (!text) throw new Error('要約を生成できませんでした');
   await updateTotalTokenUsed(model, request, { role: 'assistant', content: [{ type: 'text', text }] }, chat.config.providerId);
   return text;
