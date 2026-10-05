@@ -3,10 +3,12 @@ import type { ChatInterface, BubbleSummary } from '@type/chat';
 import { createChatSlice } from './chat-slice';
 import { getSubmitContextMessages } from '@hooks/submitHelpers';
 import { prepareChatForExport } from '@utils/chatExport';
-import { useSummaryDisplay } from '@components/Chat/ChatContent/Message/View/bubbleSummaryDisplay';
+import { createElement } from 'react';
+import { renderToStaticMarkup } from 'react-dom/server';
+import { useBubbleSummary, useSummaryDisplay } from '@components/Chat/ChatContent/Message/View/bubbleSummaryDisplay';
 
 const state = vi.hoisted(() => ({ value: {} as any }));
-vi.mock('@store/store', () => ({ default: { getState: () => state.value } }));
+vi.mock('@store/store', () => ({ default: Object.assign((selector: any) => selector(state.value), { getState: () => state.value }) }));
 const source = (id: string, parentId: string | null, text: string) => ({ nodeId: id, parentId, role: 'user' as const, textParts: [text] });
 const summary = (id: string, sources: BubbleSummary['sources'], useForSubmit = false): BubbleSummary => ({ id, sources, mode: 'range', text: `${id} summary`, useForSubmit });
 const makeChat = (): ChatInterface => ({
@@ -17,9 +19,10 @@ const makeChat = (): ChatInterface => ({
   summaries: [summary('ab', [source('a', null, 'A'), source('b', 'a', 'B')], true)],
 });
 beforeEach(() => {
-  state.value = { chats: [makeChat()], omittedNodeMaps: {}, generatingSessions: {} };
+  state.value = { currentChatIndex: 0, chats: [makeChat()], omittedNodeMaps: {}, generatingSessions: {} };
   const set = (value: any) => Object.assign(state.value, typeof value === 'function' ? value(state.value) : value);
   Object.assign(state.value, createChatSlice(set, () => state.value));
+  state.value.currentChatIndex = 0;
   useSummaryDisplay.setState({ chosen: {} });
 });
 
@@ -60,6 +63,24 @@ describe('summary persistence and send selection', () => {
     useSummaryDisplay.getState().choose('chat', b, false);
     expect(state.value.chats[0].summaries.map((item: BubbleSummary) => item.useForSubmit)).toEqual([false, false]);
     expect(getSubmitContextMessages(state.value.chats[0].messages, 'append', 3, 'gpt-4o', 0).flatMap(message => message.content)).toContainEqual({ type: 'text', text: 'B' });
+  });
+  it('switches original, readable and compact within the same source range without changing source messages', () => {
+    const ab = state.value.chats[0].summaries[0];
+    const compact = { ...ab, id: 'compact', format: 'compact' as const, text: 'Compressed', useForSubmit: false };
+    const other = { ...summary('c', [source('c', 'b', 'C')]), format: 'compact' as const };
+    state.value.saveBubbleSummary('chat', compact); state.value.saveBubbleSummary('chat', other);
+    const original = structuredClone(state.value.chats[0].messages);
+    let display!: ReturnType<typeof useBubbleSummary>;
+    const read = () => renderToStaticMarkup(createElement(() => { display = useBubbleSummary('b'); return null; }));
+    read(); expect(display.tab).toBe('summary'); expect(display.compact?.id).toBe('compact');
+    display.changeTab('compact'); read(); expect(display.tab).toBe('compact'); expect(display.summary?.id).toBe('compact');
+    expect(state.value.chats[0].summaries.map((value: BubbleSummary) => value.useForSubmit)).toEqual([false, true, false]);
+    state.value.saveBubbleSummary('chat', { ...display.summary!, text: 'Edited compact' });
+    expect(getSubmitContextMessages(state.value.chats[0].messages, 'append', 3, 'gpt-4o', 0)[0].content).toContainEqual({ type: 'text', text: expect.stringContaining('Edited compact') });
+    display.changeTab('summary'); read(); expect(display.tab).toBe('summary'); expect(display.summary?.text).toBe('ab summary');
+    display.changeTab('original'); read(); expect(display.tab).toBe('original');
+    expect(state.value.chats[0].summaries.every((value: BubbleSummary) => !value.useForSubmit)).toBe(true);
+    expect(state.value.chats[0].messages).toEqual(original);
   });
   it('excludes hidden-branch source snapshots and target flags from visible-only export', () => {
     const chat = state.value.chats[0];

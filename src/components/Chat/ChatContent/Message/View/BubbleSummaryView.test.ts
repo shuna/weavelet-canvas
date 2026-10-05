@@ -7,28 +7,30 @@ vi.mock('react', async importOriginal => ({ ...await importOriginal<typeof impor
 vi.mock('@store/store', () => ({ default: (selector: any) => selector({ markdownMode: false, inlineLatex: false }) }));
 vi.mock('@utils/messageUtils', () => ({ countTokens: vi.fn(), loadEncoder: vi.fn().mockResolvedValue(undefined) }));
 vi.mock('./bubbleSummaryDisplay', () => ({ useBubbleSummary: () => mocks.value, useSummaryDisplay: (selector: any) => selector({ choose: mocks.choose }) }));
-beforeEach(() => { mocks.value = { chat: { id: 'chat', config: { model: 'model' } }, candidates: [], summary: { sources: [{ nodeId: 'a' }, { nodeId: 'b' }], format: 'compact', text: 'Compressed', useForSubmit: true }, range: { first: 0, last: 1 }, tab: 'summary' }; });
-it('keeps both original bubbles visible while compact history is sent', () => {
+beforeEach(() => { mocks.value = { chat: { id: 'chat', config: { model: 'model' } }, candidates: [], summary: { sources: [{ nodeId: 'a' }, { nodeId: 'b' }], format: 'compact', text: 'Compressed', useForSubmit: true }, range: { first: 0, last: 1 }, tab: 'compact' }; });
+it('shows compact text in the same pane as readable summaries and hides original bubbles', () => {
   for (const nodeId of ['a', 'b']) {
     const html = renderToStaticMarkup(createElement(BubbleSummaryView, { nodeId, children: 'Original' }));
-    expect(html).toContain('<div>Original</div>');
-    expect(html).not.toContain('<div hidden="">Original</div>');
-    if (nodeId === 'b') expect(html).toContain('送信に使用中');
+    expect(html).toContain('<div hidden="">Original</div>');
+    if (nodeId === 'b') {
+      expect(html).toContain('data-summary-content');
+      expect(html).toContain('Compressed');
+      expect(html).toContain('圧縮を編集');
+      expect(html).not.toContain('<details');
+    }
   }
 });
-it('keeps readable-summary display behavior and indicates disabled compact submission', () => {
-  mocks.value.summary.format = undefined;
-  expect(renderToStaticMarkup(createElement(BubbleSummaryView, { nodeId: 'b', children: 'Original' }))).toContain('<div hidden="">Original</div>');
+it('provides the same editing action for readable summaries and restores originals on original tab', () => {
+  mocks.value.summary.format = undefined; mocks.value.tab = 'summary';
+  expect(renderToStaticMarkup(createElement(BubbleSummaryView, { nodeId: 'b', children: 'Original' }))).toContain('要約を編集');
   mocks.value.summary.format = 'compact'; mocks.value.tab = 'original';
-  expect(renderToStaticMarkup(createElement(BubbleSummaryView, { nodeId: 'b', children: 'Original' }))).toContain('原文を送信');
+  expect(renderToStaticMarkup(createElement(BubbleSummaryView, { nodeId: 'b', children: 'Original' }))).toContain('<div>Original</div>');
 });
 
-it('selects a saved compact version for review without enabling submission', () => {
+it('lists saved versions only for the current format', () => {
   const compact = { ...mocks.value.summary, id: 'compact' };
   mocks.value.summary = { ...compact, id: 'readable', format: undefined };
-  mocks.value.candidates = [mocks.value.summary, compact];
-  const view = BubbleSummaryView({ nodeId: 'b', children: 'Original' }) as any;
-  const select = view.props.children[0].props.children[1];
-  select.props.onChange({ target: { value: 'compact' } });
-  expect(mocks.choose).toHaveBeenCalledWith('chat', compact, false);
+  mocks.value.candidates = [mocks.value.summary, compact]; mocks.value.tab = 'summary';
+  const html = renderToStaticMarkup(createElement(BubbleSummaryView, { nodeId: 'b', children: 'Original' }));
+  expect(html).not.toContain('保存済み要約');
 });

@@ -30,10 +30,14 @@ export function useBubbleSummary(nodeId?: string) {
   const summary = candidates.find(value => applied.some(item => item.summary.id === value.id))
     ?? candidates.find(value => value.id === chosen[`${chat?.id}:${nodeId}`]) ?? candidates[candidates.length - 1];
   const range = effectiveChat && summary ? resolveValidSummary(effectiveChat, summary, generating) : null;
-  const tab = applied.some(value => value.summary.id === summary?.id) ? 'summary' : 'original';
-  const changeTab = (value: 'original' | 'summary') => {
-    if (!chat || !summary) return;
-    useSummaryDisplay.getState().choose(chat.id, summary, value === 'summary');
+  const tab = applied.some(value => value.summary.id === summary?.id) ? summary?.format === 'compact' ? 'compact' : 'summary' : 'original';
+  const versions = candidates.filter(value => summary && value.sources.length === summary.sources.length && value.sources.every((source, index) => source.nodeId === summary.sources[index].nodeId));
+  const readable = versions.find(value => value.id === chosen[`${chat?.id}:${nodeId}`] && value.format !== 'compact') ?? versions.filter(value => value.format !== 'compact').at(-1);
+  const compact = versions.find(value => value.id === chosen[`${chat?.id}:${nodeId}`] && value.format === 'compact') ?? versions.filter(value => value.format === 'compact').at(-1);
+  const changeTab = (value: 'original' | 'summary' | 'compact') => {
+    const next = value === 'original' ? summary : value === 'compact' ? compact : readable;
+    if (!chat || !next) return;
+    useSummaryDisplay.getState().choose(chat.id, next, value !== 'original');
   };
-  return { chat, candidates, summary, effectiveChat, generating, range, tab, changeTab };
+  return { chat, candidates, summary, effectiveChat, generating, range, readable, compact, tab, changeTab };
 }

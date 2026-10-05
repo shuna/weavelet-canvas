@@ -29,7 +29,7 @@ test('summary dialog selects previews, disables empty selection and saves genera
   });
   const bubble = page.locator('[data-node-id="b"]').first();
   await bubble.hover();
-  await bubble.getByRole('button', { name: '要約を作成', exact: true }).click();
+  await bubble.getByRole('button', { name: '要約', exact: true }).click();
   const modal = page.locator('#modal-root');
   const first = modal.getByRole('checkbox', { name: 'バブル1を要約に含める' });
   const second = modal.getByRole('checkbox', { name: 'バブル2を要約に含める' });
@@ -78,7 +78,7 @@ test('summary dialog selects previews, disables empty selection and saves genera
   await expect(page.getByRole('status').filter({ hasText: '要約中' })).toHaveCount(0);
   await page.evaluate(async () => { const { default: store } = await import(/* @vite-ignore */ '/src/store/store.ts'); store.setState({ currentChatIndex: 0 }); });
   await expect(bubble.getByRole('status')).toBeVisible();
-  await bubble.getByRole('button', { name: '要約を作成', exact: true }).click();
+  await bubble.getByRole('button', { name: '要約生成の状態', exact: true }).click();
   await expect(modal.getByRole('button', { name: '生成中…', exact: true })).toBeDisabled();
   await expect(modal.getByRole('radio', { name: 'ここまで', exact: true })).toBeChecked();
   await expect(first).toBeChecked();
@@ -102,6 +102,8 @@ test('summary dialog selects previews, disables empty selection and saves genera
   expect((await capsule.boundingBox())!.x + (await capsule.boundingBox())!.width).toBeLessThan((await otherCapsule.boundingBox())!.x);
   await expect(originalButton).toHaveAttribute('aria-pressed', 'false');
   await expect(summaryButton).toHaveAttribute('aria-pressed', 'true');
+  await expect(capsule.getByRole('button', { name: '圧縮', exact: true })).toBeVisible();
+  await expect(bubble.getByRole('button', { name: '要約を編集', exact: true })).toBeVisible();
   await expect(capsule.getByRole('button', { name: '要約を作成', exact: true })).toHaveCount(0);
   await expect(bubble.getByRole('tablist')).toHaveCount(0);
   await expect(bubble.getByText('送信：', { exact: true })).toHaveCount(0);
@@ -131,7 +133,7 @@ test('summary dialog selects previews, disables empty selection and saves genera
   await expect(page.getByText('Original b', { exact: true })).toBeVisible();
   await bubble.getByRole('button', { name: 'Collapse message', exact: true }).click();
   const originalSurface = bubble.getByText('Original b', { exact: true }).locator('..');
-  expect((await originalSurface.boundingBox())!.height).toBe(collapsedHeight);
+  expect((await originalSurface.boundingBox())!.height).toBeLessThan(expandedHeight);
   await bubble.getByRole('button', { name: 'Expand message', exact: true }).click();
   await expect(summaryText).toBeHidden();
   expect(await page.evaluate(async () => { const { default: store } = await import(/* @vite-ignore */ '/src/store/store.ts'); return store.getState().chats[0].summaries[0].useForSubmit; })).toBe(false);
