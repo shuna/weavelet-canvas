@@ -25,14 +25,14 @@ function isLowbitQValidationRoute(): boolean {
 }
 
 function App() {
-  const { isBootstrapped, bootPhase } = useAppBootstrap();
+  const { isBootstrapped, bootPhase, bootProgress } = useAppBootstrap();
   useStreamRecovery();
   useOpenRouterVerification();
   useIosStatusBarScroll();
 
   React.useEffect(() => { document.getElementById('boot-status')?.remove(); }, []);
 
-  if (!isBootstrapped) return <BootstrapLoading phase={bootPhase} />;
+  if (!isBootstrapped) return <BootstrapLoading phase={bootPhase} progress={bootProgress} />;
 
   if (isLowbitQValidationRoute()) {
     return <LowbitQValidationPage />;

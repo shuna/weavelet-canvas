@@ -6,7 +6,15 @@
     "saving": "Saving conversations on this device…",
     "finalizing": "Preparing the workspace…",
     "description": "Preparing saved data. Large conversation histories may take longer to load.",
-    "waiting": "Still waiting for data to finish loading ({{seconds}} seconds). Please keep this window open."
+    "waiting": "Continuing the current operation ({{seconds}} seconds elapsed).",
+    "opening": "Opening the saved database…",
+    "lock": "Waiting for another window to finish saving…",
+    "reading": "Reading saved records…",
+    "restoringChats": "Restoring chats…",
+    "validating": "Checking conversation data integrity…",
+    "fingerprinting": "Checking saved chat state…",
+    "migrating": "Migrating legacy chats…",
+    "chatProgress": "Processed: {{completed}} / {{total}} chats"
   },
   "save": "Save",
   "generate": "Generate",
