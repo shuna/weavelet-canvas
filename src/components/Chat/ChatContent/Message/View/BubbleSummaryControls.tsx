@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next';
 import PopupModal from '@components/PopupModal';
 import { SummarySettingsFields } from '@components/SummarySettings';
 import SettingIcon from '@icon/SettingIcon';
+import DownChevronArrow from '@icon/DownChevronArrow';
 import useStore from '@store/store';
 import { isLocalModelConfig } from '@hooks/submitHelpers';
 import { isSummaryEligible } from '@utils/bubbleSummary';
@@ -13,6 +14,7 @@ import SyncDots from '@components/GoogleSync/SyncDots';
 import { startBubbleSummary, useBubbleSummaryJob, useSummaryGeneration } from './bubbleSummaryGeneration';
 
 export default function BubbleSummaryControls({ messageIndex }: { messageIndex: number }) {
+  const menuRef = useRef<HTMLDetailsElement>(null);
   const { t } = useTranslation();
   const [open, setOpen] = useState(false);
   const [dialogFormat, setDialogFormat] = useState<'compact' | undefined>();
@@ -21,13 +23,19 @@ export default function BubbleSummaryControls({ messageIndex }: { messageIndex: 
   const job = useBubbleSummaryJob(chat?.id, nodeId);
   const buttonClass = (active: boolean) => `shrink-0 whitespace-nowrap rounded-full px-2 py-1 text-xs transition-colors ${active ? 'bg-gray-100 text-gray-700 dark:bg-gray-700 dark:text-gray-200' : 'text-gray-400 hover:text-gray-600 dark:text-gray-500 dark:hover:text-gray-300'}`;
   return <>
-    <div role='group' aria-label='要約操作' className='flex shrink-0 items-center gap-0.5 rounded-full bg-white/80 px-1.5 py-0.5 shadow-sm ring-1 ring-black/5 backdrop-blur-sm dark:bg-gray-800/80 dark:ring-white/10'>
-      <button type='button' className={buttonClass(tab === 'original')} aria-pressed={tab === 'original'} onClick={event => { event.stopPropagation(); changeTab('original'); }}>原文</button>
+    <details ref={menuRef} className='relative shrink-0' onClick={event => event.stopPropagation()} onKeyDown={event => { if (event.key === 'Escape' && menuRef.current) menuRef.current.open = false; }}>
+      <summary aria-label='表示形式' className='flex cursor-pointer list-none items-center gap-1 whitespace-nowrap rounded-full bg-white/80 px-2.5 py-1 text-xs text-gray-600 shadow-sm ring-1 ring-black/5 dark:bg-gray-800/80 dark:text-gray-300 dark:ring-white/10 [&::-webkit-details-marker]:hidden'>
+        <span className='relative inline-block'><span className={job?.busy ? 'inline-block -translate-y-0.5' : ''}>{job?.busy ? job.format === 'compact' ? '圧縮' : '要約' : tab === 'compact' ? '圧縮' : tab === 'summary' ? '要約' : '原文'}</span>{job?.busy && <span role='status' className='absolute left-1/2 top-full -mt-1 -translate-x-1/2 text-[8px] leading-[6px]'><SyncDots label={job.format === 'compact' ? '圧縮生成中' : '要約生成中'} /></span>}</span>
+        <DownChevronArrow />
+      </summary>
+      <div role='group' aria-label='要約操作' className='absolute right-0 top-full z-50 mt-1 flex min-w-36 flex-col gap-1 rounded-lg border border-gray-200 bg-white p-1 shadow-lg dark:border-gray-600 dark:bg-gray-800'>
+      <button type='button' className={buttonClass(tab === 'original')} aria-pressed={tab === 'original'} onClick={event => { event.stopPropagation(); changeTab('original'); if (menuRef.current) menuRef.current.open = false; }}>原文</button>
       {(['summary', 'compact'] as const).map(value => {
         const busy = !!job?.busy && (job.format === 'compact' ? 'compact' : 'summary') === value;
         const label = value === 'compact' ? '圧縮' : '要約';
         return <button key={value} type='button' aria-label={label} aria-busy={busy} className={buttonClass(tab === value)} aria-pressed={tab === value} onClick={event => {
           event.stopPropagation();
+          if (menuRef.current) menuRef.current.open = false;
           if (job?.busy) return;
           if (range && (value === 'compact' ? compact : readable)) { changeTab(value); return; }
           if (!chat || !effectiveChat || !nodeId || !isSummaryEligible(chat.messages[messageIndex]) || effectiveChat.omittedNodes?.[nodeId] || generating.includes(nodeId)) return;
@@ -36,9 +44,10 @@ export default function BubbleSummaryControls({ messageIndex }: { messageIndex: 
         }}><span className='relative inline-block'><span className={busy ? 'inline-block -translate-y-0.5' : ''}>{label}</span>{busy && <span role='status' className='absolute left-1/2 top-full -mt-1 -translate-x-1/2 text-[8px] leading-[6px]'><SyncDots label={`${label}生成中`} /></span>}</span></button>;
       })}
 
-    <button type='button' aria-label='要約・圧縮の詳細設定' className={buttonClass(false)} onClick={event => { event.stopPropagation(); setDialogFormat(tab === 'compact' ? 'compact' : undefined); setOpen(true); }}><SettingIcon className='h-3 w-3' /></button>
+    <button type='button' aria-label='要約・圧縮の詳細設定' className={buttonClass(false)} onClick={event => { event.stopPropagation(); setDialogFormat(tab === 'compact' ? 'compact' : undefined); setOpen(true); if (menuRef.current) menuRef.current.open = false; }}><span className='flex items-center justify-center gap-1'><SettingIcon className='h-3 w-3' />詳細設定</span></button>
     {job?.error && <button type='button' className='px-1 text-xs text-gray-500 dark:text-gray-400' title={job.error} onClick={event => { event.stopPropagation(); setOpen(true); }}>要約失敗</button>}
     </div>
+    </details>
     {open && <SummaryDialog messageIndex={summary ? chat?.branchTree?.activePath.indexOf(summary.sources[summary.sources.length - 1]?.nodeId) ?? -1 : messageIndex} initialSummary={summary} initialFormat={dialogFormat} setOpen={setOpen} />}
   </>;
 }

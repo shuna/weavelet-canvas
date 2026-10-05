@@ -1,7 +1,7 @@
 import { beforeEach, expect, it, vi } from 'vitest';
 import Controls from './BubbleSummaryControls';
 const mocks = vi.hoisted(() => ({ value: {} as any, job: undefined as any, start: vi.fn(), open: vi.fn(), change: vi.fn() }));
-vi.mock('react', async importOriginal => ({ ...await importOriginal<any>(), useState: () => [false, mocks.open] }));
+vi.mock('react', async importOriginal => ({ ...await importOriginal<any>(), useState: () => [false, mocks.open], useRef: () => ({ current: null }) }));
 vi.mock('react-i18next', () => ({ useTranslation: () => ({ t: (key: string) => key }) }));
 vi.mock('@components/PopupModal', () => ({ default: () => null }));
 vi.mock('@components/SummarySettings', () => ({ SummarySettingsFields: () => null }));
@@ -19,7 +19,7 @@ beforeEach(() => {
 });
 function click(format: number) {
  const view = Controls({ messageIndex: 0 });
- const group = (view.props.children as any[])[0];
+ const group = (view.props.children as any[])[0].props.children[1];
  group.props.children[1][format].props.onClick({ stopPropagation: vi.fn() });
 }
 it.each([0, 1])('starts format %s immediately for only the clicked bubble', format => {
