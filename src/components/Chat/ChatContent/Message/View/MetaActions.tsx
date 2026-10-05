@@ -31,9 +31,9 @@ const MetaActions = memo(
 
 
     return (
-      <div className={`flex items-center gap-1 transition-opacity ${job?.busy || job?.error ? 'pointer-events-auto opacity-100' : 'pointer-events-none opacity-0 group-hover:pointer-events-auto group-hover:opacity-100'}`}>
+      <div className={`flex flex-wrap justify-end items-center gap-1 transition-opacity ${job?.busy || job?.error ? 'pointer-events-auto opacity-100' : 'pointer-events-none opacity-0 group-hover:pointer-events-auto group-hover:opacity-100'}`}>
         <BubbleSummaryControls messageIndex={messageIndex} />
-        <div role='group' aria-label='バブル操作' className='flex items-center gap-0.5 rounded-full bg-white/80 px-1.5 py-0.5 shadow-sm ring-1 ring-black/5 backdrop-blur-sm dark:bg-gray-800/80 dark:ring-white/10'>
+        <div role='group' aria-label='バブル操作' className='flex shrink-0 items-center gap-0.5 rounded-full bg-white/80 px-1.5 py-0.5 shadow-sm ring-1 ring-black/5 backdrop-blur-sm dark:bg-gray-800/80 dark:ring-white/10'>
           {showEvaluateButton && (
             <button
               type='button'

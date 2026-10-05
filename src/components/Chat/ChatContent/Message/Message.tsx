@@ -201,7 +201,7 @@ const Message = React.memo(
         >
           {sticky ? (
             <>
-              <div className='flex items-center gap-2.5'>
+              <div className='flex flex-wrap items-center gap-2.5'>
                 <Avatar role={role} />
                 {advancedMode && (
                   <RoleSelector role={role} sticky allowSystem={false} />
@@ -222,12 +222,12 @@ const Message = React.memo(
             </>
           ) : (
             <>
-              <div className='flex items-center gap-2.5'>
+              <div className='flex flex-wrap items-center gap-2.5'>
                 <Avatar role={role} />
                 {advancedMode && resolvedNodeId && (
                   <RoleSelector role={role} nodeId={resolvedNodeId} messageIndex={messageIndex} allowSystem={messageIndex === 0} />
                 )}
-                <div className='ml-auto'>
+                <div className='ml-auto min-w-0 max-w-full'>
                   <MetaActions
                     messageIndex={messageIndex}
                     isOmitted={isOmitted}
