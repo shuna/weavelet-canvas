@@ -1,4 +1,4 @@
-import { useId, useState } from 'react';
+import { useState } from 'react';
 import useCloudAuthStore from '@store/cloud-auth-store';
 import { compactGoogleSyncHistory, isGoogleSyncUnlocked } from '@store/storage/GoogleCloudStorage';
 import { showToast } from '@utils/showToast';
@@ -6,6 +6,7 @@ import { useTranslation } from 'react-i18next';
 import { useGoogleSyncDiagnostics } from '@store/storage/google/diagnostics';
 import { useGoogleSyncProgress } from '@store/storage/google/progress';
 import { getSyncMetrics } from '@store/storage/google/metrics';
+import { InfoTooltip } from '@components/ConfigMenu/fields';
 
 const size = (bytes: number) => bytes >= 1024 * 1024
   ? `${(bytes / (1024 * 1024)).toFixed(2)} MiB` : `${(bytes / 1024).toFixed(1)} KiB`;
@@ -17,8 +18,6 @@ export default function GoogleSyncDiagnostics() {
   const diagnostics = useGoogleSyncDiagnostics();
   const folderId = useCloudAuthStore(state => state.fileId);
   const [compacting, setCompacting] = useState(false);
-  const [showInfo, setShowInfo] = useState(false);
-  const infoId = useId();
   const progress = useGoogleSyncProgress();
   const metrics = diagnostics.active ? getSyncMetrics() : diagnostics.metrics;
   const history = diagnostics.history;
@@ -33,14 +32,11 @@ export default function GoogleSyncDiagnostics() {
       </summary>
       <div className='mt-2 flex items-center justify-between gap-2'>
         <span>{diagnostics.active ? t(`progress.${progress.phase}`) : diagnostics.observed ? t('debug.elapsed', { time: seconds(diagnostics.elapsedMs) }) : t('debug.noMeasurement')}</span>
-        <button type='button' aria-label={String(t('debug.about'))} aria-expanded={showInfo} aria-controls={infoId}
-          className='inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full border border-gray-400 font-semibold hover:bg-gray-100 dark:hover:bg-gray-800'
-          onClick={() => setShowInfo(value => !value)}>i</button>
+        <InfoTooltip text={<div className='space-y-2'>
+          <p>{t('debug.measurement')}</p>
+          <p>{t('debug.referenceHelp')}</p>
+        </div>} />
       </div>
-      {showInfo && <div id={infoId} className='mt-2 space-y-2 rounded bg-gray-100 p-2 leading-relaxed dark:bg-gray-800'>
-        <p>{t('debug.measurement')}</p>
-        <p>{t('debug.referenceHelp')}</p>
-      </div>}
       {diagnostics.observed && <div className='mt-2 space-y-3 break-words' aria-live='polite'>
         <section>
           <h3 className='mb-1 font-semibold'>{t('debug.sections.transfer')}</h3>
