@@ -348,7 +348,7 @@ export const generateTitleForChat = async (
 export const generateBubbleSummary = async (
   chat: ChatInterface,
   sourceIndexes: number[],
-  deps: TitleGenerationDeps & { summaryConfig?: ConfigInterface },
+  deps: TitleGenerationDeps & { summaryConfig?: ConfigInterface; summaryFormat?: 'compact' },
   signal?: AbortSignal
 ): Promise<string> => {
   const modelConfig = deps.summaryConfig ?? chat.config;
@@ -360,13 +360,14 @@ export const generateBubbleSummary = async (
   assertAuxiliaryEndpoint(modelConfig.openRouter, resolved.endpoint);
   if ((!resolved.key || resolved.key.length === 0) && resolved.endpoint === officialAPIEndpoint) throw new Error(deps.t('noApiKeyWarning'));
   const config = { ...modelConfig, openRouter: { routing: hardOpenRouterConstraints(modelConfig.openRouter), responseCache: { mode: 'off' as const } } };
-  const request: MessageInterface[] = [{ role: 'user', content: [{ type: 'text', text: buildBubbleSummaryPrompt(messages) }] }];
+  const request: MessageInterface[] = [{ role: 'user', content: [{ type: 'text', text: buildBubbleSummaryPrompt(messages, deps.summaryFormat) }] }];
   const context = getModelContextInfo(model, modelConfig.providerId, modelConfig.modelSource).contextLength;
   if (!fitsContextWindow(await countTokens(request, model), context, modelConfig.max_tokens)) throw new Error('要約対象がモデルのコンテキスト上限を超えています');
   const data = await getChatCompletion(resolved.endpoint, request, config, resolved.key, undefined, deps.apiVersion, signal, { auxiliary: true });
   const text = normalizeBubbleSummaryText(data.choices[0]?.message.content ?? '');
   if (!text) throw new Error('要約を生成できませんでした');
   await updateTotalTokenUsed(model, request, { role: 'assistant', content: [{ type: 'text', text }] }, modelConfig.providerId);
+  if (data.choices[0]?.finish_reason === 'length') throw new Error('出力上限で要約が途中で終了しました。上限を調整して生成し直してください');
   return text;
 };
 

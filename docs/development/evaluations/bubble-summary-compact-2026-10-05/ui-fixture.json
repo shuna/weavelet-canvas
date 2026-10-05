@@ -1,0 +1,229 @@
+{
+  "version": 3,
+  "folders": {},
+  "chats": [
+    {
+      "id": "099d532c-08fb-4f3d-b42b-da73504316f5",
+      "title": "AI圧縮 UI検証（合成ケース）",
+      "titleSet": true,
+      "imageDetail": "auto",
+      "config": {
+        "model": "anthropic/claude-opus-4.6",
+        "providerId": "openrouter",
+        "modelSource": "remote",
+        "max_tokens": 2048,
+        "temperature": 1,
+        "top_p": 1,
+        "presence_penalty": 0,
+        "frequency_penalty": 0,
+        "reasoning_effort": "none",
+        "force_reasoning": true,
+        "openRouter": {
+          "responseCache": {
+            "mode": "off"
+          }
+        }
+      },
+      "messages": [
+        {
+          "role": "user",
+          "content": [
+            {
+              "type": "text",
+              "text": "文章の長さは200字以内、日本語の敬体、見出しなしでお願いします。原因Aはログにタイムアウトと出ています。Bはまだ分かりません。"
+            }
+          ]
+        },
+        {
+          "role": "assistant",
+          "content": [
+            {
+              "type": "text",
+              "text": "Aはタイムアウトです。Bは通信断の可能性があります。両方で再試行を3回にする案があります。"
+            }
+          ]
+        },
+        {
+          "role": "user",
+          "content": [
+            {
+              "type": "text",
+              "text": "Aの説明だけ採用します。Bの通信断は未採用の仮説として残してください。再試行を変える案は不採用です。修正は表示だけです。文体については敬体だけ常体に変えます。長さと見出しの条件はそのままです。原因が未確定の部分を断定しないで、次に必要なログについて説明してください。"
+            }
+          ]
+        }
+      ],
+      "branchTree": {
+        "nodes": {
+          "32a0af38-b964-42dc-bd27-5527fc0c8640": {
+            "id": "32a0af38-b964-42dc-bd27-5527fc0c8640",
+            "parentId": null,
+            "role": "user",
+            "contentHash": "19eoyog",
+            "createdAt": 0
+          },
+          "f360400d-0c75-4357-8ece-e7a7983a7876": {
+            "id": "f360400d-0c75-4357-8ece-e7a7983a7876",
+            "parentId": "32a0af38-b964-42dc-bd27-5527fc0c8640",
+            "role": "assistant",
+            "contentHash": "c1lbk8",
+            "createdAt": 1
+          },
+          "54a8fb00-d3e0-4a9e-8894-a81b3b47ea21": {
+            "id": "54a8fb00-d3e0-4a9e-8894-a81b3b47ea21",
+            "parentId": "f360400d-0c75-4357-8ece-e7a7983a7876",
+            "role": "user",
+            "contentHash": "4fzkf0",
+            "createdAt": 2
+          }
+        },
+        "rootId": "32a0af38-b964-42dc-bd27-5527fc0c8640",
+        "activePath": [
+          "32a0af38-b964-42dc-bd27-5527fc0c8640",
+          "f360400d-0c75-4357-8ece-e7a7983a7876",
+          "54a8fb00-d3e0-4a9e-8894-a81b3b47ea21"
+        ]
+      },
+      "summaries": [
+        {
+          "id": "4e037569-097a-4b4f-b171-dd6e73c4326b",
+          "mode": "range",
+          "sources": [
+            {
+              "nodeId": "32a0af38-b964-42dc-bd27-5527fc0c8640",
+              "parentId": null,
+              "role": "user",
+              "textParts": [
+                "文章の長さは200字以内、日本語の敬体、見出しなしでお願いします。原因Aはログにタイムアウトと出ています。Bはまだ分かりません。"
+              ]
+            },
+            {
+              "nodeId": "f360400d-0c75-4357-8ece-e7a7983a7876",
+              "parentId": "32a0af38-b964-42dc-bd27-5527fc0c8640",
+              "role": "assistant",
+              "textParts": [
+                "Aはタイムアウトです。Bは通信断の可能性があります。両方で再試行を3回にする案があります。"
+              ]
+            },
+            {
+              "nodeId": "54a8fb00-d3e0-4a9e-8894-a81b3b47ea21",
+              "parentId": "f360400d-0c75-4357-8ece-e7a7983a7876",
+              "role": "user",
+              "textParts": [
+                "Aの説明だけ採用します。Bの通信断は未採用の仮説として残してください。再試行を変える案は不採用です。修正は表示だけです。文体については敬体だけ常体に変えます。長さと見出しの条件はそのままです。原因が未確定の部分を断定しないで、次に必要なログについて説明してください。"
+              ]
+            }
+          ],
+          "text": "原因A：タイムアウト（ログで確認済み、ユーザー採用済み）。原因B：不明（アシスタント提案の通信断は未採用の仮説）。再試行回数変更案は不採用。修正対象は表示のみ。未確定の原因は断定しない。次に必要なログについて説明する必要がある（未回答）。\n\n後続応答の形式指定：200字以内、日本語の常体（当初の敬体から変更）、見出しなし。",
+          "format": "compact",
+          "useForSubmit": false,
+          "generation": {
+            "model": "anthropic/claude-opus-4.6",
+            "providerId": "openrouter",
+            "createdAt": 1791166204417,
+            "settings": {
+              "model": "anthropic/claude-opus-4.6",
+              "providerId": "openrouter",
+              "modelSource": "remote",
+              "max_tokens": 2048,
+              "temperature": 1,
+              "top_p": 1,
+              "presence_penalty": 0,
+              "frequency_penalty": 0,
+              "reasoning_effort": "none",
+              "force_reasoning": true,
+              "openRouter": {
+                "responseCache": {
+                  "mode": "off"
+                }
+              }
+            }
+          }
+        },
+        {
+          "id": "cdfefb0a-afc1-4704-b78a-8b687adddeec",
+          "mode": "range",
+          "sources": [
+            {
+              "nodeId": "32a0af38-b964-42dc-bd27-5527fc0c8640",
+              "parentId": null,
+              "role": "user",
+              "textParts": [
+                "文章の長さは200字以内、日本語の敬体、見出しなしでお願いします。原因Aはログにタイムアウトと出ています。Bはまだ分かりません。"
+              ]
+            },
+            {
+              "nodeId": "f360400d-0c75-4357-8ece-e7a7983a7876",
+              "parentId": "32a0af38-b964-42dc-bd27-5527fc0c8640",
+              "role": "assistant",
+              "textParts": [
+                "Aはタイムアウトです。Bは通信断の可能性があります。両方で再試行を3回にする案があります。"
+              ]
+            },
+            {
+              "nodeId": "54a8fb00-d3e0-4a9e-8894-a81b3b47ea21",
+              "parentId": "f360400d-0c75-4357-8ece-e7a7983a7876",
+              "role": "user",
+              "textParts": [
+                "Aの説明だけ採用します。Bの通信断は未採用の仮説として残してください。再試行を変える案は不採用です。修正は表示だけです。文体については敬体だけ常体に変えます。長さと見出しの条件はそのままです。原因が未確定の部分を断定しないで、次に必要なログについて説明してください。"
+              ]
+            }
+          ],
+          "text": "文章は200字以内、日本語の常体、見出しなしで書く。\n\n原因A：ログにタイムアウトと記録されており、確定事実として採用済み。\n原因B：不明。通信断はアシスタントの未採用仮説として残っている。ユーザーは採用していない。\n\n再試行回数を変える案は不採用。修正対象は表示のみ。原因が未確定の部分は断定しない。\n\n次の応答では、原因特定のために次に必要なログについて説明する必要がある。",
+          "useForSubmit": true,
+          "generation": {
+            "model": "anthropic/claude-opus-4.6",
+            "providerId": "openrouter",
+            "createdAt": 1791165803996,
+            "settings": {
+              "model": "anthropic/claude-opus-4.6",
+              "providerId": "openrouter",
+              "modelSource": "remote",
+              "max_tokens": 2048,
+              "temperature": 1,
+              "top_p": 1,
+              "presence_penalty": 0,
+              "frequency_penalty": 0,
+              "reasoning_effort": "none",
+              "force_reasoning": true,
+              "openRouter": {
+                "responseCache": {
+                  "mode": "off"
+                }
+              }
+            }
+          }
+        }
+      ]
+    }
+  ],
+  "contentStore": {
+    "19eoyog": {
+      "content": [
+        {
+          "type": "text",
+          "text": "文章の長さは200字以内、日本語の敬体、見出しなしでお願いします。原因Aはログにタイムアウトと出ています。Bはまだ分かりません。"
+        }
+      ],
+      "refCount": 1
+    },
+    "c1lbk8": {
+      "content": [
+        {
+          "type": "text",
+          "text": "Aはタイムアウトです。Bは通信断の可能性があります。両方で再試行を3回にする案があります。"
+        }
+      ],
+      "refCount": 1
+    },
+    "4fzkf0": {
+      "content": [
+        {
+          "type": "text",
+          "text": "Aの説明だけ採用します。Bの通信断は未採用の仮説として残してください。再試行を変える案は不採用です。修正は表示だけです。文体については敬体だけ常体に変えます。長さと見出しの条件はそのままです。原因が未確定の部分を断定しないで、次に必要なログについて説明してください。"
+        }
+      ],
+      "refCount": 1
+    }
+  }
+}

@@ -83,3 +83,14 @@ describe('serialized summary output', () => {
     }
   });
 });
+
+it('keeps compact opt-in and carries the response-style instruction into actual history replacement', () => {
+  const value = chat();
+  value.summaries![0].format = 'compact';
+  value.summaries![0].useForSubmit = false;
+  expect(isBubbleSummary(value.summaries![0])).toBe(true);
+  expect(isBubbleSummary({ ...value.summaries![0], format: 'unknown' })).toBe(false);
+  expect(applyBubbleSummariesForSubmit(value, 4)[0].content).toEqual(value.messages[0].content);
+  value.summaries![0].useForSubmit = true;
+  expect(applyBubbleSummariesForSubmit(value, 4)[0].content[0]).toMatchObject({ text: expect.stringContaining('retained language, tone, structure and length') });
+});
