@@ -145,12 +145,7 @@
       "failed": "失敗"
     },
     "elapsed": "同期全体: {{time}}",
-    "normal": "通常の送受信: ↑ {{sent}} / ↓ {{received}}",
-    "compactionBytes": "集約の送信: {{sent}} / 削除前の検証受信: {{received}}",
-    "packBytes": "集約の取得: 索引 {{index}} / 本体 {{body}}",
     "packAccess": "集約本体: 取得省略 {{skipped}}回 / 取得 {{read}}回（検証を除く）",
-    "processing": "処理時間（累計）: 圧縮 {{compression}} / 暗号処理 {{crypto}} / ローカル保存・読込 {{cache}}",
-    "compaction": "今回の集約判断",
     "completedGroups": "完了 {{groups}}グループ",
     "compactionStatus": {
       "notChecked": "未判定",
@@ -167,14 +162,38 @@
     },
     "lastCompaction": "直近の集約（{{time}}）: 対象元ファイル {{before}} → 新規 {{after}} / {{reduction}}削減",
     "observation": "履歴の最終確認: {{time}}",
-    "history": "未集約 {{count}} / 閾値 {{threshold}}件 · 基準超過 {{excess}}件",
-    "packs": "集約済み: 索引 {{indexes}} / 本体 {{bodies}}ファイル · 1 MiB未満の集約 {{small}}個",
-    "reference": "本体の参考最小数 {{files}} / 現状との差 {{excess}}ファイル（推定）",
-    "cleanup": "元ファイルの削除確認対象: {{count}}（既に削除済みの対象を含む場合があります）",
     "measurement": "容量と速度は完了したファイル本体を計測します。HTTPヘッダー、失敗した転送は含みません。並行通信の時間は重複を除き、処理時間は累計で表示します。",
-    "referenceHelp": "参考最小数は集約済みの圧縮量を4 MiBの本体へ詰めた場合の推定です。索引・未集約履歴・再圧縮効果を含まず、全体の最適値ではありません。",
+    "referenceHelp": "参考最小数は集約済みの圧縮量を4 MiBの本体へ詰めた場合の推定です。索引・未集約履歴・再圧縮効果を含まず、全体の最適値ではありません。 元ファイルの削除確認対象には、既に削除済みのものが含まれる場合があります。",
     "compactNow": "今すぐファイルを集約",
     "compacting": "ファイルを集約中",
-    "compactCompleted": "同期ファイルの集約が完了しました。"
+    "compactCompleted": "同期ファイルの集約が完了しました。",
+    "about": "計測方法と参考値について",
+    "sections": {
+      "transfer": "通信",
+      "breakdown": "通信内訳",
+      "processing": "処理時間（累計）",
+      "compaction": "集約",
+      "history": "履歴とファイル構成"
+    },
+    "purpose": "用途",
+    "transferPurpose": {
+      "normal": "通常",
+      "compaction": "集約",
+      "verification": "削除前の検証",
+      "pack-index": "集約索引の取得",
+      "pack": "集約本体の取得"
+    },
+    "compression": "圧縮",
+    "crypto": "暗号処理",
+    "cache": "ローカル保存・読込",
+    "unaggregated": "未集約 / 集約基準",
+    "thresholdCount": "{{count}} / {{threshold}}件",
+    "overThreshold": "基準超過（件）",
+    "indexes": "集約索引（ファイル）",
+    "bodies": "集約本体（ファイル）",
+    "smallPacks": "1 MiB未満の集約（個）",
+    "referenceFiles": "本体の参考最小数（推定）",
+    "excessFiles": "参考最小数との差（ファイル）",
+    "cleanupTargets": "元ファイルの削除確認対象"
   }
 }
