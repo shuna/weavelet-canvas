@@ -4,6 +4,7 @@ import { buildBubbleSummaryPrompt } from './bubbleSummaryPrompt';
 import corpus from '../../tests/fixtures/bubble-summary-prompt-cases.json';
 
 // These cases verify request construction; reference summaries are self-reviewed, not API outputs.
+// Real-model semantic and downstream observations: docs/development/evaluations/bubble-summary-2026-10-05/report.md.
 describe('bubble summary prompt selection and input framing', () => {
   it.each(corpus.cases)('$id: $composition', testCase => {
     const input = Array.isArray(testCase.input) ? testCase.input : [testCase.input];
