@@ -23,8 +23,8 @@ export default function BubbleSummaryControls({ messageIndex }: { messageIndex: 
   return <>
     <div role='group' aria-label='要約操作' className='flex items-center gap-0.5 rounded-full bg-white/80 px-1.5 py-0.5 shadow-sm ring-1 ring-black/5 backdrop-blur-sm dark:bg-gray-800/80 dark:ring-white/10'>
     {summary ? <>
-      <button type='button' className={buttonClass(tab === 'original')} aria-pressed={tab === 'original'} onClick={event => { event.stopPropagation(); changeTab('original'); }}>原文</button>
-      <button type='button' hidden={!!job?.busy} className={buttonClass(tab === 'summary')} aria-pressed={tab === 'summary'} onClick={event => { event.stopPropagation(); if (range && tab === 'original') changeTab('summary'); else setOpen(true); }}>要約</button>
+      <button type='button' className={buttonClass(tab === 'original')} aria-pressed={tab === 'original'} onClick={event => { event.stopPropagation(); changeTab('original'); }}>{summary.format === 'compact' ? '原文送信' : '原文'}</button>
+      <button type='button' hidden={!!job?.busy} className={buttonClass(tab === 'summary')} aria-pressed={tab === 'summary'} onClick={event => { event.stopPropagation(); if (range && tab === 'original') changeTab('summary'); else setOpen(true); }}>{summary.format === 'compact' ? '圧縮送信' : '要約'}</button>
       {job?.busy && <span role='status' className='flex items-center text-xs text-gray-500 dark:text-gray-400'>要約中<SyncDots label='要約生成中' /></span>}
     </> : <>
       <button type='button' hidden={!!job?.busy} className={buttonClass(target)} aria-pressed={target} disabled={!target && !canSelect} aria-label={target ? '要約対象から外す' : '要約に含める'} title={target ? '要約対象から外す' : '要約に含める'} onClick={event => { event.stopPropagation(); useStore.getState().toggleSummaryTarget(useStore.getState().currentChatIndex, messageIndex); }}>要約</button>
@@ -48,6 +48,7 @@ function SummaryDialog({ messageIndex, initialSummary, setOpen }: { messageIndex
   const [mode, setMode] = useState<BubbleSummary['mode']>(job ? job.mode : initialSummary?.mode ?? 'single');
   const [selected, setSelected] = useState<string[]>(() => job ? job.sourceNodeIds : initialSummary ? initialSummary.sources.map(source => source.nodeId) : endpoint ? [endpoint] : []);
   const summaryConfig = useStore(state => state.bubbleSummaryConfig);
+  const [format, setFormat] = useState<'compact' | undefined>(job ? job.format : initialSummary?.format);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const busy = !!job?.busy;
   const close = () => setOpen(false);
@@ -74,7 +75,7 @@ function SummaryDialog({ messageIndex, initialSummary, setOpen }: { messageIndex
   const generate = () => {
     if (busy || reason) return;
     const state = useStore.getState();
-    void startBubbleSummary(effectiveChat, indices, mode, endpoint!, { favoriteModels: state.favoriteModels, providers: state.providers, fallbackProvider: { endpoint: state.apiEndpoint, key: state.apiKey }, apiVersion: state.apiVersion, summaryConfig: state.bubbleSummaryConfig, t });
+    void startBubbleSummary(effectiveChat, indices, mode, endpoint!, { favoriteModels: state.favoriteModels, providers: state.providers, fallbackProvider: { endpoint: state.apiEndpoint, key: state.apiKey }, apiVersion: state.apiVersion, summaryConfig: state.bubbleSummaryConfig, summaryFormat: format, t });
     if (useSummaryGeneration.getState().jobs[`${chat.id}:${endpoint}`]?.busy) setOpen(false);
   };
   if (settingsOpen) return <ConfigMenu auxiliary config={summaryConfig ?? generationConfig} setConfig={useStore.getState().setBubbleSummaryConfig} imageDetail='auto' setImageDetail={() => {}} setIsModalOpen={setSettingsOpen} />;
@@ -82,7 +83,9 @@ function SummaryDialog({ messageIndex, initialSummary, setOpen }: { messageIndex
     footerEndContent={<><button type='button' className='btn btn-neutral' onClick={close}>{busy ? '閉じる' : 'キャンセル'}</button><button type='button' className={`btn ${busy || reason ? 'btn-neutral cursor-not-allowed opacity-50' : 'btn-primary'}`} disabled={busy || !!reason} onClick={() => void generate()}>{busy ? '生成中…' : '要約を生成'}</button></>}>
     <div className='min-w-[18rem] space-y-3 p-5 text-sm text-gray-900 dark:text-gray-300'>
       <div className='flex flex-wrap gap-3'>{(['single', 'through', 'range'] as const).map(value => <label key={value} className='flex cursor-pointer items-center gap-1 text-gray-600 dark:text-gray-400'><input type='radio' className='accent-blue-600' name='summary-mode' checked={mode === value} disabled={busy} onChange={() => chooseMode(value)} />{value === 'single' ? 'このバブル' : value === 'through' ? 'ここまで' : '選択範囲'}</label>)}</div>
-      <p className='text-xs text-gray-500 dark:text-gray-400'>原文は保持されます。生成後は要約を表示・送信します。「原文」で原文の表示・送信に戻せます。先頭のシステム指示は要約しません。</p>
+      <label className='block'>要約の形式 <select aria-label='要約の形式' className='rounded border bg-transparent p-1' value={format ?? 'readable'} disabled={busy} onChange={event => setFormat(event.target.value === 'compact' ? 'compact' : undefined)}><option value='readable'>読みやすい要約</option><option value='compact'>AI投入用の圧縮（実験）</option></select></label>
+      {format === 'compact' && <p className='text-xs'>文体・ニュアンスの保持を試みます。原文と異なる内容や後続応答になる場合があります。生成後に内容を確認し、「圧縮送信」で使用してください。原文の表示は保持します。短い入力ではトークンが増える場合があります。</p>}
+      <p className='text-xs text-gray-500 dark:text-gray-400'>原文は保持されます。読みやすい要約は生成後に表示・送信します。「原文」で原文の表示・送信に戻せます。先頭のシステム指示は要約しません。</p>
       {initialSummary?.generation && <p className='break-all text-xs text-gray-500 dark:text-gray-400'>表示中の要約を生成した設定: {initialSummary.generation.model} · {initialSummary.generation.providerId ?? '既定のAPI'} · 温度 {initialSummary.generation.settings.temperature} · 出力上限 {initialSummary.generation.settings.max_tokens || 'モデル既定'} · 思考 {initialSummary.generation.settings.reasoning_effort ?? 'モデル既定'}</p>}
       <fieldset disabled={busy} className='space-y-2 rounded border border-gray-200 p-3 dark:border-gray-600'>
         <legend className='px-1'>要約の生成設定</legend>

@@ -75,3 +75,15 @@ it('normalizes serialized output before returning it for storage', async () => {
   mocks.completion.mockResolvedValue({ choices: [{ message: { content: JSON.stringify({ role: 'user', content: '# 要約\n\n本文' }) } }] });
   expect(await generateBubbleSummary(chat(), [0], deps)).toBe('# 要約\n\n本文');
 });
+
+it('builds the opt-in compact prompt in one auxiliary call', async () => {
+  await generateBubbleSummary(chat(), [0], { ...deps, summaryFormat: 'compact' });
+  expect(mocks.completion).toHaveBeenCalledOnce();
+  expect(mocks.completion.mock.calls[0][1][0].content[0].text).toContain('AI投入');
+});
+
+it('rejects a truncated summary and records its generation usage', async () => {
+  mocks.completion.mockResolvedValue({ choices: [{ finish_reason: 'length', message: { content: 'Incomplete' } }] });
+  await expect(generateBubbleSummary(chat(), [0], { ...deps, summaryFormat: 'compact' })).rejects.toThrow('出力上限');
+  expect(mocks.usage).toHaveBeenCalledOnce();
+});
