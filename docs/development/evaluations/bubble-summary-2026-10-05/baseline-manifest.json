@@ -13,5 +13,24 @@
   },
   "cost_cap_usd": 10,
   "primary_model": "anthropic/claude-opus-4.6",
-  "endpoint": "https://openrouter.ai/api/v1/chat/completions"
+  "endpoint": "https://openrouter.ai/api/v1/chat/completions",
+  "main_compatibility_commit": "81f86947a8ced3fc731931f79ce380ade5c83b16",
+  "final_base_commit": "254c38b46f22544d44f0be67e3a8a47cff8ae29c",
+  "prompt_snapshots": {
+    "candidate1-bubbleSummaryPrompt.ts": "96c669ce42d2cae3e65e55ea92f7746e848757781eb83b682a6017b227bafbae",
+    "candidate2-bubbleSummaryPrompt.ts": "d5a55ac16fddef3c7b3165a8b7eda0197dcf88a7c03982facb98eb3c44650554",
+    "candidate5-bubbleSummaryPrompt.ts": "d87729547edd4e02c22811b6ced5fe90d68e8ad796458f0aeb4363bf96b95eaa",
+    "candidate4-bubbleSummaryPrompt.ts": "63361611c692d20eb565e1a3281635a7ad1fbed076febf7497ce56d5cbbd964b",
+    "candidate3-bubbleSummaryPrompt.ts": "54b68e527b70a3123be7d24cf07809cfa71e458900b28f3e76cc6f2d0270b1dd",
+    "baseline-bubbleSummaryPrompt.ts": "b8f66eec434a6b375378e825882fc5415c5fc70cb75a74877127baa4e543f963",
+    "main472-bubbleSummaryPrompt.ts": "328d75490302ec6ba1ead2e64f96e576c5c5c65d45582f5747679df109f33cce"
+  },
+  "history_replacement_snapshot": {
+    "snapshot": "baseline-bubbleSummary.ts",
+    "sha256": "8ccbaa204194eb58e7f4f604fbabc94f15b7080805067069e90ff95ee0cb32dd"
+  },
+  "review_scope": "One human semantic review of predeclared case checks and observed additional assumptions; warnings and token cutoffs are distinct from observed failures. No reference-string matching or independent judge. Not exhaustive quality scores.",
+  "report": "report.md",
+  "metrics": "metrics.json",
+  "results": "api-results.json"
 }

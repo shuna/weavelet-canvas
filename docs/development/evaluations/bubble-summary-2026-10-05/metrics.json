@@ -1,0 +1,482 @@
+{
+  "requests": 857,
+  "responses": 851,
+  "known_cost_usd": 8.8379,
+  "accounted_cost_usd": 9.0974,
+  "cost_cap_usd": 10,
+  "prompt_tokens": 1112676,
+  "completion_tokens": 156080,
+  "groups": [
+    {
+      "phase": "baseline",
+      "model": "anthropic/claude-opus-4.6",
+      "temperature": 1,
+      "reasoning_effort": "none",
+      "requests": 98,
+      "responses": 96,
+      "prompt_tokens": 134955,
+      "completion_tokens": 7304,
+      "reasoning_tokens": 0,
+      "known_cost_usd": 0.857375,
+      "accounted_cost_usd": 1.00975,
+      "observations": {
+        "checks_retained": 66,
+        "request_error": 2,
+        "observed_failure": 16,
+        "warning": 14
+      }
+    },
+    {
+      "phase": "downstream-baseline",
+      "model": "anthropic/claude-opus-4.6",
+      "temperature": 1,
+      "reasoning_effort": "none",
+      "requests": 60,
+      "responses": 60,
+      "prompt_tokens": 6780,
+      "completion_tokens": 29630,
+      "reasoning_tokens": 0,
+      "known_cost_usd": 0.77465,
+      "accounted_cost_usd": 0.77465,
+      "observations": {
+        "warning": 30,
+        "token_cutoff": 3,
+        "checks_retained": 22,
+        "observed_failure": 5
+      }
+    },
+    {
+      "phase": "candidate",
+      "model": "anthropic/claude-opus-4.6",
+      "temperature": 1,
+      "reasoning_effort": "none",
+      "requests": 96,
+      "responses": 96,
+      "prompt_tokens": 155595,
+      "completion_tokens": 7311,
+      "reasoning_tokens": 0,
+      "known_cost_usd": 0.96075,
+      "accounted_cost_usd": 0.96075,
+      "observations": {
+        "checks_retained": 68,
+        "observed_failure": 18,
+        "warning": 10
+      }
+    },
+    {
+      "phase": "downstream-candidate",
+      "model": "anthropic/claude-opus-4.6",
+      "temperature": 1,
+      "reasoning_effort": "none",
+      "requests": 5,
+      "responses": 3,
+      "prompt_tokens": 282,
+      "completion_tokens": 4590,
+      "reasoning_tokens": 0,
+      "known_cost_usd": 0.11616,
+      "accounted_cost_usd": 0.223285,
+      "observations": {
+        "warning": 3,
+        "request_error": 2
+      }
+    },
+    {
+      "phase": "candidate2",
+      "model": "anthropic/claude-opus-4.6",
+      "temperature": 1,
+      "reasoning_effort": "none",
+      "requests": 96,
+      "responses": 96,
+      "prompt_tokens": 172299,
+      "completion_tokens": 7014,
+      "reasoning_tokens": 0,
+      "known_cost_usd": 1.036845,
+      "accounted_cost_usd": 1.036845,
+      "observations": {
+        "checks_retained": 74,
+        "observed_failure": 13,
+        "warning": 9
+      }
+    },
+    {
+      "phase": "candidate3",
+      "model": "anthropic/claude-opus-4.6",
+      "temperature": 1,
+      "reasoning_effort": "none",
+      "requests": 96,
+      "responses": 96,
+      "prompt_tokens": 182523,
+      "completion_tokens": 7396,
+      "reasoning_tokens": 0,
+      "known_cost_usd": 1.097515,
+      "accounted_cost_usd": 1.097515,
+      "observations": {
+        "checks_retained": 78,
+        "warning": 9,
+        "observed_failure": 9
+      }
+    },
+    {
+      "phase": "candidate4",
+      "model": "anthropic/claude-opus-4.6",
+      "temperature": 1,
+      "reasoning_effort": "none",
+      "requests": 96,
+      "responses": 96,
+      "prompt_tokens": 188955,
+      "completion_tokens": 7318,
+      "reasoning_tokens": 0,
+      "known_cost_usd": 1.127725,
+      "accounted_cost_usd": 1.127725,
+      "observations": {
+        "checks_retained": 84,
+        "warning": 9,
+        "observed_failure": 3
+      }
+    },
+    {
+      "phase": "downstream-candidate4",
+      "model": "anthropic/claude-opus-4.6",
+      "temperature": 1,
+      "reasoning_effort": "none",
+      "requests": 60,
+      "responses": 60,
+      "prompt_tokens": 6628,
+      "completion_tokens": 28027,
+      "reasoning_tokens": 0,
+      "known_cost_usd": 0.733815,
+      "accounted_cost_usd": 0.733815,
+      "observations": {
+        "warning": 30,
+        "token_cutoff": 1,
+        "checks_retained": 22,
+        "observed_failure": 7
+      }
+    },
+    {
+      "phase": "candidate5",
+      "model": "anthropic/claude-opus-4.6",
+      "temperature": 1,
+      "reasoning_effort": "none",
+      "requests": 64,
+      "responses": 64,
+      "prompt_tokens": 130578,
+      "completion_tokens": 4802,
+      "reasoning_tokens": 0,
+      "known_cost_usd": 0.77294,
+      "accounted_cost_usd": 0.77294,
+      "observations": {
+        "checks_retained": 57,
+        "warning": 7
+      }
+    },
+    {
+      "phase": "downstream-candidate5",
+      "model": "anthropic/claude-opus-4.6",
+      "temperature": 1,
+      "reasoning_effort": "none",
+      "requests": 40,
+      "responses": 40,
+      "prompt_tokens": 4337,
+      "completion_tokens": 19967,
+      "reasoning_tokens": 0,
+      "known_cost_usd": 0.52086,
+      "accounted_cost_usd": 0.52086,
+      "observations": {
+        "warning": 18,
+        "token_cutoff": 1,
+        "checks_retained": 13,
+        "observed_failure": 8
+      }
+    },
+    {
+      "phase": "holdout",
+      "model": "anthropic/claude-opus-4.6",
+      "temperature": 1,
+      "reasoning_effort": "none",
+      "requests": 12,
+      "responses": 12,
+      "prompt_tokens": 28269,
+      "completion_tokens": 878,
+      "reasoning_tokens": 0,
+      "known_cost_usd": 0.163295,
+      "accounted_cost_usd": 0.163295,
+      "observations": {
+        "checks_retained": 12
+      }
+    },
+    {
+      "phase": "downstream-holdout",
+      "model": "anthropic/claude-opus-4.6",
+      "temperature": 1,
+      "reasoning_effort": "none",
+      "requests": 24,
+      "responses": 24,
+      "prompt_tokens": 6937,
+      "completion_tokens": 13398,
+      "reasoning_tokens": 0,
+      "known_cost_usd": 0.369635,
+      "accounted_cost_usd": 0.369635,
+      "observations": {
+        "checks_retained": 18,
+        "observed_failure": 3,
+        "warning": 3
+      }
+    },
+    {
+      "phase": "free",
+      "model": "qwen/qwen3.8-27b:free",
+      "temperature": 0.2,
+      "reasoning_effort": "none",
+      "requests": 8,
+      "responses": 8,
+      "prompt_tokens": 10272,
+      "completion_tokens": 425,
+      "reasoning_tokens": 0,
+      "known_cost_usd": 0,
+      "accounted_cost_usd": 0,
+      "observations": {
+        "checks_retained": 6,
+        "warning": 2
+      }
+    },
+    {
+      "phase": "downstream-free",
+      "model": "qwen/qwen3.8-27b:free",
+      "temperature": 0.2,
+      "reasoning_effort": "none",
+      "requests": 4,
+      "responses": 4,
+      "prompt_tokens": 253,
+      "completion_tokens": 54,
+      "reasoning_tokens": 0,
+      "known_cost_usd": 0,
+      "accounted_cost_usd": 0,
+      "observations": {
+        "checks_retained": 4
+      }
+    },
+    {
+      "phase": "free",
+      "model": "qwen/qwen3.8-27b:free",
+      "temperature": 1,
+      "reasoning_effort": "none",
+      "requests": 9,
+      "responses": 8,
+      "prompt_tokens": 10272,
+      "completion_tokens": 407,
+      "reasoning_tokens": 0,
+      "known_cost_usd": 0,
+      "accounted_cost_usd": 0,
+      "observations": {
+        "checks_retained": 5,
+        "request_error": 1,
+        "observed_failure": 2,
+        "warning": 1
+      }
+    },
+    {
+      "phase": "free",
+      "model": "google/gemma-4-31b-it:free",
+      "temperature": 0.2,
+      "reasoning_effort": "none",
+      "requests": 1,
+      "responses": 0,
+      "prompt_tokens": 0,
+      "completion_tokens": 0,
+      "reasoning_tokens": 0,
+      "known_cost_usd": 0,
+      "accounted_cost_usd": 0,
+      "observations": {
+        "request_error": 1
+      }
+    },
+    {
+      "phase": "free",
+      "model": "nvidia/nemotron-3-ultra-550b-a55b:free",
+      "temperature": 0.2,
+      "reasoning_effort": "none",
+      "requests": 8,
+      "responses": 8,
+      "prompt_tokens": 13974,
+      "completion_tokens": 545,
+      "reasoning_tokens": 0,
+      "known_cost_usd": 0,
+      "accounted_cost_usd": 0,
+      "observations": {
+        "checks_retained": 6,
+        "observed_failure": 2
+      }
+    },
+    {
+      "phase": "downstream-free",
+      "model": "nvidia/nemotron-3-ultra-550b-a55b:free",
+      "temperature": 0.2,
+      "reasoning_effort": "none",
+      "requests": 4,
+      "responses": 4,
+      "prompt_tokens": 366,
+      "completion_tokens": 52,
+      "reasoning_tokens": 0,
+      "known_cost_usd": 0,
+      "accounted_cost_usd": 0,
+      "observations": {
+        "checks_retained": 4
+      }
+    },
+    {
+      "phase": "free",
+      "model": "nvidia/nemotron-3-ultra-550b-a55b:free",
+      "temperature": 1,
+      "reasoning_effort": "none",
+      "requests": 8,
+      "responses": 8,
+      "prompt_tokens": 13974,
+      "completion_tokens": 588,
+      "reasoning_tokens": 0,
+      "known_cost_usd": 0,
+      "accounted_cost_usd": 0,
+      "observations": {
+        "checks_retained": 6,
+        "warning": 1,
+        "observed_failure": 1
+      }
+    },
+    {
+      "phase": "downstream-free",
+      "model": "nvidia/nemotron-3-ultra-550b-a55b:free",
+      "temperature": 1,
+      "reasoning_effort": "none",
+      "requests": 4,
+      "responses": 4,
+      "prompt_tokens": 405,
+      "completion_tokens": 582,
+      "reasoning_tokens": 0,
+      "known_cost_usd": 0,
+      "accounted_cost_usd": 0,
+      "observations": {
+        "checks_retained": 3,
+        "observed_failure": 1
+      }
+    },
+    {
+      "phase": "free",
+      "model": "nvidia/nemotron-3-ultra-550b-a55b:free",
+      "temperature": 1,
+      "reasoning_effort": "low",
+      "requests": 8,
+      "responses": 8,
+      "prompt_tokens": 13974,
+      "completion_tokens": 3319,
+      "reasoning_tokens": 3144,
+      "known_cost_usd": 0,
+      "accounted_cost_usd": 0,
+      "observations": {
+        "checks_retained": 7,
+        "warning": 1
+      }
+    },
+    {
+      "phase": "downstream-free",
+      "model": "nvidia/nemotron-3-ultra-550b-a55b:free",
+      "temperature": 1,
+      "reasoning_effort": "low",
+      "requests": 4,
+      "responses": 4,
+      "prompt_tokens": 413,
+      "completion_tokens": 275,
+      "reasoning_tokens": 259,
+      "known_cost_usd": 0,
+      "accounted_cost_usd": 0,
+      "observations": {
+        "checks_retained": 4
+      }
+    },
+    {
+      "phase": "main472",
+      "model": "anthropic/claude-opus-4.6",
+      "temperature": 1,
+      "reasoning_effort": "none",
+      "requests": 12,
+      "responses": 12,
+      "prompt_tokens": 16988,
+      "completion_tokens": 1050,
+      "reasoning_tokens": 0,
+      "known_cost_usd": 0.11119,
+      "accounted_cost_usd": 0.11119,
+      "observations": {
+        "checks_retained": 4,
+        "observed_failure": 8
+      }
+    },
+    {
+      "phase": "downstream-main472",
+      "model": "anthropic/claude-opus-4.6",
+      "temperature": 1,
+      "reasoning_effort": "none",
+      "requests": 24,
+      "responses": 24,
+      "prompt_tokens": 2574,
+      "completion_tokens": 7291,
+      "reasoning_tokens": 0,
+      "known_cost_usd": 0.195145,
+      "accounted_cost_usd": 0.195145,
+      "observations": {
+        "checks_retained": 8,
+        "warning": 12,
+        "observed_failure": 4
+      }
+    },
+    {
+      "phase": "downstream-free",
+      "model": "qwen/qwen3.8-27b:free",
+      "temperature": 1,
+      "reasoning_effort": "none",
+      "requests": 4,
+      "responses": 4,
+      "prompt_tokens": 222,
+      "completion_tokens": 42,
+      "reasoning_tokens": 0,
+      "known_cost_usd": 0,
+      "accounted_cost_usd": 0,
+      "observations": {
+        "checks_retained": 4
+      }
+    },
+    {
+      "phase": "free",
+      "model": "qwen/qwen3.8-27b:free",
+      "temperature": 1,
+      "reasoning_effort": "low",
+      "requests": 8,
+      "responses": 8,
+      "prompt_tokens": 10496,
+      "completion_tokens": 3428,
+      "reasoning_tokens": 3060,
+      "known_cost_usd": 0,
+      "accounted_cost_usd": 0,
+      "observations": {
+        "checks_retained": 6,
+        "warning": 2
+      }
+    },
+    {
+      "phase": "downstream-free",
+      "model": "qwen/qwen3.8-27b:free",
+      "temperature": 1,
+      "reasoning_effort": "low",
+      "requests": 4,
+      "responses": 4,
+      "prompt_tokens": 355,
+      "completion_tokens": 387,
+      "reasoning_tokens": 291,
+      "known_cost_usd": 0,
+      "accounted_cost_usd": 0,
+      "observations": {
+        "checks_retained": 3,
+        "warning": 1
+      }
+    }
+  ],
+  "interpretation": "Observed failures and warnings are scoped semantic review, not exhaustive quality scores. Cells have different sample sizes; do not rank models from these counts."
+}
