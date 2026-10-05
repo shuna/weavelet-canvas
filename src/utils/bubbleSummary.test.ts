@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { ChatInterface, MessageInterface } from '@type/chat';
-import { applyBubbleSummariesForSubmit, normalizeBubbleSummaryText, resolveValidSummary } from './bubbleSummary';
+import { applyBubbleSummariesForSubmit, isBubbleSummary, normalizeBubbleSummaryText, resolveValidSummary } from './bubbleSummary';
 
 const message = (role: 'user' | 'assistant' | 'system', text: string): MessageInterface => ({ role, content: [{ type: 'text', text }] });
 const chat = (): ChatInterface => ({
@@ -16,6 +16,12 @@ const chat = (): ChatInterface => ({
 });
 
 describe('bubble summary submit replacement', () => {
+  it('accepts legacy summaries and rejects malformed generation metadata', () => {
+    const summary = chat().summaries![0];
+    expect(isBubbleSummary(summary)).toBe(true);
+    expect(isBubbleSummary({ ...summary, generation: { model: 'test', createdAt: 1, settings: { temperature: 1, max_tokens: 2048 } } })).toBe(true);
+    expect(isBubbleSummary({ ...summary, generation: { model: 'test', createdAt: 1 } })).toBe(false);
+  });
   it('replaces A/B, omits C, and retains D using original path indexes', () => {
     const result = applyBubbleSummariesForSubmit(chat(), 4);
     expect(result.map(item => item.content[0].type === 'text' ? item.content[0].text : '')).toEqual(['Past conversation summary:\nA と B の要約', 'D']);

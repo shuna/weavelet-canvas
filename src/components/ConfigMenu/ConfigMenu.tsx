@@ -177,10 +177,12 @@ const ConfigMenu = ({
   setConfig,
   imageDetail,
   setImageDetail,
+  auxiliary = false,
 }: {
   setIsModalOpen: React.Dispatch<React.SetStateAction<boolean>>;
   config: ConfigInterface;
   setConfig: (config: ConfigInterface) => void;
+  auxiliary?: boolean;
   imageDetail: ImageDetail;
   setImageDetail: (imageDetail: ImageDetail) => void;
 }) => {
@@ -260,15 +262,16 @@ const ConfigMenu = ({
 
   return (
     <PopupModal
-      title={t('configuration') as string}
+      title={auxiliary ? '要約のモデル・生成設定' : t('configuration') as string}
       setIsModalOpen={setIsModalOpen}
       cancelButton={false}
       maxWidth='max-w-4xl'
     >
       <div className='p-6 flex flex-col gap-5 w-[90vw] max-w-4xl'>
-        {_providerId === 'openrouter' && _modelSource !== 'local' && <OpenRouterFields key={_model} model={_model} value={_openRouter} onChange={_setOpenRouter} />}
+        {!auxiliary && _providerId === 'openrouter' && _modelSource !== 'local' && <OpenRouterFields key={_model} model={_model} value={_openRouter} onChange={_setOpenRouter} />}
         <div>
           <ModelSelector
+            remoteOnly={auxiliary}
             _model={_model}
             _setModel={_setModel}
             _providerId={_providerId}
@@ -329,10 +332,7 @@ const ConfigMenu = ({
           )}
         </div>
 
-        <SystemPromptField
-          systemPrompt={_systemPrompt}
-          setSystemPrompt={_setSystemPrompt}
-        />
+        {auxiliary ? <p className='text-xs text-gray-500'>要約専用の設定です。モデルを切り替えると、そのモデルで設定した値に戻ります。要約には共通の要約プロンプトを使用します。</p> : <SystemPromptField systemPrompt={_systemPrompt} setSystemPrompt={_setSystemPrompt} />}
 
         <SettingsGroup label={t('section.generation')}>
           <ConfigFieldCell>
@@ -416,7 +416,9 @@ export const ModelSelector = ({
   _onModelChange,
   _label,
   className,
+  remoteOnly = false,
 }: {
+  remoteOnly?: boolean;
   _model: ModelOptions;
   _setModel: React.Dispatch<React.SetStateAction<ModelOptions>>;
   _providerId?: ProviderId;
@@ -501,7 +503,7 @@ export const ModelSelector = ({
 
   const allOptions = [
     ...remoteOptions,
-    ...localOptions,
+    ...(remoteOnly ? [] : localOptions),
   ];
   const availableModelId = chatModel.status === 'available'
     ? 'modelId' in chatModel.match.model ? chatModel.match.model.modelId : chatModel.match.model.id

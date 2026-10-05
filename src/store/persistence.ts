@@ -28,6 +28,7 @@ export type PersistedStoreState = Omit<
   | 'autoTitle'
   | 'titleModel'
   | 'titleProviderId'
+  | 'bubbleSummaryConfig'
   | 'advancedMode'
   | 'prompts'
   | 'defaultChatConfig'
@@ -94,7 +95,7 @@ type LocalStoragePersistedState = Omit<
 
 const FULL_PERSIST_KEYS: (keyof PersistedStoreState)[] = [
   'chats', 'apiKey', 'apiVersion', 'apiEndpoint', 'theme', 'autoTitle',
-  'titleModel', 'titleProviderId', 'advancedMode', 'prompts', 'defaultChatConfig', 'defaultSystemMessage',
+  'titleModel', 'titleProviderId', 'bubbleSummaryConfig', 'advancedMode', 'prompts', 'defaultChatConfig', 'defaultSystemMessage',
   'hideMenuOptions', 'hideSideMenu', 'folders', 'enterToSubmit',
   'inlineLatex', 'markdownMode', 'streamingMarkdownPolicy', 'totalTokenUsed', 'countTotalTokens',
   'displayChatSize', 'menuWidth', 'defaultImageDetail', 'animateBubbleNavigation', 'branchSwipeDirection',
@@ -124,7 +125,7 @@ const FULL_PERSIST_KEYS: (keyof PersistedStoreState)[] = [
 
 const LOCAL_STORAGE_PERSIST_KEYS: (keyof LocalStoragePersistedState)[] = [
   'apiKey', 'apiVersion', 'apiEndpoint', 'theme', 'autoTitle',
-  'titleModel', 'titleProviderId', 'advancedMode', 'prompts', 'defaultChatConfig', 'defaultSystemMessage',
+  'titleModel', 'titleProviderId', 'bubbleSummaryConfig', 'advancedMode', 'prompts', 'defaultChatConfig', 'defaultSystemMessage',
   'hideMenuOptions', 'hideSideMenu', 'folders', 'enterToSubmit',
   'inlineLatex', 'markdownMode', 'streamingMarkdownPolicy', 'totalTokenUsed', 'countTotalTokens',
   'displayChatSize', 'menuWidth', 'defaultImageDetail', 'animateBubbleNavigation', 'branchSwipeDirection',
@@ -229,6 +230,7 @@ function buildPartializedState(state: StoreState): PersistedStoreState {
     autoTitle: state.autoTitle,
     titleModel: state.titleModel,
     titleProviderId: state.titleProviderId,
+    bubbleSummaryConfig: state.bubbleSummaryConfig,
     advancedMode: state.advancedMode,
     prompts: state.prompts,
     defaultChatConfig: state.defaultChatConfig,
@@ -292,6 +294,7 @@ function buildLocalStoragePartializedState(
     autoTitle: state.autoTitle,
     titleModel: state.titleModel,
     titleProviderId: state.titleProviderId,
+    bubbleSummaryConfig: state.bubbleSummaryConfig,
     advancedMode: state.advancedMode,
     prompts: state.prompts,
     defaultChatConfig: state.defaultChatConfig,

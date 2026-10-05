@@ -1,22 +1,6 @@
 import type { BubbleSummary, ChatInterface, MessageInterface } from '@type/chat';
 import { isTextContent, isToolCallContent, isToolResultContent } from '@type/chat';
 
-// Decode only complete JSON output; ordinary Markdown and literal code escapes stay intact.
-export const normalizeBubbleSummaryText = (text: string): string => {
-  const trimmed = text.trim();
-  const json = trimmed.replace(/^```(?:json)?\s*\n([\s\S]*?)\n```$/i, '$1');
-  try {
-    const value: unknown = JSON.parse(json);
-    if (typeof value === 'string') return value.trim();
-    const messages = Array.isArray(value) ? value : [value];
-    if (messages.length && messages.every(message => message && typeof message === 'object'
-      && (message.role === 'user' || message.role === 'assistant') && typeof message.content === 'string')) {
-      return messages.map(message => message.role === 'assistant' ? `アシスタント：\n${message.content}` : message.content).join('\n\n').trim();
-    }
-  } catch { /* Not serialized output: preserve the original text. */ }
-  return trimmed;
-};
-
 const textParts = (message: MessageInterface | undefined): string[] | null => {
   if (!message?.content?.length || !message.content.every(isTextContent)) return null;
   const parts = message.content.map(value => value.text);
@@ -25,22 +9,11 @@ const textParts = (message: MessageInterface | undefined): string[] | null => {
 const hasTool = (message: MessageInterface | undefined) => !!message?.content?.some(value => isToolCallContent(value) || isToolResultContent(value));
 const equalParts = (left: string[], right: string[]) => left.length === right.length && left.every((part, index) => part === right[index]);
 
-const validGeneration = (value: unknown) => {
-  if (value === undefined) return true;
-  const generation = value as NonNullable<BubbleSummary['generation']>;
-  return !!generation && typeof generation === 'object' && typeof generation.model === 'string'
-    && (generation.providerId === undefined || typeof generation.providerId === 'string')
-    && Number.isFinite(generation.createdAt) && !!generation.settings && typeof generation.settings === 'object'
-    && Number.isFinite(generation.settings.temperature) && Number.isFinite(generation.settings.max_tokens)
-    && (generation.settings.reasoning_effort === undefined || typeof generation.settings.reasoning_effort === 'string');
-};
-
 export const isBubbleSummary = (value: unknown): value is BubbleSummary => !!value && typeof value === 'object'
   && typeof (value as BubbleSummary).id === 'string'
   && ((value as BubbleSummary).mode === 'single' || (value as BubbleSummary).mode === 'through' || (value as BubbleSummary).mode === 'range')
   && typeof (value as BubbleSummary).text === 'string'
   && typeof (value as BubbleSummary).useForSubmit === 'boolean'
-  && validGeneration((value as BubbleSummary).generation)
   && Array.isArray((value as BubbleSummary).sources)
   && (value as BubbleSummary).sources.every(source => !!source && typeof source.nodeId === 'string' && (source.parentId === null || typeof source.parentId === 'string') && (source.role === 'user' || source.role === 'assistant') && Array.isArray(source.textParts) && source.textParts.every(part => typeof part === 'string'));
 
@@ -80,7 +53,7 @@ export const applyBubbleSummariesForSubmit = (chat: ChatInterface, messageIndex:
   const result: MessageInterface[] = [];
   for (let index = 0; index < source.length; index++) {
     const replacement = starts.get(index);
-    if (replacement) { result.push({ role: 'user', content: [{ type: 'text', text: `Past conversation summary:\n${normalizeBubbleSummaryText(replacement.summary.text)}` }] }); index = replacement.range.last; continue; }
+    if (replacement) { result.push({ role: 'user', content: [{ type: 'text', text: `Past conversation summary:\n${replacement.summary.text}` }] }); index = replacement.range.last; continue; }
     if (chat.omittedNodes?.[path[index]] && !hasTool(source[index])) continue;
     result.push(source[index]);
   }

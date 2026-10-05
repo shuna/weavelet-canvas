@@ -348,24 +348,25 @@ export const generateTitleForChat = async (
 export const generateBubbleSummary = async (
   chat: ChatInterface,
   sourceIndexes: number[],
-  deps: TitleGenerationDeps,
+  deps: TitleGenerationDeps & { summaryConfig?: ConfigInterface },
   signal?: AbortSignal
 ): Promise<string> => {
-  if (isLocalModelConfig(chat.config)) throw new Error('ローカルモデルでは要約生成を利用できません');
+  const modelConfig = deps.summaryConfig ?? chat.config;
+  if (isLocalModelConfig(modelConfig)) throw new Error('ローカルモデルでは要約生成を利用できません');
   const messages = sourceIndexes.map(index => chat.messages[index]).filter(isSummaryEligible);
   if (messages.length !== sourceIndexes.length) throw new Error('要約対象にできないバブルが含まれています');
-  const model = chat.config.model;
-  const resolved = resolveProviderForModel(model, deps.favoriteModels, deps.providers, deps.fallbackProvider, chat.config.providerId);
-  assertAuxiliaryEndpoint(chat.config.openRouter, resolved.endpoint);
+  const model = modelConfig.model;
+  const resolved = resolveProviderForModel(model, deps.favoriteModels, deps.providers, deps.fallbackProvider, modelConfig.providerId);
+  assertAuxiliaryEndpoint(modelConfig.openRouter, resolved.endpoint);
   if ((!resolved.key || resolved.key.length === 0) && resolved.endpoint === officialAPIEndpoint) throw new Error(deps.t('noApiKeyWarning'));
-  const config = { ...chat.config, openRouter: { routing: hardOpenRouterConstraints(chat.config.openRouter), responseCache: { mode: 'off' as const } } };
+  const config = { ...modelConfig, openRouter: { routing: hardOpenRouterConstraints(modelConfig.openRouter), responseCache: { mode: 'off' as const } } };
   const request: MessageInterface[] = [{ role: 'user', content: [{ type: 'text', text: buildBubbleSummaryPrompt(messages) }] }];
-  const context = getModelContextInfo(model, chat.config.providerId, chat.config.modelSource).contextLength;
-  if (!fitsContextWindow(await countTokens(request, model), context, chat.config.max_tokens)) throw new Error('要約対象がモデルのコンテキスト上限を超えています');
+  const context = getModelContextInfo(model, modelConfig.providerId, modelConfig.modelSource).contextLength;
+  if (!fitsContextWindow(await countTokens(request, model), context, modelConfig.max_tokens)) throw new Error('要約対象がモデルのコンテキスト上限を超えています');
   const data = await getChatCompletion(resolved.endpoint, request, config, resolved.key, undefined, deps.apiVersion, signal, { auxiliary: true });
   const text = normalizeBubbleSummaryText(data.choices[0]?.message.content ?? '');
   if (!text) throw new Error('要約を生成できませんでした');
-  await updateTotalTokenUsed(model, request, { role: 'assistant', content: [{ type: 'text', text }] }, chat.config.providerId);
+  await updateTotalTokenUsed(model, request, { role: 'assistant', content: [{ type: 'text', text }] }, modelConfig.providerId);
   return text;
 };
 

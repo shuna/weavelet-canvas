@@ -61,6 +61,7 @@ describe('prepareStreamRequest reasoning payloads', () => {
     expect(body).toMatchObject({
       reasoning: {
         enabled: true,
+        effort: 'medium',
       },
     });
   });
@@ -80,6 +81,7 @@ describe('prepareStreamRequest reasoning payloads', () => {
     expect(body).toMatchObject({
       reasoning: {
         enabled: true,
+        effort: 'high',
       },
     });
   });
