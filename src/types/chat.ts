@@ -148,6 +148,7 @@ export interface BubbleSummary {
   sources: BubbleSummarySource[];
   text: string;
   useForSubmit: boolean;
+  generation?: { model: string; providerId?: ProviderId; settings: ModelSettings; createdAt: number };
 }
 
 export interface BranchClipboard {

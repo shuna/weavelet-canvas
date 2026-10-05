@@ -1,0 +1,17 @@
+{
+  "base_commit": "47cab4f9e18be1bdbcabf62904bc4c1f20e6384b",
+  "status": "Real API evaluation performed. Five local prompt trials retained as artifacts; production prompt changes rejected because downstream failures remain. Model/parameter comparison is free-only.",
+  "baseline_files": {
+    "src/utils/bubbleSummaryPrompt.ts": {
+      "snapshot": "baseline-bubbleSummaryPrompt.ts",
+      "sha256": "b8f66eec434a6b375378e825882fc5415c5fc70cb75a74877127baa4e543f963"
+    },
+    "tests/fixtures/bubble-summary-prompt-cases.json": {
+      "snapshot": "baseline-bubble-summary-prompt-cases.json",
+      "sha256": "372bc335d93386aca3fbd14f0a025f586f09563189b617787af7e587cc150d29"
+    }
+  },
+  "cost_cap_usd": 10,
+  "primary_model": "anthropic/claude-opus-4.6",
+  "endpoint": "https://openrouter.ai/api/v1/chat/completions"
+}

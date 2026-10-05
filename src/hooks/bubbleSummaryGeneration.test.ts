@@ -40,6 +40,19 @@ describe('bubble summary auxiliary generation', () => {
     expect(continuous).toContain('連続の場合の追加規則：');
     expect(JSON.parse(continuous.split('INPUT:\n')[1])).toEqual([{ role: 'user', content: 'Original' }, { role: 'assistant', content: 'Answer' }]);
   });
+  it('uses the independent summary model, provider and parameters without changing the chat', async () => {
+    const original = chat(); original.config.modelSource = 'local';
+    const before = structuredClone(original);
+    const summaryConfig = { ...chat().config, model: 'anthropic/claude-opus-4.6', providerId: 'openrouter' as const, temperature: 0.2, max_tokens: 4096, reasoning_effort: 'low' as const };
+    await generateBubbleSummary(original, [0], { ...deps, summaryConfig, providers: { openrouter: { id: 'openrouter', name: 'OpenRouter', modelsRequireAuth: false, endpoint: 'https://openrouter.ai/api/v1/chat/completions', apiKey: 'summary-test' } } });
+    const args = mocks.completion.mock.calls[0];
+    expect(args[0]).toBe('https://openrouter.ai/api/v1/chat/completions');
+    expect(args[2]).toMatchObject({ model: summaryConfig.model, providerId: 'openrouter', temperature: 0.2, max_tokens: 4096, reasoning_effort: 'low' });
+    expect(args[3]).toBe('summary-test');
+    expect(original).toEqual(before);
+    expect(mocks.usage.mock.calls[0][0]).toBe(summaryConfig.model);
+    expect(mocks.usage.mock.calls[0][3]).toBe('openrouter');
+  });
   it('refuses local models and oversized requests before calling the API', async () => {
     const local = chat(); local.config.modelSource = 'local';
     await expect(generateBubbleSummary(local, [0], deps)).rejects.toThrow('ローカル');

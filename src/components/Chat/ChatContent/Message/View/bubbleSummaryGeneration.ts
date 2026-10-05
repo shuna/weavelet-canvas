@@ -4,6 +4,8 @@ import { generateBubbleSummary } from '@hooks/submitHelpers';
 import { resolveValidSummary } from '@utils/bubbleSummary';
 import { isTextContent, type BubbleSummary, type ChatInterface } from '@type/chat';
 import { useSummaryDisplay } from './bubbleSummaryDisplay';
+import { pickModelSettings } from '@utils/modelSettings';
+import { hardOpenRouterConstraints } from '@utils/openrouterControls';
 
 type SummaryJob = { chatId: string; originNodeId: string; sourceNodeIds: string[]; mode: BubbleSummary['mode']; busy: boolean; error: string };
 export const useSummaryGeneration = create<{ jobs: Record<string, SummaryJob> }>(() => ({ jobs: {} }));
@@ -24,6 +26,8 @@ export async function startBubbleSummary(chat: ChatInterface, indices: number[],
   useSummaryGeneration.setState(state => ({ jobs: { ...Object.fromEntries(Object.entries(state.jobs).filter(([, previousJob]) => previousJob.busy || previousJob.chatId !== chat.id || !previousJob.sourceNodeIds.some(id => job.sourceNodeIds.includes(id)))), [key]: job } }));
   let error = '';
   try {
+    const config = deps.summaryConfig ?? chat.config;
+    summary.generation = { model: config.model, providerId: config.providerId, createdAt: Date.now(), settings: { ...pickModelSettings(config), stream: false, openRouter: { routing: hardOpenRouterConstraints(config.openRouter), responseCache: { mode: 'off' } } } };
     const text = await generateBubbleSummary(chat, indices, deps);
     const latest = useStore.getState();
     const index = latest.chats?.findIndex(value => value.id === chat.id) ?? -1;

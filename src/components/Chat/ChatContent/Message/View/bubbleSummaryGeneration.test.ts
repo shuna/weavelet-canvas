@@ -25,7 +25,7 @@ it('keeps the pending request outside the UI and prevents overlapping duplicate 
   mocks.state.currentChatIndex = 1;
   finish('Summary');
   expect(await pending).toBe(true);
-  expect(mocks.save).toHaveBeenCalledWith('chat', expect.objectContaining({ text: 'Summary' }));
+  expect(mocks.save).toHaveBeenCalledWith('chat', expect.objectContaining({ text: 'Summary', generation: expect.objectContaining({ model: 'gpt-4o', settings: expect.objectContaining({ max_tokens: 1000, temperature: 1 }) }) }));
   expect(mocks.choose).toHaveBeenCalledOnce();
   expect(useSummaryGeneration.getState().jobs).toEqual({});
 });

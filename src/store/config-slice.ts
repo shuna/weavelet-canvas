@@ -34,6 +34,8 @@ export interface ConfigSlice {
   autoTitle: boolean;
   titleModel: ModelOptions;
   titleProviderId?: ProviderId;
+  bubbleSummaryConfig?: ConfigInterface;
+  setBubbleSummaryConfig: (config: ConfigInterface | undefined) => void;
   hideMenuOptions: boolean;
   advancedMode: boolean;
   defaultChatConfig: ConfigInterface;
@@ -100,6 +102,8 @@ export const createConfigSlice: StoreSlice<ConfigSlice> = (set, get) => ({
   autoTitle: false,
   titleModel: defaultModel,
   titleProviderId: undefined,
+  bubbleSummaryConfig: undefined,
+  setBubbleSummaryConfig: config => set({ bubbleSummaryConfig: config }),
   enterToSubmit: true,
   advancedMode: true,
   defaultChatConfig: _defaultChatConfig,

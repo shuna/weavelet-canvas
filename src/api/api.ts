@@ -96,6 +96,7 @@ const buildRequestBody = (
             reasoning_effort === 'minimal' ? 'low' : reasoning_effort;
         } else if (isOpenRouterAdaptiveReasoningModel(config.model, providerId)) {
           reasoning.enabled = true;
+          reasoning.effort = reasoning_effort === 'minimal' ? 'low' : reasoning_effort;
         } else if (needsMaxTokensOnly(config.model)) {
           // Claude etc. only support max_tokens, not effort — convert
           const mapped = EFFORT_TO_MAX_TOKENS[reasoning_effort];
