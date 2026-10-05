@@ -197,7 +197,7 @@ const Message = React.memo(
           />
         )}
         <div
-          className={`text-base gap-1.5 md:gap-2 m-auto px-7 py-6 md:py-8 flex flex-col transition-all ease-in-out ${maxWidthClass}`}
+          className={`bubble-message-layout text-base gap-1.5 md:gap-2 m-auto px-7 py-6 md:py-8 flex flex-col transition-all ease-in-out ${maxWidthClass}`}
         >
           {sticky ? (
             <>
