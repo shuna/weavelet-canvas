@@ -1,7 +1,8 @@
 import { beforeEach, expect, it, vi } from 'vitest';
 import type { ChatInterface } from '@type/chat';
 import { startBubbleSummary, useSummaryGeneration } from './bubbleSummaryGeneration';
-const mocks = vi.hoisted(() => ({ generate: vi.fn(), save: vi.fn(), choose: vi.fn(), state: {} as any }));
+const mocks = vi.hoisted(() => ({ generate: vi.fn(), save: vi.fn(), choose: vi.fn(), count: vi.fn(), state: {} as any }));
+vi.mock('@utils/messageUtils', () => ({ default: mocks.count }));
 vi.mock('@hooks/submitHelpers', () => ({ generateBubbleSummary: mocks.generate }));
 vi.mock('@store/store', () => ({ default: { getState: () => mocks.state } }));
 vi.mock('./bubbleSummaryDisplay', () => ({ useSummaryDisplay: { getState: () => ({ choose: mocks.choose }) } }));
@@ -12,7 +13,7 @@ const chat = (): ChatInterface => ({ id: 'chat', title: 'Chat', titleSet: true, 
 });
 const deps = { favoriteModels: [], providers: {}, fallbackProvider: { endpoint: 'https://example.test', key: 'test' }, t: (key: string) => key };
 beforeEach(() => {
-  vi.clearAllMocks(); useSummaryGeneration.setState({ jobs: {} });
+  vi.clearAllMocks(); mocks.count.mockReset().mockResolvedValueOnce(100).mockResolvedValue(20); useSummaryGeneration.setState({ jobs: {} });
   mocks.state = { chats: [chat()], omittedNodeMaps: {}, generatingSessions: {}, saveBubbleSummary: mocks.save };
 });
 it('keeps the pending request outside the UI and prevents overlapping duplicate requests', async () => {
@@ -57,4 +58,25 @@ it('keeps the readable version and selects compact output after generation', asy
   expect(saved).toMatchObject({ format: 'compact', text: 'Compact', useForSubmit: false });
   expect(saved.id).not.toBe('readable');
   expect(mocks.choose).toHaveBeenCalledWith('chat', saved, true);
+});
+
+it.each([100, 120])('saves output but retains original when replacement costs %s tokens versus 100', async replacement => {
+ mocks.count.mockReset().mockResolvedValueOnce(100).mockResolvedValueOnce(replacement);
+ mocks.generate.mockResolvedValue('Expanded compact context');
+ expect(await startBubbleSummary(mocks.state.chats[0], [0], 'single', 'a', { ...deps, summaryFormat: 'compact' })).toBe(true);
+ const saved = mocks.save.mock.calls[0][1];
+ expect(saved.text).toBe('Expanded compact context');
+ expect(mocks.choose).toHaveBeenCalledWith('chat', saved, false);
+ expect(useSummaryGeneration.getState().jobs['chat:a']).toMatchObject({ busy: false, error: '', warning: expect.stringContaining('原文を表示・送信') });
+});
+it('does not apply a result when the source changes during token comparison', async () => {
+ let finish!: (count: number) => void;
+ mocks.count.mockReset().mockResolvedValueOnce(100).mockImplementationOnce(() => new Promise<number>(resolve => { finish = resolve; }));
+ mocks.generate.mockResolvedValue('Compact');
+ const pending = startBubbleSummary(mocks.state.chats[0], [0], 'single', 'a', { ...deps, summaryFormat: 'compact' });
+ await vi.waitFor(() => expect(finish).toBeDefined());
+ mocks.state.chats[0].messages[0].content[0].text = 'Changed';
+ finish(20);
+ expect(await pending).toBe(false);
+ expect(mocks.save).not.toHaveBeenCalled(); expect(mocks.choose).not.toHaveBeenCalled();
 });
