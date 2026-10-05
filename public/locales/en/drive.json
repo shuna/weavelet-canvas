@@ -145,12 +145,7 @@
       "failed": "Failed"
     },
     "elapsed": "Total sync: {{time}}",
-    "normal": "Normal transfer: ↑ {{sent}} / ↓ {{received}}",
-    "compactionBytes": "Compaction upload: {{sent}} / Readback before deletion: {{received}}",
-    "packBytes": "Pack download: index {{index}} / payload {{body}}",
     "packAccess": "Pack payload: skipped {{skipped}} / downloaded {{read}} (excluding verification)",
-    "processing": "Cumulative processing: compression {{compression}} / crypto {{crypto}} / local reads and writes {{cache}}",
-    "compaction": "This sync compaction decision",
     "completedGroups": "Completed {{groups}} groups",
     "compactionStatus": {
       "notChecked": "Not checked",
@@ -167,14 +162,38 @@
     },
     "lastCompaction": "Last group ({{time}}): source files {{before}} → new files {{after}} / {{reduction}} fewer",
     "observation": "History last observed: {{time}}",
-    "history": "Unpacked {{count}} / threshold {{threshold}} commits · {{excess}} beyond target",
-    "packs": "Packed: {{indexes}} indexes / {{bodies}} payload files · {{small}} packs below 1 MiB",
-    "reference": "Reference minimum payload files {{files}} / {{excess}} excess (estimate)",
-    "cleanup": "Source deletion checks remaining: {{count}} (may include already deleted sources)",
     "measurement": "Sizes and rates count completed file payloads, excluding HTTP headers and failed transfers. Overlapping transfer time is counted once; processing times are cumulative.",
-    "referenceHelp": "The reference estimates packing existing compressed payloads into 4 MiB files. It excludes indexes, unpacked history and recompression effects; it is not a global optimum.",
+    "referenceHelp": "The reference estimates packing existing compressed payloads into 4 MiB files. It excludes indexes, unpacked history and recompression effects; it is not a global optimum. Source files to check for deletion may include files already deleted.",
     "compactNow": "Compact files now",
     "compacting": "Compacting files",
-    "compactCompleted": "Sync file compaction completed."
+    "compactCompleted": "Sync file compaction completed.",
+    "about": "About measurements and estimates",
+    "sections": {
+      "transfer": "Transfers",
+      "breakdown": "Transfer breakdown",
+      "processing": "Processing time (cumulative)",
+      "compaction": "Compaction",
+      "history": "History and files"
+    },
+    "purpose": "Purpose",
+    "transferPurpose": {
+      "normal": "Normal",
+      "compaction": "Compaction",
+      "verification": "Verify before deletion",
+      "pack-index": "Pack index fetch",
+      "pack": "Pack body fetch"
+    },
+    "compression": "Compression",
+    "crypto": "Cryptography",
+    "cache": "Local reads / writes",
+    "unaggregated": "Unpacked / compaction threshold",
+    "thresholdCount": "{{count}} / {{threshold}} commits",
+    "overThreshold": "Above threshold (commits)",
+    "indexes": "Pack indexes (files)",
+    "bodies": "Pack bodies (files)",
+    "smallPacks": "Packs under 1 MiB",
+    "referenceFiles": "Estimated minimum bodies",
+    "excessFiles": "Files above estimate",
+    "cleanupTargets": "Source files to check for deletion"
   }
 }
