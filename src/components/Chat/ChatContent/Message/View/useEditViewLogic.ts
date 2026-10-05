@@ -202,13 +202,15 @@ export function useEditViewLogic({
     if (textareaRef.current) textareaRef.current.style.height = 'auto';
   };
 
-  const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement> | KeyboardEvent) => {
+    const nativeEvent = 'nativeEvent' in e ? e.nativeEvent : e;
+    // Safari can end composition before the confirming Enter keydown.
+    if (nativeEvent.isComposing || nativeEvent.keyCode === 229) return;
     const isMobile =
       /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini|playbook|silk/i.test(
         navigator.userAgent
       );
-    const isComposing = (e as any).nativeEvent?.isComposing ?? (e as any).isComposing ?? false;
-    if (e.key === 'Enter' && !isMobile && !isComposing) {
+    if (e.key === 'Enter' && !isMobile) {
       const enterToSubmit = useStore.getState().enterToSubmit;
       if (e.ctrlKey && e.shiftKey) {
         e.preventDefault();
