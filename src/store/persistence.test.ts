@@ -433,3 +433,11 @@ describe('persistence', () => {
     expect(localPartialized.chatActiveView).toBe('split-horizontal');
   });
 });
+
+it('preserves independent summary settings in both persisted snapshots', () => {
+  const state = buildStoreState();
+  const config = { ..._defaultChatConfig, model: 'anthropic/claude-opus-4.6', providerId: 'openrouter' as const, temperature: 0.2 };
+  const value = { ...state, bubbleSummaryConfig: config };
+  expect(createPartializedState(value as never).bubbleSummaryConfig).toEqual(config);
+  expect(createLocalStoragePartializedState(value as never).bubbleSummaryConfig).toEqual(config);
+});

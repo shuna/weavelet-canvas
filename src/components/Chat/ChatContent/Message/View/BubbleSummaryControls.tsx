@@ -1,6 +1,8 @@
 import { useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import PopupModal from '@components/PopupModal';
+import ConfigMenu from '@components/ConfigMenu';
+import { _defaultChatConfig } from '@constants/chat';
 import useStore from '@store/store';
 import { isLocalModelConfig } from '@hooks/submitHelpers';
 import { isSummaryEligible } from '@utils/bubbleSummary';
@@ -45,6 +47,8 @@ function SummaryDialog({ messageIndex, initialSummary, setOpen }: { messageIndex
   const job = useBubbleSummaryJob(initialChat?.id, endpoint);
   const [mode, setMode] = useState<BubbleSummary['mode']>(job ? job.mode : initialSummary?.mode ?? 'single');
   const [selected, setSelected] = useState<string[]>(() => job ? job.sourceNodeIds : initialSummary ? initialSummary.sources.map(source => source.nodeId) : endpoint ? [endpoint] : []);
+  const summaryConfig = useStore(state => state.bubbleSummaryConfig);
+  const [settingsOpen, setSettingsOpen] = useState(false);
   const busy = !!job?.busy;
   const close = () => setOpen(false);
   if (!chat?.branchTree) return null;
@@ -64,19 +68,28 @@ function SummaryDialog({ messageIndex, initialSummary, setOpen }: { messageIndex
   const indices = path.map((id, index) => selected.includes(id) ? index : -1).filter(index => index >= 0);
   const continuous = indices.length > 0 && indices.length === selected.length && indices[indices.length - 1] - indices[0] + 1 === indices.length;
   const valid = continuous && indices.every(index => eligible(index) && candidate(index)) && (mode !== 'single' || indices.length === 1);
-  const local = isLocalModelConfig(chat.config);
-  const reason = local ? 'ローカルモデルでは要約生成を利用できません。' : !chat.config.model ? 'チャットのモデルを選択してください。' : !selected.length ? '要約するバブルを選択してください。' : !valid ? '同じ経路の連続した通常テキストを選択してください。不可視・画像・ツール・生成中のバブルは対象外です。' : '';
+  const generationConfig = summaryConfig ?? chat.config;
+  const local = isLocalModelConfig(generationConfig);
+  const reason = local ? 'ローカルモデルでは要約生成を利用できません。' : !generationConfig.model ? '要約のモデルを選択してください。' : !selected.length ? '要約するバブルを選択してください。' : !valid ? '同じ経路の連続した通常テキストを選択してください。不可視・画像・ツール・生成中のバブルは対象外です。' : '';
   const generate = () => {
     if (busy || reason) return;
     const state = useStore.getState();
-    void startBubbleSummary(effectiveChat, indices, mode, endpoint!, { favoriteModels: state.favoriteModels, providers: state.providers, fallbackProvider: { endpoint: state.apiEndpoint, key: state.apiKey }, apiVersion: state.apiVersion, t });
+    void startBubbleSummary(effectiveChat, indices, mode, endpoint!, { favoriteModels: state.favoriteModels, providers: state.providers, fallbackProvider: { endpoint: state.apiEndpoint, key: state.apiKey }, apiVersion: state.apiVersion, summaryConfig: state.bubbleSummaryConfig, t });
     if (useSummaryGeneration.getState().jobs[`${chat.id}:${endpoint}`]?.busy) setOpen(false);
   };
+  if (settingsOpen) return <ConfigMenu auxiliary config={summaryConfig ?? generationConfig} setConfig={useStore.getState().setBubbleSummaryConfig} imageDetail='auto' setImageDetail={() => {}} setIsModalOpen={setSettingsOpen} />;
   return <PopupModal title='要約の対象を選択' setIsModalOpen={setOpen} handleClose={close} handleClickBackdrop={close} cancelButton={false}
     footerEndContent={<><button type='button' className='btn btn-neutral' onClick={close}>{busy ? '閉じる' : 'キャンセル'}</button><button type='button' className={`btn ${busy || reason ? 'btn-neutral cursor-not-allowed opacity-50' : 'btn-primary'}`} disabled={busy || !!reason} onClick={() => void generate()}>{busy ? '生成中…' : '要約を生成'}</button></>}>
     <div className='min-w-[18rem] space-y-3 p-5 text-sm text-gray-900 dark:text-gray-300'>
       <div className='flex flex-wrap gap-3'>{(['single', 'through', 'range'] as const).map(value => <label key={value} className='flex cursor-pointer items-center gap-1 text-gray-600 dark:text-gray-400'><input type='radio' className='accent-blue-600' name='summary-mode' checked={mode === value} disabled={busy} onChange={() => chooseMode(value)} />{value === 'single' ? 'このバブル' : value === 'through' ? 'ここまで' : '選択範囲'}</label>)}</div>
       <p className='text-xs text-gray-500 dark:text-gray-400'>原文は保持されます。生成後は要約を表示・送信します。「原文」で原文の表示・送信に戻せます。先頭のシステム指示は要約しません。</p>
+      {initialSummary?.generation && <p className='break-all text-xs text-gray-500 dark:text-gray-400'>表示中の要約を生成した設定: {initialSummary.generation.model} · {initialSummary.generation.providerId ?? '既定のAPI'} · 温度 {initialSummary.generation.settings.temperature} · 出力上限 {initialSummary.generation.settings.max_tokens || 'モデル既定'} · 思考 {initialSummary.generation.settings.reasoning_effort ?? 'モデル既定'}</p>}
+      <fieldset disabled={busy} className='space-y-2 rounded border border-gray-200 p-3 dark:border-gray-600'>
+        <legend className='px-1'>要約の生成設定</legend>
+        <label className='flex items-center gap-2'><input type='checkbox' checked={!!summaryConfig} onChange={event => useStore.getState().setBubbleSummaryConfig(event.target.checked ? { ...(local ? _defaultChatConfig : chat.config) } : undefined)} />要約専用のモデル・設定を使う（全チャット共通）</label>
+        <p className='break-all text-xs'>{summaryConfig ? '要約専用' : 'チャット設定を使用'}: {generationConfig.model} · {generationConfig.providerId ?? '既定のAPI'} · 温度 {generationConfig.temperature} · 出力上限 {generationConfig.max_tokens || 'モデル既定'} · 思考 {generationConfig.reasoning_effort ?? 'モデル既定'}</p>
+        {summaryConfig && <button type='button' className='btn btn-neutral' onClick={() => setSettingsOpen(true)}>モデル・生成パラメータを調整</button>}
+      </fieldset>
       <div className='max-h-72 space-y-2 overflow-y-auto'>{path.map((id, index) => <label key={id} className={`flex items-start gap-2 rounded border p-2 ${selected.includes(id) && eligible(index) && candidate(index) ? 'border-gray-300 text-gray-900 dark:border-gray-500 dark:text-gray-300' : 'border-gray-200 text-gray-400 dark:border-gray-600 dark:text-gray-500'}`}>
         <input type='checkbox' className='mt-0.5 accent-blue-600' aria-label={`バブル${index + 1}を要約に含める`} checked={selected.includes(id)} disabled={busy || !candidate(index) || (!eligible(index) && !selected.includes(id))} onChange={() => {
           setSelected(current => current.includes(id) ? current.filter(value => value !== id) : [...current, id]);
