@@ -237,7 +237,7 @@ const Message = React.memo(
                 </div>
               </div>
               <div className='min-w-0' ref={swipeRef}>
-                <BubbleSummaryView nodeId={resolvedNodeId}>
+                <BubbleSummaryView nodeId={resolvedNodeId} isCollapsed={isCollapsed}>
                 {isCollapsed ? (
                   <div className={contentSurfaceClass}>
                     <div className='h-[4.5rem] overflow-hidden py-0 text-sm leading-6 text-gray-700 dark:text-gray-200 whitespace-pre-wrap break-words line-clamp-3'>
