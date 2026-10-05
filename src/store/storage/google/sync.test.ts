@@ -4,7 +4,8 @@ import { EncryptedDriveSync } from './sync';
 import { useGoogleSyncProgress, withSyncProgress } from './progress';
 import { DriveTransport, DriveNotFoundError, SYNC_FOLDER_TYPE, type DriveFile } from './transport';
 import { createKeyEnvelope, decrypt, encrypt, unlockKey, encode, digest } from './crypto';
-import { toRecords, fromRecords, diffRecords } from './records';
+import { toRecords, fromRecords, diffRecords, sameSnapshot } from './records';
+import { BROWSER_LOCAL_SETTINGS, withoutBrowserLocalSettings } from './settings';
 import type { Snapshot } from './records';
 import * as cacheStorage from './cache';
 import { addContent, addContentDelta } from '@utils/contentStore';
@@ -70,6 +71,32 @@ const snapshot = (image = false): Snapshot => {
 };
 const cache = () => { (globalThis as any).indexedDB = new IDBFactory(); };
 beforeEach(cache);
+
+it('excludes browser layout and proxy usage from uploads and older downloads', async () => {
+  const local = snapshot();
+  const preferences = {
+    hideMenuOptions: true, hideSideMenu: true, menuWidth: 320,
+    splitPanelRatio: 0.7, splitPanelSwapped: true, chatActiveView: 'split-horizontal' as const,
+    showDebugPanel: true, proxyEnabled: true,
+  };
+  Object.assign(local.state, preferences, { proxyEndpoint: 'https://proxy.example', proxyAuthToken: 'token' });
+  const records = await toRecords(local);
+  for (const key of BROWSER_LOCAL_SETTINGS) {
+    expect(records).not.toHaveProperty(JSON.stringify(['state', key]));
+  }
+  expect(await sameSnapshot([local, { ...local, state: { ...local.state, proxyEnabled: false, menuWidth: 200 } }])).toBe(true);
+  // Simulate records published by a version that synchronized these preferences.
+  for (const key of BROWSER_LOCAL_SETTINGS) records[JSON.stringify(['state', key])] = JSON.stringify(preferences[key]);
+  const downloaded = await fromRecords(records);
+  const legacy = withoutBrowserLocalSettings(local.state);
+  for (const key of BROWSER_LOCAL_SETTINGS) {
+    expect(downloaded.state).not.toHaveProperty(key);
+    expect(legacy).not.toHaveProperty(key);
+    expect(local.state[key]).toEqual(preferences[key]);
+  }
+  expect(downloaded.state.proxyEndpoint).toBe('https://proxy.example');
+  expect(downloaded.state.proxyAuthToken).toBe('token');
+});
 
 it('encrypts with fresh nonces, authenticates identity, rejects wrong passwords and tampering', async () => {
   const { envelope, key } = await createKeyEnvelope(PASSWORD, 'dataset');

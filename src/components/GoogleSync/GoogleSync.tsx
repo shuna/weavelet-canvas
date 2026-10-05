@@ -1,4 +1,5 @@
 import SyncDots from './SyncDots';
+import { withoutBrowserLocalSettings } from '@store/storage/google/settings';
 import { useSyncProgressDisplay } from '@hooks/useSyncProgressDisplay';
 import { SyncConflictError, useSyncReview, type Resolution } from '@store/storage/google/conflicts';
 import { withSyncProgress, syncPhase, syncStage, phaseProgress } from '@store/storage/google/progress';
@@ -489,7 +490,7 @@ const GooglePopup = ({
           normalizedRemote.version
         ) as Partial<PersistedStoreState>;
         const observed = useStore.getState();
-        const prepared = await prepareHydratedState(observed, remotePersistedState);
+        const prepared = await prepareHydratedState(observed, withoutBrowserLocalSettings(remotePersistedState));
         if (observed !== useStore.getState()) throw new Error('Local data changed while preparing the downloaded snapshot. Retry with the latest changes.');
         const hydratedState = finishHydratedState(prepared);
 
