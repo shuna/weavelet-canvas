@@ -477,9 +477,14 @@
 .bubble-message-layout { container: bubble / inline-size; }
 .summary-format-inline { display: none; }
 .summary-format-dropdown .summary-format-options { position: absolute; right: 0; top: 100%; z-index: 50; margin-top: 4px; width: max-content; flex-direction: column; gap: 0; border-radius: 8px; background-color: white; }
-.summary-format-dropdown .summary-format-options > button { padding: 6px 12px; border-radius: 4px; text-align: left; font-size: 14px; line-height: 20px; color: rgb(55 65 81); }
+.summary-option-icon { display: none; }
+.summary-format-dropdown .summary-option-icon { display: block; width: 14px; height: 14px; flex-shrink: 0; }
+.summary-format-dropdown .summary-format-options > button { display: flex; align-items: center; gap: 8px; padding: 6px 12px; border-radius: 4px; text-align: left; font-size: 14px; line-height: 20px; color: rgb(55 65 81); }
+.summary-format-dropdown .summary-format-options > button[aria-label="要約・圧縮の詳細設定"] { margin-top: 4px; border-top: 1px solid rgb(229 231 235); padding-top: 10px; border-top-left-radius: 0; border-top-right-radius: 0; }
+.dark .summary-format-dropdown .summary-format-options > button[aria-label="要約・圧縮の詳細設定"] { border-top-color: rgb(75 85 99); }
 .summary-format-dropdown .summary-format-options > button:hover { background-color: rgb(243 244 246); }
-.summary-format-dropdown .summary-format-options > button > .flex { justify-content: flex-start; }
+.summary-format-dropdown .summary-format-options > button > .flex { justify-content: flex-start; gap: 8px; }
+.summary-format-dropdown .summary-format-options > button > .flex > svg { width: 14px; height: 14px; }
 .dark .summary-format-dropdown .summary-format-options { background-color: rgb(31 41 55); }
 .dark .summary-format-dropdown .summary-format-options > button { color: rgb(229 231 235); }
 .dark .summary-format-dropdown .summary-format-options > button:hover { background-color: rgb(55 65 81); }
