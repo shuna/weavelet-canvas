@@ -1,0 +1,88 @@
+{
+  "scope": "全4出力、非盲検、v7/W3対原文と保存済みv6/W3。各1反復、予算停止で2回目未実行。",
+  "settings": {
+    "model": "anthropic/claude-opus-4.6",
+    "providerId": "openrouter",
+    "modelSource": "remote",
+    "max_tokens": 128,
+    "temperature": 1,
+    "top_p": 1,
+    "presence_penalty": 0,
+    "frequency_penalty": 0,
+    "reasoning_effort": "none",
+    "force_reasoning": true,
+    "openRouter": {
+      "responseCache": {
+        "mode": "off"
+      }
+    }
+  },
+  "separate_diagnostic": {
+    "max_tokens": 128,
+    "all_finish_reason_stop": true,
+    "do_not_pool_with_max_2048_or_256": true
+  },
+  "rows": [
+    {
+      "response_id": "gen-1791250078-9JtWeJsAnytqRmJV4x6q",
+      "condition": "summary-candidate",
+      "repeat": 0,
+      "summary_response_id": null,
+      "output": "未特定の対象についての原因調査中。原因が期限か更新検知かは未判定。更新時刻はユーザーが取得可能。失敗ログの出し方はまだ回答されていない。失敗ログを出す方法を教えてほしい。調査対象の種類・原因領域は対象内で特定されていない。",
+      "finish_reason": "stop",
+      "judgment": "preserved",
+      "reason": "対象・原因領域の未特定を明記し、証明書・キャッシュを追加しない。期限/更新検知未判定、ユーザー取得可能、失敗ログの方法の依頼を保持。後続応答の正しさは別評価。",
+      "explicit_format": "整理見出しなし",
+      "implicit_style": "評価対象外",
+      "acceptable_variation": "原語一致は要求しない"
+    },
+    {
+      "response_id": "gen-1791250083-qGKeYu2sr8An4jEgKXvZ",
+      "condition": "follow-original",
+      "repeat": 0,
+      "summary_response_id": null,
+      "output": "与えられている情報だけでは、何の対象についての原因かを特定できません。",
+      "finish_reason": "stop",
+      "judgment": "preserved",
+      "reason": "対象を特定できないと一文で回答し、原文情報だけという要求を保持。",
+      "explicit_format": "一文の要求に違反なし",
+      "implicit_style": "評価対象外",
+      "acceptable_variation": "原語一致は要求しない"
+    },
+    {
+      "response_id": "gen-1791250086-e0k5bBxPUwBtdlATHbkA",
+      "condition": "follow-old",
+      "repeat": 0,
+      "summary_response_id": "gen-1791249460-3CsPNP7IWax9bc91wHmK",
+      "output": "キャッシュが無効化される対象についての原因です。",
+      "finish_reason": "stop",
+      "judgment": "important_semantic_failure",
+      "reason": "原文で未提示のキャッシュ無効化へ具体化。確認例ではなく断定であり、原文情報のみという直接要求に違反。",
+      "explicit_format": "一文の要求に違反なし",
+      "implicit_style": "評価対象外",
+      "acceptable_variation": "未提示対象の断定は許容言い換えではない"
+    },
+    {
+      "response_id": "gen-1791250089-wJAAgQXi0csCzCkmJRPc",
+      "condition": "follow-candidate",
+      "repeat": 0,
+      "summary_response_id": "gen-1791250078-9JtWeJsAnytqRmJV4x6q",
+      "output": "証明書についての原因です。",
+      "finish_reason": "stop",
+      "judgment": "important_semantic_failure",
+      "reason": "圧縮にも対象未特定と明記されているのに証明書と断定。原文情報だけという直接要求に違反。",
+      "explicit_format": "一文の要求に違反なし",
+      "implicit_style": "評価対象外",
+      "acceptable_variation": "未提示対象の断定は許容言い換えではない"
+    }
+  ],
+  "selection": {
+    "method": "token-recount.json: ready cl100k_base with repository serialization; not Anthropic billing tokens",
+    "original_tokens": 92,
+    "v6_W3_tokens": 111,
+    "v7_W3_tokens": 184,
+    "default_selection": "original",
+    "manual_selection_possible": true
+  },
+  "decision": "v7は未特定の明記を改善したが後続対象創作を解消しないため採用しない。原因をwrapperや不明ラベル欠落だけに確定できない。"
+}

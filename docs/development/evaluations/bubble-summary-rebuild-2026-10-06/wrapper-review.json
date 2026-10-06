@@ -1,0 +1,2447 @@
+{
+  "method": "全66件をpaired_response_idの保存済み旧応答と比較。同じsummary_response_idを全件確認。非盲検の手動判定。",
+  "counts": {
+    "paired_followups": 66
+  },
+  "limitations": [
+    "同じ圧縮を固定したが後続生成は各ペア1回。生成の自然変動とwrapperの因果効果は確定できない。",
+    "各ケース3圧縮反復。2probeは同じ要約を共有する。",
+    "重要意味と形式の指標を合算しない。clear_unqualified_assuranceは成功ではなく違反の存在。",
+    "強制診断と実選択は各行metadataに保持。"
+  ],
+  "metrics": {
+    "T05 within_200": {
+      "before": [
+        6,
+        6
+      ],
+      "after": [
+        6,
+        6
+      ],
+      "improved": 0,
+      "worsened": 0
+    },
+    "T05 concrete_log_type_present": {
+      "before": [
+        6,
+        6
+      ],
+      "after": [
+        6,
+        6
+      ],
+      "improved": 0,
+      "worsened": 0
+    },
+    "T05 no_heading": {
+      "before": [
+        6,
+        6
+      ],
+      "after": [
+        6,
+        6
+      ],
+      "improved": 0,
+      "worsened": 0
+    },
+    "T06 whole_result_null": {
+      "before": [
+        0,
+        3
+      ],
+      "after": [
+        0,
+        3
+      ],
+      "improved": 0,
+      "worsened": 0
+    },
+    "T10 no_script_labels": {
+      "before": [
+        6,
+        6
+      ],
+      "after": [
+        6,
+        6
+      ],
+      "improved": 0,
+      "worsened": 0
+    },
+    "T10 yui_polite": {
+      "before": [
+        2,
+        6
+      ],
+      "after": [
+        2,
+        6
+      ],
+      "improved": 1,
+      "worsened": 1
+    },
+    "T10 clear_unqualified_assurance": {
+      "before": [
+        1,
+        6
+      ],
+      "after": [
+        2,
+        6
+      ],
+      "improved": 2,
+      "worsened": 1
+    },
+    "D02 two_sentences": {
+      "before": [
+        1,
+        3
+      ],
+      "after": [
+        1,
+        3
+      ],
+      "improved": 0,
+      "worsened": 0
+    },
+    "D02 explicit_completion_fabrication": {
+      "before": [
+        0,
+        3
+      ],
+      "after": [
+        0,
+        3
+      ],
+      "improved": 0,
+      "worsened": 0
+    },
+    "D03 two_sentences": {
+      "before": [
+        5,
+        6
+      ],
+      "after": [
+        6,
+        6
+      ],
+      "improved": 1,
+      "worsened": 0
+    },
+    "D03 explicit_nonexecution": {
+      "before": [
+        6,
+        6
+      ],
+      "after": [
+        6,
+        6
+      ],
+      "improved": 0,
+      "worsened": 0
+    },
+    "D03 explicit_completion_fabrication": {
+      "before": [
+        0,
+        6
+      ],
+      "after": [
+        0,
+        6
+      ],
+      "improved": 0,
+      "worsened": 0
+    },
+    "T13 two_paragraphs": {
+      "before": [
+        3,
+        3
+      ],
+      "after": [
+        3,
+        3
+      ],
+      "improved": 0,
+      "worsened": 0
+    },
+    "T13 current_and_default_30": {
+      "before": [
+        3,
+        3
+      ],
+      "after": [
+        3,
+        3
+      ],
+      "improved": 0,
+      "worsened": 0
+    },
+    "T13 save_range_validation": {
+      "before": [
+        3,
+        3
+      ],
+      "after": [
+        3,
+        3
+      ],
+      "improved": 0,
+      "worsened": 0
+    },
+    "T14 no_script_labels": {
+      "before": [
+        3,
+        3
+      ],
+      "after": [
+        3,
+        3
+      ],
+      "improved": 0,
+      "worsened": 0
+    },
+    "T14 yui_polite": {
+      "before": [
+        3,
+        3
+      ],
+      "after": [
+        3,
+        3
+      ],
+      "improved": 0,
+      "worsened": 0
+    },
+    "T14 clear_unqualified_assurance": {
+      "before": [
+        0,
+        3
+      ],
+      "after": [
+        0,
+        3
+      ],
+      "improved": 0,
+      "worsened": 0
+    },
+    "R01 two_sentences": {
+      "before": [
+        6,
+        6
+      ],
+      "after": [
+        6,
+        6
+      ],
+      "improved": 0,
+      "worsened": 0
+    },
+    "R01 plain_no_heading": {
+      "before": [
+        6,
+        6
+      ],
+      "after": [
+        6,
+        6
+      ],
+      "improved": 0,
+      "worsened": 0
+    },
+    "R02 no_script_labels": {
+      "before": [
+        6,
+        6
+      ],
+      "after": [
+        6,
+        6
+      ],
+      "improved": 0,
+      "worsened": 0
+    },
+    "R02 voices_preserved": {
+      "before": [
+        6,
+        6
+      ],
+      "after": [
+        6,
+        6
+      ],
+      "improved": 0,
+      "worsened": 0
+    },
+    "R02 dialogues_le_4": {
+      "before": [
+        4,
+        6
+      ],
+      "after": [
+        4,
+        6
+      ],
+      "improved": 1,
+      "worsened": 1
+    },
+    "R02 narration_le_2": {
+      "before": [
+        0,
+        6
+      ],
+      "after": [
+        0,
+        6
+      ],
+      "improved": 0,
+      "worsened": 0
+    },
+    "R02 explicitly_checks_pending_key_return": {
+      "before": [
+        3,
+        3
+      ],
+      "after": [
+        3,
+        3
+      ],
+      "improved": 0,
+      "worsened": 0
+    },
+    "R03 proposal_not_adopted": {
+      "before": [
+        6,
+        6
+      ],
+      "after": [
+        6,
+        6
+      ],
+      "improved": 0,
+      "worsened": 0
+    },
+    "R03 current_unknown_no_fixed_implementation": {
+      "before": [
+        6,
+        6
+      ],
+      "after": [
+        6,
+        6
+      ],
+      "improved": 0,
+      "worsened": 0
+    },
+    "R03 two_polite_sentences": {
+      "before": [
+        3,
+        3
+      ],
+      "after": [
+        3,
+        3
+      ],
+      "improved": 0,
+      "worsened": 0
+    },
+    "R04 polite_no_table_le_3_sentences": {
+      "before": [
+        6,
+        6
+      ],
+      "after": [
+        6,
+        6
+      ],
+      "improved": 0,
+      "worsened": 0
+    },
+    "R04 local_preparation_retained": {
+      "before": [
+        0,
+        6
+      ],
+      "after": [
+        0,
+        6
+      ],
+      "improved": 0,
+      "worsened": 0
+    },
+    "R05 zero_and_string_distinguished": {
+      "before": [
+        6,
+        6
+      ],
+      "after": [
+        6,
+        6
+      ],
+      "improved": 0,
+      "worsened": 0
+    },
+    "R05 strict_equality_preserved": {
+      "before": [
+        6,
+        6
+      ],
+      "after": [
+        6,
+        6
+      ],
+      "improved": 0,
+      "worsened": 0
+    },
+    "R05 no_100ms_adoption": {
+      "before": [
+        6,
+        6
+      ],
+      "after": [
+        6,
+        6
+      ],
+      "improved": 0,
+      "worsened": 0
+    },
+    "R05 focused_short_bullets": {
+      "before": [
+        2,
+        6
+      ],
+      "after": [
+        2,
+        6
+      ],
+      "improved": 0,
+      "worsened": 0
+    },
+    "R06 unknown_references_unfilled": {
+      "before": [
+        6,
+        6
+      ],
+      "after": [
+        6,
+        6
+      ],
+      "improved": 0,
+      "worsened": 0
+    },
+    "R06 display_internal_distinguished": {
+      "before": [
+        6,
+        6
+      ],
+      "after": [
+        6,
+        6
+      ],
+      "improved": 0,
+      "worsened": 0
+    },
+    "R06 plain_style": {
+      "before": [
+        6,
+        6
+      ],
+      "after": [
+        6,
+        6
+      ],
+      "improved": 0,
+      "worsened": 0
+    }
+  },
+  "rows": [
+    {
+      "case_id": "T05",
+      "repeat": 0,
+      "probe": 0,
+      "response_id": "gen-1791247617-LtoGc5lIgXGqQH3oCsgR",
+      "paired_response_id": "gen-1791246823-I8FPOZgFq8giOQw8xWVP",
+      "summary_response_id": "gen-1791246810-chaNaFObJfdZx38laXoD",
+      "candidate_automatic_selection": "original",
+      "forced_diagnostic": true,
+      "output": "ログのタイムアウトを原因として採用し、修正対象は表示部分に限定する方針とした。通信断の可能性は仮説として残っているが未確定のため断定はしない。次のステップとして、タイムアウト発生時の前後のログ（リクエスト送信時刻・レスポンス有無・エラーコード）を確認する必要がある。これにより、通信断の仮説についても裏付けまたは除外できる見込みである。",
+      "paired_output": "ログにタイムアウトが記録されている点を原因として採用し、修正対象は表示のみとする。通信断の可能性は仮説として残っているが未採用のため断定しない。再試行を3回にする案は不採用とした。次のステップとして、タイムアウト発生時の前後のログ（リクエスト送信時刻・レスポンス有無・エラーコード）を確認し、原因の未確定部分を絞り込む必要がある。",
+      "semantic_and_state": [
+        "表示のみ、通信断仮説未確定、具体ログの説明を保持。説明全体を先送りしない。"
+      ],
+      "explicit_form": [],
+      "implicit_style": [],
+      "acceptable_variation": [],
+      "uncertain": [],
+      "checks": {
+        "within_200": true,
+        "concrete_log_type_present": true,
+        "no_heading": true
+      },
+      "paired_checks": {
+        "within_200": true,
+        "concrete_log_type_present": true,
+        "no_heading": true
+      }
+    },
+    {
+      "case_id": "T05",
+      "repeat": 1,
+      "probe": 0,
+      "response_id": "gen-1791247617-8EaPhWdSYAkjJgjOVJUQ",
+      "paired_response_id": "gen-1791246823-AmQl0RVMnryXz4F3GNei",
+      "summary_response_id": "gen-1791246809-KnBb9ETjJwe6563KSOwV",
+      "candidate_automatic_selection": "original",
+      "forced_diagnostic": true,
+      "output": "原因Aのタイムアウトはログで確認済みだが、原因Bは通信断の可能性を含め未確定のままである。修正対象は表示部分に限定する。次のステップとして、原因Bの切り分けのためにネットワーク層のログ（接続状態・エラーコード）を取得する必要がある。これらのログが得られれば、通信断かどうかを判断できる見込みである。",
+      "paired_output": "原因Aのタイムアウトはログで確認済みだが、原因Bは通信断の可能性を含め未確定のままである。修正対象は表示部分に限定する方針とする。次のステップとして、原因Bの特定にはエラー発生時のネットワークログおよびサーバー側レスポンスログが必要になる。これらを取得できれば、通信断か他の要因かを切り分けられる見込みである。",
+      "semantic_and_state": [
+        "表示のみ、通信断仮説未確定、具体ログの説明を保持。説明全体を先送りしない。"
+      ],
+      "explicit_form": [],
+      "implicit_style": [],
+      "acceptable_variation": [],
+      "uncertain": [],
+      "checks": {
+        "within_200": true,
+        "concrete_log_type_present": true,
+        "no_heading": true
+      },
+      "paired_checks": {
+        "within_200": true,
+        "concrete_log_type_present": true,
+        "no_heading": true
+      }
+    },
+    {
+      "case_id": "T05",
+      "repeat": 0,
+      "probe": 1,
+      "response_id": "gen-1791247622-TbgIIIJasRF4ZphDfbkM",
+      "paired_response_id": "gen-1791246836-xMGZKkjPwPVZco2ML1Iy",
+      "summary_response_id": "gen-1791246810-chaNaFObJfdZx38laXoD",
+      "candidate_automatic_selection": "original",
+      "forced_diagnostic": true,
+      "output": "ログからタイムアウトが発生していることは確認できている。一方、通信断の可能性については仮説の段階で、まだ原因として確定していない。修正対象は表示部分に限定する方針となった。次のステップとして、タイムアウト前後のネットワークログやリクエスト・レスポンスの詳細ログを取得し、通信断が実際に起きていたかどうかを切り分ける必要がある。",
+      "paired_output": "ログからタイムアウトが発生していることは確認済みで、表示の修正を進める方針だ。一方、通信断の可能性はまだ仮説の段階で確定していない。原因を切り分けるため、タイムアウト前後のネットワークログ（接続状態・リトライ回数・エラーコードなど）を追加で取得する必要がある。これにより、通信断が実際に起きていたかどうか判断できる見込みだ。",
+      "semantic_and_state": [
+        "表示のみ、通信断仮説未確定、具体ログの説明を保持。説明全体を先送りしない。"
+      ],
+      "explicit_form": [],
+      "implicit_style": [],
+      "acceptable_variation": [],
+      "uncertain": [],
+      "checks": {
+        "within_200": true,
+        "concrete_log_type_present": true,
+        "no_heading": true
+      },
+      "paired_checks": {
+        "within_200": true,
+        "concrete_log_type_present": true,
+        "no_heading": true
+      }
+    },
+    {
+      "case_id": "T05",
+      "repeat": 1,
+      "probe": 1,
+      "response_id": "gen-1791247622-GNlYCoMwfZlBgWkF77hG",
+      "paired_response_id": "gen-1791246837-7MYCqMgXMQZsfyjZQJQG",
+      "summary_response_id": "gen-1791246809-KnBb9ETjJwe6563KSOwV",
+      "candidate_automatic_selection": "original",
+      "forced_diagnostic": true,
+      "output": "ログからタイムアウトの発生は確認できたが、原因Bについては通信断の可能性を含めまだ特定できていない。修正は表示部分のみ行う予定である。次のステップとして、原因Bを切り分けるにはネットワーク層のログ（接続確立・切断の時刻やエラーコード）が必要になる。これらのログを取得できれば、通信断かそれ以外かを判断する材料になる。",
+      "paired_output": "原因Aについては、ログにタイムアウトが記録されていることが確認済みである。一方、原因Bは依然として不明であり、通信断の可能性は仮説にとどまる。現時点の修正は表示部分のみ行う予定だ。Bの原因を特定するには、通信レイヤーの詳細ログが必要になる。具体的には、リクエスト・レスポンスの送受信時刻やステータスコード、接続状態の遷移を記録したログを取得できれば、切り分けが進む見込みだ。",
+      "semantic_and_state": [
+        "表示のみ、通信断仮説未確定、具体ログの説明を保持。説明全体を先送りしない。"
+      ],
+      "explicit_form": [],
+      "implicit_style": [],
+      "acceptable_variation": [],
+      "uncertain": [],
+      "checks": {
+        "within_200": true,
+        "concrete_log_type_present": true,
+        "no_heading": true
+      },
+      "paired_checks": {
+        "within_200": true,
+        "concrete_log_type_present": true,
+        "no_heading": true
+      }
+    },
+    {
+      "case_id": "T05",
+      "repeat": 2,
+      "probe": 0,
+      "response_id": "gen-1791247626-d6mQNdn0FCqWl5ztOpul",
+      "paired_response_id": "gen-1791246859-o4sws75BcMPglLM1HAtX",
+      "summary_response_id": "gen-1791246846-f9oiQ2DTwrmIRvCXoYzG",
+      "candidate_automatic_selection": "original",
+      "forced_diagnostic": true,
+      "output": "ログにタイムアウトが記録されている点は確認済みだが、原因の全容はまだ確定していない。通信断の可能性も仮説として残っている。修正対象は表示に限定する方針とした。次のステップとして、タイムアウト発生前後のリクエスト・レスポンスログおよびネットワーク層のログを追加取得し、原因の切り分けを進める必要がある。",
+      "paired_output": "現時点では、ログに出ているタイムアウトを原因として採用し、修正対象は表示部分に限定する方針である。通信断の可能性は仮説段階で未採用のため、切り分けにはネットワーク層のログが必要になる。次のステップとして、タイムアウト発生時のリクエスト・レスポンスログに加え、通信状態を示すログ（接続確立・切断のタイミング等）を確認したい。これにより原因Bの特定を進められる見込みである。",
+      "semantic_and_state": [
+        "表示のみ、通信断仮説未確定、具体ログの説明を保持。説明全体を先送りしない。"
+      ],
+      "explicit_form": [],
+      "implicit_style": [],
+      "acceptable_variation": [],
+      "uncertain": [
+        "A原因とB未確定を「原因の全容/根本原因未特定」へまとめるため論点区別が弱い。旧wrapperも同種の確度の弱まりがある。"
+      ],
+      "checks": {
+        "within_200": true,
+        "concrete_log_type_present": true,
+        "no_heading": true
+      },
+      "paired_checks": {
+        "within_200": true,
+        "concrete_log_type_present": true,
+        "no_heading": true
+      }
+    },
+    {
+      "case_id": "T06",
+      "repeat": 0,
+      "probe": 0,
+      "response_id": "gen-1791247627-buArLv8noNswhYZi3xb2",
+      "paired_response_id": "gen-1791246855-3z2dnGE4r6ahMRvavU1y",
+      "summary_response_id": "gen-1791246847-0AktJR2TWsS5PzUrEyie",
+      "candidate_automatic_selection": "original",
+      "forced_diagnostic": true,
+      "output": "```json\n{\n  \"検査結果\": null\n}\n```",
+      "paired_output": "```json\n{\n  \"検査結果\": null\n}\n```",
+      "semantic_and_state": [
+        "旧と同じく結果全体nullではなく検査結果キーを創作。改善なし。"
+      ],
+      "explicit_form": [],
+      "implicit_style": [],
+      "acceptable_variation": [],
+      "uncertain": [],
+      "checks": {
+        "whole_result_null": false
+      },
+      "paired_checks": {
+        "whole_result_null": false
+      }
+    },
+    {
+      "case_id": "T06",
+      "repeat": 1,
+      "probe": 0,
+      "response_id": "gen-1791247629-c9w3fmUsORy1BUr2j37y",
+      "paired_response_id": "gen-1791246869-1HdwGpDFE4eHiOGsOhIu",
+      "summary_response_id": "gen-1791246861-pVd5ukZJ0IsETfsL58lS",
+      "candidate_automatic_selection": "original",
+      "forced_diagnostic": true,
+      "output": "```json\n{\n  \"検査結果\": null\n}\n```",
+      "paired_output": "```json\n{\n  \"検査結果\": null\n}\n```",
+      "semantic_and_state": [
+        "旧と同じく結果全体nullではなく検査結果キーを創作。改善なし。"
+      ],
+      "explicit_form": [],
+      "implicit_style": [],
+      "acceptable_variation": [],
+      "uncertain": [],
+      "checks": {
+        "whole_result_null": false
+      },
+      "paired_checks": {
+        "whole_result_null": false
+      }
+    },
+    {
+      "case_id": "T05",
+      "repeat": 2,
+      "probe": 1,
+      "response_id": "gen-1791247631-1nfPI1ElhN446xtOzm5b",
+      "paired_response_id": "gen-1791246873-tnCzQxnn8wbyR8LgHSYL",
+      "summary_response_id": "gen-1791246846-f9oiQ2DTwrmIRvCXoYzG",
+      "candidate_automatic_selection": "original",
+      "forced_diagnostic": true,
+      "output": "ログからタイムアウトの発生は確認されているが、その根本的な原因はまだ特定できていない。通信断の可能性も考えられるものの、現時点では仮説にとどまる。修正対象は表示部分に限定する方針となっている。次のステップとして、タイムアウト前後のネットワークログやサーバー側の応答時間を記録したログを取得し、原因の切り分けを進める必要がある。",
+      "paired_output": "ログにはタイムアウトが記録されており、これは表示の問題を調べる手がかりとして採用されている。一方、通信断の可能性など原因が確定していない部分もある。次のステップとして、タイムアウト発生前後のリクエスト・レスポンスの詳細ログや、表示処理に関連するクライアント側のログを確認する必要がある。これにより、表示不具合の原因をさらに絞り込めると考えられる。",
+      "semantic_and_state": [
+        "表示のみ、通信断仮説未確定、具体ログの説明を保持。説明全体を先送りしない。"
+      ],
+      "explicit_form": [],
+      "implicit_style": [],
+      "acceptable_variation": [],
+      "uncertain": [
+        "A原因とB未確定を「原因の全容/根本原因未特定」へまとめるため論点区別が弱い。旧wrapperも同種の確度の弱まりがある。"
+      ],
+      "checks": {
+        "within_200": true,
+        "concrete_log_type_present": true,
+        "no_heading": true
+      },
+      "paired_checks": {
+        "within_200": true,
+        "concrete_log_type_present": true,
+        "no_heading": true
+      }
+    },
+    {
+      "case_id": "T06",
+      "repeat": 2,
+      "probe": 0,
+      "response_id": "gen-1791247631-KIboziESb4YhG0qNkqet",
+      "paired_response_id": "gen-1791246882-q9sevGMlKgbAklKn5Rbm",
+      "summary_response_id": "gen-1791246875-Rkau4xugQObVMqjAbik8",
+      "candidate_automatic_selection": "original",
+      "forced_diagnostic": true,
+      "output": "```json\n{\n  \"検査結果\": null\n}\n```",
+      "paired_output": "```json\n{\n  \"検査結果\": null\n}\n```",
+      "semantic_and_state": [
+        "旧と同じく結果全体nullではなく検査結果キーを創作。改善なし。"
+      ],
+      "explicit_form": [],
+      "implicit_style": [],
+      "acceptable_variation": [],
+      "uncertain": [],
+      "checks": {
+        "whole_result_null": false
+      },
+      "paired_checks": {
+        "whole_result_null": false
+      }
+    },
+    {
+      "case_id": "T10",
+      "repeat": 0,
+      "probe": 0,
+      "response_id": "gen-1791247633-QxD5xE1DpBeR4ETfWrUz",
+      "paired_response_id": "gen-1791246903-ATl5KMsNsDzf80EQqSLs",
+      "summary_response_id": "gen-1791246882-lg8hBHldwj1UdmuCSavC",
+      "candidate_automatic_selection": "original",
+      "forced_diagnostic": true,
+      "output": "「具体的に、どこまでやるつもり？」とユイは聞いた。\n\n「全部じゃない。まず外側だけ」とアキは答えた。\n\n「外側というのは、範囲がはっきりしないんですが」\n\n「入口の周りと、窓の下あたり」\n\nユイは少し黙った。\n\n「期間は決めてありますか」\n\n「一週間くらいで見て、だめならやめる」\n\n「やめる判断は誰がするんですか」\n\n「……二人で」\n\n「二人でというのは、意見が割れたらどうなりますか」\n\nアキは視線を落とした。\n\n「そこは、まだ考えてない」\n\n「それを先に決めないと、私は乗れないです」\n\nアキは何か言いかけて、やめた。ユイも続きを待たなかった。",
+      "paired_output": "「具体的に、何を試すつもりなの」とユイは聞いた。\n\n「まだはっきりとは決めてない。ただ、前のやり方を変えたほうがいいと思った」\n\n「変えるというのは、どの部分ですか」\n\nアキは少し黙った。\n\n「……分担のところ。偏ってたと思うから」\n\n「偏りがあったのは私もそう感じていました。ただ、どう直すかが見えないまま始めると、また同じことになりませんか」\n\n「それはそうだな」\n\n「だから確認したいんです。試すにしても、期間とか、うまくいかなかったときの引き方とか、先に決めておきたいです」\n\nアキは腕を組んだ。\n\n「……一週間、とか？」\n\n「根拠はありますか」\n\n「ない。なんとなく」\n\nユイは口を結んだまま、少しだけ首を傾けた。",
+      "semantic_and_state": [
+        "明確な全体同意の確定はなし。旧の約束が消えた組もあり、意味の変化は一方向ではない。"
+      ],
+      "explicit_form": [
+        "ユイの完全な疑問文「どこまでやるつもり？/なの」が常体。旧の成功組とは入替もあり、総数は2/6のまま。"
+      ],
+      "implicit_style": [],
+      "acceptable_variation": [],
+      "uncertain": [
+        "「一週間くらいで見て、だめならやめる」は断定に近いが提案と未決の判断条件がある境界例。"
+      ],
+      "checks": {
+        "no_script_labels": true,
+        "yui_polite": false,
+        "clear_unqualified_assurance": false
+      },
+      "paired_checks": {
+        "no_script_labels": true,
+        "yui_polite": false,
+        "clear_unqualified_assurance": false
+      }
+    },
+    {
+      "case_id": "T10",
+      "repeat": 1,
+      "probe": 0,
+      "response_id": "gen-1791247636-8oaL9BcH6VWMRkeNBHr6",
+      "paired_response_id": "gen-1791246905-oSbN7PeSRDwdNegpzjRA",
+      "summary_response_id": "gen-1791246888-jq2I35ADIQajscg7fiaD",
+      "candidate_automatic_selection": "original",
+      "forced_diagnostic": true,
+      "output": "「条件って、具体的に何を確かめたい？」とアキは聞いた。\n\nユイは少し間を置いた。「まず、期間です。どのくらい試すつもりなんですか」\n\n「……決めてない。短くていいとは思ってる」\n\n「短い、というのは一週間ですか。一ヶ月ですか」\n\nアキは目をそらした。「一週間くらいで様子を見る、とか」\n\n「それと、うまくいかなかった場合のことも聞いておきたいです」とユイは続けた。「途中でやめるのは、どちらからでも言えるんですか」\n\n「……そのつもりだけど」\n\n「つもり、ですか」\n\nアキは黙った。ユイも黙った。\n\n「ちゃんと決めてから話すべきだったかもしれない」とアキは小さく言った。\n\nユイは頷きも否定もせず、ただ待っていた。",
+      "paired_output": "「具体的に、何を試すつもりですか」とユイは聞いた。\n\n「まだ決めてない。ただ、今のやり方を続けても変わらないと思った」\n\n「それは分かります。でも、変えるにしても、範囲がありますよね」\n\nアキは少し黙った。\n\n「……範囲か」\n\n「たとえば、期間とか、誰が関わるとか。そういうことを先に決めないと、私は乗れないです」\n\n「うん。それはそうだと思う」\n\nアキは視線を落とした。\n\n「全部こっちで決めて持っていくつもりはない。ただ、まだ何も形になってないから、答えられることが少ない」\n\n「それなら、形になった段階でもう一度聞かせてください。今の時点では何とも言えないので」\n\n「分かった」\n\nアキはそれだけ言って、話を先に進めようとはしなかった。",
+      "semantic_and_state": [
+        "明確な全体同意の確定はなし。旧の約束が消えた組もあり、意味の変化は一方向ではない。"
+      ],
+      "explicit_form": [],
+      "implicit_style": [],
+      "acceptable_variation": [],
+      "uncertain": [],
+      "checks": {
+        "no_script_labels": true,
+        "yui_polite": true,
+        "clear_unqualified_assurance": false
+      },
+      "paired_checks": {
+        "no_script_labels": true,
+        "yui_polite": true,
+        "clear_unqualified_assurance": false
+      }
+    },
+    {
+      "case_id": "T10",
+      "repeat": 0,
+      "probe": 1,
+      "response_id": "gen-1791247642-UA3GoFOouSzohB0a6d7l",
+      "paired_response_id": "gen-1791246929-40PXjIuvQFBWlwOjt3AD",
+      "summary_response_id": "gen-1791246882-lg8hBHldwj1UdmuCSavC",
+      "candidate_automatic_selection": "original",
+      "forced_diagnostic": true,
+      "output": "「具体的に、どこまでやるつもり？」とユイは聞いた。\n\n「まずは一週間、様子を見るだけ」とアキは答えた。\n\n「一週間で何がわかるんですか」\n\n「少なくとも、無理かどうかは見える」\n\nユイは少し黙った。\n\n「途中でやめたくなったら、やめられますか」\n\n「もちろん。縛るつもりはない」\n\n「……それを先に言ってほしかったです」\n\nアキは目をそらした。\n\n「悪かった。説明が足りなかった」\n\nユイはうなずいたが、それ以上は何も言わなかった。",
+      "paired_output": "「……具体的に聞いていい？」とユイは切り出した。「期間はどのくらいを考えていますか」\n\n「まだ決めてない。一週間か、二週間か」とアキは目を逸らした。\n\n「場所は」\n\n「うちでもいいし、外でもいい」\n\nユイは少し黙った。\n\n「……それだと、私が何を引き受けることになるのか分からないです」\n\n「そうだな」アキは否定しなかった。「詰められてない」\n\n「詰めてから、もう一度聞かせてください」\n\nアキは頷いただけで、何も足さなかった。",
+      "semantic_and_state": [
+        "r0p1「もちろん。縛るつもりはない」/r2p0「片方が止めたいと言えば止める」と、禁止された断定的撤退保証を追加。",
+        "明確な全体同意の確定はなし。旧の約束が消えた組もあり、意味の変化は一方向ではない。"
+      ],
+      "explicit_form": [
+        "ユイの完全な疑問文「どこまでやるつもり？/なの」が常体。旧の成功組とは入替もあり、総数は2/6のまま。"
+      ],
+      "implicit_style": [],
+      "acceptable_variation": [],
+      "uncertain": [
+        "謝罪とうなずきを加えるが、相槌が提案全体の合意/和解とは断定できない。"
+      ],
+      "checks": {
+        "no_script_labels": true,
+        "yui_polite": false,
+        "clear_unqualified_assurance": true
+      },
+      "paired_checks": {
+        "no_script_labels": true,
+        "yui_polite": false,
+        "clear_unqualified_assurance": false
+      }
+    },
+    {
+      "case_id": "T10",
+      "repeat": 1,
+      "probe": 1,
+      "response_id": "gen-1791247646-vCTLeMAU2gZqQGhZZDj8",
+      "paired_response_id": "gen-1791246929-ULH7z67lxnwZi8E4Z6at",
+      "summary_response_id": "gen-1791246888-jq2I35ADIQajscg7fiaD",
+      "candidate_automatic_selection": "original",
+      "forced_diagnostic": true,
+      "output": "「具体的に、どこまで変えるつもりなの」とユイは聞いた。\n\n「まだ全部は決めてない。まず配分を見直すくらい」とアキは答えた。\n\n「見直すというのは、誰がどう確認するんですか」\n\nアキは少し間を置いた。「……そこは、これから詰める」\n\n「それが分からないうちは、私からは何とも言えません」とユイは言った。\n\nアキは頷いただけで、それ以上は押さなかった。",
+      "paired_output": "「条件って、たとえば何を？」とアキは聞いた。\n\n「まず、期間です。どこまで続けるつもりなのか、聞いておきたいです」とユイは言った。\n\n「……正直、そこまで決めてない」\n\n「決めてないまま始めるのは、少し怖いです」\n\nアキは黙った。反論はしなかった。\n\n「もうひとつ。途中でやめたいと言ったら、止めないでもらえますか」\n\n「それは——うん、止めない」\n\n「本当に？」\n\n「本当に」\n\nユイは小さく息を吐いた。ただ、うなずきはしなかった。\n\n「……もう少し考えさせてください」",
+      "semantic_and_state": [
+        "明確な全体同意の確定はなし。旧の約束が消えた組もあり、意味の変化は一方向ではない。"
+      ],
+      "explicit_form": [
+        "ユイの完全な疑問文「どこまでやるつもり？/なの」が常体。旧の成功組とは入替もあり、総数は2/6のまま。"
+      ],
+      "implicit_style": [],
+      "acceptable_variation": [],
+      "uncertain": [],
+      "checks": {
+        "no_script_labels": true,
+        "yui_polite": false,
+        "clear_unqualified_assurance": false
+      },
+      "paired_checks": {
+        "no_script_labels": true,
+        "yui_polite": true,
+        "clear_unqualified_assurance": true
+      }
+    },
+    {
+      "case_id": "T10",
+      "repeat": 2,
+      "probe": 0,
+      "response_id": "gen-1791247648-XBpUmmAfpaHDZ3beCg6Q",
+      "paired_response_id": "gen-1791246962-xrAYLwTrHbvQgARenNk5",
+      "summary_response_id": "gen-1791246940-cUGKPDgPFJVw1PZcAkri",
+      "candidate_automatic_selection": "original",
+      "forced_diagnostic": true,
+      "output": "「具体的に、どこまでやるつもりなの」とユイは聞いた。\n\n「まだ決めてない。枠だけ作って、様子を見る」とアキは言った。\n\n「様子を見る、というのは、どのくらいの期間ですか」\n\n「一週間か、二週間か。短くていい」\n\nユイは少し間を置いた。\n\n「途中でやめる場合の判断は、どちらがしますか」\n\n「どっちでも。片方が止めたいと言えば止める」\n\n「それは口頭で伝える形ですか」\n\n「うん。それでいいと思う」\n\nユイはうなずかなかった。メモ帳を開いて、今の条件を書き始めた。\n\n「書いておかないと、あとで曖昧になります」\n\n「好きにして」とアキは言った。視線は窓の方を向いていた。",
+      "paired_output": "「具体的に、どこまでやるつもりなの」とユイは聞いた。\n\n「全部じゃない。まず一回だけ」とアキは言った。\n\n「一回で何がわかるんですか」\n\n「わからないかもしれない。でも、やらないよりはましだと思った」\n\nユイは少し間を置いた。\n\n「失敗したとき、誰が責任を取るんですか」\n\n「……そこは、まだ決めてない」\n\n「それを決めないまま始めるのは怖いです」\n\nアキは目をそらした。\n\n「うん。だから仮の話だって言った」\n\n「仮でも、巻き込まれる側には関係あります」\n\nアキは何も返さなかった。ユイも続きを促さなかった。",
+      "semantic_and_state": [
+        "r0p1「もちろん。縛るつもりはない」/r2p0「片方が止めたいと言えば止める」と、禁止された断定的撤退保証を追加。",
+        "明確な全体同意の確定はなし。旧の約束が消えた組もあり、意味の変化は一方向ではない。"
+      ],
+      "explicit_form": [
+        "ユイの完全な疑問文「どこまでやるつもり？/なの」が常体。旧の成功組とは入替もあり、総数は2/6のまま。"
+      ],
+      "implicit_style": [],
+      "acceptable_variation": [],
+      "uncertain": [],
+      "checks": {
+        "no_script_labels": true,
+        "yui_polite": false,
+        "clear_unqualified_assurance": true
+      },
+      "paired_checks": {
+        "no_script_labels": true,
+        "yui_polite": false,
+        "clear_unqualified_assurance": false
+      }
+    },
+    {
+      "case_id": "D02",
+      "repeat": 0,
+      "probe": 0,
+      "response_id": "gen-1791247652-BqtYhIyJiu8ZYjdwnmBA",
+      "paired_response_id": "gen-1791246950-VJUrT5kjHvpzGLfAX1tY",
+      "summary_response_id": "gen-1791246940-h2Yf2a5g0qxhoRTnHS31",
+      "candidate_automatic_selection": "original",
+      "forced_diagnostic": true,
+      "output": "採用した設定は、待機時間を30秒とする案Aです。表示だけを変更する方針のため、通信処理やキャッシュの削除は行わず、案Aの画面上の見せ方のみを調整する予定ですが、実際の変更作業や動作計測はまだ行われていません。\n\n残る確認事項としては、表示変更の具体的な内容（文言・レイアウトなど）の詳細と、変更後に30秒の待機が意図どおり機能しているかの動作確認が挙げられます。",
+      "paired_output": "採用した設定は、キャッシュを保持したまま待機時間を30秒とする案Aです。表示のみを変更し、削除や通信処理には手を加えません。\n\n残る確認事項として、変更後の表示が意図どおり反映されているかの計測がまだ実施されていない点があります。許容範囲は5〜60秒のため、計測結果によっては待機時間の微調整が必要になる可能性も残っています。",
+      "semantic_and_state": [
+        "30秒採用、表示変更の範囲を保持し、変更完了の創作はない。",
+        "「実際の変更作業...まだ行われていません」と未実施を断定。原文の未来の変更方針と未計測から実施状態全般の確定まではできず、旧にはない補完。"
+      ],
+      "explicit_form": [
+        "2文指定に対して3文または4文。"
+      ],
+      "implicit_style": [],
+      "acceptable_variation": [],
+      "uncertain": [],
+      "checks": {
+        "two_sentences": false,
+        "explicit_completion_fabrication": false
+      },
+      "paired_checks": {
+        "two_sentences": false,
+        "explicit_completion_fabrication": false
+      }
+    },
+    {
+      "case_id": "T10",
+      "repeat": 2,
+      "probe": 1,
+      "response_id": "gen-1791247657-kjA1aVxJmcKVf4c068XG",
+      "paired_response_id": "gen-1791246986-pwd0WsERklhjGedfVkdi",
+      "summary_response_id": "gen-1791246940-cUGKPDgPFJVw1PZcAkri",
+      "candidate_automatic_selection": "original",
+      "forced_diagnostic": true,
+      "output": "「具体的に、どこまで関わることになりますか」とユイは聞いた。\n\n「最初は週一くらいだと思う。増えるかは分からない」\n\n「費用の分担は」\n\n「そこはまだ決めてない」とアキは少し間を置いた。「先に全体の流れを見てからでいいかと思ってた」\n\n「順序が気になります。流れを見てからだと、断りにくくなりませんか」\n\nアキは黙った。\n\n「……確かに、そうかもしれない」\n\n「先に条件を出してもらえれば、考えやすいです」とユイは言った。声は落ち着いていたが、視線はアキの手元の資料に向いたままだった。\n\n「分かった。整理してみる」\n\nユイは小さくうなずいただけで、それ以上は何も言わなかった。",
+      "paired_output": "「具体的に、どこまでやるつもりなの」とユイは聞いた。\n\n「まだ決めてない。まず動けるか確認するだけ」とアキは答えた。\n\n「確認して、うまくいかなかったら？」\n\nアキは少し間を置いた。「そのときはやめる。無理に続ける気はない」\n\n「やめる基準は決まっていますか」\n\n「……それは正直、まだ」\n\nユイは黙った。納得とも不満ともつかない沈黙だった。\n\n「もう少し詰めてから聞かせてください」とユイは言った。「今の段階では、何とも言えないので」\n\nアキは小さくうなずいた。",
+      "semantic_and_state": [
+        "明確な全体同意の確定はなし。旧の約束が消えた組もあり、意味の変化は一方向ではない。"
+      ],
+      "explicit_form": [],
+      "implicit_style": [],
+      "acceptable_variation": [],
+      "uncertain": [],
+      "checks": {
+        "no_script_labels": true,
+        "yui_polite": true,
+        "clear_unqualified_assurance": false
+      },
+      "paired_checks": {
+        "no_script_labels": true,
+        "yui_polite": false,
+        "clear_unqualified_assurance": false
+      }
+    },
+    {
+      "case_id": "D02",
+      "repeat": 1,
+      "probe": 0,
+      "response_id": "gen-1791247658-2eDVREz31MZe96cDoRze",
+      "paired_response_id": "gen-1791246970-IacVcbQbnfidN1Z4ts1F",
+      "summary_response_id": "gen-1791246959-QlrWyrHLqCUICTtj9Wl1",
+      "candidate_automatic_selection": "original",
+      "forced_diagnostic": true,
+      "output": "採用された設定は、案Aの待機30秒です。案Bの待機45秒は説明用の候補として挙げられましたが、ユーザーにより不採用が明示されています。\n\n変更の対象は案Aの表示部分のみであり、キャッシュの削除や通信処理の変更は禁止されています。許容範囲は5〜60秒とされていますが、実際の計測はまだ行われていないため、待機30秒が適切かどうかの検証が残る確認事項となります。",
+      "paired_output": "採用した設定は、案Aの待機30秒です。表示に関する変更のみが対象となっており、削除や通信処理の変更は行いません。\n\n残る確認事項として、待機30秒の設定についてまだ計測が実施されていないため、実際の動作確認が必要です。許容範囲は5〜60秒とされていますが、30秒が適切かどうかは計測結果を見て判断することになります。また、キャッシュは消さない方針のため、キャッシュが残った状態での挙動についても確認が求められます。",
+      "semantic_and_state": [
+        "30秒採用、表示変更の範囲を保持し、変更完了の創作はない。"
+      ],
+      "explicit_form": [
+        "2文指定に対して3文または4文。"
+      ],
+      "implicit_style": [],
+      "acceptable_variation": [],
+      "uncertain": [],
+      "checks": {
+        "two_sentences": false,
+        "explicit_completion_fabrication": false
+      },
+      "paired_checks": {
+        "two_sentences": false,
+        "explicit_completion_fabrication": false
+      }
+    },
+    {
+      "case_id": "D02",
+      "repeat": 2,
+      "probe": 0,
+      "response_id": "gen-1791247662-0jUvNzxI2wvfP1GFfsx2",
+      "paired_response_id": "gen-1791246993-eYqL3zL9D4EIb2UomayU",
+      "summary_response_id": "gen-1791246980-NA7AK4v2tgkmI9WYVfLM",
+      "candidate_automatic_selection": "original",
+      "forced_diagnostic": true,
+      "output": "採用案Aでは、キャッシュを保持したまま待機時間を30秒に設定する方針です。表示の変更のみを行う予定ですが、実際の計測はまだ行われていないため、30秒の待機が期待どおりに機能するかは今後の確認事項として残っています。",
+      "paired_output": "採用した設定はタイムアウト待機30秒の案Aで、表示の変更のみが指示されています。計測はまだ実施されていないため、表示変更後の動作確認が残る確認事項です。",
+      "semantic_and_state": [
+        "30秒採用、表示変更の範囲を保持し、変更完了の創作はない。"
+      ],
+      "explicit_form": [],
+      "implicit_style": [],
+      "acceptable_variation": [],
+      "uncertain": [],
+      "checks": {
+        "two_sentences": true,
+        "explicit_completion_fabrication": false
+      },
+      "paired_checks": {
+        "two_sentences": true,
+        "explicit_completion_fabrication": false
+      }
+    },
+    {
+      "case_id": "D03",
+      "repeat": 0,
+      "probe": 0,
+      "response_id": "gen-1791247666-cggVXv4FZ4ZnAsfLybEB",
+      "paired_response_id": "gen-1791247006-lzrDeO0FUnpY6RMIoSK0",
+      "summary_response_id": "gen-1791246997-cQRIaIW58gS5FkVOdOOP",
+      "candidate_automatic_selection": "original",
+      "forced_diagnostic": true,
+      "output": "移行案Bを採用し、新しい一覧の表示だけを変更する方針としましたが、実装や検証はまだ行っていません。次回、保存済みのデータを残したまま表示の切り替えを実装する予定です。",
+      "paired_output": "移行案Bを採用し、新しい一覧の表示だけを変える方針としましたが、実装や検証はまだ行っていません。次回、保存済みのデータを残したままBの実装を進める予定です。",
+      "semantic_and_state": [
+        "B採用、実装検証未実施、次回予定を保持。旧r0p1の3文が2文になり、旧r1p1で省かれた次回も明示。"
+      ],
+      "explicit_form": [],
+      "implicit_style": [],
+      "acceptable_variation": [],
+      "uncertain": [],
+      "checks": {
+        "two_sentences": true,
+        "explicit_nonexecution": true,
+        "explicit_completion_fabrication": false
+      },
+      "paired_checks": {
+        "two_sentences": true,
+        "explicit_nonexecution": true,
+        "explicit_completion_fabrication": false
+      }
+    },
+    {
+      "case_id": "D03",
+      "repeat": 1,
+      "probe": 0,
+      "response_id": "gen-1791247667-2AH6jjEGMFyoYDYAF28a",
+      "paired_response_id": "gen-1791247008-bTsDXYPOgj6Zr6SWpnxD",
+      "summary_response_id": "gen-1791246999-y8KEGsFbp6VVAKLbf21E",
+      "candidate_automatic_selection": "original",
+      "forced_diagnostic": true,
+      "output": "移行案Bを採用し、保存済みのデータは削除せず新しい一覧の表示だけを変更する方針ですが、実装や検証はまだ行っていません。次回、案Bの実装に着手する予定です。",
+      "paired_output": "移行案Bを採用しましたが、実装・検証はまだ行っていない状態です。次回、保存済みのデータを残したまま新しい一覧の表示部分だけを変更する予定です。",
+      "semantic_and_state": [
+        "B採用、実装検証未実施、次回予定を保持。旧r0p1の3文が2文になり、旧r1p1で省かれた次回も明示。"
+      ],
+      "explicit_form": [],
+      "implicit_style": [],
+      "acceptable_variation": [],
+      "uncertain": [],
+      "checks": {
+        "two_sentences": true,
+        "explicit_nonexecution": true,
+        "explicit_completion_fabrication": false
+      },
+      "paired_checks": {
+        "two_sentences": true,
+        "explicit_nonexecution": true,
+        "explicit_completion_fabrication": false
+      }
+    },
+    {
+      "case_id": "D03",
+      "repeat": 0,
+      "probe": 1,
+      "response_id": "gen-1791247669-GNw1bNTYA4PINlGTFt9M",
+      "paired_response_id": "gen-1791247014-dUsi4pTkVPqiiWIAXzAG",
+      "summary_response_id": "gen-1791246997-cQRIaIW58gS5FkVOdOOP",
+      "candidate_automatic_selection": "original",
+      "forced_diagnostic": true,
+      "output": "移行案Bを採用しました。データの削除は行わず、一覧の表示のみを変更する方針ですが、実装・検証はまだ行っていないため、次回対応の予定です。",
+      "paired_output": "移行案Bを採用しました。Bは一覧の表示だけを変える案で、保存済みのデータには手を加えません。実装と検証はまだ行っておらず、次回対応の予定です。",
+      "semantic_and_state": [
+        "B採用、実装検証未実施、次回予定を保持。旧r0p1の3文が2文になり、旧r1p1で省かれた次回も明示。"
+      ],
+      "explicit_form": [],
+      "implicit_style": [],
+      "acceptable_variation": [],
+      "uncertain": [],
+      "checks": {
+        "two_sentences": true,
+        "explicit_nonexecution": true,
+        "explicit_completion_fabrication": false
+      },
+      "paired_checks": {
+        "two_sentences": false,
+        "explicit_nonexecution": true,
+        "explicit_completion_fabrication": false
+      }
+    },
+    {
+      "case_id": "D03",
+      "repeat": 1,
+      "probe": 1,
+      "response_id": "gen-1791247670-oJ8oxU5CSy49SIIdQJ0K",
+      "paired_response_id": "gen-1791247017-mbR8rc9CtZkubdLIbcRz",
+      "summary_response_id": "gen-1791246999-y8KEGsFbp6VVAKLbf21E",
+      "candidate_automatic_selection": "original",
+      "forced_diagnostic": true,
+      "output": "移行案Bの採用が決まりました。Bは保存済みのデータを残したまま新しい一覧の表示だけを変える案ですが、実装・検証はまだ行っていないため、実際の変更は次回対応の予定です。",
+      "paired_output": "移行案Bを採用しました。Bは保存済みのデータを残したまま、新しい一覧の表示だけを変える案ですが、実装・検証はまだ行っていません。",
+      "semantic_and_state": [
+        "B採用、実装検証未実施、次回予定を保持。旧r0p1の3文が2文になり、旧r1p1で省かれた次回も明示。"
+      ],
+      "explicit_form": [],
+      "implicit_style": [],
+      "acceptable_variation": [],
+      "uncertain": [],
+      "checks": {
+        "two_sentences": true,
+        "explicit_nonexecution": true,
+        "explicit_completion_fabrication": false
+      },
+      "paired_checks": {
+        "two_sentences": true,
+        "explicit_nonexecution": true,
+        "explicit_completion_fabrication": false
+      }
+    },
+    {
+      "case_id": "D03",
+      "repeat": 2,
+      "probe": 0,
+      "response_id": "gen-1791247672-qP1BpVLmZbyfbYVyxAEV",
+      "paired_response_id": "gen-1791247028-55mN1C0UDm49BWpKVe3K",
+      "summary_response_id": "gen-1791247020-cPuZNcyGwTvlFNJljiaw",
+      "candidate_automatic_selection": "original",
+      "forced_diagnostic": true,
+      "output": "移行案Bを採用し、新しい一覧の表示だけを変える方針としましたが、まだ変更や検証は行っていません。次回、案Bの実装と動作確認を進める予定です。",
+      "paired_output": "移行案Bの採用が決まり、保存済みのデータには手を加えず新しい一覧の表示だけを変える方針ですが、実装や検証はまだ行われていません。次回、案Bの変更を実装し検証する予定です。",
+      "semantic_and_state": [
+        "B採用、実装検証未実施、次回予定を保持。旧r0p1の3文が2文になり、旧r1p1で省かれた次回も明示。"
+      ],
+      "explicit_form": [],
+      "implicit_style": [],
+      "acceptable_variation": [],
+      "uncertain": [],
+      "checks": {
+        "two_sentences": true,
+        "explicit_nonexecution": true,
+        "explicit_completion_fabrication": false
+      },
+      "paired_checks": {
+        "two_sentences": true,
+        "explicit_nonexecution": true,
+        "explicit_completion_fabrication": false
+      }
+    },
+    {
+      "case_id": "T13",
+      "repeat": 0,
+      "probe": 0,
+      "response_id": "gen-1791247673-CaGvTuqRzjYxfFp44tMj",
+      "paired_response_id": "gen-1791247043-YU57B6fXDUJMRbLBrWtG",
+      "summary_response_id": "gen-1791247024-wUEH5so1dkWmb6DpQLTJ",
+      "candidate_automatic_selection": "compact",
+      "forced_diagnostic": false,
+      "output": "この画面では、操作が一定時間行われなかった場合に接続を自動的に終了するまでの待ち時間（タイムアウト）を設定できます。既定値、つまりあらかじめ決められている値は30秒で、現在もその30秒が設定されています。タイムアウトを短くすると使われていない接続が早めに終了され、長くすると応答を待つ時間に余裕が生まれります。\n\n設定できる値は5秒から60秒までの範囲です。この範囲から外れた値を入力した場合は、保存時に知らせが表示され、そのままでは反映されない仕組みになっています。ご利用の環境や用途に合わせて、必要に応じて値を調整してください。",
+      "paired_output": "この画面では、タイムアウト（操作の応答を待つ上限の秒数）を設定できます。現在の値は30秒です。なお、この設定の既定値（変更を加える前にあらかじめ入っている値）も30秒です。値は5秒から60秒の範囲で入力でき、この範囲の外の数値は保存時に受け付けられません。\n\nご利用の環境や用途に応じて、待ち時間を短くしたい場合や、もう少し余裕を持たせたい場合に値を調整できます。変更後に「保存」を選ぶと新しい値が反映されます。もとに戻したいときは、既定値の30秒を入力して保存してください。",
+      "semantic_and_state": [
+        "現在/既定30秒、範囲5〜60、保存検査を維持。数値反転や実測改善の創作なし。"
+      ],
+      "explicit_form": [],
+      "implicit_style": [],
+      "acceptable_variation": [],
+      "uncertain": [
+        "タイムアウト種別の解釈は未指定。無操作/応答待ち差を重大変更に確定しない。r0の「生まれります」は軽微な文法誤り。"
+      ],
+      "checks": {
+        "two_paragraphs": true,
+        "current_and_default_30": true,
+        "save_range_validation": true
+      },
+      "paired_checks": {
+        "two_paragraphs": true,
+        "current_and_default_30": true,
+        "save_range_validation": true
+      }
+    },
+    {
+      "case_id": "D03",
+      "repeat": 2,
+      "probe": 1,
+      "response_id": "gen-1791247676-3DXeFMDso2uJURknWH5i",
+      "paired_response_id": "gen-1791247037-l8D7CKjYNtGf6APdvH8u",
+      "summary_response_id": "gen-1791247020-cPuZNcyGwTvlFNJljiaw",
+      "candidate_automatic_selection": "original",
+      "forced_diagnostic": true,
+      "output": "移行案Bを採用し、A案は不採用としました。実装・検証はまだ行っておらず、保存済みのデータには手を加えていないため、実際の変更は次回対応の予定です。",
+      "paired_output": "移行案Bを採用し、A案（先にデータを削除してから新規作成する案）は不採用としました。B案の実装（新しい一覧の表示変更）と検証はまだ行っておらず、次回対応の予定です。",
+      "semantic_and_state": [
+        "B採用、実装検証未実施、次回予定を保持。旧r0p1の3文が2文になり、旧r1p1で省かれた次回も明示。"
+      ],
+      "explicit_form": [],
+      "implicit_style": [],
+      "acceptable_variation": [],
+      "uncertain": [],
+      "checks": {
+        "two_sentences": true,
+        "explicit_nonexecution": true,
+        "explicit_completion_fabrication": false
+      },
+      "paired_checks": {
+        "two_sentences": true,
+        "explicit_nonexecution": true,
+        "explicit_completion_fabrication": false
+      }
+    },
+    {
+      "case_id": "T13",
+      "repeat": 1,
+      "probe": 0,
+      "response_id": "gen-1791247679-9aYEMN5Oifp9MqSH1HYh",
+      "paired_response_id": "gen-1791247060-GRe06nTNN1pU62UZmbyl",
+      "summary_response_id": "gen-1791247044-UyMTfqWXaLPdcAHyWnC5",
+      "candidate_automatic_selection": "compact",
+      "forced_diagnostic": false,
+      "output": "この画面では、タイムアウト（通信の応答を待つ上限の秒数）を設定できます。現在の設定値は30秒で、既定値（変更を加えていない場合にあらかじめ入っている値）も30秒です。設定できる範囲は5秒から60秒までで、保存する際にこの範囲内かどうかが確認されます。\n\n通信先の状況やネットワーク環境によって、適切な待ち時間は変わることがあります。短くすると待ち時間が減る場合がありますが、応答が届く前に打ち切られる可能性もあります。長くすると応答を受け取れる余地が広がる一方、結果が返らないときの待ち時間も延びます。状況に応じて値を調整してください。",
+      "paired_output": "この設定では、タイムアウト（通信の応答を待つ上限の秒数）を変更できます。現在の設定値は30秒で、既定値（あらかじめ用意されている初期の値）も30秒です。5秒から60秒までの範囲で指定でき、保存時にこの範囲内かどうかが検証されます。\n\nご利用の環境や用途に応じて、待ち時間を短くしたい場合や、応答に時間がかかる処理に合わせて長めに設定したい場合に、値を調整いただけます。既定値に戻したいときは30秒を入力してください。",
+      "semantic_and_state": [
+        "現在/既定30秒、範囲5〜60、保存検査を維持。数値反転や実測改善の創作なし。"
+      ],
+      "explicit_form": [],
+      "implicit_style": [],
+      "acceptable_variation": [],
+      "uncertain": [
+        "タイムアウト種別の解釈は未指定。無操作/応答待ち差を重大変更に確定しない。r0の「生まれります」は軽微な文法誤り。"
+      ],
+      "checks": {
+        "two_paragraphs": true,
+        "current_and_default_30": true,
+        "save_range_validation": true
+      },
+      "paired_checks": {
+        "two_paragraphs": true,
+        "current_and_default_30": true,
+        "save_range_validation": true
+      }
+    },
+    {
+      "case_id": "T13",
+      "repeat": 2,
+      "probe": 0,
+      "response_id": "gen-1791247681-evGNjQelZsfWtrM2Vf2W",
+      "paired_response_id": "gen-1791247072-U8Y5Lw0HIaqflellvBuh",
+      "summary_response_id": "gen-1791247054-9Tpjve5HwGslre2tYeaA",
+      "candidate_automatic_selection": "compact",
+      "forced_diagnostic": false,
+      "output": "この設定項目は、操作が行われないまま一定の時間が過ぎたときに処理を中断するまでの秒数、いわゆるタイムアウトを指定するものです。現在の設定値は30秒で、特に変更されていない場合の初期値（既定値）も30秒です。\n\n設定できる範囲は5秒から60秒までで、この範囲を外れた値は保存時に受け付けられないようになっています。ご利用の環境に合わせて、必要に応じた秒数をご入力ください。",
+      "paired_output": "この設定項目は、サーバーへの接続を試みてから応答を待つ制限時間（タイムアウト）を指定するものです。タイムアウトとは、一定の時間内に応答が届かなかった場合に接続の試行を自動的に中止する仕組みを指します。現在の値は30秒で、既定値（あらかじめ設定されている初期の値）も30秒です。\n\n値は5秒から60秒の範囲で変更でき、保存時にこの範囲内であるかどうかが確認されます。ネットワークの状況に応じて、待ち時間を短くしたい場合や長めに確保したい場合に調整していただけます。既定値に戻したいときは、30秒を入力してください。",
+      "semantic_and_state": [
+        "現在/既定30秒、範囲5〜60、保存検査を維持。数値反転や実測改善の創作なし。"
+      ],
+      "explicit_form": [],
+      "implicit_style": [],
+      "acceptable_variation": [],
+      "uncertain": [
+        "タイムアウト種別の解釈は未指定。無操作/応答待ち差を重大変更に確定しない。r0の「生まれります」は軽微な文法誤り。"
+      ],
+      "checks": {
+        "two_paragraphs": true,
+        "current_and_default_30": true,
+        "save_range_validation": true
+      },
+      "paired_checks": {
+        "two_paragraphs": true,
+        "current_and_default_30": true,
+        "save_range_validation": true
+      }
+    },
+    {
+      "case_id": "T14",
+      "repeat": 0,
+      "probe": 0,
+      "response_id": "gen-1791247686-5lPZMi9IkWPSzNIOKDqb",
+      "paired_response_id": "gen-1791247094-OCQc8dqspv2VhWlwqM0s",
+      "summary_response_id": "gen-1791247070-MxhLqX4qf2OAmkJOMM7s",
+      "candidate_automatic_selection": "compact",
+      "forced_diagnostic": false,
+      "output": "ユイは少し間を置いてから口を開いた。\n\n「具体的に、どこまでを想定していますか」\n\n「全部じゃない。まず一回だけ、様子を見る程度」\n\n「一回というのは、期間ですか、回数ですか」\n\nアキは視線を落とした。\n\n「……回数のつもりだった。期間は決めてない」\n\n「期間が曖昧だと、引き際がわからなくなります」\n\n「それはそうだな」\n\n沈黙が続いた。ユイは手元のメモに何か書きつけた。\n\n「もうひとつ聞いていいですか。うまくいかなかった場合、誰がやめると言い出すんですか」\n\nアキは答えなかった。",
+      "paired_output": "ユイは少し間を置いてから口を開いた。\n\n「具体的に、何から始めるつもりですか」\n\n「……まだ全部は決めてない」とアキは視線を落とした。「ただ、最初は小さくやるつもりだった」\n\n「小さく、というのは」\n\n「週に一回、場所を借りて様子を見る。それくらい」\n\nユイは頷きかけて、やめた。\n\n「費用はどうなりますか」\n\n「そこは正直、はっきり出せてない」\n\n「……それが分からないと、私には何とも」\n\n「だろうな」とアキは言った。「だから、まず見積もりを出す。それを見てから決めてくれればいい」\n\nユイは黙ったまま、手元の紙に視線を移した。\n\n「見積もりを見てから、改めて話すということでいいですか」\n\n「うん。それでいい」\n\n沈黙が続いた。どちらも、それ以上は踏み込まなかった。",
+      "semantic_and_state": [
+        "未同意、仮の提案、条件確認を保持。検討や待つ意向は結果保証と区別。"
+      ],
+      "explicit_form": [],
+      "implicit_style": [],
+      "acceptable_variation": [
+        "場所、期間、費用等の未指定の場面細部は許容。"
+      ],
+      "uncertain": [],
+      "checks": {
+        "no_script_labels": true,
+        "yui_polite": true,
+        "clear_unqualified_assurance": false
+      },
+      "paired_checks": {
+        "no_script_labels": true,
+        "yui_polite": true,
+        "clear_unqualified_assurance": false
+      }
+    },
+    {
+      "case_id": "T14",
+      "repeat": 1,
+      "probe": 0,
+      "response_id": "gen-1791247687-54cBePN2LxnHIohCcwB1",
+      "paired_response_id": "gen-1791247103-uHBi4fQeSuOavOwVdE0K",
+      "summary_response_id": "gen-1791247084-Ki5Fb3TOosAKEmcFV2b6",
+      "candidate_automatic_selection": "compact",
+      "forced_diagnostic": false,
+      "output": "ユイは少し間を置いてから口を開いた。\n\n「具体的に聞いてもいいですか。場所はどうするつもりなんですか」\n\n「まだ決めてない」とアキは言った。「候補はあるけど、確定じゃない」\n\n「費用の分担は」\n\n「そこも考えてる途中」\n\nユイは視線を落とした。\n\n「……考えてる途中、ということは、まだ何も決まっていないんですね」\n\nアキは黙った。否定はしなかった。\n\n「もう少し固まってから、もう一度聞かせてください」とユイは言った。\n\n「……わかった」とアキは答えた。それだけだった。",
+      "paired_output": "ユイは少し間を置いてから口を開いた。\n\n「具体的に、どこまでを想定していますか」\n\n「……全部じゃない。まず最初の段階だけ」\n\n「最初の段階というのは、期間でいうとどのくらいですか」\n\nアキは視線を落とした。\n\n「一週間か、十日か。そのあたり」\n\n「その間、私の側に何か負担が発生しますか」\n\n「たぶん、多少は」\n\n「多少、というのが曖昧で気になります」\n\nアキは黙った。ユイの指がテーブルの縁をなぞった。\n\n「……まだ詰め切れてない部分はある」とアキは認めた。\n\n「では、それを先に出してもらえますか。判断はそのあとにします」\n\nアキは小さく頷いたが、すぐには何も言わなかった。",
+      "semantic_and_state": [
+        "未同意、仮の提案、条件確認を保持。検討や待つ意向は結果保証と区別。"
+      ],
+      "explicit_form": [],
+      "implicit_style": [],
+      "acceptable_variation": [
+        "場所、期間、費用等の未指定の場面細部は許容。"
+      ],
+      "uncertain": [],
+      "checks": {
+        "no_script_labels": true,
+        "yui_polite": true,
+        "clear_unqualified_assurance": false
+      },
+      "paired_checks": {
+        "no_script_labels": true,
+        "yui_polite": true,
+        "clear_unqualified_assurance": false
+      }
+    },
+    {
+      "case_id": "T14",
+      "repeat": 2,
+      "probe": 0,
+      "response_id": "gen-1791247693-Z1oIltL7G4bgkWBCFks0",
+      "paired_response_id": "gen-1791247128-dCtG6oE3hO6aYFb0TNbW",
+      "summary_response_id": "gen-1791247107-eOLTc1mSlj1hyCAReV06",
+      "candidate_automatic_selection": "compact",
+      "forced_diagnostic": false,
+      "output": "ユイは少し間を置いてから口を開いた。\n\n「具体的に、どこまでを想定していますか」\n\n「全部じゃない。まず一段階だけ」\n\n「一段階というのは、期間のことですか、それとも範囲のことですか」\n\nアキは視線を落とした。\n\n「……両方、かな。まだ自分でも整理できてない」\n\n「それを聞けてよかったです」とユイは言った。「整理できていないまま進めるのは、少し怖いので」\n\n「うん。それはそうだと思う」\n\n沈黙が続いた。ユイは手元の紙に何か書きかけて、やめた。\n\n「もう一つだけ。うまくいかなかったとき、戻せる形にしておけますか」\n\nアキはすぐには答えなかった。\n\n「……わからない。でも、考えておく」\n\n「わかりました。それなら、もう少し待ちます」",
+      "paired_output": "ユイは少し間を置いてから口を開いた。\n\n「具体的に、どこまでを想定していますか」\n\n「全部じゃない。まず一回だけ、小さくやってみる」\n\n「一回だけ、というのは期間のことですか。それとも規模のことですか」\n\nアキは視線を落とした。\n\n「……両方、かな。まだそこまで詰めてない」\n\n「そうですか」\n\nユイはメモ帳を開いたが、何も書かなかった。\n\n「失敗したときの撤退の基準は決めていますか」\n\n「決めてない」\n\n「それを先に聞いておきたいです」\n\nアキは黙った。答えを持っていないことが、沈黙で伝わった。\n\n「……考えてくる」とアキは言った。\n\nユイはメモ帳を閉じた。\n\n「待ちます」",
+      "semantic_and_state": [
+        "未同意、仮の提案、条件確認を保持。検討や待つ意向は結果保証と区別。"
+      ],
+      "explicit_form": [],
+      "implicit_style": [],
+      "acceptable_variation": [
+        "場所、期間、費用等の未指定の場面細部は許容。"
+      ],
+      "uncertain": [],
+      "checks": {
+        "no_script_labels": true,
+        "yui_polite": true,
+        "clear_unqualified_assurance": false
+      },
+      "paired_checks": {
+        "no_script_labels": true,
+        "yui_polite": true,
+        "clear_unqualified_assurance": false
+      }
+    },
+    {
+      "case_id": "R01",
+      "repeat": 0,
+      "probe": 0,
+      "response_id": "gen-1791247694-82iAs7WVHory1D1Mg7E3",
+      "paired_response_id": "gen-1791247179-rIhIbiuCQn89dDQBC8x1",
+      "summary_response_id": "gen-1791247163-Sn28OvaYGLtlaOdfhmnA",
+      "candidate_automatic_selection": "original",
+      "forced_diagnostic": true,
+      "output": "取込仕様は、容量確認（既定上限8MiB）→ヘッダー検査→`upload_root`への保存の順で処理し、上限超過・同名ファイル存在時は中止して既存データを変更しない方針で整理中である。実装は次の週の予定で、まだコードの変更や速度測定は行っていない。",
+      "paired_output": "取込仕様は、容量確認（既定上限8MiB）→ヘッダー検査→保存の順で処理し、上限超過・同名ファイル存在時は中止して既存データを変更せず、新規依存ライブラリも追加しない方針が採用されている。実装は次の週の予定であり、まだコードの変更や速度測定は行われていない。",
+      "semantic_and_state": [
+        "8MiB境界、同名中止、処理順、未実装次週を維持。細目の網羅度は変動するが重要な反転なし。"
+      ],
+      "explicit_form": [],
+      "implicit_style": [],
+      "acceptable_variation": [],
+      "uncertain": [],
+      "checks": {
+        "two_sentences": true,
+        "plain_no_heading": true
+      },
+      "paired_checks": {
+        "two_sentences": true,
+        "plain_no_heading": true
+      }
+    },
+    {
+      "case_id": "R01",
+      "repeat": 0,
+      "probe": 1,
+      "response_id": "gen-1791247698-g0XvaBjSkBBVYHoIwQ83",
+      "paired_response_id": "gen-1791247190-1zcrW1AykKDQ3yEu5dj5",
+      "summary_response_id": "gen-1791247163-Sn28OvaYGLtlaOdfhmnA",
+      "candidate_automatic_selection": "original",
+      "forced_diagnostic": true,
+      "output": "8MiBちょうどのファイルは上限以下なので受け付け、8MiB＋1バイトのファイルは上限を超えるため拒否する。保存先に同名ファイルが既に存在する場合は取込を中止し、既存ファイルは削除しない。",
+      "paired_output": "8MiB（8388608バイト）以下のファイルは受け付け、8MiB+1バイト（8388609バイト）以上は拒否する。保存先に同名ファイルが既に存在する場合は取り込みを中止し、既存ファイルは削除しない。",
+      "semantic_and_state": [
+        "8MiB境界、同名中止、処理順、未実装次週を維持。細目の網羅度は変動するが重要な反転なし。"
+      ],
+      "explicit_form": [],
+      "implicit_style": [],
+      "acceptable_variation": [],
+      "uncertain": [],
+      "checks": {
+        "two_sentences": true,
+        "plain_no_heading": true
+      },
+      "paired_checks": {
+        "two_sentences": true,
+        "plain_no_heading": true
+      }
+    },
+    {
+      "case_id": "R01",
+      "repeat": 1,
+      "probe": 0,
+      "response_id": "gen-1791247701-PUExoXv7Av3fHyNIyNPE",
+      "paired_response_id": "gen-1791247179-n6rlvpuvCCGxP9AtiiN1",
+      "summary_response_id": "gen-1791247163-wJ9Y9BCN0yyl3uyIStPA",
+      "candidate_automatic_selection": "original",
+      "forced_diagnostic": true,
+      "output": "取込仕様は、容量確認（既定上限8MiB以下で受付、超過で拒否）→ヘッダー検査（拡張子だけでなくヘッダーも確認）→`upload_root`への保存という順序で処理し、同名ファイルが既に存在すれば削除せず取込を中止、取込途中の中断では既存データも設定も変更しない方針となっている。実装はまだコードに反映しておらず次週行う予定で、新しい依存ライブラリの追加や速度測定も行っていない。",
+      "paired_output": "取込仕様は、容量が8MiB（8,388,608バイト）以下かをまず確認し、次に拡張子だけでなくヘッダーも検査したうえで`upload_root`に保存する流れで、同名ファイルがあれば削除せず取込を中止し、途中で中断しても既存データや設定は変更しない。実装はまだコードに反映しておらず、次の週に行う予定である。",
+      "semantic_and_state": [
+        "8MiB境界、同名中止、処理順、未実装次週を維持。細目の網羅度は変動するが重要な反転なし。"
+      ],
+      "explicit_form": [],
+      "implicit_style": [],
+      "acceptable_variation": [],
+      "uncertain": [],
+      "checks": {
+        "two_sentences": true,
+        "plain_no_heading": true
+      },
+      "paired_checks": {
+        "two_sentences": true,
+        "plain_no_heading": true
+      }
+    },
+    {
+      "case_id": "R01",
+      "repeat": 2,
+      "probe": 0,
+      "response_id": "gen-1791247702-cju8T1P0KOXsonsF9fZ9",
+      "paired_response_id": "gen-1791247217-Bl5R2CekBeDqPO0c7G9R",
+      "summary_response_id": "gen-1791247200-XZXVv7vwxlqHJHb6lgG9",
+      "candidate_automatic_selection": "original",
+      "forced_diagnostic": true,
+      "output": "取込仕様は、容量確認（既定上限8MiB）→ヘッダー検査→保存の順で処理し、上限超過・ヘッダー不正・同名ファイル存在のいずれかで取込を中止し既存データや設定は変更しない方針が決まっているが、ヘッダー検査の具体方法や失敗時メッセージの文字列など詳細は未確定である。実装はまだコードを変更しておらず、次の週に行う予定である。",
+      "paired_output": "取込仕様は、容量確認（既定上限8MiB以下で受付、超過で拒否）→ヘッダー検査（具体方法未定）→upload_rootへの保存の順で処理し、同名ファイルがあれば取込中止、取込途中の中断では既存データも設定も変えない方針が決まっている。実装はまだコードを変更しておらず、次の週に行う予定である。",
+      "semantic_and_state": [
+        "8MiB境界、同名中止、処理順、未実装次週を維持。細目の網羅度は変動するが重要な反転なし。"
+      ],
+      "explicit_form": [],
+      "implicit_style": [],
+      "acceptable_variation": [],
+      "uncertain": [
+        "ヘッダー不正も中止と補う。検査採用から自然な補足だが原文で具体的な処理結果は明記されていない。"
+      ],
+      "checks": {
+        "two_sentences": true,
+        "plain_no_heading": true
+      },
+      "paired_checks": {
+        "two_sentences": true,
+        "plain_no_heading": true
+      }
+    },
+    {
+      "case_id": "R01",
+      "repeat": 1,
+      "probe": 1,
+      "response_id": "gen-1791247706-WX8UaRhPm8HAryJFeJtf",
+      "paired_response_id": "gen-1791247190-3Sdywi9Wsp8UE4x0N9AH",
+      "summary_response_id": "gen-1791247163-wJ9Y9BCN0yyl3uyIStPA",
+      "candidate_automatic_selection": "original",
+      "forced_diagnostic": true,
+      "output": "8MiBちょうどのファイルは上限以下なので受け付け、8MiB+1バイトのファイルは上限を超えるため拒否する。同名ファイルが保存先に既にある場合は既存ファイルを削除せず取込を中止する。",
+      "paired_output": "8MiBちょうどのファイルは上限以下なので受け付けられ、8MiB+1バイトのファイルは上限を超えるため拒否される。同名ファイルが保存先に既に存在する場合は既存ファイルを削除せず取込を中止する。",
+      "semantic_and_state": [
+        "8MiB境界、同名中止、処理順、未実装次週を維持。細目の網羅度は変動するが重要な反転なし。"
+      ],
+      "explicit_form": [],
+      "implicit_style": [],
+      "acceptable_variation": [],
+      "uncertain": [],
+      "checks": {
+        "two_sentences": true,
+        "plain_no_heading": true
+      },
+      "paired_checks": {
+        "two_sentences": true,
+        "plain_no_heading": true
+      }
+    },
+    {
+      "case_id": "R01",
+      "repeat": 2,
+      "probe": 1,
+      "response_id": "gen-1791247707-532YkD3wpVpYNGqpJQEk",
+      "paired_response_id": "gen-1791247228-J8ondPRs2kBKXn130int",
+      "summary_response_id": "gen-1791247200-XZXVv7vwxlqHJHb6lgG9",
+      "candidate_automatic_selection": "original",
+      "forced_diagnostic": true,
+      "output": "8MiBちょうどのファイルは上限以下なので受け付け、8MiB＋1バイトのファイルは上限を超えるため拒否する。同名ファイルが既に存在する場合は既存ファイルを削除せず取込自体を中止する。",
+      "paired_output": "8MiBちょうどのファイルは上限以下なので受け付け、8MiB＋1バイトのファイルは上限を超えるため拒否する。同名ファイルが保存先に既に存在する場合は既存ファイルを削除せず取込を中止する。",
+      "semantic_and_state": [
+        "8MiB境界、同名中止、処理順、未実装次週を維持。細目の網羅度は変動するが重要な反転なし。"
+      ],
+      "explicit_form": [],
+      "implicit_style": [],
+      "acceptable_variation": [],
+      "uncertain": [],
+      "checks": {
+        "two_sentences": true,
+        "plain_no_heading": true
+      },
+      "paired_checks": {
+        "two_sentences": true,
+        "plain_no_heading": true
+      }
+    },
+    {
+      "case_id": "R02",
+      "repeat": 0,
+      "probe": 0,
+      "response_id": "gen-1791247710-IhipLURI0Lm19PRWWUPr",
+      "paired_response_id": "gen-1791247215-OUKsdrsEElpkm6GGohue",
+      "summary_response_id": "gen-1791247201-RHJYE5S6dMVmBm0KsvNo",
+      "candidate_automatic_selection": "original",
+      "forced_diagnostic": true,
+      "output": "\n\nレンは椅子の背に指を置いたまま、少しだけ間を空けた。「……五分くらいなら、ここにいるけど」\n\n閉館を告げる館内放送が、遠い廊下のほうで一度だけ鳴った。\n\n「五分、いただけますか」ミナは小さくうなずいた。",
+      "paired_output": "\n\nレンは椅子の背に指を置いたまま、少しだけ息を吸った。「……五分くらいなら、ここにいるけど」\n\n閉館を告げる館内放送が、遠い廊下の向こうで一度だけ鳴った。\n\nミナは小さくうなずいた。「五分で大丈夫です」\n\n鍵はまだ彼女の手の中にあった。",
+      "semantic_and_state": [
+        "ミナ丁寧・レン常体、鍵帰還未決、五分の時間合意を維持。旧r0p1の「決まったことが何もない」は消える。"
+      ],
+      "explicit_form": [
+        "地の文が2文を超過。発話帰属も含める。"
+      ],
+      "implicit_style": [],
+      "acceptable_variation": [
+        "図書館放送、期限切れ本などの細部は感情理由や過去の喧嘩の創作に当たらない。"
+      ],
+      "uncertain": [],
+      "checks": {
+        "no_script_labels": true,
+        "voices_preserved": true,
+        "dialogues_le_4": true,
+        "narration_le_2": false
+      },
+      "paired_checks": {
+        "no_script_labels": true,
+        "voices_preserved": true,
+        "dialogues_le_4": true,
+        "narration_le_2": false
+      }
+    },
+    {
+      "case_id": "R02",
+      "repeat": 1,
+      "probe": 0,
+      "response_id": "gen-1791247710-tNEXOmxKL0PFMoxAytIk",
+      "paired_response_id": "gen-1791247253-PvoZWHGGiwvLIkxdWgdH",
+      "summary_response_id": "gen-1791247239-bDPZj9NerhLjyXBlvvxB",
+      "candidate_automatic_selection": "original",
+      "forced_diagnostic": true,
+      "output": "\n\n閉館を告げる放送が遠い廊下から届いた。\n\n「……五分くらいなら、いいけど」\n\nミナは小さくうなずいた。「五分で大丈夫です」\n\n二人のあいだの机に、返却期限の過ぎた本が一冊だけ残っていた。",
+      "paired_output": "\n\n閉館を告げる館内放送が遠く響いた。\n\n「……五分くらいなら、いいけど」\n\nレンは椅子を引かずに立ったまま、棚のほうへ視線を逃がした。\n\n「五分ですね」\n\nミナは小さくうなずいて、鍵をポケットに入れた。",
+      "semantic_and_state": [
+        "ミナ丁寧・レン常体、鍵帰還未決、五分の時間合意を維持。旧r0p1の「決まったことが何もない」は消える。"
+      ],
+      "explicit_form": [
+        "地の文が2文を超過。発話帰属も含める。"
+      ],
+      "implicit_style": [],
+      "acceptable_variation": [
+        "図書館放送、期限切れ本などの細部は感情理由や過去の喧嘩の創作に当たらない。"
+      ],
+      "uncertain": [],
+      "checks": {
+        "no_script_labels": true,
+        "voices_preserved": true,
+        "dialogues_le_4": true,
+        "narration_le_2": false
+      },
+      "paired_checks": {
+        "no_script_labels": true,
+        "voices_preserved": true,
+        "dialogues_le_4": true,
+        "narration_le_2": false
+      }
+    },
+    {
+      "case_id": "R02",
+      "repeat": 0,
+      "probe": 1,
+      "response_id": "gen-1791247715-B5r2P9ar544ZijGMZqkB",
+      "paired_response_id": "gen-1791247231-zKjUCfHcu3MDwf8myr9U",
+      "summary_response_id": "gen-1791247201-RHJYE5S6dMVmBm0KsvNo",
+      "candidate_automatic_selection": "original",
+      "forced_diagnostic": true,
+      "output": "\n\nレンは椅子の背に指を置いたまま、少し息を吸った。「……五分くらいなら、ここにいられると思う」\n\n閉館を告げる放送が遠い廊下を渡っていった。\n\n「五分、いただけるなら十分です」ミナは小さくうなずいた。\n\nレンは黙ってから、視線を鍵のほうへ動かした。「昨日の話——返すかどうか、まだ決まってないよな」\n\nミナの指は鍵の輪郭をなぞったが、差し出しも引っ込めもしなかった。「はい。まだ何も決めていません」\n\n蛍光灯のひとつが小さく瞬いた。\n\n「帰るかどうかも、まだ……俺のほうも決めてない」レンはそれだけ言って、机の端に目を戻した。\n\nミナは鍵を手のひらに収めたまま、静かに立っていた。「確認できてよかったです」\n\n五分の最初の一分が、二人のあいだを音もなく過ぎていった。",
+      "paired_output": "\n\nレンは椅子の背に指を置いたまま、少しだけ息を吸った。\n\n「……五分くらいなら、ここにいられると思う」\n\nミナは小さくうなずいた。「五分、お借りします」\n\n閉館を知らせる館内放送が遠くの廊下で反響した。\n\n「それで——鍵のこと、まだ訊いていいのかわからないけど」\n\nミナは手のひらの中の鍵を一度だけ見下ろした。「返すかどうかは、まだ決めていません」\n\nレンは否定も催促もしなかった。\n\n「俺が帰るかどうかも、まだ決まってない。それだけ確認しておきたかった」\n\n「はい」とミナは言った。「私もそのつもりで話しています」\n\n蛍光灯がひとつ、順番を待つように明滅した。二人のあいだには、決まったことが何もないという事実だけが、静かに置かれていた。",
+      "semantic_and_state": [
+        "ミナ丁寧・レン常体、鍵帰還未決、五分の時間合意を維持。旧r0p1の「決まったことが何もない」は消える。"
+      ],
+      "explicit_form": [
+        "地の文が2文を超過。発話帰属も含める。",
+        "台詞が6括弧単位で4を超過。"
+      ],
+      "implicit_style": [],
+      "acceptable_variation": [
+        "図書館放送、期限切れ本などの細部は感情理由や過去の喧嘩の創作に当たらない。"
+      ],
+      "uncertain": [],
+      "checks": {
+        "no_script_labels": true,
+        "voices_preserved": true,
+        "dialogues_le_4": false,
+        "narration_le_2": false,
+        "explicitly_checks_pending_key_return": true
+      },
+      "paired_checks": {
+        "no_script_labels": true,
+        "voices_preserved": true,
+        "dialogues_le_4": false,
+        "narration_le_2": false,
+        "explicitly_checks_pending_key_return": true
+      }
+    },
+    {
+      "case_id": "R02",
+      "repeat": 1,
+      "probe": 1,
+      "response_id": "gen-1791247715-VrDX24lii4Ad5sgDbnG6",
+      "paired_response_id": "gen-1791247268-dGaXlB4GJknRRnGwrlo6",
+      "summary_response_id": "gen-1791247239-bDPZj9NerhLjyXBlvvxB",
+      "candidate_automatic_selection": "original",
+      "forced_diagnostic": true,
+      "output": "\n\nレンは椅子を引いたまま立ち上がらなかった。「五分だけなら」\n\n閉館のアナウンスが遠い廊下から届いた。\n\n「五分で構いません」\n\nミナは向かいの椅子に浅く座った。鍵はまだ手の中にあったが、机の上には置かなかった。\n\n「……それで、決まってないこと、整理したほうがいいと思うんだけど」\n\n蛍光灯のひとつが微かに瞬いた。\n\n「鍵のこと。それから、帰るかどうか」\n\n「はい、どちらもまだですね」\n\nレンは頷いただけで、それ以上は踏み込まなかった。五分の始まりを二人とも黙って数えているようだった。",
+      "paired_output": "\n\nレンは椅子の背に指を置いたまま、少しだけ息を吸った。\n\n「……五分くらいなら、ここにいられると思う」\n\n閉館を告げる館内放送はまだ流れていなかった。\n\n「ありがとうございます。五分で大丈夫です」\n\nミナは鍵をポケットに入れ、向かいの椅子を引いた。\n\n「鍵のこと、それから帰ること——どちらもまだ決まっていませんよね」\n\nレンは小さくうなずいた。\n\n「……うん。まだ何も決めてない」\n\n蛍光灯が一度だけ瞬いて、二人のあいだの机を白く照らした。",
+      "semantic_and_state": [
+        "ミナ丁寧・レン常体、鍵帰還未決、五分の時間合意を維持。旧r0p1の「決まったことが何もない」は消える。"
+      ],
+      "explicit_form": [
+        "地の文が2文を超過。発話帰属も含める。",
+        "台詞が5括弧単位で4を超過。"
+      ],
+      "implicit_style": [],
+      "acceptable_variation": [
+        "図書館放送、期限切れ本などの細部は感情理由や過去の喧嘩の創作に当たらない。"
+      ],
+      "uncertain": [],
+      "checks": {
+        "no_script_labels": true,
+        "voices_preserved": true,
+        "dialogues_le_4": false,
+        "narration_le_2": false,
+        "explicitly_checks_pending_key_return": true
+      },
+      "paired_checks": {
+        "no_script_labels": true,
+        "voices_preserved": true,
+        "dialogues_le_4": true,
+        "narration_le_2": false,
+        "explicitly_checks_pending_key_return": true
+      }
+    },
+    {
+      "case_id": "R02",
+      "repeat": 2,
+      "probe": 0,
+      "response_id": "gen-1791247722-QeUBWdjbuUImMkrIBaoG",
+      "paired_response_id": "gen-1791247260-IUuHzNWKAvo4Y2ynL9jY",
+      "summary_response_id": "gen-1791247247-1p1Y0406C9VboTkvZ9ju",
+      "candidate_automatic_selection": "original",
+      "forced_diagnostic": true,
+      "output": "\n\nレンは椅子の背に指を置いたまま、少し息を吐いた。「……五分くらいなら」\n\n閉館を告げる館内放送が、遠い廊下の向こうで静かに響いた。\n\n「五分、お借りします」とミナは小さくうなずいた。",
+      "paired_output": "\n\nレンは椅子の背に指を置いたまま、少し間を空けた。「……五分くらいなら」\n\n閉館を告げる館内放送が、遠い廊下の向こうで静かに響いた。\n\n「五分、お借りします」とミナは言った。",
+      "semantic_and_state": [
+        "ミナ丁寧・レン常体、鍵帰還未決、五分の時間合意を維持。旧r0p1の「決まったことが何もない」は消える。"
+      ],
+      "explicit_form": [
+        "地の文が2文を超過。発話帰属も含める。"
+      ],
+      "implicit_style": [],
+      "acceptable_variation": [
+        "図書館放送、期限切れ本などの細部は感情理由や過去の喧嘩の創作に当たらない。"
+      ],
+      "uncertain": [],
+      "checks": {
+        "no_script_labels": true,
+        "voices_preserved": true,
+        "dialogues_le_4": true,
+        "narration_le_2": false
+      },
+      "paired_checks": {
+        "no_script_labels": true,
+        "voices_preserved": true,
+        "dialogues_le_4": true,
+        "narration_le_2": false
+      }
+    },
+    {
+      "case_id": "R03",
+      "repeat": 0,
+      "probe": 0,
+      "response_id": "gen-1791247725-mB59XtUbMOTC1prGVcQy",
+      "paired_response_id": "gen-1791247292-2AWWxY4uL74J6lDTxtXU",
+      "summary_response_id": "gen-1791247279-yrUZcj4Md0naCUQPNniq",
+      "candidate_automatic_selection": "original",
+      "forced_diagnostic": true,
+      "output": "この提案はまだ採用されておらず、現在の保持期間や期限超過ログを削除する実装の有無も確認されていません。14日案と7日案の比較についても、実際のログ量や調査に要する期間は計測されておらず、どちらが適切かを判断できる根拠はまだ揃っていません。",
+      "paired_output": "この提案はまだ採用されておらず、現在の保持期間、実際のログ量、期限超過ログを削除する仕組みの有無はいずれも未確認です。分かっている事実は提案内容の比較点（14日案と7日案の特徴、障害発生時刻とリクエストIDの記録案、本文や認証値は記録対象外）に限られ、削減率や解決率の裏付けとなる数値はありません。",
+      "semantic_and_state": [
+        "assistant提案の未採用、現在値不明、確定実装なしを維持。旧の記録対象外という強い言い方は消えた。"
+      ],
+      "explicit_form": [],
+      "implicit_style": [],
+      "acceptable_variation": [],
+      "uncertain": [],
+      "checks": {
+        "proposal_not_adopted": true,
+        "current_unknown_no_fixed_implementation": true,
+        "two_polite_sentences": true
+      },
+      "paired_checks": {
+        "proposal_not_adopted": true,
+        "current_unknown_no_fixed_implementation": true,
+        "two_polite_sentences": true
+      }
+    },
+    {
+      "case_id": "R02",
+      "repeat": 2,
+      "probe": 1,
+      "response_id": "gen-1791247727-yfgvwE0wRoXjgWIIIQmw",
+      "paired_response_id": "gen-1791247280-KzzaNTGIXPFsVo75GY0c",
+      "summary_response_id": "gen-1791247247-1p1Y0406C9VboTkvZ9ju",
+      "candidate_automatic_selection": "original",
+      "forced_diagnostic": true,
+      "output": "\n\nレンは椅子の背に手を置いたまま、少しだけ間を空けた。\n\n「……五分くらいなら、ここで話せると思う」\n\n閉館を告げる館内放送が遠くの廊下で鳴った。\n\n「五分で構いません」\n\nミナは鍵をポケットに入れた。落とさないように、という仕草だった。\n\n「鍵のこと、それから帰るかどうか——まだ何も決まってないまま、ですよね」\n\nレンは小さく頷いた。\n\n「……うん。どっちも、まだ」\n\n蛍光灯がひとつ消え、閲覧席の影が少しだけ濃くなった。",
+      "paired_output": "\n\nレンは椅子の背に手を置いたまま、少し間を空けた。\n\n「……五分くらいなら、ここにいられると思う」\n\n蛍光灯のひとつが小さく明滅した。ミナは鍵をポケットの縁に当てたまま、軽くうなずいた。\n\n「五分、お借りします」\n\nレンは座り直したが、姿勢はどこか仮のままだった。\n\n「それで——何が決まってないか、だけでも確認しておきたいんだけど」\n\n閉館を告げる館内放送はまだ流れていなかった。\n\n「鍵のことと、帰るかどうか。どちらもまだですね」\n\nミナの声は平らだった。事実を並べただけの響きに、レンは少しだけ目を伏せた。\n\n「……うん。まだ、どっちも」\n\n五分の輪郭だけが、二人のあいだに置かれた。",
+      "semantic_and_state": [
+        "ミナ丁寧・レン常体、鍵帰還未決、五分の時間合意を維持。旧r0p1の「決まったことが何もない」は消える。"
+      ],
+      "explicit_form": [
+        "地の文が2文を超過。発話帰属も含める。"
+      ],
+      "implicit_style": [],
+      "acceptable_variation": [
+        "図書館放送、期限切れ本などの細部は感情理由や過去の喧嘩の創作に当たらない。"
+      ],
+      "uncertain": [],
+      "checks": {
+        "no_script_labels": true,
+        "voices_preserved": true,
+        "dialogues_le_4": true,
+        "narration_le_2": false,
+        "explicitly_checks_pending_key_return": true
+      },
+      "paired_checks": {
+        "no_script_labels": true,
+        "voices_preserved": true,
+        "dialogues_le_4": false,
+        "narration_le_2": false,
+        "explicitly_checks_pending_key_return": true
+      }
+    },
+    {
+      "case_id": "R03",
+      "repeat": 0,
+      "probe": 1,
+      "response_id": "gen-1791247729-xXy891dVH6WeNlCYQdr6",
+      "paired_response_id": "gen-1791247316-8VJUWff372r7eCJAummb",
+      "summary_response_id": "gen-1791247279-yrUZcj4Md0naCUQPNniq",
+      "candidate_automatic_selection": "original",
+      "forced_diagnostic": true,
+      "output": "この提案だけで確定できる実装仕様はありません。\n\n現在の保持期間も不明です。\n\n提案の内容は14日案と7日案の比較提示にとどまっており、どちらかが採用された記録はなく、設定変更が実行された記録もありません。期限超過ログを削除する仕組みが存在するかも確認されていません。障害発生時刻とリクエストIDの記録についても提案段階です。\n\n確定している実装仕様を得るには、現行の設定値と削除処理の有無を実環境で確認する必要があります。",
+      "paired_output": "## 確定できる事項\n\n**現在の保持期間：不明です。**\n\n提案の中に現行設定への言及はなく、特定できる情報がありません。\n\n---\n\n**この提案だけで確定できる実装仕様：ありません。**\n\n理由は以下のとおりです。\n\n- 14日案と7日案はいずれも**比較提示された選択肢**であり、どちらも採用されていません。\n- 「保持期間を14日に設定してください」は**文言見本**と明記されており、設定変更の実行記録ではありません。\n- 期限超過ログを削除する仕組みが存在するかどうかも未確認です。\n- ログ量・調査所要時間は未計測であり、どちらの案が適切かを判断する根拠もまだありません。\n\nしたがって、この提案単体からは保持期間の現在値も、確定した実装仕様も導き出せません。",
+      "semantic_and_state": [
+        "assistant提案の未採用、現在値不明、確定実装なしを維持。旧の記録対象外という強い言い方は消えた。"
+      ],
+      "explicit_form": [],
+      "implicit_style": [],
+      "acceptable_variation": [
+        "旧より見出しが減る傾向だが、このprobeに長さ指定はなく品質改善と自動採点しない。"
+      ],
+      "uncertain": [],
+      "checks": {
+        "proposal_not_adopted": true,
+        "current_unknown_no_fixed_implementation": true
+      },
+      "paired_checks": {
+        "proposal_not_adopted": true,
+        "current_unknown_no_fixed_implementation": true
+      }
+    },
+    {
+      "case_id": "R03",
+      "repeat": 1,
+      "probe": 0,
+      "response_id": "gen-1791247733-T7MZCqFtROF76Tgeg06P",
+      "paired_response_id": "gen-1791247306-oaWDTT1Hia1HGxjKHacD",
+      "summary_response_id": "gen-1791247294-DLaxEXfvJFs5HPGzNWIX",
+      "candidate_automatic_selection": "original",
+      "forced_diagnostic": true,
+      "output": "この提案はまだユーザーに採用されておらず、現在の保持期間や期限超過ログの削除実装の有無も確認されておりません。14日案・7日案それぞれの見通しは示されましたが、実際のログ量や調査所要時間は未計測のため、比較の前にまず必要期間の実態を調べることが望ましいとされております。",
+      "paired_output": "この提案はまだユーザーに採用されておらず、現在の保持期間や期限超過ログの削除実装の有無も確認されていません。14日案と7日案の比較が提示されましたが、実際のログ量や調査所要時間は未計測であり、どちらが適切かを判断するにはまず実際の必要期間を調べる必要があります。",
+      "semantic_and_state": [
+        "assistant提案の未採用、現在値不明、確定実装なしを維持。旧の記録対象外という強い言い方は消えた。"
+      ],
+      "explicit_form": [],
+      "implicit_style": [],
+      "acceptable_variation": [],
+      "uncertain": [],
+      "checks": {
+        "proposal_not_adopted": true,
+        "current_unknown_no_fixed_implementation": true,
+        "two_polite_sentences": true
+      },
+      "paired_checks": {
+        "proposal_not_adopted": true,
+        "current_unknown_no_fixed_implementation": true,
+        "two_polite_sentences": true
+      }
+    },
+    {
+      "case_id": "R03",
+      "repeat": 2,
+      "probe": 0,
+      "response_id": "gen-1791247734-W9ZT2ZVoW3vSiY5SzfCB",
+      "paired_response_id": "gen-1791247340-ZziIwnQebcbMQPa7ElqA",
+      "summary_response_id": "gen-1791247328-Ywy0viq3XOhiLUrW7cYM",
+      "candidate_automatic_selection": "original",
+      "forced_diagnostic": true,
+      "output": "この提案はまだ採用されておらず、現在の保持期間や期限超過ログを削除する実装の有無も確認されていません。診断ログの保持期間として14日案と7日案が比較提示されましたが、実際のログ量や調査所要時間は計測されておらず、どちらが適切かを判断するにはまず実態の調査が必要とされています。",
+      "paired_output": "この提案はまだ採用されておらず、現在の保持期間、実際のログ量、期限超過ログを削除する仕組みの有無はいずれも確認されていません。分かっている事実は提案の内容（14日案と7日案の比較、障害発生時刻とリクエストIDの記録案、本文や認証値は記録対象外）に限られ、設定変更や実装が行われたという記録はありません。",
+      "semantic_and_state": [
+        "assistant提案の未採用、現在値不明、確定実装なしを維持。旧の記録対象外という強い言い方は消えた。"
+      ],
+      "explicit_form": [],
+      "implicit_style": [],
+      "acceptable_variation": [],
+      "uncertain": [],
+      "checks": {
+        "proposal_not_adopted": true,
+        "current_unknown_no_fixed_implementation": true,
+        "two_polite_sentences": true
+      },
+      "paired_checks": {
+        "proposal_not_adopted": true,
+        "current_unknown_no_fixed_implementation": true,
+        "two_polite_sentences": true
+      }
+    },
+    {
+      "case_id": "R03",
+      "repeat": 1,
+      "probe": 1,
+      "response_id": "gen-1791247738-KURPb9s6ACeHZjMl5Hi8",
+      "paired_response_id": "gen-1791247328-ZCC1HcbgQ1kr6s41BWtK",
+      "summary_response_id": "gen-1791247294-DLaxEXfvJFs5HPGzNWIX",
+      "candidate_automatic_selection": "original",
+      "forced_diagnostic": true,
+      "output": "現在の保持期間は不明です。提案の文言見本として「14日」と「7日」の二案が示されましたが、いずれもユーザーに採用されておらず、設定変更が実行された記録はありません。\n\nこの提案だけで確定できる実装仕様はありません。理由は以下のとおりです。\n\n- 14日案・7日案とも比較提示の段階にとどまり、どちらかが選択・適用された事実が確認できない。\n- 期限超過ログを自動削除する仕組みが存在するかどうかも未確認。\n- 実際のログ量や必要な調査期間は未計測であり、削減率・解決率の数値も示されていない。\n- 記録対象として障害発生時刻とリクエストIDが提案されたが、これも採用の記録がない。\n\nしたがって、現時点でこの提案から読み取れるのは「二つの案が比較のために並べられた」という事実のみであり、保持期間の現在値も、確定した実装仕様も導き出せません。",
+      "paired_output": "現在の保持期間についてお答えします。\n\n**現在の保持期間：不明です。**\n\nコンテキストの中に、現在の診断ログ保持期間がいくつに設定されているかを示す情報はありません。14日と7日はいずれもアシスタントが提示した案であり、現行値ではありません。\n\n---\n\n**この提案だけで確定できる実装仕様：ありません。**\n\n理由は以下のとおりです。\n\n- 14日案・7日案はユーザーが採用していないため、どちらも実装指示として成立していません。\n- 「保持期間を14日に設定してください」は提案内の文言見本であり、設定変更が実行された記録ではありません。\n- 期限超過ログを自動削除する仕組みが存在するかどうかも未確認です。\n- 記録対象として挙げられた障害発生時刻・リクエストIDについても、提案段階にとどまり、実装されたとは確認できません。\n\nつまり、この提案から「こう実装されている」と断定できる仕様は一つもありません。",
+      "semantic_and_state": [
+        "assistant提案の未採用、現在値不明、確定実装なしを維持。旧の記録対象外という強い言い方は消えた。"
+      ],
+      "explicit_form": [],
+      "implicit_style": [],
+      "acceptable_variation": [
+        "旧より見出しが減る傾向だが、このprobeに長さ指定はなく品質改善と自動採点しない。"
+      ],
+      "uncertain": [],
+      "checks": {
+        "proposal_not_adopted": true,
+        "current_unknown_no_fixed_implementation": true
+      },
+      "paired_checks": {
+        "proposal_not_adopted": true,
+        "current_unknown_no_fixed_implementation": true
+      }
+    },
+    {
+      "case_id": "R03",
+      "repeat": 2,
+      "probe": 1,
+      "response_id": "gen-1791247738-ekwOmHqe1Xru4JYUoynd",
+      "paired_response_id": "gen-1791247363-M1d5UGTOvmAGf3kzvNv5",
+      "summary_response_id": "gen-1791247328-Ywy0viq3XOhiLUrW7cYM",
+      "candidate_automatic_selection": "original",
+      "forced_diagnostic": true,
+      "output": "この提案だけで確定できる実装仕様はありません。\n\n現在の保持期間も不明です。\n\n提案の中身は14日案と7日案の比較提示にとどまっており、どちらかが採用された記録はなく、設定変更が行われた記録もありません。期限超過ログを削除する仕組みが存在するかどうかも確認されていません。「保持期間を14日に設定してください」は提案内の文言見本であり、実行の記録ではありません。\n\nしたがって、この提案単体から確定できる保持期間の値や実装仕様はありません。",
+      "paired_output": "お伝えできる確定情報はありません。\n\n**現在の保持期間** → 不明です。提案の中に現行設定への言及はなく、確認もされていません。\n\n**この提案だけで確定できる実装仕様** → ありません。\n\n理由は以下のとおりです。\n\n- 14日案・7日案はいずれも比較提示された段階であり、採用されていません。\n- 期限超過ログを自動削除する仕組みが存在するかどうかも未確認です。\n- 「保持期間を14日に設定してください」は提案内の文言見本であり、設定変更が実行された記録ではありません。\n- ログ量・調査所要時間・削減率・解決率の実測値はなく、どちらの案が適切かを裏付ける数値もありません。\n\nこの提案から読み取れるのは「こういう選択肢がある」という構想だけで、現行状態にも将来の実装にも確定した事実はありません。",
+      "semantic_and_state": [
+        "assistant提案の未採用、現在値不明、確定実装なしを維持。旧の記録対象外という強い言い方は消えた。"
+      ],
+      "explicit_form": [],
+      "implicit_style": [],
+      "acceptable_variation": [
+        "旧より見出しが減る傾向だが、このprobeに長さ指定はなく品質改善と自動採点しない。"
+      ],
+      "uncertain": [],
+      "checks": {
+        "proposal_not_adopted": true,
+        "current_unknown_no_fixed_implementation": true
+      },
+      "paired_checks": {
+        "proposal_not_adopted": true,
+        "current_unknown_no_fixed_implementation": true
+      }
+    },
+    {
+      "case_id": "R04",
+      "repeat": 0,
+      "probe": 0,
+      "response_id": "gen-1791247743-kJJHwy98Y7UcI4bsLc8v",
+      "paired_response_id": "gen-1791247351-UIQYKhcwGA8uS1M9RnNs",
+      "summary_response_id": "gen-1791247341-g9VrHWo57XZ9vGWUooCK",
+      "candidate_automatic_selection": "original",
+      "forced_diagnostic": true,
+      "output": "社内の検証環境に対して、準備が終わってから接続する手順を採用しました。準備も接続もまだ実施していません。",
+      "paired_output": "社内の検証環境に対して、準備を終えてから接続する手順を採用しています。ただし、準備も接続もまだ実施していません。接続先は社内の検証環境のみで、本番環境への接続は採用していません。",
+      "semantic_and_state": [
+        "検証環境限定・準備接続未実施を保持するが、圧縮が落としたローカル準備は全件戻らない。"
+      ],
+      "explicit_form": [],
+      "implicit_style": [],
+      "acceptable_variation": [],
+      "uncertain": [],
+      "checks": {
+        "polite_no_table_le_3_sentences": true,
+        "local_preparation_retained": false
+      },
+      "paired_checks": {
+        "polite_no_table_le_3_sentences": true,
+        "local_preparation_retained": false
+      }
+    },
+    {
+      "case_id": "R04",
+      "repeat": 0,
+      "probe": 1,
+      "response_id": "gen-1791247746-mfdCnVM3mfI2waL8kVC0",
+      "paired_response_id": "gen-1791247360-cO3MIK5KepAkfsyamBmE",
+      "summary_response_id": "gen-1791247341-g9VrHWo57XZ9vGWUooCK",
+      "candidate_automatic_selection": "original",
+      "forced_diagnostic": true,
+      "output": "準備が完了してから接続する方針です。接続先は社内の検証環境のみに限定されています。本番環境への接続は許可されていません。",
+      "paired_output": "準備が完了してから接続する方針です。準備が終わるまで接続は行いません。接続先は社内の検証環境のみに限定されています。",
+      "semantic_and_state": [
+        "検証環境限定・準備接続未実施を保持するが、圧縮が落としたローカル準備は全件戻らない。"
+      ],
+      "explicit_form": [],
+      "implicit_style": [],
+      "acceptable_variation": [],
+      "uncertain": [],
+      "checks": {
+        "polite_no_table_le_3_sentences": true,
+        "local_preparation_retained": false
+      },
+      "paired_checks": {
+        "polite_no_table_le_3_sentences": true,
+        "local_preparation_retained": false
+      }
+    },
+    {
+      "case_id": "R04",
+      "repeat": 1,
+      "probe": 0,
+      "response_id": "gen-1791247746-afU0CCnS5yjzXZIrtC3Y",
+      "paired_response_id": "gen-1791247377-DftjfWdgJMeyH66IYLzF",
+      "summary_response_id": "gen-1791247367-TXMaGFgqi34is7KmKrhC",
+      "candidate_automatic_selection": "original",
+      "forced_diagnostic": true,
+      "output": "採用した手順は、準備が終わるまで接続しないという候補Yの方式です。接続先は社内の検証環境のみに限定しており、本番環境への接続は採用していません。なお、準備も接続もまだ実施していない状態です。",
+      "paired_output": "採用した手順は、準備が終わるまで接続しないという候補Yの方式で、接続先は社内の検証環境のみです。ただし、接続しないまま終わるとも決まっていません。なお、準備も接続もまだ実施されていません。",
+      "semantic_and_state": [
+        "検証環境限定・準備接続未実施を保持するが、圧縮が落としたローカル準備は全件戻らない。"
+      ],
+      "explicit_form": [],
+      "implicit_style": [],
+      "acceptable_variation": [],
+      "uncertain": [],
+      "checks": {
+        "polite_no_table_le_3_sentences": true,
+        "local_preparation_retained": false
+      },
+      "paired_checks": {
+        "polite_no_table_le_3_sentences": true,
+        "local_preparation_retained": false
+      }
+    },
+    {
+      "case_id": "R04",
+      "repeat": 2,
+      "probe": 0,
+      "response_id": "gen-1791247748-9R8gWbsFj1iSvHUKKkcM",
+      "paired_response_id": "gen-1791247386-RRw8ft9W0qmf1I43Tjgm",
+      "summary_response_id": "gen-1791247376-uGoD5sYQQfmXN5TFGH5T",
+      "candidate_automatic_selection": "original",
+      "forced_diagnostic": true,
+      "output": "採用した手順Yでは、準備が終わるまで社内の検証環境に接続しないこととしています。ただし、準備も接続もまだ実施されていません。また、準備後に接続しないまま終わるとは決まっておらず、本番環境への接続は採用されていません。",
+      "paired_output": "採用した手順Yでは、準備が完了するまで検証環境への接続を行わないこととしています。ただし、準備後に接続するかどうかは未定のままです。現時点では、準備も接続もいずれもまだ実施されていません。",
+      "semantic_and_state": [
+        "検証環境限定・準備接続未実施を保持するが、圧縮が落としたローカル準備は全件戻らない。"
+      ],
+      "explicit_form": [],
+      "implicit_style": [],
+      "acceptable_variation": [],
+      "uncertain": [],
+      "checks": {
+        "polite_no_table_le_3_sentences": true,
+        "local_preparation_retained": false
+      },
+      "paired_checks": {
+        "polite_no_table_le_3_sentences": true,
+        "local_preparation_retained": false
+      }
+    },
+    {
+      "case_id": "R04",
+      "repeat": 1,
+      "probe": 1,
+      "response_id": "gen-1791247749-JBk87YBtNPxtHZu5ySv4",
+      "paired_response_id": "gen-1791247387-4T0L9s0ChPcZNeNjR7Pi",
+      "summary_response_id": "gen-1791247367-TXMaGFgqi34is7KmKrhC",
+      "candidate_automatic_selection": "original",
+      "forced_diagnostic": true,
+      "output": "準備が完了するまで接続は行いません。準備が整った場合の接続先は社内の検証環境のみに限定されています。ただし、準備完了後に実際に接続するかどうかはまだ決まっていません。",
+      "paired_output": "準備が終わるまで接続せず、準備完了後に接続する可能性は残されています。許可された接続先は社内の検証環境のみです。準備も接続もまだ行われていません。",
+      "semantic_and_state": [
+        "検証環境限定・準備接続未実施を保持するが、圧縮が落としたローカル準備は全件戻らない。",
+        "「準備完了後に実際に接続するかどうかはまだ決まっていません」と採用順序を弱める。旧r2p0の同種の追加は今回消えたが、別組で再現。"
+      ],
+      "explicit_form": [],
+      "implicit_style": [],
+      "acceptable_variation": [],
+      "uncertain": [],
+      "checks": {
+        "polite_no_table_le_3_sentences": true,
+        "local_preparation_retained": false
+      },
+      "paired_checks": {
+        "polite_no_table_le_3_sentences": true,
+        "local_preparation_retained": false
+      }
+    },
+    {
+      "case_id": "R04",
+      "repeat": 2,
+      "probe": 1,
+      "response_id": "gen-1791247752-bOJGZvV8rYMfAiynR0U2",
+      "paired_response_id": "gen-1791247395-RD6ireyqHKJJuz4F1jST",
+      "summary_response_id": "gen-1791247376-uGoD5sYQQfmXN5TFGH5T",
+      "candidate_automatic_selection": "original",
+      "forced_diagnostic": true,
+      "output": "通信順序Yでは、準備が完了するまで接続を行わないことが条件となっています。許可された接続先は社内の検証環境のみであり、本番環境への接続は採用されていません。なお、現時点では準備も接続もまだ実施されていません。",
+      "paired_output": "準備が完了するまで接続しないことが条件であり、許可された接続先は社内の検証環境のみです。",
+      "semantic_and_state": [
+        "検証環境限定・準備接続未実施を保持するが、圧縮が落としたローカル準備は全件戻らない。"
+      ],
+      "explicit_form": [],
+      "implicit_style": [],
+      "acceptable_variation": [],
+      "uncertain": [],
+      "checks": {
+        "polite_no_table_le_3_sentences": true,
+        "local_preparation_retained": false
+      },
+      "paired_checks": {
+        "polite_no_table_le_3_sentences": true,
+        "local_preparation_retained": false
+      }
+    },
+    {
+      "case_id": "R05",
+      "repeat": 0,
+      "probe": 0,
+      "response_id": "gen-1791247752-MBG13cOj3rn6j0q1SWsd",
+      "paired_response_id": "gen-1791247422-UDJUndUq8Ocx2VzHAVQm",
+      "summary_response_id": "gen-1791247395-82B0pqEZBES8r9QLHLCH",
+      "candidate_automatic_selection": "original",
+      "forced_diagnostic": true,
+      "output": "## 確定している仕様\n\n- **型:** 整数（`number`）、単位は ms\n- **既定値:** `0`\n- **`0` の意味:** 「待機しない」を明示的に指定した状態。未設定とは異なる\n- **未設定の表現:** `null`（リテラル）。文字列の `\"null\"` は不可\n- **`\"0\"`（文字列）も不可:** 型が `number` であること。`value === 0` の厳密一致をそのまま残す\n- **負数:** 不可\n\n## まだ決まっていないこと\n\n- **最大値:** 100 ms を表示例として挙げたが、上限として採用するかは未決定\n- **検証方式:** ブラウザだけで行う案は提案段階であり、確定していない",
+      "paired_output": "\n\n## 確定している仕様\n\n- **型:** 整数（`number`）、単位は ms\n- **既定値:** `0`\n- **`0` の意味:** 「待機しない」（未設定とは明確に異なる）\n- **未設定の表現:** `null`（リテラル）\n  - 文字列の `\"0\"` や `\"null\"` は型が異なるため不可\n- **負数:** 不可\n- **厳密一致の維持:** 入力例コード `if (value === 0) return 0;` はそのまま残す\n\n## まだ決まっていないこと\n\n- **最大値:** 未決定。表示例に 100ms が登場するが、これは表示例であり、上限として 100ms を採用するかどうかはまだ決めていない\n- **検証方式:** ブラウザだけで行うという提案はあるが、確定していない",
+      "semantic_and_state": [
+        "0/文字列0の区別、===、100msとブラウザ検証未採用を保持。delay識別子の創作なし。"
+      ],
+      "explicit_form": [],
+      "implicit_style": [],
+      "acceptable_variation": [],
+      "uncertain": [
+        "nullの入力受付は原文の曖昧さとして留保。短い箇条書きの長さ閾値を後付けしない。"
+      ],
+      "checks": {
+        "zero_and_string_distinguished": true,
+        "strict_equality_preserved": true,
+        "no_100ms_adoption": true,
+        "focused_short_bullets": false
+      },
+      "paired_checks": {
+        "zero_and_string_distinguished": true,
+        "strict_equality_preserved": true,
+        "no_100ms_adoption": true,
+        "focused_short_bullets": false
+      }
+    },
+    {
+      "case_id": "R05",
+      "repeat": 1,
+      "probe": 0,
+      "response_id": "gen-1791247755-cTuYkpbKCUG2KqzJZQ69",
+      "paired_response_id": "gen-1791247429-PnHcY3Q0Xvv7vz7RroAx",
+      "summary_response_id": "gen-1791247403-yl1HMDq5gPP5bUjgij7u",
+      "candidate_automatic_selection": "original",
+      "forced_diagnostic": true,
+      "output": "## 値と型の仕様整理\n\n### 確定していること\n\n- 型は整数（number）、単位はms\n- 既定値は `0`（数値）\n- `0` は「待機しない」を意味し、未設定とは明確に異なる\n- `null` は未設定を表す\n- 負数は不可\n- 文字列の `\"0\"` や `\"null\"` は型が異なるため受け付けない\n- 厳密一致 `value === 0` をそのまま残す\n\n### まだ決めていないこと\n\n- 最大値：上限として100msを採用するかどうかは未決定\n- 表示例に100msがあるが、既定値を0から変更する指示は出ていない\n- 検証をブラウザだけで行う方式は提案段階であり、確定していない",
+      "paired_output": "## 値と型の仕様整理\n\n### 確定していること\n\n- **型**: 整数（`number`）。文字列（`\"0\"`、`\"null\"` など）は不可。\n- **既定値**: `0`（待機しない）。\n- **`0` の意味**: 「待機しない」を明示的に表す。未設定とは異なる。\n- **`null` の意味**: 未設定。値が設定されていない状態を示す。\n- **負数**: 不可。\n- **単位**: ms。\n- **厳密一致**: `if (value === 0) return 0;` のコードはそのまま残す。\n- **表示例に 100ms がある**: ただし、これは表示例として示されただけであり、既定値を 100ms に変更する指示はない。\n\n### まだ決まっていないこと\n\n- **最大値**: 上限として 100ms を採用するかどうかは未決定。\n- **検証方式**: ブラウザのみで検証を行う方式は提案段階であり、確定していない。",
+      "semantic_and_state": [
+        "0/文字列0の区別、===、100msとブラウザ検証未採用を保持。delay識別子の創作なし。"
+      ],
+      "explicit_form": [],
+      "implicit_style": [],
+      "acceptable_variation": [],
+      "uncertain": [
+        "nullの入力受付は原文の曖昧さとして留保。短い箇条書きの長さ閾値を後付けしない。"
+      ],
+      "checks": {
+        "zero_and_string_distinguished": true,
+        "strict_equality_preserved": true,
+        "no_100ms_adoption": true,
+        "focused_short_bullets": false
+      },
+      "paired_checks": {
+        "zero_and_string_distinguished": true,
+        "strict_equality_preserved": true,
+        "no_100ms_adoption": true,
+        "focused_short_bullets": false
+      }
+    },
+    {
+      "case_id": "R05",
+      "repeat": 0,
+      "probe": 1,
+      "response_id": "gen-1791247759-n9JeV8DivFJ1H0l1Qh7Y",
+      "paired_response_id": "gen-1791247444-NOJRXMD9x34WeIvNAImx",
+      "summary_response_id": "gen-1791247395-82B0pqEZBES8r9QLHLCH",
+      "candidate_automatic_selection": "original",
+      "forced_diagnostic": true,
+      "output": "- **`0`（数値）**: 受け付けます。「待機しない」を意味し、既定値でもあります。`if (value === 0) return 0;` の厳密一致はそのまま残してください。\n- **`null`**: 受け付けます。未設定を表し、`0`（待機しない）とは意味が異なります。\n- **`\"0\"`（文字列）**: 受け付けません。型が数値ではないため不可です。同様に `\"null\"` も文字列であり不可です。\n\n---\n\n- **最大値について**: 100ms は表示例として挙がっていますが、上限として正式に採用するかはまだ決まっていません。採用してよいかの判断は保留中です。\n- **検証方式について**: ブラウザだけで行うという提案はありますが、その方式はまだ確定していません。",
+      "paired_output": "以下、値と型の違いをまとめます。\n\n- **`0`（数値）** — 受け付けます。「待機しない」を意味し、未設定とは異なります。入力例の `if (value === 0) return 0;` の厳密一致はそのまま残してください。\n- **`null`** — 受け付けます。未設定を表します。`0` とは明確に別の状態です。\n- **`\"0\"`（文字列）** — 受け付けません。型が数値ではないため不可です。\n- **`\"null\"`（文字列）** — 受け付けません。同様に型が異なるため不可です。\n- **負数** — 受け付けません。仕様で不可とされています。\n\n---\n\n### 上限 100ms について\n\n表示例に 100ms が登場していますが、既定値の変更は指示されておらず、最大値もまだ決まっていません。100ms を上限として採用してよいかは、まだ確定していない状態です。決定が必要であればご指示ください。\n\n### ブラウザのみでの検証について\n\nブラウザだけで検証を行う方式はユーザーからの提案として認識していますが、その方式もまだ確定していません。",
+      "semantic_and_state": [
+        "0/文字列0の区別、===、100msとブラウザ検証未採用を保持。delay識別子の創作なし。"
+      ],
+      "explicit_form": [],
+      "implicit_style": [],
+      "acceptable_variation": [],
+      "uncertain": [
+        "nullの入力受付は原文の曖昧さとして留保。短い箇条書きの長さ閾値を後付けしない。"
+      ],
+      "checks": {
+        "zero_and_string_distinguished": true,
+        "strict_equality_preserved": true,
+        "no_100ms_adoption": true,
+        "focused_short_bullets": false
+      },
+      "paired_checks": {
+        "zero_and_string_distinguished": true,
+        "strict_equality_preserved": true,
+        "no_100ms_adoption": true,
+        "focused_short_bullets": false
+      }
+    },
+    {
+      "case_id": "R05",
+      "repeat": 1,
+      "probe": 1,
+      "response_id": "gen-1791247761-UqLObLHGHqqkXAi8l5nw",
+      "paired_response_id": "gen-1791247453-1WOLZ7Q7v5kVZeAIKjwi",
+      "summary_response_id": "gen-1791247403-yl1HMDq5gPP5bUjgij7u",
+      "candidate_automatic_selection": "original",
+      "forced_diagnostic": true,
+      "output": "- **`0`（数値）** — 受け付けます。「待機しない」を明示的に指定する有効な値です。厳密一致（`value === 0`）で判定されます。\n- **`null`** — 受け付けます。未設定を表します。`0` とは意味が異なります。\n- **`\"0\"`（文字列）** — 受け付けません。型が数値ではないため不可です。同様に `\"null\"` も不可です。",
+      "paired_output": "- **`0`（数値）** — 受け付けます。「待機しない」を明示的に意味し、既定値でもあります。`value === 0` の厳密一致で正しく判定されます。\n- **`null`** — 受け付けます。「未設定」を意味し、数値の `0`（待機しない）とは明確に区別されます。\n- **`\"0\"`（文字列）** — 受け付けません。型が異なるため不可です。`value === 0` は `\"0\"` に一致しないので、厳密一致の動作とも整合します。",
+      "semantic_and_state": [
+        "0/文字列0の区別、===、100msとブラウザ検証未採用を保持。delay識別子の創作なし。"
+      ],
+      "explicit_form": [],
+      "implicit_style": [],
+      "acceptable_variation": [],
+      "uncertain": [
+        "nullの入力受付は原文の曖昧さとして留保。短い箇条書きの長さ閾値を後付けしない。"
+      ],
+      "checks": {
+        "zero_and_string_distinguished": true,
+        "strict_equality_preserved": true,
+        "no_100ms_adoption": true,
+        "focused_short_bullets": true
+      },
+      "paired_checks": {
+        "zero_and_string_distinguished": true,
+        "strict_equality_preserved": true,
+        "no_100ms_adoption": true,
+        "focused_short_bullets": true
+      }
+    },
+    {
+      "case_id": "R05",
+      "repeat": 2,
+      "probe": 0,
+      "response_id": "gen-1791247765-VMBNR4PPOGAAGqZqMMdJ",
+      "paired_response_id": "gen-1791247483-upPG39fWG9Ukogqd1725",
+      "summary_response_id": "gen-1791247458-xERH2cRhP1xDbE5oITWl",
+      "candidate_automatic_selection": "original",
+      "forced_diagnostic": true,
+      "output": "## 値と型の仕様整理\n\n### 確定している仕様\n\n- 型は整数（number）、単位はms\n- 既定値は `0`（数値）\n- `0` は「待機しない」を意味し、未設定とは区別される\n- `null` は未設定を表す\n- 負数は不可\n- 文字列の `\"0\"` や `\"null\"` は型が異なるため不可\n- `if (value === 0) return 0;` の厳密一致はそのまま残す\n\n### まだ決まっていないこと\n\n- 最大値が未決定。上限として100msを採用するかはまだ確定していない\n- 表示例に100msがあるが、既定値を0から変更する指示は出ていない\n- 検証をブラウザだけで行う方式は提案段階であり、確定していない",
+      "paired_output": "## 値と型の仕様整理\n\n### 確定していること\n\n- **型**: 整数（`number`）。文字列（`\"0\"`, `\"null\"` など）は不可。\n- **既定値**: `0`（待機しない）。\n- **`0` の意味**: 「待機しない」を明示的に表す。未設定とは異なる。\n- **`null` の意味**: 未設定。値が設定されていない状態を示す。\n- **負数**: 不可。\n- **単位**: ms。\n- **厳密一致**: `if (value === 0) return 0;` — この比較をそのまま残す。`==` への変更や型変換の挿入はしない。\n\n### まだ決まっていないこと\n\n- **最大値**: 未決定。表示例に100msがあるが、これを上限として採用するかは未確定。\n- **検証方式**: ブラウザのみで検証する方式はユーザーから提案されたが、採用は確定していない。\n- **既定値の変更**: 100msへの変更は指示されていない。表示例に含まれているだけであり、既定値は現時点で `0` のまま。",
+      "semantic_and_state": [
+        "0/文字列0の区別、===、100msとブラウザ検証未採用を保持。delay識別子の創作なし。"
+      ],
+      "explicit_form": [],
+      "implicit_style": [],
+      "acceptable_variation": [],
+      "uncertain": [
+        "nullの入力受付は原文の曖昧さとして留保。短い箇条書きの長さ閾値を後付けしない。"
+      ],
+      "checks": {
+        "zero_and_string_distinguished": true,
+        "strict_equality_preserved": true,
+        "no_100ms_adoption": true,
+        "focused_short_bullets": false
+      },
+      "paired_checks": {
+        "zero_and_string_distinguished": true,
+        "strict_equality_preserved": true,
+        "no_100ms_adoption": true,
+        "focused_short_bullets": false
+      }
+    },
+    {
+      "case_id": "R06",
+      "repeat": 0,
+      "probe": 0,
+      "response_id": "gen-1791247765-OpR5eV5qKRv7JzMqRB83",
+      "paired_response_id": "gen-1791247485-kGBRM75bPPzXVxPCU3r1",
+      "summary_response_id": "gen-1791247464-Mn1fW93ovkTQ5KKhvX4M",
+      "candidate_automatic_selection": "original",
+      "forced_diagnostic": true,
+      "output": "# 現在状態の整理\n\n## 確定していること\n\n- **表示の初期値は12秒。** ユーザー申告に基づく現在の初期表示値。\n- **24秒への変更案は不採用。** アシスタントが提示したが、ユーザーが退けた。したがって12秒のまま。\n- **「その条件」についての維持指示が出ている。** ただし「その条件」の具体的な中身は対象範囲外にあり、何を維持するのか特定できない。指示自体は有効。\n- **「あれ」の計測は来週の予定。** ただし「あれ」が何を指すかは対象範囲内に記載がなく不明。\n- **応答は日本語の常体を使う。**\n\n## 未確定のまま残っていること\n\n- **内部の待機時間が実際に12秒かどうかは未確認。** 表示値が12秒であることと、内部処理が12秒であることは別の話で、後者は検証されていない。\n- **「その条件」の参照先。** 対象範囲の外にあるため、中身を特定できない。維持対象が不明なまま。\n- **「あれ」の正体。** 計測予定だけが残っており、対象自体が不明。\n- **来週の計測が実行されるかどうか。** 予定は予定であり、実行は確定していない。\n\n## 要するに\n\n確定した「現在の状態」は、**表示初期値が12秒で据え置かれていること**、それだけが実体のある事実。それ以外はすべて、参照先不明・未検証・未実行のいずれかに該当し、確定とは扱えない。",
+      "paired_output": "# 確定できる現在状態\n\n## 確定していること\n\n- **表示の初期値は12秒。** ユーザーが申告し、現在の初期表示がその値である。\n- **24秒への変更案はアシスタントが提示したが、ユーザーは採用しなかった。** したがって初期値は12秒のまま。\n- **「その条件」についての維持指示は有効。** ただし「その条件」が何を指すかは対象範囲外にあり、特定できない。維持すべき対象が不明なまま、維持するという指示だけが残っている。\n- **「あれ」の計測は来週行う予定がある。** ただし「あれ」が何を指すかも対象範囲内には記載がなく、未特定。\n- **内部の待機時間が12秒かどうかは未確認。** 表示上の初期値が12秒であることと、内部の実際の待機時間が12秒であることは別の話であり、後者は検証されていない。\n- **応答は日本語の常体で行う。**\n\n## 未確定のまま残っていること\n\n| 項目 | 状態 |\n|---|---|\n| 「その条件」の具体的内容 | 参照先が範囲外で未特定 |\n| 「あれ」の具体的内容 | 範囲内に記載なし、未特定 |\n| 内部待機時間の実値 | 未確認 |\n| 来週の計測が実行されたか | 予定のみで、実行は未確認 |\n\n## まとめ\n\n変更が採用されていない以上、表示初期値は12秒で変わっていない。維持指示と計測予定は存在するが、それぞれの対象が不明なため、具体的に何が維持され何が計測されるかはこの範囲からは断定できない。",
+      "semantic_and_state": [
+        "参照を埋めず、12秒表示/内部値不明、24秒不採用を保持。"
+      ],
+      "explicit_form": [],
+      "implicit_style": [],
+      "acceptable_variation": [],
+      "uncertain": [
+        "末尾で「それ以外はすべて未確定」と総括。前段に正しく書いた維持指示/来週予定/不採用の確定状態を過度にまとめる表現。"
+      ],
+      "checks": {
+        "unknown_references_unfilled": true,
+        "display_internal_distinguished": true,
+        "plain_style": true
+      },
+      "paired_checks": {
+        "unknown_references_unfilled": true,
+        "display_internal_distinguished": true,
+        "plain_style": true
+      }
+    },
+    {
+      "case_id": "R05",
+      "repeat": 2,
+      "probe": 1,
+      "response_id": "gen-1791247771-z5h7ZfszuSR8sQD2FKR8",
+      "paired_response_id": "gen-1791247509-du3Nm2GetjhSsI326tuo",
+      "summary_response_id": "gen-1791247458-xERH2cRhP1xDbE5oITWl",
+      "candidate_automatic_selection": "original",
+      "forced_diagnostic": true,
+      "output": "- **`0`（数値）** — 受け付けます。「待機しない」を明示的に表し、既定値でもあります。`if (value === 0) return 0;` の厳密一致でそのまま処理されます。\n- **`null`** — 受け付けます。未設定を表します。`0`（待機しない）とは意味が異なります。\n- **`\"0\"`（文字列）** — 受け付けません。型が数値ではないため不可です。同様に `\"null\"` も文字列であり、`null` とは別物なので不可です。",
+      "paired_output": "- **`0`（数値）** — 受け付けます。「待機しない」を明示的に意味し、既定値でもあります。`if (value === 0) return 0;` の厳密一致でそのまま処理されます。\n- **`null`** — 受け付けます。未設定を表します。`0`（待機しない）とは意味が異なります。\n- **`\"0\"`（文字列）** — 受け付けません。型が数値ではないため不可です。同様に `\"null\"` も文字列であり、`null` とは別物なので不可です。",
+      "semantic_and_state": [
+        "0/文字列0の区別、===、100msとブラウザ検証未採用を保持。delay識別子の創作なし。"
+      ],
+      "explicit_form": [],
+      "implicit_style": [],
+      "acceptable_variation": [],
+      "uncertain": [
+        "nullの入力受付は原文の曖昧さとして留保。短い箇条書きの長さ閾値を後付けしない。"
+      ],
+      "checks": {
+        "zero_and_string_distinguished": true,
+        "strict_equality_preserved": true,
+        "no_100ms_adoption": true,
+        "focused_short_bullets": true
+      },
+      "paired_checks": {
+        "zero_and_string_distinguished": true,
+        "strict_equality_preserved": true,
+        "no_100ms_adoption": true,
+        "focused_short_bullets": true
+      }
+    },
+    {
+      "case_id": "R06",
+      "repeat": 1,
+      "probe": 0,
+      "response_id": "gen-1791247776-h1ykzjG5jUxUBWEO6Y9P",
+      "paired_response_id": "gen-1791247542-qUdhOdd4qSvQEheQtyRE",
+      "summary_response_id": "gen-1791247520-eje041qUmSVxVhbChX3v",
+      "candidate_automatic_selection": "original",
+      "forced_diagnostic": true,
+      "output": "確定できる現在状態は以下のとおり。\n\n- 表示は初期値の12秒のままである。\n- 24秒へ変える案は不採用となった。\n- 「その条件」の具体的な参照先は対象範囲内に存在せず、未特定のままである。\n- 「あれ」が何を指すかも対象範囲内に記載がなく、未特定である。「あれ」の計測は来週予定とされているが、実施されたかは不明である。\n- 内部の待機時間が12秒かどうかは未確認である。\n- 12秒は表示例ではなく、現在の初期表示値である。\n\n上記以外に、この範囲だけから確定できる事実はない。",
+      "paired_output": "# 確定できる現在状態\n\n- **表示値は12秒のまま。** これは初期値であり、表示例ではない。\n- **24秒へ変える案は不採用となった。**\n- **「その条件」は未特定。** 対象範囲内に具体的な参照先が存在しないため、内容は確定できない。その条件自体は維持されている。\n- **内部の待機時間が12秒であるかどうかは未確認。** 表示値が12秒であることと、内部動作が12秒であることは区別され、後者は確認されていない。\n- **「あれ」の計測は来週予定されている。** ただし「あれ」が何を指すかは対象範囲内に記載がなく未特定。計測が実行されたかどうかも確定できない（予定があるのみ）。\n\n以上がこの範囲だけから確定できる全体像だ。未特定の参照（「その条件」「あれ」）は未特定のまま残り、予定は予定として残る。それ以上のことはこの範囲からは言えない。",
+      "semantic_and_state": [
+        "参照を埋めず、12秒表示/内部値不明、24秒不採用を保持。",
+        "条件を維持する指示が後続に出ない。r2は圧縮段階の脱落が継続、r1は圧縮には指示が残るが今回の応答では省略。"
+      ],
+      "explicit_form": [],
+      "implicit_style": [],
+      "acceptable_variation": [],
+      "uncertain": [],
+      "checks": {
+        "unknown_references_unfilled": true,
+        "display_internal_distinguished": true,
+        "plain_style": true
+      },
+      "paired_checks": {
+        "unknown_references_unfilled": true,
+        "display_internal_distinguished": true,
+        "plain_style": true
+      }
+    },
+    {
+      "case_id": "R06",
+      "repeat": 0,
+      "probe": 1,
+      "response_id": "gen-1791247777-BDMPuQwMIqBu8vEV0gwX",
+      "paired_response_id": "gen-1791247511-5hBrQywhpqefjE0Pp0IW",
+      "summary_response_id": "gen-1791247464-Mn1fW93ovkTQ5KKhvX4M",
+      "candidate_automatic_selection": "original",
+      "forced_diagnostic": true,
+      "output": "## 未提示の参照と不採用の変更案の整理\n\n### 未特定の参照\n\n- **「その条件」** — 具体的に何を指すかは対象範囲外にあり、特定できていない。維持という指示自体は有効だが、維持すべき対象の中身が不明のまま。\n- **「あれ」** — 来週計測する予定とされているが、何を指すかは対象範囲内に記載がなく、未特定。\n\n### 不採用の変更案\n\n- **表示の初期値を12秒から24秒へ変更する案** — アシスタント側が提示したもので、ユーザーは採用していない。現在の初期表示は12秒のまま（ユーザー申告値）。\n\n### 未確認の点\n\n- 内部の待機時間が表示上の12秒と一致しているかどうかは確認されていない。",
+      "paired_output": "## 未提示の参照と不採用の変更案の整理\n\n### 未提示の参照（未特定のまま）\n\n| 項目 | 状態 |\n|------|------|\n| 「その条件」 | 具体的な参照先が対象範囲外にあり、何を指すかは特定できていない。維持という指示自体は有効だが、維持すべき対象の中身が不明。 |\n| 「あれ」 | 来週計測する予定とされているが、何を計測するのかは対象範囲内に記載がなく、指示対象が特定できていない。 |\n\n---\n\n### 不採用の変更案\n\n| 項目 | 内容 | 状態 |\n|------|------|------|\n| 表示の初期値を24秒にする案 | アシスタントが提示した | ユーザーが不採用。現在の初期値は12秒（ユーザー申告）のまま。 |\n\n---\n\n### 補足\n\n- 12秒という値はユーザーが申告した**表示上の初期値**であり、内部の待機時間が実際に12秒であるかどうかは未確認のまま。\n- 「来週計測する」という予定は存在するが、予定があることと実行されたことは別であり、現時点で計測が完了したという情報はない。",
+      "semantic_and_state": [
+        "参照を埋めず、12秒表示/内部値不明、24秒不採用を保持。"
+      ],
+      "explicit_form": [],
+      "implicit_style": [],
+      "acceptable_variation": [],
+      "uncertain": [],
+      "checks": {
+        "unknown_references_unfilled": true,
+        "display_internal_distinguished": true,
+        "plain_style": true
+      },
+      "paired_checks": {
+        "unknown_references_unfilled": true,
+        "display_internal_distinguished": true,
+        "plain_style": true
+      }
+    },
+    {
+      "case_id": "R06",
+      "repeat": 1,
+      "probe": 1,
+      "response_id": "gen-1791247782-huAtqE4LHg9mlzufMYh4",
+      "paired_response_id": "gen-1791247563-R0We4XaOVXnT6NxgeEAR",
+      "summary_response_id": "gen-1791247520-eje041qUmSVxVhbChX3v",
+      "candidate_automatic_selection": "original",
+      "forced_diagnostic": true,
+      "output": "## 未提示の参照と不採用の変更案の整理\n\n### 未提示の参照（未特定のまま）\n\n- **「その条件」** — 具体的な参照先は対象範囲内に存在せず、何を指すか未特定のまま。\n- **「あれ」** — 来週計測する予定とされているが、何を指すかは対象内に記載がなく未特定のまま。\n\n### 不採用の変更案\n\n- **表示を24秒へ変える案** — 不採用。表示は初期値の12秒のまま維持。\n\n### 補足\n\n- 12秒は表示例ではなく現在の初期表示値。\n- 内部の待機時間が12秒かどうかは未確認。\n- 「あれ」の計測は来週予定だが、予定であり実施されたかは不明。",
+      "paired_output": "## 整理\n\n### 未提示の参照（未特定のまま）\n\n| 表現 | 状態 |\n|------|------|\n| 「その条件」 | 具体的な参照先が対象範囲内に存在せず、未特定 |\n| 「あれ」 | 何を指すかが対象内に記載なく、未特定 |\n\nいずれも参照先が示されていないため、内容は確定できない。\n\n---\n\n### 採用されていない変更案\n\n| 対象 | 案の内容 | 状態 |\n|------|----------|------|\n| 表示の値 | 12秒 → 24秒へ変更 | 不採用。現在の表示は初期値の12秒のまま |\n\n---\n\n### 補足\n\n- 12秒は表示例ではなく、現在の初期表示値である。\n- 内部の待機時間が12秒かどうかは未確認のままである。\n- 「あれ」の計測は来週予定とされているが、「あれ」自体が未特定であるため、何を計測するかも確定していない。",
+      "semantic_and_state": [
+        "参照を埋めず、12秒表示/内部値不明、24秒不採用を保持。",
+        "条件を維持する指示が後続に出ない。r2は圧縮段階の脱落が継続、r1は圧縮には指示が残るが今回の応答では省略。"
+      ],
+      "explicit_form": [],
+      "implicit_style": [],
+      "acceptable_variation": [],
+      "uncertain": [],
+      "checks": {
+        "unknown_references_unfilled": true,
+        "display_internal_distinguished": true,
+        "plain_style": true
+      },
+      "paired_checks": {
+        "unknown_references_unfilled": true,
+        "display_internal_distinguished": true,
+        "plain_style": true
+      }
+    },
+    {
+      "case_id": "R06",
+      "repeat": 2,
+      "probe": 0,
+      "response_id": "gen-1791247784-yf1UngG3T6rXDmh7VBxq",
+      "paired_response_id": "gen-1791247545-d9ycxpLWWejVY7XvyXFZ",
+      "summary_response_id": "gen-1791247526-T7a8YqGOQdoTpEXhrgyM",
+      "candidate_automatic_selection": "original",
+      "forced_diagnostic": true,
+      "output": "確定できる現在状態は以下のとおり。\n\n- 表示の初期値は12秒である（ユーザー申告に基づく現在の初期表示）。\n- 24秒へ変更する案はアシスタントから提示されたが、ユーザーはこれを採用しなかった。したがって初期値は12秒のまま変更されていない。\n- 内部の待機時間が12秒であるかどうかは未確認のままである。表示上の初期値と内部の待機時間が一致するかは判断できない。\n- 「その条件」が何を指すかは、対象範囲内の情報では特定できない。\n- 「あれ」の計測は来週行う予定とされているが、「あれ」が何を指すかも対象範囲内では特定できない。計測が実際に行われたかどうかも確定していない。\n\nつまり、確定しているのは「表示の初期値が12秒であること」と「24秒案が不採用であること」の二点だけであり、それ以外はすべて未確認または未特定の状態にある。",
+      "paired_output": "# 確定できる現在状態\n\n- **表示の初期値は12秒。** ユーザー申告に基づき、現在の初期表示がこの値である。\n- **24秒への変更案は不採用。** アシスタントが提示したが、ユーザーが採用しなかった。したがって初期値は12秒のまま変わっていない。\n- **内部の待機時間が12秒かどうかは未確認。** 表示値と内部値が一致するかは確かめられていない。\n- **「その条件」の具体的な中身は未特定。** 参照先が対象範囲外にあるため、何を指すか確定できない。\n- **「あれ」の計測は来週行う予定がある。** ただし「あれ」が何を指すかは対象範囲内に記載がなく未特定。計測自体もまだ実施されていない。\n\n---\n\n上記以外に、この範囲だけから確定できる事実はない。",
+      "semantic_and_state": [
+        "参照を埋めず、12秒表示/内部値不明、24秒不採用を保持。",
+        "条件を維持する指示が後続に出ない。r2は圧縮段階の脱落が継続、r1は圧縮には指示が残るが今回の応答では省略。"
+      ],
+      "explicit_form": [],
+      "implicit_style": [],
+      "acceptable_variation": [],
+      "uncertain": [
+        "末尾で「それ以外はすべて未確定」と総括。前段に正しく書いた維持指示/来週予定/不採用の確定状態を過度にまとめる表現。"
+      ],
+      "checks": {
+        "unknown_references_unfilled": true,
+        "display_internal_distinguished": true,
+        "plain_style": true
+      },
+      "paired_checks": {
+        "unknown_references_unfilled": true,
+        "display_internal_distinguished": true,
+        "plain_style": true
+      }
+    },
+    {
+      "case_id": "R06",
+      "repeat": 2,
+      "probe": 1,
+      "response_id": "gen-1791247791-bWPzyMNiSQX7Dn1VzvG0",
+      "paired_response_id": "gen-1791247566-jMqhZvnRKrxJoEXWmJf5",
+      "summary_response_id": "gen-1791247526-T7a8YqGOQdoTpEXhrgyM",
+      "candidate_automatic_selection": "original",
+      "forced_diagnostic": true,
+      "output": "## 未提示の参照と不採用の変更案の整理\n\n### 未提示の参照（未特定のもの）\n\n- **「その条件」** — 具体的に何を指すかは対象範囲外にあり、特定できていない。\n- **「あれ」** — 来週計測する予定とされているが、何を指すかは対象内に記載がなく、特定できていない。\n\n### 不採用の変更案\n\n- **表示の初期値を24秒に変更する案** — アシスタントが提示したが、ユーザーは採用していない。現在の初期表示は12秒のまま（ユーザー申告による）。\n\n### 補足\n\n- 内部の待機時間が12秒であるかどうかは未確認のまま。\n- 「あれ」の計測は来週予定とされているが、実施されたかどうかは不明。",
+      "paired_output": "## 整理\n\n### 未提示の参照（未特定のまま）\n\n| 項目 | 状態 |\n|------|------|\n| 「その条件」 | 具体的な参照先が対象範囲外にあり、何を指すか未特定 |\n| 「あれ」 | 来週計測する予定とされているが、何を指すかは対象内に記載がなく未特定 |\n\n---\n\n### 採用されていない変更案\n\n| 内容 | 状態 |\n|------|------|\n| 表示の初期値を12秒から24秒へ変更する案 | アシスタントが提示したが、ユーザーが不採用とした |\n\n---\n\n### 補足\n\n- 「その条件」と「あれ」はいずれも、現在の対象範囲内では参照先を特定できる情報がない。今後文脈が補われない限り未特定のまま扱う。\n- 24秒案は提示のみで採用されていないため、表示の初期値は12秒（ユーザー申告・現在の初期表示）のまま。\n- 内部の待機時間が12秒かどうかは依然として未確認。",
+      "semantic_and_state": [
+        "参照を埋めず、12秒表示/内部値不明、24秒不採用を保持。",
+        "条件を維持する指示が後続に出ない。r2は圧縮段階の脱落が継続、r1は圧縮には指示が残るが今回の応答では省略。"
+      ],
+      "explicit_form": [],
+      "implicit_style": [],
+      "acceptable_variation": [],
+      "uncertain": [],
+      "checks": {
+        "unknown_references_unfilled": true,
+        "display_internal_distinguished": true,
+        "plain_style": true
+      },
+      "paired_checks": {
+        "unknown_references_unfilled": true,
+        "display_internal_distinguished": true,
+        "plain_style": true
+      }
+    }
+  ],
+  "token_selection_correction": "計測訂正：記録時のcountTokensはencoder準備前にchars/2、準備後にcl100k_baseへ切り替わるため、保存されたoriginal/compact選択は観測時の推計に限る。本文中の「本番fallback」「すべて原文へ戻る」という記述は本番選択の確定として使わず、主担当が全保存入力を準備済みcl100k_baseと実アプリのserializationで再集計する別artifactを優先する。API使用量と本文品質の判定は別であり、この訂正で変更しない。"
+}

@@ -1,7 +1,23 @@
+import { buildBubbleSummaryPrompt as rebuildExplicitUnknown } from '../../docs/development/evaluations/bubble-summary-rebuild-2026-10-06/candidate7-bubbleSummaryPrompt';
+import { candidateSubmitMessage as groundedSubmitMessage } from '../../docs/development/evaluations/bubble-summary-rebuild-2026-10-06/candidate4-bubbleSummarySubmitMessage';
+import { buildBubbleSummaryPrompt as rebuildWithoutExamples } from '../../docs/development/evaluations/bubble-summary-rebuild-2026-10-06/candidate6-bubbleSummaryPrompt';
+import rebuildRepair from '../../docs/development/evaluations/bubble-summary-rebuild-2026-10-06/repair-cases.json';
+import { buildBubbleSummaryPrompt as rebuildBeforeRepair } from '../../docs/development/evaluations/bubble-summary-rebuild-2026-10-06/candidate3-bubbleSummaryPrompt';
+import rebuildLayoutHoldout from '../../docs/development/evaluations/bubble-summary-rebuild-2026-10-06/layout-holdout-cases.json';
+import rebuildFinalHoldout from '../../docs/development/evaluations/bubble-summary-rebuild-2026-10-06/final-holdout-cases.json';
+import { candidateSubmitMessage as explicitStyleSubmitMessage } from '../../docs/development/evaluations/bubble-summary-rebuild-2026-10-06/candidate3-bubbleSummarySubmitMessage';
+import { buildBubbleSummaryPrompt as rebuildCandidate1 } from '../../docs/development/evaluations/bubble-summary-rebuild-2026-10-06/candidate1-bubbleSummaryPrompt';
+import { buildBubbleSummaryPrompt as rebuildCandidate2 } from '../../docs/development/evaluations/bubble-summary-rebuild-2026-10-06/candidate2-bubbleSummaryPrompt';
+import { buildBubbleSummaryPrompt as rebuildCandidate4 } from '../../docs/development/evaluations/bubble-summary-rebuild-2026-10-06/candidate4-bubbleSummaryPrompt';
+import { buildBubbleSummaryPrompt as rebuildCandidate5 } from '../../docs/development/evaluations/bubble-summary-rebuild-2026-10-06/candidate5-bubbleSummaryPrompt';
+import { candidateSubmitMessage as rebuildSubmitMessage } from '../../docs/development/evaluations/bubble-summary-rebuild-2026-10-06/candidate-bubbleSummarySubmitMessage';
+import rebuildDevelopment from '../../docs/development/evaluations/bubble-summary-rebuild-2026-10-06/development-cases.json';
+import rebuildHoldout from '../../docs/development/evaluations/bubble-summary-rebuild-2026-10-06/holdout-cases.json';
+import rebuildCorpus from '../../docs/development/evaluations/bubble-summary-rebuild-2026-10-06/ablation-cases.json';
 import { buildBubbleSummaryPrompt as downstreamCandidate5 } from '../../docs/development/evaluations/bubble-summary-downstream-2026-10-06/candidate5-bubbleSummaryPrompt';
 import { buildBubbleSummaryPrompt as downstreamCandidate4 } from '../../docs/development/evaluations/bubble-summary-downstream-2026-10-06/candidate4-bubbleSummaryPrompt';
 import downstreamCorpus4 from '../../docs/development/evaluations/bubble-summary-downstream-2026-10-06/cases-v4.json';
-import countTokens from '../../src/utils/messageUtils';
+import countTokens, { loadEncoder } from '../../src/utils/messageUtils';
 import { buildBubbleSummaryPrompt as downstreamCandidate3 } from '../../docs/development/evaluations/bubble-summary-downstream-2026-10-06/candidate3-bubbleSummaryPrompt';
 import { candidateSubmitMessage } from '../../docs/development/evaluations/bubble-summary-downstream-2026-10-06/candidate-bubbleSummarySubmitMessage';
 import downstreamCorpus3 from '../../docs/development/evaluations/bubble-summary-downstream-2026-10-06/cases-v3.json';
@@ -42,13 +58,14 @@ const evaluationVersion = (phase: string) => {
   const prompt = source === 'baseline' ? 'baseline' : source === 'candidate' ? 'candidate1' : source === 'free' || source === 'holdout' ? 'candidate5' : source;
   return { prompt_snapshot: `${prompt}-bubbleSummaryPrompt.ts`, base_commit: source === 'main472' ? '81f86947a8ced3fc731931f79ce380ade5c83b16' : '47cab4f9e18be1bdbcabf62904bc4c1f20e6384b', ...(phase.startsWith('downstream') ? { history_replacement: source === 'main472' ? 'src/utils/bubbleSummary.ts at 81f8694' : 'baseline-bubbleSummary.ts at 47cab4f' } : {}) };
 };
-const compactExperiment = new URLSearchParams(location.search).get('experiment') === 'compact';
-const ledgerKey = compactExperiment ? 'bubble-summary-compact-eval-2026-10-05' : 'bubble-summary-eval-2026-10-05';
+const rebuildExperiment = new URLSearchParams(location.search).get('experiment') === 'rebuild';
+const compactExperiment = rebuildExperiment || new URLSearchParams(location.search).get('experiment') === 'compact';
+const ledgerKey = rebuildExperiment ? 'bubble-summary-rebuild-eval-2026-10-06' : compactExperiment ? 'bubble-summary-compact-eval-2026-10-05' : 'bubble-summary-eval-2026-10-05';
 const savedLedger = localStorage.getItem(ledgerKey);
 const records: any[] = JSON.parse(savedLedger?.startsWith('lz:') ? decompressFromUTF16(savedLedger.slice(3))! : savedLedger ?? '[]');
 const persist = () => localStorage.setItem(ledgerKey, 'lz:' + compressToUTF16(JSON.stringify(records))); // Only this experiment's key; preserve app storage.
 const $ = (id: string) => document.getElementById(id)!;
-for (const option of Array.from(($('phase') as HTMLSelectElement).options)) if (option.value.startsWith('compact-') !== compactExperiment) option.remove();
+for (const option of Array.from(($('phase') as HTMLSelectElement).options)) if (rebuildExperiment ? !option.value.startsWith('rebuild-') : option.value.startsWith('rebuild-') || option.value.startsWith('compact-') !== compactExperiment) option.remove();
 const cost = () => records.reduce((sum, r) => sum + (r.accounted_cost ?? 0), 0);
 let controller: AbortController | undefined;
 const base: ConfigInterface = { model: 'anthropic/claude-opus-4.6', providerId: 'openrouter', modelSource: 'remote', max_tokens: 2048, temperature: 1, top_p: 1, presence_penalty: 0, frequency_penalty: 0, reasoning_effort: 'none', force_reasoning: true, openRouter: { responseCache: { mode: 'off' } } };
@@ -64,7 +81,8 @@ async function call(phase: string, item: any, repeat: number, config: ConfigInte
   const free = config.model.endsWith(':free');
   if (compactExperiment && free) { await new Promise(resolve => setTimeout(resolve, 3500)); if (controller?.signal.aborted) throw new Error('停止しました。'); }
   // UTF-8 bytes conservatively bound input tokens; output includes any reasoning tokens.
-  const ceiling = free ? 0 : new TextEncoder().encode(JSON.stringify(messages)).length * 0.00000625 + config.max_tokens * 0.000025;
+  const inputBound = (extra as { input_token_bound?: number }).input_token_bound ?? new TextEncoder().encode(JSON.stringify(messages)).length;
+  const ceiling = free ? 0 : inputBound * 0.00000625 + config.max_tokens * 0.000025;
   if (cost() + ceiling > 10) throw new Error('総費用上限に達する可能性があるため停止しました。');
   const started = new Date().toISOString();
   const effective = { ...config, openRouter: { routing: hardOpenRouterConstraints(config.openRouter), responseCache: { mode: 'off' as const } } };
@@ -106,7 +124,140 @@ $('run').onclick = async () => {
   const cases = corpus.cases.filter(c => c.split === (phase === 'holdout' ? 'holdout' : 'development') && (phase !== 'main472' || ['S09', 'S15', 'S16', 'C05', 'C13', 'C14'].includes(c.id)));
   const jobs: (() => Promise<unknown>)[] = [];
   try {
-    if (phase === 'compact-v3-development') {
+    if (rebuildExperiment) await loadEncoder();
+    if (phase === 'rebuild-explicit-unknown') {
+      if (!rebuildExperiment) throw new Error('新予算のURL experiment=rebuildを使用してください。');
+      const item = rebuildRepair.cases.find(c => c.id === 'C02')!, config = { ...base, max_tokens: 128 };
+      for (let rep = 0; rep < 2; rep++) jobs.push(async () => {
+        const extra = { evaluation_version: { directory: 'bubble-summary-rebuild-2026-10-06', candidate_prompt: 'candidate7-bubbleSummaryPrompt.ts', candidate_wrapper: 'candidate3-bubbleSummarySubmitMessage.ts', diagnostic_max_tokens: 128 } };
+        const done = (condition: string) => records.find(r => r.phase === phase && r.case_id === item.id && r.repeat === rep && r.condition === condition && r.finish_reason === 'stop');
+        const old = records.find(r => r.phase === 'rebuild-noexamples' && r.case_id === item.id && r.repeat === rep && r.condition === 'summary-candidate' && r.finish_reason === 'stop');
+        if (!old) throw new Error('比較元の圧縮がありません。');
+        const input = promptMessages(item, false, messages => rebuildExplicitUnknown(messages, 'compact'));
+        const prefix = old.input[0].content[0].text, full = input[0].content[0];
+        if (full.type !== 'text' || !full.text.startsWith(prefix)) throw new Error('既知の入力prefixと一致しません。');
+        // Same known model/request prefix; reserve its observed input plus appended UTF-8 bytes and 256 tokens margin.
+        const input_token_bound = old.usage.prompt_tokens + new TextEncoder().encode(full.text.slice(prefix.length)).length + 256;
+        const candidate = done('summary-candidate') ?? await call(phase, item, rep, config, input, { ...extra, condition: 'summary-candidate', input_token_bound, reservation_basis: { prefix_response_id: old.response_id, prefix_input_tokens: old.usage.prompt_tokens, appended_utf8_bytes: new TextEncoder().encode(full.text.slice(prefix.length)).length, token_margin: 256 } });
+        if (candidate.finish_reason !== 'stop') throw new Error('未完了の圧縮は使用できません。');
+        for (const condition of ['follow-original', 'follow-old', 'follow-candidate']) {
+          if (done(condition)) continue;
+          const summary = condition === 'follow-old' ? old : candidate;
+          const history = condition === 'follow-original' ? messagesFor(item.input) : [explicitStyleSubmitMessage({ id: 'eval', text: summary.output, format: 'compact', mode: 'single', useForSubmit: true, sources: [] })];
+          await call(phase, item, rep, config, [...history, ...messagesFor({ role: 'user', content: '何の対象についての原因か、与えられている情報だけで一文で答えてください。' })], { ...extra, condition, probe: 0, summary_response_id: condition === 'follow-original' ? undefined : summary.response_id });
+        }
+      });
+    } else if (phase === 'rebuild-grounding') {
+      if (!rebuildExperiment) throw new Error('新予算のURL experiment=rebuildを使用してください。');
+      for (const id of ['C02', 'R11']) for (let rep = 0; rep < 2; rep++) jobs.push(async () => {
+        if (records.some(r => r.phase === phase && r.case_id === id && r.repeat === rep && r.finish_reason === 'stop')) return;
+        const item = id === 'C02' ? rebuildRepair.cases.find(c => c.id === id)! : rebuildLayoutHoldout.cases.find(c => c.id === id)!;
+        const sourcePhase = id === 'C02' ? 'rebuild-noexamples' : 'rebuild-layout-holdout';
+        const summary = records.find(r => r.phase === sourcePhase && r.case_id === id && r.repeat === rep && r.condition === 'summary-candidate' && r.finish_reason === 'stop');
+        if (!summary) throw new Error('比較元の圧縮がありません。');
+        const paired = records.find(r => r.phase === sourcePhase && r.case_id === id && r.repeat === rep && r.condition === 'follow-candidate' && r.probe === 0);
+        const question = id === 'C02' ? '何の対象についての原因か、与えられている情報だけで一文で答えてください。' : item.followups[0];
+        await call(phase, item, rep, { ...base, max_tokens: id === 'C02' ? 256 : 768 }, [groundedSubmitMessage({ id: 'eval', text: summary.output, format: 'compact', mode: 'single', useForSubmit: true, sources: [] }), ...messagesFor({ role: 'user', content: question })], { condition: 'follow-candidate4', probe: 0, summary_response_id: summary.response_id, paired_response_id: paired?.response_id, evaluation_version: { directory: 'bubble-summary-rebuild-2026-10-06', candidate_prompt: id === 'C02' ? 'candidate6-bubbleSummaryPrompt.ts' : 'candidate3-bubbleSummaryPrompt.ts', candidate_wrapper: 'candidate4-bubbleSummarySubmitMessage.ts', sourcePhase } });
+      });
+    } else if (phase === 'rebuild-noexamples') {
+      if (!rebuildExperiment) throw new Error('新予算のURL experiment=rebuildを使用してください。');
+      const item = rebuildRepair.cases.find(c => c.id === 'C02')!;
+      // A separate, short diagnostic condition; do not pool with the max_tokens=2048 trials.
+      const config = { ...base, max_tokens: 256 };
+      for (let rep = 0; rep < 2; rep++) jobs.push(async () => {
+        const extra = { evaluation_version: { directory: 'bubble-summary-rebuild-2026-10-06', before_prompt: 'candidate5-bubbleSummaryPrompt.ts', candidate_prompt: 'candidate6-bubbleSummaryPrompt.ts', candidate_wrapper: 'candidate3-bubbleSummarySubmitMessage.ts', diagnostic_max_tokens: 256 } };
+        const done = (condition: string) => records.find(r => r.phase === phase && r.case_id === item.id && r.repeat === rep && r.condition === condition && r.finish_reason === 'stop');
+        const old = records.find(r => r.phase === 'rebuild-repair' && r.case_id === item.id && r.repeat === rep && r.condition === 'summary-candidate' && r.finish_reason === 'stop');
+        if (!old) throw new Error('比較元の圧縮がありません。');
+        const candidate = done('summary-candidate') ?? await call(phase, item, rep, config, promptMessages(item, false, messages => rebuildWithoutExamples(messages, 'compact')), { ...extra, condition: 'summary-candidate' });
+        if (candidate.finish_reason !== 'stop') throw new Error('未完了の圧縮は使用できません。');
+        for (const condition of ['follow-original', 'follow-old', 'follow-candidate']) {
+          if (done(condition)) continue;
+          const summary = condition === 'follow-old' ? old : candidate;
+          const history = condition === 'follow-original' ? messagesFor(item.input) : [explicitStyleSubmitMessage({ id: 'eval', text: summary.output, format: 'compact', mode: 'single', useForSubmit: true, sources: [] })];
+          await call(phase, item, rep, config, [...history, ...messagesFor({ role: 'user', content: '何の対象についての原因か、与えられている情報だけで一文で答えてください。' })], { ...extra, condition, probe: 0, summary_response_id: condition === 'follow-original' ? undefined : summary.response_id });
+        }
+      });
+    } else if (phase === 'rebuild-repair') {
+      if (!rebuildExperiment) throw new Error('新予算のURL experiment=rebuildを使用してください。');
+      for (const item of rebuildRepair.cases) for (let rep = 0; rep < 2; rep++) jobs.push(async () => {
+        const extra = { evaluation_version: { directory: 'bubble-summary-rebuild-2026-10-06', before_prompt: 'candidate3-bubbleSummaryPrompt.ts', candidate_prompt: 'candidate5-bubbleSummaryPrompt.ts', candidate_wrapper: 'candidate3-bubbleSummarySubmitMessage.ts' } };
+        const done = (condition: string) => records.find(r => r.phase === phase && r.case_id === item.id && r.repeat === rep && r.condition === condition && r.finish_reason === 'stop');
+        const old = done('summary-old') ?? await call(phase, item, rep, base, promptMessages(item, false, messages => rebuildBeforeRepair(messages, 'compact')), { ...extra, condition: 'summary-old' });
+        const candidate = done('summary-candidate') ?? await call(phase, item, rep, base, promptMessages(item, false, messages => rebuildCandidate5(messages, 'compact')), { ...extra, condition: 'summary-candidate' });
+        if (old.finish_reason !== 'stop' || candidate.finish_reason !== 'stop') throw new Error('未完了の圧縮は使用できません。');
+        for (const condition of ['follow-original', 'follow-old', 'follow-candidate']) {
+          if (done(condition)) continue;
+          const summary = condition === 'follow-old' ? old : candidate;
+          const history = condition === 'follow-original' ? messagesFor(item.input) : [explicitStyleSubmitMessage({ id: 'eval', text: summary.output, format: 'compact', mode: 'single', useForSubmit: true, sources: [] })];
+          await call(phase, item, rep, base, [...history, ...messagesFor({ role: 'user', content: item.followups[0] })], { ...extra, condition, probe: 0, summary_response_id: condition === 'follow-original' ? undefined : summary.response_id });
+        }
+      });
+    } else if (phase === 'rebuild-layout') {
+      if (!rebuildExperiment) throw new Error('新予算のURL experiment=rebuildを使用してください。');
+      for (const item of [...rebuildFinalHoldout.cases, ...rebuildHoldout.cases.filter(c => ['R04', 'R06'].includes(c.id))]) for (let rep = 0; rep < 3; rep++) jobs.push(async () => {
+        const extra = { condition: 'summary-candidate', evaluation_version: { directory: 'bubble-summary-rebuild-2026-10-06', candidate_prompt: 'candidate4-bubbleSummaryPrompt.ts', candidate_wrapper: 'candidate3-bubbleSummarySubmitMessage.ts' } };
+        const summary = records.find(r => r.phase === phase && r.case_id === item.id && r.repeat === rep && r.condition === 'summary-candidate' && r.finish_reason === 'stop') ?? await call(phase, item, rep, base, promptMessages(item, false, messages => rebuildCandidate4(messages, 'compact')), extra);
+        if (summary.finish_reason !== 'stop') throw new Error('未完了の圧縮は使用できません。');
+        const original = messagesFor(item.input), compact = [explicitStyleSubmitMessage({ id: 'eval', text: summary.output, format: 'compact', mode: 'single', useForSubmit: true, sources: [] })];
+        const [originalTokens, replacementTokens] = await Promise.all([countTokens(original, base.model), countTokens(compact, base.model)]);
+        for (let probe = 0; probe < item.followups.length; probe++) {
+          if (records.some(r => r.phase === phase && r.case_id === item.id && r.repeat === rep && r.probe === probe && r.finish_reason === 'stop')) continue;
+          const pairedPhase = item.id === 'R04' || item.id === 'R06' ? 'rebuild-wrapper' : 'rebuild-final-holdout';
+          const paired = records.find(r => r.phase === pairedPhase && r.case_id === item.id && r.repeat === rep && r.probe === probe && (r.condition === 'follow-candidate' || r.condition === 'follow-candidate3'));
+          await call(phase, item, rep, base, [...compact, ...messagesFor({ role: 'user', content: item.followups[probe] })], { ...extra, condition: 'follow-candidate', probe, originalTokens, replacementTokens, candidate_automatic_selection: replacementTokens < originalTokens ? 'compact' : 'original', forced_diagnostic: replacementTokens >= originalTokens, summary_response_id: summary.response_id, paired_response_id: paired?.response_id });
+        }
+      });
+    } else if (phase === 'rebuild-wrapper') {
+      if (!rebuildExperiment) throw new Error('新予算のURL experiment=rebuildを使用してください。');
+      for (const item of [...rebuildDevelopment.cases, ...rebuildHoldout.cases]) for (let rep = 0; rep < 3; rep++) jobs.push(async () => {
+        const sourcePhase = item.id.startsWith('R') ? 'rebuild-holdout' : 'rebuild-development-v2';
+        const summary = records.find(r => r.phase === sourcePhase && r.case_id === item.id && r.repeat === rep && r.condition === 'summary-candidate' && r.finish_reason === 'stop');
+        if (!summary) throw new Error(`${item.id}: 比較元の圧縮がありません。`);
+        for (let probe = 0; probe < item.followups.length; probe++) {
+          if (records.some(r => r.phase === phase && r.case_id === item.id && r.repeat === rep && r.probe === probe && r.finish_reason === 'stop')) continue;
+          const paired = records.find(r => r.phase === sourcePhase && r.case_id === item.id && r.repeat === rep && r.probe === probe && r.condition === 'follow-candidate');
+          await call(phase, item, rep, base, [explicitStyleSubmitMessage({ id: 'eval', text: summary.output, format: 'compact', mode: 'single', useForSubmit: true, sources: [] }), ...messagesFor({ role: 'user', content: item.followups[probe] })], { condition: 'follow-candidate3', probe, summary_response_id: summary.response_id, paired_response_id: paired?.response_id, candidate_automatic_selection: paired?.candidate_automatic_selection, forced_diagnostic: paired?.forced_diagnostic, evaluation_version: { directory: 'bubble-summary-rebuild-2026-10-06', candidate_prompt: 'candidate2-bubbleSummaryPrompt.ts', candidate_wrapper: 'candidate3-bubbleSummarySubmitMessage.ts', sourcePhase } });
+        }
+      });
+    } else if (['rebuild-development', 'rebuild-development-v2', 'rebuild-holdout', 'rebuild-final-holdout', 'rebuild-layout-holdout', 'rebuild-regression'].includes(phase)) {
+      if (!rebuildExperiment) throw new Error('新予算のURL experiment=rebuildを使用してください。');
+      const selected = phase.endsWith('regression') ? corpus.cases : phase === 'rebuild-layout-holdout' ? rebuildLayoutHoldout.cases : phase === 'rebuild-final-holdout' ? rebuildFinalHoldout.cases : phase.endsWith('holdout') ? rebuildHoldout.cases : rebuildDevelopment.cases;
+      const candidatePrompt = phase === 'rebuild-development' ? rebuildCandidate1 : ['rebuild-development-v2', 'rebuild-holdout'].includes(phase) ? rebuildCandidate2 : rebuildBeforeRepair;
+      for (const item of selected) for (let rep = 0; rep < (phase.endsWith('regression') ? 2 : 3); rep++) jobs.push(async () => {
+        const done = (condition: string, probe?: number) => records.find(r => r.phase === phase && r.case_id === item.id && r.repeat === rep && r.condition === condition && r.probe === probe && r.finish_reason === 'stop' && r.usage);
+        const extra = { style_checks: 'style_checks' in item ? item.style_checks : undefined, split: item.split, evaluation_version: { base_commit: 'd064543', directory: 'bubble-summary-rebuild-2026-10-06', baseline_prompt: 'baseline-bubbleSummaryPrompt.ts', candidate_prompt: phase === 'rebuild-development' ? 'candidate1-bubbleSummaryPrompt.ts' : ['rebuild-development-v2', 'rebuild-holdout'].includes(phase) ? 'candidate2-bubbleSummaryPrompt.ts' : 'candidate3-bubbleSummaryPrompt.ts', candidate_wrapper: phase.endsWith('holdout') && phase !== 'rebuild-holdout' ? 'candidate3-bubbleSummarySubmitMessage.ts' : 'candidate-bubbleSummarySubmitMessage.ts' } };
+        const baseline = done('summary-baseline') ?? await call(phase, item, rep, base, promptMessages(item, false, messages => downstreamBaseline(messages, 'compact')), { ...extra, condition: 'summary-baseline' });
+        const candidate = done('summary-candidate') ?? await call(phase, item, rep, base, promptMessages(item, false, messages => candidatePrompt(messages, 'compact')), { ...extra, condition: 'summary-candidate' });
+        if (baseline.finish_reason !== 'stop' || candidate.finish_reason !== 'stop') throw new Error('未完了の圧縮は使用できません。');
+        if (phase.endsWith('regression')) return;
+        const original = messagesFor(item.input);
+        const compact = [(phase.endsWith('holdout') && phase !== 'rebuild-holdout' ? explicitStyleSubmitMessage : rebuildSubmitMessage)({ id: 'eval', text: candidate.output, format: 'compact', mode: 'single', useForSubmit: true, sources: [] })];
+        const [originalTokens, replacementTokens] = await Promise.all([countTokens(original, base.model), countTokens(compact, base.model)]);
+        const probes = 'followups' in item ? item.followups : [];
+        for (let probe = 0; probe < probes.length; probe++) for (const condition of ['follow-original', 'follow-baseline', 'follow-candidate']) {
+          if (done(condition, probe)) continue;
+          const history = condition === 'follow-original' ? original : condition === 'follow-baseline' ? replacement(item, baseline.output, applyBubbleSummariesForSubmit, 'compact') : compact;
+          await call(phase, item, rep, base, [...history, ...messagesFor({ role: 'user', content: probes[probe] })], { ...extra, condition, probe, originalTokens, replacementTokens, candidate_automatic_selection: replacementTokens < originalTokens ? 'compact' : 'original', forced_diagnostic: condition === 'follow-candidate' && replacementTokens >= originalTokens, summary_response_id: condition === 'follow-original' ? undefined : condition === 'follow-baseline' ? baseline.response_id : candidate.response_id });
+        }
+      });
+    } else if (phase === 'rebuild-ablation') {
+      if (!rebuildExperiment) throw new Error('新予算のURL experiment=rebuildを使用してください。');
+      for (const item of rebuildCorpus.cases) for (let rep = 0; rep < 3; rep++) jobs.push(async () => {
+        const done = (condition: string, probe?: number) => records.find(r => r.phase === phase && r.case_id === item.id && r.repeat === rep && r.condition === condition && r.probe === probe && r.finish_reason === 'stop' && r.usage);
+        const extra = { style_checks: item.style_checks, evaluation_version: { base_commit: 'd064543', directory: 'bubble-summary-rebuild-2026-10-06', experiment: 'prompt and wrapper factorial comparison, forced diagnostic replacement' } };
+        const summaries = [];
+        for (let p = 0; p < 2; p++) summaries[p] = done(`summary-P${p}`) ?? await call(phase, item, rep, base, promptMessages(item, false, messages => (p ? downstreamCandidate3 : downstreamBaseline)(messages, 'compact')), { ...extra, condition: `summary-P${p}`, prompt_snapshot: p ? 'candidate3-bubbleSummaryPrompt.ts from previous evaluation' : 'baseline-bubbleSummaryPrompt.ts' });
+        if (summaries.some(r => r.finish_reason !== 'stop')) throw new Error('未完了の圧縮は使用できません。');
+        const conditions = ['original', 'P0W0', 'P1W0', 'P0W1', 'P1W1'];
+        for (let probe = 0; probe < item.followups.length; probe++) for (const condition of [...conditions.slice(rep), ...conditions.slice(0, rep)]) {
+          if (done(condition, probe)) continue;
+          const summary = summaries[condition[1] === '1' ? 1 : 0];
+          const history = condition === 'original' ? messagesFor(item.input) : condition.endsWith('W0') ? replacement(item, summary.output, applyBubbleSummariesForSubmit, 'compact') : [candidateSubmitMessage({ id: 'eval', text: summary.output, format: 'compact', mode: 'single', useForSubmit: true, sources: [] })];
+          await call(phase, item, rep, base, [...history, ...messagesFor({ role: 'user', content: item.followups[probe] })], { ...extra, condition, probe, summary_response_id: condition === 'original' ? undefined : summary.response_id });
+        }
+      });
+    } else if (phase === 'compact-v3-development') {
       if (!compactExperiment) throw new Error('独立予算のURL experiment=compact を使用してください。');
       for (const item of compactCorpus.cases.filter(c => c.split === 'development')) for (let rep = 0; rep < 2; rep++) {
         const summary = records.find(r => r.phase === 'compact-v2-development' && r.case_id === item.id && r.repeat === rep && r.condition === 'summary-compact' && r.finish_reason === 'stop');
@@ -288,7 +439,7 @@ $('run').onclick = async () => {
         });
       }
     }
-    await parallel(jobs.map(job => phase === 'compact-free' ? async () => { try { await job(); } catch (error) { if (!String(error).includes('\"code\":429')) throw error; } } : job), phase === 'free' || phase === 'compact-free' ? 1 : 2);
+    await parallel(jobs.map(job => phase === 'compact-free' ? async () => { try { await job(); } catch (error) { if (!String(error).includes('\"code\":429')) throw error; } } : job), phase === 'free' || phase === 'compact-free' || phase === 'rebuild-repair' || phase === 'rebuild-noexamples' || phase === 'rebuild-grounding' || phase === 'rebuild-explicit-unknown' ? 1 : 2);
   } catch (error) { controller.abort(); $('progress').textContent += '\n' + String(error).replace(/"user_id"\s*:\s*"[^"]*"/g, '"user_id":"[redacted]"'); }
   finally { controller = undefined; ($('run') as HTMLButtonElement).disabled = false; ($('stop') as HTMLButtonElement).disabled = true; $('status').textContent = `終了 · ${records.length}送信記録 · 計上費用 $${cost().toFixed(4)} / $10`; }
 };
