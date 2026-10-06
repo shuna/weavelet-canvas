@@ -74,7 +74,7 @@ export const getAppliedBubbleSummaries = (chat: ChatInterface, messageIndex = ch
   return accepted;
 };
 
-export const bubbleSummarySubmitMessage = (summary: BubbleSummary): MessageInterface => ({ role: 'user', content: [{ type: 'text', text: `${summary.format === 'compact' ? 'Retained conversation context. Answer the latest request using the requirements and state below. Follow the retained language, tone, structure and length requirements and examples, not formatting added for this summary. Adoption and plans do not imply execution; preserve uncertainty about what has been done.\n' : 'Past conversation summary:\n'}${normalizeBubbleSummaryText(summary.text)}` }] });
+export const bubbleSummarySubmitMessage = (summary: BubbleSummary): MessageInterface => ({ role: 'user', content: [{ type: 'text', text: `Past conversation summary${summary.format === 'compact' ? ' (continue the conversation using this context; follow the retained language, tone, structure and length requirements rather than reporting them or imitating this summary layout)' : ''}:\n${normalizeBubbleSummaryText(summary.text)}` }] });
 
 export const applyBubbleSummariesForSubmit = (chat: ChatInterface, messageIndex: number, generatingNodeIds: string[] = []): MessageInterface[] => {
   const source = chat.messages.slice(0, messageIndex), path = chat.branchTree?.activePath ?? source.map((_, index) => String(index));

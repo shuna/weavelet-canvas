@@ -1,0 +1,694 @@
+{
+  "version": "v5 vs v3, same W3; v6 not included",
+  "method": "35全出力（14圧縮/21後続）全文非盲検レビュー。C02/C06/T05各2反復、T06各1。",
+  "metrics": {
+    "C02 summary-old no_added_domain": [
+      0,
+      2
+    ],
+    "C02 summary-candidate no_added_domain": [
+      1,
+      2
+    ],
+    "C02 follow-original does_not_assume_certificate_domain": [
+      2,
+      2
+    ],
+    "C02 follow-old does_not_assume_certificate_domain": [
+      0,
+      2
+    ],
+    "C02 follow-candidate does_not_assume_certificate_domain": [
+      2,
+      2
+    ],
+    "C06 summary-old user_report_explicit": [
+      0,
+      2
+    ],
+    "C06 summary-candidate user_report_explicit": [
+      2,
+      2
+    ],
+    "C06 follow-original user_report_explicit": [
+      0,
+      2
+    ],
+    "C06 follow-old user_report_explicit": [
+      0,
+      2
+    ],
+    "C06 follow-candidate user_report_explicit": [
+      2,
+      2
+    ],
+    "T05 follow-original within_200": [
+      2,
+      2
+    ],
+    "T05 follow-original plain_no_heading": [
+      2,
+      2
+    ],
+    "T05 follow-original concrete_logs": [
+      2,
+      2
+    ],
+    "T05 follow-old within_200": [
+      2,
+      2
+    ],
+    "T05 follow-old plain_no_heading": [
+      2,
+      2
+    ],
+    "T05 follow-old concrete_logs": [
+      2,
+      2
+    ],
+    "T05 follow-candidate within_200": [
+      2,
+      2
+    ],
+    "T05 follow-candidate plain_no_heading": [
+      2,
+      2
+    ],
+    "T05 follow-candidate concrete_logs": [
+      2,
+      2
+    ],
+    "T06 follow-original whole_result_null": [
+      0,
+      1
+    ],
+    "T06 follow-original json_only": [
+      1,
+      1
+    ],
+    "T06 follow-old whole_result_null": [
+      0,
+      1
+    ],
+    "T06 follow-old json_only": [
+      1,
+      1
+    ],
+    "T06 follow-candidate whole_result_null": [
+      0,
+      1
+    ],
+    "T06 follow-candidate json_only": [
+      0,
+      1
+    ]
+  },
+  "rows": [
+    {
+      "case_id": "C02",
+      "condition": "summary-old",
+      "repeat": 0,
+      "response_id": "gen-1791249143-YO7LwuNFNrEGzq4EWFhW",
+      "output": "証明書（または類似の）障害について、原因が期限切れか更新検知かは未判定。更新時刻は取得可能（ユーザー申告）。失敗ログを出す方法を教えてください。",
+      "semantic_and_state": [
+        "未提示の証明書領域を追加。v5 r0はキャッシュも例示し対象未特定と留保するが、原文にはその候補もない。"
+      ],
+      "explicit_form": [],
+      "acceptable_variation": [],
+      "uncertain": [],
+      "checks": {
+        "no_added_domain": false
+      }
+    },
+    {
+      "case_id": "C02",
+      "condition": "summary-candidate",
+      "repeat": 0,
+      "response_id": "gen-1791249147-Uo4kggvoRv4Uf0K1RKtV",
+      "output": "証明書（またはキャッシュ等、対象未特定）の障害について、原因が期限切れか更新検知かは未判定。更新時刻はユーザー側で取得可能。失敗ログの出し方についての説明を求めている。",
+      "semantic_and_state": [
+        "未提示の証明書領域を追加。v5 r0はキャッシュも例示し対象未特定と留保するが、原文にはその候補もない。"
+      ],
+      "explicit_form": [],
+      "acceptable_variation": [],
+      "uncertain": [],
+      "checks": {
+        "no_added_domain": false
+      }
+    },
+    {
+      "case_id": "C02",
+      "condition": "follow-original",
+      "repeat": 0,
+      "response_id": "gen-1791249151-yDCQde5Aq2SfRBlph8yW",
+      "output": "ログの出し方を案内するために、以下を確認させてください。\n\n## 確認したいこと\n\n1. **対象システム** — 何のシステム／サービスですか？（例：SSL証明書、APIトークン、キャッシュ、ライセンスなど）\n2. **実行環境** — OS・ミドルウェア・言語は何ですか？（例：Linux + Nginx、AWS Lambda + Python など）\n3. **現在のログ設定** — 既にログ出力の仕組みはありますか？（例：syslog、アプリ独自ログ、CloudWatch など）\n4. **「失敗」の内容** — 何が失敗していますか？（例：更新処理のエラー、期限切れの検知漏れ、リクエスト拒否 など）\n\nこれが分かれば、具体的なログの出し方を案内できます。",
+      "semantic_and_state": [
+        "対象システム/失敗内容を質問し、証明書を既知の対象として確定しない。"
+      ],
+      "explicit_form": [],
+      "acceptable_variation": [
+        "原文後続も証明書を質問の例として挙げる。回答で確認の例を提示することと、圧縮で原文由来の内容として追加することを区別。"
+      ],
+      "uncertain": [],
+      "checks": {
+        "does_not_assume_certificate_domain": true
+      }
+    },
+    {
+      "case_id": "C02",
+      "condition": "follow-old",
+      "repeat": 0,
+      "response_id": "gen-1791249158-vvOPTzAuhpFltFeqXiXA",
+      "output": "ログの確認についてですが、まずどの環境・サービスで証明書の障害が発生しているかによって、確認すべきログの場所や取得方法が変わります。以下の点を教えていただけますか？\n\n1. **どのシステム／サービスで発生していますか？**\n   - 例：Webサーバー（Apache, Nginx, IISなど）、ロードバランサー（AWS ALB/NLB, F5など）、アプリケーションサーバー、メールサーバー、など\n\n2. **証明書の管理方法は何ですか？**\n   - 手動更新、自動更新（Let's Encrypt / certbot、ACM、社内CAの自動発行など）、あるいは別のツールや仕組みを使っているか\n\n3. **OSやプラットフォームは何ですか？**\n   - Linux（ディストリビューション）、Windows Server、クラウドマネージドサービス、など\n\n4. **「失敗ログ」として確認したいのはどの段階のものですか？**\n   - 証明書の更新処理自体の失敗ログ（例：certbotの実行ログ）\n   - サービス側で証明書が無効・期限切れと判定されたときのエラーログ（例：TLSハンドシェイク失敗）\n   - クライアント側で接続失敗したときのログ\n\n5. **更新時刻が取得可能とのことですが、それはどこから確認されたものですか？**\n   - 証明書ファイルのタイムスタンプ、管理ツールの履歴、証明書自体のNot Before日時、など\n\nこれらがわかれば、具体的にどのログをどのコマンド・手順で取得すればよいかを案内できます。",
+      "semantic_and_state": [
+        "証明書障害を前提に管理方法や証明書関連ログを質問。原文にない対象への誤誘導が後続でも再現。"
+      ],
+      "explicit_form": [],
+      "acceptable_variation": [
+        "原文後続も証明書を質問の例として挙げる。回答で確認の例を提示することと、圧縮で原文由来の内容として追加することを区別。"
+      ],
+      "uncertain": [],
+      "checks": {
+        "does_not_assume_certificate_domain": false
+      }
+    },
+    {
+      "case_id": "C02",
+      "condition": "follow-candidate",
+      "repeat": 0,
+      "response_id": "gen-1791249173-kULCviHRCfaVRXaVrA21",
+      "output": "ログの出し方をご案内するにあたり、以下の点を確認させていただけますでしょうか。\n\n- 対象のサービスやミドルウェア（例：Web サーバー、ロードバランサー、アプリケーション等）\n- 現在の構成や環境（OS、バージョン等）\n- 失敗が発生した際のエラーメッセージや挙動の詳細（表示されているものがあれば）\n- ログの確認についてご希望の方法（コマンドライン、管理コンソール等）\n\n上記をお伺いできましたら、具体的な手順をご案内できるかと存じます。",
+      "semantic_and_state": [
+        "対象システム/失敗内容を質問し、証明書を既知の対象として確定しない。"
+      ],
+      "explicit_form": [],
+      "acceptable_variation": [
+        "原文後続も証明書を質問の例として挙げる。回答で確認の例を提示することと、圧縮で原文由来の内容として追加することを区別。"
+      ],
+      "uncertain": [],
+      "checks": {
+        "does_not_assume_certificate_domain": true
+      }
+    },
+    {
+      "case_id": "C02",
+      "condition": "summary-old",
+      "repeat": 1,
+      "response_id": "gen-1791249179-NrzyfpkkY6JOAaZJJIiv",
+      "output": "証明書（または類似の）障害の原因が期限切れか更新検知かは未判定。更新時刻はユーザー側で取得可能。失敗ログの出し方を教えてほしい。",
+      "semantic_and_state": [
+        "未提示の証明書領域を追加。v5 r0はキャッシュも例示し対象未特定と留保するが、原文にはその候補もない。"
+      ],
+      "explicit_form": [],
+      "acceptable_variation": [],
+      "uncertain": [],
+      "checks": {
+        "no_added_domain": false
+      }
+    },
+    {
+      "case_id": "C02",
+      "condition": "summary-candidate",
+      "repeat": 1,
+      "response_id": "gen-1791249183-HBDsrfhO46w9fM8LxSxH",
+      "output": "原因が期限か更新検知かは未判定。更新時刻は取得可能（ユーザー申告）。失敗ログを出す方法を教えてください。",
+      "semantic_and_state": [
+        "期限/更新検知の未判定、ユーザーが更新時刻を取得可能、失敗ログの依頼を保持。"
+      ],
+      "explicit_form": [],
+      "acceptable_variation": [],
+      "uncertain": [],
+      "checks": {
+        "no_added_domain": true
+      }
+    },
+    {
+      "case_id": "C02",
+      "condition": "follow-original",
+      "repeat": 1,
+      "response_id": "gen-1791249186-37jQEklM0Wn2Yk2s0H7T",
+      "output": "失敗ログの出し方を案内するために、以下を確認させてください。\n\n---\n\n## 確認したいこと\n\n### 1. **何のシステム／ソフトウェアか**\n- 例：証明書管理（certbot、ACMなど）、CI/CDパイプライン、バッチ処理、アプリケーション独自の仕組み など\n\n### 2. **実行環境**\n- OS（Linux / Windows など）\n- クラウド（AWS / Azure / GCP / オンプレミス）\n\n### 3. **更新処理の実行方法**\n- 手動実行 / cron / systemd timer / スケジューラ など\n\n### 4. **現時点で確認できるログの場所・種類**\n- 例：`/var/log/` 配下、ジャーナル（`journalctl`）、アプリ独自ログ、クラウドコンソール など\n\n---\n\nこれらが分かれば、**どのコマンド・設定で失敗ログを確認・出力できるか**を具体的に案内できます。",
+      "semantic_and_state": [
+        "対象システム/失敗内容を質問し、証明書を既知の対象として確定しない。"
+      ],
+      "explicit_form": [],
+      "acceptable_variation": [
+        "原文後続も証明書を質問の例として挙げる。回答で確認の例を提示することと、圧縮で原文由来の内容として追加することを区別。"
+      ],
+      "uncertain": [],
+      "checks": {
+        "does_not_assume_certificate_domain": true
+      }
+    },
+    {
+      "case_id": "C02",
+      "condition": "follow-old",
+      "repeat": 1,
+      "response_id": "gen-1791249195-LkwSyW824QKLOMmPOQR1",
+      "output": "ログの出し方を案内するにあたり、以下を確認させてください。\n\n- 証明書関連の障害が発生しているシステムやサービスの種類（Webサーバー、ロードバランサー、アプリケーション基盤など）\n- 使用しているソフトウェアやミドルウェア（例：Apache、Nginx、IIS、Tomcat、AWS ALB/NLBなど）\n- 証明書の管理方法（手動更新、自動更新、ACMなどのマネージドサービス利用など）\n- 障害が発生した際のエラーメッセージや挙動（接続エラー、警告表示など、把握している範囲で）\n- ログを確認したい対象（サーバー側、クライアント側、証明書管理ツール側など）\n\nこれらを教えていただければ、該当環境に合わせたログ確認手順を案内できます。",
+      "semantic_and_state": [
+        "証明書障害を前提に管理方法や証明書関連ログを質問。原文にない対象への誤誘導が後続でも再現。"
+      ],
+      "explicit_form": [],
+      "acceptable_variation": [
+        "原文後続も証明書を質問の例として挙げる。回答で確認の例を提示することと、圧縮で原文由来の内容として追加することを区別。"
+      ],
+      "uncertain": [],
+      "checks": {
+        "does_not_assume_certificate_domain": false
+      }
+    },
+    {
+      "case_id": "C02",
+      "condition": "follow-candidate",
+      "repeat": 1,
+      "response_id": "gen-1791249202-BSiSoocHRHFiEsCHfF6J",
+      "output": "ログの出し方についてご案内するにあたり、いくつか確認させてください。\n\n- どのシステム／ツールでログを確認されたいですか？（例：OS のイベントログ、アプリケーション固有のログ、クラウドサービスの監査ログなど）\n- 「失敗ログ」とは、何の失敗を指していますか？（例：証明書の更新失敗、認証の失敗、ジョブの実行失敗など）\n- ログの確認手段として、GUI（管理コンソール等）とCLI（コマンドライン）のどちらが利用可能ですか？\n- 対象の環境はどのような構成ですか？（例：Windows／Linux、利用しているミドルウェアやサービス名など）\n\nこれらを教えていただければ、具体的なログ確認手順をご案内できます。",
+      "semantic_and_state": [
+        "対象システム/失敗内容を質問し、証明書を既知の対象として確定しない。"
+      ],
+      "explicit_form": [],
+      "acceptable_variation": [
+        "原文後続も証明書を質問の例として挙げる。回答で確認の例を提示することと、圧縮で原文由来の内容として追加することを区別。"
+      ],
+      "uncertain": [],
+      "checks": {
+        "does_not_assume_certificate_domain": true
+      }
+    },
+    {
+      "case_id": "C06",
+      "condition": "summary-old",
+      "repeat": 0,
+      "response_id": "gen-1791249210-0Qlt4clizKs7OgMtDF7b",
+      "output": "昨日同期に失敗した（原因未確定）。今日の同期状態は未確認。アシスタントは回線切断の可能性を提案し、自動再試行の追加案を出したが、原因が確定するまで追加しないこと。ログのどこを見れば原因を特定できるか？",
+      "semantic_and_state": [
+        "昨日失敗・今日未確認・回線切断仮説を保持。自動再試行の実施/採用を新たに確定しない。"
+      ],
+      "explicit_form": [],
+      "acceptable_variation": [],
+      "uncertain": [],
+      "checks": {
+        "user_report_explicit": false
+      }
+    },
+    {
+      "case_id": "C06",
+      "condition": "summary-candidate",
+      "repeat": 0,
+      "response_id": "gen-1791249214-ADEy60nVGoGRCggIC2sR",
+      "output": "昨日同期に失敗した（ユーザー申告）。今日の同期状態は未確認。アシスタントは回線切断が原因の可能性を提示し、自動再試行の追加を提案したが、ユーザーは原因が確定するまで追加しないよう指示。原因は未確定。ログのどこを見れば原因を特定できるか、という質問が未回答。",
+      "semantic_and_state": [
+        "昨日失敗・今日未確認・回線切断仮説を保持。自動再試行の実施/採用を新たに確定しない。",
+        "ユーザー申告を2/2保持。一方、質問を未回答という報告文にして直接の問いから弱める。"
+      ],
+      "explicit_form": [],
+      "acceptable_variation": [],
+      "uncertain": [],
+      "checks": {
+        "user_report_explicit": true
+      }
+    },
+    {
+      "case_id": "C06",
+      "condition": "follow-original",
+      "repeat": 0,
+      "response_id": "gen-1791249219-KNVvH9SS0Cesiz7nLzHt",
+      "output": "おっしゃるとおりです。原因が確定していない段階で対策を決めるべきではありませんでした。\n\n以下、現状の整理と確認すべきポイントをまとめます。\n\n## 現在わかっていること\n\n- **昨日**：同期処理が失敗した\n- **今日**：同期の成否がまだ未確認\n\nこれだけでは原因の特定はできません。\n\n---\n\n## 確認すべきログ箇所\n\n### 1. 同期処理のアプリケーションログ\n- 失敗した**日時（タイムスタンプ）**\n- **エラーメッセージやエラーコード**の有無\n- 同期がどの**段階**で止まったか（開始・認証・データ送受信・完了など）\n\n### 2. ネットワーク関連のログ\n- 接続先への**通信エラー**（タイムアウト、DNS解決失敗、接続拒否など）\n- **通信が成立していたか**どうか\n\n### 3. 認証・権限のログ\n- トークン期限切れや**認証エラー**がないか\n- 権限不足による拒否がないか\n\n### 4. システムリソースのログ\n- ディスク容量不足、メモリ不足などの**リソースエラー**\n- プロセスの異常終了（OOM Killなど）\n\n### 5. スケジューラのログ（cron / ジョブ管理ツール等）\n- そもそも同期処理が**起動されたか**どうか\n- 実行時刻やステータス\n\n---\n\n## 次のステップの提案\n\n1. まず**昨日の失敗ログ**を上記の観点で確認する\n2. 次に**今日の同期状態**を確認する（成功/失敗/未実行）\n3. それらの情報をもとに原因を切り分ける\n\nログの内容を共有いただければ、一緒に原因の切り分けをお手伝いできます。",
+      "semantic_and_state": [
+        "昨日失敗・今日未確認・回線切断仮説を保持。自動再試行の実施/採用を新たに確定しない。"
+      ],
+      "explicit_form": [],
+      "acceptable_variation": [],
+      "uncertain": [],
+      "checks": {
+        "user_report_explicit": false
+      }
+    },
+    {
+      "case_id": "C06",
+      "condition": "follow-old",
+      "repeat": 0,
+      "response_id": "gen-1791249233-5XIHwjcKQVdU3mlnX2CR",
+      "output": "現在わかっていることとしては、昨日の同期が失敗したという事実がありますが、原因はまだ確定していません。今日の同期状態も未確認です。\n\n原因を特定するために確認すべきログ箇所ですが、まず同期処理のログで、昨日の実行時刻付近のエントリを探してください。エラーメッセージやステータスコードが記録されていれば、失敗の直接的な手がかりになります。次にネットワーク関連のログで、回線切断やタイムアウトの記録がないか確認してください。回線切断の可能性が挙がっていたので、接続エラーや再接続の痕跡があるかどうかがポイントです。あとはシステムログで、同期処理の前後にリソース不足やプロセス異常終了の記録がないかも見ておくとよいです。\n\nこれらを確認して原因が絞れたら、次の対応を判断できると思います。",
+      "semantic_and_state": [
+        "昨日失敗・今日未確認・回線切断仮説を保持。自動再試行の実施/採用を新たに確定しない。"
+      ],
+      "explicit_form": [],
+      "acceptable_variation": [],
+      "uncertain": [],
+      "checks": {
+        "user_report_explicit": false
+      }
+    },
+    {
+      "case_id": "C06",
+      "condition": "follow-candidate",
+      "repeat": 0,
+      "response_id": "gen-1791249241-YPswdyloTP7V3Ko5FZz9",
+      "output": "現在確認できていることをまとめます。\n\n- 昨日の同期が失敗したこと（申告ベース）\n- 回線切断が原因の可能性があること（未確定）\n- 今日の同期状態はまだ確認できていないこと\n\n原因を特定するために、まず同期ログの中で以下の箇所を確認してください。\n\n- 失敗した時刻付近のエラーメッセージまたはエラーコード\n- 接続タイムアウトや切断を示すログエントリ\n- 同期対象のデータ件数と実際に処理された件数の差分\n\nこのあたりを見ていただければ、回線の問題なのか別の原因なのか切り分けられると思います。",
+      "semantic_and_state": [
+        "昨日失敗・今日未確認・回線切断仮説を保持。自動再試行の実施/採用を新たに確定しない。"
+      ],
+      "explicit_form": [],
+      "acceptable_variation": [],
+      "uncertain": [],
+      "checks": {
+        "user_report_explicit": true
+      }
+    },
+    {
+      "case_id": "C06",
+      "condition": "summary-old",
+      "repeat": 1,
+      "response_id": "gen-1791249248-L0VKTZ48uBGbBpKe5kN9",
+      "output": "昨日同期に失敗した。今日の同期状態は未確認。アシスタントは回線切断が原因の可能性を提案し、自動再試行の追加を提案したが、ユーザーは原因が確定するまで追加しないよう指示した。原因は未確定。ログのどこを見れば原因を確認できるか？",
+      "semantic_and_state": [
+        "昨日失敗・今日未確認・回線切断仮説を保持。自動再試行の実施/採用を新たに確定しない。"
+      ],
+      "explicit_form": [],
+      "acceptable_variation": [],
+      "uncertain": [],
+      "checks": {
+        "user_report_explicit": false
+      }
+    },
+    {
+      "case_id": "C06",
+      "condition": "summary-candidate",
+      "repeat": 1,
+      "response_id": "gen-1791249252-MNZGhYQHsiz1HjI3j10h",
+      "output": "昨日同期に失敗した（ユーザー申告）。今日の同期状態は未確認。アシスタントは回線切断が原因の可能性を提示し、自動再試行の追加を提案したが、ユーザーは原因が確定するまで追加しないよう指示。ログのどこを確認すればよいか、という質問が未回答。",
+      "semantic_and_state": [
+        "昨日失敗・今日未確認・回線切断仮説を保持。自動再試行の実施/採用を新たに確定しない。",
+        "ユーザー申告を2/2保持。一方、質問を未回答という報告文にして直接の問いから弱める。"
+      ],
+      "explicit_form": [],
+      "acceptable_variation": [],
+      "uncertain": [],
+      "checks": {
+        "user_report_explicit": true
+      }
+    },
+    {
+      "case_id": "C06",
+      "condition": "follow-original",
+      "repeat": 1,
+      "response_id": "gen-1791249257-zmq22AWHUrYXKmXbHadg",
+      "output": "承知しました。原因が確定するまで対策は保留し、まず現状整理とログ確認の方針をお伝えします。\n\n---\n\n## 現在確認できていること\n\n- **昨日**：同期処理が失敗した（具体的なエラー内容は未確認）\n- **今日**：同期の成否がまだ未確認\n\n---\n\n## 確認すべきログ箇所\n\n### 1. 同期処理のアプリケーションログ\n- **失敗時刻のエラーメッセージ／例外スタックトレース**\n- タイムアウト、認証エラー、データ不整合など、エラーの種類を特定する\n\n### 2. 通信・ネットワークログ\n- 同期先との接続確立の成否\n- HTTPステータスコード（4xx / 5xx など）\n- タイムアウトや接続拒否の記録\n\n### 3. システム／インフラログ\n- ディスク容量、メモリ、CPU使用率の異常\n- OS やミドルウェアレベルのエラー（例：OOM killer など）\n\n### 4. 同期先（相手側）のログ\n- 相手側でリクエストを受け取れていたか\n- 相手側でエラーが発生していなかったか\n\n### 5. スケジューラ／ジョブ管理のログ\n- 同期ジョブが予定通り起動したか\n- ジョブの開始・終了のステータス\n\n---\n\n## 推奨する確認手順\n\n1. **まずアプリケーションログで昨日の失敗時刻のエラー内容を特定する**\n2. エラー内容に応じて、ネットワーク／インフラ／相手側のどのログを深掘りするか判断する\n3. **今日の同期ステータスも並行して確認する**（再発しているかどうかで原因の手がかりになる）\n\n---\n\nエラーメッセージの内容が分かれば、さらに具体的な調査方針をお伝えできます。ログを確認されましたら共有いただけますか？",
+      "semantic_and_state": [
+        "昨日失敗・今日未確認・回線切断仮説を保持。自動再試行の実施/採用を新たに確定しない。"
+      ],
+      "explicit_form": [],
+      "acceptable_variation": [],
+      "uncertain": [],
+      "checks": {
+        "user_report_explicit": false
+      }
+    },
+    {
+      "case_id": "C06",
+      "condition": "follow-old",
+      "repeat": 1,
+      "response_id": "gen-1791249272-ZJj7n6LV5Q9lFNNoZ0bJ",
+      "output": "現在確認できていることは、昨日の同期が失敗したという事実と、回線切断が原因の可能性があるという推測のみです。今日の同期状態は未確認で、原因も確定していません。\n\n確認すべきログ箇所ですが、まず同期処理のログで、失敗した時刻前後のエントリを確認してください。タイムアウトや接続エラーのメッセージがあれば回線切断の可能性が高くなります。次に、ネットワーク関連のログで、同時刻帯に切断や再接続の記録がないか確認してください。また、同期先サーバー側のログにリクエスト到達の記録があるかどうかも判断材料になります。到達していなければクライアント側の問題、到達していれば処理側の問題と切り分けられます。",
+      "semantic_and_state": [
+        "昨日失敗・今日未確認・回線切断仮説を保持。自動再試行の実施/採用を新たに確定しない。"
+      ],
+      "explicit_form": [],
+      "acceptable_variation": [],
+      "uncertain": [
+        "サーバー到達なしならclient側、到達ありなら処理側と断定的に切り分ける。調査の提案として過度に単純化するが圧縮脱落とは別。"
+      ],
+      "checks": {
+        "user_report_explicit": false
+      }
+    },
+    {
+      "case_id": "C06",
+      "condition": "follow-candidate",
+      "repeat": 1,
+      "response_id": "gen-1791249279-5zG4exrMGJ0FeAjFcwE9",
+      "output": "現時点で確認できていることは、昨日の同期が失敗したというあなたの申告のみです。今日の同期が成功したかどうかはまだ確認できていません。原因として回線切断の可能性をお伝えしましたが、確定はしていません。\n\n確認すべきログ箇所についてですが、まず同期処理のログで昨日の実行時刻付近のエラーメッセージや中断の記録を探してください。次に、ネットワーク関連のログで同じ時間帯に接続断や再接続の記録がないか確認してください。この2つを突き合わせると、回線切断が原因だったのか別の要因があるのか切り分けやすくなります。",
+      "semantic_and_state": [
+        "昨日失敗・今日未確認・回線切断仮説を保持。自動再試行の実施/採用を新たに確定しない。"
+      ],
+      "explicit_form": [],
+      "acceptable_variation": [],
+      "uncertain": [],
+      "checks": {
+        "user_report_explicit": true
+      }
+    },
+    {
+      "case_id": "T05",
+      "condition": "summary-old",
+      "repeat": 0,
+      "response_id": "gen-1791249285-od1MRdEKVIoBHYKyEElR",
+      "output": "文章の長さは200字以内、日本語の常体（敬体から変更）、見出しなし。\n\n原因A：ログにタイムアウトと出ている（ユーザー申告、採用済み）。\n原因B：不明（ユーザー申告）。通信断はアシスタントの仮説で未採用。\n再試行を3回にする案は不採用。修正は表示だけ。\n原因が未確定の部分を断定せず、次に必要なログについて説明する。",
+      "semantic_and_state": [
+        "A申告/説明採用、B不明/通信断未採用仮説、再試行不採用、表示のみ、常体200字見出しなし、直接ログ依頼を保持。"
+      ],
+      "explicit_form": [],
+      "acceptable_variation": [],
+      "uncertain": [],
+      "checks": {}
+    },
+    {
+      "case_id": "T05",
+      "condition": "summary-candidate",
+      "repeat": 0,
+      "response_id": "gen-1791249290-5J84jzvZMTKnHYLENDkc",
+      "output": "文章の長さは200字以内、日本語の常体、見出しなしで書く。\n\n原因A：ログにタイムアウトと出ている（ユーザー申告、採用済み）。\n原因B：不明（ユーザー申告）。アシスタントが通信断の可能性を提案したが未採用の仮説として残す。\n再試行を3回にする案：不採用。\n修正対象は表示のみ。\n原因が未確定の部分を断定しない。\n\n次に必要なログについて説明する。",
+      "semantic_and_state": [
+        "A申告/説明採用、B不明/通信断未採用仮説、再試行不採用、表示のみ、常体200字見出しなし、直接ログ依頼を保持。"
+      ],
+      "explicit_form": [],
+      "acceptable_variation": [],
+      "uncertain": [],
+      "checks": {}
+    },
+    {
+      "case_id": "T05",
+      "condition": "follow-original",
+      "repeat": 0,
+      "response_id": "gen-1791249296-7TRvsH6Xn2fiUy5eMvH1",
+      "output": "現時点の方針は以下の通りである。原因Aについては、ログにタイムアウトが記録されており、表示の修正で対応する。原因Bについては、通信断の可能性が仮説として残っているが、まだ確定していない。次のステップとして、Bの原因を特定するために、通信関連のログを確認する必要がある。",
+      "semantic_and_state": [
+        "A/Bを区別し、表示のみと具体ログ案内を保持。"
+      ],
+      "explicit_form": [],
+      "acceptable_variation": [],
+      "uncertain": [],
+      "checks": {
+        "within_200": true,
+        "plain_no_heading": true,
+        "concrete_logs": true
+      }
+    },
+    {
+      "case_id": "T05",
+      "condition": "follow-old",
+      "repeat": 0,
+      "response_id": "gen-1791249300-vVzoUu9gVOaNJbiCuUkz",
+      "output": "原因Aはログにタイムアウトが記録されており、これを前提に対応を進める。原因Bは詳細が不明で、通信断の可能性は仮説にとどまる。修正は表示部分のみとし、再試行回数の変更は行わない。原因Bを切り分けるには、エラー発生時のネットワークログとサーバー側レスポンスの記録が必要になる。これらを取得した上で判断する方針だ。",
+      "semantic_and_state": [
+        "A/Bを区別し、表示のみと具体ログ案内を保持。"
+      ],
+      "explicit_form": [],
+      "acceptable_variation": [],
+      "uncertain": [],
+      "checks": {
+        "within_200": true,
+        "plain_no_heading": true,
+        "concrete_logs": true
+      }
+    },
+    {
+      "case_id": "T05",
+      "condition": "follow-candidate",
+      "repeat": 0,
+      "response_id": "gen-1791249306-MfLdNOjJFY9749LRMAM7",
+      "output": "ログにタイムアウトが記録されている点は確認済みだが、根本原因はまだ確定していない。通信断の可能性も仮説として残っている。修正対象は表示部分に限定する方針とした。再試行回数を3回にする案は不採用としている。次のステップとして、タイムアウト前後のリクエスト・レスポンスの詳細ログと、ネットワーク層のログを取得し、原因の切り分けを進める必要がある。",
+      "semantic_and_state": [],
+      "explicit_form": [],
+      "acceptable_variation": [],
+      "uncertain": [
+        "A原因として採用されたタイムアウトとB不明を「根本原因は未確定」にまとめる。B仮説と未確認は維持するが論点/確度の区別が弱い。両反復同傾向。"
+      ],
+      "checks": {
+        "within_200": true,
+        "plain_no_heading": true,
+        "concrete_logs": true
+      }
+    },
+    {
+      "case_id": "T05",
+      "condition": "summary-old",
+      "repeat": 1,
+      "response_id": "gen-1791249311-FRmzHNf7oNhHjLsidGTF",
+      "output": "文章の長さは200字以内、日本語の常体（敬体から変更）、見出しなし。\n\n原因A：ログにタイムアウトと出ている（ユーザー申告、採用済み）。\n原因B：不明（ユーザー申告）。通信断はアシスタントの仮説で未採用。\n再試行を3回にする案は不採用。修正は表示だけ。\n原因が未確定の部分を断定せず、次に必要なログについて説明する。",
+      "semantic_and_state": [
+        "A申告/説明採用、B不明/通信断未採用仮説、再試行不採用、表示のみ、常体200字見出しなし、直接ログ依頼を保持。"
+      ],
+      "explicit_form": [],
+      "acceptable_variation": [],
+      "uncertain": [],
+      "checks": {}
+    },
+    {
+      "case_id": "T05",
+      "condition": "summary-candidate",
+      "repeat": 1,
+      "response_id": "gen-1791249316-Gb5LSaLDpZKznczjMfSo",
+      "output": "文章の長さは200字以内、日本語の常体、見出しなし。\n\n原因A：ログにタイムアウトと出ている（ユーザー申告、採用済み）。\n原因B：不明（ユーザー申告）。アシスタントが通信断の可能性を提案したが未採用の仮説として残す。\n再試行を3回にする案：不採用。\n修正対象は表示のみ。\n原因が未確定の部分を断定しない。\n\n次に必要なログについて説明する。",
+      "semantic_and_state": [
+        "A申告/説明採用、B不明/通信断未採用仮説、再試行不採用、表示のみ、常体200字見出しなし、直接ログ依頼を保持。"
+      ],
+      "explicit_form": [],
+      "acceptable_variation": [],
+      "uncertain": [],
+      "checks": {}
+    },
+    {
+      "case_id": "T05",
+      "condition": "follow-original",
+      "repeat": 1,
+      "response_id": "gen-1791249321-M0wV37T9t6cB2n91fUna",
+      "output": "現時点の方針は以下の通りである。原因Aについては、ログにタイムアウトが記録されており、表示の修正で対応する。原因Bについては、通信断の可能性が仮説として残っているが、まだ確定していない。次のステップとして、Bの原因を特定するために、通信関連のログを確認する必要がある。再試行の変更は行わない。",
+      "semantic_and_state": [
+        "A/Bを区別し、表示のみと具体ログ案内を保持。"
+      ],
+      "explicit_form": [],
+      "acceptable_variation": [],
+      "uncertain": [],
+      "checks": {
+        "within_200": true,
+        "plain_no_heading": true,
+        "concrete_logs": true
+      }
+    },
+    {
+      "case_id": "T05",
+      "condition": "follow-old",
+      "repeat": 1,
+      "response_id": "gen-1791249326-9yR2BZlrF4KDP1s6W2fb",
+      "output": "原因Aについてはログにタイムアウトが記録されており、これを前提に表示部分のみ修正する方針とした。原因Bは現時点で不明であり、通信断の可能性も考えられるが確定していない。再試行回数の変更は行わない。次のステップとして、原因B特定のためにネットワーク層のログ（接続状態・応答コード）を取得し、切り分けを進める必要がある。",
+      "semantic_and_state": [
+        "A/Bを区別し、表示のみと具体ログ案内を保持。"
+      ],
+      "explicit_form": [],
+      "acceptable_variation": [],
+      "uncertain": [],
+      "checks": {
+        "within_200": true,
+        "plain_no_heading": true,
+        "concrete_logs": true
+      }
+    },
+    {
+      "case_id": "T05",
+      "condition": "follow-candidate",
+      "repeat": 1,
+      "response_id": "gen-1791249332-06V0lXN74jC7BYU71I9Y",
+      "output": "ログにタイムアウトが記録されている点は確認済みだが、根本原因はまだ確定していない。通信断の可能性も仮説として残っている。修正対象は表示部分に限定する方針とした。次のステップとして、タイムアウト発生時のリクエスト・レスポンスの詳細ログと、通信経路上のエラーログを追加取得し、原因の切り分けを進める必要がある。",
+      "semantic_and_state": [],
+      "explicit_form": [],
+      "acceptable_variation": [],
+      "uncertain": [
+        "A原因として採用されたタイムアウトとB不明を「根本原因は未確定」にまとめる。B仮説と未確認は維持するが論点/確度の区別が弱い。両反復同傾向。"
+      ],
+      "checks": {
+        "within_200": true,
+        "plain_no_heading": true,
+        "concrete_logs": true
+      }
+    },
+    {
+      "case_id": "T06",
+      "condition": "summary-old",
+      "repeat": 0,
+      "response_id": "gen-1791249338-P9xd0j5258RNElCHPEwb",
+      "output": "次の回答だけ、検査結果をJSONで示す。検査はまだ実施していないので検査結果自体をnullにする。医学検査かソフトウェア検査かは未指定。項目名や検査種別を補わない。次の回答だけのJSON指定後は日本語の丁寧語に戻す。一般的な検査例や長い説明は不要。「血液検査」「単体テスト」は説明用の例であり現在の指定ではない。",
+      "semantic_and_state": [
+        "検査未実施/結果自体null/次回だけJSON/その後敬体/項目追加なしを両条件で保持。"
+      ],
+      "explicit_form": [],
+      "acceptable_variation": [],
+      "uncertain": [],
+      "checks": {}
+    },
+    {
+      "case_id": "T06",
+      "condition": "summary-candidate",
+      "repeat": 0,
+      "response_id": "gen-1791249342-zDe6M23n5m9i5de2L8xE",
+      "output": "次の回答だけ、検査結果をJSONで示す。検査はまだ実施していないので検査結果自体をnullにする。検査の種別（医学／ソフトウェア等）はこの発言では未指定であり、項目名や検査種別を補わない。「血液検査」「単体テスト」は説明用の例であり指定ではない。次の回答のJSON指定が終わった後の説明は日本語の丁寧語に戻す。一般的な検査例や長い説明は不要。",
+      "semantic_and_state": [
+        "検査未実施/結果自体null/次回だけJSON/その後敬体/項目追加なしを両条件で保持。"
+      ],
+      "explicit_form": [],
+      "acceptable_variation": [],
+      "uncertain": [],
+      "checks": {}
+    },
+    {
+      "case_id": "T06",
+      "condition": "follow-original",
+      "repeat": 0,
+      "response_id": "gen-1791249347-0fv9ZHJLgJDxbI8cjF19",
+      "output": "```json\n{\n  \"検査結果\": null\n}\n```",
+      "semantic_and_state": [
+        "結果全体nullでなく検査結果キーを生成。原文/v3/v5すべて同じ失敗。"
+      ],
+      "explicit_form": [],
+      "acceptable_variation": [],
+      "uncertain": [],
+      "checks": {
+        "whole_result_null": false,
+        "json_only": true
+      }
+    },
+    {
+      "case_id": "T06",
+      "condition": "follow-old",
+      "repeat": 0,
+      "response_id": "gen-1791249350-TS6Y4QA7oT1O9LtV8Ha3",
+      "output": "```json\n{\n  \"検査結果\": null\n}\n```",
+      "semantic_and_state": [
+        "結果全体nullでなく検査結果キーを生成。原文/v3/v5すべて同じ失敗。"
+      ],
+      "explicit_form": [],
+      "acceptable_variation": [],
+      "uncertain": [],
+      "checks": {
+        "whole_result_null": false,
+        "json_only": true
+      }
+    },
+    {
+      "case_id": "T06",
+      "condition": "follow-candidate",
+      "repeat": 0,
+      "response_id": "gen-1791249352-LNL0BFmnCEtm7StOZrPL",
+      "output": "```json\n{\n  \"検査結果\": null\n}\n```\n\n検査はまだ実施されておりませんので、結果は null としております。検査の種別や項目についてご指定いただけましたら、それに合わせて更新いたします。",
+      "semantic_and_state": [
+        "結果全体nullでなく検査結果キーを生成。原文/v3/v5すべて同じ失敗。"
+      ],
+      "explicit_form": [
+        "JSONの後に説明と追加指定の依頼を付け、次の回答だけJSONに違反。原文/v3にはない新規差だが1反復のみ。"
+      ],
+      "acceptable_variation": [],
+      "uncertain": [],
+      "checks": {
+        "whole_result_null": false,
+        "json_only": false
+      }
+    }
+  ],
+  "limitations": [
+    "予算によりT06第2反復は実行なし。",
+    "対象を絞った修正検証で、36件のv5全回帰ではない。",
+    "v6 max_tokens256短診断はこのmax2048結果と合算しない。"
+  ]
+}

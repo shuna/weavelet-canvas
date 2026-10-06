@@ -1,0 +1,1389 @@
+{
+  "version": "v3 + W3; v4ではない",
+  "method": "48全出力（12圧縮/36後続）非盲検手動レビュー。",
+  "selection": "token-recountの準備済みcl100k_base+repo serializationでは候補6圧縮すべてcompact。Anthropic実トークンとは別。",
+  "metrics": {
+    "R10 summary-baseline local_scope_retained": [
+      3,
+      3
+    ],
+    "R10 summary-baseline planned_not_completed": [
+      3,
+      3
+    ],
+    "R10 summary-candidate local_scope_retained": [
+      3,
+      3
+    ],
+    "R10 summary-candidate planned_not_completed": [
+      3,
+      3
+    ],
+    "R10 follow-original two_polite_sentences_no_heading": [
+      3,
+      6
+    ],
+    "R10 follow-original local_scope_explicit": [
+      6,
+      6
+    ],
+    "R10 follow-baseline two_polite_sentences_no_heading": [
+      6,
+      6
+    ],
+    "R10 follow-baseline local_scope_explicit": [
+      4,
+      6
+    ],
+    "R10 follow-candidate two_polite_sentences_no_heading": [
+      6,
+      6
+    ],
+    "R10 follow-candidate local_scope_explicit": [
+      5,
+      6
+    ],
+    "R10 follow-original 40_and_label_retained": [
+      3,
+      3
+    ],
+    "R10 follow-baseline 40_and_label_retained": [
+      3,
+      3
+    ],
+    "R10 follow-candidate 40_and_label_retained": [
+      3,
+      3
+    ],
+    "R11 summary-baseline kana_ticket_explicit": [
+      0,
+      3
+    ],
+    "R11 summary-candidate kana_ticket_explicit": [
+      3,
+      3
+    ],
+    "R11 follow-original no_ticket_holder_reversal": [
+      6,
+      6
+    ],
+    "R11 follow-original no_script_labels": [
+      6,
+      6
+    ],
+    "R11 follow-original dialogues_le_4": [
+      6,
+      6
+    ],
+    "R11 follow-original no_clear_voice_violation": [
+      6,
+      6
+    ],
+    "R11 follow-original narration_paragraphs_le_2": [
+      2,
+      6
+    ],
+    "R11 follow-baseline no_ticket_holder_reversal": [
+      1,
+      6
+    ],
+    "R11 follow-baseline no_script_labels": [
+      6,
+      6
+    ],
+    "R11 follow-baseline dialogues_le_4": [
+      6,
+      6
+    ],
+    "R11 follow-baseline no_clear_voice_violation": [
+      6,
+      6
+    ],
+    "R11 follow-baseline narration_paragraphs_le_2": [
+      3,
+      6
+    ],
+    "R11 follow-candidate no_ticket_holder_reversal": [
+      6,
+      6
+    ],
+    "R11 follow-candidate no_script_labels": [
+      6,
+      6
+    ],
+    "R11 follow-candidate dialogues_le_4": [
+      6,
+      6
+    ],
+    "R11 follow-candidate no_clear_voice_violation": [
+      6,
+      6
+    ],
+    "R11 follow-candidate narration_paragraphs_le_2": [
+      3,
+      6
+    ]
+  },
+  "rows": [
+    {
+      "case_id": "R10",
+      "condition": "summary-baseline",
+      "repeat": 0,
+      "probe": null,
+      "response_id": "gen-1791248439-q0oNsDUdHdpJ8viExLc3",
+      "summary_response_id": null,
+      "output": "検索結果画面の表示修正を計画中。元のデータと検索処理は変更しない。表示件数は現行の40件を維持し、入力欄ラベルは「検索条件」を維持する。次回修正の採用内容はローカルの確認用画面における絞込み欄の位置変更のみ。変更はまだ実施しておらず、操作時間の計測も未実施。変更や効果が確認済みとは書かない。不採用の候補：件数変更（25件・60件）、列変更、表示色変更、説明文変更、表示順変更、固定ヘッダー、項目詳細の別画面移動、ラベル短縮。いずれも今回は採用しない。候補の値は確定仕様ではない。\n\n後続応答の文体：日本語の丁寧語、二文、見出しなし。",
+      "token_recount": null,
+      "semantic_and_state": [
+        "位置だけ採用、40件と検索条件維持、データ検索処理不変更、未確認効果を維持。完了や効果を創作しない。"
+      ],
+      "explicit_form": [],
+      "acceptable_variation": [],
+      "uncertain": [],
+      "checks": {
+        "local_scope_retained": true,
+        "planned_not_completed": true
+      }
+    },
+    {
+      "case_id": "R10",
+      "condition": "summary-baseline",
+      "repeat": 1,
+      "probe": null,
+      "response_id": "gen-1791248440-PPzgiUdjCXc30bBKpbgy",
+      "summary_response_id": null,
+      "output": "検索結果画面の表示修正を計画中。元のデータと検索処理は変更しない。表示件数は40件を維持、ラベルは「検索条件」を維持。対象はローカルの確認用画面のみ。次回の修正内容は絞込み欄の位置変更だけ。列変更・件数変更・色変更・説明文変更・表示順変更は今回は採用しない。変更はまだ実施しておらず、操作時間の計測も未実施。効果は未確認。候補の値は確定仕様ではない。変更や効果が確認済みとは書かないこと。説明は日本語の丁寧語で二文、見出しなし。",
+      "token_recount": null,
+      "semantic_and_state": [
+        "位置だけ採用、40件と検索条件維持、データ検索処理不変更、未確認効果を維持。完了や効果を創作しない。"
+      ],
+      "explicit_form": [],
+      "acceptable_variation": [],
+      "uncertain": [],
+      "checks": {
+        "local_scope_retained": true,
+        "planned_not_completed": true
+      }
+    },
+    {
+      "case_id": "R10",
+      "condition": "summary-candidate",
+      "repeat": 1,
+      "probe": null,
+      "response_id": "gen-1791248446-7ABl0HsdRXH6s3idPcCy",
+      "summary_response_id": null,
+      "output": "検索結果画面の表示修正についての現在の計画状況です。\n\n**有効な指示**\n- 説明は日本語の丁寧語で二文、見出しなし。\n- 元のデータと検索処理は変更しない。\n- 対象はローカルの確認用画面だけ。\n- 採用：Cの絞込み欄の位置変更のみ。表示件数40件とラベル「検索条件」は維持。\n- 不採用（今回）：列変更、件数変更（25件・60件含む）、色変更、説明文変更、表示順変更、固定ヘッダー、項目詳細の別画面移動。\n- 変更や効果が確認済みとは書かない。候補の値は確定仕様ではない。\n\n**現在の状態**\n- 絞込み欄の位置変更を次回実施する予定として採用済み。まだ変更も計測も行っていない。\n- 絞込み欄の位置変更後に利用者が絞込み欄へ移動する手間は調査が必要（未実施）。\n- 案B〜Eのうち採用されていない部分は未採用の提案として残っている。案Eの表示順変更は表示だけという対象を超える可能性がアシスタントから指摘されたが未確定。",
+      "token_recount": null,
+      "semantic_and_state": [
+        "位置だけ採用、40件と検索条件維持、データ検索処理不変更、未確認効果を維持。完了や効果を創作しない。"
+      ],
+      "explicit_form": [
+        "整理見出し/箇条書きを追加。compact規則不遵守だが後続の二文見出しなし指示は保持。"
+      ],
+      "acceptable_variation": [],
+      "uncertain": [
+        "不採用案Eの責任範囲等を未確認事項に残す。原文の提案内の疑問であり新規創作ではないが、現在作業の要件と読ませない注意が要る。"
+      ],
+      "checks": {
+        "local_scope_retained": true,
+        "planned_not_completed": true
+      }
+    },
+    {
+      "case_id": "R10",
+      "condition": "summary-candidate",
+      "repeat": 0,
+      "probe": null,
+      "response_id": "gen-1791248447-Gmn4lumyHNlZxqlYiZ8B",
+      "summary_response_id": null,
+      "output": "検索結果画面の表示修正を計画中。説明は日本語の丁寧語で二文、見出しなし。\n\n**現在の状態：** 表示件数40件、入力欄ラベル「検索条件」、元のデータと検索処理は変更しない。変更も計測もまだ行っていない。\n\n**採用済み予定：** ローカルの確認用画面で絞込み欄の位置だけを次回変更する。変更後の操作時間の計測はまだ行っていない。変更や効果が確認済みとは書かないこと。\n\n**不採用（今回）：** 案A（表示件数25件）、列変更、件数変更、色変更、説明文変更、表示順変更。案B（60件＋固定ヘッダー等）、案D（説明文短縮、候補文『現在の条件に合う項目を表示しています』）、案E（更新日時順）も採用していない。ラベル「条件」への短縮も不採用。\n\n**未確認事項：** 絞込み欄の位置変更後の操作時間、利用者が絞込み欄へ移動する手間、案Eで挙がった検索処理と表示順の責任範囲の区分。",
+      "token_recount": null,
+      "semantic_and_state": [
+        "位置だけ採用、40件と検索条件維持、データ検索処理不変更、未確認効果を維持。完了や効果を創作しない。"
+      ],
+      "explicit_form": [
+        "整理見出し/箇条書きを追加。compact規則不遵守だが後続の二文見出しなし指示は保持。"
+      ],
+      "acceptable_variation": [],
+      "uncertain": [
+        "不採用案Eの責任範囲等を未確認事項に残す。原文の提案内の疑問であり新規創作ではないが、現在作業の要件と読ませない注意が要る。"
+      ],
+      "checks": {
+        "local_scope_retained": true,
+        "planned_not_completed": true
+      }
+    },
+    {
+      "case_id": "R10",
+      "condition": "follow-original",
+      "repeat": 0,
+      "probe": 0,
+      "response_id": "gen-1791248455-6mIEydsYvzQnk9JBa9JT",
+      "summary_response_id": null,
+      "output": "採用した変更は、ローカルの確認用画面において絞込み欄の位置を移動することだけです。表示件数は40件のまま維持し、ラベルも『検索条件』を変えず、元のデータと検索処理にも手を加えません。\n\n位置変更による操作時間への影響や、利用者が絞込み欄へ移動する手間が改善されるかどうかは、まだ確認しておりません。実装も計測もこれからの作業となります。",
+      "token_recount": null,
+      "semantic_and_state": [
+        "位置だけ採用、40件と検索条件維持、データ検索処理不変更、未確認効果を維持。完了や効果を創作しない。"
+      ],
+      "explicit_form": [
+        "二文指定に対して四文。"
+      ],
+      "acceptable_variation": [],
+      "uncertain": [],
+      "checks": {
+        "two_polite_sentences_no_heading": false,
+        "local_scope_explicit": true
+      }
+    },
+    {
+      "case_id": "R10",
+      "condition": "follow-original",
+      "repeat": 1,
+      "probe": 0,
+      "response_id": "gen-1791248456-sVT4zaX6igBD4sGxXQCx",
+      "summary_response_id": null,
+      "output": "採用した変更は、ローカルの確認用画面における絞込み欄の位置の変更のみです。表示件数は40件のまま維持し、ラベルも『検索条件』を維持し、元のデータと検索処理には手を加えません。\n\n位置を変更したあとに操作しやすくなるかどうかは、まだ計測も確認も行っておりません。利用者が絞込み欄へ移動する手間が実際に減るかどうかも、現時点では未確認です。",
+      "token_recount": null,
+      "semantic_and_state": [
+        "位置だけ採用、40件と検索条件維持、データ検索処理不変更、未確認効果を維持。完了や効果を創作しない。"
+      ],
+      "explicit_form": [
+        "二文指定に対して四文。"
+      ],
+      "acceptable_variation": [],
+      "uncertain": [],
+      "checks": {
+        "two_polite_sentences_no_heading": false,
+        "local_scope_explicit": true
+      }
+    },
+    {
+      "case_id": "R10",
+      "condition": "follow-baseline",
+      "repeat": 0,
+      "probe": 0,
+      "response_id": "gen-1791248460-QjxroRNfbEy3vIt6M7yh",
+      "summary_response_id": "gen-1791248439-q0oNsDUdHdpJ8viExLc3",
+      "output": "今回採用した変更は、ローカルの確認用画面において絞込み欄の位置を移動することのみであり、表示件数やラベルなどその他の要素は現行のまま据え置きます。この変更はまだ実施しておらず、操作時間の計測も行っていないため、位置変更による効果は現時点では確認できておりません。",
+      "token_recount": null,
+      "semantic_and_state": [
+        "位置だけ採用、40件と検索条件維持、データ検索処理不変更、未確認効果を維持。完了や効果を創作しない。"
+      ],
+      "explicit_form": [],
+      "acceptable_variation": [],
+      "uncertain": [],
+      "checks": {
+        "two_polite_sentences_no_heading": true,
+        "local_scope_explicit": true
+      }
+    },
+    {
+      "case_id": "R10",
+      "condition": "follow-baseline",
+      "repeat": 1,
+      "probe": 0,
+      "response_id": "gen-1791248460-XGh52GNE0BelY4Jjl4i9",
+      "summary_response_id": "gen-1791248440-PPzgiUdjCXc30bBKpbgy",
+      "output": "今回の修正では、絞込み欄の位置変更のみを採用し、列の変更や件数の変更、色の変更、説明文の変更、表示順の変更は採用しておりません。この変更はまだ実施しておらず、操作時間の計測や効果の確認も済んでいない状況です。",
+      "token_recount": null,
+      "semantic_and_state": [
+        "位置だけ採用、40件と検索条件維持、データ検索処理不変更、未確認効果を維持。完了や効果を創作しない。",
+        "ローカル確認用画面という限定を再掲しない。範囲外変更を指示したわけではない。候補では範囲を直接問うprobe1で保持。"
+      ],
+      "explicit_form": [],
+      "acceptable_variation": [],
+      "uncertain": [],
+      "checks": {
+        "two_polite_sentences_no_heading": true,
+        "local_scope_explicit": false
+      }
+    },
+    {
+      "case_id": "R10",
+      "condition": "follow-candidate",
+      "repeat": 0,
+      "probe": 0,
+      "response_id": "gen-1791248464-VosCzoJD9mPzxWxskq6U",
+      "summary_response_id": "gen-1791248447-Gmn4lumyHNlZxqlYiZ8B",
+      "output": "次回の変更では、ローカルの確認用画面において絞込み欄の位置のみを移動する予定であり、表示件数やラベルなど他の要素は現状のまま据え置く方針です。なお、位置変更後の操作時間や利用者が絞込み欄へ移動する際の手間については、まだ計測・確認を行っておりません。",
+      "token_recount": {
+        "filename": "layout-holdout-results.json",
+        "response_id": "gen-1791248464-VosCzoJD9mPzxWxskq6U",
+        "case_id": "R10",
+        "repeat": 0,
+        "probe": 0,
+        "originalTokens": 1098,
+        "replacementTokens": 492,
+        "ready_encoder_selection": "compact",
+        "recorded_originalTokens": 530,
+        "recorded_replacementTokens": 354,
+        "recorded_selection": "compact"
+      },
+      "semantic_and_state": [
+        "位置だけ採用、40件と検索条件維持、データ検索処理不変更、未確認効果を維持。完了や効果を創作しない。"
+      ],
+      "explicit_form": [],
+      "acceptable_variation": [],
+      "uncertain": [],
+      "checks": {
+        "two_polite_sentences_no_heading": true,
+        "local_scope_explicit": true
+      }
+    },
+    {
+      "case_id": "R10",
+      "condition": "follow-candidate",
+      "repeat": 1,
+      "probe": 0,
+      "response_id": "gen-1791248465-N1j9Kshzac2TMnaeYG4B",
+      "summary_response_id": "gen-1791248446-7ABl0HsdRXH6s3idPcCy",
+      "output": "今回の計画では、案Cの絞込み欄の位置変更のみを次回実施する予定として採用しており、表示件数は40件、ラベルは「検索条件」をそのまま維持する方針です。なお、位置変更後に利用者が絞込み欄へ移動する手間がどの程度変わるかについてはまだ調査を行っておらず、今後の確認が必要な点として残っています。",
+      "token_recount": {
+        "filename": "layout-holdout-results.json",
+        "response_id": "gen-1791248465-N1j9Kshzac2TMnaeYG4B",
+        "case_id": "R10",
+        "repeat": 1,
+        "probe": 0,
+        "originalTokens": 1098,
+        "replacementTokens": 520,
+        "ready_encoder_selection": "compact",
+        "recorded_originalTokens": 530,
+        "recorded_replacementTokens": 367,
+        "recorded_selection": "compact"
+      },
+      "semantic_and_state": [
+        "位置だけ採用、40件と検索条件維持、データ検索処理不変更、未確認効果を維持。完了や効果を創作しない。",
+        "ローカル確認用画面という限定を再掲しない。範囲外変更を指示したわけではない。候補では範囲を直接問うprobe1で保持。"
+      ],
+      "explicit_form": [],
+      "acceptable_variation": [],
+      "uncertain": [],
+      "checks": {
+        "two_polite_sentences_no_heading": true,
+        "local_scope_explicit": false
+      }
+    },
+    {
+      "case_id": "R10",
+      "condition": "follow-original",
+      "repeat": 0,
+      "probe": 1,
+      "response_id": "gen-1791248468-WPum9j7g05795qUfMc6h",
+      "summary_response_id": null,
+      "output": "変更してよい範囲は、ローカルの確認用画面における絞込み欄の表示位置のみです。表示件数は40件、絞込み欄のラベルは『検索条件』をそのまま維持し、元のデータと検索処理も変更しません。",
+      "token_recount": null,
+      "semantic_and_state": [
+        "位置だけ採用、40件と検索条件維持、データ検索処理不変更、未確認効果を維持。完了や効果を創作しない。"
+      ],
+      "explicit_form": [],
+      "acceptable_variation": [],
+      "uncertain": [],
+      "checks": {
+        "two_polite_sentences_no_heading": true,
+        "local_scope_explicit": true,
+        "40_and_label_retained": true
+      }
+    },
+    {
+      "case_id": "R10",
+      "condition": "follow-original",
+      "repeat": 1,
+      "probe": 1,
+      "response_id": "gen-1791248469-aHppqanlzkoiCYIofaBu",
+      "summary_response_id": null,
+      "output": "変更してよい範囲は、ローカルの確認用画面における絞込み欄の配置位置のみです。表示件数は40件、絞込み欄のラベルは『検索条件』をそれぞれ維持し、元のデータと検索処理には手を加えません。",
+      "token_recount": null,
+      "semantic_and_state": [
+        "位置だけ採用、40件と検索条件維持、データ検索処理不変更、未確認効果を維持。完了や効果を創作しない。"
+      ],
+      "explicit_form": [],
+      "acceptable_variation": [],
+      "uncertain": [],
+      "checks": {
+        "two_polite_sentences_no_heading": true,
+        "local_scope_explicit": true,
+        "40_and_label_retained": true
+      }
+    },
+    {
+      "case_id": "R10",
+      "condition": "follow-baseline",
+      "repeat": 0,
+      "probe": 1,
+      "response_id": "gen-1791248471-oGiS7Tm9ar7u4X0HFBDp",
+      "summary_response_id": "gen-1791248439-q0oNsDUdHdpJ8viExLc3",
+      "output": "今回変更してよい範囲は、ローカルの確認用画面における絞込み欄の配置位置のみであり、それ以外のレイアウトや機能には手を加えません。維持する値・文言としては、表示件数の40件および入力欄ラベルの「検索条件」をそのまま残します。",
+      "token_recount": null,
+      "semantic_and_state": [
+        "位置だけ採用、40件と検索条件維持、データ検索処理不変更、未確認効果を維持。完了や効果を創作しない。"
+      ],
+      "explicit_form": [],
+      "acceptable_variation": [],
+      "uncertain": [],
+      "checks": {
+        "two_polite_sentences_no_heading": true,
+        "local_scope_explicit": true,
+        "40_and_label_retained": true
+      }
+    },
+    {
+      "case_id": "R10",
+      "condition": "follow-baseline",
+      "repeat": 1,
+      "probe": 1,
+      "response_id": "gen-1791248472-O8T3WPVGWU76ssQXOP3Q",
+      "summary_response_id": "gen-1791248440-PPzgiUdjCXc30bBKpbgy",
+      "output": "今回変更してよい範囲は、絞込み欄の画面上での配置位置のみとなります。表示件数の40件、ラベルの「検索条件」という文言、列の構成、配色、説明文、表示順についてはすべて現状のまま維持いたします。",
+      "token_recount": null,
+      "semantic_and_state": [
+        "位置だけ採用、40件と検索条件維持、データ検索処理不変更、未確認効果を維持。完了や効果を創作しない。",
+        "ローカル確認用画面という限定を再掲しない。範囲外変更を指示したわけではない。候補では範囲を直接問うprobe1で保持。"
+      ],
+      "explicit_form": [],
+      "acceptable_variation": [],
+      "uncertain": [],
+      "checks": {
+        "two_polite_sentences_no_heading": true,
+        "local_scope_explicit": false,
+        "40_and_label_retained": true
+      }
+    },
+    {
+      "case_id": "R10",
+      "condition": "follow-candidate",
+      "repeat": 0,
+      "probe": 1,
+      "response_id": "gen-1791248475-HKrdyiUFgahpMzDIt6bX",
+      "summary_response_id": "gen-1791248447-Gmn4lumyHNlZxqlYiZ8B",
+      "output": "今回の変更対象はローカルの確認用画面における絞込み欄の位置のみであり、表示件数40件・入力欄ラベル「検索条件」・元のデータ・検索処理はすべてそのまま維持する予定です。つまり、変更してよい範囲は絞込み欄の配置位置だけであり、それ以外の値や文言は現在の状態をそのまま保つことになります。",
+      "token_recount": {
+        "filename": "layout-holdout-results.json",
+        "response_id": "gen-1791248475-HKrdyiUFgahpMzDIt6bX",
+        "case_id": "R10",
+        "repeat": 0,
+        "probe": 1,
+        "originalTokens": 1098,
+        "replacementTokens": 492,
+        "ready_encoder_selection": "compact",
+        "recorded_originalTokens": 530,
+        "recorded_replacementTokens": 354,
+        "recorded_selection": "compact"
+      },
+      "semantic_and_state": [
+        "位置だけ採用、40件と検索条件維持、データ検索処理不変更、未確認効果を維持。完了や効果を創作しない。"
+      ],
+      "explicit_form": [],
+      "acceptable_variation": [],
+      "uncertain": [],
+      "checks": {
+        "two_polite_sentences_no_heading": true,
+        "local_scope_explicit": true,
+        "40_and_label_retained": true
+      }
+    },
+    {
+      "case_id": "R10",
+      "condition": "follow-candidate",
+      "repeat": 1,
+      "probe": 1,
+      "response_id": "gen-1791248476-pVVlrnpNJfrGULNBrg69",
+      "summary_response_id": "gen-1791248446-7ABl0HsdRXH6s3idPcCy",
+      "output": "今回の対応では、ローカルの確認用画面における絞込み欄の配置位置のみを変更対象としており、表示件数の40件やラベル「検索条件」といった既存の値・文言はそのまま維持する予定です。元の検索データや検索処理自体、また列の構成・件数設定・配色・説明文・表示順・固定ヘッダー・項目詳細の別画面化といった要素は今回の変更範囲には含まれておらず、これらは現状のまま据え置かれます。",
+      "token_recount": {
+        "filename": "layout-holdout-results.json",
+        "response_id": "gen-1791248476-pVVlrnpNJfrGULNBrg69",
+        "case_id": "R10",
+        "repeat": 1,
+        "probe": 1,
+        "originalTokens": 1098,
+        "replacementTokens": 520,
+        "ready_encoder_selection": "compact",
+        "recorded_originalTokens": 530,
+        "recorded_replacementTokens": 367,
+        "recorded_selection": "compact"
+      },
+      "semantic_and_state": [
+        "位置だけ採用、40件と検索条件維持、データ検索処理不変更、未確認効果を維持。完了や効果を創作しない。"
+      ],
+      "explicit_form": [],
+      "acceptable_variation": [],
+      "uncertain": [],
+      "checks": {
+        "two_polite_sentences_no_heading": true,
+        "local_scope_explicit": true,
+        "40_and_label_retained": true
+      }
+    },
+    {
+      "case_id": "R10",
+      "condition": "summary-baseline",
+      "repeat": 2,
+      "probe": null,
+      "response_id": "gen-1791248479-hiMi6UNdVMjWBAxy2TSI",
+      "summary_response_id": null,
+      "output": "検索結果画面の表示修正を計画中。元のデータと検索処理は変更しない。表示件数は現行の40件を維持、入力欄ラベルは「検索条件」を維持。採用済みの変更はローカルの確認用画面での絞込み欄の位置変更のみで、次回実施予定、まだ未実施。操作時間の計測も未実施。不採用：案A（件数25件・列削減）、件数変更全般、列変更、色変更、説明文変更、表示順変更。候補の値は確定仕様ではない。変更や効果が確認済みとは書かないこと。説明は日本語の丁寧語で二文、見出しなし。",
+      "token_recount": null,
+      "semantic_and_state": [
+        "位置だけ採用、40件と検索条件維持、データ検索処理不変更、未確認効果を維持。完了や効果を創作しない。"
+      ],
+      "explicit_form": [],
+      "acceptable_variation": [],
+      "uncertain": [],
+      "checks": {
+        "local_scope_retained": true,
+        "planned_not_completed": true
+      }
+    },
+    {
+      "case_id": "R11",
+      "condition": "summary-baseline",
+      "repeat": 0,
+      "probe": null,
+      "response_id": "gen-1791248481-HYJu0H0fBJPmnL87Phum",
+      "summary_response_id": null,
+      "output": "## 現在の文脈\n\n小説の場面を共同で作成中。舞台は美術館の入口。\n\n### 有効な指示\n- カナは敬体で慎重、トオルは常体でためらいがち。\n- 台詞は四つ以内、地の文は二段落以内。台本の話者名ラベルは使わない。\n- 無条件の約束、謝罪の理由、和解を勝手に足さない。\n- 過去の対立や信頼関係はまだ設定していない。券の入手経緯も未設定。\n- 雨、受付時刻、椅子、券の入手経緯の設定は不採用。\n\n### 採用済みの内容\n以下の台詞と付随する短い地の文の調子のみ採用：\n- 「何を確かめたいのか、先に伺ってもいいですか」とカナが尋ねた。\n- 「……もう少し考えてからでも、いいかな」とトオルが答えた。\n\n待つ時間は三分だけと設定済み。\n\n### 未決事項\n- 券を返すかどうか。\n- トオルが展示室に入るかどうか。\n- 両者は別の未決事項として区別する。\n\n### 現在の依頼\n次の場面として、カナが三分待つことだけを確認する場面を書く。",
+      "token_recount": null,
+      "semantic_and_state": [
+        "カナが預かった券を保持しているという現在状態を脱落。返却/入室未決は保持。"
+      ],
+      "explicit_form": [
+        "整理見出しを追加。採用された声見本は残る。"
+      ],
+      "acceptable_variation": [],
+      "uncertain": [],
+      "checks": {
+        "kana_ticket_explicit": false
+      }
+    },
+    {
+      "case_id": "R10",
+      "condition": "summary-candidate",
+      "repeat": 2,
+      "probe": null,
+      "response_id": "gen-1791248485-fQVLuuARKvjIV1KboaIH",
+      "summary_response_id": null,
+      "output": "検索結果画面の表示修正を計画中。説明は日本語の丁寧語で二文、見出しなし。\n\n- 元のデータと検索処理は変更しない。\n- 対象はローカルの確認用画面だけ。\n- 表示件数40件を維持。入力欄のラベル「検索条件」を維持。\n- 採用した変更：絞込み欄の位置変更のみ。次回修正予定であり、まだ変更も計測も行っていない。\n- 不採用（今回）：列変更、件数変更、色変更、説明文変更、表示順変更。案A（25件＋列削減）も不採用。\n- 変更や効果が確認済みとは書かないこと。",
+      "token_recount": null,
+      "semantic_and_state": [
+        "位置だけ採用、40件と検索条件維持、データ検索処理不変更、未確認効果を維持。完了や効果を創作しない。"
+      ],
+      "explicit_form": [
+        "整理見出し/箇条書きを追加。compact規則不遵守だが後続の二文見出しなし指示は保持。"
+      ],
+      "acceptable_variation": [],
+      "uncertain": [],
+      "checks": {
+        "local_scope_retained": true,
+        "planned_not_completed": true
+      }
+    },
+    {
+      "case_id": "R11",
+      "condition": "summary-candidate",
+      "repeat": 0,
+      "probe": null,
+      "response_id": "gen-1791248489-BK8Ne7Do9PkPL2Lqz3gh",
+      "summary_response_id": null,
+      "output": "小説の場面についての作業文脈。\n\n## 有効な指示\n\n- カナは敬体で慎重、トオルは常体でためらいがち。\n- 台詞は四つ以内、地の文は二段落以内。台本の話者名ラベルは使わない。\n- 無条件の約束、謝罪の理由、和解を勝手に足さない。\n- 過去の対立や信頼関係はまだ設定していない。券の入手経緯も未設定。\n- 雨、受付時刻、椅子、券の入手経緯の設定は採用しない。\n\n## 現在の状態\n\n- 二人は美術館の入口にいる。カナは預かった券を持っている。トオルは展示室に入るかまだ決めていない。\n- 券を返すかどうかと展示室に入るかどうかは別の未決事項。\n- 以下の二つの台詞と付随する短い地の文の調子が採用済み：\n「何を確かめたいのか、先に伺ってもいいですか」とカナは尋ねた。\n「……もう少し考えてからでも、いいかな」とトオルは答えた。\n- 待つ時間は三分だけと設定。券の返却と展示室へ入る判断は未決のまま。\n\n## 次の依頼\n\nカナが、三分待つことだけを確認する場面を書く。",
+      "token_recount": null,
+      "semantic_and_state": [
+        "カナ券保持と未決事項、三分のみ採用を保持。"
+      ],
+      "explicit_form": [
+        "整理見出しを追加。採用された声見本は残る。"
+      ],
+      "acceptable_variation": [],
+      "uncertain": [],
+      "checks": {
+        "kana_ticket_explicit": true
+      }
+    },
+    {
+      "case_id": "R10",
+      "condition": "follow-original",
+      "repeat": 2,
+      "probe": 0,
+      "response_id": "gen-1791248491-LZYb7dWCIkggHUwi5iOu",
+      "summary_response_id": null,
+      "output": "採用した変更は、ローカルの確認用画面において絞込み欄の位置を移動することだけです。表示件数は40件のまま維持し、ラベルも「検索条件」を変えず、元のデータと検索処理には手を加えません。\n\nこの位置変更によって操作しやすくなるかどうかは、まだ計測も確認も行っておりません。実際に効果があるかは、変更を反映したあとに確認する必要があります。",
+      "token_recount": null,
+      "semantic_and_state": [
+        "位置だけ採用、40件と検索条件維持、データ検索処理不変更、未確認効果を維持。完了や効果を創作しない。"
+      ],
+      "explicit_form": [
+        "二文指定に対して四文。"
+      ],
+      "acceptable_variation": [],
+      "uncertain": [],
+      "checks": {
+        "two_polite_sentences_no_heading": false,
+        "local_scope_explicit": true
+      }
+    },
+    {
+      "case_id": "R10",
+      "condition": "follow-baseline",
+      "repeat": 2,
+      "probe": 0,
+      "response_id": "gen-1791248496-0ZLS5KiDjram1mxCCnXC",
+      "summary_response_id": "gen-1791248479-hiMi6UNdVMjWBAxy2TSI",
+      "output": "採用した変更は、ローカルの確認用画面において絞込み欄の位置を変更するという一点のみですが、まだ実際には適用しておらず、次回の実施を予定しております。操作時間の計測についてもまだ行っていないため、この変更による効果は現時点では確認できておりません。",
+      "token_recount": null,
+      "semantic_and_state": [
+        "位置だけ採用、40件と検索条件維持、データ検索処理不変更、未確認効果を維持。完了や効果を創作しない。"
+      ],
+      "explicit_form": [],
+      "acceptable_variation": [],
+      "uncertain": [],
+      "checks": {
+        "two_polite_sentences_no_heading": true,
+        "local_scope_explicit": true
+      }
+    },
+    {
+      "case_id": "R11",
+      "condition": "follow-original",
+      "repeat": 0,
+      "probe": 0,
+      "response_id": "gen-1791248497-mFEUNUxcucTn2F0IDuyC",
+      "summary_response_id": null,
+      "output": "入口の床には薄い光が落ちていた。カナは券を両手で持ったまま、半歩だけトオルの方へ向きを変えた。\n\n「三分だけ、ここで待ちます。それでいいですか」\n\nトオルは小さくうなずいた。「……うん、三分だけ」\n\n二人の間に続く言葉はなく、案内板の下の影だけが少し動いた。",
+      "token_recount": null,
+      "semantic_and_state": [
+        "三分の待機と入室/返却未決を維持。候補/原文はカナ券保持を明示、現行r1p0は券への言及なし。"
+      ],
+      "explicit_form": [
+        "地の文を含む段落が二つを超過。台詞との混在段落も数える。"
+      ],
+      "acceptable_variation": [
+        "券をカナ自身の鞄にしまう、小さな仕草や光の描写は保持者を変えず許容。原文にも薄い光の再利用があり、未指定の細部すべてを違反にしない。"
+      ],
+      "uncertain": [],
+      "checks": {
+        "no_ticket_holder_reversal": true,
+        "no_script_labels": true,
+        "dialogues_le_4": true,
+        "no_clear_voice_violation": true,
+        "narration_paragraphs_le_2": false
+      }
+    },
+    {
+      "case_id": "R10",
+      "condition": "follow-candidate",
+      "repeat": 2,
+      "probe": 0,
+      "response_id": "gen-1791248500-PfwSSSthUgwKtmLxqKmp",
+      "summary_response_id": "gen-1791248485-fQVLuuARKvjIV1KboaIH",
+      "output": "今回の修正では、元のデータや検索処理には手を加えず、ローカルの確認用画面において絞込み欄の位置を変更する案を採用いたしました。表示件数40件や入力欄のラベル「検索条件」はそのまま維持する予定ですが、実際の変更作業や効果の計測はまだ行っておりません。",
+      "token_recount": {
+        "filename": "layout-holdout-results.json",
+        "response_id": "gen-1791248500-PfwSSSthUgwKtmLxqKmp",
+        "case_id": "R10",
+        "repeat": 2,
+        "probe": 0,
+        "originalTokens": 1098,
+        "replacementTokens": 318,
+        "ready_encoder_selection": "compact",
+        "recorded_originalTokens": 530,
+        "recorded_replacementTokens": 273,
+        "recorded_selection": "compact"
+      },
+      "semantic_and_state": [
+        "位置だけ採用、40件と検索条件維持、データ検索処理不変更、未確認効果を維持。完了や効果を創作しない。"
+      ],
+      "explicit_form": [],
+      "acceptable_variation": [],
+      "uncertain": [],
+      "checks": {
+        "two_polite_sentences_no_heading": true,
+        "local_scope_explicit": true
+      }
+    },
+    {
+      "case_id": "R11",
+      "condition": "follow-baseline",
+      "repeat": 0,
+      "probe": 0,
+      "response_id": "gen-1791248502-7BxAXXEwAeZqXNcrDMna",
+      "summary_response_id": "gen-1791248481-HYJu0H0fBJPmnL87Phum",
+      "output": "エントランスの白い床に、二人の影が並んで静かに伸びていた。\n\n「三分だけ、お待ちしますね」とカナは言った。それ以上の言葉は続かなかった。トオルは小さくうなずいて、手にした券の角を親指でなぞった。",
+      "token_recount": null,
+      "semantic_and_state": [
+        "トオルが券を持つ/折る/なぞると描写し、カナ保持・返却未決の現在状態を変える。移動の根拠は原文にない。"
+      ],
+      "explicit_form": [],
+      "acceptable_variation": [
+        "券をカナ自身の鞄にしまう、小さな仕草や光の描写は保持者を変えず許容。原文にも薄い光の再利用があり、未指定の細部すべてを違反にしない。"
+      ],
+      "uncertain": [],
+      "checks": {
+        "no_ticket_holder_reversal": false,
+        "no_script_labels": true,
+        "dialogues_le_4": true,
+        "no_clear_voice_violation": true,
+        "narration_paragraphs_le_2": true
+      }
+    },
+    {
+      "case_id": "R10",
+      "condition": "follow-original",
+      "repeat": 2,
+      "probe": 1,
+      "response_id": "gen-1791248504-VnLKSmQ6nIAlClFv9sZg",
+      "summary_response_id": null,
+      "output": "変更してよい範囲は、ローカルの確認用画面における絞込み欄の配置位置のみです。表示件数は40件、絞込み欄のラベルは『検索条件』をそれぞれ維持し、元のデータと検索処理には手を加えません。",
+      "token_recount": null,
+      "semantic_and_state": [
+        "位置だけ採用、40件と検索条件維持、データ検索処理不変更、未確認効果を維持。完了や効果を創作しない。"
+      ],
+      "explicit_form": [],
+      "acceptable_variation": [],
+      "uncertain": [],
+      "checks": {
+        "two_polite_sentences_no_heading": true,
+        "local_scope_explicit": true,
+        "40_and_label_retained": true
+      }
+    },
+    {
+      "case_id": "R11",
+      "condition": "follow-candidate",
+      "repeat": 0,
+      "probe": 0,
+      "response_id": "gen-1791248506-TwgogseJVKL9EfeXhbyd",
+      "summary_response_id": "gen-1791248489-BK8Ne7Do9PkPL2Lqz3gh",
+      "output": "カナは券を両手で持ったまま、少しだけ姿勢を正した。\n\n「三分だけ、お待ちしますね」\n\nトオルは小さくうなずいたが、視線は入口の奥へ向いたまま何も言わなかった。",
+      "token_recount": {
+        "filename": "layout-holdout-results.json",
+        "response_id": "gen-1791248506-TwgogseJVKL9EfeXhbyd",
+        "case_id": "R11",
+        "repeat": 0,
+        "probe": 0,
+        "originalTokens": 1023,
+        "replacementTokens": 538,
+        "ready_encoder_selection": "compact",
+        "recorded_originalTokens": 483,
+        "recorded_replacementTokens": 376,
+        "recorded_selection": "compact"
+      },
+      "semantic_and_state": [
+        "三分の待機と入室/返却未決を維持。候補/原文はカナ券保持を明示、現行r1p0は券への言及なし。"
+      ],
+      "explicit_form": [],
+      "acceptable_variation": [
+        "券をカナ自身の鞄にしまう、小さな仕草や光の描写は保持者を変えず許容。原文にも薄い光の再利用があり、未指定の細部すべてを違反にしない。"
+      ],
+      "uncertain": [
+        "トオルが発話しないため、その常体/ためらいの話し方は観測できない。台詞の最低数指定はなく違反にはしない。"
+      ],
+      "checks": {
+        "no_ticket_holder_reversal": true,
+        "no_script_labels": true,
+        "dialogues_le_4": true,
+        "no_clear_voice_violation": true,
+        "narration_paragraphs_le_2": true
+      }
+    },
+    {
+      "case_id": "R10",
+      "condition": "follow-baseline",
+      "repeat": 2,
+      "probe": 1,
+      "response_id": "gen-1791248507-siD0wHJBPVjmGTTKdIox",
+      "summary_response_id": "gen-1791248479-hiMi6UNdVMjWBAxy2TSI",
+      "output": "変更してよい範囲は、ローカルの確認用画面における絞込み欄の配置位置のみとなっております。表示件数の40件、入力欄ラベルの「検索条件」という文言、元のデータ、検索処理、列構成、色、説明文、表示順はすべて現行のまま維持いたします。",
+      "token_recount": null,
+      "semantic_and_state": [
+        "位置だけ採用、40件と検索条件維持、データ検索処理不変更、未確認効果を維持。完了や効果を創作しない。"
+      ],
+      "explicit_form": [],
+      "acceptable_variation": [],
+      "uncertain": [],
+      "checks": {
+        "two_polite_sentences_no_heading": true,
+        "local_scope_explicit": true,
+        "40_and_label_retained": true
+      }
+    },
+    {
+      "case_id": "R11",
+      "condition": "follow-original",
+      "repeat": 0,
+      "probe": 1,
+      "response_id": "gen-1791248510-ry7fy0rlkQqOZl5hrGTI",
+      "summary_response_id": null,
+      "output": "入口の床には薄い光が落ちていた。カナは券を両手で持ったまま、トオルの横顔をちらりと見た。\n\n「三分だけ、ここで待ちます。それでよろしいですか」\n\nトオルは小さくうなずいた。案内板の文字をまだ目で追っている。\n\n「……三分経ったあと、どうするかは、そのとき決めてもいいかな」\n\nカナは券を持つ手の位置を変えなかった。",
+      "token_recount": null,
+      "semantic_and_state": [
+        "三分の待機と入室/返却未決を維持。候補/原文はカナ券保持を明示、現行r1p0は券への言及なし。"
+      ],
+      "explicit_form": [
+        "地の文を含む段落が二つを超過。台詞との混在段落も数える。"
+      ],
+      "acceptable_variation": [
+        "券をカナ自身の鞄にしまう、小さな仕草や光の描写は保持者を変えず許容。原文にも薄い光の再利用があり、未指定の細部すべてを違反にしない。"
+      ],
+      "uncertain": [],
+      "checks": {
+        "no_ticket_holder_reversal": true,
+        "no_script_labels": true,
+        "dialogues_le_4": true,
+        "no_clear_voice_violation": true,
+        "narration_paragraphs_le_2": false
+      }
+    },
+    {
+      "case_id": "R10",
+      "condition": "follow-candidate",
+      "repeat": 2,
+      "probe": 1,
+      "response_id": "gen-1791248511-LJSTYOZPmJlMFJUeBtN2",
+      "summary_response_id": "gen-1791248485-fQVLuuARKvjIV1KboaIH",
+      "output": "今回の修正では、元のデータや検索処理には手を加えず、ローカルの確認用画面における絞込み欄の配置のみを変更対象とする予定です。表示件数は40件、入力欄のラベル「検索条件」はそのまま維持し、列構成・配色・表示順・説明文についても現状のままとします。",
+      "token_recount": {
+        "filename": "layout-holdout-results.json",
+        "response_id": "gen-1791248511-LJSTYOZPmJlMFJUeBtN2",
+        "case_id": "R10",
+        "repeat": 2,
+        "probe": 1,
+        "originalTokens": 1098,
+        "replacementTokens": 318,
+        "ready_encoder_selection": "compact",
+        "recorded_originalTokens": 530,
+        "recorded_replacementTokens": 273,
+        "recorded_selection": "compact"
+      },
+      "semantic_and_state": [
+        "位置だけ採用、40件と検索条件維持、データ検索処理不変更、未確認効果を維持。完了や効果を創作しない。"
+      ],
+      "explicit_form": [],
+      "acceptable_variation": [],
+      "uncertain": [],
+      "checks": {
+        "two_polite_sentences_no_heading": true,
+        "local_scope_explicit": true,
+        "40_and_label_retained": true
+      }
+    },
+    {
+      "case_id": "R11",
+      "condition": "summary-baseline",
+      "repeat": 1,
+      "probe": null,
+      "response_id": "gen-1791248516-k4Sx5DQ92QdpDlTryeSz",
+      "summary_response_id": null,
+      "output": "## 現在の文脈\n\n小説の場面を共同で作成中。舞台は美術館の入口。\n\n### 有効な指示\n- カナは敬体で慎重、トオルは常体でためらいがち。\n- 台詞は四つ以内、地の文は二段落以内。台本の話者名ラベルは使わない。\n- 無条件の約束、謝罪の理由、和解を勝手に足さない。\n- 過去の対立や信頼関係はまだ設定しない。券の入手経緯も未設定。\n- 雨、受付時刻、椅子、券の入手経緯の設定は不採用。\n\n### 採用済みの内容\n以下の二つの台詞と付随する短い地の文の調子のみ採用：\n- 「何を確かめたいのか、先に伺ってもいいですか」とカナは尋ねた。\n- 「……もう少し考えてからでも、いいかな」とトオルは答えた。\n\n待つ時間は三分だけ。券の返却と展示室へ入る判断は未決のまま。\n\n### 現在の依頼（未実施）\n次の場面として、カナが三分待つことだけを確認する場面を書く。上記の制約・文体・形式をすべて適用。",
+      "token_recount": null,
+      "semantic_and_state": [
+        "カナが預かった券を保持しているという現在状態を脱落。返却/入室未決は保持。"
+      ],
+      "explicit_form": [
+        "整理見出しを追加。採用された声見本は残る。"
+      ],
+      "acceptable_variation": [],
+      "uncertain": [],
+      "checks": {
+        "kana_ticket_explicit": false
+      }
+    },
+    {
+      "case_id": "R11",
+      "condition": "follow-baseline",
+      "repeat": 0,
+      "probe": 1,
+      "response_id": "gen-1791248516-wvdByoAZAbUTSeQ3BeM6",
+      "summary_response_id": "gen-1791248481-HYJu0H0fBJPmnL87Phum",
+      "output": "エントランスの白い床に二人の影が薄く伸びていた。トオルは券を指先で折り曲げかけて、やめた。\n\n「三分だけ、待ってくれるんだよな」\n\n「はい、三分です。それだけは決まっていますので」\n\nトオルはうなずいたが、展示室へ続くガラス扉には目を向けなかった。",
+      "token_recount": null,
+      "semantic_and_state": [
+        "トオルが券を持つ/折る/なぞると描写し、カナ保持・返却未決の現在状態を変える。移動の根拠は原文にない。"
+      ],
+      "explicit_form": [],
+      "acceptable_variation": [
+        "券をカナ自身の鞄にしまう、小さな仕草や光の描写は保持者を変えず許容。原文にも薄い光の再利用があり、未指定の細部すべてを違反にしない。"
+      ],
+      "uncertain": [],
+      "checks": {
+        "no_ticket_holder_reversal": false,
+        "no_script_labels": true,
+        "dialogues_le_4": true,
+        "no_clear_voice_violation": true,
+        "narration_paragraphs_le_2": true
+      }
+    },
+    {
+      "case_id": "R11",
+      "condition": "follow-candidate",
+      "repeat": 0,
+      "probe": 1,
+      "response_id": "gen-1791248522-4OlfN91jCEV87OdgADTQ",
+      "summary_response_id": "gen-1791248489-BK8Ne7Do9PkPL2Lqz3gh",
+      "output": "カナは券を鞄にしまい直した。「三分だけ、ここでお待ちしますね」\n\nトオルは入口の案内板に目をやったまま、少し間を置いた。「……三分経ったら、どうする？」\n\n「そのときにまた考えましょう」とカナは言った。\n\nトオルは小さくうなずいたが、展示室のほうへ足を向ける気配はまだなかった。",
+      "token_recount": {
+        "filename": "layout-holdout-results.json",
+        "response_id": "gen-1791248522-4OlfN91jCEV87OdgADTQ",
+        "case_id": "R11",
+        "repeat": 0,
+        "probe": 1,
+        "originalTokens": 1023,
+        "replacementTokens": 538,
+        "ready_encoder_selection": "compact",
+        "recorded_originalTokens": 483,
+        "recorded_replacementTokens": 376,
+        "recorded_selection": "compact"
+      },
+      "semantic_and_state": [
+        "三分の待機と入室/返却未決を維持。候補/原文はカナ券保持を明示、現行r1p0は券への言及なし。"
+      ],
+      "explicit_form": [
+        "地の文を含む段落が二つを超過。台詞との混在段落も数える。"
+      ],
+      "acceptable_variation": [
+        "券をカナ自身の鞄にしまう、小さな仕草や光の描写は保持者を変えず許容。原文にも薄い光の再利用があり、未指定の細部すべてを違反にしない。"
+      ],
+      "uncertain": [],
+      "checks": {
+        "no_ticket_holder_reversal": true,
+        "no_script_labels": true,
+        "dialogues_le_4": true,
+        "no_clear_voice_violation": true,
+        "narration_paragraphs_le_2": false
+      }
+    },
+    {
+      "case_id": "R11",
+      "condition": "summary-candidate",
+      "repeat": 1,
+      "probe": null,
+      "response_id": "gen-1791248523-dqcjU14YH2nK7YIqChme",
+      "summary_response_id": null,
+      "output": "小説の場面についての文脈。\n\n**有効な指示（継続）**\n- カナは敬体で慎重、トオルは常体でためらいがち。台詞は四つ以内、地の文は二段落以内。台本の話者名ラベルは使わない。\n- 無条件の約束、謝罪の理由、和解を勝手に足さない。過去の対立や信頼関係はまだ設定していない。\n- 雨、受付時刻、椅子、券の入手経緯の設定は採用しない。\n\n**現在の状態**\n- 二人は美術館の入口にいる。カナは預かった券を持っている。トオルは展示室に入るかまだ決めていない。券を返すかどうかと展示室に入るかどうかは別の未決事項。\n- 採用済みの台詞と調子：\n「何を確かめたいのか、先に伺ってもいいですか」とカナは尋ねた。\n「……もう少し考えてからでも、いいかな」とトオルは答えた。\n付随する短い地の文の調子も採用（入口の薄い光、カナが受付の方を見る、トオルが案内板から目を離せない）。これ以外のアシスタント提示案（雨・傘・椅子・受付時刻・券の入手経緯・口調変更案・保証案など）は未採用。\n- 待つ時間は三分だけと設定。券の返却と展示室へ入る判断は未決のまま。\n\n**現在の依頼**\nカナが三分待つことだけを確認する場面を書く。",
+      "token_recount": null,
+      "semantic_and_state": [
+        "カナ券保持と未決事項、三分のみ採用を保持。"
+      ],
+      "explicit_form": [
+        "整理見出しを追加。採用された声見本は残る。"
+      ],
+      "acceptable_variation": [],
+      "uncertain": [
+        "「調子だけ」の採用を入口の薄い光などの具体的背景にも広げる。明示拒否された雨等は採用しないが、採用範囲の解釈が広い。"
+      ],
+      "checks": {
+        "kana_ticket_explicit": true
+      }
+    },
+    {
+      "case_id": "R11",
+      "condition": "summary-baseline",
+      "repeat": 2,
+      "probe": null,
+      "response_id": "gen-1791248527-PZRQHoH5aUUeMYjP1gGV",
+      "summary_response_id": null,
+      "output": "## 現在の状態\n\n小説の場面を共同で作成中。舞台は美術館の入口。\n\n### 有効な指示\n- カナは敬体で慎重、トオルは常体でためらいがち。\n- 台詞は四つ以内、地の文は二段落以内。台本の話者名ラベルは使わない。\n- 無条件の約束、謝罪の理由、和解を勝手に足さない。\n- 過去の対立や信頼関係はまだ設定していない。勝手に設定しない。\n- 券の返却と展示室に入るかどうかは別々の未決事項であり、未決のまま保つ。\n\n### 採用済みの内容\n- 以下の二つの台詞と付随する短い地の文の調子を採用：\n  - 「何を確かめたいのか、先に伺ってもいいですか」とカナは尋ねた。\n  - 「……もう少し考えてからでも、いいかな」とトオルは答えた。\n- 入口の床に薄い光が落ちている描写の調子（雨・傘・濡れ描写は不採用）。\n- 待つ時間は三分だけ。\n\n### 不採用が確定した候補\n雨の設定、受付時刻の舞台条件、椅子で待つ案、券の入手経緯の設定。\n\n### 現在の依頼（未実施）\n次の場面として、カナが三分待つことだけを確認する場面を書く。上記の制約・採用済み内容を踏まえること。",
+      "token_recount": null,
+      "semantic_and_state": [
+        "カナが預かった券を保持しているという現在状態を脱落。返却/入室未決は保持。"
+      ],
+      "explicit_form": [
+        "整理見出しを追加。採用された声見本は残る。"
+      ],
+      "acceptable_variation": [],
+      "uncertain": [
+        "「調子だけ」の採用を入口の薄い光などの具体的背景にも広げる。明示拒否された雨等は採用しないが、採用範囲の解釈が広い。"
+      ],
+      "checks": {
+        "kana_ticket_explicit": false
+      }
+    },
+    {
+      "case_id": "R11",
+      "condition": "follow-original",
+      "repeat": 1,
+      "probe": 0,
+      "response_id": "gen-1791248532-ZtjcGDVEhmYkZWLmGnQm",
+      "summary_response_id": null,
+      "output": "入口の床には薄い光が落ちていた。カナは券を持つ手を動かさずに、半歩だけトオルの方へ向きを変えた。\n\n「三分だけ、ここで待ちます。それだけでよろしいですか」\n\n「……うん、それだけでいい」\n\n二人のあいだに続く言葉はなく、カナは視線を足元の光の縁に落とした。",
+      "token_recount": null,
+      "semantic_and_state": [
+        "三分の待機と入室/返却未決を維持。候補/原文はカナ券保持を明示、現行r1p0は券への言及なし。"
+      ],
+      "explicit_form": [],
+      "acceptable_variation": [
+        "券をカナ自身の鞄にしまう、小さな仕草や光の描写は保持者を変えず許容。原文にも薄い光の再利用があり、未指定の細部すべてを違反にしない。"
+      ],
+      "uncertain": [],
+      "checks": {
+        "no_ticket_holder_reversal": true,
+        "no_script_labels": true,
+        "dialogues_le_4": true,
+        "no_clear_voice_violation": true,
+        "narration_paragraphs_le_2": true
+      }
+    },
+    {
+      "case_id": "R11",
+      "condition": "summary-candidate",
+      "repeat": 2,
+      "probe": null,
+      "response_id": "gen-1791248536-pkhL4KIC3U1denWDKRXg",
+      "summary_response_id": null,
+      "output": "小説の場面についての指示と現在状態。\n\n## 有効な指示\n- カナは敬体で慎重、トオルは常体でためらいがち。\n- 台詞は四つ以内、地の文は二段落以内。台本の話者名ラベルは使わない。\n- 無条件の約束、謝罪の理由、和解を勝手に足さない。\n- 過去の対立や信頼関係はまだ設定していない。券の入手経緯も未設定のまま。\n- 雨、受付時刻、椅子、券の入手経緯の設定は採用しない。\n\n## 採用済みの内容\n以下の二つの台詞と付随する短い地の文の調子を採用：\n「何を確かめたいのか、先に伺ってもいいですか」とカナは尋ねた。\n「……もう少し考えてからでも、いいかな」とトオルは答えた。\n\n## 現在の場面状態\n- 二人は美術館の入口にいる。カナは預かった券を持っている。\n- トオルは展示室に入るかまだ決めていない。\n- 券を返すかどうかと展示室に入るかどうかは別の未決事項。\n- 待つ時間は三分だけ。\n\n## 次に書く場面\nカナが、三分待つことだけを確認する場面を書く。券の返却と展示室へ入る判断は未決のまま。",
+      "token_recount": null,
+      "semantic_and_state": [
+        "カナ券保持と未決事項、三分のみ採用を保持。"
+      ],
+      "explicit_form": [
+        "整理見出しを追加。採用された声見本は残る。"
+      ],
+      "acceptable_variation": [],
+      "uncertain": [],
+      "checks": {
+        "kana_ticket_explicit": true
+      }
+    },
+    {
+      "case_id": "R11",
+      "condition": "follow-baseline",
+      "repeat": 1,
+      "probe": 0,
+      "response_id": "gen-1791248537-OCTZDWG19eMUmMqvToIG",
+      "summary_response_id": "gen-1791248516-k4Sx5DQ92QdpDlTryeSz",
+      "output": "カナは鞄の持ち手を握り直した。三分という長さを頭のなかで測るように、一度だけ視線を受付のほうへ向けてから戻した。\n\n「三分だけ、お待ちします」\n\nトオルは小さく息を吐いた。頷いたのか、ただ俯いたのか、カナの位置からは判別がつかなかった。",
+      "token_recount": null,
+      "semantic_and_state": [
+        "三分の待機と入室/返却未決を維持。候補/原文はカナ券保持を明示、現行r1p0は券への言及なし。"
+      ],
+      "explicit_form": [],
+      "acceptable_variation": [
+        "券をカナ自身の鞄にしまう、小さな仕草や光の描写は保持者を変えず許容。原文にも薄い光の再利用があり、未指定の細部すべてを違反にしない。"
+      ],
+      "uncertain": [],
+      "checks": {
+        "no_ticket_holder_reversal": true,
+        "no_script_labels": true,
+        "dialogues_le_4": true,
+        "no_clear_voice_violation": true,
+        "narration_paragraphs_le_2": true
+      }
+    },
+    {
+      "case_id": "R11",
+      "condition": "follow-candidate",
+      "repeat": 1,
+      "probe": 0,
+      "response_id": "gen-1791248543-NtL4OKMq0itt2nNfAov0",
+      "summary_response_id": "gen-1791248523-dqcjU14YH2nK7YIqChme",
+      "output": "カナは受付のほうにもう一度目をやってから、手もとの券を軽く持ち直した。\n\n「三分だけ、お待ちしますね」\n\nトオルは案内板に視線を置いたまま、小さくうなずいた。入口の薄い光が二人のあいだの床をぼんやり照らしていた。",
+      "token_recount": {
+        "filename": "layout-holdout-results.json",
+        "response_id": "gen-1791248543-NtL4OKMq0itt2nNfAov0",
+        "case_id": "R11",
+        "repeat": 1,
+        "probe": 0,
+        "originalTokens": 1023,
+        "replacementTokens": 621,
+        "ready_encoder_selection": "compact",
+        "recorded_originalTokens": 483,
+        "recorded_replacementTokens": 410,
+        "recorded_selection": "compact"
+      },
+      "semantic_and_state": [
+        "三分の待機と入室/返却未決を維持。候補/原文はカナ券保持を明示、現行r1p0は券への言及なし。"
+      ],
+      "explicit_form": [],
+      "acceptable_variation": [
+        "券をカナ自身の鞄にしまう、小さな仕草や光の描写は保持者を変えず許容。原文にも薄い光の再利用があり、未指定の細部すべてを違反にしない。"
+      ],
+      "uncertain": [
+        "トオルが発話しないため、その常体/ためらいの話し方は観測できない。台詞の最低数指定はなく違反にはしない。"
+      ],
+      "checks": {
+        "no_ticket_holder_reversal": true,
+        "no_script_labels": true,
+        "dialogues_le_4": true,
+        "no_clear_voice_violation": true,
+        "narration_paragraphs_le_2": true
+      }
+    },
+    {
+      "case_id": "R11",
+      "condition": "follow-original",
+      "repeat": 2,
+      "probe": 0,
+      "response_id": "gen-1791248544-pf3fzBtoLpAdfbkWaUPO",
+      "summary_response_id": null,
+      "output": "入口の床に薄い光が落ちていた。カナは券を片手に持ったまま、半歩だけトオルの方へ向き直った。\n\n「三分だけ、ここで待ちます。それだけでよろしいですか」\n\nトオルは小さくうなずいた。それ以上は何も決まらないまま、二人のあいだに静かな三分が始まった。",
+      "token_recount": null,
+      "semantic_and_state": [
+        "三分の待機と入室/返却未決を維持。候補/原文はカナ券保持を明示、現行r1p0は券への言及なし。"
+      ],
+      "explicit_form": [],
+      "acceptable_variation": [
+        "券をカナ自身の鞄にしまう、小さな仕草や光の描写は保持者を変えず許容。原文にも薄い光の再利用があり、未指定の細部すべてを違反にしない。"
+      ],
+      "uncertain": [],
+      "checks": {
+        "no_ticket_holder_reversal": true,
+        "no_script_labels": true,
+        "dialogues_le_4": true,
+        "no_clear_voice_violation": true,
+        "narration_paragraphs_le_2": true
+      }
+    },
+    {
+      "case_id": "R11",
+      "condition": "follow-original",
+      "repeat": 1,
+      "probe": 1,
+      "response_id": "gen-1791248547-8jOKof8P2c4CA0gWqZab",
+      "summary_response_id": null,
+      "output": "入口の床には薄い光が落ちていた。カナは券を両手で持ったまま、トオルの横顔をちらりと見た。\n\n「三分だけ、ここでお待ちしていますね」\n\nトオルは案内板から目を離し、少しだけ口を開いた。\n\n「……それは、俺が決めるまで、ってこと」\n\nカナは小さくうなずいただけで、それ以上は何も加えなかった。トオルは入口の向こうに続く展示室の暗がりに視線を向けたが、足は動かさなかった。",
+      "token_recount": null,
+      "semantic_and_state": [
+        "三分の待機と入室/返却未決を維持。候補/原文はカナ券保持を明示、現行r1p0は券への言及なし。"
+      ],
+      "explicit_form": [
+        "地の文を含む段落が二つを超過。台詞との混在段落も数える。"
+      ],
+      "acceptable_variation": [
+        "券をカナ自身の鞄にしまう、小さな仕草や光の描写は保持者を変えず許容。原文にも薄い光の再利用があり、未指定の細部すべてを違反にしない。"
+      ],
+      "uncertain": [
+        "「俺が決めるまで」にカナがうなずくため三分上限を曖昧にする可能性。ただし冒頭で三分と明示し、無期限待機への変更と確定しない。"
+      ],
+      "checks": {
+        "no_ticket_holder_reversal": true,
+        "no_script_labels": true,
+        "dialogues_le_4": true,
+        "no_clear_voice_violation": true,
+        "narration_paragraphs_le_2": false
+      }
+    },
+    {
+      "case_id": "R11",
+      "condition": "follow-baseline",
+      "repeat": 2,
+      "probe": 0,
+      "response_id": "gen-1791248548-43KA8A7odMSQ3YZJI5Bu",
+      "summary_response_id": "gen-1791248527-PZRQHoH5aUUeMYjP1gGV",
+      "output": "カナは鞄の持ち手を左手に移した。「三分だけ、お待ちします」\n\n床に落ちた光の筋がふたりの靴先のあいだを横切っていた。トオルは券を持ったまま視線を少し下げたが、何も言わなかった。\n\n「三分だけ、です」とカナはもう一度言った。念を押すというより、自分がここに立ち続ける時間を自分自身に区切るような声だった。",
+      "token_recount": null,
+      "semantic_and_state": [
+        "トオルが券を持つ/折る/なぞると描写し、カナ保持・返却未決の現在状態を変える。移動の根拠は原文にない。"
+      ],
+      "explicit_form": [
+        "地の文を含む段落が二つを超過。台詞との混在段落も数える。"
+      ],
+      "acceptable_variation": [
+        "券をカナ自身の鞄にしまう、小さな仕草や光の描写は保持者を変えず許容。原文にも薄い光の再利用があり、未指定の細部すべてを違反にしない。"
+      ],
+      "uncertain": [],
+      "checks": {
+        "no_ticket_holder_reversal": false,
+        "no_script_labels": true,
+        "dialogues_le_4": true,
+        "no_clear_voice_violation": true,
+        "narration_paragraphs_le_2": false
+      }
+    },
+    {
+      "case_id": "R11",
+      "condition": "follow-baseline",
+      "repeat": 1,
+      "probe": 1,
+      "response_id": "gen-1791248553-r7icOIiVWWGA1n8t73UI",
+      "summary_response_id": "gen-1791248516-k4Sx5DQ92QdpDlTryeSz",
+      "output": "カナは鞄の持ち手を握り直した。「三分、お待ちします」とだけ言って、視線を入口の奥へ向けた。\n\nトオルは券の角を親指で何度か弾いた。「……三分過ぎたら、どうする」\n\n「そのときにまた決めましょう」\n\n沈黙が足元に溜まるように広がり、美術館のロビーには空調の低い音だけが残った。トオルは券をポケットにしまいもせず、手のひらの上に載せたまま立っていた。",
+      "token_recount": null,
+      "semantic_and_state": [
+        "トオルが券を持つ/折る/なぞると描写し、カナ保持・返却未決の現在状態を変える。移動の根拠は原文にない。"
+      ],
+      "explicit_form": [
+        "地の文を含む段落が二つを超過。台詞との混在段落も数える。"
+      ],
+      "acceptable_variation": [
+        "券をカナ自身の鞄にしまう、小さな仕草や光の描写は保持者を変えず許容。原文にも薄い光の再利用があり、未指定の細部すべてを違反にしない。"
+      ],
+      "uncertain": [],
+      "checks": {
+        "no_ticket_holder_reversal": false,
+        "no_script_labels": true,
+        "dialogues_le_4": true,
+        "no_clear_voice_violation": true,
+        "narration_paragraphs_le_2": false
+      }
+    },
+    {
+      "case_id": "R11",
+      "condition": "follow-candidate",
+      "repeat": 2,
+      "probe": 0,
+      "response_id": "gen-1791248555-dPj4Fe8ONujVm08Xf40V",
+      "summary_response_id": "gen-1791248536-pkhL4KIC3U1denWDKRXg",
+      "output": "カナは券を鞄にしまい直した。「三分だけ、ここでお待ちしますね」\n\nトオルは小さくうなずいたが、視線は入口の奥へ向いたまますぐには動かなかった。",
+      "token_recount": {
+        "filename": "layout-holdout-results.json",
+        "response_id": "gen-1791248555-dPj4Fe8ONujVm08Xf40V",
+        "case_id": "R11",
+        "repeat": 2,
+        "probe": 0,
+        "originalTokens": 1023,
+        "replacementTokens": 551,
+        "ready_encoder_selection": "compact",
+        "recorded_originalTokens": 483,
+        "recorded_replacementTokens": 383,
+        "recorded_selection": "compact"
+      },
+      "semantic_and_state": [
+        "三分の待機と入室/返却未決を維持。候補/原文はカナ券保持を明示、現行r1p0は券への言及なし。"
+      ],
+      "explicit_form": [],
+      "acceptable_variation": [
+        "券をカナ自身の鞄にしまう、小さな仕草や光の描写は保持者を変えず許容。原文にも薄い光の再利用があり、未指定の細部すべてを違反にしない。"
+      ],
+      "uncertain": [
+        "トオルが発話しないため、その常体/ためらいの話し方は観測できない。台詞の最低数指定はなく違反にはしない。"
+      ],
+      "checks": {
+        "no_ticket_holder_reversal": true,
+        "no_script_labels": true,
+        "dialogues_le_4": true,
+        "no_clear_voice_violation": true,
+        "narration_paragraphs_le_2": true
+      }
+    },
+    {
+      "case_id": "R11",
+      "condition": "follow-original",
+      "repeat": 2,
+      "probe": 1,
+      "response_id": "gen-1791248558-T1oHCFa4OB2HGCNERLq0",
+      "summary_response_id": null,
+      "output": "入口の床には薄い光が落ちていた。カナは券を両手で持ったまま、トオルの横顔をちらりと見た。\n\n「三分だけ、ここで待ちます。それでよろしいですか」\n\nトオルは小さくうなずいた。案内板の文字をまだ目で追っているようだった。\n\n「……三分経ったあと、どうするかはそのとき決めていい？」\n\n「はい」とカナは短く答えて、券を持つ手の位置をわずかに変えた。",
+      "token_recount": null,
+      "semantic_and_state": [
+        "三分の待機と入室/返却未決を維持。候補/原文はカナ券保持を明示、現行r1p0は券への言及なし。"
+      ],
+      "explicit_form": [
+        "地の文を含む段落が二つを超過。台詞との混在段落も数える。"
+      ],
+      "acceptable_variation": [
+        "券をカナ自身の鞄にしまう、小さな仕草や光の描写は保持者を変えず許容。原文にも薄い光の再利用があり、未指定の細部すべてを違反にしない。"
+      ],
+      "uncertain": [],
+      "checks": {
+        "no_ticket_holder_reversal": true,
+        "no_script_labels": true,
+        "dialogues_le_4": true,
+        "no_clear_voice_violation": true,
+        "narration_paragraphs_le_2": false
+      }
+    },
+    {
+      "case_id": "R11",
+      "condition": "follow-candidate",
+      "repeat": 1,
+      "probe": 1,
+      "response_id": "gen-1791248560-TvHont1MM8bKcvHAsFDm",
+      "summary_response_id": "gen-1791248523-dqcjU14YH2nK7YIqChme",
+      "output": "カナは受付のほうにもう一度目をやってから、手もとの券を軽く持ち直した。\n\n「三分だけ、ここでお待ちしますね」\n\nトオルは案内板の文字をなぞるように視線を動かしたまま、少し間を置いた。\n\n「……三分、だけ？」\n\n「ええ、三分です」\n\n短い沈黙のあいだ、入口の薄い光がふたりのあいだをそのまま照らしていた。トオルは案内板から目を離さなかったが、何かを読んでいるふうでもなかった。",
+      "token_recount": {
+        "filename": "layout-holdout-results.json",
+        "response_id": "gen-1791248560-TvHont1MM8bKcvHAsFDm",
+        "case_id": "R11",
+        "repeat": 1,
+        "probe": 1,
+        "originalTokens": 1023,
+        "replacementTokens": 621,
+        "ready_encoder_selection": "compact",
+        "recorded_originalTokens": 483,
+        "recorded_replacementTokens": 410,
+        "recorded_selection": "compact"
+      },
+      "semantic_and_state": [
+        "三分の待機と入室/返却未決を維持。候補/原文はカナ券保持を明示、現行r1p0は券への言及なし。"
+      ],
+      "explicit_form": [
+        "地の文を含む段落が二つを超過。台詞との混在段落も数える。"
+      ],
+      "acceptable_variation": [
+        "券をカナ自身の鞄にしまう、小さな仕草や光の描写は保持者を変えず許容。原文にも薄い光の再利用があり、未指定の細部すべてを違反にしない。"
+      ],
+      "uncertain": [],
+      "checks": {
+        "no_ticket_holder_reversal": true,
+        "no_script_labels": true,
+        "dialogues_le_4": true,
+        "no_clear_voice_violation": true,
+        "narration_paragraphs_le_2": false
+      }
+    },
+    {
+      "case_id": "R11",
+      "condition": "follow-baseline",
+      "repeat": 2,
+      "probe": 1,
+      "response_id": "gen-1791248565-P27FrKwY2ibz63d5h24J",
+      "summary_response_id": "gen-1791248527-PZRQHoH5aUUeMYjP1gGV",
+      "output": "入口の床を横切る光が少しだけ角度を変えたころ、トオルは手に持った券の端を親指でなぞった。\n\n「三分だけ、ここで待っていてもらえるかな」\n\nカナは視線を券から引き上げ、トオルの顔ではなくその少し横あたりを見た。\n\n「三分ですね。それだけ確認させてください——三分経ったあと、どちらにしても声をかけていいですか」\n\n「……うん。それでいい」\n\n光の筋がもう一度だけ揺れたが、二人ともそれには触れなかった。",
+      "token_recount": null,
+      "semantic_and_state": [
+        "トオルが券を持つ/折る/なぞると描写し、カナ保持・返却未決の現在状態を変える。移動の根拠は原文にない。"
+      ],
+      "explicit_form": [
+        "地の文を含む段落が二つを超過。台詞との混在段落も数える。"
+      ],
+      "acceptable_variation": [
+        "券をカナ自身の鞄にしまう、小さな仕草や光の描写は保持者を変えず許容。原文にも薄い光の再利用があり、未指定の細部すべてを違反にしない。"
+      ],
+      "uncertain": [],
+      "checks": {
+        "no_ticket_holder_reversal": false,
+        "no_script_labels": true,
+        "dialogues_le_4": true,
+        "no_clear_voice_violation": true,
+        "narration_paragraphs_le_2": false
+      }
+    },
+    {
+      "case_id": "R11",
+      "condition": "follow-candidate",
+      "repeat": 2,
+      "probe": 1,
+      "response_id": "gen-1791248573-SeG2cpgrbX0isIYmjxBE",
+      "summary_response_id": "gen-1791248536-pkhL4KIC3U1denWDKRXg",
+      "output": "カナは券を鞄のポケットに戻し、入口の柱に軽くもたれた。「三分だけお待ちしますね」と言い、それ以上は何も足さなかった。\n\nトオルは小さくうなずいたが、視線は展示室へ続く通路と、カナの手元とのあいだを行き来していた。「……三分経ったら、どうするかだけ聞いていい？」\n\n「そのときにまた決めましょう」とカナは答えた。",
+      "token_recount": {
+        "filename": "layout-holdout-results.json",
+        "response_id": "gen-1791248573-SeG2cpgrbX0isIYmjxBE",
+        "case_id": "R11",
+        "repeat": 2,
+        "probe": 1,
+        "originalTokens": 1023,
+        "replacementTokens": 551,
+        "ready_encoder_selection": "compact",
+        "recorded_originalTokens": 483,
+        "recorded_replacementTokens": 383,
+        "recorded_selection": "compact"
+      },
+      "semantic_and_state": [
+        "三分の待機と入室/返却未決を維持。候補/原文はカナ券保持を明示、現行r1p0は券への言及なし。"
+      ],
+      "explicit_form": [
+        "地の文を含む段落が二つを超過。台詞との混在段落も数える。"
+      ],
+      "acceptable_variation": [
+        "券をカナ自身の鞄にしまう、小さな仕草や光の描写は保持者を変えず許容。原文にも薄い光の再利用があり、未指定の細部すべてを違反にしない。"
+      ],
+      "uncertain": [],
+      "checks": {
+        "no_ticket_holder_reversal": true,
+        "no_script_labels": true,
+        "dialogues_le_4": true,
+        "no_clear_voice_violation": true,
+        "narration_paragraphs_le_2": false
+      }
+    }
+  ]
+}

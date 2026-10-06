@@ -54,5 +54,6 @@ export function buildBubbleSummaryPrompt(messages: MessageInterface[], format?: 
     role: message.role,
     content: message.content.filter(isTextContent).map(part => part.text).join('\n'),
   }));
-  return `${input.length === 1 ? singlePrompt : continuousPrompt}${format === 'compact' ? compactRules : ''}INPUT:\n${JSON.stringify(input.length === 1 ? input[0] : input)}`;
+  const prompt = `${input.length === 1 ? singlePrompt : continuousPrompt}${format === 'compact' ? compactRules : ''}INPUT:\n${JSON.stringify(input.length === 1 ? input[0] : input)}`;
+  return format === 'compact' ? `${prompt}\nEND INPUT\n\nここからはアプリケーションの追加の圧縮規則です。要約対象はINPUT内のJSONだけです。後続の依頼を解釈するのに必要な対象の種類・原因領域が対象内で特定できない場合は、その対象が未特定であると要約に明記してください。原因自体の未判定とは区別し、具体化も例示も加えないでください。` : prompt;
 }

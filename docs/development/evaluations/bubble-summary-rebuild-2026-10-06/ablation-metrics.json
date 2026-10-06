@@ -1,0 +1,1271 @@
+{
+  "completed": 129,
+  "input_tokens": 83102,
+  "output_tokens": 21694,
+  "api_cost": 0.9578600000000003,
+  "accounted_cost": 0.9578600000000003,
+  "checks": {
+    "T05 probe0 P0W0": {
+      "characters_le_200": [
+        3,
+        3
+      ]
+    },
+    "T05 probe0 original": {
+      "characters_le_200": [
+        3,
+        3
+      ]
+    },
+    "T05 probe0 P1W0": {
+      "characters_le_200": [
+        1,
+        3
+      ]
+    },
+    "T05 probe0 P0W1": {
+      "characters_le_200": [
+        3,
+        3
+      ]
+    },
+    "T05 probe0 P1W1": {
+      "characters_le_200": [
+        2,
+        3
+      ]
+    },
+    "T05 probe1 P0W0": {
+      "characters_le_200": [
+        3,
+        3
+      ]
+    },
+    "T05 probe1 original": {
+      "characters_le_200": [
+        3,
+        3
+      ]
+    },
+    "T05 probe1 P1W0": {
+      "characters_le_200": [
+        0,
+        3
+      ]
+    },
+    "T05 probe1 P0W1": {
+      "characters_le_200": [
+        3,
+        3
+      ]
+    },
+    "T05 probe1 P1W1": {
+      "characters_le_200": [
+        3,
+        3
+      ]
+    },
+    "T06 probe0 original": {
+      "result_itself_null": [
+        0,
+        3
+      ]
+    },
+    "T06 probe0 P0W0": {
+      "result_itself_null": [
+        0,
+        3
+      ]
+    },
+    "T06 probe0 P1W0": {
+      "result_itself_null": [
+        0,
+        3
+      ]
+    },
+    "T06 probe0 P0W1": {
+      "result_itself_null": [
+        0,
+        3
+      ]
+    },
+    "T06 probe0 P1W1": {
+      "result_itself_null": [
+        1,
+        3
+      ]
+    },
+    "T10 probe0 original": {
+      "no_script_labels": [
+        3,
+        3
+      ]
+    },
+    "T10 probe0 P0W0": {
+      "no_script_labels": [
+        0,
+        3
+      ]
+    },
+    "T10 probe0 P1W0": {
+      "no_script_labels": [
+        2,
+        3
+      ]
+    },
+    "T10 probe0 P0W1": {
+      "no_script_labels": [
+        0,
+        3
+      ]
+    },
+    "T10 probe0 P1W1": {
+      "no_script_labels": [
+        3,
+        3
+      ]
+    },
+    "T10 probe1 original": {
+      "no_script_labels": [
+        3,
+        3
+      ]
+    },
+    "T10 probe1 P0W0": {
+      "no_script_labels": [
+        0,
+        3
+      ]
+    },
+    "T10 probe1 P1W0": {
+      "no_script_labels": [
+        3,
+        3
+      ]
+    },
+    "T10 probe1 P0W1": {
+      "no_script_labels": [
+        0,
+        3
+      ]
+    },
+    "T10 probe1 P1W1": {
+      "no_script_labels": [
+        2,
+        3
+      ]
+    },
+    "D02 probe0 original": {
+      "two_sentences": [
+        3,
+        3
+      ]
+    },
+    "D02 probe0 P0W0": {
+      "two_sentences": [
+        0,
+        3
+      ]
+    },
+    "D02 probe0 P1W0": {
+      "two_sentences": [
+        1,
+        3
+      ]
+    },
+    "D02 probe0 P0W1": {
+      "two_sentences": [
+        1,
+        3
+      ]
+    },
+    "D02 probe0 P1W1": {
+      "two_sentences": [
+        3,
+        3
+      ]
+    },
+    "D02 probe1 original": {
+      "two_sentences": [
+        3,
+        3
+      ]
+    },
+    "D02 probe1 P0W0": {
+      "two_sentences": [
+        0,
+        3
+      ]
+    },
+    "D02 probe1 P1W0": {
+      "two_sentences": [
+        1,
+        3
+      ]
+    },
+    "D02 probe1 P0W1": {
+      "two_sentences": [
+        0,
+        3
+      ]
+    },
+    "D02 probe1 P1W1": {
+      "two_sentences": [
+        3,
+        3
+      ]
+    }
+  },
+  "rows": [
+    {
+      "response_id": "gen-1791245986-FbIDcsu0U7hahSSpjqMj",
+      "case_id": "T05",
+      "condition": "P0W0",
+      "repeat": 1,
+      "probe": 0,
+      "checks": {
+        "characters_le_200": true
+      }
+    },
+    {
+      "response_id": "gen-1791245987-ZSmnwuhKwBW8oTvIjzaW",
+      "case_id": "T05",
+      "condition": "original",
+      "repeat": 0,
+      "probe": 0,
+      "checks": {
+        "characters_le_200": true
+      }
+    },
+    {
+      "response_id": "gen-1791245990-L8UcOA4VBp5MWwe2XHka",
+      "case_id": "T05",
+      "condition": "P0W0",
+      "repeat": 0,
+      "probe": 0,
+      "checks": {
+        "characters_le_200": true
+      }
+    },
+    {
+      "response_id": "gen-1791245992-mmnEL8KQJZATfmc9TzMC",
+      "case_id": "T05",
+      "condition": "P1W0",
+      "repeat": 1,
+      "probe": 0,
+      "checks": {
+        "characters_le_200": true
+      }
+    },
+    {
+      "response_id": "gen-1791245994-z29dMBimmXpiufYsXOMW",
+      "case_id": "T05",
+      "condition": "P1W0",
+      "repeat": 0,
+      "probe": 0,
+      "checks": {
+        "characters_le_200": false
+      }
+    },
+    {
+      "response_id": "gen-1791245997-fye38Ody3ulz0LtbLI3W",
+      "case_id": "T05",
+      "condition": "P0W1",
+      "repeat": 1,
+      "probe": 0,
+      "checks": {
+        "characters_le_200": true
+      }
+    },
+    {
+      "response_id": "gen-1791246000-9PsDFYwEvE35p3PVwKVr",
+      "case_id": "T05",
+      "condition": "P0W1",
+      "repeat": 0,
+      "probe": 0,
+      "checks": {
+        "characters_le_200": true
+      }
+    },
+    {
+      "response_id": "gen-1791246002-cwnIOo157bDUXCTBP2GU",
+      "case_id": "T05",
+      "condition": "P1W1",
+      "repeat": 1,
+      "probe": 0,
+      "checks": {
+        "characters_le_200": true
+      }
+    },
+    {
+      "response_id": "gen-1791246005-xm6VRr9khzLusFRFr7f9",
+      "case_id": "T05",
+      "condition": "P1W1",
+      "repeat": 0,
+      "probe": 0,
+      "checks": {
+        "characters_le_200": false
+      }
+    },
+    {
+      "response_id": "gen-1791246007-mWh62CRH2XhlveScAoeV",
+      "case_id": "T05",
+      "condition": "original",
+      "repeat": 1,
+      "probe": 0,
+      "checks": {
+        "characters_le_200": true
+      }
+    },
+    {
+      "response_id": "gen-1791246010-q9zwnS9v37G8smSgTrgK",
+      "case_id": "T05",
+      "condition": "P0W0",
+      "repeat": 1,
+      "probe": 1,
+      "checks": {
+        "characters_le_200": true
+      }
+    },
+    {
+      "response_id": "gen-1791246010-xbHwu99YaBjPrUq1svXP",
+      "case_id": "T05",
+      "condition": "original",
+      "repeat": 0,
+      "probe": 1,
+      "checks": {
+        "characters_le_200": true
+      }
+    },
+    {
+      "response_id": "gen-1791246014-eksqidCjyCMsQ3VAq0k8",
+      "case_id": "T05",
+      "condition": "P0W0",
+      "repeat": 0,
+      "probe": 1,
+      "checks": {
+        "characters_le_200": true
+      }
+    },
+    {
+      "response_id": "gen-1791246015-rnPB5JqWjV0rx8It4ZmW",
+      "case_id": "T05",
+      "condition": "P1W0",
+      "repeat": 1,
+      "probe": 1,
+      "checks": {
+        "characters_le_200": false
+      }
+    },
+    {
+      "response_id": "gen-1791246019-c7Ydrcg6qkd6VRksfLgk",
+      "case_id": "T05",
+      "condition": "P1W0",
+      "repeat": 0,
+      "probe": 1,
+      "checks": {
+        "characters_le_200": false
+      }
+    },
+    {
+      "response_id": "gen-1791246020-AWC0PMpjmVY4sflmUQic",
+      "case_id": "T05",
+      "condition": "P0W1",
+      "repeat": 1,
+      "probe": 1,
+      "checks": {
+        "characters_le_200": true
+      }
+    },
+    {
+      "response_id": "gen-1791246024-5fArtHBkewnbFrFr9RDr",
+      "case_id": "T05",
+      "condition": "P1W1",
+      "repeat": 1,
+      "probe": 1,
+      "checks": {
+        "characters_le_200": true
+      }
+    },
+    {
+      "response_id": "gen-1791246025-3CsQtf7MaKUcd5oj7sVz",
+      "case_id": "T05",
+      "condition": "P0W1",
+      "repeat": 0,
+      "probe": 1,
+      "checks": {
+        "characters_le_200": true
+      }
+    },
+    {
+      "response_id": "gen-1791246028-xusMvLldo61YYPxS691c",
+      "case_id": "T05",
+      "condition": "original",
+      "repeat": 1,
+      "probe": 1,
+      "checks": {
+        "characters_le_200": true
+      }
+    },
+    {
+      "response_id": "gen-1791246031-bvE3DK9qkfj6Vm2igMnK",
+      "case_id": "T05",
+      "condition": "P1W1",
+      "repeat": 0,
+      "probe": 1,
+      "checks": {
+        "characters_le_200": true
+      }
+    },
+    {
+      "response_id": "gen-1791246040-mcRHoFrRLAwnjLbQ9oN0",
+      "case_id": "T05",
+      "condition": "P1W0",
+      "repeat": 2,
+      "probe": 0,
+      "checks": {
+        "characters_le_200": false
+      }
+    },
+    {
+      "response_id": "gen-1791246045-iNgAKjrQcSc6SBlJGEPq",
+      "case_id": "T06",
+      "condition": "original",
+      "repeat": 0,
+      "probe": 0,
+      "checks": {
+        "result_itself_null": false
+      }
+    },
+    {
+      "response_id": "gen-1791246047-zLUjIfPc8dWZZeEKkc3m",
+      "case_id": "T06",
+      "condition": "P0W0",
+      "repeat": 0,
+      "probe": 0,
+      "checks": {
+        "result_itself_null": false
+      }
+    },
+    {
+      "response_id": "gen-1791246047-GxM1gcKfQUAbEOGBnclC",
+      "case_id": "T05",
+      "condition": "P0W1",
+      "repeat": 2,
+      "probe": 0,
+      "checks": {
+        "characters_le_200": true
+      }
+    },
+    {
+      "response_id": "gen-1791246048-j0EmykIcHY61mJedB0gC",
+      "case_id": "T06",
+      "condition": "P1W0",
+      "repeat": 0,
+      "probe": 0,
+      "checks": {
+        "result_itself_null": false
+      }
+    },
+    {
+      "response_id": "gen-1791246050-SDnk51cRqfSoPTgEffjV",
+      "case_id": "T06",
+      "condition": "P0W1",
+      "repeat": 0,
+      "probe": 0,
+      "checks": {
+        "result_itself_null": false
+      }
+    },
+    {
+      "response_id": "gen-1791246051-uRxiVtrb0PqVnMtScMln",
+      "case_id": "T05",
+      "condition": "P1W1",
+      "repeat": 2,
+      "probe": 0,
+      "checks": {
+        "characters_le_200": true
+      }
+    },
+    {
+      "response_id": "gen-1791246052-fT7YJ9gmkWIaW0yyZHGN",
+      "case_id": "T06",
+      "condition": "P1W1",
+      "repeat": 0,
+      "probe": 0,
+      "checks": {
+        "result_itself_null": false
+      }
+    },
+    {
+      "response_id": "gen-1791246056-3yGIzWpv4CKkte9lYHkx",
+      "case_id": "T05",
+      "condition": "original",
+      "repeat": 2,
+      "probe": 0,
+      "checks": {
+        "characters_le_200": true
+      }
+    },
+    {
+      "response_id": "gen-1791246060-67f4Yry4A4Wcc7VrMhuo",
+      "case_id": "T05",
+      "condition": "P0W0",
+      "repeat": 2,
+      "probe": 0,
+      "checks": {
+        "characters_le_200": true
+      }
+    },
+    {
+      "response_id": "gen-1791246061-skAeBOdlqDpA6W2ML33J",
+      "case_id": "T06",
+      "condition": "P0W0",
+      "repeat": 1,
+      "probe": 0,
+      "checks": {
+        "result_itself_null": false
+      }
+    },
+    {
+      "response_id": "gen-1791246063-X2F2kng310MoRQCBVrCx",
+      "case_id": "T06",
+      "condition": "P1W0",
+      "repeat": 1,
+      "probe": 0,
+      "checks": {
+        "result_itself_null": false
+      }
+    },
+    {
+      "response_id": "gen-1791246065-UfqnzxPdYv9KFmNz0zs0",
+      "case_id": "T06",
+      "condition": "P0W1",
+      "repeat": 1,
+      "probe": 0,
+      "checks": {
+        "result_itself_null": false
+      }
+    },
+    {
+      "response_id": "gen-1791246066-KbxNp4IVTBhRP1FzCqL3",
+      "case_id": "T05",
+      "condition": "P1W0",
+      "repeat": 2,
+      "probe": 1,
+      "checks": {
+        "characters_le_200": false
+      }
+    },
+    {
+      "response_id": "gen-1791246066-sqEfyRoKImyOEfgH4B2e",
+      "case_id": "T06",
+      "condition": "P1W1",
+      "repeat": 1,
+      "probe": 0,
+      "checks": {
+        "result_itself_null": false
+      }
+    },
+    {
+      "response_id": "gen-1791246068-prCj9zKiaiWBGnBkkOts",
+      "case_id": "T06",
+      "condition": "original",
+      "repeat": 1,
+      "probe": 0,
+      "checks": {
+        "result_itself_null": false
+      }
+    },
+    {
+      "response_id": "gen-1791246072-SPKp5NRpHxFj1Mj6tZHx",
+      "case_id": "T05",
+      "condition": "P0W1",
+      "repeat": 2,
+      "probe": 1,
+      "checks": {
+        "characters_le_200": true
+      }
+    },
+    {
+      "response_id": "gen-1791246075-RdvSh07tghOB2CIpqNfA",
+      "case_id": "T05",
+      "condition": "P1W1",
+      "repeat": 2,
+      "probe": 1,
+      "checks": {
+        "characters_le_200": true
+      }
+    },
+    {
+      "response_id": "gen-1791246078-d2BvrGON9NGPnRzj6h3w",
+      "case_id": "T06",
+      "condition": "P1W0",
+      "repeat": 2,
+      "probe": 0,
+      "checks": {
+        "result_itself_null": false
+      }
+    },
+    {
+      "response_id": "gen-1791246080-JxNBjSY5evgvmPhGSoUy",
+      "case_id": "T06",
+      "condition": "P0W1",
+      "repeat": 2,
+      "probe": 0,
+      "checks": {
+        "result_itself_null": false
+      }
+    },
+    {
+      "response_id": "gen-1791246080-UEDCI7V6PQaExykAxKOY",
+      "case_id": "T05",
+      "condition": "original",
+      "repeat": 2,
+      "probe": 1,
+      "checks": {
+        "characters_le_200": true
+      }
+    },
+    {
+      "response_id": "gen-1791246081-l6ryUnYHfuQuzZlOv4Za",
+      "case_id": "T06",
+      "condition": "P1W1",
+      "repeat": 2,
+      "probe": 0,
+      "checks": {
+        "result_itself_null": true
+      }
+    },
+    {
+      "response_id": "gen-1791246083-Tajt2KprNvW8lQY8LmGH",
+      "case_id": "T06",
+      "condition": "original",
+      "repeat": 2,
+      "probe": 0,
+      "checks": {
+        "result_itself_null": false
+      }
+    },
+    {
+      "response_id": "gen-1791246083-5kOmv75lcNoMvN5Yttwy",
+      "case_id": "T05",
+      "condition": "P0W0",
+      "repeat": 2,
+      "probe": 1,
+      "checks": {
+        "characters_le_200": true
+      }
+    },
+    {
+      "response_id": "gen-1791246084-WL7ezqDPeJSRoFdZryZW",
+      "case_id": "T06",
+      "condition": "P0W0",
+      "repeat": 2,
+      "probe": 0,
+      "checks": {
+        "result_itself_null": false
+      }
+    },
+    {
+      "response_id": "gen-1791246094-MNylyVnqL9MxZtW4Zc99",
+      "case_id": "T10",
+      "condition": "original",
+      "repeat": 0,
+      "probe": 0,
+      "checks": {
+        "no_script_labels": true
+      }
+    },
+    {
+      "response_id": "gen-1791246096-YLY43zrCvzsJMTFQb9BV",
+      "case_id": "T10",
+      "condition": "P0W0",
+      "repeat": 1,
+      "probe": 0,
+      "checks": {
+        "no_script_labels": false
+      }
+    },
+    {
+      "response_id": "gen-1791246098-xaSpWRFS0Y01XAImzhzF",
+      "case_id": "T10",
+      "condition": "P0W0",
+      "repeat": 0,
+      "probe": 0,
+      "checks": {
+        "no_script_labels": false
+      }
+    },
+    {
+      "response_id": "gen-1791246103-rJQM8on9Fia90vnJg0GT",
+      "case_id": "T10",
+      "condition": "P1W0",
+      "repeat": 0,
+      "probe": 0,
+      "checks": {
+        "no_script_labels": true
+      }
+    },
+    {
+      "response_id": "gen-1791246103-4XTLAsQqZVAqFMYdneNl",
+      "case_id": "T10",
+      "condition": "P1W0",
+      "repeat": 1,
+      "probe": 0,
+      "checks": {
+        "no_script_labels": false
+      }
+    },
+    {
+      "response_id": "gen-1791246111-S83mtQhwtjXZeMUCD10s",
+      "case_id": "T10",
+      "condition": "P0W1",
+      "repeat": 1,
+      "probe": 0,
+      "checks": {
+        "no_script_labels": false
+      }
+    },
+    {
+      "response_id": "gen-1791246114-VPHbP48PthTiXmOhUSZC",
+      "case_id": "T10",
+      "condition": "P0W1",
+      "repeat": 0,
+      "probe": 0,
+      "checks": {
+        "no_script_labels": false
+      }
+    },
+    {
+      "response_id": "gen-1791246118-4VZwCePiSBaamGgM0fa8",
+      "case_id": "T10",
+      "condition": "P1W1",
+      "repeat": 1,
+      "probe": 0,
+      "checks": {
+        "no_script_labels": true
+      }
+    },
+    {
+      "response_id": "gen-1791246121-oLgRWZL1hNsHq1VHYs0z",
+      "case_id": "T10",
+      "condition": "P1W1",
+      "repeat": 0,
+      "probe": 0,
+      "checks": {
+        "no_script_labels": true
+      }
+    },
+    {
+      "response_id": "gen-1791246130-U0RwYqHtqpVyR5MruyVN",
+      "case_id": "T10",
+      "condition": "original",
+      "repeat": 1,
+      "probe": 0,
+      "checks": {
+        "no_script_labels": true
+      }
+    },
+    {
+      "response_id": "gen-1791246130-4rUdfYJkjyt8fiJerYgF",
+      "case_id": "T10",
+      "condition": "original",
+      "repeat": 0,
+      "probe": 1,
+      "checks": {
+        "no_script_labels": true
+      }
+    },
+    {
+      "response_id": "gen-1791246135-IUx3RZboSE1wS8aS38w2",
+      "case_id": "T10",
+      "condition": "P0W0",
+      "repeat": 1,
+      "probe": 1,
+      "checks": {
+        "no_script_labels": false
+      }
+    },
+    {
+      "response_id": "gen-1791246137-kVDdJfqFwck5GwcHo8ai",
+      "case_id": "T10",
+      "condition": "P0W0",
+      "repeat": 0,
+      "probe": 1,
+      "checks": {
+        "no_script_labels": false
+      }
+    },
+    {
+      "response_id": "gen-1791246143-14rdVq8ZjeJFhppRwUg8",
+      "case_id": "T10",
+      "condition": "P1W0",
+      "repeat": 1,
+      "probe": 1,
+      "checks": {
+        "no_script_labels": true
+      }
+    },
+    {
+      "response_id": "gen-1791246148-SIRipMvbnvi0rr1B9WOa",
+      "case_id": "T10",
+      "condition": "P1W0",
+      "repeat": 0,
+      "probe": 1,
+      "checks": {
+        "no_script_labels": true
+      }
+    },
+    {
+      "response_id": "gen-1791246157-iyDyO9rUiK1BUKxKMqjV",
+      "case_id": "T10",
+      "condition": "P0W1",
+      "repeat": 1,
+      "probe": 1,
+      "checks": {
+        "no_script_labels": false
+      }
+    },
+    {
+      "response_id": "gen-1791246159-Y9GIB6z7J7IVlJMbLT9z",
+      "case_id": "T10",
+      "condition": "P0W1",
+      "repeat": 0,
+      "probe": 1,
+      "checks": {
+        "no_script_labels": false
+      }
+    },
+    {
+      "response_id": "gen-1791246166-q1p9UFaCxddnUPPkunMC",
+      "case_id": "T10",
+      "condition": "P1W1",
+      "repeat": 0,
+      "probe": 1,
+      "checks": {
+        "no_script_labels": true
+      }
+    },
+    {
+      "response_id": "gen-1791246169-Zh7Efa7zMYwLSCKI5Nbg",
+      "case_id": "T10",
+      "condition": "P1W1",
+      "repeat": 1,
+      "probe": 1,
+      "checks": {
+        "no_script_labels": false
+      }
+    },
+    {
+      "response_id": "gen-1791246180-IO9djOCcjMSjmDj7lZjZ",
+      "case_id": "T10",
+      "condition": "original",
+      "repeat": 1,
+      "probe": 1,
+      "checks": {
+        "no_script_labels": true
+      }
+    },
+    {
+      "response_id": "gen-1791246183-RFMgfTphDx0DjdtLlYAg",
+      "case_id": "T10",
+      "condition": "P1W0",
+      "repeat": 2,
+      "probe": 0,
+      "checks": {
+        "no_script_labels": true
+      }
+    },
+    {
+      "response_id": "gen-1791246193-0ctNG0ZaT6raowHYPUHU",
+      "case_id": "D02",
+      "condition": "original",
+      "repeat": 0,
+      "probe": 0,
+      "checks": {
+        "two_sentences": true
+      }
+    },
+    {
+      "response_id": "gen-1791246194-y8IgY6S6ODrib7dKdsRe",
+      "case_id": "T10",
+      "condition": "P0W1",
+      "repeat": 2,
+      "probe": 0,
+      "checks": {
+        "no_script_labels": false
+      }
+    },
+    {
+      "response_id": "gen-1791246195-cgK1vD2FuCTnCyF9LqBB",
+      "case_id": "D02",
+      "condition": "P0W0",
+      "repeat": 0,
+      "probe": 0,
+      "checks": {
+        "two_sentences": false
+      }
+    },
+    {
+      "response_id": "gen-1791246199-aXXA4mSqb2di4iwU27Of",
+      "case_id": "D02",
+      "condition": "P1W0",
+      "repeat": 0,
+      "probe": 0,
+      "checks": {
+        "two_sentences": false
+      }
+    },
+    {
+      "response_id": "gen-1791246203-uCdU76z2sPGj8dsENw4F",
+      "case_id": "D02",
+      "condition": "P0W1",
+      "repeat": 0,
+      "probe": 0,
+      "checks": {
+        "two_sentences": false
+      }
+    },
+    {
+      "response_id": "gen-1791246205-RVeGwF4Sml63MoU4Evzp",
+      "case_id": "T10",
+      "condition": "P1W1",
+      "repeat": 2,
+      "probe": 0,
+      "checks": {
+        "no_script_labels": true
+      }
+    },
+    {
+      "response_id": "gen-1791246208-QIj959Ryg0CSBFMP9eIF",
+      "case_id": "D02",
+      "condition": "P1W1",
+      "repeat": 0,
+      "probe": 0,
+      "checks": {
+        "two_sentences": true
+      }
+    },
+    {
+      "response_id": "gen-1791246211-DB1kO7Gg5to5ZnQW8zE1",
+      "case_id": "D02",
+      "condition": "original",
+      "repeat": 0,
+      "probe": 1,
+      "checks": {
+        "two_sentences": true
+      }
+    },
+    {
+      "response_id": "gen-1791246214-w9NeBGI6OXa3ngGBeO1t",
+      "case_id": "D02",
+      "condition": "P0W0",
+      "repeat": 0,
+      "probe": 1,
+      "checks": {
+        "two_sentences": false
+      }
+    },
+    {
+      "response_id": "gen-1791246215-82FWWkBDFsMPzdo3kg79",
+      "case_id": "T10",
+      "condition": "original",
+      "repeat": 2,
+      "probe": 0,
+      "checks": {
+        "no_script_labels": true
+      }
+    },
+    {
+      "response_id": "gen-1791246218-HKo3flsiSjDSZ8g6fHfA",
+      "case_id": "D02",
+      "condition": "P1W0",
+      "repeat": 0,
+      "probe": 1,
+      "checks": {
+        "two_sentences": false
+      }
+    },
+    {
+      "response_id": "gen-1791246220-xQ8yPQCOQXX14Rthbdxu",
+      "case_id": "T10",
+      "condition": "P0W0",
+      "repeat": 2,
+      "probe": 0,
+      "checks": {
+        "no_script_labels": false
+      }
+    },
+    {
+      "response_id": "gen-1791246220-JP4gLz45rRSLdXo8Ic9S",
+      "case_id": "D02",
+      "condition": "P0W1",
+      "repeat": 0,
+      "probe": 1,
+      "checks": {
+        "two_sentences": false
+      }
+    },
+    {
+      "response_id": "gen-1791246227-fF03li9KqlOTVpvOVsJD",
+      "case_id": "D02",
+      "condition": "P1W1",
+      "repeat": 0,
+      "probe": 1,
+      "checks": {
+        "two_sentences": true
+      }
+    },
+    {
+      "response_id": "gen-1791246230-CJc6Y36frXnDziLuqQ3L",
+      "case_id": "T10",
+      "condition": "P1W0",
+      "repeat": 2,
+      "probe": 1,
+      "checks": {
+        "no_script_labels": true
+      }
+    },
+    {
+      "response_id": "gen-1791246236-mcVvcZrxzx6gvUYdfboF",
+      "case_id": "D02",
+      "condition": "P0W0",
+      "repeat": 1,
+      "probe": 0,
+      "checks": {
+        "two_sentences": false
+      }
+    },
+    {
+      "response_id": "gen-1791246240-dNAwkLgIaZUrlk7gGQ6w",
+      "case_id": "D02",
+      "condition": "P1W0",
+      "repeat": 1,
+      "probe": 0,
+      "checks": {
+        "two_sentences": false
+      }
+    },
+    {
+      "response_id": "gen-1791246241-gAhdhihX40j4pEQTOTgX",
+      "case_id": "T10",
+      "condition": "P0W1",
+      "repeat": 2,
+      "probe": 1,
+      "checks": {
+        "no_script_labels": false
+      }
+    },
+    {
+      "response_id": "gen-1791246243-h9cySJcg4GvO0ki5nDXG",
+      "case_id": "D02",
+      "condition": "P0W1",
+      "repeat": 1,
+      "probe": 0,
+      "checks": {
+        "two_sentences": true
+      }
+    },
+    {
+      "response_id": "gen-1791246247-7rffR2CWNmipKbwNYqiZ",
+      "case_id": "D02",
+      "condition": "P1W1",
+      "repeat": 1,
+      "probe": 0,
+      "checks": {
+        "two_sentences": true
+      }
+    },
+    {
+      "response_id": "gen-1791246250-buEjJFyaRjo3xRnYXsCI",
+      "case_id": "D02",
+      "condition": "original",
+      "repeat": 1,
+      "probe": 0,
+      "checks": {
+        "two_sentences": true
+      }
+    },
+    {
+      "response_id": "gen-1791246252-3Kjd4WDpsVZcMLM0gX53",
+      "case_id": "T10",
+      "condition": "P1W1",
+      "repeat": 2,
+      "probe": 1,
+      "checks": {
+        "no_script_labels": true
+      }
+    },
+    {
+      "response_id": "gen-1791246253-kiQBmt72du4lHjb1hmvM",
+      "case_id": "D02",
+      "condition": "P0W0",
+      "repeat": 1,
+      "probe": 1,
+      "checks": {
+        "two_sentences": false
+      }
+    },
+    {
+      "response_id": "gen-1791246259-fECJlwKi56Uxd8ECmFnA",
+      "case_id": "D02",
+      "condition": "P1W0",
+      "repeat": 1,
+      "probe": 1,
+      "checks": {
+        "two_sentences": false
+      }
+    },
+    {
+      "response_id": "gen-1791246263-8TaEgx9VClyxrqp00GWC",
+      "case_id": "T10",
+      "condition": "original",
+      "repeat": 2,
+      "probe": 1,
+      "checks": {
+        "no_script_labels": true
+      }
+    },
+    {
+      "response_id": "gen-1791246263-wgldbJzxeYvFVZM3TEMB",
+      "case_id": "D02",
+      "condition": "P0W1",
+      "repeat": 1,
+      "probe": 1,
+      "checks": {
+        "two_sentences": false
+      }
+    },
+    {
+      "response_id": "gen-1791246268-9TF1emvubky0yN1wT4IC",
+      "case_id": "T10",
+      "condition": "P0W0",
+      "repeat": 2,
+      "probe": 1,
+      "checks": {
+        "no_script_labels": false
+      }
+    },
+    {
+      "response_id": "gen-1791246269-eWcjHMccmbWJ64pVVDh6",
+      "case_id": "D02",
+      "condition": "P1W1",
+      "repeat": 1,
+      "probe": 1,
+      "checks": {
+        "two_sentences": true
+      }
+    },
+    {
+      "response_id": "gen-1791246271-Kwc5Bmypc4uKTGEDNp6n",
+      "case_id": "D02",
+      "condition": "original",
+      "repeat": 1,
+      "probe": 1,
+      "checks": {
+        "two_sentences": true
+      }
+    },
+    {
+      "response_id": "gen-1791246281-dMVeDOx19bo0NtHkR5oR",
+      "case_id": "D02",
+      "condition": "P1W0",
+      "repeat": 2,
+      "probe": 0,
+      "checks": {
+        "two_sentences": true
+      }
+    },
+    {
+      "response_id": "gen-1791246284-JEKQU0BoIXeOGUhEUxHv",
+      "case_id": "D02",
+      "condition": "P0W1",
+      "repeat": 2,
+      "probe": 0,
+      "checks": {
+        "two_sentences": false
+      }
+    },
+    {
+      "response_id": "gen-1791246289-fLLmxFG5pPcS6fJzMc4I",
+      "case_id": "D02",
+      "condition": "P1W1",
+      "repeat": 2,
+      "probe": 0,
+      "checks": {
+        "two_sentences": true
+      }
+    },
+    {
+      "response_id": "gen-1791246292-VdA2jlUZYkHvYYQ5VGgt",
+      "case_id": "D02",
+      "condition": "original",
+      "repeat": 2,
+      "probe": 0,
+      "checks": {
+        "two_sentences": true
+      }
+    },
+    {
+      "response_id": "gen-1791246295-4u5GPNZByzCbMQGBq0ev",
+      "case_id": "D02",
+      "condition": "P0W0",
+      "repeat": 2,
+      "probe": 0,
+      "checks": {
+        "two_sentences": false
+      }
+    },
+    {
+      "response_id": "gen-1791246300-ZBzjeG0BWE9ASx0M9Ctf",
+      "case_id": "D02",
+      "condition": "P1W0",
+      "repeat": 2,
+      "probe": 1,
+      "checks": {
+        "two_sentences": true
+      }
+    },
+    {
+      "response_id": "gen-1791246302-p2QTn2u8f1paZJxAxnIo",
+      "case_id": "D02",
+      "condition": "P0W1",
+      "repeat": 2,
+      "probe": 1,
+      "checks": {
+        "two_sentences": false
+      }
+    },
+    {
+      "response_id": "gen-1791246310-tMVWVgpDIlaV4CfOxyrn",
+      "case_id": "D02",
+      "condition": "P1W1",
+      "repeat": 2,
+      "probe": 1,
+      "checks": {
+        "two_sentences": true
+      }
+    },
+    {
+      "response_id": "gen-1791246313-6wdnBvU92l7YFel5jygW",
+      "case_id": "D02",
+      "condition": "original",
+      "repeat": 2,
+      "probe": 1,
+      "checks": {
+        "two_sentences": true
+      }
+    },
+    {
+      "response_id": "gen-1791246316-Y6Brnv4tJ1Vmyh3FrLc8",
+      "case_id": "D02",
+      "condition": "P0W0",
+      "repeat": 2,
+      "probe": 1,
+      "checks": {
+        "two_sentences": false
+      }
+    }
+  ]
+}
