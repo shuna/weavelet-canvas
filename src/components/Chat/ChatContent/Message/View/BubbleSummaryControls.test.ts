@@ -33,9 +33,8 @@ it('switches a saved format without regenerating or opening the dialog', () => {
  click(0);
  expect(mocks.change).toHaveBeenCalledWith('summary'); expect(mocks.start).not.toHaveBeenCalled(); expect(mocks.open).not.toHaveBeenCalled();
 });
-it('does not start another job while busy or for omitted sources', () => {
+it('does not start another job while busy', () => {
  mocks.job = { busy: true }; click(0);
- mocks.job = undefined; mocks.value.effectiveChat.omittedNodes = { a: true }; click(1);
  expect(mocks.start).not.toHaveBeenCalled();
 });
 
@@ -62,4 +61,10 @@ it('keeps the inline capsule selection behavior without confirming or regenerati
  click(0, false);
  expect(confirm).not.toHaveBeenCalled(); expect(mocks.start).not.toHaveBeenCalled(); expect(mocks.change).toHaveBeenCalledWith('summary');
  vi.unstubAllGlobals();
+});
+
+it.each([0, 1])('starts format %s for an omitted bubble', format => {
+ mocks.value.effectiveChat.omittedNodes = { a: true };
+ click(format);
+ expect(mocks.start).toHaveBeenCalledWith(mocks.value.effectiveChat, [0], 'single', 'a', expect.objectContaining({ summaryFormat: format ? 'compact' : undefined }));
 });

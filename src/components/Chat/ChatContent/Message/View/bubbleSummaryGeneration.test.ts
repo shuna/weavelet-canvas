@@ -80,3 +80,11 @@ it('does not apply a result when the source changes during token comparison', as
  expect(await pending).toBe(false);
  expect(mocks.save).not.toHaveBeenCalled(); expect(mocks.choose).not.toHaveBeenCalled();
 });
+
+it.each([undefined, 'compact'] as const)('saves and selects format %s of an omitted bubble', async format => {
+  mocks.state.omittedNodeMaps = { '0': { a: true } };
+  mocks.generate.mockResolvedValue('Summary');
+  expect(await startBubbleSummary(mocks.state.chats[0], [0], 'single', 'a', { ...deps, summaryFormat: format })).toBe(true);
+  expect(mocks.save).toHaveBeenCalledWith('chat', expect.objectContaining({ text: 'Summary' }));
+  expect(mocks.choose).toHaveBeenCalledOnce();
+});
