@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { ChatInterface, MessageInterface } from '@type/chat';
-import { applyBubbleSummariesForSubmit, isBubbleSummary, normalizeBubbleSummaryText, resolveValidSummary } from './bubbleSummary';
+import { getAppliedBubbleSummaries, applyBubbleSummariesForSubmit, isBubbleSummary, normalizeBubbleSummaryText, resolveValidSummary } from './bubbleSummary';
 
 const message = (role: 'user' | 'assistant' | 'system', text: string): MessageInterface => ({ role, content: [{ type: 'text', text }] });
 const chat = (): ChatInterface => ({
@@ -37,12 +37,9 @@ describe('bubble summary submit replacement', () => {
     ] });
     expect(applyBubbleSummariesForSubmit(value, 4).map(item => item.content[0].type === 'text' ? item.content[0].text : '')).toEqual(['A', 'B', 'C', 'D']);
   });
-  it('rejects omitted, generating, non-text, or reordered sources', () => {
+  it('rejects generating, non-text, or reordered sources', () => {
     const value = chat(), summary = value.summaries![0];
     expect(resolveValidSummary(value, summary, ['a'])).toBeNull();
-    value.omittedNodes = { a: true };
-    expect(resolveValidSummary(value, summary)).toBeNull();
-    value.omittedNodes = {};
     value.messages[0].content.push({ type: 'reasoning', text: 'hidden' });
     expect(resolveValidSummary(value, summary)).toBeNull();
     value.messages[0] = message('user', 'A');
@@ -93,4 +90,20 @@ it('keeps compact opt-in and carries the response-style instruction into actual 
   expect(applyBubbleSummariesForSubmit(value, 4)[0].content).toEqual(value.messages[0].content);
   value.summaries![0].useForSubmit = true;
   expect(applyBubbleSummariesForSubmit(value, 4)[0].content[0]).toMatchObject({ text: expect.stringContaining('retained language, tone, structure and length') });
+});
+
+it('allows omitted summaries for display while excluding their content from submission', () => {
+  const value = chat(), summary = value.summaries![0];
+  for (const omittedNodes of [{ a: true }, { a: true, b: true }] as Record<string, boolean>[]) {
+    value.omittedNodes = omittedNodes;
+    expect(resolveValidSummary(value, summary)).toEqual({ first: 0, last: 1 });
+    expect(getAppliedBubbleSummaries(value)).toHaveLength(1);
+    expect(applyBubbleSummariesForSubmit(value, 4)).toEqual(value.messages.filter((_, index) => !omittedNodes[value.branchTree!.activePath[index]]));
+    summary.useForSubmit = false;
+    expect(getAppliedBubbleSummaries(value)).toEqual([]);
+    expect(applyBubbleSummariesForSubmit(value, 4)).toEqual(value.messages.filter((_, index) => !omittedNodes[value.branchTree!.activePath[index]]));
+    summary.useForSubmit = true;
+  }
+  value.omittedNodes = {};
+  expect(applyBubbleSummariesForSubmit(value, 4)[0].content[0]).toEqual({ type: 'text', text: 'Past conversation summary:\nA と B の要約' });
 });

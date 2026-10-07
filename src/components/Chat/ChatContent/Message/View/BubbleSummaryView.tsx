@@ -22,6 +22,6 @@ export default function BubbleSummaryView({ nodeId, isCollapsed = false, childre
         {isCollapsed ? <div data-summary-content className='rounded-2xl bg-white/60 px-4 pt-2.5 pb-2 shadow-sm ring-1 ring-black/5 dark:bg-gray-900/20 dark:ring-white/10 md:px-5 md:pt-3 md:pb-2.5'><div data-summary-preview className='h-[4.5rem] overflow-hidden text-sm leading-6 whitespace-pre-wrap break-words line-clamp-3'>{preview.length > 280 ? `${preview.slice(0, 280)}...` : preview}</div></div> : <div data-summary-content key={`${summary.id}:${tab}`}>{tab !== 'original' && renderSummary(summary)}</div>}
       </div>
     </div>
-    {(!range || (summary.useForSubmit && tab === 'original')) && <p className='mt-2 text-xs text-gray-500 dark:text-gray-400' aria-live='polite'>{!range ? '原文を表示・送信します。要約の更新が必要です（原文・対象・不可視・生成状態を確認してください）。' : '要約の対象が重複しているため原文を表示・送信します。要約を選び直してください。'}</p>}
+    {(!range || (summary.useForSubmit && tab === 'original')) && <p className='mt-2 text-xs text-gray-500 dark:text-gray-400' aria-live='polite'>{!range ? '原文を表示・送信します。要約の更新が必要です（原文・対象・生成状態を確認してください）。' : '要約の対象が重複しているため原文を表示・送信します。要約を選び直してください。'}</p>}
   </section>;
 }

@@ -59,7 +59,7 @@ export const resolveValidSummary = (chat: ChatInterface, summary: BubbleSummary 
   for (let offset = 0; offset < candidate.sources.length; offset++) {
     const index = first + offset, source = candidate.sources[offset], nodeId = path[index];
     const node = chat.branchTree?.nodes[nodeId], message = chat.messages[index], parts = textParts(message);
-    if (!source || source.nodeId !== nodeId || generatingNodeIds.includes(nodeId) || chat.omittedNodes?.[nodeId]
+    if (!source || source.nodeId !== nodeId || generatingNodeIds.includes(nodeId)
       || !isSummaryEligible(message) || !parts || message.role !== source.role || !Array.isArray(source.textParts) || !equalParts(parts, source.textParts)
       || (node?.parentId ?? null) !== source.parentId) return null;
   }
@@ -78,7 +78,8 @@ export const bubbleSummarySubmitMessage = (summary: BubbleSummary): MessageInter
 
 export const applyBubbleSummariesForSubmit = (chat: ChatInterface, messageIndex: number, generatingNodeIds: string[] = []): MessageInterface[] => {
   const source = chat.messages.slice(0, messageIndex), path = chat.branchTree?.activePath ?? source.map((_, index) => String(index));
-  const accepted = getAppliedBubbleSummaries(chat, messageIndex, generatingNodeIds);
+  const accepted = getAppliedBubbleSummaries(chat, messageIndex, generatingNodeIds)
+    .filter(({ summary }) => !summary.sources.some(source => chat.omittedNodes?.[source.nodeId]));
   const starts = new Map(accepted.map(value => [value.range.first, value]));
   const result: MessageInterface[] = [];
   for (let index = 0; index < source.length; index++) {

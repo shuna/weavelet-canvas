@@ -177,3 +177,48 @@ test('summary dialog selects previews, disables empty selection and saves genera
   await expect(styledSurface).toHaveCSS('background-color', 'rgba(255, 255, 255, 0.6)');
   await page.screenshot({ path: '/tmp/weavelet-summary-capsule-light.jpg' });
 });
+
+test('omitted bubbles can be summarized and switched without entering the submit context', async ({ page }) => {
+  await page.route('https://summary.test/**', route => route.fulfill({ json: { choices: [{ message: { content: 'Private summary' } }] } }));
+  await page.goto('/');
+  await page.evaluate(async () => {
+    const load = (path: string) => import(/* @vite-ignore */ path);
+    const { default: store } = await load('/src/store/store.ts');
+    const { addContent } = await load('/src/utils/contentStore.ts');
+    const { generateDefaultChat } = await load('/src/constants/chat.ts');
+    const { materializeActivePath } = await load('/src/utils/branchUtils.ts');
+    const contentStore = {};
+    const nodes = Object.fromEntries(['a', 'b'].map((id, index) => [id, { id, parentId: index ? 'a' : null, role: 'user', createdAt: index, contentHash: addContent(contentStore, [{ type: 'text', text: id === 'b' ? 'Private original '.repeat(100) : 'Original a' }]) }]));
+    const tree = { nodes, rootId: 'a', activePath: ['a', 'b'] };
+    const chat = { ...generateDefaultChat('Omitted summary'), branchTree: tree, messages: materializeActivePath(tree, contentStore), omittedNodes: { b: true } };
+    chat.config.model = 'gpt-4o';
+    store.getState().setOnboardingCompleted(true);
+    store.setState({ chats: [chat], currentChatIndex: 0, contentStore, hideSideMenu: true, apiEndpoint: 'https://summary.test/v1/chat/completions', apiKey: 'test', providers: {}, favoriteModels: [], bubbleSummaryConfig: undefined, proxyEndpoint: '', omittedNodeMaps: { '0': { b: true } }, generatingSessions: {} });
+  });
+  const bubble = page.locator('[data-node-id="b"]').first();
+  await bubble.hover();
+  await bubble.getByRole('button', { name: '要約・圧縮の詳細設定', exact: true }).click();
+  const modal = page.locator('#modal-root');
+  await expect(modal.getByRole('checkbox', { name: 'バブル2を要約に含める' })).toBeEnabled();
+  await expect(modal.getByRole('button', { name: '要約を生成', exact: true })).toBeEnabled();
+  await modal.getByRole('button', { name: '要約を生成', exact: true }).click();
+  await expect(bubble.getByText('Private summary', { exact: true })).toBeVisible();
+  const submitText = () => page.evaluate(async () => {
+    const load = (path: string) => import(/* @vite-ignore */ path);
+    const { default: store } = await load('/src/store/store.ts');
+    const { getSubmitContextMessages } = await load('/src/hooks/submitHelpers.ts');
+    const chat = store.getState().chats[0];
+    return getSubmitContextMessages(chat.messages, 'append', chat.messages.length, chat.config.model, 0).flatMap((message: any) => message.content.map((part: any) => part.text));
+  });
+  expect(await submitText()).toEqual(['Original a']);
+  await bubble.hover();
+  await bubble.getByRole('button', { name: /^原文/ }).click();
+  await expect(bubble.getByText('Private original '.repeat(100).trim(), { exact: true })).toBeVisible();
+  expect(await submitText()).toEqual(['Original a']);
+  await bubble.getByRole('button', { name: '要約', exact: true }).click();
+  await expect(bubble.getByText('Private summary', { exact: true })).toBeVisible();
+  expect(await submitText()).toEqual(['Original a']);
+  await bubble.getByRole('button', { name: '圧縮', exact: true }).click();
+  await expect(bubble.getByRole('button', { name: '圧縮', exact: true })).toHaveAttribute('aria-pressed', 'true');
+  expect(await submitText()).toEqual(['Original a']);
+});
