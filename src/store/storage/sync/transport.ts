@@ -19,6 +19,7 @@ export interface SyncTransport<T extends SyncDataset = SyncDataset> {
   // IDs identify immutable bytes. Retrying a write must verify an existing file, never overwrite it.
   put(id: string, dataset: string, kind: string, bytes: Uint8Array): Promise<void>;
   startToken(): Promise<string>;
+  history(dataset: string): Promise<{ commits: string[]; packs: string[] }>;
   commits(dataset: string): Promise<string[]>;
   packs(dataset: string): Promise<string[]>;
   // A cursor advances only after every dependency has been read and authenticated.

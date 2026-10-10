@@ -100,6 +100,11 @@ export class FileSystemTransport implements SyncTransport {
     return files.sort((a, b) => a.id.localeCompare(b.id));
   }
   async startToken() { return '[]'; }
+  async history(dataset: string) {
+    await this.keyHeader(dataset);
+    const files = await this.scan();
+    return { commits: files.filter(file => file.kind === 'commit').map(file => file.id), packs: files.filter(file => file.kind === 'pack').map(file => file.id) };
+  }
   async commits(dataset: string) { await this.keyHeader(dataset); return (await this.scan()).filter(file => file.kind === 'commit').map(file => file.id); }
   async packs(dataset: string) { await this.keyHeader(dataset); return (await this.scan()).filter(file => file.kind === 'pack').map(file => file.id); }
   async changes(token: string) {

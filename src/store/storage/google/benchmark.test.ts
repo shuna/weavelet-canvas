@@ -40,6 +40,7 @@ it.skipIf(!process.env.SYNC_BENCH)('measures a 32 MiB initial snapshot and one t
     },
     async read(id: string) { await wait('read'); return files.get(id)!.data.slice(); },
     async startToken() { await wait('startToken'); return String(events.length); },
+    async history() { await wait('history'); return { commits: [...files.values()].filter(f => f.metadata.appProperties.kind === 'commit').map(f => f.metadata.id), packs: [] }; },
     async commits() { await wait('commits'); return [...files.values()].filter(f => f.metadata.appProperties.kind === 'commit').map(f => f.metadata.id); },
     async packs() { await wait('packs'); return []; },
     async changes(token: string) { await wait('changes'); return { token: String(events.length), changes: events.slice(Number(token)).map(event => ({ ...event, id: event.fileId, dataset: event.file.appProperties.dataset, kind: event.file.appProperties.kind })) }; },
