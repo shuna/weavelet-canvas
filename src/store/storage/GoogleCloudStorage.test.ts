@@ -108,6 +108,17 @@ describe('GoogleCloudStorage encrypted upload scheduling', () => {
     expect(mocks.push).toHaveBeenCalledTimes(2);
   });
 
+  it('passes conflict targets to the review screen without an overlapping error toast', async () => {
+    const { SyncConflictError, useSyncReview } = await import('./google/conflicts');
+    const keys = [JSON.stringify(['chats', 'chat-1', 'title'])];
+    mocks.push.mockRejectedValueOnce(new SyncConflictError(keys));
+    await storage().setItem('test', { state: { count: 4 }, version: 1 });
+    await vi.advanceTimersByTimeAsync(5000);
+    expect(useSyncReview.getState()).toMatchObject({ conflict: true, conflictKeys: keys });
+    expect(mocks.state.setSyncStatus).toHaveBeenLastCalledWith('error');
+    expect(mocks.toast).not.toHaveBeenCalled();
+  });
+
   it('saves locally while locked and never uploads streaming snapshots', async () => {
     mocks.streaming = true;
     await storage().setItem('test', { state: { count: 5 } });
