@@ -118,9 +118,9 @@ it('acknowledges all chats, folders and branch nodes persistently without resolv
   const { useSyncReview, acknowledgeAllSyncChanges, markSyncChanges } = await import('./conflicts');
   useSyncReview.setState({ conflict: true, chats: ['chat', 'hidden-chat'], folders: ['folder'], nodes: { chat: ['b'], 'hidden-chat': ['x'] } });
   acknowledgeAllSyncChanges();
-  expect(useSyncReview.getState()).toEqual({ conflict: true, chats: [], folders: [], nodes: {} });
+  expect(useSyncReview.getState()).toEqual({ conflict: true, conflictKeys: [], cloudOverview: null, cloudReview: null, chats: [], folders: [], nodes: {} });
   await useSyncReview.persist.rehydrate();
-  expect(useSyncReview.getState()).toEqual({ conflict: true, chats: [], folders: [], nodes: {} });
+  expect(useSyncReview.getState()).toEqual({ conflict: true, conflictKeys: [], cloudOverview: null, cloudReview: null, chats: [], folders: [], nodes: {} });
   const before = snapshot(), after = structuredClone(before);
   node(after, 'b', 'a', 'new sync change');
   await markSyncChanges(before, after);

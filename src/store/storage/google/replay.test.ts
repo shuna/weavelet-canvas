@@ -32,3 +32,18 @@ it('preserves invalid resolution errors', async () => {
   const invalid = await commit(['left', 'right'], 'left', 'merged', { key: [] });
   await expect(replayHistory({ commits: { base, left, right, invalid }, tips: ['invalid'] })).rejects.toThrow('Invalid conflict resolution parents');
 });
+
+it('combines edit timestamps without hiding content or deletion conflicts', async () => {
+  const key = JSON.stringify(['chats', 'chat', 'updatedAt']);
+  const dated = async (parents: string[], before: string | null, after: string | null) => ({
+    ...await commit(parents, before, after), changes: [{ key, before: before === null ? null : await digest(before), after }],
+  });
+  const base = await dated([], null, '1000');
+  const left = await dated(['base'], '1000', '2000');
+  const right = await dated(['base'], '1000', '3000');
+  expect(await replayHistory({ commits: { base, left, right }, tips: ['left', 'right'] })).toEqual({ records: { [key]: '3000' }, conflicts: {} });
+  const next = await dated(['left', 'right'], '3000', '4000');
+  expect((await replayHistory({ commits: { base, left, right, next }, tips: ['next'] })).records[key]).toBe('4000');
+  const removed = await dated(['base'], '1000', null);
+  expect((await replayHistory({ commits: { base, left, removed }, tips: ['left', 'removed'] })).conflicts[key]).toHaveLength(2);
+});

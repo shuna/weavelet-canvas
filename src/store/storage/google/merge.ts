@@ -1,4 +1,5 @@
 import { mergeBranches } from './mergeBranches';
+import { mergeEditTimes } from './editTimes';
 import type { BranchTree } from '@type/chat';
 import { digest } from './crypto';
 import type { Records } from './records';
@@ -23,6 +24,8 @@ export async function mergeSyncRecords(base: Records, local: Records, cloud: Rec
     }
     if (left === right || leftHash === base[key]) continue;
     if (rightHash === base[key]) { set(key, left); continue; }
+    const time = mergeEditTimes(key, [left, right]);
+    if (time !== undefined) { set(key, time); continue; }
     const path = JSON.parse(key) as string[];
     if (path[0] === 'chats' && path[1]) {
       if (path[2] !== 'branchTree') chats.add(path[1]);

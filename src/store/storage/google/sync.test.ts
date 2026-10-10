@@ -359,6 +359,14 @@ it.each([false, true])('detects genuinely concurrent publications (same field: %
   }
   expect(drive.writes.filter((w) => w.kind === 'commit')).toHaveLength(3);
   if (conflict) {
+    const writesBeforeOverview = drive.writes.length;
+    const overview = await reader.overview();
+    expect(overview).toMatchObject({ chats: 2, versions: 2 });
+    expect(drive.writes).toHaveLength(writesBeforeOverview);
+    const review = await reader.inspect();
+    expect(review.versions.map(version => version.snapshot.state.chats![0].title).sort()).toEqual(['A', 'B']);
+    expect(review.snapshot.state.chats).toHaveLength(2);
+    expect(drive.writes).toHaveLength(writesBeforeOverview);
     const resolved = await reader.resolve(original, 'cloud');
     expect(resolved.state.chats!.map(c => c.title).sort()).toEqual(['A', 'B']);
     cache();

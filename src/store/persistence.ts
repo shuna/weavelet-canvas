@@ -21,6 +21,7 @@ export type PersistedStoreState = Omit<
   Pick<
   StoreState,
   | 'chats'
+  | 'lastContentEditedAt'
   | 'apiKey'
   | 'apiVersion'
   | 'apiEndpoint'
@@ -94,6 +95,7 @@ type LocalStoragePersistedState = Omit<
 >;
 
 const FULL_PERSIST_KEYS: (keyof PersistedStoreState)[] = [
+  'lastContentEditedAt',
   'chats', 'apiKey', 'apiVersion', 'apiEndpoint', 'theme', 'autoTitle',
   'titleModel', 'titleProviderId', 'bubbleSummaryConfig', 'advancedMode', 'prompts', 'defaultChatConfig', 'defaultSystemMessage',
   'hideMenuOptions', 'hideSideMenu', 'folders', 'enterToSubmit',
@@ -124,6 +126,7 @@ const FULL_PERSIST_KEYS: (keyof PersistedStoreState)[] = [
 ];
 
 const LOCAL_STORAGE_PERSIST_KEYS: (keyof LocalStoragePersistedState)[] = [
+  'lastContentEditedAt',
   'apiKey', 'apiVersion', 'apiEndpoint', 'theme', 'autoTitle',
   'titleModel', 'titleProviderId', 'bubbleSummaryConfig', 'advancedMode', 'prompts', 'defaultChatConfig', 'defaultSystemMessage',
   'hideMenuOptions', 'hideSideMenu', 'folders', 'enterToSubmit',
@@ -219,6 +222,7 @@ function sanitizeClipboard(
 function buildPartializedState(state: StoreState): PersistedStoreState {
   const snapshot = finalizeStreamingSnapshotState(state.chats, state.contentStore);
   return {
+    lastContentEditedAt: state.lastContentEditedAt,
     chats: buildPersistedChats({
       ...state,
       chats: snapshot.chats,
@@ -287,6 +291,7 @@ function buildLocalStoragePartializedState(
   state: StoreState
 ): LocalStoragePersistedState {
   return {
+    lastContentEditedAt: state.lastContentEditedAt,
     apiKey: state.apiKey,
     apiVersion: state.apiVersion,
     apiEndpoint: state.apiEndpoint,
