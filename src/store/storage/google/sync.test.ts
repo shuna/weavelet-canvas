@@ -72,7 +72,7 @@ const snapshot = (image = false): Snapshot => {
     config: { model: 'test', max_tokens: 100, temperature: 1, presence_penalty: 0, top_p: 1, frequency_penalty: 0 },
     branchTree: { rootId: 'n1', activePath: ['n1'], nodes: { n1: { id: 'n1', parentId: null, role: 'user', contentHash: hash, createdAt: 1 } } },
   };
-  return { version: 16, state: { chats: [chat], contentStore, branchClipboard: null, theme: 'dark' } };
+  return { version: 16, state: { chats: [chat], contentStore, branchClipboard: null, defaultSystemMessage: 'dark' } };
 };
 const cache = () => { (globalThis as any).indexedDB = new IDBFactory(); };
 beforeEach(cache);
@@ -91,13 +91,13 @@ it('excludes browser layout and proxy usage from uploads and older downloads', a
   }
   expect(await sameSnapshot([local, { ...local, state: { ...local.state, proxyEnabled: false, menuWidth: 200 } }])).toBe(true);
   // Simulate records published by a version that synchronized these preferences.
-  for (const key of BROWSER_LOCAL_SETTINGS) records[JSON.stringify(['state', key])] = JSON.stringify(preferences[key]);
+  for (const [key, value] of Object.entries(preferences)) records[JSON.stringify(['state', key])] = JSON.stringify(value);
   const downloaded = await fromRecords(records);
   const legacy = withoutBrowserLocalSettings(local.state);
   for (const key of BROWSER_LOCAL_SETTINGS) {
     expect(downloaded.state).not.toHaveProperty(key);
     expect(legacy).not.toHaveProperty(key);
-    expect(local.state[key]).toEqual(preferences[key]);
+    if (key in preferences) expect(local.state[key]).toEqual(preferences[key]);
   }
   expect(downloaded.state.proxyEndpoint).toBe('https://proxy.example');
   expect(downloaded.state.proxyAuthToken).toBe('token');
@@ -234,10 +234,10 @@ it('preserves disjoint edits from two devices and stops conflicting changes befo
   await a.push(changeA);
   (globalThis as any).indexedDB = dbB;
   const changeB = structuredClone(original);
-  changeB.state.theme = 'light';
+  changeB.state.defaultSystemMessage = 'light';
   await b.push(changeB);
   const combined = await b.pull();
-  expect(combined.state.theme).toBe('light');
+  expect(combined.state.defaultSystemMessage).toBe('light');
   expect(combined.state.chats![0].title).toBe('Device A');
   changeB.state.chats![0].title = 'Device B';
   const count = drive.writes.length;
@@ -344,7 +344,7 @@ it.each([false, true])('detects genuinely concurrent publications (same field: %
     drive.events.slice(Number(token)).filter((e) => drive.events.indexOf(e) < initialEvents || drive.events.indexOf(e) >= afterA).map(normalizeChange) });
   const changeB = structuredClone(original);
   if (conflict) changeB.state.chats![0].title = 'B';
-  else changeB.state.theme = 'light';
+  else changeB.state.defaultSystemMessage = 'light';
   await b.push(changeB);
   drive.changes = changes;
   // A fresh device sees both concurrent branches, regardless of listing order.
@@ -355,7 +355,7 @@ it.each([false, true])('detects genuinely concurrent publications (same field: %
   else {
     const result = await reader.pull();
     expect(result.state.chats![0].title).toBe('A');
-    expect(result.state.theme).toBe('light');
+    expect(result.state.defaultSystemMessage).toBe('light');
   }
   expect(drive.writes.filter((w) => w.kind === 'commit')).toHaveLength(3);
   if (conflict) {
@@ -599,12 +599,12 @@ async function appendHistory(drive: FakeDrive, file: DriveFile, state: Snapshot,
   }
   return parent;
 }
-async function appendTheme(drive: FakeDrive, file: DriveFile, state: Snapshot, parent: string, theme: NonNullable<Snapshot['state']['theme']>) {
+async function appendTheme(drive: FakeDrive, file: DriveFile, state: Snapshot, parent: string, defaultSystemMessage: NonNullable<Snapshot['state']['defaultSystemMessage']>) {
   const key = (await cacheStorage.rememberedSyncKey(file.id))!;
   const id = await drive.id();
-  const before = await digest(JSON.stringify(state.state.theme));
-  state.state.theme = theme;
-  const commit = { version: 2, parents: [parent], changes: [{ key: '["state","theme"]', before, after: JSON.stringify(theme) }] };
+  const before = await digest(JSON.stringify(state.state.defaultSystemMessage));
+  state.state.defaultSystemMessage = defaultSystemMessage;
+  const commit = { version: 2, parents: [parent], changes: [{ key: '["state","defaultSystemMessage"]', before, after: JSON.stringify(defaultSystemMessage) }] };
   await drive.put(id, file.id, 'commit', await encrypt(key, encode(commit), `${file.id}:${id}`));
 }
 async function appendPackedTitle(drive: FakeDrive, file: DriveFile, parent: string, title: string) {
@@ -739,7 +739,7 @@ it.each([false, true])('rechecks history after compaction cleanup sees an extern
     await remove(id);
   };
   if (conflict) await expect(session.synchronize(local, true)).rejects.toThrow('conflict');
-  else expect((await session.synchronize(local, true)).state.theme).toBe('light');
+  else expect((await session.synchronize(local, true)).state.defaultSystemMessage).toBe('light');
   expect(injected).toBe(true);
 }, 30_000);
 
@@ -782,10 +782,10 @@ it('preserves offline disjoint edits and still rejects conflicting edits after s
   await session.push(state, true);
   (globalThis as any).indexedDB = offlineDb;
   const local = structuredClone(original);
-  local.state.theme = 'light';
+  local.state.defaultSystemMessage = 'light';
   await offline.push(local);
   const combined = await offline.pull();
-  expect(combined.state.theme).toBe('light');
+  expect(combined.state.defaultSystemMessage).toBe('light');
   expect(combined.state.chats![0].title).toBe(state.state.chats![0].title);
   local.state.chats![0].title = 'offline edit';
   const before = drive.writes.length;
@@ -906,12 +906,12 @@ it('Drive-only import preserves remote chats, settings and the local sync baseli
   const imported = snapshot();
   imported.state.chats![0].id = 'imported-chat';
   imported.state.chats![0].title = 'Imported';
-  delete imported.state.theme;
+  delete imported.state.defaultSystemMessage;
   await session.importSnapshot(imported);
   expect(local.state.chats).toHaveLength(1);
   let result = await session.pull();
   expect(result.state.chats!.map(chat => chat.id).sort()).toEqual(['chat-a', 'imported-chat']);
-  expect(result.state.theme).toBe('dark');
+  expect(result.state.defaultSystemMessage).toBe('dark');
   // Unchanged local data must not erase the import on the next automatic upload.
   await session.push(local);
   expect((await session.pull()).state.chats).toHaveLength(2);
@@ -919,4 +919,85 @@ it('Drive-only import preserves remote chats, settings and the local sync baseli
   const fresh = new EncryptedDriveSync(file.id, drive.transport());
   await fresh.unlock(PASSWORD);
   expect((await fresh.pull()).state.chats).toHaveLength(2);
+});
+
+it('keeps local caches and display preferences out of synchronization while merging display-only edits', async () => {
+  const drive = new FakeDrive();
+  const dbA = new IDBFactory(); globalThis.indexedDB = dbA;
+  const { session: a, file } = await EncryptedDriveSync.create(drive.transport(), PASSWORD);
+  const original = snapshot();
+  original.state.folders = { folder: { id: 'folder', name: 'Folder', expanded: true, order: 0 } };
+  original.state.chats![0].collapsedNodes = {};
+  await a.push(original, true);
+  const dbB = new IDBFactory(); globalThis.indexedDB = dbB;
+  const b = new EncryptedDriveSync(file.id, drive.transport()); await b.unlock(PASSWORD);
+  await b.acceptLocal(await b.pull());
+  const left = structuredClone(original), right = structuredClone(original);
+  left.state.folders!.folder.expanded = false;
+  left.state.chats![0].collapsedNodes = { n1: true };
+  left.state.theme = 'light'; right.state.theme = 'dark';
+  left.state.pendingVerifications = { entry: { generationId: 'generation', chatId: 'chat-a', targetNodeId: 'n1', requestedAt: 1, nextAttemptAt: 2, attemptCount: 1, status: 'failed' } };
+  right.state.pendingVerifications = { entry: { ...left.state.pendingVerifications.entry, status: 'pending' } };
+  globalThis.indexedDB = dbA; await a.push(left);
+  right.state.chats![0].collapsedNodes = { n1: false };
+  right.state.folders!.folder.expanded = true;
+  globalThis.indexedDB = dbB;
+  const result = await b.synchronize(right);
+  expect(result.state.chats![0].collapsedNodes).toEqual({ n1: false });
+  expect(result.state.folders!.folder.expanded).toBe(false);
+  expect(result.state.pendingVerifications).toBeUndefined();
+  expect(result.state.theme).toBeUndefined();
+  for (const field of ['verifiedStats', 'totalTokenUsed', 'providerModelCache']) {
+    expect((await toRecords({ ...original, state: { ...original.state, [field]: { cache: 1 } } }))[JSON.stringify(['state', field, 'cache'])]).toBeUndefined();
+  }
+});
+
+it('downloads legacy cache conflicts without blocking, retaining generation IDs for local re-verification', async () => {
+  const drive = new FakeDrive();
+  const { session, file } = await EncryptedDriveSync.create(drive.transport(), PASSWORD);
+  const initial = snapshot(); initial.state.chats![0].branchTree!.nodes.n1.role = 'assistant';
+  await session.push(initial, true);
+  const parent = drive.writes.find(write => write.kind === 'commit')!.id;
+  const encryptionKey = (await cacheStorage.rememberedSyncKey(file.id))!;
+  const statusKey = JSON.stringify(['state', 'pendingVerifications', 'chat-a:::n1', 'status']);
+  const generationKey = JSON.stringify(['state', 'pendingVerifications', 'chat-a:::n1', 'generationId']);
+  for (const status of ['failed', 'pending']) {
+    const id = await drive.id();
+    const commit = { version: 2, parents: [parent], changes: [
+      { key: statusKey, before: null, after: JSON.stringify(status) },
+      { key: generationKey, before: null, after: JSON.stringify('legacy-generation') },
+    ] };
+    await drive.put(id, file.id, 'commit', await encrypt(encryptionKey, encode(commit), `${file.id}:${id}`));
+  }
+  const downloaded = await session.pull();
+  expect(downloaded.state.pendingVerifications).toBeUndefined();
+  expect(downloaded.state.chats![0].branchTree!.nodes.n1.openRouterObservation?.generationId).toBe('legacy-generation');
+  await session.acceptLocal(downloaded);
+  downloaded.state.chats![0].title = 'Updated after cache conflict';
+  await session.push(downloaded);
+  expect((await session.pull()).state.chats![0].title).toBe('Updated after cache conflict');
+  const records = await toRecords(initial);
+  records[JSON.stringify(['state', 'pendingVerifications'])] = '{}';
+  records[generationKey] = JSON.stringify('legacy-generation');
+  expect((await fromRecords(records)).state.chats![0].branchTree!.nodes.n1.openRouterObservation?.generationId).toBe('legacy-generation');
+});
+
+it('does not publish a navigation path pointing at a node another device deleted', async () => {
+  const drive = new FakeDrive(); const dbA = new IDBFactory(); globalThis.indexedDB = dbA;
+  const { session: a, file } = await EncryptedDriveSync.create(drive.transport(), PASSWORD);
+  const initial = snapshot(); const tree = initial.state.chats![0].branchTree!;
+  tree.nodes.a = { ...tree.nodes.n1, id: 'a', parentId: 'n1' };
+  tree.nodes.b = { ...tree.nodes.n1, id: 'b', parentId: 'n1' };
+  tree.activePath = ['n1', 'a'];
+  await a.push(initial, true);
+  const dbB = new IDBFactory(); globalThis.indexedDB = dbB;
+  const b = new EncryptedDriveSync(file.id, drive.transport()); await b.unlock(PASSWORD); await b.acceptLocal(await b.pull());
+  const deleted = structuredClone(initial); delete deleted.state.chats![0].branchTree!.nodes.b;
+  globalThis.indexedDB = dbA; await a.push(deleted);
+  const navigated = structuredClone(initial); navigated.state.chats![0].branchTree!.activePath = ['n1', 'b'];
+  globalThis.indexedDB = dbB;
+  const result = await b.synchronize(navigated);
+  expect(result.state.chats![0].branchTree!.activePath).toEqual(['n1', 'a']);
+  expect(result.state.chats![0].branchTree!.nodes.b).toBeUndefined();
+  expect((await b.pull()).state.chats![0].branchTree!.activePath).toEqual(['n1', 'a']);
 });

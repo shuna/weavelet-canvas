@@ -139,7 +139,7 @@ describe('persistence', () => {
     const hydrated = finishHydratedState(await prepareHydratedState(base as never, received));
     const applied = { ...base, ...hydrated };
     for (const key of BROWSER_LOCAL_SETTINGS) expect(applied[key]).toEqual(preferences[key]);
-    expect(applied.theme).toBe('light');
+    expect(applied.theme).toBe(base.theme);
   });
 
   it('persists both swipe preferences and invalidates the cached snapshot when they change', () => {

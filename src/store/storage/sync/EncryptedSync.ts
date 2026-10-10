@@ -1,3 +1,4 @@
+import { isBrowserLocalRecord, isNonBlockingRecord, selectActivePath } from '../google/settings';
 import { summarizeSyncSnapshot } from '../google/overview';
 import { reportSyncHistory, reportCompaction, recordPackAccess, useGoogleSyncDiagnostics } from '../google/diagnostics';
 import { SyncConflictError, type Resolution } from '../google/conflicts';
@@ -609,15 +610,27 @@ export class EncryptedSync {
         if (!replace && !this.cache.baseline) throw new Error('Choose upload or download before enabling automatic sync.');
         const base = replace === true || (replace === 'if-empty' && !this.cache.baseline) ? await hashRecords(remote) : this.cache.baseline!;
         const localHashes = await hashRecords(local);
-        const changes = diffHashedRecords(base, local, localHashes).filter((change) => {
+        const changes = await Promise.all(diffHashedRecords(base, local, localHashes).filter((change) => {
+          if (isBrowserLocalRecord(change.key)) return false;
           // Content and assets are immutable and may be referenced by another device. Never GC them from a local snapshot.
           const path = JSON.parse(change.key);
           return change.after !== null || (path[0] !== 'content' && path[0] !== 'assets');
-        });
+        }).map(async change => isNonBlockingRecord(change.key)
+          ? { ...change, before: remote[change.key] === undefined ? null : await digest(remote[change.key]) }
+          : change));
         if (snapshot.state.chats?.length === 0 && Object.keys(remote).some((key) => JSON.parse(key)[0] === 'chats' && JSON.parse(key).length > 1)) {
           throw new Error('Cloud sync skipped because the snapshot would erase all chats.');
         }
         const merged = await applyChanges(remote, changes);
+        for (const change of changes) {
+          if (change.after === null) continue;
+          const selected = selectActivePath(change.key, [change.after, remote[change.key] ?? null], merged);
+          if (selected !== undefined) {
+            change.after = selected;
+            if (selected === null) delete merged[change.key];
+            else merged[change.key] = selected;
+          }
+        }
         try { await fromRecords(merged); }
         catch (error) {
           // Two valid edits can conflict structurally (for example, deleting a branch another device extends).

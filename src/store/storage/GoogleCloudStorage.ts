@@ -1,3 +1,4 @@
+import { rebuildSyncedUsage } from './sync/rebuildUsage';
 import { withSyncProgress, syncStage } from './google/progress';
 import type { PersistStorage } from 'zustand/middleware';
 import { createJSONStorage } from 'zustand/middleware';
@@ -78,6 +79,8 @@ async function applySyncedSnapshot(target: EncryptedDriveSync, before: Snapshot,
     migratePersistedState(received.state, received.version ?? STORE_VERSION) as Partial<PersistedStoreState>);
   if (target !== session || state !== useStore.getState()) return false;
   const hydrated = finishHydratedState(prepared);
+  if (hydrated.chats) Object.assign(hydrated, await rebuildSyncedUsage(hydrated.chats, hydrated.contentStore ?? {}, state));
+  if (target !== session || state !== useStore.getState()) return false;
   if (selectedId && hydrated.chats) {
     const index = hydrated.chats.findIndex(chat => chat.id === selectedId);
     if (index >= 0) hydrated.currentChatIndex = index;

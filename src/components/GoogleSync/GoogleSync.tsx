@@ -1,3 +1,4 @@
+import { rebuildSyncedUsage } from '@store/storage/sync/rebuildUsage';
 import { InfoTooltip } from '@components/ConfigMenu/fields';
 import SyncDots from './SyncDots';
 import { withoutBrowserLocalSettings } from '@store/storage/google/settings';
@@ -550,6 +551,8 @@ const GooglePopup = ({
         const prepared = await prepareHydratedState(observed, withoutBrowserLocalSettings(remotePersistedState));
         if (observed !== useStore.getState()) throw new Error('Local data changed while preparing the downloaded snapshot. Retry with the latest changes.');
         const hydratedState = finishHydratedState(prepared);
+        if (hydratedState.chats) Object.assign(hydratedState, await rebuildSyncedUsage(hydratedState.chats, hydratedState.contentStore ?? {}, observed));
+        if (observed !== useStore.getState()) throw new Error('Local data changed while preparing the downloaded snapshot. Retry with the latest changes.');
 
         syncPhase('saving');
         // Keep the local format and persist chat data before publishing the hydrated state.
