@@ -93,9 +93,8 @@ async function applySyncedSnapshot(target: EncryptedDriveSync, before: Snapshot,
   return true;
 }
 async function synchronize(target: EncryptedDriveSync, snapshot: Snapshot) {
-  await syncStage(0, 3, () => target.push(snapshot));
-  const received = await syncStage(1, 3, () => target.pull());
-  await syncStage(2, 3, async () => {
+  const received = await syncStage(0, 2, () => target.synchronize(snapshot));
+  await syncStage(1, 2, async () => {
     if (await sameSnapshot(snapshot, received)) return;
     if (!await applySyncedSnapshot(target, snapshot, received) && target === session) {
       pending = { session: target, value: currentSnapshot() };

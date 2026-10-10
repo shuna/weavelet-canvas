@@ -1,3 +1,4 @@
+import { SyncFileNotFoundError, type SyncChange, type SyncTransport } from '../sync/transport';
 import type { TransferPurpose } from './diagnostics';
 import { measure, recordMetric } from './metrics';
 import { beginTransfer } from './progress';
@@ -20,8 +21,8 @@ const API = 'https://www.googleapis.com/drive/v3';
 export interface DriveFile extends GoogleFileResource {
   appProperties?: Record<string, string>;
 }
-export class DriveNotFoundError extends Error {}
-export class DriveTransport {
+export { SyncFileNotFoundError as DriveNotFoundError };
+export class DriveTransport implements SyncTransport<DriveFile> {
   constructor(private token: () => string) {}
 
   private async request(url: string, init: RequestInit = {}) {
@@ -59,6 +60,13 @@ export class DriveTransport {
       return file;
     });
   }
+  async keyHeader(dataset: string): Promise<string> {
+    const file = await this.metadata(dataset);
+    if (file.mimeType !== SYNC_FOLDER_TYPE || file.appProperties?.weaveletSync !== '1' || !file.appProperties.headerId) {
+      throw new Error('Legacy sync files are read-only. Create a new encrypted sync folder.');
+    }
+    return file.appProperties.headerId;
+  }
   async folder(id: string, headerId: string, name = `${DEFAULT_SYNC_FOLDER_NAME} (${id})`): Promise<DriveFile> {
     if (!name.trim()) throw new Error('Enter a sync folder name.');
     return this.json(`${API}/files?fields=id,name,mimeType,appProperties`, {
@@ -71,7 +79,7 @@ export class DriveTransport {
     const finish = beginTransfer('download', purpose);
     const started = performance.now();
     const response = await this.request(`${API}/files/${encodeURIComponent(id)}?alt=media`);
-    if (response.status === 404) throw new DriveNotFoundError('Google Drive 404: missing sync file.');
+    if (response.status === 404) throw new SyncFileNotFoundError('Google Drive 404: missing sync file.');
     if (!response.ok) throw new Error(`Google Drive ${response.status}: ${response.statusText}`);
     const bytes = new Uint8Array(await response.arrayBuffer());
     finish(bytes.length);
@@ -125,14 +133,19 @@ export class DriveTransport {
     } while (pageToken);
     return ids;
   }
-  async changes(token: string): Promise<{ token: string; changes: { fileId: string; removed?: boolean; file?: DriveFile & { trashed?: boolean } }[] }> {
-    const changes = [];
+  async changes(token: string): Promise<{ token: string; changes: SyncChange[] }> {
+    const changes: SyncChange[] = [];
     let pageToken = token;
     for (;;) {
       const params = new URLSearchParams({ pageToken, pageSize: '1000',
         fields: 'nextPageToken,newStartPageToken,changes(fileId,removed,file(id,trashed,appProperties))' });
       const page = await this.json(`${API}/changes?${params}`);
-      changes.push(...page.changes);
+      changes.push(...page.changes.map((change: { fileId: string; removed?: boolean; file?: DriveFile & { trashed?: boolean } }): SyncChange => ({
+        id: change.fileId,
+        removed: change.removed || change.file?.trashed,
+        dataset: change.file?.appProperties?.dataset,
+        kind: change.file?.appProperties?.kind,
+      })));
       if (!page.nextPageToken) return { token: page.newStartPageToken, changes };
       pageToken = page.nextPageToken;
     }

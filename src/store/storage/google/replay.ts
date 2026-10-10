@@ -1,7 +1,13 @@
 import { applyChanges, SyncConflictError, type Records, type Change } from './records';
-import { digest } from './crypto';
+import { digest, encode } from './crypto';
 
 export interface Commit { version: 1; parents: string[]; changes: Change[]; resolutions?: Record<string, (string | null)[]> }
+
+export async function hashCommits(commits: Record<string, Commit>): Promise<Record<string, string>> {
+  const hashes: Record<string, string> = {};
+  for (const [id, commit] of Object.entries(commits)) hashes[id] = await digest(encode(commit));
+  return hashes;
+}
 
 export async function replayHistory({ commits, tips }: { commits: Record<string, Commit>; tips: string[] }) {
   // Replay retained history unchanged; run this CPU work in the sync worker.
@@ -16,8 +22,17 @@ export async function replayHistory({ commits, tips }: { commits: Record<string,
   };
   tips.forEach(visit);
   const remaining = new Set([...reachable].sort());
-  const latest = (versions: { id: string; value: string | null }[]) =>
-    versions.filter((v) => !versions.some((other) => ancestors.get(other.id)?.has(v.id)));
+  const latest = (versions: { id: string; value: string | null }[]) => {
+    const excluded = new Set<string>();
+    const result: typeof versions = [];
+    for (let index = versions.length - 1; index >= 0; index--) {
+      const version = versions[index];
+      if (excluded.has(version.id)) continue;
+      result.push(version);
+      for (const ancestor of ancestors.get(version.id)!) excluded.add(ancestor);
+    }
+    return result.reverse();
+  };
   const valueOf = (versions: { value: string | null }[]) => {
     const values = new Set(versions.map((v) => v.value));
     if (values.size > 1) throw new SyncConflictError([]);

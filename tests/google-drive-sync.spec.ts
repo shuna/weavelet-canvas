@@ -10,7 +10,9 @@ test.use({
 });
 
 test('encrypted Drive creation, incremental autosave and unlock after browser reload', async ({ page }, testInfo) => {
-  test.setTimeout(90_000);
+  const apiLatencyMs = Number(process.env.SYNC_TEST_API_LATENCY ?? 0);
+  test.setTimeout(90_000 + apiLatencyMs * 100);
+  const requests: Record<string, number> = {};
   const files = new Map<string, { metadata: any; bytes: Buffer }>();
   files.set('legacy-file', { metadata: { id: 'legacy-file', name: 'legacy.json', mimeType: 'application/json', size: '2048' }, bytes: Buffer.from('{}') });
   const changes: { fileId: string; file: any }[] = [];
@@ -28,6 +30,9 @@ test('encrypted Drive creation, incremental autosave and unlock after browser re
   await page.route('https://{www,content}.googleapis.com/**', async (route) => {
     const request = route.request();
     const url = new URL(request.url());
+    const label = `${request.method()} ${url.pathname}`;
+    requests[label] = (requests[label] ?? 0) + 1;
+    if (apiLatencyMs) await new Promise(resolve => setTimeout(resolve, apiLatencyMs));
     if (url.pathname.endsWith('/generateIds')) return route.fulfill({ json: { ids: Array.from({ length: Number(url.searchParams.get('count') ?? 1) }, () => `file-${++next}`) } });
     if (url.pathname.endsWith('/startPageToken')) return route.fulfill({ json: { startPageToken: String(changes.length) } });
     if (url.pathname.endsWith('/changes')) return route.fulfill({ json: {
@@ -173,6 +178,14 @@ test('encrypted Drive creation, incremental autosave and unlock after browser re
   await expect(page.getByRole('button', { name: 'ロック解除して同期を再開', exact: true })).toHaveCount(0);
   await expect(page.getByRole('button', { name: '自動同期（有効）', exact: true })).toHaveCount(0);
   await expect(progress).toHaveCount(0);
+  const completion = await page.evaluate(async () => {
+    const { useGoogleSyncDiagnostics } = await import('/src/store/storage/google/diagnostics.ts');
+    const { active, result, elapsedMs } = useGoogleSyncDiagnostics.getState();
+    return { active, result, elapsedMs };
+  });
+  expect(completion.active).toBe(false);
+  expect(completion.result).toBe('completed');
+  await testInfo.attach('sync-completion.json', { body: JSON.stringify({ apiLatencyMs, requests, completion }), contentType: 'application/json' });
   await expect.poll(() => uploads.filter(u => u.metadata.appProperties.kind === 'commit').length).toBe(2);
   expect(await page.evaluate(async () => (await import('/src/store/store.ts')).default.getState().chats![0].title)).toBe('EDIT DURING INITIAL');
   const total = uploads.reduce((sum, upload) => sum + upload.bytes.length, 0);
@@ -563,14 +576,14 @@ test('history compaction restores from Drive packs using real Workers and Indexe
         const metadata = { id, mimeType: SYNC_FOLDER_TYPE, appProperties: { weaveletSync: '1', headerId } };
         files.set(id, { bytes: new Uint8Array(), metadata }); return metadata;
       },
-      async metadata(id: string) { return files.get(id)!.metadata; },
+      async keyHeader(id: string) { return files.get(id)!.metadata.appProperties.headerId; },
       async put(id: string, dataset: string, kind: string, bytes: Uint8Array) {
         const metadata = { id, appProperties: { dataset, kind } };
         files.set(id, { bytes: bytes.slice(), metadata }); events.push({ fileId: id, file: metadata });
       },
       async read(id: string) { reads.push(id); if (!files.has(id)) throw new DriveNotFoundError('404'); return files.get(id)!.bytes.slice(); },
       async startToken() { return String(events.length); },
-      async changes(token: string) { return { token: String(events.length), changes: events.slice(Number(token)) }; },
+      async changes(token: string) { return { token: String(events.length), changes: events.slice(Number(token)).map(event => ({ id: event.fileId, removed: event.removed, dataset: event.file?.appProperties?.dataset, kind: event.file?.appProperties?.kind })) }; },
       async commits(dataset: string) { return list(dataset, 'commit'); },
       async packs(dataset: string) { return list(dataset, 'pack'); },
       async remove(id: string) { if (files.delete(id)) events.push({ fileId: id, removed: true }); },

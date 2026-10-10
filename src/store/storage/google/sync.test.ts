@@ -12,6 +12,10 @@ import { addContent, addContentDelta } from '@utils/contentStore';
 import type { ChatInterface } from '@type/chat';
 
 const PASSWORD = 'test-only long passphrase';
+const normalizeChange = (event: { fileId: string; file?: DriveFile; removed?: boolean }) => ({
+  id: event.fileId, removed: event.removed,
+  dataset: event.file?.appProperties?.dataset, kind: event.file?.appProperties?.kind,
+});
 class FakeDrive {
   next = 0;
   files = new Map<string, { bytes: Uint8Array; metadata: DriveFile }>();
@@ -29,7 +33,7 @@ class FakeDrive {
     this.files.set(id, { bytes: new Uint8Array(), metadata });
     return metadata;
   }
-  async metadata(id: string) { return this.files.get(id)!.metadata; }
+  async keyHeader(id: string) { return this.files.get(id)!.metadata.appProperties!.headerId; }
   async put(id: string, dataset: string, kind: string, bytes: Uint8Array) {
     this.attempts.push(id);
     if (this.failKind === kind) throw new Error('network interrupted');
@@ -53,7 +57,7 @@ class FakeDrive {
   async remove(id: string) {
     if (this.files.delete(id)) this.events.push({ fileId: id, removed: true });
   }
-  async changes(token: string) { return { token: String(this.events.length), changes: this.events.slice(Number(token)) }; }
+  async changes(token: string) { return { token: String(this.events.length), changes: this.events.slice(Number(token)).map(normalizeChange) }; }
   transport() { return this as unknown as DriveTransport; }
 }
 const snapshot = (image = false): Snapshot => {
@@ -297,15 +301,19 @@ it('counts all required commit and part files before reporting download progress
   const secondPart = new Promise<void>(resolve => { reached = resolve; });
   let partReads = 0;
   drive.read = async id => {
-    if (parts.includes(id) && ++partReads === 2) { reached(); await held; }
+    if (parts.includes(id)) {
+      if (++partReads === 2) reached();
+      await held;
+    }
     return read(id);
   };
   const pulling = withSyncProgress(() => receiver.pull());
-  await secondPart;
-  expect(useGoogleSyncProgress.getState()).toMatchObject({
-    active: true, phase: 'downloading', totalFiles: parts.length + 1, completedFiles: 2,
-  });
-  release();
+  try {
+    await secondPart;
+    expect(useGoogleSyncProgress.getState()).toMatchObject({
+      active: true, phase: 'downloading', totalFiles: parts.length + 1, completedFiles: 1,
+    });
+  } finally { release(); }
   await pulling;
   expect(drive.reads.filter(id => id === drive.writes.find(w => w.kind === 'commit')!.id)).toHaveLength(1);
 });
@@ -332,7 +340,7 @@ it.each([false, true])('detects genuinely concurrent publications (same field: %
   // Simulate B publishing before it can observe A's commit.
   const changes = drive.changes.bind(drive);
   drive.changes = async (token) => ({ token: String(drive.events.length), changes:
-    drive.events.slice(Number(token)).filter((e) => drive.events.indexOf(e) < initialEvents || drive.events.indexOf(e) >= afterA) });
+    drive.events.slice(Number(token)).filter((e) => drive.events.indexOf(e) < initialEvents || drive.events.indexOf(e) >= afterA).map(normalizeChange) });
   const changeB = structuredClone(original);
   if (conflict) changeB.state.chats![0].title = 'B';
   else changeB.state.theme = 'light';
@@ -582,6 +590,24 @@ async function appendHistory(drive: FakeDrive, file: DriveFile, state: Snapshot,
   }
   return parent;
 }
+async function appendTheme(drive: FakeDrive, file: DriveFile, state: Snapshot, parent: string, theme: NonNullable<Snapshot['state']['theme']>) {
+  const key = (await cacheStorage.rememberedSyncKey(file.id))!;
+  const id = await drive.id();
+  const before = await digest(JSON.stringify(state.state.theme));
+  state.state.theme = theme;
+  const commit = { version: 2, parents: [parent], changes: [{ key: '["state","theme"]', before, after: JSON.stringify(theme) }] };
+  await drive.put(id, file.id, 'commit', await encrypt(key, encode(commit), `${file.id}:${id}`));
+}
+async function appendPackedTitle(drive: FakeDrive, file: DriveFile, parent: string, title: string) {
+  const key = (await cacheStorage.rememberedSyncKey(file.id))!;
+  const commitId = await drive.id(), part = await drive.id(), pack = await drive.id();
+  const commit = { version: 1, parents: [parent], changes: [{ key: '["chats","chat-a","title"]',
+    before: await digest(JSON.stringify(`revision-${parent}`)), after: JSON.stringify(title) }] };
+  const payload = encode({ version: 1, commits: { [commitId]: commit } });
+  await drive.put(part, file.id, 'pack-part', await encrypt(key, payload, `${file.id}:${part}`));
+  const manifest = { version: 1, commits: { [commitId]: await digest(encode(commit)) }, parts: [part], bytes: payload.length };
+  await drive.put(pack, file.id, 'pack', await encrypt(key, encode(manifest), `${file.id}:${pack}`));
+}
 async function retainedHistory(count = 128) {
   const drive = new FakeDrive();
   const { session, file } = await EncryptedDriveSync.create(drive.transport(), PASSWORD);
@@ -666,6 +692,46 @@ it('never deletes sources when pack readback authentication fails', async () => 
   damage = false;
   expect(await toRecords(await session.pull())).toEqual(await toRecords(state));
   expect(await drive.commits(file.id)).toHaveLength(0);
+}, 30_000);
+
+it('rejects an externally listed conflicting pack before compaction deletes sources', async () => {
+  const { drive, session, file, state, last } = await retainedHistory();
+  const local = structuredClone(state);
+  local.state.chats![0].title = 'local packed edit';
+  const read = drive.read.bind(drive);
+  let injected = false, deleted = 0;
+  drive.read = async id => {
+    const bytes = await read(id);
+    if (!injected && drive.files.get(id)?.metadata.appProperties?.kind === 'pack') {
+      injected = true;
+      await appendPackedTitle(drive, file, last, 'external packed edit');
+    }
+    return bytes;
+  };
+  const remove = drive.remove.bind(drive);
+  drive.remove = async id => { deleted++; await remove(id); };
+  await expect(session.synchronize(local, true)).rejects.toThrow('conflict');
+  expect(injected).toBe(true);
+  expect(deleted).toBe(0);
+}, 30_000);
+
+it.each([false, true])('rechecks history after compaction cleanup sees an external %s-field publication', async conflict => {
+  const { drive, session, file, state, last } = await retainedHistory();
+  const local = structuredClone(state);
+  if (conflict) local.state.chats![0].title = 'local cleanup edit';
+  const remove = drive.remove.bind(drive);
+  let injected = false;
+  drive.remove = async id => {
+    if (!injected) {
+      injected = true;
+      if (conflict) await appendHistory(drive, file, state, last, 1);
+      else await appendTheme(drive, file, state, last, 'light');
+    }
+    await remove(id);
+  };
+  if (conflict) await expect(session.synchronize(local, true)).rejects.toThrow('conflict');
+  else expect((await session.synchronize(local, true)).state.theme).toBe('light');
+  expect(injected).toBe(true);
 }, 30_000);
 
 it('merges small packs again and lets an offline reader recover through the replacement index', async () => {

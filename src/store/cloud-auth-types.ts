@@ -1,9 +1,9 @@
 import type { SyncStatus } from '@type/google-api';
 
-export type CloudSyncProvider = 'google' | 'cloudkit';
+export type CloudSyncProvider = 'google' | 'cloudkit' | 'filesystem';
 
 export const DEFAULT_CLOUD_SYNC_PROVIDER: CloudSyncProvider = 'google';
-export const CLOUD_AUTH_STORAGE_VERSION = 3;
+export const CLOUD_AUTH_STORAGE_VERSION = 4;
 
 export interface CloudProviderSyncState {
   sessionToken?: string;
@@ -19,6 +19,7 @@ export interface CloudProviderSyncState {
 export interface CloudProviderSyncStateMap {
   google: CloudProviderSyncState;
   cloudkit: CloudProviderSyncState;
+  filesystem: CloudProviderSyncState;
 }
 
 export interface CloudAuthPersistedState {
@@ -37,7 +38,7 @@ export interface CloudAuthPersistedState {
 const DEFAULT_SYNC_STATE: SyncStatus = 'unauthenticated';
 
 export const isCloudSyncProvider = (value: unknown): value is CloudSyncProvider =>
-  value === 'google' || value === 'cloudkit';
+  value === 'google' || value === 'cloudkit' || value === 'filesystem';
 
 export const isSyncStatus = (value: unknown): value is SyncStatus =>
   value === 'unauthenticated' || value === 'syncing' || value === 'synced' || value === 'locked' || value === 'error';
@@ -56,11 +57,12 @@ export const createCloudProviderSyncState = (
 });
 
 export const createCloudAuthPersistedState = (
-  partial?: Partial<CloudAuthPersistedState>
+  partial?: Omit<Partial<CloudAuthPersistedState>, 'providers'> & { providers?: Partial<CloudProviderSyncStateMap> }
 ): CloudAuthPersistedState => {
   const providers: CloudProviderSyncStateMap = {
     google: createCloudProviderSyncState(partial?.providers?.google),
     cloudkit: createCloudProviderSyncState(partial?.providers?.cloudkit),
+    filesystem: createCloudProviderSyncState(partial?.providers?.filesystem),
   };
   const partialProvider = partial?.provider;
   const provider = isCloudSyncProvider(partialProvider)
@@ -239,7 +241,7 @@ export const migrateCloudAuthPersistedState = (
   const providers = state.providers;
 
   if (
-    version >= CLOUD_AUTH_STORAGE_VERSION &&
+    version >= 3 &&
     providers &&
     typeof providers === 'object'
   ) {
@@ -279,6 +281,7 @@ export const migrateCloudAuthPersistedState = (
     providers: {
       google: googleProviderState,
       cloudkit: createCloudProviderSyncState(),
+      filesystem: createCloudProviderSyncState(),
     },
   });
 };
