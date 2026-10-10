@@ -267,6 +267,37 @@
       "user": "ユーザー",
       "assistant": "アシスタント",
       "system": "システム"
-    }
+    },
+    "verificationHelp": "これはアプリの設定ではなく、OpenRouterの生成結果の使用量・料金を確認する処理の状態です。",
+    "settingLocation": "設定の場所",
+    "valueComparison": "競合する値の比較",
+    "storedValue": "保存値"
+  },
+  "settingsFields": {
+    "pendingVerifications": "OpenRouter使用量の確認待ち",
+    "verifiedStats": "OpenRouter確認済み使用量",
+    "nextAttemptAt": "次回確認日時",
+    "attemptCount": "確認試行回数",
+    "status": "確認状態",
+    "requestedAt": "確認要求日時",
+    "lastAttemptAt": "最終確認日時",
+    "lastError": "最終エラー",
+    "fetchedAt": "取得日時",
+    "generationId": "生成ID",
+    "chatId": "会話ID",
+    "targetNodeId": "バブルID",
+    "theme": "テーマ",
+    "language": "言語",
+    "providers": "AIプロバイダー",
+    "evaluationSettings": "評価設定"
+  },
+  "settingsValues": {
+    "noAutoRetry": "自動再試行なし（手動で再試行）",
+    "pending": "確認待ち",
+    "fetching": "確認中",
+    "failed": "確認失敗",
+    "enabled": "有効",
+    "disabled": "無効",
+    "unset": "未設定"
   }
 }

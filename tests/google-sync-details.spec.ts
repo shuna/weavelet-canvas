@@ -198,21 +198,19 @@ test('reads conflict context on either side without editing or synchronizing', a
     await targets.getByRole('button', { name: /詳細検証会話/ }).click();
     const contents = page.getByRole('region', { name: '会話・競合項目の内容', exact: true });
     await expect(contents.getByText('端末の本文', { exact: true })).toBeVisible();
-    await expect(contents.getByText('前の発言', { exact: true })).toBeVisible();
+    await expect(contents.getByText('前の発言', { exact: true }).first()).toBeVisible();
     await expect(contents.getByText('端末の後の発言 A', { exact: true })).toBeVisible();
-    await expect(page.getByText('このブランチの2番目のバブルが競合しています。')).toBeVisible();
+    await expect(page.getByText('このブランチの2番目のバブルが競合しています。').first()).toBeVisible();
     await expect(page.getByRole('button', { name: '選択した方法で同期', exact: true })).toBeHidden();
     await expect(contents.locator('textarea, input, [contenteditable="true"]')).toHaveCount(0);
-    await page.getByRole('button', { name: 'クラウド', exact: true }).click();
     await expect(contents.getByText('クラウドの本文', { exact: true })).toBeVisible();
-    await page.getByLabel('ブランチ', { exact: true }).selectOption('right');
+    await page.getByLabel('クラウド ブランチ', { exact: true }).selectOption('right');
     await expect(contents.getByText('クラウドの後の発言 B', { exact: true })).toBeVisible();
     await page.getByLabel('クラウドの版', { exact: true }).selectOption('two');
     await expect(page.getByText('この側には該当バブルがありません。残っているブランチの内容を表示します。')).toBeVisible();
-    await expect(contents.getByText('該当バブル', { exact: true })).toHaveCount(0);
+    await expect(contents.getByRole('cell').nth(1).getByText('該当バブル', { exact: true })).toHaveCount(0);
     await page.getByLabel('クラウドの版', { exact: true }).selectOption('three');
     await expect(contents.getByText('この側には該当する会話がありません。')).toBeVisible();
-    await page.getByRole('button', { name: 'この端末', exact: true }).click();
     await expect(contents.getByText('端末の本文', { exact: true })).toBeVisible();
     const back = page.getByRole('button', { name: '競合一覧に戻る', exact: true });
     await expect(back).toBeInViewport();
@@ -239,4 +237,36 @@ test('reads conflict context on either side without editing or synchronizing', a
   })).toBe(original);
   expect(await page.evaluate(async () => (await import('/src/store/cloud-auth-store.ts')).default.getState().syncStatus)).toBe('synced');
   expect(await page.evaluate(() => localStorage.getItem('weavelet-sync-review'))).not.toContain('クラウドの本文');
+  await page.evaluate(async () => {
+    const store = (await import('/src/store/store.ts')).default;
+    const review = (await import('/src/store/storage/google/conflicts.ts')).useSyncReview;
+    const entry = { generationId: 'test-generation', chatId: 'chat', targetNodeId: 'target', requestedAt: 1, nextAttemptAt: Number.MAX_SAFE_INTEGER, attemptCount: 1, status: 'failed' as const };
+    store.setState({ pendingVerifications: { 'chat:::target': entry } });
+    const cloud = structuredClone(review.getState().cloudReview!);
+    cloud.snapshot.state.pendingVerifications = { 'chat:::target': { ...entry, status: 'pending' } };
+    review.setState({ cloudReview: cloud, conflictKeys: [JSON.stringify(['state', 'pendingVerifications', 'chat:::target', 'status'])] });
+  });
+  await page.getByRole('button', { name: /OpenRouter.*確認状態 詳細/ }).click();
+  await expect(page.getByText('これはアプリの設定ではなく、', { exact: false })).toBeVisible();
+  const comparison = page.getByRole('table', { name: '競合する値の比較' });
+  await expect(comparison.getByRole('cell').nth(0)).toContainText('確認失敗');
+  await expect(comparison.getByRole('cell').nth(1)).toContainText('確認待ち');
+  await expect(comparison).toContainText('保存値：failed');
+  await expect(page.getByRole('group', { name: '閲覧する内容' })).toHaveCount(0);
+
+  await page.getByRole('button', { name: '競合一覧に戻る', exact: true }).click();
+  await page.evaluate(async () => {
+    const store = (await import('/src/store/store.ts')).default;
+    const review = (await import('/src/store/storage/google/conflicts.ts')).useSyncReview;
+    store.setState({ folders: { folder: { id: 'folder', name: '端末フォルダ', expanded: true, order: 0 } } });
+    const cloud = structuredClone(review.getState().cloudReview!);
+    cloud.snapshot.state.folders = { folder: { id: 'folder', name: 'クラウドフォルダ', expanded: true, order: 0 } };
+    review.setState({ cloudReview: cloud, conflictKeys: [JSON.stringify(['state', 'folders', 'folder', 'name'])] });
+  });
+  await page.getByRole('button', { name: /端末フォルダ.*詳細/ }).click();
+  const folders = page.getByRole('table', { name: '競合する値の比較' });
+  await expect(folders.getByRole('cell').nth(0)).toContainText('端末フォルダ');
+  await expect(folders.getByRole('cell').nth(1)).toContainText('クラウドフォルダ');
+  await expect(page.getByRole('group', { name: '閲覧する内容' })).toHaveCount(0);
+
 });

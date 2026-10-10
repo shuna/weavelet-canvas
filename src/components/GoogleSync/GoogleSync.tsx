@@ -855,8 +855,8 @@ const GooglePopup = ({
                 const kind = path[0] === 'chats' ? 'chat' : path[1] === 'folders' ? 'folder' : ['content', 'assets'].includes(path[0]) ? 'content' : 'settings';
                 return <li key={key} className='break-words'>
                   <button type='button' disabled={isBusy} onClick={() => setDetail({ key, snapshot: structuredClone(snapshot()) })} className='flex w-full items-center justify-between gap-3 rounded p-1 text-left hover:bg-gray-200/60 focus-visible:ring-2 focus-visible:ring-blue-500 dark:hover:bg-gray-600/60'>
-                  <span className='min-w-0'><span className='font-medium'>{chat?.title ?? folder?.name ?? t(`conflict.${kind}`)}</span>
-                  <span className='mt-0.5 block text-gray-500 dark:text-gray-400'>{preview || t(`conflict.fields.${path[path.length - 1]}`, { defaultValue: t('conflict.otherField') })}</span>
+                  <span className='min-w-0'><span className='font-medium'>{chat?.title ?? folder?.name ?? (kind === 'settings' ? t(`settingsFields.${path[1]}`, { defaultValue: path[1] ?? t('conflict.settings') }) : t(`conflict.${kind}`))}</span>
+                  <span className='mt-0.5 block text-gray-500 dark:text-gray-400'>{preview || (kind === 'settings' ? path.slice(2).map((field, index) => <span key={index} className='block pl-2'>{t(`settingsFields.${field}`, { defaultValue: field })}</span>) : t(`conflict.fields.${path[path.length - 1]}`, { defaultValue: t('conflict.otherField') }))}</span>
                   </span><span className='shrink-0 text-blue-600 dark:text-blue-400'>{t('details.open')}</span>
                   </button>
                 </li>;

@@ -53,3 +53,19 @@ export function getBranchMessages(snapshot: Snapshot, key: string, branchId?: st
       content: resolveContent(snapshot.state.contentStore ?? {}, node.contentHash) };
   });
 }
+
+// Keep the full path visible for settings that do not yet have a translated label.
+export function describeSettingPath(path: string[], label: (field: string) => string) {
+  return path.slice(1).map(label).join(' › ');
+}
+
+export function formatSettingValue(path: string[], value: unknown, label: (key: string) => string, locale: string) {
+  const field = path.at(-1);
+  const verification = ['pendingVerifications', 'verifiedStats'].includes(path[1]);
+  if (verification && field === 'nextAttemptAt' && value === Number.MAX_SAFE_INTEGER) return label('noAutoRetry');
+  if (verification && field === 'status' && ['pending', 'fetching', 'failed'].includes(String(value))) return label(String(value));
+  if (verification && ['requestedAt', 'nextAttemptAt', 'lastAttemptAt', 'fetchedAt'].includes(field ?? '') && typeof value === 'number' && Number.isFinite(new Date(value).getTime())) return new Date(value).toLocaleString(locale);
+  if (typeof value === 'boolean') return label(value ? 'enabled' : 'disabled');
+  if (value === null) return label('unset');
+  return typeof value === 'string' ? value : JSON.stringify(value, null, 2);
+}
