@@ -83,7 +83,8 @@
     "failed": "Sync did not complete. Local data remains saved.",
     "disconnectBeforeDelete": "Disconnect before deleting the current sync target.",
     "folderNameHelp": "Choose or enter a name. An existing sync folder with the same name adds a number when creating the new folder; it is not overwritten.",
-    "folderNameAdjusted": "Name to create: {{name}}"
+    "folderNameAdjusted": "Name to create: {{name}}",
+    "about": "About encryption"
   },
   "guidance": {
     "retry": "Press “Retry sync”.",
@@ -126,8 +127,34 @@
   "conflict": {
     "description": "Conflicting messages become branches within the chat; matching branches are combined. Conflicting chat metadata or folders are kept as separate copies. Conflicting settings use this device’s values.",
     "merge": "Merge (keep both)",
-    "local": "Use this device’s contents",
-    "cloud": "Use cloud contents"
+    "local": "Overwrite cloud with this device’s contents",
+    "cloud": "Overwrite this device with cloud contents",
+    "title": "Sync contents conflict",
+    "targets": "Conflicting items ({{count}})",
+    "unknownTargets": "Item details are unavailable. Both copies are preserved.",
+    "guidance": "Review the items and choose how to resolve them.",
+    "device": "This device",
+    "chat": "Chat",
+    "folder": "Folder",
+    "settings": "Settings / sync data",
+    "localDescription": "Replace cloud chats and settings with this device’s data. Cloud-only changes are not included in the resulting data.",
+    "cloudDescription": "Replace this device’s chats and settings with cloud data. Device-only changes are not included in the resulting data.",
+    "content": "Messages / attachments",
+    "otherField": "Content / structure changes",
+    "fields": {
+      "title": "Title",
+      "folder": "Folder assignment",
+      "name": "Name",
+      "contentHash": "Message body",
+      "role": "Message role",
+      "parentId": "Branch connection",
+      "activePath": "Selected branch",
+      "order": "Order"
+    },
+    "targetsUnknown": "Conflicting items",
+    "resolutionTitle": "Choose a resolution",
+    "contentsTitle": "Conflicting content",
+    "apply": "Sync with the selected method"
   },
   "review": {
     "allDone": "Mark all chats as reviewed",
@@ -195,5 +222,52 @@
     "referenceFiles": "Estimated minimum bodies",
     "excessFiles": "Files above estimate",
     "cleanupTargets": "Source files to check for deletion"
+  },
+  "detailsTitle": "Data sync details",
+  "syncDestination": "Sync destination: Google Drive",
+  "overview": {
+    "review": "Review sync data",
+    "title": "Overview",
+    "cloud": "Cloud",
+    "chats": "Conversations",
+    "messages": "Messages",
+    "bytes": "Sync data size",
+    "help": "Messages count every bubble across all branches once. Sync data size uses the same sync format for conversations, settings and images, before compression and encryption. Sync history and Drive storage usage are excluded.",
+    "scope": "Overwrite applies to the entire synced dataset, not only the conflicting items.",
+    "multipleVersions": "The cloud has {{count}} versions. This overview combines them using the same method as overwriting this device from the cloud.",
+    "mergedVersions": "Overview of {{count}} combined cloud versions",
+    "loading": "Loading overview…",
+    "failed": "Could not load the overview.",
+    "retry": "Retry"
+  },
+  "details": {
+    "title": "Conflict details",
+    "open": "Details",
+    "back": "Back to conflict list",
+    "side": "Content to view",
+    "branch": "Branch",
+    "branchNumber": "Branch {{number}}",
+    "messageCount": "{{count}} messages",
+    "bubblePosition": "Bubble {{number}} in this branch is conflicting.",
+    "messagePosition": "Message {{number}}",
+    "target": "Conflicting bubble",
+    "wholeChat": "This conflict concerns the conversation. Choose a branch to review its content.",
+    "legacy": "Conversation without branches",
+    "bubbleMissing": "This side does not contain the conflicting bubble. Showing the remaining branches.",
+    "chatMissing": "This conversation is absent on this side.",
+    "itemMissing": "This item is absent on this side.",
+    "cloudVersion": "Cloud version",
+    "combined": "Combined result (same as overview)",
+    "version": "Version {{number}}",
+    "contents": "Conversation and conflicting item content",
+    "failed": "Could not load the cloud content.",
+    "empty": "Content is empty or unavailable.",
+    "image": "Attached image",
+    "readOnly": "Read only. Return to the list to choose a resolution and synchronize.",
+    "roles": {
+      "user": "User",
+      "assistant": "Assistant",
+      "system": "System"
+    }
   }
 }

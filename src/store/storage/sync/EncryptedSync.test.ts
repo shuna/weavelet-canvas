@@ -141,6 +141,14 @@ it('downloads without publishing a persisted outbox and discards it only after a
   await reader.restoreKey();
   transport.put = write;
   const count = transport.writes.length;
+  const overview = await reader.overview();
+  expect(overview).toMatchObject({ chats: 0, messages: 0, versions: 1 });
+  expect(overview.bytes).toBeGreaterThan(0);
+  expect(transport.writes).toHaveLength(count);
+  const review = await reader.inspect();
+  expect(review.snapshot.state.theme).toBe('dark');
+  expect(review.versions).toEqual([]);
+  expect(transport.writes).toHaveLength(count);
   const received = await reader.pull(false);
   expect(received.state.theme).toBe('dark');
   expect(transport.writes).toHaveLength(count);

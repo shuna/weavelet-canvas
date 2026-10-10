@@ -5,8 +5,10 @@ import { notifyStorageError, setLocalStorageItem } from './storage/storageErrors
 import { addContent } from '@utils/contentStore';
 import { materializeActivePath } from '@utils/branchUtils';
 import { isBubbleSummary, isSummaryEligible } from '@utils/bubbleSummary';
+import { recordChatEdits } from './chat-edit-time';
 
 export interface ChatSlice {
+  lastContentEditedAt?: number;
   messages: MessageInterface[];
   chats?: ChatInterface[];
   collapsedNodeMaps: Record<string, Record<string, boolean>>;
@@ -92,7 +94,20 @@ const hasSameChatOrder = (
   return prevChats.every((chat, index) => chat.id === nextChats[index]?.id);
 };
 
-export const createChatSlice: StoreSlice<ChatSlice> = (set, get) => {
+export const createChatSlice: StoreSlice<ChatSlice> = (setState, get) => {
+  const set: typeof setState = (partial, replace) => setState(previous => {
+    const patch = typeof partial === 'function' ? partial(previous) : partial;
+    const now = Date.now();
+    const edits = patch.chats && patch.chats !== previous.chats ? recordChatEdits(previous.chats, patch.chats, now) : undefined;
+    const folderContents = (folders: FolderCollection) => Object.entries(folders).map(([id, folder]) => [id, folder.name, folder.order]);
+    const foldersEdited = patch.folders && patch.folders !== previous.folders &&
+      JSON.stringify(folderContents(patch.folders)) !== JSON.stringify(folderContents(previous.folders));
+    return {
+      ...patch,
+      ...(edits ? { chats: edits.chats } : {}),
+      ...(edits?.changed || foldersEdited ? { lastContentEditedAt: now } : {}),
+    };
+  }, replace);
   return {
     messages: [],
     collapsedNodeMaps: {},

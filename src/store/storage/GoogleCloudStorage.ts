@@ -40,7 +40,7 @@ export async function pauseGoogleSync() {
 export const isGoogleSyncUnlocked = (id?: string) => !!session && session.dataset === id;
 export function lockGoogleSync() {
   keyGeneration++;
-  useSyncReview.setState({ conflict: false });
+  useSyncReview.setState({ conflict: false, cloudOverview: null, cloudReview: null });
   suspended = true;
   lastQueuedState = undefined;
   session?.close(); session = undefined; pending = undefined;
@@ -139,6 +139,20 @@ export async function pullEncryptedGoogleSync(): Promise<Snapshot> {
   if (!session) throw new Error('Unlock Google sync first.');
   return session.pull();
 }
+export async function getGoogleSyncCloudOverview() {
+  const target = session;
+  if (!target) throw new Error('Unlock Google sync first.');
+  const overview = await target.overview();
+  if (target !== session) throw new Error('Google sync target changed.');
+  return overview;
+}
+export async function getGoogleSyncCloudReview() {
+  const target = session;
+  if (!target) throw new Error('Unlock Google sync first.');
+  const review = await target.inspect();
+  if (target !== session) throw new Error('Google sync target changed.');
+  return review;
+}
 export async function acceptGoogleSyncLocal(snapshot: Snapshot) {
   if (!session) throw new Error('Unlock Google sync first.');
   await session.acceptLocal(snapshot);
@@ -185,9 +199,9 @@ const schedule = () => {
 const reportFailure = (error: unknown) => {
   const auth = useCloudAuthStore.getState();
   if (auth.provider !== 'google' || !auth.cloudSync) return;
-  if (error instanceof SyncConflictError) useSyncReview.setState({ conflict: true });
+  if (error instanceof SyncConflictError) useSyncReview.setState({ conflict: true, conflictKeys: error.keys, cloudOverview: null, cloudReview: null });
   auth.setSyncStatus(isGoogleAuthError(error) ? 'unauthenticated' : 'error');
-  showToast(error instanceof Error ? error.message : String(error), 'error');
+  if (!(error instanceof SyncConflictError)) showToast(error instanceof Error ? error.message : String(error), 'error');
 };
 function flushAndReport() {
   const target = session;

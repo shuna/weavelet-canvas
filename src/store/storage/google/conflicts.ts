@@ -2,11 +2,15 @@ import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import type { Snapshot } from './records';
 import { toRecordsAsync as toRecords } from './processing';
+import type { CloudSyncOverview, CloudSyncReview } from './overview';
 export { SyncConflictError } from './records';
 
 export type Resolution = 'merge' | 'local' | 'cloud';
 export const useSyncReview = create(persist(() => ({
   conflict: false,
+  conflictKeys: [] as string[],
+  cloudOverview: null as CloudSyncOverview | null,
+  cloudReview: null as CloudSyncReview | null,
   chats: [] as string[],
   folders: [] as string[],
   nodes: {} as Record<string, string[]>,

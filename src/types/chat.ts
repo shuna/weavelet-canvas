@@ -92,6 +92,7 @@ export interface MessageInterface {
 }
 
 export interface BranchNode {
+  updatedAt?: number;
   openRouterObservation?: OpenRouterObservation;
   id: string;
   parentId: string | null;
@@ -120,6 +121,7 @@ export interface BranchTree {
 }
 
 export interface ChatInterface {
+  updatedAt?: number;
   id: string;
   title: string;
   folder?: string;

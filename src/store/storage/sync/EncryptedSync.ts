@@ -1,3 +1,4 @@
+import { summarizeSyncSnapshot } from '../google/overview';
 import { reportSyncHistory, reportCompaction, recordPackAccess, useGoogleSyncDiagnostics } from '../google/diagnostics';
 import { SyncConflictError, type Resolution } from '../google/conflicts';
 import { mergeSyncRecords } from '../google/merge';
@@ -647,6 +648,48 @@ export class EncryptedSync {
     await this.synchronize(snapshot, replace);
   }
 
+  private async coherentCloudRecords(remote: Records): Promise<Records> {
+    let cloud = remote;
+    if (Object.keys(this.remoteConflicts).length) {
+      // Each head is a complete view. Merge coherent views rather than picking unrelated node fields.
+      const heads = this.heads();
+      const ancestors = (id: string, found = new Set<string>()): Set<string> => {
+        if (!found.has(id)) { found.add(id); this.cache.commits[id].parents.forEach(p => ancestors(p, found)); }
+        return found;
+      };
+      const sets = heads.map(id => ancestors(id));
+      const common = [...sets[0]].filter(id => sets.every(set => set.has(id)));
+      const base = common.length ? await hashRecords(await this.remote(false, common)) : {};
+      cloud = await this.remote(false, [heads[0]]);
+      for (const head of heads.slice(1)) cloud = await mergeSyncRecords(base, cloud, await this.remote(false, [head]));
+    }
+    return cloud;
+  }
+
+  async overview() {
+    return this.run(async () => {
+      // Inspect published history without sending the outbox or accepting a new baseline.
+      await this.refresh();
+      const remote = await this.remote(true);
+      const cloud = await this.coherentCloudRecords(remote);
+      const snapshot = await fromRecords(cloud);
+      return { ...await summarizeSyncSnapshot(snapshot), versions: this.heads().length };
+    });
+  }
+
+  async inspect() {
+    return this.run(async () => {
+      await this.refresh();
+      const remote = await this.remote(true);
+      const heads = this.heads();
+      const snapshot = await fromRecords(await this.coherentCloudRecords(remote));
+      const versions = heads.length > 1 ? await Promise.all(heads.map(async id => ({
+        id, snapshot: await fromRecords(await this.remote(false, [id])),
+      }))) : [];
+      return { snapshot, versions };
+    });
+  }
+
   async resolve(snapshot: Snapshot, mode: Resolution): Promise<Snapshot> {
     const local = await syncStage(0, 8, () => toRecords(snapshot));
     return this.run(async () => {
@@ -655,20 +698,7 @@ export class EncryptedSync {
       const remote = await syncStage(3, 8, () => this.remote(true));
       const { result, changes, resolutions } = await syncStage(4, 8, async () => {
         const resolutions = this.remoteConflicts;
-        let cloud = remote;
-        if (Object.keys(resolutions).length) {
-          // Each head is a complete view. Merge coherent views rather than picking unrelated node fields.
-          const heads = this.heads();
-          const ancestors = (id: string, found = new Set<string>()): Set<string> => {
-            if (!found.has(id)) { found.add(id); this.cache.commits[id].parents.forEach(p => ancestors(p, found)); }
-            return found;
-          };
-          const sets = heads.map(id => ancestors(id));
-          const common = [...sets[0]].filter(id => sets.every(set => set.has(id)));
-          const base = common.length ? await hashRecords(await this.remote(false, common)) : {};
-          cloud = await this.remote(false, [heads[0]]);
-          for (const head of heads.slice(1)) cloud = await mergeSyncRecords(base, cloud, await this.remote(false, [head]));
-        }
+        const cloud = await this.coherentCloudRecords(remote);
         const chosen = mode === 'local' ? local : mode === 'cloud' ? cloud
           : await mergeSyncRecords(this.cache.baseline ?? {}, local, cloud);
         const result = await fromRecords(chosen);

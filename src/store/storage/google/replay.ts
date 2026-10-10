@@ -1,3 +1,4 @@
+import { mergeEditTimes } from './editTimes';
 import { applyChanges, SyncConflictError, type Records, type Change } from './records';
 import { digest, encode } from './crypto';
 
@@ -33,7 +34,9 @@ export async function replayHistory({ commits, tips }: { commits: Record<string,
     }
     return result.reverse();
   };
-  const valueOf = (versions: { value: string | null }[]) => {
+  const valueOf = (versions: { value: string | null }[], key: string) => {
+    const time = mergeEditTimes(key, versions.map(version => version.value));
+    if (time !== undefined) return time;
     const values = new Set(versions.map((v) => v.value));
     if (values.size > 1) throw new SyncConflictError([]);
     return versions[0]?.value ?? null;
@@ -59,7 +62,7 @@ export async function replayHistory({ commits, tips }: { commits: Record<string,
             throw new Error('Invalid conflict resolution parents.');
           }
           parentValue = parents[0]?.value ?? null;
-        } else parentValue = valueOf(parents);
+        } else parentValue = valueOf(parents, change.key);
         await applyChanges(parentValue === null ? {} : { [change.key]: parentValue }, [change]);
         history.push({ id, value: change.after });
         histories.set(change.key, history);
@@ -73,8 +76,9 @@ export async function replayHistory({ commits, tips }: { commits: Record<string,
   for (const [key, history] of histories) {
     const versions = latest(history);
     const values = [...new Set(versions.map(v => v.value))];
-    if (values.length > 1) conflicts[key] = await Promise.all(values.map(v => v === null ? null : digest(v)));
-    const value = versions[0]?.value ?? null;
+    const time = mergeEditTimes(key, values);
+    if (values.length > 1 && time === undefined) conflicts[key] = await Promise.all(values.map(v => v === null ? null : digest(v)));
+    const value = time ?? versions[0]?.value ?? null;
     if (value !== null) records[key] = value;
   }
   return { records, conflicts };
