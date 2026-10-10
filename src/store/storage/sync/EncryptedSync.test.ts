@@ -10,6 +10,8 @@ class MemoryTransport implements SyncTransport {
   files = new Map<string, { dataset: string; kind: string; bytes: Uint8Array }>();
   events: SyncChange[] = [];
   writes: string[] = [];
+  historyCalls = 0;
+  failHistory = false;
   hidden = new Set<string>();
   async ids(count: number) { return Array.from({ length: count }, () => `memory-${++this.next}`); }
   async folder(id: string, headerId: string) { this.headers.set(id, headerId); return { id }; }
@@ -31,6 +33,10 @@ class MemoryTransport implements SyncTransport {
     this.writes.push(kind);
   }
   async startToken() { return String(this.events.length); }
+  async history(dataset: string) {
+    this.historyCalls++; if (this.failHistory) throw new Error('listing failed');
+    return { commits: this.list(dataset, 'commit'), packs: this.list(dataset, 'pack') };
+  }
   async commits(dataset: string) { return this.list(dataset, 'commit'); }
   async packs(dataset: string) { return this.list(dataset, 'pack'); }
   private list(dataset: string, kind: string) {
@@ -41,6 +47,53 @@ class MemoryTransport implements SyncTransport {
 }
 
 beforeEach(() => { globalThis.indexedDB = new IDBFactory(); });
+
+it('scans history once for a fresh reader and uses changes after the cursor is saved', async () => {
+  const transport = new MemoryTransport();
+  const password = 'test-only shared sync passphrase';
+  const { session, file } = await EncryptedSync.create(transport, password);
+  await session.push({ version: 18, state: { chats: [], contentStore: {}, theme: 'dark' } }, true);
+  globalThis.indexedDB = new IDBFactory();
+  transport.historyCalls = 0;
+  const reader = new EncryptedSync(file.id, transport);
+  await reader.unlock(password);
+  await reader.pull();
+  expect(transport.historyCalls).toBe(1);
+  await reader.pull();
+  expect(transport.historyCalls).toBe(1);
+});
+
+it('does not retain a provisional cursor when initial history listing fails', async () => {
+  const transport = new MemoryTransport(), password = 'test-only shared sync passphrase';
+  const { session, file } = await EncryptedSync.create(transport, password);
+  await session.push({ version: 18, state: { chats: [], contentStore: {}, theme: 'dark' } }, true);
+  globalThis.indexedDB = new IDBFactory(); transport.historyCalls = 0; transport.failHistory = true;
+  const reader = new EncryptedSync(file.id, transport); await reader.unlock(password);
+  await expect(reader.pull()).rejects.toThrow('listing failed');
+  transport.failHistory = false;
+  await reader.pull();
+  expect(transport.historyCalls).toBe(2);
+});
+
+it('accepts a commit published after the initial history listing through changes', async () => {
+  const transport = new MemoryTransport(), password = 'test-only shared sync passphrase';
+  const { session, file } = await EncryptedSync.create(transport, password);
+  const before: Snapshot = { version: 18, state: { chats: [], contentStore: {}, theme: 'dark' } };
+  await session.push(before, true);
+  const oldEvents = transport.events.length;
+  const after = structuredClone(before); after.state.theme = 'light';
+  await session.push(after);
+  const deferred = transport.events.splice(oldEvents);
+  transport.history = async dataset => {
+    const hidden = new Set(deferred.map(event => event.id));
+    const commits = [...transport.files].filter(([id, file]) => file.dataset === dataset && file.kind === 'commit' && !hidden.has(id)).map(([id]) => id);
+    transport.events.push(...deferred);
+    return { commits, packs: [] };
+  };
+  globalThis.indexedDB = new IDBFactory();
+  const reader = new EncryptedSync(file.id, transport); await reader.unlock(password);
+  expect((await reader.pull()).state.theme).toBe('light');
+});
 
 it('shares encrypted delta sync with a non-Drive transport and retries dependencies arriving later', async () => {
   const transport = new MemoryTransport();

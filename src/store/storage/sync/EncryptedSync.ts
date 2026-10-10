@@ -327,8 +327,8 @@ export class EncryptedSync {
       if (!this.persistedCommits.has(commit)) this.encodedCommits.set(commit, bytes);
     }
   }
-  private async discoverPacks(): Promise<void> {
-    const ids = await this.transport.packs(this.dataset);
+  private async discoverPacks(ids?: string[]): Promise<void> {
+    ids ??= await this.transport.packs(this.dataset);
     const packs = this.cache.packs ??= {};
     for (const id of Object.keys(packs)) if (!ids.includes(id)) delete packs[id];
     for (const id of ids) {
@@ -346,8 +346,9 @@ export class EncryptedSync {
       const ids = new Set<string>();
       if (!this.cache.token) {
         const token = await this.transport.startToken();
-        await this.discoverPacks();
-        for (const id of await this.transport.commits(this.dataset)) ids.add(id);
+        const history = await this.transport.history(this.dataset);
+        await this.discoverPacks(history.packs);
+        for (const id of history.commits) ids.add(id);
         this.cache.token = token;
       }
       const page = await this.transport.changes(this.cache.token!);

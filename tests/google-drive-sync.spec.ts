@@ -68,9 +68,9 @@ test('encrypted Drive creation, incremental autosave and unlock after browser re
         const children = [...files.values()].filter(({ metadata }) => metadata.parents?.includes(folderId));
         return route.fulfill({ json: { files: children.map(({ metadata, bytes }) => ({ id: metadata.id, size: String(bytes.length) })) } });
       }
-      const kind = url.searchParams.get('q')?.match(/key='kind' and value='([^']+)'/)?.[1];
-      const listed = [...files.values()].filter(({ metadata }) => kind
-        ? metadata.appProperties?.kind === kind
+      const kinds = [...(url.searchParams.get('q')?.matchAll(/key='kind' and value='([^']+)'/g) ?? [])].map(match => match[1]);
+      const listed = [...files.values()].filter(({ metadata }) => kinds.length
+        ? kinds.includes(metadata.appProperties?.kind ?? '')
         : metadata.appProperties?.weaveletSync === '1' || metadata.mimeType === 'application/json').map(({ metadata }) => metadata);
       return route.fulfill({ json: { files: listed, incompleteSearch: false } });
     }
@@ -583,6 +583,7 @@ test('history compaction restores from Drive packs using real Workers and Indexe
       },
       async read(id: string) { reads.push(id); if (!files.has(id)) throw new DriveNotFoundError('404'); return files.get(id)!.bytes.slice(); },
       async startToken() { return String(events.length); },
+      async history(dataset: string) { return { commits: list(dataset, 'commit'), packs: list(dataset, 'pack') }; },
       async changes(token: string) { return { token: String(events.length), changes: events.slice(Number(token)).map(event => ({ id: event.fileId, removed: event.removed, dataset: event.file?.appProperties?.dataset, kind: event.file?.appProperties?.kind })) }; },
       async commits(dataset: string) { return list(dataset, 'commit'); },
       async packs(dataset: string) { return list(dataset, 'pack'); },

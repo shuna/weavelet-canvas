@@ -1,8 +1,9 @@
 import { afterEach, expect, it, vi } from 'vitest';
 import { DriveTransport, nextSyncFolderName, DEFAULT_SYNC_FOLDER_NAME } from './transport';
+import useCloudAuthStore from '@store/cloud-auth-store';
 import { listDriveFiles, getDriveFolderSize } from '@api/google-api';
 const json = (data: unknown, status = 200) => new Response(JSON.stringify(data), { status });
-afterEach(() => vi.unstubAllGlobals());
+afterEach(() => { vi.unstubAllGlobals(); vi.restoreAllMocks(); vi.useRealTimers(); });
 
 it('lists every commit page and filters by the encrypted dataset', async () => {
   const fetch = vi.fn().mockResolvedValueOnce(json({ files: [{ id: 'a' }], nextPageToken: 'next' }))
@@ -11,6 +12,124 @@ it('lists every commit page and filters by the encrypted dataset', async () => {
   expect(await new DriveTransport(() => 'token').commits('dataset')).toEqual(['a', 'b']);
   expect(new URL(fetch.mock.calls[0][0]).searchParams.get('q')).toContain("'dataset' in parents");
   expect(new URL(fetch.mock.calls[1][0]).searchParams.get('pageToken')).toBe('next');
+});
+
+it('gets commits and pack indexes in one validated history scan', async () => {
+  const fetch = vi.fn().mockResolvedValueOnce(json({ files: [
+    { id: 'commit', appProperties: { kind: 'commit' } }, { id: 'pack', appProperties: { kind: 'pack' } },
+  ], nextPageToken: 'next' })).mockResolvedValueOnce(json({ files: [] }));
+  vi.stubGlobal('fetch', fetch);
+  expect(await new DriveTransport(() => 'token').history('dataset')).toEqual({ commits: ['commit'], packs: ['pack'] });
+  const first = new URL(fetch.mock.calls[0][0]);
+  expect(first.searchParams.get('q')).toContain("(appProperties has { key='kind' and value='commit' } or appProperties has { key='kind' and value='pack' })");
+  expect(first.searchParams.get('fields')).toBe('nextPageToken,incompleteSearch,files(id,appProperties(kind))');
+  expect(fetch).toHaveBeenCalledTimes(2);
+});
+
+it('rejects malformed or cyclic listing and change cursors', async () => {
+  const drive = new DriveTransport(() => 'token');
+  vi.stubGlobal('fetch', vi.fn().mockResolvedValue(json({ files: [], nextPageToken: '' })));
+  await expect(drive.history('dataset')).rejects.toThrow('listing token');
+  vi.stubGlobal('fetch', vi.fn().mockResolvedValue(json({ changes: [], nextPageToken: 'start' })));
+  await expect(drive.changes('start')).rejects.toThrow('change token');
+  vi.stubGlobal('fetch', vi.fn().mockResolvedValue(json({ files: [{ id: 'bad', appProperties: { kind: 'part' } }] })));
+  await expect(drive.history('dataset')).rejects.toThrow('history listing');
+  vi.stubGlobal('fetch', vi.fn().mockResolvedValueOnce(json({ files: [], nextPageToken: 'again' })).mockResolvedValueOnce(json({ files: [], nextPageToken: 'again' })));
+  await expect(drive.history('dataset')).rejects.toThrow('listing token');
+  vi.stubGlobal('fetch', vi.fn().mockResolvedValue(json({ changes: [] })));
+  await expect(drive.changes('start')).rejects.toThrow('change token');
+});
+
+it('retries a throttled response with backoff and preserves the response when its retry budget is exhausted', async () => {
+  vi.useFakeTimers();
+  vi.spyOn(Math, 'random').mockReturnValue(0);
+  const fetch = vi.fn().mockResolvedValueOnce(new Response('', { status: 429, headers: { 'Retry-After': '1' } }))
+    .mockResolvedValueOnce(json({ startPageToken: 'done' }));
+  vi.stubGlobal('fetch', fetch);
+  const pending = new DriveTransport(() => 'token').startToken();
+  await vi.advanceTimersByTimeAsync(1_000);
+  await expect(pending).resolves.toBe('done');
+  expect(fetch).toHaveBeenCalledTimes(2);
+  vi.useRealTimers();
+});
+
+it('uses at most three retries, respects Retry-After lower bounds, and skips waits beyond its budget', async () => {
+  vi.useFakeTimers(); vi.spyOn(Math, 'random').mockReturnValue(0);
+  const fetch = vi.fn().mockResolvedValue(new Response('', { status: 503 }));
+  vi.stubGlobal('fetch', fetch);
+  const exhausted = new DriveTransport(() => 'token').startToken();
+  const failed = expect(exhausted).rejects.toThrow('503');
+  await vi.runAllTimersAsync(); await failed;
+  expect(fetch).toHaveBeenCalledTimes(4);
+  const date = new Date(Date.now() + 31_000).toUTCString();
+  fetch.mockClear().mockResolvedValue(new Response('', { status: 429, headers: { 'Retry-After': date } }));
+  await expect(new DriveTransport(() => 'token').startToken()).rejects.toThrow('429');
+  expect(fetch).toHaveBeenCalledTimes(1);
+});
+
+it('does not retry network failures, aborted requests, or a changed direct-token account', async () => {
+  vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new DOMException('aborted', 'AbortError')));
+  await expect(new DriveTransport(() => 'token').startToken()).rejects.toThrow('aborted');
+  vi.useFakeTimers(); vi.spyOn(Math, 'random').mockReturnValue(0);
+  let token = 'first';
+  const fetch = vi.fn().mockResolvedValue(new Response('', { status: 503 }));
+  vi.stubGlobal('fetch', fetch);
+  const pending = new DriveTransport(() => token).startToken();
+  const stopped = expect(pending).rejects.toThrow('503');
+  token = 'second';
+  await vi.advanceTimersByTimeAsync(1_000);
+  await stopped;
+  expect(fetch).toHaveBeenCalledTimes(1);
+});
+
+it('stops retrying when the authenticated backend connection changes', async () => {
+  vi.useFakeTimers(); vi.spyOn(Math, 'random').mockReturnValue(0);
+  const previous = useCloudAuthStore.getState().providers.google.connectionId;
+  useCloudAuthStore.getState().setProviderSession('google', { connectionId: 'first' });
+  const fetch = vi.fn().mockResolvedValue(new Response('', { status: 503 }));
+  vi.stubGlobal('fetch', fetch);
+  const pending = new DriveTransport(() => 'token').startToken();
+  const stopped = expect(pending).rejects.toThrow('503');
+  useCloudAuthStore.getState().setProviderSession('google', { connectionId: 'second' });
+  await vi.advanceTimersByTimeAsync(1_000); await stopped;
+  expect(fetch).toHaveBeenCalledTimes(1);
+  useCloudAuthStore.getState().setProviderSession('google', { connectionId: previous });
+});
+
+it('retries only the documented 403 rate-limit reasons and stops after an account or abort change', async () => {
+  vi.useFakeTimers();
+  vi.spyOn(Math, 'random').mockReturnValue(0);
+  const limited = json({ error: { errors: [{ reason: 'rateLimitExceeded' }] } }, 403);
+  const fetch = vi.fn().mockResolvedValueOnce(limited).mockResolvedValueOnce(json({ startPageToken: 'done' }));
+  vi.stubGlobal('fetch', fetch);
+  const pending = new DriveTransport(() => 'token').startToken();
+  await vi.advanceTimersByTimeAsync(1_000);
+  await expect(pending).resolves.toBe('done');
+  vi.stubGlobal('fetch', vi.fn().mockResolvedValue(json({ error: { errors: [{ reason: 'forbidden' }] } }, 403)));
+  await expect(new DriveTransport(() => 'token').startToken()).rejects.toThrow('403');
+  expect(fetch).toHaveBeenCalledTimes(2);
+});
+
+it('recovers a lost folder-create response only for its exact live folder', async () => {
+  vi.useFakeTimers(); vi.spyOn(Math, 'random').mockReturnValue(0);
+  const fetch = vi.fn().mockResolvedValueOnce(new Response('', { status: 503 }))
+    .mockResolvedValueOnce(new Response('', { status: 409 }))
+    .mockResolvedValueOnce(json({ id: 'folder', mimeType: 'application/vnd.google-apps.folder', appProperties: { weaveletSync: '1', headerId: 'header' } }));
+  vi.stubGlobal('fetch', fetch);
+  const pending = new DriveTransport(() => 'token').folder('folder', 'header');
+  await vi.advanceTimersByTimeAsync(1_000);
+  await expect(pending).resolves.toMatchObject({ id: 'folder' });
+  expect(fetch).toHaveBeenCalledTimes(3);
+});
+
+it('rejects a conflicting or trashed folder after a 409 create response', async () => {
+  const fetch = vi.fn().mockResolvedValueOnce(new Response('', { status: 409 }))
+    .mockResolvedValueOnce(json({ id: 'folder', trashed: false, mimeType: 'application/vnd.google-apps.folder', appProperties: { weaveletSync: '1', headerId: 'other' } }));
+  vi.stubGlobal('fetch', fetch);
+  await expect(new DriveTransport(() => 'token').folder('folder', 'header')).rejects.toThrow('409');
+  fetch.mockReset().mockResolvedValueOnce(new Response('', { status: 409 }))
+    .mockResolvedValueOnce(json({ id: 'folder', trashed: true, mimeType: 'application/vnd.google-apps.folder', appProperties: { weaveletSync: '1', headerId: 'header' } }));
+  await expect(new DriveTransport(() => 'token').folder('folder', 'header')).rejects.toThrow('deleted');
 });
 
 it('collects all changes pages before returning the next cursor', async () => {

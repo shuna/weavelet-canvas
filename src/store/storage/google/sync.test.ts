@@ -52,6 +52,7 @@ class FakeDrive {
     return file.bytes.slice();
   }
   async startToken() { return String(this.events.length); }
+  async history(dataset: string) { return { commits: await this.commits(dataset), packs: await this.packs(dataset) }; }
   async commits(dataset: string) { return [...this.files.values()].filter((f) => f.metadata.appProperties?.dataset === dataset && f.metadata.appProperties.kind === 'commit').map((f) => f.metadata.id); }
   async packs(dataset: string) { return [...this.files.values()].filter(f => f.metadata.appProperties?.dataset === dataset && f.metadata.appProperties.kind === 'pack').map(f => f.metadata.id); }
   async remove(id: string) {

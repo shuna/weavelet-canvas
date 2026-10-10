@@ -13,6 +13,7 @@ vi.mock('./handleStore', () => ({ savedFileSystemTarget: async (value?: any) => 
 class Directory {
   name = 'sync'; kind = 'directory';
   files = new Map<string, Uint8Array>();
+  scans = 0;
   fail = '';
   async isSameEntry(other: unknown) { return other === this; }
   async getFileHandle(name: string, options?: { create?: boolean }) {
@@ -36,12 +37,25 @@ class Directory {
       },
     } as unknown as FileSystemFileHandle;
   }
-  async *values() { for (const name of this.files.keys()) yield await this.getFileHandle(name); }
+  async *values() { this.scans++; for (const name of this.files.keys()) yield await this.getFileHandle(name); }
   transport() { return new FileSystemTransport(this as unknown as FileSystemDirectoryHandle); }
 }
 const original: Snapshot = { version: 18, state: { theme: 'dark', contentStore: {}, chats: [] } };
 const password = 'test-only folder passphrase';
 beforeEach(() => { globalThis.indexedDB = new IDBFactory(); saved.target = undefined; });
+
+it('classifies initial history from one directory scan', async () => {
+  const dir = new Directory(), transport = dir.transport();
+  const dataset = `fs-${crypto.randomUUID()}`, header = `fs-${crypto.randomUUID()}`;
+  await transport.folder(dataset, header);
+  await transport.put(header, dataset, 'key', new Uint8Array([1]));
+  const [commit, pack] = await transport.ids(2);
+  await transport.put(commit, dataset, 'commit', new Uint8Array([1]));
+  await transport.put(pack, dataset, 'pack', new Uint8Array([1]));
+  dir.scans = 0;
+  expect(await transport.history(dataset)).toEqual({ commits: [commit], packs: [pack] });
+  expect(dir.scans).toBe(1);
+});
 
 it('reuses encrypted deltas, catches immutable collisions and detects missing history', async () => {
   const dir = new Directory(), transport = dir.transport();
