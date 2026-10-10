@@ -18,7 +18,7 @@ it('collects all changes pages before returning the next cursor', async () => {
     .mockResolvedValueOnce(json({ changes: [{ fileId: 'b' }], newStartPageToken: 'done' }));
   vi.stubGlobal('fetch', fetch);
   expect(await new DriveTransport(() => 'token').changes('start')).toEqual({
-    changes: [{ fileId: 'a' }, { fileId: 'b' }], token: 'done',
+    changes: [{ id: 'a' }, { id: 'b' }], token: 'done',
   });
 });
 
@@ -124,4 +124,28 @@ it('retries source deletion idempotently but preserves authentication and server
   await drive.remove('source');
   await expect(drive.remove('source')).rejects.toThrow('403');
   expect(fetch.mock.calls[0][1].method).toBe('DELETE');
+});
+
+it('normalizes Drive metadata and change events for the shared sync engine', async () => {
+  const fetch = vi.fn().mockResolvedValueOnce(json({ id: 'dataset', mimeType: 'application/vnd.google-apps.folder',
+    appProperties: { weaveletSync: '1', headerId: 'key' } }))
+    .mockResolvedValueOnce(json({ changes: [
+      { fileId: 'commit', file: { appProperties: { dataset: 'dataset', kind: 'commit' } } },
+      { fileId: 'trashed', file: { trashed: true } }, { fileId: 'deleted', removed: true },
+    ], newStartPageToken: 'done' }));
+  vi.stubGlobal('fetch', fetch);
+  const drive = new DriveTransport(() => 'token');
+  expect(await drive.keyHeader('dataset')).toBe('key');
+  expect(await drive.changes('start')).toEqual({ token: 'done', changes: [
+    { id: 'commit', dataset: 'dataset', kind: 'commit' },
+    { id: 'trashed', removed: true }, { id: 'deleted', removed: true },
+  ] });
+});
+
+it.each([
+  { mimeType: 'application/json' },
+  { mimeType: 'application/vnd.google-apps.folder', appProperties: { weaveletSync: '1' } },
+])('rejects a dataset without valid encrypted folder metadata', async (file) => {
+  vi.stubGlobal('fetch', vi.fn().mockResolvedValue(json(file)));
+  await expect(new DriveTransport(() => 'token').keyHeader('dataset')).rejects.toThrow('read-only');
 });

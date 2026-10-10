@@ -19,6 +19,7 @@ vi.mock('./google/sync', () => ({
     unlock = mocks.unlock;
     restoreKey = mocks.restoreKey;
     push = mocks.push;
+    synchronize = async (snapshot: unknown) => { await mocks.push(snapshot); return snapshot; };
     pull = async () => mocks.push.mock.calls[mocks.push.mock.calls.length - 1][0];
     close = mocks.close;
   },

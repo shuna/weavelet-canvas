@@ -1,4 +1,5 @@
-import React from 'react';
+import React, { useEffect } from 'react';
+import { startFileSystemSync } from '@store/storage/FileSystemSync';
 import useStore from '@store/store';
 
 import Chat from '@components/Chat';
@@ -26,6 +27,9 @@ function isLowbitQValidationRoute(): boolean {
 
 function App() {
   const { isBootstrapped, bootPhase, bootProgress } = useAppBootstrap();
+  useEffect(() => {
+    if (isBootstrapped) return startFileSystemSync();
+  }, [isBootstrapped]);
   useStreamRecovery();
   useOpenRouterVerification();
   useIosStatusBarScroll();

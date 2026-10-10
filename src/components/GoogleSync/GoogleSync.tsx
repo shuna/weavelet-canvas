@@ -540,8 +540,7 @@ const GooglePopup = ({
       setFolderNameDraft(undefined);
       setPassphrase('');
       setConfirmation('');
-      const _files = await getFiles(googleAccessToken);
-      if (_files) setFiles(_files);
+      setFiles(current => current.some(file => file.id === createdFile.id) ? current : [...current, createdFile]);
       activateCloudSyncTarget(createdFile.id);
       await queueGoogleSyncSnapshot(snapshot());
       setSelectedOperation('resume');
