@@ -1,5 +1,5 @@
 import { recordMetric } from './metrics';
-import { withoutBrowserLocalSettings } from './settings';
+import { isBrowserLocalRecord, withoutBrowserLocalSettings } from './settings';
 import type { StorageValue } from 'zustand/middleware';
 import type { PersistedStoreState } from '@store/persistence';
 import type { BranchNode, ContentInterface } from '@type/chat';
@@ -81,7 +81,13 @@ export async function toRecords(snapshot: Snapshot): Promise<Records> {
     if (!chat.id || chats[chat.id]) throw new Error('Missing or duplicate chat ID; sync stopped.');
     order.push(chat.id);
     if (chat.branchTree) {
-      for (const node of Object.values(chat.branchTree.nodes)) await translate(node);
+      for (const node of Object.values(chat.branchTree.nodes)) {
+        const statsKey = `${chat.id}:::${node.id}`;
+        const generationId = node.openRouterObservation?.generationId ?? copy.state.pendingVerifications?.[statsKey]?.generationId ?? copy.state.verifiedStats?.[statsKey]?.generationId;
+        // Retain the lookup identity, not the device's verification queue/cache.
+        if (generationId) node.openRouterObservation = { ...node.openRouterObservation, generationId };
+        await translate(node);
+      }
       delete chat.messages;
     } else if (chat.messages) {
       for (const message of chat.messages) message.content = await externalize(message.content);
@@ -110,10 +116,21 @@ export async function toRecords(snapshot: Snapshot): Promise<Records> {
 
 export async function fromRecords(records: Records): Promise<Snapshot> {
   const root: any = Object.create(null);
+  let skippedLocalState = false;
+  const generationIds = new Map<string, string>();
   for (const [encoded, value] of Object.entries(records)) {
     const path: unknown = JSON.parse(encoded);
     if (!Array.isArray(path) || path.length < 1 || path.length > 100 ||
         path.some((p) => typeof p !== 'string' || forbidden.has(p))) throw new Error('Invalid sync record path.');
+    if (isBrowserLocalRecord(encoded)) {
+      skippedLocalState = true;
+      if (path.length === 4 && ['pendingVerifications', 'verifiedStats'].includes(path[1]) && path[3] === 'generationId') {
+        const id = JSON.parse(value);
+        if (typeof id === 'string' && !generationIds.has(path[2])) generationIds.set(path[2], id);
+      }
+      continue;
+    }
+    if (path[0] === 'chats' && path[2] === 'collapsedNodes' && path.length === 3 && value === '{}') continue;
     let current = root;
     for (const part of path.slice(0, -1)) {
       if (Object.hasOwn(current, part) && (!current[part] || typeof current[part] !== 'object' || Array.isArray(current[part]))) {
@@ -125,6 +142,7 @@ export async function fromRecords(records: Records): Promise<Snapshot> {
     if (Object.hasOwn(current, last)) throw new Error('Conflicting sync record paths.');
     current[last] = JSON.parse(value);
   }
+  if (skippedLocalState && !root.state) root.state = Object.create(null);
   if (!root.state || !root.chats || !Array.isArray(root.order) || !Number.isInteger(root.version)) {
     throw new Error('Incomplete sync snapshot.');
   }
@@ -169,6 +187,8 @@ export async function fromRecords(records: Records): Promise<Snapshot> {
           cursor = cursor.parentId ? tree.nodes[cursor.parentId] : undefined;
         }
         await restore(node);
+        const generationId = node.openRouterObservation?.generationId ?? generationIds.get(`${id}:::${nodeId}`);
+        if (generationId) node.openRouterObservation = { ...node.openRouterObservation, generationId };
       }
       if (tree.activePath.some((nodeId: string) => !tree.nodes[nodeId])) throw new Error('Invalid active branch path.');
     } else if (chat.messages) {

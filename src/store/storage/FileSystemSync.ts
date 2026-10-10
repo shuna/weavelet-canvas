@@ -1,3 +1,4 @@
+import { rebuildSyncedUsage } from './sync/rebuildUsage';
 import useStore from '@store/store';
 import useCloudAuthStore from '@store/cloud-auth-store';
 import { createPartializedState, prepareHydratedState, finishHydratedState, migratePersistedState, type PersistedStoreState } from '@store/persistence';
@@ -54,6 +55,8 @@ async function apply(received: Snapshot, before: Snapshot, current: EncryptedSyn
     migratePersistedState(received.state, received.version ?? STORE_VERSION) as Partial<PersistedStoreState>);
   if (revision !== generation || current !== session || observed !== useStore.getState()) return false;
   const hydrated = finishHydratedState(prepared);
+  if (hydrated.chats) Object.assign(hydrated, await rebuildSyncedUsage(hydrated.chats, hydrated.contentStore ?? {}, observed));
+  if (revision !== generation || current !== session || observed !== useStore.getState()) return false;
   const selectedId = observed.chats?.[observed.currentChatIndex]?.id;
   const index = hydrated.chats?.findIndex(chat => chat.id === selectedId) ?? -1;
   if (index >= 0) hydrated.currentChatIndex = index;
