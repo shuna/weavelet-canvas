@@ -841,7 +841,6 @@ const GooglePopup = ({
                 </tr>)}</tbody>
               </table>
               {(!localOverview || !cloudOverview) && <p role='status' className='mt-1 text-gray-500 dark:text-gray-400'>{t(overviewFailed || localOverviewFailed ? 'overview.failed' : 'overview.loading')}{(overviewFailed || localOverviewFailed) && <button type='button' className='ml-2 underline' onClick={() => setOverviewAttempt(attempt => attempt + 1)}>{t('overview.retry')}</button>}</p>}
-              {cloudOverview && cloudOverview.versions > 1 && <p className='mt-1 text-gray-500 dark:text-gray-400'>{t('overview.mergedVersions', { count: cloudOverview.versions })}</p>}
             </div> : <div id='google-sync-targets-panel' role='tabpanel' aria-labelledby='google-sync-conflict-targets' className='h-full'>
             <div ref={conflictTargetsRef} onScroll={updateMoreTargets} tabIndex={0} role='region' aria-labelledby='google-sync-conflict-targets' className='hide-scroll-bar h-full overflow-y-auto overscroll-contain' style={{ scrollbarWidth: 'none' }}>
             {conflictKeys.length ? <ul className='space-y-2 text-xs'>

@@ -45,7 +45,7 @@ function schedule() {
   timer = setTimeout(() => { void flushFileSystemSync().catch(() => {}); }, 1500);
 }
 async function persist(value: Snapshot) {
-  if (value.state.chats) await saveChatData({ chats: value.state.chats, contentStore: value.state.contentStore ?? {}, branchClipboard: value.state.branchClipboard ?? null });
+  if (value.state.chats) await saveChatData({ lastContentEditedAt: value.state.lastContentEditedAt, chats: value.state.chats, contentStore: value.state.contentStore ?? {}, branchClipboard: value.state.branchClipboard ?? null });
 }
 async function apply(received: Snapshot, before: Snapshot, current: EncryptedSync, revision: number) {
   const observed = useStore.getState();

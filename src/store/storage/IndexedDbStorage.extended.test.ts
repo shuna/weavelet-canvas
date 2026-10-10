@@ -154,6 +154,35 @@ beforeEach(async () => {
   db.close();
 });
 
+describe('edit timestamps', () => {
+  it('preserves edit times across saves, compressed records and reloads without replacing them with save time', async () => {
+    const chat = makeChat('dated-chat', ['h1'], { updatedAt: 1000 });
+    chat.branchTree.nodes.n0.updatedAt = 1100;
+    const data = { chats: [chat], contentStore: { h1: textEntry('dated') }, branchClipboard: null, lastContentEditedAt: 1200 };
+    await saveChatData(data);
+    expect((await idbGet<any>('meta')).lastContentEditedAt).toBe(1200);
+    await compressSingleChat(chat.id);
+    _resetInternalState();
+    const loaded = await loadChatData({} as StoreState);
+    expect(loaded?.loadStatus).toBe('ok');
+    expect(loaded?.lastContentEditedAt).toBe(1200);
+    expect(loaded?.chats?.[0].updatedAt).toBe(1000);
+    expect(loaded?.chats?.[0].branchTree?.nodes.n0.updatedAt).toBe(1100);
+    await saveChatData({ ...data, lastContentEditedAt: 1300 });
+    _resetInternalState();
+    expect((await loadChatData({} as StoreState))?.lastContentEditedAt).toBe(1300);
+    expect((await loadChatData({} as StoreState))?.chats?.[0].updatedAt).toBe(1000);
+  });
+
+  it.each([undefined, 1200])('keeps legacy edit times as recorded (%s), without inventing dates', async time => {
+    await idbPut('chat-data', { version: 18, chats: [makeChat('legacy-chat', ['h1'])], contentStore: { h1: textEntry('legacy') }, branchClipboard: null, lastContentEditedAt: time });
+    expect((await loadChatData({} as StoreState))?.lastContentEditedAt).toBe(time);
+    expect((await idbGet<any>('meta')).lastContentEditedAt).toBe(time);
+    _resetInternalState();
+    expect((await loadChatData({} as StoreState))?.lastContentEditedAt).toBe(time);
+  });
+});
+
 describe('collectIndexedDbRecoverySnapshot', () => {
   it('exports raw IndexedDB recovery records without mutating storage', async () => {
     const chat = makeChat('chat-1', ['h1']);

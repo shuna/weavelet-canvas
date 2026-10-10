@@ -122,6 +122,7 @@ export async function resolveGoogleSyncConflict(mode: Resolution) {
 
 async function persistChatSnapshot(snapshot: Snapshot) {
   if (snapshot.state.chats) await saveChatData({
+    lastContentEditedAt: snapshot.state.lastContentEditedAt,
     chats: snapshot.state.chats, contentStore: snapshot.state.contentStore ?? {},
     branchClipboard: snapshot.state.branchClipboard ?? null,
   });
