@@ -45,6 +45,7 @@ type PersistedChat = Omit<ChatInterface, 'messages'> & {
 };
 
 interface MetaRecord {
+  lastContentEditedAt?: number;
   version: number;
   generation: number;
   activeChatId?: string;
@@ -470,6 +471,7 @@ async function migrateLegacyData(
     }
 
     const chatData: PersistedChatData = {
+      lastContentEditedAt: legacy.lastContentEditedAt,
       chats: legacyChats,
       contentStore: legacy.contentStore,
       branchClipboard: legacy.branchClipboard ?? null,
@@ -516,6 +518,7 @@ async function migrateLegacyData(
     // that the data has not been schema-migrated.
     await idbPut(store2, META_KEY, {
       version: legacyVersion,
+      lastContentEditedAt: chatData.lastContentEditedAt,
       generation: gen,
       chatIds: chats.map((c) => c.id),
     } satisfies MetaRecord);
@@ -847,6 +850,7 @@ async function loadSplitData(
 
     return {
       chats,
+      lastContentEditedAt: meta.lastContentEditedAt,
       contentStore,
       branchClipboard: clipboard,
       loadStatus,
@@ -1052,6 +1056,7 @@ const saveChatDataUnlocked = async (data: PersistedChatData, prepared: Awaited<R
   await withTransaction('readwrite', async (store) => {
     await idbPut(store, META_KEY, {
       version: STORE_VERSION,
+      lastContentEditedAt: prepared.data.lastContentEditedAt,
       generation: nextGen,
       chatIds: chats.map((c) => c.id),
     } satisfies MetaRecord);

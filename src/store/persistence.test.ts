@@ -296,8 +296,8 @@ describe('persistence', () => {
     ).toBe('number');
   });
 
-  it('round-trips persisted chat data independently from localStorage state', () => {
-    const state = buildStoreState();
+  it('round-trips persisted chat data independently from localStorage state', async () => {
+    const state = { ...buildStoreState(), lastContentEditedAt: 1234 };
     const chatData = createPersistedChatDataState(state as never);
     const targetState = buildStoreState();
 
@@ -312,6 +312,16 @@ describe('persistence', () => {
     ]);
     expect(Object.keys(targetState.contentStore)).not.toHaveLength(0);
     expect(targetState.branchClipboard).toEqual(chatData.branchClipboard);
+    expect((targetState as typeof state).lastContentEditedAt).toBe(1234);
+    const hydrated = hydrateFromPersistedStoreState(state as never, { ...chatData, lastContentEditedAt: 5678 });
+    expect(hydrated.lastContentEditedAt).toBe(5678);
+    const oldData = { ...chatData };
+    delete oldData.lastContentEditedAt;
+    const oldHydrated = finishHydratedState(await prepareHydratedState(state as never, oldData));
+    expect(Object.hasOwn(oldHydrated, 'lastContentEditedAt')).toBe(true);
+    expect({ ...state, ...oldHydrated }.lastContentEditedAt).toBeUndefined();
+    applyPersistedChatDataState(targetState as never, { ...chatData, lastContentEditedAt: undefined });
+    expect((targetState as typeof state).lastContentEditedAt).toBeUndefined();
   });
 
   it('hydrates a persisted store snapshot and resets the current chat index when chats are empty', () => {

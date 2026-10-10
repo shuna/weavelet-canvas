@@ -185,6 +185,7 @@ const useAppBootstrap = () => {
         if (cancelled) return;
         const nextState = finishHydratedState(prepared);
         useStore.setState({
+          lastContentEditedAt: nextState.lastContentEditedAt,
           chats: nextState.chats,
           contentStore: nextState.contentStore,
           branchClipboard: nextState.branchClipboard,
@@ -301,6 +302,7 @@ const useAppBootstrap = () => {
         if (
           state.chats === prev.chats &&
           state.contentStore === prev.contentStore &&
+          state.lastContentEditedAt === prev.lastContentEditedAt &&
           state.branchClipboard === prev.branchClipboard
         ) {
           return;

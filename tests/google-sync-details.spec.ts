@@ -11,6 +11,7 @@ test('sync details keep conflict targets scrollable without moving choices', asy
   await page.goto('/');
   await page.getByText('すべてスキップ', { exact: true }).click();
   await page.getByRole('button', { name: 'close modal', exact: true }).click();
+  await expect.poll(() => page.evaluate(async () => (await import('/src/store/store.ts')).default.getState().chats?.length ?? 0)).toBeGreaterThan(0);
   await page.evaluate(async () => {
     const { default: auth } = await import('/src/store/cloud-auth-store.ts');
     auth.setState({ provider: 'google', cloudSync: true, syncStatus: 'synced' });
@@ -33,10 +34,11 @@ test('sync details keep conflict targets scrollable without moving choices', asy
     const chat = store.getState().chats![0];
     store.getState().setChats([{ ...chat, title: '競合している会話' }]);
     store.getState().setFolders({ 'conflict-folder': { id: 'conflict-folder', name: '競合しているフォルダー', expanded: true, order: 0 } });
-    useSyncReview.setState({ cloudOverview: { chats: 120, messages: 2400, bytes: 10485760, versions: 1 }, conflict: true, conflictKeys: [JSON.stringify(['chats', chat.id, 'title']), JSON.stringify(['state', 'folders', 'conflict-folder', 'name'])] });
+    useSyncReview.setState({ cloudOverview: { chats: 120, messages: 2400, bytes: 10485760, versions: 2 }, conflict: true, conflictKeys: [JSON.stringify(['chats', chat.id, 'title']), JSON.stringify(['state', 'folders', 'conflict-folder', 'name'])] });
   });
   await expect(page.getByText('同期する内容が競合しています', { exact: true })).toBeVisible();
   await expect(page.getByText('内容を確認し、解決方法を選んでください。', { exact: true })).toBeVisible();
+  await expect(page.getByText('クラウドの2版を統合した概要', { exact: true })).toHaveCount(0);
   const mergePanel = page.getByRole('radio', { name: 'マージ（両方を保持）', exact: true }).locator('..').locator('..');
   // A dark theme must not fall back to the light card background.
   expect(await mergePanel.evaluate(element => getComputedStyle(element).backgroundColor)).not.toContain('209, 250, 229');
@@ -149,6 +151,7 @@ test('reads conflict context on either side without editing or synchronizing', a
   await page.goto('/');
   await page.getByText('すべてスキップ', { exact: true }).click();
   await page.getByRole('button', { name: 'close modal', exact: true }).click();
+  await expect.poll(() => page.evaluate(async () => (await import('/src/store/store.ts')).default.getState().chats?.length ?? 0)).toBeGreaterThan(0);
   await page.evaluate(async () => {
     const { default: store } = await import('/src/store/store.ts');
     const { default: auth } = await import('/src/store/cloud-auth-store.ts');

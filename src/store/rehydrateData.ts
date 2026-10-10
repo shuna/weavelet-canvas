@@ -167,6 +167,7 @@ export function prepareHydratedData({ base, persisted, savedIndex }: {
   const { repairedChatTitles } = rehydrateData(state, savedIndex);
   return { repairedChatTitles, state: {
     ...persisted, chats: state.chats, contentStore: state.contentStore ?? {},
+    ...(Object.hasOwn(persisted, 'chats') ? { lastContentEditedAt: persisted.lastContentEditedAt } : {}),
     branchClipboard: state.branchClipboard ?? null,
     currentChatIndex: state.chats?.length ? state.currentChatIndex : -1,
   } };

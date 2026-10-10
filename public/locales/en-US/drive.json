@@ -212,7 +212,6 @@
     "help": "Messages count every bubble across all branches once. Sync data size uses the same sync format for conversations, settings and images, before compression and encryption. Sync history and Drive storage usage are excluded.",
     "scope": "Overwrite applies to the entire synced dataset, not only the conflicting items.",
     "multipleVersions": "The cloud has {{count}} versions. This overview combines them using the same method as overwriting this device from the cloud.",
-    "mergedVersions": "Overview of {{count}} combined cloud versions",
     "loading": "Loading overview…",
     "failed": "Could not load the overview.",
     "retry": "Retry"
