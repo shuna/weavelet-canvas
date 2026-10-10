@@ -244,6 +244,37 @@
       "user": "User",
       "assistant": "Assistant",
       "system": "System"
-    }
+    },
+    "verificationHelp": "This is the status of OpenRouter generation usage and cost verification, rather than an app preference.",
+    "settingLocation": "Setting location",
+    "valueComparison": "Conflicting values",
+    "storedValue": "Stored value"
+  },
+  "settingsFields": {
+    "pendingVerifications": "Pending OpenRouter usage verification",
+    "verifiedStats": "Verified OpenRouter usage",
+    "nextAttemptAt": "Next verification time",
+    "attemptCount": "Verification attempts",
+    "status": "Verification status",
+    "requestedAt": "Requested at",
+    "lastAttemptAt": "Last attempt",
+    "lastError": "Last error",
+    "fetchedAt": "Fetched at",
+    "generationId": "Generation ID",
+    "chatId": "Conversation ID",
+    "targetNodeId": "Bubble ID",
+    "theme": "Theme",
+    "language": "Language",
+    "providers": "AI providers",
+    "evaluationSettings": "Evaluation settings"
+  },
+  "settingsValues": {
+    "noAutoRetry": "No automatic retry (retry manually)",
+    "pending": "Pending",
+    "fetching": "Fetching",
+    "failed": "Failed",
+    "enabled": "Enabled",
+    "disabled": "Disabled",
+    "unset": "Not set"
   }
 }

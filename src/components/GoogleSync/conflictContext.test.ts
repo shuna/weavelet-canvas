@@ -1,7 +1,7 @@
 import { expect, it } from 'vitest';
 import { addContent } from '@utils/contentStore';
 import type { Snapshot } from '@store/storage/google/records';
-import { getBranchMessages, getConflictContext, parseConflictPath } from './conflictContext';
+import { describeSettingPath, formatSettingValue, getBranchMessages, getConflictContext, parseConflictPath } from './conflictContext';
 
 const fixture = (): Snapshot => {
   const contentStore = {};
@@ -43,4 +43,16 @@ it('distinguishes missing bubbles, missing chats, legacy messages and non-chat f
   expect(getBranchMessages(snapshot, JSON.stringify(['chats', 'chat', 'messages']))).toMatchObject([{ position: 1, content: [{ text: 'legacy' }] }]);
   expect(parseConflictPath('invalid')).toEqual([]);
   expect(parseConflictPath('["chats", 1]')).toEqual([]);
+});
+
+it('identifies nested settings and formats verification values without interpreting unrelated numbers', () => {
+  const path = ['state', 'pendingVerifications', 'chat:::bubble', 'nextAttemptAt'];
+  const label = (key: string) => ({ pendingVerifications: 'Usage verification', nextAttemptAt: 'Next attempt', noAutoRetry: 'Manual retry', failed: 'Failed', enabled: 'Enabled' }[key] ?? key);
+  expect(describeSettingPath(path, label)).toBe('Usage verification › chat:::bubble › Next attempt');
+  expect(formatSettingValue(path, Number.MAX_SAFE_INTEGER, label, 'en')).toBe('Manual retry');
+  expect(formatSettingValue([...path.slice(0, -1), 'status'], 'failed', label, 'en')).toBe('Failed');
+  expect(formatSettingValue([...path.slice(0, -1), 'attemptCount'], 1, label, 'en')).toBe('1');
+  expect(formatSettingValue(['state', 'unknown'], Number.MAX_SAFE_INTEGER, label, 'en')).toBe(String(Number.MAX_SAFE_INTEGER));
+  expect(formatSettingValue(['state', 'enabled'], true, label, 'en')).toBe('Enabled');
+  expect(formatSettingValue(path, 0, label, 'en')).toBe(new Date(0).toLocaleString('en'));
 });
