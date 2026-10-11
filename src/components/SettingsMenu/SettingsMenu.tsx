@@ -164,7 +164,8 @@ const SettingsMenu = () => {
           setIsModalOpen(true);
         }}
       >
-        <SettingIcon className='w-4 h-4' /> {t('setting') as string}
+        <SettingIcon className='w-4 h-4 shrink-0' />
+        <span className='min-w-0 truncate' title={t('setting') as string}>{t('setting') as string}</span>
       </a>
       {isModalOpen && (
         <SettingsDialog setIsModalOpen={setIsModalOpen} initialTab={initialTab} />
