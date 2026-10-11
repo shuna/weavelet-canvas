@@ -1,3 +1,4 @@
+import { readDraggedChatIds } from './chatHistoryFolderUtils';
 import React, { useEffect, useRef, useState } from 'react';
 import useStore from '@store/store';
 import { shallow } from 'zustand/shallow';
@@ -31,7 +32,6 @@ const ChatHistoryList = ({
   const currentChatIndex = useStore((state) => state.currentChatIndex);
   const hideSideMenu = useStore((state) => state.hideSideMenu);
   const displayChatSize = useStore((state) => state.displayChatSize);
-  const setChats = useStore((state) => state.setChats);
   const setFolders = useStore((state) => state.setFolders);
   const chatTitles = useStore(
     (state) => state.chats?.map((chat) => chat.title),
@@ -247,15 +247,9 @@ const ChatHistoryList = ({
       e.stopPropagation();
       setIsHover(false);
 
-      const chatIndices = JSON.parse(e.dataTransfer.getData('chatIndices'));
-      const updatedChats: ChatInterface[] = JSON.parse(
-        JSON.stringify(useStore.getState().chats)
-      );
-      chatIndices.forEach((chatIndex: number) => {
-        delete updatedChats[chatIndex].folder;
-      });
-      setChats(updatedChats);
-      setSelectedChats([]);
+      const chatIds = readDraggedChatIds(e.dataTransfer.getData('chatIds'));
+      if (!chatIds) return;
+      if (useStore.getState().moveChatsToFolder({ chatIds, folderId: null, expandDestination: false }).status === 'applied') setSelectedChats([]);
     }
   };
 

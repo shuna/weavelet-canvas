@@ -2,10 +2,20 @@ import { v4 as uuidv4 } from 'uuid';
 import { StoreSlice } from './store';
 import { ChatInterface, FolderCollection, GeneratingSession, MessageInterface, TextContentInterface } from '@type/chat';
 import { notifyStorageError, setLocalStorageItem } from './storage/storageErrors';
-import { addContent } from '@utils/contentStore';
+import { addContent, retainContent } from '@utils/contentStore';
 import { materializeActivePath } from '@utils/branchUtils';
+import { generateDefaultChat } from '@constants/chat';
+import { deepCloneSingleChat } from '@utils/chatShallowClone';
+import { prepareChatForExport } from '@utils/chatExport';
 
 export interface ChatSlice {
+  createChat: (input: { folderId?: string }) => { status: 'created'; chatId: string } | { status: 'folder-missing' | 'not-ready' };
+  duplicateChat: (input: { chatId: string; scope: 'all' | 'activePath' }) => { status: 'created'; chatId: string } | { status: 'chat-missing' };
+  renameChat: (input: { chatId: string; title: string }) => 'updated' | 'unchanged' | 'chat-missing';
+  createFolder: () => { folderId: string };
+  editFolder: (input: { folderId: string; patch: { name?: string; color?: string | null; expanded?: boolean } }) => 'updated' | 'unchanged' | 'folder-missing';
+  removeFolder: (input: { folderId: string }) => { status: 'removed' | 'folder-missing'; detachedChatIds: string[] };
+  moveChatsToFolder: (input: { chatIds: string[]; folderId: string | null; expandDestination: boolean }) => { status: 'applied' | 'folder-missing' | 'invalid-input'; movedChatIds: string[]; missingChatIds: string[] };
   messages: MessageInterface[];
   chats?: ChatInterface[];
   collapsedNodeMaps: Record<string, Record<string, boolean>>;
@@ -88,7 +98,100 @@ const hasSameChatOrder = (
 };
 
 export const createChatSlice: StoreSlice<ChatSlice> = (set, get) => {
+  const selectNewChat = (chat: ChatInterface, contentStore = get().contentStore) => {
+    const state = get();
+    state.captureCurrentNavigationEntry();
+    const chats = [chat, ...(state.chats ?? [])];
+    set({ chats, contentStore,
+      collapsedNodeMaps: buildNodeMaps(chats, 'collapsedNodes'),
+      omittedNodeMaps: buildNodeMaps(chats, 'omittedNodes'),
+      protectedNodeMaps: buildNodeMaps(chats, 'protectedNodes'),
+    });
+    state.pushNavigationEntry({ chatId: chat.id, activePath: [...(chat.branchTree?.activePath ?? [])], viewContext: state.chatActiveView, source: 'chat-switch' });
+    get().setCurrentChatIndex(0);
+    return { status: 'created' as const, chatId: chat.id };
+  };
   return {
+    createChat: ({ folderId }) => {
+      const { chats, folders } = get();
+      if (!chats) return { status: 'not-ready' };
+      if (folderId !== undefined && !folders[folderId]) return { status: 'folder-missing' };
+      let number = 1;
+      while (chats.some(chat => chat.title === `New Chat ${number}`)) number++;
+      return selectNewChat(generateDefaultChat(`New Chat ${number}`, folderId));
+    },
+    duplicateChat: ({ chatId, scope }) => {
+      const { chats, contentStore: current } = get();
+      const source = chats?.find(chat => chat.id === chatId);
+      if (!source) return { status: 'chat-missing' };
+      let title = `Copy of ${source.title}`;
+      let number = 0;
+      while (chats!.some(chat => chat.title === title)) title = `Copy ${++number} of ${source.title}`;
+      const copy = deepCloneSingleChat(scope === 'activePath'
+        ? prepareChatForExport(source, current, { visibleBranchOnly: true }).chat : source);
+      copy.title = title;
+      const contentStore = { ...current };
+      for (const node of Object.values(copy.branchTree?.nodes ?? {})) {
+        if (contentStore[node.contentHash]) contentStore[node.contentHash] = { ...contentStore[node.contentHash] };
+        retainContent(contentStore, node.contentHash);
+      }
+      return selectNewChat(copy, contentStore);
+    },
+    renameChat: ({ chatId, title }) => {
+      const chats = get().chats;
+      const chat = chats?.find(chat => chat.id === chatId);
+      if (!chat) return 'chat-missing';
+      if (chat.title === title) return 'unchanged';
+      set({ chats: chats!.map(value => value === chat ? { ...value, title } : value) });
+      return 'updated';
+    },
+    createFolder: () => {
+      const folders = get().folders;
+      let number = 1;
+      while (Object.values(folders).some(folder => folder.name === `New Folder ${number}`)) number++;
+      const folderId = uuidv4();
+      const shifted = Object.fromEntries(Object.entries(folders).map(([id, folder]) => [id, { ...folder, order: folder.order + 1 }]));
+      set({ folders: { [folderId]: { id: folderId, name: `New Folder ${number}`, expanded: false, order: 0 }, ...shifted } });
+      return { folderId };
+    },
+    editFolder: ({ folderId, patch }) => {
+      const folders = get().folders;
+      const folder = folders[folderId];
+      if (!folder) return 'folder-missing';
+      const next = { ...folder, ...patch, color: patch.color === null ? undefined : patch.color ?? folder.color };
+      if (next.name === folder.name && next.color === folder.color && next.expanded === folder.expanded) return 'unchanged';
+      set({ folders: { ...folders, [folderId]: next } });
+      return 'updated';
+    },
+    removeFolder: ({ folderId }) => {
+      const { folders, chats } = get();
+      if (!folders[folderId]) return { status: 'folder-missing', detachedChatIds: [] };
+      const nextFolders = { ...folders };
+      delete nextFolders[folderId];
+      const detachedChatIds: string[] = [];
+      const nextChats = chats?.map(chat => {
+        if (chat.folder !== folderId) return chat;
+        detachedChatIds.push(chat.id);
+        return { ...chat, folder: undefined };
+      });
+      set({ folders: nextFolders, chats: nextChats });
+      return { status: 'removed', detachedChatIds };
+    },
+    moveChatsToFolder: ({ chatIds, folderId, expandDestination }) => {
+      const { chats, folders } = get();
+      if (folderId === null && expandDestination) return { status: 'invalid-input', movedChatIds: [], missingChatIds: [] };
+      if (folderId !== null && !folders[folderId]) return { status: 'folder-missing', movedChatIds: [], missingChatIds: [] };
+      const remaining = new Set(chatIds);
+      const movedChatIds: string[] = [];
+      const nextChats = chats?.map(chat => {
+        if (!remaining.delete(chat.id)) return chat;
+        movedChatIds.push(chat.id);
+        return chat.folder === (folderId ?? undefined) ? chat : { ...chat, folder: folderId ?? undefined };
+      });
+      set({ chats: nextChats, folders: folderId !== null && expandDestination
+        ? { ...folders, [folderId]: { ...folders[folderId], expanded: true } } : folders });
+      return { status: 'applied', movedChatIds, missingChatIds: [...remaining] };
+    },
     messages: [],
     collapsedNodeMaps: {},
     omittedNodeMaps: {},
