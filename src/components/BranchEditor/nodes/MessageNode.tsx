@@ -17,7 +17,7 @@ const MessageNode = memo(({ data, id }: NodeProps<MessageNodeData>) => {
   const syncChanged = useSyncReview(state => (state.nodes[chatId] ?? []).includes(id));
   const hoveredNodeId = useStore((state) => state.hoveredNodeId);
   const setHoveredNodeId = useStore((state) => state.setHoveredNodeId);
-  const toggleNodeStar = useStore((state) => state.toggleNodeStar);
+  const setNodeStar = useStore((state) => state.setNodeStar);
   const isSearchMatch = useStore((state) => state.matchedNodeIds.has(id));
   const isCurrentSearchResult = useStore((state) => state.currentResultNodeId === id);
   const compareTarget = useStore((state) => state.compareTarget);
@@ -48,8 +48,8 @@ const MessageNode = memo(({ data, id }: NodeProps<MessageNodeData>) => {
 
   const handleStarClick = useCallback((e: React.MouseEvent) => {
     e.stopPropagation();
-    toggleNodeStar(data.chatIndex, id);
-  }, [data.chatIndex, id, toggleNodeStar]);
+    setNodeStar({ chatId, nodeId: id, value: !data.starred });
+  }, [chatId, data.starred, id, setNodeStar]);
 
   const borderColor = isCurrentSearchResult
     ? '#f97316'

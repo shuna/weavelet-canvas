@@ -181,6 +181,13 @@ export const ensureBranchTreeState = (
     updatedChats[chatIndex].messages,
     contentStore
   );
+  const chat = updatedChats[chatIndex];
+  for (const field of ['collapsedNodes', 'omittedNodes', 'protectedNodes'] as const) {
+    const nodes = chat[field];
+    if (nodes) chat[field] = Object.fromEntries(Object.entries(nodes).map(([id, value]) => [
+      chat.branchTree!.activePath[Number(id)] ?? id, value,
+    ]));
+  }
 
   return { chats: updatedChats, contentStore };
 };
@@ -336,41 +343,14 @@ export const pruneHiddenNodesState = (
   return { chats: updatedChats, contentStore };
 };
 
-export const renameBranchNodeState = (
-  chats: ChatInterface[],
-  chatIndex: number,
-  nodeId: string,
-  label: string
+export const setBranchNodeFieldState = (
+  chats: ChatInterface[], chatIndex: number, nodeId: string,
+  field: 'label' | 'starred' | 'pinned', value: string | true | undefined
 ) => {
-  const updatedChats = cloneChatAt(chats, chatIndex);
-  const tree = updatedChats[chatIndex].branchTree!;
-  tree.nodes[nodeId] = cloneNode(tree.nodes[nodeId]);
-  tree.nodes[nodeId].label = label || undefined;
-  return updatedChats;
-};
-
-export const toggleNodeStarState = (
-  chats: ChatInterface[],
-  chatIndex: number,
-  nodeId: string
-) => {
-  const updatedChats = cloneChatAt(chats, chatIndex);
-  const tree = updatedChats[chatIndex].branchTree!;
-  tree.nodes[nodeId] = cloneNode(tree.nodes[nodeId]);
-  tree.nodes[nodeId].starred = !tree.nodes[nodeId].starred || undefined;
-  return updatedChats;
-};
-
-export const toggleNodePinState = (
-  chats: ChatInterface[],
-  chatIndex: number,
-  nodeId: string
-) => {
-  const updatedChats = cloneChatAt(chats, chatIndex);
-  const tree = updatedChats[chatIndex].branchTree!;
-  tree.nodes[nodeId] = cloneNode(tree.nodes[nodeId]);
-  tree.nodes[nodeId].pinned = !tree.nodes[nodeId].pinned || undefined;
-  return updatedChats;
+  const updated = cloneChatAt(chats, chatIndex);
+  const tree = updated[chatIndex].branchTree!;
+  tree.nodes[nodeId] = { ...tree.nodes[nodeId], [field]: value };
+  return updated;
 };
 
 export const appendNodeToActivePathState = (

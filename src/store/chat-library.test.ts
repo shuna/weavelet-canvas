@@ -35,7 +35,7 @@ const fixture = () => {
 describe('chat library operations', () => {
   it('duplicates by ID after reorder with shared node IDs and independent content references', () => {
     const { get } = fixture();
-    get().toggleCollapseNode(0, 0);
+    get().setNodeCollapsed({ chatId: get().chats![0].id, nodeId: get().chats![0].branchTree?.activePath[0] ?? '0', value: true });
     const source = get().chats![0];
     const node = source.branchTree!.nodes[source.branchTree!.rootId];
     const previousEntry = get().contentStore[node.contentHash];
@@ -57,7 +57,7 @@ describe('chat library operations', () => {
   it('clones only the active path when requested and keeps other branches at the source', () => {
     const { get } = fixture();
     const root = get().chats![0].branchTree!.rootId;
-    get().createBranch(0, root, [{ type: 'text', text: 'branch' }]);
+    get().createBranch({ chatId: get().chats![0].id, fromNodeId: root, content: [{ type: 'text', text: 'branch' }] });
     const source = get().chats![0];
     get().duplicateChat({ chatId: 'a', scope: 'activePath' });
     const copy = get().chats![0];

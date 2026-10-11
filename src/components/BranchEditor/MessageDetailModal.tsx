@@ -13,10 +13,11 @@ interface MessageDetailModalProps {
 
 const MessageDetailModal = ({ chatIndex, nodeId, onClose }: MessageDetailModalProps) => {
   const { t } = useTranslation();
+  const chat = useStore((state) => state.chats?.[chatIndex]);
   const tree = useStore((state) => state.chats?.[chatIndex]?.branchTree);
   const contentStore = useStore((state) => state.contentStore);
-  const toggleNodeStar = useStore((state) => state.toggleNodeStar);
-  const toggleNodePin = useStore((state) => state.toggleNodePin);
+  const setNodeStar = useStore((state) => state.setNodeStar);
+  const setNodePin = useStore((state) => state.setNodePin);
   const modalRoot = document.getElementById('modal-root');
 
   const node = tree?.nodes[nodeId];
@@ -50,7 +51,7 @@ const MessageDetailModal = ({ chatIndex, nodeId, onClose }: MessageDetailModalPr
                 className={`p-1 rounded hover:bg-gray-200 dark:hover:bg-gray-600 ${
                   node.starred ? 'text-yellow-500' : 'text-gray-400'
                 }`}
-                onClick={() => toggleNodeStar(chatIndex, nodeId)}
+                onClick={() => setNodeStar({ chatId: chat?.id ?? '', nodeId, value: !node.starred })}
                 title={node.starred ? 'Unstar' : 'Star'}
               >
                 <svg className='w-4 h-4' viewBox='0 0 24 24' fill='currentColor'>
@@ -61,7 +62,7 @@ const MessageDetailModal = ({ chatIndex, nodeId, onClose }: MessageDetailModalPr
                 className={`p-1 rounded hover:bg-gray-200 dark:hover:bg-gray-600 ${
                   node.pinned ? 'text-blue-500' : 'text-gray-400'
                 }`}
-                onClick={() => toggleNodePin(chatIndex, nodeId)}
+                onClick={() => setNodePin({ chatId: chat?.id ?? '', nodeId, value: !node.pinned })}
                 title={node.pinned ? 'Unpin' : 'Pin'}
               >
                 <svg className='w-4 h-4' viewBox='0 0 24 24' fill='currentColor'>

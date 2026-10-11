@@ -55,12 +55,13 @@ function hasProtectedFollowingNodes(messageIndex: number): boolean {
   return false;
 }
 
-function resolveMessageIndex(nodeId: string | undefined, fallbackIndex: number): number {
-  if (!nodeId) return fallbackIndex;
-  const activePath =
-    useStore.getState().chats?.[useStore.getState().currentChatIndex]?.branchTree?.activePath;
-  const resolvedIndex = activePath?.indexOf(nodeId) ?? -1;
-  return resolvedIndex >= 0 ? resolvedIndex : fallbackIndex;
+function resolveMessageIndex(chatId: string, nodeId: string | undefined, fallbackIndex: number): number {
+  const chat = useStore.getState().chats?.find(chat => chat.id === chatId);
+  if (!chat) return -1;
+  if (!nodeId) return chat.messages[fallbackIndex] ? fallbackIndex : -1;
+  if (chat.branchTree) return chat.branchTree.activePath.indexOf(nodeId);
+  const index = Number(nodeId);
+  return String(index) === nodeId && chat.messages[index] ? index : -1;
 }
 
 const blobToBase64 = (blob: Blob): Promise<string> =>
@@ -131,9 +132,9 @@ export function useEditViewLogic({
   editSessionKey: string;
 }) {
   const inputRole = useStore((state) => state.inputRole);
-  const appendNodeToActivePath = useStore((state) => state.appendNodeToActivePath);
-  const replaceMessageAndPruneFollowing = useStore((state) => state.replaceMessageAndPruneFollowing);
-  const upsertWithAutoBranch = useStore((state) => state.upsertWithAutoBranch);
+  const appendNode = useStore((state) => state.appendNode);
+  const replaceNodeAndPrune = useStore((state) => state.replaceNodeAndPrune);
+  const saveNode = useStore((state) => state.saveNode);
   const currentChatIndex = useStore((state) => state.currentChatIndex);
   const { model, providerId, modelSource } = useStore((state) => {
     const { chats, currentChatIndex: idx } = state;
@@ -278,6 +279,11 @@ export function useEditViewLogic({
     _setContent(updatedImages);
   };
 
+  const editTarget = () => {
+    const chat = useStore.getState().chats?.find(chat => chat.id === currentChatId);
+    return { chatId: currentChatId, nodeId: nodeId ?? chat?.branchTree?.activePath[messageIndex] ?? String(messageIndex) };
+  };
+
   const handleSave = () => {
     const hasSubmittableContent = hasMeaningfulContent(_content);
     if (sticky && !hasSubmittableContent) return;
@@ -288,20 +294,18 @@ export function useEditViewLogic({
     }
     if (resolveChatModel(currentChatIndex).status === 'available' && !confirmChatModelFavorite(currentChatIndex)) return;
 
-    const resolvedMessageIndex = resolveMessageIndex(nodeId, messageIndex);
+    const resolvedMessageIndex = resolveMessageIndex(currentChatId, nodeId, messageIndex);
 
     if (sticky) {
-      appendNodeToActivePath(currentChatIndex, inputRole, _content);
+      if (appendNode({ chatId: currentChatId, role: inputRole, content: _content }).status !== 'updated') return;
       _setContent([{ type: 'text', text: '' } as TextContentInterface]);
       clearDraft();
       resetTextAreaHeight();
     } else {
-      upsertWithAutoBranch(
-        currentChatIndex,
-        resolvedMessageIndex,
-        useStore.getState().chats![currentChatIndex].messages[resolvedMessageIndex].role,
-        _content
-      );
+      const role = useStore.getState().chats?.find(chat => chat.id === currentChatId)?.messages[resolvedMessageIndex]?.role;
+      if (!role) return;
+      const result = saveNode({ ...editTarget(), role, content: _content });
+      if (result.status !== 'updated' && result.status !== 'unchanged') return;
       clearDraft();
       setIsEdit(false);
     }
@@ -310,15 +314,8 @@ export function useEditViewLogic({
   const handleBranchOnly = () => {
     if (sticky || isNodeBusy(nodeId)) return;
     if (resolveChatModel(currentChatIndex).status === 'available' && !confirmChatModelFavorite(currentChatIndex)) return;
-    const { ensureBranchTree, createBranch } = useStore.getState();
-    ensureBranchTree(currentChatIndex);
-    const activeNodeId =
-      nodeId ??
-      useStore.getState().chats![currentChatIndex].branchTree!.activePath[
-        resolveMessageIndex(nodeId, messageIndex)
-      ];
-    if (!activeNodeId) return;
-    createBranch(currentChatIndex, activeNodeId, _content);
+    const { chatId, nodeId: fromNodeId } = editTarget();
+    if (useStore.getState().createBranch({ chatId, fromNodeId, content: _content }).status !== 'created') return;
     clearDraft();
     setIsEdit(false);
   };
@@ -326,15 +323,8 @@ export function useEditViewLogic({
   const handleBranchGenerate = () => {
     if (isChatBusy() || !modelValid || sticky || isNodeBusy(nodeId)) return;
     if (!confirmChatModelFavorite(currentChatIndex)) return;
-    const { ensureBranchTree, createBranch } = useStore.getState();
-    ensureBranchTree(currentChatIndex);
-    const activeNodeId =
-      nodeId ??
-      useStore.getState().chats![currentChatIndex].branchTree!.activePath[
-        resolveMessageIndex(nodeId, messageIndex)
-      ];
-    if (!activeNodeId) return;
-    createBranch(currentChatIndex, activeNodeId, _content);
+    const { chatId, nodeId: fromNodeId } = editTarget();
+    if (useStore.getState().createBranch({ chatId, fromNodeId, content: _content }).status !== 'created') return;
     clearDraft();
     setIsEdit(false);
     handleSubmit();
@@ -346,7 +336,8 @@ export function useEditViewLogic({
       showToast(i18next.t('protectedCannotEdit', { ns: 'main' }), 'warning');
       return;
     }
-    const resolvedMessageIndex = resolveMessageIndex(nodeId, messageIndex);
+    const resolvedMessageIndex = resolveMessageIndex(currentChatId, nodeId, messageIndex);
+    if (resolvedMessageIndex < 0) return;
     const nextIndex = resolvedMessageIndex + 1;
     const chats = useStore.getState().chats!;
     const removeCount = nextIndex < chats[currentChatIndex].messages.length ? 1 : 0;
@@ -359,13 +350,7 @@ export function useEditViewLogic({
       }
     }
     if (!confirmChatModelFavorite(currentChatIndex)) return;
-    replaceMessageAndPruneFollowing(
-      currentChatIndex,
-      resolvedMessageIndex,
-      chats[currentChatIndex].messages[resolvedMessageIndex].role,
-      _content,
-      removeCount
-    );
+    if (replaceNodeAndPrune({ ...editTarget(), role: chats[currentChatIndex].messages[resolvedMessageIndex].role, content: _content, removeCount }).status !== 'updated') return;
     clearDraft();
     setIsEdit(false);
     handleSubmitMidChat(nextIndex);
@@ -383,13 +368,14 @@ export function useEditViewLogic({
 
     if (sticky) {
       if (hasSubmittableContent) {
-        appendNodeToActivePath(currentChatIndex, inputRole, _content);
+        if (appendNode({ chatId: currentChatId, role: inputRole, content: _content }).status !== 'updated') return;
       }
       _setContent([{ type: 'text', text: '' } as TextContentInterface]);
       clearDraft();
       resetTextAreaHeight();
     } else {
-      const resolvedMessageIndex = resolveMessageIndex(nodeId, messageIndex);
+      const resolvedMessageIndex = resolveMessageIndex(currentChatId, nodeId, messageIndex);
+      if (resolvedMessageIndex < 0) return;
       const chats = useStore.getState().chats!;
       const removeCount = Math.max(
         0,
@@ -399,13 +385,7 @@ export function useEditViewLogic({
         showToast(i18next.t('protectedPruneStopped', { ns: 'main' }), 'warning');
         return;
       }
-      replaceMessageAndPruneFollowing(
-        currentChatIndex,
-        resolvedMessageIndex,
-        chats[currentChatIndex].messages[resolvedMessageIndex].role,
-        _content,
-        removeCount
-      );
+      if (replaceNodeAndPrune({ ...editTarget(), role: chats[currentChatIndex].messages[resolvedMessageIndex].role, content: _content, removeCount }).status !== 'updated') return;
       clearDraft();
       setIsEdit(false);
     }

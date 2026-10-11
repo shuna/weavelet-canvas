@@ -6,18 +6,19 @@ import ProtectedIcon from '@icon/ProtectedIcon';
 
 const MetaActions = memo(
   ({
-    messageIndex,
+    chatId,
+    nodeId,
     isOmitted,
     isProtected,
   }: {
-    messageIndex: number;
+    chatId: string;
+    nodeId: string;
     isOmitted: boolean;
     isProtected: boolean;
   }) => {
     const { t } = useTranslation();
-    const currentChatIndex = useStore((state) => state.currentChatIndex);
-    const toggleOmitNode = useStore((state) => state.toggleOmitNode);
-    const toggleProtectNode = useStore((state) => state.toggleProtectNode);
+    const setNodeOmitted = useStore((state) => state.setNodeOmitted);
+    const setNodeProtected = useStore((state) => state.setNodeProtected);
 
     return (
       <div className='pointer-events-none flex items-center gap-1 opacity-0 transition-opacity group-hover:pointer-events-auto group-hover:opacity-100'>
@@ -31,7 +32,7 @@ const MetaActions = memo(
             }`}
             onClick={(e) => {
               e.stopPropagation();
-              toggleOmitNode(currentChatIndex, messageIndex);
+              setNodeOmitted({ chatId, nodeId, value: !isOmitted });
             }}
             title={String(isOmitted ? t('omitOff') : t('omitOn'))}
             aria-label={String(isOmitted ? t('omitOff') : t('omitOn'))}
@@ -47,7 +48,7 @@ const MetaActions = memo(
             }`}
             onClick={(e) => {
               e.stopPropagation();
-              toggleProtectNode(currentChatIndex, messageIndex);
+              setNodeProtected({ chatId, nodeId, value: !isProtected });
             }}
             title={String(isProtected ? t('protectOff') : t('protectOn'))}
             aria-label={String(isProtected ? t('protectOff') : t('protectOn'))}

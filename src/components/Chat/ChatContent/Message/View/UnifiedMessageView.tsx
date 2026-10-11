@@ -12,17 +12,15 @@ import {
 } from '@type/chat';
 import { resolveRegenerateTarget } from '@utils/branchUtils';
 import { useEditViewLogic } from './useEditViewLogic';
-import OverTypeEditor from './OverTypeEditor';
+import { MessageEditForm } from './EditView';
 import ContentActions from './ContentActions';
 import ContentAttachments from './ContentAttachments';
-import EditViewButtons from './EditViewButtons';
 import ContentBody from './ContentBody';
 import EvaluationPanel from './EvaluationPanel';
 import EvaluationModal from './EvaluationModal';
 import type { TabId } from './EvaluationModal';
 import PopupModal from '@components/PopupModal';
 import { useTranslation } from 'react-i18next';
-import { useModelType } from '@utils/modelLookup';
 import { useStreamingText } from '@hooks/useStreamingText';
 import { useStreamingReasoning } from '@hooks/useStreamingReasoning';
 import { isReasoningContent } from '@type/chat';
@@ -63,8 +61,8 @@ const UnifiedMessageView = memo(
     const [evalInitialTab, setEvalInitialTab] = useState<TabId | undefined>();
 
     const currentChatIndex = useStore((state) => state.currentChatIndex);
-    const removeMessageAtIndex = useStore((state) => state.removeMessageAtIndex);
-    const moveMessage = useStore((state) => state.moveMessage);
+    const removeNode = useStore((state) => state.removeNode);
+    const moveNode = useStore((state) => state.moveNode);
     const lastMessageIndex = useStore((state) =>
       state.chats?.[state.currentChatIndex]?.messages
         ? state.chats[state.currentChatIndex].messages.length - 1
@@ -103,35 +101,38 @@ const UnifiedMessageView = memo(
       sticky: false,
       editSessionKey,
     });
-    const isImageModel = useModelType(editLogic.model, editLogic.providerId) === 'image';
 
     // Resolve current message index from active path
     const resolveCurrentMessageIndex = () => {
       if (!nodeId) return messageIndex;
       const activePath =
-        useStore.getState().chats?.[currentChatIndex]?.branchTree?.activePath ?? [];
+        useStore.getState().chats?.find(chat => chat.id === currentChatId)?.branchTree?.activePath ?? [];
       const resolvedIndex = activePath.indexOf(nodeId);
-      return resolvedIndex >= 0 ? resolvedIndex : messageIndex;
+      return resolvedIndex;
     };
 
-    // ContentView handlers
+    // User message operations
     const handleDelete = () => {
-      removeMessageAtIndex(currentChatIndex, resolveCurrentMessageIndex());
+      removeNode({ chatId: currentChatId, nodeId: nodeId ?? String(messageIndex) });
     };
     const handleMove = (direction: 'up' | 'down') => {
-      moveMessage(currentChatIndex, resolveCurrentMessageIndex(), direction);
+      moveNode({ chatId: currentChatId, nodeId: nodeId ?? String(messageIndex), direction });
     };
     const handleRefresh = () => {
       if (isCurrentChatGenerating) return;
+      const index = resolveCurrentMessageIndex();
+      if (index < 0) return;
       const plan = resolveRegenerateTarget(
         role as Role,
-        resolveCurrentMessageIndex(),
+        index,
         useStore.getState().chats![currentChatIndex].messages.length
       );
       if (!plan) return;
       if (!confirmChatModelFavorite(currentChatIndex)) return;
       if (plan.removeIndex >= 0) {
-        removeMessageAtIndex(currentChatIndex, plan.removeIndex);
+        const chat = useStore.getState().chats?.find(chat => chat.id === currentChatId);
+        const result = removeNode({ chatId: currentChatId, nodeId: chat?.branchTree?.activePath[plan.removeIndex] ?? String(plan.removeIndex) });
+        if (result.status !== 'updated') return;
       }
       handleRegenerate(plan.submitMode === 'append' ? 'append' : 'midchat', plan.insertIndex);
     };
@@ -194,75 +195,11 @@ const UnifiedMessageView = memo(
       ? (content.slice(1).filter(isImageContent) as ImageContentInterface[])
       : [];
 
-    // Determine displayed value: draft when editing, saved content when viewing
-    const displayValue = isEditState
-      ? editLogic.textValue
-      : currentTextContent;
-
     return (
       <>
         {isEditState ? (
           <div ref={setContentElement} className={contentSurfaceClass}>
-            <div className={contentMinHeightClass}>
-              <OverTypeEditor
-                value={displayValue}
-                mode='edit'
-                onChange={editLogic.setTextValue}
-                onKeyDown={(e) => {
-                  // Convert native KeyboardEvent to React-compatible format for handleKeyDown
-                  editLogic.handleKeyDown(e as unknown as React.KeyboardEvent<HTMLTextAreaElement>);
-                }}
-                onPaste={(e) => {
-                  editLogic.handlePaste(e as unknown as React.ClipboardEvent<HTMLTextAreaElement>);
-                }}
-                autoFocus
-                minHeight='5.25rem'
-              />
-            </div>
-            <EditViewButtons
-              sticky={false}
-              handleFileChange={editLogic.handleFileChange}
-              handleImageDetailChange={editLogic.handleImageDetailChange}
-              handleRemoveImage={editLogic.handleRemoveImage}
-              handleGenerate={editLogic.handleGenerate}
-              handleGenerateNextOnly={editLogic.handleGenerateNextOnly}
-              generateBelowDisabled={editLogic.generateBelowDisabled}
-              handleBranchGenerate={editLogic.handleBranchGenerate}
-              handleSave={editLogic.handleSave}
-              handleBranchOnly={editLogic.handleBranchOnly}
-              handleCancel={editLogic.handleCancel}
-              contentChanged={editLogic.contentChanged}
-              handleUploadButtonClick={editLogic.handleUploadButtonClick}
-              setIsModalOpen={editLogic.setIsModalOpen}
-              _setContent={editLogic._setContent}
-              _content={editLogic._content}
-              imageUrl={editLogic.imageUrl}
-              setImageUrl={editLogic.setImageUrl}
-              handleImageUrlChange={editLogic.handleImageUrlChange}
-              fileInputRef={editLogic.fileInputRef}
-              model={editLogic.model}
-              providerId={editLogic.providerId}
-              modelValid={editLogic.modelValid}
-              messageIndex={messageIndex}
-              role={role}
-            />
-            {editLogic.isModalOpen && (
-              <PopupModal
-                setIsModalOpen={editLogic.setIsModalOpen}
-                title={t('warning') as string}
-                message={t('clearMessageWarning') as string}
-                handleConfirm={editLogic.handleGenerate}
-              />
-            )}
-            {editLogic.isUnknownContextConfirmOpen && (
-              <PopupModal
-                setIsModalOpen={editLogic.setIsUnknownContextConfirmOpen}
-                title={t('warning') as string}
-                message={editLogic.unknownContextConfirmMessage}
-                handleConfirm={editLogic.handleUnknownContextConfirm}
-                handleClose={editLogic.handleUnknownContextCancel}
-              />
-            )}
+            <MessageEditForm logic={editLogic} role={role} messageIndex={messageIndex} editorClassName={contentMinHeightClass} />
           </div>
         ) : (
           <div ref={setContentElement} className={`${contentSurfaceClass} relative`}>

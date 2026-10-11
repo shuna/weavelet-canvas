@@ -31,9 +31,9 @@ const NodeContextMenu = ({
   const copyBranchSequence = useStore((state) => state.copyBranchSequence);
   const cutBranchSequence = useStore((state) => state.cutBranchSequence);
   const pasteBranchSequence = useStore((state) => state.pasteBranchSequence);
-  const renameBranchNode = useStore((state) => state.renameBranchNode);
-  const toggleNodeStar = useStore((state) => state.toggleNodeStar);
-  const toggleNodePin = useStore((state) => state.toggleNodePin);
+  const setNodeLabel = useStore((state) => state.setNodeLabel);
+  const setNodeStar = useStore((state) => state.setNodeStar);
+  const setNodePin = useStore((state) => state.setNodePin);
   const compareTarget = useStore((state) => state.compareTarget);
   const setCompareTarget = useStore((state) => state.setCompareTarget);
   const branchClipboard = useStore((state) => state.branchClipboard);
@@ -104,7 +104,7 @@ const NodeContextMenu = ({
   };
 
   const handleLabelSubmit = () => {
-    renameBranchNode(chatIndex, nodeId, labelValue.trim());
+    setNodeLabel({ chatId: chats?.[chatIndex]?.id ?? '', nodeId, value: labelValue.trim() });
     setIsEditingLabel(false);
     onClose();
   };
@@ -178,7 +178,7 @@ const NodeContextMenu = ({
         <button
           className='w-full px-4 py-2 text-left text-sm text-inherit hover:bg-gray-100 dark:hover:bg-gray-700'
           onClick={() => {
-            toggleNodeStar(chatIndex, nodeId);
+            setNodeStar({ chatId: chats?.[chatIndex]?.id ?? '', nodeId, value: !tree?.nodes[nodeId]?.starred });
             onClose();
           }}
         >
@@ -187,7 +187,7 @@ const NodeContextMenu = ({
         <button
           className='w-full px-4 py-2 text-left text-sm text-inherit hover:bg-gray-100 dark:hover:bg-gray-700'
           onClick={() => {
-            toggleNodePin(chatIndex, nodeId);
+            setNodePin({ chatId: chats?.[chatIndex]?.id ?? '', nodeId, value: !tree?.nodes[nodeId]?.pinned });
             onClose();
           }}
         >

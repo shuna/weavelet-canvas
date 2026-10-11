@@ -49,7 +49,7 @@ const ChatTitle = React.memo(() => {
     setChats(updatedChats);
     // If system prompt changed, trigger bubble sync
     if ((config.systemPrompt ?? '') !== (prevSystemPrompt ?? '')) {
-      setChatSystemPrompt(currentChatIndex, config.systemPrompt ?? '');
+      setChatSystemPrompt({ chatId: chats[currentChatIndex].id, prompt: config.systemPrompt ?? '' });
     }
   };
 
