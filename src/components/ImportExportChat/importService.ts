@@ -4,6 +4,11 @@ import { showToast } from '@utils/showToast';
 import useStore from '@store/store';
 import { createPartializedState } from '@store/store';
 import type { StoreState } from '@store/store';
+import { createPersistedChatDataState } from '@store/persistence';
+import { STORE_VERSION } from '@store/version';
+import { findPersistedDataIntegrityErrors } from '@store/storage/prepareSave';
+import { saveChatData, resolveLegacyRemoteSnapshot, type LegacyRemoteSnapshot } from '@store/storage/IndexedDbStorage';
+import { setLocalStorageItem } from '@store/storage/storageErrors';
 import {
   importOpenAIChatExport,
   isLegacyImport,
@@ -15,18 +20,20 @@ import {
   validateExportV2,
   validateExportV3,
 } from '@utils/import';
-import { flatMessagesToBranchTree } from '@utils/branchUtils';
+import { flatMessagesToBranchTree, materializeActivePath } from '@utils/branchUtils';
 import { assignFreshChatIds } from '@utils/chatIdentity';
-import { ContentStoreData, addContent } from '@utils/contentStore';
+import { ContentStoreData, addContent, resolveContent } from '@utils/contentStore';
 import { normalizeSystemPrompt } from '@utils/systemPromptNormalize';
 import { isKnownModel } from '@utils/modelLookup';
 import { BranchNodeLegacy, ChatInterface, Folder, FolderCollection } from '@type/chat';
 import { ExportV1, ExportV2, ExportV3, OpenAIChat, OpenAIPlaygroundJSON } from '@type/export';
 import type { EvaluationResultMap } from '@type/evaluation';
+import { invalidateAiTasks } from '@hooks/aiTaskLifetime';
 
 export type ImportResult = {
   success: boolean;
   message: string;
+  status?: 'concurrent-change' | 'storage-error';
 };
 
 export type ImportMode = 'append' | 'replace';
@@ -41,27 +48,12 @@ type ImportType =
   | 'ExportV3'
   | '';
 
-type StoreSnapshot = {
-  persistedState: ReturnType<typeof createPartializedState>;
-  currentChatIndex: number;
-};
-
-const applyPersistedState = (persistedState: ReturnType<typeof createPartializedState>) => {
-  const currentState = useStore.getState();
-  const nextState: StoreState = {
-    ...currentState,
-    ...persistedState,
-    chats: persistedState.chats?.map((chat) => ({
-      ...chat,
-      messages: chat.messages ?? [],
-    })) ?? currentState.chats,
-  };
-  useStore.setState(nextState);
-};
-
 const cloneState = <T,>(value: T): T => JSON.parse(JSON.stringify(value));
 const deepClone = <T,>(value: T): T =>
   typeof structuredClone === 'function' ? structuredClone(value) : cloneState(value);
+const snapshot = (state: StoreState) => deepClone(createPartializedState({
+  ...state, contentStore: deepClone(state.contentStore),
+}));
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === 'object' && value !== null;
 const extractModelId = (chat: unknown): string | undefined => {
@@ -71,35 +63,23 @@ const extractModelId = (chat: unknown): string | undefined => {
   return chat.config.model;
 };
 
-const takeSnapshot = (): StoreSnapshot => ({
-  persistedState: deepClone(createPartializedState(useStore.getState())),
-  currentChatIndex: useStore.getState().currentChatIndex,
-});
-
-const restoreSnapshot = (snapshot: StoreSnapshot) => {
-  applyPersistedState(snapshot.persistedState);
-  useStore.getState().setCurrentChatIndex(snapshot.currentChatIndex);
+// Only persisted data is cloned; store actions and runtime state remain on the base.
+const createImportPlan = (base: StoreState, mode: ImportMode, includeSettings: boolean): StoreState => {
+  const defaults = mode === 'replace' && includeSettings
+    ? snapshot(useStore.getInitialState())
+    : snapshot(base);
+  return {
+    ...base,
+    ...defaults,
+    chats: mode === 'replace' ? [] : deepClone(base.chats),
+    folders: mode === 'replace' ? {} : deepClone(base.folders),
+    contentStore: mode === 'replace' ? {} : deepClone(base.contentStore),
+    branchClipboard: mode === 'replace' ? null : deepClone(base.branchClipboard),
+    currentChatIndex: mode === 'replace' ? -1 : base.currentChatIndex,
+  };
 };
 
-const resetPersistedStateForReplace = () => {
-  const initialState = deepClone(
-    createPartializedState(useStore.getInitialState())
-  );
-  applyPersistedState(initialState);
-  useStore.getState().setCurrentChatIndex(initialState.chats?.length ? 0 : -1);
-};
-
-const resetChatsOnlyForReplace = () => {
-  useStore.setState({
-    chats: [],
-    folders: {},
-    contentStore: {},
-    branchClipboard: null,
-  });
-  useStore.getState().setCurrentChatIndex(-1);
-};
-
-const mergeChats = (chatsToImport: ChatInterface[]) => {
+const mergeChats = (plan: StoreState, chatsToImport: ChatInterface[]) => {
   const chatIdMap: Record<string, string> = {};
   chatsToImport.forEach((chat) => {
     const prevId = chat.id;
@@ -107,19 +87,15 @@ const mergeChats = (chatsToImport: ChatInterface[]) => {
     chatIdMap[prevId] = chat.id;
   });
   // Normalize system prompts: migrate system bubbles → config.systemPrompt
-  const contentStore = useStore.getState().contentStore ?? {};
+  const contentStore = plan.contentStore ?? {};
   for (const chat of chatsToImport) {
-    try {
-      normalizeSystemPrompt(chat, contentStore);
-    } catch (e) {
-      console.warn('[import] system prompt normalization failed for chat', chat.id, e);
-    }
+    normalizeSystemPrompt(chat, contentStore);
   }
-  const existingChats = useStore.getState().chats;
+  const existingChats = plan.chats;
   if (existingChats) {
-    useStore.getState().setChats(chatsToImport.concat(cloneState(existingChats)));
+    plan.chats = chatsToImport.concat(existingChats);
   } else {
-    useStore.getState().setChats(chatsToImport);
+    plan.chats = chatsToImport;
   }
   return chatIdMap;
 };
@@ -154,13 +130,13 @@ const clearMissingFolderReferences = (
   });
 };
 
-const shiftAndMergeFolders = (folders: FolderCollection) => {
+const shiftAndMergeFolders = (plan: StoreState, folders: FolderCollection) => {
   const offset = Object.keys(folders).length;
-  const currentFolders = useStore.getState().folders;
+  const currentFolders = plan.folders;
   Object.values(currentFolders).forEach((folder) => {
     folder.order += offset;
   });
-  useStore.getState().setFolders({ ...folders, ...currentFolders });
+  plan.folders = { ...folders, ...currentFolders };
 };
 
 const warnUnsupportedModels = (chats: unknown[], t: Translator) => {
@@ -193,11 +169,52 @@ export const readImportFile = async (file: File): Promise<string> => {
     return await new Response(decompressedStream).text();
   }
 
-  return new Promise((resolve) => {
+  return new Promise((resolve, reject) => {
     const reader = new FileReader();
     reader.onload = (event) => resolve(event.target?.result as string);
+    reader.onerror = () => reject(reader.error ?? new Error('Import file read failed'));
+    reader.onabort = () => reject(new Error('Import file read aborted'));
     reader.readAsText(file);
   });
+};
+
+// Raw sync backups enter the existing import converters only by explicit file import.
+const decodeLegacyRemoteImport = (raw: LegacyRemoteSnapshot) => {
+  if (!Number.isInteger(raw.version) || raw.version < 0 || raw.version >= STORE_VERSION) {
+    throw new Error('この同期データの版は取り込めません。対応する版で開いてください。');
+  }
+  if (!isRecord(raw.state) || !Array.isArray(raw.state.chats)) {
+    throw new Error('Invalid legacy remote snapshot');
+  }
+  const state = deepClone(raw.state);
+  const chats = state.chats as ChatInterface[];
+  const hasInlineNodes = chats.some(chat => chat.branchTree &&
+    Object.values(chat.branchTree.nodes).some(node => 'content' in node && !node.contentHash));
+  const version = hasInlineNodes ? 2 : isRecord(state.contentStore) ? 3 : 1;
+  if (version === 3 || hasInlineNodes) {
+    const hashedChats = hasInlineNodes ? chats.map(chat => chat.branchTree ? {
+      ...chat, branchTree: { ...chat.branchTree, nodes: Object.fromEntries(
+        Object.entries(chat.branchTree.nodes).filter(([, node]) => node.contentHash !== undefined),
+      ) },
+    } : chat) : chats;
+    const errors = findPersistedDataIntegrityErrors(hashedChats, (state.contentStore ?? {}) as ContentStoreData, null);
+    if (errors.length) throw new Error(`Invalid legacy remote snapshot: ${errors.join('; ')}`);
+  }
+  for (const chat of chats) {
+    if (hasInlineNodes && chat.branchTree) {
+      for (const node of Object.values(chat.branchTree.nodes)) {
+        if (node.contentHash) {
+          (node as unknown as BranchNodeLegacy).content = resolveContent(state.contentStore as ContentStoreData, node.contentHash);
+          delete (node as Partial<typeof node>).contentHash;
+        }
+      }
+    }
+    if (chat.messages === undefined) {
+      if (!chat.branchTree) throw new Error('Invalid legacy remote snapshot: missing chat messages');
+      chat.messages = version === 3 ? materializeActivePath(chat.branchTree, state.contentStore as ContentStoreData) : [];
+    }
+  }
+  return { ...state, version, chats, folders: state.folders ?? {} };
 };
 
 const detectImportType = (parsedData: unknown): ImportType => {
@@ -224,19 +241,15 @@ const buildFailureResult = (message: string): ImportResult => ({
 });
 
 const importLegacyChats = (
+  plan: StoreState,
   chatsToImport: unknown[],
-  removedChatsCount: number,
-  originalParsedData: unknown[],
   t: Translator
 ): ImportResult => {
   if (!validateAndFixChats(chatsToImport)) {
-    warnUnsupportedModels(chatsToImport, t);
     return buildFailureResult(
       t('notifications.invalidChatsDataFormat', { ns: 'import' })
     );
   }
-
-  warnUnsupportedModels(originalParsedData, t);
 
   const folderNameToIdMap: Record<string, string> = {};
   const parsedFolders: string[] = [];
@@ -262,29 +275,17 @@ const importLegacyChats = (
     return { [id]: nextFolder, ...acc };
   }, {} as FolderCollection);
 
-  shiftAndMergeFolders(newFolders);
+  shiftAndMergeFolders(plan, newFolders);
 
-  const contentStore = { ...useStore.getState().contentStore };
+  const contentStore = { ...plan.contentStore };
   for (const chat of chatsToImport) {
     if (!chat.branchTree) {
       chat.branchTree = flatMessagesToBranchTree(chat.messages, contentStore);
     }
   }
-  useStore.setState({ contentStore });
+  plan.contentStore = contentStore;
 
-  mergeChats(chatsToImport);
-
-  if (removedChatsCount > 0) {
-    showToast(
-      `${t('reduceMessagesSuccess', { count: removedChatsCount })}. ${t('notifications.chatsImported', {
-        ns: 'import',
-        imported: chatsToImport.length,
-        total: originalParsedData.length,
-      })}`,
-      'info',
-      15000
-    );
-  }
+  mergeChats(plan, chatsToImport);
 
   return chatsToImport.length > 0
     ? buildSuccessResult(t('notifications.successfulImport', { ns: 'import' }))
@@ -292,6 +293,7 @@ const importLegacyChats = (
 };
 
 const importExportV3 = (
+  plan: StoreState,
   parsedData: ExportV3,
   t: Translator,
   mode: ImportMode,
@@ -306,9 +308,9 @@ const importExportV3 = (
 
   clearMissingFolderReferences(chats, parsedData.folders);
 
-  shiftAndMergeFolders(parsedData.folders);
+  shiftAndMergeFolders(plan, parsedData.folders);
 
-  const existingContentStore = { ...useStore.getState().contentStore };
+  const existingContentStore = { ...plan.contentStore };
   const importedContentStore = parsedData.contentStore as ContentStoreData;
   for (const [hash, entry] of Object.entries(importedContentStore)) {
     if (existingContentStore[hash]) {
@@ -317,23 +319,19 @@ const importExportV3 = (
       existingContentStore[hash] = { ...entry };
     }
   }
-  useStore.setState({ contentStore: existingContentStore });
-  const chatIdMap = mergeChats(chats);
+  plan.contentStore = existingContentStore;
+  const chatIdMap = mergeChats(plan, chats);
 
   if (parsedData.evaluationResults) {
     const remapped = remapEvaluationResultKeys(parsedData.evaluationResults, chatIdMap);
-    const existingResults = useStore.getState().evaluationResults;
-    useStore.setState({
-      evaluationResults: { ...existingResults, ...remapped },
-    });
+    const existingResults = plan.evaluationResults;
+    plan.evaluationResults = { ...existingResults, ...remapped };
   }
 
   if (includeSettings && mode === 'replace' && parsedData.evaluationSettings) {
     // Backfill defaults for fields added after initial release
-    const currentDefaults = useStore.getState().evaluationSettings;
-    useStore.setState({
-      evaluationSettings: { ...currentDefaults, ...parsedData.evaluationSettings },
-    });
+    const currentDefaults = plan.evaluationSettings;
+    plan.evaluationSettings = { ...currentDefaults, ...parsedData.evaluationSettings };
   }
 
   return chats.length > 0
@@ -341,7 +339,7 @@ const importExportV3 = (
     : buildFailureResult(t('notifications.quotaExceeded', { ns: 'import' }));
 };
 
-const importExportV2 = (parsedData: ExportV2, t: Translator): ImportResult => {
+const importExportV2 = (plan: StoreState, parsedData: ExportV2, t: Translator): ImportResult => {
   if (!validateExportV2(parsedData)) {
     return buildFailureResult(
       t('notifications.invalidFormatForVersion', { ns: 'import' })
@@ -349,9 +347,9 @@ const importExportV2 = (parsedData: ExportV2, t: Translator): ImportResult => {
   }
 
   clearMissingFolderReferences(parsedData.chats, parsedData.folders);
-  shiftAndMergeFolders(parsedData.folders);
+  shiftAndMergeFolders(plan, parsedData.folders);
 
-  const contentStore = { ...useStore.getState().contentStore };
+  const contentStore = { ...plan.contentStore };
   if (parsedData.chats) {
     type LegacyBranchNodeWithHash = Omit<BranchNodeLegacy, 'content'> & {
       content?: BranchNodeLegacy['content'];
@@ -371,9 +369,9 @@ const importExportV2 = (parsedData: ExportV2, t: Translator): ImportResult => {
     }
   }
 
-  useStore.setState({ contentStore });
+  plan.contentStore = contentStore;
   if (parsedData.chats) {
-    mergeChats(parsedData.chats);
+    mergeChats(plan, parsedData.chats);
   }
 
   return parsedData.chats && parsedData.chats.length > 0
@@ -382,9 +380,8 @@ const importExportV2 = (parsedData: ExportV2, t: Translator): ImportResult => {
 };
 
 const importExportV1 = (
+  plan: StoreState,
   parsedData: ExportV1,
-  removedChatsCount: number,
-  originalParsedData: ExportV1,
   t: Translator
 ): ImportResult => {
   if (!validateExportV1(parsedData)) {
@@ -394,30 +391,17 @@ const importExportV1 = (
   }
 
   clearMissingFolderReferences(parsedData.chats, parsedData.folders);
-  shiftAndMergeFolders(parsedData.folders);
+  shiftAndMergeFolders(plan, parsedData.folders);
 
   if (parsedData.chats) {
-    const contentStore = { ...useStore.getState().contentStore };
+    const contentStore = { ...plan.contentStore };
     for (const chat of parsedData.chats) {
       if (!chat.branchTree) {
         chat.branchTree = flatMessagesToBranchTree(chat.messages, contentStore);
       }
     }
-    useStore.setState({ contentStore });
-    mergeChats(parsedData.chats);
-  }
-
-  if (removedChatsCount > 0 && parsedData.chats && parsedData.chats.length > 0) {
-    const originalChats = originalParsedData.chats ?? [];
-    showToast(
-      `${t('reduceMessagesSuccess', { count: removedChatsCount })}. ${t('notifications.chatsImported', {
-        ns: 'import',
-        imported: originalChats.length - removedChatsCount,
-        total: originalChats.length,
-      })}`,
-      'info',
-      15000
-    );
+    plan.contentStore = contentStore;
+    mergeChats(plan, parsedData.chats);
   }
 
   return parsedData.chats && parsedData.chats.length > 0
@@ -426,35 +410,22 @@ const importExportV1 = (
 };
 
 const importOpenAIData = (
+  plan: StoreState,
   chatsToImport: OpenAIChat | OpenAIPlaygroundJSON | OpenAIChat[],
   shouldAllowPartialImport: boolean,
-  removedChatsCount: number,
-  originalParsedData: OpenAIChat[],
   t: Translator
 ): ImportResult => {
   const chats = importOpenAIChatExport(chatsToImport, shouldAllowPartialImport);
 
-  const contentStore = { ...useStore.getState().contentStore };
+  const contentStore = { ...plan.contentStore };
   for (const chat of chats) {
     if (!chat.branchTree) {
       chat.branchTree = flatMessagesToBranchTree(chat.messages, contentStore);
     }
   }
-  useStore.setState({ contentStore });
+  plan.contentStore = contentStore;
 
-  mergeChats(chats);
-
-  if (removedChatsCount > 0) {
-    showToast(
-      `${t('reduceMessagesSuccess', { count: removedChatsCount })}. ${t('notifications.chatsImported', {
-        ns: 'import',
-        imported: chats.length,
-        total: originalParsedData.length,
-      })}`,
-      'info',
-      15000
-    );
-  }
+  mergeChats(plan, chats);
 
   return chats.length > 0
     ? buildSuccessResult(t('notifications.successfulImport', { ns: 'import' }))
@@ -462,108 +433,75 @@ const importOpenAIData = (
 };
 
 const importParsedData = async (
+  base: StoreState,
   parsedData: unknown,
-  originalParsedData: unknown,
   type: ImportType,
   t: Translator,
   shouldAllowPartialImport: boolean,
   mode: ImportMode,
   includeSettings: boolean = true
-): Promise<ImportResult> => {
+): Promise<{ result: ImportResult; plan: StoreState; removedChatsCount?: number }> => {
   let chatsToImport = parsedData;
   let removedChatsCount = 0;
   let reduceImport = false;
 
   while (true) {
+    const plan = createImportPlan(base, mode, includeSettings);
     try {
-      if (mode === 'replace') {
-        if (includeSettings) {
-          resetPersistedStateForReplace();
-        } else {
-          resetChatsOnlyForReplace();
-        }
-      }
-
+      // Each retry converts a fresh payload so ids, folders and refs cannot accumulate.
+      const data = deepClone(chatsToImport);
+      let result: ImportResult;
       switch (type) {
         case 'OpenAIContent':
-          return importOpenAIData(
-            chatsToImport as OpenAIChat | OpenAIPlaygroundJSON | OpenAIChat[],
-            shouldAllowPartialImport,
-            removedChatsCount,
-            originalParsedData as OpenAIChat[],
-            t
-          );
+          result = importOpenAIData(plan, data as OpenAIChat | OpenAIPlaygroundJSON | OpenAIChat[],
+            shouldAllowPartialImport, t);
+          break;
         case 'SingleChat':
-          return importLegacyChats(
-            [chatsToImport],
-            removedChatsCount,
-            [originalParsedData],
-            t
-          );
+          result = importLegacyChats(plan, [data], t);
+          break;
         case 'LegacyImport':
-          return importLegacyChats(
-            chatsToImport as unknown[],
-            removedChatsCount,
-            originalParsedData as unknown[],
-            t
-          );
+          result = importLegacyChats(plan, data as unknown[], t);
+          break;
         case 'ExportV3':
-          return importExportV3(parsedData as ExportV3, t, mode, includeSettings);
+          result = importExportV3(plan, data as ExportV3, t, mode, includeSettings);
+          break;
         case 'ExportV2':
-          return importExportV2(parsedData as ExportV2, t);
+          result = importExportV2(plan, data as ExportV2, t);
+          break;
         case 'ExportV1':
-          return importExportV1(
-            parsedData as ExportV1,
-            removedChatsCount,
-            originalParsedData as ExportV1,
-            t
-          );
+          result = importExportV1(plan, data as ExportV1, t);
+          break;
         default:
-          return buildFailureResult(
-            t('notifications.unrecognisedDataFormat', { ns: 'import' })
-          );
+          result = buildFailureResult(t('notifications.unrecognisedDataFormat', { ns: 'import' }));
       }
+      return { result, plan, removedChatsCount };
     } catch (error: unknown) {
       if ((error as DOMException).name === 'QuotaExceededError') {
-        if (type === 'ExportV1') {
-          if (!isRecord(chatsToImport) || !Array.isArray(chatsToImport.chats) || !chatsToImport.chats.length) {
-            return buildFailureResult(t('notifications.quotaExceeded', { ns: 'import' }));
-          }
-          if (reduceImport) {
-            chatsToImport.chats.pop();
-            removedChatsCount++;
-            continue;
-          }
-        } else {
-          if (!Array.isArray(chatsToImport) || !chatsToImport.length) {
-            return buildFailureResult(t('notifications.quotaExceeded', { ns: 'import' }));
-          }
-          if (reduceImport) {
-            chatsToImport.pop();
-            removedChatsCount++;
-            continue;
-          }
+        const chats = type === 'ExportV1' && isRecord(chatsToImport)
+          ? chatsToImport.chats : chatsToImport;
+        if (!Array.isArray(chats) || !chats.length) {
+          return { result: buildFailureResult(t('notifications.quotaExceeded', { ns: 'import' })), plan };
         }
-
-        const confirmMessage = t('reduceMessagesFailedImportWarning');
-        if (window.confirm(confirmMessage)) {
+        if (reduceImport) {
+          chats.pop();
+          removedChatsCount++;
+          continue;
+        }
+        if (window.confirm(t('reduceMessagesFailedImportWarning'))) {
           reduceImport = true;
           continue;
         }
-        return buildFailureResult(t('notifications.quotaExceeded', { ns: 'import' }));
+        return { result: buildFailureResult(t('notifications.quotaExceeded', { ns: 'import' })), plan };
       }
-
       if (error instanceof PartialImportError) {
-        const confirmMessage = t('partialImportWarning', { message: error.message });
-        if (window.confirm(confirmMessage)) {
+        if (window.confirm(t('partialImportWarning', { message: error.message }))) {
           shouldAllowPartialImport = true;
           reduceImport = true;
           continue;
         }
-        return buildFailureResult(t('notifications.nothingImported', { ns: 'import' }));
+        return { result: buildFailureResult(t('notifications.nothingImported', { ns: 'import' })), plan };
       }
-
-      return buildFailureResult((error as Error).message);
+      return { result: buildFailureResult((error as Error).message), plan };
     }
   }
 };
@@ -574,33 +512,74 @@ export const importChatFromFile = async (
   mode: ImportMode = 'append',
   includeSettings: boolean = true
 ): Promise<ImportResult> => {
-  const snapshot = takeSnapshot();
-
+  let committed = false;
   try {
     const data = await readImportFile(file);
-    const parsedData = JSON.parse(data);
-    const originalParsedData = JSON.parse(data);
+    const raw = JSON.parse(data);
+    const legacyRemote = isRecord(raw) && Object.hasOwn(raw, 'state') && typeof raw.version === 'number'
+      ? raw as unknown as LegacyRemoteSnapshot : undefined;
+    const parsedData = legacyRemote ? decodeLegacyRemoteImport(legacyRemote) : raw;
+    const originalImport = deepClone(parsedData);
     const type = detectImportType(parsedData);
-    const result = await importParsedData(
-      parsedData,
-      originalParsedData,
-      type,
-      t,
-      false,
-      mode,
-      includeSettings
-    );
-
-    if (!result.success) {
-      restoreSnapshot(snapshot);
-    } else if (mode === 'replace') {
-      const chats = useStore.getState().chats;
-      useStore.getState().setCurrentChatIndex(chats && chats.length > 0 ? 0 : -1);
+    if (!type) return buildFailureResult(t('notifications.unrecognisedDataFormat', { ns: 'import' }));
+    const valid = type === 'ExportV3' ? validateExportV3(parsedData)
+      : type === 'ExportV2' ? validateExportV2(parsedData)
+      : type === 'ExportV1' ? validateExportV1(parsedData)
+      : type === 'LegacyImport' ? validateAndFixChats(parsedData)
+      : type === 'SingleChat' ? validateAndFixChats([parsedData]) : true;
+    if (!valid) {
+      if (type === 'LegacyImport' || type === 'SingleChat') warnUnsupportedModels(type === 'LegacyImport' ? parsedData : [parsedData], t);
+      return buildFailureResult(t(type.startsWith('Export')
+        ? 'notifications.invalidFormatForVersion' : 'notifications.invalidChatsDataFormat', { ns: 'import' }));
     }
-
+    if (mode === 'replace') invalidateAiTasks();
+    const base = useStore.getState();
+    const observed = JSON.stringify(snapshot(base));
+    const { result, plan, removedChatsCount } = await importParsedData(base, parsedData, type, t, false, mode, includeSettings);
+    if (!result.success) return result;
+    if (useStore.getState() !== base || JSON.stringify(snapshot(useStore.getState())) !== observed) {
+      return { success: false, message: 'concurrent-change', status: 'concurrent-change' };
+    }
+    const chats = plan.chats ?? [];
+    const maps = (field: 'collapsedNodes' | 'omittedNodes' | 'protectedNodes') => Object.fromEntries(
+      chats.flatMap((chat, index) => chat[field] && Object.keys(chat[field]!).length
+        ? [[String(index), { ...chat[field] }]] : [])
+    );
+    // Appends keep existing chat objects and their editing history intact.
+    if (mode === 'append' && base.chats) chats.splice(chats.length - base.chats.length, base.chats.length, ...base.chats);
+    const patch = {
+      ...createPartializedState(plan),
+      chats,
+      contentStore: plan.contentStore,
+      branchClipboard: plan.branchClipboard,
+      currentChatIndex: mode === 'replace' ? (chats.length ? 0 : -1) : base.currentChatIndex,
+      collapsedNodeMaps: maps('collapsedNodes'),
+      omittedNodeMaps: maps('omittedNodes'),
+      protectedNodeMaps: maps('protectedNodes'),
+      ...(mode === 'replace' ? { branchHistoryPast: [], branchHistoryFuture: [] } : {}),
+    };
+    committed = true;
+    useStore.setState(patch);
+    if (mode === 'replace') setLocalStorageItem('currentChatIndex', String(chats.length ? 0 : -1));
+    await saveChatData(createPersistedChatDataState({
+      ...useStore.getState(), contentStore: deepClone(useStore.getState().contentStore),
+    }));
+    if (legacyRemote && !removedChatsCount) {
+      await resolveLegacyRemoteSnapshot(legacyRemote);
+      await useStore.getState().refreshLegacyRemoteMigration();
+    }
+    if (type === 'LegacyImport' || type === 'SingleChat') warnUnsupportedModels(type === 'LegacyImport' ? parsedData : [parsedData], t);
+    if (removedChatsCount) {
+      const original = originalImport;
+      const total = Array.isArray(original) ? original.length : original.chats.length;
+      showToast(`${t('reduceMessagesSuccess', { count: removedChatsCount })}. ${t('notifications.chatsImported', {
+        ns: 'import', imported: total - removedChatsCount, total,
+      })}`, 'info', 15000);
+    }
     return result;
   } catch (error: unknown) {
-    restoreSnapshot(snapshot);
-    return buildFailureResult((error as Error).message);
+    return committed
+      ? { success: false, message: `storage-error: ${(error as Error).message}`, status: 'storage-error' }
+      : buildFailureResult((error as Error).message);
   }
 };

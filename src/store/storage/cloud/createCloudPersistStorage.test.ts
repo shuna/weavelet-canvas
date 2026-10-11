@@ -124,8 +124,9 @@ describe('createCloudPersistStorage', () => {
 
   it('recovers after size rejection and does not reopen the same guard toast', async () => {
     const { provider, state } = buildProvider();
-    const controller = createCloudPersistStorage(provider);
-    const oversized = { state: { text: 'x'.repeat(2_000_001) }, version: 1 };
+    // Exercise guard re-entry without repeatedly compressing a multi-megabyte fixture.
+    const controller = createCloudPersistStorage(provider, { maxCompressedBytes: 128 });
+    const oversized = { state: { text: Array.from({ length: 1000 }, (_, i) => String(i)).join(',') }, version: 1 };
     // Toast updates also trigger persistence in the application.
     state.notifyError.mockImplementation(() => {
       void controller.storage.setItem('test', oversized);

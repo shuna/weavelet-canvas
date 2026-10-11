@@ -1,5 +1,6 @@
+import { invalidateAiTasks } from '@hooks/aiTaskLifetime';
 import i18next from 'i18next';
-import { StoreSlice } from './store';
+import { StoreSlice, StoreState } from './store';
 import {
   BranchClipboard,
   ChatInterface,
@@ -14,6 +15,8 @@ import { materializeActivePath } from '@utils/branchUtils';
 import { showToast } from '@utils/showToast';
 import {
   finalizeStreamingBuffer,
+  getStreamingTargetFromHash,
+  peekBufferedContent,
   isStreamingContentHash,
 } from '@utils/streamingBuffer';
 import {
@@ -27,12 +30,11 @@ import {
   moveMessageState,
   pasteBranchSequenceState,
   removeMessageAtIndexState,
-  renameBranchNodeState,
+  removeBranchSequenceState,
+  setBranchNodeFieldState,
   replaceMessageAndPruneFollowingState,
   switchActivePathState,
   switchBranchAtNodeState,
-  toggleNodeStarState,
-  toggleNodePinState,
   truncateActivePathState,
   updateNodeRoleState,
   upsertMessageAtIndexState,
@@ -40,6 +42,7 @@ import {
   updateLastNodeContentState,
 } from './branch-domain';
 import { cloneChatAt } from './branch-domain';
+import { recordChatEdits } from './chat-edit-time';
 
 /**
  * Finalize any streaming nodes in the given chat, mutating contentStore in place.
@@ -80,7 +83,7 @@ function finalizeStreamingNodesInChat(
   const updatedChats = cloneChatAt(chats, chatIndex);
   const updatedTree = updatedChats[chatIndex].branchTree!;
   for (const node of streamingNodes) {
-    const content = finalizeStreamingBuffer(node.id);
+    const content = finalizeStreamingBuffer(chat.id, node.id);
     updatedTree.nodes[node.id] = {
       ...updatedTree.nodes[node.id],
       contentHash: addContent(contentStore, content),
@@ -108,6 +111,7 @@ interface BranchChatSnapshot {
   messages: ChatInterface['messages'];
   branchTree: ChatInterface['branchTree'];
   expectedActivePath?: string[];
+  systemPrompt?: { value: string | undefined };
 }
 
 interface BranchSnapshot {
@@ -168,6 +172,9 @@ const createBranchSnapshot = (
       messages: structuredClone(chat.messages),
       branchTree: structuredClone(chat.branchTree),
       expectedActivePath: expectedById.get(chat.id)?.branchTree?.activePath.slice(),
+      ...(chat.config.systemPrompt !== expectedById.get(chat.id)?.config.systemPrompt
+        ? { systemPrompt: { value: chat.config.systemPrompt } }
+        : {}),
     }));
   return {
     chats: snapshotChats,
@@ -195,7 +202,10 @@ const restoreBranchSnapshot = (
   const restored = chats.map((chat) => {
     const saved = snapshots.get(chat.id);
     if (!saved) return chat;
-    if (!saved.branchTree) return { ...chat, messages: structuredClone(saved.messages), branchTree: undefined };
+    const config = saved.systemPrompt
+      ? { ...chat.config, systemPrompt: saved.systemPrompt.value }
+      : chat.config;
+    if (!saved.branchTree) return { ...chat, config, messages: structuredClone(saved.messages), branchTree: undefined };
     const branchTree = structuredClone(saved.branchTree);
     const currentPath = chat.branchTree?.activePath;
     if (currentPath && saved.expectedActivePath &&
@@ -203,9 +213,57 @@ const restoreBranchSnapshot = (
       isUsableActivePath(branchTree, currentPath)) {
       branchTree.activePath = currentPath.slice();
     }
-    return { ...chat, branchTree, messages: materializeActivePath(branchTree, contentStore) };
+    return { ...chat, config, branchTree, messages: materializeActivePath(branchTree, contentStore) };
   });
   return restored;
+};
+
+type SequenceRange = { chatId: string; fromNodeId: string; toNodeId: string };
+type SequenceFailure = { status: 'missing' | 'not-ancestor' | 'invalid-target' | 'content-missing' };
+
+const validateSequenceRange = (chats: ChatInterface[] | undefined, input: SequenceRange) => {
+  const chatIndex = chats?.findIndex((chat) => chat.id === input.chatId) ?? -1;
+  const tree = chats?.[chatIndex]?.branchTree;
+  if (!tree?.nodes[input.fromNodeId] || !tree.nodes[input.toNodeId]) {
+    return { status: 'missing' as const };
+  }
+  const clipboard = copyBranchSequenceState(chats!, chatIndex, input.fromNodeId, input.toNodeId);
+  if (!clipboard) return { status: 'not-ancestor' as const };
+  return { status: 'valid' as const, chatIndex, clipboard };
+};
+
+const hasClipboardContent = (clipboard: BranchClipboard, contentStore: ContentStoreData) =>
+  clipboard.nodeIds.length > 0 && clipboard.nodeIds.every((id) => {
+    const node = clipboard.nodes[id];
+    if (!node) return false;
+    const target = getStreamingTargetFromHash(node.contentHash);
+    if (target) return peekBufferedContent(target.chatId, target.nodeId) !== undefined;
+    let hash: string | undefined = node.contentHash;
+    const visited = new Set<string>();
+    while (hash) {
+      if (visited.has(hash) || !contentStore[hash]) return false;
+      visited.add(hash);
+      hash = contentStore[hash].delta?.baseHash;
+    }
+    return true;
+  });
+
+type NodeTarget = { chatId: string; nodeId: string };
+type NodeEdit = NodeTarget & { role: Role; content: ContentInterface[] };
+type NodeResult = { status: 'updated' | 'unchanged' | 'chat-missing' | 'node-missing' | 'invalid-target' | 'protected' | 'busy' };
+
+const resolveNodeTarget = (chats: ChatInterface[] | undefined, input: NodeTarget, activeOnly = false) => {
+  const chatIndex = chats?.findIndex((chat) => chat.id === input.chatId) ?? -1;
+  const chat = chats?.[chatIndex];
+  if (!chat) return { status: 'chat-missing' as const };
+  const index = chat.branchTree
+    ? chat.branchTree.activePath.indexOf(input.nodeId)
+    : Number(input.nodeId);
+  const exists = chat.branchTree ? !!chat.branchTree.nodes[input.nodeId]
+    : Number.isInteger(index) && index >= 0 && String(index) === input.nodeId && !!chat.messages[index];
+  if (!exists) return { status: 'node-missing' as const };
+  if (activeOnly && index < 0) return { status: 'invalid-target' as const };
+  return { status: 'valid' as const, chatIndex, messageIndex: index, chat };
 };
 
 export interface BranchSlice {
@@ -214,7 +272,7 @@ export interface BranchSlice {
   applyBranchState: (
     chats: ChatInterface[],
     contentStore: ContentStoreData,
-    options?: { recordHistory?: boolean }
+    options?: { recordHistory?: boolean; clipboard?: BranchClipboard; historyBase?: { chats: ChatInterface[]; contentStore: ContentStoreData } }
   ) => void;
   invalidateBranchHistory: (chatIds: string[]) => void;
   branchHistoryPast: BranchSnapshot[];
@@ -251,44 +309,35 @@ export interface BranchSlice {
   setMultiViewChatIndices: (indices: number[]) => void;
   multiViewPrimaryChatIndex: number | null;
   setMultiViewPrimaryChatIndex: (index: number | null) => void;
-  moveBranchSequence: (
-    sourceChatIndex: number,
-    fromNodeId: string,
-    toNodeId: string,
-    targetChatIndex: number,
-    afterNodeId: string
-  ) => void;
+  moveBranchSequence: (input: {
+    sourceChatId: string; fromNodeId: string; toNodeId: string;
+    targetChatId: string; afterNodeId: string;
+  }) => { status: 'moved'; nodeIds: string[] } | SequenceFailure;
+  cutBranchSequence: (input: SequenceRange) => { status: 'cut' } | SequenceFailure;
   activateFolderOverview: (folderId: string) => void;
 
   compareTarget: { chatIndex: number; nodeId: string } | null;
   setCompareTarget: (target: { chatIndex: number; nodeId: string } | null) => void;
 
-  updateNodeRole: (chatIndex: number, nodeId: string, role: Role) => void;
+  saveNode: (input: NodeEdit) => NodeResult;
+  appendNode: (input: { chatId: string; role: Role; content: ContentInterface[] }) => { status: 'updated'; nodeId: string } | { status: 'chat-missing' };
+  insertNode: (input: { chatId: string; beforeNodeId: string | null; role: Role; content: ContentInterface[] }) => { status: 'updated'; nodeId: string } | { status: 'chat-missing' | 'node-missing' | 'invalid-target' };
+  removeNode: (input: NodeTarget) => NodeResult;
+  moveNode: (input: NodeTarget & { direction: 'up' | 'down' }) => NodeResult;
+  replaceNodeAndPrune: (input: NodeEdit & { removeCount: number }) => { status: 'updated' | 'missing' | 'invalid-input'; removedNodeIds: string[]; pruneBlockedBy: string[] };
+  updateNodeRole: (input: NodeTarget & { role: Role }) => NodeResult;
+  setNodeStar: (input: NodeTarget & { value: boolean }) => NodeResult;
+  setNodePin: (input: NodeTarget & { value: boolean }) => NodeResult;
+  setNodeLabel: (input: NodeTarget & { value: string }) => NodeResult;
 
   ensureBranchTree: (chatIndex: number) => void;
-  createBranch: (
-    chatIndex: number,
-    fromNodeId: string,
-    newContent?: ContentInterface[]
-  ) => string;
+  createBranch: (input: { chatId: string; fromNodeId: string; content?: ContentInterface[] }) =>
+    { status: 'created'; nodeId: string } | { status: 'chat-missing' | 'node-missing' };
   switchBranchAtNode: (chatIndex: number, nodeId: string) => void;
   switchActivePath: (chatIndex: number, newPath: string[]) => void;
   switchActivePathSilent: (chatIndex: number, newPath: string[]) => void;
   deleteBranch: (chatIndex: number, nodeId: string) => void;
   pruneHiddenNodes: (chatIndex: number) => void;
-  renameBranchNode: (
-    chatIndex: number,
-    nodeId: string,
-    label: string
-  ) => void;
-  toggleNodeStar: (chatIndex: number, nodeId: string) => void;
-  toggleNodePin: (chatIndex: number, nodeId: string) => void;
-
-  appendNodeToActivePath: (
-    chatIndex: number,
-    role: Role,
-    content: ContentInterface[]
-  ) => string;
   updateLastNodeContent: (
     chatIndex: number,
     content: ContentInterface[]
@@ -300,61 +349,80 @@ export interface BranchSlice {
     role: Role,
     content: ContentInterface[]
   ) => void;
-  upsertWithAutoBranch: (
-    chatIndex: number,
-    messageIndex: number,
-    role: Role,
-    content: ContentInterface[]
-  ) => void;
-  insertMessageAtIndex: (
-    chatIndex: number,
-    messageIndex: number,
-    role: Role,
-    content: ContentInterface[]
-  ) => string;
   removeMessageAtIndex: (chatIndex: number, messageIndex: number) => void;
-  moveMessage: (
-    chatIndex: number,
-    messageIndex: number,
-    direction: 'up' | 'down'
-  ) => void;
-  replaceMessageAndPruneFollowing: (
-    chatIndex: number,
-    messageIndex: number,
-    role: Role,
-    content: ContentInterface[],
-    removeCount?: number
-  ) => void;
 
-  copyBranchSequence: (
-    chatIndex: number,
-    fromNodeId: string,
-    toNodeId: string
-  ) => void;
-  pasteBranchSequence: (
-    targetChatIndex: number,
-    afterNodeId: string
-  ) => void;
+  copyBranchSequence: (input: SequenceRange) => { status: 'copied' } | { status: 'missing' | 'not-ancestor' };
+  pasteBranchSequence: (input: { chatId: string; afterNodeId: string }) =>
+    { status: 'pasted'; nodeIds: string[] } | { status: 'missing' | 'clipboard-empty' | 'content-missing' };
   setBranchClipboard: (clipboard: BranchClipboard | null) => void;
 }
 
-export const createBranchSlice: StoreSlice<BranchSlice> = (set, get) => ({
+export const createBranchSlice: StoreSlice<BranchSlice> = (set, get) => {
+  const setNodeField = (input: NodeTarget, field: 'label' | 'starred' | 'pinned', value: string | true | undefined): NodeResult => {
+    const target = resolveNodeTarget(get().chats, input);
+    if (target.status !== 'valid') return target;
+    const ensured = ensureBranchTreeState(get().chats!, target.chatIndex, get().contentStore);
+    const nodeId = target.chat.branchTree ? input.nodeId : ensured.chats[target.chatIndex].branchTree!.activePath[target.messageIndex];
+    if (ensured.chats[target.chatIndex].branchTree!.nodes[nodeId][field] === value) return { status: 'unchanged' };
+    const chats = setBranchNodeFieldState(ensured.chats, target.chatIndex, nodeId, field, value);
+    get().applyBranchState(chats, ensured.contentStore, { historyBase: ensured });
+    return { status: 'updated' };
+  };
+  return ({
   contentStore: {},
   setContentStore: (contentStore) => {
     set({ contentStore });
   },
   applyBranchState: (chats, contentStore, options) => {
     const prevChats = get().chats;
-    const changedIds = prevChats ? changedBranchChatIds(prevChats, chats) : [];
-    if (options?.recordHistory !== false && prevChats && changedIds.length > 0) {
-      const past = [...get().branchHistoryPast, createBranchSnapshot(
-        prevChats, get().contentStore, changedIds, chats
-      )];
-      if (past.length > HISTORY_LIMIT) past.shift();
-      set({ branchHistoryPast: past, branchHistoryFuture: [] });
+    const now = Date.now();
+    const edits = recordChatEdits(prevChats, chats, now);
+    chats = edits.chats;
+    // Legacy tree creation has no undo step; record the edit against that prepared tree.
+    const historyChats = options?.historyBase?.chats ?? prevChats;
+    const historyStore = options?.historyBase?.contentStore ?? get().contentStore;
+    const changedIds = historyChats ? changedBranchChatIds(historyChats, chats) : [];
+    const history = options?.recordHistory !== false && prevChats && changedIds.length > 0
+      ? {
+          branchHistoryPast: [...get().branchHistoryPast, createBranchSnapshot(
+            historyChats!, historyStore, changedIds, chats
+          )].slice(-HISTORY_LIMIT),
+          branchHistoryFuture: [],
+        }
+      : {};
+    const clipboard = options?.clipboard ? { branchClipboard: options.clipboard } : {};
+    const sameOrder = prevChats?.length === chats.length &&
+      prevChats.every((chat, index) => chat.id === chats[index].id);
+    if (!sameOrder) {
+      get().setChats(chats, { preserveBranchHistory: true });
     }
-    get().setChats(chats, { preserveBranchHistory: true });
-    set({ contentStore });
+    const attributes: Partial<StoreState> = {};
+    for (const [field, runtime] of [
+      ['collapsedNodes', 'collapsedNodeMaps'], ['omittedNodes', 'omittedNodeMaps'], ['protectedNodes', 'protectedNodeMaps'],
+    ] as const) {
+      const changed = chats.filter((chat, index) => chat[field] !== prevChats?.[index]?.[field]);
+      if (sameOrder && changed.length) {
+        attributes[runtime] = { ...get()[runtime] };
+        for (const chat of changed) attributes[runtime]![String(chats.indexOf(chat))] = chat[field] ?? {};
+      }
+    }
+    set({ chats, contentStore, ...history, ...clipboard, ...attributes,
+      ...(edits.changed ? { lastContentEditedAt: now } : {}),
+    });
+    if (options?.recordHistory !== false) {
+      for (const previous of prevChats ?? []) {
+        const next = chats.find(chat => chat.id === previous.id);
+        if (!next || previous.config.systemPrompt !== next.config.systemPrompt) {
+          invalidateAiTasks([previous.id]);
+          continue;
+        }
+        const changedNodes = Object.values(previous.branchTree?.nodes ?? {}).filter(node => {
+          const updated = next.branchTree?.nodes[node.id];
+          return !updated || node.contentHash !== updated.contentHash || node.role !== updated.role;
+        }).map(node => node.id);
+        if (changedNodes.length) invalidateAiTasks([previous.id], changedNodes);
+      }
+    }
   },
   invalidateBranchHistory: (chatIds) => {
     if (chatIds.length === 0) return;
@@ -388,6 +456,7 @@ export const createBranchSlice: StoreSlice<BranchSlice> = (set, get) => ({
     });
     get().setChats(restoreBranchSnapshot(currentChats, contentStore, snapshot), { preserveBranchHistory: true });
     set({ contentStore });
+    invalidateAiTasks(snapshot.chats.map(chat => chat.id));
   },
   redoBranch: () => {
     const future = get().branchHistoryFuture;
@@ -410,6 +479,7 @@ export const createBranchSlice: StoreSlice<BranchSlice> = (set, get) => ({
     });
     get().setChats(restoreBranchSnapshot(currentChats, contentStore, snapshot), { preserveBranchHistory: true });
     set({ contentStore });
+    invalidateAiTasks(snapshot.chats.map(chat => chat.id));
   },
   canUndoBranch: () => get().branchHistoryPast.length > 0 && !Object.values(get().generatingSessions).some(
     (session) => get().branchHistoryPast.at(-1)?.chats.some((chat) => chat.id === session.chatId)
@@ -508,19 +578,29 @@ export const createBranchSlice: StoreSlice<BranchSlice> = (set, get) => ({
     if (get().multiViewPrimaryChatIndex === index) return;
     set({ multiViewPrimaryChatIndex: index });
   },
-  moveBranchSequence: (sourceChatIndex, fromNodeId, toNodeId, targetChatIndex, afterNodeId) => {
+  moveBranchSequence: (input) => {
     const chats = get().chats;
-    if (!chats) return;
-    const clipboard = copyBranchSequenceState(chats, sourceChatIndex, fromNodeId, toNodeId);
-    if (!clipboard) return;
-    const pasted = pasteBranchSequenceState(
-      chats, targetChatIndex, afterNodeId, clipboard, get().contentStore
-    );
-    const result = deleteBranchState(
-      pasted.chats, sourceChatIndex, fromNodeId, pasted.contentStore
-    );
-    set({ branchClipboard: clipboard });
-    get().applyBranchState(result.chats, result.contentStore);
+    const range = validateSequenceRange(chats, { ...input, chatId: input.sourceChatId });
+    if (range.status !== 'valid') return range;
+    const targetIndex = chats!.findIndex((chat) => chat.id === input.targetChatId);
+    if (!chats![targetIndex]?.branchTree?.nodes[input.afterNodeId]) return { status: 'missing' };
+    if (range.chatIndex === targetIndex && range.clipboard.nodeIds.includes(input.afterNodeId)) {
+      return { status: 'invalid-target' };
+    }
+    if (!hasClipboardContent(range.clipboard, get().contentStore)) return { status: 'content-missing' };
+    const removed = removeBranchSequenceState(chats!, range.chatIndex, range.clipboard.nodeIds, get().contentStore);
+    const pasted = pasteBranchSequenceState(removed.chats, targetIndex, input.afterNodeId, range.clipboard, removed.contentStore);
+    const nodeIds = pasted.chats[targetIndex].branchTree!.activePath.slice(-range.clipboard.nodeIds.length);
+    get().applyBranchState(pasted.chats, pasted.contentStore, { clipboard: range.clipboard });
+    return { status: 'moved', nodeIds };
+  },
+  cutBranchSequence: (input) => {
+    const range = validateSequenceRange(get().chats, input);
+    if (range.status !== 'valid') return range;
+    if (!hasClipboardContent(range.clipboard, get().contentStore)) return { status: 'content-missing' };
+    const removed = removeBranchSequenceState(get().chats!, range.chatIndex, range.clipboard.nodeIds, get().contentStore);
+    get().applyBranchState(removed.chats, removed.contentStore, { clipboard: range.clipboard });
+    return { status: 'cut' };
   },
   activateFolderOverview: (folderId) => {
     const chats = get().chats;
@@ -536,24 +616,82 @@ export const createBranchSlice: StoreSlice<BranchSlice> = (set, get) => ({
     });
   },
 
-  updateNodeRole: (chatIndex, nodeId, role) => {
-    const chats = get().chats;
-    if (!chats) return;
-    const { chats: ensured, contentStore } = ensureBranchTreeState(
-      chats, chatIndex, get().contentStore
-    );
-    // Resolve fallback nodeId (e.g. "0") to real UUID from activePath
-    const tree = ensured[chatIndex].branchTree!;
-    let resolvedId = nodeId;
-    if (!tree.nodes[nodeId]) {
-      const idx = parseInt(nodeId, 10);
-      if (!isNaN(idx) && tree.activePath[idx]) {
-        resolvedId = tree.activePath[idx];
-      }
-    }
-    if (!tree.nodes[resolvedId]) return;
-    const updated = updateNodeRoleState(ensured, chatIndex, resolvedId, role, contentStore);
-    get().applyBranchState(updated, contentStore);
+  updateNodeRole: (input) => {
+    const target = resolveNodeTarget(get().chats, input);
+    if (target.status !== 'valid') return target;
+    const currentRole = target.chat.branchTree?.nodes[input.nodeId]?.role ?? target.chat.messages[target.messageIndex]?.role;
+    if (currentRole === input.role) return { status: 'unchanged' };
+    const ensured = ensureBranchTreeState(get().chats!, target.chatIndex, get().contentStore);
+    const nodeId = target.chat.branchTree ? input.nodeId : ensured.chats[target.chatIndex].branchTree!.activePath[target.messageIndex];
+    const chats = updateNodeRoleState(ensured.chats, target.chatIndex, nodeId, input.role, ensured.contentStore);
+    get().applyBranchState(chats, ensured.contentStore, { historyBase: ensured });
+    return { status: 'updated' };
+  },
+  setNodeStar: (input) => setNodeField(input, 'starred', input.value || undefined),
+  setNodePin: (input) => setNodeField(input, 'pinned', input.value || undefined),
+  setNodeLabel: (input) => setNodeField(input, 'label', input.value || undefined),
+  saveNode: (input) => {
+    const target = resolveNodeTarget(get().chats, input, true);
+    if (target.status !== 'valid') return target;
+    if ((target.chat.protectedNodes ?? {})[input.nodeId]) return { status: 'protected' };
+    if (Object.values(get().generatingSessions).some(session => session.chatId === input.chatId && session.targetNodeId === input.nodeId)) return { status: 'busy' };
+    const ensured = ensureBranchTreeState(get().chats!, target.chatIndex, get().contentStore);
+    const result = upsertWithAutoBranchState(ensured.chats, target.chatIndex, target.messageIndex, input, ensured.contentStore);
+    if (result.noOp) return { status: 'unchanged' };
+    get().applyBranchState(result.chats, result.contentStore, { historyBase: ensured });
+    return { status: 'updated' };
+  },
+  appendNode: (input) => {
+    const chatIndex = get().chats?.findIndex(chat => chat.id === input.chatId) ?? -1;
+    if (chatIndex < 0) return { status: 'chat-missing' };
+    const ensured = ensureBranchTreeState(get().chats!, chatIndex, get().contentStore);
+    const result = appendNodeToActivePathState(ensured.chats, chatIndex, input.role, input.content, ensured.contentStore);
+    get().applyBranchState(result.chats, result.contentStore, { historyBase: ensured });
+    return { status: 'updated', nodeId: result.newId };
+  },
+  insertNode: (input) => {
+    const chatIndex = get().chats?.findIndex(chat => chat.id === input.chatId) ?? -1;
+    if (chatIndex < 0) return { status: 'chat-missing' };
+    const target = input.beforeNodeId === null ? null : resolveNodeTarget(get().chats, { chatId: input.chatId, nodeId: input.beforeNodeId }, true);
+    if (target && target.status !== 'valid') return target;
+    const index = target?.messageIndex ?? get().chats![chatIndex].messages.length;
+    const ensured = ensureBranchTreeState(get().chats!, chatIndex, get().contentStore);
+    const result = insertMessageAtIndexState(ensured.chats, chatIndex, index, input, ensured.contentStore);
+    get().applyBranchState(result.chats, result.contentStore, { historyBase: ensured });
+    return { status: 'updated', nodeId: result.newId };
+  },
+  removeNode: (input) => {
+    const target = resolveNodeTarget(get().chats, input, true);
+    if (target.status !== 'valid') return target;
+    if ((target.chat.protectedNodes ?? {})[input.nodeId]) return { status: 'protected' };
+    const preserveNode = Object.values(get().generatingSessions).some(session => session.chatId === input.chatId && session.targetNodeId === input.nodeId);
+    const ensured = ensureBranchTreeState(get().chats!, target.chatIndex, get().contentStore);
+    const result = removeMessageAtIndexState(ensured.chats, target.chatIndex, target.messageIndex, ensured.contentStore, { preserveNode });
+    get().applyBranchState(result.chats, result.contentStore, { historyBase: ensured });
+    return { status: 'updated' };
+  },
+  moveNode: (input) => {
+    const target = resolveNodeTarget(get().chats, input, true);
+    if (target.status !== 'valid') return target;
+    if (input.direction === 'up' ? target.messageIndex === 0 : target.messageIndex === target.chat.messages.length - 1) return { status: 'unchanged' };
+    const topRole = target.chat.messages[0]?.role;
+    if (topRole === 'system' && (target.messageIndex === 0 || (input.direction === 'up' && target.messageIndex === 1))) return { status: 'unchanged' };
+    const ensured = ensureBranchTreeState(get().chats!, target.chatIndex, get().contentStore);
+    const result = moveMessageState(ensured.chats, target.chatIndex, target.messageIndex, input.direction, ensured.contentStore);
+    get().applyBranchState(result.chats, result.contentStore, { historyBase: ensured });
+    return { status: 'updated' };
+  },
+  replaceNodeAndPrune: (input) => {
+    if (!Number.isInteger(input.removeCount) || input.removeCount < 0) return { status: 'invalid-input', removedNodeIds: [], pruneBlockedBy: [] };
+    const target = resolveNodeTarget(get().chats, input, true);
+    if (target.status !== 'valid') return { status: 'missing', removedNodeIds: [], pruneBlockedBy: [] };
+    const ensured = ensureBranchTreeState(get().chats!, target.chatIndex, get().contentStore);
+    const prepared = ensured.chats[target.chatIndex];
+    const following = prepared.branchTree!.activePath.slice(target.messageIndex + 1, target.messageIndex + 1 + input.removeCount);
+    const pruneBlockedBy = following.filter(id => prepared.protectedNodes?.[id]);
+    const result = replaceMessageAndPruneFollowingState(ensured.chats, target.chatIndex, target.messageIndex, input, ensured.contentStore, pruneBlockedBy.length ? 0 : input.removeCount);
+    get().applyBranchState(result.chats, result.contentStore, { historyBase: ensured });
+    return { status: 'updated', removedNodeIds: pruneBlockedBy.length ? [] : following, pruneBlockedBy };
   },
 
   ensureBranchTree: (chatIndex) => {
@@ -567,16 +705,14 @@ export const createBranchSlice: StoreSlice<BranchSlice> = (set, get) => ({
     get().applyBranchState(updatedChats, contentStore, { recordHistory: false });
   },
 
-  createBranch: (chatIndex, fromNodeId, newContent) => {
-    const { chats, contentStore, newId } = createBranchState(
-      get().chats!,
-      chatIndex,
-      fromNodeId,
-      newContent,
-      get().contentStore
-    );
-    get().applyBranchState(chats, contentStore);
-    return newId;
+  createBranch: (input) => {
+    const target = resolveNodeTarget(get().chats, { chatId: input.chatId, nodeId: input.fromNodeId });
+    if (target.status !== 'valid') return { status: target.status === 'chat-missing' ? 'chat-missing' : 'node-missing' };
+    const ensured = ensureBranchTreeState(get().chats!, target.chatIndex, get().contentStore);
+    const nodeId = target.chat.branchTree ? input.fromNodeId : ensured.chats[target.chatIndex].branchTree!.activePath[target.messageIndex];
+    const result = createBranchState(ensured.chats, target.chatIndex, nodeId, input.content, ensured.contentStore);
+    get().applyBranchState(result.chats, result.contentStore, { historyBase: ensured });
+    return { status: 'created', nodeId: result.newId };
   },
 
   switchBranchAtNode: (chatIndex, nodeId) => {
@@ -639,33 +775,6 @@ export const createBranchSlice: StoreSlice<BranchSlice> = (set, get) => ({
     get().applyBranchState(result.chats, result.contentStore);
   },
 
-  renameBranchNode: (chatIndex, nodeId, label) => {
-    const chats = renameBranchNodeState(get().chats!, chatIndex, nodeId, label);
-    get().applyBranchState(chats, get().contentStore);
-  },
-
-  toggleNodeStar: (chatIndex, nodeId) => {
-    const chats = toggleNodeStarState(get().chats!, chatIndex, nodeId);
-    get().applyBranchState(chats, get().contentStore);
-  },
-
-  toggleNodePin: (chatIndex, nodeId) => {
-    const chats = toggleNodePinState(get().chats!, chatIndex, nodeId);
-    get().applyBranchState(chats, get().contentStore);
-  },
-
-  appendNodeToActivePath: (chatIndex, role, content) => {
-    const { chats, contentStore, newId } = appendNodeToActivePathState(
-      get().chats!,
-      chatIndex,
-      role,
-      content,
-      get().contentStore
-    );
-    get().applyBranchState(chats, contentStore);
-    return newId;
-  },
-
   updateLastNodeContent: (chatIndex, content) => {
     const { chats, contentStore } = updateLastNodeContentState(
       get().chats!,
@@ -693,26 +802,6 @@ export const createBranchSlice: StoreSlice<BranchSlice> = (set, get) => ({
     get().applyBranchState(chats, contentStore);
   },
 
-  upsertWithAutoBranch: (chatIndex, messageIndex, role, content) => {
-    const result = upsertWithAutoBranchState(
-      get().chats!, chatIndex, messageIndex, { role, content }, get().contentStore
-    );
-    if (result.noOp) return;
-    get().applyBranchState(result.chats, result.contentStore);
-  },
-
-  insertMessageAtIndex: (chatIndex, messageIndex, role, content) => {
-    const { chats, contentStore, newId } = insertMessageAtIndexState(
-      get().chats!,
-      chatIndex,
-      messageIndex,
-      { role, content },
-      get().contentStore
-    );
-    get().applyBranchState(chats, contentStore);
-    return newId;
-  },
-
   removeMessageAtIndex: (chatIndex, messageIndex) => {
     const chat = get().chats?.[chatIndex];
     // Block deletion of protected nodes
@@ -738,77 +827,27 @@ export const createBranchSlice: StoreSlice<BranchSlice> = (set, get) => ({
     get().applyBranchState(chats, contentStore);
   },
 
-  moveMessage: (chatIndex, messageIndex, direction) => {
-    const { chats, contentStore } = moveMessageState(
-      get().chats!,
-      chatIndex,
-      messageIndex,
-      direction,
-      get().contentStore
-    );
-    get().applyBranchState(chats, contentStore);
+  copyBranchSequence: (input) => {
+    const range = validateSequenceRange(get().chats, input);
+    if (range.status !== 'valid') return range;
+    set({ branchClipboard: range.clipboard });
+    return { status: 'copied' };
   },
 
-  replaceMessageAndPruneFollowing: (
-    chatIndex,
-    messageIndex,
-    role,
-    content,
-    removeCount = 0
-  ) => {
-    // Block all deletions if any following node in the range is protected
-    const chat = get().chats?.[chatIndex];
-    if (chat && removeCount > 0) {
-      const mapKey = String(chatIndex);
-      const protectedNodes = get().protectedNodeMaps[mapKey] ?? chat.protectedNodes ?? {};
-      if (Object.keys(protectedNodes).length > 0) {
-        for (let i = 0; i < removeCount; i++) {
-          const idx = messageIndex + 1 + i;
-          const nodeId = chat.branchTree?.activePath?.[idx] ?? String(idx);
-          if (protectedNodes[nodeId]) {
-            showToast(i18next.t('protectedPruneStopped', { ns: 'main' }), 'warning');
-            removeCount = 0;
-            break;
-          }
-        }
-      }
-    }
-
-    const { chats, contentStore } = replaceMessageAndPruneFollowingState(
-      get().chats!,
-      chatIndex,
-      messageIndex,
-      { role, content },
-      get().contentStore,
-      removeCount
-    );
-    get().applyBranchState(chats, contentStore);
-  },
-
-  copyBranchSequence: (chatIndex, fromNodeId, toNodeId) => {
+  pasteBranchSequence: (input) => {
     const chats = get().chats;
-    if (!chats) return;
-    const clipboard = copyBranchSequenceState(chats, chatIndex, fromNodeId, toNodeId);
-    if (!clipboard) return;
-    set({
-      branchClipboard: clipboard,
-    });
-  },
-
-  pasteBranchSequence: (targetChatIndex, afterNodeId) => {
+    const chatIndex = chats?.findIndex((chat) => chat.id === input.chatId) ?? -1;
+    if (!chats?.[chatIndex]?.branchTree?.nodes[input.afterNodeId]) return { status: 'missing' };
     const clipboard = get().branchClipboard;
-    if (!clipboard) return;
-    const { chats, contentStore } = pasteBranchSequenceState(
-      get().chats!,
-      targetChatIndex,
-      afterNodeId,
-      clipboard,
-      get().contentStore
-    );
-    get().applyBranchState(chats, contentStore);
+    if (!clipboard) return { status: 'clipboard-empty' };
+    if (!hasClipboardContent(clipboard, get().contentStore)) return { status: 'content-missing' };
+    const result = pasteBranchSequenceState(chats, chatIndex, input.afterNodeId, clipboard, get().contentStore);
+    get().applyBranchState(result.chats, result.contentStore);
+    return { status: 'pasted', nodeIds: result.chats[chatIndex].branchTree!.activePath.slice(-clipboard.nodeIds.length) };
   },
 
   setBranchClipboard: (clipboard) => {
     set({ branchClipboard: clipboard });
   },
-});
+  });
+};

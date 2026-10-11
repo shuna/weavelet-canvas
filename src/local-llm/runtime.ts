@@ -44,12 +44,22 @@ export function promptAsInput(prompt: string): WllamaGenerateInput {
 }
 
 export interface WllamaWorkerProxy {
-  generate(input: WllamaGenerateInput, opts: GenerateOptions, onChunk: (text: string) => void, reason?: LocalModelBusyReason): Promise<string>;
+  generate(input: WllamaGenerateInput, opts: GenerateOptions, onChunk: (text: string) => void, reason?: LocalModelBusyReason, signal?: AbortSignal): Promise<string>;
   abort(): void;
 }
 
+/** Identifies one caller that must keep models resident until it releases them. */
+export type LocalModelOwnerId = string;
+
+export interface LocalModelReservation {
+  ownerId: LocalModelOwnerId;
+  modelIds: readonly string[];
+}
+
+export type UnloadResult = 'unloaded' | 'reserved' | 'blocked';
+
 export interface TransformersWorkerProxy {
-  classify(text: string, reason?: LocalModelBusyReason): Promise<ClassificationLabel[]>;
+  classify(text: string, reason?: LocalModelBusyReason, signal?: AbortSignal): Promise<ClassificationLabel[]>;
 }
 
 export interface RuntimeLogEvent {
@@ -96,6 +106,11 @@ interface EngineEntry {
   abortRequested: boolean;
   /** Why this model is currently busy (only meaningful when status === 'busy') */
   busyReason?: LocalModelBusyReason;
+  /** Incremented before every generate/classify and when its worker is replaced. */
+  epoch: number;
+  activeRequestId: number | null;
+  activeRequestEpoch: number | null;
+  disposed?: boolean;
 }
 
 interface LoadModelOptions {
@@ -275,6 +290,15 @@ export type { VariantOverride as WasmVariantOverride } from '../vendor/wllama/va
 
 export class LocalModelRuntime {
   private engines = new Map<string, EngineEntry>();
+  private loadPromises = new Map<string, Promise<void>>();
+  private ownerModels = new Map<LocalModelOwnerId, Set<string>>();
+  private modelOwners = new Map<string, Set<LocalModelOwnerId>>();
+  private ownerCancellation = new Map<LocalModelOwnerId, {
+    cancelled: boolean;
+    reject?: (reason: unknown) => void;
+    onCancel?: () => void | Promise<void>;
+  }>();
+  private removalIntents = new Set<string>();
   private wasmCaps = new Map<string, WasmCapabilities>();
   private webGpuEnabled: boolean | null = null;
   private wasmVariantOverride: VariantOverride = 'auto';
@@ -328,6 +352,110 @@ export class LocalModelRuntime {
     this.wasmVariantOverride = override;
   }
 
+  reserve(ownerId: LocalModelOwnerId, modelIds: readonly string[]): LocalModelReservation {
+    if (this.ownerCancellation.get(ownerId)?.cancelled) {
+      throw new DOMException('Local model owner cancelled', 'AbortError');
+    }
+    const ids = [...new Set(modelIds.filter(Boolean))];
+    let owned = this.ownerModels.get(ownerId);
+    if (!owned) {
+      owned = new Set();
+      this.ownerModels.set(ownerId, owned);
+    }
+    for (const modelId of ids) {
+      if (owned.has(modelId)) continue;
+      owned.add(modelId);
+      let owners = this.modelOwners.get(modelId);
+      if (!owners) {
+        owners = new Set();
+        this.modelOwners.set(modelId, owners);
+      }
+      owners.add(ownerId);
+    }
+    return { ownerId, modelIds: ids };
+  }
+
+  release(ownerId: LocalModelOwnerId): void {
+    const owned = this.ownerModels.get(ownerId);
+    if (!owned) return;
+    for (const modelId of owned) {
+      const owners = this.modelOwners.get(modelId);
+      owners?.delete(ownerId);
+      if (owners?.size === 0) this.modelOwners.delete(modelId);
+    }
+    this.ownerModels.delete(ownerId);
+    this.ownerCancellation.delete(ownerId);
+  }
+
+  registerOwnerCancellation(ownerId: LocalModelOwnerId, onCancel: () => void | Promise<void>): () => void {
+    const state = this.ownerCancellation.get(ownerId) ?? { cancelled: false };
+    if (state.cancelled) {
+      void onCancel();
+      return () => {};
+    }
+    state.onCancel = onCancel;
+    this.ownerCancellation.set(ownerId, state);
+    return () => {
+      if (this.ownerCancellation.get(ownerId)?.onCancel === onCancel) {
+        this.ownerCancellation.get(ownerId)!.onCancel = undefined;
+      }
+    };
+  }
+
+  cancelOwner(ownerId: LocalModelOwnerId): void {
+    const state = this.ownerCancellation.get(ownerId) ?? { cancelled: false };
+    if (state.cancelled) return;
+    state.cancelled = true;
+    state.reject?.(new DOMException('Local model owner cancelled', 'AbortError'));
+    try { void state.onCancel?.(); } catch { /* cancellation is best-effort */ }
+    this.ownerCancellation.set(ownerId, state);
+    this.releaseReservation(ownerId);
+  }
+
+  private releaseReservation(ownerId: LocalModelOwnerId): void {
+    const owned = this.ownerModels.get(ownerId);
+    if (!owned) return;
+    for (const modelId of owned) {
+      const owners = this.modelOwners.get(modelId);
+      owners?.delete(ownerId);
+      if (owners?.size === 0) this.modelOwners.delete(modelId);
+    }
+    this.ownerModels.delete(ownerId);
+  }
+
+  private clearModelReservations(modelId: string): void {
+    const owners = this.modelOwners.get(modelId);
+    if (!owners) return;
+    for (const ownerId of [...owners]) this.cancelOwner(ownerId);
+  }
+
+  isReserved(modelId: string): boolean {
+    return (this.modelOwners.get(modelId)?.size ?? 0) > 0;
+  }
+
+  beginAssetRemoval(modelId: string): void {
+    this.removalIntents.add(modelId);
+  }
+
+  endAssetRemoval(modelId: string): void {
+    this.removalIntents.delete(modelId);
+  }
+
+  private ownerCancellationPromise(ownerId: LocalModelOwnerId): Promise<never> {
+    const state = this.ownerCancellation.get(ownerId) ?? { cancelled: false };
+    if (state.cancelled) return Promise.reject(new DOMException('Local model owner cancelled', 'AbortError'));
+    const promise = new Promise<never>((_resolve, reject) => {
+      state.reject = reject;
+    });
+    this.ownerCancellation.set(ownerId, state);
+    return promise;
+  }
+
+  private async awaitForOwner<T>(promise: Promise<T>, ownerId?: LocalModelOwnerId): Promise<T> {
+    if (!ownerId) return promise;
+    return Promise.race([promise, this.ownerCancellationPromise(ownerId)]);
+  }
+
   // -------------------------------------------------------------------------
   // Lifecycle
   // -------------------------------------------------------------------------
@@ -344,6 +472,9 @@ export class LocalModelRuntime {
       pending: new Map(),
       onChunk: null,
       abortRequested: false,
+      epoch: 0,
+      activeRequestId: null,
+      activeRequestEpoch: null,
     };
     this.engines.set(modelId, entry);
 
@@ -404,6 +535,9 @@ export class LocalModelRuntime {
       pending: new Map(),
       onChunk: null,
       abortRequested: false,
+      epoch: 0,
+      activeRequestId: null,
+      activeRequestEpoch: null,
     };
     this.engines.set(modelId, entry);
 
@@ -523,9 +657,22 @@ export class LocalModelRuntime {
   }
 
   async loadModel(def: LocalModelDefinition, provider: ModelFileProvider, options: LoadModelOptions = {}): Promise<void> {
-    if (this.isLoaded(def.id)) {
-      throw new Error(`Model ${def.id} is already loaded`);
+    if (this.removalIntents.has(def.id)) {
+      throw new DOMException(`Model ${def.id} is being removed`, 'AbortError');
     }
+    if (this.isLoaded(def.id)) return;
+    const existing = this.loadPromises.get(def.id);
+    if (existing) return existing;
+    const loading = this.loadModelImpl(def, provider, options);
+    this.loadPromises.set(def.id, loading);
+    try {
+      await loading;
+    } finally {
+      if (this.loadPromises.get(def.id) === loading) this.loadPromises.delete(def.id);
+    }
+  }
+
+  private async loadModelImpl(def: LocalModelDefinition, provider: ModelFileProvider, options: LoadModelOptions = {}): Promise<void> {
 
     const worker = this.createWorker(def.engine);
     const entry: EngineEntry = {
@@ -537,6 +684,9 @@ export class LocalModelRuntime {
       pending: new Map(),
       onChunk: null,
       abortRequested: false,
+      epoch: 0,
+      activeRequestId: null,
+      activeRequestEpoch: null,
     };
     this.engines.set(def.id, entry);
     this.notifyListeners();
@@ -652,6 +802,9 @@ export class LocalModelRuntime {
 
       this.setStatus(def.id, 'ready');
     } catch (e) {
+      if (entry.disposed || this.removalIntents.has(def.id)) {
+        throw new DOMException('Model loading cancelled', 'AbortError');
+      }
       const selectedWebGPU = this.wasmCaps.get(def.id)?.webgpu === true;
       console.error('[LocalModelRuntime] loadModel failed for', def.id, ':', (e as Error).message);
       this.setStatus(def.id, 'error');
@@ -671,33 +824,64 @@ export class LocalModelRuntime {
         this.engines.delete(def.id);
         this.wasmCaps.delete(def.id);
         this.notifyListeners();
-        await this.loadModel(def, provider, { forceDisableWebGPU: true });
+        await this.loadModelImpl(def, provider, { forceDisableWebGPU: true });
         return;
       }
       throw e;
     }
   }
 
-  async unloadModel(modelId: string): Promise<void> {
+  async unloadModel(modelId: string, options: { force?: boolean } = {}): Promise<UnloadResult> {
+    if (options.force) this.clearModelReservations(modelId);
     const entry = this.engines.get(modelId);
-    if (!entry) return;
+    if (!entry) return 'unloaded';
+    if (!options.force && this.isReserved(modelId)) return 'reserved';
+    if (entry.status === 'loading') {
+      if (!options.force) return 'blocked';
+      entry.disposed = true;
+      entry.worker.terminate();
+      const abortError = new DOMException('Model unloaded while loading', 'AbortError');
+      for (const [, pending] of entry.pending) pending.reject(abortError);
+      entry.pending.clear();
+      this.engines.delete(modelId);
+      this.wasmCaps.delete(modelId);
+      const loading = this.loadPromises.get(modelId);
+      if (loading) {
+        try { await loading; } catch { /* expected cancellation */ }
+      }
+      this.notifyListeners();
+      return 'unloaded';
+    }
+    if (entry.status === 'busy') this.abort(modelId);
 
     try {
       await this.sendRequest(modelId, { type: 'unload' });
     } catch {
-      // Best-effort
+      return 'blocked';
     }
 
     entry.worker.terminate();
     entry.pending.clear();
+    entry.epoch++;
+    entry.activeRequestId = null;
+    entry.activeRequestEpoch = null;
     this.engines.delete(modelId);
     this.notifyListeners();
+    return 'unloaded';
+  }
+
+  async stopForAssetRemoval(modelId: string): Promise<UnloadResult> {
+    this.beginAssetRemoval(modelId);
+    return this.unloadModel(modelId, { force: true });
   }
 
   abort(modelId: string): void {
     const entry = this.engines.get(modelId);
     if (!entry || entry.status !== 'busy') return;
     entry.abortRequested = true;
+    entry.epoch++;
+    entry.activeRequestId = null;
+    entry.activeRequestEpoch = null;
     // Send abort message to worker
     entry.worker.postMessage({ id: 0, type: 'abort' });
     // Reject all pending generate requests immediately so the generate()
@@ -716,12 +900,17 @@ export class LocalModelRuntime {
    * If currently loading, waits for the load to complete.
    * Otherwise, looks up the model definition and loads it from OPFS.
    */
-  async ensureLoaded(modelId: string): Promise<void> {
+  async ensureLoaded(modelId: string, ownerId?: LocalModelOwnerId): Promise<void> {
+    if (this.removalIntents.has(modelId)) {
+      throw new DOMException(`Model ${modelId} is being removed`, 'AbortError');
+    }
+    if (ownerId) this.reserve(ownerId, [modelId]);
     if (this.isLoaded(modelId)) return;
 
     const status = this.getStatus(modelId);
     if (status === 'loading') {
-      return this.waitForLoad(modelId);
+      const existing = this.loadPromises.get(modelId);
+      return this.awaitForOwner(existing ?? this.waitForLoad(modelId), ownerId);
     }
 
     const def = findModelDefinition(modelId);
@@ -730,7 +919,7 @@ export class LocalModelRuntime {
     // Import OpfsFileProvider lazily to avoid circular dependency
     const { OpfsFileProvider } = await import('./storage');
     const provider = new OpfsFileProvider(modelId, def.manifest);
-    await this.loadModel(def, provider);
+    await this.awaitForOwner(this.loadModel(def, provider), ownerId);
   }
 
   /**
@@ -761,17 +950,24 @@ export class LocalModelRuntime {
     if (!this.isLoaded(modelId)) return null;
 
     return {
-      generate: async (input: WllamaGenerateInput, opts: GenerateOptions, onChunk: (text: string) => void, reason?: LocalModelBusyReason): Promise<string> => {
+      generate: async (input: WllamaGenerateInput, opts: GenerateOptions, onChunk: (text: string) => void, reason?: LocalModelBusyReason, signal?: AbortSignal): Promise<string> => {
+        if (signal?.aborted) throw new DOMException('Generation aborted', 'AbortError');
         if (this.isBusy(modelId)) {
           throw new Error(`Model ${modelId} is busy`);
         }
         this.setStatus(modelId, 'busy', reason ?? 'chat');
         entry.onChunk = onChunk;
         entry.abortRequested = false;
+        const epoch = ++entry.epoch;
+        const onAbort = () => {
+          if (this.engines.get(modelId) === entry && entry.epoch === epoch) this.abort(modelId);
+        };
+        signal?.addEventListener('abort', onAbort, { once: true });
 
         try {
           const result = await this.sendRequest(modelId, {
             type: 'generate',
+            epoch,
             messages: input.messages,
             assistantPrefix: input.assistantPrefix,
             maxTokens: opts.maxTokens ?? 256,
@@ -781,6 +977,7 @@ export class LocalModelRuntime {
 
           return result.fullText;
         } finally {
+          signal?.removeEventListener('abort', onAbort);
           entry.onChunk = null;
           if (entry.status === 'busy') {
             this.setStatus(modelId, 'ready');
@@ -797,20 +994,28 @@ export class LocalModelRuntime {
     if (!this.isLoaded(modelId)) return null;
 
     return {
-      classify: async (text: string, reason?: LocalModelBusyReason): Promise<ClassificationLabel[]> => {
+      classify: async (text: string, reason?: LocalModelBusyReason, signal?: AbortSignal): Promise<ClassificationLabel[]> => {
+        if (signal?.aborted) throw new DOMException('Classification aborted', 'AbortError');
         if (this.isBusy(modelId)) {
           throw new Error(`Model ${modelId} is busy`);
         }
         this.setStatus(modelId, 'busy', reason ?? 'moderation');
+        const epoch = ++entry.epoch;
+        const onAbort = () => {
+          if (this.engines.get(modelId) === entry && entry.epoch === epoch) this.abort(modelId);
+        };
+        signal?.addEventListener('abort', onAbort, { once: true });
 
         try {
           const result = await this.sendRequest(modelId, {
             type: 'classify',
             text,
+            epoch,
           }) as { labels: ClassificationLabel[] };
 
           return result.labels;
         } finally {
+          signal?.removeEventListener('abort', onAbort);
           if (entry.status === 'busy') {
             this.setStatus(modelId, 'ready');
           }
@@ -964,6 +1169,10 @@ export class LocalModelRuntime {
     if (!entry) return Promise.reject(new Error(`No engine for model ${modelId}`));
 
     const id = entry.nextId++;
+    if (payload.type === 'generate' || payload.type === 'classify') {
+      entry.activeRequestId = id;
+      entry.activeRequestEpoch = payload.epoch as number;
+    }
     emitRuntimeDebugLog(modelId, 'debug', `request #${id} ${String(payload.type ?? 'unknown')}: ${summarizePayload(payload)}`);
     return new Promise((resolve, reject) => {
       entry.pending.set(id, { resolve, reject });
@@ -1029,7 +1238,9 @@ export class LocalModelRuntime {
 
     // Streaming chunks don't resolve the pending promise
     if (type === 'chunk') {
-      entry.onChunk?.(data.text as string);
+      if (id === entry.activeRequestId && entry.activeRequestEpoch === entry.epoch) {
+        entry.onChunk?.(data.text as string);
+      }
       return;
     }
 
@@ -1041,6 +1252,10 @@ export class LocalModelRuntime {
         emitRuntimeDebugLog(modelId, 'error', `response #${id} error: ${String(data.message ?? '')}`);
         pending.reject(new Error(data.message as string));
       }
+      if (id === entry.activeRequestId) {
+        entry.activeRequestId = null;
+        entry.activeRequestEpoch = null;
+      }
       return;
     }
 
@@ -1050,6 +1265,10 @@ export class LocalModelRuntime {
       entry.pending.delete(id);
       emitRuntimeDebugLog(modelId, 'debug', `response #${id} ${type}: ${summarizePayload(data)}`);
       pending.resolve(data);
+    }
+    if (id === entry.activeRequestId) {
+      entry.activeRequestId = null;
+      entry.activeRequestEpoch = null;
     }
   }
 }

@@ -28,7 +28,7 @@ it('records edits, undo and deletion, but not viewing, and preserves times throu
   expect(edited.branchTree!.nodes[nodeId].updatedAt).toBe(2000);
   clock.mockReturnValue(3000);
   state.setChats(state.chats!.slice());
-  state.toggleCollapseNode(0, 0);
+  state.setNodeCollapsed({ chatId: 'chat', nodeId, value: true });
   state.switchActivePathSilent(0, [nodeId]);
   expect(state.chats![0].updatedAt).toBe(2000);
   expect(state.lastContentEditedAt).toBe(2000);

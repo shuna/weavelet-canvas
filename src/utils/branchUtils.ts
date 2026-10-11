@@ -69,40 +69,6 @@ export function upsertActivePathMessage(
   tree.activePath.push(newId);
 }
 
-export function truncateActivePathAfterIndex(
-  chat: ChatInterface,
-  lastIndexInclusive: number
-) {
-  if (!chat.branchTree) return;
-  chat.branchTree.activePath = chat.branchTree.activePath.slice(
-    0,
-    lastIndexInclusive + 1
-  );
-}
-
-export function deleteActivePathMessage(
-  chat: ChatInterface,
-  index: number,
-  contentStore: ContentStoreData
-) {
-  if (!chat.branchTree || index < 0) return;
-
-  const tree = chat.branchTree;
-  const nodeId = tree.activePath[index];
-  if (!nodeId) return;
-
-  const parentId = tree.nodes[nodeId]?.parentId ?? null;
-  Object.values(tree.nodes).forEach((node) => {
-    if (node.parentId === nodeId) {
-      node.parentId = parentId;
-    }
-  });
-
-  releaseContent(contentStore, tree.nodes[nodeId].contentHash);
-  delete tree.nodes[nodeId];
-  tree.activePath.splice(index, 1);
-}
-
 export function flatMessagesToBranchTree(
   messages: MessageInterface[],
   contentStore: ContentStoreData
@@ -208,18 +174,6 @@ export function collectDescendants(
     }
   }
   return result;
-}
-
-export function removeMessageWithBranchSync(
-  chat: ChatInterface,
-  index: number,
-  contentStore: ContentStoreData
-): void {
-  chat.messages.splice(index, 1);
-  if (chat.branchTree) {
-    deleteActivePathMessage(chat, index, contentStore);
-    chat.messages = materializeActivePath(chat.branchTree, contentStore);
-  }
 }
 
 export interface RegenerateTarget {

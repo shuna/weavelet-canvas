@@ -1,3 +1,5 @@
+import { localModelRuntime } from '@src/local-llm/runtime';
+import { beginAiTask, finishAiTask, isAiTaskCurrent } from './aiTaskLifetime';
 import i18next from 'i18next';
 import { hardOpenRouterConstraints } from '@utils/openrouterControls';
 import { normalizeConfigStream } from '@utils/streamSupport';
@@ -31,7 +33,12 @@ import {
   stopSubmitSessionsForChat,
 } from './submitRuntime';
 import { isLocalModelConfig } from './submitHelpers';
-import { prepareModelsForExecution, getEvaluationModelIds } from '@src/local-llm/orchestrator';
+import {
+  createLocalModelOwner,
+  getEvaluationModelIds,
+  prepareModelsForExecution,
+  releaseModelsForExecution,
+} from '@src/local-llm/orchestrator';
 import {
   buildVerifiedStatsKey,
   OPENROUTER_VERIFICATION_INITIAL_DELAY_MS,
@@ -110,6 +117,17 @@ const useSubmit = () => {
       chatId
     );
 
+    const initialState = useStore.getState();
+    const isLocal = isLocalModelConfig(submitConfig);
+    const resolved = isLocal ? undefined : resolveProviderForModel(submitConfig.model, initialState.favoriteModels, initialState.providers, fallbackProvider, submitConfig.providerId);
+    const apiVersion = initialState.apiVersion;
+    const prefillKey = mode === 'append' ? '__sticky__' : (chats[chatIndex].branchTree?.activePath[(insertIndex ?? 1) - 1] ?? '__sticky__');
+    const assistantPrefill = initialState.assistantPrefillMap[prefillKey]?.trim() || undefined;
+    const titleSettings = { titleModel: initialState.titleModel, titleProviderId: initialState.titleProviderId, favoriteModels: initialState.favoriteModels, providers: initialState.providers };
+    const evaluationSettings = initialState.evaluationSettings;
+    const ticket = beginAiTask({ requestId: sessionId, chatId, nodeId: targetNodeId, kind: 'generation', dependencyIds: updatedChats[chatIndex].branchTree?.activePath.slice(0, messageIndex) ?? [], cancel: () => stopSubmitSession(sessionId) });
+    let localModelOwnerId: string | null = null;
+    let unregisterOwner: (() => void) | undefined;
     try {
       const contextMessages = getSubmitContextMessages(
         updatedChats[chatIndex].messages,
@@ -124,8 +142,6 @@ const useSubmit = () => {
         throw new Error(t('errors.noMessagesSubmitted') as string);
       if (!hasMeaningfulMessageContent(contextMessages))
         throw new Error(t('errors.noMessagesSubmitted') as string);
-
-      const isLocal = isLocalModelConfig(submitConfig);
 
       await loadEncoder();
       const { contextLength: modelContextLength } = getModelContextInfo(
@@ -147,18 +163,8 @@ const useSubmit = () => {
       if (!fitsContextWindow(promptTokens, modelContextLength, completionBudget))
         throw new Error(t('errors.messageExceedMaxToken') as string);
 
-      // Resolve execution target
-      const resolved = isLocal
-        ? undefined
-        : resolveProviderForModel(
-            submitConfig.model,
-            useStore.getState().favoriteModels,
-            useStore.getState().providers,
-            fallbackProvider,
-            submitConfig.providerId
-          );
+      if (!isAiTaskCurrent(ticket)) return;
 
-      const evaluationSettings = useStore.getState().evaluationSettings;
       if (hardOpenRouterConstraints(submitConfig.openRouter) && evaluationSettings.safetyPreSend === 'auto' && evaluationSettings.safetyEngine !== 'local') {
         throw new Error(i18next.t('model:openRouter.errors.safety') as string);
       }
@@ -167,6 +173,7 @@ const useSubmit = () => {
       const evalCtx: EvaluationContext = {
         chatId,
         nodeId: targetNodeId,
+        parentTicket: ticket,
         endpoint: resolved?.endpoint ?? '',
         apiKey: resolved?.key,
         model: submitConfig.model,
@@ -176,9 +183,12 @@ const useSubmit = () => {
       if (isLocal) {
         const evalModelIds = await getEvaluationModelIds();
         const allRequired = [submitConfig.model, ...evalModelIds].filter(Boolean);
-        await prepareModelsForExecution(allRequired);
+        localModelOwnerId = createLocalModelOwner(`submit:${sessionId}`);
+        unregisterOwner = localModelRuntime.registerOwnerCancellation(localModelOwnerId, () => stopSubmitSession(sessionId));
+        await prepareModelsForExecution(localModelOwnerId, allRequired, { signal: abortController.signal });
       }
 
+      if (!isAiTaskCurrent(ticket) || abortController.signal.aborted) return;
       if (userMsg) {
         runPreSendEvaluation(userMsg.content, evalCtx).catch(() => {});
       }
@@ -186,19 +196,8 @@ const useSubmit = () => {
       // Execute generation
       let streamResult: { generationId?: string } = {};
       if (isLocal) {
-        // Determine which nodeId's prefill to use:
-        // - append: the sticky composer's prefill (__sticky__)
-        // - midchat: the user message immediately preceding the insertion point
-        const { assistantPrefillMap } = useStore.getState();
-        let prefillKey: string;
-        if (mode === 'append') {
-          prefillKey = '__sticky__';
-        } else {
-          const activePath = chats[chatIndex].branchTree?.activePath ?? [];
-          prefillKey = activePath[(insertIndex ?? 1) - 1] ?? '__sticky__';
-        }
-        const assistantPrefill = assistantPrefillMap[prefillKey]?.trim() || undefined;
         await executeLocalSubmit({
+          ticket,
           sessionId,
           chatId,
           chatIndex,
@@ -210,9 +209,11 @@ const useSubmit = () => {
           abortController,
           t: (key: string) => t(key) as string,
           assistantPrefill,
+          modelOwnerId: localModelOwnerId ?? undefined,
         });
       } else {
         streamResult = await executeSubmitStream({
+          ticket,
           sessionId,
           chatId,
           chatIndex,
@@ -223,16 +224,19 @@ const useSubmit = () => {
           resolvedProvider: resolved!,
           regenerate,
           abortController,
-          apiVersion: useStore.getState().apiVersion,
+          apiVersion,
           t: (key: string) => t(key) as string,
         });
-        await applySubmitTokenUsage(chatId, targetNodeId);
+        if (isAiTaskCurrent(ticket)) await applySubmitTokenUsage(chatId, targetNodeId);
       }
 
+      if (!isAiTaskCurrent(ticket) || abortController.signal.aborted) return;
       // Post-receive evaluation (async, non-blocking)
       if (userMsg) {
         const postChats = useStore.getState().chats;
-        const assistantMsg = postChats?.[chatIndex]?.messages[messageIndex];
+        const postChat = postChats?.find(chat => chat.id === chatId);
+        const postIndex = postChat?.branchTree?.activePath.indexOf(targetNodeId) ?? -1;
+        const assistantMsg = postChat?.messages[postIndex];
         if (assistantMsg) {
           runPostReceiveEvaluation(userMsg.content, assistantMsg.content, evalCtx).catch(() => {});
         }
@@ -258,13 +262,11 @@ const useSubmit = () => {
           chatId,
           language: i18n.language,
           setChats,
-          apiVersion: useStore.getState().apiVersion,
+          apiVersion,
           sourceConfig: submitConfig,
-          titleModel: useStore.getState().titleModel,
-          titleProviderId: useStore.getState().titleProviderId,
+          ...titleSettings,
           t: (key: string) => t(key) as string,
-          favoriteModels: useStore.getState().favoriteModels,
-          providers: useStore.getState().providers,
+
           fallbackProvider,
         });
       }
@@ -285,17 +287,15 @@ const useSubmit = () => {
           }
         );
       }
-      const err = (e as Error).message;
-      setError(err);
+      if (isAiTaskCurrent(ticket)) setError((e as Error).message);
     } finally {
+      unregisterOwner?.();
+      if (localModelOwnerId) releaseModelsForExecution(localModelOwnerId);
       useStore.getState().removeSession(sessionId);
       clearSubmitSessionRuntime(sessionId);
+      finishAiTask(ticket);
       // Clear the prefill that was consumed (if any local generation happened)
-      if (isLocalModelConfig(chats[chatIndex]?.config)) {
-        const activePath = chats[chatIndex]?.branchTree?.activePath ?? [];
-        const prefillKey = mode === 'append'
-          ? '__sticky__'
-          : activePath[(insertIndex ?? 1) - 1] ?? '__sticky__';
+      if (isLocal && useStore.getState().assistantPrefillMap[prefillKey]?.trim() === assistantPrefill) {
         useStore.getState().clearAssistantPrefill(prefillKey);
       }
     }

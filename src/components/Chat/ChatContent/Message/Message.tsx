@@ -61,7 +61,7 @@ const Message = React.memo(
   }) => {
     const hideSideMenu = useStore((state) => state.hideSideMenu);
     const advancedMode = useStore((state) => state.advancedMode);
-    const toggleCollapseNode = useStore((state) => state.toggleCollapseNode);
+    const setNodeCollapsed = useStore((state) => state.setNodeCollapsed);
     const currentChatIndex = useStore((state) => state.currentChatIndex);
     const setHoveredNodeId = useStore((state) => state.setHoveredNodeId);
     const setBranchEditorFocusNodeId = useStore((state) => state.setBranchEditorFocusNodeId);
@@ -135,9 +135,9 @@ const Message = React.memo(
 
     const handleToggleCollapse = useCallback(() => {
       if (!sticky) {
-        toggleCollapseNode(currentChatIndex, messageIndex);
+        if (resolvedNodeId) setNodeCollapsed({ chatId, nodeId: resolvedNodeId, value: !isCollapsed });
       }
-    }, [currentChatIndex, messageIndex, sticky, toggleCollapseNode]);
+    }, [chatId, resolvedNodeId, isCollapsed, sticky, setNodeCollapsed]);
 
     const handleMouseEnter = useCallback(() => {
       if (!sticky && isSplitView(chatActiveView)) {
@@ -229,7 +229,8 @@ const Message = React.memo(
                 )}
                 <div className='ml-auto min-w-0 max-w-full'>
                   <MetaActions
-                    messageIndex={messageIndex}
+                    chatId={chatId}
+                    nodeId={resolvedNodeId ?? ''}
                     isOmitted={isOmitted}
                     isProtected={isProtected}
                     showEvaluateButton={!isGeneratingMessage}

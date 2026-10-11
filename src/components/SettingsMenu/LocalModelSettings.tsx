@@ -11,8 +11,9 @@ import {
   type WllamaFeatureCheck,
 } from '@src/local-llm/runtime';
 import type { VariantOverride as WasmVariantOverride } from '@src/vendor/wllama/variant-table';
-import { OpfsFileProvider, deleteModel, getTempFileSize, readFile, saveFile, sha256Blob } from '@src/local-llm/storage';
-import { rehydrateSavedModels } from '@src/local-llm/storage';
+import { OpfsFileProvider, getTempFileSize, readFile, saveFile, sha256Blob } from '@src/local-llm/storage';
+import { removeAssets } from '@src/local-llm/assetRemoval';
+import { rehydrateLocalModels } from '@hooks/useLocalModelRehydration';
 import { CURATED_MODELS } from '@src/local-llm/catalog';
 import type { CatalogModel } from '@src/local-llm/catalog';
 import { downloadCatalogModel, downloadModelFiles } from '@src/local-llm/download';
@@ -294,29 +295,9 @@ const LocalModelSettings = () => {
     if (rehydratedRef.current && rehydrationEpoch === 0) return;
     rehydratedRef.current = true;
 
-    const searchModels = useStore.getState().localModels
-      .filter((m) => m.source === 'opfs' && !CURATED_MODELS.some((c) => c.id === m.id))
-      .map((m) => ({ id: m.id, manifest: m.manifest }));
-    const entries = [...CURATED_MODELS, ...searchModels];
-
-    rehydrateSavedModels(entries).then((meta) => {
-      const store = useStore.getState();
-      for (const [id, m] of Object.entries(meta)) {
-        store.updateSavedModelMeta(id, m);
-        if (m.storageState === 'saved' && !store.localModels.some((lm) => lm.id === id)) {
-          const catalog = CURATED_MODELS.find((c) => c.id === id);
-          if (catalog) {
-            store.addLocalModel({
-              id: catalog.id, engine: catalog.engine, tasks: catalog.tasks,
-              label: catalog.label, origin: catalog.huggingFaceRepo, source: 'opfs',
-              manifest: catalog.manifest, fileSize: m.storedBytes || catalog.expectedDownloadSize,
-              displayMeta: catalog.displayMeta,
-            });
-          }
-        }
-      }
-      setRehydrated(true);
-    }).catch(() => { setRehydrated(true); });
+    rehydrateLocalModels(rehydrationEpoch > 0)
+      .then(() => setRehydrated(true))
+      .catch(() => setRehydrated(true));
   }, [enabled, rehydrationEpoch]);
 
   // Sync partial model storedBytes on section mount
@@ -419,7 +400,8 @@ const LocalModelSettings = () => {
       });
       const duplicate = await findStoredModelWithHash(fileHash, totalBytes, model.id);
       if (duplicate) {
-        await deleteModel(model.id);
+        const removal = await removeAssets(model.id);
+        if (removal.status !== 'removed') return;
         store.removeSavedModelMeta(model.id);
         store.removeLocalModel(model.id);
         if (!store.favoriteLocalModelIds.includes(duplicate.id)) store.toggleFavoriteLocalModel(duplicate.id);
@@ -476,7 +458,7 @@ const LocalModelSettings = () => {
     const provider = new OpfsFileProvider(model.id, model.manifest);
     try {
       if (localModelRuntime.isLoaded(model.id)) {
-        await localModelRuntime.unloadModel(model.id);
+        await localModelRuntime.unloadModel(model.id, { force: true });
       }
       await localModelRuntime.loadModel(
         { id: model.id, engine: model.engine, tasks: model.tasks, label: model.label,
@@ -501,7 +483,7 @@ const LocalModelSettings = () => {
   }, [autoAssignIfUnset]);
 
   const handleUnloadCatalogModel = useCallback(async (modelId: string) => {
-    await localModelRuntime.unloadModel(modelId);
+    await localModelRuntime.unloadModel(modelId, { force: true });
   }, []);
 
   // ----- Ephemeral file handlers -----
@@ -648,7 +630,7 @@ const LocalModelSettings = () => {
         store.addLocalModel(model);
       }
 
-      if (localModelRuntime.isLoaded(model.id)) await localModelRuntime.unloadModel(model.id);
+      if (localModelRuntime.isLoaded(model.id)) await localModelRuntime.unloadModel(model.id, { force: true });
 
       await localModelRuntime.loadModel(
         model,
@@ -669,7 +651,7 @@ const LocalModelSettings = () => {
   }, [autoAssignIfUnset, bumpOpfsBrowser, findStoredModelWithHash]);
 
   const handleUnloadEphemeral = useCallback(async () => {
-    if (importedModelId) await localModelRuntime.unloadModel(importedModelId);
+    if (importedModelId) await localModelRuntime.unloadModel(importedModelId, { force: true });
     setContextLength(null);
     setFileName(null);
     setImportedModelId(null);
@@ -826,7 +808,7 @@ const LocalModelSettings = () => {
     const modelId = generateSearchModelId(result.repoId, variant);
     const provider = new OpfsFileProvider(modelId, candidate.manifest);
     try {
-      if (localModelRuntime.isLoaded(modelId)) await localModelRuntime.unloadModel(modelId);
+      if (localModelRuntime.isLoaded(modelId)) await localModelRuntime.unloadModel(modelId, { force: true });
       await localModelRuntime.loadModel(
         { id: modelId, engine: candidate.engine, tasks: candidate.tasks, label: candidate.label,
           origin: result.repoId, source: 'opfs', manifest: candidate.manifest, fileSize: candidate.estimatedSize },
@@ -848,7 +830,7 @@ const LocalModelSettings = () => {
   }, [autoAssignIfUnset]);
 
   const handleUnloadSearchModel = useCallback(async (modelId: string) => {
-    await localModelRuntime.unloadModel(modelId);
+    await localModelRuntime.unloadModel(modelId, { force: true });
   }, []);
 
   const handleDeleteSearchModel = useCallback(async (modelId: string) => {

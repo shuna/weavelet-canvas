@@ -27,8 +27,12 @@ import {
   saveFile,
   readFile,
   verifyStoredModel,
-  deleteModelFile,
+  beginWrite,
+  finishWrite,
+  registerWriterAbort,
+  type WriterToken,
 } from '../storage';
+import { removeAssets } from '../assetRemoval';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -125,6 +129,10 @@ export class LowbitQConversionManager {
   private pendingResolve: ((result: LowbitQConversionResult) => void) | null = null;
   private pendingReject: ((error: Error) => void) | null = null;
   private callbacks: LowbitQConversionCallbacks = {};
+  private operationToken: WriterToken | null = null;
+  private operationFinished: Promise<void> | null = null;
+  private resolveOperationFinished: (() => void) | null = null;
+  private cancelled = false;
 
   /**
    * Convert a source model to lowbit-Q format and persist to OPFS.
@@ -150,9 +158,8 @@ export class LowbitQConversionManager {
     const opfsFile = await readFile(sourceModelId, sourceFileName);
 
     // For large files (>2 GB), read into memory chunks to break the OPFS
-    // storage reference, then delete the OPFS entry. A File from getFile()
-    // holds a reference to the underlying OPFS storage — deleting the
-    // directory entry alone won't free space while the File is alive.
+    // storage reference. Source deletion is deferred until the target passed
+    // verification, so a failed conversion never loses its input.
     const LARGE_FILE_THRESHOLD = 2 * 1024 * 1024 * 1024; // 2 GB
     let sourceFile: File = opfsFile;
     if (opfsFile.size > LARGE_FILE_THRESHOLD) {
@@ -168,15 +175,7 @@ export class LowbitQConversionManager {
         chunks.push(value);
       }
       sourceFile = new File(chunks, opfsFile.name, { type: opfsFile.type });
-      console.info(
-        `[LowbitQConversionManager] In-memory File created, deleting OPFS entry...`,
-      );
-      try {
-        await deleteModelFile(sourceModelId, sourceFileName);
-        console.info('[LowbitQConversionManager] OPFS source deleted');
-      } catch (e) {
-        console.warn('[LowbitQConversionManager] Failed to delete source:', (e as Error).message);
-      }
+      console.info('[LowbitQConversionManager] In-memory File created; retaining source until target verifies');
     }
 
     return this.convertFromFile(sourceFile, sourceModelId, sourceLabel, callbacks);
@@ -195,48 +194,63 @@ export class LowbitQConversionManager {
     callbacks: LowbitQConversionCallbacks = {},
   ): Promise<LowbitQConversionResult> {
     this.callbacks = callbacks;
+    this.cancelled = false;
+    const targetId = generateLowbitQModelId(sourceModelId);
+    this.operationToken = beginWrite(targetId, `lowbit:${sourceModelId}`);
+    this.operationFinished = new Promise<void>((resolve) => { this.resolveOperationFinished = resolve; });
+    const finished = this.operationFinished;
+    registerWriterAbort(this.operationToken, async () => {
+      this.cancel();
+      await finished;
+    });
 
     return new Promise<LowbitQConversionResult>((resolve, reject) => {
       this.pendingResolve = resolve;
       this.pendingReject = reject;
 
-      this.worker = new Worker(
-        new URL('../../workers/lowbitQConversionWorker.ts', import.meta.url),
-        { type: 'module' },
-      );
-
-      this.worker.onmessage = (ev: MessageEvent) => {
-        this.handleWorkerMessage(
-          ev.data, sourceModelId, sourceLabel, sourceFile.name,
+      try {
+        this.worker = new Worker(
+          new URL('../../workers/lowbitQConversionWorker.ts', import.meta.url),
+          { type: 'module' },
         );
-      };
 
-      this.worker.onerror = (ev: ErrorEvent) => {
-        const errorMsg = `変換ワーカーエラー: ${ev.message}`;
-        this.callbacks.onError?.(errorMsg);
-        this.pendingReject?.(new Error(errorMsg));
+        this.worker.onmessage = (ev: MessageEvent) => {
+          this.handleWorkerMessage(
+            ev.data, sourceModelId, sourceLabel, sourceFile.name,
+          );
+        };
+
+        this.worker.onerror = (ev: ErrorEvent) => {
+          const errorMsg = `変換ワーカーエラー: ${ev.message}`;
+          this.callbacks.onError?.(errorMsg);
+          this.pendingReject?.(new Error(errorMsg));
+          this.cleanup();
+        };
+
+        // When allocatorConfig is provided, use the v2 pipeline.
+        // Pass convertMode only when falling back to the legacy v1 path.
+        this.worker.postMessage({
+          id: 1,
+          type: 'start',
+          sourceFile,
+          sourceUrl: callbacks.sourceUrl,
+          opfsTarget: callbacks.allocatorConfig
+            ? {
+                modelId: generateLowbitQModelId(sourceModelId),
+                fileName: generateLowbitQFilename(sourceFile.name),
+              }
+            : undefined,
+          allocatorConfig: callbacks.allocatorConfig,
+          convertMode: callbacks.allocatorConfig ? undefined : callbacks.convertMode,
+          computeQuality: callbacks.computeQuality,
+          sourceModelName: callbacks.sourceModelName,
+          sourceOpfsInfo: callbacks.sourceOpfsInfo,
+        });
+      } catch (error) {
+        this.cancelled = true;
+        reject(error);
         this.cleanup();
-      };
-
-      // When allocatorConfig is provided, use the v2 pipeline.
-      // Pass convertMode only when falling back to the legacy v1 path.
-      this.worker.postMessage({
-        id: 1,
-        type: 'start',
-        sourceFile,
-        sourceUrl: callbacks.sourceUrl,
-        opfsTarget: callbacks.allocatorConfig
-          ? {
-              modelId: generateLowbitQModelId(sourceModelId),
-              fileName: generateLowbitQFilename(sourceFile.name),
-            }
-          : undefined,
-        allocatorConfig: callbacks.allocatorConfig,
-        convertMode: callbacks.allocatorConfig ? undefined : callbacks.convertMode,
-        computeQuality: callbacks.computeQuality,
-        sourceModelName: callbacks.sourceModelName,
-        sourceOpfsInfo: callbacks.sourceOpfsInfo,
-      });
+      }
     });
   }
 
@@ -244,11 +258,9 @@ export class LowbitQConversionManager {
    * Cancel an in-progress conversion.
    */
   cancel(): void {
-    if (this.worker) {
-      this.worker.terminate();
-      this.pendingReject?.(new Error('変換がキャンセルされました'));
-      this.cleanup();
-    }
+    this.cancelled = true;
+    this.pendingReject?.(new Error('変換がキャンセルされました'));
+    this.cleanup();
   }
 
   private async handleWorkerMessage(
@@ -257,6 +269,7 @@ export class LowbitQConversionManager {
     sourceLabel: string,
     sourceFileName: string,
   ): Promise<void> {
+    if (this.cancelled) return;
     switch (msg.type) {
       case 'progress':
         this.callbacks.onProgress?.(msg.progress);
@@ -313,6 +326,17 @@ export class LowbitQConversionManager {
               `OPFS検証に失敗しました: 保存状態=${verifyResult}。ストレージに問題がある可能性があります。`,
             );
           }
+          if (this.cancelled) return;
+
+          // Only release an OPFS source after its replacement is durable.
+          const source = this.callbacks.sourceOpfsInfo;
+          if (source) {
+            const removal = await removeAssets(source.modelId, { files: [source.fileName] });
+            if (removal.status !== 'removed') {
+              console.warn('[LowbitQConversionManager] Retained source after conversion:', removal.status);
+            }
+          }
+          if (this.cancelled) return;
 
           const result: LowbitQConversionResult = {
             modelDef,
@@ -358,6 +382,13 @@ export class LowbitQConversionManager {
     this.pendingResolve = null;
     this.pendingReject = null;
     this.callbacks = {};
+    if (this.operationToken) {
+      finishWrite(this.operationToken, this.cancelled ? 'partial' : 'saved');
+      this.operationToken = null;
+    }
+    this.resolveOperationFinished?.();
+    this.resolveOperationFinished = null;
+    this.operationFinished = null;
   }
 }
 

@@ -17,7 +17,7 @@ const RoleSelector = React.memo(
     const { t } = useTranslation();
     const setInputRole = useStore((state) => state.setInputRole);
     const updateNodeRole = useStore((state) => state.updateNodeRole);
-    const currentChatIndex = useStore((state) => state.currentChatIndex);
+    const chatId = useStore(state => state.chats?.[state.currentChatIndex]?.id ?? '');
 
     const [dropDown, setDropDown, dropDownRef] = useHideOnOutsideClick();
 
@@ -53,7 +53,7 @@ const RoleSelector = React.memo(
                     setInputRole(r);
                   } else {
                     if (!nodeId) return;
-                    updateNodeRole(currentChatIndex, nodeId, r);
+                    updateNodeRole({ chatId, nodeId, role: r });
                   }
                   setDropDown(false);
                 }}

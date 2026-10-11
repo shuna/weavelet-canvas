@@ -405,6 +405,8 @@ async function handleStartStream(msg, port) {
   // Save initial record
   const initialRecord = {
     requestId,
+    chatId: msg.chatId,
+    nodeId: msg.nodeId,
     chatIndex: msg.chatIndex,
     messageIndex: msg.messageIndex,
     bufferedText: '',
@@ -421,7 +423,10 @@ async function handleStartStream(msg, port) {
     initialRecord.proxySessionId = proxyConfig.sessionId;
     initialRecord.lastProxyEventId = 0;
   }
-  await dbPut(initialRecord);
+  // The page created this record first; update in place to preserve a committed checkpoint.
+  const existing = await dbGet(requestId);
+  if (existing) await dbUpdate(requestId, { proxySessionId: initialRecord.proxySessionId, lastProxyEventId: initialRecord.lastProxyEventId });
+  else await dbPut(initialRecord);
 
   function postToClient(data) {
     if (port) {
@@ -461,7 +466,7 @@ async function handleStartStream(msg, port) {
           thinkTagCheckpoint,
           generationId: generationIdSnapshot,
           llmDone: llmDoneSnapshot,
-          ...(completedSnapshot ? { status: 'completed' } : {}),
+          ...(completedSnapshot ? { status: 'completed', ...(proxyMode ? { proxyComplete: true } : {}) } : {}),
         };
         if (proxyMode) updates.lastProxyEventId = eventIdSnapshot;
         await dbUpdate(requestId, updates);
@@ -814,7 +819,10 @@ async function handleStartStream(msg, port) {
     postDebug('flush buffered start len=' + bufferedText.length);
     await flushBufferedText();
     postDebug('flush buffered done len=' + bufferedText.length);
-    // The window ACKs only after it applies the terminal state to the UI.
+    // Notification does not prove the primary chat has been saved. Keep the
+    // terminal buffer until the page acknowledges its committed content hash.
+    await dbUpdate(requestId, { status: 'completed', updatedAt: Date.now() }).catch(function() {});
+    postDebug('record retained until primary save');
     postDebug(
       'posting sw-done generation=' + (generationId || '-') +
       ' finish=' + (finishReason || '-')
@@ -843,7 +851,7 @@ async function handleStartStream(msg, port) {
     await flushBufferedText();
     postDebug('flush buffered after error len=' + bufferedText.length);
     // Keep partial state after transport failure; startup recovery owns deletion.
-    await dbUpdate(requestId, { status: isAbort ? 'interrupted' : 'failed', error: error });
+    await dbUpdate(requestId, { status: isAbort ? 'interrupted' : 'failed', error: error, updatedAt: Date.now() });
     postToClient({
       type: isAbort ? 'sw-cancelled' : 'sw-error',
       requestId,

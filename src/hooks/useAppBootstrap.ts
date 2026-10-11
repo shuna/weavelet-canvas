@@ -20,6 +20,9 @@ import {
   setChatDataWritesBlocked,
 } from '@store/storage/IndexedDbStorage';
 import { notifyStorageError } from '@store/storage/storageErrors';
+import { getProxyConfig, sendAck } from '@utils/proxyClient';
+import { updateStreamCheckpoints } from '@utils/streamDb';
+import { getStreamCheckpointTargets } from './submitRuntime';
 import { registerSnapshotFlushCallback } from '@utils/streamingBuffer';
 import { setRuntimeStoreGetter } from '@src/local-llm/runtime';
 
@@ -81,7 +84,15 @@ const useAppBootstrap = () => {
         while (true) {
           pendingSave = false;
           try {
-            await saveChatData(createPersistedChatDataState(useStore.getState()));
+            const snapshot = createPersistedChatDataState(useStore.getState());
+            const targets = getStreamCheckpointTargets();
+            await saveChatData(snapshot);
+            const currentRequests = new Set(getStreamCheckpointTargets().map(target => target.requestId));
+            const acknowledged = await updateStreamCheckpoints(snapshot, targets.filter(target => currentRequests.has(target.requestId)));
+            const proxy = getProxyConfig();
+            if (proxy) for (const record of acknowledged) {
+              if (record.proxySessionId && record.proxyComplete) sendAck(proxy, record.proxySessionId);
+            }
           } catch (error) {
             notifyStorageError(error);
           }
@@ -251,6 +262,9 @@ const useAppBootstrap = () => {
           status: 'needs-export-import',
         });
       }
+
+      await useStore.getState().refreshLegacyRemoteMigration();
+      if (cancelled) return;
 
       const { chats, currentChatIndex } = useStore.getState();
 

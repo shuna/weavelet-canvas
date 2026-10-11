@@ -2,7 +2,6 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next';
 import useStore from '@store/store';
 import { SearchResult, searchBranchNodes } from '@utils/branchSearch';
-import { buildPathToLeaf } from '@utils/branchUtils';
 
 interface ChatFindBarProps {
   scrollerRef: React.RefObject<HTMLDivElement | null>;
@@ -77,7 +76,7 @@ const ChatFindBar = ({ scrollerRef, onClose }: ChatFindBarProps) => {
   const currentChatId = useStore((s) => s.chats?.[s.currentChatIndex]?.id ?? '');
   const branchTree = useStore((s) => s.chats?.[s.currentChatIndex]?.branchTree);
   const contentStore = useStore((s) => s.contentStore);
-  const switchActivePathSilent = useStore((s) => s.switchActivePathSilent);
+  const navigateToNode = useStore((s) => s.navigateToNode);
   const pushNavigationEntry = useStore((s) => s.pushNavigationEntry);
   const chatActiveView = useStore((s) => s.chatActiveView);
 
@@ -229,7 +228,7 @@ const ChatFindBar = ({ scrollerRef, onClose }: ChatFindBarProps) => {
 
   const entries = useMemo(() => {
     if (!branchTree) return [];
-    return [{ tree: branchTree, chatIndex: currentChatIndex }];
+    return [{ tree: branchTree, chatId: currentChatId, chatIndex: currentChatIndex }];
   }, [branchTree, currentChatIndex]);
 
   const doNodeSearch = useCallback(
@@ -256,26 +255,13 @@ const ChatFindBar = ({ scrollerRef, onClose }: ChatFindBarProps) => {
 
   const navigateToNodeResult = useCallback(
     (result: SearchResult, q: string) => {
-      if (!branchTree) return;
-      const newPath = buildPathToLeaf(branchTree, result.nodeId);
-
-      pushNavigationEntry({
-        chatId: currentChatId,
-        activePath: newPath,
-        focusedNodeId: result.nodeId,
-        viewContext: chatActiveView,
-        source: 'search',
-      });
-
-      if (!result.isOnActivePath) {
-        switchActivePathSilent(currentChatIndex, newPath);
-      }
+      if (navigateToNode({ chatId: result.chatId, nodeId: result.nodeId, source: 'search', history: 'push', focus: 'none' }) !== 'reached') return;
       // After path switch, highlight in DOM with a short delay for re-render
       setTimeout(() => {
         applyDomHighlightAndScroll(q);
       }, 200);
     },
-    [branchTree, currentChatIndex, currentChatId, switchActivePathSilent, pushNavigationEntry, chatActiveView]
+    [navigateToNode]
   );
 
   /** Apply DOM highlights and scroll to the first match after a path switch. */

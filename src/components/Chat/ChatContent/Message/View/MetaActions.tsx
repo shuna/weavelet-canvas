@@ -9,26 +9,28 @@ import { useBubbleSummaryJob } from './bubbleSummaryGeneration';
 
 const MetaActions = memo(
   ({
-    messageIndex,
+    chatId,
+    nodeId,
     isOmitted,
     isProtected,
     showEvaluateButton,
     onEvaluate,
   }: {
-    messageIndex: number;
+    chatId: string;
+    nodeId: string;
     isOmitted: boolean;
     isProtected: boolean;
     showEvaluateButton: boolean;
     onEvaluate: () => void;
   }) => {
     const { t } = useTranslation();
-    const currentChatIndex = useStore((state) => state.currentChatIndex);
-    const toggleOmitNode = useStore((state) => state.toggleOmitNode);
-    const toggleProtectNode = useStore((state) => state.toggleProtectNode);
-    const chatId = useStore(state => state.chats?.[state.currentChatIndex]?.id);
-    const nodeId = useStore(state => state.chats?.[state.currentChatIndex]?.branchTree?.activePath[messageIndex]);
+    const setNodeOmitted = useStore((state) => state.setNodeOmitted);
+    const setNodeProtected = useStore((state) => state.setNodeProtected);
     const job = useBubbleSummaryJob(chatId, nodeId);
-
+    const messageIndex = useStore(state => {
+      const chat = state.chats?.find(chat => chat.id === chatId);
+      return chat?.branchTree ? chat.branchTree.activePath.indexOf(nodeId) : Number(nodeId);
+    });
 
     return (
       <div className={`flex flex-wrap justify-end items-center gap-1 transition-opacity ${job?.busy || job?.error ? 'pointer-events-auto opacity-100' : 'pointer-events-none opacity-0 group-hover:pointer-events-auto group-hover:opacity-100 focus-within:pointer-events-auto focus-within:opacity-100'}`}>
@@ -57,7 +59,7 @@ const MetaActions = memo(
             }`}
             onClick={(e) => {
               e.stopPropagation();
-              toggleOmitNode(currentChatIndex, messageIndex);
+              setNodeOmitted({ chatId, nodeId, value: !isOmitted });
             }}
             title={String(isOmitted ? t('omitOff') : t('omitOn'))}
             aria-label={String(isOmitted ? t('omitOff') : t('omitOn'))}
@@ -73,7 +75,7 @@ const MetaActions = memo(
             }`}
             onClick={(e) => {
               e.stopPropagation();
-              toggleProtectNode(currentChatIndex, messageIndex);
+              setNodeProtected({ chatId, nodeId, value: !isProtected });
             }}
             title={String(isProtected ? t('protectOff') : t('protectOn'))}
             aria-label={String(isProtected ? t('protectOff') : t('protectOn'))}

@@ -1,10 +1,11 @@
+import { applyExternalSnapshot } from './applyExternalSnapshot';
 import { rebuildSyncedUsage } from './sync/rebuildUsage';
 import { withSyncProgress, syncStage } from './google/progress';
 import type { PersistStorage } from 'zustand/middleware';
 import { createJSONStorage } from 'zustand/middleware';
 import useCloudAuthStore from '@store/cloud-auth-store';
 import useStore from '@store/store';
-import { createLocalStoragePartializedState, createPartializedState, prepareHydratedState, finishHydratedState, migratePersistedState, type PersistedStoreState } from '@store/persistence';
+import { createLocalStoragePartializedState, createPartializedState, prepareHydratedState, finishHydratedState, reportHydratedStateCommitted, migratePersistedState, type PersistedStoreState } from '@store/persistence';
 import { hasActiveStreamingBuffers } from '@utils/streamingBuffer';
 import { isGoogleAuthError } from '@api/google-api';
 import { showToast } from '@utils/showToast';
@@ -16,6 +17,7 @@ import type { Snapshot } from './google/records';
 import { sameSnapshotAsync as sameSnapshot } from './google/processing';
 import { SyncConflictError, useSyncReview, markSyncChanges, type Resolution } from './google/conflicts';
 import { STORE_VERSION } from '@store/version';
+import { invalidateAiTasks } from '@hooks/aiTaskLifetime';
 
 let session: EncryptedDriveSync | undefined;
 let pending: { value: Snapshot; session: EncryptedDriveSync } | undefined;
@@ -72,23 +74,35 @@ export async function restoreGoogleSync(id: string): Promise<boolean> {
 const currentSnapshot = (): Snapshot => ({ state: createPartializedState(useStore.getState()), version: STORE_VERSION });
 async function applySyncedSnapshot(target: EncryptedDriveSync, before: Snapshot, received: Snapshot) {
   const observed = useStore.getState();
+  if (received.version !== STORE_VERSION) {
+    return applyExternalSnapshot(received.state, () => target === session, observed, received.version ?? 0);
+  }
   if (target !== session || !await sameSnapshot(before, currentSnapshot()) || observed !== useStore.getState()) return false;
+  // Finalizing an active task can change the persisted payload.  In that case
+  // the received merge was computed against an obsolete base, so let the normal
+  // queue path merge it again instead of applying it over the final partial.
+  invalidateAiTasks();
   const state = useStore.getState();
+  const preparedBase = currentSnapshot();
+  if (target !== session || !await sameSnapshot(before, preparedBase)) return false;
   const selectedId = state.chats?.[state.currentChatIndex]?.id;
   const prepared = await prepareHydratedState(state,
     migratePersistedState(received.state, received.version ?? STORE_VERSION) as Partial<PersistedStoreState>);
-  if (target !== session || state !== useStore.getState()) return false;
+  if (!await sameSnapshot(preparedBase, currentSnapshot()) || target !== session || state !== useStore.getState()) return false;
   const hydrated = finishHydratedState(prepared);
   if (hydrated.chats) Object.assign(hydrated, await rebuildSyncedUsage(hydrated.chats, hydrated.contentStore ?? {}, state));
-  if (target !== session || state !== useStore.getState()) return false;
+  if (!await sameSnapshot(preparedBase, currentSnapshot()) || target !== session || state !== useStore.getState()) return false;
   if (selectedId && hydrated.chats) {
     const index = hydrated.chats.findIndex(chat => chat.id === selectedId);
     if (index >= 0) hydrated.currentChatIndex = index;
   }
   applyingRemote = true;
   try {
-    useStore.setState(hydrated);
+    useStore.setState({ ...hydrated, branchHistoryPast: [], branchHistoryFuture: [] });
+    const applied = useStore.getState();
     await persistChatSnapshot(currentSnapshot());
+    if (target !== session) return false;
+    if (applied === useStore.getState()) reportHydratedStateCommitted(prepared);
     await target.acceptLocal(received);
     await markSyncChanges(before, received);
     if (!await sameSnapshot(received, currentSnapshot())) pending = { session: target, value: currentSnapshot() };

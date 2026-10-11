@@ -1,10 +1,10 @@
 import { StoreSlice } from './store';
 import { SearchResult, searchBranchNodes } from '@utils/branchSearch';
-import { buildPathToLeaf } from '@utils/branchUtils';
 import { ContentStoreData } from '@utils/contentStore';
 import { ChatInterface, isTextContent } from '@type/chat';
 
 export interface GrepResult {
+  chatId: string;
   chatIndex: number;
   chatTitle: string;
   matches: SearchResult[];
@@ -21,7 +21,7 @@ export interface GrepSlice {
   setGrepQuery: (q: string) => void;
   executeGrep: () => void;
   setGrepMode: (on: boolean) => void;
-  navigateToGrepResult: (chatIndex: number, nodeId?: string) => void;
+  navigateToGrepResult: (chatId: string, nodeId?: string) => boolean;
   saveSidebarSearchHistory: (query?: string) => void;
   clearSidebarSearchHistory: () => void;
   saveChatFindHistory: (query: string) => void;
@@ -59,6 +59,7 @@ function searchLegacyChat(
 
     results.push({
       nodeId: `legacy-${i}`,
+      chatId: chat.id,
       chatIndex,
       snippet,
       isOnActivePath: true,
@@ -107,7 +108,7 @@ export const createGrepSlice: StoreSlice<GrepSlice> = (set, get) => ({
       if (chat.branchTree) {
         matches = searchBranchNodes(
           query,
-          [{ tree: chat.branchTree, chatIndex: i }],
+          [{ tree: chat.branchTree, chatId: chat.id, chatIndex: i }],
           contentStore,
           'all'
         );
@@ -117,6 +118,7 @@ export const createGrepSlice: StoreSlice<GrepSlice> = (set, get) => ({
 
       if (matches.length > 0) {
         results.push({
+          chatId: chat.id,
           chatIndex: i,
           chatTitle: chat.title,
           matches,
@@ -163,27 +165,8 @@ export const createGrepSlice: StoreSlice<GrepSlice> = (set, get) => ({
     set({ chatFindHistory: [] });
   },
 
-  navigateToGrepResult: (chatIndex, nodeId) => {
-    const query = get().grepQuery;
-
-    // Switch to the target chat
-    get().setCurrentChatIndex(chatIndex);
-
-    if (nodeId && !nodeId.startsWith('legacy-')) {
-      // Navigate branch tree to show the matched node
-      const chats = get().chats;
-      const chat = chats?.[chatIndex];
-      if (chat?.branchTree) {
-        const newPath = buildPathToLeaf(chat.branchTree, nodeId);
-        const switchPath = get().switchActivePathSilent;
-        if (switchPath) {
-          switchPath(chatIndex, newPath);
-        }
-        get().setBranchEditorFocusNodeId(nodeId);
-      }
-    }
-
-    // Highlight is triggered by GrepResults component after calling this
-  },
-
+  navigateToGrepResult: (chatId, nodeId) => get().navigateToNode({
+    chatId, nodeId: nodeId?.startsWith('legacy-') ? undefined : nodeId,
+    source: 'grep', history: 'push', focus: 'editor',
+  }) === 'reached',
 });

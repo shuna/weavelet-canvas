@@ -18,11 +18,11 @@ vi.mock('@store/store', () => {
     protectedNodeMaps: {},
     omittedNodeMaps: {},
     saveBubbleSummary: mocks.summarySave,
-    removeMessageAtIndex: mocks.remove,
+    removeNode: mocks.remove,
     truncateActivePathAt: mocks.truncate,
     enterToSubmit: true,
-    upsertWithAutoBranch: mocks.save,
-    appendNodeToActivePath: mocks.append,
+    saveNode: mocks.save,
+    appendNode: mocks.append,
   };
   return { default: Object.assign((selector: (value: typeof state) => unknown) => selector(state), {
     getState: () => state,
@@ -32,6 +32,8 @@ vi.mock('@store/store', () => {
 describe('edit Enter shortcuts', () => {
   it.each([false, true])('ignores IME Enter and allows the next ordinary Enter (sticky=%s)', sticky => {
     vi.clearAllMocks();
+    mocks.save.mockReturnValue({ status: 'updated' });
+    mocks.append.mockReturnValue({ status: 'updated' });
     vi.stubGlobal('navigator', { userAgent: 'Macintosh Safari' });
     let logic!: ReturnType<typeof useEditViewLogic>;
     const setIsEdit = vi.fn();
@@ -83,7 +85,7 @@ describe('editing the selected summary through the common editor', () => {
       { nodeId: '1', parentId: null, role: 'assistant', textParts: ['Original answer'] },
     ] }] }];
     mocks.summarySave.mockImplementation((_chatId, summary) => { state.chats[0].summaries = [summary]; });
-    mocks.remove.mockImplementation((_index, messageIndex) => state.chats[0].messages.splice(messageIndex, 1));
+    mocks.remove.mockImplementation(({ nodeId }) => { state.chats[0].messages.splice(Number(nodeId), 1); return { status: 'updated' }; });
     let logic!: ReturnType<typeof useEditViewLogic>;
     renderToString(React.createElement(() => { logic = useEditViewLogic({ content: [{ type: 'text', text: 'Edited displayed text' }], setIsEdit: vi.fn(), messageIndex: 1, nodeId: '1', summaryId: 'summary', editSessionKey: `summary-${format}-${mocks.summarySave.mock.calls.length}` }); return null; }));
     return { logic, state };
@@ -100,7 +102,7 @@ describe('editing the selected summary through the common editor', () => {
     const { logic, state } = harness(format);
     logic.handleGenerateNextOnly();
     expect(mocks.midchat).toHaveBeenCalledWith(2);
-    expect(mocks.remove).toHaveBeenCalledWith(0, 2);
+    expect(mocks.remove).toHaveBeenCalledWith({ chatId: 'chat', nodeId: '2' });
     expect(mocks.save).not.toHaveBeenCalled();
     expect(state.chats[0].messages.map((message: any) => message.content[0].text)).toEqual(['Original user', 'Original answer']);
     const sent = applyBubbleSummariesForSubmit(state.chats[0], 2);

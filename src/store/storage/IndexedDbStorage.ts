@@ -1,3 +1,4 @@
+import { v4 as uuidv4 } from 'uuid';
 import { findPersistedDataIntegrityErrors, computeChatFingerprint } from './prepareSave';
 import { prepareSaveAsync } from './google/processing';
 import {
@@ -38,6 +39,7 @@ const LEGACY_KEY = 'chat-data';
 const META_KEY = 'meta';
 const CONTENT_STORE_KEY = 'content-store';
 const BRANCH_CLIPBOARD_KEY = 'branch-clipboard';
+const REMOTE_RECOVERY_PREFIX = 'remote-recovery:';
 const chatKey = (id: string) => `chat:${id}`;
 
 type PersistedChat = Omit<ChatInterface, 'messages'> & {
@@ -74,6 +76,16 @@ type LegacyChatDataRecord = PersistedChatData & {
   version: number;
 };
 
+export interface LegacyRemoteSnapshot {
+  state: unknown;
+  version: number;
+}
+
+export interface LegacyRemoteRecoveryRecord {
+  id: string;
+  snapshot: LegacyRemoteSnapshot;
+}
+
 export interface IndexedDbRecoveryChatSnapshot {
   key: string;
   packed: boolean;
@@ -91,6 +103,7 @@ export interface IndexedDbRecoverySnapshot {
   keys: string[];
   meta?: MetaRecord;
   legacy?: LegacyChatDataRecord;
+  legacyRemoteSnapshots?: LegacyRemoteRecoveryRecord[];
   contentStore?: ContentStoreRecord;
   branchClipboard?: BranchClipboardRecord;
   chats: IndexedDbRecoveryChatSnapshot[];
@@ -246,6 +259,46 @@ const withTransaction = async <T>(
     database.close();
   }
 };
+
+const readLegacyRemoteSnapshots = async (store: IDBObjectStore): Promise<LegacyRemoteRecoveryRecord[]> => {
+  const keys = (await idbGetAllKeys(store)).filter((key): key is string =>
+    typeof key === 'string' && key.startsWith(REMOTE_RECOVERY_PREFIX));
+  return Promise.all(keys.map(async (key) => ({
+    id: key.slice(REMOTE_RECOVERY_PREFIX.length),
+    snapshot: (await idbGet<LegacyRemoteSnapshot>(store, key))!,
+  })));
+};
+
+export const loadLegacyRemoteSnapshots = (): Promise<LegacyRemoteRecoveryRecord[]> =>
+  hasIndexedDb() ? withTransaction('readonly', readLegacyRemoteSnapshots) : Promise.resolve([]);
+
+// Unrecognized remote schemas stay outside the current primary generation.
+export const preserveLegacyRemoteSnapshot = (snapshot: LegacyRemoteSnapshot): Promise<{ id: string; version: number }> => {
+  const owned = structuredClone(snapshot);
+  return enqueueStorageMutation(async () => {
+    if (!hasIndexedDb()) throw new Error('IndexedDB is unavailable; remote recovery data could not be preserved');
+    return withTransaction('readwrite', async (store) => {
+      const existing = (await readLegacyRemoteSnapshots(store)).find(record =>
+        JSON.stringify(record.snapshot) === JSON.stringify(owned));
+      const id = existing?.id ?? uuidv4();
+      if (!existing) await idbPut(store, `${REMOTE_RECOVERY_PREFIX}${id}`, owned);
+      return { id, version: owned.version };
+    });
+  });
+};
+
+// Called only after this exact exported payload has been imported and saved.
+export const resolveLegacyRemoteSnapshot = (snapshot: LegacyRemoteSnapshot): Promise<boolean> =>
+  enqueueStorageMutation(async () => {
+    if (!hasIndexedDb()) return false;
+    return withTransaction('readwrite', async (store) => {
+      const existing = (await readLegacyRemoteSnapshots(store)).find(record =>
+        JSON.stringify(record.snapshot) === JSON.stringify(snapshot));
+      if (!existing) return false;
+      await idbDelete(store, `${REMOTE_RECOVERY_PREFIX}${existing.id}`);
+      return true;
+    });
+  });
 
 /**
  * Collect all contentHashes referenced by chats and branchClipboard.
@@ -888,7 +941,7 @@ async function collectIndexedDbRecoverySnapshotUnlocked(): Promise<IndexedDbReco
     const recordTx = database.transaction(STORE_NAME, 'readonly');
     const recordTxDone = transactionDone(recordTx);
     const recordStore = recordTx.objectStore(STORE_NAME);
-    const [meta, legacy, contentStore, branchClipboard, rawValues, packedValues] = await Promise.all([
+    const [meta, legacy, contentStore, branchClipboard, rawValues, packedValues, legacyRemoteSnapshots] = await Promise.all([
       idbGet<MetaRecord>(recordStore, META_KEY),
       idbGet<LegacyChatDataRecord>(recordStore, LEGACY_KEY),
       idbGet<ContentStoreRecord>(recordStore, CONTENT_STORE_KEY),
@@ -899,6 +952,7 @@ async function collectIndexedDbRecoverySnapshotUnlocked(): Promise<IndexedDbReco
           idbGet<{ compressed: Uint8Array; generation: number }>(recordStore, key)
         )
       ),
+      readLegacyRemoteSnapshots(recordStore),
     ]);
     await recordTxDone;
 
@@ -947,6 +1001,7 @@ async function collectIndexedDbRecoverySnapshotUnlocked(): Promise<IndexedDbReco
       keys,
       meta,
       legacy,
+      legacyRemoteSnapshots,
       contentStore,
       branchClipboard,
       chats,
@@ -1388,6 +1443,7 @@ const clearChatDataUnlocked = async (): Promise<void> => {
   await withTransaction('readwrite', async (store) => {
     const allKeys = await idbGetAllKeys(store);
     for (const key of allKeys) {
+      if (typeof key === 'string' && key.startsWith(REMOTE_RECOVERY_PREFIX)) continue;
       await idbDelete(store, key as string);
     }
   });

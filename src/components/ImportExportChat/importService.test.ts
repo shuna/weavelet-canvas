@@ -44,6 +44,9 @@ const testContext = vi.hoisted(() => {
     contentStore: state.contentStore,
     apiKey: state.apiKey,
     theme: state.theme,
+    branchClipboard: state.branchClipboard,
+    evaluationSettings: state.evaluationSettings,
+    evaluationResults: state.evaluationResults,
   }));
 
   return {
@@ -57,8 +60,18 @@ const testContext = vi.hoisted(() => {
     setState,
     importOpenAIChatExportMock,
     createPartializedState,
+    invalidateAiTasks: vi.fn(),
+    saveChatData: vi.fn(),
+    resolveLegacyRemoteSnapshot: vi.fn(),
+    refreshLegacyRemoteMigration: vi.fn(),
+    setLocalStorageItem: vi.fn(),
+    normalizeSystemPrompt: vi.fn(),
   };
 });
+
+vi.mock('@hooks/aiTaskLifetime', () => ({
+  invalidateAiTasks: testContext.invalidateAiTasks,
+}));
 
 vi.mock('@utils/showToast', () => ({
   showToast: (...args: unknown[]) => {
@@ -70,18 +83,7 @@ vi.mock('@utils/showToast', () => ({
 
 vi.mock('@store/store', () => ({
   default: {
-    getState: () => ({
-      chats: testContext.storeState.chats,
-      folders: testContext.storeState.folders,
-      contentStore: testContext.storeState.contentStore,
-      apiKey: testContext.storeState.apiKey,
-      theme: testContext.storeState.theme,
-      currentChatIndex: testContext.storeState.currentChatIndex,
-      providerCustomModels: {},
-      setChats: testContext.setChats,
-      setFolders: testContext.setFolders,
-      setCurrentChatIndex: testContext.setCurrentChatIndex,
-    }),
+    getState: () => testContext.storeState,
     getInitialState: () => ({
       ...testContext.initialStoreState,
     }),
@@ -89,6 +91,19 @@ vi.mock('@store/store', () => ({
   },
   createPartializedState: testContext.createPartializedState,
 }));
+
+vi.mock('@store/persistence', () => ({
+  createPersistedChatDataState: (state: Record<string, unknown>) => ({
+    chats: state.chats, contentStore: state.contentStore, branchClipboard: state.branchClipboard,
+  }),
+}));
+vi.mock('@store/storage/IndexedDbStorage', () => ({ saveChatData: testContext.saveChatData, resolveLegacyRemoteSnapshot: testContext.resolveLegacyRemoteSnapshot }));
+vi.mock('@store/storage/storageErrors', () => ({ setLocalStorageItem: testContext.setLocalStorageItem }));
+vi.mock('@utils/systemPromptNormalize', async () => {
+  const actual = await vi.importActual<typeof import('@utils/systemPromptNormalize')>('@utils/systemPromptNormalize');
+  testContext.normalizeSystemPrompt.mockImplementation(actual.normalizeSystemPrompt);
+  return { normalizeSystemPrompt: testContext.normalizeSystemPrompt };
+});
 
 vi.mock('@utils/import', async () => {
   const actual = await vi.importActual<typeof import('@utils/import')>('@utils/import');
@@ -141,18 +156,35 @@ describe('importService', () => {
     testContext.storeState.apiKey = 'existing-key';
     testContext.storeState.theme = 'light';
     testContext.storeState.currentChatIndex = 0;
+    testContext.storeState.branchClipboard = null;
+    testContext.storeState.evaluationResults = {};
+    testContext.storeState.evaluationSettings = { safetyPreSend: 'manual', safetyPostReceive: 'manual', qualityPreSend: 'manual', qualityPostReceive: 'manual' };
+    testContext.storeState.branchHistoryPast = [];
+    testContext.storeState.branchHistoryFuture = [];
+    testContext.storeState.providerCustomModels = {};
     testContext.setChats.mockClear();
     testContext.setFolders.mockClear();
     testContext.setCurrentChatIndex.mockClear();
-    testContext.setState.mockClear();
+    testContext.setState.mockReset();
+    testContext.setState.mockImplementation((patch) => Object.assign(testContext.storeState, patch));
+    testContext.saveChatData.mockReset();
+    testContext.saveChatData.mockResolvedValue(undefined);
+    testContext.resolveLegacyRemoteSnapshot.mockReset();
+    testContext.resolveLegacyRemoteSnapshot.mockResolvedValue(true);
+    testContext.refreshLegacyRemoteMigration.mockReset();
+    testContext.refreshLegacyRemoteMigration.mockResolvedValue(undefined);
+    testContext.storeState.refreshLegacyRemoteMigration = testContext.refreshLegacyRemoteMigration;
+    testContext.setLocalStorageItem.mockClear();
+    testContext.normalizeSystemPrompt.mockClear();
     testContext.toastInfo.mockClear();
     testContext.toastWarning.mockClear();
     testContext.importOpenAIChatExportMock.mockReset();
     testContext.createPartializedState.mockClear();
+    testContext.invalidateAiTasks.mockReset();
     vi.mocked(window.confirm).mockReset();
   });
 
-  it('restores snapshot when import format is unrecognized', async () => {
+  it('leaves live state untouched when import format is unrecognized', async () => {
     const file = new File([JSON.stringify({ foo: 'bar' })], 'import.json', {
       type: 'application/json',
     });
@@ -164,6 +196,46 @@ describe('importService', () => {
       message: 'notifications.unrecognisedDataFormat',
     });
     expect(testContext.storeState.chats).toEqual([createChat('existing-chat', 'Existing')]);
+    expect(testContext.setState).not.toHaveBeenCalled();
+  });
+
+  it('does not roll back edits made while the import file is being read', async () => {
+    let finishRead!: (text: string) => void;
+    const originalFileReader = globalThis.FileReader;
+    class DeferredFileReader {
+      public onload: ((event: { target: { result: string } }) => void) | null = null;
+      readAsText() {
+        finishRead = (text) => this.onload?.({ target: { result: text } });
+      }
+    }
+    Object.defineProperty(globalThis, 'FileReader', {
+      value: DeferredFileReader,
+      configurable: true,
+    });
+    testContext.normalizeSystemPrompt.mockImplementationOnce(() => {
+      throw new DOMException('quota', 'QuotaExceededError');
+    });
+    vi.mocked(window.confirm).mockReturnValue(false);
+
+    try {
+      const pending = importChatFromFile(
+        new File([JSON.stringify({ version: 1, folders: {}, chats: [createChat('imported')] })], 'slow.json'),
+        t,
+      );
+      testContext.storeState.theme = 'changed-during-read';
+      finishRead(JSON.stringify({ version: 1, folders: {}, chats: [createChat('imported')] }));
+
+      await expect(pending).resolves.toEqual({
+        success: false,
+        message: 'notifications.quotaExceeded',
+      });
+      expect(testContext.storeState.theme).toBe('changed-during-read');
+    } finally {
+      Object.defineProperty(globalThis, 'FileReader', {
+        value: originalFileReader,
+        configurable: true,
+      });
+    }
   });
 
   it('retries partial OpenAI import after confirmation', async () => {
@@ -209,7 +281,7 @@ describe('importService', () => {
     expect(testContext.storeState.chats[1].id).toBe('existing-chat');
   });
 
-  it('fails and restores snapshot when quota retry is declined', async () => {
+  it('leaves live state untouched when quota retry is declined', async () => {
     const openAIExport = [
       {
         title: 'Imported',
@@ -246,6 +318,7 @@ describe('importService', () => {
       message: 'notifications.quotaExceeded',
     });
     expect(testContext.storeState.chats).toEqual([createChat('existing-chat', 'Existing')]);
+    expect(testContext.setState).not.toHaveBeenCalled();
   });
 
   it('deduplicates chat ids when importing export v3 data', async () => {
@@ -325,6 +398,7 @@ describe('importService', () => {
     expect(testContext.storeState.apiKey).toBeUndefined();
     expect(testContext.storeState.theme).toBe('dark');
     expect(testContext.storeState.currentChatIndex).toBe(0);
+    expect(testContext.invalidateAiTasks).toHaveBeenCalledWith();
   });
 
   it('rejects invalid export v3 data with broken branch references', async () => {
@@ -401,15 +475,9 @@ describe('importService', () => {
       ],
     };
 
-    let callCount = 0;
-    testContext.setChats.mockImplementation((chats: ChatInterface[]) => {
-      callCount++;
-      if (callCount <= 2) {
-        testContext.storeState.chats = chats;
-        throw new DOMException('quota', 'QuotaExceededError');
-      }
-      testContext.storeState.chats = chats;
-    });
+    testContext.normalizeSystemPrompt
+      .mockImplementationOnce(() => { throw new DOMException('quota', 'QuotaExceededError'); })
+      .mockImplementationOnce(() => { throw new DOMException('quota', 'QuotaExceededError'); });
     vi.mocked(window.confirm).mockReturnValue(true);
 
     const file = new File([JSON.stringify(exportV1)], 'quota-v1.json', {
@@ -420,6 +488,8 @@ describe('importService', () => {
 
     expect(result.success).toBe(true);
     expect(window.confirm).toHaveBeenCalledTimes(1);
+    expect(testContext.storeState.chats).toHaveLength(3);
+    expect(testContext.setState).toHaveBeenCalledTimes(1);
   });
 
   it('imports a single chat object (not wrapped in array)', async () => {
@@ -464,4 +534,209 @@ describe('importService', () => {
       message: 'notifications.quotaExceeded',
     });
   });
+
+  it.each([1, 2, 3])('commits version %s with its settings priority in one write', async (version) => {
+    for (const mode of ['append', 'replace'] as const) {
+      for (const includeSettings of [false, true]) {
+        testContext.storeState.chats = [createChat('existing-chat', 'Existing')];
+        const existing = testContext.storeState.chats[0];
+        testContext.storeState.apiKey = 'existing-key';
+        testContext.storeState.theme = 'light';
+        const existingSettings = { safetyPreSend: 'manual', safetyPostReceive: 'manual', qualityPreSend: 'manual', qualityPostReceive: 'manual' };
+        testContext.storeState.evaluationSettings = existingSettings;
+        testContext.storeState.evaluationResults = { 'existing-chat:node:pre-send': { phase: 'pre-send' } };
+        testContext.storeState.branchHistoryPast = [{ chats: [{ id: 'existing-chat' }] }];
+        testContext.storeState.branchHistoryFuture = [];
+        testContext.setState.mockClear();
+        const importedSettings = { safetyPreSend: 'auto', safetyPostReceive: 'auto', qualityPreSend: 'auto', qualityPostReceive: 'auto' };
+        const payload = { version, folders: {}, contentStore: {}, chats: [createChat('imported')],
+          apiKey: 'file-secret', theme: 'file-theme', evaluationSettings: importedSettings,
+          evaluationResults: { 'imported:node:pre-send': { phase: 'pre-send' } },
+        };
+        const result = await importChatFromFile(new File([JSON.stringify(payload)], 'priority.json'), t, mode, includeSettings);
+        expect(result.success).toBe(true);
+        expect(testContext.setState).toHaveBeenCalledTimes(1);
+        const resetsSettings = mode === 'replace' && includeSettings;
+        expect(testContext.storeState.apiKey).toBe(resetsSettings ? undefined : 'existing-key');
+        expect(testContext.storeState.theme).toBe(resetsSettings ? 'dark' : 'light');
+        if (version === 3 && resetsSettings) expect(testContext.storeState.evaluationSettings).toEqual(importedSettings);
+        else if (!resetsSettings) expect(testContext.storeState.evaluationSettings).toEqual(existingSettings);
+        if (mode === 'append') {
+          expect(testContext.storeState.chats[1]).toBe(existing);
+          expect(testContext.storeState.branchHistoryPast).toHaveLength(1);
+        } else {
+          expect(testContext.storeState.chats).toHaveLength(1);
+          expect(testContext.storeState.branchHistoryPast).toEqual([]);
+        }
+        const results = testContext.storeState.evaluationResults as Record<string, unknown>;
+        if (version === 3) expect(results[`${testContext.storeState.chats[0].id}:node:pre-send`]).toEqual({ phase: 'pre-send' });
+      }
+    }
+  });
+
+  it('rejects an edit made while a plan awaits commit without restoring old data', async () => {
+    testContext.normalizeSystemPrompt.mockImplementationOnce(() => {
+      queueMicrotask(() => { testContext.storeState.theme = 'new-edit'; });
+    });
+    const result = await importChatFromFile(new File([JSON.stringify([createChat('imported')])], 'edit.json'), t);
+    expect(result).toEqual({ success: false, message: 'concurrent-change', status: 'concurrent-change' });
+    expect(testContext.storeState.theme).toBe('new-edit');
+    expect(testContext.storeState.chats[0].id).toBe('existing-chat');
+    expect(testContext.setState).not.toHaveBeenCalled();
+    expect(testContext.saveChatData).not.toHaveBeenCalled();
+  });
+
+  it('recaptures replace settings after AI cancellation finalizes state', async () => {
+    testContext.invalidateAiTasks.mockImplementationOnce(() => { testContext.storeState.theme = 'finalized'; });
+    const result = await importChatFromFile(new File([JSON.stringify([createChat('imported')])], 'finalize.json'), t, 'replace', false);
+    expect(result.success).toBe(true);
+    expect(testContext.storeState.theme).toBe('finalized');
+    expect(testContext.setState).toHaveBeenCalledTimes(1);
+  });
+
+  it('keeps imported memory when post-commit persistence fails', async () => {
+    testContext.saveChatData.mockRejectedValueOnce(new DOMException('quota', 'QuotaExceededError'));
+    const result = await importChatFromFile(new File([JSON.stringify([createChat('imported')])], 'storage.json'), t, 'replace', false);
+    expect(result).toEqual({ success: false, message: 'storage-error: quota', status: 'storage-error' });
+    expect(testContext.storeState.chats).toHaveLength(1);
+    expect(testContext.storeState.chats[0].id).not.toBe('existing-chat');
+    expect(testContext.setState).toHaveBeenCalledTimes(1);
+    expect(window.confirm).not.toHaveBeenCalled();
+  });
+
+  it('leaves folders, content refs, chats and settings unchanged if conversion fails', async () => {
+    const sharedContent = { content: [{ type: 'text', text: 'original' }], refCount: 2 };
+    testContext.storeState.contentStore = { shared: sharedContent };
+    const folder = { id: 'existing-folder', name: 'Existing', expanded: false, order: 1 };
+    testContext.storeState.folders = { [folder.id]: folder };
+    const originalChats = testContext.storeState.chats;
+    testContext.normalizeSystemPrompt.mockImplementationOnce(() => { throw new Error('normalization failure'); });
+    const payload = { version: 3, folders: { imported: { id: 'imported', name: 'Imported', expanded: false, order: 0 } },
+      contentStore: { shared: { ...sharedContent, refCount: 1 } }, chats: [createChat('imported')],
+    };
+    const result = await importChatFromFile(new File([JSON.stringify(payload)], 'failed.json'), t);
+    expect(result).toEqual({ success: false, message: 'normalization failure' });
+    expect(testContext.storeState.chats).toBe(originalChats);
+    expect(sharedContent.refCount).toBe(2);
+    expect(folder.order).toBe(1);
+    expect(testContext.storeState.apiKey).toBe('existing-key');
+    expect(testContext.setState).not.toHaveBeenCalled();
+  });
+
+
+  it('converts every v2 branch on the detached content store', async () => {
+    const payload = { version: 2, folders: {}, chats: [{ ...createChat('branched'),
+      collapsedNodes: { root: true }, omittedNodes: { hidden: true }, protectedNodes: { root: true },
+      branchTree: { rootId: 'root', activePath: ['root'], nodes: {
+        root: { id: 'root', parentId: null, role: 'user', createdAt: 1, content: [{ type: 'text', text: 'root text' }] },
+        hidden: { id: 'hidden', parentId: 'root', role: 'assistant', createdAt: 2, content: [{ type: 'reasoning', text: 'hidden reasoning' }] },
+      } },
+    }] };
+    const result = await importChatFromFile(new File([JSON.stringify(payload)], 'branches.json'), t);
+    expect(result.success).toBe(true);
+    const nodes = testContext.storeState.chats[0].branchTree!.nodes;
+    const content = testContext.storeState.contentStore[nodes.hidden.contentHash] as { content: unknown[] };
+    expect(content.content).toEqual([{ type: 'reasoning', text: 'hidden reasoning' }]);
+    expect(testContext.storeState.collapsedNodeMaps).toEqual({ '0': { root: true } });
+    expect(testContext.storeState.omittedNodeMaps).toEqual({ '0': { hidden: true } });
+    expect(testContext.storeState.protectedNodeMaps).toEqual({ '0': { root: true } });
+    expect(testContext.setState).toHaveBeenCalledTimes(1);
+    expect(testContext.setChats).not.toHaveBeenCalled();
+    expect(testContext.setFolders).not.toHaveBeenCalled();
+  });
+
+  it('updates the append folder order without mutating the original folder object', async () => {
+    const existingFolder = { id: 'existing', name: 'Existing', order: 0, expanded: false };
+    testContext.storeState.folders = { existing: existingFolder };
+    const result = await importChatFromFile(new File([JSON.stringify({ version: 1,
+      folders: { imported: { id: 'imported', name: 'Imported', order: 0, expanded: false } },
+      chats: [createChat('imported')],
+    })], 'folders.json'), t);
+    expect(result.success).toBe(true);
+    expect(existingFolder.order).toBe(0);
+    expect(testContext.storeState.folders.existing.order).toBe(1);
+    expect(testContext.setState).toHaveBeenCalledTimes(1);
+  });
+
+
+  it('imports the exported raw version 17 snapshot through the compatible hashed-tree converter', async () => {
+    const chat = createChat('old', 'Old sync chat');
+    const raw = { version: 17, state: { chats: [{ ...chat, messages: undefined,
+      branchTree: { rootId: 'old-node', activePath: ['old-node'], nodes: {
+        'old-node': { id: 'old-node', parentId: null, role: 'user', contentHash: 'old-content', createdAt: 1 },
+      } },
+    }], folders: {}, contentStore: { 'old-content': { content: [{ type: 'text', text: 'old text' }], refCount: 1 } } } };
+    const fileRaw = JSON.parse(JSON.stringify(raw));
+    const result = await importChatFromFile(new File([JSON.stringify(fileRaw)], 'old-remote.json'), t);
+    expect(result.success).toBe(true);
+    expect(testContext.storeState.chats[0].messages).toEqual([{ role: 'user', content: [{ type: 'text', text: 'old text' }] }]);
+    expect(testContext.resolveLegacyRemoteSnapshot).toHaveBeenCalledWith(fileRaw);
+    expect(testContext.refreshLegacyRemoteMigration).toHaveBeenCalledTimes(1);
+    expect(testContext.setState).toHaveBeenCalledTimes(1);
+  });
+
+  it('retains the raw record until primary persistence succeeds and leaves unrelated imports alone', async () => {
+    const raw = { version: 17, state: { chats: [createChat('old')], folders: {} } };
+    let finishSave!: () => void;
+    testContext.saveChatData.mockImplementationOnce(() => new Promise<void>(resolve => { finishSave = resolve; }));
+    const pending = importChatFromFile(new File([JSON.stringify(raw)], 'raw.json'), t);
+    await vi.waitFor(() => expect(testContext.saveChatData).toHaveBeenCalledTimes(1));
+    expect(testContext.resolveLegacyRemoteSnapshot).not.toHaveBeenCalled();
+    finishSave();
+    expect((await pending).success).toBe(true);
+    expect(testContext.resolveLegacyRemoteSnapshot).toHaveBeenCalledWith(raw);
+    testContext.resolveLegacyRemoteSnapshot.mockClear();
+    await importChatFromFile(new File([JSON.stringify([createChat('ordinary')])], 'ordinary.json'), t);
+    expect(testContext.resolveLegacyRemoteSnapshot).not.toHaveBeenCalled();
+  });
+
+  it('retains the raw record if imported primary persistence fails', async () => {
+    testContext.saveChatData.mockRejectedValueOnce(new Error('disk failed'));
+    const raw = { version: 17, state: { chats: [createChat('old')], folders: {} } };
+    const result = await importChatFromFile(new File([JSON.stringify(raw)], 'raw.json'), t);
+    expect(result.status).toBe('storage-error');
+    expect(testContext.resolveLegacyRemoteSnapshot).not.toHaveBeenCalled();
+  });
+
+  it('rejects future raw schemas and corrupted raw references without changing live data or resolving recovery', async () => {
+    for (const raw of [
+      { version: 19, state: { chats: [createChat('future')], folders: {} } },
+      { version: 17, state: { chats: [{ ...createChat('broken'), messages: undefined,
+        branchTree: { rootId: 'node', activePath: ['node'], nodes: { node: { id: 'node', contentHash: 'missing' } } },
+      }], contentStore: {}, folders: {} } },
+    ]) {
+      const result = await importChatFromFile(new File([JSON.stringify(raw)], 'invalid.json'), t);
+      expect(result.success).toBe(false);
+    }
+    expect(testContext.setState).not.toHaveBeenCalled();
+    expect(testContext.resolveLegacyRemoteSnapshot).not.toHaveBeenCalled();
+  });
+
+
+  it('delegates inline legacy branch content to the v2 converter', async () => {
+    const raw = { version: 12, state: { chats: [{ ...createChat('inline'), messages: undefined,
+      branchTree: { rootId: 'node', activePath: ['node', 'hashed'], nodes: {
+        node: { id: 'node', parentId: null, role: 'user', content: [{ type: 'text', text: 'inline text' }], createdAt: 1 },
+        hashed: { id: 'hashed', parentId: 'node', role: 'assistant', contentHash: 'stored-hash', createdAt: 2 },
+      } },
+    }], folders: {}, contentStore: { 'stored-hash': { content: [{ type: 'text', text: 'hashed text' }], refCount: 1 } } } };
+    const result = await importChatFromFile(new File([JSON.stringify(raw)], 'inline-remote.json'), t);
+    expect(result.success).toBe(true);
+    expect(testContext.storeState.chats[0].messages[0].content).toEqual([{ type: 'text', text: 'inline text' }]);
+    expect(testContext.storeState.chats[0].messages[1].content).toEqual([{ type: 'text', text: 'hashed text' }]);
+    expect(testContext.resolveLegacyRemoteSnapshot).toHaveBeenCalled();
+  });
+
+  it('retains the complete raw recovery record when a reduced import succeeds', async () => {
+    const raw = { version: 17, state: { chats: [createChat('first'), createChat('second')], folders: {} } };
+    testContext.normalizeSystemPrompt
+      .mockImplementationOnce(() => { throw new DOMException('quota', 'QuotaExceededError'); })
+      .mockImplementationOnce(() => { throw new DOMException('quota', 'QuotaExceededError'); });
+    vi.mocked(window.confirm).mockReturnValue(true);
+    const result = await importChatFromFile(new File([JSON.stringify(raw)], 'reduced-remote.json'), t);
+    expect(result.success).toBe(true);
+    expect(testContext.storeState.chats).toHaveLength(2);
+    expect(testContext.resolveLegacyRemoteSnapshot).not.toHaveBeenCalled();
+  });
+
 });

@@ -111,3 +111,29 @@ describe('navigation-slice', () => {
   });
 
 });
+
+describe('navigateToNode target identity', () => {
+  it('resolves a chat after reordering and rejects a deleted node without history or selection writes', () => {
+    const get = createState();
+    get().chats.reverse();
+    expect(get().navigateToNode({ chatId: 'chat-a', nodeId: 'a', source: 'search', history: 'push', focus: 'editor' })).toBe('reached');
+    expect(get().setCurrentChatIndex).toHaveBeenCalledWith(1);
+    expect(get().navHistoryCurrent?.chatId).toBe('chat-a');
+    const entry = get().navHistoryCurrent;
+    get().setCurrentChatIndex.mockClear();
+    expect(get().navigateToNode({ chatId: 'chat-b', nodeId: 'deleted', source: 'search', history: 'push', focus: 'editor' })).toBe('node-missing');
+    expect(get().navHistoryCurrent).toBe(entry);
+    expect(get().setCurrentChatIndex).not.toHaveBeenCalled();
+  });
+
+  it('preserves an existing path for search and can focus the editor without changing the displayed chat', () => {
+    const get = createState();
+    get().chats[0].branchTree.activePath = ['a', 'child'];
+    get().chats[0].branchTree.nodes.child = { parentId: 'a' };
+    expect(get().navigateToNode({ chatId: 'chat-a', nodeId: 'a', source: 'search', history: 'push', selectChat: false, focus: 'editor' })).toBe('reached');
+    expect(get().navHistoryCurrent?.activePath).toEqual(['a', 'child']);
+    expect(get().switchActivePathSilent).not.toHaveBeenCalled();
+    expect(get().setCurrentChatIndex).not.toHaveBeenCalled();
+    expect(get().setBranchEditorFocusNodeId).toHaveBeenCalledWith('a');
+  });
+});

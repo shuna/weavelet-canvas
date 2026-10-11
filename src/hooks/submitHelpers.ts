@@ -1,3 +1,4 @@
+import { beginAiTask, finishAiTask, isAiTaskCurrent } from './aiTaskLifetime';
 import { assertAuxiliaryEndpoint, hardOpenRouterConstraints } from '@utils/openrouterControls';
 import { getChatCompletion } from '@api/api';
 import { officialAPIEndpoint } from '@constants/auth';
@@ -433,16 +434,23 @@ export const maybeGenerateAutoTitle = async ({
   const titleChatIndex = titleChats.findIndex((chat) => chat.id === chatId);
   if (titleChatIndex < 0) return;
 
-  const updatedChats = cloneChatAtIndex(titleChats, titleChatIndex);
-  let title = (
-    await generateTitleForChat([promptMessage], sourceConfig ?? updatedChats[titleChatIndex].config, deps)
-  ).trim();
+  const ticket = beginAiTask({ requestId: crypto.randomUUID(), kind: 'title', chatId, dependencyIds: [] });
+  let title: string;
+  try {
+    title = (await generateTitleForChat([promptMessage], sourceConfig ?? titleChats[titleChatIndex].config, deps)).trim();
+    if (!isAiTaskCurrent(ticket)) return;
+  } finally {
+    finishAiTask(ticket);
+  }
   if (title.startsWith('"') && title.endsWith('"')) title = title.slice(1, -1);
-  setGeneratedTitle(updatedChats, titleChatIndex, title);
+  const latestChats = useStore.getState().chats!;
+  const latestIndex = latestChats.findIndex(chat => chat.id === chatId);
+  const updatedChats = cloneChatAtIndex(latestChats, latestIndex);
+  setGeneratedTitle(updatedChats, latestIndex, title);
   setChats(updatedChats);
 
   if (useStore.getState().countTotalTokens) {
-    const titleConfig = updatedChats[titleChatIndex].config;
+    const titleConfig = updatedChats[latestIndex].config;
     const titleTokenModel = deps.titleModel ?? titleConfig.model;
     const titleTokenProviderId = deps.titleModel ? deps.titleProviderId : titleConfig.providerId;
     await updateTotalTokenUsed(titleTokenModel as ModelOptions, [promptMessage], {

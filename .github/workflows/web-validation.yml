@@ -1,0 +1,45 @@
+name: Web validation
+
+on:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Use Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Use Yarn 1.22.22
+        run: |
+          corepack enable
+          corepack prepare yarn@1.22.22 --activate
+
+      - name: Install root dependencies
+        run: yarn install --frozen-lockfile
+
+      - name: Install Proxy Worker dependencies
+        run: npm ci --prefix proxy-worker
+
+      - name: Typecheck web
+        run: yarn typecheck:web
+
+      - name: Typecheck Cloud Functions
+        run: yarn typecheck:cloud
+
+      - name: Test web
+        run: yarn test
+
+      - name: Build web
+        run: yarn build:web
+
+      - name: Typecheck Proxy Worker
+        run: npm run typecheck --prefix proxy-worker

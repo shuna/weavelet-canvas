@@ -110,11 +110,11 @@ describe('useLiveTotalTokenUsed streaming buffer integration', () => {
     const staleMessage = textMsg('assistant', '');
 
     // Streaming buffer has accumulated real content
-    initializeStreamingBuffer(targetNodeId, [{ type: 'text', text: '' }]);
-    appendToStreamingBuffer(targetNodeId, 'The answer to your question is 42.');
+    initializeStreamingBuffer('chat-1', targetNodeId, [{ type: 'text', text: '' }]);
+    appendToStreamingBuffer('chat-1', targetNodeId, 'The answer to your question is 42.');
 
     // Resolve live content (mirrors the fix in useLiveTotalTokenUsed)
-    const liveContent = peekBufferedContent(targetNodeId);
+    const liveContent = peekBufferedContent('chat-1', targetNodeId);
     const liveCompletionMessage: MessageInterface | undefined = liveContent
       ? { role: 'assistant', content: liveContent }
       : staleMessage;

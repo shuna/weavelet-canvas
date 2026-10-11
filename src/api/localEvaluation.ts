@@ -5,7 +5,7 @@
  * and wllama generation for quality hints.
  */
 
-import { localModelRuntime, promptAsInput } from '@src/local-llm/runtime';
+import { localModelRuntime, promptAsInput, type LocalModelOwnerId } from '@src/local-llm/runtime';
 import type { LocalModerationResult, StandardQualityEvaluationResult, QualityScores, AxisProgressState } from '@type/evaluation';
 import { qualityAxisKeys } from '@type/evaluation';
 import type { LocalModelTask } from '@src/local-llm/types';
@@ -36,21 +36,28 @@ const BLOCK_THRESHOLD = 0.8;
  * Returns a 3-level screening result (safe / warn / block-candidate)
  * that is NOT a replacement for remote 13-category moderation.
  */
-export async function runLocalModeration(text: string): Promise<LocalModerationResult> {
-  const modelId = getActiveModelId('analysis') ?? getActiveModelId('moderation');
+export async function runLocalModeration(
+  text: string,
+  ownerId?: LocalModelOwnerId,
+  signal?: AbortSignal,
+  modelId = getActiveModelId('analysis') ?? getActiveModelId('moderation'),
+): Promise<LocalModerationResult> {
+  if (signal?.aborted) throw new DOMException('Aborted', 'AbortError');
   if (!modelId) {
     throw new Error('No local analysis/moderation model configured');
   }
 
   // Safety net: ensure the model is loaded before attempting to use it
-  await localModelRuntime.ensureLoaded(modelId);
+  await localModelRuntime.ensureLoaded(modelId, ownerId);
 
+  if (signal?.aborted) throw new DOMException('Aborted', 'AbortError');
   const engine = localModelRuntime.getTransformersEngine(modelId);
   if (!engine) {
     throw new Error('Local moderation model not loaded');
   }
 
-  const labels = await engine.classify(text, 'moderation');
+  const labels = await engine.classify(text, 'moderation', signal);
+  if (signal?.aborted) throw new DOMException('Aborted', 'AbortError');
 
   // Determine screening level from classification scores.
   // The classifier may return labels like "toxic", "hate", "safe", etc.
@@ -343,14 +350,18 @@ export async function runLocalQualityEvaluation(
   text: string,
   assistantResponse: string | undefined,
   onAxisProgress?: (axis: keyof QualityScores, state: AxisProgressState) => void,
+  ownerId?: LocalModelOwnerId,
+  signal?: AbortSignal,
+  modelId = getActiveModelId('analysis') ?? getActiveModelId('quality') ?? getActiveModelId('generation'),
 ): Promise<StandardQualityEvaluationResult> {
-  const modelId = getActiveModelId('analysis') ?? getActiveModelId('quality') ?? getActiveModelId('generation');
+  if (signal?.aborted) throw new DOMException('Aborted', 'AbortError');
   if (!modelId) {
     throw new Error('No local analysis/generation model configured');
   }
 
-  await localModelRuntime.ensureLoaded(modelId);
+  await localModelRuntime.ensureLoaded(modelId, ownerId);
 
+  if (signal?.aborted) throw new DOMException('Aborted', 'AbortError');
   const engine = localModelRuntime.getWllamaEngine(modelId);
   if (!engine) {
     throw new Error('Local quality model not loaded');
@@ -372,11 +383,13 @@ export async function runLocalQualityEvaluation(
 
   // Set all axes to 'waiting' initially
   for (const axis of qualityAxisKeys) {
+    if (signal?.aborted) throw new DOMException('Aborted', 'AbortError');
     onAxisProgress?.(axis, 'waiting');
   }
 
   // Evaluate each axis individually
   for (const axis of qualityAxisKeys) {
+    if (signal?.aborted) throw new DOMException('Aborted', 'AbortError');
     onAxisProgress?.(axis, 'generating');
     const label = axisLabels[axis];
     const prompt = buildAxisPrompt(inputText, label.question, inputAssistant);
@@ -388,7 +401,9 @@ export async function runLocalQualityEvaluation(
       { maxTokens: 400, temperature: 0.2 },
       () => {},
       'evaluation',
+      signal,
     );
+    if (signal?.aborted) throw new DOMException('Aborted', 'AbortError');
 
     console.info(`[evaluation] local quality axis "${axis}" output length:`, raw.length, 'preview:', raw.slice(0, 100));
 
@@ -398,7 +413,8 @@ export async function runLocalQualityEvaluation(
       const fallback = lang.startsWith('ja')
         ? `「${inputText.slice(0, 150)}」\n${label.name}の評価:`
         : `"${inputText.slice(0, 150)}"\n${label.name}:`;
-      raw = await engine.generate(promptAsInput(fallback), { maxTokens: 200, temperature: 0.5 }, () => {}, 'evaluation');
+      raw = await engine.generate(promptAsInput(fallback), { maxTokens: 200, temperature: 0.5 }, () => {}, 'evaluation', signal);
+      if (signal?.aborted) throw new DOMException('Aborted', 'AbortError');
     }
 
     const trimmed = raw.trim();

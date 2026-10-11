@@ -1,7 +1,9 @@
+import { applyExternalSnapshot } from './applyExternalSnapshot';
+import { invalidateAiTasks } from '@hooks/aiTaskLifetime';
 import { rebuildSyncedUsage } from './sync/rebuildUsage';
 import useStore from '@store/store';
 import useCloudAuthStore from '@store/cloud-auth-store';
-import { createPartializedState, prepareHydratedState, finishHydratedState, migratePersistedState, type PersistedStoreState } from '@store/persistence';
+import { createPartializedState, prepareHydratedState, finishHydratedState, reportHydratedStateCommitted, migratePersistedState, type PersistedStoreState } from '@store/persistence';
 import { STORE_VERSION } from '@store/version';
 import { hasActiveStreamingBuffers } from '@utils/streamingBuffer';
 import { showToast } from '@utils/showToast';
@@ -50,26 +52,33 @@ async function persist(value: Snapshot) {
 }
 async function apply(received: Snapshot, before: Snapshot, current: EncryptedSync, revision: number) {
   const observed = useStore.getState();
+  if (received.version !== STORE_VERSION) {
+    return applyExternalSnapshot(received.state, () => revision === generation && current === session, observed, received.version ?? 0);
+  }
   if (revision !== generation || current !== session || !await sameSnapshot(before, snapshot()) || observed !== useStore.getState()) return false;
-  const prepared = await prepareHydratedState(observed,
+  invalidateAiTasks();
+  const state = useStore.getState();
+  const preparedBase = snapshot();
+  if (revision !== generation || current !== session || !await sameSnapshot(before, preparedBase)) return false;
+  const prepared = await prepareHydratedState(state,
     migratePersistedState(received.state, received.version ?? STORE_VERSION) as Partial<PersistedStoreState>);
-  if (revision !== generation || current !== session || observed !== useStore.getState()) return false;
+  if (!await sameSnapshot(preparedBase, snapshot()) || revision !== generation || current !== session || state !== useStore.getState()) return false;
   const hydrated = finishHydratedState(prepared);
-  if (hydrated.chats) Object.assign(hydrated, await rebuildSyncedUsage(hydrated.chats, hydrated.contentStore ?? {}, observed));
-  if (revision !== generation || current !== session || observed !== useStore.getState()) return false;
-  const selectedId = observed.chats?.[observed.currentChatIndex]?.id;
+  if (hydrated.chats) Object.assign(hydrated, await rebuildSyncedUsage(hydrated.chats, hydrated.contentStore ?? {}, state));
+  if (!await sameSnapshot(preparedBase, snapshot()) || revision !== generation || current !== session || state !== useStore.getState()) return false;
+  const selectedId = state.chats?.[state.currentChatIndex]?.id;
   const index = hydrated.chats?.findIndex(chat => chat.id === selectedId) ?? -1;
   if (index >= 0) hydrated.currentChatIndex = index;
-  await persist({ state: hydrated, version: STORE_VERSION });
-  if (revision !== generation || current !== session || observed !== useStore.getState()) {
-    await persist(snapshot());
-    return false;
-  }
   applying = true;
   try {
-    useStore.setState(hydrated);
+    useStore.setState({ ...hydrated, branchHistoryPast: [], branchHistoryFuture: [] });
+    const applied = useStore.getState();
+    await persist(snapshot());
+    if (revision !== generation || current !== session) return false;
+    if (applied === useStore.getState()) reportHydratedStateCommitted(prepared);
     await current.acceptLocal(received, target?.downloadPending === true);
     await markSyncChanges(before, received);
+    if (!await sameSnapshot(received, snapshot())) pending = true;
   } finally { applying = false; }
   return true;
 }

@@ -10,9 +10,12 @@ export {
   verifyStoredModel,
   rehydrateSavedModels,
   deleteModel,
+  beginWrite,
+  finishWrite,
   getTempFileSize,
   hasGgufMagic,
 } from './storage';
+export { removeAssets } from './assetRemoval';
 export type { SavedModelMeta, StorageVerifyResult, RehydrationEntry } from './storage';
 export { downloadCatalogModel, downloadModelFiles, buildHfUrl } from './download';
 export type { DownloadProgress, DownloadCallbacks, DownloadRequest } from './download';
@@ -24,6 +27,8 @@ export {
 } from './hfSearch';
 export {
   prepareModelsForExecution,
+  createLocalModelOwner,
   evictIrrelevantModels,
   getEvaluationModelIds,
+  releaseModelsForExecution,
 } from './orchestrator';

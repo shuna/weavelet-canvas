@@ -72,7 +72,7 @@ describe('searchBranchNodes – orphaned pinned subtrees after prune', () => {
     // Search for "orphan" – should find both orphan nodes
     const results = searchBranchNodes(
       'orphan',
-      [{ tree, chatIndex: 0 }],
+      [{ tree, chatId: 'chat-a', chatIndex: 0 }],
       contentStore,
       'all'
     );
@@ -113,7 +113,7 @@ describe('searchBranchNodes – orphaned pinned subtrees after prune', () => {
 
     const results = searchBranchNodes(
       'dangling',
-      [{ tree, chatIndex: 0 }],
+      [{ tree, chatId: 'chat-a', chatIndex: 0 }],
       contentStore,
       'all'
     );
@@ -154,7 +154,7 @@ describe('searchBranchNodes – orphaned pinned subtrees after prune', () => {
     // Empty query + starredOnly should return only starred nodes
     const results = searchBranchNodes(
       '',
-      [{ tree, chatIndex: 0 }],
+      [{ tree, chatId: 'chat-a', chatIndex: 0 }],
       contentStore,
       'all',
       { starredOnly: true }

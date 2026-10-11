@@ -1,37 +1,8 @@
-import React from 'react';
 import useStore from '@store/store';
-import { generateDefaultChat } from '@constants/chat';
-import { ChatInterface } from '@type/chat';
-/* no deep clone needed – just prepend a new default chat */
 
 const useAddChat = () => {
-  const setChats = useStore((state) => state.setChats);
-  const setCurrentChatIndex = useStore((state) => state.setCurrentChatIndex);
-  const pushNavigationEntry = useStore((state) => state.pushNavigationEntry);
-  const captureCurrentNavigationEntry = useStore((state) => state.captureCurrentNavigationEntry);
-
-  const addChat = (folder?:string) => {
-    const chats = useStore.getState().chats;
-    if (chats) {
-      const updatedChats = chats.slice();
-      let titleIndex = 1;
-      let title = `New Chat ${titleIndex}`;
-
-      while (chats.some((chat) => chat.title === title)) {
-        titleIndex += 1;
-        title = `New Chat ${titleIndex}`;
-      }
-
-      const chat = generateDefaultChat(title, folder);
-      updatedChats.unshift(chat);
-      captureCurrentNavigationEntry();
-      setChats(updatedChats);
-      pushNavigationEntry({ chatId: chat.id, activePath: [...(chat.branchTree?.activePath ?? [])], viewContext: useStore.getState().chatActiveView, source: 'chat-switch' });
-      setCurrentChatIndex(0);
-    }
-  };
-
-  return addChat;
+  const createChat = useStore(state => state.createChat);
+  return (folderId?: string) => createChat({ folderId });
 };
 
 export default useAddChat;

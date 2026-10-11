@@ -5,6 +5,7 @@ import { baseButtonClass } from './ScrollToBottomButton';
 
 const CollapseAllButtons = React.memo(() => {
   const currentChatIndex = useStore((state) => state.currentChatIndex);
+  const chatId = useStore((state) => state.chats?.[state.currentChatIndex]?.id ?? '');
   const setAllCollapsed = useStore((state) => state.setAllCollapsed);
   const pushNavigationEntry = useStore((state) => state.pushNavigationEntry);
   const { hasMessages, orphanCount, focusOrphanNode } = useStore((state) => {
@@ -65,7 +66,7 @@ const CollapseAllButtons = React.memo(() => {
         disabled={!hasMessages}
         aria-label='Collapse all messages'
         title='Collapse all'
-        onClick={() => setAllCollapsed(currentChatIndex, true)}
+        onClick={() => setAllCollapsed({ chatId, value: true })}
       >
         <svg
           stroke='currentColor'
@@ -87,7 +88,7 @@ const CollapseAllButtons = React.memo(() => {
         disabled={!hasMessages}
         aria-label='Expand all messages'
         title='Expand all'
-        onClick={() => setAllCollapsed(currentChatIndex, false)}
+        onClick={() => setAllCollapsed({ chatId, value: false })}
       >
         <svg
           stroke='currentColor'

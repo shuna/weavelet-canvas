@@ -3,6 +3,8 @@ import { test, expect } from '@playwright/test';
 test.use({ headless: true, baseURL: process.env.PLAYWRIGHT_BASE_URL ?? 'http://127.0.0.1:5175', launchOptions: { executablePath: process.env.PLAYWRIGHT_CHROME_EXECUTABLE } });
 
 test('summary dialog selects previews, disables empty selection and saves generated summary', async ({ page }) => {
+  // Automatic summary selection requires fewer tokens than the originals.
+  const originalTexts = Object.fromEntries(['a', 'b', 'c'].map(id => [id, `Original ${id} ` + 'A detailed original conversation sentence. '.repeat(6)]));
   const summaryMarkdown = '## Generated summary\n\n**Important**\n\n- First item\n- Second item';
   let finishSummary: (() => void) | undefined;
   let requests = 0;
@@ -12,21 +14,21 @@ test('summary dialog selects previews, disables empty selection and saves genera
     await route.fulfill({ json: { choices: [{ message: { content: summaryMarkdown } }] } });
   });
   await page.goto('/');
-  await page.evaluate(async () => {
+  await page.evaluate(async (originalTexts) => {
     const load = (path: string) => import(/* @vite-ignore */ path);
     const { default: store } = await load('/src/store/store.ts');
     const { addContent } = await load('/src/utils/contentStore.ts');
     const { generateDefaultChat } = await load('/src/constants/chat.ts');
     const { materializeActivePath } = await load('/src/utils/branchUtils.ts');
     const contentStore = {};
-    const nodes = Object.fromEntries(['a', 'b', 'c'].map((id, index) => [id, { id, parentId: index ? ['a', 'b'][index - 1] : null, role: 'user', createdAt: index, contentHash: addContent(contentStore, [{ type: 'text', text: `Original ${id}` }]) }]));
+    const nodes = Object.fromEntries(['a', 'b', 'c'].map((id, index) => [id, { id, parentId: index ? ['a', 'b'][index - 1] : null, role: 'user', createdAt: index, contentHash: addContent(contentStore, [{ type: 'text', text: originalTexts[id] }]) }]));
     const tree = { nodes, rootId: 'a', activePath: ['a', 'b', 'c'] };
     const chat = { ...generateDefaultChat('Summary test'), branchTree: tree, messages: materializeActivePath(tree, contentStore) };
     chat.config.model = 'gpt-4o';
     store.getState().setOnboardingCompleted(true);
     store.setState({ chats: [chat], currentChatIndex: 0, contentStore, hideSideMenu: true, markdownMode: true, apiEndpoint: 'https://summary.test/v1/chat/completions', apiKey: 'test', providers: {}, favoriteModels: [], omittedNodeMaps: {}, generatingSessions: {} });
     document.documentElement.classList.add('dark');
-  });
+  }, originalTexts);
   const bubble = page.locator('[data-node-id="b"]').first();
   await bubble.hover();
   await bubble.getByRole('button', { name: '要約・圧縮の詳細設定', exact: true }).click();
@@ -56,14 +58,14 @@ test('summary dialog selects previews, disables empty selection and saves genera
   await modal.getByRole('radio', { name: 'ここまで', exact: true }).check();
   await page.screenshot({ path: '/tmp/weavelet-summary-dialog-fixed.jpg' });
   await generate.click();
-  await expect(modal.getByText('要約の対象を選択', { exact: true })).toHaveCount(0);
+  await expect(modal.getByRole('heading', { name: '要約・圧縮', exact: true })).toHaveCount(0);
   await bubble.getByRole('button', { name: '要約失敗', exact: true }).click();
   await expect(modal.getByText('Summary service unavailable', { exact: true })).toBeVisible();
   await expect(generate).toBeEnabled();
   await generate.click();
   await expect(bubble.getByRole('img', { name: '要約生成中' })).toBeVisible();
   await expect(bubble.getByRole('button', { name: /要約に含める|要約対象から外す/ })).toHaveCount(0);
-  await expect(modal.getByText('要約の対象を選択', { exact: true })).toHaveCount(0);
+  await expect(modal.getByRole('heading', { name: '要約・圧縮', exact: true })).toHaveCount(0);
   await page.mouse.move(0, 0);
   await expect(bubble.getByRole('status')).toBeVisible();
   const dots = bubble.getByRole('img', { name: '要約生成中' });
@@ -87,7 +89,7 @@ test('summary dialog selects previews, disables empty selection and saves genera
   expect(requests).toBe(2);
   finishSummary!();
   await expect(bubble.getByRole('status')).toHaveCount(0);
-  await expect(modal.getByText('要約の対象を選択', { exact: true })).toHaveCount(0);
+  await expect(modal.getByRole('heading', { name: '要約・圧縮', exact: true })).toHaveCount(0);
   await expect(page.getByText('Generated summary', { exact: true })).toBeVisible();
   const saved = await page.evaluate(async () => {
     const { default: store } = await import(/* @vite-ignore */ '/src/store/store.ts');
@@ -130,10 +132,10 @@ test('summary dialog selects previews, disables empty selection and saves genera
   await expect(summaryText).toBeVisible();
   await page.screenshot({ path: '/tmp/weavelet-summary-capsule-dark.jpg' });
   await originalButton.click();
-  await expect(page.getByText('Original a', { exact: true })).toBeVisible();
-  await expect(page.getByText('Original b', { exact: true })).toBeVisible();
+  await expect(page.getByText(originalTexts.a.trim(), { exact: true })).toBeVisible();
+  await expect(page.getByText(originalTexts.b.trim(), { exact: true })).toBeVisible();
   await bubble.getByRole('button', { name: 'Collapse message', exact: true }).click();
-  const originalSurface = bubble.getByText('Original b', { exact: true }).locator('..');
+  const originalSurface = bubble.getByText(originalTexts.b.trim(), { exact: true }).locator('..');
   expect((await originalSurface.boundingBox())!.height).toBeLessThan(expandedHeight);
   await bubble.getByRole('button', { name: 'Expand message', exact: true }).click();
   await expect(summaryText).toBeHidden();
@@ -141,12 +143,12 @@ test('summary dialog selects previews, disables empty selection and saves genera
   await summaryButton.click();
   expect(await page.evaluate(async () => { const { default: store } = await import(/* @vite-ignore */ '/src/store/store.ts'); return store.getState().chats[0].summaries[0].useForSubmit; })).toBe(true);
   await expect(summaryText).toBeVisible();
-  await expect(page.getByText('Original a', { exact: true })).toBeHidden();
+  await expect(page.getByText(originalTexts.a.trim(), { exact: true })).toBeHidden();
   await expect(bubble.getByText('送信：', { exact: true })).toHaveCount(0);
   await expect(bubble.getByText(/概算.*トークン/)).toHaveCount(0);
   const idleCapsuleSize = await capsule.boundingBox();
   await capsule.getByRole('button', { name: '要約・圧縮の詳細設定' }).click();
-  await expect(modal.getByText('要約の対象を選択', { exact: true })).toBeVisible();
+  await expect(modal.getByRole('heading', { name: '要約・圧縮', exact: true })).toBeVisible();
   await expect(first).toBeChecked();
   await expect(second).toBeChecked();
   await generate.click();
@@ -156,7 +158,7 @@ test('summary dialog selects previews, disables empty selection and saves genera
   expect(busyCapsuleSize!.width).toBe(idleCapsuleSize!.width);
   expect(busyCapsuleSize!.height).toBe(idleCapsuleSize!.height);
   await expect(originalButton).toBeVisible();
-  await expect(modal.getByText('要約の対象を選択', { exact: true })).toHaveCount(0);
+  await expect(modal.getByRole('heading', { name: '要約・圧縮', exact: true })).toHaveCount(0);
   await expect.poll(() => requests).toBe(3);
   finishSummary!();
   await expect(bubble.getByRole('status')).toHaveCount(0);

@@ -40,7 +40,7 @@ class Directory {
   async *values() { this.scans++; for (const name of this.files.keys()) yield await this.getFileHandle(name); }
   transport() { return new FileSystemTransport(this as unknown as FileSystemDirectoryHandle); }
 }
-const original: Snapshot = { version: 18, state: { theme: 'dark', contentStore: {}, chats: [] } };
+const original: Snapshot = { version: 18, state: { defaultSystemMessage: 'dark', contentStore: {}, chats: [] } };
 const password = 'test-only folder passphrase';
 beforeEach(() => { globalThis.indexedDB = new IDBFactory(); saved.target = undefined; });
 
@@ -62,13 +62,13 @@ it('reuses encrypted deltas, catches immutable collisions and detects missing hi
   const { session, file } = await EncryptedSync.create(transport, password);
   await session.push(original, 'if-empty');
   const initial = await transport.changes('[]');
-  await session.push({ ...original, state: { ...original.state, theme: 'light' } });
+  await session.push({ ...original, state: { ...original.state, defaultSystemMessage: 'light' } });
   const delta = await transport.changes(initial.token);
   expect(delta.changes.filter(change => !change.removed).map(change => change.kind)).toEqual(['commit']);
   globalThis.indexedDB = new IDBFactory();
   const reader = new EncryptedSync(file.id, transport);
   await reader.unlock(password);
-  expect((await reader.pull()).state.theme).toBe('light');
+  expect((await reader.pull()).state.defaultSystemMessage).toBe('light');
   const header = await transport.keyHeader(file.id);
   const bytes = await transport.read(header);
   await expect(transport.put(header, file.id, 'key', new Uint8Array([1]))).rejects.toThrow('上書き');
@@ -101,12 +101,12 @@ it.each(['manifest', 'key'])('resumes a failed initial %s write with the same da
   await reader.resumeCreation(target.headerId);
   await reader.push(original, 'if-empty');
   expect((await dir.transport().manifest())?.dataset).toBe(target.dataset);
-  expect((await reader.pull()).state.theme).toBe('dark');
+  expect((await reader.pull()).state.defaultSystemMessage).toBe('dark');
   // A separate browser can decrypt the recovered header using the original passphrase.
   globalThis.indexedDB = new IDBFactory();
   const other = new EncryptedSync(target.dataset, dir.transport());
   await other.unlock(password);
-  expect((await other.pull()).state.theme).toBe('dark');
+  expect((await other.pull()).state.defaultSystemMessage).toBe('dark');
 });
 
 it('rejects nonempty folders and conflict copies without changing existing bytes', async () => {
@@ -136,7 +136,7 @@ it.each(['fragments-first', 'index-first', 'child-first', 'header-last'] as cons
     const { session, file } = await EncryptedSync.create(sender.transport(), password, { partBytes: 16 });
     await session.push(original, 'if-empty');
     const first = new Map(sender.files);
-    await session.push({ ...original, state: { ...original.state, theme: 'light' } });
+    await session.push({ ...original, state: { ...original.state, defaultSystemMessage: 'light' } });
     const receiver = new Directory();
     const deliver = (names: string[]) => { for (const name of names) receiver.files.set(name, sender.files.get(name)!.slice()); };
     const headers = [...first.keys()].filter(name => name === FILE_SYSTEM_MANIFEST || name.endsWith('.key.bin'));
@@ -171,7 +171,7 @@ it.each(['fragments-first', 'index-first', 'child-first', 'header-last'] as cons
         deliver([parent]);
       }
     }
-    expect((await reader.pull(false)).state.theme).toBe('light');
+    expect((await reader.pull(false)).state.defaultSystemMessage).toBe('light');
     // Reading never publishes incomplete history or overwrites delivered files.
     for (const [name, bytes] of receiver.files) expect(bytes).toEqual(sender.files.get(name));
     expect(receiver.files.size).toBe(sender.files.size);
@@ -191,5 +191,5 @@ it('retries a listed but incomplete fragment without accepting an incomplete com
   await reader.unlock(password);
   await expect(reader.pull(false)).rejects.toThrow();
   receiver.files.set(part, sender.files.get(part)!);
-  expect((await reader.pull(false)).state.theme).toBe('dark');
+  expect((await reader.pull(false)).state.defaultSystemMessage).toBe('dark');
 });

@@ -5,7 +5,12 @@
  * Called from submit and evaluation hooks to prepare models before use.
  */
 
-import { localModelRuntime, findModelDefinition } from './runtime';
+import {
+  localModelRuntime,
+  findModelDefinition,
+  type LocalModelOwnerId,
+  type LocalModelReservation,
+} from './runtime';
 import { estimateDeviceTier, canParallelLoad } from './device';
 import type { LocalModelTask } from './types';
 
@@ -36,39 +41,73 @@ async function getStoreState() {
  * Handles sequential vs parallel loading based on settings and device tier.
  * After loading, evicts models not in the required set.
  */
+let ownerSequence = 0;
+const ownerAbortCleanups = new Map<LocalModelOwnerId, () => void>();
+
+export function createLocalModelOwner(scope: string): LocalModelOwnerId {
+  ownerSequence += 1;
+  return `${scope}:${ownerSequence}`;
+}
+
 export async function prepareModelsForExecution(
+  ownerId: LocalModelOwnerId,
   requiredModelIds: string[],
-): Promise<void> {
-  const ids = [...new Set(requiredModelIds.filter(Boolean))];
-  if (ids.length === 0) return;
-
-  const state = await getStoreState();
-  const mode = state.localModelExecutionMode;
-
-  if (mode === 'parallel-if-possible' && ids.length > 1) {
-    // Check if parallel loading is feasible
-    const sizes = ids.map((id) => {
-      const def = findModelDefinition(id);
-      return def?.fileSize ?? 0;
-    });
-    const tier = estimateDeviceTier();
-
-    if (canParallelLoad(sizes, tier)) {
-      await Promise.all(ids.map((id) => localModelRuntime.ensureLoaded(id)));
-    } else {
-      // Fallback to sequential
-      for (const id of ids) {
-        await localModelRuntime.ensureLoaded(id);
-      }
-    }
-  } else {
-    // Sequential (default)
-    for (const id of ids) {
-      await localModelRuntime.ensureLoaded(id);
-    }
+  options: { signal?: AbortSignal } = {},
+): Promise<LocalModelReservation> {
+  if (options.signal?.aborted) {
+    localModelRuntime.cancelOwner(ownerId);
+    throw new DOMException('Local model preparation aborted', 'AbortError');
   }
+  const cancel = () => localModelRuntime.cancelOwner(ownerId);
+  options.signal?.addEventListener('abort', cancel, { once: true });
+  if (options.signal) {
+    ownerAbortCleanups.get(ownerId)?.();
+    ownerAbortCleanups.set(ownerId, () => options.signal?.removeEventListener('abort', cancel));
+  }
+  const ids = [...new Set(requiredModelIds.filter(Boolean))];
+  let reservation: LocalModelReservation;
+  try {
+    reservation = localModelRuntime.reserve(ownerId, ids);
+  } catch (error) {
+    options.signal?.removeEventListener('abort', cancel);
+    throw error;
+  }
+  if (ids.length === 0) return reservation;
 
-  await evictIrrelevantModels(ids);
+  try {
+    const state = await getStoreState();
+    const mode = state.localModelExecutionMode;
+
+    if (mode === 'parallel-if-possible' && ids.length > 1) {
+      const sizes = ids.map((id) => {
+        const def = findModelDefinition(id);
+        return def?.fileSize ?? 0;
+      });
+      const tier = estimateDeviceTier();
+
+      if (canParallelLoad(sizes, tier)) {
+        await Promise.all(ids.map((id) => localModelRuntime.ensureLoaded(id, ownerId)));
+      } else {
+        for (const id of ids) await localModelRuntime.ensureLoaded(id, ownerId);
+      }
+    } else {
+      for (const id of ids) await localModelRuntime.ensureLoaded(id, ownerId);
+    }
+
+    await evictIrrelevantModels(ids);
+    return reservation;
+  } catch (error) {
+    ownerAbortCleanups.get(ownerId)?.();
+    ownerAbortCleanups.delete(ownerId);
+    localModelRuntime.release(ownerId);
+    throw error;
+  }
+}
+
+export function releaseModelsForExecution(ownerId: LocalModelOwnerId): void {
+  ownerAbortCleanups.get(ownerId)?.();
+  ownerAbortCleanups.delete(ownerId);
+  localModelRuntime.release(ownerId);
 }
 
 // ---------------------------------------------------------------------------

@@ -52,7 +52,7 @@ it('scans history once for a fresh reader and uses changes after the cursor is s
   const transport = new MemoryTransport();
   const password = 'test-only shared sync passphrase';
   const { session, file } = await EncryptedSync.create(transport, password);
-  await session.push({ version: 18, state: { chats: [], contentStore: {}, theme: 'dark' } }, true);
+  await session.push({ version: 18, state: { chats: [], contentStore: {}, defaultSystemMessage: 'dark' } }, true);
   globalThis.indexedDB = new IDBFactory();
   transport.historyCalls = 0;
   const reader = new EncryptedSync(file.id, transport);
@@ -66,7 +66,7 @@ it('scans history once for a fresh reader and uses changes after the cursor is s
 it('does not retain a provisional cursor when initial history listing fails', async () => {
   const transport = new MemoryTransport(), password = 'test-only shared sync passphrase';
   const { session, file } = await EncryptedSync.create(transport, password);
-  await session.push({ version: 18, state: { chats: [], contentStore: {}, theme: 'dark' } }, true);
+  await session.push({ version: 18, state: { chats: [], contentStore: {}, defaultSystemMessage: 'dark' } }, true);
   globalThis.indexedDB = new IDBFactory(); transport.historyCalls = 0; transport.failHistory = true;
   const reader = new EncryptedSync(file.id, transport); await reader.unlock(password);
   await expect(reader.pull()).rejects.toThrow('listing failed');
@@ -78,10 +78,10 @@ it('does not retain a provisional cursor when initial history listing fails', as
 it('accepts a commit published after the initial history listing through changes', async () => {
   const transport = new MemoryTransport(), password = 'test-only shared sync passphrase';
   const { session, file } = await EncryptedSync.create(transport, password);
-  const before: Snapshot = { version: 18, state: { chats: [], contentStore: {}, theme: 'dark' } };
+  const before: Snapshot = { version: 18, state: { chats: [], contentStore: {}, defaultSystemMessage: 'dark' } };
   await session.push(before, true);
   const oldEvents = transport.events.length;
-  const after = structuredClone(before); after.state.theme = 'light';
+  const after = structuredClone(before); after.state.defaultSystemMessage = 'light';
   await session.push(after);
   const deferred = transport.events.splice(oldEvents);
   transport.history = async dataset => {
@@ -92,7 +92,7 @@ it('accepts a commit published after the initial history listing through changes
   };
   globalThis.indexedDB = new IDBFactory();
   const reader = new EncryptedSync(file.id, transport); await reader.unlock(password);
-  expect((await reader.pull()).state.theme).toBe('light');
+  expect((await reader.pull()).state.defaultSystemMessage).toBe('light');
 });
 
 it('shares encrypted delta sync with a non-Drive transport and retries dependencies arriving later', async () => {
@@ -103,7 +103,7 @@ it('shares encrypted delta sync with a non-Drive transport and retries dependenc
     id: 'chat', title: 'initial', messages: [{ role: 'user', content: [{ type: 'text', text: 'private body' }] }],
     titleSet: true, imageDetail: 'auto',
     config: { model: 'test', max_tokens: 100, temperature: 1, presence_penalty: 0, top_p: 1, frequency_penalty: 0 },
-  }], contentStore: {}, theme: 'dark' } };
+  }], contentStore: {}, defaultSystemMessage: 'dark' } };
   await session.push(original, true);
   const changed = structuredClone(original);
   changed.state.chats![0].title = 'changed';
@@ -124,19 +124,19 @@ it('shares encrypted delta sync with a non-Drive transport and retries dependenc
   expect((await reader.pull()).state.chats![0].title).toBe('changed');
   await reader.acceptLocal(await reader.pull());
   const downloaded = await reader.pull();
-  downloaded.state.theme = 'light';
+  downloaded.state.defaultSystemMessage = 'light';
   await reader.push(downloaded);
-  expect((await reader.pull()).state.theme).toBe('light');
+  expect((await reader.pull()).state.defaultSystemMessage).toBe('light');
 });
 
 it('downloads without publishing a persisted outbox and discards it only after acceptance', async () => {
   const transport = new MemoryTransport();
   const { session, file } = await EncryptedSync.create(transport, 'test-only shared passphrase');
-  const original: Snapshot = { version: 18, state: { theme: 'dark', chats: [], contentStore: {} } };
+  const original: Snapshot = { version: 18, state: { defaultSystemMessage: 'dark', chats: [], contentStore: {} } };
   await session.push(original, 'if-empty');
   const write = transport.put.bind(transport);
   transport.put = async (...args) => { if (args[2] === 'commit') throw new Error('offline'); return write(...args); };
-  await expect(session.push({ ...original, state: { ...original.state, theme: 'light' } })).rejects.toThrow('offline');
+  await expect(session.push({ ...original, state: { ...original.state, defaultSystemMessage: 'light' } })).rejects.toThrow('offline');
   const reader = new EncryptedSync(file.id, transport);
   await reader.restoreKey();
   transport.put = write;
@@ -146,35 +146,35 @@ it('downloads without publishing a persisted outbox and discards it only after a
   expect(overview.bytes).toBeGreaterThan(0);
   expect(transport.writes).toHaveLength(count);
   const review = await reader.inspect();
-  expect(review.snapshot.state.theme).toBe('dark');
+  expect(review.snapshot.state.defaultSystemMessage).toBe('dark');
   expect(review.versions).toEqual([]);
   expect(transport.writes).toHaveLength(count);
   const received = await reader.pull(false);
-  expect(received.state.theme).toBe('dark');
+  expect(received.state.defaultSystemMessage).toBe('dark');
   expect(transport.writes).toHaveLength(count);
   await reader.acceptLocal(received, true);
   await reader.push(received);
   expect(transport.writes).toHaveLength(count);
-  expect((await reader.pull()).state.theme).toBe('dark');
+  expect((await reader.pull()).state.defaultSystemMessage).toBe('dark');
 });
 
 it('does not initialize over existing history when another browser has no baseline', async () => {
   const transport = new MemoryTransport();
   const { session, file } = await EncryptedSync.create(transport, 'test-only shared passphrase');
-  const original: Snapshot = { version: 18, state: { theme: 'dark', chats: [], contentStore: {} } };
+  const original: Snapshot = { version: 18, state: { defaultSystemMessage: 'dark', chats: [], contentStore: {} } };
   await session.push(original, 'if-empty');
   globalThis.indexedDB = new IDBFactory();
   const reader = new EncryptedSync(file.id, transport);
   await reader.unlock('test-only shared passphrase');
   const count = transport.writes.length;
-  await expect(reader.push({ ...original, state: { ...original.state, theme: 'light' } }, 'if-empty')).rejects.toThrow('downloaded');
+  await expect(reader.push({ ...original, state: { ...original.state, defaultSystemMessage: 'light' } }, 'if-empty')).rejects.toThrow('downloaded');
   expect(transport.writes).toHaveLength(count);
 });
 
 it('retains an authenticated replay for an unchanged cursor and drops it after a failed refresh', async () => {
   const transport = new MemoryTransport();
   const { session, file } = await EncryptedSync.create(transport, 'test-only shared passphrase');
-  const original: Snapshot = { version: 18, state: { theme: 'dark', chats: [], contentStore: {} } };
+  const original: Snapshot = { version: 18, state: { defaultSystemMessage: 'dark', chats: [], contentStore: {} } };
   await session.push(original, true);
   await session.pull();
   const replay = (session as any).remoteCache;

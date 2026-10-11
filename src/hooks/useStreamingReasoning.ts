@@ -16,26 +16,28 @@ const EMPTY_UNSUB = () => {};
  * re-renders on each chunk — the Zustand store is not involved.
  */
 export function useStreamingReasoning(
+  chatId: string,
   nodeId: string | undefined,
   visible = true,
   expanded = true
 ): string | undefined {
-  const snapshot = useRef<{ nodeId: string | undefined; value: string | undefined }>({ nodeId, value: undefined });
-  if (snapshot.current.nodeId !== nodeId) snapshot.current = { nodeId, value: undefined };
+  const snapshot = useRef<{ key: string; value: string | undefined }>({ key: JSON.stringify([chatId, nodeId]), value: undefined });
+  const key = JSON.stringify([chatId, nodeId]);
+  if (snapshot.current.key !== key) snapshot.current = { key, value: undefined };
   const subscribe = useCallback(
     (callback: () => void) => {
       if (!nodeId || !visible) return EMPTY_UNSUB;
-      return subscribeToStreaming(nodeId, callback, 250, true, !expanded);
+      return subscribeToStreaming(chatId, nodeId, callback, 250, true, !expanded);
     },
-    [nodeId, visible, expanded]
+    [chatId, nodeId, visible, expanded]
   );
 
   const getSnapshot = useCallback(() => {
     if (!nodeId) return undefined;
     if (!visible || (!expanded && snapshot.current.value)) return snapshot.current.value;
-    snapshot.current.value = peekBufferedReasoning(nodeId);
+    snapshot.current.value = peekBufferedReasoning(chatId, nodeId);
     return snapshot.current.value;
-  }, [nodeId, visible, expanded]);
+  }, [chatId, nodeId, visible, expanded]);
 
   return useSyncExternalStore(subscribe, getSnapshot);
 }

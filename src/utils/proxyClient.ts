@@ -163,7 +163,8 @@ export function retryAfterMessage(value: string | null, now = Date.now()): strin
  */
 export async function runModerationViaProxy(
   config: ProxyConfig,
-  payload: { endpoint: string; apiKey: string; input: string }
+  payload: { endpoint: string; apiKey: string; input: string },
+  signal?: AbortSignal
 ): Promise<Response> {
   return fetch(`${config.endpoint}/api/moderation`, {
     method: 'POST',
@@ -172,6 +173,7 @@ export async function runModerationViaProxy(
       ...authHeaders(config),
     },
     body: JSON.stringify(payload),
+    signal,
   });
 }
 

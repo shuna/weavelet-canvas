@@ -224,7 +224,7 @@ describe('Startup: corrupt branch tree recovery', () => {
 
   it('replaces orphaned streaming markers with empty content', () => {
     const { contentStore, userHash } = makeContentStore();
-    const streamHash = createStreamingContentHash('n2');
+    const streamHash = createStreamingContentHash('c1', 'n2');
     const chat: ChatInterface = {
       id: 'c1',
       title: 'Streaming marker',
@@ -565,8 +565,8 @@ describe('Persistence: round-trip with local data', () => {
 
   it('finalizes streaming buffers during persistence snapshot', () => {
     const { contentStore, userHash } = makeContentStore();
-    const streamHash = createStreamingContentHash('sn1');
-    initializeStreamingBuffer('sn1', [{ type: 'text', text: 'buffered data' }]);
+    const streamHash = createStreamingContentHash('c1', 'sn1');
+    initializeStreamingBuffer('c1', 'sn1', [{ type: 'text', text: 'buffered data' }]);
 
     const chat: ChatInterface = {
       id: 'c1',
