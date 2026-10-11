@@ -5,7 +5,12 @@
  * Called from submit and evaluation hooks to prepare models before use.
  */
 
-import { localModelRuntime, findModelDefinition } from './runtime';
+import {
+  localModelRuntime,
+  findModelDefinition,
+  type LocalModelOwnerId,
+  type LocalModelReservation,
+} from './runtime';
 import { estimateDeviceTier, canParallelLoad } from './device';
 import type { LocalModelTask } from './types';
 
@@ -36,39 +41,51 @@ async function getStoreState() {
  * Handles sequential vs parallel loading based on settings and device tier.
  * After loading, evicts models not in the required set.
  */
+let ownerSequence = 0;
+
+export function createLocalModelOwner(scope: string): LocalModelOwnerId {
+  ownerSequence += 1;
+  return `${scope}:${ownerSequence}`;
+}
+
 export async function prepareModelsForExecution(
+  ownerId: LocalModelOwnerId,
   requiredModelIds: string[],
-): Promise<void> {
+): Promise<LocalModelReservation> {
   const ids = [...new Set(requiredModelIds.filter(Boolean))];
-  if (ids.length === 0) return;
+  const reservation = localModelRuntime.reserve(ownerId, ids);
+  if (ids.length === 0) return reservation;
 
-  const state = await getStoreState();
-  const mode = state.localModelExecutionMode;
+  try {
+    const state = await getStoreState();
+    const mode = state.localModelExecutionMode;
 
-  if (mode === 'parallel-if-possible' && ids.length > 1) {
-    // Check if parallel loading is feasible
-    const sizes = ids.map((id) => {
-      const def = findModelDefinition(id);
-      return def?.fileSize ?? 0;
-    });
-    const tier = estimateDeviceTier();
+    if (mode === 'parallel-if-possible' && ids.length > 1) {
+      const sizes = ids.map((id) => {
+        const def = findModelDefinition(id);
+        return def?.fileSize ?? 0;
+      });
+      const tier = estimateDeviceTier();
 
-    if (canParallelLoad(sizes, tier)) {
-      await Promise.all(ids.map((id) => localModelRuntime.ensureLoaded(id)));
-    } else {
-      // Fallback to sequential
-      for (const id of ids) {
-        await localModelRuntime.ensureLoaded(id);
+      if (canParallelLoad(sizes, tier)) {
+        await Promise.all(ids.map((id) => localModelRuntime.ensureLoaded(id, ownerId)));
+      } else {
+        for (const id of ids) await localModelRuntime.ensureLoaded(id, ownerId);
       }
+    } else {
+      for (const id of ids) await localModelRuntime.ensureLoaded(id, ownerId);
     }
-  } else {
-    // Sequential (default)
-    for (const id of ids) {
-      await localModelRuntime.ensureLoaded(id);
-    }
-  }
 
-  await evictIrrelevantModels(ids);
+    await evictIrrelevantModels(ids);
+    return reservation;
+  } catch (error) {
+    localModelRuntime.release(ownerId);
+    throw error;
+  }
+}
+
+export function releaseModelsForExecution(ownerId: LocalModelOwnerId): void {
+  localModelRuntime.release(ownerId);
 }
 
 // ---------------------------------------------------------------------------

@@ -24,6 +24,8 @@ export {
 } from './hfSearch';
 export {
   prepareModelsForExecution,
+  createLocalModelOwner,
   evictIrrelevantModels,
   getEvaluationModelIds,
+  releaseModelsForExecution,
 } from './orchestrator';

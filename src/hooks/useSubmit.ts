@@ -31,7 +31,12 @@ import {
   stopSubmitSessionsForChat,
 } from './submitRuntime';
 import { isLocalModelConfig } from './submitHelpers';
-import { prepareModelsForExecution, getEvaluationModelIds } from '@src/local-llm/orchestrator';
+import {
+  createLocalModelOwner,
+  getEvaluationModelIds,
+  prepareModelsForExecution,
+  releaseModelsForExecution,
+} from '@src/local-llm/orchestrator';
 import {
   buildVerifiedStatsKey,
   OPENROUTER_VERIFICATION_INITIAL_DELAY_MS,
@@ -110,6 +115,7 @@ const useSubmit = () => {
       chatId
     );
 
+    let localModelOwnerId: string | null = null;
     try {
       const contextMessages = getSubmitContextMessages(
         updatedChats[chatIndex].messages,
@@ -176,7 +182,8 @@ const useSubmit = () => {
       if (isLocal) {
         const evalModelIds = await getEvaluationModelIds();
         const allRequired = [submitConfig.model, ...evalModelIds].filter(Boolean);
-        await prepareModelsForExecution(allRequired);
+        localModelOwnerId = createLocalModelOwner(`submit:${sessionId}`);
+        await prepareModelsForExecution(localModelOwnerId, allRequired);
       }
 
       if (userMsg) {
@@ -210,6 +217,7 @@ const useSubmit = () => {
           abortController,
           t: (key: string) => t(key) as string,
           assistantPrefill,
+          modelOwnerId: localModelOwnerId ?? undefined,
         });
       } else {
         streamResult = await executeSubmitStream({
@@ -288,6 +296,7 @@ const useSubmit = () => {
       const err = (e as Error).message;
       setError(err);
     } finally {
+      if (localModelOwnerId) releaseModelsForExecution(localModelOwnerId);
       useStore.getState().removeSession(sessionId);
       clearSubmitSessionRuntime(sessionId);
       // Clear the prefill that was consumed (if any local generation happened)

@@ -77,7 +77,7 @@ const OpfsFileBrowser = ({
     try {
       // Unload if running
       if (localModelRuntime.isLoaded(modelId)) {
-        await localModelRuntime.unloadModel(modelId);
+        await localModelRuntime.unloadModel(modelId, { force: true });
       }
       await deleteModel(modelId);
       // Clean store — metadata, definition, and task assignments
@@ -132,7 +132,7 @@ const OpfsFileBrowser = ({
       const store = useStore.getState();
       for (const entry of entries) {
         if (localModelRuntime.isLoaded(entry.modelId)) {
-          await localModelRuntime.unloadModel(entry.modelId);
+          await localModelRuntime.unloadModel(entry.modelId, { force: true });
         }
       }
       const deleted = await clearAllModels();

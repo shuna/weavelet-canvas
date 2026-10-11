@@ -408,10 +408,10 @@ function LowbitQValidationPage() {
     updateStep(stepKey, 'running', 'モデルをロード中');
 
     if (localModelRuntime.isLoaded(originalDef.id)) {
-      await localModelRuntime.unloadModel(originalDef.id);
+      await localModelRuntime.unloadModel(originalDef.id, { force: true });
     }
     if (localModelRuntime.isLoaded(lowbitQDef.id)) {
-      await localModelRuntime.unloadModel(lowbitQDef.id);
+      await localModelRuntime.unloadModel(lowbitQDef.id, { force: true });
     }
 
     try {
@@ -454,7 +454,7 @@ function LowbitQValidationPage() {
       throw err;
     } finally {
       if (localModelRuntime.isLoaded(def.id)) {
-        await localModelRuntime.unloadModel(def.id);
+        await localModelRuntime.unloadModel(def.id, { force: true });
       }
     }
   };
@@ -497,10 +497,10 @@ function LowbitQValidationPage() {
     try {
       // Unload any loaded models
       if (localModelRuntime.isLoaded(originalDef.id)) {
-        await localModelRuntime.unloadModel(originalDef.id);
+        await localModelRuntime.unloadModel(originalDef.id, { force: true });
       }
       if (localModelRuntime.isLoaded(lowbitQDef.id)) {
-        await localModelRuntime.unloadModel(lowbitQDef.id);
+        await localModelRuntime.unloadModel(lowbitQDef.id, { force: true });
       }
 
       // Phase 1: Run all prompts for original
@@ -512,7 +512,7 @@ function LowbitQValidationPage() {
 
       // Unload original, prepare for lowbit-Q
       if (localModelRuntime.isLoaded(originalDef.id)) {
-        await localModelRuntime.unloadModel(originalDef.id);
+        await localModelRuntime.unloadModel(originalDef.id, { force: true });
       }
 
       // Phase 2: Run all prompts for lowbit-Q
@@ -534,7 +534,7 @@ function LowbitQValidationPage() {
 
       // Unload lowbit-Q
       if (localModelRuntime.isLoaded(lowbitQDef.id)) {
-        await localModelRuntime.unloadModel(lowbitQDef.id);
+        await localModelRuntime.unloadModel(lowbitQDef.id, { force: true });
       }
 
       setBatchResults(results);

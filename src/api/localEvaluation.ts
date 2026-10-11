@@ -5,7 +5,7 @@
  * and wllama generation for quality hints.
  */
 
-import { localModelRuntime, promptAsInput } from '@src/local-llm/runtime';
+import { localModelRuntime, promptAsInput, type LocalModelOwnerId } from '@src/local-llm/runtime';
 import type { LocalModerationResult, StandardQualityEvaluationResult, QualityScores, AxisProgressState } from '@type/evaluation';
 import { qualityAxisKeys } from '@type/evaluation';
 import type { LocalModelTask } from '@src/local-llm/types';
@@ -36,14 +36,14 @@ const BLOCK_THRESHOLD = 0.8;
  * Returns a 3-level screening result (safe / warn / block-candidate)
  * that is NOT a replacement for remote 13-category moderation.
  */
-export async function runLocalModeration(text: string): Promise<LocalModerationResult> {
+export async function runLocalModeration(text: string, ownerId?: LocalModelOwnerId): Promise<LocalModerationResult> {
   const modelId = getActiveModelId('analysis') ?? getActiveModelId('moderation');
   if (!modelId) {
     throw new Error('No local analysis/moderation model configured');
   }
 
   // Safety net: ensure the model is loaded before attempting to use it
-  await localModelRuntime.ensureLoaded(modelId);
+  await localModelRuntime.ensureLoaded(modelId, ownerId);
 
   const engine = localModelRuntime.getTransformersEngine(modelId);
   if (!engine) {
@@ -343,13 +343,14 @@ export async function runLocalQualityEvaluation(
   text: string,
   assistantResponse: string | undefined,
   onAxisProgress?: (axis: keyof QualityScores, state: AxisProgressState) => void,
+  ownerId?: LocalModelOwnerId,
 ): Promise<StandardQualityEvaluationResult> {
   const modelId = getActiveModelId('analysis') ?? getActiveModelId('quality') ?? getActiveModelId('generation');
   if (!modelId) {
     throw new Error('No local analysis/generation model configured');
   }
 
-  await localModelRuntime.ensureLoaded(modelId);
+  await localModelRuntime.ensureLoaded(modelId, ownerId);
 
   const engine = localModelRuntime.getWllamaEngine(modelId);
   if (!engine) {

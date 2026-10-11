@@ -19,7 +19,11 @@ import type {
 } from '@type/evaluation';
 import { runSafetyCheck, runQualityEvaluation } from '@api/evaluation';
 import { runLocalQualityEvaluation } from '@api/localEvaluation';
-import { prepareModelsForExecution } from '@src/local-llm/orchestrator';
+import {
+  createLocalModelOwner,
+  prepareModelsForExecution,
+  releaseModelsForExecution,
+} from '@src/local-llm/orchestrator';
 import type { ResolvedProvider } from '@hooks/submitHelpers';
 import { formatEvaluationErrorMessage } from '@utils/evaluationError';
 import type { FormattedEvaluationError } from '@utils/evaluationError';
@@ -745,6 +749,7 @@ const EvaluationModal: React.FC<EvaluationModalProps> = ({
 
     setQualityRunning(true);
     setQualityError(null);
+    let localModelOwnerId: string | undefined;
     try {
       const store = useStore.getState();
       const analysisModelId = store.localModelEnabled
@@ -753,7 +758,8 @@ const EvaluationModal: React.FC<EvaluationModalProps> = ({
 
       if (analysisModelId) {
         // Use local analysis (evaluation) model
-        await prepareModelsForExecution([analysisModelId]);
+        localModelOwnerId = createLocalModelOwner(`modal-evaluation:${key}`);
+        await prepareModelsForExecution(localModelOwnerId, [analysisModelId]);
         const axisProgress = (axis: keyof QualityScores, state: AxisProgressState) => {
           useStore.getState().setEvaluationAxisProgress(key, { [axis]: state });
         };
@@ -761,6 +767,7 @@ const EvaluationModal: React.FC<EvaluationModalProps> = ({
           promptText,
           phase === 'post-receive' ? ctx.assistantText : undefined,
           axisProgress,
+          localModelOwnerId,
         );
         const existing = store.evaluationResults[key];
         store.setEvaluationResult(key, {
@@ -793,6 +800,7 @@ const EvaluationModal: React.FC<EvaluationModalProps> = ({
       setQualityError(formatEvaluationErrorMessage(msg, t));
       console.warn('[evaluation] quality evaluation failed:', e);
     } finally {
+      if (localModelOwnerId) releaseModelsForExecution(localModelOwnerId);
       setQualityRunning(false);
       useStore.getState().clearEvaluationAxisProgress(key);
     }

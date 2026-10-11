@@ -587,6 +587,7 @@ export interface ExecuteLocalSubmitParams {
   abortController: AbortController;
   t: (key: string) => string;
   assistantPrefill?: string;
+  modelOwnerId?: string;
 }
 
 export const executeLocalSubmit = async ({
@@ -600,12 +601,13 @@ export const executeLocalSubmit = async ({
   mode,
   abortController,
   assistantPrefill,
+  modelOwnerId,
 }: ExecuteLocalSubmitParams): Promise<ExecuteSubmitStreamResult> => {
   // Lazy imports to keep submitRuntime lightweight
   const { localModelRuntime } = await import('@src/local-llm/runtime');
   const { buildLocalChatMessages } = await import('./submitHelpers');
 
-  await localModelRuntime.ensureLoaded(config.model);
+  await localModelRuntime.ensureLoaded(config.model, modelOwnerId);
   const engine = localModelRuntime.getWllamaEngine(config.model);
   if (!engine) throw new Error('Local model engine not available');
 

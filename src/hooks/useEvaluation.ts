@@ -9,7 +9,11 @@ import { useCallback } from 'react';
 import useStore from '@store/store';
 import { runSafetyCheck, runQualityEvaluation } from '@api/evaluation';
 import { runLocalModeration, runLocalQualityEvaluation } from '@api/localEvaluation';
-import { prepareModelsForExecution } from '@src/local-llm/orchestrator';
+import {
+  createLocalModelOwner,
+  prepareModelsForExecution,
+  releaseModelsForExecution,
+} from '@src/local-llm/orchestrator';
 import { evaluationResultKey, qualityAxisKeys } from '@type/evaluation';
 import type { EvaluationResult, QualityScores, AxisProgressState } from '@type/evaluation';
 import type { ContentInterface } from '@type/chat';
@@ -55,6 +59,7 @@ async function runEvaluationForPhase(
   store.setEvaluationPending(key, true);
 
   const result: EvaluationResult = { phase };
+  let localModelOwnerId: string | undefined;
 
   try {
     const textToCheck = phase === 'pre-send' ? userText : (assistantText ?? '');
@@ -65,14 +70,21 @@ async function runEvaluationForPhase(
       const evalIds: string[] = [];
       const analysisModelId = store.activeLocalModels['analysis'];
       if (analysisModelId) evalIds.push(analysisModelId);
-      if (evalIds.length > 0) await prepareModelsForExecution(evalIds);
+      if (shouldSafety && !analysisModelId) {
+        const moderationModelId = store.activeLocalModels['moderation'];
+        if (moderationModelId) evalIds.push(moderationModelId);
+      }
+      if (evalIds.length > 0) {
+        localModelOwnerId = createLocalModelOwner(`evaluation:${key}:${phase}`);
+        await prepareModelsForExecution(localModelOwnerId, evalIds);
+      }
     }
 
     if (shouldSafety && textToCheck) {
       // --- Local safety (if engine is local or hybrid) ---
       if (safetyEngine === 'local' || safetyEngine === 'hybrid') {
         try {
-          result.localSafety = await runLocalModeration(textToCheck);
+          result.localSafety = await runLocalModeration(textToCheck, localModelOwnerId);
         } catch (e) {
           console.warn('[evaluation] local safety screening failed:', e);
         }
@@ -121,6 +133,7 @@ async function runEvaluationForPhase(
               userText,
               phase === 'post-receive' ? assistantText : undefined,
               axisProgress,
+              localModelOwnerId,
             );
           } catch (e) {
             console.warn('[evaluation] local quality evaluation failed:', e);
@@ -150,6 +163,7 @@ async function runEvaluationForPhase(
       useStore.getState().setEvaluationResult(key, result);
     }
   } finally {
+    if (localModelOwnerId) releaseModelsForExecution(localModelOwnerId);
     useStore.getState().setEvaluationPending(key, false);
     useStore.getState().clearEvaluationAxisProgress(key);
   }
@@ -228,6 +242,7 @@ export function useEvaluation() {
       const store = useStore.getState();
       const key = evaluationResultKey(chatId, nodeId, phase);
       store.setEvaluationPending(key, true);
+      let localModelOwnerId: string | undefined;
       try {
         const analysisModelId = store.localModelEnabled
           ? (store.activeLocalModels['analysis'] ?? null)
@@ -236,12 +251,13 @@ export function useEvaluation() {
         if (analysisModelId) {
           // Use local quality evaluation
           if (store.localModelEnabled) {
-            await prepareModelsForExecution([analysisModelId]);
+            localModelOwnerId = createLocalModelOwner(`manual-evaluation:${key}`);
+            await prepareModelsForExecution(localModelOwnerId, [analysisModelId]);
           }
           const axisProgress = (axis: keyof QualityScores, state: AxisProgressState) => {
             useStore.getState().setEvaluationAxisProgress(key, { [axis]: state });
           };
-          const quality = await runLocalQualityEvaluation(userText, assistantText, axisProgress);
+          const quality = await runLocalQualityEvaluation(userText, assistantText, axisProgress, localModelOwnerId);
           const existing = store.evaluationResults[key];
           store.setEvaluationResult(key, {
             ...existing,
@@ -270,6 +286,7 @@ export function useEvaluation() {
       } catch (e) {
         console.warn('[evaluation] manual quality evaluation failed:', e);
       } finally {
+        if (localModelOwnerId) releaseModelsForExecution(localModelOwnerId);
         useStore.getState().setEvaluationPending(key, false);
         useStore.getState().clearEvaluationAxisProgress(key);
       }

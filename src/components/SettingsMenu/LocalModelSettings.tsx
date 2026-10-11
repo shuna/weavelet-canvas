@@ -475,7 +475,7 @@ const LocalModelSettings = () => {
     const provider = new OpfsFileProvider(model.id, model.manifest);
     try {
       if (localModelRuntime.isLoaded(model.id)) {
-        await localModelRuntime.unloadModel(model.id);
+        await localModelRuntime.unloadModel(model.id, { force: true });
       }
       await localModelRuntime.loadModel(
         { id: model.id, engine: model.engine, tasks: model.tasks, label: model.label,
@@ -500,7 +500,7 @@ const LocalModelSettings = () => {
   }, [autoAssignIfUnset]);
 
   const handleUnloadCatalogModel = useCallback(async (modelId: string) => {
-    await localModelRuntime.unloadModel(modelId);
+    await localModelRuntime.unloadModel(modelId, { force: true });
   }, []);
 
   // ----- Ephemeral file handlers -----
@@ -647,7 +647,7 @@ const LocalModelSettings = () => {
         store.addLocalModel(model);
       }
 
-      if (localModelRuntime.isLoaded(model.id)) await localModelRuntime.unloadModel(model.id);
+      if (localModelRuntime.isLoaded(model.id)) await localModelRuntime.unloadModel(model.id, { force: true });
 
       await localModelRuntime.loadModel(
         model,
@@ -668,7 +668,7 @@ const LocalModelSettings = () => {
   }, [autoAssignIfUnset, bumpOpfsBrowser, findStoredModelWithHash]);
 
   const handleUnloadEphemeral = useCallback(async () => {
-    if (importedModelId) await localModelRuntime.unloadModel(importedModelId);
+    if (importedModelId) await localModelRuntime.unloadModel(importedModelId, { force: true });
     setContextLength(null);
     setFileName(null);
     setImportedModelId(null);
@@ -825,7 +825,7 @@ const LocalModelSettings = () => {
     const modelId = generateSearchModelId(result.repoId, variant);
     const provider = new OpfsFileProvider(modelId, candidate.manifest);
     try {
-      if (localModelRuntime.isLoaded(modelId)) await localModelRuntime.unloadModel(modelId);
+      if (localModelRuntime.isLoaded(modelId)) await localModelRuntime.unloadModel(modelId, { force: true });
       await localModelRuntime.loadModel(
         { id: modelId, engine: candidate.engine, tasks: candidate.tasks, label: candidate.label,
           origin: result.repoId, source: 'opfs', manifest: candidate.manifest, fileSize: candidate.estimatedSize },
@@ -847,7 +847,7 @@ const LocalModelSettings = () => {
   }, [autoAssignIfUnset]);
 
   const handleUnloadSearchModel = useCallback(async (modelId: string) => {
-    await localModelRuntime.unloadModel(modelId);
+    await localModelRuntime.unloadModel(modelId, { force: true });
   }, []);
 
   const handleDeleteSearchModel = useCallback(async (modelId: string) => {

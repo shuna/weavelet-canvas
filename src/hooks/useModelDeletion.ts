@@ -31,7 +31,7 @@ export function useModelDeletion() {
 
     // Unload from runtime if loaded
     if (localModelRuntime.isLoaded(modelId)) {
-      await localModelRuntime.unloadModel(modelId);
+      await localModelRuntime.unloadModel(modelId, { force: true });
     }
 
     // Clear task assignments pointing to this model
