@@ -62,6 +62,9 @@ async function runEvaluationForPhase(
 ): Promise<void> {
   const store = useStore.getState();
   const settings = store.evaluationSettings;
+  const analysisModelId = store.localModelEnabled ? (store.activeLocalModels.analysis ?? null) : null;
+  const moderationModelId = store.localModelEnabled
+    ? (analysisModelId ?? store.activeLocalModels.moderation ?? null) : null;
   const key = evaluationResultKey(ctx.chatId, ctx.nodeId, phase);
 
   const shouldSafety =
@@ -88,12 +91,8 @@ async function runEvaluationForPhase(
     // Prepare local evaluation models before first use
     if (store.localModelEnabled) {
       const evalIds: string[] = [];
-      const analysisModelId = store.activeLocalModels['analysis'];
       if (analysisModelId) evalIds.push(analysisModelId);
-      if (shouldSafety && !analysisModelId) {
-        const moderationModelId = store.activeLocalModels['moderation'];
-        if (moderationModelId) evalIds.push(moderationModelId);
-      }
+      if (shouldSafety && !analysisModelId && moderationModelId) evalIds.push(moderationModelId);
       if (evalIds.length > 0) {
         localModelOwnerId = createLocalModelOwner(`evaluation:${key}:${phase}`);
         unregisterOwner = localModelRuntime.registerOwnerCancellation(localModelOwnerId, () => cancelAiTask(ticket));
@@ -106,12 +105,13 @@ async function runEvaluationForPhase(
       // --- Local safety (if engine is local or hybrid) ---
       if (safetyEngine === 'local' || safetyEngine === 'hybrid') {
         try {
-          result.localSafety = await runLocalModeration(textToCheck, localModelOwnerId, ticket.controller.signal);
+          result.localSafety = await runLocalModeration(textToCheck, localModelOwnerId, ticket.controller.signal, moderationModelId);
         } catch (e) {
           console.warn('[evaluation] local safety screening failed:', e);
         }
       }
 
+      if (!isAiTaskCurrent(ticket)) return;
       // --- Remote safety ---
       // In 'local' mode, if local failed, fall back to remote as a safety net
       const localOnlyButFailed = safetyEngine === 'local' && !result.localSafety;
@@ -140,11 +140,6 @@ async function runEvaluationForPhase(
 
     if (!isAiTaskCurrent(ticket)) return;
     if (shouldQuality && userText) {
-      // Determine if a local model is assigned to the analysis (evaluation) task
-      const analysisModelId = store.localModelEnabled
-        ? (store.activeLocalModels['analysis'] ?? null)
-        : null;
-
       if (analysisModelId) {
         // Use local quality evaluation as the primary evaluator
         if (userText) {
@@ -158,6 +153,7 @@ async function runEvaluationForPhase(
               axisProgress,
               localModelOwnerId,
               ticket.controller.signal,
+              analysisModelId,
             );
           } catch (e) {
             console.warn('[evaluation] local quality evaluation failed:', e);
@@ -292,7 +288,7 @@ export function useEvaluation() {
           const axisProgress = (axis: keyof QualityScores, state: AxisProgressState) => {
             if (isAiTaskCurrent(ticket)) useStore.getState().setEvaluationAxisProgress(key, { [axis]: state });
           };
-          const quality = await runLocalQualityEvaluation(userText, assistantText, axisProgress, localModelOwnerId, ticket.controller.signal);
+          const quality = await runLocalQualityEvaluation(userText, assistantText, axisProgress, localModelOwnerId, ticket.controller.signal, analysisModelId);
           if (!isAiTaskCurrent(ticket)) return;
           const existing = useStore.getState().evaluationResults[key];
           useStore.getState().setEvaluationResult(key, {
