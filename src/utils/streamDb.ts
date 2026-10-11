@@ -166,7 +166,7 @@ export async function setStreamObservation(requestId: string, patch: OpenRouterO
 }
 
 /** Mark the finalized node without recreating a record removed by explicit cancellation. */
-export async function markStreamApplied(requestId: string, appliedHash: string, checkpointRole: Role): Promise<void> {
+export async function markStreamApplied(requestId: string, appliedHash: string, checkpointRole: Role, expectedBufferedText: string): Promise<void> {
   const db = await openDb();
   await new Promise<void>((resolve, reject) => {
     const transaction = db.transaction(STORE_NAME, 'readwrite');
@@ -176,7 +176,7 @@ export async function markStreamApplied(requestId: string, appliedHash: string, 
     const request = store.get(requestId);
     request.onsuccess = () => {
       const record = request.result as StreamRecord | undefined;
-      if (record) store.put({ ...record, appliedHash, checkpointRole, updatedAt: Date.now() });
+      if (record && record.status !== 'streaming' && record.bufferedText === expectedBufferedText) store.put({ ...record, appliedHash, checkpointRole, updatedAt: Date.now() });
     };
   });
 }
@@ -200,7 +200,7 @@ export async function updateStreamCheckpoints(snapshot: { chats?: Pick<ChatInter
         const node = snapshot.chats?.find(chat => chat.id === record.chatId)?.branchTree?.nodes[record.nodeId];
         const hash = node?.contentHash;
         if (!hash || hash.startsWith('__streaming:')) continue;
-        if (record.appliedHash === hash && record.checkpointRole === node!.role) {
+        if (record.status !== 'streaming' && record.appliedHash === hash && record.checkpointRole === node!.role) {
           store.delete(record.requestId);
           acknowledged.push(record);
         }

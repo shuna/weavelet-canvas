@@ -203,7 +203,7 @@ describe('saved checkpoints', () => {
   });
   it('retains legacy and mismatched recovery data, including stale unacknowledged records', async () => {
     await saveRequest(makeRecord({ requestId: 'legacy', createdAt: 1 }));
-    await saveRequest(makeRecord({ requestId: 'mismatch', chatId: 'chat', nodeId: 'node', checkpointHash: 'old', checkpointRole: 'assistant', appliedHash: 'recovered', createdAt: 1 }));
+    await saveRequest(makeRecord({ requestId: 'mismatch', status: 'completed', chatId: 'chat', nodeId: 'node', checkpointHash: 'old', checkpointRole: 'assistant', appliedHash: 'recovered', createdAt: 1 }));
     await cleanupStale(1);
     await updateStreamCheckpoints(snapshot('edited'), []);
     expect(await getRequest('legacy')).toBeDefined();
@@ -214,14 +214,33 @@ describe('saved checkpoints', () => {
   });
   it('keeps finalized terminal output until the matching primary snapshot succeeds', async () => {
     await saveRequest(makeRecord({ chatId: 'chat', nodeId: 'node', status: 'failed', bufferedText: 'partial', proxySessionId: 'proxy' }));
-    await markStreamApplied('req-1', 'final', 'assistant');
+    await markStreamApplied('req-1', 'final', 'assistant', 'partial');
     expect(await getRequest('req-1')).toMatchObject({ bufferedText: 'partial', status: 'failed', appliedHash: 'final' });
     expect(await updateStreamCheckpoints(snapshot('older'), [])).toEqual([]);
     expect(await getRequest('req-1')).toBeDefined();
     expect(await updateStreamCheckpoints(snapshot('final'), [])).toEqual([expect.objectContaining({ proxySessionId: 'proxy' })]);
     expect(await getRequest('req-1')).toBeUndefined();
-    await markStreamApplied('req-1', 'final', 'assistant');
+    await markStreamApplied('req-1', 'final', 'assistant', 'partial');
     expect(await getRequest('req-1')).toBeUndefined();
+  });
+
+  it('does not acknowledge heartbeat partials before the worker commits terminal status', async () => {
+    await saveRequest(makeRecord({ chatId: 'chat', nodeId: 'node', checkpointRole: 'assistant', bufferedText: 'partial', proxySessionId: 'proxy' }));
+    await markStreamApplied('req-1', 'partial-hash', 'assistant', 'partial');
+    expect((await getRequest('req-1'))?.appliedHash).toBeUndefined();
+    expect(await updateStreamCheckpoints(snapshot('partial-hash'), [])).toEqual([]);
+    await appendText('req-1', ' later worker output');
+    await updateStatus('req-1', 'interrupted');
+    await markStreamApplied('req-1', 'partial-hash', 'assistant', 'partial');
+    expect(await updateStreamCheckpoints(snapshot('partial-hash'), [])).toEqual([]);
+    expect(await getRequest('req-1')).toMatchObject({ bufferedText: 'partial later worker output', status: 'interrupted' });
+    await markStreamApplied('req-1', 'terminal-hash', 'assistant', 'partial later worker output');
+    expect(await updateStreamCheckpoints(snapshot('terminal-hash'), [])).toHaveLength(1);
+  });
+  it('retains a streaming record even if it has an old applied hash', async () => {
+    await saveRequest(makeRecord({ chatId: 'chat', nodeId: 'node', checkpointRole: 'assistant', appliedHash: 'partial-hash' }));
+    expect(await updateStreamCheckpoints(snapshot('partial-hash'), [])).toEqual([]);
+    expect(await getRequest('req-1')).toBeDefined();
   });
 
 });

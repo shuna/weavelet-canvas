@@ -149,6 +149,13 @@ export async function startStream(params: StartStreamParams): Promise<SwStreamHa
       status: 'error',
       detail: `${formatDebugTime()} heartbeat failed: ${reason}`,
     });
+    // A lost port does not stop the worker fetch. Request cancellation, but keep
+    // its recovery record until the worker commits a terminal status.
+    try {
+      controller.postMessage({ type: 'cancelStream', requestId });
+    } catch (error) {
+      debugReport(`stream:${requestId}`, { status: 'error', detail: `Worker cancellation could not be delivered: ${String(error)}` });
+    }
     cleanup();
     onError(`Service Worker stream lost: ${reason}`);
   };

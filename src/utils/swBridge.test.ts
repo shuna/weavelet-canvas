@@ -155,4 +155,19 @@ describe('Service Worker stream heartbeat', () => {
     expect(db.deleteRequest).toHaveBeenCalledWith('delayed');
   });
 
+  it('requests worker cancellation when heartbeat acknowledgements are lost', async () => {
+    const controller = { postMessage: vi.fn() };
+    Object.defineProperty(globalThis, 'navigator', { value: { serviceWorker: { controller } }, configurable: true });
+    const { startStream } = await import('./swBridge');
+    const onError = vi.fn();
+    await startStream({ requestId: 'heartbeat-lost', chatId: 'chat', nodeId: 'node', endpoint: 'https://example.test',
+      headers: {}, body: {}, chatIndex: 0, messageIndex: 0, onChunk: vi.fn(), onDone: vi.fn(), onError });
+    await vi.advanceTimersByTimeAsync(24_000);
+    expect(controller.postMessage).toHaveBeenCalledWith({ type: 'cancelStream', requestId: 'heartbeat-lost' });
+    expect(onError).toHaveBeenCalledOnce();
+    const messages = controller.postMessage.mock.calls.length;
+    await vi.advanceTimersByTimeAsync(20_000);
+    expect(controller.postMessage.mock.calls).toHaveLength(messages);
+  });
+
 });

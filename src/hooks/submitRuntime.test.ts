@@ -715,7 +715,7 @@ describe('stream end status via SW path', () => {
       else await pending;
       expect(db.deleteRequest).not.toHaveBeenCalled();
       expect(db.markStreamApplied).toHaveBeenCalledWith(expect.any(String),
-        (mockState.chats as any[])[0].branchTree.nodes['node-assistant'].contentHash, 'assistant');
+        (mockState.chats as any[])[0].branchTree.nodes['node-assistant'].contentHash, 'assistant', 'saved answer');
       expect(fetchSpy).not.toHaveBeenCalled();
     } finally { fetchSpy.mockRestore(); clearSubmitSessionRuntime(sessionId); }
   });

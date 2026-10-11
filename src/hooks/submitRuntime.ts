@@ -781,6 +781,7 @@ export const executeSubmitStream = async ({
   const proxyConfig = getProxyConfig();
   let capturedGenerationId: string | undefined;
   let lastFinishReason: string | undefined;
+  let receivedStreamText = '';
 
   // Parser for <think>...</think> tags in content (used by open-source models
   // on Together AI, Fireworks, Groq, etc.)
@@ -806,6 +807,7 @@ export const executeSubmitStream = async ({
   };
   const observeUsage = (usage: unknown) => requestContext.onObservation?.(observeOpenRouterUsage(usage));
   const runRequest = async (requestMessages: MessageInterface[]) => {
+    receivedStreamText = '';
     if (!isStreamSupported) {
       let data;
       const signal = abortController.signal;
@@ -878,6 +880,7 @@ export const executeSubmitStream = async ({
 
     const onChunk = (text: string, meta?: { generationId?: string; reasoning?: string; openRouterObservation?: import('@type/chat').OpenRouterObservation }) => {
       if (!canApply()) return;
+      receivedStreamText += text;
       if (meta?.openRouterObservation) requestContext.onObservation?.(meta.openRouterObservation);
       if (meta?.generationId && !capturedGenerationId) {
         capturedGenerationId = meta.generationId;
@@ -1364,7 +1367,7 @@ export const executeSubmitStream = async ({
       const node = useStore.getState().chats?.find(chat => chat.id === chatId)?.branchTree?.nodes[targetNodeId];
       if (requestId && node && !isStreamingContentHash(node.contentHash)) {
         try {
-          await markStreamApplied(requestId, node.contentHash, node.role);
+          await markStreamApplied(requestId, node.contentHash, node.role, receivedStreamText);
           requestSnapshotFlush();
         } catch (error) {
           debugReport(`recovery-record:${requestId}`, { status: 'error', detail: `Finalized recovery checkpoint failed: ${String(error)}` });

@@ -440,7 +440,7 @@ async function recoverPendingInner(manual: boolean, debugId: string) {
           });
         }
         if (restoredThisRecord) {
-          await saveRequest({ ...record, bufferedText: getCurrentMessageText(latest.message), appliedHash: expectedHash, updatedAt: Date.now() });
+          await saveRequest({ ...record, bufferedText: getCurrentMessageText(latest.message), appliedHash: record.status === 'streaming' ? undefined : expectedHash, updatedAt: Date.now() });
           requestSnapshotFlush();
           if (!currentTarget()) continue;
           restoredMessageCount++;
@@ -448,7 +448,7 @@ async function recoverPendingInner(manual: boolean, debugId: string) {
           useStreamEndStatusStore.getState().setStatus(record.nodeId!, isPartial ? 'recovered_partial' : proxyRecoveredThisRecord ? 'recovered' : 'completed');
           // Bootstrap acknowledges appliedHash only after the primary snapshot commits.
         } else if (latest.node.contentHash === record.checkpointHash) {
-          await saveRequest({ ...record, appliedHash: expectedHash, updatedAt: Date.now() });
+          await saveRequest({ ...record, appliedHash: record.status === 'streaming' ? undefined : expectedHash, updatedAt: Date.now() });
           requestSnapshotFlush();
         }
       } finally {
