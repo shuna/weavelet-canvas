@@ -39,6 +39,10 @@ export function beginAiTask(input: Omit<AiTaskTicket, 'status' | 'fingerprint'>)
   return ticket;
 }
 
+export function ownsAiTask(ticket: AiTaskTicket): boolean {
+  return ticket.status === 'active' && tasks.get(targetKey(ticket)) === ticket;
+}
+
 export function isAiTaskCurrent(ticket: AiTaskTicket): boolean {
   return ticket.status === 'active' && ticket.parent?.status !== 'cancelled'
     && tasks.get(targetKey(ticket)) === ticket && ticket.fingerprint !== ''

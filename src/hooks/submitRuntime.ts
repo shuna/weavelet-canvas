@@ -1,3 +1,4 @@
+import { cancelAiTask, cancelAiTaskRequest, isAiTaskCurrent, type AiTaskTicket } from './aiTaskLifetime';
 import { isOpenRouterEndpoint, observeOpenRouterHeaders, observeOpenRouterUsage, type OpenRouterRequestContext } from '@utils/openrouterControls';
 import { recordOpenRouterObservation } from '@utils/openrouterObservation';
 import useStore from '@store/store';
@@ -185,6 +186,7 @@ export const clearSubmitSessionRuntime = (
 };
 
 export const stopSubmitSession = (sessionId: string) => {
+  cancelAiTaskRequest(sessionId);
   const requestId = sessionRequestIds.get(sessionId);
   // Mark the target node as interrupted before aborting
   const chunkTarget =
@@ -201,7 +203,7 @@ export const stopSubmitSession = (sessionId: string) => {
   // runtime path might not complete (e.g. race conditions, worker crashes).
   const session = useStore.getState().generatingSessions[sessionId];
   if (session) {
-    const chat = useStore.getState().chats?.[session.chatIndex];
+    const chat = useStore.getState().chats?.find(chat => chat.id === session.chatId);
     if (chat?.config?.modelSource === 'local') {
       debugReport(`local-model:${chat.config.model}`, {
         label: 'Local model',
@@ -508,7 +510,8 @@ export const flushQueuedChunks = (chatId: string, targetNodeId: string) => {
 export const queueChunkToStore = (
   chatId: string,
   targetNodeId: string,
-  text: string
+  text: string,
+  canApply?: () => boolean
 ) => {
   if (!text) return;
 
@@ -521,12 +524,14 @@ export const queueChunkToStore = (
     key,
     scheduleFlush(() => {
       pendingChunkTimers.delete(key);
+      if (canApply && !canApply()) { discardQueuedChunks(chatId, targetNodeId); return; }
       flushQueuedChunks(chatId, targetNodeId);
     })
   );
 };
 
 type ExecuteSubmitStreamParams = {
+  ticket?: AiTaskTicket;
   regenerate?: boolean;
   sessionId: string;
   chatId: string;
@@ -576,6 +581,7 @@ export const getGenerationIdFromSubmitError = (
 // ---------------------------------------------------------------------------
 
 export interface ExecuteLocalSubmitParams {
+  ticket?: AiTaskTicket;
   sessionId: string;
   chatId: string;
   chatIndex: number;
@@ -591,6 +597,7 @@ export interface ExecuteLocalSubmitParams {
 }
 
 export const executeLocalSubmit = async ({
+  ticket,
   sessionId,
   chatId,
   chatIndex,
@@ -603,11 +610,18 @@ export const executeLocalSubmit = async ({
   assistantPrefill,
   modelOwnerId,
 }: ExecuteLocalSubmitParams): Promise<ExecuteSubmitStreamResult> => {
+  const canApply = () => {
+    if (!ticket || isAiTaskCurrent(ticket)) return !abortController.signal.aborted;
+    cancelAiTask(ticket);
+    return false;
+  };
+  if (!canApply()) return {};
   // Lazy imports to keep submitRuntime lightweight
   const { localModelRuntime } = await import('@src/local-llm/runtime');
   const { buildLocalChatMessages } = await import('./submitHelpers');
 
   await localModelRuntime.ensureLoaded(config.model, modelOwnerId);
+  if (!canApply()) return {};
   const engine = localModelRuntime.getWllamaEngine(config.model);
   if (!engine) throw new Error('Local model engine not available');
 
@@ -626,12 +640,13 @@ export const executeLocalSubmit = async ({
   useStore.setState((state) => {
     const chats = state.chats;
     if (!chats) return state;
-    const chat = chats[chatIndex];
+    const currentIndex = chats.findIndex(chat => chat.id === chatId);
+    const chat = chats[currentIndex];
     if (!chat?.branchTree) return state;
 
     const updatedChats = [...chats];
     const updatedChat = { ...chat, branchTree: { ...chat.branchTree, nodes: { ...chat.branchTree.nodes } } };
-    updatedChats[chatIndex] = updatedChat;
+    updatedChats[currentIndex] = updatedChat;
     const tree = updatedChat.branchTree;
     const node = tree.nodes[targetNodeId];
     if (!node) return state;
@@ -703,7 +718,7 @@ export const executeLocalSubmit = async ({
         temperature: config.temperature,
       },
       (text) => {
-        if (abortController.signal.aborted) return;
+        if (!canApply()) return;
         fullText = text;
         resetStallTimer();
         // wllama sends currentText (full generated text-so-far), not deltas.
@@ -736,6 +751,7 @@ export const executeLocalSubmit = async ({
 // ---------------------------------------------------------------------------
 
 export const executeSubmitStream = async ({
+  ticket,
   sessionId,
   chatId,
   chatIndex,
@@ -749,6 +765,12 @@ export const executeSubmitStream = async ({
   t,
   regenerate = false,
 }: ExecuteSubmitStreamParams): Promise<ExecuteSubmitStreamResult> => {
+  const canApply = () => {
+    if (!ticket || isAiTaskCurrent(ticket)) return !abortController.signal.aborted;
+    cancelAiTask(ticket);
+    return false;
+  };
+  if (!canApply()) return {};
   sessionChunkTargets.set(sessionId, { chatId, targetNodeId });
   const isStreamSupported = getEffectiveStreamEnabled(config);
   const proxyConfig = getProxyConfig();
@@ -770,6 +792,7 @@ export const executeSubmitStream = async ({
   const requestContext: OpenRouterRequestContext = {
     chatId, regenerate, viaProxy: !!proxyConfig,
     onObservation: patch => {
+      if (!canApply()) return;
       if (!isOpenRouterEndpoint(resolvedProvider.endpoint)) return;
       recordOpenRouterObservation(chatId, targetNodeId, patch);
       const requestId = sessionRequestIds.get(sessionId);
@@ -809,7 +832,7 @@ export const executeSubmitStream = async ({
         );
       }
 
-      if (!useStore.getState().generatingSessions[sessionId]) return;
+      if (!canApply() || !useStore.getState().generatingSessions[sessionId]) return;
       if (!data?.choices?.[0]?.message?.content) {
         throw new Error(t('errors.failedToRetrieveData'));
       }
@@ -849,6 +872,7 @@ export const executeSubmitStream = async ({
     }
 
     const onChunk = (text: string, meta?: { generationId?: string; reasoning?: string; openRouterObservation?: import('@type/chat').OpenRouterObservation }) => {
+      if (!canApply()) return;
       if (meta?.openRouterObservation) requestContext.onObservation?.(meta.openRouterObservation);
       if (meta?.generationId && !capturedGenerationId) {
         capturedGenerationId = meta.generationId;
@@ -865,12 +889,13 @@ export const executeSubmitStream = async ({
           writeReasoningChunk(chatId, targetNodeId, parsed.reasoning);
         }
         if (parsed.content) {
-          queueChunkToStore(chatId, targetNodeId, parsed.content);
+          queueChunkToStore(chatId, targetNodeId, parsed.content, canApply);
         }
       }
     };
 
     const onReasoningChunk = (text: string) => {
+      if (!canApply()) return;
       writeReasoningChunk(chatId, targetNodeId, text);
     };
 
@@ -1316,10 +1341,12 @@ export const executeSubmitStream = async ({
   } finally {
     // Flush any remaining <think> tag buffer before finalizing
     const remaining = thinkTagParser.flush();
-    if (remaining.reasoning) writeReasoningChunk(chatId, targetNodeId, remaining.reasoning);
-    if (remaining.content) queueChunkToStore(chatId, targetNodeId, remaining.content);
-    flushQueuedChunks(chatId, targetNodeId);
-    finalizeStreamingNode(chatId, targetNodeId);
+    if (canApply() && remaining.reasoning) writeReasoningChunk(chatId, targetNodeId, remaining.reasoning);
+    if (canApply() && remaining.content) queueChunkToStore(chatId, targetNodeId, remaining.content);
+    if (canApply()) {
+      flushQueuedChunks(chatId, targetNodeId);
+      finalizeStreamingNode(chatId, targetNodeId);
+    }
   }
 
   // Stream completed successfully — determine the reason

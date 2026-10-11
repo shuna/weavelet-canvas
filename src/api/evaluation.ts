@@ -53,6 +53,7 @@ export function resolveOpenAiCredentials(): { endpoint: string; apiKey: string }
 export async function runSafetyCheck(
   text: string,
   openRouter?: OpenRouterChatSettings,
+  signal?: AbortSignal,
 ): Promise<SafetyCheckResult> {
   if (hardOpenRouterConstraints(openRouter)) throw new Error(i18next.t('model:openRouter.errors.safety') as string);
   const { endpoint, apiKey } = resolveOpenAiCredentials();
@@ -72,7 +73,8 @@ export async function runSafetyCheck(
       endpoint: moderationUrl,
       apiKey,
       input: text,
-    }
+    },
+    signal
   ).catch((e) => {
     throw new Error(`[EVAL_CONNECTION_FAILED] url=${moderationUrl} detail=${e.message}`);
   });
@@ -269,7 +271,8 @@ export async function runQualityEvaluation(
   apiKey?: string,
   language?: string,
   evaluationMode?: QualityEvaluationMode,
-  openRouter?: OpenRouterChatSettings
+  openRouter?: OpenRouterChatSettings,
+  signal?: AbortSignal
 ): Promise<QualityEvaluationResult> {
   if (!model) {
     throw new Error('[EVAL_MODEL_NOT_SELECTED]');
@@ -301,7 +304,7 @@ export async function runQualityEvaluation(
 
   const proxyConfig = getProxyConfig();
   applyOpenRouterControls(chatUrl, { model, max_tokens: 0, temperature: 0, top_p: 1, presence_penalty: 0, frequency_penalty: 0, openRouter: { routing: hardOpenRouterConstraints(openRouter), responseCache: { mode: 'off' } } }, body, headers, { auxiliary: true, viaProxy: !!proxyConfig });
-  const response = await fetchViaProxy(proxyConfig, chatUrl, headers, body).catch((e) => {
+  const response = await fetchViaProxy(proxyConfig, chatUrl, headers, body, signal).catch((e) => {
     throw new Error(`[EVAL_QUALITY_CONNECTION_FAILED] url=${chatUrl} detail=${e.message}`);
   });
 

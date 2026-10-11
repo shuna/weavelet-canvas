@@ -1,3 +1,5 @@
+import { localModelRuntime } from '@src/local-llm/runtime';
+import { beginAiTask, cancelAiTask, finishAiTask, isAiTaskCurrent, ownsAiTask, evaluationDependencyIds, type AiTaskTicket } from './aiTaskLifetime';
 import { showToast } from '@utils/showToast';
 /**
  * Hook for running evaluations on chat messages.
@@ -30,10 +32,26 @@ function extractText(content: ContentInterface[]): string {
 export interface EvaluationContext {
   chatId: string;
   nodeId: string;
+  parentTicket?: AiTaskTicket;
   endpoint: string;
   apiKey?: string;
   model: string;
   openRouter?: import('@type/chat').OpenRouterChatSettings;
+}
+
+function evaluationTask(chatId: string, nodeId: string, phase: 'pre-send' | 'post-receive', parent?: AiTaskTicket) {
+  const key = evaluationResultKey(chatId, nodeId, phase);
+  const controller = new AbortController();
+  const ticket = beginAiTask({ requestId: crypto.randomUUID(), chatId, nodeId, parent,
+    kind: phase === 'pre-send' ? 'evaluation-pre' : 'evaluation-post',
+    dependencyIds: evaluationDependencyIds(chatId, nodeId, phase),
+    cancel: () => {
+      controller.abort();
+      useStore.getState().setEvaluationPending(key, false);
+      useStore.getState().clearEvaluationAxisProgress(key);
+    },
+  });
+  return Object.assign(ticket, { controller });
 }
 
 async function runEvaluationForPhase(
@@ -56,10 +74,12 @@ async function runEvaluationForPhase(
 
   if (!shouldSafety && !shouldQuality) return;
 
+  const ticket = evaluationTask(ctx.chatId, ctx.nodeId, phase, ctx.parentTicket);
   store.setEvaluationPending(key, true);
 
   const result: EvaluationResult = { phase };
   let localModelOwnerId: string | undefined;
+  let unregisterOwner: (() => void) | undefined;
 
   try {
     const textToCheck = phase === 'pre-send' ? userText : (assistantText ?? '');
@@ -76,15 +96,17 @@ async function runEvaluationForPhase(
       }
       if (evalIds.length > 0) {
         localModelOwnerId = createLocalModelOwner(`evaluation:${key}:${phase}`);
-        await prepareModelsForExecution(localModelOwnerId, evalIds);
+        unregisterOwner = localModelRuntime.registerOwnerCancellation(localModelOwnerId, () => cancelAiTask(ticket));
+        await prepareModelsForExecution(localModelOwnerId, evalIds, { signal: ticket.controller.signal });
       }
     }
 
+    if (!isAiTaskCurrent(ticket)) return;
     if (shouldSafety && textToCheck) {
       // --- Local safety (if engine is local or hybrid) ---
       if (safetyEngine === 'local' || safetyEngine === 'hybrid') {
         try {
-          result.localSafety = await runLocalModeration(textToCheck, localModelOwnerId);
+          result.localSafety = await runLocalModeration(textToCheck, localModelOwnerId, ticket.controller.signal);
         } catch (e) {
           console.warn('[evaluation] local safety screening failed:', e);
         }
@@ -108,7 +130,7 @@ async function runEvaluationForPhase(
 
       if (shouldRunRemote) {
         try {
-          result.safety = await runSafetyCheck(textToCheck, ctx.openRouter);
+          result.safety = await runSafetyCheck(textToCheck, ctx.openRouter, ticket.controller.signal);
         } catch (e) {
           console.warn('[evaluation] remote safety check failed:', e);
           showToast(e instanceof Error ? e.message : String(e), 'error');
@@ -116,6 +138,7 @@ async function runEvaluationForPhase(
       }
     }
 
+    if (!isAiTaskCurrent(ticket)) return;
     if (shouldQuality && userText) {
       // Determine if a local model is assigned to the analysis (evaluation) task
       const analysisModelId = store.localModelEnabled
@@ -127,13 +150,14 @@ async function runEvaluationForPhase(
         if (userText) {
           try {
             const axisProgress = (axis: keyof QualityScores, state: AxisProgressState) => {
-              useStore.getState().setEvaluationAxisProgress(key, { [axis]: state });
+              if (isAiTaskCurrent(ticket)) useStore.getState().setEvaluationAxisProgress(key, { [axis]: state });
             };
             result.quality = await runLocalQualityEvaluation(
               userText,
               phase === 'post-receive' ? assistantText : undefined,
               axisProgress,
               localModelOwnerId,
+              ticket.controller.signal,
             );
           } catch (e) {
             console.warn('[evaluation] local quality evaluation failed:', e);
@@ -150,7 +174,8 @@ async function runEvaluationForPhase(
             ctx.apiKey,
             i18next.language,
             undefined,
-            ctx.openRouter
+            ctx.openRouter,
+            ticket.controller.signal
           );
         } catch (e) {
           console.warn('[evaluation] quality evaluation failed:', e);
@@ -159,13 +184,17 @@ async function runEvaluationForPhase(
       }
     }
 
-    if (result.safety || result.quality || result.localSafety) {
+    if (isAiTaskCurrent(ticket) && (result.safety || result.quality || result.localSafety)) {
       useStore.getState().setEvaluationResult(key, result);
     }
   } finally {
+    unregisterOwner?.();
     if (localModelOwnerId) releaseModelsForExecution(localModelOwnerId);
-    useStore.getState().setEvaluationPending(key, false);
-    useStore.getState().clearEvaluationAxisProgress(key);
+    if (ownsAiTask(ticket)) {
+      useStore.getState().setEvaluationPending(key, false);
+      useStore.getState().clearEvaluationAxisProgress(key);
+    }
+    finishAiTask(ticket);
   }
 }
 
@@ -211,11 +240,13 @@ export function useEvaluation() {
     ) => {
       const store = useStore.getState();
       const key = evaluationResultKey(chatId, nodeId, phase);
+      const ticket = evaluationTask(chatId, nodeId, phase);
       store.setEvaluationPending(key, true);
       try {
-        const safety = await runSafetyCheck(text, store.chats?.find(c => c.id === chatId)?.config.openRouter);
-        const existing = store.evaluationResults[key];
-        store.setEvaluationResult(key, {
+        const safety = await runSafetyCheck(text, store.chats?.find(c => c.id === chatId)?.config.openRouter, ticket.controller.signal);
+        if (!isAiTaskCurrent(ticket)) return;
+        const existing = useStore.getState().evaluationResults[key];
+        useStore.getState().setEvaluationResult(key, {
           ...existing,
           phase,
           safety,
@@ -223,7 +254,8 @@ export function useEvaluation() {
       } catch (e) {
         console.warn('[evaluation] manual safety check failed:', e);
       } finally {
-        useStore.getState().setEvaluationPending(key, false);
+        if (ownsAiTask(ticket)) useStore.getState().setEvaluationPending(key, false);
+        finishAiTask(ticket);
       }
     },
     []
@@ -241,8 +273,10 @@ export function useEvaluation() {
     ) => {
       const store = useStore.getState();
       const key = evaluationResultKey(chatId, nodeId, phase);
+      const ticket = evaluationTask(chatId, nodeId, phase);
       store.setEvaluationPending(key, true);
       let localModelOwnerId: string | undefined;
+      let unregisterOwner: (() => void) | undefined;
       try {
         const analysisModelId = store.localModelEnabled
           ? (store.activeLocalModels['analysis'] ?? null)
@@ -252,14 +286,16 @@ export function useEvaluation() {
           // Use local quality evaluation
           if (store.localModelEnabled) {
             localModelOwnerId = createLocalModelOwner(`manual-evaluation:${key}`);
-            await prepareModelsForExecution(localModelOwnerId, [analysisModelId]);
+            unregisterOwner = localModelRuntime.registerOwnerCancellation(localModelOwnerId, () => cancelAiTask(ticket));
+            await prepareModelsForExecution(localModelOwnerId, [analysisModelId], { signal: ticket.controller.signal });
           }
           const axisProgress = (axis: keyof QualityScores, state: AxisProgressState) => {
-            useStore.getState().setEvaluationAxisProgress(key, { [axis]: state });
+            if (isAiTaskCurrent(ticket)) useStore.getState().setEvaluationAxisProgress(key, { [axis]: state });
           };
-          const quality = await runLocalQualityEvaluation(userText, assistantText, axisProgress, localModelOwnerId);
-          const existing = store.evaluationResults[key];
-          store.setEvaluationResult(key, {
+          const quality = await runLocalQualityEvaluation(userText, assistantText, axisProgress, localModelOwnerId, ticket.controller.signal);
+          if (!isAiTaskCurrent(ticket)) return;
+          const existing = useStore.getState().evaluationResults[key];
+          useStore.getState().setEvaluationResult(key, {
             ...existing,
             phase,
             quality,
@@ -274,10 +310,12 @@ export function useEvaluation() {
             resolvedProvider.key,
             i18next.language,
             undefined,
-            store.chats?.find(c => c.id === chatId)?.config.openRouter
+            store.chats?.find(c => c.id === chatId)?.config.openRouter,
+            ticket.controller.signal
           );
-          const existing = store.evaluationResults[key];
-          store.setEvaluationResult(key, {
+          if (!isAiTaskCurrent(ticket)) return;
+          const existing = useStore.getState().evaluationResults[key];
+          useStore.getState().setEvaluationResult(key, {
             ...existing,
             phase,
             quality,
@@ -286,9 +324,11 @@ export function useEvaluation() {
       } catch (e) {
         console.warn('[evaluation] manual quality evaluation failed:', e);
       } finally {
+        unregisterOwner?.();
         if (localModelOwnerId) releaseModelsForExecution(localModelOwnerId);
-        useStore.getState().setEvaluationPending(key, false);
-        useStore.getState().clearEvaluationAxisProgress(key);
+        if (ownsAiTask(ticket)) useStore.getState().setEvaluationPending(key, false);
+        if (ownsAiTask(ticket)) useStore.getState().clearEvaluationAxisProgress(key);
+        finishAiTask(ticket);
       }
     },
     []

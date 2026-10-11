@@ -36,7 +36,7 @@ const BLOCK_THRESHOLD = 0.8;
  * Returns a 3-level screening result (safe / warn / block-candidate)
  * that is NOT a replacement for remote 13-category moderation.
  */
-export async function runLocalModeration(text: string, ownerId?: LocalModelOwnerId): Promise<LocalModerationResult> {
+export async function runLocalModeration(text: string, ownerId?: LocalModelOwnerId, signal?: AbortSignal): Promise<LocalModerationResult> {
   const modelId = getActiveModelId('analysis') ?? getActiveModelId('moderation');
   if (!modelId) {
     throw new Error('No local analysis/moderation model configured');
@@ -45,6 +45,7 @@ export async function runLocalModeration(text: string, ownerId?: LocalModelOwner
   // Safety net: ensure the model is loaded before attempting to use it
   await localModelRuntime.ensureLoaded(modelId, ownerId);
 
+  if (signal?.aborted) throw new DOMException('Aborted', 'AbortError');
   const engine = localModelRuntime.getTransformersEngine(modelId);
   if (!engine) {
     throw new Error('Local moderation model not loaded');
@@ -344,6 +345,7 @@ export async function runLocalQualityEvaluation(
   assistantResponse: string | undefined,
   onAxisProgress?: (axis: keyof QualityScores, state: AxisProgressState) => void,
   ownerId?: LocalModelOwnerId,
+  signal?: AbortSignal,
 ): Promise<StandardQualityEvaluationResult> {
   const modelId = getActiveModelId('analysis') ?? getActiveModelId('quality') ?? getActiveModelId('generation');
   if (!modelId) {
@@ -373,11 +375,13 @@ export async function runLocalQualityEvaluation(
 
   // Set all axes to 'waiting' initially
   for (const axis of qualityAxisKeys) {
+    if (signal?.aborted) throw new DOMException('Aborted', 'AbortError');
     onAxisProgress?.(axis, 'waiting');
   }
 
   // Evaluate each axis individually
   for (const axis of qualityAxisKeys) {
+    if (signal?.aborted) throw new DOMException('Aborted', 'AbortError');
     onAxisProgress?.(axis, 'generating');
     const label = axisLabels[axis];
     const prompt = buildAxisPrompt(inputText, label.question, inputAssistant);
