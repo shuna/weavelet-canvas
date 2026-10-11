@@ -1,3 +1,4 @@
+import { applyExternalSnapshot } from '../../applyExternalSnapshot';
 import { decompress } from 'lz-string';
 import type { StorageValue } from 'zustand/middleware';
 
@@ -15,16 +16,11 @@ import { getOrCreateDeviceId } from '@utils/deviceId';
 import useCloudAuthStore from '@store/cloud-auth-store';
 import useStore from '@store/store';
 import {
-  createPersistedChatDataState,
   migratePersistedState,
   needsDataMigration,
-  prepareHydratedState,
-  finishHydratedState,
   type PersistedStoreState,
 } from '@store/persistence';
-import { saveChatData } from '@store/storage/IndexedDbStorage';
 import { STORE_VERSION } from '@store/version';
-import { invalidateAiTasks } from '@hooks/aiTaskLifetime';
 import i18next from 'i18next';
 import { showToast } from '@utils/showToast';
 import type { CloudSyncProvider, CloudSyncTarget } from '../types';
@@ -73,9 +69,22 @@ const getCloudSyncTarget = (): CloudSyncTarget | null => {
     return null;
   }
 
+  if (!cloudkitState.connectionId) state.setProviderSession('cloudkit', { connectionId: crypto.randomUUID() });
   return {
     accessToken: cloudkitState.sessionToken,
     fileId: CLOUDKIT_DEFAULT_RECORD_NAME,
+  };
+};
+
+const cloudKitSessionGuard = (target: CloudSyncTarget) => {
+  const initial = useCloudAuthStore.getState().providers.cloudkit;
+  const { connectionId, sessionToken } = initial;
+  const valid = sessionToken === target.accessToken;
+  return () => {
+    const current = useCloudAuthStore.getState().providers.cloudkit;
+    return valid && !!current.sessionToken && (connectionId
+      ? current.connectionId === connectionId
+      : current.sessionToken === sessionToken);
   };
 };
 
@@ -120,20 +129,14 @@ const normalizeRemoteRecord = (
   return { state: parsed as Partial<PersistedStoreState>, version: STORE_VERSION };
 };
 
-const hydrateFromServerRecord = async (record: CloudKitRecord): Promise<boolean> => {
+const hydrateFromServerRecord = async (record: CloudKitRecord, observed: ReturnType<typeof useStore.getState>, isCurrent: () => boolean): Promise<boolean> => {
   const normalized = normalizeRemoteRecord(record);
   const remotePersistedState = migratePersistedState(
     structuredClone(normalized.state),
     normalized.version
   ) as Partial<PersistedStoreState>;
 
-  invalidateAiTasks();
-  const base = useStore.getState();
-  const prepared = await prepareHydratedState(base, remotePersistedState);
-  if (base !== useStore.getState()) return false;
-  const hydratedState = finishHydratedState(prepared);
-  useStore.setState(hydratedState);
-  await saveChatData(createPersistedChatDataState(useStore.getState()));
+  if (!await applyExternalSnapshot(remotePersistedState, isCurrent, observed)) return false;
 
   if (needsDataMigration()) {
     useStore.getState().setMigrationUiState({
@@ -161,11 +164,13 @@ export const createCloudKitCloudProvider = <S>(): CloudSyncProvider<S> => ({
     const config = getCloudKitConfig();
     if (!config) return null;
 
+    const isCurrent = cloudKitSessionGuard(target);
     const result = await fetchCloudKitRecord(
       config,
       target.accessToken,
       CLOUDKIT_DEFAULT_RECORD_NAME
     );
+    if (!isCurrent()) throw new Error('CloudKit connection changed during sync.');
     maybeUpdateToken(result.newWebAuthToken);
 
     if (!result.record) return null;
@@ -186,7 +191,10 @@ export const createCloudKitCloudProvider = <S>(): CloudSyncProvider<S> => ({
     const config = getCloudKitConfig();
     if (!config) return;
 
+    const observed = useStore.getState();
+    const isCurrent = cloudKitSessionGuard(target);
     const compressed = await file.text();
+    if (!isCurrent()) throw new Error('CloudKit connection changed during sync.');
     const payload = lzStringToBase64(compressed);
     const recordChangeTag = getRecordChangeTag();
     // Compute updatedAt once — this exact value is written to the record
@@ -205,16 +213,18 @@ export const createCloudKitCloudProvider = <S>(): CloudSyncProvider<S> => ({
         updatedAt
       );
 
+      if (!isCurrent()) throw new Error('CloudKit connection changed during sync.');
       updateRecordChangeTag(result.record.recordChangeTag);
       maybeUpdateToken(result.newWebAuthToken);
     } catch (e: unknown) {
-      if (e instanceof CloudKitConflictError) {
+      if (e instanceof CloudKitConflictError && isCurrent()) {
         // Fetch latest server record
         const fetchResult = await fetchCloudKitRecord(
           config,
           target.accessToken,
           CLOUDKIT_DEFAULT_RECORD_NAME
         );
+        if (!isCurrent()) throw new Error('CloudKit connection changed during sync.');
         maybeUpdateToken(fetchResult.newWebAuthToken);
 
         if (!fetchResult.record) {
@@ -229,6 +239,7 @@ export const createCloudKitCloudProvider = <S>(): CloudSyncProvider<S> => ({
             undefined,
             updatedAt
           );
+          if (!isCurrent()) throw new Error('CloudKit connection changed during sync.');
           updateRecordChangeTag(retryResult.record.recordChangeTag);
           maybeUpdateToken(retryResult.newWebAuthToken);
           return;
@@ -249,6 +260,7 @@ export const createCloudKitCloudProvider = <S>(): CloudSyncProvider<S> => ({
             fetchResult.record.recordChangeTag,
             updatedAt
           );
+          if (!isCurrent()) throw new Error('CloudKit connection changed during sync.');
           updateRecordChangeTag(retryResult.record.recordChangeTag);
           maybeUpdateToken(retryResult.newWebAuthToken);
         } else {
@@ -256,7 +268,7 @@ export const createCloudKitCloudProvider = <S>(): CloudSyncProvider<S> => ({
           // so the generic layer updates its guard-metrics baseline.
           updateRecordChangeTag(fetchResult.record.recordChangeTag);
           const normalized = normalizeRemoteRecord(fetchResult.record);
-          if (!await hydrateFromServerRecord(fetchResult.record)) {
+          if (!await hydrateFromServerRecord(fetchResult.record, observed, isCurrent)) {
             throw new Error('Local data changed while applying the CloudKit server state. Retry sync.');
           }
 
@@ -275,11 +287,13 @@ export const createCloudKitCloudProvider = <S>(): CloudSyncProvider<S> => ({
     const config = getCloudKitConfig();
     if (!config) return;
 
+    const isCurrent = cloudKitSessionGuard(target);
     const result = await deleteCloudKitRecord(
       config,
       target.accessToken,
       CLOUDKIT_DEFAULT_RECORD_NAME
     );
+    if (!isCurrent()) throw new Error('CloudKit connection changed during sync.');
     maybeUpdateToken(result.newWebAuthToken);
   },
 

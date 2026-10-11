@@ -1,0 +1,18 @@
+import useStore from '@store/store';
+import { invalidateAiTasks } from '@hooks/aiTaskLifetime';
+import { createPersistedChatDataState, prepareHydratedState, reportHydratedStateCommitted, type PersistedStoreState } from '@store/persistence';
+import { saveChatData } from './IndexedDbStorage';
+
+// A changed session or local edit leaves the downloaded payload unapplied.
+export async function applyExternalSnapshot(payload: Partial<PersistedStoreState>, sessionIsCurrent: () => boolean, observed = useStore.getState()): Promise<boolean> {
+  if (!sessionIsCurrent() || observed !== useStore.getState()) return false;
+  invalidateAiTasks();
+  const base = useStore.getState();
+  const prepared = await prepareHydratedState(base, payload);
+  if (base !== useStore.getState() || !sessionIsCurrent()) return false;
+  useStore.setState({ ...prepared.state, branchHistoryPast: [], branchHistoryFuture: [] });
+  const applied = useStore.getState();
+  await saveChatData(createPersistedChatDataState(applied));
+  if (applied === useStore.getState()) reportHydratedStateCommitted(prepared);
+  return sessionIsCurrent();
+}

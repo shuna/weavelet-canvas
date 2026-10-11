@@ -3,7 +3,7 @@ import type { PersistStorage } from 'zustand/middleware';
 import { createJSONStorage } from 'zustand/middleware';
 import useCloudAuthStore from '@store/cloud-auth-store';
 import useStore from '@store/store';
-import { createLocalStoragePartializedState, createPartializedState, prepareHydratedState, finishHydratedState, migratePersistedState, type PersistedStoreState } from '@store/persistence';
+import { createLocalStoragePartializedState, createPartializedState, prepareHydratedState, finishHydratedState, reportHydratedStateCommitted, migratePersistedState, type PersistedStoreState } from '@store/persistence';
 import { hasActiveStreamingBuffers } from '@utils/streamingBuffer';
 import { isGoogleAuthError } from '@api/google-api';
 import { showToast } from '@utils/showToast';
@@ -83,7 +83,7 @@ async function applySyncedSnapshot(target: EncryptedDriveSync, before: Snapshot,
   const selectedId = state.chats?.[state.currentChatIndex]?.id;
   const prepared = await prepareHydratedState(state,
     migratePersistedState(received.state, received.version ?? STORE_VERSION) as Partial<PersistedStoreState>);
-  if (target !== session || state !== useStore.getState() || !await sameSnapshot(preparedBase, currentSnapshot())) return false;
+  if (!await sameSnapshot(preparedBase, currentSnapshot()) || target !== session || state !== useStore.getState()) return false;
   const hydrated = finishHydratedState(prepared);
   if (selectedId && hydrated.chats) {
     const index = hydrated.chats.findIndex(chat => chat.id === selectedId);
@@ -91,8 +91,11 @@ async function applySyncedSnapshot(target: EncryptedDriveSync, before: Snapshot,
   }
   applyingRemote = true;
   try {
-    useStore.setState(hydrated);
+    useStore.setState({ ...hydrated, branchHistoryPast: [], branchHistoryFuture: [] });
+    const applied = useStore.getState();
     await persistChatSnapshot(currentSnapshot());
+    if (target !== session) return false;
+    if (applied === useStore.getState()) reportHydratedStateCommitted(prepared);
     await target.acceptLocal(received);
     await markSyncChanges(before, received);
     if (!await sameSnapshot(received, currentSnapshot())) pending = { session: target, value: currentSnapshot() };

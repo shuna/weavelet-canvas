@@ -1,3 +1,4 @@
+import { applyExternalSnapshot } from '@store/storage/applyExternalSnapshot';
 import SyncDots from './SyncDots';
 import { useSyncProgressDisplay } from '@hooks/useSyncProgressDisplay';
 import { SyncConflictError, useSyncReview, type Resolution } from '@store/storage/google/conflicts';
@@ -29,16 +30,12 @@ import createGoogleCloudStorage, {
 } from '@store/storage/GoogleCloudStorage';
 import { SYNC_FOLDER_TYPE, DEFAULT_SYNC_FOLDER_NAME, nextSyncFolderName } from '@store/storage/google/transport';
 import {
-  createPersistedChatDataState,
   createLocalStoragePartializedState,
   createPartializedState,
-  prepareHydratedState,
-  finishHydratedState,
   migratePersistedState,
   needsDataMigration,
   PersistedStoreState,
 } from '@store/persistence';
-import { saveChatData } from '@store/storage/IndexedDbStorage';
 import { STORE_VERSION } from '@store/version';
 
 import GoogleSyncButton, { GoogleSyncButtonHandle } from './GoogleSyncButton';
@@ -479,6 +476,7 @@ const GooglePopup = ({
       const encrypted = selectedFile?.mimeType === SYNC_FOLDER_TYPE;
       if (encrypted) await unlockSelected();
       else syncPhase('downloading');
+      const observed = useStore.getState();
       const remoteStorageValue = await syncStage(0, 2, () => encrypted
         ? pullEncryptedGoogleSync()
         : getDriveFileTyped(_fileId, googleAccessToken));
@@ -488,19 +486,14 @@ const GooglePopup = ({
           normalizedRemote.state,
           normalizedRemote.version
         ) as Partial<PersistedStoreState>;
-        const observed = useStore.getState();
-        const prepared = await prepareHydratedState(observed, remotePersistedState);
-        if (observed !== useStore.getState()) throw new Error('Local data changed while preparing the downloaded snapshot. Retry with the latest changes.');
-        const hydratedState = finishHydratedState(prepared);
-
         syncPhase('saving');
-        // Keep the local format and persist chat data before publishing the hydrated state.
-        await saveChatData(createPersistedChatDataState({ ...useStore.getState(), ...hydratedState }));
         useStore.persist.setOptions({
           storage: createJSONStorage(() => compressedStorage),
           partialize: (state) => createLocalStoragePartializedState(state),
         });
-        useStore.setState(hydratedState);
+        if (!await applyExternalSnapshot(remotePersistedState, () => useGStore.getState().googleAccessToken === googleAccessToken, observed)) {
+          throw new Error('Local data or connection changed while preparing the downloaded snapshot.');
+        }
         if (encrypted) {
           await acceptGoogleSyncLocal(snapshot());
           activateCloudSyncTarget(operationFileId);
