@@ -202,6 +202,13 @@ const GoogleSync = ({ clientId, openOnMount = false, showEntry = true, isModalOp
   const setSyncStatus = useGStore((state) => state.setSyncStatus);
   const syncTargetConfirmed = useGStore((state) => state.syncTargetConfirmed);
   const progress = useSyncProgressDisplay();
+  const [showSlowSync, setShowSlowSync] = useState(false);
+  useEffect(() => {
+    setShowSlowSync(false);
+    if (syncStatus !== 'syncing') return;
+    const timer = setTimeout(() => setShowSlowSync(true), 10_000);
+    return () => clearTimeout(timer);
+  }, [syncStatus]);
   const [bannerTarget, setBannerTarget] = useState<HTMLElement | null>(null);
   useEffect(() => {
     setBannerTarget(document.getElementById('google-sync-banner-overlay'));
@@ -287,7 +294,7 @@ const GoogleSync = ({ clientId, openOnMount = false, showEntry = true, isModalOp
         <span className='min-w-0 truncate' title={t('name') as string}>{t('name')}</span>
         {cloudSync && <SyncIcon status={syncStatus} />}
       </div>}
-      {bannerTarget && !isModalOpen && (syncStatus === 'syncing' || syncStatus === 'error') && createPortal(
+      {bannerTarget && !isModalOpen && ((syncStatus === 'syncing' && showSlowSync) || syncStatus === 'error') && createPortal(
         <button type='button' onClick={() => setIsModalOpen(true)}
           data-google-sync-banner
           className={`absolute inset-x-0 top-0 flex h-6 items-center justify-center gap-1 px-3 text-xs text-white shadow-sm ${syncStatus === 'error' ? 'bg-red-700' : 'bg-emerald-700'}`}
