@@ -124,18 +124,20 @@ const OpfsFileBrowser = ({
     setDeleting('__all__');
     try {
       const store = useStore.getState();
+      const removedIds: string[] = [];
       for (const entry of entries) {
         const removal = await removeAssets(entry.modelId);
-        if (removal.status !== 'removed') return;
+        if (removal.status === 'removed') removedIds.push(entry.modelId);
       }
-      // Clean store for all deleted models
-      for (const { modelId: id } of entries) {
+      // Keep metadata for models whose stop/remove operation was blocked.
+      for (const id of removedIds) {
         store.removeSavedModelMeta(id);
         store.removeLocalModel(id);
       }
-      // Clear active assignments
-      for (const task of Object.keys(store.activeLocalModels)) {
-        store.setActiveLocalModel(task as any, null);
+      for (const task of Object.keys(store.activeLocalModels) as LocalModelTask[]) {
+        if (removedIds.includes(store.activeLocalModels[task] ?? '')) {
+          store.setActiveLocalModel(task, null);
+        }
       }
       onStorageChanged?.();
       await refresh();

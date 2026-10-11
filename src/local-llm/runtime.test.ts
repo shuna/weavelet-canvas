@@ -6,6 +6,7 @@ import type { LocalModelDefinition } from './types';
 class FakeWorker {
   static instances: FakeWorker[] = [];
   static autoRespond = true;
+  static unloadError = false;
   onmessage: ((event: MessageEvent) => void) | null = null;
   onerror: ((event: ErrorEvent) => void) | null = null;
   messages: Array<Record<string, unknown>> = [];
@@ -17,7 +18,9 @@ class FakeWorker {
 
   postMessage(message: Record<string, unknown>): void {
     this.messages.push(message);
-    if (FakeWorker.autoRespond && (message.type === 'init' || message.type === 'load' || message.type === 'unload')) {
+    if (FakeWorker.autoRespond && message.type === 'unload' && FakeWorker.unloadError) {
+      queueMicrotask(() => this.emit({ id: message.id, type: 'error', message: 'worker refused unload' }));
+    } else if (FakeWorker.autoRespond && (message.type === 'init' || message.type === 'load' || message.type === 'unload')) {
       queueMicrotask(() => this.emit({ id: message.id, type: message.type === 'load' ? 'loaded' : 'ready' }));
     }
   }
@@ -56,6 +59,7 @@ describe('LocalModelRuntime request ownership', () => {
   beforeEach(() => {
     FakeWorker.instances = [];
     FakeWorker.autoRespond = true;
+    FakeWorker.unloadError = false;
     vi.stubGlobal('Worker', FakeWorker);
   });
 
@@ -124,5 +128,17 @@ describe('LocalModelRuntime request ownership', () => {
     await Promise.all([loadingRejected, ownerRejected]);
     await expect(runtime.ensureLoaded(definition.id, 'new-owner')).rejects.toMatchObject({ name: 'AbortError' });
     expect(worker.terminated).toBe(true);
+    worker.emit({ id: 1, type: 'error', message: 'late load failure' });
+    expect(FakeWorker.instances).toHaveLength(1);
+  });
+
+  it('does not report force unload as complete when the worker rejects it', async () => {
+    const runtime = new LocalModelRuntime();
+    await runtime.loadModel(definition, provider);
+    FakeWorker.unloadError = true;
+
+    expect(await runtime.unloadModel(definition.id, { force: true })).toBe('blocked');
+    expect(runtime.isLoaded(definition.id)).toBe(true);
+    expect(FakeWorker.instances[0].terminated).toBe(false);
   });
 });
