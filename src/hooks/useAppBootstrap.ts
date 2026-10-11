@@ -18,6 +18,7 @@ import {
   setChatDataWritesBlocked,
 } from '@store/storage/IndexedDbStorage';
 import { notifyStorageError } from '@store/storage/storageErrors';
+import { getProxyConfig, sendAck } from '@utils/proxyClient';
 import { updateStreamCheckpoints } from '@utils/streamDb';
 import { getStreamCheckpointTargets } from './submitRuntime';
 import { registerSnapshotFlushCallback } from '@utils/streamingBuffer';
@@ -88,7 +89,11 @@ const useAppBootstrap = () => {
             const targets = getStreamCheckpointTargets();
             await saveChatData(snapshot);
             const currentRequests = new Set(getStreamCheckpointTargets().map(target => target.requestId));
-            await updateStreamCheckpoints(snapshot, targets.filter(target => currentRequests.has(target.requestId)));
+            const acknowledged = await updateStreamCheckpoints(snapshot, targets.filter(target => currentRequests.has(target.requestId)));
+            const proxy = getProxyConfig();
+            if (proxy) for (const record of acknowledged) {
+              if (record.proxySessionId) sendAck(proxy, record.proxySessionId);
+            }
           } catch (error) {
             notifyStorageError(error);
           }

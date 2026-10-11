@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 vi.mock('@store/debug-store', () => ({ debugReport: vi.fn() }));
 vi.mock('./streamDb', () => ({
   saveRequest: vi.fn().mockResolvedValue(undefined),
+  deleteRequest: vi.fn().mockResolvedValue(undefined),
   cleanupStale: vi.fn().mockResolvedValue(undefined),
 }));
 
@@ -134,4 +135,24 @@ describe('Service Worker stream heartbeat', () => {
     });
     expect(replacementController.postMessage).not.toHaveBeenCalled();
   });
+  it('does not start the worker when cancellation occurs during initial record save', async () => {
+    const controller = { postMessage: vi.fn() };
+    Object.defineProperty(globalThis, 'navigator', { value: { serviceWorker: { controller } }, configurable: true });
+    const db = await import('./streamDb');
+    let finishSave!: () => void;
+    vi.mocked(db.saveRequest).mockImplementationOnce(() => new Promise<void>(resolve => { finishSave = resolve; }));
+    const abort = new AbortController();
+    const { startStream } = await import('./swBridge');
+    const pending = startStream({ requestId: 'delayed', chatId: 'chat', nodeId: 'node', endpoint: 'https://example.test',
+      headers: {}, body: {}, chatIndex: 0, messageIndex: 0, signal: abort.signal,
+      onChunk: vi.fn(), onDone: vi.fn(), onError: vi.fn() });
+    const rejected = expect(pending).rejects.toMatchObject({ name: 'AbortError' });
+    await vi.advanceTimersByTimeAsync(600);
+    abort.abort();
+    finishSave();
+    await rejected;
+    expect(controller.postMessage).not.toHaveBeenCalled();
+    expect(db.deleteRequest).toHaveBeenCalledWith('delayed');
+  });
+
 });

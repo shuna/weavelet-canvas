@@ -19,8 +19,10 @@ import {
   saveRequest as saveStreamRecord,
   setGenerationId as setStreamGenerationId,
   setStreamObservation,
+  markStreamApplied,
+  updateStatus as updateStreamStatus,
 } from '@utils/streamDb';
-import { getProxyConfig, sendAck, sendCancel, parseProxySse, type ProxyConfig } from '@utils/proxyClient';
+import { getProxyConfig, sendCancel, parseProxySse, type ProxyConfig } from '@utils/proxyClient';
 import { cancelGeneration } from '@api/openrouter';
 import {
   appendToStreamingBuffer,
@@ -28,6 +30,7 @@ import {
   createStreamingContentHash,
   finalizeStreamingBuffer,
   discardStreamingBuffer,
+  requestSnapshotFlush,
   initializeStreamingBuffer,
   isBufferingNode,
   isStreamingContentHash,
@@ -904,7 +907,9 @@ export const executeSubmitStream = async ({
     // --- Path 1: SW available (with optional proxy) ---
     // Debug option: set localStorage.setItem('disableSW', '1') to bypass SW
     const swDisabled = typeof localStorage !== 'undefined' && localStorage.getItem('disableSW') === '1';
-    if (!swDisabled && await swBridge.waitForController()) {
+    const swAvailable = !swDisabled && await swBridge.waitForController();
+    if (!canApply()) return;
+    if (swAvailable) {
       const requestId = crypto.randomUUID();
       const prepared = prepareStreamRequest(
         resolvedProvider.endpoint,
@@ -939,7 +944,6 @@ export const executeSubmitStream = async ({
 
         const cleanup = () => {
           clearInterval(checkStop);
-          deleteStreamRecord(requestId).catch(() => {});
           debugReport(`submit:${sessionId}`, {
             label: 'Submit Session',
             status: 'active',
@@ -961,6 +965,7 @@ export const executeSubmitStream = async ({
         }, 500);
 
         swBridge.startStream({
+          signal: abortController.signal,
           requestId,
           chatId,
           nodeId: targetNodeId,
@@ -979,10 +984,6 @@ export const executeSubmitStream = async ({
               status: 'done',
               detail: `${formatDebugTime()} onDone ${requestId.slice(0, 8)}`,
             });
-            // ACK proxy to free KV cache
-            if (meta?.proxySessionId && proxyConfig) {
-              sendAck(proxyConfig, meta.proxySessionId);
-            }
             resolve();
           },
           onError: (error, meta) => {
@@ -999,6 +1000,13 @@ export const executeSubmitStream = async ({
           },
           proxyConfig: swProxyConfig,
         }).then((handle) => {
+          if (!canApply() || !useStore.getState().generatingSessions[sessionId]) {
+            swCancelledByUser = true;
+            handle.cancel();
+            cleanup();
+            resolve();
+            return;
+          }
           swHandle = handle;
           swCancellers.set(sessionId, () => handle.cancel());
           debugReport(`submit:${sessionId}`, {
@@ -1143,6 +1151,7 @@ export const executeSubmitStream = async ({
         ]);
       }
 
+      let terminalStatus: 'completed' | 'failed' | 'interrupted' = 'failed';
       try {
         while (reading && !abortController.signal.aborted) {
           const { done, value } = await readWithTimeout();
@@ -1233,15 +1242,14 @@ export const executeSubmitStream = async ({
             dbBuffered += resultString;
           }
         }
+        terminalStatus = abortController.signal.aborted ? 'interrupted' : 'completed';
       } finally {
         reader.cancel();
         reader.releaseLock();
         // Final streamDb flush
         flushDbBuffer();
         await dbFlushChain;
-        // ACK proxy to free KV cache (best-effort, even on error/abort)
-        sendAck(proxyConfig, proxySessionId);
-        deleteStreamRecord(requestId).catch(() => {});
+        await updateStreamStatus(requestId, abortController.signal.aborted ? 'interrupted' : terminalStatus);
       }
 
       return;
@@ -1352,6 +1360,16 @@ export const executeSubmitStream = async ({
     if (canApply()) {
       flushQueuedChunks(chatId, targetNodeId);
       finalizeStreamingNode(chatId, targetNodeId);
+      const requestId = sessionRequestIds.get(sessionId);
+      const node = useStore.getState().chats?.find(chat => chat.id === chatId)?.branchTree?.nodes[targetNodeId];
+      if (requestId && node && !isStreamingContentHash(node.contentHash)) {
+        try {
+          await markStreamApplied(requestId, node.contentHash, node.role);
+          requestSnapshotFlush();
+        } catch (error) {
+          debugReport(`recovery-record:${requestId}`, { status: 'error', detail: `Finalized recovery checkpoint failed: ${String(error)}` });
+        }
+      }
     }
   }
 

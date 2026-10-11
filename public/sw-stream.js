@@ -773,11 +773,10 @@ async function handleStartStream(msg, port) {
     postDebug('flush buffered start len=' + bufferedText.length);
     await flushBufferedText();
     postDebug('flush buffered done len=' + bufferedText.length);
-    // Stream completed — delete the recovery record since we'll notify the
-    // client directly.  Using delete instead of dbUpdate avoids a get-put
-    // race where a concurrent client delete could be undone by a later put.
-    await dbDelete(requestId).catch(function() {});
-    postDebug('record deleted');
+    // Notification does not prove the primary chat has been saved. Keep the
+    // terminal buffer until the page acknowledges its committed content hash.
+    await dbUpdate(requestId, { status: 'completed', updatedAt: Date.now() }).catch(function() {});
+    postDebug('record retained until primary save');
     postDebug(
       'posting sw-done generation=' + (generationId || '-') +
       ' finish=' + (finishReason || '-')
@@ -805,10 +804,9 @@ async function handleStartStream(msg, port) {
     );
     await flushBufferedText();
     postDebug('flush buffered after error len=' + bufferedText.length);
-    // For errors/cancellation, also delete — the client gets notified via
-    // sw-error/sw-cancelled and can decide how to handle it.
-    await dbDelete(requestId).catch(function() {});
-    postDebug('record deleted after error');
+    // Keep partial output recoverable until the primary chat snapshot commits.
+    await dbUpdate(requestId, { status: isAbort ? 'interrupted' : 'failed', error, updatedAt: Date.now() }).catch(function() {});
+    postDebug('record retained after error');
     postToClient({
       type: isAbort ? 'sw-cancelled' : 'sw-error',
       requestId,

@@ -15,6 +15,7 @@ import {
   deleteRequest,
   cleanupStale,
   updateStreamCheckpoints,
+  markStreamApplied,
   type StreamRecord,
 } from './streamDb';
 
@@ -211,4 +212,16 @@ describe('saved checkpoints', () => {
     expect(await getRequest('mismatch')).toBeUndefined();
     expect(await getRequest('legacy')).toBeDefined();
   });
+  it('keeps finalized terminal output until the matching primary snapshot succeeds', async () => {
+    await saveRequest(makeRecord({ chatId: 'chat', nodeId: 'node', status: 'failed', bufferedText: 'partial', proxySessionId: 'proxy' }));
+    await markStreamApplied('req-1', 'final', 'assistant');
+    expect(await getRequest('req-1')).toMatchObject({ bufferedText: 'partial', status: 'failed', appliedHash: 'final' });
+    expect(await updateStreamCheckpoints(snapshot('older'), [])).toEqual([]);
+    expect(await getRequest('req-1')).toBeDefined();
+    expect(await updateStreamCheckpoints(snapshot('final'), [])).toEqual([expect.objectContaining({ proxySessionId: 'proxy' })]);
+    expect(await getRequest('req-1')).toBeUndefined();
+    await markStreamApplied('req-1', 'final', 'assistant');
+    expect(await getRequest('req-1')).toBeUndefined();
+  });
+
 });

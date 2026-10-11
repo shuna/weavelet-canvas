@@ -182,6 +182,9 @@ export const registerSnapshotFlushCallback = (onFlush: () => void): void => {
   snapshotFlushCallback = onFlush;
 };
 
+/** Reuse the bootstrap save queue after recovery metadata has committed. */
+export const requestSnapshotFlush = (): void => { snapshotFlushCallback?.(); };
+
 /** Called internally when a streaming buffer is first created. */
 export const ensureSnapshotFlushRunning = (): void => {
   if (snapshotFlushTimer != null || !snapshotFlushCallback) return;

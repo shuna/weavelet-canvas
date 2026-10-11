@@ -61,6 +61,13 @@ vi.mock('@utils/swBridge', () => ({
   startStream: vi.fn(),
 }));
 
+vi.mock('@utils/streamDb', () => ({
+  appendText: vi.fn().mockResolvedValue(undefined), deleteRequest: vi.fn().mockResolvedValue(undefined),
+  saveRequest: vi.fn().mockResolvedValue(undefined), setGenerationId: vi.fn().mockResolvedValue(undefined),
+  setStreamObservation: vi.fn().mockResolvedValue(undefined), markStreamApplied: vi.fn().mockResolvedValue(undefined),
+  updateStatus: vi.fn().mockResolvedValue(undefined),
+}));
+
 // ---------------------------------------------------------------------------
 // Mock local-llm/runtime for executeLocalSubmit tests
 // ---------------------------------------------------------------------------
@@ -639,6 +646,106 @@ describe('stream end status via SW path', () => {
     // The status should remain 'interrupted', NOT be overwritten with 'completed'
     const status = useStreamEndStatusStore.getState().statuses['node-assistant'];
     expect(status).toBe('interrupted');
+  });
+
+  it('does not start a stream after cancellation during controller wait', async () => {
+    const sessionId = 'delayed-start';
+    mockState = makeMockState(sessionId);
+    vi.mocked(prepareStreamRequest).mockReturnValue({ endpoint: 'https://example.test', headers: {}, body: {} });
+    const abortController = createSubmitAbortController(sessionId);
+    let ready!: (value: boolean) => void;
+    vi.mocked(swBridge.waitForController).mockImplementationOnce(() => new Promise<boolean>(resolve => { ready = resolve; }));
+    vi.mocked(swBridge.startStream).mockClear();
+    const pending = executeSubmitStream({ sessionId, chatId: 'chat-1', chatIndex: 0, messageIndex: 0, targetNodeId: 'node-assistant',
+      messages: [{ role: 'user', content: [{ type: 'text', text: 'hi' }] }],
+      config: { model: 'test', max_tokens: 100, temperature: 1, presence_penalty: 0, top_p: 1, frequency_penalty: 0, stream: true },
+      resolvedProvider: { endpoint: 'https://example.test', key: 'secret' }, abortController, t: key => key });
+    abortController.abort();
+    ready(true);
+    await pending;
+    expect(swBridge.startStream).not.toHaveBeenCalled();
+  });
+
+  it('cancels a handle delivered after the removed session has already settled', async () => {
+    vi.useFakeTimers();
+    const sessionId = 'delayed-start';
+    mockState = makeMockState(sessionId);
+    vi.mocked(prepareStreamRequest).mockReturnValue({ endpoint: 'https://example.test', headers: {}, body: {} });
+    const abortController = createSubmitAbortController(sessionId);
+    vi.mocked(swBridge.waitForController).mockResolvedValue(true);
+    let deliver!: (value: swBridge.SwStreamHandle) => void;
+    vi.mocked(swBridge.startStream).mockImplementationOnce(() => new Promise(resolve => { deliver = resolve; }));
+    const pending = executeSubmitStream({ sessionId, chatId: 'chat-1', chatIndex: 0, messageIndex: 0, targetNodeId: 'node-assistant',
+      messages: [{ role: 'user', content: [{ type: 'text', text: 'hi' }] }],
+      config: { model: 'test', max_tokens: 100, temperature: 1, presence_penalty: 0, top_p: 1, frequency_penalty: 0, stream: true },
+      resolvedProvider: { endpoint: 'https://example.test', key: 'secret' }, abortController, t: key => key });
+    await vi.advanceTimersByTimeAsync(1);
+    mockState.generatingSessions = {};
+    await vi.advanceTimersByTimeAsync(600);
+    await pending;
+    const cancel = vi.fn();
+    deliver({ cancel });
+    await Promise.resolve();
+    expect(cancel).toHaveBeenCalledOnce();
+    clearSubmitSessionRuntime(sessionId);
+  });
+
+  it.each(['done', 'error'])('retains the SW recovery record after %s instead of deleting during cleanup', async (terminal) => {
+    const sessionId = 'terminal-record';
+    mockState = makeMockState(sessionId);
+    vi.mocked(prepareStreamRequest).mockReturnValue({ endpoint: 'https://example.test', headers: {}, body: {} });
+    const abortController = createSubmitAbortController(sessionId);
+    const db = await import('@utils/streamDb');
+    vi.mocked(db.deleteRequest).mockClear();
+    vi.mocked(db.markStreamApplied).mockClear();
+    vi.mocked(swBridge.waitForController).mockResolvedValue(true);
+    vi.mocked(swBridge.startStream).mockImplementationOnce(async params => {
+      params.onChunk('saved answer');
+      if (terminal === 'done') params.onDone({ finishReason: 'stop', proxySessionId: 'proxy-session' });
+      else params.onError('network lost');
+      return { cancel: vi.fn() };
+    });
+    const fetchSpy = vi.spyOn(globalThis, 'fetch');
+    try {
+      const pending = executeSubmitStream({ sessionId, chatId: 'chat-1', chatIndex: 0, messageIndex: 0, targetNodeId: 'node-assistant',
+      messages: [{ role: 'user', content: [{ type: 'text', text: 'hi' }] }],
+      config: { model: 'test', max_tokens: 100, temperature: 1, presence_penalty: 0, top_p: 1, frequency_penalty: 0, stream: true },
+      resolvedProvider: { endpoint: 'https://example.test', key: 'secret' }, abortController, t: key => key });
+      if (terminal === 'error') await expect(pending).rejects.toThrow('network lost');
+      else await pending;
+      expect(db.deleteRequest).not.toHaveBeenCalled();
+      expect(db.markStreamApplied).toHaveBeenCalledWith(expect.any(String),
+        (mockState.chats as any[])[0].branchTree.nodes['node-assistant'].contentHash, 'assistant');
+      expect(fetchSpy).not.toHaveBeenCalled();
+    } finally { fetchSpy.mockRestore(); clearSubmitSessionRuntime(sessionId); }
+  });
+
+  it.each(['done', 'error'])('retains direct proxy terminal %s output without premature ACK', async (terminal) => {
+    const sessionId = 'terminal-record';
+    mockState = makeMockState(sessionId);
+    vi.mocked(prepareStreamRequest).mockReturnValue({ endpoint: 'https://example.test', headers: {}, body: {} });
+    const abortController = createSubmitAbortController(sessionId);
+    const db = await import('@utils/streamDb');
+    vi.mocked(db.deleteRequest).mockClear();
+    vi.mocked(db.markStreamApplied).mockClear();
+    vi.mocked(swBridge.waitForController).mockResolvedValue(false);
+    vi.mocked(db.updateStatus).mockClear();
+    const llm = 'data: {"choices":[{"delta":{"content":"saved answer"}}]}\n\n';
+    const wire = `id: 1\ndata: ${JSON.stringify(llm)}\n\nevent: ${terminal}\ndata: ${JSON.stringify({ error: 'network lost' })}\n\n`;
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(wire));
+    try {
+      const pending = executeSubmitStream({ sessionId, chatId: 'chat-1', chatIndex: 0, messageIndex: 0, targetNodeId: 'node-assistant',
+      messages: [{ role: 'user', content: [{ type: 'text', text: 'hi' }] }],
+      config: { model: 'test', max_tokens: 100, temperature: 1, presence_penalty: 0, top_p: 1, frequency_penalty: 0, stream: true },
+      resolvedProvider: { endpoint: 'https://example.test', key: 'secret' }, abortController, t: key => key });
+      if (terminal === 'error') await expect(pending).rejects.toThrow('network lost');
+      else await pending;
+      expect(db.deleteRequest).not.toHaveBeenCalled();
+      expect(db.updateStatus).toHaveBeenCalledWith(expect.any(String), terminal === 'done' ? 'completed' : 'failed');
+      expect(db.markStreamApplied).toHaveBeenCalledOnce();
+      expect(fetchSpy).toHaveBeenCalledOnce();
+      expect(fetchSpy.mock.calls[0][0]).toBe('https://proxy.test/api/stream');
+    } finally { fetchSpy.mockRestore(); clearSubmitSessionRuntime(sessionId); }
   });
 
   it('sets max_tokens status when SW path reports finish_reason=length', async () => {

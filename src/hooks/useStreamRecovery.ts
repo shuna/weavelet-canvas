@@ -1,3 +1,4 @@
+import { requestSnapshotFlush } from '@utils/streamingBuffer';
 import { recordOpenRouterObservation } from '@utils/openrouterObservation';
 import { observeOpenRouterUsage } from '@utils/openrouterControls';
 import { useEffect, useRef } from 'react';
@@ -10,7 +11,6 @@ import { cloneChatAtIndex } from '@utils/chatShallowClone';
 import { register } from '@utils/swBridge';
 import {
   recoverFromProxy,
-  sendAck,
   parseProxySse,
   type ProxyConfig,
 } from '@utils/proxyClient';
@@ -420,14 +420,10 @@ async function recoverPendingInner(manual: boolean, debugId: string) {
             const proxyText = await tryProxyRecovery(record, getCurrentMessageText(latest.message), recordAbort.signal);
             if (!currentTarget()) continue;
             if (proxyText) {
-              // Keep the proxy result recoverable before ACK; the primary snapshot is a separate commit.
+              // Keep the proxy result recoverable until the primary snapshot commits.
               await saveRequest({ ...record, bufferedText: proxyText, updatedAt: Date.now() });
               if (!currentTarget()) continue;
               if (applyText(proxyText)) { recoveredCount++; proxyRecoveredThisRecord = true; }
-            }
-            if (record.proxySessionId && currentTarget()) {
-              const state = useStore.getState();
-              sendAck({ endpoint: state.proxyEndpoint.replace(/\/+$/, ''), authToken: state.proxyAuthToken || undefined }, record.proxySessionId);
             }
           } catch {
             debugReport(debugId, { detail: 'Proxy recovery failed, using IndexedDB data' });
@@ -445,13 +441,15 @@ async function recoverPendingInner(manual: boolean, debugId: string) {
         }
         if (restoredThisRecord) {
           await saveRequest({ ...record, bufferedText: getCurrentMessageText(latest.message), appliedHash: expectedHash, updatedAt: Date.now() });
+          requestSnapshotFlush();
           if (!currentTarget()) continue;
           restoredMessageCount++;
           const isPartial = effectiveStatus === 'interrupted' || effectiveStatus === 'failed';
           useStreamEndStatusStore.getState().setStatus(record.nodeId!, isPartial ? 'recovered_partial' : proxyRecoveredThisRecord ? 'recovered' : 'completed');
           // Bootstrap acknowledges appliedHash only after the primary snapshot commits.
         } else if (latest.node.contentHash === record.checkpointHash) {
-          await deleteRequest(requestId);
+          await saveRequest({ ...record, appliedHash: expectedHash, updatedAt: Date.now() });
+          requestSnapshotFlush();
         }
       } finally {
         finishAiTask(ticket);

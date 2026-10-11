@@ -116,5 +116,5 @@ it('rechecks the chat identity after proxy await even when the chat order change
   await pending;
   expect(text(0)).toEqual([{ type: 'text', text: '' }]);
   expect(text(1)).toEqual([{ type: 'text', text: 'recovered response' }]);
-  expect(fixture.ack).toHaveBeenCalledTimes(1);
+  expect(fixture.ack).not.toHaveBeenCalled();
 });

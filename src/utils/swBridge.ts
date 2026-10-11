@@ -1,6 +1,6 @@
 import type { OpenRouterObservation } from '@type/chat';
 import { debugReport } from '@store/debug-store';
-import { saveRequest, cleanupStale } from './streamDb';
+import { saveRequest, cleanupStale, deleteRequest } from './streamDb';
 
 let registration: ServiceWorkerRegistration | null = null;
 let controllerReady: Promise<void> | null = null;
@@ -68,6 +68,7 @@ export interface ProxyStreamConfig {
 }
 
 export interface StartStreamParams {
+  signal?: AbortSignal;
   requestId: string;
   chatId: string;
   nodeId: string;
@@ -117,7 +118,12 @@ export async function startStream(params: StartStreamParams): Promise<SwStreamHa
     createdAt: Date.now(),
     updatedAt: Date.now(),
     acknowledged: false,
+    proxySessionId: proxyConfig?.sessionId,
   });
+  if (params.signal?.aborted) {
+    await deleteRequest(requestId);
+    throw new DOMException('Stream cancelled before start', 'AbortError');
+  }
 
   const sw = navigator.serviceWorker;
 
@@ -291,6 +297,12 @@ export async function startStream(params: StartStreamParams): Promise<SwStreamHa
     }
     heartbeatChannels.clear();
     channel.port1.close();
+  }
+
+  if (params.signal?.aborted) {
+    cleanup();
+    await deleteRequest(requestId);
+    throw new DOMException('Stream cancelled before start', 'AbortError');
   }
 
   // Send startStream to SW with port2 transferred
