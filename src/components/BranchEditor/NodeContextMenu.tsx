@@ -29,6 +29,7 @@ const NodeContextMenu = ({
   const { t } = useTranslation();
   const deleteBranch = useStore((state) => state.deleteBranch);
   const copyBranchSequence = useStore((state) => state.copyBranchSequence);
+  const cutBranchSequence = useStore((state) => state.cutBranchSequence);
   const pasteBranchSequence = useStore((state) => state.pasteBranchSequence);
   const renameBranchNode = useStore((state) => state.renameBranchNode);
   const toggleNodeStar = useStore((state) => state.toggleNodeStar);
@@ -62,7 +63,7 @@ const NodeContextMenu = ({
     if (!tree) return;
     const path = buildPathToLeaf(tree, nodeId);
     const leafId = path[path.length - 1];
-    copyBranchSequence(chatIndex, nodeId, leafId);
+    copyBranchSequence({ chatId: chats?.[chatIndex]?.id ?? '', fromNodeId: nodeId, toNodeId: leafId });
     onClose();
   };
 
@@ -70,8 +71,7 @@ const NodeContextMenu = ({
     if (!tree) return;
     const path = buildPathToLeaf(tree, nodeId);
     const leafId = path[path.length - 1];
-    copyBranchSequence(chatIndex, nodeId, leafId);
-    deleteBranch(chatIndex, nodeId);
+    cutBranchSequence({ chatId: chats?.[chatIndex]?.id ?? '', fromNodeId: nodeId, toNodeId: leafId });
     onClose();
   };
 
@@ -79,7 +79,7 @@ const NodeContextMenu = ({
     if (!tree || selectedNodeIds.length < 2) return;
     const firstId = selectedNodeIds[0];
     const lastId = selectedNodeIds[selectedNodeIds.length - 1];
-    copyBranchSequence(chatIndex, firstId, lastId);
+    copyBranchSequence({ chatId: chats?.[chatIndex]?.id ?? '', fromNodeId: firstId, toNodeId: lastId });
     onClose();
   };
 
@@ -87,13 +87,12 @@ const NodeContextMenu = ({
     if (!tree || selectedNodeIds.length < 2) return;
     const firstId = selectedNodeIds[0];
     const lastId = selectedNodeIds[selectedNodeIds.length - 1];
-    copyBranchSequence(chatIndex, firstId, lastId);
-    deleteBranch(chatIndex, firstId);
+    cutBranchSequence({ chatId: chats?.[chatIndex]?.id ?? '', fromNodeId: firstId, toNodeId: lastId });
     onClose();
   };
 
   const handlePaste = () => {
-    pasteBranchSequence(chatIndex, nodeId);
+    pasteBranchSequence({ chatId: chats?.[chatIndex]?.id ?? '', afterNodeId: nodeId });
     onClose();
   };
 

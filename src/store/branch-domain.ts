@@ -415,6 +415,7 @@ export const upsertMessageAtIndexState = (
     prepareBranchMutationState(chats, chatIndex, currentContentStore);
   const existingId = tree.activePath[messageIndex];
 
+  const previousRole = existingId ? tree.nodes[existingId].role : undefined;
   chat.messages[messageIndex] = message;
 
   if (existingId) {
@@ -450,7 +451,11 @@ export const upsertMessageAtIndexState = (
 
   // Sync: if index-0 system node was edited, update config.systemPrompt
   if (messageIndex === 0) {
-    syncBubbleToConfig(chat, tree, contentStore);
+    if (previousRole === 'system' && message.role !== 'system') {
+      chat.config = { ...chat.config, systemPrompt: undefined };
+    } else {
+      syncBubbleToConfig(chat, tree, contentStore);
+    }
   }
 
   return finalizePreparedBranchMutationState({
@@ -664,12 +669,16 @@ export const copyBranchSequenceState = (
   fromNodeId: string,
   toNodeId: string
 ): BranchClipboard | null => {
-  const tree = chats[chatIndex].branchTree!;
+  const tree = chats[chatIndex]?.branchTree;
+  if (!tree?.nodes[fromNodeId] || !tree.nodes[toNodeId]) return null;
 
   // Walk from toNodeId up to fromNodeId to build the path
   const nodeIds: string[] = [];
   let cur: string | null = toNodeId;
+  const visited = new Set<string>();
   while (cur) {
+    if (visited.has(cur) || !tree.nodes[cur]) return null;
+    visited.add(cur);
     nodeIds.unshift(cur);
     if (cur === fromNodeId) break;
     cur = tree.nodes[cur]?.parentId ?? null;
@@ -686,6 +695,37 @@ export const copyBranchSequenceState = (
     sourceChat: chats[chatIndex].id,
     nodes,
   };
+};
+
+export const removeBranchSequenceState = (
+  chats: ChatInterface[],
+  chatIndex: number,
+  nodeIds: string[],
+  currentContentStore: ContentStoreData
+) => {
+  const contentStore = { ...currentContentStore };
+  const updatedChats = cloneChatAt(chats, chatIndex);
+  const chat = updatedChats[chatIndex];
+  const tree = chat.branchTree!;
+  const removed = new Set(nodeIds);
+  for (const node of Object.values(tree.nodes)) {
+    if (removed.has(node.id) || !node.parentId || !removed.has(node.parentId)) continue;
+    let parentId: string | null = node.parentId;
+    while (parentId && removed.has(parentId)) parentId = tree.nodes[parentId].parentId;
+    tree.nodes[node.id] = { ...node, parentId };
+  }
+  for (const id of nodeIds) {
+    releaseContent(contentStore, tree.nodes[id].contentHash);
+    delete tree.nodes[id];
+  }
+  tree.activePath = tree.activePath.filter((id) => !removed.has(id));
+  if (tree.activePath.length === 0) {
+    const root = Object.values(tree.nodes).find((node) => !node.parentId);
+    if (root) tree.activePath = buildPathToLeaf(tree, root.id);
+  }
+  tree.rootId = tree.activePath[0] ?? '';
+  chat.messages = materializeActivePath(tree, contentStore);
+  return { chats: updatedChats, contentStore };
 };
 
 export const pasteBranchSequenceState = (
@@ -718,11 +758,13 @@ export const pasteBranchSequenceState = (
     prevId = newId;
   }
 
-  const insertIdx = tree.activePath.indexOf(afterNodeId);
+  const destinationPath = buildPathToLeaf(tree, afterNodeId);
+  const insertIdx = destinationPath.indexOf(afterNodeId);
   tree.activePath = [
-    ...tree.activePath.slice(0, insertIdx + 1),
+    ...destinationPath.slice(0, insertIdx + 1),
     ...clipboard.nodeIds.map((id) => idMap[id]),
   ];
+  tree.rootId = tree.activePath[0] ?? '';
   updatedChats[targetChatIndex].messages = materializeActivePath(tree, contentStore);
 
   return { chats: updatedChats, contentStore };
@@ -807,9 +849,10 @@ export const upsertWithAutoBranchState = (
 
   // Role-only change: in-place update
   if (!contentChanged) {
-    const state = prepareBranchMutationState(ensuredChats, chatIndex, ensuredStore);
-    state.tree.nodes[existingId] = { ...state.tree.nodes[existingId], role: message.role };
-    return finalizePreparedBranchMutationState(state);
+    return {
+      chats: updateNodeRoleState(ensuredChats, chatIndex, existingId, message.role, ensuredStore),
+      contentStore: ensuredStore,
+    };
   }
 
   // Content changed: always in-place update (overwrite semantics)

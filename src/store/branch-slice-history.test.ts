@@ -21,7 +21,7 @@ const chat = (id: string, text: string): ChatInterface => ({
   messages: [{ role: 'user', content: content(text) }],
 });
 
-const makeState = () => {
+const makeState = (onSet?: (state: StoreState) => void) => {
   let state: StoreState;
   const get = () => state;
   const set = ((partial: unknown) => {
@@ -32,6 +32,7 @@ const makeState = () => {
       ...state,
       ...patch,
     };
+    onSet?.(state);
   }) as StoreApi<StoreState>['setState'];
   state = { ...createChatSlice(set, get), ...createBranchSlice(set, get) } as StoreState;
   return get;
@@ -159,7 +160,7 @@ describe('branch history scope', () => {
     const sourceNodeId = get().chats![0].branchTree!.activePath[1];
     const targetNodeId = get().chats![1].branchTree!.rootId;
 
-    get().moveBranchSequence(0, sourceNodeId, sourceNodeId, 1, targetNodeId);
+    get().moveBranchSequence({ sourceChatId: 'a', fromNodeId: sourceNodeId, toNodeId: sourceNodeId, targetChatId: 'b', afterNodeId: targetNodeId });
 
     expect(get().branchHistoryPast).toHaveLength(1);
     get().undoBranch();
@@ -217,5 +218,126 @@ describe('branch history scope', () => {
     get().redoBranch();
     expect(get().contentStore[deltaHash]?.delta?.baseHash).toBe(sharedHash);
     expect(get().contentStore[sharedHash]).toBeDefined();
+  });
+});
+
+
+describe('range operations and prompt history', () => {
+  const rangeState = () => {
+    const writes: StoreState[] = [];
+    const get = makeState((state) => writes.push(state));
+    get().setChats([chat('a', 'root'), chat('b', 'target')]);
+    get().ensureBranchTree(0);
+    get().ensureBranchTree(1);
+    const root = get().chats![0].branchTree!.rootId;
+    const middle = get().appendNodeToActivePath(0, 'assistant', content('middle'));
+    const leaf = get().appendNodeToActivePath(0, 'user', content('leaf'));
+    const other = get().createBranch(0, leaf, content('other'));
+    get().switchActivePath(0, [root, middle, leaf]);
+    get().invalidateBranchHistory(['a', 'b']);
+    writes.length = 0;
+    return { get, root, middle, leaf, other, writes };
+  };
+
+  it('cuts only the range and exposes clipboard and tree together', () => {
+    const { get, root, middle, leaf, other, writes } = rangeState();
+    const result = get().cutBranchSequence({ chatId: 'a', fromNodeId: root, toNodeId: middle });
+    expect(result.status).toBe('cut');
+    expect(writes).toHaveLength(1);
+    expect(writes[0].branchClipboard?.nodeIds).toEqual([root, middle]);
+    expect(writes[0].chats![0].branchTree!.nodes[root]).toBeUndefined();
+    const tree = get().chats![0].branchTree!;
+    expect(Object.keys(tree.nodes)).toEqual([leaf, other]);
+    expect(tree.nodes[leaf].parentId).toBeNull();
+    expect(tree.nodes[other].parentId).toBeNull();
+    expect(tree.activePath).toEqual([leaf]);
+    expect(get().branchClipboard?.nodeIds).toEqual([root, middle]);
+    expect(get().branchHistoryPast).toHaveLength(1);
+    get().undoBranch();
+    expect(messageTexts(get().chats![0])).toEqual(['root', 'middle', 'leaf']);
+    expect(get().branchClipboard?.nodeIds).toEqual([root, middle]);
+    get().redoBranch();
+    expect(messageTexts(get().chats![0])).toEqual(['leaf']);
+  });
+
+  it('rejects invalid ranges, destinations and missing contents without changing any state', () => {
+    const { get, root, middle, leaf, other } = rangeState();
+    get().copyBranchSequence({ chatId: 'a', fromNodeId: root, toNodeId: leaf });
+    const before = get();
+    expect(get().cutBranchSequence({ chatId: 'a', fromNodeId: leaf, toNodeId: other }).status).toBe('not-ancestor');
+    expect(get()).toBe(before);
+    expect(get().cutBranchSequence({ chatId: 'a', fromNodeId: 'missing', toNodeId: middle }).status).toBe('missing');
+    expect(get()).toBe(before);
+    expect(get().moveBranchSequence({ sourceChatId: 'a', fromNodeId: root, toNodeId: middle, targetChatId: 'a', afterNodeId: middle }).status).toBe('invalid-target');
+    expect(get()).toBe(before);
+    const missingHash = before.chats![0].branchTree!.nodes[middle].contentHash;
+    const damaged = { ...before.contentStore };
+    delete damaged[missingHash];
+    get().setContentStore(damaged);
+    const withMissingContent = get();
+    expect(get().cutBranchSequence({ chatId: 'a', fromNodeId: root, toNodeId: middle }).status).toBe('content-missing');
+    expect(get().pasteBranchSequence({ chatId: 'b', afterNodeId: get().chats![1].branchTree!.rootId }).status).toBe('content-missing');
+    expect(get()).toBe(withMissingContent);
+    damaged[missingHash] = { content: [], refCount: 1, delta: { baseHash: 'missing-base', patches: '' } };
+    expect(get().cutBranchSequence({ chatId: 'a', fromNodeId: root, toNodeId: middle }).status).toBe('content-missing');
+    expect(get()).toBe(withMissingContent);
+  });
+
+  it('moves a finite range across chats as one undo while retaining unselected children', () => {
+    const { get, root, middle, leaf, other } = rangeState();
+    const target = get().chats![1].branchTree!.rootId;
+    const result = get().moveBranchSequence({ sourceChatId: 'a', fromNodeId: middle, toNodeId: middle, targetChatId: 'b', afterNodeId: target });
+    expect(result.status).toBe('moved');
+    expect(get().chats![0].branchTree!.nodes[leaf].parentId).toBe(root);
+    expect(get().chats![0].branchTree!.nodes[other].parentId).toBe(root);
+    expect(messageTexts(get().chats![0])).toEqual(['root', 'leaf']);
+    expect(messageTexts(get().chats![1])).toEqual(['target', 'middle']);
+    expect(get().branchHistoryPast).toHaveLength(1);
+    get().undoBranch();
+    expect(messageTexts(get().chats![0])).toEqual(['root', 'middle', 'leaf']);
+    expect(messageTexts(get().chats![1])).toEqual(['target']);
+    get().redoBranch();
+    expect(messageTexts(get().chats![0])).toEqual(['root', 'leaf']);
+    expect(messageTexts(get().chats![1])).toEqual(['target', 'middle']);
+  });
+
+  it('moves within one chat without dropping later nodes', () => {
+    const { get, root, middle, leaf, other } = rangeState();
+    expect(get().moveBranchSequence({ sourceChatId: 'a', fromNodeId: middle, toNodeId: middle, targetChatId: 'a', afterNodeId: leaf }).status).toBe('moved');
+    const tree = get().chats![0].branchTree!;
+    expect(tree.nodes[leaf].parentId).toBe(root);
+    expect(tree.nodes[other].parentId).toBe(root);
+    expect(messageTexts(get().chats![0])).toEqual(['root', 'leaf', 'middle']);
+  });
+
+  it('restores only the affected system prompt for body and role undo and redo', () => {
+    const get = makeState();
+    get().setChats([chat('a', 'old prompt')]);
+    get().ensureBranchTree(0);
+    const root = get().chats![0].branchTree!.rootId;
+    get().updateNodeRole(0, root, 'system');
+    get().invalidateBranchHistory(['a']);
+    get().upsertWithAutoBranch(0, 0, 'system', content('new prompt'));
+    const updated = get().chats!.slice();
+    updated[0] = { ...updated[0], config: { ...updated[0].config, temperature: 0.25 } };
+    get().setChats(updated);
+    get().undoBranch();
+    expect(get().chats![0].config.systemPrompt).toBe('old prompt');
+    expect(get().chats![0].config.temperature).toBe(0.25);
+    get().redoBranch();
+    expect(get().chats![0].config.systemPrompt).toBe('new prompt');
+    get().upsertWithAutoBranch(0, 0, 'user', content('new prompt'));
+    expect(get().chats![0].config.systemPrompt).toBeUndefined();
+    get().undoBranch();
+    expect(get().chats![0].config.systemPrompt).toBe('new prompt');
+    expect(get().chats![0].messages[0].role).toBe('system');
+    get().redoBranch();
+    expect(get().chats![0].config.systemPrompt).toBeUndefined();
+    get().updateNodeRole(0, root, 'system');
+    expect(get().chats![0].config.systemPrompt).toBe('new prompt');
+    get().undoBranch();
+    expect(get().chats![0].config.systemPrompt).toBeUndefined();
+    get().redoBranch();
+    expect(get().chats![0].config.systemPrompt).toBe('new prompt');
   });
 });

@@ -14,6 +14,8 @@ import { materializeActivePath } from '@utils/branchUtils';
 import { showToast } from '@utils/showToast';
 import {
   finalizeStreamingBuffer,
+  getStreamingNodeIdFromHash,
+  peekBufferedContent,
   isStreamingContentHash,
 } from '@utils/streamingBuffer';
 import {
@@ -27,6 +29,7 @@ import {
   moveMessageState,
   pasteBranchSequenceState,
   removeMessageAtIndexState,
+  removeBranchSequenceState,
   renameBranchNodeState,
   replaceMessageAndPruneFollowingState,
   switchActivePathState,
@@ -108,6 +111,7 @@ interface BranchChatSnapshot {
   messages: ChatInterface['messages'];
   branchTree: ChatInterface['branchTree'];
   expectedActivePath?: string[];
+  systemPrompt?: { value: string | undefined };
 }
 
 interface BranchSnapshot {
@@ -168,6 +172,9 @@ const createBranchSnapshot = (
       messages: structuredClone(chat.messages),
       branchTree: structuredClone(chat.branchTree),
       expectedActivePath: expectedById.get(chat.id)?.branchTree?.activePath.slice(),
+      ...(chat.config.systemPrompt !== expectedById.get(chat.id)?.config.systemPrompt
+        ? { systemPrompt: { value: chat.config.systemPrompt } }
+        : {}),
     }));
   return {
     chats: snapshotChats,
@@ -195,7 +202,10 @@ const restoreBranchSnapshot = (
   const restored = chats.map((chat) => {
     const saved = snapshots.get(chat.id);
     if (!saved) return chat;
-    if (!saved.branchTree) return { ...chat, messages: structuredClone(saved.messages), branchTree: undefined };
+    const config = saved.systemPrompt
+      ? { ...chat.config, systemPrompt: saved.systemPrompt.value }
+      : chat.config;
+    if (!saved.branchTree) return { ...chat, config, messages: structuredClone(saved.messages), branchTree: undefined };
     const branchTree = structuredClone(saved.branchTree);
     const currentPath = chat.branchTree?.activePath;
     if (currentPath && saved.expectedActivePath &&
@@ -203,10 +213,40 @@ const restoreBranchSnapshot = (
       isUsableActivePath(branchTree, currentPath)) {
       branchTree.activePath = currentPath.slice();
     }
-    return { ...chat, branchTree, messages: materializeActivePath(branchTree, contentStore) };
+    return { ...chat, config, branchTree, messages: materializeActivePath(branchTree, contentStore) };
   });
   return restored;
 };
+
+type SequenceRange = { chatId: string; fromNodeId: string; toNodeId: string };
+type SequenceFailure = { status: 'missing' | 'not-ancestor' | 'invalid-target' | 'content-missing' };
+
+const validateSequenceRange = (chats: ChatInterface[] | undefined, input: SequenceRange) => {
+  const chatIndex = chats?.findIndex((chat) => chat.id === input.chatId) ?? -1;
+  const tree = chats?.[chatIndex]?.branchTree;
+  if (!tree?.nodes[input.fromNodeId] || !tree.nodes[input.toNodeId]) {
+    return { status: 'missing' as const };
+  }
+  const clipboard = copyBranchSequenceState(chats!, chatIndex, input.fromNodeId, input.toNodeId);
+  if (!clipboard) return { status: 'not-ancestor' as const };
+  return { status: 'valid' as const, chatIndex, clipboard };
+};
+
+const hasClipboardContent = (clipboard: BranchClipboard, contentStore: ContentStoreData) =>
+  clipboard.nodeIds.length > 0 && clipboard.nodeIds.every((id) => {
+    const node = clipboard.nodes[id];
+    if (!node) return false;
+    const streamingId = getStreamingNodeIdFromHash(node.contentHash);
+    if (streamingId) return peekBufferedContent(streamingId) !== undefined;
+    let hash: string | undefined = node.contentHash;
+    const visited = new Set<string>();
+    while (hash) {
+      if (visited.has(hash) || !contentStore[hash]) return false;
+      visited.add(hash);
+      hash = contentStore[hash].delta?.baseHash;
+    }
+    return true;
+  });
 
 export interface BranchSlice {
   contentStore: ContentStoreData;
@@ -214,7 +254,7 @@ export interface BranchSlice {
   applyBranchState: (
     chats: ChatInterface[],
     contentStore: ContentStoreData,
-    options?: { recordHistory?: boolean }
+    options?: { recordHistory?: boolean; clipboard?: BranchClipboard }
   ) => void;
   invalidateBranchHistory: (chatIds: string[]) => void;
   branchHistoryPast: BranchSnapshot[];
@@ -251,13 +291,11 @@ export interface BranchSlice {
   setMultiViewChatIndices: (indices: number[]) => void;
   multiViewPrimaryChatIndex: number | null;
   setMultiViewPrimaryChatIndex: (index: number | null) => void;
-  moveBranchSequence: (
-    sourceChatIndex: number,
-    fromNodeId: string,
-    toNodeId: string,
-    targetChatIndex: number,
-    afterNodeId: string
-  ) => void;
+  moveBranchSequence: (input: {
+    sourceChatId: string; fromNodeId: string; toNodeId: string;
+    targetChatId: string; afterNodeId: string;
+  }) => { status: 'moved'; nodeIds: string[] } | SequenceFailure;
+  cutBranchSequence: (input: SequenceRange) => { status: 'cut' } | SequenceFailure;
   activateFolderOverview: (folderId: string) => void;
 
   compareTarget: { chatIndex: number; nodeId: string } | null;
@@ -326,15 +364,9 @@ export interface BranchSlice {
     removeCount?: number
   ) => void;
 
-  copyBranchSequence: (
-    chatIndex: number,
-    fromNodeId: string,
-    toNodeId: string
-  ) => void;
-  pasteBranchSequence: (
-    targetChatIndex: number,
-    afterNodeId: string
-  ) => void;
+  copyBranchSequence: (input: SequenceRange) => { status: 'copied' } | { status: 'missing' | 'not-ancestor' };
+  pasteBranchSequence: (input: { chatId: string; afterNodeId: string }) =>
+    { status: 'pasted'; nodeIds: string[] } | { status: 'missing' | 'clipboard-empty' | 'content-missing' };
   setBranchClipboard: (clipboard: BranchClipboard | null) => void;
 }
 
@@ -346,15 +378,21 @@ export const createBranchSlice: StoreSlice<BranchSlice> = (set, get) => ({
   applyBranchState: (chats, contentStore, options) => {
     const prevChats = get().chats;
     const changedIds = prevChats ? changedBranchChatIds(prevChats, chats) : [];
-    if (options?.recordHistory !== false && prevChats && changedIds.length > 0) {
-      const past = [...get().branchHistoryPast, createBranchSnapshot(
-        prevChats, get().contentStore, changedIds, chats
-      )];
-      if (past.length > HISTORY_LIMIT) past.shift();
-      set({ branchHistoryPast: past, branchHistoryFuture: [] });
+    const history = options?.recordHistory !== false && prevChats && changedIds.length > 0
+      ? {
+          branchHistoryPast: [...get().branchHistoryPast, createBranchSnapshot(
+            prevChats, get().contentStore, changedIds, chats
+          )].slice(-HISTORY_LIMIT),
+          branchHistoryFuture: [],
+        }
+      : {};
+    const clipboard = options?.clipboard ? { branchClipboard: options.clipboard } : {};
+    const sameOrder = prevChats?.length === chats.length &&
+      prevChats.every((chat, index) => chat.id === chats[index].id);
+    if (!sameOrder) {
+      get().setChats(chats, { preserveBranchHistory: true });
     }
-    get().setChats(chats, { preserveBranchHistory: true });
-    set({ contentStore });
+    set({ chats, contentStore, ...history, ...clipboard });
   },
   invalidateBranchHistory: (chatIds) => {
     if (chatIds.length === 0) return;
@@ -508,19 +546,29 @@ export const createBranchSlice: StoreSlice<BranchSlice> = (set, get) => ({
     if (get().multiViewPrimaryChatIndex === index) return;
     set({ multiViewPrimaryChatIndex: index });
   },
-  moveBranchSequence: (sourceChatIndex, fromNodeId, toNodeId, targetChatIndex, afterNodeId) => {
+  moveBranchSequence: (input) => {
     const chats = get().chats;
-    if (!chats) return;
-    const clipboard = copyBranchSequenceState(chats, sourceChatIndex, fromNodeId, toNodeId);
-    if (!clipboard) return;
-    const pasted = pasteBranchSequenceState(
-      chats, targetChatIndex, afterNodeId, clipboard, get().contentStore
-    );
-    const result = deleteBranchState(
-      pasted.chats, sourceChatIndex, fromNodeId, pasted.contentStore
-    );
-    set({ branchClipboard: clipboard });
-    get().applyBranchState(result.chats, result.contentStore);
+    const range = validateSequenceRange(chats, { ...input, chatId: input.sourceChatId });
+    if (range.status !== 'valid') return range;
+    const targetIndex = chats!.findIndex((chat) => chat.id === input.targetChatId);
+    if (!chats![targetIndex]?.branchTree?.nodes[input.afterNodeId]) return { status: 'missing' };
+    if (range.chatIndex === targetIndex && range.clipboard.nodeIds.includes(input.afterNodeId)) {
+      return { status: 'invalid-target' };
+    }
+    if (!hasClipboardContent(range.clipboard, get().contentStore)) return { status: 'content-missing' };
+    const removed = removeBranchSequenceState(chats!, range.chatIndex, range.clipboard.nodeIds, get().contentStore);
+    const pasted = pasteBranchSequenceState(removed.chats, targetIndex, input.afterNodeId, range.clipboard, removed.contentStore);
+    const nodeIds = pasted.chats[targetIndex].branchTree!.activePath.slice(-range.clipboard.nodeIds.length);
+    get().applyBranchState(pasted.chats, pasted.contentStore, { clipboard: range.clipboard });
+    return { status: 'moved', nodeIds };
+  },
+  cutBranchSequence: (input) => {
+    const range = validateSequenceRange(get().chats, input);
+    if (range.status !== 'valid') return range;
+    if (!hasClipboardContent(range.clipboard, get().contentStore)) return { status: 'content-missing' };
+    const removed = removeBranchSequenceState(get().chats!, range.chatIndex, range.clipboard.nodeIds, get().contentStore);
+    get().applyBranchState(removed.chats, removed.contentStore, { clipboard: range.clipboard });
+    return { status: 'cut' };
   },
   activateFolderOverview: (folderId) => {
     const chats = get().chats;
@@ -785,27 +833,23 @@ export const createBranchSlice: StoreSlice<BranchSlice> = (set, get) => ({
     get().applyBranchState(chats, contentStore);
   },
 
-  copyBranchSequence: (chatIndex, fromNodeId, toNodeId) => {
-    const chats = get().chats;
-    if (!chats) return;
-    const clipboard = copyBranchSequenceState(chats, chatIndex, fromNodeId, toNodeId);
-    if (!clipboard) return;
-    set({
-      branchClipboard: clipboard,
-    });
+  copyBranchSequence: (input) => {
+    const range = validateSequenceRange(get().chats, input);
+    if (range.status !== 'valid') return range;
+    set({ branchClipboard: range.clipboard });
+    return { status: 'copied' };
   },
 
-  pasteBranchSequence: (targetChatIndex, afterNodeId) => {
+  pasteBranchSequence: (input) => {
+    const chats = get().chats;
+    const chatIndex = chats?.findIndex((chat) => chat.id === input.chatId) ?? -1;
+    if (!chats?.[chatIndex]?.branchTree?.nodes[input.afterNodeId]) return { status: 'missing' };
     const clipboard = get().branchClipboard;
-    if (!clipboard) return;
-    const { chats, contentStore } = pasteBranchSequenceState(
-      get().chats!,
-      targetChatIndex,
-      afterNodeId,
-      clipboard,
-      get().contentStore
-    );
-    get().applyBranchState(chats, contentStore);
+    if (!clipboard) return { status: 'clipboard-empty' };
+    if (!hasClipboardContent(clipboard, get().contentStore)) return { status: 'content-missing' };
+    const result = pasteBranchSequenceState(chats, chatIndex, input.afterNodeId, clipboard, get().contentStore);
+    get().applyBranchState(result.chats, result.contentStore);
+    return { status: 'pasted', nodeIds: result.chats[chatIndex].branchTree!.activePath.slice(-clipboard.nodeIds.length) };
   },
 
   setBranchClipboard: (clipboard) => {

@@ -533,7 +533,7 @@ const BranchEditorCanvas = ({
         const ci = (node.data as MessageNodeData).chatIndex >= 0
           ? (node.data as MessageNodeData).chatIndex
           : primaryChatIndex;
-        useStore.getState().copyBranchSequence(ci, firstId, lastId);
+        useStore.getState().copyBranchSequence({ chatId: useStore.getState().chats?.[ci]?.id ?? '', fromNodeId: firstId, toNodeId: lastId });
       }
 
       if (e.key === 'x' && selectedNodeIds.length > 0) {
@@ -545,8 +545,7 @@ const BranchEditorCanvas = ({
         const ci = (node.data as MessageNodeData).chatIndex >= 0
           ? (node.data as MessageNodeData).chatIndex
           : primaryChatIndex;
-        useStore.getState().copyBranchSequence(ci, firstId, lastId);
-        deleteBranch(ci, firstId);
+        useStore.getState().cutBranchSequence({ chatId: useStore.getState().chats?.[ci]?.id ?? '', fromNodeId: firstId, toNodeId: lastId });
       }
 
       if (e.key === 'v') {
@@ -563,7 +562,7 @@ const BranchEditorCanvas = ({
         const ci = (node.data as MessageNodeData).chatIndex >= 0
           ? (node.data as MessageNodeData).chatIndex
           : primaryChatIndex;
-        useStore.getState().pasteBranchSequence(ci, targetId);
+        useStore.getState().pasteBranchSequence({ chatId: useStore.getState().chats?.[ci]?.id ?? '', afterNodeId: targetId });
       }
     };
     document.addEventListener('keydown', handler);
@@ -839,8 +838,9 @@ const BranchEditorCanvas = ({
     if (!sourceChat?.branchTree) return;
     const path = buildPathToLeaf(sourceChat.branchTree, sourceNodeId);
     const leafId = path[path.length - 1];
-    copyBranchSequence(sourceChatIndex, sourceNodeId, leafId);
-    pasteBranchSequence(targetChatIndex, targetNodeId);
+    const copied = copyBranchSequence({ chatId: sourceChat.id, fromNodeId: sourceNodeId, toNodeId: leafId });
+    if (copied.status !== 'copied') return;
+    pasteBranchSequence({ chatId: chats?.[targetChatIndex]?.id ?? '', afterNodeId: targetNodeId });
     setDropPopover(null);
   }, [dropPopover, chats, copyBranchSequence, pasteBranchSequence]);
 
@@ -851,7 +851,7 @@ const BranchEditorCanvas = ({
     if (!sourceChat?.branchTree) return;
     const path = buildPathToLeaf(sourceChat.branchTree, sourceNodeId);
     const leafId = path[path.length - 1];
-    moveBranchSequence(sourceChatIndex, sourceNodeId, leafId, targetChatIndex, targetNodeId);
+    moveBranchSequence({ sourceChatId: sourceChat.id, fromNodeId: sourceNodeId, toNodeId: leafId, targetChatId: chats?.[targetChatIndex]?.id ?? '', afterNodeId: targetNodeId });
     setDropPopover(null);
   }, [dropPopover, chats, moveBranchSequence]);
 
