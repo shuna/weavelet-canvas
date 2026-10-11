@@ -113,7 +113,9 @@ export function useModelDownload(onStorageChanged?: () => void) {
       },
       onError: (error) => {
         if (settled) return;
+        const current = isCurrent() && abortControllers.current[modelId] === controller;
         finish('partial');
+        if (!current) return;
         useStore.getState().updateSavedModelMeta(modelId, {
           storageState: 'partial',
           lastError: error.message,

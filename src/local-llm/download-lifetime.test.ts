@@ -79,3 +79,24 @@ it('waits for the pre-writer download to stop and rejects callbacks arriving aft
   expect(fixture.state.savedModelMeta['download-target']).toBeUndefined();
   expect(complete).not.toHaveBeenCalled();
 });
+
+
+it('does not let a cancelled download error overwrite its completed replacement', () => {
+  fixture.state = { savedModelMeta: {}, updateSavedModelMeta: vi.fn((id, patch) => {
+    fixture.state.savedModelMeta[id] = { ...fixture.state.savedModelMeta[id], ...patch };
+  }) };
+  const hook = useModelDownload();
+  const oldError = vi.fn();
+  let old!: DownloadCallbacks;
+  let replacement!: DownloadCallbacks;
+  hook.startDownload('restart', cb => { old = cb; }, { onError: oldError });
+  hook.cancelDownload('restart');
+  hook.startDownload('restart', cb => { replacement = cb; });
+  replacement.onComplete(42);
+  const saved = fixture.state.savedModelMeta.restart;
+  old.onError(new Error('cancelled'), 'restart', 'weights.gguf');
+  expect(fixture.state.savedModelMeta.restart).toBe(saved);
+  expect(saved.storageState).toBe('saved');
+  expect(saved.storedBytes).toBe(42);
+  expect(oldError).not.toHaveBeenCalled();
+});
