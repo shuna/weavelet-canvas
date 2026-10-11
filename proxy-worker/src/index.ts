@@ -1,142 +1,100 @@
-/**
- * Weavelet Stream Proxy - CloudFlare Worker
- *
- * Optional SSE proxy that sits between the client and LLM APIs.
- * Provides stream recovery when the client disconnects mid-stream.
- *
- * Architecture:
- * 1. Client POSTs to /api/stream with LLM endpoint, headers, and body
- * 2. Worker forwards request to LLM API and streams SSE back to client
- * 3. Each chunk is tagged with a sequential event ID
- * 4. Chunks are buffered in memory during streaming (write-back cache)
- * 5. On stream completion, a single KV write persists the full response
- * 6. If client disconnects, waitUntil() keeps the Worker alive to finish reading
- * 7. Client can recover missed chunks via GET /api/recover/:sessionId
- *
- * Recovery strategies (toggle via RECOVERY_STRATEGY):
- * - "progressive": After client disconnect, periodic KV snapshots every
- *   PROGRESSIVE_SNAPSHOT_INTERVAL_MS. Recovery endpoint polls KV and
- *   streams chunks progressively as they become available.
- * - "batch": KV write only at completion. Recovery endpoint polls until
- *   stream is done, then replays all chunks at once.
- *
- * Free plan limits:
- * - 100k requests/day, 10ms CPU/request (I/O wait excluded)
- * - KV: 100k reads/day, 1k writes/day → ~1000 sessions/day
- *
- * KV storage format (NDJSON):
- *   Line 1: metadata JSON  {"totalChunks":N,"done":true|false,"error":"...","streaming":true|false}
- *   Line 2+: each chunk individually JSON-stringified, one per line
- * This avoids re-serializing the entire chunk array on every write,
- * keeping CPU cost O(N) linear instead of O(N²) quadratic.
- */
-
 export interface Env {
-  STREAM_CACHE: KVNamespace;
   PROXY_AUTH_TOKEN: string;
 }
-
 interface StreamRequest {
   endpoint: string;
   headers: Record<string, string>;
   body: unknown;
   sessionId: string;
 }
-
 interface ModerationProxyRequest {
   endpoint: string;
   apiKey: string;
   input: string;
 }
-
-function isStringRecord(value: unknown): value is Record<string, string> {
-  if (!value || typeof value !== 'object' || Array.isArray(value)) {
-    return false;
-  }
-
-  return Object.values(value).every((entry) => typeof entry === 'string');
+interface CachedChunk {
+  id: number;
+  data: string;
 }
-
-// ---------------------------------------------------------------------------
-// Recovery strategy toggle
-// ---------------------------------------------------------------------------
-
-/**
- * "progressive" — after client disconnect, write KV snapshots every
- *   PROGRESSIVE_SNAPSHOT_INTERVAL_MS. Recovery streams chunks progressively.
- * "batch" — write KV only at completion. Recovery waits until done,
- *   then replays everything at once.
- */
-const RECOVERY_STRATEGY: 'progressive' | 'batch' = 'progressive';
-
-/** Interval (ms) for periodic KV snapshots after client disconnect (progressive mode) */
-const PROGRESSIVE_SNAPSHOT_INTERVAL_MS = 10_000;
-
-/** How long the recovery endpoint polls KV before giving up (ms) */
-const RECOVERY_POLL_TIMEOUT_MS = 300_000; // 5 minutes
-
-/** Interval (ms) between KV reads during recovery polling */
-const RECOVERY_POLL_INTERVAL_MS = 2_000;
-
-/** KV TTL in seconds - safety net if client never sends ACK */
-const KV_EXPIRATION_TTL = 21600; // 6 hours
-
-// ---------------------------------------------------------------------------
-// Active stream tracking — allows cancel endpoint to abort upstream reads
-// ---------------------------------------------------------------------------
-
+interface CachedSession {
+  version: 1;
+  firstEventId: number;
+  chunks: CachedChunk[];
+  generationTerminal: 'streaming' | 'complete' | 'interrupted' | 'failed';
+  cacheCapability: 'available' | 'overflow';
+  error?: string;
+  openRouterObservation?: Record<string, string | number>;
+}
 interface ActiveStream {
   abortController: AbortController;
-  /** LLM API key from the original request headers (for provider cancel) */
   apiKey?: string;
 }
-
-const activeStreams = new Map<string, ActiveStream>();
-
-/** Metadata stored in the first line of the NDJSON KV value */
-interface SessionMeta {
-  openRouterObservation?: Record<string, string | number>;
-  totalChunks: number;
-  done: boolean;
-  error?: string;
-  /** true while the Worker is still receiving from the LLM */
-  streaming?: boolean;
+interface CancelRequest {
+  providerCancel?: { generationId: string; apiKey: string };
 }
-
-// ---------------------------------------------------------------------------
-// CORS
-// ---------------------------------------------------------------------------
-
+const activeStreams = new Map<string, ActiveStream>();
+const MAX_RECOVERY_CACHE_BYTES = 1_048_576,
+  HEADER_TIMEOUT_MS = 45_000,
+  DISCONNECT_READ_LIMIT_MS = 20_000,
+  DISCONNECT_CACHE_LIMIT_MS = 25_000,
+  SNAPSHOT_INTERVAL_MS = 10_000,
+  RECOVERY_POLL_INTERVAL_MS = 2_000,
+  RECOVERY_POLL_TIMEOUT_MS = 25_000,
+  BODY_IDLE_TIMEOUT_MS = 45_000,
+  ERROR_BODY_LIMIT = 8 * 1024;
 const CORS_HEADERS: Record<string, string> = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Methods': 'GET, POST, DELETE, OPTIONS',
   'Access-Control-Allow-Headers': 'Content-Type, Authorization',
-  'Access-Control-Expose-Headers': 'X-OpenRouter-Cache-Status, X-OpenRouter-Cache-Age, X-OpenRouter-Cache-TTL, X-OpenRouter-Cache-Source-Id, X-Generation-Id',
+  'Access-Control-Expose-Headers':
+    'X-OpenRouter-Cache-Status, X-OpenRouter-Cache-Age, X-OpenRouter-Cache-TTL, X-OpenRouter-Cache-Source-Id, X-Generation-Id, Retry-After',
 };
-
+const isStringRecord = (v: unknown): v is Record<string, string> =>
+  !!v &&
+  typeof v === 'object' &&
+  !Array.isArray(v) &&
+  Object.values(v).every((x) => typeof x === 'string');
+const sleep = (ms: number) =>
+  new Promise<void>((resolve) => setTimeout(resolve, ms));
+const timeout = <T>(promise: Promise<T>, ms: number) =>
+  Promise.race([promise, sleep(ms).then(() => undefined as T | undefined)]);
+const errorMessage = (error: unknown) =>
+  error instanceof Error ? error.message : String(error);
+function readWithIdleTimeout(
+  reader: ReadableStreamDefaultReader<Uint8Array>
+): Promise<ReadableStreamReadResult<Uint8Array> | undefined> {
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => resolve(undefined), BODY_IDLE_TIMEOUT_MS);
+    void reader.read().then(
+      (result) => {
+        clearTimeout(timer);
+        resolve(result);
+      },
+      (error) => {
+        clearTimeout(timer);
+        reject(error);
+      }
+    );
+  });
+}
 function withCORS(response: Response): Response {
   const headers = new Headers(response.headers);
-  for (const [k, v] of Object.entries(CORS_HEADERS)) {
-    headers.set(k, v);
-  }
+  for (const [k, v] of Object.entries(CORS_HEADERS)) headers.set(k, v);
   return new Response(response.body, {
     status: response.status,
     statusText: response.statusText,
     headers,
   });
 }
-
-function jsonResponse(data: unknown, status = 200): Response {
-  return withCORS(
+const jsonResponse = (data: unknown, status = 200) =>
+  withCORS(
     new Response(JSON.stringify(data), {
       status,
       headers: { 'Content-Type': 'application/json' },
     })
   );
-}
-
-function sseResponse(body: ReadableStream): Response {
-  return withCORS(
+const sseResponse = (body: ReadableStream) =>
+  withCORS(
     new Response(body, {
       headers: {
         'Content-Type': 'text/event-stream',
@@ -144,71 +102,117 @@ function sseResponse(body: ReadableStream): Response {
       },
     })
   );
+const authenticated = (request: Request, env: Env) =>
+  !env.PROXY_AUTH_TOKEN ||
+  request.headers.get('Authorization') === `Bearer ${env.PROXY_AUTH_TOKEN}`;
+async function cacheKey(
+  sessionId: string,
+  requestUrl: string
+): Promise<Request> {
+  const digest = await crypto.subtle.digest(
+    'SHA-256',
+    new TextEncoder().encode(sessionId)
+  );
+  const hash = Array.from(new Uint8Array(digest), (b) =>
+    b.toString(16).padStart(2, '0')
+  ).join('');
+  return new Request(
+    `${new URL(requestUrl).origin}/_weavelet_stream_cache/v1/${hash}`
+  );
 }
-
-// ---------------------------------------------------------------------------
-// Auth
-// ---------------------------------------------------------------------------
-
-function authenticate(request: Request, env: Env): boolean {
-  // If no PROXY_AUTH_TOKEN is set, allow all requests (open proxy mode)
-  if (!env.PROXY_AUTH_TOKEN) return true;
-
-  const auth = request.headers.get('Authorization');
-  if (!auth) return false;
-  return auth === `Bearer ${env.PROXY_AUTH_TOKEN}`;
-}
-
-// ---------------------------------------------------------------------------
-// KV helpers
-// ---------------------------------------------------------------------------
-
-/** Parse KV content into metadata + chunk lines */
-function parseKvContent(raw: string): { meta: SessionMeta; chunkLines: string[] } | null {
-  const newlineIdx = raw.indexOf('\n');
-  if (newlineIdx === -1) return null;
-
+const cacheResponse = (s: CachedSession) =>
+  new Response(JSON.stringify(s), {
+    headers: {
+      'Content-Type': 'application/json',
+      'Cache-Control': 'max-age=300',
+    },
+  });
+async function boundedBody(response: Response): Promise<string> {
+  if (!response.body) return '';
+  const reader = response.body.getReader(),
+    chunks: Uint8Array[] = [];
+  let length = 0;
   try {
-    const meta: SessionMeta = JSON.parse(raw.slice(0, newlineIdx));
-    const rest = raw.slice(newlineIdx + 1);
-    const lines = rest.split('\n');
-    if (lines.length > 0 && lines[lines.length - 1] === '') {
-      lines.pop();
+    while (length < ERROR_BODY_LIMIT) {
+      const next = await readWithIdleTimeout(reader);
+      if (!next) break;
+      const { done, value } = next;
+      if (done) break;
+      const part = value.subarray(0, ERROR_BODY_LIMIT - length);
+      chunks.push(part);
+      length += part.byteLength;
+      if (part.byteLength !== value.byteLength) break;
     }
-    return { meta, chunkLines: lines };
-  } catch {
-    return null;
+  } finally {
+    try {
+      await reader.cancel();
+    } catch {}
+    reader.releaseLock();
+  }
+  const all = new Uint8Array(length);
+  let offset = 0;
+  for (const part of chunks) {
+    all.set(part, offset);
+    offset += part.byteLength;
+  }
+  return new TextDecoder().decode(all);
+}
+async function cancelBody(response: Response) {
+  try {
+    await response.body?.cancel();
+  } catch {}
+}
+async function fetchWithHeaderTimeout(
+  input: RequestInfo,
+  init: RequestInit
+): Promise<Response> {
+  const abort = new AbortController(),
+    timer = setTimeout(() => abort.abort(), HEADER_TIMEOUT_MS);
+  try {
+    return await fetch(input, { ...init, signal: abort.signal });
+  } finally {
+    clearTimeout(timer);
   }
 }
-
-/**
- * Write a snapshot of the current stream state to KV.
- * Returns the wall-clock time of the write for rate-limit tracking.
- */
-async function writeSnapshot(
-  env: Env,
-  sessionId: string,
-  meta: SessionMeta,
-  ndjsonBody: string
-): Promise<number> {
-  const kvValue = JSON.stringify(meta) + '\n' + ndjsonBody;
-  const writeTime = Date.now();
-  await env.STREAM_CACHE.put(
-    `session:${sessionId}`,
-    kvValue,
-    { expirationTtl: KV_EXPIRATION_TTL }
-  ).catch((e) => {
-    console.error(`KV write failed for session:${sessionId}:`, (e as Error).message ?? e);
-  });
-  return writeTime;
+function upstreamHeaders(response: Response): Headers {
+  const h = new Headers();
+  for (const n of [
+    'Content-Type',
+    'Retry-After',
+    'X-OpenRouter-Cache-Status',
+    'X-OpenRouter-Cache-Age',
+    'X-OpenRouter-Cache-TTL',
+    'X-OpenRouter-Cache-Source-Id',
+    'X-Generation-Id',
+  ]) {
+    const v = response.headers.get(n);
+    if (v !== null) h.set(n, v);
+  }
+  return h;
 }
-
-/** Minimum gap (ms) between KV writes to the same key to avoid rate-limit 429s */
-const KV_WRITE_COOLDOWN_MS = 1100;
-
-// ---------------------------------------------------------------------------
-// Stream handler - proxies SSE from LLM API with event IDs
-// ---------------------------------------------------------------------------
+function observations(headers: Headers) {
+  const out: Record<string, string | number> = {},
+    fields: Record<string, string> = {
+      responseCacheStatus: 'X-OpenRouter-Cache-Status',
+      responseCacheAge: 'X-OpenRouter-Cache-Age',
+      responseCacheTTL: 'X-OpenRouter-Cache-TTL',
+      responseCacheSourceId: 'X-OpenRouter-Cache-Source-Id',
+      generationId: 'X-Generation-Id',
+    };
+  for (const [k, n] of Object.entries(fields)) {
+    const v = headers.get(n);
+    if (v !== null)
+      out[k] =
+        k === 'responseCacheAge' || k === 'responseCacheTTL' ? Number(v) : v;
+  }
+  return out;
+}
+function scanDone(scanner: { pending: string; done: boolean }, text: string) {
+  const lines = (scanner.pending + text).split(/\r?\n/);
+  scanner.pending = (lines.pop() ?? '').slice(-8192);
+  for (const line of lines)
+    if (/^data:\s*\[DONE\]\s*$/.test(line)) scanner.done = true;
+}
 
 async function handleStream(
   request: Request,
@@ -221,249 +225,360 @@ async function handleStream(
   } catch {
     return jsonResponse({ error: 'Invalid JSON body' }, 400);
   }
-
-  const { endpoint, headers: reqHeaders, body, sessionId } = parsed;
-
-  if (typeof endpoint !== 'string' || typeof sessionId !== 'string' || !endpoint || !sessionId) {
+  const { endpoint, headers, body, sessionId } = parsed;
+  if (
+    !endpoint ||
+    !sessionId ||
+    typeof endpoint !== 'string' ||
+    typeof sessionId !== 'string'
+  )
     return jsonResponse({ error: 'endpoint and sessionId are required' }, 400);
-  }
-
-  if (!isStringRecord(reqHeaders)) {
-    return jsonResponse({ error: 'headers must be an object of string values' }, 400);
-  }
-
-  // SECURITY NOTE: The client sends LLM API keys inside `headers`.
-  // This Worker forwards them verbatim to the LLM endpoint.  The keys
-  // transit through Cloudflare's network but are NOT logged or stored
-  // by this Worker.  Operators should be aware that deploying this proxy
-  // means LLM API keys pass through the Worker.  See README for details.
-  const llmAbort = new AbortController();
-  const apiKey = reqHeaders['Authorization']?.replace(/^Bearer\s+/i, '') ||
-    reqHeaders['authorization']?.replace(/^Bearer\s+/i, '');
-  activeStreams.set(sessionId, { abortController: llmAbort, apiKey });
-
-  let llmRes: Response;
+  if (!isStringRecord(headers))
+    return jsonResponse(
+      { error: 'headers must be an object of string values' },
+      400
+    );
+  const abort = new AbortController(),
+    headerTimer = setTimeout(() => abort.abort(), HEADER_TIMEOUT_MS),
+    apiKey =
+      headers.Authorization?.replace(/^Bearer\s+/i, '') ??
+      headers.authorization?.replace(/^Bearer\s+/i, '');
+  activeStreams.set(sessionId, { abortController: abort, apiKey });
+  let upstream: Response;
   try {
-    llmRes = await fetch(endpoint, {
+    upstream = await fetch(endpoint, {
       method: 'POST',
-      headers: reqHeaders,
+      headers,
       body: JSON.stringify(body),
-      signal: llmAbort.signal,
+      signal: abort.signal,
     });
   } catch (e) {
+    clearTimeout(headerTimer);
     activeStreams.delete(sessionId);
     return jsonResponse(
       { error: `Failed to reach LLM API: ${(e as Error).message}` },
       502
     );
   }
-
-  if (!llmRes.ok) {
+  clearTimeout(headerTimer);
+  if (!upstream.ok) {
     activeStreams.delete(sessionId);
-    const errBody = await llmRes.text();
+    const text = await boundedBody(upstream);
     return withCORS(
-      new Response(errBody, {
-        status: llmRes.status,
-        headers: { 'Content-Type': llmRes.headers.get('Content-Type') || 'text/plain' },
+      new Response(text, {
+        status: upstream.status,
+        headers: upstreamHeaders(upstream),
       })
     );
   }
-
-  if (!llmRes.body) {
+  if (!upstream.body) {
     activeStreams.delete(sessionId);
     return jsonResponse({ error: 'LLM API returned no body' }, 502);
   }
-
-  const openRouterObservation: Record<string, string | number> = {};
-  for (const [key, name] of Object.entries({ responseCacheStatus: 'X-OpenRouter-Cache-Status', responseCacheAge: 'X-OpenRouter-Cache-Age', responseCacheTTL: 'X-OpenRouter-Cache-TTL', responseCacheSourceId: 'X-OpenRouter-Cache-Source-Id', generationId: 'X-Generation-Id' })) {
-    const value = llmRes.headers.get(name);
-    if (value !== null) openRouterObservation[key] = ['responseCacheAge', 'responseCacheTTL'].includes(key) ? Number(value) : value;
-  }
-
-  // Write-back cache: chunks are buffered in memory as pre-serialized NDJSON
-  // lines. Only a single KV write happens at stream completion.
-  // Each chunk is JSON.stringify'd on arrival (O(chunk_size)), so the final
-  // KV write is a plain string concatenation with zero re-serialization.
-  let ndjsonBody = '';
-  let eventId = 0;
-  const { readable, writable } = new TransformStream();
-
-  const processStream = async () => {
-    const writer = writable.getWriter();
-    const reader = llmRes.body!.getReader();
-    const enc = new TextEncoder();
-    const dec = new TextDecoder();
-    let clientGone = false;
-    let streamError: string | undefined;
-    let snapshotTimer: ReturnType<typeof setTimeout> | null = null;
-    /** Timestamp of the last KV write — used to enforce KV_WRITE_COOLDOWN_MS */
-    let lastKvWriteAt = 0;
-
-    /** Start periodic KV snapshots (progressive mode only, after client disconnect) */
-    async function startProgressiveSnapshots() {
-      if (RECOVERY_STRATEGY !== 'progressive' || snapshotTimer !== null) return;
-
-      // Write an immediate snapshot so recovery can start right away.
-      // Await to guarantee lastKvWriteAt is set before we resume reading
-      // chunks — prevents the final write from racing this one.
-      const immediateMeta: SessionMeta = {
-        totalChunks: eventId,
-        openRouterObservation,
-        done: false,
-        streaming: true,
-      };
-      lastKvWriteAt = await writeSnapshot(env, sessionId, immediateMeta, ndjsonBody);
-
-      snapshotTimer = setInterval(async () => {
-        const meta: SessionMeta = {
-          totalChunks: eventId,
-          openRouterObservation,
-          done: false,
-          streaming: true,
-        };
-        lastKvWriteAt = await writeSnapshot(env, sessionId, meta, ndjsonBody);
-      }, PROGRESSIVE_SNAPSHOT_INTERVAL_MS);
-    }
-
-    function stopProgressiveSnapshots() {
-      if (snapshotTimer !== null) {
-        clearInterval(snapshotTimer);
-        snapshotTimer = null;
+  const { readable, writable } = new TransformStream<Uint8Array, Uint8Array>();
+  const process = async () => {
+    const reader = upstream.body!.getReader(),
+      writer = writable.getWriter(),
+      encoder = new TextEncoder(),
+      decoder = new TextDecoder(),
+      key = await cacheKey(sessionId, request.url),
+      observation = observations(upstream.headers),
+      chunks: CachedChunk[] = [],
+      scanner = { pending: '', done: false };
+    let bytes = 0,
+      eventId = 0,
+      overflow = false,
+      disconnected = false,
+      terminalDelivered = false,
+      snapshotInflight = false,
+      readAt = 0;
+    let readTimer: ReturnType<typeof setTimeout> | undefined,
+      heartbeat: ReturnType<typeof setInterval> | undefined,
+      snapshotTimer: ReturnType<typeof setInterval> | undefined,
+      snapshotChain: Promise<void> = Promise.resolve(),
+      writeChain: Promise<void> = Promise.resolve();
+    const startDisconnected = () => {
+      if (disconnected || terminalDelivered) return;
+      disconnected = true;
+      readAt = Date.now();
+      void snapshot('streaming', true);
+      readTimer = setTimeout(() => abort.abort(), DISCONNECT_READ_LIMIT_MS);
+      snapshotTimer = setInterval(() => {
+        void snapshot('streaming');
+      }, SNAPSHOT_INTERVAL_MS);
+    };
+    const write = async (text: string): Promise<boolean> => {
+      const writeAttempt = writeChain.then(() =>
+        writer.write(encoder.encode(text))
+      );
+      writeChain = writeAttempt.catch(() => undefined);
+      try {
+        await writeAttempt;
+        return true;
+      } catch {
+        startDisconnected();
+        return false;
       }
-    }
-
+    };
+    const snapshot = (
+      terminal: CachedSession['generationTerminal'],
+      force = false
+    ): Promise<void> => {
+      if (!disconnected || (!force && snapshotInflight)) return snapshotChain;
+      const copy: CachedSession = {
+        version: 1,
+        firstEventId: chunks[0]?.id ?? eventId + 1,
+        chunks: chunks.map((c) => ({ ...c })),
+        generationTerminal: terminal,
+        cacheCapability: overflow ? 'overflow' : 'available',
+        openRouterObservation: { ...observation },
+        ...(error ? { error } : {}),
+      };
+      snapshotInflight = true;
+      snapshotChain = snapshotChain.then(async () => {
+        try {
+          await caches.default.put(key, cacheResponse(copy));
+        } catch (e) {
+          console.error('stream cache write failed:', (e as Error).message);
+        } finally {
+          snapshotInflight = false;
+        }
+      });
+      return snapshotChain;
+    };
+    const onRequestAbort = () => {
+      startDisconnected();
+      // Preserve the first snapshot even if this runtime tears down the
+      // response-facing task as soon as the client aborts.
+      ctx.waitUntil(snapshotChain);
+    };
+    request.signal.addEventListener('abort', onRequestAbort, { once: true });
+    void writer.closed.catch(() => startDisconnected());
+    heartbeat = setInterval(() => {
+      if (!disconnected && !terminalDelivered) void write(': ping\n\n');
+    }, 5_000);
+    let terminal: CachedSession['generationTerminal'] = 'interrupted',
+      error: string | undefined;
     try {
       while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-
-        const text = dec.decode(value, { stream: true });
-        // Serialize once per chunk, reuse for both NDJSON buffer and SSE output
-        const serialized = JSON.stringify(text);
-        ndjsonBody += serialized + '\n';
-        eventId++;
-
-        if (!clientGone) {
+        const read = await readWithIdleTimeout(reader);
+        if (!read) {
+          abort.abort();
           try {
-            await writer.write(
-              enc.encode(`id: ${eventId}\ndata: ${serialized}\n\n`)
-            );
-          } catch {
-            // Client disconnected - continue reading from LLM to buffer
-            clientGone = true;
-            await startProgressiveSnapshots();
-          }
+            await reader.cancel('Upstream stream idle timeout');
+          } catch {}
+          throw new Error('Upstream stream idle timeout');
         }
+        const { done, value } = read;
+        if (done) break;
+        const data = decoder.decode(value, { stream: true });
+        scanDone(scanner, data);
+        eventId++;
+        const size = new TextEncoder().encode(data).byteLength;
+        if (!overflow && bytes + size <= MAX_RECOVERY_CACHE_BYTES) {
+          chunks.push({ id: eventId, data });
+          bytes += size;
+        } else overflow = true;
+        if (!disconnected)
+          await write(`id: ${eventId}\ndata: ${JSON.stringify(data)}\n\n`);
       }
-
-      // Send completion event with metadata
-      const donePayload = JSON.stringify({
-        totalChunks: eventId,
-        openRouterObservation,
-        complete: true,
-      });
-      if (!clientGone) {
-        try {
-          await writer.write(
-            enc.encode(`event: done\ndata: ${donePayload}\n\n`)
-          );
-        } catch {
-          clientGone = true;
-        }
-      }
+      scanDone(scanner, decoder.decode());
+      if (/^data:\s*\[DONE\]\s*$/.test(scanner.pending)) scanner.done = true;
+      terminal = scanner.done ? 'complete' : 'interrupted';
+      if (!scanner.done) error = 'Upstream stream ended before [DONE]';
     } catch (e) {
-      streamError = (e as Error).message;
-      const errPayload = JSON.stringify({
-        totalChunks: eventId,
-        openRouterObservation,
-        complete: false,
-        error: streamError,
-      });
-      if (!clientGone) {
-        try {
-          await writer.write(
-            enc.encode(`event: error\ndata: ${errPayload}\n\n`)
-          );
-        } catch {
-          clientGone = true;
-        }
-      }
+      terminal = abort.signal.aborted ? 'interrupted' : 'failed';
+      error = errorMessage(e);
     } finally {
+      if (heartbeat) clearInterval(heartbeat);
+      if (snapshotTimer) clearInterval(snapshotTimer);
+      if (readTimer) clearTimeout(readTimer);
+      if (!disconnected) {
+        const event =
+          terminal === 'complete'
+            ? 'done'
+            : terminal === 'failed'
+              ? 'error'
+              : 'interrupted';
+        if (
+          await write(
+            `event: ${event}\ndata: ${JSON.stringify({ totalChunks: eventId, openRouterObservation: observation, complete: terminal === 'complete', ...(error ? { error } : {}) })}\n\n`
+          )
+        )
+          terminalDelivered = true;
+      }
+      if (disconnected)
+        await timeout(
+          snapshot(terminal, true),
+          Math.max(0, DISCONNECT_CACHE_LIMIT_MS - (Date.now() - readAt))
+        );
+      // A terminal write can discover the disconnect after the earlier timer
+      // cleanup, so clear the timers started by that late transition too.
+      if (snapshotTimer) clearInterval(snapshotTimer);
+      if (readTimer) clearTimeout(readTimer);
+      request.signal.removeEventListener('abort', onRequestAbort);
       activeStreams.delete(sessionId);
-      stopProgressiveSnapshots();
-
       try {
-        writer.close();
-      } catch {
-        // Already closed or errored
-      }
-
-      // Single KV write at completion (write-back).
-      // NDJSON format: metadata line + one pre-serialized chunk per line.
-      // No re-serialization needed — just string concatenation.
-      if (eventId > 0) {
-        // Respect KV write cooldown to avoid 429 when a snapshot was just written
-        if (lastKvWriteAt > 0) {
-          const elapsed = Date.now() - lastKvWriteAt;
-          if (elapsed < KV_WRITE_COOLDOWN_MS) {
-            await sleep(KV_WRITE_COOLDOWN_MS - elapsed);
-          }
-        }
-        const meta: SessionMeta = {
-          totalChunks: eventId,
-          openRouterObservation,
-          done: !streamError,
-          streaming: false,
-          ...(streamError ? { error: streamError } : {}),
-        };
-        await writeSnapshot(env, sessionId, meta, ndjsonBody);
-      }
+        await reader.cancel();
+      } catch {}
+      reader.releaseLock();
+      try {
+        await writer.close();
+      } catch {}
     }
   };
-
-  // waitUntil ensures the Worker stays alive even after client disconnects
-  ctx.waitUntil(processStream());
-
+  ctx.waitUntil(process());
   const response = sseResponse(readable);
-  for (const name of ['X-OpenRouter-Cache-Status', 'X-OpenRouter-Cache-Age', 'X-OpenRouter-Cache-TTL', 'X-OpenRouter-Cache-Source-Id', 'X-Generation-Id']) {
-    const value = llmRes.headers.get(name);
-    if (value !== null) response.headers.set(name, value);
-  }
+  for (const [name, value] of upstreamHeaders(upstream))
+    response.headers.set(name, value);
   return response;
 }
 
-// ---------------------------------------------------------------------------
-// Moderation proxy - forwards non-streaming moderation requests
-// ---------------------------------------------------------------------------
-
-async function handleModeration(request: Request): Promise<Response> {
-  let parsed: ModerationProxyRequest;
+async function handleRecover(
+  sessionId: string,
+  lastEventId: number,
+  request: Request,
+  ctx: ExecutionContext
+): Promise<Response> {
+  const { readable, writable } = new TransformStream<Uint8Array, Uint8Array>(),
+    writer = writable.getWriter(),
+    enc = new TextEncoder();
+  const run = async () => {
+    const started = Date.now();
+    let sent = lastEventId;
+    try {
+      while (true) {
+        const response = await caches.default.match(
+          await cacheKey(sessionId, request.url)
+        );
+        if (!response) {
+          await writer.write(
+            enc.encode('event: cache-miss\ndata: {"complete":false}\n\n')
+          );
+          break;
+        }
+        let cached: CachedSession;
+        try {
+          cached = (await response.json()) as CachedSession;
+        } catch {
+          await writer.write(
+            enc.encode(
+              'event: error\ndata: {"error":"Corrupt session data"}\n\n'
+            )
+          );
+          break;
+        }
+        for (const chunk of cached.chunks)
+          if (chunk.id > sent) {
+            sent = chunk.id;
+            await writer.write(
+              enc.encode(
+                `id: ${chunk.id}\ndata: ${JSON.stringify(chunk.data)}\n\n`
+              )
+            );
+          }
+        if (cached.cacheCapability === 'overflow') {
+          await writer.write(
+            enc.encode(
+              `event: interrupted\ndata: ${JSON.stringify({ totalChunks: sent, complete: false, reason: 'capacity', openRouterObservation: cached.openRouterObservation })}\n\n`
+            )
+          );
+          break;
+        }
+        if (cached.generationTerminal !== 'streaming') {
+          const event =
+            cached.generationTerminal === 'complete'
+              ? 'done'
+              : cached.generationTerminal === 'failed'
+                ? 'error'
+                : 'interrupted';
+          await writer.write(
+            enc.encode(
+              `event: ${event}\ndata: ${JSON.stringify({ totalChunks: sent, complete: cached.generationTerminal === 'complete', error: cached.error, openRouterObservation: cached.openRouterObservation })}\n\n`
+            )
+          );
+          break;
+        }
+        if (Date.now() - started >= RECOVERY_POLL_TIMEOUT_MS) {
+          await writer.write(
+            enc.encode(
+              `event: interrupted\ndata: ${JSON.stringify({ totalChunks: sent, complete: false })}\n\n`
+            )
+          );
+          break;
+        }
+        await sleep(RECOVERY_POLL_INTERVAL_MS);
+      }
+    } catch {
+    } finally {
+      try {
+        await writer.close();
+      } catch {}
+    }
+  };
+  ctx.waitUntil(run());
+  return sseResponse(readable);
+}
+async function handleRequest(request: Request): Promise<Response> {
+  let p: Omit<StreamRequest, 'sessionId'>;
   try {
-    parsed = (await request.json()) as ModerationProxyRequest;
+    p = (await request.json()) as Omit<StreamRequest, 'sessionId'>;
   } catch {
     return jsonResponse({ error: 'Invalid JSON body' }, 400);
   }
-
-  const { endpoint, apiKey, input } = parsed;
   if (
-    typeof endpoint !== 'string' ||
-    typeof apiKey !== 'string' ||
-    typeof input !== 'string' ||
-    !endpoint ||
-    !apiKey
-  ) {
-    return jsonResponse({ error: 'endpoint, apiKey, and input are required' }, 400);
-  }
-
-  let upstream: Response;
+    !p?.endpoint ||
+    typeof p.endpoint !== 'string' ||
+    !isStringRecord(p.headers)
+  )
+    return jsonResponse(
+      { error: 'endpoint and string headers are required' },
+      400
+    );
+  let r: Response;
   try {
-    upstream = await fetch(endpoint, {
+    r = await fetchWithHeaderTimeout(p.endpoint, {
+      method: 'POST',
+      headers: p.headers,
+      body: JSON.stringify(p.body),
+    });
+  } catch (e) {
+    return jsonResponse(
+      { error: `Failed to reach LLM API: ${(e as Error).message}` },
+      502
+    );
+  }
+  if (!r.ok) {
+    const body = await boundedBody(r);
+    return withCORS(
+      new Response(body, { status: r.status, headers: upstreamHeaders(r) })
+    );
+  }
+  return withCORS(
+    new Response(r.body, { status: r.status, headers: upstreamHeaders(r) })
+  );
+}
+async function handleModeration(request: Request): Promise<Response> {
+  let p: ModerationProxyRequest;
+  try {
+    p = (await request.json()) as ModerationProxyRequest;
+  } catch {
+    return jsonResponse({ error: 'Invalid JSON body' }, 400);
+  }
+  if (!p?.endpoint || !p.apiKey || typeof p.input !== 'string')
+    return jsonResponse(
+      { error: 'endpoint, apiKey, and input are required' },
+      400
+    );
+  let r: Response;
+  try {
+    r = await fetchWithHeaderTimeout(p.endpoint, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        Authorization: `Bearer ${apiKey}`,
+        'Authorization': `Bearer ${p.apiKey}`,
       },
-      body: JSON.stringify({ input }),
+      body: JSON.stringify({ input: p.input }),
     });
   } catch (e) {
     return jsonResponse(
@@ -471,358 +586,84 @@ async function handleModeration(request: Request): Promise<Response> {
       502
     );
   }
-
-  const text = await upstream.text();
+  const body = await boundedBody(r);
   return withCORS(
-    new Response(text, {
-      status: upstream.status,
-      headers: {
-        'Content-Type': upstream.headers.get('Content-Type') || 'application/json',
-      },
-    })
+    new Response(body, { status: r.status, headers: upstreamHeaders(r) })
   );
 }
-
-async function handleRequest(request: Request): Promise<Response> {
-  let parsed: Omit<StreamRequest, 'sessionId'>;
-  try {
-    parsed = await request.json() as Omit<StreamRequest, 'sessionId'>;
-  } catch {
-    return jsonResponse({ error: 'Invalid JSON body' }, 400);
-  }
-  if (typeof parsed?.endpoint !== 'string' || !parsed.endpoint || !isStringRecord(parsed.headers)) {
-    return jsonResponse({ error: 'endpoint and string headers are required' }, 400);
-  }
-  let upstream: Response;
-  try {
-    upstream = await fetch(parsed.endpoint, {
-      method: 'POST', headers: parsed.headers, body: JSON.stringify(parsed.body),
-      signal: request.signal,
-    });
-  } catch (e) {
-    return jsonResponse({ error: `Failed to reach LLM API: ${(e as Error).message}` }, 502);
-  }
-  const headers = new Headers();
-  for (const name of ['Content-Type', 'X-OpenRouter-Cache-Status', 'X-OpenRouter-Cache-Age', 'X-OpenRouter-Cache-TTL', 'X-OpenRouter-Cache-Source-Id', 'X-Generation-Id']) {
-    const value = upstream.headers.get(name);
-    if (value !== null) headers.set(name, value);
-  }
-  return withCORS(new Response(upstream.body, { status: upstream.status, headers }));
-}
-
-// ---------------------------------------------------------------------------
-// Recovery handler - replays missed chunks from KV (with polling)
-// ---------------------------------------------------------------------------
-
-async function handleRecover(
-  sessionId: string,
-  lastEventId: number,
-  env: Env,
-  ctx: ExecutionContext
-): Promise<Response> {
-  const enc = new TextEncoder();
-
-  const { readable, writable } = new TransformStream();
-  const writer = writable.getWriter();
-
-  const streamRecovery = async () => {
-    let sentUpTo = lastEventId;
-    const startTime = Date.now();
-
-    try {
-      while (true) {
-        const raw = await env.STREAM_CACHE.get(`session:${sessionId}`);
-
-        if (!raw) {
-          // No data in KV yet — if within timeout, send a waiting event and poll
-          if (Date.now() - startTime > RECOVERY_POLL_TIMEOUT_MS) {
-            await writer.write(
-              enc.encode(`event: error\ndata: ${JSON.stringify({
-                totalChunks: 0,
-                complete: false,
-                error: 'Recovery timeout: session not found',
-              })}\n\n`)
-            );
-            break;
-          }
-          await writer.write(
-            enc.encode(`event: waiting\ndata: ${JSON.stringify({ sentUpTo })}\n\n`)
-          );
-          await sleep(RECOVERY_POLL_INTERVAL_MS);
-          continue;
-        }
-
-        const parsed = parseKvContent(raw);
-        if (!parsed) {
-          await writer.write(
-            enc.encode(`event: error\ndata: ${JSON.stringify({
-              error: 'Corrupt session data',
-            })}\n\n`)
-          );
-          break;
-        }
-
-        const { meta, chunkLines } = parsed;
-
-        // Decide whether to send chunks now:
-        // - progressive: send immediately as they become available
-        // - batch: only send once the stream is complete (done/error)
-        const shouldSendChunks =
-          RECOVERY_STRATEGY === 'progressive' || !meta.streaming;
-
-        if (shouldSendChunks) {
-          // Send any new chunks since our last position
-          const newChunks = chunkLines.slice(sentUpTo);
-          for (let i = 0; i < newChunks.length; i++) {
-            sentUpTo++;
-            // Chunk lines are already JSON.stringify'd — use directly as SSE data
-            await writer.write(
-              enc.encode(`id: ${sentUpTo}\ndata: ${newChunks[i]}\n\n`)
-            );
-          }
-        }
-
-        // Stream is complete — send final event and exit
-        if (meta.done) {
-          await writer.write(
-            enc.encode(`event: done\ndata: ${JSON.stringify({
-              totalChunks: meta.totalChunks,
-              openRouterObservation: meta.openRouterObservation,
-              complete: true,
-            })}\n\n`)
-          );
-          break;
-        }
-
-        if (meta.error) {
-          await writer.write(
-            enc.encode(`event: error\ndata: ${JSON.stringify({
-              totalChunks: meta.totalChunks,
-              openRouterObservation: meta.openRouterObservation,
-              complete: false,
-              error: meta.error,
-            })}\n\n`)
-          );
-          break;
-        }
-
-        // Stream is still in progress — poll again
-        if (meta.streaming) {
-          // Check timeout
-          if (Date.now() - startTime > RECOVERY_POLL_TIMEOUT_MS) {
-            // Send whatever we have as interrupted
-            await writer.write(
-              enc.encode(`event: interrupted\ndata: ${JSON.stringify({
-                totalChunks: meta.totalChunks,
-                openRouterObservation: meta.openRouterObservation,
-                complete: false,
-              })}\n\n`)
-            );
-            break;
-          }
-
-          await writer.write(
-            enc.encode(`event: waiting\ndata: ${JSON.stringify({
-              sentUpTo,
-              streaming: true,
-            })}\n\n`)
-          );
-          await sleep(RECOVERY_POLL_INTERVAL_MS);
-          continue;
-        }
-
-        // meta.streaming === false and meta.done === false — shouldn't happen normally
-        // but treat as interrupted
-        await writer.write(
-          enc.encode(`event: interrupted\ndata: ${JSON.stringify({
-            totalChunks: meta.totalChunks,
-            openRouterObservation: meta.openRouterObservation,
-            complete: false,
-          })}\n\n`)
-        );
-        break;
-      }
-    } catch (e) {
-      try {
-        await writer.write(
-          enc.encode(`event: error\ndata: ${JSON.stringify({
-            error: (e as Error).message,
-          })}\n\n`)
-        );
-      } catch {
-        // Writer already closed
-      }
-    } finally {
-      try {
-        writer.close();
-      } catch {
-        // Already closed
-      }
-    }
-  };
-
-  // Use waitUntil so the polling continues even if client reads slowly
-  ctx.waitUntil(streamRecovery());
-
-  return sseResponse(readable);
-}
-
-function sleep(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms));
-}
-
-// ---------------------------------------------------------------------------
-// ACK handler - client confirms full receipt, KV entry is deleted
-// ---------------------------------------------------------------------------
-
-async function handleAck(
-  sessionId: string,
-  env: Env
-): Promise<Response> {
-  await env.STREAM_CACHE.delete(`session:${sessionId}`);
-  return jsonResponse({ deleted: true });
-}
-
-// ---------------------------------------------------------------------------
-// Cancel handler - abort upstream LLM read and optionally call provider cancel
-// ---------------------------------------------------------------------------
-
-interface CancelRequest {
-  providerCancel?: {
-    generationId: string;
-    apiKey: string;
-  };
-}
-
 async function handleCancel(
   sessionId: string,
-  request: Request,
-  env: Env
+  request: Request
 ): Promise<Response> {
-  let cancelReq: CancelRequest = {};
+  let payload: CancelRequest = {};
   try {
-    cancelReq = (await request.json()) as CancelRequest;
-  } catch {
-    // Body is optional
-  }
-
-  const stream = activeStreams.get(sessionId);
-  if (stream) {
-    // Abort the upstream LLM fetch — this will cause reader.read() to throw
-    // in processStream, ending the while loop and triggering cleanup.
-    stream.abortController.abort();
-  }
-
-  // Call provider cancel API if generation ID is provided
-  const pc = cancelReq.providerCancel;
-  if (pc?.generationId && pc?.apiKey) {
+    payload = (await request.json()) as CancelRequest;
+  } catch {}
+  const local = activeStreams.get(sessionId);
+  if (local) local.abortController.abort();
+  let providerCancel: 'not-requested' | 'succeeded' | 'failed' =
+    'not-requested';
+  const p = payload.providerCancel;
+  if (p?.generationId && p.apiKey)
     try {
-      await fetch(
-        `https://openrouter.ai/api/v1/generation/${encodeURIComponent(pc.generationId)}/cancel`,
-        {
-          method: 'POST',
-          headers: { Authorization: `Bearer ${pc.apiKey}` },
-        }
+      const r = await fetchWithHeaderTimeout(
+        `https://openrouter.ai/api/v1/generation/${encodeURIComponent(p.generationId)}/cancel`,
+        { method: 'POST', headers: { Authorization: `Bearer ${p.apiKey}` } }
       );
+      providerCancel = r.ok ? 'succeeded' : 'failed';
+      await cancelBody(r);
     } catch {
-      // Best-effort
+      providerCancel = 'failed';
     }
-  }
-
-  // Clean up KV cache — the buffered data up to this point is already
-  // available for recovery if needed (the final snapshot in processStream's
-  // finally block will still run with whatever was buffered before abort).
-  return jsonResponse({ cancelled: true });
+  return jsonResponse({ localAbortRequested: !!local, providerCancel });
 }
-
-// ---------------------------------------------------------------------------
-// Health check
-// ---------------------------------------------------------------------------
-
-function handleHealth(): Response {
-  return jsonResponse({ status: 'ok', version: '0.2.0' });
-}
-
-// ---------------------------------------------------------------------------
-// Router
-// ---------------------------------------------------------------------------
-
 export default {
   async fetch(
     request: Request,
     env: Env,
     ctx: ExecutionContext
   ): Promise<Response> {
-    // CORS preflight
-    if (request.method === 'OPTIONS') {
+    if (request.method === 'OPTIONS')
       return withCORS(new Response(null, { status: 204 }));
-    }
-
     const url = new URL(request.url);
-
-    // Health check (unauthenticated)
-    if (url.pathname === '/health') {
-      return handleHealth();
-    }
-
-    // Auth check for all /api/* routes
-    if (url.pathname.startsWith('/api/')) {
-      if (!authenticate(request, env)) {
-        return jsonResponse({ error: 'Unauthorized' }, 401);
-      }
-    }
-
-    // POST /api/stream - Start proxied SSE stream
-    if (url.pathname === '/api/stream' && request.method === 'POST') {
+    if (url.pathname === '/health')
+      return jsonResponse({ status: 'ok', version: '0.2.0' });
+    if (url.pathname.startsWith('/api/') && !authenticated(request, env))
+      return jsonResponse({ error: 'Unauthorized' }, 401);
+    if (url.pathname === '/api/stream' && request.method === 'POST')
       return handleStream(request, env, ctx);
-    }
-
-    if (url.pathname === '/api/request' && request.method === 'POST') {
+    if (url.pathname === '/api/request' && request.method === 'POST')
       return handleRequest(request);
-    }
-
-    // POST /api/moderation - Forward a moderation request
-    if (url.pathname === '/api/moderation' && request.method === 'POST') {
+    if (url.pathname === '/api/moderation' && request.method === 'POST')
       return handleModeration(request);
-    }
-
-    // POST /api/cancel/:sessionId - Cancel upstream LLM stream
-    if (url.pathname.startsWith('/api/cancel/') && request.method === 'POST') {
-      const sessionId = decodeURIComponent(
-        url.pathname.slice('/api/cancel/'.length)
-      );
-      if (!sessionId) {
-        return jsonResponse({ error: 'sessionId is required' }, 400);
-      }
-      return handleCancel(sessionId, request, env);
-    }
-
-    // POST /api/ack/:sessionId - Client confirms full receipt, deletes KV
-    if (url.pathname.startsWith('/api/ack/') && request.method === 'POST') {
-      const sessionId = decodeURIComponent(
-        url.pathname.slice('/api/ack/'.length)
-      );
-      if (!sessionId) {
-        return jsonResponse({ error: 'sessionId is required' }, 400);
-      }
-      return handleAck(sessionId, env);
-    }
-
-    // GET /api/recover/:sessionId?lastEventId=N - Recover missed chunks
     if (url.pathname.startsWith('/api/recover/') && request.method === 'GET') {
-      const sessionId = decodeURIComponent(
-        url.pathname.slice('/api/recover/'.length)
-      );
-      const lastEventId = parseInt(
-        url.searchParams.get('lastEventId') || '0',
-        10
-      );
-      if (!sessionId) {
-        return jsonResponse({ error: 'sessionId is required' }, 400);
-      }
-      return handleRecover(sessionId, lastEventId, env, ctx);
+      const id = decodeURIComponent(url.pathname.slice('/api/recover/'.length));
+      return id
+        ? handleRecover(
+            id,
+            Number.parseInt(url.searchParams.get('lastEventId') ?? '0', 10) ||
+              0,
+            request,
+            ctx
+          )
+        : jsonResponse({ error: 'sessionId is required' }, 400);
     }
-
+    if (url.pathname.startsWith('/api/ack/') && request.method === 'POST') {
+      const id = decodeURIComponent(url.pathname.slice('/api/ack/'.length));
+      return id
+        ? jsonResponse({
+            deleted: await caches.default.delete(
+              await cacheKey(id, request.url)
+            ),
+          })
+        : jsonResponse({ error: 'sessionId is required' }, 400);
+    }
+    if (url.pathname.startsWith('/api/cancel/') && request.method === 'POST') {
+      const id = decodeURIComponent(url.pathname.slice('/api/cancel/'.length));
+      return id
+        ? handleCancel(id, request)
+        : jsonResponse({ error: 'sessionId is required' }, 400);
+    }
     return jsonResponse({ error: 'Not Found' }, 404);
   },
 };

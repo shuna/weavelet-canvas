@@ -15,6 +15,7 @@ import { clearStreamingBuffersForTest, initializeStreamingBuffer, isBufferingNod
 import { useStreamEndStatusStore } from '@store/stream-end-status-store';
 import * as swBridge from '@utils/swBridge';
 import { prepareStreamRequest } from '@api/api';
+import { IDBFactory, IDBKeyRange } from 'fake-indexeddb';
 
 // ---------------------------------------------------------------------------
 // Mock zustand store
@@ -597,6 +598,34 @@ describe('stream end status via SW path', () => {
     proxyAuthToken: '',
   });
 
+  it.each([
+    { id: 'generation-started', choices: [] },
+    { choices: [{ delta: {}, finish_reason: 'stop' }] },
+    { choices: [{ delta: {} }] },
+  ])('does not resend a proxy POST after an upstream event without display text: %j', async (event) => {
+    const sessionId = 'sess-proxy-no-retry';
+    mockState = makeMockState(sessionId);
+    vi.mocked(swBridge.waitForController).mockResolvedValue(false);
+    vi.mocked(prepareStreamRequest as any).mockReturnValue({ endpoint: 'https://example.com/v1/chat/completions', headers: {}, body: {} });
+    vi.stubGlobal('indexedDB', new IDBFactory());
+    vi.stubGlobal('IDBKeyRange', IDBKeyRange);
+    const proxyEvents = `id: 1\ndata: ${JSON.stringify(`data: ${JSON.stringify(event)}\n\n`)}\n\nevent: error\ndata: {"error":"This model does not support system messages","complete":false}\n\n`;
+    const fetchMock = vi.fn(async () => new Response(proxyEvents));
+    vi.stubGlobal('fetch', fetchMock);
+    try {
+      await expect(executeSubmitStream({
+        sessionId, chatId: 'chat-1', chatIndex: 0, messageIndex: 0, targetNodeId: 'node-assistant',
+        messages: [{ role: 'system', content: [{ type: 'text', text: 'instruction' }] }, { role: 'user', content: [{ type: 'text', text: 'hi' }] }],
+        config: { model: 'test', max_tokens: 100, temperature: 1, presence_penalty: 0, top_p: 1, frequency_penalty: 0, stream: true },
+        resolvedProvider: { endpoint: 'https://example.com/v1/chat/completions', key: 'secret' },
+        abortController: new AbortController(), t: key => key,
+      })).rejects.toThrow('does not support system messages');
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
   it('preserves interrupted status when user cancels on SW path', async () => {
     vi.useFakeTimers();
     const sessionId = 'sess-sw-cancel';
@@ -700,6 +729,7 @@ describe('stream end status via SW path', () => {
     vi.mocked(db.markStreamApplied).mockClear();
     vi.mocked(swBridge.waitForController).mockResolvedValue(true);
     vi.mocked(swBridge.startStream).mockImplementationOnce(async params => {
+      params.onChunk('', { reasoning: 'received thought' });
       params.onChunk('saved answer');
       if (terminal === 'done') params.onDone({ finishReason: 'stop', proxySessionId: 'proxy-session' });
       else params.onError('network lost');
@@ -715,7 +745,7 @@ describe('stream end status via SW path', () => {
       else await pending;
       expect(db.deleteRequest).not.toHaveBeenCalled();
       expect(db.markStreamApplied).toHaveBeenCalledWith(expect.any(String),
-        (mockState.chats as any[])[0].branchTree.nodes['node-assistant'].contentHash, 'assistant', 'saved answer');
+        (mockState.chats as any[])[0].branchTree.nodes['node-assistant'].contentHash, 'assistant', 'saved answer', 'received thought');
       expect(fetchSpy).not.toHaveBeenCalled();
     } finally { fetchSpy.mockRestore(); clearSubmitSessionRuntime(sessionId); }
   });
@@ -730,8 +760,8 @@ describe('stream end status via SW path', () => {
     vi.mocked(db.markStreamApplied).mockClear();
     vi.mocked(swBridge.waitForController).mockResolvedValue(false);
     vi.mocked(db.updateStatus).mockClear();
-    const llm = 'data: {"choices":[{"delta":{"content":"saved answer"}}]}\n\n';
-    const wire = `id: 1\ndata: ${JSON.stringify(llm)}\n\nevent: ${terminal}\ndata: ${JSON.stringify({ error: 'network lost' })}\n\n`;
+    const llm = 'data: {"choices":[{"delta":{"content":"<think>hidden</think>saved answer","reasoning":"thought"}}]}\n\ndata: [DONE]\n\n';
+    const wire = `id: 1\ndata: ${JSON.stringify(llm)}\n\nevent: ${terminal}\ndata: ${JSON.stringify(terminal === 'done' ? { complete: true } : { error: 'network lost' })}\n\n`;
     const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(wire));
     try {
       const pending = executeSubmitStream({ sessionId, chatId: 'chat-1', chatIndex: 0, messageIndex: 0, targetNodeId: 'node-assistant',
@@ -742,7 +772,8 @@ describe('stream end status via SW path', () => {
       else await pending;
       expect(db.deleteRequest).not.toHaveBeenCalled();
       expect(db.updateStatus).toHaveBeenCalledWith(expect.any(String), terminal === 'done' ? 'completed' : 'failed');
-      expect(db.markStreamApplied).toHaveBeenCalledOnce();
+      expect(db.markStreamApplied).toHaveBeenCalledWith(expect.any(String),
+        (mockState.chats as any[])[0].branchTree.nodes['node-assistant'].contentHash, 'assistant', 'saved answer', 'thoughthidden');
       expect(fetchSpy).toHaveBeenCalledOnce();
       expect(fetchSpy.mock.calls[0][0]).toBe('https://proxy.test/api/stream');
     } finally { fetchSpy.mockRestore(); clearSubmitSessionRuntime(sessionId); }

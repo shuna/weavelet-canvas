@@ -1,6 +1,7 @@
 import type { BranchNode, BranchTree } from '@type/chat';
 import { digest } from './crypto';
 import type { Records } from './records';
+import { mergeEditTimes } from './editTimes';
 
 // Parent links remain a tree: equal siblings coalesce, but continuations under
 // different parents need separate nodes (their immutable content stays shared).
@@ -16,6 +17,7 @@ export async function mergeBranches(chatId: string, base: Records, local: Branch
   const unchanged = async (node: BranchNode) => {
     const fields = new Set([...Object.keys(node), ...baselineFields.get(node.id) ?? []]);
     for (const field of fields) {
+      if (field === 'updatedAt') continue;
       const value = (node as any)[field];
       if ((value === undefined ? undefined : await digest(JSON.stringify(value))) !== base[JSON.stringify([...prefix, node.id, field])]) return false;
     }
@@ -45,6 +47,8 @@ export async function mergeBranches(chatId: string, base: Records, local: Branch
       if (field === 'id') continue;
       const l = (left as any)[field], r = (right as any)[field];
       if (l === r) continue;
+      const time = mergeEditTimes(JSON.stringify([...prefix, id, field]), [l === undefined ? undefined : JSON.stringify(l), r === undefined ? undefined : JSON.stringify(r)]);
+      if (time !== undefined) { left.updatedAt = right.updatedAt = Number(time); continue; }
       const baseline = base[JSON.stringify([...prefix, id, field])];
       const lh = l === undefined ? undefined : await digest(JSON.stringify(l));
       const rh = r === undefined ? undefined : await digest(JSON.stringify(r));
@@ -93,6 +97,8 @@ export async function mergeBranches(chatId: string, base: Records, local: Branch
         if (!match) {
           nodes[target] = { ...node, id: target, parentId };
           signatures.set(signature, [...signatures.get(signature) ?? [], target]);
+        } else if (node.updatedAt !== undefined) {
+          nodes[target].updatedAt = Math.max(nodes[target].updatedAt ?? node.updatedAt, node.updatedAt);
         }
         used.add(target); maps[side][node.id] = target;
       }

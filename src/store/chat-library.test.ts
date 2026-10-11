@@ -49,7 +49,9 @@ describe('chat library operations', () => {
     expect(result.status).toBe('created');
     const copy = get().chats![0];
     expect(copy.id).not.toBe(source.id);
-    expect(copy.branchTree).toEqual(source.branchTree);
+    expect(copy.branchTree).toEqual({ ...source.branchTree, nodes: Object.fromEntries(
+      Object.entries(source.branchTree!.nodes).map(([id, value]) => [id, { ...value, updatedAt: value.updatedAt ?? expect.any(Number) }])
+    ) });
     expect(copy.branchTree).not.toBe(source.branchTree);
     expect(get().collapsedNodeMaps['0']).toEqual(source.collapsedNodes);
     expect(previousEntry.refCount).toBe(beforeCount);

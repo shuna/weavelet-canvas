@@ -1,3 +1,4 @@
+import { resolveValidSummary } from '@utils/bubbleSummary';
 import React, { useEffect, useMemo, useState, useRef } from 'react';
 import useStore from '@store/store';
 import useSubmit from '@hooks/useSubmit';
@@ -123,6 +124,7 @@ export function useEditViewLogic({
   nodeId,
   sticky,
   editSessionKey,
+  summaryId,
 }: {
   content: ContentInterface[];
   setIsEdit: React.Dispatch<React.SetStateAction<boolean>>;
@@ -130,6 +132,7 @@ export function useEditViewLogic({
   nodeId?: string;
   sticky?: boolean;
   editSessionKey: string;
+  summaryId?: string;
 }) {
   const inputRole = useStore((state) => state.inputRole);
   const appendNode = useStore((state) => state.appendNode);
@@ -203,13 +206,15 @@ export function useEditViewLogic({
     if (textareaRef.current) textareaRef.current.style.height = 'auto';
   };
 
-  const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement> | KeyboardEvent) => {
+    const nativeEvent = 'nativeEvent' in e ? e.nativeEvent : e;
+    // Safari can end composition before the confirming Enter keydown.
+    if (nativeEvent.isComposing || nativeEvent.keyCode === 229) return;
     const isMobile =
       /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini|playbook|silk/i.test(
         navigator.userAgent
       );
-    const isComposing = (e as any).nativeEvent?.isComposing ?? (e as any).isComposing ?? false;
-    if (e.key === 'Enter' && !isMobile && !isComposing) {
+    if (e.key === 'Enter' && !isMobile) {
       const enterToSubmit = useStore.getState().enterToSubmit;
       if (e.ctrlKey && e.shiftKey) {
         e.preventDefault();
@@ -284,6 +289,23 @@ export function useEditViewLogic({
     return { chatId: currentChatId, nodeId: nodeId ?? chat?.branchTree?.activePath[messageIndex] ?? String(messageIndex) };
   };
 
+  const commitSummary = (removeCount = 0) => {
+    const state = useStore.getState();
+    const chat = state.chats?.find(chat => chat.id === currentChatId);
+    const summary = chat?.summaries?.find(value => value.id === summaryId);
+    if (!chat || !summary?.useForSubmit || !_content.every(value => value.type === 'text') || !hasMeaningfulContent(_content)) return false;
+    const range = resolveValidSummary({ ...chat, omittedNodes: state.omittedNodeMaps[String(currentChatIndex)] ?? chat.omittedNodes }, summary, Object.values(state.generatingSessions).filter(session => session.chatId === chat.id).map(session => session.targetNodeId));
+    if (!range || range.last !== resolveMessageIndex(currentChatId, nodeId, messageIndex)) return false;
+    state.saveBubbleSummary(chat.id, { ...summary, text: _content.map(value => value.type === 'text' ? value.text : '').join('\n') });
+    for (let index = range.last + removeCount; index > range.last; index--) {
+      const targetNodeId = state.chats?.find(value => value.id === chat.id)?.branchTree?.activePath[index] ?? String(index);
+      if (state.removeNode({ chatId: chat.id, nodeId: targetNodeId }).status !== 'updated') return false;
+    }
+    clearDraft();
+    setIsEdit(false);
+    return true;
+  };
+
   const handleSave = () => {
     const hasSubmittableContent = hasMeaningfulContent(_content);
     if (sticky && !hasSubmittableContent) return;
@@ -294,6 +316,7 @@ export function useEditViewLogic({
     }
     if (resolveChatModel(currentChatIndex).status === 'available' && !confirmChatModelFavorite(currentChatIndex)) return;
 
+    if (summaryId) { commitSummary(); return; }
     const resolvedMessageIndex = resolveMessageIndex(currentChatId, nodeId, messageIndex);
 
     if (sticky) {
@@ -312,7 +335,7 @@ export function useEditViewLogic({
   };
 
   const handleBranchOnly = () => {
-    if (sticky || isNodeBusy(nodeId)) return;
+    if (summaryId || sticky || isNodeBusy(nodeId)) return;
     if (resolveChatModel(currentChatIndex).status === 'available' && !confirmChatModelFavorite(currentChatIndex)) return;
     const { chatId, nodeId: fromNodeId } = editTarget();
     if (useStore.getState().createBranch({ chatId, fromNodeId, content: _content }).status !== 'created') return;
@@ -323,6 +346,14 @@ export function useEditViewLogic({
   const handleBranchGenerate = () => {
     if (isChatBusy() || !modelValid || sticky || isNodeBusy(nodeId)) return;
     if (!confirmChatModelFavorite(currentChatIndex)) return;
+    if (summaryId) {
+      const chat = useStore.getState().chats?.[currentChatIndex];
+      const anchor = nodeId ?? chat?.branchTree?.activePath[resolveMessageIndex(currentChatId, nodeId, messageIndex)];
+      if (!anchor || !commitSummary()) return;
+      useStore.getState().truncateActivePathAt(currentChatIndex, anchor);
+      handleSubmit();
+      return;
+    }
     const { chatId, nodeId: fromNodeId } = editTarget();
     if (useStore.getState().createBranch({ chatId, fromNodeId, content: _content }).status !== 'created') return;
     clearDraft();
@@ -350,6 +381,7 @@ export function useEditViewLogic({
       }
     }
     if (!confirmChatModelFavorite(currentChatIndex)) return;
+    if (summaryId) { if (commitSummary(removeCount)) handleSubmitMidChat(nextIndex); return; }
     if (replaceNodeAndPrune({ ...editTarget(), role: chats[currentChatIndex].messages[resolvedMessageIndex].role, content: _content, removeCount }).status !== 'updated') return;
     clearDraft();
     setIsEdit(false);
@@ -385,6 +417,7 @@ export function useEditViewLogic({
         showToast(i18next.t('protectedPruneStopped', { ns: 'main' }), 'warning');
         return;
       }
+      if (summaryId) { if (commitSummary(removeCount)) handleSubmit(); return; }
       if (replaceNodeAndPrune({ ...editTarget(), role: chats[currentChatIndex].messages[resolvedMessageIndex].role, content: _content, removeCount }).status !== 'updated') return;
       clearDraft();
       setIsEdit(false);
@@ -393,6 +426,7 @@ export function useEditViewLogic({
   };
 
   const handlePaste = async (e: React.ClipboardEvent<HTMLTextAreaElement>) => {
+    if (summaryId) return;
     const items = e.clipboardData.items;
     const chat = useStore.getState().chats![currentChatIndex];
     for (const item of items) {

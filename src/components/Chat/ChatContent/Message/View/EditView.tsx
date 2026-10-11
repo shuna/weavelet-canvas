@@ -6,13 +6,14 @@ import EditViewButtons from './EditViewButtons';
 import { useEditViewLogic } from './useEditViewLogic';
 import OverTypeEditor from './OverTypeEditor';
 
-export const MessageEditForm = ({ logic, role, messageIndex, sticky = false, autoFocus = true, editorClassName }: {
+export const MessageEditForm = ({ logic, role, messageIndex, sticky = false, autoFocus = true, textOnly = false, editorClassName }: {
   logic: ReturnType<typeof useEditViewLogic>;
   role?: string;
   messageIndex: number;
   sticky?: boolean;
   autoFocus?: boolean;
   editorClassName?: string;
+  textOnly?: boolean;
 }) => {
   const { t } = useTranslation();
   const stickySurfaceClass = 'rounded-2xl bg-white/60 px-4 pt-2.5 pb-2.5 shadow-sm ring-1 ring-black/5 dark:bg-gray-900/20 dark:ring-white/10 md:px-5 md:pt-3 md:pb-3';
@@ -43,10 +44,10 @@ export const MessageEditForm = ({ logic, role, messageIndex, sticky = false, aut
           />
         </div>
         {sticky && (
-          <EditViewButtons {...logic} sticky={sticky} messageIndex={messageIndex} role={role} />
+          <EditViewButtons {...logic} textOnly={textOnly} sticky={sticky} messageIndex={messageIndex} role={role} />
         )}
       </div>
-      {!sticky && <EditViewButtons {...logic} sticky={false} messageIndex={messageIndex} role={role} />}
+      {!sticky && <EditViewButtons {...logic} textOnly={textOnly} sticky={false} messageIndex={messageIndex} role={role} />}
       {logic.isModalOpen && (
         <PopupModal
           setIsModalOpen={logic.setIsModalOpen}

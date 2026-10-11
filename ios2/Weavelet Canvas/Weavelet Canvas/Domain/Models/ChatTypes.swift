@@ -64,6 +64,8 @@ struct Chat: Codable, Hashable, Identifiable {
     var collapsedNodes: [String: Bool]?
     var omittedNodes: [String: Bool]?
     var protectedNodes: [String: Bool]?
+    var summaryTargets: [String: Bool]?
+    var summaries: [BubbleSummary]?
 
     init(
         id: String = UUID().uuidString,
@@ -76,7 +78,9 @@ struct Chat: Codable, Hashable, Identifiable {
         branchTree: BranchTree? = nil,
         collapsedNodes: [String: Bool]? = nil,
         omittedNodes: [String: Bool]? = nil,
-        protectedNodes: [String: Bool]? = nil
+        protectedNodes: [String: Bool]? = nil,
+        summaryTargets: [String: Bool]? = nil,
+        summaries: [BubbleSummary]? = nil
     ) {
         self.id = id
         self.title = title
@@ -89,7 +93,43 @@ struct Chat: Codable, Hashable, Identifiable {
         self.collapsedNodes = collapsedNodes
         self.omittedNodes = omittedNodes
         self.protectedNodes = protectedNodes
+        self.summaryTargets = summaryTargets
+        self.summaries = summaries
     }
+}
+
+struct BubbleSummarySource: Codable, Hashable {
+    let nodeId: String
+    let parentId: String?
+    let role: String
+    let textParts: [String]
+
+    enum CodingKeys: String, CodingKey { case nodeId, parentId, role, textParts }
+    init(nodeId: String, parentId: String?, role: String, textParts: [String]) {
+        self.nodeId = nodeId; self.parentId = parentId; self.role = role; self.textParts = textParts
+    }
+    init(from decoder: Decoder) throws {
+        let values = try decoder.container(keyedBy: CodingKeys.self)
+        nodeId = try values.decode(String.self, forKey: .nodeId)
+        parentId = try values.decodeIfPresent(String.self, forKey: .parentId)
+        role = try values.decode(String.self, forKey: .role)
+        textParts = try values.decode([String].self, forKey: .textParts)
+    }
+    func encode(to encoder: Encoder) throws {
+        var values = encoder.container(keyedBy: CodingKeys.self)
+        try values.encode(nodeId, forKey: .nodeId)
+        try values.encode(parentId, forKey: .parentId)
+        try values.encode(role, forKey: .role)
+        try values.encode(textParts, forKey: .textParts)
+    }
+}
+
+struct BubbleSummary: Codable, Hashable, Identifiable {
+    let id: String
+    let mode: String
+    let sources: [BubbleSummarySource]
+    let text: String
+    var useForSubmit: Bool
 }
 
 // MARK: - Folder

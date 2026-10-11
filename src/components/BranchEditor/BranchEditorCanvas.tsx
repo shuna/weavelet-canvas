@@ -25,6 +25,7 @@ import ConversationHeaderNode from './nodes/ConversationHeaderNode';
 import NodeContextMenu from './NodeContextMenu';
 import BranchDiffModal from './BranchDiffModal';
 import MessageDetailModal from './MessageDetailModal';
+import BranchStepEdge from './BranchStepEdge';
 import { buildPathToLeaf, findLCA } from '@utils/branchUtils';
 import { perfStart, perfEnd } from '@utils/perfTrace';
 import BranchSearchBar from './BranchSearchBar';
@@ -307,6 +308,8 @@ const InteractionModeToggle = ({
     </div>
   );
 };
+
+const edgeTypes = { step: BranchStepEdge };
 
 const nodeTypes = {
   messageNode: MessageNode,
@@ -828,7 +831,7 @@ const BranchEditorCanvas = ({
   }, [dropPopover, chats, moveBranchSequence]);
 
   return (
-    <div ref={containerRef} className='relative w-full h-full' tabIndex={-1}>
+    <div ref={containerRef} className='relative isolate w-full h-full' tabIndex={-1}>
       <ReactFlow
         nodes={nodes}
         edges={edges}
@@ -844,6 +847,7 @@ const BranchEditorCanvas = ({
         onMoveEnd={unlockPageDragBounce}
         onSelectionChange={onSelectionChange}
         nodeTypes={nodeTypes}
+        edgeTypes={edgeTypes}
         fitView
         fitViewOptions={{ padding: 0.2 }}
         minZoom={0.1}

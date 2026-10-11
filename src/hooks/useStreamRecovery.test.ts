@@ -17,14 +17,16 @@ vi.mock('@utils/streamDb', () => ({
   getAllPending: async () => fixture.records,
   deleteRequest: (...args: unknown[]) => fixture.remove(...args),
   saveRequest: (...args: unknown[]) => fixture.save(...args),
+  saveRecoveryRecord: (record: StreamRecord) => fixture.save(record),
+  saveProxyCheckpoint: vi.fn(),
 }));
 vi.mock('@utils/swBridge', () => ({ register: vi.fn() }));
 vi.mock('@utils/proxyClient', () => ({
-  recoverFromProxy: (...args: unknown[]) => fixture.proxy(...args),
+  fetchProxyRecovery: (...args: unknown[]) => fixture.proxy(...args),
   sendAck: (...args: unknown[]) => fixture.ack(...args),
   parseProxySse: () => ({ partial: '', events: [
-    { rawText: 'data: {"choices":[{"delta":{"content":"recovered response"}}]}\n\n' },
-    { eventType: 'done' },
+    { rawText: 'data: {"choices":[{"delta":{"content":"recovered response"}}]}\n\ndata: [DONE]\n\n' },
+    { eventType: 'done', meta: { complete: true } },
   ] }),
 }));
 vi.mock('@store/debug-store', () => ({ debugReport: vi.fn() }));
@@ -54,9 +56,9 @@ beforeEach(() => {
   fixture.save.mockResolvedValue(undefined);
   fixture.remove.mockResolvedValue(undefined);
 });
-const stream = () => new ReadableStream<Uint8Array>({ start(controller) {
+const stream = () => new Response(new ReadableStream({ start(controller) {
   controller.enqueue(new TextEncoder().encode('proxy data')); controller.close();
-} });
+} }));
 const text = (index: number) => resolveContent(fixture.state.contentStore, fixture.state.chats![index].branchTree!.nodes.node.contentHash);
 
 it('retains legacy index-only records and checkpoint conflicts without applying or deleting', async () => {
@@ -83,8 +85,8 @@ it('recovers SW text without proxy and retains it until the primary snapshot ack
 it.each(['edit', 'role', 'invalidate'] as const)('rejects proxy output after %s while awaiting it', async (change) => {
   fixture.state.proxyEnabled = true;
   fixture.records[0].proxySessionId = 'proxy-request';
-  let resolve!: (value: ReadableStream<Uint8Array>) => void;
-  fixture.proxy.mockImplementation(() => new Promise<ReadableStream<Uint8Array>>(done => { resolve = done; }));
+  let resolve!: (value: Response) => void;
+  fixture.proxy.mockImplementation(() => new Promise<Response>(done => { resolve = done; }));
   const pending = recoverPending();
   await vi.waitFor(() => expect(fixture.proxy).toHaveBeenCalledTimes(1));
   if (change === 'edit') {
@@ -107,8 +109,8 @@ it.each(['edit', 'role', 'invalidate'] as const)('rejects proxy output after %s 
 it('rechecks the chat identity after proxy await even when the chat order changes', async () => {
   fixture.state.proxyEnabled = true;
   fixture.records[0].proxySessionId = 'proxy-request';
-  let resolve!: (value: ReadableStream<Uint8Array>) => void;
-  fixture.proxy.mockImplementation(() => new Promise<ReadableStream<Uint8Array>>(done => { resolve = done; }));
+  let resolve!: (value: Response) => void;
+  fixture.proxy.mockImplementation(() => new Promise<Response>(done => { resolve = done; }));
   const pending = recoverPending();
   await vi.waitFor(() => expect(fixture.proxy).toHaveBeenCalledTimes(1));
   fixture.state.chats!.unshift({ ...structuredClone(fixture.state.chats![0]), id: 'clone' });

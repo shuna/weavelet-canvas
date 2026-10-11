@@ -438,7 +438,9 @@ class ChatViewModel {
             branchTree: source.branchTree,
             collapsedNodes: source.collapsedNodes,
             omittedNodes: source.omittedNodes,
-            protectedNodes: source.protectedNodes
+            protectedNodes: source.protectedNodes,
+            summaryTargets: source.summaryTargets,
+            summaries: source.summaries
         )
         // Retain content store entries for duplicated tree
         if let tree = source.branchTree {

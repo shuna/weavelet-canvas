@@ -2,6 +2,7 @@ import { v4 as uuidv4 } from 'uuid';
 import {
   BranchNode,
   BranchTree,
+  BranchSwipeDirection,
   ChatInterface,
   ContentInterface,
   MessageInterface,
@@ -13,6 +14,10 @@ import {
   resolveContent,
   releaseContent,
 } from './contentStore';
+
+export function resolveBranchSwipeDirection(distance: number, preference: BranchSwipeDirection = 'left-next'): 'previous' | 'next' {
+  return (distance < 0) === (preference === 'left-next') ? 'next' : 'previous';
+}
 
 export function materializeActivePath(
   tree: BranchTree,

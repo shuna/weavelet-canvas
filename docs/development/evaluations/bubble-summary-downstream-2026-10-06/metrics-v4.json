@@ -1,0 +1,220 @@
+{
+  "records": 26,
+  "completed": 26,
+  "usage_prompt_tokens": 38439,
+  "usage_completion_tokens": 5121,
+  "completed_usage_cost": 0.32022,
+  "accounted_cost": 0.32022,
+  "checks": {
+    "T01 probe0 follow-effective": {
+      "two_paragraphs": [
+        2,
+        2
+      ],
+      "no_markdown_heading": [
+        2,
+        2
+      ]
+    },
+    "T05 probe0 follow-effective": {
+      "character_limit": [
+        2,
+        2
+      ],
+      "no_markdown_heading": [
+        2,
+        2
+      ]
+    },
+    "T10 probe0 follow-effective": {
+      "no_added_script_labels": [
+        2,
+        2
+      ]
+    },
+    "T13 probe0 follow-effective": {
+      "two_paragraphs": [
+        2,
+        2
+      ]
+    },
+    "T14 probe0 follow-effective": {
+      "no_added_script_labels": [
+        2,
+        2
+      ]
+    },
+    "D07 probeNone follow-original": {
+      "two_sentences": [
+        2,
+        2
+      ]
+    },
+    "D07 probe0 follow-effective": {
+      "two_sentences": [
+        2,
+        2
+      ]
+    }
+  },
+  "rows": [
+    {
+      "case_id": "T01",
+      "repeat": 1,
+      "condition": "follow-effective",
+      "probe": 0,
+      "characters": 189,
+      "response_id": "gen-1791235330-904adrIp6joKlfa0YIgX",
+      "checks": {
+        "two_paragraphs": true,
+        "no_markdown_heading": true
+      }
+    },
+    {
+      "case_id": "T01",
+      "repeat": 0,
+      "condition": "follow-effective",
+      "probe": 0,
+      "characters": 195,
+      "response_id": "gen-1791235331-RixTy0OVLdENJ7pEOnVK",
+      "checks": {
+        "two_paragraphs": true,
+        "no_markdown_heading": true
+      }
+    },
+    {
+      "case_id": "T05",
+      "repeat": 0,
+      "condition": "follow-effective",
+      "probe": 0,
+      "characters": 134,
+      "response_id": "gen-1791235343-1mrdCP0jK6ucWZeShuE2",
+      "checks": {
+        "character_limit": true,
+        "no_markdown_heading": true
+      }
+    },
+    {
+      "case_id": "T05",
+      "repeat": 1,
+      "condition": "follow-effective",
+      "probe": 0,
+      "characters": 176,
+      "response_id": "gen-1791235344-UjxGppQFBGu3KW30XuED",
+      "checks": {
+        "character_limit": true,
+        "no_markdown_heading": true
+      }
+    },
+    {
+      "case_id": "T10",
+      "repeat": 0,
+      "condition": "follow-effective",
+      "probe": 0,
+      "characters": 313,
+      "response_id": "gen-1791235351-Zlsc4f02jqHKk6VXTg1M",
+      "checks": {
+        "no_added_script_labels": true
+      }
+    },
+    {
+      "case_id": "T10",
+      "repeat": 1,
+      "condition": "follow-effective",
+      "probe": 0,
+      "characters": 319,
+      "response_id": "gen-1791235353-xppn2gUYu7VFB4gpEvWL",
+      "checks": {
+        "no_added_script_labels": true
+      }
+    },
+    {
+      "case_id": "T13",
+      "repeat": 0,
+      "condition": "follow-effective",
+      "probe": 0,
+      "characters": 285,
+      "response_id": "gen-1791235367-fFWDMGecYzKw03OlyWyK",
+      "checks": {
+        "two_paragraphs": true
+      }
+    },
+    {
+      "case_id": "T13",
+      "repeat": 1,
+      "condition": "follow-effective",
+      "probe": 0,
+      "characters": 233,
+      "response_id": "gen-1791235368-zL2uKEf1KXMS0Ti04qOi",
+      "checks": {
+        "two_paragraphs": true
+      }
+    },
+    {
+      "case_id": "T14",
+      "repeat": 0,
+      "condition": "follow-effective",
+      "probe": 0,
+      "characters": 382,
+      "response_id": "gen-1791235379-0KbqYkgKXWvj6oCkBbk3",
+      "checks": {
+        "no_added_script_labels": true
+      }
+    },
+    {
+      "case_id": "T14",
+      "repeat": 1,
+      "condition": "follow-effective",
+      "probe": 0,
+      "characters": 363,
+      "response_id": "gen-1791235380-tKmBUFsXk00wTtdLIr9z",
+      "checks": {
+        "no_added_script_labels": true
+      }
+    },
+    {
+      "case_id": "D07",
+      "repeat": 0,
+      "condition": "follow-original",
+      "probe": null,
+      "characters": 119,
+      "response_id": "gen-1791235393-Q9PpkGcxcCez3JzvznYJ",
+      "checks": {
+        "two_sentences": true
+      }
+    },
+    {
+      "case_id": "D07",
+      "repeat": 1,
+      "condition": "follow-original",
+      "probe": null,
+      "characters": 109,
+      "response_id": "gen-1791235394-NJafVDrxKkqWN1OdJWug",
+      "checks": {
+        "two_sentences": true
+      }
+    },
+    {
+      "case_id": "D07",
+      "repeat": 0,
+      "condition": "follow-effective",
+      "probe": 0,
+      "characters": 117,
+      "response_id": "gen-1791235398-PE2M3B25tkqLCdCAxEnw",
+      "checks": {
+        "two_sentences": true
+      }
+    },
+    {
+      "case_id": "D07",
+      "repeat": 1,
+      "condition": "follow-effective",
+      "probe": 0,
+      "characters": 119,
+      "response_id": "gen-1791235398-T8Rf9YCAqhxpz3WQpA5x",
+      "checks": {
+        "two_sentences": true
+      }
+    }
+  ]
+}

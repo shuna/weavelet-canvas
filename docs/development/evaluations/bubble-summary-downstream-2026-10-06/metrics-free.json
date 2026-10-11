@@ -1,0 +1,10 @@
+{
+  "records": 4,
+  "completed": 0,
+  "usage_prompt_tokens": 0,
+  "usage_completion_tokens": 0,
+  "completed_usage_cost": 0,
+  "accounted_cost": 0,
+  "checks": {},
+  "rows": []
+}

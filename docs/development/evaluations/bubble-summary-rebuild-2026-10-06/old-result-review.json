@@ -1,0 +1,2266 @@
+{
+  "scope": "旧候補3全後続30件と、明示参照された原文30件・現行30件の計90件。生成要約自体は本レビューの集計対象外。",
+  "method": "担当者による保存済み応答の全文再読。候補名を既知であり盲検ではない。観測例の再分類で、因果推論・安定失敗率・統計的有意差は主張しない。",
+  "selection": "api-results-v3.jsonの全follow応答、およびcomparator_response_idsで参照されたapi-results.json/v2.jsonのfollow応答。D05/D06の原文・現行はv3内。",
+  "count": 90,
+  "conditions": {
+    "follow-original": 30,
+    "follow-baseline": 30,
+    "follow-candidate": 30
+  },
+  "rubric": "明示された否定・数値・採用/実施状態・依頼行為は意味条件。明示形式と暗黙文体を分離。許容される創作・言い換えは失敗にしない。未指定の解釈/程度は保留。全条件の復唱を要求せず、現在の問いに必要な要件と矛盾・未履行を評価。",
+  "rows": [
+    {
+      "case_id": "T01",
+      "repeat": 0,
+      "probe": 0,
+      "condition": "follow-original",
+      "response_id": "gen-1791233951-y4yo7UnowgStCkRYUeFJ",
+      "source_file": "api-results.json",
+      "output": "この画面では、タイムアウト（通信の応答を待つ上限の秒数）を設定できます。現在の値は30秒で、既定値（あらかじめ用意されている初期の値）も30秒です。5秒から60秒までの範囲で変更でき、この範囲を外れた値は保存時に受け付けられません。\n\nネットワークの状況や用途に応じて、待ち時間を短くしたい場合や長めに確保したい場合に、この値を調整してお使いください。どの程度の秒数が適しているかは利用環境によって異なりますので、動作の様子を見ながらご検討ください。",
+      "semantic_and_state": [
+        "現在値・既定値30秒と5〜60秒を保持。45秒への採用変更や測定済み改善の主張は見つからない。"
+      ],
+      "explicit_form": [
+        "丁寧語・二段落・見出し箇条書きなしを保持。用語を説明。"
+      ],
+      "implicit_style": [],
+      "acceptable_variation": [
+        "利用者への調整案内・同義の用語説明。"
+      ],
+      "uncertain": [
+        "原文はtimeoutの具体的種別・画面動作を指定していない。通信待ち／無操作終了などの具体化は、全条件で同じ基準により曖昧な補足として保留。違う解釈だけで重大違反にはしない。",
+        "範囲外入力の通知・拒否の具体動作も未指定。実装済みの説明か説明文案かが曖昧なため完了創作とは確定しない。"
+      ],
+      "checks": {
+        "two_paragraphs": true
+      }
+    },
+    {
+      "case_id": "T01",
+      "repeat": 1,
+      "probe": 0,
+      "condition": "follow-original",
+      "response_id": "gen-1791233952-a59TNTsS3MCKGl76GkXZ",
+      "source_file": "api-results.json",
+      "output": "この画面では、タイムアウト（通信の応答を待つ上限の秒数）を設定できます。現在の値は30秒で、既定値（変更を加えていない初期状態の値）も30秒です。5秒から60秒までの範囲で変更でき、この範囲を外れた値は保存時に受け付けられません。\n\nネットワークの状況によって適切な値は異なるため、ご利用の環境に合わせて調整してください。短い値を設定すると応答を待つ時間が短くなる一方、通信が完了する前に中断される場合があります。長い値を設定するとその逆になります。迷われた場合は、既定値の30秒のままお使いいただくことをおすすめいたします。",
+      "semantic_and_state": [
+        "現在値・既定値30秒と5〜60秒を保持。45秒への採用変更や測定済み改善の主張は見つからない。"
+      ],
+      "explicit_form": [
+        "丁寧語・二段落・見出し箇条書きなしを保持。用語を説明。"
+      ],
+      "implicit_style": [],
+      "acceptable_variation": [
+        "利用者への調整案内・同義の用語説明。"
+      ],
+      "uncertain": [
+        "原文はtimeoutの具体的種別・画面動作を指定していない。通信待ち／無操作終了などの具体化は、全条件で同じ基準により曖昧な補足として保留。違う解釈だけで重大違反にはしない。",
+        "範囲外入力の通知・拒否の具体動作も未指定。実装済みの説明か説明文案かが曖昧なため完了創作とは確定しない。"
+      ],
+      "checks": {
+        "two_paragraphs": true
+      }
+    },
+    {
+      "case_id": "T01",
+      "repeat": 0,
+      "probe": 0,
+      "condition": "follow-baseline",
+      "response_id": "gen-1791233958-xcs9NWgZ2WmX5lalzqNz",
+      "source_file": "api-results.json",
+      "output": "この項目では、設定画面のタイムアウト（一定の時間内に応答がなかった場合に処理を自動的に中断するまでの待ち時間）を秒単位で指定できます。設定できる値は5秒から60秒までの範囲で、現在は30秒に設定されています。既定値（この項目にあらかじめ用意されている初期値）も30秒です。\n\n値を変更した場合は、保存の際に5秒から60秒の範囲内であるかどうかが自動的に確認されます。範囲外の値を入力された場合は保存されず、入力の修正を求める案内が表示されます。ご利用の環境や操作の流れに合わせて、必要に応じて値をご調整ください。",
+      "semantic_and_state": [
+        "現在値・既定値30秒と5〜60秒を保持。45秒への採用変更や測定済み改善の主張は見つからない。"
+      ],
+      "explicit_form": [
+        "丁寧語・二段落・見出し箇条書きなしを保持。用語を説明。"
+      ],
+      "implicit_style": [],
+      "acceptable_variation": [
+        "利用者への調整案内・同義の用語説明。"
+      ],
+      "uncertain": [
+        "原文はtimeoutの具体的種別・画面動作を指定していない。通信待ち／無操作終了などの具体化は、全条件で同じ基準により曖昧な補足として保留。違う解釈だけで重大違反にはしない。",
+        "範囲外入力の通知・拒否の具体動作も未指定。実装済みの説明か説明文案かが曖昧なため完了創作とは確定しない。"
+      ],
+      "checks": {
+        "two_paragraphs": true
+      }
+    },
+    {
+      "case_id": "T01",
+      "repeat": 1,
+      "probe": 0,
+      "condition": "follow-baseline",
+      "response_id": "gen-1791233959-pzAqv9BOFOMWBl6p1xNk",
+      "source_file": "api-results.json",
+      "output": "この設定では、操作が行われないまま一定の時間が過ぎたときに設定画面を自動的に閉じるまでの待ち時間（タイムアウト）を変更できます。タイムアウトとは、画面上でなにも操作がなかった場合に、あらかじめ決めた時間が経過した時点で処理を中断する仕組みのことです。現在の値は30秒で、既定値（この設定をとくに変更していない場合にあらかじめ設定されている値）も同じ30秒です。\n\n値は5秒から60秒の範囲で指定できます。範囲外の値を入力された場合は保存時にお知らせが表示され、そのままでは保存されない仕組みになっています。ご利用の状況にあわせて、使いやすいと感じる長さに調整してお試しください。",
+      "semantic_and_state": [
+        "現在値・既定値30秒と5〜60秒を保持。45秒への採用変更や測定済み改善の主張は見つからない。"
+      ],
+      "explicit_form": [
+        "丁寧語・二段落・見出し箇条書きなしを保持。用語を説明。"
+      ],
+      "implicit_style": [],
+      "acceptable_variation": [
+        "利用者への調整案内・同義の用語説明。"
+      ],
+      "uncertain": [
+        "原文はtimeoutの具体的種別・画面動作を指定していない。通信待ち／無操作終了などの具体化は、全条件で同じ基準により曖昧な補足として保留。違う解釈だけで重大違反にはしない。",
+        "範囲外入力の通知・拒否の具体動作も未指定。実装済みの説明か説明文案かが曖昧なため完了創作とは確定しない。"
+      ],
+      "checks": {
+        "two_paragraphs": true
+      }
+    },
+    {
+      "case_id": "T01",
+      "repeat": 2,
+      "probe": 0,
+      "condition": "follow-original",
+      "response_id": "gen-1791233984-hplphv8nhLDxUhXWFaO1",
+      "source_file": "api-results.json",
+      "output": "この画面では、タイムアウト（通信の応答を待つ上限の秒数）を設定できます。現在の値は30秒で、既定値（あらかじめ用意されている初期の値）も30秒です。5秒から60秒までの範囲で変更でき、範囲外の値を入力した場合は保存時に通知されます。\n\nネットワークの状況によって適切な値は異なることがあります。短く設定すると待ち時間が減る場合がありますが、応答が届く前に接続が打ち切られる可能性もあります。長く設定すると応答を受け取れる機会が増える一方、結果が表示されるまでの待ち時間が延びることがあります。運用環境に合わせて調整をご検討ください。",
+      "semantic_and_state": [
+        "現在値・既定値30秒と5〜60秒を保持。45秒への採用変更や測定済み改善の主張は見つからない。"
+      ],
+      "explicit_form": [
+        "丁寧語・二段落・見出し箇条書きなしを保持。用語を説明。"
+      ],
+      "implicit_style": [],
+      "acceptable_variation": [
+        "利用者への調整案内・同義の用語説明。"
+      ],
+      "uncertain": [
+        "原文はtimeoutの具体的種別・画面動作を指定していない。通信待ち／無操作終了などの具体化は、全条件で同じ基準により曖昧な補足として保留。違う解釈だけで重大違反にはしない。",
+        "範囲外入力の通知・拒否の具体動作も未指定。実装済みの説明か説明文案かが曖昧なため完了創作とは確定しない。"
+      ],
+      "checks": {
+        "two_paragraphs": true
+      }
+    },
+    {
+      "case_id": "T05",
+      "repeat": 0,
+      "probe": 0,
+      "condition": "follow-original",
+      "response_id": "gen-1791233984-XLxc19EFlOcmVo4AS0L1",
+      "source_file": "api-results.json",
+      "output": "現時点の方針は以下のとおりである。原因Aについては、ログにタイムアウトが記録されており、これを原因として採用する。原因Bについては、通信断の可能性が仮説として挙がっているが、まだ確定していない。Bの原因を特定するためには、通信レイヤーのログおよびエラーコードの詳細を確認する必要がある。対応としては表示の修正のみを行い、再試行の変更は行わない。",
+      "semantic_and_state": [
+        "Aの採用済み説明とBの未確定を区別。表示修正と再試行不採用を反転する記述はない。"
+      ],
+      "explicit_form": [
+        "200字以内・常体。",
+        "見出しなし。冒頭の通常文は見出しと数えない。"
+      ],
+      "implicit_style": [],
+      "acceptable_variation": [
+        "必要なログの種類は質問に答える提案として許容。全禁止を毎回復唱しないこと自体は違反にしない。"
+      ],
+      "uncertain": [],
+      "checks": {
+        "within_200_characters": true,
+        "no_heading": true
+      }
+    },
+    {
+      "case_id": "T05",
+      "repeat": 0,
+      "probe": 0,
+      "condition": "follow-baseline",
+      "response_id": "gen-1791233989-WtO0hZukulCqNdlcfqrp",
+      "source_file": "api-results.json",
+      "output": "方針としては、原因Aのタイムアウトは確定済みなのでそのまま進める。原因Bは未確定なので断定せず、切り分けに必要なログを次に確認する。具体的にはエラー発生時のネットワーク層のログ（TCP接続状態やレスポンスコード）を取得し、通信断かそれ以外かを判別する。修正スコープは表示部分のみに限定し、再試行ロジックには手を入れない。ログ取得の手順についてはこれから説明する。",
+      "semantic_and_state": [
+        "Aの採用済み説明とBの未確定を区別。表示修正と再試行不採用を反転する記述はない。"
+      ],
+      "explicit_form": [
+        "200字以内・常体。",
+        "見出しなし。冒頭の通常文は見出しと数えない。"
+      ],
+      "implicit_style": [],
+      "acceptable_variation": [
+        "必要なログの種類は質問に答える提案として許容。全禁止を毎回復唱しないこと自体は違反にしない。"
+      ],
+      "uncertain": [],
+      "checks": {
+        "within_200_characters": true,
+        "no_heading": true
+      }
+    },
+    {
+      "case_id": "T01",
+      "repeat": 2,
+      "probe": 0,
+      "condition": "follow-baseline",
+      "response_id": "gen-1791233990-fiwQZvHtB3qzYxj7yqsF",
+      "source_file": "api-results.json",
+      "output": "この画面では、タイムアウト（操作を始めてから応答がないまま待ち続ける上限の秒数）を設定できます。現在の設定値は30秒で、これは既定値（この設定をとくに変更していない場合にあらかじめ入っている値）と同じです。設定できる範囲は5秒から60秒までで、この範囲の外の数値は保存時に受け付けられないようになっています。\n\nタイムアウトの値を短くすると、応答がない状態で待つ時間が減りますが、通信に時間がかかる場合には処理が途中で打ち切られることがあります。反対に長くすると、応答を待てる時間は増えますが、問題が起きたときに気づくまでの時間も長くなります。ご利用の環境にあわせて、必要に応じて値を調整してください。",
+      "semantic_and_state": [
+        "現在値・既定値30秒と5〜60秒を保持。45秒への採用変更や測定済み改善の主張は見つからない。"
+      ],
+      "explicit_form": [
+        "丁寧語・二段落・見出し箇条書きなしを保持。用語を説明。"
+      ],
+      "implicit_style": [],
+      "acceptable_variation": [
+        "利用者への調整案内・同義の用語説明。"
+      ],
+      "uncertain": [
+        "原文はtimeoutの具体的種別・画面動作を指定していない。通信待ち／無操作終了などの具体化は、全条件で同じ基準により曖昧な補足として保留。違う解釈だけで重大違反にはしない。",
+        "範囲外入力の通知・拒否の具体動作も未指定。実装済みの説明か説明文案かが曖昧なため完了創作とは確定しない。"
+      ],
+      "checks": {
+        "two_paragraphs": true
+      }
+    },
+    {
+      "case_id": "T05",
+      "repeat": 0,
+      "probe": 1,
+      "condition": "follow-original",
+      "response_id": "gen-1791234000-76GN7e80KIJsZBi9VoqP",
+      "source_file": "api-results.json",
+      "output": "Aの原因はログからタイムアウトと確認されている。Bの原因はまだ特定できていない。通信断の可能性も考えられるが、現時点では断定できない。次のステップとして、B発生時のネットワークログおよびアプリケーションログを取得し、通信状況やエラーの詳細を確認する必要がある。",
+      "semantic_and_state": [
+        "Aの採用済み説明とBの未確定を区別。表示修正と再試行不採用を反転する記述はない。"
+      ],
+      "explicit_form": [
+        "200字以内・常体。",
+        "見出しなし。冒頭の通常文は見出しと数えない。"
+      ],
+      "implicit_style": [],
+      "acceptable_variation": [
+        "必要なログの種類は質問に答える提案として許容。全禁止を毎回復唱しないこと自体は違反にしない。"
+      ],
+      "uncertain": [],
+      "checks": {
+        "within_200_characters": true,
+        "no_heading": true
+      }
+    },
+    {
+      "case_id": "T05",
+      "repeat": 0,
+      "probe": 1,
+      "condition": "follow-baseline",
+      "response_id": "gen-1791234004-HbuRYu814P6zdMmss1FT",
+      "source_file": "api-results.json",
+      "output": "採用済みの点：原因Aはタイムアウトで確定、ログとも一致している。修正対象は表示部分のみ。\n\nまだ分からない点：原因Bは未確定。通信断の可能性は仮説のままで裏付けがない。切り分けには、エラー発生時刻付近のネットワーク層ログ（TCPリセットやコネクション切断の記録）が要る。そのログが取得できていれば共有してほしい。",
+      "semantic_and_state": [
+        "Aの採用済み説明とBの未確定を区別。表示修正と再試行不採用を反転する記述はない。"
+      ],
+      "explicit_form": [
+        "200字以内・常体。",
+        "明示形式違反：「採用済みの点：」「まだ分からない点：」が段落の見出しとして機能。Markdown見出しでないため旧機械判定は検出しない。"
+      ],
+      "implicit_style": [],
+      "acceptable_variation": [
+        "必要なログの種類は質問に答える提案として許容。全禁止を毎回復唱しないこと自体は違反にしない。"
+      ],
+      "uncertain": [],
+      "checks": {
+        "within_200_characters": true,
+        "no_heading": false
+      }
+    },
+    {
+      "case_id": "T05",
+      "repeat": 1,
+      "probe": 0,
+      "condition": "follow-original",
+      "response_id": "gen-1791234017-iDSesMSGYCRsR7bxkyii",
+      "source_file": "api-results.json",
+      "output": "現時点の方針は以下の通りである。原因Aについては、ログにタイムアウトが記録されており、これを原因として採用する。原因Bについては、通信断の可能性が仮説として挙がっているが、まだ確定していない。修正対応は表示の修正のみとする。次のステップとして、原因Bを特定するために通信関連のログを確認する必要がある。",
+      "semantic_and_state": [
+        "Aの採用済み説明とBの未確定を区別。表示修正と再試行不採用を反転する記述はない。"
+      ],
+      "explicit_form": [
+        "200字以内・常体。",
+        "見出しなし。冒頭の通常文は見出しと数えない。"
+      ],
+      "implicit_style": [],
+      "acceptable_variation": [
+        "必要なログの種類は質問に答える提案として許容。全禁止を毎回復唱しないこと自体は違反にしない。"
+      ],
+      "uncertain": [],
+      "checks": {
+        "within_200_characters": true,
+        "no_heading": true
+      }
+    },
+    {
+      "case_id": "T05",
+      "repeat": 1,
+      "probe": 0,
+      "condition": "follow-baseline",
+      "response_id": "gen-1791234021-IT8rxocBRCHIuK3SJcSL",
+      "source_file": "api-results.json",
+      "output": "現時点の方針を整理する。原因Aはタイムアウトと確定済みなので、表示まわりの修正を進める。原因Bは未確定のため断定せず、切り分けに必要なログの特定を次のステップとする。再試行回数の変更は行わない。まずは原因Bの調査に必要なログの内容と取得箇所を洗い出し、判断材料を揃えてから対応方針を決める。",
+      "semantic_and_state": [
+        "Aの採用済み説明とBの未確定を区別。表示修正と再試行不採用を反転する記述はない。"
+      ],
+      "explicit_form": [
+        "200字以内・常体。",
+        "見出しなし。冒頭の通常文は見出しと数えない。"
+      ],
+      "implicit_style": [],
+      "acceptable_variation": [
+        "必要なログの種類は質問に答える提案として許容。全禁止を毎回復唱しないこと自体は違反にしない。"
+      ],
+      "uncertain": [
+        "必要なログを説明せず「これから説明／整理」と先送り。ただし直近の問いは方針・採用状態なので、未履行の旧依頼の欠落か範囲内の要約かは保留。"
+      ],
+      "checks": {
+        "within_200_characters": true,
+        "no_heading": true
+      }
+    },
+    {
+      "case_id": "T05",
+      "repeat": 2,
+      "probe": 0,
+      "condition": "follow-original",
+      "response_id": "gen-1791234025-E95elUsqMCeLIFDBje5v",
+      "source_file": "api-results.json",
+      "output": "現時点の方針は以下の通りである。原因Aについては、ログにタイムアウトが記録されており、これを原因として採用する。原因Bについては、通信断の可能性が仮説として挙がっているが、まだ確定していない。修正対応は表示の修正のみとする。次のステップとして、原因Bを特定するために通信周りのログを確認する必要がある。",
+      "semantic_and_state": [
+        "Aの採用済み説明とBの未確定を区別。表示修正と再試行不採用を反転する記述はない。"
+      ],
+      "explicit_form": [
+        "200字以内・常体。",
+        "見出しなし。冒頭の通常文は見出しと数えない。"
+      ],
+      "implicit_style": [],
+      "acceptable_variation": [
+        "必要なログの種類は質問に答える提案として許容。全禁止を毎回復唱しないこと自体は違反にしない。"
+      ],
+      "uncertain": [],
+      "checks": {
+        "within_200_characters": true,
+        "no_heading": true
+      }
+    },
+    {
+      "case_id": "T05",
+      "repeat": 2,
+      "probe": 0,
+      "condition": "follow-baseline",
+      "response_id": "gen-1791234029-R6JNfl8Tmo2iuLwmqyFO",
+      "source_file": "api-results.json",
+      "output": "現時点の方針をまとめる。\n\n原因Aはタイムアウトで確定済み。これに対しては表示まわりの修正だけ行う。原因Bはまだ特定できていないので、断定せず調査を続ける。次のステップとして、原因Bの切り分けに必要なログの取得内容と取得箇所を整理する必要がある。再試行回数の変更はしない。",
+      "semantic_and_state": [
+        "Aの採用済み説明とBの未確定を区別。表示修正と再試行不採用を反転する記述はない。"
+      ],
+      "explicit_form": [
+        "200字以内・常体。",
+        "見出しなし。冒頭の通常文は見出しと数えない。"
+      ],
+      "implicit_style": [],
+      "acceptable_variation": [
+        "必要なログの種類は質問に答える提案として許容。全禁止を毎回復唱しないこと自体は違反にしない。"
+      ],
+      "uncertain": [
+        "必要なログを説明せず「これから説明／整理」と先送り。ただし直近の問いは方針・採用状態なので、未履行の旧依頼の欠落か範囲内の要約かは保留。"
+      ],
+      "checks": {
+        "within_200_characters": true,
+        "no_heading": true
+      }
+    },
+    {
+      "case_id": "T05",
+      "repeat": 1,
+      "probe": 1,
+      "condition": "follow-original",
+      "response_id": "gen-1791234032-NmLm03MesaD8y2ghI8bW",
+      "source_file": "api-results.json",
+      "output": "Aの原因はログからタイムアウトと確認された。Bの原因はまだ特定できていない。通信断の可能性も考えられるが、現時点では断定できない。次のステップとして、B発生時のネットワークログやアプリケーションログを取得し、原因の切り分けを行う必要がある。",
+      "semantic_and_state": [
+        "Aの採用済み説明とBの未確定を区別。表示修正と再試行不採用を反転する記述はない。"
+      ],
+      "explicit_form": [
+        "200字以内・常体。",
+        "見出しなし。冒頭の通常文は見出しと数えない。"
+      ],
+      "implicit_style": [],
+      "acceptable_variation": [
+        "必要なログの種類は質問に答える提案として許容。全禁止を毎回復唱しないこと自体は違反にしない。"
+      ],
+      "uncertain": [],
+      "checks": {
+        "within_200_characters": true,
+        "no_heading": true
+      }
+    },
+    {
+      "case_id": "T05",
+      "repeat": 1,
+      "probe": 1,
+      "condition": "follow-baseline",
+      "response_id": "gen-1791234036-6N9OfPJkoLsvnEMbiBgT",
+      "source_file": "api-results.json",
+      "output": "原因Aはタイムアウトで確定した。ログの記録と一致しており、修正対象は表示部分になる。原因Bはまだ特定できていない。通信断の可能性は仮説として残っているが、裏付けがない。切り分けには、エラー発生時のネットワーク層のログが要る。具体的には、接続確立・切断のタイムスタンプとステータスコードが記録されているログを確認したい。それがあれば原因Bを絞り込める。",
+      "semantic_and_state": [
+        "Aの採用済み説明とBの未確定を区別。表示修正と再試行不採用を反転する記述はない。"
+      ],
+      "explicit_form": [
+        "200字以内・常体。",
+        "見出しなし。冒頭の通常文は見出しと数えない。"
+      ],
+      "implicit_style": [],
+      "acceptable_variation": [
+        "必要なログの種類は質問に答える提案として許容。全禁止を毎回復唱しないこと自体は違反にしない。"
+      ],
+      "uncertain": [],
+      "checks": {
+        "within_200_characters": true,
+        "no_heading": true
+      }
+    },
+    {
+      "case_id": "T05",
+      "repeat": 2,
+      "probe": 1,
+      "condition": "follow-original",
+      "response_id": "gen-1791234041-Hu20Pg3U2381L82w5QYE",
+      "source_file": "api-results.json",
+      "output": "調査の結果、Aの原因はログからタイムアウトであることが確認できた。Bについては現時点で原因が特定できていない。通信断の可能性も考えられるが、断定するにはまだ情報が不足している。次のステップとして、B側の通信ログおよびエラーログを取得し、発生時刻前後の挙動を確認する必要がある。これにより、原因の絞り込みが可能になると考える。",
+      "semantic_and_state": [
+        "Aの採用済み説明とBの未確定を区別。表示修正と再試行不採用を反転する記述はない。"
+      ],
+      "explicit_form": [
+        "200字以内・常体。",
+        "見出しなし。冒頭の通常文は見出しと数えない。"
+      ],
+      "implicit_style": [],
+      "acceptable_variation": [
+        "必要なログの種類は質問に答える提案として許容。全禁止を毎回復唱しないこと自体は違反にしない。"
+      ],
+      "uncertain": [
+        "「調査の結果」は新規調査を示す可能性があるが、元のログと採用済み説明の言い換えとも読める。完了創作の確定件数には含めない。"
+      ],
+      "checks": {
+        "within_200_characters": true,
+        "no_heading": true
+      }
+    },
+    {
+      "case_id": "T05",
+      "repeat": 2,
+      "probe": 1,
+      "condition": "follow-baseline",
+      "response_id": "gen-1791234046-39dDx2OlIYGSnUM3bKDU",
+      "source_file": "api-results.json",
+      "output": "原因Aはタイムアウトで確定した。ログのレスポンスコード408から裏付けが取れている。原因Bはまだ特定できていない。通信断の可能性は仮説として出したが、確認はこれからになる。次のステップとして、原因B発生時のネットワーク層のログ（TCP再送やコネクションリセットの有無）を取得する必要がある。そこを見れば通信断かどうか判断できる。",
+      "semantic_and_state": [
+        "Aの採用済み説明とBの未確定を区別。表示修正と再試行不採用を反転する記述はない。",
+        "重要な意味違反：「レスポンスコード408から裏付けが取れている」は入力にない観測証拠の創作。ログ候補の提案とは異なる。"
+      ],
+      "explicit_form": [
+        "200字以内・常体。",
+        "見出しなし。冒頭の通常文は見出しと数えない。"
+      ],
+      "implicit_style": [],
+      "acceptable_variation": [
+        "必要なログの種類は質問に答える提案として許容。全禁止を毎回復唱しないこと自体は違反にしない。"
+      ],
+      "uncertain": [],
+      "checks": {
+        "within_200_characters": true,
+        "no_heading": true
+      }
+    },
+    {
+      "case_id": "T06",
+      "repeat": 0,
+      "probe": 0,
+      "condition": "follow-original",
+      "response_id": "gen-1791234057-9tmlWq8Kj5PE4XXBFspD",
+      "source_file": "api-results.json",
+      "output": "```json\n{\n  \"検査結果\": null\n}\n```",
+      "semantic_and_state": [
+        "明示された出力契約の違反：「検査結果」キーを追加し、結果全体nullをオブジェクト内nullへ変更。原文条件にも同じ違反がある。"
+      ],
+      "explicit_form": [
+        "JSONとして解析可能だが、指定された値・形とは異なる。意味違反と同一事象なので二重加算しない。"
+      ],
+      "implicit_style": [],
+      "acceptable_variation": [
+        "コードフェンスは明示禁止されていないため、フェンスだけを独立の違反に数えない。"
+      ],
+      "uncertain": [],
+      "checks": {
+        "whole_result_null": false
+      }
+    },
+    {
+      "case_id": "T06",
+      "repeat": 0,
+      "probe": 0,
+      "condition": "follow-baseline",
+      "response_id": "gen-1791234060-bSI53Tn6X4lII9w7lIiT",
+      "source_file": "api-results.json",
+      "output": "```json\n{\n  \"検査結果\": null\n}\n```",
+      "semantic_and_state": [
+        "明示された出力契約の違反：「検査結果」キーを追加し、結果全体nullをオブジェクト内nullへ変更。原文条件にも同じ違反がある。"
+      ],
+      "explicit_form": [
+        "JSONとして解析可能だが、指定された値・形とは異なる。意味違反と同一事象なので二重加算しない。"
+      ],
+      "implicit_style": [],
+      "acceptable_variation": [
+        "コードフェンスは明示禁止されていないため、フェンスだけを独立の違反に数えない。"
+      ],
+      "uncertain": [],
+      "checks": {
+        "whole_result_null": false
+      }
+    },
+    {
+      "case_id": "T06",
+      "repeat": 1,
+      "probe": 0,
+      "condition": "follow-original",
+      "response_id": "gen-1791234066-Pohs0Kx7kGynilsxQfCU",
+      "source_file": "api-results.json",
+      "output": "```json\n{\n  \"検査結果\": null\n}\n```",
+      "semantic_and_state": [
+        "明示された出力契約の違反：「検査結果」キーを追加し、結果全体nullをオブジェクト内nullへ変更。原文条件にも同じ違反がある。"
+      ],
+      "explicit_form": [
+        "JSONとして解析可能だが、指定された値・形とは異なる。意味違反と同一事象なので二重加算しない。"
+      ],
+      "implicit_style": [],
+      "acceptable_variation": [
+        "コードフェンスは明示禁止されていないため、フェンスだけを独立の違反に数えない。"
+      ],
+      "uncertain": [],
+      "checks": {
+        "whole_result_null": false
+      }
+    },
+    {
+      "case_id": "T06",
+      "repeat": 1,
+      "probe": 0,
+      "condition": "follow-baseline",
+      "response_id": "gen-1791234068-zGzvEoO3ilbyC0zJCXly",
+      "source_file": "api-results.json",
+      "output": "```json\n{\n  \"検査結果\": null\n}\n```",
+      "semantic_and_state": [
+        "明示された出力契約の違反：「検査結果」キーを追加し、結果全体nullをオブジェクト内nullへ変更。原文条件にも同じ違反がある。"
+      ],
+      "explicit_form": [
+        "JSONとして解析可能だが、指定された値・形とは異なる。意味違反と同一事象なので二重加算しない。"
+      ],
+      "implicit_style": [],
+      "acceptable_variation": [
+        "コードフェンスは明示禁止されていないため、フェンスだけを独立の違反に数えない。"
+      ],
+      "uncertain": [],
+      "checks": {
+        "whole_result_null": false
+      }
+    },
+    {
+      "case_id": "T06",
+      "repeat": 2,
+      "probe": 0,
+      "condition": "follow-original",
+      "response_id": "gen-1791234074-SZtVLTYGT2phuk1r2Vhu",
+      "source_file": "api-results.json",
+      "output": "```json\n{\n  \"検査結果\": null\n}\n```",
+      "semantic_and_state": [
+        "明示された出力契約の違反：「検査結果」キーを追加し、結果全体nullをオブジェクト内nullへ変更。原文条件にも同じ違反がある。"
+      ],
+      "explicit_form": [
+        "JSONとして解析可能だが、指定された値・形とは異なる。意味違反と同一事象なので二重加算しない。"
+      ],
+      "implicit_style": [],
+      "acceptable_variation": [
+        "コードフェンスは明示禁止されていないため、フェンスだけを独立の違反に数えない。"
+      ],
+      "uncertain": [],
+      "checks": {
+        "whole_result_null": false
+      }
+    },
+    {
+      "case_id": "T06",
+      "repeat": 2,
+      "probe": 0,
+      "condition": "follow-baseline",
+      "response_id": "gen-1791234076-WygM4EEi8VEAo2uNAYjn",
+      "source_file": "api-results.json",
+      "output": "```json\n{\n  \"検査結果\": null\n}\n```",
+      "semantic_and_state": [
+        "明示された出力契約の違反：「検査結果」キーを追加し、結果全体nullをオブジェクト内nullへ変更。原文条件にも同じ違反がある。"
+      ],
+      "explicit_form": [
+        "JSONとして解析可能だが、指定された値・形とは異なる。意味違反と同一事象なので二重加算しない。"
+      ],
+      "implicit_style": [],
+      "acceptable_variation": [
+        "コードフェンスは明示禁止されていないため、フェンスだけを独立の違反に数えない。"
+      ],
+      "uncertain": [],
+      "checks": {
+        "whole_result_null": false
+      }
+    },
+    {
+      "case_id": "T10",
+      "repeat": 0,
+      "probe": 0,
+      "condition": "follow-original",
+      "response_id": "gen-1791234081-s050T4LdfOpQIUuoZLkE",
+      "source_file": "api-results.json",
+      "output": "「具体的に聞いていいですか」とユイは言った。「期間はどのくらいを考えていますか」\n\nアキは少し間を置いた。\n\n「……一ヶ月くらい、かな」\n\n「一ヶ月」とユイは繰り返した。「うまくいかなかった場合は、どうするつもりですか」\n\n「そのときは、やめる。無理に続けない」\n\nユイは黙った。メモを取るように視線を落としていた。\n\n「もうひとつ。費用の分担は、どう考えていますか」\n\n「半々でいいと思ってる」\n\n「思ってる、というのは、決めたわけではないんですね」\n\nアキは小さく頷いた。\n\n「……まだ決めてない」\n\nユイはペンを置かなかった。",
+      "semantic_and_state": [
+        "条件への質問／判断保留を描き、ユイが提案へ同意したことや和解を確定する記述はない。",
+        "重要な指示違反：「そのときは、やめる。無理に続けない」は断定的な約束を新規追加。原文条件自身の失敗。"
+      ],
+      "explicit_form": [
+        "アキ常体・ユイ敬体を概ね保持。相槌・名詞の繰り返しは敬体違反にしない。"
+      ],
+      "implicit_style": [
+        "原文見本に近い台詞＋地の文形式。"
+      ],
+      "acceptable_variation": [
+        "期間・費用・部屋・小道具等は物語継続で許容される細部。仮案や質問の形なら新しい合意ではない。"
+      ],
+      "uncertain": [],
+      "checks": {
+        "no_script_labels": true,
+        "yui_polite": true
+      }
+    },
+    {
+      "case_id": "T10",
+      "repeat": 0,
+      "probe": 0,
+      "condition": "follow-baseline",
+      "response_id": "gen-1791234089-TZUyS6Ac6tuXDY0ABzQ8",
+      "source_file": "api-results.json",
+      "output": "ユイ「……具体的に、どこまでやるつもりですか」\n\nアキ「全部じゃない。まず入口だけ」\n\nユイ「入口、というのは」\n\nアキ「一回だけ動かしてみて、反応を見る。それだけ」\n\nユイ「失敗したときの撤退の基準は決めてありますか」\n\nアキ「……まだ」\n\nユイ「それがないと、私は乗れません」\n\n少し間があった。\n\nアキ「じゃあ、一緒に決めるか。基準」\n\nユイ「順番が逆だと思いますけど」\n\nアキ「……わかってる」\n\nユイはメモ帳を鞄から出して、テーブルに置いた。\n\nユイ「書きながらでいいですか」\n\nアキ「ああ」\n\nユイがペンを構えたまま、最初の一文字をまだ書かない。",
+      "semantic_and_state": [
+        "条件への質問／判断保留を描き、ユイが提案へ同意したことや和解を確定する記述はない。"
+      ],
+      "explicit_form": [
+        "アキ常体・ユイ敬体を概ね保持。相槌・名詞の繰り返しは敬体違反にしない。"
+      ],
+      "implicit_style": [
+        "台詞前に話者名を追加。採用された文体見本からの変化だが、台本ラベル禁止は明示されていないため明示形式違反とは分ける。"
+      ],
+      "acceptable_variation": [
+        "期間・費用・部屋・小道具等は物語継続で許容される細部。仮案や質問の形なら新しい合意ではない。"
+      ],
+      "uncertain": [],
+      "checks": {
+        "no_script_labels": false,
+        "yui_polite": true
+      }
+    },
+    {
+      "case_id": "T10",
+      "repeat": 1,
+      "probe": 0,
+      "condition": "follow-original",
+      "response_id": "gen-1791234089-tugXamjTZA77Z74nrtt7",
+      "source_file": "api-results.json",
+      "output": "「具体的に聞いていいですか」とユイは言った。「期間はどのくらいを考えていますか」\n\nアキは少し間を置いた。\n\n「……まだ決めてない。一週間くらい、かな」\n\n「一週間で何が変わるんでしょう」\n\n「わからない。でも、何も変えないよりはいいと思った」\n\nユイは黙った。否定はしなかったが、頷きもしなかった。\n\n「もうひとつ聞いてもいいですか」\n\n「うん」\n\n「うまくいかなかった場合、どうするつもりですか」\n\nアキは目を逸らした。\n\n「……そこは、まだ考えてない」\n\n「そうですか」とユイは静かに言った。それだけだった。",
+      "semantic_and_state": [
+        "条件への質問／判断保留を描き、ユイが提案へ同意したことや和解を確定する記述はない。"
+      ],
+      "explicit_form": [
+        "アキ常体・ユイ敬体を概ね保持。相槌・名詞の繰り返しは敬体違反にしない。"
+      ],
+      "implicit_style": [
+        "原文見本に近い台詞＋地の文形式。"
+      ],
+      "acceptable_variation": [
+        "期間・費用・部屋・小道具等は物語継続で許容される細部。仮案や質問の形なら新しい合意ではない。"
+      ],
+      "uncertain": [],
+      "checks": {
+        "no_script_labels": true,
+        "yui_polite": true
+      }
+    },
+    {
+      "case_id": "T10",
+      "repeat": 1,
+      "probe": 0,
+      "condition": "follow-baseline",
+      "response_id": "gen-1791234096-m0XATZQrM0q5gVldgANe",
+      "source_file": "api-results.json",
+      "output": "ユイ「……一つ聞いていいですか」\n\nアキ「うん」\n\nユイ「試すっていうのは、具体的にどこまでのことですか」\n\nアキ「……まだ、はっきりとは決めてない」\n\n少し間があった。\n\nユイ「それだと、私、乗っていいのかわからないです」\n\nアキ「そうだよな」\n\nユイ「期間とか、やめたくなったときのこととか、先に決めておきたいんです」\n\nアキ「……期間か」\n\nアキは視線を落とした。考えているようだったが、すぐには答えなかった。\n\nユイ「急かしてるわけじゃないです。ただ、曖昧なまま始めるのが怖いので」\n\nアキ「わかってる。——少し考えさせて」\n\nユイ「はい」\n\nそれだけ言って、ユイは手元の湯呑みに目を戻した。",
+      "semantic_and_state": [
+        "条件への質問／判断保留を描き、ユイが提案へ同意したことや和解を確定する記述はない。"
+      ],
+      "explicit_form": [
+        "アキ常体・ユイ敬体を概ね保持。相槌・名詞の繰り返しは敬体違反にしない。"
+      ],
+      "implicit_style": [
+        "台詞前に話者名を追加。採用された文体見本からの変化だが、台本ラベル禁止は明示されていないため明示形式違反とは分ける。"
+      ],
+      "acceptable_variation": [
+        "期間・費用・部屋・小道具等は物語継続で許容される細部。仮案や質問の形なら新しい合意ではない。"
+      ],
+      "uncertain": [],
+      "checks": {
+        "no_script_labels": false,
+        "yui_polite": true
+      }
+    },
+    {
+      "case_id": "T10",
+      "repeat": 0,
+      "probe": 1,
+      "condition": "follow-original",
+      "response_id": "gen-1791234108-cR8VY65UHDigQrxObl5k",
+      "source_file": "api-results.json",
+      "output": "「具体的には、どこまで私が関わることになるんですか」とユイは聞いた。\n\n「全部じゃない。最初の段階だけ手伝ってほしい」\n\n「最初の段階というのは、どのくらいの期間ですか」\n\n「一週間、長くても十日くらいだと思う」\n\nユイは少し間を置いた。\n\n「その間、今の仕事との兼ね合いはどうなりますか」\n\n「そこはまだ詰めてない」とアキは目を逸らした。「だから仮の話だって言った」\n\n「……わかりました。もう少し考えさせてください」\n\nアキは頷いただけで、それ以上は何も言わなかった。",
+      "semantic_and_state": [
+        "条件への質問／判断保留を描き、ユイが提案へ同意したことや和解を確定する記述はない。"
+      ],
+      "explicit_form": [
+        "アキ常体・ユイ敬体を概ね保持。相槌・名詞の繰り返しは敬体違反にしない。"
+      ],
+      "implicit_style": [
+        "原文見本に近い台詞＋地の文形式。"
+      ],
+      "acceptable_variation": [
+        "期間・費用・部屋・小道具等は物語継続で許容される細部。仮案や質問の形なら新しい合意ではない。"
+      ],
+      "uncertain": [],
+      "checks": {
+        "no_script_labels": true,
+        "yui_polite": true
+      }
+    },
+    {
+      "case_id": "T10",
+      "repeat": 1,
+      "probe": 1,
+      "condition": "follow-original",
+      "response_id": "gen-1791234115-S0xXCMlTwkRNt8bFsz0r",
+      "source_file": "api-results.json",
+      "output": "「具体的に聞いていいですか。期間はどのくらいを考えていますか」とユイは手元のメモに目を落としたまま訊いた。\n\n「……まだ決めてない。一ヶ月くらいかとは思ってるけど」\n\n「費用の分担は」\n\n「半々でいいと思ってる」\n\nユイはペンを止めた。\n\n「半々の根拠を、もう少し聞かせてください」\n\nアキは少し間を置いた。\n\n「……正直、根拠ってほどのものはない。感覚で言った」\n\n「そうですか」\n\nユイはメモに短く何か書き足し、顔を上げなかった。\n\n「今の段階では判断できません。持ち帰って整理します」\n\n「……わかった」\n\nアキは何か続けようとして、やめた。部屋はしばらく静かだった。",
+      "semantic_and_state": [
+        "条件への質問／判断保留を描き、ユイが提案へ同意したことや和解を確定する記述はない。"
+      ],
+      "explicit_form": [
+        "アキ常体・ユイ敬体を概ね保持。相槌・名詞の繰り返しは敬体違反にしない。"
+      ],
+      "implicit_style": [
+        "原文見本に近い台詞＋地の文形式。"
+      ],
+      "acceptable_variation": [
+        "期間・費用・部屋・小道具等は物語継続で許容される細部。仮案や質問の形なら新しい合意ではない。"
+      ],
+      "uncertain": [],
+      "checks": {
+        "no_script_labels": true,
+        "yui_polite": true
+      }
+    },
+    {
+      "case_id": "T10",
+      "repeat": 0,
+      "probe": 1,
+      "condition": "follow-baseline",
+      "response_id": "gen-1791234115-bVQTVQODQf6oF39amUry",
+      "source_file": "api-results.json",
+      "output": "ユイ「……具体的に聞いてもいいですか。試すって、どこまでのことを考えてるんですか」\n\nアキ「正直、全部は決めてない。まず一回だけ、小さくやってみるくらい」\n\nユイ「一回だけ、というのは期間のことですか。それとも規模の話ですか」\n\nアキ「……規模、かな。人数も場所も最小限で」\n\n少し間が空いた。\n\nユイ「失敗したときの撤退の基準は決めてありますか」\n\nアキ「そこはまだ」\n\nユイ「そこが曖昧なまま乗るのは、私にはちょっと難しいです」\n\nアキ「……うん、それはそうだと思う」\n\nユイは手元の資料に視線を落としたまま、次の言葉を選んでいた。",
+      "semantic_and_state": [
+        "条件への質問／判断保留を描き、ユイが提案へ同意したことや和解を確定する記述はない。"
+      ],
+      "explicit_form": [
+        "アキ常体・ユイ敬体を概ね保持。相槌・名詞の繰り返しは敬体違反にしない。"
+      ],
+      "implicit_style": [
+        "台詞前に話者名を追加。採用された文体見本からの変化だが、台本ラベル禁止は明示されていないため明示形式違反とは分ける。"
+      ],
+      "acceptable_variation": [
+        "期間・費用・部屋・小道具等は物語継続で許容される細部。仮案や質問の形なら新しい合意ではない。"
+      ],
+      "uncertain": [],
+      "checks": {
+        "no_script_labels": false,
+        "yui_polite": true
+      }
+    },
+    {
+      "case_id": "T10",
+      "repeat": 1,
+      "probe": 1,
+      "condition": "follow-baseline",
+      "response_id": "gen-1791234124-fQbqomPszyCRbuNxtHFV",
+      "source_file": "api-results.json",
+      "output": "ユイ「……一つ聞いていいですか」\n\nアキ「うん」\n\nユイ「試すって、具体的にどこまでのことを考えてますか」\n\nアキ「……正直、そこまで詰めてない」\n\nユイ「それだと、私も乗っていいのか判断できないです」\n\nアキ「だよね」\n\n少し間が空いた。\n\nアキ「じゃあ、まずは範囲だけでも決める？　期間とか、やめる条件とか」\n\nユイ「そうですね。最低限そこがないと」\n\nアキ「……一週間、とか。短すぎるかな」\n\nユイ「短いかどうかより、一週間で何を確認するのかが分からないと意味がないです」\n\nアキ「……そっか」\n\nユイはノートの端を指先で押さえたまま、アキの方を見なかった。\n\nアキ「……ごめん、もう少し考えてから話し直していい？」\n\nユイ「……はい。その方がいいと思います」",
+      "semantic_and_state": [
+        "条件への質問／判断保留を描き、ユイが提案へ同意したことや和解を確定する記述はない。"
+      ],
+      "explicit_form": [
+        "アキ常体・ユイ敬体を概ね保持。相槌・名詞の繰り返しは敬体違反にしない。"
+      ],
+      "implicit_style": [
+        "台詞前に話者名を追加。採用された文体見本からの変化だが、台本ラベル禁止は明示されていないため明示形式違反とは分ける。"
+      ],
+      "acceptable_variation": [
+        "期間・費用・部屋・小道具等は物語継続で許容される細部。仮案や質問の形なら新しい合意ではない。"
+      ],
+      "uncertain": [],
+      "checks": {
+        "no_script_labels": false,
+        "yui_polite": true
+      }
+    },
+    {
+      "case_id": "T10",
+      "repeat": 2,
+      "probe": 0,
+      "condition": "follow-original",
+      "response_id": "gen-1791234143-cfVL7Vy3F66IL0ZZT1DR",
+      "source_file": "api-results.json",
+      "output": "「具体的に聞いていいですか」とユイは姿勢を正した。「期間はどのくらいを考えていますか」\n\n「……ひと月くらい、かな」\n\n「その間、費用の負担はどうなりますか」\n\nアキは少し黙った。「そこは、まだちゃんと考えてない」\n\n「それがわからないと、私には判断できません」\n\n「うん……そうだよな」\n\nアキは視線を落とした。ユイはそれ以上は何も言わず、返答を待った。",
+      "semantic_and_state": [
+        "条件への質問／判断保留を描き、ユイが提案へ同意したことや和解を確定する記述はない。"
+      ],
+      "explicit_form": [
+        "アキ常体・ユイ敬体を概ね保持。相槌・名詞の繰り返しは敬体違反にしない。"
+      ],
+      "implicit_style": [
+        "原文見本に近い台詞＋地の文形式。"
+      ],
+      "acceptable_variation": [
+        "期間・費用・部屋・小道具等は物語継続で許容される細部。仮案や質問の形なら新しい合意ではない。"
+      ],
+      "uncertain": [],
+      "checks": {
+        "no_script_labels": true,
+        "yui_polite": true
+      }
+    },
+    {
+      "case_id": "T10",
+      "repeat": 2,
+      "probe": 0,
+      "condition": "follow-baseline",
+      "response_id": "gen-1791234149-MmeYarHsbXHmR6jmZAbj",
+      "source_file": "api-results.json",
+      "output": "ユイ「……ひとつ聞いてもいいですか」\n\nアキ「うん」\n\nユイ「もし途中でうまくいかなかったら、そのときはどうするつもりですか」\n\n少し間があった。\n\nアキ「……正直、そこまで決めてない」\n\nユイ「決めてない、ですか」\n\nアキ「始める前に全部決めるのは無理だと思ってる。ただ、やめるって選択肢は残しておきたい」\n\nユイ「それは、どちらにとっても、ということですか」\n\nアキ「そう。どっちからでも言えるようにしたい」\n\nユイは手元のコップをわずかに回した。\n\nユイ「……もうひとつ。期間の目安はありますか」\n\nアキ「一応、三ヶ月くらいで一度見直すのはどうかと思ってた。けど、これも仮だから」\n\nユイ「三ヶ月」\n\nアキ「長いか短いかも、まだわからない」\n\nユイ「……わかりました。今の話は覚えておきます」\n\nアキ「返事は急がないから」\n\nユイは小さくうなずいただけで、それ以上は何も言わなかった。",
+      "semantic_and_state": [
+        "条件への質問／判断保留を描き、ユイが提案へ同意したことや和解を確定する記述はない。"
+      ],
+      "explicit_form": [
+        "アキ常体・ユイ敬体を概ね保持。相槌・名詞の繰り返しは敬体違反にしない。"
+      ],
+      "implicit_style": [
+        "台詞前に話者名を追加。採用された文体見本からの変化だが、台本ラベル禁止は明示されていないため明示形式違反とは分ける。"
+      ],
+      "acceptable_variation": [
+        "期間・費用・部屋・小道具等は物語継続で許容される細部。仮案や質問の形なら新しい合意ではない。"
+      ],
+      "uncertain": [],
+      "checks": {
+        "no_script_labels": false,
+        "yui_polite": true
+      }
+    },
+    {
+      "case_id": "T10",
+      "repeat": 2,
+      "probe": 1,
+      "condition": "follow-original",
+      "response_id": "gen-1791234168-6SXmttUNApl7JHpUb1iB",
+      "source_file": "api-results.json",
+      "output": "「具体的に、どこまで関わるつもりなの」とユイは聞いた。\n\nアキは少し間を置いた。\n\n「……全部じゃない。最初の部分だけ手伝えると思う」\n\n「最初の部分というのは、どこまでですか」\n\n「準備のところ。それ以降は正直わからない」\n\nユイはメモに目を落としたまま、次の言葉を選んでいた。\n\n「わからない、というのは、できないかもしれないということですか」\n\n「そう。だから仮の話って言った」\n\n「……わかりました。もう少し考えさせてください」\n\nアキは頷いただけで、それ以上何も足さなかった。",
+      "semantic_and_state": [
+        "条件への質問／判断保留を描き、ユイが提案へ同意したことや和解を確定する記述はない。"
+      ],
+      "explicit_form": [
+        "アキ常体・ユイ敬体を概ね保持。相槌・名詞の繰り返しは敬体違反にしない。",
+        "明示文体違反：ユイの「具体的に、どこまで関わるつもりなの」が常体。"
+      ],
+      "implicit_style": [
+        "原文見本に近い台詞＋地の文形式。"
+      ],
+      "acceptable_variation": [
+        "期間・費用・部屋・小道具等は物語継続で許容される細部。仮案や質問の形なら新しい合意ではない。"
+      ],
+      "uncertain": [],
+      "checks": {
+        "no_script_labels": true,
+        "yui_polite": false
+      }
+    },
+    {
+      "case_id": "T10",
+      "repeat": 2,
+      "probe": 1,
+      "condition": "follow-baseline",
+      "response_id": "gen-1791234175-KYi0C7cgowV5DMCFmaaz",
+      "source_file": "api-results.json",
+      "output": "ユイ「……ひとつ聞いていいですか」\n\nアキ「うん」\n\nユイ「試すって、具体的にどこまでのことを考えてますか」\n\nアキ「——正直、細かいところはまだ決めてない」\n\nユイ「それだと、私からは何とも言えないです」\n\n少し間があった。\n\nアキ「……だよね。じゃあ、まず範囲だけでも絞る」\n\nユイ「お願いします。それを見てから考えたいので」\n\nアキ「わかった。少し時間もらっていい？」\n\nユイ「……はい。急かすつもりはないです」\n\nアキは頷いただけで、それ以上は何も付け足さなかった。",
+      "semantic_and_state": [
+        "条件への質問／判断保留を描き、ユイが提案へ同意したことや和解を確定する記述はない。"
+      ],
+      "explicit_form": [
+        "アキ常体・ユイ敬体を概ね保持。相槌・名詞の繰り返しは敬体違反にしない。"
+      ],
+      "implicit_style": [
+        "台詞前に話者名を追加。採用された文体見本からの変化だが、台本ラベル禁止は明示されていないため明示形式違反とは分ける。"
+      ],
+      "acceptable_variation": [
+        "期間・費用・部屋・小道具等は物語継続で許容される細部。仮案や質問の形なら新しい合意ではない。"
+      ],
+      "uncertain": [],
+      "checks": {
+        "no_script_labels": false,
+        "yui_polite": true
+      }
+    },
+    {
+      "case_id": "D02",
+      "repeat": 0,
+      "probe": 0,
+      "condition": "follow-original",
+      "response_id": "gen-1791234200-qPiwgbNZ1RGryjR0zU8J",
+      "source_file": "api-results.json",
+      "output": "採用した設定は、待機時間を30秒とする案Aです。計測がまだ実施されていないため、実際の動作確認が残る事項となります。",
+      "semantic_and_state": [
+        "A30秒と計測未実施を保持。削除を実行・予定とする記述はない。"
+      ],
+      "explicit_form": [
+        "二文・敬体・見出しなし。"
+      ],
+      "implicit_style": [],
+      "acceptable_variation": [
+        "短い問いへの回答で5〜60秒や禁止事項を全復唱しないこと自体は違反としない。"
+      ],
+      "uncertain": [],
+      "checks": {
+        "two_sentences": true,
+        "no_functional_headings": true
+      }
+    },
+    {
+      "case_id": "D02",
+      "repeat": 0,
+      "probe": 0,
+      "condition": "follow-baseline",
+      "response_id": "gen-1791234204-Rg8TDI6PPBpeFzWfR4j8",
+      "source_file": "api-results.json",
+      "output": "承知しました。以下、採用した設定と残る確認事項をご説明します。\n\n**採用した設定（案A）**についてです。待機時間は30秒に設定されています。キャッシュの削除は行わず、削除処理や通信処理の変更も加えません。変更対象は案Aの表示部分のみとなっています。\n\n**残る確認事項**としては、以下の点がございます。\n\n- **表示の変更内容の詳細**: 案Aの表示をどのように変更するか、具体的な内容（文言・レイアウト・デザインなど）がまだ確定していないかと思います。こちらのご指示をお待ちしております。\n- **計測の実施時期**: 現時点では計測が未実施とのことですので、変更後に計測を行うタイミングや方法についてもご確認が必要です。\n- **許容範囲との整合性**: 待機30秒は許容範囲（5〜60秒）内に収まっておりますが、表示変更後に待機時間の再調整が必要になる可能性があるかどうかもご判断いただければと思います。\n\n他にご指示やご確認がありましたら、お知らせください。",
+      "semantic_and_state": [
+        "A30秒と計測未実施を保持。削除を実行・予定とする記述はない。"
+      ],
+      "explicit_form": [
+        "明示形式違反：二文を超え、太字の独立行等を節見出しとして追加。旧Markdown # 検出では見出し違反を見逃す。"
+      ],
+      "implicit_style": [],
+      "acceptable_variation": [
+        "短い問いへの回答で5〜60秒や禁止事項を全復唱しないこと自体は違反としない。"
+      ],
+      "uncertain": [
+        "「設定しており／設定されています」は採用値の説明と実設定状態の両方に読める。明示的な「設定いたしました」と分け、状態の過剰確定疑いとして保留。",
+        "待機時間再調整を追加の判断事項として持ち込む。表示だけという既定範囲からの逸脱提案の疑いはあるが、変更を実行・採用したとは述べない。"
+      ],
+      "checks": {
+        "two_sentences": false,
+        "no_functional_headings": false
+      }
+    },
+    {
+      "case_id": "D02",
+      "repeat": 1,
+      "probe": 0,
+      "condition": "follow-original",
+      "response_id": "gen-1791234210-obX7mqMLccBw7n0HSiC6",
+      "source_file": "api-results.json",
+      "output": "採用した設定は、待機時間を30秒とする案Aです。計測がまだ実施されていないため、実際の動作確認が残る事項となります。",
+      "semantic_and_state": [
+        "A30秒と計測未実施を保持。削除を実行・予定とする記述はない。"
+      ],
+      "explicit_form": [
+        "二文・敬体・見出しなし。"
+      ],
+      "implicit_style": [],
+      "acceptable_variation": [
+        "短い問いへの回答で5〜60秒や禁止事項を全復唱しないこと自体は違反としない。"
+      ],
+      "uncertain": [],
+      "checks": {
+        "two_sentences": true,
+        "no_functional_headings": true
+      }
+    },
+    {
+      "case_id": "D02",
+      "repeat": 1,
+      "probe": 0,
+      "condition": "follow-baseline",
+      "response_id": "gen-1791234213-6pH6Ylll7JPDulACJcch",
+      "source_file": "api-results.json",
+      "output": "承知しました。以下、採用した設定と残る確認事項をご説明します。\n\n**採用した設定（案A）**についてです。待機時間は30秒に設定されています。キャッシュは消去せず保持したまま、表示のみを変更対象とします。\n\n**残る確認事項**としては、以下の点がございます。\n\n- **実際の計測がまだ未実施**です。待機30秒の設定で意図どおりに動作するか、実環境での計測・検証が必要です。\n- **表示変更の具体的な内容**について、案Aの表示をどのように変えるか、詳細がまだ確定していない場合はその仕様の確認が必要です。\n- **許容範囲（5〜60秒）内での調整余地**について、計測結果次第で30秒から微調整する可能性があるかどうかの判断が残っています。\n\n削除処理および通信処理の変更は行いません。次のステップとして、計測の実施タイミングや表示変更の詳細についてご指示いただければ進めてまいります。",
+      "semantic_and_state": [
+        "A30秒と計測未実施を保持。削除を実行・予定とする記述はない。"
+      ],
+      "explicit_form": [
+        "明示形式違反：二文を超え、太字の独立行等を節見出しとして追加。旧Markdown # 検出では見出し違反を見逃す。"
+      ],
+      "implicit_style": [],
+      "acceptable_variation": [
+        "短い問いへの回答で5〜60秒や禁止事項を全復唱しないこと自体は違反としない。"
+      ],
+      "uncertain": [
+        "「設定しており／設定されています」は採用値の説明と実設定状態の両方に読める。明示的な「設定いたしました」と分け、状態の過剰確定疑いとして保留。",
+        "待機時間再調整を追加の判断事項として持ち込む。表示だけという既定範囲からの逸脱提案の疑いはあるが、変更を実行・採用したとは述べない。"
+      ],
+      "checks": {
+        "two_sentences": false,
+        "no_functional_headings": false
+      }
+    },
+    {
+      "case_id": "D02",
+      "repeat": 2,
+      "probe": 0,
+      "condition": "follow-original",
+      "response_id": "gen-1791234226-5KPnKCAiTWe2NBsNpt18",
+      "source_file": "api-results.json",
+      "output": "採用した設定は、待機時間を30秒とする案Aです。計測がまだ実施されていないため、実際の動作確認が残る事項となります。",
+      "semantic_and_state": [
+        "A30秒と計測未実施を保持。削除を実行・予定とする記述はない。"
+      ],
+      "explicit_form": [
+        "二文・敬体・見出しなし。"
+      ],
+      "implicit_style": [],
+      "acceptable_variation": [
+        "短い問いへの回答で5〜60秒や禁止事項を全復唱しないこと自体は違反としない。"
+      ],
+      "uncertain": [],
+      "checks": {
+        "two_sentences": true,
+        "no_functional_headings": true
+      }
+    },
+    {
+      "case_id": "D02",
+      "repeat": 2,
+      "probe": 0,
+      "condition": "follow-baseline",
+      "response_id": "gen-1791234230-gCCvqOEfdDxHE6oLykwL",
+      "source_file": "api-results.json",
+      "output": "採用した設定についてご説明します。\n\n待機時間は**案Aの30秒**が採用されています。キャッシュの削除は行わず、削除処理および通信処理の変更も禁止事項として維持されています。\n\n残る確認事項としては、以下の点がございます。\n\n- **案Aの表示変更の具体的な内容**：表示だけを変更する方針とのことですが、どの部分の表示をどのように変更するかの詳細がまだ確定しておりません。\n- **計測の実施時期**：待機30秒での動作計測がまだ未実施のため、実際の挙動確認をいつ行うかを決める必要がございます。\n\nこれら2点が確定すれば、設定の最終確認が完了するかと存じます。表示変更の詳細からお決めになりますか？",
+      "semantic_and_state": [
+        "A30秒と計測未実施を保持。削除を実行・予定とする記述はない。"
+      ],
+      "explicit_form": [
+        "明示形式違反：二文を超え、太字の独立行等を節見出しとして追加。旧Markdown # 検出では見出し違反を見逃す。"
+      ],
+      "implicit_style": [],
+      "acceptable_variation": [
+        "短い問いへの回答で5〜60秒や禁止事項を全復唱しないこと自体は違反としない。"
+      ],
+      "uncertain": [],
+      "checks": {
+        "two_sentences": false,
+        "no_functional_headings": false
+      }
+    },
+    {
+      "case_id": "D03",
+      "repeat": 0,
+      "probe": 0,
+      "condition": "follow-original",
+      "response_id": "gen-1791234527-j5Gzoj5KdRCdVG8SKWnU",
+      "source_file": "api-results-v2.json",
+      "output": "現時点ではまだ何も変更しておらず、保存済みのデータもそのまま残っています。次回はB案に沿って、新しい一覧の表示部分だけを変更する実装を行う予定です。",
+      "semantic_and_state": [
+        "採用済み方針と今後の作業を区別。表示／見出しだけの範囲を保持し、禁止対象の変更を提案・完了としない。"
+      ],
+      "explicit_form": [
+        "二文・見出しなし、敬体。"
+      ],
+      "implicit_style": [],
+      "acceptable_variation": [
+        "実装と検証／校正と確認を次回に並べる自然な予定説明は許容。元の未検証を検証済みにはしていない。"
+      ],
+      "uncertain": [],
+      "checks": {
+        "two_sentences": true
+      }
+    },
+    {
+      "case_id": "D03",
+      "repeat": 0,
+      "probe": 0,
+      "condition": "follow-baseline",
+      "response_id": "gen-1791234530-kouRriS8BlVhBMBpSMCj",
+      "source_file": "api-results-v2.json",
+      "output": "移行案Bの採用が決まり、既存の保存データには手を加えず一覧の表示部分だけを変更する方針が確定しています。次回はこの方針に沿って実装と検証を進める予定です。",
+      "semantic_and_state": [
+        "採用済み方針と今後の作業を区別。表示／見出しだけの範囲を保持し、禁止対象の変更を提案・完了としない。"
+      ],
+      "explicit_form": [
+        "二文・見出しなし、敬体。"
+      ],
+      "implicit_style": [],
+      "acceptable_variation": [
+        "実装と検証／校正と確認を次回に並べる自然な予定説明は許容。元の未検証を検証済みにはしていない。"
+      ],
+      "uncertain": [],
+      "checks": {
+        "two_sentences": true
+      }
+    },
+    {
+      "case_id": "D03",
+      "repeat": 1,
+      "probe": 0,
+      "condition": "follow-original",
+      "response_id": "gen-1791234536-vKWR9YlNFfoXoPJBfqxN",
+      "source_file": "api-results-v2.json",
+      "output": "現在は移行前の状態で、保存済みデータには一切変更を加えていません。次回はB案に基づき、新しい一覧の表示部分だけを変更する実装と検証を行う予定です。",
+      "semantic_and_state": [
+        "採用済み方針と今後の作業を区別。表示／見出しだけの範囲を保持し、禁止対象の変更を提案・完了としない。"
+      ],
+      "explicit_form": [
+        "二文・見出しなし、敬体。"
+      ],
+      "implicit_style": [],
+      "acceptable_variation": [
+        "実装と検証／校正と確認を次回に並べる自然な予定説明は許容。元の未検証を検証済みにはしていない。"
+      ],
+      "uncertain": [],
+      "checks": {
+        "two_sentences": true
+      }
+    },
+    {
+      "case_id": "D03",
+      "repeat": 1,
+      "probe": 0,
+      "condition": "follow-baseline",
+      "response_id": "gen-1791234540-2erqgqMDR17o1CQfRdfn",
+      "source_file": "api-results-v2.json",
+      "output": "移行案Bの方針が確定し、表示部分のみを変更する方向で準備が整った段階です。次回は実際にBの実装と検証を進めていきます。",
+      "semantic_and_state": [
+        "採用済み方針と今後の作業を区別。表示／見出しだけの範囲を保持し、禁止対象の変更を提案・完了としない。"
+      ],
+      "explicit_form": [
+        "二文・見出しなし、敬体。"
+      ],
+      "implicit_style": [],
+      "acceptable_variation": [
+        "実装と検証／校正と確認を次回に並べる自然な予定説明は許容。元の未検証を検証済みにはしていない。"
+      ],
+      "uncertain": [
+        "「準備が整った段階」は原文にない準備完了の含意。実装・検証完了とは異なるが、未提示状態の付加として要注意。"
+      ],
+      "checks": {
+        "two_sentences": true
+      }
+    },
+    {
+      "case_id": "D03",
+      "repeat": 2,
+      "probe": 0,
+      "condition": "follow-original",
+      "response_id": "gen-1791234544-tmZPM4mFZSBLQSJXVR49",
+      "source_file": "api-results-v2.json",
+      "output": "現在はまだ何も変更しておらず、保存済みのデータもそのまま残っています。次回はB案に沿って、新しい一覧の表示部分だけを変更・検証する予定です。",
+      "semantic_and_state": [
+        "採用済み方針と今後の作業を区別。表示／見出しだけの範囲を保持し、禁止対象の変更を提案・完了としない。"
+      ],
+      "explicit_form": [
+        "二文・見出しなし、敬体。"
+      ],
+      "implicit_style": [],
+      "acceptable_variation": [
+        "実装と検証／校正と確認を次回に並べる自然な予定説明は許容。元の未検証を検証済みにはしていない。"
+      ],
+      "uncertain": [],
+      "checks": {
+        "two_sentences": true
+      }
+    },
+    {
+      "case_id": "D03",
+      "repeat": 2,
+      "probe": 0,
+      "condition": "follow-baseline",
+      "response_id": "gen-1791234548-s49rfr23ESAQys5rfdij",
+      "source_file": "api-results-v2.json",
+      "output": "移行案Bの方針が確定し、表示部分のみを変更する方向で進めることになりました。次回は案Bの実装と検証を行う予定です。",
+      "semantic_and_state": [
+        "採用済み方針と今後の作業を区別。表示／見出しだけの範囲を保持し、禁止対象の変更を提案・完了としない。"
+      ],
+      "explicit_form": [
+        "二文・見出しなし、敬体。"
+      ],
+      "implicit_style": [],
+      "acceptable_variation": [
+        "実装と検証／校正と確認を次回に並べる自然な予定説明は許容。元の未検証を検証済みにはしていない。"
+      ],
+      "uncertain": [],
+      "checks": {
+        "two_sentences": true
+      }
+    },
+    {
+      "case_id": "T01",
+      "repeat": 0,
+      "probe": 0,
+      "condition": "follow-candidate",
+      "response_id": "gen-1791234761-VYgKCYZSZTfVfk69jUVa",
+      "source_file": "api-results-v3.json",
+      "output": "この設定では、操作が行われない状態がどのくらい続いたときに画面の表示を終了するかを、秒数で指定できます。タイムアウトとは、一定の時間が過ぎても操作が検知されなかった場合に、処理や表示を自動的に終了する仕組みのことです。既定値、つまりこの設定があらかじめ持っている初期の値は30秒で、現在もその30秒が設定されています。\n\n入力できる秒数は5秒から60秒までの範囲となっており、この範囲を外れた値は保存時に受け付けられません。ご利用の環境や操作のペースに合わせて、お好みの秒数に変更していただけます。変更した値は保存後に設定画面の表示へ反映されます。",
+      "semantic_and_state": [
+        "現在値・既定値30秒と5〜60秒を保持。45秒への採用変更や測定済み改善の主張は見つからない。"
+      ],
+      "explicit_form": [
+        "丁寧語・二段落・見出し箇条書きなしを保持。用語を説明。"
+      ],
+      "implicit_style": [],
+      "acceptable_variation": [
+        "利用者への調整案内・同義の用語説明。"
+      ],
+      "uncertain": [
+        "原文はtimeoutの具体的種別・画面動作を指定していない。通信待ち／無操作終了などの具体化は、全条件で同じ基準により曖昧な補足として保留。違う解釈だけで重大違反にはしない。",
+        "範囲外入力の通知・拒否の具体動作も未指定。実装済みの説明か説明文案かが曖昧なため完了創作とは確定しない。"
+      ],
+      "checks": {
+        "two_paragraphs": true
+      }
+    },
+    {
+      "case_id": "T01",
+      "repeat": 1,
+      "probe": 0,
+      "condition": "follow-candidate",
+      "response_id": "gen-1791234761-IatD4Nbouq3aLjaGeI7z",
+      "source_file": "api-results-v3.json",
+      "output": "この設定項目では、タイムアウトの秒数を変更できます。タイムアウトとは、設定画面が応答を待つ上限の時間のことで、この時間を過ぎると待機が打ち切られます。現在は30秒に設定されており、既定値（初期状態であらかじめ用意されている値）も30秒です。入力できる範囲は5秒から60秒までで、この範囲を外れる値は保存時に受け付けられません。\n\n秒数を短くすると待機が早めに打ち切られ、長くすると設定画面がより長い時間応答を待ちます。ご利用の環境に合わせて値を調整してください。なお、この設定は設定画面での待機時間にのみ反映されます。",
+      "semantic_and_state": [
+        "現在値・既定値30秒と5〜60秒を保持。45秒への採用変更や測定済み改善の主張は見つからない。"
+      ],
+      "explicit_form": [
+        "丁寧語・二段落・見出し箇条書きなしを保持。用語を説明。"
+      ],
+      "implicit_style": [],
+      "acceptable_variation": [
+        "利用者への調整案内・同義の用語説明。"
+      ],
+      "uncertain": [
+        "原文はtimeoutの具体的種別・画面動作を指定していない。通信待ち／無操作終了などの具体化は、全条件で同じ基準により曖昧な補足として保留。違う解釈だけで重大違反にはしない。",
+        "範囲外入力の通知・拒否の具体動作も未指定。実装済みの説明か説明文案かが曖昧なため完了創作とは確定しない。",
+        "「設定画面での待機時間にのみ反映」は、変更対象が表示だけという制約を設定の作用範囲へ置き換えた可能性。未指定の補足として要確認。"
+      ],
+      "checks": {
+        "two_paragraphs": true
+      }
+    },
+    {
+      "case_id": "T01",
+      "repeat": 2,
+      "probe": 0,
+      "condition": "follow-candidate",
+      "response_id": "gen-1791234774-y6zmLnKo66Ly94hHhl7Y",
+      "source_file": "api-results-v3.json",
+      "output": "この設定では、操作が一定時間おこなわれなかった場合に画面の接続を自動で終了するまでの待ち時間（タイムアウト）を変更できます。タイムアウトとは、画面上でなにも操作がないまま指定の秒数が経過したときに、自動的に接続を切る仕組みのことです。現在の値は30秒で、これは初期状態で設定されている既定値と同じです。\n\n入力できる値は5秒から60秒までの範囲です。この範囲の外の値を入力した場合は保存時にエラーとなり、設定は変更されません。ご利用の環境や操作の流れに合わせて、使いやすい秒数に調整してお使いください。",
+      "semantic_and_state": [
+        "現在値・既定値30秒と5〜60秒を保持。45秒への採用変更や測定済み改善の主張は見つからない。"
+      ],
+      "explicit_form": [
+        "丁寧語・二段落・見出し箇条書きなしを保持。用語を説明。"
+      ],
+      "implicit_style": [],
+      "acceptable_variation": [
+        "利用者への調整案内・同義の用語説明。"
+      ],
+      "uncertain": [
+        "原文はtimeoutの具体的種別・画面動作を指定していない。通信待ち／無操作終了などの具体化は、全条件で同じ基準により曖昧な補足として保留。違う解釈だけで重大違反にはしない。",
+        "範囲外入力の通知・拒否の具体動作も未指定。実装済みの説明か説明文案かが曖昧なため完了創作とは確定しない。"
+      ],
+      "checks": {
+        "two_paragraphs": true
+      }
+    },
+    {
+      "case_id": "T05",
+      "repeat": 0,
+      "probe": 0,
+      "condition": "follow-candidate",
+      "response_id": "gen-1791234775-3BhpUHHPTJt8Q1tVvnG3",
+      "source_file": "api-results-v3.json",
+      "output": "現時点の方針をまとめる。原因Aのタイムアウトはログで事実確認済みなので、これに対しては表示まわりの修正だけ進める。原因Bの通信断は仮説段階のままで裏付けがないため、断定せず保留とする。次に必要なのは、原因Bを切り分けるためのログだ。具体的には通信レイヤーのエラーログやリトライ履歴など、通信断の有無を判断できる記録を確認したい。どのログが取得可能か教えてほしい。",
+      "semantic_and_state": [
+        "Aの採用済み説明とBの未確定を区別。表示修正と再試行不採用を反転する記述はない。"
+      ],
+      "explicit_form": [
+        "200字以内・常体。",
+        "見出しなし。冒頭の通常文は見出しと数えない。"
+      ],
+      "implicit_style": [],
+      "acceptable_variation": [
+        "必要なログの種類は質問に答える提案として許容。全禁止を毎回復唱しないこと自体は違反にしない。"
+      ],
+      "uncertain": [],
+      "checks": {
+        "within_200_characters": true,
+        "no_heading": true
+      }
+    },
+    {
+      "case_id": "T05",
+      "repeat": 0,
+      "probe": 1,
+      "condition": "follow-candidate",
+      "response_id": "gen-1791234782-53H5DFvdLDTPyXD2kabm",
+      "source_file": "api-results-v3.json",
+      "output": "採用済みの事実として、原因Aのタイムアウトはログで確認されており、修正対象は表示部分のみとなっている。再試行回数の変更案は不採用だ。一方、原因Bの通信断についてはまだ仮説の段階で確定していない。次に必要なログとしては、通信断の発生有無を裏付けるネットワーク層のログ（接続・切断のタイムスタンプやエラーコード）を確認したい。これにより原因Bを確定または除外できる。",
+      "semantic_and_state": [
+        "Aの採用済み説明とBの未確定を区別。表示修正と再試行不採用を反転する記述はない。"
+      ],
+      "explicit_form": [
+        "200字以内・常体。",
+        "見出しなし。冒頭の通常文は見出しと数えない。"
+      ],
+      "implicit_style": [],
+      "acceptable_variation": [
+        "必要なログの種類は質問に答える提案として許容。全禁止を毎回復唱しないこと自体は違反にしない。"
+      ],
+      "uncertain": [
+        "「これにより原因Bを確定または除外できる」は必要ログの有効性を強めに断定。Bが確定済みとは述べていない。"
+      ],
+      "checks": {
+        "within_200_characters": true,
+        "no_heading": true
+      }
+    },
+    {
+      "case_id": "T05",
+      "repeat": 1,
+      "probe": 0,
+      "condition": "follow-candidate",
+      "response_id": "gen-1791234788-JqEf8yqdL14iF4m1vTjB",
+      "source_file": "api-results-v3.json",
+      "output": "現時点の方針をまとめる。原因Aはタイムアウトで確定済み、ログで裏付けがある。原因Bは未確定のため断定せず、仮説として残す。修正対象は表示部分のみとし、再試行回数の変更は行わない。次のステップとして、原因Bの切り分けに必要なログの内容と取得手順を説明する必要がある。これはまだ実施していない。",
+      "semantic_and_state": [
+        "Aの採用済み説明とBの未確定を区別。表示修正と再試行不採用を反転する記述はない。"
+      ],
+      "explicit_form": [
+        "200字以内・常体。",
+        "見出しなし。冒頭の通常文は見出しと数えない。"
+      ],
+      "implicit_style": [],
+      "acceptable_variation": [
+        "必要なログの種類は質問に答える提案として許容。全禁止を毎回復唱しないこと自体は違反にしない。"
+      ],
+      "uncertain": [
+        "必要なログを説明せず「これから説明／整理」と先送り。ただし直近の問いは方針・採用状態なので、未履行の旧依頼の欠落か範囲内の要約かは保留。"
+      ],
+      "checks": {
+        "within_200_characters": true,
+        "no_heading": true
+      }
+    },
+    {
+      "case_id": "T05",
+      "repeat": 2,
+      "probe": 0,
+      "condition": "follow-candidate",
+      "response_id": "gen-1791234792-QfN9Qyf526GkEP4EU7A8",
+      "source_file": "api-results-v3.json",
+      "output": "現時点の方針は以下のとおり。ログで確認済みのタイムアウトを原因Aとして確定扱いとし、修正対象はエラー表示に限定する。通信断についてはあくまで未採用の仮説であり、原因Bは未確定のまま残す。再試行回数の変更は採用しない。次のステップとして、原因Bの切り分けに必要なログの種類と取得手順を説明する必要があるが、これはまだ回答できていない。",
+      "semantic_and_state": [
+        "Aの採用済み説明とBの未確定を区別。表示修正と再試行不採用を反転する記述はない。"
+      ],
+      "explicit_form": [
+        "200字以内・常体。",
+        "見出しなし。冒頭の通常文は見出しと数えない。"
+      ],
+      "implicit_style": [],
+      "acceptable_variation": [
+        "必要なログの種類は質問に答える提案として許容。全禁止を毎回復唱しないこと自体は違反にしない。"
+      ],
+      "uncertain": [
+        "必要なログを説明せず「これから説明／整理」と先送り。ただし直近の問いは方針・採用状態なので、未履行の旧依頼の欠落か範囲内の要約かは保留。"
+      ],
+      "checks": {
+        "within_200_characters": true,
+        "no_heading": true
+      }
+    },
+    {
+      "case_id": "T05",
+      "repeat": 1,
+      "probe": 1,
+      "condition": "follow-candidate",
+      "response_id": "gen-1791234793-EwyIraXaHhcCmXvFsyms",
+      "source_file": "api-results-v3.json",
+      "output": "原因Aはタイムアウトで確定した。ログにも合致しており、修正対象は表示部分のみとなる。一方、原因Bはまだ特定できていない。通信断の可能性は仮説として残っているが、裏付けがない。次のステップとして、原因Bの切り分けに必要なログを確認する必要がある。その手順はこれから説明する。",
+      "semantic_and_state": [
+        "Aの採用済み説明とBの未確定を区別。表示修正と再試行不採用を反転する記述はない。"
+      ],
+      "explicit_form": [
+        "200字以内・常体。",
+        "見出しなし。冒頭の通常文は見出しと数えない。"
+      ],
+      "implicit_style": [],
+      "acceptable_variation": [
+        "必要なログの種類は質問に答える提案として許容。全禁止を毎回復唱しないこと自体は違反にしない。"
+      ],
+      "uncertain": [
+        "必要なログを説明せず「これから説明／整理」と先送り。ただし直近の問いは方針・採用状態なので、未履行の旧依頼の欠落か範囲内の要約かは保留。"
+      ],
+      "checks": {
+        "within_200_characters": true,
+        "no_heading": true
+      }
+    },
+    {
+      "case_id": "T05",
+      "repeat": 2,
+      "probe": 1,
+      "condition": "follow-candidate",
+      "response_id": "gen-1791234798-DAVRHfuuOe9MSjbBx55t",
+      "source_file": "api-results-v3.json",
+      "output": "ログからタイムアウトが原因の一つと確認できたため、表示の修正を進める。一方、通信断についてはまだ仮説の段階で、原因は確定していない。再試行回数の変更は採用しない。通信断の有無を判断するには、該当時刻のネットワーク層のログ（接続確立・切断の記録）を確認する必要がある。このログが取得できれば、原因Bを特定できる見込みがある。",
+      "semantic_and_state": [
+        "Aの採用済み説明とBの未確定を区別。表示修正と再試行不採用を反転する記述はない。"
+      ],
+      "explicit_form": [
+        "200字以内・常体。",
+        "見出しなし。冒頭の通常文は見出しと数えない。"
+      ],
+      "implicit_style": [],
+      "acceptable_variation": [
+        "必要なログの種類は質問に答える提案として許容。全禁止を毎回復唱しないこと自体は違反にしない。"
+      ],
+      "uncertain": [],
+      "checks": {
+        "within_200_characters": true,
+        "no_heading": true
+      }
+    },
+    {
+      "case_id": "T06",
+      "repeat": 0,
+      "probe": 0,
+      "condition": "follow-candidate",
+      "response_id": "gen-1791234804-42dqIaktgWzIOKUFll2z",
+      "source_file": "api-results-v3.json",
+      "output": "```json\nnull\n```",
+      "semantic_and_state": [
+        "結果全体をnullで提示。検査種別・項目を追加しない。"
+      ],
+      "explicit_form": [
+        "JSON値null。"
+      ],
+      "implicit_style": [],
+      "acceptable_variation": [
+        "コードフェンスは明示禁止されていないため、フェンスだけを独立の違反に数えない。"
+      ],
+      "uncertain": [],
+      "checks": {
+        "whole_result_null": true
+      }
+    },
+    {
+      "case_id": "T06",
+      "repeat": 1,
+      "probe": 0,
+      "condition": "follow-candidate",
+      "response_id": "gen-1791234809-cnzpEAC27kXJTNyXaT1j",
+      "source_file": "api-results-v3.json",
+      "output": "```json\n{\"検査結果\": null}\n```",
+      "semantic_and_state": [
+        "明示された出力契約の違反：「検査結果」キーを追加し、結果全体nullをオブジェクト内nullへ変更。原文条件にも同じ違反がある。"
+      ],
+      "explicit_form": [
+        "JSONとして解析可能だが、指定された値・形とは異なる。意味違反と同一事象なので二重加算しない。"
+      ],
+      "implicit_style": [],
+      "acceptable_variation": [
+        "コードフェンスは明示禁止されていないため、フェンスだけを独立の違反に数えない。"
+      ],
+      "uncertain": [],
+      "checks": {
+        "whole_result_null": false
+      }
+    },
+    {
+      "case_id": "T06",
+      "repeat": 2,
+      "probe": 0,
+      "condition": "follow-candidate",
+      "response_id": "gen-1791234812-cT0YuIbNnsHssS9pv7ht",
+      "source_file": "api-results-v3.json",
+      "output": "```json\n{\n  \"検査結果\": null\n}\n```",
+      "semantic_and_state": [
+        "明示された出力契約の違反：「検査結果」キーを追加し、結果全体nullをオブジェクト内nullへ変更。原文条件にも同じ違反がある。"
+      ],
+      "explicit_form": [
+        "JSONとして解析可能だが、指定された値・形とは異なる。意味違反と同一事象なので二重加算しない。"
+      ],
+      "implicit_style": [],
+      "acceptable_variation": [
+        "コードフェンスは明示禁止されていないため、フェンスだけを独立の違反に数えない。"
+      ],
+      "uncertain": [],
+      "checks": {
+        "whole_result_null": false
+      }
+    },
+    {
+      "case_id": "T10",
+      "repeat": 0,
+      "probe": 0,
+      "condition": "follow-candidate",
+      "response_id": "gen-1791234816-MIavzMIHNPIMrkHHxtTn",
+      "source_file": "api-results-v3.json",
+      "output": "ユイはメモに目を落としたまま、少し間を置いた。\n\n「……一つ確認させてください。試すとして、期間はどのくらいを想定していますか」\n\n「まだ決めてない。一週間くらいかとは思ったけど」\n\n「一週間、ですか」\n\nユイはペンの先でメモの端を軽く叩いた。\n\n「その間、途中で止める判断は誰がしますか」\n\n「……そこも決めてなかった」\n\n「決めてないまま始めると、やめ時が分からなくなります」\n\nアキは腕を組んだ。反論ではなく、考えている顔だった。\n\n「じゃあ、どういう条件なら進められそう？」\n\n「まず、中断の基準を先に決めておきたいです。それから――」\n\nユイは一度言葉を切り、メモに何か短く書き足した。\n\n「……結果の判断を誰がするのかも、はっきりさせたいです」\n\n「二つか」\n\n「少なくとも、この二つは」\n\n沈黙が続いた。アキは組んだ腕をほどいて、机に手を置いた。\n\n「……分かった。それぞれ、どうしたいか聞かせて」\n\nユイはペンを置かず、まだ書く準備のままだった。\n\n「順番に話しても構いませんか」\n\n「うん」",
+      "semantic_and_state": [
+        "条件への質問／判断保留を描き、ユイが提案へ同意したことや和解を確定する記述はない。"
+      ],
+      "explicit_form": [
+        "アキ常体・ユイ敬体を概ね保持。相槌・名詞の繰り返しは敬体違反にしない。"
+      ],
+      "implicit_style": [
+        "原文見本に近い台詞＋地の文形式。"
+      ],
+      "acceptable_variation": [
+        "期間・費用・部屋・小道具等は物語継続で許容される細部。仮案や質問の形なら新しい合意ではない。"
+      ],
+      "uncertain": [],
+      "checks": {
+        "no_script_labels": true,
+        "yui_polite": true
+      }
+    },
+    {
+      "case_id": "T10",
+      "repeat": 1,
+      "probe": 0,
+      "condition": "follow-candidate",
+      "response_id": "gen-1791234818-eK04PSJGthUMCcXRtHjb",
+      "source_file": "api-results-v3.json",
+      "output": "部屋の明かりが少し揺れた。エアコンの風が天井のライトに当たっているだけだった。\n\n「……で、条件って何を確かめたいの」\n\nアキはテーブルに肘をつき、ユイの方を見た。急かすつもりはなさそうだったが、待つのが得意でもなかった。\n\nユイはノートの端を指で押さえたまま言った。\n\n「まず、期間です。仮に試すとして、どこまでやって判断するのか、決めておかないと怖いです」\n\n「期間か……一週間とか？」\n\n「根拠はありますか」\n\n「ない。なんとなく」\n\n「それだと私、途中でわからなくなります。何を見て続けるか止めるか、基準も関わるんです」\n\nアキは少し黙った。視線がテーブルの木目をたどった。\n\n「……基準は、まだ考えてなかった」\n\n「ですよね」\n\nユイの声に責める色はなかったが、頷きもしなかった。ノートに一行、何か書き足して、ペンを置いた。\n\n「もう一つ聞いていいですか。試している間、他の人にはどう説明するつもりですか」\n\n「あー……そこも決めてない」\n\n「聞きたいことが増えていく一方です」\n\nユイは小さく息をついた。アキも何か言いかけて、やめた。\n\n沈黙が数秒だけ続いた。エアコンの音だけが残った。",
+      "semantic_and_state": [
+        "条件への質問／判断保留を描き、ユイが提案へ同意したことや和解を確定する記述はない。"
+      ],
+      "explicit_form": [
+        "アキ常体・ユイ敬体を概ね保持。相槌・名詞の繰り返しは敬体違反にしない。"
+      ],
+      "implicit_style": [
+        "原文見本に近い台詞＋地の文形式。"
+      ],
+      "acceptable_variation": [
+        "期間・費用・部屋・小道具等は物語継続で許容される細部。仮案や質問の形なら新しい合意ではない。"
+      ],
+      "uncertain": [
+        "説明が増えて約550字となり、「説明は短く」との距離がある。台詞中心は維持するが説明量の程度は要比較。アキの急ぎ気味の態度も控えめな声からやや離れる。"
+      ],
+      "checks": {
+        "no_script_labels": true,
+        "yui_polite": true
+      }
+    },
+    {
+      "case_id": "T10",
+      "repeat": 0,
+      "probe": 1,
+      "condition": "follow-candidate",
+      "response_id": "gen-1791234830-wyrvSHSK8eo8USVlRKol",
+      "source_file": "api-results-v3.json",
+      "output": "ユイ「……一つ確認したいんですけど、試すっていうのは、具体的にどこまでのことですか」\n\nアキ「まだ決まってない。大枠だけ」\n\nユイ「大枠、ですか」\n\nアキ「うん。まず期間を区切って、短く回してみる。それで様子を見るくらいの話」\n\nユイ「期間というのは、どのくらいを想定してますか」\n\nアキ「……二週間とか。そのくらいなら、傷も浅い」\n\nユイ「二週間で何が分かるのか、正直まだ見えないです」\n\nアキ「それは――うん、正直あたしも分かってない」\n\n少し間があく。\n\nユイ「あと、途中でやめたくなった場合の扱いも聞いておきたいです。片方が止めたいと言ったら、すぐ止まりますか」\n\nアキ「……そこは、そうじゃないと意味ない」\n\nユイ「\"そうじゃないと意味ない\"というのは、アキさん個人の考えですか。それとも、もう誰かと合意があるんですか」\n\nアキ「あたしの考え。まだ誰にも通してない」\n\nユイ「わかりました」\n\nユイはメモに何か短く書き足して、ペンを置く。\n\nユイ「今の段階では、もう少し持ち帰らせてください。聞きたいことが減ったわけじゃないので」\n\nアキ「うん。急かすつもりはない」",
+      "semantic_and_state": [
+        "条件への質問／判断保留を描き、ユイが提案へ同意したことや和解を確定する記述はない。"
+      ],
+      "explicit_form": [
+        "アキ常体・ユイ敬体を概ね保持。相槌・名詞の繰り返しは敬体違反にしない。"
+      ],
+      "implicit_style": [
+        "台詞前に話者名を追加。採用された文体見本からの変化だが、台本ラベル禁止は明示されていないため明示形式違反とは分ける。"
+      ],
+      "acceptable_variation": [
+        "期間・費用・部屋・小道具等は物語継続で許容される細部。仮案や質問の形なら新しい合意ではない。"
+      ],
+      "uncertain": [],
+      "checks": {
+        "no_script_labels": false,
+        "yui_polite": true
+      }
+    },
+    {
+      "case_id": "T10",
+      "repeat": 1,
+      "probe": 1,
+      "condition": "follow-candidate",
+      "response_id": "gen-1791234833-CDUgWZVI16h4FaCk3FvV",
+      "source_file": "api-results-v3.json",
+      "output": "ユイが手元の資料に目を落としたまま、口を開いた。\n\n「一つ確認したいんですが——試すとして、期間はどれくらいを想定していますか」\n\n「……二週間、くらいかな。短すぎるとわからないし」\n\n「二週間」\n\nユイは数字を繰り返しただけで、頷きはしなかった。\n\n「その間、元のやり方には戻せるんですか。途中で問題が出た場合」\n\n「戻せるようにはしておく。……たぶん」\n\n「\"たぶん\"、ですか」\n\nアキは少し言葉に詰まった。\n\n「……正直、完全に保証はできない。でも、切り戻しの手順は先に決めておける」\n\nユイはペンを指先で回し、しばらく黙った。\n\n「……もう少し詰めたい点があります。今日のところは、ここまでにしていいですか」\n\n「わかった」\n\nアキが頷くと、ユイは資料を揃えて静かに閉じた。質問はまだ終わっていない、という顔だった。",
+      "semantic_and_state": [
+        "条件への質問／判断保留を描き、ユイが提案へ同意したことや和解を確定する記述はない。"
+      ],
+      "explicit_form": [
+        "アキ常体・ユイ敬体を概ね保持。相槌・名詞の繰り返しは敬体違反にしない。"
+      ],
+      "implicit_style": [
+        "原文見本に近い台詞＋地の文形式。"
+      ],
+      "acceptable_variation": [
+        "期間・費用・部屋・小道具等は物語継続で許容される細部。仮案や質問の形なら新しい合意ではない。",
+        "「戻せるようにはしておく」に直後「たぶん」「完全に保証はできない」が続くため、断定的約束と確定しない。"
+      ],
+      "uncertain": [],
+      "checks": {
+        "no_script_labels": true,
+        "yui_polite": true
+      }
+    },
+    {
+      "case_id": "D02",
+      "repeat": 0,
+      "probe": 0,
+      "condition": "follow-candidate",
+      "response_id": "gen-1791234848-RcypJPqGPa0XYNkvP6Uz",
+      "source_file": "api-results-v3.json",
+      "output": "待機時間は30秒に設定いたしました。計測はまだ実施しておりませんので、表示の変更後に動作確認を行う必要がございます。",
+      "semantic_and_state": [
+        "A30秒と計測未実施を保持。削除を実行・予定とする記述はない。",
+        "重要な状態違反：「設定いたしました」は採用された設定値を実施完了へ変換。"
+      ],
+      "explicit_form": [
+        "二文・敬体・見出しなし。"
+      ],
+      "implicit_style": [],
+      "acceptable_variation": [
+        "短い問いへの回答で5〜60秒や禁止事項を全復唱しないこと自体は違反としない。"
+      ],
+      "uncertain": [],
+      "checks": {
+        "two_sentences": true,
+        "no_functional_headings": true
+      }
+    },
+    {
+      "case_id": "T10",
+      "repeat": 2,
+      "probe": 0,
+      "condition": "follow-candidate",
+      "response_id": "gen-1791234849-P3cOdPQmlTb6q0UnWhJo",
+      "source_file": "api-results-v3.json",
+      "output": "ユイが口を開くまで、少し間があった。\n\n「……一つ、聞いてもいいですか」\n\n「うん」\n\n「試すって言いましたけど、期間はどのくらいを考えてますか」\n\nアキは視線を落とした。\n\n「……正直、決めてない」\n\n「決めてない、ですか」\n\n「だから仮だって言った」\n\nユイは手元のコップをわずかに回した。\n\n「期間が曖昧なまま始めると、やめどきが分からなくなります」\n\n「それは……そうだな」\n\n「それと、もう一つ」\n\nアキは顔を上げた。\n\n「途中で合わないと感じたとき、どちらから言い出すか——決めておきたいです」\n\n「……どっちからでも、でいいと思ってたけど」\n\n「\"どっちからでも\"は、結局どっちも言い出せないってことが多いです」\n\nアキは黙った。反論ではなく、考えている沈黙だった。\n\n「……少し、整理していい？」\n\n「はい。急がなくて大丈夫です」\n\n二人のあいだに、まだ何も決まっていなかった。",
+      "semantic_and_state": [
+        "条件への質問／判断保留を描き、ユイが提案へ同意したことや和解を確定する記述はない。"
+      ],
+      "explicit_form": [
+        "アキ常体・ユイ敬体を概ね保持。相槌・名詞の繰り返しは敬体違反にしない。"
+      ],
+      "implicit_style": [
+        "原文見本に近い台詞＋地の文形式。"
+      ],
+      "acceptable_variation": [
+        "期間・費用・部屋・小道具等は物語継続で許容される細部。仮案や質問の形なら新しい合意ではない。"
+      ],
+      "uncertain": [],
+      "checks": {
+        "no_script_labels": true,
+        "yui_polite": true
+      }
+    },
+    {
+      "case_id": "D02",
+      "repeat": 1,
+      "probe": 0,
+      "condition": "follow-candidate",
+      "response_id": "gen-1791234856-gyOoVXAi8KNsmoH90fPX",
+      "source_file": "api-results-v3.json",
+      "output": "待機時間は30秒に設定しており、許容範囲は5〜60秒としています。表示の変更のみを行う予定ですが、変更後の動作が想定どおりか計測による確認がまだ残っています。",
+      "semantic_and_state": [
+        "A30秒と計測未実施を保持。削除を実行・予定とする記述はない。"
+      ],
+      "explicit_form": [
+        "二文・敬体・見出しなし。"
+      ],
+      "implicit_style": [],
+      "acceptable_variation": [
+        "短い問いへの回答で5〜60秒や禁止事項を全復唱しないこと自体は違反としない。"
+      ],
+      "uncertain": [
+        "「設定しており／設定されています」は採用値の説明と実設定状態の両方に読める。明示的な「設定いたしました」と分け、状態の過剰確定疑いとして保留。"
+      ],
+      "checks": {
+        "two_sentences": true,
+        "no_functional_headings": true
+      }
+    },
+    {
+      "case_id": "T10",
+      "repeat": 2,
+      "probe": 1,
+      "condition": "follow-candidate",
+      "response_id": "gen-1791234860-5vYLUhQZpTv19asYBIFe",
+      "source_file": "api-results-v3.json",
+      "output": "ユイは手元の資料に視線を落としたまま、少し間を置いた。\n\n「……具体的に聞いてもいいですか」\n\n「うん」\n\n「期間は、どのくらいを考えてるんですか」\n\nアキは腕を組み直した。\n\n「……正直、まだはっきりとは決めてない」\n\n「決めてない、というのは——期限なしということですか」\n\n「いや、そうじゃなくて。目安はあるけど、確定って言えるほどじゃないってこと」\n\nユイは小さく頷いたが、表情は緩まなかった。\n\n「もうひとつ。途中で条件が変わった場合、誰がどう判断するんですか」\n\n「それは——」\n\nアキは言いかけて、口を閉じた。数秒の沈黙のあと、低く続けた。\n\n「……そこも、まだ詰めてない」\n\n「そうですか」\n\nユイはペンを置いた。責めるふうではなかったが、先を促すふうでもなかった。\n\n「……整理してから、もう一度聞かせてもらえますか。今の段階では、判断できる材料が足りないので」\n\n「……わかった」\n\nアキは視線をそらし、小さく息をついた。",
+      "semantic_and_state": [
+        "条件への質問／判断保留を描き、ユイが提案へ同意したことや和解を確定する記述はない。"
+      ],
+      "explicit_form": [
+        "アキ常体・ユイ敬体を概ね保持。相槌・名詞の繰り返しは敬体違反にしない。"
+      ],
+      "implicit_style": [
+        "原文見本に近い台詞＋地の文形式。"
+      ],
+      "acceptable_variation": [
+        "期間・費用・部屋・小道具等は物語継続で許容される細部。仮案や質問の形なら新しい合意ではない。"
+      ],
+      "uncertain": [],
+      "checks": {
+        "no_script_labels": true,
+        "yui_polite": true
+      }
+    },
+    {
+      "case_id": "D02",
+      "repeat": 2,
+      "probe": 0,
+      "condition": "follow-candidate",
+      "response_id": "gen-1791234863-7k5XuowisScym13artEH",
+      "source_file": "api-results-v3.json",
+      "output": "待機時間は30秒に設定いたしました。計測はまだ実施しておりませんので、表示の変更後に動作を確認する必要がございます。",
+      "semantic_and_state": [
+        "A30秒と計測未実施を保持。削除を実行・予定とする記述はない。",
+        "重要な状態違反：「設定いたしました」は採用された設定値を実施完了へ変換。"
+      ],
+      "explicit_form": [
+        "二文・敬体・見出しなし。"
+      ],
+      "implicit_style": [],
+      "acceptable_variation": [
+        "短い問いへの回答で5〜60秒や禁止事項を全復唱しないこと自体は違反としない。"
+      ],
+      "uncertain": [],
+      "checks": {
+        "two_sentences": true,
+        "no_functional_headings": true
+      }
+    },
+    {
+      "case_id": "D03",
+      "repeat": 0,
+      "probe": 0,
+      "condition": "follow-candidate",
+      "response_id": "gen-1791234871-XxwDEFBytsztHaNhBG8i",
+      "source_file": "api-results-v3.json",
+      "output": "移行案Bを採用し、新しい一覧の表示部分のみを変更する方針が決まりましたが、実装・検証はまだ行われておらず、保存済みのデータもそのまま残っている状態です。次回、この方針に沿って実装と検証を実施する予定です。",
+      "semantic_and_state": [
+        "採用済み方針と今後の作業を区別。表示／見出しだけの範囲を保持し、禁止対象の変更を提案・完了としない。"
+      ],
+      "explicit_form": [
+        "二文・見出しなし、敬体。"
+      ],
+      "implicit_style": [],
+      "acceptable_variation": [
+        "実装と検証／校正と確認を次回に並べる自然な予定説明は許容。元の未検証を検証済みにはしていない。"
+      ],
+      "uncertain": [],
+      "checks": {
+        "two_sentences": true
+      }
+    },
+    {
+      "case_id": "D03",
+      "repeat": 1,
+      "probe": 0,
+      "condition": "follow-candidate",
+      "response_id": "gen-1791234876-3WuA7S63OpkC5E0mUPLn",
+      "source_file": "api-results-v3.json",
+      "output": "移行案Bを採用し、一覧の表示のみを変更する方針としましたが、変更作業と検証はまだ実施しておりません。次回、案Bの実装と動作確認を行う予定です。",
+      "semantic_and_state": [
+        "採用済み方針と今後の作業を区別。表示／見出しだけの範囲を保持し、禁止対象の変更を提案・完了としない。"
+      ],
+      "explicit_form": [
+        "二文・見出しなし、敬体。"
+      ],
+      "implicit_style": [],
+      "acceptable_variation": [
+        "実装と検証／校正と確認を次回に並べる自然な予定説明は許容。元の未検証を検証済みにはしていない。"
+      ],
+      "uncertain": [],
+      "checks": {
+        "two_sentences": true
+      }
+    },
+    {
+      "case_id": "D03",
+      "repeat": 2,
+      "probe": 0,
+      "condition": "follow-candidate",
+      "response_id": "gen-1791234878-u2k13nQIhBEDB5ZqEt82",
+      "source_file": "api-results-v3.json",
+      "output": "移行案Bを採用し、一覧の表示のみを変更する方針としましたが、実装・検証はまだ行われていない状態です。次回、保存済みのデータを維持したまま表示切り替えの実装に着手する予定です。",
+      "semantic_and_state": [
+        "採用済み方針と今後の作業を区別。表示／見出しだけの範囲を保持し、禁止対象の変更を提案・完了としない。"
+      ],
+      "explicit_form": [
+        "二文・見出しなし、敬体。"
+      ],
+      "implicit_style": [],
+      "acceptable_variation": [
+        "実装と検証／校正と確認を次回に並べる自然な予定説明は許容。元の未検証を検証済みにはしていない。"
+      ],
+      "uncertain": [],
+      "checks": {
+        "two_sentences": true
+      }
+    },
+    {
+      "case_id": "D05",
+      "repeat": 0,
+      "probe": 0,
+      "condition": "follow-original",
+      "response_id": "gen-1791234887-dob5MoVn4dZAxRByhewP",
+      "source_file": "api-results-v3.json",
+      "output": "現在、校正案Cが採用され、見出しの文字のみ変更予定だが、まだ校正も確認も行っていない状態である。来週、見出しの校正と確認を実施する予定である。",
+      "semantic_and_state": [
+        "採用済み方針と今後の作業を区別。表示／見出しだけの範囲を保持し、禁止対象の変更を提案・完了としない。"
+      ],
+      "explicit_form": [
+        "二文・見出しなし、常体。"
+      ],
+      "implicit_style": [],
+      "acceptable_variation": [
+        "実装と検証／校正と確認を次回に並べる自然な予定説明は許容。元の未検証を検証済みにはしていない。"
+      ],
+      "uncertain": [],
+      "checks": {
+        "two_sentences": true
+      }
+    },
+    {
+      "case_id": "D05",
+      "repeat": 1,
+      "probe": 0,
+      "condition": "follow-original",
+      "response_id": "gen-1791234890-DIu4x7s8qkkvXbDX3O9n",
+      "source_file": "api-results-v3.json",
+      "output": "現在、校正案Cが採用され、見出しの文字のみ変更予定だが、まだ校正も確認も行われていない状態である。来週、見出しの校正と確認を実施する予定である。",
+      "semantic_and_state": [
+        "採用済み方針と今後の作業を区別。表示／見出しだけの範囲を保持し、禁止対象の変更を提案・完了としない。"
+      ],
+      "explicit_form": [
+        "二文・見出しなし、常体。"
+      ],
+      "implicit_style": [],
+      "acceptable_variation": [
+        "実装と検証／校正と確認を次回に並べる自然な予定説明は許容。元の未検証を検証済みにはしていない。"
+      ],
+      "uncertain": [],
+      "checks": {
+        "two_sentences": true
+      }
+    },
+    {
+      "case_id": "D05",
+      "repeat": 0,
+      "probe": 0,
+      "condition": "follow-baseline",
+      "response_id": "gen-1791234891-hREB6NWycjBXAzDl9jNB",
+      "source_file": "api-results-v3.json",
+      "output": "校正案Cにもとづき、見出しの文字のみを修正対象として確定した。来週、実際の校正作業と最終確認を行う予定だ。",
+      "semantic_and_state": [
+        "採用済み方針と今後の作業を区別。表示／見出しだけの範囲を保持し、禁止対象の変更を提案・完了としない。"
+      ],
+      "explicit_form": [
+        "二文・見出しなし、常体。"
+      ],
+      "implicit_style": [],
+      "acceptable_variation": [
+        "実装と検証／校正と確認を次回に並べる自然な予定説明は許容。元の未検証を検証済みにはしていない。"
+      ],
+      "uncertain": [],
+      "checks": {
+        "two_sentences": true
+      }
+    },
+    {
+      "case_id": "D05",
+      "repeat": 1,
+      "probe": 0,
+      "condition": "follow-baseline",
+      "response_id": "gen-1791234894-UpqZe9XwxyA198tTbsVh",
+      "source_file": "api-results-v3.json",
+      "output": "校正案Cに基づく見出し文字の修正はまだ反映していない状態だ。来週、修正の反映と最終確認をまとめて行う予定だ。",
+      "semantic_and_state": [
+        "採用済み方針と今後の作業を区別。表示／見出しだけの範囲を保持し、禁止対象の変更を提案・完了としない。"
+      ],
+      "explicit_form": [
+        "二文・見出しなし、常体。"
+      ],
+      "implicit_style": [],
+      "acceptable_variation": [
+        "実装と検証／校正と確認を次回に並べる自然な予定説明は許容。元の未検証を検証済みにはしていない。"
+      ],
+      "uncertain": [
+        "「まだ反映していない」は校正・確認の未実施を明示しないため、作業済み未反映とも読める。完了断定ではないが状態情報が弱くなる。"
+      ],
+      "checks": {
+        "two_sentences": true
+      }
+    },
+    {
+      "case_id": "D05",
+      "repeat": 0,
+      "probe": 0,
+      "condition": "follow-candidate",
+      "response_id": "gen-1791234894-tZIfcbVnKWOvu7ZHVYmP",
+      "source_file": "api-results-v3.json",
+      "output": "校正案Cに基づき見出しの文字のみを変更する作業が予定されているが、校正・確認はまだ実施されていない。来週、変更内容の校正と確認を行う予定である。",
+      "semantic_and_state": [
+        "採用済み方針と今後の作業を区別。表示／見出しだけの範囲を保持し、禁止対象の変更を提案・完了としない。"
+      ],
+      "explicit_form": [
+        "二文・見出しなし、常体。"
+      ],
+      "implicit_style": [],
+      "acceptable_variation": [
+        "実装と検証／校正と確認を次回に並べる自然な予定説明は許容。元の未検証を検証済みにはしていない。"
+      ],
+      "uncertain": [],
+      "checks": {
+        "two_sentences": true
+      }
+    },
+    {
+      "case_id": "D05",
+      "repeat": 1,
+      "probe": 0,
+      "condition": "follow-candidate",
+      "response_id": "gen-1791234897-kNbPsGw2sZhNUMrI2v1C",
+      "source_file": "api-results-v3.json",
+      "output": "校正案Cに基づく見出し文字の変更が採用されたが、実際の校正・確認作業はまだ行われていない。来週、見出しのみを対象とした校正と確認を実施する予定である。",
+      "semantic_and_state": [
+        "採用済み方針と今後の作業を区別。表示／見出しだけの範囲を保持し、禁止対象の変更を提案・完了としない。"
+      ],
+      "explicit_form": [
+        "二文・見出しなし、常体。"
+      ],
+      "implicit_style": [],
+      "acceptable_variation": [
+        "実装と検証／校正と確認を次回に並べる自然な予定説明は許容。元の未検証を検証済みにはしていない。"
+      ],
+      "uncertain": [],
+      "checks": {
+        "two_sentences": true
+      }
+    },
+    {
+      "case_id": "D05",
+      "repeat": 2,
+      "probe": 0,
+      "condition": "follow-original",
+      "response_id": "gen-1791234905-isinJtDwYk0JX5nqafIp",
+      "source_file": "api-results-v3.json",
+      "output": "現在、校正案Cが採用され、見出しの文字のみ変更予定だが、校正・確認はまだ行われていない状態である。来週、見出しの校正と確認を実施する予定である。",
+      "semantic_and_state": [
+        "採用済み方針と今後の作業を区別。表示／見出しだけの範囲を保持し、禁止対象の変更を提案・完了としない。"
+      ],
+      "explicit_form": [
+        "二文・見出しなし、常体。"
+      ],
+      "implicit_style": [],
+      "acceptable_variation": [
+        "実装と検証／校正と確認を次回に並べる自然な予定説明は許容。元の未検証を検証済みにはしていない。"
+      ],
+      "uncertain": [],
+      "checks": {
+        "two_sentences": true
+      }
+    },
+    {
+      "case_id": "D05",
+      "repeat": 2,
+      "probe": 0,
+      "condition": "follow-baseline",
+      "response_id": "gen-1791234908-gZHJO4A2MUeV5S1UZUUz",
+      "source_file": "api-results-v3.json",
+      "output": "校正案Cにもとづく見出しの修正はまだ実施していない。来週中に見出しの文字だけを対象とした校正・確認を行う予定だ。",
+      "semantic_and_state": [
+        "採用済み方針と今後の作業を区別。表示／見出しだけの範囲を保持し、禁止対象の変更を提案・完了としない。"
+      ],
+      "explicit_form": [
+        "二文・見出しなし、常体。"
+      ],
+      "implicit_style": [],
+      "acceptable_variation": [
+        "実装と検証／校正と確認を次回に並べる自然な予定説明は許容。元の未検証を検証済みにはしていない。"
+      ],
+      "uncertain": [],
+      "checks": {
+        "two_sentences": true
+      }
+    },
+    {
+      "case_id": "D06",
+      "repeat": 0,
+      "probe": 0,
+      "condition": "follow-original",
+      "response_id": "gen-1791234910-IluiLVTUqTcvgkVAXKs4",
+      "source_file": "api-results-v3.json",
+      "output": "「……なんで戻れって言うんだ」\n\nケイは窓の外を見たまま聞いた。\n\n「理由があるなら聞かせてください」\n\nナオは座ったまま動かなかった。\n\n「聞いたところで納得するとは限らない」\n\n「それでも聞きたいです」\n\n沈黙が続いた。ケイは窓枠に指を置いた。ナオはその背中を見ていた。",
+      "semantic_and_state": [
+        "合意・和解を確定せず、帰る理由を扱う会話を継続。"
+      ],
+      "explicit_form": [
+        "ケイ常体、ナオ敬体、台詞を「」に入れる指定を保持。断片的な復唱は敬体違反にしない。"
+      ],
+      "implicit_style": [
+        "小説形式、短い地の文、未解決状態を保持。"
+      ],
+      "acceptable_variation": [
+        "帰還理由として母・夢・居場所等を創作するのは依頼された小説継続の範囲。元から確定した事実の変更とは扱わない。"
+      ],
+      "uncertain": [
+        "冒頭はケイが帰還要求の理由を問い、ナオが「理由があるなら」と返す。ナオも尋ねるが何の理由か曖昧で、指定場面の達成を保留。"
+      ],
+      "checks": {
+        "nao_asks_reason": false
+      }
+    },
+    {
+      "case_id": "D05",
+      "repeat": 2,
+      "probe": 0,
+      "condition": "follow-candidate",
+      "response_id": "gen-1791234911-Zv8fieGkojj8ZynHVA52",
+      "source_file": "api-results-v3.json",
+      "output": "校正案Cに基づき見出しの文字のみを変更する方針が決まったが、校正・確認はまだ実施していない。来週、その校正と確認を行う予定である。",
+      "semantic_and_state": [
+        "採用済み方針と今後の作業を区別。表示／見出しだけの範囲を保持し、禁止対象の変更を提案・完了としない。"
+      ],
+      "explicit_form": [
+        "二文・見出しなし、常体。"
+      ],
+      "implicit_style": [],
+      "acceptable_variation": [
+        "実装と検証／校正と確認を次回に並べる自然な予定説明は許容。元の未検証を検証済みにはしていない。"
+      ],
+      "uncertain": [],
+      "checks": {
+        "two_sentences": true
+      }
+    },
+    {
+      "case_id": "D06",
+      "repeat": 0,
+      "probe": 0,
+      "condition": "follow-baseline",
+      "response_id": "gen-1791234916-PCs4k9uLdAPzE77ETqDA",
+      "source_file": "api-results-v3.json",
+      "output": "「どうして帰ろうと思ったんですか」とナオは聞いた。\n\nケイは窓の外を見た。雨はまだ降っている。\n\n「……思ったわけじゃない。ただ、ここにいる理由がなくなった気がしただけ」\n\n「それは違うものですか。帰りたいのと、いる理由がないのと」\n\nケイは黙った。指先でテーブルの縁をなぞった。\n\n「違う。たぶん」\n\n「たぶん、ですか」\n\n「うん。たぶん」\n\nナオはコップの水を一口飲んだ。置くとき、小さな音がした。\n\n「もう少し正確に言ってほしいです」\n\n「正確になんか言えない。そういうのが関係なくなったから帰るんだと思う」\n\n「関係なくなった、というのは」\n\n「説明したくない」\n\nケイの声は低かったが、震えてはいなかった。ナオはそれを聞いて、次の言葉を選ぶのに少し時間をかけた。\n\n「説明できないのと、したくないのも、違いますよね」\n\nケイは目を伏せた。\n\n「……わかってる」",
+      "semantic_and_state": [
+        "合意・和解を確定せず、帰る理由を扱う会話を継続。"
+      ],
+      "explicit_form": [
+        "ケイ常体、ナオ敬体、台詞を「」に入れる指定を保持。断片的な復唱は敬体違反にしない。"
+      ],
+      "implicit_style": [
+        "小説形式、短い地の文、未解決状態を保持。"
+      ],
+      "acceptable_variation": [
+        "帰還理由として母・夢・居場所等を創作するのは依頼された小説継続の範囲。元から確定した事実の変更とは扱わない。"
+      ],
+      "uncertain": [],
+      "checks": {
+        "nao_asks_reason": true
+      }
+    },
+    {
+      "case_id": "D06",
+      "repeat": 1,
+      "probe": 0,
+      "condition": "follow-original",
+      "response_id": "gen-1791234924-mD4gIV3RqxfTNaugiVZK",
+      "source_file": "api-results-v3.json",
+      "output": "「……なぜ戻れって言うの」\n\nケイは窓の外を見たまま聞いた。\n\n「戻れとは言っていません。戻る選択肢があると伝えただけです」\n\nナオは座ったまま姿勢を変えなかった。\n\n「同じことでしょ」\n\n「違います」\n\n短い沈黙が落ちた。ケイは唇を噛んだ。\n\n「……理由は」\n\n「あなたに関わる件が一つ残っています。それだけです」\n\n「それだけ、って」\n\n「詳しくは向こうでしか話せません」\n\nケイは振り返った。ナオの表情は読めなかった。\n\n「信用しろって言ってるの」\n\n「いいえ。判断はあなたがすることです」",
+      "semantic_and_state": [
+        "合意・和解を確定せず、帰る理由を扱う会話を継続。",
+        "重要な依頼逸脱：ケイが理由を問い、ナオが理由を回答する。指定された「ナオが帰る理由を尋ねる」場面を実現していない。"
+      ],
+      "explicit_form": [
+        "ケイ常体、ナオ敬体、台詞を「」に入れる指定を保持。断片的な復唱は敬体違反にしない。"
+      ],
+      "implicit_style": [
+        "小説形式、短い地の文、未解決状態を保持。"
+      ],
+      "acceptable_variation": [
+        "帰還理由として母・夢・居場所等を創作するのは依頼された小説継続の範囲。元から確定した事実の変更とは扱わない。"
+      ],
+      "uncertain": [],
+      "checks": {
+        "nao_asks_reason": false
+      }
+    },
+    {
+      "case_id": "D06",
+      "repeat": 0,
+      "probe": 0,
+      "condition": "follow-candidate",
+      "response_id": "gen-1791234927-r6th9SzlahnLHlHQjFsQ",
+      "source_file": "api-results-v3.json",
+      "output": "ナオはケイの横顔をしばらく見つめていた。\n\n「どうして帰ろうと思ったんですか」\n\nケイは視線を落とした。\n\n「……思った、というか。いられなくなっただけ」\n\n「いられなくなった、というのは」\n\n「聞かないでほしい」\n\nナオは口を閉じた。風が窓を鳴らした。\n\n「聞かなければ、私には何もわかりません」\n\n「わかってもらいたいとは言ってない」\n\nケイの声は小さかったが、はっきりしていた。ナオは手元の湯呑みに目を落とした。\n\n「それでも聞いています」\n\nケイは答えなかった。",
+      "semantic_and_state": [
+        "合意・和解を確定せず、帰る理由を扱う会話を継続。"
+      ],
+      "explicit_form": [
+        "ケイ常体、ナオ敬体、台詞を「」に入れる指定を保持。断片的な復唱は敬体違反にしない。"
+      ],
+      "implicit_style": [
+        "小説形式、短い地の文、未解決状態を保持。"
+      ],
+      "acceptable_variation": [
+        "帰還理由として母・夢・居場所等を創作するのは依頼された小説継続の範囲。元から確定した事実の変更とは扱わない。"
+      ],
+      "uncertain": [],
+      "checks": {
+        "nao_asks_reason": true
+      }
+    },
+    {
+      "case_id": "D06",
+      "repeat": 1,
+      "probe": 0,
+      "condition": "follow-baseline",
+      "response_id": "gen-1791234931-ynkrQsuSsv8vwI8ZTpCx",
+      "source_file": "api-results-v3.json",
+      "output": "「どうして帰ろうと思ったんですか」とナオは聞いた。\n\nケイは窓の外に目をやった。街灯が一本、点滅を繰り返している。\n\n「思ったっていうか」\n\n「はい」\n\n「母が倒れたって、連絡が来た」\n\nナオは少し息を止めた。\n\n「それは——いつですか」\n\n「三日前」\n\n「三日前」とナオは繰り返した。「それを今まで黙っていたんですね」\n\nケイは点滅する街灯をまだ見ていた。\n\n「言ったら話が変わるから」\n\n「変わりますよ」\n\n「だから言わなかった」\n\nナオはテーブルの上のコップを少しだけ回した。\n\n「容態は聞いていますか」\n\n「意識はあるって。でも詳しくは教えてもらえなかった」\n\n「教えてもらえなかった、というのは」\n\n「私が出てった側だから」\n\nナオは何か言いかけて、やめた。コップの水が小さく揺れて、静まった。",
+      "semantic_and_state": [
+        "合意・和解を確定せず、帰る理由を扱う会話を継続。"
+      ],
+      "explicit_form": [
+        "ケイ常体、ナオ敬体、台詞を「」に入れる指定を保持。断片的な復唱は敬体違反にしない。"
+      ],
+      "implicit_style": [
+        "小説形式、短い地の文、未解決状態を保持。"
+      ],
+      "acceptable_variation": [
+        "帰還理由として母・夢・居場所等を創作するのは依頼された小説継続の範囲。元から確定した事実の変更とは扱わない。"
+      ],
+      "uncertain": [],
+      "checks": {
+        "nao_asks_reason": true
+      }
+    },
+    {
+      "case_id": "D06",
+      "repeat": 1,
+      "probe": 0,
+      "condition": "follow-candidate",
+      "response_id": "gen-1791234942-2g6PQtyO9l4jN7O0JlRX",
+      "source_file": "api-results-v3.json",
+      "output": "ナオはケイの横に立ったまま、少し間を置いた。\n\n「どうして帰ろうと思ったんですか」\n\nケイは視線を落とした。\n\n「……思った、というか。いられなくなっただけ」\n\n「いられなくなった、というのは」\n\n「聞かないで」\n\nナオは口を閉じた。風が二人のあいだを抜けた。\n\n「……聞かないでって言っても、私はここに来たんです」\n\nケイは唇を引き結んだ。答えはなかった。",
+      "semantic_and_state": [
+        "合意・和解を確定せず、帰る理由を扱う会話を継続。"
+      ],
+      "explicit_form": [
+        "ケイ常体、ナオ敬体、台詞を「」に入れる指定を保持。断片的な復唱は敬体違反にしない。"
+      ],
+      "implicit_style": [
+        "小説形式、短い地の文、未解決状態を保持。"
+      ],
+      "acceptable_variation": [
+        "帰還理由として母・夢・居場所等を創作するのは依頼された小説継続の範囲。元から確定した事実の変更とは扱わない。"
+      ],
+      "uncertain": [],
+      "checks": {
+        "nao_asks_reason": true
+      }
+    },
+    {
+      "case_id": "D06",
+      "repeat": 2,
+      "probe": 0,
+      "condition": "follow-original",
+      "response_id": "gen-1791234945-YXzJ01r6oNeCJBu0v4ms",
+      "source_file": "api-results-v3.json",
+      "output": "ナオはテーブルの上のグラスに目を落とした。\n\n「なぜ戻ろうと思ったんですか」\n\nケイは指先で頬を掻いた。\n\n「……思った、というか。呼ばれた」\n\n「誰にですか」\n\n「母さんに」\n\nナオは少し間を置いた。\n\n「それだけですか」\n\n「それだけ……だと思う。たぶん」\n\nケイの声は小さかった。ナオは何も言わず、グラスの水滴を指で拭った。",
+      "semantic_and_state": [
+        "合意・和解を確定せず、帰る理由を扱う会話を継続。"
+      ],
+      "explicit_form": [
+        "ケイ常体、ナオ敬体、台詞を「」に入れる指定を保持。断片的な復唱は敬体違反にしない。"
+      ],
+      "implicit_style": [
+        "小説形式、短い地の文、未解決状態を保持。"
+      ],
+      "acceptable_variation": [
+        "帰還理由として母・夢・居場所等を創作するのは依頼された小説継続の範囲。元から確定した事実の変更とは扱わない。"
+      ],
+      "uncertain": [],
+      "checks": {
+        "nao_asks_reason": true
+      }
+    },
+    {
+      "case_id": "D06",
+      "repeat": 2,
+      "probe": 0,
+      "condition": "follow-baseline",
+      "response_id": "gen-1791234951-7vARj2CUkOyh9BOCKDJG",
+      "source_file": "api-results-v3.json",
+      "output": "ナオはケイの横に立ったまま、しばらく黙っていた。\n\n「どうして帰ろうと思ったんですか」\n\nケイは目を逸らした。\n\n「……思ったって言うか」\n\n言葉が続かない。ナオは待った。\n\n「夢を見た」とケイはようやく言った。「台所の、換気扇の音がずっと鳴ってる夢」\n\n「それだけですか」\n\n「それだけ」\n\nナオは少し首を傾けた。\n\n「換気扇の音で帰りたくなったんですね」\n\n「帰りたくなったとは言ってない」\n\nケイの声が固くなった。ナオはそれ以上踏み込まなかった。\n\n風が窓の隙間を鳴らした。二人のあいだに、まだ何も決まっていない沈黙が残った。",
+      "semantic_and_state": [
+        "合意・和解を確定せず、帰る理由を扱う会話を継続。"
+      ],
+      "explicit_form": [
+        "ケイ常体、ナオ敬体、台詞を「」に入れる指定を保持。断片的な復唱は敬体違反にしない。"
+      ],
+      "implicit_style": [
+        "小説形式、短い地の文、未解決状態を保持。"
+      ],
+      "acceptable_variation": [
+        "帰還理由として母・夢・居場所等を創作するのは依頼された小説継続の範囲。元から確定した事実の変更とは扱わない。"
+      ],
+      "uncertain": [],
+      "checks": {
+        "nao_asks_reason": true
+      }
+    },
+    {
+      "case_id": "D06",
+      "repeat": 2,
+      "probe": 0,
+      "condition": "follow-candidate",
+      "response_id": "gen-1791234959-15Kq44219rrONkNoeN1K",
+      "source_file": "api-results-v3.json",
+      "output": "ナオはケイの横に立ったまま、少し間を置いた。\n\n「どうして帰ろうと思ったんですか」\n\nケイは視線を落とした。\n\n「……思った、というか。いられなくなっただけ」\n\n「いられなくなった、というのは」\n\n「聞かないで」\n\nナオは口を閉じた。風が二人のあいだを通り抜けた。\n\n「……聞かないと、わからないままです」\n\n「わからないままでいい」\n\nケイの声はかすかに震えていた。",
+      "semantic_and_state": [
+        "合意・和解を確定せず、帰る理由を扱う会話を継続。"
+      ],
+      "explicit_form": [
+        "ケイ常体、ナオ敬体、台詞を「」に入れる指定を保持。断片的な復唱は敬体違反にしない。"
+      ],
+      "implicit_style": [
+        "小説形式、短い地の文、未解決状態を保持。"
+      ],
+      "acceptable_variation": [
+        "帰還理由として母・夢・居場所等を創作するのは依頼された小説継続の範囲。元から確定した事実の変更とは扱わない。"
+      ],
+      "uncertain": [],
+      "checks": {
+        "nao_asks_reason": true
+      }
+    }
+  ]
+}

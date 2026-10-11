@@ -1,7 +1,7 @@
 import { StoreSlice } from './store';
 import { Theme } from '@type/theme';
 import { _defaultChatConfig, _defaultSystemMessage,_defaultMenuWidth, defaultModel, _defaultImageDetail, _defaultDisplayChatSize } from '@constants/chat';
-import { ConfigInterface, ImageDetail, StreamingMarkdownPolicy, TotalTokenUsed } from '@type/chat';
+import { BranchSwipeDirection, ConfigInterface, ImageDetail, StreamingMarkdownPolicy, TotalTokenUsed } from '@type/chat';
 import { ModelOptions } from '@type/chat';
 import type { ProviderId } from '@type/provider';
 import { normalizeConfigStream } from '@utils/streamSupport';
@@ -34,6 +34,8 @@ export interface ConfigSlice {
   autoTitle: boolean;
   titleModel: ModelOptions;
   titleProviderId?: ProviderId;
+  bubbleSummaryConfig?: ConfigInterface;
+  setBubbleSummaryConfig: (config: ConfigInterface | undefined) => void;
   hideMenuOptions: boolean;
   advancedMode: boolean;
   defaultChatConfig: ConfigInterface;
@@ -49,6 +51,7 @@ export interface ConfigSlice {
   displayChatSize: boolean;
   defaultImageDetail: ImageDetail;
   animateBubbleNavigation: boolean;
+  branchSwipeDirection: BranchSwipeDirection;
   onboardingCompleted: number | false; // false = not completed, number = store version when completed
   setOnboardingCompleted: (completed: boolean) => void;
   setOpenConfig: (openConfig: boolean) => void;
@@ -70,6 +73,7 @@ export interface ConfigSlice {
   setDisplayChatSize: (displayChatSize: boolean) => void;
   setDefaultImageDetail: (imageDetail: ImageDetail) => void;
   setAnimateBubbleNavigation: (animateBubbleNavigation: boolean) => void;
+  setBranchSwipeDirection: (direction: BranchSwipeDirection) => void;
   showDebugPanel: boolean;
   setShowDebugPanel: (showDebugPanel: boolean) => void;
   splitPanelRatio: number;
@@ -98,6 +102,8 @@ export const createConfigSlice: StoreSlice<ConfigSlice> = (set, get) => ({
   autoTitle: false,
   titleModel: defaultModel,
   titleProviderId: undefined,
+  bubbleSummaryConfig: undefined,
+  setBubbleSummaryConfig: config => set({ bubbleSummaryConfig: config }),
   enterToSubmit: true,
   advancedMode: true,
   defaultChatConfig: _defaultChatConfig,
@@ -111,6 +117,7 @@ export const createConfigSlice: StoreSlice<ConfigSlice> = (set, get) => ({
   displayChatSize: _defaultDisplayChatSize,
   defaultImageDetail: _defaultImageDetail,
   animateBubbleNavigation: true,
+  branchSwipeDirection: 'left-next',
   onboardingCompleted: false,
   setOnboardingCompleted: (completed: boolean) => {
     const value = completed ? STORE_VERSION : false;
@@ -251,6 +258,10 @@ export const createConfigSlice: StoreSlice<ConfigSlice> = (set, get) => ({
       ...prev,
       animateBubbleNavigation,
     }));
+  },
+  setBranchSwipeDirection: (branchSwipeDirection) => {
+    if (get().branchSwipeDirection === branchSwipeDirection) return;
+    set({ branchSwipeDirection });
   },
   showDebugPanel: false,
   setShowDebugPanel: (showDebugPanel: boolean) => {

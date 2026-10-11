@@ -462,6 +462,7 @@ const ChatContent = ({ isChatFindOpen, onChatFindClose }: ChatContentProps = {})
     if (!atBottomForAutoScrollRef.current) return;
 
     const scrollToEnd = () => {
+      if (scroller.dataset.branchSwiping) return;
       // Stop following if user scrolled away manually
       if (!atBottomForAutoScrollRef.current) return;
       // Eagerly keep both state and refs pinned to "at bottom" so content growth
@@ -816,12 +817,12 @@ const ChatContent = ({ isChatFindOpen, onChatFindClose }: ChatContentProps = {})
         <div
           ref={scrollerCallbackRef}
           key={currentChatIndex}
-          className='h-full overflow-y-auto overscroll-contain'
+          className='h-full overflow-y-auto overflow-x-hidden overscroll-contain'
           data-chat-scroller
           data-chat-id={currentChatId}
         >
           {syncChanged && <div role='status' className='flex items-center justify-between gap-3 px-7 py-2 text-sm text-amber-800 bg-amber-50 dark:bg-gray-700 dark:text-amber-200'><span>{t('drive:review.description')}</span><button type='button' className='shrink-0 underline' onClick={() => acknowledgeSyncChat(reviewChatId)}>{t('drive:review.chatDone')}</button></div>}
-          <div data-message-list>
+          <div className='relative' data-message-list>
             {items.map((item, index) => (
               <div key={computeItemKey(index)} data-item-index={index} data-node-id={activePath[item.originalIndex]}>
                 <Message

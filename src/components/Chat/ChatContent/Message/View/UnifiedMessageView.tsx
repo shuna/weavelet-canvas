@@ -1,8 +1,7 @@
-import React, { memo, useCallback, useEffect, useState } from 'react';
+import React, { memo, useEffect, useState } from 'react';
 import useStore from '@store/store';
 import useSubmit from '@hooks/useSubmit';
 import { confirmChatModelFavorite } from '@utils/chatModelResolution';
-import { resolveProviderForModel, type ResolvedProvider } from '@hooks/submitHelpers';
 import {
   ContentInterface,
   ImageContentInterface,
@@ -17,7 +16,6 @@ import ContentActions from './ContentActions';
 import ContentAttachments from './ContentAttachments';
 import ContentBody from './ContentBody';
 import EvaluationPanel from './EvaluationPanel';
-import EvaluationModal from './EvaluationModal';
 import type { TabId } from './EvaluationModal';
 import PopupModal from '@components/PopupModal';
 import { useTranslation } from 'react-i18next';
@@ -35,6 +33,8 @@ const UnifiedMessageView = memo(
     nodeId,
     isEditState,
     editSessionKey,
+    onOpenEvalTab,
+    summaryId,
   }: {
     role: string;
     content: ContentInterface[];
@@ -42,7 +42,9 @@ const UnifiedMessageView = memo(
     messageIndex: number;
     nodeId?: string;
     isEditState: boolean;
+    summaryId?: string;
     editSessionKey: string;
+    onOpenEvalTab?: (tab?: TabId) => void;
   }) => {
     const contentSurfaceClass =
       'rounded-2xl bg-white/60 px-4 pt-2.5 pb-2 shadow-sm ring-1 ring-black/5 dark:bg-gray-900/20 dark:ring-white/10 md:px-5 md:pt-3 md:pb-2.5';
@@ -57,8 +59,6 @@ const UnifiedMessageView = memo(
       handleUnknownContextCancel,
     } = useSubmit();
     const [isDelete, setIsDelete] = useState(false);
-    const [isEvalModalOpen, setIsEvalModalOpen] = useState(false);
-    const [evalInitialTab, setEvalInitialTab] = useState<TabId | undefined>();
 
     const currentChatIndex = useStore((state) => state.currentChatIndex);
     const removeNode = useStore((state) => state.removeNode);
@@ -100,6 +100,7 @@ const UnifiedMessageView = memo(
       nodeId,
       sticky: false,
       editSessionKey,
+      summaryId,
     });
 
     // Resolve current message index from active path
@@ -113,7 +114,8 @@ const UnifiedMessageView = memo(
 
     // User message operations
     const handleDelete = () => {
-      removeNode({ chatId: currentChatId, nodeId: nodeId ?? String(messageIndex) });
+      if (summaryId) useStore.getState().removeBubbleSummary(currentChatId, summaryId);
+      else removeNode({ chatId: currentChatId, nodeId: nodeId ?? String(messageIndex) });
     };
     const handleMove = (direction: 'up' | 'down') => {
       moveNode({ chatId: currentChatId, nodeId: nodeId ?? String(messageIndex), direction });
@@ -136,38 +138,6 @@ const UnifiedMessageView = memo(
       }
       handleRegenerate(plan.submitMode === 'append' ? 'append' : 'midchat', plan.insertIndex);
     };
-
-    const handleEvaluate = useCallback(() => {
-      setEvalInitialTab(undefined);
-      setIsEvalModalOpen(true);
-    }, []);
-
-    const handleOpenEvalTab = useCallback((tab: TabId) => {
-      setEvalInitialTab(tab);
-      setIsEvalModalOpen(true);
-    }, []);
-
-    /** Resolve provider for this chat's model config */
-    const getResolvedProvider = useCallback(() => {
-      const state = useStore.getState();
-      const chat = state.chats?.[currentChatIndex];
-      if (!chat) return null;
-      const config = chat.config;
-      const fallbackProvider: ResolvedProvider = {
-        endpoint: state.apiEndpoint,
-        key: state.apiKey,
-      };
-      return {
-        resolved: resolveProviderForModel(
-          config.model,
-          state.favoriteModels || [],
-          state.providers || {},
-          fallbackProvider,
-          config.providerId
-        ),
-        model: config.model,
-      };
-    }, [currentChatIndex]);
 
     const [contentElement, setContentElement] = useState<HTMLDivElement | null>(null);
     const [streamVisible, setStreamVisible] = useState(true);
@@ -199,7 +169,7 @@ const UnifiedMessageView = memo(
       <>
         {isEditState ? (
           <div ref={setContentElement} className={contentSurfaceClass}>
-            <MessageEditForm logic={editLogic} role={role} messageIndex={messageIndex} editorClassName={contentMinHeightClass} />
+            <MessageEditForm logic={editLogic} role={role} messageIndex={messageIndex} editorClassName={contentMinHeightClass} textOnly={!!summaryId} />
           </div>
         ) : (
           <div ref={setContentElement} className={`${contentSurfaceClass} relative`}>
@@ -223,10 +193,10 @@ const UnifiedMessageView = memo(
               />
             </div>
             <ContentAttachments images={isEditState ? [] : validImageContents} />
-            {nodeId && currentChatId && (
+            {nodeId && currentChatId && !summaryId && (
               <>
-                <EvaluationPanel chatId={currentChatId} nodeId={nodeId} phase='pre-send' onOpenTab={handleOpenEvalTab} />
-                <EvaluationPanel chatId={currentChatId} nodeId={nodeId} phase='post-receive' onOpenTab={handleOpenEvalTab} />
+                <EvaluationPanel chatId={currentChatId} nodeId={nodeId} phase='pre-send' onOpenTab={onOpenEvalTab} />
+                <EvaluationPanel chatId={currentChatId} nodeId={nodeId} phase='post-receive' onOpenTab={onOpenEvalTab} />
               </>
             )}
             <ContentActions
@@ -246,28 +216,7 @@ const UnifiedMessageView = memo(
               onMoveDown={() => handleMove('down')}
               onCopy={handleCopy}
               onDelete={handleDelete}
-              showEvaluateButton={true}
-              onEvaluate={handleEvaluate}
             />
-            {(() => {
-              if (!isEvalModalOpen || !nodeId || !currentChatId) return null;
-              const providerInfo = getResolvedProvider();
-              if (!providerInfo) return null;
-              return (
-                <EvaluationModal
-                  chatId={currentChatId}
-                  nodeId={nodeId}
-                  chatIndex={currentChatIndex}
-                  messageIndex={resolveCurrentMessageIndex()}
-                  phase={role === 'user' ? 'pre-send' : 'post-receive'}
-                  role={role}
-                  resolvedProvider={providerInfo.resolved}
-                  model={providerInfo.model}
-                  setIsModalOpen={setIsEvalModalOpen}
-                  initialTab={evalInitialTab}
-                />
-              );
-            })()}
             {isUnknownContextConfirmOpen && (
               <PopupModal
                 setIsModalOpen={setIsUnknownContextConfirmOpen}

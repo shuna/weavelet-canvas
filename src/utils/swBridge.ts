@@ -77,7 +77,7 @@ export interface StartStreamParams {
   body: object;
   chatIndex: number;
   messageIndex: number;
-  onChunk: (text: string, meta?: { generationId?: string; reasoning?: string; openRouterObservation?: OpenRouterObservation }) => void;
+  onChunk: (text: string, meta?: { generationId?: string; reasoning?: string; upstreamStarted?: boolean; openRouterObservation?: OpenRouterObservation }) => void;
   onDone: (meta?: { proxySessionId?: string; lastProxyEventId?: number; generationId?: string; finishReason?: string; openRouterObservation?: OpenRouterObservation }) => void;
   onError: (error: string, meta?: { proxySessionId?: string; lastProxyEventId?: number; generationId?: string; openRouterObservation?: OpenRouterObservation }) => void;
   /** When set, SW routes the request through the proxy worker */
@@ -118,7 +118,14 @@ export async function startStream(params: StartStreamParams): Promise<SwStreamHa
     createdAt: Date.now(),
     updatedAt: Date.now(),
     acknowledged: false,
-    proxySessionId: proxyConfig?.sessionId,
+    ...(proxyConfig ? {
+      proxySessionId: proxyConfig.sessionId,
+      lastProxyEventId: 0,
+      llmSsePartial: '',
+      thinkTagCheckpoint: { state: 'outside', pending: '' },
+      bufferedReasoning: '',
+      llmDone: false,
+    } : {}),
   });
   if (params.signal?.aborted) {
     await deleteRequest(requestId);
@@ -229,7 +236,7 @@ export async function startStream(params: StartStreamParams): Promise<SwStreamHa
         });
         break;
       case 'sw-chunk':
-        onChunk(data.text, { generationId: data.generationId, reasoning: data.reasoning, openRouterObservation: data.openRouterObservation });
+        onChunk(data.text, { generationId: data.generationId, reasoning: data.reasoning, upstreamStarted: data.upstreamStarted, openRouterObservation: data.openRouterObservation });
         break;
       case 'sw-done':
         cleanup();

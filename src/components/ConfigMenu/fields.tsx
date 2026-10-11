@@ -108,12 +108,12 @@ export const InfoTooltip = ({ text }: { text: React.ReactNode }) => {
       }
     };
     const key = (e: KeyboardEvent) => { if (e.key === 'Escape') { setPinned(false); setHovered(false); } };
-    document.addEventListener('mousedown', close);
-    document.addEventListener('touchstart', close);
+    document.addEventListener('mousedown', close, true);
+    document.addEventListener('touchstart', close, true);
     document.addEventListener('keydown', key);
     return () => {
-      document.removeEventListener('mousedown', close);
-      document.removeEventListener('touchstart', close);
+      document.removeEventListener('mousedown', close, true);
+      document.removeEventListener('touchstart', close, true);
       document.removeEventListener('keydown', key);
     };
   }, [open]);

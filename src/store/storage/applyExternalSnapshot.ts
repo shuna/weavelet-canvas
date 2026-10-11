@@ -1,3 +1,4 @@
+import { rebuildSyncedUsage } from './sync/rebuildUsage';
 import useStore from '@store/store';
 import { invalidateAiTasks } from '@hooks/aiTaskLifetime';
 import { createPersistedChatDataState, prepareHydratedState, reportHydratedStateCommitted, type PersistedStoreState } from '@store/persistence';
@@ -17,6 +18,8 @@ export async function applyExternalSnapshot(payload: Partial<PersistedStoreState
   // The downloaded payload was based on the pre-cancellation content.
   if (base.chats !== observed.chats || base.contentStore !== observed.contentStore) return false;
   const prepared = await prepareHydratedState(base, payload);
+  if (base !== useStore.getState() || !sessionIsCurrent()) return false;
+  if (prepared.state.chats) Object.assign(prepared.state, await rebuildSyncedUsage(prepared.state.chats, prepared.state.contentStore ?? {}, base));
   if (base !== useStore.getState() || !sessionIsCurrent()) return false;
   useStore.setState({ ...prepared.state, branchHistoryPast: [], branchHistoryFuture: [] });
   const applied = useStore.getState();

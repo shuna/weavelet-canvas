@@ -21,6 +21,23 @@ export interface StreamRecord {
   lastProxyEventId?: number;
   /** OpenRouter generation ID when present in the upstream stream */
   generationId?: string;
+  bufferedReasoning?: string;
+  llmSsePartial?: string;
+  thinkTagCheckpoint?: { state: 'outside' | 'inside'; pending: string };
+  llmDone?: boolean;
+  proxyComplete?: boolean;
+}
+
+export interface ProxyCheckpoint {
+  bufferedText: string;
+  bufferedReasoning: string;
+  lastProxyEventId: number;
+  llmSsePartial: string;
+  thinkTagCheckpoint: { state: 'outside' | 'inside'; pending: string };
+  generationId?: string;
+  llmDone?: boolean;
+  proxyComplete?: boolean;
+  openRouterObservation?: OpenRouterObservation;
 }
 
 const DB_NAME = 'sw-stream-db';
@@ -55,10 +72,31 @@ function reqToPromise<T>(request: IDBRequest<T>): Promise<T> {
   });
 }
 
+function transactionDone(transaction: IDBTransaction, db: IDBDatabase): Promise<void> {
+  return new Promise((resolve, reject) => {
+    transaction.oncomplete = () => { db.close(); resolve(); };
+    transaction.onerror = () => { db.close(); reject(transaction.error); };
+    transaction.onabort = () => { db.close(); reject(transaction.error); };
+  });
+}
+
 export async function saveRequest(record: StreamRecord): Promise<void> {
   const db = await openDb();
-  await reqToPromise(tx(db, 'readwrite').put(record));
-  db.close();
+  const transaction = db.transaction(STORE_NAME, 'readwrite');
+  transaction.objectStore(STORE_NAME).put(record);
+  await transactionDone(transaction, db);
+}
+
+/** Recovery cannot recreate a purged record or save after its target was invalidated. */
+export async function saveRecoveryRecord(record: StreamRecord, isCurrent: () => boolean): Promise<void> {
+  const db = await openDb();
+  const transaction = db.transaction(STORE_NAME, 'readwrite');
+  const store = transaction.objectStore(STORE_NAME);
+  const request = store.get(record.requestId);
+  request.onsuccess = () => {
+    if (request.result && isCurrent()) store.put(record);
+  };
+  await transactionDone(transaction, db);
 }
 
 export async function getRequest(requestId: string): Promise<StreamRecord | undefined> {
@@ -89,6 +127,31 @@ export async function appendText(
     await reqToPromise(store.put(record));
   }
   db.close();
+}
+
+/** Persist the recovery cursor and every parser state from the same stream point. */
+export async function saveProxyCheckpoint(
+  requestId: string,
+  checkpoint: ProxyCheckpoint,
+  isCurrent?: () => boolean
+): Promise<void> {
+  const db = await openDb();
+  const transaction = db.transaction(STORE_NAME, 'readwrite');
+  const store = transaction.objectStore(STORE_NAME);
+  const record: StreamRecord | undefined = await reqToPromise(store.get(requestId));
+  if (record && (!isCurrent || isCurrent())) {
+    store.put({ ...record, ...checkpoint, updatedAt: Date.now() });
+  }
+  await transactionDone(transaction, db);
+}
+
+export async function markAcknowledged(requestId: string): Promise<void> {
+  const db = await openDb();
+  const transaction = db.transaction(STORE_NAME, 'readwrite');
+  const store = transaction.objectStore(STORE_NAME);
+  const record: StreamRecord | undefined = await reqToPromise(store.get(requestId));
+  if (record) store.put({ ...record, acknowledged: true, updatedAt: Date.now() });
+  await transactionDone(transaction, db);
 }
 
 export async function setGenerationId(
@@ -166,7 +229,7 @@ export async function setStreamObservation(requestId: string, patch: OpenRouterO
 }
 
 /** Mark the finalized node without recreating a record removed by explicit cancellation. */
-export async function markStreamApplied(requestId: string, appliedHash: string, checkpointRole: Role, expectedBufferedText: string): Promise<void> {
+export async function markStreamApplied(requestId: string, appliedHash: string, checkpointRole: Role, expectedBufferedText: string, expectedBufferedReasoning: string): Promise<void> {
   const db = await openDb();
   await new Promise<void>((resolve, reject) => {
     const transaction = db.transaction(STORE_NAME, 'readwrite');
@@ -176,7 +239,7 @@ export async function markStreamApplied(requestId: string, appliedHash: string, 
     const request = store.get(requestId);
     request.onsuccess = () => {
       const record = request.result as StreamRecord | undefined;
-      if (record && record.status !== 'streaming' && record.bufferedText === expectedBufferedText) store.put({ ...record, appliedHash, checkpointRole, updatedAt: Date.now() });
+      if (record && record.status !== 'streaming' && record.bufferedText === expectedBufferedText && (record.bufferedReasoning ?? '') === expectedBufferedReasoning) store.put({ ...record, appliedHash, checkpointRole, updatedAt: Date.now() });
     };
   });
 }
@@ -201,8 +264,12 @@ export async function updateStreamCheckpoints(snapshot: { chats?: Pick<ChatInter
         const hash = node?.contentHash;
         if (!hash || hash.startsWith('__streaming:')) continue;
         if (record.status !== 'streaming' && record.appliedHash === hash && record.checkpointRole === node!.role) {
-          store.delete(record.requestId);
-          acknowledged.push(record);
+          if (record.proxySessionId && record.proxyComplete !== true) {
+            store.put({ ...record, checkpointHash: hash, checkpointRole: node!.role, appliedHash: undefined });
+          } else {
+            store.delete(record.requestId);
+            acknowledged.push(record);
+          }
         }
         else if (targets.some(target => target.requestId === record.requestId && target.chatId === record.chatId && target.nodeId === record.nodeId)) {
           store.put({ ...record, checkpointHash: hash, checkpointRole: node!.role });

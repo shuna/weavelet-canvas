@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 const mocks = vi.hoisted(() => ({
   state: {} as any,
   prepare: vi.fn(), save: vi.fn(), report: vi.fn(), invalidate: vi.fn(),
-  set: vi.fn(), preserve: vi.fn(),
+  set: vi.fn(), preserve: vi.fn(), rebuild: vi.fn(),
 }));
 vi.mock('@store/store', () => ({ default: {
   getState: () => mocks.state,
@@ -15,6 +15,7 @@ vi.mock('@store/persistence', () => ({
   createPersistedChatDataState: (state: unknown) => state,
   reportHydratedStateCommitted: mocks.report,
 }));
+vi.mock('./sync/rebuildUsage', () => ({ rebuildSyncedUsage: mocks.rebuild }));
 vi.mock('./IndexedDbStorage', () => ({ saveChatData: mocks.save, preserveLegacyRemoteSnapshot: mocks.preserve }));
 import { applyExternalSnapshot } from './applyExternalSnapshot';
 
@@ -24,6 +25,7 @@ beforeEach(() => {
   mocks.invalidate.mockImplementation(() => {});
   mocks.prepare.mockImplementation(async () => ({ state: { chats: ['new'], currentChatIndex: 0 }, repairedChatTitles: [] }));
   mocks.save.mockResolvedValue(undefined);
+  mocks.rebuild.mockResolvedValue({ totalTokenUsed: {}, verifiedStats: {}, pendingVerifications: {} });
 });
 
 describe('external snapshot commit', () => {
@@ -62,6 +64,17 @@ describe('external snapshot commit', () => {
       if (kind === 'edit') mocks.state = { ...mocks.state, chats: ['edited'] };
       else connected = false;
       return { state: { chats: ['new'] } };
+    });
+    expect(await applyExternalSnapshot({}, () => connected)).toBe(false);
+    expect(mocks.set).not.toHaveBeenCalled();
+    expect(mocks.save).not.toHaveBeenCalled();
+  });
+  it.each(['edit', 'disconnect'])('rejects %s during usage reconstruction', async kind => {
+    let connected = true;
+    mocks.rebuild.mockImplementation(async () => {
+      if (kind === 'edit') mocks.state = { ...mocks.state, chats: ['edited'] };
+      else connected = false;
+      return { totalTokenUsed: {} };
     });
     expect(await applyExternalSnapshot({}, () => connected)).toBe(false);
     expect(mocks.set).not.toHaveBeenCalled();

@@ -3,6 +3,7 @@ import useStore from '@store/store';
 
 import EditView from './View/EditView';
 import UnifiedMessageView from './View/UnifiedMessageView';
+import type { TabId } from './View/EvaluationModal';
 import { ContentInterface } from '@type/chat';
 
 const editStateCache = new Map<string, boolean>();
@@ -35,18 +36,22 @@ const MessageContent = ({
   messageIndex,
   nodeId,
   sticky = false,
+  onOpenEvalTab,
+  summaryId,
 }: {
   role: string;
   content: ContentInterface[];
   messageIndex: number;
   nodeId?: string;
   sticky?: boolean;
+  summaryId?: string;
+  onOpenEvalTab?: (tab?: TabId) => void;
 }) => {
   const currentChatIndex = useStore((state) => state.currentChatIndex);
   const advancedMode = useStore((state) => state.advancedMode);
   const editSessionKey = useMemo(
-    () => getEditSessionKey(currentChatIndex, messageIndex, nodeId, sticky),
-    [currentChatIndex, messageIndex, nodeId, sticky]
+    () => `${getEditSessionKey(currentChatIndex, messageIndex, nodeId, sticky)}${summaryId ? `:summary:${summaryId}` : ''}`,
+    [currentChatIndex, messageIndex, nodeId, sticky, summaryId]
   );
   const [isEditState, setIsEditState] = useState<boolean>(
     () => editStateCache.get(editSessionKey) ?? sticky
@@ -89,7 +94,9 @@ const MessageContent = ({
           setIsEdit={setIsEdit}
           messageIndex={messageIndex}
           nodeId={nodeId}
+          summaryId={summaryId}
           isEditState={isEditState}
+          onOpenEvalTab={onOpenEvalTab}
           editSessionKey={editSessionKey}
         />
       )}

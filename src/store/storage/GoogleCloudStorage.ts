@@ -1,4 +1,5 @@
 import { applyExternalSnapshot } from './applyExternalSnapshot';
+import { rebuildSyncedUsage } from './sync/rebuildUsage';
 import { withSyncProgress, syncStage } from './google/progress';
 import type { PersistStorage } from 'zustand/middleware';
 import { createJSONStorage } from 'zustand/middleware';
@@ -42,7 +43,7 @@ export async function pauseGoogleSync() {
 export const isGoogleSyncUnlocked = (id?: string) => !!session && session.dataset === id;
 export function lockGoogleSync() {
   keyGeneration++;
-  useSyncReview.setState({ conflict: false });
+  useSyncReview.setState({ conflict: false, cloudOverview: null, cloudReview: null });
   suspended = true;
   lastQueuedState = undefined;
   session?.close(); session = undefined; pending = undefined;
@@ -89,6 +90,8 @@ async function applySyncedSnapshot(target: EncryptedDriveSync, before: Snapshot,
     migratePersistedState(received.state, received.version ?? STORE_VERSION) as Partial<PersistedStoreState>);
   if (!await sameSnapshot(preparedBase, currentSnapshot()) || target !== session || state !== useStore.getState()) return false;
   const hydrated = finishHydratedState(prepared);
+  if (hydrated.chats) Object.assign(hydrated, await rebuildSyncedUsage(hydrated.chats, hydrated.contentStore ?? {}, state));
+  if (!await sameSnapshot(preparedBase, currentSnapshot()) || target !== session || state !== useStore.getState()) return false;
   if (selectedId && hydrated.chats) {
     const index = hydrated.chats.findIndex(chat => chat.id === selectedId);
     if (index >= 0) hydrated.currentChatIndex = index;
@@ -107,9 +110,8 @@ async function applySyncedSnapshot(target: EncryptedDriveSync, before: Snapshot,
   return true;
 }
 async function synchronize(target: EncryptedDriveSync, snapshot: Snapshot) {
-  await syncStage(0, 3, () => target.push(snapshot));
-  const received = await syncStage(1, 3, () => target.pull());
-  await syncStage(2, 3, async () => {
+  const received = await syncStage(0, 2, () => target.synchronize(snapshot));
+  await syncStage(1, 2, async () => {
     if (await sameSnapshot(snapshot, received)) return;
     if (!await applySyncedSnapshot(target, snapshot, received) && target === session) {
       pending = { session: target, value: currentSnapshot() };
@@ -137,6 +139,7 @@ export async function resolveGoogleSyncConflict(mode: Resolution) {
 
 async function persistChatSnapshot(snapshot: Snapshot) {
   if (snapshot.state.chats) await saveChatData({
+    lastContentEditedAt: snapshot.state.lastContentEditedAt,
     chats: snapshot.state.chats, contentStore: snapshot.state.contentStore ?? {},
     branchClipboard: snapshot.state.branchClipboard ?? null,
   });
@@ -154,6 +157,20 @@ export async function pullEncryptedGoogleSync(): Promise<Snapshot> {
   if (!session) throw new Error('Unlock Google sync first.');
   return session.pull();
 }
+export async function getGoogleSyncCloudOverview() {
+  const target = session;
+  if (!target) throw new Error('Unlock Google sync first.');
+  const overview = await target.overview();
+  if (target !== session) throw new Error('Google sync target changed.');
+  return overview;
+}
+export async function getGoogleSyncCloudReview() {
+  const target = session;
+  if (!target) throw new Error('Unlock Google sync first.');
+  const review = await target.inspect();
+  if (target !== session) throw new Error('Google sync target changed.');
+  return review;
+}
 export async function acceptGoogleSyncLocal(snapshot: Snapshot) {
   if (!session) throw new Error('Unlock Google sync first.');
   await session.acceptLocal(snapshot);
@@ -164,6 +181,35 @@ export async function pushEncryptedGoogleSync(snapshot: Snapshot, replace = fals
   await session.push(snapshot, replace);
 }
 
+async function runManualDriveOperation(work: () => Promise<void>) {
+  while (inFlight) await inFlight;
+  const operation = withSyncProgress(work);
+  inFlight = operation;
+  try { await operation; }
+  finally {
+    if (inFlight === operation) inFlight = undefined;
+    if (pending && !suspended) schedule();
+  }
+}
+
+export async function compactGoogleSyncHistory() {
+  const target = session;
+  if (!target) throw new Error('Unlock Google sync first.');
+  await runManualDriveOperation(() => target.compactHistory());
+}
+
+// A separate session never applies imported data or changes the active sync target.
+export async function importGoogleSyncSnapshot(id: string, passphrase: string, snapshot: Snapshot) {
+  await runManualDriveOperation(async () => {
+    const current = session?.dataset === id ? session : undefined;
+    const target = current ?? new EncryptedDriveSync(id, transport());
+    try {
+      if (!current && !await target.restoreKey()) await target.unlock(passphrase);
+      await target.importSnapshot(snapshot);
+    } finally { if (!current) target.close(); }
+  });
+}
+
 const schedule = () => {
   clearTimeout(timer);
   timer = setTimeout(flushAndReport, 5000);
@@ -171,9 +217,9 @@ const schedule = () => {
 const reportFailure = (error: unknown) => {
   const auth = useCloudAuthStore.getState();
   if (auth.provider !== 'google' || !auth.cloudSync) return;
-  if (error instanceof SyncConflictError) useSyncReview.setState({ conflict: true });
+  if (error instanceof SyncConflictError) useSyncReview.setState({ conflict: true, conflictKeys: error.keys, cloudOverview: null, cloudReview: null });
   auth.setSyncStatus(isGoogleAuthError(error) ? 'unauthenticated' : 'error');
-  showToast(error instanceof Error ? error.message : String(error), 'error');
+  if (!(error instanceof SyncConflictError)) showToast(error instanceof Error ? error.message : String(error), 'error');
 };
 function flushAndReport() {
   const target = session;

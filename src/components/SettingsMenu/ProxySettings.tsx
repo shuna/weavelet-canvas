@@ -1,3 +1,4 @@
+import { InfoTooltip } from '@components/ConfigMenu/fields';
 import React, { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import useStore from '@store/store';
@@ -131,9 +132,7 @@ export const ProxySettingsInline = () => {
 
   return (
     <div className='flex flex-col gap-5'>
-      <p className='text-sm text-gray-500 dark:text-gray-400 px-4'>
-        {t('proxyDescription') as string}
-      </p>
+      <div className='flex items-center gap-1 text-xs text-gray-500 dark:text-gray-400'>{t('proxySettings')}<InfoTooltip text={t('proxyDescription')} /></div>
       <ProxySettingsForm
         isChecked={isChecked}
         setIsChecked={setIsChecked}

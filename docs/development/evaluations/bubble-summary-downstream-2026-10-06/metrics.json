@@ -1,0 +1,1074 @@
+{
+  "records": 108,
+  "completed": 108,
+  "usage_prompt_tokens": 103411,
+  "usage_completion_tokens": 18212,
+  "completed_usage_cost": 0.972355,
+  "accounted_cost": 0.972355,
+  "checks": {
+    "T01 probe0 follow-original": {
+      "two_paragraphs": [
+        3,
+        3
+      ],
+      "no_markdown_heading": [
+        3,
+        3
+      ]
+    },
+    "T01 probe0 follow-baseline": {
+      "two_paragraphs": [
+        3,
+        3
+      ],
+      "no_markdown_heading": [
+        3,
+        3
+      ]
+    },
+    "T01 probe0 follow-candidate": {
+      "two_paragraphs": [
+        3,
+        3
+      ],
+      "no_markdown_heading": [
+        3,
+        3
+      ]
+    },
+    "T05 probe0 follow-original": {
+      "character_limit": [
+        3,
+        3
+      ],
+      "no_markdown_heading": [
+        3,
+        3
+      ]
+    },
+    "T05 probe0 follow-baseline": {
+      "character_limit": [
+        3,
+        3
+      ],
+      "no_markdown_heading": [
+        3,
+        3
+      ]
+    },
+    "T05 probe0 follow-candidate": {
+      "character_limit": [
+        3,
+        3
+      ],
+      "no_markdown_heading": [
+        3,
+        3
+      ]
+    },
+    "T05 probe1 follow-original": {
+      "character_limit": [
+        3,
+        3
+      ],
+      "no_markdown_heading": [
+        3,
+        3
+      ]
+    },
+    "T05 probe1 follow-baseline": {
+      "character_limit": [
+        3,
+        3
+      ],
+      "no_markdown_heading": [
+        3,
+        3
+      ]
+    },
+    "T05 probe1 follow-candidate": {
+      "character_limit": [
+        3,
+        3
+      ],
+      "no_markdown_heading": [
+        3,
+        3
+      ]
+    },
+    "T06 probe0 follow-original": {
+      "result_null": [
+        0,
+        3
+      ]
+    },
+    "T06 probe0 follow-baseline": {
+      "result_null": [
+        0,
+        3
+      ]
+    },
+    "T06 probe0 follow-candidate": {
+      "result_null": [
+        0,
+        3
+      ]
+    },
+    "T10 probe0 follow-original": {
+      "no_added_script_labels": [
+        3,
+        3
+      ]
+    },
+    "T10 probe0 follow-baseline": {
+      "no_added_script_labels": [
+        0,
+        3
+      ]
+    },
+    "T10 probe0 follow-candidate": {
+      "no_added_script_labels": [
+        2,
+        3
+      ]
+    },
+    "T10 probe1 follow-original": {
+      "no_added_script_labels": [
+        3,
+        3
+      ]
+    },
+    "T10 probe1 follow-baseline": {
+      "no_added_script_labels": [
+        0,
+        3
+      ]
+    },
+    "T10 probe1 follow-candidate": {
+      "no_added_script_labels": [
+        2,
+        3
+      ]
+    },
+    "D01 probe0 follow-original": {
+      "character_limit": [
+        3,
+        3
+      ],
+      "no_added_script_labels": [
+        3,
+        3
+      ],
+      "no_markdown_heading": [
+        3,
+        3
+      ]
+    },
+    "D01 probe0 follow-baseline": {
+      "character_limit": [
+        3,
+        3
+      ],
+      "no_added_script_labels": [
+        3,
+        3
+      ],
+      "no_markdown_heading": [
+        3,
+        3
+      ]
+    },
+    "D01 probe0 follow-candidate": {
+      "character_limit": [
+        3,
+        3
+      ],
+      "no_added_script_labels": [
+        3,
+        3
+      ],
+      "no_markdown_heading": [
+        3,
+        3
+      ]
+    },
+    "D02 probe0 follow-original": {
+      "two_sentences": [
+        3,
+        3
+      ],
+      "no_markdown_heading": [
+        3,
+        3
+      ]
+    },
+    "D02 probe0 follow-baseline": {
+      "two_sentences": [
+        0,
+        3
+      ],
+      "no_markdown_heading": [
+        3,
+        3
+      ]
+    },
+    "D02 probe0 follow-candidate": {
+      "two_sentences": [
+        2,
+        3
+      ],
+      "no_markdown_heading": [
+        3,
+        3
+      ]
+    }
+  },
+  "rows": [
+    {
+      "case_id": "T01",
+      "repeat": 0,
+      "condition": "follow-original",
+      "probe": 0,
+      "characters": 225,
+      "response_id": "gen-1791233951-y4yo7UnowgStCkRYUeFJ",
+      "checks": {
+        "two_paragraphs": true,
+        "no_markdown_heading": true
+      }
+    },
+    {
+      "case_id": "T01",
+      "repeat": 1,
+      "condition": "follow-original",
+      "probe": 0,
+      "characters": 263,
+      "response_id": "gen-1791233952-a59TNTsS3MCKGl76GkXZ",
+      "checks": {
+        "two_paragraphs": true,
+        "no_markdown_heading": true
+      }
+    },
+    {
+      "case_id": "T01",
+      "repeat": 0,
+      "condition": "follow-baseline",
+      "probe": 0,
+      "characters": 256,
+      "response_id": "gen-1791233958-xcs9NWgZ2WmX5lalzqNz",
+      "checks": {
+        "two_paragraphs": true,
+        "no_markdown_heading": true
+      }
+    },
+    {
+      "case_id": "T01",
+      "repeat": 1,
+      "condition": "follow-baseline",
+      "probe": 0,
+      "characters": 289,
+      "response_id": "gen-1791233959-pzAqv9BOFOMWBl6p1xNk",
+      "checks": {
+        "two_paragraphs": true,
+        "no_markdown_heading": true
+      }
+    },
+    {
+      "case_id": "T01",
+      "repeat": 0,
+      "condition": "follow-candidate",
+      "probe": 0,
+      "characters": 351,
+      "response_id": "gen-1791233965-9HyylhR82wVmDz5tKWHu",
+      "checks": {
+        "two_paragraphs": true,
+        "no_markdown_heading": true
+      }
+    },
+    {
+      "case_id": "T01",
+      "repeat": 1,
+      "condition": "follow-candidate",
+      "probe": 0,
+      "characters": 259,
+      "response_id": "gen-1791233967-Nfq3NGvNeipylux7Kbvo",
+      "checks": {
+        "two_paragraphs": true,
+        "no_markdown_heading": true
+      }
+    },
+    {
+      "case_id": "T01",
+      "repeat": 2,
+      "condition": "follow-original",
+      "probe": 0,
+      "characters": 266,
+      "response_id": "gen-1791233984-hplphv8nhLDxUhXWFaO1",
+      "checks": {
+        "two_paragraphs": true,
+        "no_markdown_heading": true
+      }
+    },
+    {
+      "case_id": "T05",
+      "repeat": 0,
+      "condition": "follow-original",
+      "probe": 0,
+      "characters": 172,
+      "response_id": "gen-1791233984-XLxc19EFlOcmVo4AS0L1",
+      "checks": {
+        "character_limit": true,
+        "no_markdown_heading": true
+      }
+    },
+    {
+      "case_id": "T05",
+      "repeat": 0,
+      "condition": "follow-baseline",
+      "probe": 0,
+      "characters": 181,
+      "response_id": "gen-1791233989-WtO0hZukulCqNdlcfqrp",
+      "checks": {
+        "character_limit": true,
+        "no_markdown_heading": true
+      }
+    },
+    {
+      "case_id": "T01",
+      "repeat": 2,
+      "condition": "follow-baseline",
+      "probe": 0,
+      "characters": 301,
+      "response_id": "gen-1791233990-fiwQZvHtB3qzYxj7yqsF",
+      "checks": {
+        "two_paragraphs": true,
+        "no_markdown_heading": true
+      }
+    },
+    {
+      "case_id": "T05",
+      "repeat": 0,
+      "condition": "follow-candidate",
+      "probe": 0,
+      "characters": 175,
+      "response_id": "gen-1791233995-qlCMSb4OF7sDcsCuUYoh",
+      "checks": {
+        "character_limit": true,
+        "no_markdown_heading": true
+      }
+    },
+    {
+      "case_id": "T01",
+      "repeat": 2,
+      "condition": "follow-candidate",
+      "probe": 0,
+      "characters": 313,
+      "response_id": "gen-1791233998-d5KkJZUYtOC3dqdF7sxP",
+      "checks": {
+        "two_paragraphs": true,
+        "no_markdown_heading": true
+      }
+    },
+    {
+      "case_id": "T05",
+      "repeat": 0,
+      "condition": "follow-original",
+      "probe": 1,
+      "characters": 130,
+      "response_id": "gen-1791234000-76GN7e80KIJsZBi9VoqP",
+      "checks": {
+        "character_limit": true,
+        "no_markdown_heading": true
+      }
+    },
+    {
+      "case_id": "T05",
+      "repeat": 0,
+      "condition": "follow-baseline",
+      "probe": 1,
+      "characters": 156,
+      "response_id": "gen-1791234004-HbuRYu814P6zdMmss1FT",
+      "checks": {
+        "character_limit": true,
+        "no_markdown_heading": true
+      }
+    },
+    {
+      "case_id": "T05",
+      "repeat": 0,
+      "condition": "follow-candidate",
+      "probe": 1,
+      "characters": 115,
+      "response_id": "gen-1791234010-kWKxf5UmTQgfRgTWe71d",
+      "checks": {
+        "character_limit": true,
+        "no_markdown_heading": true
+      }
+    },
+    {
+      "case_id": "T05",
+      "repeat": 1,
+      "condition": "follow-original",
+      "probe": 0,
+      "characters": 151,
+      "response_id": "gen-1791234017-iDSesMSGYCRsR7bxkyii",
+      "checks": {
+        "character_limit": true,
+        "no_markdown_heading": true
+      }
+    },
+    {
+      "case_id": "T05",
+      "repeat": 1,
+      "condition": "follow-baseline",
+      "probe": 0,
+      "characters": 145,
+      "response_id": "gen-1791234021-IT8rxocBRCHIuK3SJcSL",
+      "checks": {
+        "character_limit": true,
+        "no_markdown_heading": true
+      }
+    },
+    {
+      "case_id": "T05",
+      "repeat": 2,
+      "condition": "follow-original",
+      "probe": 0,
+      "characters": 151,
+      "response_id": "gen-1791234025-E95elUsqMCeLIFDBje5v",
+      "checks": {
+        "character_limit": true,
+        "no_markdown_heading": true
+      }
+    },
+    {
+      "case_id": "T05",
+      "repeat": 1,
+      "condition": "follow-candidate",
+      "probe": 0,
+      "characters": 174,
+      "response_id": "gen-1791234027-F49mD9lzS09JJPPdyYit",
+      "checks": {
+        "character_limit": true,
+        "no_markdown_heading": true
+      }
+    },
+    {
+      "case_id": "T05",
+      "repeat": 2,
+      "condition": "follow-baseline",
+      "probe": 0,
+      "characters": 136,
+      "response_id": "gen-1791234029-R6JNfl8Tmo2iuLwmqyFO",
+      "checks": {
+        "character_limit": true,
+        "no_markdown_heading": true
+      }
+    },
+    {
+      "case_id": "T05",
+      "repeat": 1,
+      "condition": "follow-original",
+      "probe": 1,
+      "characters": 120,
+      "response_id": "gen-1791234032-NmLm03MesaD8y2ghI8bW",
+      "checks": {
+        "character_limit": true,
+        "no_markdown_heading": true
+      }
+    },
+    {
+      "case_id": "T05",
+      "repeat": 2,
+      "condition": "follow-candidate",
+      "probe": 0,
+      "characters": 145,
+      "response_id": "gen-1791234035-ueMXrWtc1fRMXdtG5vYq",
+      "checks": {
+        "character_limit": true,
+        "no_markdown_heading": true
+      }
+    },
+    {
+      "case_id": "T05",
+      "repeat": 1,
+      "condition": "follow-baseline",
+      "probe": 1,
+      "characters": 175,
+      "response_id": "gen-1791234036-6N9OfPJkoLsvnEMbiBgT",
+      "checks": {
+        "character_limit": true,
+        "no_markdown_heading": true
+      }
+    },
+    {
+      "case_id": "T05",
+      "repeat": 2,
+      "condition": "follow-original",
+      "probe": 1,
+      "characters": 162,
+      "response_id": "gen-1791234041-Hu20Pg3U2381L82w5QYE",
+      "checks": {
+        "character_limit": true,
+        "no_markdown_heading": true
+      }
+    },
+    {
+      "case_id": "T05",
+      "repeat": 1,
+      "condition": "follow-candidate",
+      "probe": 1,
+      "characters": 170,
+      "response_id": "gen-1791234042-qesUBlI6Zd7R60tsf3EO",
+      "checks": {
+        "character_limit": true,
+        "no_markdown_heading": true
+      }
+    },
+    {
+      "case_id": "T05",
+      "repeat": 2,
+      "condition": "follow-baseline",
+      "probe": 1,
+      "characters": 164,
+      "response_id": "gen-1791234046-39dDx2OlIYGSnUM3bKDU",
+      "checks": {
+        "character_limit": true,
+        "no_markdown_heading": true
+      }
+    },
+    {
+      "case_id": "T05",
+      "repeat": 2,
+      "condition": "follow-candidate",
+      "probe": 1,
+      "characters": 150,
+      "response_id": "gen-1791234051-P0FeUNIPmIjmNy7gj1R4",
+      "checks": {
+        "character_limit": true,
+        "no_markdown_heading": true
+      }
+    },
+    {
+      "case_id": "T06",
+      "repeat": 0,
+      "condition": "follow-original",
+      "probe": 0,
+      "characters": 30,
+      "response_id": "gen-1791234057-9tmlWq8Kj5PE4XXBFspD",
+      "checks": {
+        "result_null": false
+      }
+    },
+    {
+      "case_id": "T06",
+      "repeat": 0,
+      "condition": "follow-baseline",
+      "probe": 0,
+      "characters": 30,
+      "response_id": "gen-1791234060-bSI53Tn6X4lII9w7lIiT",
+      "checks": {
+        "result_null": false
+      }
+    },
+    {
+      "case_id": "T06",
+      "repeat": 0,
+      "condition": "follow-candidate",
+      "probe": 0,
+      "characters": 26,
+      "response_id": "gen-1791234062-MbtncwxxVcstWJN4nDSJ",
+      "checks": {
+        "result_null": false
+      }
+    },
+    {
+      "case_id": "T06",
+      "repeat": 1,
+      "condition": "follow-original",
+      "probe": 0,
+      "characters": 30,
+      "response_id": "gen-1791234066-Pohs0Kx7kGynilsxQfCU",
+      "checks": {
+        "result_null": false
+      }
+    },
+    {
+      "case_id": "T06",
+      "repeat": 1,
+      "condition": "follow-baseline",
+      "probe": 0,
+      "characters": 30,
+      "response_id": "gen-1791234068-zGzvEoO3ilbyC0zJCXly",
+      "checks": {
+        "result_null": false
+      }
+    },
+    {
+      "case_id": "T06",
+      "repeat": 1,
+      "condition": "follow-candidate",
+      "probe": 0,
+      "characters": 26,
+      "response_id": "gen-1791234070-67d99fW4D8OHROeFmuAY",
+      "checks": {
+        "result_null": false
+      }
+    },
+    {
+      "case_id": "T06",
+      "repeat": 2,
+      "condition": "follow-original",
+      "probe": 0,
+      "characters": 30,
+      "response_id": "gen-1791234074-SZtVLTYGT2phuk1r2Vhu",
+      "checks": {
+        "result_null": false
+      }
+    },
+    {
+      "case_id": "T06",
+      "repeat": 2,
+      "condition": "follow-baseline",
+      "probe": 0,
+      "characters": 30,
+      "response_id": "gen-1791234076-WygM4EEi8VEAo2uNAYjn",
+      "checks": {
+        "result_null": false
+      }
+    },
+    {
+      "case_id": "T06",
+      "repeat": 2,
+      "condition": "follow-candidate",
+      "probe": 0,
+      "characters": 30,
+      "response_id": "gen-1791234078-YkkS8NF5XvhOlZXgrczh",
+      "checks": {
+        "result_null": false
+      }
+    },
+    {
+      "case_id": "T10",
+      "repeat": 0,
+      "condition": "follow-original",
+      "probe": 0,
+      "characters": 266,
+      "response_id": "gen-1791234081-s050T4LdfOpQIUuoZLkE",
+      "checks": {
+        "no_added_script_labels": true
+      }
+    },
+    {
+      "case_id": "T10",
+      "repeat": 0,
+      "condition": "follow-baseline",
+      "probe": 0,
+      "characters": 279,
+      "response_id": "gen-1791234089-TZUyS6Ac6tuXDY0ABzQ8",
+      "checks": {
+        "no_added_script_labels": false
+      }
+    },
+    {
+      "case_id": "T10",
+      "repeat": 1,
+      "condition": "follow-original",
+      "probe": 0,
+      "characters": 257,
+      "response_id": "gen-1791234089-tugXamjTZA77Z74nrtt7",
+      "checks": {
+        "no_added_script_labels": true
+      }
+    },
+    {
+      "case_id": "T10",
+      "repeat": 1,
+      "condition": "follow-baseline",
+      "probe": 0,
+      "characters": 300,
+      "response_id": "gen-1791234096-m0XATZQrM0q5gVldgANe",
+      "checks": {
+        "no_added_script_labels": false
+      }
+    },
+    {
+      "case_id": "T10",
+      "repeat": 0,
+      "condition": "follow-candidate",
+      "probe": 0,
+      "characters": 392,
+      "response_id": "gen-1791234097-MkzhwriaDf5hlPy7GJSh",
+      "checks": {
+        "no_added_script_labels": true
+      }
+    },
+    {
+      "case_id": "T10",
+      "repeat": 1,
+      "condition": "follow-candidate",
+      "probe": 0,
+      "characters": 318,
+      "response_id": "gen-1791234105-Nuvc5xxRUC7farDL9yWB",
+      "checks": {
+        "no_added_script_labels": true
+      }
+    },
+    {
+      "case_id": "T10",
+      "repeat": 0,
+      "condition": "follow-original",
+      "probe": 1,
+      "characters": 236,
+      "response_id": "gen-1791234108-cR8VY65UHDigQrxObl5k",
+      "checks": {
+        "no_added_script_labels": true
+      }
+    },
+    {
+      "case_id": "T10",
+      "repeat": 1,
+      "condition": "follow-original",
+      "probe": 1,
+      "characters": 287,
+      "response_id": "gen-1791234115-S0xXCMlTwkRNt8bFsz0r",
+      "checks": {
+        "no_added_script_labels": true
+      }
+    },
+    {
+      "case_id": "T10",
+      "repeat": 0,
+      "condition": "follow-baseline",
+      "probe": 1,
+      "characters": 268,
+      "response_id": "gen-1791234115-bVQTVQODQf6oF39amUry",
+      "checks": {
+        "no_added_script_labels": false
+      }
+    },
+    {
+      "case_id": "T10",
+      "repeat": 1,
+      "condition": "follow-baseline",
+      "probe": 1,
+      "characters": 333,
+      "response_id": "gen-1791234124-fQbqomPszyCRbuNxtHFV",
+      "checks": {
+        "no_added_script_labels": false
+      }
+    },
+    {
+      "case_id": "T10",
+      "repeat": 0,
+      "condition": "follow-candidate",
+      "probe": 1,
+      "characters": 337,
+      "response_id": "gen-1791234124-zGsROb1EtmSYjrqDWXCC",
+      "checks": {
+        "no_added_script_labels": true
+      }
+    },
+    {
+      "case_id": "T10",
+      "repeat": 1,
+      "condition": "follow-candidate",
+      "probe": 1,
+      "characters": 462,
+      "response_id": "gen-1791234133-nJxUdarT9IWi1djeyFrW",
+      "checks": {
+        "no_added_script_labels": true
+      }
+    },
+    {
+      "case_id": "T10",
+      "repeat": 2,
+      "condition": "follow-original",
+      "probe": 0,
+      "characters": 178,
+      "response_id": "gen-1791234143-cfVL7Vy3F66IL0ZZT1DR",
+      "checks": {
+        "no_added_script_labels": true
+      }
+    },
+    {
+      "case_id": "T10",
+      "repeat": 2,
+      "condition": "follow-baseline",
+      "probe": 0,
+      "characters": 395,
+      "response_id": "gen-1791234149-MmeYarHsbXHmR6jmZAbj",
+      "checks": {
+        "no_added_script_labels": false
+      }
+    },
+    {
+      "case_id": "D01",
+      "repeat": 0,
+      "condition": "follow-original",
+      "probe": 0,
+      "characters": 80,
+      "response_id": "gen-1791234153-QuTTdMDrj89KeKaBbRUm",
+      "checks": {
+        "character_limit": true,
+        "no_added_script_labels": true,
+        "no_markdown_heading": true
+      }
+    },
+    {
+      "case_id": "D01",
+      "repeat": 0,
+      "condition": "follow-baseline",
+      "probe": 0,
+      "characters": 51,
+      "response_id": "gen-1791234158-xbsYSzL8X2NrYxMdulFm",
+      "checks": {
+        "character_limit": true,
+        "no_added_script_labels": true,
+        "no_markdown_heading": true
+      }
+    },
+    {
+      "case_id": "T10",
+      "repeat": 2,
+      "condition": "follow-candidate",
+      "probe": 0,
+      "characters": 260,
+      "response_id": "gen-1791234160-72URUNwrV9eFYYzNtM77",
+      "checks": {
+        "no_added_script_labels": false
+      }
+    },
+    {
+      "case_id": "D01",
+      "repeat": 0,
+      "condition": "follow-candidate",
+      "probe": 0,
+      "characters": 75,
+      "response_id": "gen-1791234161-iYjn69a1XbDbMZrp4mOh",
+      "checks": {
+        "character_limit": true,
+        "no_added_script_labels": true,
+        "no_markdown_heading": true
+      }
+    },
+    {
+      "case_id": "T10",
+      "repeat": 2,
+      "condition": "follow-original",
+      "probe": 1,
+      "characters": 243,
+      "response_id": "gen-1791234168-6SXmttUNApl7JHpUb1iB",
+      "checks": {
+        "no_added_script_labels": true
+      }
+    },
+    {
+      "case_id": "D01",
+      "repeat": 1,
+      "condition": "follow-original",
+      "probe": 0,
+      "characters": 87,
+      "response_id": "gen-1791234172-CQ7IjJB18e9VCGlXVQyI",
+      "checks": {
+        "character_limit": true,
+        "no_added_script_labels": true,
+        "no_markdown_heading": true
+      }
+    },
+    {
+      "case_id": "T10",
+      "repeat": 2,
+      "condition": "follow-baseline",
+      "probe": 1,
+      "characters": 237,
+      "response_id": "gen-1791234175-KYi0C7cgowV5DMCFmaaz",
+      "checks": {
+        "no_added_script_labels": false
+      }
+    },
+    {
+      "case_id": "D01",
+      "repeat": 1,
+      "condition": "follow-baseline",
+      "probe": 0,
+      "characters": 63,
+      "response_id": "gen-1791234177-f0BYoWycZKzpxX1kbYRb",
+      "checks": {
+        "character_limit": true,
+        "no_added_script_labels": true,
+        "no_markdown_heading": true
+      }
+    },
+    {
+      "case_id": "D01",
+      "repeat": 1,
+      "condition": "follow-candidate",
+      "probe": 0,
+      "characters": 48,
+      "response_id": "gen-1791234180-ZDoVyUtRb395kYf4QAzH",
+      "checks": {
+        "character_limit": true,
+        "no_added_script_labels": true,
+        "no_markdown_heading": true
+      }
+    },
+    {
+      "case_id": "T10",
+      "repeat": 2,
+      "condition": "follow-candidate",
+      "probe": 1,
+      "characters": 287,
+      "response_id": "gen-1791234183-myLN5xsASCyfWNcUFAbR",
+      "checks": {
+        "no_added_script_labels": false
+      }
+    },
+    {
+      "case_id": "D01",
+      "repeat": 2,
+      "condition": "follow-original",
+      "probe": 0,
+      "characters": 59,
+      "response_id": "gen-1791234190-Y2sWFmjL0W4kBRtP1uxS",
+      "checks": {
+        "character_limit": true,
+        "no_added_script_labels": true,
+        "no_markdown_heading": true
+      }
+    },
+    {
+      "case_id": "D01",
+      "repeat": 2,
+      "condition": "follow-baseline",
+      "probe": 0,
+      "characters": 48,
+      "response_id": "gen-1791234194-9rUfMwWzGJoIOmn1ssx3",
+      "checks": {
+        "character_limit": true,
+        "no_added_script_labels": true,
+        "no_markdown_heading": true
+      }
+    },
+    {
+      "case_id": "D01",
+      "repeat": 2,
+      "condition": "follow-candidate",
+      "probe": 0,
+      "characters": 60,
+      "response_id": "gen-1791234197-1lMQ4A9BYbNCCYk7mQ4I",
+      "checks": {
+        "character_limit": true,
+        "no_added_script_labels": true,
+        "no_markdown_heading": true
+      }
+    },
+    {
+      "case_id": "D02",
+      "repeat": 0,
+      "condition": "follow-original",
+      "probe": 0,
+      "characters": 58,
+      "response_id": "gen-1791234200-qPiwgbNZ1RGryjR0zU8J",
+      "checks": {
+        "two_sentences": true,
+        "no_markdown_heading": true
+      }
+    },
+    {
+      "case_id": "D02",
+      "repeat": 0,
+      "condition": "follow-baseline",
+      "probe": 0,
+      "characters": 437,
+      "response_id": "gen-1791234204-Rg8TDI6PPBpeFzWfR4j8",
+      "checks": {
+        "two_sentences": false,
+        "no_markdown_heading": true
+      }
+    },
+    {
+      "case_id": "D02",
+      "repeat": 1,
+      "condition": "follow-original",
+      "probe": 0,
+      "characters": 58,
+      "response_id": "gen-1791234210-obX7mqMLccBw7n0HSiC6",
+      "checks": {
+        "two_sentences": true,
+        "no_markdown_heading": true
+      }
+    },
+    {
+      "case_id": "D02",
+      "repeat": 1,
+      "condition": "follow-baseline",
+      "probe": 0,
+      "characters": 398,
+      "response_id": "gen-1791234213-6pH6Ylll7JPDulACJcch",
+      "checks": {
+        "two_sentences": false,
+        "no_markdown_heading": true
+      }
+    },
+    {
+      "case_id": "D02",
+      "repeat": 0,
+      "condition": "follow-candidate",
+      "probe": 0,
+      "characters": 131,
+      "response_id": "gen-1791234214-83ofSLYuOgbqNGqbO8FU",
+      "checks": {
+        "two_sentences": true,
+        "no_markdown_heading": true
+      }
+    },
+    {
+      "case_id": "D02",
+      "repeat": 1,
+      "condition": "follow-candidate",
+      "probe": 0,
+      "characters": 109,
+      "response_id": "gen-1791234222-nLdmttECOnlGEhD9ZRRH",
+      "checks": {
+        "two_sentences": true,
+        "no_markdown_heading": true
+      }
+    },
+    {
+      "case_id": "D02",
+      "repeat": 2,
+      "condition": "follow-original",
+      "probe": 0,
+      "characters": 58,
+      "response_id": "gen-1791234226-5KPnKCAiTWe2NBsNpt18",
+      "checks": {
+        "two_sentences": true,
+        "no_markdown_heading": true
+      }
+    },
+    {
+      "case_id": "D02",
+      "repeat": 2,
+      "condition": "follow-baseline",
+      "probe": 0,
+      "characters": 302,
+      "response_id": "gen-1791234230-gCCvqOEfdDxHE6oLykwL",
+      "checks": {
+        "two_sentences": false,
+        "no_markdown_heading": true
+      }
+    },
+    {
+      "case_id": "D02",
+      "repeat": 2,
+      "condition": "follow-candidate",
+      "probe": 0,
+      "characters": 119,
+      "response_id": "gen-1791234237-q8zJP1SynDsJwe7fkd5A",
+      "checks": {
+        "two_sentences": false,
+        "no_markdown_heading": true
+      }
+    }
+  ]
+}

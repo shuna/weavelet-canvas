@@ -3,7 +3,7 @@ import { throttle } from 'lodash';
 import useStore from '@store/store';
 import countTokens from '@utils/messageUtils';
 import useTokenEncoder from '@hooks/useTokenEncoder';
-import { filterOmittedMessages } from '@hooks/submitHelpers';
+import { getSubmitContextMessages } from '@hooks/submitHelpers';
 import {
   buildTokenUsageKey,
   countImageInputs,
@@ -54,10 +54,7 @@ const useLiveTotalTokenUsed = (): TotalTokenUsed => {
         const completionMessage = chat.messages[session.messageIndex];
         if (!completionMessage) return null;
 
-        const promptMessages = filterOmittedMessages(
-          chat.messages.slice(0, session.messageIndex),
-          session.chatIndex
-        );
+        const promptMessages = getSubmitContextMessages(chat.messages, session.mode, session.messageIndex, chat.config.model, session.chatIndex, chat.config.systemPrompt);
         const promptCacheKey = buildPromptCountCacheKey(
           session.sessionId,
           chat.config.model,
@@ -130,7 +127,7 @@ const useLiveTotalTokenUsed = (): TotalTokenUsed => {
   // Invalidate prompt cache when omission state changes mid-stream
   useEffect(() => {
     promptCacheRef.current.clear();
-  }, [omittedNodeMaps]);
+  }, [omittedNodeMaps, chats]);
 
   useEffect(() => {
     mountedRef.current = true;

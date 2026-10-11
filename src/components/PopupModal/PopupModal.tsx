@@ -13,12 +13,14 @@ const PopupModal = ({
   handleClickBackdrop,
   cancelButton = true,
   disableClose = false,
+  headerBottomContent,
   footerStartContent,
   footerEndContent,
   maxWidth,
+  scrollBody = true,
   children,
 }: {
-  title?: string;
+  title?: React.ReactNode;
   message?: string;
   setIsModalOpen: React.Dispatch<React.SetStateAction<boolean>>;
   handleConfirm?: () => void;
@@ -26,9 +28,11 @@ const PopupModal = ({
   handleClickBackdrop?: () => void;
   cancelButton?: boolean;
   disableClose?: boolean;
+  headerBottomContent?: React.ReactNode;
   footerStartContent?: React.ReactNode;
   footerEndContent?: React.ReactNode;
   maxWidth?: string;
+  scrollBody?: boolean;
   children?: React.ReactElement;
 }) => {
   const modalRoot = document.getElementById('modal-root');
@@ -68,7 +72,7 @@ const PopupModal = ({
     return () => {
       document.removeEventListener('keydown', handleKeyDown);
     };
-  }, [handleConfirm, handleClose, handleClickBackdrop]);
+  }, [handleConfirm, handleClose, handleClickBackdrop, disableClose]);
 
   if (modalRoot) {
     return ReactDOM.createPortal(
@@ -78,8 +82,8 @@ const PopupModal = ({
           onMouseDown={stopModalPointerPropagation}
           onPointerDown={stopModalPointerPropagation}
         >
-          <div className='relative bg-gray-50 rounded-lg shadow dark:bg-gray-700 max-h-full overflow-hidden flex flex-col'>
-            <div className='flex items-center justify-between p-4 border-b rounded-t dark:border-gray-600'>
+          <div className='relative w-full bg-gray-50 rounded-lg shadow dark:bg-gray-700 max-h-full overflow-hidden flex flex-col'>
+            <div className='flex flex-wrap shrink-0 items-center justify-between p-4 border-b rounded-t dark:border-gray-600'>
               <h3 className='ml-2 text-lg font-semibold text-gray-900 dark:text-white'>
                 {title}
               </h3>
@@ -92,6 +96,7 @@ const PopupModal = ({
               >
                 <CrossIcon2 />
               </button>
+              {headerBottomContent && <div className='mt-3 ml-2 w-full'>{headerBottomContent}</div>}
             </div>
 
             {message && (
@@ -102,12 +107,12 @@ const PopupModal = ({
               </div>
             )}
 
-            <div className='overflow-y-auto'>
+            <div className={`min-h-0 ${scrollBody ? 'overflow-y-auto' : 'flex overflow-hidden'}`}>
               {children}
             </div>
 
             {(footerStartContent || footerEndContent || handleConfirm || cancelButton) && (
-              <div className='flex items-center justify-between p-6 gap-4'>
+              <div className='flex shrink-0 items-center justify-between p-6 gap-4'>
                 <div className='min-w-0 flex-1'>
                   {footerStartContent}
                 </div>

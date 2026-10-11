@@ -42,6 +42,7 @@ import {
   updateLastNodeContentState,
 } from './branch-domain';
 import { cloneChatAt } from './branch-domain';
+import { recordChatEdits } from './chat-edit-time';
 
 /**
  * Finalize any streaming nodes in the given chat, mutating contentStore in place.
@@ -374,6 +375,9 @@ export const createBranchSlice: StoreSlice<BranchSlice> = (set, get) => {
   },
   applyBranchState: (chats, contentStore, options) => {
     const prevChats = get().chats;
+    const now = Date.now();
+    const edits = recordChatEdits(prevChats, chats, now);
+    chats = edits.chats;
     // Legacy tree creation has no undo step; record the edit against that prepared tree.
     const historyChats = options?.historyBase?.chats ?? prevChats;
     const historyStore = options?.historyBase?.contentStore ?? get().contentStore;
@@ -402,7 +406,9 @@ export const createBranchSlice: StoreSlice<BranchSlice> = (set, get) => {
         for (const chat of changed) attributes[runtime]![String(chats.indexOf(chat))] = chat[field] ?? {};
       }
     }
-    set({ chats, contentStore, ...history, ...clipboard, ...attributes });
+    set({ chats, contentStore, ...history, ...clipboard, ...attributes,
+      ...(edits.changed ? { lastContentEditedAt: now } : {}),
+    });
     if (options?.recordHistory !== false) {
       for (const previous of prevChats ?? []) {
         const next = chats.find(chat => chat.id === previous.id);

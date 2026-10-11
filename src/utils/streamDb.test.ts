@@ -13,9 +13,11 @@ import {
   updateStatus,
   getAllPending,
   deleteRequest,
+  saveProxyCheckpoint,
   cleanupStale,
   updateStreamCheckpoints,
   markStreamApplied,
+  saveRecoveryRecord,
   type StreamRecord,
 } from './streamDb';
 
@@ -170,6 +172,14 @@ describe('cleanupStale', () => {
 });
 
 describe('proxy recovery fields', () => {
+  it('persists parser state and cursor in one checkpoint', async () => {
+    await saveRequest(makeRecord({ requestId: 'checkpoint-1' }));
+    await saveProxyCheckpoint('checkpoint-1', {
+      bufferedText: 'visible', bufferedReasoning: 'thought', lastProxyEventId: 7,
+      llmSsePartial: 'data: {"x"', thinkTagCheckpoint: { state: 'inside', pending: '</thi' },
+    });
+    expect(await getRequest('checkpoint-1')).toMatchObject({ bufferedText: 'visible', bufferedReasoning: 'thought', lastProxyEventId: 7, llmSsePartial: 'data: {"x"', thinkTagCheckpoint: { state: 'inside', pending: '</thi' } });
+  });
   it('persists proxySessionId and lastProxyEventId', async () => {
     await saveRequest(
       makeRecord({
@@ -213,29 +223,49 @@ describe('saved checkpoints', () => {
     expect(await getRequest('legacy')).toBeDefined();
   });
   it('keeps finalized terminal output until the matching primary snapshot succeeds', async () => {
-    await saveRequest(makeRecord({ chatId: 'chat', nodeId: 'node', status: 'failed', bufferedText: 'partial', proxySessionId: 'proxy' }));
-    await markStreamApplied('req-1', 'final', 'assistant', 'partial');
-    expect(await getRequest('req-1')).toMatchObject({ bufferedText: 'partial', status: 'failed', appliedHash: 'final' });
+    await saveRequest(makeRecord({ chatId: 'chat', nodeId: 'node', status: 'completed', bufferedText: 'partial', proxySessionId: 'proxy', proxyComplete: true }));
+    await markStreamApplied('req-1', 'final', 'assistant', 'partial', '');
+    expect(await getRequest('req-1')).toMatchObject({ bufferedText: 'partial', status: 'completed', appliedHash: 'final' });
     expect(await updateStreamCheckpoints(snapshot('older'), [])).toEqual([]);
     expect(await getRequest('req-1')).toBeDefined();
     expect(await updateStreamCheckpoints(snapshot('final'), [])).toEqual([expect.objectContaining({ proxySessionId: 'proxy' })]);
     expect(await getRequest('req-1')).toBeUndefined();
-    await markStreamApplied('req-1', 'final', 'assistant', 'partial');
+    await markStreamApplied('req-1', 'final', 'assistant', 'partial', '');
     expect(await getRequest('req-1')).toBeUndefined();
+  });
+
+  it('retains a completed worker record when only the trailing reasoning was not delivered', async () => {
+    await saveRequest(makeRecord({ chatId: 'chat', nodeId: 'node', status: 'completed', bufferedText: 'answer', bufferedReasoning: 'thought suffix', proxySessionId: 'proxy', proxyComplete: true }));
+    await markStreamApplied('req-1', 'incomplete', 'assistant', 'answer', 'thought');
+    expect((await getRequest('req-1'))?.appliedHash).toBeUndefined();
+    expect(await updateStreamCheckpoints(snapshot('incomplete'), [])).toEqual([]);
+    expect(await getRequest('req-1')).toMatchObject({ bufferedText: 'answer', bufferedReasoning: 'thought suffix' });
+    await markStreamApplied('req-1', 'complete', 'assistant', 'answer', 'thought suffix');
+    expect(await updateStreamCheckpoints(snapshot('complete'), [])).toEqual([expect.objectContaining({ proxySessionId: 'proxy' })]);
+  });
+
+  it('does not recreate a purged recovery record or update an invalidated target', async () => {
+    const record = makeRecord({ bufferedText: 'recovered' });
+    await saveRecoveryRecord(record, () => true);
+    expect(await getRequest(record.requestId)).toBeUndefined();
+    await saveRequest({ ...record, bufferedText: 'original' });
+    await saveRecoveryRecord(record, () => false);
+    expect(await getRequest(record.requestId)).toMatchObject({ bufferedText: 'original' });
   });
 
   it('does not acknowledge heartbeat partials before the worker commits terminal status', async () => {
     await saveRequest(makeRecord({ chatId: 'chat', nodeId: 'node', checkpointRole: 'assistant', bufferedText: 'partial', proxySessionId: 'proxy' }));
-    await markStreamApplied('req-1', 'partial-hash', 'assistant', 'partial');
+    await markStreamApplied('req-1', 'partial-hash', 'assistant', 'partial', '');
     expect((await getRequest('req-1'))?.appliedHash).toBeUndefined();
     expect(await updateStreamCheckpoints(snapshot('partial-hash'), [])).toEqual([]);
     await appendText('req-1', ' later worker output');
     await updateStatus('req-1', 'interrupted');
-    await markStreamApplied('req-1', 'partial-hash', 'assistant', 'partial');
+    await markStreamApplied('req-1', 'partial-hash', 'assistant', 'partial', '');
     expect(await updateStreamCheckpoints(snapshot('partial-hash'), [])).toEqual([]);
     expect(await getRequest('req-1')).toMatchObject({ bufferedText: 'partial later worker output', status: 'interrupted' });
-    await markStreamApplied('req-1', 'terminal-hash', 'assistant', 'partial later worker output');
-    expect(await updateStreamCheckpoints(snapshot('terminal-hash'), [])).toHaveLength(1);
+    await markStreamApplied('req-1', 'terminal-hash', 'assistant', 'partial later worker output', '');
+    expect(await updateStreamCheckpoints(snapshot('terminal-hash'), [])).toEqual([]);
+    expect(await getRequest('req-1')).toMatchObject({ checkpointHash: 'terminal-hash', appliedHash: undefined, acknowledged: false });
   });
   it('retains a streaming record even if it has an old applied hash', async () => {
     await saveRequest(makeRecord({ chatId: 'chat', nodeId: 'node', checkpointRole: 'assistant', appliedHash: 'partial-hash' }));

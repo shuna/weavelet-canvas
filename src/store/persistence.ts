@@ -21,6 +21,7 @@ export type PersistedStoreState = Omit<
   Pick<
   StoreState,
   | 'chats'
+  | 'lastContentEditedAt'
   | 'apiKey'
   | 'apiVersion'
   | 'apiEndpoint'
@@ -28,6 +29,7 @@ export type PersistedStoreState = Omit<
   | 'autoTitle'
   | 'titleModel'
   | 'titleProviderId'
+  | 'bubbleSummaryConfig'
   | 'advancedMode'
   | 'prompts'
   | 'defaultChatConfig'
@@ -45,6 +47,7 @@ export type PersistedStoreState = Omit<
   | 'menuWidth'
   | 'defaultImageDetail'
   | 'animateBubbleNavigation'
+  | 'branchSwipeDirection'
   | 'providers'
   | 'favoriteModels'
   | 'branchClipboard'
@@ -83,7 +86,7 @@ export type PersistedStoreState = Omit<
 
 export type PersistedChatData = Pick<
   PersistedStoreState,
-  'chats' | 'contentStore' | 'branchClipboard'
+  'chats' | 'contentStore' | 'branchClipboard' | 'lastContentEditedAt'
 >;
 
 type LocalStoragePersistedState = Omit<
@@ -92,11 +95,12 @@ type LocalStoragePersistedState = Omit<
 >;
 
 const FULL_PERSIST_KEYS: (keyof PersistedStoreState)[] = [
+  'lastContentEditedAt',
   'chats', 'apiKey', 'apiVersion', 'apiEndpoint', 'theme', 'autoTitle',
-  'titleModel', 'titleProviderId', 'advancedMode', 'prompts', 'defaultChatConfig', 'defaultSystemMessage',
+  'titleModel', 'titleProviderId', 'bubbleSummaryConfig', 'advancedMode', 'prompts', 'defaultChatConfig', 'defaultSystemMessage',
   'hideMenuOptions', 'hideSideMenu', 'folders', 'enterToSubmit',
   'inlineLatex', 'markdownMode', 'streamingMarkdownPolicy', 'totalTokenUsed', 'countTotalTokens',
-  'displayChatSize', 'menuWidth', 'defaultImageDetail', 'animateBubbleNavigation',
+  'displayChatSize', 'menuWidth', 'defaultImageDetail', 'animateBubbleNavigation', 'branchSwipeDirection',
   'providers', 'favoriteModels',
   'branchClipboard', 'contentStore', 'providerModelCache',
   'providerCustomModels', '_legacyCustomModels',
@@ -298,6 +302,7 @@ export const createPersistedChatDataState = (
 ): PersistedChatData => {
   const snapshot = finalizeStreamingSnapshotState(state.chats, state.contentStore);
   return {
+    lastContentEditedAt: state.lastContentEditedAt,
     chats: buildPersistedChats({
       ...state,
       chats: snapshot.chats,
@@ -311,6 +316,7 @@ export const applyPersistedChatDataState = (
   state: StoreState,
   persistedChatData: PersistedChatData
 ) => {
+  state.lastContentEditedAt = persistedChatData.lastContentEditedAt;
   state.chats = persistedChatData.chats as ChatInterface[] | undefined;
   state.contentStore = persistedChatData.contentStore ?? {};
   state.branchClipboard = persistedChatData.branchClipboard ?? null;
@@ -336,6 +342,7 @@ export const hydrateFromPersistedStoreState = (
   } as StoreState;
 
   applyPersistedChatDataState(nextState, {
+    lastContentEditedAt: nextState.lastContentEditedAt,
     chats: hasChats ? persistedState.chats : baseState.chats,
     contentStore: hasContentStore
       ? persistedState.contentStore ?? {}

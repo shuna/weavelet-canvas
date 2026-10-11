@@ -118,9 +118,9 @@ it('acknowledges all chats, folders and branch nodes persistently without resolv
   const { useSyncReview, acknowledgeAllSyncChanges, markSyncChanges } = await import('./conflicts');
   useSyncReview.setState({ conflict: true, chats: ['chat', 'hidden-chat'], folders: ['folder'], nodes: { chat: ['b'], 'hidden-chat': ['x'] } });
   acknowledgeAllSyncChanges();
-  expect(useSyncReview.getState()).toEqual({ conflict: true, chats: [], folders: [], nodes: {} });
+  expect(useSyncReview.getState()).toEqual({ conflict: true, conflictKeys: [], cloudOverview: null, cloudReview: null, chats: [], folders: [], nodes: {} });
   await useSyncReview.persist.rehydrate();
-  expect(useSyncReview.getState()).toEqual({ conflict: true, chats: [], folders: [], nodes: {} });
+  expect(useSyncReview.getState()).toEqual({ conflict: true, conflictKeys: [], cloudOverview: null, cloudReview: null, chats: [], folders: [], nodes: {} });
   const before = snapshot(), after = structuredClone(before);
   node(after, 'b', 'a', 'new sync change');
   await markSyncChanges(before, after);
@@ -128,4 +128,20 @@ it('acknowledges all chats, folders and branch nodes persistently without resolv
   expect(useSyncReview.getState().nodes.chat).toEqual(['b']);
   acknowledgeAllSyncChanges();
   useSyncReview.setState({ conflict: false });
+});
+
+it('remaps locally generated summary references when matching branches coalesce', async () => {
+  const base = snapshot(), local = structuredClone(base), cloud = structuredClone(base);
+  node(local, 'l', 'a', 'new'); node(local, 'lt', 'l', 'end');
+  node(cloud, 'r', 'a', 'new'); node(cloud, 'rt', 'r', 'end');
+  tree(local).activePath = ['a', 'l', 'lt']; tree(cloud).activePath = ['a', 'r', 'rt'];
+  local.state.chats![0].summaryTargets = { l: true };
+  local.state.chats![0].summaries = [{ id: 'summary', mode: 'range', text: 'new then end', useForSubmit: true, sources: [
+    { nodeId: 'l', parentId: 'a', role: 'user', textParts: ['new'] },
+    { nodeId: 'lt', parentId: 'l', role: 'user', textParts: ['end'] },
+  ] }];
+  const result = await merge(base, local, cloud);
+  expect(result.state.chats![0].summaries![0].sources.map(source => source.nodeId)).toEqual(['r', 'rt']);
+  expect(result.state.chats![0].summaries![0].sources.map(source => source.parentId)).toEqual(['a', 'r']);
+  expect(result.state.chats![0].summaryTargets?.r).toBe(true);
 });

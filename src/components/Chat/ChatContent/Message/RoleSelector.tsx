@@ -24,9 +24,9 @@ const RoleSelector = React.memo(
     const availableRoles = allowSystem ? roles : roles.filter((r) => r !== 'system');
 
     return (
-      <div className='prose dark:prose-invert relative'>
+      <div className='prose dark:prose-invert relative shrink-0'>
         <button
-          className='btn btn-neutral btn-small flex gap-1'
+          className='btn btn-neutral btn-small flex gap-1 whitespace-nowrap'
           aria-label={t(role) as string}
           type='button'
           onClick={() => setDropDown((prev) => !prev)}

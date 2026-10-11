@@ -1,7 +1,7 @@
 import { invalidateAiTasks } from '@hooks/aiTaskLifetime';
 import { v4 as uuidv4 } from 'uuid';
 import { StoreSlice, StoreState } from './store';
-import { ChatInterface, FolderCollection, GeneratingSession, MessageInterface, TextContentInterface } from '@type/chat';
+import { BubbleSummary, ChatInterface, FolderCollection, GeneratingSession, MessageInterface, TextContentInterface } from '@type/chat';
 import { notifyStorageError, setLocalStorageItem } from './storage/storageErrors';
 import { addContent, retainContent, releaseContent } from '@utils/contentStore';
 import { materializeActivePath } from '@utils/branchUtils';
@@ -9,8 +9,11 @@ import { generateDefaultChat } from '@constants/chat';
 import { deepCloneSingleChat } from '@utils/chatShallowClone';
 import { prepareChatForExport } from '@utils/chatExport';
 import { finalizeStreamingSnapshotState } from '@utils/streamingBuffer';
+import { isBubbleSummary, isSummaryEligible } from '@utils/bubbleSummary';
+import { recordChatEdits } from './chat-edit-time';
 
 export interface ChatSlice {
+  lastContentEditedAt?: number;
   removeChats: (input: { chatIds: readonly string[] }) => { removedChatIds: string[]; missingChatIds: string[]; selectedChatId: string };
   createChat: (input: { folderId?: string }) => { status: 'created'; chatId: string } | { status: 'folder-missing' | 'not-ready' };
   duplicateChat: (input: { chatId: string; scope: 'all' | 'activePath' }) => { status: 'created'; chatId: string } | { status: 'chat-missing' };
@@ -53,9 +56,13 @@ export interface ChatSlice {
   setNodeCollapsed: (input: { chatId: string; nodeId: string; value: boolean }) => { status: 'updated' | 'unchanged' | 'missing' };
   setNodeOmitted: (input: { chatId: string; nodeId: string; value: boolean }) => { status: 'updated' | 'unchanged' | 'missing' };
   setNodeProtected: (input: { chatId: string; nodeId: string; value: boolean }) => { status: 'updated' | 'unchanged' | 'missing' };
+  toggleSummaryTarget: (chatIndex: number, messageIndex: number) => void;
+  removeBubbleSummary: (chatId: string, summaryId: string) => void;
+  saveBubbleSummary: (chatId: string, summary: BubbleSummary) => void;
+  setSummaryForSubmit: (chatId: string, summaryId: string, use: boolean) => void;
 }
 
-type NodeMapField = 'collapsedNodes' | 'omittedNodes' | 'protectedNodes';
+type NodeMapField = 'collapsedNodes' | 'omittedNodes' | 'protectedNodes' | 'summaryTargets';
 
 /** Produce a new chats array with updated node-map field for one chat. */
 const updateChatNodeField = (
@@ -88,7 +95,20 @@ const hasSameChatOrder = (
   return prevChats.every((chat, index) => chat.id === nextChats[index]?.id);
 };
 
-export const createChatSlice: StoreSlice<ChatSlice> = (set, get) => {
+export const createChatSlice: StoreSlice<ChatSlice> = (setState, get) => {
+  const set: typeof setState = (partial, replace) => setState(previous => {
+    const patch = typeof partial === 'function' ? partial(previous) : partial;
+    const now = Date.now();
+    const edits = patch.chats && patch.chats !== previous.chats ? recordChatEdits(previous.chats, patch.chats, now) : undefined;
+    const folderContents = (folders: FolderCollection) => Object.entries(folders).map(([id, folder]) => [id, folder.name, folder.order]);
+    const foldersEdited = patch.folders && patch.folders !== previous.folders &&
+      JSON.stringify(folderContents(patch.folders)) !== JSON.stringify(folderContents(previous.folders));
+    return {
+      ...patch,
+      ...(edits ? { chats: edits.chats } : {}),
+      ...(edits?.changed || foldersEdited ? { lastContentEditedAt: now } : {}),
+    };
+  }, replace);
   const setNodeMap = (input: { chatId: string; nodeId?: string; value: boolean }, field: NodeMapField, runtime: 'collapsedNodeMaps' | 'omittedNodeMaps' | 'protectedNodeMaps') => {
     const chats = get().chats;
     const index = chats?.findIndex(chat => chat.id === input.chatId) ?? -1;
@@ -441,5 +461,37 @@ export const createChatSlice: StoreSlice<ChatSlice> = (set, get) => {
     setNodeCollapsed: (input) => setNodeMap(input, 'collapsedNodes', 'collapsedNodeMaps'),
     setNodeOmitted: (input) => setNodeMap(input, 'omittedNodes', 'omittedNodeMaps'),
     setNodeProtected: (input) => setNodeMap(input, 'protectedNodes', 'protectedNodeMaps'),
+    toggleSummaryTarget: (chatIndex: number, messageIndex: number) => {
+      const chats = get().chats;
+      const chat = chats?.[chatIndex];
+      const nodeId = chat?.branchTree?.activePath[messageIndex] ?? String(messageIndex);
+      if (!chats || !chat || !isSummaryEligible(chat.messages[messageIndex])) return;
+      const summaryTargets = { ...(chat.summaryTargets ?? {}) };
+      if (summaryTargets[nodeId]) delete summaryTargets[nodeId]; else summaryTargets[nodeId] = true;
+      set({ chats: updateChatNodeField(chats, chatIndex, 'summaryTargets', summaryTargets) });
+    },
+    removeBubbleSummary: (chatId, summaryId) => {
+      const chats = get().chats;
+      if (chats) set({ chats: chats.map(chat => chat.id === chatId ? { ...chat, summaries: chat.summaries?.filter(summary => summary.id !== summaryId) } : chat) });
+    },
+    saveBubbleSummary: (chatId: string, summary: BubbleSummary) => {
+      const chats = get().chats;
+      if (!chats || !isBubbleSummary(summary)) return;
+      set({ chats: chats.map(chat => chat.id !== chatId ? chat : {
+        ...chat,
+        summaries: [...(Array.isArray(chat.summaries) ? chat.summaries.filter(item => item.id !== summary.id) : []), summary],
+      }) });
+    },
+    setSummaryForSubmit: (chatId: string, summaryId: string, use: boolean) => {
+      const chats = get().chats;
+      if (!chats) return;
+      set({ chats: chats.map(chat => {
+        if (chat.id !== chatId || !Array.isArray(chat.summaries)) return chat;
+        const chosen = chat.summaries.find(summary => summary.id === summaryId);
+        if (!chosen) return chat;
+        const overlaps = (left: BubbleSummary, right: BubbleSummary) => left.sources.some(source => right.sources.some(other => source.nodeId === other.nodeId));
+        return { ...chat, summaries: chat.summaries.map(summary => ({ ...summary, useForSubmit: summary.id === summaryId ? use : overlaps(summary, chosen) ? false : summary.useForSubmit })) };
+      }) });
+    },
   };
 };

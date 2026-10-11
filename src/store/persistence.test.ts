@@ -27,6 +27,7 @@ import {
 } from './persistence';
 import { DEFAULT_PROVIDERS } from './provider-config';
 import { STORE_VERSION } from './version';
+import { BROWSER_LOCAL_SETTINGS, withoutBrowserLocalSettings } from './storage/google/settings';
 
 const buildStoreState = () => {
   const contentStore = {};
@@ -89,6 +90,7 @@ const buildStoreState = () => {
     inlineLatex: false,
     markdownMode: true,
     streamingMarkdownPolicy: 'auto',
+    branchSwipeDirection: 'left-next',
     totalTokenUsed: {},
     countTotalTokens: false,
     displayChatSize: false,
@@ -122,6 +124,31 @@ describe('persistence', () => {
   beforeEach(() => {
     clearStreamingBuffersForTest();
     setIndexedDbMigrationComplete(false);
+  });
+
+  it('keeps browser preferences in local storage and preserves them when applying Drive settings', async () => {
+    const preferences = {
+      hideMenuOptions: true, hideSideMenu: true, menuWidth: 320,
+      splitPanelRatio: 0.7, splitPanelSwapped: true, chatActiveView: 'split-horizontal' as const,
+      showDebugPanel: true, proxyEnabled: true,
+    };
+    const base = { ...buildStoreState(), ...preferences };
+    const saved = createLocalStoragePartializedState(base as never);
+    for (const key of BROWSER_LOCAL_SETTINGS) expect(saved[key]).toEqual(preferences[key]);
+    const received = withoutBrowserLocalSettings({ ...preferences, hideSideMenu: false, proxyEnabled: false, theme: 'light' });
+    const hydrated = finishHydratedState(await prepareHydratedState(base as never, received));
+    const applied = { ...base, ...hydrated };
+    for (const key of BROWSER_LOCAL_SETTINGS) expect(applied[key]).toEqual(preferences[key]);
+    expect(applied.theme).toBe(base.theme);
+  });
+
+  it('persists both swipe preferences and invalidates the cached snapshot when they change', () => {
+    const state = buildStoreState();
+    expect(createPartializedState(state as never).branchSwipeDirection).toBe('left-next');
+    expect(createLocalStoragePartializedState(state as never).branchSwipeDirection).toBe('left-next');
+    state.branchSwipeDirection = 'right-next';
+    expect(createPartializedState(state as never).branchSwipeDirection).toBe('right-next');
+    expect(createLocalStoragePartializedState(state as never).branchSwipeDirection).toBe('right-next');
   });
 
   it('finalizes streaming marker nodes when building a full snapshot', () => {
@@ -269,8 +296,8 @@ describe('persistence', () => {
     ).toBe('number');
   });
 
-  it('round-trips persisted chat data independently from localStorage state', () => {
-    const state = buildStoreState();
+  it('round-trips persisted chat data independently from localStorage state', async () => {
+    const state = { ...buildStoreState(), lastContentEditedAt: 1234 };
     const chatData = createPersistedChatDataState(state as never);
     const targetState = buildStoreState();
 
@@ -285,6 +312,16 @@ describe('persistence', () => {
     ]);
     expect(Object.keys(targetState.contentStore)).not.toHaveLength(0);
     expect(targetState.branchClipboard).toEqual(chatData.branchClipboard);
+    expect((targetState as typeof state).lastContentEditedAt).toBe(1234);
+    const hydrated = hydrateFromPersistedStoreState(state as never, { ...chatData, lastContentEditedAt: 5678 });
+    expect(hydrated.lastContentEditedAt).toBe(5678);
+    const oldData = { ...chatData };
+    delete oldData.lastContentEditedAt;
+    const oldHydrated = finishHydratedState(await prepareHydratedState(state as never, oldData));
+    expect(Object.hasOwn(oldHydrated, 'lastContentEditedAt')).toBe(true);
+    expect({ ...state, ...oldHydrated }.lastContentEditedAt).toBeUndefined();
+    applyPersistedChatDataState(targetState as never, { ...chatData, lastContentEditedAt: undefined });
+    expect((targetState as typeof state).lastContentEditedAt).toBeUndefined();
   });
 
   it('hydrates a persisted store snapshot and resets the current chat index when chats are empty', () => {
@@ -405,4 +442,12 @@ describe('persistence', () => {
     expect(localPartialized.splitPanelSwapped).toBe(true);
     expect(localPartialized.chatActiveView).toBe('split-horizontal');
   });
+});
+
+it('preserves independent summary settings in both persisted snapshots', () => {
+  const state = buildStoreState();
+  const config = { ..._defaultChatConfig, model: 'anthropic/claude-opus-4.6', providerId: 'openrouter' as const, temperature: 0.2 };
+  const value = { ...state, bubbleSummaryConfig: config };
+  expect(createPartializedState(value as never).bubbleSummaryConfig).toEqual(config);
+  expect(createLocalStoragePartializedState(value as never).bubbleSummaryConfig).toEqual(config);
 });

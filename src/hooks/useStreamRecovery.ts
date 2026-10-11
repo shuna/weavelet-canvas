@@ -3,18 +3,20 @@ import { recordOpenRouterObservation } from '@utils/openrouterObservation';
 import { observeOpenRouterUsage } from '@utils/openrouterControls';
 import { useEffect, useRef } from 'react';
 import useStore from '@store/store';
-import { getAllPending, deleteRequest, saveRequest, StreamRecord } from '@utils/streamDb';
+import { getAllPending, deleteRequest, saveRecoveryRecord, saveProxyCheckpoint, StreamRecord } from '@utils/streamDb';
 import { materializeActivePath } from '@utils/branchUtils';
 import { addContent } from '@utils/contentStore';
-import { beginAiTask, finishAiTask, isAiTaskCurrent } from './aiTaskLifetime';
+import { beginAiTask, cancelAiTask, finishAiTask, isAiTaskCurrent, type AiTaskTicket } from './aiTaskLifetime';
 import { cloneChatAtIndex } from '@utils/chatShallowClone';
 import { register } from '@utils/swBridge';
 import {
-  recoverFromProxy,
+  fetchProxyRecovery,
   parseProxySse,
   type ProxyConfig,
 } from '@utils/proxyClient';
 import { parseEventSource } from '@api/helper';
+import { ThinkTagParser } from '@utils/thinkTagParser';
+import { extractTextFromApiContent, extractReasoningFromApiContent, extractReasoningFromReasoningDetails } from '@utils/apiContent';
 import { debugReport } from '@store/debug-store';
 import { useStreamEndStatusStore } from '@store/stream-end-status-store';
 import { showToast } from '@utils/showToast';
@@ -39,12 +41,14 @@ let recoveryInProgress = false;
 
 /** Module-level AbortController for cancelling in-flight proxy recovery */
 let activeRecoveryAbort: AbortController | null = null;
+let activeRecoveryTicket: AiTaskTicket | null = null;
 let recoveryCancelledManually = false;
 
 /** Cancel any in-flight proxy recovery. Called externally for manual stop. */
 export function cancelActiveRecovery(silent = false) {
   if (activeRecoveryAbort) {
     recoveryCancelledManually = true;
+    if (activeRecoveryTicket) cancelAiTask(activeRecoveryTicket);
     activeRecoveryAbort.abort();
     activeRecoveryAbort = null;
   }
@@ -143,7 +147,7 @@ export default function useStreamRecovery() {
 
 /** Max retry attempts when proxy returns an 'interrupted' event (Worker may still be writing) */
 const PROXY_RECOVERY_MAX_RETRIES = 3;
-const PROXY_RECOVERY_RETRY_DELAY_MS = 2000;
+const PROXY_RECOVERY_RETRY_DELAY_MS = 500;
 
 /** Timeout for the entire proxy recovery SSE stream read (ms) */
 const PROXY_RECOVERY_STREAM_TIMEOUT_MS = 120_000; // 2 minutes
@@ -170,11 +174,26 @@ async function waitForStoreHydration(): Promise<boolean> {
 }
 
 /** Try to recover additional text from the proxy's KV cache */
+type ProxyRecoveryResult = { text: string; reasoning: string; outcome: 'complete' | 'partial' | 'network' | 'abort'; retryAfterMs?: number; retry?: boolean };
+
+const appendRecoveredEvent = (event: any, parser: ThinkTagParser, result: { text: string; reasoning: string }) => {
+  const delta = event.choices?.[0]?.delta;
+  if (!delta) return;
+  const reasoning = typeof delta.reasoning === 'string' ? delta.reasoning
+    : typeof delta.reasoning_content === 'string' ? delta.reasoning_content
+    : extractReasoningFromReasoningDetails(delta.reasoning_details)
+      || extractReasoningFromApiContent(delta.content as never);
+  result.reasoning += reasoning || '';
+  const parsed = parser.process(extractTextFromApiContent(delta.content as never));
+  result.text += parsed.content;
+  result.reasoning += parsed.reasoning;
+};
+
 async function tryProxyRecovery(
   record: StreamRecord,
   currentText: string,
   signal: AbortSignal
-): Promise<string | null> {
+): Promise<ProxyRecoveryResult | null> {
   const { proxyEnabled, proxyEndpoint, proxyAuthToken } = useStore.getState();
   if (!proxyEnabled || !proxyEndpoint || !record.proxySessionId) return null;
 
@@ -183,56 +202,71 @@ async function tryProxyRecovery(
     authToken: proxyAuthToken || undefined,
   };
 
-  let bestText: string | null = null;
+  let best: ProxyRecoveryResult | null = null;
 
   for (let attempt = 0; attempt <= PROXY_RECOVERY_MAX_RETRIES; attempt++) {
     if (signal.aborted) break;
 
     if (attempt > 0) {
-      await new Promise((r) => setTimeout(r, PROXY_RECOVERY_RETRY_DELAY_MS));
+      await new Promise((r) => setTimeout(r, best?.retryAfterMs ?? PROXY_RECOVERY_RETRY_DELAY_MS));
     }
 
     if (signal.aborted) break;
 
     const result = await readProxyRecoveryStream(config, record, signal);
-    if (!result) break;
+    if (!result) return { text: record.bufferedText, reasoning: record.bufferedReasoning ?? '', outcome: signal.aborted ? 'abort' : 'network' };
 
-    if (result.text.length > (bestText?.length ?? 0)) {
-      bestText = result.text;
+    if (result.text.length + result.reasoning.length > ((best?.text.length ?? 0) + (best?.reasoning.length ?? 0))) {
+      best = result;
     }
 
-    // If the stream completed or errored, no point retrying
-    if (!result.interrupted) break;
+    if (result.outcome === 'complete' || result.outcome === 'abort') return result;
+    if (result.outcome === 'network' || (result.outcome === 'partial' && result.retry)) {
+      best = result;
+      continue;
+    }
+    return result;
   }
-
-  return bestText && bestText.length > currentText.length ? bestText : null;
+  return best ?? { text: currentText, reasoning: record.bufferedReasoning ?? '', outcome: signal.aborted ? 'abort' : 'partial' };
 }
 
 async function readProxyRecoveryStream(
   config: ProxyConfig,
   record: StreamRecord,
   signal: AbortSignal
-): Promise<{ text: string; interrupted: boolean } | null> {
-  const stream = await recoverFromProxy(
-    config,
-    record.proxySessionId!,
-    record.lastProxyEventId ?? 0,
-    signal
-  );
-  if (!stream) return null;
+): Promise<ProxyRecoveryResult | null> {
+  let response: Response;
+  try {
+    response = await fetchProxyRecovery(config, record.proxySessionId!, record.lastProxyEventId ?? 0, signal);
+  } catch {
+    return { text: record.bufferedText, reasoning: record.bufferedReasoning ?? '', outcome: signal.aborted ? 'abort' : 'network' };
+  }
+  if (!response.ok || !response.body) {
+    const retry = response.headers.get('Retry-After');
+    await response.body?.cancel().catch(() => {});
+    const seconds = Number(retry);
+    const retryAfterMs = Number.isFinite(seconds) ? Math.min(Math.max(seconds * 1000, 0), 5_000) : undefined;
+    return { text: record.bufferedText, reasoning: record.bufferedReasoning ?? '', outcome: 'network', retryAfterMs };
+  }
+  const stream = response.body;
 
   const reader = stream.getReader();
   const decoder = new TextDecoder();
   let partial = '';
-  let llmPartial = '';
+  let llmPartial = record.llmSsePartial ?? '';
   let recoveredText = record.bufferedText;
-  let interrupted = false;
+  let recoveredReasoning = record.bufferedReasoning ?? '';
+  const thinkParser = new ThinkTagParser();
+  if (record.thinkTagCheckpoint) thinkParser.restore(record.thinkTagCheckpoint);
+  let outcome: ProxyRecoveryResult['outcome'] = 'network';
+  let sawLlmDone = record.llmDone === true;
+  let retry = false;
 
   try {
     // eslint-disable-next-line no-constant-condition
     while (true) {
       if (signal.aborted) {
-        interrupted = true;
+        outcome = 'abort';
         break;
       }
 
@@ -243,13 +277,21 @@ async function readProxyRecoveryStream(
 
       let shouldBreak = false;
       for (const evt of proxySse.events) {
+        if (evt.id > (record.lastProxyEventId ?? 0)) record.lastProxyEventId = evt.id;
         if (evt.eventType === 'interrupted') {
-          interrupted = true;
+          outcome = 'partial';
+          shouldBreak = true;
+          break;
+        }
+        if (evt.eventType === 'cache-miss') {
+          outcome = 'partial';
+          retry = true;
           shouldBreak = true;
           break;
         }
         if (evt.eventType === 'done' || evt.eventType === 'error') {
           if (evt.meta?.openRouterObservation) record.openRouterObservation = { ...record.openRouterObservation, ...evt.meta.openRouterObservation };
+          outcome = evt.eventType === 'done' && evt.meta?.complete === true && evt.meta?.cacheCapability !== 'overflow' && sawLlmDone ? 'complete' : 'partial';
           shouldBreak = true;
           break;
         }
@@ -261,34 +303,62 @@ async function readProxyRecoveryStream(
           const llmChunk = llmPartial + evt.rawText;
           const llmParsed = parseEventSource(llmChunk, false);
           llmPartial = llmParsed.partial;
+          if (llmParsed.done) sawLlmDone = true;
 
           for (const llmEvt of llmParsed.events) {
             record.openRouterObservation = { ...record.openRouterObservation, ...observeOpenRouterUsage(llmEvt.usage) };
-            const content = llmEvt.choices?.[0]?.delta?.content;
-            if (content) recoveredText += content;
+            const recovered = { text: '', reasoning: '' };
+            appendRecoveredEvent(llmEvt, thinkParser, recovered);
+            recoveredText += recovered.text;
+            recoveredReasoning += recovered.reasoning;
           }
         }
       }
 
-      if (shouldBreak || done) break;
+      if (done) {
+        if (!shouldBreak) outcome = 'network';
+        break;
+      }
+      if (shouldBreak) break;
     }
 
-    // Flush remaining LLM partial
-    if (llmPartial) {
-      const flushed = parseEventSource(llmPartial, true);
-      for (const llmEvt of flushed.events) {
+    // Terminal completion alone permits finalizing parser buffers.
+    if (outcome === 'complete') {
+      const flushedLlm = parseEventSource(llmPartial, true);
+      for (const llmEvt of flushedLlm.events) {
         record.openRouterObservation = { ...record.openRouterObservation, ...observeOpenRouterUsage(llmEvt.usage) };
-        const content = llmEvt.choices?.[0]?.delta?.content;
-        if (content) recoveredText += content;
+        const recovered = { text: '', reasoning: '' };
+        appendRecoveredEvent(llmEvt, thinkParser, recovered);
+        recoveredText += recovered.text;
+        recoveredReasoning += recovered.reasoning;
       }
+      const flushedThink = thinkParser.flush();
+      recoveredText += flushedThink.content;
+      recoveredReasoning += flushedThink.reasoning;
     }
   } catch {
-    // Network error during recovery — use what we have
+    outcome = signal.aborted ? 'abort' : 'network';
   } finally {
-    reader.cancel().catch(() => {});
+    await reader.cancel().catch(() => {});
+    reader.releaseLock();
   }
 
-  return { text: recoveredText, interrupted };
+  await saveProxyCheckpoint(record.requestId, {
+    bufferedText: recoveredText,
+    bufferedReasoning: recoveredReasoning,
+    lastProxyEventId: record.lastProxyEventId ?? 0,
+    llmSsePartial: llmPartial,
+    thinkTagCheckpoint: thinkParser.checkpoint(),
+    generationId: record.generationId,
+    llmDone: sawLlmDone,
+    openRouterObservation: record.openRouterObservation,
+  }, () => !!activeRecoveryTicket && isAiTaskCurrent(activeRecoveryTicket));
+  record.bufferedText = recoveredText;
+  record.bufferedReasoning = recoveredReasoning;
+  record.llmSsePartial = llmPartial;
+  record.thinkTagCheckpoint = thinkParser.checkpoint();
+  record.llmDone = sawLlmDone;
+  return { text: recoveredText, reasoning: recoveredReasoning, outcome, retry };
 }
 
 export async function recoverPending(opts?: { manual?: boolean }) {
@@ -381,28 +451,37 @@ async function recoverPendingInner(manual: boolean, debugId: string) {
       const hasActiveSession = Object.values(initial.generatingSessions).some(session => session.chatId === record.chatId && session.targetNodeId === record.nodeId);
       const effectiveStatus = resolveRecoveryStatus(record, Date.now(), hasActiveSession);
       if (effectiveStatus === 'streaming') continue;
+      if (record.status === 'streaming') record.status = 'interrupted';
 
       const recordAbort = new AbortController();
       const abortRecord = () => recordAbort.abort();
       abort.signal.addEventListener('abort', abortRecord, { once: true });
       const ticket = beginAiTask({ kind: 'recovery', requestId, chatId: record.chatId!, nodeId: record.nodeId!, dependencyIds: [], cancel: abortRecord });
+      activeRecoveryTicket = ticket;
       let expectedHash = record.checkpointHash!;
       let restoredThisRecord = false;
       let proxyRecoveredThisRecord = false;
       const currentTarget = () => {
-        if (recordAbort.signal.aborted || !isAiTaskCurrent(ticket)) return null;
+        if (!isAiTaskCurrent(ticket)) return null;
         const state = useStore.getState();
         if (Object.values(state.generatingSessions).some(session => session.chatId === record.chatId && session.targetNodeId === record.nodeId)) return null;
         return resolveRecoveryTarget(state.chats, state.contentStore, record, expectedHash);
       };
-      const applyText = (text: string): boolean => {
+      let proxyOutcome: ProxyRecoveryResult['outcome'] | undefined;
+      const applyText = (text: string, reasoning = ''): boolean => {
         const latest = currentTarget();
-        if (!latest || !shouldApplyRecoveredText(getCurrentMessageText(latest.message), text)) return false;
+        if (!latest) return false;
+        const currentText = getCurrentMessageText(latest.message);
+        const reasoningContent = latest.message.content.find(content => content.type === 'reasoning');
+        const currentReasoning = reasoningContent && 'text' in reasoningContent ? reasoningContent.text : '';
+        if (!shouldApplyRecoveredText(currentText, text, currentReasoning, reasoning)) return false;
+        text = text.length >= currentText.length ? text : currentText;
+        reasoning = reasoning.length >= currentReasoning.length ? reasoning : currentReasoning;
         const state = useStore.getState();
         const chats = cloneChatAtIndex(state.chats!, latest.chatIndex);
         const chat = chats[latest.chatIndex];
         const contentStore = Object.fromEntries(Object.entries(state.contentStore).map(([hash, entry]) => [hash, { ...entry }]));
-        const message = buildRecoveredMessage(latest.message, text);
+        const message = buildRecoveredMessage(latest.message, text, reasoning);
         expectedHash = addContent(contentStore, message.content);
         chat.branchTree!.nodes[record.nodeId!] = { ...latest.node, contentHash: expectedHash };
         chat.messages = materializeActivePath(chat.branchTree!, contentStore);
@@ -412,18 +491,21 @@ async function recoverPendingInner(manual: boolean, debugId: string) {
         return true;
       };
       try {
-        applyText(bufferedText);
-        if (useStore.getState().proxyEnabled && effectiveStatus !== 'completed' && record.proxySessionId) {
+        applyText(bufferedText, record.bufferedReasoning);
+        if (useStore.getState().proxyEnabled && record.proxyComplete !== true && record.proxySessionId) {
           try {
             const latest = currentTarget();
             if (!latest) continue;
-            const proxyText = await tryProxyRecovery(record, getCurrentMessageText(latest.message), recordAbort.signal);
+            const proxyResult = await tryProxyRecovery(record, getCurrentMessageText(latest.message), recordAbort.signal);
             if (!currentTarget()) continue;
-            if (proxyText) {
+            if (proxyResult) {
+              proxyOutcome = proxyResult.outcome;
+              record.proxyComplete = proxyOutcome === 'complete';
+              if (record.proxyComplete) record.status = 'completed';
               // Keep the proxy result recoverable until the primary snapshot commits.
-              await saveRequest({ ...record, bufferedText: proxyText, updatedAt: Date.now() });
+              await saveRecoveryRecord({ ...record, updatedAt: Date.now() }, () => !!currentTarget());
               if (!currentTarget()) continue;
-              if (applyText(proxyText)) { recoveredCount++; proxyRecoveredThisRecord = true; }
+              if (applyText(proxyResult.text, proxyResult.reasoning)) { recoveredCount++; proxyRecoveredThisRecord = true; }
             }
           } catch {
             debugReport(debugId, { detail: 'Proxy recovery failed, using IndexedDB data' });
@@ -440,18 +522,19 @@ async function recoverPendingInner(manual: boolean, debugId: string) {
           });
         }
         if (restoredThisRecord) {
-          await saveRequest({ ...record, bufferedText: getCurrentMessageText(latest.message), appliedHash: record.status === 'streaming' ? undefined : expectedHash, updatedAt: Date.now() });
+          await saveRecoveryRecord({ ...record, bufferedText: record.proxySessionId ? record.bufferedText : getCurrentMessageText(latest.message), appliedHash: expectedHash, updatedAt: Date.now() }, () => !!currentTarget());
           requestSnapshotFlush();
           if (!currentTarget()) continue;
           restoredMessageCount++;
-          const isPartial = effectiveStatus === 'interrupted' || effectiveStatus === 'failed';
+          const isPartial = proxyOutcome ? proxyOutcome !== 'complete' : effectiveStatus === 'interrupted' || effectiveStatus === 'failed';
           useStreamEndStatusStore.getState().setStatus(record.nodeId!, isPartial ? 'recovered_partial' : proxyRecoveredThisRecord ? 'recovered' : 'completed');
           // Bootstrap acknowledges appliedHash only after the primary snapshot commits.
         } else if (latest.node.contentHash === record.checkpointHash) {
-          await saveRequest({ ...record, appliedHash: record.status === 'streaming' ? undefined : expectedHash, updatedAt: Date.now() });
+          await saveRecoveryRecord({ ...record, appliedHash: expectedHash, updatedAt: Date.now() }, () => !!currentTarget());
           requestSnapshotFlush();
         }
       } finally {
+        if (activeRecoveryTicket === ticket) activeRecoveryTicket = null;
         finishAiTask(ticket);
         abort.signal.removeEventListener('abort', abortRecord);
       }

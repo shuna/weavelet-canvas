@@ -1,0 +1,5 @@
+{
+  "extends": "../../tsconfig.json",
+  "include": ["bubble-summary-eval.ts", "../../src/vite-env.d.ts"],
+  "exclude": []
+}
