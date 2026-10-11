@@ -16,6 +16,9 @@ if (typeof window === 'undefined') {
 
 import {
   loadChatData,
+  preserveLegacyRemoteSnapshot,
+  loadLegacyRemoteSnapshots,
+  resolveLegacyRemoteSnapshot,
   saveChatData,
   clearChatData,
   collectReferencedHashes,
@@ -39,6 +42,8 @@ import {
 } from '@utils/contentStore';
 import type { BranchClipboard, BranchNode, ChatInterface } from '@type/chat';
 import type { StoreState } from '@store/store';
+import { createMigrationSlice } from '@store/migration-slice';
+import { STORE_VERSION } from '@store/version';
 import { createStreamingContentHash } from '@utils/streamingBuffer';
 
 // ── Helpers ──
@@ -1028,3 +1033,55 @@ describe('compression scheduler', () => {
 });
 
 // ─── Performance ───
+
+
+describe('remote schema recovery preservation', () => {
+  it('keeps version 17 raw data separate from the current primary and exposes it after restart', async () => {
+    await saveChatData({ chats: [makeChat('current', ['current-hash'])], contentStore: { 'current-hash': textEntry('current') }, branchClipboard: null });
+    const primary = await collectIndexedDbRecoverySnapshot();
+    const raw = { version: 17, state: { chats: [makeChat('old', ['old-hash'])], contentStore: { 'old-hash': textEntry('old') }, folders: {} } };
+    const saved = await preserveLegacyRemoteSnapshot(raw);
+    expect(saved.version).toBe(17);
+    expect(await idbGet('meta')).toEqual(primary!.meta);
+    expect((await loadChatData(baseState))!.chats![0].id).toBe('current');
+    expect((await collectIndexedDbRecoverySnapshot())!.legacyRemoteSnapshots).toEqual([{ id: saved.id, snapshot: raw }]);
+    _resetInternalState();
+    const records = await loadLegacyRemoteSnapshots();
+    expect(records).toEqual([{ id: saved.id, snapshot: raw }]);
+    let state: any = { migrationUiState: null };
+    const slice = createMigrationSlice((patch: any) => { state = { ...state, ...(typeof patch === 'function' ? patch(state) : patch) }; }, () => state);
+    await slice.refreshLegacyRemoteMigration();
+    expect(state.migrationUiState).toEqual({ visible: true, status: 'remote-migration-required', legacyRemoteSnapshots: [{ id: saved.id, version: 17 }] });
+    expect((await idbGet<any>('meta')).version).toBe(STORE_VERSION);
+  });
+
+  it('retains separate snapshots, reuses duplicates and resolves only the imported raw record', async () => {
+    const first = { version: 17, state: { chats: [], marker: 'first' } };
+    const second = { version: 17, state: { chats: [], marker: 'second' } };
+    const firstRecord = await preserveLegacyRemoteSnapshot(first);
+    expect(await preserveLegacyRemoteSnapshot(first)).toEqual(firstRecord);
+    const secondRecord = await preserveLegacyRemoteSnapshot(second);
+    expect(secondRecord.id).not.toBe(firstRecord.id);
+    expect(await resolveLegacyRemoteSnapshot({ version: 17, state: { chats: [], marker: 'unrelated' } })).toBe(false);
+    expect(await loadLegacyRemoteSnapshots()).toHaveLength(2);
+    expect(await resolveLegacyRemoteSnapshot(first)).toBe(true);
+    expect(await loadLegacyRemoteSnapshots()).toEqual([{ id: secondRecord.id, snapshot: second }]);
+  });
+
+  it('keeps future schema data untouched and preserves recovery keys during normal saves and chat-data clearing', async () => {
+    const raw = { version: STORE_VERSION + 1, state: { newerField: { value: 'future' } } };
+    await preserveLegacyRemoteSnapshot(raw);
+    await saveChatData({ chats: [makeChat('current', ['hash'])], contentStore: { hash: textEntry('current') }, branchClipboard: null });
+    await clearChatData();
+    expect((await loadLegacyRemoteSnapshots())[0].snapshot).toEqual(raw);
+    expect(await idbGet('meta')).toBeUndefined();
+  });
+
+  it('keeps the storage recovery banner when refreshing pending remote data', async () => {
+    const record = await preserveLegacyRemoteSnapshot({ version: 17, state: { chats: [] } });
+    let state: any = { migrationUiState: { visible: true, status: 'storage-recovery-required', details: ['read failed'] } };
+    const slice = createMigrationSlice((patch: any) => { state = { ...state, ...(typeof patch === 'function' ? patch(state) : patch) }; }, () => state);
+    await slice.refreshLegacyRemoteMigration();
+    expect(state.migrationUiState).toEqual({ visible: true, status: 'storage-recovery-required', details: ['read failed'], legacyRemoteSnapshots: [{ id: record.id, version: 17 }] });
+  });
+});

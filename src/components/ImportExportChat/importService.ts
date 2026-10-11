@@ -5,7 +5,9 @@ import useStore from '@store/store';
 import { createPartializedState } from '@store/store';
 import type { StoreState } from '@store/store';
 import { createPersistedChatDataState } from '@store/persistence';
-import { saveChatData } from '@store/storage/IndexedDbStorage';
+import { STORE_VERSION } from '@store/version';
+import { findPersistedDataIntegrityErrors } from '@store/storage/prepareSave';
+import { saveChatData, resolveLegacyRemoteSnapshot, type LegacyRemoteSnapshot } from '@store/storage/IndexedDbStorage';
 import { setLocalStorageItem } from '@store/storage/storageErrors';
 import {
   importOpenAIChatExport,
@@ -18,9 +20,9 @@ import {
   validateExportV2,
   validateExportV3,
 } from '@utils/import';
-import { flatMessagesToBranchTree } from '@utils/branchUtils';
+import { flatMessagesToBranchTree, materializeActivePath } from '@utils/branchUtils';
 import { assignFreshChatIds } from '@utils/chatIdentity';
-import { ContentStoreData, addContent } from '@utils/contentStore';
+import { ContentStoreData, addContent, resolveContent } from '@utils/contentStore';
 import { normalizeSystemPrompt } from '@utils/systemPromptNormalize';
 import { isKnownModel } from '@utils/modelLookup';
 import { BranchNodeLegacy, ChatInterface, Folder, FolderCollection } from '@type/chat';
@@ -174,6 +176,45 @@ const readImportFile = async (file: File): Promise<string> => {
     reader.onabort = () => reject(new Error('Import file read aborted'));
     reader.readAsText(file);
   });
+};
+
+// Raw sync backups enter the existing import converters only by explicit file import.
+const decodeLegacyRemoteImport = (raw: LegacyRemoteSnapshot) => {
+  if (!Number.isInteger(raw.version) || raw.version < 0 || raw.version >= STORE_VERSION) {
+    throw new Error('この同期データの版は取り込めません。対応する版で開いてください。');
+  }
+  if (!isRecord(raw.state) || !Array.isArray(raw.state.chats)) {
+    throw new Error('Invalid legacy remote snapshot');
+  }
+  const state = deepClone(raw.state);
+  const chats = state.chats as ChatInterface[];
+  const hasInlineNodes = chats.some(chat => chat.branchTree &&
+    Object.values(chat.branchTree.nodes).some(node => 'content' in node && !node.contentHash));
+  const version = hasInlineNodes ? 2 : isRecord(state.contentStore) ? 3 : 1;
+  if (version === 3 || hasInlineNodes) {
+    const hashedChats = hasInlineNodes ? chats.map(chat => chat.branchTree ? {
+      ...chat, branchTree: { ...chat.branchTree, nodes: Object.fromEntries(
+        Object.entries(chat.branchTree.nodes).filter(([, node]) => node.contentHash !== undefined),
+      ) },
+    } : chat) : chats;
+    const errors = findPersistedDataIntegrityErrors(hashedChats, (state.contentStore ?? {}) as ContentStoreData, null);
+    if (errors.length) throw new Error(`Invalid legacy remote snapshot: ${errors.join('; ')}`);
+  }
+  for (const chat of chats) {
+    if (hasInlineNodes && chat.branchTree) {
+      for (const node of Object.values(chat.branchTree.nodes)) {
+        if (node.contentHash) {
+          (node as unknown as BranchNodeLegacy).content = resolveContent(state.contentStore as ContentStoreData, node.contentHash);
+          delete (node as Partial<typeof node>).contentHash;
+        }
+      }
+    }
+    if (chat.messages === undefined) {
+      if (!chat.branchTree) throw new Error('Invalid legacy remote snapshot: missing chat messages');
+      chat.messages = version === 3 ? materializeActivePath(chat.branchTree, state.contentStore as ContentStoreData) : [];
+    }
+  }
+  return { ...state, version, chats, folders: state.folders ?? {} };
 };
 
 const detectImportType = (parsedData: unknown): ImportType => {
@@ -474,7 +515,11 @@ export const importChatFromFile = async (
   let committed = false;
   try {
     const data = await readImportFile(file);
-    const parsedData = JSON.parse(data);
+    const raw = JSON.parse(data);
+    const legacyRemote = isRecord(raw) && Object.hasOwn(raw, 'state') && typeof raw.version === 'number'
+      ? raw as unknown as LegacyRemoteSnapshot : undefined;
+    const parsedData = legacyRemote ? decodeLegacyRemoteImport(legacyRemote) : raw;
+    const originalImport = deepClone(parsedData);
     const type = detectImportType(parsedData);
     if (!type) return buildFailureResult(t('notifications.unrecognisedDataFormat', { ns: 'import' }));
     const valid = type === 'ExportV3' ? validateExportV3(parsedData)
@@ -519,9 +564,13 @@ export const importChatFromFile = async (
     await saveChatData(createPersistedChatDataState({
       ...useStore.getState(), contentStore: deepClone(useStore.getState().contentStore),
     }));
+    if (legacyRemote && !removedChatsCount) {
+      await resolveLegacyRemoteSnapshot(legacyRemote);
+      await useStore.getState().refreshLegacyRemoteMigration();
+    }
     if (type === 'LegacyImport' || type === 'SingleChat') warnUnsupportedModels(type === 'LegacyImport' ? parsedData : [parsedData], t);
     if (removedChatsCount) {
-      const original = JSON.parse(data);
+      const original = originalImport;
       const total = Array.isArray(original) ? original.length : original.chats.length;
       showToast(`${t('reduceMessagesSuccess', { count: removedChatsCount })}. ${t('notifications.chatsImported', {
         ns: 'import', imported: total - removedChatsCount, total,

@@ -62,6 +62,8 @@ const testContext = vi.hoisted(() => {
     createPartializedState,
     invalidateAiTasks: vi.fn(),
     saveChatData: vi.fn(),
+    resolveLegacyRemoteSnapshot: vi.fn(),
+    refreshLegacyRemoteMigration: vi.fn(),
     setLocalStorageItem: vi.fn(),
     normalizeSystemPrompt: vi.fn(),
   };
@@ -95,7 +97,7 @@ vi.mock('@store/persistence', () => ({
     chats: state.chats, contentStore: state.contentStore, branchClipboard: state.branchClipboard,
   }),
 }));
-vi.mock('@store/storage/IndexedDbStorage', () => ({ saveChatData: testContext.saveChatData }));
+vi.mock('@store/storage/IndexedDbStorage', () => ({ saveChatData: testContext.saveChatData, resolveLegacyRemoteSnapshot: testContext.resolveLegacyRemoteSnapshot }));
 vi.mock('@store/storage/storageErrors', () => ({ setLocalStorageItem: testContext.setLocalStorageItem }));
 vi.mock('@utils/systemPromptNormalize', async () => {
   const actual = await vi.importActual<typeof import('@utils/systemPromptNormalize')>('@utils/systemPromptNormalize');
@@ -167,6 +169,11 @@ describe('importService', () => {
     testContext.setState.mockImplementation((patch) => Object.assign(testContext.storeState, patch));
     testContext.saveChatData.mockReset();
     testContext.saveChatData.mockResolvedValue(undefined);
+    testContext.resolveLegacyRemoteSnapshot.mockReset();
+    testContext.resolveLegacyRemoteSnapshot.mockResolvedValue(true);
+    testContext.refreshLegacyRemoteMigration.mockReset();
+    testContext.refreshLegacyRemoteMigration.mockResolvedValue(undefined);
+    testContext.storeState.refreshLegacyRemoteMigration = testContext.refreshLegacyRemoteMigration;
     testContext.setLocalStorageItem.mockClear();
     testContext.normalizeSystemPrompt.mockClear();
     testContext.toastInfo.mockClear();
@@ -649,6 +656,87 @@ describe('importService', () => {
     expect(existingFolder.order).toBe(0);
     expect(testContext.storeState.folders.existing.order).toBe(1);
     expect(testContext.setState).toHaveBeenCalledTimes(1);
+  });
+
+
+  it('imports the exported raw version 17 snapshot through the compatible hashed-tree converter', async () => {
+    const chat = createChat('old', 'Old sync chat');
+    const raw = { version: 17, state: { chats: [{ ...chat, messages: undefined,
+      branchTree: { rootId: 'old-node', activePath: ['old-node'], nodes: {
+        'old-node': { id: 'old-node', parentId: null, role: 'user', contentHash: 'old-content', createdAt: 1 },
+      } },
+    }], folders: {}, contentStore: { 'old-content': { content: [{ type: 'text', text: 'old text' }], refCount: 1 } } } };
+    const fileRaw = JSON.parse(JSON.stringify(raw));
+    const result = await importChatFromFile(new File([JSON.stringify(fileRaw)], 'old-remote.json'), t);
+    expect(result.success).toBe(true);
+    expect(testContext.storeState.chats[0].messages).toEqual([{ role: 'user', content: [{ type: 'text', text: 'old text' }] }]);
+    expect(testContext.resolveLegacyRemoteSnapshot).toHaveBeenCalledWith(fileRaw);
+    expect(testContext.refreshLegacyRemoteMigration).toHaveBeenCalledTimes(1);
+    expect(testContext.setState).toHaveBeenCalledTimes(1);
+  });
+
+  it('retains the raw record until primary persistence succeeds and leaves unrelated imports alone', async () => {
+    const raw = { version: 17, state: { chats: [createChat('old')], folders: {} } };
+    let finishSave!: () => void;
+    testContext.saveChatData.mockImplementationOnce(() => new Promise<void>(resolve => { finishSave = resolve; }));
+    const pending = importChatFromFile(new File([JSON.stringify(raw)], 'raw.json'), t);
+    await vi.waitFor(() => expect(testContext.saveChatData).toHaveBeenCalledTimes(1));
+    expect(testContext.resolveLegacyRemoteSnapshot).not.toHaveBeenCalled();
+    finishSave();
+    expect((await pending).success).toBe(true);
+    expect(testContext.resolveLegacyRemoteSnapshot).toHaveBeenCalledWith(raw);
+    testContext.resolveLegacyRemoteSnapshot.mockClear();
+    await importChatFromFile(new File([JSON.stringify([createChat('ordinary')])], 'ordinary.json'), t);
+    expect(testContext.resolveLegacyRemoteSnapshot).not.toHaveBeenCalled();
+  });
+
+  it('retains the raw record if imported primary persistence fails', async () => {
+    testContext.saveChatData.mockRejectedValueOnce(new Error('disk failed'));
+    const raw = { version: 17, state: { chats: [createChat('old')], folders: {} } };
+    const result = await importChatFromFile(new File([JSON.stringify(raw)], 'raw.json'), t);
+    expect(result.status).toBe('storage-error');
+    expect(testContext.resolveLegacyRemoteSnapshot).not.toHaveBeenCalled();
+  });
+
+  it('rejects future raw schemas and corrupted raw references without changing live data or resolving recovery', async () => {
+    for (const raw of [
+      { version: 19, state: { chats: [createChat('future')], folders: {} } },
+      { version: 17, state: { chats: [{ ...createChat('broken'), messages: undefined,
+        branchTree: { rootId: 'node', activePath: ['node'], nodes: { node: { id: 'node', contentHash: 'missing' } } },
+      }], contentStore: {}, folders: {} } },
+    ]) {
+      const result = await importChatFromFile(new File([JSON.stringify(raw)], 'invalid.json'), t);
+      expect(result.success).toBe(false);
+    }
+    expect(testContext.setState).not.toHaveBeenCalled();
+    expect(testContext.resolveLegacyRemoteSnapshot).not.toHaveBeenCalled();
+  });
+
+
+  it('delegates inline legacy branch content to the v2 converter', async () => {
+    const raw = { version: 12, state: { chats: [{ ...createChat('inline'), messages: undefined,
+      branchTree: { rootId: 'node', activePath: ['node', 'hashed'], nodes: {
+        node: { id: 'node', parentId: null, role: 'user', content: [{ type: 'text', text: 'inline text' }], createdAt: 1 },
+        hashed: { id: 'hashed', parentId: 'node', role: 'assistant', contentHash: 'stored-hash', createdAt: 2 },
+      } },
+    }], folders: {}, contentStore: { 'stored-hash': { content: [{ type: 'text', text: 'hashed text' }], refCount: 1 } } } };
+    const result = await importChatFromFile(new File([JSON.stringify(raw)], 'inline-remote.json'), t);
+    expect(result.success).toBe(true);
+    expect(testContext.storeState.chats[0].messages[0].content).toEqual([{ type: 'text', text: 'inline text' }]);
+    expect(testContext.storeState.chats[0].messages[1].content).toEqual([{ type: 'text', text: 'hashed text' }]);
+    expect(testContext.resolveLegacyRemoteSnapshot).toHaveBeenCalled();
+  });
+
+  it('retains the complete raw recovery record when a reduced import succeeds', async () => {
+    const raw = { version: 17, state: { chats: [createChat('first'), createChat('second')], folders: {} } };
+    testContext.normalizeSystemPrompt
+      .mockImplementationOnce(() => { throw new DOMException('quota', 'QuotaExceededError'); })
+      .mockImplementationOnce(() => { throw new DOMException('quota', 'QuotaExceededError'); });
+    vi.mocked(window.confirm).mockReturnValue(true);
+    const result = await importChatFromFile(new File([JSON.stringify(raw)], 'reduced-remote.json'), t);
+    expect(result.success).toBe(true);
+    expect(testContext.storeState.chats).toHaveLength(2);
+    expect(testContext.resolveLegacyRemoteSnapshot).not.toHaveBeenCalled();
   });
 
 });

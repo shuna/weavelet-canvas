@@ -249,6 +249,9 @@ const useAppBootstrap = () => {
         });
       }
 
+      await useStore.getState().refreshLegacyRemoteMigration();
+      if (cancelled) return;
+
       const { chats, currentChatIndex } = useStore.getState();
 
       const missingChatDataWhileFoldersRemain =
