@@ -1,0 +1,28 @@
+{
+  "browser": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/154.0.0.0 Safari/537.36",
+  "modelBytes": 386404992,
+  "loadMs": 610.4150000810623,
+  "runs": [
+    {
+      "ttftMs": 417.05999994277954,
+      "durationMs": 749.6549999713898,
+      "text": "The answer to 2 + 3 is 5."
+    },
+    {
+      "ttftMs": 304.7300000190735,
+      "durationMs": 631.8650000095367,
+      "text": "The answer to 2 + 3 is 5."
+    },
+    {
+      "ttftMs": 299.63499999046326,
+      "durationMs": 626.9700000286102,
+      "text": "The answer to 2 + 3 is 5."
+    }
+  ],
+  "cancelMs": 0.2549999952316284,
+  "cancellationError": "AbortError",
+  "cancelledText": "",
+  "loadedAfterUnload": false,
+  "peakBrowserTreeRssKiB": 2259712,
+  "rssNote": "250ms sum of browser descendant RSS; shared pages may be counted more than once."
+}
