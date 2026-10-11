@@ -167,4 +167,9 @@ describe('OPFS writer and asset removal', () => {
     expect(models.entriesMap.has('bulk-blocked')).toBe(true);
     finishWrite(token, 'failed');
   });
+
+  it('does not treat a non-NotFound file deletion error as successful removal', async () => {
+    await expect(removeAssets('delete-error', { files: ['missing.gguf'] }))
+      .resolves.toMatchObject({ status: 'failed' });
+  });
 });

@@ -422,7 +422,11 @@ export async function removeAssets(
     const removedFiles = scope.files ? [...scope.files] : await listFiles(modelId);
     if (scope.files) {
       for (const file of scope.files) {
-        try { await deleteModelFile(modelId, file); } catch { /* missing is already removed */ }
+        try {
+          await deleteModelFile(modelId, file);
+        } catch (error) {
+          if (!(error instanceof DOMException) || error.name !== 'NotFoundError') throw error;
+        }
       }
     } else {
       await deleteModel(modelId);

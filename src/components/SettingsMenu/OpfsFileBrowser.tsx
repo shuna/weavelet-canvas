@@ -29,6 +29,7 @@ const OpfsFileBrowser = ({
   const [loading, setLoading] = useState(false);
   const [expandedModels, setExpandedModels] = useState<Set<string>>(new Set());
   const [deleting, setDeleting] = useState<string | null>(null);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
   const localModels = useStore((s) => s.localModels);
 
   const refresh = useCallback(async () => {
@@ -71,9 +72,13 @@ const OpfsFileBrowser = ({
   const handleDeleteModel = useCallback(async (modelId: string) => {
     if (!window.confirm(t('localModel.opfsBrowser.confirmDeleteModel') as string)) return;
     setDeleting(modelId);
+    setDeleteError(null);
     try {
       const removal = await removeAssets(modelId);
-      if (removal.status !== 'removed') return;
+      if (removal.status !== 'removed') {
+        setDeleteError(removal.error ?? `削除できませんでした (${removal.status})`);
+        return;
+      }
       // Clean store — metadata, definition, and task assignments
       const store = useStore.getState();
       for (const task of Object.keys(store.activeLocalModels) as LocalModelTask[]) {
@@ -85,10 +90,11 @@ const OpfsFileBrowser = ({
       store.removeLocalModel(modelId);
       onStorageChanged?.();
       await refresh();
-    } catch {
-      // ignore
+    } catch (error) {
+      setDeleteError(error instanceof Error ? error.message : String(error));
+    } finally {
+      setDeleting(null);
     }
-    setDeleting(null);
   }, [t, refresh, onStorageChanged]);
 
   const handleDeleteFile = useCallback(async (modelId: string, fileName: string) => {
@@ -96,32 +102,38 @@ const OpfsFileBrowser = ({
       (t('localModel.opfsBrowser.confirmDeleteFile') as string).replace('{{file}}', fileName),
     )) return;
     setDeleting(`${modelId}/${fileName}`);
+    setDeleteError(null);
     try {
       const removal = await removeAssets(modelId, { files: [fileName] });
-      if (removal.status !== 'removed') return;
+      if (removal.status !== 'removed') {
+        setDeleteError(removal.error ?? `削除できませんでした (${removal.status})`);
+        return;
+      }
       // If this is a .part marker, also delete the corresponding data file
       // (in the current design, data is written to the final name and .part
       // is a zero-byte marker; leaving the data file would make a partial
       // download look "saved").
       if (fileName.endsWith('.part')) {
         const dataFileName = fileName.slice(0, -'.part'.length);
-        try {
-          await removeAssets(modelId, { files: [dataFileName] });
-        } catch {
-          // Data file may not exist
+        const dataRemoval = await removeAssets(modelId, { files: [dataFileName] });
+        if (dataRemoval.status !== 'removed') {
+          setDeleteError(dataRemoval.error ?? `本体ファイルを削除できませんでした (${dataRemoval.status})`);
+          return;
         }
       }
       onStorageChanged?.();
       await refresh();
-    } catch {
-      // ignore
+    } catch (error) {
+      setDeleteError(error instanceof Error ? error.message : String(error));
+    } finally {
+      setDeleting(null);
     }
-    setDeleting(null);
   }, [t, refresh, onStorageChanged]);
 
   const handleClearAll = useCallback(async () => {
     if (!window.confirm(t('localModel.opfsBrowser.confirmClearAll') as string)) return;
     setDeleting('__all__');
+    setDeleteError(null);
     try {
       const store = useStore.getState();
       const removedIds: string[] = [];
@@ -141,10 +153,11 @@ const OpfsFileBrowser = ({
       }
       onStorageChanged?.();
       await refresh();
-    } catch {
-      // ignore
+    } catch (error) {
+      setDeleteError(error instanceof Error ? error.message : String(error));
+    } finally {
+      setDeleting(null);
     }
-    setDeleting(null);
   }, [t, entries, refresh, onStorageChanged]);
 
   const isDeleting = deleting !== null;
@@ -152,6 +165,7 @@ const OpfsFileBrowser = ({
   return (
     <div className='space-y-3'>
       {/* Header: total storage + actions */}
+      {deleteError && <p className='px-4 text-sm text-red-600 dark:text-red-400'>{deleteError}</p>}
       <div className='flex items-center justify-between px-4 py-2'>
         <div className='text-sm text-gray-700 dark:text-gray-300'>
           <span className='font-medium'>{t('localModel.opfsBrowser.totalUsage')}:</span>{' '}

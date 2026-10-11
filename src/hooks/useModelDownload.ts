@@ -1,6 +1,7 @@
 import { useCallback, useRef, useState } from 'react';
 import useStore from '@store/store';
 import type { DownloadProgress, DownloadCallbacks } from '@src/local-llm/download';
+import { beginWrite, finishWrite, registerWriterAbort } from '@src/local-llm/storage';
 
 export interface StartDownloadOpts {
   /** Files list for onComplete storedFiles update (if known ahead of time) */
@@ -50,6 +51,17 @@ export function useModelDownload(onStorageChanged?: () => void) {
 
     const controller = new AbortController();
     abortControllers.current[modelId] = controller;
+    const operationToken = beginWrite(modelId, `download:${modelId}`);
+    let finishOperation!: () => void;
+    const operationFinished = new Promise<void>((resolve) => { finishOperation = resolve; });
+    registerWriterAbort(operationToken, async () => {
+      controller.abort();
+      await operationFinished;
+    });
+    const finish = (outcome: 'saved' | 'partial' | 'failed') => {
+      finishWrite(operationToken, outcome);
+      finishOperation();
+    };
 
     const store = useStore.getState();
     store.updateSavedModelMeta(modelId, {
@@ -76,6 +88,7 @@ export function useModelDownload(onStorageChanged?: () => void) {
         opts?.onStorageChanged?.();
       },
       onComplete: (totalBytes) => {
+        finish('saved');
         useStore.getState().updateSavedModelMeta(modelId, {
           storageState: 'saved',
           storedBytes: totalBytes,
@@ -92,6 +105,7 @@ export function useModelDownload(onStorageChanged?: () => void) {
         opts?.onComplete?.(totalBytes);
       },
       onError: (error) => {
+        finish('partial');
         useStore.getState().updateSavedModelMeta(modelId, {
           storageState: 'partial',
           lastError: error.message,

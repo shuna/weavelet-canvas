@@ -28,6 +28,10 @@ import {
   readFile,
   verifyStoredModel,
   removeAssets,
+  beginWrite,
+  finishWrite,
+  registerWriterAbort,
+  type WriterToken,
 } from '../storage';
 
 // ---------------------------------------------------------------------------
@@ -125,6 +129,10 @@ export class LowbitQConversionManager {
   private pendingResolve: ((result: LowbitQConversionResult) => void) | null = null;
   private pendingReject: ((error: Error) => void) | null = null;
   private callbacks: LowbitQConversionCallbacks = {};
+  private operationToken: WriterToken | null = null;
+  private operationFinished: Promise<void> | null = null;
+  private resolveOperationFinished: (() => void) | null = null;
+  private cancelled = false;
 
   /**
    * Convert a source model to lowbit-Q format and persist to OPFS.
@@ -195,6 +203,15 @@ export class LowbitQConversionManager {
     callbacks: LowbitQConversionCallbacks = {},
   ): Promise<LowbitQConversionResult> {
     this.callbacks = callbacks;
+    this.cancelled = false;
+    const targetId = generateLowbitQModelId(sourceModelId);
+    this.operationToken = beginWrite(targetId, `lowbit:${sourceModelId}`);
+    this.operationFinished = new Promise<void>((resolve) => { this.resolveOperationFinished = resolve; });
+    const finished = this.operationFinished;
+    registerWriterAbort(this.operationToken, async () => {
+      this.cancel();
+      await finished;
+    });
 
     return new Promise<LowbitQConversionResult>((resolve, reject) => {
       this.pendingResolve = resolve;
@@ -244,6 +261,7 @@ export class LowbitQConversionManager {
    * Cancel an in-progress conversion.
    */
   cancel(): void {
+    this.cancelled = true;
     if (this.worker) {
       this.worker.terminate();
       this.pendingReject?.(new Error('変換がキャンセルされました'));
@@ -257,6 +275,7 @@ export class LowbitQConversionManager {
     sourceLabel: string,
     sourceFileName: string,
   ): Promise<void> {
+    if (this.cancelled) return;
     switch (msg.type) {
       case 'progress':
         this.callbacks.onProgress?.(msg.progress);
@@ -358,6 +377,13 @@ export class LowbitQConversionManager {
     this.pendingResolve = null;
     this.pendingReject = null;
     this.callbacks = {};
+    if (this.operationToken) {
+      finishWrite(this.operationToken, this.cancelled ? 'partial' : 'saved');
+      this.operationToken = null;
+    }
+    this.resolveOperationFinished?.();
+    this.resolveOperationFinished = null;
+    this.operationFinished = null;
   }
 }
 

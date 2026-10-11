@@ -44,7 +44,7 @@ export function promptAsInput(prompt: string): WllamaGenerateInput {
 }
 
 export interface WllamaWorkerProxy {
-  generate(input: WllamaGenerateInput, opts: GenerateOptions, onChunk: (text: string) => void, reason?: LocalModelBusyReason): Promise<string>;
+  generate(input: WllamaGenerateInput, opts: GenerateOptions, onChunk: (text: string) => void, reason?: LocalModelBusyReason, signal?: AbortSignal): Promise<string>;
   abort(): void;
 }
 
@@ -59,7 +59,7 @@ export interface LocalModelReservation {
 export type UnloadResult = 'unloaded' | 'reserved' | 'blocked';
 
 export interface TransformersWorkerProxy {
-  classify(text: string, reason?: LocalModelBusyReason): Promise<ClassificationLabel[]>;
+  classify(text: string, reason?: LocalModelBusyReason, signal?: AbortSignal): Promise<ClassificationLabel[]>;
 }
 
 export interface RuntimeLogEvent {
@@ -950,7 +950,8 @@ export class LocalModelRuntime {
     if (!this.isLoaded(modelId)) return null;
 
     return {
-      generate: async (input: WllamaGenerateInput, opts: GenerateOptions, onChunk: (text: string) => void, reason?: LocalModelBusyReason): Promise<string> => {
+      generate: async (input: WllamaGenerateInput, opts: GenerateOptions, onChunk: (text: string) => void, reason?: LocalModelBusyReason, signal?: AbortSignal): Promise<string> => {
+        if (signal?.aborted) throw new DOMException('Generation aborted', 'AbortError');
         if (this.isBusy(modelId)) {
           throw new Error(`Model ${modelId} is busy`);
         }
@@ -958,6 +959,8 @@ export class LocalModelRuntime {
         entry.onChunk = onChunk;
         entry.abortRequested = false;
         const epoch = ++entry.epoch;
+        const onAbort = () => this.abort(modelId);
+        signal?.addEventListener('abort', onAbort, { once: true });
 
         try {
           const result = await this.sendRequest(modelId, {
@@ -972,6 +975,7 @@ export class LocalModelRuntime {
 
           return result.fullText;
         } finally {
+          signal?.removeEventListener('abort', onAbort);
           entry.onChunk = null;
           if (entry.status === 'busy') {
             this.setStatus(modelId, 'ready');
@@ -988,12 +992,15 @@ export class LocalModelRuntime {
     if (!this.isLoaded(modelId)) return null;
 
     return {
-      classify: async (text: string, reason?: LocalModelBusyReason): Promise<ClassificationLabel[]> => {
+      classify: async (text: string, reason?: LocalModelBusyReason, signal?: AbortSignal): Promise<ClassificationLabel[]> => {
+        if (signal?.aborted) throw new DOMException('Classification aborted', 'AbortError');
         if (this.isBusy(modelId)) {
           throw new Error(`Model ${modelId} is busy`);
         }
         this.setStatus(modelId, 'busy', reason ?? 'moderation');
         const epoch = ++entry.epoch;
+        const onAbort = () => this.abort(modelId);
+        signal?.addEventListener('abort', onAbort, { once: true });
 
         try {
           const result = await this.sendRequest(modelId, {
@@ -1004,6 +1011,7 @@ export class LocalModelRuntime {
 
           return result.labels;
         } finally {
+          signal?.removeEventListener('abort', onAbort);
           if (entry.status === 'busy') {
             this.setStatus(modelId, 'ready');
           }
