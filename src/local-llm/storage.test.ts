@@ -185,4 +185,15 @@ describe('OPFS writer and asset removal', () => {
     await expect(removeAssets('multi', { files: ['first.gguf', 'locked.gguf'] }))
       .resolves.toMatchObject({ status: 'partial', removedFiles: ['first.gguf'], retainedFiles: ['locked.gguf'] });
   });
+  it('retains the incomplete marker if deleting its body fails', async () => {
+    await saveFile('incomplete', 'weights.gguf', new Blob([new Uint8Array([1])]));
+    await saveFile('incomplete', 'weights.gguf.part', new Blob([]));
+    const models = await root.getDirectoryHandle('models');
+    const dir = await models.getDirectoryHandle('incomplete');
+    dir.failRemove.add('weights.gguf');
+    await expect(removeAssets('incomplete', { files: ['weights.gguf', 'weights.gguf.part'] }))
+      .resolves.toMatchObject({ status: 'failed', removedFiles: [] });
+    expect(dir.entriesMap.has('weights.gguf.part')).toBe(true);
+  });
+
 });

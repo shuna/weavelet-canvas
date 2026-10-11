@@ -104,22 +104,14 @@ const OpfsFileBrowser = ({
     setDeleting(`${modelId}/${fileName}`);
     setDeleteError(null);
     try {
-      const removal = await removeAssets(modelId, { files: [fileName] });
+      // Keep the marker if removing the incomplete body fails.
+      const files = fileName.endsWith('.part')
+        ? [fileName.slice(0, -'.part'.length), fileName]
+        : [fileName];
+      const removal = await removeAssets(modelId, { files });
       if (removal.status !== 'removed') {
         setDeleteError(removal.error ?? `削除できませんでした (${removal.status})`);
         return;
-      }
-      // If this is a .part marker, also delete the corresponding data file
-      // (in the current design, data is written to the final name and .part
-      // is a zero-byte marker; leaving the data file would make a partial
-      // download look "saved").
-      if (fileName.endsWith('.part')) {
-        const dataFileName = fileName.slice(0, -'.part'.length);
-        const dataRemoval = await removeAssets(modelId, { files: [dataFileName] });
-        if (dataRemoval.status !== 'removed') {
-          setDeleteError(dataRemoval.error ?? `本体ファイルを削除できませんでした (${dataRemoval.status})`);
-          return;
-        }
       }
       onStorageChanged?.();
       await refresh();

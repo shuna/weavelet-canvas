@@ -58,7 +58,11 @@ export function useModelDownload(onStorageChanged?: () => void) {
       controller.abort();
       await operationFinished;
     });
+    let settled = false;
+    const isCurrent = () => !settled && !controller.signal.aborted;
     const finish = (outcome: 'saved' | 'partial' | 'failed') => {
+      settled = true;
+      if (abortControllers.current[modelId] === controller) delete abortControllers.current[modelId];
       finishWrite(operationToken, outcome);
       finishOperation();
     };
@@ -76,9 +80,11 @@ export function useModelDownload(onStorageChanged?: () => void) {
 
     const callbacks: DownloadCallbacks = {
       onProgress: (p) => {
+        if (!isCurrent()) return;
         setDownloadProgresses((prev) => ({ ...prev, [modelId]: p }));
       },
       onFileComplete: (_fileName, fileSize) => {
+        if (!isCurrent()) return;
         const currentMeta = useStore.getState().savedModelMeta[modelId];
         useStore.getState().updateSavedModelMeta(modelId, {
           storedBytes: (currentMeta?.storedBytes ?? 0) + fileSize,
@@ -88,6 +94,8 @@ export function useModelDownload(onStorageChanged?: () => void) {
         opts?.onStorageChanged?.();
       },
       onComplete: (totalBytes) => {
+        if (settled) return;
+        if (controller.signal.aborted) { finish('partial'); return; }
         finish('saved');
         useStore.getState().updateSavedModelMeta(modelId, {
           storageState: 'saved',
@@ -99,12 +107,12 @@ export function useModelDownload(onStorageChanged?: () => void) {
           const { [modelId]: _, ...rest } = prev;
           return rest;
         });
-        delete abortControllers.current[modelId];
         onStorageChanged?.();
         opts?.onStorageChanged?.();
         opts?.onComplete?.(totalBytes);
       },
       onError: (error) => {
+        if (settled) return;
         finish('partial');
         useStore.getState().updateSavedModelMeta(modelId, {
           storageState: 'partial',
@@ -114,7 +122,6 @@ export function useModelDownload(onStorageChanged?: () => void) {
           const { [modelId]: _, ...rest } = prev;
           return rest;
         });
-        delete abortControllers.current[modelId];
         onStorageChanged?.();
         opts?.onStorageChanged?.();
         opts?.onError?.();
@@ -123,6 +130,7 @@ export function useModelDownload(onStorageChanged?: () => void) {
 
     if (opts?.resumeFallbackMsg) {
       callbacks.onResumeFallback = () => {
+        if (!isCurrent()) return;
         setResumeFallbacks((prev) => ({
           ...prev,
           [modelId]: opts.resumeFallbackMsg!,
@@ -130,7 +138,11 @@ export function useModelDownload(onStorageChanged?: () => void) {
       };
     }
 
-    downloadFn(callbacks, controller.signal);
+    try {
+      downloadFn(callbacks, controller.signal);
+    } catch (error) {
+      callbacks.onError(error instanceof Error ? error : new Error(String(error)), modelId, '');
+    }
   }, [onStorageChanged]);
 
   const cancelDownload = useCallback((modelId: string) => {
