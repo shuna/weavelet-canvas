@@ -51,7 +51,7 @@ import { allocateBitwidths, DEFAULT_ALLOCATOR_CONFIG, validateAllocations } from
 import { quantizeQ4_0 } from './q4_0Quantize';
 import { quantizeQ3_K } from './q3_kQuantize';
 import { quantizeQ2_K } from './q2_kQuantize';
-import { writeTempChunk, removeTempFile, createOPFSWritable, createOPFSSyncWriter, getOPFSFileSize, deleteModelFile } from '../storage';
+import { writeTempChunk, removeTempFile, createOPFSWritable, createOPFSSyncWriter, getOPFSFileSize, removeAssets } from '../storage';
 import type { OPFSWriter } from '../storage';
 import { fp32ToFp16 } from './dequantize';
 
@@ -1286,7 +1286,7 @@ export async function convertToLowbitQV2StreamingToOPFS(
     const { modelId: srcModelId, fileName: srcFileName } = options.sourceOpfsInfo;
     console.info(`[lowbit-q] Deleting source from OPFS to free quota: ${srcModelId}/${srcFileName}`);
     try {
-      await deleteModelFile(srcModelId, srcFileName);
+      await removeAssets(srcModelId, { files: [srcFileName] });
     } catch (e) {
       console.warn('[lowbit-q] Failed to delete source (may not exist):', (e as Error).message);
     }

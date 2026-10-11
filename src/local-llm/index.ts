@@ -10,6 +10,9 @@ export {
   verifyStoredModel,
   rehydrateSavedModels,
   deleteModel,
+  removeAssets,
+  beginWrite,
+  finishWrite,
   getTempFileSize,
   hasGgufMagic,
 } from './storage';

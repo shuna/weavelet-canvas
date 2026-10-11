@@ -42,6 +42,7 @@ async function getStoreState() {
  * After loading, evicts models not in the required set.
  */
 let ownerSequence = 0;
+const ownerAbortCleanups = new Map<LocalModelOwnerId, () => void>();
 
 export function createLocalModelOwner(scope: string): LocalModelOwnerId {
   ownerSequence += 1;
@@ -51,9 +52,26 @@ export function createLocalModelOwner(scope: string): LocalModelOwnerId {
 export async function prepareModelsForExecution(
   ownerId: LocalModelOwnerId,
   requiredModelIds: string[],
+  options: { signal?: AbortSignal } = {},
 ): Promise<LocalModelReservation> {
+  if (options.signal?.aborted) {
+    localModelRuntime.cancelOwner(ownerId);
+    throw new DOMException('Local model preparation aborted', 'AbortError');
+  }
+  const cancel = () => localModelRuntime.cancelOwner(ownerId);
+  options.signal?.addEventListener('abort', cancel, { once: true });
+  if (options.signal) {
+    ownerAbortCleanups.get(ownerId)?.();
+    ownerAbortCleanups.set(ownerId, () => options.signal?.removeEventListener('abort', cancel));
+  }
   const ids = [...new Set(requiredModelIds.filter(Boolean))];
-  const reservation = localModelRuntime.reserve(ownerId, ids);
+  let reservation: LocalModelReservation;
+  try {
+    reservation = localModelRuntime.reserve(ownerId, ids);
+  } catch (error) {
+    options.signal?.removeEventListener('abort', cancel);
+    throw error;
+  }
   if (ids.length === 0) return reservation;
 
   try {
@@ -79,12 +97,16 @@ export async function prepareModelsForExecution(
     await evictIrrelevantModels(ids);
     return reservation;
   } catch (error) {
+    ownerAbortCleanups.get(ownerId)?.();
+    ownerAbortCleanups.delete(ownerId);
     localModelRuntime.release(ownerId);
     throw error;
   }
 }
 
 export function releaseModelsForExecution(ownerId: LocalModelOwnerId): void {
+  ownerAbortCleanups.get(ownerId)?.();
+  ownerAbortCleanups.delete(ownerId);
   localModelRuntime.release(ownerId);
 }
 

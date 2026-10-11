@@ -10,7 +10,7 @@ import {
   type WllamaFeatureCheck,
 } from '@src/local-llm/runtime';
 import type { VariantOverride as WasmVariantOverride } from '@src/vendor/wllama/variant-table';
-import { OpfsFileProvider, deleteModel, getTempFileSize, readFile, saveFile, sha256Blob } from '@src/local-llm/storage';
+import { OpfsFileProvider, removeAssets, getTempFileSize, readFile, saveFile, sha256Blob } from '@src/local-llm/storage';
 import { rehydrateSavedModels } from '@src/local-llm/storage';
 import { CURATED_MODELS } from '@src/local-llm/catalog';
 import type { CatalogModel } from '@src/local-llm/catalog';
@@ -418,7 +418,8 @@ const LocalModelSettings = () => {
       });
       const duplicate = await findStoredModelWithHash(fileHash, totalBytes, model.id);
       if (duplicate) {
-        await deleteModel(model.id);
+        const removal = await removeAssets(model.id);
+        if (removal.status !== 'removed') return;
         store.removeSavedModelMeta(model.id);
         store.removeLocalModel(model.id);
         if (!store.favoriteLocalModelIds.includes(duplicate.id)) store.toggleFavoriteLocalModel(duplicate.id);

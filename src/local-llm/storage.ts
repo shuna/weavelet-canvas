@@ -60,6 +60,51 @@ export interface SavedModelMeta {
 const MODELS_DIR = 'models';
 const PART_SUFFIX = '.part';
 
+export type WriterOutcome = 'saved' | 'partial' | 'failed';
+export interface WriterToken { readonly id: string; readonly modelId: string; }
+export type RemoveAssetsResult = {
+  status: 'removed' | 'partial' | 'blocked' | 'failed';
+  removedFiles: string[];
+  retainedFiles: string[];
+  verification: StorageVerifyResult;
+  error?: string;
+};
+
+const activeWriters = new Map<string, Map<string, { abort?: () => Promise<void> }>>();
+const deletionIntents = new Set<string>();
+let writerSequence = 0;
+
+export function beginWrite(modelId: string, _ownerId?: string): WriterToken {
+  if (deletionIntents.has(modelId)) {
+    throw new DOMException(`Model ${modelId} is being removed`, 'AbortError');
+  }
+  const token = { id: `${modelId}:${++writerSequence}`, modelId };
+  const writers = activeWriters.get(modelId) ?? new Map();
+  writers.set(token.id, {});
+  activeWriters.set(modelId, writers);
+  return token;
+}
+
+export function registerWriterAbort(token: WriterToken, abort: () => Promise<void>): void {
+  const writer = activeWriters.get(token.modelId)?.get(token.id);
+  if (writer) writer.abort = abort;
+}
+
+export function finishWrite(token: WriterToken, _outcome: WriterOutcome): void {
+  const writers = activeWriters.get(token.modelId);
+  writers?.delete(token.id);
+  if (writers?.size === 0) activeWriters.delete(token.modelId);
+}
+
+async function stopWriters(modelId: string): Promise<boolean> {
+  const writers = activeWriters.get(modelId);
+  if (!writers) return true;
+  const results = await Promise.allSettled(
+    [...writers.values()].map((writer) => writer.abort?.() ?? Promise.resolve()),
+  );
+  return results.every((result) => result.status === 'fulfilled') && !activeWriters.has(modelId);
+}
+
 /** GGUF magic bytes: "GGUF" in little-endian */
 const GGUF_MAGIC = new Uint8Array([0x47, 0x47, 0x55, 0x46]);
 
@@ -135,9 +180,7 @@ export async function saveFile(
   relativePath: string,
   blob: Blob,
 ): Promise<void> {
-  const dir = await getModelDir(modelId);
-  const fileHandle = await dir.getFileHandle(relativePath, { create: true }) as unknown as WritableFileHandle;
-  const writable = await fileHandle.createWritable();
+  const writable = await createOPFSWritable(modelId, relativePath);
   try {
     const reader = blob.stream().getReader();
     try {
@@ -168,9 +211,30 @@ export async function createOPFSWritable(
   modelId: string,
   relativePath: string,
 ): Promise<FileSystemWritableFileStream> {
-  const dir = await getModelDir(modelId);
-  const fileHandle = await dir.getFileHandle(relativePath, { create: true }) as unknown as WritableFileHandle;
-  return fileHandle.createWritable({ keepExistingData: false });
+  const token = beginWrite(modelId);
+  let writable: FileSystemWritableFileStream;
+  try {
+    const dir = await getModelDir(modelId);
+    const fileHandle = await dir.getFileHandle(relativePath, { create: true }) as unknown as WritableFileHandle;
+    writable = await fileHandle.createWritable({ keepExistingData: false });
+  } catch (error) {
+    finishWrite(token, 'failed');
+    throw error;
+  }
+  registerWriterAbort(token, async () => {
+    try { await writable.abort(); } finally { finishWrite(token, 'partial'); }
+  });
+  return {
+    write: (data) => writable.write(data),
+    seek: (position) => writable.seek(position),
+    truncate: (size) => writable.truncate(size),
+    close: async () => {
+      try { await writable.close(); } finally { finishWrite(token, 'saved'); }
+    },
+    abort: async () => {
+      try { await writable.abort(); } finally { finishWrite(token, 'partial'); }
+    },
+  } as FileSystemWritableFileStream;
 }
 
 /**
@@ -197,14 +261,36 @@ export async function createOPFSSyncWriter(
   modelId: string,
   relativePath: string,
 ): Promise<OPFSWriter> {
-  const dir = await getModelDir(modelId);
-  const fileHandle = await dir.getFileHandle(relativePath, { create: true });
-  // @ts-expect-error — createSyncAccessHandle is available in Worker OPFS
-  const accessHandle: FileSystemSyncAccessHandle = await fileHandle.createSyncAccessHandle();
+  const token = beginWrite(modelId);
+  let accessHandle: {
+    truncate(size: number): void;
+    write(data: Uint8Array, options: { at: number }): number;
+    flush(): void;
+    close(): void;
+  };
+  try {
+    const dir = await getModelDir(modelId);
+    const fileHandle = await dir.getFileHandle(relativePath, { create: true });
+    // @ts-expect-error — createSyncAccessHandle is available in Worker OPFS
+    accessHandle = await fileHandle.createSyncAccessHandle();
+  } catch (error) {
+    finishWrite(token, 'failed');
+    throw error;
+  }
   accessHandle.truncate(0);
 
   let offset = 0;
 
+  const abort = async () => {
+    try {
+      accessHandle.close();
+    } catch {
+      // ignore close errors during abort
+    } finally {
+      finishWrite(token, 'partial');
+    }
+  };
+  registerWriterAbort(token, abort);
   return {
     async write(data: Uint8Array): Promise<void> {
       const written = accessHandle.write(data, { at: offset });
@@ -219,16 +305,14 @@ export async function createOPFSSyncWriter(
       offset += written;
     },
     async close(): Promise<void> {
-      accessHandle.flush();
-      accessHandle.close();
-    },
-    async abort(): Promise<void> {
       try {
+        accessHandle.flush();
         accessHandle.close();
-      } catch {
-        // ignore close errors during abort
+      } finally {
+        finishWrite(token, 'saved');
       }
     },
+    abort,
   };
 }
 
@@ -318,6 +402,56 @@ export async function deleteModel(modelId: string): Promise<void> {
   await modelsRoot.removeEntry(modelId, { recursive: true });
 }
 
+export async function removeAssets(
+  modelId: string,
+  scope: { files?: string[]; manifest?: LocalModelManifest } = {},
+): Promise<RemoveAssetsResult> {
+  if (deletionIntents.has(modelId)) {
+    return { status: 'blocked', removedFiles: [], retainedFiles: [], verification: 'none' };
+  }
+
+  deletionIntents.add(modelId);
+  let runtime: typeof import('./runtime') | undefined;
+  try {
+    runtime = await import('./runtime');
+    const stopped = await runtime.localModelRuntime.stopForAssetRemoval(modelId);
+    if (stopped === 'blocked' || !(await stopWriters(modelId))) {
+      return { status: 'blocked', removedFiles: [], retainedFiles: [], verification: 'partial' };
+    }
+
+    const removedFiles = scope.files ? [...scope.files] : await listFiles(modelId);
+    if (scope.files) {
+      for (const file of scope.files) {
+        try { await deleteModelFile(modelId, file); } catch { /* missing is already removed */ }
+      }
+    } else {
+      await deleteModel(modelId);
+    }
+
+    const verification = scope.manifest
+      ? await verifyStoredModel(modelId, scope.manifest)
+      : 'none';
+    const retainedFiles = scope.files ? await listFiles(modelId).catch(() => []) : [];
+    return {
+      status: 'removed',
+      removedFiles,
+      retainedFiles,
+      verification,
+    };
+  } catch (error) {
+    return {
+      status: 'failed',
+      removedFiles: [],
+      retainedFiles: await listFiles(modelId).catch(() => []),
+      verification: 'partial',
+      error: error instanceof Error ? error.message : String(error),
+    };
+  } finally {
+    runtime?.localModelRuntime.endAssetRemoval(modelId);
+    deletionIntents.delete(modelId);
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Temp file operations (for streaming downloads)
 //
@@ -351,22 +485,31 @@ export async function openDownloadWriter(
   relativePath: string,
   resumeOffset: number,
 ): Promise<DownloadWriter> {
-  const dir = await getModelDir(modelId);
-  const fileHandle = await dir.getFileHandle(relativePath, { create: true }) as unknown as WritableFileHandle;
-  const keepExisting = resumeOffset > 0;
-  const writable = await fileHandle.createWritable({ keepExistingData: keepExisting });
-  if (keepExisting) {
-    await writable.seek(resumeOffset);
+  const token = beginWrite(modelId);
+  let writable: FileSystemWritableFileStream;
+  try {
+    const dir = await getModelDir(modelId);
+    const fileHandle = await dir.getFileHandle(relativePath, { create: true }) as unknown as WritableFileHandle;
+    const keepExisting = resumeOffset > 0;
+    writable = await fileHandle.createWritable({ keepExistingData: keepExisting });
+    if (keepExisting) await writable.seek(resumeOffset);
+    // Create .part marker once (zero-byte sentinel = "download in progress")
+    await dir.getFileHandle(relativePath + PART_SUFFIX, { create: true });
+  } catch (error) {
+    finishWrite(token, 'failed');
+    throw error;
   }
-  // Create .part marker once (zero-byte sentinel = "download in progress")
-  await dir.getFileHandle(relativePath + PART_SUFFIX, { create: true });
 
+  const abort = async () => {
+    try { await writable.abort(); } finally { finishWrite(token, 'partial'); }
+  };
+  registerWriterAbort(token, abort);
   return {
     write: (chunk: Uint8Array) => writable.write(chunk),
-    close: () => writable.close(),
-    abort: async () => {
-      try { await writable.abort(); } catch { /* ignore */ }
+    close: async () => {
+      try { await writable.close(); } finally { finishWrite(token, 'saved'); }
     },
+    abort,
   };
 }
 
@@ -383,20 +526,27 @@ export async function writeTempChunk(
   chunk: Uint8Array,
   append: boolean,
 ): Promise<void> {
+  const token = beginWrite(modelId);
   const dir = await getModelDir(modelId);
 
   // Write data directly to the final file name
   const fileHandle = await dir.getFileHandle(relativePath, { create: true }) as unknown as WritableFileHandle;
   const writable = await fileHandle.createWritable({ keepExistingData: append });
-  if (append) {
-    const file = await fileHandle.getFile();
-    await writable.seek(file.size);
+  try {
+    if (append) {
+      const file = await fileHandle.getFile();
+      await writable.seek(file.size);
+    }
+    await writable.write(chunk);
+    await writable.close();
+    // Ensure .part marker exists (zero-byte sentinel = "download in progress")
+    await dir.getFileHandle(relativePath + PART_SUFFIX, { create: true });
+  } catch (error) {
+    try { await writable.abort(); } catch { /* ignore */ }
+    throw error;
+  } finally {
+    finishWrite(token, 'partial');
   }
-  await writable.write(chunk);
-  await writable.close();
-
-  // Ensure .part marker exists (zero-byte sentinel = "download in progress")
-  await dir.getFileHandle(relativePath + PART_SUFFIX, { create: true });
 }
 
 /**

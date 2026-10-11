@@ -5,6 +5,7 @@ import type { LocalModelDefinition } from './types';
 
 class FakeWorker {
   static instances: FakeWorker[] = [];
+  static autoRespond = true;
   onmessage: ((event: MessageEvent) => void) | null = null;
   onerror: ((event: ErrorEvent) => void) | null = null;
   messages: Array<Record<string, unknown>> = [];
@@ -16,7 +17,7 @@ class FakeWorker {
 
   postMessage(message: Record<string, unknown>): void {
     this.messages.push(message);
-    if (message.type === 'init' || message.type === 'load' || message.type === 'unload') {
+    if (FakeWorker.autoRespond && (message.type === 'init' || message.type === 'load' || message.type === 'unload')) {
       queueMicrotask(() => this.emit({ id: message.id, type: message.type === 'load' ? 'loaded' : 'ready' }));
     }
   }
@@ -54,6 +55,7 @@ const provider: ModelFileProvider = {
 describe('LocalModelRuntime request ownership', () => {
   beforeEach(() => {
     FakeWorker.instances = [];
+    FakeWorker.autoRespond = true;
     vi.stubGlobal('Worker', FakeWorker);
   });
 
@@ -86,5 +88,41 @@ describe('LocalModelRuntime request ownership', () => {
 
     await expect(generation).rejects.toMatchObject({ name: 'AbortError' });
     expect(chunks).toEqual(['before']);
+  });
+
+  it('cancels one owner waiting on a shared load without stopping other owners', async () => {
+    FakeWorker.autoRespond = false;
+    const runtime = new LocalModelRuntime();
+    const initialLoad = runtime.loadModel(definition, provider);
+    const ownerA = runtime.ensureLoaded(definition.id, 'owner-a');
+    const ownerB = runtime.ensureLoaded(definition.id, 'owner-b');
+    const worker = FakeWorker.instances[0];
+
+    runtime.cancelOwner('owner-a');
+    await expect(ownerA).rejects.toMatchObject({ name: 'AbortError' });
+
+    const init = worker.messages.find((message) => message.type === 'init')!;
+    worker.emit({ id: init.id, type: 'ready' });
+    await Promise.resolve();
+    const load = worker.messages.find((message) => message.type === 'load')!;
+    worker.emit({ id: load.id, type: 'loaded' });
+
+    await Promise.all([initialLoad, ownerB]);
+    expect(runtime.isLoaded(definition.id)).toBe(true);
+  });
+
+  it('stops a loading worker for asset removal and rejects later reload attempts', async () => {
+    FakeWorker.autoRespond = false;
+    const runtime = new LocalModelRuntime();
+    const loading = runtime.loadModel(definition, provider);
+    const waitingOwner = runtime.ensureLoaded(definition.id, 'delete-owner');
+    const worker = FakeWorker.instances[0];
+    const loadingRejected = expect(loading).rejects.toMatchObject({ name: 'AbortError' });
+    const ownerRejected = expect(waitingOwner).rejects.toMatchObject({ name: 'AbortError' });
+
+    expect(await runtime.stopForAssetRemoval(definition.id)).toBe('unloaded');
+    await Promise.all([loadingRejected, ownerRejected]);
+    await expect(runtime.ensureLoaded(definition.id, 'new-owner')).rejects.toMatchObject({ name: 'AbortError' });
+    expect(worker.terminated).toBe(true);
   });
 });

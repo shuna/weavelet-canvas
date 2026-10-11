@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { downloadModelFiles, type DownloadProgress } from '@src/local-llm/download';
 import { localModelRuntime, promptAsInput, type RuntimeDiagnosticEvent, type RuntimeLogEvent, type RuntimeLoadProgressEvent } from '@src/local-llm/runtime';
-import { OpfsFileProvider, readFile, saveFile, createOPFSWritable, verifyStoredModel, deleteModelFile } from '@src/local-llm/storage';
+import { OpfsFileProvider, readFile, saveFile, createOPFSWritable, verifyStoredModel, removeAssets } from '@src/local-llm/storage';
 import {
   FIXED_VALIDATION_MODEL,
   VALIDATION_PROMPTS,
@@ -320,7 +320,8 @@ function LowbitQValidationPage() {
             chunks.push(value);
           }
           useFileDirectly = new File(chunks, srcFile.name, { type: srcFile.type });
-          await deleteModelFile(originalDef.id, FIXED_VALIDATION_MODEL.fileName);
+          const removal = await removeAssets(originalDef.id, { files: [FIXED_VALIDATION_MODEL.fileName] });
+          if (removal.status !== 'removed') throw new Error('OPFS source could not be stopped for deletion');
           console.info('[LowbitQValidation] OPFS source deleted — quota freed');
         }
       } catch {

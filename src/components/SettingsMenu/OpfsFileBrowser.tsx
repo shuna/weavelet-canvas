@@ -2,14 +2,11 @@ import React, { useCallback, useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
   listAllOpfsEntries,
-  clearAllModels,
-  deleteModel,
-  deleteModelFile,
+  removeAssets,
   getTotalStorageUsed,
 } from '@src/local-llm/storage';
 import type { OpfsModelEntry } from '@src/local-llm/storage';
 import { formatBytes } from '@src/local-llm/device';
-import { localModelRuntime } from '@src/local-llm/runtime';
 import type { LocalModelTask } from '@src/local-llm/types';
 import useStore from '@store/store';
 
@@ -75,11 +72,8 @@ const OpfsFileBrowser = ({
     if (!window.confirm(t('localModel.opfsBrowser.confirmDeleteModel') as string)) return;
     setDeleting(modelId);
     try {
-      // Unload if running
-      if (localModelRuntime.isLoaded(modelId)) {
-        await localModelRuntime.unloadModel(modelId, { force: true });
-      }
-      await deleteModel(modelId);
+      const removal = await removeAssets(modelId);
+      if (removal.status !== 'removed') return;
       // Clean store — metadata, definition, and task assignments
       const store = useStore.getState();
       for (const task of Object.keys(store.activeLocalModels) as LocalModelTask[]) {
@@ -103,7 +97,8 @@ const OpfsFileBrowser = ({
     )) return;
     setDeleting(`${modelId}/${fileName}`);
     try {
-      await deleteModelFile(modelId, fileName);
+      const removal = await removeAssets(modelId, { files: [fileName] });
+      if (removal.status !== 'removed') return;
       // If this is a .part marker, also delete the corresponding data file
       // (in the current design, data is written to the final name and .part
       // is a zero-byte marker; leaving the data file would make a partial
@@ -111,7 +106,7 @@ const OpfsFileBrowser = ({
       if (fileName.endsWith('.part')) {
         const dataFileName = fileName.slice(0, -'.part'.length);
         try {
-          await deleteModelFile(modelId, dataFileName);
+          await removeAssets(modelId, { files: [dataFileName] });
         } catch {
           // Data file may not exist
         }
@@ -128,16 +123,13 @@ const OpfsFileBrowser = ({
     if (!window.confirm(t('localModel.opfsBrowser.confirmClearAll') as string)) return;
     setDeleting('__all__');
     try {
-      // Unload all running models
       const store = useStore.getState();
       for (const entry of entries) {
-        if (localModelRuntime.isLoaded(entry.modelId)) {
-          await localModelRuntime.unloadModel(entry.modelId, { force: true });
-        }
+        const removal = await removeAssets(entry.modelId);
+        if (removal.status !== 'removed') return;
       }
-      const deleted = await clearAllModels();
       // Clean store for all deleted models
-      for (const id of deleted) {
+      for (const { modelId: id } of entries) {
         store.removeSavedModelMeta(id);
         store.removeLocalModel(id);
       }

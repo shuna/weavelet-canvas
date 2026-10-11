@@ -27,7 +27,7 @@ import {
   saveFile,
   readFile,
   verifyStoredModel,
-  deleteModelFile,
+  removeAssets,
 } from '../storage';
 
 // ---------------------------------------------------------------------------
@@ -172,7 +172,7 @@ export class LowbitQConversionManager {
         `[LowbitQConversionManager] In-memory File created, deleting OPFS entry...`,
       );
       try {
-        await deleteModelFile(sourceModelId, sourceFileName);
+        await removeAssets(sourceModelId, { files: [sourceFileName] });
         console.info('[LowbitQConversionManager] OPFS source deleted');
       } catch (e) {
         console.warn('[LowbitQConversionManager] Failed to delete source:', (e as Error).message);
