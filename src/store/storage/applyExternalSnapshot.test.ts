@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 const mocks = vi.hoisted(() => ({
   state: {} as any,
   prepare: vi.fn(), save: vi.fn(), report: vi.fn(), invalidate: vi.fn(),
-  set: vi.fn(),
+  set: vi.fn(), preserve: vi.fn(),
 }));
 vi.mock('@store/store', () => ({ default: {
   getState: () => mocks.state,
@@ -15,18 +15,27 @@ vi.mock('@store/persistence', () => ({
   createPersistedChatDataState: (state: unknown) => state,
   reportHydratedStateCommitted: mocks.report,
 }));
-vi.mock('./IndexedDbStorage', () => ({ saveChatData: mocks.save }));
+vi.mock('./IndexedDbStorage', () => ({ saveChatData: mocks.save, preserveLegacyRemoteSnapshot: mocks.preserve }));
 import { applyExternalSnapshot } from './applyExternalSnapshot';
 
 beforeEach(() => {
   vi.clearAllMocks();
-  mocks.state = { chats: ['old'], branchHistoryPast: ['old undo'] };
+  mocks.state = { chats: ['old'], branchHistoryPast: ['old undo'], refreshLegacyRemoteMigration: vi.fn() };
   mocks.invalidate.mockImplementation(() => {});
   mocks.prepare.mockImplementation(async () => ({ state: { chats: ['new'], currentChatIndex: 0 }, repairedChatTitles: [] }));
   mocks.save.mockResolvedValue(undefined);
 });
 
 describe('external snapshot commit', () => {
+  it.each([17, 19])('preserves version %s without cancelling or overwriting current chats', async version => {
+    const payload = { chats: [{ id: 'remote' }] } as any;
+    const before = mocks.state;
+    await expect(applyExternalSnapshot(payload, () => true, before, version)).rejects.toThrow('preserved');
+    expect(mocks.preserve).toHaveBeenCalledWith({ state: payload, version });
+    expect(mocks.state).toBe(before);
+    expect(mocks.invalidate).not.toHaveBeenCalled();
+    expect(mocks.save).not.toHaveBeenCalled();
+  });
   it('rejects edits during download before cancelling tasks', async () => {
     const observed = mocks.state;
     mocks.state = { ...observed, chats: ['edited'] };

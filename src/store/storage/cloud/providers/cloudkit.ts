@@ -136,7 +136,7 @@ const hydrateFromServerRecord = async (record: CloudKitRecord, observed: ReturnT
     normalized.version
   ) as Partial<PersistedStoreState>;
 
-  if (!await applyExternalSnapshot(remotePersistedState, isCurrent, observed)) return false;
+  if (!await applyExternalSnapshot(remotePersistedState, isCurrent, observed, normalized.version)) return false;
 
   if (needsDataMigration()) {
     useStore.getState().setMigrationUiState({

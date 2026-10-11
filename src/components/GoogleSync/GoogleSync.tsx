@@ -491,7 +491,7 @@ const GooglePopup = ({
           storage: createJSONStorage(() => compressedStorage),
           partialize: (state) => createLocalStoragePartializedState(state),
         });
-        if (!await applyExternalSnapshot(remotePersistedState, () => useGStore.getState().googleAccessToken === googleAccessToken, observed)) {
+        if (!await applyExternalSnapshot(remotePersistedState, () => useGStore.getState().googleAccessToken === googleAccessToken, observed, normalizedRemote.version)) {
           throw new Error('Local data or connection changed while preparing the downloaded snapshot.');
         }
         if (encrypted) {

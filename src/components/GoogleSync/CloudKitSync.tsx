@@ -245,7 +245,7 @@ const CloudKitSync = () => {
       if (!await applyExternalSnapshot(remotePersistedState, () => {
         const current = useCloudAuthStore.getState().providers.cloudkit;
         return (current.connectionId ?? current.sessionToken) === connection;
-      }, observed)) {
+      }, observed, normalized.version)) {
         throw new Error('Local data or connection changed while preparing the downloaded snapshot.');
       }
 

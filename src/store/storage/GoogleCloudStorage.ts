@@ -1,3 +1,4 @@
+import { applyExternalSnapshot } from './applyExternalSnapshot';
 import { withSyncProgress, syncStage } from './google/progress';
 import type { PersistStorage } from 'zustand/middleware';
 import { createJSONStorage } from 'zustand/middleware';
@@ -72,6 +73,9 @@ export async function restoreGoogleSync(id: string): Promise<boolean> {
 const currentSnapshot = (): Snapshot => ({ state: createPartializedState(useStore.getState()), version: STORE_VERSION });
 async function applySyncedSnapshot(target: EncryptedDriveSync, before: Snapshot, received: Snapshot) {
   const observed = useStore.getState();
+  if (received.version !== STORE_VERSION) {
+    return applyExternalSnapshot(received.state, () => target === session, observed, received.version ?? 0);
+  }
   if (target !== session || !await sameSnapshot(before, currentSnapshot()) || observed !== useStore.getState()) return false;
   // Finalizing an active task can change the persisted payload.  In that case
   // the received merge was computed against an obsolete base, so let the normal
