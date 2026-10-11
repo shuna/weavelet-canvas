@@ -83,3 +83,19 @@ S0の退行調査閾値を超えない。短い合成測定なので、高速化
 製品コードは大幅純減していない。重複UI手順・保存設定コピー・未使用実装を削減した一方、取消・復旧・資産削除・旧形式保全に不足していた契約を実装したため、製品行数はほぼ同量となった。今回の成果は更新責任の集約と失敗時の整合性であり、コード量改善の目標全体が達成されたとは扱わない。文書・CI・lockfileは上記製品集計外。
 
 元の未コミットBranchEditor差分は統合していない。利用時にはその差分とのmergeが必要で、MessageDetailModalのID APIとcanvas内dialogの両方を残す解決を一時checkoutで確認済み。リモートへのpush/PR/mergeは実行していない。
+
+## main統合（PR #513）
+
+PR作成時のmainは`e6b97a37`で、初回基準後に要約UI、フォルダ同期、編集日時、Proxyの推論文・SSE再開点、BranchEditor改善が追加されていた。`0741a3fe`で両方の変更を統合した。既存の編集日時記録を共通branch更新へ接続し、外部適用のusage再計算・フォルダ同期の世代確認を維持した。
+
+独立Sol 6.1 Mediumが保存・同期および通信復旧の統合差分を監査した。推論文の受信確認漏れ、手動取消・purge後の復旧record再作成の2件を回帰テスト付きで修正し、限定再監査で解消・追加指摘なし。
+
+- 全体Vitest: 119ファイル、1,195件中1,194成功・1skip・失敗0。
+- Web、Functions、Proxyの型検査と本番build成功。
+- Chrome計12シナリオ成功（既存7件＋実フォルダ同期1件＋Google同期詳細2件＋要約UI2件）。
+- mainの同期テスト11件は、同期対象外となったthemeを使うfixture不整合をmain単体でも再現。同期対象のdefaultSystemMessageへ置換し、assert・配送順序・例外確認は保持。
+- 並行Viteの依存cache衝突があったため、比較serverのcacheを分離して再測定。Google同期UIはserver起動時にtest-onlyのVITE_GOOGLE_CLIENT_IDを指定し、OAuthはmock。実認証の証拠にはしない。
+- mainの要約UIテストは、原文が生成要約より短い旧fixtureと旧ダイアログ見出しでmain単体でも失敗した。十分長い原文と現行見出しへ変更し、表示・保存・切替のassertを維持。
+- GitHub runnerで容量拒否テストが5秒timeout。既存maxCompressedBytes設定を使って小さいfixtureで同じ拒否・再入・回復を検証し、別のJSON容量境界テストは維持した（関連8件成功）。
+
+初回の製品コード純増43行は`1bfa76d0`対`02d5e8e7`の値であり、この追加統合後を表す値ではない。前節の未push記述も初回完了時点の記録である。
