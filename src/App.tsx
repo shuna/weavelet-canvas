@@ -26,7 +26,8 @@ function isLowbitQValidationRoute(): boolean {
 
 function App() {
   const isBootstrapped = useAppBootstrap();
-  useLocalModelRehydration(isBootstrapped);
+  const localModelEnabled = useStore((state) => state.localModelEnabled);
+  useLocalModelRehydration(isBootstrapped && localModelEnabled);
   useStreamRecovery();
   useOpenRouterVerification();
   useIosStatusBarScroll();

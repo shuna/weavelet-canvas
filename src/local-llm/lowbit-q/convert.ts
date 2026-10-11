@@ -51,7 +51,7 @@ import { allocateBitwidths, DEFAULT_ALLOCATOR_CONFIG, validateAllocations } from
 import { quantizeQ4_0 } from './q4_0Quantize';
 import { quantizeQ3_K } from './q3_kQuantize';
 import { quantizeQ2_K } from './q2_kQuantize';
-import { writeTempChunk, removeTempFile, createOPFSWritable, createOPFSSyncWriter, getOPFSFileSize, removeAssets } from '../storage';
+import { writeTempChunk, removeTempFile, createOPFSWritable, createOPFSSyncWriter, getOPFSFileSize } from '../storage';
 import type { OPFSWriter } from '../storage';
 import { fp32ToFp16 } from './dequantize';
 
@@ -1278,19 +1278,6 @@ export async function convertToLowbitQV2StreamingToOPFS(
 
   // Remove any existing output file before starting a fresh write.
   await removeTempFile(target.modelId, target.fileName);
-
-  // For large models, delete the source file from OPFS to free quota before
-  // writing the output. The source Blob remains valid because OPFS getFile()
-  // returns a snapshot per the File System Access spec.
-  if (options.sourceOpfsInfo) {
-    const { modelId: srcModelId, fileName: srcFileName } = options.sourceOpfsInfo;
-    console.info(`[lowbit-q] Deleting source from OPFS to free quota: ${srcModelId}/${srcFileName}`);
-    try {
-      await removeAssets(srcModelId, { files: [srcFileName] });
-    } catch (e) {
-      console.warn('[lowbit-q] Failed to delete source (may not exist):', (e as Error).message);
-    }
-  }
 
   // Use SyncAccessHandle (direct write, no swap file) when available (Worker
   // context). Falls back to createWritable() on main thread.  SyncAccessHandle

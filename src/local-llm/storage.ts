@@ -96,7 +96,7 @@ export function finishWrite(token: WriterToken, _outcome: WriterOutcome): void {
   if (writers?.size === 0) activeWriters.delete(token.modelId);
 }
 
-async function stopWriters(modelId: string): Promise<boolean> {
+export async function stopModelWriters(modelId: string): Promise<boolean> {
   const writers = activeWriters.get(modelId);
   if (!writers) return true;
   const results = await Promise.allSettled(
@@ -402,33 +402,46 @@ export async function deleteModel(modelId: string): Promise<void> {
   await modelsRoot.removeEntry(modelId, { recursive: true });
 }
 
-export async function removeAssets(
+/** Mark a model unavailable to new writers while a Main-thread removal owns it. */
+export function beginAssetRemoval(modelId: string): boolean {
+  if (deletionIntents.has(modelId)) return false;
+  deletionIntents.add(modelId);
+  return true;
+}
+
+export function endAssetRemoval(modelId: string): void {
+  deletionIntents.delete(modelId);
+}
+
+/**
+ * Delete storage after the Main-thread owner has stopped runtime and writers.
+ * This module deliberately has no runtime import: it is also bundled for workers.
+ */
+export async function removeStoredAssets(
   modelId: string,
   scope: { files?: string[]; manifest?: LocalModelManifest } = {},
 ): Promise<RemoveAssetsResult> {
-  if (deletionIntents.has(modelId)) {
-    return { status: 'blocked', removedFiles: [], retainedFiles: [], verification: 'none' };
-  }
-
-  deletionIntents.add(modelId);
-  let runtime: typeof import('./runtime') | undefined;
+  const removedFiles: string[] = [];
   try {
-    runtime = await import('./runtime');
-    const stopped = await runtime.localModelRuntime.stopForAssetRemoval(modelId);
-    if (stopped === 'blocked' || !(await stopWriters(modelId))) {
-      return { status: 'blocked', removedFiles: [], retainedFiles: [], verification: 'partial' };
-    }
-
-    const removedFiles = scope.files ? [...scope.files] : await listFiles(modelId);
     if (scope.files) {
       for (const file of scope.files) {
         try {
           await deleteModelFile(modelId, file);
+          removedFiles.push(file);
         } catch (error) {
-          if (!(error instanceof DOMException) || error.name !== 'NotFoundError') throw error;
+          if (error instanceof DOMException && error.name === 'NotFoundError') continue;
+          const retainedFiles = await listFiles(modelId).catch(() => []);
+          return {
+            status: removedFiles.length ? 'partial' : 'failed',
+            removedFiles,
+            retainedFiles,
+            verification: scope.manifest ? await verifyStoredModel(modelId, scope.manifest).catch(() => 'partial' as const) : 'partial',
+            error: error instanceof Error ? error.message : String(error),
+          };
         }
       }
     } else {
+      removedFiles.push(...await listFiles(modelId));
       await deleteModel(modelId);
     }
 
@@ -445,14 +458,11 @@ export async function removeAssets(
   } catch (error) {
     return {
       status: 'failed',
-      removedFiles: [],
+      removedFiles,
       retainedFiles: await listFiles(modelId).catch(() => []),
       verification: 'partial',
       error: error instanceof Error ? error.message : String(error),
     };
-  } finally {
-    runtime?.localModelRuntime.endAssetRemoval(modelId);
-    deletionIntents.delete(modelId);
   }
 }
 

@@ -27,12 +27,12 @@ import {
   saveFile,
   readFile,
   verifyStoredModel,
-  removeAssets,
   beginWrite,
   finishWrite,
   registerWriterAbort,
   type WriterToken,
 } from '../storage';
+import { removeAssets } from '../assetRemoval';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -158,9 +158,8 @@ export class LowbitQConversionManager {
     const opfsFile = await readFile(sourceModelId, sourceFileName);
 
     // For large files (>2 GB), read into memory chunks to break the OPFS
-    // storage reference, then delete the OPFS entry. A File from getFile()
-    // holds a reference to the underlying OPFS storage — deleting the
-    // directory entry alone won't free space while the File is alive.
+    // storage reference. Source deletion is deferred until the target passed
+    // verification, so a failed conversion never loses its input.
     const LARGE_FILE_THRESHOLD = 2 * 1024 * 1024 * 1024; // 2 GB
     let sourceFile: File = opfsFile;
     if (opfsFile.size > LARGE_FILE_THRESHOLD) {
@@ -176,15 +175,7 @@ export class LowbitQConversionManager {
         chunks.push(value);
       }
       sourceFile = new File(chunks, opfsFile.name, { type: opfsFile.type });
-      console.info(
-        `[LowbitQConversionManager] In-memory File created, deleting OPFS entry...`,
-      );
-      try {
-        await removeAssets(sourceModelId, { files: [sourceFileName] });
-        console.info('[LowbitQConversionManager] OPFS source deleted');
-      } catch (e) {
-        console.warn('[LowbitQConversionManager] Failed to delete source:', (e as Error).message);
-      }
+      console.info('[LowbitQConversionManager] In-memory File created; retaining source until target verifies');
     }
 
     return this.convertFromFile(sourceFile, sourceModelId, sourceLabel, callbacks);
@@ -332,6 +323,17 @@ export class LowbitQConversionManager {
               `OPFS検証に失敗しました: 保存状態=${verifyResult}。ストレージに問題がある可能性があります。`,
             );
           }
+          if (this.cancelled) return;
+
+          // Only release an OPFS source after its replacement is durable.
+          const source = this.callbacks.sourceOpfsInfo;
+          if (source) {
+            const removal = await removeAssets(source.modelId, { files: [source.fileName] });
+            if (removal.status !== 'removed') {
+              console.warn('[LowbitQConversionManager] Retained source after conversion:', removal.status);
+            }
+          }
+          if (this.cancelled) return;
 
           const result: LowbitQConversionResult = {
             modelDef,

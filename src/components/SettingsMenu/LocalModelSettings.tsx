@@ -10,7 +10,8 @@ import {
   type WllamaFeatureCheck,
 } from '@src/local-llm/runtime';
 import type { VariantOverride as WasmVariantOverride } from '@src/vendor/wllama/variant-table';
-import { OpfsFileProvider, removeAssets, getTempFileSize, readFile, saveFile, sha256Blob } from '@src/local-llm/storage';
+import { OpfsFileProvider, getTempFileSize, readFile, saveFile, sha256Blob } from '@src/local-llm/storage';
+import { removeAssets } from '@src/local-llm/assetRemoval';
 import { rehydrateLocalModels } from '@hooks/useLocalModelRehydration';
 import { CURATED_MODELS } from '@src/local-llm/catalog';
 import type { CatalogModel } from '@src/local-llm/catalog';

@@ -141,4 +141,27 @@ describe('LocalModelRuntime request ownership', () => {
     expect(runtime.isLoaded(definition.id)).toBe(true);
     expect(FakeWorker.instances[0].terminated).toBe(false);
   });
+
+  it('does not let a late abort listener cancel a newer generation epoch', async () => {
+    const runtime = new LocalModelRuntime();
+    await runtime.loadModel(definition, provider);
+    const worker = FakeWorker.instances[0];
+    const listeners: Array<() => void> = [];
+    const staleSignal = {
+      aborted: false,
+      addEventListener: (_: string, listener: () => void) => listeners.push(listener),
+      removeEventListener: () => {}, // Simulate an already queued abort event.
+    } as unknown as AbortSignal;
+    const engine = runtime.getWllamaEngine(definition.id)!;
+    const first = engine.generate({ messages: [] }, {}, () => {}, undefined, staleSignal);
+    const firstRequest = worker.messages.find((message) => message.type === 'generate')!;
+    worker.emit({ id: firstRequest.id, type: 'done', fullText: 'first' });
+    await expect(first).resolves.toBe('first');
+
+    const second = engine.generate({ messages: [] }, {}, () => {});
+    listeners[0]();
+    const secondRequest = worker.messages.filter((message) => message.type === 'generate')[1];
+    worker.emit({ id: secondRequest.id, type: 'done', fullText: 'second' });
+    await expect(second).resolves.toBe('second');
+  });
 });

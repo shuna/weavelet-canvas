@@ -1,7 +1,7 @@
 import { useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
 import useStore from '@store/store';
-import { removeAssets } from '@src/local-llm/storage';
+import { removeAssets } from '@src/local-llm/assetRemoval';
 import { ASSIGNABLE_TASKS } from '@src/components/SettingsMenu/localModelConstants';
 
 export interface DeleteModelOpts {

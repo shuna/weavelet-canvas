@@ -1,9 +1,9 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-const runtime = {
+const runtime = vi.hoisted(() => ({
   stopForAssetRemoval: vi.fn<() => Promise<'unloaded' | 'blocked'>>(),
   endAssetRemoval: vi.fn(),
-};
+}));
 
 vi.mock('./runtime', () => ({ localModelRuntime: runtime }));
 
@@ -12,9 +12,9 @@ import {
   finishWrite,
   openDownloadWriter,
   registerWriterAbort,
-  removeAssets,
   saveFile,
 } from './storage';
+import { removeAssets } from './assetRemoval';
 import type { LocalModelManifest } from './types';
 
 class Deferred {
@@ -64,6 +64,7 @@ class FakeFileHandle {
 class FakeDirectory {
   readonly kind = 'directory';
   entriesMap = new Map<string, FakeDirectory | FakeFileHandle>();
+  failRemove = new Set<string>();
   constructor(private readonly abortGate: () => Deferred | undefined) {}
 
   async getDirectoryHandle(name: string, options?: { create?: boolean }): Promise<FakeDirectory> {
@@ -85,6 +86,7 @@ class FakeDirectory {
   }
 
   async removeEntry(name: string): Promise<void> {
+    if (this.failRemove.has(name)) throw new DOMException('locked', 'NoModificationAllowedError');
     if (!this.entriesMap.delete(name)) throw new Error('missing entry');
   }
 
@@ -171,5 +173,16 @@ describe('OPFS writer and asset removal', () => {
   it('does not treat a non-NotFound file deletion error as successful removal', async () => {
     await expect(removeAssets('delete-error', { files: ['missing.gguf'] }))
       .resolves.toMatchObject({ status: 'failed' });
+  });
+
+  it('reports files already removed when a later file deletion fails', async () => {
+    await saveFile('multi', 'first.gguf', new Blob([new Uint8Array([1]) ]));
+    await saveFile('multi', 'locked.gguf', new Blob([new Uint8Array([2]) ]));
+    const models = await root.getDirectoryHandle('models');
+    const dir = await models.getDirectoryHandle('multi');
+    dir.failRemove.add('locked.gguf');
+
+    await expect(removeAssets('multi', { files: ['first.gguf', 'locked.gguf'] }))
+      .resolves.toMatchObject({ status: 'partial', removedFiles: ['first.gguf'], retainedFiles: ['locked.gguf'] });
   });
 });

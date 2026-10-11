@@ -2,9 +2,9 @@ import React, { useCallback, useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
   listAllOpfsEntries,
-  removeAssets,
   getTotalStorageUsed,
 } from '@src/local-llm/storage';
+import { removeAssets } from '@src/local-llm/assetRemoval';
 import type { OpfsModelEntry } from '@src/local-llm/storage';
 import { formatBytes } from '@src/local-llm/device';
 import type { LocalModelTask } from '@src/local-llm/types';

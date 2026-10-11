@@ -959,7 +959,9 @@ export class LocalModelRuntime {
         entry.onChunk = onChunk;
         entry.abortRequested = false;
         const epoch = ++entry.epoch;
-        const onAbort = () => this.abort(modelId);
+        const onAbort = () => {
+          if (this.engines.get(modelId) === entry && entry.epoch === epoch) this.abort(modelId);
+        };
         signal?.addEventListener('abort', onAbort, { once: true });
 
         try {
@@ -999,7 +1001,9 @@ export class LocalModelRuntime {
         }
         this.setStatus(modelId, 'busy', reason ?? 'moderation');
         const epoch = ++entry.epoch;
-        const onAbort = () => this.abort(modelId);
+        const onAbort = () => {
+          if (this.engines.get(modelId) === entry && entry.epoch === epoch) this.abort(modelId);
+        };
         signal?.addEventListener('abort', onAbort, { once: true });
 
         try {

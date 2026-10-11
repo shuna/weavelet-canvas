@@ -1,7 +1,8 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { downloadModelFiles, type DownloadProgress } from '@src/local-llm/download';
 import { localModelRuntime, promptAsInput, type RuntimeDiagnosticEvent, type RuntimeLogEvent, type RuntimeLoadProgressEvent } from '@src/local-llm/runtime';
-import { OpfsFileProvider, readFile, saveFile, createOPFSWritable, verifyStoredModel, removeAssets } from '@src/local-llm/storage';
+import { OpfsFileProvider, readFile, saveFile, createOPFSWritable, verifyStoredModel } from '@src/local-llm/storage';
+import { removeAssets } from '@src/local-llm/assetRemoval';
 import {
   FIXED_VALIDATION_MODEL,
   VALIDATION_PROMPTS,
