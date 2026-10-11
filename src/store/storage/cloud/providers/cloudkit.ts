@@ -16,7 +16,6 @@ import { getOrCreateDeviceId } from '@utils/deviceId';
 import useCloudAuthStore from '@store/cloud-auth-store';
 import useStore from '@store/store';
 import {
-  migratePersistedState,
   needsDataMigration,
   type PersistedStoreState,
 } from '@store/persistence';
@@ -131,10 +130,7 @@ const normalizeRemoteRecord = (
 
 const hydrateFromServerRecord = async (record: CloudKitRecord, observed: ReturnType<typeof useStore.getState>, isCurrent: () => boolean): Promise<boolean> => {
   const normalized = normalizeRemoteRecord(record);
-  const remotePersistedState = migratePersistedState(
-    structuredClone(normalized.state),
-    normalized.version
-  ) as Partial<PersistedStoreState>;
+  const remotePersistedState = structuredClone(normalized.state) as Partial<PersistedStoreState>;
 
   if (!await applyExternalSnapshot(remotePersistedState, isCurrent, observed, normalized.version)) return false;
 

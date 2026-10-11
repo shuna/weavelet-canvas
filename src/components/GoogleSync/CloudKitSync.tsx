@@ -18,7 +18,6 @@ import {
   createLocalStoragePartializedState,
   createPartializedState,
   hydrateFromPersistedStoreState,
-  migratePersistedState,
   needsDataMigration,
   type PersistedStoreState,
 } from '@store/persistence';
@@ -237,10 +236,7 @@ const CloudKitSync = () => {
       }
 
       const normalized = normalizeRemoteStorageValue(remoteStorageValue);
-      const remotePersistedState = migratePersistedState(
-        structuredClone(normalized.state),
-        normalized.version
-      ) as Partial<PersistedStoreState>;
+      const remotePersistedState = structuredClone(normalized.state) as Partial<PersistedStoreState>;
 
       if (!await applyExternalSnapshot(remotePersistedState, () => {
         const current = useCloudAuthStore.getState().providers.cloudkit;

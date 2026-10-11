@@ -32,7 +32,6 @@ import { SYNC_FOLDER_TYPE, DEFAULT_SYNC_FOLDER_NAME, nextSyncFolderName } from '
 import {
   createLocalStoragePartializedState,
   createPartializedState,
-  migratePersistedState,
   needsDataMigration,
   PersistedStoreState,
 } from '@store/persistence';
@@ -482,10 +481,7 @@ const GooglePopup = ({
         : getDriveFileTyped(_fileId, googleAccessToken));
       await syncStage(1, 2, async () => {
         const normalizedRemote = normalizeRemotePersistedState(remoteStorageValue);
-        const remotePersistedState = migratePersistedState(
-          normalizedRemote.state,
-          normalizedRemote.version
-        ) as Partial<PersistedStoreState>;
+        const remotePersistedState = normalizedRemote.state as Partial<PersistedStoreState>;
         syncPhase('saving');
         useStore.persist.setOptions({
           storage: createJSONStorage(() => compressedStorage),
