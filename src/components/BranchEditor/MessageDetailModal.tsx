@@ -1,5 +1,4 @@
 import React from 'react';
-import ReactDOM from 'react-dom';
 import { useTranslation } from 'react-i18next';
 import useStore from '@store/store';
 import { isTextContent, isImageContent } from '@type/chat';
@@ -17,10 +16,9 @@ const MessageDetailModal = ({ chatIndex, nodeId, onClose }: MessageDetailModalPr
   const contentStore = useStore((state) => state.contentStore);
   const toggleNodeStar = useStore((state) => state.toggleNodeStar);
   const toggleNodePin = useStore((state) => state.toggleNodePin);
-  const modalRoot = document.getElementById('modal-root');
 
   const node = tree?.nodes[nodeId];
-  if (!node || !modalRoot) return null;
+  if (!node) return null;
 
   const entry = contentStore[node.contentHash];
   if (!entry) return null;
@@ -32,8 +30,8 @@ const MessageDetailModal = ({ chatIndex, nodeId, onClose }: MessageDetailModalPr
     ? 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200'
     : 'bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-200';
 
-  return ReactDOM.createPortal(
-    <div className='fixed top-0 left-0 z-[999] w-full p-4 overflow-x-hidden overflow-y-auto h-full flex justify-center items-center'>
+  return (
+    <div role='dialog' aria-label={roleLabel} className='absolute inset-0 z-[999] p-4 overflow-x-hidden overflow-y-auto flex justify-center items-center'>
       <div className='relative z-2 max-w-3xl w-full md:h-auto flex justify-center max-h-full'>
         <div className='relative bg-gray-50 rounded-lg shadow dark:bg-gray-700 max-h-full overflow-y-auto hide-scroll-bar w-full'>
           <div className='flex items-center justify-between p-4 border-b rounded-t dark:border-gray-600'>
@@ -110,8 +108,7 @@ const MessageDetailModal = ({ chatIndex, nodeId, onClose }: MessageDetailModalPr
         className='bg-gray-800/90 absolute top-0 left-0 h-full w-full z-[-1]'
         onClick={onClose}
       />
-    </div>,
-    modalRoot
+    </div>
   );
 };
 
