@@ -47,7 +47,6 @@ const ChatHistory = React.memo(
   }) => {
     const initialiseNewChat = useInitialiseNewChat();
     const setCurrentChatIndex = useStore((state) => state.setCurrentChatIndex);
-    const pushNavigationEntry = useStore((state) => state.pushNavigationEntry);
     const setChats = useStore((state) => state.setChats);
     const active = useStore((state) => state.currentChatIndex === chatIndex);
 
@@ -181,17 +180,7 @@ const ChatHistory = React.memo(
         aria-current={active ? 'page' : undefined}
         onClick={() => {
           if (!active) {
-            const state = useStore.getState();
-            const destChat = state.chats?.[chatIndex];
-            if (destChat) {
-              pushNavigationEntry({
-                chatId: destChat.id,
-                activePath: destChat.branchTree?.activePath ? [...destChat.branchTree.activePath] : [],
-                viewContext: state.chatActiveView,
-                source: 'chat-switch',
-              });
-            }
-            setCurrentChatIndex(chatIndex);
+            useStore.getState().navigateToNode({ chatId, source: 'chat-switch', history: 'push', focus: 'none' });
           }
         }}
         draggable={!isEdit}

@@ -3,6 +3,7 @@ import { ContentStoreData, resolveContentText } from './contentStore';
 
 export interface SearchResult {
   nodeId: string;
+  chatId: string;
   chatIndex: number;
   snippet: string;
   isOnActivePath: boolean;
@@ -23,7 +24,7 @@ export interface SearchOptions {
  */
 export function searchBranchNodes(
   query: string,
-  entries: ReadonlyArray<{ tree: BranchTree; chatIndex: number }>,
+  entries: ReadonlyArray<{ tree: BranchTree; chatId: string; chatIndex: number }>,
   contentStore: ContentStoreData,
   scope: 'all' | 'activePath',
   options?: SearchOptions
@@ -38,7 +39,7 @@ export function searchBranchNodes(
   const results: SearchResult[] = [];
   const textCache = new Map<string, string>();
 
-  for (const { tree, chatIndex } of entries) {
+  for (const { tree, chatId, chatIndex } of entries) {
     const activePathSet = new Set(tree.activePath);
 
     // Determine which nodes to search
@@ -98,6 +99,7 @@ export function searchBranchNodes(
 
       results.push({
         nodeId,
+        chatId,
         chatIndex,
         snippet,
         isOnActivePath: activePathSet.has(nodeId),

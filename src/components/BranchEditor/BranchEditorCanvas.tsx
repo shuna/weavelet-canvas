@@ -328,14 +328,10 @@ const BranchEditorCanvas = ({
   const isSearchOpen = useStore((state) => state.isSearchOpen);
   const openSearch = useStore((state) => state.openSearch);
   const closeSearch = useStore((state) => state.closeSearch);
-  const switchActivePath = useStore((state) => state.switchActivePath);
   const focusNodeId = useStore((state) => state.branchEditorFocusNodeId);
   const setBranchEditorFocusNodeId = useStore((state) => state.setBranchEditorFocusNodeId);
-  const setCurrentChatIndex = useStore((state) => state.setCurrentChatIndex);
-  const setChatActiveView = useStore((state) => state.setChatActiveView);
   const ensureBranchTree = useStore((state) => state.ensureBranchTree);
-  const setPendingChatFocus = useStore((state) => state.setPendingChatFocus);
-  const pushNavigationEntry = useStore((state) => state.pushNavigationEntry);
+  const navigateToNode = useStore((state) => state.navigateToNode);
 
   const lockPageDragBounce = useCallback(() => {
     pageDragLockCountRef.current += 1;
@@ -623,28 +619,13 @@ const BranchEditorCanvas = ({
 
   const navigateToChat = useCallback(
     (chatIndex: number, nodeId: string) => {
-      ensureBranchTree(chatIndex);
       const chat = chats?.[chatIndex];
-      if (chat?.branchTree) {
-        const newPath = buildPathToLeaf(chat.branchTree, nodeId);
-        const currentView = useStore.getState().chatActiveView;
-        pushNavigationEntry({
-          chatId: chat.id,
-          activePath: newPath,
-          focusedNodeId: nodeId,
-          viewContext: isSplitView(currentView) ? currentView : 'chat',
-          source: 'branch-editor',
-        });
-        switchActivePath(chatIndex, newPath);
-      }
-      setCurrentChatIndex(chatIndex);
+      if (!chat) return;
+      ensureBranchTree(chatIndex);
       const currentView = useStore.getState().chatActiveView;
-      if (!isSplitView(currentView)) {
-        setChatActiveView('chat');
-      }
-      setPendingChatFocus({ chatIndex, nodeId });
+      navigateToNode({ chatId: chat.id, nodeId, view: isSplitView(currentView) ? currentView : 'chat', source: 'branch-editor', history: 'push', focus: 'bubble' });
     },
-    [chats, ensureBranchTree, switchActivePath, setCurrentChatIndex, setChatActiveView, setPendingChatFocus, pushNavigationEntry]
+    [chats, ensureBranchTree, navigateToNode]
   );
 
   const onNodeClick = useCallback(
@@ -652,7 +633,6 @@ const BranchEditorCanvas = ({
       const nodeChatIndex = node.data.chatIndex >= 0 ? node.data.chatIndex : primaryChatIndex;
       const chat = chats?.[nodeChatIndex];
       if (!chat?.branchTree) return;
-      const newPath = buildPathToLeaf(chat.branchTree, node.id);
 
       // Header click → navigate to chat, content click → open modal
       const target = event.target as HTMLElement;
@@ -661,19 +641,11 @@ const BranchEditorCanvas = ({
       if (isHeaderClick) {
         navigateToChat(nodeChatIndex, node.id);
       } else {
-        const currentView = useStore.getState().chatActiveView;
-        pushNavigationEntry({
-          chatId: chat.id,
-          activePath: newPath,
-          focusedNodeId: node.id,
-          viewContext: currentView,
-          source: 'branch-editor',
-        });
-        switchActivePath(nodeChatIndex, newPath);
+        if (navigateToNode({ chatId: chat.id, nodeId: node.id, source: 'branch-editor', history: 'push', selectChat: false, focus: 'none' }) !== 'reached') return;
         setSelectedNodeForModal({ nodeId: node.id, chatIndex: nodeChatIndex });
       }
     },
-    [chats, primaryChatIndex, switchActivePath, navigateToChat, pushNavigationEntry]
+    [chats, primaryChatIndex, navigateToNode, navigateToChat]
   );
 
   const onNodeDoubleClick = useCallback(
@@ -682,7 +654,7 @@ const BranchEditorCanvas = ({
       const chat = chats?.[nodeChatIndex];
       navigateToChat(nodeChatIndex, node.id);
     },
-    [chats, primaryChatIndex, navigateToChat, pushNavigationEntry]
+    [chats, primaryChatIndex, navigateToChat]
   );
 
   const onNodeContextMenu = useCallback(

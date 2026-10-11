@@ -6,6 +6,7 @@ import { createSearchSlice, type SearchSlice } from './search-slice';
 
 type SearchTestState = SearchSlice & {
   chats: Array<{ branchTree?: BranchTree }>;
+  navigateToNode: ReturnType<typeof vi.fn>;
   setBranchEditorFocusNodeId: ReturnType<typeof vi.fn>;
   switchActivePathSilent: ReturnType<typeof vi.fn>;
 };
@@ -41,6 +42,7 @@ const createBranchTree = (): BranchTree => ({
 const createSearchState = () => {
   let state = {
     chats: [{ branchTree: createBranchTree() }],
+    navigateToNode: vi.fn(),
     setBranchEditorFocusNodeId: vi.fn(),
     switchActivePathSilent: vi.fn(),
   } as unknown as SearchTestState;
@@ -87,8 +89,8 @@ describe('search-slice', () => {
   it('preserves the current result when search results are recomputed', () => {
     const getState = createSearchState();
     const initialResults: SearchResult[] = [
-      { nodeId: 'branch-a', chatIndex: 0, snippet: 'first', isOnActivePath: true, matchType: 'content' as const },
-      { nodeId: 'branch-b', chatIndex: 0, snippet: 'second', isOnActivePath: false, matchType: 'content' as const },
+      { nodeId: 'branch-a', chatId: 'chat-a', chatIndex: 0, snippet: 'first', isOnActivePath: true, matchType: 'content' as const },
+      { nodeId: 'branch-b', chatId: 'chat-a', chatIndex: 0, snippet: 'second', isOnActivePath: false, matchType: 'content' as const },
     ];
 
     getState().setSearchResults(initialResults);
@@ -97,8 +99,8 @@ describe('search-slice', () => {
     expect(getState().currentResultIndex).toBe(1);
 
     getState().setSearchResults([
-      { nodeId: 'branch-a', chatIndex: 0, snippet: 'first', isOnActivePath: false, matchType: 'content' as const },
-      { nodeId: 'branch-b', chatIndex: 0, snippet: 'second', isOnActivePath: true, matchType: 'content' as const },
+      { nodeId: 'branch-a', chatId: 'chat-a', chatIndex: 0, snippet: 'first', isOnActivePath: false, matchType: 'content' as const },
+      { nodeId: 'branch-b', chatId: 'chat-a', chatIndex: 0, snippet: 'second', isOnActivePath: true, matchType: 'content' as const },
     ]);
 
     expect(getState().currentResultNodeId).toBe('branch-b');
@@ -109,8 +111,8 @@ describe('search-slice', () => {
     const getState = createSearchState();
 
     getState().setSearchResults([
-      { nodeId: 'branch-a', chatIndex: 0, snippet: 'first', isOnActivePath: true, matchType: 'content' as const },
-      { nodeId: 'branch-b', chatIndex: 0, snippet: 'second', isOnActivePath: false, matchType: 'content' as const },
+      { nodeId: 'branch-a', chatId: 'chat-a', chatIndex: 0, snippet: 'first', isOnActivePath: true, matchType: 'content' as const },
+      { nodeId: 'branch-b', chatId: 'chat-a', chatIndex: 0, snippet: 'second', isOnActivePath: false, matchType: 'content' as const },
     ]);
 
     getState().nextResult();

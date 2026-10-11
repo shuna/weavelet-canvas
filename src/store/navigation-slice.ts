@@ -1,6 +1,7 @@
 import { v4 as uuidv4 } from 'uuid';
 import { StoreSlice } from './store';
 import { ChatView } from '@type/chat';
+import { buildPathToLeaf } from '@utils/branchUtils';
 
 export interface NavScrollAnchor {
   firstVisibleItemIndex: number;
@@ -21,6 +22,7 @@ export interface NavEntry {
 }
 
 export interface NavigationSlice {
+  navigateToNode: (input: { chatId: string; nodeId?: string; view?: ChatView; source: NavEntry['source']; history: 'push' | 'silent'; selectChat?: boolean; focus: 'bubble' | 'editor' | 'none' }) => 'reached' | 'chat-missing' | 'node-missing';
   navHistoryPast: NavEntry[];
   navHistoryCurrent: NavEntry | null;
   navHistoryFuture: NavEntry[];
@@ -84,6 +86,25 @@ export const createNavigationSlice: StoreSlice<NavigationSlice> = (
   set,
   get
 ) => ({
+  navigateToNode: ({ chatId, nodeId, view, source, history, selectChat = true, focus }) => {
+    const state = get();
+    const chatIndex = resolveChatIndex(state.chats, chatId);
+    const chat = state.chats?.[chatIndex];
+    if (!chat) return 'chat-missing';
+    if (nodeId && !chat.branchTree?.nodes[nodeId]) return 'node-missing';
+    const tree = chat.branchTree;
+    const preservePath = (source === 'search' || source === 'grep') && nodeId && tree?.activePath.includes(nodeId);
+    const path = nodeId && tree && !preservePath ? buildPathToLeaf(tree, nodeId) : [...(tree?.activePath ?? [])];
+    if (history === 'push') state.pushNavigationEntry({ chatId, activePath: path, focusedNodeId: nodeId, viewContext: view ?? state.chatActiveView, source });
+    if (tree && (path.length !== tree.activePath.length || path.some((id, index) => id !== tree.activePath[index]))) {
+      state.switchActivePathSilent(chatIndex, path);
+    }
+    if (selectChat) state.setCurrentChatIndex(chatIndex);
+    if (view !== undefined) state.setChatActiveView(view);
+    if (nodeId && focus === 'editor') state.setBranchEditorFocusNodeId(nodeId);
+    if (nodeId && focus === 'bubble') state.setPendingChatFocus({ chatIndex, nodeId });
+    return 'reached';
+  },
   navHistoryPast: [],
   navHistoryCurrent: null,
   navHistoryFuture: [],

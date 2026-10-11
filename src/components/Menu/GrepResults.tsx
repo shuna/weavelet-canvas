@@ -2,7 +2,6 @@ import React, { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import useStore from '@store/store';
 import { GrepResult } from '@store/grep-slice';
-import { buildPathToLeaf } from '@utils/branchUtils';
 
 const MAX_VISIBLE = 5;
 
@@ -164,29 +163,12 @@ const GrepResultGroup = ({ result, query }: { result: GrepResult; query: string 
   const [expanded, setExpanded] = useState(true);
   const [showAll, setShowAll] = useState(false);
   const navigateToGrepResult = useStore((state) => state.navigateToGrepResult);
-  const pushNavigationEntry = useStore((state) => state.pushNavigationEntry);
   const currentChatIndex = useStore((state) => state.currentChatIndex);
   const chats = useStore((state) => state.chats);
 
-  const handleClick = (chatIndex: number, nodeId?: string) => {
-    const isSameChat = currentChatIndex === chatIndex;
-    const chat = chats?.[chatIndex];
-    if (chat) {
-      // Build the destination path (where we're going), not the current path
-      const destPath =
-        nodeId && chat.branchTree && !nodeId.startsWith('legacy-')
-          ? buildPathToLeaf(chat.branchTree, nodeId)
-          : chat.branchTree?.activePath ?? [];
-      pushNavigationEntry({
-        chatId: chat.id,
-        activePath: destPath,
-        focusedNodeId: nodeId,
-        viewContext: useStore.getState().chatActiveView,
-        source: 'grep',
-      });
-    }
-    navigateToGrepResult(chatIndex, nodeId);
-    triggerHighlight(query, !isSameChat);
+  const handleClick = (chatId: string, nodeId?: string) => {
+    const isSameChat = chats?.[currentChatIndex]?.id === chatId;
+    if (navigateToGrepResult(chatId, nodeId)) triggerHighlight(query, !isSameChat);
   };
 
   const visibleMatches = showAll ? result.matches : result.matches.slice(0, MAX_VISIBLE);
@@ -217,7 +199,7 @@ const GrepResultGroup = ({ result, query }: { result: GrepResult; query: string 
             <button
               key={`${match.nodeId}-${i}`}
               className='block w-full truncate px-3 py-1 text-left text-xs text-gray-500 hover:bg-gray-100 hover:text-gray-700 dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-gray-200'
-              onClick={() => handleClick(result.chatIndex, match.nodeId)}
+              onClick={() => handleClick(result.chatId, match.nodeId)}
               title={match.snippet}
             >
               <HighlightedSnippet snippet={match.snippet} query={query} />
