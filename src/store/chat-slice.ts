@@ -8,6 +8,7 @@ import { materializeActivePath } from '@utils/branchUtils';
 import { generateDefaultChat } from '@constants/chat';
 import { deepCloneSingleChat } from '@utils/chatShallowClone';
 import { prepareChatForExport } from '@utils/chatExport';
+import { finalizeStreamingSnapshotState } from '@utils/streamingBuffer';
 
 export interface ChatSlice {
   removeChats: (input: { chatIds: readonly string[] }) => { removedChatIds: string[]; missingChatIds: string[]; selectedChatId: string };
@@ -165,12 +166,15 @@ export const createChatSlice: StoreSlice<ChatSlice> = (set, get) => {
       let title = `Copy of ${source.title}`;
       let number = 0;
       while (chats!.some(chat => chat.title === title)) title = `Copy ${++number} of ${source.title}`;
+      const snapshot = finalizeStreamingSnapshotState([source], current);
+      const frozen = snapshot.chats![0];
       const copy = deepCloneSingleChat(scope === 'activePath'
-        ? prepareChatForExport(source, current, { visibleBranchOnly: true }).chat : source);
+        ? prepareChatForExport(frozen, snapshot.contentStore, { visibleBranchOnly: true }).chat : frozen);
       copy.title = title;
       const contentStore = { ...current };
       for (const node of Object.values(copy.branchTree?.nodes ?? {})) {
-        if (contentStore[node.contentHash]) contentStore[node.contentHash] = { ...contentStore[node.contentHash] };
+        const entry = contentStore[node.contentHash];
+        contentStore[node.contentHash] = entry ? { ...entry } : { ...snapshot.contentStore[node.contentHash], refCount: 0 };
         retainContent(contentStore, node.contentHash);
       }
       return selectNewChat(copy, contentStore);
