@@ -15,7 +15,7 @@ import { materializeActivePath } from '@utils/branchUtils';
 import { showToast } from '@utils/showToast';
 import {
   finalizeStreamingBuffer,
-  getStreamingNodeIdFromHash,
+  getStreamingTargetFromHash,
   peekBufferedContent,
   isStreamingContentHash,
 } from '@utils/streamingBuffer';
@@ -82,7 +82,7 @@ function finalizeStreamingNodesInChat(
   const updatedChats = cloneChatAt(chats, chatIndex);
   const updatedTree = updatedChats[chatIndex].branchTree!;
   for (const node of streamingNodes) {
-    const content = finalizeStreamingBuffer(node.id);
+    const content = finalizeStreamingBuffer(chat.id, node.id);
     updatedTree.nodes[node.id] = {
       ...updatedTree.nodes[node.id],
       contentHash: addContent(contentStore, content),
@@ -235,8 +235,8 @@ const hasClipboardContent = (clipboard: BranchClipboard, contentStore: ContentSt
   clipboard.nodeIds.length > 0 && clipboard.nodeIds.every((id) => {
     const node = clipboard.nodes[id];
     if (!node) return false;
-    const streamingId = getStreamingNodeIdFromHash(node.contentHash);
-    if (streamingId) return peekBufferedContent(streamingId) !== undefined;
+    const target = getStreamingTargetFromHash(node.contentHash);
+    if (target) return peekBufferedContent(target.chatId, target.nodeId) !== undefined;
     let hash: string | undefined = node.contentHash;
     const visited = new Set<string>();
     while (hash) {

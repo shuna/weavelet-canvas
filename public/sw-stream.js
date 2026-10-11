@@ -392,6 +392,8 @@ async function handleStartStream(msg, port) {
   // Save initial record
   const initialRecord = {
     requestId,
+    chatId: msg.chatId,
+    nodeId: msg.nodeId,
     chatIndex: msg.chatIndex,
     messageIndex: msg.messageIndex,
     bufferedText: '',
@@ -404,7 +406,10 @@ async function handleStartStream(msg, port) {
     initialRecord.proxySessionId = proxyConfig.sessionId;
     initialRecord.lastProxyEventId = 0;
   }
-  await dbPut(initialRecord);
+  // The page created this record first; update in place to preserve a committed checkpoint.
+  const existing = await dbGet(requestId);
+  if (existing) await dbUpdate(requestId, { proxySessionId: initialRecord.proxySessionId, lastProxyEventId: initialRecord.lastProxyEventId });
+  else await dbPut(initialRecord);
 
   function postToClient(data) {
     if (port) {

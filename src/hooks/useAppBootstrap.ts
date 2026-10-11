@@ -18,6 +18,8 @@ import {
   setChatDataWritesBlocked,
 } from '@store/storage/IndexedDbStorage';
 import { notifyStorageError } from '@store/storage/storageErrors';
+import { updateStreamCheckpoints } from '@utils/streamDb';
+import { getStreamCheckpointTargets } from './submitRuntime';
 import { registerSnapshotFlushCallback } from '@utils/streamingBuffer';
 import { setRuntimeStoreGetter } from '@src/local-llm/runtime';
 
@@ -82,7 +84,11 @@ const useAppBootstrap = () => {
         while (true) {
           pendingSave = false;
           try {
-            await saveChatData(createPersistedChatDataState(useStore.getState()));
+            const snapshot = createPersistedChatDataState(useStore.getState());
+            const targets = getStreamCheckpointTargets();
+            await saveChatData(snapshot);
+            const currentRequests = new Set(getStreamCheckpointTargets().map(target => target.requestId));
+            await updateStreamCheckpoints(snapshot, targets.filter(target => currentRequests.has(target.requestId)));
           } catch (error) {
             notifyStorageError(error);
           }

@@ -14,6 +14,7 @@ import {
   getAllPending,
   deleteRequest,
   cleanupStale,
+  updateStreamCheckpoints,
   type StreamRecord,
 } from './streamDb';
 
@@ -157,9 +158,9 @@ describe('getAllPending', () => {
 });
 
 describe('cleanupStale', () => {
-  it('removes records older than maxAgeMs', async () => {
+  it('removes only acknowledged records older than maxAgeMs', async () => {
     const old = Date.now() - 7200000; // 2 hours ago
-    await saveRequest(makeRecord({ requestId: 'stale-1', createdAt: old }));
+    await saveRequest(makeRecord({ requestId: 'stale-1', acknowledged: true, createdAt: old }));
     await saveRequest(makeRecord({ requestId: 'fresh-1', createdAt: Date.now() }));
     await cleanupStale(3600000); // 1 hour threshold
     expect(await getRequest('stale-1')).toBeUndefined();
@@ -186,5 +187,28 @@ describe('proxy recovery fields', () => {
     await setGenerationId('proxy-gen', 'gen-xyz');
     const result = await getRequest('proxy-gen');
     expect(result!.generationId).toBe('gen-xyz');
+  });
+});
+
+
+describe('saved checkpoints', () => {
+  const snapshot = (hash: string) => ({ chats: [{ id: 'chat', branchTree: { rootId: 'node', activePath: ['node'], nodes: { node: { id: 'node', role: 'assistant' as const, parentId: null, contentHash: hash, createdAt: 1 } } } }] });
+  it('updates the exact request target without using its old indexes', async () => {
+    await saveRequest(makeRecord({ chatId: 'chat', nodeId: 'node', checkpointHash: 'old', chatIndex: 9, messageIndex: 9 }));
+    await updateStreamCheckpoints(snapshot('saved'), [{ requestId: 'req-1', chatId: 'chat', nodeId: 'node' }]);
+    expect((await getRequest('req-1'))?.checkpointHash).toBe('saved');
+    await updateStreamCheckpoints(snapshot('wrong-request'), [{ requestId: 'other', chatId: 'chat', nodeId: 'node' }]);
+    expect((await getRequest('req-1'))?.checkpointHash).toBe('saved');
+  });
+  it('retains legacy and mismatched recovery data, including stale unacknowledged records', async () => {
+    await saveRequest(makeRecord({ requestId: 'legacy', createdAt: 1 }));
+    await saveRequest(makeRecord({ requestId: 'mismatch', chatId: 'chat', nodeId: 'node', checkpointHash: 'old', checkpointRole: 'assistant', appliedHash: 'recovered', createdAt: 1 }));
+    await cleanupStale(1);
+    await updateStreamCheckpoints(snapshot('edited'), []);
+    expect(await getRequest('legacy')).toBeDefined();
+    expect(await getRequest('mismatch')).toBeDefined();
+    await updateStreamCheckpoints(snapshot('recovered'), []);
+    expect(await getRequest('mismatch')).toBeUndefined();
+    expect(await getRequest('legacy')).toBeDefined();
   });
 });

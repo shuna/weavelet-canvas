@@ -2,8 +2,10 @@ import { recordOpenRouterObservation } from '@utils/openrouterObservation';
 import { observeOpenRouterUsage } from '@utils/openrouterControls';
 import { useEffect, useRef } from 'react';
 import useStore from '@store/store';
-import { getAllPending, deleteRequest, StreamRecord } from '@utils/streamDb';
-import { upsertActivePathMessage } from '@utils/branchUtils';
+import { getAllPending, deleteRequest, saveRequest, StreamRecord } from '@utils/streamDb';
+import { materializeActivePath } from '@utils/branchUtils';
+import { addContent } from '@utils/contentStore';
+import { beginAiTask, finishAiTask, isAiTaskCurrent } from './aiTaskLifetime';
 import { cloneChatAtIndex } from '@utils/chatShallowClone';
 import { register } from '@utils/swBridge';
 import {
@@ -22,9 +24,8 @@ import {
 } from '@utils/openrouterVerification';
 import {
   buildRecoveredMessage,
-  findRecoverableChat,
+  resolveRecoveryTarget,
   getCurrentMessageText,
-  hasRecoverableMessage,
   resolveRecoveryStatus,
   shouldApplyRecoveredText,
 } from './streamRecoveryHelpers';
@@ -204,13 +205,6 @@ async function tryProxyRecovery(
     if (!result.interrupted) break;
   }
 
-  // Only ACK (delete KV) when we exited normally — NOT on client-side abort.
-  // If the client timed out but the Worker is still streaming, we must keep
-  // the KV cache so the next recovery attempt can pick up remaining data.
-  if (!signal.aborted) {
-    sendAck(config, record.proxySessionId);
-  }
-
   return bestText && bestText.length > currentText.length ? bestText : null;
 }
 
@@ -339,14 +333,6 @@ async function recoverPendingInner(manual: boolean, debugId: string) {
     return;
   }
 
-  // Skip recovery entirely when proxy is disabled
-  const { proxyEnabled } = useStore.getState();
-  if (!proxyEnabled) {
-    debugReport(debugId, { status: 'done', detail: 'Proxy disabled — recovery skipped' });
-    if (manual) showToast('プロキシが無効のためリカバリは実行されません', 'info');
-    return;
-  }
-
   let records: StreamRecord[];
   try {
     records = await getAllPending();
@@ -371,7 +357,6 @@ async function recoverPendingInner(manual: boolean, debugId: string) {
   // Auto-timeout for the entire recovery session
   const timeoutId = setTimeout(() => abort.abort(), PROXY_RECOVERY_STREAM_TIMEOUT_MS);
 
-  const { setChats } = useStore.getState();
   let recoveredCount = 0;
   let failedCount = 0;
   let restoredMessageCount = 0;
@@ -386,183 +371,93 @@ async function recoverPendingInner(manual: boolean, debugId: string) {
         break;
       }
 
-      const { requestId, chatIndex, messageIndex, bufferedText } = record;
-      debugReport(debugId, {
-        detail: `${formatDebugTime()} inspect ${requestId.slice(0, 8)} m${messageIndex}`,
-      });
+      const { requestId, bufferedText } = record;
+      const initial = useStore.getState();
+      const target = resolveRecoveryTarget(initial.chats, initial.contentStore, record);
+      if (!target) {
+        debugReport(`recovery-record:${requestId}`, { label: 'Recovery Record', status: 'done', detail: 'IDs or saved checkpoint do not match; retained' });
+        continue;
+      }
+      const hasActiveSession = Object.values(initial.generatingSessions).some(session => session.chatId === record.chatId && session.targetNodeId === record.nodeId);
+      const effectiveStatus = resolveRecoveryStatus(record, Date.now(), hasActiveSession);
+      if (effectiveStatus === 'streaming') continue;
+
+      const recordAbort = new AbortController();
+      const abortRecord = () => recordAbort.abort();
+      abort.signal.addEventListener('abort', abortRecord, { once: true });
+      const ticket = beginAiTask({ kind: 'recovery', requestId, chatId: record.chatId!, nodeId: record.nodeId!, dependencyIds: [], cancel: abortRecord });
+      let expectedHash = record.checkpointHash!;
       let restoredThisRecord = false;
       let proxyRecoveredThisRecord = false;
-
-      // Re-read latest state each iteration to avoid overwriting prior recoveries
-      const chats = useStore.getState().chats;
-      if (!chats) return;
-
-      const chat = findRecoverableChat(chats, chatIndex);
-      if (!chat) {
-        await deleteRequest(requestId);
-        continue;
-      }
-      if (!hasRecoverableMessage(chat, messageIndex)) {
-        await deleteRequest(requestId);
-        continue;
-      }
-
-      const currentText = getCurrentMessageText(chat.messages[messageIndex]);
-      const generatingSessions = Object.values(useStore.getState().generatingSessions);
-      const hasActiveSession = generatingSessions.some(
-        (session) => session.chatId === chat.id && session.messageIndex === messageIndex
-      );
-      const chatHasAnyActiveSession = generatingSessions.some(
-        (session) => session.chatId === chat.id
-      );
-
-      // Determine if stream is stale (SW probably died)
-      // IMPORTANT: check this BEFORE applying buffered text — applying stale
-      // text to an actively-streaming message overwrites the streaming content
-      // hash and disconnects the live streaming buffer from the React tree.
-      const effectiveStatus = resolveRecoveryStatus(record, Date.now(), hasActiveSession);
-      debugReport(`recovery-record:${requestId}`, {
-        label: 'Recovery Record',
-        status: effectiveStatus === 'streaming' ? 'active' : 'done',
-        detail: `${formatDebugTime()} status=${effectiveStatus}`,
-      });
-      if (effectiveStatus === 'streaming') {
-        debugReport(`recovery-record:${requestId}`, {
-          status: 'done',
-          detail: `${formatDebugTime()} still streaming`,
-        });
-        continue;
-      }
-
-      if (abort.signal.aborted) {
-        cancelled = recoveryCancelledManually;
-        timedOut = !cancelled;
-        break;
-      }
-
-      // Apply IndexedDB buffered text (fast, local)
-      const bestText = bufferedText;
-      if (shouldApplyRecoveredText(currentText, bestText)) {
-        debugReport(`recovery-record:${requestId}`, {
-          status: 'active',
-          detail: `${formatDebugTime()} apply indexeddb len=${bestText.length}`,
-        });
-        const updatedChats = cloneChatAtIndex(chats, chatIndex);
-        const updatedMessages = updatedChats[chatIndex].messages;
-        const oldMsg = updatedMessages[messageIndex];
-        const newMsg = buildRecoveredMessage(oldMsg, bestText);
-        updatedMessages[messageIndex] = newMsg;
-        upsertActivePathMessage(
-          updatedChats[chatIndex],
-          messageIndex,
-          newMsg,
-          useStore.getState().contentStore
-        );
-        setChats(updatedChats);
+      const currentTarget = () => {
+        if (recordAbort.signal.aborted || !isAiTaskCurrent(ticket)) return null;
+        const state = useStore.getState();
+        if (Object.values(state.generatingSessions).some(session => session.chatId === record.chatId && session.targetNodeId === record.nodeId)) return null;
+        return resolveRecoveryTarget(state.chats, state.contentStore, record, expectedHash);
+      };
+      const applyText = (text: string): boolean => {
+        const latest = currentTarget();
+        if (!latest || !shouldApplyRecoveredText(getCurrentMessageText(latest.message), text)) return false;
+        const state = useStore.getState();
+        const chats = cloneChatAtIndex(state.chats!, latest.chatIndex);
+        const chat = chats[latest.chatIndex];
+        const contentStore = Object.fromEntries(Object.entries(state.contentStore).map(([hash, entry]) => [hash, { ...entry }]));
+        const message = buildRecoveredMessage(latest.message, text);
+        expectedHash = addContent(contentStore, message.content);
+        chat.branchTree!.nodes[record.nodeId!] = { ...latest.node, contentHash: expectedHash };
+        chat.messages = materializeActivePath(chat.branchTree!, contentStore);
+        state.invalidateBranchHistory([chat.id]);
+        state.applyBranchState(chats, contentStore, { recordHistory: false });
         restoredThisRecord = true;
-      }
-
-      // Second: try proxy recovery for interrupted/failed/streaming-with-proxy streams
-      const { proxyEnabled } = useStore.getState();
-      if (
-        proxyEnabled &&
-        (effectiveStatus === 'interrupted' || effectiveStatus === 'failed' || effectiveStatus === 'streaming-with-proxy') &&
-        record.proxySessionId
-      ) {
-        debugReport(debugId, { detail: `Proxy recovery for session ${record.proxySessionId.slice(0, 8)}…` });
-        try {
-          const proxyText = await tryProxyRecovery(
-            record,
-            getCurrentMessageText(
-              useStore.getState().chats?.[chatIndex]?.messages[messageIndex]
-            ),
-            abort.signal
-          );
-          // Re-check abort after async proxy call — if cancelled mid-flight,
-          // discard partial results instead of applying them.
-          if (abort.signal.aborted) break;
-          if (proxyText) {
-            debugReport(debugId, { detail: `Proxy recovered ${proxyText.length} chars` });
-            debugReport(`recovery-record:${requestId}`, {
-              status: 'active',
-              detail: `${formatDebugTime()} apply proxy len=${proxyText.length}`,
-            });
-            const latestChats = useStore.getState().chats;
-            if (latestChats) {
-              const updatedChats = cloneChatAtIndex(latestChats, chatIndex);
-              const updatedMessages = updatedChats[chatIndex].messages;
-              const oldMsg = updatedMessages[messageIndex];
-              const newMsg = buildRecoveredMessage(oldMsg, proxyText);
-              updatedMessages[messageIndex] = newMsg;
-              upsertActivePathMessage(
-                updatedChats[chatIndex],
-                messageIndex,
-                newMsg,
-                useStore.getState().contentStore
-              );
-              setChats(updatedChats);
-              recoveredCount++;
-              restoredThisRecord = true;
-              proxyRecoveredThisRecord = true;
+        return true;
+      };
+      try {
+        applyText(bufferedText);
+        if (useStore.getState().proxyEnabled && effectiveStatus !== 'completed' && record.proxySessionId) {
+          try {
+            const latest = currentTarget();
+            if (!latest) continue;
+            const proxyText = await tryProxyRecovery(record, getCurrentMessageText(latest.message), recordAbort.signal);
+            if (!currentTarget()) continue;
+            if (proxyText) {
+              // Keep the proxy result recoverable before ACK; the primary snapshot is a separate commit.
+              await saveRequest({ ...record, bufferedText: proxyText, updatedAt: Date.now() });
+              if (!currentTarget()) continue;
+              if (applyText(proxyText)) { recoveredCount++; proxyRecoveredThisRecord = true; }
             }
+            if (record.proxySessionId && currentTarget()) {
+              const state = useStore.getState();
+              sendAck({ endpoint: state.proxyEndpoint.replace(/\/+$/, ''), authToken: state.proxyAuthToken || undefined }, record.proxySessionId);
+            }
+          } catch {
+            debugReport(debugId, { detail: 'Proxy recovery failed, using IndexedDB data' });
+            failedCount++;
           }
-        } catch {
-          debugReport(debugId, { detail: 'Proxy recovery failed, using IndexedDB data' });
-          failedCount++;
         }
-      }
-
-      const latestChat = useStore.getState().chats?.[chatIndex];
-      const targetNodeId = latestChat?.branchTree?.activePath?.[messageIndex];
-      const observationChat = useStore.getState().chats?.[chatIndex];
-      const observationNode = observationChat?.branchTree?.activePath[messageIndex];
-      if (observationChat && observationNode && record.openRouterObservation) recordOpenRouterObservation(observationChat.id, observationNode, record.openRouterObservation);
-      if (
-        record.generationId &&
-        latestChat?.config.providerId === 'openrouter' &&
-        targetNodeId
-      ) {
-        useStore.getState().queueVerification(
-          buildVerifiedStatsKey(latestChat.id, targetNodeId),
-          {
-            generationId: record.generationId,
-            chatId: latestChat.id,
-            targetNodeId,
+        const latest = currentTarget();
+        if (!latest) continue;
+        if (record.openRouterObservation) recordOpenRouterObservation(latest.chat.id, record.nodeId!, record.openRouterObservation);
+        if (record.generationId && latest.chat.config.providerId === 'openrouter') {
+          useStore.getState().queueVerification(buildVerifiedStatsKey(latest.chat.id, record.nodeId!), {
+            generationId: record.generationId, chatId: latest.chat.id, targetNodeId: record.nodeId!,
             nextAttemptAt: Date.now() + OPENROUTER_VERIFICATION_INITIAL_DELAY_MS,
-          }
-        );
-      }
-
-      if (restoredThisRecord) {
-        restoredMessageCount++;
-      }
-
-      // Set stream end status indicator for the recovered message
-      if (targetNodeId && restoredThisRecord) {
-        const isPartial = effectiveStatus === 'interrupted' || effectiveStatus === 'failed';
-        if (isPartial) {
-          useStreamEndStatusStore.getState().setStatus(targetNodeId, 'recovered_partial');
-        } else if (proxyRecoveredThisRecord) {
-          useStreamEndStatusStore.getState().setStatus(targetNodeId, 'recovered');
-        } else {
-          // IndexedDB-only recovery that completed successfully
-          useStreamEndStatusStore.getState().setStatus(targetNodeId, 'completed');
+          });
         }
+        if (restoredThisRecord) {
+          await saveRequest({ ...record, bufferedText: getCurrentMessageText(latest.message), appliedHash: expectedHash, updatedAt: Date.now() });
+          if (!currentTarget()) continue;
+          restoredMessageCount++;
+          const isPartial = effectiveStatus === 'interrupted' || effectiveStatus === 'failed';
+          useStreamEndStatusStore.getState().setStatus(record.nodeId!, isPartial ? 'recovered_partial' : proxyRecoveredThisRecord ? 'recovered' : 'completed');
+          // Bootstrap acknowledges appliedHash only after the primary snapshot commits.
+        } else if (latest.node.contentHash === record.checkpointHash) {
+          await deleteRequest(requestId);
+        }
+      } finally {
+        finishAiTask(ticket);
+        abort.signal.removeEventListener('abort', abortRecord);
       }
 
-      // Clear generating sessions for this chat — but only if no other
-      // active session is still streaming to the same chat.
-      if (!chatHasAnyActiveSession) {
-        useStore.getState().removeSessionsForChat(
-          useStore.getState().chats?.[chatIndex]?.id ?? ''
-        );
-      }
-
-      await deleteRequest(requestId);
-      debugReport(`recovery-record:${requestId}`, {
-        status: 'done',
-        detail: `${formatDebugTime()} record deleted`,
-      });
     }
   } finally {
     clearTimeout(timeoutId);

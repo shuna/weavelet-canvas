@@ -328,7 +328,7 @@ describe('loadSplitData crash recovery', () => {
 
   it('loads a committed transient streaming reference so rehydration can repair it', async () => {
     const chat = makeChat('interrupted-stream', [
-      createStreamingContentHash('assistant-node'),
+      createStreamingContentHash('chat', 'assistant-node'),
     ]);
     await idbPut('meta', {
       version: 18,
@@ -386,7 +386,7 @@ describe('loadSplitData crash recovery', () => {
   it('still rejects transient streaming references when saving directly', async () => {
     await expect(
       saveChatData({
-        chats: [makeChat('unsafe-save', [createStreamingContentHash('node')])],
+        chats: [makeChat('unsafe-save', [createStreamingContentHash('chat', 'node')])],
         contentStore: {},
         branchClipboard: null,
       })
@@ -801,7 +801,7 @@ describe('legacy migration integrity', () => {
     await idbPut('chat-data', {
       version: 18,
       chats: [
-        makeChat('legacy-stream', [createStreamingContentHash('assistant-node')]),
+        makeChat('legacy-stream', [createStreamingContentHash('chat', 'assistant-node')]),
       ],
       contentStore: {},
       branchClipboard: null,

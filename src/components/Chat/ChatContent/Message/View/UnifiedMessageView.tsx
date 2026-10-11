@@ -177,8 +177,8 @@ const UnifiedMessageView = memo(
       observer.observe(contentElement);
       return () => observer.disconnect();
     }, [isGeneratingMessage, contentElement]);
-    const streamingText = useStreamingText(isGeneratingMessage ? nodeId : undefined, streamVisible);
-    const streamingReasoning = useStreamingReasoning(isGeneratingMessage ? nodeId : undefined, streamVisible, false);
+    const streamingText = useStreamingText(currentChatId, isGeneratingMessage ? nodeId : undefined, streamVisible);
+    const streamingReasoning = useStreamingReasoning(currentChatId, isGeneratingMessage ? nodeId : undefined, streamVisible, false);
     // Resolve reasoning: from streaming buffer during generation, from persisted content otherwise
     const persistedReasoning = Array.isArray(content)
       ? content.filter(isReasoningContent).map((c) => c.text).join('')
@@ -205,6 +205,7 @@ const UnifiedMessageView = memo(
           <div ref={setContentElement} className={`${contentSurfaceClass} relative`}>
             {role === 'assistant' && currentReasoning && (
               <CollapsibleReasoning
+                chatId={currentChatId}
                 reasoning={currentReasoning}
                 nodeId={nodeId}
                 visible={streamVisible}

@@ -126,8 +126,8 @@ describe('persistence', () => {
 
   it('finalizes streaming marker nodes when building a full snapshot', () => {
     const state = buildStoreState();
-    state.chats[0].branchTree!.nodes['node-2'].contentHash = createStreamingContentHash('node-2');
-    initializeStreamingBuffer('node-2', [{ type: 'text', text: 'streamed' }]);
+    state.chats[0].branchTree!.nodes['node-2'].contentHash = createStreamingContentHash('chat-1', 'node-2');
+    initializeStreamingBuffer('chat-1', 'node-2', [{ type: 'text', text: 'streamed' }]);
 
     const partialized = createPartializedState(state as never);
     const persistedNode = partialized.chats?.[0].branchTree?.nodes['node-2'];
@@ -184,8 +184,8 @@ describe('persistence', () => {
       const remote: Partial<ReturnType<typeof createPartializedState>> = createPartializedState(buildStoreState() as never);
       if (omitContentStore) {
         remote.contentStore = undefined;
-        remote.chats![0].branchTree!.nodes['node-1'].contentHash = createStreamingContentHash('node-1');
-        remote.chats![0].branchTree!.nodes['node-2'].contentHash = createStreamingContentHash('node-2');
+        remote.chats![0].branchTree!.nodes['node-1'].contentHash = createStreamingContentHash('chat-1', 'node-1');
+        remote.chats![0].branchTree!.nodes['node-2'].contentHash = createStreamingContentHash('chat-1', 'node-2');
       }
       const original = structuredClone(remote);
       const expected = hydrateFromPersistedStoreState(structuredClone(base) as never, structuredClone(remote));

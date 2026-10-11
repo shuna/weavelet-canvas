@@ -44,7 +44,7 @@ function resolveCompletionMessage(
   storeMessage: MessageInterface | undefined,
   targetNodeId: string
 ): MessageInterface | undefined {
-  const liveContent = peekBufferedContent(targetNodeId);
+  const liveContent = peekBufferedContent('chat-1', targetNodeId);
   if (liveContent) {
     return { role: 'assistant', content: liveContent };
   }
@@ -92,8 +92,8 @@ describe('TokenCount live streaming content resolution', () => {
 
   it('returns live buffer content when streaming buffer exists', () => {
     const storeMsg = textMsg('assistant', 'first chunk');
-    initializeStreamingBuffer('node-assistant', [{ type: 'text', text: 'first chunk' }]);
-    appendToStreamingBuffer('node-assistant', ' more text');
+    initializeStreamingBuffer('chat-1', 'node-assistant', [{ type: 'text', text: 'first chunk' }]);
+    appendToStreamingBuffer('chat-1', 'node-assistant', ' more text');
 
     const resolved = resolveCompletionMessage(storeMsg, 'node-assistant');
     expect(resolved).not.toBe(storeMsg);
@@ -112,8 +112,8 @@ describe('TokenCount live streaming content resolution', () => {
     const storeMsg = textMsg('assistant', 'Hello');
 
     // Streaming buffer has accumulated much more text
-    initializeStreamingBuffer('node-assistant', [{ type: 'text', text: 'Hello' }]);
-    appendToStreamingBuffer('node-assistant', ', this is a much longer response from the LLM');
+    initializeStreamingBuffer('chat-1', 'node-assistant', [{ type: 'text', text: 'Hello' }]);
+    appendToStreamingBuffer('chat-1', 'node-assistant', ', this is a much longer response from the LLM');
 
     const resolved = resolveCompletionMessage(storeMsg, 'node-assistant');
     const resolvedText = (resolved!.content[0] as { text: string }).text;

@@ -2,6 +2,7 @@ import { showToast } from '@utils/showToast';
 
 import type { ChatInterface, MessageInterface, TextContentInterface } from '@type/chat';
 import { isTextContent } from '@type/chat';
+import { resolveContent, type ContentStoreData } from '@utils/contentStore';
 import type { StreamRecord } from '@utils/streamDb';
 
 export type RecoveryStatus = Exclude<StreamRecord['status'], 'streaming'> | 'streaming-with-proxy';
@@ -96,4 +97,14 @@ const RECOVERY_TOASTS: Record<
 export const showRecoveryToast = (status: RecoveryStatus) => {
   const entry = RECOVERY_TOASTS[status];
   showToast(entry.message, entry.status, entry.duration);
+};
+
+/** Missing IDs/checkpoints remain recovery data, never an index-based write target. */
+export const resolveRecoveryTarget = (chats: ChatInterface[] | undefined, contentStore: ContentStoreData, record: StreamRecord, expectedHash = record.checkpointHash) => {
+  if (!record.chatId || !record.nodeId || !expectedHash || !record.checkpointRole) return null;
+  const chatIndex = chats?.findIndex(chat => chat.id === record.chatId) ?? -1;
+  const chat = chats?.[chatIndex];
+  const node = chat?.branchTree?.nodes[record.nodeId];
+  if (!chat || !node || node.contentHash !== expectedHash || node.role !== record.checkpointRole) return null;
+  return { chat, chatIndex, node, messageIndex: chat.branchTree!.activePath.indexOf(record.nodeId), message: { role: node.role, content: resolveContent(contentStore, node.contentHash) } };
 };

@@ -26,8 +26,8 @@ function makeChatWithStreamingNode(
   const userHash = addContent(contentStore, textContent('hello'));
 
   // Set up an assistant node with a streaming buffer
-  initializeStreamingBuffer(nodeId, textContent(streamingText), chatId);
-  const streamingHash = createStreamingContentHash(nodeId);
+  initializeStreamingBuffer(chatId, nodeId, textContent(streamingText));
+  const streamingHash = createStreamingContentHash(chatId, nodeId);
 
   const chat: ChatInterface = {
     id: chatId,
@@ -90,7 +90,7 @@ describe('finalizeStreamingNodesInChat', () => {
     expect(isStreamingContentHash(nodeHash)).toBe(false);
 
     // Buffer should be cleared
-    expect(isBufferingNode('node-asst')).toBe(false);
+    expect(isBufferingNode('chat-1', 'node-asst')).toBe(false);
 
     // Content should be preserved in the content store
     expect(contentStore[nodeHash]?.content).toEqual(textContent('Hello world'));
@@ -133,7 +133,7 @@ describe('finalizeStreamingNodesInChat', () => {
     expect(isStreamingContentHash(nodeHash)).toBe(true);
 
     // Buffer should still be alive
-    expect(isBufferingNode('node-asst')).toBe(true);
+    expect(isBufferingNode('chat-1', 'node-asst')).toBe(true);
   });
 
   it('finalizes idle streaming nodes while preserving active ones', () => {
@@ -141,12 +141,12 @@ describe('finalizeStreamingNodesInChat', () => {
 
     // Set up an idle streaming node (no active session)
     const idleHash = addContent(contentStore, textContent(''));
-    initializeStreamingBuffer('node-idle', textContent('idle content'), 'chat-1');
-    appendToStreamingBuffer('node-idle', ' done');
+    initializeStreamingBuffer('chat-1', 'node-idle', textContent('idle content'));
+    appendToStreamingBuffer('chat-1', 'node-idle', ' done');
 
     // Set up an active streaming node
-    initializeStreamingBuffer('node-active', textContent('active '), 'chat-1');
-    appendToStreamingBuffer('node-active', 'partial');
+    initializeStreamingBuffer('chat-1', 'node-active', textContent('active '));
+    appendToStreamingBuffer('chat-1', 'node-active', 'partial');
 
     const userHash = addContent(contentStore, textContent('hi'));
 
@@ -179,14 +179,14 @@ describe('finalizeStreamingNodesInChat', () => {
             id: 'node-idle',
             parentId: 'node-user',
             role: 'assistant',
-            contentHash: createStreamingContentHash('node-idle'),
+            contentHash: createStreamingContentHash('chat-1', 'node-idle'),
             createdAt: 2,
           },
           'node-active': {
             id: 'node-active',
             parentId: 'node-idle',
             role: 'assistant',
-            contentHash: createStreamingContentHash('node-active'),
+            contentHash: createStreamingContentHash('chat-1', 'node-active'),
             createdAt: 3,
           },
         },
@@ -218,7 +218,7 @@ describe('finalizeStreamingNodesInChat', () => {
     const idleNodeHash =
       result[0].branchTree!.nodes['node-idle'].contentHash;
     expect(isStreamingContentHash(idleNodeHash)).toBe(false);
-    expect(isBufferingNode('node-idle')).toBe(false);
+    expect(isBufferingNode('chat-1', 'node-idle')).toBe(false);
     expect(contentStore[idleNodeHash]?.content[0]).toEqual({
       type: 'text',
       text: 'idle content done',
@@ -228,7 +228,7 @@ describe('finalizeStreamingNodesInChat', () => {
     const activeNodeHash =
       result[0].branchTree!.nodes['node-active'].contentHash;
     expect(isStreamingContentHash(activeNodeHash)).toBe(true);
-    expect(isBufferingNode('node-active')).toBe(true);
+    expect(isBufferingNode('chat-1', 'node-active')).toBe(true);
   });
 
   it('falls back to finalizing all when generatingSessions is undefined', () => {
@@ -243,7 +243,7 @@ describe('finalizeStreamingNodesInChat', () => {
 
     const nodeHash = result[0].branchTree!.nodes['node-asst'].contentHash;
     expect(isStreamingContentHash(nodeHash)).toBe(false);
-    expect(isBufferingNode('node-asst')).toBe(false);
+    expect(isBufferingNode('chat-1', 'node-asst')).toBe(false);
   });
 
   it('sessions for a different chat do not prevent finalization', () => {

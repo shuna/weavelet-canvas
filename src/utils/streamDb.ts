@@ -1,7 +1,12 @@
-import type { OpenRouterObservation } from '@type/chat';
+import type { ChatInterface, OpenRouterObservation, Role } from '@type/chat';
 export interface StreamRecord {
   openRouterObservation?: OpenRouterObservation;
   requestId: string;
+  chatId?: string;
+  nodeId?: string;
+  checkpointHash?: string;
+  checkpointRole?: Role;
+  appliedHash?: string;
   chatIndex: number;
   messageIndex: number;
   bufferedText: string;
@@ -137,7 +142,7 @@ export async function cleanupStale(maxAgeMs: number = 3600000): Promise<void> {
   const all: StreamRecord[] = await reqToPromise(store.getAll());
   const now = Date.now();
   for (const r of all) {
-    if (now - r.createdAt > maxAgeMs) {
+    if (r.acknowledged && now - r.createdAt > maxAgeMs) {
       store.delete(r.requestId);
     }
   }
@@ -156,6 +161,33 @@ export async function setStreamObservation(requestId: string, patch: OpenRouterO
     request.onsuccess = () => {
       const record = request.result as StreamRecord | undefined;
       if (record) store.put({ ...record, openRouterObservation: { ...record.openRouterObservation, ...patch }, updatedAt: Date.now() });
+    };
+  });
+}
+
+export interface StreamCheckpointTarget { requestId: string; chatId: string; nodeId: string }
+
+/** Call only after the primary chat snapshot has committed. Separate DB writes may still fail. */
+export async function updateStreamCheckpoints(snapshot: { chats?: Pick<ChatInterface, 'id' | 'branchTree'>[] }, targets: readonly StreamCheckpointTarget[]): Promise<void> {
+  const db = await openDb();
+  await new Promise<void>((resolve, reject) => {
+    const transaction = db.transaction(STORE_NAME, 'readwrite');
+    const store = transaction.objectStore(STORE_NAME);
+    transaction.oncomplete = () => { db.close(); resolve(); };
+    transaction.onerror = () => { db.close(); reject(transaction.error); };
+    transaction.onabort = () => { db.close(); reject(transaction.error); };
+    const request = store.getAll();
+    request.onsuccess = () => {
+      for (const record of request.result as StreamRecord[]) {
+        if (!record.chatId || !record.nodeId) continue;
+        const node = snapshot.chats?.find(chat => chat.id === record.chatId)?.branchTree?.nodes[record.nodeId];
+        const hash = node?.contentHash;
+        if (!hash || hash.startsWith('__streaming:')) continue;
+        if (record.appliedHash === hash && record.checkpointRole === node!.role) store.delete(record.requestId);
+        else if (targets.some(target => target.requestId === record.requestId && target.chatId === record.chatId && target.nodeId === record.nodeId)) {
+          store.put({ ...record, checkpointHash: hash, checkpointRole: node!.role });
+        }
+      }
     };
   });
 }

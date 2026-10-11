@@ -11,7 +11,7 @@ import {
   writeChunkToStore,
   finalizeStreamingNode,
 } from './submitRuntime';
-import { clearStreamingBuffersForTest } from '@utils/streamingBuffer';
+import { clearStreamingBuffersForTest, initializeStreamingBuffer, isBufferingNode } from '@utils/streamingBuffer';
 import { useStreamEndStatusStore } from '@store/stream-end-status-store';
 import * as swBridge from '@utils/swBridge';
 import { prepareStreamRequest } from '@api/api';
@@ -936,4 +936,15 @@ describe('executeLocalSubmit abort handling', () => {
       assistantPrefix: 'Answer: ',
     });
   });
+});
+
+
+it.each(['deleted', 'edited'])('discards the cancelled buffer when its target was %s and leaves a cloned target alone', (change) => {
+  initializeStreamingBuffer('original', 'node', [{ type: 'text', text: 'obsolete partial' }]);
+  initializeStreamingBuffer('clone', 'node', [{ type: 'text', text: 'other stream' }]);
+  mockState = { chats: change === 'deleted' ? [] : [{ id: 'original', branchTree: { nodes: { node: { contentHash: 'edited' } } } }], contentStore: {} };
+  finalizeStreamingNode('original', 'node');
+  expect(isBufferingNode('original', 'node')).toBe(false);
+  expect(isBufferingNode('clone', 'node')).toBe(true);
+  if (change === 'edited') expect((mockState as any).chats[0].branchTree.nodes.node.contentHash).toBe('edited');
 });

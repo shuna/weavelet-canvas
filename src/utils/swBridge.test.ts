@@ -79,6 +79,8 @@ describe('Service Worker stream heartbeat', () => {
     const onDone = vi.fn();
     await startStream({
       requestId: 'request-1',
+      chatId: 'chat-1',
+      nodeId: 'node-1',
       endpoint: 'https://example.test/chat',
       headers: {},
       body: {},
@@ -111,6 +113,8 @@ describe('Service Worker stream heartbeat', () => {
     const { startStream } = await import('./swBridge');
     const handle = await startStream({
       requestId: 'request-2',
+      chatId: 'chat-2',
+      nodeId: 'node-2',
       endpoint: 'https://example.test/chat',
       headers: {},
       body: {},

@@ -77,7 +77,7 @@ const useLiveTotalTokenUsed = (): TotalTokenUsed => {
 
         // Read live streaming buffer content if available, since
         // chat.messages is only updated on the first chunk and becomes stale.
-        const liveContent = peekBufferedContent(session.targetNodeId);
+        const liveContent = peekBufferedContent(session.chatId, session.targetNodeId);
         const liveCompletionMessage: MessageInterface | undefined = liveContent
           ? { role: 'assistant', content: liveContent }
           : completionMessage;

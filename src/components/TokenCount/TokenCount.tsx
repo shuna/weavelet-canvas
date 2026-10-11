@@ -169,7 +169,7 @@ const TokenCount = React.memo(() => {
 
       // Read live streaming buffer content if available, since
       // chat.messages is only updated on the first chunk and becomes stale.
-      const liveContent = peekBufferedContent(snapshot.generatingSession.targetNodeId);
+      const liveContent = peekBufferedContent(snapshot.generatingSession.chatId, snapshot.generatingSession.targetNodeId);
       const liveCompletionMessage: MessageInterface | undefined = liveContent
         ? { role: 'assistant', content: liveContent }
         : completionMessage;

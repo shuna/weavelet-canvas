@@ -3,11 +3,13 @@ import { useTranslation } from 'react-i18next';
 import { useStreamingReasoning } from '@hooks/useStreamingReasoning';
 
 const CollapsibleReasoning = memo(function CollapsibleReasoning({
+  chatId,
   reasoning,
   isGenerating,
   nodeId,
   visible,
 }: {
+  chatId: string;
   reasoning: string;
   isGenerating: boolean;
   nodeId?: string;
@@ -15,7 +17,7 @@ const CollapsibleReasoning = memo(function CollapsibleReasoning({
 }) {
   const [isOpen, setIsOpen] = useState(false);
   const { t } = useTranslation('model');
-  const streamingReasoning = useStreamingReasoning(isGenerating ? nodeId : undefined, visible && isOpen);
+  const streamingReasoning = useStreamingReasoning(chatId, isGenerating ? nodeId : undefined, visible && isOpen);
   const displayedReasoning = streamingReasoning ?? reasoning;
 
   if (!reasoning) return null;

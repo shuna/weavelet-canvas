@@ -8,14 +8,12 @@ import { materializeActivePath } from './branchUtils';
 const STREAMING_CONTENT_HASH_PREFIX = '__streaming:';
 
 interface StreamingBufferEntry {
+  chatId: string;
   content: ContentInterface[];
   reasoning: string;
 }
 
 const streamingBuffers = new Map<string, StreamingBufferEntry>();
-
-/** Tracks which chatId each streaming nodeId belongs to. */
-const nodeToChatId = new Map<string, string>();
 
 const cloneContentItem = (content: ContentInterface): ContentInterface => {
   if (content.type === 'image_url') return { ...content, image_url: { ...content.image_url } };
@@ -45,34 +43,43 @@ const upsertTextContent = (
   return [{ type: 'text', text: updater('') }, ...content.map(cloneContentItem)];
 };
 
-export const createStreamingContentHash = (nodeId: string): string =>
-  `${STREAMING_CONTENT_HASH_PREFIX}${nodeId}`;
+const bufferKey = (chatId: string, nodeId: string): string => JSON.stringify([chatId, nodeId]);
 
-export const isStreamingContentHash = (hash: string): boolean =>
-  hash.startsWith(STREAMING_CONTENT_HASH_PREFIX);
+export const createStreamingContentHash = (chatId: string, nodeId: string): string =>
+  `${STREAMING_CONTENT_HASH_PREFIX}${bufferKey(chatId, nodeId)}`;
 
-export const getStreamingNodeIdFromHash = (hash: string): string | null =>
-  isStreamingContentHash(hash) ? hash.slice(STREAMING_CONTENT_HASH_PREFIX.length) : null;
+export const isStreamingContentHash = (hash: string): boolean => hash.startsWith(STREAMING_CONTENT_HASH_PREFIX);
+
+export const getStreamingTargetFromHash = (hash: string): { chatId: string; nodeId: string } | null => {
+  if (!isStreamingContentHash(hash)) return null;
+  try {
+    const target = JSON.parse(hash.slice(STREAMING_CONTENT_HASH_PREFIX.length));
+    return Array.isArray(target) && target.length === 2 && target.every(value => typeof value === 'string')
+      ? { chatId: target[0], nodeId: target[1] } : null;
+  } catch { return null; }
+};
 
 export const initializeStreamingBuffer = (
+  chatId: string,
   nodeId: string,
   content: ContentInterface[],
-  chatId?: string,
 ): void => {
+  const key = bufferKey(chatId, nodeId);
   // Extract existing reasoning text from content if present
   const existingReasoning = content
     .filter((c): c is ReasoningContentInterface => c.type === 'reasoning')
     .map((c) => c.text)
     .join('');
-  streamingBuffers.set(nodeId, { content: cloneContent(content), reasoning: existingReasoning });
-  if (chatId) nodeToChatId.set(nodeId, chatId);
+  streamingBuffers.set(key, { chatId, content: cloneContent(content), reasoning: existingReasoning });
   ensureSnapshotFlushRunning();
 };
 
-export const appendToStreamingBuffer = (nodeId: string, text: string): void => {
-  const entry = streamingBuffers.get(nodeId);
+export const appendToStreamingBuffer = (chatId: string, nodeId: string, text: string): void => {
+  const key = bufferKey(chatId, nodeId);
+  const entry = streamingBuffers.get(key);
   const current = entry?.content ?? [];
-  streamingBuffers.set(nodeId, {
+  streamingBuffers.set(key, {
+    chatId,
     content: upsertTextContent(current, (existing) => existing + text),
     reasoning: entry?.reasoning ?? '',
   });
@@ -83,39 +90,46 @@ export const appendToStreamingBuffer = (nodeId: string, text: string): void => {
  * Used by local model generation where the worker sends currentText (full text-so-far)
  * rather than incremental deltas.
  */
-export const setStreamingBufferText = (nodeId: string, text: string): void => {
-  const entry = streamingBuffers.get(nodeId);
+export const setStreamingBufferText = (chatId: string, nodeId: string, text: string): void => {
+  const key = bufferKey(chatId, nodeId);
+  const entry = streamingBuffers.get(key);
   const current = entry?.content ?? [];
-  streamingBuffers.set(nodeId, {
+  streamingBuffers.set(key, {
+    chatId,
     content: upsertTextContent(current, () => text),
     reasoning: entry?.reasoning ?? '',
   });
 };
 
-export const appendReasoningToStreamingBuffer = (nodeId: string, text: string): void => {
-  const entry = streamingBuffers.get(nodeId);
+export const appendReasoningToStreamingBuffer = (chatId: string, nodeId: string, text: string): void => {
+  const key = bufferKey(chatId, nodeId);
+  const entry = streamingBuffers.get(key);
   if (!entry) return;
   entry.reasoning += text;
 };
 
-export const getBufferedContent = (nodeId: string): ContentInterface[] | undefined => {
-  const entry = streamingBuffers.get(nodeId);
+export const getBufferedContent = (chatId: string, nodeId: string): ContentInterface[] | undefined => {
+  const key = bufferKey(chatId, nodeId);
+  const entry = streamingBuffers.get(key);
   return entry ? cloneContent(entry.content) : undefined;
 };
 
 /** Read-only reference to buffered content. Caller must NOT mutate the result. */
-export const peekBufferedContent = (nodeId: string): ContentInterface[] | undefined => {
-  return streamingBuffers.get(nodeId)?.content;
+export const peekBufferedContent = (chatId: string, nodeId: string): ContentInterface[] | undefined => {
+  const key = bufferKey(chatId, nodeId);
+  return streamingBuffers.get(key)?.content;
 };
 
 /** Read-only reference to buffered reasoning text. */
-export const peekBufferedReasoning = (nodeId: string): string | undefined => {
-  const r = streamingBuffers.get(nodeId)?.reasoning;
+export const peekBufferedReasoning = (chatId: string, nodeId: string): string | undefined => {
+  const key = bufferKey(chatId, nodeId);
+  const r = streamingBuffers.get(key)?.reasoning;
   return r || undefined;
 };
 
-export const finalizeStreamingBuffer = (nodeId: string): ContentInterface[] => {
-  const entry = streamingBuffers.get(nodeId);
+export const finalizeStreamingBuffer = (chatId: string, nodeId: string): ContentInterface[] => {
+  const key = bufferKey(chatId, nodeId);
+  const entry = streamingBuffers.get(key);
   const content = entry ? cloneContent(entry.content) : [];
 
   // Prepend reasoning content if present
@@ -126,25 +140,27 @@ export const finalizeStreamingBuffer = (nodeId: string): ContentInterface[] => {
       ]
     : content;
 
-  streamingBuffers.delete(nodeId);
-  clearStreamingNotification(nodeId);
-  streamingListeners.delete(nodeId);
-  nodeToChatId.delete(nodeId);
+  streamingBuffers.delete(key);
+  clearStreamingNotification(key);
+  streamingListeners.delete(key);
   return result;
+};
+
+export const discardStreamingBuffer = (chatId: string, nodeId: string): void => {
+  finalizeStreamingBuffer(chatId, nodeId);
 };
 
 export const hasActiveStreamingBuffers = (): boolean => streamingBuffers.size > 0;
 
 /** Returns the set of chatIds that currently have active streaming buffers. */
-export const getStreamingChatIds = (): Set<string> => new Set(nodeToChatId.values());
+export const getStreamingChatIds = (): Set<string> => new Set([...streamingBuffers.values()].map(entry => entry.chatId));
 
-export const isBufferingNode = (nodeId: string): boolean => streamingBuffers.has(nodeId);
+export const isBufferingNode = (chatId: string, nodeId: string): boolean => streamingBuffers.has(bufferKey(chatId, nodeId));
 
 export const clearStreamingBuffersForTest = (): void => {
   for (const nodeId of streamingListeners.keys()) clearStreamingNotification(nodeId);
   streamingBuffers.clear();
   streamingListeners.clear();
-  nodeToChatId.clear();
   stopSnapshotFlush();
 };
 
@@ -199,25 +215,28 @@ const clearStreamingNotification = (nodeId: string): void => {
   streamingListeners.get(nodeId)?.forEach(listener => listener.clear());
 };
 
-export const notifyStreamingUpdate = (nodeId: string): void => {
-  streamingListeners.get(nodeId)?.forEach(listener => listener.notify());
+export const notifyStreamingUpdate = (chatId: string, nodeId: string): void => {
+  const key = bufferKey(chatId, nodeId);
+  streamingListeners.get(key)?.forEach(listener => listener.notify());
 };
 
 export const subscribeToStreaming = (
+  chatId: string,
   nodeId: string,
   callback: () => void,
   interval = 150,
   reasoning = false,
   firstOnly = false
 ): (() => void) => {
-  let listeners = streamingListeners.get(nodeId);
+  const key = bufferKey(chatId, nodeId);
+  let listeners = streamingListeners.get(key);
   if (!listeners) {
     listeners = new Set();
-    streamingListeners.set(nodeId, listeners);
+    streamingListeners.set(key, listeners);
   }
   const read = () => {
-    if (reasoning) return peekBufferedReasoning(nodeId);
-    const first = peekBufferedContent(nodeId)?.[0];
+    if (reasoning) return peekBufferedReasoning(chatId, nodeId);
+    const first = peekBufferedContent(chatId, nodeId)?.[0];
     return first && isTextContent(first) ? first.text : undefined;
   };
   let published = read();
@@ -252,7 +271,7 @@ export const subscribeToStreaming = (
     clear();
     if (typeof document !== 'undefined') document.removeEventListener('visibilitychange', onVisibilityChange);
     listeners!.delete(listener);
-    if (!listeners!.size) streamingListeners.delete(nodeId);
+    if (!listeners!.size) streamingListeners.delete(key);
   };
 };
 
@@ -280,12 +299,12 @@ export const finalizeStreamingSnapshotState = (
     Object.values(tree.nodes).forEach((node) => {
       if (!isStreamingContentHash(node.contentHash)) return;
 
-      const nodeId = getStreamingNodeIdFromHash(node.contentHash) ?? node.id;
-      const bufferedContent = getBufferedContent(nodeId) ?? [];
+      const bufferedContent = getBufferedContent(chat.id, node.id);
+      if (!bufferedContent) return;
 
       if (!changed) {
         updatedChats = chats.slice();
-        updatedContentStore = { ...contentStore };
+        updatedContentStore = Object.fromEntries(Object.entries(contentStore).map(([hash, entry]) => [hash, { ...entry }]));
         changed = true;
       }
 

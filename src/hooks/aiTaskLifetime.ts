@@ -1,7 +1,7 @@
 import useStore from '@store/store';
 import type { StoreState } from '@store/store';
 
-type TaskKind = 'generation' | 'evaluation-pre' | 'evaluation-post' | 'title';
+type TaskKind = 'generation' | 'recovery' | 'evaluation-pre' | 'evaluation-post' | 'title';
 export interface AiTaskTicket {
   requestId: string;
   chatId: string;

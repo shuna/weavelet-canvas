@@ -27,6 +27,7 @@ import {
   appendReasoningToStreamingBuffer,
   createStreamingContentHash,
   finalizeStreamingBuffer,
+  discardStreamingBuffer,
   initializeStreamingBuffer,
   isBufferingNode,
   isStreamingContentHash,
@@ -308,21 +309,21 @@ const ensureStreamingBufferForNode = (
     let updatedContentStore = state.contentStore;
     const node = tree.nodes[targetNodeId];
 
-    if (!isStreamingContentHash(node.contentHash)) {
+    if (node.contentHash !== createStreamingContentHash(chatId, targetNodeId)) {
       updatedContentStore = { ...state.contentStore };
       initializeStreamingBuffer(
+        chatId,
         targetNodeId,
         resolveContent(updatedContentStore, node.contentHash),
-        chatId
       );
       releaseContent(updatedContentStore, node.contentHash);
       tree.nodes[targetNodeId] = {
         ...node,
-        contentHash: createStreamingContentHash(targetNodeId),
+        contentHash: createStreamingContentHash(chatId, targetNodeId),
       };
       initialized = true;
-    } else if (!isBufferingNode(targetNodeId)) {
-      initializeStreamingBuffer(targetNodeId, [], chatId);
+    } else if (!isBufferingNode(chatId, targetNodeId)) {
+      initializeStreamingBuffer(chatId, targetNodeId, []);
       initialized = true;
     }
 
@@ -345,7 +346,7 @@ const ensureStreamingBufferForNode = (
     };
   });
 
-  return initialized || isBufferingNode(targetNodeId);
+  return initialized || isBufferingNode(chatId, targetNodeId);
 };
 
 /** Write reasoning chunk to the streaming buffer (not the Zustand store). */
@@ -355,11 +356,11 @@ const writeReasoningChunk = (
   text: string
 ): void => {
   if (!text) return;
-  if (!isBufferingNode(targetNodeId) && !ensureStreamingBufferForNode(chatId, targetNodeId)) {
+  if (!isBufferingNode(chatId, targetNodeId) && !ensureStreamingBufferForNode(chatId, targetNodeId)) {
     return;
   }
-  appendReasoningToStreamingBuffer(targetNodeId, text);
-  notifyStreamingUpdate(targetNodeId);
+  appendReasoningToStreamingBuffer(chatId, targetNodeId, text);
+  notifyStreamingUpdate(chatId, targetNodeId);
 };
 
 export const writeChunkToStore = (
@@ -369,9 +370,9 @@ export const writeChunkToStore = (
 ) => {
   // Fast path: buffer already exists — update buffer only, skip Zustand.
   // Only the component subscribing via useStreamingText will re-render.
-  if (isBufferingNode(targetNodeId)) {
-    appendToStreamingBuffer(targetNodeId, text);
-    notifyStreamingUpdate(targetNodeId);
+  if (isBufferingNode(chatId, targetNodeId)) {
+    appendToStreamingBuffer(chatId, targetNodeId, text);
+    notifyStreamingUpdate(chatId, targetNodeId);
     return;
   }
 
@@ -391,23 +392,23 @@ export const writeChunkToStore = (
       let updatedContentStore = state.contentStore;
       const node = tree.nodes[targetNodeId];
 
-      if (!isStreamingContentHash(node.contentHash)) {
+      if (node.contentHash !== createStreamingContentHash(chatId, targetNodeId)) {
         updatedContentStore = { ...state.contentStore };
         initializeStreamingBuffer(
+          chatId,
           targetNodeId,
           resolveContent(updatedContentStore, node.contentHash),
-          chatId,
         );
         releaseContent(updatedContentStore, node.contentHash);
         tree.nodes[targetNodeId] = {
           ...node,
-          contentHash: createStreamingContentHash(targetNodeId),
+          contentHash: createStreamingContentHash(chatId, targetNodeId),
         };
-      } else if (!isBufferingNode(targetNodeId)) {
-        initializeStreamingBuffer(targetNodeId, [], chatId);
+      } else if (!isBufferingNode(chatId, targetNodeId)) {
+        initializeStreamingBuffer(chatId, targetNodeId, []);
       }
 
-      appendToStreamingBuffer(targetNodeId, text);
+      appendToStreamingBuffer(chatId, targetNodeId, text);
 
       const pathIndex = tree.activePath.indexOf(targetNodeId);
       if (pathIndex >= 0) {
@@ -457,15 +458,16 @@ export const writeChunkToStore = (
 export const finalizeStreamingNode = (chatId: string, targetNodeId: string) => {
   useStore.setState((state) => {
     const chats = state.chats;
-    if (!chats) return state;
+    if (!chats) { discardStreamingBuffer(chatId, targetNodeId); return state; }
 
     const chatIndex = chats.findIndex((chat) => chat.id === chatId);
-    if (chatIndex < 0) return state;
+    if (chatIndex < 0) { discardStreamingBuffer(chatId, targetNodeId); return state; }
 
     const chat = chats[chatIndex];
     const tree = chat.branchTree;
     const node = tree?.nodes[targetNodeId];
     if (!tree || !node || !isStreamingContentHash(node.contentHash)) {
+      discardStreamingBuffer(chatId, targetNodeId);
       return state;
     }
 
@@ -473,7 +475,7 @@ export const finalizeStreamingNode = (chatId: string, targetNodeId: string) => {
     const updatedChat = updatedChats[chatIndex];
     const updatedTree = updatedChat.branchTree!;
     const updatedContentStore = { ...state.contentStore };
-    const finalizedContent = finalizeStreamingBuffer(targetNodeId);
+    const finalizedContent = finalizeStreamingBuffer(chatId, targetNodeId);
 
     updatedTree.nodes[targetNodeId] = {
       ...updatedTree.nodes[targetNodeId],
@@ -652,20 +654,20 @@ export const executeLocalSubmit = async ({
     if (!node) return state;
 
     let updatedContentStore = state.contentStore;
-    if (!isStreamingContentHash(node.contentHash)) {
+    if (node.contentHash !== createStreamingContentHash(chatId, targetNodeId)) {
       updatedContentStore = { ...state.contentStore };
       initializeStreamingBuffer(
+        chatId,
         targetNodeId,
         resolveContent(updatedContentStore, node.contentHash),
-        chatId,
       );
       releaseContent(updatedContentStore, node.contentHash);
       tree.nodes[targetNodeId] = {
         ...node,
-        contentHash: createStreamingContentHash(targetNodeId),
+        contentHash: createStreamingContentHash(chatId, targetNodeId),
       };
-    } else if (!isBufferingNode(targetNodeId)) {
-      initializeStreamingBuffer(targetNodeId, [], chatId);
+    } else if (!isBufferingNode(chatId, targetNodeId)) {
+      initializeStreamingBuffer(chatId, targetNodeId, []);
     }
 
     return {
@@ -700,8 +702,8 @@ export const executeLocalSubmit = async ({
   // Seed the streaming buffer with the prefix immediately so it's visible
   // before the first generated token arrives.
   if (prefix) {
-    setStreamingBufferText(targetNodeId, prefix);
-    notifyStreamingUpdate(targetNodeId);
+    setStreamingBufferText(chatId, targetNodeId, prefix);
+    notifyStreamingUpdate(chatId, targetNodeId);
   }
 
   try {
@@ -723,8 +725,8 @@ export const executeLocalSubmit = async ({
         resetStallTimer();
         // wllama sends currentText (full generated text-so-far), not deltas.
         // Prepend the prefix so the buffer always shows the complete content.
-        setStreamingBufferText(targetNodeId, prefix + text);
-        notifyStreamingUpdate(targetNodeId);
+        setStreamingBufferText(chatId, targetNodeId, prefix + text);
+        notifyStreamingUpdate(chatId, targetNodeId);
       },
       'chat',
     );
@@ -960,6 +962,8 @@ export const executeSubmitStream = async ({
 
         swBridge.startStream({
           requestId,
+          chatId,
+          nodeId: targetNodeId,
           endpoint: prepared.endpoint,
           headers: prepared.headers,
           body: prepared.body,
@@ -1039,6 +1043,8 @@ export const executeSubmitStream = async ({
       // Write initial streamDb record so useStreamRecovery can find this session
       await saveStreamRecord({
         requestId,
+        chatId,
+        nodeId: targetNodeId,
         chatIndex,
         messageIndex,
         bufferedText: '',
@@ -1358,3 +1364,10 @@ export const executeSubmitStream = async ({
 
   return { generationId: capturedGenerationId };
 };
+
+export function getStreamCheckpointTargets(): { requestId: string; chatId: string; nodeId: string }[] {
+  return [...sessionRequestIds].flatMap(([sessionId, requestId]) => {
+    const session = useStore.getState().generatingSessions[sessionId];
+    return session ? [{ requestId, chatId: session.chatId, nodeId: session.targetNodeId }] : [];
+  });
+}

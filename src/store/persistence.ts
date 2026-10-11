@@ -179,7 +179,7 @@ function sanitizeClipboard(
   const updatedNodes = { ...clipboard.nodes };
   for (const node of streamingNodes) {
     const nodeId = node.id;
-    const content = getBufferedContent(nodeId) ?? [];
+    const content = getBufferedContent(clipboard.sourceChat, nodeId) ?? [];
     updatedNodes[nodeId] = {
       ...updatedNodes[nodeId],
       contentHash: addContent(contentStore, content),

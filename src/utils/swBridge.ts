@@ -69,6 +69,8 @@ export interface ProxyStreamConfig {
 
 export interface StartStreamParams {
   requestId: string;
+  chatId: string;
+  nodeId: string;
   endpoint: string;
   headers: Record<string, string>;
   body: object;
@@ -84,6 +86,8 @@ export interface StartStreamParams {
 export async function startStream(params: StartStreamParams): Promise<SwStreamHandle> {
   const {
     requestId,
+    chatId,
+    nodeId,
     endpoint,
     headers,
     body,
@@ -104,6 +108,8 @@ export async function startStream(params: StartStreamParams): Promise<SwStreamHa
   // Save initial record to IndexedDB (client side too, in case SW dies before writing)
   await saveRequest({
     requestId,
+    chatId,
+    nodeId,
     chatIndex,
     messageIndex,
     bufferedText: '',
@@ -292,6 +298,8 @@ export async function startStream(params: StartStreamParams): Promise<SwStreamHa
     {
       type: 'startStream',
       requestId,
+      chatId,
+      nodeId,
       endpoint,
       headers,
       body,

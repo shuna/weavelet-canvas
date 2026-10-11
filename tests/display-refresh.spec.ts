@@ -25,13 +25,13 @@ test('continuous Markdown advances, completion is immediate, hidden snapshots fr
     const root = createRoot(element);
     let setText: (text: string) => void, setGenerating: (generating: boolean) => void;
     let setVisible: (visible: boolean) => void;
-    buffer.initializeStreamingBuffer('display-test', [{ type: 'text', text: 'first' }]);
+    buffer.initializeStreamingBuffer('display-chat', 'display-test', [{ type: 'text', text: 'first' }]);
     function Check() {
       const [text, updateText] = React.useState('```text\nstart');
       const [generating, updateGenerating] = React.useState(true);
       const [visible, updateVisible] = React.useState(true);
       setText = updateText; setGenerating = updateGenerating; setVisible = updateVisible;
-      const liveText = useStreamingText('display-test', visible);
+      const liveText = useStreamingText('display-chat', 'display-test', visible);
       const syncProgress = useSyncProgressDisplay();
       return React.createElement('div', null,
         React.createElement('div', { id: 'markdown-check' }, React.createElement(ContentBody, {
@@ -51,9 +51,9 @@ test('continuous Markdown advances, completion is immediate, hidden snapshots fr
         return setTimeout(() => clearInterval(timer), 1200);
       },
       visible: (visible: boolean) => setVisible(visible),
-      append: () => { buffer.appendToStreamingBuffer('display-test', '-next'); buffer.notifyStreamingUpdate('display-test'); },
+      append: () => { buffer.appendToStreamingBuffer('display-chat', 'display-test', '-next'); buffer.notifyStreamingUpdate('display-chat', 'display-test'); },
       progress: (active: boolean, completedFiles: number) => progress.useGoogleSyncProgress.setState({ active, completedFiles }),
-      cleanup: () => { root.unmount(); buffer.finalizeStreamingBuffer('display-test'); },
+      cleanup: () => { root.unmount(); buffer.finalizeStreamingBuffer('display-chat', 'display-test'); },
     };
   });
   await expect(page.locator('#markdown-check')).toContainText('start');
