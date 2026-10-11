@@ -185,7 +185,13 @@ const SyncDirectionInline = ({
   );
 };
 
-const GoogleSync = ({ clientId, openOnMount = false, showEntry = true }: { clientId: string; openOnMount?: boolean; showEntry?: boolean }) => {
+const GoogleSync = ({ clientId, openOnMount = false, showEntry = true, isModalOpen, setIsModalOpen }: {
+  clientId: string;
+  openOnMount?: boolean;
+  showEntry?: boolean;
+  isModalOpen: boolean;
+  setIsModalOpen: React.Dispatch<React.SetStateAction<boolean>>;
+}) => {
   const { t } = useTranslation(['drive']);
 
   const fileId = useGStore((state) => state.fileId);
@@ -217,7 +223,6 @@ const GoogleSync = ({ clientId, openOnMount = false, showEntry = true }: { clien
     });
   };
 
-  const [isModalOpen, setIsModalOpen] = useState<boolean>(openOnMount);
   const [files, setFiles] = useState<GoogleFileResource[]>([]);
   const isSilentRefresh = useRef(false);
   useEffect(() => { if (showEntry && cloudSync) setIsModalOpen(true); }, [showEntry]);
@@ -1064,7 +1069,7 @@ const FileSelector = ({ file, selected, current, syncing, selectable, onSelect, 
   );
 };
 
-const SyncIcon = ({ status }: { status: SyncStatus }) => {
+export const SyncIcon = ({ status }: { status: SyncStatus }) => {
   const statusToIcon = {
     locked: <span aria-label='Locked'>🔒</span>,
     error: <span aria-label='Sync failed'>!</span>,
