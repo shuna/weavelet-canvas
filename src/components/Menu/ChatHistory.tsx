@@ -1,7 +1,6 @@
 import { useSyncReview } from '@store/storage/google/conflicts';
 import React, { useEffect, useRef, useState } from 'react';
 
-import useInitialiseNewChat from '@hooks/useInitialiseNewChat';
 
 import ChatIcon from '@icon/ChatIcon';
 import CrossIcon from '@icon/CrossIcon';
@@ -12,7 +11,6 @@ import ExportIcon from '@icon/ExportIcon';
 import TickIcon from '@icon/TickIcon';
 import useStore from '@store/store';
 import { formatNumber } from '@utils/chat';
-import { releaseContent } from '@utils/contentStore';
 import { stopSessionsForChat } from '@hooks/useSubmit';
 import DownloadChat from '@components/Chat/ChatContent/DownloadChat';
 
@@ -45,9 +43,6 @@ const ChatHistory = React.memo(
     lastSelectedIndex: number | null;
     setLastSelectedIndex: (index: number) => void;
   }) => {
-    const initialiseNewChat = useInitialiseNewChat();
-    const setCurrentChatIndex = useStore((state) => state.setCurrentChatIndex);
-    const setChats = useStore((state) => state.setChats);
     const active = useStore((state) => state.currentChatIndex === chatIndex);
 
     const chatId = useStore((state) => state.chats?.[chatIndex]?.id ?? '');
@@ -70,32 +65,8 @@ const ChatHistory = React.memo(
     const deleteChat = () => {
       const chats = useStore.getState().chats;
       if (!chats) return;
-      const updatedChats = chats.slice();
-      const indicesToDelete =
-        selectedChats.length > 0 ? selectedChats : [chatIndex];
-
-      const contentStore = { ...useStore.getState().contentStore };
-      indicesToDelete.forEach((index) => {
-        const chat = chats?.[index];
-        if (chat?.branchTree) {
-          for (const node of Object.values(chat.branchTree.nodes)) {
-            releaseContent(contentStore, node.contentHash);
-          }
-        }
-      });
-
-      indicesToDelete
-        .sort((a, b) => b - a)
-        .forEach((index) => {
-          updatedChats.splice(index, 1);
-        });
-      if (updatedChats.length > 0) {
-        setCurrentChatIndex(0);
-        setChats(updatedChats);
-        useStore.setState({ contentStore });
-      } else {
-        initialiseNewChat();
-      }
+      const indices = selectedChats.length > 0 ? selectedChats : [chatIndex];
+      useStore.getState().removeChats({ chatIds: indices.map(index => chats[index]?.id).filter((id): id is string => !!id) });
       setIsDelete(false);
       setSelectedChats([]);
     };

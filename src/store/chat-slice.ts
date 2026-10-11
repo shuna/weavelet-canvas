@@ -1,14 +1,16 @@
+import { invalidateAiTasks } from '@hooks/aiTaskLifetime';
 import { v4 as uuidv4 } from 'uuid';
-import { StoreSlice } from './store';
+import { StoreSlice, StoreState } from './store';
 import { ChatInterface, FolderCollection, GeneratingSession, MessageInterface, TextContentInterface } from '@type/chat';
 import { notifyStorageError, setLocalStorageItem } from './storage/storageErrors';
-import { addContent, retainContent } from '@utils/contentStore';
+import { addContent, retainContent, releaseContent } from '@utils/contentStore';
 import { materializeActivePath } from '@utils/branchUtils';
 import { generateDefaultChat } from '@constants/chat';
 import { deepCloneSingleChat } from '@utils/chatShallowClone';
 import { prepareChatForExport } from '@utils/chatExport';
 
 export interface ChatSlice {
+  removeChats: (input: { chatIds: readonly string[] }) => { removedChatIds: string[]; missingChatIds: string[]; selectedChatId: string };
   createChat: (input: { folderId?: string }) => { status: 'created'; chatId: string } | { status: 'folder-missing' | 'not-ready' };
   duplicateChat: (input: { chatId: string; scope: 'all' | 'activePath' }) => { status: 'created'; chatId: string } | { status: 'chat-missing' };
   renameChat: (input: { chatId: string; title: string }) => 'updated' | 'unchanged' | 'chat-missing';
@@ -104,6 +106,7 @@ export const createChatSlice: StoreSlice<ChatSlice> = (set, get) => {
     }
     if (Object.keys(previous).length === Object.keys(next).length && Object.keys(next).every(id => previous[id] === next[id])) return { status: 'unchanged' as const };
     set({ chats: updateChatNodeField(chats!, index, field, next), [runtime]: { ...get()[runtime], [String(index)]: next } });
+    if (field === 'omittedNodes') invalidateAiTasks([input.chatId], input.nodeId ? [input.nodeId] : undefined);
     return { status: 'updated' as const };
   };
   const selectNewChat = (chat: ChatInterface, contentStore = get().contentStore) => {
@@ -120,6 +123,33 @@ export const createChatSlice: StoreSlice<ChatSlice> = (set, get) => {
     return { status: 'created' as const, chatId: chat.id };
   };
   return {
+    removeChats: ({ chatIds }) => {
+      const ids = new Set(chatIds);
+      const previous = get().chats ?? [];
+      const removedChatIds = previous.filter(chat => ids.has(chat.id)).map(chat => chat.id);
+      const missingChatIds = [...ids].filter(id => !removedChatIds.includes(id));
+      if (!removedChatIds.length) return { removedChatIds, missingChatIds, selectedChatId: previous[get().currentChatIndex]?.id ?? '' };
+      invalidateAiTasks(removedChatIds);
+      const state = get();
+      const contentStore = structuredClone(state.contentStore);
+      const chats = (state.chats ?? []).filter(chat => {
+        if (!ids.has(chat.id)) return true;
+        for (const node of Object.values(chat.branchTree?.nodes ?? {})) releaseContent(contentStore, node.contentHash);
+        return false;
+      });
+      if (!chats.length) chats.push(generateDefaultChat());
+      const touches = (snapshot: StoreState['branchHistoryPast'][number]) => snapshot.chats.some(chat => ids.has(chat.id));
+      set({ chats, contentStore,
+        generatingSessions: Object.fromEntries(Object.entries(state.generatingSessions).filter(([, session]) => !ids.has(session.chatId))),
+        branchHistoryPast: state.branchHistoryPast.filter(snapshot => !touches(snapshot)),
+        branchHistoryFuture: state.branchHistoryFuture.filter(snapshot => !touches(snapshot)),
+        collapsedNodeMaps: buildNodeMaps(chats, 'collapsedNodes'),
+        omittedNodeMaps: buildNodeMaps(chats, 'omittedNodes'),
+        protectedNodeMaps: buildNodeMaps(chats, 'protectedNodes'),
+      });
+      get().setCurrentChatIndex(0);
+      return { removedChatIds, missingChatIds, selectedChatId: chats[0].id };
+    },
     createChat: ({ folderId }) => {
       const { chats, folders } = get();
       if (!chats) return { status: 'not-ready' };
@@ -355,6 +385,7 @@ export const createChatSlice: StoreSlice<ChatSlice> = (set, get) => {
 
       get().invalidateBranchHistory([chat.id]);
       set((prev: ChatSlice) => ({ ...prev, chats: updated, contentStore } as any));
+      invalidateAiTasks([chatId]);
       return { status: 'updated' };
     },
     setFolders: (folders: FolderCollection) => {

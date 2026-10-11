@@ -1,4 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
+const current = vi.hoisted(() => ({ get: () => ({} as any) }));
+vi.mock('@store/store', () => ({ default: { getState: () => current.get() } }));
 import { createChatSlice } from './chat-slice';
 import { createBranchSlice } from './branch-slice';
 import type { StoreState } from './store';
@@ -15,6 +17,7 @@ const chat = (id: string): ChatInterface => ({
 const fixture = () => {
   let state: StoreState;
   const get = () => state;
+  current.get = get;
   const writes: Partial<StoreState>[] = [];
   const set = ((partial: Partial<StoreState> | ((state: StoreState) => Partial<StoreState>)) => {
     const patch = typeof partial === 'function' ? partial(state) : partial;
@@ -24,7 +27,7 @@ const fixture = () => {
   state = { ...createChatSlice(set, get), ...createBranchSlice(set, get),
     captureCurrentNavigationEntry: vi.fn(), pushNavigationEntry: vi.fn(),
     setCurrentChatIndex: vi.fn(index => { state.currentChatIndex = index; }),
-    evaluationResults: {},
+    evaluationResults: {}, favoriteModels: [], providerModelCache: {}, providerCustomModels: {}, defaultChatConfig: chat('defaults').config, defaultSystemMessage: '', defaultImageDetail: 'auto',
   } as unknown as StoreState;
   get().setChats([chat('a'), chat('b')]);
   get().ensureBranchTree(0);
@@ -97,5 +100,23 @@ describe('chat library operations', () => {
     expect(get().folders[folderId].expanded).toBe(true);
     expect(readDraggedChatIds('{bad')).toBeNull();
     expect(readDraggedChatIds('[0]')).toBeNull();
+  });
+});
+
+describe('chat removal', () => {
+  it('removes only requested IDs, keeps clipboard content, and initializes the final empty library', () => {
+    const { get } = fixture();
+    const root = get().chats![0].branchTree!.rootId;
+    get().copyBranchSequence({ chatId: 'a', fromNodeId: root, toNodeId: root });
+    const clipboard = get().branchClipboard;
+    const result = get().removeChats({ chatIds: ['a', 'a', 'missing'] });
+    expect(result).toEqual({ removedChatIds: ['a'], missingChatIds: ['missing'], selectedChatId: 'b' });
+    expect(get().branchClipboard).toBe(clipboard);
+    const hash = clipboard!.nodes[root].contentHash;
+    expect(resolveContent(get().contentStore, hash)).toEqual([{ type: 'text', text: 'a' }]);
+    get().removeChats({ chatIds: ['b'] });
+    expect(get().chats).toHaveLength(1);
+    expect(get().chats![0].id).not.toBe('b');
+    expect(get().chats![0].messages).toEqual([]);
   });
 });

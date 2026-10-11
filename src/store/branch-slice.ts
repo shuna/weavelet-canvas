@@ -1,3 +1,4 @@
+import { invalidateAiTasks } from '@hooks/aiTaskLifetime';
 import i18next from 'i18next';
 import { StoreSlice, StoreState } from './store';
 import {
@@ -402,6 +403,20 @@ export const createBranchSlice: StoreSlice<BranchSlice> = (set, get) => {
       }
     }
     set({ chats, contentStore, ...history, ...clipboard, ...attributes });
+    if (options?.recordHistory !== false) {
+      for (const previous of prevChats ?? []) {
+        const next = chats.find(chat => chat.id === previous.id);
+        if (!next || previous.config.systemPrompt !== next.config.systemPrompt) {
+          invalidateAiTasks([previous.id]);
+          continue;
+        }
+        const changedNodes = Object.values(previous.branchTree?.nodes ?? {}).filter(node => {
+          const updated = next.branchTree?.nodes[node.id];
+          return !updated || node.contentHash !== updated.contentHash || node.role !== updated.role;
+        }).map(node => node.id);
+        if (changedNodes.length) invalidateAiTasks([previous.id], changedNodes);
+      }
+    }
   },
   invalidateBranchHistory: (chatIds) => {
     if (chatIds.length === 0) return;
@@ -435,6 +450,7 @@ export const createBranchSlice: StoreSlice<BranchSlice> = (set, get) => {
     });
     get().setChats(restoreBranchSnapshot(currentChats, contentStore, snapshot), { preserveBranchHistory: true });
     set({ contentStore });
+    invalidateAiTasks(snapshot.chats.map(chat => chat.id));
   },
   redoBranch: () => {
     const future = get().branchHistoryFuture;
@@ -457,6 +473,7 @@ export const createBranchSlice: StoreSlice<BranchSlice> = (set, get) => {
     });
     get().setChats(restoreBranchSnapshot(currentChats, contentStore, snapshot), { preserveBranchHistory: true });
     set({ contentStore });
+    invalidateAiTasks(snapshot.chats.map(chat => chat.id));
   },
   canUndoBranch: () => get().branchHistoryPast.length > 0 && !Object.values(get().generatingSessions).some(
     (session) => get().branchHistoryPast.at(-1)?.chats.some((chat) => chat.id === session.chatId)
