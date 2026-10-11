@@ -46,7 +46,7 @@ import ConflictDetails from './ConflictDetails';
 import GoogleSyncButton, { GoogleSyncButtonHandle } from './GoogleSyncButton';
 import PopupModal from '@components/PopupModal';
 
-import GoogleIcon from '@icon/GoogleIcon';
+import GoogleDriveIcon from '@icon/GoogleDriveIcon';
 import TickIcon from '@icon/TickIcon';
 import RefreshIcon from '@icon/RefreshIcon';
 import DownArrow from '@icon/DownArrow';
@@ -279,7 +279,8 @@ const GoogleSync = ({ clientId, openOnMount = false, showEntry = true }: { clien
           setIsModalOpen(true);
         }}
       >
-        <GoogleIcon /> {t('name')}
+        <GoogleDriveIcon className='w-4 h-4 shrink-0' />
+        <span className='min-w-0 truncate' title={t('name') as string}>{t('name')}</span>
         {cloudSync && <SyncIcon status={syncStatus} />}
       </div>}
       {bannerTarget && !isModalOpen && (syncStatus === 'syncing' || syncStatus === 'error') && createPortal(

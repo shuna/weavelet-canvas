@@ -19,8 +19,10 @@ const ImportExportChat = () => {
           setIsModalOpen(true);
         }}
       >
-        <ExportIcon className='w-4 h-4' />
-        {t('import')} / {t('export')}
+        <ExportIcon className='w-4 h-4 shrink-0' />
+        <span className='min-w-0 truncate' title={`${t('import')} / ${t('export')}`}>
+          {t('import')} / {t('export')}
+        </span>
       </a>
       {isModalOpen && (
         <PopupModal

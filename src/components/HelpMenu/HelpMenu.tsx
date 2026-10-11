@@ -13,10 +13,8 @@ const HelpMenu = () => {
         className='flex cursor-pointer items-center gap-3 rounded-md px-2 py-2 text-sm text-gray-700 transition-colors duration-200 hover:bg-gray-100 dark:text-white dark:hover:bg-gray-500/10'
         onClick={() => setIsModalOpen(true)}
       >
-        <div>
-          <HelpIcon />
-        </div>
-        {t('help.title')}
+        <HelpIcon className='w-4 h-4 shrink-0' />
+        <span className='min-w-0 truncate' title={t('help.title') as string}>{t('help.title')}</span>
       </a>
       {isModalOpen && (
         <PopupModal

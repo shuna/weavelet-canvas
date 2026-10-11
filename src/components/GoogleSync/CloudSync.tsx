@@ -6,6 +6,8 @@ import GoogleSync from './GoogleSync';
 import CloudKitSync from './CloudKitSync';
 import FileSystemSync from './FileSystemSync';
 import RefreshIcon from '@icon/RefreshIcon';
+import GoogleDriveIcon from '@icon/GoogleDriveIcon';
+import CloudIcon from '@icon/CloudIcon';
 
 const googleClientId = import.meta.env.VITE_GOOGLE_CLIENT_ID || undefined;
 
@@ -44,11 +46,11 @@ const CloudSync = () => {
           setExpanded((v) => !v);
         }}
       >
-        <RefreshIcon className='w-4 h-4' />
-        クラウド同期
+        <RefreshIcon className='w-4 h-4 shrink-0' />
+        <span className='min-w-0 truncate' title='クラウド同期'>クラウド同期</span>
         {isActive && (
-          <span className='ml-auto text-xs text-gray-400 dark:text-gray-500'>
-            {providerLabels[selectedProvider]}
+          <span className='ml-auto shrink-0' role='img' aria-label={providerLabels[selectedProvider]} title={providerLabels[selectedProvider]}>
+            {selectedProvider === 'google' ? <GoogleDriveIcon className='w-4 h-4' /> : selectedProvider === 'cloudkit' ? <CloudIcon className='w-4 h-4' /> : providerLabels[selectedProvider]}
           </span>
         )}
       </a>
@@ -98,9 +100,10 @@ const CloudSync = () => {
                   setProvider('google');
                   setSetupProvider('google');
                 }}
-                className='rounded px-2 py-1.5 text-left text-xs text-gray-600 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-gray-700/50'
+                className='flex items-center gap-3 rounded px-2 py-1.5 text-left text-xs text-gray-600 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-gray-700/50'
               >
-                Google Drive で同期
+                <GoogleDriveIcon className='w-4 h-4 shrink-0' />
+                <span className='min-w-0 truncate' title='Google Drive で同期'>Google Drive で同期</span>
               </button>
               <button
                 type='button'
@@ -108,9 +111,10 @@ const CloudSync = () => {
                   setProvider('cloudkit');
                   setSetupProvider('cloudkit');
                 }}
-                className='rounded px-2 py-1.5 text-left text-xs text-gray-600 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-gray-700/50'
+                className='flex items-center gap-3 rounded px-2 py-1.5 text-left text-xs text-gray-600 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-gray-700/50'
               >
-                iCloud で同期
+                <CloudIcon className='w-4 h-4 shrink-0' />
+                <span className='min-w-0 truncate' title='iCloud で同期'>iCloud で同期</span>
               </button>
             </div>
           )}
