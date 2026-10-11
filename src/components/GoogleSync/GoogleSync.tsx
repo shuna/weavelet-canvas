@@ -225,7 +225,6 @@ const GoogleSync = ({ clientId, openOnMount = false, showEntry = true, isModalOp
 
   const [files, setFiles] = useState<GoogleFileResource[]>([]);
   const isSilentRefresh = useRef(false);
-  useEffect(() => { if (showEntry && cloudSync) setIsModalOpen(true); }, [showEntry]);
 
   const initialiseState = async (_googleAccessToken: string, options?: { openModal?: boolean }) => {
     let validated;
