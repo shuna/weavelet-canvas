@@ -8,6 +8,8 @@ export async function applyExternalSnapshot(payload: Partial<PersistedStoreState
   if (!sessionIsCurrent() || observed !== useStore.getState()) return false;
   invalidateAiTasks();
   const base = useStore.getState();
+  // The downloaded payload was based on the pre-cancellation content.
+  if (base.chats !== observed.chats || base.contentStore !== observed.contentStore) return false;
   const prepared = await prepareHydratedState(base, payload);
   if (base !== useStore.getState() || !sessionIsCurrent()) return false;
   useStore.setState({ ...prepared.state, branchHistoryPast: [], branchHistoryFuture: [] });

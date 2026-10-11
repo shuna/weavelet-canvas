@@ -6,6 +6,7 @@ import { createBranchSlice } from './branch-slice';
 import type { StoreState } from './store';
 import type { StoreApi } from 'zustand';
 import type { ChatInterface } from '@type/chat';
+import { initializeStreamingBuffer, createStreamingContentHash, appendToStreamingBuffer, clearStreamingBuffersForTest } from '@utils/streamingBuffer';
 import { resolveContent } from '@utils/contentStore';
 import { readDraggedChatIds } from '../components/Menu/chatHistoryFolderUtils';
 
@@ -55,6 +56,24 @@ describe('chat library operations', () => {
     expect(get().contentStore[node.contentHash].refCount).toBe(beforeCount + 1);
     expect(get().evaluationResults).toEqual({});
     expect(get().pushNavigationEntry).toHaveBeenCalledTimes(1);
+  });
+
+  it.each(['all', 'activePath'] as const)('freezes the current stream for %s duplication', (scope) => {
+    clearStreamingBuffersForTest();
+    const { get } = fixture();
+    const source = get().chats![0];
+    const node = source.branchTree!.nodes[source.branchTree!.rootId];
+    initializeStreamingBuffer(source.id, node.id, [{ type: 'text', text: 'partial' }]);
+    node.contentHash = createStreamingContentHash(source.id, node.id);
+    get().duplicateChat({ chatId: source.id, scope });
+    const copy = get().chats![0];
+    appendToStreamingBuffer(source.id, node.id, ' later');
+    const copyHash = copy.branchTree!.nodes[node.id].contentHash;
+    expect(copyHash).not.toBe(node.contentHash);
+    expect(resolveContent(get().contentStore, copyHash)).toEqual([{ type: 'text', text: 'partial' }]);
+    expect(get().contentStore[copyHash].refCount).toBe(1);
+    expect(resolveContent(get().contentStore, node.contentHash)).toEqual([{ type: 'text', text: 'partial later' }]);
+    clearStreamingBuffersForTest();
   });
 
   it('clones only the active path when requested and keeps other branches at the source', () => {

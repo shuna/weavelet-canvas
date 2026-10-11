@@ -223,6 +223,9 @@ const CloudKitSync = () => {
         return;
       }
 
+      if (!useCloudAuthStore.getState().providers.cloudkit.connectionId) {
+        useCloudAuthStore.getState().setProviderSession('cloudkit', { connectionId: crypto.randomUUID() });
+      }
       const provider = useCloudAuthStore.getState().providers.cloudkit;
       const connection = provider.connectionId ?? provider.sessionToken;
       const observed = useStore.getState();

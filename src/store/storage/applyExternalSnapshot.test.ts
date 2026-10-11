@@ -34,10 +34,15 @@ describe('external snapshot commit', () => {
     expect(mocks.invalidate).not.toHaveBeenCalled();
     expect(mocks.set).not.toHaveBeenCalled();
   });
-  it('prepares against the state after cancellation finalized partial content', async () => {
-    mocks.invalidate.mockImplementation(() => { mocks.state = { ...mocks.state, partial: 'saved' }; });
+  it('rejects a payload superseded by cancellation finalizing partial content', async () => {
+    mocks.invalidate.mockImplementation(() => { mocks.state = { ...mocks.state, chats: ['partial'] }; });
+    expect(await applyExternalSnapshot({}, () => true)).toBe(false);
+    expect(mocks.state.chats).toEqual(['partial']);
+    expect(mocks.prepare).not.toHaveBeenCalled();
+    expect(mocks.save).not.toHaveBeenCalled();
+  });
+  it('commits once and clears obsolete editing history', async () => {
     expect(await applyExternalSnapshot({}, () => true)).toBe(true);
-    expect(mocks.prepare.mock.calls[0][0].partial).toBe('saved');
     expect(mocks.set).toHaveBeenCalledTimes(1);
     expect(mocks.state.branchHistoryPast).toEqual([]);
     expect(mocks.save).toHaveBeenCalledWith(mocks.state);

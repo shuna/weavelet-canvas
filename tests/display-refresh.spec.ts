@@ -77,7 +77,13 @@ test('continuous Markdown advances, completion is immediate, hidden snapshots fr
   await expect(page.locator('#progress-check')).toHaveText('5');
   await page.evaluate(() => (window as any).displayCheck.progress(false, 6));
   await expect(page.locator('#progress-check')).toHaveText('6');
+  await page.evaluate(() => {
+    (window as any).motionChanged = new Promise(resolve => {
+      window.matchMedia('(prefers-reduced-motion: reduce)').addEventListener('change', resolve, { once: true });
+    });
+  });
   await page.emulateMedia({ reducedMotion: 'reduce' });
+  await page.evaluate(() => (window as any).motionChanged);
   const dots = await page.locator('#dots-check').innerText();
   await page.waitForTimeout(1100);
   await expect(page.locator('#dots-check')).toHaveText(dots);

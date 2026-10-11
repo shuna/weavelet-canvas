@@ -118,7 +118,7 @@ vi.mock('@store/persistence', () => ({
     state: persisted,
     repairedChatTitles: [],
   })),
-  finishHydratedState: vi.fn((prepared: { state: unknown }) => prepared.state),
+  reportHydratedStateCommitted: vi.fn(),
 }));
 
 vi.mock('@store/storage/IndexedDbStorage', () => ({
