@@ -208,43 +208,49 @@ export class LowbitQConversionManager {
       this.pendingResolve = resolve;
       this.pendingReject = reject;
 
-      this.worker = new Worker(
-        new URL('../../workers/lowbitQConversionWorker.ts', import.meta.url),
-        { type: 'module' },
-      );
-
-      this.worker.onmessage = (ev: MessageEvent) => {
-        this.handleWorkerMessage(
-          ev.data, sourceModelId, sourceLabel, sourceFile.name,
+      try {
+        this.worker = new Worker(
+          new URL('../../workers/lowbitQConversionWorker.ts', import.meta.url),
+          { type: 'module' },
         );
-      };
 
-      this.worker.onerror = (ev: ErrorEvent) => {
-        const errorMsg = `変換ワーカーエラー: ${ev.message}`;
-        this.callbacks.onError?.(errorMsg);
-        this.pendingReject?.(new Error(errorMsg));
+        this.worker.onmessage = (ev: MessageEvent) => {
+          this.handleWorkerMessage(
+            ev.data, sourceModelId, sourceLabel, sourceFile.name,
+          );
+        };
+
+        this.worker.onerror = (ev: ErrorEvent) => {
+          const errorMsg = `変換ワーカーエラー: ${ev.message}`;
+          this.callbacks.onError?.(errorMsg);
+          this.pendingReject?.(new Error(errorMsg));
+          this.cleanup();
+        };
+
+        // When allocatorConfig is provided, use the v2 pipeline.
+        // Pass convertMode only when falling back to the legacy v1 path.
+        this.worker.postMessage({
+          id: 1,
+          type: 'start',
+          sourceFile,
+          sourceUrl: callbacks.sourceUrl,
+          opfsTarget: callbacks.allocatorConfig
+            ? {
+                modelId: generateLowbitQModelId(sourceModelId),
+                fileName: generateLowbitQFilename(sourceFile.name),
+              }
+            : undefined,
+          allocatorConfig: callbacks.allocatorConfig,
+          convertMode: callbacks.allocatorConfig ? undefined : callbacks.convertMode,
+          computeQuality: callbacks.computeQuality,
+          sourceModelName: callbacks.sourceModelName,
+          sourceOpfsInfo: callbacks.sourceOpfsInfo,
+        });
+      } catch (error) {
+        this.cancelled = true;
+        reject(error);
         this.cleanup();
-      };
-
-      // When allocatorConfig is provided, use the v2 pipeline.
-      // Pass convertMode only when falling back to the legacy v1 path.
-      this.worker.postMessage({
-        id: 1,
-        type: 'start',
-        sourceFile,
-        sourceUrl: callbacks.sourceUrl,
-        opfsTarget: callbacks.allocatorConfig
-          ? {
-              modelId: generateLowbitQModelId(sourceModelId),
-              fileName: generateLowbitQFilename(sourceFile.name),
-            }
-          : undefined,
-        allocatorConfig: callbacks.allocatorConfig,
-        convertMode: callbacks.allocatorConfig ? undefined : callbacks.convertMode,
-        computeQuality: callbacks.computeQuality,
-        sourceModelName: callbacks.sourceModelName,
-        sourceOpfsInfo: callbacks.sourceOpfsInfo,
-      });
+      }
     });
   }
 
@@ -253,11 +259,8 @@ export class LowbitQConversionManager {
    */
   cancel(): void {
     this.cancelled = true;
-    if (this.worker) {
-      this.worker.terminate();
-      this.pendingReject?.(new Error('変換がキャンセルされました'));
-      this.cleanup();
-    }
+    this.pendingReject?.(new Error('変換がキャンセルされました'));
+    this.cleanup();
   }
 
   private async handleWorkerMessage(
