@@ -15,14 +15,16 @@ import { getOrCreateDeviceId } from '@utils/deviceId';
 import useCloudAuthStore from '@store/cloud-auth-store';
 import useStore from '@store/store';
 import {
-  hydrateFromPersistedStoreState,
   createPersistedChatDataState,
   migratePersistedState,
   needsDataMigration,
+  prepareHydratedState,
+  finishHydratedState,
   type PersistedStoreState,
 } from '@store/persistence';
 import { saveChatData } from '@store/storage/IndexedDbStorage';
 import { STORE_VERSION } from '@store/version';
+import { invalidateAiTasks } from '@hooks/aiTaskLifetime';
 import i18next from 'i18next';
 import { showToast } from '@utils/showToast';
 import type { CloudSyncProvider, CloudSyncTarget } from '../types';
@@ -118,17 +120,18 @@ const normalizeRemoteRecord = (
   return { state: parsed as Partial<PersistedStoreState>, version: STORE_VERSION };
 };
 
-const hydrateFromServerRecord = async (record: CloudKitRecord) => {
+const hydrateFromServerRecord = async (record: CloudKitRecord): Promise<boolean> => {
   const normalized = normalizeRemoteRecord(record);
   const remotePersistedState = migratePersistedState(
     structuredClone(normalized.state),
     normalized.version
   ) as Partial<PersistedStoreState>;
 
-  const hydratedState = hydrateFromPersistedStoreState(
-    useStore.getState(),
-    remotePersistedState
-  );
+  invalidateAiTasks();
+  const base = useStore.getState();
+  const prepared = await prepareHydratedState(base, remotePersistedState);
+  if (base !== useStore.getState()) return false;
+  const hydratedState = finishHydratedState(prepared);
   useStore.setState(hydratedState);
   await saveChatData(createPersistedChatDataState(useStore.getState()));
 
@@ -138,6 +141,7 @@ const hydrateFromServerRecord = async (record: CloudKitRecord) => {
       status: 'needs-export-import',
     });
   }
+  return true;
 };
 
 // --- Validate ---
@@ -252,7 +256,9 @@ export const createCloudKitCloudProvider = <S>(): CloudSyncProvider<S> => ({
           // so the generic layer updates its guard-metrics baseline.
           updateRecordChangeTag(fetchResult.record.recordChangeTag);
           const normalized = normalizeRemoteRecord(fetchResult.record);
-          await hydrateFromServerRecord(fetchResult.record);
+          if (!await hydrateFromServerRecord(fetchResult.record)) {
+            throw new Error('Local data changed while applying the CloudKit server state. Retry sync.');
+          }
 
           showToast(i18next.t('toast.conflict', { ns: 'cloudkit' }), 'warning');
 

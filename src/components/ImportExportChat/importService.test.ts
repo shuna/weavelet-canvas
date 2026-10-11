@@ -57,8 +57,13 @@ const testContext = vi.hoisted(() => {
     setState,
     importOpenAIChatExportMock,
     createPartializedState,
+    invalidateAiTasks: vi.fn(),
   };
 });
+
+vi.mock('@hooks/aiTaskLifetime', () => ({
+  invalidateAiTasks: testContext.invalidateAiTasks,
+}));
 
 vi.mock('@utils/showToast', () => ({
   showToast: (...args: unknown[]) => {
@@ -149,6 +154,7 @@ describe('importService', () => {
     testContext.toastWarning.mockClear();
     testContext.importOpenAIChatExportMock.mockReset();
     testContext.createPartializedState.mockClear();
+    testContext.invalidateAiTasks.mockClear();
     vi.mocked(window.confirm).mockReset();
   });
 
@@ -164,6 +170,45 @@ describe('importService', () => {
       message: 'notifications.unrecognisedDataFormat',
     });
     expect(testContext.storeState.chats).toEqual([createChat('existing-chat', 'Existing')]);
+  });
+
+  it('does not roll back edits made while the import file is being read', async () => {
+    let finishRead!: (text: string) => void;
+    const originalFileReader = globalThis.FileReader;
+    class DeferredFileReader {
+      public onload: ((event: { target: { result: string } }) => void) | null = null;
+      readAsText() {
+        finishRead = (text) => this.onload?.({ target: { result: text } });
+      }
+    }
+    Object.defineProperty(globalThis, 'FileReader', {
+      value: DeferredFileReader,
+      configurable: true,
+    });
+    testContext.setChats.mockImplementationOnce(() => {
+      throw new DOMException('quota', 'QuotaExceededError');
+    });
+    vi.mocked(window.confirm).mockReturnValue(false);
+
+    try {
+      const pending = importChatFromFile(
+        new File([JSON.stringify({ version: 1, folders: {}, chats: [createChat('imported')] })], 'slow.json'),
+        t,
+      );
+      testContext.storeState.theme = 'changed-during-read';
+      finishRead(JSON.stringify({ version: 1, folders: {}, chats: [createChat('imported')] }));
+
+      await expect(pending).resolves.toEqual({
+        success: false,
+        message: 'notifications.quotaExceeded',
+      });
+      expect(testContext.storeState.theme).toBe('changed-during-read');
+    } finally {
+      Object.defineProperty(globalThis, 'FileReader', {
+        value: originalFileReader,
+        configurable: true,
+      });
+    }
   });
 
   it('retries partial OpenAI import after confirmation', async () => {
@@ -325,6 +370,7 @@ describe('importService', () => {
     expect(testContext.storeState.apiKey).toBeUndefined();
     expect(testContext.storeState.theme).toBe('dark');
     expect(testContext.storeState.currentChatIndex).toBe(0);
+    expect(testContext.invalidateAiTasks).toHaveBeenCalledWith();
   });
 
   it('rejects invalid export v3 data with broken branch references', async () => {

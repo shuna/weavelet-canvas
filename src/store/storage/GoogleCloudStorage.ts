@@ -15,6 +15,7 @@ import type { Snapshot } from './google/records';
 import { sameSnapshotAsync as sameSnapshot } from './google/processing';
 import { SyncConflictError, useSyncReview, markSyncChanges, type Resolution } from './google/conflicts';
 import { STORE_VERSION } from '@store/version';
+import { invalidateAiTasks } from '@hooks/aiTaskLifetime';
 
 let session: EncryptedDriveSync | undefined;
 let pending: { value: Snapshot; session: EncryptedDriveSync } | undefined;
@@ -72,11 +73,17 @@ const currentSnapshot = (): Snapshot => ({ state: createPartializedState(useStor
 async function applySyncedSnapshot(target: EncryptedDriveSync, before: Snapshot, received: Snapshot) {
   const observed = useStore.getState();
   if (target !== session || !await sameSnapshot(before, currentSnapshot()) || observed !== useStore.getState()) return false;
+  // Finalizing an active task can change the persisted payload.  In that case
+  // the received merge was computed against an obsolete base, so let the normal
+  // queue path merge it again instead of applying it over the final partial.
+  invalidateAiTasks();
   const state = useStore.getState();
+  const preparedBase = currentSnapshot();
+  if (target !== session || !await sameSnapshot(before, preparedBase)) return false;
   const selectedId = state.chats?.[state.currentChatIndex]?.id;
   const prepared = await prepareHydratedState(state,
     migratePersistedState(received.state, received.version ?? STORE_VERSION) as Partial<PersistedStoreState>);
-  if (target !== session || state !== useStore.getState()) return false;
+  if (target !== session || state !== useStore.getState() || !await sameSnapshot(preparedBase, currentSnapshot())) return false;
   const hydrated = finishHydratedState(prepared);
   if (selectedId && hydrated.chats) {
     const index = hydrated.chats.findIndex(chat => chat.id === selectedId);

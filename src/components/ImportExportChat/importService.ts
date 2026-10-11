@@ -23,6 +23,7 @@ import { isKnownModel } from '@utils/modelLookup';
 import { BranchNodeLegacy, ChatInterface, Folder, FolderCollection } from '@type/chat';
 import { ExportV1, ExportV2, ExportV3, OpenAIChat, OpenAIPlaygroundJSON } from '@type/export';
 import type { EvaluationResultMap } from '@type/evaluation';
+import { invalidateAiTasks } from '@hooks/aiTaskLifetime';
 
 export type ImportResult = {
   success: boolean;
@@ -574,13 +575,17 @@ export const importChatFromFile = async (
   mode: ImportMode = 'append',
   includeSettings: boolean = true
 ): Promise<ImportResult> => {
-  const snapshot = takeSnapshot();
+  let snapshot: StoreSnapshot | undefined;
 
   try {
     const data = await readImportFile(file);
     const parsedData = JSON.parse(data);
     const originalParsedData = JSON.parse(data);
     const type = detectImportType(parsedData);
+    if (mode === 'replace') invalidateAiTasks();
+    // Capture only after file I/O and task finalization.  Restoring an earlier
+    // state here would discard edits made while the file picker was open.
+    snapshot = takeSnapshot();
     const result = await importParsedData(
       parsedData,
       originalParsedData,
@@ -591,7 +596,7 @@ export const importChatFromFile = async (
       includeSettings
     );
 
-    if (!result.success) {
+    if (!result.success && snapshot) {
       restoreSnapshot(snapshot);
     } else if (mode === 'replace') {
       const chats = useStore.getState().chats;
@@ -600,7 +605,7 @@ export const importChatFromFile = async (
 
     return result;
   } catch (error: unknown) {
-    restoreSnapshot(snapshot);
+    if (snapshot) restoreSnapshot(snapshot);
     return buildFailureResult((error as Error).message);
   }
 };
