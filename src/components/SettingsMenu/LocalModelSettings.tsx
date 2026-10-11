@@ -11,7 +11,7 @@ import {
 } from '@src/local-llm/runtime';
 import type { VariantOverride as WasmVariantOverride } from '@src/vendor/wllama/variant-table';
 import { OpfsFileProvider, removeAssets, getTempFileSize, readFile, saveFile, sha256Blob } from '@src/local-llm/storage';
-import { rehydrateSavedModels } from '@src/local-llm/storage';
+import { rehydrateLocalModels } from '@hooks/useLocalModelRehydration';
 import { CURATED_MODELS } from '@src/local-llm/catalog';
 import type { CatalogModel } from '@src/local-llm/catalog';
 import { downloadCatalogModel, downloadModelFiles } from '@src/local-llm/download';
@@ -293,29 +293,9 @@ const LocalModelSettings = () => {
     if (rehydratedRef.current && rehydrationEpoch === 0) return;
     rehydratedRef.current = true;
 
-    const searchModels = useStore.getState().localModels
-      .filter((m) => m.source === 'opfs' && !CURATED_MODELS.some((c) => c.id === m.id))
-      .map((m) => ({ id: m.id, manifest: m.manifest }));
-    const entries = [...CURATED_MODELS, ...searchModels];
-
-    rehydrateSavedModels(entries).then((meta) => {
-      const store = useStore.getState();
-      for (const [id, m] of Object.entries(meta)) {
-        store.updateSavedModelMeta(id, m);
-        if (m.storageState === 'saved' && !store.localModels.some((lm) => lm.id === id)) {
-          const catalog = CURATED_MODELS.find((c) => c.id === id);
-          if (catalog) {
-            store.addLocalModel({
-              id: catalog.id, engine: catalog.engine, tasks: catalog.tasks,
-              label: catalog.label, origin: catalog.huggingFaceRepo, source: 'opfs',
-              manifest: catalog.manifest, fileSize: m.storedBytes || catalog.expectedDownloadSize,
-              displayMeta: catalog.displayMeta,
-            });
-          }
-        }
-      }
-      setRehydrated(true);
-    }).catch(() => { setRehydrated(true); });
+    rehydrateLocalModels(rehydrationEpoch > 0)
+      .then(() => setRehydrated(true))
+      .catch(() => setRehydrated(true));
   }, [enabled, rehydrationEpoch]);
 
   // Sync partial model storedBytes on section mount

@@ -8,6 +8,7 @@ import useStreamRecovery from '@hooks/useStreamRecovery';
 import useOpenRouterVerification from '@hooks/useOpenRouterVerification';
 import useIosStatusBarScroll from '@hooks/useIosStatusBarScroll';
 import useAppBootstrap from '@hooks/useAppBootstrap';
+import useLocalModelRehydration from '@hooks/useLocalModelRehydration';
 import Toast from '@components/Toast';
 import LegacyCustomModelsBanner from '@components/LegacyCustomModelsBanner';
 import MigrationProgressBanner from '@components/MigrationProgressBanner';
@@ -25,6 +26,7 @@ function isLowbitQValidationRoute(): boolean {
 
 function App() {
   const isBootstrapped = useAppBootstrap();
+  useLocalModelRehydration(isBootstrapped);
   useStreamRecovery();
   useOpenRouterVerification();
   useIosStatusBarScroll();
