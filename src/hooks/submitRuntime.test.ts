@@ -11,7 +11,6 @@ import {
   writeChunkToStore,
   finalizeStreamingNode,
 } from './submitRuntime';
-import { buildLocalPromptFromContext } from './submitHelpers';
 import { clearStreamingBuffersForTest } from '@utils/streamingBuffer';
 import { useStreamEndStatusStore } from '@store/stream-end-status-store';
 import * as swBridge from '@utils/swBridge';
@@ -66,7 +65,7 @@ vi.mock('@utils/swBridge', () => ({
 // Mock local-llm/runtime for executeLocalSubmit tests
 // ---------------------------------------------------------------------------
 const mockAbort = vi.fn();
-let mockGenerateImpl: ((prompt: string, opts: any, onChunk: (text: string) => void) => Promise<string>) | null = null;
+let mockGenerateImpl: ((input: unknown, opts: any, onChunk: (text: string) => void) => Promise<string>) | null = null;
 
 vi.mock('@src/local-llm/runtime', () => ({
   localModelRuntime: {
@@ -80,14 +79,6 @@ vi.mock('@src/local-llm/runtime', () => ({
     })),
   },
 }));
-
-vi.mock('./submitHelpers', async () => {
-  const actual = await vi.importActual<typeof import('./submitHelpers')>('./submitHelpers');
-  return {
-    ...actual,
-    buildLocalPromptFromContext: vi.fn(() => 'test prompt'),
-  };
-});
 
 beforeEach(() => {
   mockRemoveSession.mockClear();
@@ -897,14 +888,20 @@ describe('executeLocalSubmit abort handling', () => {
     expect(mockAbort).not.toHaveBeenCalled();
   });
 
-  it('builds the local prompt from the full prepared context', async () => {
+  it('sends full structured history, the configured system prompt, and prefix to the worker', async () => {
     mockState = makeLocalMockState();
-    mockGenerateImpl = async () => 'Done';
+    let workerInput: unknown;
+    mockGenerateImpl = async (input) => {
+      workerInput = input;
+      return 'Done';
+    };
 
     const abortController = createSubmitAbortController('sess-local-context');
     const messages = [
-      { role: 'system', content: [{ type: 'text', text: 'be helpful' }] },
-      { role: 'user', content: [{ type: 'text', text: 'hi' }] },
+      { role: 'system', content: [{ type: 'text', text: 'stale message system prompt' }] },
+      { role: 'user', content: [{ type: 'text', text: 'first question' }] },
+      { role: 'assistant', content: [{ type: 'text', text: 'first answer' }] },
+      { role: 'user', content: [{ type: 'text', text: 'latest question' }] },
     ] as any;
 
     await executeLocalSubmit({
@@ -921,20 +918,22 @@ describe('executeLocalSubmit abort handling', () => {
         presence_penalty: 0,
         top_p: 1,
         frequency_penalty: 0,
-        systemPrompt: 'be helpful',
+        systemPrompt: 'configured system prompt',
       } as any,
       mode: 'append',
       abortController,
       t: (key) => key,
+      assistantPrefill: 'Answer: ',
     });
 
-    expect(buildLocalPromptFromContext).toHaveBeenCalledWith(
-      messages,
-      'append',
-      messages.length,
-      'local-model',
-      undefined,
-      'be helpful',
-    );
+    expect(workerInput).toEqual({
+      messages: [
+        { role: 'system', content: 'configured system prompt' },
+        { role: 'user', content: 'first question' },
+        { role: 'assistant', content: 'first answer' },
+        { role: 'user', content: 'latest question' },
+      ],
+      assistantPrefix: 'Answer: ',
+    });
   });
 });
