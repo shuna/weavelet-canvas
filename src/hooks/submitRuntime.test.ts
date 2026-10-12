@@ -1,3 +1,4 @@
+import { resolveContent } from '@utils/contentStore';
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 
 import {
@@ -67,6 +68,7 @@ vi.mock('@utils/streamDb', () => ({
   saveRequest: vi.fn().mockResolvedValue(undefined), setGenerationId: vi.fn().mockResolvedValue(undefined),
   setStreamObservation: vi.fn().mockResolvedValue(undefined), markStreamApplied: vi.fn().mockResolvedValue(undefined),
   updateStatus: vi.fn().mockResolvedValue(undefined),
+  saveProxyCheckpoint: vi.fn().mockResolvedValue(undefined),
 }));
 
 // ---------------------------------------------------------------------------
@@ -776,6 +778,37 @@ describe('stream end status via SW path', () => {
         (mockState.chats as any[])[0].branchTree.nodes['node-assistant'].contentHash, 'assistant', 'saved answer', 'thoughthidden');
       expect(fetchSpy).toHaveBeenCalledOnce();
       expect(fetchSpy.mock.calls[0][0]).toBe('https://proxy.test/api/stream');
+    } finally { fetchSpy.mockRestore(); clearSubmitSessionRuntime(sessionId); }
+  });
+
+  it('retains the proxy ID and unfinished think tag when the next chunk times out at 45 seconds', async () => {
+    vi.useFakeTimers();
+    const sessionId = 'proxy-chunk-timeout';
+    mockState = makeMockState(sessionId);
+    vi.mocked(prepareStreamRequest).mockReturnValue({ endpoint: 'https://example.test', headers: {}, body: {} });
+    vi.mocked(swBridge.waitForController).mockResolvedValue(false);
+    const db = await import('@utils/streamDb');
+    vi.mocked(db.deleteRequest).mockClear();
+    vi.mocked(db.saveProxyCheckpoint).mockClear();
+    const raw = 'data: {"choices":[{"delta":{"content":"A<thi"}}]}\n\n';
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(new ReadableStream({
+      start(controller) { controller.enqueue(new TextEncoder().encode(`id: 1\ndata: ${JSON.stringify(raw)}\n\n`)); },
+    })));
+    try {
+      const pending = executeSubmitStream({ sessionId, chatId: 'chat-1', chatIndex: 0, messageIndex: 0, targetNodeId: 'node-assistant',
+        messages: [{ role: 'user', content: [{ type: 'text', text: 'hi' }] }],
+        config: { model: 'test', max_tokens: 100, temperature: 1, presence_penalty: 0, top_p: 1, frequency_penalty: 0, stream: true },
+        resolvedProvider: { endpoint: 'https://example.test', key: 'secret' }, abortController: createSubmitAbortController(sessionId), t: key => key });
+      const rejected = expect(pending).rejects.toThrow('Chunk timeout: no data received for 45s');
+      await vi.advanceTimersByTimeAsync(45_001);
+      await rejected;
+      expect(db.deleteRequest).not.toHaveBeenCalled();
+      expect(fetchSpy).toHaveBeenCalledOnce();
+      expect(db.saveRequest).toHaveBeenCalledWith(expect.objectContaining({ chatId: 'chat-1', nodeId: 'node-assistant', proxySessionId: expect.stringContaining('chat-1:') }));
+      expect(db.saveProxyCheckpoint).toHaveBeenLastCalledWith(expect.any(String), expect.objectContaining({ bufferedText: 'A', thinkTagCheckpoint: { state: 'outside', pending: '<thi' } }));
+      const chats = mockState.chats as any[];
+      expect(resolveContent(mockState.contentStore as any, chats[0].branchTree.nodes['node-assistant'].contentHash)).toEqual([{ type: 'text', text: 'A' }]);
+      expect(db.markStreamApplied).toHaveBeenCalledWith(expect.any(String), chats[0].branchTree.nodes['node-assistant'].contentHash, 'assistant', 'A', '');
     } finally { fetchSpy.mockRestore(); clearSubmitSessionRuntime(sessionId); }
   });
 

@@ -783,6 +783,7 @@ export const executeSubmitStream = async ({
   let lastFinishReason: string | undefined;
   let receivedStreamText = '';
   let receivedStreamReasoning = '';
+  let proxyTimedOut = false;
 
   // Parser for <think>...</think> tags in content (used by open-source models
   // on Together AI, Fireworks, Groq, etc.)
@@ -1080,7 +1081,7 @@ export const executeSubmitStream = async ({
         llmDone: false,
       });
 
-      const headerTimeout = setTimeout(() => abortController.abort(), 45_000);
+      const headerTimeout = setTimeout(() => { proxyTimedOut = true; abortController.abort(); }, 45_000);
       let res: Response;
       try {
         res = await fetch(`${proxyConfig.endpoint}/api/stream`, {
@@ -1099,6 +1100,9 @@ export const executeSubmitStream = async ({
         }),
           signal: abortController.signal,
         });
+      } catch (error) {
+        await updateStreamStatus(requestId, proxyTimedOut ? 'failed' : 'interrupted');
+        throw error;
       } finally {
         clearTimeout(headerTimeout);
       }
@@ -1178,6 +1182,7 @@ export const executeSubmitStream = async ({
           new Promise<never>((_, reject) => {
             timer = setTimeout(
               () => {
+                proxyTimedOut = true;
                 abortController.abort();
                 reject(new Error('Chunk timeout: no data received for 45s'));
               },
@@ -1307,7 +1312,7 @@ export const executeSubmitStream = async ({
         } else {
           receivedStreamText = dbBuffered;
           receivedStreamReasoning = dbReasoning;
-          await updateStreamStatus(requestId, abortController.signal.aborted ? 'interrupted' : 'failed');
+          await updateStreamStatus(requestId, abortController.signal.aborted && !proxyTimedOut ? 'interrupted' : 'failed');
         }
       }
 
@@ -1394,8 +1399,10 @@ export const executeSubmitStream = async ({
     }
   };
 
+  let requestCompleted = false;
   try {
     await runRequest(messages);
+    requestCompleted = true;
   } catch (error) {
     if (upstreamDataStarted || !shouldRetryWithoutSystemMessages(error, messages)) {
       // Determine end reason from the error type
@@ -1406,6 +1413,7 @@ export const executeSubmitStream = async ({
     }
     try {
       await runRequest(removeSystemMessages(messages));
+      requestCompleted = true;
     } catch (retryError) {
       const isAbort = retryError instanceof Error && retryError.name === 'AbortError';
       const endReason: StreamEndReason = isAbort ? 'interrupted' : 'error';
@@ -1413,11 +1421,15 @@ export const executeSubmitStream = async ({
       throw withCapturedGenerationId(retryError, capturedGenerationId);
     }
   } finally {
-    // Flush any remaining <think> tag buffer before finalizing
-    const remaining = thinkTagParser.flush();
-    if (canApply() && remaining.reasoning) writeReasoningChunk(chatId, targetNodeId, remaining.reasoning);
-    if (canApply() && remaining.content) queueChunkToStore(chatId, targetNodeId, remaining.content);
-    if (canApply()) {
+    // An interrupted proxy stream retains unfinished tags in its recovery checkpoint.
+    if (!proxyConfig || requestCompleted) {
+      const remaining = thinkTagParser.flush();
+      if (canApply() && remaining.reasoning) writeReasoningChunk(chatId, targetNodeId, remaining.reasoning);
+      if (canApply() && remaining.content) queueChunkToStore(chatId, targetNodeId, remaining.content);
+    }
+    const canFinalize = canApply() || (proxyTimedOut && (!ticket || isAiTaskCurrent(ticket))
+      && !!useStore.getState().generatingSessions[sessionId]);
+    if (canFinalize) {
       flushQueuedChunks(chatId, targetNodeId);
       finalizeStreamingNode(chatId, targetNodeId);
       const requestId = sessionRequestIds.get(sessionId);
