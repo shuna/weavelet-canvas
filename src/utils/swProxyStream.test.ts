@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { runInNewContext } from 'node:vm';
 import { IDBFactory } from 'fake-indexeddb';
@@ -7,14 +7,14 @@ const bytes = (parts: string[]) => new ReadableStream<Uint8Array>({
   start(controller) { parts.forEach((part) => controller.enqueue(new TextEncoder().encode(part))); controller.close(); },
 });
 
-async function run(parts: string[]) {
+async function run(parts: string[], stall = false) {
   const messages: any[] = [];
   const scope = runInNewContext(`${readFileSync('public/sw-stream.js', 'utf8')}\n({ handleStartStream, dbGet })`, {
     indexedDB: new IDBFactory(), self: { addEventListener() {} }, Date, Map, Promise,
     TextEncoder, TextDecoder, ReadableStream, AbortController, setTimeout, clearTimeout,
-    console: { log() {} }, fetch: async () => new Response(bytes(parts), { status: 200 }),
+    console: { log() {} }, fetch: async () => new Response(stall ? new ReadableStream({ start(controller) { parts.forEach(part => controller.enqueue(new TextEncoder().encode(part))); } }) : bytes(parts), { status: 200 }),
   });
-  await scope.handleStartStream({ requestId: 'r', endpoint: 'https://llm', headers: {}, body: {}, chatIndex: 0, messageIndex: 0,
+  await scope.handleStartStream({ requestId: 'r', chatId: 'c', nodeId: 'n', endpoint: 'https://llm', headers: {}, body: {}, chatIndex: 0, messageIndex: 0,
     proxyMode: true, proxyConfig: { endpoint: 'https://proxy', sessionId: 's' } }, { postMessage: (message: any) => messages.push(message) });
   return { messages, record: await scope.dbGet('r') };
 }
@@ -39,4 +39,18 @@ describe('SW proxy stream terminal and checkpoint semantics', () => {
     expect(messages.some((message) => message.type === 'sw-error')).toBe(true);
     expect(record).toMatchObject({ status: 'failed', lastProxyEventId: 1 });
   });
+  it('retains the same proxy ID and parser checkpoint after a 45-second chunk timeout', async () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+    try {
+      const raw = 'data: {"choices":[{"delta":{"content":"A<thi"}}]}\n\n';
+      const pending = run([`id: 1\ndata: ${JSON.stringify(raw)}\n\n`], true);
+      // IndexedDB uses real tasks; wait until the first read schedules its timeout.
+      await vi.waitFor(() => expect(vi.getTimerCount()).toBeGreaterThan(0));
+      await vi.advanceTimersByTimeAsync(45_001);
+      const { messages, record } = await pending;
+      expect(messages).toEqual(expect.arrayContaining([expect.objectContaining({ type: 'sw-error', error: 'Chunk timeout: no data received for 45s' })]));
+      expect(record).toMatchObject({ chatId: 'c', nodeId: 'n', proxySessionId: 's', status: 'failed', bufferedText: 'A', lastProxyEventId: 1, thinkTagCheckpoint: { state: 'outside', pending: '<thi' } });
+    } finally { vi.useRealTimers(); }
+  });
+
 });

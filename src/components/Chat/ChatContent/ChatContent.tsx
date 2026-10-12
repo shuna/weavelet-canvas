@@ -258,14 +258,17 @@ const ChatContent = ({ isChatFindOpen, onChatFindClose }: ChatContentProps = {})
   const [hasPendingRecords, setHasPendingRecords] = useState(false);
 
   useEffect(() => {
+    let disposed = false;
+    setHasPendingRecords(false);
     if (error && proxyActive) {
       getAllPending()
-        .then((records) => setHasPendingRecords(records.some((record) => !!record.proxySessionId)))
-        .catch(() => setHasPendingRecords(false));
-    } else {
-      setHasPendingRecords(false);
+        .then((records) => {
+          if (!disposed) setHasPendingRecords(records.some(record => record.chatId === currentChatId && !!record.proxySessionId));
+        })
+        .catch(() => { if (!disposed) setHasPendingRecords(false); });
     }
-  }, [error, proxyActive]);
+    return () => { disposed = true; };
+  }, [error, proxyActive, currentChatId]);
 
   // Scroller refs — simplified from Virtuoso's dual-ref pattern
   const scrollerRef = useRef<HTMLDivElement>(null);
@@ -866,7 +869,7 @@ const ChatContent = ({ isChatFindOpen, onChatFindClose }: ChatContentProps = {})
                     {hasPendingRecords && (
                       <button
                         className='px-3 py-1 text-sm bg-blue-500 text-white rounded hover:bg-blue-600 transition-colors'
-                        onClick={() => recoverPending({ manual: true })}
+                        onClick={() => recoverPending({ manual: true, chatId: currentChatId })}
                       >
                         {t('recoverFromProxy')}
                       </button>

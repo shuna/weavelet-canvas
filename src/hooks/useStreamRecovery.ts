@@ -245,7 +245,7 @@ async function readProxyRecoveryStream(
     const retry = response.headers.get('Retry-After');
     await response.body?.cancel().catch(() => {});
     const seconds = Number(retry);
-    const retryAfterMs = Number.isFinite(seconds) ? Math.min(Math.max(seconds * 1000, 0), 5_000) : undefined;
+    const retryAfterMs = retry !== null && Number.isFinite(seconds) ? Math.min(Math.max(seconds * 1000, 0), 5_000) : undefined;
     return { text: record.bufferedText, reasoning: record.bufferedReasoning ?? '', outcome: 'network', retryAfterMs };
   }
   const stream = response.body;
@@ -361,7 +361,7 @@ async function readProxyRecoveryStream(
   return { text: recoveredText, reasoning: recoveredReasoning, outcome, retry };
 }
 
-export async function recoverPending(opts?: { manual?: boolean }) {
+export async function recoverPending(opts?: { manual?: boolean; chatId?: string }) {
   // Prevent concurrent calls (StrictMode double-mount, rapid visibility changes)
   if (recoveryInProgress) {
     debugReport('recovery-hook', {
@@ -378,7 +378,7 @@ export async function recoverPending(opts?: { manual?: boolean }) {
   debugReport(debugId, { label: 'Stream Recovery', status: 'active', detail: 'Checking pending records…' });
 
   try {
-    await recoverPendingInner(manual, debugId);
+    await recoverPendingInner(manual, debugId, opts?.chatId);
   } finally {
     // If recovery was cancelled manually (e.g. debug panel ×), the caller
     // already removed the entry — don't re-create it with a debugReport.
@@ -394,7 +394,7 @@ export async function recoverPending(opts?: { manual?: boolean }) {
   }
 }
 
-async function recoverPendingInner(manual: boolean, debugId: string) {
+async function recoverPendingInner(manual: boolean, debugId: string, chatId?: string) {
   // Wait for store hydration so proxy credentials are available
   const hydrated = await waitForStoreHydration();
   if (!hydrated) {
@@ -405,7 +405,7 @@ async function recoverPendingInner(manual: boolean, debugId: string) {
 
   let records: StreamRecord[];
   try {
-    records = await getAllPending();
+    records = (await getAllPending()).filter(record => !chatId || record.chatId === chatId);
   } catch {
     debugReport(debugId, { status: 'error', detail: 'Failed to read pending records' });
     showToast('リカバリの準備に失敗しました', 'error');
@@ -429,6 +429,9 @@ async function recoverPendingInner(manual: boolean, debugId: string) {
 
   let recoveredCount = 0;
   let failedCount = 0;
+  let partialCount = 0;
+  let skippedCount = 0;
+  let completedCount = 0;
   let restoredMessageCount = 0;
   let timedOut = false;
   let cancelled = false;
@@ -445,12 +448,13 @@ async function recoverPendingInner(manual: boolean, debugId: string) {
       const initial = useStore.getState();
       const target = resolveRecoveryTarget(initial.chats, initial.contentStore, record);
       if (!target) {
+        skippedCount++;
         debugReport(`recovery-record:${requestId}`, { label: 'Recovery Record', status: 'done', detail: 'IDs or saved checkpoint do not match; retained' });
         continue;
       }
       const hasActiveSession = Object.values(initial.generatingSessions).some(session => session.chatId === record.chatId && session.targetNodeId === record.nodeId);
       const effectiveStatus = resolveRecoveryStatus(record, Date.now(), hasActiveSession);
-      if (effectiveStatus === 'streaming') continue;
+      if (effectiveStatus === 'streaming') { skippedCount++; continue; }
       if (record.status === 'streaming') record.status = 'interrupted';
 
       const recordAbort = new AbortController();
@@ -458,7 +462,7 @@ async function recoverPendingInner(manual: boolean, debugId: string) {
       abort.signal.addEventListener('abort', abortRecord, { once: true });
       const ticket = beginAiTask({ kind: 'recovery', requestId, chatId: record.chatId!, nodeId: record.nodeId!, dependencyIds: [], cancel: abortRecord });
       activeRecoveryTicket = ticket;
-      let expectedHash = record.checkpointHash!;
+      let expectedHash = target.node.contentHash;
       let restoredThisRecord = false;
       let proxyRecoveredThisRecord = false;
       const currentTarget = () => {
@@ -483,7 +487,7 @@ async function recoverPendingInner(manual: boolean, debugId: string) {
         const contentStore = Object.fromEntries(Object.entries(state.contentStore).map(([hash, entry]) => [hash, { ...entry }]));
         const message = buildRecoveredMessage(latest.message, text, reasoning);
         expectedHash = addContent(contentStore, message.content);
-        chat.branchTree!.nodes[record.nodeId!] = { ...latest.node, contentHash: expectedHash };
+        chat.branchTree = { ...chat.branchTree!, nodes: { ...chat.branchTree!.nodes, [record.nodeId!]: { ...latest.node, contentHash: expectedHash } } };
         chat.messages = materializeActivePath(chat.branchTree!, contentStore);
         state.invalidateBranchHistory([chat.id]);
         state.applyBranchState(chats, contentStore, { recordHistory: false });
@@ -500,6 +504,8 @@ async function recoverPendingInner(manual: boolean, debugId: string) {
             if (!currentTarget()) continue;
             if (proxyResult) {
               proxyOutcome = proxyResult.outcome;
+              if (proxyOutcome === 'network') failedCount++;
+              if (proxyOutcome === 'partial') partialCount++;
               record.proxyComplete = proxyOutcome === 'complete';
               if (record.proxyComplete) record.status = 'completed';
               // Keep the proxy result recoverable until the primary snapshot commits.
@@ -521,6 +527,10 @@ async function recoverPendingInner(manual: boolean, debugId: string) {
             nextAttemptAt: Date.now() + OPENROUTER_VERIFICATION_INITIAL_DELAY_MS,
           });
         }
+        if (record.proxyComplete === true) {
+          completedCount++;
+          useStreamEndStatusStore.getState().setStatus(record.nodeId!, 'recovered');
+        }
         if (restoredThisRecord) {
           await saveRecoveryRecord({ ...record, bufferedText: record.proxySessionId ? record.bufferedText : getCurrentMessageText(latest.message), appliedHash: expectedHash, updatedAt: Date.now() }, () => !!currentTarget());
           requestSnapshotFlush();
@@ -529,7 +539,7 @@ async function recoverPendingInner(manual: boolean, debugId: string) {
           const isPartial = proxyOutcome ? proxyOutcome !== 'complete' : effectiveStatus === 'interrupted' || effectiveStatus === 'failed';
           useStreamEndStatusStore.getState().setStatus(record.nodeId!, isPartial ? 'recovered_partial' : proxyRecoveredThisRecord ? 'recovered' : 'completed');
           // Bootstrap acknowledges appliedHash only after the primary snapshot commits.
-        } else if (latest.node.contentHash === record.checkpointHash) {
+        } else {
           await saveRecoveryRecord({ ...record, appliedHash: expectedHash, updatedAt: Date.now() }, () => !!currentTarget());
           requestSnapshotFlush();
         }
@@ -541,6 +551,8 @@ async function recoverPendingInner(manual: boolean, debugId: string) {
 
     }
   } finally {
+    cancelled = recoveryCancelledManually;
+    timedOut = abort.signal.aborted && !cancelled;
     clearTimeout(timeoutId);
     if (activeRecoveryAbort === abort) {
       activeRecoveryAbort = null;
@@ -556,17 +568,30 @@ async function recoverPendingInner(manual: boolean, debugId: string) {
       : `Processed ${records.length} record(s)`,
   });
 
+  if (cancelled) return;
+
   if (restoredMessageCount > 0) {
     const sourceLabel = recoveredCount > 0
       ? ` ${recoveredCount}件はプロキシから追加復元しました。`
       : '';
-    showToast(`リカバリ成功: ${restoredMessageCount}件のメッセージを復元しました。${sourceLabel}`.trim(), 'success');
-  } else if (manual && !failedCount && !timedOut) {
+    const incomplete = failedCount > 0 || partialCount > 0 || timedOut;
+    showToast(`リカバリ${incomplete ? '途中' : '成功'}: ${restoredMessageCount}件のメッセージを復元しました。${sourceLabel}`.trim(), incomplete ? 'warning' : 'success');
+  } else if (manual && completedCount > 0) {
+    showToast(`リカバリ成功: ${completedCount}件の応答の受信完了を確認しました`, 'success');
+  } else if (manual && !failedCount && !partialCount && !timedOut && !skippedCount) {
     showToast('復元できる新しい内容はありませんでした', 'info');
   }
 
   if (failedCount > 0) {
     showToast(`リカバリ失敗: ${failedCount}件はプロキシから復元できませんでした`, 'error');
+  }
+
+  if (partialCount > 0) {
+    showToast(`リカバリ未完了: ${partialCount}件の記録を保持しています。しばらくしてから再試行してください`, 'warning');
+  }
+
+  if (manual && skippedCount > 0) {
+    showToast(`リカバリ保留: ${skippedCount}件は生成中、または復元先を安全に確認できませんでした。記録は保持しています`, 'info');
   }
 
   if (timedOut) {

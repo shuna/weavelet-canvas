@@ -107,11 +107,15 @@ export const showRecoveryToast = (status: RecoveryStatus) => {
 };
 
 /** Missing IDs/checkpoints remain recovery data, never an index-based write target. */
-export const resolveRecoveryTarget = (chats: ChatInterface[] | undefined, contentStore: ContentStoreData, record: StreamRecord, expectedHash = record.checkpointHash) => {
-  if (!record.chatId || !record.nodeId || !expectedHash || !record.checkpointRole) return null;
+export const resolveRecoveryTarget = (chats: ChatInterface[] | undefined, contentStore: ContentStoreData, record: StreamRecord, expectedHash?: string) => {
+  if (!record.chatId || !record.nodeId || !record.checkpointRole) return null;
   const chatIndex = chats?.findIndex(chat => chat.id === record.chatId) ?? -1;
   const chat = chats?.[chatIndex];
   const node = chat?.branchTree?.nodes[record.nodeId];
-  if (!chat || !node || node.contentHash !== expectedHash || node.role !== record.checkpointRole) return null;
+  if (!chat || !node || node.role !== record.checkpointRole) return null;
+  const matchesHash = expectedHash !== undefined
+    ? node.contentHash === expectedHash
+    : node.contentHash === record.checkpointHash || node.contentHash === record.appliedHash;
+  if (!matchesHash) return null;
   return { chat, chatIndex, node, messageIndex: chat.branchTree!.activePath.indexOf(record.nodeId), message: { role: node.role, content: resolveContent(contentStore, node.contentHash) } };
 };
