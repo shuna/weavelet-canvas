@@ -97,6 +97,10 @@ struct SavedChatState {
 
 struct LocalStateStore {
     let fileURL: URL
+    private let write: (Data, URL) throws -> Void
+    init(fileURL: URL, write: @escaping (Data, URL) throws -> Void = { try $0.write(to:$1,options:.atomic) }) {
+        self.fileURL = fileURL; self.write = write
+    }
 
     static var applicationStore: LocalStateStore {
         let support = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
@@ -111,6 +115,6 @@ struct LocalStateStore {
     func save(_ state: SavedChatState) throws {
         let data = try state.encoded()
         try FileManager.default.createDirectory(at: fileURL.deletingLastPathComponent(), withIntermediateDirectories: true)
-        try data.write(to: fileURL, options: .atomic)
+        try write(data,fileURL)
     }
 }

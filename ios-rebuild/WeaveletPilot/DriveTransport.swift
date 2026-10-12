@@ -89,7 +89,7 @@ actor DriveTransport: SyncDrive {
         guard (200...299).contains(response.statusCode) else { throw DriveTransportError.http(response.statusCode) }
     }
     private func list(_ dataset: String, kind: String) async throws -> OrderedJSON {
-        var ids: [OrderedJSON] = []; var page: String?
+        var ids: [OrderedJSON] = []; var page: String?; var seen = Set<String>()
         let escaped = dataset.replacingOccurrences(of: "\\", with: "\\\\").replacingOccurrences(of: "'", with: "\\'")
         repeat {
             var query = [URLQueryItem(name: "q", value: "'\(escaped)' in parents and trashed = false and appProperties has { key='kind' and value='\(kind)' }"),
@@ -99,8 +99,27 @@ actor DriveTransport: SyncDrive {
             guard result["incompleteSearch"] != .bool(true) else { throw DriveTransportError.invalidResponse }
             for file in try result.required("files").array("files") { ids.append(.string(try file.required("id").string("id"))) }
             page = try result["nextPageToken"].map { try $0.string("nextPageToken") }
+            if let page { guard !page.isEmpty, seen.insert(page).inserted else { throw DriveTransportError.invalidResponse } }
         } while page != nil
         return .array(ids)
+    }
+
+    // Listing rules and names come from the same Web helper; URLSession owns paging and transport.
+    func listDatasets() async throws -> OrderedJSON {
+        let definition = try SharedWebOperations.call("driveListing", .array([]))
+        let parameters = try definition.required("parameters").object("parameters")
+        var files: [OrderedJSON] = []; var page: String?; var seen = Set<String>()
+        repeat {
+            var query = try parameters.map { URLQueryItem(name: $0.key, value: try $0.value.string($0.key)) }
+            if let page { query.append(URLQueryItem(name: "pageToken", value: page)) }
+            let result = try await json("/files", query: query)
+            guard result["incompleteSearch"] != .bool(true) else { throw DriveTransportError.invalidResponse }
+            files += try result.required("files").array("files")
+            page = try result["nextPageToken"].map { try $0.string("nextPageToken") }
+            if page == "" { page = nil }
+            if let page { guard seen.insert(page).inserted else { throw DriveTransportError.invalidResponse } }
+        } while page != nil
+        return .array(files)
     }
 
     func call(_ method: String, args: [OrderedJSON]) async throws -> OrderedJSON {
@@ -127,7 +146,7 @@ actor DriveTransport: SyncDrive {
             guard file["trashed"] != .bool(true) else { throw DriveTransportError.notFound }; return file
         case "folder":
             let id = try args[0].string("id"), header = try args[1].string("headerId")
-            let name = try (args.count > 2 && args[2] != .null ? args[2].string("name") : "Weavelet encrypted sync (\(id))").trimmingCharacters(in: .whitespacesAndNewlines)
+            let name = try (args.count > 2 && args[2] != .null ? args[2].string("name") : SharedWebOperations.call("driveFolderName", .string(id)).string("name")).trimmingCharacters(in: .whitespacesAndNewlines)
             guard !name.isEmpty else { throw DriveTransportError.invalidResponse }
             return try await json("/files", query: [URLQueryItem(name: "fields", value: "id,name,mimeType,appProperties")], body: .object([
                 JSONField(key: "id", value: .string(id)), JSONField(key: "name", value: .string(name)), JSONField(key: "mimeType", value: .string("application/vnd.google-apps.folder")),
@@ -138,11 +157,14 @@ actor DriveTransport: SyncDrive {
         case "startToken": return try await json("/changes/startPageToken").required("startPageToken")
         case "commits", "packs": return try await list(args[0].string("dataset"), kind: method == "commits" ? "commit" : "pack")
         case "changes":
-            var page = try args[0].string("token"); var changes: [OrderedJSON] = []
+            var page = try args[0].string("token"); var seen = Set([page]); var changes: [OrderedJSON] = []
             while true {
                 let result = try await json("/changes", query: [URLQueryItem(name: "pageToken", value: page), URLQueryItem(name: "pageSize", value: "1000"), URLQueryItem(name: "fields", value: "nextPageToken,newStartPageToken,changes(fileId,removed,file(id,trashed,appProperties))")])
                 changes += try result.required("changes").array("changes")
-                if let next = result["nextPageToken"] { page = try next.string("pageToken") }
+                if let next = result["nextPageToken"] {
+                    page = try next.string("pageToken")
+                    guard !page.isEmpty, seen.insert(page).inserted else { throw DriveTransportError.invalidResponse }
+                }
                 else { return .object([JSONField(key: "token", value: try result.required("newStartPageToken")), JSONField(key: "changes", value: .array(changes))]) }
             }
         case "remove":

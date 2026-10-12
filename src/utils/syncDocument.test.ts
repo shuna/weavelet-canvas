@@ -204,6 +204,53 @@ describe('shared full-state document boundary', () => {
     expect(changes.every((change:any) => change.op !== 'set' || Object.hasOwn(change,'value'))).toBe(true);
     expect(apply(document,changes).snapshot.state.chats[0]).toEqual({id:'flat',title:'new',messages:[],updatedAt:now});
   });
+  it('applies synchronized changes without restoring remotely deleted nodes/entries or replacing unchanged raw leaves', () => {
+    const document = createSyncDocument({snapshot:fixture('content-entry-wire').snapshot,v3Sidecar:{xV3:'retained'}});
+    document.snapshot.state.theme = 'device';
+    document.snapshot.state.xHuge = JSON.parse('9007199254740993');
+    const received = structuredClone(document.snapshot);
+    received.state.theme = 'remote';
+    received.state.chats = [];
+    received.state.contentStore = {};
+    const changes = JSON.parse(documentOperation(JSON.stringify({operation:'syncSnapshot',document,received})));
+    expect(changes.some((p:any) => p.path.includes('theme') || p.path.includes('xHuge'))).toBe(false);
+    const updated = apply(document.snapshot,changes);
+    expect(updated.state.chats).toEqual([]);
+    expect(updated.state.contentStore).toEqual({});
+    expect(updated.state.theme).toBe('device');
+    expect(document.v3Sidecar).toEqual({xV3:'retained'});
+    expect(() => documentOperation(JSON.stringify({operation:'syncSnapshot',document,received:{version:19,state:{}}}))).toThrow('different data version');
+  });
+  it('restores unchanged raw chat values by ID across received insertion while adopting changed metadata and deletions', () => {
+    const original = JSON.parse('{"version":18,"state":{"chats":[{"id":"A","title":"old","messages":[],"xHuge":9007199254740993,"xAttrs":{"keep":9007199254740993,"change":"old"}}],"folders":{},"contentStore":{}}}');
+    const document = createSyncDocument({snapshot:original});
+    const received = structuredClone(original);
+    received.state.chats[0].xAttrs.change = 'remote';
+    received.state.chats.unshift({id:'B',title:'new',messages:[]});
+    const changes = JSON.parse(documentOperation(JSON.stringify({operation:'syncSnapshot',document,received})));
+    const restored = changes.map((change:any) => {
+      if (!change.rawSources) return change;
+      const refs = change.rawSources.map((reference:any) => ({op:'set',path:reference.path,value:reference.sourcePath.reduce((value:any,key:any)=>value[key],original)}));
+      return {...change,value:apply(change.value,refs)};
+    });
+    expect(apply(original,restored)).toEqual(received);
+    expect(changes.some((change:any) => change.rawSources?.some((reference:any) => reference.sourcePath.join('.') === 'state.chats.0.xHuge'))).toBe(true);
+    const changed = structuredClone(received); changed.state.chats[1].xHuge = 9007199254740996;
+    const changedPlan = JSON.parse(documentOperation(JSON.stringify({operation:'syncSnapshot',document,received:changed})));
+    expect(changedPlan.flatMap((p:any)=>p.rawSources??[]).some((p:any)=>p.sourcePath.join('.')==='state.chats.0.xHuge')).toBe(false);
+    const deleted = structuredClone(received); deleted.state.chats = [deleted.state.chats[0]];
+    const deletedPlan = JSON.parse(documentOperation(JSON.stringify({operation:'syncSnapshot',document,received:deleted})));
+    expect(deletedPlan.flatMap((p:any)=>p.rawSources??[]).some((p:any)=>p.sourcePath.join('.')==='state.chats.0')).toBe(false);
+  });
+  it('replaces moved chat positions even when distinct raw numbers collapse to the same JS leaf', () => {
+    const snapshot = JSON.parse('{"version":18,"state":{"chats":[{"id":"A","title":"same","messages":[],"xHuge":9007199254740993},{"id":"B","title":"same","messages":[],"xHuge":9007199254740992}],"folders":{},"contentStore":{}}}');
+    const document = createSyncDocument({snapshot}), received = structuredClone(snapshot);
+    received.state.chats.reverse();
+    const changes = JSON.parse(documentOperation(JSON.stringify({operation:'syncSnapshot',document,received})));
+    expect(changes.filter((change:any) => change.op === 'set').map((change:any) => change.path)).toEqual([['state','chats',0],['state','chats',1]]);
+    expect(changes[0].rawSources).toEqual([{path:[],sourcePath:['state','chats',1]}]);
+    expect(changes[1].rawSources).toEqual([{path:[],sourcePath:['state','chats',0]}]);
+  });
   it('rejects stale edits and conflicting namespaces without mutating input', () => {
     const document = createSyncDocument({ snapshot: fixture('io-corpus').syncSnapshot });
     const before = projectSyncDocument(document); const saved = structuredClone(document);

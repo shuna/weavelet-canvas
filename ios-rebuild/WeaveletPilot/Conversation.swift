@@ -82,6 +82,7 @@ final class ChatState: ObservableObject {
     @Published var generationError: String?
     private var generationTask: Task<Void, Never>?
     private let store: LocalStateStore?
+    private var initialLoadFailed = false
 
     init(store: LocalStateStore? = nil) {
         self.store = store
@@ -94,7 +95,7 @@ final class ChatState: ObservableObject {
                 exchange = saved.exchange
                 document = saved.document
             }
-        } catch { persistenceError = "保存した会話を復元できませんでした。保存ファイルは変更していません。\n" + error.localizedDescription }
+        } catch { initialLoadFailed = true; persistenceError = "保存した会話を復元できませんでした。保存ファイルは変更していません。\n" + error.localizedDescription }
     }
 
     var selectedConversationID: String {
@@ -121,6 +122,7 @@ final class ChatState: ObservableObject {
         selectedID = selected
         exchange = imported
         document = candidate
+        initialLoadFailed = false
         persistenceError = nil
     }
 
@@ -337,6 +339,20 @@ final class ChatState: ObservableObject {
     func applySnapshot(_ snapshot: OrderedJSON) throws {
         let base = try document ?? SyncDocument(v3: exchange?.source ?? ChatLibrary.emptySource)
         let candidate = try base.mergingSnapshot(snapshot)
+        try applyDocument(candidate)
+    }
+    func syncInputSnapshot() throws -> OrderedJSON {
+        guard !initialLoadFailed else { throw SyncSessionError.invalid("The saved local file could not be loaded; it was not replaced") }
+        guard generation == nil else { throw SyncSessionError.invalid("Wait for the active generation before applying Google sync") }
+        if let document { return document.snapshot }
+        return try SyncDocument(v3:ChatLibrary.emptySource).snapshot
+    }
+    func applySynchronizedSnapshot(_ snapshot: OrderedJSON, expected: OrderedJSON) throws {
+        guard try syncInputSnapshot() == expected else { throw SyncSessionError.invalid("Local data changed during sync") }
+        let base = try document ?? SyncDocument(v3: exchange?.source ?? ChatLibrary.emptySource)
+        try applyDocument(base.synchronizingSnapshot(snapshot))
+    }
+    private func applyDocument(_ candidate: SyncDocument) throws {
         let changed = try WebExchange(source: candidate.uiProjection())
         var views = changed.conversations
         for index in views.indices {

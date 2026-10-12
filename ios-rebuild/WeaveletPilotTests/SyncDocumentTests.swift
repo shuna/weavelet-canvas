@@ -82,6 +82,29 @@ final class SyncDocumentTests: XCTestCase {
         let restarted = try SyncDocument(snapshot: edited.snapshot)
         XCTAssertEqual(try restarted.uiProjection()["contentStore"]?["delta"]?["content"], .array(content))
     }
+    func testSyncChatInsertionAndReorderingRestoreRawUnknownValuesByIDAndAdoptRemoteChanges() throws {
+        let original = try OrderedJSON.decode(Data(#"{"version":18,"state":{"chats":[{"id":"A","title":"old","messages":[],"xHuge":9007199254740993,"xAttrs":{"keep":1.234567890123456789,"change":"old"}}],"contentStore":{},"folders":{}}}"#.utf8))
+        let document = try SyncDocument(snapshot:original)
+        let received = try OrderedJSON.decode(Data(#"{"version":18,"state":{"chats":[{"id":"B","title":"new","messages":[]},{"id":"A","title":"old","messages":[],"xHuge":9007199254740992,"xAttrs":{"keep":1.2345678901234567,"change":"remote"}}],"contentStore":{},"folders":{}}}"#.utf8))
+        let changed = try document.synchronizingSnapshot(received)
+        let chats = try changed.snapshot.required("state").required("chats").array("chats")
+        XCTAssertEqual(chats.map { $0["id"] },[.string("B"),.string("A")])
+        XCTAssertEqual(chats[1]["xHuge"],.number("9007199254740993"))
+        XCTAssertEqual(chats[1]["xAttrs"]?["keep"],.number("1.234567890123456789"))
+        XCTAssertEqual(chats[1]["xAttrs"]?["change"],.string("remote"))
+        let altered = received.replacing("state",with:try received.required("state").replacing("chats",with:.array([chats[0],chats[1].replacing("xHuge",with:.number("9007199254740996"))])))
+        XCTAssertEqual(try document.synchronizingSnapshot(altered).snapshot.required("state").required("chats").array("chats")[1]["xHuge"],.number("9007199254740996"))
+        let removed = received.replacing("state",with:try received.required("state").replacing("chats",with:.array([chats[0]])))
+        XCTAssertEqual(try document.synchronizingSnapshot(removed).snapshot.required("state").required("chats").array("chats").map { $0["id"] },[.string("B")])
+    }
+    func testSyncExistingChatSwapKeepsDifferentRawNumbersThatAreEqualInJS() throws {
+        let original = try OrderedJSON.decode(Data(#"{"version":18,"state":{"chats":[{"id":"A","title":"same","messages":[],"xHuge":9007199254740993},{"id":"B","title":"same","messages":[],"xHuge":9007199254740992}],"folders":{},"contentStore":{}}}"#.utf8))
+        let received = try OrderedJSON.decode(Data(#"{"version":18,"state":{"chats":[{"id":"B","title":"same","messages":[],"xHuge":9007199254740992},{"id":"A","title":"same","messages":[],"xHuge":9007199254740992}],"folders":{},"contentStore":{}}}"#.utf8))
+        let changed = try SyncDocument(snapshot:original).synchronizingSnapshot(received)
+        let chats = try changed.snapshot.required("state").required("chats").array("chats")
+        XCTAssertEqual(chats[0]["id"],.string("B")); XCTAssertEqual(chats[0]["xHuge"],.number("9007199254740992"))
+        XCTAssertEqual(chats[1]["id"],.string("A")); XCTAssertEqual(chats[1]["xHuge"],.number("9007199254740993"))
+    }
     @MainActor func testDepth256SharedRootPersistsRestartsAndExportsExactRawValue() throws {
         let directory = FileManager.default.temporaryDirectory.appendingPathComponent("fullstate-depth-\(UUID().uuidString)")
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)

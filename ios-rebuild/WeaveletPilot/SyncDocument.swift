@@ -70,6 +70,32 @@ struct SyncDocument {
         let changes = try SharedWebOperations.call("documentOperation", input)
         return try Self.fromRaw(OrderedJSONChanges.apply(changes, to: raw, opaque: boundary.opaque), order: v3RootOrder)
     }
+    func synchronizingSnapshot(_ received: OrderedJSON) throws -> SyncDocument {
+        let input = OrderedJSON.object([.init(key: "operation", value: .string("syncSnapshot")), .init(key: "document", value: raw), .init(key: "received", value: received)])
+        let planned = try SharedWebOperations.call("documentOperation", input).array("changes")
+        func rawValue(_ path: OrderedJSON) throws -> OrderedJSON {
+            var value = snapshot
+            for key in try path.array("source path") {
+                switch key {
+                case .string(let name): value = try value.required(name)
+                case .number(let raw):
+                    let values = try value.array("source array")
+                    guard let index = Int(raw), values.indices.contains(index) else { throw ExchangeError.invalid("raw source index") }
+                    value = values[index]
+                default: throw ExchangeError.invalid("raw source path")
+                }
+            }
+            return value
+        }
+        let changes = try planned.map { change -> OrderedJSON in
+            guard let references = change["rawSources"] else { return change }
+            let restores = try references.array("raw sources").map { reference in
+                OrderedJSON.object([.init(key:"op",value:.string("set")),.init(key:"path",value:try reference.required("path")),.init(key:"value",value:try rawValue(reference.required("sourcePath")))])
+            }
+            return try change.replacing("value",with:OrderedJSONChanges.apply(.array(restores),to:change.required("value")))
+        }
+        return try .init(snapshot: OrderedJSONChanges.apply(.array(changes), to: snapshot), v3Sidecar: v3Sidecar, v3RootOrder: v3RootOrder)
+    }
     func mergingSnapshot(_ incoming: OrderedJSON) throws -> SyncDocument {
         // Send only root presence/type containers. Set values always come from the raw incoming source.
         let shallow = incoming.replacing("state", with: .object(try incoming.required("state").object("state").map { .init(key: $0.key, value: .null) }))

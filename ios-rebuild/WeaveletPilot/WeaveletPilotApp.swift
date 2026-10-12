@@ -21,6 +21,8 @@ struct ChatView: View {
     @State private var showsSettings = false
     @State private var showsLibrary = false
     @State private var showsRemoteSettings = false
+    @State private var shownGoogleConnection: GoogleSyncConnection?
+    @State private var googleConnection: GoogleSyncConnection?
     @State private var input = ""
     @State private var showsImporter = false
     @State private var showsExporter = false
@@ -147,8 +149,15 @@ struct ChatView: View {
                             ForEach(ChatStyle.allCases) { style in Text(style.rawValue).tag(style) }
                         }
                         .pickerStyle(.inline)
+                        Button("Google同期") {
+                            if googleConnection == nil { googleConnection = GoogleSyncConnection(state: state) }
+                            shownGoogleConnection = googleConnection
+                        }.disabled(state.generation != nil)
                         Button("remote生成設定") { showsRemoteSettings = true }
                             .disabled(state.generation != nil)
+                    }
+                    .sheet(item: $shownGoogleConnection) { connection in
+                        GoogleSyncSettingsView(connection: connection)
                     }
                     .sheet(isPresented: $showsRemoteSettings) { RemoteSettingsView(state: state) }
                     .navigationTitle("表示設定")

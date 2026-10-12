@@ -11,6 +11,38 @@ final class DriveTransportTests: XCTestCase {
     override func tearDown() { DriveURLProtocol.handler = nil; super.tearDown() }
     private func json(_ value: String) -> Data { Data(value.utf8) }
 
+    func testDatasetListingUsesSharedQueryAndCompletePagination() async throws {
+        var requests = 0
+        let definition = try SharedWebOperations.call("driveListing", .array([.string("Weavelet encrypted sync"), .string("Weavelet encrypted sync (2)")]))
+        XCTAssertEqual(try definition.required("suggestedName").string("name"), "Weavelet encrypted sync (3)")
+        let drive = transport { request in
+            requests += 1
+            let query = URLComponents(url: request.url!, resolvingAgainstBaseURL: false)!.queryItems!
+            for field in try definition.required("parameters").object("parameters") {
+                XCTAssertEqual(query.first { $0.name == field.key }?.value, try field.value.string(field.key))
+            }
+            if requests == 1 { return (200, self.json("{\"files\":[{\"id\":\"FAKE-a\"}],\"nextPageToken\":\"FAKE-next\"}")) }
+            XCTAssertEqual(query.first { $0.name == "pageToken" }?.value, "FAKE-next")
+            return (200, self.json("{\"files\":[{\"id\":\"FAKE-b\"}]}"))
+        }
+        let files = try await drive.listDatasets().array("files")
+        XCTAssertEqual(files.count, 2); XCTAssertEqual(requests, 2)
+        let incomplete = transport { _ in (200, self.json("{\"files\":[],\"incompleteSearch\":true}")) }
+        do { _ = try await incomplete.listDatasets(); XCTFail("Incomplete list accepted") }
+        catch { XCTAssertEqual(error as? DriveTransportError, .invalidResponse) }
+    }
+
+    func testRepeatedListingCursorIsRejected() async throws {
+        let drive = transport { _ in (200, self.json("{\"files\":[],\"changes\":[],\"nextPageToken\":\"again\"}")) }
+        for method in ["datasets", "commits", "changes"] {
+            do {
+                if method == "datasets" { _ = try await drive.listDatasets() }
+                else { _ = try await drive.call(method, args: [.string("FAKE-start")]) }
+                XCTFail("Repeated cursor accepted")
+            } catch { XCTAssertEqual(error as? DriveTransportError, .invalidResponse) }
+        }
+    }
+
     func testSharedSessionOpenUnlockUsesNativeMetadataAndRejectsLegacyFoldersBeforeReadingKeys() async throws {
         let directory = FileManager.default.temporaryDirectory.appendingPathComponent("weavelet-drive-open-\(UUID().uuidString)")
         defer { try? FileManager.default.removeItem(at: directory) }

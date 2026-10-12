@@ -26,7 +26,7 @@ final class SyncStateStore: @unchecked Sendable {
                 if let entries = field.value["entries"] {
                     for entry in try entries.object("entries") { _ = try entry.value.syncData() }
                 }
-                if let accepted = field.value["accepted"] { _ = try OrderedJSON.decode(Data(accepted.string("accepted snapshot").utf8)) }
+                if let accepted = field.value["accepted"] { _ = try Self.decodeSnapshot(accepted) }
             }
             return root
         } catch let error as CocoaError where error.code == .fileReadNoSuchFile {
@@ -48,7 +48,53 @@ final class SyncStateStore: @unchecked Sendable {
     }
     func acceptedSnapshot(dataset id: String) throws -> OrderedJSON? {
         guard let source = try dataset(id)["accepted"] else { return nil }
-        return try OrderedJSON.decode(Data(source.string("accepted snapshot").utf8))
+        return try Self.decodeSnapshot(source)
+    }
+    private static func encodeSnapshot(_ snapshot: OrderedJSON) throws -> OrderedJSON {
+        let stored: OrderedJSON
+        if let state = snapshot["state"] {
+            stored = snapshot.replacing("state", with: .string(String(decoding: try state.encoded(), as: UTF8.self)))
+        } else { stored = snapshot }
+        return .string(String(decoding: try stored.encoded(), as: UTF8.self))
+    }
+    private static func decodeSnapshot(_ stored: OrderedJSON) throws -> OrderedJSON {
+        let snapshot = try OrderedJSON.decode(Data(stored.string("snapshot").utf8))
+        if case .string(let json) = snapshot["state"] {
+            return snapshot.replacing("state", with: try OrderedJSON.decode(Data(json.utf8)))
+        }
+        return snapshot
+    }
+    func selectedDataset() throws -> String? { try locked(false) { try load()["selectedDataset"]?.string("dataset") } }
+    func selectDataset(_ dataset: String?) throws {
+        try locked(true) {
+            let root = try load()
+            let updated = try dataset.map { root.replacing("selectedDataset", with: .string($0)) } ?? .object(try root.object("sync state").filter { $0.key != "selectedDataset" })
+            try write(updated.encoded(),fileURL)
+        }
+    }
+    struct Publication {
+        let input: OrderedJSON
+        let received: OrderedJSON?
+        let target: OrderedJSON?
+        var mode: String = "sync"
+        var replace: Bool = false
+    }
+    func publication(dataset: String) throws -> Publication? {
+        guard let value = try self.dataset(dataset)["publication"] else { return nil }
+        return try .init(input: Self.decodeSnapshot(value.required("input")), received: value["received"].map(Self.decodeSnapshot), target: value["target"].map(Self.decodeSnapshot), mode: value["mode"].map { try $0.string("mode") } ?? "sync", replace: value["replace"].map { try $0.boolean("replace") } ?? false)
+    }
+    func savePublication(dataset: String, _ publication: Publication?) throws {
+        try locked(true) {
+            let root = try load(), datasets = try root.required("datasets")
+            var state = datasets[dataset] ?? .object([])
+            if let publication {
+                var value = OrderedJSON.object([.init(key: "input", value: try Self.encodeSnapshot(publication.input)), .init(key:"mode",value:.string(publication.mode)), .init(key:"replace",value:.bool(publication.replace))])
+                if let received = publication.received { value = value.replacing("received", with: try Self.encodeSnapshot(received)) }
+                if let target = publication.target { value = value.replacing("target", with: try Self.encodeSnapshot(target)) }
+                state = state.replacing("publication", with: value)
+            } else { state = .object(try state.object("dataset").filter { $0.key != "publication" }) }
+            try write(root.replacing("datasets", with: datasets.replacing(dataset,with:state)).encoded(),fileURL)
+        }
     }
     func transaction(dataset id: String, expectedCache: OrderedJSON, cache: OrderedJSON?,
                      entries: [JSONField], remove: [String], accepted: OrderedJSON?) throws {
@@ -63,7 +109,7 @@ final class SyncStateStore: @unchecked Sendable {
             if !remove.isEmpty { storedEntries = .object(try storedEntries.object("entries").filter { field in !remove.contains { $0.utf8.elementsEqual(field.key.utf8) } }) }
             state = state.replacing("entries", with: storedEntries)
             if let cache { state = state.replacing("cache", with: cache) }
-            if let accepted { state = state.replacing("accepted", with: .string(String(decoding: try accepted.encoded(), as: UTF8.self))) }
+            if let accepted { state = state.replacing("accepted", with: try Self.encodeSnapshot(accepted)) }
             datasets = datasets.replacing(id, with: state)
             let bytes = try root.replacing("datasets", with: datasets).encoded()
             try write(bytes, fileURL)

@@ -266,13 +266,13 @@ final class SyncSessionTests: XCTestCase {
 }
 
 private final class SaveFault: @unchecked Sendable { var rejectAccepted = false }
-private final class TestSyncKeys: SyncKeyStore, @unchecked Sendable {
+final class TestSyncKeys: SyncKeyStore, @unchecked Sendable {
     private let lock = NSLock(); private var values: [String: SymmetricKey] = [:]
     func load(dataset: String) throws -> SymmetricKey? { lock.lock(); defer { lock.unlock() }; return values[dataset] }
     func save(_ key: SymmetricKey, dataset: String) throws { lock.lock(); defer { lock.unlock() }; values[dataset] = key }
 }
 
-private actor FakeSyncDrive: SyncDrive {
+actor FakeSyncDrive: SyncDrive {
     private var next = 0
     private var files = OrderedJSON.object([])
     private var events: [OrderedJSON] = []

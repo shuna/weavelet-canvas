@@ -6983,7 +6983,9 @@ var WeaveletGoogleSync = (() => {
   __export(entry_exports, {
     documentOperation: () => documentOperation,
     drain: () => drain,
+    driveFolderName: () => driveFolderName,
     driveHeaderID: () => driveHeaderID,
+    driveListing: () => driveListing,
     folderOperation: () => folderOperation,
     folderRows: () => folderRows,
     generationRequest: () => generationRequest,
@@ -6997,6 +6999,23 @@ var WeaveletGoogleSync = (() => {
     settle: () => settle,
     start: () => start
   });
+
+  // src/store/storage/google/datasetListing.ts
+  var DEFAULT_SYNC_FOLDER_NAME = "Weavelet encrypted sync";
+  var defaultSyncFolderName = (id) => `${DEFAULT_SYNC_FOLDER_NAME} (${id})`;
+  function nextSyncFolderName(name, names) {
+    const base = name.trim();
+    const used = new Set(names);
+    let candidate = base, suffix = 2;
+    while (used.has(candidate))
+      candidate = `${base} (${suffix++})`;
+    return candidate;
+  }
+  var DRIVE_LIST_FIELDS = "id,kind,name,mimeType,modifiedTime,size";
+  var DRIVE_LIST_QUERY = "trashed = false and (mimeType = 'application/json' or appProperties has { key='weaveletSync' and value='1' } or (mimeType = 'application/octet-stream' and name contains '.json'))";
+  function driveListParameters(q = DRIVE_LIST_QUERY, fields = DRIVE_LIST_FIELDS) {
+    return { q, orderBy: "modifiedTime desc", pageSize: "1000", fields: `nextPageToken,incompleteSearch,files(${fields})` };
+  }
 
   // src/store/storage/google/datasetHeader.ts
   var SYNC_FOLDER_TYPE = "application/vnd.google-apps.folder";
@@ -10372,22 +10391,8 @@ ${message.content}` : message.content).join("\n\n").trim();
     imageDetail: _defaultImageDetail
   });
 
-  // src/store/storage/google/records.ts
-  var import_diff_match_patch3 = __toESM(require_diff_match_patch(), 1);
-  var dmp3 = new import_diff_match_patch3.default();
-  function resolveStrict2(store, hash, visited = /* @__PURE__ */ new Set()) {
-    const entry = store[hash];
-    if (!entry || visited.has(hash) || visited.size >= 100)
-      throw new Error("Missing or cyclic message content; sync stopped.");
-    if (!entry.delta)
-      return entry.content;
-    visited.add(hash);
-    const base = resolveStrict2(store, entry.delta.baseHash, visited);
-    const [text, applied] = dmp3.patch_apply(dmp3.patch_fromText(entry.delta.patches), JSON.stringify(base));
-    if (applied.some((ok) => !ok))
-      throw new Error("Invalid message delta; sync stopped.");
-    return JSON.parse(text);
-  }
+  // src/store/version.ts
+  var STORE_VERSION = 18;
 
   // src/utils/syncDocument.ts
   var import_lodash2 = __toESM(require_lodash(), 1);
@@ -10439,9 +10444,6 @@ ${message.content}` : message.content).join("\n\n").trim();
     const contents = (folders) => Object.entries(folders).map(([id, folder]) => [id, folder.name, folder.order, folder.color, folder.parentId]);
     return JSON.stringify(contents(next)) !== JSON.stringify(contents(previous));
   }
-
-  // src/store/version.ts
-  var STORE_VERSION = 18;
 
   // src/utils/syncDocument.ts
   var DOCUMENT_SHARED_ROOTS = ["chats", "contentStore", "folders", "evaluationSettings", "evaluationResults"];
@@ -10569,6 +10571,23 @@ ${message.content}` : message.content).join("\n\n").trim();
     return result(document2, next);
   }
 
+  // src/store/storage/google/records.ts
+  var import_diff_match_patch3 = __toESM(require_diff_match_patch(), 1);
+  var dmp3 = new import_diff_match_patch3.default();
+  function resolveStrict2(store, hash, visited = /* @__PURE__ */ new Set()) {
+    const entry = store[hash];
+    if (!entry || visited.has(hash) || visited.size >= 100)
+      throw new Error("Missing or cyclic message content; sync stopped.");
+    if (!entry.delta)
+      return entry.content;
+    visited.add(hash);
+    const base = resolveStrict2(store, entry.delta.baseHash, visited);
+    const [text, applied] = dmp3.patch_apply(dmp3.patch_fromText(entry.delta.patches), JSON.stringify(base));
+    if (applied.some((ok) => !ok))
+      throw new Error("Invalid message delta; sync stopped.");
+    return JSON.parse(text);
+  }
+
   // shared/google-sync/document.ts
   function documentOperation(json) {
     const input = JSON.parse(json);
@@ -10579,6 +10598,61 @@ ${message.content}` : message.content).join("\n\n").trim();
             resolveStrict2(input.store, hash);
           return [hash, resolveDeltaContentJSON(input.store, hash) ?? "[]"];
         })));
+      case "syncSnapshot": {
+        if (input.received.version !== STORE_VERSION)
+          throw new Error("The downloaded snapshot uses a different data version; it was preserved without replacing local chats.");
+        const shared2 = withoutBrowserLocalSettings(input.received.state);
+        const next = mergeSyncDocumentSnapshot(input.document, { ...input.received, state: shared2 }).document;
+        if (shared2.contentStore) {
+          const expanded = projectSyncDocument(input.document).contentStore;
+          for (const [hash, entry] of Object.entries(shared2.contentStore)) {
+            if (orderedJSONEqual(expanded[hash], entry) && input.document.snapshot.state.contentStore?.[hash])
+              next.snapshot.state.contentStore[hash] = input.document.snapshot.state.contentStore[hash];
+          }
+        }
+        const original = input.document.snapshot;
+        const replacedChats = /* @__PURE__ */ new Set();
+        const changes = diffJSONChanges(original, next.snapshot).flatMap((change) => {
+          if (change.path[0] === "state" && change.path[1] === "chats" && typeof change.path[2] === "number") {
+            const index = change.path[2], chat = next.snapshot.state.chats[index];
+            if (chat && original.state.chats?.[index]?.id !== chat.id) {
+              if (replacedChats.has(index))
+                return [];
+              replacedChats.add(index);
+              return [{ op: "set", path: ["state", "chats", index], value: chat }];
+            }
+          }
+          return [change];
+        }).map((change) => {
+          if (change.op !== "set")
+            return change;
+          let sourcePath = [...change.path];
+          if (sourcePath[0] === "state" && sourcePath[1] === "chats" && typeof sourcePath[2] === "number") {
+            const chat = next.snapshot.state.chats[sourcePath[2]];
+            const index = original.state.chats?.findIndex((item) => item.id === chat.id) ?? -1;
+            if (index < 0)
+              return change;
+            sourcePath[2] = index;
+          }
+          const read = (path) => path.reduce((value2, key) => value2?.[key], original);
+          const rawSources = [];
+          const protect = (value2, path, source) => {
+            const previous = read(source);
+            if (previous !== void 0 && orderedJSONEqual(previous, value2)) {
+              rawSources.push({ path, sourcePath: source });
+              return null;
+            }
+            if (Array.isArray(value2))
+              return value2.map((item, index) => protect(item, [...path, index], [...source, index]));
+            if (value2 && typeof value2 === "object")
+              return Object.fromEntries(Object.entries(value2).map(([key, item]) => [key, protect(item, [...path, key], [...source, key])]));
+            return value2;
+          };
+          const value = protect(change.value, [], sourcePath);
+          return { ...change, value, rawSources };
+        });
+        return JSON.stringify(changes);
+      }
       case "v3Layout":
         return JSON.stringify(v3DocumentLayout(input.v3));
       case "project":
@@ -10668,6 +10742,8 @@ ${message.content}` : message.content).join("\n\n").trim();
   }
 
   // shared/google-sync/entry.ts
+  var driveFolderName = (json) => JSON.stringify(defaultSyncFolderName(JSON.parse(json)));
+  var driveListing = (json) => JSON.stringify({ parameters: driveListParameters(), suggestedName: nextSyncFolderName(DEFAULT_SYNC_FOLDER_NAME, JSON.parse(json)) });
   var driveHeaderID = (json) => JSON.stringify(encryptedSyncHeaderId(JSON.parse(json)));
   var global2 = globalThis;
   global2.crypto = { randomUUID: () => host("uuid") };
@@ -10740,9 +10816,16 @@ ${message.content}` : message.content).join("\n\n").trim();
         case "push":
           host("stageAccepted", session.dataset, args.snapshot);
           return session.push(args.snapshot, args.replace);
+        case "synchronize":
+          host("stageAccepted", session.dataset, args.snapshot);
+          return session.synchronize(args.snapshot, args.replace);
+        case "resolveForPublication":
+          host("stageAccepted", session.dataset, args.snapshot);
+          return session.resolve(args.snapshot, args.mode);
         case "pull":
           return session.pull();
         case "acceptLocal":
+          host("stageAccepted", session.dataset, args.snapshot);
           return session.acceptLocal(args.snapshot);
         case "receive": {
           const snapshot = await session.pull();

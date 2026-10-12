@@ -16,6 +16,7 @@
     "src/store/storage/google/records.ts": "21f44f6ba31a25f7ecd7cea71b54354b3579a09414e9895fd1ee592618dfb9e9",
     "src/store/storage/google/decodeParts.ts": "5b07a57eea273940ded90e83228af04aeb121a594289a4f831151351919dfe9b",
     "src/store/storage/google/crypto.ts": "c1ca1e5735caf368fde182c900b1dfac2c32f13993b286136e0ae0b392c6041e",
+    "src/store/storage/google/datasetListing.ts": "60e21120e61e955622decbaa7b6d5c3afc8dea072a68cd6d8aea55d5cad27d26",
     "src/store/storage/google/datasetHeader.ts": "e62a0cd0ecb2d29862377e848c9b0d904e0e2e00ead656e9794def1e946b3f3a",
     "src/store/storage/google/settings.ts": "692573ffb4476d3ae4bc0e4053aab36918c4182aa71b08d371f044653943e4d6",
     "src/utils/folderHierarchy.ts": "43c27d7124d1fd75625f01199c68add22f91d55a4b95e7b0b54c2fa52e2e6f93",
@@ -37,11 +38,12 @@
     "src/utils/chatShallowClone.ts": "105a942dc9ad825dbbcfccc302b682ede001be10953209d43ed7be6dba71b8ec",
     "src/utils/chatExport.ts": "552130b7f2c2140eabce1d48d82eeb5eb29b0179d3d4f196d28d2e53145ddade",
     "src/utils/chatLibrary.ts": "1ae29e8a4180971b75a2192422afe668240d426c07435c6ab95a5251d090a451",
-    "src/store/chat-edit-time.ts": "1d7abac60c3dbc063fcaaef270dd846c2cf2d78dc0aa1a286b99ffc708ecac8c",
     "src/store/version.ts": "c1ce6b0ecd6bd3a6fd71d6e862e940486bf61c3e2c7cda6bdab9650ae75715f4",
+    "src/store/chat-edit-time.ts": "1d7abac60c3dbc063fcaaef270dd846c2cf2d78dc0aa1a286b99ffc708ecac8c",
     "src/utils/syncDocument.ts": "bc7cca9616aa593538dfb194b861ea7415ce3c7e7da42620a9fca0a89acb4120"
   },
   "bundleInputs": {
+    "src/store/storage/google/datasetListing.ts": "60e21120e61e955622decbaa7b6d5c3afc8dea072a68cd6d8aea55d5cad27d26",
     "src/store/storage/google/datasetHeader.ts": "e62a0cd0ecb2d29862377e848c9b0d904e0e2e00ead656e9794def1e946b3f3a",
     "src/store/storage/google/settings.ts": "692573ffb4476d3ae4bc0e4053aab36918c4182aa71b08d371f044653943e4d6",
     "shared/google-sync/adapters/host.ts": "886caab3057bf1b56f5de56164001feaa2a80247f1a4760b18893f29598b1cea",
@@ -83,12 +85,12 @@
     "src/utils/chatExport.ts": "552130b7f2c2140eabce1d48d82eeb5eb29b0179d3d4f196d28d2e53145ddade",
     "src/utils/chatLibrary.ts": "1ae29e8a4180971b75a2192422afe668240d426c07435c6ab95a5251d090a451",
     "shared/google-sync/library.ts": "e247758695f7ffc57b5cb2358b314334cf50508d78e0e79d56fa4b4fcb172340",
-    "src/store/storage/google/records.ts": "21f44f6ba31a25f7ecd7cea71b54354b3579a09414e9895fd1ee592618dfb9e9",
-    "src/store/chat-edit-time.ts": "1d7abac60c3dbc063fcaaef270dd846c2cf2d78dc0aa1a286b99ffc708ecac8c",
     "src/store/version.ts": "c1ce6b0ecd6bd3a6fd71d6e862e940486bf61c3e2c7cda6bdab9650ae75715f4",
+    "src/store/chat-edit-time.ts": "1d7abac60c3dbc063fcaaef270dd846c2cf2d78dc0aa1a286b99ffc708ecac8c",
     "src/utils/syncDocument.ts": "bc7cca9616aa593538dfb194b861ea7415ce3c7e7da42620a9fca0a89acb4120",
-    "shared/google-sync/document.ts": "ee59d8c1f2b5ef3ef3c930c3f8e58c61409c9860609afcda2d6ef82e0e6b26d7",
-    "shared/google-sync/entry.ts": "e37226de0f52e5bb021905a692f9600172ebe6d5fa40e5b12f99876eee7af6ed",
+    "src/store/storage/google/records.ts": "21f44f6ba31a25f7ecd7cea71b54354b3579a09414e9895fd1ee592618dfb9e9",
+    "shared/google-sync/document.ts": "f30ff4f414326a0f47c0cc35b8538aa58d7ff6acf7c459d805f637854cf47e8b",
+    "shared/google-sync/entry.ts": "533dbe4f06b0afce4518142bee0b89309d729a2f934a0e0afb704a1e248adcfa",
     "shared/google-sync/generate.mjs": "416532bf17f1c392c3c60e7319b4f0868454f98496c6c6c0c4b367f12e0ddf22"
   },
   "dependencyInputs": {
@@ -99,5 +101,5 @@
     "lodash/package.json": "8e41b07c744a0de0d2c1c23ed41418ecb0849abb56395d28802e601b4730d7c2",
     "lodash/LICENSE": "f71e8ed126b46346494aad5486874cd8f0aafe95092ed67d2e3cb6110f939abc"
   },
-  "bundleSHA256": "5a8d351d59b02366f93b67fae015cb0f2b02db6e3bf5480feeec8cda12e22573"
+  "bundleSHA256": "d05e84a87d82f857dc6c492467762c78f0cfe3d79e5bef6501763d42cd36ddb0"
 }

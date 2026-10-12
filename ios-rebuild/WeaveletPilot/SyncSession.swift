@@ -52,7 +52,10 @@ actor SyncSession {
         return try OrderedJSON.decode(Data(json.utf8))
     }
     private func run(_ operation: String, args: OrderedJSON = .object([])) async throws -> OrderedJSON {
-        await acquire(); defer { host.stagedAccepted.removeAll(); release() }
+        await acquire(); defer { host.stagedAccepted.removeAll(); host.nextRawAccepted = nil; release() }
+        if ["acceptLocal", "synchronize", "resolveForPublication", "push", "resolve"].contains(operation) {
+            host.nextRawAccepted = args["snapshot"]
+        }
         _ = try invoke("start", [operation, String(decoding: try args.encoded(), as: UTF8.self)])
         var cancellation: Error?
         while true {
@@ -106,6 +109,16 @@ actor SyncSession {
     func push(_ snapshot: OrderedJSON, replace: Bool = false) async throws {
         _ = try await run("push", args: .object([JSONField(key: "snapshot", value: snapshot), JSONField(key: "replace", value: .bool(replace))]))
     }
+    func synchronizeForPublication(_ snapshot: OrderedJSON, replace: Bool = false) async throws -> OrderedJSON {
+        try await run("synchronize", args: .object([.init(key: "snapshot", value: snapshot), .init(key: "replace", value: .bool(replace))]))
+    }
+    func resolveForPublication(_ snapshot: OrderedJSON, mode: String) async throws -> OrderedJSON {
+        guard ["merge", "local", "cloud"].contains(mode) else { throw SyncSessionError.invalid("Invalid resolution") }
+        return try await run("resolveForPublication", args: .object([.init(key: "snapshot", value: snapshot), .init(key: "mode", value: .string(mode))]))
+    }
+    func acceptPublication(_ snapshot: OrderedJSON) async throws {
+        _ = try await run("acceptLocal", args: .object([.init(key: "snapshot", value: snapshot)]))
+    }
     func pull() async throws -> OrderedJSON { try await run("pull") }
     // Receive and baseline are committed together; a failed write leaves the previous accepted state intact.
     func receiveAndSave() async throws -> OrderedJSON { try await run("receive") }
@@ -122,6 +135,7 @@ private final class SyncNativeHost {
     var key: SymmetricKey?
     var expected: [Data: OrderedJSON] = [:]
     var stagedAccepted: [Data: OrderedJSON] = [:]
+    var nextRawAccepted: OrderedJSON?
     private let descriptor = OrderedJSON.object([
         JSONField(key: "type", value: .string("secret")), JSONField(key: "extractable", value: .bool(false)),
         JSONField(key: "algorithm", value: .object([JSONField(key: "name", value: .string("AES-GCM")), JSONField(key: "length", value: .number("256"))])),
@@ -133,7 +147,10 @@ private final class SyncNativeHost {
         do {
             let request = try OrderedJSON.decode(Data(json.utf8))
             let operation = try request.required("operation").string("operation")
-            let args = try request.required("args").array("args").map { try OrderedJSON.decode(Data($0.string("argument JSON").utf8)) }
+            let args = try request.required("args").array("args").enumerated().map { index,value in
+                if operation == "stageAccepted", index == 1, let raw = nextRawAccepted { return raw }
+                return try OrderedJSON.decode(Data(value.string("argument JSON").utf8))
+            }
             response = .object([JSONField(key: "ok", value: .bool(true)), JSONField(key: "value", value: try perform(operation, args))])
         } catch { response = .object([JSONField(key: "ok", value: .bool(false)), JSONField(key: "error", value: .string(error.localizedDescription))]) }
         return String(decoding: try! response.encoded(), as: UTF8.self)
@@ -189,7 +206,7 @@ private final class SyncNativeHost {
             } else { key = try keys.load(dataset: dataset) }
             return key == nil ? .null : descriptor
         case "stageAccepted":
-            stagedAccepted[Data(try args[0].string("dataset").utf8)] = args[1]; return .null
+            stagedAccepted[Data(try args[0].string("dataset").utf8)] = nextRawAccepted ?? args[1]; nextRawAccepted = nil; return .null
         default: throw SyncSessionError.invalid("Unknown native sync operation")
         }
     }

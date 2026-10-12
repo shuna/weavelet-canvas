@@ -1,3 +1,6 @@
+export const driveFolderName = (json: string) => JSON.stringify(defaultSyncFolderName(JSON.parse(json)));
+import { defaultSyncFolderName, driveListParameters, nextSyncFolderName, DEFAULT_SYNC_FOLDER_NAME } from '../../src/store/storage/google/datasetListing';
+export const driveListing = (json: string) => JSON.stringify({ parameters: driveListParameters(), suggestedName: nextSyncFolderName(DEFAULT_SYNC_FOLDER_NAME, JSON.parse(json)) });
 import { encryptedSyncHeaderId } from '../../src/store/storage/google/datasetHeader';
 export const driveHeaderID = (json: string) => JSON.stringify(encryptedSyncHeaderId(JSON.parse(json)));
 import { EncryptedDriveSync } from './source/sync';
@@ -55,8 +58,10 @@ export const start = (operation: string, json: string) => {
       case 'unlock': return session.unlock(args.password);
       case 'restoreKey': return session.restoreKey();
       case 'push': host('stageAccepted', session.dataset, args.snapshot); return session.push(args.snapshot, args.replace);
+      case 'synchronize': host('stageAccepted', session.dataset, args.snapshot); return session.synchronize(args.snapshot,args.replace);
+      case 'resolveForPublication': host('stageAccepted', session.dataset, args.snapshot); return session.resolve(args.snapshot,args.mode);
       case 'pull': return session.pull();
-      case 'acceptLocal': return session.acceptLocal(args.snapshot);
+      case 'acceptLocal': host('stageAccepted',session.dataset,args.snapshot); return session.acceptLocal(args.snapshot);
       case 'receive': {
         const snapshot = await session.pull();
         host('stageAccepted', session.dataset, snapshot);

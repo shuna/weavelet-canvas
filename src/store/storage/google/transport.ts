@@ -1,3 +1,4 @@
+import { defaultSyncFolderName } from './datasetListing';
 import { encryptedSyncHeaderId, SYNC_FOLDER_TYPE } from './datasetHeader';
 export { SYNC_FOLDER_TYPE } from './datasetHeader';
 import { SyncFileNotFoundError, type SyncChange, type SyncTransport } from '../sync/transport';
@@ -10,14 +11,7 @@ import { createMultipartRelatedBody } from '@api/helper';
 import type { GoogleFileResource } from '@type/google-api';
 import { digest } from './crypto';
 
-export const DEFAULT_SYNC_FOLDER_NAME = 'Weavelet encrypted sync';
-export function nextSyncFolderName(name: string, names: string[]): string {
-  const base = name.trim();
-  const used = new Set(names);
-  let candidate = base, suffix = 2;
-  while (used.has(candidate)) candidate = `${base} (${suffix++})`;
-  return candidate;
-}
+export { DEFAULT_SYNC_FOLDER_NAME, nextSyncFolderName } from './datasetListing';
 
 const API = 'https://www.googleapis.com/drive/v3';
 export interface DriveFile extends GoogleFileResource {
@@ -92,7 +86,7 @@ export class DriveTransport implements SyncTransport<DriveFile> {
     const file = await this.metadata(dataset);
     return encryptedSyncHeaderId(file);
   }
-  async folder(id: string, headerId: string, name = `${DEFAULT_SYNC_FOLDER_NAME} (${id})`): Promise<DriveFile> {
+  async folder(id: string, headerId: string, name = defaultSyncFolderName(id)): Promise<DriveFile> {
     if (!name.trim()) throw new Error('Enter a sync folder name.');
     const body = JSON.stringify({ id, name: name.trim(), mimeType: SYNC_FOLDER_TYPE,
       appProperties: { weaveletSync: '1', headerId } });

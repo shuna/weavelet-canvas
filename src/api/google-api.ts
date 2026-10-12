@@ -1,3 +1,4 @@
+import { DRIVE_LIST_FIELDS, DRIVE_LIST_QUERY, driveListParameters } from '../store/storage/google/datasetListing';
 import { beginTransfer } from '@store/storage/google/progress';
 import { googleFetch, getGoogleAccessToken } from './google-auth';
 import { debounce } from 'lodash';
@@ -93,16 +94,12 @@ export const getDriveFileTyped = async (
 const listDriveFilesMatching = async (
   accessToken: string,
   q: string,
-  fields = 'id,kind,name,mimeType,modifiedTime,size'
+  fields = DRIVE_LIST_FIELDS
 ): Promise<GoogleFileList> => {
   const files: GoogleFileResource[] = [];
   let pageToken: string | undefined;
   do {
-    const params = new URLSearchParams({
-      q,
-      orderBy: 'modifiedTime desc', pageSize: '1000',
-      fields: `nextPageToken,incompleteSearch,files(${fields})`,
-    });
+    const params = new URLSearchParams(driveListParameters(q, fields));
     if (pageToken) params.set('pageToken', pageToken);
     const response = await googleFetch(`https://www.googleapis.com/drive/v3/files?${params}`, accessToken, {
       headers: { Authorization: `Bearer ${accessToken}` },
@@ -117,8 +114,7 @@ const listDriveFilesMatching = async (
 };
 
 export const listDriveFiles = (accessToken: string): Promise<GoogleFileList> =>
-  listDriveFilesMatching(accessToken,
-    "trashed = false and (mimeType = 'application/json' or appProperties has { key='weaveletSync' and value='1' } or (mimeType = 'application/octet-stream' and name contains '.json'))");
+  listDriveFilesMatching(accessToken, DRIVE_LIST_QUERY);
 
 // Encrypted sync folders are flat. Include data, commit and key files, excluding trash.
 export const getDriveFolderSize = async (folderId: string, accessToken: string): Promise<string> => {
