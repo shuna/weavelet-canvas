@@ -9,7 +9,7 @@ import EditIcon from '@icon/EditIcon';
 import CloneIcon from '@icon/CloneIcon';
 import ExportIcon from '@icon/ExportIcon';
 import TickIcon from '@icon/TickIcon';
-import useStore from '@store/store';
+import { useWorkspaceStore, useWorkspaceReadOnly } from '@store/workspaceScope';
 import { formatNumber } from '@utils/chat';
 import { stopSessionsForChat } from '@hooks/useSubmit';
 import DownloadChat from '@components/Chat/ChatContent/DownloadChat';
@@ -43,10 +43,13 @@ const ChatHistory = React.memo(
     lastSelectedIndex: number | null;
     setLastSelectedIndex: (index: number) => void;
   }) => {
+  const useStore = useWorkspaceStore();
+  const readOnly = useWorkspaceReadOnly();
+
     const active = useStore((state) => state.currentChatIndex === chatIndex);
 
     const chatId = useStore((state) => state.chats?.[chatIndex]?.id ?? '');
-    const syncChanged = useSyncReview(state => state.chats.includes(chatId));
+    const syncChanged = useSyncReview(state => !readOnly && state.chats.includes(chatId));
     const isThisChatGenerating = useStore((state) =>
       Object.values(state.generatingSessions).some((s) => s.chatId === chatId)
     );
@@ -154,7 +157,7 @@ const ChatHistory = React.memo(
             useStore.getState().navigateToNode({ chatId, source: 'chat-switch', history: 'push', focus: 'none' });
           }
         }}
-        draggable={!isEdit}
+        draggable={!readOnly && !isEdit}
         onDragStart={handleDragStart}
       >
         <div
@@ -162,9 +165,10 @@ const ChatHistory = React.memo(
           onMouseEnter={() => setIsIconHovered(true)}
           onMouseLeave={() => setIsIconHovered(false)}
         >
-          {selectedChats.includes(chatIndex) || isIconHovered ? (
+          {readOnly || selectedChats.includes(chatIndex) || isIconHovered ? (
             <input
               type='checkbox'
+              aria-label={`Select chat: ${title}`}
               checked={selectedChats.includes(chatIndex)}
               onClick={handleCheckboxClick}
               onChange={() => {}}
@@ -223,7 +227,7 @@ const ChatHistory = React.memo(
               </svg>
             </button>
           </div>
-        ) : active && (
+        ) : !readOnly && active && (
           <div className='visible absolute right-1 z-10 flex text-gray-500 dark:text-gray-300'>
             {isDelete || isEdit ? (
               <>

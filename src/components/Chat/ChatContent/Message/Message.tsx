@@ -2,7 +2,7 @@ import { normalizeBubbleSummaryText } from '@utils/bubbleSummary';
 import { useSyncReview, acknowledgeSyncNode } from '@store/storage/google/conflicts';
 import { useTranslation } from 'react-i18next';
 import React, { useCallback, useState } from 'react';
-import useStore from '@store/store';
+import { useWorkspaceStore, useWorkspaceReadOnly } from '@store/workspaceScope';
 
 import Avatar from './Avatar';
 import MessageContent from './MessageContent';
@@ -59,6 +59,9 @@ const Message = React.memo(
     nodeId?: string;
     sticky?: boolean;
   }) => {
+  const useStore = useWorkspaceStore();
+  const readOnly = useWorkspaceReadOnly();
+
     const hideSideMenu = useStore((state) => state.hideSideMenu);
     const advancedMode = useStore((state) => state.advancedMode);
     const setNodeCollapsed = useStore((state) => state.setNodeCollapsed);
@@ -178,7 +181,7 @@ const Message = React.memo(
         onMouseLeave={handleMouseLeave}
         onClick={handleClick}
       >
-        {syncChanged && <button type='button' className='relative z-10 px-7 pt-2 text-xs text-amber-700 dark:text-amber-300' onClick={event => { event.stopPropagation(); acknowledgeSyncNode(chatId, resolvedNodeId!); }}>{t('review.nodeDone')}</button>}
+        {!readOnly && syncChanged && <button type='button' className='relative z-10 px-7 pt-2 text-xs text-amber-700 dark:text-amber-300' onClick={event => { event.stopPropagation(); acknowledgeSyncNode(chatId, resolvedNodeId!); }}>{t('review.nodeDone')}</button>}
         {!sticky && (
           <CollapseToggle
             isCollapsed={isCollapsed}
@@ -214,7 +217,7 @@ const Message = React.memo(
             <>
               <div className='flex flex-wrap items-center gap-2.5'>
                 <Avatar role={role} />
-                {advancedMode && resolvedNodeId && (
+                {!readOnly && advancedMode && resolvedNodeId && (
                   <RoleSelector role={role} nodeId={resolvedNodeId} messageIndex={messageIndex} allowSystem={messageIndex === 0} />
                 )}
                 <div className='ml-auto min-w-0 max-w-full'>
@@ -242,7 +245,7 @@ const Message = React.memo(
                 />
                 </BubbleSummaryView>
               </div>
-              {role === 'user' && resolvedNodeId && !isCollapsed && (
+              {!readOnly && role === 'user' && resolvedNodeId && !isCollapsed && (
                 <AssistantPrefillSeed nodeId={resolvedNodeId} />
               )}
             </>

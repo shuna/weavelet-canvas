@@ -1,9 +1,12 @@
 import React from 'react';
-import useStore from '@store/store';
+import { useWorkspaceStore, useWorkspaceReadOnly } from '@store/workspaceScope';
 import UndoRedoButtons from '../UndoRedoButtons';
 import { baseButtonClass } from './ScrollToBottomButton';
 
 const CollapseAllButtons = React.memo(() => {
+  const useStore = useWorkspaceStore();
+  const readOnly = useWorkspaceReadOnly();
+
   const currentChatIndex = useStore((state) => state.currentChatIndex);
   const chatId = useStore((state) => state.chats?.[state.currentChatIndex]?.id ?? '');
   const setAllCollapsed = useStore((state) => state.setAllCollapsed);
@@ -32,7 +35,7 @@ const CollapseAllButtons = React.memo(() => {
 
   return (
     <div className='absolute left-2 bottom-2 z-20 flex flex-col gap-1.5 md:left-4 md:bottom-3'>
-      <UndoRedoButtons />
+      {!readOnly && <UndoRedoButtons />}
       {orphanCount > 0 && (
         <button
           className={`${baseButtonClass} relative overflow-hidden`}

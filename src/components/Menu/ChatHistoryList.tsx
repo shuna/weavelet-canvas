@@ -1,6 +1,7 @@
+import { getFolderAncestors, getFolderParentId } from '@utils/folderHierarchy';
 import { readDraggedChatIds } from './chatHistoryFolderUtils';
 import React, { useEffect, useRef, useState } from 'react';
-import useStore from '@store/store';
+import { useWorkspaceStore, useWorkspaceReadOnly, useWorkspaceScope } from '@store/workspaceScope';
 import { shallow } from 'zustand/shallow';
 
 import ChatFolder from './ChatFolder';
@@ -29,10 +30,14 @@ const ChatHistoryList = ({
   searchFocused?: boolean;
   onHistorySelect?: (query: string) => void;
 }) => {
+  const useStore = useWorkspaceStore();
+  const readOnly = useWorkspaceReadOnly();
+
   const currentChatIndex = useStore((state) => state.currentChatIndex);
   const hideSideMenu = useStore((state) => state.hideSideMenu);
   const displayChatSize = useStore((state) => state.displayChatSize);
   const setFolders = useStore((state) => state.setFolders);
+  const folders = useStore(state => state.folders);
   const chatTitles = useStore(
     (state) => state.chats?.map((chat) => chat.title),
     shallow
@@ -48,7 +53,14 @@ const ChatHistoryList = ({
   const isGrepMode = useStore((state) => state.isGrepMode);
   const sidebarSearchHistory = useStore((state) => state.sidebarSearchHistory);
   const grepQuery = useStore((state) => state.grepQuery);
-  const [selectedChats, setSelectedChats] = useState<number[]>([]);
+  const scope = useWorkspaceScope();
+  const [localSelection, setLocalSelection] = useState<number[]>(() => readOnly ? [] : [...useStore.getState().multiViewChatIndices]);
+  const selectionChats = useStore(state => state.chats);
+  const selectedChats = readOnly ? (selectionChats ?? []).flatMap((chat, index) => scope?.selectedIds.includes(chat.id) ? [index] : []) : localSelection;
+  const setSelectedChats = (indices: number[]) => {
+    if (readOnly) scope?.setSelectedIds(indices.flatMap(index => selectionChats?.[index]?.id ? [selectionChats[index].id] : []));
+    else setLocalSelection(indices);
+  };
   const [lastSelectedIndex, setLastSelectedIndex] = useState<number | null>(
     null
   );
@@ -57,7 +69,7 @@ const ChatHistoryList = ({
   const setMultiViewChatIndices = useStore((state) => state.setMultiViewChatIndices);
 
   useEffect(() => {
-    setMultiViewChatIndices(selectedChats);
+    if (!readOnly) setMultiViewChatIndices(selectedChats);
   }, [selectedChats, setMultiViewChatIndices]);
 
   const chatsRef = useRef<ChatInterface[]>(useStore.getState().chats || []);
@@ -81,7 +93,7 @@ const ChatHistoryList = ({
         const _filterLowerCase = filterRef.current.toLowerCase();
         const _chatTitle = chat.title.toLowerCase();
         const folder = chat.folder ? folders[chat.folder] : undefined;
-        const _chatFolderName = folder?.name.toLowerCase() ?? '';
+        const _chatFolderName = folder ? getFolderAncestors(folders, folder.id).map(id => folders[id].name.toLowerCase()).join(' ') : '';
 
         if (
           !_chatTitle.includes(_filterLowerCase) &&
@@ -164,6 +176,15 @@ const ChatHistoryList = ({
       });
     }
 
+    const query = filterRef.current.toLowerCase();
+    if (query) {
+      const visible = new Set<string>();
+      for (const [id, chats] of Object.entries(_folders)) {
+        const path = getFolderAncestors(folders, id);
+        if (chats.length || path.some(parent => folders[parent].name.toLowerCase().includes(query))) path.forEach(parent => visible.add(parent));
+      }
+      for (const id of Object.keys(_folders)) if (!visible.has(id)) delete _folders[id];
+    }
     setChatFolders(_folders);
     setNoChatFolders(_noFolders);
   }).current;
@@ -194,13 +215,14 @@ const ChatHistoryList = ({
   }, [displayChatSize]);
 
   useEffect(() => {
+    updateFolders();
     if (
       chatTitles &&
       currentChatIndex >= 0 &&
       currentChatIndex < chatTitles.length
     ) {
       // set title
-      document.title = chatTitles[currentChatIndex];
+      if (!readOnly) document.title = chatTitles[currentChatIndex];
 
       // expand folder of current chat
       const chats = useStore.getState().chats;
@@ -266,14 +288,19 @@ const ChatHistoryList = ({
     setIsHover(false);
   };
 
+  const folderChildren: Record<string, string[]> = {};
+  for (const id of Object.keys(chatFolders)) {
+    const parent = getFolderParentId(folders, id) ?? '';
+    (folderChildren[parent] ??= []).push(id);
+  }
   return (
     <div
       ref={listRef}
       className={`flex flex-1 flex-col overflow-y-auto overscroll-contain border-b border-gray-200 dark:border-white/20 ${
         isHover ? 'bg-gray-200/70 dark:bg-gray-800/40' : ''
       }`}
-      onDrop={handleDrop}
-      onDragOver={handleDragOver}
+      onDrop={readOnly ? undefined : handleDrop}
+      onDragOver={readOnly ? undefined : handleDragOver}
       onDragLeave={handleDragLeave}
       onDragEnd={handleDragEnd}
     >
@@ -284,9 +311,12 @@ const ChatHistoryList = ({
         <GrepResults />
       ) : (
         <div className='flex flex-col gap-2 text-sm text-gray-700 dark:text-gray-100'>
-          {Object.keys(chatFolders).map((folderId) => (
+          {(folderChildren[''] ?? []).map((folderId) => (
             <ChatFolder
               folderChats={chatFolders[folderId]}
+              allFolderChats={chatFolders}
+              childFolderIds={folderChildren}
+              forceExpanded={!!filter}
               folderId={folderId}
               key={folderId}
               selectedChats={selectedChats}

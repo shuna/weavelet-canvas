@@ -12,7 +12,7 @@ import ReactFlow, {
 } from 'reactflow';
 import 'reactflow/dist/style.css';
 
-import useStore from '@store/store';
+import { useWorkspaceStore, useWorkspaceReadOnly } from '@store/workspaceScope';
 import { BranchTree, isSplitView } from '@type/chat';
 import {
   useMultiBranchEditorLayout,
@@ -32,6 +32,9 @@ import BranchSearchBar from './BranchSearchBar';
 import { useTranslation } from 'react-i18next';
 
 const UndoRedoControls = () => {
+  const useStore = useWorkspaceStore();
+  const readOnly = useWorkspaceReadOnly();
+
   const canUndo = useStore((state) => state.canUndoBranch());
   const canRedo = useStore((state) => state.canRedoBranch());
   const undoBranch = useStore((state) => state.undoBranch);
@@ -72,6 +75,9 @@ const UndoRedoControls = () => {
 };
 
 const NavBackForwardControls = () => {
+  const useStore = useWorkspaceStore();
+  const readOnly = useWorkspaceReadOnly();
+
   const canBack = useStore((state) => state.canNavBack());
   const canForward = useStore((state) => state.canNavForward());
   const navBack = useStore((state) => state.navBack);
@@ -110,6 +116,9 @@ const NavBackForwardControls = () => {
 };
 
 const ConversationEditMenu = ({ entries }: { entries: MultiLayoutEntry[] }) => {
+  const useStore = useWorkspaceStore();
+  const readOnly = useWorkspaceReadOnly();
+
   const { t } = useTranslation();
   const [open, setOpen] = React.useState(false);
   const [confirming, setConfirming] = React.useState(false);
@@ -323,6 +332,9 @@ const BranchEditorCanvas = ({
   chatIndices: number[];
   primaryChatIndex: number;
 }) => {
+  const useStore = useWorkspaceStore();
+  const readOnly = useWorkspaceReadOnly();
+
   const [interactionMode, setInteractionMode] = useState<InteractionMode>('dragScroll');
   const [selectedNodeIds, setSelectedNodeIds] = useState<string[]>([]);
   const pageDragLockCountRef = useRef(0);
@@ -514,6 +526,7 @@ const BranchEditorCanvas = ({
 
   // Keyboard shortcuts for copy/cut/paste on selected nodes
   useEffect(() => {
+    if (readOnly) return;
     const handler = (e: KeyboardEvent) => {
       if (!containerRef.current?.contains(document.activeElement) &&
           document.activeElement !== containerRef.current) return;
@@ -841,8 +854,10 @@ const BranchEditorCanvas = ({
         onNodeClick={onNodeClick}
         onNodeDoubleClick={onNodeDoubleClick}
         onNodeContextMenu={onNodeContextMenu}
-        onNodeDragStart={onNodeDragStart}
-        onNodeDragStop={onNodeDragStop}
+        nodesDraggable={!readOnly}
+        deleteKeyCode={readOnly ? null : "Backspace"}
+        onNodeDragStart={readOnly ? undefined : onNodeDragStart}
+        onNodeDragStop={readOnly ? undefined : onNodeDragStop}
         onMoveStart={lockPageDragBounce}
         onMoveEnd={unlockPageDragBounce}
         onSelectionChange={onSelectionChange}
@@ -861,9 +876,9 @@ const BranchEditorCanvas = ({
       >
         <Background className='!bg-white dark:!bg-gray-800' />
         <NavBackForwardControls />
-        <UndoRedoControls />
+        {!readOnly && <UndoRedoControls />}
         {isSearchOpen && <BranchSearchBar entries={entries} />}
-        <ConversationEditMenu entries={entries} />
+        {!readOnly && <ConversationEditMenu entries={entries} />}
         <InteractionModeToggle mode={interactionMode} setMode={setInteractionMode} />
         <Controls className='!bg-gray-200 dark:!bg-gray-700 !rounded !shadow-md [&>button]:!bg-transparent [&>button]:!fill-gray-700 [&>button]:dark:!fill-gray-200 [&>button]:!border-gray-300 [&>button]:dark:!border-gray-600' />
         <MiniMap

@@ -3,6 +3,14 @@ import type { FolderCollection } from '@type/chat';
 import { expandExistingFolder } from './chatHistoryFolderUtils';
 
 describe('expandExistingFolder', () => {
+  it('expands all ancestors even when the child is already expanded', () => {
+    const folders: FolderCollection = {
+      root: { id: 'root', name: 'Root', order: 0, expanded: false },
+      child: { id: 'child', parentId: 'root', name: 'Child', order: 1, expanded: true },
+    };
+    expect(expandExistingFolder(folders, 'child')?.root.expanded).toBe(true);
+    expect(folders.root.expanded).toBe(false);
+  });
   it('returns null when a chat references a deleted folder', () => {
     expect(expandExistingFolder({}, 'missing-folder')).toBeNull();
   });

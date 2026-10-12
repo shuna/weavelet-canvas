@@ -41,7 +41,7 @@ export interface NavigationSlice {
 }
 
 const MAX_HISTORY = 100;
-let restoreTimer: ReturnType<typeof setTimeout> | null = null;
+
 
 function captureVisibleAnchor(chatId: string, get: () => any): boolean {
   if (typeof document === 'undefined') return false;
@@ -85,7 +85,9 @@ function resolveChatIndex(
 export const createNavigationSlice: StoreSlice<NavigationSlice> = (
   set,
   get
-) => ({
+) => {
+  let restoreTimer: ReturnType<typeof setTimeout> | null = null;
+  return ({
   navigateToNode: ({ chatId, nodeId, view, source, history, selectChat = true, focus }) => {
     const state = get();
     const chatIndex = resolveChatIndex(state.chats, chatId);
@@ -282,3 +284,4 @@ export const createNavigationSlice: StoreSlice<NavigationSlice> = (
   canNavBack: () => get().navHistoryPast.some((entry) => resolveChatIndex(get().chats, entry.chatId) >= 0),
   canNavForward: () => get().navHistoryFuture.some((entry) => resolveChatIndex(get().chats, entry.chatId) >= 0),
 });
+};

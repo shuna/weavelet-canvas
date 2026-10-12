@@ -281,6 +281,7 @@ export interface FolderCollection {
 
 export interface Folder {
   id: string;
+  parentId?: string | null;
   name: string;
   expanded: boolean;
   order: number;

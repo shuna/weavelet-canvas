@@ -1,6 +1,6 @@
 import { useSyncReview, acknowledgeSyncChat } from '@store/storage/google/conflicts';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import useStore from '@store/store';
+import { useWorkspaceStore, useWorkspaceReadOnly } from '@store/workspaceScope';
 import { useTranslation } from 'react-i18next';
 
 import ScrollToBottomButton from './ScrollToBottomButton';
@@ -128,6 +128,9 @@ interface ChatContentProps {
 }
 
 const ChatContent = ({ isChatFindOpen, onChatFindClose }: ChatContentProps = {}) => {
+  const useStore = useWorkspaceStore();
+  const readOnly = useWorkspaceReadOnly();
+
   const { t } = useTranslation();
   const inputRole = useStore((state) => state.inputRole);
   const setError = useStore((state) => state.setError);
@@ -141,7 +144,7 @@ const ChatContent = ({ isChatFindOpen, onChatFindClose }: ChatContentProps = {})
       : EMPTY_MESSAGES
   );
   const reviewChatId = useStore(state => state.chats?.[state.currentChatIndex]?.id ?? '');
-  const syncChanged = useSyncReview(state => state.chats.includes(reviewChatId));
+  const syncChanged = useSyncReview(state => !readOnly && state.chats.includes(reviewChatId));
   const currentChatIndex = useStore((state) => state.currentChatIndex);
   const stickyIndex = useStore((state) =>
     state.chats &&
@@ -215,7 +218,7 @@ const ChatContent = ({ isChatFindOpen, onChatFindClose }: ChatContentProps = {})
   useEffect(() => {
     let cancelled = false;
 
-    if (!isCurrentChatGenerating) {
+    if (!readOnly && !isCurrentChatGenerating) {
       if (messagesLimited.length > 0 && messagesLimited.length < messages.length) {
         Promise.all([
           countTokens(messages, model),
@@ -260,7 +263,7 @@ const ChatContent = ({ isChatFindOpen, onChatFindClose }: ChatContentProps = {})
   useEffect(() => {
     let disposed = false;
     setHasPendingRecords(false);
-    if (error && proxyActive) {
+    if (!readOnly && error && proxyActive) {
       getAllPending()
         .then((records) => {
           if (!disposed) setHasPendingRecords(records.some(record => record.chatId === currentChatId && !!record.proxySessionId));
@@ -834,7 +837,7 @@ const ChatContent = ({ isChatFindOpen, onChatFindClose }: ChatContentProps = {})
                   messageIndex={item.originalIndex}
                   nodeId={activePath[item.originalIndex]}
                 />
-                {!isCurrentChatGenerating && advancedMode && (
+                {!readOnly && !isCurrentChatGenerating && advancedMode && (
                   <NewMessageButton
                     messageIndex={item.originalIndex}
                     nodeId={activePath[item.originalIndex]}
@@ -846,14 +849,14 @@ const ChatContent = ({ isChatFindOpen, onChatFindClose }: ChatContentProps = {})
           </div>
 
           <div className='flex flex-col items-center text-sm bg-white dark:bg-gray-800'>
-            <Message
+            {!readOnly && <Message
               role={inputRole}
               content={[{ type: 'text', text: '' } as TextContentInterface]}
               messageIndex={stickyIndex}
               sticky
-            />
+            />}
 
-            {error !== '' && (
+            {!readOnly && error !== '' && (
               <div className='relative py-2 px-3 w-3/5 mt-3 max-md:w-11/12 border rounded-md border-red-500 bg-red-500/10'>
                 <div className='text-gray-600 dark:text-gray-100 text-sm whitespace-pre-wrap'>
                   {error}

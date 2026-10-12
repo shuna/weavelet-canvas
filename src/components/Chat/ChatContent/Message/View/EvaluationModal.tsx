@@ -2,7 +2,7 @@ import React, { useState, useCallback, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import PopupModal from '@components/PopupModal';
 import RadarChart from './RadarChart';
-import useStore from '@store/store';
+import { useWorkspaceStore, useWorkspaceReadOnly } from '@store/workspaceScope';
 import { evaluationResultKey, qualityAxisKeys, systemQualityAxisKeys, moderationCategoryKeys, categoryToI18nKey, getSafetyStatus, summarizeSafetyScores } from '@type/evaluation';
 import type { QualityEvaluationMode, QualityScores, AxisProgressState } from '@type/evaluation';
 import type {
@@ -64,6 +64,7 @@ const InlineScopeControls = ({
   onScopeChange: (s: EvaluationScope) => void;
   onOmittedModeChange: (m: EvaluationOmittedMode) => void;
 }) => {
+  const readOnlyMode = useWorkspaceReadOnly();
   const { t } = useTranslation('main');
   const singleLabel = role === 'assistant'
     ? t('evaluation.scopeSingleAssistant')
@@ -164,6 +165,7 @@ const SafetyTab = ({
   onScopeChange: (s: EvaluationScope) => void;
   onOmittedModeChange: (m: EvaluationOmittedMode) => void;
 }) => {
+  const readOnlyMode = useWorkspaceReadOnly();
   const { t } = useTranslation('main');
   const summary = result
     ? summarizeSafetyScores(result.categoryScores, thresholds)
@@ -206,13 +208,13 @@ const SafetyTab = ({
             </span>
           )}
         </div>
-        <button
+        {!readOnlyMode && <button
           className='text-xs px-3 py-1.5 rounded-md border border-gray-300 dark:border-gray-600 hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-300 disabled:opacity-50 whitespace-nowrap'
           onClick={onReEvaluate}
           disabled={isRunning}
         >
           {isRunning ? t('evaluation.running') : result ? t('evaluation.reEvaluate') : t('evaluation.runEvaluation')}
-        </button>
+        </button>}
       </div>
       {/* Header row 2: scope controls */}
       <InlineScopeControls
@@ -358,6 +360,7 @@ const SafetyTab = ({
 // ---------------------------------------------------------------------------
 
 const AxisProgressBadge = ({ state }: { state?: AxisProgressState }) => {
+  const readOnlyMode = useWorkspaceReadOnly();
   const { t } = useTranslation('main');
   if (!state || state === 'done') return null;
   if (state === 'generating') {
@@ -404,6 +407,7 @@ const QualityTab = ({
   onScopeChange: (s: EvaluationScope) => void;
   onOmittedModeChange: (m: EvaluationOmittedMode) => void;
 }) => {
+  const readOnlyMode = useWorkspaceReadOnly();
   const { t } = useTranslation('main');
 
   const isSystem = result?.kind === 'system';
@@ -443,14 +447,14 @@ const QualityTab = ({
             </span>
           )}
         </div>
-        <button
+        {!readOnlyMode && <button
           className='text-xs px-3 py-1.5 rounded-md border border-gray-300 dark:border-gray-600 hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-300 disabled:opacity-50 whitespace-nowrap'
           onClick={onReEvaluate}
           disabled={isRunning || !!disabledReason}
           title={disabledReason ?? undefined}
         >
           {isRunning ? t('evaluation.running') : result ? t('evaluation.reEvaluate') : t('evaluation.runEvaluation')}
-        </button>
+        </button>}
       </div>
       {/* Header row 2: scope controls */}
       <InlineScopeControls
@@ -624,6 +628,10 @@ const EvaluationModal: React.FC<EvaluationModalProps> = ({
   setIsModalOpen,
   initialTab,
 }) => {
+  const useStore = useWorkspaceStore();
+  const readOnly = useWorkspaceReadOnly();
+
+  const readOnlyMode = useWorkspaceReadOnly();
   const { t } = useTranslation('main');
 
   // Fixed width based on viewport — recalculated only on window resize
@@ -679,7 +687,7 @@ const EvaluationModal: React.FC<EvaluationModalProps> = ({
   const { isBusy: isQualityModelBusy, busyReason: qualityBusyReason } = useLocalModelBusy(qualityLocalModelId);
 
   // Pre-resolve context to check availability for button disabling (P3)
-  const preResolvedCtx = resolveEvalContext(chatIndex, messageIndex, role, scope, omittedMode);
+  const preResolvedCtx = readOnly ? null : resolveEvalContext(chatIndex, messageIndex, role, scope, omittedMode);
   const qualityDisabledReason: string | null = (() => {
     if (isQualityModelBusy && qualityBusyReason) {
       return t(`localModel.busy.${qualityBusyReason}`) as string;
@@ -696,6 +704,7 @@ const EvaluationModal: React.FC<EvaluationModalProps> = ({
   })();
 
   const handleRunSafety = useCallback(async () => {
+    if (readOnly) return;
     const ctx = resolveEvalContext(chatIndex, messageIndex, role, scope, omittedMode);
     if (!ctx) return;
 
@@ -739,6 +748,7 @@ const EvaluationModal: React.FC<EvaluationModalProps> = ({
   }, [key, phase, chatIndex, messageIndex, role, scope, omittedMode, t]);
 
   const handleRunQuality = useCallback(async () => {
+    if (readOnly) return;
     const ctx = resolveEvalContext(chatIndex, messageIndex, role, scope, omittedMode);
     if (!ctx) return;
     // full-context: use contextText (all roles) so the judge sees the

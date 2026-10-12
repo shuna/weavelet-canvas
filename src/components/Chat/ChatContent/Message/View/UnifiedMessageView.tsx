@@ -1,5 +1,5 @@
 import React, { memo, useEffect, useState } from 'react';
-import useStore from '@store/store';
+import { useWorkspaceStore } from '@store/workspaceScope';
 import useSubmit from '@hooks/useSubmit';
 import { confirmChatModelFavorite } from '@utils/chatModelResolution';
 import {
@@ -50,6 +50,8 @@ const UnifiedMessageView = memo(
     editSessionKey: string;
     onOpenEvalTab?: (tab?: TabId) => void;
   }) => {
+  const useStore = useWorkspaceStore();
+
     const contentSurfaceClass =
       'rounded-2xl bg-white/60 px-4 pt-2.5 pb-2 shadow-sm ring-1 ring-black/5 dark:bg-gray-900/20 dark:ring-white/10 md:px-5 md:pt-3 md:pb-2.5';
     const contentMinHeightClass = 'min-h-[5.25rem]';

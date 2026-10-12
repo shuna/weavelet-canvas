@@ -122,6 +122,19 @@ describe('chat library operations', () => {
     expect(readDraggedChatIds('{bad')).toBeNull();
     expect(readDraggedChatIds('[0]')).toBeNull();
   });
+  it('promotes direct children and chats to the deleted parent and expands destination ancestors', () => {
+    const { get } = fixture();
+    get().setFolders(Object.fromEntries(['root', 'middle', 'leaf', 'descendant'].map((id, index, ids) =>
+      [id, { id, name: id, expanded: false, order: index, parentId: index ? ids[index - 1] : null }])));
+    get().moveChatsToFolder({ chatIds: ['a'], folderId: 'middle', expandDestination: true });
+    get().moveChatsToFolder({ chatIds: ['b'], folderId: 'descendant', expandDestination: true });
+    expect(Object.values(get().folders).every(folder => folder.expanded)).toBe(true);
+    expect(get().editFolder({ folderId: 'root', patch: { parentId: 'leaf' } })).toBe('invalid-input');
+    get().removeFolder({ folderId: 'middle' });
+    expect(get().folders.leaf.parentId).toBe('root');
+    expect(get().folders.descendant.parentId).toBe('leaf');
+    expect(get().chats!.map(chat => chat.folder)).toEqual(['root', 'descendant']);
+  });
 });
 
 describe('chat removal', () => {

@@ -47,4 +47,10 @@ it('records edits, undo and deletion, but not viewing, and preserves times throu
   clock.mockReturnValue(7000);
   state.setFolders({ folder: { ...state.folders.folder, expanded: false } });
   expect(state.lastContentEditedAt).toBe(6000);
+  state.setFolders({ ...state.folders, root: { id: 'root', name: 'Root', order: 1, expanded: false } });
+  clock.mockReturnValue(8000);
+  state.editFolder({ folderId: 'folder', patch: { parentId: 'root' } });
+  expect(state.lastContentEditedAt).toBe(8000);
+  const hierarchy = await fromRecords(await toRecords({ version: 18, state: createPartializedState(state) }));
+  expect(hierarchy.state.folders!.folder.parentId).toBe('root');
 });

@@ -19,10 +19,13 @@ import {
   validateExportV1,
   validateExportV2,
   validateExportV3,
+  validateFolders,
 } from '@utils/import';
 import { flatMessagesToBranchTree, materializeActivePath } from '@utils/branchUtils';
 import { assignFreshChatIds } from '@utils/chatIdentity';
-import { ContentStoreData, addContent, resolveContent } from '@utils/contentStore';
+import { ContentStoreData, addContent, resolveContent, validateDeltaIntegrity } from '@utils/contentStore';
+import { prepareChatForExport } from '@utils/chatExport';
+import { isStreamingContentHash } from '@utils/streamingBuffer';
 import { normalizeSystemPrompt } from '@utils/systemPromptNormalize';
 import { isKnownModel } from '@utils/modelLookup';
 import { BranchNodeLegacy, ChatInterface, Folder, FolderCollection } from '@type/chat';
@@ -76,6 +79,7 @@ const createImportPlan = (base: StoreState, mode: ImportMode, includeSettings: b
     contentStore: mode === 'replace' ? {} : deepClone(base.contentStore),
     branchClipboard: mode === 'replace' ? null : deepClone(base.branchClipboard),
     currentChatIndex: mode === 'replace' ? -1 : base.currentChatIndex,
+    evaluationResults: mode === 'replace' ? {} : deepClone(base.evaluationResults),
   };
 };
 
@@ -124,7 +128,7 @@ const clearMissingFolderReferences = (
   if (!chats) return;
 
   chats.forEach((chat) => {
-    if (chat.folder && !folders[chat.folder]) {
+    if (chat.folder && !Object.hasOwn(folders, chat.folder)) {
       delete chat.folder;
     }
   });
@@ -334,7 +338,7 @@ const importExportV3 = (
     plan.evaluationSettings = { ...currentDefaults, ...parsedData.evaluationSettings };
   }
 
-  return chats.length > 0
+  return chats.length > 0 || Object.keys(parsedData.folders).length > 0
     ? buildSuccessResult(t('notifications.successfulImport', { ns: 'import' }))
     : buildFailureResult(t('notifications.quotaExceeded', { ns: 'import' }));
 };
@@ -374,7 +378,7 @@ const importExportV2 = (plan: StoreState, parsedData: ExportV2, t: Translator): 
     mergeChats(plan, parsedData.chats);
   }
 
-  return parsedData.chats && parsedData.chats.length > 0
+  return (parsedData.chats && parsedData.chats.length > 0) || Object.keys(parsedData.folders).length > 0
     ? buildSuccessResult(t('notifications.successfulImport', { ns: 'import' }))
     : buildFailureResult(t('notifications.quotaExceeded', { ns: 'import' }));
 };
@@ -404,7 +408,7 @@ const importExportV1 = (
     mergeChats(plan, parsedData.chats);
   }
 
-  return parsedData.chats && parsedData.chats.length > 0
+  return (parsedData.chats && parsedData.chats.length > 0) || Object.keys(parsedData.folders).length > 0
     ? buildSuccessResult(t('notifications.successfulImport', { ns: 'import' }))
     : buildFailureResult(t('notifications.quotaExceeded', { ns: 'import' }));
 };
@@ -432,6 +436,71 @@ const importOpenAIData = (
     : buildFailureResult(t('notifications.quotaExceeded', { ns: 'import' }));
 };
 
+// Validate both directed graphs before the legacy converter traverses/backtracks them.
+const validateOpenAIMappings = (data: unknown) => {
+  for (const chat of Array.isArray(data) ? data : [data]) {
+    if (!isRecord(chat) || !Object.hasOwn(chat, 'mapping')) continue; // Playground has flat messages.
+    if (!isRecord(chat.mapping) || Array.isArray(chat.mapping)) throw new Error('Invalid OpenAI mapping');
+    const mapping = chat.mapping;
+    const ids = Object.keys(mapping);
+    if (!ids.length) throw new Error('Empty OpenAI mapping');
+    if (chat.current_node !== undefined && chat.current_node !== null &&
+        (typeof chat.current_node !== 'string' || !Object.hasOwn(mapping, chat.current_node))) {
+      throw new Error('Invalid OpenAI current_node');
+    }
+    const parents = new Map<string, string[]>();
+    const children = new Map<string, string[]>();
+    for (const id of ids) {
+      const node = mapping[id];
+      if (!isRecord(node) || node.id !== id || !Array.isArray(node.children) ||
+          (node.parent !== null && (typeof node.parent !== 'string' || !Object.hasOwn(mapping, node.parent))) ||
+          node.children.some(child => typeof child !== 'string' || !Object.hasOwn(mapping, child))) {
+        throw new Error('Invalid OpenAI node references');
+      }
+      // The converter continues without advancing its parent for unsupported roles.
+      if (isRecord(node.message) && isRecord(node.message.author) &&
+          !['user', 'assistant', 'system'].includes(String(node.message.author.role))) {
+        throw new Error('Unsupported OpenAI message role');
+      }
+      parents.set(id, node.parent === null ? [] : [node.parent as string]);
+      children.set(id, node.children as string[]);
+    }
+    for (const edges of [parents, children]) {
+      const indegrees = new Map(ids.map(id => [id, 0]));
+      for (const targets of edges.values()) for (const target of targets) indegrees.set(target, indegrees.get(target)! + 1);
+      const queue = ids.filter(id => indegrees.get(id) === 0);
+      for (let index = 0; index < queue.length; index++) {
+        for (const target of edges.get(queue[index])!) {
+          indegrees.set(target, indegrees.get(target)! - 1);
+          if (indegrees.get(target) === 0) queue.push(target);
+        }
+      }
+      if (queue.length !== ids.length) throw new Error('Circular OpenAI mapping');
+    }
+  }
+};
+
+// Runtime view references use positions; keep their existing chat identities after prepend.
+const remapAppendedChatReferences = (base: StoreState, chats: ChatInterface[]) => {
+  const positions = new Map(chats.map((chat, index) => [chat.id, index]));
+  const remap = (index: number | null) => index === null ? null
+    : positions.get(base.chats?.[index]?.id ?? '') ?? null;
+  const focus = (value: StoreState['pendingChatFocus']) => {
+    if (!value) return null;
+    const chatIndex = remap(value.chatIndex);
+    return chatIndex === null ? null : { ...value, chatIndex };
+  };
+  return {
+    multiViewChatIndices: (base.multiViewChatIndices ?? []).flatMap(index => {
+      const next = remap(index);
+      return next === null ? [] : [next];
+    }),
+    multiViewPrimaryChatIndex: remap(base.multiViewPrimaryChatIndex ?? null),
+    pendingChatFocus: focus(base.pendingChatFocus),
+    compareTarget: focus(base.compareTarget),
+  };
+};
+
 const importParsedData = async (
   base: StoreState,
   parsedData: unknown,
@@ -441,6 +510,7 @@ const importParsedData = async (
   mode: ImportMode,
   includeSettings: boolean = true
 ): Promise<{ result: ImportResult; plan: StoreState; removedChatsCount?: number }> => {
+  if (type === 'OpenAIContent') validateOpenAIMappings(parsedData);
   let chatsToImport = parsedData;
   let removedChatsCount = 0;
   let reduceImport = false;
@@ -535,32 +605,26 @@ export const importChatFromFile = async (
     if (mode === 'replace') invalidateAiTasks();
     const base = useStore.getState();
     const observed = JSON.stringify(snapshot(base));
-    const { result, plan, removedChatsCount } = await importParsedData(base, parsedData, type, t, false, mode, includeSettings);
+    const { result, plan, removedChatsCount } = await importParsedData(base, parsedData, type, t, false,
+      mode === 'append' ? 'replace' : mode, mode === 'append' ? false : includeSettings);
     if (!result.success) return result;
     if (useStore.getState() !== base || JSON.stringify(snapshot(useStore.getState())) !== observed) {
       return { success: false, message: 'concurrent-change', status: 'concurrent-change' };
     }
     const chats = plan.chats ?? [];
-    const maps = (field: 'collapsedNodes' | 'omittedNodes' | 'protectedNodes') => Object.fromEntries(
-      chats.flatMap((chat, index) => chat[field] && Object.keys(chat[field]!).length
-        ? [[String(index), { ...chat[field] }]] : [])
-    );
-    // Appends keep existing chat objects and their editing history intact.
-    if (mode === 'append' && base.chats) chats.splice(chats.length - base.chats.length, base.chats.length, ...base.chats);
-    const patch = {
-      ...createPartializedState(plan),
-      chats,
-      contentStore: plan.contentStore,
-      branchClipboard: plan.branchClipboard,
-      currentChatIndex: mode === 'replace' ? (chats.length ? 0 : -1) : base.currentChatIndex,
-      collapsedNodeMaps: maps('collapsedNodes'),
-      omittedNodeMaps: maps('omittedNodes'),
-      protectedNodeMaps: maps('protectedNodes'),
-      ...(mode === 'replace' ? { branchHistoryPast: [], branchHistoryFuture: [] } : {}),
-    };
+    const patch = mode === 'append'
+      ? buildPreviewAppendPatch(base, previewSourceFromPlan(plan), chats.map(chat => chat.id), t, {
+          fileName: file.name, selectedFolderIds: Object.keys(plan.folders),
+        })
+      : {
+          ...createPartializedState(plan), chats, contentStore: plan.contentStore,
+          branchClipboard: plan.branchClipboard,
+          currentChatIndex: chats.length ? 0 : -1,
+          ...chatNodeMaps(chats), branchHistoryPast: [], branchHistoryFuture: [],
+        };
     committed = true;
     useStore.setState(patch);
-    if (mode === 'replace') setLocalStorageItem('currentChatIndex', String(chats.length ? 0 : -1));
+    setLocalStorageItem('currentChatIndex', String(patch.currentChatIndex));
     await saveChatData(createPersistedChatDataState({
       ...useStore.getState(), contentStore: deepClone(useStore.getState().contentStore),
     }));
@@ -578,6 +642,223 @@ export const importChatFromFile = async (
     }
     return result;
   } catch (error: unknown) {
+    return committed
+      ? { success: false, message: `storage-error: ${(error as Error).message}`, status: 'storage-error' }
+      : buildFailureResult((error as Error).message);
+  }
+};
+
+
+export type ImportPreviewSource = {
+  chats: ChatInterface[];
+  folders: FolderCollection;
+  contentStore: ContentStoreData;
+  evaluationResults: EvaluationResultMap;
+};
+
+const validatePreviewSource = (source: ImportPreviewSource) => {
+  if (!validateFolders(source.folders)) throw new Error('Invalid folder hierarchy');
+  const errors = findPersistedDataIntegrityErrors(source.chats, source.contentStore, null);
+  if (errors.length) throw new Error(errors.join('; '));
+  for (const [hash, entry] of Object.entries(source.contentStore)) {
+    if (isStreamingContentHash(hash) || (entry.delta && isStreamingContentHash(entry.delta.baseHash))) {
+      throw new Error('Streaming content cannot be previewed');
+    }
+  }
+  if (validateDeltaIntegrity(source.contentStore).size) throw new Error('Invalid delta content');
+  for (const chat of source.chats) {
+    const tree = chat.branchTree;
+    if (!tree) continue;
+    const ids = Object.keys(tree.nodes);
+    if (!Array.isArray(tree.activePath) || (ids.length && !tree.nodes[tree.rootId])) {
+      throw new Error('Invalid branch root or active path');
+    }
+    const checked = new Set<string>();
+    for (const id of ids) {
+      const node = tree.nodes[id];
+      if (!node || node.id !== id || !['user', 'assistant', 'system'].includes(node.role) ||
+          (node.parentId !== null && !tree.nodes[node.parentId])) throw new Error('Invalid branch node');
+      const path = new Set<string>();
+      let current: string | null = id;
+      while (current !== null && !checked.has(current)) {
+        if (path.has(current)) throw new Error('Circular branch tree');
+        path.add(current);
+        current = tree.nodes[current].parentId;
+      }
+      path.forEach(value => checked.add(value));
+      const content = resolveContent(source.contentStore, node.contentHash);
+      // Use the existing content validation for resolved deltas as well.
+      if (!validateExportV3({ version: 3, chats: [], folders: {},
+        contentStore: { resolved: { content, refCount: 1 } } })) throw new Error('Invalid resolved content');
+    }
+    const activeIds = new Set<string>();
+    let previous: string | null = null;
+    for (const id of tree.activePath) {
+      if (!tree.nodes[id] || activeIds.has(id) || tree.nodes[id].parentId !== previous) {
+        throw new Error('Invalid active path');
+      }
+      activeIds.add(id);
+      previous = id;
+    }
+  }
+};
+
+/** Converts into a detached plan; no persistence, AI cancellation or live state changes. */
+export const prepareImportPreview = async (file: File, t: Translator): Promise<ImportPreviewSource> => {
+  const raw = JSON.parse(await readImportFile(file));
+  const payload = isRecord(raw) && isRecord(raw.state) ? raw.state : raw;
+  // Reject transient hashes before any converter can resolve the live streaming buffer.
+  const rawChats = isRecord(payload) && Array.isArray(payload.chats) ? payload.chats
+    : Array.isArray(payload) ? payload : [payload];
+  if (isRecord(payload) && isRecord(payload.contentStore)) {
+    const contentStore = payload.contentStore as unknown as ContentStoreData;
+    for (const [hash, entry] of Object.entries(contentStore)) {
+      if (isStreamingContentHash(hash) || (entry?.delta && isStreamingContentHash(entry.delta.baseHash))) {
+        throw new Error('Streaming content cannot be previewed');
+      }
+    }
+    if (validateDeltaIntegrity(contentStore).size) throw new Error('Invalid delta content');
+    const hashedChats = rawChats.map(chat => isRecord(chat) && isRecord(chat.branchTree) && isRecord(chat.branchTree.nodes)
+      ? { ...chat, branchTree: { ...chat.branchTree, nodes: Object.fromEntries(
+          Object.entries(chat.branchTree.nodes).filter(([, node]) => isRecord(node) && node.contentHash !== undefined),
+        ) } } : chat);
+    const errors = findPersistedDataIntegrityErrors(hashedChats as ChatInterface[], contentStore, null)
+      .filter(error => !error.startsWith('Duplicate chat id:'));
+    if (errors.length) throw new Error(errors.join('; '));
+  }
+  for (const chat of rawChats) {
+    if (isRecord(chat) && isRecord(chat.branchTree) && isRecord(chat.branchTree.nodes)) {
+      for (const node of Object.values(chat.branchTree.nodes)) {
+        if (isRecord(node) && typeof node.contentHash === 'string' && isStreamingContentHash(node.contentHash)) {
+          throw new Error('Streaming content cannot be previewed');
+        }
+      }
+    }
+  }
+  const parsed = isRecord(raw) && Object.hasOwn(raw, 'state') && typeof raw.version === 'number'
+    ? decodeLegacyRemoteImport(raw as unknown as LegacyRemoteSnapshot) : raw;
+  const type = detectImportType(parsed);
+  if (!type) throw new Error(t('notifications.unrecognisedDataFormat', { ns: 'import' }));
+  const base = useStore.getInitialState();
+  const { result, plan } = await importParsedData(base, parsed, type, t, false, 'replace', false);
+  if (!result.success) throw new Error(result.message);
+  const source = previewSourceFromPlan(plan);
+  validatePreviewSource(source);
+  return source;
+};
+
+/** Retry persistence after a committed import without appending the same chats again. */
+export const retryImportPreviewSave = async (t: Translator): Promise<ImportResult> => {
+  try {
+    await saveChatData(createPersistedChatDataState({
+      ...useStore.getState(), contentStore: deepClone(useStore.getState().contentStore),
+    }));
+    return buildSuccessResult(t('notifications.successfulImport', { ns: 'import' }));
+  } catch (error) {
+    return { success: false, message: `storage-error: ${(error as Error).message}`, status: 'storage-error' };
+  }
+};
+
+export type ImportPreviewSelectionOptions = {
+  fileName: string;
+  selectedFolderIds: readonly string[];
+};
+
+const previewSourceFromPlan = (plan: StoreState): ImportPreviewSource => {
+  // V3 also permits legacy flat chats; normalize before mounting reused views.
+  for (const chat of plan.chats ?? []) {
+    if (!chat.branchTree) chat.branchTree = flatMessagesToBranchTree(chat.messages, plan.contentStore);
+  }
+  const source: ImportPreviewSource = { chats: plan.chats ?? [], folders: plan.folders,
+    contentStore: plan.contentStore, evaluationResults: plan.evaluationResults ?? {} };
+  return source;
+};
+
+const chatNodeMaps = (chats: ChatInterface[]) => {
+  const maps = (field: 'collapsedNodes' | 'omittedNodes' | 'protectedNodes') => Object.fromEntries(
+    chats.flatMap((chat, index) => chat[field] && Object.keys(chat[field]!).length
+      ? [[String(index), { ...chat[field] }]] : []));
+  return { collapsedNodeMaps: maps('collapsedNodes'), omittedNodeMaps: maps('omittedNodes'),
+    protectedNodeMaps: maps('protectedNodes') };
+};
+
+/** Shared by full file append and preview selection; source ids never merge with live ids. */
+const buildPreviewAppendPatch = (
+  base: StoreState, source: ImportPreviewSource, ids: readonly string[], t: Translator,
+  options: ImportPreviewSelectionOptions
+) => {
+  validatePreviewSource(source);
+  const selectedIds = new Set(ids);
+  const selected = source.chats.filter(chat => selectedIds.has(chat.id));
+  const includedFolderIds = new Set(options.selectedFolderIds);
+  if (selected.length !== selectedIds.size || [...includedFolderIds].some(id => !Object.hasOwn(source.folders, id))) {
+    throw new Error(t('notifications.nothingImported', { ns: 'import' }));
+  }
+  for (const chat of selected) if (chat.folder) includedFolderIds.add(chat.folder);
+  // Only ancestor closure; unchecked chats and unrelated descendants remain excluded.
+  for (const id of includedFolderIds) {
+    const parentId = source.folders[id]?.parentId;
+    if (parentId) includedFolderIds.add(parentId);
+  }
+  if (!selected.length && !includedFolderIds.size) {
+    throw new Error(t('notifications.nothingImported', { ns: 'import' }));
+  }
+  const rootId = uuidv4();
+  const folderIdMap = Object.fromEntries([...includedFolderIds].map(id => [id, uuidv4()]));
+  const folders = { ...base.folders };
+  // A new root shifts only its root siblings, preserving each child's order and reference.
+  for (const [id, folder] of Object.entries(folders)) {
+    if (!folder.parentId) folders[id] = { ...folder, order: folder.order + 1 };
+  }
+  folders[rootId] = { id: rootId,
+    name: t('preview.importFolderName', { fileName: options.fileName, ns: 'import', defaultValue: 'Import: {{fileName}}' }),
+    expanded: true, order: 0 };
+  for (const id of includedFolderIds) {
+    const folder = source.folders[id];
+    const nextId = folderIdMap[id];
+    folders[nextId] = { ...deepClone(folder), id: nextId,
+      parentId: folder.parentId ? folderIdMap[folder.parentId] : rootId };
+  }
+  const contentStore = deepClone(base.contentStore);
+  const chatIdMap: Record<string, string> = {};
+  const chats = selected.map(original => {
+    const prepared = prepareChatForExport(original, source.contentStore);
+    const chat = prepared.chat;
+    assignFreshChatIds([chat]);
+    chatIdMap[original.id] = chat.id;
+    chat.folder = original.folder ? folderIdMap[original.folder] : rootId;
+    for (const node of Object.values(chat.branchTree!.nodes)) {
+      node.contentHash = addContent(contentStore, prepared.contentStore[node.contentHash].content);
+    }
+    return chat;
+  });
+  const evaluationResults = Object.fromEntries(Object.entries(source.evaluationResults)
+    .filter(([key]) => selectedIds.has(key.slice(0, key.indexOf(':')))));
+  const selectedChatId = base.chats?.[base.currentChatIndex]?.id;
+  const mergedChats = [...chats, ...(base.chats ?? [])];
+  return {
+    ...remapAppendedChatReferences(base, mergedChats), ...chatNodeMaps(mergedChats),
+    chats: mergedChats, folders, contentStore,
+    evaluationResults: { ...base.evaluationResults, ...remapEvaluationResultKeys(evaluationResults, chatIdMap) },
+    currentChatIndex: selectedChatId ? mergedChats.findIndex(chat => chat.id === selectedChatId)
+      : mergedChats.length ? 0 : -1,
+  };
+};
+
+export const importSelectedPreview = async (
+  source: ImportPreviewSource, ids: readonly string[], t: Translator,
+  options: ImportPreviewSelectionOptions = { fileName: '', selectedFolderIds: [] }
+): Promise<ImportResult> => {
+  let committed = false;
+  try {
+    const base = useStore.getState();
+    const patch = buildPreviewAppendPatch(base, source, ids, t, options);
+    // Preparation is synchronous: commit against the latest live state without an async gap.
+    committed = true;
+    useStore.setState(patch);
+    setLocalStorageItem('currentChatIndex', String(patch.currentChatIndex));
+    return retryImportPreviewSave(t);
+  } catch (error) {
     return committed
       ? { success: false, message: `storage-error: ${(error as Error).message}`, status: 'storage-error' }
       : buildFailureResult((error as Error).message);

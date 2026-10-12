@@ -1,3 +1,4 @@
+import { validateFolderHierarchy } from '@utils/folderHierarchy';
 import { v4 as uuidv4 } from 'uuid';
 
 import {
@@ -186,16 +187,7 @@ export const isSingleChatImport = (importedData: unknown): importedData is ChatI
 export const validateFolders = (
   folders: FolderCollection
 ): folders is FolderCollection => {
-  if (typeof folders !== 'object') return false;
-
-  for (const folderId in folders) {
-    if (typeof folders[folderId].id !== 'string') return false;
-    if (typeof folders[folderId].name !== 'string') return false;
-    if (typeof folders[folderId].order !== 'number') return false;
-    if (typeof folders[folderId].expanded !== 'boolean') return false;
-  }
-
-  return true;
+  return validateFolderHierarchy(folders);
 };
 
 export const validateExportV1 = (data: ExportV1): data is ExportV1 => {

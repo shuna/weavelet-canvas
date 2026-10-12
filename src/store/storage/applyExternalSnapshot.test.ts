@@ -29,6 +29,15 @@ beforeEach(() => {
 });
 
 describe('external snapshot commit', () => {
+  it('rejects a cyclic folder graph before cancelling tasks or replacing chats', async () => {
+    const before = mocks.state;
+    const folders = { root: { id: 'root', parentId: 'root', name: 'Root', order: 0, expanded: true } };
+    await expect(applyExternalSnapshot({ folders }, () => true)).rejects.toThrow('folder hierarchy');
+    expect(mocks.state).toBe(before);
+    expect(mocks.invalidate).not.toHaveBeenCalled();
+    expect(mocks.prepare).not.toHaveBeenCalled();
+    expect(mocks.save).not.toHaveBeenCalled();
+  });
   it.each([17, 19])('preserves version %s without cancelling or overwriting current chats', async version => {
     const payload = { chats: [{ id: 'remote' }] } as any;
     const before = mocks.state;

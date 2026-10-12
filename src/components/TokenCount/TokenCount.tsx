@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { throttle } from 'lodash';
-import useStore from '@store/store';
+import { useWorkspaceStore } from '@store/workspaceScope';
 import { shallow } from 'zustand/shallow';
 import { useTranslation } from 'react-i18next';
 
@@ -30,6 +30,8 @@ const DISPLAY_REFRESH_MS = 180;
 const tokenCountCache = new Map<string, TokenCounts>();
 
 const TokenCount = React.memo(() => {
+  const useStore = useWorkspaceStore();
+
   const { t } = useTranslation();
   const currentChatId = useStore((state) => state.chats?.[state.currentChatIndex]?.id ?? '');
   const cachedCounts = tokenCountCache.get(currentChatId) ?? {
@@ -147,7 +149,7 @@ const TokenCount = React.memo(() => {
     const snapshot = latestInputRef.current;
     let nextCounts: TokenCounts;
     if (snapshot.generatingSession) {
-      const promptMessages = getSubmitContextMessages(snapshot.messages, 'append', snapshot.generatingSession.messageIndex, snapshot.model, snapshot.currentChatIndex, snapshot.systemPrompt);
+      const promptMessages = getSubmitContextMessages(snapshot.messages, 'append', snapshot.generatingSession.messageIndex, snapshot.model, snapshot.currentChatIndex, snapshot.systemPrompt, useStore.getState());
       const completionMessage = snapshot.messages[snapshot.generatingSession.messageIndex];
       const promptCacheKey = buildPromptCountCacheKey(
         snapshot.generatingSession.sessionId,
@@ -184,7 +186,7 @@ const TokenCount = React.memo(() => {
         imageTokenCount: cachedPrompt.imageTokenCount,
       };
     } else {
-      const filteredMessages = getSubmitContextMessages(snapshot.messages, 'append', snapshot.messages.length, snapshot.model, snapshot.currentChatIndex, snapshot.systemPrompt);
+      const filteredMessages = getSubmitContextMessages(snapshot.messages, 'append', snapshot.messages.length, snapshot.model, snapshot.currentChatIndex, snapshot.systemPrompt, useStore.getState());
       const nextPromptTokenCount = await countTokens(filteredMessages, snapshot.model);
       nextCounts = {
         promptTokenCount: nextPromptTokenCount,

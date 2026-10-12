@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import useStore from '@store/store';
+import { useWorkspaceStore } from '@store/workspaceScope';
 import { SearchResult, searchBranchNodes } from '@utils/branchSearch';
 
 interface ChatFindBarProps {
@@ -55,6 +55,8 @@ type FindScope = 'visible' | 'allNodes';
  *   including nodes on non-active paths, and switches path when navigating.
  */
 const ChatFindBar = ({ scrollerRef, onClose }: ChatFindBarProps) => {
+  const useStore = useWorkspaceStore();
+
   const { t } = useTranslation();
   const inputRef = useRef<HTMLInputElement>(null);
   const [query, setQuery] = useState('');

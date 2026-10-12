@@ -3,7 +3,7 @@ import { beginAiTask, finishAiTask, isAiTaskCurrent } from './aiTaskLifetime';
 import i18next from 'i18next';
 import { hardOpenRouterConstraints } from '@utils/openrouterControls';
 import { normalizeConfigStream } from '@utils/streamSupport';
-import useStore from '@store/store';
+import { useWorkspaceStore, useWorkspaceReadOnly } from '@store/workspaceScope';
 import { useTranslation } from 'react-i18next';
 import { useRef, useState } from 'react';
 import { countTokens, limitMessageTokens, loadEncoder } from '@utils/messageUtils';
@@ -55,6 +55,8 @@ export function stopSessionsForChat(chatId: string) {
 }
 
 const useSubmit = () => {
+  const useStore = useWorkspaceStore();
+  const readOnly = useWorkspaceReadOnly();
   const { t, i18n } = useTranslation('api');
   const error = useStore((state) => state.error);
   const setError = useStore((state) => state.setError);
@@ -70,6 +72,7 @@ const useSubmit = () => {
   const pendingSubmitRef = useRef<(() => Promise<void>) | null>(null);
 
   const runSubmit = async (mode: SubmitMode, insertIndex: number | null = null, regenerate = false) => {
+    if (readOnly) return;
     const chats = useStore.getState().chats;
     if (!chats) return;
 
@@ -337,6 +340,7 @@ const useSubmit = () => {
   };
 
   const submitWithConfirmation = async (mode: SubmitMode, insertIndex: number | null, regenerate = false) => {
+    if (readOnly) return;
     const chats = useStore.getState().chats;
     const chatIndex = useStore.getState().currentChatIndex;
     const config = chats?.[chatIndex]?.config;
@@ -362,6 +366,7 @@ const useSubmit = () => {
     if (currentChatIndex !== lastSubmitChatIndex) return;
     if (isChatGenerating(lastSubmitChatId)) return;
 
+    if (readOnly) return;
     const chats = useStore.getState().chats;
     if (!chats) return;
     if (!confirmChatModelFavorite(currentChatIndex)) return;

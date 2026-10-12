@@ -1,7 +1,9 @@
 import React from 'react';
-import useStore from '@store/store';
+import { useWorkspaceStore } from '@store/workspaceScope';
 
 const NavigationButtons = () => {
+  const useStore = useWorkspaceStore();
+
   const canBack = useStore((state) => state.canNavBack());
   const canForward = useStore((state) => state.canNavForward());
   const navBack = useStore((state) => state.navBack);

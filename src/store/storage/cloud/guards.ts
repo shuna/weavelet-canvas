@@ -1,4 +1,5 @@
 import { compress } from 'lz-string';
+import { validateFolderHierarchy } from '@utils/folderHierarchy';
 import type { CloudSyncMetrics } from './types';
 
 const MAX_CLOUD_SYNC_JSON_BYTES = 2_000_000;
@@ -37,6 +38,10 @@ export const getCloudSyncGuardMessage = (
   lastSuccessfulUploadMetrics: CloudSyncMetrics | null,
   maxCompressedBytes: number = MAX_CLOUD_SYNC_COMPRESSED_BYTES
 ): string | null => {
+  const snapshotState = getSnapshotState(value);
+  if (snapshotState && Object.hasOwn(snapshotState, 'folders') && !validateFolderHierarchy(snapshotState.folders)) {
+    return 'Cloud sync skipped because the folder hierarchy is invalid.';
+  }
   if (metrics.jsonBytes > MAX_CLOUD_SYNC_JSON_BYTES) {
     return 'Cloud sync skipped because the snapshot is too large to upload safely.';
   }

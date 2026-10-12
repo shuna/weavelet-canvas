@@ -3,6 +3,7 @@ import { startFileSystemSync } from '@store/storage/FileSystemSync';
 import useStore from '@store/store';
 
 import Chat from '@components/Chat';
+import LocalFilePreview, { useImportPreviewSession } from '@components/ImportExportChat/LocalFilePreview';
 import Menu from '@components/Menu';
 
 import useStreamRecovery from '@hooks/useStreamRecovery';
@@ -27,6 +28,7 @@ function isLowbitQValidationRoute(): boolean {
 }
 
 function App() {
+  const preview = useImportPreviewSession();
   const { isBootstrapped, bootPhase, bootProgress } = useAppBootstrap();
   const localModelEnabled = useStore((state) => state.localModelEnabled);
   useLocalModelRehydration(isBootstrapped && localModelEnabled);
@@ -47,14 +49,16 @@ function App() {
 
   return (
     <div className='overflow-hidden w-full h-full relative'>
-      <OnboardingModal />
-      <LegacyCustomModelsBanner />
-      <MigrationProgressBanner />
-      <Menu />
-      <div className={`flex h-full flex-1 flex-col`}>
-        <Chat />
-        <Toast />
-      </div>
+      {!preview.source && <>
+        <OnboardingModal />
+        <LegacyCustomModelsBanner />
+        <MigrationProgressBanner />
+      </>}
+      {preview.source ? <LocalFilePreview source={preview.source} fileName={preview.fileName} /> : <>
+        <Menu />
+        <div className='flex h-full flex-1 flex-col'><Chat /></div>
+      </>}
+      <Toast />
     </div>
   );
 }

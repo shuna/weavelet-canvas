@@ -1,3 +1,4 @@
+import { validateFolderHierarchy } from '@utils/folderHierarchy';
 import { rehydrateData } from './rehydrateData';
 import { prepareHydratedDataAsync } from './storage/google/processing';
 import { ContentStoreData } from '@utils/contentStore';
@@ -281,6 +282,7 @@ export const rehydrateStoreState = (state: StoreState) => {
 };
 
 export function prepareHydratedState(base: StoreState, persisted: Partial<PersistedStoreState>) {
+  if (Object.hasOwn(persisted, 'folders') && !validateFolderHierarchy(persisted.folders)) throw new Error('Invalid folder hierarchy.');
   const { chats, contentStore, branchClipboard, providers, evaluationSettings, verifiedStats, pendingVerifications } = base;
   return prepareHydratedDataAsync({
     base: Object.fromEntries(Object.entries({ chats, contentStore, branchClipboard, providers, evaluationSettings, verifiedStats, pendingVerifications })

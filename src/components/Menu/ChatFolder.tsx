@@ -1,15 +1,16 @@
 import { useSyncReview } from '@store/storage/google/conflicts';
 import { useTranslation } from 'react-i18next';
 import React, { useEffect, useRef, useState } from 'react';
-import useStore from '@store/store';
+import { useWorkspaceStore, useWorkspaceReadOnly, useWorkspaceScope } from '@store/workspaceScope';
 
 import DownChevronArrow from '@icon/DownChevronArrow';
 import FolderIcon from '@icon/FolderIcon';
 import {
-  ChatHistoryInterface,
+  ChatHistoryInterface, ChatHistoryFolderInterface,
 } from '@type/chat';
 
 import ChatHistory from './ChatHistory';
+import { getFolderSubtreeIds } from '@utils/folderHierarchy';
 import { readDraggedChatIds } from './chatHistoryFolderUtils';
 import NewChat from './NewChat';
 import EditIcon from '@icon/EditIcon';
@@ -25,6 +26,10 @@ import useHideOnOutsideClick from '@hooks/useHideOnOutsideClick';
 
 const ChatFolder = ({
   folderChats,
+  allFolderChats,
+  childFolderIds,
+  ancestorIds = [],
+  forceExpanded = false,
   folderId,
   selectedChats,
   setSelectedChats,
@@ -32,16 +37,38 @@ const ChatFolder = ({
   setLastSelectedIndex,
 }: {
   folderChats: ChatHistoryInterface[];
+  allFolderChats: ChatHistoryFolderInterface;
+  childFolderIds: Record<string, string[]>;
+  ancestorIds?: string[];
+  forceExpanded?: boolean;
   folderId: string;
   selectedChats: number[];
   setSelectedChats: (indices: number[]) => void;
   lastSelectedIndex: number | null;
   setLastSelectedIndex: (index: number) => void;
 }) => {
+  const useStore = useWorkspaceStore();
+  const readOnly = useWorkspaceReadOnly();
+
   const { t } = useTranslation('drive');
-  const syncChanged = useSyncReview(state => state.folders.includes(folderId));
+  const syncChanged = useSyncReview(state => !readOnly && state.folders.includes(folderId));
   const folderName = useStore((state) => state.folders[folderId]?.name);
-  const isExpanded = useStore((state) => state.folders[folderId]?.expanded);
+  const savedExpanded = useStore((state) => state.folders[folderId]?.expanded);
+  const isExpanded = forceExpanded || savedExpanded;
+  const scope = useWorkspaceScope();
+  const folders = useStore(state => state.folders);
+  const chats = useStore(state => state.chats);
+  const subtree = new Set(readOnly ? getFolderSubtreeIds(folders, folderId) : []);
+  const subtreeChatIds = readOnly ? (chats ?? []).filter(chat => chat.folder && subtree.has(chat.folder)).map(chat => chat.id) : [];
+  const folderChecked = !!scope && [...subtree].every(id => scope.selectedFolderIds.includes(id)) && subtreeChatIds.every(id => scope.selectedIds.includes(id));
+  const folderPartial = !folderChecked && !!scope && ([...subtree].some(id => scope.selectedFolderIds.includes(id)) || subtreeChatIds.some(id => scope.selectedIds.includes(id)));
+  const checkboxRef = useRef<HTMLInputElement>(null);
+  useEffect(() => { if (checkboxRef.current) checkboxRef.current.indeterminate = folderPartial; }, [folderPartial]);
+  const toggleSelection = (checked: boolean) => {
+    if (!scope) return;
+    scope.setSelectedFolderIds(checked ? [...new Set([...scope.selectedFolderIds, ...subtree])] : scope.selectedFolderIds.filter(id => !subtree.has(id)));
+    scope.setSelectedIds(checked ? [...new Set([...scope.selectedIds, ...subtreeChatIds])] : scope.selectedIds.filter(id => !subtreeChatIds.includes(id)));
+  };
   const color = useStore((state) => state.folders[folderId]?.color);
 
 
@@ -113,7 +140,10 @@ const ChatFolder = ({
 
   const toggleExpanded = () => {
     const state = useStore.getState();
-    state.editFolder({ folderId, patch: { expanded: !state.folders[folderId]?.expanded } });
+    if (readOnly) {
+      const folder = state.folders[folderId];
+      if (folder) state.setFolders({ ...state.folders, [folderId]: { ...folder, expanded: !folder.expanded } });
+    } else state.editFolder({ folderId, patch: { expanded: !state.folders[folderId]?.expanded } });
   };
 
   useEffect(() => {
@@ -125,8 +155,8 @@ const ChatFolder = ({
       className={`w-full transition-colors group/folder ${
         isHover ? 'bg-gray-200/70 dark:bg-gray-800/40' : ''
       }`}
-      onDrop={handleDrop}
-      onDragOver={handleDragOver}
+      onDrop={readOnly ? undefined : handleDrop}
+      onDragOver={readOnly ? undefined : handleDragOver}
       onDragLeave={handleDragLeave}
     >
       <div
@@ -149,6 +179,7 @@ const ChatFolder = ({
           if (gradientRef.current) gradientRef.current.style.width = '1rem';
         }}
       >
+        {readOnly && <input ref={checkboxRef} type='checkbox' aria-label={`Select folder: ${folderName}`} aria-checked={folderPartial ? 'mixed' : folderChecked} checked={folderChecked} onClick={event => event.stopPropagation()} onChange={event => toggleSelection(event.target.checked)} />}
         <FolderIcon className='h-4 w-4' />
         <div className='flex-1 text-ellipsis max-h-5 overflow-hidden break-all relative'>
           {isEdit ? (
@@ -181,7 +212,7 @@ const ChatFolder = ({
           )}
         </div>
         <div
-          className='flex text-gray-500 dark:text-gray-300'
+          className={`flex text-gray-500 dark:text-gray-300 ${readOnly ? 'hidden' : ''}`}
           onClick={(e) => e.stopPropagation()}
         >
           {isDelete || isEdit ? (
@@ -272,9 +303,10 @@ const ChatFolder = ({
           )}
         </div>
       </div>
-      {syncChanged && <button type='button' className='px-2 text-xs text-amber-700 dark:text-amber-300' onClick={() => useSyncReview.setState(state => ({ folders: state.folders.filter(id => id !== folderId) }))}>{t('review.folderDone')}</button>}
+      {!readOnly && syncChanged && <button type='button' className='px-2 text-xs text-amber-700 dark:text-amber-300' onClick={() => useSyncReview.setState(state => ({ folders: state.folders.filter(id => id !== folderId) }))}>{t('review.folderDone')}</button>}
       <div className='parent ml-3 flex flex-col gap-1 border-l-2 border-gray-200 pl-1 dark:border-gray-700'>
-        {isExpanded && <NewChat folder={folderId} />}
+        {isExpanded && (childFolderIds[folderId] ?? []).filter(id => !ancestorIds.includes(id) && id !== folderId).map(id => <ChatFolder key={id} folderId={id} folderChats={allFolderChats[id] ?? []} allFolderChats={allFolderChats} childFolderIds={childFolderIds} ancestorIds={[...ancestorIds, folderId]} forceExpanded={forceExpanded} selectedChats={selectedChats} setSelectedChats={setSelectedChats} lastSelectedIndex={lastSelectedIndex} setLastSelectedIndex={setLastSelectedIndex} />)}
+        {!readOnly && isExpanded && <NewChat folder={folderId} />}
         {isExpanded &&
           folderChats.map((chat) => (
             <ChatHistory
