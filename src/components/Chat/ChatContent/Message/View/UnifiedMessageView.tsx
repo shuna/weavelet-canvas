@@ -32,6 +32,8 @@ const UnifiedMessageView = memo(
     messageIndex,
     nodeId,
     isEditState,
+    isCollapsed,
+    onExpand,
     editSessionKey,
     onOpenEvalTab,
     summaryId,
@@ -42,6 +44,8 @@ const UnifiedMessageView = memo(
     messageIndex: number;
     nodeId?: string;
     isEditState: boolean;
+    isCollapsed: boolean;
+    onExpand?: () => void;
     summaryId?: string;
     editSessionKey: string;
     onOpenEvalTab?: (tab?: TabId) => void;
@@ -165,38 +169,57 @@ const UnifiedMessageView = memo(
       ? (content.slice(1).filter(isImageContent) as ImageContentInterface[])
       : [];
 
+    const previewText = currentTextContent.replace(/\s+/g, ' ').trim();
+    const collapsedPreview = previewText
+      ? previewText.length > 280 ? `${previewText.slice(0, 280)}...` : previewText
+      : `${role} message`;
+    const handleEdit: React.Dispatch<React.SetStateAction<boolean>> = (value) => {
+      const nextValue = typeof value === 'function' ? value(isEditState) : value;
+      if (nextValue && isCollapsed) onExpand?.();
+      setIsEdit(nextValue);
+    };
+
     return (
       <>
-        {isEditState ? (
-          <div ref={setContentElement} className={contentSurfaceClass}>
+        {isEditState && (
+          <div hidden={isCollapsed} ref={setContentElement} className={contentSurfaceClass}>
             <MessageEditForm logic={editLogic} role={role} messageIndex={messageIndex} editorClassName={contentMinHeightClass} textOnly={!!summaryId} />
           </div>
-        ) : (
+        )}
+        {(!isEditState || isCollapsed) && (
           <div ref={setContentElement} className={`${contentSurfaceClass} relative`}>
-            {role === 'assistant' && currentReasoning && (
-              <CollapsibleReasoning
-                chatId={currentChatId}
-                reasoning={currentReasoning}
-                nodeId={nodeId}
-                visible={streamVisible}
-                isGenerating={isGeneratingMessage}
-              />
-            )}
-            <div className={contentMinHeightClass}>
-              <ContentBody
-                currentTextContent={currentTextContent}
-                markdownMode={markdownMode}
-                streamingMarkdownPolicy={streamingMarkdownPolicy}
-                inlineLatex={inlineLatex}
-                isGeneratingMessage={isGeneratingMessage}
-                nodeId={nodeId}
-              />
-            </div>
-            <ContentAttachments images={isEditState ? [] : validImageContents} />
-            {nodeId && currentChatId && !summaryId && (
+            {isCollapsed ? (
+              <div className='h-[4.5rem] overflow-hidden text-sm leading-6 text-gray-700 dark:text-gray-200 whitespace-pre-wrap break-words line-clamp-3'>
+                {collapsedPreview}
+              </div>
+            ) : (
               <>
-                <EvaluationPanel chatId={currentChatId} nodeId={nodeId} phase='pre-send' onOpenTab={onOpenEvalTab} />
-                <EvaluationPanel chatId={currentChatId} nodeId={nodeId} phase='post-receive' onOpenTab={onOpenEvalTab} />
+                {role === 'assistant' && currentReasoning && (
+                  <CollapsibleReasoning
+                    chatId={currentChatId}
+                    reasoning={currentReasoning}
+                    nodeId={nodeId}
+                    visible={streamVisible}
+                    isGenerating={isGeneratingMessage}
+                  />
+                )}
+                <div className={contentMinHeightClass}>
+                  <ContentBody
+                    currentTextContent={currentTextContent}
+                    markdownMode={markdownMode}
+                    streamingMarkdownPolicy={streamingMarkdownPolicy}
+                    inlineLatex={inlineLatex}
+                    isGeneratingMessage={isGeneratingMessage}
+                    nodeId={nodeId}
+                  />
+                </div>
+                <ContentAttachments images={isEditState ? [] : validImageContents} />
+                {nodeId && currentChatId && !summaryId && (
+                  <>
+                    <EvaluationPanel chatId={currentChatId} nodeId={nodeId} phase='pre-send' onOpenTab={onOpenEvalTab} />
+                    <EvaluationPanel chatId={currentChatId} nodeId={nodeId} phase='post-receive' onOpenTab={onOpenEvalTab} />
+                  </>
+                )}
               </>
             )}
             <ContentActions
@@ -209,7 +232,7 @@ const UnifiedMessageView = memo(
               isProtected={isProtected}
               isGeneratingMessage={isGeneratingMessage}
               isCurrentChatGenerating={isCurrentChatGenerating}
-              setIsEdit={setIsEdit}
+              setIsEdit={handleEdit}
               setIsDelete={setIsDelete}
               onRefresh={handleRefresh}
               onMoveUp={() => handleMove('up')}

@@ -341,6 +341,24 @@ const OverTypeEditor: React.FC<OverTypeEditorProps> = ({
     }
   }, [value, mode, autoFocus]);
 
+  // Re-measure after a collapsed editor becomes visible or its available width changes.
+  useEffect(() => {
+    const container = containerRef.current;
+    if (!container || !autoResize) return;
+    let previousWidth = 0;
+    const observer = new ResizeObserver(([entry]) => {
+      const width = entry.contentRect.width;
+      if (width === previousWidth) return;
+      previousWidth = width;
+      const instance = instanceRef.current;
+      if (width > 0 && instance) {
+        applyEditorMode(instance, mode, valueRef.current);
+      }
+    });
+    observer.observe(container);
+    return () => observer.disconnect();
+  }, [autoResize, mode]);
+
   // Sync theme with dark mode
   useEffect(() => {
     const observer = new MutationObserver(() => {
