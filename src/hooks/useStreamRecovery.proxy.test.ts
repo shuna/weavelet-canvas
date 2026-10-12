@@ -31,7 +31,10 @@ const chat = () => ({ id: 'c', config: {}, messages: [{ role: 'assistant', conte
 describe('recoverPending proxy outcomes', () => {
   beforeEach(async () => {
     (globalThis as any).indexedDB = new IDBFactory(); (globalThis as any).IDBKeyRange = IDBKeyRange;
-    state = { proxyEnabled: true, proxyEndpoint: 'https://proxy', proxyAuthToken: '', chats: [chat()], generatingSessions: {}, contentStore: {},
+    state = { error: 'Chunk timeout: no data received for 45s', lastSubmitMode: 'append', lastSubmitChatId: 'c', lastSubmitIndex: null,
+      setError: (error: string) => { state.error = error; },
+      setLastSubmitContext: (mode: string | null, index: number | null, _chatIndex: number | null, chatId: string | null) => { state.lastSubmitMode = mode; state.lastSubmitIndex = index; state.lastSubmitChatId = chatId; },
+      proxyEnabled: true, proxyEndpoint: 'https://proxy', proxyAuthToken: '', chats: [chat()], generatingSessions: {}, contentStore: {},
       setChats: (chats: any) => { state.chats = chats; }, removeSessionsForChat: vi.fn(), queueVerification: vi.fn() };
     state.chats[0].branchTree.nodes.n.contentHash = addContent(state.contentStore, state.chats[0].messages[0].content);
     state.invalidateBranchHistory = vi.fn();
@@ -137,6 +140,7 @@ describe('recoverPending proxy outcomes', () => {
     const { recoverPending } = await import('./useStreamRecovery');
     fetchRecovery.mockRejectedValue(new Error('offline'));
     await recoverPending({ manual: true, chatId: 'c' });
+    expect(state.error).toContain('Chunk timeout');
     expect(showToast).toHaveBeenCalledWith(expect.stringContaining('リカバリ失敗'), 'error');
     expect(showToast).not.toHaveBeenCalledWith('復元できる新しい内容はありませんでした', 'info');
     expect(await db.getRequest('target')).toMatchObject({ proxySessionId: 'same-session', proxyComplete: false });
@@ -197,6 +201,24 @@ describe('recoverPending proxy outcomes', () => {
     expect(setStatus).toHaveBeenCalledWith('n', 'recovered');
     expect(showToast).toHaveBeenCalledWith(expect.stringContaining('受信完了'), 'success');
     expect(await db.getRequest('target')).toMatchObject({ proxyComplete: true });
+    expect(state.error).toBe('');
+    expect(state.lastSubmitMode).toBeNull();
+  });
+
+  it.each(['other-chat', 'new-error', 'new-target', 'partial'])('retains an error that recovery did not resolve: %s', async (scenario) => {
+    await seed({ llmDone: true });
+    const { recoverPending } = await import('./useStreamRecovery');
+    fetchRecovery.mockImplementation(async () => {
+      if (scenario === 'other-chat') state.lastSubmitChatId = 'other';
+      if (scenario === 'new-error') state.error = 'New request failed';
+      if (scenario === 'new-target') state.chats[0].branchTree.activePath = ['n', 'new'];
+      return response(scenario === 'partial'
+        ? 'event: interrupted\ndata: {}\n\n'
+        : 'event: done\ndata: {"complete":true}\n\n');
+    });
+    await recoverPending({ manual: true, chatId: 'c' });
+    expect(state.error).not.toBe('');
+    expect(state.lastSubmitMode).toBe('append');
   });
 
   it('does not fetch or apply another chat when manually recovering the current chat', async () => {
