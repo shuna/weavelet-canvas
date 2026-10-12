@@ -173,13 +173,19 @@ function summarizePayload(payload: Record<string, unknown>): string {
 /**
  * Firefox detection for WebGPU backend suppression.
  *
- * Reason: ggml-webgpu WGSL shaders (Q2_K blocks in
- * vendor/wllama-src/llama.cpp/ggml/src/ggml-webgpu/ggml-webgpu.cpp ~:2504)
- * use `bitcast<u32>(vec2<u16>(...))` which Chromium/Tint accepts but
- * Firefox/Naga rejects as an invalid implicit conversion. Until the
- * upstream shaders are made Naga-compatible, force Firefox onto the CPU
- * path and prefer Memory64 so we retain the >2GB addressing needed for
- * large models.
+ * Reason: ggml-webgpu WGSL shaders (quant unpack paths in
+ * vendor/wllama-src/llama.cpp/ggml/src/ggml-webgpu/wgsl-shaders/*.tmpl.wgsl —
+ * Q4_0/Q5_0/Q8_0/Q3_K/Q6_K/IQ2/IQ3/IQ4 等 60+ 箇所) use
+ * `bitcast<u32>(vec2<f16>(...))`. WGSL spec 上は合法
+ * (https://www.w3.org/TR/WGSL/#bit-reinterp-builtin-functions) だが
+ * Chromium/Tint のみ実装済みで Firefox/Naga は未実装のため拒否される。
+ * 上流 tracking: https://github.com/gfx-rs/wgpu/issues/8896
+ * (2026-04 時点で IR リファクタ途中・修正見込み未定。reporter 自身が
+ * 「bitcast から脱却する」方向を示唆)。関連: gfx-rs/wgpu#4403。
+ * Bugzilla に独立報告なし (Mozilla は wgpu 上流待ち)。
+ *
+ * 本修正が入るまで Firefox は CPU パスに固定し、>2GB アドレッシングの
+ * ため preferMemory64 を維持する。
  *
  * How to apply: call before passing allowWebGPU / preferMemory64 to the
  * worker. Safe no-op outside browsers (ua falsy).
@@ -605,7 +611,7 @@ export class LocalModelRuntime {
       } else if (isFirefoxRuntime()) {
         report.checks.webgpuPreflight = {
           state: 'no',
-          detail: 'Firefox: ggml-webgpu WGSL シェーダが Naga バリデータで不可 (Q2_K 系の vec2<u16>→u32 bitcast)。CPU パスで動作します。',
+          detail: 'Firefox: ggml-webgpu WGSL の bitcast<u32>(vec2<f16>) が Naga 未実装のため不可 (WGSL spec 上は合法、Chromium/Tint のみ実装)。上流 issue: https://github.com/gfx-rs/wgpu/issues/8896。CPU パスで動作します。',
         };
       } else {
         const blocker = [

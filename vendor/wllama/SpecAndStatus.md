@@ -137,6 +137,7 @@ Memory64 × WebGPU × JSPI の 3 軸を素朴に展開すると 2³ = 8 通り�
 - **JSPI WebGPU バリアント** (`*-webgpu-compat.wasm`, `*-webgpu.wasm`) は `-sJSPI=1` を前提とする。JSPI がない環境では選ばれない。
 - **Asyncify WebGPU バリアント** (`*-webgpu-asyncify-compat.wasm`) は `-sASYNCIFY=1` で JSPI なしに WebGPU を使う。Chromium では ST/MT とも E2E PASS 済み。Firefox / Mobile Chrome / Mobile Safari は検証中のため、状態は experimental active とする。
 - Firefox デスクトップ・Chrome for Android は `WebGPU` あり / `JSPI` なし の典型環境。Asyncify バリアントが有効になればこれらで WebGPU を使えるようになる可能性がある。
+- **Firefox WebGPU 現状ブロック (2026-04-23)**: ggml-webgpu の WGSL シェーダ (quant unpack 60+ 箇所) が `bitcast<u32>(vec2<f16>)` を使用しており、Chromium/Tint は通るが Firefox/Naga は未実装で拒否する。WGSL spec 上は合法 (<https://www.w3.org/TR/WGSL/#bit-reinterp-builtin-functions>)。上流 tracking: <https://github.com/gfx-rs/wgpu/issues/8896> (2026-04 時点 open、IR リファクタ途中で中断、修正見込み未定)。関連: <https://github.com/gfx-rs/wgpu/issues/4403>。Bugzilla に独立報告なし。当面 `src/local-llm/runtime.ts` の `isFirefoxRuntime()` ガードで CPU パスに固定し、preferMemory64=true を維持する。
 - Safari 系では `JSPI`・`Memory64` いずれも前提にできないため、現状は CPU compat fallback。WebGPU Asyncify が stable になれば Safari でも WebGPU が使える可能性がある（未検証）。
 - モバイル環境での実機確認は現在の開発環境では実施できない。期待挙動のみ SpecAndStatus.md に記録する。
 
