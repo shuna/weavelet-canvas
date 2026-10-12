@@ -11,6 +11,7 @@
       "chatsImported": "{{total}}件中{{imported}}件のチャットがインポートされました。",
       "unsupportedModels": "非対応モデル: {{models}} は利用できません。AIプロバイダ設定のCustomタブから追加してください。"
     },
+    "importEntireFile": "ファイル全体を取り込む",
     "mode": {
       "append": "既存データに追加",
       "replace": "ローカルデータを全置換"

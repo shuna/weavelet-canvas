@@ -232,6 +232,7 @@ test('ordinary append groups the complete file under a new import folder', async
   await page.locator('input[type="file"][accept*=".json"]').first().setInputFiles({
     name: 'ordinary-import.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(source)),
   });
+  await page.getByText('ファイル全体を取り込む', { exact: true }).click();
   await page.getByRole('button', { name: 'インポート', exact: true }).click();
   await expect.poll(() => page.evaluate(async () => {
     const { default: store } = await import(/* @vite-ignore */ '/src/store/store.ts');
@@ -297,4 +298,28 @@ test('preview toolbar remains reachable above the mobile sidebar and backdrop', 
   await page.screenshot({ path: testInfo.outputPath('local-file-preview-mobile.png') });
   await cancel.click();
   await expect(bar).toHaveCount(0);
+});
+
+
+test('import dialog keeps file selection and preview primary at desktop and mobile widths', async ({ page }) => {
+  const source = await fixture(page);
+  await page.locator('#menu').getByText('インポート / エクスポート', { exact: true }).click();
+  const modal = page.locator('#modal-root');
+  await expect(modal.getByRole('button', { name: 'Browse import file', exact: true })).toBeDisabled();
+  await expect(modal.locator('input[type=radio]')).toHaveCount(7);
+  await expect(modal.locator('input[type=radio]').first()).not.toBeVisible();
+  await page.locator('input[type="file"][accept*=".json"]').first().setInputFiles({
+    name: '2026-05-20-long-filename.json.gz', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(source)),
+  });
+  for (const width of [1280, 390]) {
+    await page.setViewportSize({ width, height: 850 });
+    await expect(modal.getByRole('button', { name: 'Browse import file', exact: true })).toBeVisible();
+    await expect(modal.getByText('2026-05-20-long-filename.json.gz', { exact: true })).toBeVisible();
+    expect(await modal.evaluate(el => el.scrollWidth <= window.innerWidth)).toBe(true);
+    await page.screenshot({ path: `/tmp/weavelet-import-layout-${width}.png` });
+  }
+  await modal.getByText('ファイル全体を取り込む', { exact: true }).click();
+  await expect(modal.locator('input[type=radio]').first()).toBeVisible();
+  await modal.getByText('ローカルデータを全置換', { exact: true }).click();
+  await expect(modal.getByText('設定も含める', { exact: true })).toBeVisible();
 });

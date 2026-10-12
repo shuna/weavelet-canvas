@@ -61,54 +61,11 @@ const ImportChat = ({ hideTitle }: { hideTitle?: boolean }) => {
           {t('import')} (JSON)
         </div>
       )}
-      <p className='text-xs text-gray-500 dark:text-gray-400 mb-2 truncate'>
-        {fileSelected && inputRef.current?.files?.[0]
-          ? inputRef.current.files[0].name
-          : t('selectFileDescription', { ns: 'import', defaultValue: 'インポートするファイルを選択してください' })}
-      </p>
       {/* Native <label> trigger — avoids Chrome user-activation issues
          with programmatic .click() inside stopPropagation portals */}
-      <div className='mt-3 flex flex-col gap-2 text-xs text-gray-500 dark:text-gray-400'>
-        <label className='flex items-center gap-1.5 cursor-pointer'>
-          <input
-            type='radio'
-            name='importMode'
-            checked={mode === 'append'}
-            onChange={() => setMode('append')}
-            className='rounded'
-          />
-          {t('mode.append', { ns: 'import' })}
-        </label>
-        <label className='flex items-center gap-1.5 cursor-pointer'>
-          <input
-            type='radio'
-            name='importMode'
-            checked={mode === 'replace'}
-            onChange={() => setMode('replace')}
-            className='rounded'
-          />
-          {t('mode.replace', { ns: 'import' })}
-        </label>
-        {mode === 'replace' && (
-          <>
-            <div className='rounded-md border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-amber-700 dark:text-amber-200'>
-              {t(includeSettings ? 'replaceWarningWithSettings' : 'replaceWarning', { ns: 'import' })}
-            </div>
-            <label className='flex items-center gap-1.5 cursor-pointer mt-1'>
-              <input
-                type='checkbox'
-                checked={includeSettings}
-                onChange={() => setIncludeSettings((v) => !v)}
-                className='rounded'
-              />
-              {t('includeSettings', { ns: 'import' })}
-            </label>
-          </>
-        )}
-      </div>
-      <div className='flex items-center justify-between mt-3'>
+      <div className='flex items-center gap-3 rounded-lg bg-gray-100 p-3 dark:bg-gray-800/50'>
         <label
-          className='btn btn-small btn-neutral flex items-center gap-2 whitespace-nowrap cursor-pointer'
+          className='btn btn-small btn-neutral flex items-center gap-2 whitespace-nowrap cursor-pointer focus-within:ring-2 focus-within:ring-blue-500'
         >
           <input
             className='absolute w-0 h-0 overflow-hidden opacity-0'
@@ -119,16 +76,58 @@ const ImportChat = ({ hideTitle }: { hideTitle?: boolean }) => {
           />
           {t('selectFile')}
         </label>
+        <span className='min-w-0 flex-1 truncate text-sm text-gray-600 dark:text-gray-300' title={file?.name}>{file?.name}</span>
+      </div>
+      <button type='button' aria-label='Browse import file' className='btn btn-small btn-primary mt-4 w-full justify-center' disabled={!fileSelected || browsing} onClick={browse}>{t('preview.browse', { ns: 'import', defaultValue: '内容を確認して取り込む' })}</button>
+      <details className='mt-5 border-t border-gray-200 pt-4 text-sm text-gray-700 dark:border-gray-600 dark:text-gray-300'>
+        <summary className='cursor-pointer'>{t('importEntireFile', { ns: 'import' })}</summary>
+        <div className='mt-3 flex flex-col gap-2 text-xs text-gray-500 dark:text-gray-400'>
+          <label className='flex items-center gap-1.5 cursor-pointer'>
+            <input
+              type='radio'
+              name='importMode'
+              checked={mode === 'append'}
+              onChange={() => setMode('append')}
+              className='rounded'
+            />
+            {t('mode.append', { ns: 'import' })}
+          </label>
+          <label className='flex items-center gap-1.5 cursor-pointer'>
+            <input
+              type='radio'
+              name='importMode'
+              checked={mode === 'replace'}
+              onChange={() => setMode('replace')}
+              className='rounded'
+            />
+            {t('mode.replace', { ns: 'import' })}
+          </label>
+          {mode === 'replace' && (
+            <>
+              <div className='rounded-md border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-amber-700 dark:text-amber-200'>
+                {t(includeSettings ? 'replaceWarningWithSettings' : 'replaceWarning', { ns: 'import' })}
+              </div>
+              <label className='flex items-center gap-1.5 cursor-pointer mt-1'>
+                <input
+                  type='checkbox'
+                  checked={includeSettings}
+                  onChange={() => setIncludeSettings((v) => !v)}
+                  className='rounded'
+                />
+                {t('includeSettings', { ns: 'import' })}
+              </label>
+            </>
+          )}
+        </div>
         <button
-          className={`btn btn-small w-32 justify-center ${fileSelected ? 'btn-primary' : 'btn-neutral cursor-not-allowed opacity-50'}`}
+          className={`btn btn-small mt-3 w-full justify-center ${fileSelected ? 'btn-primary' : 'btn-neutral cursor-not-allowed opacity-50'}`}
           onClick={handleFileUpload}
           disabled={!fileSelected}
           aria-label={translate('import')}
         >
           {t('import')}
         </button>
-      </div>
-      <button type='button' aria-label='Browse import file' className='btn btn-small btn-neutral mt-2 w-full' disabled={!fileSelected || browsing} onClick={browse}>{t('preview.browse', { ns: 'import', defaultValue: '内容を確認して取り込む' })}</button>
+      </details>
       <DriveImport file={file} />
       {alert && (
         <div

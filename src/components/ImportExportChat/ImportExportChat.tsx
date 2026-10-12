@@ -30,13 +30,12 @@ const ImportExportChat = () => {
           setIsModalOpen={setIsModalOpen}
           cancelButton={false}
         >
-          <div className='p-6 border-b border-gray-200 dark:border-gray-600 w-[85vw] max-w-xl'>
-            <div className='rounded-lg border border-gray-200 dark:border-gray-600 p-4'>
-              <ImportChat />
-            </div>
-            <div className='rounded-lg border border-gray-200 dark:border-gray-600 p-4 mt-4'>
-              <ExportChat />
-            </div>
+          <div className='p-5 w-[85vw] max-w-xl'>
+            <ImportChat />
+            <details className='mt-4 border-t border-gray-200 pt-4 text-sm text-gray-700 dark:border-gray-600 dark:text-gray-300'>
+              <summary className='cursor-pointer'>{t('export')} (JSON)</summary>
+              <div className='mt-3'><ExportChat hideTitle /></div>
+            </details>
           </div>
         </PopupModal>
       )}

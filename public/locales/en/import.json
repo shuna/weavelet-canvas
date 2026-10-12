@@ -11,6 +11,7 @@
       "chatsImported": "{{imported}} chats were imported out of {{total}}.",
       "unsupportedModels": "Unsupported model(s): {{models}} are not available. Add them in AI Provider Settings → Custom tab before importing."
     },
+    "importEntireFile": "Import entire file",
     "mode": {
       "append": "Append to existing data",
       "replace": "Replace all local data"
