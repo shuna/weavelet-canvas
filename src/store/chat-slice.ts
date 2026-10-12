@@ -1,3 +1,4 @@
+import { getFolderAncestors, getFolderParentId, validateFolderHierarchy } from '@utils/folderHierarchy';
 import { invalidateAiTasks } from '@hooks/aiTaskLifetime';
 import { v4 as uuidv4 } from 'uuid';
 import { StoreSlice, StoreState } from './store';
@@ -19,7 +20,7 @@ export interface ChatSlice {
   duplicateChat: (input: { chatId: string; scope: 'all' | 'activePath' }) => { status: 'created'; chatId: string } | { status: 'chat-missing' };
   renameChat: (input: { chatId: string; title: string }) => 'updated' | 'unchanged' | 'chat-missing';
   createFolder: () => { folderId: string };
-  editFolder: (input: { folderId: string; patch: { name?: string; color?: string | null; expanded?: boolean } }) => 'updated' | 'unchanged' | 'folder-missing';
+  editFolder: (input: { folderId: string; patch: { name?: string; color?: string | null; expanded?: boolean; parentId?: string | null } }) => 'updated' | 'unchanged' | 'folder-missing' | 'invalid-input';
   removeFolder: (input: { folderId: string }) => { status: 'removed' | 'folder-missing'; detachedChatIds: string[] };
   moveChatsToFolder: (input: { chatIds: string[]; folderId: string | null; expandDestination: boolean }) => { status: 'applied' | 'folder-missing' | 'invalid-input'; movedChatIds: string[]; missingChatIds: string[] };
   messages: MessageInterface[];
@@ -100,7 +101,7 @@ export const createChatSlice: StoreSlice<ChatSlice> = (setState, get) => {
     const patch = typeof partial === 'function' ? partial(previous) : partial;
     const now = Date.now();
     const edits = patch.chats && patch.chats !== previous.chats ? recordChatEdits(previous.chats, patch.chats, now) : undefined;
-    const folderContents = (folders: FolderCollection) => Object.entries(folders).map(([id, folder]) => [id, folder.name, folder.order]);
+    const folderContents = (folders: FolderCollection) => Object.entries(folders).map(([id, folder]) => [id, folder.name, folder.order, folder.color, folder.parentId]);
     const foldersEdited = patch.folders && patch.folders !== previous.folders &&
       JSON.stringify(folderContents(patch.folders)) !== JSON.stringify(folderContents(previous.folders));
     return {
@@ -221,20 +222,25 @@ export const createChatSlice: StoreSlice<ChatSlice> = (setState, get) => {
       const folder = folders[folderId];
       if (!folder) return 'folder-missing';
       const next = { ...folder, ...patch, color: patch.color === null ? undefined : patch.color ?? folder.color };
-      if (next.name === folder.name && next.color === folder.color && next.expanded === folder.expanded) return 'unchanged';
+      if (!validateFolderHierarchy({ ...folders, [folderId]: next })) return 'invalid-input';
+      if (next.name === folder.name && next.color === folder.color && next.expanded === folder.expanded && next.parentId === folder.parentId) return 'unchanged';
       set({ folders: { ...folders, [folderId]: next } });
       return 'updated';
     },
     removeFolder: ({ folderId }) => {
       const { folders, chats } = get();
       if (!folders[folderId]) return { status: 'folder-missing', detachedChatIds: [] };
+      const parentId = getFolderParentId(folders, folderId);
       const nextFolders = { ...folders };
       delete nextFolders[folderId];
+      for (const [id, folder] of Object.entries(nextFolders)) {
+        if (folder.parentId === folderId) nextFolders[id] = { ...folder, parentId };
+      }
       const detachedChatIds: string[] = [];
       const nextChats = chats?.map(chat => {
         if (chat.folder !== folderId) return chat;
         detachedChatIds.push(chat.id);
-        return { ...chat, folder: undefined };
+        return { ...chat, folder: parentId };
       });
       set({ folders: nextFolders, chats: nextChats });
       return { status: 'removed', detachedChatIds };
@@ -251,7 +257,7 @@ export const createChatSlice: StoreSlice<ChatSlice> = (setState, get) => {
         return chat.folder === (folderId ?? undefined) ? chat : { ...chat, folder: folderId ?? undefined };
       });
       set({ chats: nextChats, folders: folderId !== null && expandDestination
-        ? { ...folders, [folderId]: { ...folders[folderId], expanded: true } } : folders });
+        ? { ...folders, ...Object.fromEntries(getFolderAncestors(folders, folderId).map(id => [id, { ...folders[id], expanded: true }])) } : folders });
       return { status: 'applied', movedChatIds, missingChatIds: [...remaining] };
     },
     messages: [],

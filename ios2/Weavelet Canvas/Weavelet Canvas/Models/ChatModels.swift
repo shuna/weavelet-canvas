@@ -473,9 +473,13 @@ class ChatViewModel {
     }
 
     func deleteFolder(_ folderId: String) {
-        // Move chats out of folder
+        guard let folder = folders[folderId] else { return }
+        let parentId = folder.parentId
+        for id in Array(folders.keys) where folders[id]?.parentId == folderId {
+            folders[id]?.parentId = parentId
+        }
         for i in chats.indices where chats[i].folder == folderId {
-            chats[i].folder = nil
+            chats[i].folder = parentId
         }
         folders.removeValue(forKey: folderId)
         scheduleSave()

@@ -1,3 +1,4 @@
+import { validateFolderHierarchy } from '@utils/folderHierarchy';
 import { rebuildSyncedUsage } from './sync/rebuildUsage';
 import useStore from '@store/store';
 import { invalidateAiTasks } from '@hooks/aiTaskLifetime';
@@ -13,6 +14,7 @@ export async function applyExternalSnapshot(payload: Partial<PersistedStoreState
     await useStore.getState().refreshLegacyRemoteMigration();
     throw new Error('The downloaded snapshot uses a different data version. It was preserved for export and import; current chats were not replaced.');
   }
+  if (Object.hasOwn(payload, 'folders') && !validateFolderHierarchy(payload.folders)) throw new Error('Invalid folder hierarchy.');
   invalidateAiTasks();
   const base = useStore.getState();
   // The downloaded payload was based on the pre-cancellation content.

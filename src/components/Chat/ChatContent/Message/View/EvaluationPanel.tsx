@@ -1,6 +1,6 @@
 import React from 'react';
 import { useTranslation } from 'react-i18next';
-import useStore from '@store/store';
+import { useWorkspaceStore } from '@store/workspaceScope';
 import { evaluationResultKey, qualityAxisKeys, categoryToI18nKey, summarizeSafetyScores } from '@type/evaluation';
 import type { EvaluationResult, SafetyCheckResult, QualityEvaluationResult, QualityAxisThreshold, LocalModerationResult, AxisProgressMap, QualityScores, AxisProgressState } from '@type/evaluation';
 import type { TabId } from './EvaluationModal';
@@ -39,6 +39,8 @@ const ScoreBar = ({ score, label, threshold, axisState }: { score: number; label
 };
 
 const SafetySection = ({ result, onOpenTab }: { result: SafetyCheckResult; onOpenTab?: (tab: TabId) => void }) => {
+  const useStore = useWorkspaceStore();
+
   const { t } = useTranslation('main');
   const safetyThresholds = useStore((state) => state.safetyThresholds);
   const summary = summarizeSafetyScores(result.categoryScores, safetyThresholds);
@@ -74,6 +76,8 @@ const SafetySection = ({ result, onOpenTab }: { result: SafetyCheckResult; onOpe
 };
 
 const QualitySummary = ({ result, onOpenTab, axisProgress }: { result: QualityEvaluationResult; onOpenTab?: (tab: TabId) => void; axisProgress?: AxisProgressMap }) => {
+  const useStore = useWorkspaceStore();
+
   const { t } = useTranslation('main');
   const qualityThresholds = useStore((state) => state.qualityThresholds);
 
@@ -137,6 +141,8 @@ const LocalSafetyBadge = ({ result }: { result: LocalModerationResult }) => {
 };
 
 const EvaluationPanel: React.FC<EvaluationPanelProps> = ({ chatId, nodeId, phase, onOpenTab }) => {
+  const useStore = useWorkspaceStore();
+
   const key = evaluationResultKey(chatId, nodeId, phase);
   const result: EvaluationResult | undefined = useStore(
     (state) => state.evaluationResults[key]

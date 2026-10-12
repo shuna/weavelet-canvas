@@ -1,6 +1,7 @@
+import { resolveContent } from '@utils/contentStore';
 import React from 'react';
 import { useTranslation } from 'react-i18next';
-import useStore from '@store/store';
+import { useWorkspaceStore, useWorkspaceReadOnly } from '@store/workspaceScope';
 import { isTextContent, isImageContent } from '@type/chat';
 import CrossIcon2 from '@icon/CrossIcon2';
 
@@ -11,6 +12,9 @@ interface MessageDetailModalProps {
 }
 
 const MessageDetailModal = ({ chatIndex, nodeId, onClose }: MessageDetailModalProps) => {
+  const useStore = useWorkspaceStore();
+  const readOnly = useWorkspaceReadOnly();
+
   const { t } = useTranslation();
   const chat = useStore((state) => state.chats?.[chatIndex]);
   const tree = useStore((state) => state.chats?.[chatIndex]?.branchTree);
@@ -22,6 +26,7 @@ const MessageDetailModal = ({ chatIndex, nodeId, onClose }: MessageDetailModalPr
   if (!node) return null;
 
   const entry = contentStore[node.contentHash];
+  const resolved = resolveContent(contentStore, node.contentHash);
   if (!entry) return null;
 
   const roleLabel = t(node.role);
@@ -45,7 +50,7 @@ const MessageDetailModal = ({ chatIndex, nodeId, onClose }: MessageDetailModalPr
                   {node.label}
                 </span>
               )}
-              <button
+              <button disabled={readOnly}
                 className={`p-1 rounded hover:bg-gray-200 dark:hover:bg-gray-600 ${
                   node.starred ? 'text-yellow-500' : 'text-gray-400'
                 }`}
@@ -56,7 +61,7 @@ const MessageDetailModal = ({ chatIndex, nodeId, onClose }: MessageDetailModalPr
                   <path d='M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z' />
                 </svg>
               </button>
-              <button
+              <button disabled={readOnly}
                 className={`p-1 rounded hover:bg-gray-200 dark:hover:bg-gray-600 ${
                   node.pinned ? 'text-blue-500' : 'text-gray-400'
                 }`}
@@ -79,7 +84,7 @@ const MessageDetailModal = ({ chatIndex, nodeId, onClose }: MessageDetailModalPr
           </div>
 
           <div className='p-4 space-y-3'>
-            {entry.content.map((content, idx) => {
+            {resolved.map((content, idx) => {
               if (isTextContent(content)) {
                 return (
                   <div

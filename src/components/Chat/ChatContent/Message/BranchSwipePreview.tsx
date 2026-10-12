@@ -1,4 +1,4 @@
-import useStore from '@store/store';
+import { useWorkspaceStore } from '@store/workspaceScope';
 import { BranchTree, isImageContent, isReasoningContent, isTextContent } from '@type/chat';
 import { resolveContent } from '@utils/contentStore';
 import Avatar from './Avatar';
@@ -10,6 +10,8 @@ import CollapsibleReasoning from './View/CollapsibleReasoning';
 export default function BranchSwipePreview({ tree, path, startIndex, chatIndex }: {
   tree: BranchTree; path: string[]; startIndex: number; chatIndex: number;
 }) {
+  const useStore = useWorkspaceStore();
+
   const state = useStore.getState();
   const chat = state.chats?.[chatIndex];
   if (!chat) return null;

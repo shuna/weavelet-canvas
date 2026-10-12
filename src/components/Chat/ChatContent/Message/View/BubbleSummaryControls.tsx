@@ -6,7 +6,7 @@ import PopupModal from '@components/PopupModal';
 import { SummarySettingsFields } from '@components/SummarySettings';
 import SettingIcon from '@icon/SettingIcon';
 import DownChevronArrow from '@icon/DownChevronArrow';
-import useStore from '@store/store';
+import { useWorkspaceStore, useWorkspaceReadOnly } from '@store/workspaceScope';
 import { isLocalModelConfig } from '@hooks/submitHelpers';
 import { isSummaryEligible } from '@utils/bubbleSummary';
 import { BubbleSummary, isTextContent } from '@type/chat';
@@ -16,6 +16,9 @@ import SyncDots from '@components/GoogleSync/SyncDots';
 import { startBubbleSummary, useBubbleSummaryJob, useSummaryGeneration } from './bubbleSummaryGeneration';
 
 export default function BubbleSummaryControls({ messageIndex }: { messageIndex: number }) {
+  const useStore = useWorkspaceStore();
+  const readOnly = useWorkspaceReadOnly();
+
   const menuRef = useRef<HTMLDetailsElement>(null);
   const { t } = useTranslation();
   const [open, setOpen] = useState(false);
@@ -31,6 +34,9 @@ export default function BubbleSummaryControls({ messageIndex }: { messageIndex: 
     return tokens === undefined ? '計算中…' : summaryTokenLabel(tokens, counts!.original, value === 'original');
   };
   const buttonClass = (active: boolean) => `shrink-0 whitespace-nowrap rounded-full px-2 py-1 text-xs transition-colors ${active ? 'bg-gray-100 text-gray-700 dark:bg-gray-700 dark:text-gray-200' : 'text-gray-400 hover:text-gray-600 dark:text-gray-500 dark:hover:text-gray-300'}`;
+  if (readOnly) return <div role='group' aria-label='要約表示' className='flex gap-1'>
+    {(['original', 'summary', 'compact'] as const).filter(value => value === 'original' || (range && (value === 'summary' ? readable : compact))).map(value => <button type='button' key={value} onClick={event => { event.stopPropagation(); changeTab(value); }}>{value === 'original' ? '原文' : value === 'summary' ? '要約' : '圧縮'}</button>)}
+  </div>;
   const controls = (
       <div role='group' aria-label='要約操作' className='summary-format-options flex gap-0.5 bg-white/80 p-1 shadow-sm ring-1 ring-black/5 dark:bg-gray-800/80 dark:ring-white/10'>
       <button type='button' className={buttonClass(tab === 'original')} aria-pressed={tab === 'original'} onClick={event => { event.stopPropagation(); changeTab('original'); if (menuRef.current) menuRef.current.open = false; }}><svg aria-hidden='true' className='summary-option-icon' viewBox='0 0 24 24' fill='none' stroke='currentColor' strokeWidth='1.8' strokeLinecap='round' strokeLinejoin='round'><path d='M14 3H6v18h12V7l-4-4ZM14 3v5h4M9 12h6M9 16h6' /></svg>原文<span className='summary-option-stats ml-auto text-xs'>({tokenLabel('original')})</span></button>
@@ -71,6 +77,9 @@ export default function BubbleSummaryControls({ messageIndex }: { messageIndex: 
 }
 
 function SummaryDialog({ messageIndex, initialSummary, initialFormat, setOpen }: { messageIndex: number; initialSummary?: BubbleSummary; initialFormat?: 'compact'; setOpen: React.Dispatch<React.SetStateAction<boolean>> }) {
+  const useStore = useWorkspaceStore();
+  const readOnly = useWorkspaceReadOnly();
+
   const { t } = useTranslation();
   const initialChat = useRef(useStore.getState().chats?.[useStore.getState().currentChatIndex]).current;
   const chat = useStore(state => state.chats?.find(value => value.id === initialChat?.id));

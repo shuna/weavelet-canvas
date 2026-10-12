@@ -46,6 +46,17 @@ beforeEach(async () => {
 });
 afterEach(async () => { await service.disconnectFileSystemSync(); });
 
+it('refuses to publish a corrupt local folder hierarchy', async () => {
+  await service.connectFileSystemSync(handle, 'passphrase', false);
+  mocks.push.mockClear();
+  mocks.state = { ...mocks.state, folders: {
+    root: { id: 'root', name: 'Root', parentId: 'root', expanded: true, order: 0 },
+  } };
+  await expect(service.flushFileSystemSync()).rejects.toThrow('folder hierarchy');
+  expect(mocks.push).not.toHaveBeenCalled();
+  expect(mocks.state.folders.root.parentId).toBe('root');
+});
+
 it('retries a failed initial download without publishing local state or pending commits', async () => {
   mocks.pull.mockRejectedValueOnce(new Error('not yet arrived'));
   await expect(service.connectFileSystemSync(handle, 'passphrase', false)).rejects.toThrow('not yet arrived');

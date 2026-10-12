@@ -32,5 +32,18 @@
       "passphrase": "フォルダのパスフレーズ（保存済みなら省略可）",
       "upload": "変換してDriveへアップロード",
       "completed": "Driveへのアップロードが完了しました。ローカルのチャットは変更していません。"
-    }
+    },
+  "preview": {
+    "browse": "内容を確認して取り込む",
+    "readOnly": "閲覧専用",
+    "importSelected": "選択した {{count}} 件を取り込む",
+    "cancel": "キャンセル",
+    "retrySave": "保存を再試行",
+    "pendingSave": "取り込みは完了しましたが、保存に失敗しました。保存だけを再試行できます。",
+    "selectAll": "すべて選択",
+    "clearSelection": "選択解除",
+    "selectionCount": "選択: チャット {{chats}} 件・フォルダ {{folders}} 件",
+    "importSelection": "選択項目を取り込む",
+    "importFolderName": "インポート: {{fileName}}"
+  }
 }

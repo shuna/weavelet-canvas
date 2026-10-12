@@ -1,3 +1,4 @@
+import { getFolderSubtreeIds } from '@utils/folderHierarchy';
 import { isNonBlockingRecord } from './settings';
 import { mergeBranches } from './mergeBranches';
 import { mergeEditTimes } from './editTimes';
@@ -39,6 +40,11 @@ export async function mergeSyncRecords(base: Records, local: Records, cloud: Rec
   }
   const localSnapshot = await fromRecords(local);
   const cloudSnapshot = await fromRecords(cloud);
+  for (const id of [...folders.keys()]) {
+    for (const descendant of getFolderSubtreeIds(localSnapshot.state.folders ?? {}, id)) {
+      if (!folders.has(descendant)) folders.set(descendant, crypto.randomUUID());
+    }
+  }
   for (const chat of localSnapshot.state.chats ?? []) if (chat.folder && folders.has(chat.folder)) chats.add(chat.id);
   const copyEntity = (prefix: string[], newId?: string) => {
     for (const key of Object.keys(merged)) {
@@ -56,7 +62,7 @@ export async function mergeSyncRecords(base: Records, local: Records, cloud: Rec
       path[prefix.length - 1] = newId;
       const field = path[prefix.length];
       merged[JSON.stringify(path)] = field === 'id' ? JSON.stringify(newId)
-        : field === 'folder' && folders.has(JSON.parse(value)) ? JSON.stringify(folders.get(JSON.parse(value))) : value;
+        : ['folder', 'parentId'].includes(field) && folders.has(JSON.parse(value)) ? JSON.stringify(folders.get(JSON.parse(value))) : value;
     }
   };
   for (const [id, newId] of folders) copyEntity(['state', 'folders', id], localSnapshot.state.folders?.[id] ? newId : undefined);

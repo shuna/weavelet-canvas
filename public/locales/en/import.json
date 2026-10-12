@@ -32,5 +32,18 @@
       "passphrase": "Folder passphrase (optional if remembered)",
       "upload": "Convert and upload to Drive",
       "completed": "Export uploaded to Drive. Local chats have not changed."
-    }
+    },
+  "preview": {
+    "browse": "Browse and select chats",
+    "readOnly": "Read only",
+    "importSelected": "Import {{count}} selected chats",
+    "cancel": "Cancel",
+    "retrySave": "Retry save",
+    "pendingSave": "Chats were imported, but saving failed. Retry saving without importing again.",
+    "selectAll": "Select all",
+    "clearSelection": "Clear selection",
+    "selectionCount": "Selected: {{chats}} chats · {{folders}} folders",
+    "importSelection": "Import selection",
+    "importFolderName": "Import: {{fileName}}"
+  }
 }

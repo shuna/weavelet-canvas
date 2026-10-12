@@ -1,3 +1,4 @@
+import { validateFolderHierarchy } from '@utils/folderHierarchy';
 import { recordMetric } from './metrics';
 import { isBrowserLocalRecord, withoutBrowserLocalSettings } from './settings';
 import type { StorageValue } from 'zustand/middleware';
@@ -48,6 +49,7 @@ export async function toRecords(snapshot: Snapshot): Promise<Records> {
   const serialized = JSON.stringify(snapshot);
   const copy = JSON.parse(serialized) as Snapshot;
   const state = withoutBrowserLocalSettings(copy.state);
+  if (state.folders !== undefined && !validateFolderHierarchy(state.folders)) throw new Error('Invalid folder hierarchy; sync stopped.');
   const records: Records = Object.create(null);
   const source = state.contentStore ?? {};
   const contentIds = new Map<string, string>();
@@ -146,6 +148,7 @@ export async function fromRecords(records: Records): Promise<Snapshot> {
   if (!root.state || !root.chats || !Array.isArray(root.order) || !Number.isInteger(root.version)) {
     throw new Error('Incomplete sync snapshot.');
   }
+  if (root.state.folders !== undefined && !validateFolderHierarchy(root.state.folders)) throw new Error('Invalid folder hierarchy; sync stopped.');
   const restoreAssets = async (parts: any[]) => {
     if (!Array.isArray(parts)) throw new Error('Invalid message content.');
     const restored = structuredClone(parts);

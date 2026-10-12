@@ -1,3 +1,4 @@
+import { useWorkspaceScope } from '@store/workspaceScope';
 import { useEffect, useRef } from 'react';
 import { createBranchSwipeMotion, BranchSwipeMotion } from './branchSwipeMotion';
 import { resolveBranchSwipeDirection } from '@utils/branchUtils';
@@ -110,6 +111,7 @@ export function bindMessageBranchSwipe(
 }
 
 export default function useMessageBranchSwipe(chatIndex: number, nodeId?: string) {
+  const scope = useWorkspaceScope();
   const ref = useRef<HTMLDivElement>(null);
   const motion = useRef<BranchSwipeMotion | null>(null);
 
@@ -117,7 +119,7 @@ export default function useMessageBranchSwipe(chatIndex: number, nodeId?: string
     if (!nodeId || !ref.current) return;
     const unbind = bindMessageBranchSwipe(ref.current, direction => motion.current?.finish(direction), {
       begin: () => {
-        motion.current = createBranchSwipeMotion(ref.current!, chatIndex, nodeId);
+        motion.current = createBranchSwipeMotion(ref.current!, chatIndex, nodeId, scope);
         return !!motion.current;
       },
       width: () => motion.current?.width ?? 0,

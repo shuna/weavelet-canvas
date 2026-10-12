@@ -1,4 +1,5 @@
 import { applyExternalSnapshot } from './applyExternalSnapshot';
+import { validateFolderHierarchy } from '@utils/folderHierarchy';
 import { invalidateAiTasks } from '@hooks/aiTaskLifetime';
 import { rebuildSyncedUsage } from './sync/rebuildUsage';
 import useStore from '@store/store';
@@ -24,7 +25,11 @@ let inFlight: Promise<void> | undefined;
 let restoring: Promise<void> | undefined;
 let manualOperation: Promise<void> | undefined;
 let generation = 0;
-const snapshot = (): Snapshot => ({ state: createPartializedState(useStore.getState()), version: STORE_VERSION });
+const snapshot = (): Snapshot => {
+  const state = createPartializedState(useStore.getState());
+  if (state.folders !== undefined && !validateFolderHierarchy(state.folders)) throw new Error('Invalid folder hierarchy; sync stopped.');
+  return { state, version: STORE_VERSION };
+};
 const active = () => {
   const auth = useCloudAuthStore.getState();
   return auth.provider === 'filesystem' && auth.cloudSync && auth.syncTargetConfirmed;

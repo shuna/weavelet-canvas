@@ -1,10 +1,12 @@
 import React, { useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
-import useStore from '@store/store';
+import { useWorkspaceStore } from '@store/workspaceScope';
 import { isBranchEditorVisible } from '@type/chat';
 import BranchEditorCanvas from './BranchEditorCanvas';
 
 const BranchEditorView = () => {
+  const useStore = useWorkspaceStore();
+
   const { t } = useTranslation();
   const currentChatIndex = useStore((state) => state.currentChatIndex);
   const ensureBranchTree = useStore((state) => state.ensureBranchTree);

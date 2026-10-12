@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { debounce } from 'lodash';
-import useStore from '@store/store';
+import { useWorkspaceStore } from '@store/workspaceScope';
 
 const ChatSearch = ({
   filter,
@@ -14,6 +14,8 @@ const ChatSearch = ({
   onSearchFocusChange?: (focused: boolean) => void;
   externalQuery?: string | null;
 }) => {
+  const useStore = useWorkspaceStore();
+
   const { t } = useTranslation();
   const isGrepMode = useStore((state) => state.isGrepMode);
   const setGrepMode = useStore((state) => state.setGrepMode);

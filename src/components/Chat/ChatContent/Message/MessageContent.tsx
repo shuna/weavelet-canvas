@@ -1,5 +1,5 @@
 import React, { useCallback, useMemo, useState } from 'react';
-import useStore from '@store/store';
+import { useWorkspaceStore, useWorkspaceReadOnly } from '@store/workspaceScope';
 
 import EditView from './View/EditView';
 import UnifiedMessageView from './View/UnifiedMessageView';
@@ -51,6 +51,9 @@ const MessageContent = ({
   summaryId?: string;
   onOpenEvalTab?: (tab?: TabId) => void;
 }) => {
+  const useStore = useWorkspaceStore();
+  const readOnly = useWorkspaceReadOnly();
+
   const currentChatIndex = useStore((state) => state.currentChatIndex);
   const advancedMode = useStore((state) => state.advancedMode);
   const editSessionKey = useMemo(
@@ -99,7 +102,7 @@ const MessageContent = ({
           messageIndex={messageIndex}
           nodeId={nodeId}
           summaryId={summaryId}
-          isEditState={isEditState}
+          isEditState={!readOnly && isEditState}
           isCollapsed={isCollapsed}
           onExpand={onExpand}
           onOpenEvalTab={onOpenEvalTab}

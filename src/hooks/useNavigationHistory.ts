@@ -1,5 +1,5 @@
 import { useEffect, useRef } from 'react';
-import useStore from '@store/store';
+import { useWorkspaceStore, useWorkspaceReadOnly } from '@store/workspaceScope';
 
 function isPWA(): boolean {
   return (
@@ -11,6 +11,9 @@ function isPWA(): boolean {
 export { isPWA };
 
 export default function useNavigationHistory() {
+  const useStore = useWorkspaceStore();
+  const readOnly = useWorkspaceReadOnly();
+
   const initNavigationEntry = useStore((s) => s.initNavigationEntry);
   const initialized = useRef(false);
   const isRestoringRef = useRef(false);
@@ -25,7 +28,7 @@ export default function useNavigationHistory() {
 
   // Browser History API integration (non-PWA only)
   useEffect(() => {
-    if (isPWA()) return;
+    if (readOnly || isPWA()) return;
 
     let prevCurrentKey: string | null =
       useStore.getState().navHistoryCurrent?.key ?? null;
@@ -110,5 +113,5 @@ export default function useNavigationHistory() {
       unsub();
       window.removeEventListener('popstate', handlePopState);
     };
-  }, []);
+  }, [readOnly, useStore]);
 }

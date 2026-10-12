@@ -140,19 +140,22 @@ struct Folder: Codable, Hashable, Identifiable {
     var expanded: Bool
     var order: Int
     var color: String?
+    var parentId: String?
 
     init(
         id: String = UUID().uuidString,
         name: String = "New Folder",
         expanded: Bool = true,
         order: Int = 0,
-        color: String? = nil
+        color: String? = nil,
+        parentId: String? = nil
     ) {
         self.id = id
         self.name = name
         self.expanded = expanded
         self.order = order
         self.color = color
+        self.parentId = parentId
     }
 }
 

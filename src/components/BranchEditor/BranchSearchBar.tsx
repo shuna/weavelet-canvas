@@ -1,9 +1,11 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import useStore from '@store/store';
+import { useWorkspaceStore } from '@store/workspaceScope';
 import { searchBranchNodes } from '@utils/branchSearch';
 import { MultiLayoutEntry } from './useBranchEditorLayout';
 
 const BranchSearchBar = ({ entries }: { entries: MultiLayoutEntry[] }) => {
+  const useStore = useWorkspaceStore();
+
   const searchQuery = useStore((s) => s.searchQuery);
   const searchHistory = useStore((s) => s.searchHistory);
   const searchScope = useStore((s) => s.searchScope);

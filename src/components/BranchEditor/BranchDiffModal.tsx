@@ -1,6 +1,6 @@
 import React, { useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
-import useStore from '@store/store';
+import { useWorkspaceStore } from '@store/workspaceScope';
 import { BranchTree, isTextContent } from '@type/chat';
 import { wordDiff, DiffSegment } from '@utils/diffUtils';
 import PopupModal from '@components/PopupModal';
@@ -19,6 +19,8 @@ const BranchDiffModal = ({
   pathB,
   setIsOpen,
 }: BranchDiffModalProps) => {
+  const useStore = useWorkspaceStore();
+
   const { t } = useTranslation();
   const tree = useStore(
     (state) => state.chats?.[chatIndex]?.branchTree

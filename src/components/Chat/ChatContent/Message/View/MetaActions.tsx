@@ -1,6 +1,6 @@
 import React, { memo } from 'react';
 import { useTranslation } from 'react-i18next';
-import useStore from '@store/store';
+import { useWorkspaceStore, useWorkspaceReadOnly } from '@store/workspaceScope';
 import OmitIcon from '@icon/OmitIcon';
 import ProtectedIcon from '@icon/ProtectedIcon';
 import EvaluateIcon from '@icon/EvaluateIcon';
@@ -23,6 +23,9 @@ const MetaActions = memo(
     showEvaluateButton: boolean;
     onEvaluate: () => void;
   }) => {
+  const useStore = useWorkspaceStore();
+  const readOnly = useWorkspaceReadOnly();
+
     const { t } = useTranslation();
     const setNodeOmitted = useStore((state) => state.setNodeOmitted);
     const setNodeProtected = useStore((state) => state.setNodeProtected);
@@ -32,6 +35,7 @@ const MetaActions = memo(
       return chat?.branchTree ? chat.branchTree.activePath.indexOf(nodeId) : Number(nodeId);
     });
 
+    if (readOnly) return <div className="flex items-center gap-2"><BubbleSummaryControls messageIndex={messageIndex} />{showEvaluateButton ? <button type="button" onClick={onEvaluate} aria-label={String(t("evaluation.modalTitle"))}><EvaluateIcon className="h-3.5 w-3.5" /></button> : null}</div>;
     return (
       <div className={`flex flex-wrap justify-end items-center gap-1 transition-opacity ${job?.busy || job?.error ? 'pointer-events-auto opacity-100' : 'pointer-events-none opacity-0 group-hover:pointer-events-auto group-hover:opacity-100 focus-within:pointer-events-auto focus-within:opacity-100'}`}>
         <BubbleSummaryControls messageIndex={messageIndex} />

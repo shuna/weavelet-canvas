@@ -1,7 +1,8 @@
 import { createElement } from 'react';
 import { createRoot } from 'react-dom/client';
 import { flushSync } from 'react-dom';
-import useStore from '@store/store';
+import liveStore from '@store/store';
+import { WorkspaceContext, WorkspaceScope } from '@store/workspaceScope';
 import { buildPathToLeaf, getSiblingsOf, resolveBranchSwipeDirection } from '@utils/branchUtils';
 import type { BranchSwipeDirection } from '@type/chat';
 import BranchSwipePreview from '@components/Chat/ChatContent/Message/BranchSwipePreview';
@@ -15,7 +16,8 @@ export interface BranchSwipeMotion {
   dispose: () => void;
 }
 
-export function createBranchSwipeMotion(element: HTMLElement, chatIndex: number, nodeId: string): BranchSwipeMotion | null {
+export function createBranchSwipeMotion(element: HTMLElement, chatIndex: number, nodeId: string, scope: WorkspaceScope | null = null): BranchSwipeMotion | null {
+  const useStore = scope?.store ?? liveStore;
   const state = useStore.getState();
   const preference = state.branchSwipeDirection;
   const chat = state.chats?.[chatIndex];
@@ -124,7 +126,7 @@ export function createBranchSwipeMotion(element: HTMLElement, chatIndex: number,
       if (nextDirection !== direction) {
         direction = nextDirection;
         targetId = siblings[index + (direction === 'previous' ? -1 : 1)]?.id;
-        flushSync(() => previewRoot.render(targetId ? createElement(BranchSwipePreview, { tree, path: buildPathToLeaf(tree, targetId), startIndex: pathIndex, chatIndex }) : null));
+        flushSync(() => previewRoot.render(targetId ? createElement(WorkspaceContext.Provider, { value: scope }, createElement(BranchSwipePreview, { tree, path: buildPathToLeaf(tree, targetId), startIndex: pathIndex, chatIndex })) : null));
       }
       translate(targetId ? Math.max(-width, Math.min(width, dx)) : Math.sign(dx) * Math.min(32, Math.abs(dx) * .18));
     },

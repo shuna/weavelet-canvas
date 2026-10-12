@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import useStore from '@store/store';
+import { useWorkspaceStore, useWorkspaceReadOnly } from '@store/workspaceScope';
 import { buildPathToLeaf } from '@utils/branchUtils';
 
 interface NodeContextMenuProps {
@@ -26,6 +26,9 @@ const NodeContextMenu = ({
   onNavigateToChat,
   selectedNodeIds = [],
 }: NodeContextMenuProps) => {
+  const useStore = useWorkspaceStore();
+  const readOnly = useWorkspaceReadOnly();
+
   const { t } = useTranslation();
   const deleteBranch = useStore((state) => state.deleteBranch);
   const copyBranchSequence = useStore((state) => state.copyBranchSequence);
@@ -119,6 +122,15 @@ const NodeContextMenu = ({
       onClose();
     }
   };
+
+  if (readOnly) return <>
+    <div className='fixed inset-0 z-40' onClick={onClose} />
+    <div role='menu' className='fixed z-50 min-w-[180px] rounded-lg border border-gray-200 bg-white py-1 text-gray-800 shadow-lg dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100' style={{ left: x, top: y }}>
+      <button role='menuitem' className='w-full px-4 py-2 text-left text-sm hover:bg-gray-100 dark:hover:bg-gray-700' onClick={() => { onNavigateToChat(chatIndex, nodeId); onClose(); }}>{t('navigateToMessage')}</button>
+      <button role='menuitem' className='w-full px-4 py-2 text-left text-sm hover:bg-gray-100 dark:hover:bg-gray-700' onClick={handleDiff}>{t('compareBranches')}</button>
+      <button role='menuitem' className='w-full px-4 py-2 text-left text-sm hover:bg-gray-100 dark:hover:bg-gray-700' onClick={handleCompareWith}>{compareTarget && compareTarget.nodeId !== nodeId ? t('compareWithSelected') : t('compareWith')}</button>
+    </div>
+  </>;
 
   if (isEditingLabel) {
     return (

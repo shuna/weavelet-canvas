@@ -2,7 +2,7 @@ import { beginAiTask, finishAiTask, isAiTaskCurrent } from './aiTaskLifetime';
 import { assertAuxiliaryEndpoint, hardOpenRouterConstraints } from '@utils/openrouterControls';
 import { getChatCompletion } from '@api/api';
 import { officialAPIEndpoint } from '@constants/auth';
-import useStore from '@store/store';
+import useStore, { type StoreState } from '@store/store';
 import { cloneChatAtIndex } from '@utils/chatShallowClone';
 import { ContentStoreData } from '@utils/contentStore';
 import { countTokens, updateTotalTokenUsed } from '@utils/messageUtils';
@@ -194,9 +194,9 @@ const ensureRoleAlternation = (
 
 export const filterOmittedMessages = (
   messages: MessageInterface[],
-  chatIndex: number
+  chatIndex: number,
+  state: StoreState = useStore.getState()
 ): MessageInterface[] => {
-  const state = useStore.getState();
   const chat = state.chats?.[chatIndex];
   const omittedNodes =
     state.omittedNodeMaps[String(chatIndex)] ?? chat?.omittedNodes ?? {};
@@ -229,14 +229,15 @@ export const getSubmitContextMessages = (
   messageIndex: number,
   modelId?: string,
   chatIndex?: number,
-  systemPrompt?: string
+  systemPrompt?: string,
+  state: StoreState = useStore.getState()
 ): MessageInterface[] => {
   const sliced = messages.slice(0, messageIndex);
-  const chat = chatIndex === undefined ? undefined : useStore.getState().chats?.[chatIndex];
+  const chat = chatIndex === undefined ? undefined : state.chats?.[chatIndex];
   // Summary replacement and omission must share original active-path indexes.
   const filtered = chat
-    ? applyBubbleSummariesForSubmit({ ...effectiveSummaryChat(chat, chatIndex!), messages }, messageIndex, generatingNodeIdsForChat(chat.id))
-    : chatIndex !== undefined ? filterOmittedMessages(sliced, chatIndex) : sliced;
+    ? applyBubbleSummariesForSubmit({ ...chat, omittedNodes: state.omittedNodeMaps[String(chatIndex)] ?? chat.omittedNodes ?? {}, messages }, messageIndex, Object.values(state.generatingSessions).filter(session => session.chatId === chat.id).map(session => session.targetNodeId))
+    : chatIndex !== undefined ? filterOmittedMessages(sliced, chatIndex, state) : sliced;
 
   // Strip ALL system-role messages from the message array (config is the source of truth)
   const withoutSystem = filtered.filter((m) => m.role !== 'system');

@@ -1,6 +1,7 @@
 import { resolveValidSummary } from '@utils/bubbleSummary';
 import React, { useEffect, useMemo, useState, useRef } from 'react';
 import useStore from '@store/store';
+import { useWorkspaceStore, useWorkspaceReadOnly } from '@store/workspaceScope';
 import useSubmit from '@hooks/useSubmit';
 import {
   ContentInterface,
@@ -134,6 +135,8 @@ export function useEditViewLogic({
   editSessionKey: string;
   summaryId?: string;
 }) {
+  const useStore = useWorkspaceStore();
+  const readOnly = useWorkspaceReadOnly();
   const inputRole = useStore((state) => state.inputRole);
   const appendNode = useStore((state) => state.appendNode);
   const replaceNodeAndPrune = useStore((state) => state.replaceNodeAndPrune);
@@ -162,7 +165,7 @@ export function useEditViewLogic({
   const modelValid = !!model && modelStatus !== 'unmatched' && modelStatus !== 'unspecified';
 
   const [_content, setContentState] = useState<ContentInterface[]>(
-    () => cloneContent(editDraftCache.get(editSessionKey) ?? content)
+    () => cloneContent(readOnly ? content : editDraftCache.get(editSessionKey) ?? content)
   );
   const [isModalOpen, setIsModalOpen] = useState<boolean>(false);
   const [imageUrl, setImageUrl] = useState<string>('');
@@ -173,6 +176,7 @@ export function useEditViewLogic({
   // This handles desync when a mid-chat insert causes activePath and
   // messagesLimited to temporarily diverge during async token limiting.
   useEffect(() => {
+    if (readOnly) return;
     if (!editDraftCache.has(editSessionKey)) {
       setContentState(cloneContent(content));
     }
@@ -450,6 +454,7 @@ export function useEditViewLogic({
   }, [_setContent]);
 
   useEffect(() => {
+    if (readOnly) return;
     if (textareaRef.current) {
       textareaRef.current.style.height = 'auto';
       textareaRef.current.style.height = `${textareaRef.current.scrollHeight}px`;

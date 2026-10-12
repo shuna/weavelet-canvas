@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { shallow } from 'zustand/shallow';
-import useStore from '@store/store';
+import { useWorkspaceStore, useWorkspaceReadOnly } from '@store/workspaceScope';
 import BranchIcon from '@icon/BranchIcon';
 import NavigationButtons from './NavigationButtons';
 import MenuIcon from '@icon/MenuIcon';
@@ -40,6 +40,9 @@ const ChatViewTabs = ({
   activeView: ChatView;
   setActiveView: (view: ChatView) => void;
 }) => {
+  const useStore = useWorkspaceStore();
+  const readOnly = useWorkspaceReadOnly();
+
   const { t } = useTranslation('model');
   const { t: tMain } = useTranslation();
   const advancedMode = useStore((state) => state.advancedMode);
@@ -79,7 +82,7 @@ const ChatViewTabs = ({
   const isProxyMode = useStore((state) => state.proxyEnabled && !!state.proxyEndpoint);
 
   const isLocalModel = chat?.config?.modelSource === 'local';
-  const wasmCaps = useWasmCapabilities(isLocalModel ? chat?.config?.model ?? null : null);
+  const wasmCaps = useWasmCapabilities(!readOnly && isLocalModel ? chat?.config?.model ?? null : null);
 
   // OpenRouter credit balance
   const currentProviderId = chat?.config?.providerId;
@@ -89,7 +92,7 @@ const ChatViewTabs = ({
   const isOpenRouter = currentProviderId === 'openrouter';
   const creditBalance = useStore((state) => state.creditBalance);
   const creditBalanceFetching = useStore((state) => state.creditBalanceFetching);
-  useOpenRouterCreditBalance(isOpenRouter);
+  useOpenRouterCreditBalance(!readOnly && isOpenRouter);
 
   // Verified stats & retry
   const {
@@ -144,6 +147,7 @@ const ChatViewTabs = ({
   }, []);
 
   const setConfig = (config: ConfigInterface) => {
+    if (readOnly) return;
     const chats = useStore.getState().chats;
     if (!chats) return;
     const updatedChats = cloneChatAtIndex(chats, currentChatIndex);
@@ -152,6 +156,7 @@ const ChatViewTabs = ({
   };
 
   const setImageDetail = (imageDetail: ImageDetail) => {
+    if (readOnly) return;
     const chats = useStore.getState().chats;
     if (!chats) return;
     const updatedChats = cloneChatAtIndex(chats, currentChatIndex);
@@ -160,6 +165,7 @@ const ChatViewTabs = ({
   };
 
   const handleModelChange = (modelId: string, providerId?: ProviderId, modelSource?: 'remote' | 'local') => {
+    if (readOnly) return;
     const chats = useStore.getState().chats;
     if (!chats) return;
     const updatedChats = cloneChatAtIndex(chats, currentChatIndex);
@@ -234,6 +240,7 @@ const ChatViewTabs = ({
   }, [isLayoutDropdownOpen]);
 
   useEffect(() => {
+    if (readOnly) return;
     const chats = useStore.getState().chats;
     if (chats && chats.length > 0 && currentChatIndex !== -1 && !chat?.config) {
       const updatedChats = cloneChatAtIndex(chats, currentChatIndex);
@@ -276,7 +283,7 @@ const ChatViewTabs = ({
                 className='p-1 px-2 rounded-md bg-gray-300/20 dark:bg-gray-900/10 hover:bg-gray-300/50 dark:hover:bg-gray-900/50 cursor-pointer flex items-center gap-1 overflow-hidden'
                 onClick={(e) => {
                   e.stopPropagation();
-                  setIsModelDropdownOpen(!isModelDropdownOpen);
+                  if (!readOnly) setIsModelDropdownOpen(!isModelDropdownOpen);
                 }}
               >
                 {chat.config.modelSource === 'local'
@@ -294,7 +301,7 @@ const ChatViewTabs = ({
                   <path strokeLinecap='round' strokeLinejoin='round' strokeWidth={2} d='M19 9l-7 7-7-7' />
                 </svg>
               </div>
-              {isModelDropdownOpen && (() => {
+              {!readOnly && isModelDropdownOpen && (() => {
                 // Build a lookup of lowbit-Q models keyed by their source model ID
                 const lowbitQByOrigin = new Map<string, typeof localModels[number]>();
                 for (const m of localModels) {
@@ -573,8 +580,8 @@ const ChatViewTabs = ({
           )}
         </div>
       </div>
-      {summarySettingsOpen && chat && <SummarySettings config={chat.config} setOpen={setSummarySettingsOpen} />}
-      {isModalOpen && chat && (
+      {!readOnly && summarySettingsOpen && chat && <SummarySettings config={chat.config} setOpen={setSummarySettingsOpen} />}
+      {!readOnly && isModalOpen && chat && (
         <ConfigMenu
           setIsModalOpen={setIsModalOpen}
           config={chat.config}

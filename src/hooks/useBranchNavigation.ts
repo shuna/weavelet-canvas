@@ -1,7 +1,8 @@
-import useStore from '@store/store';
+import { useWorkspaceStore } from '@store/workspaceScope';
 import { getSiblingsOf } from '@utils/branchUtils';
 
 export default function useBranchNavigation(chatIndex: number, nodeId?: string) {
+  const useStore = useWorkspaceStore();
   const chat = useStore((state) => state.chats?.[chatIndex]);
   const tree = chat?.branchTree;
   const siblings = tree && nodeId ? getSiblingsOf(tree, nodeId) : [];

@@ -2,7 +2,8 @@ import DriveImport from './DriveImport';
 import React, { useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { showToast } from '@utils/showToast';
-import { ImportMode, importChatFromFile } from './importService';
+import { ImportMode, importChatFromFile, prepareImportPreview } from './importService';
+import { useImportPreviewSession } from './LocalFilePreview';
 
 const ImportChat = ({ hideTitle }: { hideTitle?: boolean }) => {
   const { t } = useTranslation(['main', 'import']);
@@ -10,6 +11,14 @@ const ImportChat = ({ hideTitle }: { hideTitle?: boolean }) => {
   const [mode, setMode] = useState<ImportMode>('append');
   const [file, setFile] = useState<File>();
   const fileSelected = !!file;
+  const [browsing, setBrowsing] = useState(false);
+  const browse = async () => {
+    if (!file || browsing) return;
+    setBrowsing(true);
+    try { const source = await prepareImportPreview(file, translate); useImportPreviewSession.setState({ source, fileName: file.name }); }
+    catch (error) { showToast(error instanceof Error ? error.message : String(error), "error", 15000); }
+    finally { setBrowsing(false); }
+  };
   const [includeSettings, setIncludeSettings] = useState(false);
   const [alert, setAlert] = useState<{
     message: string;
@@ -119,6 +128,7 @@ const ImportChat = ({ hideTitle }: { hideTitle?: boolean }) => {
           {t('import')}
         </button>
       </div>
+      <button type='button' aria-label='Browse import file' className='btn btn-small btn-neutral mt-2 w-full' disabled={!fileSelected || browsing} onClick={browse}>{t('preview.browse', { ns: 'import', defaultValue: '内容を確認して取り込む' })}</button>
       <DriveImport file={file} />
       {alert && (
         <div

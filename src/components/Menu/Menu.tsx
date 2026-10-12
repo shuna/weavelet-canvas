@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import useStore from '@store/store';
+import { useWorkspaceStore, useWorkspaceReadOnly } from '@store/workspaceScope';
 import { useTranslation } from 'react-i18next';
 import { useSyncReview, acknowledgeAllSyncChanges } from '@store/storage/google/conflicts';
 
@@ -15,6 +15,9 @@ import MenuIcon from '@icon/MenuIcon';
 import useSwipeGesture from '@hooks/useSwipeGesture';
 
 const Menu = () => {
+  const useStore = useWorkspaceStore();
+  const readOnly = useWorkspaceReadOnly();
+
   const { t } = useTranslation('drive');
   const hasSyncChanges = useSyncReview(state =>
     state.chats.length > 0 || state.folders.length > 0 ||
@@ -37,14 +40,16 @@ const Menu = () => {
 
   useEffect(() => {
     if (window.innerWidth < 768) setHideSideMenu(true);
-    window.addEventListener('resize', () => {
+    const onResize = () => {
       if (
         windowWidthRef.current !== window.innerWidth &&
         window.innerWidth < 768
       )
         setHideSideMenu(true);
-    });
-  }, []);
+    };
+    window.addEventListener('resize', onResize);
+    return () => window.removeEventListener('resize', onResize);
+  }, [setHideSideMenu]);
 
   const handleMouseDown = () => {
     isResizing.current = true;
@@ -81,7 +86,7 @@ const Menu = () => {
         className={`group/menu fixed top-0 left-0 z-[999] h-full overflow-visible bg-gray-100 text-gray-800 transition-transform dark:bg-gray-900 dark:text-gray-100 md:inset-y-0 md:flex md:flex-col max-md:w-3/4 max-md:shadow-[4px_0_16px_rgba(0,0,0,0.12)] max-md:dark:shadow-[4px_0_16px_rgba(0,0,0,0.4)] ${
           hideSideMenu ? 'translate-x-[-100%]' : 'translate-x-[0%]'
         }`}
-        style={{ width: `${menuWidth}px` }}
+        style={{ width: `${menuWidth}px`, ...(readOnly ? { top: "var(--preview-bar-height)", height: "calc(100% - var(--preview-bar-height))", bottom: "auto" } : {}) }}
         {...menuHandlers}
       >
         <div className='flex h-full min-h-0 flex-col'>
@@ -98,11 +103,11 @@ const Menu = () => {
                 >
                   <MenuIcon className='h-4 w-4' />
                 </button>
-                <NewChat />
-                <NewFolder />
+                {!readOnly && <NewChat />}
+                {!readOnly && <NewFolder />}
               </div>
               <ChatSearch filter={filter} setFilter={setFilter} onSearchFocusChange={setSearchFocused} externalQuery={externalQuery} />
-              {hasSyncChanges && (
+              {!readOnly && hasSyncChanges && (
                 <button
                   type='button'
                   className='shrink-0 rounded-md px-2 py-2 text-left text-xs text-amber-700 hover:bg-gray-200 dark:text-amber-300 dark:hover:bg-gray-800'
@@ -116,10 +121,10 @@ const Menu = () => {
                 // Reset to allow re-selection of the same query
                 setTimeout(() => setExternalQuery(null), 0);
               }} />
-              <DebugPanel />
+              {!readOnly && <DebugPanel />}
               <div className='mt-auto flex flex-col gap-2 pb-2'>
                 <VersionInfo />
-                <MenuOptions />
+                {!readOnly && <MenuOptions />}
               </div>
             </nav>
           </div>
@@ -131,6 +136,7 @@ const Menu = () => {
       </div>
       <div
         id='menu-backdrop'
+        style={readOnly ? { top: 'var(--preview-bar-height)', height: 'calc(100% - var(--preview-bar-height))' } : undefined}
         ref={backdropRef}
         className={`${
           hideSideMenu ? 'hidden' : ''
