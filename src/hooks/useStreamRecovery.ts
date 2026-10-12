@@ -395,6 +395,11 @@ export async function recoverPending(opts?: { manual?: boolean; chatId?: string 
 }
 
 async function recoverPendingInner(manual: boolean, debugId: string, chatId?: string) {
+  const { error: failedError, lastSubmitChatId: failedChatId, lastSubmitMode: failedMode, lastSubmitIndex: failedSubmitIndex, chats } = useStore.getState();
+  const failedPath = chats?.find(chat => chat.id === failedChatId)?.branchTree?.activePath;
+  const failedIndex = failedMode === 'midchat' ? failedSubmitIndex : (failedPath?.length ?? 0) - 1;
+  const failedNodeId = failedIndex == null ? undefined : failedPath?.[failedIndex];
+
   // Wait for store hydration so proxy credentials are available
   const hydrated = await waitForStoreHydration();
   if (!hydrated) {
@@ -542,6 +547,17 @@ async function recoverPendingInner(manual: boolean, debugId: string, chatId?: st
         } else {
           await saveRecoveryRecord({ ...record, appliedHash: expectedHash, updatedAt: Date.now() }, () => !!currentTarget());
           requestSnapshotFlush();
+        }
+        const state = useStore.getState();
+        const path = state.chats?.find(chat => chat.id === state.lastSubmitChatId)?.branchTree?.activePath;
+        const index = state.lastSubmitMode === 'midchat' ? state.lastSubmitIndex : (path?.length ?? 0) - 1;
+        if (record.proxyComplete && currentTarget() && !abort.signal.aborted
+          && failedError && state.error === failedError
+          && state.lastSubmitMode === failedMode && state.lastSubmitIndex === failedSubmitIndex
+          && state.lastSubmitChatId === record.chatId && failedChatId === record.chatId
+          && record.nodeId === failedNodeId && index != null && path?.[index] === failedNodeId) {
+          state.setError('');
+          state.setLastSubmitContext(null, null, null, null);
         }
       } finally {
         if (activeRecoveryTicket === ticket) activeRecoveryTicket = null;
