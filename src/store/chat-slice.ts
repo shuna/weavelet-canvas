@@ -9,7 +9,7 @@ import { addContent, type ContentStoreData } from '@utils/contentStore';
 import { materializeActivePath } from '@utils/branchUtils';
 import { generateDefaultChat } from '@constants/chat';
 import { isBubbleSummary, isSummaryEligible } from '@utils/bubbleSummary';
-import { recordChatEdits } from './chat-edit-time';
+import { recordChatEdits, hasFolderContentEdits } from './chat-edit-time';
 
 export interface ChatSlice {
   lastContentEditedAt?: number;
@@ -99,9 +99,8 @@ export const createChatSlice: StoreSlice<ChatSlice> = (setState, get) => {
     const patch = typeof partial === 'function' ? partial(previous) : partial;
     const now = Date.now();
     const edits = patch.chats && patch.chats !== previous.chats ? recordChatEdits(previous.chats, patch.chats, now) : undefined;
-    const folderContents = (folders: FolderCollection) => Object.entries(folders).map(([id, folder]) => [id, folder.name, folder.order, folder.color, folder.parentId]);
     const foldersEdited = patch.folders && patch.folders !== previous.folders &&
-      JSON.stringify(folderContents(patch.folders)) !== JSON.stringify(folderContents(previous.folders));
+      hasFolderContentEdits(previous.folders, patch.folders);
     return {
       ...patch,
       ...(edits ? { chats: edits.chats } : {}),

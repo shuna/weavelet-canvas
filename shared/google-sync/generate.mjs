@@ -38,7 +38,7 @@ for (const name of sourceNames) {
 }
 // Export the existing private helpers for the native bridge without copying their logic.
 const recordsSnapshot = path.join(root, 'source/records.ts');
-writeFileSync(recordsSnapshot, readFileSync(recordsSnapshot, 'utf8') + '\nexport { canonical, resolveStrict };\n');
+writeFileSync(recordsSnapshot, readFileSync(recordsSnapshot, 'utf8') + '\nexport { canonical };\n');
 writeFileSync(path.join(root, 'provenance.json'), JSON.stringify({
   sourceOfTruth: 'Current repository Web source; source/ is a generated audit snapshot, never hand-edit it.',
   license: 'Repository CC0 1.0; see LICENSE.txt',
@@ -52,6 +52,7 @@ const adapters = new Set(['crypto', 'cache', 'diagnostics', 'progress', 'process
 const bundled = await build({ metafile: true, entryPoints: [path.join(root, 'entry.ts')], outfile: path.join(root, 'GoogleSync.bundle.js'), bundle: true,
   format: 'iife', globalName: 'WeaveletGoogleSync', target: 'es2022', legalComments: 'inline',
   plugins: [{ name: 'native-boundaries', setup(build) {
+    build.onResolve({ filter: /^uuid$/ }, () => ({ path: path.join(root, 'adapters/uuid.ts') }));
     build.onResolve({ filter: /^\.\.\/sync\/EncryptedSync$/ }, () => ({ path: path.join(webRoot, 'src/store/storage/sync/EncryptedSync.ts') }));
     build.onResolve({ filter: /^\.\.\/google\// }, args => {
       const name = args.path.slice('../google/'.length);

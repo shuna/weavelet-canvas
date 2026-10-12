@@ -7,8 +7,18 @@ enum SyncRecords {
     static func toRecords(_ snapshot: OrderedJSON) throws -> OrderedJSON { try SharedRecordJSON().call("toRecords", [snapshot]) }
     static func fromRecords(_ records: OrderedJSON) throws -> OrderedJSON { try SharedRecordJSON().call("fromRecords", [records]) }
     static func canonical(_ value: OrderedJSON) throws -> String { try SharedRecordJSON().call("canonical", [value]).string("canonical") }
-    static func resolveContent(_ source: OrderedJSON, hash: String) throws -> OrderedJSON { try SharedRecordJSON().call("resolveContent", [source, .string(hash)]) }
-    static func resolveProjectedContent(_ source: OrderedJSON, hash: String) throws -> OrderedJSON { try SharedRecordJSON().call("resolveProjectedContent", [source, .string(hash)]) }
+    static func resolveContent(_ source: OrderedJSON, hash: String) throws -> OrderedJSON { try resolvedContent(source, hash: hash, operation: "resolveContent") }
+    static func resolveProjectedContent(_ source: OrderedJSON, hash: String) throws -> OrderedJSON { try resolvedContent(source, hash: hash, operation: "resolveProjectedContent") }
+    private static func resolvedContent(_ source: OrderedJSON, hash: String, operation: String) throws -> OrderedJSON {
+        if operation == "resolveContent", source[hash]?["delta"] != nil {
+            _ = try SharedRecordJSON().call(operation, [source, .string(hash)])
+        }
+        var projection = SharedWebProjection()
+        let projected = try projection.store(source, resolving: [hash])
+        let result = try SharedRecordJSON().call(operation, [projected, .string(hash)])
+        let changes = OrderedJSON.array([.object([.init(key: "op", value: .string("set")), .init(key: "path", value: .array([])), .init(key: "value", value: result)])])
+        return try OrderedJSONChanges.apply(changes, to: .null, opaque: projection.opaque)
+    }
     static func digest(_ value: String) -> String { hash(Data(value.utf8)) }
     private static func hash(_ value: Data) -> String { SHA256.hash(data: value).map { String(format: "%02x", $0) }.joined() }
     static func encodeWire(_ value: OrderedJSON) throws -> Data {

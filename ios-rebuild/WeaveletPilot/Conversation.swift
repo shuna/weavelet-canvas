@@ -75,6 +75,7 @@ final class ChatState: ObservableObject {
     @Published private var selectedID = Conversation.samples[0].id
     @Published private var displayStyle: ChatStyle = .stream
     @Published private(set) var exchange: WebExchange?
+    @Published private(set) var document: SyncDocument?
     @Published var persistenceError: String?
     @Published private(set) var generation: ActiveGeneration?
     @Published private(set) var remoteSettings = RemoteSettings()
@@ -91,6 +92,7 @@ final class ChatState: ObservableObject {
                 selectedID = saved.selectedConversationID
                 displayStyle = saved.style
                 exchange = saved.exchange
+                document = saved.document
             }
         } catch { persistenceError = "保存した会話を復元できませんでした。保存ファイルは変更していません。\n" + error.localizedDescription }
     }
@@ -109,13 +111,16 @@ final class ChatState: ObservableObject {
     var conversation: Conversation? { conversations.first { $0.id.utf8.elementsEqual(selectedID.utf8) } }
 
     func importWebData(_ data: Data) throws {
-        let imported = try WebExchange(data: data)
+        let rawV3 = try OrderedJSON.decode(data)
+        let candidate = try document.map { try $0.importingV3(rawV3) } ?? SyncDocument(v3: rawV3)
+        let imported = try WebExchange(source: candidate.uiProjection())
         let selected = imported.conversations.first?.id ?? ""
-        try store?.save(SavedChatState(exchange: imported, conversations: imported.conversations, selectedConversationID: selected, style: displayStyle))
+        try store?.save(SavedChatState(exchange: imported, document: candidate, conversations: imported.conversations, selectedConversationID: selected, style: displayStyle))
         invalidateGeneration()
         conversations = imported.conversations
         selectedID = selected
         exchange = imported
+        document = candidate
         persistenceError = nil
     }
 
@@ -175,7 +180,7 @@ final class ChatState: ObservableObject {
         let ids = newIDs ?? (0..<needed).map { _ in UUID().uuidString.lowercased() }
         let source = try MessageEditing.save(in: exchange.source, chatID: draft.chatID, nodeID: draft.nodeID, viewingPath: draft.path, role: draft.role,
                                              parts: draft.parts, mode: mode, newIDs: ids, now: now)
-        try applyLibrary(source, selectedID: draft.chatID, resetViewFor: draft.chatID)
+        try applyLibrary(source, selectedID: draft.chatID, resetViewFor: draft.chatID, now: now)
     }
 
     func loadRemoteSettings(read: () throws -> RemoteCredentialRecord = RemoteCredentials.load) throws {
@@ -196,13 +201,14 @@ final class ChatState: ObservableObject {
         let count = try sourceChat["branchTree"] == nil ? sourceChat.required("messages").array("messages").count + 1 : 1
         let ids = nodeIDs ?? (0..<count).map { _ in UUID().uuidString.lowercased() }
         let body = OrderedJSON.array([.object([JSONField(key: "type", value: .string("text")), JSONField(key: "text", value: .string(input))])])
-        let source = try MessageEditing.save(in: exchange.source, chatID: conversation.id, nodeID: nil, viewingPath: conversation.visibleMessages.map(\.id), role: "user", parts: body, mode: .append, newIDs: ids, now: Date().timeIntervalSince1970 * 1000)
+        let now = Date().timeIntervalSince1970 * 1000
+        let source = try MessageEditing.save(in: exchange.source, chatID: conversation.id, nodeID: nil, viewingPath: conversation.visibleMessages.map(\.id), role: "user", parts: body, mode: .append, newIDs: ids, now: now)
         let changed = try WebExchange(source: source)
         let path = changed.conversations.first { $0.identity == conversation.identity }!.visibleMessages.map(\.id)
         let request = try RemoteRequest.make(source: source, chatID: conversation.id, path: path, settings: record.settings, key: record.key)
-        try applyLibrary(source, selectedID: conversation.id, resetViewFor: conversation.id)
+        try applyLibrary(source, selectedID: conversation.id, resetViewFor: conversation.id, now: now)
         let id = UUID()
-        generation = ActiveGeneration(id: id, chatID: conversation.id, baseSource: source, path: path)
+        generation = ActiveGeneration(id: id, chatID: conversation.id, baseSource: try publishedSource(), path: path)
         generationError = nil
         generationTask = Task { @MainActor [weak self] in
             do {
@@ -243,8 +249,9 @@ final class ChatState: ObservableObject {
     private func persistGeneration(_ current: ActiveGeneration) throws {
         guard exchange?.source == current.baseSource else { throw ExchangeError.invalid("生成開始後に会話が変更されています") }
         if current.output.isEmpty { generation = nil; return }
-        let source = try MessageEditing.save(in: current.baseSource, chatID: current.chatID, nodeID: nil, viewingPath: current.path, role: "assistant", parts: current.output.parts, mode: .append, newIDs: [UUID().uuidString.lowercased()], now: Date().timeIntervalSince1970 * 1000)
-        try applyLibrary(source, selectedID: current.chatID, resetViewFor: current.chatID)
+        let now = Date().timeIntervalSince1970 * 1000
+        let source = try MessageEditing.save(in: current.baseSource, chatID: current.chatID, nodeID: nil, viewingPath: current.path, role: "assistant", parts: current.output.parts, mode: .append, newIDs: [UUID().uuidString.lowercased()], now: now)
+        try applyLibrary(source, selectedID: current.chatID, resetViewFor: current.chatID, now: now)
         generation = nil
     }
 
@@ -254,28 +261,28 @@ final class ChatState: ObservableObject {
         generation = nil
     }
 
-    func createChat(defaults: ChatDefaults, id: String = UUID().uuidString.lowercased(), folder: String? = nil) throws {
+    func createChat(defaults: ChatDefaults, id: String = UUID().uuidString.lowercased(), folder: String? = nil, now: Double = Date().timeIntervalSince1970 * 1000) throws {
         let source = exchange?.source ?? ChatLibrary.emptySource
         var created = try ChatLibrary.create(in: source, id: id, defaults: defaults, folder: folder)
         if let folder { created = try ChatFolders.apply(in: created, operation: .move(chatIDs: [id], folderID: folder)) }
-        try applyLibrary(created, selectedID: id)
+        try applyLibrary(created, selectedID: id, now: now)
     }
 
-    func renameChat(id: String, title: String) throws {
+    func renameChat(id: String, title: String, now: Double = Date().timeIntervalSince1970 * 1000) throws {
         guard let exchange else { throw ExchangeError.invalid("サンプル会話は変更できません") }
-        try applyLibrary(ChatLibrary.rename(in: exchange.source, id: id, title: title), selectedID: selectedID)
+        try applyLibrary(ChatLibrary.rename(in: exchange.source, id: id, title: title), selectedID: selectedID, now: now)
     }
 
-    func duplicateChat(id: String, newID: String = UUID().uuidString.lowercased()) throws {
+    func duplicateChat(id: String, newID: String = UUID().uuidString.lowercased(), now: Double = Date().timeIntervalSince1970 * 1000) throws {
         guard let exchange else { throw ExchangeError.invalid("サンプル会話は複製できません") }
-        try applyLibrary(ChatLibrary.duplicate(in: exchange.source, id: id, newID: newID), selectedID: newID)
+        try applyLibrary(ChatLibrary.duplicate(in: exchange.source, id: id, newID: newID), selectedID: newID, now: now)
     }
 
-    func deleteChats(ids: [String], defaults: ChatDefaults, replacementID: String = UUID().uuidString.lowercased()) throws {
+    func deleteChats(ids: [String], defaults: ChatDefaults, replacementID: String = UUID().uuidString.lowercased(), now: Double = Date().timeIntervalSince1970 * 1000) throws {
         guard let exchange else { throw ExchangeError.invalid("サンプル会話は削除できません") }
         let source = try ChatLibrary.delete(in: exchange.source, ids: ids, replacementID: replacementID, defaults: defaults)
         let first = try source.required("chats").array("chats")[0].required("id").string("id")
-        try applyLibrary(source, selectedID: first)
+        try applyLibrary(source, selectedID: first, now: now)
     }
 
     func folderRows() throws -> [ChatFolderRow] {
@@ -287,13 +294,16 @@ final class ChatState: ObservableObject {
               let chat = chats.first(where: { if case .string(let id) = $0["id"] { return id.utf8.elementsEqual(chatID.utf8) }; return false }) else { return nil }
         return ChatFolders.membership(of: chat)
     }
-    func applyFolder(_ operation: ChatFolderOperation) throws {
+    func applyFolder(_ operation: ChatFolderOperation, now: Double = Date().timeIntervalSince1970 * 1000) throws {
         let source = exchange?.source ?? ChatLibrary.emptySource
-        try applyLibrary(ChatFolders.apply(in: source, operation: operation), selectedID: exchange == nil ? "" : selectedID, preserveGeneration: true)
+        try applyLibrary(ChatFolders.apply(in: source, operation: operation), selectedID: exchange == nil ? "" : selectedID, preserveGeneration: true, now: now)
     }
 
-    private func applyLibrary(_ source: OrderedJSON, selectedID: String, resetViewFor: String? = nil, preserveGeneration: Bool = false) throws {
-        let changed = try WebExchange(source: source)
+    private func applyLibrary(_ source: OrderedJSON, selectedID: String, resetViewFor: String? = nil, preserveGeneration: Bool = false, now: Double = Date().timeIntervalSince1970 * 1000) throws {
+        let base = try document ?? SyncDocument(v3: exchange?.source ?? ChatLibrary.emptySource)
+        let before = try exchange?.source ?? base.uiProjection()
+        let candidate = try base.applyingV3Edits(source, comparedTo: before, now: now)
+        let changed = try WebExchange(source: candidate.uiProjection())
         var views = changed.conversations
         for index in views.indices {
             if exchange != nil, resetViewFor.map({ !views[index].id.utf8.elementsEqual($0.utf8) }) ?? true, let previous = conversations.first(where: { $0.identity == views[index].identity }) {
@@ -301,20 +311,51 @@ final class ChatState: ObservableObject {
                 views[index].displayedPathIDs = previous.displayedPathIDs
             }
         }
-        try store?.save(SavedChatState(exchange: changed, conversations: views, selectedConversationID: selectedID, style: displayStyle))
+        try store?.save(SavedChatState(exchange: changed, document: candidate, conversations: views, selectedConversationID: selectedID, style: displayStyle))
         if preserveGeneration, let current = generation {
-            generation = ActiveGeneration(id: current.id, chatID: current.chatID, baseSource: source, path: current.path, output: current.output, running: current.running)
+            generation = ActiveGeneration(id: current.id, chatID: current.chatID, baseSource: changed.source, path: current.path, output: current.output, running: current.running)
         } else { invalidateGeneration() }
         conversations = views
         self.selectedID = selectedID
         exchange = changed
+        document = candidate
         persistenceError = nil
+    }
+
+    private func publishedSource() throws -> OrderedJSON {
+        guard let exchange else { throw ExchangeError.invalid("保存済み会話がありません") }
+        return exchange.source
+    }
+    func publicationSnapshot() throws -> OrderedJSON {
+        guard let document else { throw ExchangeError.invalid("保存済み会話がありません") }
+        return document.snapshot
+    }
+    func exportWebData() throws -> Data {
+        guard let document else { throw ExchangeError.invalid("保存済み会話がありません") }
+        return try document.exportData()
+    }
+    func applySnapshot(_ snapshot: OrderedJSON) throws {
+        let base = try document ?? SyncDocument(v3: exchange?.source ?? ChatLibrary.emptySource)
+        let candidate = try base.mergingSnapshot(snapshot)
+        let changed = try WebExchange(source: candidate.uiProjection())
+        var views = changed.conversations
+        for index in views.indices {
+            if let previous = conversations.first(where: { $0.identity == views[index].identity }),
+               previous.visibleMessages.allSatisfy({ node in views[index].nodes.contains { $0.identity == node.identity } }) {
+                views[index].selectedLeafID = previous.selectedLeafID
+                views[index].displayedPathIDs = previous.displayedPathIDs
+            }
+        }
+        let selected = views.contains { $0.id.utf8.elementsEqual(selectedID.utf8) } ? selectedID : views.first?.id ?? ""
+        try store?.save(SavedChatState(exchange: changed, document: candidate, conversations: views, selectedConversationID: selected, style: displayStyle))
+        invalidateGeneration()
+        document = candidate; exchange = changed; conversations = views; selectedID = selected; persistenceError = nil
     }
 
     private func update(conversations: [Conversation], selectedID: String, style: ChatStyle) {
         do {
-            if let exchange {
-                try store?.save(SavedChatState(exchange: exchange, conversations: conversations, selectedConversationID: selectedID, style: style))
+            if let exchange, let document {
+                try store?.save(SavedChatState(exchange: exchange, document: document, conversations: conversations, selectedConversationID: selectedID, style: style))
             }
             self.conversations = conversations
             self.selectedID = selectedID

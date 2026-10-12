@@ -1,79 +1,76 @@
 import Foundation
 
-// Opaque message attributes belong to the saved document, never the generation request.
+// Namespace rules and correspondence checks belong to the actual Web branch utilities.
 enum MessageAttributes {
-    static func read(_ owner: OrderedJSON) throws -> OrderedJSON? {
-        guard let value = owner["messageAttributesV1"] else { return nil }
-        let fields = try value.object("message attributes namespace")
-        guard fields.allSatisfy({ ["version", "byNode"].contains($0.key) }),
-              try value.required("version").number("message attributes version") == 1 else {
-            throw ExchangeError.invalid("未対応のmessage属性形式です")
-        }
-        let byNode = try value.required("byNode")
-        let nodes = try owner.required("nodes")
-        _ = try nodes.object("nodes")
-        for field in try byNode.object("message attributes byNode") {
-            guard nodes[field.key] != nil else { throw ExchangeError.invalid("message属性のnode参照がありません") }
-            _ = try field.value.object("message attributes")
-            guard field.value["role"] == nil, field.value["content"] == nil else {
-                throw ExchangeError.invalid("message属性に本文または役割が含まれています")
+    private static func owner(_ value: OrderedJSON, boundary: inout SharedWebProjection) throws -> OrderedJSON {
+        .object(try value.object("owner").map { field in
+            if field.key == "nodes", case .object(let nodes) = field.value {
+                return .init(key: field.key, value: .object(nodes.map { .init(key: $0.key, value: .null) }))
             }
-        }
-        return byNode
-    }
-
-    static func extras(_ message: OrderedJSON) throws -> OrderedJSON {
-        .object(try message.object("message").filter { $0.key != "role" && $0.key != "content" })
-    }
-
-    static func setting(_ owner: OrderedJSON, nodeID: String, message: OrderedJSON) throws -> OrderedJSON {
-        let attributes = try extras(message)
-        guard try !attributes.object("message attributes").isEmpty else { return owner }
-        var byNode = try read(owner) ?? .object([])
-        var merged = byNode[nodeID] ?? .object([])
-        for field in try attributes.object("message attributes") {
-            merged = merged.replacing(field.key, with: field.value)
-        }
-        byNode = byNode.replacing(nodeID, with: merged)
-        return owner.replacing("messageAttributesV1", with: .object([
-            JSONField(key: "version", value: .number("1")), JSONField(key: "byNode", value: byNode)
-        ]))
-    }
-
-    static func copying(from source: OrderedJSON, nodeID: String, to target: OrderedJSON, newID: String) throws -> OrderedJSON {
-        guard let attributes = try read(source)?[nodeID] else { return target }
-        return try setting(target, nodeID: newID, message: attributes)
-    }
-
-    static func capture(_ chat: OrderedJSON, store: OrderedJSON) throws -> OrderedJSON {
-        guard var tree = chat["branchTree"] else { return chat }
-        let projection = chat["messages"] == .null ? OrderedJSON.array([]) : chat["messages"] ?? .array([])
-        for (index, message) in try projection.array("messages").enumerated() {
-            let attributes = try extras(message)
-            guard try !attributes.object("message attributes").isEmpty else { continue }
-            let path = try tree.required("activePath").array("activePath")
-            let nodes = try tree.required("nodes")
-            guard path.indices.contains(index) else { throw ExchangeError.invalid("message属性と表示分岐が一致しません") }
-            let id = try path[index].string("node ID")
-            let node = try nodes.required(id)
-            let body = try SyncRecords.resolveProjectedContent(store, hash: node.required("contentHash").string("hash"))
-            guard node["role"] == message["role"], try Data(SyncRecords.canonical(body).utf8) == Data(SyncRecords.canonical(message.required("content")).utf8) else {
-                throw ExchangeError.invalid("message属性と表示分岐が一致しません")
-            }
-            if let existing = try read(tree)?[id] {
-                for field in try attributes.object("message attributes") {
-                    if let old = existing[field.key], try Data(SyncRecords.canonical(old).utf8) != Data(SyncRecords.canonical(field.value).utf8) {
-                        throw ExchangeError.invalid("message属性が競合しています")
+            if field.key == "messageAttributesV1", case .object(let fields) = field.value {
+                let namespace = try fields.map { part -> JSONField in
+                    guard part.key == "byNode", case .object(let nodes) = part.value else { return part }
+                    let values = try nodes.map { node -> JSONField in
+                        guard case .object(let attributes) = node.value else { return node }
+                        return .init(key: node.key, value: .object(try attributes.map { .init(key: $0.key, value: try boundary.reference($0.value)) }))
                     }
+                    return .init(key: part.key, value: .object(values))
                 }
+                return .init(key: field.key, value: .object(namespace))
             }
-            tree = try setting(tree, nodeID: id, message: message)
-        }
-        return chat.replacing("branchTree", with: tree)
+            return field
+        })
     }
-
-    static func projecting(_ message: OrderedJSON, owner: OrderedJSON, nodeID: String) throws -> OrderedJSON {
-        let attributes = try read(owner)?[nodeID] ?? .object([])
-        return try attributes.replacing("role", with: message.required("role")).replacing("content", with: message.required("content"))
+    private static func message(_ value: OrderedJSON, boundary: inout SharedWebProjection) throws -> OrderedJSON {
+        .object(try value.object("message").map { field in
+            .init(key: field.key, value: field.key == "role" || field.key == "content" ? field.value : try boundary.reference(field.value))
+        })
+    }
+    private static func restored(_ output: OrderedJSON, boundary: SharedWebProjection) throws -> OrderedJSON {
+        try OrderedJSONChanges.apply(.array([.object([.init(key: "op", value: .string("set")), .init(key: "path", value: .array([])), .init(key: "value", value: output)])]), to: .null, opaque: boundary.opaque)
+    }
+    static func document(_ source: OrderedJSON, exporting: Bool = false) throws -> OrderedJSON {
+        var boundary = SharedWebProjection()
+        var fields: [JSONField] = [
+            .init(key: "chats", value: .array(try source.required("chats").array("chats").map { try boundary.chat($0) })),
+            .init(key: "contentStore", value: try boundary.store(source.required("contentStore")))
+        ]
+        if let clipboard = source["branchClipboard"] {
+            fields.append(.init(key: "branchClipboard", value: clipboard == .null ? .null : try owner(clipboard, boundary: &boundary)))
+        }
+        let input = OrderedJSON.object([.init(key: "operation", value: .string(exporting ? "exportDocument" : "captureDocument")), .init(key: "source", value: .object(fields))])
+        return try OrderedJSONChanges.apply(SharedWebOperations.call("messageAttributesOperation", input), to: source, opaque: boundary.opaque)
+    }
+    static func read(_ value: OrderedJSON) throws -> OrderedJSON? {
+        var boundary = SharedWebProjection()
+        let output = try SharedWebOperations.call("messageAttributesOperation", .object([.init(key: "operation", value: .string("read")), .init(key: "owner", value: owner(value, boundary: &boundary))]))
+        // Validation is shared; returning the original container preserves its raw field order.
+        return output == .null ? nil : value["messageAttributesV1"]?["byNode"]
+    }
+    static func extras(_ value: OrderedJSON) throws -> OrderedJSON {
+        var boundary = SharedWebProjection()
+        return try restored(SharedWebOperations.call("messageAttributesOperation", .object([.init(key: "operation", value: .string("extras")), .init(key: "message", value: message(value, boundary: &boundary))])), boundary: boundary)
+    }
+    static func setting(_ value: OrderedJSON, nodeID: String, message: OrderedJSON) throws -> OrderedJSON {
+        var boundary = SharedWebProjection()
+        let input = OrderedJSON.object([.init(key: "operation", value: .string("setting")), .init(key: "owner", value: try owner(value, boundary: &boundary)), .init(key: "nodeID", value: .string(nodeID)), .init(key: "message", value: try self.message(message, boundary: &boundary))])
+        return try OrderedJSONChanges.apply(SharedWebOperations.call("messageAttributesOperation", input), to: value, opaque: boundary.opaque)
+    }
+    static func copying(from source: OrderedJSON, nodeID: String, to target: OrderedJSON, newID: String) throws -> OrderedJSON {
+        var boundary = SharedWebProjection()
+        let input = OrderedJSON.object([.init(key: "operation", value: .string("copying")), .init(key: "source", value: try owner(source, boundary: &boundary)), .init(key: "nodeID", value: .string(nodeID)), .init(key: "target", value: try owner(target, boundary: &boundary)), .init(key: "newID", value: .string(newID))])
+        return try OrderedJSONChanges.apply(SharedWebOperations.call("messageAttributesOperation", input), to: target, opaque: boundary.opaque)
+    }
+    static func capture(_ chat: OrderedJSON, store: OrderedJSON) throws -> OrderedJSON {
+        var boundary = SharedWebProjection()
+        let input = OrderedJSON.object([.init(key: "operation", value: .string("capture")), .init(key: "chat", value: try boundary.chat(chat)), .init(key: "store", value: try boundary.store(store))])
+        return try OrderedJSONChanges.apply(SharedWebOperations.call("messageAttributesOperation", input), to: chat, opaque: boundary.opaque)
+    }
+    static func projecting(_ message: OrderedJSON, owner value: OrderedJSON, nodeID: String) throws -> OrderedJSON {
+        var boundary = SharedWebProjection()
+        let projectedParts = try boundary.parts(message.required("content"))
+        let projectedMessage = message.replacing("content", with: projectedParts)
+        let input = OrderedJSON.object([.init(key: "operation", value: .string("projecting")), .init(key: "message", value: projectedMessage), .init(key: "owner", value: try owner(value, boundary: &boundary)), .init(key: "nodeID", value: .string(nodeID))])
+        return try restored(SharedWebOperations.call("messageAttributesOperation", input), boundary: boundary)
     }
 }

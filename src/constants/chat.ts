@@ -1,13 +1,12 @@
 import { v4 as uuidv4 } from 'uuid';
 import {
   ChatInterface,
-  ConfigInterface,
-  ImageDetail,
   TextContentInterface,
 } from '@type/chat';
 import useStore from '@store/store';
 import { normalizeConfigStream } from '@utils/streamSupport';
 import { createLibraryChat } from '@utils/chatLibrary';
+import { defaultSystemMessage } from './chatDefaults';
 
 const date = new Date();
 const dateString =
@@ -17,30 +16,11 @@ const dateString =
   '-' +
   ('0' + date.getDate()).slice(-2);
 
-// default system message obtained using the following method: https://twitter.com/DeminDimin/status/1619935545144279040
-export const _defaultSystemMessage =
-  import.meta.env.VITE_DEFAULT_SYSTEM_MESSAGE ??
-  `You are a large language model assistant.
-Carefully heed the user's instructions. 
-Respond using Markdown.`;
-
+// Environment overrides belong to the Web host; initial values are shared with native.
+export { defaultModel, defaultUserMaxToken, _defaultChatConfig, _defaultImageDetail } from './chatDefaults';
+export const _defaultSystemMessage = import.meta.env.VITE_DEFAULT_SYSTEM_MESSAGE ?? defaultSystemMessage;
 export const defaultApiVersion = '2024-04-01-preview';
-export const defaultModel = '';
-
-export const defaultUserMaxToken = 4000;
 export const reduceMessagesToTotalToken = 256000; // sufficient for almost all models; gemini has 1.5kk though
-
-export const _defaultChatConfig: ConfigInterface = {
-  model: defaultModel,
-  max_tokens: defaultUserMaxToken,
-  temperature: 1,
-  presence_penalty: 0,
-  top_p: 1,
-  frequency_penalty: 0,
-  stream: true,
-  reasoning_effort: 'none',
-  reasoning_budget_tokens: 0,
-};
 
 export const generateDefaultChat = (
   title?: string,
@@ -93,4 +73,3 @@ export const codeLanguageSubset = [
 
 export const _defaultMenuWidth = 260;
 export const _defaultDisplayChatSize = false;
-export const _defaultImageDetail: ImageDetail = 'auto';

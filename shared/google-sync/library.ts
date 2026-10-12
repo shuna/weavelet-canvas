@@ -1,3 +1,4 @@
+import { _defaultChatConfig, _defaultImageDetail, defaultSystemMessage } from '../../src/constants/chatDefaults';
 import { addLibraryChat, createLibraryChat, deleteLibraryChats, duplicateLibraryChat, renameLibraryChat } from '../../src/utils/chatLibrary';
 import { diffJSONChanges } from '../../src/utils/jsonChanges';
 import type { ChatInterface, ConfigInterface, ImageDetail } from '../../src/types/chat';
@@ -41,5 +42,11 @@ export function libraryOperation(json: string): string {
     }
     default: throw new Error('Unknown library operation.');
   }
-  return JSON.stringify(diffJSONChanges({ chats, contentStore }, next));
+  // Match the JSON boundary: optional undefined fields are removals, never valueless set patches.
+  return JSON.stringify(diffJSONChanges({ chats, contentStore }, JSON.parse(JSON.stringify(next))));
 }
+
+export const libraryDefaults = () => JSON.stringify({
+  config: { ..._defaultChatConfig, systemPrompt: defaultSystemMessage },
+  imageDetail: _defaultImageDetail,
+});

@@ -44,7 +44,7 @@ enum RemoteRequest {
         let url = try settings.validatedURL()
         let chat = try source.required("chats").array("chats").first { try $0.required("id").string("ID").utf8.elementsEqual(chatID.utf8) }
         guard let chat else { throw ExchangeError.invalid("chat ID") }
-        var config = chat["config"] ?? ChatDefaults.webInitial.config
+        var config = try chat["config"] ?? ChatDefaults.webInitial().config
         config = config.replacing("model", with: .string(settings.model)).replacing("stream", with: .bool(settings.stream))
         let messages = try projectedMessages(source: source, chat: chat, path: path)
         var contextChat = chat.replacing("messages", with: .array(messages))

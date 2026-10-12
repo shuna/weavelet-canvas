@@ -108,8 +108,7 @@ struct ChatView: View {
                         Button("V3 JSONを読み込む") { showsImporter = true }
                         Button("読み込んだV3 JSONを書き出す") {
                             do {
-                                guard let exchange = state.exchange else { return }
-                                exportDocument = WebJSONDocument(data: try exchange.encoded())
+                                exportDocument = WebJSONDocument(data: try state.exportWebData())
                                 showsExporter = true
                             } catch { errorMessage = error.localizedDescription }
                         }
@@ -343,7 +342,7 @@ struct ConversationLibraryView: View {
                     Button("新規フォルダ", systemImage: "folder.badge.plus") { perform { try state.applyFolder(.create(id: UUID().uuidString.lowercased())) } }
                 }
                 ToolbarItem(placement: .topBarTrailing) {
-                    Button("新規", systemImage: "plus") { perform { try state.createChat(defaults: .webInitial) } }
+                    Button("新規", systemImage: "plus") { perform { try state.createChat(defaults: .webInitial()) } }
                 }
                 ToolbarItem(placement: .bottomBar) {
                     Menu("選択を移動（\(selected.count)）") {
@@ -362,7 +361,7 @@ struct ConversationLibraryView: View {
             .confirmationDialog("会話を削除しますか？", isPresented: $showsDelete, titleVisibility: .visible) {
                 Button("削除", role: .destructive) {
                     perform {
-                        try state.deleteChats(ids: pendingDelete, defaults: .webInitial)
+                        try state.deleteChats(ids: pendingDelete, defaults: .webInitial())
                         selected.removeAll()
                     }
                 }
@@ -459,7 +458,7 @@ struct ConversationLibraryView: View {
                 HStack { Image(systemName: folder.expanded ? "chevron.down" : "chevron.right"); Image(systemName: "folder.fill").foregroundStyle(folderColor(folder.color)); Text(folder.name.isEmpty ? "（名前なし）" : folder.name).frame(maxWidth: .infinity, alignment: .leading) }.frame(minHeight: 44)
             }.buttonStyle(.borderless).accessibilityLabel("フォルダ: \(folder.name)").accessibilityValue(folder.expanded ? "展開中" : "閉じています")
             Menu {
-                Button("このフォルダに新規会話") { perform { try state.createChat(defaults: .webInitial, folder: folder.id) } }
+                Button("このフォルダに新規会話") { perform { try state.createChat(defaults: .webInitial(), folder: folder.id) } }
                 Button("改名") { folderRenameID = folder.id; folderRenameTitle = folder.name; showsFolderRename = true }
                 Menu("色") {
                     ForEach(["#be123c", "#6d28d9", "#0369a1", "#047857", "#b45309"], id: \.self) { color in

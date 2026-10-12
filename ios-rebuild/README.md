@@ -30,7 +30,7 @@ xcodebuild -project ios-rebuild/WeaveletPilot.xcodeproj \
 
 内部表現やローカル保存はCore Data等で最適化可能。現在は交換データを`OrderedJSON`で保持し、`WebExchange`から表示用モデルを取り出す。これは内部DB形式をWebへ合わせる要求ではない。読み込み失敗時は現在の会話を変更しない。
 
-OpenAI互換remote送信は実装済み。Google同期serviceは接続済みだが、アプリ全state・認証・同期UIへの接続は未完了。添付取得、他provider、delta本文のアプリ取込・旧版形式・旧iOS移行は未対応。分岐選択は閲覧のみで、再書出しは保存sourceのactivePathを保持する。parserは重複key、深さ256超、孤立surrogateを拒否する。これらは全体完成までに扱いを確定する制約。
+OpenAI互換remote送信は実装済み。Google同期serviceは接続済みだが、アプリ全state・認証・同期UIへの接続は未完了。添付取得、他provider、旧Web形式・旧iOS移行は未対応。delta本文は共有resolverで表示用に展開し、保存元のdeltaを保持する。分岐選択は閲覧のみで、再書出しは保存sourceのactivePathを保持する。parserは重複key、深さ256超、孤立surrogateを拒否する。これらは全体完成までに扱いを確定する制約。
 
 Catalystの結果はiPhone/iPad実機、Dynamic Type、VoiceOver、IME、キーボード表示中の検証を代替しない。
 
@@ -85,3 +85,7 @@ OpenAI互換remoteのstream/nonstream・Stop・部分保存・遅延結果拒否
 Google同期のWeb実protocolは `shared/google-sync/GoogleSync.bundle.js` をJavaScriptCoreで共有し、通信・CryptoKit暗号・保存をnativeへ接続する。変更後は `node shared/google-sync/generate.mjs` で生成し、`node shared/google-sync/generate.mjs --check` でWeb原本・adapter・生成script・依存版・bundleの鮮度を確認する。生成済みsource snapshotは手編集しない。
 
 同期service関連11件、Web実コードとのmultipart/pack/属性packetの相互確認、独立Astraの修正確認が成功。親の統合接点22件も確認した（messageのJSON key順依存を除いた2件のみ再実行）。本番OAuth・同期UI・実クラウド・実機性能は未確認。最新の完成範囲は[完成条件と証拠](../docs/development/plans/app/web-native-completion-ledger.md)を参照する。
+
+## 共有文書・編集・会話管理の接続
+
+2026-10-13、実Webのbranch-domain/branchUtils/chatLibraryをnativeへ接続した。保存v2はfull snapshotとV3 sidecarを保持し、旧保存v1も読める。UIの書出しは共有文書投影を使う。本文差分の展開と原delta保持、未知属性・大数値、深さ256、保存失敗時の元状態保持、編集後の再起動を確認した。初期設定と更新時刻の規則もWeb由来となった。検証件数・修正後の限定再実行・独立監査は[完成条件と証拠](../docs/development/plans/app/web-native-completion-ledger.md)に記録する。同期の認証/UIと実オンライン相互運用は引き続き未完了。

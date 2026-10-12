@@ -43,13 +43,10 @@ struct WebExchange {
                 }
             }
         }
-        var capturedChats: [OrderedJSON] = []
+        let capturedSource = try MessageAttributes.document(source)
         var chats: [Conversation] = []
         var chatIDs = Set<Data>()
-        for original in try source.required("chats").array("chats") {
-            let chat = try MessageAttributes.capture(original, store: store)
-            if let tree = chat["branchTree"] { _ = try MessageAttributes.read(tree) }
-            capturedChats.append(chat)
+        for chat in try capturedSource.required("chats").array("chats") {
             let id = try chat.required("id").string("chat.id")
             guard !id.isEmpty, chatIDs.insert(Data(id.utf8)).inserted else { throw ExchangeError.invalid("chat.id重複または空") }
             let title = try chat.required("title").string("chat.title")
@@ -100,24 +97,12 @@ struct WebExchange {
                 chats.append(Conversation(id: id, title: title, nodes: flat, selectedLeafID: flat.last?.id ?? ""))
             }
         }
-        if let clipboard = source["branchClipboard"], clipboard != .null { _ = try MessageAttributes.read(clipboard) }
-        self.source = source.replacing("chats", with: .array(capturedChats))
+        self.source = capturedSource
         conversations = chats
     }
 
     func encoded() throws -> Data {
-        let store = try source.required("contentStore")
-        let chats = try source.required("chats").array("chats").map { chat -> OrderedJSON in
-            guard let tree = chat["branchTree"], try MessageAttributes.read(tree) != nil else { return chat }
-            let messages = try tree.required("activePath").array("activePath").map { id -> OrderedJSON in
-                let nodeID = try id.string("node ID"), node = try tree.required("nodes").required(nodeID)
-                let body = try SyncRecords.resolveContent(store, hash: node.required("contentHash").string("hash"))
-                let message = OrderedJSON.object([JSONField(key: "role", value: try node.required("role")), JSONField(key: "content", value: body)])
-                return try MessageAttributes.projecting(message, owner: tree, nodeID: nodeID)
-            }
-            return chat.replacing("messages", with: .array(messages))
-        }
-        return try source.replacing("chats", with: .array(chats)).encoded()
+        try MessageAttributes.document(source, exporting: true).encoded()
     }
 
     private static func role(_ value: OrderedJSON) throws -> String {

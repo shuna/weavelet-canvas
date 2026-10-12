@@ -300,6 +300,13 @@ export function resolveContent(
     return entry.content;
   }
 
+  const text = resolveDeltaContentJSON(store, hash);
+  return text === null ? [] : JSON.parse(text) as ContentInterface[];
+}
+
+// Keep the resolver's resulting JSON text available at the raw native I/O boundary.
+// The application resolver still owns patch traversal, application and validation.
+export function resolveDeltaContentJSON(store: ContentStoreData, hash: string): string | null {
   // Delta resolution
   const visited = new Set<string>();
   let current = hash;
@@ -310,7 +317,7 @@ export function resolveContent(
     if (visited.has(current)) {
       // Circular reference detected
       console.error(`[ContentStore] Circular delta chain detected at ${current}`);
-      return [];
+      return null;
     }
     visited.add(current);
     deltaChain.push({
@@ -323,7 +330,7 @@ export function resolveContent(
   const baseEntry = store[current];
   if (!baseEntry) {
     console.error(`[ContentStore] Missing delta base: ${current}`);
-    return [];
+    return null;
   }
 
   // Apply patches from base to target
@@ -333,16 +340,17 @@ export function resolveContent(
     const [result, applied] = dmp.patch_apply(patches, text);
     if (applied.some((ok: boolean) => !ok)) {
       console.error(`[ContentStore] Patch apply failed for delta chain`);
-      return [];
+      return null;
     }
     text = result;
   }
 
   try {
-    return JSON.parse(text) as ContentInterface[];
+    JSON.parse(text);
+    return text;
   } catch {
     console.error(`[ContentStore] Failed to parse resolved delta content`);
-    return [];
+    return null;
   }
 }
 

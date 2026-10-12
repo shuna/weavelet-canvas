@@ -37,12 +37,16 @@ final class ChatFoldersTests: XCTestCase {
     @MainActor func testMembershipRemovalPersistenceRestartExportAndAtomicFailure() throws {
         let input = try fixture().required("input"), store = try store(), state = ChatState(store: store)
         try state.importWebData(input.encoded())
-        try state.applyFolder(.move(chatIDs: ["chat-a", "chat-c"], folderID: "f-b"))
-        try state.applyFolder(.remove(id: "f-b"))
+        try state.applyFolder(.move(chatIDs: ["chat-a", "chat-c"], folderID: "f-b"), now: 1700000000123)
+        try state.applyFolder(.remove(id: "f-b"), now: 1700000000123)
         let before = try XCTUnwrap(state.exchange?.source), saved = try Data(contentsOf: store.fileURL)
         XCTAssertEqual(try before.required("chats").array("chats").count, 3)
         for chat in try before.required("chats").array("chats") { XCTAssertNil(chat["folder"]) }
         XCTAssertEqual(before["contentStore"], input["contentStore"])
+        XCTAssertEqual(try state.publicationSnapshot().required("state").required("lastContentEditedAt").number("stamp"), 1700000000123)
+        for chat in try before.required("chats").array("chats") {
+            XCTAssertEqual(try chat.required("updatedAt").number("stamp"), 1700000000123)
+        }
         let fresh = ChatState(store: store)
         XCTAssertNil(fresh.persistenceError)
         XCTAssertEqual(fresh.exchange?.source, before)

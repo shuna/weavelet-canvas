@@ -38,6 +38,22 @@ final class MessageEditingTests: XCTestCase {
         let expectedNodes = try expected.required("chats").array("chats")[0].required("branchTree").required("nodes").object("nodes")
         XCTAssertEqual(nodes.map { Data($0.key.utf8) }, expectedNodes.map { Data($0.key.utf8) }, name)
     }
+    private func currentExpected(_ test: OrderedJSON) throws -> OrderedJSON {
+        var expected = try test.required("expected")
+        if test["name"] == .string("no-op") { return expected }
+        let id: String
+        if test["mode"] == .string("branch") || test["mode"] == .string("append") { id = "new-node" }
+        else if test["name"] == .string("flat-overwrite") { id = "converted" }
+        else { id = try test.required("nodeID").string("nodeID") }
+        var chats = try expected.required("chats").array("chats"), chat = chats[0]
+        let tree = try chat.required("branchTree"), nodes = try tree.required("nodes")
+        chat = chat.replacing("branchTree", with: tree.replacing("nodes", with: nodes.replacing(id, with: try nodes.required(id).replacing("updatedAt", with: .number("1000")))))
+            .replacing("updatedAt", with: .number("1000"))
+        chats[0] = chat
+        expected = expected.replacing("chats", with: .array(chats))
+        return expected
+    }
+
     func testSharedEditsAtomicSaveRestartAndExport() throws {
         let tests = try cases()
         XCTAssertEqual(tests.count, 15)
@@ -61,7 +77,7 @@ final class MessageEditingTests: XCTestCase {
             try state.saveMessage(draft, mode: mode, newIDs: test.required("newIDs").array("newIDs").map { try $0.string("ID") }, now: test.required("now").number("now"))
             let name = try test.required("name").string("name")
             let source = try XCTUnwrap(state.exchange).source
-            try assertSnapshot(source, test.required("expected"), name: name)
+            try assertSnapshot(source, currentExpected(test), name: name)
             // Storage representation can differ, but old extensions and unrelated entries cannot be lost.
             for field in try input.required("contentStore").object("store") {
                 XCTAssertEqual(source["contentStore"]?[field.key]?["xEntry"], field.value["xEntry"], name)
@@ -71,10 +87,104 @@ final class MessageEditingTests: XCTestCase {
             XCTAssertNil(fresh.persistenceError, name)
             XCTAssertEqual(fresh.conversation?.visibleMessages.map(\.id), state.conversation?.visibleMessages.map(\.id), name)
             let exported = try OrderedJSON.decode(XCTUnwrap(fresh.exchange).encoded())
-            try assertSnapshot(exported, test.required("expected"), name: "restart/export \(name)")
+            try assertSnapshot(exported, currentExpected(test), name: "restart/export \(name)")
             XCTAssertEqual(exported, source, name)
         }
     }
+    func testSharedEditingPreservesOpaqueNumbersWhenCopiedToNewBranchAndContent() throws {
+        var input = try cases()[0].required("input")
+        var chats = try input.required("chats").array("chats"), chat = chats[0]
+        var tree = try chat.required("branchTree"), store = try input.required("contentStore")
+        let path = try tree.required("activePath").array("path")
+        let id = try path[1].string("id"), node = try tree.required("nodes").required(id)
+        let hash = try node.required("contentHash").string("hash")
+        var body = try store.required(hash).required("content").array("content")
+        body[0] = body[0].replacing("xHuge", with: .number("9007199254740993")).replacing("content", with: .object([.init(key: "opaqueRef", value: .number("0"))]))
+        store = store.replacing(hash, with: try store.required(hash).replacing("content", with: .array(body)).replacing("xHuge", with: .number("1.234567890123456789")))
+        let attributes = OrderedJSON.object([.init(key: "xHuge", value: .number("9007199254740993"))])
+        tree = tree.replacing("messageAttributesV1", with: .object([.init(key: "version", value: .number("1")), .init(key: "byNode", value: .object([.init(key: id, value: attributes)]))]))
+        var messages = try chat.required("messages").array("messages")
+        messages[1] = messages[1].replacing("content", with: .array(body)).replacing("xHuge", with: .number("9007199254740993"))
+        chat = chat.replacing("branchTree", with: tree).replacing("messages", with: .array(messages))
+        chats[0] = chat
+        input = input.replacing("chats", with: .array(chats)).replacing("contentStore", with: store).replacing("xHuge", with: .number("9007199254740993"))
+        let before = try input.encoded()
+        body[0] = body[0].replacing("text", with: .string("Edited body"))
+        let result = try MessageEditing.save(in: input, chatID: chat.required("id").string("id"), nodeID: id, viewingPath: path.map { try $0.string("id") }, role: "assistant", parts: .array(body), mode: .branch, newIDs: ["new-meta"], now: 1000)
+        let changed = try result.required("chats").array("chats")[0], newTree = try changed.required("branchTree")
+        XCTAssertEqual(newTree["messageAttributesV1"]?["byNode"]?["new-meta"], attributes)
+        XCTAssertNil(newTree["nodes"]?["new-meta"]?["xNode"])
+        let newHash = try newTree.required("nodes").required("new-meta").required("contentHash").string("hash")
+        XCTAssertEqual(try SyncRecords.resolveContent(result.required("contentStore"), hash: newHash), .array(body))
+        let exported = try OrderedJSON.decode(WebExchange(source: result).encoded())
+        let messagesAfterExport = try exported.required("chats").array("chats")[0].required("messages").array("messages")
+        XCTAssertEqual(messagesAfterExport[1]["content"], .array(body))
+        XCTAssertEqual(messagesAfterExport[1]["xHuge"], .number("9007199254740993"))
+        XCTAssertEqual(result["contentStore"]?[hash]?["xHuge"], .number("1.234567890123456789"))
+        XCTAssertEqual(result["xHuge"], .number("9007199254740993"))
+        XCTAssertEqual(try input.encoded(), before)
+    }
+
+    func testLongSharedBodyEditRestoresOpaqueAttributesBeforeSaving() throws {
+        let test = try XCTUnwrap(cases().first { $0["name"] == .string("last-overwrite") })
+        var input = try test.required("input")
+        var chats = try input.required("chats").array("chats"), chat = chats[0]
+        var tree = try chat.required("branchTree"), nodes = try tree.required("nodes")
+        let hash = try nodes.required("last").required("contentHash").string("hash")
+        let text = String(repeating: "Long text ", count: 300)
+        let body = OrderedJSON.array([.object([.init(key: "type", value: .string("text")), .init(key: "text", value: .string(text)),
+            .init(key: "xFuture", value: .number("9007199254740993"))])])
+        nodes = nodes.replacing("inactive", with: try nodes.required("last").replacing("id", with: .string("inactive")).replacing("parentId", with: .null))
+        tree = tree.replacing("nodes", with: nodes)
+        chat = chat.replacing("branchTree", with: tree); chats[0] = chat
+        var contentStore = try input.required("contentStore")
+        contentStore = contentStore.replacing(hash, with: .object([.init(key: "content", value: body), .init(key: "refCount", value: .number("2"))]))
+        input = input.replacing("chats", with: .array(chats)).replacing("contentStore", with: contentStore)
+        let disk = try store(), state = ChatState(store: disk)
+        try state.importWebData(input.encoded())
+        var draft = try state.messageDraft(nodeID: "last")
+        draft.text = text + "Edited"
+        try state.saveMessage(draft, mode: .overwrite, newIDs: [], now: 1000)
+        let restored = ChatState(store: disk)
+        XCTAssertNil(restored.persistenceError)
+        let source = try XCTUnwrap(restored.exchange).source
+        let editedChat = try source.required("chats").array("chats")[0]
+        let newHash = try editedChat.required("branchTree").required("nodes").required("last").required("contentHash").string("hash")
+        let entry = try source.required("contentStore").required(newHash)
+        XCTAssertNil(entry["delta"])
+        let parts = try entry.required("content").array("content")
+        XCTAssertEqual(parts[0]["text"], .string(text + "Edited"))
+        XCTAssertEqual(parts[0]["xFuture"], .number("9007199254740993"))
+        XCTAssertEqual(source["contentStore"]?[hash]?["content"], body)
+        XCTAssertEqual(try OrderedJSON.decode(restored.exportWebData()), source)
+    }
+
+    func testOpaqueReferencesKeepDifferentRawOrderAndNumberSpellingDistinct() throws {
+        let first = OrderedJSON.object([.init(key: "a", value: .number("1.0")), .init(key: "b", value: .string("B"))])
+        let second = OrderedJSON.object([.init(key: "b", value: .string("B")), .init(key: "a", value: .number("1e0"))])
+        var projection = SharedWebProjection()
+        XCTAssertEqual(try projection.reference(.null), .null)
+        XCTAssertTrue(projection.opaque.isEmpty)
+        let firstRef = try projection.reference(first), secondRef = try projection.reference(second)
+        XCTAssertNotEqual(firstRef, secondRef)
+        XCTAssertEqual(try projection.reference(first), firstRef)
+        let patch = OrderedJSON.array([.object([.init(key: "op", value: .string("set")), .init(key: "path", value: .array([])), .init(key: "value", value: secondRef)])])
+        let copied = try OrderedJSONChanges.apply(patch, to: .null, opaque: projection.opaque)
+        XCTAssertEqual(try copied.encoded(), try second.encoded())
+        XCTAssertEqual(try copied.object("object").map(\.key), ["b", "a"])
+        XCTAssertEqual(copied["a"], .number("1e0"))
+    }
+
+    func testLeafChangesPreserveNullArrayOrderAndUntouchedOpaqueValues() throws {
+        let source = OrderedJSON.object([.init(key: "array", value: .array([.number("9007199254740993"), .string("old")])), .init(key: "x", value: .null), .init(key: "opaqueRef", value: .number("0"))])
+        let changes = try OrderedJSON.decode(Data("[{\"op\":\"set\",\"path\":[\"array\",1],\"value\":null},{\"op\":\"set\",\"path\":[\"array\",2],\"value\":\"new\"},{\"op\":\"remove\",\"path\":[\"x\"]},{\"op\":\"keys\",\"path\":[],\"keys\":[\"opaqueRef\",\"array\"]}]".utf8))
+        let result = try OrderedJSONChanges.apply(changes, to: source)
+        XCTAssertEqual(try result.object("root").map(\.key), ["opaqueRef", "array"])
+        XCTAssertEqual(result["array"], .array([.number("9007199254740993"), .null, .string("new")]))
+        XCTAssertEqual(result["opaqueRef"], .number("0"))
+        XCTAssertNil(result["x"])
+    }
+
     func testProtectedOverwriteAndRoleAreRejectedButBranchPreservesOriginal() throws {
         var input = try cases()[0].required("input")
         var chats = try input.required("chats").array("chats")

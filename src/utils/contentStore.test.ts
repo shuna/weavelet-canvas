@@ -45,6 +45,32 @@ describe('isDeltaEligible', () => {
 });
 
 describe('addContentDelta', () => {
+  it('preserves edited text-part metadata and multiple part boundaries', () => {
+    const store: ContentStoreData = {};
+    const base = addContent(store, lt(''));
+    for (const content of [
+      [{ type: 'text', text: L + ' changed', xPart: { future: true } }],
+      [{ type: 'text', text: L }, { type: 'text', text: ' changed' }],
+    ] as ContentInterface[][]) {
+      const hash = addContentDelta(store, content, base);
+      expect(resolveContent(store, hash)).toEqual(content);
+    }
+  });
+  it('preserves metadata-bearing and multi-part bases when creating a delta', () => {
+    for (const content of [
+      [{ type: 'text', text: L, xPart: 'base metadata' }],
+      [{ type: 'text', text: L }, { type: 'text', text: ' base' }],
+    ] as ContentInterface[][]) {
+      const store: ContentStoreData = {};
+      const base = addContent(store, content);
+      const edited = lt(' changed');
+      const hash = addContentDelta(store, edited, base);
+      expect(resolveContent(store, hash)).toEqual(edited);
+      expect(resolveContent(store, base)).toEqual(content);
+    }
+  });
+
+
   it('stores delta for similar text-only content', () => {
     const store: ContentStoreData = {};
     const baseHash = addContent(store, lt(''));

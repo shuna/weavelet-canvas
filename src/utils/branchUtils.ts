@@ -30,7 +30,7 @@ export function readMessageAttributes(owner: BranchTree | BranchClipboard): Mess
   return value;
 }
 
-const extraMessageAttributes = (message: MessageInterface) => {
+export const extraMessageAttributes = (message: MessageInterface) => {
   const { role, content, ...attributes } = message;
   return attributes as Record<string, unknown>;
 };
@@ -79,6 +79,10 @@ export function resolveBranchSwipeDirection(distance: number, preference: Branch
   return (distance < 0) === (preference === 'left-next') ? 'next' : 'previous';
 }
 
+export function projectMessageAttributes(owner: BranchTree | BranchClipboard, nodeId: string, message: MessageInterface): MessageInterface {
+  return { ...structuredClone(readMessageAttributes(owner)?.byNode[nodeId] ?? {}), role: message.role, content: message.content };
+}
+
 export function materializeActivePath(
   tree: BranchTree,
   contentStore: ContentStoreData,
@@ -86,7 +90,8 @@ export function materializeActivePath(
 ): MessageInterface[] {
   return tree.activePath.map((id) => {
     const node = tree.nodes[id];
-    return { ...(includeAttributes ? structuredClone(readMessageAttributes(tree)?.byNode[id] ?? {}) : {}), role: node.role, content: resolveContent(contentStore, node.contentHash) };
+    const message = { role: node.role, content: resolveContent(contentStore, node.contentHash) };
+    return includeAttributes ? projectMessageAttributes(tree, id, message) : message;
   });
 }
 

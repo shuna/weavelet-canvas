@@ -1,6 +1,7 @@
 import Foundation
 
 struct SavedChatState {
+    let document: SyncDocument
     let exchange: WebExchange
     let conversations: [Conversation]
     let selectedConversationID: String
@@ -14,16 +15,23 @@ struct SavedChatState {
                 JSONField(key: "displayedPathIDs", value: conversation.displayedPathIDs.map { .array($0.map(OrderedJSON.string)) } ?? .null)
             ])
         }
+        // The state has the same depth budget as the external V3 root. Keep the
+        // snapshot wrapper separate so persistence does not consume one extra level.
+        let stateJSON = String(decoding: try document.snapshot.required("state").encoded(), as: UTF8.self)
+        let storedSnapshot = document.snapshot.replacing("state", with: .string(stateJSON))
         return try OrderedJSON.object([
-            JSONField(key: "version", value: .number("1")),
-            JSONField(key: "source", value: .string(String(decoding: try exchange.encoded(), as: UTF8.self))),
+            JSONField(key: "version", value: .number("2")),
+            JSONField(key: "snapshot", value: .string(String(decoding: try storedSnapshot.encoded(), as: UTF8.self))),
+            JSONField(key: "v3Sidecar", value: .string(String(decoding: try document.v3Sidecar.encoded(), as: UTF8.self))),
+            JSONField(key: "v3RootOrder", value: .array(document.v3RootOrder.map(OrderedJSON.string))),
             JSONField(key: "style", value: .string(style.rawValue)),
             JSONField(key: "selectedChatID", value: .string(selectedConversationID)),
             JSONField(key: "views", value: .array(views))
         ]).encoded()
     }
 
-    init(exchange: WebExchange, conversations: [Conversation], selectedConversationID: String, style: ChatStyle) {
+    init(exchange: WebExchange, document: SyncDocument, conversations: [Conversation], selectedConversationID: String, style: ChatStyle) {
+        self.document = document
         self.exchange = exchange
         self.conversations = conversations
         self.selectedConversationID = selectedConversationID
@@ -32,16 +40,33 @@ struct SavedChatState {
 
     init(data: Data) throws {
         let saved = try OrderedJSON.decode(data)
-        guard try saved.required("version").number("version") == 1,
+        let version = try saved.required("version").number("version")
+        guard version == 1 || version == 2,
               let style = ChatStyle(rawValue: try saved.required("style").string("style")) else { throw ExchangeError.invalid("保存形式") }
-        let source = try saved.required("source")
-        let exchange: WebExchange
-        // Keep the external V3 depth limit independent of the local envelope.
-        if case .string(let json) = source {
-            exchange = try WebExchange(data: Data(json.utf8))
+        let document: SyncDocument
+        if version == 1 {
+            let source = try saved.required("source")
+            let exchange: WebExchange
+            // Keep the external V3 depth limit independent of the local envelope.
+            if case .string(let json) = source { exchange = try WebExchange(data: Data(json.utf8)) }
+            else { exchange = try WebExchange(source: source) }
+            document = try SyncDocument(v3: exchange.source)
         } else {
-            exchange = try WebExchange(source: source)
+            let storedSnapshot = try OrderedJSON.decode(Data(saved.required("snapshot").string("snapshot").utf8))
+            let state = try storedSnapshot.required("state")
+            let snapshot: OrderedJSON
+            if case .string(let json) = state {
+                snapshot = storedSnapshot.replacing("state", with: try OrderedJSON.decode(Data(json.utf8)))
+            } else {
+                // Read the earlier v2 representation as well as the original v1 save.
+                snapshot = storedSnapshot
+            }
+            let sidecar = try OrderedJSON.decode(Data(saved.required("v3Sidecar").string("sidecar").utf8))
+            let order = try saved.required("v3RootOrder").array("root order").map { try $0.string("root") }
+            guard Set(order.map { Data($0.utf8) }).count == order.count else { throw ExchangeError.invalid("V3 root order") }
+            document = try SyncDocument(snapshot: snapshot, v3Sidecar: sidecar, v3RootOrder: order)
         }
+        let exchange = try WebExchange(source: document.uiProjection())
         var conversations = exchange.conversations
         let selected = try saved.required("selectedChatID").string("selectedChatID")
         guard (conversations.isEmpty && selected.isEmpty) || conversations.contains(where: { $0.id.utf8.elementsEqual(selected.utf8) }) else {
@@ -66,7 +91,7 @@ struct SavedChatState {
             conversations[index].selectedLeafID = leaf
             conversations[index].displayedPathIDs = path
         }
-        self.init(exchange: exchange, conversations: conversations, selectedConversationID: selected, style: style)
+        self.init(exchange: exchange, document: document, conversations: conversations, selectedConversationID: selected, style: style)
     }
 }
 

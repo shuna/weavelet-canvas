@@ -44,15 +44,36 @@ final class ChatLibraryTests: XCTestCase {
             let state = ChatState(store: store)
             try state.importWebData(input.encoded())
             switch try test.required("operation").string("operation") {
-            case "create": try state.createChat(defaults: defaults(), id: "new-created")
-            case "rename": try state.renameChat(id: "chat-a", title: "Renamed")
-            case "duplicate": try state.duplicateChat(id: "chat-a", newID: "new-copy")
-            case "delete": try state.deleteChats(ids: ["chat-a"], defaults: defaults())
-            case "delete-flat": try state.deleteChats(ids: ["chat-b"], defaults: defaults())
-            case "delete-all": try state.deleteChats(ids: ["chat-a", "chat-b"], defaults: defaults(), replacementID: "new-created")
+            case "create": try state.createChat(defaults: defaults(), id: "new-created", now: 1700000000123)
+            case "rename": try state.renameChat(id: "chat-a", title: "Renamed", now: 1700000000123)
+            case "duplicate": try state.duplicateChat(id: "chat-a", newID: "new-copy", now: 1700000000123)
+            case "delete": try state.deleteChats(ids: ["chat-a"], defaults: defaults(), now: 1700000000123)
+            case "delete-flat": try state.deleteChats(ids: ["chat-b"], defaults: defaults(), now: 1700000000123)
+            case "delete-all": try state.deleteChats(ids: ["chat-a", "chat-b"], defaults: defaults(), replacementID: "new-created", now: 1700000000123)
             default: throw ExchangeError.invalid("fixture operation")
             }
-            let expected = try test.required("expected")
+            var expected = try test.required("expected")
+            // Current Web deletion retains entries until explicit GC; the legacy fixture stays unchanged.
+            if try test.required("operation").string("operation") == "delete-all" {
+                var retained = try input.required("contentStore")
+                for hash in ["system", "rich", "answer", "inactive"] {
+                    retained = retained.replacing(hash, with: try retained.required(hash).replacing("refCount", with: .number("98")))
+                }
+                expected = expected.replacing("contentStore", with: retained)
+            }
+            // The shared Web save rule stamps new/renamed chats and copied nodes.
+            let operation = try test.required("operation").string("operation")
+            if ["create", "rename", "duplicate", "delete-all"].contains(operation) {
+                var chats = try expected.required("chats").array("chats")
+                chats[0] = chats[0].replacing("updatedAt", with: .number("1700000000123"))
+                if operation == "duplicate", let tree = chats[0]["branchTree"] {
+                    let nodes = try tree.required("nodes").object("nodes").map { field in
+                        JSONField(key: field.key, value: field.value.replacing("updatedAt", with: .number("1700000000123")))
+                    }
+                    chats[0] = chats[0].replacing("branchTree", with: tree.replacing("nodes", with: .object(nodes)))
+                }
+                expected = expected.replacing("chats", with: .array(chats))
+            }
             let selected = try test.required("selectedID").string("selectedID")
             XCTAssertEqual(state.selectedConversationID, selected, name)
             try assertEquivalent(XCTUnwrap(state.exchange).source, expected, name: name)
@@ -87,9 +108,9 @@ final class ChatLibraryTests: XCTestCase {
         let state = ChatState(store: store)
         XCTAssertThrowsError(try state.renameChat(id: "sample-1", title: "Rename"))
         XCTAssertThrowsError(try state.duplicateChat(id: "sample-1"))
-        XCTAssertThrowsError(try state.deleteChats(ids: ["sample-1"], defaults: .webInitial))
+        XCTAssertThrowsError(try state.deleteChats(ids: ["sample-1"], defaults: .webInitial()))
         XCTAssertFalse(FileManager.default.fileExists(atPath: store.fileURL.path))
-        try state.createChat(defaults: .webInitial, id: "sample-1")
+        try state.createChat(defaults: .webInitial(), id: "sample-1")
         let fresh = ChatState(store: store)
         XCTAssertNil(fresh.persistenceError)
         XCTAssertEqual(fresh.conversations.map(\.id), ["sample-1"])
@@ -158,4 +179,26 @@ final class ChatLibraryTests: XCTestCase {
         XCTAssertEqual(state.exchange?.source, corrupt)
         XCTAssertEqual(try Data(contentsOf: store.fileURL), before)
     }
+    func testSharedLibraryBridgePreservesOpaqueValuesAndDefaultFallbacks() throws {
+        let raw = try OrderedJSON.decode(Data(#"{"z":9007199254740993,"a":1e0}"#.utf8))
+        let defaults = try defaults()
+        let config = defaults.config.replacing("custom", with: raw)
+            .replacing("reasoning_effort", with: .null).replacing("reasoning_budget_tokens", with: .null)
+        let created = try ChatLibrary.create(in: ChatLibrary.emptySource, id: "opaque", defaults: ChatDefaults(config: config, imageDetail: defaults.imageDetail))
+        let original = try created.required("chats").array("chats")[0]
+        let createdConfig = try original.required("config")
+        XCTAssertEqual(try createdConfig.required("custom").encoded(), try raw.encoded())
+        XCTAssertEqual(createdConfig["reasoning_effort"], .string("none"))
+        XCTAssertEqual(createdConfig["reasoning_budget_tokens"], .number("0"))
+        let source = created.replacing("chats", with: .array([original.replacing("custom", with: raw)]))
+        let duplicated = try ChatLibrary.duplicate(in: source, id: "opaque", newID: "copy")
+        for chat in try duplicated.required("chats").array("chats") {
+            XCTAssertEqual(try chat.required("custom").encoded(), try raw.encoded())
+            XCTAssertEqual(try chat.required("config").required("custom").encoded(), try raw.encoded())
+        }
+        let initial = try ChatDefaults.webInitial()
+        XCTAssertEqual(initial.imageDetail, "auto")
+        XCTAssertEqual(initial.config["max_tokens"], .number("4000"))
+    }
+
 }

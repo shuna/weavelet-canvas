@@ -158,3 +158,7 @@ Finish editing/document sharing first, including attribute handling and operatio
 - フォルダ・ライブラリ操作は最新 Web の動作を共有 utility に集約する。同期生成物も旧 Drive 専用クラスから最新の汎用同期クラスへ追従する。端末固有設定の同期除外は Web 正本の仕様に合わせ、完全ファイル I/O の未知データ保持とは区別する。
 - 次の機能単位は引き続き編集中の共有編集・full-state document 接続と native ライブラリの共有化。別 worktree の途中成果は保全しており、旧 bundle や旧 Web ファイルを新しい基準へ丸ごと上書きしない。native の全削除時の未参照 entry 保持など、新しい Web と異なる旧 Swift 規則は共有化の完了まで未達として扱う。
 - 検証は統合一式の Web テスト/型/build、Catalyst、独立 Astra にまとめる。差異の原因を特定した失敗箇所だけ再確認し、小変更ごとのゲートは追加しない。
+
+### 2026-10-13: 共有編集・文書保存・会話管理の受入
+
+上記の接続途中だった3範囲は、実Web処理を呼ぶ構成で機能単位の検証と独立Astra監査を完了した。Swiftの編集/属性/会話管理規則は撤去し、Webの初期定数と更新時刻判定も共用する。保存v2と旧形式の読取、raw delta・未知値の保持、保存失敗時の非公開を接続テストで確認した。詳細と再実行の区別は[完成条件と証拠](web-native-completion-ledger.md)に記録する。次はこのfull-state境界を使う同期provider/UI接続と残る機能を進める。全面再設計や言語移植は追加しない。

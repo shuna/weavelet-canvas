@@ -69,7 +69,7 @@ function canonical(value: any): string {
 }
 
 // Fail closed: the local resolver deliberately repairs damaged chains; sync must not publish that repair as an empty message.
-function resolveStrict(store: ContentStoreData, hash: string, visited = new Set<string>()): ContentInterface[] {
+export function resolveStrict(store: ContentStoreData, hash: string, visited = new Set<string>()): ContentInterface[] {
   const entry = store[hash];
   if (!entry || visited.has(hash) || visited.size >= 100) throw new Error('Missing or cyclic message content; sync stopped.');
   if (!entry.delta) return entry.content;
@@ -418,4 +418,4 @@ export function diffHashedRecords(before: Records, after: Records, hashes: Recor
   return changes;
 }
 
-export { canonical, resolveStrict };
+export { canonical };

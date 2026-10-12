@@ -1,4 +1,4 @@
-import type { BranchNode, ChatInterface } from '@type/chat';
+import type { BranchNode, ChatInterface, FolderCollection } from '@type/chat';
 
 const nodeContent = (node: BranchNode) => [node.parentId, node.role, node.contentHash, node.label, node.starred, node.pinned];
 const chatContent = (chat: ChatInterface) => [chat.title, chat.folder, chat.config, chat.imageDetail, chat.titleSet,
@@ -30,4 +30,9 @@ export function recordChatEdits(previous: ChatInterface[] | undefined, next: Cha
     return { ...chat, branchTree: tree, updatedAt: !before ? chat.updatedAt ?? now : now };
   });
   return { chats, changed };
+}
+
+export function hasFolderContentEdits(previous: FolderCollection, next: FolderCollection): boolean {
+  const contents = (folders: FolderCollection) => Object.entries(folders).map(([id, folder]) => [id, folder.name, folder.order, folder.color, folder.parentId]);
+  return JSON.stringify(contents(next)) !== JSON.stringify(contents(previous));
 }
