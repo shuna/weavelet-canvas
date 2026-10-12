@@ -31,9 +31,9 @@ var WeaveletGoogleSync = (() => {
   ));
   var __toCommonJS = (mod) => __copyProps(__defProp({}, "__esModule", { value: true }), mod);
 
-  // ../../../Users/suzuki/weavelet-canvas/node_modules/lodash/lodash.js
+  // ../../../../../../../../Users/suzuki/weavelet-canvas/node_modules/lodash/lodash.js
   var require_lodash = __commonJS({
-    "../../../Users/suzuki/weavelet-canvas/node_modules/lodash/lodash.js"(exports, module) {
+    "../../../../../../../../Users/suzuki/weavelet-canvas/node_modules/lodash/lodash.js"(exports, module) {
       /**
        * @license
        * Lodash <https://lodash.com/>
@@ -5519,9 +5519,9 @@ var WeaveletGoogleSync = (() => {
     }
   });
 
-  // ../../../Users/suzuki/weavelet-canvas/node_modules/diff-match-patch/index.js
+  // ../../../../../../../../Users/suzuki/weavelet-canvas/node_modules/diff-match-patch/index.js
   var require_diff_match_patch = __commonJS({
-    "../../../Users/suzuki/weavelet-canvas/node_modules/diff-match-patch/index.js"(exports, module) {
+    "../../../../../../../../Users/suzuki/weavelet-canvas/node_modules/diff-match-patch/index.js"(exports, module) {
       var diff_match_patch2 = function() {
         this.Diff_Timeout = 1;
         this.Diff_EditCost = 4;
@@ -6982,6 +6982,7 @@ var WeaveletGoogleSync = (() => {
   var entry_exports = {};
   __export(entry_exports, {
     drain: () => drain,
+    driveHeaderID: () => driveHeaderID,
     folderOperation: () => folderOperation,
     folderRows: () => folderRows,
     generationRequest: () => generationRequest,
@@ -6992,20 +6993,196 @@ var WeaveletGoogleSync = (() => {
     start: () => start
   });
 
-  // shared/google-sync/adapters/diagnostics.ts
-  var reportSyncHistory = () => {
-  };
-  var reportCompaction = () => {
-  };
-  var recordPackAccess = () => {
-  };
-  var useGoogleSyncDiagnostics = { getState: () => ({ compaction: { status: "running" } }) };
+  // src/store/storage/google/datasetHeader.ts
+  var SYNC_FOLDER_TYPE = "application/vnd.google-apps.folder";
+  function encryptedSyncHeaderId(file) {
+    if (file.mimeType !== SYNC_FOLDER_TYPE || file.appProperties?.weaveletSync !== "1" || !file.appProperties.headerId) {
+      throw new Error("Legacy sync files are read-only. Create a new encrypted sync folder.");
+    }
+    return file.appProperties.headerId;
+  }
+
+  // src/store/storage/google/settings.ts
+  var BROWSER_LOCAL_SETTINGS = [
+    "hideMenuOptions",
+    "hideSideMenu",
+    "menuWidth",
+    "splitPanelRatio",
+    "splitPanelSwapped",
+    "chatActiveView",
+    "showDebugPanel",
+    "proxyEnabled"
+  ];
+  var SYNC_LOCAL_SETTINGS = [
+    ...BROWSER_LOCAL_SETTINGS,
+    "pendingVerifications",
+    "verifiedStats",
+    "providerModelCache",
+    "totalTokenUsed",
+    "theme",
+    "advancedMode",
+    "enterToSubmit",
+    "inlineLatex",
+    "markdownMode",
+    "streamingMarkdownPolicy",
+    "displayChatSize",
+    "animateBubbleNavigation",
+    "branchSwipeDirection"
+  ];
+  function withoutBrowserLocalSettings(state) {
+    const shared = { ...state };
+    for (const key of SYNC_LOCAL_SETTINGS)
+      delete shared[key];
+    return shared;
+  }
+  function isBrowserLocalRecord(key) {
+    let path;
+    try {
+      path = JSON.parse(key);
+    } catch {
+      return false;
+    }
+    if (!Array.isArray(path) || path[0] !== "state")
+      return false;
+    const field = path[1];
+    return SYNC_LOCAL_SETTINGS.some((key2) => key2 === field);
+  }
+  function isNonBlockingRecord(key) {
+    if (isBrowserLocalRecord(key))
+      return true;
+    let path;
+    try {
+      path = JSON.parse(key);
+    } catch {
+      return false;
+    }
+    if (!Array.isArray(path))
+      return false;
+    return path.length === 4 && path[0] === "state" && path[1] === "folders" && path[3] === "expanded" || path.length >= 3 && path.length <= 4 && path[0] === "chats" && path[2] === "collapsedNodes" || path.length === 4 && path[0] === "chats" && path[2] === "branchTree" && path[3] === "activePath";
+  }
+  function selectActivePath(key, values, records) {
+    if (!key.endsWith(',"activePath"]'))
+      return;
+    const path = JSON.parse(key);
+    if (path.length !== 4 || path[0] !== "chats" || path[2] !== "branchTree" || path[3] !== "activePath")
+      return;
+    if (records[JSON.stringify(["chats", path[1], "id"])] === void 0)
+      return null;
+    const prefix = ["chats", path[1], "branchTree"];
+    const candidates = values.filter((value) => value !== null).map((value) => JSON.parse(value)).filter((value) => Array.isArray(value) && value.every((id) => typeof id === "string"));
+    if (!candidates.length)
+      return;
+    const validPrefix = (ids) => {
+      let length = 0;
+      for (const id of ids) {
+        if (records[JSON.stringify([...prefix, "nodes", id, "id"])] !== JSON.stringify(id) || records[JSON.stringify([...prefix, "nodes", id, "parentId"])] !== JSON.stringify(length ? ids[length - 1] : null))
+          break;
+        length++;
+      }
+      return ids.slice(0, length);
+    };
+    for (const candidate of candidates)
+      if (validPrefix(candidate).length === candidate.length)
+        return JSON.stringify(candidate);
+    const retained = candidates.map(validPrefix).sort((a, b) => b.length - a.length)[0];
+    const root = records[JSON.stringify([...prefix, "rootId"])];
+    return JSON.stringify(retained.length ? retained : root ? validPrefix([JSON.parse(root)]) : []);
+  }
+
+  // shared/google-sync/adapters/host.ts
+  function host(operation, ...args) {
+    const result2 = JSON.parse(nativeSyncCall(JSON.stringify({ operation, args: args.map((value) => JSON.stringify(value ?? null)) })));
+    if (!result2.ok)
+      throw new Error(result2.error);
+    return result2.value;
+  }
+  var bytes = (value) => Array.from(value);
+
+  // shared/google-sync/adapters/crypto.ts
+  var digest = async (value) => host("digest", typeof value === "string" ? value : bytes(value));
+  var encode = (value) => new Uint8Array(host("encode", value));
+  var decode = (value) => host("decode", bytes(value));
+  var encrypt = async (key, value, context) => new Uint8Array(host("encrypt", key, bytes(value), context));
+  var decrypt = async (key, value, context) => new Uint8Array(host("decrypt", key, bytes(value), context));
+  var createKeyEnvelope = async (password, dataset) => host("createKeyEnvelope", password, dataset);
+  var unlockKey = async (envelope, password, dataset) => host("unlockKey", envelope, password, dataset);
+
+  // src/utils/folderHierarchy.ts
+  function validateFolderHierarchy(folders) {
+    if (!folders || typeof folders !== "object" || Array.isArray(folders))
+      return false;
+    const collection = folders;
+    for (const [id, folder] of Object.entries(collection)) {
+      if (!id || !folder || typeof folder !== "object" || folder.id !== id || typeof folder.name !== "string" || !Number.isFinite(folder.order) || typeof folder.expanded !== "boolean" || folder.parentId != null && (typeof folder.parentId !== "string" || !Object.hasOwn(collection, folder.parentId)))
+        return false;
+    }
+    const finished = /* @__PURE__ */ new Set();
+    for (const id of Object.keys(collection)) {
+      const path = /* @__PURE__ */ new Set();
+      let current = id;
+      while (current !== void 0 && !finished.has(current)) {
+        if (path.has(current))
+          return false;
+        path.add(current);
+        current = collection[current].parentId ?? void 0;
+      }
+      for (const member of path)
+        finished.add(member);
+    }
+    return true;
+  }
+  function getFolderParentId(folders, id) {
+    const parent = folders[id]?.parentId ?? void 0;
+    const visited = /* @__PURE__ */ new Set([id]);
+    let current = parent;
+    while (current !== void 0) {
+      if (visited.has(current) || !Object.hasOwn(folders, current))
+        return void 0;
+      visited.add(current);
+      current = folders[current]?.parentId ?? void 0;
+    }
+    return parent;
+  }
+  function getFolderAncestors(folders, id) {
+    const result2 = [];
+    const visited = /* @__PURE__ */ new Set();
+    let current = id;
+    while (current !== void 0 && Object.hasOwn(folders, current) && !visited.has(current)) {
+      visited.add(current);
+      result2.push(current);
+      current = result2.length === 1 ? getFolderParentId(folders, current) : folders[current]?.parentId ?? void 0;
+    }
+    return result2;
+  }
+  function getFolderSubtreeIds(folders, id) {
+    if (!Object.hasOwn(folders, id))
+      return [];
+    const children = /* @__PURE__ */ new Map();
+    for (const [childId, folder] of Object.entries(folders)) {
+      if (folder?.parentId != null) {
+        const list = children.get(folder.parentId) ?? [];
+        list.push(childId);
+        children.set(folder.parentId, list);
+      }
+    }
+    const result2 = [], visited = /* @__PURE__ */ new Set(), pending = [id];
+    while (pending.length) {
+      const current = pending.pop();
+      if (visited.has(current))
+        continue;
+      visited.add(current);
+      result2.push(current);
+      for (const child of children.get(current) ?? [])
+        pending.push(child);
+    }
+    return result2;
+  }
 
   // shared/google-sync/adapters/metrics.ts
   var recordMetric = () => {
   };
 
-  // ../weavelet-web-exchange-contract/src/types/chat.ts
+  // src/types/chat.ts
   function isTextContent(ob) {
     return ob !== void 0 && ob !== null && ob.type === "text";
   }
@@ -7019,7 +7196,7 @@ var WeaveletGoogleSync = (() => {
     return ob !== void 0 && ob !== null && ob.type === "tool_result";
   }
 
-  // ../weavelet-web-exchange-contract/src/utils/branchUtils.ts
+  // src/utils/branchUtils.ts
   var import_lodash = __toESM(require_lodash());
   function readMessageAttributes(owner) {
     const value = owner.messageAttributesV1;
@@ -7074,16 +7251,27 @@ var WeaveletGoogleSync = (() => {
     chat.branchTree = next;
   }
 
-  // ../weavelet-web-exchange-contract/src/utils/streamingBuffer.ts
+  // src/utils/streamingBuffer.ts
   var STREAMING_CONTENT_HASH_PREFIX = "__streaming:";
   var streamingBuffers = /* @__PURE__ */ new Map();
+  var bufferKey = (chatId, nodeId) => JSON.stringify([chatId, nodeId]);
   var isStreamingContentHash = (hash) => hash.startsWith(STREAMING_CONTENT_HASH_PREFIX);
-  var getStreamingNodeIdFromHash = (hash) => isStreamingContentHash(hash) ? hash.slice(STREAMING_CONTENT_HASH_PREFIX.length) : null;
-  var peekBufferedContent = (nodeId) => {
-    return streamingBuffers.get(nodeId)?.content;
+  var getStreamingTargetFromHash = (hash) => {
+    if (!isStreamingContentHash(hash))
+      return null;
+    try {
+      const target = JSON.parse(hash.slice(STREAMING_CONTENT_HASH_PREFIX.length));
+      return Array.isArray(target) && target.length === 2 && target.every((value) => typeof value === "string") ? { chatId: target[0], nodeId: target[1] } : null;
+    } catch {
+      return null;
+    }
+  };
+  var peekBufferedContent = (chatId, nodeId) => {
+    const key = bufferKey(chatId, nodeId);
+    return streamingBuffers.get(key)?.content;
   };
 
-  // ../weavelet-web-exchange-contract/src/utils/contentStore.ts
+  // src/utils/contentStore.ts
   var import_diff_match_patch = __toESM(require_diff_match_patch());
   var dmp = new import_diff_match_patch.diff_match_patch();
   function computeContentHash(content) {
@@ -7123,8 +7311,8 @@ var WeaveletGoogleSync = (() => {
   }
   function resolveContent(store, hash) {
     if (isStreamingContentHash(hash)) {
-      const nodeId = getStreamingNodeIdFromHash(hash);
-      return nodeId ? peekBufferedContent(nodeId) ?? [] : [];
+      const target = getStreamingTargetFromHash(hash);
+      return target ? peekBufferedContent(target.chatId, target.nodeId) ?? [] : [];
     }
     const entry = store[hash];
     if (!entry)
@@ -7172,26 +7360,6 @@ var WeaveletGoogleSync = (() => {
 
   // shared/google-sync/source/records.ts
   var import_diff_match_patch2 = __toESM(require_diff_match_patch(), 1);
-
-  // shared/google-sync/adapters/host.ts
-  function host(operation, ...args) {
-    const result2 = JSON.parse(nativeSyncCall(JSON.stringify({ operation, args: args.map((value) => JSON.stringify(value ?? null)) })));
-    if (!result2.ok)
-      throw new Error(result2.error);
-    return result2.value;
-  }
-  var bytes = (value) => Array.from(value);
-
-  // shared/google-sync/adapters/crypto.ts
-  var digest = async (value) => host("digest", typeof value === "string" ? value : bytes(value));
-  var encode = (value) => new Uint8Array(host("encode", value));
-  var decode = (value) => host("decode", bytes(value));
-  var encrypt = async (key, value, context) => new Uint8Array(host("encrypt", key, bytes(value), context));
-  var decrypt = async (key, value, context) => new Uint8Array(host("decrypt", key, bytes(value), context));
-  var createKeyEnvelope = async (password, dataset) => host("createKeyEnvelope", password, dataset);
-  var unlockKey = async (envelope, password, dataset) => host("unlockKey", envelope, password, dataset);
-
-  // shared/google-sync/source/records.ts
   var SyncConflictError = class extends Error {
     constructor(keys) {
       super("Concurrent edits conflict. Both copies are preserved.");
@@ -7207,6 +7375,13 @@ var WeaveletGoogleSync = (() => {
     return value;
   };
   var isNodeOrderPath = (path) => Array.isArray(path) && path[0] === "nodeOrder" && (path.length === 3 && path[1] === "chats" && typeof path[2] === "string" || path.length === 2 && path[1] === "clipboard");
+  function isNodeOrderRecord(key) {
+    try {
+      return isNodeOrderPath(JSON.parse(key));
+    } catch {
+      return false;
+    }
+  }
   function mergeNodeOrderValues(values) {
     const orders = values.filter((value) => value !== null).map((value) => readNodeOrder(JSON.parse(value)));
     return orders.length ? JSON.stringify([...new Set(orders.flat())]) : null;
@@ -7256,7 +7431,9 @@ var WeaveletGoogleSync = (() => {
     const started = performance.now();
     const serialized = JSON.stringify(snapshot);
     const copy = JSON.parse(serialized);
-    const state = copy.state;
+    const state = withoutBrowserLocalSettings(copy.state);
+    if (state.folders !== void 0 && !validateFolderHierarchy(state.folders))
+      throw new Error("Invalid folder hierarchy; sync stopped.");
     const records = /* @__PURE__ */ Object.create(null);
     const source = state.contentStore ?? {};
     const contentIds = /* @__PURE__ */ new Map();
@@ -7310,8 +7487,13 @@ var WeaveletGoogleSync = (() => {
         readMessageAttributes(chat.branchTree);
         nodeOrder.chats[chat.id] = Object.keys(chat.branchTree.nodes);
         entryRefs.chats[chat.id] = /* @__PURE__ */ Object.create(null);
-        for (const node of Object.values(chat.branchTree.nodes))
+        for (const node of Object.values(chat.branchTree.nodes)) {
+          const statsKey = `${chat.id}:::${node.id}`;
+          const generationId = node.openRouterObservation?.generationId ?? copy.state.pendingVerifications?.[statsKey]?.generationId ?? copy.state.verifiedStats?.[statsKey]?.generationId;
+          if (generationId)
+            node.openRouterObservation = { ...node.openRouterObservation, generationId };
           translate(node, entryRefs.chats[chat.id]);
+        }
         delete chat.messages;
       } else if (chat.messages) {
         for (const message of chat.messages)
@@ -7356,10 +7538,23 @@ var WeaveletGoogleSync = (() => {
   }
   async function fromRecords(records) {
     const root = /* @__PURE__ */ Object.create(null);
+    let skippedLocalState = false;
+    const generationIds = /* @__PURE__ */ new Map();
     for (const [encoded, value] of Object.entries(records)) {
       const path = JSON.parse(encoded);
       if (!Array.isArray(path) || path.length < 1 || path.length > 100 || path.some((p) => typeof p !== "string" || forbidden.has(p)))
         throw new Error("Invalid sync record path.");
+      if (isBrowserLocalRecord(encoded)) {
+        skippedLocalState = true;
+        if (path.length === 4 && ["pendingVerifications", "verifiedStats"].includes(path[1]) && path[3] === "generationId") {
+          const id = JSON.parse(value);
+          if (typeof id === "string" && !generationIds.has(path[2]))
+            generationIds.set(path[2], id);
+        }
+        continue;
+      }
+      if (path[0] === "chats" && path[2] === "collapsedNodes" && path.length === 3 && value === "{}")
+        continue;
       let current = root;
       for (const part of path.slice(0, -1)) {
         if (Object.hasOwn(current, part) && (!current[part] || typeof current[part] !== "object" || Array.isArray(current[part]))) {
@@ -7372,6 +7567,8 @@ var WeaveletGoogleSync = (() => {
         throw new Error("Conflicting sync record paths.");
       current[last] = JSON.parse(value);
     }
+    if (skippedLocalState && !root.state)
+      root.state = /* @__PURE__ */ Object.create(null);
     if (!root.state || !root.chats || !Array.isArray(root.order) || !Number.isInteger(root.version)) {
       throw new Error("Incomplete sync snapshot.");
     }
@@ -7385,6 +7582,8 @@ var WeaveletGoogleSync = (() => {
       if (orders.clipboard !== void 0)
         readNodeOrder(orders.clipboard);
     }
+    if (root.state.folders !== void 0 && !validateFolderHierarchy(root.state.folders))
+      throw new Error("Invalid folder hierarchy; sync stopped.");
     const restoreAssets = async (parts) => {
       if (!Array.isArray(parts))
         throw new Error("Invalid message content.");
@@ -7486,6 +7685,9 @@ var WeaveletGoogleSync = (() => {
             cursor = cursor.parentId ? tree.nodes[cursor.parentId] : void 0;
           }
           await restore(node, root.contentEntryRefs?.chats?.[id]);
+          const generationId = node.openRouterObservation?.generationId ?? generationIds.get(`${id}:::${nodeId}`);
+          if (generationId)
+            node.openRouterObservation = { ...node.openRouterObservation, generationId };
         }
         if (tree.activePath.some((nodeId) => !tree.nodes[nodeId]))
           throw new Error("Invalid active branch path.");
@@ -7510,7 +7712,45 @@ var WeaveletGoogleSync = (() => {
         await restoreEntry(entryId);
       }
     }
-    return { version: root.version, state: { ...root.state, chats, contentStore: store } };
+    return { version: root.version, state: { ...withoutBrowserLocalSettings(root.state), chats, contentStore: store } };
+  }
+  async function assertNoConcurrentOrphans(base, local, cloud, merged) {
+    const orphans = Object.entries(merged).filter(([key, value]) => {
+      const path = JSON.parse(key);
+      if (path.length !== 6 || path[0] !== "chats" || path[2] !== "branchTree" || path[3] !== "nodes" || path[5] !== "parentId")
+        return false;
+      const parent = JSON.parse(value);
+      const parentKey = JSON.stringify([...path.slice(0, 4), parent, "id"]);
+      return parent && base[parentKey] && !merged[parentKey];
+    });
+    if (!orphans.length)
+      return;
+    const affected = new Set(orphans.map(([key]) => JSON.parse(key)[1]));
+    for (const source of [local, cloud]) {
+      const changed = /* @__PURE__ */ new Map();
+      for (const [key, value] of Object.entries(source)) {
+        const path = JSON.parse(key);
+        const node = path.length === 6 && path[0] === "chats" && path[2] === "branchTree" && (path[3] === "nodes" && path[5] !== "updatedAt" || path[3] === "messageAttributesV1" && path[4] === "byNode") ? [path[1], path[path[3] === "nodes" ? 4 : 5]] : path.length === 4 && path[0] === "contentEntryRefs" && path[1] === "chats" ? [path[2], path[3]] : void 0;
+        if (!node || !affected.has(node[0]) || await digest(value) === base[key])
+          continue;
+        const [chat, id] = node;
+        const ids = changed.get(chat) ?? /* @__PURE__ */ new Set();
+        changed.set(chat, ids);
+        let cursor = id;
+        while (cursor && !ids.has(cursor)) {
+          ids.add(cursor);
+          const parent = source[JSON.stringify(["chats", chat, "branchTree", "nodes", cursor, "parentId"])];
+          cursor = parent === void 0 ? null : JSON.parse(parent);
+        }
+      }
+      for (const [key, value] of orphans) {
+        const path = JSON.parse(key);
+        const parent = JSON.parse(value);
+        const parentKey = JSON.stringify([...path.slice(0, 4), parent, "id"]);
+        if (source[parentKey] && source[key] === value && changed.get(path[1])?.has(path[4]))
+          throw new SyncConflictError([key]);
+      }
+    }
   }
   async function diffRecords(before, after) {
     const changes = [];
@@ -7530,7 +7770,7 @@ var WeaveletGoogleSync = (() => {
       keys.add(change.key);
       const current = result2[change.key];
       if ((current ?? null) !== change.after && (current === void 0 ? null : await digest(current)) !== change.before) {
-        if (isNodeOrderPath(JSON.parse(change.key))) {
+        if (isNodeOrderRecord(change.key)) {
           const value = mergeNodeOrderValues([current ?? null, change.after]);
           if (value === null)
             delete result2[change.key];
@@ -7563,6 +7803,199 @@ var WeaveletGoogleSync = (() => {
     return changes;
   }
 
+  // src/store/storage/google/editTimes.ts
+  function mergeEditTimes(key, values) {
+    if (key !== '["state","lastContentEditedAt"]' && !key.endsWith(',"updatedAt"]'))
+      return;
+    const path = JSON.parse(key);
+    if (!(path[0] === "state" && path.length === 2 && path[1] === "lastContentEditedAt" || path[0] === "chats" && path.at(-1) === "updatedAt" && (path.length === 3 || path.length === 6 && path[2] === "branchTree" && path[3] === "nodes")))
+      return;
+    const times = values.map((value) => value == null ? NaN : Number(value));
+    if (times.length && times.every((time) => Number.isFinite(time) && time > 0))
+      return String(Math.max(...times));
+  }
+
+  // shared/google-sync/source/replay.ts
+  async function hashCommits(commits) {
+    const hashes = {};
+    for (const [id, commit] of Object.entries(commits))
+      hashes[id] = await digest(encode(commit));
+    return hashes;
+  }
+  async function replayHistory({ commits, tips }) {
+    const histories = /* @__PURE__ */ new Map();
+    const ancestors = /* @__PURE__ */ new Map();
+    const reachable = /* @__PURE__ */ new Set();
+    const visit = (id) => {
+      if (reachable.has(id))
+        return;
+      const commit = commits[id];
+      if (!commit)
+        throw new Error("Missing sync history.");
+      reachable.add(id);
+      commit.parents.forEach(visit);
+    };
+    tips.forEach(visit);
+    const remaining = new Set([...reachable].sort());
+    const latest = (versions) => {
+      const excluded = /* @__PURE__ */ new Set();
+      const result2 = [];
+      for (let index = versions.length - 1; index >= 0; index--) {
+        const version = versions[index];
+        if (excluded.has(version.id))
+          continue;
+        result2.push(version);
+        for (const ancestor of ancestors.get(version.id))
+          excluded.add(ancestor);
+      }
+      return result2.reverse();
+    };
+    const valueOf = (versions, key) => {
+      if (isNodeOrderRecord(key))
+        return mergeNodeOrderValues(versions.map((version) => version.value));
+      const time = mergeEditTimes(key, versions.map((version) => version.value));
+      if (time !== void 0)
+        return time;
+      const values = new Set(versions.map((v) => v.value));
+      if (values.size > 1 && !isNonBlockingRecord(key))
+        throw new SyncConflictError([]);
+      return versions[0]?.value ?? null;
+    };
+    const repairedPath = (key, versions, records2, preceding) => {
+      if (!key.endsWith(',"activePath"]'))
+        return;
+      const values = [...new Set(versions.map((version) => version.value))];
+      if (values.length < 2) {
+        if (!values[0])
+          return;
+        const path = JSON.parse(key), ids = JSON.parse(values[0]);
+        if (!Array.isArray(ids) || !ids.some((id) => {
+          const removed = histories.get(JSON.stringify([...path.slice(0, 3), "nodes", id, "id"]));
+          const retained = removed && latest(removed.filter((version) => !preceding || preceding.has(version.id)));
+          return retained?.length && retained.every((version) => version.value === null);
+        }))
+          return;
+      }
+      return selectActivePath(key, values, records2);
+    };
+    while (remaining.size) {
+      let progress = false;
+      for (const id of remaining) {
+        const commit = commits[id];
+        if (!commit.parents.every((p) => ancestors.has(p)))
+          continue;
+        const preceding = new Set(commit.parents);
+        for (const parent of commit.parents)
+          for (const ancestor of ancestors.get(parent))
+            preceding.add(ancestor);
+        ancestors.set(id, preceding);
+        const keys = /* @__PURE__ */ new Set();
+        for (const change of commit.changes) {
+          if (!change || typeof change.key !== "string" || keys.has(change.key))
+            throw new Error("Invalid sync change.");
+          keys.add(change.key);
+          const history = histories.get(change.key) ?? [];
+          const parents = latest(history.filter((v) => preceding.has(v.id)));
+          let parentValue;
+          if (commit.resolutions?.[change.key]) {
+            const expected = [...new Set(await Promise.all(parents.map((v) => v.value === null ? null : digest(v.value))))].sort();
+            if (expected.length < 2 || JSON.stringify(expected) !== JSON.stringify([...commit.resolutions[change.key]].sort())) {
+              throw new Error("Invalid conflict resolution parents.");
+            }
+            parentValue = parents[0]?.value ?? null;
+          } else if (isNonBlockingRecord(change.key) || isNodeOrderRecord(change.key)) {
+            const parentHashes = await Promise.all(parents.map((version) => version.value === null ? null : digest(version.value)));
+            const matching = parentHashes.indexOf(change.before);
+            parentValue = matching >= 0 ? parents[matching].value : valueOf(parents, change.key);
+            if (matching < 0 && change.key.endsWith(',"activePath"]')) {
+              const parentRecords = {};
+              for (const [key, versions] of histories) {
+                const retained = latest(versions.filter((version) => preceding.has(version.id)));
+                const value = isNodeOrderRecord(key) ? mergeNodeOrderValues(retained.map((version) => version.value)) : mergeEditTimes(key, retained.map((version) => version.value)) ?? retained[0]?.value ?? null;
+                if (value !== null)
+                  parentRecords[key] = value;
+              }
+              const repaired = repairedPath(change.key, parents, parentRecords, preceding);
+              if (repaired !== void 0 && (repaired === null ? null : await digest(repaired)) === change.before)
+                parentValue = repaired;
+            }
+          } else
+            parentValue = valueOf(parents, change.key);
+          const applied = await applyChanges(parentValue === null ? {} : { [change.key]: parentValue }, [change]);
+          history.push({ id, value: applied[change.key] ?? null });
+          histories.set(change.key, history);
+        }
+        remaining.delete(id);
+        progress = true;
+      }
+      if (!progress)
+        throw new Error("Missing or cyclic sync history.");
+    }
+    const records = {};
+    const conflicts = {};
+    for (const [key, history] of histories) {
+      const versions = latest(history);
+      const values = [...new Set(versions.map((v) => v.value))];
+      const time = mergeEditTimes(key, values);
+      if (values.length > 1 && time === void 0 && !isNonBlockingRecord(key) && !isNodeOrderRecord(key))
+        conflicts[key] = await Promise.all(values.map((v) => v === null ? null : digest(v)));
+      const value = isNodeOrderRecord(key) ? valueOf(versions, key) : time ?? versions[0]?.value ?? null;
+      if (value !== null)
+        records[key] = value;
+    }
+    for (const [key, history] of histories) {
+      const selected = repairedPath(key, latest(history), records);
+      if (selected === null)
+        delete records[key];
+      else if (selected !== void 0)
+        records[key] = selected;
+    }
+    return { records, conflicts };
+  }
+
+  // shared/google-sync/source/decodeParts.ts
+  function decodeParts(parts) {
+    const bytes2 = new Uint8Array(parts.reduce((size, part) => size + part.length, 0));
+    let offset = 0;
+    for (const part of parts) {
+      bytes2.set(part, offset);
+      offset += part.length;
+    }
+    return { bytes: bytes2, value: decode(bytes2) };
+  }
+
+  // shared/google-sync/adapters/processing.ts
+  var encodeAsync = async (value) => encode(value);
+  var decodeAsync = async (value) => decode(value);
+  var toRecordsAsync = toRecords;
+  var fromRecordsAsync = fromRecords;
+  var hashRecordsAsync = hashRecords;
+  var replayHistoryAsync = replayHistory;
+  var decodePartsAsync = async (value) => decodeParts(value);
+  var hashCommitsAsync = hashCommits;
+
+  // src/store/storage/google/overview.ts
+  function summarizeSyncRecords(snapshot, records) {
+    const chats = snapshot.state.chats ?? [];
+    return {
+      chats: chats.length,
+      messages: chats.reduce((count, chat) => count + (chat.branchTree ? Object.keys(chat.branchTree.nodes).length : chat.messages?.length ?? 0), 0),
+      bytes: new TextEncoder().encode(JSON.stringify(records)).length
+    };
+  }
+  async function summarizeSyncSnapshot(snapshot) {
+    return summarizeSyncRecords(snapshot, await toRecordsAsync(snapshot));
+  }
+
+  // shared/google-sync/adapters/diagnostics.ts
+  var reportSyncHistory = () => {
+  };
+  var reportCompaction = () => {
+  };
+  var recordPackAccess = () => {
+  };
+  var useGoogleSyncDiagnostics = { getState: () => ({ compaction: { status: "running" } }) };
+
   // shared/google-sync/source/mergeBranches.ts
   async function mergeBranches(chatId, base, local, cloud) {
     const prefix = ["chats", chatId, "branchTree", "nodes"];
@@ -7582,6 +8015,8 @@ var WeaveletGoogleSync = (() => {
         return false;
       const fields = /* @__PURE__ */ new Set([...Object.keys(node), ...baselineFields.get(node.id) ?? []]);
       for (const field of fields) {
+        if (field === "updatedAt")
+          continue;
         const value = node[field];
         if ((value === void 0 ? void 0 : await digest(JSON.stringify(value))) !== base[JSON.stringify([...prefix, node.id, field])])
           return false;
@@ -7630,6 +8065,11 @@ var WeaveletGoogleSync = (() => {
         const l = left[field], r = right[field];
         if (l === r)
           continue;
+        const time = mergeEditTimes(JSON.stringify([...prefix, id, field]), [l === void 0 ? void 0 : JSON.stringify(l), r === void 0 ? void 0 : JSON.stringify(r)]);
+        if (time !== void 0) {
+          left.updatedAt = right.updatedAt = Number(time);
+          continue;
+        }
         const baseline = base[JSON.stringify([...prefix, id, field])];
         const lh2 = l === void 0 ? void 0 : await digest(JSON.stringify(l));
         const rh2 = r === void 0 ? void 0 : await digest(JSON.stringify(r));
@@ -7688,6 +8128,8 @@ var WeaveletGoogleSync = (() => {
             if (attributes)
               byNode[target] = structuredClone(attributes);
             signatures.set(signature, [...signatures.get(signature) ?? [], target]);
+          } else if (node.updatedAt !== void 0) {
+            nodes[target].updatedAt = Math.max(nodes[target].updatedAt ?? node.updatedAt, node.updatedAt);
           }
           used.add(target);
           maps[side][node.id] = target;
@@ -7707,102 +8149,6 @@ var WeaveletGoogleSync = (() => {
     const tree = { ...Object.keys(byNode).length ? { messageAttributesV1: { version: 1, byNode } } : {}, nodes, activePath, rootId: activePath[0] ?? maps[0][cloud.rootId] ?? Object.keys(nodes)[0] ?? "" };
     return { tree, cloudIds: maps[0], localIds: maps[1] };
   }
-
-  // shared/google-sync/source/replay.ts
-  async function replayHistory({ commits, tips }) {
-    const histories = /* @__PURE__ */ new Map();
-    const ancestors = /* @__PURE__ */ new Map();
-    const reachable = /* @__PURE__ */ new Set();
-    const visit = (id) => {
-      if (reachable.has(id))
-        return;
-      const commit = commits[id];
-      if (!commit)
-        throw new Error("Missing sync history.");
-      reachable.add(id);
-      commit.parents.forEach(visit);
-    };
-    tips.forEach(visit);
-    const remaining = new Set([...reachable].sort());
-    const latest = (versions) => versions.filter((v) => !versions.some((other) => ancestors.get(other.id)?.has(v.id)));
-    const valueOf = (key, versions) => {
-      if (isNodeOrderPath(JSON.parse(key)))
-        return mergeNodeOrderValues(versions.map((version) => version.value));
-      const values = new Set(versions.map((v) => v.value));
-      if (values.size > 1)
-        throw new SyncConflictError([]);
-      return versions[0]?.value ?? null;
-    };
-    while (remaining.size) {
-      let progress = false;
-      for (const id of remaining) {
-        const commit = commits[id];
-        if (!commit.parents.every((p) => ancestors.has(p)))
-          continue;
-        const preceding = new Set(commit.parents);
-        for (const parent of commit.parents)
-          for (const ancestor of ancestors.get(parent))
-            preceding.add(ancestor);
-        ancestors.set(id, preceding);
-        const keys = /* @__PURE__ */ new Set();
-        for (const change of commit.changes) {
-          if (!change || typeof change.key !== "string" || keys.has(change.key))
-            throw new Error("Invalid sync change.");
-          keys.add(change.key);
-          const history = histories.get(change.key) ?? [];
-          const parents = latest(history.filter((v) => preceding.has(v.id)));
-          let parentValue;
-          if (commit.resolutions?.[change.key]) {
-            const expected = [...new Set(await Promise.all(parents.map((v) => v.value === null ? null : digest(v.value))))].sort();
-            if (expected.length < 2 || JSON.stringify(expected) !== JSON.stringify([...commit.resolutions[change.key]].sort())) {
-              throw new Error("Invalid conflict resolution parents.");
-            }
-            parentValue = parents[0]?.value ?? null;
-          } else
-            parentValue = valueOf(change.key, parents);
-          const applied = await applyChanges(parentValue === null ? {} : { [change.key]: parentValue }, [change]);
-          history.push({ id, value: applied[change.key] ?? null });
-          histories.set(change.key, history);
-        }
-        remaining.delete(id);
-        progress = true;
-      }
-      if (!progress)
-        throw new Error("Missing or cyclic sync history.");
-    }
-    const records = {};
-    const conflicts = {};
-    for (const [key, history] of histories) {
-      const versions = latest(history);
-      const values = [...new Set(versions.map((v) => v.value))];
-      if (values.length > 1 && !isNodeOrderPath(JSON.parse(key)))
-        conflicts[key] = await Promise.all(values.map((v) => v === null ? null : digest(v)));
-      const value = isNodeOrderPath(JSON.parse(key)) ? valueOf(key, versions) : versions[0]?.value ?? null;
-      if (value !== null)
-        records[key] = value;
-    }
-    return { records, conflicts };
-  }
-
-  // shared/google-sync/source/decodeParts.ts
-  function decodeParts(parts) {
-    const bytes2 = new Uint8Array(parts.reduce((size, part) => size + part.length, 0));
-    let offset = 0;
-    for (const part of parts) {
-      bytes2.set(part, offset);
-      offset += part.length;
-    }
-    return { bytes: bytes2, value: decode(bytes2) };
-  }
-
-  // shared/google-sync/adapters/processing.ts
-  var encodeAsync = async (value) => encode(value);
-  var decodeAsync = async (value) => decode(value);
-  var toRecordsAsync = toRecords;
-  var fromRecordsAsync = fromRecords;
-  var hashRecordsAsync = hashRecords;
-  var replayHistoryAsync = replayHistory;
-  var decodePartsAsync = async (value) => decodeParts(value);
 
   // shared/google-sync/source/merge.ts
   async function mergeSyncRecords(base, local, cloud) {
@@ -7840,6 +8186,15 @@ var WeaveletGoogleSync = (() => {
         set(key, left);
         continue;
       }
+      const time = mergeEditTimes(key, [left, right]);
+      if (time !== void 0) {
+        set(key, time);
+        continue;
+      }
+      if (isNonBlockingRecord(key)) {
+        set(key, left);
+        continue;
+      }
       const path = JSON.parse(key);
       if (path[0] === "chats" && path[1]) {
         if (path[2] !== "branchTree")
@@ -7856,6 +8211,12 @@ var WeaveletGoogleSync = (() => {
           merged[key] = value;
       } else
         set(key, left);
+    }
+    for (const id of [...folders.keys()]) {
+      for (const descendant of getFolderSubtreeIds(localSnapshot.state.folders ?? {}, id)) {
+        if (!folders.has(descendant))
+          folders.set(descendant, crypto.randomUUID());
+      }
     }
     for (const chat of localSnapshot.state.chats ?? [])
       if (chat.folder && folders.has(chat.folder))
@@ -7900,7 +8261,7 @@ var WeaveletGoogleSync = (() => {
           continue;
         path[prefix.length - 1] = newId;
         const field = path[prefix.length];
-        merged[JSON.stringify(path)] = field === "id" ? JSON.stringify(newId) : field === "folder" && folders.has(JSON.parse(value)) ? JSON.stringify(folders.get(JSON.parse(value))) : value;
+        merged[JSON.stringify(path)] = field === "id" ? JSON.stringify(newId) : ["folder", "parentId"].includes(field) && folders.has(JSON.parse(value)) ? JSON.stringify(folders.get(JSON.parse(value))) : value;
       }
     };
     for (const [id, newId] of folders)
@@ -7974,13 +8335,25 @@ var WeaveletGoogleSync = (() => {
       for (const node of Object.values(tree.nodes))
         for (const [field, value] of Object.entries(node))
           put(["branchTree", "nodes", node.id, field], value);
-      for (const field of ["collapsedNodes", "omittedNodes", "protectedNodes"]) {
+      for (const field of ["collapsedNodes", "omittedNodes", "protectedNodes", "summaryTargets"]) {
         for (const [source, ids] of [[remote, cloudIds], [chat, localIds]]) {
           for (const id of Object.keys(source[field] ?? {})) {
             const value = merged[JSON.stringify(["chats", chat.id, field, id])];
             if (ids[id] && ids[id] !== id && value !== void 0)
               put([field, ids[id]], JSON.parse(value));
           }
+        }
+      }
+      const summaryKey = JSON.stringify(["chats", chat.id, "summaries"]);
+      const encodedSummaries = merged[summaryKey];
+      if (encodedSummaries) {
+        const source = encodedSummaries === local[summaryKey] ? chat : remote;
+        const ids = source === chat ? localIds : cloudIds;
+        try {
+          const summaries = JSON.parse(encodedSummaries);
+          if (Array.isArray(summaries))
+            put(["summaries"], summaries.map((summary) => ({ ...summary, sources: Array.isArray(summary?.sources) ? summary.sources.map((item) => ({ ...item, nodeId: ids[item.nodeId] ?? item.nodeId, parentId: item.parentId === null ? null : ids[item.parentId] ?? item.parentId })) : summary?.sources })));
+        } catch {
         }
       }
     }
@@ -8012,8 +8385,7 @@ var WeaveletGoogleSync = (() => {
   var syncStage = async (_start, _count, work) => work();
 
   // shared/google-sync/adapters/transport.ts
-  var SYNC_FOLDER_TYPE = "application/vnd.google-apps.folder";
-  var DriveNotFoundError = class extends Error {
+  var SyncFileNotFoundError = class extends Error {
   };
 
   // shared/google-sync/adapters/cache.ts
@@ -8025,16 +8397,16 @@ var WeaveletGoogleSync = (() => {
   var writeSyncCache = async (dataset, value, entries = [], remove = []) => host("writeSyncCache", dataset, value ? bytes(value) : null, entries.map(([key, value2]) => [key, bytes(value2)]), remove);
   var rememberedSyncKey = async (dataset, key) => host("rememberedSyncKey", dataset, key ?? null) ?? void 0;
 
-  // shared/google-sync/source/sync.ts
+  // src/store/storage/sync/EncryptedSync.ts
   var emptyCache = () => ({ version: 1, commits: {} });
   var PART_BYTES = 1024 * 1024;
   var INLINE_BYTES = 256 * 1024;
   var PACK_BYTES = 4 * 1024 * 1024 - 28;
   var COMPACT_COMMITS = 128;
-  var EncryptedDriveSync = class {
-    constructor(dataset, drive2, options = {}) {
+  var EncryptedSync = class {
+    constructor(dataset, transport, options = {}) {
       this.dataset = dataset;
-      this.drive = drive2;
+      this.transport = transport;
       this.options = options;
     }
     cache = emptyCache();
@@ -8043,6 +8415,7 @@ var WeaveletGoogleSync = (() => {
     closed = false;
     cacheFingerprint;
     remoteConflicts = {};
+    remoteCache;
     loading = /* @__PURE__ */ new Set();
     persistedCommits = /* @__PURE__ */ new Set();
     encodedCommits = /* @__PURE__ */ new Map();
@@ -8051,12 +8424,36 @@ var WeaveletGoogleSync = (() => {
     }
     requireKey() {
       if (!this.key || this.closed)
-        throw new Error("Unlock Google sync with your passphrase first.");
+        throw new Error("Unlock encrypted sync with your passphrase first.");
       return this.key;
     }
     close() {
       this.closed = true;
       this.key = void 0;
+      this.remoteCache = void 0;
+    }
+    async parallel(values, work) {
+      const results = new Array(values.length);
+      let next = 0;
+      let failure;
+      let failed = false;
+      const worker = async () => {
+        while (!failed) {
+          const index = next++;
+          if (index >= values.length)
+            return;
+          try {
+            results[index] = await work(values[index]);
+          } catch (error) {
+            failed = true;
+            failure = error;
+          }
+        }
+      };
+      await Promise.all(Array.from({ length: Math.min(this.options.concurrency ?? 2, values.length) }, worker));
+      if (failed)
+        throw failure;
+      return results;
     }
     async save(remove = []) {
       const entries = [];
@@ -8115,13 +8512,15 @@ var WeaveletGoogleSync = (() => {
       });
     }
     async loadCache(bytes2) {
+      this.remoteCache = void 0;
       const stored = await decodeAsync(await decrypt(this.requireKey(), bytes2, this.context("cache")));
       if (stored.version === 1) {
         this.cache = stored;
         if (stored.baseline)
           this.cache.baseline = await hashRecordsAsync(stored.baseline);
         if (stored.pending) {
-          stored.pending.baseline = await hashRecordsAsync(stored.pending.baseline);
+          if (stored.pending.baseline)
+            stored.pending.baseline = await hashRecordsAsync(stored.pending.baseline);
           for (const file of stored.pending.files) {
             file.bytes = new Uint8Array(file.bytes);
             file.size = file.bytes.length;
@@ -8172,6 +8571,7 @@ var WeaveletGoogleSync = (() => {
           } catch (error) {
             this.cacheFingerprint = void 0;
             this.cache = emptyCache();
+            this.remoteCache = void 0;
             this.persistedCommits.clear();
             this.encodedCommits.clear();
             throw error;
@@ -8184,26 +8584,37 @@ var WeaveletGoogleSync = (() => {
       });
       return result2;
     }
-    static async create(drive2, password, options = {}) {
-      const [dataset, header] = await drive2.ids(2);
+    static async create(transport, password, options = {}) {
+      const [dataset, header] = await transport.ids(2);
       syncPhase("key");
       const { key, envelope } = await createKeyEnvelope(password, dataset);
-      syncPhase("folder");
-      const file = await drive2.folder(dataset, header, options.folderName);
-      await drive2.put(header, dataset, "key", new TextEncoder().encode(JSON.stringify(envelope)));
-      const session2 = new EncryptedDriveSync(dataset, drive2, options);
+      const session2 = new EncryptedSync(dataset, transport, options);
       session2.key = key;
       await session2.save();
       await rememberedSyncKey(dataset, key);
+      const headerBytes = new TextEncoder().encode(JSON.stringify(envelope));
+      await writeSyncCache(dataset, void 0, [["initial-key", await encrypt(key, headerBytes, session2.context("initial-key"))]]);
+      syncPhase("folder");
+      const file = await transport.folder(dataset, header, options.folderName);
+      await transport.put(header, dataset, "key", headerBytes);
+      await writeSyncCache(dataset, void 0, [], ["initial-key"]);
       return { session: session2, file };
     }
+    async resumeCreation(header) {
+      await this.run(async () => {
+        const [saved] = await readSyncEntries(this.dataset, ["initial-key"]);
+        if (!saved)
+          return;
+        const bytes2 = await decrypt(this.requireKey(), saved, this.context("initial-key"));
+        await this.transport.folder(this.dataset, header);
+        await this.transport.put(header, this.dataset, "key", bytes2);
+        await writeSyncCache(this.dataset, void 0, [], ["initial-key"]);
+      });
+    }
     async unlock(password) {
-      const file = await this.drive.metadata(this.dataset);
-      if (file.mimeType !== SYNC_FOLDER_TYPE || file.appProperties?.weaveletSync !== "1" || !file.appProperties.headerId) {
-        throw new Error("Legacy sync files are read-only. Create a new encrypted sync folder.");
-      }
+      const header = await this.transport.keyHeader(this.dataset);
       syncPhase("downloading");
-      const envelope = JSON.parse(new TextDecoder().decode(await this.drive.read(file.appProperties.headerId)));
+      const envelope = JSON.parse(new TextDecoder().decode(await this.transport.read(header)));
       syncPhase("key");
       this.key = await unlockKey(envelope, password, this.dataset);
       this.closed = false;
@@ -8221,7 +8632,7 @@ var WeaveletGoogleSync = (() => {
       return true;
     }
     async downloadManifest(id) {
-      const encoded = await decrypt(this.requireKey(), await this.drive.read(id), this.context(id));
+      const encoded = await decrypt(this.requireKey(), await this.transport.read(id), this.context(id));
       const manifest = await decodeAsync(encoded);
       if (manifest.version !== 2 && (manifest.version !== 1 || !Array.isArray(manifest.parts) || !manifest.parts.length || manifest.parts.some((p) => typeof p !== "string")))
         throw new Error("Invalid sync commit.");
@@ -8248,12 +8659,11 @@ var WeaveletGoogleSync = (() => {
           commit = { version: 1, parents: manifest.parents, changes: manifest.changes, ...manifest.resolutions ? { resolutions: manifest.resolutions } : {} };
           payload = await encodeAsync(commit);
         } else {
-          const chunks = [];
-          for (const part of manifest.parts) {
-            const bytes2 = await decrypt(this.requireKey(), await this.drive.read(part), this.context(part));
+          const chunks = await this.parallel(manifest.parts, async (part) => {
+            const bytes2 = await decrypt(this.requireKey(), await this.transport.read(part), this.context(part));
             completedFile(bytes2.length);
-            chunks.push(bytes2);
-          }
+            return bytes2;
+          });
           const decoded = await decodePartsAsync(chunks);
           payload = decoded.bytes;
           commit = decoded.value;
@@ -8270,7 +8680,7 @@ var WeaveletGoogleSync = (() => {
       }
     }
     async readPackManifest(id) {
-      const pack = await decodeAsync(await decrypt(this.requireKey(), await this.drive.read(id, "pack-index"), this.context(id)));
+      const pack = await decodeAsync(await decrypt(this.requireKey(), await this.transport.read(id, "pack-index"), this.context(id)));
       if (pack.version !== 1 || !pack.commits || typeof pack.commits !== "object" || Array.isArray(pack.commits) || !Object.keys(pack.commits).length || Object.entries(pack.commits).some(([id2, hash]) => !/^[A-Za-z0-9_-]+$/.test(id2) || ["__proto__", "constructor", "prototype"].includes(id2) || typeof hash !== "string" || !/^[a-f0-9]{64}$/.test(hash)) || !Array.isArray(pack.parts) || !pack.parts.length || pack.parts.some((part) => typeof part !== "string" || !part) || new Set(pack.parts).size !== pack.parts.length || !Number.isSafeInteger(pack.bytes) || pack.bytes < 1) {
         throw new Error("Invalid sync pack.");
       }
@@ -8278,22 +8688,22 @@ var WeaveletGoogleSync = (() => {
     }
     async loadPack(pack, verify = false) {
       const missing = Object.keys(pack.commits).some((commit) => !this.cache.commits[commit]);
-      for (const [commit, hash] of Object.entries(pack.commits))
-        if (this.cache.commits[commit] && await digest(await encodeAsync(this.cache.commits[commit])) !== hash)
+      const retained = Object.fromEntries(Object.keys(pack.commits).filter((commit) => this.cache.commits[commit]).map((commit) => [commit, this.cache.commits[commit]]));
+      for (const [commit, hash] of Object.entries(await hashCommitsAsync(retained))) {
+        if (hash !== pack.commits[commit])
           throw new Error("Sync pack history mismatch.");
+      }
       if (!missing && !verify) {
         recordPackAccess(true);
         return;
       }
       syncPhase("downloading", pack.parts.length);
-      const chunks = [];
-      let size = 0;
-      for (const part of pack.parts) {
-        const bytes2 = await decrypt(this.requireKey(), await this.drive.read(part, verify ? "verification" : "pack"), this.context(part));
-        chunks.push(bytes2);
-        size += bytes2.length;
+      const chunks = await this.parallel(pack.parts, async (part) => {
+        const bytes2 = await decrypt(this.requireKey(), await this.transport.read(part, verify ? "verification" : "pack"), this.context(part));
         completedFile(bytes2.length);
-      }
+        return bytes2;
+      });
+      const size = chunks.reduce((total, bytes2) => total + bytes2.length, 0);
       if (size !== pack.bytes)
         throw new Error("Incomplete sync pack.");
       const { value: data } = await decodePartsAsync(chunks);
@@ -8301,26 +8711,29 @@ var WeaveletGoogleSync = (() => {
         throw new Error("Invalid sync pack.");
       }
       const encoded = /* @__PURE__ */ new Map();
-      for (const [commit, hash] of Object.entries(pack.commits)) {
+      for (const [commit] of Object.entries(pack.commits)) {
         const value = data.commits[commit];
         if (!Object.hasOwn(data.commits, commit) || !value || value.version !== 1 || !Array.isArray(value.parents) || value.parents.some((parent) => typeof parent !== "string" || parent === commit) || !Array.isArray(value.changes)) {
           throw new Error("Invalid packed commit.");
         }
-        const bytes2 = await encodeAsync(value);
-        if (await digest(bytes2) !== hash)
-          throw new Error("Sync pack history mismatch.");
-        encoded.set(commit, bytes2);
+        encoded.set(commit, await encodeAsync(value));
       }
+      for (const [commit, hash] of Object.entries(pack.commits))
+        if (await digest(encoded.get(commit)) !== hash) {
+          throw new Error("Sync pack history mismatch.");
+        }
       if (!verify)
         recordPackAccess(false);
+      if (encoded.size)
+        this.remoteCache = void 0;
       for (const [commit, bytes2] of encoded) {
         this.cache.commits[commit] = data.commits[commit];
         if (!this.persistedCommits.has(commit))
           this.encodedCommits.set(commit, bytes2);
       }
     }
-    async discoverPacks() {
-      const ids = await this.drive.packs(this.dataset);
+    async discoverPacks(ids) {
+      ids ??= await this.transport.packs(this.dataset);
       const packs = this.cache.packs ??= {};
       for (const id of Object.keys(packs))
         if (!ids.includes(id))
@@ -8339,45 +8752,47 @@ var WeaveletGoogleSync = (() => {
         syncPhase("checking");
         const ids = /* @__PURE__ */ new Set();
         if (!this.cache.token) {
-          const token = await this.drive.startToken();
-          await this.discoverPacks();
-          for (const id of await this.drive.commits(this.dataset))
+          const token = await this.transport.startToken();
+          const history = await this.transport.history(this.dataset);
+          await this.discoverPacks(history.packs);
+          for (const id of history.commits)
             ids.add(id);
           this.cache.token = token;
         }
-        const page = await this.drive.changes(this.cache.token);
-        const removed = new Set(page.changes.filter((change) => change.removed || change.file?.trashed).map((change) => change.fileId));
+        const page = await this.transport.changes(this.cache.token);
+        if (page.changes.some((change) => change.removed || change.dataset === this.dataset && (change.kind === "commit" || change.kind === "pack")))
+          this.remoteCache = void 0;
+        const removed = new Set(page.changes.filter((change) => change.removed).map((change) => change.id));
         if (removed.has(this.dataset))
-          throw new Error("Sync folder was deleted from Drive; sync stopped.");
+          throw new Error("Sync folder was deleted from storage; sync stopped.");
         const oldPacks = this.cache.packs ?? {};
         const removedPacks = Object.entries(oldPacks).filter(([id]) => removed.has(id));
-        const packChanged = page.changes.some((change) => change.file?.appProperties?.dataset === this.dataset && change.file.appProperties.kind === "pack") || removedPacks.length > 0;
+        const packChanged = page.changes.some((change) => change.dataset === this.dataset && change.kind === "pack") || removedPacks.length > 0;
         if (packChanged || [...removed].some((id) => this.cache.commits[id] || ids.has(id)))
           await this.discoverPacks();
         const covered = this.packedCommits();
         for (const [, pack] of removedPacks)
           if (Object.keys(pack.commits).some((id) => !covered.has(id))) {
-            throw new Error("Sync history was deleted from Drive; sync stopped.");
+            throw new Error("Sync history was deleted from storage; sync stopped.");
           }
         for (const id of removed) {
           if ((this.cache.commits[id] || ids.has(id)) && !covered.has(id)) {
-            throw new Error("Sync history was deleted from Drive; sync stopped.");
+            throw new Error("Sync history was deleted from storage; sync stopped.");
           }
           ids.delete(id);
         }
         for (const change of page.changes) {
-          if (change.file?.appProperties?.dataset === this.dataset && change.file.appProperties.kind === "commit" && !removed.has(change.fileId))
-            ids.add(change.fileId);
+          if (change.dataset === this.dataset && change.kind === "commit" && !removed.has(change.id))
+            ids.add(change.id);
         }
         const missing = [...ids].filter((id) => !this.cache.commits[id]);
         if (missing.length) {
           syncPhase("downloading");
           const manifests = /* @__PURE__ */ new Map();
           let partCount = 0;
-          for (const id of missing) {
-            if (covered.has(id))
-              continue;
-            const manifest = await this.downloadManifest(id);
+          const unbundled = missing.filter((id) => !covered.has(id));
+          const downloaded = await this.parallel(unbundled, async (id) => [id, await this.downloadManifest(id)]);
+          for (const [id, manifest] of downloaded) {
             manifests.set(id, manifest);
             if (manifest.version === 1)
               partCount += manifest.parts.length;
@@ -8394,8 +8809,9 @@ var WeaveletGoogleSync = (() => {
         this.cache.token = page.token;
         await this.save();
       } catch (error) {
-        if (!retry || !(error instanceof DriveNotFoundError))
+        if (!retry || !(error instanceof SyncFileNotFoundError))
           throw error;
+        this.cache.token = void 0;
         await this.discoverPacks();
         await this.refresh(false);
       }
@@ -8406,7 +8822,10 @@ var WeaveletGoogleSync = (() => {
     }
     async remote(allowConflicts = false, tips) {
       syncPhase("verifying");
-      const { records, conflicts } = await replayHistoryAsync({ commits: this.cache.commits, tips: tips ?? this.heads() });
+      const cached = tips ? void 0 : this.remoteCache;
+      const { records, conflicts } = cached ?? await replayHistoryAsync({ commits: this.cache.commits, tips: tips ?? this.heads() });
+      if (!tips)
+        this.remoteCache = { records, conflicts };
       this.remoteConflicts = conflicts;
       if (!allowConflicts && Object.keys(conflicts).length)
         throw new SyncConflictError(Object.keys(conflicts));
@@ -8429,20 +8848,14 @@ var WeaveletGoogleSync = (() => {
         if (!bytes2 || bytes2.length !== file.size)
           throw new Error("Missing local upload data.");
         await decrypt(this.requireKey(), bytes2, this.context(file.id));
-        await this.drive.put(file.id, this.dataset, file.kind, bytes2);
+        await this.transport.put(file.id, this.dataset, file.kind, bytes2);
         const ack = await encrypt(this.requireKey(), encode(pending.id), this.context(`ack:${file.id}`));
         await writeSyncCache(this.dataset, void 0, [[`ack:${file.id}`, ack]]);
         file.sent = true;
         completedFile(file.size);
       };
       const parts = remaining.filter((file) => file.kind !== publication);
-      const concurrency = this.options.concurrency ?? 2;
-      for (let i = 0; i < parts.length; i += concurrency) {
-        const results = await Promise.allSettled(parts.slice(i, i + concurrency).map(send));
-        const failed = results.find((r) => r.status === "rejected");
-        if (failed)
-          throw failed.reason;
-      }
+      await this.parallel(parts, send);
       for (const file of remaining.filter((file2) => file2.kind === publication))
         await send(file);
     }
@@ -8454,7 +8867,9 @@ var WeaveletGoogleSync = (() => {
       syncPhase("saving");
       (this.cache.parts ??= {})[pending.id] = pending.files.filter((file) => file.kind === "part").map((file) => file.id);
       this.cache.commits[pending.id] = pending.commit;
-      this.cache.baseline = pending.baseline;
+      this.remoteCache = void 0;
+      if (pending.baseline)
+        this.cache.baseline = pending.baseline;
       delete this.cache.pending;
       await this.save(pending.files.flatMap((f) => [`outbox:${f.id}`, `ack:${f.id}`]));
     }
@@ -8474,7 +8889,7 @@ var WeaveletGoogleSync = (() => {
         await this.loadPack(manifest, true);
         (this.cache.packs ??= {})[pending.id] = manifest;
       } catch (error) {
-        if (!(error instanceof DriveNotFoundError))
+        if (!(error instanceof SyncFileNotFoundError))
           throw error;
         await this.discoverPacks();
         const replacements = Object.values(this.cache.packs ?? {}).filter((pack) => Object.keys(pack.commits).some((id) => Object.hasOwn(pending.manifest.commits, id)));
@@ -8485,15 +8900,10 @@ var WeaveletGoogleSync = (() => {
         for (const pack of replacements)
           await this.loadPack(pack, true);
       }
+      await this.refresh();
       await this.remote();
       syncPhase("saving");
-      const concurrency = this.options.concurrency ?? 2;
-      for (let i = 0; i < pending.remove.length; i += concurrency) {
-        const results = await Promise.allSettled(pending.remove.slice(i, i + concurrency).map((id) => this.drive.remove(id)));
-        const failed = results.find((r) => r.status === "rejected");
-        if (failed)
-          throw failed.reason;
-      }
+      await this.parallel(pending.remove, (id) => this.transport.remove(id));
       for (const id of pending.remove) {
         delete this.cache.packs?.[id];
         delete this.cache.parts?.[id];
@@ -8502,16 +8912,18 @@ var WeaveletGoogleSync = (() => {
       await this.save(pending.files.flatMap((file) => [`outbox:${file.id}`, `ack:${file.id}`]));
       reportCompaction({ status: "completed", sourceFiles: pending.remove.length, newFiles: pending.files.length });
     }
-    async compact() {
+    async compact(force = false) {
+      if (this.transport.supportsCompaction === false)
+        return;
       await this.finishCompaction();
       const covered = this.packedCommits();
-      if (Object.keys(this.cache.commits).filter((id) => !covered.has(id)).length < COMPACT_COMMITS) {
+      if (Object.keys(this.cache.commits).filter((id) => !covered.has(id)).length < (force ? 1 : COMPACT_COMMITS)) {
         reportCompaction({ status: "skipped", reason: "belowThreshold" });
         return;
       }
       await this.discoverPacks();
-      const raw = await this.drive.commits(this.dataset);
-      if (raw.length < COMPACT_COMMITS) {
+      const raw = await this.transport.commits(this.dataset);
+      if (raw.length < (force ? 1 : COMPACT_COMMITS)) {
         reportCompaction({ status: "skipped", reason: "liveBelowThreshold" });
         return;
       }
@@ -8545,10 +8957,8 @@ var WeaveletGoogleSync = (() => {
       for (const group2 of groups) {
         const commits = Object.fromEntries([...new Set(group2.commits)].sort().map((id2) => [id2, this.cache.commits[id2]]));
         const payload = await encodeAsync({ version: 1, commits });
-        const hashes = {};
-        for (const [id2, commit] of Object.entries(commits))
-          hashes[id2] = await digest(await encodeAsync(commit));
-        const [id, ...parts] = await this.drive.ids(1 + Math.ceil(payload.length / PACK_BYTES));
+        const hashes = await hashCommitsAsync(commits);
+        const [id, ...parts] = await this.transport.ids(1 + Math.ceil(payload.length / PACK_BYTES));
         const files = [];
         for (let i = 0; i < parts.length; i++) {
           const bytes3 = await encrypt(this.requireKey(), payload.slice(i * PACK_BYTES, (i + 1) * PACK_BYTES), this.context(parts[i]));
@@ -8571,7 +8981,7 @@ var WeaveletGoogleSync = (() => {
       const payload = await encodeAsync(commit);
       const inline = commit.parents.length > 0 && payload.length <= INLINE_BYTES;
       const partBytes = this.options.partBytes ?? PART_BYTES;
-      const [id, ...parts] = await this.drive.ids(inline ? 1 : 1 + Math.ceil(payload.length / partBytes));
+      const [id, ...parts] = await this.transport.ids(inline ? 1 : 1 + Math.ceil(payload.length / partBytes));
       syncPhase("encrypting", parts.length + 1);
       const files = [];
       for (let i = 0; i < parts.length; i++) {
@@ -8586,7 +8996,43 @@ var WeaveletGoogleSync = (() => {
       this.cache.pending = { id, commit, baseline, files };
       await this.save();
     }
-    async push(snapshot, replace = false) {
+    // Import to remote only: preserve the current local baseline and remote records.
+    async importSnapshot(snapshot) {
+      const local = await syncStage(0, 6, () => toRecordsAsync(snapshot));
+      await this.run(async () => {
+        await syncStage(1, 6, async () => {
+          await this.sendPending();
+          await this.finishCompaction();
+        });
+        await syncStage(2, 6, () => this.refresh());
+        const remote = await syncStage(3, 6, () => this.remote());
+        await syncStage(4, 6, async () => {
+          const merged = await mergeSyncRecords({}, local, remote);
+          const changes = await diffRecords(remote, merged);
+          if (changes.length) {
+            await this.prepare(changes, this.cache.baseline);
+            await this.sendPending();
+          }
+        });
+        await syncStage(5, 6, async () => {
+          await this.compact();
+          await this.refresh();
+          await this.remote();
+        });
+      });
+    }
+    async compactHistory() {
+      await this.run(async () => {
+        await syncStage(0, 4, async () => {
+          await this.sendPending();
+          await this.finishCompaction();
+        });
+        await syncStage(1, 4, () => this.refresh());
+        await syncStage(2, 4, () => this.remote());
+        await syncStage(3, 4, () => this.compact(true));
+      });
+    }
+    async synchronize(snapshot, replace = false) {
       syncPhase("preparing");
       const local = await syncStage(0, 8, () => toRecordsAsync(snapshot));
       return this.run(async () => {
@@ -8598,33 +9044,37 @@ var WeaveletGoogleSync = (() => {
         const remote = await syncStage(3, 8, () => this.remote());
         const { localHashes, changes } = await syncStage(4, 8, async () => {
           syncPhase("preparing");
+          if (replace === "if-empty" && !this.cache.baseline && Object.keys(remote).length)
+            throw new Error("Existing history must be downloaded before initializing sync.");
           if (!replace && !this.cache.baseline)
             throw new Error("Choose upload or download before enabling automatic sync.");
-          const base = replace ? await hashRecordsAsync(remote) : this.cache.baseline;
+          const base = replace === true || replace === "if-empty" && !this.cache.baseline ? await hashRecordsAsync(remote) : this.cache.baseline;
           const localHashes2 = await hashRecordsAsync(local);
-          const changes2 = diffHashedRecords(base, local, localHashes2).filter((change) => {
+          const changes2 = await Promise.all(diffHashedRecords(base, local, localHashes2).filter((change) => {
+            if (isBrowserLocalRecord(change.key))
+              return false;
             const path = JSON.parse(change.key);
             return change.after !== null || path[0] !== "content" && path[0] !== "assets" && path[0] !== "contentEntries";
-          });
+          }).map(async (change) => isNonBlockingRecord(change.key) ? { ...change, before: remote[change.key] === void 0 ? null : await digest(remote[change.key]) } : change));
           if (snapshot.state.chats?.length === 0 && Object.keys(remote).some((key) => JSON.parse(key)[0] === "chats" && JSON.parse(key).length > 1)) {
             throw new Error("Cloud sync skipped because the snapshot would erase all chats.");
           }
           const merged = await applyChanges(remote, changes2);
-          try {
-            const restored = await fromRecordsAsync(merged);
-            for (const chat of restored.state.chats ?? []) {
-              const nodes = chat.branchTree?.nodes ?? {};
-              for (const node of Object.values(nodes)) {
-                if (!node.parentId || nodes[node.parentId])
-                  continue;
-                const prefix = ["chats", chat.id, "branchTree", "nodes"];
-                const existed = [local, remote].some(
-                  (source) => source[JSON.stringify([...prefix, node.id, "parentId"])] === JSON.stringify(node.parentId) && source[JSON.stringify([...prefix, node.id, "pinned"])] === "true" && source[JSON.stringify([...prefix, node.parentId, "id"])] === void 0
-                );
-                if (!existed)
-                  throw new Error("Concurrent edits orphaned a pinned branch.");
-              }
+          for (const change of changes2) {
+            if (change.after === null)
+              continue;
+            const selected = selectActivePath(change.key, [change.after, remote[change.key] ?? null], merged);
+            if (selected !== void 0) {
+              change.after = selected;
+              if (selected === null)
+                delete merged[change.key];
+              else
+                merged[change.key] = selected;
             }
+          }
+          try {
+            await fromRecordsAsync(merged);
+            await assertNoConcurrentOrphans(base, local, remote, merged);
           } catch (error) {
             await fromRecordsAsync(local);
             await fromRecordsAsync(remote);
@@ -8641,13 +9091,57 @@ var WeaveletGoogleSync = (() => {
             await this.save();
           }
         });
-        await syncStage(6, 8, async () => {
-          if (changes.length) {
-            await this.refresh();
-            await this.remote();
-          }
+        await syncStage(6, 8, () => this.compact());
+        const finalRemote = await syncStage(7, 8, async () => {
+          await this.refresh();
+          return this.remote();
         });
-        await syncStage(7, 8, () => this.compact());
+        return fromRecordsAsync(finalRemote);
+      });
+    }
+    async push(snapshot, replace = false) {
+      await this.synchronize(snapshot, replace);
+    }
+    async coherentCloudRecords(remote) {
+      let cloud = remote;
+      if (Object.keys(this.remoteConflicts).length) {
+        const heads = this.heads();
+        const ancestors = (id, found = /* @__PURE__ */ new Set()) => {
+          if (!found.has(id)) {
+            found.add(id);
+            this.cache.commits[id].parents.forEach((p) => ancestors(p, found));
+          }
+          return found;
+        };
+        const sets = heads.map((id) => ancestors(id));
+        const common = [...sets[0]].filter((id) => sets.every((set) => set.has(id)));
+        const base = common.length ? await hashRecordsAsync(await this.remote(false, common)) : {};
+        cloud = await this.remote(false, [heads[0]]);
+        for (const head of heads.slice(1))
+          cloud = await mergeSyncRecords(base, cloud, await this.remote(false, [head]));
+      }
+      return cloud;
+    }
+    async overview() {
+      return this.run(async () => {
+        await this.refresh();
+        const remote = await this.remote(true);
+        const cloud = await this.coherentCloudRecords(remote);
+        const snapshot = await fromRecordsAsync(cloud);
+        return { ...await summarizeSyncSnapshot(snapshot), versions: this.heads().length };
+      });
+    }
+    async inspect() {
+      return this.run(async () => {
+        await this.refresh();
+        const remote = await this.remote(true);
+        const heads = this.heads();
+        const snapshot = await fromRecordsAsync(await this.coherentCloudRecords(remote));
+        const versions = heads.length > 1 ? await Promise.all(heads.map(async (id) => ({
+          id,
+          snapshot: await fromRecordsAsync(await this.remote(false, [id]))
+        }))) : [];
+        return { snapshot, versions };
       });
     }
     async resolve(snapshot, mode) {
@@ -8661,23 +9155,7 @@ var WeaveletGoogleSync = (() => {
         const remote = await syncStage(3, 8, () => this.remote(true));
         const { result: result2, changes, resolutions } = await syncStage(4, 8, async () => {
           const resolutions2 = this.remoteConflicts;
-          let cloud = remote;
-          if (Object.keys(resolutions2).length) {
-            const heads = this.heads();
-            const ancestors = (id, found = /* @__PURE__ */ new Set()) => {
-              if (!found.has(id)) {
-                found.add(id);
-                this.cache.commits[id].parents.forEach((p) => ancestors(p, found));
-              }
-              return found;
-            };
-            const sets = heads.map((id) => ancestors(id));
-            const common = [...sets[0]].filter((id) => sets.every((set) => set.has(id)));
-            const base = common.length ? await hashRecordsAsync(await this.remote(false, common)) : {};
-            cloud = await this.remote(false, [heads[0]]);
-            for (const head of heads.slice(1))
-              cloud = await mergeSyncRecords(base, cloud, await this.remote(false, [head]));
-          }
+          const cloud = await this.coherentCloudRecords(remote);
           const chosen = mode === "local" ? local : mode === "cloud" ? cloud : await mergeSyncRecords(this.cache.baseline ?? {}, local, cloud);
           const result3 = await fromRecordsAsync(chosen);
           const changes2 = await diffRecords(remote, chosen);
@@ -8703,11 +9181,13 @@ var WeaveletGoogleSync = (() => {
         return result2;
       });
     }
-    async pull() {
+    async pull(publishPending = true) {
       return this.run(async () => {
         await syncStage(0, 4, async () => {
-          await this.sendPending();
-          await this.finishCompaction();
+          if (publishPending) {
+            await this.sendPending();
+            await this.finishCompaction();
+          }
         });
         await syncStage(1, 4, () => this.refresh());
         const records = await syncStage(2, 4, () => this.remote());
@@ -8717,17 +9197,20 @@ var WeaveletGoogleSync = (() => {
       });
     }
     // Call only after the existing local persistence has accepted the downloaded state.
-    async acceptLocal(snapshot) {
+    async acceptLocal(snapshot, discardPending = false) {
       syncPhase("saving");
       const baseline = await hashRecordsAsync(await toRecordsAsync(snapshot));
       await this.run(async () => {
+        const remove = discardPending ? this.cache.pending?.files.flatMap((file) => [`outbox:${file.id}`, `ack:${file.id}`]) ?? [] : [];
+        if (discardPending)
+          delete this.cache.pending;
         this.cache.baseline = baseline;
-        await this.save();
+        await this.save(remove);
       });
     }
   };
 
-  // ../weavelet-web-exchange-contract/src/utils/chatFolders.ts
+  // src/utils/chatFolders.ts
   var orderedFolders = (folders) => Object.values(folders).sort((a, b) => a.order - b.order);
   function applyFolderOperation(source, operation) {
     if (operation.type === "create") {
@@ -8736,12 +9219,14 @@ var WeaveletGoogleSync = (() => {
       let index = 1;
       while (Object.values(source.folders).some((folder2) => folder2.name === `New Folder ${index}`))
         index++;
-      const previous = Object.fromEntries(Object.entries(source.folders).map(([id, folder2]) => [id, { ...folder2, order: folder2.order + 1 }]));
-      return { ...source, folders: { [operation.id]: { id: operation.id, name: `New Folder ${index}`, expanded: false, order: 0 }, ...previous } };
+      const previous2 = Object.fromEntries(Object.entries(source.folders).map(([id, folder2]) => [id, { ...folder2, order: folder2.order + 1 }]));
+      return { ...source, folders: { [operation.id]: { id: operation.id, name: `New Folder ${index}`, expanded: false, order: 0 }, ...previous2 } };
     }
     if (operation.type === "move") {
       if (operation.folderId !== void 0 && !Object.hasOwn(source.folders, operation.folderId))
         throw new Error("Folder does not exist.");
+      if (operation.folderId === void 0 && operation.expandDestination === true)
+        throw new Error("Unassigned destination cannot expand.");
       const ids = new Set(operation.chatIds);
       if ([...ids].some((id) => !source.chats?.some((chat) => chat.id === id)))
         throw new Error("Chat does not exist.");
@@ -8751,39 +9236,44 @@ var WeaveletGoogleSync = (() => {
         const { folder: _previous, ...rest } = chat;
         return operation.folderId === void 0 ? rest : { ...rest, folder: operation.folderId };
       });
-      const folders = operation.folderId === void 0 ? source.folders : {
+      const folders2 = operation.folderId === void 0 || operation.expandDestination === false ? source.folders : {
         ...source.folders,
-        [operation.folderId]: { ...source.folders[operation.folderId], expanded: true }
+        ...Object.fromEntries(getFolderAncestors(source.folders, operation.folderId).map((id) => [id, { ...source.folders[id], expanded: true }]))
       };
-      return { ...source, chats, folders };
+      return { ...source, chats, folders: folders2 };
     }
     if (!Object.hasOwn(source.folders, operation.id))
       throw new Error("Folder does not exist.");
     if (operation.type === "remove") {
-      const folders = { ...source.folders };
-      delete folders[operation.id];
+      const parentId = getFolderParentId(source.folders, operation.id);
+      const folders2 = { ...source.folders };
+      delete folders2[operation.id];
+      for (const [id, folder2] of Object.entries(folders2))
+        if (folder2.parentId === operation.id) {
+          const { parentId: _previous, ...rest } = folder2;
+          folders2[id] = parentId === void 0 ? rest : { ...rest, parentId };
+        }
       const chats = source.chats?.map((chat) => {
         if (chat.folder !== operation.id)
           return chat;
         const { folder: _previous, ...rest } = chat;
-        return rest;
+        return parentId === void 0 ? rest : { ...rest, folder: parentId };
       });
-      return { ...source, chats, folders };
+      return { ...source, chats, folders: folders2 };
     }
-    const folder = { ...source.folders[operation.id] };
-    if (operation.type === "rename")
-      folder.name = operation.name;
-    else if (operation.type === "expanded")
-      folder.expanded = operation.expanded;
-    else if (operation.color)
-      folder.color = operation.color;
-    else
+    const patch = operation.type === "edit" ? operation.patch : operation.type === "rename" ? { name: operation.name } : operation.type === "expanded" ? { expanded: operation.expanded } : { color: operation.color || null };
+    const previous = source.folders[operation.id];
+    const folder = { ...previous, ...patch, color: patch.color === null ? void 0 : patch.color ?? previous.color };
+    if (folder.color === void 0)
       delete folder.color;
-    return { ...source, folders: { ...source.folders, [operation.id]: folder } };
+    const folders = { ...source.folders, [operation.id]: folder };
+    if (!validateFolderHierarchy(folders))
+      throw new Error("Invalid folder hierarchy.");
+    return { ...source, folders };
   }
 
   // shared/google-sync/folders.ts
-  var folderFields = ["id", "name", "order", "expanded", "color"];
+  var folderFields = ["id", "name", "order", "expanded", "color", "parentId"];
   function difference(before, after, fields) {
     const set = Object.fromEntries(fields.filter((key) => Object.hasOwn(after, key) && (!Object.hasOwn(before, key) || before[key] !== after[key])).map((key) => [key, after[key]]));
     const remove = fields.filter((key) => Object.hasOwn(before, key) && !Object.hasOwn(after, key));
@@ -8804,7 +9294,7 @@ var WeaveletGoogleSync = (() => {
     return JSON.stringify(orderedFolders(input.folders).map((folder) => Object.fromEntries(folderFields.filter((key) => Object.hasOwn(folder, key)).map((key) => [key, folder[key]]))));
   }
 
-  // ../weavelet-web-exchange-contract/src/utils/reasoning.ts
+  // src/utils/reasoning.ts
   var getEffectiveVerbosity = (verbosity, allowMax) => verbosity === "max" && !allowMax ? "medium" : verbosity;
   var normalizeModelId = (modelId) => modelId.toLowerCase();
   var getClaudeVersion = (id) => {
@@ -8911,6 +9401,7 @@ var WeaveletGoogleSync = (() => {
             reasoning.effort = reasoning_effort === "minimal" ? "low" : reasoning_effort;
           } else if (isOpenRouterAdaptiveReasoningModel(config.model, providerId)) {
             reasoning.enabled = true;
+            reasoning.effort = reasoning_effort === "minimal" ? "low" : reasoning_effort;
           } else if (needsMaxTokensOnly(config.model)) {
             const mapped = EFFORT_TO_MAX_TOKENS[reasoning_effort];
             if (mapped > 0)
@@ -8935,6 +9426,84 @@ var WeaveletGoogleSync = (() => {
       body.verbosity = getEffectiveVerbosity(verbosity, supportsMaxVerbosity(config.model, providerId));
     }
     return body;
+  };
+
+  // src/utils/bubbleSummary.ts
+  var normalizeBubbleSummaryText = (text) => {
+    const trimmed = text.trim();
+    const json = trimmed.replace(/^```(?:json)?\s*\n([\s\S]*?)\n```$/i, "$1");
+    try {
+      const value = JSON.parse(json);
+      if (typeof value === "string")
+        return value.trim();
+      const messages = Array.isArray(value) ? value : [value];
+      if (messages.length && messages.every((message) => message && typeof message === "object" && (message.role === "user" || message.role === "assistant") && typeof message.content === "string")) {
+        return messages.map((message) => message.role === "assistant" ? `\u30A2\u30B7\u30B9\u30BF\u30F3\u30C8\uFF1A
+${message.content}` : message.content).join("\n\n").trim();
+      }
+    } catch {
+    }
+    return trimmed;
+  };
+  var textParts = (message) => {
+    if (!message?.content?.length || !message.content.every(isTextContent))
+      return null;
+    const parts = message.content.map((value) => value.text);
+    return parts.some((part) => part.trim()) ? parts : null;
+  };
+  var hasTool = (message) => !!message?.content?.some((value) => isToolCallContent(value) || isToolResultContent(value));
+  var equalParts = (left, right) => left.length === right.length && left.every((part, index) => part === right[index]);
+  var validGeneration = (value) => {
+    if (value === void 0)
+      return true;
+    const generation = value;
+    return !!generation && typeof generation === "object" && typeof generation.model === "string" && (generation.providerId === void 0 || typeof generation.providerId === "string") && Number.isFinite(generation.createdAt) && !!generation.settings && typeof generation.settings === "object" && Number.isFinite(generation.settings.temperature) && Number.isFinite(generation.settings.max_tokens) && (generation.settings.reasoning_effort === void 0 || typeof generation.settings.reasoning_effort === "string");
+  };
+  var isBubbleSummary = (value) => !!value && typeof value === "object" && typeof value.id === "string" && (value.mode === "single" || value.mode === "through" || value.mode === "range") && typeof value.text === "string" && typeof value.useForSubmit === "boolean" && (value.format === void 0 || value.format === "compact") && validGeneration(value.generation) && Array.isArray(value.sources) && value.sources.every((source) => !!source && typeof source.nodeId === "string" && (source.parentId === null || typeof source.parentId === "string") && (source.role === "user" || source.role === "assistant") && Array.isArray(source.textParts) && source.textParts.every((part) => typeof part === "string"));
+  var isSummaryEligible = (message) => !!message && (message.role === "user" || message.role === "assistant") && textParts(message) !== null && !hasTool(message);
+  var resolveValidSummary = (chat, summary, generatingNodeIds = []) => {
+    if (!isBubbleSummary(summary))
+      return null;
+    const candidate = summary, path = chat.branchTree?.activePath ?? chat.messages.map((_, index) => String(index));
+    if (typeof candidate.text !== "string" || !candidate.text.trim() || !Array.isArray(candidate.sources) || !candidate.sources.length)
+      return null;
+    const indices = candidate.sources.map((source) => path.indexOf(source?.nodeId));
+    if (indices.some((index) => index < 0) || new Set(indices).size !== indices.length)
+      return null;
+    const first = Math.min(...indices), last = Math.max(...indices);
+    if (last - first + 1 !== indices.length)
+      return null;
+    for (let offset = 0; offset < candidate.sources.length; offset++) {
+      const index = first + offset, source = candidate.sources[offset], nodeId = path[index];
+      const node = chat.branchTree?.nodes[nodeId], message = chat.messages[index], parts = textParts(message);
+      if (!source || source.nodeId !== nodeId || generatingNodeIds.includes(nodeId) || !isSummaryEligible(message) || !parts || message.role !== source.role || !Array.isArray(source.textParts) || !equalParts(parts, source.textParts) || (node?.parentId ?? null) !== source.parentId)
+        return null;
+    }
+    return { first, last };
+  };
+  var getAppliedBubbleSummaries = (chat, messageIndex = chat.messages.length, generatingNodeIds = []) => {
+    const candidates = (Array.isArray(chat.summaries) ? chat.summaries : []).filter((summary) => summary?.useForSubmit).map((summary) => ({ summary, range: resolveValidSummary(chat, summary, generatingNodeIds) })).filter((value) => !!value.range && value.range.last < messageIndex);
+    const accepted = candidates.filter((candidate) => !candidates.some((other) => other !== candidate && candidate.range.first <= other.range.last && other.range.first <= candidate.range.last));
+    return accepted;
+  };
+  var bubbleSummarySubmitMessage = (summary) => ({ role: "user", content: [{ type: "text", text: `${summary.format === "compact" ? "Retained conversation context. Answer the latest request using the requirements and state below. Follow the retained language, tone, structure and length requirements and examples, not formatting added for this summary. Adoption and plans do not imply execution; preserve uncertainty about what has been done.\n" : "Past conversation summary:\n"}${normalizeBubbleSummaryText(summary.text)}` }] });
+  var applyBubbleSummariesForSubmit = (chat, messageIndex, generatingNodeIds = []) => {
+    const source = chat.messages.slice(0, messageIndex), path = chat.branchTree?.activePath ?? source.map((_, index) => String(index));
+    const accepted = getAppliedBubbleSummaries(chat, messageIndex, generatingNodeIds).filter(({ summary }) => !summary.sources.some((source2) => chat.omittedNodes?.[source2.nodeId]));
+    const starts = new Map(accepted.map((value) => [value.range.first, value]));
+    const result2 = [];
+    for (let index = 0; index < source.length; index++) {
+      const replacement = starts.get(index);
+      if (replacement) {
+        result2.push(bubbleSummarySubmitMessage(replacement.summary));
+        index = replacement.range.last;
+        continue;
+      }
+      if (chat.omittedNodes?.[path[index]] && !hasTool(source[index]))
+        continue;
+      result2.push(source[index]);
+    }
+    return result2;
   };
 
   // src/utils/submitContext.ts
@@ -8985,9 +9554,9 @@ var WeaveletGoogleSync = (() => {
       content: sanitizeMessageContent(message.content)
     })).filter((message) => message.content.length > 0)
   );
-  var getSubmitContextMessages = (messages, messageIndex, modelId, activePath, omittedNodes = {}, systemPrompt) => {
+  var getSubmitContextMessages = (messages, messageIndex, modelId, activePath, omittedNodes = {}, systemPrompt, summaryContext) => {
     const sliced = messages.slice(0, messageIndex);
-    const filtered = filterOmittedMessages(sliced, activePath, omittedNodes);
+    const filtered = summaryContext ? applyBubbleSummariesForSubmit({ ...summaryContext.chat, messages, omittedNodes }, messageIndex, summaryContext.generatingNodeIds) : filterOmittedMessages(sliced, activePath, omittedNodes);
     const withoutSystem = filtered.filter((m) => m.role !== "system");
     const sanitized = sanitizeMessagesForSubmit(withoutSystem);
     const supportsSystem = modelId ? modelSupportsSystemRole(modelId) : true;
@@ -9009,7 +9578,8 @@ var WeaveletGoogleSync = (() => {
       input.config.model,
       input.activePath,
       input.omittedNodes,
-      input.config.systemPrompt
+      input.config.systemPrompt,
+      input.chat ? { chat: input.chat, generatingNodeIds: input.generatingNodeIds ?? [] } : void 0
     );
     if (messages.length === 0)
       throw new Error("\u9001\u4FE1\u3059\u308B\u672C\u6587\u304C\u3042\u308A\u307E\u305B\u3093");
@@ -9022,6 +9592,7 @@ var WeaveletGoogleSync = (() => {
   };
 
   // shared/google-sync/entry.ts
+  var driveHeaderID = (json) => JSON.stringify(encryptedSyncHeaderId(JSON.parse(json)));
   var global2 = globalThis;
   global2.crypto = { randomUUID: () => host("uuid") };
   global2.console = { error: () => {
@@ -9048,10 +9619,29 @@ var WeaveletGoogleSync = (() => {
     requests.push({ id, method, args });
     replies.set(id, { resolve, reject });
   });
-  var drive = new Proxy({}, { get: (_target, method) => (...args) => request(
-    method,
-    args.map((arg) => arg instanceof Uint8Array ? Array.from(arg) : arg)
-  ).then((value) => method === "read" ? new Uint8Array(value) : value) });
+  var drive = new Proxy({}, { get: (_target, method) => {
+    if (method === "supportsCompaction")
+      return true;
+    if (method === "keyHeader")
+      return (dataset) => request("metadata", [dataset]).then((file) => encryptedSyncHeaderId(file));
+    if (method === "history")
+      return async (dataset) => ({
+        commits: await request("commits", [dataset]),
+        packs: await request("packs", [dataset])
+      });
+    return (...args) => request(method, args.map((arg) => arg instanceof Uint8Array ? Array.from(arg) : arg)).then((value) => {
+      if (method === "read")
+        return new Uint8Array(value);
+      if (method === "changes")
+        return { ...value, changes: value.changes.map((change) => ({
+          id: change.fileId,
+          removed: change.removed || change.file?.trashed,
+          dataset: change.file?.appProperties?.dataset,
+          kind: change.file?.appProperties?.kind
+        })) };
+      return value;
+    });
+  } });
   var session;
   var outcome;
   var start = (operation, json) => {
@@ -9060,12 +9650,12 @@ var WeaveletGoogleSync = (() => {
     Promise.resolve().then(async () => {
       switch (operation) {
         case "create": {
-          const created = await EncryptedDriveSync.create(drive, args.password, args.options);
+          const created = await EncryptedSync.create(drive, args.password, args.options);
           session = created.session;
           return created.file;
         }
         case "open":
-          session = new EncryptedDriveSync(args.dataset, drive, args.options);
+          session = new EncryptedSync(args.dataset, drive, args.options);
           return null;
         case "unlock":
           return session.unlock(args.password);
@@ -9115,7 +9705,7 @@ var WeaveletGoogleSync = (() => {
     if (result2.ok)
       reply.resolve(result2.value);
     else
-      reply.reject(result2.notFound ? new DriveNotFoundError(result2.error) : new Error(result2.error));
+      reply.reject(result2.notFound ? new SyncFileNotFoundError(result2.error) : new Error(result2.error));
   };
   var result = () => JSON.stringify({ ...outcome, value: void 0, valueJSON: outcome.value === void 0 ? null : JSON.stringify(outcome.value) });
   var recordOutcome;

@@ -1,3 +1,5 @@
+import { encryptedSyncHeaderId } from '../../src/store/storage/google/datasetHeader';
+export const driveHeaderID = (json: string) => JSON.stringify(encryptedSyncHeaderId(JSON.parse(json)));
 import { EncryptedDriveSync } from './source/sync';
 import { DriveNotFoundError } from './adapters/transport';
 import { host } from './adapters/host';
@@ -20,8 +22,21 @@ const request = (method: string, args: unknown[]) => new Promise((resolve, rejec
   const id = ++sequence;
   requests.push({ id, method, args }); replies.set(id, { resolve, reject });
 });
-const drive = new Proxy({}, { get: (_target, method: string) => (...args: unknown[]) => request(method,
-  args.map(arg => arg instanceof Uint8Array ? Array.from(arg) : arg)).then(value => method === 'read' ? new Uint8Array(value as number[]) : value) });
+const drive = new Proxy({}, { get: (_target, method: string) => {
+  if (method === 'supportsCompaction') return true;
+  if (method === 'keyHeader') return (dataset: string) => request('metadata', [dataset]).then(file => encryptedSyncHeaderId(file as any));
+  if (method === 'history') return async (dataset: string) => ({
+    commits: await request('commits', [dataset]), packs: await request('packs', [dataset]),
+  });
+  return (...args: unknown[]) => request(method, args.map(arg => arg instanceof Uint8Array ? Array.from(arg) : arg)).then((value: any) => {
+    if (method === 'read') return new Uint8Array(value);
+    if (method === 'changes') return { ...value, changes: value.changes.map((change: any) => ({
+      id: change.fileId, removed: change.removed || change.file?.trashed,
+      dataset: change.file?.appProperties?.dataset, kind: change.file?.appProperties?.kind,
+    })) };
+    return value;
+  });
+} });
 let session: EncryptedDriveSync;
 let outcome: { status: string; value?: unknown; error?: string; conflictKeys?: string[] };
 export const start = (operation: string, json: string) => {

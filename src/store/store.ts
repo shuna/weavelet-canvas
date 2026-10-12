@@ -48,28 +48,30 @@ export type StoreSlice<T> = (
   get: StoreApi<StoreState>['getState']
 ) => T;
 
+export const createStoreState: (set: StoreApi<StoreState>['setState'], get: StoreApi<StoreState>['getState']) => StoreState = (set, get) => ({
+  ...createChatSlice(set, get),
+  ...createInputSlice(set, get),
+  ...createAuthSlice(set, get),
+  ...createConfigSlice(set, get),
+  ...createPromptSlice(set, get),
+  ...createToastSlice(set, get),
+  ...createProviderSlice(set, get),
+  ...createBranchSlice(set, get),
+  ...createMigrationSlice(set, get),
+  ...createSearchSlice(set, get),
+  ...createOpenRouterStatsSlice(set, get),
+  ...createGrepSlice(set, get),
+  ...createNavigationSlice(set, get),
+  ...createEvaluationSlice(set, get),
+  ...createLocalModelSlice(set, get),
+});
+
 const useStore = create<StoreState>()(
   persist(
     (originalSet, get, api) => {
       const set = preservePersistedRootsOnReplace(originalSet);
       api.setState = preservePersistedRootsOnReplace(api.setState);
-      return {
-        ...createChatSlice(set, get),
-        ...createInputSlice(set, get),
-        ...createAuthSlice(set, get),
-        ...createConfigSlice(set, get),
-        ...createPromptSlice(set, get),
-        ...createToastSlice(set, get),
-        ...createProviderSlice(set, get),
-        ...createBranchSlice(set, get),
-        ...createMigrationSlice(set, get),
-        ...createSearchSlice(set, get),
-        ...createOpenRouterStatsSlice(set, get),
-        ...createGrepSlice(set, get),
-        ...createNavigationSlice(set, get),
-        ...createEvaluationSlice(set, get),
-        ...createLocalModelSlice(set, get),
-      };
+      return createStoreState(set, get);
     },
     {
       name: 'free-chat-gpt',

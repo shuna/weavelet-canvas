@@ -1,6 +1,6 @@
 import React from 'react';
 
-import useStore from '@store/store';
+import { useWorkspaceStore, useWorkspaceReadOnly } from '@store/workspaceScope';
 import PlusIcon from '@icon/PlusIcon';
 import MenuIcon from '@icon/MenuIcon';
 import SearchIcon from '@icon/SearchIcon';
@@ -12,6 +12,9 @@ interface MobileBarProps {
 }
 
 const MobileBar = ({ onSearchOpen, extraButtons }: MobileBarProps) => {
+  const useStore = useWorkspaceStore();
+  const readOnly = useWorkspaceReadOnly();
+
   const setHideSideMenu = useStore((state) => state.setHideSideMenu);
   const chatTitle = useStore((state) =>
     state.chats &&
@@ -51,7 +54,7 @@ const MobileBar = ({ onSearchOpen, extraButtons }: MobileBarProps) => {
           <SearchIcon className='h-5 w-5' />
         </button>
       )}
-      <button
+      {!readOnly && <button
         type='button'
         className='mr-1 px-3 text-gray-400 cursor-pointer opacity-100'
         onClick={() => {
@@ -60,7 +63,7 @@ const MobileBar = ({ onSearchOpen, extraButtons }: MobileBarProps) => {
         aria-label='new chat'
       >
         <PlusIcon className='h-6 w-6' />
-      </button>
+      </button>}
     </div>
   );
 };

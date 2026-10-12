@@ -1,6 +1,6 @@
 import type { OpenRouterObservation } from '@type/chat';
 import { debugReport } from '@store/debug-store';
-import { saveRequest, cleanupStale } from './streamDb';
+import { saveRequest, cleanupStale, deleteRequest } from './streamDb';
 
 let registration: ServiceWorkerRegistration | null = null;
 let controllerReady: Promise<void> | null = null;
@@ -68,13 +68,16 @@ export interface ProxyStreamConfig {
 }
 
 export interface StartStreamParams {
+  signal?: AbortSignal;
   requestId: string;
+  chatId: string;
+  nodeId: string;
   endpoint: string;
   headers: Record<string, string>;
   body: object;
   chatIndex: number;
   messageIndex: number;
-  onChunk: (text: string, meta?: { generationId?: string; reasoning?: string; openRouterObservation?: OpenRouterObservation }) => void;
+  onChunk: (text: string, meta?: { generationId?: string; reasoning?: string; upstreamStarted?: boolean; openRouterObservation?: OpenRouterObservation }) => void;
   onDone: (meta?: { proxySessionId?: string; lastProxyEventId?: number; generationId?: string; finishReason?: string; openRouterObservation?: OpenRouterObservation }) => void;
   onError: (error: string, meta?: { proxySessionId?: string; lastProxyEventId?: number; generationId?: string; openRouterObservation?: OpenRouterObservation }) => void;
   /** When set, SW routes the request through the proxy worker */
@@ -84,6 +87,8 @@ export interface StartStreamParams {
 export async function startStream(params: StartStreamParams): Promise<SwStreamHandle> {
   const {
     requestId,
+    chatId,
+    nodeId,
     endpoint,
     headers,
     body,
@@ -104,6 +109,8 @@ export async function startStream(params: StartStreamParams): Promise<SwStreamHa
   // Save initial record to IndexedDB (client side too, in case SW dies before writing)
   await saveRequest({
     requestId,
+    chatId,
+    nodeId,
     chatIndex,
     messageIndex,
     bufferedText: '',
@@ -111,7 +118,19 @@ export async function startStream(params: StartStreamParams): Promise<SwStreamHa
     createdAt: Date.now(),
     updatedAt: Date.now(),
     acknowledged: false,
+    ...(proxyConfig ? {
+      proxySessionId: proxyConfig.sessionId,
+      lastProxyEventId: 0,
+      llmSsePartial: '',
+      thinkTagCheckpoint: { state: 'outside', pending: '' },
+      bufferedReasoning: '',
+      llmDone: false,
+    } : {}),
   });
+  if (params.signal?.aborted) {
+    await deleteRequest(requestId);
+    throw new DOMException('Stream cancelled before start', 'AbortError');
+  }
 
   const sw = navigator.serviceWorker;
 
@@ -137,6 +156,13 @@ export async function startStream(params: StartStreamParams): Promise<SwStreamHa
       status: 'error',
       detail: `${formatDebugTime()} heartbeat failed: ${reason}`,
     });
+    // A lost port does not stop the worker fetch. Request cancellation, but keep
+    // its recovery record until the worker commits a terminal status.
+    try {
+      controller.postMessage({ type: 'cancelStream', requestId });
+    } catch (error) {
+      debugReport(`stream:${requestId}`, { status: 'error', detail: `Worker cancellation could not be delivered: ${String(error)}` });
+    }
     cleanup();
     onError(`Service Worker stream lost: ${reason}`);
   };
@@ -210,7 +236,7 @@ export async function startStream(params: StartStreamParams): Promise<SwStreamHa
         });
         break;
       case 'sw-chunk':
-        onChunk(data.text, { generationId: data.generationId, reasoning: data.reasoning, openRouterObservation: data.openRouterObservation });
+        onChunk(data.text, { generationId: data.generationId, reasoning: data.reasoning, upstreamStarted: data.upstreamStarted, openRouterObservation: data.openRouterObservation });
         break;
       case 'sw-done':
         cleanup();
@@ -287,11 +313,19 @@ export async function startStream(params: StartStreamParams): Promise<SwStreamHa
     channel.port1.close();
   }
 
+  if (params.signal?.aborted) {
+    cleanup();
+    await deleteRequest(requestId);
+    throw new DOMException('Stream cancelled before start', 'AbortError');
+  }
+
   // Send startStream to SW with port2 transferred
   controller.postMessage(
     {
       type: 'startStream',
       requestId,
+      chatId,
+      nodeId,
       endpoint,
       headers,
       body,

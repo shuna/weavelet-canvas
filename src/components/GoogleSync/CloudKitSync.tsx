@@ -1,3 +1,4 @@
+import { applyExternalSnapshot } from '@store/storage/applyExternalSnapshot';
 import SyncDots from './SyncDots';
 import React, { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -16,13 +17,10 @@ import createCloudKitCloudStorage, {
 import {
   createLocalStoragePartializedState,
   createPartializedState,
-  createPersistedChatDataState,
   hydrateFromPersistedStoreState,
-  migratePersistedState,
   needsDataMigration,
   type PersistedStoreState,
 } from '@store/persistence';
-import { saveChatData } from '@store/storage/IndexedDbStorage';
 import { STORE_VERSION } from '@store/version';
 import compressedStorage from '@store/storage/CompressedStorage';
 import { showToast } from '@utils/showToast';
@@ -166,6 +164,7 @@ const CloudKitSync = () => {
 
           setProviderSession('cloudkit', {
             sessionToken: userResult.newWebAuthToken ?? ckWebAuthToken,
+            connectionId: crypto.randomUUID(),
           });
           // CloudKit uses fixed recordName — auth = target confirmed (unlike Google which requires file selection)
           setSyncTargetConfirmed(true);
@@ -223,6 +222,12 @@ const CloudKitSync = () => {
         return;
       }
 
+      if (!useCloudAuthStore.getState().providers.cloudkit.connectionId) {
+        useCloudAuthStore.getState().setProviderSession('cloudkit', { connectionId: crypto.randomUUID() });
+      }
+      const provider = useCloudAuthStore.getState().providers.cloudkit;
+      const connection = provider.connectionId ?? provider.sessionToken;
+      const observed = useStore.getState();
       const remoteStorageValue = await storage.getItem('free-chat-gpt');
       if (!remoteStorageValue) {
         setSyncStatus('synced');
@@ -231,17 +236,14 @@ const CloudKitSync = () => {
       }
 
       const normalized = normalizeRemoteStorageValue(remoteStorageValue);
-      const remotePersistedState = migratePersistedState(
-        structuredClone(normalized.state),
-        normalized.version
-      ) as Partial<PersistedStoreState>;
+      const remotePersistedState = structuredClone(normalized.state) as Partial<PersistedStoreState>;
 
-      const hydratedState = hydrateFromPersistedStoreState(
-        useStore.getState(),
-        remotePersistedState
-      );
-      useStore.setState(hydratedState);
-      await saveChatData(createPersistedChatDataState(useStore.getState()));
+      if (!await applyExternalSnapshot(remotePersistedState, () => {
+        const current = useCloudAuthStore.getState().providers.cloudkit;
+        return (current.connectionId ?? current.sessionToken) === connection;
+      }, observed, normalized.version)) {
+        throw new Error('Local data or connection changed while preparing the downloaded snapshot.');
+      }
 
       if (needsDataMigration()) {
         useStore.getState().setMigrationUiState({

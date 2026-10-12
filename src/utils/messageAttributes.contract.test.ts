@@ -198,7 +198,7 @@ describe('shared message attributes: external I/O semantics and runtime projecti
     expect(filterOmittedMessages(converted.messages, 0)).toEqual([fixture.expected.apiMessages[1]]);
     expect(createPartializedState(state).chats![0].omittedNodes).toEqual({ [id]: true });
     const tree = structuredClone(converted.branchTree);
-    state.upsertWithAutoBranch(0, 0, 'user', fixture.expected.editedContent);
+    expect(state.saveNode({ chatId: converted.id, nodeId: id, role: 'user', content: fixture.expected.editedContent }).status).toBe('protected');
     expect(context.store.getState().chats![0].branchTree).toEqual(tree);
   });
 

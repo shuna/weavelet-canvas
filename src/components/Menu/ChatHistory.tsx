@@ -1,7 +1,6 @@
 import { useSyncReview } from '@store/storage/google/conflicts';
 import React, { useEffect, useRef, useState } from 'react';
 
-import { generateDefaultChat } from '@constants/chat';
 
 import ChatIcon from '@icon/ChatIcon';
 import CrossIcon from '@icon/CrossIcon';
@@ -10,9 +9,8 @@ import EditIcon from '@icon/EditIcon';
 import CloneIcon from '@icon/CloneIcon';
 import ExportIcon from '@icon/ExportIcon';
 import TickIcon from '@icon/TickIcon';
-import useStore from '@store/store';
+import { useWorkspaceStore, useWorkspaceReadOnly } from '@store/workspaceScope';
 import { formatNumber } from '@utils/chat';
-import { renameLibraryChat, duplicateLibraryChat, deleteLibraryChats } from '@utils/chatLibrary';
 import { stopSessionsForChat } from '@hooks/useSubmit';
 import DownloadChat from '@components/Chat/ChatContent/DownloadChat';
 
@@ -45,14 +43,13 @@ const ChatHistory = React.memo(
     lastSelectedIndex: number | null;
     setLastSelectedIndex: (index: number) => void;
   }) => {
-    const setCurrentChatIndex = useStore((state) => state.setCurrentChatIndex);
-    const pushNavigationEntry = useStore((state) => state.pushNavigationEntry);
-    const captureCurrentNavigationEntry = useStore((state) => state.captureCurrentNavigationEntry);
-    const setChats = useStore((state) => state.setChats);
+  const useStore = useWorkspaceStore();
+  const readOnly = useWorkspaceReadOnly();
+
     const active = useStore((state) => state.currentChatIndex === chatIndex);
 
     const chatId = useStore((state) => state.chats?.[chatIndex]?.id ?? '');
-    const syncChanged = useSyncReview(state => state.chats.includes(chatId));
+    const syncChanged = useSyncReview(state => !readOnly && state.chats.includes(chatId));
     const isThisChatGenerating = useStore((state) =>
       Object.values(state.generatingSessions).some((s) => s.chatId === chatId)
     );
@@ -64,27 +61,15 @@ const ChatHistory = React.memo(
     const inputRef = useRef<HTMLInputElement>(null);
 
     const editTitle = () => {
-      const chats = useStore.getState().chats;
-      if (!chats) return;
-      const updatedChats = renameLibraryChat(chats, chatIndex, _title);
-      setChats(updatedChats);
+      useStore.getState().renameChat({ chatId, title: _title });
       setIsEdit(false);
     };
 
     const deleteChat = () => {
       const chats = useStore.getState().chats;
       if (!chats) return;
-      const indicesToDelete = selectedChats.length > 0 ? selectedChats : [chatIndex];
-      let result: ReturnType<typeof deleteLibraryChats>;
-      try {
-        result = deleteLibraryChats(chats, indicesToDelete, useStore.getState().contentStore, () => generateDefaultChat());
-      } catch (error) {
-        useStore.getState().setError(error instanceof Error ? error.message : String(error));
-        return;
-      }
-      const { chats: updatedChats, contentStore } = result;
-      setCurrentChatIndex(0);
-      setChats(updatedChats, { contentStore });
+      const indices = selectedChats.length > 0 ? selectedChats : [chatIndex];
+      useStore.getState().removeChats({ chatIds: indices.map(index => chats[index]?.id).filter((id): id is string => !!id) });
       setIsDelete(false);
       setSelectedChats([]);
     };
@@ -115,7 +100,8 @@ const ChatHistory = React.memo(
       if (e.dataTransfer) {
         const chatIndices =
           selectedChats.length > 0 ? selectedChats : [chatIndex];
-        e.dataTransfer.setData('chatIndices', JSON.stringify(chatIndices));
+        const chats = useStore.getState().chats;
+        e.dataTransfer.setData('chatIds', JSON.stringify(chatIndices.map(index => chats?.[index]?.id).filter(Boolean)));
       }
     };
 
@@ -145,15 +131,7 @@ const ChatHistory = React.memo(
 
     const handleClone = (e: React.MouseEvent<HTMLButtonElement>) => {
       e.stopPropagation();
-      const chats = useStore.getState().chats;
-      if (chats) {
-        const { chats: updatedChats, contentStore } = duplicateLibraryChat(chats, chatIndex, useStore.getState().contentStore);
-        const clonedChat = updatedChats[0];
-        captureCurrentNavigationEntry();
-        setChats(updatedChats, { contentStore });
-        pushNavigationEntry({ chatId: clonedChat.id, activePath: [...(clonedChat.branchTree?.activePath ?? [])], viewContext: useStore.getState().chatActiveView, source: 'chat-switch' });
-        setCurrentChatIndex(0);
-      }
+      useStore.getState().duplicateChat({ chatId, scope: 'all' });
     };
 
     const handleStopGeneration = (e: React.MouseEvent<HTMLButtonElement>) => {
@@ -176,20 +154,10 @@ const ChatHistory = React.memo(
         aria-current={active ? 'page' : undefined}
         onClick={() => {
           if (!active) {
-            const state = useStore.getState();
-            const destChat = state.chats?.[chatIndex];
-            if (destChat) {
-              pushNavigationEntry({
-                chatId: destChat.id,
-                activePath: destChat.branchTree?.activePath ? [...destChat.branchTree.activePath] : [],
-                viewContext: state.chatActiveView,
-                source: 'chat-switch',
-              });
-            }
-            setCurrentChatIndex(chatIndex);
+            useStore.getState().navigateToNode({ chatId, source: 'chat-switch', history: 'push', focus: 'none' });
           }
         }}
-        draggable={!isEdit}
+        draggable={!readOnly && !isEdit}
         onDragStart={handleDragStart}
       >
         <div
@@ -197,9 +165,10 @@ const ChatHistory = React.memo(
           onMouseEnter={() => setIsIconHovered(true)}
           onMouseLeave={() => setIsIconHovered(false)}
         >
-          {selectedChats.includes(chatIndex) || isIconHovered ? (
+          {readOnly || selectedChats.includes(chatIndex) || isIconHovered ? (
             <input
               type='checkbox'
+              aria-label={`Select chat: ${title}`}
               checked={selectedChats.includes(chatIndex)}
               onClick={handleCheckboxClick}
               onChange={() => {}}
@@ -258,7 +227,7 @@ const ChatHistory = React.memo(
               </svg>
             </button>
           </div>
-        ) : active && (
+        ) : !readOnly && active && (
           <div className='visible absolute right-1 z-10 flex text-gray-500 dark:text-gray-300'>
             {isDelete || isEdit ? (
               <>

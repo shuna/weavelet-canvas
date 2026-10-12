@@ -1,0 +1,422 @@
+[
+  {
+    "phase": "rebuild-grounding",
+    "case_id": "C02",
+    "repeat": 0,
+    "started": "2026-10-06T01:21:07.492Z",
+    "endpoint": "https://openrouter.ai/api/v1/chat/completions",
+    "config": {
+      "model": "anthropic/claude-opus-4.6",
+      "providerId": "openrouter",
+      "modelSource": "remote",
+      "max_tokens": 256,
+      "temperature": 1,
+      "top_p": 1,
+      "presence_penalty": 0,
+      "frequency_penalty": 0,
+      "reasoning_effort": "none",
+      "force_reasoning": true,
+      "openRouter": {
+        "responseCache": {
+          "mode": "off"
+        }
+      }
+    },
+    "input": [
+      {
+        "role": "user",
+        "content": [
+          {
+            "type": "text",
+            "text": "Retained conversation context. Answer the latest request using the requirements and state below. Follow the retained language, tone, structure and length requirements and examples, not formatting added for this summary. Do not infer unstated subjects or causes as established context. Adoption and plans do not imply execution; preserve uncertainty about what has been done.\n原因が期限か更新検知かは未判定。更新時刻は取得可能（ユーザー申告）。失敗ログを出す方法を教えてください。"
+          }
+        ]
+      },
+      {
+        "role": "user",
+        "content": [
+          {
+            "type": "text",
+            "text": "何の対象についての原因か、与えられている情報だけで一文で答えてください。"
+          }
+        ]
+      }
+    ],
+    "accounted_cost": 0.001575,
+    "evaluation_version": {
+      "directory": "bubble-summary-rebuild-2026-10-06",
+      "candidate_prompt": "candidate6-bubbleSummaryPrompt.ts",
+      "candidate_wrapper": "candidate4-bubbleSummarySubmitMessage.ts",
+      "sourcePhase": "rebuild-noexamples"
+    },
+    "condition": "follow-candidate4",
+    "probe": 0,
+    "summary_response_id": "gen-1791249460-3CsPNP7IWax9bc91wHmK",
+    "paired_response_id": "gen-1791249469-8lDSMDNpEXlYdSi4VAGB",
+    "completed": "2026-10-06T01:21:10.227Z",
+    "source": [
+      {
+        "role": "user",
+        "content": "原因は期限か更新検知か？どのログが必要ですか？"
+      },
+      {
+        "role": "assistant",
+        "content": "期限か検知かは未判定です。更新時刻と失敗ログが必要です。"
+      },
+      {
+        "role": "user",
+        "content": "更新時刻は取得できます。失敗ログを出す方法を教えてください。"
+      }
+    ],
+    "semantic_checks": [
+      "未解決の原因を保持",
+      "取得可能と取得済みを区別",
+      "現在の依頼を直接保持"
+    ],
+    "output": "キャッシュ破棄の原因が期限切れか更新検知かは未判定です。",
+    "finish_reason": "stop",
+    "model_returned": "anthropic/claude-opus-4.6",
+    "provider_returned": "Claude Platform on AWS",
+    "response_id": "gen-1791249668-uuopgflw8x9gVSrYsTdu",
+    "usage": {
+      "prompt_tokens": 155,
+      "completion_tokens": 32,
+      "total_tokens": 187,
+      "cost": 0.001575,
+      "is_byok": false,
+      "prompt_tokens_details": {
+        "cached_tokens": 0,
+        "cache_write_tokens": 0,
+        "audio_tokens": 0,
+        "video_tokens": 0
+      },
+      "cost_details": {
+        "upstream_inference_cost": 0.001575,
+        "upstream_inference_prompt_cost": 0.000775,
+        "upstream_inference_completions_cost": 0.0008
+      },
+      "completion_tokens_details": {
+        "reasoning_tokens": 0,
+        "image_tokens": 0,
+        "audio_tokens": 0
+      }
+    },
+    "judgment": "未判定：意味条件と後続応答をレビューする"
+  },
+  {
+    "phase": "rebuild-grounding",
+    "case_id": "C02",
+    "repeat": 1,
+    "started": "2026-10-06T01:21:10.800Z",
+    "endpoint": "https://openrouter.ai/api/v1/chat/completions",
+    "config": {
+      "model": "anthropic/claude-opus-4.6",
+      "providerId": "openrouter",
+      "modelSource": "remote",
+      "max_tokens": 256,
+      "temperature": 1,
+      "top_p": 1,
+      "presence_penalty": 0,
+      "frequency_penalty": 0,
+      "reasoning_effort": "none",
+      "force_reasoning": true,
+      "openRouter": {
+        "responseCache": {
+          "mode": "off"
+        }
+      }
+    },
+    "input": [
+      {
+        "role": "user",
+        "content": [
+          {
+            "type": "text",
+            "text": "Retained conversation context. Answer the latest request using the requirements and state below. Follow the retained language, tone, structure and length requirements and examples, not formatting added for this summary. Do not infer unstated subjects or causes as established context. Adoption and plans do not imply execution; preserve uncertainty about what has been done.\n原因が期限か更新検知かは未判定。更新時刻は取得可能（ユーザー申告）。失敗ログの出し方を教えてください。"
+          }
+        ]
+      },
+      {
+        "role": "user",
+        "content": [
+          {
+            "type": "text",
+            "text": "何の対象についての原因か、与えられている情報だけで一文で答えてください。"
+          }
+        ]
+      }
+    ],
+    "accounted_cost": 0.00157,
+    "evaluation_version": {
+      "directory": "bubble-summary-rebuild-2026-10-06",
+      "candidate_prompt": "candidate6-bubbleSummaryPrompt.ts",
+      "candidate_wrapper": "candidate4-bubbleSummarySubmitMessage.ts",
+      "sourcePhase": "rebuild-noexamples"
+    },
+    "condition": "follow-candidate4",
+    "probe": 0,
+    "summary_response_id": "gen-1791249472-HoUgnMO7LLwE8HYkC0yx",
+    "paired_response_id": "gen-1791249481-89c6Ajdj9mmL1XiET3F9",
+    "completed": "2026-10-06T01:21:13.192Z",
+    "source": [
+      {
+        "role": "user",
+        "content": "原因は期限か更新検知か？どのログが必要ですか？"
+      },
+      {
+        "role": "assistant",
+        "content": "期限か検知かは未判定です。更新時刻と失敗ログが必要です。"
+      },
+      {
+        "role": "user",
+        "content": "更新時刻は取得できます。失敗ログを出す方法を教えてください。"
+      }
+    ],
+    "semantic_checks": [
+      "未解決の原因を保持",
+      "取得可能と取得済みを区別",
+      "現在の依頼を直接保持"
+    ],
+    "output": "キャッシュ無効化の原因が期限切れか更新検知かは未判定です。",
+    "finish_reason": "stop",
+    "model_returned": "anthropic/claude-opus-4.6",
+    "provider_returned": "Claude Platform on AWS",
+    "response_id": "gen-1791249671-9y1w5X9nGrl4enARlhxC",
+    "usage": {
+      "prompt_tokens": 154,
+      "completion_tokens": 32,
+      "total_tokens": 186,
+      "cost": 0.00157,
+      "is_byok": false,
+      "prompt_tokens_details": {
+        "cached_tokens": 0,
+        "cache_write_tokens": 0,
+        "audio_tokens": 0,
+        "video_tokens": 0
+      },
+      "cost_details": {
+        "upstream_inference_cost": 0.00157,
+        "upstream_inference_prompt_cost": 0.00077,
+        "upstream_inference_completions_cost": 0.0008
+      },
+      "completion_tokens_details": {
+        "reasoning_tokens": 0,
+        "image_tokens": 0,
+        "audio_tokens": 0
+      }
+    },
+    "judgment": "未判定：意味条件と後続応答をレビューする"
+  },
+  {
+    "phase": "rebuild-grounding",
+    "case_id": "R11",
+    "repeat": 0,
+    "started": "2026-10-06T01:21:13.752Z",
+    "endpoint": "https://openrouter.ai/api/v1/chat/completions",
+    "config": {
+      "model": "anthropic/claude-opus-4.6",
+      "providerId": "openrouter",
+      "modelSource": "remote",
+      "max_tokens": 768,
+      "temperature": 1,
+      "top_p": 1,
+      "presence_penalty": 0,
+      "frequency_penalty": 0,
+      "reasoning_effort": "none",
+      "force_reasoning": true,
+      "openRouter": {
+        "responseCache": {
+          "mode": "off"
+        }
+      }
+    },
+    "input": [
+      {
+        "role": "user",
+        "content": [
+          {
+            "type": "text",
+            "text": "Retained conversation context. Answer the latest request using the requirements and state below. Follow the retained language, tone, structure and length requirements and examples, not formatting added for this summary. Do not infer unstated subjects or causes as established context. Adoption and plans do not imply execution; preserve uncertainty about what has been done.\n小説の場面についての作業文脈。\n\n## 有効な指示\n\n- カナは敬体で慎重、トオルは常体でためらいがち。\n- 台詞は四つ以内、地の文は二段落以内。台本の話者名ラベルは使わない。\n- 無条件の約束、謝罪の理由、和解を勝手に足さない。\n- 過去の対立や信頼関係はまだ設定していない。券の入手経緯も未設定。\n- 雨、受付時刻、椅子、券の入手経緯の設定は採用しない。\n\n## 現在の状態\n\n- 二人は美術館の入口にいる。カナは預かった券を持っている。トオルは展示室に入るかまだ決めていない。\n- 券を返すかどうかと展示室に入るかどうかは別の未決事項。\n- 以下の二つの台詞と付随する短い地の文の調子が採用済み：\n「何を確かめたいのか、先に伺ってもいいですか」とカナは尋ねた。\n「……もう少し考えてからでも、いいかな」とトオルは答えた。\n- 待つ時間は三分だけと設定。券の返却と展示室へ入る判断は未決のまま。\n\n## 次の依頼\n\nカナが、三分待つことだけを確認する場面を書く。"
+          }
+        ]
+      },
+      {
+        "role": "user",
+        "content": [
+          {
+            "type": "text",
+            "text": "指定した次の場面を書いてください。"
+          }
+        ]
+      }
+    ],
+    "accounted_cost": 0.004475,
+    "evaluation_version": {
+      "directory": "bubble-summary-rebuild-2026-10-06",
+      "candidate_prompt": "candidate3-bubbleSummaryPrompt.ts",
+      "candidate_wrapper": "candidate4-bubbleSummarySubmitMessage.ts",
+      "sourcePhase": "rebuild-layout-holdout"
+    },
+    "condition": "follow-candidate4",
+    "probe": 0,
+    "summary_response_id": "gen-1791248489-BK8Ne7Do9PkPL2Lqz3gh",
+    "paired_response_id": "gen-1791248506-TwgogseJVKL9EfeXhbyd",
+    "completed": "2026-10-06T01:21:17.404Z",
+    "source": [
+      {
+        "role": "user",
+        "content": "小説の次の場面を考えます。カナは敬体で慎重、トオルは常体でためらいがちです。台詞は四つ以内、地の文は二段落以内。台本の話者名ラベルは使わないでください。二人は美術館の入口にいます。カナは預かった券を持っており、トオルは展示室に入るかまだ決めていません。券を返すかどうかと展示室に入るかどうかは別の未決事項です。過去の対立や信頼関係はまだ設定していません。無条件の約束、謝罪の理由、和解を勝手に足さないでください。"
+      },
+      {
+        "role": "assistant",
+        "content": "書き出しの候補を示します。『入口の床には薄い光が落ちていた。カナは受付の方を見て、トオルは案内板から目を離せずにいた。』という地の文を考えられます。別案として雨の日の入口にして、傘を置く動作を入れることもできます。券が濡れないようにカナが手を添える描写、トオルが出口の方を一度振り返る描写も候補です。これらは心情や合意を確定するものではありません。台詞の候補は次の二つです。\n「何を確かめたいのか、先に伺ってもいいですか」とカナは尋ねた。\n「……もう少し考えてからでも、いいかな」とトオルは答えた。\nその後の展開には、トオルが展示の順番を相談する案、カナが券を返す時刻を質問する案、いったん入口の椅子で待つ案があります。椅子で待つ場合も、同行が決定したことにはなりません。受付が閉まるまでの時刻を舞台上の条件にする案と、展示室の照明を時間の変化の説明に使う案を比較できます。どちらも今回の採用決定ではありません。券の入手経緯について、以前の仕事の依頼や友人からの預かり物だったという案も作れますが、過去の関係をまだ設定していないので、その説明は不要かもしれません。次の場面でカナが急に強い口調へ変わる案は、慎重な敬体という指定との関係を確認する必要があります。トオルが『必ず戻る』と保証する案は、無条件の約束を足さないという指示に合いません。これらの案は候補の比較として提示したもので、採用済みの出来事ではありません。"
+      },
+      {
+        "role": "user",
+        "content": "採用するのはその二つの台詞と付随する短い地の文の調子だけです。雨、受付時刻、椅子、券の入手経緯の設定は採用しません。待つ時間は三分だけとし、券の返却と展示室へ入る判断は未決のままです。次はカナが、三分待つことだけを確認する場面を書いてください。"
+      }
+    ],
+    "semantic_checks": [
+      "三分だけ採用",
+      "券カナ保持",
+      "返却と入室未決",
+      "雨等の候補未採用",
+      "過去因果/約束/和解を創作しない"
+    ],
+    "output": "カナは券を持った手を動かさずに口を開いた。「三分だけ、お待ちしますね」\n\nトオルは小さくうなずいたが、視線は入口の奥へ向いたまま何も言わなかった。",
+    "finish_reason": "stop",
+    "model_returned": "anthropic/claude-opus-4.6",
+    "provider_returned": "Claude Platform on AWS",
+    "response_id": "gen-1791249674-0G0ZwNn2qn6GSV1xD1DN",
+    "usage": {
+      "prompt_tokens": 515,
+      "completion_tokens": 76,
+      "total_tokens": 591,
+      "cost": 0.004475,
+      "is_byok": false,
+      "prompt_tokens_details": {
+        "cached_tokens": 0,
+        "cache_write_tokens": 0,
+        "audio_tokens": 0,
+        "video_tokens": 0
+      },
+      "cost_details": {
+        "upstream_inference_cost": 0.004475,
+        "upstream_inference_prompt_cost": 0.002575,
+        "upstream_inference_completions_cost": 0.0019
+      },
+      "completion_tokens_details": {
+        "reasoning_tokens": 0,
+        "image_tokens": 0,
+        "audio_tokens": 0
+      }
+    },
+    "judgment": "未判定：意味条件と後続応答をレビューする"
+  },
+  {
+    "phase": "rebuild-grounding",
+    "case_id": "R11",
+    "repeat": 1,
+    "started": "2026-10-06T01:21:17.970Z",
+    "endpoint": "https://openrouter.ai/api/v1/chat/completions",
+    "config": {
+      "model": "anthropic/claude-opus-4.6",
+      "providerId": "openrouter",
+      "modelSource": "remote",
+      "max_tokens": 768,
+      "temperature": 1,
+      "top_p": 1,
+      "presence_penalty": 0,
+      "frequency_penalty": 0,
+      "reasoning_effort": "none",
+      "force_reasoning": true,
+      "openRouter": {
+        "responseCache": {
+          "mode": "off"
+        }
+      }
+    },
+    "input": [
+      {
+        "role": "user",
+        "content": [
+          {
+            "type": "text",
+            "text": "Retained conversation context. Answer the latest request using the requirements and state below. Follow the retained language, tone, structure and length requirements and examples, not formatting added for this summary. Do not infer unstated subjects or causes as established context. Adoption and plans do not imply execution; preserve uncertainty about what has been done.\n小説の場面についての文脈。\n\n**有効な指示（継続）**\n- カナは敬体で慎重、トオルは常体でためらいがち。台詞は四つ以内、地の文は二段落以内。台本の話者名ラベルは使わない。\n- 無条件の約束、謝罪の理由、和解を勝手に足さない。過去の対立や信頼関係はまだ設定していない。\n- 雨、受付時刻、椅子、券の入手経緯の設定は採用しない。\n\n**現在の状態**\n- 二人は美術館の入口にいる。カナは預かった券を持っている。トオルは展示室に入るかまだ決めていない。券を返すかどうかと展示室に入るかどうかは別の未決事項。\n- 採用済みの台詞と調子：\n「何を確かめたいのか、先に伺ってもいいですか」とカナは尋ねた。\n「……もう少し考えてからでも、いいかな」とトオルは答えた。\n付随する短い地の文の調子も採用（入口の薄い光、カナが受付の方を見る、トオルが案内板から目を離せない）。これ以外のアシスタント提示案（雨・傘・椅子・受付時刻・券の入手経緯・口調変更案・保証案など）は未採用。\n- 待つ時間は三分だけと設定。券の返却と展示室へ入る判断は未決のまま。\n\n**現在の依頼**\nカナが三分待つことだけを確認する場面を書く。"
+          }
+        ]
+      },
+      {
+        "role": "user",
+        "content": [
+          {
+            "type": "text",
+            "text": "指定した次の場面を書いてください。"
+          }
+        ]
+      }
+    ],
+    "accounted_cost": 0.0056,
+    "evaluation_version": {
+      "directory": "bubble-summary-rebuild-2026-10-06",
+      "candidate_prompt": "candidate3-bubbleSummaryPrompt.ts",
+      "candidate_wrapper": "candidate4-bubbleSummarySubmitMessage.ts",
+      "sourcePhase": "rebuild-layout-holdout"
+    },
+    "condition": "follow-candidate4",
+    "probe": 0,
+    "summary_response_id": "gen-1791248523-dqcjU14YH2nK7YIqChme",
+    "paired_response_id": "gen-1791248543-NtL4OKMq0itt2nNfAov0",
+    "completed": "2026-10-06T01:21:22.682Z",
+    "source": [
+      {
+        "role": "user",
+        "content": "小説の次の場面を考えます。カナは敬体で慎重、トオルは常体でためらいがちです。台詞は四つ以内、地の文は二段落以内。台本の話者名ラベルは使わないでください。二人は美術館の入口にいます。カナは預かった券を持っており、トオルは展示室に入るかまだ決めていません。券を返すかどうかと展示室に入るかどうかは別の未決事項です。過去の対立や信頼関係はまだ設定していません。無条件の約束、謝罪の理由、和解を勝手に足さないでください。"
+      },
+      {
+        "role": "assistant",
+        "content": "書き出しの候補を示します。『入口の床には薄い光が落ちていた。カナは受付の方を見て、トオルは案内板から目を離せずにいた。』という地の文を考えられます。別案として雨の日の入口にして、傘を置く動作を入れることもできます。券が濡れないようにカナが手を添える描写、トオルが出口の方を一度振り返る描写も候補です。これらは心情や合意を確定するものではありません。台詞の候補は次の二つです。\n「何を確かめたいのか、先に伺ってもいいですか」とカナは尋ねた。\n「……もう少し考えてからでも、いいかな」とトオルは答えた。\nその後の展開には、トオルが展示の順番を相談する案、カナが券を返す時刻を質問する案、いったん入口の椅子で待つ案があります。椅子で待つ場合も、同行が決定したことにはなりません。受付が閉まるまでの時刻を舞台上の条件にする案と、展示室の照明を時間の変化の説明に使う案を比較できます。どちらも今回の採用決定ではありません。券の入手経緯について、以前の仕事の依頼や友人からの預かり物だったという案も作れますが、過去の関係をまだ設定していないので、その説明は不要かもしれません。次の場面でカナが急に強い口調へ変わる案は、慎重な敬体という指定との関係を確認する必要があります。トオルが『必ず戻る』と保証する案は、無条件の約束を足さないという指示に合いません。これらの案は候補の比較として提示したもので、採用済みの出来事ではありません。"
+      },
+      {
+        "role": "user",
+        "content": "採用するのはその二つの台詞と付随する短い地の文の調子だけです。雨、受付時刻、椅子、券の入手経緯の設定は採用しません。待つ時間は三分だけとし、券の返却と展示室へ入る判断は未決のままです。次はカナが、三分待つことだけを確認する場面を書いてください。"
+      }
+    ],
+    "semantic_checks": [
+      "三分だけ採用",
+      "券カナ保持",
+      "返却と入室未決",
+      "雨等の候補未採用",
+      "過去因果/約束/和解を創作しない"
+    ],
+    "output": "カナは受付のほうにもう一度目をやってから、手もとの券を軽く持ち直した。\n\n「三分だけ、お待ちしますね」\n\nトオルは案内板に視線を向けたまま、小さくうなずいた。入口の薄い光が二人のあいだの床をうっすら照らしていた。",
+    "finish_reason": "stop",
+    "model_returned": "anthropic/claude-opus-4.6",
+    "provider_returned": "Claude Platform on AWS",
+    "response_id": "gen-1791249678-KFIF6IfF8jdZPguuZyOS",
+    "usage": {
+      "prompt_tokens": 585,
+      "completion_tokens": 107,
+      "total_tokens": 692,
+      "cost": 0.0056,
+      "is_byok": false,
+      "prompt_tokens_details": {
+        "cached_tokens": 0,
+        "cache_write_tokens": 0,
+        "audio_tokens": 0,
+        "video_tokens": 0
+      },
+      "cost_details": {
+        "upstream_inference_cost": 0.0056,
+        "upstream_inference_prompt_cost": 0.002925,
+        "upstream_inference_completions_cost": 0.002675
+      },
+      "completion_tokens_details": {
+        "reasoning_tokens": 0,
+        "image_tokens": 0,
+        "audio_tokens": 0
+      }
+    },
+    "judgment": "未判定：意味条件と後続応答をレビューする"
+  }
+]

@@ -1,5 +1,7 @@
+import { resolveValidSummary } from '@utils/bubbleSummary';
 import React, { useEffect, useMemo, useState, useRef } from 'react';
 import useStore from '@store/store';
+import { useWorkspaceStore, useWorkspaceReadOnly } from '@store/workspaceScope';
 import useSubmit from '@hooks/useSubmit';
 import {
   ContentInterface,
@@ -55,12 +57,13 @@ function hasProtectedFollowingNodes(messageIndex: number): boolean {
   return false;
 }
 
-function resolveMessageIndex(nodeId: string | undefined, fallbackIndex: number): number {
-  if (!nodeId) return fallbackIndex;
-  const activePath =
-    useStore.getState().chats?.[useStore.getState().currentChatIndex]?.branchTree?.activePath;
-  const resolvedIndex = activePath?.indexOf(nodeId) ?? -1;
-  return resolvedIndex >= 0 ? resolvedIndex : fallbackIndex;
+function resolveMessageIndex(chatId: string, nodeId: string | undefined, fallbackIndex: number): number {
+  const chat = useStore.getState().chats?.find(chat => chat.id === chatId);
+  if (!chat) return -1;
+  if (!nodeId) return chat.messages[fallbackIndex] ? fallbackIndex : -1;
+  if (chat.branchTree) return chat.branchTree.activePath.indexOf(nodeId);
+  const index = Number(nodeId);
+  return String(index) === nodeId && chat.messages[index] ? index : -1;
 }
 
 const blobToBase64 = (blob: Blob): Promise<string> =>
@@ -122,6 +125,7 @@ export function useEditViewLogic({
   nodeId,
   sticky,
   editSessionKey,
+  summaryId,
 }: {
   content: ContentInterface[];
   setIsEdit: React.Dispatch<React.SetStateAction<boolean>>;
@@ -129,11 +133,14 @@ export function useEditViewLogic({
   nodeId?: string;
   sticky?: boolean;
   editSessionKey: string;
+  summaryId?: string;
 }) {
+  const useStore = useWorkspaceStore();
+  const readOnly = useWorkspaceReadOnly();
   const inputRole = useStore((state) => state.inputRole);
-  const appendNodeToActivePath = useStore((state) => state.appendNodeToActivePath);
-  const replaceMessageAndPruneFollowing = useStore((state) => state.replaceMessageAndPruneFollowing);
-  const upsertWithAutoBranch = useStore((state) => state.upsertWithAutoBranch);
+  const appendNode = useStore((state) => state.appendNode);
+  const replaceNodeAndPrune = useStore((state) => state.replaceNodeAndPrune);
+  const saveNode = useStore((state) => state.saveNode);
   const currentChatIndex = useStore((state) => state.currentChatIndex);
   const { model, providerId, modelSource } = useStore((state) => {
     const { chats, currentChatIndex: idx } = state;
@@ -158,7 +165,7 @@ export function useEditViewLogic({
   const modelValid = !!model && modelStatus !== 'unmatched' && modelStatus !== 'unspecified';
 
   const [_content, setContentState] = useState<ContentInterface[]>(
-    () => cloneContent(editDraftCache.get(editSessionKey) ?? content)
+    () => cloneContent(readOnly ? content : editDraftCache.get(editSessionKey) ?? content)
   );
   const [isModalOpen, setIsModalOpen] = useState<boolean>(false);
   const [imageUrl, setImageUrl] = useState<string>('');
@@ -169,6 +176,7 @@ export function useEditViewLogic({
   // This handles desync when a mid-chat insert causes activePath and
   // messagesLimited to temporarily diverge during async token limiting.
   useEffect(() => {
+    if (readOnly) return;
     if (!editDraftCache.has(editSessionKey)) {
       setContentState(cloneContent(content));
     }
@@ -202,13 +210,15 @@ export function useEditViewLogic({
     if (textareaRef.current) textareaRef.current.style.height = 'auto';
   };
 
-  const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement> | KeyboardEvent) => {
+    const nativeEvent = 'nativeEvent' in e ? e.nativeEvent : e;
+    // Safari can end composition before the confirming Enter keydown.
+    if (nativeEvent.isComposing || nativeEvent.keyCode === 229) return;
     const isMobile =
       /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini|playbook|silk/i.test(
         navigator.userAgent
       );
-    const isComposing = (e as any).nativeEvent?.isComposing ?? (e as any).isComposing ?? false;
-    if (e.key === 'Enter' && !isMobile && !isComposing) {
+    if (e.key === 'Enter' && !isMobile) {
       const enterToSubmit = useStore.getState().enterToSubmit;
       if (e.ctrlKey && e.shiftKey) {
         e.preventDefault();
@@ -278,6 +288,28 @@ export function useEditViewLogic({
     _setContent(updatedImages);
   };
 
+  const editTarget = () => {
+    const chat = useStore.getState().chats?.find(chat => chat.id === currentChatId);
+    return { chatId: currentChatId, nodeId: nodeId ?? chat?.branchTree?.activePath[messageIndex] ?? String(messageIndex) };
+  };
+
+  const commitSummary = (removeCount = 0) => {
+    const state = useStore.getState();
+    const chat = state.chats?.find(chat => chat.id === currentChatId);
+    const summary = chat?.summaries?.find(value => value.id === summaryId);
+    if (!chat || !summary?.useForSubmit || !_content.every(value => value.type === 'text') || !hasMeaningfulContent(_content)) return false;
+    const range = resolveValidSummary({ ...chat, omittedNodes: state.omittedNodeMaps[String(currentChatIndex)] ?? chat.omittedNodes }, summary, Object.values(state.generatingSessions).filter(session => session.chatId === chat.id).map(session => session.targetNodeId));
+    if (!range || range.last !== resolveMessageIndex(currentChatId, nodeId, messageIndex)) return false;
+    state.saveBubbleSummary(chat.id, { ...summary, text: _content.map(value => value.type === 'text' ? value.text : '').join('\n') });
+    for (let index = range.last + removeCount; index > range.last; index--) {
+      const targetNodeId = state.chats?.find(value => value.id === chat.id)?.branchTree?.activePath[index] ?? String(index);
+      if (state.removeNode({ chatId: chat.id, nodeId: targetNodeId }).status !== 'updated') return false;
+    }
+    clearDraft();
+    setIsEdit(false);
+    return true;
+  };
+
   const handleSave = () => {
     const hasSubmittableContent = hasMeaningfulContent(_content);
     if (sticky && !hasSubmittableContent) return;
@@ -288,37 +320,29 @@ export function useEditViewLogic({
     }
     if (resolveChatModel(currentChatIndex).status === 'available' && !confirmChatModelFavorite(currentChatIndex)) return;
 
-    const resolvedMessageIndex = resolveMessageIndex(nodeId, messageIndex);
+    if (summaryId) { commitSummary(); return; }
+    const resolvedMessageIndex = resolveMessageIndex(currentChatId, nodeId, messageIndex);
 
     if (sticky) {
-      appendNodeToActivePath(currentChatIndex, inputRole, _content);
+      if (appendNode({ chatId: currentChatId, role: inputRole, content: _content }).status !== 'updated') return;
       _setContent([{ type: 'text', text: '' } as TextContentInterface]);
       clearDraft();
       resetTextAreaHeight();
     } else {
-      upsertWithAutoBranch(
-        currentChatIndex,
-        resolvedMessageIndex,
-        useStore.getState().chats![currentChatIndex].messages[resolvedMessageIndex].role,
-        _content
-      );
+      const role = useStore.getState().chats?.find(chat => chat.id === currentChatId)?.messages[resolvedMessageIndex]?.role;
+      if (!role) return;
+      const result = saveNode({ ...editTarget(), role, content: _content });
+      if (result.status !== 'updated' && result.status !== 'unchanged') return;
       clearDraft();
       setIsEdit(false);
     }
   };
 
   const handleBranchOnly = () => {
-    if (sticky || isNodeBusy(nodeId)) return;
+    if (summaryId || sticky || isNodeBusy(nodeId)) return;
     if (resolveChatModel(currentChatIndex).status === 'available' && !confirmChatModelFavorite(currentChatIndex)) return;
-    const { ensureBranchTree, createBranch } = useStore.getState();
-    ensureBranchTree(currentChatIndex);
-    const activeNodeId =
-      nodeId ??
-      useStore.getState().chats![currentChatIndex].branchTree!.activePath[
-        resolveMessageIndex(nodeId, messageIndex)
-      ];
-    if (!activeNodeId) return;
-    createBranch(currentChatIndex, activeNodeId, _content);
+    const { chatId, nodeId: fromNodeId } = editTarget();
+    if (useStore.getState().createBranch({ chatId, fromNodeId, content: _content }).status !== 'created') return;
     clearDraft();
     setIsEdit(false);
   };
@@ -326,15 +350,16 @@ export function useEditViewLogic({
   const handleBranchGenerate = () => {
     if (isChatBusy() || !modelValid || sticky || isNodeBusy(nodeId)) return;
     if (!confirmChatModelFavorite(currentChatIndex)) return;
-    const { ensureBranchTree, createBranch } = useStore.getState();
-    ensureBranchTree(currentChatIndex);
-    const activeNodeId =
-      nodeId ??
-      useStore.getState().chats![currentChatIndex].branchTree!.activePath[
-        resolveMessageIndex(nodeId, messageIndex)
-      ];
-    if (!activeNodeId) return;
-    createBranch(currentChatIndex, activeNodeId, _content);
+    if (summaryId) {
+      const chat = useStore.getState().chats?.[currentChatIndex];
+      const anchor = nodeId ?? chat?.branchTree?.activePath[resolveMessageIndex(currentChatId, nodeId, messageIndex)];
+      if (!anchor || !commitSummary()) return;
+      useStore.getState().truncateActivePathAt(currentChatIndex, anchor);
+      handleSubmit();
+      return;
+    }
+    const { chatId, nodeId: fromNodeId } = editTarget();
+    if (useStore.getState().createBranch({ chatId, fromNodeId, content: _content }).status !== 'created') return;
     clearDraft();
     setIsEdit(false);
     handleSubmit();
@@ -346,7 +371,8 @@ export function useEditViewLogic({
       showToast(i18next.t('protectedCannotEdit', { ns: 'main' }), 'warning');
       return;
     }
-    const resolvedMessageIndex = resolveMessageIndex(nodeId, messageIndex);
+    const resolvedMessageIndex = resolveMessageIndex(currentChatId, nodeId, messageIndex);
+    if (resolvedMessageIndex < 0) return;
     const nextIndex = resolvedMessageIndex + 1;
     const chats = useStore.getState().chats!;
     const removeCount = nextIndex < chats[currentChatIndex].messages.length ? 1 : 0;
@@ -359,13 +385,8 @@ export function useEditViewLogic({
       }
     }
     if (!confirmChatModelFavorite(currentChatIndex)) return;
-    replaceMessageAndPruneFollowing(
-      currentChatIndex,
-      resolvedMessageIndex,
-      chats[currentChatIndex].messages[resolvedMessageIndex].role,
-      _content,
-      removeCount
-    );
+    if (summaryId) { if (commitSummary(removeCount)) handleSubmitMidChat(nextIndex); return; }
+    if (replaceNodeAndPrune({ ...editTarget(), role: chats[currentChatIndex].messages[resolvedMessageIndex].role, content: _content, removeCount }).status !== 'updated') return;
     clearDraft();
     setIsEdit(false);
     handleSubmitMidChat(nextIndex);
@@ -383,13 +404,14 @@ export function useEditViewLogic({
 
     if (sticky) {
       if (hasSubmittableContent) {
-        appendNodeToActivePath(currentChatIndex, inputRole, _content);
+        if (appendNode({ chatId: currentChatId, role: inputRole, content: _content }).status !== 'updated') return;
       }
       _setContent([{ type: 'text', text: '' } as TextContentInterface]);
       clearDraft();
       resetTextAreaHeight();
     } else {
-      const resolvedMessageIndex = resolveMessageIndex(nodeId, messageIndex);
+      const resolvedMessageIndex = resolveMessageIndex(currentChatId, nodeId, messageIndex);
+      if (resolvedMessageIndex < 0) return;
       const chats = useStore.getState().chats!;
       const removeCount = Math.max(
         0,
@@ -399,13 +421,8 @@ export function useEditViewLogic({
         showToast(i18next.t('protectedPruneStopped', { ns: 'main' }), 'warning');
         return;
       }
-      replaceMessageAndPruneFollowing(
-        currentChatIndex,
-        resolvedMessageIndex,
-        chats[currentChatIndex].messages[resolvedMessageIndex].role,
-        _content,
-        removeCount
-      );
+      if (summaryId) { if (commitSummary(removeCount)) handleSubmit(); return; }
+      if (replaceNodeAndPrune({ ...editTarget(), role: chats[currentChatIndex].messages[resolvedMessageIndex].role, content: _content, removeCount }).status !== 'updated') return;
       clearDraft();
       setIsEdit(false);
     }
@@ -413,6 +430,7 @@ export function useEditViewLogic({
   };
 
   const handlePaste = async (e: React.ClipboardEvent<HTMLTextAreaElement>) => {
+    if (summaryId) return;
     const items = e.clipboardData.items;
     const chat = useStore.getState().chats![currentChatIndex];
     for (const item of items) {
@@ -436,6 +454,7 @@ export function useEditViewLogic({
   }, [_setContent]);
 
   useEffect(() => {
+    if (readOnly) return;
     if (textareaRef.current) {
       textareaRef.current.style.height = 'auto';
       textareaRef.current.style.height = `${textareaRef.current.scrollHeight}px`;

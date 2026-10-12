@@ -49,7 +49,7 @@ enum SharedWebOperations {
 }
 
 enum ChatFolders {
-    private static let folderFields = ["id", "name", "order", "expanded", "color"]
+    private static let folderFields = ["id", "name", "order", "expanded", "color", "parentId"]
     private static func projection(_ value: OrderedJSON, fields: [String]) throws -> OrderedJSON {
         .object(try value.object("projection").filter { field in fields.contains { $0.utf8.elementsEqual(field.key.utf8) } })
     }

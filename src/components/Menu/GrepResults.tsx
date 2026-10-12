@@ -1,8 +1,7 @@
 import React, { useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import useStore from '@store/store';
+import { useWorkspaceStore, useWorkspaceReadOnly, useWorkspaceScope } from '@store/workspaceScope';
 import { GrepResult } from '@store/grep-slice';
-import { buildPathToLeaf } from '@utils/branchUtils';
 
 const MAX_VISIBLE = 5;
 
@@ -69,11 +68,13 @@ function applyHighlights(query: string) {
   return targets.length > 0;
 }
 
+let highlightEpoch = 0;
 let hlTimer: ReturnType<typeof setTimeout> | null = null;
 let cleanTimer: ReturnType<typeof setTimeout> | null = null;
 let hlObserver: MutationObserver | null = null;
 
 function triggerHighlight(query: string, waitForChatSwitch: boolean) {
+  const epoch = ++highlightEpoch;
   if (hlTimer) clearTimeout(hlTimer);
   if (cleanTimer) clearTimeout(cleanTimer);
   if (hlObserver) { hlObserver.disconnect(); hlObserver = null; }
@@ -83,6 +84,7 @@ function triggerHighlight(query: string, waitForChatSwitch: boolean) {
   let applied = false;
 
   const applyAndWatch = () => {
+    if (epoch !== highlightEpoch) return;
     attempts++;
     if (attempts > 30) return;
     if (!applyHighlights(query)) {
@@ -108,8 +110,10 @@ function triggerHighlight(query: string, waitForChatSwitch: boolean) {
 
     let reapplyTimer: ReturnType<typeof setTimeout> | null = null;
     hlObserver = new MutationObserver(() => {
+      if (epoch !== highlightEpoch) return;
       if (reapplyTimer) return; // debounce
       reapplyTimer = setTimeout(() => {
+        if (epoch !== highlightEpoch) return;
         reapplyTimer = null;
         const markCount = document.querySelectorAll(`mark.${MARK_CLASS}`).length;
         if (markCount === 0 && reapplyCount < maxReapplies) {
@@ -161,39 +165,27 @@ const HighlightedSnippet = ({ snippet, query }: { snippet: string; query: string
 };
 
 const GrepResultGroup = ({ result, query }: { result: GrepResult; query: string }) => {
+  const useStore = useWorkspaceStore();
+  const readOnly = useWorkspaceReadOnly();
+
   const [expanded, setExpanded] = useState(true);
   const [showAll, setShowAll] = useState(false);
   const navigateToGrepResult = useStore((state) => state.navigateToGrepResult);
-  const pushNavigationEntry = useStore((state) => state.pushNavigationEntry);
   const currentChatIndex = useStore((state) => state.currentChatIndex);
   const chats = useStore((state) => state.chats);
 
-  const handleClick = (chatIndex: number, nodeId?: string) => {
-    const isSameChat = currentChatIndex === chatIndex;
-    const chat = chats?.[chatIndex];
-    if (chat) {
-      // Build the destination path (where we're going), not the current path
-      const destPath =
-        nodeId && chat.branchTree && !nodeId.startsWith('legacy-')
-          ? buildPathToLeaf(chat.branchTree, nodeId)
-          : chat.branchTree?.activePath ?? [];
-      pushNavigationEntry({
-        chatId: chat.id,
-        activePath: destPath,
-        focusedNodeId: nodeId,
-        viewContext: useStore.getState().chatActiveView,
-        source: 'grep',
-      });
-    }
-    navigateToGrepResult(chatIndex, nodeId);
-    triggerHighlight(query, !isSameChat);
+  const handleClick = (chatId: string, nodeId?: string) => {
+    const isSameChat = chats?.[currentChatIndex]?.id === chatId;
+    if (navigateToGrepResult(chatId, nodeId)) triggerHighlight(query, !isSameChat);
   };
 
+  const scope = useWorkspaceScope();
   const visibleMatches = showAll ? result.matches : result.matches.slice(0, MAX_VISIBLE);
   const hasMore = result.matches.length > MAX_VISIBLE;
 
   return (
     <div className='mb-1'>
+      {readOnly && <label className='flex items-center gap-2 px-2'><input type='checkbox' aria-label={`Select chat: ${result.chatTitle}`} checked={scope?.selectedIds.includes(result.chatId) ?? false} onChange={event => scope?.setSelectedIds(event.target.checked ? [...scope.selectedIds, result.chatId] : scope.selectedIds.filter(id => id !== result.chatId))} />{result.chatTitle}</label>}
       <button
         className='flex w-full items-center gap-1 rounded px-2 py-1 text-left text-xs font-medium text-gray-700 hover:bg-gray-200/50 dark:text-gray-300 dark:hover:bg-gray-700/50'
         onClick={() => setExpanded(!expanded)}
@@ -217,7 +209,7 @@ const GrepResultGroup = ({ result, query }: { result: GrepResult; query: string 
             <button
               key={`${match.nodeId}-${i}`}
               className='block w-full truncate px-3 py-1 text-left text-xs text-gray-500 hover:bg-gray-100 hover:text-gray-700 dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-gray-200'
-              onClick={() => handleClick(result.chatIndex, match.nodeId)}
+              onClick={() => handleClick(result.chatId, match.nodeId)}
               title={match.snippet}
             >
               <HighlightedSnippet snippet={match.snippet} query={query} />
@@ -238,10 +230,15 @@ const GrepResultGroup = ({ result, query }: { result: GrepResult; query: string 
 };
 
 const GrepResults = () => {
+  const useStore = useWorkspaceStore();
+  const readOnly = useWorkspaceReadOnly();
+
   const { t } = useTranslation();
   const grepResults = useStore((state) => state.grepResults);
   const grepQuery = useStore((state) => state.grepQuery);
   const isGrepSearching = useStore((state) => state.isGrepSearching);
+
+  React.useEffect(() => () => { ++highlightEpoch; if (hlTimer) clearTimeout(hlTimer); if (cleanTimer) clearTimeout(cleanTimer); hlObserver?.disconnect(); cleanHighlights(); }, []);
 
   if (isGrepSearching) {
     return (

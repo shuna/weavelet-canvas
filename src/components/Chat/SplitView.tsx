@@ -1,5 +1,5 @@
 import React, { Suspense, useCallback, useEffect, useRef, useState } from 'react';
-import useStore from '@store/store';
+import { useWorkspaceStore } from '@store/workspaceScope';
 import ChatContent from './ChatContent';
 
 
@@ -18,6 +18,8 @@ interface SplitViewProps {
 }
 
 const SplitView: React.FC<SplitViewProps> = ({ direction }) => {
+  const useStore = useWorkspaceStore();
+
   const ratio = useStore((state) => state.splitPanelRatio);
   const swapped = useStore((state) => state.splitPanelSwapped);
   const setRatio = useStore((state) => state.setSplitPanelRatio);

@@ -9,8 +9,18 @@ final class SyncSessionTests: XCTestCase {
     private func sameRecords(_ left: OrderedJSON, _ right: OrderedJSON) throws {
         XCTAssertEqual(Data(try SyncRecords.canonical(left).utf8), Data(try SyncRecords.canonical(right).utf8))
     }
-    private func edit(_ snapshot: OrderedJSON, theme: String) throws -> OrderedJSON {
-        try snapshot.replacing("state", with: snapshot.required("state").replacing("theme", with: .string(theme)))
+    private func edit(_ snapshot: OrderedJSON, systemMessage: String) throws -> OrderedJSON {
+        try snapshot.replacing("state", with: snapshot.required("state").replacing("defaultSystemMessage", with: .string(systemMessage)))
+    }
+    private func syncRecordsProjection(_ records: OrderedJSON) throws -> OrderedJSON {
+        let policy = try OrderedJSON.decode(Data(contentsOf: root.appendingPathComponent("tests/fixtures/web-native/sync-local-settings-policy.json")))
+        XCTAssertEqual(policy["fixtureVersion"], .number("1"))
+        let keys = try policy.required("syncLocalSettings").array("policy").map { Data(try $0.string("key").utf8) }
+        return .object(try records.object("records").filter { field in
+            let path = try OrderedJSON.decode(Data(field.key.utf8)).array("record path")
+            guard path.count >= 2, path[0] == .string("state") else { return true }
+            return try !keys.contains(Data(path[1].string("root").utf8))
+        })
     }
     private func editMetadata(_ snapshot: OrderedJSON, origin: String) throws -> OrderedJSON {
         let state = try snapshot.required("state")
@@ -53,9 +63,9 @@ final class SyncSessionTests: XCTestCase {
         try await session.open(dataset: dataset)
         try await session.unlock(password: fixture.required("password").string("password"))
         let received = try await session.receiveAndSave()
-        try sameRecords(SyncRecords.toRecords(received), fixture.required("expectedRecords"))
-        try sameRecords(SyncRecords.toRecords(XCTUnwrap(store.acceptedSnapshot(dataset: dataset))), fixture.required("expectedRecords"))
-        let changed = try edit(received, theme: "FAKE Native compacted theme")
+        try sameRecords(SyncRecords.toRecords(received), syncRecordsProjection(fixture.required("expectedRecords")))
+        try sameRecords(SyncRecords.toRecords(XCTUnwrap(store.acceptedSnapshot(dataset: dataset))), syncRecordsProjection(fixture.required("expectedRecords")))
+        let changed = try edit(received, systemMessage: "FAKE Native compacted system message")
         try await session.push(changed)
         let packs = try await drive.call("packs", args: [.string(dataset)]).array("packs")
         XCTAssertFalse(packs.isEmpty)
@@ -139,7 +149,7 @@ final class SyncSessionTests: XCTestCase {
         let b = try SyncSession(drive: drive, store: bStore, keyStore: keys)
         for session in [a, b] { try await session.open(dataset: dataset); try await session.unlock(password: fixture.required("password").string("password")) }
         let left = try await a.receiveAndSave(), right = try await b.receiveAndSave()
-        try sameRecords(SyncRecords.toRecords(left), fixture.required("expectedRecords"))
+        try sameRecords(SyncRecords.toRecords(left), syncRecordsProjection(fixture.required("expectedRecords")))
         let captured = try left.required("state").required("chats").array("chats")[0].required("branchTree").required("messageAttributesV1").required("byNode")
         try sameRecords(captured, fixture.required("expectedAttributes"))
         func changed(_ source: OrderedJSON, side: String) throws -> OrderedJSON {
@@ -202,7 +212,7 @@ final class SyncSessionTests: XCTestCase {
         let base = try await resolver.receiveAndSave(), cloudBase = try await cloud.receiveAndSave()
         let cloudEdit = try cloudBase.replacing("state", with: cloudBase.required("state").replacing("xCloud", with: .string("FAKE cloud merged marker")))
         try await cloud.push(cloudEdit)
-        let input = try edit(base, theme: "FAKE local resolution edit")
+        let input = try edit(base, systemMessage: "FAKE local resolution edit")
         fault.rejectAccepted = true
         do { _ = try await resolver.resolveAndSave(input, mode: "merge"); XCTFail("Expected final acceptance write failure") } catch {}
         let accepted = try XCTUnwrap(resolverStore.acceptedSnapshot(dataset: dataset))
@@ -219,7 +229,7 @@ final class SyncSessionTests: XCTestCase {
         let publications = await drive.putCount(); try await restarted.push(accepted)
         let afterPush = await drive.putCount(); XCTAssertEqual(afterPush, publications, "Restart must not publish an inverse edit")
         let remote = try await restarted.receiveAndSave()
-        XCTAssertEqual(remote["state"]?["theme"], .string("FAKE local resolution edit"))
+        XCTAssertEqual(remote["state"]?["defaultSystemMessage"], .string("FAKE local resolution edit"))
         XCTAssertEqual(remote["state"]?["xCloud"], .string("FAKE cloud merged marker"))
     }
 
@@ -238,7 +248,7 @@ final class SyncSessionTests: XCTestCase {
         let oldCache = try XCTUnwrap(readerStore.dataset(dataset)["cache"]).syncData()
         let key = try XCTUnwrap(keys.load(dataset: dataset))
         let oldBaseline = try SyncRecords.decodeWire(SyncCrypto.decrypt(key: key, bytes: oldCache, context: "\(dataset):cache"))["baseline"]
-        try await writer.push(edit(base, theme: "FAKE remote changed"))
+        try await writer.push(edit(base, systemMessage: "FAKE remote changed"))
         fault.rejectAccepted = true
         do { _ = try await reader.receiveAndSave(); XCTFail("Expected atomic write failure") } catch {}
         XCTAssertEqual(try readerStore.acceptedSnapshot(dataset: dataset), previous)
@@ -249,7 +259,7 @@ final class SyncSessionTests: XCTestCase {
         try await resumed.open(dataset: dataset); let restoredKey = try await resumed.restoreKey()
         XCTAssertTrue(restoredKey)
         let accepted = try await resumed.receiveAndSave()
-        XCTAssertEqual(accepted["state"]?["theme"], .string("FAKE remote changed"))
+        XCTAssertEqual(accepted["state"]?["defaultSystemMessage"], .string("FAKE remote changed"))
         let before = await drive.putCount(); try await resumed.push(accepted)
         let after = await drive.putCount(); XCTAssertEqual(after, before)
     }

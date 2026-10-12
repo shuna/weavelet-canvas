@@ -1,19 +1,10 @@
 import React from 'react';
-import { useTranslation } from 'react-i18next';
-import { v4 as uuidv4 } from 'uuid';
 import useStore from '@store/store';
 
 import NewFolderIcon from '@icon/NewFolderIcon';
-import { applyFolderOperation } from '@utils/chatFolders';
 
 const NewFolder = () => {
-  const { t } = useTranslation();
-  const setFolders = useStore((state) => state.setFolders);
-
-  const addFolder = () => {
-    const state = useStore.getState();
-    setFolders(applyFolderOperation(state, { type: 'create', id: uuidv4() }).folders);
-  };
+  const addFolder = useStore(state => state.createFolder);
 
   return (
     <a

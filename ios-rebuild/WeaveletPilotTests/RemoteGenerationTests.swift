@@ -50,6 +50,13 @@ final class RemoteGenerationTests: XCTestCase {
         let root = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
         return try OrderedJSON.decode(Data(contentsOf: root.appendingPathComponent("tests/fixtures/web-native/remote-generation.json")))
     }
+    func testSavedSummaryUsesSharedSubmissionRules() throws {
+        let source = try OrderedJSON.decode(Data(#"{"chats":[{"id":"summary-chat","config":{"model":"fake-model","max_tokens":100},"messages":[{"role":"user","content":[{"type":"text","text":"Original"}]}],"summaries":[{"id":"s","mode":"single","useForSubmit":true,"text":"Saved context","sources":[{"nodeId":"0","parentId":null,"role":"user","textParts":["Original"]}]}]}]}"#.utf8))
+        let request = try RemoteRequest.make(source: source, chatID: "summary-chat", path: ["0"], settings: record().settings, key: "FAKE")
+        let messages = try OrderedJSON.decode(XCTUnwrap(request.httpBody)).required("messages").array("messages")
+        XCTAssertEqual(try messages[0].required("content").array("content")[0].required("text").string("text"), "Past conversation summary:\nSaved context")
+    }
+
     private func store() throws -> LocalStateStore {
         let directory = FileManager.default.temporaryDirectory.appendingPathComponent("weavelet-remote-test-\(UUID().uuidString)")
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)

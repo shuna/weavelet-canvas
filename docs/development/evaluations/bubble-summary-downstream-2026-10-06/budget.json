@@ -1,0 +1,7 @@
+{
+  "ceiling_usd": 10,
+  "total_accounted_usd": 9.343795000000007,
+  "records": 989,
+  "prior_accounted_usd": 6.142655000000001,
+  "note": "過去の中断呼び出しの保守的予約を含む。APIの総実請求額ではない。"
+}

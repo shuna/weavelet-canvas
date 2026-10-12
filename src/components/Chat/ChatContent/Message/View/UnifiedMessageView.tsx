@@ -1,8 +1,7 @@
-import React, { memo, useCallback, useEffect, useState } from 'react';
-import useStore from '@store/store';
+import React, { memo, useEffect, useState } from 'react';
+import { useWorkspaceStore } from '@store/workspaceScope';
 import useSubmit from '@hooks/useSubmit';
 import { confirmChatModelFavorite } from '@utils/chatModelResolution';
-import { resolveProviderForModel, type ResolvedProvider } from '@hooks/submitHelpers';
 import {
   ContentInterface,
   ImageContentInterface,
@@ -12,17 +11,14 @@ import {
 } from '@type/chat';
 import { resolveRegenerateTarget } from '@utils/branchUtils';
 import { useEditViewLogic } from './useEditViewLogic';
-import OverTypeEditor from './OverTypeEditor';
+import { MessageEditForm } from './EditView';
 import ContentActions from './ContentActions';
 import ContentAttachments from './ContentAttachments';
-import EditViewButtons from './EditViewButtons';
 import ContentBody from './ContentBody';
 import EvaluationPanel from './EvaluationPanel';
-import EvaluationModal from './EvaluationModal';
 import type { TabId } from './EvaluationModal';
 import PopupModal from '@components/PopupModal';
 import { useTranslation } from 'react-i18next';
-import { useModelType } from '@utils/modelLookup';
 import { useStreamingText } from '@hooks/useStreamingText';
 import { useStreamingReasoning } from '@hooks/useStreamingReasoning';
 import { isReasoningContent } from '@type/chat';
@@ -39,6 +35,8 @@ const UnifiedMessageView = memo(
     isCollapsed,
     onExpand,
     editSessionKey,
+    onOpenEvalTab,
+    summaryId,
   }: {
     role: string;
     content: ContentInterface[];
@@ -48,8 +46,12 @@ const UnifiedMessageView = memo(
     isEditState: boolean;
     isCollapsed: boolean;
     onExpand?: () => void;
+    summaryId?: string;
     editSessionKey: string;
+    onOpenEvalTab?: (tab?: TabId) => void;
   }) => {
+  const useStore = useWorkspaceStore();
+
     const contentSurfaceClass =
       'rounded-2xl bg-white/60 px-4 pt-2.5 pb-2 shadow-sm ring-1 ring-black/5 dark:bg-gray-900/20 dark:ring-white/10 md:px-5 md:pt-3 md:pb-2.5';
     const contentMinHeightClass = 'min-h-[5.25rem]';
@@ -63,12 +65,10 @@ const UnifiedMessageView = memo(
       handleUnknownContextCancel,
     } = useSubmit();
     const [isDelete, setIsDelete] = useState(false);
-    const [isEvalModalOpen, setIsEvalModalOpen] = useState(false);
-    const [evalInitialTab, setEvalInitialTab] = useState<TabId | undefined>();
 
     const currentChatIndex = useStore((state) => state.currentChatIndex);
-    const removeMessageAtIndex = useStore((state) => state.removeMessageAtIndex);
-    const moveMessage = useStore((state) => state.moveMessage);
+    const removeNode = useStore((state) => state.removeNode);
+    const moveNode = useStore((state) => state.moveNode);
     const lastMessageIndex = useStore((state) =>
       state.chats?.[state.currentChatIndex]?.messages
         ? state.chats[state.currentChatIndex].messages.length - 1
@@ -106,71 +106,44 @@ const UnifiedMessageView = memo(
       nodeId,
       sticky: false,
       editSessionKey,
+      summaryId,
     });
-    const isImageModel = useModelType(editLogic.model, editLogic.providerId) === 'image';
 
     // Resolve current message index from active path
     const resolveCurrentMessageIndex = () => {
       if (!nodeId) return messageIndex;
       const activePath =
-        useStore.getState().chats?.[currentChatIndex]?.branchTree?.activePath ?? [];
+        useStore.getState().chats?.find(chat => chat.id === currentChatId)?.branchTree?.activePath ?? [];
       const resolvedIndex = activePath.indexOf(nodeId);
-      return resolvedIndex >= 0 ? resolvedIndex : messageIndex;
+      return resolvedIndex;
     };
 
-    // ContentView handlers
+    // User message operations
     const handleDelete = () => {
-      removeMessageAtIndex(currentChatIndex, resolveCurrentMessageIndex());
+      if (summaryId) useStore.getState().removeBubbleSummary(currentChatId, summaryId);
+      else removeNode({ chatId: currentChatId, nodeId: nodeId ?? String(messageIndex) });
     };
     const handleMove = (direction: 'up' | 'down') => {
-      moveMessage(currentChatIndex, resolveCurrentMessageIndex(), direction);
+      moveNode({ chatId: currentChatId, nodeId: nodeId ?? String(messageIndex), direction });
     };
     const handleRefresh = () => {
       if (isCurrentChatGenerating) return;
+      const index = resolveCurrentMessageIndex();
+      if (index < 0) return;
       const plan = resolveRegenerateTarget(
         role as Role,
-        resolveCurrentMessageIndex(),
+        index,
         useStore.getState().chats![currentChatIndex].messages.length
       );
       if (!plan) return;
       if (!confirmChatModelFavorite(currentChatIndex)) return;
       if (plan.removeIndex >= 0) {
-        removeMessageAtIndex(currentChatIndex, plan.removeIndex);
+        const chat = useStore.getState().chats?.find(chat => chat.id === currentChatId);
+        const result = removeNode({ chatId: currentChatId, nodeId: chat?.branchTree?.activePath[plan.removeIndex] ?? String(plan.removeIndex) });
+        if (result.status !== 'updated') return;
       }
       handleRegenerate(plan.submitMode === 'append' ? 'append' : 'midchat', plan.insertIndex);
     };
-
-    const handleEvaluate = useCallback(() => {
-      setEvalInitialTab(undefined);
-      setIsEvalModalOpen(true);
-    }, []);
-
-    const handleOpenEvalTab = useCallback((tab: TabId) => {
-      setEvalInitialTab(tab);
-      setIsEvalModalOpen(true);
-    }, []);
-
-    /** Resolve provider for this chat's model config */
-    const getResolvedProvider = useCallback(() => {
-      const state = useStore.getState();
-      const chat = state.chats?.[currentChatIndex];
-      if (!chat) return null;
-      const config = chat.config;
-      const fallbackProvider: ResolvedProvider = {
-        endpoint: state.apiEndpoint,
-        key: state.apiKey,
-      };
-      return {
-        resolved: resolveProviderForModel(
-          config.model,
-          state.favoriteModels || [],
-          state.providers || {},
-          fallbackProvider,
-          config.providerId
-        ),
-        model: config.model,
-      };
-    }, [currentChatIndex]);
 
     const [contentElement, setContentElement] = useState<HTMLDivElement | null>(null);
     const [streamVisible, setStreamVisible] = useState(true);
@@ -180,8 +153,8 @@ const UnifiedMessageView = memo(
       observer.observe(contentElement);
       return () => observer.disconnect();
     }, [isGeneratingMessage, contentElement]);
-    const streamingText = useStreamingText(isGeneratingMessage ? nodeId : undefined, streamVisible);
-    const streamingReasoning = useStreamingReasoning(isGeneratingMessage ? nodeId : undefined, streamVisible, false);
+    const streamingText = useStreamingText(currentChatId, isGeneratingMessage ? nodeId : undefined, streamVisible);
+    const streamingReasoning = useStreamingReasoning(currentChatId, isGeneratingMessage ? nodeId : undefined, streamVisible, false);
     // Resolve reasoning: from streaming buffer during generation, from persisted content otherwise
     const persistedReasoning = Array.isArray(content)
       ? content.filter(isReasoningContent).map((c) => c.text).join('')
@@ -198,11 +171,6 @@ const UnifiedMessageView = memo(
       ? (content.slice(1).filter(isImageContent) as ImageContentInterface[])
       : [];
 
-    // Determine displayed value: draft when editing, saved content when viewing
-    const displayValue = isEditState
-      ? editLogic.textValue
-      : currentTextContent;
-
     const previewText = currentTextContent.replace(/\s+/g, ' ').trim();
     const collapsedPreview = previewText
       ? previewText.length > 280 ? `${previewText.slice(0, 280)}...` : previewText
@@ -217,66 +185,7 @@ const UnifiedMessageView = memo(
       <>
         {isEditState && (
           <div hidden={isCollapsed} ref={setContentElement} className={contentSurfaceClass}>
-            <div className={contentMinHeightClass}>
-              <OverTypeEditor
-                value={displayValue}
-                mode='edit'
-                onChange={editLogic.setTextValue}
-                onKeyDown={(e) => {
-                  // Convert native KeyboardEvent to React-compatible format for handleKeyDown
-                  editLogic.handleKeyDown(e as unknown as React.KeyboardEvent<HTMLTextAreaElement>);
-                }}
-                onPaste={(e) => {
-                  editLogic.handlePaste(e as unknown as React.ClipboardEvent<HTMLTextAreaElement>);
-                }}
-                autoFocus
-                minHeight='5.25rem'
-              />
-            </div>
-            <EditViewButtons
-              sticky={false}
-              handleFileChange={editLogic.handleFileChange}
-              handleImageDetailChange={editLogic.handleImageDetailChange}
-              handleRemoveImage={editLogic.handleRemoveImage}
-              handleGenerate={editLogic.handleGenerate}
-              handleGenerateNextOnly={editLogic.handleGenerateNextOnly}
-              generateBelowDisabled={editLogic.generateBelowDisabled}
-              handleBranchGenerate={editLogic.handleBranchGenerate}
-              handleSave={editLogic.handleSave}
-              handleBranchOnly={editLogic.handleBranchOnly}
-              handleCancel={editLogic.handleCancel}
-              contentChanged={editLogic.contentChanged}
-              handleUploadButtonClick={editLogic.handleUploadButtonClick}
-              setIsModalOpen={editLogic.setIsModalOpen}
-              _setContent={editLogic._setContent}
-              _content={editLogic._content}
-              imageUrl={editLogic.imageUrl}
-              setImageUrl={editLogic.setImageUrl}
-              handleImageUrlChange={editLogic.handleImageUrlChange}
-              fileInputRef={editLogic.fileInputRef}
-              model={editLogic.model}
-              providerId={editLogic.providerId}
-              modelValid={editLogic.modelValid}
-              messageIndex={messageIndex}
-              role={role}
-            />
-            {editLogic.isModalOpen && (
-              <PopupModal
-                setIsModalOpen={editLogic.setIsModalOpen}
-                title={t('warning') as string}
-                message={t('clearMessageWarning') as string}
-                handleConfirm={editLogic.handleGenerate}
-              />
-            )}
-            {editLogic.isUnknownContextConfirmOpen && (
-              <PopupModal
-                setIsModalOpen={editLogic.setIsUnknownContextConfirmOpen}
-                title={t('warning') as string}
-                message={editLogic.unknownContextConfirmMessage}
-                handleConfirm={editLogic.handleUnknownContextConfirm}
-                handleClose={editLogic.handleUnknownContextCancel}
-              />
-            )}
+            <MessageEditForm logic={editLogic} role={role} messageIndex={messageIndex} editorClassName={contentMinHeightClass} textOnly={!!summaryId} />
           </div>
         )}
         {(!isEditState || isCollapsed) && (
@@ -289,6 +198,7 @@ const UnifiedMessageView = memo(
               <>
                 {role === 'assistant' && currentReasoning && (
                   <CollapsibleReasoning
+                    chatId={currentChatId}
                     reasoning={currentReasoning}
                     nodeId={nodeId}
                     visible={streamVisible}
@@ -306,10 +216,10 @@ const UnifiedMessageView = memo(
                   />
                 </div>
                 <ContentAttachments images={isEditState ? [] : validImageContents} />
-                {nodeId && currentChatId && (
+                {nodeId && currentChatId && !summaryId && (
                   <>
-                    <EvaluationPanel chatId={currentChatId} nodeId={nodeId} phase='pre-send' onOpenTab={handleOpenEvalTab} />
-                    <EvaluationPanel chatId={currentChatId} nodeId={nodeId} phase='post-receive' onOpenTab={handleOpenEvalTab} />
+                    <EvaluationPanel chatId={currentChatId} nodeId={nodeId} phase='pre-send' onOpenTab={onOpenEvalTab} />
+                    <EvaluationPanel chatId={currentChatId} nodeId={nodeId} phase='post-receive' onOpenTab={onOpenEvalTab} />
                   </>
                 )}
               </>
@@ -331,28 +241,7 @@ const UnifiedMessageView = memo(
               onMoveDown={() => handleMove('down')}
               onCopy={handleCopy}
               onDelete={handleDelete}
-              showEvaluateButton={true}
-              onEvaluate={handleEvaluate}
             />
-            {(() => {
-              if (!isEvalModalOpen || !nodeId || !currentChatId) return null;
-              const providerInfo = getResolvedProvider();
-              if (!providerInfo) return null;
-              return (
-                <EvaluationModal
-                  chatId={currentChatId}
-                  nodeId={nodeId}
-                  chatIndex={currentChatIndex}
-                  messageIndex={resolveCurrentMessageIndex()}
-                  phase={role === 'user' ? 'pre-send' : 'post-receive'}
-                  role={role}
-                  resolvedProvider={providerInfo.resolved}
-                  model={providerInfo.model}
-                  setIsModalOpen={setIsEvalModalOpen}
-                  initialTab={evalInitialTab}
-                />
-              );
-            })()}
             {isUnknownContextConfirmOpen && (
               <PopupModal
                 setIsModalOpen={setIsUnknownContextConfirmOpen}

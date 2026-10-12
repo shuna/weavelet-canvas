@@ -1,4 +1,6 @@
+import { validateFolderHierarchy } from '@utils/folderHierarchy';
 import { recordMetric } from './metrics';
+import { isBrowserLocalRecord, withoutBrowserLocalSettings } from './settings';
 import type { StorageValue } from 'zustand/middleware';
 import type { PersistedStoreState } from '@store/persistence';
 import type { BranchNode, ContentInterface } from '@type/chat';
@@ -26,6 +28,10 @@ const readNodeOrder = (value: unknown): string[] => {
 
 export const isNodeOrderPath = (path: unknown): boolean => Array.isArray(path) && path[0] === 'nodeOrder' &&
   ((path.length === 3 && path[1] === 'chats' && typeof path[2] === 'string') || (path.length === 2 && path[1] === 'clipboard'));
+
+export function isNodeOrderRecord(key: string): boolean {
+  try { return isNodeOrderPath(JSON.parse(key)); } catch { return false; }
+}
 
 export function mergeNodeOrderValues(values: (string | null)[]): string | null {
   const orders = values.filter((value): value is string => value !== null).map(value => readNodeOrder(JSON.parse(value)));
@@ -79,7 +85,8 @@ export async function toRecords(snapshot: Snapshot): Promise<Records> {
   const started = performance.now();
   const serialized = JSON.stringify(snapshot);
   const copy = JSON.parse(serialized) as Snapshot;
-  const state = copy.state;
+  const state = withoutBrowserLocalSettings(copy.state);
+  if (state.folders !== undefined && !validateFolderHierarchy(state.folders)) throw new Error('Invalid folder hierarchy; sync stopped.');
   const records: Records = Object.create(null);
   const source = state.contentStore ?? {};
   const contentIds = new Map<string, string>();
@@ -132,7 +139,13 @@ export async function toRecords(snapshot: Snapshot): Promise<Records> {
       readMessageAttributes(chat.branchTree);
       nodeOrder.chats[chat.id] = Object.keys(chat.branchTree.nodes);
       entryRefs.chats[chat.id] = Object.create(null);
-      for (const node of Object.values(chat.branchTree.nodes)) translate(node, entryRefs.chats[chat.id]);
+      for (const node of Object.values(chat.branchTree.nodes)) {
+        const statsKey = `${chat.id}:::${node.id}`;
+        const generationId = node.openRouterObservation?.generationId ?? copy.state.pendingVerifications?.[statsKey]?.generationId ?? copy.state.verifiedStats?.[statsKey]?.generationId;
+        // Retain the lookup identity, not the device's verification queue/cache.
+        if (generationId) node.openRouterObservation = { ...node.openRouterObservation, generationId };
+        translate(node, entryRefs.chats[chat.id]);
+      }
       delete chat.messages;
     } else if (chat.messages) {
       for (const message of chat.messages) message.content = await externalize(message.content);
@@ -171,10 +184,21 @@ export async function toRecords(snapshot: Snapshot): Promise<Records> {
 
 export async function fromRecords(records: Records): Promise<Snapshot> {
   const root: any = Object.create(null);
+  let skippedLocalState = false;
+  const generationIds = new Map<string, string>();
   for (const [encoded, value] of Object.entries(records)) {
     const path: unknown = JSON.parse(encoded);
     if (!Array.isArray(path) || path.length < 1 || path.length > 100 ||
         path.some((p) => typeof p !== 'string' || forbidden.has(p))) throw new Error('Invalid sync record path.');
+    if (isBrowserLocalRecord(encoded)) {
+      skippedLocalState = true;
+      if (path.length === 4 && ['pendingVerifications', 'verifiedStats'].includes(path[1]) && path[3] === 'generationId') {
+        const id = JSON.parse(value);
+        if (typeof id === 'string' && !generationIds.has(path[2])) generationIds.set(path[2], id);
+      }
+      continue;
+    }
+    if (path[0] === 'chats' && path[2] === 'collapsedNodes' && path.length === 3 && value === '{}') continue;
     let current = root;
     for (const part of path.slice(0, -1)) {
       if (Object.hasOwn(current, part) && (!current[part] || typeof current[part] !== 'object' || Array.isArray(current[part]))) {
@@ -186,6 +210,7 @@ export async function fromRecords(records: Records): Promise<Snapshot> {
     if (Object.hasOwn(current, last)) throw new Error('Conflicting sync record paths.');
     current[last] = JSON.parse(value);
   }
+  if (skippedLocalState && !root.state) root.state = Object.create(null);
   if (!root.state || !root.chats || !Array.isArray(root.order) || !Number.isInteger(root.version)) {
     throw new Error('Incomplete sync snapshot.');
   }
@@ -198,6 +223,7 @@ export async function fromRecords(records: Records): Promise<Snapshot> {
     for (const value of Object.values(orders.chats ?? {})) readNodeOrder(value);
     if (orders.clipboard !== undefined) readNodeOrder(orders.clipboard);
   }
+  if (root.state.folders !== undefined && !validateFolderHierarchy(root.state.folders)) throw new Error('Invalid folder hierarchy; sync stopped.');
   const restoreAssets = async (parts: any[]) => {
     if (!Array.isArray(parts)) throw new Error('Invalid message content.');
     const restored = structuredClone(parts);
@@ -282,6 +308,8 @@ export async function fromRecords(records: Records): Promise<Snapshot> {
           cursor = cursor.parentId ? tree.nodes[cursor.parentId] : undefined;
         }
         await restore(node, root.contentEntryRefs?.chats?.[id]);
+        const generationId = node.openRouterObservation?.generationId ?? generationIds.get(`${id}:::${nodeId}`);
+        if (generationId) node.openRouterObservation = { ...node.openRouterObservation, generationId };
       }
       if (tree.activePath.some((nodeId: string) => !tree.nodes[nodeId])) throw new Error('Invalid active branch path.');
     } else if (chat.messages) {
@@ -301,7 +329,45 @@ export async function fromRecords(records: Records): Promise<Snapshot> {
       await restoreEntry(entryId);
     }
   }
-  return { version: root.version, state: { ...root.state, chats, contentStore: store } };
+  return { version: root.version, state: { ...withoutBrowserLocalSettings(root.state), chats, contentStore: store } };
+}
+
+// A pinned orphan that already existed is valid. Concurrently deleting its
+// previous parent must not discard the other writer's new/edited subtree.
+export async function assertNoConcurrentOrphans(base: Records, local: Records, cloud: Records, merged: Records): Promise<void> {
+  const orphans = Object.entries(merged).filter(([key, value]) => {
+    const path: string[] = JSON.parse(key);
+    if (path.length !== 6 || path[0] !== 'chats' || path[2] !== 'branchTree' || path[3] !== 'nodes' || path[5] !== 'parentId') return false;
+    const parent: string | null = JSON.parse(value);
+    const parentKey = JSON.stringify([...path.slice(0, 4), parent, 'id']);
+    return parent && base[parentKey] && !merged[parentKey];
+  });
+  if (!orphans.length) return;
+  const affected = new Set(orphans.map(([key]) => JSON.parse(key)[1]));
+  for (const source of [local, cloud]) {
+    const changed = new Map<string, Set<string>>();
+    for (const [key, value] of Object.entries(source)) {
+      const path: string[] = JSON.parse(key);
+      const node = path.length === 6 && path[0] === 'chats' && path[2] === 'branchTree' &&
+        ((path[3] === 'nodes' && path[5] !== 'updatedAt') || (path[3] === 'messageAttributesV1' && path[4] === 'byNode')) ? [path[1], path[path[3] === 'nodes' ? 4 : 5]]
+        : path.length === 4 && path[0] === 'contentEntryRefs' && path[1] === 'chats' ? [path[2], path[3]] : undefined;
+      if (!node || !affected.has(node[0]) || await digest(value) === base[key]) continue;
+      const [chat, id] = node;
+      const ids = changed.get(chat) ?? new Set<string>(); changed.set(chat, ids);
+      let cursor: string | null = id;
+      while (cursor && !ids.has(cursor)) {
+        ids.add(cursor);
+        const parent: string | undefined = source[JSON.stringify(['chats', chat, 'branchTree', 'nodes', cursor, 'parentId'])];
+        cursor = parent === undefined ? null : JSON.parse(parent);
+      }
+    }
+    for (const [key, value] of orphans) {
+      const path: string[] = JSON.parse(key);
+      const parent: string | null = JSON.parse(value);
+      const parentKey = JSON.stringify([...path.slice(0, 4), parent, 'id']);
+      if (source[parentKey] && source[key] === value && changed.get(path[1])?.has(path[4])) throw new SyncConflictError([key]);
+    }
+  }
 }
 
 export async function diffRecords(before: Records, after: Records): Promise<Change[]> {
@@ -324,7 +390,7 @@ export async function applyChanges(records: Records, changes: Change[]): Promise
     const current = result[change.key];
     if ((current ?? null) !== change.after &&
         (current === undefined ? null : await digest(current)) !== change.before) {
-      if (isNodeOrderPath(JSON.parse(change.key))) {
+      if (isNodeOrderRecord(change.key)) {
         const value = mergeNodeOrderValues([current ?? null, change.after]);
         if (value === null) delete result[change.key]; else result[change.key] = value;
         continue;

@@ -303,13 +303,10 @@ const EvaluationSettings = () => {
     <div className='flex flex-col gap-5'>
       <div>
         <div className='text-sm font-semibold text-gray-900 dark:text-gray-200'>
-          {t('evaluation.safetyAboutTitle')}
+          {t('evaluation.safetyAboutTitle')}<InfoTooltip text={t('evaluation.safetyDescription')} />
         </div>
       </div>
 
-      <p className='text-xs text-gray-500 dark:text-gray-400'>
-        {t('evaluation.safetyDescription')}
-      </p>
 
       <SettingsGroup label={t('evaluation.safetyTitle')}>
         {settingRows.slice(0, 2).map((row) => (
@@ -408,13 +405,10 @@ const EvaluationSettings = () => {
 
       <div>
         <div className='text-sm font-semibold text-gray-900 dark:text-gray-200'>
-          {t('evaluation.qualityAboutTitle')}
+          {t('evaluation.qualityAboutTitle')}<InfoTooltip text={t('evaluation.qualityDescription')} />
         </div>
       </div>
 
-      <p className='text-xs text-gray-500 dark:text-gray-400'>
-        {t('evaluation.qualityDescription')}
-      </p>
 
       <SettingsGroup label={t('evaluation.qualityTitle')}>
         {settingRows.slice(2).map((row) => (

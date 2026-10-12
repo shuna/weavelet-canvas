@@ -1,7 +1,8 @@
 import type { ChatInterface, ConfigInterface, ImageDetail } from '@type/chat';
-import { cloneChatAtIndex, deepCloneSingleChat } from './chatShallowClone';
+import { deepCloneSingleChat } from './chatShallowClone';
 import { releaseContent, retainContent, type ContentStoreData } from './contentStore';
-import { isStreamingContentHash } from './streamingBuffer';
+import { isStreamingContentHash, finalizeStreamingSnapshotState } from './streamingBuffer';
+import { prepareChatForExport } from './chatExport';
 
 export function createLibraryChat(id: string, title: string | undefined, config: ConfigInterface, imageDetail: ImageDetail, systemPrompt?: string, folder?: string): ChatInterface {
   return {
@@ -27,8 +28,8 @@ export function addLibraryChat(chats: ChatInterface[], create: (title: string) =
 }
 
 export function renameLibraryChat(chats: ChatInterface[], index: number, title: string): ChatInterface[] {
-  const updated = cloneChatAtIndex(chats, index);
-  updated[index].title = title;
+  const updated = chats.slice();
+  updated[index] = { ...chats[index], title };
   return updated;
 }
 
@@ -36,33 +37,38 @@ export function renameLibraryChat(chats: ChatInterface[], index: number, title: 
 const copyEntries = (store: ContentStoreData): ContentStoreData =>
   Object.fromEntries(Object.entries(store).map(([hash, entry]) => [hash, { ...entry }]));
 
-export function duplicateLibraryChat(chats: ChatInterface[], index: number, store: ContentStoreData, newID?: string) {
+export function duplicateLibraryChat(chats: ChatInterface[], index: number, store: ContentStoreData, newID?: string, scope: 'all' | 'activePath' = 'all') {
   const original = chats[index];
   let title = `Copy of ${original.title}`, suffix = 0;
   while (chats.some(chat => chat.title === title)) title = `Copy ${++suffix} of ${original.title}`;
-  const chat = deepCloneSingleChat(original, newID);
+  const snapshot = finalizeStreamingSnapshotState([original], store);
+  const frozen = snapshot.chats![0];
+  const chat = deepCloneSingleChat(scope === 'activePath'
+    ? prepareChatForExport(frozen, snapshot.contentStore, { visibleBranchOnly: true }).chat : frozen, newID);
   chat.title = title;
-  const contentStore = copyEntries(store);
-  for (const node of Object.values(chat.branchTree?.nodes ?? {})) retainContent(contentStore, node.contentHash);
+  const contentStore = { ...store };
+  for (const node of Object.values(chat.branchTree?.nodes ?? {})) {
+    const entry = contentStore[node.contentHash];
+    contentStore[node.contentHash] = entry ? { ...entry } : { ...snapshot.contentStore[node.contentHash], refCount: 0 };
+    retainContent(contentStore, node.contentHash);
+  }
   return { chats: [chat, ...chats], contentStore };
 }
 
 export function deleteLibraryChats(chats: ChatInterface[], indices: number[], store: ContentStoreData, create: () => ChatInterface) {
   const selected = new Set(indices);
   const remaining = chats.filter((_, index) => !selected.has(index));
-  if (remaining.length) {
-    const removed = new Map<string, number>();
-    for (const [index, chat] of chats.entries()) {
-      if (!selected.has(index)) continue;
-      for (const node of Object.values(chat.branchTree?.nodes ?? {})) {
-        if (isStreamingContentHash(node.contentHash)) continue;
-        removed.set(node.contentHash, (removed.get(node.contentHash) ?? 0) + 1);
-      }
+  const removed = new Map<string, number>();
+  for (const [index, chat] of chats.entries()) {
+    if (!selected.has(index)) continue;
+    for (const node of Object.values(chat.branchTree?.nodes ?? {})) {
+      if (isStreamingContentHash(node.contentHash)) continue;
+      removed.set(node.contentHash, (removed.get(node.contentHash) ?? 0) + 1);
     }
-    for (const [hash, count] of removed) {
-      if (!store[hash] || !Number.isInteger(store[hash].refCount) || store[hash].refCount < count) {
-        throw new Error('Invalid message reference count; conversation was not deleted.');
-      }
+  }
+  for (const [hash, count] of removed) {
+    if (!Object.hasOwn(store, hash) || !Number.isInteger(store[hash].refCount) || store[hash].refCount < count) {
+      throw new Error('Invalid message reference count; conversation was not deleted.');
     }
   }
   const contentStore = copyEntries(store);
@@ -70,6 +76,6 @@ export function deleteLibraryChats(chats: ChatInterface[], indices: number[], st
     if (!selected.has(index)) continue;
     for (const node of Object.values(chat.branchTree?.nodes ?? {})) releaseContent(contentStore, node.contentHash);
   }
-  if (!remaining.length) return { chats: [create()], contentStore: {} as ContentStoreData };
+  if (!remaining.length) return { chats: [create()], contentStore };
   return { chats: remaining, contentStore };
 }

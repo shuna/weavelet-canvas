@@ -5,6 +5,7 @@ import type { ChatInterface, ConfigInterface } from '@type/chat';
 import type { ContentStoreData } from './contentStore';
 import { addLibraryChat, deleteLibraryChats, duplicateLibraryChat, renameLibraryChat } from './chatLibrary';
 import { createChatSlice } from '@store/chat-slice';
+import { recordChatEdits } from '@store/chat-edit-time';
 
 vi.mock('uuid', () => ({ v4: () => 'new-copy' }));
 
@@ -32,7 +33,16 @@ describe('shared Web/native library operations', () => {
       case 'delete-all': result = deleteLibraryChats(input.chats, [0, 1], input.contentStore, create); break;
       default: throw Error('Unknown fixture operation');
     }
-    expect({ ...input, ...result }).toEqual(expected);
+    // Latest Web removal retains entries until explicit GC, including unreferenced
+    // data. Keep the old fixture as a legacy artifact and assert the new full store.
+    const currentExpected = operation === 'delete-all' ? { ...expected, contentStore: {
+      ...input.contentStore,
+      system: { ...input.contentStore.system, refCount: 98 },
+      rich: { ...input.contentStore.rich, refCount: 98 },
+      answer: { ...input.contentStore.answer, refCount: 98 },
+      inactive: { ...input.contentStore.inactive, refCount: 98 },
+    } } : expected;
+    expect({ ...input, ...result }).toEqual(currentExpected);
     expect(result.chats[0].id).toBe(selectedID);
     expect(input).toEqual(before);
     for (const chat of result.chats) {
@@ -61,8 +71,11 @@ describe('shared Web/native library operations', () => {
     state = { ...createChatSlice(set as any, () => state), chats: input.chats,
       contentStore: input.contentStore, invalidateBranchHistory: vi.fn() };
     const next = duplicateLibraryChat(input.chats, 0, input.contentStore);
-    state.setChats(next.chats, { contentStore: next.contentStore });
-    expect(observed).toEqual([next]);
+    const clock = vi.spyOn(Date, 'now').mockReturnValue(1234);
+    try {
+      state.setChats(next.chats, { contentStore: next.contentStore });
+      expect(observed).toEqual([{ chats: recordChatEdits(input.chats, next.chats, 1234).chats, contentStore: next.contentStore }]);
+    } finally { clock.mockRestore(); }
     expect(input).toEqual(fixture.cases[0].input);
   });
 

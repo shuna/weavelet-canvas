@@ -11,6 +11,7 @@
       "chatsImported": "{{imported}} chats were imported out of {{total}}.",
       "unsupportedModels": "Unsupported model(s): {{models}} are not available. Add them in AI Provider Settings → Custom tab before importing."
     },
+    "importEntireFile": "Import entire file",
     "mode": {
       "append": "Append to existing data",
       "replace": "Replace all local data"
@@ -21,6 +22,33 @@
     "confirmReplaceAll": "This will delete all local conversations, then replace them with the imported data. Continue?",
     "confirmReplaceAllWithSettings": "This will delete all local conversations and settings, then replace them with the imported data. Continue?",
     "reduceMessagesSuccess": "{{count}} messages were reduced.",
-    "partialImportMessages": "expected {{total}} messages but found {{count}}"
+    "partialImportMessages": "expected {{total}} messages but found {{count}}",
+    "drive": {
+      "title": "Upload export to Google Drive only",
+      "description": "Add this export to an encrypted sync folder without importing it into local chats. Existing Drive chats are preserved.",
+      "connect": "Connect Google Drive in sync settings first.",
+      "loadFolders": "Load sync folders",
+      "folder": "Destination sync folder",
+      "selectFolder": "Select a folder",
+      "passphrase": "Folder passphrase (optional if remembered)",
+      "upload": "Convert and upload to Drive",
+      "completed": "Export uploaded to Drive. Local chats have not changed."
+    },
+  "preview": {
+    "browse": "Browse and select chats",
+    "readOnly": "Read only",
+    "importSelected": "Import {{count}} selected chats",
+    "cancel": "Cancel",
+    "retrySave": "Retry save",
+    "pendingSave": "Chats were imported, but saving failed. Retry saving without importing again.",
+    "selectAll": "Select all",
+    "clearSelection": "Clear selection",
+    "selectionCount": "Selected: {{chats}} chats · {{folders}} folders",
+    "importSelection": "Import selection",
+    "importFolderName": "Import: {{fileName}}",
+    "missingContent": "Missing content: this body is absent from the source file ({{hash}}).",
+    "recoveredContent": "Recovered {{count}} missing references from bodies retained in the file.",
+    "unavailableContent": "{{count}} chats contain missing bodies. You can browse them, but cannot import these chats.",
+    "cannotImportMissingContent": "Chats with missing bodies are selected. Deselect these chats before importing."
   }
-  
+}

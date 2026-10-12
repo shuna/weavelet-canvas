@@ -1,7 +1,8 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { downloadModelFiles, type DownloadProgress } from '@src/local-llm/download';
 import { localModelRuntime, promptAsInput, type RuntimeDiagnosticEvent, type RuntimeLogEvent, type RuntimeLoadProgressEvent } from '@src/local-llm/runtime';
-import { OpfsFileProvider, readFile, saveFile, createOPFSWritable, verifyStoredModel, deleteModelFile } from '@src/local-llm/storage';
+import { OpfsFileProvider, readFile, saveFile, createOPFSWritable, verifyStoredModel } from '@src/local-llm/storage';
+import { removeAssets } from '@src/local-llm/assetRemoval';
 import {
   FIXED_VALIDATION_MODEL,
   VALIDATION_PROMPTS,
@@ -320,7 +321,8 @@ function LowbitQValidationPage() {
             chunks.push(value);
           }
           useFileDirectly = new File(chunks, srcFile.name, { type: srcFile.type });
-          await deleteModelFile(originalDef.id, FIXED_VALIDATION_MODEL.fileName);
+          const removal = await removeAssets(originalDef.id, { files: [FIXED_VALIDATION_MODEL.fileName] });
+          if (removal.status !== 'removed') throw new Error('OPFS source could not be stopped for deletion');
           console.info('[LowbitQValidation] OPFS source deleted — quota freed');
         }
       } catch {
@@ -408,10 +410,10 @@ function LowbitQValidationPage() {
     updateStep(stepKey, 'running', 'モデルをロード中');
 
     if (localModelRuntime.isLoaded(originalDef.id)) {
-      await localModelRuntime.unloadModel(originalDef.id);
+      await localModelRuntime.unloadModel(originalDef.id, { force: true });
     }
     if (localModelRuntime.isLoaded(lowbitQDef.id)) {
-      await localModelRuntime.unloadModel(lowbitQDef.id);
+      await localModelRuntime.unloadModel(lowbitQDef.id, { force: true });
     }
 
     try {
@@ -454,7 +456,7 @@ function LowbitQValidationPage() {
       throw err;
     } finally {
       if (localModelRuntime.isLoaded(def.id)) {
-        await localModelRuntime.unloadModel(def.id);
+        await localModelRuntime.unloadModel(def.id, { force: true });
       }
     }
   };
@@ -497,10 +499,10 @@ function LowbitQValidationPage() {
     try {
       // Unload any loaded models
       if (localModelRuntime.isLoaded(originalDef.id)) {
-        await localModelRuntime.unloadModel(originalDef.id);
+        await localModelRuntime.unloadModel(originalDef.id, { force: true });
       }
       if (localModelRuntime.isLoaded(lowbitQDef.id)) {
-        await localModelRuntime.unloadModel(lowbitQDef.id);
+        await localModelRuntime.unloadModel(lowbitQDef.id, { force: true });
       }
 
       // Phase 1: Run all prompts for original
@@ -512,7 +514,7 @@ function LowbitQValidationPage() {
 
       // Unload original, prepare for lowbit-Q
       if (localModelRuntime.isLoaded(originalDef.id)) {
-        await localModelRuntime.unloadModel(originalDef.id);
+        await localModelRuntime.unloadModel(originalDef.id, { force: true });
       }
 
       // Phase 2: Run all prompts for lowbit-Q
@@ -534,7 +536,7 @@ function LowbitQValidationPage() {
 
       // Unload lowbit-Q
       if (localModelRuntime.isLoaded(lowbitQDef.id)) {
-        await localModelRuntime.unloadModel(lowbitQDef.id);
+        await localModelRuntime.unloadModel(lowbitQDef.id, { force: true });
       }
 
       setBatchResults(results);

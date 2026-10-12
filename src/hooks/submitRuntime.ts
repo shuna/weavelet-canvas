@@ -1,3 +1,4 @@
+import { cancelAiTask, cancelAiTaskRequest, isAiTaskCurrent, type AiTaskTicket } from './aiTaskLifetime';
 import { isOpenRouterEndpoint, observeOpenRouterHeaders, observeOpenRouterUsage, type OpenRouterRequestContext } from '@utils/openrouterControls';
 import { recordOpenRouterObservation } from '@utils/openrouterObservation';
 import useStore from '@store/store';
@@ -13,19 +14,23 @@ import { upsertActivePathMessage } from '@utils/branchUtils';
 import { materializeActivePath } from '@utils/branchUtils';
 import { addContent, releaseContent, resolveContent } from '@utils/contentStore';
 import {
-  appendText as appendStreamText,
   deleteRequest as deleteStreamRecord,
   saveRequest as saveStreamRecord,
   setGenerationId as setStreamGenerationId,
   setStreamObservation,
+  markStreamApplied,
+  updateStatus as updateStreamStatus,
+  saveProxyCheckpoint,
 } from '@utils/streamDb';
-import { getProxyConfig, sendAck, sendCancel, parseProxySse, type ProxyConfig } from '@utils/proxyClient';
+import { getProxyConfig, sendCancel, parseProxySse, retryAfterMessage, type ProxyConfig } from '@utils/proxyClient';
 import { cancelGeneration } from '@api/openrouter';
 import {
   appendToStreamingBuffer,
   appendReasoningToStreamingBuffer,
   createStreamingContentHash,
   finalizeStreamingBuffer,
+  discardStreamingBuffer,
+  requestSnapshotFlush,
   initializeStreamingBuffer,
   isBufferingNode,
   isStreamingContentHash,
@@ -185,6 +190,7 @@ export const clearSubmitSessionRuntime = (
 };
 
 export const stopSubmitSession = (sessionId: string) => {
+  cancelAiTaskRequest(sessionId);
   const requestId = sessionRequestIds.get(sessionId);
   // Mark the target node as interrupted before aborting
   const chunkTarget =
@@ -201,7 +207,7 @@ export const stopSubmitSession = (sessionId: string) => {
   // runtime path might not complete (e.g. race conditions, worker crashes).
   const session = useStore.getState().generatingSessions[sessionId];
   if (session) {
-    const chat = useStore.getState().chats?.[session.chatIndex];
+    const chat = useStore.getState().chats?.find(chat => chat.id === session.chatId);
     if (chat?.config?.modelSource === 'local') {
       debugReport(`local-model:${chat.config.model}`, {
         label: 'Local model',
@@ -306,21 +312,21 @@ const ensureStreamingBufferForNode = (
     let updatedContentStore = state.contentStore;
     const node = tree.nodes[targetNodeId];
 
-    if (!isStreamingContentHash(node.contentHash)) {
+    if (node.contentHash !== createStreamingContentHash(chatId, targetNodeId)) {
       updatedContentStore = { ...state.contentStore };
       initializeStreamingBuffer(
+        chatId,
         targetNodeId,
         resolveContent(updatedContentStore, node.contentHash),
-        chatId
       );
       releaseContent(updatedContentStore, node.contentHash);
       tree.nodes[targetNodeId] = {
         ...node,
-        contentHash: createStreamingContentHash(targetNodeId),
+        contentHash: createStreamingContentHash(chatId, targetNodeId),
       };
       initialized = true;
-    } else if (!isBufferingNode(targetNodeId)) {
-      initializeStreamingBuffer(targetNodeId, [], chatId);
+    } else if (!isBufferingNode(chatId, targetNodeId)) {
+      initializeStreamingBuffer(chatId, targetNodeId, []);
       initialized = true;
     }
 
@@ -343,7 +349,7 @@ const ensureStreamingBufferForNode = (
     };
   });
 
-  return initialized || isBufferingNode(targetNodeId);
+  return initialized || isBufferingNode(chatId, targetNodeId);
 };
 
 /** Write reasoning chunk to the streaming buffer (not the Zustand store). */
@@ -353,11 +359,11 @@ const writeReasoningChunk = (
   text: string
 ): void => {
   if (!text) return;
-  if (!isBufferingNode(targetNodeId) && !ensureStreamingBufferForNode(chatId, targetNodeId)) {
+  if (!isBufferingNode(chatId, targetNodeId) && !ensureStreamingBufferForNode(chatId, targetNodeId)) {
     return;
   }
-  appendReasoningToStreamingBuffer(targetNodeId, text);
-  notifyStreamingUpdate(targetNodeId);
+  appendReasoningToStreamingBuffer(chatId, targetNodeId, text);
+  notifyStreamingUpdate(chatId, targetNodeId);
 };
 
 export const writeChunkToStore = (
@@ -367,9 +373,9 @@ export const writeChunkToStore = (
 ) => {
   // Fast path: buffer already exists — update buffer only, skip Zustand.
   // Only the component subscribing via useStreamingText will re-render.
-  if (isBufferingNode(targetNodeId)) {
-    appendToStreamingBuffer(targetNodeId, text);
-    notifyStreamingUpdate(targetNodeId);
+  if (isBufferingNode(chatId, targetNodeId)) {
+    appendToStreamingBuffer(chatId, targetNodeId, text);
+    notifyStreamingUpdate(chatId, targetNodeId);
     return;
   }
 
@@ -389,23 +395,23 @@ export const writeChunkToStore = (
       let updatedContentStore = state.contentStore;
       const node = tree.nodes[targetNodeId];
 
-      if (!isStreamingContentHash(node.contentHash)) {
+      if (node.contentHash !== createStreamingContentHash(chatId, targetNodeId)) {
         updatedContentStore = { ...state.contentStore };
         initializeStreamingBuffer(
+          chatId,
           targetNodeId,
           resolveContent(updatedContentStore, node.contentHash),
-          chatId,
         );
         releaseContent(updatedContentStore, node.contentHash);
         tree.nodes[targetNodeId] = {
           ...node,
-          contentHash: createStreamingContentHash(targetNodeId),
+          contentHash: createStreamingContentHash(chatId, targetNodeId),
         };
-      } else if (!isBufferingNode(targetNodeId)) {
-        initializeStreamingBuffer(targetNodeId, [], chatId);
+      } else if (!isBufferingNode(chatId, targetNodeId)) {
+        initializeStreamingBuffer(chatId, targetNodeId, []);
       }
 
-      appendToStreamingBuffer(targetNodeId, text);
+      appendToStreamingBuffer(chatId, targetNodeId, text);
 
       const pathIndex = tree.activePath.indexOf(targetNodeId);
       if (pathIndex >= 0) {
@@ -455,15 +461,16 @@ export const writeChunkToStore = (
 export const finalizeStreamingNode = (chatId: string, targetNodeId: string) => {
   useStore.setState((state) => {
     const chats = state.chats;
-    if (!chats) return state;
+    if (!chats) { discardStreamingBuffer(chatId, targetNodeId); return state; }
 
     const chatIndex = chats.findIndex((chat) => chat.id === chatId);
-    if (chatIndex < 0) return state;
+    if (chatIndex < 0) { discardStreamingBuffer(chatId, targetNodeId); return state; }
 
     const chat = chats[chatIndex];
     const tree = chat.branchTree;
     const node = tree?.nodes[targetNodeId];
     if (!tree || !node || !isStreamingContentHash(node.contentHash)) {
+      discardStreamingBuffer(chatId, targetNodeId);
       return state;
     }
 
@@ -471,7 +478,7 @@ export const finalizeStreamingNode = (chatId: string, targetNodeId: string) => {
     const updatedChat = updatedChats[chatIndex];
     const updatedTree = updatedChat.branchTree!;
     const updatedContentStore = { ...state.contentStore };
-    const finalizedContent = finalizeStreamingBuffer(targetNodeId);
+    const finalizedContent = finalizeStreamingBuffer(chatId, targetNodeId);
 
     updatedTree.nodes[targetNodeId] = {
       ...updatedTree.nodes[targetNodeId],
@@ -508,7 +515,8 @@ export const flushQueuedChunks = (chatId: string, targetNodeId: string) => {
 export const queueChunkToStore = (
   chatId: string,
   targetNodeId: string,
-  text: string
+  text: string,
+  canApply?: () => boolean
 ) => {
   if (!text) return;
 
@@ -521,12 +529,14 @@ export const queueChunkToStore = (
     key,
     scheduleFlush(() => {
       pendingChunkTimers.delete(key);
+      if (canApply && !canApply()) { discardQueuedChunks(chatId, targetNodeId); return; }
       flushQueuedChunks(chatId, targetNodeId);
     })
   );
 };
 
 type ExecuteSubmitStreamParams = {
+  ticket?: AiTaskTicket;
   regenerate?: boolean;
   sessionId: string;
   chatId: string;
@@ -576,6 +586,7 @@ export const getGenerationIdFromSubmitError = (
 // ---------------------------------------------------------------------------
 
 export interface ExecuteLocalSubmitParams {
+  ticket?: AiTaskTicket;
   sessionId: string;
   chatId: string;
   chatIndex: number;
@@ -587,9 +598,11 @@ export interface ExecuteLocalSubmitParams {
   abortController: AbortController;
   t: (key: string) => string;
   assistantPrefill?: string;
+  modelOwnerId?: string;
 }
 
 export const executeLocalSubmit = async ({
+  ticket,
   sessionId,
   chatId,
   chatIndex,
@@ -600,12 +613,20 @@ export const executeLocalSubmit = async ({
   mode,
   abortController,
   assistantPrefill,
+  modelOwnerId,
 }: ExecuteLocalSubmitParams): Promise<ExecuteSubmitStreamResult> => {
+  const canApply = () => {
+    if (!ticket || isAiTaskCurrent(ticket)) return !abortController.signal.aborted;
+    cancelAiTask(ticket);
+    return false;
+  };
+  if (!canApply()) return {};
   // Lazy imports to keep submitRuntime lightweight
   const { localModelRuntime } = await import('@src/local-llm/runtime');
   const { buildLocalChatMessages } = await import('./submitHelpers');
 
-  await localModelRuntime.ensureLoaded(config.model);
+  await localModelRuntime.ensureLoaded(config.model, modelOwnerId);
+  if (!canApply()) return {};
   const engine = localModelRuntime.getWllamaEngine(config.model);
   if (!engine) throw new Error('Local model engine not available');
 
@@ -624,31 +645,32 @@ export const executeLocalSubmit = async ({
   useStore.setState((state) => {
     const chats = state.chats;
     if (!chats) return state;
-    const chat = chats[chatIndex];
+    const currentIndex = chats.findIndex(chat => chat.id === chatId);
+    const chat = chats[currentIndex];
     if (!chat?.branchTree) return state;
 
     const updatedChats = [...chats];
     const updatedChat = { ...chat, branchTree: { ...chat.branchTree, nodes: { ...chat.branchTree.nodes } } };
-    updatedChats[chatIndex] = updatedChat;
+    updatedChats[currentIndex] = updatedChat;
     const tree = updatedChat.branchTree;
     const node = tree.nodes[targetNodeId];
     if (!node) return state;
 
     let updatedContentStore = state.contentStore;
-    if (!isStreamingContentHash(node.contentHash)) {
+    if (node.contentHash !== createStreamingContentHash(chatId, targetNodeId)) {
       updatedContentStore = { ...state.contentStore };
       initializeStreamingBuffer(
+        chatId,
         targetNodeId,
         resolveContent(updatedContentStore, node.contentHash),
-        chatId,
       );
       releaseContent(updatedContentStore, node.contentHash);
       tree.nodes[targetNodeId] = {
         ...node,
-        contentHash: createStreamingContentHash(targetNodeId),
+        contentHash: createStreamingContentHash(chatId, targetNodeId),
       };
-    } else if (!isBufferingNode(targetNodeId)) {
-      initializeStreamingBuffer(targetNodeId, [], chatId);
+    } else if (!isBufferingNode(chatId, targetNodeId)) {
+      initializeStreamingBuffer(chatId, targetNodeId, []);
     }
 
     return {
@@ -683,8 +705,8 @@ export const executeLocalSubmit = async ({
   // Seed the streaming buffer with the prefix immediately so it's visible
   // before the first generated token arrives.
   if (prefix) {
-    setStreamingBufferText(targetNodeId, prefix);
-    notifyStreamingUpdate(targetNodeId);
+    setStreamingBufferText(chatId, targetNodeId, prefix);
+    notifyStreamingUpdate(chatId, targetNodeId);
   }
 
   try {
@@ -701,13 +723,13 @@ export const executeLocalSubmit = async ({
         temperature: config.temperature,
       },
       (text) => {
-        if (abortController.signal.aborted) return;
+        if (!canApply()) return;
         fullText = text;
         resetStallTimer();
         // wllama sends currentText (full generated text-so-far), not deltas.
         // Prepend the prefix so the buffer always shows the complete content.
-        setStreamingBufferText(targetNodeId, prefix + text);
-        notifyStreamingUpdate(targetNodeId);
+        setStreamingBufferText(chatId, targetNodeId, prefix + text);
+        notifyStreamingUpdate(chatId, targetNodeId);
       },
       'chat',
     );
@@ -734,6 +756,7 @@ export const executeLocalSubmit = async ({
 // ---------------------------------------------------------------------------
 
 export const executeSubmitStream = async ({
+  ticket,
   sessionId,
   chatId,
   chatIndex,
@@ -747,11 +770,20 @@ export const executeSubmitStream = async ({
   t,
   regenerate = false,
 }: ExecuteSubmitStreamParams): Promise<ExecuteSubmitStreamResult> => {
+  const canApply = () => {
+    if (!ticket || isAiTaskCurrent(ticket)) return !abortController.signal.aborted;
+    cancelAiTask(ticket);
+    return false;
+  };
+  if (!canApply()) return {};
   sessionChunkTargets.set(sessionId, { chatId, targetNodeId });
   const isStreamSupported = getEffectiveStreamEnabled(config);
   const proxyConfig = getProxyConfig();
   let capturedGenerationId: string | undefined;
   let lastFinishReason: string | undefined;
+  let receivedStreamText = '';
+  let receivedStreamReasoning = '';
+  let proxyTimedOut = false;
 
   // Parser for <think>...</think> tags in content (used by open-source models
   // on Together AI, Fireworks, Groq, etc.)
@@ -768,14 +800,21 @@ export const executeSubmitStream = async ({
   const requestContext: OpenRouterRequestContext = {
     chatId, regenerate, viaProxy: !!proxyConfig,
     onObservation: patch => {
+      if (!canApply()) return;
       if (!isOpenRouterEndpoint(resolvedProvider.endpoint)) return;
       recordOpenRouterObservation(chatId, targetNodeId, patch);
       const requestId = sessionRequestIds.get(sessionId);
       if (requestId) void setStreamObservation(requestId, patch).catch(() => {});
     },
   };
-  const observeUsage = (usage: unknown) => requestContext.onObservation?.(observeOpenRouterUsage(usage));
+  let upstreamDataStarted = false;
+  const observeUsage = (usage: unknown) => {
+    if (usage) upstreamDataStarted = true;
+    requestContext.onObservation?.(observeOpenRouterUsage(usage));
+  };
   const runRequest = async (requestMessages: MessageInterface[]) => {
+    receivedStreamText = '';
+    receivedStreamReasoning = '';
     if (!isStreamSupported) {
       let data;
       const signal = abortController.signal;
@@ -807,7 +846,7 @@ export const executeSubmitStream = async ({
         );
       }
 
-      if (!useStore.getState().generatingSessions[sessionId]) return;
+      if (!canApply() || !useStore.getState().generatingSessions[sessionId]) return;
       if (!data?.choices?.[0]?.message?.content) {
         throw new Error(t('errors.failedToRetrieveData'));
       }
@@ -846,7 +885,10 @@ export const executeSubmitStream = async ({
       throw new Error(t('noApiKeyWarning'));
     }
 
-    const onChunk = (text: string, meta?: { generationId?: string; reasoning?: string; openRouterObservation?: import('@type/chat').OpenRouterObservation }) => {
+    const onChunk = (text: string, meta?: { generationId?: string; reasoning?: string; upstreamStarted?: boolean; openRouterObservation?: import('@type/chat').OpenRouterObservation }) => {
+      if (!canApply()) return;
+      receivedStreamText += text;
+      if (text || meta?.reasoning || meta?.generationId || meta?.upstreamStarted || meta?.openRouterObservation) upstreamDataStarted = true;
       if (meta?.openRouterObservation) requestContext.onObservation?.(meta.openRouterObservation);
       if (meta?.generationId && !capturedGenerationId) {
         capturedGenerationId = meta.generationId;
@@ -854,6 +896,7 @@ export const executeSubmitStream = async ({
       }
       // Handle reasoning from SW path (already extracted by SW)
       if (meta?.reasoning) {
+        receivedStreamReasoning += meta.reasoning;
         writeReasoningChunk(chatId, targetNodeId, meta.reasoning);
       }
       if (text) {
@@ -863,19 +906,23 @@ export const executeSubmitStream = async ({
           writeReasoningChunk(chatId, targetNodeId, parsed.reasoning);
         }
         if (parsed.content) {
-          queueChunkToStore(chatId, targetNodeId, parsed.content);
+          queueChunkToStore(chatId, targetNodeId, parsed.content, canApply);
         }
       }
     };
 
     const onReasoningChunk = (text: string) => {
+      if (!canApply()) return;
+      if (text) upstreamDataStarted = true;
       writeReasoningChunk(chatId, targetNodeId, text);
     };
 
     // --- Path 1: SW available (with optional proxy) ---
     // Debug option: set localStorage.setItem('disableSW', '1') to bypass SW
     const swDisabled = typeof localStorage !== 'undefined' && localStorage.getItem('disableSW') === '1';
-    if (!swDisabled && await swBridge.waitForController()) {
+    const swAvailable = !swDisabled && await swBridge.waitForController();
+    if (!canApply()) return;
+    if (swAvailable) {
       const requestId = crypto.randomUUID();
       const prepared = prepareStreamRequest(
         resolvedProvider.endpoint,
@@ -910,7 +957,6 @@ export const executeSubmitStream = async ({
 
         const cleanup = () => {
           clearInterval(checkStop);
-          deleteStreamRecord(requestId).catch(() => {});
           debugReport(`submit:${sessionId}`, {
             label: 'Submit Session',
             status: 'active',
@@ -932,7 +978,10 @@ export const executeSubmitStream = async ({
         }, 500);
 
         swBridge.startStream({
+          signal: abortController.signal,
           requestId,
+          chatId,
+          nodeId: targetNodeId,
           endpoint: prepared.endpoint,
           headers: prepared.headers,
           body: prepared.body,
@@ -948,10 +997,6 @@ export const executeSubmitStream = async ({
               status: 'done',
               detail: `${formatDebugTime()} onDone ${requestId.slice(0, 8)}`,
             });
-            // ACK proxy to free KV cache
-            if (meta?.proxySessionId && proxyConfig) {
-              sendAck(proxyConfig, meta.proxySessionId);
-            }
             resolve();
           },
           onError: (error, meta) => {
@@ -968,6 +1013,13 @@ export const executeSubmitStream = async ({
           },
           proxyConfig: swProxyConfig,
         }).then((handle) => {
+          if (!canApply() || !useStore.getState().generatingSessions[sessionId]) {
+            swCancelledByUser = true;
+            handle.cancel();
+            cleanup();
+            resolve();
+            return;
+          }
           swHandle = handle;
           swCancellers.set(sessionId, () => handle.cancel());
           debugReport(`submit:${sessionId}`, {
@@ -1012,6 +1064,8 @@ export const executeSubmitStream = async ({
       // Write initial streamDb record so useStreamRecovery can find this session
       await saveStreamRecord({
         requestId,
+        chatId,
+        nodeId: targetNodeId,
         chatIndex,
         messageIndex,
         bufferedText: '',
@@ -1021,9 +1075,16 @@ export const executeSubmitStream = async ({
         acknowledged: false,
         proxySessionId,
         lastProxyEventId: 0,
+        bufferedReasoning: '',
+        llmSsePartial: '',
+        thinkTagCheckpoint: { state: 'outside', pending: '' },
+        llmDone: false,
       });
 
-      const res = await fetch(`${proxyConfig.endpoint}/api/stream`, {
+      const headerTimeout = setTimeout(() => { proxyTimedOut = true; abortController.abort(); }, 45_000);
+      let res: Response;
+      try {
+        res = await fetch(`${proxyConfig.endpoint}/api/stream`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -1037,11 +1098,17 @@ export const executeSubmitStream = async ({
           body: prepared.body,
           sessionId: proxySessionId,
         }),
-        signal: abortController.signal,
-      });
+          signal: abortController.signal,
+        });
+      } catch (error) {
+        await updateStreamStatus(requestId, proxyTimedOut ? 'failed' : 'interrupted');
+        throw error;
+      } finally {
+        clearTimeout(headerTimeout);
+      }
 
       if (!res.ok) {
-        const errBody = await res.text();
+        const errBody = (await res.text()).slice(0, 8192);
         // Cloudflare platform errors (e.g. 530/1016 DNS failure) return HTML,
         // not JSON. Detect these and provide a user-friendly message.
         const isCloudflareError =
@@ -1054,7 +1121,7 @@ export const executeSubmitStream = async ({
             `Proxy error (${code}): The LLM API endpoint is unreachable. Check the URL and try again.`
           );
         }
-        throw new Error(errBody);
+        throw new Error(retryAfterMessage(res.headers.get('Retry-After')) ?? errBody);
       }
 
       if (!res.body) throw new Error('Proxy returned no body');
@@ -1065,30 +1132,41 @@ export const executeSubmitStream = async ({
       let partial = '';
       let llmPartial = '';
       let reading = true;
+      let proxyCompleted = false;
+      let llmCompleted = false;
       const CHUNK_TIMEOUT_MS = 45_000;
 
       // Periodic streamDb flush (mirrors SW's FLUSH_INTERVAL_MS = 800)
       const DB_FLUSH_INTERVAL_MS = 800;
       let dbBuffered = '';
+      let dbReasoning = '';
       let dbLastProxyEventId = 0;
+      const checkpointThinkParser = new ThinkTagParser();
       let dbFlushTimer: ReturnType<typeof setTimeout> | null = null;
       let dbFlushChain = Promise.resolve();
 
       function flushDbBuffer() {
         if (dbFlushTimer) { clearTimeout(dbFlushTimer); dbFlushTimer = null; }
         const snapshot = dbBuffered;
+        const reasoningSnapshot = dbReasoning;
         const eventIdSnapshot = dbLastProxyEventId;
-        if (!snapshot) return;
-        dbBuffered = '';
+        const llmPartialSnapshot = llmPartial;
+        const thinkCheckpoint = checkpointThinkParser.checkpoint();
+        const generationIdSnapshot = capturedGenerationId;
+        const llmDoneSnapshot = llmCompleted;
+        const proxyCompleteSnapshot = proxyCompleted && llmCompleted;
+        if (!snapshot && !reasoningSnapshot && !llmPartialSnapshot && eventIdSnapshot === 0) return;
         dbFlushChain = dbFlushChain
-          .then(() =>
-            appendStreamText(
-              requestId,
-              snapshot,
-              eventIdSnapshot,
-              capturedGenerationId
-            )
-          )
+          .then(() => saveProxyCheckpoint(requestId, {
+            bufferedText: snapshot,
+            bufferedReasoning: reasoningSnapshot,
+            lastProxyEventId: eventIdSnapshot,
+            llmSsePartial: llmPartialSnapshot,
+            thinkTagCheckpoint: thinkCheckpoint,
+            generationId: generationIdSnapshot,
+            llmDone: llmDoneSnapshot,
+            proxyComplete: proxyCompleteSnapshot,
+          }))
           .catch(() => {});
       }
 
@@ -1103,7 +1181,11 @@ export const executeSubmitStream = async ({
           reader.read().finally(() => clearTimeout(timer)),
           new Promise<never>((_, reject) => {
             timer = setTimeout(
-              () => reject(new Error('Chunk timeout: no data received for 45s')),
+              () => {
+                proxyTimedOut = true;
+                abortController.abort();
+                reject(new Error('Chunk timeout: no data received for 45s'));
+              },
               CHUNK_TIMEOUT_MS
             );
           }),
@@ -1118,9 +1200,12 @@ export const executeSubmitStream = async ({
           partial = proxySse.partial;
 
           for (const evt of proxySse.events) {
+            // Only fully parsed outer events advance the recovery cursor.
             if (evt.id > dbLastProxyEventId) dbLastProxyEventId = evt.id;
             if (evt.eventType === 'done') {
               if (evt.meta?.openRouterObservation) requestContext.onObservation?.(evt.meta.openRouterObservation);
+              if (evt.meta?.complete !== true) throw new Error('Proxy stream ended without a complete marker');
+              proxyCompleted = true;
               reading = false;
               break;
             }
@@ -1131,6 +1216,7 @@ export const executeSubmitStream = async ({
               const llmChunk = llmPartial + evt.rawText;
               const llmParsed = parseEventSource(llmChunk, false);
               llmPartial = llmParsed.partial;
+              if (llmParsed.events.length || llmParsed.done) upstreamDataStarted = true;
 
               if (!capturedGenerationId) {
                 for (const e of llmParsed.events) {
@@ -1161,14 +1247,16 @@ export const executeSubmitStream = async ({
                 ''
               );
               if (reasoningString) onReasoningChunk(reasoningString);
+              dbReasoning += reasoningString;
               if (resultString) {
                 onChunk(resultString);
-                dbBuffered += resultString;
+                const parsedContent = checkpointThinkParser.process(resultString);
+                dbBuffered += parsedContent.content;
+                dbReasoning += parsedContent.reasoning;
                 scheduleDbFlush();
               }
               if (llmParsed.done) {
-                reading = false;
-                break;
+                llmCompleted = true;
               }
             }
           }
@@ -1176,8 +1264,8 @@ export const executeSubmitStream = async ({
           if (done) reading = false;
         }
 
-        // Flush remaining LLM partial
-        if (llmPartial) {
+        // Only a confirmed outer completion makes unfinished parser state final.
+        if (proxyCompleted && llmCompleted && llmPartial) {
           const llmFlushed = parseEventSource(llmPartial, true);
           let flushReasoningString = '';
           const resultString = llmFlushed.events.reduce(
@@ -1195,20 +1283,37 @@ export const executeSubmitStream = async ({
             ''
           );
           if (flushReasoningString) onReasoningChunk(flushReasoningString);
+          dbReasoning += flushReasoningString;
           if (resultString) {
             onChunk(resultString);
-            dbBuffered += resultString;
+            const parsedContent = checkpointThinkParser.process(resultString);
+            dbBuffered += parsedContent.content;
+            dbReasoning += parsedContent.reasoning;
           }
         }
+        if (!proxyCompleted || !llmCompleted) {
+          throw new Error('Proxy stream ended before complete outer and inner markers');
+        }
       } finally {
-        reader.cancel();
+        await reader.cancel().catch(() => {});
         reader.releaseLock();
         // Final streamDb flush
         flushDbBuffer();
         await dbFlushChain;
-        // ACK proxy to free KV cache (best-effort, even on error/abort)
-        sendAck(proxyConfig, proxySessionId);
-        deleteStreamRecord(requestId).catch(() => {});
+        if (proxyCompleted && llmCompleted) {
+          const finalThink = checkpointThinkParser.flush();
+          dbBuffered += finalThink.content;
+          dbReasoning += finalThink.reasoning;
+          flushDbBuffer();
+          await dbFlushChain;
+          receivedStreamText = dbBuffered;
+          receivedStreamReasoning = dbReasoning;
+          await updateStreamStatus(requestId, 'completed');
+        } else {
+          receivedStreamText = dbBuffered;
+          receivedStreamReasoning = dbReasoning;
+          await updateStreamStatus(requestId, abortController.signal.aborted && !proxyTimedOut ? 'interrupted' : 'failed');
+        }
       }
 
       return;
@@ -1250,6 +1355,7 @@ export const executeSubmitStream = async ({
         const { done, value } = await readWithTimeout();
         const chunk = partial + decoder.decode(done ? undefined : value, { stream: !done });
         const parsed = parseEventSource(chunk, done);
+        if (parsed.events.length || parsed.done) upstreamDataStarted = true;
         partial = parsed.partial;
 
         if (!capturedGenerationId) {
@@ -1293,10 +1399,12 @@ export const executeSubmitStream = async ({
     }
   };
 
+  let requestCompleted = false;
   try {
     await runRequest(messages);
+    requestCompleted = true;
   } catch (error) {
-    if (!shouldRetryWithoutSystemMessages(error, messages)) {
+    if (upstreamDataStarted || !shouldRetryWithoutSystemMessages(error, messages)) {
       // Determine end reason from the error type
       const isAbort = error instanceof Error && error.name === 'AbortError';
       const endReason: StreamEndReason = isAbort ? 'interrupted' : 'error';
@@ -1305,6 +1413,7 @@ export const executeSubmitStream = async ({
     }
     try {
       await runRequest(removeSystemMessages(messages));
+      requestCompleted = true;
     } catch (retryError) {
       const isAbort = retryError instanceof Error && retryError.name === 'AbortError';
       const endReason: StreamEndReason = isAbort ? 'interrupted' : 'error';
@@ -1312,13 +1421,30 @@ export const executeSubmitStream = async ({
       throw withCapturedGenerationId(retryError, capturedGenerationId);
     }
   } finally {
-    // Flush any remaining <think> tag buffer before finalizing
-    const remaining = thinkTagParser.flush();
-    if (remaining.reasoning) writeReasoningChunk(chatId, targetNodeId, remaining.reasoning);
-    if (remaining.content) queueChunkToStore(chatId, targetNodeId, remaining.content);
-    flushQueuedChunks(chatId, targetNodeId);
-    finalizeStreamingNode(chatId, targetNodeId);
+    // An interrupted proxy stream retains unfinished tags in its recovery checkpoint.
+    if (!proxyConfig || requestCompleted) {
+      const remaining = thinkTagParser.flush();
+      if (canApply() && remaining.reasoning) writeReasoningChunk(chatId, targetNodeId, remaining.reasoning);
+      if (canApply() && remaining.content) queueChunkToStore(chatId, targetNodeId, remaining.content);
+    }
+    const canFinalize = canApply() || (proxyTimedOut && (!ticket || isAiTaskCurrent(ticket))
+      && !!useStore.getState().generatingSessions[sessionId]);
+    if (canFinalize) {
+      flushQueuedChunks(chatId, targetNodeId);
+      finalizeStreamingNode(chatId, targetNodeId);
+      const requestId = sessionRequestIds.get(sessionId);
+      const node = useStore.getState().chats?.find(chat => chat.id === chatId)?.branchTree?.nodes[targetNodeId];
+      if (requestId && node && !isStreamingContentHash(node.contentHash)) {
+        try {
+          await markStreamApplied(requestId, node.contentHash, node.role, receivedStreamText, receivedStreamReasoning);
+          requestSnapshotFlush();
+        } catch (error) {
+          debugReport(`recovery-record:${requestId}`, { status: 'error', detail: `Finalized recovery checkpoint failed: ${String(error)}` });
+        }
+      }
+    }
   }
+
 
   // Stream completed successfully — determine the reason
   // Skip if the SW path resolved due to user cancel (status already set by stopSubmitSession)
@@ -1329,3 +1455,10 @@ export const executeSubmitStream = async ({
 
   return { generationId: capturedGenerationId };
 };
+
+export function getStreamCheckpointTargets(): { requestId: string; chatId: string; nodeId: string }[] {
+  return [...sessionRequestIds].flatMap(([sessionId, requestId]) => {
+    const session = useStore.getState().generatingSessions[sessionId];
+    return session ? [{ requestId, chatId: session.chatId, nodeId: session.targetNodeId }] : [];
+  });
+}

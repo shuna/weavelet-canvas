@@ -4,13 +4,16 @@ import {
   modelSupportsSystemRole,
 } from '@utils/submitContext';
 export { sanitizeMessagesForSubmit } from '@utils/submitContext';
+import { beginAiTask, finishAiTask, isAiTaskCurrent } from './aiTaskLifetime';
 import { assertAuxiliaryEndpoint, hardOpenRouterConstraints } from '@utils/openrouterControls';
 import { getChatCompletion } from '@api/api';
 import { officialAPIEndpoint } from '@constants/auth';
-import useStore from '@store/store';
+import useStore, { type StoreState } from '@store/store';
 import { cloneChatAtIndex } from '@utils/chatShallowClone';
 import { ContentStoreData } from '@utils/contentStore';
-import { updateTotalTokenUsed } from '@utils/messageUtils';
+import { countTokens, updateTotalTokenUsed } from '@utils/messageUtils';
+import { getModelContextInfo } from '@utils/modelLookup';
+import { fitsContextWindow } from '@utils/tokenBudget';
 import {
   appendNodeToActivePathState,
   insertMessageAtIndexState,
@@ -25,8 +28,18 @@ import {
 } from '@type/chat';
 import { FavoriteModel, ProviderConfig, ProviderId } from '@type/provider';
 import { normalizeProviderConfig } from '@store/provider-helpers';
+import { isSummaryEligible, normalizeBubbleSummaryText } from '@utils/bubbleSummary';
+import { buildBubbleSummaryPrompt } from '@utils/bubbleSummaryPrompt';
 
 type ProviderMap = Partial<Record<ProviderId, ProviderConfig>>;
+
+const generatingNodeIdsForChat = (chatId: string) =>
+  Object.values(useStore.getState().generatingSessions).filter(session => session.chatId === chatId).map(session => session.targetNodeId);
+
+const effectiveSummaryChat = (chat: ChatInterface, chatIndex: number): ChatInterface => {
+  const state = useStore.getState();
+  return { ...chat, omittedNodes: state.omittedNodeMaps[String(chatIndex)] ?? chat.omittedNodes ?? {} };
+};
 
 export type ResolvedProvider = {
   endpoint: string;
@@ -136,9 +149,9 @@ export const resolveProviderForModel = (
 
 export const filterOmittedMessages = (
   messages: MessageInterface[],
-  chatIndex: number
+  chatIndex: number,
+  state: StoreState = useStore.getState()
 ): MessageInterface[] => {
-  const state = useStore.getState();
   const chat = state.chats?.[chatIndex];
   return filterSharedOmittedMessages(messages, chat?.branchTree?.activePath,
     state.omittedNodeMaps[String(chatIndex)] ?? chat?.omittedNodes ?? {});
@@ -150,16 +163,18 @@ export const getSubmitContextMessages = (
   messageIndex: number,
   modelId?: string,
   chatIndex?: number,
-  systemPrompt?: string
+  systemPrompt?: string,
+  state: StoreState = useStore.getState()
 ): MessageInterface[] => {
   if (chatIndex === undefined) {
     return getSharedSubmitContextMessages(messages, messageIndex, modelId, undefined, {}, systemPrompt);
   }
-  const state = useStore.getState();
   const chat = state.chats?.[chatIndex];
   return getSharedSubmitContextMessages(messages, messageIndex, modelId,
     chat?.branchTree?.activePath,
-    state.omittedNodeMaps[String(chatIndex)] ?? chat?.omittedNodes ?? {}, systemPrompt);
+    state.omittedNodeMaps[String(chatIndex)] ?? chat?.omittedNodes ?? {}, systemPrompt,
+    chat ? { chat, generatingNodeIds: Object.values(state.generatingSessions)
+      .filter(session => session.chatId === chat.id).map(session => session.targetNodeId) } : undefined);
 };
 
 export const applySubmitTokenUsage = async (
@@ -191,18 +206,8 @@ export const applySubmitTokenUsage = async (
   const assistantMessage = messages[assistantMessageIndex];
   if (!assistantMessage) return;
 
-  let promptMessages = filterOmittedMessages(
-    messages.slice(0, assistantMessageIndex),
-    chatIndex
-  ).filter((m) => m.role !== 'system');
+  const promptMessages = getSubmitContextMessages(messages, 'append', assistantMessageIndex, config.model, chatIndex, config.systemPrompt);
 
-  // Include config systemPrompt in token counting
-  if (config.systemPrompt && modelSupportsSystemRole(config.model)) {
-    promptMessages = [
-      { role: 'system', content: [{ type: 'text', text: config.systemPrompt } as TextContentInterface] },
-      ...promptMessages,
-    ];
-  }
 
   await updateTotalTokenUsed(
     config.model,
@@ -260,6 +265,33 @@ export const generateTitleForChat = async (
       `${deps.t('errors.errorGeneratingTitle')}\n${(error as Error).message}`
     );
   }
+};
+
+/** Auxiliary request with the same endpoint, key and OpenRouter restrictions as title generation. */
+export const generateBubbleSummary = async (
+  chat: ChatInterface,
+  sourceIndexes: number[],
+  deps: TitleGenerationDeps & { summaryConfig?: ConfigInterface; summaryFormat?: 'compact' },
+  signal?: AbortSignal
+): Promise<string> => {
+  const modelConfig = deps.summaryConfig ?? chat.config;
+  if (isLocalModelConfig(modelConfig)) throw new Error('ローカルモデルでは要約生成を利用できません');
+  const messages = sourceIndexes.map(index => chat.messages[index]).filter(isSummaryEligible);
+  if (messages.length !== sourceIndexes.length) throw new Error('要約対象にできないバブルが含まれています');
+  const model = modelConfig.model;
+  const resolved = resolveProviderForModel(model, deps.favoriteModels, deps.providers, deps.fallbackProvider, modelConfig.providerId);
+  assertAuxiliaryEndpoint(modelConfig.openRouter, resolved.endpoint);
+  if ((!resolved.key || resolved.key.length === 0) && resolved.endpoint === officialAPIEndpoint) throw new Error(deps.t('noApiKeyWarning'));
+  const config = { ...modelConfig, openRouter: { routing: hardOpenRouterConstraints(modelConfig.openRouter), responseCache: { mode: 'off' as const } } };
+  const request: MessageInterface[] = [{ role: 'user', content: [{ type: 'text', text: buildBubbleSummaryPrompt(messages, deps.summaryFormat) }] }];
+  const context = getModelContextInfo(model, modelConfig.providerId, modelConfig.modelSource).contextLength;
+  if (!fitsContextWindow(await countTokens(request, model), context, modelConfig.max_tokens)) throw new Error('要約対象がモデルのコンテキスト上限を超えています');
+  const data = await getChatCompletion(resolved.endpoint, request, config, resolved.key, undefined, deps.apiVersion, signal, { auxiliary: true });
+  const text = normalizeBubbleSummaryText(data.choices[0]?.message.content ?? '');
+  if (!text) throw new Error('要約を生成できませんでした');
+  await updateTotalTokenUsed(model, request, { role: 'assistant', content: [{ type: 'text', text }] }, modelConfig.providerId);
+  if (data.choices[0]?.finish_reason === 'length') throw new Error('出力上限で要約が途中で終了しました。上限を調整して生成し直してください');
+  return text;
 };
 
 export const buildTitlePromptMessage = (
@@ -324,16 +356,23 @@ export const maybeGenerateAutoTitle = async ({
   const titleChatIndex = titleChats.findIndex((chat) => chat.id === chatId);
   if (titleChatIndex < 0) return;
 
-  const updatedChats = cloneChatAtIndex(titleChats, titleChatIndex);
-  let title = (
-    await generateTitleForChat([promptMessage], sourceConfig ?? updatedChats[titleChatIndex].config, deps)
-  ).trim();
+  const ticket = beginAiTask({ requestId: crypto.randomUUID(), kind: 'title', chatId, dependencyIds: [] });
+  let title: string;
+  try {
+    title = (await generateTitleForChat([promptMessage], sourceConfig ?? titleChats[titleChatIndex].config, deps)).trim();
+    if (!isAiTaskCurrent(ticket)) return;
+  } finally {
+    finishAiTask(ticket);
+  }
   if (title.startsWith('"') && title.endsWith('"')) title = title.slice(1, -1);
-  setGeneratedTitle(updatedChats, titleChatIndex, title);
+  const latestChats = useStore.getState().chats!;
+  const latestIndex = latestChats.findIndex(chat => chat.id === chatId);
+  const updatedChats = cloneChatAtIndex(latestChats, latestIndex);
+  setGeneratedTitle(updatedChats, latestIndex, title);
   setChats(updatedChats);
 
   if (useStore.getState().countTotalTokens) {
-    const titleConfig = updatedChats[titleChatIndex].config;
+    const titleConfig = updatedChats[latestIndex].config;
     const titleTokenModel = deps.titleModel ?? titleConfig.model;
     const titleTokenProviderId = deps.titleModel ? deps.titleProviderId : titleConfig.providerId;
     await updateTotalTokenUsed(titleTokenModel as ModelOptions, [promptMessage], {

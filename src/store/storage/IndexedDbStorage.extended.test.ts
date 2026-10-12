@@ -5,6 +5,7 @@
  * Uses fake-indexeddb polyfill injected into globalThis.
  */
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
+import * as processing from './google/processing';
 import { IDBFactory, IDBKeyRange } from 'fake-indexeddb';
 
 // Polyfill indexedDB + window into globalThis before importing IndexedDbStorage
@@ -16,6 +17,9 @@ if (typeof window === 'undefined') {
 
 import {
   loadChatData,
+  preserveLegacyRemoteSnapshot,
+  loadLegacyRemoteSnapshots,
+  resolveLegacyRemoteSnapshot,
   saveChatData,
   clearChatData,
   collectReferencedHashes,
@@ -39,6 +43,8 @@ import {
 } from '@utils/contentStore';
 import type { BranchClipboard, BranchNode, ChatInterface } from '@type/chat';
 import type { StoreState } from '@store/store';
+import { createMigrationSlice } from '@store/migration-slice';
+import { STORE_VERSION } from '@store/version';
 import { createStreamingContentHash } from '@utils/streamingBuffer';
 
 // ── Helpers ──
@@ -153,6 +159,35 @@ beforeEach(async () => {
   db.close();
 });
 
+describe('edit timestamps', () => {
+  it('preserves edit times across saves, compressed records and reloads without replacing them with save time', async () => {
+    const chat = makeChat('dated-chat', ['h1'], { updatedAt: 1000 });
+    chat.branchTree.nodes.n0.updatedAt = 1100;
+    const data = { chats: [chat], contentStore: { h1: textEntry('dated') }, branchClipboard: null, lastContentEditedAt: 1200 };
+    await saveChatData(data);
+    expect((await idbGet<any>('meta')).lastContentEditedAt).toBe(1200);
+    await compressSingleChat(chat.id);
+    _resetInternalState();
+    const loaded = await loadChatData({} as StoreState);
+    expect(loaded?.loadStatus).toBe('ok');
+    expect(loaded?.lastContentEditedAt).toBe(1200);
+    expect(loaded?.chats?.[0].updatedAt).toBe(1000);
+    expect(loaded?.chats?.[0].branchTree?.nodes.n0.updatedAt).toBe(1100);
+    await saveChatData({ ...data, lastContentEditedAt: 1300 });
+    _resetInternalState();
+    expect((await loadChatData({} as StoreState))?.lastContentEditedAt).toBe(1300);
+    expect((await loadChatData({} as StoreState))?.chats?.[0].updatedAt).toBe(1000);
+  });
+
+  it.each([undefined, 1200])('keeps legacy edit times as recorded (%s), without inventing dates', async time => {
+    await idbPut('chat-data', { version: 18, chats: [makeChat('legacy-chat', ['h1'])], contentStore: { h1: textEntry('legacy') }, branchClipboard: null, lastContentEditedAt: time });
+    expect((await loadChatData({} as StoreState))?.lastContentEditedAt).toBe(time);
+    expect((await idbGet<any>('meta')).lastContentEditedAt).toBe(time);
+    _resetInternalState();
+    expect((await loadChatData({} as StoreState))?.lastContentEditedAt).toBe(time);
+  });
+});
+
 describe('collectIndexedDbRecoverySnapshot', () => {
   it('exports raw IndexedDB recovery records without mutating storage', async () => {
     const chat = makeChat('chat-1', ['h1']);
@@ -235,9 +270,17 @@ describe('loadSplitData crash recovery', () => {
     await compressSingleChat('packed-b');
     _resetInternalState();
 
-    const result = await loadChatData(baseState);
+    const progress = vi.fn();
+    const result = await loadChatData(baseState, progress);
 
     expect(result?.loadStatus).toBe('ok');
+    expect(progress.mock.calls.map(([value]) => value).filter(value => value.stage === 'restoringChats')).toEqual([
+      { stage: 'restoringChats', completed: 0, total: 3 },
+      { stage: 'restoringChats', completed: 1, total: 3 },
+      { stage: 'restoringChats', completed: 2, total: 3 },
+      { stage: 'restoringChats', completed: 3, total: 3 },
+    ]);
+    expect(progress).toHaveBeenLastCalledWith({ stage: 'fingerprinting', completed: 3, total: 3 });
     expect(result?.chats?.map((chat) => chat.id)).toEqual([
       'active',
       'packed-a',
@@ -328,7 +371,7 @@ describe('loadSplitData crash recovery', () => {
 
   it('loads a committed transient streaming reference so rehydration can repair it', async () => {
     const chat = makeChat('interrupted-stream', [
-      createStreamingContentHash('assistant-node'),
+      createStreamingContentHash('chat', 'assistant-node'),
     ]);
     await idbPut('meta', {
       version: 18,
@@ -386,7 +429,7 @@ describe('loadSplitData crash recovery', () => {
   it('still rejects transient streaming references when saving directly', async () => {
     await expect(
       saveChatData({
-        chats: [makeChat('unsafe-save', [createStreamingContentHash('node')])],
+        chats: [makeChat('unsafe-save', [createStreamingContentHash('chat', 'node')])],
         contentStore: {},
         branchClipboard: null,
       })
@@ -801,7 +844,7 @@ describe('legacy migration integrity', () => {
     await idbPut('chat-data', {
       version: 18,
       chats: [
-        makeChat('legacy-stream', [createStreamingContentHash('assistant-node')]),
+        makeChat('legacy-stream', [createStreamingContentHash('chat', 'assistant-node')]),
       ],
       contentStore: {},
       branchClipboard: null,
@@ -1028,3 +1071,113 @@ describe('compression scheduler', () => {
 });
 
 // ─── Performance ───
+
+
+describe('remote schema recovery preservation', () => {
+  it('keeps version 17 raw data separate from the current primary and exposes it after restart', async () => {
+    await saveChatData({ chats: [makeChat('current', ['current-hash'])], contentStore: { 'current-hash': textEntry('current') }, branchClipboard: null });
+    const primary = await collectIndexedDbRecoverySnapshot();
+    const raw = { version: 17, state: { chats: [makeChat('old', ['old-hash'])], contentStore: { 'old-hash': textEntry('old') }, folders: {} } };
+    const saved = await preserveLegacyRemoteSnapshot(raw);
+    expect(saved.version).toBe(17);
+    expect(await idbGet('meta')).toEqual(primary!.meta);
+    expect((await loadChatData(baseState))!.chats![0].id).toBe('current');
+    expect((await collectIndexedDbRecoverySnapshot())!.legacyRemoteSnapshots).toEqual([{ id: saved.id, snapshot: raw }]);
+    _resetInternalState();
+    const records = await loadLegacyRemoteSnapshots();
+    expect(records).toEqual([{ id: saved.id, snapshot: raw }]);
+    let state: any = { migrationUiState: null };
+    const slice = createMigrationSlice((patch: any) => { state = { ...state, ...(typeof patch === 'function' ? patch(state) : patch) }; }, () => state);
+    await slice.refreshLegacyRemoteMigration();
+    expect(state.migrationUiState).toEqual({ visible: true, status: 'remote-migration-required', legacyRemoteSnapshots: [{ id: saved.id, version: 17 }] });
+    expect((await idbGet<any>('meta')).version).toBe(STORE_VERSION);
+  });
+
+  it('retains separate snapshots, reuses duplicates and resolves only the imported raw record', async () => {
+    const first = { version: 17, state: { chats: [], marker: 'first' } };
+    const second = { version: 17, state: { chats: [], marker: 'second' } };
+    const firstRecord = await preserveLegacyRemoteSnapshot(first);
+    expect(await preserveLegacyRemoteSnapshot(first)).toEqual(firstRecord);
+    const secondRecord = await preserveLegacyRemoteSnapshot(second);
+    expect(secondRecord.id).not.toBe(firstRecord.id);
+    expect(await resolveLegacyRemoteSnapshot({ version: 17, state: { chats: [], marker: 'unrelated' } })).toBe(false);
+    expect(await loadLegacyRemoteSnapshots()).toHaveLength(2);
+    expect(await resolveLegacyRemoteSnapshot(first)).toBe(true);
+    expect(await loadLegacyRemoteSnapshots()).toEqual([{ id: secondRecord.id, snapshot: second }]);
+  });
+
+  it('keeps future schema data untouched and preserves recovery keys during normal saves and chat-data clearing', async () => {
+    const raw = { version: STORE_VERSION + 1, state: { newerField: { value: 'future' } } };
+    await preserveLegacyRemoteSnapshot(raw);
+    await saveChatData({ chats: [makeChat('current', ['hash'])], contentStore: { hash: textEntry('current') }, branchClipboard: null });
+    await clearChatData();
+    expect((await loadLegacyRemoteSnapshots())[0].snapshot).toEqual(raw);
+    expect(await idbGet('meta')).toBeUndefined();
+  });
+
+  it('keeps the storage recovery banner when refreshing pending remote data', async () => {
+    const record = await preserveLegacyRemoteSnapshot({ version: 17, state: { chats: [] } });
+    let state: any = { migrationUiState: { visible: true, status: 'storage-recovery-required', details: ['read failed'] } };
+    const slice = createMigrationSlice((patch: any) => { state = { ...state, ...(typeof patch === 'function' ? patch(state) : patch) }; }, () => state);
+    await slice.refreshLegacyRemoteMigration();
+    expect(state.migrationUiState).toEqual({ visible: true, status: 'storage-recovery-required', details: ['read failed'], legacyRemoteSnapshots: [{ id: record.id, version: 17 }] });
+  });
+});
+
+describe('startup lock contention', () => {
+  it('does not hold the cross-window lock during save preparation', async () => {
+    const data = { chats: [makeChat('chat-a', ['h1'])], contentStore: { h1: textEntry('one') }, branchClipboard: null };
+    await saveChatData(data);
+    let release!: () => void;
+    let started!: () => void;
+    const gate = new Promise<void>(resolve => { release = resolve; });
+    const preparing = new Promise<void>(resolve => { started = resolve; });
+    const original = processing.prepareSaveAsync;
+    const prepare = vi.spyOn(processing, 'prepareSaveAsync').mockImplementationOnce(async value => {
+      started();
+      await gate;
+      return original(value);
+    });
+    const request = vi.fn((_name, _options, run) => run());
+    vi.stubGlobal('navigator', { locks: { request } });
+    const saving = saveChatData(data);
+    try {
+      await preparing;
+      expect(request).not.toHaveBeenCalled();
+      expect((await loadChatData(baseState))?.loadStatus).toBe('ok');
+      release();
+      await saving;
+      expect(request).toHaveBeenCalledTimes(2);
+    } finally {
+      release();
+      await saving;
+      prepare.mockRestore();
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it('reports a stalled lock after 30 seconds without modifying stored records', async () => {
+    await saveChatData({ chats: [makeChat('chat-a', ['h1'])], contentStore: { h1: textEntry('one') }, branchClipboard: null });
+    const before = await idbGet('meta');
+    let started!: () => void;
+    const waiting = new Promise<void>(resolve => { started = resolve; });
+    vi.stubGlobal('navigator', { locks: { request: vi.fn((_name, options) => new Promise((_resolve, reject) => {
+      options.signal.addEventListener('abort', () => reject(new DOMException('Aborted', 'AbortError')));
+      started();
+    })) } });
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+    try {
+      const progress = vi.fn();
+      const failed = expect(loadChatData(baseState, progress)).rejects.toThrow('30秒');
+      await waiting;
+      expect(progress).toHaveBeenLastCalledWith({ stage: 'lock' });
+      await vi.advanceTimersByTimeAsync(30_000);
+      await failed;
+      expect(await idbGet('meta')).toEqual(before);
+      expect(await idbGet('chat:chat-a')).toBeDefined();
+    } finally {
+      vi.useRealTimers();
+      vi.unstubAllGlobals();
+    }
+  });
+});

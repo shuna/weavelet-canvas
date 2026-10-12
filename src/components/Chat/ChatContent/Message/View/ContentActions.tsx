@@ -1,15 +1,13 @@
+import { useWorkspaceReadOnly } from '@store/workspaceScope';
 import React from 'react';
-import { useTranslation } from 'react-i18next';
 import TickIcon from '@icon/TickIcon';
 import CrossIcon from '@icon/CrossIcon';
-import EvaluateIcon from '@icon/EvaluateIcon';
 
 import RefreshButton from './Button/RefreshButton';
 import RegenerateNextButton from './Button/RegenerateNextButton';
 import CopyButton from './Button/CopyButton';
 import EditButton from './Button/EditButton';
 import DeleteButton from './Button/DeleteButton';
-import BaseButton from './Button/BaseButton';
 import BranchSwitcher from '../BranchSwitcher';
 
 type ContentActionsProps = {
@@ -22,7 +20,6 @@ type ContentActionsProps = {
   isProtected: boolean;
   isGeneratingMessage: boolean;
   isCurrentChatGenerating: boolean;
-  showEvaluateButton: boolean;
   setIsEdit: React.Dispatch<React.SetStateAction<boolean>>;
   setIsDelete: React.Dispatch<React.SetStateAction<boolean>>;
   onRefresh: () => void;
@@ -30,7 +27,6 @@ type ContentActionsProps = {
   onMoveDown: () => void;
   onCopy: () => void;
   onDelete: () => void;
-  onEvaluate: () => void;
 };
 
 export default function ContentActions({
@@ -43,7 +39,6 @@ export default function ContentActions({
   isProtected,
   isGeneratingMessage,
   isCurrentChatGenerating,
-  showEvaluateButton,
   setIsEdit,
   setIsDelete,
   onRefresh,
@@ -51,10 +46,8 @@ export default function ContentActions({
   onMoveDown,
   onCopy,
   onDelete,
-  onEvaluate,
 }: ContentActionsProps) {
-  const { t } = useTranslation('main');
-
+  const readOnly = useWorkspaceReadOnly();
   return (
     <div className='sticky bottom-2 z-20 mt-2.5 flex min-h-[2.75rem] items-center justify-center gap-2 px-2 md:bottom-3 md:px-3'>
       <div className='absolute left-2 top-1/2 -translate-y-1/2 min-w-0 shrink-0 md:left-3 pointer-events-auto'>
@@ -65,7 +58,7 @@ export default function ContentActions({
           />
         )}
       </div>
-      {!isDelete && (
+      {!readOnly && !isDelete && (
         <div className='absolute right-2 top-1/2 -translate-y-1/2 flex shrink-0 flex-col items-center gap-1 text-gray-500 dark:text-gray-400 md:right-3'>
           {messageIndex !== 0 && (
             <button
@@ -98,22 +91,15 @@ export default function ContentActions({
         <div className='relative z-10 flex flex-nowrap items-center justify-center gap-1.5 px-1.5 py-1.5 text-gray-600 md:gap-2 md:px-2 md:py-2 dark:text-gray-200'>
           {isDelete || (
             <>
-              {!isCurrentChatGenerating && role === 'assistant' && (
+              {!readOnly && !isCurrentChatGenerating && role === 'assistant' && (
                 <RefreshButton onClick={onRefresh} />
               )}
-              {!isCurrentChatGenerating && role === 'user' && (
+              {!readOnly && !isCurrentChatGenerating && role === 'user' && (
                 <RegenerateNextButton onClick={onRefresh} />
               )}
               <CopyButton onClick={onCopy} />
-              {!isGeneratingMessage && <EditButton setIsEdit={setIsEdit} disabled={isProtected} />}
-              <DeleteButton setIsDelete={setIsDelete} disabled={isProtected} />
-              {showEvaluateButton && !isGeneratingMessage && (
-                <BaseButton
-                  icon={<EvaluateIcon />}
-                  onClick={onEvaluate}
-                  buttonProps={{ 'aria-label': t('evaluation.modalTitle') as string }}
-                />
-              )}
+              {!readOnly && !isGeneratingMessage && <EditButton setIsEdit={setIsEdit} disabled={isProtected} />}
+              {!readOnly && <DeleteButton setIsDelete={setIsDelete} disabled={isProtected} />}
             </>
           )}
           {isDelete && (

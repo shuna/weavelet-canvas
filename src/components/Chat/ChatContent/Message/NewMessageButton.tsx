@@ -37,7 +37,8 @@ const NewMessageButton = React.memo(
     const setCurrentChatIndex = useStore((state) => state.setCurrentChatIndex);
     const pushNavigationEntry = useStore((state) => state.pushNavigationEntry);
     const captureCurrentNavigationEntry = useStore((state) => state.captureCurrentNavigationEntry);
-    const insertMessageAtIndex = useStore((state) => state.insertMessageAtIndex);
+    const insertNode = useStore((state) => state.insertNode);
+    const currentChatId = useStore(state => state.chats?.[state.currentChatIndex]?.id ?? '');
     const createBranch = useStore((state) => state.createBranch);
     const [isMenuOpen, setIsMenuOpen] = useState(false);
     const containerRef = useRef<HTMLDivElement | null>(null);
@@ -91,27 +92,28 @@ const NewMessageButton = React.memo(
       if (currentChatIndex === -1) {
         addChat();
       } else {
-        insertMessageAtIndex(
-          currentChatIndex,
-          messageIndex + 1,
-          'user',
-          [{ type: 'text', text: '' } as TextContentInterface]
-        );
+        const chat = useStore.getState().chats?.find(chat => chat.id === currentChatId);
+        const index = nodeId && chat?.branchTree ? chat.branchTree.activePath.indexOf(nodeId) : messageIndex;
+        if (!chat || (nodeId && index < 0)) return;
+        const beforeNodeId = chat.branchTree?.activePath[index + 1]
+          ?? (chat.messages[index + 1] ? String(index + 1) : null);
+        insertNode({ chatId: currentChatId, beforeNodeId, role: 'user', content: [{ type: 'text', text: '' }] });
       }
     };
 
     const handleBranchGenerate = async () => {
       if (!nodeId) return;
       if (!confirmChatModelFavorite(currentChatIndex)) return;
-      createBranch(currentChatIndex, nodeId, undefined);
+      if (createBranch({ chatId: currentChatId, fromNodeId: nodeId }).status !== 'created') return;
       setIsMenuOpen(false);
       await handleSubmit();
     };
 
     const handleBranchOnly = () => {
       if (!nodeId) return;
-      const newNodeId = createBranch(currentChatIndex, nodeId, undefined);
-      primeEditSession(currentChatIndex, messageIndex, newNodeId);
+      const result = createBranch({ chatId: currentChatId, fromNodeId: nodeId });
+      if (result.status !== 'created') return;
+      primeEditSession(currentChatIndex, messageIndex, result.nodeId);
       setIsMenuOpen(false);
     };
 

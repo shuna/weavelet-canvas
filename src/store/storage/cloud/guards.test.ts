@@ -5,6 +5,16 @@ import {
 } from './guards';
 
 describe('cloud guards', () => {
+  it('blocks invalid folder graphs while permitting preserved parent metadata', () => {
+    const value = { state: { chats: [{ id: 'chat' }], folders: {
+      root: { id: 'root', name: 'Root', expanded: false, order: 0 },
+      child: { id: 'child', name: 'Child', expanded: false, order: 1, parentId: 'root' },
+    } } };
+    const metrics = computeCloudSyncMetrics(value);
+    expect(getCloudSyncGuardMessage(value, metrics, null)).toBeNull();
+    value.state.folders.child.parentId = 'child';
+    expect(getCloudSyncGuardMessage(value, metrics, null)).toContain('folder hierarchy is invalid');
+  });
   it('detects oversized snapshots and preserves guard messages', () => {
     const metrics = computeCloudSyncMetrics({
       chats: [{ id: 'chat-1', messages: [{ role: 'user', content: 'x'.repeat(10) }] }],

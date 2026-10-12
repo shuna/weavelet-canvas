@@ -1,6 +1,5 @@
 import { StoreSlice } from './store';
 import { SearchResult } from '@utils/branchSearch';
-import { buildPathToLeaf } from '@utils/branchUtils';
 
 export interface SearchSlice {
   searchQuery: string;
@@ -58,10 +57,11 @@ export const createSearchSlice: StoreSlice<SearchSlice> = (set, get) => ({
   },
 
   setSearchResults: (results) => {
-    const previousResultNodeId = get().currentResultNodeId;
+    const previousResult = get().searchResults[get().currentResultIndex];
+    const previousResultNodeId = previousResult?.nodeId;
     const matchedNodeIds = new Set(results.map((r) => r.nodeId));
     const preservedIndex = previousResultNodeId
-      ? results.findIndex((result) => result.nodeId === previousResultNodeId)
+      ? results.findIndex((result) => result.nodeId === previousResultNodeId && result.chatId === previousResult?.chatId)
       : -1;
     const currentResultIndex =
       results.length === 0
@@ -72,14 +72,12 @@ export const createSearchSlice: StoreSlice<SearchSlice> = (set, get) => ({
     const currentResultNodeId =
       currentResultIndex >= 0 ? results[currentResultIndex].nodeId : null;
     const shouldNavigateToCurrentResult =
-      currentResultNodeId !== null && currentResultNodeId !== previousResultNodeId;
+      currentResultNodeId !== null && (currentResultNodeId !== previousResultNodeId || results[currentResultIndex]?.chatId !== previousResult?.chatId);
 
     set({ searchResults: results, matchedNodeIds, currentResultIndex, currentResultNodeId });
 
     if (shouldNavigateToCurrentResult) {
-      get().setBranchEditorFocusNodeId(currentResultNodeId);
-      pushSearchNavEntry(get, results[currentResultIndex]);
-      navigateToResult(get, results[currentResultIndex]);
+      get().navigateToNode({ ...results[currentResultIndex], source: 'search', history: 'push', selectChat: false, focus: 'editor' });
     }
   },
 
@@ -98,9 +96,7 @@ export const createSearchSlice: StoreSlice<SearchSlice> = (set, get) => ({
     const next = (currentResultIndex + 1) % searchResults.length;
     const result = searchResults[next];
     set({ currentResultIndex: next, currentResultNodeId: result.nodeId });
-    get().setBranchEditorFocusNodeId(result.nodeId);
-    pushSearchNavEntry(get, result);
-    navigateToResult(get, result);
+    get().navigateToNode({ ...result, source: 'search', history: 'push', selectChat: false, focus: 'editor' });
   },
 
   prevResult: () => {
@@ -110,9 +106,7 @@ export const createSearchSlice: StoreSlice<SearchSlice> = (set, get) => ({
     const prev = (currentResultIndex - 1 + searchResults.length) % searchResults.length;
     const result = searchResults[prev];
     set({ currentResultIndex: prev, currentResultNodeId: result.nodeId });
-    get().setBranchEditorFocusNodeId(result.nodeId);
-    pushSearchNavEntry(get, result);
-    navigateToResult(get, result);
+    get().navigateToNode({ ...result, source: 'search', history: 'push', selectChat: false, focus: 'editor' });
   },
 
   openSearch: () => {
@@ -140,43 +134,3 @@ export const createSearchSlice: StoreSlice<SearchSlice> = (set, get) => ({
     }
   },
 });
-
-function pushSearchNavEntry(
-  get: () => any,
-  result: SearchResult
-) {
-  const state = get();
-  if (!state.pushNavigationEntry) return;
-  const chat = state.chats?.[result.chatIndex];
-  if (!chat) return;
-
-  const newPath = chat.branchTree
-    ? buildPathToLeaf(chat.branchTree, result.nodeId)
-    : [];
-
-  state.pushNavigationEntry({
-    chatId: chat.id,
-    activePath: newPath,
-    focusedNodeId: result.nodeId,
-    viewContext: state.chatActiveView,
-    source: 'search' as const,
-  });
-}
-
-function navigateToResult(
-  get: () => ReturnType<StoreSlice<SearchSlice>>,
-  result: SearchResult
-) {
-  if (result.isOnActivePath) return;
-
-  const state = get() as unknown as {
-    chats: Array<{ branchTree?: Parameters<typeof buildPathToLeaf>[0] }> | null;
-    switchActivePathSilent: (chatIndex: number, newPath: string[]) => void;
-  };
-
-  const chat = state.chats?.[result.chatIndex];
-  if (!chat?.branchTree) return;
-
-  const newPath = buildPathToLeaf(chat.branchTree, result.nodeId);
-  state.switchActivePathSilent(result.chatIndex, newPath);
-}

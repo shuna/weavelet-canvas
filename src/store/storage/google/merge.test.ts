@@ -18,6 +18,38 @@ async function merge(base: Snapshot, local: Snapshot, cloud: Snapshot) {
 const text = (s: Snapshot, id: string) => resolveContent(s.state.contentStore!, s.state.chats![0].branchTree!.nodes[id].contentHash);
 const tree = (s: Snapshot) => s.state.chats![0].branchTree!;
 
+it('preserves both folder hierarchies and descendant chats when a parent conflicts', async () => {
+  const base = snapshot();
+  base.state.folders = {
+    root: { id: 'root', name: 'Root', order: 0, expanded: true },
+    child: { id: 'child', parentId: 'root', name: 'Child', order: 1, expanded: false },
+    leaf: { id: 'leaf', parentId: 'child', name: 'Leaf', order: 2, expanded: false },
+  };
+  base.state.chats![0].folder = 'leaf';
+  const local = structuredClone(base), cloud = structuredClone(base);
+  local.state.folders!.root.name = 'Local';
+  cloud.state.folders!.root.name = 'Cloud';
+  const result = await merge(base, local, cloud);
+  const folders = result.state.folders!;
+  expect(Object.keys(folders)).toHaveLength(6);
+  expect(folders.root.name).toBe('Cloud');
+  expect(folders.child.parentId).toBe('root');
+  const localRoot = Object.values(folders).find(folder => folder.name === 'Local')!;
+  const localChild = Object.values(folders).find(folder => folder.parentId === localRoot.id)!;
+  const localLeaf = Object.values(folders).find(folder => folder.parentId === localChild.id)!;
+  expect(result.state.chats!.map(chat => chat.folder)).toEqual(expect.arrayContaining(['leaf', localLeaf.id]));
+});
+
+it('rejects orphaned and cyclic folder graphs before syncing', async () => {
+  const value = snapshot();
+  value.state.folders = { root: { id: 'root', parentId: 'missing', name: 'Root', order: 0, expanded: true } };
+  await expect(toRecords(value)).rejects.toThrow('folder hierarchy');
+  value.state.folders.root.parentId = null;
+  const records = await toRecords(value);
+  records[JSON.stringify(['state', 'folders', 'root', 'parentId'])] = JSON.stringify('root');
+  await expect(fromRecords(records)).rejects.toThrow('folder hierarchy');
+});
+
 it('forks only the conflicting message within one chat, retaining both continuations and shared content', async () => {
   const base = snapshot(), local = structuredClone(base), cloud = structuredClone(base);
   node(local, 'b', 'a', 'local'); node(cloud, 'b', 'a', 'cloud');
@@ -201,9 +233,9 @@ it('acknowledges all chats, folders and branch nodes persistently without resolv
   const { useSyncReview, acknowledgeAllSyncChanges, markSyncChanges } = await import('./conflicts');
   useSyncReview.setState({ conflict: true, chats: ['chat', 'hidden-chat'], folders: ['folder'], nodes: { chat: ['b'], 'hidden-chat': ['x'] } });
   acknowledgeAllSyncChanges();
-  expect(useSyncReview.getState()).toEqual({ conflict: true, chats: [], folders: [], nodes: {} });
+  expect(useSyncReview.getState()).toEqual({ conflict: true, conflictKeys: [], cloudOverview: null, cloudReview: null, chats: [], folders: [], nodes: {} });
   await useSyncReview.persist.rehydrate();
-  expect(useSyncReview.getState()).toEqual({ conflict: true, chats: [], folders: [], nodes: {} });
+  expect(useSyncReview.getState()).toEqual({ conflict: true, conflictKeys: [], cloudOverview: null, cloudReview: null, chats: [], folders: [], nodes: {} });
   const before = snapshot(), after = structuredClone(before);
   node(after, 'b', 'a', 'new sync change');
   await markSyncChanges(before, after);
@@ -211,4 +243,20 @@ it('acknowledges all chats, folders and branch nodes persistently without resolv
   expect(useSyncReview.getState().nodes.chat).toEqual(['b']);
   acknowledgeAllSyncChanges();
   useSyncReview.setState({ conflict: false });
+});
+
+it('remaps locally generated summary references when matching branches coalesce', async () => {
+  const base = snapshot(), local = structuredClone(base), cloud = structuredClone(base);
+  node(local, 'l', 'a', 'new'); node(local, 'lt', 'l', 'end');
+  node(cloud, 'r', 'a', 'new'); node(cloud, 'rt', 'r', 'end');
+  tree(local).activePath = ['a', 'l', 'lt']; tree(cloud).activePath = ['a', 'r', 'rt'];
+  local.state.chats![0].summaryTargets = { l: true };
+  local.state.chats![0].summaries = [{ id: 'summary', mode: 'range', text: 'new then end', useForSubmit: true, sources: [
+    { nodeId: 'l', parentId: 'a', role: 'user', textParts: ['new'] },
+    { nodeId: 'lt', parentId: 'l', role: 'user', textParts: ['end'] },
+  ] }];
+  const result = await merge(base, local, cloud);
+  expect(result.state.chats![0].summaries![0].sources.map(source => source.nodeId)).toEqual(['r', 'rt']);
+  expect(result.state.chats![0].summaries![0].sources.map(source => source.parentId)).toEqual(['a', 'r']);
+  expect(result.state.chats![0].summaryTargets?.r).toBe(true);
 });

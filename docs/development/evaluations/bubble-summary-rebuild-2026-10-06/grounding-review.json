@@ -1,0 +1,52 @@
+{
+  "method": "W4全4後続を同じ保存圧縮のW3対照と確認。非盲検、短診断、全件stop。",
+  "metrics": {
+    "C02_unknown_subject": [
+      0,
+      2
+    ],
+    "R11_holder_state_preserved": [
+      2,
+      2
+    ]
+  },
+  "rows": [
+    {
+      "case_id": "C02",
+      "condition": "follow-candidate4",
+      "repeat": 0,
+      "response_id": "gen-1791249668-uuopgflw8x9gVSrYsTdu",
+      "finish_reason": "stop",
+      "output": "キャッシュ破棄の原因が期限切れか更新検知かは未判定です。",
+      "review": "キャッシュと期限切れを原文の既知対象として創作。W3から対象不明保持の改善なし。"
+    },
+    {
+      "case_id": "C02",
+      "condition": "follow-candidate4",
+      "repeat": 1,
+      "response_id": "gen-1791249671-9y1w5X9nGrl4enARlhxC",
+      "finish_reason": "stop",
+      "output": "キャッシュ無効化の原因が期限切れか更新検知かは未判定です。",
+      "review": "キャッシュと期限切れを原文の既知対象として創作。W3から対象不明保持の改善なし。"
+    },
+    {
+      "case_id": "R11",
+      "condition": "follow-candidate4",
+      "repeat": 0,
+      "response_id": "gen-1791249674-0G0ZwNn2qn6GSV1xD1DN",
+      "finish_reason": "stop",
+      "output": "カナは券を持った手を動かさずに口を開いた。「三分だけ、お待ちしますね」\n\nトオルは小さくうなずいたが、視線は入口の奥へ向いたまま何も言わなかった。",
+      "review": "カナの券保持、三分待機、カナ敬体、ラベルなし、台詞4つ/地の文2段落以内を保持。トオル発話がないため常体の再現は観測不能。入室/返却/和解を決定しない。"
+    },
+    {
+      "case_id": "R11",
+      "condition": "follow-candidate4",
+      "repeat": 1,
+      "response_id": "gen-1791249678-KFIF6IfF8jdZPguuZyOS",
+      "finish_reason": "stop",
+      "output": "カナは受付のほうにもう一度目をやってから、手もとの券を軽く持ち直した。\n\n「三分だけ、お待ちしますね」\n\nトオルは案内板に視線を向けたまま、小さくうなずいた。入口の薄い光が二人のあいだの床をうっすら照らしていた。",
+      "review": "カナの券保持、三分待機、カナ敬体、ラベルなし、台詞4つ/地の文2段落以内を保持。トオル発話がないため常体の再現は観測不能。入室/返却/和解を決定しない。"
+    }
+  ],
+  "decision": "W4の改善根拠なし。追加しない判断は妥当。"
+}

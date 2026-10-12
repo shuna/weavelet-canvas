@@ -149,3 +149,12 @@ Rustを採用する場合の候補構成は、同じソースをWeb向けWASMと
 Independent read-only Astra review found five remaining maintenance-cost issues in current main: Swift ChatLibrary duplicates Web library rules/defaults; Swift MessageEditing duplicates branch/content rules (replacement in progress); MessageAttributes duplicates Web namespace/projection rules (must be removed through document/editing integration); primitive calls repeatedly load/evaluate the 406,244-byte shared bundle (batch at document-operation boundaries, no speculative global cache); unused RecordsBridge/DMP resources and old unreferenced adapter snapshots remain. Runtime cost was not measured.
 
 Finish editing/document sharing first, including attribute handling and operation-level bridge calls. Then share existing Web chatLibrary operations instead of extending Swift library rules. Archive unused earlier artifacts before removing active resource references and obsolete generated inputs. Keep native UI, URLSession, Keychain, CryptoKit, atomic storage and the lossless OrderedJSON boundary; keep LZ for external wire compatibility. No broad redesign or extra per-file audit gates are required.
+
+
+### 2026-10-13: 最新 main の統合による計画差分
+
+- 基準を `origin/main` の `7a0a383a`（#523）へ更新する。元作業場所は変更せず、未コミット成果を `3bf7e881` に保全した専用 worktree/branch `codex/shared-main-integration` で統合した。
+- Web の新しい NodeTarget API、読み取り専用ファイル閲覧、階層フォルダ、選択インポート、要約、汎用暗号化同期の経路を使用する。古い UI/store 呼出しを維持するための別実装は増やさない。
+- フォルダ・ライブラリ操作は最新 Web の動作を共有 utility に集約する。同期生成物も旧 Drive 専用クラスから最新の汎用同期クラスへ追従する。端末固有設定の同期除外は Web 正本の仕様に合わせ、完全ファイル I/O の未知データ保持とは区別する。
+- 次の機能単位は引き続き編集中の共有編集・full-state document 接続と native ライブラリの共有化。別 worktree の途中成果は保全しており、旧 bundle や旧 Web ファイルを新しい基準へ丸ごと上書きしない。native の全削除時の未参照 entry 保持など、新しい Web と異なる旧 Swift 規則は共有化の完了まで未達として扱う。
+- 検証は統合一式の Web テスト/型/build、Catalyst、独立 Astra にまとめる。差異の原因を特定した失敗箇所だけ再確認し、小変更ごとのゲートは追加しない。

@@ -5,6 +5,15 @@ import Foundation
 @Suite("SyncSnapshot")
 struct SyncSnapshotTests {
 
+    @Test("Folder hierarchy survives Codable and old folders remain roots")
+    func folderHierarchyRoundTrip() throws {
+        let child = Folder(id: "child", parentId: "root")
+        let decoded = try JSONDecoder().decode(Folder.self, from: JSONEncoder().encode(child))
+        #expect(decoded.parentId == "root")
+        let legacy = Data(#"{"id":"root","name":"Root","expanded":true,"order":0}"#.utf8)
+        #expect(try JSONDecoder().decode(Folder.self, from: legacy).parentId == nil)
+    }
+
     @Test("Init from AppState copies sync fields")
     func initFromAppState() {
         let chat = Chat(id: "c1", title: "Test")

@@ -1,0 +1,37 @@
+{
+  "fixtureVersion": 1,
+  "description": "Current main Web settings.ts explicit device-local sync policy. Legacy record fixtures stay unchanged; only these known state roots are excluded at sync boundaries, not local persistence or V3 I/O.",
+  "browserLocalSettings": [
+    "hideMenuOptions",
+    "hideSideMenu",
+    "menuWidth",
+    "splitPanelRatio",
+    "splitPanelSwapped",
+    "chatActiveView",
+    "showDebugPanel",
+    "proxyEnabled"
+  ],
+  "syncLocalSettings": [
+    "hideMenuOptions",
+    "hideSideMenu",
+    "menuWidth",
+    "splitPanelRatio",
+    "splitPanelSwapped",
+    "chatActiveView",
+    "showDebugPanel",
+    "proxyEnabled",
+    "pendingVerifications",
+    "verifiedStats",
+    "providerModelCache",
+    "totalTokenUsed",
+    "theme",
+    "advancedMode",
+    "enterToSubmit",
+    "inlineLatex",
+    "markdownMode",
+    "streamingMarkdownPolicy",
+    "displayChatSize",
+    "animateBubbleNavigation",
+    "branchSwipeDirection"
+  ]
+}

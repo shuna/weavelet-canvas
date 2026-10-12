@@ -116,6 +116,7 @@ vi.mock('@store/version', () => ({
   STORE_VERSION: 17,
 }));
 
+import { createCloudKitCloudProvider } from './cloud/providers/cloudkit';
 import createCloudKitCloudStorage, {
   flushPendingCloudKitSync,
   resetPendingCloudKitSyncForTests,
@@ -148,6 +149,37 @@ describe('CloudKitCloudStorage', () => {
   afterEach(() => {
     vi.useRealTimers();
     resetPendingCloudKitSyncForTests();
+  });
+
+  it('rejects a late read after reconnect without overwriting the new credentials', async () => {
+    const provider = createCloudKitCloudProvider();
+    const target = provider.getTarget()!;
+    let finish!: (value: unknown) => void;
+    fetchCloudKitRecordMock.mockImplementationOnce(() => new Promise(resolve => { finish = resolve; }));
+    const pending = provider.readItem('snapshot', target);
+    cloudState.setProviderSession('cloudkit', { sessionToken: 'new-account', connectionId: 'new-connection' });
+    finish({ newWebAuthToken: 'old-refreshed', record: null });
+    await expect(pending).rejects.toThrow('connection changed');
+    expect(cloudState.providers.cloudkit.sessionToken).toBe('new-account');
+  });
+
+  it('accepts token rotation within the same connection', async () => {
+    const provider = createCloudKitCloudProvider();
+    const target = provider.getTarget()!;
+    fetchCloudKitRecordMock.mockResolvedValueOnce({ newWebAuthToken: 'refreshed', record: null });
+    await expect(provider.readItem('snapshot', target)).resolves.toBeNull();
+    expect(cloudState.providers.cloudkit.sessionToken).toBe('refreshed');
+  });
+
+  it('does not upload after disconnect while reading the upload file', async () => {
+    const provider = createCloudKitCloudProvider();
+    const target = provider.getTarget()!;
+    const file = { text: async () => {
+      cloudState.setProviderSession('cloudkit', { sessionToken: undefined });
+      return 'payload';
+    } } as File;
+    await expect(provider.writeItem('snapshot', file, target)).rejects.toThrow('connection changed');
+    expect(saveCloudKitRecordMock).not.toHaveBeenCalled();
   });
 
   it('blocks oversized uploads with 700KB limit', async () => {

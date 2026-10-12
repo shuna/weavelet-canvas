@@ -1,0 +1,100 @@
+{
+  "version": "v6 compression + W3; old followups use v5 stored summaries",
+  "method": "全8件確認。非盲検。max_tokens256の短診断であり、max2048結果と合算しない。",
+  "counts": {
+    "summary": 2,
+    "followup": 6
+  },
+  "metrics": {
+    "v6_summary_no_domain_added": [
+      2,
+      2
+    ],
+    "original_followup_unknown_subject": [
+      2,
+      2
+    ],
+    "v5_followup_unknown_subject": [
+      0,
+      2
+    ],
+    "v6_followup_unknown_subject": [
+      0,
+      2
+    ]
+  },
+  "rows": [
+    {
+      "case_id": "C02",
+      "condition": "summary-candidate",
+      "repeat": 0,
+      "response_id": "gen-1791249460-3CsPNP7IWax9bc91wHmK",
+      "finish_reason": "stop",
+      "output": "原因が期限か更新検知かは未判定。更新時刻は取得可能（ユーザー申告）。失敗ログを出す方法を教えてください。",
+      "judgment": "原文にない領域・例を追加せず、期限/更新検知未判定、取得可能の申告、ログ依頼を保持。圧縮修正の狙いを満たす。"
+    },
+    {
+      "case_id": "C02",
+      "condition": "follow-original",
+      "repeat": 0,
+      "response_id": "gen-1791249463-bcvpQj8v4wXQht9KBhMJ",
+      "finish_reason": "stop",
+      "output": "与えられている情報だけでは、何の対象についての原因かを特定できません。",
+      "judgment": "対象を不明と回答し、原文情報だけという指定に従う。"
+    },
+    {
+      "case_id": "C02",
+      "condition": "follow-old",
+      "repeat": 0,
+      "response_id": "gen-1791249466-1CSVjzua9p4UPaVh02pR",
+      "finish_reason": "stop",
+      "output": "証明書についての原因です。",
+      "judgment": "原文にない証明書/キャッシュと期限切れを確定し、原文情報だけという指定に反する。v6では圧縮段階の追加が消えても後続で再発。"
+    },
+    {
+      "case_id": "C02",
+      "condition": "follow-candidate",
+      "repeat": 0,
+      "response_id": "gen-1791249469-8lDSMDNpEXlYdSi4VAGB",
+      "finish_reason": "stop",
+      "output": "キャッシュが無効化される原因が期限切れか更新検知かは未判定です。",
+      "judgment": "原文にない証明書/キャッシュと期限切れを確定し、原文情報だけという指定に反する。v6では圧縮段階の追加が消えても後続で再発。"
+    },
+    {
+      "case_id": "C02",
+      "condition": "summary-candidate",
+      "repeat": 1,
+      "response_id": "gen-1791249472-HoUgnMO7LLwE8HYkC0yx",
+      "finish_reason": "stop",
+      "output": "原因が期限か更新検知かは未判定。更新時刻は取得可能（ユーザー申告）。失敗ログの出し方を教えてください。",
+      "judgment": "原文にない領域・例を追加せず、期限/更新検知未判定、取得可能の申告、ログ依頼を保持。圧縮修正の狙いを満たす。"
+    },
+    {
+      "case_id": "C02",
+      "condition": "follow-original",
+      "repeat": 1,
+      "response_id": "gen-1791249475-vZsXKyDTqfKHmuUc7Of5",
+      "finish_reason": "stop",
+      "output": "与えられている情報だけでは、何の対象についての原因かを特定できません。",
+      "judgment": "対象を不明と回答し、原文情報だけという指定に従う。"
+    },
+    {
+      "case_id": "C02",
+      "condition": "follow-old",
+      "repeat": 1,
+      "response_id": "gen-1791249477-q6wdiVhY3CXj0JDcrwRC",
+      "finish_reason": "stop",
+      "output": "キャッシュ破棄の原因が期限切れか更新検知かは未判定です。",
+      "judgment": "原文にない証明書/キャッシュと期限切れを確定し、原文情報だけという指定に反する。v6では圧縮段階の追加が消えても後続で再発。"
+    },
+    {
+      "case_id": "C02",
+      "condition": "follow-candidate",
+      "repeat": 1,
+      "response_id": "gen-1791249481-89c6Ajdj9mmL1XiET3F9",
+      "finish_reason": "stop",
+      "output": "キャッシュが無効化された原因が、期限切れによるものか更新検知によるものかが未判定です。",
+      "judgment": "原文にない証明書/キャッシュと期限切れを確定し、原文情報だけという指定に反する。v6では圧縮段階の追加が消えても後続で再発。"
+    }
+  ]
+}

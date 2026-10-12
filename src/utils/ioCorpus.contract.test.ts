@@ -33,7 +33,7 @@ const persistKeys = [
 ];
 
 describe('synthetic I/O corpus: preservation and explicit Web losses', () => {
-  it('includes all 55 known persistence roots and a valid full V3 export', () => {
+  it('retains the original 55-root corpus and a valid full V3 export', () => {
     expect(corpus.fixtureVersion).toBe(1);
     expect(corpus.syncSnapshot.version).toBe(STORE_VERSION);
     expect(persistKeys).toHaveLength(55);
@@ -51,7 +51,8 @@ describe('synthetic I/O corpus: preservation and explicit Web losses', () => {
     delete expected.chats![0].messages;
     const hydrated = mergePersistedStoreState(input as unknown as StoreState, input);
     const saved = createPartializedState(hydrated);
-    expect(Object.keys(saved).sort()).toEqual([...persistKeys, 'xFixtureRoot'].sort());
+    // main adds these roots; the original fixture deliberately remains an older snapshot.
+    expect(Object.keys(saved).sort()).toEqual([...persistKeys, 'branchSwipeDirection', 'bubbleSummaryConfig', 'lastContentEditedAt', 'xFixtureRoot'].sort());
     expect(JSON.parse(JSON.stringify(saved))).toEqual(expected);
     expect(input).toEqual(before);
   });

@@ -4,6 +4,7 @@ import useCloudAuthStore from '@store/cloud-auth-store';
 import type { CloudSyncProvider as CloudSyncProviderType } from '@store/cloud-auth-types';
 import GoogleSync, { SyncIcon } from './GoogleSync';
 import CloudKitSync from './CloudKitSync';
+import FileSystemSync from './FileSystemSync';
 import RefreshIcon from '@icon/RefreshIcon';
 import GoogleDriveIcon from '@icon/GoogleDriveIcon';
 import CloudIcon from '@icon/CloudIcon';
@@ -13,6 +14,7 @@ const googleClientId = import.meta.env.VITE_GOOGLE_CLIENT_ID || undefined;
 const providerLabels: Record<CloudSyncProviderType, string> = {
   google: 'Google Drive',
   cloudkit: 'iCloud',
+  filesystem: 'フォルダー',
 };
 
 const CloudSync = () => {
@@ -59,7 +61,7 @@ const CloudSync = () => {
           <span className='min-w-0 truncate' title='クラウド同期'>クラウド同期</span>
           {isActive && !expanded && !showGoogleStatus && (
             <span className='ml-auto shrink-0' role='img' aria-label={providerLabels[selectedProvider]} title={providerLabels[selectedProvider]}>
-              {selectedProvider === 'google' ? <GoogleDriveIcon className='w-4 h-4' /> : <CloudIcon className='w-4 h-4' />}
+              {selectedProvider === 'google' ? <GoogleDriveIcon className='w-4 h-4' /> : selectedProvider === 'cloudkit' ? <CloudIcon className='w-4 h-4' /> : providerLabels[selectedProvider]}
             </span>
           )}
         </button>
@@ -93,6 +95,8 @@ const CloudSync = () => {
                     VITE_GOOGLE_CLIENT_ID 未設定
                   </div>
                 )
+              ) : showingProvider === 'filesystem' ? (
+                <FileSystemSync />
               ) : (
                 <CloudKitSync />
               )}
@@ -110,6 +114,10 @@ const CloudSync = () => {
           ) : (
             /* --- No sync: show provider choices --- */
             <div className='flex flex-col gap-1'>
+              <button type='button' onClick={() => { setProvider('filesystem'); setSetupProvider('filesystem'); }}
+                className='rounded px-2 py-1.5 text-left text-xs text-gray-600 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-gray-700/50'>
+                フォルダーで同期
+              </button>
               <button
                 type='button'
                 onClick={() => {

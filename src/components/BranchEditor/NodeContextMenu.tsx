@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import useStore from '@store/store';
+import { useWorkspaceStore, useWorkspaceReadOnly } from '@store/workspaceScope';
 import { buildPathToLeaf } from '@utils/branchUtils';
 
 interface NodeContextMenuProps {
@@ -26,13 +26,17 @@ const NodeContextMenu = ({
   onNavigateToChat,
   selectedNodeIds = [],
 }: NodeContextMenuProps) => {
+  const useStore = useWorkspaceStore();
+  const readOnly = useWorkspaceReadOnly();
+
   const { t } = useTranslation();
   const deleteBranch = useStore((state) => state.deleteBranch);
   const copyBranchSequence = useStore((state) => state.copyBranchSequence);
+  const cutBranchSequence = useStore((state) => state.cutBranchSequence);
   const pasteBranchSequence = useStore((state) => state.pasteBranchSequence);
-  const renameBranchNode = useStore((state) => state.renameBranchNode);
-  const toggleNodeStar = useStore((state) => state.toggleNodeStar);
-  const toggleNodePin = useStore((state) => state.toggleNodePin);
+  const setNodeLabel = useStore((state) => state.setNodeLabel);
+  const setNodeStar = useStore((state) => state.setNodeStar);
+  const setNodePin = useStore((state) => state.setNodePin);
   const compareTarget = useStore((state) => state.compareTarget);
   const setCompareTarget = useStore((state) => state.setCompareTarget);
   const branchClipboard = useStore((state) => state.branchClipboard);
@@ -62,7 +66,7 @@ const NodeContextMenu = ({
     if (!tree) return;
     const path = buildPathToLeaf(tree, nodeId);
     const leafId = path[path.length - 1];
-    copyBranchSequence(chatIndex, nodeId, leafId);
+    copyBranchSequence({ chatId: chats?.[chatIndex]?.id ?? '', fromNodeId: nodeId, toNodeId: leafId });
     onClose();
   };
 
@@ -70,8 +74,7 @@ const NodeContextMenu = ({
     if (!tree) return;
     const path = buildPathToLeaf(tree, nodeId);
     const leafId = path[path.length - 1];
-    copyBranchSequence(chatIndex, nodeId, leafId);
-    deleteBranch(chatIndex, nodeId);
+    cutBranchSequence({ chatId: chats?.[chatIndex]?.id ?? '', fromNodeId: nodeId, toNodeId: leafId });
     onClose();
   };
 
@@ -79,7 +82,7 @@ const NodeContextMenu = ({
     if (!tree || selectedNodeIds.length < 2) return;
     const firstId = selectedNodeIds[0];
     const lastId = selectedNodeIds[selectedNodeIds.length - 1];
-    copyBranchSequence(chatIndex, firstId, lastId);
+    copyBranchSequence({ chatId: chats?.[chatIndex]?.id ?? '', fromNodeId: firstId, toNodeId: lastId });
     onClose();
   };
 
@@ -87,13 +90,12 @@ const NodeContextMenu = ({
     if (!tree || selectedNodeIds.length < 2) return;
     const firstId = selectedNodeIds[0];
     const lastId = selectedNodeIds[selectedNodeIds.length - 1];
-    copyBranchSequence(chatIndex, firstId, lastId);
-    deleteBranch(chatIndex, firstId);
+    cutBranchSequence({ chatId: chats?.[chatIndex]?.id ?? '', fromNodeId: firstId, toNodeId: lastId });
     onClose();
   };
 
   const handlePaste = () => {
-    pasteBranchSequence(chatIndex, nodeId);
+    pasteBranchSequence({ chatId: chats?.[chatIndex]?.id ?? '', afterNodeId: nodeId });
     onClose();
   };
 
@@ -105,7 +107,7 @@ const NodeContextMenu = ({
   };
 
   const handleLabelSubmit = () => {
-    renameBranchNode(chatIndex, nodeId, labelValue.trim());
+    setNodeLabel({ chatId: chats?.[chatIndex]?.id ?? '', nodeId, value: labelValue.trim() });
     setIsEditingLabel(false);
     onClose();
   };
@@ -120,6 +122,15 @@ const NodeContextMenu = ({
       onClose();
     }
   };
+
+  if (readOnly) return <>
+    <div className='fixed inset-0 z-40' onClick={onClose} />
+    <div role='menu' className='fixed z-50 min-w-[180px] rounded-lg border border-gray-200 bg-white py-1 text-gray-800 shadow-lg dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100' style={{ left: x, top: y }}>
+      <button role='menuitem' className='w-full px-4 py-2 text-left text-sm hover:bg-gray-100 dark:hover:bg-gray-700' onClick={() => { onNavigateToChat(chatIndex, nodeId); onClose(); }}>{t('navigateToMessage')}</button>
+      <button role='menuitem' className='w-full px-4 py-2 text-left text-sm hover:bg-gray-100 dark:hover:bg-gray-700' onClick={handleDiff}>{t('compareBranches')}</button>
+      <button role='menuitem' className='w-full px-4 py-2 text-left text-sm hover:bg-gray-100 dark:hover:bg-gray-700' onClick={handleCompareWith}>{compareTarget && compareTarget.nodeId !== nodeId ? t('compareWithSelected') : t('compareWith')}</button>
+    </div>
+  </>;
 
   if (isEditingLabel) {
     return (
@@ -179,7 +190,7 @@ const NodeContextMenu = ({
         <button
           className='w-full px-4 py-2 text-left text-sm text-inherit hover:bg-gray-100 dark:hover:bg-gray-700'
           onClick={() => {
-            toggleNodeStar(chatIndex, nodeId);
+            setNodeStar({ chatId: chats?.[chatIndex]?.id ?? '', nodeId, value: !tree?.nodes[nodeId]?.starred });
             onClose();
           }}
         >
@@ -188,7 +199,7 @@ const NodeContextMenu = ({
         <button
           className='w-full px-4 py-2 text-left text-sm text-inherit hover:bg-gray-100 dark:hover:bg-gray-700'
           onClick={() => {
-            toggleNodePin(chatIndex, nodeId);
+            setNodePin({ chatId: chats?.[chatIndex]?.id ?? '', nodeId, value: !tree?.nodes[nodeId]?.pinned });
             onClose();
           }}
         >

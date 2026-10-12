@@ -1,6 +1,6 @@
 import { ContentInterface } from '@type/chat';
 import {
-  getStreamingNodeIdFromHash,
+  getStreamingTargetFromHash,
   isStreamingContentHash,
   peekBufferedContent,
 } from './streamingBuffer';
@@ -290,8 +290,8 @@ export function resolveContent(
   hash: string
 ): ContentInterface[] {
   if (isStreamingContentHash(hash)) {
-    const nodeId = getStreamingNodeIdFromHash(hash);
-    return nodeId ? peekBufferedContent(nodeId) ?? [] : [];
+    const target = getStreamingTargetFromHash(hash);
+    return target ? peekBufferedContent(target.chatId, target.nodeId) ?? [] : [];
   }
   const entry = store[hash];
   if (!entry) return [];

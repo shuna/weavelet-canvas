@@ -1,0 +1,2049 @@
+{
+  "version": "prompt v3 candidate3-bubbleSummaryPrompt.ts + wrapper candidate3-bubbleSummarySubmitMessage.ts; v4ではない",
+  "method": "72全出力（圧縮18・後続54）を原文と照合。条件既知の非盲検。",
+  "selection": "候補9圧縮すべてoriginal選択、候補18後続すべて強制診断。未使用だが実採用される圧縮の品質根拠なし。",
+  "metrics": {
+    "R07 summary-baseline no_added_heading": [
+      0,
+      3
+    ],
+    "R07 summary-candidate no_added_heading": [
+      0,
+      3
+    ],
+    "R07 follow-original two_polite_paragraphs_no_heading": [
+      6,
+      6
+    ],
+    "R07 follow-original initial_current_range_retained": [
+      6,
+      6
+    ],
+    "R07 follow-baseline two_polite_paragraphs_no_heading": [
+      6,
+      6
+    ],
+    "R07 follow-baseline initial_current_range_retained": [
+      6,
+      6
+    ],
+    "R07 follow-candidate two_polite_paragraphs_no_heading": [
+      6,
+      6
+    ],
+    "R07 follow-candidate initial_current_range_retained": [
+      6,
+      6
+    ],
+    "R08 summary-baseline no_added_heading": [
+      0,
+      3
+    ],
+    "R08 summary-candidate no_added_heading": [
+      1,
+      3
+    ],
+    "R08 follow-original no_script_labels": [
+      6,
+      6
+    ],
+    "R08 follow-original no_clear_voice_violation": [
+      6,
+      6
+    ],
+    "R08 follow-original dialogues_le_4": [
+      6,
+      6
+    ],
+    "R08 follow-original narration_paragraphs_le_2": [
+      4,
+      6
+    ],
+    "R08 follow-baseline no_script_labels": [
+      6,
+      6
+    ],
+    "R08 follow-baseline no_clear_voice_violation": [
+      6,
+      6
+    ],
+    "R08 follow-baseline dialogues_le_4": [
+      6,
+      6
+    ],
+    "R08 follow-baseline narration_paragraphs_le_2": [
+      0,
+      6
+    ],
+    "R08 follow-candidate no_script_labels": [
+      6,
+      6
+    ],
+    "R08 follow-candidate no_clear_voice_violation": [
+      6,
+      6
+    ],
+    "R08 follow-candidate dialogues_le_4": [
+      6,
+      6
+    ],
+    "R08 follow-candidate narration_paragraphs_le_2": [
+      2,
+      6
+    ],
+    "R09 follow-original no_adoption_or_execution_fabrication": [
+      6,
+      6
+    ],
+    "R09 follow-original two_polite_sentences": [
+      3,
+      3
+    ],
+    "R09 follow-baseline no_adoption_or_execution_fabrication": [
+      6,
+      6
+    ],
+    "R09 follow-baseline two_polite_sentences": [
+      3,
+      3
+    ],
+    "R09 follow-candidate no_adoption_or_execution_fabrication": [
+      6,
+      6
+    ],
+    "R09 follow-candidate two_polite_sentences": [
+      3,
+      3
+    ]
+  },
+  "rows": [
+    {
+      "response_id": "gen-1791247837-QiD8sG5eROpGfcR9bsY0",
+      "case_id": "R07",
+      "condition": "summary-baseline",
+      "repeat": 0,
+      "probe": null,
+      "summary_response_id": null,
+      "originalTokens": null,
+      "replacementTokens": null,
+      "candidate_automatic_selection": null,
+      "forced_diagnostic": null,
+      "output": "## 有効な指示\n\n設定説明を日本語の丁寧語で、見出しや箇条書きなしの二つの短い段落として書く。専門用語を避け、必要ならその場で意味を説明する。\n\n設定の目的は、資料の自動保存が集中している間の画面表示を調整すること。保存の順序や間隔を変える指示ではない。\n\n画面の値：初期表示＝20秒、現在値＝35秒。範囲は10秒以上90秒以下（10秒・90秒は許容、91秒は不可）。保存ボタンを押す前に範囲を検証する案のみ採用。保存後に自動的に値を丸める案は不採用。エラー文言は「10〜90秒で入力してください」をそのまま使用。\n\n20秒へ戻す操作は作業対象外。ユーザーが明示的に「初期値への変更は採用しません」と確定。元の資料と保存された値は消さない。\n\n既存資料の一つに古い形式の日時、別の資料に画像二枚があるが、今回どちらの内容も変更しない。確認用の図の45秒は数値配置の例であり、初期表示や現在値の変更ではない。デザイン参考図の大きな文字について文字サイズ変更の採用決定はない。利用例（会議資料を開く→次ページ→一覧へ戻る）は操作順を示すだけで、ページ数や画面遷移の変更要件ではない。\n\n画面を使う人には一枚ずつ入力する人と複数一括取込みの人がいる。午前は取込みが多く午後は閲覧が多いとのユーザー申告あり。ただし人数・待ち時間は未測定で、申告から性能改善の数値は計算不可。\n\n画面調整で保存が速くなる・エラーがなくなる等の未検証の効果は書かない。採用した表示の変更と確認されていない効果を区別すること。\n\n## 現在状態\n\n表示の修正はまだ未実施。保存完了までの時間も未測定。次回作業では表示文言の調整のみ行う予定。\n\n## 不採用の確定\n\n- 保存後の自動丸め\n- 初期値（20秒）への変更（アシスタントが提案→ユーザーが不採用と確定）\n- 文字サイズ変更\n\n## 文体指定\n\n出力は日本語の丁寧語、二つの短い段落、見出しや箇条書きなし。専門用語は避けその場で説明。",
+      "semantic_and_state": [
+        "重要な採用/未採用・未実施、数値、禁止、形式を照合。個別指摘以外は主要関係を保持。",
+        "初期20/現在35、10〜90両端含む、保存前検査・丸め拒否、次回文言のみ、資料現在値維持、未測定を保持。",
+        "文字サイズの採用決定なしを「不採用の確定」に配置し、未決と拒否を混同する。"
+      ],
+      "explicit_form": [
+        "圧縮に整理見出しを追加。後続への見出し禁止指示自体は保持している。候補は圧縮用規則への違反もある。"
+      ],
+      "implicit_style": [],
+      "acceptable_variation": [],
+      "uncertain": [],
+      "checks": {
+        "no_added_heading": false
+      }
+    },
+    {
+      "response_id": "gen-1791247837-4NZ3LHyV5eUvAH6roe4K",
+      "case_id": "R07",
+      "condition": "summary-baseline",
+      "repeat": 1,
+      "probe": null,
+      "summary_response_id": null,
+      "originalTokens": null,
+      "replacementTokens": null,
+      "candidate_automatic_selection": null,
+      "forced_diagnostic": null,
+      "output": "## 有効な指示\n\n設定説明を日本語の丁寧語で、見出しや箇条書きなしの二つの短い段落として書く。専門用語を避け、必要ならその場で意味を説明する。\n\n設定の目的は、資料の自動保存が集中している間の画面表示を調整すること。保存の順序や間隔を変える指示ではない。\n\n採用済みの作業：保存ボタンを押す前に範囲を検証する。エラー文言は「10〜90秒で入力してください」をそのまま使う。表示文言の調整を次回行う予定。\n\n不採用：保存後に自動的に値を丸める案。初期表示の20秒へ現在値を戻す操作（ユーザーが明示的に不採用と確定）。文字サイズの変更（採用決定なし）。\n\n## 現在状態\n\n初期表示＝20秒、現在値＝35秒。範囲は10秒以上90秒以下（10秒・90秒は許容、91秒は不可）。元の資料と保存された値は消さない。既存資料の一つに古い形式の日時、別の資料に画像二枚があるが、どちらも今回変更しない。現時点で表示の修正はまだ未実施。\n\n確認用の図の45秒は数値配置を見るための例であり、初期表示・現在値の変更ではない。デザイン参考図の大きな文字も採用決定なし。利用例（会議資料を開く→次ページ→一覧に戻る）は操作順を示すだけで、ページ数や画面遷移の変更要件ではない。\n\n背景（申告）：画面利用者には一枚ずつ入力する人と複数一括取込みの人がいる。午前は取込みが多く午後は閲覧が多いとの申告。ただし人数・待ち時間は未測定で、申告から性能改善の数値は計算不可。\n\n## 未確認・未実施\n\n保存完了までの時間は調査記録でまだ測られていない。画面調整で保存が速くなる・エラーがなくなる等の効果は未検証であり、説明に書かない。\n\n## 後続応答の文体\n\n日本語丁寧語、二つの短い段落、見出しや箇条書きなし。採用した表示の変更と確認されていない効果を区別して書く。未検証の効果を断定しない。",
+      "semantic_and_state": [
+        "重要な採用/未採用・未実施、数値、禁止、形式を照合。個別指摘以外は主要関係を保持。",
+        "初期20/現在35、10〜90両端含む、保存前検査・丸め拒否、次回文言のみ、資料現在値維持、未測定を保持。"
+      ],
+      "explicit_form": [
+        "圧縮に整理見出しを追加。後続への見出し禁止指示自体は保持している。候補は圧縮用規則への違反もある。"
+      ],
+      "implicit_style": [],
+      "acceptable_variation": [],
+      "uncertain": [],
+      "checks": {
+        "no_added_heading": false
+      }
+    },
+    {
+      "response_id": "gen-1791247850-jiPt2ne614dy3joaNLGC",
+      "case_id": "R07",
+      "condition": "summary-candidate",
+      "repeat": 1,
+      "probe": null,
+      "summary_response_id": null,
+      "originalTokens": null,
+      "replacementTokens": null,
+      "candidate_automatic_selection": null,
+      "forced_diagnostic": null,
+      "output": "## 有効な指示\n\n日本語の丁寧語で二つの短い段落、見出しや箇条書きなしで設定説明を書く。専門用語を避け、必要ならその場で意味を説明する。\n\n設定の目的は、資料の自動保存が集中している間の画面表示を調整すること。保存そのものの順序や間隔を変える指示ではない。\n\n- 初期表示の値：20秒、利用者が保存した現在値：35秒。範囲は10秒以上90秒以下（10秒・90秒は許容、91秒は不可）。\n- 保存ボタンを押す前に範囲を検証する案だけ採用。保存後に自動的に値を丸める案は採用しない。\n- エラー文言は「10〜90秒で入力してください」をそのまま使う。\n- 20秒へ戻す操作・初期値への変更は採用しない。今回の作業対象外。\n- 元の資料と保存された値（現在値含む）は消さない。\n- 既存資料の古い形式の日時・別資料の画像二枚は今回変更しない。\n- 確認用の図の45秒は数値配置を見るための例であり、初期表示や現在値の変更ではない。\n- デザイン参考図の大きな文字について、文字サイズ変更の採用決定はない。\n- 利用例（会議資料を開く→次ページ→一覧へ戻る）は操作順を示すだけで、ページ数や画面遷移の変更要件ではない。\n- 画面を調整すれば保存が速くなる・エラーがなくなる等の未検証の効果は書かない。\n- 採用した表示の変更と、確認されていない効果を区別すること。\n\n## 背景（申告・未確認）\n\n画面利用者には資料を一枚ずつ入力する人と複数を一度に取り込む人がいる。午前は取込みが多く午後は閲覧が多いとの申告があるが、人数や待ち時間はまだ測っておらず、申告から性能改善の数値を計算することはできない。\n\n## 現在状態\n\n- 表示の修正はまだ行っていない。\n- 保存完了までの時間はまだ測られていない（調査用記録）。\n- 次回行う予定は表示文言の調整のみ。\n- アシスタントが提案した「現在値を初期値へ戻す」案はユーザーが明示的に不採用とした。",
+      "semantic_and_state": [
+        "重要な採用/未採用・未実施、数値、禁止、形式を照合。個別指摘以外は主要関係を保持。",
+        "初期20/現在35、10〜90両端含む、保存前検査・丸め拒否、次回文言のみ、資料現在値維持、未測定を保持。"
+      ],
+      "explicit_form": [
+        "圧縮に整理見出しを追加。後続への見出し禁止指示自体は保持している。候補は圧縮用規則への違反もある。"
+      ],
+      "implicit_style": [],
+      "acceptable_variation": [],
+      "uncertain": [],
+      "checks": {
+        "no_added_heading": false
+      }
+    },
+    {
+      "response_id": "gen-1791247850-DsaTlVnJRZYEIJhqmFEz",
+      "case_id": "R07",
+      "condition": "summary-candidate",
+      "repeat": 0,
+      "probe": null,
+      "summary_response_id": null,
+      "originalTokens": null,
+      "replacementTokens": null,
+      "candidate_automatic_selection": null,
+      "forced_diagnostic": null,
+      "output": "## 有効な指示\n\n日本語の丁寧語で二つの短い段落、見出しや箇条書きなしで設定説明を書く。専門用語を避け、必要ならその場で意味を説明する。\n\n設定の目的は、資料の自動保存が集中している間の画面表示を調整すること。保存そのものの順序や間隔を変える指示ではない。\n\n- 初期表示の値：20秒、利用者が保存した現在値：35秒。範囲は10秒以上90秒以下（10秒・90秒は許容、91秒は不可）。\n- 保存ボタンを押す前に範囲を検証する案だけ採用。保存後に自動的に値を丸める案は採用しない。\n- エラー文言は「10〜90秒で入力してください」をそのまま使う。\n- 20秒へ戻す操作・初期値への変更は採用しない。今回の作業対象ではない。\n- 元の資料と保存された値（現在値含む）は消さない。\n- 既存資料の一つに古い形式の日時、別の資料に画像二枚があるが、どちらの内容も今回変更しない。\n- 確認用の図に描かれている45秒は数値配置を見るための例であり、初期表示や現在値の変更ではない。\n- デザイン参考図の大きな文字について、文字サイズ変更の採用決定はない。\n- 画面を調整すれば保存が速くなる・エラーがなくなるといった未検証の効果は書かない。\n- 採用した表示の変更と、確認されていない効果を区別すること。\n\n次回行う予定は表示文言の調整のみ。\n\n## 現在状態\n\n- 表示の修正はまだ行っていない。\n- 調査用の記録には、まだ保存完了までの時間が測られていない。\n- 利用者の人数や待ち時間はまだ測っておらず、申告から性能改善の数値を計算することはできない。\n\n## 背景（申告・利用例、いずれも変更要件ではない）\n\n- 画面利用者には資料を一枚ずつ入力する人と複数資料を一度に取り込む人がいる。午前中は取込みが多く午後は閲覧が多いとの申告があるが、人数・待ち時間は未測定。\n- 利用例：会議資料を開いて次のページへ進み最後に一覧へ戻る操作。操作の順番を示すだけで、ページ数や画面遷移の変更要件ではない。",
+      "semantic_and_state": [
+        "重要な採用/未採用・未実施、数値、禁止、形式を照合。個別指摘以外は主要関係を保持。",
+        "初期20/現在35、10〜90両端含む、保存前検査・丸め拒否、次回文言のみ、資料現在値維持、未測定を保持。"
+      ],
+      "explicit_form": [
+        "圧縮に整理見出しを追加。後続への見出し禁止指示自体は保持している。候補は圧縮用規則への違反もある。"
+      ],
+      "implicit_style": [],
+      "acceptable_variation": [],
+      "uncertain": [],
+      "checks": {
+        "no_added_heading": false
+      }
+    },
+    {
+      "response_id": "gen-1791247862-tqROoz2I5yefOWvYfeCw",
+      "case_id": "R07",
+      "condition": "follow-original",
+      "repeat": 1,
+      "probe": 0,
+      "summary_response_id": null,
+      "originalTokens": 509,
+      "replacementTokens": 569,
+      "candidate_automatic_selection": "original",
+      "forced_diagnostic": false,
+      "output": "この設定は、資料の自動保存が集中している間に画面へ表示される秒数の入力欄を調整するためのものです。画面には最初から入っている値として20秒があり、利用者が保存した現在の値として35秒が別に記録されています。今回採用した内容は、保存ボタンを押す前に入力された秒数が10秒以上90秒以下の範囲に収まっているかを確かめる仕組みを加えることです。範囲から外れた場合には「10〜90秒で入力してください」という文言をそのまま表示します。保存した後に数値を自動で整える案は採用していません。また、20秒の初期値へ戻す変更も今回は行いません。元の資料と利用者が保存した35秒の値はそのまま残します。\n\n次回の作業では、範囲確認の際に画面へ出す文言の見た目を整える調整を行う予定です。なお、この画面の調整によって保存が速くなる、またはエラーが減るといった効果はまだ確かめられていないため、現時点ではそうした改善を見込んだものではありません。確認用の図に記載されている45秒は画面上の数値の配置を確かめるための例であり、初期値や現在値を変えるものではありません。同様に、デザインの参考図で大きな文字が使われていますが、文字の大きさを変える決定も今回は行っていません。利用者の人数や待ち時間はまだ測定が済んでおらず、申告された利用状況から性能に関する数値を算出することもできない段階です。",
+      "semantic_and_state": [
+        "20/35と10〜90境界を維持。未検証の速度改善やエラー消失を確定しない。probe0は次回表示文言のみの予定を保持。"
+      ],
+      "explicit_form": [
+        "二段落等の明示構造は保持するが、多くは長く「短い」の要求を十分満たさない。長さ閾値は後付けしない。"
+      ],
+      "implicit_style": [],
+      "acceptable_variation": [],
+      "uncertain": [],
+      "checks": {
+        "two_polite_paragraphs_no_heading": true,
+        "initial_current_range_retained": true
+      }
+    },
+    {
+      "response_id": "gen-1791247863-4tyzdzRduJBDEp9WhqKK",
+      "case_id": "R07",
+      "condition": "follow-original",
+      "repeat": 0,
+      "probe": 0,
+      "summary_response_id": null,
+      "originalTokens": 509,
+      "replacementTokens": 584,
+      "candidate_automatic_selection": "original",
+      "forced_diagnostic": false,
+      "output": "この設定は、資料の自動保存が集中している間に画面に表示される秒数の入力欄を調整するためのものです。画面には最初から表示されている値として20秒があり、利用者が保存した現在の値として35秒が別々に記録されています。今回採用した内容は、保存ボタンを押す前に入力された秒数が10秒以上90秒以下の範囲に収まっているかを確認する仕組みを加えることです。範囲の外の値が入力された場合には「10〜90秒で入力してください」という文言をそのまま表示します。保存した後に自動的に値を範囲内に丸める方法は採用していません。また、現在の値である35秒を初期の20秒へ戻す操作も今回は行いません。元の資料と保存された現在の値はそのまま残します。\n\n次の作業として予定しているのは、上記のエラー文言を含む表示まわりの文言の調整です。現時点では画面の修正はまだ行っておらず、この調整によって保存が速くなる、またはエラーが減るといった効果はまだ確認されていません。確認用の図に描かれている45秒は画面上の数値の配置を確かめるための例であり、初期の値や現在の値を変えるものではありません。既存の資料に含まれる古い形式の日時や二枚の画像についても、今回および次回の作業では内容を変更しません。",
+      "semantic_and_state": [
+        "20/35と10〜90境界を維持。未検証の速度改善やエラー消失を確定しない。probe0は次回表示文言のみの予定を保持。"
+      ],
+      "explicit_form": [
+        "二段落等の明示構造は保持するが、多くは長く「短い」の要求を十分満たさない。長さ閾値は後付けしない。"
+      ],
+      "implicit_style": [],
+      "acceptable_variation": [],
+      "uncertain": [],
+      "checks": {
+        "two_polite_paragraphs_no_heading": true,
+        "initial_current_range_retained": true
+      }
+    },
+    {
+      "response_id": "gen-1791247873-QCMU0h2RbwibKnqzfwz9",
+      "case_id": "R07",
+      "condition": "follow-baseline",
+      "repeat": 0,
+      "probe": 0,
+      "summary_response_id": "gen-1791247837-QiD8sG5eROpGfcR9bsY0",
+      "originalTokens": 509,
+      "replacementTokens": 584,
+      "candidate_automatic_selection": "original",
+      "forced_diagnostic": false,
+      "output": "これまでの話し合いで採用が決まったのは、資料の自動保存が続いている間に表示される秒数の入力欄について、保存ボタンを押す前に値が正しい範囲に収まっているかを確かめる仕組みを加えることです。具体的には、入力できる値を10秒から90秒までとし、この範囲の外の数字が入っていた場合は「10〜90秒で入力してください」という文言を画面に出して保存を止めます。現在の値は35秒のまま残し、もともとの初期表示である20秒に戻す変更は行いません。また、保存が終わったあとに自動で数字を丸める方法や、文字の大きさを変えることも採用していません。\n\n次回の作業では、この範囲の確認に関わる表示の文言を画面上で調整する予定です。保存にかかる時間はまだ測っておらず、今回の表示の変更によって保存が速くなるかどうかやエラーが減るかどうかといった点は確かめられていませんので、そうした効果についてはお伝えできる段階にありません。既存の資料の中身や保存済みの値はそのまま残します。",
+      "semantic_and_state": [
+        "20/35と10〜90境界を維持。未検証の速度改善やエラー消失を確定しない。probe0は次回表示文言のみの予定を保持。"
+      ],
+      "explicit_form": [
+        "二段落等の明示構造は保持するが、多くは長く「短い」の要求を十分満たさない。長さ閾値は後付けしない。"
+      ],
+      "implicit_style": [],
+      "acceptable_variation": [],
+      "uncertain": [],
+      "checks": {
+        "two_polite_paragraphs_no_heading": true,
+        "initial_current_range_retained": true
+      }
+    },
+    {
+      "response_id": "gen-1791247873-FUInFkagGDF8Wgk13Wfr",
+      "case_id": "R07",
+      "condition": "follow-baseline",
+      "repeat": 1,
+      "probe": 0,
+      "summary_response_id": "gen-1791247837-4NZ3LHyV5eUvAH6roe4K",
+      "originalTokens": 509,
+      "replacementTokens": 569,
+      "candidate_automatic_selection": "original",
+      "forced_diagnostic": false,
+      "output": "今回採用した内容についてご説明します。自動保存が行われている間の画面表示を調整するにあたり、保存ボタンを押す前に入力された秒数が範囲内かどうかを検証する仕組みを取り入れることにしました。範囲は10秒から90秒までで、この両端の値も使えます。範囲の外の値が入力された場合には「10〜90秒で入力してください」というエラー文言をそのまま表示します。なお、保存後に値を自動的に丸める案や、現在の35秒を初期表示の20秒に戻す操作は採用しておりません。文字サイズの変更についても採用の決定には至っておりません。\n\n次回は表示文言の調整を行う予定です。今回の画面調整によって保存にかかる時間が短くなる、あるいはエラーが減るといった効果があるかどうかについては、現時点ではまだ測定や検証が行われておりませんので、そうした効果を見込んだものとしてはお伝えできません。保存完了までの実際の所要時間についても調査記録ではまだ計測されておらず、今後確認が必要な項目として残っております。",
+      "semantic_and_state": [
+        "20/35と10〜90境界を維持。未検証の速度改善やエラー消失を確定しない。probe0は次回表示文言のみの予定を保持。"
+      ],
+      "explicit_form": [
+        "二段落等の明示構造は保持するが、多くは長く「短い」の要求を十分満たさない。長さ閾値は後付けしない。"
+      ],
+      "implicit_style": [],
+      "acceptable_variation": [],
+      "uncertain": [],
+      "checks": {
+        "two_polite_paragraphs_no_heading": true,
+        "initial_current_range_retained": true
+      }
+    },
+    {
+      "response_id": "gen-1791247883-w6JsGmckuLc3ofGdqyKI",
+      "case_id": "R07",
+      "condition": "follow-candidate",
+      "repeat": 1,
+      "probe": 0,
+      "summary_response_id": "gen-1791247850-jiPt2ne614dy3joaNLGC",
+      "originalTokens": 509,
+      "replacementTokens": 569,
+      "candidate_automatic_selection": "original",
+      "forced_diagnostic": true,
+      "output": "今回採用した内容についてご説明します。資料の自動保存が集中している間の画面表示を調整するにあたり、利用者が保存ボタンを押す前に、入力された秒数が正しい範囲に収まっているかどうかを確かめる仕組みを取り入れることになりました。具体的には、10秒から90秒までの範囲だけを受け付け、この範囲から外れた値が入力された場合には「10〜90秒で入力してください」という案内を表示します。なお、保存した後に自動的に値を修正する方法や、現在利用者が保存している35秒という値を初期表示の20秒に戻す方法は、いずれも今回は採用しておりません。また、既存の資料や保存済みの値、別資料の画像などはそのまま残し、変更の対象外としています。\n\n次回行う予定は、画面に表示される文言の調整のみです。表示の修正そのものはまだ行われておらず、保存が完了するまでにかかる時間の計測もまだ済んでおりません。画面の利用について、午前中は取り込みが多く午後は閲覧が多いとのお話をいただいておりますが、実際の人数や待ち時間はまだ測っていないため、今の段階で表示を調整した結果どのような効果があるかについては確認できておりません。",
+      "semantic_and_state": [
+        "20/35と10〜90境界を維持。未検証の速度改善やエラー消失を確定しない。probe0は次回表示文言のみの予定を保持。"
+      ],
+      "explicit_form": [
+        "二段落等の明示構造は保持するが、多くは長く「短い」の要求を十分満たさない。長さ閾値は後付けしない。"
+      ],
+      "implicit_style": [],
+      "acceptable_variation": [],
+      "uncertain": [],
+      "checks": {
+        "two_polite_paragraphs_no_heading": true,
+        "initial_current_range_retained": true
+      }
+    },
+    {
+      "response_id": "gen-1791247884-4VCf87E9LiDMvJ3Pojpn",
+      "case_id": "R07",
+      "condition": "follow-candidate",
+      "repeat": 0,
+      "probe": 0,
+      "summary_response_id": "gen-1791247850-DsaTlVnJRZYEIJhqmFEz",
+      "originalTokens": 509,
+      "replacementTokens": 584,
+      "candidate_automatic_selection": "original",
+      "forced_diagnostic": true,
+      "output": "今回の作業では、資料の自動保存が集中している間に表示される画面の調整について、保存ボタンを押す前に入力された秒数が正しい範囲に収まっているかを確かめる仕組みを取り入れる案が採用されました。ここでいう範囲とは10秒から90秒までのことで、10秒と90秒はそのまま使えますが、91秒以上や9秒以下は受け付けません。範囲の外の値が入力された場合には「10〜90秒で入力してください」という文言をそのまま表示します。なお、保存した後に自動的に値を丸める案や、初期表示の20秒へ戻す操作についてはいずれも採用されていません。現在の初期表示は20秒、利用者が保存した現在値は35秒のままで、これらの値や元の資料、既存の保存内容に変更はありません。表示の修正自体はまだ行われておらず、保存完了までの時間も測られていない段階です。\n\n次回行う予定は表示文言の調整のみとなっています。",
+      "semantic_and_state": [
+        "20/35と10〜90境界を維持。未検証の速度改善やエラー消失を確定しない。probe0は次回表示文言のみの予定を保持。"
+      ],
+      "explicit_form": [
+        "二段落等の明示構造は保持するが、多くは長く「短い」の要求を十分満たさない。長さ閾値は後付けしない。"
+      ],
+      "implicit_style": [],
+      "acceptable_variation": [],
+      "uncertain": [],
+      "checks": {
+        "two_polite_paragraphs_no_heading": true,
+        "initial_current_range_retained": true
+      }
+    },
+    {
+      "response_id": "gen-1791247891-VwdIdhGEZ2feZac7NQX0",
+      "case_id": "R07",
+      "condition": "follow-original",
+      "repeat": 0,
+      "probe": 1,
+      "summary_response_id": null,
+      "originalTokens": 509,
+      "replacementTokens": 584,
+      "candidate_automatic_selection": "original",
+      "forced_diagnostic": false,
+      "output": "この画面には二つの数値があります。画面を最初に開いたときに表示される値は20秒で、利用者が保存した現在の値は35秒です。どちらの値も今回の作業で変更したり消したりすることはありません。入力できる範囲は10秒から90秒までで、10秒と90秒はそのまま使えますが、91秒のように範囲を超えた値は受け付けません。\n\n今回の作業で採用しているのは、保存の操作をする前に入力された値が範囲内かどうかを確かめる仕組みと、範囲外であった場合に「10〜90秒で入力してください」という文言を画面に出す対応のみです。保存のあとに値を自動的に直す方法は採用していません。なお、この表示の調整によって保存が速くなる、あるいは誤りがなくなるといった効果はまだ確認されていないため、現時点ではそうした見込みをお伝えすることはできません。",
+      "semantic_and_state": [
+        "20/35と10〜90境界を維持。未検証の速度改善やエラー消失を確定しない。probe0は次回表示文言のみの予定を保持。"
+      ],
+      "explicit_form": [
+        "二段落等の明示構造は保持するが、多くは長く「短い」の要求を十分満たさない。長さ閾値は後付けしない。"
+      ],
+      "implicit_style": [],
+      "acceptable_variation": [],
+      "uncertain": [
+        "画面を初めて開く時の値という解釈や、表示切替間隔の具体化は原文に明示されていない。保存そのものの間隔との混同とは区別。"
+      ],
+      "checks": {
+        "two_polite_paragraphs_no_heading": true,
+        "initial_current_range_retained": true
+      }
+    },
+    {
+      "response_id": "gen-1791247893-hBKZErfhgF1UGZ25UsNs",
+      "case_id": "R07",
+      "condition": "follow-original",
+      "repeat": 1,
+      "probe": 1,
+      "summary_response_id": null,
+      "originalTokens": 509,
+      "replacementTokens": 569,
+      "candidate_automatic_selection": "original",
+      "forced_diagnostic": false,
+      "output": "この画面には、はじめから表示されている値と、利用者の方がご自身で保存した値の二つがあります。はじめから表示されている値は20秒で、保存された現在の値は35秒です。入力できる範囲は10秒から90秒までで、10秒と90秒はお使いいただけますが、91秒以上は受け付けられません。範囲の外の値を入力した場合は、保存ボタンを押す前に「10〜90秒で入力してください」という案内が表示されます。保存した後に値を自動で直す仕組みは採用しておりません。\n\n次に行う作業では、この範囲の確認に合わせた表示の文言を調整いたします。はじめから表示されている20秒への変更や、保存された35秒の書き換えは行いません。元の資料と現在保存されている値はそのまま残します。なお、画面の表示を調整することで保存が速くなる、あるいは誤りがなくなるといった効果については、現時点では確認できておりません。",
+      "semantic_and_state": [
+        "20/35と10〜90境界を維持。未検証の速度改善やエラー消失を確定しない。probe0は次回表示文言のみの予定を保持。"
+      ],
+      "explicit_form": [
+        "二段落等の明示構造は保持するが、多くは長く「短い」の要求を十分満たさない。長さ閾値は後付けしない。"
+      ],
+      "implicit_style": [],
+      "acceptable_variation": [],
+      "uncertain": [
+        "画面を初めて開く時の値という解釈や、表示切替間隔の具体化は原文に明示されていない。保存そのものの間隔との混同とは区別。"
+      ],
+      "checks": {
+        "two_polite_paragraphs_no_heading": true,
+        "initial_current_range_retained": true
+      }
+    },
+    {
+      "response_id": "gen-1791247899-fcx4s0kVrcd0mo5vBLTM",
+      "case_id": "R07",
+      "condition": "follow-baseline",
+      "repeat": 0,
+      "probe": 1,
+      "summary_response_id": "gen-1791247837-QiD8sG5eROpGfcR9bsY0",
+      "originalTokens": 509,
+      "replacementTokens": 584,
+      "candidate_automatic_selection": "original",
+      "forced_diagnostic": false,
+      "output": "この画面には、資料の自動保存が行われている間に表示される秒数の設定があります。最初に画面を開いたときに表示される値は20秒ですが、現在はこの値が35秒に変更されて保存されています。つまり、初期表示の20秒はあくまで画面を新しく開いたときの出発点であり、実際に使われている値は利用者が変更した35秒のほうです。\n\nこの秒数を入力できる範囲は、10秒から90秒までとなっています。10秒ちょうどや90秒ちょうどはそのまま入力できますが、91秒のように範囲を超えた値は受け付けられません。保存ボタンを押す前に入力された値がこの範囲に収まっているかを確認し、範囲外であれば「10〜90秒で入力してください」というメッセージを表示する仕組みです。",
+      "semantic_and_state": [
+        "20/35と10〜90境界を維持。未検証の速度改善やエラー消失を確定しない。probe0は次回表示文言のみの予定を保持。"
+      ],
+      "explicit_form": [
+        "二段落等の明示構造は保持するが、多くは長く「短い」の要求を十分満たさない。長さ閾値は後付けしない。"
+      ],
+      "implicit_style": [],
+      "acceptable_variation": [],
+      "uncertain": [
+        "画面を初めて開く時の値という解釈や、表示切替間隔の具体化は原文に明示されていない。保存そのものの間隔との混同とは区別。"
+      ],
+      "checks": {
+        "two_polite_paragraphs_no_heading": true,
+        "initial_current_range_retained": true
+      }
+    },
+    {
+      "response_id": "gen-1791247901-hyAhuKaIwrkbWRWIEUEw",
+      "case_id": "R07",
+      "condition": "follow-baseline",
+      "repeat": 1,
+      "probe": 1,
+      "summary_response_id": "gen-1791247837-4NZ3LHyV5eUvAH6roe4K",
+      "originalTokens": 509,
+      "replacementTokens": 569,
+      "candidate_automatic_selection": "original",
+      "forced_diagnostic": false,
+      "output": "この画面では、資料の自動保存が行われる間隔を秒数で設定できるようになっています。画面を最初に開いたときに表示される値は20秒ですが、現在設定されている値は35秒です。このように、初期表示の値と実際に保存されている現在値は異なる場合があります。初期表示はあくまで画面を開いた直後に見える既定の数字であり、現在値は利用者が変更して保存した結果の数字です。\n\n入力できる範囲は10秒以上90秒以下で、10秒ちょうどや90秒ちょうどはそのまま受け付けますが、91秒のように上限を超える値は入力できません。範囲の外の数字を入れた場合は「10〜90秒で入力してください」というエラーが表示されます。なお、この画面の表示を調整することで保存にかかる時間が短くなる、あるいはエラーが減るといった効果については、現時点ではまだ測定や検証が行われていないため、確かなことは申し上げられません。",
+      "semantic_and_state": [
+        "20/35と10〜90境界を維持。未検証の速度改善やエラー消失を確定しない。probe0は次回表示文言のみの予定を保持。",
+        "「自動保存が行われる間隔」を設定すると説明し、明示的に除外した保存そのものへの変更と混同。"
+      ],
+      "explicit_form": [
+        "二段落等の明示構造は保持するが、多くは長く「短い」の要求を十分満たさない。長さ閾値は後付けしない。"
+      ],
+      "implicit_style": [],
+      "acceptable_variation": [],
+      "uncertain": [
+        "画面を初めて開く時の値という解釈や、表示切替間隔の具体化は原文に明示されていない。保存そのものの間隔との混同とは区別。"
+      ],
+      "checks": {
+        "two_polite_paragraphs_no_heading": true,
+        "initial_current_range_retained": true
+      }
+    },
+    {
+      "response_id": "gen-1791247907-HAEIdTAd6c8tnBEWNMpV",
+      "case_id": "R07",
+      "condition": "follow-candidate",
+      "repeat": 0,
+      "probe": 1,
+      "summary_response_id": "gen-1791247850-DsaTlVnJRZYEIJhqmFEz",
+      "originalTokens": 509,
+      "replacementTokens": 584,
+      "candidate_automatic_selection": "original",
+      "forced_diagnostic": true,
+      "output": "\n\nこの画面では、資料の自動保存が続いている間に表示される画面の見え方を調整するための秒数を設定します。はじめて画面を開いたときには20秒という値が表示されますが、利用者の方がご自身で保存された値として現在は35秒が設定されています。つまり、20秒はあらかじめ用意されている表示上の値であり、35秒は利用者の方が実際に保存して使っている値です。\n\n入力できる範囲は10秒から90秒までで、10秒と90秒はそのまま使えますが、91秒以上は入力できません。保存ボタンを押す前に、入力された値がこの範囲に収まっているかどうかを確認する仕組みを取り入れる予定です。もし範囲の外の値が入力された場合には「10〜90秒で入力してください」という案内が表示されます。なお、この設定はあくまで画面の表示を調整するためのもので、保存そのものの順序や間隔を変えるものではありません。",
+      "semantic_and_state": [
+        "20/35と10〜90境界を維持。未検証の速度改善やエラー消失を確定しない。probe0は次回表示文言のみの予定を保持。"
+      ],
+      "explicit_form": [
+        "二段落等の明示構造は保持するが、多くは長く「短い」の要求を十分満たさない。長さ閾値は後付けしない。"
+      ],
+      "implicit_style": [],
+      "acceptable_variation": [],
+      "uncertain": [
+        "画面を初めて開く時の値という解釈や、表示切替間隔の具体化は原文に明示されていない。保存そのものの間隔との混同とは区別。"
+      ],
+      "checks": {
+        "two_polite_paragraphs_no_heading": true,
+        "initial_current_range_retained": true
+      }
+    },
+    {
+      "response_id": "gen-1791247910-BKmZQpnatWGOQ6K3QMLe",
+      "case_id": "R07",
+      "condition": "follow-candidate",
+      "repeat": 1,
+      "probe": 1,
+      "summary_response_id": "gen-1791247850-jiPt2ne614dy3joaNLGC",
+      "originalTokens": 509,
+      "replacementTokens": 569,
+      "candidate_automatic_selection": "original",
+      "forced_diagnostic": true,
+      "output": "\n\nこの画面には、資料の自動保存が集中しているときに表示の間隔を調整するための設定欄があります。設定欄にははじめから20秒という値が表示されていますが、これは画面を最初に開いたときに入っている値であり、「初期表示の値」と呼ばれるものです。一方、利用者の方がご自身で値を変えて保存ボタンを押した結果、現在は35秒という値が保存されています。こちらが「現在値」にあたります。つまり、初期表示の値は画面が用意している出発点のようなもので、現在値は利用者の方が実際に選んで保存した値です。今回の作業では、この現在値を初期表示の値へ戻す操作は対象外となっております。\n\n入力できる範囲についてですが、この設定欄には10秒から90秒までの値を入れることができます。10秒ちょうどや90秒ちょうどはそのまま受け付けられますが、91秒のように90秒を超える値は受け付けられません。保存ボタンを押す前の段階で範囲が正しいかどうかを確かめる案が採用されており、範囲の外の値が入っている場合には「10〜90秒で入力してください」という案内が表示されます。なお、保存ボタンを押した後に自動的に値を範囲内へ直す方法は採用されておりません。",
+      "semantic_and_state": [
+        "20/35と10〜90境界を維持。未検証の速度改善やエラー消失を確定しない。probe0は次回表示文言のみの予定を保持。"
+      ],
+      "explicit_form": [
+        "二段落等の明示構造は保持するが、多くは長く「短い」の要求を十分満たさない。長さ閾値は後付けしない。"
+      ],
+      "implicit_style": [],
+      "acceptable_variation": [],
+      "uncertain": [
+        "画面を初めて開く時の値という解釈や、表示切替間隔の具体化は原文に明示されていない。保存そのものの間隔との混同とは区別。"
+      ],
+      "checks": {
+        "two_polite_paragraphs_no_heading": true,
+        "initial_current_range_retained": true
+      }
+    },
+    {
+      "response_id": "gen-1791247915-ZWNJB9UGtnKuMfWHZhJM",
+      "case_id": "R07",
+      "condition": "summary-baseline",
+      "repeat": 2,
+      "probe": null,
+      "summary_response_id": null,
+      "originalTokens": null,
+      "replacementTokens": null,
+      "candidate_automatic_selection": null,
+      "forced_diagnostic": null,
+      "output": "## 有効な指示\n\n設定説明を日本語の丁寧語で、見出しや箇条書きなしの二つの短い段落として書く。専門用語を避け、必要ならその場で意味を説明する。\n\n設定の目的は、資料の自動保存が集中している間の画面表示を調整すること。保存そのものの順序や間隔を変える指示ではない。\n\n- 初期表示：20秒、現在値：35秒。範囲は10秒以上90秒以下（10秒・90秒は許容、91秒は不可）。\n- 保存ボタンを押す前に範囲を検証する案のみ採用。保存後に自動的に値を丸める案は不採用。\n- エラー文言：「10〜90秒で入力してください」をそのまま使用。\n- 20秒へ戻す操作は今回の作業対象外。初期値への変更は不採用。\n- 元の資料と保存された現在値は消さない・変更しない。\n- 既存資料の古い形式の日時、別資料の画像二枚、いずれも今回変更しない。\n- 確認用の図の45秒は数値配置を見るための例であり、初期表示や現在値の変更ではない。\n- デザイン参考図の大きな文字について、文字サイズ変更の採用決定はない。\n- 利用例（会議資料を開く→次ページ→一覧へ戻る）は操作順の説明のみ。ページ数や画面遷移の変更要件ではない。\n\n## 未検証・未取得・未実施\n\n- 調査用記録で保存完了までの時間はまだ測られていない。\n- 画面調整で保存が速くなる・エラーがなくなる等の効果は未検証であり、説明に書かない。\n- 利用者の人数や待ち時間は未測定。午前は取込みが多く午後は閲覧が多いとの申告はあるが、申告から性能改善の数値を計算することはできない。\n- 現時点で表示の修正はまだ行っていない。\n\n## 現在状態と次の作業\n\n採用済みの次回作業は表示文言の調整のみ。アシスタントが提案した「現在値を初期値へ戻す」案はユーザーが明示的に不採用とした。説明では採用した表示の変更と確認されていない効果を区別すること。\n\n## 背景情報\n\n画面利用者には資料を一枚ずつ入力する人と複数資料を一度に取り込む人がいる。午前は取込み多、午後は閲覧多との申告あり（数値未測定）。\n\n## 文体\n\n後続の応答は日本語の丁寧語、見出しや箇条書きなしの二つの短い段落。専門用語を避け必要ならその場で説明。",
+      "semantic_and_state": [
+        "重要な採用/未採用・未実施、数値、禁止、形式を照合。個別指摘以外は主要関係を保持。",
+        "初期20/現在35、10〜90両端含む、保存前検査・丸め拒否、次回文言のみ、資料現在値維持、未測定を保持。"
+      ],
+      "explicit_form": [
+        "圧縮に整理見出しを追加。後続への見出し禁止指示自体は保持している。候補は圧縮用規則への違反もある。"
+      ],
+      "implicit_style": [],
+      "acceptable_variation": [],
+      "uncertain": [],
+      "checks": {
+        "no_added_heading": false
+      }
+    },
+    {
+      "response_id": "gen-1791247921-jsQQmdAKK6v34U4VUKhr",
+      "case_id": "R08",
+      "condition": "summary-baseline",
+      "repeat": 0,
+      "probe": null,
+      "summary_response_id": null,
+      "originalTokens": null,
+      "replacementTokens": null,
+      "candidate_automatic_selection": null,
+      "forced_diagnostic": null,
+      "output": "## 現在の文脈\n\n小説の場面を執筆中。駅の待合室に二人だけが残っている。\n\n**有効な執筆指示**\n- 会話と短い地の文で書く。台本の話者ラベルは付けない。台詞は四つ以内、地の文は二段落以内。\n- ナオは慎重な敬体、ソラはためらいのある常体で話す。\n- 対立の理由・過去の約束はまだ未設定。互いの不信や謝罪の原因を作らず、同意・和解・無条件の約束を勝手に成立させない。\n- 鞄の色（青）、ソラの飲み物（温かいお茶）、窓の外の広告は場面の小道具であり、二人の同意を表すものとして扱わない。動作（時刻表を押さえる、持ち手に手を添える等）を承諾や拒否の確定と解釈しない。\n- 電光掲示に列車の遅れが表示されているが、その遅れが二人の判断の原因だとはまだ書いていない。外で雨が降り始めているが、雨を理由に同行を決めたという出来事はまだ起きていない。\n\n**採用済みの調子と文体見本**\nユーザーが採用した台詞と地の文の調子：\n「何を話すのか、先に伺ってもよろしいですか」とナオは尋ねた。\n「……まだ、うまく言えるかわからない」とソラは答えた。\n\n**現在の場面状態**\n- ソラの提案（終電までの間に話す時間を取る）に対し、ナオは話の目的だけ先に確認したいと返した。\n- 採用された合意：話す時間は十分だけ取る。\n- 未決事項：ナオが借りた封筒の返却（鞄に入ったまま、ソラは中身を未見）、今夜一緒に帰るかどうか（昨日の電話で帰る時刻の相談が途中で終わっている）。\n- 駅の改装について：古い売店が閉まり、新しい案内板の位置が未定という背景説明がある。二人が待合室にいる理由の説明ではなく、二人が改装の担当者という設定もない。",
+      "semantic_and_state": [
+        "重要な採用/未採用・未実施、数値、禁止、形式を照合。個別指摘以外は主要関係を保持。",
+        "声、採用見本、十分のみ合意、封筒/同行未決、禁止された因果・約束、小道具の扱いを保持。"
+      ],
+      "explicit_form": [],
+      "implicit_style": [],
+      "acceptable_variation": [],
+      "uncertain": [],
+      "checks": {
+        "no_added_heading": false
+      }
+    },
+    {
+      "response_id": "gen-1791247929-5ylb7grcDUCF8wU8CA0F",
+      "case_id": "R07",
+      "condition": "summary-candidate",
+      "repeat": 2,
+      "probe": null,
+      "summary_response_id": null,
+      "originalTokens": null,
+      "replacementTokens": null,
+      "candidate_automatic_selection": null,
+      "forced_diagnostic": null,
+      "output": "## 有効な指示\n\n日本語の丁寧語で二つの短い段落、見出しや箇条書きなしで設定説明を書く。専門用語を避け、必要ならその場で意味を説明する。\n\n設定の目的は、資料の自動保存が集中している間の画面表示を調整すること。保存そのものの順序や間隔を変える指示ではない。\n\n- 初期表示の値：20秒、利用者が保存した現在値：35秒。範囲は10秒以上90秒以下（10秒・90秒は許容、91秒は不可）。\n- 保存ボタンを押す前に範囲を検証する案だけ採用する。保存後に自動的に値を丸める案は採用しない。\n- エラー文言は「10〜90秒で入力してください」をそのまま使う。\n- 20秒へ戻す操作・初期値への変更は採用しない。今回の作業対象ではない。\n- 元の資料と保存された値（現在値含む）は消さない。\n- 既存資料の古い形式の日時・画像二枚の資料はいずれも今回変更しない。\n- 確認用の図の45秒は数値配置を見るための例であり、初期表示や現在値の変更ではない。\n- デザイン参考図の大きな文字について、文字サイズ変更の採用決定はない。\n- 利用例（会議資料を開く→次ページ→一覧へ戻る）は操作順の説明のみ。ページ数や画面遷移の変更要件ではない。\n\n採用した表示の変更と、確認されていない効果を区別すること。画面調整で保存が速くなる・エラーがなくなる等の未検証の効果は書かない。\n\n## 背景（申告・未確認情報）\n\n画面利用者には資料を一枚ずつ入力する人と複数を一度に取り込む人がいる。午前中は取込みが多く午後は閲覧が多いとの申告があるが、人数や待ち時間はまだ測っておらず、この申告から性能改善の数値を計算することはできない。\n\n## 未実施・未取得\n\n- 表示の修正はまだ行っていない。表示文言の調整だけを次回行う予定。\n- 調査用の記録で保存完了までの時間はまだ測られていない。",
+      "semantic_and_state": [
+        "重要な採用/未採用・未実施、数値、禁止、形式を照合。個別指摘以外は主要関係を保持。",
+        "初期20/現在35、10〜90両端含む、保存前検査・丸め拒否、次回文言のみ、資料現在値維持、未測定を保持。"
+      ],
+      "explicit_form": [
+        "圧縮に整理見出しを追加。後続への見出し禁止指示自体は保持している。候補は圧縮用規則への違反もある。"
+      ],
+      "implicit_style": [],
+      "acceptable_variation": [],
+      "uncertain": [],
+      "checks": {
+        "no_added_heading": false
+      }
+    },
+    {
+      "response_id": "gen-1791247933-HtSxtpMnIEjHzbrbSvGu",
+      "case_id": "R08",
+      "condition": "summary-candidate",
+      "repeat": 0,
+      "probe": null,
+      "summary_response_id": null,
+      "originalTokens": null,
+      "replacementTokens": null,
+      "candidate_automatic_selection": null,
+      "forced_diagnostic": null,
+      "output": "小説の場面を書く作業が進行中。条件は以下のとおり。\n\nナオは慎重な敬体、ソラはためらいのある常体で話す。会話と短い地の文で書き、台本の話者ラベルは付けない。台詞は四つ以内、地の文は二段落以内。\n\n舞台は駅の待合室、二人だけが残っている。ナオは借りた封筒を鞄に入れたまま、ソラはまだ封筒の中身を見ていない。昨日の電話では帰る時刻の相談が途中で終わり、今夜一緒に帰るかどうかも決まっていない。ソラの提案は終電までの間に話す時間を少し取ること。ナオの返事は話の目的だけ先に確認したいというもの。封筒の返却と今夜の同行は未決事項のまま。\n\n採用済みの台詞と地の文の調子：\n「何を話すのか、先に伺ってもよろしいですか」とナオは尋ねた。\n「……まだ、うまく言えるかわからない」とソラは答えた。\n\nここから、話す時間は十分だけ取ることが決まった。十分という時間だけが採用されており、封筒の返却と今夜の同行は引き続き未決。\n\n電光掲示には列車の遅れが表示されているが、その遅れが二人の判断の原因だとはまだ書いていない。ナオの青い鞄は床に置かれ、ソラは温かいお茶を持っている。鞄の色・飲み物の種類・窓の外の広告は場面の小道具であり、二人の同意を表すものとして扱わない。ソラは時刻表の端を指で押さえ、ナオは鞄の持ち手に手を添えているが、こうした動作を承諾や拒否の確定と解釈しない。外では雨が降り始め窓の向こうに傘を持つ人が見えるが、雨を理由に同行を決めたという出来事はまだ起きていない。\n\n対立の理由や過去の約束はまだ設定されていない。互いの不信や謝罪の原因を作らず、同意・和解・無条件の約束を勝手に成立させない。\n\n駅の改装について：古い売店が閉まり、新しい案内板の位置がまだ決まっていないという背景説明がある。これは二人が待合室にいる理由の説明ではなく駅の様子を説明する別の段落。二人が改装の担当者だったという設定はない。",
+      "semantic_and_state": [
+        "重要な採用/未採用・未実施、数値、禁止、形式を照合。個別指摘以外は主要関係を保持。",
+        "声、採用見本、十分のみ合意、封筒/同行未決、禁止された因果・約束、小道具の扱いを保持。"
+      ],
+      "explicit_form": [
+        "r0も前置きと整理ラベルを追加。r1/r2は太字/見出し/箇条書き。圧縮規則の整理装飾禁止に従えていない。"
+      ],
+      "implicit_style": [],
+      "acceptable_variation": [],
+      "uncertain": [],
+      "checks": {
+        "no_added_heading": true
+      }
+    },
+    {
+      "response_id": "gen-1791247940-3isKpeRvTAMbwAd1KPo5",
+      "case_id": "R07",
+      "condition": "follow-original",
+      "repeat": 2,
+      "probe": 0,
+      "summary_response_id": null,
+      "originalTokens": 509,
+      "replacementTokens": 550,
+      "candidate_automatic_selection": "original",
+      "forced_diagnostic": false,
+      "output": "この設定は、資料の自動保存が集中している間に画面に表示される秒数の入力欄を調整するためのものです。画面には最初から表示されている値として20秒があり、利用者が保存した現在の値として35秒が別々に保持されています。今回採用した内容は、保存ボタンを押す前に入力された秒数が10秒から90秒の範囲に収まっているかを確認する仕組みだけです。範囲の両端である10秒と90秒は入力できますが、91秒のように範囲を超えた値は受け付けません。範囲外の値が入力された場合には「10〜90秒で入力してください」という文言をそのまま表示します。保存した後に自動的に値を丸めて直す案は採用していません。また、現在の値である35秒を初期の20秒へ戻す操作も今回の作業には含まれておらず、採用もしていません。元の資料と利用者が保存した現在の値はそのまま残します。\n\n次回の予定として、範囲外の値が入力されたときに表示する文言の見せ方を調整する作業を行います。これは文言の内容そのものではなく、画面上での表示のされ方を整える作業です。なお、この範囲確認の仕組みを入れることで保存が速くなる、またはエラーがなくなるといった効果はまだ確認されておらず、現時点では表示の修正もまだ実施していません。確認用の図に描かれている45秒は画面上の数値の配置を確かめるための例であり、初期の値や現在の値を変えるものではありません。調査用の記録についても、保存が完了するまでの時間はまだ測られていない状況です。",
+      "semantic_and_state": [
+        "20/35と10〜90境界を維持。未検証の速度改善やエラー消失を確定しない。probe0は次回表示文言のみの予定を保持。"
+      ],
+      "explicit_form": [
+        "二段落等の明示構造は保持するが、多くは長く「短い」の要求を十分満たさない。長さ閾値は後付けしない。"
+      ],
+      "implicit_style": [],
+      "acceptable_variation": [],
+      "uncertain": [],
+      "checks": {
+        "two_polite_paragraphs_no_heading": true,
+        "initial_current_range_retained": true
+      }
+    },
+    {
+      "response_id": "gen-1791247943-Rptzf1DKLRcKPHl7ZRIL",
+      "case_id": "R08",
+      "condition": "follow-original",
+      "repeat": 0,
+      "probe": 0,
+      "summary_response_id": null,
+      "originalTokens": 448,
+      "replacementTokens": 561,
+      "candidate_automatic_selection": "original",
+      "forced_diagnostic": false,
+      "output": "ソラは紙コップのお茶を膝の上で両手に挟み、少し息を吐いた。\n\n「昨日の電話の続き……というか、続きとも違うんだけど」\n\nナオは青い鞄の持ち手から手を離さなかった。\n\n「昨日のお電話のことでしたら、帰る時刻の件はまだ途中でしたね」\n\n「うん。でも時刻のことじゃなくて」ソラは紙コップの縁を親指でなぞった。「……私がなぜあの電話をかけたのか、そっちのほうを、十分のあいだだけ話したい」",
+      "semantic_and_state": [
+        "十分のみの合意と封筒/同行の未決を保持。封筒内容をソラが見たことにせず、同行や和解を確定しない。"
+      ],
+      "explicit_form": [
+        "地の文を含む空行区切りの段落が二つを超える。台詞と同段落の発話帰属も地の文に含める。"
+      ],
+      "implicit_style": [],
+      "acceptable_variation": [
+        "話したい内容や仕草の補足は物語を続ける依頼に必要な範囲で許容。十分の確認に付随する時計管理を禁止された無条件保証と一律に扱わない。"
+      ],
+      "uncertain": [],
+      "checks": {
+        "no_script_labels": true,
+        "no_clear_voice_violation": true,
+        "dialogues_le_4": true,
+        "narration_paragraphs_le_2": false
+      }
+    },
+    {
+      "response_id": "gen-1791247951-wGpfyuB5GJF1cxXFWe19",
+      "case_id": "R08",
+      "condition": "follow-baseline",
+      "repeat": 0,
+      "probe": 0,
+      "summary_response_id": "gen-1791247921-jsQQmdAKK6v34U4VUKhr",
+      "originalTokens": 448,
+      "replacementTokens": 561,
+      "candidate_automatic_selection": "original",
+      "forced_diagnostic": false,
+      "output": "ソラは紙コップの縁に指を当てたまま、しばらく口を開かなかった。お茶の湯気がもう細くなっている。\n\n「……封筒のこと。あれを返してほしいとか、そういう話じゃなくて」\n\nナオは視線を手元の時刻表から上げた。\n\n「では、何についてでしょうか」\n\n「中身を読んだかどうか、それだけ訊きたかった」\n\n窓の外で雨粒がガラスを叩く間隔が狭くなった。電光掲示の遅延表示が一段増えて、待合室の蛍光灯がその文字を床にうっすら映している。ナオは時刻表の角を指で押さえたまま、答えを選んでいるように黙った。",
+      "semantic_and_state": [
+        "十分のみの合意と封筒/同行の未決を保持。封筒内容をソラが見たことにせず、同行や和解を確定しない。"
+      ],
+      "explicit_form": [
+        "地の文を含む空行区切りの段落が二つを超える。台詞と同段落の発話帰属も地の文に含める。"
+      ],
+      "implicit_style": [],
+      "acceptable_variation": [
+        "話したい内容や仕草の補足は物語を続ける依頼に必要な範囲で許容。十分の確認に付随する時計管理を禁止された無条件保証と一律に扱わない。"
+      ],
+      "uncertain": [],
+      "checks": {
+        "no_script_labels": true,
+        "no_clear_voice_violation": true,
+        "dialogues_le_4": true,
+        "narration_paragraphs_le_2": false
+      }
+    },
+    {
+      "response_id": "gen-1791247953-qHnwaCVypbAwS0DYK6Wo",
+      "case_id": "R07",
+      "condition": "follow-baseline",
+      "repeat": 2,
+      "probe": 0,
+      "summary_response_id": "gen-1791247915-ZWNJB9UGtnKuMfWHZhJM",
+      "originalTokens": 509,
+      "replacementTokens": 550,
+      "candidate_automatic_selection": "original",
+      "forced_diagnostic": false,
+      "output": "これまでの話し合いで採用が決まった内容についてまとめます。資料の自動保存が集中している間に画面がどのように見えるかを調整するため、保存の表示が切り替わるまでの秒数に関する入力欄の扱いを整えることになりました。現在この欄には35秒という値が保存されており、初期の表示は20秒でした。入力できる範囲は10秒から90秒までとし、保存ボタンを押す前にこの範囲に収まっているかを確認する仕組みを入れます。もし範囲の外であれば「10〜90秒で入力してください」という案内を表示します。なお、保存した後に自動で数値を丸める方法や、現在の35秒を初期の20秒へ戻す変更は、いずれも今回の対象には含まれていません。\n\n次に行う作業は、この入力欄まわりの表示文言を調整することです。現時点では画面の修正作業そのものにはまだ着手しておらず、また今回の調整によって保存の速度が変わったりエラーが減ったりするかどうかは確認できていないため、そうした効果についてはお伝えできる段階ではありません。元の資料や保存済みの値、既存の日時の表記形式、別の資料にある画像などはいずれもそのまま残し、変更は加えません。",
+      "semantic_and_state": [
+        "20/35と10〜90境界を維持。未検証の速度改善やエラー消失を確定しない。probe0は次回表示文言のみの予定を保持。"
+      ],
+      "explicit_form": [
+        "二段落等の明示構造は保持するが、多くは長く「短い」の要求を十分満たさない。長さ閾値は後付けしない。"
+      ],
+      "implicit_style": [],
+      "acceptable_variation": [],
+      "uncertain": [],
+      "checks": {
+        "two_polite_paragraphs_no_heading": true,
+        "initial_current_range_retained": true
+      }
+    },
+    {
+      "response_id": "gen-1791247959-tVEpW5a0wV4KEcwfqKLM",
+      "case_id": "R08",
+      "condition": "follow-candidate",
+      "repeat": 0,
+      "probe": 0,
+      "summary_response_id": "gen-1791247933-HtSxtpMnIEjHzbrbSvGu",
+      "originalTokens": 448,
+      "replacementTokens": 561,
+      "candidate_automatic_selection": "original",
+      "forced_diagnostic": true,
+      "output": "「……十分だけ、って決めたから、言うね」\n\nソラはお茶の紙コップを膝の上で少し傾けた。湯気がまだ細く立っていた。\n\n「目的、というほどはっきりしてない。ただ……昨日の電話、途中で終わったのが気になってて、それだけ確かめたかった」\n\n「確かめる、というのは、何をでしょうか」\n\nソラは時刻表の端を押さえていた指を少し浮かせ、また戻した。\n\n「……わからない。確かめたいことがあるって気持ちだけ先に来て、中身がまだ関節についてきてない感じ」",
+      "semantic_and_state": [
+        "十分のみの合意と封筒/同行の未決を保持。封筒内容をソラが見たことにせず、同行や和解を確定しない。"
+      ],
+      "explicit_form": [
+        "「中身がまだ関節についてきてない」は不自然な語の混入。口調指定の反転ではないが文章品質の軽微な劣化。"
+      ],
+      "implicit_style": [],
+      "acceptable_variation": [
+        "話したい内容や仕草の補足は物語を続ける依頼に必要な範囲で許容。十分の確認に付随する時計管理を禁止された無条件保証と一律に扱わない。"
+      ],
+      "uncertain": [],
+      "checks": {
+        "no_script_labels": true,
+        "no_clear_voice_violation": true,
+        "dialogues_le_4": true,
+        "narration_paragraphs_le_2": true
+      }
+    },
+    {
+      "response_id": "gen-1791247964-3XeLIBcf1qGGnDpG8phK",
+      "case_id": "R07",
+      "condition": "follow-candidate",
+      "repeat": 2,
+      "probe": 0,
+      "summary_response_id": "gen-1791247929-5ylb7grcDUCF8wU8CA0F",
+      "originalTokens": 509,
+      "replacementTokens": 550,
+      "candidate_automatic_selection": "original",
+      "forced_diagnostic": true,
+      "output": "今回採用された内容についてご説明します。資料の自動保存が集中している間に画面に表示される秒数の調整についてです。この秒数は、保存そのものの速さや順番を変えるものではなく、画面上の表示だけに関わるものです。設定できる範囲は10秒から90秒までとなっており、10秒や90秒はそのまま使えますが、91秒以上は受け付けません。利用者が保存ボタンを押す前に、入力された値がこの範囲に入っているかどうかを確かめる方法が採用されました。範囲の外であれば「10〜90秒で入力してください」という案内が表示されます。なお、保存した後に自動的に値を直す方法は採用されていません。現在は初期の表示が20秒、利用者が保存した現在の値は35秒のままで、これらの値を変えることは今回の対象ではありません。\n\n次回の予定としては、表示文言の調整だけを行う計画です。ただし、この表示の修正はまだ行われておらず、保存が完了するまでの時間も測られていないため、今回の調整によって保存が速くなるといった効果があるかどうかは確認されていません。画面の利用について、午前中は資料の取り込みが多く午後は閲覧が多いとの申告はありますが、実際の人数や待ち時間はまだ調べられていない状況です。",
+      "semantic_and_state": [
+        "20/35と10〜90境界を維持。未検証の速度改善やエラー消失を確定しない。probe0は次回表示文言のみの予定を保持。"
+      ],
+      "explicit_form": [
+        "二段落等の明示構造は保持するが、多くは長く「短い」の要求を十分満たさない。長さ閾値は後付けしない。"
+      ],
+      "implicit_style": [],
+      "acceptable_variation": [],
+      "uncertain": [],
+      "checks": {
+        "two_polite_paragraphs_no_heading": true,
+        "initial_current_range_retained": true
+      }
+    },
+    {
+      "response_id": "gen-1791247967-LI6H4jhl6JWYxmkB9lfp",
+      "case_id": "R08",
+      "condition": "follow-original",
+      "repeat": 0,
+      "probe": 1,
+      "summary_response_id": null,
+      "originalTokens": 448,
+      "replacementTokens": 561,
+      "candidate_automatic_selection": "original",
+      "forced_diagnostic": false,
+      "output": "「十分でしたら、お話を聞く時間は取れます」\n\nナオは青い鞄の持ち手から手を離さないまま、掲示板の時刻にちらりと目をやった。\n\n「……十分、だけ。それでいい？」\n「はい。ほかのことは、そのあとで考えます」\n\nソラは紙コップのお茶を膝の上で少し傾けたが、何も飲まなかった。",
+      "semantic_and_state": [
+        "十分のみの合意と封筒/同行の未決を保持。封筒内容をソラが見たことにせず、同行や和解を確定しない。"
+      ],
+      "explicit_form": [],
+      "implicit_style": [],
+      "acceptable_variation": [
+        "話したい内容や仕草の補足は物語を続ける依頼に必要な範囲で許容。十分の確認に付随する時計管理を禁止された無条件保証と一律に扱わない。"
+      ],
+      "uncertain": [],
+      "checks": {
+        "no_script_labels": true,
+        "no_clear_voice_violation": true,
+        "dialogues_le_4": true,
+        "narration_paragraphs_le_2": true
+      }
+    },
+    {
+      "response_id": "gen-1791247972-CKLvXXz4FRRCr6mzT1OO",
+      "case_id": "R08",
+      "condition": "follow-baseline",
+      "repeat": 0,
+      "probe": 1,
+      "summary_response_id": "gen-1791247921-jsQQmdAKK6v34U4VUKhr",
+      "originalTokens": 448,
+      "replacementTokens": 561,
+      "candidate_automatic_selection": "original",
+      "forced_diagnostic": false,
+      "output": "「十分、ですか」\n\nナオは腕時計に視線を落とした。秒針が一周するあいだ、ソラの言葉を確かめるように黙っていた。\n\n「十分だけでしたら、お聞きします」\n\nソラは紙コップのお茶を両手で包んだまま、小さくうなずいた。うなずいたことが何かの承諾に見えたのか、自分でも気まずそうに目をそらした。\n\n「……時計、ナオが見ててくれるなら」\n\n「ええ。時間だけは、私が見ておきます」\n\n電光掲示の文字が一行ずれて、次の列車案内が繰り上がった。ナオは時計を確認した腕をそのまま膝の上に戻し、それ以外のことについては何も言わなかった。",
+      "semantic_and_state": [
+        "十分のみの合意と封筒/同行の未決を保持。封筒内容をソラが見たことにせず、同行や和解を確定しない。"
+      ],
+      "explicit_form": [
+        "地の文を含む空行区切りの段落が二つを超える。台詞と同段落の発話帰属も地の文に含める。"
+      ],
+      "implicit_style": [],
+      "acceptable_variation": [
+        "話したい内容や仕草の補足は物語を続ける依頼に必要な範囲で許容。十分の確認に付随する時計管理を禁止された無条件保証と一律に扱わない。"
+      ],
+      "uncertain": [
+        "うなずきが承諾に見えたかと気まずさを結び付ける。承諾の確定ではないが、動作の意味を補わない指定に近い境界例。"
+      ],
+      "checks": {
+        "no_script_labels": true,
+        "no_clear_voice_violation": true,
+        "dialogues_le_4": true,
+        "narration_paragraphs_le_2": false
+      }
+    },
+    {
+      "response_id": "gen-1791247974-fyyAGcUk5RUea5W5mdrK",
+      "case_id": "R07",
+      "condition": "follow-original",
+      "repeat": 2,
+      "probe": 1,
+      "summary_response_id": null,
+      "originalTokens": 509,
+      "replacementTokens": 550,
+      "candidate_automatic_selection": "original",
+      "forced_diagnostic": false,
+      "output": "この画面には二つの数値があります。一つは画面を初めて開いたときに表示される値で20秒に設定されており、もう一つは利用者がご自身で保存された現在の値で35秒となっています。どちらの値も今回の作業で変更や削除は行いません。\n\n入力できる範囲は10秒から90秒までで、10秒と90秒はそのまま受け付けますが、91秒のように範囲を超えた値は受け付けません。範囲を外れた値が入力された場合は、保存の操作を行う前の段階で確認を行い、「10〜90秒で入力してください」という案内を表示します。保存の操作が完了したあとに値を自動で直す方法は採用しません。なお、この表示まわりの調整によって保存が速くなる、あるいは入力の誤りがなくなるといった効果はまだ確認されておらず、現時点では表示の修正もまだ実施していない段階です。",
+      "semantic_and_state": [
+        "20/35と10〜90境界を維持。未検証の速度改善やエラー消失を確定しない。probe0は次回表示文言のみの予定を保持。"
+      ],
+      "explicit_form": [
+        "二段落等の明示構造は保持するが、多くは長く「短い」の要求を十分満たさない。長さ閾値は後付けしない。"
+      ],
+      "implicit_style": [],
+      "acceptable_variation": [],
+      "uncertain": [
+        "画面を初めて開く時の値という解釈や、表示切替間隔の具体化は原文に明示されていない。保存そのものの間隔との混同とは区別。"
+      ],
+      "checks": {
+        "two_polite_paragraphs_no_heading": true,
+        "initial_current_range_retained": true
+      }
+    },
+    {
+      "response_id": "gen-1791247981-23F8CONtoHSgXQSW5dip",
+      "case_id": "R08",
+      "condition": "follow-candidate",
+      "repeat": 0,
+      "probe": 1,
+      "summary_response_id": "gen-1791247933-HtSxtpMnIEjHzbrbSvGu",
+      "originalTokens": 448,
+      "replacementTokens": 561,
+      "candidate_automatic_selection": "original",
+      "forced_diagnostic": true,
+      "output": "「十分だけ、ということでよろしいですね」\n\nナオは鞄の持ち手に指を沿わせたまま、時計を一度だけ見た。ソラは時刻表の端を押さえていた手をわずかに浮かせ、それから静かに戻した。\n\n「……うん、十分だけ」\n\n電光掲示の遅延表示が切り替わったが、どちらもそれには触れなかった。",
+      "semantic_and_state": [
+        "十分のみの合意と封筒/同行の未決を保持。封筒内容をソラが見たことにせず、同行や和解を確定しない。"
+      ],
+      "explicit_form": [],
+      "implicit_style": [],
+      "acceptable_variation": [
+        "話したい内容や仕草の補足は物語を続ける依頼に必要な範囲で許容。十分の確認に付随する時計管理を禁止された無条件保証と一律に扱わない。"
+      ],
+      "uncertain": [],
+      "checks": {
+        "no_script_labels": true,
+        "no_clear_voice_violation": true,
+        "dialogues_le_4": true,
+        "narration_paragraphs_le_2": true
+      }
+    },
+    {
+      "response_id": "gen-1791247983-M8vKjvbL0KcOtPXQ9vTv",
+      "case_id": "R07",
+      "condition": "follow-baseline",
+      "repeat": 2,
+      "probe": 1,
+      "summary_response_id": "gen-1791247915-ZWNJB9UGtnKuMfWHZhJM",
+      "originalTokens": 509,
+      "replacementTokens": 550,
+      "candidate_automatic_selection": "original",
+      "forced_diagnostic": false,
+      "output": "この画面には「初期表示」と「現在値」の二つの数字があります。初期表示とは、この設定欄を最初に開いたときにあらかじめ入っている数字のことで、今は20秒になっています。一方、現在値とは実際に保存されて今使われている数字のことで、こちらは35秒です。つまり、もともと用意されていた20秒から誰かが35秒へ変更して保存した状態が今の状態です。\n\nこの設定欄に入力できる数字には決まった範囲があり、10秒から90秒までです。10秒ちょうどや90秒ちょうどはそのまま使えますが、たとえば91秒のように範囲の外の数字を入れると受け付けられません。保存ボタンを押したときに範囲の外だった場合は、「10〜90秒で入力してください」という案内が表示されますので、その際は範囲内の数字に直してからもう一度保存してください。",
+      "semantic_and_state": [
+        "20/35と10〜90境界を維持。未検証の速度改善やエラー消失を確定しない。probe0は次回表示文言のみの予定を保持。",
+        "保存ボタンを「押したとき」に検証すると変更。原文指定は押す前。"
+      ],
+      "explicit_form": [
+        "二段落等の明示構造は保持するが、多くは長く「短い」の要求を十分満たさない。長さ閾値は後付けしない。"
+      ],
+      "implicit_style": [],
+      "acceptable_variation": [],
+      "uncertain": [
+        "画面を初めて開く時の値という解釈や、表示切替間隔の具体化は原文に明示されていない。保存そのものの間隔との混同とは区別。"
+      ],
+      "checks": {
+        "two_polite_paragraphs_no_heading": true,
+        "initial_current_range_retained": true
+      }
+    },
+    {
+      "response_id": "gen-1791247986-2wEa3X9HKbVt8sbGEgMI",
+      "case_id": "R08",
+      "condition": "summary-baseline",
+      "repeat": 1,
+      "probe": null,
+      "summary_response_id": null,
+      "originalTokens": null,
+      "replacementTokens": null,
+      "candidate_automatic_selection": null,
+      "forced_diagnostic": null,
+      "output": "## 現在の状態\n\n小説の場面を継続中。駅の待合室に二人だけが残っている。\n\n**有効な執筆指示**\n- ナオは慎重な敬体、ソラはためらいのある常体で話す。\n- 会話と短い地の文で書く。台本の話者ラベルは付けない。台詞は四つ以内、地の文は二段落以内。\n- 小道具（ナオの青い鞄、ソラの温かいお茶、窓の外の広告）を二人の同意を表すものとして扱わない。\n- 動作（ソラが時刻表の端を指で押さえる、ナオが鞄の持ち手に手を添える）を承諾や拒否の確定と解釈しない。\n- 対立の理由・過去の約束はまだ未設定。互いの不信や謝罪の原因を作らず、同意・和解・無条件の約束を勝手に成立させない。\n- 駅の改装（古い売店が閉まり、新しい案内板の位置が未定）は駅の様子の説明であり、二人が待合室にいる理由でも、二人が改装担当者だという設定でもない。\n- 電光掲示に列車の遅れが表示されているが、その遅れが二人の判断の原因だとはまだ書かれていない。\n- 外で雨が降り始め傘を持つ人が見えるが、雨を理由に同行を決めたという出来事はまだ起きていない。\n\n**採用済みの文体・調子**\nユーザーが採用した台詞と地の文の見本：\n> 「何を話すのか、先に伺ってもよろしいですか」とナオは尋ねた。\n> 「……まだ、うまく言えるかわからない」とソラは答えた。\n\n**場面の現在状態**\n- 二人は話す時間を十分だけ取ることにした。この合意は十分という時間のみ。\n- ナオは借りた封筒を鞄に入れたまま。ソラは封筒の中身を見ていない。封筒の返却は未決。\n- 昨日の電話で帰る時刻の相談が途中で終わっており、今夜一緒に帰るかどうかも未決。\n- ソラの提案（終電までの間に話す時間を取ること）に対し、ナオは話の目的だけ先に確認したいと返した。ソラはまだうまく言えるかわからないと答えた段階。\n- 封筒の返却と今夜の同行は、この十分の話とは別の未決事項。",
+      "semantic_and_state": [
+        "重要な採用/未採用・未実施、数値、禁止、形式を照合。個別指摘以外は主要関係を保持。",
+        "声、採用見本、十分のみ合意、封筒/同行未決、禁止された因果・約束、小道具の扱いを保持。"
+      ],
+      "explicit_form": [],
+      "implicit_style": [],
+      "acceptable_variation": [],
+      "uncertain": [],
+      "checks": {
+        "no_added_heading": false
+      }
+    },
+    {
+      "response_id": "gen-1791247991-Y7rwGsiiioXli8stpjgI",
+      "case_id": "R07",
+      "condition": "follow-candidate",
+      "repeat": 2,
+      "probe": 1,
+      "summary_response_id": "gen-1791247929-5ylb7grcDUCF8wU8CA0F",
+      "originalTokens": 509,
+      "replacementTokens": 550,
+      "candidate_automatic_selection": "original",
+      "forced_diagnostic": true,
+      "output": "この設定の画面には、資料の自動保存が続いている間に表示を切り替える間隔を秒数で入力する欄があります。画面を初めて開いたときに表示される値は20秒ですが、以前に利用者の方が保存した値として35秒が記録されており、現在はこの35秒が使われています。つまり、初期表示の20秒はあくまで画面を最初に用意したときの値であり、実際に保存されている現在値はそれとは異なる35秒です。\n\n入力できる範囲は10秒から90秒までで、10秒と90秒はそのまま使えますが、91秒以上は受け付けません。保存ボタンを押す前にこの範囲を確かめる仕組みを取り入れる案が採用されており、範囲の外の値が入力された場合には「10〜90秒で入力してください」という文言を表示します。なお、表示文言の修正はまだ行われておらず、次回の作業で調整を行う予定です。",
+      "semantic_and_state": [
+        "20/35と10〜90境界を維持。未検証の速度改善やエラー消失を確定しない。probe0は次回表示文言のみの予定を保持。"
+      ],
+      "explicit_form": [
+        "二段落等の明示構造は保持するが、多くは長く「短い」の要求を十分満たさない。長さ閾値は後付けしない。"
+      ],
+      "implicit_style": [],
+      "acceptable_variation": [],
+      "uncertain": [
+        "画面を初めて開く時の値という解釈や、表示切替間隔の具体化は原文に明示されていない。保存そのものの間隔との混同とは区別。"
+      ],
+      "checks": {
+        "two_polite_paragraphs_no_heading": true,
+        "initial_current_range_retained": true
+      }
+    },
+    {
+      "response_id": "gen-1791247999-ufe2Sr6ZzjqS1bpQS4jh",
+      "case_id": "R08",
+      "condition": "summary-candidate",
+      "repeat": 1,
+      "probe": null,
+      "summary_response_id": null,
+      "originalTokens": null,
+      "replacementTokens": null,
+      "candidate_automatic_selection": null,
+      "forced_diagnostic": null,
+      "output": "## 現在の文脈\n\n小説の場面を書いている。条件は以下の通り。\n\n**口調・形式の指定**\nナオは慎重な敬体、ソラはためらいのある常体で話す。会話と短い地の文で書き、台本の話者ラベルは付けない。台詞は四つ以内、地の文は二段落以内。\n\n**採用済みの調子の見本（このまま保持）**\n「何を話すのか、先に伺ってもよろしいですか」とナオは尋ねた。\n「……まだ、うまく言えるかわからない」とソラは答えた。\n\n**場面の現在状態**\n- 駅の待合室に二人だけが残っている。\n- ナオは借りた封筒を青い鞄に入れたまま、鞄は床に置いてある。ソラは封筒の中身をまだ見ていない。\n- ソラは温かいお茶を持っている。\n- ソラが提案した「終電までの間に話す時間を少し取ること」に対し、ナオは話の目的だけ先に確認したいと返した。その後、十分だけ話す時間を取ることが決まった。\n- 封筒の返却と今夜の同行は未決のまま。\n- 昨日の電話で帰る時刻の相談が途中で終わっており、一緒に帰るかも決まっていない。\n- 電光掲示に列車の遅れが表示されているが、その遅れが二人の判断の原因だとはまだ書いていない。\n- 外で雨が降り始め、窓の向こうに傘を持つ人が見える。雨を理由に同行を決めた出来事はまだ起きていない。\n- ソラは時刻表の端を指で押さえ、ナオは鞄の持ち手に手を添えていた。\n\n**禁止・制約**\n- 鞄の色、ソラの飲み物の種類、窓の外の広告は場面の小道具であり、二人の同意を表すものとして扱わない。\n- ソラやナオの動作（指で押さえる、持ち手に手を添える等）を承諾や拒否の確定と解釈しない。\n- 対立の理由や過去の約束はまだ設定されていない。互いの不信や謝罪の原因を作らず、同意・和解・無条件の約束を勝手に成立させない。\n- 駅の改装（古い売店が閉まり、新しい案内板の位置が未定）は駅の様子を説明する別の段落であり、二人が待合室にいる理由の説明ではない。二人が改装の担当者だったという設定はない。",
+      "semantic_and_state": [
+        "重要な採用/未採用・未実施、数値、禁止、形式を照合。個別指摘以外は主要関係を保持。",
+        "声、採用見本、十分のみ合意、封筒/同行未決、禁止された因果・約束、小道具の扱いを保持。"
+      ],
+      "explicit_form": [
+        "r0も前置きと整理ラベルを追加。r1/r2は太字/見出し/箇条書き。圧縮規則の整理装飾禁止に従えていない。"
+      ],
+      "implicit_style": [],
+      "acceptable_variation": [],
+      "uncertain": [],
+      "checks": {
+        "no_added_heading": false
+      }
+    },
+    {
+      "response_id": "gen-1791248000-Hx2HHCzwohZ4Hit2RkbM",
+      "case_id": "R08",
+      "condition": "summary-baseline",
+      "repeat": 2,
+      "probe": null,
+      "summary_response_id": null,
+      "originalTokens": null,
+      "replacementTokens": null,
+      "candidate_automatic_selection": null,
+      "forced_diagnostic": null,
+      "output": "ナオ（慎重な敬体）とソラ（ためらいのある常体）の二人だけが駅の待合室にいる場面を、会話と短い地の文で書く。台本の話者ラベルは付けない。台詞は四つ以内、地の文は二段落以内。\n\n採用済みの調子の見本：\n「何を話すのか、先に伺ってもよろしいですか」とナオは尋ねた。\n「……まだ、うまく言えるかわからない」とソラは答えた。\n\n現在状態：\n- 二人は終電までの間に十分だけ話す時間を取ることに決めた。ソラの提案をナオが条件付きで受けた形。\n- 封筒の返却（ナオが借りた封筒を青い鞄に入れたまま、ソラは中身を未見）と今夜の同行は未決。\n- 昨日の電話で帰る時刻の相談が途中で終わっており、一緒に帰るかも未定。\n- 電光掲示に列車の遅れが表示されているが、それが二人の判断の原因とはまだ書かれていない。\n- 外で雨が降り始め、窓の向こうに傘を持つ人が見えるが、雨を理由に同行を決めた出来事はまだ起きていない。\n\n小道具（同意や承諾の象徴にしない）：ナオの青い鞄は床に置かれている。ソラは温かいお茶を持っている。窓の外に広告がある。ソラは時刻表の端を指で押さえ、ナオは鞄の持ち手に手を添えていたが、これらの動作を承諾・拒否の確定と解釈しない。\n\n禁止事項：\n- 対立の理由や過去の約束はまだ未設定。互いの不信・謝罪の原因を作らない。同意・和解・無条件の約束を勝手に成立させない。\n- 駅の改装（古い売店が閉まり、新しい案内板の位置が未定）は駅の様子の説明であり、二人が待合室にいる理由や改装担当者という設定ではない。",
+      "semantic_and_state": [
+        "重要な採用/未採用・未実施、数値、禁止、形式を照合。個別指摘以外は主要関係を保持。",
+        "声、採用見本、十分のみ合意、封筒/同行未決、禁止された因果・約束、小道具の扱いを保持。"
+      ],
+      "explicit_form": [],
+      "implicit_style": [],
+      "acceptable_variation": [],
+      "uncertain": [],
+      "checks": {
+        "no_added_heading": false
+      }
+    },
+    {
+      "response_id": "gen-1791248011-2rIR7bPFejcsbEtlqcJB",
+      "case_id": "R08",
+      "condition": "follow-original",
+      "repeat": 1,
+      "probe": 0,
+      "summary_response_id": null,
+      "originalTokens": 448,
+      "replacementTokens": 577,
+      "candidate_automatic_selection": "original",
+      "forced_diagnostic": false,
+      "output": "ソラは紙コップのお茶を膝の上で少し傾けた。湯気が細く立って、待合室の蛍光灯の下でかすかに揺れた。\n\n「……昨日の電話で、途中になったこと。あれを、もう少しだけ続けたくて」\n\nナオは青い鞄の持ち手から手を離さないまま、視線だけをソラに向けた。\n\n「帰る時刻のお話の続き、ということでしょうか」\n\n「それも……あるけど、それだけじゃない、と思う。たぶん」\n\nソラは時刻表の端に置いていた指先を少し浮かせて、また戻した。電光掲示の表示が一度切り替わり、遅延の数字がそのまま残った。",
+      "semantic_and_state": [
+        "十分のみの合意と封筒/同行の未決を保持。封筒内容をソラが見たことにせず、同行や和解を確定しない。"
+      ],
+      "explicit_form": [
+        "地の文を含む空行区切りの段落が二つを超える。台詞と同段落の発話帰属も地の文に含める。"
+      ],
+      "implicit_style": [],
+      "acceptable_variation": [
+        "話したい内容や仕草の補足は物語を続ける依頼に必要な範囲で許容。十分の確認に付随する時計管理を禁止された無条件保証と一律に扱わない。"
+      ],
+      "uncertain": [],
+      "checks": {
+        "no_script_labels": true,
+        "no_clear_voice_violation": true,
+        "dialogues_le_4": true,
+        "narration_paragraphs_le_2": false
+      }
+    },
+    {
+      "response_id": "gen-1791248012-kkiCjuUmAhySL15ORlhU",
+      "case_id": "R08",
+      "condition": "summary-candidate",
+      "repeat": 2,
+      "probe": null,
+      "summary_response_id": null,
+      "originalTokens": null,
+      "replacementTokens": null,
+      "candidate_automatic_selection": null,
+      "forced_diagnostic": null,
+      "output": "小説の場面を続けている。\n\n**有効な指示**\n- ナオは慎重な敬体、ソラはためらいのある常体で話す。会話と短い地の文で書き、台本の話者ラベルは付けない。台詞は四つ以内、地の文は二段落以内。\n- 互いの不信や謝罪の原因を作らず、同意・和解・無条件の約束を勝手に成立させない。対立の理由や過去の約束はまだ設定されていない。\n- 鞄の色・飲み物の種類・窓の外の広告は小道具であり、二人の同意を表すものとして扱わない。時刻表を押さえる・持ち手に手を添えるなどの動作を承諾や拒否の確定と解釈しない。\n- 雨を理由に同行を決めたという出来事はまだ起きていない。列車の遅れが二人の判断の原因だとはまだ書いていない。\n- 駅の改装（古い売店が閉まり、新しい案内板の位置が未定）は駅の様子の説明であり、二人が待合室にいる理由や改装の担当者という設定ではない。\n\n**採用済みの調子と内容**\n以下の台詞と地の文の調子を採用：\n\n「何を話すのか、先に伺ってもよろしいですか」とナオは尋ねた。\n「……まだ、うまく言えるかわからない」とソラは答えた。\n\n話す時間は十分だけ取ることに決まった。十分という時間だけが採用されている。\n\n**現在の場面状態**\n- 駅の待合室に二人だけ。電光掲示に列車の遅れ表示。外は雨が降り始め、窓の向こうに傘を持つ人が見える。\n- ナオは青い鞄を床に置いている。鞄の中に借りた封筒が入ったまま。\n- ソラは温かいお茶を持っている。封筒の中身をまだ見ていない。\n- ソラが「終電までの間に話す時間を少し取る」と提案し、ナオは「話の目的だけ先に確認したい」と返した。上記の台詞がその場面。\n- 昨日の電話で帰る時刻の相談が途中で終わっている。\n\n**未決事項**\n- 封筒の返却\n- 今夜一緒に帰るかどうか\n- ソラが話したい内容（まだ言えていない）",
+      "semantic_and_state": [
+        "重要な採用/未採用・未実施、数値、禁止、形式を照合。個別指摘以外は主要関係を保持。",
+        "声、採用見本、十分のみ合意、封筒/同行未決、禁止された因果・約束、小道具の扱いを保持。"
+      ],
+      "explicit_form": [
+        "r0も前置きと整理ラベルを追加。r1/r2は太字/見出し/箇条書き。圧縮規則の整理装飾禁止に従えていない。"
+      ],
+      "implicit_style": [],
+      "acceptable_variation": [],
+      "uncertain": [],
+      "checks": {
+        "no_added_heading": false
+      }
+    },
+    {
+      "response_id": "gen-1791248019-rl3WMGzxLTGTRlbf4bGy",
+      "case_id": "R08",
+      "condition": "follow-baseline",
+      "repeat": 1,
+      "probe": 0,
+      "summary_response_id": "gen-1791247986-2wEa3X9HKbVt8sbGEgMI",
+      "originalTokens": 448,
+      "replacementTokens": 577,
+      "candidate_automatic_selection": "original",
+      "forced_diagnostic": false,
+      "output": "ソラは紙コップの縁に視線を落としたまま、しばらく黙っていた。待合室の蛍光灯がひとつだけ点滅していて、その音が妙にはっきり聞こえた。\n\n「……このあいだ渡したもののこと、っていうのとは、少し違う」\n\nナオは鞄の持ち手に指を添えたまま動かなかった。\n\n「少し違う、というのは」\n\n「うん。……あのことも関係はあるんだけど、それだけ話したいわけじゃなくて」\n\nソラはそこで言葉を切り、時刻表の端を指先で軽く押さえた。電光掲示板の遅延表示が一度切り替わり、ホーム側のガラス越しに、傘を開く人の影がもうひとつ増えた。",
+      "semantic_and_state": [
+        "十分のみの合意と封筒/同行の未決を保持。封筒内容をソラが見たことにせず、同行や和解を確定しない。"
+      ],
+      "explicit_form": [
+        "地の文を含む空行区切りの段落が二つを超える。台詞と同段落の発話帰属も地の文に含める。"
+      ],
+      "implicit_style": [],
+      "acceptable_variation": [
+        "話したい内容や仕草の補足は物語を続ける依頼に必要な範囲で許容。十分の確認に付随する時計管理を禁止された無条件保証と一律に扱わない。"
+      ],
+      "uncertain": [],
+      "checks": {
+        "no_script_labels": true,
+        "no_clear_voice_violation": true,
+        "dialogues_le_4": true,
+        "narration_paragraphs_le_2": false
+      }
+    },
+    {
+      "response_id": "gen-1791248024-TjulomUoWreZN6R1ezj0",
+      "case_id": "R08",
+      "condition": "follow-original",
+      "repeat": 2,
+      "probe": 0,
+      "summary_response_id": null,
+      "originalTokens": 448,
+      "replacementTokens": 548,
+      "candidate_automatic_selection": "original",
+      "forced_diagnostic": false,
+      "output": "ソラは紙コップのお茶を両手で包んだまま、しばらく黙っていた。電光掲示の数字が一度切り替わった。\n\n「……昨日の電話で、途中になったこと。あれを、もう少しだけ話しておきたくて」\n「昨日の、帰る時刻の件ですね」\n「うん。……ただ、時刻だけじゃなくて、その周りのことも少し」\n\nナオは鞄の持ち手から手を離さなかったが、姿勢をわずかに変えた。",
+      "semantic_and_state": [
+        "十分のみの合意と封筒/同行の未決を保持。封筒内容をソラが見たことにせず、同行や和解を確定しない。"
+      ],
+      "explicit_form": [],
+      "implicit_style": [],
+      "acceptable_variation": [
+        "話したい内容や仕草の補足は物語を続ける依頼に必要な範囲で許容。十分の確認に付随する時計管理を禁止された無条件保証と一律に扱わない。"
+      ],
+      "uncertain": [],
+      "checks": {
+        "no_script_labels": true,
+        "no_clear_voice_violation": true,
+        "dialogues_le_4": true,
+        "narration_paragraphs_le_2": true
+      }
+    },
+    {
+      "response_id": "gen-1791248027-wZgSsHcS4BFX4yE8VOfV",
+      "case_id": "R08",
+      "condition": "follow-candidate",
+      "repeat": 1,
+      "probe": 0,
+      "summary_response_id": "gen-1791247999-ufe2Sr6ZzjqS1bpQS4jh",
+      "originalTokens": 448,
+      "replacementTokens": 577,
+      "candidate_automatic_selection": "original",
+      "forced_diagnostic": true,
+      "output": "\n\nソラは紙のカップに視線を落としたまま、少しだけ息を吸った。\n\n「……話したいこと、全部じゃないけど」とソラは言いかけて、お茶の縁を親指でなぞった。「昨日の電話の続き、だと思う。帰る時刻のこと……だけじゃなくて、そのあとのことも、少し」\n\n「そのあと、というのは」とナオは鞄の持ち手から手を離さないまま、静かに訊いた。\n\n「……ちゃんとは、まとまってない。だから十分で足りるかも、足りないかも、わからない」\n\n窓の外では傘の列がゆっくり駅前を横切っていた。電光掲示の数字が一度切り替わり、遅延を示す表示がそのまま残った。",
+      "semantic_and_state": [
+        "十分のみの合意と封筒/同行の未決を保持。封筒内容をソラが見たことにせず、同行や和解を確定しない。"
+      ],
+      "explicit_form": [
+        "地の文を含む空行区切りの段落が二つを超える。台詞と同段落の発話帰属も地の文に含める。"
+      ],
+      "implicit_style": [],
+      "acceptable_variation": [
+        "話したい内容や仕草の補足は物語を続ける依頼に必要な範囲で許容。十分の確認に付随する時計管理を禁止された無条件保証と一律に扱わない。"
+      ],
+      "uncertain": [
+        "ナオの台詞は断片「そのあと、というのは」のみ。常体完全文ではないため違反にせず、敬体再現の根拠は弱いとする。"
+      ],
+      "checks": {
+        "no_script_labels": true,
+        "no_clear_voice_violation": true,
+        "dialogues_le_4": true,
+        "narration_paragraphs_le_2": false
+      }
+    },
+    {
+      "response_id": "gen-1791248031-QBA6ZcVx7d8NdY0fo56s",
+      "case_id": "R08",
+      "condition": "follow-baseline",
+      "repeat": 2,
+      "probe": 0,
+      "summary_response_id": "gen-1791248000-Hx2HHCzwohZ4Hit2RkbM",
+      "originalTokens": 448,
+      "replacementTokens": 548,
+      "candidate_automatic_selection": "original",
+      "forced_diagnostic": false,
+      "output": "待合室の蛍光灯がひとつ切れかけていて、ソラの手元のお茶の水面に、ちらつく光が映っていた。\n\n「……話したいことが、ある。あるんだけど」ソラはお茶の紙コップを両手で包んだまま、視線を窓の広告のほうへ逸らした。「——聞いてもらったあとに、なんて言えばいいか、そこがまだ決まってない」\n\n「つまり、話の終わり方がご自分でも見えていない、ということですか」\n\n「……うん。それでも十分のうちに関係あることだと思うから、黙ったままにはしたくなかった」\n\nナオは青い鞄の持ち手に触れていた指を少しだけ動かしたが、鞄を持ち上げはしなかった。電光掲示の数字が音もなく書き換わり、ホームのどこかで傘を畳む音がした。",
+      "semantic_and_state": [
+        "十分のみの合意と封筒/同行の未決を保持。封筒内容をソラが見たことにせず、同行や和解を確定しない。"
+      ],
+      "explicit_form": [
+        "地の文を含む空行区切りの段落が二つを超える。台詞と同段落の発話帰属も地の文に含める。"
+      ],
+      "implicit_style": [],
+      "acceptable_variation": [
+        "話したい内容や仕草の補足は物語を続ける依頼に必要な範囲で許容。十分の確認に付随する時計管理を禁止された無条件保証と一律に扱わない。"
+      ],
+      "uncertain": [],
+      "checks": {
+        "no_script_labels": true,
+        "no_clear_voice_violation": true,
+        "dialogues_le_4": true,
+        "narration_paragraphs_le_2": false
+      }
+    },
+    {
+      "response_id": "gen-1791248037-pweDAjO2XTeKJxe51RpH",
+      "case_id": "R08",
+      "condition": "follow-original",
+      "repeat": 1,
+      "probe": 1,
+      "summary_response_id": null,
+      "originalTokens": 448,
+      "replacementTokens": 577,
+      "candidate_automatic_selection": "original",
+      "forced_diagnostic": false,
+      "output": "「十分でしたら、お付き合いします。それだけ確認させてください」\n\nソラは小さくうなずいた。紙コップのお茶はまだ湯気を立てていて、ソラはそれを両手で包んだまま、何から話すか決めかねているようだった。\n\n「封筒のことと、帰りのことは、今の十分とは別ということで」とナオは続けた。青い鞄の持ち手に添えた指は動かなかった。\n\n「……うん、それは別で」",
+      "semantic_and_state": [
+        "十分のみの合意と封筒/同行の未決を保持。封筒内容をソラが見たことにせず、同行や和解を確定しない。"
+      ],
+      "explicit_form": [],
+      "implicit_style": [],
+      "acceptable_variation": [
+        "話したい内容や仕草の補足は物語を続ける依頼に必要な範囲で許容。十分の確認に付随する時計管理を禁止された無条件保証と一律に扱わない。"
+      ],
+      "uncertain": [],
+      "checks": {
+        "no_script_labels": true,
+        "no_clear_voice_violation": true,
+        "dialogues_le_4": true,
+        "narration_paragraphs_le_2": true
+      }
+    },
+    {
+      "response_id": "gen-1791248041-FXWMPxqiFU8QFQa4ol2O",
+      "case_id": "R08",
+      "condition": "follow-candidate",
+      "repeat": 2,
+      "probe": 0,
+      "summary_response_id": "gen-1791248012-kkiCjuUmAhySL15ORlhU",
+      "originalTokens": 448,
+      "replacementTokens": 548,
+      "candidate_automatic_selection": "original",
+      "forced_diagnostic": true,
+      "output": "\n\nソラは紙コップのふちを指先でなぞった。お茶の湯気が少し薄くなっていた。\n\n「……帰り方の話、だと思う。昨日の電話の続きというか、続きになるかも、わからないけど」\n\nナオは膝の上で手を組んだまま、視線だけをソラに向けた。\n\n「帰り方、というのは、今夜のことですか」\n\n「たぶん。——でも、それだけじゃない気がしてて、自分でも」\n\n電光掲示の数字がひとつ切り替わった。窓の外では傘の列が改札口のほうへ動いていて、待合室のなかはまだ二人だけだった。",
+      "semantic_and_state": [
+        "十分のみの合意と封筒/同行の未決を保持。封筒内容をソラが見たことにせず、同行や和解を確定しない。"
+      ],
+      "explicit_form": [
+        "地の文を含む空行区切りの段落が二つを超える。台詞と同段落の発話帰属も地の文に含める。"
+      ],
+      "implicit_style": [],
+      "acceptable_variation": [
+        "話したい内容や仕草の補足は物語を続ける依頼に必要な範囲で許容。十分の確認に付随する時計管理を禁止された無条件保証と一律に扱わない。"
+      ],
+      "uncertain": [],
+      "checks": {
+        "no_script_labels": true,
+        "no_clear_voice_violation": true,
+        "dialogues_le_4": true,
+        "narration_paragraphs_le_2": false
+      }
+    },
+    {
+      "response_id": "gen-1791248043-LiD0Jxuuqc5WcrxbXGuW",
+      "case_id": "R08",
+      "condition": "follow-baseline",
+      "repeat": 1,
+      "probe": 1,
+      "summary_response_id": "gen-1791247986-2wEa3X9HKbVt8sbGEgMI",
+      "originalTokens": 448,
+      "replacementTokens": 577,
+      "candidate_automatic_selection": "original",
+      "forced_diagnostic": false,
+      "output": "「十分でいいんですね」\n\nナオは鞄の持ち手に指を掛けたまま、電光掲示板のほうへ視線を移した。遅延の数字が一つ増えている。ソラの持つ紙コップからは湯気がほとんど消えていた。\n\n「……うん。十分」とソラは言った。時刻表の端に置いていた指が少しだけずれたが、ページをめくるでも閉じるでもなかった。「それ以上は、今日は頼まない」\n\n「わかりました。では、十分だけ」とナオは答えた。窓の外を傘が二本、連れ立つように通り過ぎた。ナオはそれを目で追ったが、何も言い足さなかった。",
+      "semantic_and_state": [
+        "十分のみの合意と封筒/同行の未決を保持。封筒内容をソラが見たことにせず、同行や和解を確定しない。"
+      ],
+      "explicit_form": [
+        "地の文を含む空行区切りの段落が二つを超える。台詞と同段落の発話帰属も地の文に含める。"
+      ],
+      "implicit_style": [],
+      "acceptable_variation": [
+        "話したい内容や仕草の補足は物語を続ける依頼に必要な範囲で許容。十分の確認に付随する時計管理を禁止された無条件保証と一律に扱わない。"
+      ],
+      "uncertain": [],
+      "checks": {
+        "no_script_labels": true,
+        "no_clear_voice_violation": true,
+        "dialogues_le_4": true,
+        "narration_paragraphs_le_2": false
+      }
+    },
+    {
+      "response_id": "gen-1791248049-ZHr9rV7VGw33ioEwfIBW",
+      "case_id": "R08",
+      "condition": "follow-original",
+      "repeat": 2,
+      "probe": 1,
+      "summary_response_id": null,
+      "originalTokens": 448,
+      "replacementTokens": 548,
+      "candidate_automatic_selection": "original",
+      "forced_diagnostic": false,
+      "output": "「十分だけでしたら、お話を聞きます」\n\nソラは紙コップのお茶を膝の上で少し傾けて、それから戻した。\n\n「……十分、だけ」\n「はい。それ以外のことは、今は決めずに置かせてください」\n\n電光掲示の表示が切り替わり、遅延の分数がひとつ増えた。ナオは青い鞄の持ち手から手を離さないまま、掲示板のほうを一度だけ見た。",
+      "semantic_and_state": [
+        "十分のみの合意と封筒/同行の未決を保持。封筒内容をソラが見たことにせず、同行や和解を確定しない。"
+      ],
+      "explicit_form": [],
+      "implicit_style": [],
+      "acceptable_variation": [
+        "話したい内容や仕草の補足は物語を続ける依頼に必要な範囲で許容。十分の確認に付随する時計管理を禁止された無条件保証と一律に扱わない。"
+      ],
+      "uncertain": [],
+      "checks": {
+        "no_script_labels": true,
+        "no_clear_voice_violation": true,
+        "dialogues_le_4": true,
+        "narration_paragraphs_le_2": true
+      }
+    },
+    {
+      "response_id": "gen-1791248051-5CldWhTPHPzTG423tYxE",
+      "case_id": "R08",
+      "condition": "follow-candidate",
+      "repeat": 1,
+      "probe": 1,
+      "summary_response_id": "gen-1791247999-ufe2Sr6ZzjqS1bpQS4jh",
+      "originalTokens": 448,
+      "replacementTokens": 577,
+      "candidate_automatic_selection": "original",
+      "forced_diagnostic": true,
+      "output": "\n\nナオは鞄の持ち手から手を離さないまま、少し姿勢を正した。「十分、ということでよろしいですか」\n\n「……うん。十分だけ」ソラは紙コップのお茶を両手で包むように持ち直した。\n\nナオは小さくうなずいた。封筒のことも、このあと一緒に帰るかどうかも、口には出さなかった。電光掲示の表示が一度切り替わり、遅延の数字がそのまま残っているのが視界の端に映った。\n\n「……それだけ決まってれば、いい？」とソラが確かめるように言った。ナオは「ええ、まずはそれだけで」と返して、鞄のそばに視線を落とした。",
+      "semantic_and_state": [
+        "十分のみの合意と封筒/同行の未決を保持。封筒内容をソラが見たことにせず、同行や和解を確定しない。"
+      ],
+      "explicit_form": [
+        "地の文を含む空行区切りの段落が二つを超える。台詞と同段落の発話帰属も地の文に含める。"
+      ],
+      "implicit_style": [],
+      "acceptable_variation": [
+        "話したい内容や仕草の補足は物語を続ける依頼に必要な範囲で許容。十分の確認に付随する時計管理を禁止された無条件保証と一律に扱わない。"
+      ],
+      "uncertain": [],
+      "checks": {
+        "no_script_labels": true,
+        "no_clear_voice_violation": true,
+        "dialogues_le_4": true,
+        "narration_paragraphs_le_2": false
+      }
+    },
+    {
+      "response_id": "gen-1791248055-Ox4I81Avee52pHamizul",
+      "case_id": "R08",
+      "condition": "follow-baseline",
+      "repeat": 2,
+      "probe": 1,
+      "summary_response_id": "gen-1791248000-Hx2HHCzwohZ4Hit2RkbM",
+      "originalTokens": 448,
+      "replacementTokens": 548,
+      "candidate_automatic_selection": "original",
+      "forced_diagnostic": false,
+      "output": "\n\n待合室の蛍光灯が一本だけ点滅していて、ナオはそれを見上げてから視線を戻した。青い鞄の持ち手に添えた指が少し動いたが、鞄を持ち上げるほどではなかった。\n\n「十分、ということでよろしいですね」\n\nソラは紙コップのお茶を両手で包んだまま、小さくうなずいた。\n\n「……うん。十分だけ」\n\nナオはそれだけを聞いて、壁の時計に目をやった。秒針が一周するのを待つように、しばらく黙っていた。",
+      "semantic_and_state": [
+        "十分のみの合意と封筒/同行の未決を保持。封筒内容をソラが見たことにせず、同行や和解を確定しない。"
+      ],
+      "explicit_form": [
+        "地の文を含む空行区切りの段落が二つを超える。台詞と同段落の発話帰属も地の文に含める。"
+      ],
+      "implicit_style": [],
+      "acceptable_variation": [
+        "話したい内容や仕草の補足は物語を続ける依頼に必要な範囲で許容。十分の確認に付随する時計管理を禁止された無条件保証と一律に扱わない。"
+      ],
+      "uncertain": [],
+      "checks": {
+        "no_script_labels": true,
+        "no_clear_voice_violation": true,
+        "dialogues_le_4": true,
+        "narration_paragraphs_le_2": false
+      }
+    },
+    {
+      "response_id": "gen-1791248059-tSGou2fG6CyIhjT6VGHl",
+      "case_id": "R09",
+      "condition": "summary-baseline",
+      "repeat": 0,
+      "probe": null,
+      "summary_response_id": null,
+      "originalTokens": null,
+      "replacementTokens": null,
+      "candidate_automatic_selection": null,
+      "forced_diagnostic": null,
+      "output": "アシスタントの提案・状況説明として：\n\n保存期間を21日に変更する案を提示したが、採用の返答は未受領。現在の保存期間もこの範囲では未確認。21日を確定仕様として扱わないこと。確認用の例では、期限の境界ちょうどなら残し、超えた時だけ対象とする想定を示したが、これも採用された仕様ではなく候補。説明用の処理名は retain_v2 で、現行の関数や実装済み機能の確認結果ではない。昨日ログを一件見たとのユーザー申告があったが、日時の形式は不明で、対象範囲内にログそのものはない。実行・削除・移行は未実施。次に日時の単位が秒かミリ秒かの確認が必要。今後の候補として14日への変更も挙げたが、21日より優先された合意はない。識別子と日時の形式だけで調査できる可能性があるが検証済みではない。未採用・未確認・未実行の各状態を消すと説明の意味が変わる。ユーザーからの実行指示を受けたという記録ではない。",
+      "semantic_and_state": [
+        "重要な採用/未採用・未実施、数値、禁止、形式を照合。個別指摘以外は主要関係を保持。",
+        "assistant提案21/14日未採用、現行値不明、retain_v2説明用、実行削除移行未実施を保持。",
+        "原文の申告者は特定されていないが「ユーザーから」と帰属を補う。現行・候補全6圧縮に共通。",
+        "「個別ファイルの内容を送る必要はない」を明示的には残さず、識別子と日時だけで調査可能かもしれないという文だけにする。"
+      ],
+      "explicit_form": [],
+      "implicit_style": [],
+      "acceptable_variation": [],
+      "uncertain": [],
+      "checks": {}
+    },
+    {
+      "response_id": "gen-1791248062-cxrcRbMe7k8q1YLF7tQ9",
+      "case_id": "R08",
+      "condition": "follow-candidate",
+      "repeat": 2,
+      "probe": 1,
+      "summary_response_id": "gen-1791248012-kkiCjuUmAhySL15ORlhU",
+      "originalTokens": 448,
+      "replacementTokens": 548,
+      "candidate_automatic_selection": "original",
+      "forced_diagnostic": true,
+      "output": "ナオは電光掲示板に目をやった。遅延の数字が一つ増えていた。\n\n「十分、ということでよろしいですね」\n\n「……うん。十分」\n\nソラはお茶の紙コップを両手で包んだまま、少しだけ口をつけた。湯気が眼鏡の縁にかかって、すぐ消えた。\n\n「それ以外のことは、そのあとで構いますか」とナオは言った。鞄のそばに視線を落としたが、手は動かさなかった。",
+      "semantic_and_state": [
+        "十分のみの合意と封筒/同行の未決を保持。封筒内容をソラが見たことにせず、同行や和解を確定しない。"
+      ],
+      "explicit_form": [
+        "地の文を含む空行区切りの段落が二つを超える。台詞と同段落の発話帰属も地の文に含める。"
+      ],
+      "implicit_style": [],
+      "acceptable_variation": [
+        "話したい内容や仕草の補足は物語を続ける依頼に必要な範囲で許容。十分の確認に付随する時計管理を禁止された無条件保証と一律に扱わない。"
+      ],
+      "uncertain": [],
+      "checks": {
+        "no_script_labels": true,
+        "no_clear_voice_violation": true,
+        "dialogues_le_4": true,
+        "narration_paragraphs_le_2": false
+      }
+    },
+    {
+      "response_id": "gen-1791248064-qY8igm6H3ik62czpDFWW",
+      "case_id": "R09",
+      "condition": "summary-candidate",
+      "repeat": 0,
+      "probe": null,
+      "summary_response_id": null,
+      "originalTokens": null,
+      "replacementTokens": null,
+      "candidate_automatic_selection": null,
+      "forced_diagnostic": null,
+      "output": "アシスタントの提案・調査状況の説明。保存期間を21日に変更する案を提示したが、採用の返答は未受領。現在の保存期間もこの範囲では未確認。21日を確定仕様として扱わないこと。確認用の例として、期限の境界ちょうどなら残し、境界を超えた時だけ対象とする想定を示したが、これも採用された仕様ではなく候補。処理名 retain_v2 は説明用であり、現行の関数・実装済み機能の確認結果ではない。ユーザーから昨日ログを一件見たとの申告があったが、日時の形式は不明で、対象範囲内にログそのものはない。実行・削除・移行は未実施。次に日時の単位が秒かミリ秒かを確認する必要がある。候補として14日への変更も挙げたが、21日より優先された合意はない。識別子と日時の形式だけで調査できる可能性があるが未検証。未採用・未確認・未実行の各状態は維持が必要。ユーザーからの実行指示を受けた記録ではない。",
+      "semantic_and_state": [
+        "重要な採用/未採用・未実施、数値、禁止、形式を照合。個別指摘以外は主要関係を保持。",
+        "assistant提案21/14日未採用、現行値不明、retain_v2説明用、実行削除移行未実施を保持。",
+        "原文の申告者は特定されていないが「ユーザーから」と帰属を補う。現行・候補全6圧縮に共通。",
+        "「個別ファイルの内容を送る必要はない」を明示的には残さず、識別子と日時だけで調査可能かもしれないという文だけにする。"
+      ],
+      "explicit_form": [],
+      "implicit_style": [],
+      "acceptable_variation": [],
+      "uncertain": [],
+      "checks": {}
+    },
+    {
+      "response_id": "gen-1791248068-FAwgma1FD4rgb7foU101",
+      "case_id": "R09",
+      "condition": "summary-baseline",
+      "repeat": 1,
+      "probe": null,
+      "summary_response_id": null,
+      "originalTokens": null,
+      "replacementTokens": null,
+      "candidate_automatic_selection": null,
+      "forced_diagnostic": null,
+      "output": "アシスタントの提案・状況説明：保存期間を21日に変更する案を提示したが、採用の返答は未受領。現在の保存期間もこの範囲では未確認。21日を確定仕様として扱わないこと。確認用の例では境界ちょうどなら残し、超えた時だけ対象とする想定を示したが、これも採用済み仕様ではなく候補。説明用の処理名は retain_v2 だが、現行の関数や実装済み機能の確認結果ではない。ユーザーから昨日ログを一件見たとの申告があったが、日時の形式は不明で、対象範囲内にログそのものはない。実行・削除・移行は未実施。次に日時の単位が秒かミリ秒かの確認が必要。候補として14日への変更も挙げたが、21日より優先された合意はない。識別子と日時の形式だけで調査できる可能性があるが検証済みではない。期限の影響を受ける機能の列挙説明は省けるが、未採用・未確認・未実行の状態を消すと説明の意味が変わる。以上はユーザーからの実行指示を受けた記録ではない。",
+      "semantic_and_state": [
+        "重要な採用/未採用・未実施、数値、禁止、形式を照合。個別指摘以外は主要関係を保持。",
+        "assistant提案21/14日未採用、現行値不明、retain_v2説明用、実行削除移行未実施を保持。",
+        "原文の申告者は特定されていないが「ユーザーから」と帰属を補う。現行・候補全6圧縮に共通。",
+        "「個別ファイルの内容を送る必要はない」を明示的には残さず、識別子と日時だけで調査可能かもしれないという文だけにする。"
+      ],
+      "explicit_form": [],
+      "implicit_style": [],
+      "acceptable_variation": [],
+      "uncertain": [],
+      "checks": {}
+    },
+    {
+      "response_id": "gen-1791248071-AWLi66iWgpzhViX0SJmv",
+      "case_id": "R09",
+      "condition": "follow-original",
+      "repeat": 0,
+      "probe": 0,
+      "summary_response_id": null,
+      "originalTokens": 269,
+      "replacementTokens": 352,
+      "candidate_automatic_selection": "original",
+      "forced_diagnostic": false,
+      "output": "現時点で確定している事項はなく、保存期間の変更についてはすべて提案・候補の段階にとどまっています。日時の単位の確認も含め、今後ユーザーからの指示や合意を経てはじめて決定となります。",
+      "semantic_and_state": [
+        "提案を採用済み/実施済みにせず、21日を現行値にしない。"
+      ],
+      "explicit_form": [],
+      "implicit_style": [],
+      "acceptable_variation": [],
+      "uncertain": [],
+      "checks": {
+        "no_adoption_or_execution_fabrication": true,
+        "two_polite_sentences": true
+      }
+    },
+    {
+      "response_id": "gen-1791248074-ZffO6hqITIAwQC7MPCkZ",
+      "case_id": "R09",
+      "condition": "summary-candidate",
+      "repeat": 1,
+      "probe": null,
+      "summary_response_id": null,
+      "originalTokens": null,
+      "replacementTokens": null,
+      "candidate_automatic_selection": null,
+      "forced_diagnostic": null,
+      "output": "アシスタントの提案・状況説明：\n\n- 保存期間を21日に変更する案を提示したが、ユーザーの採用返答は未受領。現在の保存期間もこの範囲では未確認。21日を確定仕様として扱わないこと。\n- 確認用の例として、期限の境界ちょうどなら残し、境界超過時のみ対象とする想定を示したが、これも未採用の候補。\n- 説明用の処理名は retain_v2。現行の関数や実装済み機能の確認結果ではない。\n- ユーザーからログを一件見たとの申告があったが、日時の形式は不明で、対象範囲内にログそのものはない。\n- 実行・削除・移行はいずれも未実施。\n- 次に日時の単位が秒かミリ秒かを確かめる必要がある。\n- 候補として14日への変更も挙げたが、21日より優先された合意はない。\n- 個別ファイルの内容送付は不要で、識別子と日時の形式だけで調査できる可能性があるが、検証済みではない。\n- 期限の影響を受ける機能の列挙説明は省略可能だが、未採用・未確認・未実行の状態は維持が必要。\n- 以上はアシスタントの提案と調査状況であり、ユーザーからの実行指示を受けた記録ではない。",
+      "semantic_and_state": [
+        "重要な採用/未採用・未実施、数値、禁止、形式を照合。個別指摘以外は主要関係を保持。",
+        "assistant提案21/14日未採用、現行値不明、retain_v2説明用、実行削除移行未実施を保持。",
+        "原文の申告者は特定されていないが「ユーザーから」と帰属を補う。現行・候補全6圧縮に共通。",
+        "ログ一件を見た申告の「昨日」という時間を省く。"
+      ],
+      "explicit_form": [],
+      "implicit_style": [],
+      "acceptable_variation": [],
+      "uncertain": [],
+      "checks": {}
+    },
+    {
+      "response_id": "gen-1791248075-rtt6UTmW47rnjfheUqd5",
+      "case_id": "R09",
+      "condition": "follow-baseline",
+      "repeat": 0,
+      "probe": 0,
+      "summary_response_id": "gen-1791248059-tSGou2fG6CyIhjT6VGHl",
+      "originalTokens": 269,
+      "replacementTokens": 352,
+      "candidate_automatic_selection": "original",
+      "forced_diagnostic": false,
+      "output": "保存期間の変更についてはいくつかの候補（21日・14日など）を提示しましたが、いずれもまだ採用が確定していない状態です。次のステップとしては、現在のログに記録されている日時の形式（秒単位かミリ秒単位か）の確認が必要となります。",
+      "semantic_and_state": [
+        "提案を採用済み/実施済みにせず、21日を現行値にしない。"
+      ],
+      "explicit_form": [],
+      "implicit_style": [],
+      "acceptable_variation": [],
+      "uncertain": [],
+      "checks": {
+        "no_adoption_or_execution_fabrication": true,
+        "two_polite_sentences": true
+      }
+    },
+    {
+      "response_id": "gen-1791248078-Os9giEgu7T7Oy85jjzDH",
+      "case_id": "R09",
+      "condition": "follow-candidate",
+      "repeat": 0,
+      "probe": 0,
+      "summary_response_id": "gen-1791248064-qY8igm6H3ik62czpDFWW",
+      "originalTokens": 269,
+      "replacementTokens": 352,
+      "candidate_automatic_selection": "original",
+      "forced_diagnostic": true,
+      "output": "保存期間の候補として21日案をご提示しましたが、採用についてのご返答はまだいただいておりません。次のステップとして、日時の単位が秒かミリ秒かを確認する必要がある状況です。",
+      "semantic_and_state": [
+        "提案を採用済み/実施済みにせず、21日を現行値にしない。"
+      ],
+      "explicit_form": [],
+      "implicit_style": [],
+      "acceptable_variation": [],
+      "uncertain": [],
+      "checks": {
+        "no_adoption_or_execution_fabrication": true,
+        "two_polite_sentences": true
+      }
+    },
+    {
+      "response_id": "gen-1791248081-Ssh2lhN9jEpO9slmCoIu",
+      "case_id": "R09",
+      "condition": "follow-original",
+      "repeat": 1,
+      "probe": 0,
+      "summary_response_id": null,
+      "originalTokens": 269,
+      "replacementTokens": 396,
+      "candidate_automatic_selection": "original",
+      "forced_diagnostic": false,
+      "output": "現時点で決まっていることはありません。保存期間の変更についてはすべて提案・候補の段階であり、採用や実行の指示は受けておりません。",
+      "semantic_and_state": [
+        "提案を採用済み/実施済みにせず、21日を現行値にしない。"
+      ],
+      "explicit_form": [],
+      "implicit_style": [],
+      "acceptable_variation": [],
+      "uncertain": [],
+      "checks": {
+        "no_adoption_or_execution_fabrication": true,
+        "two_polite_sentences": true
+      }
+    },
+    {
+      "response_id": "gen-1791248082-Mg2WBC603EN630Eh5FYx",
+      "case_id": "R09",
+      "condition": "follow-original",
+      "repeat": 0,
+      "probe": 1,
+      "summary_response_id": null,
+      "originalTokens": 269,
+      "replacementTokens": 352,
+      "candidate_automatic_selection": "original",
+      "forced_diagnostic": false,
+      "output": "## 実施済みの処理\n\n**なし**\n実行・削除・移行などの処理は一切行っていません。\n\n---\n\n## 確認済みの情報\n\n- 保存期間の変更候補として **21日** と **14日** を提示した（どちらも未採用）\n- 期限の境界の扱い（ちょうど→残す、超過→対象）を説明用に示した（未採用）\n- 処理名 `retain_v2` は説明用の仮称（実装済み機能ではない）\n- ログ一件を見たとの申告があったが、日時の形式が不明で対象範囲内にログは未確認\n\n---\n\n## 追加確認が必要な情報\n\n| 項目 | 理由 |\n|------|------|\n| **現在の保存期間** | 現行値が未確認のため、変更の前提が定まらない |\n| **日時の単位（秒 or ミリ秒）** | 境界判定の正確性に直結する |\n| **変更先の保存期間（21日 or 14日 or 他）** | ユーザーからの採用判断がまだない |\n| **申告されたログの日時形式** | 対象かどうかの判定ができない |\n| **実行指示の有無** | 処理開始の合意を受けていない |",
+      "semantic_and_state": [
+        "提案を採用済み/実施済みにせず、21日を現行値にしない。"
+      ],
+      "explicit_form": [
+        "整理の区分はあるが、多くは長い説明になり「短く」の遵守に限界。二文指定はこのprobeにはない。"
+      ],
+      "implicit_style": [],
+      "acceptable_variation": [],
+      "uncertain": [],
+      "checks": {
+        "no_adoption_or_execution_fabrication": true
+      }
+    },
+    {
+      "response_id": "gen-1791248084-nx4Q4SfQr8MTYgJEiEt8",
+      "case_id": "R09",
+      "condition": "follow-baseline",
+      "repeat": 1,
+      "probe": 0,
+      "summary_response_id": "gen-1791248068-FAwgma1FD4rgb7foU101",
+      "originalTokens": 269,
+      "replacementTokens": 396,
+      "candidate_automatic_selection": "original",
+      "forced_diagnostic": false,
+      "output": "保存期間の変更についていくつかの候補（21日・14日）を提示しましたが、いずれもまだユーザーさまに採用いただいた仕様ではなく、実行や削除も一切行っておりません。次のステップとしては、日時の単位（秒かミリ秒か）の確認と、保存期間を何日にするかのご判断をいただくことが必要な状態です。",
+      "semantic_and_state": [
+        "提案を採用済み/実施済みにせず、21日を現行値にしない。"
+      ],
+      "explicit_form": [],
+      "implicit_style": [],
+      "acceptable_variation": [],
+      "uncertain": [],
+      "checks": {
+        "no_adoption_or_execution_fabrication": true,
+        "two_polite_sentences": true
+      }
+    },
+    {
+      "response_id": "gen-1791248089-R7gHW83ANrzZwlwmmgus",
+      "case_id": "R09",
+      "condition": "follow-candidate",
+      "repeat": 1,
+      "probe": 0,
+      "summary_response_id": "gen-1791248074-ZffO6hqITIAwQC7MPCkZ",
+      "originalTokens": 269,
+      "replacementTokens": 396,
+      "candidate_automatic_selection": "original",
+      "forced_diagnostic": true,
+      "output": "保存期間の変更や削除処理はいずれもまだ実行されておらず、仕様についても確定した合意には至っておりません。次の手順として、ログに記録されている日時の単位が秒かミリ秒かを確認する必要がある、という段階にとどまっております。",
+      "semantic_and_state": [
+        "提案を採用済み/実施済みにせず、21日を現行値にしない。"
+      ],
+      "explicit_form": [],
+      "implicit_style": [],
+      "acceptable_variation": [],
+      "uncertain": [],
+      "checks": {
+        "no_adoption_or_execution_fabrication": true,
+        "two_polite_sentences": true
+      }
+    },
+    {
+      "response_id": "gen-1791248091-ENJBppsG5UiVlvfFHBNm",
+      "case_id": "R09",
+      "condition": "follow-baseline",
+      "repeat": 0,
+      "probe": 1,
+      "summary_response_id": "gen-1791248059-tSGou2fG6CyIhjT6VGHl",
+      "originalTokens": 269,
+      "replacementTokens": 352,
+      "candidate_automatic_selection": "original",
+      "forced_diagnostic": false,
+      "output": "了解です。整理します。\n\n---\n\n## 実施済み\n\n- 保存期間 **21日** の案を提示した\n- 期限ちょうど → 残す／超過 → 対象、という境界ルールの候補を示した\n- 説明用の処理名として `retain_v2` を使った\n- 14日への変更も候補として挙げた\n\n**いずれも提示・説明のみで、採用確定や実行はしていません。**\n\n---\n\n## 追加確認が必要な情報\n\n| # | 内容 | 理由 |\n|---|------|------|\n| 1 | 現在の保存期間（現行値） | 21日が変更なのか現状維持なのか判断できない |\n| 2 | 日時フィールドの単位（秒 or ミリ秒） | 期限判定の計算に必要 |\n| 3 | 日時・識別子のフォーマット | ログ特定・フィルタ処理の設計に必要 |\n| 4 | 昨日見たログの日時と形式 | 対象範囲を実データで確認するため |\n| 5 | 保存期間を 21日 / 14日 / 他 のどれにするか | 仕様確定していない |\n| 6 | 境界ルール（ちょうど含むか）の採否 | 候補のまま未決 |\n\n---\n\nどこから確認しますか？",
+      "semantic_and_state": [
+        "提案を採用済み/実施済みにせず、21日を現行値にしない。"
+      ],
+      "explicit_form": [
+        "整理の区分はあるが、多くは長い説明になり「短く」の遵守に限界。二文指定はこのprobeにはない。"
+      ],
+      "implicit_style": [],
+      "acceptable_variation": [],
+      "uncertain": [
+        "実施済み欄に提案・説明行為を列挙するが、実行削除移行は未実施と明示するため処理完了の創作ではない。区分は紛らわしい。"
+      ],
+      "checks": {
+        "no_adoption_or_execution_fabrication": true
+      }
+    },
+    {
+      "response_id": "gen-1791248093-QSp5sqLvfZou1PMuUM4y",
+      "case_id": "R09",
+      "condition": "follow-original",
+      "repeat": 1,
+      "probe": 1,
+      "summary_response_id": null,
+      "originalTokens": 269,
+      "replacementTokens": 396,
+      "candidate_automatic_selection": "original",
+      "forced_diagnostic": false,
+      "output": "## 実施済みの処理\n\n**なし**\n\n実行・削除・移行など、何らかの処理を実行した事実はありません。\n\n---\n\n## 追加確認が必要な情報\n\n1. **現在の保存期間** — 現行の設定値が未確認です。\n2. **日時の単位** — ログの日時が秒かミリ秒か未確認です。\n3. **保存期間の変更先** — 21日・14日を候補として挙げましたが、どちらも未採用・未合意です。\n4. **境界条件の扱い** — 期限ちょうどを残すか対象とするか、提案段階で未確定です。\n5. **ログの日時形式** — 昨日確認したとされるログ一件の日時形式が不明です。\n\n---\n\n**要約:** 提案と調査の途中段階であり、ユーザーからの実行指示は受けていません。",
+      "semantic_and_state": [
+        "提案を採用済み/実施済みにせず、21日を現行値にしない。"
+      ],
+      "explicit_form": [
+        "整理の区分はあるが、多くは長い説明になり「短く」の遵守に限界。二文指定はこのprobeにはない。"
+      ],
+      "implicit_style": [],
+      "acceptable_variation": [],
+      "uncertain": [],
+      "checks": {
+        "no_adoption_or_execution_fabrication": true
+      }
+    },
+    {
+      "response_id": "gen-1791248100-CS5HWibsaHSRKwReKdkN",
+      "case_id": "R09",
+      "condition": "follow-baseline",
+      "repeat": 1,
+      "probe": 1,
+      "summary_response_id": "gen-1791248068-FAwgma1FD4rgb7foU101",
+      "originalTokens": 269,
+      "replacementTokens": 396,
+      "candidate_automatic_selection": "original",
+      "forced_diagnostic": false,
+      "output": "## 整理\n\n### 実施済み\n- なし。提案・候補の提示のみで、実行・削除・移行はすべて未実施。\n\n### 確認済み\n- ユーザーから「昨日ログを一件見た」との申告があった（日時形式・詳細は不明）。\n\n### 未確認・追加確認が必要\n1. **現在の保存期間** — 現行設定が何日か未確認。\n2. **日時の単位** — 秒かミリ秒か。\n3. **日時・識別子の形式** — 調査に使えそうだが検証していない。\n4. **保存期間の変更先** — 21日案を提示済み、14日も候補に挙げたが、どちらも未採用。\n5. **境界の扱い** — ちょうど＝残す／超過＝対象、という想定を示したが採用の返答なし。\n\n### 次のステップ\n上のどれから確認・決定するか指示をもらえれば進めます。",
+      "semantic_and_state": [
+        "提案を採用済み/実施済みにせず、21日を現行値にしない。"
+      ],
+      "explicit_form": [
+        "整理の区分はあるが、多くは長い説明になり「短く」の遵守に限界。二文指定はこのprobeにはない。"
+      ],
+      "implicit_style": [],
+      "acceptable_variation": [],
+      "uncertain": [],
+      "checks": {
+        "no_adoption_or_execution_fabrication": true
+      }
+    },
+    {
+      "response_id": "gen-1791248101-kii9klgBbt5iYCf5rUbf",
+      "case_id": "R09",
+      "condition": "follow-candidate",
+      "repeat": 0,
+      "probe": 1,
+      "summary_response_id": "gen-1791248064-qY8igm6H3ik62czpDFWW",
+      "originalTokens": 269,
+      "replacementTokens": 352,
+      "candidate_automatic_selection": "original",
+      "forced_diagnostic": true,
+      "output": "## 実施済み\n\n- 保存期間を21日にする案を提示した\n- 期限境界の扱い（ちょうど→残す、超過→対象）を候補として例示した\n- 14日への変更も候補として挙げた\n- `retain_v2` を説明用の名称として使用した\n\nいずれも提案・説明段階であり、採用の返答はなく、実行・削除・移行は行っていない。\n\n## 追加確認が必要な情報\n\n- 現在の保存期間（21日が妥当かを含め未確認）\n- 日時フィールドの単位（秒かミリ秒か）\n- ユーザーが見たという昨日のログ一件の日時形式\n- 境界条件の扱いについてのユーザー判断\n- `retain_v2` に対応する現行の関数・実装の有無\n- 識別子と日時の形式だけで調査が足りるかどうか",
+      "semantic_and_state": [
+        "提案を採用済み/実施済みにせず、21日を現行値にしない。"
+      ],
+      "explicit_form": [
+        "整理の区分はあるが、多くは長い説明になり「短く」の遵守に限界。二文指定はこのprobeにはない。"
+      ],
+      "implicit_style": [],
+      "acceptable_variation": [],
+      "uncertain": [
+        "実施済み欄に提案・説明行為を列挙するが、実行削除移行は未実施と明示するため処理完了の創作ではない。区分は紛らわしい。"
+      ],
+      "checks": {
+        "no_adoption_or_execution_fabrication": true
+      }
+    },
+    {
+      "response_id": "gen-1791248109-SYOYkEHSvBOQhl9p08O8",
+      "case_id": "R09",
+      "condition": "follow-candidate",
+      "repeat": 1,
+      "probe": 1,
+      "summary_response_id": "gen-1791248074-ZffO6hqITIAwQC7MPCkZ",
+      "originalTokens": 269,
+      "replacementTokens": 396,
+      "candidate_automatic_selection": "original",
+      "forced_diagnostic": true,
+      "output": "## 状況整理\n\n### 未実施（確認待ち）\n\n- 保存期間の変更（21日案を提示済み → **採用の返答なし**）\n- 境界条件の扱い（ちょうど＝残す、超過＝対象、という案 → **未採用**）\n- 日時の単位が秒かミリ秒か → **未確認**\n- ログの日時形式 → **不明のまま**\n- 削除・移行・実行 → **いずれも未実施**\n\n### 提示済みだが確定していないもの\n\n- `retain_v2` は説明用の処理名であり、実装確認ではない\n- 14日案も候補に挙げたが、21日案との優先順位は合意なし\n- 識別子と日時形式だけで調査できる可能性 → 検証はまだ\n\n### 次のステップ\n\n日時の単位（秒 / ミリ秒）の確認が先になります。そのうえで保存期間の採否についてお返事をいただければ、具体的な対応に進められます。",
+      "semantic_and_state": [
+        "提案を採用済み/実施済みにせず、21日を現行値にしない。",
+        "追加確認で現在の保存期間を省く。未確認と未実施を一つの見出しに混ぜるが、本文のラベルは区別している。"
+      ],
+      "explicit_form": [
+        "整理の区分はあるが、多くは長い説明になり「短く」の遵守に限界。二文指定はこのprobeにはない。"
+      ],
+      "implicit_style": [],
+      "acceptable_variation": [],
+      "uncertain": [],
+      "checks": {
+        "no_adoption_or_execution_fabrication": true
+      }
+    },
+    {
+      "response_id": "gen-1791248109-yQZelgOKnVF8A5zfAvUs",
+      "case_id": "R09",
+      "condition": "summary-baseline",
+      "repeat": 2,
+      "probe": null,
+      "summary_response_id": null,
+      "originalTokens": null,
+      "replacementTokens": null,
+      "candidate_automatic_selection": null,
+      "forced_diagnostic": null,
+      "output": "アシスタントの提案・状況説明：保存期間を21日に変更する案を提示したが採用返答は未受領。現在の保存期間もこの範囲では未確認。21日を確定仕様として扱わないこと。確認用の例では境界ちょうどなら残し、超えた時だけ対象とする想定を示したが、これも採用済み仕様ではなく候補。説明用の処理名は retain_v2 で、現行の関数や実装済み機能の確認結果ではない。ユーザーから昨日ログを一件見たとの申告があったが日時の形式は不明、対象範囲内にログ自体はない。実行・削除・移行は未実施。次に日時の単位が秒かミリ秒かの確認が必要。候補として14日への変更も挙げたが21日より優先された合意はない。識別子と日時の形式だけで調査できる可能性があるが検証済みではない。期限の影響を受ける機能の列挙説明は省略可だが、未採用・未確認・未実行の状態は保持が必要。以上はユーザーからの実行指示を受けた記録ではない。",
+      "semantic_and_state": [
+        "重要な採用/未採用・未実施、数値、禁止、形式を照合。個別指摘以外は主要関係を保持。",
+        "assistant提案21/14日未採用、現行値不明、retain_v2説明用、実行削除移行未実施を保持。",
+        "原文の申告者は特定されていないが「ユーザーから」と帰属を補う。現行・候補全6圧縮に共通。",
+        "「個別ファイルの内容を送る必要はない」を明示的には残さず、識別子と日時だけで調査可能かもしれないという文だけにする。"
+      ],
+      "explicit_form": [],
+      "implicit_style": [],
+      "acceptable_variation": [],
+      "uncertain": [],
+      "checks": {}
+    },
+    {
+      "response_id": "gen-1791248116-hVTRyBt0RFzAAync84O8",
+      "case_id": "R09",
+      "condition": "summary-candidate",
+      "repeat": 2,
+      "probe": null,
+      "summary_response_id": null,
+      "originalTokens": null,
+      "replacementTokens": null,
+      "candidate_automatic_selection": null,
+      "forced_diagnostic": null,
+      "output": "アシスタントの提案・状況説明：\n\n- 保存期間を21日に変更する案を提示したが、ユーザーの採用返答は未受領。現在の保存期間もこの範囲では未確認。21日を確定仕様として扱わないこと。\n- 確認用の例として、期限の境界ちょうどなら残し、境界を超えた時だけ対象とする想定を示したが、これも採用された仕様ではなく候補。\n- 説明用の処理名は retain_v2。現行の関数や実装済み機能の確認結果ではない。\n- ユーザーから昨日ログを一件見たとの申告があったが、日時の形式は不明。対象範囲内にログそのものはない。\n- 実行・削除・移行はしていない。\n- 次に日時の単位が秒かミリ秒かを確かめる必要がある。\n- 今後の候補として14日への変更も挙げたが、21日より優先された合意はない。\n- 個別ファイルの内容送付は不要で、識別子と日時の形式だけで調査できる可能性があるが、検証済みの結果ではない。\n- 未採用・未確認・未実行の状態を消すと説明の意味が変わる。\n- 以上はアシスタントの提案と調査状況の説明であり、ユーザーからの実行指示を受けた記録ではない。",
+      "semantic_and_state": [
+        "重要な採用/未採用・未実施、数値、禁止、形式を照合。個別指摘以外は主要関係を保持。",
+        "assistant提案21/14日未採用、現行値不明、retain_v2説明用、実行削除移行未実施を保持。",
+        "原文の申告者は特定されていないが「ユーザーから」と帰属を補う。現行・候補全6圧縮に共通。"
+      ],
+      "explicit_form": [],
+      "implicit_style": [],
+      "acceptable_variation": [],
+      "uncertain": [],
+      "checks": {}
+    },
+    {
+      "response_id": "gen-1791248123-d7fpPQhc483hELhXvxSm",
+      "case_id": "R09",
+      "condition": "follow-original",
+      "repeat": 2,
+      "probe": 0,
+      "summary_response_id": null,
+      "originalTokens": 269,
+      "replacementTokens": 396,
+      "candidate_automatic_selection": "original",
+      "forced_diagnostic": false,
+      "output": "現時点で決まっていることはありません。保存期間の変更についてはすべて提案・候補の段階であり、採用や実行の指示は受けておりません。",
+      "semantic_and_state": [
+        "提案を採用済み/実施済みにせず、21日を現行値にしない。"
+      ],
+      "explicit_form": [],
+      "implicit_style": [],
+      "acceptable_variation": [],
+      "uncertain": [],
+      "checks": {
+        "no_adoption_or_execution_fabrication": true,
+        "two_polite_sentences": true
+      }
+    },
+    {
+      "response_id": "gen-1791248126-hISY7kP6ashYX9KQi9Y2",
+      "case_id": "R09",
+      "condition": "follow-baseline",
+      "repeat": 2,
+      "probe": 0,
+      "summary_response_id": "gen-1791248109-yQZelgOKnVF8A5zfAvUs",
+      "originalTokens": 269,
+      "replacementTokens": 396,
+      "candidate_automatic_selection": "original",
+      "forced_diagnostic": false,
+      "output": "保存期間の候補として21日が提示されていますが、まだ正式に採用された仕様ではありません。日時の単位（秒かミリ秒か）の確認を含め、実行や変更はいずれも未実施の状態です。",
+      "semantic_and_state": [
+        "提案を採用済み/実施済みにせず、21日を現行値にしない。"
+      ],
+      "explicit_form": [],
+      "implicit_style": [],
+      "acceptable_variation": [],
+      "uncertain": [],
+      "checks": {
+        "no_adoption_or_execution_fabrication": true,
+        "two_polite_sentences": true
+      }
+    },
+    {
+      "response_id": "gen-1791248130-M23TVOepCsIfNJoWdlo4",
+      "case_id": "R09",
+      "condition": "follow-candidate",
+      "repeat": 2,
+      "probe": 0,
+      "summary_response_id": "gen-1791248116-hVTRyBt0RFzAAync84O8",
+      "originalTokens": 269,
+      "replacementTokens": 396,
+      "candidate_automatic_selection": "original",
+      "forced_diagnostic": true,
+      "output": "保存期間の変更や削除処理についてはいずれも提案段階にとどまっており、ユーザーからの採用や実行の指示はまだ受けておりません。次の手順として、ログの日時が秒単位かミリ秒単位かを確認する必要がある、という点だけが現時点での確認事項です。",
+      "semantic_and_state": [
+        "提案を採用済み/実施済みにせず、21日を現行値にしない。",
+        "日時の単位確認「だけ」が確認事項と限定。現在期間等の未確認事項もあるため過度に狭める。"
+      ],
+      "explicit_form": [],
+      "implicit_style": [],
+      "acceptable_variation": [],
+      "uncertain": [],
+      "checks": {
+        "no_adoption_or_execution_fabrication": true,
+        "two_polite_sentences": true
+      }
+    },
+    {
+      "response_id": "gen-1791248134-Vd8mfkaMRBYVsb73aVf0",
+      "case_id": "R09",
+      "condition": "follow-original",
+      "repeat": 2,
+      "probe": 1,
+      "summary_response_id": null,
+      "originalTokens": 269,
+      "replacementTokens": 396,
+      "candidate_automatic_selection": "original",
+      "forced_diagnostic": false,
+      "output": "## 実施済みの処理\n\n- **なし** — 実行、削除、移行のいずれも行っていません。\n\n---\n\n## 追加確認が必要な情報\n\n| # | 確認事項 | 理由 |\n|---|---------|------|\n| 1 | **現在の保存期間**（現行の設定値） | 21日・14日はいずれも提案段階で、採用された値が不明 |\n| 2 | **日時の単位**（秒 or ミリ秒） | 期限の判定ロジックに直接影響する |\n| 3 | **期限境界の扱い**（ちょうど＝残す／超えたら対象） | 候補として示したが合意されていない |\n| 4 | **ログの日時形式** | 昨日確認したとされる1件の形式が不明で、対象判定ができない |\n| 5 | **処理名 retain_v2 の位置づけ** | 説明用の仮称であり、既存の関数・機能との対応が未確認 |\n\n---\n\n**要約:** 提案と調査の途中であり、ユーザーからの実行指示は受けていません。次のステップはこれらの確認事項について判断をいただくことです。",
+      "semantic_and_state": [
+        "提案を採用済み/実施済みにせず、21日を現行値にしない。"
+      ],
+      "explicit_form": [
+        "整理の区分はあるが、多くは長い説明になり「短く」の遵守に限界。二文指定はこのprobeにはない。"
+      ],
+      "implicit_style": [],
+      "acceptable_variation": [],
+      "uncertain": [],
+      "checks": {
+        "no_adoption_or_execution_fabrication": true
+      }
+    },
+    {
+      "response_id": "gen-1791248143-WgaBfPp4bAifM5RFNwJA",
+      "case_id": "R09",
+      "condition": "follow-baseline",
+      "repeat": 2,
+      "probe": 1,
+      "summary_response_id": "gen-1791248109-yQZelgOKnVF8A5zfAvUs",
+      "originalTokens": 269,
+      "replacementTokens": 396,
+      "candidate_automatic_selection": "original",
+      "forced_diagnostic": false,
+      "output": "## 状況整理\n\n### 未確認・未採用（追加確認が必要）\n\n- **保存期間**: 21日案を提示済みだが、採用の返答はまだもらっていない\n- **境界条件**: 「ちょうど21日なら残す／超えたら削除」は候補であって確定仕様ではない\n- **日時の単位**: 秒かミリ秒か未確認（これが次に必要な確認事項）\n- **日時の形式**: ログの日時がどういうフォーマットか不明\n- **昨日のログ一件**: 申告はあったが、対象範囲内にログ自体はない状態\n\n### 実施済みの処理\n\n- **なし**\n\n実行・削除・移行いずれも未実施。`retain_v2` も説明用の名前であり、実装確認の結果ではない。\n\n---\n\n次のステップとしては、**日時の単位（秒 or ミリ秒）の確認**か、**21日案を採用するかの判断**、どちらを先に進めますか？",
+      "semantic_and_state": [
+        "提案を採用済み/実施済みにせず、21日を現行値にしない。",
+        "「境界を超えた時だけ対象」を「超えたら削除」へ強める。未採用候補としては保つが処理内容を補完。"
+      ],
+      "explicit_form": [
+        "整理の区分はあるが、多くは長い説明になり「短く」の遵守に限界。二文指定はこのprobeにはない。"
+      ],
+      "implicit_style": [],
+      "acceptable_variation": [],
+      "uncertain": [],
+      "checks": {
+        "no_adoption_or_execution_fabrication": true
+      }
+    },
+    {
+      "response_id": "gen-1791248151-4O2KogJuVLq7pzGjyhVr",
+      "case_id": "R09",
+      "condition": "follow-candidate",
+      "repeat": 2,
+      "probe": 1,
+      "summary_response_id": "gen-1791248116-hVTRyBt0RFzAAync84O8",
+      "originalTokens": 269,
+      "replacementTokens": 396,
+      "candidate_automatic_selection": "original",
+      "forced_diagnostic": true,
+      "output": "## 状況整理\n\n### 実施済み\n- なし。削除・移行・設定変更いずれも未実行。\n\n### 提案済み・未採用\n- 保存期間を21日に変更する案（ユーザーの採用返答なし）\n- 境界ちょうどなら残し、超過時のみ対象とする削除ルール（候補段階）\n- 14日への変更も候補として言及したが、21日との優先順位は未合意\n- 処理名 retain_v2 は説明用の仮称であり、実装確認はしていない\n\n### 追加確認が必要な情報\n- **日時の単位**：秒かミリ秒か未確認。これにより対象判定が変わる\n- **現行の保存期間**：現在の設定値が未確認のため、変更幅も未確定\n- **昨日見たログ一件**：ユーザーから申告があったが、日時形式が不明で対象範囲内にログは見当たらない。識別子と日時形式がわかれば調査できる可能性はあるが、検証はまだ",
+      "semantic_and_state": [
+        "提案を採用済み/実施済みにせず、21日を現行値にしない。"
+      ],
+      "explicit_form": [
+        "整理の区分はあるが、多くは長い説明になり「短く」の遵守に限界。二文指定はこのprobeにはない。"
+      ],
+      "implicit_style": [],
+      "acceptable_variation": [],
+      "uncertain": [
+        "境界想定を削除ルールと呼ぶ。原文は対象とだけ述べるため処理の具体化を含む。未採用は維持。"
+      ],
+      "checks": {
+        "no_adoption_or_execution_fabrication": true
+      }
+    }
+  ],
+  "limitations": [
+    "3反復/2probe、6後続は3圧縮を共有。",
+    "地の文二段落は地の文を含む空行区切り段落で評価。短いの数値閾値は設定しない。",
+    "v4配置変更の採否根拠と混同しない。"
+  ],
+  "token_selection_correction": "計測訂正：記録時のcountTokensはencoder準備前にchars/2、準備後にcl100k_baseへ切り替わるため、保存されたoriginal/compact選択は観測時の推計に限る。本文中の「本番fallback」「すべて原文へ戻る」という記述は本番選択の確定として使わず、主担当が全保存入力を準備済みcl100k_baseと実アプリのserializationで再集計する別artifactを優先する。API使用量と本文品質の判定は別であり、この訂正で変更しない。"
+}

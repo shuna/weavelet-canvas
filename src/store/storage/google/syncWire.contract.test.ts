@@ -4,6 +4,7 @@ import { compress, decompress } from 'lz-string';
 import { toRecords, fromRecords, applyChanges, type Snapshot } from './records';
 import { replayHistory, type Commit } from './replay';
 import { createKeyEnvelope, unlockKey, encrypt, decrypt, encode, decode, digest, type KeyEnvelope } from './crypto';
+import { withoutBrowserLocalSettings } from './settings';
 import { getSiblingsOf } from '@utils/branchUtils';
 import { lzStringToBase64, base64ToLzString } from '../cloud/providers/cloudkit';
 import { CLOUDKIT_DEFAULT_RECORD_NAME, saveCloudKitRecord } from '@api/cloudkit';
@@ -58,14 +59,14 @@ describe('Google record wire: synthetic full corpus', () => {
     expect(JSON.parse(records[JSON.stringify(['content', wireHashes['n-user']])])).toEqual(expectedParts);
   });
 
-  it('restores every state field and node/content meaning, retaining entry metadata with derived refcounts', async () => {
+  it('restores every synchronized state field and node/content meaning, retaining entry metadata with derived refcounts', async () => {
     const restored = await fromRecords(await toRecords(corpus.syncSnapshot));
     const { chats: sourceChats, contentStore: sourceStore, ...expectedState } = corpus.syncSnapshot.state;
     const { chats, contentStore, ...state } = restored.state;
     const expectedClipboard = structuredClone(expectedState.branchClipboard!);
     const clipboardHash = restored.state.branchClipboard!.nodes['n-inactive'].contentHash;
     expectedClipboard.nodes['n-inactive'].contentHash = clipboardHash;
-    expect(state).toEqual({ ...expectedState, branchClipboard: expectedClipboard });
+    expect(state).toEqual({ ...withoutBrowserLocalSettings(expectedState), branchClipboard: expectedClipboard });
     expect(restored.version).toBe(18);
     expect(chats!.map((chat) => chat.id)).toEqual(['chat-a', 'chat-b']);
     expect(chats![1]).toEqual(sourceChats![1]);

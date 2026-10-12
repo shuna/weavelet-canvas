@@ -216,3 +216,9 @@ main STORE_VERSION=18。旧mainは自動schema変換せずmigration-required/exp
 独立Sol 6.1 Mediumが本成果物を新規監査。初回はCの2点（準備入力とticket捕捉時点の不一致、評価格納先と評価入力fingerprintの混同）を指摘した。同一同期snapshotからの登録・await後照合、phase別入力fingerprintと格納先の分離を契約と受入ケースへ採用。修正箇所の再監査で2点とも解消、新たな重大矛盾なし、静的S0/S1成果物として受入可能との判定。前段計画の合格は流用していない。
 
 監査は静的な契約・根拠の確認であり、製品実装、既存失敗解消、実モデル/実同期の検証完了を保証しない。これらは基準報告の実装開始ゲートとして残す。
+
+## 承認後の実装対応
+
+実装・監査・実測は[Webリファクタリング実装記録](../../reports/web-refactor/README.md)を参照。`navigateToNode`は複数canvasから開く場合の既存挙動を維持するため`selectChat?: boolean`を持ち、falseでは表示中の会話選択を変えず指定IDへ移動する。indexは境界でIDへ解決し、生成中bufferと復旧対象にもchatId/nodeIdを用いる。
+
+外部snapshotは準備完了までlive状態へ書き込まず、直前に入力状態と接続を照合する。取消がpartialを確定して入力状態を変えた場合、旧payloadをそのまま適用しない。現行形式以外のremote snapshotは元version付きで保全し、現行形式への通常保存・同期成功には数えない。インポートは明示的な形式変換として別経路に置く。primary保存失敗は適用済みメモリを巻き戻さず、保存失敗として返す。

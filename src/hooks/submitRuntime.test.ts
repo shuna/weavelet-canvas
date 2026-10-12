@@ -1,3 +1,4 @@
+import { resolveContent } from '@utils/contentStore';
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 
 import {
@@ -11,11 +12,11 @@ import {
   writeChunkToStore,
   finalizeStreamingNode,
 } from './submitRuntime';
-import { buildLocalPromptFromContext } from './submitHelpers';
-import { clearStreamingBuffersForTest } from '@utils/streamingBuffer';
+import { clearStreamingBuffersForTest, initializeStreamingBuffer, isBufferingNode } from '@utils/streamingBuffer';
 import { useStreamEndStatusStore } from '@store/stream-end-status-store';
 import * as swBridge from '@utils/swBridge';
 import { prepareStreamRequest } from '@api/api';
+import { IDBFactory, IDBKeyRange } from 'fake-indexeddb';
 
 // ---------------------------------------------------------------------------
 // Mock zustand store
@@ -62,11 +63,19 @@ vi.mock('@utils/swBridge', () => ({
   startStream: vi.fn(),
 }));
 
+vi.mock('@utils/streamDb', () => ({
+  appendText: vi.fn().mockResolvedValue(undefined), deleteRequest: vi.fn().mockResolvedValue(undefined),
+  saveRequest: vi.fn().mockResolvedValue(undefined), setGenerationId: vi.fn().mockResolvedValue(undefined),
+  setStreamObservation: vi.fn().mockResolvedValue(undefined), markStreamApplied: vi.fn().mockResolvedValue(undefined),
+  updateStatus: vi.fn().mockResolvedValue(undefined),
+  saveProxyCheckpoint: vi.fn().mockResolvedValue(undefined),
+}));
+
 // ---------------------------------------------------------------------------
 // Mock local-llm/runtime for executeLocalSubmit tests
 // ---------------------------------------------------------------------------
 const mockAbort = vi.fn();
-let mockGenerateImpl: ((prompt: string, opts: any, onChunk: (text: string) => void) => Promise<string>) | null = null;
+let mockGenerateImpl: ((input: unknown, opts: any, onChunk: (text: string) => void) => Promise<string>) | null = null;
 
 vi.mock('@src/local-llm/runtime', () => ({
   localModelRuntime: {
@@ -80,14 +89,6 @@ vi.mock('@src/local-llm/runtime', () => ({
     })),
   },
 }));
-
-vi.mock('./submitHelpers', async () => {
-  const actual = await vi.importActual<typeof import('./submitHelpers')>('./submitHelpers');
-  return {
-    ...actual,
-    buildLocalPromptFromContext: vi.fn(() => 'test prompt'),
-  };
-});
 
 beforeEach(() => {
   mockRemoveSession.mockClear();
@@ -599,6 +600,34 @@ describe('stream end status via SW path', () => {
     proxyAuthToken: '',
   });
 
+  it.each([
+    { id: 'generation-started', choices: [] },
+    { choices: [{ delta: {}, finish_reason: 'stop' }] },
+    { choices: [{ delta: {} }] },
+  ])('does not resend a proxy POST after an upstream event without display text: %j', async (event) => {
+    const sessionId = 'sess-proxy-no-retry';
+    mockState = makeMockState(sessionId);
+    vi.mocked(swBridge.waitForController).mockResolvedValue(false);
+    vi.mocked(prepareStreamRequest as any).mockReturnValue({ endpoint: 'https://example.com/v1/chat/completions', headers: {}, body: {} });
+    vi.stubGlobal('indexedDB', new IDBFactory());
+    vi.stubGlobal('IDBKeyRange', IDBKeyRange);
+    const proxyEvents = `id: 1\ndata: ${JSON.stringify(`data: ${JSON.stringify(event)}\n\n`)}\n\nevent: error\ndata: {"error":"This model does not support system messages","complete":false}\n\n`;
+    const fetchMock = vi.fn(async () => new Response(proxyEvents));
+    vi.stubGlobal('fetch', fetchMock);
+    try {
+      await expect(executeSubmitStream({
+        sessionId, chatId: 'chat-1', chatIndex: 0, messageIndex: 0, targetNodeId: 'node-assistant',
+        messages: [{ role: 'system', content: [{ type: 'text', text: 'instruction' }] }, { role: 'user', content: [{ type: 'text', text: 'hi' }] }],
+        config: { model: 'test', max_tokens: 100, temperature: 1, presence_penalty: 0, top_p: 1, frequency_penalty: 0, stream: true },
+        resolvedProvider: { endpoint: 'https://example.com/v1/chat/completions', key: 'secret' },
+        abortController: new AbortController(), t: key => key,
+      })).rejects.toThrow('does not support system messages');
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
   it('preserves interrupted status when user cancels on SW path', async () => {
     vi.useFakeTimers();
     const sessionId = 'sess-sw-cancel';
@@ -648,6 +677,139 @@ describe('stream end status via SW path', () => {
     // The status should remain 'interrupted', NOT be overwritten with 'completed'
     const status = useStreamEndStatusStore.getState().statuses['node-assistant'];
     expect(status).toBe('interrupted');
+  });
+
+  it('does not start a stream after cancellation during controller wait', async () => {
+    const sessionId = 'delayed-start';
+    mockState = makeMockState(sessionId);
+    vi.mocked(prepareStreamRequest).mockReturnValue({ endpoint: 'https://example.test', headers: {}, body: {} });
+    const abortController = createSubmitAbortController(sessionId);
+    let ready!: (value: boolean) => void;
+    vi.mocked(swBridge.waitForController).mockImplementationOnce(() => new Promise<boolean>(resolve => { ready = resolve; }));
+    vi.mocked(swBridge.startStream).mockClear();
+    const pending = executeSubmitStream({ sessionId, chatId: 'chat-1', chatIndex: 0, messageIndex: 0, targetNodeId: 'node-assistant',
+      messages: [{ role: 'user', content: [{ type: 'text', text: 'hi' }] }],
+      config: { model: 'test', max_tokens: 100, temperature: 1, presence_penalty: 0, top_p: 1, frequency_penalty: 0, stream: true },
+      resolvedProvider: { endpoint: 'https://example.test', key: 'secret' }, abortController, t: key => key });
+    abortController.abort();
+    ready(true);
+    await pending;
+    expect(swBridge.startStream).not.toHaveBeenCalled();
+  });
+
+  it('cancels a handle delivered after the removed session has already settled', async () => {
+    vi.useFakeTimers();
+    const sessionId = 'delayed-start';
+    mockState = makeMockState(sessionId);
+    vi.mocked(prepareStreamRequest).mockReturnValue({ endpoint: 'https://example.test', headers: {}, body: {} });
+    const abortController = createSubmitAbortController(sessionId);
+    vi.mocked(swBridge.waitForController).mockResolvedValue(true);
+    let deliver!: (value: swBridge.SwStreamHandle) => void;
+    vi.mocked(swBridge.startStream).mockImplementationOnce(() => new Promise(resolve => { deliver = resolve; }));
+    const pending = executeSubmitStream({ sessionId, chatId: 'chat-1', chatIndex: 0, messageIndex: 0, targetNodeId: 'node-assistant',
+      messages: [{ role: 'user', content: [{ type: 'text', text: 'hi' }] }],
+      config: { model: 'test', max_tokens: 100, temperature: 1, presence_penalty: 0, top_p: 1, frequency_penalty: 0, stream: true },
+      resolvedProvider: { endpoint: 'https://example.test', key: 'secret' }, abortController, t: key => key });
+    await vi.advanceTimersByTimeAsync(1);
+    mockState.generatingSessions = {};
+    await vi.advanceTimersByTimeAsync(600);
+    await pending;
+    const cancel = vi.fn();
+    deliver({ cancel });
+    await Promise.resolve();
+    expect(cancel).toHaveBeenCalledOnce();
+    clearSubmitSessionRuntime(sessionId);
+  });
+
+  it.each(['done', 'error'])('retains the SW recovery record after %s instead of deleting during cleanup', async (terminal) => {
+    const sessionId = 'terminal-record';
+    mockState = makeMockState(sessionId);
+    vi.mocked(prepareStreamRequest).mockReturnValue({ endpoint: 'https://example.test', headers: {}, body: {} });
+    const abortController = createSubmitAbortController(sessionId);
+    const db = await import('@utils/streamDb');
+    vi.mocked(db.deleteRequest).mockClear();
+    vi.mocked(db.markStreamApplied).mockClear();
+    vi.mocked(swBridge.waitForController).mockResolvedValue(true);
+    vi.mocked(swBridge.startStream).mockImplementationOnce(async params => {
+      params.onChunk('', { reasoning: 'received thought' });
+      params.onChunk('saved answer');
+      if (terminal === 'done') params.onDone({ finishReason: 'stop', proxySessionId: 'proxy-session' });
+      else params.onError('network lost');
+      return { cancel: vi.fn() };
+    });
+    const fetchSpy = vi.spyOn(globalThis, 'fetch');
+    try {
+      const pending = executeSubmitStream({ sessionId, chatId: 'chat-1', chatIndex: 0, messageIndex: 0, targetNodeId: 'node-assistant',
+      messages: [{ role: 'user', content: [{ type: 'text', text: 'hi' }] }],
+      config: { model: 'test', max_tokens: 100, temperature: 1, presence_penalty: 0, top_p: 1, frequency_penalty: 0, stream: true },
+      resolvedProvider: { endpoint: 'https://example.test', key: 'secret' }, abortController, t: key => key });
+      if (terminal === 'error') await expect(pending).rejects.toThrow('network lost');
+      else await pending;
+      expect(db.deleteRequest).not.toHaveBeenCalled();
+      expect(db.markStreamApplied).toHaveBeenCalledWith(expect.any(String),
+        (mockState.chats as any[])[0].branchTree.nodes['node-assistant'].contentHash, 'assistant', 'saved answer', 'received thought');
+      expect(fetchSpy).not.toHaveBeenCalled();
+    } finally { fetchSpy.mockRestore(); clearSubmitSessionRuntime(sessionId); }
+  });
+
+  it.each(['done', 'error'])('retains direct proxy terminal %s output without premature ACK', async (terminal) => {
+    const sessionId = 'terminal-record';
+    mockState = makeMockState(sessionId);
+    vi.mocked(prepareStreamRequest).mockReturnValue({ endpoint: 'https://example.test', headers: {}, body: {} });
+    const abortController = createSubmitAbortController(sessionId);
+    const db = await import('@utils/streamDb');
+    vi.mocked(db.deleteRequest).mockClear();
+    vi.mocked(db.markStreamApplied).mockClear();
+    vi.mocked(swBridge.waitForController).mockResolvedValue(false);
+    vi.mocked(db.updateStatus).mockClear();
+    const llm = 'data: {"choices":[{"delta":{"content":"<think>hidden</think>saved answer","reasoning":"thought"}}]}\n\ndata: [DONE]\n\n';
+    const wire = `id: 1\ndata: ${JSON.stringify(llm)}\n\nevent: ${terminal}\ndata: ${JSON.stringify(terminal === 'done' ? { complete: true } : { error: 'network lost' })}\n\n`;
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(wire));
+    try {
+      const pending = executeSubmitStream({ sessionId, chatId: 'chat-1', chatIndex: 0, messageIndex: 0, targetNodeId: 'node-assistant',
+      messages: [{ role: 'user', content: [{ type: 'text', text: 'hi' }] }],
+      config: { model: 'test', max_tokens: 100, temperature: 1, presence_penalty: 0, top_p: 1, frequency_penalty: 0, stream: true },
+      resolvedProvider: { endpoint: 'https://example.test', key: 'secret' }, abortController, t: key => key });
+      if (terminal === 'error') await expect(pending).rejects.toThrow('network lost');
+      else await pending;
+      expect(db.deleteRequest).not.toHaveBeenCalled();
+      expect(db.updateStatus).toHaveBeenCalledWith(expect.any(String), terminal === 'done' ? 'completed' : 'failed');
+      expect(db.markStreamApplied).toHaveBeenCalledWith(expect.any(String),
+        (mockState.chats as any[])[0].branchTree.nodes['node-assistant'].contentHash, 'assistant', 'saved answer', 'thoughthidden');
+      expect(fetchSpy).toHaveBeenCalledOnce();
+      expect(fetchSpy.mock.calls[0][0]).toBe('https://proxy.test/api/stream');
+    } finally { fetchSpy.mockRestore(); clearSubmitSessionRuntime(sessionId); }
+  });
+
+  it('retains the proxy ID and unfinished think tag when the next chunk times out at 45 seconds', async () => {
+    vi.useFakeTimers();
+    const sessionId = 'proxy-chunk-timeout';
+    mockState = makeMockState(sessionId);
+    vi.mocked(prepareStreamRequest).mockReturnValue({ endpoint: 'https://example.test', headers: {}, body: {} });
+    vi.mocked(swBridge.waitForController).mockResolvedValue(false);
+    const db = await import('@utils/streamDb');
+    vi.mocked(db.deleteRequest).mockClear();
+    vi.mocked(db.saveProxyCheckpoint).mockClear();
+    const raw = 'data: {"choices":[{"delta":{"content":"A<thi"}}]}\n\n';
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(new ReadableStream({
+      start(controller) { controller.enqueue(new TextEncoder().encode(`id: 1\ndata: ${JSON.stringify(raw)}\n\n`)); },
+    })));
+    try {
+      const pending = executeSubmitStream({ sessionId, chatId: 'chat-1', chatIndex: 0, messageIndex: 0, targetNodeId: 'node-assistant',
+        messages: [{ role: 'user', content: [{ type: 'text', text: 'hi' }] }],
+        config: { model: 'test', max_tokens: 100, temperature: 1, presence_penalty: 0, top_p: 1, frequency_penalty: 0, stream: true },
+        resolvedProvider: { endpoint: 'https://example.test', key: 'secret' }, abortController: createSubmitAbortController(sessionId), t: key => key });
+      const rejected = expect(pending).rejects.toThrow('Chunk timeout: no data received for 45s');
+      await vi.advanceTimersByTimeAsync(45_001);
+      await rejected;
+      expect(db.deleteRequest).not.toHaveBeenCalled();
+      expect(fetchSpy).toHaveBeenCalledOnce();
+      expect(db.saveRequest).toHaveBeenCalledWith(expect.objectContaining({ chatId: 'chat-1', nodeId: 'node-assistant', proxySessionId: expect.stringContaining('chat-1:') }));
+      expect(db.saveProxyCheckpoint).toHaveBeenLastCalledWith(expect.any(String), expect.objectContaining({ bufferedText: 'A', thinkTagCheckpoint: { state: 'outside', pending: '<thi' } }));
+      const chats = mockState.chats as any[];
+      expect(resolveContent(mockState.contentStore as any, chats[0].branchTree.nodes['node-assistant'].contentHash)).toEqual([{ type: 'text', text: 'A' }]);
+      expect(db.markStreamApplied).toHaveBeenCalledWith(expect.any(String), chats[0].branchTree.nodes['node-assistant'].contentHash, 'assistant', 'A', '');
+    } finally { fetchSpy.mockRestore(); clearSubmitSessionRuntime(sessionId); }
   });
 
   it('sets max_tokens status when SW path reports finish_reason=length', async () => {
@@ -897,14 +1059,20 @@ describe('executeLocalSubmit abort handling', () => {
     expect(mockAbort).not.toHaveBeenCalled();
   });
 
-  it('builds the local prompt from the full prepared context', async () => {
+  it('sends full structured history, the configured system prompt, and prefix to the worker', async () => {
     mockState = makeLocalMockState();
-    mockGenerateImpl = async () => 'Done';
+    let workerInput: unknown;
+    mockGenerateImpl = async (input) => {
+      workerInput = input;
+      return 'Done';
+    };
 
     const abortController = createSubmitAbortController('sess-local-context');
     const messages = [
-      { role: 'system', content: [{ type: 'text', text: 'be helpful' }] },
-      { role: 'user', content: [{ type: 'text', text: 'hi' }] },
+      { role: 'system', content: [{ type: 'text', text: 'stale message system prompt' }] },
+      { role: 'user', content: [{ type: 'text', text: 'first question' }] },
+      { role: 'assistant', content: [{ type: 'text', text: 'first answer' }] },
+      { role: 'user', content: [{ type: 'text', text: 'latest question' }] },
     ] as any;
 
     await executeLocalSubmit({
@@ -921,20 +1089,33 @@ describe('executeLocalSubmit abort handling', () => {
         presence_penalty: 0,
         top_p: 1,
         frequency_penalty: 0,
-        systemPrompt: 'be helpful',
+        systemPrompt: 'configured system prompt',
       } as any,
       mode: 'append',
       abortController,
       t: (key) => key,
+      assistantPrefill: 'Answer: ',
     });
 
-    expect(buildLocalPromptFromContext).toHaveBeenCalledWith(
-      messages,
-      'append',
-      messages.length,
-      'local-model',
-      undefined,
-      'be helpful',
-    );
+    expect(workerInput).toEqual({
+      messages: [
+        { role: 'system', content: 'configured system prompt' },
+        { role: 'user', content: 'first question' },
+        { role: 'assistant', content: 'first answer' },
+        { role: 'user', content: 'latest question' },
+      ],
+      assistantPrefix: 'Answer: ',
+    });
   });
+});
+
+
+it.each(['deleted', 'edited'])('discards the cancelled buffer when its target was %s and leaves a cloned target alone', (change) => {
+  initializeStreamingBuffer('original', 'node', [{ type: 'text', text: 'obsolete partial' }]);
+  initializeStreamingBuffer('clone', 'node', [{ type: 'text', text: 'other stream' }]);
+  mockState = { chats: change === 'deleted' ? [] : [{ id: 'original', branchTree: { nodes: { node: { contentHash: 'edited' } } } }], contentStore: {} };
+  finalizeStreamingNode('original', 'node');
+  expect(isBufferingNode('original', 'node')).toBe(false);
+  expect(isBufferingNode('clone', 'node')).toBe(true);
+  if (change === 'edited') expect((mockState as any).chats[0].branchTree.nodes.node.contentHash).toBe('edited');
 });

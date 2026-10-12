@@ -12,7 +12,7 @@ import ReactFlow, {
 } from 'reactflow';
 import 'reactflow/dist/style.css';
 
-import useStore from '@store/store';
+import { useWorkspaceStore, useWorkspaceReadOnly } from '@store/workspaceScope';
 import { BranchTree, isSplitView } from '@type/chat';
 import {
   useMultiBranchEditorLayout,
@@ -32,6 +32,9 @@ import BranchSearchBar from './BranchSearchBar';
 import { useTranslation } from 'react-i18next';
 
 const UndoRedoControls = () => {
+  const useStore = useWorkspaceStore();
+  const readOnly = useWorkspaceReadOnly();
+
   const canUndo = useStore((state) => state.canUndoBranch());
   const canRedo = useStore((state) => state.canRedoBranch());
   const undoBranch = useStore((state) => state.undoBranch);
@@ -72,6 +75,9 @@ const UndoRedoControls = () => {
 };
 
 const NavBackForwardControls = () => {
+  const useStore = useWorkspaceStore();
+  const readOnly = useWorkspaceReadOnly();
+
   const canBack = useStore((state) => state.canNavBack());
   const canForward = useStore((state) => state.canNavForward());
   const navBack = useStore((state) => state.navBack);
@@ -110,6 +116,9 @@ const NavBackForwardControls = () => {
 };
 
 const ConversationEditMenu = ({ entries }: { entries: MultiLayoutEntry[] }) => {
+  const useStore = useWorkspaceStore();
+  const readOnly = useWorkspaceReadOnly();
+
   const { t } = useTranslation();
   const [open, setOpen] = React.useState(false);
   const [confirming, setConfirming] = React.useState(false);
@@ -323,6 +332,9 @@ const BranchEditorCanvas = ({
   chatIndices: number[];
   primaryChatIndex: number;
 }) => {
+  const useStore = useWorkspaceStore();
+  const readOnly = useWorkspaceReadOnly();
+
   const [interactionMode, setInteractionMode] = useState<InteractionMode>('dragScroll');
   const [selectedNodeIds, setSelectedNodeIds] = useState<string[]>([]);
   const pageDragLockCountRef = useRef(0);
@@ -331,14 +343,10 @@ const BranchEditorCanvas = ({
   const isSearchOpen = useStore((state) => state.isSearchOpen);
   const openSearch = useStore((state) => state.openSearch);
   const closeSearch = useStore((state) => state.closeSearch);
-  const switchActivePath = useStore((state) => state.switchActivePath);
   const focusNodeId = useStore((state) => state.branchEditorFocusNodeId);
   const setBranchEditorFocusNodeId = useStore((state) => state.setBranchEditorFocusNodeId);
-  const setCurrentChatIndex = useStore((state) => state.setCurrentChatIndex);
-  const setChatActiveView = useStore((state) => state.setChatActiveView);
   const ensureBranchTree = useStore((state) => state.ensureBranchTree);
-  const setPendingChatFocus = useStore((state) => state.setPendingChatFocus);
-  const pushNavigationEntry = useStore((state) => state.pushNavigationEntry);
+  const navigateToNode = useStore((state) => state.navigateToNode);
 
   const lockPageDragBounce = useCallback(() => {
     pageDragLockCountRef.current += 1;
@@ -518,6 +526,7 @@ const BranchEditorCanvas = ({
 
   // Keyboard shortcuts for copy/cut/paste on selected nodes
   useEffect(() => {
+    if (readOnly) return;
     const handler = (e: KeyboardEvent) => {
       if (!containerRef.current?.contains(document.activeElement) &&
           document.activeElement !== containerRef.current) return;
@@ -536,7 +545,7 @@ const BranchEditorCanvas = ({
         const ci = (node.data as MessageNodeData).chatIndex >= 0
           ? (node.data as MessageNodeData).chatIndex
           : primaryChatIndex;
-        useStore.getState().copyBranchSequence(ci, firstId, lastId);
+        useStore.getState().copyBranchSequence({ chatId: useStore.getState().chats?.[ci]?.id ?? '', fromNodeId: firstId, toNodeId: lastId });
       }
 
       if (e.key === 'x' && selectedNodeIds.length > 0) {
@@ -548,8 +557,7 @@ const BranchEditorCanvas = ({
         const ci = (node.data as MessageNodeData).chatIndex >= 0
           ? (node.data as MessageNodeData).chatIndex
           : primaryChatIndex;
-        useStore.getState().copyBranchSequence(ci, firstId, lastId);
-        deleteBranch(ci, firstId);
+        useStore.getState().cutBranchSequence({ chatId: useStore.getState().chats?.[ci]?.id ?? '', fromNodeId: firstId, toNodeId: lastId });
       }
 
       if (e.key === 'v') {
@@ -566,7 +574,7 @@ const BranchEditorCanvas = ({
         const ci = (node.data as MessageNodeData).chatIndex >= 0
           ? (node.data as MessageNodeData).chatIndex
           : primaryChatIndex;
-        useStore.getState().pasteBranchSequence(ci, targetId);
+        useStore.getState().pasteBranchSequence({ chatId: useStore.getState().chats?.[ci]?.id ?? '', afterNodeId: targetId });
       }
     };
     document.addEventListener('keydown', handler);
@@ -627,28 +635,13 @@ const BranchEditorCanvas = ({
 
   const navigateToChat = useCallback(
     (chatIndex: number, nodeId: string) => {
-      ensureBranchTree(chatIndex);
       const chat = chats?.[chatIndex];
-      if (chat?.branchTree) {
-        const newPath = buildPathToLeaf(chat.branchTree, nodeId);
-        const currentView = useStore.getState().chatActiveView;
-        pushNavigationEntry({
-          chatId: chat.id,
-          activePath: newPath,
-          focusedNodeId: nodeId,
-          viewContext: isSplitView(currentView) ? currentView : 'chat',
-          source: 'branch-editor',
-        });
-        switchActivePath(chatIndex, newPath);
-      }
-      setCurrentChatIndex(chatIndex);
+      if (!chat) return;
+      ensureBranchTree(chatIndex);
       const currentView = useStore.getState().chatActiveView;
-      if (!isSplitView(currentView)) {
-        setChatActiveView('chat');
-      }
-      setPendingChatFocus({ chatIndex, nodeId });
+      navigateToNode({ chatId: chat.id, nodeId, view: isSplitView(currentView) ? currentView : 'chat', source: 'branch-editor', history: 'push', focus: 'bubble' });
     },
-    [chats, ensureBranchTree, switchActivePath, setCurrentChatIndex, setChatActiveView, setPendingChatFocus, pushNavigationEntry]
+    [chats, ensureBranchTree, navigateToNode]
   );
 
   const onNodeClick = useCallback(
@@ -656,7 +649,6 @@ const BranchEditorCanvas = ({
       const nodeChatIndex = node.data.chatIndex >= 0 ? node.data.chatIndex : primaryChatIndex;
       const chat = chats?.[nodeChatIndex];
       if (!chat?.branchTree) return;
-      const newPath = buildPathToLeaf(chat.branchTree, node.id);
 
       // Header click → navigate to chat, content click → open modal
       const target = event.target as HTMLElement;
@@ -665,19 +657,11 @@ const BranchEditorCanvas = ({
       if (isHeaderClick) {
         navigateToChat(nodeChatIndex, node.id);
       } else {
-        const currentView = useStore.getState().chatActiveView;
-        pushNavigationEntry({
-          chatId: chat.id,
-          activePath: newPath,
-          focusedNodeId: node.id,
-          viewContext: currentView,
-          source: 'branch-editor',
-        });
-        switchActivePath(nodeChatIndex, newPath);
+        if (navigateToNode({ chatId: chat.id, nodeId: node.id, source: 'branch-editor', history: 'push', selectChat: false, focus: 'none' }) !== 'reached') return;
         setSelectedNodeForModal({ nodeId: node.id, chatIndex: nodeChatIndex });
       }
     },
-    [chats, primaryChatIndex, switchActivePath, navigateToChat, pushNavigationEntry]
+    [chats, primaryChatIndex, navigateToNode, navigateToChat]
   );
 
   const onNodeDoubleClick = useCallback(
@@ -686,7 +670,7 @@ const BranchEditorCanvas = ({
       const chat = chats?.[nodeChatIndex];
       navigateToChat(nodeChatIndex, node.id);
     },
-    [chats, primaryChatIndex, navigateToChat, pushNavigationEntry]
+    [chats, primaryChatIndex, navigateToChat]
   );
 
   const onNodeContextMenu = useCallback(
@@ -842,8 +826,9 @@ const BranchEditorCanvas = ({
     if (!sourceChat?.branchTree) return;
     const path = buildPathToLeaf(sourceChat.branchTree, sourceNodeId);
     const leafId = path[path.length - 1];
-    copyBranchSequence(sourceChatIndex, sourceNodeId, leafId);
-    pasteBranchSequence(targetChatIndex, targetNodeId);
+    const copied = copyBranchSequence({ chatId: sourceChat.id, fromNodeId: sourceNodeId, toNodeId: leafId });
+    if (copied.status !== 'copied') return;
+    pasteBranchSequence({ chatId: chats?.[targetChatIndex]?.id ?? '', afterNodeId: targetNodeId });
     setDropPopover(null);
   }, [dropPopover, chats, copyBranchSequence, pasteBranchSequence]);
 
@@ -854,7 +839,7 @@ const BranchEditorCanvas = ({
     if (!sourceChat?.branchTree) return;
     const path = buildPathToLeaf(sourceChat.branchTree, sourceNodeId);
     const leafId = path[path.length - 1];
-    moveBranchSequence(sourceChatIndex, sourceNodeId, leafId, targetChatIndex, targetNodeId);
+    moveBranchSequence({ sourceChatId: sourceChat.id, fromNodeId: sourceNodeId, toNodeId: leafId, targetChatId: chats?.[targetChatIndex]?.id ?? '', afterNodeId: targetNodeId });
     setDropPopover(null);
   }, [dropPopover, chats, moveBranchSequence]);
 
@@ -869,8 +854,10 @@ const BranchEditorCanvas = ({
         onNodeClick={onNodeClick}
         onNodeDoubleClick={onNodeDoubleClick}
         onNodeContextMenu={onNodeContextMenu}
-        onNodeDragStart={onNodeDragStart}
-        onNodeDragStop={onNodeDragStop}
+        nodesDraggable={!readOnly}
+        deleteKeyCode={readOnly ? null : "Backspace"}
+        onNodeDragStart={readOnly ? undefined : onNodeDragStart}
+        onNodeDragStop={readOnly ? undefined : onNodeDragStop}
         onMoveStart={lockPageDragBounce}
         onMoveEnd={unlockPageDragBounce}
         onSelectionChange={onSelectionChange}
@@ -889,9 +876,9 @@ const BranchEditorCanvas = ({
       >
         <Background className='!bg-white dark:!bg-gray-800' />
         <NavBackForwardControls />
-        <UndoRedoControls />
+        {!readOnly && <UndoRedoControls />}
         {isSearchOpen && <BranchSearchBar entries={entries} />}
-        <ConversationEditMenu entries={entries} />
+        {!readOnly && <ConversationEditMenu entries={entries} />}
         <InteractionModeToggle mode={interactionMode} setMode={setInteractionMode} />
         <Controls className='!bg-gray-200 dark:!bg-gray-700 !rounded !shadow-md [&>button]:!bg-transparent [&>button]:!fill-gray-700 [&>button]:dark:!fill-gray-200 [&>button]:!border-gray-300 [&>button]:dark:!border-gray-600' />
         <MiniMap

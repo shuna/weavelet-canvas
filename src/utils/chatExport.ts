@@ -82,6 +82,10 @@ export const prepareChatForExport = (
   const collapsedNodes = filterNodeRecord(chat.collapsedNodes);
   const omittedNodes = filterNodeRecord(chat.omittedNodes);
   const protectedNodes = filterNodeRecord(chat.protectedNodes);
+  const summaryTargets = filterNodeRecord(chat.summaryTargets);
+  const summaries = chat.summaries?.filter(summary => summary.sources.every(source =>
+    includedNodeSet.has(source.nodeId) && (source.parentId === null || includedNodeSet.has(source.parentId))
+  ));
 
   const exportedChat = clone(chat);
   return {
@@ -100,6 +104,8 @@ export const prepareChatForExport = (
       collapsedNodes,
       omittedNodes,
       protectedNodes,
+      summaryTargets,
+      summaries,
     },
     contentStore,
   };

@@ -111,10 +111,14 @@ vi.mock('@utils/deviceId', () => ({
 }));
 
 vi.mock('@store/persistence', () => ({
-  hydrateFromPersistedStoreState: vi.fn((_base: unknown, persisted: unknown) => persisted),
   createPersistedChatDataState: vi.fn(() => ({})),
   migratePersistedState: vi.fn((state: unknown) => state),
   needsDataMigration: vi.fn(() => false),
+  prepareHydratedState: vi.fn(async (_base: unknown, persisted: unknown) => ({
+    state: persisted,
+    repairedChatTitles: [],
+  })),
+  reportHydratedStateCommitted: vi.fn(),
 }));
 
 vi.mock('@store/storage/IndexedDbStorage', () => ({

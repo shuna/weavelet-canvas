@@ -16,7 +16,7 @@ const fixture = JSON.parse(readFileSync(new URL('../../tests/fixtures/web-native
 describe('OpenAI-compatible native remote request contract', () => {
   for (const test of fixture.cases) it(test.name, async () => {
     const chat = test.source.chats[0];
-    runtime.state = { chats: [chat], omittedNodeMaps: {}, favoriteModels: [], providerModelCache: {}, providerCustomModels: {} };
+    runtime.state = { chats: [chat], omittedNodeMaps: {}, generatingSessions: {}, favoriteModels: [], providerModelCache: {}, providerCustomModels: {} };
     const config = { ...chat.config, model: test.settings.model, stream: test.settings.stream };
     const context = getSubmitContextMessages(chat.messages, 'append', chat.messages.length, config.model, 0, config.systemPrompt);
     const result = test.settings.stream
@@ -32,4 +32,17 @@ describe('OpenAI-compatible native remote request contract', () => {
     expect(result.body.messages.some((message: any) => 'xMessage' in message)).toBe(false);
     expect(test.source.apiKey).toBe('FAKE-imported-not-request-key');
   });
+  it('passes the saved summary and original path to the shared request builder', () => {
+    const chat = { ...structuredClone(fixture.cases[0].source.chats[0]), branchTree: undefined,
+      messages: [{ role: 'user', content: [{ type: 'text', text: 'Original' }] }],
+      omittedNodes: {}, summaries: [{ id: 'summary', mode: 'single', useForSubmit: true,
+        text: 'Saved context', sources: [{ nodeId: '0', parentId: null, role: 'user', textParts: ['Original'] }] }] };
+    runtime.state = { chats: [chat], omittedNodeMaps: {}, generatingSessions: {} };
+    const body = JSON.parse(generationRequest(JSON.stringify({ chat, messages: chat.messages,
+      config: chat.config, capabilities: { supportsReasoning: false, requiresReasoning: false } })));
+    const web = getSubmitContextMessages(chat.messages, 'append', 1, chat.config.model, 0, chat.config.systemPrompt);
+    expect(body.messages).toEqual(web.map(({ role, content }) => ({ role, content })));
+    expect(body.messages.at(-1).content[0].text).toBe('Past conversation summary:\nSaved context');
+  });
+
 });

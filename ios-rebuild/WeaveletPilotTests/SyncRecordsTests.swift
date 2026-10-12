@@ -7,6 +7,14 @@ final class SyncRecordsTests: XCTestCase {
     private func fixture() throws -> OrderedJSON {
         try OrderedJSON.decode(Data(contentsOf: root.appendingPathComponent("tests/fixtures/web-native/record-wire.json")))
     }
+    // Policy is frozen separately and checked against actual Web constants by recordWire tests.
+    private func syncProjection(_ snapshot: OrderedJSON) throws -> OrderedJSON {
+        let policy = try OrderedJSON.decode(Data(contentsOf: root.appendingPathComponent("tests/fixtures/web-native/sync-local-settings-policy.json")))
+        XCTAssertEqual(policy["fixtureVersion"], .number("1"))
+        let keys = try policy.required("syncLocalSettings").array("policy").map { Data(try $0.string("key").utf8) }
+        let state = try snapshot.required("state").object("state").filter { !keys.contains(Data($0.key.utf8)) }
+        return snapshot.replacing("state", with: .object(state))
+    }
     private func baseCase() throws -> OrderedJSON { try fixture().required("cases").array("cases")[0] }
     private func path(_ parts: [String]) throws -> String { String(decoding: try OrderedJSON.array(parts.map(OrderedJSON.string)).encoded(), as: UTF8.self) }
     private func compareRecords(_ actual: OrderedJSON, _ expected: OrderedJSON, name: String) throws {
@@ -31,7 +39,7 @@ final class SyncRecordsTests: XCTestCase {
             let records = try test.required("records")
             XCTAssertEqual(try input.encoded(), before)
             let restored = try SyncRecords.fromRecords(records)
-            XCTAssertEqual(restored, try test.required("restored"), name)
+            XCTAssertEqual(restored, try syncProjection(test.required("restored")), name)
             let reversed = OrderedJSON.object(try records.object("records").reversed())
             let reversedSnapshot = try SyncRecords.fromRecords(reversed)
             let expectedChats = try restored.required("state").required("chats").array("chats")
@@ -183,7 +191,7 @@ final class SyncRecordsTests: XCTestCase {
         XCTAssertEqual(cases.count, 5)
         for test in cases {
             let name = try test.required("name").string("name")
-            XCTAssertEqual(try SyncRecords.fromRecords(test.required("records")), try test.required("restored"), name)
+            XCTAssertEqual(try SyncRecords.fromRecords(test.required("records")), try syncProjection(test.required("restored")), name)
         }
     }
 

@@ -17,28 +17,30 @@ const EMPTY_UNSUB = () => {};
  * re-renders on each chunk — the Zustand store is not involved.
  */
 export function useStreamingText(
+  chatId: string,
   nodeId: string | undefined,
   visible = true
 ): string | undefined {
-  const snapshot = useRef<{ nodeId: string | undefined; value: string | undefined }>({ nodeId, value: undefined });
-  if (snapshot.current.nodeId !== nodeId) snapshot.current = { nodeId, value: undefined };
+  const snapshot = useRef<{ key: string; value: string | undefined }>({ key: JSON.stringify([chatId, nodeId]), value: undefined });
+  const key = JSON.stringify([chatId, nodeId]);
+  if (snapshot.current.key !== key) snapshot.current = { key, value: undefined };
   const subscribe = useCallback(
     (callback: () => void) => {
       if (!nodeId || !visible) return EMPTY_UNSUB;
-      return subscribeToStreaming(nodeId, callback);
+      return subscribeToStreaming(chatId, nodeId, callback);
     },
-    [nodeId, visible]
+    [chatId, nodeId, visible]
   );
 
   const getSnapshot = useCallback(() => {
     if (!nodeId) return undefined;
     if (!visible) return snapshot.current.value;
-    const content = peekBufferedContent(nodeId);
+    const content = peekBufferedContent(chatId, nodeId);
     if (!content || content.length === 0) return undefined;
     const first = content[0];
     snapshot.current.value = isTextContent(first) ? first.text : undefined;
     return snapshot.current.value;
-  }, [nodeId, visible]);
+  }, [chatId, nodeId, visible]);
 
   return useSyncExternalStore(subscribe, getSnapshot);
 }

@@ -1,7 +1,8 @@
 import { showToast } from '@utils/showToast';
 
-import type { ChatInterface, MessageInterface, TextContentInterface } from '@type/chat';
+import type { ChatInterface, MessageInterface, TextContentInterface, ReasoningContentInterface } from '@type/chat';
 import { isTextContent } from '@type/chat';
+import { resolveContent, type ContentStoreData } from '@utils/contentStore';
 import type { StreamRecord } from '@utils/streamDb';
 
 export type RecoveryStatus = Exclude<StreamRecord['status'], 'streaming'> | 'streaming-with-proxy';
@@ -15,21 +16,28 @@ export const getCurrentMessageText = (message: MessageInterface | undefined): st
 
 export const shouldApplyRecoveredText = (
   currentText: string,
-  bufferedText: string
-): boolean => bufferedText.length > currentText.length;
+  bufferedText: string,
+  currentReasoning = '',
+  bufferedReasoning = ''
+): boolean => bufferedText.length > currentText.length || bufferedReasoning.length > currentReasoning.length;
 
 export const buildRecoveredMessage = (
   message: MessageInterface,
-  bufferedText: string
+  bufferedText: string,
+  bufferedReasoning = ''
 ): MessageInterface => {
   const firstContent = message.content[0];
   const recoveredContent: TextContentInterface = isTextContent(firstContent)
     ? { ...firstContent, text: bufferedText }
     : { type: 'text', text: bufferedText };
 
+  const existingReasoning = message.content.find((content): content is ReasoningContentInterface => content.type === 'reasoning');
+  const reasoning = bufferedReasoning
+    ? { type: 'reasoning' as const, text: bufferedReasoning }
+    : existingReasoning;
   return {
     ...message,
-    content: [recoveredContent, ...message.content.slice(1)],
+    content: [recoveredContent, ...(reasoning ? [reasoning] : []), ...message.content.slice(1).filter((content) => content.type !== 'reasoning')],
   };
 };
 
@@ -96,4 +104,18 @@ const RECOVERY_TOASTS: Record<
 export const showRecoveryToast = (status: RecoveryStatus) => {
   const entry = RECOVERY_TOASTS[status];
   showToast(entry.message, entry.status, entry.duration);
+};
+
+/** Missing IDs/checkpoints remain recovery data, never an index-based write target. */
+export const resolveRecoveryTarget = (chats: ChatInterface[] | undefined, contentStore: ContentStoreData, record: StreamRecord, expectedHash?: string) => {
+  if (!record.chatId || !record.nodeId || !record.checkpointRole) return null;
+  const chatIndex = chats?.findIndex(chat => chat.id === record.chatId) ?? -1;
+  const chat = chats?.[chatIndex];
+  const node = chat?.branchTree?.nodes[record.nodeId];
+  if (!chat || !node || node.role !== record.checkpointRole) return null;
+  const matchesHash = expectedHash !== undefined
+    ? node.contentHash === expectedHash
+    : node.contentHash === record.checkpointHash || node.contentHash === record.appliedHash;
+  if (!matchesHash) return null;
+  return { chat, chatIndex, node, messageIndex: chat.branchTree!.activePath.indexOf(record.nodeId), message: { role: node.role, content: resolveContent(contentStore, node.contentHash) } };
 };

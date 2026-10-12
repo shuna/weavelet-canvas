@@ -78,6 +78,15 @@ export class ThinkTagParser {
     return { content: remaining, reasoning: '' };
   }
 
+  checkpoint(): { state: 'outside' | 'inside'; pending: string } {
+    return { state: this.state, pending: this.pending };
+  }
+
+  restore(checkpoint: { state: 'outside' | 'inside'; pending: string }): void {
+    this.state = checkpoint.state;
+    this.pending = checkpoint.pending;
+  }
+
   /** Check if `buffer` ends with a prefix of `tag` (for partial tag detection). */
   private findPartialTag(buffer: string, tag: string): number {
     const maxLen = Math.min(tag.length - 1, buffer.length);

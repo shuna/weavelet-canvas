@@ -139,11 +139,11 @@ describe('unknown persisted roots through actual hydration, operations and I/O',
     vi.stubGlobal('Worker', class {
       onmessage: ((event: { data: unknown }) => void) | null = null;
       terminate() {}
-      postMessage(message: { value: Parameters<typeof prepareHydratedData>[0] }) {
+      postMessage(message: { id: number; value: Parameters<typeof prepareHydratedData>[0] }) {
         const copy = structuredClone(message);
         posted.push(copy);
         const prepared = prepareHydratedData(copy.value);
-        this.onmessage?.({ data: { value: structuredClone(prepared), metrics: {} } });
+        this.onmessage?.({ data: { id: copy.id, value: structuredClone(prepared), metrics: {} } });
       }
     });
     const incoming = { theme: 'light' as const, xWorker: { future: ['keep'] }, setChats: 'OPAQUE_WORKER_METHOD' };
@@ -161,6 +161,24 @@ describe('unknown persisted roots through actual hydration, operations and I/O',
     expect(incoming).toEqual(before);
   });
 
+  it('keeps actions callable and opaque roots separate after replacing from a valid file', async () => {
+    const store = createTestStore(opaque);
+    const setChats = store.getState().setChats;
+    vi.stubGlobal('FileReader', class {
+      onload: ((event: { target: { result: string } }) => void) | null = null;
+      readAsText(file: File) { file.text().then(result => this.onload?.({ target: { result } })); }
+    });
+    const result = await importChatFromFile(new File([JSON.stringify(corpus.exportV3)], 'valid.json'), key => key, 'replace', false);
+    expect(result.success, JSON.stringify(result)).toBe(true);
+    expect(store.getState().setChats).toBe(setChats);
+    expect(store.getState()).not.toHaveProperty('xFuture');
+    const saved = createPartializedState(store.getState());
+    expect(saved).toHaveProperty('setChats', opaque.setChats);
+    expect(saved).toHaveProperty('xFuture', opaque.xFuture);
+    store.getState().setChats(store.getState().chats!.slice(), { preserveBranchHistory: true });
+    expect(typeof store.getState().setChats).toBe('function');
+  });
+
   it('keeps opaque roots on failed save and import rollback, and preserves the migration contract', async () => {
     const store = createTestStore(opaque);
     const disk = stored;
@@ -175,7 +193,7 @@ describe('unknown persisted roots through actual hydration, operations and I/O',
       readAsText(file: File) { file.text().then(result => this.onload?.({ target: { result } })); }
     });
     const result = await importChatFromFile(new File(['{"invalid":"fake"}'], 'fake-invalid.json'), key => key);
-    expect(result.success).toBe(false);
+    expect(result.success, JSON.stringify(result)).toBe(false);
     expect(typeof store.getState().setChats).toBe('function');
     expect(createPartializedState(store.getState())).toHaveProperty('setChats', opaque.setChats);
     expect(createPartializedState(store.getState())).toHaveProperty('xFuture', opaque.xFuture);

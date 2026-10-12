@@ -1,3 +1,4 @@
+import { validateFolderHierarchy } from '@utils/folderHierarchy';
 import { rehydrateData } from './rehydrateData';
 import { prepareHydratedDataAsync } from './storage/google/processing';
 import { ContentStoreData } from '@utils/contentStore';
@@ -23,6 +24,7 @@ export type PersistedStoreState = Omit<
   Pick<
   StoreState,
   | 'chats'
+  | 'lastContentEditedAt'
   | 'apiKey'
   | 'apiVersion'
   | 'apiEndpoint'
@@ -30,6 +32,7 @@ export type PersistedStoreState = Omit<
   | 'autoTitle'
   | 'titleModel'
   | 'titleProviderId'
+  | 'bubbleSummaryConfig'
   | 'advancedMode'
   | 'prompts'
   | 'defaultChatConfig'
@@ -47,6 +50,7 @@ export type PersistedStoreState = Omit<
   | 'menuWidth'
   | 'defaultImageDetail'
   | 'animateBubbleNavigation'
+  | 'branchSwipeDirection'
   | 'providers'
   | 'favoriteModels'
   | 'branchClipboard'
@@ -85,7 +89,7 @@ export type PersistedStoreState = Omit<
 
 export type PersistedChatData = Pick<
   PersistedStoreState,
-  'chats' | 'contentStore' | 'branchClipboard'
+  'chats' | 'contentStore' | 'branchClipboard' | 'lastContentEditedAt'
 >;
 
 type LocalStoragePersistedState = Omit<
@@ -94,11 +98,12 @@ type LocalStoragePersistedState = Omit<
 >;
 
 const FULL_PERSIST_KEYS: (keyof PersistedStoreState)[] = [
+  'lastContentEditedAt',
   'chats', 'apiKey', 'apiVersion', 'apiEndpoint', 'theme', 'autoTitle',
-  'titleModel', 'titleProviderId', 'advancedMode', 'prompts', 'defaultChatConfig', 'defaultSystemMessage',
+  'titleModel', 'titleProviderId', 'bubbleSummaryConfig', 'advancedMode', 'prompts', 'defaultChatConfig', 'defaultSystemMessage',
   'hideMenuOptions', 'hideSideMenu', 'folders', 'enterToSubmit',
   'inlineLatex', 'markdownMode', 'streamingMarkdownPolicy', 'totalTokenUsed', 'countTotalTokens',
-  'displayChatSize', 'menuWidth', 'defaultImageDetail', 'animateBubbleNavigation',
+  'displayChatSize', 'menuWidth', 'defaultImageDetail', 'animateBubbleNavigation', 'branchSwipeDirection',
   'providers', 'favoriteModels',
   'branchClipboard', 'contentStore', 'providerModelCache',
   'providerCustomModels', '_legacyCustomModels',
@@ -123,35 +128,9 @@ const FULL_PERSIST_KEYS: (keyof PersistedStoreState)[] = [
   'savedModelMeta',
 ];
 
-const LOCAL_STORAGE_PERSIST_KEYS: (keyof LocalStoragePersistedState)[] = [
-  'apiKey', 'apiVersion', 'apiEndpoint', 'theme', 'autoTitle',
-  'titleModel', 'titleProviderId', 'advancedMode', 'prompts', 'defaultChatConfig', 'defaultSystemMessage',
-  'hideMenuOptions', 'hideSideMenu', 'folders', 'enterToSubmit',
-  'inlineLatex', 'markdownMode', 'streamingMarkdownPolicy', 'totalTokenUsed', 'countTotalTokens',
-  'displayChatSize', 'menuWidth', 'defaultImageDetail', 'animateBubbleNavigation',
-  'providers', 'favoriteModels',
-  'providerModelCache',
-  'providerCustomModels', '_legacyCustomModels',
-  'onboardingCompleted',
-  'splitPanelRatio', 'splitPanelSwapped', 'chatActiveView',
-  'proxyEnabled', 'proxyEndpoint', 'proxyAuthToken',
-  'showDebugPanel',
-  'searchHistory',
-  'sidebarSearchHistory',
-  'chatFindHistory',
-  'verifiedStats',
-  'pendingVerifications',
-  'evaluationSettings',
-  'safetyThresholds',
-  'qualityThresholds',
-  'evaluationResults',
-  'localModelEnabled',
-  'localModels',
-  'favoriteLocalModelIds',
-  'localModelExecutionMode',
-  'activeLocalModels',
-  'savedModelMeta',
-];
+const LOCAL_STORAGE_PERSIST_KEYS = FULL_PERSIST_KEYS.filter(
+  (key): key is keyof LocalStoragePersistedState => key !== 'chats' && key !== 'contentStore' && key !== 'branchClipboard'
+);
 
 const persistedKeys = new Set<string>(FULL_PERSIST_KEYS);
 // Only persisted input can populate this sidecar; runtime fields stay out of snapshots.
@@ -245,7 +224,7 @@ function sanitizeClipboard(
   const updatedNodes = { ...clipboard.nodes };
   for (const node of streamingNodes) {
     const nodeId = node.id;
-    const content = getBufferedContent(nodeId) ?? [];
+    const content = getBufferedContent(clipboard.sourceChat, nodeId) ?? [];
     updatedNodes[nodeId] = {
       ...updatedNodes[nodeId],
       contentHash: addContent(contentStore, content),
@@ -255,130 +234,11 @@ function sanitizeClipboard(
 }
 
 function buildPartializedState(state: StoreState): PersistedStoreState {
-  const snapshot = finalizeStreamingSnapshotState(state.chats, state.contentStore);
-  return {
-    ...getUnknownRoots(state),
-    chats: buildPersistedChats({
-      ...state,
-      chats: snapshot.chats,
-    } as StoreState),
-    apiKey: state.apiKey,
-    apiVersion: state.apiVersion,
-    apiEndpoint: state.apiEndpoint,
-    theme: state.theme,
-    autoTitle: state.autoTitle,
-    titleModel: state.titleModel,
-    titleProviderId: state.titleProviderId,
-    advancedMode: state.advancedMode,
-    prompts: state.prompts,
-    defaultChatConfig: state.defaultChatConfig,
-    defaultSystemMessage: state.defaultSystemMessage,
-    hideMenuOptions: state.hideMenuOptions,
-    hideSideMenu: state.hideSideMenu,
-    folders: state.folders,
-    enterToSubmit: state.enterToSubmit,
-    inlineLatex: state.inlineLatex,
-    markdownMode: state.markdownMode,
-    streamingMarkdownPolicy: state.streamingMarkdownPolicy,
-    totalTokenUsed: state.totalTokenUsed,
-    countTotalTokens: state.countTotalTokens,
-    displayChatSize: state.displayChatSize,
-    menuWidth: state.menuWidth,
-    defaultImageDetail: state.defaultImageDetail,
-    animateBubbleNavigation: state.animateBubbleNavigation,
-
-    providers: state.providers,
-    favoriteModels: state.favoriteModels,
-    branchClipboard: sanitizeClipboard(state.branchClipboard, snapshot.contentStore),
-    contentStore: snapshot.contentStore,
-    providerModelCache: state.providerModelCache,
-    providerCustomModels: state.providerCustomModels,
-    _legacyCustomModels: state._legacyCustomModels,
-    onboardingCompleted: state.onboardingCompleted,
-    splitPanelRatio: state.splitPanelRatio,
-    splitPanelSwapped: state.splitPanelSwapped,
-    chatActiveView: state.chatActiveView,
-    proxyEnabled: state.proxyEnabled,
-    proxyEndpoint: state.proxyEndpoint,
-    proxyAuthToken: state.proxyAuthToken,
-    showDebugPanel: state.showDebugPanel,
-    searchHistory: state.searchHistory,
-    sidebarSearchHistory: state.sidebarSearchHistory,
-    chatFindHistory: state.chatFindHistory,
-    verifiedStats: state.verifiedStats,
-    pendingVerifications: state.pendingVerifications,
-    evaluationSettings: state.evaluationSettings,
-    safetyThresholds: state.safetyThresholds,
-    qualityThresholds: state.qualityThresholds,
-    evaluationResults: state.evaluationResults,
-    localModelEnabled: state.localModelEnabled,
-    localModels: state.localModels,
-    favoriteLocalModelIds: state.favoriteLocalModelIds,
-    localModelExecutionMode: state.localModelExecutionMode,
-    activeLocalModels: state.activeLocalModels,
-    savedModelMeta: state.savedModelMeta,
-  };
+  return { ...buildLocalStoragePartializedState(state), ...createPersistedChatDataState(state) };
 }
 
-function buildLocalStoragePartializedState(
-  state: StoreState
-): LocalStoragePersistedState {
-  return {
-    ...getUnknownRoots(state),
-    apiKey: state.apiKey,
-    apiVersion: state.apiVersion,
-    apiEndpoint: state.apiEndpoint,
-    theme: state.theme,
-    autoTitle: state.autoTitle,
-    titleModel: state.titleModel,
-    titleProviderId: state.titleProviderId,
-    advancedMode: state.advancedMode,
-    prompts: state.prompts,
-    defaultChatConfig: state.defaultChatConfig,
-    defaultSystemMessage: state.defaultSystemMessage,
-    hideMenuOptions: state.hideMenuOptions,
-    hideSideMenu: state.hideSideMenu,
-    folders: state.folders,
-    enterToSubmit: state.enterToSubmit,
-    inlineLatex: state.inlineLatex,
-    markdownMode: state.markdownMode,
-    streamingMarkdownPolicy: state.streamingMarkdownPolicy,
-    totalTokenUsed: state.totalTokenUsed,
-    countTotalTokens: state.countTotalTokens,
-    displayChatSize: state.displayChatSize,
-    menuWidth: state.menuWidth,
-    defaultImageDetail: state.defaultImageDetail,
-    animateBubbleNavigation: state.animateBubbleNavigation,
-
-    providers: state.providers,
-    favoriteModels: state.favoriteModels,
-    providerModelCache: state.providerModelCache,
-    providerCustomModels: state.providerCustomModels,
-    _legacyCustomModels: state._legacyCustomModels,
-    onboardingCompleted: state.onboardingCompleted,
-    splitPanelRatio: state.splitPanelRatio,
-    splitPanelSwapped: state.splitPanelSwapped,
-    chatActiveView: state.chatActiveView,
-    proxyEnabled: state.proxyEnabled,
-    proxyEndpoint: state.proxyEndpoint,
-    proxyAuthToken: state.proxyAuthToken,
-    showDebugPanel: state.showDebugPanel,
-    searchHistory: state.searchHistory,
-    sidebarSearchHistory: state.sidebarSearchHistory,
-    chatFindHistory: state.chatFindHistory,
-    verifiedStats: state.verifiedStats,
-    pendingVerifications: state.pendingVerifications,
-    evaluationSettings: state.evaluationSettings,
-    safetyThresholds: state.safetyThresholds,
-    qualityThresholds: state.qualityThresholds,
-    evaluationResults: state.evaluationResults,
-    localModelEnabled: state.localModelEnabled,
-    localModels: state.localModels,
-    favoriteLocalModelIds: state.favoriteLocalModelIds,
-    localModelExecutionMode: state.localModelExecutionMode,
-    activeLocalModels: state.activeLocalModels,
-    savedModelMeta: state.savedModelMeta,
-  };
+function buildLocalStoragePartializedState(state: StoreState): LocalStoragePersistedState {
+  return { ...getUnknownRoots(state), ...Object.fromEntries(LOCAL_STORAGE_PERSIST_KEYS.map(key => [key, state[key]])) } as LocalStoragePersistedState;
 }
 
 export const createPartializedState = (state: StoreState): PersistedStoreState => {
@@ -464,6 +324,7 @@ export const rehydrateStoreState = (state: StoreState) => {
 };
 
 export function prepareHydratedState(base: StoreState, persisted: Partial<PersistedStoreState>) {
+  if (Object.hasOwn(persisted, 'folders') && !validateFolderHierarchy(persisted.folders)) throw new Error('Invalid folder hierarchy.');
   const merged = mergePersistedStoreState(base, persisted);
   const known = knownPersistedFields(persisted);
   const { chats, contentStore, branchClipboard, providers, evaluationSettings, verifiedStats, pendingVerifications } = base;
@@ -474,9 +335,12 @@ export function prepareHydratedState(base: StoreState, persisted: Partial<Persis
   }).then(prepared => ({ ...prepared, state: { ...prepared.state, [unknownRoots]: getUnknownRoots(merged) } }));
 }
 export function finishHydratedState(prepared: Awaited<ReturnType<typeof prepareHydratedState>>) {
+  return prepared.state;
+}
+
+export function reportHydratedStateCommitted(prepared: Awaited<ReturnType<typeof prepareHydratedState>>) {
   reportRepairedChats(prepared.repairedChatTitles);
   setLocalStorageItem('currentChatIndex', String(prepared.state.currentChatIndex));
-  return prepared.state;
 }
 
 export const createPersistedChatDataState = (
@@ -484,6 +348,7 @@ export const createPersistedChatDataState = (
 ): PersistedChatData => {
   const snapshot = finalizeStreamingSnapshotState(state.chats, state.contentStore);
   return {
+    lastContentEditedAt: state.lastContentEditedAt,
     chats: buildPersistedChats({
       ...state,
       chats: snapshot.chats,
@@ -497,6 +362,7 @@ export const applyPersistedChatDataState = (
   state: StoreState,
   persistedChatData: PersistedChatData
 ) => {
+  state.lastContentEditedAt = persistedChatData.lastContentEditedAt;
   state.chats = persistedChatData.chats as ChatInterface[] | undefined;
   state.contentStore = persistedChatData.contentStore ?? {};
   state.branchClipboard = persistedChatData.branchClipboard ?? null;
@@ -519,6 +385,7 @@ export const hydrateFromPersistedStoreState = (
   const nextState = mergePersistedStoreState(baseState, persistedState);
 
   applyPersistedChatDataState(nextState, {
+    lastContentEditedAt: nextState.lastContentEditedAt,
     chats: hasChats ? persistedState.chats : baseState.chats,
     contentStore: hasContentStore
       ? persistedState.contentStore ?? {}

@@ -16,14 +16,10 @@ const context = vi.hoisted(() => {
   return { state };
 });
 
-vi.mock('@store/store', () => ({
+vi.mock('@store/store', () => {
+  return ({
   default: {
-    getState: () => ({
-      ...context.state,
-      setChats: (chats: ChatInterface[]) => { context.state.chats = chats; },
-      setFolders: (folders: FolderCollection) => { context.state.folders = folders; },
-      setCurrentChatIndex: (index: number) => { context.state.currentChatIndex = index; },
-    }),
+    getState: () => context.state,
     setState: (patch: Partial<typeof context.state>) => {
       if (patch.chats !== undefined) context.state.chats = patch.chats;
       if (patch.folders !== undefined) context.state.folders = patch.folders;
@@ -36,7 +32,7 @@ vi.mock('@store/store', () => ({
     folders: state.folders,
     contentStore: state.contentStore,
   }),
-}));
+}); });
 
 const { importChatFromFile } = await import('@components/ImportExportChat/importService');
 
@@ -88,7 +84,14 @@ describe('expanded V3 exchange read contract and Web observations', () => {
     const text = JSON.stringify(payload);
     const file = { name: 'exchange.json', text: async () => text } as File;
     const result = await importChatFromFile(file, (key) => key);
-    expect(result.success).toBe(observed.importSuccess);
+    if (spec === 'outside-expanded-v3' && observed.resolveThrows) {
+      // main propagates normalization failures before publish; the fixture records the former swallowed error.
+      expect(result).toEqual({ success: false, message: 'Invalid patch string: not a patch' });
+      expect(context.state).toEqual(before);
+      expect(() => resolveContent(payload.contentStore, 'body')).toThrow('Invalid patch string: not a patch');
+      return;
+    }
+    expect(result.success, JSON.stringify(result)).toBe(observed.importSuccess);
     expect(context.state.contentStore.existing).toEqual(before.contentStore.existing);
     if (!result.success) {
       expect(context.state).toEqual(before);
@@ -122,8 +125,15 @@ describe('expanded V3 exchange read contract and Web observations', () => {
     if (spec === 'accept') {
       const imported = context.state.chats[0];
       const source = payload.chats![0];
-      expect({ ...imported, id: source.id }).toEqual(source);
-      expect(context.state.folders).toEqual(payload.folders);
+      // main imports under a new root and remaps identities; all original folder fields remain.
+      expect({ ...imported, id: source.id, folder: source.folder }).toEqual(source);
+      const folder = context.state.folders[imported.folder!];
+      expect({ ...folder, id: source.folder, parentId: undefined })
+        .toEqual({ ...payload.folders[source.folder!], parentId: undefined });
+      expect(context.state.folders[folder.parentId!]).toEqual({
+        id: folder.parentId, name: 'preview.importFolderName', expanded: true, order: 0,
+      });
+      expect(Object.keys(context.state.folders)).toHaveLength(Object.keys(payload.folders).length + 1);
       expect(context.state.contentStore.body).toEqual(payload.contentStore.body);
     }
   });

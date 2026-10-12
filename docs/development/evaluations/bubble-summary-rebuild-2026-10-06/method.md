@@ -1,0 +1,19 @@
+# 実験条件と評価の範囲
+
+新予算の上限は10米ドル。前回までの台帳は保持し、新しい台帳だけを計上する。OpenRouter anthropic/claude-opus-4.6、temperature=1、top_p=1、max_tokens=2048、penalties=0、reasoning=none、response cache=off。API経路はアプリ共通のgetChatCompletion。人工入力だけを使用する。モデルが返したusageと費用、応答ID、設定、原文、圧縮文、後続応答を記録する。
+
+各開発・未使用ケースでは圧縮を3回、それぞれから原文・現行・候補の後続応答を生成する。同じ圧縮からの複数質問は独立した圧縮成功とは数えない。意味・作業状態の誤り、明示された形式、暗黙の文体、許容される語句や創作の差を分ける。機械判定は形式の補助であり、意味保持の合否に置き換えない。担当者は候補名を知るため盲検ではない。少数回の観測で統計的優位を断定しない。
+
+診断では圧縮を強制使用する。本番では既存の削減判定で長くなった圧縮を自動採用せず原文を維持する。candidate_automatic_selectionとforced_diagnosticに区別を残す。アプリのトークン数は文字数推計またはcl100k_baseであり、Anthropicの正確なトークン数ではない。API入力トークンの比較は同じ質問を付けた実際の使用量を使い、アプリの表示値と混同しない。
+
+共通・単独・連続の規則、role/contentのJSON入力、一回生成は維持する。内容別の事前分類や追加生成、固定の圧縮率を課す処理は追加しない。検証と読みやすい要約の共通規則を変える必要がない限り、変更はcompactと置換メッセージだけに限定する。
+
+## 推定値の訂正
+
+手動runnerで起動直後の文字数/2と準備後のcl100k_baseが混在した。実行時の記録は保持し、`recount.mjs`で保存した要求をrepoのserializeMessagesForTokenCountと準備済みcl100k_baseを使い統一再集計した。`token-recount.json`のready_encoder_selectionを推定採否の比較に用いる。原記録のcandidate_automatic_selectionやforced_diagnosticは当時の推定結果であり、本番の恒常的な採否を確定しない。回帰フェーズ以後はrunnerがloadEncoderを待つ。Anthropicの削減率は、対応する原文/圧縮の後続要求についてAPI usage.prompt_tokensを比較し、cl100kの値とは別に示す。
+
+後置配置案v4は候補から外し、最終採用はv3を基礎に申告者と未提示領域の例示禁止を追加したv6の前置規則とW3の案内文。v6の全36件回帰は未実施。W3の言語/口調/構成/長さの明示復元は優越を確認できず、その語句に品質改善を帰属しない。
+
+診断の出力上限はnoexamples=256、grounding C02=256/R11=768、explicit-unknown=128。最後の診断は同一接頭部の実測prompt_tokens＋追加UTF-8バイト数＋256tokensの余裕で入力費用を予約した。この経験的予約を厳密なトークン上限とは扱わない。費用予約でrepair T06の2反復目とexplicit-unknownの2反復目の送信前に停止した。
+
+初期のrecordには変更作業中のcandidate-bubbleSummaryPrompt.tsを指すメタデータがある。実際に送信したinputの全文を正とし、reportのフェーズ別版番号とcandidate1〜7の固定スナップショットを参照する。runnerは完了後に各フェーズを固定版のimportへ変更し、再実行時に最終候補へ置き換わらないようにした。

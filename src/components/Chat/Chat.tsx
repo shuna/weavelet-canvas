@@ -1,5 +1,5 @@
 import React, { Suspense, useEffect, useRef, useState } from 'react';
-import useStore from '@store/store';
+import { useWorkspaceStore, useWorkspaceReadOnly } from '@store/workspaceScope';
 import { isSplitView } from '@type/chat';
 
 import ChatContent from './ChatContent';
@@ -17,6 +17,9 @@ const BranchEditorView = React.lazy(
 );
 
 const Chat = () => {
+  const useStore = useWorkspaceStore();
+  const readOnly = useWorkspaceReadOnly();
+
   const hideSideMenu = useStore((state) => state.hideSideMenu);
   const menuWidth = useStore((state) => state.menuWidth);
   const activeView = useStore((state) => state.chatActiveView);
@@ -59,7 +62,7 @@ const Chat = () => {
           <ChatViewTabs activeView={effectiveView} setActiveView={setActiveView} />
           <div id='google-sync-banner-overlay' className='absolute inset-x-0 top-full z-[60]' />
         </div>
-        {effectiveView === 'branch-editor' && (
+        {!readOnly && effectiveView === 'branch-editor' && (
           <div className='absolute left-2 bottom-2 z-30 flex flex-col gap-1.5 md:left-4 md:bottom-3'>
             <UndoRedoButtons />
           </div>

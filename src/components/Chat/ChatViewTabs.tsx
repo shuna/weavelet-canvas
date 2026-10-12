@@ -1,11 +1,12 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { shallow } from 'zustand/shallow';
-import useStore from '@store/store';
+import { useWorkspaceStore, useWorkspaceReadOnly } from '@store/workspaceScope';
 import BranchIcon from '@icon/BranchIcon';
 import NavigationButtons from './NavigationButtons';
 import MenuIcon from '@icon/MenuIcon';
 import ConfigMenu from '@components/ConfigMenu';
+import SummarySettings from '@components/SummarySettings';
 import { CapabilityIconsInline } from '@components/ConfigMenu/fields';
 import { getModelCapabilities, useModelCapabilities } from '@utils/modelLookup';
 import { resolveChatModel } from '@utils/chatModelResolution';
@@ -39,6 +40,9 @@ const ChatViewTabs = ({
   activeView: ChatView;
   setActiveView: (view: ChatView) => void;
 }) => {
+  const useStore = useWorkspaceStore();
+  const readOnly = useWorkspaceReadOnly();
+
   const { t } = useTranslation('model');
   const { t: tMain } = useTranslation();
   const advancedMode = useStore((state) => state.advancedMode);
@@ -66,6 +70,7 @@ const ChatViewTabs = ({
   const setSplitPanelSwapped = useStore((state) => state.setSplitPanelSwapped);
   const branchEditorSyncEnabled = useStore((state) => state.branchEditorSyncEnabled);
   const setBranchEditorSyncEnabled = useStore((state) => state.setBranchEditorSyncEnabled);
+  const [summarySettingsOpen, setSummarySettingsOpen] = useState(false);
   const [isModalOpen, setIsModalOpen] = useState<boolean>(false);
   const [isModelDropdownOpen, setIsModelDropdownOpen] = useState<boolean>(false);
   const [isLayoutDropdownOpen, setIsLayoutDropdownOpen] = useState<boolean>(false);
@@ -77,7 +82,7 @@ const ChatViewTabs = ({
   const isProxyMode = useStore((state) => state.proxyEnabled && !!state.proxyEndpoint);
 
   const isLocalModel = chat?.config?.modelSource === 'local';
-  const wasmCaps = useWasmCapabilities(isLocalModel ? chat?.config?.model ?? null : null);
+  const wasmCaps = useWasmCapabilities(!readOnly && isLocalModel ? chat?.config?.model ?? null : null);
 
   // OpenRouter credit balance
   const currentProviderId = chat?.config?.providerId;
@@ -87,7 +92,7 @@ const ChatViewTabs = ({
   const isOpenRouter = currentProviderId === 'openrouter';
   const creditBalance = useStore((state) => state.creditBalance);
   const creditBalanceFetching = useStore((state) => state.creditBalanceFetching);
-  useOpenRouterCreditBalance(isOpenRouter);
+  useOpenRouterCreditBalance(!readOnly && isOpenRouter);
 
   // Verified stats & retry
   const {
@@ -142,6 +147,7 @@ const ChatViewTabs = ({
   }, []);
 
   const setConfig = (config: ConfigInterface) => {
+    if (readOnly) return;
     const chats = useStore.getState().chats;
     if (!chats) return;
     const updatedChats = cloneChatAtIndex(chats, currentChatIndex);
@@ -150,6 +156,7 @@ const ChatViewTabs = ({
   };
 
   const setImageDetail = (imageDetail: ImageDetail) => {
+    if (readOnly) return;
     const chats = useStore.getState().chats;
     if (!chats) return;
     const updatedChats = cloneChatAtIndex(chats, currentChatIndex);
@@ -158,6 +165,7 @@ const ChatViewTabs = ({
   };
 
   const handleModelChange = (modelId: string, providerId?: ProviderId, modelSource?: 'remote' | 'local') => {
+    if (readOnly) return;
     const chats = useStore.getState().chats;
     if (!chats) return;
     const updatedChats = cloneChatAtIndex(chats, currentChatIndex);
@@ -232,6 +240,7 @@ const ChatViewTabs = ({
   }, [isLayoutDropdownOpen]);
 
   useEffect(() => {
+    if (readOnly) return;
     const chats = useStore.getState().chats;
     if (chats && chats.length > 0 && currentChatIndex !== -1 && !chat?.config) {
       const updatedChats = cloneChatAtIndex(chats, currentChatIndex);
@@ -274,7 +283,7 @@ const ChatViewTabs = ({
                 className='p-1 px-2 rounded-md bg-gray-300/20 dark:bg-gray-900/10 hover:bg-gray-300/50 dark:hover:bg-gray-900/50 cursor-pointer flex items-center gap-1 overflow-hidden'
                 onClick={(e) => {
                   e.stopPropagation();
-                  setIsModelDropdownOpen(!isModelDropdownOpen);
+                  if (!readOnly) setIsModelDropdownOpen(!isModelDropdownOpen);
                 }}
               >
                 {chat.config.modelSource === 'local'
@@ -292,7 +301,7 @@ const ChatViewTabs = ({
                   <path strokeLinecap='round' strokeLinejoin='round' strokeWidth={2} d='M19 9l-7 7-7-7' />
                 </svg>
               </div>
-              {isModelDropdownOpen && (() => {
+              {!readOnly && isModelDropdownOpen && (() => {
                 // Build a lookup of lowbit-Q models keyed by their source model ID
                 const lowbitQByOrigin = new Map<string, typeof localModels[number]>();
                 for (const m of localModels) {
@@ -359,6 +368,17 @@ const ChatViewTabs = ({
                     </div>
                   </div>
                   <div className='border-t border-gray-200 dark:border-gray-600 my-1' />
+                  <div
+                    className='px-3 py-2 text-sm cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-700 flex items-center gap-1.5'
+                    onClick={() => { setIsModelDropdownOpen(false); setIsModalOpen(true); }}
+                  >
+                    <svg className='w-4 h-4' fill='none' stroke='currentColor' viewBox='0 0 24 24'>
+                      <path strokeLinecap='round' strokeLinejoin='round' strokeWidth={2} d='M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4' />
+                    </svg>
+                    {tMain('chatSettings')}
+                  </div>
+                  <button type='button' className='w-full px-3 py-2 text-left text-sm hover:bg-gray-100 dark:hover:bg-gray-700 flex items-center gap-1.5' onClick={() => { setIsModelDropdownOpen(false); setSummarySettingsOpen(true); }}><svg aria-hidden='true' className='w-4 h-4 shrink-0' fill='none' stroke='currentColor' viewBox='0 0 24 24'><path strokeLinecap='round' strokeLinejoin='round' strokeWidth={2} d='M4 5h16M4 10h16M4 15h10M4 20h6' /></svg>要約・圧縮設定</button>
+                  <div className='border-t border-gray-200 dark:border-gray-600 my-1' />
                   {!hasAny ? (
                     <div className='px-3 py-2 text-sm text-gray-500'>
                       {t('provider.noModelSelected', 'モデル未選択')}
@@ -409,15 +429,7 @@ const ChatViewTabs = ({
                     </>
                   )}
                   <div className='border-t border-gray-200 dark:border-gray-600 my-1' />
-                  <div
-                    className='px-3 py-2 text-sm cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-700 flex items-center gap-1.5'
-                    onClick={() => { setIsModelDropdownOpen(false); setIsModalOpen(true); }}
-                  >
-                    <svg className='w-4 h-4' fill='none' stroke='currentColor' viewBox='0 0 24 24'>
-                      <path strokeLinecap='round' strokeLinejoin='round' strokeWidth={2} d='M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4' />
-                    </svg>
-                    {tMain('chatSettings')}
-                  </div>
+
                 </div>
                 );
               })()}
@@ -568,7 +580,8 @@ const ChatViewTabs = ({
           )}
         </div>
       </div>
-      {isModalOpen && chat && (
+      {!readOnly && summarySettingsOpen && chat && <SummarySettings config={chat.config} setOpen={setSummarySettingsOpen} />}
+      {!readOnly && isModalOpen && chat && (
         <ConfigMenu
           setIsModalOpen={setIsModalOpen}
           config={chat.config}

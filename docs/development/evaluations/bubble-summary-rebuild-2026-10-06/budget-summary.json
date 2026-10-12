@@ -1,0 +1,228 @@
+{
+  "budget_usd": 10,
+  "cost_usd": 9.97914,
+  "calls": 963,
+  "prompt_tokens": 1115078,
+  "completion_tokens": 176150,
+  "total_tokens": 1291228,
+  "model_returned": {
+    "anthropic/claude-opus-4.6": 963
+  },
+  "provider_returned": {
+    "Claude Platform on AWS": 963
+  },
+  "finish_reasons": {
+    "stop": 963
+  },
+  "phases": [
+    {
+      "file": "ablation-results.json",
+      "phase": [
+        "rebuild-ablation"
+      ],
+      "calls": 129,
+      "prompt_tokens": 83102,
+      "completion_tokens": 21694,
+      "cost_usd": 0.95786,
+      "finish_reasons": {
+        "stop": 129
+      },
+      "max_tokens": [
+        2048
+      ]
+    },
+    {
+      "file": "development-results.json",
+      "phase": [
+        "rebuild-development"
+      ],
+      "calls": 132,
+      "prompt_tokens": 139603,
+      "completion_tokens": 21034,
+      "cost_usd": 1.223865,
+      "finish_reasons": {
+        "stop": 132
+      },
+      "max_tokens": [
+        2048
+      ]
+    },
+    {
+      "file": "development-v2-results.json",
+      "phase": [
+        "rebuild-development-v2"
+      ],
+      "calls": 132,
+      "prompt_tokens": 141560,
+      "completion_tokens": 21738,
+      "cost_usd": 1.25125,
+      "finish_reasons": {
+        "stop": 132
+      },
+      "max_tokens": [
+        2048
+      ]
+    },
+    {
+      "file": "explicit-unknown-results.json",
+      "phase": [
+        "rebuild-explicit-unknown"
+      ],
+      "calls": 4,
+      "prompt_tokens": 3113,
+      "completion_tokens": 174,
+      "cost_usd": 0.019915,
+      "finish_reasons": {
+        "stop": 4
+      },
+      "max_tokens": [
+        128
+      ]
+    },
+    {
+      "file": "final-holdout-results.json",
+      "phase": [
+        "rebuild-final-holdout"
+      ],
+      "calls": 72,
+      "prompt_tokens": 93058,
+      "completion_tokens": 26205,
+      "cost_usd": 1.120415,
+      "finish_reasons": {
+        "stop": 72
+      },
+      "max_tokens": [
+        2048
+      ]
+    },
+    {
+      "file": "grounding-results.json",
+      "phase": [
+        "rebuild-grounding"
+      ],
+      "calls": 4,
+      "prompt_tokens": 1409,
+      "completion_tokens": 247,
+      "cost_usd": 0.01322,
+      "finish_reasons": {
+        "stop": 4
+      },
+      "max_tokens": [
+        256,
+        768
+      ]
+    },
+    {
+      "file": "holdout-results.json",
+      "phase": [
+        "rebuild-holdout"
+      ],
+      "calls": 144,
+      "prompt_tokens": 126530,
+      "completion_tokens": 32332,
+      "cost_usd": 1.44095,
+      "finish_reasons": {
+        "stop": 144
+      },
+      "max_tokens": [
+        2048
+      ]
+    },
+    {
+      "file": "layout-holdout-results.json",
+      "phase": [
+        "rebuild-layout-holdout"
+      ],
+      "calls": 48,
+      "prompt_tokens": 60095,
+      "completion_tokens": 9039,
+      "cost_usd": 0.52645,
+      "finish_reasons": {
+        "stop": 48
+      },
+      "max_tokens": [
+        2048
+      ]
+    },
+    {
+      "file": "layout-results.json",
+      "phase": [
+        "rebuild-layout"
+      ],
+      "calls": 45,
+      "prompt_tokens": 60085,
+      "completion_tokens": 14209,
+      "cost_usd": 0.65565,
+      "finish_reasons": {
+        "stop": 45
+      },
+      "max_tokens": [
+        2048
+      ]
+    },
+    {
+      "file": "noexamples-results.json",
+      "phase": [
+        "rebuild-noexamples"
+      ],
+      "calls": 8,
+      "prompt_tokens": 5893,
+      "completion_tokens": 287,
+      "cost_usd": 0.03664,
+      "finish_reasons": {
+        "stop": 8
+      },
+      "max_tokens": [
+        256
+      ]
+    },
+    {
+      "file": "regression-results.json",
+      "phase": [
+        "rebuild-regression"
+      ],
+      "calls": 144,
+      "prompt_tokens": 341760,
+      "completion_tokens": 11440,
+      "cost_usd": 1.9948,
+      "finish_reasons": {
+        "stop": 144
+      },
+      "max_tokens": [
+        2048
+      ]
+    },
+    {
+      "file": "repair-results.json",
+      "phase": [
+        "rebuild-repair"
+      ],
+      "calls": 35,
+      "prompt_tokens": 39239,
+      "completion_tokens": 6676,
+      "cost_usd": 0.363095,
+      "finish_reasons": {
+        "stop": 35
+      },
+      "max_tokens": [
+        2048
+      ]
+    },
+    {
+      "file": "wrapper-results.json",
+      "phase": [
+        "rebuild-wrapper"
+      ],
+      "calls": 66,
+      "prompt_tokens": 19631,
+      "completion_tokens": 11075,
+      "cost_usd": 0.37503,
+      "finish_reasons": {
+        "stop": 66
+      },
+      "max_tokens": [
+        2048
+      ]
+    }
+  ]
+}

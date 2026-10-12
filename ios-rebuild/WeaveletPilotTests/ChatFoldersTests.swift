@@ -58,6 +58,27 @@ final class ChatFoldersTests: XCTestCase {
         XCTAssertEqual(state.exchange?.source, before)
         XCTAssertEqual(try Data(contentsOf: store.fileURL), saved)
     }
+    func testSharedHierarchyRemovalReparentsChildrenAndMovingExpandsAncestors() throws {
+        var input = try fixture().required("input"), folders = try input.required("folders")
+        folders = folders.replacing("f-a", with: try folders.required("f-a").replacing("expanded", with: .bool(false)))
+            .replacing("f-b", with: try folders.required("f-b").replacing("parentId", with: .string("f-a")))
+            .replacing("f-c", with: try folders.required("f-c").replacing("parentId", with: .string("f-b")))
+        var chats = try input.required("chats").array("chats")
+        chats[0] = chats[0].replacing("folder", with: .string("f-b"))
+        chats[1] = chats[1].replacing("folder", with: .string("f-c"))
+        input = input.replacing("folders", with: folders).replacing("chats", with: .array(chats))
+        let removed = try ChatFolders.apply(in: input, operation: .remove(id: "f-b"))
+        XCTAssertNil(removed["folders"]?["f-b"])
+        XCTAssertEqual(removed["folders"]?["f-c"]?["parentId"], .string("f-a"))
+        XCTAssertEqual(try removed.required("chats").array("chats")[0]["folder"], .string("f-a"))
+        let moved = try ChatFolders.apply(in: removed, operation: .move(chatIDs: ["chat-c"], folderID: "f-c"))
+        XCTAssertEqual(moved["folders"]?["f-a"]?["expanded"], .bool(true))
+        XCTAssertEqual(moved["folders"]?["f-c"]?["expanded"], .bool(true))
+        XCTAssertEqual(moved["folders"]?["f-c"]?["xFolder"], input["folders"]?["f-c"]?["xFolder"])
+        XCTAssertEqual(moved["contentStore"], input["contentStore"])
+        XCTAssertEqual(moved["xRoot"], input["xRoot"])
+    }
+
     func testInvalidOperationLeavesOriginalDocumentUnchanged() throws {
         let input = try fixture().required("input"), before = try input.encoded()
         XCTAssertThrowsError(try ChatFolders.apply(in: input, operation: .create(id: "f-a")))

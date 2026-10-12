@@ -1,0 +1,274 @@
+{
+  "schema": 1,
+  "cost_cap_usd": 10,
+  "requests": 592,
+  "outputs": 588,
+  "actual_cost_usd": 5.290730000000002,
+  "accounted_cost_usd": 5.290730000000002,
+  "phases": {
+    "compact-development": {
+      "requests": 140,
+      "outputs": 140,
+      "finish_reasons": {
+        "stop": 140
+      },
+      "actual_cost_usd": 1.4555,
+      "accounted_cost_usd": 1.4555,
+      "prompt_tokens": 139915,
+      "completion_tokens": 30237
+    },
+    "compact-free": {
+      "requests": 70,
+      "outputs": 66,
+      "finish_reasons": {
+        "stop": 66,
+        "error": 4
+      },
+      "actual_cost_usd": 0,
+      "accounted_cost_usd": 0,
+      "prompt_tokens": 51264,
+      "completion_tokens": 11597
+    },
+    "compact-regression": {
+      "requests": 96,
+      "outputs": 96,
+      "finish_reasons": {
+        "stop": 96
+      },
+      "actual_cost_usd": 1.1514299999999997,
+      "accounted_cost_usd": 1.1514299999999997,
+      "prompt_tokens": 167661,
+      "completion_tokens": 12525
+    },
+    "compact-v2-development": {
+      "requests": 56,
+      "outputs": 56,
+      "finish_reasons": {
+        "stop": 56
+      },
+      "actual_cost_usd": 0.67443,
+      "accounted_cost_usd": 0.67443,
+      "prompt_tokens": 76501,
+      "completion_tokens": 11677
+    },
+    "compact-v3-audit": {
+      "requests": 30,
+      "outputs": 30,
+      "finish_reasons": {
+        "stop": 30
+      },
+      "actual_cost_usd": 0.16578000000000007,
+      "accounted_cost_usd": 0.16578000000000007,
+      "prompt_tokens": 23101,
+      "completion_tokens": 2011
+    },
+    "compact-v3-development": {
+      "requests": 28,
+      "outputs": 28,
+      "finish_reasons": {
+        "stop": 28
+      },
+      "actual_cost_usd": 0.18258,
+      "accounted_cost_usd": 0.18258,
+      "prompt_tokens": 6961,
+      "completion_tokens": 5911
+    },
+    "compact-v3-holdout": {
+      "requests": 40,
+      "outputs": 40,
+      "finish_reasons": {
+        "stop": 40
+      },
+      "actual_cost_usd": 0.38202,
+      "accounted_cost_usd": 0.38202,
+      "prompt_tokens": 33789,
+      "completion_tokens": 8523
+    },
+    "compact-v4-audit": {
+      "requests": 30,
+      "outputs": 30,
+      "finish_reasons": {
+        "stop": 30
+      },
+      "actual_cost_usd": 0.170245,
+      "accounted_cost_usd": 0.170245,
+      "prompt_tokens": 23714,
+      "completion_tokens": 2067
+    },
+    "compact-v4-development": {
+      "requests": 56,
+      "outputs": 56,
+      "finish_reasons": {
+        "stop": 56
+      },
+      "actual_cost_usd": 0.689565,
+      "accounted_cost_usd": 0.689565,
+      "prompt_tokens": 79588,
+      "completion_tokens": 11665
+    },
+    "compact-v5-probes": {
+      "requests": 28,
+      "outputs": 28,
+      "finish_reasons": {
+        "stop": 28
+      },
+      "actual_cost_usd": 0.31362,
+      "accounted_cost_usd": 0.31362,
+      "prompt_tokens": 36869,
+      "completion_tokens": 5171
+    },
+    "compact-v5-validation": {
+      "requests": 18,
+      "outputs": 18,
+      "finish_reasons": {
+        "stop": 18
+      },
+      "actual_cost_usd": 0.10556000000000001,
+      "accounted_cost_usd": 0.10556000000000001,
+      "prompt_tokens": 15312,
+      "completion_tokens": 1160
+    }
+  },
+  "paired_followup_input_tokens": [
+    {
+      "case_id": "A01",
+      "original": 103,
+      "readable": 103,
+      "compact_final": 129.5
+    },
+    {
+      "case_id": "A02",
+      "original": 112,
+      "readable": 96.5,
+      "compact_final": 137.5
+    },
+    {
+      "case_id": "A03",
+      "original": 105,
+      "readable": 109,
+      "compact_final": 139
+    },
+    {
+      "case_id": "H01",
+      "original": 202,
+      "readable": 156.5,
+      "compact_final": 208.5
+    },
+    {
+      "case_id": "H02",
+      "original": 132,
+      "readable": 128,
+      "compact_final": 156
+    },
+    {
+      "case_id": "H03",
+      "original": 106,
+      "readable": 150,
+      "compact_final": 186.5
+    },
+    {
+      "case_id": "H04",
+      "original": 169,
+      "readable": 199.5,
+      "compact_final": 196.5
+    },
+    {
+      "case_id": "T01",
+      "original": 300,
+      "readable": 304.5,
+      "compact_v1": 285,
+      "compact_final": 307.5
+    },
+    {
+      "case_id": "T02",
+      "original": 282,
+      "readable": 224,
+      "compact_v1": 276,
+      "compact_final": 286.5
+    },
+    {
+      "case_id": "T03",
+      "original": 187,
+      "readable": 187.5,
+      "compact_v1": 251.5,
+      "compact_final": 222
+    },
+    {
+      "case_id": "T04",
+      "original": 180,
+      "readable": 239,
+      "compact_v1": 334.5,
+      "compact_final": 322.5
+    },
+    {
+      "case_id": "T05",
+      "original": 237,
+      "readable": 186,
+      "compact_v1": 224.5,
+      "compact_final": 214.5
+    },
+    {
+      "case_id": "T06",
+      "original": 214,
+      "readable": 184,
+      "compact_v1": 187.5,
+      "compact_final": 211.5
+    },
+    {
+      "case_id": "T07",
+      "original": 214,
+      "readable": 285,
+      "compact_v1": 223,
+      "compact_final": 223.5
+    },
+    {
+      "case_id": "T08",
+      "original": 221,
+      "readable": 200.5,
+      "compact_v1": 215,
+      "compact_final": 218.5
+    },
+    {
+      "case_id": "T09",
+      "original": 251,
+      "readable": 192.5,
+      "compact_v1": 303.5,
+      "compact_final": 281.5
+    },
+    {
+      "case_id": "T10",
+      "original": 205,
+      "readable": 232.5,
+      "compact_v1": 296,
+      "compact_final": 208.5
+    },
+    {
+      "case_id": "T11",
+      "original": 232,
+      "readable": 213.5,
+      "compact_v1": 252,
+      "compact_final": 239
+    },
+    {
+      "case_id": "T12",
+      "original": 152,
+      "readable": 138.5,
+      "compact_v1": 232.5,
+      "compact_final": 191
+    },
+    {
+      "case_id": "T13",
+      "original": 1696,
+      "readable": 312.5,
+      "compact_v1": 300.5,
+      "compact_final": 339
+    },
+    {
+      "case_id": "T14",
+      "original": 1121,
+      "readable": 178,
+      "compact_v1": 198,
+      "compact_final": 215
+    }
+  ]
+}

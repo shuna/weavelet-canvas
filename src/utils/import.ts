@@ -1,3 +1,4 @@
+import { validateFolderHierarchy } from '@utils/folderHierarchy';
 import { v4 as uuidv4 } from 'uuid';
 
 import {
@@ -10,6 +11,7 @@ import {
   MessageInterface,
   strToTextContent,
 } from '@type/chat';
+import { isBubbleSummary } from '@utils/bubbleSummary';
 import { roles } from '@type/chat';
 import {
   defaultModel,
@@ -117,12 +119,15 @@ export const validateAndFixChats = (chats: unknown): chats is ChatInterface[] =>
 
     if (!validateMessage(mutableChat.messages)) return false;
     if (!validateAndFixChatConfig(mutableChat.config)) return false;
+    if (mutableChat.summaryTargets !== undefined && (!isRecord(mutableChat.summaryTargets) || Object.values(mutableChat.summaryTargets).some(value => typeof value !== 'boolean'))) return false;
+    if (mutableChat.summaries !== undefined && (!Array.isArray(mutableChat.summaries) || !mutableChat.summaries.every(isBubbleSummary))) return false;
   }
 
   ensureUniqueChatIds(chats as ChatInterface[]);
 
   return true;
 };
+
 
 const validateMessage = (messages: unknown): messages is MessageInterface[] => {
   if (!Array.isArray(messages)) return false;
@@ -182,16 +187,7 @@ export const isSingleChatImport = (importedData: unknown): importedData is ChatI
 export const validateFolders = (
   folders: FolderCollection
 ): folders is FolderCollection => {
-  if (typeof folders !== 'object') return false;
-
-  for (const folderId in folders) {
-    if (typeof folders[folderId].id !== 'string') return false;
-    if (typeof folders[folderId].name !== 'string') return false;
-    if (typeof folders[folderId].order !== 'number') return false;
-    if (typeof folders[folderId].expanded !== 'boolean') return false;
-  }
-
-  return true;
+  return validateFolderHierarchy(folders);
 };
 
 export const validateExportV1 = (data: ExportV1): data is ExportV1 => {

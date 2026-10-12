@@ -167,3 +167,14 @@ describe('cloud auth state helpers', () => {
     expect(restored.providers.cloudkit.recordChangeTag).toBe('tag-abc');
   });
 });
+
+it('migrates version 3 provider settings and supplies the filesystem defaults', () => {
+  const migrated = migrateCloudAuthPersistedState({ provider: 'cloudkit', cloudSync: true,
+    providers: { google: createCloudProviderSyncState({ targetId: 'drive' }),
+      cloudkit: createCloudProviderSyncState({ targetId: 'icloud', recordChangeTag: 'tag' }) } }, 3);
+  expect(migrated.providers.google.targetId).toBe('drive');
+  expect(migrated.providers.cloudkit.targetId).toBe('icloud');
+  expect(migrated.providers.cloudkit.recordChangeTag).toBe('tag');
+  expect(migrated.providers.filesystem).toEqual(createCloudProviderSyncState());
+  expect(switchCloudProviderState(migrated, 'filesystem').syncStatus).toBe('unauthenticated');
+});

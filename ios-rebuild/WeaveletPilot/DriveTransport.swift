@@ -119,6 +119,9 @@ actor DriveTransport: SyncDrive {
             }
             guard Set(try ids.map { try Data($0.string("id").utf8) }).count == ids.count else { throw DriveTransportError.invalidResponse }
             return .array(ids)
+        case "keyHeader":
+            let file = try await call("metadata", args: args)
+            return try SharedWebOperations.call("driveHeaderID", file)
         case "metadata":
             let file = try await json("/files/\(component(args[0].string("id")))", query: [URLQueryItem(name: "fields", value: "id,name,mimeType,appProperties,trashed")])
             guard file["trashed"] != .bool(true) else { throw DriveTransportError.notFound }; return file

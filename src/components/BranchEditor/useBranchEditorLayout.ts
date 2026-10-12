@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { BranchTree } from '@type/chat';
 import { Node, Edge } from 'reactflow';
-import useStore from '@store/store';
+import { useWorkspaceStore } from '@store/workspaceScope';
 import { showToast } from '@utils/showToast';
 import type { ContentStoreData } from '@utils/contentStore';
 import { resolveContentText } from '@utils/contentStore';
@@ -58,6 +58,8 @@ export function useBranchEditorLayout(tree: BranchTree | undefined) {
 }
 
 export function useMultiBranchEditorLayout(entries: MultiLayoutEntry[]) {
+  const useStore = useWorkspaceStore();
+
   const contentStore = useStore((state) => state.contentStore);
   const [layoutNodes, setLayoutNodes] = useState<Node<MessageNodeData>[]>(EMPTY_NODES);
   const [layoutEdges, setLayoutEdges] = useState<Edge[]>(EMPTY_EDGES);

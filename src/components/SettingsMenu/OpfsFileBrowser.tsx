@@ -2,14 +2,11 @@ import React, { useCallback, useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
   listAllOpfsEntries,
-  clearAllModels,
-  deleteModel,
-  deleteModelFile,
   getTotalStorageUsed,
 } from '@src/local-llm/storage';
+import { removeAssets } from '@src/local-llm/assetRemoval';
 import type { OpfsModelEntry } from '@src/local-llm/storage';
 import { formatBytes } from '@src/local-llm/device';
-import { localModelRuntime } from '@src/local-llm/runtime';
 import type { LocalModelTask } from '@src/local-llm/types';
 import useStore from '@store/store';
 
@@ -32,6 +29,7 @@ const OpfsFileBrowser = ({
   const [loading, setLoading] = useState(false);
   const [expandedModels, setExpandedModels] = useState<Set<string>>(new Set());
   const [deleting, setDeleting] = useState<string | null>(null);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
   const localModels = useStore((s) => s.localModels);
 
   const refresh = useCallback(async () => {
@@ -74,12 +72,13 @@ const OpfsFileBrowser = ({
   const handleDeleteModel = useCallback(async (modelId: string) => {
     if (!window.confirm(t('localModel.opfsBrowser.confirmDeleteModel') as string)) return;
     setDeleting(modelId);
+    setDeleteError(null);
     try {
-      // Unload if running
-      if (localModelRuntime.isLoaded(modelId)) {
-        await localModelRuntime.unloadModel(modelId);
+      const removal = await removeAssets(modelId);
+      if (removal.status !== 'removed') {
+        setDeleteError(removal.error ?? `削除できませんでした (${removal.status})`);
+        return;
       }
-      await deleteModel(modelId);
       // Clean store — metadata, definition, and task assignments
       const store = useStore.getState();
       for (const task of Object.keys(store.activeLocalModels) as LocalModelTask[]) {
@@ -91,10 +90,11 @@ const OpfsFileBrowser = ({
       store.removeLocalModel(modelId);
       onStorageChanged?.();
       await refresh();
-    } catch {
-      // ignore
+    } catch (error) {
+      setDeleteError(error instanceof Error ? error.message : String(error));
+    } finally {
+      setDeleting(null);
     }
-    setDeleting(null);
   }, [t, refresh, onStorageChanged]);
 
   const handleDeleteFile = useCallback(async (modelId: string, fileName: string) => {
@@ -102,55 +102,54 @@ const OpfsFileBrowser = ({
       (t('localModel.opfsBrowser.confirmDeleteFile') as string).replace('{{file}}', fileName),
     )) return;
     setDeleting(`${modelId}/${fileName}`);
+    setDeleteError(null);
     try {
-      await deleteModelFile(modelId, fileName);
-      // If this is a .part marker, also delete the corresponding data file
-      // (in the current design, data is written to the final name and .part
-      // is a zero-byte marker; leaving the data file would make a partial
-      // download look "saved").
-      if (fileName.endsWith('.part')) {
-        const dataFileName = fileName.slice(0, -'.part'.length);
-        try {
-          await deleteModelFile(modelId, dataFileName);
-        } catch {
-          // Data file may not exist
-        }
+      // Keep the marker if removing the incomplete body fails.
+      const files = fileName.endsWith('.part')
+        ? [fileName.slice(0, -'.part'.length), fileName]
+        : [fileName];
+      const removal = await removeAssets(modelId, { files });
+      if (removal.status !== 'removed') {
+        setDeleteError(removal.error ?? `削除できませんでした (${removal.status})`);
+        return;
       }
       onStorageChanged?.();
       await refresh();
-    } catch {
-      // ignore
+    } catch (error) {
+      setDeleteError(error instanceof Error ? error.message : String(error));
+    } finally {
+      setDeleting(null);
     }
-    setDeleting(null);
   }, [t, refresh, onStorageChanged]);
 
   const handleClearAll = useCallback(async () => {
     if (!window.confirm(t('localModel.opfsBrowser.confirmClearAll') as string)) return;
     setDeleting('__all__');
+    setDeleteError(null);
     try {
-      // Unload all running models
       const store = useStore.getState();
+      const removedIds: string[] = [];
       for (const entry of entries) {
-        if (localModelRuntime.isLoaded(entry.modelId)) {
-          await localModelRuntime.unloadModel(entry.modelId);
-        }
+        const removal = await removeAssets(entry.modelId);
+        if (removal.status === 'removed') removedIds.push(entry.modelId);
       }
-      const deleted = await clearAllModels();
-      // Clean store for all deleted models
-      for (const id of deleted) {
+      // Keep metadata for models whose stop/remove operation was blocked.
+      for (const id of removedIds) {
         store.removeSavedModelMeta(id);
         store.removeLocalModel(id);
       }
-      // Clear active assignments
-      for (const task of Object.keys(store.activeLocalModels)) {
-        store.setActiveLocalModel(task as any, null);
+      for (const task of Object.keys(store.activeLocalModels) as LocalModelTask[]) {
+        if (removedIds.includes(store.activeLocalModels[task] ?? '')) {
+          store.setActiveLocalModel(task, null);
+        }
       }
       onStorageChanged?.();
       await refresh();
-    } catch {
-      // ignore
+    } catch (error) {
+      setDeleteError(error instanceof Error ? error.message : String(error));
+    } finally {
+      setDeleting(null);
     }
-    setDeleting(null);
   }, [t, entries, refresh, onStorageChanged]);
 
   const isDeleting = deleting !== null;
@@ -158,6 +157,7 @@ const OpfsFileBrowser = ({
   return (
     <div className='space-y-3'>
       {/* Header: total storage + actions */}
+      {deleteError && <p className='px-4 text-sm text-red-600 dark:text-red-400'>{deleteError}</p>}
       <div className='flex items-center justify-between px-4 py-2'>
         <div className='text-sm text-gray-700 dark:text-gray-300'>
           <span className='font-medium'>{t('localModel.opfsBrowser.totalUsage')}:</span>{' '}

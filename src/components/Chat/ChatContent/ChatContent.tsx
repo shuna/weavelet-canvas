@@ -1,6 +1,6 @@
 import { useSyncReview, acknowledgeSyncChat } from '@store/storage/google/conflicts';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import useStore from '@store/store';
+import { useWorkspaceStore, useWorkspaceReadOnly } from '@store/workspaceScope';
 import { useTranslation } from 'react-i18next';
 
 import ScrollToBottomButton from './ScrollToBottomButton';
@@ -128,6 +128,9 @@ interface ChatContentProps {
 }
 
 const ChatContent = ({ isChatFindOpen, onChatFindClose }: ChatContentProps = {}) => {
+  const useStore = useWorkspaceStore();
+  const readOnly = useWorkspaceReadOnly();
+
   const { t } = useTranslation();
   const inputRole = useStore((state) => state.inputRole);
   const setError = useStore((state) => state.setError);
@@ -141,7 +144,7 @@ const ChatContent = ({ isChatFindOpen, onChatFindClose }: ChatContentProps = {})
       : EMPTY_MESSAGES
   );
   const reviewChatId = useStore(state => state.chats?.[state.currentChatIndex]?.id ?? '');
-  const syncChanged = useSyncReview(state => state.chats.includes(reviewChatId));
+  const syncChanged = useSyncReview(state => !readOnly && state.chats.includes(reviewChatId));
   const currentChatIndex = useStore((state) => state.currentChatIndex);
   const stickyIndex = useStore((state) =>
     state.chats &&
@@ -215,7 +218,7 @@ const ChatContent = ({ isChatFindOpen, onChatFindClose }: ChatContentProps = {})
   useEffect(() => {
     let cancelled = false;
 
-    if (!isCurrentChatGenerating) {
+    if (!readOnly && !isCurrentChatGenerating) {
       if (messagesLimited.length > 0 && messagesLimited.length < messages.length) {
         Promise.all([
           countTokens(messages, model),
@@ -258,14 +261,17 @@ const ChatContent = ({ isChatFindOpen, onChatFindClose }: ChatContentProps = {})
   const [hasPendingRecords, setHasPendingRecords] = useState(false);
 
   useEffect(() => {
-    if (error && proxyActive) {
+    let disposed = false;
+    setHasPendingRecords(false);
+    if (!readOnly && error && proxyActive) {
       getAllPending()
-        .then((records) => setHasPendingRecords(records.some((record) => !!record.proxySessionId)))
-        .catch(() => setHasPendingRecords(false));
-    } else {
-      setHasPendingRecords(false);
+        .then((records) => {
+          if (!disposed) setHasPendingRecords(records.some(record => record.chatId === currentChatId && !!record.proxySessionId));
+        })
+        .catch(() => { if (!disposed) setHasPendingRecords(false); });
     }
-  }, [error, proxyActive]);
+    return () => { disposed = true; };
+  }, [error, proxyActive, currentChatId]);
 
   // Scroller refs — simplified from Virtuoso's dual-ref pattern
   const scrollerRef = useRef<HTMLDivElement>(null);
@@ -462,6 +468,7 @@ const ChatContent = ({ isChatFindOpen, onChatFindClose }: ChatContentProps = {})
     if (!atBottomForAutoScrollRef.current) return;
 
     const scrollToEnd = () => {
+      if (scroller.dataset.branchSwiping) return;
       // Stop following if user scrolled away manually
       if (!atBottomForAutoScrollRef.current) return;
       // Eagerly keep both state and refs pinned to "at bottom" so content growth
@@ -816,12 +823,12 @@ const ChatContent = ({ isChatFindOpen, onChatFindClose }: ChatContentProps = {})
         <div
           ref={scrollerCallbackRef}
           key={currentChatIndex}
-          className='h-full overflow-y-auto overscroll-contain'
+          className='h-full overflow-y-auto overflow-x-hidden overscroll-contain'
           data-chat-scroller
           data-chat-id={currentChatId}
         >
           {syncChanged && <div role='status' className='flex items-center justify-between gap-3 px-7 py-2 text-sm text-amber-800 bg-amber-50 dark:bg-gray-700 dark:text-amber-200'><span>{t('drive:review.description')}</span><button type='button' className='shrink-0 underline' onClick={() => acknowledgeSyncChat(reviewChatId)}>{t('drive:review.chatDone')}</button></div>}
-          <div data-message-list>
+          <div className='relative' data-message-list>
             {items.map((item, index) => (
               <div key={computeItemKey(index)} data-item-index={index} data-node-id={activePath[item.originalIndex]}>
                 <Message
@@ -830,7 +837,7 @@ const ChatContent = ({ isChatFindOpen, onChatFindClose }: ChatContentProps = {})
                   messageIndex={item.originalIndex}
                   nodeId={activePath[item.originalIndex]}
                 />
-                {!isCurrentChatGenerating && advancedMode && (
+                {!readOnly && !isCurrentChatGenerating && advancedMode && (
                   <NewMessageButton
                     messageIndex={item.originalIndex}
                     nodeId={activePath[item.originalIndex]}
@@ -842,14 +849,14 @@ const ChatContent = ({ isChatFindOpen, onChatFindClose }: ChatContentProps = {})
           </div>
 
           <div className='flex flex-col items-center text-sm bg-white dark:bg-gray-800'>
-            <Message
+            {!readOnly && <Message
               role={inputRole}
               content={[{ type: 'text', text: '' } as TextContentInterface]}
               messageIndex={stickyIndex}
               sticky
-            />
+            />}
 
-            {error !== '' && (
+            {!readOnly && error !== '' && (
               <div className='relative py-2 px-3 w-3/5 mt-3 max-md:w-11/12 border rounded-md border-red-500 bg-red-500/10'>
                 <div className='text-gray-600 dark:text-gray-100 text-sm whitespace-pre-wrap'>
                   {error}
@@ -865,7 +872,7 @@ const ChatContent = ({ isChatFindOpen, onChatFindClose }: ChatContentProps = {})
                     {hasPendingRecords && (
                       <button
                         className='px-3 py-1 text-sm bg-blue-500 text-white rounded hover:bg-blue-600 transition-colors'
-                        onClick={() => recoverPending({ manual: true })}
+                        onClick={() => recoverPending({ manual: true, chatId: currentChatId })}
                       >
                         {t('recoverFromProxy')}
                       </button>

@@ -1,12 +1,14 @@
 import React from 'react';
 import { useTranslation } from 'react-i18next';
-import useStore from '@store/store';
+import { useWorkspaceStore } from '@store/workspaceScope';
 
 const SidebarSearchHistory = ({
   onSelect,
 }: {
   onSelect: (query: string) => void;
 }) => {
+  const useStore = useWorkspaceStore();
+
   const { t } = useTranslation();
   const sidebarSearchHistory = useStore((state) => state.sidebarSearchHistory);
   const clearSidebarSearchHistory = useStore((state) => state.clearSidebarSearchHistory);

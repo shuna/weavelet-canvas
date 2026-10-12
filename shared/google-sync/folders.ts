@@ -4,7 +4,7 @@ import type { ChatInterface, FolderCollection } from '../../src/types/chat';
 // Only known folder fields and chat identities/membership cross the JS boundary.
 // Unknown values remain in the caller's original ordered JSON document.
 type Projection = { folders: FolderCollection; chats: ChatInterface[] };
-const folderFields = ['id', 'name', 'order', 'expanded', 'color'] as const;
+const folderFields = ['id', 'name', 'order', 'expanded', 'color', 'parentId'] as const;
 function difference(before: Record<string, unknown>, after: Record<string, unknown>, fields: readonly string[]) {
   const set = Object.fromEntries(fields.filter(key => Object.hasOwn(after, key) && (!Object.hasOwn(before, key) || before[key] !== after[key])).map(key => [key, after[key]]));
   const remove = fields.filter(key => Object.hasOwn(before, key) && !Object.hasOwn(after, key));

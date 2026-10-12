@@ -1,5 +1,5 @@
 import { useRef, useCallback, useEffect } from 'react';
-import useStore from '@store/store';
+import { useWorkspaceStore } from '@store/workspaceScope';
 
 
 const SWIPE_THRESHOLD = 0.3;
@@ -12,6 +12,8 @@ export default function useSwipeGesture(
   menuRef: React.RefObject<HTMLDivElement | null>,
   backdropRef: React.RefObject<HTMLDivElement | null>
 ) {
+  const useStore = useWorkspaceStore();
+
   const hideSideMenu = useStore((state) => state.hideSideMenu);
   const setHideSideMenu = useStore((state) => state.setHideSideMenu);
   const menuWidth = useStore((state) => state.menuWidth);

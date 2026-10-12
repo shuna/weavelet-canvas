@@ -3,6 +3,7 @@ import { v4 as uuidv4 } from 'uuid';
 import {
   BranchNode,
   BranchTree,
+  BranchSwipeDirection,
   ChatInterface,
   ContentInterface,
   MessageInterface,
@@ -72,6 +73,10 @@ export function captureProjectedMessageAttributes(chat: ChatInterface, contentSt
     setMessageAttributes(next, nodeId, message);
   }
   chat.branchTree = next;
+}
+
+export function resolveBranchSwipeDirection(distance: number, preference: BranchSwipeDirection = 'left-next'): 'previous' | 'next' {
+  return (distance < 0) === (preference === 'left-next') ? 'next' : 'previous';
 }
 
 export function materializeActivePath(
@@ -281,18 +286,6 @@ export function collectDescendants(
     }
   }
   return result;
-}
-
-export function removeMessageWithBranchSync(
-  chat: ChatInterface,
-  index: number,
-  contentStore: ContentStoreData
-): void {
-  chat.messages.splice(index, 1);
-  if (chat.branchTree) {
-    deleteActivePathMessage(chat, index, contentStore);
-    chat.messages = materializeActivePath(chat.branchTree, contentStore);
-  }
 }
 
 export interface RegenerateTarget {

@@ -2,7 +2,7 @@ import { useSyncReview, acknowledgeSyncNode } from '@store/storage/google/confli
 import { useTranslation } from 'react-i18next';
 import React, { memo, useCallback, useRef } from 'react';
 import { Handle, Position, NodeProps } from 'reactflow';
-import useStore from '@store/store';
+import { useWorkspaceStore, useWorkspaceReadOnly } from '@store/workspaceScope';
 import { MessageNodeData } from '../useBranchEditorLayout';
 
 const roleBadgeColors: Record<string, string> = {
@@ -12,12 +12,15 @@ const roleBadgeColors: Record<string, string> = {
 };
 
 const MessageNode = memo(({ data, id }: NodeProps<MessageNodeData>) => {
+  const useStore = useWorkspaceStore();
+  const readOnly = useWorkspaceReadOnly();
+
   const { t } = useTranslation('drive');
   const chatId = useStore(state => state.chats?.[data.chatIndex]?.id ?? '');
-  const syncChanged = useSyncReview(state => (state.nodes[chatId] ?? []).includes(id));
+  const syncChanged = useSyncReview(state => !readOnly && (state.nodes[chatId] ?? []).includes(id));
   const hoveredNodeId = useStore((state) => state.hoveredNodeId);
   const setHoveredNodeId = useStore((state) => state.setHoveredNodeId);
-  const toggleNodeStar = useStore((state) => state.toggleNodeStar);
+  const setNodeStar = useStore((state) => state.setNodeStar);
   const isSearchMatch = useStore((state) => state.matchedNodeIds.has(id));
   const isCurrentSearchResult = useStore((state) => state.currentResultNodeId === id);
   const compareTarget = useStore((state) => state.compareTarget);
@@ -48,8 +51,8 @@ const MessageNode = memo(({ data, id }: NodeProps<MessageNodeData>) => {
 
   const handleStarClick = useCallback((e: React.MouseEvent) => {
     e.stopPropagation();
-    toggleNodeStar(data.chatIndex, id);
-  }, [data.chatIndex, id, toggleNodeStar]);
+    setNodeStar({ chatId, nodeId: id, value: !data.starred });
+  }, [chatId, data.starred, id, setNodeStar]);
 
   const borderColor = isCurrentSearchResult
     ? '#f97316'
@@ -129,6 +132,7 @@ const MessageNode = memo(({ data, id }: NodeProps<MessageNodeData>) => {
                 ? 'bg-yellow-100 dark:bg-yellow-900 text-yellow-500 dark:text-yellow-300'
                 : 'bg-gray-200 dark:bg-gray-600 text-gray-400 dark:text-gray-500 hover:bg-gray-300 dark:hover:bg-gray-500'
             }`}
+            disabled={readOnly}
             onClick={handleStarClick}
             title={data.starred ? 'Unstar' : 'Star'}
           >

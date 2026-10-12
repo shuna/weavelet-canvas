@@ -17,6 +17,7 @@ export type Content = 'text' | 'image_url';
 export type ImageDetail = 'low' | 'high' | 'auto';
 export const imageDetails: ImageDetail[] = ['low', 'high', 'auto'];
 export type StreamingMarkdownPolicy = 'auto' | 'always' | 'never';
+export type BranchSwipeDirection = 'left-next' | 'right-next';
 export type Role = 'user' | 'assistant' | 'system';
 export const roles: Role[] = ['user', 'assistant', 'system'];
 
@@ -91,6 +92,7 @@ export interface MessageInterface {
 }
 
 export interface BranchNode {
+  updatedAt?: number;
   openRouterObservation?: OpenRouterObservation;
   id: string;
   parentId: string | null;
@@ -125,6 +127,7 @@ export interface BranchTree {
 }
 
 export interface ChatInterface {
+  updatedAt?: number;
   id: string;
   title: string;
   folder?: string;
@@ -136,6 +139,25 @@ export interface ChatInterface {
   collapsedNodes?: Record<string, boolean>;
   omittedNodes?: Record<string, boolean>;
   protectedNodes?: Record<string, boolean>;
+  summaryTargets?: Record<string, boolean>;
+  summaries?: BubbleSummary[];
+}
+
+export interface BubbleSummarySource {
+  nodeId: string;
+  parentId: string | null;
+  role: 'user' | 'assistant';
+  textParts: string[];
+}
+
+export interface BubbleSummary {
+  id: string;
+  mode: 'single' | 'through' | 'range';
+  sources: BubbleSummarySource[];
+  text: string;
+  useForSubmit: boolean;
+  format?: 'compact';
+  generation?: { model: string; providerId?: ProviderId; settings: ModelSettings; createdAt: number };
 }
 
 export interface BranchClipboard {
@@ -266,6 +288,7 @@ export interface FolderCollection {
 
 export interface Folder {
   id: string;
+  parentId?: string | null;
   name: string;
   expanded: boolean;
   order: number;

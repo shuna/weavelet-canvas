@@ -1,3 +1,4 @@
+import { v4 as uuidv4 } from 'uuid';
 import { findPersistedDataIntegrityErrors, computeChatFingerprint } from './prepareSave';
 import { prepareSaveAsync } from './google/processing';
 import {
@@ -38,6 +39,7 @@ const LEGACY_KEY = 'chat-data';
 const META_KEY = 'meta';
 const CONTENT_STORE_KEY = 'content-store';
 const BRANCH_CLIPBOARD_KEY = 'branch-clipboard';
+const REMOTE_RECOVERY_PREFIX = 'remote-recovery:';
 const chatKey = (id: string) => `chat:${id}`;
 
 type PersistedChat = Omit<ChatInterface, 'messages'> & {
@@ -45,6 +47,7 @@ type PersistedChat = Omit<ChatInterface, 'messages'> & {
 };
 
 interface MetaRecord {
+  lastContentEditedAt?: number;
   version: number;
   generation: number;
   activeChatId?: string;
@@ -73,6 +76,16 @@ type LegacyChatDataRecord = PersistedChatData & {
   version: number;
 };
 
+export interface LegacyRemoteSnapshot {
+  state: unknown;
+  version: number;
+}
+
+export interface LegacyRemoteRecoveryRecord {
+  id: string;
+  snapshot: LegacyRemoteSnapshot;
+}
+
 export interface IndexedDbRecoveryChatSnapshot {
   key: string;
   packed: boolean;
@@ -90,6 +103,7 @@ export interface IndexedDbRecoverySnapshot {
   keys: string[];
   meta?: MetaRecord;
   legacy?: LegacyChatDataRecord;
+  legacyRemoteSnapshots?: LegacyRemoteRecoveryRecord[];
   contentStore?: ContentStoreRecord;
   branchClipboard?: BranchClipboardRecord;
   chats: IndexedDbRecoveryChatSnapshot[];
@@ -127,22 +141,30 @@ const bytesToBase64 = (bytes: Uint8Array): string => {
   return btoa(binary);
 };
 
-const withCrossContextStorageLock = async <T>(run: () => Promise<T>): Promise<T> => {
-  if (typeof navigator !== 'undefined' && navigator.locks) {
-    return navigator.locks.request(
+const withCrossContextStorageLock = async <T>(run: () => Promise<T>, timeoutMs?: number): Promise<T> => {
+  if (typeof navigator === 'undefined' || !navigator.locks) return run();
+  const controller = new AbortController();
+  // Bound acquisition only. Never interrupt an acquired lock or a database commit.
+  const timer = timeoutMs === undefined ? undefined : setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    return await navigator.locks.request(
       `${DB_NAME}:${STORE_NAME}:mutation`,
-      { mode: 'exclusive' },
-      run
+      { mode: 'exclusive', signal: controller.signal },
+      () => {
+        clearTimeout(timer);
+        return run();
+      }
     );
+  } catch (error) {
+    if (controller.signal.aborted) throw new Error('別の画面の保存処理が30秒以内に完了しませんでした。保存中の画面を確認し、読み込みを再試行してください。既存データへの書き込みは停止しています。');
+    throw error;
+  } finally {
+    clearTimeout(timer);
   }
-  return run();
 };
 
 const enqueueStorageMutation = <T>(run: () => Promise<T>): Promise<T> => {
-  const result = storageMutationQueue.then(
-    () => withCrossContextStorageLock(run),
-    () => withCrossContextStorageLock(run)
-  );
+  const result = storageMutationQueue.then(run, run);
   storageMutationQueue = result.then(
     () => undefined,
     () => undefined
@@ -237,6 +259,46 @@ const withTransaction = async <T>(
     database.close();
   }
 };
+
+const readLegacyRemoteSnapshots = async (store: IDBObjectStore): Promise<LegacyRemoteRecoveryRecord[]> => {
+  const keys = (await idbGetAllKeys(store)).filter((key): key is string =>
+    typeof key === 'string' && key.startsWith(REMOTE_RECOVERY_PREFIX));
+  return Promise.all(keys.map(async (key) => ({
+    id: key.slice(REMOTE_RECOVERY_PREFIX.length),
+    snapshot: (await idbGet<LegacyRemoteSnapshot>(store, key))!,
+  })));
+};
+
+export const loadLegacyRemoteSnapshots = (): Promise<LegacyRemoteRecoveryRecord[]> =>
+  hasIndexedDb() ? withTransaction('readonly', readLegacyRemoteSnapshots) : Promise.resolve([]);
+
+// Unrecognized remote schemas stay outside the current primary generation.
+export const preserveLegacyRemoteSnapshot = (snapshot: LegacyRemoteSnapshot): Promise<{ id: string; version: number }> => {
+  const owned = structuredClone(snapshot);
+  return enqueueStorageMutation(async () => {
+    if (!hasIndexedDb()) throw new Error('IndexedDB is unavailable; remote recovery data could not be preserved');
+    return withTransaction('readwrite', async (store) => {
+      const existing = (await readLegacyRemoteSnapshots(store)).find(record =>
+        JSON.stringify(record.snapshot) === JSON.stringify(owned));
+      const id = existing?.id ?? uuidv4();
+      if (!existing) await idbPut(store, `${REMOTE_RECOVERY_PREFIX}${id}`, owned);
+      return { id, version: owned.version };
+    });
+  });
+};
+
+// Called only after this exact exported payload has been imported and saved.
+export const resolveLegacyRemoteSnapshot = (snapshot: LegacyRemoteSnapshot): Promise<boolean> =>
+  enqueueStorageMutation(async () => {
+    if (!hasIndexedDb()) return false;
+    return withTransaction('readwrite', async (store) => {
+      const existing = (await readLegacyRemoteSnapshots(store)).find(record =>
+        JSON.stringify(record.snapshot) === JSON.stringify(snapshot));
+      if (!existing) return false;
+      await idbDelete(store, `${REMOTE_RECOVERY_PREFIX}${existing.id}`);
+      return true;
+    });
+  });
 
 /**
  * Collect all contentHashes referenced by chats and branchClipboard.
@@ -420,7 +482,8 @@ export function isMigrationInProgress(): boolean {
  * No schema-level migration is performed — data is moved as-is.
  */
 async function migrateLegacyData(
-  _baseState: StoreState
+  _baseState: StoreState,
+  onProgress?: (progress: ChatDataLoadProgress) => void
 ): Promise<ChatDataLoadResult | null> {
   const database = await openDatabase();
   try {
@@ -461,6 +524,7 @@ async function migrateLegacyData(
     }
 
     const chatData: PersistedChatData = {
+      lastContentEditedAt: legacy.lastContentEditedAt,
       chats: legacyChats,
       contentStore: legacy.contentStore,
       branchClipboard: legacy.branchClipboard ?? null,
@@ -491,11 +555,11 @@ async function migrateLegacyData(
       generation: gen,
     });
 
-    for (const chat of chats) {
-      await idbPut(store2, chatKey(chat.id), {
-        chat,
-        generation: gen,
-      });
+    onProgress?.({ stage: 'migrating', completed: 0, total: chats.length });
+    for (let index = 0; index < chats.length; index++) {
+      const chat = chats[index];
+      await idbPut(store2, chatKey(chat.id), { chat, generation: gen });
+      onProgress?.({ stage: 'migrating', completed: index + 1, total: chats.length });
     }
 
     await idbPut(store2, BRANCH_CLIPBOARD_KEY, {
@@ -507,6 +571,7 @@ async function migrateLegacyData(
     // that the data has not been schema-migrated.
     await idbPut(store2, META_KEY, {
       version: legacyVersion,
+      lastContentEditedAt: chatData.lastContentEditedAt,
       generation: gen,
       chatIds: chats.map((c) => c.id),
     } satisfies MetaRecord);
@@ -541,11 +606,19 @@ async function migrateLegacyData(
  * 1. Migration from legacy single-key format
  * 2. New per-chat key format with generation-based recovery
  */
+export interface ChatDataLoadProgress {
+  stage: 'opening' | 'lock' | 'reading' | 'restoringChats' | 'validating' | 'fingerprinting' | 'migrating';
+  completed?: number;
+  total?: number;
+}
+
 export const loadChatData = async (
-  baseState: StoreState
+  baseState: StoreState,
+  onProgress?: (progress: ChatDataLoadProgress) => void
 ): Promise<ChatDataLoadResult | null> => {
   if (!hasIndexedDb()) return null;
 
+  onProgress?.({ stage: 'opening' });
   const database = await openDatabase();
   try {
     const tx = database.transaction(STORE_NAME, 'readonly');
@@ -562,24 +635,26 @@ export const loadChatData = async (
 
     // If legacy data exists and no meta, migrate storage format (not schema)
     if (legacy && !meta) {
-      const migrated = await enqueueStorageMutation(() => migrateLegacyData(baseState));
+      onProgress?.({ stage: 'lock' });
+      const migrated = await enqueueStorageMutation(() => withCrossContextStorageLock(() => migrateLegacyData(baseState, onProgress), 30_000));
       if (migrated) return migrated;
 
       // Another tab may have completed the migration while this tab waited
       // for the mutation lock. Re-read the committed format rather than
       // treating the store as empty and starting a destructive first save.
-      return loadChatData(baseState);
+      return loadChatData(baseState, onProgress);
     }
 
     if (!meta) return null;
 
-    return withCrossContextStorageLock(async () => {
+    onProgress?.({ stage: 'lock' });
+    return await withCrossContextStorageLock(async () => {
       // The meta observed before waiting for the lock may already be stale.
       const currentMeta = await withTransaction('readonly', (store) =>
         idbGet<MetaRecord>(store, META_KEY)
       );
-      return currentMeta ? loadSplitData(currentMeta) : null;
-    });
+      return currentMeta ? loadSplitData(currentMeta, onProgress) : null;
+    }, 30_000);
   } catch (e) {
     database.close();
     throw e;
@@ -587,9 +662,11 @@ export const loadChatData = async (
 };
 
 async function loadSplitData(
-  meta: MetaRecord
+  meta: MetaRecord,
+  onProgress?: (progress: ChatDataLoadProgress) => void
 ): Promise<ChatDataLoadResult | null> {
   const G = meta.generation;
+  onProgress?.({ stage: 'reading' });
 
   const database = await openDatabase();
   try {
@@ -623,6 +700,19 @@ async function loadSplitData(
     await recordTxDone;
     database.close();
 
+    const total = new Set([...rawChatKeys, ...packedChatKeys.map(key => key.slice(0, -':packed'.length))]).size;
+    const packedKeys = new Set(packedChatKeys);
+    const completedKeys = new Set<string>();
+    let lastYield = performance.now();
+    const reportChat = async (key: string) => {
+      completedKeys.add(key);
+      onProgress?.({ stage: 'restoringChats', completed: completedKeys.size, total });
+      if (performance.now() - lastYield >= 16) {
+        await new Promise(resolve => setTimeout(resolve, 0));
+        lastYield = performance.now();
+      }
+    };
+    onProgress?.({ stage: 'restoringChats', completed: 0, total });
     const errors: string[] = [];
     const chatRecords: Array<{ key: string; record: ChatRecord }> = [];
     const usableRawKeys = new Set<string>();
@@ -661,6 +751,7 @@ async function loadSplitData(
       } else if (belongsToCommittedSnapshot(key)) {
         errors.push(`Invalid raw chat record: ${key}`);
       }
+      if (usableRawKeys.has(key) || !packedKeys.has(packedKey(key))) await reportChat(key);
     }
 
     for (let i = 0; i < packedChatKeys.length; i++) {
@@ -696,6 +787,7 @@ async function loadSplitData(
       } else if (belongsToCommittedSnapshot(rawKey)) {
         errors.push(`Invalid packed chat record: ${pk}`);
       }
+      await reportChat(rawKey);
     }
 
     // ── Generation reconciliation ──
@@ -764,6 +856,8 @@ async function loadSplitData(
       errors.push('Missing or invalid content-store record');
     }
 
+    onProgress?.({ stage: 'validating' });
+    await new Promise(resolve => setTimeout(resolve, 0));
     const repairedContent = repairMissingContentReferences(
       chats,
       contentStore,
@@ -796,12 +890,20 @@ async function loadSplitData(
 
     // Initialize chat snapshot for differential writes
     previousChatSnapshot = new Map();
-    for (const chat of chats) {
+    onProgress?.({ stage: 'fingerprinting', completed: 0, total: chats.length });
+    for (let index = 0; index < chats.length; index++) {
+      const chat = chats[index];
       previousChatSnapshot.set(chat.id, computeChatFingerprint(chat as PersistedChat));
+      onProgress?.({ stage: 'fingerprinting', completed: index + 1, total: chats.length });
+      if (performance.now() - lastYield >= 16) {
+        await new Promise(resolve => setTimeout(resolve, 0));
+        lastYield = performance.now();
+      }
     }
 
     return {
       chats,
+      lastContentEditedAt: meta.lastContentEditedAt,
       contentStore,
       branchClipboard: clipboard,
       loadStatus,
@@ -839,7 +941,7 @@ async function collectIndexedDbRecoverySnapshotUnlocked(): Promise<IndexedDbReco
     const recordTx = database.transaction(STORE_NAME, 'readonly');
     const recordTxDone = transactionDone(recordTx);
     const recordStore = recordTx.objectStore(STORE_NAME);
-    const [meta, legacy, contentStore, branchClipboard, rawValues, packedValues] = await Promise.all([
+    const [meta, legacy, contentStore, branchClipboard, rawValues, packedValues, legacyRemoteSnapshots] = await Promise.all([
       idbGet<MetaRecord>(recordStore, META_KEY),
       idbGet<LegacyChatDataRecord>(recordStore, LEGACY_KEY),
       idbGet<ContentStoreRecord>(recordStore, CONTENT_STORE_KEY),
@@ -850,6 +952,7 @@ async function collectIndexedDbRecoverySnapshotUnlocked(): Promise<IndexedDbReco
           idbGet<{ compressed: Uint8Array; generation: number }>(recordStore, key)
         )
       ),
+      readLegacyRemoteSnapshots(recordStore),
     ]);
     await recordTxDone;
 
@@ -898,6 +1001,7 @@ async function collectIndexedDbRecoverySnapshotUnlocked(): Promise<IndexedDbReco
       keys,
       meta,
       legacy,
+      legacyRemoteSnapshots,
       contentStore,
       branchClipboard,
       chats,
@@ -928,7 +1032,7 @@ let previousChatSnapshot: Map<string, string> = new Map(); // id → JSON hash o
  * 3. Write meta (commit marker)
  * 4. GC (deferred, safe to skip on crash)
  */
-const saveChatDataUnlocked = async (data: PersistedChatData): Promise<void> => {
+const saveChatDataUnlocked = async (data: PersistedChatData, prepared: Awaited<ReturnType<typeof prepareSaveAsync>>): Promise<void> => {
   if (!hasIndexedDb()) return;
   if (chatDataWritesBlocked) {
     throw new Error('Chat data writes are blocked because persisted data did not load safely');
@@ -952,7 +1056,6 @@ const saveChatDataUnlocked = async (data: PersistedChatData): Promise<void> => {
   }
   currentGeneration = Math.max(currentGeneration, diskMeta?.generation ?? 0);
   const nextGen = currentGeneration + 1;
-  const prepared = await prepareSaveAsync(data);
   const chats = (prepared.data.chats ?? []) as PersistedChat[];
   const contentStore = prepared.data.contentStore ?? {};
   const clipboard = prepared.data.branchClipboard ?? null;
@@ -1008,6 +1111,7 @@ const saveChatDataUnlocked = async (data: PersistedChatData): Promise<void> => {
   await withTransaction('readwrite', async (store) => {
     await idbPut(store, META_KEY, {
       version: STORE_VERSION,
+      lastContentEditedAt: prepared.data.lastContentEditedAt,
       generation: nextGen,
       chatIds: chats.map((c) => c.id),
     } satisfies MetaRecord);
@@ -1069,7 +1173,11 @@ const saveChatDataUnlocked = async (data: PersistedChatData): Promise<void> => {
 };
 
 export const saveChatData = (data: PersistedChatData): Promise<void> =>
-  enqueueStorageMutation(() => saveChatDataUnlocked(data));
+  enqueueStorageMutation(async () => {
+    // Preserve save order, but leave other tabs free to load while the worker prepares data.
+    const prepared = await prepareSaveAsync(data);
+    return withCrossContextStorageLock(() => saveChatDataUnlocked(data, prepared));
+  });
 
 // ─── Copy-on-Write Compression ───
 
@@ -1127,7 +1235,7 @@ export const compressSingleChat = (
     const compressed = await compressChatRecord(rawRecord);
     if (signal?.aborted || chatDataWritesBlocked) return false;
     return enqueueStorageMutation(() =>
-      commitCompressedChatUnlocked(chatId, rawRecord, compressed, signal)
+      withCrossContextStorageLock(() => commitCompressedChatUnlocked(chatId, rawRecord, compressed, signal))
     );
   });
 };
@@ -1180,7 +1288,7 @@ export const decompressSingleChat = async (chatId: string): Promise<boolean> => 
   const record = await decompressChatRecord<ChatRecord>(compressed);
   if (chatDataWritesBlocked) return false;
   return enqueueStorageMutation(() =>
-    commitDecompressedChatUnlocked(chatId, { ...packed, compressed }, record)
+    withCrossContextStorageLock(() => commitDecompressedChatUnlocked(chatId, { ...packed, compressed }, record))
   );
 };
 
@@ -1335,6 +1443,7 @@ const clearChatDataUnlocked = async (): Promise<void> => {
   await withTransaction('readwrite', async (store) => {
     const allKeys = await idbGetAllKeys(store);
     for (const key of allKeys) {
+      if (typeof key === 'string' && key.startsWith(REMOTE_RECOVERY_PREFIX)) continue;
       await idbDelete(store, key as string);
     }
   });
@@ -1346,7 +1455,7 @@ const clearChatDataUnlocked = async (): Promise<void> => {
 };
 
 export const clearChatData = (): Promise<void> =>
-  enqueueStorageMutation(clearChatDataUnlocked);
+  enqueueStorageMutation(() => withCrossContextStorageLock(clearChatDataUnlocked));
 
 // Exported for testing
 export {

@@ -1,7 +1,8 @@
-import useStore from '@store/store';
-import { buildPathToLeaf, getSiblingsOf } from '@utils/branchUtils';
+import { useWorkspaceStore } from '@store/workspaceScope';
+import { getSiblingsOf } from '@utils/branchUtils';
 
 export default function useBranchNavigation(chatIndex: number, nodeId?: string) {
+  const useStore = useWorkspaceStore();
   const chat = useStore((state) => state.chats?.[chatIndex]);
   const tree = chat?.branchTree;
   const siblings = tree && nodeId ? getSiblingsOf(tree, nodeId) : [];
@@ -9,15 +10,8 @@ export default function useBranchNavigation(chatIndex: number, nodeId?: string) 
 
   const switchTo = (targetNodeId: string) => {
     const state = useStore.getState();
-    const currentChat = state.chats?.[chatIndex];
-    if (!currentChat?.branchTree || !currentChat.branchTree.nodes[targetNodeId]) return;
-    state.pushNavigationEntry({
-      chatId: currentChat.id,
-      activePath: buildPathToLeaf(currentChat.branchTree, targetNodeId),
-      viewContext: state.chatActiveView,
-      source: 'branch-switch',
-    });
-    state.switchBranchAtNode(chatIndex, targetNodeId);
+    if (!chat) return;
+    state.navigateToNode({ chatId: chat.id, nodeId: targetNodeId, source: 'branch-switch', history: 'push', focus: 'none' });
   };
 
   return { siblings, currentIdx, switchTo };

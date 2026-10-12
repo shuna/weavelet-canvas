@@ -47,9 +47,14 @@ enum RemoteRequest {
         var config = chat["config"] ?? ChatDefaults.webInitial.config
         config = config.replacing("model", with: .string(settings.model)).replacing("stream", with: .bool(settings.stream))
         let messages = try projectedMessages(source: source, chat: chat, path: path)
+        var contextChat = chat.replacing("messages", with: .array(messages))
+        if let tree = chat["branchTree"] {
+            contextChat = contextChat.replacing("branchTree", with: tree.replacing("activePath", with: .array(path.map(OrderedJSON.string))))
+        }
         // shortcut: Catalog capabilities remain unavailable until native model settings are connected; force_reasoning uses the shared builder.
         let input = OrderedJSON.object([
             .init(key: "messages", value: .array(messages)),
+            .init(key: "chat", value: contextChat),
             .init(key: "config", value: config),
             .init(key: "activePath", value: .array(path.map(OrderedJSON.string))),
             .init(key: "omittedNodes", value: chat["omittedNodes"] ?? .object([])),

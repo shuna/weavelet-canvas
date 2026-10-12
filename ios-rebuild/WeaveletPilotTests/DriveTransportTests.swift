@@ -1,4 +1,5 @@
 import XCTest
+import CryptoKit
 @testable import WeaveletPilot
 
 final class DriveTransportTests: XCTestCase {
@@ -10,6 +11,42 @@ final class DriveTransportTests: XCTestCase {
     override func tearDown() { DriveURLProtocol.handler = nil; super.tearDown() }
     private func json(_ value: String) -> Data { Data(value.utf8) }
 
+    func testSharedSessionOpenUnlockUsesNativeMetadataAndRejectsLegacyFoldersBeforeReadingKeys() async throws {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent("weavelet-drive-open-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let password = "FAKE TEST ONLY native metadata passphrase"
+        let created = try SyncCrypto.createKeyEnvelope(password: password, dataset: "FAKE-dataset")
+        let header = try JSONEncoder().encode(created.envelope)
+        var metadata = "{\"id\":\"FAKE-dataset\",\"mimeType\":\"application/vnd.google-apps.folder\",\"appProperties\":{\"weaveletSync\":\"1\",\"headerId\":\"FAKE-header\"}}"
+        var mediaReads = 0
+        let drive = transport { request in
+            XCTAssertEqual(request.value(forHTTPHeaderField: "Authorization"), "Bearer FAKE TOKEN")
+            if request.url?.path.hasSuffix("FAKE-header") == true {
+                mediaReads += 1
+                XCTAssertEqual(URLComponents(url: request.url!, resolvingAgainstBaseURL: false)?.queryItems?.first { $0.name == "alt" }?.value, "media")
+                return (200, header)
+            }
+            XCTAssertEqual(request.url?.path, "/drive/v3/files/FAKE-dataset")
+            return (200, self.json(metadata))
+        }
+        let keys = DriveTestKeys()
+        let session = try SyncSession(drive: drive, store: SyncStateStore(fileURL: directory.appendingPathComponent("state.json")), keyStore: keys)
+        try await session.open(dataset: "FAKE-dataset")
+        try await session.unlock(password: password)
+        XCTAssertEqual(mediaReads, 1)
+        XCTAssertNotNil(try keys.load(dataset: "FAKE-dataset"))
+        for invalid in [
+            "{\"mimeType\":\"application/json\",\"appProperties\":{\"weaveletSync\":\"1\",\"headerId\":\"FAKE-header\"}}",
+            "{\"mimeType\":\"application/vnd.google-apps.folder\",\"appProperties\":{\"headerId\":\"FAKE-header\"}}",
+            "{\"mimeType\":\"application/vnd.google-apps.folder\",\"appProperties\":{\"weaveletSync\":\"1\"}}",
+            "{\"trashed\":true,\"mimeType\":\"application/vnd.google-apps.folder\",\"appProperties\":{\"weaveletSync\":\"1\",\"headerId\":\"FAKE-header\"}}"
+        ] {
+            metadata = invalid
+            try await session.open(dataset: "FAKE-dataset")
+            do { try await session.unlock(password: password); XCTFail("Invalid folder accepted") } catch {}
+            XCTAssertEqual(mediaReads, 1)
+        }
+    }
     func testTokenRefreshPaginationAndGeneratedIDsUseNativeRequests() async throws {
         let drive = transport({ request in
             XCTAssertEqual(request.url?.host, "www.googleapis.com")
@@ -81,4 +118,11 @@ private final class DriveURLProtocol: URLProtocol {
         } catch { client?.urlProtocol(self, didFailWithError: error) }
     }
     override func stopLoading() {}
+}
+
+private final class DriveTestKeys: SyncKeyStore, @unchecked Sendable {
+    private let lock = NSLock()
+    private var key: SymmetricKey?
+    func load(dataset: String) throws -> SymmetricKey? { lock.lock(); defer { lock.unlock() }; return key }
+    func save(_ key: SymmetricKey, dataset: String) throws { lock.lock(); defer { lock.unlock() }; self.key = key }
 }

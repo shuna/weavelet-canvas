@@ -1,3 +1,4 @@
+import { InfoTooltip } from '@components/ConfigMenu/fields';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import useStore from '@store/store';
@@ -10,8 +11,9 @@ import {
   type WllamaFeatureCheck,
 } from '@src/local-llm/runtime';
 import type { VariantOverride as WasmVariantOverride } from '@src/vendor/wllama/variant-table';
-import { OpfsFileProvider, deleteModel, getTempFileSize, readFile, saveFile, sha256Blob } from '@src/local-llm/storage';
-import { rehydrateSavedModels } from '@src/local-llm/storage';
+import { OpfsFileProvider, getTempFileSize, readFile, saveFile, sha256Blob } from '@src/local-llm/storage';
+import { removeAssets } from '@src/local-llm/assetRemoval';
+import { rehydrateLocalModels } from '@hooks/useLocalModelRehydration';
 import { CURATED_MODELS } from '@src/local-llm/catalog';
 import type { CatalogModel } from '@src/local-llm/catalog';
 import { downloadCatalogModel, downloadModelFiles } from '@src/local-llm/download';
@@ -293,29 +295,9 @@ const LocalModelSettings = () => {
     if (rehydratedRef.current && rehydrationEpoch === 0) return;
     rehydratedRef.current = true;
 
-    const searchModels = useStore.getState().localModels
-      .filter((m) => m.source === 'opfs' && !CURATED_MODELS.some((c) => c.id === m.id))
-      .map((m) => ({ id: m.id, manifest: m.manifest }));
-    const entries = [...CURATED_MODELS, ...searchModels];
-
-    rehydrateSavedModels(entries).then((meta) => {
-      const store = useStore.getState();
-      for (const [id, m] of Object.entries(meta)) {
-        store.updateSavedModelMeta(id, m);
-        if (m.storageState === 'saved' && !store.localModels.some((lm) => lm.id === id)) {
-          const catalog = CURATED_MODELS.find((c) => c.id === id);
-          if (catalog) {
-            store.addLocalModel({
-              id: catalog.id, engine: catalog.engine, tasks: catalog.tasks,
-              label: catalog.label, origin: catalog.huggingFaceRepo, source: 'opfs',
-              manifest: catalog.manifest, fileSize: m.storedBytes || catalog.expectedDownloadSize,
-              displayMeta: catalog.displayMeta,
-            });
-          }
-        }
-      }
-      setRehydrated(true);
-    }).catch(() => { setRehydrated(true); });
+    rehydrateLocalModels(rehydrationEpoch > 0)
+      .then(() => setRehydrated(true))
+      .catch(() => setRehydrated(true));
   }, [enabled, rehydrationEpoch]);
 
   // Sync partial model storedBytes on section mount
@@ -418,7 +400,8 @@ const LocalModelSettings = () => {
       });
       const duplicate = await findStoredModelWithHash(fileHash, totalBytes, model.id);
       if (duplicate) {
-        await deleteModel(model.id);
+        const removal = await removeAssets(model.id);
+        if (removal.status !== 'removed') return;
         store.removeSavedModelMeta(model.id);
         store.removeLocalModel(model.id);
         if (!store.favoriteLocalModelIds.includes(duplicate.id)) store.toggleFavoriteLocalModel(duplicate.id);
@@ -475,7 +458,7 @@ const LocalModelSettings = () => {
     const provider = new OpfsFileProvider(model.id, model.manifest);
     try {
       if (localModelRuntime.isLoaded(model.id)) {
-        await localModelRuntime.unloadModel(model.id);
+        await localModelRuntime.unloadModel(model.id, { force: true });
       }
       await localModelRuntime.loadModel(
         { id: model.id, engine: model.engine, tasks: model.tasks, label: model.label,
@@ -500,7 +483,7 @@ const LocalModelSettings = () => {
   }, [autoAssignIfUnset]);
 
   const handleUnloadCatalogModel = useCallback(async (modelId: string) => {
-    await localModelRuntime.unloadModel(modelId);
+    await localModelRuntime.unloadModel(modelId, { force: true });
   }, []);
 
   // ----- Ephemeral file handlers -----
@@ -647,7 +630,7 @@ const LocalModelSettings = () => {
         store.addLocalModel(model);
       }
 
-      if (localModelRuntime.isLoaded(model.id)) await localModelRuntime.unloadModel(model.id);
+      if (localModelRuntime.isLoaded(model.id)) await localModelRuntime.unloadModel(model.id, { force: true });
 
       await localModelRuntime.loadModel(
         model,
@@ -668,7 +651,7 @@ const LocalModelSettings = () => {
   }, [autoAssignIfUnset, bumpOpfsBrowser, findStoredModelWithHash]);
 
   const handleUnloadEphemeral = useCallback(async () => {
-    if (importedModelId) await localModelRuntime.unloadModel(importedModelId);
+    if (importedModelId) await localModelRuntime.unloadModel(importedModelId, { force: true });
     setContextLength(null);
     setFileName(null);
     setImportedModelId(null);
@@ -825,7 +808,7 @@ const LocalModelSettings = () => {
     const modelId = generateSearchModelId(result.repoId, variant);
     const provider = new OpfsFileProvider(modelId, candidate.manifest);
     try {
-      if (localModelRuntime.isLoaded(modelId)) await localModelRuntime.unloadModel(modelId);
+      if (localModelRuntime.isLoaded(modelId)) await localModelRuntime.unloadModel(modelId, { force: true });
       await localModelRuntime.loadModel(
         { id: modelId, engine: candidate.engine, tasks: candidate.tasks, label: candidate.label,
           origin: result.repoId, source: 'opfs', manifest: candidate.manifest, fileSize: candidate.estimatedSize },
@@ -847,7 +830,7 @@ const LocalModelSettings = () => {
   }, [autoAssignIfUnset]);
 
   const handleUnloadSearchModel = useCallback(async (modelId: string) => {
-    await localModelRuntime.unloadModel(modelId);
+    await localModelRuntime.unloadModel(modelId, { force: true });
   }, []);
 
   const handleDeleteSearchModel = useCallback(async (modelId: string) => {
@@ -964,7 +947,7 @@ const LocalModelSettings = () => {
       {/* Experimental notice */}
       <div className='flex items-start gap-2 rounded-lg border border-amber-300 dark:border-amber-600 bg-amber-50 dark:bg-amber-900/20 p-3 text-xs text-amber-800 dark:text-amber-300'>
         <span className='font-semibold whitespace-nowrap'>{t('localModel.experimental')}</span>
-        <span>{t('localModel.experimentalNote')}</span>
+        <InfoTooltip text={t('localModel.experimentalNote')} />
       </div>
 
       {/* 1. Enable toggle + device tier */}
@@ -999,7 +982,6 @@ const LocalModelSettings = () => {
                   >
                     <span className='flex min-w-0 flex-col'>
                       <span className='text-sm font-medium text-gray-900 dark:text-gray-200'>{t('localModel.featureChecklist')}</span>
-                      <span className='text-[11px] text-gray-500 dark:text-gray-400'>{t('localModel.featureChecklistDescription')}</span>
                     </span>
                     <span className='inline-flex items-center gap-1 whitespace-nowrap text-[11px] text-gray-500 dark:text-gray-400'>
                       <span>{showFeatureChecklist ? t('localModel.featureChecklistHide') : t('localModel.featureChecklistShow')}</span>
@@ -1011,6 +993,7 @@ const LocalModelSettings = () => {
                       </span>
                     </span>
                   </button>
+                  <InfoTooltip text={t('localModel.featureChecklistDescription')} />
                   <button
                     type='button'
                     onClick={() => { void runEnvironmentInspection(); }}
@@ -1028,7 +1011,7 @@ const LocalModelSettings = () => {
                       <div>{t('localModel.estimatedWebGpuSingleThread')}: <span className='font-medium text-gray-900 dark:text-gray-100'>{envReport ? formatEstimatedGiB(envReport.estimates.webgpuSingleThreadGiB) : '—'}</span></div>
                       <div>{t('localModel.estimatedCpuMultiThread')}: <span className='font-medium text-gray-900 dark:text-gray-100'>{envReport ? formatEstimatedGiB(envReport.estimates.cpuMultiThreadGiB) : '—'}</span></div>
                       <div>{t('localModel.estimatedWebGpuMultiThread')}: <span className='font-medium text-gray-900 dark:text-gray-100'>{envReport ? formatEstimatedGiB(envReport.estimates.webgpuMultiThreadGiB) : '—'}</span></div>
-                      <div className='mt-1 text-[10px] text-gray-500 dark:text-gray-400'>{t('localModel.estimatedLimitNote')}</div>
+                      <div className='flex items-center gap-1 text-xs text-gray-500 dark:text-gray-400'>{t('localModel.deviceTier')}<InfoTooltip text={t('localModel.estimatedLimitNote')} /></div>
                     </div>
 
                     <div
@@ -1056,7 +1039,7 @@ const LocalModelSettings = () => {
                           <option value='mt-webgpu-jspi-compat'>mt-webgpu-jspi-compat</option>
                         </select>
                       </label>
-                      <div className='text-[10px] text-gray-500 dark:text-gray-400'>{t('localModel.wasmVariantOverrideNote')}</div>
+                      <div className='flex items-center gap-1 text-xs text-gray-500 dark:text-gray-400'>{t('localModel.featureChecklist')}<InfoTooltip text={t('localModel.wasmVariantOverrideNote')} /></div>
                     </div>
 
                     <div className='overflow-x-auto'>
@@ -1119,7 +1102,7 @@ const LocalModelSettings = () => {
                           {!envReport && (
                             <tr className='border-t border-gray-200 dark:border-gray-700'>
                               <td colSpan={3} className='px-3 py-3 text-gray-500 dark:text-gray-400'>
-                                {webGpuPreflighting ? t('localModel.webgpuPreflightChecking') : t('localModel.featureChecklistDescription')}
+                                {webGpuPreflighting ? t('localModel.webgpuPreflightChecking') : <InfoTooltip text={t('localModel.featureChecklistDescription')} />}
                               </td>
                             </tr>
                           )}
@@ -1335,7 +1318,7 @@ const LocalModelSettings = () => {
           {/* 3. Manual import */}
           <SettingsGroup label={t('localModel.importedFiles')}>
             <div className='px-4 py-3 flex flex-col gap-3'>
-              <p className='text-xs text-gray-500 dark:text-gray-400'>{t('localModel.selectGgufHint')}</p>
+              <div className='flex items-center gap-1 text-xs text-gray-500 dark:text-gray-400'>{t('localModel.importedFiles')}<InfoTooltip text={t('localModel.selectGgufHint')} /></div>
               <div className='flex items-center gap-3'>
                 <label
                   className={`btn btn-neutral text-sm px-4 py-1.5 cursor-pointer${importedStatus === 'loading' ? ' opacity-50 pointer-events-none' : ''}`}
@@ -1394,7 +1377,7 @@ const LocalModelSettings = () => {
 
           {/* OPFS Storage Management */}
           <SettingsGroup label={t('localModel.opfsBrowser.title')}>
-            <div className='px-4 py-2 text-xs text-gray-500 dark:text-gray-400'>{t('localModel.opfsBrowser.description')}</div>
+            <div className='px-4 py-2 flex items-center gap-1 text-xs text-gray-500 dark:text-gray-400'>{t('localModel.opfsBrowser.title')}<InfoTooltip text={t('localModel.opfsBrowser.description')} /></div>
             <OpfsFileBrowser
               refreshTrigger={opfsBrowserRefresh}
               onStorageChanged={() => {

@@ -353,41 +353,14 @@ export const pruneHiddenNodesState = (
   return { chats: updatedChats, contentStore };
 };
 
-export const renameBranchNodeState = (
-  chats: ChatInterface[],
-  chatIndex: number,
-  nodeId: string,
-  label: string
+export const setBranchNodeFieldState = (
+  chats: ChatInterface[], chatIndex: number, nodeId: string,
+  field: 'label' | 'starred' | 'pinned', value: string | true | undefined
 ) => {
-  const updatedChats = cloneChatAt(chats, chatIndex);
-  const tree = updatedChats[chatIndex].branchTree!;
-  tree.nodes[nodeId] = cloneNode(tree.nodes[nodeId]);
-  tree.nodes[nodeId].label = label || undefined;
-  return updatedChats;
-};
-
-export const toggleNodeStarState = (
-  chats: ChatInterface[],
-  chatIndex: number,
-  nodeId: string
-) => {
-  const updatedChats = cloneChatAt(chats, chatIndex);
-  const tree = updatedChats[chatIndex].branchTree!;
-  tree.nodes[nodeId] = cloneNode(tree.nodes[nodeId]);
-  tree.nodes[nodeId].starred = !tree.nodes[nodeId].starred || undefined;
-  return updatedChats;
-};
-
-export const toggleNodePinState = (
-  chats: ChatInterface[],
-  chatIndex: number,
-  nodeId: string
-) => {
-  const updatedChats = cloneChatAt(chats, chatIndex);
-  const tree = updatedChats[chatIndex].branchTree!;
-  tree.nodes[nodeId] = cloneNode(tree.nodes[nodeId]);
-  tree.nodes[nodeId].pinned = !tree.nodes[nodeId].pinned || undefined;
-  return updatedChats;
+  const updated = cloneChatAt(chats, chatIndex);
+  const tree = updated[chatIndex].branchTree!;
+  tree.nodes[nodeId] = { ...tree.nodes[nodeId], [field]: value };
+  return updated;
 };
 
 export const appendNodeToActivePathState = (
@@ -693,12 +666,16 @@ export const copyBranchSequenceState = (
   fromNodeId: string,
   toNodeId: string
 ): BranchClipboard | null => {
-  const tree = chats[chatIndex].branchTree!;
+  const tree = chats[chatIndex]?.branchTree;
+  if (!tree?.nodes[fromNodeId] || !tree.nodes[toNodeId]) return null;
 
   // Walk from toNodeId up to fromNodeId to build the path
   const nodeIds: string[] = [];
   let cur: string | null = toNodeId;
+  const visited = new Set<string>();
   while (cur) {
+    if (visited.has(cur) || !tree.nodes[cur]) return null;
+    visited.add(cur);
     nodeIds.unshift(cur);
     if (cur === fromNodeId) break;
     cur = tree.nodes[cur]?.parentId ?? null;
@@ -713,6 +690,38 @@ export const copyBranchSequenceState = (
   const clipboard: BranchClipboard = { nodeIds, sourceChat: chats[chatIndex].id, nodes };
   for (const id of nodeIds) copyMessageAttributes(tree, id, clipboard, id);
   return clipboard;
+};
+
+export const removeBranchSequenceState = (
+  chats: ChatInterface[],
+  chatIndex: number,
+  nodeIds: string[],
+  currentContentStore: ContentStoreData
+) => {
+  const contentStore = { ...currentContentStore };
+  const updatedChats = cloneChatAt(chats, chatIndex);
+  const chat = updatedChats[chatIndex];
+  const tree = chat.branchTree!;
+  const removed = new Set(nodeIds);
+  for (const node of Object.values(tree.nodes)) {
+    if (removed.has(node.id) || !node.parentId || !removed.has(node.parentId)) continue;
+    let parentId: string | null = node.parentId;
+    while (parentId && removed.has(parentId)) parentId = tree.nodes[parentId].parentId;
+    tree.nodes[node.id] = { ...node, parentId };
+  }
+  for (const id of nodeIds) {
+    releaseContent(contentStore, tree.nodes[id].contentHash);
+    deleteMessageAttributes(tree, id);
+    delete tree.nodes[id];
+  }
+  tree.activePath = tree.activePath.filter((id) => !removed.has(id));
+  if (tree.activePath.length === 0) {
+    const root = Object.values(tree.nodes).find((node) => !node.parentId);
+    if (root) tree.activePath = buildPathToLeaf(tree, root.id);
+  }
+  tree.rootId = tree.activePath[0] ?? '';
+  chat.messages = materializeActivePath(tree, contentStore);
+  return { chats: updatedChats, contentStore };
 };
 
 export const pasteBranchSequenceState = (
@@ -746,11 +755,13 @@ export const pasteBranchSequenceState = (
     prevId = newId;
   }
 
-  const insertIdx = tree.activePath.indexOf(afterNodeId);
+  const destinationPath = buildPathToLeaf(tree, afterNodeId);
+  const insertIdx = destinationPath.indexOf(afterNodeId);
   tree.activePath = [
-    ...tree.activePath.slice(0, insertIdx + 1),
+    ...destinationPath.slice(0, insertIdx + 1),
     ...clipboard.nodeIds.map((id) => idMap[id]),
   ];
+  tree.rootId = tree.activePath[0] ?? '';
   updatedChats[targetChatIndex].messages = materializeActivePath(tree, contentStore);
 
   return { chats: updatedChats, contentStore };

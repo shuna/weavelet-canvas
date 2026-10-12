@@ -5,29 +5,31 @@ import i18n from '../i18n';
 import { Theme } from '@type/theme';
 import useInitialiseNewChat from './useInitialiseNewChat';
 import {
-  applyPersistedChatDataState,
+  prepareHydratedState,
+  finishHydratedState,
   createPersistedChatDataState,
   setIndexedDbMigrationComplete,
   needsDataMigration,
 } from '@store/persistence';
 import {
   loadChatData,
+  type ChatDataLoadProgress,
   saveChatData,
   initCompressionScheduler,
   notifyActiveChatChanged,
   setChatDataWritesBlocked,
 } from '@store/storage/IndexedDbStorage';
 import { notifyStorageError } from '@store/storage/storageErrors';
+import { getProxyConfig, sendAck } from '@utils/proxyClient';
+import { updateStreamCheckpoints } from '@utils/streamDb';
+import { getStreamCheckpointTargets } from './submitRuntime';
 import { registerSnapshotFlushCallback } from '@utils/streamingBuffer';
 import { setRuntimeStoreGetter } from '@src/local-llm/runtime';
 
-function setBootPhase(phase: string) {
-  const el = document.getElementById('boot-status');
-  if (el) el.textContent = phase;
-}
-
 const useAppBootstrap = () => {
   const [isBootstrapped, setIsBootstrapped] = useState(false);
+  const [bootPhase, setBootPhase] = useState('restoring');
+  const [bootProgress, setBootProgress] = useState<ChatDataLoadProgress>();
   const initialiseNewChat = useInitialiseNewChat();
   const setChats = useStore((state) => state.setChats);
   const setTheme = useStore((state) => state.setTheme);
@@ -82,7 +84,15 @@ const useAppBootstrap = () => {
         while (true) {
           pendingSave = false;
           try {
-            await saveChatData(createPersistedChatDataState(useStore.getState()));
+            const snapshot = createPersistedChatDataState(useStore.getState());
+            const targets = getStreamCheckpointTargets();
+            await saveChatData(snapshot);
+            const currentRequests = new Set(getStreamCheckpointTargets().map(target => target.requestId));
+            const acknowledged = await updateStreamCheckpoints(snapshot, targets.filter(target => currentRequests.has(target.requestId)));
+            const proxy = getProxyConfig();
+            if (proxy) for (const record of acknowledged) {
+              if (record.proxySessionId && record.proxyComplete) sendAck(proxy, record.proxySessionId);
+            }
           } catch (error) {
             notifyStorageError(error);
           }
@@ -115,8 +125,9 @@ const useAppBootstrap = () => {
     };
 
     const bootstrap = async () => {
-      setBootPhase('rehydrating store');
+      setBootPhase('restoring');
       await useStore.persist.rehydrate();
+      if (cancelled) return;
 
       // Wire up local model runtime store access
       setRuntimeStoreGetter(() => useStore.getState());
@@ -143,8 +154,10 @@ const useAppBootstrap = () => {
       let indexedDbLoadFailed = false;
       let indexedDbLoadErrors: string[] = [];
       try {
-        setBootPhase('loading chat data');
-        indexedDbChatData = await loadChatData(useStore.getState());
+        setBootPhase('loading');
+        indexedDbChatData = await loadChatData(useStore.getState(), progress => {
+          if (!cancelled) setBootProgress(progress);
+        });
       } catch (error) {
         indexedDbLoadFailed = true;
         indexedDbLoadErrors = [error instanceof Error ? error.message : String(error)];
@@ -177,11 +190,16 @@ const useAppBootstrap = () => {
         }
       } else if (indexedDbChatData) {
         setIndexedDbMigrationComplete(true);
-        const nextState = { ...useStore.getState() };
-        applyPersistedChatDataState(nextState, indexedDbChatData);
+        setBootPhase('finalizing');
+        setBootProgress(undefined);
+        const prepared = await prepareHydratedState(useStore.getState(), indexedDbChatData);
+        if (cancelled) return;
+        const nextState = finishHydratedState(prepared);
         useStore.setState({
+          lastContentEditedAt: nextState.lastContentEditedAt,
           chats: nextState.chats,
           contentStore: nextState.contentStore,
+          branchClipboard: nextState.branchClipboard,
           currentChatIndex: nextState.currentChatIndex,
         });
         setChatDataWritesBlocked(false);
@@ -199,6 +217,7 @@ const useAppBootstrap = () => {
         // First launch with IndexedDB: move existing chat data to IndexedDB
         const chatDataState = createPersistedChatDataState(useStore.getState());
         try {
+          setBootPhase('saving');
           setChatDataWritesBlocked(false);
           await saveChatData(chatDataState);
           setIndexedDbMigrationComplete(true);
@@ -233,6 +252,7 @@ const useAppBootstrap = () => {
         }
       }
 
+      setBootProgress(undefined);
       setBootPhase('finalizing');
 
       // Check if persisted data needs schema migration
@@ -242,6 +262,9 @@ const useAppBootstrap = () => {
           status: 'needs-export-import',
         });
       }
+
+      await useStore.getState().refreshLegacyRemoteMigration();
+      if (cancelled) return;
 
       const { chats, currentChatIndex } = useStore.getState();
 
@@ -293,6 +316,7 @@ const useAppBootstrap = () => {
         if (
           state.chats === prev.chats &&
           state.contentStore === prev.contentStore &&
+          state.lastContentEditedAt === prev.lastContentEditedAt &&
           state.branchClipboard === prev.branchClipboard
         ) {
           return;
@@ -323,7 +347,7 @@ const useAppBootstrap = () => {
     };
   }, [initialiseNewChat, setApiKey, setChats, setCurrentChatIndex, setTheme]);
 
-  return isBootstrapped;
+  return { isBootstrapped, bootPhase, bootProgress };
 };
 
 export default useAppBootstrap;

@@ -1,4 +1,6 @@
+import { applyBubbleSummariesForSubmit } from './bubbleSummary';
 import {
+  type ChatInterface,
   type ContentInterface,
   type MessageInterface,
   type TextContentInterface,
@@ -87,10 +89,13 @@ export const getSubmitContextMessages = (
   modelId?: string,
   activePath?: string[],
   omittedNodes: Record<string, boolean> = {},
-  systemPrompt?: string
+  systemPrompt?: string,
+  summaryContext?: { chat: ChatInterface; generatingNodeIds: string[] }
 ): MessageInterface[] => {
   const sliced = messages.slice(0, messageIndex);
-  const filtered = filterOmittedMessages(sliced, activePath, omittedNodes);
+  const filtered = summaryContext
+    ? applyBubbleSummariesForSubmit({ ...summaryContext.chat, messages, omittedNodes }, messageIndex, summaryContext.generatingNodeIds)
+    : filterOmittedMessages(sliced, activePath, omittedNodes);
 
   // Strip ALL system-role messages from the message array (config is the source of truth)
   const withoutSystem = filtered.filter((m) => m.role !== 'system');

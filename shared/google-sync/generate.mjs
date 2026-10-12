@@ -52,9 +52,19 @@ const adapters = new Set(['crypto', 'cache', 'diagnostics', 'progress', 'process
 const bundled = await build({ metafile: true, entryPoints: [path.join(root, 'entry.ts')], outfile: path.join(root, 'GoogleSync.bundle.js'), bundle: true,
   format: 'iife', globalName: 'WeaveletGoogleSync', target: 'es2022', legalComments: 'inline',
   plugins: [{ name: 'native-boundaries', setup(build) {
+    build.onResolve({ filter: /^\.\.\/sync\/EncryptedSync$/ }, () => ({ path: path.join(webRoot, 'src/store/storage/sync/EncryptedSync.ts') }));
+    build.onResolve({ filter: /^\.\.\/google\// }, args => {
+      const name = args.path.slice('../google/'.length);
+      if (adapters.has(name)) return { path: path.join(root, 'adapters', `${name}.ts`) };
+      if (sourceNames.includes(name)) return { path: path.join(root, 'source', `${name}.ts`) };
+    });
     build.onResolve({ filter: /^\.\// }, args => {
       const name = args.path.slice(2);
-      if (args.importer.startsWith(path.join(root, 'source')) && adapters.has(name)) return { path: path.join(root, 'adapters', `${name}.ts`) };
+      if (args.importer === path.join(webRoot, 'src/store/storage/sync/EncryptedSync.ts') && name === 'transport') return { path: path.join(root, 'adapters/transport.ts') };
+      const googleModule = args.importer.startsWith(path.join(root, 'source')) || args.importer.startsWith(path.join(webRoot, 'src/store/storage/google'));
+      if (googleModule && adapters.has(name)) return { path: path.join(root, 'adapters', `${name}.ts`) };
+      if (googleModule && sourceNames.includes(name)) return { path: path.join(root, 'source', `${name}.ts`) };
+      if (args.importer.startsWith(path.join(root, 'source')) && existsSync(path.join(webRoot, 'src/store/storage/google', `${name}.ts`))) return { path: path.join(webRoot, 'src/store/storage/google', `${name}.ts`) };
     });
     build.onResolve({ filter: /^@(utils|store|type)\// }, args => {
       const [, category, name] = args.path.match(/^@(utils|store|type)\/(.*)$/);
@@ -74,7 +84,7 @@ provenance.inputs = inputs;
 provenance.bundleInputs = {};
 for (const filename of [...Object.keys(bundled.metafile.inputs), path.join(root, 'generate.mjs')]) {
   const input = path.resolve(filename);
-  if (input.startsWith(root + path.sep) || ['src/api/requestBody.ts', 'src/utils/submitContext.ts'].some(name => input === path.resolve(root, '../..', name))) {
+  if (input.startsWith(root + path.sep) || input.startsWith(path.resolve(root, '../../src') + path.sep)) {
     provenance.bundleInputs[path.relative(path.join(root, '../..'), input)] = createHash('sha256').update(readFileSync(input)).digest('hex');
   }
 }
