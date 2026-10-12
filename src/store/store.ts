@@ -22,6 +22,8 @@ import {
   createPartializedState,
   migratePersistedState,
   rehydrateStoreState,
+  mergePersistedStoreState,
+  preservePersistedRootsOnReplace,
 } from './persistence';
 export { createPartializedState } from './persistence';
 
@@ -48,28 +50,33 @@ export type StoreSlice<T> = (
 
 const useStore = create<StoreState>()(
   persist(
-    (set, get) => ({
-      ...createChatSlice(set, get),
-      ...createInputSlice(set, get),
-      ...createAuthSlice(set, get),
-      ...createConfigSlice(set, get),
-      ...createPromptSlice(set, get),
-      ...createToastSlice(set, get),
-      ...createProviderSlice(set, get),
-      ...createBranchSlice(set, get),
-      ...createMigrationSlice(set, get),
-      ...createSearchSlice(set, get),
-      ...createOpenRouterStatsSlice(set, get),
-      ...createGrepSlice(set, get),
-      ...createNavigationSlice(set, get),
-      ...createEvaluationSlice(set, get),
-      ...createLocalModelSlice(set, get),
-    }),
+    (originalSet, get, api) => {
+      const set = preservePersistedRootsOnReplace(originalSet);
+      api.setState = preservePersistedRootsOnReplace(api.setState);
+      return {
+        ...createChatSlice(set, get),
+        ...createInputSlice(set, get),
+        ...createAuthSlice(set, get),
+        ...createConfigSlice(set, get),
+        ...createPromptSlice(set, get),
+        ...createToastSlice(set, get),
+        ...createProviderSlice(set, get),
+        ...createBranchSlice(set, get),
+        ...createMigrationSlice(set, get),
+        ...createSearchSlice(set, get),
+        ...createOpenRouterStatsSlice(set, get),
+        ...createGrepSlice(set, get),
+        ...createNavigationSlice(set, get),
+        ...createEvaluationSlice(set, get),
+        ...createLocalModelSlice(set, get),
+      };
+    },
     {
       name: 'free-chat-gpt',
       storage: createJSONStorage(() => compressedStorage),
       partialize: (state) => createLocalStoragePartializedState(state),
       version: STORE_VERSION,
+      merge: (persisted, current) => mergePersistedStoreState(current, persisted as Parameters<typeof mergePersistedStoreState>[1]),
       onRehydrateStorage: () => (state) => {
         if (!state) return;
         const repaired = rehydrateStoreState(state as StoreState);

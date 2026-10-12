@@ -7,6 +7,7 @@ import {
 } from '@type/chat';
 import useStore from '@store/store';
 import { normalizeConfigStream } from '@utils/streamSupport';
+import { createLibraryChat } from '@utils/chatLibrary';
 
 const date = new Date();
 const dateString =
@@ -46,21 +47,10 @@ export const generateDefaultChat = (
   folder?: string
 ): ChatInterface => {
   const state = useStore.getState();
-  const systemPrompt = state.defaultSystemMessage || undefined;
-  return {
-    id: uuidv4(),
-    title: title ? title : 'New Chat',
-    messages: [],
-    config: normalizeConfigStream({
-      ...structuredClone(state.defaultChatConfig),
-      reasoning_effort: state.defaultChatConfig.reasoning_effort ?? 'none',
-      reasoning_budget_tokens: state.defaultChatConfig.reasoning_budget_tokens ?? 0,
-      systemPrompt,
-    }),
-    titleSet: false,
-    folder,
-    imageDetail: state.defaultImageDetail,
-  };
+  const chat = createLibraryChat(uuidv4(), title, state.defaultChatConfig,
+    state.defaultImageDetail, state.defaultSystemMessage, folder);
+  chat.config = normalizeConfigStream(chat.config);
+  return chat;
 };
 
 export const codeLanguageSubset = [

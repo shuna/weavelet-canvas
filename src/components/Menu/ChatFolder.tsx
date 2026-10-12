@@ -7,8 +7,6 @@ import DownChevronArrow from '@icon/DownChevronArrow';
 import FolderIcon from '@icon/FolderIcon';
 import {
   ChatHistoryInterface,
-  ChatInterface,
-  FolderCollection,
 } from '@type/chat';
 
 import ChatHistory from './ChatHistory';
@@ -20,6 +18,7 @@ import TickIcon from '@icon/TickIcon';
 import ColorPaletteIcon from '@icon/ColorPaletteIcon';
 import RefreshIcon from '@icon/RefreshIcon';
 
+import { applyFolderOperation, type FolderOperation } from '@utils/chatFolders';
 import { folderColorOptions } from '@constants/color';
 
 import useHideOnOutsideClick from '@hooks/useHideOnOutsideClick';
@@ -45,7 +44,6 @@ const ChatFolder = ({
   const isExpanded = useStore((state) => state.folders[folderId]?.expanded);
   const color = useStore((state) => state.folders[folderId]?.color);
 
-  const setChats = useStore((state) => state.setChats);
   const setFolders = useStore((state) => state.setFolders);
 
   const inputRef = useRef<HTMLInputElement>(null);
@@ -59,40 +57,23 @@ const ChatFolder = ({
 
   const [showPalette, setShowPalette, paletteRef] = useHideOnOutsideClick();
 
+  const updateFolder = (operation: FolderOperation) => {
+    const updated = applyFolderOperation(useStore.getState(), operation);
+    setFolders(updated.folders, { chats: updated.chats });
+  };
+
   const editTitle = () => {
-    const updatedFolders: FolderCollection = JSON.parse(
-      JSON.stringify(useStore.getState().folders)
-    );
-    updatedFolders[folderId].name = _folderName;
-    setFolders(updatedFolders);
+    updateFolder({ type: 'rename', id: folderId, name: _folderName });
     setIsEdit(false);
   };
 
   const deleteFolder = () => {
-    const updatedChats: ChatInterface[] = JSON.parse(
-      JSON.stringify(useStore.getState().chats)
-    );
-    updatedChats.forEach((chat) => {
-      if (chat.folder === folderId) delete chat.folder;
-    });
-    setChats(updatedChats);
-
-    const updatedFolders: FolderCollection = JSON.parse(
-      JSON.stringify(useStore.getState().folders)
-    );
-    delete updatedFolders[folderId];
-    setFolders(updatedFolders);
-
+    updateFolder({ type: 'remove', id: folderId });
     setIsDelete(false);
   };
 
   const updateColor = (_color?: string) => {
-    const updatedFolders: FolderCollection = JSON.parse(
-      JSON.stringify(useStore.getState().folders)
-    );
-    if (_color) updatedFolders[folderId].color = _color;
-    else delete updatedFolders[folderId].color;
-    setFolders(updatedFolders);
+    updateFolder({ type: 'color', id: folderId, color: _color });
     setShowPalette(false);
   };
 
@@ -120,22 +101,9 @@ const ChatFolder = ({
       e.stopPropagation();
       setIsHover(false);
 
-      // expand folder on drop
-      const updatedFolders: FolderCollection = JSON.parse(
-        JSON.stringify(useStore.getState().folders)
-      );
-      updatedFolders[folderId].expanded = true;
-      setFolders(updatedFolders);
-
-      // update chat folderId to new folderId
-      const chatIndices = JSON.parse(e.dataTransfer.getData('chatIndices'));
-      const updatedChats: ChatInterface[] = JSON.parse(
-        JSON.stringify(useStore.getState().chats)
-      );
-      chatIndices.forEach((chatIndex: number) => {
-        updatedChats[chatIndex].folder = folderId;
-      });
-      setChats(updatedChats);
+      const state = useStore.getState();
+      const chatIds = (JSON.parse(e.dataTransfer.getData('chatIndices')) as number[]).map(index => state.chats![index].id);
+      updateFolder({ type: 'move', chatIds, folderId });
       setSelectedChats([]);
     }
   };
@@ -151,12 +119,10 @@ const ChatFolder = ({
   };
 
   const toggleExpanded = () => {
-    const updatedFolders: FolderCollection = JSON.parse(
-      JSON.stringify(useStore.getState().folders)
-    );
-    updatedFolders[folderId].expanded = !updatedFolders[folderId].expanded;
-    setFolders(updatedFolders);
+    updateFolder({ type: 'expanded', id: folderId, expanded: !useStore.getState().folders[folderId].expanded });
   };
+
+  useEffect(() => { if (!isEdit) _setFolderName(folderName); }, [folderName, isEdit]);
 
   useEffect(() => {
     if (inputRef && inputRef.current) inputRef.current.focus();

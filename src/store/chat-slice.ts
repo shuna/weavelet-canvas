@@ -2,7 +2,7 @@ import { v4 as uuidv4 } from 'uuid';
 import { StoreSlice } from './store';
 import { ChatInterface, FolderCollection, GeneratingSession, MessageInterface, TextContentInterface } from '@type/chat';
 import { notifyStorageError, setLocalStorageItem } from './storage/storageErrors';
-import { addContent } from '@utils/contentStore';
+import { addContent, type ContentStoreData } from '@utils/contentStore';
 import { materializeActivePath } from '@utils/branchUtils';
 
 export interface ChatSlice {
@@ -20,7 +20,7 @@ export interface ChatSlice {
   lastSubmitChatId: string | null;
   folders: FolderCollection;
   setMessages: (messages: MessageInterface[]) => void;
-  setChats: (chats: ChatInterface[], options?: { preserveBranchHistory?: boolean }) => void;
+  setChats: (chats: ChatInterface[], options?: { preserveBranchHistory?: boolean; contentStore?: ContentStoreData }) => void;
   setCurrentChatIndex: (currentChatIndex: number) => void;
   setError: (error: string) => void;
   setLastSubmitContext: (
@@ -30,7 +30,7 @@ export interface ChatSlice {
     chatId?: string | null
   ) => void;
   setChatSystemPrompt: (chatIndex: number, systemPrompt: string) => void;
-  setFolders: (folders: FolderCollection) => void;
+  setFolders: (folders: FolderCollection, options?: { chats?: ChatInterface[] }) => void;
   addSession: (session: GeneratingSession) => void;
   removeSession: (sessionId: string) => void;
   updateSession: (sessionId: string, patch: Partial<GeneratingSession>) => void;
@@ -129,6 +129,7 @@ export const createChatSlice: StoreSlice<ChatSlice> = (set, get) => {
           return {
             ...prev,
             chats: chats,
+            ...(options?.contentStore === undefined ? {} : { contentStore: options.contentStore }),
             collapsedNodeMaps: sameOrder
               ? prev.collapsedNodeMaps
               : buildNodeMaps(chats, 'collapsedNodes'),
@@ -238,11 +239,16 @@ export const createChatSlice: StoreSlice<ChatSlice> = (set, get) => {
       get().invalidateBranchHistory([chat.id]);
       set((prev: ChatSlice) => ({ ...prev, chats: updated, contentStore } as any));
     },
-    setFolders: (folders: FolderCollection) => {
-      set((prev: ChatSlice) => ({
-        ...prev,
-        folders: folders,
-      }));
+    setFolders: (folders: FolderCollection, options) => {
+      const previous = get();
+      try {
+        set((prev: ChatSlice) => ({ ...prev, folders, ...(options?.chats === undefined ? {} : { chats: options.chats }) }));
+      } catch (error) {
+        // Zustand publishes before synchronous persist. Restore the previous live state on write failure.
+        try { set(previous); }
+        catch (rollbackError) { throw new AggregateError([error, rollbackError], 'Folder save and rollback save failed.'); }
+        throw error;
+      }
     },
     addSession: (session: GeneratingSession) => {
       set((prev: ChatSlice) => ({

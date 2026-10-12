@@ -98,7 +98,7 @@ const replaceTextValue = (
   }
 
   const next = [...content];
-  next[index] = { type: 'text', text } as TextContentInterface;
+  next[index] = { ...content[index], text } as TextContentInterface;
   return next;
 };
 

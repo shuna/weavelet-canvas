@@ -10,9 +10,14 @@ import {
 import {
   buildPathToLeaf,
   collectDescendants,
-  flatMessagesToBranchTree,
+  flatChatToBranchTree,
   getChildrenOf,
   materializeActivePath,
+  captureProjectedMessageAttributes,
+  readMessageAttributes,
+  setMessageAttributes,
+  copyMessageAttributes,
+  deleteMessageAttributes,
 } from '@utils/branchUtils';
 import {
   ContentStoreData,
@@ -57,6 +62,7 @@ export const cloneChatAt = (
           ...chat.branchTree,
           nodes: { ...chat.branchTree.nodes },
           activePath: chat.branchTree.activePath.slice(),
+          ...(chat.branchTree.messageAttributesV1 ? { messageAttributesV1: structuredClone(readMessageAttributes(chat.branchTree)) } : {}),
         }
       : undefined,
     collapsedNodes: chat.collapsedNodes
@@ -161,6 +167,7 @@ const removeMessageAtIndexFromPreparedState = (
 
   if (!options?.preserveNode) {
     releaseContent(contentStore, tree.nodes[nodeId].contentHash);
+    deleteMessageAttributes(tree, nodeId);
     delete tree.nodes[nodeId];
   }
   tree.activePath.splice(messageIndex, 1);
@@ -172,15 +179,17 @@ export const ensureBranchTreeState = (
   currentContentStore: ContentStoreData
 ) => {
   if (chats[chatIndex]?.branchTree) {
+    if (chats[chatIndex].messages.some(message => Object.keys(message).some(key => key !== 'role' && key !== 'content'))) {
+      const updatedChats = cloneChatAt(chats, chatIndex);
+      captureProjectedMessageAttributes(updatedChats[chatIndex], currentContentStore);
+      return { chats: updatedChats, contentStore: currentContentStore };
+    }
     return { chats, contentStore: currentContentStore };
   }
 
   const contentStore = { ...currentContentStore };
   const updatedChats = cloneChatAt(chats, chatIndex);
-  updatedChats[chatIndex].branchTree = flatMessagesToBranchTree(
-    updatedChats[chatIndex].messages,
-    contentStore
-  );
+  flatChatToBranchTree(updatedChats[chatIndex], contentStore);
 
   return { chats: updatedChats, contentStore };
 };
@@ -194,6 +203,7 @@ export const createBranchState = (
 ) => {
   const contentStore = { ...currentContentStore };
   const updatedChats = cloneChatAt(chats, chatIndex);
+  captureProjectedMessageAttributes(updatedChats[chatIndex], contentStore);
   const tree = updatedChats[chatIndex].branchTree!;
   const fromNode = tree.nodes[fromNodeId];
 
@@ -213,8 +223,10 @@ export const createBranchState = (
     createdAt: Date.now(),
   };
 
+  copyMessageAttributes(tree, fromNodeId, tree, newId);
   const fromIdx = tree.activePath.indexOf(fromNodeId);
   tree.activePath = [...tree.activePath.slice(0, fromIdx), newId];
+  if (fromIdx === 0) syncBubbleToConfig(updatedChats[chatIndex], tree, contentStore);
   updatedChats[chatIndex].messages = materializeActivePath(tree, contentStore);
 
   return { chats: updatedChats, contentStore, newId };
@@ -227,6 +239,7 @@ export const switchActivePathState = (
   contentStore: ContentStoreData
 ) => {
   const updatedChats = cloneChatAt(chats, chatIndex);
+  captureProjectedMessageAttributes(updatedChats[chatIndex], contentStore);
   const tree = updatedChats[chatIndex].branchTree!;
   tree.activePath = newPath;
   updatedChats[chatIndex].messages = materializeActivePath(tree, contentStore);
@@ -256,12 +269,14 @@ export const deleteBranchState = (
 ) => {
   const contentStore = { ...currentContentStore };
   const updatedChats = cloneChatAt(chats, chatIndex);
+  captureProjectedMessageAttributes(updatedChats[chatIndex], contentStore);
   const tree = updatedChats[chatIndex].branchTree!;
   const toDelete = collectDescendants(tree, nodeId);
   const parentId = tree.nodes[nodeId]?.parentId;
 
   toDelete.forEach((id) => {
     releaseContent(contentStore, tree.nodes[id].contentHash);
+    deleteMessageAttributes(tree, id);
     delete tree.nodes[id];
   });
 
@@ -290,6 +305,7 @@ export const pruneHiddenNodesState = (
 ) => {
   const contentStore = { ...currentContentStore };
   const updatedChats = cloneChatAt(chats, chatIndex);
+  captureProjectedMessageAttributes(updatedChats[chatIndex], contentStore);
   const tree = updatedChats[chatIndex].branchTree!;
   const activeSet = new Set(tree.activePath);
 
@@ -317,6 +333,7 @@ export const pruneHiddenNodesState = (
   );
   toDelete.forEach((id) => {
     releaseContent(contentStore, tree.nodes[id].contentHash);
+    deleteMessageAttributes(tree, id);
     delete tree.nodes[id];
   });
 
@@ -415,7 +432,9 @@ export const upsertMessageAtIndexState = (
     prepareBranchMutationState(chats, chatIndex, currentContentStore);
   const existingId = tree.activePath[messageIndex];
 
+  const previousRole = existingId ? tree.nodes[existingId].role : undefined;
   chat.messages[messageIndex] = message;
+  if (existingId) setMessageAttributes(tree, existingId, message);
 
   if (existingId) {
     const oldHash = tree.nodes[existingId].contentHash;
@@ -442,6 +461,7 @@ export const upsertMessageAtIndexState = (
       contentHash: addContent(contentStore, message.content),
       createdAt: Date.now(),
     };
+    setMessageAttributes(tree, newId, message);
     tree.activePath.push(newId);
     if (messageIndex === 0) {
       tree.rootId = newId;
@@ -450,7 +470,11 @@ export const upsertMessageAtIndexState = (
 
   // Sync: if index-0 system node was edited, update config.systemPrompt
   if (messageIndex === 0) {
-    syncBubbleToConfig(chat, tree, contentStore);
+    if (previousRole === 'system' && message.role !== 'system') {
+      chat.config = { ...chat.config, systemPrompt: undefined };
+    } else {
+      syncBubbleToConfig(chat, tree, contentStore);
+    }
   }
 
   return finalizePreparedBranchMutationState({
@@ -487,6 +511,7 @@ export const insertMessageAtIndexState = (
     tree.nodes[nextId].parentId = newId;
   }
 
+  setMessageAttributes(tree, newId, message);
   tree.activePath.splice(messageIndex, 0, newId);
   if (messageIndex === 0) {
     tree.rootId = newId;
@@ -509,6 +534,7 @@ export const updateLastNodeContentState = (
 ) => {
   const contentStore = { ...currentContentStore };
   const updatedChats = cloneChatAt(chats, chatIndex);
+  captureProjectedMessageAttributes(updatedChats[chatIndex], contentStore);
   const tree = updatedChats[chatIndex].branchTree!;
   const lastId = tree.activePath[tree.activePath.length - 1];
 
@@ -610,6 +636,7 @@ export const replaceMessageAndPruneFollowingState = (
   const existingId = tree.activePath[messageIndex];
 
   state.chat.messages[messageIndex] = message;
+  if (existingId) setMessageAttributes(tree, existingId, message);
 
   if (existingId) {
     const oldHash = tree.nodes[existingId].contentHash;
@@ -632,6 +659,7 @@ export const replaceMessageAndPruneFollowingState = (
       contentHash: addContent(contentStore, message.content),
       createdAt: Date.now(),
     };
+    setMessageAttributes(tree, newId, message);
     tree.activePath.push(newId);
   }
 
@@ -649,6 +677,7 @@ export const truncateActivePathState = (
   contentStore: ContentStoreData
 ) => {
   const updatedChats = cloneChatAt(chats, chatIndex);
+  captureProjectedMessageAttributes(updatedChats[chatIndex], contentStore);
   const tree = updatedChats[chatIndex].branchTree!;
   const idx = tree.activePath.indexOf(nodeId);
   if (idx >= 0) {
@@ -681,11 +710,9 @@ export const copyBranchSequenceState = (
     nodes[id] = { ...tree.nodes[id] };
   });
 
-  return {
-    nodeIds,
-    sourceChat: chats[chatIndex].id,
-    nodes,
-  };
+  const clipboard: BranchClipboard = { nodeIds, sourceChat: chats[chatIndex].id, nodes };
+  for (const id of nodeIds) copyMessageAttributes(tree, id, clipboard, id);
+  return clipboard;
 };
 
 export const pasteBranchSequenceState = (
@@ -715,6 +742,7 @@ export const pasteBranchSequenceState = (
       parentId: prevId,
       createdAt: Date.now(),
     };
+    copyMessageAttributes(clipboard, origId, tree, newId);
     prevId = newId;
   }
 
@@ -742,6 +770,7 @@ export const updateNodeRoleState = (
 ) => {
   const updatedChats = cloneChatAt(chats, chatIndex);
   const chat = updatedChats[chatIndex];
+  captureProjectedMessageAttributes(chat, contentStore);
   const tree = chat.branchTree!;
   const prevRole = tree.nodes[nodeId]?.role;
   tree.nodes[nodeId] = { ...tree.nodes[nodeId], role };
@@ -770,13 +799,11 @@ export type UpsertWithAutoBranchResult = {
 };
 
 /**
- * Upsert a message with automatic branch preservation.
+ * Upsert a message in place; branching is an explicit operation.
  *
  * - No content/role change → no-op (returns noOp: true)
  * - Role-only change → in-place role update
- * - Content change + last node → in-place update (no descendants to preserve)
- * - Content change + mid-chain node → create new sibling node, truncate activePath
- *   (old node and its descendants remain intact on the original branch)
+ * - Content change → in-place update, preserving the existing path
  */
 export const upsertWithAutoBranchState = (
   chats: ChatInterface[],
@@ -800,16 +827,20 @@ export const upsertWithAutoBranchState = (
   const contentChanged = !isContentEqual(ensuredStore, node.contentHash, message.content);
   const roleChanged = node.role !== message.role;
 
+  const previousAttributes = JSON.stringify(tree.messageAttributesV1);
+  setMessageAttributes(tree, existingId, message);
+  const attributesChanged = JSON.stringify(tree.messageAttributesV1) !== previousAttributes;
+
   // Complete no-op: no change to tree or contentStore, skip undo history
-  if (!contentChanged && !roleChanged) {
+  if (!contentChanged && !roleChanged && !attributesChanged) {
     return { chats: ensuredChats, contentStore: ensuredStore, noOp: true };
   }
 
+  if (!contentChanged && !roleChanged) return { chats: ensuredChats, contentStore: ensuredStore };
+
   // Role-only change: in-place update
   if (!contentChanged) {
-    const state = prepareBranchMutationState(ensuredChats, chatIndex, ensuredStore);
-    state.tree.nodes[existingId] = { ...state.tree.nodes[existingId], role: message.role };
-    return finalizePreparedBranchMutationState(state);
+    return { chats: updateNodeRoleState(ensuredChats, chatIndex, existingId, message.role, ensuredStore), contentStore: ensuredStore };
   }
 
   // Content changed: always in-place update (overwrite semantics)

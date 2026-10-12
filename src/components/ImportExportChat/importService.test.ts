@@ -1,8 +1,11 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
+vi.mock('@src/i18n', () => ({ default: { t: (key: string) => key } }));
+
 import { _defaultChatConfig, _defaultImageDetail } from '@constants/chat';
 import type { ChatInterface, FolderCollection } from '@type/chat';
 import { PartialImportError } from '@utils/import';
+import { resolveContent, type ContentStoreData } from '@utils/contentStore';
 
 const testContext = vi.hoisted(() => {
   const toastInfo = vi.fn();
@@ -74,6 +77,7 @@ vi.mock('@store/store', () => ({
       chats: testContext.storeState.chats,
       folders: testContext.storeState.folders,
       contentStore: testContext.storeState.contentStore,
+      branchClipboard: testContext.storeState.branchClipboard,
       apiKey: testContext.storeState.apiKey,
       theme: testContext.storeState.theme,
       currentChatIndex: testContext.storeState.currentChatIndex,
@@ -133,11 +137,23 @@ const createChat = (id: string, title = 'Chat'): ChatInterface => ({
   messages: [{ role: 'user', content: [{ type: 'text', text: 'hello' }] }],
 });
 
+const createBranchChat = (id: string, hashes: string[]): ChatInterface => ({
+  ...createChat(id),
+  branchTree: {
+    rootId: 'node-0', activePath: ['node-0'],
+    nodes: Object.fromEntries(hashes.map((contentHash, index) => [`node-${index}`, {
+      id: `node-${index}`, parentId: index ? `node-${index - 1}` : null,
+      role: index ? 'assistant' : 'user', contentHash, createdAt: index,
+    }])),
+  },
+});
+
 describe('importService', () => {
   beforeEach(() => {
     testContext.storeState.chats = [createChat('existing-chat', 'Existing')];
     testContext.storeState.folders = {};
     testContext.storeState.contentStore = {};
+    testContext.storeState.branchClipboard = null;
     testContext.storeState.apiKey = 'existing-key';
     testContext.storeState.theme = 'light';
     testContext.storeState.currentChatIndex = 0;
@@ -294,6 +310,230 @@ describe('importService', () => {
       message: 'notifications.successfulImport',
     });
     expect(testContext.storeState.chats[0].folder).toBeUndefined();
+  });
+
+  it('reserves both existing and incoming suffix hashes when appending conflicting full content', async () => {
+    const existing = {
+      body: { content: [{ type: 'text' as const, text: 'existing' }], refCount: 4, future: { source: 'existing' } },
+      body__: { content: [{ type: 'text' as const, text: 'reserved existing' }], refCount: 1 },
+    };
+    const before = structuredClone(existing);
+    testContext.storeState.contentStore = existing;
+    testContext.storeState.chats = [createBranchChat('existing-chat', ['body'])];
+    const payload = {
+      version: 3, folders: {}, chats: [createBranchChat('incoming', ['body', 'body_'])],
+      contentStore: {
+        body: { content: [{ type: 'text', text: 'incoming' }], refCount: 2, future: { source: 'incoming' } },
+        body_: { content: [{ type: 'text', text: 'reserved incoming' }], refCount: 1, future: { source: 'suffix' } },
+      },
+    };
+    const input = JSON.stringify(payload);
+    const file = new File([input], 'collision-v3.json');
+    expect((await importChatFromFile(file, t)).success).toBe(true);
+    const store = testContext.storeState.contentStore as ContentStoreData;
+    expect(testContext.storeState.chats[0].branchTree!.nodes['node-0'].contentHash).toBe('body___');
+    expect(testContext.storeState.chats[0].branchTree!.nodes['node-1'].contentHash).toBe('body_');
+    expect(testContext.storeState.chats[1].branchTree!.nodes['node-0'].contentHash).toBe('body');
+    expect(store.body).toEqual(before.body);
+    expect(store.body__).toEqual(before.body__);
+    expect(store.body___).toEqual(payload.contentStore.body);
+    expect(store.body_).toEqual(payload.contentStore.body_);
+    expect(existing).toEqual(before);
+    expect(JSON.stringify(payload)).toBe(input);
+    expect(await file.text()).toBe(input);
+  });
+
+  it.each(['full', 'delta'])('reuses identical %s entries without mutating existing entry references', async kind => {
+    const body = kind === 'delta'
+      ? { content: [], refCount: 4, delta: { baseHash: 'base', patches: '' }, future: { delta: 'opaque metadata' } }
+      : { content: [{ type: 'text', text: 'shared' }], refCount: 4, future: { delta: 'opaque metadata' } };
+    const existing = { base: { content: [{ type: 'text', text: 'shared' }], refCount: 2 }, body };
+    const before = structuredClone(existing);
+    testContext.storeState.contentStore = existing;
+    const payload = {
+      version: 3, folders: {}, chats: [createBranchChat('incoming', ['body'])],
+      contentStore: { base: { ...existing.base, refCount: 3 }, body: { ...body, refCount: 2 } },
+    };
+    const input = JSON.stringify(payload);
+    expect((await importChatFromFile(new File([input], 'reuse-v3.json'), t)).success).toBe(true);
+    const store = testContext.storeState.contentStore as ContentStoreData;
+    expect(Object.keys(store)).toEqual(['base', 'body']);
+    expect(store.body).toEqual({ ...before.body, refCount: 6 });
+    expect(store.base).toEqual({ ...before.base, refCount: 5 });
+    expect(store.body).not.toBe(body);
+    expect(testContext.storeState.chats[0].branchTree!.nodes['node-0'].contentHash).toBe('body');
+    expect(resolveContent(store, 'body')).toEqual([{ type: 'text', text: 'shared' }]);
+    expect(existing).toEqual(before);
+    expect(JSON.stringify(payload)).toBe(input);
+  });
+
+  it('keeps equal content with different unknown metadata in separate entries', async () => {
+    const existing = { content: [{ type: 'text', text: 'shared' }], refCount: 4, future: { source: 'existing' } };
+    testContext.storeState.contentStore = { body: existing };
+    const imported = { content: [{ type: 'text', text: 'shared' }], refCount: 2, future: { source: 'incoming' } };
+    const payload = { version: 3, folders: {}, chats: [createBranchChat('incoming', ['body'])], contentStore: { body: imported } };
+    expect((await importChatFromFile(new File([JSON.stringify(payload)], 'metadata-v3.json'), t)).success).toBe(true);
+    expect(testContext.storeState.contentStore).toEqual({ body: existing, body_: imported });
+    expect(testContext.storeState.chats[0].branchTree!.nodes['node-0'].contentHash).toBe('body_');
+    expect(existing.refCount).toBe(4);
+  });
+
+  it('remaps a colliding base and all otherwise identical dependent deltas without changing existing chains', async () => {
+    const delta = { content: [], refCount: 4, delta: { baseHash: 'base', patches: '', future: 'delta metadata' }, future: { source: 'delta' } };
+    const chain = { content: [], refCount: 5, delta: { baseHash: 'delta', patches: '' }, future: { source: 'chain' } };
+    const existing = {
+      base: { content: [{ type: 'text', text: 'existing base' }], refCount: 7, future: { source: 'existing' } },
+      delta, chain,
+    };
+    const before = structuredClone(existing);
+    testContext.storeState.contentStore = existing;
+    const payload = {
+      version: 3, folders: {}, chats: [createBranchChat('incoming', ['chain', 'delta', 'base', 'base_'])],
+      contentStore: {
+        chain: { ...chain, refCount: 1 }, delta: { ...delta, refCount: 1 },
+        base: { content: [{ type: 'text', text: 'incoming base' }], refCount: 3, future: { source: 'incoming' } },
+        base_: { content: [{ type: 'text', text: 'reserved incoming' }], refCount: 1 },
+      },
+    };
+    const input = JSON.stringify(payload);
+    expect((await importChatFromFile(new File([input], 'delta-collision-v3.json'), t)).success).toBe(true);
+    const store = testContext.storeState.contentStore as ContentStoreData;
+    expect(Object.values(testContext.storeState.chats[0].branchTree!.nodes).map(node => node.contentHash))
+      .toEqual(['chain_', 'delta_', 'base__', 'base_']);
+    expect(store.base).toEqual(before.base);
+    expect(store.delta).toEqual(before.delta);
+    expect(store.chain).toEqual(before.chain);
+    expect(store.base__).toEqual(payload.contentStore.base);
+    expect(store.delta_).toEqual({ ...payload.contentStore.delta, delta: { ...delta.delta, baseHash: 'base__' } });
+    expect(store.chain_).toEqual({ ...payload.contentStore.chain, delta: { ...chain.delta, baseHash: 'delta_' } });
+    expect(resolveContent(store, 'chain')).toEqual([{ type: 'text', text: 'existing base' }]);
+    expect(resolveContent(store, 'chain_')).toEqual([{ type: 'text', text: 'incoming base' }]);
+    expect(existing).toEqual(before);
+    expect(JSON.stringify(payload)).toBe(input);
+  });
+
+  it.each([false, true])('keeps original hash/delta metadata on replace with includeSettings=%s', async includeSettings => {
+    const existing = { body: { content: [{ type: 'text', text: 'existing' }], refCount: 4 } };
+    const before = structuredClone(existing);
+    testContext.storeState.contentStore = existing;
+    const payload = {
+      version: 3, folders: {}, chats: [createBranchChat('incoming', ['body'])],
+      contentStore: {
+        base: { content: [{ type: 'text', text: 'incoming' }], refCount: 1, future: { source: 'base' } },
+        body: { content: [], refCount: 1, delta: { baseHash: 'base', patches: '' }, future: { delta: 'opaque metadata' } },
+      },
+    };
+    const input = JSON.stringify(payload);
+    expect((await importChatFromFile(new File([input], 'replace-delta-v3.json'), t, 'replace', includeSettings)).success).toBe(true);
+    expect(testContext.storeState.contentStore).toEqual(payload.contentStore);
+    expect(testContext.storeState.chats).toHaveLength(1);
+    expect(testContext.storeState.chats[0].branchTree!.nodes['node-0'].contentHash).toBe('body');
+    expect(resolveContent(testContext.storeState.contentStore as ContentStoreData, 'body'))
+      .toEqual([{ type: 'text', text: 'incoming' }]);
+    expect(existing).toEqual(before);
+    expect(JSON.stringify(payload)).toBe(input);
+  });
+
+  it.each(['missing', 'cyclic'])('keeps the existing %s delta read boundary after collision remapping', async kind => {
+    const existing = { body: { content: [{ type: 'text', text: 'existing' }], refCount: 4 } };
+    const before = structuredClone(existing);
+    testContext.storeState.contentStore = existing;
+    const payload = {
+      version: 3, folders: {}, chats: [createBranchChat('incoming', ['body'])],
+      contentStore: {
+        body: { content: [], refCount: 1, delta: { baseHash: kind === 'missing' ? 'absent' : 'loop', patches: '' } },
+        ...(kind === 'cyclic' ? { loop: { content: [], refCount: 1, delta: { baseHash: 'body', patches: '' } } } : {}),
+      },
+    };
+    expect((await importChatFromFile(new File([JSON.stringify(payload)], 'broken-delta-v3.json'), t)).success).toBe(true);
+    const store = testContext.storeState.contentStore as ContentStoreData;
+    expect(store.body).toEqual(before.body);
+    expect(store.body_.delta?.baseHash).toBe(kind === 'missing' ? 'absent' : 'loop');
+    if (kind === 'cyclic') expect(store.loop.delta?.baseHash).toBe('body_');
+    expect(resolveContent(store, 'body_')).toEqual([]);
+    expect(resolveContent(store, 'body')).toEqual([{ type: 'text', text: 'existing' }]);
+    expect(existing).toEqual(before);
+  });
+
+  it.each(['constructor', '__proto__'])('handles %s as an own content key without changing the store prototype', async hash => {
+    const existing = { keep: { content: [{ type: 'text', text: 'keep' }], refCount: 1 } };
+    testContext.storeState.contentStore = existing;
+    const original = { content: [{ type: 'text', text: 'first import' }], refCount: 2, future: { source: 'first' } };
+    const payload = {
+      version: 3, folders: {}, chats: [createBranchChat('incoming', [hash])],
+      contentStore: Object.fromEntries([[hash, original]]),
+    };
+    expect((await importChatFromFile(new File([JSON.stringify(payload)], 'own-key-v3.json'), t)).success).toBe(true);
+    expect(Object.hasOwn(testContext.storeState.contentStore, hash)).toBe(true);
+    expect(testContext.storeState.contentStore[hash]).toEqual(original);
+    expect(testContext.storeState.chats[0].branchTree!.nodes['node-0'].contentHash).toBe(hash);
+    const incoming = { content: [{ type: 'text', text: 'second import' }], refCount: 3, future: { source: 'second' } };
+    payload.contentStore = Object.fromEntries([[hash, incoming]]);
+    expect((await importChatFromFile(new File([JSON.stringify(payload)], 'own-key-collision-v3.json'), t)).success).toBe(true);
+    expect(Object.hasOwn(testContext.storeState.contentStore, `${hash}_`)).toBe(true);
+    expect(testContext.storeState.contentStore[hash]).toEqual(original);
+    expect(testContext.storeState.contentStore[`${hash}_`]).toEqual(incoming);
+    expect(testContext.storeState.chats[0].branchTree!.nodes['node-0'].contentHash).toBe(`${hash}_`);
+    expect(testContext.storeState.contentStore.keep).toEqual(existing.keep);
+    expect(Object.getPrototypeOf(testContext.storeState.contentStore)).toBe(Object.prototype);
+  });
+
+  it.each(['existing', 'incoming'])('does not bind a missing %s delta base to a new collision alias', async side => {
+    const missingDelta = { content: [], refCount: 1, delta: { baseHash: 'body_', patches: '' }, future: { source: side } };
+    const existing = {
+      body: { content: [{ type: 'text', text: 'existing' }], refCount: 4 },
+      ...(side === 'existing' ? { missingDelta } : {}),
+    };
+    const before = structuredClone(existing);
+    testContext.storeState.contentStore = existing;
+    testContext.storeState.chats = [createBranchChat('existing', ['body', ...(side === 'existing' ? ['missingDelta'] : [])])];
+    const payload = {
+      version: 3, folders: {},
+      chats: [createBranchChat('incoming', ['body', ...(side === 'incoming' ? ['missingDelta'] : [])])],
+      contentStore: {
+        body: { content: [{ type: 'text', text: 'incoming' }], refCount: 1 },
+        ...(side === 'incoming' ? { missingDelta } : {}),
+      },
+    };
+    const input = JSON.stringify(payload);
+    expect((await importChatFromFile(new File([input], 'missing-suffix-v3.json'), t)).success).toBe(true);
+    const store = testContext.storeState.contentStore as ContentStoreData;
+    expect(testContext.storeState.chats[0].branchTree!.nodes['node-0'].contentHash).toBe('body__');
+    expect(store.body).toEqual(before.body);
+    expect(store.body__).toEqual(payload.contentStore.body);
+    expect(Object.hasOwn(store, 'body_')).toBe(false);
+    expect(store.missingDelta).toEqual(missingDelta);
+    expect(resolveContent(store, 'missingDelta')).toEqual([]);
+    const chat = testContext.storeState.chats[side === 'incoming' ? 0 : 1];
+    expect(chat.branchTree!.nodes['node-1'].contentHash).toBe('missingDelta');
+    expect(existing).toEqual(before);
+    expect(JSON.stringify(payload)).toBe(input);
+  });
+
+  it('reserves missing existing, incoming and clipboard node references before choosing an alias', async () => {
+    const existing = { body: { content: [{ type: 'text', text: 'existing' }], refCount: 4 } };
+    testContext.storeState.contentStore = existing;
+    testContext.storeState.chats = [createBranchChat('existing', ['body', 'body_'])];
+    const clipboard = { nodeIds: ['clipboard'], sourceChat: 'existing', nodes: {
+      clipboard: { id: 'clipboard', parentId: null, role: 'user', contentHash: 'body___', createdAt: 0 },
+    } };
+    testContext.storeState.branchClipboard = clipboard;
+    const payload = {
+      version: 3, folders: {}, chats: [createBranchChat('incoming', ['body', 'body__'])],
+      contentStore: { body: { content: [{ type: 'text', text: 'incoming' }], refCount: 1 } },
+    };
+    expect((await importChatFromFile(new File([JSON.stringify(payload)], 'missing-node-suffix-v3.json'), t)).success).toBe(true);
+    const store = testContext.storeState.contentStore as ContentStoreData;
+    expect(testContext.storeState.chats[0].branchTree!.nodes['node-0'].contentHash).toBe('body____');
+    expect(testContext.storeState.chats[0].branchTree!.nodes['node-1'].contentHash).toBe('body__');
+    expect(testContext.storeState.chats[1].branchTree!.nodes['node-1'].contentHash).toBe('body_');
+    expect(testContext.storeState.branchClipboard).toEqual(clipboard);
+    expect(store.body).toEqual(existing.body);
+    expect(store.body____).toEqual(payload.contentStore.body);
+    for (const hash of ['body_', 'body__', 'body___']) {
+      expect(Object.hasOwn(store, hash)).toBe(false);
+      expect(resolveContent(store, hash)).toEqual([]);
+    }
   });
 
   it('replaces local conversations and settings when mode is replace', async () => {

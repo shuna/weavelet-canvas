@@ -1,4 +1,4 @@
-import { materializeActivePath, buildPathToLeaf } from '@utils/branchUtils';
+import { materializeActivePath, buildPathToLeaf, captureProjectedMessageAttributes } from '@utils/branchUtils';
 import { normalizeSystemPrompt } from '@utils/systemPromptNormalize';
 import { ensureUniqueChatIds } from '@utils/chatIdentity';
 import { addContent, validateDeltaIntegrity, type ContentStoreData } from '@utils/contentStore';
@@ -81,6 +81,7 @@ export const rehydrateData = (state: StoreState, savedIndex: number) => {
   state.chats?.forEach((chat: ChatInterface) => {
     if (!chat.messages) chat.messages = [];
     if (chat.branchTree) {
+      captureProjectedMessageAttributes(chat, contentStore);
       try {
         const chatRepaired = sanitizeBranchTreeReferences(chat);
         if (chatRepaired) {

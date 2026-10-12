@@ -551,13 +551,29 @@ export class EncryptedDriveSync {
         const changes = diffHashedRecords(base, local, localHashes).filter((change) => {
           // Content and assets are immutable and may be referenced by another device. Never GC them from a local snapshot.
           const path = JSON.parse(change.key);
-          return change.after !== null || (path[0] !== 'content' && path[0] !== 'assets');
+          return change.after !== null || (path[0] !== 'content' && path[0] !== 'assets' && path[0] !== 'contentEntries');
         });
         if (snapshot.state.chats?.length === 0 && Object.keys(remote).some((key) => JSON.parse(key)[0] === 'chats' && JSON.parse(key).length > 1)) {
           throw new Error('Cloud sync skipped because the snapshot would erase all chats.');
         }
         const merged = await applyChanges(remote, changes);
-        try { await fromRecords(merged); }
+        try {
+          const restored = await fromRecords(merged);
+          for (const chat of restored.state.chats ?? []) {
+            const nodes = chat.branchTree?.nodes ?? {};
+            for (const node of Object.values(nodes)) {
+              if (!node.parentId || nodes[node.parentId]) continue;
+              const prefix = ['chats', chat.id, 'branchTree', 'nodes'];
+              // Existing pinned orphans are valid; concurrent edits must not create a new orphan edge.
+              const existed = [local, remote].some(source =>
+                source[JSON.stringify([...prefix, node.id, 'parentId'])] === JSON.stringify(node.parentId) &&
+                source[JSON.stringify([...prefix, node.id, 'pinned'])] === 'true' &&
+                source[JSON.stringify([...prefix, node.parentId, 'id'])] === undefined
+              );
+              if (!existed) throw new Error('Concurrent edits orphaned a pinned branch.');
+            }
+          }
+        }
         catch (error) {
           // Two valid edits can conflict structurally (for example, deleting a branch another device extends).
           await fromRecords(local); await fromRecords(remote);

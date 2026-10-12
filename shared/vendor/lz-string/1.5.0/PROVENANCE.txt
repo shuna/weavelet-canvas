@@ -1,0 +1,4 @@
+lz-string 1.5.0, MIT, installed Web dependency.
+Source: node_modules/lz-string/libs/lz-string.min.js
+License: node_modules/lz-string/LICENSE
+Copied without modification on 2026-10-12. No runtime node_modules dependency.

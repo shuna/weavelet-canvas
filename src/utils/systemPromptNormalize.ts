@@ -14,7 +14,7 @@
 
 import type { ChatInterface, ContentInterface, TextContentInterface } from '@type/chat';
 import { isTextContent } from '@type/chat';
-import { materializeActivePath } from '@utils/branchUtils';
+import { materializeActivePath, flatChatToBranchTree, captureProjectedMessageAttributes, readMessageAttributes } from '@utils/branchUtils';
 import { addContent, resolveContent, type ContentStoreData } from '@utils/contentStore';
 
 function extractTextFromContent(content: ContentInterface[]): string {
@@ -36,6 +36,10 @@ export function normalizeSystemPrompt(
   chat: ChatInterface,
   contentStore: ContentStoreData
 ): void {
+  if (!chat.branchTree && chat.messages.some(message => message.role === 'system' && Object.keys(message).some(key => key !== 'role' && key !== 'content'))) {
+    flatChatToBranchTree(chat, contentStore);
+  }
+  captureProjectedMessageAttributes(chat, contentStore);
   if (chat.branchTree) {
     normalizeWithBranchTree(chat, contentStore);
   } else {
@@ -149,7 +153,7 @@ function normalizeWithBranchTree(
     }
 
     // Remove the node from the tree entirely (children are already relinked)
-    delete nodes[sysId];
+    if (!readMessageAttributes(tree)?.byNode[sysId]) delete nodes[sysId];
   }
 
   // ── Phase 4: Handle top system node on activePath ──
@@ -177,7 +181,7 @@ function normalizeWithBranchTree(
         nodes[nextId] = { ...nodes[nextId], parentId: null };
       }
       tree.activePath.splice(0, 1);
-      delete nodes[topNodeId];
+      if (!readMessageAttributes(tree)?.byNode[topNodeId]) delete nodes[topNodeId];
       if (tree.rootId === topNodeId && tree.activePath.length > 0) {
         tree.rootId = tree.activePath[0];
       }

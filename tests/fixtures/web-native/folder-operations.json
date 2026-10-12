@@ -1,0 +1,2640 @@
+{
+  "fixtureVersion": 1,
+  "input": {
+    "version": 3,
+    "chats": [
+      {
+        "id": "chat-a",
+        "title": "A",
+        "titleSet": true,
+        "imageDetail": "auto",
+        "config": {
+          "model": "FAKE-TEST-MODEL",
+          "max_tokens": 100,
+          "temperature": 1,
+          "presence_penalty": 0,
+          "top_p": 1,
+          "frequency_penalty": 0
+        },
+        "messages": [
+          {
+            "role": "user",
+            "content": [
+              {
+                "type": "text",
+                "text": "FAKE TEST A"
+              }
+            ]
+          }
+        ],
+        "folder": "f-a",
+        "xChat": {
+          "keep": [
+            "FAKE A",
+            null
+          ]
+        }
+      },
+      {
+        "id": "chat-b",
+        "title": "B",
+        "titleSet": true,
+        "imageDetail": "auto",
+        "config": {
+          "model": "FAKE-TEST-MODEL",
+          "max_tokens": 100,
+          "temperature": 1,
+          "presence_penalty": 0,
+          "top_p": 1,
+          "frequency_penalty": 0
+        },
+        "messages": [
+          {
+            "role": "assistant",
+            "content": [
+              {
+                "type": "text",
+                "text": "FAKE TEST B"
+              }
+            ]
+          }
+        ],
+        "folder": "f-b",
+        "branchTree": {
+          "rootId": "node-b",
+          "activePath": [
+            "node-b"
+          ],
+          "nodes": {
+            "node-b": {
+              "id": "node-b",
+              "parentId": null,
+              "role": "assistant",
+              "contentHash": "body-b",
+              "createdAt": 1,
+              "xNode": {
+                "keep": true
+              }
+            }
+          }
+        },
+        "xChat": {
+          "keep": "FAKE B"
+        }
+      },
+      {
+        "id": "chat-c",
+        "title": "C",
+        "titleSet": false,
+        "imageDetail": "auto",
+        "config": {
+          "model": "FAKE-TEST-MODEL",
+          "max_tokens": 100,
+          "temperature": 1,
+          "presence_penalty": 0,
+          "top_p": 1,
+          "frequency_penalty": 0
+        },
+        "messages": [],
+        "xChat": [
+          "FAKE C"
+        ]
+      }
+    ],
+    "folders": {
+      "f-a": {
+        "id": "f-a",
+        "name": "New Folder 1",
+        "expanded": true,
+        "order": 0,
+        "color": "#0369a1",
+        "xFolder": {
+          "opaque": [
+            null,
+            {
+              "FAKE": true
+            }
+          ]
+        }
+      },
+      "f-b": {
+        "id": "f-b",
+        "name": "New Folder 3",
+        "expanded": false,
+        "order": 2,
+        "xFolder": [
+          "FAKE B"
+        ]
+      },
+      "f-c": {
+        "id": "f-c",
+        "name": "Research",
+        "expanded": false,
+        "order": 2,
+        "xFolder": "FAKE C"
+      }
+    },
+    "contentStore": {
+      "body-a": {
+        "content": [
+          {
+            "type": "text",
+            "text": "FAKE TEST A"
+          }
+        ],
+        "refCount": 1,
+        "xEntry": "FAKE A"
+      },
+      "body-b": {
+        "content": [
+          {
+            "type": "text",
+            "text": "FAKE TEST B"
+          }
+        ],
+        "refCount": 1,
+        "xEntry": {
+          "keep": "FAKE B"
+        }
+      },
+      "unused": {
+        "content": [
+          {
+            "type": "text",
+            "text": "FAKE UNUSED"
+          }
+        ],
+        "refCount": 0,
+        "xEntry": [
+          "FAKE UNUSED"
+        ]
+      }
+    },
+    "xRoot": {
+      "opaque": [
+        true,
+        null,
+        "FAKE ROOT"
+      ]
+    }
+  },
+  "cases": [
+    {
+      "name": "create first folder with unused default name",
+      "operation": {
+        "type": "create",
+        "id": "new-folder"
+      },
+      "expected": {
+        "version": 3,
+        "chats": [
+          {
+            "id": "chat-a",
+            "title": "A",
+            "titleSet": true,
+            "imageDetail": "auto",
+            "config": {
+              "model": "FAKE-TEST-MODEL",
+              "max_tokens": 100,
+              "temperature": 1,
+              "presence_penalty": 0,
+              "top_p": 1,
+              "frequency_penalty": 0
+            },
+            "messages": [
+              {
+                "role": "user",
+                "content": [
+                  {
+                    "type": "text",
+                    "text": "FAKE TEST A"
+                  }
+                ]
+              }
+            ],
+            "folder": "f-a",
+            "xChat": {
+              "keep": [
+                "FAKE A",
+                null
+              ]
+            }
+          },
+          {
+            "id": "chat-b",
+            "title": "B",
+            "titleSet": true,
+            "imageDetail": "auto",
+            "config": {
+              "model": "FAKE-TEST-MODEL",
+              "max_tokens": 100,
+              "temperature": 1,
+              "presence_penalty": 0,
+              "top_p": 1,
+              "frequency_penalty": 0
+            },
+            "messages": [
+              {
+                "role": "assistant",
+                "content": [
+                  {
+                    "type": "text",
+                    "text": "FAKE TEST B"
+                  }
+                ]
+              }
+            ],
+            "folder": "f-b",
+            "branchTree": {
+              "rootId": "node-b",
+              "activePath": [
+                "node-b"
+              ],
+              "nodes": {
+                "node-b": {
+                  "id": "node-b",
+                  "parentId": null,
+                  "role": "assistant",
+                  "contentHash": "body-b",
+                  "createdAt": 1,
+                  "xNode": {
+                    "keep": true
+                  }
+                }
+              }
+            },
+            "xChat": {
+              "keep": "FAKE B"
+            }
+          },
+          {
+            "id": "chat-c",
+            "title": "C",
+            "titleSet": false,
+            "imageDetail": "auto",
+            "config": {
+              "model": "FAKE-TEST-MODEL",
+              "max_tokens": 100,
+              "temperature": 1,
+              "presence_penalty": 0,
+              "top_p": 1,
+              "frequency_penalty": 0
+            },
+            "messages": [],
+            "xChat": [
+              "FAKE C"
+            ]
+          }
+        ],
+        "folders": {
+          "new-folder": {
+            "id": "new-folder",
+            "name": "New Folder 2",
+            "expanded": false,
+            "order": 0
+          },
+          "f-a": {
+            "id": "f-a",
+            "name": "New Folder 1",
+            "expanded": true,
+            "order": 1,
+            "color": "#0369a1",
+            "xFolder": {
+              "opaque": [
+                null,
+                {
+                  "FAKE": true
+                }
+              ]
+            }
+          },
+          "f-b": {
+            "id": "f-b",
+            "name": "New Folder 3",
+            "expanded": false,
+            "order": 3,
+            "xFolder": [
+              "FAKE B"
+            ]
+          },
+          "f-c": {
+            "id": "f-c",
+            "name": "Research",
+            "expanded": false,
+            "order": 3,
+            "xFolder": "FAKE C"
+          }
+        },
+        "contentStore": {
+          "body-a": {
+            "content": [
+              {
+                "type": "text",
+                "text": "FAKE TEST A"
+              }
+            ],
+            "refCount": 1,
+            "xEntry": "FAKE A"
+          },
+          "body-b": {
+            "content": [
+              {
+                "type": "text",
+                "text": "FAKE TEST B"
+              }
+            ],
+            "refCount": 1,
+            "xEntry": {
+              "keep": "FAKE B"
+            }
+          },
+          "unused": {
+            "content": [
+              {
+                "type": "text",
+                "text": "FAKE UNUSED"
+              }
+            ],
+            "refCount": 0,
+            "xEntry": [
+              "FAKE UNUSED"
+            ]
+          }
+        },
+        "xRoot": {
+          "opaque": [
+            true,
+            null,
+            "FAKE ROOT"
+          ]
+        }
+      },
+      "orderedIDs": [
+        "new-folder",
+        "f-a",
+        "f-b",
+        "f-c"
+      ]
+    },
+    {
+      "name": "rename preserves exact Unicode and extensions",
+      "operation": {
+        "type": "rename",
+        "id": "f-b",
+        "name": "研究 é"
+      },
+      "expected": {
+        "version": 3,
+        "chats": [
+          {
+            "id": "chat-a",
+            "title": "A",
+            "titleSet": true,
+            "imageDetail": "auto",
+            "config": {
+              "model": "FAKE-TEST-MODEL",
+              "max_tokens": 100,
+              "temperature": 1,
+              "presence_penalty": 0,
+              "top_p": 1,
+              "frequency_penalty": 0
+            },
+            "messages": [
+              {
+                "role": "user",
+                "content": [
+                  {
+                    "type": "text",
+                    "text": "FAKE TEST A"
+                  }
+                ]
+              }
+            ],
+            "folder": "f-a",
+            "xChat": {
+              "keep": [
+                "FAKE A",
+                null
+              ]
+            }
+          },
+          {
+            "id": "chat-b",
+            "title": "B",
+            "titleSet": true,
+            "imageDetail": "auto",
+            "config": {
+              "model": "FAKE-TEST-MODEL",
+              "max_tokens": 100,
+              "temperature": 1,
+              "presence_penalty": 0,
+              "top_p": 1,
+              "frequency_penalty": 0
+            },
+            "messages": [
+              {
+                "role": "assistant",
+                "content": [
+                  {
+                    "type": "text",
+                    "text": "FAKE TEST B"
+                  }
+                ]
+              }
+            ],
+            "folder": "f-b",
+            "branchTree": {
+              "rootId": "node-b",
+              "activePath": [
+                "node-b"
+              ],
+              "nodes": {
+                "node-b": {
+                  "id": "node-b",
+                  "parentId": null,
+                  "role": "assistant",
+                  "contentHash": "body-b",
+                  "createdAt": 1,
+                  "xNode": {
+                    "keep": true
+                  }
+                }
+              }
+            },
+            "xChat": {
+              "keep": "FAKE B"
+            }
+          },
+          {
+            "id": "chat-c",
+            "title": "C",
+            "titleSet": false,
+            "imageDetail": "auto",
+            "config": {
+              "model": "FAKE-TEST-MODEL",
+              "max_tokens": 100,
+              "temperature": 1,
+              "presence_penalty": 0,
+              "top_p": 1,
+              "frequency_penalty": 0
+            },
+            "messages": [],
+            "xChat": [
+              "FAKE C"
+            ]
+          }
+        ],
+        "folders": {
+          "f-a": {
+            "id": "f-a",
+            "name": "New Folder 1",
+            "expanded": true,
+            "order": 0,
+            "color": "#0369a1",
+            "xFolder": {
+              "opaque": [
+                null,
+                {
+                  "FAKE": true
+                }
+              ]
+            }
+          },
+          "f-b": {
+            "id": "f-b",
+            "name": "研究 é",
+            "expanded": false,
+            "order": 2,
+            "xFolder": [
+              "FAKE B"
+            ]
+          },
+          "f-c": {
+            "id": "f-c",
+            "name": "Research",
+            "expanded": false,
+            "order": 2,
+            "xFolder": "FAKE C"
+          }
+        },
+        "contentStore": {
+          "body-a": {
+            "content": [
+              {
+                "type": "text",
+                "text": "FAKE TEST A"
+              }
+            ],
+            "refCount": 1,
+            "xEntry": "FAKE A"
+          },
+          "body-b": {
+            "content": [
+              {
+                "type": "text",
+                "text": "FAKE TEST B"
+              }
+            ],
+            "refCount": 1,
+            "xEntry": {
+              "keep": "FAKE B"
+            }
+          },
+          "unused": {
+            "content": [
+              {
+                "type": "text",
+                "text": "FAKE UNUSED"
+              }
+            ],
+            "refCount": 0,
+            "xEntry": [
+              "FAKE UNUSED"
+            ]
+          }
+        },
+        "xRoot": {
+          "opaque": [
+            true,
+            null,
+            "FAKE ROOT"
+          ]
+        }
+      },
+      "orderedIDs": [
+        "f-a",
+        "f-b",
+        "f-c"
+      ]
+    },
+    {
+      "name": "empty name is accepted",
+      "operation": {
+        "type": "rename",
+        "id": "f-b",
+        "name": ""
+      },
+      "expected": {
+        "version": 3,
+        "chats": [
+          {
+            "id": "chat-a",
+            "title": "A",
+            "titleSet": true,
+            "imageDetail": "auto",
+            "config": {
+              "model": "FAKE-TEST-MODEL",
+              "max_tokens": 100,
+              "temperature": 1,
+              "presence_penalty": 0,
+              "top_p": 1,
+              "frequency_penalty": 0
+            },
+            "messages": [
+              {
+                "role": "user",
+                "content": [
+                  {
+                    "type": "text",
+                    "text": "FAKE TEST A"
+                  }
+                ]
+              }
+            ],
+            "folder": "f-a",
+            "xChat": {
+              "keep": [
+                "FAKE A",
+                null
+              ]
+            }
+          },
+          {
+            "id": "chat-b",
+            "title": "B",
+            "titleSet": true,
+            "imageDetail": "auto",
+            "config": {
+              "model": "FAKE-TEST-MODEL",
+              "max_tokens": 100,
+              "temperature": 1,
+              "presence_penalty": 0,
+              "top_p": 1,
+              "frequency_penalty": 0
+            },
+            "messages": [
+              {
+                "role": "assistant",
+                "content": [
+                  {
+                    "type": "text",
+                    "text": "FAKE TEST B"
+                  }
+                ]
+              }
+            ],
+            "folder": "f-b",
+            "branchTree": {
+              "rootId": "node-b",
+              "activePath": [
+                "node-b"
+              ],
+              "nodes": {
+                "node-b": {
+                  "id": "node-b",
+                  "parentId": null,
+                  "role": "assistant",
+                  "contentHash": "body-b",
+                  "createdAt": 1,
+                  "xNode": {
+                    "keep": true
+                  }
+                }
+              }
+            },
+            "xChat": {
+              "keep": "FAKE B"
+            }
+          },
+          {
+            "id": "chat-c",
+            "title": "C",
+            "titleSet": false,
+            "imageDetail": "auto",
+            "config": {
+              "model": "FAKE-TEST-MODEL",
+              "max_tokens": 100,
+              "temperature": 1,
+              "presence_penalty": 0,
+              "top_p": 1,
+              "frequency_penalty": 0
+            },
+            "messages": [],
+            "xChat": [
+              "FAKE C"
+            ]
+          }
+        ],
+        "folders": {
+          "f-a": {
+            "id": "f-a",
+            "name": "New Folder 1",
+            "expanded": true,
+            "order": 0,
+            "color": "#0369a1",
+            "xFolder": {
+              "opaque": [
+                null,
+                {
+                  "FAKE": true
+                }
+              ]
+            }
+          },
+          "f-b": {
+            "id": "f-b",
+            "name": "",
+            "expanded": false,
+            "order": 2,
+            "xFolder": [
+              "FAKE B"
+            ]
+          },
+          "f-c": {
+            "id": "f-c",
+            "name": "Research",
+            "expanded": false,
+            "order": 2,
+            "xFolder": "FAKE C"
+          }
+        },
+        "contentStore": {
+          "body-a": {
+            "content": [
+              {
+                "type": "text",
+                "text": "FAKE TEST A"
+              }
+            ],
+            "refCount": 1,
+            "xEntry": "FAKE A"
+          },
+          "body-b": {
+            "content": [
+              {
+                "type": "text",
+                "text": "FAKE TEST B"
+              }
+            ],
+            "refCount": 1,
+            "xEntry": {
+              "keep": "FAKE B"
+            }
+          },
+          "unused": {
+            "content": [
+              {
+                "type": "text",
+                "text": "FAKE UNUSED"
+              }
+            ],
+            "refCount": 0,
+            "xEntry": [
+              "FAKE UNUSED"
+            ]
+          }
+        },
+        "xRoot": {
+          "opaque": [
+            true,
+            null,
+            "FAKE ROOT"
+          ]
+        }
+      },
+      "orderedIDs": [
+        "f-a",
+        "f-b",
+        "f-c"
+      ]
+    },
+    {
+      "name": "set folder color",
+      "operation": {
+        "type": "color",
+        "id": "f-b",
+        "color": "#047857"
+      },
+      "expected": {
+        "version": 3,
+        "chats": [
+          {
+            "id": "chat-a",
+            "title": "A",
+            "titleSet": true,
+            "imageDetail": "auto",
+            "config": {
+              "model": "FAKE-TEST-MODEL",
+              "max_tokens": 100,
+              "temperature": 1,
+              "presence_penalty": 0,
+              "top_p": 1,
+              "frequency_penalty": 0
+            },
+            "messages": [
+              {
+                "role": "user",
+                "content": [
+                  {
+                    "type": "text",
+                    "text": "FAKE TEST A"
+                  }
+                ]
+              }
+            ],
+            "folder": "f-a",
+            "xChat": {
+              "keep": [
+                "FAKE A",
+                null
+              ]
+            }
+          },
+          {
+            "id": "chat-b",
+            "title": "B",
+            "titleSet": true,
+            "imageDetail": "auto",
+            "config": {
+              "model": "FAKE-TEST-MODEL",
+              "max_tokens": 100,
+              "temperature": 1,
+              "presence_penalty": 0,
+              "top_p": 1,
+              "frequency_penalty": 0
+            },
+            "messages": [
+              {
+                "role": "assistant",
+                "content": [
+                  {
+                    "type": "text",
+                    "text": "FAKE TEST B"
+                  }
+                ]
+              }
+            ],
+            "folder": "f-b",
+            "branchTree": {
+              "rootId": "node-b",
+              "activePath": [
+                "node-b"
+              ],
+              "nodes": {
+                "node-b": {
+                  "id": "node-b",
+                  "parentId": null,
+                  "role": "assistant",
+                  "contentHash": "body-b",
+                  "createdAt": 1,
+                  "xNode": {
+                    "keep": true
+                  }
+                }
+              }
+            },
+            "xChat": {
+              "keep": "FAKE B"
+            }
+          },
+          {
+            "id": "chat-c",
+            "title": "C",
+            "titleSet": false,
+            "imageDetail": "auto",
+            "config": {
+              "model": "FAKE-TEST-MODEL",
+              "max_tokens": 100,
+              "temperature": 1,
+              "presence_penalty": 0,
+              "top_p": 1,
+              "frequency_penalty": 0
+            },
+            "messages": [],
+            "xChat": [
+              "FAKE C"
+            ]
+          }
+        ],
+        "folders": {
+          "f-a": {
+            "id": "f-a",
+            "name": "New Folder 1",
+            "expanded": true,
+            "order": 0,
+            "color": "#0369a1",
+            "xFolder": {
+              "opaque": [
+                null,
+                {
+                  "FAKE": true
+                }
+              ]
+            }
+          },
+          "f-b": {
+            "id": "f-b",
+            "name": "New Folder 3",
+            "expanded": false,
+            "order": 2,
+            "xFolder": [
+              "FAKE B"
+            ],
+            "color": "#047857"
+          },
+          "f-c": {
+            "id": "f-c",
+            "name": "Research",
+            "expanded": false,
+            "order": 2,
+            "xFolder": "FAKE C"
+          }
+        },
+        "contentStore": {
+          "body-a": {
+            "content": [
+              {
+                "type": "text",
+                "text": "FAKE TEST A"
+              }
+            ],
+            "refCount": 1,
+            "xEntry": "FAKE A"
+          },
+          "body-b": {
+            "content": [
+              {
+                "type": "text",
+                "text": "FAKE TEST B"
+              }
+            ],
+            "refCount": 1,
+            "xEntry": {
+              "keep": "FAKE B"
+            }
+          },
+          "unused": {
+            "content": [
+              {
+                "type": "text",
+                "text": "FAKE UNUSED"
+              }
+            ],
+            "refCount": 0,
+            "xEntry": [
+              "FAKE UNUSED"
+            ]
+          }
+        },
+        "xRoot": {
+          "opaque": [
+            true,
+            null,
+            "FAKE ROOT"
+          ]
+        }
+      },
+      "orderedIDs": [
+        "f-a",
+        "f-b",
+        "f-c"
+      ]
+    },
+    {
+      "name": "clear folder color",
+      "operation": {
+        "type": "color",
+        "id": "f-a"
+      },
+      "expected": {
+        "version": 3,
+        "chats": [
+          {
+            "id": "chat-a",
+            "title": "A",
+            "titleSet": true,
+            "imageDetail": "auto",
+            "config": {
+              "model": "FAKE-TEST-MODEL",
+              "max_tokens": 100,
+              "temperature": 1,
+              "presence_penalty": 0,
+              "top_p": 1,
+              "frequency_penalty": 0
+            },
+            "messages": [
+              {
+                "role": "user",
+                "content": [
+                  {
+                    "type": "text",
+                    "text": "FAKE TEST A"
+                  }
+                ]
+              }
+            ],
+            "folder": "f-a",
+            "xChat": {
+              "keep": [
+                "FAKE A",
+                null
+              ]
+            }
+          },
+          {
+            "id": "chat-b",
+            "title": "B",
+            "titleSet": true,
+            "imageDetail": "auto",
+            "config": {
+              "model": "FAKE-TEST-MODEL",
+              "max_tokens": 100,
+              "temperature": 1,
+              "presence_penalty": 0,
+              "top_p": 1,
+              "frequency_penalty": 0
+            },
+            "messages": [
+              {
+                "role": "assistant",
+                "content": [
+                  {
+                    "type": "text",
+                    "text": "FAKE TEST B"
+                  }
+                ]
+              }
+            ],
+            "folder": "f-b",
+            "branchTree": {
+              "rootId": "node-b",
+              "activePath": [
+                "node-b"
+              ],
+              "nodes": {
+                "node-b": {
+                  "id": "node-b",
+                  "parentId": null,
+                  "role": "assistant",
+                  "contentHash": "body-b",
+                  "createdAt": 1,
+                  "xNode": {
+                    "keep": true
+                  }
+                }
+              }
+            },
+            "xChat": {
+              "keep": "FAKE B"
+            }
+          },
+          {
+            "id": "chat-c",
+            "title": "C",
+            "titleSet": false,
+            "imageDetail": "auto",
+            "config": {
+              "model": "FAKE-TEST-MODEL",
+              "max_tokens": 100,
+              "temperature": 1,
+              "presence_penalty": 0,
+              "top_p": 1,
+              "frequency_penalty": 0
+            },
+            "messages": [],
+            "xChat": [
+              "FAKE C"
+            ]
+          }
+        ],
+        "folders": {
+          "f-a": {
+            "id": "f-a",
+            "name": "New Folder 1",
+            "expanded": true,
+            "order": 0,
+            "xFolder": {
+              "opaque": [
+                null,
+                {
+                  "FAKE": true
+                }
+              ]
+            }
+          },
+          "f-b": {
+            "id": "f-b",
+            "name": "New Folder 3",
+            "expanded": false,
+            "order": 2,
+            "xFolder": [
+              "FAKE B"
+            ]
+          },
+          "f-c": {
+            "id": "f-c",
+            "name": "Research",
+            "expanded": false,
+            "order": 2,
+            "xFolder": "FAKE C"
+          }
+        },
+        "contentStore": {
+          "body-a": {
+            "content": [
+              {
+                "type": "text",
+                "text": "FAKE TEST A"
+              }
+            ],
+            "refCount": 1,
+            "xEntry": "FAKE A"
+          },
+          "body-b": {
+            "content": [
+              {
+                "type": "text",
+                "text": "FAKE TEST B"
+              }
+            ],
+            "refCount": 1,
+            "xEntry": {
+              "keep": "FAKE B"
+            }
+          },
+          "unused": {
+            "content": [
+              {
+                "type": "text",
+                "text": "FAKE UNUSED"
+              }
+            ],
+            "refCount": 0,
+            "xEntry": [
+              "FAKE UNUSED"
+            ]
+          }
+        },
+        "xRoot": {
+          "opaque": [
+            true,
+            null,
+            "FAKE ROOT"
+          ]
+        }
+      },
+      "orderedIDs": [
+        "f-a",
+        "f-b",
+        "f-c"
+      ]
+    },
+    {
+      "name": "expand folder",
+      "operation": {
+        "type": "expanded",
+        "id": "f-c",
+        "expanded": true
+      },
+      "expected": {
+        "version": 3,
+        "chats": [
+          {
+            "id": "chat-a",
+            "title": "A",
+            "titleSet": true,
+            "imageDetail": "auto",
+            "config": {
+              "model": "FAKE-TEST-MODEL",
+              "max_tokens": 100,
+              "temperature": 1,
+              "presence_penalty": 0,
+              "top_p": 1,
+              "frequency_penalty": 0
+            },
+            "messages": [
+              {
+                "role": "user",
+                "content": [
+                  {
+                    "type": "text",
+                    "text": "FAKE TEST A"
+                  }
+                ]
+              }
+            ],
+            "folder": "f-a",
+            "xChat": {
+              "keep": [
+                "FAKE A",
+                null
+              ]
+            }
+          },
+          {
+            "id": "chat-b",
+            "title": "B",
+            "titleSet": true,
+            "imageDetail": "auto",
+            "config": {
+              "model": "FAKE-TEST-MODEL",
+              "max_tokens": 100,
+              "temperature": 1,
+              "presence_penalty": 0,
+              "top_p": 1,
+              "frequency_penalty": 0
+            },
+            "messages": [
+              {
+                "role": "assistant",
+                "content": [
+                  {
+                    "type": "text",
+                    "text": "FAKE TEST B"
+                  }
+                ]
+              }
+            ],
+            "folder": "f-b",
+            "branchTree": {
+              "rootId": "node-b",
+              "activePath": [
+                "node-b"
+              ],
+              "nodes": {
+                "node-b": {
+                  "id": "node-b",
+                  "parentId": null,
+                  "role": "assistant",
+                  "contentHash": "body-b",
+                  "createdAt": 1,
+                  "xNode": {
+                    "keep": true
+                  }
+                }
+              }
+            },
+            "xChat": {
+              "keep": "FAKE B"
+            }
+          },
+          {
+            "id": "chat-c",
+            "title": "C",
+            "titleSet": false,
+            "imageDetail": "auto",
+            "config": {
+              "model": "FAKE-TEST-MODEL",
+              "max_tokens": 100,
+              "temperature": 1,
+              "presence_penalty": 0,
+              "top_p": 1,
+              "frequency_penalty": 0
+            },
+            "messages": [],
+            "xChat": [
+              "FAKE C"
+            ]
+          }
+        ],
+        "folders": {
+          "f-a": {
+            "id": "f-a",
+            "name": "New Folder 1",
+            "expanded": true,
+            "order": 0,
+            "color": "#0369a1",
+            "xFolder": {
+              "opaque": [
+                null,
+                {
+                  "FAKE": true
+                }
+              ]
+            }
+          },
+          "f-b": {
+            "id": "f-b",
+            "name": "New Folder 3",
+            "expanded": false,
+            "order": 2,
+            "xFolder": [
+              "FAKE B"
+            ]
+          },
+          "f-c": {
+            "id": "f-c",
+            "name": "Research",
+            "expanded": true,
+            "order": 2,
+            "xFolder": "FAKE C"
+          }
+        },
+        "contentStore": {
+          "body-a": {
+            "content": [
+              {
+                "type": "text",
+                "text": "FAKE TEST A"
+              }
+            ],
+            "refCount": 1,
+            "xEntry": "FAKE A"
+          },
+          "body-b": {
+            "content": [
+              {
+                "type": "text",
+                "text": "FAKE TEST B"
+              }
+            ],
+            "refCount": 1,
+            "xEntry": {
+              "keep": "FAKE B"
+            }
+          },
+          "unused": {
+            "content": [
+              {
+                "type": "text",
+                "text": "FAKE UNUSED"
+              }
+            ],
+            "refCount": 0,
+            "xEntry": [
+              "FAKE UNUSED"
+            ]
+          }
+        },
+        "xRoot": {
+          "opaque": [
+            true,
+            null,
+            "FAKE ROOT"
+          ]
+        }
+      },
+      "orderedIDs": [
+        "f-a",
+        "f-b",
+        "f-c"
+      ]
+    },
+    {
+      "name": "collapse folder",
+      "operation": {
+        "type": "expanded",
+        "id": "f-a",
+        "expanded": false
+      },
+      "expected": {
+        "version": 3,
+        "chats": [
+          {
+            "id": "chat-a",
+            "title": "A",
+            "titleSet": true,
+            "imageDetail": "auto",
+            "config": {
+              "model": "FAKE-TEST-MODEL",
+              "max_tokens": 100,
+              "temperature": 1,
+              "presence_penalty": 0,
+              "top_p": 1,
+              "frequency_penalty": 0
+            },
+            "messages": [
+              {
+                "role": "user",
+                "content": [
+                  {
+                    "type": "text",
+                    "text": "FAKE TEST A"
+                  }
+                ]
+              }
+            ],
+            "folder": "f-a",
+            "xChat": {
+              "keep": [
+                "FAKE A",
+                null
+              ]
+            }
+          },
+          {
+            "id": "chat-b",
+            "title": "B",
+            "titleSet": true,
+            "imageDetail": "auto",
+            "config": {
+              "model": "FAKE-TEST-MODEL",
+              "max_tokens": 100,
+              "temperature": 1,
+              "presence_penalty": 0,
+              "top_p": 1,
+              "frequency_penalty": 0
+            },
+            "messages": [
+              {
+                "role": "assistant",
+                "content": [
+                  {
+                    "type": "text",
+                    "text": "FAKE TEST B"
+                  }
+                ]
+              }
+            ],
+            "folder": "f-b",
+            "branchTree": {
+              "rootId": "node-b",
+              "activePath": [
+                "node-b"
+              ],
+              "nodes": {
+                "node-b": {
+                  "id": "node-b",
+                  "parentId": null,
+                  "role": "assistant",
+                  "contentHash": "body-b",
+                  "createdAt": 1,
+                  "xNode": {
+                    "keep": true
+                  }
+                }
+              }
+            },
+            "xChat": {
+              "keep": "FAKE B"
+            }
+          },
+          {
+            "id": "chat-c",
+            "title": "C",
+            "titleSet": false,
+            "imageDetail": "auto",
+            "config": {
+              "model": "FAKE-TEST-MODEL",
+              "max_tokens": 100,
+              "temperature": 1,
+              "presence_penalty": 0,
+              "top_p": 1,
+              "frequency_penalty": 0
+            },
+            "messages": [],
+            "xChat": [
+              "FAKE C"
+            ]
+          }
+        ],
+        "folders": {
+          "f-a": {
+            "id": "f-a",
+            "name": "New Folder 1",
+            "expanded": false,
+            "order": 0,
+            "color": "#0369a1",
+            "xFolder": {
+              "opaque": [
+                null,
+                {
+                  "FAKE": true
+                }
+              ]
+            }
+          },
+          "f-b": {
+            "id": "f-b",
+            "name": "New Folder 3",
+            "expanded": false,
+            "order": 2,
+            "xFolder": [
+              "FAKE B"
+            ]
+          },
+          "f-c": {
+            "id": "f-c",
+            "name": "Research",
+            "expanded": false,
+            "order": 2,
+            "xFolder": "FAKE C"
+          }
+        },
+        "contentStore": {
+          "body-a": {
+            "content": [
+              {
+                "type": "text",
+                "text": "FAKE TEST A"
+              }
+            ],
+            "refCount": 1,
+            "xEntry": "FAKE A"
+          },
+          "body-b": {
+            "content": [
+              {
+                "type": "text",
+                "text": "FAKE TEST B"
+              }
+            ],
+            "refCount": 1,
+            "xEntry": {
+              "keep": "FAKE B"
+            }
+          },
+          "unused": {
+            "content": [
+              {
+                "type": "text",
+                "text": "FAKE UNUSED"
+              }
+            ],
+            "refCount": 0,
+            "xEntry": [
+              "FAKE UNUSED"
+            ]
+          }
+        },
+        "xRoot": {
+          "opaque": [
+            true,
+            null,
+            "FAKE ROOT"
+          ]
+        }
+      },
+      "orderedIDs": [
+        "f-a",
+        "f-b",
+        "f-c"
+      ]
+    },
+    {
+      "name": "delete folder retains every chat and body",
+      "operation": {
+        "type": "remove",
+        "id": "f-a"
+      },
+      "expected": {
+        "version": 3,
+        "chats": [
+          {
+            "id": "chat-a",
+            "title": "A",
+            "titleSet": true,
+            "imageDetail": "auto",
+            "config": {
+              "model": "FAKE-TEST-MODEL",
+              "max_tokens": 100,
+              "temperature": 1,
+              "presence_penalty": 0,
+              "top_p": 1,
+              "frequency_penalty": 0
+            },
+            "messages": [
+              {
+                "role": "user",
+                "content": [
+                  {
+                    "type": "text",
+                    "text": "FAKE TEST A"
+                  }
+                ]
+              }
+            ],
+            "xChat": {
+              "keep": [
+                "FAKE A",
+                null
+              ]
+            }
+          },
+          {
+            "id": "chat-b",
+            "title": "B",
+            "titleSet": true,
+            "imageDetail": "auto",
+            "config": {
+              "model": "FAKE-TEST-MODEL",
+              "max_tokens": 100,
+              "temperature": 1,
+              "presence_penalty": 0,
+              "top_p": 1,
+              "frequency_penalty": 0
+            },
+            "messages": [
+              {
+                "role": "assistant",
+                "content": [
+                  {
+                    "type": "text",
+                    "text": "FAKE TEST B"
+                  }
+                ]
+              }
+            ],
+            "folder": "f-b",
+            "branchTree": {
+              "rootId": "node-b",
+              "activePath": [
+                "node-b"
+              ],
+              "nodes": {
+                "node-b": {
+                  "id": "node-b",
+                  "parentId": null,
+                  "role": "assistant",
+                  "contentHash": "body-b",
+                  "createdAt": 1,
+                  "xNode": {
+                    "keep": true
+                  }
+                }
+              }
+            },
+            "xChat": {
+              "keep": "FAKE B"
+            }
+          },
+          {
+            "id": "chat-c",
+            "title": "C",
+            "titleSet": false,
+            "imageDetail": "auto",
+            "config": {
+              "model": "FAKE-TEST-MODEL",
+              "max_tokens": 100,
+              "temperature": 1,
+              "presence_penalty": 0,
+              "top_p": 1,
+              "frequency_penalty": 0
+            },
+            "messages": [],
+            "xChat": [
+              "FAKE C"
+            ]
+          }
+        ],
+        "folders": {
+          "f-b": {
+            "id": "f-b",
+            "name": "New Folder 3",
+            "expanded": false,
+            "order": 2,
+            "xFolder": [
+              "FAKE B"
+            ]
+          },
+          "f-c": {
+            "id": "f-c",
+            "name": "Research",
+            "expanded": false,
+            "order": 2,
+            "xFolder": "FAKE C"
+          }
+        },
+        "contentStore": {
+          "body-a": {
+            "content": [
+              {
+                "type": "text",
+                "text": "FAKE TEST A"
+              }
+            ],
+            "refCount": 1,
+            "xEntry": "FAKE A"
+          },
+          "body-b": {
+            "content": [
+              {
+                "type": "text",
+                "text": "FAKE TEST B"
+              }
+            ],
+            "refCount": 1,
+            "xEntry": {
+              "keep": "FAKE B"
+            }
+          },
+          "unused": {
+            "content": [
+              {
+                "type": "text",
+                "text": "FAKE UNUSED"
+              }
+            ],
+            "refCount": 0,
+            "xEntry": [
+              "FAKE UNUSED"
+            ]
+          }
+        },
+        "xRoot": {
+          "opaque": [
+            true,
+            null,
+            "FAKE ROOT"
+          ]
+        }
+      },
+      "orderedIDs": [
+        "f-b",
+        "f-c"
+      ]
+    },
+    {
+      "name": "move multiple chats and expand destination",
+      "operation": {
+        "type": "move",
+        "chatIds": [
+          "chat-a",
+          "chat-c"
+        ],
+        "folderId": "f-b"
+      },
+      "expected": {
+        "version": 3,
+        "chats": [
+          {
+            "id": "chat-a",
+            "title": "A",
+            "titleSet": true,
+            "imageDetail": "auto",
+            "config": {
+              "model": "FAKE-TEST-MODEL",
+              "max_tokens": 100,
+              "temperature": 1,
+              "presence_penalty": 0,
+              "top_p": 1,
+              "frequency_penalty": 0
+            },
+            "messages": [
+              {
+                "role": "user",
+                "content": [
+                  {
+                    "type": "text",
+                    "text": "FAKE TEST A"
+                  }
+                ]
+              }
+            ],
+            "folder": "f-b",
+            "xChat": {
+              "keep": [
+                "FAKE A",
+                null
+              ]
+            }
+          },
+          {
+            "id": "chat-b",
+            "title": "B",
+            "titleSet": true,
+            "imageDetail": "auto",
+            "config": {
+              "model": "FAKE-TEST-MODEL",
+              "max_tokens": 100,
+              "temperature": 1,
+              "presence_penalty": 0,
+              "top_p": 1,
+              "frequency_penalty": 0
+            },
+            "messages": [
+              {
+                "role": "assistant",
+                "content": [
+                  {
+                    "type": "text",
+                    "text": "FAKE TEST B"
+                  }
+                ]
+              }
+            ],
+            "folder": "f-b",
+            "branchTree": {
+              "rootId": "node-b",
+              "activePath": [
+                "node-b"
+              ],
+              "nodes": {
+                "node-b": {
+                  "id": "node-b",
+                  "parentId": null,
+                  "role": "assistant",
+                  "contentHash": "body-b",
+                  "createdAt": 1,
+                  "xNode": {
+                    "keep": true
+                  }
+                }
+              }
+            },
+            "xChat": {
+              "keep": "FAKE B"
+            }
+          },
+          {
+            "id": "chat-c",
+            "title": "C",
+            "titleSet": false,
+            "imageDetail": "auto",
+            "config": {
+              "model": "FAKE-TEST-MODEL",
+              "max_tokens": 100,
+              "temperature": 1,
+              "presence_penalty": 0,
+              "top_p": 1,
+              "frequency_penalty": 0
+            },
+            "messages": [],
+            "xChat": [
+              "FAKE C"
+            ],
+            "folder": "f-b"
+          }
+        ],
+        "folders": {
+          "f-a": {
+            "id": "f-a",
+            "name": "New Folder 1",
+            "expanded": true,
+            "order": 0,
+            "color": "#0369a1",
+            "xFolder": {
+              "opaque": [
+                null,
+                {
+                  "FAKE": true
+                }
+              ]
+            }
+          },
+          "f-b": {
+            "id": "f-b",
+            "name": "New Folder 3",
+            "expanded": true,
+            "order": 2,
+            "xFolder": [
+              "FAKE B"
+            ]
+          },
+          "f-c": {
+            "id": "f-c",
+            "name": "Research",
+            "expanded": false,
+            "order": 2,
+            "xFolder": "FAKE C"
+          }
+        },
+        "contentStore": {
+          "body-a": {
+            "content": [
+              {
+                "type": "text",
+                "text": "FAKE TEST A"
+              }
+            ],
+            "refCount": 1,
+            "xEntry": "FAKE A"
+          },
+          "body-b": {
+            "content": [
+              {
+                "type": "text",
+                "text": "FAKE TEST B"
+              }
+            ],
+            "refCount": 1,
+            "xEntry": {
+              "keep": "FAKE B"
+            }
+          },
+          "unused": {
+            "content": [
+              {
+                "type": "text",
+                "text": "FAKE UNUSED"
+              }
+            ],
+            "refCount": 0,
+            "xEntry": [
+              "FAKE UNUSED"
+            ]
+          }
+        },
+        "xRoot": {
+          "opaque": [
+            true,
+            null,
+            "FAKE ROOT"
+          ]
+        }
+      },
+      "orderedIDs": [
+        "f-a",
+        "f-b",
+        "f-c"
+      ]
+    },
+    {
+      "name": "move multiple chats to unassigned",
+      "operation": {
+        "type": "move",
+        "chatIds": [
+          "chat-a",
+          "chat-b"
+        ]
+      },
+      "expected": {
+        "version": 3,
+        "chats": [
+          {
+            "id": "chat-a",
+            "title": "A",
+            "titleSet": true,
+            "imageDetail": "auto",
+            "config": {
+              "model": "FAKE-TEST-MODEL",
+              "max_tokens": 100,
+              "temperature": 1,
+              "presence_penalty": 0,
+              "top_p": 1,
+              "frequency_penalty": 0
+            },
+            "messages": [
+              {
+                "role": "user",
+                "content": [
+                  {
+                    "type": "text",
+                    "text": "FAKE TEST A"
+                  }
+                ]
+              }
+            ],
+            "xChat": {
+              "keep": [
+                "FAKE A",
+                null
+              ]
+            }
+          },
+          {
+            "id": "chat-b",
+            "title": "B",
+            "titleSet": true,
+            "imageDetail": "auto",
+            "config": {
+              "model": "FAKE-TEST-MODEL",
+              "max_tokens": 100,
+              "temperature": 1,
+              "presence_penalty": 0,
+              "top_p": 1,
+              "frequency_penalty": 0
+            },
+            "messages": [
+              {
+                "role": "assistant",
+                "content": [
+                  {
+                    "type": "text",
+                    "text": "FAKE TEST B"
+                  }
+                ]
+              }
+            ],
+            "branchTree": {
+              "rootId": "node-b",
+              "activePath": [
+                "node-b"
+              ],
+              "nodes": {
+                "node-b": {
+                  "id": "node-b",
+                  "parentId": null,
+                  "role": "assistant",
+                  "contentHash": "body-b",
+                  "createdAt": 1,
+                  "xNode": {
+                    "keep": true
+                  }
+                }
+              }
+            },
+            "xChat": {
+              "keep": "FAKE B"
+            }
+          },
+          {
+            "id": "chat-c",
+            "title": "C",
+            "titleSet": false,
+            "imageDetail": "auto",
+            "config": {
+              "model": "FAKE-TEST-MODEL",
+              "max_tokens": 100,
+              "temperature": 1,
+              "presence_penalty": 0,
+              "top_p": 1,
+              "frequency_penalty": 0
+            },
+            "messages": [],
+            "xChat": [
+              "FAKE C"
+            ]
+          }
+        ],
+        "folders": {
+          "f-a": {
+            "id": "f-a",
+            "name": "New Folder 1",
+            "expanded": true,
+            "order": 0,
+            "color": "#0369a1",
+            "xFolder": {
+              "opaque": [
+                null,
+                {
+                  "FAKE": true
+                }
+              ]
+            }
+          },
+          "f-b": {
+            "id": "f-b",
+            "name": "New Folder 3",
+            "expanded": false,
+            "order": 2,
+            "xFolder": [
+              "FAKE B"
+            ]
+          },
+          "f-c": {
+            "id": "f-c",
+            "name": "Research",
+            "expanded": false,
+            "order": 2,
+            "xFolder": "FAKE C"
+          }
+        },
+        "contentStore": {
+          "body-a": {
+            "content": [
+              {
+                "type": "text",
+                "text": "FAKE TEST A"
+              }
+            ],
+            "refCount": 1,
+            "xEntry": "FAKE A"
+          },
+          "body-b": {
+            "content": [
+              {
+                "type": "text",
+                "text": "FAKE TEST B"
+              }
+            ],
+            "refCount": 1,
+            "xEntry": {
+              "keep": "FAKE B"
+            }
+          },
+          "unused": {
+            "content": [
+              {
+                "type": "text",
+                "text": "FAKE UNUSED"
+              }
+            ],
+            "refCount": 0,
+            "xEntry": [
+              "FAKE UNUSED"
+            ]
+          }
+        },
+        "xRoot": {
+          "opaque": [
+            true,
+            null,
+            "FAKE ROOT"
+          ]
+        }
+      },
+      "orderedIDs": [
+        "f-a",
+        "f-b",
+        "f-c"
+      ]
+    },
+    {
+      "name": "empty drop still expands destination",
+      "operation": {
+        "type": "move",
+        "chatIds": [],
+        "folderId": "f-c"
+      },
+      "expected": {
+        "version": 3,
+        "chats": [
+          {
+            "id": "chat-a",
+            "title": "A",
+            "titleSet": true,
+            "imageDetail": "auto",
+            "config": {
+              "model": "FAKE-TEST-MODEL",
+              "max_tokens": 100,
+              "temperature": 1,
+              "presence_penalty": 0,
+              "top_p": 1,
+              "frequency_penalty": 0
+            },
+            "messages": [
+              {
+                "role": "user",
+                "content": [
+                  {
+                    "type": "text",
+                    "text": "FAKE TEST A"
+                  }
+                ]
+              }
+            ],
+            "folder": "f-a",
+            "xChat": {
+              "keep": [
+                "FAKE A",
+                null
+              ]
+            }
+          },
+          {
+            "id": "chat-b",
+            "title": "B",
+            "titleSet": true,
+            "imageDetail": "auto",
+            "config": {
+              "model": "FAKE-TEST-MODEL",
+              "max_tokens": 100,
+              "temperature": 1,
+              "presence_penalty": 0,
+              "top_p": 1,
+              "frequency_penalty": 0
+            },
+            "messages": [
+              {
+                "role": "assistant",
+                "content": [
+                  {
+                    "type": "text",
+                    "text": "FAKE TEST B"
+                  }
+                ]
+              }
+            ],
+            "folder": "f-b",
+            "branchTree": {
+              "rootId": "node-b",
+              "activePath": [
+                "node-b"
+              ],
+              "nodes": {
+                "node-b": {
+                  "id": "node-b",
+                  "parentId": null,
+                  "role": "assistant",
+                  "contentHash": "body-b",
+                  "createdAt": 1,
+                  "xNode": {
+                    "keep": true
+                  }
+                }
+              }
+            },
+            "xChat": {
+              "keep": "FAKE B"
+            }
+          },
+          {
+            "id": "chat-c",
+            "title": "C",
+            "titleSet": false,
+            "imageDetail": "auto",
+            "config": {
+              "model": "FAKE-TEST-MODEL",
+              "max_tokens": 100,
+              "temperature": 1,
+              "presence_penalty": 0,
+              "top_p": 1,
+              "frequency_penalty": 0
+            },
+            "messages": [],
+            "xChat": [
+              "FAKE C"
+            ]
+          }
+        ],
+        "folders": {
+          "f-a": {
+            "id": "f-a",
+            "name": "New Folder 1",
+            "expanded": true,
+            "order": 0,
+            "color": "#0369a1",
+            "xFolder": {
+              "opaque": [
+                null,
+                {
+                  "FAKE": true
+                }
+              ]
+            }
+          },
+          "f-b": {
+            "id": "f-b",
+            "name": "New Folder 3",
+            "expanded": false,
+            "order": 2,
+            "xFolder": [
+              "FAKE B"
+            ]
+          },
+          "f-c": {
+            "id": "f-c",
+            "name": "Research",
+            "expanded": true,
+            "order": 2,
+            "xFolder": "FAKE C"
+          }
+        },
+        "contentStore": {
+          "body-a": {
+            "content": [
+              {
+                "type": "text",
+                "text": "FAKE TEST A"
+              }
+            ],
+            "refCount": 1,
+            "xEntry": "FAKE A"
+          },
+          "body-b": {
+            "content": [
+              {
+                "type": "text",
+                "text": "FAKE TEST B"
+              }
+            ],
+            "refCount": 1,
+            "xEntry": {
+              "keep": "FAKE B"
+            }
+          },
+          "unused": {
+            "content": [
+              {
+                "type": "text",
+                "text": "FAKE UNUSED"
+              }
+            ],
+            "refCount": 0,
+            "xEntry": [
+              "FAKE UNUSED"
+            ]
+          }
+        },
+        "xRoot": {
+          "opaque": [
+            true,
+            null,
+            "FAKE ROOT"
+          ]
+        }
+      },
+      "orderedIDs": [
+        "f-a",
+        "f-b",
+        "f-c"
+      ]
+    },
+    {
+      "name": "stable equal-order sort follows JS integer keys",
+      "input": {
+        "version": 3,
+        "chats": [
+          {
+            "id": "chat-a",
+            "title": "A",
+            "titleSet": true,
+            "imageDetail": "auto",
+            "config": {
+              "model": "FAKE-TEST-MODEL",
+              "max_tokens": 100,
+              "temperature": 1,
+              "presence_penalty": 0,
+              "top_p": 1,
+              "frequency_penalty": 0
+            },
+            "messages": [
+              {
+                "role": "user",
+                "content": [
+                  {
+                    "type": "text",
+                    "text": "FAKE TEST A"
+                  }
+                ]
+              }
+            ],
+            "folder": "f-a",
+            "xChat": {
+              "keep": [
+                "FAKE A",
+                null
+              ]
+            }
+          },
+          {
+            "id": "chat-b",
+            "title": "B",
+            "titleSet": true,
+            "imageDetail": "auto",
+            "config": {
+              "model": "FAKE-TEST-MODEL",
+              "max_tokens": 100,
+              "temperature": 1,
+              "presence_penalty": 0,
+              "top_p": 1,
+              "frequency_penalty": 0
+            },
+            "messages": [
+              {
+                "role": "assistant",
+                "content": [
+                  {
+                    "type": "text",
+                    "text": "FAKE TEST B"
+                  }
+                ]
+              }
+            ],
+            "folder": "f-b",
+            "branchTree": {
+              "rootId": "node-b",
+              "activePath": [
+                "node-b"
+              ],
+              "nodes": {
+                "node-b": {
+                  "id": "node-b",
+                  "parentId": null,
+                  "role": "assistant",
+                  "contentHash": "body-b",
+                  "createdAt": 1,
+                  "xNode": {
+                    "keep": true
+                  }
+                }
+              }
+            },
+            "xChat": {
+              "keep": "FAKE B"
+            }
+          },
+          {
+            "id": "chat-c",
+            "title": "C",
+            "titleSet": false,
+            "imageDetail": "auto",
+            "config": {
+              "model": "FAKE-TEST-MODEL",
+              "max_tokens": 100,
+              "temperature": 1,
+              "presence_penalty": 0,
+              "top_p": 1,
+              "frequency_penalty": 0
+            },
+            "messages": [],
+            "xChat": [
+              "FAKE C"
+            ]
+          }
+        ],
+        "folders": {
+          "f-a": {
+            "id": "f-a",
+            "name": "New Folder 1",
+            "expanded": true,
+            "order": 5,
+            "color": "#0369a1",
+            "xFolder": {
+              "opaque": [
+                null,
+                {
+                  "FAKE": true
+                }
+              ]
+            }
+          },
+          "2": {
+            "id": "2",
+            "name": "Two",
+            "expanded": true,
+            "order": 5,
+            "xFolder": "FAKE TWO"
+          },
+          "1": {
+            "id": "1",
+            "name": "One",
+            "expanded": true,
+            "order": 5,
+            "xFolder": "FAKE ONE"
+          }
+        },
+        "contentStore": {
+          "body-a": {
+            "content": [
+              {
+                "type": "text",
+                "text": "FAKE TEST A"
+              }
+            ],
+            "refCount": 1,
+            "xEntry": "FAKE A"
+          },
+          "body-b": {
+            "content": [
+              {
+                "type": "text",
+                "text": "FAKE TEST B"
+              }
+            ],
+            "refCount": 1,
+            "xEntry": {
+              "keep": "FAKE B"
+            }
+          },
+          "unused": {
+            "content": [
+              {
+                "type": "text",
+                "text": "FAKE UNUSED"
+              }
+            ],
+            "refCount": 0,
+            "xEntry": [
+              "FAKE UNUSED"
+            ]
+          }
+        },
+        "xRoot": {
+          "opaque": [
+            true,
+            null,
+            "FAKE ROOT"
+          ]
+        }
+      },
+      "operation": {
+        "type": "expanded",
+        "id": "1",
+        "expanded": false
+      },
+      "expected": {
+        "version": 3,
+        "chats": [
+          {
+            "id": "chat-a",
+            "title": "A",
+            "titleSet": true,
+            "imageDetail": "auto",
+            "config": {
+              "model": "FAKE-TEST-MODEL",
+              "max_tokens": 100,
+              "temperature": 1,
+              "presence_penalty": 0,
+              "top_p": 1,
+              "frequency_penalty": 0
+            },
+            "messages": [
+              {
+                "role": "user",
+                "content": [
+                  {
+                    "type": "text",
+                    "text": "FAKE TEST A"
+                  }
+                ]
+              }
+            ],
+            "folder": "f-a",
+            "xChat": {
+              "keep": [
+                "FAKE A",
+                null
+              ]
+            }
+          },
+          {
+            "id": "chat-b",
+            "title": "B",
+            "titleSet": true,
+            "imageDetail": "auto",
+            "config": {
+              "model": "FAKE-TEST-MODEL",
+              "max_tokens": 100,
+              "temperature": 1,
+              "presence_penalty": 0,
+              "top_p": 1,
+              "frequency_penalty": 0
+            },
+            "messages": [
+              {
+                "role": "assistant",
+                "content": [
+                  {
+                    "type": "text",
+                    "text": "FAKE TEST B"
+                  }
+                ]
+              }
+            ],
+            "folder": "f-b",
+            "branchTree": {
+              "rootId": "node-b",
+              "activePath": [
+                "node-b"
+              ],
+              "nodes": {
+                "node-b": {
+                  "id": "node-b",
+                  "parentId": null,
+                  "role": "assistant",
+                  "contentHash": "body-b",
+                  "createdAt": 1,
+                  "xNode": {
+                    "keep": true
+                  }
+                }
+              }
+            },
+            "xChat": {
+              "keep": "FAKE B"
+            }
+          },
+          {
+            "id": "chat-c",
+            "title": "C",
+            "titleSet": false,
+            "imageDetail": "auto",
+            "config": {
+              "model": "FAKE-TEST-MODEL",
+              "max_tokens": 100,
+              "temperature": 1,
+              "presence_penalty": 0,
+              "top_p": 1,
+              "frequency_penalty": 0
+            },
+            "messages": [],
+            "xChat": [
+              "FAKE C"
+            ]
+          }
+        ],
+        "folders": {
+          "f-a": {
+            "id": "f-a",
+            "name": "New Folder 1",
+            "expanded": true,
+            "order": 5,
+            "color": "#0369a1",
+            "xFolder": {
+              "opaque": [
+                null,
+                {
+                  "FAKE": true
+                }
+              ]
+            }
+          },
+          "2": {
+            "id": "2",
+            "name": "Two",
+            "expanded": true,
+            "order": 5,
+            "xFolder": "FAKE TWO"
+          },
+          "1": {
+            "id": "1",
+            "name": "One",
+            "expanded": false,
+            "order": 5,
+            "xFolder": "FAKE ONE"
+          }
+        },
+        "contentStore": {
+          "body-a": {
+            "content": [
+              {
+                "type": "text",
+                "text": "FAKE TEST A"
+              }
+            ],
+            "refCount": 1,
+            "xEntry": "FAKE A"
+          },
+          "body-b": {
+            "content": [
+              {
+                "type": "text",
+                "text": "FAKE TEST B"
+              }
+            ],
+            "refCount": 1,
+            "xEntry": {
+              "keep": "FAKE B"
+            }
+          },
+          "unused": {
+            "content": [
+              {
+                "type": "text",
+                "text": "FAKE UNUSED"
+              }
+            ],
+            "refCount": 0,
+            "xEntry": [
+              "FAKE UNUSED"
+            ]
+          }
+        },
+        "xRoot": {
+          "opaque": [
+            true,
+            null,
+            "FAKE ROOT"
+          ]
+        }
+      },
+      "orderedIDs": [
+        "1",
+        "2",
+        "f-a"
+      ]
+    }
+  ]
+}

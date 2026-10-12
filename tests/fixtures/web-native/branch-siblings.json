@@ -1,0 +1,97 @@
+{
+  "version": 1,
+  "cases": [
+    {
+      "name": "empty tree missing node",
+      "scope": "shared",
+      "nodeId": "missing",
+      "nodes": [],
+      "expectedIds": []
+    },
+    {
+      "name": "existing tree missing node",
+      "scope": "shared",
+      "nodeId": "missing",
+      "nodes": [
+        { "id": "root", "parentId": null, "createdAt": 1 },
+        { "id": "child", "parentId": "root", "createdAt": 2 }
+      ],
+      "expectedIds": []
+    },
+    {
+      "name": "single root",
+      "scope": "shared",
+      "nodeId": "root",
+      "nodes": [
+        { "id": "root", "parentId": null, "createdAt": 1 }
+      ],
+      "expectedIds": ["root"]
+    },
+    {
+      "name": "siblings include self and retain object enumeration order",
+      "scope": "shared",
+      "nodeId": "sibling-b",
+      "nodes": [
+        { "id": "root", "parentId": null, "createdAt": 0 },
+        { "id": "sibling-b", "parentId": "root", "createdAt": 30 },
+        { "id": "sibling-a", "parentId": "root", "createdAt": 10 },
+        { "id": "sibling-c", "parentId": "root", "createdAt": 20 }
+      ],
+      "expectedIds": ["sibling-b", "sibling-a", "sibling-c"]
+    },
+    {
+      "name": "multiple roots ignore rootId",
+      "scope": "shared",
+      "nodeId": "root-b",
+      "nodes": [
+        { "id": "root-a", "parentId": null, "createdAt": 9 },
+        { "id": "root-b", "parentId": null, "createdAt": 1 },
+        { "id": "root-c", "parentId": null, "createdAt": 5 }
+      ],
+      "expectedIds": ["root-a", "root-b", "root-c"]
+    },
+    {
+      "name": "siblings share absent orphan parent",
+      "scope": "shared",
+      "nodeId": "orphan-a",
+      "nodes": [
+        { "id": "orphan-a", "parentId": "absent-parent", "createdAt": 4 },
+        { "id": "orphan-b", "parentId": "absent-parent", "createdAt": 2 }
+      ],
+      "expectedIds": ["orphan-a", "orphan-b"]
+    },
+    {
+      "name": "integer-like keys enumerate numerically before other keys",
+      "scope": "shared",
+      "nodeId": "10",
+      "nodes": [
+        { "id": "10", "parentId": null, "createdAt": 1 },
+        { "id": "2", "parentId": null, "createdAt": 2 },
+        { "id": "1", "parentId": null, "createdAt": 3 },
+        { "id": "01", "parentId": null, "createdAt": 4 }
+      ],
+      "expectedIds": ["1", "2", "10", "01"]
+    },
+    {
+      "name": "unicode ordinary identifiers",
+      "scope": "shared",
+      "nodeId": "枝-a",
+      "nodes": [
+        { "id": "根", "parentId": null, "createdAt": 1 },
+        { "id": "枝-a", "parentId": "根", "createdAt": 3 },
+        { "id": "枝-b", "parentId": "根", "createdAt": 2 }
+      ],
+      "expectedIds": ["枝-a", "枝-b"]
+    },
+    {
+      "name": "empty parent is treated as root and matches null roots",
+      "scope": "web-observation",
+      "nodeId": "empty-parent",
+      "nodes": [
+        { "id": "empty-parent", "parentId": "", "createdAt": 1 },
+        { "id": "null-root", "parentId": null, "createdAt": 2 }
+      ],
+      "expectedIds": ["null-root"]
+    }
+  ]
+}

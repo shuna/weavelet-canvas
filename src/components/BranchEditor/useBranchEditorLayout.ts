@@ -200,9 +200,10 @@ export function useMultiBranchEditorLayout(entries: MultiLayoutEntry[]) {
 
       return {
         ...edge,
+        zIndex: active.activeSet.has(edge.target) ? 1 : 0,
         style: active.activeSet.has(edge.target)
-          ? { stroke: active.color, strokeWidth: 3, opacity: 1 }
-          : { stroke: '#9ca3af', strokeWidth: 1, opacity: 0.4 },
+          ? { stroke: active.color, strokeWidth: 4, opacity: 1 }
+          : { stroke: '#9ca3af', strokeWidth: 2, opacity: 0.65 },
       };
     });
   }, [entries, layoutEdges, rfNodes]);

@@ -1,7 +1,7 @@
 import { useSyncReview } from '@store/storage/google/conflicts';
 import React, { useEffect, useRef, useState } from 'react';
 
-import useInitialiseNewChat from '@hooks/useInitialiseNewChat';
+import { generateDefaultChat } from '@constants/chat';
 
 import ChatIcon from '@icon/ChatIcon';
 import CrossIcon from '@icon/CrossIcon';
@@ -12,10 +12,8 @@ import ExportIcon from '@icon/ExportIcon';
 import TickIcon from '@icon/TickIcon';
 import useStore from '@store/store';
 import { formatNumber } from '@utils/chat';
-import { retainContent, releaseContent } from '@utils/contentStore';
-import { cloneChatAtIndex, deepCloneSingleChat } from '@utils/chatShallowClone';
+import { renameLibraryChat, duplicateLibraryChat, deleteLibraryChats } from '@utils/chatLibrary';
 import { stopSessionsForChat } from '@hooks/useSubmit';
-import { BranchNode } from '@type/chat';
 import DownloadChat from '@components/Chat/ChatContent/DownloadChat';
 
 const ChatHistoryClass = {
@@ -47,7 +45,6 @@ const ChatHistory = React.memo(
     lastSelectedIndex: number | null;
     setLastSelectedIndex: (index: number) => void;
   }) => {
-    const initialiseNewChat = useInitialiseNewChat();
     const setCurrentChatIndex = useStore((state) => state.setCurrentChatIndex);
     const pushNavigationEntry = useStore((state) => state.pushNavigationEntry);
     const captureCurrentNavigationEntry = useStore((state) => state.captureCurrentNavigationEntry);
@@ -69,8 +66,7 @@ const ChatHistory = React.memo(
     const editTitle = () => {
       const chats = useStore.getState().chats;
       if (!chats) return;
-      const updatedChats = cloneChatAtIndex(chats, chatIndex);
-      updatedChats[chatIndex].title = _title;
+      const updatedChats = renameLibraryChat(chats, chatIndex, _title);
       setChats(updatedChats);
       setIsEdit(false);
     };
@@ -78,32 +74,17 @@ const ChatHistory = React.memo(
     const deleteChat = () => {
       const chats = useStore.getState().chats;
       if (!chats) return;
-      const updatedChats = chats.slice();
-      const indicesToDelete =
-        selectedChats.length > 0 ? selectedChats : [chatIndex];
-
-      const contentStore = { ...useStore.getState().contentStore };
-      indicesToDelete.forEach((index) => {
-        const chat = chats?.[index];
-        if (chat?.branchTree) {
-          for (const node of Object.values(chat.branchTree.nodes)) {
-            releaseContent(contentStore, node.contentHash);
-          }
-        }
-      });
-
-      indicesToDelete
-        .sort((a, b) => b - a)
-        .forEach((index) => {
-          updatedChats.splice(index, 1);
-        });
-      if (updatedChats.length > 0) {
-        setCurrentChatIndex(0);
-        setChats(updatedChats);
-        useStore.setState({ contentStore });
-      } else {
-        initialiseNewChat();
+      const indicesToDelete = selectedChats.length > 0 ? selectedChats : [chatIndex];
+      let result: ReturnType<typeof deleteLibraryChats>;
+      try {
+        result = deleteLibraryChats(chats, indicesToDelete, useStore.getState().contentStore, () => generateDefaultChat());
+      } catch (error) {
+        useStore.getState().setError(error instanceof Error ? error.message : String(error));
+        return;
       }
+      const { chats: updatedChats, contentStore } = result;
+      setCurrentChatIndex(0);
+      setChats(updatedChats, { contentStore });
       setIsDelete(false);
       setSelectedChats([]);
     };
@@ -166,30 +147,10 @@ const ChatHistory = React.memo(
       e.stopPropagation();
       const chats = useStore.getState().chats;
       if (chats) {
-        const index = chatIndex;
-        let title = `Copy of ${chats[index].title}`;
-        let i = 0;
-        while (chats.some((chat: { title: string }) => chat.title === title)) {
-          i += 1;
-          title = `Copy ${i} of ${chats[index].title}`;
-        }
-
-        const clonedChat = deepCloneSingleChat(chats[index]);
-        clonedChat.title = title;
-
-        const contentStore = { ...useStore.getState().contentStore };
-        if (clonedChat.branchTree) {
-          for (const node of Object.values(clonedChat.branchTree.nodes) as BranchNode[]) {
-            retainContent(contentStore, node.contentHash);
-          }
-        }
-
-        const updatedChats = chats.slice();
-        updatedChats.unshift(clonedChat);
-
+        const { chats: updatedChats, contentStore } = duplicateLibraryChat(chats, chatIndex, useStore.getState().contentStore);
+        const clonedChat = updatedChats[0];
         captureCurrentNavigationEntry();
-        setChats(updatedChats);
-        useStore.setState({ contentStore });
+        setChats(updatedChats, { contentStore });
         pushNavigationEntry({ chatId: clonedChat.id, activePath: [...(clonedChat.branchTree?.activePath ?? [])], viewContext: useStore.getState().chatActiveView, source: 'chat-switch' });
         setCurrentChatIndex(0);
       }

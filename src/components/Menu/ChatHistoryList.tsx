@@ -6,7 +6,7 @@ import ChatFolder from './ChatFolder';
 import ChatHistory from './ChatHistory';
 import GrepResults from './GrepResults';
 import SidebarSearchHistory from './SidebarSearchHistory';
-import { expandExistingFolder } from './chatHistoryFolderUtils';
+import { applyFolderOperation, orderedFolders } from '@utils/chatFolders';
 
 import {
   ChatHistoryInterface,
@@ -31,7 +31,6 @@ const ChatHistoryList = ({
   const currentChatIndex = useStore((state) => state.currentChatIndex);
   const hideSideMenu = useStore((state) => state.hideSideMenu);
   const displayChatSize = useStore((state) => state.displayChatSize);
-  const setChats = useStore((state) => state.setChats);
   const setFolders = useStore((state) => state.setFolders);
   const chatTitles = useStore(
     (state) => state.chats?.map((chat) => chat.title),
@@ -72,8 +71,7 @@ const ChatHistoryList = ({
     const folders = useStore.getState().folders;
     const displayChatSize = useStore.getState().displayChatSize;
 
-    Object.values(folders)
-      .sort((a, b) => a.order - b.order)
+    orderedFolders(folders)
       .forEach((f) => (_folders[f.id] = []));
 
     if (chats) {
@@ -209,9 +207,8 @@ const ChatHistoryList = ({
 
         if (folderId) {
           const currentFolders = useStore.getState().folders;
-          const updatedFolders = expandExistingFolder(currentFolders, folderId);
-          if (updatedFolders) {
-            setFolders(updatedFolders);
+          if (currentFolders[folderId] && !currentFolders[folderId].expanded) {
+            setFolders(applyFolderOperation(useStore.getState(), { type: 'expanded', id: folderId, expanded: true }).folders);
           }
         }
       }
@@ -247,14 +244,10 @@ const ChatHistoryList = ({
       e.stopPropagation();
       setIsHover(false);
 
-      const chatIndices = JSON.parse(e.dataTransfer.getData('chatIndices'));
-      const updatedChats: ChatInterface[] = JSON.parse(
-        JSON.stringify(useStore.getState().chats)
-      );
-      chatIndices.forEach((chatIndex: number) => {
-        delete updatedChats[chatIndex].folder;
-      });
-      setChats(updatedChats);
+      const state = useStore.getState();
+      const chatIds = (JSON.parse(e.dataTransfer.getData('chatIndices')) as number[]).map(index => state.chats![index].id);
+      const updated = applyFolderOperation(state, { type: 'move', chatIds });
+      setFolders(updated.folders, { chats: updated.chats });
       setSelectedChats([]);
     }
   };

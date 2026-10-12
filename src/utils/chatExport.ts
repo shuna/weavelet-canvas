@@ -4,6 +4,7 @@ import {
   LMStudioChat, LMStudioMessage, LMStudioContentBlock,
   LMStudioUserVersion, LMStudioSystemVersion, LMStudioAssistantVersion,
 } from '@type/export';
+import { captureProjectedMessageAttributes, materializeActivePath, readMessageAttributes } from './branchUtils';
 import { ContentStoreData, resolveContent } from './contentStore';
 
 type PrepareChatForExportOptions = {
@@ -34,7 +35,9 @@ export const prepareChatForExport = (
     };
   }
 
-  const sourceTree = chat.branchTree;
+  chat = clone(chat);
+  captureProjectedMessageAttributes(chat, sourceContentStore);
+  const sourceTree = chat.branchTree!;
   const includedNodeIds = visibleBranchOnly
     ? sourceTree.activePath.filter((id) => sourceTree.nodes[id] !== undefined)
     : Object.keys(sourceTree.nodes);
@@ -55,14 +58,16 @@ export const prepareChatForExport = (
   hashRefCounts.forEach((refCount, hash) => {
     const entry = sourceContentStore[hash];
     if (!entry) return;
+    const { delta, ...fullEntry } = entry;
     // Resolve deltas to full content for V3-compatible export
-    const content = entry.delta
+    const content = delta
       ? resolveContent(sourceContentStore, hash)
       : entry.content;
-    contentStore[hash] = {
-      content: clone(content),
+    contentStore[hash] = clone({
+      ...fullEntry,
+      content,
       refCount,
-    };
+    });
   });
 
   const filterNodeRecord = (
@@ -78,18 +83,15 @@ export const prepareChatForExport = (
   const omittedNodes = filterNodeRecord(chat.omittedNodes);
   const protectedNodes = filterNodeRecord(chat.protectedNodes);
 
+  const exportedChat = clone(chat);
   return {
     chat: {
-      ...clone(chat),
-      messages: activePath.map((id) => {
-        const node = sourceTree.nodes[id];
-        return {
-          role: node.role,
-          content: clone(resolveContent(sourceContentStore, node.contentHash)),
-        };
-      }),
+      ...exportedChat,
+      messages: clone(materializeActivePath({ ...sourceTree, activePath }, sourceContentStore, true)),
       branchTree: {
+        ...exportedChat.branchTree,
         nodes,
+        ...(sourceTree.messageAttributesV1 ? { messageAttributesV1: { version: 1 as const, byNode: Object.fromEntries(Object.entries(readMessageAttributes(sourceTree)!.byNode).filter(([id]) => includedNodeSet.has(id))) } } : {}),
         rootId: includedNodeSet.has(sourceTree.rootId)
           ? sourceTree.rootId
           : activePath[0] ?? includedNodeIds[0] ?? '',

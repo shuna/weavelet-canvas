@@ -1,0 +1,1835 @@
+{
+  "fixtureVersion": 1,
+  "exportV3": {
+    "version": 3,
+    "chats": [
+      {
+        "id": "chat-a",
+        "title": "全項目合成会話",
+        "titleSet": true,
+        "folder": "folder-a",
+        "messages": [
+          {
+            "role": "system",
+            "content": [
+              {
+                "type": "text",
+                "text": "合成system instruction"
+              }
+            ]
+          },
+          {
+            "role": "user",
+            "content": [
+              {
+                "type": "text",
+                "text": "本文\n日本語🙂",
+                "xFixtureContent": "keep-text"
+              },
+              {
+                "type": "image_url",
+                "image_url": {
+                  "url": "data:image/png;base64,FAKE_TEST_IMAGE",
+                  "detail": "high",
+                  "xFixtureImage": "keep-image"
+                }
+              },
+              {
+                "type": "reasoning",
+                "text": "検討",
+                "xFixtureContent": "keep-reasoning"
+              },
+              {
+                "type": "tool_call",
+                "id": "FAKE-TEST-CALL",
+                "name": "fake_lookup",
+                "arguments": "{\"fake\":true,\"q\":\"日本語\"}",
+                "xFixtureContent": "keep-tool-call"
+              },
+              {
+                "type": "tool_result",
+                "tool_call_id": "FAKE-TEST-CALL",
+                "content": "FAKE TEST RESULT",
+                "xFixtureContent": "keep-tool-result"
+              }
+            ]
+          },
+          {
+            "role": "assistant",
+            "content": [
+              {
+                "type": "text",
+                "text": "表示中の回答"
+              }
+            ]
+          }
+        ],
+        "config": {
+          "openRouter": {
+            "routing": {
+              "order": [
+                "fake-provider"
+              ],
+              "only": [
+                "fake-provider"
+              ],
+              "ignore": [
+                "fake-other"
+              ],
+              "sort": "price",
+              "allow_fallbacks": true,
+              "require_parameters": true,
+              "max_price": {
+                "prompt": 0.01,
+                "completion": 0.02
+              },
+              "data_collection": "deny",
+              "zdr": true
+            },
+            "promptCache": {
+              "mode": "claude-conversation",
+              "ttl": "1h"
+            },
+            "responseCache": {
+              "mode": "on",
+              "ttlSeconds": 90
+            },
+            "stickySession": true
+          },
+          "max_tokens": 321,
+          "temperature": 0.25,
+          "presence_penalty": 0.1,
+          "top_p": 0.8,
+          "frequency_penalty": 0.2,
+          "stream": true,
+          "reasoning_effort": "medium",
+          "reasoning_budget_tokens": 2048,
+          "verbosity": "high",
+          "force_reasoning": true,
+          "model": "FAKE-TEST-MODEL",
+          "providerId": "openrouter",
+          "systemPrompt": "合成system instruction",
+          "modelSource": "remote",
+          "modelSettings": {
+            "openrouter:FAKE-TEST-MODEL": {
+              "openRouter": {
+                "routing": {
+                  "order": [
+                    "fake-provider"
+                  ],
+                  "only": [
+                    "fake-provider"
+                  ],
+                  "ignore": [
+                    "fake-other"
+                  ],
+                  "sort": "price",
+                  "allow_fallbacks": true,
+                  "require_parameters": true,
+                  "max_price": {
+                    "prompt": 0.01,
+                    "completion": 0.02
+                  },
+                  "data_collection": "deny",
+                  "zdr": true
+                },
+                "promptCache": {
+                  "mode": "claude-conversation",
+                  "ttl": "1h"
+                },
+                "responseCache": {
+                  "mode": "on",
+                  "ttlSeconds": 90
+                },
+                "stickySession": true
+              },
+              "max_tokens": 321,
+              "temperature": 0.25,
+              "presence_penalty": 0.1,
+              "top_p": 0.8,
+              "frequency_penalty": 0.2,
+              "stream": true,
+              "reasoning_effort": "medium",
+              "reasoning_budget_tokens": 2048,
+              "verbosity": "high",
+              "force_reasoning": true
+            }
+          },
+          "xFixtureConfig": {
+            "unknown": "keep-config"
+          }
+        },
+        "imageDetail": "high",
+        "branchTree": {
+          "nodes": {
+            "n-system": {
+              "id": "n-system",
+              "parentId": null,
+              "role": "system",
+              "contentHash": "system",
+              "createdAt": 1,
+              "label": "合成 n-system",
+              "starred": true,
+              "pinned": false,
+              "openRouterObservation": {
+                "generationId": "FAKE-TEST-GENERATION",
+                "promptTokens": 11,
+                "completionTokens": 12,
+                "cost": 0.003,
+                "cachedTokens": 2,
+                "cacheWriteTokens": 1,
+                "responseCacheStatus": "HIT",
+                "responseCacheAge": 4,
+                "responseCacheTTL": 90,
+                "responseCacheSourceId": "FAKE-TEST-SOURCE"
+              },
+              "xFixtureNode": {
+                "unknown": "keep-n-system"
+              }
+            },
+            "n-user": {
+              "id": "n-user",
+              "parentId": "n-system",
+              "role": "user",
+              "contentHash": "rich",
+              "createdAt": 2,
+              "label": "合成 n-user",
+              "starred": true,
+              "pinned": false,
+              "openRouterObservation": {
+                "generationId": "FAKE-TEST-GENERATION",
+                "promptTokens": 11,
+                "completionTokens": 12,
+                "cost": 0.003,
+                "cachedTokens": 2,
+                "cacheWriteTokens": 1,
+                "responseCacheStatus": "HIT",
+                "responseCacheAge": 4,
+                "responseCacheTTL": 90,
+                "responseCacheSourceId": "FAKE-TEST-SOURCE"
+              },
+              "xFixtureNode": {
+                "unknown": "keep-n-user"
+              }
+            },
+            "n-inactive": {
+              "id": "n-inactive",
+              "parentId": "n-user",
+              "role": "assistant",
+              "contentHash": "inactive",
+              "createdAt": 4,
+              "label": "合成 n-inactive",
+              "starred": true,
+              "pinned": false,
+              "openRouterObservation": {
+                "generationId": "FAKE-TEST-GENERATION",
+                "promptTokens": 11,
+                "completionTokens": 12,
+                "cost": 0.003,
+                "cachedTokens": 2,
+                "cacheWriteTokens": 1,
+                "responseCacheStatus": "HIT",
+                "responseCacheAge": 4,
+                "responseCacheTTL": 90,
+                "responseCacheSourceId": "FAKE-TEST-SOURCE"
+              },
+              "xFixtureNode": {
+                "unknown": "keep-n-inactive"
+              }
+            },
+            "n-assistant": {
+              "id": "n-assistant",
+              "parentId": "n-user",
+              "role": "assistant",
+              "contentHash": "answer",
+              "createdAt": 3,
+              "label": "合成 n-assistant",
+              "starred": true,
+              "pinned": false,
+              "openRouterObservation": {
+                "generationId": "FAKE-TEST-GENERATION",
+                "promptTokens": 11,
+                "completionTokens": 12,
+                "cost": 0.003,
+                "cachedTokens": 2,
+                "cacheWriteTokens": 1,
+                "responseCacheStatus": "HIT",
+                "responseCacheAge": 4,
+                "responseCacheTTL": 90,
+                "responseCacheSourceId": "FAKE-TEST-SOURCE"
+              },
+              "xFixtureNode": {
+                "unknown": "keep-n-assistant"
+              }
+            }
+          },
+          "rootId": "n-system",
+          "activePath": [
+            "n-system",
+            "n-user",
+            "n-assistant"
+          ],
+          "xFixtureTree": "keep-tree"
+        },
+        "collapsedNodes": {
+          "n-inactive": true,
+          "n-user": false
+        },
+        "omittedNodes": {
+          "n-inactive": true,
+          "n-user": false
+        },
+        "protectedNodes": {
+          "n-assistant": true,
+          "n-inactive": false
+        },
+        "xFixtureChat": {
+          "unknown": "keep-chat"
+        }
+      },
+      {
+        "id": "chat-b",
+        "title": "flat 合成会話",
+        "titleSet": false,
+        "folder": "folder-b",
+        "messages": [
+          {
+            "role": "user",
+            "content": [
+              {
+                "type": "text",
+                "text": "flat本文",
+                "xFixtureContent": "keep-flat"
+              }
+            ],
+            "xFixtureMessage": "keep-message"
+          }
+        ],
+        "config": {
+          "openRouter": {
+            "routing": {
+              "order": [
+                "fake-provider"
+              ],
+              "only": [
+                "fake-provider"
+              ],
+              "ignore": [
+                "fake-other"
+              ],
+              "sort": "price",
+              "allow_fallbacks": true,
+              "require_parameters": true,
+              "max_price": {
+                "prompt": 0.01,
+                "completion": 0.02
+              },
+              "data_collection": "deny",
+              "zdr": true
+            },
+            "promptCache": {
+              "mode": "claude-conversation",
+              "ttl": "1h"
+            },
+            "responseCache": {
+              "mode": "on",
+              "ttlSeconds": 90
+            },
+            "stickySession": true
+          },
+          "max_tokens": 321,
+          "temperature": 0.25,
+          "presence_penalty": 0.1,
+          "top_p": 0.8,
+          "frequency_penalty": 0.2,
+          "stream": true,
+          "reasoning_effort": "medium",
+          "reasoning_budget_tokens": 2048,
+          "verbosity": "high",
+          "force_reasoning": true,
+          "model": "FAKE-TEST-MODEL",
+          "providerId": "openrouter",
+          "systemPrompt": "合成system instruction",
+          "modelSource": "remote",
+          "modelSettings": {
+            "openrouter:FAKE-TEST-MODEL": {
+              "openRouter": {
+                "routing": {
+                  "order": [
+                    "fake-provider"
+                  ],
+                  "only": [
+                    "fake-provider"
+                  ],
+                  "ignore": [
+                    "fake-other"
+                  ],
+                  "sort": "price",
+                  "allow_fallbacks": true,
+                  "require_parameters": true,
+                  "max_price": {
+                    "prompt": 0.01,
+                    "completion": 0.02
+                  },
+                  "data_collection": "deny",
+                  "zdr": true
+                },
+                "promptCache": {
+                  "mode": "claude-conversation",
+                  "ttl": "1h"
+                },
+                "responseCache": {
+                  "mode": "on",
+                  "ttlSeconds": 90
+                },
+                "stickySession": true
+              },
+              "max_tokens": 321,
+              "temperature": 0.25,
+              "presence_penalty": 0.1,
+              "top_p": 0.8,
+              "frequency_penalty": 0.2,
+              "stream": true,
+              "reasoning_effort": "medium",
+              "reasoning_budget_tokens": 2048,
+              "verbosity": "high",
+              "force_reasoning": true
+            }
+          },
+          "xFixtureConfig": {
+            "unknown": "keep-config"
+          }
+        },
+        "imageDetail": "low",
+        "xFixtureChat": "keep-flat-chat"
+      }
+    ],
+    "contentStore": {
+      "system": {
+        "content": [
+          {
+            "type": "text",
+            "text": "合成system instruction"
+          }
+        ],
+        "refCount": 99,
+        "xFixtureEntry": "keep-entry-system"
+      },
+      "rich": {
+        "content": [
+          {
+            "type": "text",
+            "text": "本文\n日本語🙂",
+            "xFixtureContent": "keep-text"
+          },
+          {
+            "type": "image_url",
+            "image_url": {
+              "url": "data:image/png;base64,FAKE_TEST_IMAGE",
+              "detail": "high",
+              "xFixtureImage": "keep-image"
+            }
+          },
+          {
+            "type": "reasoning",
+            "text": "検討",
+            "xFixtureContent": "keep-reasoning"
+          },
+          {
+            "type": "tool_call",
+            "id": "FAKE-TEST-CALL",
+            "name": "fake_lookup",
+            "arguments": "{\"fake\":true,\"q\":\"日本語\"}",
+            "xFixtureContent": "keep-tool-call"
+          },
+          {
+            "type": "tool_result",
+            "tool_call_id": "FAKE-TEST-CALL",
+            "content": "FAKE TEST RESULT",
+            "xFixtureContent": "keep-tool-result"
+          }
+        ],
+        "refCount": 99,
+        "xFixtureEntry": "keep-entry-rich"
+      },
+      "answer": {
+        "content": [
+          {
+            "type": "text",
+            "text": "表示中の回答"
+          }
+        ],
+        "refCount": 99,
+        "xFixtureEntry": "keep-entry-answer"
+      },
+      "inactive": {
+        "content": [
+          {
+            "type": "text",
+            "text": "別分岐の本文"
+          }
+        ],
+        "refCount": 99,
+        "xFixtureEntry": "keep-entry-inactive"
+      },
+      "unreferenced": {
+        "content": [
+          {
+            "type": "text",
+            "text": "未参照だが保存された本文"
+          }
+        ],
+        "refCount": 99,
+        "xFixtureEntry": "keep-entry-unreferenced"
+      }
+    },
+    "folders": {
+      "folder-a": {
+        "id": "folder-a",
+        "name": "合成A",
+        "expanded": true,
+        "order": 0,
+        "color": "#123456",
+        "xFixtureFolder": "keep-folder-a"
+      },
+      "folder-b": {
+        "id": "folder-b",
+        "name": "合成B",
+        "expanded": false,
+        "order": 1,
+        "color": "#abcdef",
+        "xFixtureFolder": "keep-folder-b"
+      }
+    },
+    "evaluationSettings": {
+      "safetyPreSend": "auto",
+      "safetyPostReceive": "manual",
+      "qualityPreSend": "manual",
+      "qualityPostReceive": "auto",
+      "safetyEngine": "hybrid",
+      "hybridRemoteOnSafe": true,
+      "xFixtureEvaluationSettings": "keep-eval-settings"
+    },
+    "evaluationResults": {
+      "chat-a:n-assistant:post-receive": {
+        "phase": "post-receive",
+        "safety": {
+          "flagged": false,
+          "categories": {
+            "sexual": false,
+            "hate": false,
+            "harassment": false,
+            "self-harm": false,
+            "sexual/minors": false,
+            "hate/threatening": false,
+            "violence/graphic": false,
+            "violence": false,
+            "harassment/threatening": false,
+            "self-harm/intent": false,
+            "self-harm/instructions": false,
+            "illicit": false,
+            "illicit/violent": false
+          },
+          "categoryScores": {
+            "sexual": 0.1,
+            "hate": 0.1,
+            "harassment": 0.1,
+            "self-harm": 0.1,
+            "sexual/minors": 0.1,
+            "hate/threatening": 0.1,
+            "violence/graphic": 0.1,
+            "violence": 0.1,
+            "harassment/threatening": 0.1,
+            "self-harm/intent": 0.1,
+            "self-harm/instructions": 0.1,
+            "illicit": 0.1,
+            "illicit/violent": 0.1
+          },
+          "timestamp": 100
+        },
+        "quality": {
+          "kind": "standard",
+          "scores": {
+            "taskCompletion": 0.9,
+            "faithfulness": 0.9,
+            "coherence": 0.9,
+            "conciseness": 0.9,
+            "instructionFollowing": 0.9
+          },
+          "reasoning": {
+            "taskCompletion": "合成根拠 taskCompletion",
+            "faithfulness": "合成根拠 faithfulness",
+            "coherence": "合成根拠 coherence",
+            "conciseness": "合成根拠 conciseness",
+            "instructionFollowing": "合成根拠 instructionFollowing"
+          },
+          "promptSuggestions": [
+            "合成prompt提案"
+          ],
+          "configSuggestions": [
+            "合成config提案"
+          ],
+          "source": "remote",
+          "timestamp": 102
+        },
+        "localSafety": {
+          "screening": "warn",
+          "rawScores": [
+            {
+              "label": "FAKE TEST LABEL",
+              "score": 0.2
+            }
+          ],
+          "source": "local",
+          "timestamp": 101
+        },
+        "localQualityHint": {
+          "grade": "fair",
+          "comment": "合成hint",
+          "source": "local",
+          "timestamp": 103
+        },
+        "safetyContext": {
+          "scope": "full-context",
+          "omittedMode": "respect-omitted"
+        },
+        "qualityContext": {
+          "scope": "single",
+          "omittedMode": "include-omitted"
+        },
+        "xFixtureEvaluation": "keep-eval"
+      },
+      "chat-a:n-system:pre-send": {
+        "phase": "pre-send",
+        "quality": {
+          "kind": "system",
+          "scores": {
+            "roleClarity": 0.9,
+            "constraintConsistency": 0.9,
+            "safetyAdequacy": 0.9,
+            "conciseness": 0.9,
+            "operability": 0.9
+          },
+          "reasoning": {
+            "roleClarity": "合成根拠 roleClarity",
+            "constraintConsistency": "合成根拠 constraintConsistency",
+            "safetyAdequacy": "合成根拠 safetyAdequacy",
+            "conciseness": "合成根拠 conciseness",
+            "operability": "合成根拠 operability"
+          },
+          "promptSuggestions": [
+            "合成prompt提案"
+          ],
+          "configSuggestions": [
+            "合成config提案"
+          ],
+          "source": "remote",
+          "timestamp": 102
+        }
+      }
+    },
+    "xFixtureExport": {
+      "unknown": "keep-export"
+    }
+  },
+  "syncSnapshot": {
+    "version": 18,
+    "state": {
+      "chats": [
+        {
+          "id": "chat-a",
+          "title": "全項目合成会話",
+          "titleSet": true,
+          "folder": "folder-a",
+          "messages": [
+            {
+              "role": "system",
+              "content": [
+                {
+                  "type": "text",
+                  "text": "合成system instruction"
+                }
+              ]
+            },
+            {
+              "role": "user",
+              "content": [
+                {
+                  "type": "text",
+                  "text": "本文\n日本語🙂",
+                  "xFixtureContent": "keep-text"
+                },
+                {
+                  "type": "image_url",
+                  "image_url": {
+                    "url": "data:image/png;base64,FAKE_TEST_IMAGE",
+                    "detail": "high",
+                    "xFixtureImage": "keep-image"
+                  }
+                },
+                {
+                  "type": "reasoning",
+                  "text": "検討",
+                  "xFixtureContent": "keep-reasoning"
+                },
+                {
+                  "type": "tool_call",
+                  "id": "FAKE-TEST-CALL",
+                  "name": "fake_lookup",
+                  "arguments": "{\"fake\":true,\"q\":\"日本語\"}",
+                  "xFixtureContent": "keep-tool-call"
+                },
+                {
+                  "type": "tool_result",
+                  "tool_call_id": "FAKE-TEST-CALL",
+                  "content": "FAKE TEST RESULT",
+                  "xFixtureContent": "keep-tool-result"
+                }
+              ]
+            },
+            {
+              "role": "assistant",
+              "content": [
+                {
+                  "type": "text",
+                  "text": "表示中の回答"
+                }
+              ]
+            }
+          ],
+          "config": {
+            "openRouter": {
+              "routing": {
+                "order": [
+                  "fake-provider"
+                ],
+                "only": [
+                  "fake-provider"
+                ],
+                "ignore": [
+                  "fake-other"
+                ],
+                "sort": "price",
+                "allow_fallbacks": true,
+                "require_parameters": true,
+                "max_price": {
+                  "prompt": 0.01,
+                  "completion": 0.02
+                },
+                "data_collection": "deny",
+                "zdr": true
+              },
+              "promptCache": {
+                "mode": "claude-conversation",
+                "ttl": "1h"
+              },
+              "responseCache": {
+                "mode": "on",
+                "ttlSeconds": 90
+              },
+              "stickySession": true
+            },
+            "max_tokens": 321,
+            "temperature": 0.25,
+            "presence_penalty": 0.1,
+            "top_p": 0.8,
+            "frequency_penalty": 0.2,
+            "stream": true,
+            "reasoning_effort": "medium",
+            "reasoning_budget_tokens": 2048,
+            "verbosity": "high",
+            "force_reasoning": true,
+            "model": "FAKE-TEST-MODEL",
+            "providerId": "openrouter",
+            "systemPrompt": "合成system instruction",
+            "modelSource": "remote",
+            "modelSettings": {
+              "openrouter:FAKE-TEST-MODEL": {
+                "openRouter": {
+                  "routing": {
+                    "order": [
+                      "fake-provider"
+                    ],
+                    "only": [
+                      "fake-provider"
+                    ],
+                    "ignore": [
+                      "fake-other"
+                    ],
+                    "sort": "price",
+                    "allow_fallbacks": true,
+                    "require_parameters": true,
+                    "max_price": {
+                      "prompt": 0.01,
+                      "completion": 0.02
+                    },
+                    "data_collection": "deny",
+                    "zdr": true
+                  },
+                  "promptCache": {
+                    "mode": "claude-conversation",
+                    "ttl": "1h"
+                  },
+                  "responseCache": {
+                    "mode": "on",
+                    "ttlSeconds": 90
+                  },
+                  "stickySession": true
+                },
+                "max_tokens": 321,
+                "temperature": 0.25,
+                "presence_penalty": 0.1,
+                "top_p": 0.8,
+                "frequency_penalty": 0.2,
+                "stream": true,
+                "reasoning_effort": "medium",
+                "reasoning_budget_tokens": 2048,
+                "verbosity": "high",
+                "force_reasoning": true
+              }
+            },
+            "xFixtureConfig": {
+              "unknown": "keep-config"
+            }
+          },
+          "imageDetail": "high",
+          "branchTree": {
+            "nodes": {
+              "n-system": {
+                "id": "n-system",
+                "parentId": null,
+                "role": "system",
+                "contentHash": "system",
+                "createdAt": 1,
+                "label": "合成 n-system",
+                "starred": true,
+                "pinned": false,
+                "openRouterObservation": {
+                  "generationId": "FAKE-TEST-GENERATION",
+                  "promptTokens": 11,
+                  "completionTokens": 12,
+                  "cost": 0.003,
+                  "cachedTokens": 2,
+                  "cacheWriteTokens": 1,
+                  "responseCacheStatus": "HIT",
+                  "responseCacheAge": 4,
+                  "responseCacheTTL": 90,
+                  "responseCacheSourceId": "FAKE-TEST-SOURCE"
+                },
+                "xFixtureNode": {
+                  "unknown": "keep-n-system"
+                }
+              },
+              "n-user": {
+                "id": "n-user",
+                "parentId": "n-system",
+                "role": "user",
+                "contentHash": "rich",
+                "createdAt": 2,
+                "label": "合成 n-user",
+                "starred": true,
+                "pinned": false,
+                "openRouterObservation": {
+                  "generationId": "FAKE-TEST-GENERATION",
+                  "promptTokens": 11,
+                  "completionTokens": 12,
+                  "cost": 0.003,
+                  "cachedTokens": 2,
+                  "cacheWriteTokens": 1,
+                  "responseCacheStatus": "HIT",
+                  "responseCacheAge": 4,
+                  "responseCacheTTL": 90,
+                  "responseCacheSourceId": "FAKE-TEST-SOURCE"
+                },
+                "xFixtureNode": {
+                  "unknown": "keep-n-user"
+                }
+              },
+              "n-inactive": {
+                "id": "n-inactive",
+                "parentId": "n-user",
+                "role": "assistant",
+                "contentHash": "inactive",
+                "createdAt": 4,
+                "label": "合成 n-inactive",
+                "starred": true,
+                "pinned": false,
+                "openRouterObservation": {
+                  "generationId": "FAKE-TEST-GENERATION",
+                  "promptTokens": 11,
+                  "completionTokens": 12,
+                  "cost": 0.003,
+                  "cachedTokens": 2,
+                  "cacheWriteTokens": 1,
+                  "responseCacheStatus": "HIT",
+                  "responseCacheAge": 4,
+                  "responseCacheTTL": 90,
+                  "responseCacheSourceId": "FAKE-TEST-SOURCE"
+                },
+                "xFixtureNode": {
+                  "unknown": "keep-n-inactive"
+                }
+              },
+              "n-assistant": {
+                "id": "n-assistant",
+                "parentId": "n-user",
+                "role": "assistant",
+                "contentHash": "answer",
+                "createdAt": 3,
+                "label": "合成 n-assistant",
+                "starred": true,
+                "pinned": false,
+                "openRouterObservation": {
+                  "generationId": "FAKE-TEST-GENERATION",
+                  "promptTokens": 11,
+                  "completionTokens": 12,
+                  "cost": 0.003,
+                  "cachedTokens": 2,
+                  "cacheWriteTokens": 1,
+                  "responseCacheStatus": "HIT",
+                  "responseCacheAge": 4,
+                  "responseCacheTTL": 90,
+                  "responseCacheSourceId": "FAKE-TEST-SOURCE"
+                },
+                "xFixtureNode": {
+                  "unknown": "keep-n-assistant"
+                }
+              }
+            },
+            "rootId": "n-system",
+            "activePath": [
+              "n-system",
+              "n-user",
+              "n-assistant"
+            ],
+            "xFixtureTree": "keep-tree"
+          },
+          "collapsedNodes": {
+            "n-inactive": true,
+            "n-user": false
+          },
+          "omittedNodes": {
+            "n-inactive": true,
+            "n-user": false
+          },
+          "protectedNodes": {
+            "n-assistant": true,
+            "n-inactive": false
+          },
+          "xFixtureChat": {
+            "unknown": "keep-chat"
+          }
+        },
+        {
+          "id": "chat-b",
+          "title": "flat 合成会話",
+          "titleSet": false,
+          "folder": "folder-b",
+          "messages": [
+            {
+              "role": "user",
+              "content": [
+                {
+                  "type": "text",
+                  "text": "flat本文",
+                  "xFixtureContent": "keep-flat"
+                }
+              ],
+              "xFixtureMessage": "keep-message"
+            }
+          ],
+          "config": {
+            "openRouter": {
+              "routing": {
+                "order": [
+                  "fake-provider"
+                ],
+                "only": [
+                  "fake-provider"
+                ],
+                "ignore": [
+                  "fake-other"
+                ],
+                "sort": "price",
+                "allow_fallbacks": true,
+                "require_parameters": true,
+                "max_price": {
+                  "prompt": 0.01,
+                  "completion": 0.02
+                },
+                "data_collection": "deny",
+                "zdr": true
+              },
+              "promptCache": {
+                "mode": "claude-conversation",
+                "ttl": "1h"
+              },
+              "responseCache": {
+                "mode": "on",
+                "ttlSeconds": 90
+              },
+              "stickySession": true
+            },
+            "max_tokens": 321,
+            "temperature": 0.25,
+            "presence_penalty": 0.1,
+            "top_p": 0.8,
+            "frequency_penalty": 0.2,
+            "stream": true,
+            "reasoning_effort": "medium",
+            "reasoning_budget_tokens": 2048,
+            "verbosity": "high",
+            "force_reasoning": true,
+            "model": "FAKE-TEST-MODEL",
+            "providerId": "openrouter",
+            "systemPrompt": "合成system instruction",
+            "modelSource": "remote",
+            "modelSettings": {
+              "openrouter:FAKE-TEST-MODEL": {
+                "openRouter": {
+                  "routing": {
+                    "order": [
+                      "fake-provider"
+                    ],
+                    "only": [
+                      "fake-provider"
+                    ],
+                    "ignore": [
+                      "fake-other"
+                    ],
+                    "sort": "price",
+                    "allow_fallbacks": true,
+                    "require_parameters": true,
+                    "max_price": {
+                      "prompt": 0.01,
+                      "completion": 0.02
+                    },
+                    "data_collection": "deny",
+                    "zdr": true
+                  },
+                  "promptCache": {
+                    "mode": "claude-conversation",
+                    "ttl": "1h"
+                  },
+                  "responseCache": {
+                    "mode": "on",
+                    "ttlSeconds": 90
+                  },
+                  "stickySession": true
+                },
+                "max_tokens": 321,
+                "temperature": 0.25,
+                "presence_penalty": 0.1,
+                "top_p": 0.8,
+                "frequency_penalty": 0.2,
+                "stream": true,
+                "reasoning_effort": "medium",
+                "reasoning_budget_tokens": 2048,
+                "verbosity": "high",
+                "force_reasoning": true
+              }
+            },
+            "xFixtureConfig": {
+              "unknown": "keep-config"
+            }
+          },
+          "imageDetail": "low",
+          "xFixtureChat": "keep-flat-chat"
+        }
+      ],
+      "apiKey": "FAKE_TEST_ONLY_API_KEY",
+      "apiVersion": "FAKE_TEST_ONLY_VERSION",
+      "apiEndpoint": "https://example.invalid/api",
+      "theme": "dark",
+      "autoTitle": true,
+      "titleModel": "FAKE-TEST-MODEL",
+      "titleProviderId": "openrouter",
+      "advancedMode": true,
+      "prompts": [
+        {
+          "id": "fake-prompt",
+          "name": "合成prompt",
+          "prompt": "FAKE TEST 日本語",
+          "label": "system",
+          "xFixturePrompt": "keep-prompt"
+        }
+      ],
+      "defaultChatConfig": {
+        "openRouter": {
+          "routing": {
+            "order": [
+              "fake-provider"
+            ],
+            "only": [
+              "fake-provider"
+            ],
+            "ignore": [
+              "fake-other"
+            ],
+            "sort": "price",
+            "allow_fallbacks": true,
+            "require_parameters": true,
+            "max_price": {
+              "prompt": 0.01,
+              "completion": 0.02
+            },
+            "data_collection": "deny",
+            "zdr": true
+          },
+          "promptCache": {
+            "mode": "claude-conversation",
+            "ttl": "1h"
+          },
+          "responseCache": {
+            "mode": "on",
+            "ttlSeconds": 90
+          },
+          "stickySession": true
+        },
+        "max_tokens": 321,
+        "temperature": 0.25,
+        "presence_penalty": 0.1,
+        "top_p": 0.8,
+        "frequency_penalty": 0.2,
+        "stream": true,
+        "reasoning_effort": "medium",
+        "reasoning_budget_tokens": 2048,
+        "verbosity": "high",
+        "force_reasoning": true,
+        "model": "FAKE-TEST-MODEL",
+        "providerId": "openrouter",
+        "systemPrompt": "合成system instruction",
+        "modelSource": "remote",
+        "modelSettings": {
+          "openrouter:FAKE-TEST-MODEL": {
+            "openRouter": {
+              "routing": {
+                "order": [
+                  "fake-provider"
+                ],
+                "only": [
+                  "fake-provider"
+                ],
+                "ignore": [
+                  "fake-other"
+                ],
+                "sort": "price",
+                "allow_fallbacks": true,
+                "require_parameters": true,
+                "max_price": {
+                  "prompt": 0.01,
+                  "completion": 0.02
+                },
+                "data_collection": "deny",
+                "zdr": true
+              },
+              "promptCache": {
+                "mode": "claude-conversation",
+                "ttl": "1h"
+              },
+              "responseCache": {
+                "mode": "on",
+                "ttlSeconds": 90
+              },
+              "stickySession": true
+            },
+            "max_tokens": 321,
+            "temperature": 0.25,
+            "presence_penalty": 0.1,
+            "top_p": 0.8,
+            "frequency_penalty": 0.2,
+            "stream": true,
+            "reasoning_effort": "medium",
+            "reasoning_budget_tokens": 2048,
+            "verbosity": "high",
+            "force_reasoning": true
+          }
+        },
+        "xFixtureConfig": {
+          "unknown": "keep-config"
+        }
+      },
+      "defaultSystemMessage": "FAKE TEST 合成default system",
+      "hideMenuOptions": true,
+      "hideSideMenu": false,
+      "folders": {
+        "folder-a": {
+          "id": "folder-a",
+          "name": "合成A",
+          "expanded": true,
+          "order": 0,
+          "color": "#123456",
+          "xFixtureFolder": "keep-folder-a"
+        },
+        "folder-b": {
+          "id": "folder-b",
+          "name": "合成B",
+          "expanded": false,
+          "order": 1,
+          "color": "#abcdef",
+          "xFixtureFolder": "keep-folder-b"
+        }
+      },
+      "enterToSubmit": false,
+      "inlineLatex": true,
+      "markdownMode": true,
+      "streamingMarkdownPolicy": "always",
+      "totalTokenUsed": {
+        "FAKE-TEST-MODEL": {
+          "promptTokens": 10,
+          "completionTokens": 20,
+          "imageTokens": 30
+        }
+      },
+      "countTotalTokens": true,
+      "displayChatSize": true,
+      "menuWidth": 310,
+      "defaultImageDetail": "high",
+      "animateBubbleNavigation": false,
+      "providers": {
+        "openrouter": {
+          "id": "openrouter",
+          "name": "FAKE TEST openrouter",
+          "apiKey": "FAKE_TEST_ONLY_OPENROUTER_KEY",
+          "endpoint": "https://example.invalid/openrouter",
+          "modelsEndpoint": "https://example.invalid/openrouter/models",
+          "modelsRequireAuth": true,
+          "xFixtureProvider": "keep-provider"
+        },
+        "openai": {
+          "id": "openai",
+          "name": "FAKE TEST openai",
+          "apiKey": "FAKE_TEST_ONLY_OPENAI_KEY",
+          "endpoint": "https://example.invalid/openai",
+          "modelsEndpoint": "https://example.invalid/openai/models",
+          "modelsRequireAuth": true,
+          "xFixtureProvider": "keep-provider"
+        },
+        "mistral": {
+          "id": "mistral",
+          "name": "FAKE TEST mistral",
+          "apiKey": "FAKE_TEST_ONLY_MISTRAL_KEY",
+          "endpoint": "https://example.invalid/mistral",
+          "modelsEndpoint": "https://example.invalid/mistral/models",
+          "modelsRequireAuth": true,
+          "xFixtureProvider": "keep-provider"
+        },
+        "groq": {
+          "id": "groq",
+          "name": "FAKE TEST groq",
+          "apiKey": "FAKE_TEST_ONLY_GROQ_KEY",
+          "endpoint": "https://example.invalid/groq",
+          "modelsEndpoint": "https://example.invalid/groq/models",
+          "modelsRequireAuth": true,
+          "xFixtureProvider": "keep-provider"
+        },
+        "together": {
+          "id": "together",
+          "name": "FAKE TEST together",
+          "apiKey": "FAKE_TEST_ONLY_TOGETHER_KEY",
+          "endpoint": "https://example.invalid/together",
+          "modelsEndpoint": "https://example.invalid/together/models",
+          "modelsRequireAuth": true,
+          "xFixtureProvider": "keep-provider"
+        },
+        "cohere": {
+          "id": "cohere",
+          "name": "FAKE TEST cohere",
+          "apiKey": "FAKE_TEST_ONLY_COHERE_KEY",
+          "endpoint": "https://example.invalid/cohere",
+          "modelsEndpoint": "https://example.invalid/cohere/models",
+          "modelsRequireAuth": true,
+          "xFixtureProvider": "keep-provider"
+        },
+        "perplexity": {
+          "id": "perplexity",
+          "name": "FAKE TEST perplexity",
+          "apiKey": "FAKE_TEST_ONLY_PERPLEXITY_KEY",
+          "endpoint": "https://example.invalid/perplexity",
+          "modelsEndpoint": "https://example.invalid/perplexity/models",
+          "modelsRequireAuth": true,
+          "xFixtureProvider": "keep-provider"
+        },
+        "deepseek": {
+          "id": "deepseek",
+          "name": "FAKE TEST deepseek",
+          "apiKey": "FAKE_TEST_ONLY_DEEPSEEK_KEY",
+          "endpoint": "https://example.invalid/deepseek",
+          "modelsEndpoint": "https://example.invalid/deepseek/models",
+          "modelsRequireAuth": true,
+          "xFixtureProvider": "keep-provider"
+        },
+        "xai": {
+          "id": "xai",
+          "name": "FAKE TEST xai",
+          "apiKey": "FAKE_TEST_ONLY_XAI_KEY",
+          "endpoint": "https://example.invalid/xai",
+          "modelsEndpoint": "https://example.invalid/xai/models",
+          "modelsRequireAuth": true,
+          "xFixtureProvider": "keep-provider"
+        },
+        "fireworks": {
+          "id": "fireworks",
+          "name": "FAKE TEST fireworks",
+          "apiKey": "FAKE_TEST_ONLY_FIREWORKS_KEY",
+          "endpoint": "https://example.invalid/fireworks",
+          "modelsEndpoint": "https://example.invalid/fireworks/models",
+          "modelsRequireAuth": true,
+          "xFixtureProvider": "keep-provider"
+        }
+      },
+      "favoriteModels": [
+        {
+          "providerId": "openrouter",
+          "contextLength": 4096,
+          "maxCompletionTokens": 512,
+          "promptPrice": 0.1,
+          "completionPrice": 0.2,
+          "modelType": "text",
+          "streamSupport": true,
+          "supportsReasoning": true,
+          "reasoningMandatory": false,
+          "supportsVision": true,
+          "supportsAudio": false,
+          "modelId": "FAKE-TEST-MODEL",
+          "imagePrice": 0.3
+        }
+      ],
+      "branchClipboard": {
+        "nodeIds": [
+          "n-inactive"
+        ],
+        "sourceChat": "chat-a",
+        "nodes": {
+          "n-inactive": {
+            "id": "n-inactive",
+            "parentId": "n-user",
+            "role": "assistant",
+            "contentHash": "inactive",
+            "createdAt": 4,
+            "label": "合成 n-inactive",
+            "starred": true,
+            "pinned": false,
+            "openRouterObservation": {
+              "generationId": "FAKE-TEST-GENERATION",
+              "promptTokens": 11,
+              "completionTokens": 12,
+              "cost": 0.003,
+              "cachedTokens": 2,
+              "cacheWriteTokens": 1,
+              "responseCacheStatus": "HIT",
+              "responseCacheAge": 4,
+              "responseCacheTTL": 90,
+              "responseCacheSourceId": "FAKE-TEST-SOURCE"
+            },
+            "xFixtureNode": {
+              "unknown": "keep-n-inactive"
+            }
+          }
+        },
+        "xFixtureClipboard": "keep-clipboard"
+      },
+      "contentStore": {
+        "system": {
+          "content": [
+            {
+              "type": "text",
+              "text": "合成system instruction"
+            }
+          ],
+          "refCount": 99,
+          "xFixtureEntry": "keep-entry-system"
+        },
+        "rich": {
+          "content": [
+            {
+              "type": "text",
+              "text": "本文\n日本語🙂",
+              "xFixtureContent": "keep-text"
+            },
+            {
+              "type": "image_url",
+              "image_url": {
+                "url": "data:image/png;base64,FAKE_TEST_IMAGE",
+                "detail": "high",
+                "xFixtureImage": "keep-image"
+              }
+            },
+            {
+              "type": "reasoning",
+              "text": "検討",
+              "xFixtureContent": "keep-reasoning"
+            },
+            {
+              "type": "tool_call",
+              "id": "FAKE-TEST-CALL",
+              "name": "fake_lookup",
+              "arguments": "{\"fake\":true,\"q\":\"日本語\"}",
+              "xFixtureContent": "keep-tool-call"
+            },
+            {
+              "type": "tool_result",
+              "tool_call_id": "FAKE-TEST-CALL",
+              "content": "FAKE TEST RESULT",
+              "xFixtureContent": "keep-tool-result"
+            }
+          ],
+          "refCount": 99,
+          "xFixtureEntry": "keep-entry-rich"
+        },
+        "answer": {
+          "content": [
+            {
+              "type": "text",
+              "text": "表示中の回答"
+            }
+          ],
+          "refCount": 99,
+          "xFixtureEntry": "keep-entry-answer"
+        },
+        "inactive": {
+          "content": [
+            {
+              "type": "text",
+              "text": "別分岐の本文"
+            }
+          ],
+          "refCount": 99,
+          "xFixtureEntry": "keep-entry-inactive"
+        },
+        "unreferenced": {
+          "content": [
+            {
+              "type": "text",
+              "text": "未参照だが保存された本文"
+            }
+          ],
+          "refCount": 99,
+          "xFixtureEntry": "keep-entry-unreferenced"
+        }
+      },
+      "providerModelCache": {
+        "openrouter": [
+          {
+            "id": "FAKE-TEST-MODEL",
+            "name": "FAKE TEST Model",
+            "providerId": "openrouter",
+            "contextLength": 4096,
+            "maxCompletionTokens": 512,
+            "promptPrice": 0.1,
+            "completionPrice": 0.2,
+            "created": 123,
+            "modelType": "text",
+            "streamSupport": true,
+            "supportsReasoning": true,
+            "reasoningMandatory": false,
+            "supportsVision": true,
+            "supportsAudio": false,
+            "supportedParameters": [
+              "temperature",
+              "reasoning_effort"
+            ]
+          }
+        ]
+      },
+      "providerCustomModels": {
+        "openrouter": [
+          {
+            "providerId": "openrouter",
+            "contextLength": 4096,
+            "maxCompletionTokens": 512,
+            "promptPrice": 0.1,
+            "completionPrice": 0.2,
+            "modelType": "text",
+            "streamSupport": true,
+            "supportsReasoning": true,
+            "supportsVision": true,
+            "supportsAudio": false,
+            "modelId": "FAKE-TEST-MODEL",
+            "imagePrice": 0.3,
+            "name": "FAKE TEST Custom"
+          }
+        ]
+      },
+      "_legacyCustomModels": [
+        {
+          "FAKE_TEST_ONLY_LEGACY_MODEL": "keep-legacy"
+        }
+      ],
+      "onboardingCompleted": 123,
+      "splitPanelRatio": 0.4,
+      "splitPanelSwapped": true,
+      "chatActiveView": "split-horizontal",
+      "proxyEnabled": true,
+      "proxyEndpoint": "https://example.invalid/proxy",
+      "proxyAuthToken": "FAKE_TEST_ONLY_PROXY_TOKEN",
+      "showDebugPanel": true,
+      "searchHistory": [
+        "合成検索"
+      ],
+      "sidebarSearchHistory": [
+        "合成sidebar"
+      ],
+      "chatFindHistory": [
+        "合成本文検索"
+      ],
+      "verifiedStats": {
+        "chat-a:::n-assistant": {
+          "generationId": "FAKE-TEST-GENERATION",
+          "model": "FAKE-TEST-MODEL",
+          "promptTokens": 10,
+          "completionTokens": 20,
+          "nativePromptTokens": 11,
+          "nativeCompletionTokens": 21,
+          "totalCost": 0.1,
+          "cacheDiscount": null,
+          "error": "FAKE TEST ERROR",
+          "fetchedAt": 111
+        }
+      },
+      "pendingVerifications": {
+        "chat-a:::n-inactive": {
+          "generationId": "FAKE-TEST-GENERATION",
+          "chatId": "chat-a",
+          "targetNodeId": "n-inactive",
+          "requestedAt": 100,
+          "nextAttemptAt": 110,
+          "attemptCount": 1,
+          "status": "failed",
+          "lastAttemptAt": 105,
+          "lastError": "FAKE TEST ERROR"
+        }
+      },
+      "evaluationSettings": {
+        "safetyPreSend": "auto",
+        "safetyPostReceive": "manual",
+        "qualityPreSend": "manual",
+        "qualityPostReceive": "auto",
+        "safetyEngine": "hybrid",
+        "hybridRemoteOnSafe": true,
+        "xFixtureEvaluationSettings": "keep-eval-settings"
+      },
+      "safetyThresholds": {
+        "sexual": {
+          "review": 0.7,
+          "block": 0.9
+        },
+        "hate": {
+          "review": 0.7,
+          "block": 0.9
+        },
+        "harassment": {
+          "review": 0.7,
+          "block": 0.9
+        },
+        "self-harm": {
+          "review": 0.7,
+          "block": 0.9
+        },
+        "sexual/minors": {
+          "review": 0.7,
+          "block": 0.9
+        },
+        "hate/threatening": {
+          "review": 0.7,
+          "block": 0.9
+        },
+        "violence/graphic": {
+          "review": 0.7,
+          "block": 0.9
+        },
+        "violence": {
+          "review": 0.7,
+          "block": 0.9
+        },
+        "harassment/threatening": {
+          "review": 0.7,
+          "block": 0.9
+        },
+        "self-harm/intent": {
+          "review": 0.7,
+          "block": 0.9
+        },
+        "self-harm/instructions": {
+          "review": 0.7,
+          "block": 0.9
+        },
+        "illicit": {
+          "review": 0.7,
+          "block": 0.9
+        },
+        "illicit/violent": {
+          "review": 0.7,
+          "block": 0.9
+        }
+      },
+      "qualityThresholds": {
+        "taskCompletion": {
+          "red": 0.4,
+          "green": 0.8
+        },
+        "faithfulness": {
+          "red": 0.4,
+          "green": 0.8
+        },
+        "coherence": {
+          "red": 0.4,
+          "green": 0.8
+        },
+        "conciseness": {
+          "red": 0.4,
+          "green": 0.8
+        },
+        "instructionFollowing": {
+          "red": 0.4,
+          "green": 0.8
+        }
+      },
+      "evaluationResults": {
+        "chat-a:n-assistant:post-receive": {
+          "phase": "post-receive",
+          "safety": {
+            "flagged": false,
+            "categories": {
+              "sexual": false,
+              "hate": false,
+              "harassment": false,
+              "self-harm": false,
+              "sexual/minors": false,
+              "hate/threatening": false,
+              "violence/graphic": false,
+              "violence": false,
+              "harassment/threatening": false,
+              "self-harm/intent": false,
+              "self-harm/instructions": false,
+              "illicit": false,
+              "illicit/violent": false
+            },
+            "categoryScores": {
+              "sexual": 0.1,
+              "hate": 0.1,
+              "harassment": 0.1,
+              "self-harm": 0.1,
+              "sexual/minors": 0.1,
+              "hate/threatening": 0.1,
+              "violence/graphic": 0.1,
+              "violence": 0.1,
+              "harassment/threatening": 0.1,
+              "self-harm/intent": 0.1,
+              "self-harm/instructions": 0.1,
+              "illicit": 0.1,
+              "illicit/violent": 0.1
+            },
+            "timestamp": 100
+          },
+          "quality": {
+            "kind": "standard",
+            "scores": {
+              "taskCompletion": 0.9,
+              "faithfulness": 0.9,
+              "coherence": 0.9,
+              "conciseness": 0.9,
+              "instructionFollowing": 0.9
+            },
+            "reasoning": {
+              "taskCompletion": "合成根拠 taskCompletion",
+              "faithfulness": "合成根拠 faithfulness",
+              "coherence": "合成根拠 coherence",
+              "conciseness": "合成根拠 conciseness",
+              "instructionFollowing": "合成根拠 instructionFollowing"
+            },
+            "promptSuggestions": [
+              "合成prompt提案"
+            ],
+            "configSuggestions": [
+              "合成config提案"
+            ],
+            "source": "remote",
+            "timestamp": 102
+          },
+          "localSafety": {
+            "screening": "warn",
+            "rawScores": [
+              {
+                "label": "FAKE TEST LABEL",
+                "score": 0.2
+              }
+            ],
+            "source": "local",
+            "timestamp": 101
+          },
+          "localQualityHint": {
+            "grade": "fair",
+            "comment": "合成hint",
+            "source": "local",
+            "timestamp": 103
+          },
+          "safetyContext": {
+            "scope": "full-context",
+            "omittedMode": "respect-omitted"
+          },
+          "qualityContext": {
+            "scope": "single",
+            "omittedMode": "include-omitted"
+          },
+          "xFixtureEvaluation": "keep-eval"
+        },
+        "chat-a:n-system:pre-send": {
+          "phase": "pre-send",
+          "quality": {
+            "kind": "system",
+            "scores": {
+              "roleClarity": 0.9,
+              "constraintConsistency": 0.9,
+              "safetyAdequacy": 0.9,
+              "conciseness": 0.9,
+              "operability": 0.9
+            },
+            "reasoning": {
+              "roleClarity": "合成根拠 roleClarity",
+              "constraintConsistency": "合成根拠 constraintConsistency",
+              "safetyAdequacy": "合成根拠 safetyAdequacy",
+              "conciseness": "合成根拠 conciseness",
+              "operability": "合成根拠 operability"
+            },
+            "promptSuggestions": [
+              "合成prompt提案"
+            ],
+            "configSuggestions": [
+              "合成config提案"
+            ],
+            "source": "remote",
+            "timestamp": 102
+          }
+        }
+      },
+      "localModelEnabled": true,
+      "localModels": [
+        {
+          "id": "FAKE-TEST-LOCAL",
+          "engine": "wllama",
+          "tasks": [
+            "generation",
+            "moderation",
+            "quality",
+            "analysis"
+          ],
+          "label": "FAKE TEST Local",
+          "origin": "FAKE_TEST_ONLY/local",
+          "source": "opfs",
+          "manifest": {
+            "kind": "single-file",
+            "entrypoint": "FAKE_TEST_ONLY.gguf"
+          },
+          "fileSize": 16,
+          "lastFileName": "FAKE_TEST_ONLY.gguf",
+          "displayMeta": {
+            "releaseDate": "2000-01-01",
+            "supportsTextInference": true,
+            "supportsVision": false,
+            "quantization": "FAKE_TEST_ONLY",
+            "parameterSizeLabel": "FAKE TEST",
+            "sourceLabel": "imported",
+            "recommended": false,
+            "contextLength": 256
+          }
+        },
+        {
+          "id": "FAKE-TEST-ONNX",
+          "engine": "transformers.js",
+          "tasks": [
+            "generation",
+            "moderation",
+            "quality",
+            "analysis"
+          ],
+          "label": "FAKE TEST Local",
+          "origin": "FAKE_TEST_ONLY/local",
+          "source": "opfs",
+          "manifest": {
+            "kind": "multi-file",
+            "entrypoint": "onnx/FAKE_TEST_ONLY.onnx",
+            "requiredFiles": [
+              "FAKE_TEST_ONLY.json",
+              "onnx/FAKE_TEST_ONLY.onnx"
+            ]
+          },
+          "fileSize": 16,
+          "lastFileName": "FAKE_TEST_ONLY.gguf",
+          "displayMeta": {
+            "releaseDate": "2000-01-01",
+            "supportsTextInference": true,
+            "supportsVision": false,
+            "quantization": "FAKE_TEST_ONLY",
+            "parameterSizeLabel": "FAKE TEST",
+            "sourceLabel": "imported",
+            "recommended": false,
+            "contextLength": 256
+          }
+        },
+        {
+          "id": "FAKE-TEST-SHARDED",
+          "engine": "wllama",
+          "tasks": [
+            "generation",
+            "moderation",
+            "quality",
+            "analysis"
+          ],
+          "label": "FAKE TEST Local",
+          "origin": "FAKE_TEST_ONLY/local",
+          "source": "opfs",
+          "manifest": {
+            "kind": "gguf-sharded",
+            "entrypoint": "FAKE_TEST_ONLY-1.gguf",
+            "shards": [
+              "FAKE_TEST_ONLY-1.gguf",
+              "FAKE_TEST_ONLY-2.gguf"
+            ],
+            "totalSize": 32
+          },
+          "fileSize": 16,
+          "lastFileName": "FAKE_TEST_ONLY.gguf",
+          "displayMeta": {
+            "releaseDate": "2000-01-01",
+            "supportsTextInference": true,
+            "supportsVision": false,
+            "quantization": "FAKE_TEST_ONLY",
+            "parameterSizeLabel": "FAKE TEST",
+            "sourceLabel": "imported",
+            "recommended": false,
+            "contextLength": 256
+          }
+        }
+      ],
+      "favoriteLocalModelIds": [
+        "FAKE-TEST-LOCAL"
+      ],
+      "localModelExecutionMode": "parallel-if-possible",
+      "activeLocalModels": {
+        "generation": "FAKE-TEST-LOCAL",
+        "moderation": "FAKE-TEST-ONNX",
+        "quality": "FAKE-TEST-LOCAL",
+        "analysis": "FAKE-TEST-LOCAL"
+      },
+      "savedModelMeta": {
+        "FAKE-TEST-LOCAL": {
+          "storageState": "saved",
+          "storedBytes": 16,
+          "storedFiles": [
+            "FAKE_TEST_ONLY.gguf"
+          ],
+          "fileHashes": {
+            "FAKE_TEST_ONLY.gguf": "FAKE_TEST_ONLY_SHA256"
+          },
+          "lastVerifiedAt": 112,
+          "lastError": "FAKE TEST ERROR",
+          "downloadRevision": "FAKE_TEST_ONLY_REVISION"
+        }
+      },
+      "xFixtureRoot": {
+        "unknown": "keep-root"
+      }
+    }
+  }
+}

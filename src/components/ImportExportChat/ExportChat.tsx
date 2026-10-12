@@ -5,11 +5,11 @@ import useStore from '@store/store';
 
 import downloadFile, { downloadFileGzip } from '@utils/downloadFile';
 import { getToday } from '@utils/date';
-import { resolveContent, buildExportContentStore } from '@utils/contentStore';
+import { buildExportContentStore } from '@utils/contentStore';
 
 import { ChatInterface } from '@type/chat';
 import { ExportV1, ExportV3 } from '@type/export';
-import { chatToOpenAIFormat, chatToOpenRouterFormat, chatToLMStudioFormat } from '@utils/chatExport';
+import { chatToOpenAIFormat, chatToOpenRouterFormat, chatToLMStudioFormat, prepareChatForExport } from '@utils/chatExport';
 
 type ExportFormat = 'v3' | 'v1' | 'openai' | 'openrouter' | 'lmstudio';
 
@@ -40,13 +40,7 @@ const ExportChat = ({ hideTitle }: { hideTitle?: boolean }) => {
       const v1Chats = chats?.map((chat) => {
         const expanded = { ...chat };
         if (expanded.branchTree) {
-          expanded.messages = expanded.branchTree.activePath.map((id) => {
-            const node = expanded.branchTree!.nodes[id];
-            return {
-              role: node.role,
-              content: resolveContent(contentStore, node.contentHash),
-            };
-          });
+          expanded.messages = prepareChatForExport(chat, contentStore).chat.messages;
         }
         const { branchTree, collapsedNodes, ...rest } = expanded;
         return rest as ChatInterface;

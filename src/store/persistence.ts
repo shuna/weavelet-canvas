@@ -6,10 +6,12 @@ import {
   hasActiveStreamingBuffers,
   isStreamingContentHash,
 } from '@utils/streamingBuffer';
+import { captureProjectedMessageAttributes } from '@utils/branchUtils';
 import { addContent } from '@utils/contentStore';
 import { getBufferedContent } from '@utils/streamingBuffer';
 import { BranchClipboard, ChatInterface } from '@type/chat';
 import type { StoreState } from './store';
+import type { StoreApi } from 'zustand';
 import { setLocalStorageItem } from './storage/storageErrors';
 import { STORE_VERSION } from './version';
 
@@ -151,11 +153,43 @@ const LOCAL_STORAGE_PERSIST_KEYS: (keyof LocalStoragePersistedState)[] = [
   'savedModelMeta',
 ];
 
+const persistedKeys = new Set<string>(FULL_PERSIST_KEYS);
+// Only persisted input can populate this sidecar; runtime fields stay out of snapshots.
+const unknownRoots = Symbol('unknown persisted roots');
+const emptyUnknownRoots: Record<string, unknown> = {};
+type StateWithUnknownRoots = StoreState & { [unknownRoots]?: Record<string, unknown> };
+const getUnknownRoots = (state: StoreState) => (state as StateWithUnknownRoots)[unknownRoots] ?? emptyUnknownRoots;
+const knownPersistedFields = (persisted: Partial<PersistedStoreState>) =>
+  Object.fromEntries(Object.entries(persisted).filter(([key]) => persistedKeys.has(key))) as Partial<PersistedStoreState>;
+
+export function mergePersistedStoreState(base: StoreState, persisted: Partial<PersistedStoreState>): StoreState {
+  if (persisted === undefined) return base; // Zustand calls merge with no stored snapshot on first launch.
+  if (!persisted || typeof persisted !== 'object' || Array.isArray(persisted)) throw new Error('Invalid persisted state.');
+  const unknown = Object.fromEntries(Object.entries(persisted).filter(([key]) => !persistedKeys.has(key)));
+  return {
+    ...base, ...knownPersistedFields(persisted),
+    [unknownRoots]: { ...getUnknownRoots(base), ...structuredClone(unknown) },
+  } as StoreState;
+}
+
+export function preservePersistedRootsOnReplace(set: StoreApi<StoreState>['setState']): StoreApi<StoreState>['setState'] {
+  return (partial, replace) => {
+    if (replace) {
+      set(state => {
+        const next = typeof partial === 'function' ? partial(state) : partial;
+        return { ...next, [unknownRoots]: (next as StateWithUnknownRoots)[unknownRoots] ?? getUnknownRoots(state) } as StoreState;
+      }, true);
+    } else set(partial, false);
+  };
+}
+
 let previousFullInputRefs: Partial<Record<keyof PersistedStoreState, unknown>> = {};
 let previousFullResult: PersistedStoreState | null = null;
+let previousFullUnknownRoots = emptyUnknownRoots;
 
 let previousLocalInputRefs: Partial<Record<keyof LocalStoragePersistedState, unknown>> = {};
 let previousLocalResult: LocalStoragePersistedState | null = null;
+let previousLocalUnknownRoots = emptyUnknownRoots;
 
 /**
  * When true, localStorage persist will strip chats/contentStore/branchClipboard
@@ -189,7 +223,13 @@ const buildPersistedChats = (state: StoreState): PersistedChat[] | undefined =>
       omittedNodes,
       protectedNodes,
     };
-    return merged.branchTree ? merged : { ...merged, messages };
+    if (merged.branchTree) {
+      const chat = { ...merged, messages };
+      captureProjectedMessageAttributes(chat, state.contentStore);
+      const { messages: _projection, ...persisted } = chat;
+      return persisted;
+    }
+    return { ...merged, messages };
   });
 
 
@@ -217,6 +257,7 @@ function sanitizeClipboard(
 function buildPartializedState(state: StoreState): PersistedStoreState {
   const snapshot = finalizeStreamingSnapshotState(state.chats, state.contentStore);
   return {
+    ...getUnknownRoots(state),
     chats: buildPersistedChats({
       ...state,
       chats: snapshot.chats,
@@ -283,6 +324,7 @@ function buildLocalStoragePartializedState(
   state: StoreState
 ): LocalStoragePersistedState {
   return {
+    ...getUnknownRoots(state),
     apiKey: state.apiKey,
     apiVersion: state.apiVersion,
     apiEndpoint: state.apiEndpoint,
@@ -340,7 +382,7 @@ function buildLocalStoragePartializedState(
 }
 
 export const createPartializedState = (state: StoreState): PersistedStoreState => {
-  let changed = !previousFullResult || hasActiveStreamingBuffers();
+  let changed = !previousFullResult || hasActiveStreamingBuffers() || getUnknownRoots(state) !== previousFullUnknownRoots;
 
   if (!changed) {
     for (const key of FULL_PERSIST_KEYS) {
@@ -358,6 +400,7 @@ export const createPartializedState = (state: StoreState): PersistedStoreState =
       refs[key] = state[key];
     }
     previousFullInputRefs = refs;
+    previousFullUnknownRoots = getUnknownRoots(state);
   }
 
   return previousFullResult!;
@@ -376,7 +419,7 @@ export const createLocalStoragePartializedState = (
     }
   }
 
-  let changed = !previousLocalResult;
+  let changed = !previousLocalResult || getUnknownRoots(state) !== previousLocalUnknownRoots;
 
   if (!changed) {
     for (const key of LOCAL_STORAGE_PERSIST_KEYS) {
@@ -394,6 +437,7 @@ export const createLocalStoragePartializedState = (
       refs[key] = state[key];
     }
     previousLocalInputRefs = refs;
+    previousLocalUnknownRoots = getUnknownRoots(state);
   }
 
   return previousLocalResult!;
@@ -420,12 +464,14 @@ export const rehydrateStoreState = (state: StoreState) => {
 };
 
 export function prepareHydratedState(base: StoreState, persisted: Partial<PersistedStoreState>) {
+  const merged = mergePersistedStoreState(base, persisted);
+  const known = knownPersistedFields(persisted);
   const { chats, contentStore, branchClipboard, providers, evaluationSettings, verifiedStats, pendingVerifications } = base;
   return prepareHydratedDataAsync({
     base: Object.fromEntries(Object.entries({ chats, contentStore, branchClipboard, providers, evaluationSettings, verifiedStats, pendingVerifications })
-      .filter(([key]) => !Object.hasOwn(persisted, key))),
-    persisted, savedIndex: parseInt(localStorage.getItem('currentChatIndex') ?? '-1', 10),
-  });
+      .filter(([key]) => !Object.hasOwn(known, key))),
+    persisted: known, savedIndex: parseInt(localStorage.getItem('currentChatIndex') ?? '-1', 10),
+  }).then(prepared => ({ ...prepared, state: { ...prepared.state, [unknownRoots]: getUnknownRoots(merged) } }));
 }
 export function finishHydratedState(prepared: Awaited<ReturnType<typeof prepareHydratedState>>) {
   reportRepairedChats(prepared.repairedChatTitles);
@@ -470,10 +516,7 @@ export const hydrateFromPersistedStoreState = (
     persistedState,
     'branchClipboard'
   );
-  const nextState = {
-    ...baseState,
-    ...persistedState,
-  } as StoreState;
+  const nextState = mergePersistedStoreState(baseState, persistedState);
 
   applyPersistedChatDataState(nextState, {
     chats: hasChats ? persistedState.chats : baseState.chats,
@@ -490,12 +533,13 @@ export const hydrateFromPersistedStoreState = (
   setLocalStorageItem('currentChatIndex', String(currentChatIndex));
 
   return {
-    ...persistedState,
+    ...knownPersistedFields(persistedState),
+    [unknownRoots]: getUnknownRoots(nextState),
     chats: nextState.chats,
     contentStore: nextState.contentStore,
     branchClipboard: nextState.branchClipboard,
     currentChatIndex,
-  };
+  } as Partial<StateWithUnknownRoots>;
 };
 
 /**

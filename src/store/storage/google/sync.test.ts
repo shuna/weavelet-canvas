@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { IDBFactory } from 'fake-indexeddb';
 import { EncryptedDriveSync } from './sync';
@@ -7,9 +8,10 @@ import { createKeyEnvelope, decrypt, encrypt, unlockKey, encode, digest } from '
 import { toRecords, fromRecords, diffRecords } from './records';
 import type { Snapshot } from './records';
 import * as cacheStorage from './cache';
-import { addContent, addContentDelta } from '@utils/contentStore';
+import { addContent, addContentDelta, releaseContent, flushPendingGC } from '@utils/contentStore';
 import type { ChatInterface } from '@type/chat';
 
+const contentEntryFixture = (): Snapshot => JSON.parse(readFileSync(new URL('../../../../tests/fixtures/web-native/content-entry-wire.json', import.meta.url), 'utf8')).snapshot;
 const PASSWORD = 'test-only long passphrase';
 class FakeDrive {
   next = 0;
@@ -211,6 +213,48 @@ it('preserves disjoint edits from two devices and stops conflicting changes befo
   const count = drive.writes.length;
   await expect(b.push(changeB)).rejects.toThrow('conflict');
   expect(drive.writes).toHaveLength(count);
+});
+
+it.each([false, true])('preserves independently added hidden nodes through push and fresh replay (offline=%s)', async offline => {
+  const drive = new FakeDrive();
+  const dbA = new IDBFactory(); (globalThis as any).indexedDB = dbA;
+  const original = snapshot();
+  const { session: a, file } = await EncryptedDriveSync.create(drive.transport(), PASSWORD);
+  await a.push(original, true);
+  const dbB = new IDBFactory(); (globalThis as any).indexedDB = dbB;
+  const b = new EncryptedDriveSync(file.id, drive.transport());
+  await b.unlock(PASSWORD); await b.acceptLocal(await b.pull());
+  const initialEvents = drive.events.length;
+  const remote = structuredClone(original), local = structuredClone(original);
+  remote.state.chats![0].branchTree!.nodes['remote-hidden'] = {
+    ...remote.state.chats![0].branchTree!.nodes.n1, id: 'remote-hidden', parentId: 'n1', label: 'remote',
+  };
+  local.state.chats![0].branchTree!.nodes['local-hidden'] = {
+    ...local.state.chats![0].branchTree!.nodes.n1, id: 'local-hidden', parentId: 'n1', label: 'local',
+  };
+  (globalThis as any).indexedDB = dbA; await a.push(remote);
+  const afterA = drive.events.length;
+  const changes = drive.changes.bind(drive);
+  if (offline) drive.changes = async token => ({ token: String(drive.events.length), changes:
+    drive.events.slice(Number(token)).filter(event => drive.events.indexOf(event) < initialEvents || drive.events.indexOf(event) >= afterA) });
+  (globalThis as any).indexedDB = dbB; await b.push(local);
+  drive.changes = changes;
+  cache();
+  const reader = new EncryptedDriveSync(file.id, drive.transport());
+  await reader.unlock(PASSWORD);
+  const result = await reader.pull();
+  const nodes = result.state.chats![0].branchTree!.nodes;
+  expect(Object.keys(nodes)).toHaveLength(3);
+  expect(Object.keys(nodes)[0]).toBe('n1');
+  expect(nodes['remote-hidden'].label).toBe('remote');
+  expect(nodes['local-hidden'].label).toBe('local');
+  expect(result.state.chats![0].branchTree!.activePath).toEqual(['n1']);
+  await reader.acceptLocal(result);
+  await reader.push(result);
+  cache();
+  const reloaded = new EncryptedDriveSync(file.id, drive.transport());
+  await reloaded.unlock(PASSWORD);
+  expect(Object.keys((await reloaded.pull()).state.chats![0].branchTree!.nodes)).toEqual(Object.keys(nodes));
 });
 
 it('blocks empty-chat uploads and never advances past damaged ciphertext', async () => {
@@ -478,27 +522,57 @@ it.each(['merge', 'local', 'cloud'] as const)('resolves a local/cloud conflict u
   expect(await toRecords(await reader.pull())).toEqual(await toRecords(result));
 });
 
-it('preserves both valid branches when deleting a node conflicts with extending it', async () => {
+it.each(['ordinary', 'pinned', 'reparented-orphan'])('preserves both valid branches when deleting a node conflicts with its %s extension', async kind => {
   const drive = new FakeDrive();
   const dbA = new IDBFactory(); (globalThis as any).indexedDB = dbA;
   const original = snapshot();
   const tree = original.state.chats![0].branchTree!;
   tree.nodes.n2 = { ...tree.nodes.n1, id: 'n2', parentId: 'n1' }; tree.activePath.push('n2');
+  if (kind === 'reparented-orphan') {
+    tree.nodes.n3 = { ...tree.nodes.n1, id: 'n3', parentId: 'legacy-missing-parent', pinned: true };
+  }
   const { session: a, file } = await EncryptedDriveSync.create(drive.transport(), PASSWORD);
   await a.push(original, true);
   const dbB = new IDBFactory(); (globalThis as any).indexedDB = dbB;
   const b = new EncryptedDriveSync(file.id, drive.transport()); await b.unlock(PASSWORD); await b.acceptLocal(await b.pull());
   const remote = structuredClone(original), local = structuredClone(original);
-  remote.state.chats![0].branchTree!.nodes.n3 = { ...tree.nodes.n2, id: 'n3', parentId: 'n2' };
+  remote.state.chats![0].branchTree!.nodes.n3 = { ...tree.nodes.n2, id: 'n3', parentId: 'n2', pinned: kind !== 'ordinary' };
   delete local.state.chats![0].branchTree!.nodes.n2; local.state.chats![0].branchTree!.activePath = ['n1'];
   (globalThis as any).indexedDB = dbA; await a.push(remote);
   (globalThis as any).indexedDB = dbB;
   await expect(b.push(local)).rejects.toThrow('conflict');
   const result = await b.resolve(local, 'merge');
   expect(result.state.chats).toHaveLength(1);
-  expect(Object.keys(result.state.chats![0].branchTree!.nodes)).toHaveLength(3);
+  expect(Object.keys(result.state.chats![0].branchTree!.nodes)).toHaveLength(kind === 'reparented-orphan' ? 4 : 3);
+  expect(result.state.chats![0].branchTree!.nodes.n2).toBeDefined();
   expect(result.state.chats![0].branchTree!.activePath).toEqual(['n1']);
   await b.acceptLocal(result); await b.push(result);
+});
+
+it.each(['local', 'remote'])('publishes an already orphaned pinned branch present only in the %s input', async side => {
+  const drive = new FakeDrive();
+  const dbA = new IDBFactory(); (globalThis as any).indexedDB = dbA;
+  const original = snapshot();
+  const { session: a, file } = await EncryptedDriveSync.create(drive.transport(), PASSWORD);
+  await a.push(original, true);
+  const dbB = new IDBFactory(); (globalThis as any).indexedDB = dbB;
+  const b = new EncryptedDriveSync(file.id, drive.transport());
+  await b.unlock(PASSWORD); await b.acceptLocal(await b.pull());
+  const remote = structuredClone(original), local = structuredClone(original);
+  const orphanState = side === 'local' ? local : remote;
+  orphanState.state.chats![0].branchTree!.nodes.orphan = {
+    ...orphanState.state.chats![0].branchTree!.nodes.n1,
+    id: 'orphan', parentId: 'missing-parent', pinned: true, label: 'pinned orphan',
+  };
+  remote.state.chats![0].imageDetail = 'low';
+  local.state.chats![0].branchTree!.nodes.n1.label = 'local root';
+  (globalThis as any).indexedDB = dbA; await a.push(remote);
+  (globalThis as any).indexedDB = dbB; await b.push(local);
+  const result = await b.pull();
+  expect(result.state.chats![0].branchTree!.nodes.orphan)
+    .toEqual(expect.objectContaining({ id: 'orphan', parentId: 'missing-parent', pinned: true, label: 'pinned orphan' }));
+  expect(result.state.chats![0].branchTree!.nodes.n1.label).toBe('local root');
+  expect(result.state.chats![0].imageDetail).toBe('low');
 });
 
 it.each(['title', 'message'])('resumes an interrupted %s merge publication without duplicating preserved data', async kind => {
@@ -781,3 +855,53 @@ it('keeps simultaneously published packs safe and consolidates their duplicate h
   await reader.unlock(PASSWORD);
   expect(await toRecords(await reader.pull())).toEqual(await toRecords(state));
 }, 30_000);
+
+it('preserves independent entry metadata edits through actual push/replay and does not revive explicitly collected unused entries', async () => {
+  const drive = new FakeDrive(), original = contentEntryFixture();
+  const dbA = new IDBFactory(); (globalThis as any).indexedDB = dbA;
+  const { session: a, file } = await EncryptedDriveSync.create(drive.transport(), PASSWORD);
+  await a.push(original, true);
+  const dbB = new IDBFactory(); (globalThis as any).indexedDB = dbB;
+  const b = new EncryptedDriveSync(file.id, drive.transport());
+  await b.unlock(PASSWORD); await b.acceptLocal(await b.pull());
+  const local = contentEntryFixture(), remote = contentEntryFixture();
+  Object.assign(remote.state.contentStore!.right, { xFuture: { origin: 'FAKE remote metadata' } });
+  Object.assign(local.state.contentStore!.delta, { xFuture: { origin: 'FAKE local metadata' } });
+  (globalThis as any).indexedDB = dbA; await a.push(remote);
+  (globalThis as any).indexedDB = dbB; await b.push(local);
+  cache();
+  const reader = new EncryptedDriveSync(file.id, drive.transport());
+  await reader.unlock(PASSWORD);
+  const result = await reader.pull();
+  for (const [id, expected] of [['right', 'FAKE remote metadata'], ['delta', 'FAKE local metadata']]) {
+    const hash = result.state.chats![0].branchTree!.nodes[id].contentHash;
+    expect(result.state.contentStore![hash]).toHaveProperty('xFuture.origin', expected);
+  }
+  const unused = Object.entries(result.state.contentStore!).find(([, entry]) => (entry as any).xFuture?.origin === 'unused')![0];
+  await reader.acceptLocal(result);
+  releaseContent(result.state.contentStore!, unused);
+  expect(flushPendingGC(result.state.contentStore!)).toEqual([unused]);
+  await reader.push(result);
+  cache();
+  const fresh = new EncryptedDriveSync(file.id, drive.transport());
+  await fresh.unlock(PASSWORD);
+  expect(Object.values((await fresh.pull()).state.contentStore!).some(entry => (entry as any).xFuture?.origin === 'unused')).toBe(false);
+});
+
+it('reports a same-node body/metadata concurrent edit instead of publishing a mismatched entry', async () => {
+  const drive = new FakeDrive(), original = contentEntryFixture();
+  const dbA = new IDBFactory(); (globalThis as any).indexedDB = dbA;
+  const { session: a, file } = await EncryptedDriveSync.create(drive.transport(), PASSWORD);
+  await a.push(original, true);
+  const dbB = new IDBFactory(); (globalThis as any).indexedDB = dbB;
+  const b = new EncryptedDriveSync(file.id, drive.transport());
+  await b.unlock(PASSWORD); await b.acceptLocal(await b.pull());
+  const body = contentEntryFixture(), meta = contentEntryFixture();
+  body.state.contentStore!.right.content = [{ type: 'text', text: 'FAKE changed body' }];
+  Object.assign(meta.state.contentStore!.right, { xFuture: { origin: 'FAKE remote metadata' } });
+  (globalThis as any).indexedDB = dbA; await a.push(meta);
+  const writes = drive.writes.length;
+  (globalThis as any).indexedDB = dbB;
+  await expect(b.push(body)).rejects.toThrow('Concurrent edits conflict');
+  expect(drive.writes).toHaveLength(writes);
+});

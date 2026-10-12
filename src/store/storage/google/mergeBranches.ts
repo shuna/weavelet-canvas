@@ -1,5 +1,6 @@
 import type { BranchNode, BranchTree } from '@type/chat';
 import { digest } from './crypto';
+import { readMessageAttributes, deleteMessageAttributes } from '@utils/branchUtils';
 import type { Records } from './records';
 
 // Parent links remain a tree: equal siblings coalesce, but continuations under
@@ -13,7 +14,10 @@ export async function mergeBranches(chatId: string, base: Records, local: Branch
     if (!baselineFields.has(path[4])) baselineFields.set(path[4], new Set());
     baselineFields.get(path[4])!.add(path[5]);
   }
-  const unchanged = async (node: BranchNode) => {
+  const attributesKey = (id: string) => JSON.stringify(['chats', chatId, 'branchTree', 'messageAttributesV1', 'byNode', id]);
+  const unchanged = async (node: BranchNode, tree: BranchTree) => {
+    const attributes = readMessageAttributes(tree)?.byNode[node.id];
+    if ((attributes === undefined ? undefined : await digest(JSON.stringify(attributes))) !== base[attributesKey(node.id)]) return false;
     const fields = new Set([...Object.keys(node), ...baselineFields.get(node.id) ?? []]);
     for (const field of fields) {
       const value = (node as any)[field];
@@ -28,19 +32,29 @@ export async function mergeBranches(chatId: string, base: Records, local: Branch
   for (let side = 0; side < 2; side++) {
     const source = sides[side], other = sides[1 - side];
     const changed = new Set<string>();
-    for (const node of Object.values(source.nodes)) if (!await unchanged(node)) {
+    for (const node of Object.values(source.nodes)) if (!await unchanged(node, source)) {
       let cursor: BranchNode | undefined = node;
       while (cursor && !changed.has(cursor.id)) {
         changed.add(cursor.id); cursor = cursor.parentId ? source.nodes[cursor.parentId] : undefined;
       }
     }
     for (const node of Object.values(source.nodes)) {
-      if (!other.nodes[node.id] && !changed.has(node.id)) delete source.nodes[node.id];
+      if (!other.nodes[node.id] && !changed.has(node.id)) { deleteMessageAttributes(source, node.id); delete source.nodes[node.id]; }
     }
   }
   for (const id of Object.keys(sides[0].nodes)) {
     const right = sides[0].nodes[id], left = sides[1].nodes[id];
     if (!left) continue;
+    const leftAttributes = readMessageAttributes(sides[1])?.byNode[id], rightAttributes = readMessageAttributes(sides[0])?.byNode[id];
+    const lh = leftAttributes === undefined ? undefined : await digest(JSON.stringify(leftAttributes));
+    const rh = rightAttributes === undefined ? undefined : await digest(JSON.stringify(rightAttributes));
+    if (lh !== rh && (lh === base[attributesKey(id)] || rh === base[attributesKey(id)])) {
+      const attributes = lh === base[attributesKey(id)] ? rightAttributes : leftAttributes;
+      for (const side of sides) {
+        if (attributes === undefined) deleteMessageAttributes(side, id);
+        else side.messageAttributesV1 = { version: 1, byNode: { ...side.messageAttributesV1?.byNode, [id]: structuredClone(attributes) } };
+      }
+    }
     for (const field of new Set([...Object.keys(left), ...Object.keys(right)])) {
       if (field === 'id') continue;
       const l = (left as any)[field], r = (right as any)[field];
@@ -74,6 +88,7 @@ export async function mergeBranches(chatId: string, base: Records, local: Branch
   };
   const inputs = sides.every(coherent) ? sides : originals;
   const nodes: BranchTree['nodes'] = {};
+  const byNode: Record<string, Record<string, unknown>> = {};
   const maps: Record<string, string>[] = [{}, {}];
   const signatures = new Map<string, string[]>();
   for (let side = 0; side < 2; side++) {
@@ -85,13 +100,15 @@ export async function mergeBranches(chatId: string, base: Records, local: Branch
         chain.push(cursor); cursor = cursor.parentId ? tree.nodes[cursor.parentId] : undefined;
       }
       for (const node of chain.reverse()) {
-        const parentId = node.parentId ? maps[side][node.parentId] : null;
-        const signature = JSON.stringify([parentId, node.role, node.contentHash, node.label ?? null, !!node.starred, !!node.pinned]);
+        const parentId = node.parentId ? maps[side][node.parentId] ?? node.parentId : null;
+        const attributes = readMessageAttributes(tree)?.byNode[node.id];
+        const signature = JSON.stringify([parentId, node.role, node.contentHash, node.label ?? null, !!node.starred, !!node.pinned, attributes ?? null]);
         const candidates = side === 1 ? signatures.get(signature)?.filter(candidate => !used.has(candidate)) : undefined;
         const match = candidates?.includes(node.id) ? node.id : candidates?.[0];
         const target = match ?? (nodes[node.id] ? crypto.randomUUID() : node.id);
         if (!match) {
           nodes[target] = { ...node, id: target, parentId };
+          if (attributes) byNode[target] = structuredClone(attributes);
           signatures.set(signature, [...signatures.get(signature) ?? [], target]);
         }
         used.add(target); maps[side][node.id] = target;
@@ -100,8 +117,11 @@ export async function mergeBranches(chatId: string, base: Records, local: Branch
     for (const id of Object.keys(tree.nodes)) append(id);
   }
   const activePath: string[] = [];
+  const visited = new Set<string>();
   let tip: string | null = local.activePath.map(id => maps[1][id]).filter(Boolean).at(-1) ?? null;
-  while (tip) { activePath.unshift(tip); tip = nodes[tip].parentId; }
-  const tree: BranchTree = { nodes, activePath, rootId: activePath[0] ?? maps[0][cloud.rootId] ?? Object.keys(nodes)[0] ?? '' };
+  while (tip && nodes[tip] && !visited.has(tip)) {
+    visited.add(tip); activePath.unshift(tip); tip = nodes[tip].parentId;
+  }
+  const tree: BranchTree = { ...(Object.keys(byNode).length ? { messageAttributesV1: { version: 1 as const, byNode } } : {}), nodes, activePath, rootId: activePath[0] ?? maps[0][cloud.rootId] ?? Object.keys(nodes)[0] ?? '' };
   return { tree, cloudIds: maps[0], localIds: maps[1] };
 }

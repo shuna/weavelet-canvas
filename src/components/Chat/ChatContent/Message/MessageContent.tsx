@@ -35,12 +35,16 @@ const MessageContent = ({
   messageIndex,
   nodeId,
   sticky = false,
+  isCollapsed = false,
+  onExpand,
 }: {
   role: string;
   content: ContentInterface[];
   messageIndex: number;
   nodeId?: string;
   sticky?: boolean;
+  isCollapsed?: boolean;
+  onExpand?: () => void;
 }) => {
   const currentChatIndex = useStore((state) => state.currentChatIndex);
   const advancedMode = useStore((state) => state.advancedMode);
@@ -90,6 +94,8 @@ const MessageContent = ({
           messageIndex={messageIndex}
           nodeId={nodeId}
           isEditState={isEditState}
+          isCollapsed={isCollapsed}
+          onExpand={onExpand}
           editSessionKey={editSessionKey}
         />
       )}

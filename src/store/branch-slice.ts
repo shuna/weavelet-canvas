@@ -1,5 +1,5 @@
 import i18next from 'i18next';
-import { StoreSlice } from './store';
+import { StoreSlice, StoreState } from './store';
 import {
   BranchClipboard,
   ChatInterface,
@@ -208,6 +208,13 @@ const restoreBranchSnapshot = (
   return restored;
 };
 
+const withRuntimeFlatNodeMaps = (chats: ChatInterface[] | undefined, state: StoreState) => chats?.map((chat, index) => {
+  if (chat.branchTree) return chat;
+  const key = String(index);
+  return { ...chat, collapsedNodes: state.collapsedNodeMaps[key] ?? chat.collapsedNodes,
+    omittedNodes: state.omittedNodeMaps[key] ?? chat.omittedNodes, protectedNodes: state.protectedNodeMaps[key] ?? chat.protectedNodes };
+});
+
 export interface BranchSlice {
   contentStore: ContentStoreData;
   setContentStore: (contentStore: ContentStoreData) => void;
@@ -354,7 +361,14 @@ export const createBranchSlice: StoreSlice<BranchSlice> = (set, get) => ({
       set({ branchHistoryPast: past, branchHistoryFuture: [] });
     }
     get().setChats(chats, { preserveBranchHistory: true });
-    set({ contentStore });
+    const collapsedNodeMaps = { ...get().collapsedNodeMaps }, omittedNodeMaps = { ...get().omittedNodeMaps }, protectedNodeMaps = { ...get().protectedNodeMaps };
+    for (const [index, chat] of chats.entries()) if (!prevChats?.[index]?.branchTree && chat.branchTree) {
+      const key = String(index);
+      collapsedNodeMaps[key] = chat.collapsedNodes ?? {};
+      omittedNodeMaps[key] = chat.omittedNodes ?? {};
+      protectedNodeMaps[key] = chat.protectedNodes ?? {};
+    }
+    set({ contentStore, collapsedNodeMaps, omittedNodeMaps, protectedNodeMaps });
   },
   invalidateBranchHistory: (chatIds) => {
     if (chatIds.length === 0) return;
@@ -509,7 +523,7 @@ export const createBranchSlice: StoreSlice<BranchSlice> = (set, get) => ({
     set({ multiViewPrimaryChatIndex: index });
   },
   moveBranchSequence: (sourceChatIndex, fromNodeId, toNodeId, targetChatIndex, afterNodeId) => {
-    const chats = get().chats;
+    const chats = withRuntimeFlatNodeMaps(get().chats, get());
     if (!chats) return;
     const clipboard = copyBranchSequenceState(chats, sourceChatIndex, fromNodeId, toNodeId);
     if (!clipboard) return;
@@ -523,7 +537,7 @@ export const createBranchSlice: StoreSlice<BranchSlice> = (set, get) => ({
     get().applyBranchState(result.chats, result.contentStore);
   },
   activateFolderOverview: (folderId) => {
-    const chats = get().chats;
+    const chats = withRuntimeFlatNodeMaps(get().chats, get());
     if (!chats) return;
     const indices = chats
       .map((c, i) => ({ chat: c, index: i }))
@@ -537,8 +551,15 @@ export const createBranchSlice: StoreSlice<BranchSlice> = (set, get) => ({
   },
 
   updateNodeRole: (chatIndex, nodeId, role) => {
-    const chats = get().chats;
+    const chats = withRuntimeFlatNodeMaps(get().chats, get());
     if (!chats) return;
+    const chat = chats[chatIndex];
+    const protectedID = chat?.branchTree?.nodes[nodeId] ? nodeId : chat?.branchTree?.activePath[parseInt(nodeId, 10)] ?? nodeId;
+    const protectedNodes = get().protectedNodeMaps[String(chatIndex)] ?? chat?.protectedNodes ?? {};
+    if (protectedNodes[protectedID]) {
+      showToast(i18next.t('protectedCannotEdit', { ns: 'main' }), 'warning');
+      return;
+    }
     const { chats: ensured, contentStore } = ensureBranchTreeState(
       chats, chatIndex, get().contentStore
     );
@@ -557,7 +578,7 @@ export const createBranchSlice: StoreSlice<BranchSlice> = (set, get) => ({
   },
 
   ensureBranchTree: (chatIndex) => {
-    const chats = get().chats;
+    const chats = withRuntimeFlatNodeMaps(get().chats, get());
     if (!chats || chats[chatIndex]?.branchTree) return;
     const { chats: updatedChats, contentStore } = ensureBranchTreeState(
       chats,
@@ -569,7 +590,7 @@ export const createBranchSlice: StoreSlice<BranchSlice> = (set, get) => ({
 
   createBranch: (chatIndex, fromNodeId, newContent) => {
     const { chats, contentStore, newId } = createBranchState(
-      get().chats!,
+      withRuntimeFlatNodeMaps(get().chats, get())!,
       chatIndex,
       fromNodeId,
       newContent,
@@ -612,7 +633,7 @@ export const createBranchSlice: StoreSlice<BranchSlice> = (set, get) => ({
 
   deleteBranch: (chatIndex, nodeId) => {
     const { chats, contentStore } = deleteBranchState(
-      get().chats!,
+      withRuntimeFlatNodeMaps(get().chats, get())!,
       chatIndex,
       nodeId,
       get().contentStore
@@ -656,7 +677,7 @@ export const createBranchSlice: StoreSlice<BranchSlice> = (set, get) => ({
 
   appendNodeToActivePath: (chatIndex, role, content) => {
     const { chats, contentStore, newId } = appendNodeToActivePathState(
-      get().chats!,
+      withRuntimeFlatNodeMaps(get().chats, get())!,
       chatIndex,
       role,
       content,
@@ -668,7 +689,7 @@ export const createBranchSlice: StoreSlice<BranchSlice> = (set, get) => ({
 
   updateLastNodeContent: (chatIndex, content) => {
     const { chats, contentStore } = updateLastNodeContentState(
-      get().chats!,
+      withRuntimeFlatNodeMaps(get().chats, get())!,
       chatIndex,
       content,
       get().contentStore
@@ -684,7 +705,7 @@ export const createBranchSlice: StoreSlice<BranchSlice> = (set, get) => ({
 
   upsertMessageAtIndex: (chatIndex, messageIndex, role, content) => {
     const { chats, contentStore } = upsertMessageAtIndexState(
-      get().chats!,
+      withRuntimeFlatNodeMaps(get().chats, get())!,
       chatIndex,
       messageIndex,
       { role, content },
@@ -694,8 +715,15 @@ export const createBranchSlice: StoreSlice<BranchSlice> = (set, get) => ({
   },
 
   upsertWithAutoBranch: (chatIndex, messageIndex, role, content) => {
+    const chat = get().chats?.[chatIndex];
+    const nodeID = chat?.branchTree?.activePath[messageIndex] ?? String(messageIndex);
+    const protectedNodes = get().protectedNodeMaps[String(chatIndex)] ?? chat?.protectedNodes ?? {};
+    if (protectedNodes[nodeID]) {
+      showToast(i18next.t('protectedCannotEdit', { ns: 'main' }), 'warning');
+      return;
+    }
     const result = upsertWithAutoBranchState(
-      get().chats!, chatIndex, messageIndex, { role, content }, get().contentStore
+      withRuntimeFlatNodeMaps(get().chats, get())!, chatIndex, messageIndex, { role, content }, get().contentStore
     );
     if (result.noOp) return;
     get().applyBranchState(result.chats, result.contentStore);
@@ -703,7 +731,7 @@ export const createBranchSlice: StoreSlice<BranchSlice> = (set, get) => ({
 
   insertMessageAtIndex: (chatIndex, messageIndex, role, content) => {
     const { chats, contentStore, newId } = insertMessageAtIndexState(
-      get().chats!,
+      withRuntimeFlatNodeMaps(get().chats, get())!,
       chatIndex,
       messageIndex,
       { role, content },
@@ -729,7 +757,7 @@ export const createBranchSlice: StoreSlice<BranchSlice> = (set, get) => ({
       (session) => session.chatId === chat?.id && session.targetNodeId === nodeId
     );
     const { chats, contentStore } = removeMessageAtIndexState(
-      get().chats!,
+      withRuntimeFlatNodeMaps(get().chats, get())!,
       chatIndex,
       messageIndex,
       get().contentStore,
@@ -740,7 +768,7 @@ export const createBranchSlice: StoreSlice<BranchSlice> = (set, get) => ({
 
   moveMessage: (chatIndex, messageIndex, direction) => {
     const { chats, contentStore } = moveMessageState(
-      get().chats!,
+      withRuntimeFlatNodeMaps(get().chats, get())!,
       chatIndex,
       messageIndex,
       direction,
@@ -775,7 +803,7 @@ export const createBranchSlice: StoreSlice<BranchSlice> = (set, get) => ({
     }
 
     const { chats, contentStore } = replaceMessageAndPruneFollowingState(
-      get().chats!,
+      withRuntimeFlatNodeMaps(get().chats, get())!,
       chatIndex,
       messageIndex,
       { role, content },
@@ -786,7 +814,7 @@ export const createBranchSlice: StoreSlice<BranchSlice> = (set, get) => ({
   },
 
   copyBranchSequence: (chatIndex, fromNodeId, toNodeId) => {
-    const chats = get().chats;
+    const chats = withRuntimeFlatNodeMaps(get().chats, get());
     if (!chats) return;
     const clipboard = copyBranchSequenceState(chats, chatIndex, fromNodeId, toNodeId);
     if (!clipboard) return;
@@ -799,7 +827,7 @@ export const createBranchSlice: StoreSlice<BranchSlice> = (set, get) => ({
     const clipboard = get().branchClipboard;
     if (!clipboard) return;
     const { chats, contentStore } = pasteBranchSequenceState(
-      get().chats!,
+      withRuntimeFlatNodeMaps(get().chats, get())!,
       targetChatIndex,
       afterNodeId,
       clipboard,

@@ -1,7 +1,7 @@
 import React from 'react';
 import useStore from '@store/store';
 import { generateDefaultChat } from '@constants/chat';
-import { ChatInterface } from '@type/chat';
+import { addLibraryChat } from '@utils/chatLibrary';
 /* no deep clone needed – just prepend a new default chat */
 
 const useAddChat = () => {
@@ -13,17 +13,8 @@ const useAddChat = () => {
   const addChat = (folder?:string) => {
     const chats = useStore.getState().chats;
     if (chats) {
-      const updatedChats = chats.slice();
-      let titleIndex = 1;
-      let title = `New Chat ${titleIndex}`;
-
-      while (chats.some((chat) => chat.title === title)) {
-        titleIndex += 1;
-        title = `New Chat ${titleIndex}`;
-      }
-
-      const chat = generateDefaultChat(title, folder);
-      updatedChats.unshift(chat);
+      const updatedChats = addLibraryChat(chats, title => generateDefaultChat(title, folder));
+      const chat = updatedChats[0];
       captureCurrentNavigationEntry();
       setChats(updatedChats);
       pushNavigationEntry({ chatId: chat.id, activePath: [...(chat.branchTree?.activePath ?? [])], viewContext: useStore.getState().chatActiveView, source: 'chat-switch' });

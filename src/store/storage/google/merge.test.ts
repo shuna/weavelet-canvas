@@ -32,7 +32,7 @@ it('forks only the conflicting message within one chat, retaining both continuat
   expect(alternatives.map(n => text(result, n.id)[0])).toEqual(expect.arrayContaining([{ type: 'text', text: 'local' }, { type: 'text', text: 'cloud' }]));
   for (const alternative of alternatives) expect(Object.values(tree(result).nodes).filter(n => n.parentId === alternative.id)).toHaveLength(1);
   expect(Object.keys(tree(result).nodes)).toHaveLength(5);
-  expect(Object.keys(result.state.contentStore!)).toHaveLength(4);
+  expect(Object.keys(result.state.contentStore!)).toHaveLength(5);
   expect(text(result, tree(result).activePath[1])[0]).toEqual({ type: 'text', text: 'local' });
   expect(await toRecords(await merge(base, result, cloud))).toEqual(await toRecords(result));
 });
@@ -45,6 +45,24 @@ it('coalesces independently created matching branches and their matching continu
   const result = await merge(base, local, cloud);
   expect(Object.keys(tree(result).nodes)).toHaveLength(5);
   expect(tree(result).activePath).toEqual(['a', 'r', 'rt']);
+});
+
+it('preserves each copied chat order after metadata conflict even with shuffled input records', async () => {
+  const base = snapshot(), local = structuredClone(base), cloud = structuredClone(base);
+  local.state.chats![0].title = 'Local'; cloud.state.chats![0].title = 'Cloud';
+  tree(local).nodes = Object.fromEntries(['c', 'a', 'b'].map(id => [id, tree(local).nodes[id]]));
+  tree(cloud).nodes = Object.fromEntries(['b', 'c', 'a'].map(id => [id, tree(cloud).nodes[id]]));
+  const shuffle = (records: Record<string, string>) => Object.fromEntries(Object.entries(records).reverse());
+  const result = await fromRecords(await mergeSyncRecords(
+    await hashRecords(await toRecords(base)), shuffle(await toRecords(local)), shuffle(await toRecords(cloud))
+  ));
+  expect(result.state.chats).toHaveLength(2);
+  const byTitle = Object.fromEntries(result.state.chats!.map(chat => [chat.title, chat]));
+  expect(Object.keys(byTitle.Local.branchTree!.nodes)).toEqual(['c', 'a', 'b']);
+  expect(Object.keys(byTitle.Cloud.branchTree!.nodes)).toEqual(['b', 'c', 'a']);
+  const records = await toRecords(result);
+  expect(records[JSON.stringify(['nodeOrder', 'chats', byTitle.Local.id])]).toBe('["c","a","b"]');
+  expect(records[JSON.stringify(['nodeOrder', 'chats', byTitle.Cloud.id])]).toBe('["b","c","a"]');
 });
 
 it('combines independent message edits without adding a branch', async () => {
@@ -86,6 +104,71 @@ it('preserves coherent alternatives if independent reparenting would create a cy
   expect(result.state.chats).toHaveLength(1);
   expect(Object.keys(tree(result).nodes)).toHaveLength(5);
   expect(tree(result).activePath).toHaveLength(3);
+});
+
+it.each([false, true])('preserves a preexisting pinned orphan parent and child after both inputs are edited (active=%s)', async active => {
+  const base = snapshot();
+  node(base, 'orphan', 'missing-parent', 'pinned orphan content');
+  tree(base).nodes.orphan.pinned = true;
+  tree(base).nodes.orphan.label = 'pinned orphan label';
+  node(base, 'orphan-child', 'orphan', 'orphan child content');
+  if (active) tree(base).activePath = ['orphan', 'orphan-child'];
+  const local = structuredClone(base), cloud = structuredClone(base);
+  node(local, 'b', 'a', 'local'); node(cloud, 'c', 'b', 'cloud');
+  const result = await merge(base, local, cloud);
+  expect(result.state.chats).toHaveLength(1);
+  expect(tree(result).nodes.orphan).toEqual(expect.objectContaining({
+    id: 'orphan', parentId: 'missing-parent', pinned: true, label: 'pinned orphan label',
+  }));
+  expect(tree(result).nodes['orphan-child'].parentId).toBe('orphan');
+  expect(text(result, 'orphan')).toEqual([{ type: 'text', text: 'pinned orphan content' }]);
+  expect(text(result, 'orphan-child')).toEqual([{ type: 'text', text: 'orphan child content' }]);
+  if (active) {
+    expect(tree(result).activePath).toEqual(['orphan', 'orphan-child']);
+  } else {
+    expect(tree(result).activePath.flatMap(id => text(result, id))).toEqual([
+      { type: 'text', text: 'root' }, { type: 'text', text: 'local' },
+      { type: 'text', text: 'same continuation' },
+    ]);
+  }
+  expect(Object.keys(tree(result).nodes).flatMap(id => text(result, id))).toEqual(expect.arrayContaining([
+    { type: 'text', text: 'local' }, { type: 'text', text: 'cloud' },
+  ]));
+});
+
+it('preserves separate valid chats when pinned orphan parent IDs collide into a cycle', async () => {
+  const base = snapshot();
+  tree(base).nodes = {};
+  tree(base).rootId = '';
+  tree(base).activePath = [];
+  base.state.contentStore = {};
+  const local = structuredClone(base), cloud = structuredClone(base);
+  node(local, 'y', 'x', 'local pinned orphan');
+  tree(local).nodes.y.pinned = true;
+  tree(local).rootId = 'y';
+  tree(local).activePath = ['y'];
+  node(cloud, 'x', 'y', 'cloud pinned orphan');
+  tree(cloud).nodes.x.pinned = true;
+  tree(cloud).rootId = 'x';
+  tree(cloud).activePath = ['x'];
+  const result = await merge(base, local, cloud);
+  expect(result.state.chats).toHaveLength(2);
+  expect(new Set(result.state.chats!.map(chat => chat.id)).size).toBe(2);
+  const branches = result.state.chats!.map(chat => {
+    const branch = chat.branchTree!;
+    expect(Object.keys(branch.nodes)).toHaveLength(1);
+    const retained = Object.values(branch.nodes)[0];
+    expect(branch.rootId).toBe(retained.id);
+    expect(branch.activePath).toEqual([retained.id]);
+    return {
+      id: retained.id, parentId: retained.parentId, pinned: retained.pinned,
+      content: resolveContent(result.state.contentStore!, retained.contentHash),
+    };
+  });
+  expect(branches).toEqual(expect.arrayContaining([
+    { id: 'y', parentId: 'x', pinned: true, content: [{ type: 'text', text: 'local pinned orphan' }] },
+    { id: 'x', parentId: 'y', pinned: true, content: [{ type: 'text', text: 'cloud pinned orphan' }] },
+  ]));
 });
 
 it('keeps node review markers until explicit acknowledgement, including across reloads', async () => {

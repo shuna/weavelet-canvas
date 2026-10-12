@@ -1,0 +1,567 @@
+import SwiftUI
+import UniformTypeIdentifiers
+
+@main
+struct WeaveletPilotApp: App {
+    @StateObject private var state = ChatState(store: WeaveletPilotApp.stateStore)
+    private static var stateStore: LocalStateStore? {
+        if ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] != nil { return nil }
+        #if DEBUG
+        if RemoteFixture.enabled { return LocalStateStore(fileURL: LocalStateStore.applicationStore.fileURL.deletingLastPathComponent().appendingPathComponent("debug-remote-fixture/local-state.json")) }
+        #endif
+        return .applicationStore
+    }
+    var body: some Scene {
+        WindowGroup { ChatView(state: state) }
+    }
+}
+
+struct ChatView: View {
+    @ObservedObject var state: ChatState
+    @State private var showsSettings = false
+    @State private var showsLibrary = false
+    @State private var showsRemoteSettings = false
+    @State private var input = ""
+    @State private var showsImporter = false
+    @State private var showsExporter = false
+    @State private var exportDocument: WebJSONDocument?
+    @State private var errorMessage: String?
+    @State private var draft: MessageDraft?
+
+    var body: some View {
+        NavigationStack {
+            ScrollView {
+                LazyVStack(alignment: .leading, spacing: 20) {
+                    if let conversation = state.conversation {
+                        ForEach(conversation.visibleMessages, id: \.identity) { node in
+                            MessageView(node: node, siblings: node.id.utf8.elementsEqual(conversation.selectedLeafID.utf8) ? siblings(of: node.id, in: conversation.nodes) : [], style: state.style, edit: state.exchange == nil || state.generation != nil ? nil : {
+                                do { draft = try state.messageDraft(nodeID: node.id) }
+                                catch { errorMessage = error.localizedDescription }
+                            }) { siblingID in
+                                state.selectSibling(siblingID, of: node.id)
+                            }
+                            .id(node.identity)
+                            .disabled(state.generation != nil)
+                        }
+                        if state.exchange != nil {
+                            Button("本文を追加", systemImage: "plus.bubble") {
+                                do { draft = try state.messageDraft(nodeID: nil) }
+                                catch { errorMessage = error.localizedDescription }
+                            }
+                            .frame(minHeight: 44)
+                            .disabled(state.generation != nil)
+                        }
+                        if let generation = state.generation {
+                            VStack(alignment: .leading, spacing: 8) {
+                                Text(generation.running ? "生成中" : "未保存の生成結果").font(.headline)
+                                if !generation.output.reasoning.isEmpty { MessagePartView(part: .reasoning(generation.output.reasoning)) }
+                                if !generation.output.text.isEmpty { MessagePartView(part: .text(generation.output.text)) }
+                                if generation.running { Button("停止") { state.stopGeneration() }.frame(minHeight: 44) }
+                                else { Button("生成結果の保存を再試行") {
+                                    do { try state.saveGenerationResult() } catch { state.generationError = error.localizedDescription }
+                                }.frame(minHeight: 44) }
+                            }
+                        }
+                        if let generationError = state.generationError { Text(generationError).foregroundStyle(.red) }
+                        if state.exchange != nil {
+                            TextField("送信する本文", text: $input, axis: .vertical)
+                                .lineLimit(3...8).textFieldStyle(.roundedBorder)
+                                .disabled(state.generation != nil)
+                            Button("送信", systemImage: "paperplane") {
+                                do {
+                                    let record = try RemoteCredentials.load()
+                                    try state.startGeneration(input: input, record: record)
+                                    input = ""
+                                } catch { state.generationError = error.localizedDescription }
+                            }
+                            .frame(minHeight: 44)
+                            .disabled(state.generation != nil || input.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                        }
+                    } else {
+                        ContentUnavailableView("会話がありません", systemImage: "bubble.left.and.bubble.right")
+                    }
+                }
+                .padding(20)
+                .frame(maxWidth: 900)
+                .frame(maxWidth: .infinity)
+            }
+            .navigationTitle(RemoteFixture.enabled ? "Weavelet Pilot · FAKE" : "Weavelet Pilot")
+            .task {
+                guard ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] == nil else { return }
+                do { try state.loadRemoteSettings() } catch { state.generationError = error.localizedDescription }
+            }
+            .toolbar {
+                ToolbarItemGroup(placement: .topBarLeading) {
+                    Button("会話一覧", systemImage: "list.bullet") { showsLibrary = true }
+                        .disabled(state.generation != nil)
+                        .frame(minWidth: 44, minHeight: 44)
+                    Picker("会話", selection: Binding(get: { Data(state.selectedConversationID.utf8) }, set: { state.selectedConversationID = String(decoding: $0, as: UTF8.self) })) {
+                        ForEach(state.conversations, id: \.identity) { conversation in
+                            Text(conversation.title).tag(conversation.identity)
+                        }
+                    }
+                    .pickerStyle(.menu)
+                    .disabled(state.generation != nil)
+                }
+                ToolbarItemGroup(placement: .topBarTrailing) {
+                    Menu("ファイル", systemImage: "doc") {
+                        Button("V3 JSONを読み込む") { showsImporter = true }
+                        Button("読み込んだV3 JSONを書き出す") {
+                            do {
+                                guard let exchange = state.exchange else { return }
+                                exportDocument = WebJSONDocument(data: try exchange.encoded())
+                                showsExporter = true
+                            } catch { errorMessage = error.localizedDescription }
+                        }
+                        .disabled(state.exchange == nil)
+                    }
+                    .frame(minWidth: 44, minHeight: 44)
+                    .disabled(state.generation != nil)
+                    Button("表示設定", systemImage: "slider.horizontal.3") { showsSettings = true }
+                        .frame(minWidth: 44, minHeight: 44)
+                }
+            }
+            .fileImporter(isPresented: $showsImporter, allowedContentTypes: [.json], allowsMultipleSelection: false) { result in
+                do {
+                    guard let url = try result.get().first else { return }
+                    let access = url.startAccessingSecurityScopedResource()
+                    defer { if access { url.stopAccessingSecurityScopedResource() } }
+                    try state.importWebData(Data(contentsOf: url))
+                } catch {
+                    if (error as? CocoaError)?.code != .userCancelled { errorMessage = error.localizedDescription }
+                }
+            }
+            .fileExporter(isPresented: $showsExporter, document: exportDocument, contentType: .json, defaultFilename: "weavelet-native-v3") { result in
+                if case .failure(let error) = result, (error as? CocoaError)?.code != .userCancelled {
+                    errorMessage = error.localizedDescription
+                }
+            }
+            .alert("データを処理できませんでした", isPresented: Binding(get: { errorMessage != nil || state.persistenceError != nil }, set: { if !$0 { errorMessage = nil; state.persistenceError = nil } })) {
+                Button("閉じる", role: .cancel) { errorMessage = nil; state.persistenceError = nil }
+            } message: { Text(errorMessage ?? state.persistenceError ?? "") }
+            .sheet(item: $draft) { draft in MessageEditorView(state: state, draft: draft) }
+            .sheet(isPresented: $showsLibrary) { ConversationLibraryView(state: state) }
+            .sheet(isPresented: $showsSettings) {
+                NavigationStack {
+                    Form {
+                        Picker("チャット表示", selection: $state.style) {
+                            ForEach(ChatStyle.allCases) { style in Text(style.rawValue).tag(style) }
+                        }
+                        .pickerStyle(.inline)
+                        Button("remote生成設定") { showsRemoteSettings = true }
+                            .disabled(state.generation != nil)
+                    }
+                    .sheet(isPresented: $showsRemoteSettings) { RemoteSettingsView(state: state) }
+                    .navigationTitle("表示設定")
+                    .toolbar { ToolbarItem(placement: .confirmationAction) { Button("完了") { showsSettings = false } } }
+                }
+            }
+        }
+    }
+}
+
+struct MessageView: View {
+    let node: MessageNode
+    let siblings: [MessageNode]
+    let style: ChatStyle
+    var edit: (() -> Void)? = nil
+    let select: (String) -> Void
+
+    private var roleName: String {
+        switch node.role {
+        case "user": return "ユーザー"
+        case "system": return "システム"
+        default: return "アシスタント"
+        }
+    }
+
+    private var icon: String {
+        switch node.role {
+        case "user": return "person.crop.circle"
+        case "system": return "gearshape"
+        default: return "sparkles"
+        }
+    }
+
+    var body: some View {
+        let isBubble = style == .bubbles
+        HStack(spacing: 0) {
+            if isBubble && node.role == "user" { Spacer(minLength: 24) }
+            VStack(alignment: .leading, spacing: 12) {
+                Label(roleName, systemImage: icon)
+                    .font(.headline)
+                    .accessibilityAddTraits(.isHeader)
+                if node.parts.isEmpty {
+                    Text(node.content)
+                        .font(.body)
+                        .textSelection(.enabled)
+                        .fixedSize(horizontal: false, vertical: true)
+                } else {
+                    ForEach(Array(node.parts.enumerated()), id: \.offset) { _, part in
+                        MessagePartView(part: part)
+                    }
+                }
+                if let edit {
+                    Button("編集", systemImage: "square.and.pencil", action: edit)
+                        .frame(minHeight: 44)
+                }
+                if siblings.count > 1 {
+                    let position = (siblings.firstIndex(where: { $0.id.utf8.elementsEqual(node.id.utf8) }) ?? 0) + 1
+                    HStack(spacing: 8) {
+                        Button {
+                            select(siblings[position - 2].id)
+                        } label: {
+                            Image(systemName: "chevron.left")
+                                .frame(minWidth: 44, minHeight: 44)
+                        }
+                        .disabled(position == 1)
+                        .accessibilityLabel("前の分岐")
+                        Text("分岐 \(position) / \(siblings.count)")
+                            .accessibilityLabel("分岐 \(position) / \(siblings.count)")
+                        Button {
+                            select(siblings[position].id)
+                        } label: {
+                            Image(systemName: "chevron.right")
+                                .frame(minWidth: 44, minHeight: 44)
+                        }
+                        .disabled(position == siblings.count)
+                        .accessibilityLabel("次の分岐")
+                    }
+                }
+            }
+            .frame(maxWidth: isBubble ? nil : .infinity, alignment: .leading)
+            .padding(isBubble ? 16 : 0)
+            .background {
+                if isBubble {
+                    RoundedRectangle(cornerRadius: 18)
+                        .fill(node.role == "user" ? Color.accentColor.opacity(0.12) : Color(uiColor: .secondarySystemBackground))
+                }
+            }
+            if isBubble && node.role == "assistant" { Spacer(minLength: 24) }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+}
+
+
+struct MessagePartView: View {
+    let part: MessagePart
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            switch part {
+            case .text(let text): Text(text)
+            case .reasoning(let text):
+                Text("推論").font(.headline)
+                Text(text)
+            case .image(let url, let detail):
+                Text("画像（\(detail)）").font(.headline)
+                Text(url)
+            case .toolCall(let id, let name, let arguments):
+                Text("ツール呼び出し: \(name)").font(.headline)
+                Text("ID: \(id)")
+                Text(arguments)
+            case .toolResult(let callID, let content):
+                Text("ツール結果").font(.headline)
+                Text("呼び出しID: \(callID)")
+                Text(content)
+            }
+        }
+        .font(.body)
+        .textSelection(.enabled)
+        .fixedSize(horizontal: false, vertical: true)
+    }
+}
+
+struct WebJSONDocument: FileDocument {
+    static var readableContentTypes: [UTType] { [.json] }
+    let data: Data
+    init(data: Data) { self.data = data }
+    init(configuration: ReadConfiguration) throws {
+        guard let data = configuration.file.regularFileContents else { throw ExchangeError.invalid("ファイル内容") }
+        self.data = data
+    }
+    func fileWrapper(configuration: WriteConfiguration) throws -> FileWrapper {
+        FileWrapper(regularFileWithContents: data)
+    }
+}
+
+
+struct ConversationLibraryView: View {
+    @ObservedObject var state: ChatState
+    @Environment(\.dismiss) private var dismiss
+    @State private var selected = Set<Data>()
+    @State private var pendingDelete: [String] = []
+    @State private var showsDelete = false
+    @State private var renameID: String?
+    @State private var renameTitle = ""
+    @State private var showsRename = false
+    @State private var errorMessage: String?
+    @State private var folders: [ChatFolderRow] = []
+    @State private var folderRenameID: String?
+    @State private var folderRenameTitle = ""
+    @State private var showsFolderRename = false
+    @State private var folderDeleteID: String?
+    @State private var showsFolderDelete = false
+
+    var body: some View {
+        NavigationStack {
+            List {
+                if state.exchange == nil {
+                    Text("サンプル会話です。新規作成で保存用の会話を開始します。")
+                        .foregroundStyle(.secondary)
+                }
+                ForEach(folders, id: \.identity) { folder in
+                    Section {
+                        folderHeader(folder)
+                        if folder.expanded {
+                            ForEach(state.conversations.filter { state.folderID(for: $0.id)?.utf8.elementsEqual(folder.id.utf8) == true }, id: \.identity) { conversation in
+                                conversationRow(conversation)
+                            }
+                        }
+                    }
+                }
+                Section(folders.isEmpty ? "会話" : "未所属") {
+                    ForEach(state.conversations.filter { conversation in
+                        guard let id = state.folderID(for: conversation.id) else { return true }
+                        return !folders.contains { $0.id.utf8.elementsEqual(id.utf8) }
+                    }, id: \.identity) { conversation in conversationRow(conversation) }
+                }
+            }
+            .navigationTitle("会話一覧")
+            .onAppear {
+                perform {
+                    folders = try state.folderRows()
+                    if let id = state.folderID(for: state.selectedConversationID), let folder = folders.first(where: { $0.id.utf8.elementsEqual(id.utf8) }), !folder.expanded {
+                        try state.applyFolder(.expanded(id: id, expanded: true))
+                    }
+                }
+            }
+            .onChange(of: state.exchange?.source) { _, _ in perform {} }
+            .toolbar {
+                ToolbarItem(placement: .topBarLeading) { Button("閉じる") { dismiss() } }
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button("新規フォルダ", systemImage: "folder.badge.plus") { perform { try state.applyFolder(.create(id: UUID().uuidString.lowercased())) } }
+                }
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button("新規", systemImage: "plus") { perform { try state.createChat(defaults: .webInitial) } }
+                }
+                ToolbarItem(placement: .bottomBar) {
+                    Menu("選択を移動（\(selected.count)）") {
+                        moveButtons(ids: state.conversations.filter { selected.contains($0.identity) }.map(\.id))
+                    }.disabled(selected.isEmpty)
+                }
+                ToolbarItem(placement: .bottomBar) {
+                    Button("選択を削除（\(selected.count)）", role: .destructive) {
+                        pendingDelete = state.conversations.filter { selected.contains($0.identity) }.map(\.id)
+                        showsDelete = true
+                    }
+                    .disabled(selected.isEmpty)
+                    .frame(minHeight: 44)
+                }
+            }
+            .confirmationDialog("会話を削除しますか？", isPresented: $showsDelete, titleVisibility: .visible) {
+                Button("削除", role: .destructive) {
+                    perform {
+                        try state.deleteChats(ids: pendingDelete, defaults: .webInitial)
+                        selected.removeAll()
+                    }
+                }
+                Button("取消", role: .cancel) {}
+            } message: { Text("\(pendingDelete.count)件の会話を削除します。") }
+            .sheet(isPresented: $showsRename) {
+                NavigationStack {
+                    Form {
+                        TextField("名前", text: $renameTitle)
+                        if let errorMessage { Text(errorMessage).foregroundStyle(.red) }
+                    }
+                    .navigationTitle("会話の名前")
+                    .toolbar {
+                        ToolbarItem(placement: .cancellationAction) { Button("取消") { showsRename = false } }
+                        ToolbarItem(placement: .confirmationAction) {
+                            Button("保存") {
+                                if let renameID, perform({ try state.renameChat(id: renameID, title: renameTitle) }) { showsRename = false }
+                            }
+                        }
+                    }
+                }
+            }
+            .confirmationDialog("フォルダを削除しますか？", isPresented: $showsFolderDelete, titleVisibility: .visible) {
+                Button("削除", role: .destructive) { if let id = folderDeleteID { perform { try state.applyFolder(.remove(id: id)) } } }
+                Button("取消", role: .cancel) {}
+            } message: { Text("会話は削除せず、未所属へ移します。") }
+            .sheet(isPresented: $showsFolderRename) {
+                NavigationStack {
+                    Form { TextField("名前", text: $folderRenameTitle); if let errorMessage { Text(errorMessage).foregroundStyle(.red) } }
+                    .navigationTitle("フォルダの名前")
+                    .toolbar {
+                        ToolbarItem(placement: .cancellationAction) { Button("取消") { showsFolderRename = false } }
+                        ToolbarItem(placement: .confirmationAction) {
+                            Button("保存") { if let id = folderRenameID, perform({ try state.applyFolder(.rename(id: id, name: folderRenameTitle)) }) { showsFolderRename = false } }
+                        }
+                    }
+                }
+            }
+            .alert("会話を変更できませんでした", isPresented: Binding(get: { errorMessage != nil }, set: { if !$0 { errorMessage = nil } })) {
+                Button("閉じる", role: .cancel) { errorMessage = nil }
+            } message: { Text(errorMessage ?? "") }
+        }
+    }
+
+
+    private func conversationRow(_ conversation: Conversation) -> some View {
+        HStack {
+            if state.exchange != nil {
+                Button {
+                    if !selected.insert(conversation.identity).inserted { selected.remove(conversation.identity) }
+                } label: {
+                    Image(systemName: selected.contains(conversation.identity) ? "checkmark.circle.fill" : "circle")
+                        .frame(minWidth: 44, minHeight: 44)
+                }
+                .buttonStyle(.borderless)
+                .accessibilityLabel("選択対象: \(conversation.title)")
+                .accessibilityValue(selected.contains(conversation.identity) ? "選択中" : "未選択")
+            }
+            Button {
+                state.selectedConversationID = conversation.id
+                if state.selectedConversationID.utf8.elementsEqual(conversation.id.utf8), state.persistenceError == nil { dismiss() }
+                else { errorMessage = state.persistenceError }
+            } label: {
+                Text(conversation.title.isEmpty ? "（タイトルなし）" : conversation.title)
+                    .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
+            }
+            .buttonStyle(.borderless)
+            if state.exchange != nil {
+                Menu {
+                    Button("改名") {
+                        renameID = conversation.id
+                        renameTitle = conversation.title
+                        showsRename = true
+                    }
+                    Button("複製") {
+                        perform { try state.duplicateChat(id: conversation.id) }
+                    }
+                    Menu("移動") { moveButtons(ids: [conversation.id]) }
+                    Button("削除", role: .destructive) {
+                        pendingDelete = [conversation.id]
+                        showsDelete = true
+                    }
+                } label: {
+                    Image(systemName: "ellipsis").frame(minWidth: 44, minHeight: 44)
+                }
+                .accessibilityLabel("会話の操作: \(conversation.title)")
+            }
+        }
+    }
+
+    private func folderHeader(_ folder: ChatFolderRow) -> some View {
+        HStack {
+            Button { perform { try state.applyFolder(.expanded(id: folder.id, expanded: !folder.expanded)) } } label: {
+                HStack { Image(systemName: folder.expanded ? "chevron.down" : "chevron.right"); Image(systemName: "folder.fill").foregroundStyle(folderColor(folder.color)); Text(folder.name.isEmpty ? "（名前なし）" : folder.name).frame(maxWidth: .infinity, alignment: .leading) }.frame(minHeight: 44)
+            }.buttonStyle(.borderless).accessibilityLabel("フォルダ: \(folder.name)").accessibilityValue(folder.expanded ? "展開中" : "閉じています")
+            Menu {
+                Button("このフォルダに新規会話") { perform { try state.createChat(defaults: .webInitial, folder: folder.id) } }
+                Button("改名") { folderRenameID = folder.id; folderRenameTitle = folder.name; showsFolderRename = true }
+                Menu("色") {
+                    ForEach(["#be123c", "#6d28d9", "#0369a1", "#047857", "#b45309"], id: \.self) { color in
+                        Button(color) { perform { try state.applyFolder(.color(id: folder.id, color: color)) } }
+                    }
+                    Button("標準色") { perform { try state.applyFolder(.color(id: folder.id, color: nil)) } }
+                }
+                Button("削除", role: .destructive) { folderDeleteID = folder.id; showsFolderDelete = true }
+            } label: { Image(systemName: "ellipsis").frame(minWidth: 44, minHeight: 44) }
+            .accessibilityLabel("フォルダの操作: \(folder.name)")
+        }
+    }
+
+    @ViewBuilder private func moveButtons(ids: [String]) -> some View {
+        Button("未所属") { if perform({ try state.applyFolder(.move(chatIDs: ids, folderID: nil)) }) { selected.removeAll() } }
+        ForEach(folders, id: \.identity) { folder in
+            Button(folder.name.isEmpty ? "（名前なし）" : folder.name) {
+                if perform({ try state.applyFolder(.move(chatIDs: ids, folderID: folder.id)) }) { selected.removeAll() }
+            }
+        }
+    }
+    private func folderColor(_ value: String?) -> Color {
+        guard let value, value.hasPrefix("#"), value.count == 7, let rgb = UInt32(value.dropFirst(), radix: 16) else { return .secondary }
+        return Color(red: Double((rgb >> 16) & 255) / 255, green: Double((rgb >> 8) & 255) / 255, blue: Double(rgb & 255) / 255)
+    }
+
+    @discardableResult
+    private func perform(_ operation: () throws -> Void) -> Bool {
+        do { try operation(); folders = try state.folderRows(); errorMessage = nil; return true }
+        catch { errorMessage = error.localizedDescription; return false }
+    }
+}
+
+
+struct MessageEditorView: View {
+    @ObservedObject var state: ChatState
+    @Environment(\.dismiss) private var dismiss
+    @State var draft: MessageDraft
+    @State private var errorMessage: String?
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                Picker("役割", selection: $draft.role) {
+                    Text("ユーザー").tag("user")
+                    Text("アシスタント").tag("assistant")
+                    if draft.nodeID != nil && (draft.path.first?.utf8.elementsEqual(draft.nodeID!.utf8) == true || draft.originalRole == "system") {
+                        Text("システム").tag("system")
+                    }
+                }
+                Section("本文") {
+                    TextEditor(text: $draft.text).frame(minHeight: 220)
+                    Text("最初のテキストを編集します。他の本文要素は保持します。")
+                        .font(.footnote).foregroundStyle(.secondary)
+                }
+                if draft.isProtected { Text("保護されたメッセージです。分岐として保存できます。") }
+                if let errorMessage { Text(errorMessage).foregroundStyle(.red) }
+                if draft.nodeID != nil {
+                    Button("上書き保存") { save(.overwrite) }
+                        .disabled(draft.isProtected || !draft.changed)
+                    Button("分岐として保存") { save(.branch) }
+                } else {
+                    Button("追加して保存") { save(.append) }
+                        .disabled(draft.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                }
+            }
+            .navigationTitle(draft.nodeID == nil ? "本文を追加" : "本文を編集")
+            .toolbar { ToolbarItem(placement: .cancellationAction) { Button("取消") { dismiss() } } }
+        }
+    }
+
+    private func save(_ mode: MessageSaveMode) {
+        do { try state.saveMessage(draft, mode: mode); dismiss() }
+        catch { errorMessage = error.localizedDescription }
+    }
+}
+
+
+struct RemoteSettingsView: View {
+    @ObservedObject var state: ChatState
+    @Environment(\.dismiss) private var dismiss
+    @State private var record = RemoteCredentialRecord()
+    @State private var errorMessage: String?
+    var body: some View {
+        NavigationStack {
+            Form {
+                TextField("完了API URL（HTTPS）", text: $record.settings.endpoint).textInputAutocapitalization(.never).autocorrectionDisabled()
+                TextField("モデルID", text: $record.settings.model).textInputAutocapitalization(.never).autocorrectionDisabled()
+                SecureField("API key", text: $record.key)
+                Toggle("streaming", isOn: $record.settings.stream)
+                Text("OpenAI互換remoteの文字列本文と推論に対応します。provider別設定・local生成・評価・token上限制御は未接続です。")
+                    .font(.footnote).foregroundStyle(.secondary)
+                if let errorMessage { Text(errorMessage).foregroundStyle(.red) }
+            }
+            .navigationTitle("remote生成設定")
+            .task { do { record = try RemoteCredentials.load() } catch { errorMessage = error.localizedDescription } }
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) { Button("取消") { dismiss() } }
+                ToolbarItem(placement: .confirmationAction) { Button("保存") {
+                    do { try state.saveRemoteSettings(record); dismiss() } catch { errorMessage = error.localizedDescription }
+                } }
+            }
+        }
+    }
+}

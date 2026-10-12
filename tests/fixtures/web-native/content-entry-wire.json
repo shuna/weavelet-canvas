@@ -1,0 +1,214 @@
+{
+  "fixtureVersion": 1,
+  "description": "Synthetic fake data only. Expected digests frozen from independent Python hashlib canonical JSON; semantic expectations are handwritten.",
+  "snapshot": {
+    "version": 18,
+    "state": {
+      "chats": [
+        {
+          "id": "entry-chat",
+          "title": "FAKE TEST entry chat",
+          "messages": [],
+          "titleSet": true,
+          "imageDetail": "auto",
+          "config": {
+            "model": "FAKE TEST model",
+            "max_tokens": 100,
+            "temperature": 1,
+            "presence_penalty": 0,
+            "top_p": 1,
+            "frequency_penalty": 0
+          },
+          "branchTree": {
+            "rootId": "left",
+            "activePath": [
+              "left",
+              "right"
+            ],
+            "nodes": {
+              "left": {
+                "id": "left",
+                "parentId": null,
+                "role": "user",
+                "contentHash": "left",
+                "createdAt": 1
+              },
+              "right": {
+                "id": "right",
+                "parentId": "left",
+                "role": "user",
+                "contentHash": "right",
+                "createdAt": 1
+              },
+              "delta": {
+                "id": "delta",
+                "parentId": "left",
+                "role": "user",
+                "contentHash": "delta",
+                "createdAt": 1
+              }
+            }
+          }
+        }
+      ],
+      "contentStore": {
+        "left": {
+          "content": [
+            {
+              "type": "text",
+              "text": "FAKE TEST body"
+            }
+          ],
+          "refCount": 1,
+          "xFuture": {
+            "origin": "left",
+            "values": [
+              1,
+              null
+            ]
+          }
+        },
+        "right": {
+          "content": [
+            {
+              "type": "text",
+              "text": "FAKE TEST body"
+            }
+          ],
+          "refCount": 1,
+          "xFuture": {
+            "origin": "right"
+          }
+        },
+        "delta": {
+          "content": [],
+          "refCount": 1,
+          "delta": {
+            "baseHash": "left",
+            "patches": ""
+          },
+          "xFuture": {
+            "origin": "delta"
+          }
+        },
+        "unused": {
+          "content": [
+            {
+              "type": "text",
+              "text": "FAKE TEST unused"
+            }
+          ],
+          "refCount": 0,
+          "xFuture": {
+            "origin": "unused"
+          }
+        }
+      },
+      "branchClipboard": {
+        "nodes": {
+          "clip": {
+            "id": "clip",
+            "parentId": null,
+            "role": "user",
+            "contentHash": "left",
+            "createdAt": 1
+          }
+        },
+        "nodeIds": [
+          "clip"
+        ],
+        "sourceChat": "entry-chat"
+      },
+      "theme": "dark"
+    }
+  },
+  "expected": {
+    "entries": [
+      {
+        "sourceKey": "left",
+        "content": [
+          {
+            "type": "text",
+            "text": "FAKE TEST body"
+          }
+        ],
+        "metadata": {
+          "xFuture": {
+            "origin": "left",
+            "values": [
+              1,
+              null
+            ]
+          }
+        },
+        "references": 2
+      },
+      {
+        "sourceKey": "right",
+        "content": [
+          {
+            "type": "text",
+            "text": "FAKE TEST body"
+          }
+        ],
+        "metadata": {
+          "xFuture": {
+            "origin": "right"
+          }
+        },
+        "references": 1
+      },
+      {
+        "sourceKey": "delta",
+        "content": [
+          {
+            "type": "text",
+            "text": "FAKE TEST body"
+          }
+        ],
+        "metadata": {
+          "xFuture": {
+            "origin": "delta"
+          }
+        },
+        "references": 1
+      },
+      {
+        "sourceKey": "unused",
+        "content": [
+          {
+            "type": "text",
+            "text": "FAKE TEST unused"
+          }
+        ],
+        "metadata": {
+          "xFuture": {
+            "origin": "unused"
+          }
+        },
+        "references": 0
+      }
+    ],
+    "entryIds": {
+      "left": "69977423841f270fca5a2f1095b28d07af7fea259669ef0801f60f7e66c4d58a",
+      "right": "cabf41bbe92eed02faf89eafc37543c6369c480b22f48c9c0005241fc2b1d44d",
+      "delta": "4bffdd63db81690e6552f9d1ea3de7a62c0ebb6b6a05632fdc06c996c9258690",
+      "unused": "2970c8bf8468eae016495031126d4d812655b647099da48ce2fe49f5bdff7345"
+    },
+    "extensionRecords": {
+      "[\"contentEntryFormat\"]": "1",
+      "[\"contentEntries\",\"69977423841f270fca5a2f1095b28d07af7fea259669ef0801f60f7e66c4d58a\"]": "{\"contentId\":\"abf16815aa67b8888a66ca1a6ac5e424538fcc656f1c74adcf00a91ca2ad4806\",\"metadata\":{\"xFuture\":{\"origin\":\"left\",\"values\":[1,null]}}}",
+      "[\"retainedContentEntries\",\"69977423841f270fca5a2f1095b28d07af7fea259669ef0801f60f7e66c4d58a\"]": "true",
+      "[\"contentEntries\",\"cabf41bbe92eed02faf89eafc37543c6369c480b22f48c9c0005241fc2b1d44d\"]": "{\"contentId\":\"abf16815aa67b8888a66ca1a6ac5e424538fcc656f1c74adcf00a91ca2ad4806\",\"metadata\":{\"xFuture\":{\"origin\":\"right\"}}}",
+      "[\"retainedContentEntries\",\"cabf41bbe92eed02faf89eafc37543c6369c480b22f48c9c0005241fc2b1d44d\"]": "true",
+      "[\"contentEntries\",\"4bffdd63db81690e6552f9d1ea3de7a62c0ebb6b6a05632fdc06c996c9258690\"]": "{\"contentId\":\"abf16815aa67b8888a66ca1a6ac5e424538fcc656f1c74adcf00a91ca2ad4806\",\"metadata\":{\"xFuture\":{\"origin\":\"delta\"}}}",
+      "[\"retainedContentEntries\",\"4bffdd63db81690e6552f9d1ea3de7a62c0ebb6b6a05632fdc06c996c9258690\"]": "true",
+      "[\"contentEntries\",\"2970c8bf8468eae016495031126d4d812655b647099da48ce2fe49f5bdff7345\"]": "{\"contentId\":\"ce59ebe7086443c40a811b26a989dd7f8dd29a5889af74146d6bc74907e59d97\",\"metadata\":{\"xFuture\":{\"origin\":\"unused\"}}}",
+      "[\"retainedContentEntries\",\"2970c8bf8468eae016495031126d4d812655b647099da48ce2fe49f5bdff7345\"]": "true",
+      "[\"contentEntryRefs\",\"chats\",\"entry-chat\",\"left\"]": "\"69977423841f270fca5a2f1095b28d07af7fea259669ef0801f60f7e66c4d58a\"",
+      "[\"contentEntryRefs\",\"chats\",\"entry-chat\",\"right\"]": "\"cabf41bbe92eed02faf89eafc37543c6369c480b22f48c9c0005241fc2b1d44d\"",
+      "[\"contentEntryRefs\",\"chats\",\"entry-chat\",\"delta\"]": "\"4bffdd63db81690e6552f9d1ea3de7a62c0ebb6b6a05632fdc06c996c9258690\"",
+      "[\"contentEntryRefs\",\"clipboard\",\"clip\"]": "\"69977423841f270fca5a2f1095b28d07af7fea259669ef0801f60f7e66c4d58a\""
+    }
+  }
+}

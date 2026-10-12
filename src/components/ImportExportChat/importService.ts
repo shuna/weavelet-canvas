@@ -3,6 +3,7 @@ import { showToast } from '@utils/showToast';
 
 import useStore from '@store/store';
 import { createPartializedState } from '@store/store';
+import { mergePersistedStoreState } from '@store/persistence';
 import type { StoreState } from '@store/store';
 import {
   importOpenAIChatExport,
@@ -15,7 +16,7 @@ import {
   validateExportV2,
   validateExportV3,
 } from '@utils/import';
-import { flatMessagesToBranchTree } from '@utils/branchUtils';
+import { flatChatToBranchTree, captureProjectedMessageAttributes } from '@utils/branchUtils';
 import { assignFreshChatIds } from '@utils/chatIdentity';
 import { ContentStoreData, addContent } from '@utils/contentStore';
 import { normalizeSystemPrompt } from '@utils/systemPromptNormalize';
@@ -49,8 +50,7 @@ type StoreSnapshot = {
 const applyPersistedState = (persistedState: ReturnType<typeof createPartializedState>) => {
   const currentState = useStore.getState();
   const nextState: StoreState = {
-    ...currentState,
-    ...persistedState,
+    ...mergePersistedStoreState(currentState, persistedState),
     chats: persistedState.chats?.map((chat) => ({
       ...chat,
       messages: chat.messages ?? [],
@@ -109,6 +109,7 @@ const mergeChats = (chatsToImport: ChatInterface[]) => {
   // Normalize system prompts: migrate system bubbles → config.systemPrompt
   const contentStore = useStore.getState().contentStore ?? {};
   for (const chat of chatsToImport) {
+    captureProjectedMessageAttributes(chat, contentStore);
     try {
       normalizeSystemPrompt(chat, contentStore);
     } catch (e) {
@@ -267,7 +268,7 @@ const importLegacyChats = (
   const contentStore = { ...useStore.getState().contentStore };
   for (const chat of chatsToImport) {
     if (!chat.branchTree) {
-      chat.branchTree = flatMessagesToBranchTree(chat.messages, contentStore);
+      flatChatToBranchTree(chat, contentStore);
     }
   }
   useStore.setState({ contentStore });
@@ -308,16 +309,61 @@ const importExportV3 = (
 
   shiftAndMergeFolders(parsedData.folders);
 
-  const existingContentStore = { ...useStore.getState().contentStore };
+  const currentState = useStore.getState();
+  const existingContentStore = new Map(Object.entries(currentState.contentStore)
+    .map(([hash, entry]) => [hash, { ...entry }]));
   const importedContentStore = parsedData.contentStore as ContentStoreData;
-  for (const [hash, entry] of Object.entries(importedContentStore)) {
-    if (existingContentStore[hash]) {
-      existingContentStore[hash].refCount += entry.refCount;
-    } else {
-      existingContentStore[hash] = { ...entry };
+  const importedEntries = Object.entries(importedContentStore);
+  const reservedHashes = new Set([...existingContentStore.keys(), ...Object.keys(importedContentStore)]);
+  // Missing references must stay missing rather than bind to a newly allocated alias.
+  for (const entry of [...existingContentStore.values(), ...Object.values(importedContentStore)]) {
+    if (entry.delta) reservedHashes.add(entry.delta.baseHash);
+  }
+  for (const chat of [...currentState.chats ?? [], ...chats]) {
+    for (const node of Object.values(chat.branchTree?.nodes ?? {})) reservedHashes.add(node.contentHash);
+  }
+  for (const node of Object.values(currentState.branchClipboard?.nodes ?? {})) reservedHashes.add(node.contentHash);
+  const hashMap = new Map<string, string>();
+  const reserveHash = (hash: string) => {
+    let target = hash;
+    do { target += '_'; } while (reservedHashes.has(target));
+    reservedHashes.add(target);
+    hashMap.set(hash, target);
+  };
+  for (const [hash, entry] of importedEntries) {
+    const existing = existingContentStore.get(hash);
+    if (existing && JSON.stringify({ ...existing, refCount: 0 }) !== JSON.stringify({ ...entry, refCount: 0 })) {
+      reserveHash(hash);
     }
   }
-  useStore.setState({ contentStore: existingContentStore });
+  // A reused delta also needs a new hash if its imported base was remapped.
+  let changed = true;
+  while (changed) {
+    changed = false;
+    for (const [hash, entry] of importedEntries) {
+      if (entry.delta && hashMap.has(entry.delta.baseHash) && !hashMap.has(hash) && existingContentStore.has(hash)) {
+        reserveHash(hash);
+        changed = true;
+      }
+    }
+  }
+  for (const [hash, entry] of importedEntries) {
+    const target = hashMap.get(hash) ?? hash;
+    const imported = deepClone(entry);
+    if (imported.delta) {
+      imported.delta.baseHash = hashMap.get(imported.delta.baseHash) ?? imported.delta.baseHash;
+    }
+    const existing = existingContentStore.get(target);
+    existingContentStore.set(target, existing
+      ? { ...existing, refCount: existing.refCount + imported.refCount }
+      : imported);
+  }
+  for (const chat of chats) {
+    for (const node of Object.values(chat.branchTree?.nodes ?? {})) {
+      node.contentHash = hashMap.get(node.contentHash) ?? node.contentHash;
+    }
+  }
+  useStore.setState({ contentStore: Object.fromEntries(existingContentStore) });
   const chatIdMap = mergeChats(chats);
 
   if (parsedData.evaluationResults) {
@@ -366,7 +412,7 @@ const importExportV2 = (parsedData: ExportV2, t: Translator): ImportResult => {
           }
         }
       } else {
-        chat.branchTree = flatMessagesToBranchTree(chat.messages, contentStore);
+        flatChatToBranchTree(chat, contentStore);
       }
     }
   }
@@ -400,7 +446,7 @@ const importExportV1 = (
     const contentStore = { ...useStore.getState().contentStore };
     for (const chat of parsedData.chats) {
       if (!chat.branchTree) {
-        chat.branchTree = flatMessagesToBranchTree(chat.messages, contentStore);
+        flatChatToBranchTree(chat, contentStore);
       }
     }
     useStore.setState({ contentStore });
@@ -437,7 +483,7 @@ const importOpenAIData = (
   const contentStore = { ...useStore.getState().contentStore };
   for (const chat of chats) {
     if (!chat.branchTree) {
-      chat.branchTree = flatMessagesToBranchTree(chat.messages, contentStore);
+      flatChatToBranchTree(chat, contentStore);
     }
   }
   useStore.setState({ contentStore });

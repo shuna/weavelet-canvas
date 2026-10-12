@@ -1,4 +1,4 @@
-import { applyChanges, SyncConflictError, type Records, type Change } from './records';
+import { applyChanges, isNodeOrderPath, mergeNodeOrderValues, SyncConflictError, type Records, type Change } from './records';
 import { digest } from './crypto';
 
 export interface Commit { version: 1; parents: string[]; changes: Change[]; resolutions?: Record<string, (string | null)[]> }
@@ -18,7 +18,8 @@ export async function replayHistory({ commits, tips }: { commits: Record<string,
   const remaining = new Set([...reachable].sort());
   const latest = (versions: { id: string; value: string | null }[]) =>
     versions.filter((v) => !versions.some((other) => ancestors.get(other.id)?.has(v.id)));
-  const valueOf = (versions: { value: string | null }[]) => {
+  const valueOf = (key: string, versions: { value: string | null }[]) => {
+    if (isNodeOrderPath(JSON.parse(key))) return mergeNodeOrderValues(versions.map(version => version.value));
     const values = new Set(versions.map((v) => v.value));
     if (values.size > 1) throw new SyncConflictError([]);
     return versions[0]?.value ?? null;
@@ -44,9 +45,9 @@ export async function replayHistory({ commits, tips }: { commits: Record<string,
             throw new Error('Invalid conflict resolution parents.');
           }
           parentValue = parents[0]?.value ?? null;
-        } else parentValue = valueOf(parents);
-        await applyChanges(parentValue === null ? {} : { [change.key]: parentValue }, [change]);
-        history.push({ id, value: change.after });
+        } else parentValue = valueOf(change.key, parents);
+        const applied = await applyChanges(parentValue === null ? {} : { [change.key]: parentValue }, [change]);
+        history.push({ id, value: applied[change.key] ?? null });
         histories.set(change.key, history);
       }
       remaining.delete(id); progress = true;
@@ -58,8 +59,8 @@ export async function replayHistory({ commits, tips }: { commits: Record<string,
   for (const [key, history] of histories) {
     const versions = latest(history);
     const values = [...new Set(versions.map(v => v.value))];
-    if (values.length > 1) conflicts[key] = await Promise.all(values.map(v => v === null ? null : digest(v)));
-    const value = versions[0]?.value ?? null;
+    if (values.length > 1 && !isNodeOrderPath(JSON.parse(key))) conflicts[key] = await Promise.all(values.map(v => v === null ? null : digest(v)));
+    const value = isNodeOrderPath(JSON.parse(key)) ? valueOf(key, versions) : versions[0]?.value ?? null;
     if (value !== null) records[key] = value;
   }
   return { records, conflicts };

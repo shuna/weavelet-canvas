@@ -26,9 +26,9 @@ export const cloneChatAtIndex = (
  * Deep-clone a single chat for duplication (clone chat).
  * Uses structuredClone for correctness without full-array deep clone.
  */
-export const deepCloneSingleChat = (chat: ChatInterface): ChatInterface => {
+export const deepCloneSingleChat = (chat: ChatInterface, id: string = uuidv4()): ChatInterface => {
   return {
     ...structuredClone(chat),
-    id: uuidv4(),
+    id,
   };
 };

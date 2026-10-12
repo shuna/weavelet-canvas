@@ -1,4 +1,5 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
+vi.mock('@utils/showToast', () => ({ showToast: vi.fn() }));
 import type { StoreApi } from 'zustand';
 import { createBranchSlice } from './branch-slice';
 import { createChatSlice } from './chat-slice';
@@ -217,5 +218,42 @@ describe('branch history scope', () => {
     get().redoBranch();
     expect(get().contentStore[deltaHash]?.delta?.baseHash).toBe(sharedHash);
     expect(get().contentStore[sharedHash]).toBeDefined();
+  });
+});
+
+
+describe('message editing boundaries', () => {
+  it('blocks protected role and body edits without creating history, then allows explicit unprotect', () => {
+    const get = makeState();
+    get().setChats([chat('a', 'before')]);
+    get().ensureBranchTree(0);
+    const nodeID = get().chats![0].branchTree!.rootId;
+    get().toggleProtectNode(0, 0);
+    const before = get().chats;
+    const history = get().branchHistoryPast;
+    get().updateNodeRole(0, nodeID, 'system');
+    get().upsertWithAutoBranch(0, 0, 'assistant', content('changed'));
+    expect(get().chats).toBe(before);
+    expect(get().branchHistoryPast).toBe(history);
+    get().toggleProtectNode(0, 0);
+    get().updateNodeRole(0, nodeID, 'system');
+    expect(get().chats![0].config.systemPrompt).toBe('before');
+    get().upsertWithAutoBranch(0, 0, 'user', content('changed'));
+    expect(get().chats![0].config.systemPrompt).toBeUndefined();
+    expect(get().chats![0].messages[0].content).toEqual(content('changed'));
+  });
+
+  it('synchronizes system configuration for role-only changes and explicit root branches', () => {
+    const get = makeState();
+    get().setChats([chat('a', 'before')]);
+    get().upsertWithAutoBranch(0, 0, 'system', content('before'));
+    const root = get().chats![0].branchTree!.rootId;
+    expect(get().chats![0].config.systemPrompt).toBe('before');
+    get().createBranch(0, root, content('branched system'));
+    const current = get().chats![0];
+    expect(current.config.systemPrompt).toBe('branched system');
+    expect(resolveContent(get().contentStore, current.branchTree!.nodes[root].contentHash)).toEqual(content('before'));
+    get().upsertWithAutoBranch(0, 0, 'user', content('branched system'));
+    expect(get().chats![0].config.systemPrompt).toBeUndefined();
   });
 });

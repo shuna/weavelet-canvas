@@ -253,11 +253,18 @@ describe('buildExportContentStore', () => {
     const store: ContentStoreData = {};
     const baseHash = addContent(store, lt(''));
     const deltaHash = addContentDelta(store, lt(' exported'), baseHash);
+    Object.assign(store[baseHash], { futureEntry: { flags: [false] } });
+    Object.assign(store[deltaHash], { futureEntry: { delta: 'opaque future value', flags: [true] } });
+    const before = structuredClone(store);
 
     const exported = buildExportContentStore(store);
-    expect(exported[deltaHash].delta).toBeUndefined();
-    expect(exported[deltaHash].content).toEqual(lt(' exported'));
-    expect(exported[baseHash].content).toEqual(lt(''));
+    expect(exported[deltaHash]).toEqual({
+      content: lt(' exported'), refCount: before[deltaHash].refCount,
+      futureEntry: { delta: 'opaque future value', flags: [true] },
+    });
+    expect(exported[deltaHash]).not.toHaveProperty('delta');
+    expect(exported[baseHash]).toEqual(before[baseHash]);
+    expect(store).toEqual(before);
   });
 });
 

@@ -1,3 +1,4 @@
+import { isEqual } from 'lodash';
 import { v4 as uuidv4 } from 'uuid';
 import {
   BranchNode,
@@ -5,6 +6,8 @@ import {
   ChatInterface,
   ContentInterface,
   MessageInterface,
+  MessageAttributesV1,
+  BranchClipboard,
   Role,
 } from '@type/chat';
 import {
@@ -14,13 +17,71 @@ import {
   releaseContent,
 } from './contentStore';
 
+export function readMessageAttributes(owner: BranchTree | BranchClipboard): MessageAttributesV1 | undefined {
+  const value = owner.messageAttributesV1;
+  if (!Object.hasOwn(owner, 'messageAttributesV1')) return undefined;
+  if (!value || value.version !== 1 || !value.byNode || typeof value.byNode !== 'object' || Array.isArray(value.byNode) ||
+      Object.keys(value).some(key => key !== 'version' && key !== 'byNode') ||
+      Object.keys(value.byNode).some(id => !Object.hasOwn(owner.nodes, id)) ||
+      Object.values(value.byNode).some(attributes => !attributes || typeof attributes !== 'object' || Array.isArray(attributes) || Object.hasOwn(attributes, 'role') || Object.hasOwn(attributes, 'content'))) {
+    throw new Error('Unsupported message attributes namespace.');
+  }
+  return value;
+}
+
+const extraMessageAttributes = (message: MessageInterface) => {
+  const { role, content, ...attributes } = message;
+  return attributes as Record<string, unknown>;
+};
+
+export function setMessageAttributes(owner: BranchTree | BranchClipboard, nodeId: string, message: MessageInterface) {
+  const attributes = extraMessageAttributes(message);
+  if (!Object.keys(attributes).length) return;
+  const previous = readMessageAttributes(owner);
+  owner.messageAttributesV1 = { version: 1, byNode: {
+    ...previous?.byNode, [nodeId]: { ...previous?.byNode[nodeId], ...structuredClone(attributes) },
+  } };
+}
+
+export function copyMessageAttributes(source: BranchTree | BranchClipboard, sourceId: string, target: BranchTree | BranchClipboard, targetId: string) {
+  const attributes = readMessageAttributes(source)?.byNode[sourceId];
+  if (!attributes) return;
+  setMessageAttributes(target, targetId, { ...attributes, role: 'user', content: [] });
+}
+
+export function deleteMessageAttributes(owner: BranchTree | BranchClipboard, nodeId: string) {
+  const previous = readMessageAttributes(owner);
+  if (!previous || !Object.hasOwn(previous.byNode, nodeId)) return;
+  const byNode = { ...previous.byNode };
+  delete byNode[nodeId];
+  owner.messageAttributesV1 = { version: 1, byNode };
+}
+
+// Capture only rows with opaque attributes; ordinary redundant projections need no correspondence check.
+export function captureProjectedMessageAttributes(chat: ChatInterface, contentStore: ContentStoreData): void {
+  if (!chat.branchTree) return;
+  let next = chat.branchTree;
+  for (const [index, message] of (chat.messages ?? []).entries()) {
+    const attributes = extraMessageAttributes(message);
+    if (!Object.keys(attributes).length) continue;
+    const nodeId = chat.branchTree.activePath[index], node = chat.branchTree.nodes[nodeId];
+    if (!node || node.role !== message.role || !isEqual(resolveContent(contentStore, node.contentHash), message.content)) throw new Error('Message attributes do not match the active branch.');
+    const existing = readMessageAttributes(next)?.byNode[nodeId];
+    for (const [key, value] of Object.entries(attributes)) if (existing && Object.hasOwn(existing, key) && !isEqual(existing[key], value)) throw new Error('Conflicting projected message attributes.');
+    if (next === chat.branchTree) next = { ...next };
+    setMessageAttributes(next, nodeId, message);
+  }
+  chat.branchTree = next;
+}
+
 export function materializeActivePath(
   tree: BranchTree,
-  contentStore: ContentStoreData
+  contentStore: ContentStoreData,
+  includeAttributes = false
 ): MessageInterface[] {
   return tree.activePath.map((id) => {
     const node = tree.nodes[id];
-    return { role: node.role, content: resolveContent(contentStore, node.contentHash) };
+    return { ...(includeAttributes ? structuredClone(readMessageAttributes(tree)?.byNode[id] ?? {}) : {}), role: node.role, content: resolveContent(contentStore, node.contentHash) };
   });
 }
 
@@ -36,6 +97,7 @@ export function upsertActivePathMessage(
   const existingId = tree.activePath[index];
 
   if (existingId) {
+    setMessageAttributes(tree, existingId, message);
     const oldHash = tree.nodes[existingId].contentHash;
     const newHash = addContent(contentStore, message.content);
     releaseContent(contentStore, oldHash);
@@ -61,6 +123,7 @@ export function upsertActivePathMessage(
     contentHash,
     createdAt: Date.now(),
   };
+  setMessageAttributes(tree, newId, message);
   tree.activePath.push(newId);
 }
 
@@ -94,6 +157,7 @@ export function deleteActivePathMessage(
   });
 
   releaseContent(contentStore, tree.nodes[nodeId].contentHash);
+  deleteMessageAttributes(tree, nodeId);
   delete tree.nodes[nodeId];
   tree.activePath.splice(index, 1);
 }
@@ -104,6 +168,7 @@ export function flatMessagesToBranchTree(
 ): BranchTree {
   const nodes: Record<string, BranchNode> = {};
   const ids: string[] = [];
+  const tree: BranchTree = { nodes, rootId: '', activePath: ids };
 
   for (let i = 0; i < messages.length; i++) {
     const id = uuidv4();
@@ -116,13 +181,26 @@ export function flatMessagesToBranchTree(
       contentHash,
       createdAt: Date.now() - (messages.length - i) * 1000,
     };
+    setMessageAttributes(tree, id, messages[i]);
   }
 
-  return {
-    nodes,
-    rootId: ids[0] ?? '',
-    activePath: ids,
-  };
+  tree.rootId = ids[0] ?? '';
+  return tree;
+}
+
+export function flatChatToBranchTree(chat: ChatInterface, contentStore: ContentStoreData): void {
+  if (chat.branchTree) return;
+  const tree = flatMessagesToBranchTree(chat.messages, contentStore);
+  for (const field of ['collapsedNodes', 'omittedNodes', 'protectedNodes'] as const) {
+    if (!chat[field]) continue;
+    chat[field] = Object.fromEntries(Object.entries(chat[field]!).map(([key, value]) => {
+      const index = Number(key);
+      const id = Number.isInteger(index) && index >= 0 && String(index) === key ? tree.activePath[index] : undefined;
+      return [id ?? key, value];
+    }));
+  }
+  chat.branchTree = tree;
+  chat.messages = materializeActivePath(tree, contentStore);
 }
 
 export function getChildrenOf(

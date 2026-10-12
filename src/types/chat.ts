@@ -112,7 +112,13 @@ export interface BranchNodeLegacy {
   label?: string;
 }
 
+export interface MessageAttributesV1 {
+  version: 1;
+  byNode: Record<string, Record<string, unknown>>;
+}
+
 export interface BranchTree {
+  messageAttributesV1?: MessageAttributesV1;
   nodes: Record<string, BranchNode>;
   rootId: string;
   activePath: string[];
@@ -133,6 +139,7 @@ export interface ChatInterface {
 }
 
 export interface BranchClipboard {
+  messageAttributesV1?: MessageAttributesV1;
   nodeIds: string[];
   sourceChat: string;
   nodes: Record<string, BranchNode>;

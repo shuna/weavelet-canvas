@@ -1,0 +1,6 @@
+diff-match-patch 1.0.5, Apache-2.0, installed Web dependency.
+Source: node_modules/diff-match-patch/index.js
+Source SHA256: 7cead2c7cb3e4ff5c02e173cd6b81d22005e67c47ac2ce28e4b5c73d9ffcfdb2
+Bundled SHA256: 861e5853d42c5b897febfb7a37b062435739d27b1884ccb9dd6a955570b1a7a9
+Bundled by installed esbuild 0.27.3 (--bundle --minify --format=iife --global-name=WeaveletDMP) on 2026-10-12.
+Entry exports default as DiffMatchPatch. No runtime node_modules dependency.

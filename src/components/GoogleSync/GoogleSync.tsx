@@ -44,7 +44,7 @@ import { STORE_VERSION } from '@store/version';
 import GoogleSyncButton, { GoogleSyncButtonHandle } from './GoogleSyncButton';
 import PopupModal from '@components/PopupModal';
 
-import GoogleIcon from '@icon/GoogleIcon';
+import GoogleDriveIcon from '@icon/GoogleDriveIcon';
 import TickIcon from '@icon/TickIcon';
 import RefreshIcon from '@icon/RefreshIcon';
 import DownArrow from '@icon/DownArrow';
@@ -183,7 +183,13 @@ const SyncDirectionInline = ({
   );
 };
 
-const GoogleSync = ({ clientId, openOnMount = false, showEntry = true }: { clientId: string; openOnMount?: boolean; showEntry?: boolean }) => {
+const GoogleSync = ({ clientId, openOnMount = false, showEntry = true, isModalOpen, setIsModalOpen }: {
+  clientId: string;
+  openOnMount?: boolean;
+  showEntry?: boolean;
+  isModalOpen: boolean;
+  setIsModalOpen: React.Dispatch<React.SetStateAction<boolean>>;
+}) => {
   const { t } = useTranslation(['drive']);
 
   const fileId = useGStore((state) => state.fileId);
@@ -215,10 +221,8 @@ const GoogleSync = ({ clientId, openOnMount = false, showEntry = true }: { clien
     });
   };
 
-  const [isModalOpen, setIsModalOpen] = useState<boolean>(openOnMount);
   const [files, setFiles] = useState<GoogleFileResource[]>([]);
   const isSilentRefresh = useRef(false);
-  useEffect(() => { if (showEntry && cloudSync) setIsModalOpen(true); }, [showEntry]);
 
   const initialiseState = async (_googleAccessToken: string, options?: { openModal?: boolean }) => {
     let validated;
@@ -277,7 +281,8 @@ const GoogleSync = ({ clientId, openOnMount = false, showEntry = true }: { clien
           setIsModalOpen(true);
         }}
       >
-        <GoogleIcon /> {t('name')}
+        <GoogleDriveIcon className='w-4 h-4 shrink-0' />
+        <span className='min-w-0 truncate' title={t('name') as string}>{t('name')}</span>
         {cloudSync && <SyncIcon status={syncStatus} />}
       </div>}
       {bannerTarget && !isModalOpen && (syncStatus === 'syncing' || syncStatus === 'error') && createPortal(
@@ -935,7 +940,7 @@ const FileSelector = ({ file, selected, current, syncing, selectable, onSelect, 
   );
 };
 
-const SyncIcon = ({ status }: { status: SyncStatus }) => {
+export const SyncIcon = ({ status }: { status: SyncStatus }) => {
   const statusToIcon = {
     locked: <span aria-label='Locked'>🔒</span>,
     error: <span aria-label='Sync failed'>!</span>,

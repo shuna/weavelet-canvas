@@ -1,0 +1,1370 @@
+{
+  "version": 1,
+  "cases": [
+    {
+      "name": "expanded V3 preserves all five content kinds and metadata",
+      "spec": "accept",
+      "payload": {
+        "version": 3,
+        "chats": [
+          {
+            "id": "chat-1",
+            "title": "交換",
+            "titleSet": true,
+            "folder": "folder-1",
+            "messages": [
+              {
+                "role": "user",
+                "content": [
+                  {
+                    "type": "text",
+                    "text": "本文\n二行目"
+                  },
+                  {
+                    "type": "image_url",
+                    "image_url": {
+                      "url": "https://example.invalid/image.png",
+                      "detail": "auto"
+                    }
+                  },
+                  {
+                    "type": "reasoning",
+                    "text": "検討"
+                  },
+                  {
+                    "type": "tool_call",
+                    "id": "call-1",
+                    "name": "lookup",
+                    "arguments": "{\"q\":\"語\"}"
+                  },
+                  {
+                    "type": "tool_result",
+                    "tool_call_id": "call-1",
+                    "content": "結果"
+                  }
+                ]
+              }
+            ],
+            "config": {
+              "temperature": 0.7,
+              "presence_penalty": 0,
+              "top_p": 1,
+              "frequency_penalty": 0,
+              "model": "gpt-4o",
+              "systemPrompt": ""
+            },
+            "imageDetail": "auto",
+            "branchTree": {
+              "nodes": {
+                "root": {
+                  "id": "root",
+                  "parentId": null,
+                  "role": "user",
+                  "contentHash": "body",
+                  "createdAt": 12,
+                  "label": "開始",
+                  "starred": true,
+                  "pinned": true
+                },
+                "inactive": {
+                  "id": "inactive",
+                  "parentId": "root",
+                  "role": "assistant",
+                  "contentHash": "inactive-body",
+                  "createdAt": 13,
+                  "label": "別応答",
+                  "starred": false,
+                  "pinned": true
+                }
+              },
+              "rootId": "root",
+              "activePath": [
+                "root"
+              ]
+            },
+            "collapsedNodes": {
+              "root": true
+            },
+            "omittedNodes": {
+              "root": false
+            },
+            "protectedNodes": {
+              "root": true
+            }
+          }
+        ],
+        "folders": {
+          "folder-1": {
+            "id": "folder-1",
+            "name": "保存",
+            "order": 0,
+            "expanded": true
+          }
+        },
+        "contentStore": {
+          "body": {
+            "content": [
+              {
+                "type": "text",
+                "text": "本文\n二行目"
+              },
+              {
+                "type": "image_url",
+                "image_url": {
+                  "url": "https://example.invalid/image.png",
+                  "detail": "auto"
+                }
+              },
+              {
+                "type": "reasoning",
+                "text": "検討"
+              },
+              {
+                "type": "tool_call",
+                "id": "call-1",
+                "name": "lookup",
+                "arguments": "{\"q\":\"語\"}"
+              },
+              {
+                "type": "tool_result",
+                "tool_call_id": "call-1",
+                "content": "結果"
+              }
+            ],
+            "refCount": 1
+          },
+          "inactive-body": {
+            "content": [
+              {
+                "type": "text",
+                "text": "非activeの本文"
+              }
+            ],
+            "refCount": 1
+          }
+        }
+      },
+      "observed": {
+        "validator": true,
+        "importSuccess": true,
+        "resolvedBody": [
+          {
+            "type": "text",
+            "text": "本文\n二行目"
+          },
+          {
+            "type": "image_url",
+            "image_url": {
+              "url": "https://example.invalid/image.png",
+              "detail": "auto"
+            }
+          },
+          {
+            "type": "reasoning",
+            "text": "検討"
+          },
+          {
+            "type": "tool_call",
+            "id": "call-1",
+            "name": "lookup",
+            "arguments": "{\"q\":\"語\"}"
+          },
+          {
+            "type": "tool_result",
+            "tool_call_id": "call-1",
+            "content": "結果"
+          }
+        ],
+        "inactiveNode": {
+          "id": "inactive",
+          "parentId": "root",
+          "role": "assistant",
+          "contentHash": "inactive-body",
+          "createdAt": 13,
+          "label": "別応答",
+          "starred": false,
+          "pinned": true
+        },
+        "resolvedInactive": [
+          {
+            "type": "text",
+            "text": "非activeの本文"
+          }
+        ],
+        "exportedInactiveEntry": {
+          "content": [
+            {
+              "type": "text",
+              "text": "非activeの本文"
+            }
+          ],
+          "refCount": 1
+        }
+      }
+    },
+    {
+      "name": "unknown version is rejected by import dispatch only",
+      "spec": "reject",
+      "payload": {
+        "version": 99,
+        "chats": [
+          {
+            "id": "chat-1",
+            "title": "交換",
+            "titleSet": true,
+            "folder": "folder-1",
+            "messages": [
+              {
+                "role": "user",
+                "content": [
+                  {
+                    "type": "text",
+                    "text": "本文\n二行目"
+                  },
+                  {
+                    "type": "image_url",
+                    "image_url": {
+                      "url": "https://example.invalid/image.png",
+                      "detail": "auto"
+                    }
+                  },
+                  {
+                    "type": "reasoning",
+                    "text": "検討"
+                  },
+                  {
+                    "type": "tool_call",
+                    "id": "call-1",
+                    "name": "lookup",
+                    "arguments": "{\"q\":\"語\"}"
+                  },
+                  {
+                    "type": "tool_result",
+                    "tool_call_id": "call-1",
+                    "content": "結果"
+                  }
+                ]
+              }
+            ],
+            "config": {
+              "temperature": 0.7,
+              "presence_penalty": 0,
+              "top_p": 1,
+              "frequency_penalty": 0,
+              "model": "gpt-4o",
+              "systemPrompt": ""
+            },
+            "imageDetail": "auto",
+            "branchTree": {
+              "nodes": {
+                "root": {
+                  "id": "root",
+                  "parentId": null,
+                  "role": "user",
+                  "contentHash": "body",
+                  "createdAt": 12,
+                  "label": "開始",
+                  "starred": true,
+                  "pinned": true
+                }
+              },
+              "rootId": "root",
+              "activePath": [
+                "root"
+              ]
+            },
+            "collapsedNodes": {
+              "root": true
+            },
+            "omittedNodes": {
+              "root": false
+            },
+            "protectedNodes": {
+              "root": true
+            }
+          }
+        ],
+        "folders": {
+          "folder-1": {
+            "id": "folder-1",
+            "name": "保存",
+            "order": 0,
+            "expanded": true
+          }
+        },
+        "contentStore": {
+          "body": {
+            "content": [
+              {
+                "type": "text",
+                "text": "本文\n二行目"
+              },
+              {
+                "type": "image_url",
+                "image_url": {
+                  "url": "https://example.invalid/image.png",
+                  "detail": "auto"
+                }
+              },
+              {
+                "type": "reasoning",
+                "text": "検討"
+              },
+              {
+                "type": "tool_call",
+                "id": "call-1",
+                "name": "lookup",
+                "arguments": "{\"q\":\"語\"}"
+              },
+              {
+                "type": "tool_result",
+                "tool_call_id": "call-1",
+                "content": "結果"
+              }
+            ],
+            "refCount": 1
+          }
+        }
+      },
+      "observed": {
+        "validator": true,
+        "importSuccess": false
+      }
+    },
+    {
+      "name": "invalid stored content is rejected",
+      "spec": "reject",
+      "payload": {
+        "version": 3,
+        "chats": [
+          {
+            "id": "chat-1",
+            "title": "交換",
+            "titleSet": true,
+            "folder": "folder-1",
+            "messages": [
+              {
+                "role": "user",
+                "content": [
+                  {
+                    "type": "text",
+                    "text": "本文\n二行目"
+                  },
+                  {
+                    "type": "image_url",
+                    "image_url": {
+                      "url": "https://example.invalid/image.png",
+                      "detail": "auto"
+                    }
+                  },
+                  {
+                    "type": "reasoning",
+                    "text": "検討"
+                  },
+                  {
+                    "type": "tool_call",
+                    "id": "call-1",
+                    "name": "lookup",
+                    "arguments": "{\"q\":\"語\"}"
+                  },
+                  {
+                    "type": "tool_result",
+                    "tool_call_id": "call-1",
+                    "content": "結果"
+                  }
+                ]
+              }
+            ],
+            "config": {
+              "temperature": 0.7,
+              "presence_penalty": 0,
+              "top_p": 1,
+              "frequency_penalty": 0,
+              "model": "gpt-4o",
+              "systemPrompt": ""
+            },
+            "imageDetail": "auto",
+            "branchTree": {
+              "nodes": {
+                "root": {
+                  "id": "root",
+                  "parentId": null,
+                  "role": "user",
+                  "contentHash": "body",
+                  "createdAt": 12,
+                  "label": "開始",
+                  "starred": true,
+                  "pinned": true
+                }
+              },
+              "rootId": "root",
+              "activePath": [
+                "root"
+              ]
+            },
+            "collapsedNodes": {
+              "root": true
+            },
+            "omittedNodes": {
+              "root": false
+            },
+            "protectedNodes": {
+              "root": true
+            }
+          }
+        ],
+        "folders": {
+          "folder-1": {
+            "id": "folder-1",
+            "name": "保存",
+            "order": 0,
+            "expanded": true
+          }
+        },
+        "contentStore": {
+          "body": {
+            "content": [
+              {
+                "type": "text",
+                "text": 7
+              }
+            ],
+            "refCount": 1
+          }
+        }
+      },
+      "observed": {
+        "validator": false,
+        "importSuccess": false
+      }
+    },
+    {
+      "name": "missing content reference passes and resolves empty",
+      "spec": "reject",
+      "payload": {
+        "version": 3,
+        "chats": [
+          {
+            "id": "chat-1",
+            "title": "交換",
+            "titleSet": true,
+            "folder": "folder-1",
+            "messages": [
+              {
+                "role": "user",
+                "content": [
+                  {
+                    "type": "text",
+                    "text": "本文\n二行目"
+                  },
+                  {
+                    "type": "image_url",
+                    "image_url": {
+                      "url": "https://example.invalid/image.png",
+                      "detail": "auto"
+                    }
+                  },
+                  {
+                    "type": "reasoning",
+                    "text": "検討"
+                  },
+                  {
+                    "type": "tool_call",
+                    "id": "call-1",
+                    "name": "lookup",
+                    "arguments": "{\"q\":\"語\"}"
+                  },
+                  {
+                    "type": "tool_result",
+                    "tool_call_id": "call-1",
+                    "content": "結果"
+                  }
+                ]
+              }
+            ],
+            "config": {
+              "temperature": 0.7,
+              "presence_penalty": 0,
+              "top_p": 1,
+              "frequency_penalty": 0,
+              "model": "gpt-4o",
+              "systemPrompt": ""
+            },
+            "imageDetail": "auto",
+            "branchTree": {
+              "nodes": {
+                "root": {
+                  "id": "root",
+                  "parentId": null,
+                  "role": "user",
+                  "contentHash": "body",
+                  "createdAt": 12,
+                  "label": "開始",
+                  "starred": true,
+                  "pinned": true
+                }
+              },
+              "rootId": "root",
+              "activePath": [
+                "root"
+              ]
+            },
+            "collapsedNodes": {
+              "root": true
+            },
+            "omittedNodes": {
+              "root": false
+            },
+            "protectedNodes": {
+              "root": true
+            }
+          }
+        ],
+        "folders": {
+          "folder-1": {
+            "id": "folder-1",
+            "name": "保存",
+            "order": 0,
+            "expanded": true
+          }
+        },
+        "contentStore": {}
+      },
+      "observed": {
+        "validator": true,
+        "importSuccess": true,
+        "resolvedBody": []
+      }
+    },
+    {
+      "name": "missing active node is rejected",
+      "spec": "reject",
+      "payload": {
+        "version": 3,
+        "chats": [
+          {
+            "id": "chat-1",
+            "title": "交換",
+            "titleSet": true,
+            "folder": "folder-1",
+            "messages": [
+              {
+                "role": "user",
+                "content": [
+                  {
+                    "type": "text",
+                    "text": "本文\n二行目"
+                  },
+                  {
+                    "type": "image_url",
+                    "image_url": {
+                      "url": "https://example.invalid/image.png",
+                      "detail": "auto"
+                    }
+                  },
+                  {
+                    "type": "reasoning",
+                    "text": "検討"
+                  },
+                  {
+                    "type": "tool_call",
+                    "id": "call-1",
+                    "name": "lookup",
+                    "arguments": "{\"q\":\"語\"}"
+                  },
+                  {
+                    "type": "tool_result",
+                    "tool_call_id": "call-1",
+                    "content": "結果"
+                  }
+                ]
+              }
+            ],
+            "config": {
+              "temperature": 0.7,
+              "presence_penalty": 0,
+              "top_p": 1,
+              "frequency_penalty": 0,
+              "model": "gpt-4o",
+              "systemPrompt": ""
+            },
+            "imageDetail": "auto",
+            "branchTree": {
+              "nodes": {
+                "root": {
+                  "id": "root",
+                  "parentId": null,
+                  "role": "user",
+                  "contentHash": "body",
+                  "createdAt": 12,
+                  "label": "開始",
+                  "starred": true,
+                  "pinned": true
+                }
+              },
+              "rootId": "root",
+              "activePath": [
+                "absent"
+              ]
+            },
+            "collapsedNodes": {
+              "root": true
+            },
+            "omittedNodes": {
+              "root": false
+            },
+            "protectedNodes": {
+              "root": true
+            }
+          }
+        ],
+        "folders": {
+          "folder-1": {
+            "id": "folder-1",
+            "name": "保存",
+            "order": 0,
+            "expanded": true
+          }
+        },
+        "contentStore": {
+          "body": {
+            "content": [
+              {
+                "type": "text",
+                "text": "本文\n二行目"
+              },
+              {
+                "type": "image_url",
+                "image_url": {
+                  "url": "https://example.invalid/image.png",
+                  "detail": "auto"
+                }
+              },
+              {
+                "type": "reasoning",
+                "text": "検討"
+              },
+              {
+                "type": "tool_call",
+                "id": "call-1",
+                "name": "lookup",
+                "arguments": "{\"q\":\"語\"}"
+              },
+              {
+                "type": "tool_result",
+                "tool_call_id": "call-1",
+                "content": "結果"
+              }
+            ],
+            "refCount": 1
+          }
+        }
+      },
+      "observed": {
+        "validator": false,
+        "importSuccess": false
+      }
+    },
+    {
+      "name": "delta with valid base and empty patch resolves",
+      "spec": "outside-expanded-v3",
+      "payload": {
+        "version": 3,
+        "chats": [
+          {
+            "id": "chat-1",
+            "title": "交換",
+            "titleSet": true,
+            "folder": "folder-1",
+            "messages": [
+              {
+                "role": "user",
+                "content": [
+                  {
+                    "type": "text",
+                    "text": "本文\n二行目"
+                  },
+                  {
+                    "type": "image_url",
+                    "image_url": {
+                      "url": "https://example.invalid/image.png",
+                      "detail": "auto"
+                    }
+                  },
+                  {
+                    "type": "reasoning",
+                    "text": "検討"
+                  },
+                  {
+                    "type": "tool_call",
+                    "id": "call-1",
+                    "name": "lookup",
+                    "arguments": "{\"q\":\"語\"}"
+                  },
+                  {
+                    "type": "tool_result",
+                    "tool_call_id": "call-1",
+                    "content": "結果"
+                  }
+                ]
+              }
+            ],
+            "config": {
+              "temperature": 0.7,
+              "presence_penalty": 0,
+              "top_p": 1,
+              "frequency_penalty": 0,
+              "model": "gpt-4o",
+              "systemPrompt": ""
+            },
+            "imageDetail": "auto",
+            "branchTree": {
+              "nodes": {
+                "root": {
+                  "id": "root",
+                  "parentId": null,
+                  "role": "user",
+                  "contentHash": "body",
+                  "createdAt": 12,
+                  "label": "開始",
+                  "starred": true,
+                  "pinned": true
+                }
+              },
+              "rootId": "root",
+              "activePath": [
+                "root"
+              ]
+            },
+            "collapsedNodes": {
+              "root": true
+            },
+            "omittedNodes": {
+              "root": false
+            },
+            "protectedNodes": {
+              "root": true
+            }
+          }
+        ],
+        "folders": {
+          "folder-1": {
+            "id": "folder-1",
+            "name": "保存",
+            "order": 0,
+            "expanded": true
+          }
+        },
+        "contentStore": {
+          "body": {
+            "content": [],
+            "refCount": 1,
+            "delta": {
+              "baseHash": "base",
+              "patches": ""
+            }
+          },
+          "base": {
+            "content": [
+              {
+                "type": "text",
+                "text": "本文\n二行目"
+              },
+              {
+                "type": "image_url",
+                "image_url": {
+                  "url": "https://example.invalid/image.png",
+                  "detail": "auto"
+                }
+              },
+              {
+                "type": "reasoning",
+                "text": "検討"
+              },
+              {
+                "type": "tool_call",
+                "id": "call-1",
+                "name": "lookup",
+                "arguments": "{\"q\":\"語\"}"
+              },
+              {
+                "type": "tool_result",
+                "tool_call_id": "call-1",
+                "content": "結果"
+              }
+            ],
+            "refCount": 1
+          }
+        }
+      },
+      "observed": {
+        "validator": true,
+        "importSuccess": true,
+        "resolvedBody": [
+          {
+            "type": "text",
+            "text": "本文\n二行目"
+          },
+          {
+            "type": "image_url",
+            "image_url": {
+              "url": "https://example.invalid/image.png",
+              "detail": "auto"
+            }
+          },
+          {
+            "type": "reasoning",
+            "text": "検討"
+          },
+          {
+            "type": "tool_call",
+            "id": "call-1",
+            "name": "lookup",
+            "arguments": "{\"q\":\"語\"}"
+          },
+          {
+            "type": "tool_result",
+            "tool_call_id": "call-1",
+            "content": "結果"
+          }
+        ]
+      }
+    },
+    {
+      "name": "delta with missing base passes and resolves empty",
+      "spec": "outside-expanded-v3",
+      "payload": {
+        "version": 3,
+        "chats": [
+          {
+            "id": "chat-1",
+            "title": "交換",
+            "titleSet": true,
+            "folder": "folder-1",
+            "messages": [
+              {
+                "role": "user",
+                "content": [
+                  {
+                    "type": "text",
+                    "text": "本文\n二行目"
+                  },
+                  {
+                    "type": "image_url",
+                    "image_url": {
+                      "url": "https://example.invalid/image.png",
+                      "detail": "auto"
+                    }
+                  },
+                  {
+                    "type": "reasoning",
+                    "text": "検討"
+                  },
+                  {
+                    "type": "tool_call",
+                    "id": "call-1",
+                    "name": "lookup",
+                    "arguments": "{\"q\":\"語\"}"
+                  },
+                  {
+                    "type": "tool_result",
+                    "tool_call_id": "call-1",
+                    "content": "結果"
+                  }
+                ]
+              }
+            ],
+            "config": {
+              "temperature": 0.7,
+              "presence_penalty": 0,
+              "top_p": 1,
+              "frequency_penalty": 0,
+              "model": "gpt-4o",
+              "systemPrompt": ""
+            },
+            "imageDetail": "auto",
+            "branchTree": {
+              "nodes": {
+                "root": {
+                  "id": "root",
+                  "parentId": null,
+                  "role": "user",
+                  "contentHash": "body",
+                  "createdAt": 12,
+                  "label": "開始",
+                  "starred": true,
+                  "pinned": true
+                }
+              },
+              "rootId": "root",
+              "activePath": [
+                "root"
+              ]
+            },
+            "collapsedNodes": {
+              "root": true
+            },
+            "omittedNodes": {
+              "root": false
+            },
+            "protectedNodes": {
+              "root": true
+            }
+          }
+        ],
+        "folders": {
+          "folder-1": {
+            "id": "folder-1",
+            "name": "保存",
+            "order": 0,
+            "expanded": true
+          }
+        },
+        "contentStore": {
+          "body": {
+            "content": [],
+            "refCount": 1,
+            "delta": {
+              "baseHash": "absent",
+              "patches": ""
+            }
+          }
+        }
+      },
+      "observed": {
+        "validator": true,
+        "importSuccess": true,
+        "resolvedBody": []
+      }
+    },
+    {
+      "name": "malformed delta patch passes import but resolver throws",
+      "spec": "outside-expanded-v3",
+      "payload": {
+        "version": 3,
+        "chats": [
+          {
+            "id": "chat-1",
+            "title": "交換",
+            "titleSet": true,
+            "folder": "folder-1",
+            "messages": [
+              {
+                "role": "user",
+                "content": [
+                  {
+                    "type": "text",
+                    "text": "本文\n二行目"
+                  },
+                  {
+                    "type": "image_url",
+                    "image_url": {
+                      "url": "https://example.invalid/image.png",
+                      "detail": "auto"
+                    }
+                  },
+                  {
+                    "type": "reasoning",
+                    "text": "検討"
+                  },
+                  {
+                    "type": "tool_call",
+                    "id": "call-1",
+                    "name": "lookup",
+                    "arguments": "{\"q\":\"語\"}"
+                  },
+                  {
+                    "type": "tool_result",
+                    "tool_call_id": "call-1",
+                    "content": "結果"
+                  }
+                ]
+              }
+            ],
+            "config": {
+              "temperature": 0.7,
+              "presence_penalty": 0,
+              "top_p": 1,
+              "frequency_penalty": 0,
+              "model": "gpt-4o",
+              "systemPrompt": ""
+            },
+            "imageDetail": "auto",
+            "branchTree": {
+              "nodes": {
+                "root": {
+                  "id": "root",
+                  "parentId": null,
+                  "role": "user",
+                  "contentHash": "body",
+                  "createdAt": 12,
+                  "label": "開始",
+                  "starred": true,
+                  "pinned": true
+                }
+              },
+              "rootId": "root",
+              "activePath": [
+                "root"
+              ]
+            },
+            "collapsedNodes": {
+              "root": true
+            },
+            "omittedNodes": {
+              "root": false
+            },
+            "protectedNodes": {
+              "root": true
+            }
+          }
+        ],
+        "folders": {
+          "folder-1": {
+            "id": "folder-1",
+            "name": "保存",
+            "order": 0,
+            "expanded": true
+          }
+        },
+        "contentStore": {
+          "body": {
+            "content": [],
+            "refCount": 1,
+            "delta": {
+              "baseHash": "base",
+              "patches": "not a patch"
+            }
+          },
+          "base": {
+            "content": [
+              {
+                "type": "text",
+                "text": "本文\n二行目"
+              },
+              {
+                "type": "image_url",
+                "image_url": {
+                  "url": "https://example.invalid/image.png",
+                  "detail": "auto"
+                }
+              },
+              {
+                "type": "reasoning",
+                "text": "検討"
+              },
+              {
+                "type": "tool_call",
+                "id": "call-1",
+                "name": "lookup",
+                "arguments": "{\"q\":\"語\"}"
+              },
+              {
+                "type": "tool_result",
+                "tool_call_id": "call-1",
+                "content": "結果"
+              }
+            ],
+            "refCount": 1
+          }
+        }
+      },
+      "observed": {
+        "validator": true,
+        "importSuccess": true,
+        "resolveThrows": true
+      }
+    },
+    {
+      "name": "null nodes throws in validator and service returns failure",
+      "spec": "reject",
+      "payload": {
+        "version": 3,
+        "chats": [
+          {
+            "id": "chat-1",
+            "title": "交換",
+            "titleSet": true,
+            "folder": "folder-1",
+            "messages": [
+              {
+                "role": "user",
+                "content": [
+                  {
+                    "type": "text",
+                    "text": "本文\n二行目"
+                  },
+                  {
+                    "type": "image_url",
+                    "image_url": {
+                      "url": "https://example.invalid/image.png",
+                      "detail": "auto"
+                    }
+                  },
+                  {
+                    "type": "reasoning",
+                    "text": "検討"
+                  },
+                  {
+                    "type": "tool_call",
+                    "id": "call-1",
+                    "name": "lookup",
+                    "arguments": "{\"q\":\"語\"}"
+                  },
+                  {
+                    "type": "tool_result",
+                    "tool_call_id": "call-1",
+                    "content": "結果"
+                  }
+                ]
+              }
+            ],
+            "config": {
+              "temperature": 0.7,
+              "presence_penalty": 0,
+              "top_p": 1,
+              "frequency_penalty": 0,
+              "model": "gpt-4o",
+              "systemPrompt": ""
+            },
+            "imageDetail": "auto",
+            "branchTree": {
+              "nodes": null,
+              "rootId": "root",
+              "activePath": [
+                "root"
+              ]
+            },
+            "collapsedNodes": {
+              "root": true
+            },
+            "omittedNodes": {
+              "root": false
+            },
+            "protectedNodes": {
+              "root": true
+            }
+          }
+        ],
+        "folders": {
+          "folder-1": {
+            "id": "folder-1",
+            "name": "保存",
+            "order": 0,
+            "expanded": true
+          }
+        },
+        "contentStore": {
+          "body": {
+            "content": [
+              {
+                "type": "text",
+                "text": "本文\n二行目"
+              },
+              {
+                "type": "image_url",
+                "image_url": {
+                  "url": "https://example.invalid/image.png",
+                  "detail": "auto"
+                }
+              },
+              {
+                "type": "reasoning",
+                "text": "検討"
+              },
+              {
+                "type": "tool_call",
+                "id": "call-1",
+                "name": "lookup",
+                "arguments": "{\"q\":\"語\"}"
+              },
+              {
+                "type": "tool_result",
+                "tool_call_id": "call-1",
+                "content": "結果"
+              }
+            ],
+            "refCount": 1
+          }
+        }
+      },
+      "observed": {
+        "validator": "throws",
+        "importSuccess": false
+      }
+    },
+    {
+      "name": "inactive missing content is not validated",
+      "spec": "reject",
+      "payload": {
+        "version": 3,
+        "chats": [
+          {
+            "id": "chat-1",
+            "title": "交換",
+            "titleSet": true,
+            "folder": "folder-1",
+            "messages": [
+              {
+                "role": "user",
+                "content": [
+                  {
+                    "type": "text",
+                    "text": "本文\n二行目"
+                  },
+                  {
+                    "type": "image_url",
+                    "image_url": {
+                      "url": "https://example.invalid/image.png",
+                      "detail": "auto"
+                    }
+                  },
+                  {
+                    "type": "reasoning",
+                    "text": "検討"
+                  },
+                  {
+                    "type": "tool_call",
+                    "id": "call-1",
+                    "name": "lookup",
+                    "arguments": "{\"q\":\"語\"}"
+                  },
+                  {
+                    "type": "tool_result",
+                    "tool_call_id": "call-1",
+                    "content": "結果"
+                  }
+                ]
+              }
+            ],
+            "config": {
+              "temperature": 0.7,
+              "presence_penalty": 0,
+              "top_p": 1,
+              "frequency_penalty": 0,
+              "model": "gpt-4o",
+              "systemPrompt": ""
+            },
+            "imageDetail": "auto",
+            "branchTree": {
+              "nodes": {
+                "root": {
+                  "id": "root",
+                  "parentId": null,
+                  "role": "user",
+                  "contentHash": "body",
+                  "createdAt": 12,
+                  "label": "開始",
+                  "starred": true,
+                  "pinned": true
+                },
+                "inactive": {
+                  "id": "inactive",
+                  "parentId": "root",
+                  "role": "assistant",
+                  "contentHash": "absent",
+                  "createdAt": 13
+                }
+              },
+              "rootId": "root",
+              "activePath": [
+                "root"
+              ]
+            },
+            "collapsedNodes": {
+              "root": true
+            },
+            "omittedNodes": {
+              "root": false
+            },
+            "protectedNodes": {
+              "root": true
+            }
+          }
+        ],
+        "folders": {
+          "folder-1": {
+            "id": "folder-1",
+            "name": "保存",
+            "order": 0,
+            "expanded": true
+          }
+        },
+        "contentStore": {
+          "body": {
+            "content": [
+              {
+                "type": "text",
+                "text": "本文\n二行目"
+              },
+              {
+                "type": "image_url",
+                "image_url": {
+                  "url": "https://example.invalid/image.png",
+                  "detail": "auto"
+                }
+              },
+              {
+                "type": "reasoning",
+                "text": "検討"
+              },
+              {
+                "type": "tool_call",
+                "id": "call-1",
+                "name": "lookup",
+                "arguments": "{\"q\":\"語\"}"
+              },
+              {
+                "type": "tool_result",
+                "tool_call_id": "call-1",
+                "content": "結果"
+              }
+            ],
+            "refCount": 1
+          }
+        }
+      },
+      "observed": {
+        "validator": true,
+        "importSuccess": true,
+        "resolvedBody": [
+          {
+            "type": "text",
+            "text": "本文\n二行目"
+          },
+          {
+            "type": "image_url",
+            "image_url": {
+              "url": "https://example.invalid/image.png",
+              "detail": "auto"
+            }
+          },
+          {
+            "type": "reasoning",
+            "text": "検討"
+          },
+          {
+            "type": "tool_call",
+            "id": "call-1",
+            "name": "lookup",
+            "arguments": "{\"q\":\"語\"}"
+          },
+          {
+            "type": "tool_result",
+            "tool_call_id": "call-1",
+            "content": "結果"
+          }
+        ],
+        "resolvedInactive": [],
+        "inactiveNode": {
+          "id": "inactive",
+          "parentId": "root",
+          "role": "assistant",
+          "contentHash": "absent",
+          "createdAt": 13
+        },
+        "exportedInactiveEntry": null
+      }
+    }
+  ]
+}

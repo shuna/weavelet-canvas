@@ -1,0 +1,269 @@
+{
+  "fixtureVersion": 1,
+  "flatChat": {
+    "id": "message-chat",
+    "title": "FAKE TEST message attrs",
+    "titleSet": true,
+    "imageDetail": "auto",
+    "config": {
+      "model": "FAKE TEST model",
+      "max_tokens": 100,
+      "temperature": 1,
+      "presence_penalty": 0,
+      "top_p": 1,
+      "frequency_penalty": 0
+    },
+    "messages": [
+      {
+        "role": "user",
+        "content": [
+          {
+            "type": "text",
+            "text": "FAKE TEST first"
+          }
+        ],
+        "id": "FAKE foreign message id",
+        "parentId": "FAKE foreign parent",
+        "contentHash": "FAKE foreign hash",
+        "createdAt": 123,
+        "label": "FAKE message label",
+        "xFuture": {
+          "nested": [
+            null,
+            {
+              "flag": true
+            }
+          ]
+        }
+      },
+      {
+        "role": "assistant",
+        "content": [
+          {
+            "type": "text",
+            "text": "FAKE TEST second"
+          }
+        ],
+        "xFuture": {
+          "origin": "second"
+        },
+        "xNullable": null
+      }
+    ],
+    "omittedNodes": {
+      "0": true
+    },
+    "protectedNodes": {
+      "0": true
+    },
+    "collapsedNodes": {
+      "1": true,
+      "FAKE-existing-uuid": false,
+      "01": false
+    }
+  },
+  "branchedSnapshot": {
+    "version": 18,
+    "state": {
+      "chats": [
+        {
+          "id": "message-chat",
+          "title": "FAKE TEST message attrs",
+          "titleSet": true,
+          "imageDetail": "auto",
+          "config": {
+            "model": "FAKE TEST model",
+            "max_tokens": 100,
+            "temperature": 1,
+            "presence_penalty": 0,
+            "top_p": 1,
+            "frequency_penalty": 0
+          },
+          "messages": [
+            {
+              "role": "user",
+              "content": [
+                {
+                  "type": "text",
+                  "text": "FAKE TEST first"
+                }
+              ],
+              "id": "FAKE foreign message id",
+              "parentId": "FAKE foreign parent",
+              "contentHash": "FAKE foreign hash",
+              "createdAt": 123,
+              "label": "FAKE message label",
+              "xFuture": {
+                "nested": [
+                  null,
+                  {
+                    "flag": true
+                  }
+                ]
+              }
+            },
+            {
+              "role": "assistant",
+              "content": [
+                {
+                  "type": "text",
+                  "text": "FAKE TEST second"
+                }
+              ],
+              "xFuture": {
+                "origin": "second"
+              },
+              "xNullable": null
+            }
+          ],
+          "branchTree": {
+            "rootId": "a",
+            "activePath": [
+              "a",
+              "b"
+            ],
+            "nodes": {
+              "a": {
+                "id": "a",
+                "parentId": null,
+                "role": "user",
+                "contentHash": "first",
+                "createdAt": 1,
+                "label": "FAKE node label",
+                "starred": true,
+                "pinned": true,
+                "xNode": {
+                  "keep": "FAKE node attrs"
+                }
+              },
+              "b": {
+                "id": "b",
+                "parentId": "a",
+                "role": "assistant",
+                "contentHash": "second",
+                "createdAt": 2
+              }
+            },
+            "messageAttributesV1": {
+              "version": 1,
+              "byNode": {
+                "a": {
+                  "xExisting": "FAKE existing attrs"
+                }
+              }
+            }
+          }
+        }
+      ],
+      "contentStore": {
+        "first": {
+          "content": [
+            {
+              "type": "text",
+              "text": "FAKE TEST first"
+            }
+          ],
+          "refCount": 1
+        },
+        "second": {
+          "content": [
+            {
+              "type": "text",
+              "text": "FAKE TEST second"
+            }
+          ],
+          "refCount": 1
+        }
+      },
+      "branchClipboard": null
+    }
+  },
+  "expected": {
+    "flatAttributes": [
+      {
+        "id": "FAKE foreign message id",
+        "parentId": "FAKE foreign parent",
+        "contentHash": "FAKE foreign hash",
+        "createdAt": 123,
+        "label": "FAKE message label",
+        "xFuture": {
+          "nested": [
+            null,
+            {
+              "flag": true
+            }
+          ]
+        }
+      },
+      {
+        "xFuture": {
+          "origin": "second"
+        },
+        "xNullable": null
+      }
+    ],
+    "branchedAttributes": {
+      "a": {
+        "xExisting": "FAKE existing attrs",
+        "id": "FAKE foreign message id",
+        "parentId": "FAKE foreign parent",
+        "contentHash": "FAKE foreign hash",
+        "createdAt": 123,
+        "label": "FAKE message label",
+        "xFuture": {
+          "nested": [
+            null,
+            {
+              "flag": true
+            }
+          ]
+        }
+      },
+      "b": {
+        "xFuture": {
+          "origin": "second"
+        },
+        "xNullable": null
+      }
+    },
+    "editedContent": [
+      {
+        "type": "text",
+        "text": "FAKE TEST edited"
+      }
+    ],
+    "apiMessages": [
+      {
+        "role": "user",
+        "content": [
+          {
+            "type": "text",
+            "text": "FAKE TEST first"
+          }
+        ]
+      },
+      {
+        "role": "assistant",
+        "content": [
+          {
+            "type": "text",
+            "text": "FAKE TEST second"
+          }
+        ]
+      }
+    ],
+    "flatMaps": {
+      "omittedNodes": {
+        "0": true
+      },
+      "protectedNodes": {
+        "0": true
+      },
+      "collapsedNodes": {
+        "1": true,
+        "FAKE-existing-uuid": false,
+        "01": false
+      }
+    }
+  }
+}

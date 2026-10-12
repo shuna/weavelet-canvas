@@ -83,6 +83,10 @@ describe('prepareChatForExport', () => {
       },
     };
 
+    const treeMetadata = { future: { delta: 'opaque future value' } };
+    Object.assign(chat.branchTree!, { futureTree: treeMetadata });
+    Object.assign(contentStore['hash-shared'], { futureEntry: { flags: [true] } });
+    const before = structuredClone({ chat, contentStore });
     const prepared = prepareChatForExport(chat, contentStore, {
       visibleBranchOnly: true,
     });
@@ -96,6 +100,8 @@ describe('prepareChatForExport', () => {
     expect(prepared.chat.collapsedNodes).toEqual({ root: true });
     expect(prepared.chat.omittedNodes).toEqual({ shown: true });
     expect(prepared.chat.protectedNodes).toEqual({ root: true });
+    expect(prepared.chat.branchTree).toHaveProperty('futureTree', treeMetadata);
+    expect(Reflect.get(prepared.chat.branchTree!, 'futureTree')).not.toBe(treeMetadata);
     expect(prepared.contentStore).toEqual({
       'hash-root': {
         content: [{ type: 'text', text: 'hello' }],
@@ -104,8 +110,10 @@ describe('prepareChatForExport', () => {
       'hash-shared': {
         content: [{ type: 'text', text: 'visible reply' }],
         refCount: 1,
+        futureEntry: { flags: [true] },
       },
     });
+    expect({ chat, contentStore }).toEqual(before);
   });
 });
 
@@ -152,10 +160,13 @@ describe('prepareChatForExport with deltas', () => {
     expect(result.contentStore[h2]).toBeUndefined();
   });
 
-  it('resolves deltas in exported content', () => {
+  it.each([false, true])('resolves deltas and retains entry extensions with visibleBranchOnly=%s', visibleBranchOnly => {
     const store: ContentStoreData = {};
     const baseHash = addContent(store, lt(''));
     const deltaHash = addContentDelta(store, lt(' for-export'), baseHash);
+    const entryMetadata = { delta: 'opaque future value', flags: [true] };
+    Object.assign(store[deltaHash], { futureEntry: entryMetadata });
+    const before = structuredClone(store);
 
     const chat: ChatInterface = {
       id: 'c1',
@@ -173,9 +184,14 @@ describe('prepareChatForExport with deltas', () => {
       },
     };
 
-    const result = prepareChatForExport(chat, store);
-    expect(result.contentStore[deltaHash].delta).toBeUndefined();
+    const result = prepareChatForExport(chat, store, { visibleBranchOnly });
+    expect(result.contentStore[deltaHash]).not.toHaveProperty('delta');
     expect(result.contentStore[deltaHash].content).toEqual(lt(' for-export'));
+    expect(result.contentStore[deltaHash]).toHaveProperty('futureEntry', entryMetadata);
+    expect(Reflect.get(result.contentStore[deltaHash], 'futureEntry')).not.toBe(entryMetadata);
+    expect(result.contentStore[deltaHash].refCount).toBe(1);
+    expect(result.contentStore).not.toHaveProperty(baseHash);
+    expect(store).toEqual(before);
   });
 });
 

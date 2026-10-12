@@ -385,13 +385,14 @@ export function buildExportContentStore(
 ): ContentStoreData {
   const exported: ContentStoreData = {};
   for (const [hash, entry] of Object.entries(store)) {
-    if (entry.delta) {
+    const { delta, ...fullEntry } = entry;
+    if (delta) {
       exported[hash] = {
+        ...fullEntry,
         content: resolveContent(store, hash),
-        refCount: entry.refCount,
       };
     } else {
-      exported[hash] = { content: entry.content, refCount: entry.refCount };
+      exported[hash] = fullEntry;
     }
   }
   return exported;
