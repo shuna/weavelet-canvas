@@ -7,7 +7,7 @@ import useStore from '@store/store';
 import Avatar from './Avatar';
 import MessageContent from './MessageContent';
 
-import { ContentInterface, Role, isSplitView, isTextContent } from '@type/chat';
+import { ContentInterface, Role, isSplitView } from '@type/chat';
 import RoleSelector from './RoleSelector';
 import useIsDesktop from '@hooks/useIsDesktop';
 import useCanHover from '@hooks/useCanHover';
@@ -126,13 +126,6 @@ const Message = React.memo(
       return protectedNodes[resolvedNodeId] ?? false;
     });
 
-    const collapsedPreview = (() => {
-      const firstText = content.find(isTextContent);
-      const text = firstText?.text.replace(/\s+/g, ' ').trim() ?? '';
-      if (!text) return `${role} message`;
-      return text.length > 280 ? `${text.slice(0, 280)}...` : text;
-    })();
-
     const handleToggleCollapse = useCallback(() => {
       if (!sticky) {
         if (resolvedNodeId) setNodeCollapsed({ chatId, nodeId: resolvedNodeId, value: !isCollapsed });
@@ -171,9 +164,6 @@ const Message = React.memo(
     const maxWidthClass = isDesktopMenuExpanded
       ? 'md:max-w-3xl lg:max-w-3xl xl:max-w-4xl'
       : 'md:max-w-4xl lg:max-w-4xl xl:max-w-5xl';
-
-    const contentSurfaceClass =
-      'rounded-2xl bg-white/60 px-4 pt-2.5 pb-2 shadow-sm ring-1 ring-black/5 backdrop-blur-sm dark:bg-gray-900/20 dark:ring-white/10 md:px-5 md:pt-3 md:pb-2.5';
 
     return (
       <div
@@ -240,22 +230,16 @@ const Message = React.memo(
               </div>
               <div className='min-w-0' ref={swipeRef}>
                 <BubbleSummaryView nodeId={resolvedNodeId} isCollapsed={isCollapsed} renderSummary={summary => <MessageContent role='user' content={[{ type: 'text', text: normalizeBubbleSummaryText(summary.text) }]} messageIndex={messageIndex} nodeId={resolvedNodeId} summaryId={summary.id} />}>
-                {isCollapsed ? (
-                  <div className={contentSurfaceClass}>
-                    <div className='h-[4.5rem] overflow-hidden py-0 text-sm leading-6 text-gray-700 dark:text-gray-200 whitespace-pre-wrap break-words line-clamp-3'>
-                      {collapsedPreview}
-                    </div>
-                  </div>
-                ) : (
-                  <MessageContent
-                    role={role}
-                    content={content}
-                    messageIndex={messageIndex}
-                    nodeId={resolvedNodeId}
-                    sticky={sticky}
-                    onOpenEvalTab={handleOpenEvalTab}
-                  />
-                )}
+                <MessageContent
+                  role={role}
+                  content={content}
+                  messageIndex={messageIndex}
+                  nodeId={resolvedNodeId}
+                  sticky={sticky}
+                  onOpenEvalTab={handleOpenEvalTab}
+                  isCollapsed={isCollapsed}
+                  onExpand={handleToggleCollapse}
+                />
                 </BubbleSummaryView>
               </div>
               {role === 'user' && resolvedNodeId && !isCollapsed && (

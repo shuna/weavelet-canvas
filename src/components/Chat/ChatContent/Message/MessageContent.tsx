@@ -36,6 +36,8 @@ const MessageContent = ({
   messageIndex,
   nodeId,
   sticky = false,
+  isCollapsed = false,
+  onExpand,
   onOpenEvalTab,
   summaryId,
 }: {
@@ -44,6 +46,8 @@ const MessageContent = ({
   messageIndex: number;
   nodeId?: string;
   sticky?: boolean;
+  isCollapsed?: boolean;
+  onExpand?: () => void;
   summaryId?: string;
   onOpenEvalTab?: (tab?: TabId) => void;
 }) => {
@@ -96,6 +100,8 @@ const MessageContent = ({
           nodeId={nodeId}
           summaryId={summaryId}
           isEditState={isEditState}
+          isCollapsed={isCollapsed}
+          onExpand={onExpand}
           onOpenEvalTab={onOpenEvalTab}
           editSessionKey={editSessionKey}
         />

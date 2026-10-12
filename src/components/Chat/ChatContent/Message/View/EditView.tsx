@@ -39,7 +39,7 @@ export const MessageEditForm = ({ logic, role, messageIndex, sticky = false, aut
             }}
             placeholder={sticky ? t('submitPlaceholder') as string : undefined}
             autoFocus={autoFocus}
-            autoResize={sticky}
+            autoResize
             minHeight='5.25rem'
           />
         </div>
