@@ -23,7 +23,7 @@ import {
 } from '@utils/import';
 import { flatMessagesToBranchTree, materializeActivePath } from '@utils/branchUtils';
 import { assignFreshChatIds } from '@utils/chatIdentity';
-import { ContentStoreData, addContent, resolveContent, validateDeltaIntegrity } from '@utils/contentStore';
+import { ContentStoreData, addContent, computeContentHash, resolveContent, validateDeltaIntegrity } from '@utils/contentStore';
 import { prepareChatForExport } from '@utils/chatExport';
 import { isStreamingContentHash } from '@utils/streamingBuffer';
 import { normalizeSystemPrompt } from '@utils/systemPromptNormalize';
@@ -654,6 +654,67 @@ export type ImportPreviewSource = {
   folders: FolderCollection;
   contentStore: ContentStoreData;
   evaluationResults: EvaluationResultMap;
+  recoveredContentCount?: number;
+  unavailableContent?: Record<string, string[]>;
+};
+
+type PreviewChat = ChatInterface & { __previewMissingContent?: string[] };
+
+// Repair only the detached file data. Missing bodies stay explicit and cannot be imported.
+const prepareMissingPreviewContent = (chats: unknown[], store: ContentStoreData, t: Translator) => {
+  const originalHashes = new Set(Object.keys(store));
+  const retained = new Map<string, ContentStoreData[string]['content'] | null>();
+  const references: { chat: Record<string, unknown>; node: Record<string, unknown>; hash: string }[] = [];
+  let recovered = 0;
+  const asContent = (value: unknown) => {
+    const content = typeof value === 'string' ? [{ type: 'text', text: value }] : value;
+    return validateExportV3({ version: 3, chats: [], folders: {},
+      contentStore: { candidate: { content, refCount: 1 } } } as ExportV3)
+      ? content as ContentStoreData[string]['content'] : undefined;
+  };
+  for (const value of chats) {
+    if (!isRecord(value)) continue;
+    delete value.__previewMissingContent;
+    const tree = value.branchTree;
+    if (!isRecord(tree) || !isRecord(tree.nodes)) continue;
+    for (const node of Object.values(tree.nodes)) {
+      if (!isRecord(node) || typeof node.contentHash !== 'string' ||
+          originalHashes.has(node.contentHash) || isStreamingContentHash(node.contentHash)) continue;
+      const hash = node.contentHash;
+      let content = asContent(node.content);
+      const path = tree.activePath;
+      const messages = value.messages;
+      if (!content && Array.isArray(path) && Array.isArray(messages) && path.length === messages.length) {
+        const message = messages[path.indexOf(node.id)];
+        if (isRecord(message) && message.role === node.role) {
+          const candidate = asContent(message.content);
+          if (candidate) {
+            const candidateHash = computeContentHash(candidate);
+            // Suffixes distinguish collisions; never trust a stale positional message alone.
+            if (hash === candidateHash || (hash.startsWith(candidateHash) && /^_+$/.test(hash.slice(candidateHash.length)))) content = candidate;
+          }
+        }
+      }
+      references.push({ chat: value, node, hash });
+      if (content) {
+        const previous = retained.get(hash);
+        retained.set(hash, previous === undefined ? content
+          : JSON.stringify(previous) === JSON.stringify(content) ? previous : null);
+      }
+    }
+  }
+  for (const { chat, node, hash } of references) {
+    let content = retained.get(hash);
+    if (content) recovered++;
+    else {
+      const missing = (chat.__previewMissingContent ??= []) as string[];
+      missing.push(hash);
+      content = [{ type: 'text', text: t('preview.missingContent', { ns: 'import', hash }) }];
+    }
+    node.contentHash = addContent(store, content);
+    delete node.content;
+  }
+  return recovered;
 };
 
 const validatePreviewSource = (source: ImportPreviewSource) => {
@@ -710,14 +771,17 @@ export const prepareImportPreview = async (file: File, t: Translator): Promise<I
   // Reject transient hashes before any converter can resolve the live streaming buffer.
   const rawChats = isRecord(payload) && Array.isArray(payload.chats) ? payload.chats
     : Array.isArray(payload) ? payload : [payload];
+  let recoveredContentCount = 0;
   if (isRecord(payload) && isRecord(payload.contentStore)) {
     const contentStore = payload.contentStore as unknown as ContentStoreData;
+    if (!validateExportV3({ version: 3, chats: [], folders: {}, contentStore })) throw new Error('Invalid content store');
     for (const [hash, entry] of Object.entries(contentStore)) {
       if (isStreamingContentHash(hash) || (entry?.delta && isStreamingContentHash(entry.delta.baseHash))) {
         throw new Error('Streaming content cannot be previewed');
       }
     }
     if (validateDeltaIntegrity(contentStore).size) throw new Error('Invalid delta content');
+    recoveredContentCount = prepareMissingPreviewContent(rawChats, contentStore, t);
     const hashedChats = rawChats.map(chat => isRecord(chat) && isRecord(chat.branchTree) && isRecord(chat.branchTree.nodes)
       ? { ...chat, branchTree: { ...chat.branchTree, nodes: Object.fromEntries(
           Object.entries(chat.branchTree.nodes).filter(([, node]) => isRecord(node) && node.contentHash !== undefined),
@@ -743,6 +807,12 @@ export const prepareImportPreview = async (file: File, t: Translator): Promise<I
   const { result, plan } = await importParsedData(base, parsed, type, t, false, 'replace', false);
   if (!result.success) throw new Error(result.message);
   const source = previewSourceFromPlan(plan);
+  source.recoveredContentCount = recoveredContentCount;
+  source.unavailableContent = {};
+  for (const chat of source.chats as PreviewChat[]) {
+    if (chat.__previewMissingContent?.length) source.unavailableContent[chat.id] = chat.__previewMissingContent;
+    delete chat.__previewMissingContent;
+  }
   validatePreviewSource(source);
   return source;
 };
@@ -790,6 +860,9 @@ const buildPreviewAppendPatch = (
   validatePreviewSource(source);
   const selectedIds = new Set(ids);
   const selected = source.chats.filter(chat => selectedIds.has(chat.id));
+  if (selected.some(chat => source.unavailableContent?.[chat.id]?.length)) {
+    throw new Error(t('preview.cannotImportMissingContent', { ns: 'import' }));
+  }
   const includedFolderIds = new Set(options.selectedFolderIds);
   if (selected.length !== selectedIds.size || [...includedFolderIds].some(id => !Object.hasOwn(source.folders, id))) {
     throw new Error(t('notifications.nothingImported', { ns: 'import' }));

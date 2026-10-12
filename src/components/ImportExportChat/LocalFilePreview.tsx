@@ -47,6 +47,8 @@ export default function LocalFilePreview({ source, fileName }: { source: ImportP
         <span>{t('preview.selectionCount', { chats: selectedIds.length, folders: selectedFolderIds.length, defaultValue: 'チャット {{chats}} 件・フォルダ {{folders}} 件' })}</span>
         <button type='button' aria-label={pendingSave ? 'Retry saving imported chats' : 'Import selected chats'} className='btn btn-small btn-primary' disabled={busy || (!pendingSave && !selectedIds.length && !selectedFolderIds.length)} onClick={commit}>{pendingSave ? t('preview.retrySave', '保存を再試行') : t('preview.importSelection', '選択項目を取り込む')}</button>
         <button type='button' aria-label='Cancel preview' className='btn btn-small btn-neutral' disabled={busy} onClick={close}>{t('preview.cancel', 'キャンセル')}</button>
+        {!!source.recoveredContentCount && <p role='status' className='w-full'>{t('preview.recoveredContent', { count: source.recoveredContentCount })}</p>}
+        {!!Object.keys(source.unavailableContent ?? {}).length && <p role='status' className='w-full text-amber-800 dark:text-amber-200'>{t('preview.unavailableContent', { count: Object.keys(source.unavailableContent ?? {}).length })} {source.chats.filter(chat => source.unavailableContent?.[chat.id]?.length).map(chat => chat.title).join('、')}</p>}
         {error && <p role='alert' className='w-full whitespace-pre-wrap text-red-600'>{pendingSave ? t('preview.pendingSave', '取り込みは完了しましたが、保存に失敗しました。保存だけを再試行できます。') : ''} {error}</p>}
       </div>
       <Menu />

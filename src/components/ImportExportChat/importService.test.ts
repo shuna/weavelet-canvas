@@ -817,7 +817,7 @@ describe('importService', () => {
     expect(JSON.stringify(source)).toBe(sourceJson);
   });
 
-  it('rejects corrupt nonactive branch content, circular parents/deltas and streaming references without committing', async () => {
+  it('allows missing nonactive bodies to be browsed but rejects circular parents/deltas and streaming references', async () => {
     const store: ContentStoreData = {};
     const chat = createChat('invalid');
     chat.branchTree = flatMessagesToBranchTree(chat.messages, store);
@@ -829,7 +829,11 @@ describe('importService', () => {
         hidden: { ...root, id: 'hidden', parentId: 'hidden' } } } },
       { ...chat, branchTree: { ...chat.branchTree, nodes: { [root.id]: { ...root, contentHash: '__streaming:["live","node"]' } } } },
     ];
-    for (const invalid of invalids) {
+    const partial = await prepareImportPreview(new File([JSON.stringify({ version: 3,
+      chats: [invalids[0]], folders: {}, contentStore: store,
+    })], 'partial.json'), t);
+    expect(partial.unavailableContent?.[partial.chats[0].id]).toEqual(['missing']);
+    for (const invalid of invalids.slice(1)) {
       await expect(prepareImportPreview(new File([JSON.stringify({ version: 3,
         chats: [invalid], folders: {}, contentStore: store,
       })], 'invalid.json'), t)).rejects.toThrow();
@@ -845,6 +849,83 @@ describe('importService', () => {
     })], 'cyclic.json'), t)).rejects.toThrow();
     expect(testContext.setState).not.toHaveBeenCalled();
     expect(testContext.saveChatData).not.toHaveBeenCalled();
+  });
+
+  it('recovers a missing body only from a matching retained active-path copy', async () => {
+    const chat = createChat('recoverable');
+    const store: ContentStoreData = {};
+    chat.branchTree = flatMessagesToBranchTree(chat.messages, store);
+    const node = chat.branchTree.nodes[chat.branchTree.rootId];
+    delete store[node.contentHash];
+    const source = await prepareImportPreview(new File([JSON.stringify({ version: 3,
+      chats: [chat], folders: {}, contentStore: store,
+    })], 'recoverable.json'), t);
+    expect(source.recoveredContentCount).toBe(1);
+    expect(source.unavailableContent).toEqual({});
+    expect(source.chats[0].messages[0].content).toEqual(chat.messages[0].content);
+    const result = await importSelectedPreview(source, [source.chats[0].id], t);
+    expect(result.success).toBe(true);
+  });
+
+  it('keeps unavailable content explicit, rejects its import and allows healthy chats in the same file', async () => {
+    const missing = createChat('missing');
+    const healthy = createChat('healthy');
+    missing.messages = [{ role: 'user', content: [{ type: 'text', text: 'actual missing body' }] }];
+    const store: ContentStoreData = {};
+    missing.branchTree = flatMessagesToBranchTree(missing.messages, store);
+    healthy.branchTree = flatMessagesToBranchTree(healthy.messages, store);
+    const node = missing.branchTree.nodes[missing.branchTree.rootId];
+    const originalHash = node.contentHash;
+    missing.messages = [{ role: 'user', content: [{ type: 'text', text: 'stale different body' }] }];
+    delete store[originalHash];
+    delete store[healthy.branchTree.nodes[healthy.branchTree.rootId].contentHash];
+    // The healthy chat still has an authoritative inline active-path copy.
+    const source = await prepareImportPreview(new File([JSON.stringify({ version: 3,
+      chats: [missing, healthy], folders: {}, contentStore: store,
+    })], 'partial.json'), t);
+    const missingChat = source.chats.find(chat => source.unavailableContent?.[chat.id]?.length)!;
+    const healthyChat = source.chats.find(chat => !source.unavailableContent?.[chat.id]?.length)!;
+    expect(source.recoveredContentCount).toBe(1);
+    expect(source.unavailableContent?.[missingChat.id]).toEqual([originalHash]);
+    expect(missingChat.messages[0].content).toEqual([{ type: 'text', text: 'preview.missingContent' }]);
+    expect((await importSelectedPreview(source, [missingChat.id, healthyChat.id], t)).success).toBe(false);
+    expect(testContext.setState).not.toHaveBeenCalled();
+    expect(testContext.saveChatData).not.toHaveBeenCalled();
+    expect((await importSelectedPreview(source, [healthyChat.id], t)).success).toBe(true);
+    expect(testContext.storeState.chats[0].messages[0].content).toEqual(healthy.messages[0].content);
+  });
+
+  it('recovers inline node content in a legacy remote snapshot without consulting the live workspace', async () => {
+    const chat = createChat('legacy');
+    chat.branchTree = { rootId: 'root', activePath: ['root'], nodes: {
+      root: { id: 'root', parentId: null, role: 'user', createdAt: 1, contentHash: 'missing',
+        content: [{ type: 'text', text: 'inline retained body' }] } as any,
+    } };
+    const source = await prepareImportPreview(new File([JSON.stringify({ version: 17,
+      state: { chats: [chat], contentStore: {}, folders: {} },
+    })], 'legacy.json'), t);
+    expect(source.recoveredContentCount).toBe(1);
+    expect(source.unavailableContent).toEqual({});
+    expect(source.chats[0].messages[0].content).toEqual([{ type: 'text', text: 'inline retained body' }]);
+    expect(testContext.setState).not.toHaveBeenCalled();
+    expect(testContext.saveChatData).not.toHaveBeenCalled();
+  });
+
+  it('recovers repeated missing references from another retained copy of the same hash', async () => {
+    const first = createChat('first');
+    const second = createChat('second');
+    const store: ContentStoreData = {};
+    first.branchTree = flatMessagesToBranchTree(first.messages, store);
+    second.branchTree = flatMessagesToBranchTree(second.messages, store);
+    const hash = first.branchTree.nodes[first.branchTree.rootId].contentHash;
+    first.messages = [];
+    delete store[hash];
+    const source = await prepareImportPreview(new File([JSON.stringify({ version: 3,
+      chats: [first, second], folders: {}, contentStore: store,
+    })], 'shared.json'), t);
+    expect(source.recoveredContentCount).toBe(2);
+    expect(source.unavailableContent).toEqual({});
+    expect(source.chats.every(chat => chat.messages[0].content[0].type === 'text' && chat.messages[0].content[0].text === 'hello')).toBe(true);
   });
 
   it('rejects empty/unknown selections and retries committed save failures without duplicating chats', async () => {

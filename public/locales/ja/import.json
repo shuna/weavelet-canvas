@@ -44,6 +44,10 @@
     "clearSelection": "選択解除",
     "selectionCount": "選択: チャット {{chats}} 件・フォルダ {{folders}} 件",
     "importSelection": "選択項目を取り込む",
-    "importFolderName": "インポート: {{fileName}}"
+    "importFolderName": "インポート: {{fileName}}",
+    "missingContent": "本文欠損: 元ファイルに参照先の本文がありません（{{hash}}）。",
+    "recoveredContent": "ファイル内に残っていた本文から{{count}}件の欠損参照を復元しました。",
+    "unavailableContent": "{{count}}件のチャットに本文欠損があります。閲覧できますが、これらのチャットは取り込めません。",
+    "cannotImportMissingContent": "本文欠損のあるチャットが選択されています。欠損チャットの選択を解除してから取り込んでください。"
   }
 }
