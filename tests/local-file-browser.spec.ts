@@ -232,6 +232,7 @@ test('ordinary append groups the complete file under a new import folder', async
   await page.locator('input[type="file"][accept*=".json"]').first().setInputFiles({
     name: 'ordinary-import.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(source)),
   });
+  await page.getByText('ファイル全体を取り込む', { exact: true }).click();
   await page.getByRole('button', { name: 'インポート', exact: true }).click();
   await expect.poll(() => page.evaluate(async () => {
     const { default: store } = await import(/* @vite-ignore */ '/src/store/store.ts');
@@ -251,6 +252,37 @@ test('ordinary append groups the complete file under a new import folder', async
   expect(result.selected).toBe('source-0');
 });
 
+test('missing bodies remain browseable and only complete chats can be imported', async ({ page }) => {
+  const source = await fixture(page);
+  const damaged = source.chats[0];
+  const hash = damaged.branchTree.nodes.root.contentHash;
+  delete source.contentStore[hash];
+  damaged.messages = [];
+  await openFile(page, source);
+  const before = await liveSnapshot(page);
+  const bar = page.getByRole('region', { name: 'Local file preview', exact: true });
+  await expect(bar).toContainText('本文欠損');
+  await expect(bar).toContainText('File alpha');
+  await expect(page.locator('[data-chat-scroller]')).toContainText(`本文欠損: 元ファイルに参照先の本文がありません（${hash}）。`);
+  await expect(page.locator('[data-chat-scroller]')).toContainText('Visible answer 0');
+  const sidebar = page.locator('#menu');
+  const missing = sidebar.getByRole('checkbox', { name: 'Select chat: File alpha', exact: true });
+  await missing.check();
+  await page.getByRole('button', { name: 'Import selected chats', exact: true }).click();
+  await expect(page.getByRole('alert')).toContainText('欠損チャットの選択を解除');
+  expect(await liveSnapshot(page)).toBe(before);
+  await missing.uncheck();
+  await sidebar.getByRole('checkbox', { name: 'Select chat: File beta', exact: true }).check();
+  await page.getByRole('button', { name: 'Import selected chats', exact: true }).click();
+  await expect(bar).toHaveCount(0);
+  const titles = await page.evaluate(async () => {
+    const { default: store } = await import(/* @vite-ignore */ '/src/store/store.ts');
+    return store.getState().chats.map(chat => chat.title);
+  });
+  expect(titles).toEqual(expect.arrayContaining(['File beta', 'Live selected chat']));
+  expect(titles).not.toContain('File alpha');
+});
+
 test('preview toolbar remains reachable above the mobile sidebar and backdrop', async ({ page }, testInfo) => {
   const source = await fixture(page);
   await openFile(page, source);
@@ -266,4 +298,28 @@ test('preview toolbar remains reachable above the mobile sidebar and backdrop', 
   await page.screenshot({ path: testInfo.outputPath('local-file-preview-mobile.png') });
   await cancel.click();
   await expect(bar).toHaveCount(0);
+});
+
+
+test('import dialog keeps file selection and preview primary at desktop and mobile widths', async ({ page }) => {
+  const source = await fixture(page);
+  await page.locator('#menu').getByText('インポート / エクスポート', { exact: true }).click();
+  const modal = page.locator('#modal-root');
+  await expect(modal.getByRole('button', { name: 'Browse import file', exact: true })).toBeDisabled();
+  await expect(modal.locator('input[type=radio]')).toHaveCount(7);
+  await expect(modal.locator('input[type=radio]').first()).not.toBeVisible();
+  await page.locator('input[type="file"][accept*=".json"]').first().setInputFiles({
+    name: '2026-05-20-long-filename.json.gz', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(source)),
+  });
+  for (const width of [1280, 390]) {
+    await page.setViewportSize({ width, height: 850 });
+    await expect(modal.getByRole('button', { name: 'Browse import file', exact: true })).toBeVisible();
+    await expect(modal.getByText('2026-05-20-long-filename.json.gz', { exact: true })).toBeVisible();
+    expect(await modal.evaluate(el => el.scrollWidth <= window.innerWidth)).toBe(true);
+    await page.screenshot({ path: `/tmp/weavelet-import-layout-${width}.png` });
+  }
+  await modal.getByText('ファイル全体を取り込む', { exact: true }).click();
+  await expect(modal.locator('input[type=radio]').first()).toBeVisible();
+  await modal.getByText('ローカルデータを全置換', { exact: true }).click();
+  await expect(modal.getByText('設定も含める', { exact: true })).toBeVisible();
 });

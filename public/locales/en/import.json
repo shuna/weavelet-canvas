@@ -11,6 +11,7 @@
       "chatsImported": "{{imported}} chats were imported out of {{total}}.",
       "unsupportedModels": "Unsupported model(s): {{models}} are not available. Add them in AI Provider Settings → Custom tab before importing."
     },
+    "importEntireFile": "Import entire file",
     "mode": {
       "append": "Append to existing data",
       "replace": "Replace all local data"
@@ -44,6 +45,10 @@
     "clearSelection": "Clear selection",
     "selectionCount": "Selected: {{chats}} chats · {{folders}} folders",
     "importSelection": "Import selection",
-    "importFolderName": "Import: {{fileName}}"
+    "importFolderName": "Import: {{fileName}}",
+    "missingContent": "Missing content: this body is absent from the source file ({{hash}}).",
+    "recoveredContent": "Recovered {{count}} missing references from bodies retained in the file.",
+    "unavailableContent": "{{count}} chats contain missing bodies. You can browse them, but cannot import these chats.",
+    "cannotImportMissingContent": "Chats with missing bodies are selected. Deselect these chats before importing."
   }
 }

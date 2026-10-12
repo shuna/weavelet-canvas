@@ -24,7 +24,7 @@ export default function DriveImport({ file }: { file?: File }) {
     catch (error) { setMessage(error instanceof Error ? error.message : String(error)); }
     finally { setBusy(false); }
   };
-  return <details className='mt-3 text-xs text-gray-600 dark:text-gray-300'>
+  return <details className='mt-4 border-t border-gray-200 pt-4 text-sm text-gray-700 dark:border-gray-600 dark:text-gray-300'>
     <summary className='cursor-pointer'>{t('drive.title')}</summary>
     <div className='flex items-center gap-1 text-xs text-gray-500 dark:text-gray-400'>{t('drive.title')}<InfoTooltip text={t('drive.description')} /></div>
     {!token ? <p>{t('drive.connect')}</p> : <div className='space-y-2'>
