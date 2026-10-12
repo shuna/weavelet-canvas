@@ -59,7 +59,7 @@ const CloudSync = () => {
         >
           <RefreshIcon className='w-4 h-4 shrink-0' />
           <span className='min-w-0 truncate' title='クラウド同期'>クラウド同期</span>
-          {isActive && !showGoogleStatus && (
+          {isActive && !expanded && !showGoogleStatus && (
             <span className='ml-auto shrink-0' role='img' aria-label={providerLabels[selectedProvider]} title={providerLabels[selectedProvider]}>
               {selectedProvider === 'google' ? <GoogleDriveIcon className='w-4 h-4' /> : selectedProvider === 'cloudkit' ? <CloudIcon className='w-4 h-4' /> : providerLabels[selectedProvider]}
             </span>
