@@ -1,4 +1,4 @@
-import { localAxisPrompt, localAxisScore, localModeration, localQualityResult, localSafetyPolicy, parseLocalQualityResponse } from '../../src/utils/localEvaluationCore';
+import { localAxisPrompt, localAxisScore, localModeration, localModerationModelID, localQualityResult, localSafetyPolicy, parseLocalQualityResponse } from '../../src/utils/localEvaluationCore';
 import { hardOpenRouterConstraints } from '../../src/utils/openrouterRequest';
 import { buildJudgeRequest, buildSafetyRequest, parseJudgeResponse, parseSafetyResponse } from '../../src/utils/evaluationCore';
 import { resolveEvalContextCore } from '../../src/utils/evaluationContextCore';
@@ -25,6 +25,7 @@ type Input =
   | {operation: 'localQualityResult'; outputs: Partial<Record<keyof QualityScores, string>>; now: number}
   | {operation: 'localParse'; raw: string; now: number}
   | {operation: 'localModeration'; labels: {label: string; score: number}[]; now: number}
+  | {operation: 'localModerationModel'; state: {localModelEnabled?: boolean; activeLocalModels?: {analysis?: string | null; moderation?: string | null}}}
   | {operation: 'localPolicy'; safetyEngine: SafetyEngineMode; hybridRemoteOnSafe: boolean; localSafety?: LocalModerationResult}
   | {operation: 'defaults'}
   | {operation: 'display'; result: EvaluationResult; safetyThresholds?: typeof defaultSafetyThresholds; qualityThresholds?: typeof defaultQualityThresholds}
@@ -61,6 +62,7 @@ export function evaluation(json: string): string {
     case 'localQualityResult': return JSON.stringify(localQualityResult(input.outputs, input.now));
     case 'localParse': return JSON.stringify(parseLocalQualityResponse(input.raw, input.now));
     case 'localModeration': return JSON.stringify(localModeration(input.labels, input.now));
+    case 'localModerationModel': return JSON.stringify(localModerationModelID(input.state.localModelEnabled === true, input.state.activeLocalModels ?? {}));
     case 'localPolicy': return JSON.stringify(localSafetyPolicy(input.safetyEngine, input.hybridRemoteOnSafe, input.localSafety));
     case 'defaults': return JSON.stringify({evaluationSettings: defaultEvaluationSettings, safetyThresholds: defaultSafetyThresholds, qualityThresholds: defaultQualityThresholds});
     case 'display': {

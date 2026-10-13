@@ -11,7 +11,7 @@ import { useCallback } from 'react';
 import useStore from '@store/store';
 import { runSafetyCheck, runQualityEvaluation } from '@api/evaluation';
 import { runLocalModeration, runLocalQualityEvaluation } from '@api/localEvaluation';
-import { localSafetyPolicy } from '@utils/localEvaluationCore';
+import { localSafetyPolicy, localModerationModelID } from '@utils/localEvaluationCore';
 import { autoEvaluationPlan } from '@utils/evaluationAutoCore';
 import { applyAutoEvaluationResult } from '@utils/evaluationState';
 import {
@@ -60,8 +60,7 @@ async function runEvaluationForPhase(
   const settings = store.evaluationSettings;
   const { userText, assistantText, safetyText, shouldSafety, shouldQuality } = autoEvaluationPlan({phase, userContent, assistantContent, settings});
   const analysisModelId = store.localModelEnabled ? (store.activeLocalModels.analysis ?? null) : null;
-  const moderationModelId = store.localModelEnabled
-    ? (analysisModelId ?? store.activeLocalModels.moderation ?? null) : null;
+  const moderationModelId = localModerationModelID(store.localModelEnabled, store.activeLocalModels);
   const key = evaluationResultKey(ctx.chatId, ctx.nodeId, phase);
 
   if (!shouldSafety && !shouldQuality) return;

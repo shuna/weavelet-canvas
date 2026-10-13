@@ -25606,6 +25606,9 @@ ${messageContent}---
   }
 
   // src/utils/localEvaluationCore.ts
+  function localModerationModelID(enabled, active) {
+    return enabled ? active.analysis ?? active.moderation ?? null : null;
+  }
   var WARN_THRESHOLD = 0.5;
   var BLOCK_THRESHOLD = 0.8;
   function isPositiveLabel(label) {
@@ -26295,6 +26298,8 @@ ${text}`;
         return JSON.stringify(parseLocalQualityResponse(input.raw, input.now));
       case "localModeration":
         return JSON.stringify(localModeration(input.labels, input.now));
+      case "localModerationModel":
+        return JSON.stringify(localModerationModelID(input.state.localModelEnabled === true, input.state.activeLocalModels ?? {}));
       case "localPolicy":
         return JSON.stringify(localSafetyPolicy(input.safetyEngine, input.hybridRemoteOnSafe, input.localSafety));
       case "defaults":

@@ -7,7 +7,7 @@
 
 import { localModelRuntime, promptAsInput, type LocalModelOwnerId } from '@src/local-llm/runtime';
 import type { LocalModerationResult, StandardQualityEvaluationResult, QualityScores, AxisProgressState } from '@type/evaluation';
-import { localModeration, localAxisPrompt, localQualityResult } from '@utils/localEvaluationCore';
+import { localModeration, localModerationModelID, localAxisPrompt, localQualityResult } from '@utils/localEvaluationCore';
 import { qualityAxisKeys } from '@type/evaluation';
 import type { LocalModelTask } from '@src/local-llm/types';
 import useStore from '@store/store';
@@ -37,7 +37,7 @@ export async function runLocalModeration(
   text: string,
   ownerId?: LocalModelOwnerId,
   signal?: AbortSignal,
-  modelId = getActiveModelId('analysis') ?? getActiveModelId('moderation'),
+  modelId = localModerationModelID(useStore.getState().localModelEnabled, useStore.getState().activeLocalModels),
 ): Promise<LocalModerationResult> {
   if (signal?.aborted) throw new DOMException('Aborted', 'AbortError');
   if (!modelId) {

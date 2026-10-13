@@ -1,6 +1,10 @@
 import type { LocalModerationResult, StandardQualityEvaluationResult, QualityScores, SafetyEngineMode } from '@type/evaluation';
 import { qualityAxisKeys } from '@type/evaluation';
 
+export function localModerationModelID(enabled: boolean, active: {analysis?: string | null; moderation?: string | null}): string | null {
+  return enabled ? active.analysis ?? active.moderation ?? null : null;
+}
+
 /** Screening thresholds for classification scores */
 const WARN_THRESHOLD = 0.5;
 const BLOCK_THRESHOLD = 0.8;

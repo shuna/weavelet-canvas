@@ -4,6 +4,14 @@ import { evaluation } from '../../shared/google-sync/evaluation';
 const run = (input: object) => JSON.parse(evaluation(JSON.stringify(input)));
 
 describe('shared local evaluation', () => {
+  it('retains the actual Web analysis-first moderation selection including empty IDs', () => {
+    const activeLocalModels = {analysis: 'analysis', moderation: 'moderation', future: 'opaque'};
+    expect(run({operation: 'localModerationModel', state: {localModelEnabled: true, activeLocalModels}})).toBe('analysis');
+    expect(run({operation: 'localModerationModel', state: {localModelEnabled: false, activeLocalModels}})).toBeNull();
+    expect(run({operation: 'localModerationModel', state: {localModelEnabled: true, activeLocalModels: {moderation: 'moderation'}}})).toBe('moderation');
+    expect(run({operation: 'localModerationModel', state: {localModelEnabled: true, activeLocalModels: {...activeLocalModels, analysis: ''}}})).toBe('');
+    expect(run({operation: 'localModerationModel', state: {}})).toBeNull();
+  });
   it('keeps axis order and truncates prompt inputs before generation', () => {
     expect(run({operation: 'localAxes'})).toEqual(['taskCompletion', 'faithfulness', 'coherence', 'conciseness', 'instructionFollowing']);
     const request = run({operation: 'localPrompt', axis: 'faithfulness', text: 'x'.repeat(450), assistantResponse: 'y'.repeat(450), language: 'ja-JP'});
