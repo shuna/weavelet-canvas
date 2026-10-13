@@ -72,18 +72,18 @@ final class RemoteGenerationTests: XCTestCase {
         var chats = try saved.required("chats").array("chats")
         let chatID = try XCTUnwrap(state.conversation).id
         let index = try XCTUnwrap(chats.firstIndex { $0["id"] == .string(chatID) })
-        let config = try chats[index].required("config").replacing("providerId",with:.string("openrouter")).replacing("reasoning_effort",with:.string("none"))
+        let config = try chats[index].required("config").replacing("model",with:.string("anthropic/claude-opus-5.5")).replacing("stream",with:.bool(false)).replacing("providerId",with:.string("openrouter")).replacing("reasoning_effort",with:.string("none"))
         chats[index] = chats[index].replacing("config",with:config)
         let modelState = try OrderedJSON.decode(Data(#"{"favoriteModels":[{"modelId":"anthropic/claude-opus-5.5","providerId":"openrouter","supportsReasoning":true,"reasoningMandatory":true,"xRaw":{"huge":9007199254740993,"decimal":1.2300}}],"providerModelCache":{},"providerCustomModels":{}}"#.utf8))
         let roots = try modelState.object("modelState")
         try state.applySnapshot(.object([.init(key:"version",value:snapshot.required("version")),.init(key:"state",value:.object([.init(key:"chats",value:.array(chats))] + roots))]))
         let source = try XCTUnwrap(state.exchange).source, sourceBytes = try source.encoded(), before = try state.publicationSnapshot().encoded()
         var credentials = record(stream:false)
-        credentials.settings.model = "anthropic/claude-opus-5.5"
+        credentials.settings.model = "unused-device-model"
         let direct = try RemoteRequest.make(source:source,chatID:chatID,path:XCTUnwrap(state.conversation).visibleMessages.map(\.id),settings:credentials.settings,key:credentials.key,modelState:modelState)
         let directBody = try OrderedJSON.decode(XCTUnwrap(direct.httpBody))
         XCTAssertEqual(directBody["reasoning"]?["effort"],.string("low"))
-        XCTAssertEqual(directBody["model"],.string(credentials.settings.model)); XCTAssertEqual(directBody["stream"],.bool(false))
+        XCTAssertEqual(directBody["model"],.string("anthropic/claude-opus-5.5")); XCTAssertEqual(directBody["stream"],.bool(false))
         XCTAssertEqual(try source.encoded(),sourceBytes); XCTAssertEqual(try state.publicationSnapshot().encoded(),before)
         let remote = client()
         FakeRemoteProtocol.packets = [.init(bytes:try fixture().required("responses").required("nonstream").encoded())]
@@ -118,9 +118,13 @@ final class RemoteGenerationTests: XCTestCase {
     private func record(stream: Bool = true) -> RemoteCredentialRecord {
         RemoteCredentialRecord(settings: RemoteSettings(endpoint: "https://fixture.invalid/v1/chat/completions", model: "fake-model", stream: stream), key: "FAKE")
     }
-    private func state(_ store: LocalStateStore) throws -> ChatState {
+    private func state(_ store: LocalStateStore, stream: Bool = true) throws -> ChatState {
         let state = ChatState(store: store)
-        try state.importWebData(fixture().required("cases").array("cases")[0].required("source").encoded())
+        var source = try fixture().required("cases").array("cases")[0].required("source")
+        var chats = try source.required("chats").array("chats")
+        chats[0] = chats[0].replacing("config",with:try chats[0].required("config").replacing("stream",with:.bool(stream)))
+        source = source.replacing("chats",with:.array(chats))
+        try state.importWebData(source.encoded())
         return state
     }
     private func wait(_ predicate: () -> Bool) async throws {
@@ -170,7 +174,9 @@ final class RemoteGenerationTests: XCTestCase {
             XCTAssertEqual(request.url?.absoluteString, try expected.required("endpoint").string("endpoint"))
             for header in try expected.required("headers").object("headers") { XCTAssertEqual(request.value(forHTTPHeaderField: header.key), try header.value.string("header")) }
             let body = try OrderedJSON.decode(XCTUnwrap(request.httpBody))
-            XCTAssertEqual(try SyncRecords.canonical(body), try SyncRecords.canonical(expected.required("body")))
+            // The fixture's device override is superseded by the saved conversation's stream.
+            let expectedBody = try expected.required("body").replacing("stream",with:source.required("chats").array("chats")[0].required("config").required("stream"))
+            XCTAssertEqual(try SyncRecords.canonical(body), try SyncRecords.canonical(expectedBody))
             XCTAssertEqual(source["apiKey"], .string("FAKE-imported-not-request-key"))
             XCTAssertThrowsError(try RemoteRequest.make(source: source, chatID: "remote", path: [], settings: RemoteSettings(endpoint: "http://fixture.invalid", model: "fake-model"), key: "FAKE"))
         }
@@ -178,14 +184,15 @@ final class RemoteGenerationTests: XCTestCase {
     func testNonstreamAndStreamingSaveAssistantRestartExportAndPreserveOldData() async throws {
         for streaming in [false, true] {
             let store = try store()
-            let state = try state(store)
+            let state = try state(store,stream:streaming)
             let old = try XCTUnwrap(state.exchange).source
             let client = client()
             FakeRemoteProtocol.packets = streaming ? try streamPackets() : [.init(bytes: try fixture().required("responses").required("nonstream").encoded())]
+            // Device stream deliberately disagrees: the parser must use the final request.
             if streaming {
                 let imageOnly = OrderedJSON.array([.object([.init(key:"type",value:.string("image_url")),.init(key:"image_url",value:.object([.init(key:"url",value:.string("data:image/png;base64,FAKE_ONLY")),.init(key:"detail",value:.string("auto"))]))])])
-                try state.startGeneration(parts:imageOnly,record:record(stream:true),client:client)
-            } else { try state.startGeneration(input:"New user",record:record(stream:false),client:client) }
+                try state.startGeneration(parts:imageOnly,record:record(stream:false),client:client)
+            } else { try state.startGeneration(input:"New user",record:record(stream:true),client:client) }
             try await wait { state.generation == nil }
             XCTAssertNil(state.generationError)
             let source = try XCTUnwrap(state.exchange).source
@@ -218,7 +225,9 @@ final class RemoteGenerationTests: XCTestCase {
         let client = client()
         FakeRemoteProtocol.packets = [.init(bytes: Data("data: {\"choices\":[{\"delta\":{\"content\":\"Partial\"}}]}\n\n".utf8)), .init(bytes: Data("data: {\"choices\":[{\"delta\":{\"content\":\" LATE\"}}]}\n\ndata: [DONE]\n\n".utf8), delay: 0.1)]
         FakeRemoteProtocol.holdLast = true
+        let configDraft = try state.chatConfigDraft()
         try state.startGeneration(input: "Stop", record: record(), client: client)
+        XCTAssertThrowsError(try state.saveChatConfig(configDraft))
         try await wait { state.generation?.output.text == "Partial" }
         XCTAssertNotNil(FakeRemoteProtocol.releaseLast)
         state.stopGeneration()
@@ -252,7 +261,7 @@ final class RemoteGenerationTests: XCTestCase {
     }
     func testSaveFailuresRetainInputSourceDiskAndUnpublishedOutputForRetry() async throws {
         let store = try store()
-        let state = try state(store)
+        let state = try state(store,stream:false)
         let client = client()
         FakeRemoteProtocol.packets = [.init(bytes: try fixture().required("responses").required("nonstream").encoded(), delay: 0.05)]
         let original = state.exchange?.source
@@ -291,7 +300,7 @@ final class RemoteGenerationTests: XCTestCase {
     }
     func testSourceReplacementInvalidatesOldSessionAndRejectsLateCompletion() async throws {
         let store = try store()
-        let state = try state(store)
+        let state = try state(store,stream:false)
         let client = client()
         FakeRemoteProtocol.packets = [.init(bytes: try fixture().required("responses").required("nonstream").encoded(), delay: 0.1)]
         FakeRemoteProtocol.holdLast = true
@@ -304,7 +313,7 @@ final class RemoteGenerationTests: XCTestCase {
         XCTAssertNil(state.generation)
         XCTAssertEqual(state.exchange?.source, changed)
     }
-    func testSettingsFailureKeepsPublishedAndStoredRecordThenNewSettingsAffectRequest() throws {
+    func testSettingsFailureKeepsRecordAndSavedChatModelWinsWithLegacyFallback() throws {
         let state = ChatState()
         var stored = record(stream: false)
         try state.loadRemoteSettings(read: { stored })
@@ -319,9 +328,16 @@ final class RemoteGenerationTests: XCTestCase {
         let source = try fixture().required("cases").array("cases")[0].required("source")
         let request = try RemoteRequest.make(source: source, chatID: "remote", path: [], settings: stored.settings, key: stored.key)
         let body = try OrderedJSON.decode(XCTUnwrap(request.httpBody))
-        XCTAssertEqual(body["model"], .string("fake-changed"))
+        XCTAssertEqual(body["model"], .string("fake-model"))
         XCTAssertEqual(body["stream"], .bool(true))
         XCTAssertEqual(request.value(forHTTPHeaderField: "Authorization"), "Bearer FAKE-new")
+        var legacyChats = try source.required("chats").array("chats")
+        legacyChats[0] = legacyChats[0].replacing("config",with:try legacyChats[0].required("config").replacing("model",with:.string("")))
+        let legacy = source.replacing("chats",with:.array(legacyChats)), before = try legacy.encoded()
+        let fallback = try RemoteRequest.make(source:legacy,chatID:"remote",path:[],settings:stored.settings,key:stored.key)
+        let fallbackBody = try OrderedJSON.decode(XCTUnwrap(fallback.httpBody))
+        XCTAssertEqual(fallbackBody["model"],.string("fake-changed")); XCTAssertEqual(fallbackBody["stream"],.bool(true))
+        XCTAssertEqual(try legacy.encoded(),before)
     }
     func testMalformedEventsMultilineAndUnsupportedResponseAreRejected() throws {
         var parser = RemoteSSE()

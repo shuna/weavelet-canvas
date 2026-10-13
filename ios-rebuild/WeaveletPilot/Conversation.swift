@@ -289,6 +289,22 @@ final class ChatState: ObservableObject {
         navigationFocus = focus.map { NavigationFocus(nodeID: $0) }
     }
 
+    func chatConfigDraft() throws -> ChatConfigDraft {
+        guard let exchange, let conversation else { throw ExchangeError.invalid("保存済み会話を選択してください") }
+        guard let chat = try exchange.source.required("chats").array("chats").first(where:{ try $0.required("id").string("id").utf8.elementsEqual(conversation.id.utf8) }) else { throw ExchangeError.invalid("chat ID") }
+        let snapshot = try publicationSnapshot()
+        return try ChatConfigDraft(chatID:conversation.id,source:exchange.source,snapshot:snapshot,modelState:ChatConfig.modelState(in:snapshot.required("state")),config:chat["config"] ?? ChatDefaults.webInitial().config)
+    }
+    func saveChatConfig(_ draft: ChatConfigDraft, now: Double = Date().timeIntervalSince1970 * 1000) throws {
+        guard generation == nil else { throw ExchangeError.invalid("生成結果を保存してから設定してください") }
+        guard let exchange, exchange.source == draft.source, try publicationSnapshot() == draft.snapshot else { throw ExchangeError.invalid("会話または設定が変更されました。設定を開き直してください") }
+        var chats = try exchange.source.required("chats").array("chats")
+        guard let index = try chats.firstIndex(where:{ try $0.required("id").string("id").utf8.elementsEqual(draft.chatID.utf8) }) else { throw ExchangeError.invalid("chat ID") }
+        if chats[index]["config"] == draft.config { return }
+        chats[index] = chats[index].replacing("config",with:draft.config)
+        try applyLibrary(exchange.source.replacing("chats",with:.array(chats)),selectedID:selectedID,now:now)
+    }
+
     func nodeOptionsDraft(nodeID: String) throws -> NodeOptionsDraft {
         guard let exchange, let conversation,
               let node = conversation.nodes.first(where: { $0.id.utf8.elementsEqual(nodeID.utf8) }) else { throw ExchangeError.invalid("メッセージがありません") }
@@ -520,17 +536,16 @@ final class ChatState: ObservableObject {
         let changed = try WebExchange(source: source)
         let path = changed.conversations.first { $0.identity == conversation.identity }!.visibleMessages.map(\.id)
         let savedState = try publicationSnapshot().required("state")
-        let modelState = OrderedJSON.object(["favoriteModels", "providerModelCache", "providerCustomModels"].compactMap { key in
-            savedState[key].map { JSONField(key:key,value:$0) }
-        })
+        let modelState = ChatConfig.modelState(in:savedState)
         let request = try RemoteRequest.make(source: source, chatID: conversation.id, path: path, settings: record.settings, key: record.key, modelState:modelState)
+        let streaming = try RemoteRequest.streaming(request)
         try applyLibrary(source, selectedID: conversation.id, resetViewFor: conversation.id, editing: history, now: now)
         let id = UUID()
         generation = ActiveGeneration(id: id, chatID: conversation.id, baseSource: try publishedSource(), path: path)
         generationError = nil
         generationTask = Task { @MainActor [weak self] in
             do {
-                try await client.complete(request, streaming: record.settings.stream) { [weak self] output in
+                try await client.complete(request, streaming: streaming) { [weak self] output in
                     guard let self, self.generation?.id == id, self.generation?.running == true,
                           self.exchange?.source == self.generation?.baseSource else { return }
                     self.generation?.output = output

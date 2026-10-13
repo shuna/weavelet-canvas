@@ -37,6 +37,7 @@ struct ChatView: View {
     @State private var exportDocument: WebJSONDocument?
     @State private var errorMessage: String?
     @State private var draft: MessageDraft?
+    @State private var configDraft: ChatConfigDraft?
     @State private var optionsDraft: NodeOptionsDraft?
     @State private var removalDraft: NodeRemovalDraft?
     @State private var showsRemoval = false
@@ -117,6 +118,10 @@ struct ChatView: View {
                         }
                         if let generationError = state.generationError { Text(generationError).foregroundStyle(.red) }
                         if state.exchange != nil {
+                            Button("会話の生成設定",systemImage:"slider.horizontal.3") {
+                                do { configDraft = try state.chatConfigDraft() }
+                                catch { errorMessage = error.localizedDescription }
+                            }.disabled(state.generation != nil)
                             TextField("送信する本文", text: Binding(
                                 get: { state.composerDraft(chatID:conversation.id).text },
                                 set: { text in
@@ -285,6 +290,7 @@ struct ChatView: View {
             .overlay { if isPreparingImport { ProgressView("取り込み内容を確認中").padding().background(.regularMaterial, in: RoundedRectangle(cornerRadius: 12)) } }
             .sheet(item: $draft) { draft in MessageEditorView(state: state, draft: draft) }
             .sheet(item: $clipboardDraft) { draft in BranchClipboardView(state: state, draft: draft) }
+            .sheet(item: $configDraft) { draft in ChatConfigView(state:state,draft:draft) }
             .sheet(item: $optionsDraft) { draft in NodeOptionsView(state: state, draft: draft) }
             .sheet(isPresented: $showsSearch) {
                 ChatSearchView(state: state) { result, mode in
@@ -1036,10 +1042,10 @@ struct RemoteSettingsView: View {
         NavigationStack {
             Form {
                 TextField("完了API URL（HTTPS）", text: $record.settings.endpoint).textInputAutocapitalization(.never).autocorrectionDisabled()
-                TextField("モデルID", text: $record.settings.model).textInputAutocapitalization(.never).autocorrectionDisabled()
+                TextField("旧会話用の予備モデルID", text: $record.settings.model).textInputAutocapitalization(.never).autocorrectionDisabled()
                 SecureField("API key", text: $record.key)
-                Toggle("streaming", isOn: $record.settings.stream)
-                Text("OpenAI互換remoteの文字列本文と推論に対応します。provider別設定・local生成・評価・token上限制御は未接続です。")
+                Toggle("旧会話用の予備streaming", isOn: $record.settings.stream)
+                Text("endpointとAPI keyは端末に保存します。modelとstreamingは会話設定を優先し、モデル未設定の旧会話だけ予備値を使います。local生成・評価は未接続です。")
                     .font(.footnote).foregroundStyle(.secondary)
                 if let errorMessage { Text(errorMessage).foregroundStyle(.red) }
             }

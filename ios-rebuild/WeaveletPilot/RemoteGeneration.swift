@@ -17,8 +17,8 @@ struct RemoteSettings: Codable, Equatable {
     var stream = true
     func validatedURL() throws -> URL {
         guard let url = URL(string: endpoint.trimmingCharacters(in: .whitespacesAndNewlines)), url.scheme == "https", url.host != nil,
-              url.user == nil, url.password == nil, !model.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
-            throw ExchangeError.invalid("HTTPSの完了API URLとモデルを設定してください")
+              url.user == nil, url.password == nil else {
+            throw ExchangeError.invalid("HTTPSの完了API URLを設定してください")
         }
         return url
     }
@@ -45,7 +45,12 @@ enum RemoteRequest {
         let chat = try source.required("chats").array("chats").first { try $0.required("id").string("ID").utf8.elementsEqual(chatID.utf8) }
         guard let chat else { throw ExchangeError.invalid("chat ID") }
         var config = try chat["config"] ?? ChatDefaults.webInitial().config
-        config = config.replacing("model", with: .string(settings.model)).replacing("stream", with: .bool(settings.stream))
+        let savedModel = try config["model"]?.string("model") ?? ""
+        if savedModel.trimmingCharacters(in:.whitespacesAndNewlines).isEmpty {
+            config = config.replacing("model",with:.string(settings.model)).replacing("stream",with:.bool(settings.stream))
+        }
+        guard case .string(let model) = config["model"], !model.trimmingCharacters(in:.whitespacesAndNewlines).isEmpty else { throw ExchangeError.invalid("会話のモデルIDを設定してください") }
+        guard config["modelSource"] != .string("local") else { throw ExchangeError.invalid("localモデルの生成は未対応です") }
         var boundary = SharedWebProjection()
         let store = try boundary.store(source["contentStore"] ?? .object([]))
         var contextChat = chat
@@ -74,6 +79,11 @@ enum RemoteRequest {
         request.httpBody = try body.encoded()
         return request
     }
+    static func streaming(_ request: URLRequest) throws -> Bool {
+        guard let bytes = request.httpBody else { throw ExchangeError.invalid("生成要求の本文がありません") }
+        return try OrderedJSON.decode(bytes).required("stream").boolean("stream")
+    }
+
 }
 
 struct RemoteOutput {
