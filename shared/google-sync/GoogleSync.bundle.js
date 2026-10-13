@@ -7492,6 +7492,7 @@ var WeaveletGoogleSync = (() => {
     libraryOperation: () => libraryOperation,
     localGenerationInput: () => localGenerationInput,
     localGenerationOutput: () => localGenerationOutput,
+    localModelImport: () => localModelImport,
     localModelRole: () => localModelRole,
     messageAttributesOperation: () => messageAttributesOperation,
     messageEdit: () => messageEdit,
@@ -20976,6 +20977,53 @@ ${text}`;
       activeLocalModels: input.state.activeLocalModels
     };
     return JSON.stringify({ changes: diffJSONChanges(before, mutateLocalModelRole(before, input)) });
+  }
+
+  // src/utils/localModelImport.ts
+  var sanitizeModelIdSegment = (value) => value.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 48) || "model";
+  function singleGGUFDefinition(name, hash, size) {
+    return {
+      id: `local-file--${hash.slice(0, 16)}--${sanitizeModelIdSegment(name)}`,
+      engine: "wllama",
+      tasks: ["generation", "analysis"],
+      label: name,
+      origin: name,
+      source: "opfs",
+      manifest: { kind: "single-file", entrypoint: name },
+      fileSize: size,
+      lastFileName: name
+    };
+  }
+  function autoAssignImportedModel(active, model) {
+    const next = { ...active };
+    for (const task of model.tasks)
+      if (!next[task])
+        next[task] = model.id;
+    return next;
+  }
+  function prepareSingleGGUFImport(name, hash, size, candidates = [], existingModel, existingIDs) {
+    const proposed = singleGGUFDefinition(name, hash, size);
+    const duplicate = existingModel ?? candidates.find(({ model, hash: storedHash, size: storedSize }) => model.engine === "wllama" && model.manifest.kind === "single-file" && storedHash === hash && (!storedSize || storedSize === size))?.model;
+    if (!duplicate && (existingIDs ?? candidates.map(({ model }) => model.id)).includes(proposed.id))
+      throw new Error("A different model already uses this ID.");
+    return { model: duplicate ?? proposed, existing: !!duplicate };
+  }
+  function commitSingleGGUFImport(state, model, existingIDs) {
+    const current = existingIDs ? existingIDs.includes(model.id) : state.localModels.some((entry) => entry.id === model.id);
+    return {
+      ...state,
+      localModels: current ? state.localModels : [...state.localModels, model],
+      activeLocalModels: autoAssignImportedModel(state.activeLocalModels, model)
+    };
+  }
+
+  // shared/google-sync/localModelImport.ts
+  function localModelImport(json) {
+    const input = JSON.parse(json);
+    if (input.operation === "prepare")
+      return JSON.stringify(prepareSingleGGUFImport(input.name, input.hash, input.size, input.candidates, input.existingModel, input.existingIDs));
+    const before = { localModels: input.state.localModels, activeLocalModels: input.state.activeLocalModels };
+    return JSON.stringify({ changes: diffJSONChanges(before, commitSingleGGUFImport(before, input.model, input.existingIDs)) });
   }
 
   // shared/google-sync/entry.ts

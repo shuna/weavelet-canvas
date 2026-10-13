@@ -202,3 +202,5 @@ export { usageCost } from "./usageCost";
 export { evaluation } from './evaluation';
 
 export { localModelRole } from './localModelRole';
+
+export { localModelImport } from './localModelImport';

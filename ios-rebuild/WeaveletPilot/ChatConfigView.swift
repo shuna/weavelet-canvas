@@ -50,6 +50,12 @@ struct LocalModelSettingsView: View {
                     Text("ファイルの保存先は端末ごとに異なります。役割とモデル定義はWebと共通です。")
                         .font(.footnote).foregroundStyle(.secondary)
                 }
+                Section("新しいモデル") {
+                    Button("単一GGUFを登録") { importingModelID = nil; showsImporter = true }
+                        .frame(minHeight:44)
+                    Text("選択したファイルをこの端末に保存し、空いている生成・分析の役割に割り当てます。")
+                        .font(.footnote).foregroundStyle(.secondary)
+                }
                 Section("保存済みのモデル定義") {
                     if models.isEmpty { Text("登録済みのモデル定義がありません。") }
                     ForEach(models.indices,id:\.self) { index in
@@ -83,14 +89,18 @@ struct LocalModelSettingsView: View {
         .fileImporter(isPresented:$showsImporter,allowedContentTypes:[UTType(filenameExtension:"gguf") ?? .data]) { result in
             do {
                 let source = try result.get()
-                guard let modelID = importingModelID else { return }
-                let files = state.localModelFiles
+                let modelID = importingModelID, files = state.localModelFiles
                 copying = true; errorMessage = nil
                 Task { @MainActor in
                     defer { copying = false }
                     do {
-                        try await Task.detached { try files.install(source,modelID:modelID) }.value
-                        fileStatus = "ファイルを保存しました（" + modelID + "）"
+                        if let modelID {
+                            try await Task.detached { try files.install(source,modelID:modelID) }.value
+                            fileStatus = "ファイルを保存しました（" + modelID + "）"
+                        } else {
+                            let importedID = try await state.importSingleGGUF(source)
+                            fileStatus = "モデルを登録しました（" + importedID + "）"
+                        }
                     } catch { errorMessage = error.localizedDescription }
                 }
             } catch { errorMessage = error.localizedDescription }
@@ -115,6 +125,7 @@ struct ChatConfigView: View {
     @State private var modelSource: String
     @State private var originalSource: String
     @State private var showsModelImporter = false
+    @State private var showsLocalModelSettings = false
     @State private var importingModelID = ""
     @State private var copyingModel = false
     @State private var fileStatus: String?
@@ -167,6 +178,7 @@ struct ChatConfigView: View {
                 if modelSource == "remote" {
                     TextField("provider ID（任意）",text:binding("providerId")).textInputAutocapitalization(.never).autocorrectionDisabled()
                 } else {
+                    Button("新しいGGUFを登録") { showsLocalModelSettings = true }
                     Button(copyingModel ? "モデルを保存中…" : "このモデルのGGUFファイルを選択") {
                         importingModelID = values["model"] ?? ""
                         showsModelImporter = true
@@ -201,6 +213,7 @@ struct ChatConfigView: View {
                     }
                 } catch { errorMessage = error.localizedDescription }
             }
+            .sheet(isPresented:$showsLocalModelSettings) { NavigationStack { LocalModelSettingsView(state:state) } }
             .sheet(isPresented:$showsModels) {
                 ProviderModelsView(state:state,draft:$draft) { row in
                     draft.config = try ChatConfig.switched(draft.config,model:row.modelID,providerID:row.providerID,modelState:draft.modelState)

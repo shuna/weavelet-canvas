@@ -15,6 +15,39 @@ struct LocalModelFiles {
         guard FileManager.default.fileExists(atPath:file.path) else { throw ExchangeError.invalid("この端末でモデルのGGUFファイルを選択してください") }
         return file
     }
+    func inspect(_ source: URL) throws -> (name: String, hash: String, size: Int64) {
+        guard source.pathExtension.lowercased() == "gguf" else { throw ExchangeError.invalid("単一のGGUFファイルを選択してください") }
+        let scoped = source.startAccessingSecurityScopedResource()
+        defer { if scoped { source.stopAccessingSecurityScopedResource() } }
+        let handle = try FileHandle(forReadingFrom:source)
+        defer { try? handle.close() }
+        guard try handle.read(upToCount:4) == Data("GGUF".utf8) else { throw ExchangeError.invalid("GGUFファイルではありません") }
+        try handle.seek(toOffset:0)
+        var digest = SHA256(), size: Int64 = 0
+        while let chunk = try handle.read(upToCount:1024 * 1024), !chunk.isEmpty {
+            digest.update(data:chunk)
+            size += Int64(chunk.count)
+        }
+        return (source.lastPathComponent,digest.finalize().map { String(format:"%02x",$0) }.joined(),size)
+    }
+    func installNew(_ source: URL, modelID: String, hash: String) throws {
+        let target = try url(modelID:modelID)
+        if FileManager.default.fileExists(atPath:target.path) {
+            guard try inspect(target).hash == hash else { throw ExchangeError.invalid("同じモデルIDの別ファイルがこの端末にあります") }
+            return
+        }
+        let scoped = source.startAccessingSecurityScopedResource()
+        defer { if scoped { source.stopAccessingSecurityScopedResource() } }
+        try FileManager.default.createDirectory(at:directory,withIntermediateDirectories:true)
+        let pending = directory.appendingPathComponent(UUID().uuidString + ".gguf")
+        defer { try? FileManager.default.removeItem(at:pending) }
+        try FileManager.default.copyItem(at:source,to:pending)
+        guard try inspect(pending).hash == hash else { throw ExchangeError.invalid("コピーしたGGUFのハッシュが一致しません") }
+        if link(pending.path,target.path) != 0 {
+            if errno == EEXIST, try inspect(target).hash == hash { return }
+            throw POSIXError(POSIXErrorCode(rawValue:errno) ?? .EIO)
+        }
+    }
     func install(_ source: URL, modelID: String) throws {
         let target = try url(modelID:modelID)
         let scoped = source.startAccessingSecurityScopedResource()

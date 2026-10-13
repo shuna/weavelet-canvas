@@ -41,6 +41,7 @@ import { CatalogCard, DownloadedModelRow, DownloadingModelRow, TaskAssignmentRow
 import SearchResultCard from './SearchResultCard';
 import { useModelDownload } from '@src/hooks/useModelDownload';
 import { useModelDeletion } from '@src/hooks/useModelDeletion';
+import { autoAssignImportedModel, prepareSingleGGUFImport } from '@utils/localModelImport';
 import { useHfSearch } from '@src/hooks/useHfSearch';
 
 const IMPORTED_MODEL_PREFIX = 'local-file';
@@ -323,11 +324,8 @@ const LocalModelSettings = () => {
   // ----- Auto-assignment helper -----
   const autoAssignIfUnset = useCallback((modelId: string, tasks: LocalModelTask[]) => {
     const store = useStore.getState();
-    for (const task of tasks) {
-      if (!store.activeLocalModels[task]) {
-        store.setActiveLocalModel(task, modelId);
-      }
-    }
+    const next = autoAssignImportedModel(store.activeLocalModels, {id: modelId, tasks});
+    for (const task of tasks) if (next[task] !== store.activeLocalModels[task]) store.setActiveLocalModel(task, modelId);
   }, []);
 
   const findStoredModelWithHash = useCallback(async (fileHash: string, fileSize: number, excludeModelId?: string): Promise<LocalModelDefinition | null> => {
@@ -596,17 +594,9 @@ const LocalModelSettings = () => {
       const store = useStore.getState();
       const modelId = `${IMPORTED_MODEL_PREFIX}--${fileHash.slice(0, 16)}--${sanitizeModelIdSegment(primaryFile.name)}`;
 
-      const model: LocalModelDefinition = existingModel ?? {
-        id: modelId,
-        engine: 'wllama',
-        tasks: ['generation', 'analysis'],
-        label: displayLabel,
-        origin: primaryFile.name,
-        source: 'opfs',
-        manifest,
-        fileSize: totalSize,
-        lastFileName: primaryFile.name,
-      };
+      const model: LocalModelDefinition = isShardSet
+        ? existingModel ?? {id: modelId, engine: 'wllama', tasks: ['generation', 'analysis'], label: displayLabel, origin: primaryFile.name, source: 'opfs', manifest, fileSize: totalSize, lastFileName: primaryFile.name}
+        : prepareSingleGGUFImport(primaryFile.name, fileHash, totalSize, [], existingModel ?? undefined).model;
 
       if (!existingModel) {
         // Save all files to OPFS

@@ -58,6 +58,66 @@ final class NativeLocalEvaluationTests: XCTestCase {
         XCTAssertEqual(try ChatState(store:store).publicationSnapshot(),try app.publicationSnapshot())
     }
 
+    func testSingleGGUFImportKeepsOtherStateAndReusesDuplicate() async throws {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent("single-gguf-\(UUID())")
+        defer { try? FileManager.default.removeItem(at:directory) }
+        try FileManager.default.createDirectory(at:directory,withIntermediateDirectories:true)
+        let source = directory.appendingPathComponent("My Model.gguf")
+        try Data("GGUF TEST".utf8).write(to:source)
+        let store = LocalStateStore(fileURL:directory.appendingPathComponent("state.json")), app = ChatState(store:store)
+        try app.importWebData(Data(#"{"version":3,"chats":[],"activeLocalModels":{"generation":"already"},"savedModelMeta":{"old":{"storedBytes":9007199254740993}},"xRoot":{"raw":9007199254740993}}"#.utf8))
+        let initial = try app.publicationSnapshot(), imported = try OrderedJSON.decode(app.exportWebData())
+        var roots = try initial.required("state")
+        for key in ["activeLocalModels","savedModelMeta","xRoot"] {
+            roots = roots.replacing(key,with:try imported.required(key))
+        }
+        try app.applySnapshot(initial.replacing("state",with:roots))
+        let before = try OrderedJSON.decode(app.exportWebData())
+        let id = try await app.importSingleGGUF(source)
+        XCTAssertTrue(id.hasPrefix("local-file--"))
+        XCTAssertEqual(app.activeLocalModel("generation"),"already")
+        XCTAssertEqual(app.activeLocalModel("analysis"),id)
+        XCTAssertEqual(try app.localModelDefinitions().count,1)
+        let copied = try app.localModelFiles.installed(modelID:id)
+        let copiedHash = try app.localModelFiles.inspect(copied).hash
+        let sourceHash = try app.localModelFiles.inspect(source).hash
+        XCTAssertEqual(copiedHash,sourceHash)
+        let after = try OrderedJSON.decode(app.exportWebData())
+        XCTAssertEqual(after["savedModelMeta"],before["savedModelMeta"])
+        XCTAssertEqual(after["xRoot"],before["xRoot"])
+        let repeated = try await app.importSingleGGUF(source)
+        XCTAssertEqual(repeated,id)
+        XCTAssertEqual(try app.localModelDefinitions().count,1)
+    }
+
+    func testSingleGGUFImportSaveFailureLeavesStateAndRetryableFile() async throws {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent("single-gguf-failure-\(UUID())")
+        defer { try? FileManager.default.removeItem(at:directory) }
+        try FileManager.default.createDirectory(at:directory,withIntermediateDirectories:true)
+        let source = directory.appendingPathComponent("retry.gguf")
+        try Data("GGUF RETRY".utf8).write(to:source)
+        var reject = false
+        let store = LocalStateStore(fileURL:directory.appendingPathComponent("state.json"),write:{ bytes,url in
+            if reject { throw CocoaError(.fileWriteNoPermission) }
+            try bytes.write(to:url,options:.atomic)
+        })
+        let app = ChatState(store:store)
+        try app.importWebData(Data(#"{"version":3,"chats":[],"activeLocalModels":{"analysis":"keep"}}"#.utf8))
+        let initial = try app.publicationSnapshot(), imported = try OrderedJSON.decode(app.exportWebData())
+        let roots = try initial.required("state").replacing("activeLocalModels",with:imported.required("activeLocalModels"))
+        try app.applySnapshot(initial.replacing("state",with:roots))
+        let before = try app.publicationSnapshot(), disk = try Data(contentsOf:store.fileURL)
+        reject = true
+        do { _ = try await app.importSingleGGUF(source); XCTFail("save should fail") } catch { }
+        XCTAssertEqual(try app.publicationSnapshot(),before)
+        XCTAssertEqual(try Data(contentsOf:store.fileURL),disk)
+        reject = false
+        let id = try await app.importSingleGGUF(source)
+        XCTAssertEqual(app.activeLocalModel("analysis"),"keep")
+        XCTAssertEqual(app.activeLocalModel("generation"),id)
+        XCTAssertEqual(try app.localModelDefinitions().count,1)
+    }
+
     func testRoleSettingsSaveFailureKeepsMemoryAndDisk() throws {
         let directory = FileManager.default.temporaryDirectory.appendingPathComponent("local-role-failure-\(UUID())")
         defer { try? FileManager.default.removeItem(at:directory) }

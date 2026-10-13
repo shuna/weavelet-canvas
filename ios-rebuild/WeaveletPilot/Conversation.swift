@@ -695,6 +695,56 @@ final class ChatState: ObservableObject {
         try applyGlobalState(OrderedJSONChanges.apply(result.required("changes"),to:roots))
     }
 
+    @MainActor func importSingleGGUF(_ source: URL) async throws -> String {
+        guard generation == nil else { throw ExchangeError.invalid("生成結果を保存してからモデルを登録してください") }
+        let roots = try syncInputSnapshot().required("state")
+        let models = try roots["localModels"]?.array("local models") ?? []
+        let active = roots["activeLocalModels"] ?? .object([])
+        let files = localModelFiles
+        let inspected = try await Task.detached { try files.inspect(source) }.value
+        let candidates: [OrderedJSON] = await Task.detached {
+            models.compactMap { model in
+                guard let id = try? model.required("id").string("id"),
+                      model["engine"] == .string("wllama"), model["manifest"]?["kind"] == .string("single-file"),
+                      let installed = try? files.installed(modelID:id), let fingerprint = try? files.inspect(installed) else { return nil }
+                let projectedModel = OrderedJSON.object([
+                    .init(key:"id",value:.string(id)),.init(key:"engine",value:.string("wllama")),
+                    .init(key:"manifest",value:.object([.init(key:"kind",value:.string("single-file"))]))
+                ])
+                return .object([.init(key:"model",value:projectedModel),
+                    .init(key:"hash",value:.string(fingerprint.hash)),.init(key:"size",value:.number(String(fingerprint.size)))])
+            }
+        }.value
+        let ids = try models.map { try $0.required("id").string("id") }
+        let prepared = try SharedWebOperations.call("localModelImport",.object([
+            .init(key:"operation",value:.string("prepare")),.init(key:"name",value:.string(inspected.name)),
+            .init(key:"hash",value:.string(inspected.hash)),.init(key:"size",value:.number(String(inspected.size))),
+            .init(key:"candidates",value:.array(candidates)),.init(key:"existingIDs",value:.array(ids.map(OrderedJSON.string))) ]))
+        let proposed = try prepared.required("model")
+        let modelID = try proposed.required("id").string("model ID")
+        let existing = prepared["existing"] == .bool(true)
+        let model = existing ? (models.first { $0["id"] == .string(modelID) } ?? proposed) : proposed
+        if !existing { try await Task.detached { try files.installNew(source,modelID:modelID,hash:inspected.hash) }.value }
+        let current = try syncInputSnapshot().required("state")
+        guard (current["localModels"] ?? .array([])) == (roots["localModels"] ?? .array([])), (current["activeLocalModels"] ?? .object([])) == active else {
+            throw ExchangeError.invalid("モデル設定が変更されました。もう一度登録してください")
+        }
+        var boundary = SharedWebProjection()
+        let opaqueModels = try models.map { try boundary.reference($0) }
+        let projectedActive = try OrderedJSON.object(try active.object("active models").map { field in
+            JSONField(key:field.key,value:field.value == .null || (try? field.value.string("model ID")) != nil ? field.value : try boundary.reference(field.value))
+        })
+        let projected = OrderedJSON.object([.init(key:"localModels",value:.array(opaqueModels)),.init(key:"activeLocalModels",value:projectedActive)])
+        let commitModel = existing ? OrderedJSON.object([
+            .init(key:"id",value:.string(modelID)),.init(key:"tasks",value:model["tasks"] ?? .array([]))
+        ]) : model
+        let result = try SharedWebOperations.call("localModelImport",.object([
+            .init(key:"operation",value:.string("commit")),.init(key:"state",value:projected),
+            .init(key:"model",value:commitModel),.init(key:"existingIDs",value:.array(ids.map(OrderedJSON.string))) ]))
+        try applyGlobalState(OrderedJSONChanges.apply(result.required("changes"),to:current.replacing("localModels",with:current["localModels"] ?? .array([])).replacing("activeLocalModels",with:current["activeLocalModels"] ?? .object([])),opaque:boundary.opaque))
+        return modelID
+    }
+
     private func beginLocalGeneration(source: OrderedJSON, chat: OrderedJSON, chatID: String, path: [String], history: MessageEditing.HistoryState?, plan: OrderedJSON?, now: Double) throws {
         let config = try chat.required("config")
         let modelID = try config.required("model").string("model")
