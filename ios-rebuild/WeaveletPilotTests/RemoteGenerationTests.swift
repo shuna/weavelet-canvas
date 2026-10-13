@@ -72,13 +72,13 @@ final class RemoteGenerationTests: XCTestCase {
         var chats = try saved.required("chats").array("chats")
         let chatID = try XCTUnwrap(state.conversation).id
         let index = try XCTUnwrap(chats.firstIndex { $0["id"] == .string(chatID) })
-        let config = try chats[index].required("config").replacing("model",with:.string("anthropic/claude-opus-5.5")).replacing("stream",with:.bool(false)).replacing("providerId",with:.string("openrouter")).replacing("reasoning_effort",with:.string("none"))
+        let config = try chats[index].required("config").replacing("model",with:.string("anthropic/claude-opus-5.5")).replacing("stream",with:.bool(true)).replacing("providerId",with:.string("openrouter")).replacing("reasoning_effort",with:.string("none"))
         chats[index] = chats[index].replacing("config",with:config)
-        let modelState = try OrderedJSON.decode(Data(#"{"favoriteModels":[{"modelId":"anthropic/claude-opus-5.5","providerId":"openrouter","supportsReasoning":true,"reasoningMandatory":true,"xRaw":{"huge":9007199254740993,"decimal":1.2300}}],"providerModelCache":{},"providerCustomModels":{}}"#.utf8))
+        let modelState = try OrderedJSON.decode(Data(#"{"favoriteModels":[{"modelId":"anthropic/claude-opus-5.5","providerId":"openrouter","supportsReasoning":true,"reasoningMandatory":true,"streamSupport":false,"xRaw":{"huge":9007199254740993,"decimal":1.2300}}],"providerModelCache":{},"providerCustomModels":{}}"#.utf8))
         let roots = try modelState.object("modelState")
         try state.applySnapshot(.object([.init(key:"version",value:snapshot.required("version")),.init(key:"state",value:.object([.init(key:"chats",value:.array(chats))] + roots))]))
         let source = try XCTUnwrap(state.exchange).source, sourceBytes = try source.encoded(), before = try state.publicationSnapshot().encoded()
-        var credentials = record(stream:false)
+        var credentials = record(stream:true)
         credentials.settings.model = "unused-device-model"
         let direct = try RemoteRequest.make(source:source,chatID:chatID,path:XCTUnwrap(state.conversation).visibleMessages.map(\.id),settings:credentials.settings,key:credentials.key,modelState:modelState)
         let directBody = try OrderedJSON.decode(XCTUnwrap(direct.httpBody))
@@ -333,11 +333,11 @@ final class RemoteGenerationTests: XCTestCase {
         XCTAssertEqual(request.value(forHTTPHeaderField: "Authorization"), "Bearer FAKE-new")
         var legacyChats = try source.required("chats").array("chats")
         legacyChats[0] = legacyChats[0].replacing("config",with:try legacyChats[0].required("config").replacing("model",with:.string("")))
-        let legacy = source.replacing("chats",with:.array(legacyChats)), before = try legacy.encoded()
+        let legacy = source.replacing("chats",with:.array(legacyChats)), legacyBefore = try legacy.encoded()
         let fallback = try RemoteRequest.make(source:legacy,chatID:"remote",path:[],settings:stored.settings,key:stored.key)
         let fallbackBody = try OrderedJSON.decode(XCTUnwrap(fallback.httpBody))
         XCTAssertEqual(fallbackBody["model"],.string("fake-changed")); XCTAssertEqual(fallbackBody["stream"],.bool(true))
-        XCTAssertEqual(try legacy.encoded(),before)
+        XCTAssertEqual(try legacy.encoded(),legacyBefore)
     }
     func testMalformedEventsMultilineAndUnsupportedResponseAreRejected() throws {
         var parser = RemoteSSE()

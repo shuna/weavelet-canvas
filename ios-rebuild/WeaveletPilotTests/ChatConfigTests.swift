@@ -31,5 +31,15 @@ final class ChatConfigTests: XCTestCase {
         XCTAssertThrowsError(try state.saveChatConfig(draft))
         XCTAssertEqual(try ChatState(store:local).exportWebData(),try state.exportWebData())
         XCTAssertEqual(try state.chatConfigDraft().config.required("xTarget").encoded(),try raw.encoded())
+        XCTAssertTrue(ChatConfigView.valuesDiffer("\u{00e9}","e\u{0301}"))
+        var composed = try state.chatConfigDraft()
+        composed.config = composed.config.replacing("xUnicode",with:.string("\u{00e9}"))
+        try state.saveChatConfig(composed)
+        var stale = try state.chatConfigDraft(), decomposed = stale
+        decomposed.config = decomposed.config.replacing("xUnicode",with:.string("e\u{0301}"))
+        try state.saveChatConfig(decomposed)
+        XCTAssertEqual(try state.chatConfigDraft().config.required("xUnicode").encoded(),try OrderedJSON.string("e\u{0301}").encoded())
+        stale.config = stale.config.replacing("temperature",with:.number("0.2"))
+        XCTAssertThrowsError(try state.saveChatConfig(stale))
     }
 }

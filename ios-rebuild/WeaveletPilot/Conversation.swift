@@ -297,10 +297,10 @@ final class ChatState: ObservableObject {
     }
     func saveChatConfig(_ draft: ChatConfigDraft, now: Double = Date().timeIntervalSince1970 * 1000) throws {
         guard generation == nil else { throw ExchangeError.invalid("生成結果を保存してから設定してください") }
-        guard let exchange, exchange.source == draft.source, try publicationSnapshot() == draft.snapshot else { throw ExchangeError.invalid("会話または設定が変更されました。設定を開き直してください") }
+        guard let exchange, try exchange.source.encoded() == draft.source.encoded(), try publicationSnapshot().encoded() == draft.snapshot.encoded() else { throw ExchangeError.invalid("会話または設定が変更されました。設定を開き直してください") }
         var chats = try exchange.source.required("chats").array("chats")
         guard let index = try chats.firstIndex(where:{ try $0.required("id").string("id").utf8.elementsEqual(draft.chatID.utf8) }) else { throw ExchangeError.invalid("chat ID") }
-        if chats[index]["config"] == draft.config { return }
+        if try chats[index]["config"]?.encoded() == draft.config.encoded() { return }
         chats[index] = chats[index].replacing("config",with:draft.config)
         try applyLibrary(exchange.source.replacing("chats",with:.array(chats)),selectedID:selectedID,now:now)
     }

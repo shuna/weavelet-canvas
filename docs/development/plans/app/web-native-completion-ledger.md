@@ -1,5 +1,15 @@
 # Web / 新iOSの完成条件と証拠
 
+## 会話生成設定・モデル切替・stream/token補正（2026-10-13）
+
+既存WebのswitchConfigModel/savedModelSettings/normalizeConfigStreamとremoteモデル上限判定をpure共有元へ切り出し、Webの旧入口も委譲する。モデル別設定entryの未知属性を上書きで失う経路は、共有元で既存entryへ既知設定を重ねる最小修正を行った。nativeの会話設定画面からモデル/provider・stream・token・temperature・推論設定を編集し、切替結果の差分を原raw値へ戻す。古いdraftと保存失敗時は公開せず、UTF8表現差も上書きしない。
+
+要求は会話model/streamを優先し、モデル空の旧会話のみ従来Keychain値をfallbackする。Keychain Codableと認証情報の保存は維持。transportは共有処理で確定した要求のstreamを使用する。旧testsの端末上書き期待はこの会話設定優先へ更新し、Keychain失敗保全・旧会話fallback・元source不変assertを維持した。local実行は明示未対応であり、モデル一覧取得や全provider接続を実装済みとはしない。
+
+共有56 tests・型・bundle鮮度は担当成功結果を再利用。CatalystはPBX参照ID重複とテスト変数名重複のcompile失敗を修正後、設定1＋生成13の14件が成功。非streamモデルでは会話/端末stream=trueでも正規化後falseで受信完了する実接続、raw未知数値、保存失敗/retry、stale/Unicode拒否、再起動を確認した。監査のフォームString比較指摘はUTF8比較へ修正し該当箇所のみ再確認、新規なし。ログ `/private/tmp/weavelet-chat-config-catalyst-tests.log`。
+
+隔離FAKE Catalystで会話設定を開き、モデル/provider、token256、temperature0.3、stream=falseを保存して再表示で保持を確認。実API送信、実機、狭幅/VoiceOver、モデル切替直後の設定プレビューは未確認。変更のない同期・画像・Markdownの検証は再利用し、全機能完成とは扱わない。
+
 ## remote推論能力の共有接続（2026-10-13）
 
 nativeの能力false固定を廃止し、既存Web modelLookup/APIの実判定を `modelReasoning.ts` へ切り出した。Webのget/useとAPIも同じ元を使う。customの明示値、favorite/cacheとID推定、mandatoryの明示false等の優先規則は維持する。nativeは保存snapshotのfavoriteModels/providerModelCache/providerCustomModelsを読み取り専用で渡し、metadataを要求bodyへ混入させない。既存の端末model/stream指定は維持し、provider取得・モデル切替・stream/token補正は別の残件とする。

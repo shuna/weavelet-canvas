@@ -26,13 +26,14 @@ struct ChatConfigView: View {
         self.originalValues = values; self.originalStream = stream; self.originalForce = force
         _values = State(initialValue:values); _stream = State(initialValue:stream); _forceReasoning = State(initialValue:force)
     }
+    static func valuesDiffer(_ lhs: String?, _ rhs: String?) -> Bool { !(lhs ?? "").utf8.elementsEqual((rhs ?? "").utf8) }
     private func binding(_ key: String) -> Binding<String> { Binding(get:{ values[key] ?? "" },set:{ values[key] = $0 }) }
     var body: some View {
         NavigationStack {
             Form {
                 TextField("モデルID",text:binding("model")).textInputAutocapitalization(.never).autocorrectionDisabled()
                 TextField("provider ID（任意）",text:binding("providerId")).textInputAutocapitalization(.never).autocorrectionDisabled()
-                Text("モデル切替時は保存済み設定を復元します。送信時はモデルの対応状況に応じて共有Web処理がstream・token・推論設定を補正します。localモデルは未対応です。")
+                Text("モデル切替時は保存済み設定を復元します。モデルに応じて出力上限を調整し、非対応モデルではストリーミングを使いません。ローカルモデルは未対応です。")
                     .font(.footnote).foregroundStyle(.secondary)
                 Toggle("streaming",isOn:$stream)
                 TextField("最大出力token（空欄で解除）",text:binding("max_tokens"))
@@ -53,11 +54,11 @@ struct ChatConfigView: View {
     private func save() {
         do {
             var changed = draft
-            if values["model"] != originalValues["model"] || values["providerId"] != originalValues["providerId"] {
+            if Self.valuesDiffer(values["model"],originalValues["model"]) || Self.valuesDiffer(values["providerId"],originalValues["providerId"]) {
                 changed.config = try ChatConfig.switched(changed.config,model:values["model"] ?? "",providerID:values["providerId"],modelState:draft.modelState)
             }
             var patches: [OrderedJSON] = []
-            for key in Self.fields where key != "model" && key != "providerId" && values[key] != originalValues[key] {
+            for key in Self.fields where key != "model" && key != "providerId" && Self.valuesDiffer(values[key],originalValues[key]) {
                 let text = values[key] ?? "", value: OrderedJSON
                 if text.isEmpty { patches.append(.object([.init(key:"op",value:.string("remove")),.init(key:"path",value:.array([.string(key)]))])); continue }
                 if ["max_tokens", "temperature", "reasoning_budget_tokens"].contains(key) {
