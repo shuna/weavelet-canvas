@@ -216,7 +216,7 @@
     "src/utils/chatSearch.ts": "ab0cec09d902d6527236c20a729ba4cb963a67c2485c640e7c5d4109cfef316a",
     "shared/google-sync/search.ts": "ac646051fe9d7c4e58512136592477fb6e1760ca53905e071dd3b2f7d4214047",
     "src/utils/branchNavigation.ts": "9d2929d918ddb5645e278989c809bbd6a89f00456f888f3d669a73fb8db904a6",
-    "shared/google-sync/navigation.ts": "e8334d5817b379efb99a24686beb63a898d674f969bde8acd01fd81941f09857",
+    "shared/google-sync/navigation.ts": "e998593c759d3de37f1df3c0f90ee0b109d38cdfc0916e6b1138c8ba7c072261",
     "src/store/storage/google/datasetListing.ts": "60e21120e61e955622decbaa7b6d5c3afc8dea072a68cd6d8aea55d5cad27d26",
     "src/store/storage/google/datasetHeader.ts": "e62a0cd0ecb2d29862377e848c9b0d904e0e2e00ead656e9794def1e946b3f3a",
     "src/store/storage/google/settings.ts": "692573ffb4476d3ae4bc0e4053aab36918c4182aa71b08d371f044653943e4d6",
@@ -353,5 +353,5 @@
     "remove-accents/package.json": "511775b39122274ad36e9dc32c47b2112a3fd4372e64284c2336b143be853c82",
     "remove-accents/LICENSE": "31279697ad2455927a227e7678f2bb71e9e06dde319f12ce345404b3b7a99b81"
   },
-  "bundleSHA256": "2a001ccb5c2e597d235ec7775233bb8c9a3eb4d1f2b1fb01bd3a228554e2c1e8"
+  "bundleSHA256": "6a97d44e085c1a94ad9fca748db77fd85e2f285f6efe76bc7964c4f7f27732e8"
 }

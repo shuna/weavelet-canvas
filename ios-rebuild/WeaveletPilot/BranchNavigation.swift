@@ -25,6 +25,14 @@ enum BranchNavigation {
         fileprivate let nodePositions: [Data:Int]
         func candidates(for nodeID: String) -> NodeCandidates? { nodePositions[Data(nodeID.utf8)].map { byNode[$0] } }
     }
+    private static let swipeSession = Swift.Result<SharedWebOperations.Session, Error> { try SharedWebOperations.Session() }
+    static func swipeDirection(distance: Double, preference: String) throws -> String {
+        try swipeSession.get().call("navigationOperation", .object([
+            .init(key: "operation", value: .string("swipeDirection")),
+            .init(key: "distance", value: .number(String(distance))),
+            .init(key: "preference", value: .string(preference))
+        ])).string("swipe direction")
+    }
     enum HistoryAction: String { case initialize, push, back, forward, capture }
     struct HistoryResult {
         let history: OrderedJSON

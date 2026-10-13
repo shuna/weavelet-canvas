@@ -52,4 +52,11 @@ final class BranchNavigationTests: XCTestCase {
         let invalid=OrderedJSON.object([.init(key:"chatId",value:.string("chat-a")),.init(key:"activePath",value:.array([.string("n-user"),.string("n-system")]))])
         XCTAssertEqual(try BranchNavigation.restore(in:source,entry:invalid).source,source)
     }
+    func testSwipeDirectionUsesActualSharedWebResolver() throws {
+        XCTAssertEqual(try BranchNavigation.swipeDirection(distance: -44, preference: "left-next"), "next")
+        XCTAssertEqual(try BranchNavigation.swipeDirection(distance: 44, preference: "left-next"), "previous")
+        XCTAssertEqual(try BranchNavigation.swipeDirection(distance: -44, preference: "right-next"), "previous")
+        XCTAssertEqual(try BranchNavigation.swipeDirection(distance: 44, preference: "right-next"), "next")
+    }
+
 }

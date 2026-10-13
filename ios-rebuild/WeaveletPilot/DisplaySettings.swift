@@ -1,12 +1,13 @@
 import Foundation
 
 enum DisplaySetting: String {
-    case theme, inlineLatex, markdownMode, streamingMarkdownPolicy, displayChatSize
+    case theme, inlineLatex, markdownMode, streamingMarkdownPolicy, displayChatSize, branchSwipeDirection, animateBubbleNavigation
 
     func accepts(_ value: OrderedJSON) -> Bool {
         switch self {
         case .theme: return value == .string("light") || value == .string("dark")
-        case .inlineLatex, .markdownMode, .displayChatSize: if case .bool = value { return true }; return false
+        case .inlineLatex, .markdownMode, .displayChatSize, .animateBubbleNavigation: if case .bool = value { return true }; return false
+        case .branchSwipeDirection: return ["left-next", "right-next"].contains { value == .string($0) }
         case .streamingMarkdownPolicy: return ["auto", "always", "never"].contains { value == .string($0) }
         }
     }

@@ -13444,6 +13444,9 @@ var WeaveletGoogleSync = (() => {
     }
     chat.branchTree = next;
   }
+  function resolveBranchSwipeDirection(distance, preference = "left-next") {
+    return distance < 0 === (preference === "left-next") ? "next" : "previous";
+  }
   function projectMessageAttributes(owner, nodeId, message) {
     return { ...structuredClone(readMessageAttributes(owner)?.byNode[nodeId] ?? {}), role: message.role, content: message.content };
   }
@@ -17567,6 +17570,8 @@ ${JSON.stringify(input.length === 1 ? input[0] : input)}`;
   function navigationOperation(json) {
     const input = JSON.parse(json), source = input.source;
     switch (input.operation) {
+      case "swipeDirection":
+        return JSON.stringify(resolveBranchSwipeDirection(input.distance, input.preference));
       case "navigate": {
         let target = resolveNavigationTarget(source.chats, input.chatId, input.nodeId, input.navigationSource);
         if (target.status !== "reached")

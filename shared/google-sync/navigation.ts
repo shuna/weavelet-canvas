@@ -1,4 +1,4 @@
-import { getSiblingGroups } from '../../src/utils/branchUtils';
+import { getSiblingGroups, resolveBranchSwipeDirection } from '../../src/utils/branchUtils';
 import { switchActivePathState } from '../../src/store/branch-domain';
 import { diffJSONChanges } from '../../src/utils/jsonChanges';
 import { resolveNavigationTarget, navigationEntry, entryWithNavigationKey, navigationEntryWithAnchor, captureNavigationHistory, restoredNavigationPath, emptyNavigationHistory, initializeNavigationHistory, pushNavigationHistory, moveNavigationHistory, canMoveNavigationHistory } from '../../src/utils/branchNavigation';
@@ -8,6 +8,7 @@ const encodeHistory = (value:any) => ({...value,navEntryMap:[...value.navEntryMa
 export function navigationOperation(json: string): string {
   const input = JSON.parse(json), source = input.source;
   switch (input.operation) {
+    case 'swipeDirection': return JSON.stringify(resolveBranchSwipeDirection(input.distance, input.preference));
     case 'navigate': {
       let target = resolveNavigationTarget(source.chats,input.chatId,input.nodeId,input.navigationSource);
       if (target.status !== 'reached') return JSON.stringify({...target,changes:[]});

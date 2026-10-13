@@ -30,7 +30,8 @@ struct DisplaySettingsView: View {
         Form {
             switch Result(catching: {
                 try (state.displaySetting(.theme), state.displaySetting(.inlineLatex),
-                     state.displaySetting(.markdownMode), state.displaySetting(.streamingMarkdownPolicy), state.displaySetting(.displayChatSize))
+                     state.displaySetting(.markdownMode), state.displaySetting(.streamingMarkdownPolicy), state.displaySetting(.displayChatSize),
+                     state.displaySetting(.branchSwipeDirection), state.displaySetting(.animateBubbleNavigation))
             }) {
             case .success(let values):
                 Section("外観") {
@@ -42,6 +43,16 @@ struct DisplaySettingsView: View {
                 }
                 Section("会話一覧") {
                     boolean(.displayChatSize, title: "会話サイズを表示", value: values.4)
+                }
+                Section("本文の移動") {
+                    Picker("分岐のスワイプ方向", selection: selection(.branchSwipeDirection, value: values.5)) {
+                        if !DisplaySetting.branchSwipeDirection.accepts(values.5) { Text("元の値（未対応）").tag("unknown").disabled(true) }
+                        Text("左へスワイプで次の分岐").tag("left-next")
+                        Text("右へスワイプで次の分岐").tag("right-next")
+                    }.frame(minHeight: 44)
+                    Text("本文下の分岐番号をスワイプして切り替えます。")
+                        .font(.footnote).foregroundStyle(.secondary)
+                    boolean(.animateBubbleNavigation, title: "本文へのスクロールをアニメーション", value: values.6)
                 }
                 Section("本文の表示") {
                     boolean(.markdownMode, title: "Markdownで表示", value: values.2)

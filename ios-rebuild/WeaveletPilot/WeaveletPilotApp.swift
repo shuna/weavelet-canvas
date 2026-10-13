@@ -23,6 +23,7 @@ struct ChatView: View {
     @State private var showsSettings = false
     @State private var columnVisibility: NavigationSplitViewVisibility = .automatic
     @State private var preferredCompactColumn: NavigationSplitViewColumn = .detail
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
     @State private var showsSearch = false
     @State private var searchMode: ChatSearchMode = .grep
@@ -394,7 +395,11 @@ struct ChatView: View {
                 .frame(maxWidth: .infinity)
             }
             .onChange(of: state.navigationFocus) { _, focus in
-                if let focus { scroll.scrollTo(Data(focus.nodeID.utf8), anchor: .center) }
+                if let focus {
+                    if !reduceMotion && (try? state.displaySetting(.animateBubbleNavigation)) == .bool(true) {
+                        withAnimation { scroll.scrollTo(Data(focus.nodeID.utf8), anchor: .center) }
+                    } else { scroll.scrollTo(Data(focus.nodeID.utf8), anchor: .center) }
+                }
             }
             .onAppear {
                 if let focus = state.navigationFocus { scroll.scrollTo(Data(focus.nodeID.utf8), anchor: .center) }
@@ -511,12 +516,16 @@ struct ChatView: View {
         return generation
     }
 
+    private var branchSwipePreference: String? {
+        guard let value = try? state.displaySetting(.branchSwipeDirection), DisplaySetting.branchSwipeDirection.accepts(value) else { return nil }
+        return try? value.string("branch swipe direction")
+    }
     private func messageRow(node: MessageNode, conversation: Conversation, summaryInfo: OrderedJSON?, generation: ActiveGeneration?) -> some View {
         let summarySelection: ((String,Bool) -> Void)? = state.exchange == nil || state.generation != nil ? nil : { id, use in
             do { try state.mutateSummary(chatID:conversation.id,action:"use",summaryID:id,use:use) }
             catch { errorMessage = error.localizedDescription }
         }
-        return MessageView(node: node, siblings: state.siblings(for: node.id), style: state.style, generation: generation, edit: state.exchange == nil || state.generation != nil ? nil : {
+        return MessageView(node: node, siblings: state.siblings(for: node.id), style: state.style, branchSwipeDirection: branchSwipePreference, branchSwipeContext: Data(conversation.id.utf8), generation: generation, edit: state.exchange == nil || state.generation != nil ? nil : {
             do { draft = try state.messageDraft(nodeID: node.id) }
             catch { errorMessage = error.localizedDescription }
         }, insertBefore: state.exchange == nil || state.generation != nil ? nil : {
@@ -594,6 +603,8 @@ struct MessageView: View {
     let node: MessageNode
     let siblings: [MessageNode]
     let style: ChatStyle
+    var branchSwipeDirection: String? = nil
+    var branchSwipeContext: Data? = nil
     var generation: ActiveGeneration? = nil
     var edit: (() -> Void)? = nil
     var insertBefore: (() -> Void)? = nil
@@ -615,6 +626,11 @@ struct MessageView: View {
     var openSummary: (() -> Void)? = nil
     var selectSummary: ((String,Bool) -> Void)? = nil
     let select: (String) -> Void
+    @Environment(\.isEnabled) private var isEnabled
+    @GestureState private var swipeActive = false
+    @State private var swipeSource: [Data]?
+    @State private var swipeRejected = false
+    @State private var swipePreference: String?
     @Environment(\.markdownSettings) private var markdownSettings
     @State private var markdownMode: Bool?
     @State private var markdownRevision = 0
@@ -740,6 +756,28 @@ struct MessageView: View {
         }
     }
 
+    private var branchSwipe: some Gesture {
+        DragGesture(minimumDistance: 10)
+            .updating($swipeActive) { _, active, _ in active = true }
+            .onChanged { value in
+                if swipeSource == nil {
+                    swipeSource = [branchSwipeContext ?? Data(), Data(node.id.utf8)] + siblings.map { Data($0.id.utf8) }
+                    swipePreference = branchSwipeDirection
+                }
+                if abs(value.translation.width) <= abs(value.translation.height) * 1.5 { swipeRejected = true }
+            }
+            .onEnded { value in
+                defer { swipeSource = nil; swipePreference = nil; swipeRejected = false }
+                guard isEnabled, !swipeRejected, abs(value.translation.width) >= 44,
+                      abs(value.translation.width) > abs(value.translation.height) * 1.5,
+                      swipeSource == [branchSwipeContext ?? Data(), Data(node.id.utf8)] + siblings.map({ Data($0.id.utf8) }),
+                      let preference = swipePreference, preference == branchSwipeDirection,
+                      let position = siblings.firstIndex(where: { $0.id.utf8.elementsEqual(node.id.utf8) }),
+                      let direction = try? BranchNavigation.swipeDirection(distance: Double(value.translation.width), preference: preference) else { return }
+                let target = position + (direction == "next" ? 1 : -1)
+                if siblings.indices.contains(target) { select(siblings[target].id) }
+            }
+    }
     @ViewBuilder private var branchControls: some View {
         if siblings.count > 1 {
             let position = (siblings.firstIndex(where: { $0.id.utf8.elementsEqual(node.id.utf8) }) ?? 0) + 1
@@ -753,6 +791,13 @@ struct MessageView: View {
                 .disabled(position == 1)
                 .accessibilityLabel("前の分岐")
                 Text("分岐 \(position) / \(siblings.count)")
+                    .frame(minHeight: 44)
+                    .contentShape(Rectangle())
+                    .simultaneousGesture(branchSwipe)
+                    .onChange(of: swipeActive) { _, active in
+                        if !active { swipeSource = nil; swipePreference = nil; swipeRejected = false }
+                    }
+                    .accessibilityHint("前後の分岐ボタン、またはこの番号の横スワイプで切り替え")
                     .accessibilityLabel("分岐 \(position) / \(siblings.count)")
                 Button {
                     select(siblings[position].id)

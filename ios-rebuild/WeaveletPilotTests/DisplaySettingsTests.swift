@@ -79,4 +79,49 @@ final class DisplaySettingsTests: XCTestCase {
         XCTAssertEqual(try state.publicationSnapshot().encoded(), try snapshot.encoded())
         XCTAssertEqual(try Data(contentsOf: local.fileURL), disk)
     }
+    func testBranchDisplayDefaultsChoicesUnknownRetentionAndSaveFailure() throws {
+        let defaults = try ChatImport.call("defaults")
+        XCTAssertEqual(try DisplaySettings.value(.branchSwipeDirection, in: .object([])), try defaults.required("branchSwipeDirection"))
+        XCTAssertEqual(try DisplaySettings.value(.animateBubbleNavigation, in: .object([])), try defaults.required("animateBubbleNavigation"))
+        XCTAssertEqual(try defaults.required("branchSwipeDirection"), .string("left-next"))
+        XCTAssertEqual(try defaults.required("animateBubbleNavigation"), .bool(true))
+        var rejects = false
+        let local = try store { data, file in
+            if rejects { throw CocoaError(.fileWriteNoPermission) }
+            try data.write(to: file, options: .atomic)
+        }
+        let state = try rawApp(local), original = try state.publicationSnapshot()
+        let unknown = try original.required("state")
+            .replacing("branchSwipeDirection", with: .string("future"))
+            .replacing("animateBubbleNavigation", with: .object([.init(key: "raw", value: .number("1.2300"))]))
+        try state.applySnapshot(.object([.init(key: "version", value: try original.required("version")), .init(key: "state", value: unknown)]))
+        let before = try state.publicationSnapshot(), disk = try Data(contentsOf: local.fileURL)
+        for field in [DisplaySetting.branchSwipeDirection, .animateBubbleNavigation] {
+            XCTAssertEqual(try state.displaySetting(field).encoded(), try unknown.required(field.rawValue).encoded())
+            XCTAssertFalse(field.accepts(try state.displaySetting(field)))
+        }
+        XCTAssertEqual(try state.publicationSnapshot().encoded(), try before.encoded())
+        rejects = true
+        for (field, value) in [(DisplaySetting.branchSwipeDirection, OrderedJSON.string("right-next")), (.animateBubbleNavigation, .bool(false))] {
+            XCTAssertThrowsError(try state.saveDisplaySetting(field, value: value))
+            XCTAssertEqual(try state.publicationSnapshot().encoded(), try before.encoded())
+            XCTAssertEqual(try Data(contentsOf: local.fileURL), disk)
+        }
+        rejects = false
+        for (field, value) in [(DisplaySetting.branchSwipeDirection, OrderedJSON.string("right-next")), (.branchSwipeDirection, .string("left-next")), (.animateBubbleNavigation, .bool(false)), (.animateBubbleNavigation, .bool(true))] {
+            let previous = try state.publicationSnapshot().required("state")
+            try state.saveDisplaySetting(field, value: value)
+            let current = try state.publicationSnapshot().required("state")
+            XCTAssertEqual(try current.required(field.rawValue).encoded(), try value.encoded())
+            XCTAssertEqual(try current.object("state").map(\.key), try previous.object("state").map(\.key))
+            XCTAssertEqual(try OrderedJSON.object(current.object("state").filter { $0.key != field.rawValue }).encoded(),
+                           try OrderedJSON.object(previous.object("state").filter { $0.key != field.rawValue }).encoded())
+        }
+        let saved = try state.publicationSnapshot()
+        XCTAssertThrowsError(try state.saveDisplaySetting(.branchSwipeDirection, value: .string("future")))
+        XCTAssertThrowsError(try state.saveDisplaySetting(.animateBubbleNavigation, value: .string("true")))
+        XCTAssertEqual(try state.publicationSnapshot().encoded(), try saved.encoded())
+        XCTAssertEqual(try ChatState(store: local).publicationSnapshot().encoded(), try saved.encoded())
+    }
+
 }
