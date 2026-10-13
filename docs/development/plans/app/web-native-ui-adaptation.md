@@ -126,3 +126,8 @@ Web根拠は`src/components/`を起点とする。
 Webのrole/avatar左・表示系/状態操作右という配置をMessageViewへ反映した。表示形式menuに原文/要約/圧縮とMarkdown/rawを集約し、評価・除外・保護・操作を隣接させる。単独の操作行を減らし、44pt操作領域とViewThatFitsの段組を使用する。streamに時刻を加えず、標準チャット表示/吹き出し表示の両方を維持。会話名はinline、入力欄はsafeAreaInsetで下端固定、設定と送信/停止を左右、画像と先頭文を近接配置する。会話追加/整理・履歴は上部menuへ移す。
 
 CatalystのFAKE実画面で右上操作、重複行消失、本文端、固定入力欄と表示切替を確認し、独立Astra限定監査は新規なし。iPhone狭幅・最大Dynamic Type・キーボード時の収まりは未確認。サイドバー/分割表示、会話・フォルダー一覧と分岐の配置再現は次のUI対象とする。画像提案やこの局所確認だけでUI全体の受入とはしない。
+
+
+## 2026-10-13：会話サイドバー
+
+wideではWebと同様に会話/フォルダー一覧を左、チャットと固定入力を右へ配置。compactは標準NavigationSplitViewのpreferredCompactColumnで一覧/詳細に遷移する。既存の選択・作成・複製・改名・移動・削除・フォルダー処理を再利用し、0件選択の操作footerとwideの重複controlを除いた。FAKE Catalystでwide配置、タイトルと選択時controlsを視覚確認済み。compact実機・最大文字サイズ・並替え・分岐キャンバス表示は未確認/未実装として続ける。

@@ -974,14 +974,21 @@ final class ChatState: ObservableObject {
         let key = SummaryIdentity(chatID:draft.chatID,nodeID:draft.nodeID)
         guard evaluationJobs[key]?.busy != true else { return }
         let roots = try publicationSnapshot().required("state")
-        let prepared = try ConversationEvaluation.prepare(source:source,state:roots,chatID:draft.chatID,nodeID:draft.nodeID,dimension:dimension,scope:scope,omittedMode:omittedMode,language:Locale.preferredLanguages.first ?? "en",legacy:record ?? RemoteCredentials.load(),readProviderCredential:readProviderCredential)
+        let prepared = try ConversationEvaluation.prepare(source:source,state:roots,chatID:draft.chatID,nodeID:draft.nodeID,dimension:dimension,scope:scope,omittedMode:omittedMode,language:Locale.preferredLanguages.first ?? "en",legacy:record ?? RemoteCredentials.load(),files:localModelFiles,readProviderCredential:readProviderCredential)
         let id = UUID()
         evaluationJobs[key] = EvaluationJob(id:id,busy:true)
         evaluationTasks[key] = Task { @MainActor [weak self] in
             guard let self else { return }
             defer { if self.evaluationJobs[key]?.id == id { self.evaluationTasks[key] = nil; self.evaluationJobs[key]?.busy = false } }
             do {
-                let result = try await ConversationEvaluation.run(prepared,client:client)
+                let result = try await ConversationEvaluation.run(prepared,client:client,localGenerator:self.localGenerate,isCurrent:{ [weak self] in
+                    guard let self, self.evaluationJobs[key]?.id == id, let source = self.exchange?.source,
+                          let roots = try? self.publicationSnapshot().required("state") else { return false }
+                    return (try? ConversationEvaluation.isCurrent(prepared,source:source,state:roots)) == true
+                },onProgress:{ [weak self] update in
+                    guard let self, self.evaluationJobs[key]?.id == id else { return }
+                    for field in (try? update.object("axis progress")) ?? [] { self.evaluationJobs[key]?.progress = self.evaluationJobs[key]?.progress.replacing(field.key,with:field.value) ?? .object([field]) }
+                })
                 try Task.checkCancellation()
                 guard self.evaluationJobs[key]?.id == id, let latestSource = self.exchange?.source else { return }
                 let updated = try ConversationEvaluation.apply(result,prepared:prepared,source:latestSource,state:self.publicationSnapshot().required("state"))

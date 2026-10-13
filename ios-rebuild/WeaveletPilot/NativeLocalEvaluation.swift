@@ -108,7 +108,6 @@ enum NativeLocalEvaluation {
         let output = Output()
         try await generator(modelURL,request) { cumulative in
             try Task.checkCancellation()
-            guard await isCurrent() else { throw ExchangeError.invalid("評価対象が更新されました") }
             await output.receive(cumulative)
             return false
         }

@@ -9,6 +9,7 @@ struct EvaluationJob {
     let id: UUID
     var busy: Bool
     var error: String? = nil
+    var progress = OrderedJSON.object([])
 }
 
 struct ConversationEvaluationView: View {
@@ -39,6 +40,11 @@ struct ConversationEvaluationView: View {
                 Section {
                     if job?.busy == true {
                         ProgressView("評価中")
+                        if let fields = try? job?.progress.object("axis progress") {
+                            ForEach(Array(fields.enumerated()),id:\.offset) { _, field in
+                                HStack { Text(label(field.key)); Spacer(); Text(label((try? field.value.string("progress")) ?? "")) }
+                            }
+                        }
                         Button("停止",role:.destructive) { state.stopEvaluation(chatID:draft.chatID,nodeID:draft.nodeID) }
                     } else {
                         Button("評価を実行") {
@@ -52,6 +58,7 @@ struct ConversationEvaluationView: View {
                 }
                 if let result = result?[dimension] {
                     Section("保存済みの評価") {
+                        if result["source"] == .string("local") { Text("端末内モデルの評価（実験的）").font(.caption).foregroundStyle(.secondary) }
                         if let context = self.result?[dimension + "Context"] {
                             Text(context["scope"] == .string("single") ? "単一の発言" : "会話全体").foregroundStyle(.secondary)
                         }
@@ -66,7 +73,7 @@ struct ConversationEvaluationView: View {
                     }
                 }
             }
-            .navigationTitle("オンライン評価")
+            .navigationTitle("評価")
             .toolbar { ToolbarItem(placement:.confirmationAction) { Button("閉じる") { dismiss() } } }
         }
     }
@@ -76,6 +83,7 @@ struct ConversationEvaluationView: View {
          "sexual":"性的な内容", "hate":"憎悪", "harassment":"嫌がらせ", "self-harm":"自傷", "sexual/minors":"未成年の性的内容",
          "hate/threatening":"憎悪による脅迫", "violence/graphic":"生々しい暴力", "violence":"暴力", "harassment/threatening":"嫌がらせによる脅迫",
          "self-harm/intent":"自傷の意図", "self-harm/instructions":"自傷の手順", "illicit":"違法行為", "illicit/violent":"暴力を伴う違法行為",
+         "waiting":"待機", "generating":"生成中", "done":"完了",
          "green":"良好", "yellow":"改善余地", "red":"要改善", "safe":"低リスク", "review":"要確認", "block":"高リスク"][key] ?? key
     }
     @ViewBuilder private func reportRows(_ values: OrderedJSON?) -> some View {

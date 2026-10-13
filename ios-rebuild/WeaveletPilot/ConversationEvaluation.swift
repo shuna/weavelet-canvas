@@ -1,6 +1,7 @@
 import Foundation
 
 enum ConversationEvaluation {
+    enum Execution { case remote(URLRequest), local(URL) }
     struct Prepared {
         let chatID: String
         let nodeID: String
@@ -11,7 +12,8 @@ enum ConversationEvaluation {
         let scope: String
         let omittedMode: String
         let context: OrderedJSON
-        let request: URLRequest
+        let execution: Execution
+        let language: String
         fileprivate let sourceChat: Data
         fileprivate let sourceContentStore: Data
         fileprivate let providerState: Data
@@ -32,7 +34,7 @@ enum ConversationEvaluation {
 
     static func prepare(source: OrderedJSON, state: OrderedJSON, chatID: String, nodeID: String,
                         dimension: String, scope: String = "full-context", omittedMode: String = "respect-omitted",
-                        language: String = "en", legacy: RemoteCredentialRecord = .init(),
+                        language: String = "en", legacy: @autoclosure () throws -> RemoteCredentialRecord = RemoteCredentialRecord(), files: LocalModelFiles? = nil,
                         readProviderCredential: ProviderModels.CredentialReader = RemoteCredentials.load(providerID:)) throws -> Prepared {
         guard ["safety", "quality"].contains(dimension), ["single", "full-context"].contains(scope),
               ["respect-omitted", "include-omitted"].contains(omittedMode) else { throw ExchangeError.invalid("評価条件") }
@@ -55,12 +57,14 @@ enum ConversationEvaluation {
             .init(key:"scope",value:.string(scope)), .init(key:"omittedMode",value:.string(effectiveOmitted))
         ]))
         guard context != .null else { throw ExchangeError.invalid("評価コンテキスト") }
-        let request: URLRequest
+        let execution: Execution
         if dimension == "quality" {
             if state["localModelEnabled"] == .bool(true), let analysis = state["activeLocalModels"]?["analysis"],
                case .string(let localModel) = analysis, !localModel.isEmpty {
-                throw ExchangeError.invalid("ローカル分析モデルによる評価は未接続です")
-            }
+                guard let files else { throw ExchangeError.invalid("この端末の分析モデルを選択してください") }
+                execution = .local(try NativeLocalEvaluation.modelURL(state:state,files:files))
+            } else {
+            let legacy = try legacy()
             let prompt = try (scope == "full-context" ? context.required("contextText") : context.required("userText")).string("評価文")
             guard !prompt.isEmpty else { throw ExchangeError.invalid("評価文が空です") }
             let config = try chat.required("config")
@@ -92,8 +96,9 @@ enum ConversationEvaluation {
                 .init(key:"authentication",value:.array(auth == .null ? [] : [.object([.init(key:"name",value:.string("Authorization")),.init(key:"prefix",value:.string("Bearer "))])]))])
             let body = try OrderedJSONChanges.apply(.array([.object([.init(key:"op",value:.string("set")),
                 .init(key:"path",value:.array([])),.init(key:"value",value:try envelope.required("body"))])]),to:.null,opaque:boundary.opaque)
-            request = try RemoteRequest.bindEnvelope(bound,body:body,originalURL:credential.url,key:credential.record.key)
+            execution = .remote(try RemoteRequest.bindEnvelope(bound,body:body,originalURL:credential.url,key:credential.record.key))
             guard body["stream"] != .bool(true) else { throw ExchangeError.invalid("評価は非streamingが必要です") }
+            }
         } else {
             let text: String
             if scope == "full-context" {
@@ -116,17 +121,23 @@ enum ConversationEvaluation {
                 .init(key:"headers",value:try envelope.required("headers")),
                 .init(key:"authentication",value:.array([.object([.init(key:"name",value:.string("Authorization")),
                     .init(key:"prefix",value:.string("Bearer "))])]))])
-            request = try RemoteRequest.bindEnvelope(bound,body:envelope.required("body"),originalURL:url,key:credential.key)
+            execution = .remote(try RemoteRequest.bindEnvelope(bound,body:envelope.required("body"),originalURL:url,key:credential.key))
         }
         return Prepared(chatID:chatID,nodeID:nodeID,key:key,phase:phase,dimension:dimension,mode:target.role,scope:scope,
-                        omittedMode:effectiveOmitted,context:context,request:request,sourceChat:try chat.encoded(),
-                        sourceContentStore:try (source["contentStore"] ?? .null).encoded(),providerState:try providerDependency(state).encoded())
+                        omittedMode:effectiveOmitted,context:context,execution:execution,language:language,sourceChat:try chat.encoded(),
+                        sourceContentStore:try (source["contentStore"] ?? .null).encoded(),providerState:try providerDependency(state,execution:execution).encoded())
     }
 
-    static func run(_ prepared: Prepared, client: RemoteClient = RemoteClient(), isCurrent: () -> Bool = { true }) async throws -> OrderedJSON {
+    @MainActor static func run(_ prepared: Prepared, client: RemoteClient = RemoteClient(), localGenerator: @escaping LocalLlama.Generator = LocalLlama.generate,
+                             isCurrent: @escaping @MainActor @Sendable () -> Bool = { true }, onProgress: @escaping @MainActor (OrderedJSON) -> Void = { _ in }) async throws -> OrderedJSON {
         try Task.checkCancellation()
         guard isCurrent() else { throw ExchangeError.invalid("評価対象が更新されました") }
-        let response = try await client.auxiliaryClient().completeJSON(prepared.request)
+        let response: OrderedJSON
+        switch prepared.execution {
+        case .local(let modelURL):
+            return try await NativeLocalEvaluation.runQuality(context:prepared.context,scope:prepared.scope,language:prepared.language,modelURL:modelURL,generator:localGenerator,isCurrent:isCurrent,onProgress:onProgress)
+        case .remote(let request): response = try await client.auxiliaryClient().completeJSON(request)
+        }
         try Task.checkCancellation()
         guard isCurrent() else { throw ExchangeError.invalid("評価対象が更新されました") }
         let now = OrderedJSON.number(String(Int(Date().timeIntervalSince1970 * 1000)))
@@ -181,12 +192,14 @@ enum ConversationEvaluation {
             return id.utf8.elementsEqual(prepared.chatID.utf8)
         }),
               try chat.encoded() == prepared.sourceChat, try (source["contentStore"] ?? .null).encoded() == prepared.sourceContentStore,
-              try providerDependency(state).encoded() == prepared.providerState else { return false }
+              try providerDependency(state,execution:prepared.execution).encoded() == prepared.providerState else { return false }
         return true
     }
 
-    private static func providerDependency(_ state: OrderedJSON) -> OrderedJSON {
-        .object(["providers","localModelEnabled","activeLocalModels"].compactMap { key in state[key].map { .init(key:key,value:$0) } })
+    private static func providerDependency(_ state: OrderedJSON, execution: Execution) -> OrderedJSON {
+        var keys = ["providers","localModelEnabled","activeLocalModels"]
+        if case .local = execution { keys.append("localModels") }
+        return .object(keys.compactMap { key in state[key].map { .init(key:key,value:$0) } })
     }
 
     private static func targetMessage(chat: OrderedJSON, source: OrderedJSON, nodeID: String) throws -> (chat: OrderedJSON, index: Int, role: String)? {

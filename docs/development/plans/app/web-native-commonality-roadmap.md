@@ -304,3 +304,10 @@ iOSの設定へ利用量の累計、モデル別推定費用・合計、累計�
 既存Webの評価文脈、judge要求、応答解析、結果更新、閾値表示をpure coreへ分離し、Web実callerとnative bridgeから共用する。nativeはKeychain・URLSession・URL/secret束縛・世代照合・原子的保存だけを担当。安全性評価のWeb CORS proxy条件はnative直接通信には不要で、OpenAI専用credentialとOpenRouter必須制約の拒否は維持する。今回のnative範囲は手動オンライン評価（品質/安全性、単一/全文、除外発言の扱い）と結果保存・閲覧。自動評価、local/hybrid評価と評価設定全体は次の接続範囲であり、local analysis指定を無視してremoteへ送らない。
 
 ユーザー追加指示に従い、Webの配置をiOSで再現する調整を進める。今回バブル左にrole/avatar・star/pin、右に表示形式/評価/除外/保護/操作をまとめ、44pt操作領域と狭幅の段組を維持した。Markdown/raw切替の重複行を右上menuへ統合し、本文端を維持。タイトルを現在会話名のinline表示、入力欄を下端固定、履歴と会話操作を上部menuへ移した。次は全体のサイドバー・分割表示、会話/フォルダー一覧と分岐表示の配置をWeb基準で調整する。Catalyst機能群確認・独立Astra監査完了の証拠は[検証台帳](web-native-completion-ledger.md)に記録する。
+
+
+## 2026-10-13：ローカル品質評価・サイドバー
+
+Webの5軸prompt、空応答fallback、採点/解析、local safety/hybrid判定を共有coreへ移し、Web実callerを接続。native品質評価は既存wllama/NativeLlamaと実GGUFへ接続し、共有promptと結果だけを使う。remote secretは遅延読取でlocal実行時に読まない。モデルregistryと端末実ファイルを区別し、評価中のGGUF置換をOSのファイル世代で拒否する。Web由来の分析モデル割当と既存ファイルimportを使用する段階で、割当/資産管理UI、Transformers分類器、自動/hybrid評価とiPhone向けnativeエンジンは残件。
+
+会話/フォルダー一覧を既存Viewの再利用でサイドバーへ移し、wideはチャットと同時表示、compactはpreferredCompactColumnで一覧/詳細へ移る。Apple公式APIの列制御を使用し、700px独自幅判定を廃止。wideの重複buttonと0件選択footerを除去。Catalyst確認と独立Astra監査の記録は[検証台帳](web-native-completion-ledger.md)。次はiPhoneのエンジン接続と残るモデル/評価設定、分岐表示・一覧並替えを進める。

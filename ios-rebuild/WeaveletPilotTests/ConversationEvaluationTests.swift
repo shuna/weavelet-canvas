@@ -24,6 +24,10 @@ final class ConversationEvaluationTests: XCTestCase {
         configuration.protocolClasses = [EvaluationProtocol.self]
         return RemoteClient(session:URLSession(configuration:configuration,delegate:RemoteRedirectPolicy(),delegateQueue:nil))
     }
+    private func request(_ prepared: ConversationEvaluation.Prepared) throws -> URLRequest {
+        guard case .remote(let request) = prepared.execution else { throw ExchangeError.invalid("Expected remote evaluation") }
+        return request
+    }
     private func source() throws -> OrderedJSON {
         try json(#"{"chats":[{"id":"chat","config":{"model":"fake-model","providerId":"openrouter","openRouter":{"routing":{"only":["provider-a"],"max_price":{"prompt":0.0100,"xFuture":9007199254740993}},"responseCache":{"mode":"on"}}},"branchTree":{"activePath":["user","assistant"],"nodes":{"user":{"id":"user","parentId":null,"role":"user","contentHash":"u"},"assistant":{"id":"assistant","parentId":"user","role":"assistant","contentHash":"a"}}},"omittedNodes":{}}],"contentStore":{"u":{"content":[{"type":"text","text":"質問"}],"refCount":1},"a":{"content":[{"type":"text","text":"回答"}],"refCount":1}},"evaluationResults":{},"xRoot":9007199254740993}"#)
     }
@@ -40,12 +44,12 @@ final class ConversationEvaluationTests: XCTestCase {
         let prepared = try ConversationEvaluation.prepare(source:source,state:state,chatID:"chat",nodeID:"assistant",
             dimension:"quality",legacy:RemoteCredentialRecord(),readProviderCredential:read)
         XCTAssertEqual(prepared.key,"chat:assistant:post-receive")
-        XCTAssertEqual(prepared.request.url?.host,"openrouter.ai")
-        XCTAssertEqual(prepared.request.value(forHTTPHeaderField:"Authorization"),"Bearer FAKE-openrouter")
-        let body = try OrderedJSON.decode(XCTUnwrap(prepared.request.httpBody))
+        XCTAssertEqual(try request(prepared).url?.host,"openrouter.ai")
+        XCTAssertEqual(try request(prepared).value(forHTTPHeaderField:"Authorization"),"Bearer FAKE-openrouter")
+        let body = try OrderedJSON.decode(XCTUnwrap(try request(prepared).httpBody))
         XCTAssertEqual(body["provider"]?["only"],.array([.string("provider-a")]))
         XCTAssertEqual(body["provider"]?["max_price"]?["xFuture"],.number("9007199254740993"))
-        XCTAssertNil(prepared.request.value(forHTTPHeaderField:"X-OpenRouter-Cache"))
+        XCTAssertNil(try request(prepared).value(forHTTPHeaderField:"X-OpenRouter-Cache"))
         EvaluationProtocol.requests = []
         EvaluationProtocol.reply = Data(#"{"choices":[{"message":{"content":"{\"scores\":{\"taskCompletion\":0.8}}"}}]}"#.utf8)
         do {
@@ -70,9 +74,9 @@ final class ConversationEvaluationTests: XCTestCase {
         let safeChat = original.replacing("config",with:.object(try original.required("config").object("config").filter { $0.key != "openRouter" }))
         let prepared = try ConversationEvaluation.prepare(source:safetySource.replacing("chats",with:.array([safeChat])),state:state(),chatID:"chat",nodeID:"assistant",
             dimension:"safety",scope:"single",readProviderCredential:read)
-        XCTAssertEqual(prepared.request.url?.absoluteString,"https://api.openai.com/v1/moderations")
-        XCTAssertEqual(prepared.request.value(forHTTPHeaderField:"Authorization"),"Bearer FAKE-openai")
-        XCTAssertEqual(try OrderedJSON.decode(XCTUnwrap(prepared.request.httpBody)).required("input"),.string("回答"))
+        XCTAssertEqual(try request(prepared).url?.absoluteString,"https://api.openai.com/v1/moderations")
+        XCTAssertEqual(try request(prepared).value(forHTTPHeaderField:"Authorization"),"Bearer FAKE-openai")
+        XCTAssertEqual(try OrderedJSON.decode(XCTUnwrap(try request(prepared).httpBody)).required("input"),.string("回答"))
         EvaluationProtocol.reply = Data(#"{"results":[{"flagged":true,"categories":{"violence":true,"future":true},"category_scores":{"violence":0.91,"future":0.1234567890123456789}}]}"#.utf8)
         let result = try await ConversationEvaluation.run(prepared,client:client())
         XCTAssertEqual(result["flagged"],.bool(true))
@@ -136,6 +140,37 @@ final class ConversationEvaluationTests: XCTestCase {
                 XCTAssertEqual(try app.publicationSnapshot()["state"]?["xEvalRoot"],.number("9007199254740993"))
             }
         }
+    }
+
+    func testLocalAnalysisUsesInstalledGGUFWithoutReadingRemoteCredentialsAndPersistsProgress() async throws {
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent("native-local-eval-store-\(UUID().uuidString)")
+        let store = LocalStateStore(fileURL:dir.appendingPathComponent("state.json"))
+        let generator: LocalLlama.Generator = { _, _, onText in _ = try await onText("good") }
+        let app = ChatState(store:store,localGenerate:generator)
+        try app.importWebData(json(#"{"version":3,"chats":[{"id":"local-chat","title":"Local","config":{"model":"fake-model"},"messages":[{"role":"user","content":[{"type":"text","text":"Prompt"}]}]}]}"#).encoded())
+        let snapshot = try app.publicationSnapshot(), roots = try snapshot.required("state")
+        let models = try json(#"[{"id":"analysis-model","engine":"wllama","tasks":["analysis"],"manifest":{"kind":"single-file"},"xFuture":9007199254740993}]"#)
+        try app.applySnapshot(snapshot.replacing("state",with:roots.replacing("localModelEnabled",with:.bool(true)).replacing("activeLocalModels",with:.object([.init(key:"analysis",value:.string("analysis-model"))])).replacing("localModels",with:models)))
+        try FileManager.default.createDirectory(at:app.localModelFiles.directory,withIntermediateDirectories:true)
+        try Data("GGUF".utf8).write(to:app.localModelFiles.url(modelID:"analysis-model"))
+        let nodeID = try XCTUnwrap(app.conversation?.visibleMessages.first?.id)
+        func noRemoteCredential() throws -> RemoteCredentialRecord { throw ExchangeError.invalid("Must not read remote credentials") }
+        let prepared = try ConversationEvaluation.prepare(source:XCTUnwrap(app.exchange?.source),state:app.publicationSnapshot().required("state"),chatID:"local-chat",nodeID:nodeID,dimension:"quality",legacy:noRemoteCredential(),files:app.localModelFiles,readProviderCredential:{ _ in throw ExchangeError.invalid("Must not read provider credentials") })
+        guard case .local = prepared.execution else { return XCTFail("Expected local execution") }
+        let completed = expectation(description:"local evaluation saved")
+        let subscription = app.$evaluationJobs.dropFirst().filter { $0.values.first?.busy == false }.first().sink { _ in completed.fulfill() }
+        try app.startEvaluation(app.evaluationDraft(nodeID:nodeID),dimension:"quality",scope:"single",omittedMode:"respect-omitted",readProviderCredential:{ _ in throw ExchangeError.invalid("Must not read provider credentials") })
+        await fulfillment(of:[completed],timeout:5)
+        withExtendedLifetime(subscription) {}
+        let job = try XCTUnwrap(app.evaluationJobs[.init(chatID:"local-chat",nodeID:nodeID)])
+        XCTAssertNil(job.error)
+        XCTAssertEqual(try job.progress.object("progress").count,5)
+        XCTAssertTrue(try job.progress.object("progress").allSatisfy { $0.value == .string("done") })
+        let result = try app.evaluationResult(chatID:"local-chat",nodeID:nodeID)
+        XCTAssertEqual(result?["quality"]?["source"],.string("local"))
+        XCTAssertEqual(result?["quality"]?["scores"]?["taskCompletion"],.number("0.65"))
+        XCTAssertEqual(try ChatState(store:store).publicationSnapshot(),try app.publicationSnapshot())
+        XCTAssertEqual(try app.publicationSnapshot()["state"]?["localModels"],models)
     }
 
 }

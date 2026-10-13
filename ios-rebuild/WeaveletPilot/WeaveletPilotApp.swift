@@ -57,12 +57,11 @@ struct ChatView: View {
     @State private var evaluationDraft: ConversationEvaluationDraft?
 
     var body: some View {
+        let closeLibrary: (() -> Void)? = horizontalSizeClass == .compact ? { preferredCompactColumn = .detail } : nil
         NavigationSplitView(columnVisibility:$columnVisibility, preferredCompactColumn:$preferredCompactColumn) {
             ConversationLibraryView(state:state, onSelect: {
                 preferredCompactColumn = .detail
-            }, onClose: {
-                preferredCompactColumn = .detail
-            })
+            }, onClose: closeLibrary)
                 .navigationSplitViewColumnWidth(min:260,ideal:300,max:380)
         } detail: {
         NavigationStack {
@@ -728,8 +727,7 @@ struct WebJSONDocument: FileDocument {
 struct ConversationLibraryView: View {
     @ObservedObject var state: ChatState
     let onSelect: () -> Void
-    let onClose: () -> Void
-    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
+    let onClose: (() -> Void)?
     @State private var selected = Set<Data>()
     @State private var pendingDelete: [String] = []
     @State private var showsDelete = false
@@ -781,7 +779,7 @@ struct ConversationLibraryView: View {
             }
             .onChange(of: state.exchange?.source) { _, _ in perform {} }
             .toolbar {
-                if horizontalSizeClass == .compact {
+                if let onClose {
                     ToolbarItem(placement: .topBarLeading) { Button("閉じる",action:onClose) }
                 }
                 ToolbarItem(placement: .topBarTrailing) {

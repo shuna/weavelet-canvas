@@ -546,3 +546,14 @@ Web実処理由来の選択・原文保持・生成要求・評価・CRUD・表�
 Catalyst実画面は別bundle IDのFAKE cloneで確認。初回表示でMarkdown切替の独立行と大きいタイトル/Scroll終端の入力欄が残ることを観測し、右上menu・inlineタイトル・下端固定へ修正。最終画面で重複行消失、右上操作/本文端/固定入力欄、テキスト切替を確認。手動評価sheetの品質/安全性・範囲controlsを表示したが実API実行はしない。検証アプリは終了しprocess消失を確認、通常store/Keychainを操作していない。iPhone狭幅・Dynamic Type最大・ソフトウェアキーボード/IME実操作と実APIは未確認。Airの導入版は前のcheckpointを維持する。
 
 自動/local/hybrid評価、評価設定UI全体、main split/sidebar/branchのWeb配置再現、実クラウド同期は残件。最新origin/main 7a0a383aをfetchし統合branchの祖先と確認済み。部分機能の成功を全体完了にしない。
+
+
+## ローカル品質評価・サイドバー（2026-10-13）
+
+WebのlocalEvaluation/useEvaluationからprompt・fallback・400/150文字切詰め・採点/解析・local/hybrid条件を共有し、nativeは既存GGUF生成adapterの5軸実行と保存へ接続。共有担当の25件・Web型検査を再利用、bundle生成/鮮度と差分確認成功。Catalyst初回はlocalGeneratorのescaping指定不足でbuild失敗、修正後NativeLocal4＋既存/統合評価5の計9件成功。停止/stale/空応答fallback/累積callback/進捗/モデル置換拒否/秘密を読まないlocal分岐/保存失敗/再起動/未知metadataを確認。さらに既存の隔離tiny GGUFで実5軸推論1件成功（6.747秒、source=local、15進捗、5個の有限な採点値）。FAKE GGUFを実推論と呼ばず、Webとの結果同一性や評価内容の有用性を実model試験から主張しない。10件の成功範囲は単一runではない。
+
+新classifierやSDKは追加せず、Transformers moderationをGGUFで近似していない。モデルfileのdevice/inode/size/mtimeをaxis/fallback前後と最終適用前に照合する。深いstate bytes検査はaxis間と保存前、token callbackはTask取消だけとし、各tokenで全documentをserializeしない。独立Astraは新規なし。ログ: /private/tmp/weavelet-local-evaluation-{bundle,freshness,catalyst,catalyst-fixed,real-gguf}.log。モデル資産/同期/暗号化基盤の未変更成功は再利用し、全往復や全依存監査を反復しない。
+
+sidebarはNavigationSplitViewで既存会話/フォルダーViewとcallbackを再利用。compactの制御には[Apple公式preferredCompactColumn API](https://developer.apple.com/documentation/swiftui/navigationsplitview/init(columnvisibility:preferredcompactcolumn:sidebar:detail:))を使用した。FAKE Catalyst実画面で一覧/チャット/下端入力の同時表示、標準toggle、タイトルの欠け解消、0件選択footer非表示、選択1件の移動/削除iconの収まりを確認した。子sidebarのtraitがcompactになるためwideにも閉じるbuttonが残った問題は、root traitでoptional callbackを渡して修正、限定Astraは新規なし。UI最終build成功（/private/tmp/weavelet-sidebar-final-build.log）。確認アプリ終了とprocess消失を確認。通常データ・Keychainへ触れず、移動/削除は実行していない。
+
+iPhone compact・最大Dynamic Type・キーボード、Web/nativeの実クラウド相互運用は未確認。nativeの分析モデル割当/資産管理UI、Transformers分類器、auto/hybrid評価、iPhone向けGGUF engine buildは残る。前の「未接続local品質」はCatalyst単一GGUF品質まで更新したのであり、全local完成にはしない。一覧並替えには既存native操作APIがなく、サイドバー移植だけでは未実装部分を補っていない。

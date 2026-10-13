@@ -111,4 +111,19 @@ final class NativeLocalEvaluationTests: XCTestCase {
             XCTAssertFalse(progress.contains { $0["taskCompletion"] == .string("done") })
         }
     }
+    func testRealGGUFExecutesSharedFiveAxisEvaluationWhenModelIsProvided() async throws {
+        guard let path = ProcessInfo.processInfo.environment["WEAVELET_REAL_GGUF"] else { throw XCTSkip("Provide an existing test GGUF for native inference") }
+        let model = URL(fileURLWithPath:path)
+        var progress: [OrderedJSON] = []
+        let context = try json(#"{"userText":"Write a short story.","contextText":"[user]\nWrite a short story.","assistantText":"Anna and Ben played together."}"#)
+        let result = try await NativeLocalEvaluation.runQuality(context:context,scope:"single",language:"en",modelURL:model,onProgress:{ progress.append($0) })
+        XCTAssertEqual(result["source"],.string("local"))
+        XCTAssertEqual(try result.required("scores").object("scores").count,5)
+        XCTAssertEqual(progress.count,15)
+        for field in try result.required("scores").object("scores") {
+            let score = try field.value.number("score")
+            XCTAssertTrue(score.isFinite && score >= 0 && score <= 1)
+        }
+    }
+
 }

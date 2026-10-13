@@ -20259,6 +20259,291 @@ ${messageContent}---
     return `${chatId}:${nodeId}:${phase}`;
   }
 
+  // src/utils/localEvaluationCore.ts
+  var WARN_THRESHOLD = 0.5;
+  var BLOCK_THRESHOLD = 0.8;
+  function isPositiveLabel(label) {
+    const lower = label.toLowerCase();
+    return lower === "safe" || lower === "not toxic" || lower === "acceptable" || lower === "none" || lower === "ok" || lower.startsWith("not_") || lower.startsWith("non_");
+  }
+  var AXIS_LABELS = {
+    ja: {
+      taskCompletion: { name: "\u30BF\u30B9\u30AF\u9054\u6210\u5EA6", question: "\u3053\u306E\u6587\u7AE0\u306F\u6C42\u3081\u3089\u308C\u305F\u5185\u5BB9\u3092\u3069\u306E\u7A0B\u5EA6\u9054\u6210\u3057\u3066\u3044\u307E\u3059\u304B\uFF1F" },
+      faithfulness: { name: "\u6B63\u78BA\u6027", question: "\u3053\u306E\u6587\u7AE0\u306E\u5185\u5BB9\u306F\u6B63\u78BA\u3067\u4E8B\u5B9F\u306B\u57FA\u3065\u3044\u3066\u3044\u307E\u3059\u304B\uFF1F" },
+      coherence: { name: "\u4E00\u8CAB\u6027", question: "\u3053\u306E\u6587\u7AE0\u306F\u8AD6\u7406\u7684\u306B\u4E00\u8CAB\u3057\u3066\u3044\u3066\u8AAD\u307F\u3084\u3059\u3044\u3067\u3059\u304B\uFF1F" },
+      conciseness: { name: "\u7C21\u6F54\u6027", question: "\u3053\u306E\u6587\u7AE0\u306F\u7C21\u6F54\u3067\u7121\u99C4\u304C\u306A\u3044\u3067\u3059\u304B\uFF1F" },
+      instructionFollowing: { name: "\u6307\u793A\u9075\u5B88", question: "\u3053\u306E\u6587\u7AE0\u306F\u6307\u793A\u3084\u5236\u7D04\u306B\u5F93\u3063\u3066\u3044\u307E\u3059\u304B\uFF1F" }
+    },
+    en: {
+      taskCompletion: { name: "Task Completion", question: "Does this text adequately address what was requested?" },
+      faithfulness: { name: "Faithfulness", question: "Is this text accurate and factually grounded?" },
+      coherence: { name: "Coherence", question: "Is this text logically coherent and easy to follow?" },
+      conciseness: { name: "Conciseness", question: "Is this text concise without unnecessary content?" },
+      instructionFollowing: { name: "Instruction Following", question: "Does this text follow the given instructions and constraints?" }
+    }
+  };
+  function getAxisLabels(language) {
+    if (language.startsWith("ja"))
+      return AXIS_LABELS.ja;
+    return AXIS_LABELS.en;
+  }
+  function buildAxisPrompt(text, axisQuestion, assistantResponse, language) {
+    if (language.startsWith("ja")) {
+      if (assistantResponse) {
+        return `\u4EE5\u4E0B\u306E\u4F1A\u8A71\u30B3\u30F3\u30C6\u30AD\u30B9\u30C8\u3068\u30A2\u30B7\u30B9\u30BF\u30F3\u30C8\u306E\u5FDC\u7B54\u306B\u3064\u3044\u3066\u7B54\u3048\u3066\u304F\u3060\u3055\u3044\u3002
+
+\u30B3\u30F3\u30C6\u30AD\u30B9\u30C8: ${text}
+
+\u30A2\u30B7\u30B9\u30BF\u30F3\u30C8\u306E\u5FDC\u7B54: ${assistantResponse}
+
+\u8CEA\u554F: ${axisQuestion}
+
+\u56DE\u7B54:`;
+      }
+      return `\u4EE5\u4E0B\u306E\u30C6\u30AD\u30B9\u30C8\u306B\u3064\u3044\u3066\u7B54\u3048\u3066\u304F\u3060\u3055\u3044\u3002
+
+\u30C6\u30AD\u30B9\u30C8: ${text}
+
+\u8CEA\u554F: ${axisQuestion}
+
+\u56DE\u7B54:`;
+    }
+    if (assistantResponse) {
+      return `Answer about this conversation context and assistant response.
+
+Context: ${text}
+
+Assistant response: ${assistantResponse}
+
+Question: ${axisQuestion}
+
+Answer:`;
+    }
+    return `Answer about this text.
+
+Text: ${text}
+
+Question: ${axisQuestion}
+
+Answer:`;
+  }
+  function estimateScoreFromText(raw) {
+    const trimmed = raw.trim().toLowerCase();
+    const rawText = raw.trim();
+    const positiveEN = (trimmed.match(/\b(good|great|excellent|well|clear|strong|effective|accurate|concise|yes|adequate|follows)\b/g) || []).length;
+    const negativeEN = (trimmed.match(/\b(poor|bad|weak|unclear|confusing|verbose|wrong|inaccurate|lacks?|missing|no|does not|doesn't|fail)\b/g) || []).length;
+    const positiveJA = (rawText.match(/(良い|優れ|適切|明確|分かりやすい|簡潔|正確|的確|効果的|丁寧|はい|従って|達成)/g) || []).length;
+    const negativeJA = (rawText.match(/(悪い|不適切|不明確|冗長|不正確|曖昧|不足|欠け|問題|いいえ|従っていない|達成していない)/g) || []).length;
+    const pos = positiveEN + positiveJA;
+    const neg = negativeEN + negativeJA;
+    if (pos > neg + 1)
+      return 0.75;
+    if (pos > neg)
+      return 0.65;
+    if (neg > pos + 1)
+      return 0.3;
+    if (neg > pos)
+      return 0.45;
+    return 0.55;
+  }
+  var AXIS_NAME_MAP = {
+    "task completion": "taskCompletion",
+    "taskcompletion": "taskCompletion",
+    "task_completion": "taskCompletion",
+    "\u30BF\u30B9\u30AF\u9054\u6210": "taskCompletion",
+    "faithfulness": "faithfulness",
+    "\u6B63\u78BA\u6027": "faithfulness",
+    "\u5FE0\u5B9F\u6027": "faithfulness",
+    "coherence": "coherence",
+    "\u4E00\u8CAB\u6027": "coherence",
+    "conciseness": "conciseness",
+    "\u7C21\u6F54\u6027": "conciseness",
+    "instruction following": "instructionFollowing",
+    "instructionfollowing": "instructionFollowing",
+    "instruction_following": "instructionFollowing",
+    "\u6307\u793A\u9075\u5B88": "instructionFollowing"
+  };
+  function parseLocalQualityResponse(raw, now) {
+    const defaultScores = () => ({
+      taskCompletion: 0,
+      faithfulness: 0,
+      coherence: 0,
+      conciseness: 0,
+      instructionFollowing: 0
+    });
+    try {
+      const jsonMatch = raw.match(/```(?:json)?\s*([\s\S]*?)```/) || [null, raw];
+      const jsonStr = jsonMatch[1]?.trim() ?? raw.trim();
+      const parsed = JSON.parse(jsonStr);
+      if (parsed && typeof parsed.scores === "object") {
+        const scores = defaultScores();
+        const reasoning = {};
+        for (const key of qualityAxisKeys) {
+          const val = parsed.scores[key];
+          if (typeof val === "number") {
+            scores[key] = val > 1 ? val / 10 : Math.min(1, Math.max(0, val));
+          }
+          if (parsed.reasoning?.[key]) {
+            reasoning[key] = String(parsed.reasoning[key]);
+          }
+        }
+        return {
+          kind: "standard",
+          scores,
+          reasoning,
+          promptSuggestions: Array.isArray(parsed.promptSuggestions) ? parsed.promptSuggestions.map(String) : [],
+          configSuggestions: Array.isArray(parsed.configSuggestions) ? parsed.configSuggestions.map(String) : [],
+          source: "local",
+          timestamp: now
+        };
+      }
+    } catch {
+    }
+    {
+      const scores = defaultScores();
+      const reasoning = {};
+      let foundAxes = 0;
+      const lines = raw.split("\n");
+      for (let i = 0; i < lines.length; i++) {
+        const line = lines[i];
+        const lineLower = line.toLowerCase();
+        for (const [name, key] of Object.entries(AXIS_NAME_MAP)) {
+          if (lineLower.includes(name)) {
+            const scoreMatch = line.match(/[\s:]+(\d+(?:\.\d+)?)\s*(?:\/\s*10)?/);
+            if (scoreMatch) {
+              let val = parseFloat(scoreMatch[1]);
+              if (val > 1)
+                val = val / 10;
+              scores[key] = Math.min(1, Math.max(0, val));
+              foundAxes++;
+              const afterScore = line.slice((scoreMatch.index ?? 0) + scoreMatch[0].length).trim();
+              const reasonText = afterScore.replace(/^[-–—:.\s]+/, "").trim();
+              if (reasonText.length > 5) {
+                reasoning[key] = reasonText;
+              } else if (i + 1 < lines.length) {
+                const nextLine = lines[i + 1].trim().replace(/^[-–—:.\s]+/, "").trim();
+                if (nextLine && !Object.keys(AXIS_NAME_MAP).some((n) => nextLine.toLowerCase().includes(n))) {
+                  reasoning[key] = nextLine;
+                }
+              }
+            }
+            break;
+          }
+        }
+      }
+      if (foundAxes >= 3) {
+        const promptSuggestions = [];
+        const configSuggestions = [];
+        let currentSection = null;
+        for (const line of lines) {
+          const lower = line.toLowerCase();
+          if (lower.includes("prompt") && lower.includes("suggest")) {
+            currentSection = "prompt";
+            continue;
+          }
+          if (lower.includes("config") && lower.includes("suggest") || lower.includes("recommendation")) {
+            currentSection = "config";
+            continue;
+          }
+          const bullet = line.match(/^\s*[-*•]\s+(.+)/);
+          if (bullet && currentSection === "prompt")
+            promptSuggestions.push(bullet[1].trim());
+          if (bullet && currentSection === "config")
+            configSuggestions.push(bullet[1].trim());
+        }
+        return {
+          kind: "standard",
+          scores,
+          reasoning,
+          promptSuggestions,
+          configSuggestions,
+          source: "local",
+          timestamp: now
+        };
+      }
+    }
+    const trimmed = raw.trim().toLowerCase();
+    const rawText = raw.trim();
+    let uniformScore = 0.55;
+    const positiveEN = (trimmed.match(/\b(good|great|excellent|well|clear|strong|effective|accurate|concise)\b/g) || []).length;
+    const negativeEN = (trimmed.match(/\b(poor|bad|weak|unclear|confusing|verbose|wrong|inaccurate|lacks?|missing)\b/g) || []).length;
+    const positiveJA = (rawText.match(/(良い|優れ|適切|明確|分かりやすい|簡潔|正確|的確|効果的|丁寧)/g) || []).length;
+    const negativeJA = (rawText.match(/(悪い|不適切|不明確|冗長|不正確|曖昧|不足|欠け|問題)/g) || []).length;
+    const positiveWords = positiveEN + positiveJA;
+    const negativeWords = negativeEN + negativeJA;
+    if (positiveWords > negativeWords + 1)
+      uniformScore = 0.75;
+    else if (positiveWords > negativeWords)
+      uniformScore = 0.65;
+    else if (negativeWords > positiveWords + 1)
+      uniformScore = 0.3;
+    else if (negativeWords > positiveWords)
+      uniformScore = 0.45;
+    const uniformScores = defaultScores();
+    for (const key of qualityAxisKeys) {
+      uniformScores[key] = uniformScore;
+    }
+    const tier3Reasoning = {};
+    if (rawText) {
+      for (const key of qualityAxisKeys) {
+        tier3Reasoning[key] = rawText;
+      }
+    }
+    return {
+      kind: "standard",
+      scores: uniformScores,
+      reasoning: tier3Reasoning,
+      promptSuggestions: [],
+      configSuggestions: [],
+      source: "local",
+      timestamp: now
+    };
+  }
+  function localAxisPrompt(axis, text, assistantResponse, language) {
+    const label = getAxisLabels(language)[axis];
+    const inputText = text.slice(0, 400);
+    const inputAssistant = assistantResponse?.slice(0, 400);
+    return {
+      prompt: buildAxisPrompt(inputText, label.question, inputAssistant, language),
+      fallback: language.startsWith("ja") ? `\u300C${inputText.slice(0, 150)}\u300D
+${label.name}\u306E\u8A55\u4FA1:` : `"${inputText.slice(0, 150)}"
+${label.name}:`,
+      options: { maxTokens: 400, temperature: 0.2 },
+      fallbackOptions: { maxTokens: 200, temperature: 0.5 }
+    };
+  }
+  function localAxisScore(raw) {
+    const trimmed = raw.trim();
+    return trimmed ? { score: estimateScoreFromText(trimmed), reasoning: trimmed } : { score: 0.5 };
+  }
+  function localQualityResult(outputs, now) {
+    const scores = {};
+    const reasoning = {};
+    for (const axis of qualityAxisKeys) {
+      const result3 = localAxisScore(outputs[axis] ?? "");
+      scores[axis] = result3.score;
+      if (result3.reasoning)
+        reasoning[axis] = result3.reasoning;
+    }
+    return { kind: "standard", scores, reasoning, promptSuggestions: [], configSuggestions: [], source: "local", timestamp: now };
+  }
+  function localModeration(labels, now) {
+    const negativeLabels = labels.filter((l) => !isPositiveLabel(l.label));
+    const maxNegativeScore = negativeLabels.length > 0 ? Math.max(...negativeLabels.map((l) => l.score)) : 0;
+    let screening = "safe";
+    if (maxNegativeScore >= BLOCK_THRESHOLD)
+      screening = "block-candidate";
+    else if (maxNegativeScore >= WARN_THRESHOLD)
+      screening = "warn";
+    return { screening, rawScores: labels.map((l) => ({ label: l.label, score: l.score })), source: "local", timestamp: now };
+  }
+  function localSafetyPolicy(safetyEngine, hybridRemoteOnSafe, localSafety) {
+    return {
+      runLocal: safetyEngine === "local" || safetyEngine === "hybrid",
+      runRemote: safetyEngine === "remote" || safetyEngine === "local" && !localSafety || safetyEngine === "hybrid" && (localSafety?.screening === "warn" || localSafety?.screening === "block-candidate" || hybridRemoteOnSafe || !localSafety)
+    };
+  }
+
   // src/utils/evaluationCore.ts
   var QUALITY_SYSTEM_PROMPT = `You are an expert evaluation judge. You will receive a user prompt and an AI response. Evaluate the response quality on these 5 axes (score 0.0-1.0 each):
 
@@ -20609,6 +20894,20 @@ ${text}`;
         return JSON.stringify(parseSafetyResponse(input.data, input.now));
       case "resultKey":
         return JSON.stringify(evaluationResultKey(input.chatId ?? input.chatID ?? "", input.nodeId ?? input.nodeID ?? "", input.phase));
+      case "localAxes":
+        return JSON.stringify(qualityAxisKeys);
+      case "localPrompt":
+        return JSON.stringify(localAxisPrompt(input.axis, input.text, input.assistantResponse, input.language));
+      case "localAxisScore":
+        return JSON.stringify(localAxisScore(input.raw));
+      case "localQualityResult":
+        return JSON.stringify(localQualityResult(input.outputs, input.now));
+      case "localParse":
+        return JSON.stringify(parseLocalQualityResponse(input.raw, input.now));
+      case "localModeration":
+        return JSON.stringify(localModeration(input.labels, input.now));
+      case "localPolicy":
+        return JSON.stringify(localSafetyPolicy(input.safetyEngine, input.hybridRemoteOnSafe, input.localSafety));
       case "defaults":
         return JSON.stringify({ evaluationSettings: defaultEvaluationSettings, safetyThresholds: defaultSafetyThresholds, qualityThresholds: defaultQualityThresholds });
       case "display": {
