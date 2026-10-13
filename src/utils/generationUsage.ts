@@ -7,7 +7,8 @@ export type PreparedSubmitUsage = {
 } & ({ kind: 'observed'; promptTokens: number; completionTokens: number }
   | { kind: 'estimated'; promptMessages: MessageInterface[]; completionMessage: MessageInterface });
 
-export function prepareSubmitUsage(chat: ChatInterface, targetNodeId: string): PreparedSubmitUsage | undefined {
+export function prepareSubmitUsage(chat: ChatInterface, targetNodeId: string,
+  generatingNodeIds: string[] = [targetNodeId]): PreparedSubmitUsage | undefined {
   const index = chat.branchTree?.activePath.indexOf(targetNodeId) ?? -1;
   if (index < 0) return;
   const { model, providerId, systemPrompt } = chat.config;
@@ -20,7 +21,7 @@ export function prepareSubmitUsage(chat: ChatInterface, targetNodeId: string): P
   if (!completionMessage) return;
   return { kind: 'estimated', model, providerId, completionMessage,
     promptMessages: getSubmitContextMessages(chat.messages, index, model, chat.branchTree?.activePath,
-      chat.omittedNodes ?? {}, systemPrompt, { chat, generatingNodeIds: [targetNodeId] }) };
+      chat.omittedNodes ?? {}, systemPrompt, { chat, generatingNodeIds }) };
 }
 
 export function addPreparedSubmitUsage(total: TotalTokenUsed, prepared: PreparedSubmitUsage,

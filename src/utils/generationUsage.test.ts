@@ -59,6 +59,14 @@ describe('generation usage shared with Web', () => {
       .toEqual({ changes: [] });
   });
 
+  it('does not substitute a summary containing another generating node', () => {
+    const prepared = prepareSubmitUsage(chat(), 'd', ['a', 'd']);
+    expect(prepared?.kind).toBe('estimated');
+    if (prepared?.kind !== 'estimated') return;
+    expect(prepared.promptMessages.map(item => item.content[0].type === 'text' ? item.content[0].text : ''))
+      .toEqual(['instructions', 'A', 'B']);
+  });
+
   it('saves observation leaves on the node without touching unrelated chat data', () => {
     const source = chat();
     source.branchTree!.nodes.d.openRouterObservation = { generationId: 'old', cost: 2 };

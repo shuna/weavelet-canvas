@@ -107,7 +107,8 @@ export const applySubmitTokenUsage = async (
   if (chatIndex < 0) return;
   const chat = state.chats[chatIndex];
   const prepared = prepareSubmitUsage({ ...chat,
-    omittedNodes: state.omittedNodeMaps[String(chatIndex)] ?? chat.omittedNodes ?? {} }, targetNodeId);
+    omittedNodes: state.omittedNodeMaps[String(chatIndex)] ?? chat.omittedNodes ?? {} }, targetNodeId,
+    Object.values(state.generatingSessions).filter(session => session.chatId === chatId).map(session => session.targetNodeId));
   if (!prepared) return;
   if (prepared.kind === 'observed') {
     state.setTotalTokenUsed(addPreparedSubmitUsage(state.totalTokenUsed, prepared));

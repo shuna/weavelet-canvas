@@ -5,9 +5,9 @@ import { diffJSONChanges } from '../../src/utils/jsonChanges';
 
 export function generationUsage(json: string): string {
   const input = JSON.parse(json) as { chat: ChatInterface; targetNodeId: string;
-    countTotalTokens: boolean; totalTokenUsed: TotalTokenUsed };
+    countTotalTokens: boolean; totalTokenUsed: TotalTokenUsed; generatingNodeIds?: string[] };
   if (!input.countTotalTokens) return JSON.stringify({ changes: [] });
-  const prepared = prepareSubmitUsage(input.chat, input.targetNodeId);
+  const prepared = prepareSubmitUsage(input.chat, input.targetNodeId, input.generatingNodeIds);
   if (!prepared) return JSON.stringify({ changes: [] });
   const totals = input.totalTokenUsed ?? {};
   // shortcut: JSC has no Web tokenizer worker; replace these counts when a native tokenizer adapter exists.
