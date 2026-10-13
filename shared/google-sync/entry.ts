@@ -1,3 +1,4 @@
+export { messageDisplayIndexes } from './advancedDisplay';
 export { enterSubmissionOperation } from './enterSubmission';
 export { summaryOperation } from './bubbleSummary';
 export { titleOperation } from './title';

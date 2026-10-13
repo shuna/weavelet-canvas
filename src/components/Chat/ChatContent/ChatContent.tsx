@@ -1,3 +1,4 @@
+import { isMessageVisible } from '@utils/advancedDisplay';
 import { useSyncReview, acknowledgeSyncChat } from '@store/storage/google/conflicts';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useWorkspaceStore, useWorkspaceReadOnly } from '@store/workspaceScope';
@@ -308,7 +309,7 @@ const ChatContent = ({ isChatFindOpen, onChatFindClose }: ChatContentProps = {})
   const items = useMemo(() => {
     const result: Array<{ message: MessageInterface; originalIndex: number }> = [];
     messages?.forEach((message, index) => {
-      if (!advancedMode && index === 0 && message.role === 'system') return;
+      if (!isMessageVisible(advancedMode, index, message.role)) return;
       result.push({ message, originalIndex: index });
     });
     return result;

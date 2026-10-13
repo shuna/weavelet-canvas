@@ -1,12 +1,12 @@
 import Foundation
 
 enum DisplaySetting: String {
-    case theme, inlineLatex, markdownMode, streamingMarkdownPolicy, displayChatSize, branchSwipeDirection, animateBubbleNavigation, enterToSubmit
+    case theme, inlineLatex, markdownMode, streamingMarkdownPolicy, displayChatSize, branchSwipeDirection, animateBubbleNavigation, enterToSubmit, advancedMode
 
     func accepts(_ value: OrderedJSON) -> Bool {
         switch self {
         case .theme: return value == .string("light") || value == .string("dark")
-        case .inlineLatex, .markdownMode, .displayChatSize, .animateBubbleNavigation, .enterToSubmit: if case .bool = value { return true }; return false
+        case .inlineLatex, .markdownMode, .displayChatSize, .animateBubbleNavigation, .enterToSubmit, .advancedMode: if case .bool = value { return true }; return false
         case .branchSwipeDirection: return ["left-next", "right-next"].contains { value == .string($0) }
         case .streamingMarkdownPolicy: return ["auto", "always", "never"].contains { value == .string($0) }
         }
@@ -15,6 +15,18 @@ enum DisplaySetting: String {
 
 enum DisplaySettings {
     private static let defaults = Result { try ChatImport.call("defaults") }
+    private static let displaySession = Result<SharedWebOperations.Session, Error> { try SharedWebOperations.Session() }
+    static func messagesForDisplay(_ messages: [MessageNode], advancedMode: Bool) throws -> [MessageNode] {
+        let indexes = try displaySession.get().call("messageDisplayIndexes", .object([
+            .init(key: "advancedMode", value: .bool(advancedMode)),
+            .init(key: "roles", value: .array(messages.map { .string($0.role) }))
+        ])).array("display indexes")
+        return try indexes.map {
+            let index = Int(try $0.number("display index"))
+            guard messages.indices.contains(index) else { throw ExchangeError.invalid("本文表示の位置が正しくありません") }
+            return messages[index]
+        }
+    }
     static func value(_ field: DisplaySetting, in roots: OrderedJSON) throws -> OrderedJSON {
         if let stored = roots[field.rawValue] { return stored }
         return try defaults.get().required(field.rawValue)

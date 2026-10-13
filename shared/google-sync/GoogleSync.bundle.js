@@ -8489,6 +8489,7 @@ var WeaveletGoogleSync = (() => {
     localModelImport: () => localModelImport,
     localModelRole: () => localModelRole,
     messageAttributesOperation: () => messageAttributesOperation,
+    messageDisplayIndexes: () => messageDisplayIndexes,
     messageEdit: () => messageEdit,
     navigationOperation: () => navigationOperation,
     nodeOptions: () => nodeOptions,
@@ -8507,6 +8508,17 @@ var WeaveletGoogleSync = (() => {
     treeEdit: () => treeEdit,
     usageCost: () => usageCost
   });
+
+  // src/utils/advancedDisplay.ts
+  function isMessageVisible(advancedMode, originalIndex, role) {
+    return !(!advancedMode && originalIndex === 0 && role === "system");
+  }
+
+  // shared/google-sync/advancedDisplay.ts
+  function messageDisplayIndexes(json) {
+    const input = JSON.parse(json);
+    return JSON.stringify(input.roles.flatMap((role, index) => isMessageVisible(input.advancedMode, index, role) ? [index] : []));
+  }
 
   // src/utils/enterSubmission.ts
   function enterSubmission(input) {

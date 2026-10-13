@@ -20,6 +20,7 @@ struct ChatView: View {
     @ObservedObject var state: ChatState
     @State private var titleSettingsDraft: ConversationTitleSettingsDraft?
     @State private var defaultConfigDraft: ChatConfigDraft?
+    @State private var settingsConfigDraft: ChatConfigDraft?
     @State private var showsSettings = false
     @State private var columnVisibility: NavigationSplitViewVisibility = .automatic
     @State private var preferredCompactColumn: NavigationSplitViewColumn = .detail
@@ -59,6 +60,7 @@ struct ChatView: View {
     @State private var evaluationDraft: ConversationEvaluationDraft?
     @State private var composerPromptRequest: PromptPickerRequest?
 
+    private var advancedMode: Bool { (try? state.displaySetting(.advancedMode)) != .bool(false) }
     var body: some View {
         let closeLibrary: (() -> Void)? = horizontalSizeClass == .compact ? { preferredCompactColumn = .detail } : nil
         NavigationSplitView(columnVisibility:$columnVisibility, preferredCompactColumn:$preferredCompactColumn) {
@@ -117,10 +119,12 @@ struct ChatView: View {
                     .disabled(state.exchange == nil || state.generation != nil)
                     .frame(minWidth: 44, minHeight: 44)
                     Menu("会話操作",systemImage:"ellipsis.circle") {
+                        if advancedMode {
                         Button("本文を追加",systemImage:"plus.bubble") {
                             do { draft = try state.messageDraft(nodeID:nil) }
                             catch { errorMessage = error.localizedDescription }
                         }.disabled(state.exchange == nil || state.generation != nil)
+                        }
                         Button("非表示の枝を整理",systemImage:"line.3.horizontal.decrease") {
                             do { removalDraft = try state.pruneHiddenDraft(); showsRemoval = true }
                             catch { errorMessage = error.localizedDescription }
@@ -233,6 +237,10 @@ struct ChatView: View {
                         NavigationLink("プロンプトライブラリ") { PromptLibraryView(state:state) }
                     }
                     Section("会話設定") {
+                        Button("現在の会話の生成設定") {
+                            do { settingsConfigDraft = try state.chatConfigDraft() }
+                            catch { state.generationError = error.localizedDescription }
+                        }.frame(minHeight: 44).disabled(state.exchange == nil || state.generation != nil)
                         Button("タイトルの自動生成") {
                             do { titleSettingsDraft = try state.titleSettingsDraft() } catch { state.generationError = error.localizedDescription }
                         }.disabled(state.generation != nil)
@@ -260,6 +268,7 @@ struct ChatView: View {
                 .sheet(item: $shownFolderConnection) { connection in FolderSyncSettingsView(connection:connection) }
                 .sheet(item: $titleSettingsDraft) { draft in ConversationTitleSettingsView(state:state,draft:draft) }
                 .sheet(item: $defaultConfigDraft) { draft in ChatConfigView(state:state,draft:draft) }
+                .sheet(item: $settingsConfigDraft) { draft in ChatConfigView(state:state,draft:draft) }
                 .sheet(isPresented: $showsRemoteSettings) { RemoteSettingsView(state: state) }
                 .navigationTitle("設定")
                 .toolbar { ToolbarItem(placement: .confirmationAction) { Button("完了") { showsSettings = false } } }
@@ -366,7 +375,9 @@ struct ChatView: View {
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 20) {
                     if let conversation = state.conversation {
-                        ForEach(conversation.visibleMessages, id: \.identity) { node in
+                        switch Result(catching: { try DisplaySettings.messagesForDisplay(conversation.visibleMessages, advancedMode: advancedMode) }) {
+                        case .success(let messages):
+                        ForEach(messages, id: \.identity) { node in
                             let summaryInfo = try? state.summaryInfo(chatID:conversation.id,nodeID:node.id)
                             let generation = generation(at:node, in:conversation)
                             if summaryInfo?["hidden"] != .bool(true) {
@@ -382,6 +393,8 @@ struct ChatView: View {
                                     prefillInput(key:state.assistantPrefillKey(nodeID:node.id))
                                 }
                             }
+                        }
+                        case .failure(let error): Text(error.localizedDescription).foregroundStyle(.red)
                         }
                         if let generationError = state.generationError { Text(generationError).foregroundStyle(.red) }
                         if let automaticEvaluationError = state.automaticEvaluationError { Text(automaticEvaluationError).foregroundStyle(.red) }
@@ -443,12 +456,14 @@ struct ChatView: View {
                 } label: { Text("/").frame(width: 44, height: 44) }
                 .accessibilityLabel("プロンプトライブラリ")
                 .disabled(state.generation != nil)
+                if advancedMode {
                 Button {
                     do { configDraft = try state.chatConfigDraft() }
                     catch { errorMessage = error.localizedDescription }
                 } label: { Image(systemName:"slider.horizontal.3").frame(width:44,height:44) }
                 .accessibilityLabel("会話の生成設定")
                 .disabled(state.generation != nil)
+                }
                 Spacer(minLength:0)
                 if state.generation?.running == true {
                     Button("停止",systemImage:"stop.fill") { state.stopGeneration() }
@@ -535,10 +550,10 @@ struct ChatView: View {
             do { try state.mutateSummary(chatID:conversation.id,action:"use",summaryID:id,use:use) }
             catch { errorMessage = error.localizedDescription }
         }
-        return MessageView(node: node, siblings: state.siblings(for: node.id), style: state.style, branchSwipeDirection: branchSwipePreference, branchSwipeContext: Data(conversation.id.utf8), generation: generation, edit: state.exchange == nil || state.generation != nil ? nil : {
+        return MessageView(node: node, siblings: state.siblings(for: node.id), style: state.style, advancedMode: advancedMode, branchSwipeDirection: branchSwipePreference, branchSwipeContext: Data(conversation.id.utf8), generation: generation, edit: state.exchange == nil || state.generation != nil ? nil : {
             do { draft = try state.messageDraft(nodeID: node.id) }
             catch { errorMessage = error.localizedDescription }
-        }, insertBefore: state.exchange == nil || state.generation != nil ? nil : {
+        }, insertBefore: !advancedMode || state.exchange == nil || state.generation != nil ? nil : {
             do { draft = try state.messageInsertionDraft(beforeNodeID: node.id) }
             catch { errorMessage = error.localizedDescription }
         }, regenerate: state.exchange == nil || state.generation != nil ? nil : {
@@ -613,6 +628,7 @@ struct MessageView: View {
     let node: MessageNode
     let siblings: [MessageNode]
     let style: ChatStyle
+    var advancedMode = true
     var branchSwipeDirection: String? = nil
     var branchSwipeContext: Data? = nil
     var generation: ActiveGeneration? = nil
@@ -691,9 +707,20 @@ struct MessageView: View {
 
     private var headerTitle: some View {
         HStack(spacing: 8) {
-            Label(roleName,systemImage:icon)
+            if advancedMode, let edit {
+                Button(action: edit) {
+                    Label(roleName, systemImage: icon)
+                    Image(systemName: "chevron.down").font(.caption)
+                }
+                .buttonStyle(.plain)
                 .font(.headline)
-                .accessibilityAddTraits(.isHeader)
+                .frame(minHeight: 44)
+                .accessibilityLabel("\(roleName)：役割と本文を編集")
+            } else {
+                Label(roleName,systemImage:icon)
+                    .font(.headline)
+                    .accessibilityAddTraits(.isHeader)
+            }
             if node.options.starred { Image(systemName:"star.fill").accessibilityLabel("スター") }
             if node.options.pinned { Image(systemName:"pin.fill").accessibilityLabel("ピン留め") }
         }
@@ -1495,12 +1522,14 @@ struct MessageEditorView: View {
     var body: some View {
         NavigationStack {
             Form {
+                if (try? state.displaySetting(.advancedMode)) != .bool(false) {
                 Picker("役割", selection: $draft.role) {
                     Text("ユーザー").tag("user")
                     Text("アシスタント").tag("assistant")
                     if draft.isInsertion || (draft.nodeID != nil && (draft.path.first?.utf8.elementsEqual(draft.nodeID!.utf8) == true || draft.originalRole == "system")) {
                         Text("システム").tag("system")
                     }
+                }
                 }
                 Section("本文") {
                     Button {

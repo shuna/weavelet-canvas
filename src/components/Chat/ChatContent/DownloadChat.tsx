@@ -1,3 +1,4 @@
+import { isMessageVisible } from '@utils/advancedDisplay';
 import React, { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import useStore from '@store/store';
@@ -20,7 +21,7 @@ const getVisibleMessages = (): Array<{ message: MessageInterface; originalIndex:
   if (!chat) return [];
   const result: Array<{ message: MessageInterface; originalIndex: number }> = [];
   chat.messages.forEach((message, index) => {
-    if (!state.advancedMode && index === 0 && message.role === 'system') return;
+    if (!isMessageVisible(state.advancedMode, index, message.role)) return;
     result.push({ message, originalIndex: index });
   });
   return result;
