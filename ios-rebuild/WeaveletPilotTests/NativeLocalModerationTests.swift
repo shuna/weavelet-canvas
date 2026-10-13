@@ -25,6 +25,7 @@ private final class ModerationProtocol: URLProtocol {
         let prepared: ConversationEvaluation.AutoPrepared
         let modelRoot: URL
         let fault: Fault
+        let store: LocalStateStore
     }
     private func fixture(engine: String = "hybrid", remoteOnSafe: Bool = false) throws -> Fixture {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent("local-moderation-\(UUID())")
@@ -56,7 +57,7 @@ private final class ModerationProtocol: URLProtocol {
         let prepared = try XCTUnwrap(ConversationEvaluation.prepareAuto(source:source,state:state,chatID:"chat",nodeID:nodeID,
             phase:"pre-send",userContent:.array([.object([.init(key:"type",value:.string("text")),.init(key:"text",value:.string("日本語🙂"))])]),
             legacy:RemoteCredentialRecord(),files:app.localModelFiles,readProviderCredential:{ _ in XCTFail("Preparation must stay lazy"); return nil }))
-        return Fixture(app:app,source:source,state:state,prepared:prepared,modelRoot:modelRoot,fault:fault)
+        return Fixture(app:app,source:source,state:state,prepared:prepared,modelRoot:modelRoot,fault:fault,store:store)
     }
     private func client() -> RemoteClient {
         let configuration = URLSessionConfiguration.ephemeral; configuration.protocolClasses = [ModerationProtocol.self]
@@ -70,6 +71,65 @@ private final class ModerationProtocol: URLProtocol {
         let snapshot = try fixture.app.publicationSnapshot()
         let updated = try ConversationEvaluation.autoApply(result,dimension:dimension,prepared:fixture.prepared,source:fixture.source,state:snapshot.required("state"))
         try fixture.app.applySnapshot(snapshot.replacing("state",with:updated))
+    }
+    func testBundledClassifierRunsThroughAutoSafetyAndPersistsAcrossRestartAndRecords() async throws {
+        let setup = try fixture(engine:"local")
+        let bundled = try XCTUnwrap(Bundle(for: Self.self).url(forResource:"ClassifierFixtureResources",withExtension:nil))
+        let paths = ["config.json", "tokenizer.json", "tokenizer_config.json", "onnx/model_quantized.onnx"]
+        for path in paths {
+            let bytes = try Data(contentsOf:bundled.appendingPathComponent(path))
+            if path.hasSuffix(".onnx") { XCTAssertEqual(bytes.count,299) }
+            try bytes.write(to:setup.modelRoot.appendingPathComponent(path))
+        }
+        let manifest = OrderedJSON.object([.init(key:"kind",value:.string("multi-file")),
+            .init(key:"entrypoint",value:.string("onnx/model_quantized.onnx")),.init(key:"requiredFiles",value:.array(paths.map(OrderedJSON.string)))])
+        let model = try setup.state.required("localModels").array("models")[0].replacing("manifest",with:manifest)
+        let state = setup.state.replacing("localModels",with:.array([model]))
+        try setup.app.applySnapshot(setup.app.publicationSnapshot().replacing("state",with:state))
+        let source = try XCTUnwrap(setup.app.exchange?.source)
+        let prepared = try XCTUnwrap(ConversationEvaluation.prepareAuto(source:source,state:state,chatID:setup.prepared.chatID,
+            nodeID:setup.prepared.nodeID,phase:setup.prepared.phase,userContent:setup.prepared.userContent,
+            requestPath:setup.prepared.requestPath,legacy:RemoteCredentialRecord(),files:setup.app.localModelFiles,
+            readProviderCredential:{ _ in XCTFail("Local preparation must not read credentials"); return nil }))
+        let fixture = Fixture(app:setup.app,source:source,state:state,prepared:prepared,modelRoot:setup.modelRoot,fault:setup.fault,store:setup.store)
+        let before = try fixture.app.publicationSnapshot()
+        ModerationProtocol.requests = 0
+        var dimensions: [String] = []
+        try await ConversationEvaluation.runAutoSafety(prepared,state:state,files:fixture.app.localModelFiles,client:client(),
+            readProviderCredential:{ _ in XCTFail("Successful Local must not read credentials, including block-candidate"); return nil },
+            classifier:nil,isCurrent:{ (try? ConversationEvaluation.autoIsCurrent(prepared,source:source,state:fixture.app.publicationSnapshot().required("state"))) == true },
+            onResult:{ dimension,result in dimensions.append(dimension); try self.publish(fixture,dimension,result) })
+        XCTAssertEqual(dimensions,["localSafety"])
+        XCTAssertEqual(ModerationProtocol.requests,0)
+        let saved = try fixture.app.publicationSnapshot()
+        let evaluation = try saved.required("state").required("evaluationResults").required(prepared.key)
+        XCTAssertEqual(evaluation["phase"],.string("pre-send"))
+        XCTAssertNil(evaluation["safety"])
+        let local = try evaluation.required("localSafety")
+        XCTAssertEqual(local["screening"],.string("block-candidate"))
+        XCTAssertEqual(local["source"],.string("local"))
+        XCTAssertGreaterThan(try local.required("timestamp").number("timestamp"),0)
+        let scores = try local.required("rawScores").array("scores")
+        XCTAssertEqual(try scores.map { try $0.required("label").string("label") },["FIXTURE_TWO","FIXTURE_ZERO"])
+        XCTAssertEqual(try scores[0].required("score").number("score"),0.8807970881462097,accuracy:0.0000001)
+        XCTAssertEqual(try scores[1].required("score").number("score"),0.1192029193043709,accuracy:0.0000001)
+        let restarted = ChatState(store:fixture.store)
+        XCTAssertEqual(try restarted.publicationSnapshot(),saved)
+        for field in try before.required("state").object("state") where field.key != "evaluationResults" {
+            XCTAssertEqual(saved["state"]?[field.key],field.value)
+        }
+        for field in try source.object("source") where field.key != "evaluationResults" {
+            XCTAssertEqual(restarted.exchange?.source[field.key],field.value)
+        }
+        XCTAssertEqual(saved["state"]?["xRaw"],.number("9007199254740993"))
+        XCTAssertEqual(try saved.required("state").required("localModels").array("models")[0]["unknown"],.number("9007199254740993"))
+        let records = try SyncRecords.toRecords(restarted.publicationSnapshot())
+        let received = try SyncRecords.fromRecords(records)
+        XCTAssertEqual(received["state"]?["evaluationResults"]?[prepared.key],evaluation)
+        // Record JSON uses the existing Web Number conversion; local persistence above remains exact.
+        XCTAssertEqual(received["state"]?["xRaw"],.number("9007199254740992"))
+        XCTAssertEqual(try received.required("state").required("localModels").array("models")[0]["unknown"],.number("9007199254740992"))
+        XCTAssertEqual(try SyncRecords.canonical(SyncRecords.toRecords(received)),try SyncRecords.canonical(records))
     }
     func testSafeLocalResultSavesWithoutReadingRemoteCredential() async throws {
         let fixture = try fixture()
