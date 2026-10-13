@@ -235,6 +235,15 @@ describe('CloudKit provider', () => {
       expect(result).toEqual(data);
     });
 
+    it('rejects damaged payloads instead of accepting an empty snapshot', async () => {
+      fetchCloudKitRecordMock.mockResolvedValueOnce({
+        record: { recordChangeTag: 'tag-bad', fields: { payload: { value: 'AAAA' } } },
+      });
+      const provider = createCloudKitCloudProvider();
+      await expect(provider.readItem('test', { accessToken: 'ck-token', fileId: 'rec' }))
+        .rejects.toThrow('Invalid CloudKit payload');
+    });
+
     it('updates recordChangeTag on read', async () => {
       const data = { state: {}, version: 1 };
       const compressed = compress(JSON.stringify(data))!;

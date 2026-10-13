@@ -31,9 +31,9 @@ var WeaveletGoogleSync = (() => {
   ));
   var __toCommonJS = (mod) => __copyProps(__defProp({}, "__esModule", { value: true }), mod);
 
-  // ../weavelet-main-integration-ew768sf2/worktree/node_modules/lodash/lodash.js
+  // ../../var/folders/1r/xtsjvqk90yzdyjq5jfjn9phw0000gn/T/weavelet-main-integration-ew768sf2/worktree/node_modules/lodash/lodash.js
   var require_lodash = __commonJS({
-    "../weavelet-main-integration-ew768sf2/worktree/node_modules/lodash/lodash.js"(exports, module) {
+    "../../var/folders/1r/xtsjvqk90yzdyjq5jfjn9phw0000gn/T/weavelet-main-integration-ew768sf2/worktree/node_modules/lodash/lodash.js"(exports, module) {
       /**
        * @license
        * Lodash <https://lodash.com/>
@@ -5537,9 +5537,9 @@ var WeaveletGoogleSync = (() => {
     }
   });
 
-  // ../weavelet-main-integration-ew768sf2/worktree/node_modules/diff-match-patch/index.js
+  // ../../var/folders/1r/xtsjvqk90yzdyjq5jfjn9phw0000gn/T/weavelet-main-integration-ew768sf2/worktree/node_modules/diff-match-patch/index.js
   var require_diff_match_patch = __commonJS({
-    "../weavelet-main-integration-ew768sf2/worktree/node_modules/diff-match-patch/index.js"(exports, module) {
+    "../../var/folders/1r/xtsjvqk90yzdyjq5jfjn9phw0000gn/T/weavelet-main-integration-ew768sf2/worktree/node_modules/diff-match-patch/index.js"(exports, module) {
       var diff_match_patch2 = function() {
         this.Diff_Timeout = 1;
         this.Diff_EditCost = 4;
@@ -6996,6 +6996,473 @@ var WeaveletGoogleSync = (() => {
     }
   });
 
+  // ../../var/folders/1r/xtsjvqk90yzdyjq5jfjn9phw0000gn/T/weavelet-main-integration-ew768sf2/worktree/node_modules/lz-string/libs/lz-string.js
+  var require_lz_string = __commonJS({
+    "../../var/folders/1r/xtsjvqk90yzdyjq5jfjn9phw0000gn/T/weavelet-main-integration-ew768sf2/worktree/node_modules/lz-string/libs/lz-string.js"(exports, module) {
+      var LZString = function() {
+        var f = String.fromCharCode;
+        var keyStrBase64 = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/=";
+        var keyStrUriSafe = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+-$";
+        var baseReverseDic = {};
+        function getBaseValue(alphabet, character) {
+          if (!baseReverseDic[alphabet]) {
+            baseReverseDic[alphabet] = {};
+            for (var i = 0; i < alphabet.length; i++) {
+              baseReverseDic[alphabet][alphabet.charAt(i)] = i;
+            }
+          }
+          return baseReverseDic[alphabet][character];
+        }
+        var LZString2 = {
+          compressToBase64: function(input) {
+            if (input == null)
+              return "";
+            var res = LZString2._compress(input, 6, function(a) {
+              return keyStrBase64.charAt(a);
+            });
+            switch (res.length % 4) {
+              default:
+              case 0:
+                return res;
+              case 1:
+                return res + "===";
+              case 2:
+                return res + "==";
+              case 3:
+                return res + "=";
+            }
+          },
+          decompressFromBase64: function(input) {
+            if (input == null)
+              return "";
+            if (input == "")
+              return null;
+            return LZString2._decompress(input.length, 32, function(index) {
+              return getBaseValue(keyStrBase64, input.charAt(index));
+            });
+          },
+          compressToUTF16: function(input) {
+            if (input == null)
+              return "";
+            return LZString2._compress(input, 15, function(a) {
+              return f(a + 32);
+            }) + " ";
+          },
+          decompressFromUTF16: function(compressed) {
+            if (compressed == null)
+              return "";
+            if (compressed == "")
+              return null;
+            return LZString2._decompress(compressed.length, 16384, function(index) {
+              return compressed.charCodeAt(index) - 32;
+            });
+          },
+          //compress into uint8array (UCS-2 big endian format)
+          compressToUint8Array: function(uncompressed) {
+            var compressed = LZString2.compress(uncompressed);
+            var buf = new Uint8Array(compressed.length * 2);
+            for (var i = 0, TotalLen = compressed.length; i < TotalLen; i++) {
+              var current_value = compressed.charCodeAt(i);
+              buf[i * 2] = current_value >>> 8;
+              buf[i * 2 + 1] = current_value % 256;
+            }
+            return buf;
+          },
+          //decompress from uint8array (UCS-2 big endian format)
+          decompressFromUint8Array: function(compressed) {
+            if (compressed === null || compressed === void 0) {
+              return LZString2.decompress(compressed);
+            } else {
+              var buf = new Array(compressed.length / 2);
+              for (var i = 0, TotalLen = buf.length; i < TotalLen; i++) {
+                buf[i] = compressed[i * 2] * 256 + compressed[i * 2 + 1];
+              }
+              var result3 = [];
+              buf.forEach(function(c) {
+                result3.push(f(c));
+              });
+              return LZString2.decompress(result3.join(""));
+            }
+          },
+          //compress into a string that is already URI encoded
+          compressToEncodedURIComponent: function(input) {
+            if (input == null)
+              return "";
+            return LZString2._compress(input, 6, function(a) {
+              return keyStrUriSafe.charAt(a);
+            });
+          },
+          //decompress from an output of compressToEncodedURIComponent
+          decompressFromEncodedURIComponent: function(input) {
+            if (input == null)
+              return "";
+            if (input == "")
+              return null;
+            input = input.replace(/ /g, "+");
+            return LZString2._decompress(input.length, 32, function(index) {
+              return getBaseValue(keyStrUriSafe, input.charAt(index));
+            });
+          },
+          compress: function(uncompressed) {
+            return LZString2._compress(uncompressed, 16, function(a) {
+              return f(a);
+            });
+          },
+          _compress: function(uncompressed, bitsPerChar, getCharFromInt) {
+            if (uncompressed == null)
+              return "";
+            var i, value, context_dictionary = {}, context_dictionaryToCreate = {}, context_c = "", context_wc = "", context_w = "", context_enlargeIn = 2, context_dictSize = 3, context_numBits = 2, context_data = [], context_data_val = 0, context_data_position = 0, ii;
+            for (ii = 0; ii < uncompressed.length; ii += 1) {
+              context_c = uncompressed.charAt(ii);
+              if (!Object.prototype.hasOwnProperty.call(context_dictionary, context_c)) {
+                context_dictionary[context_c] = context_dictSize++;
+                context_dictionaryToCreate[context_c] = true;
+              }
+              context_wc = context_w + context_c;
+              if (Object.prototype.hasOwnProperty.call(context_dictionary, context_wc)) {
+                context_w = context_wc;
+              } else {
+                if (Object.prototype.hasOwnProperty.call(context_dictionaryToCreate, context_w)) {
+                  if (context_w.charCodeAt(0) < 256) {
+                    for (i = 0; i < context_numBits; i++) {
+                      context_data_val = context_data_val << 1;
+                      if (context_data_position == bitsPerChar - 1) {
+                        context_data_position = 0;
+                        context_data.push(getCharFromInt(context_data_val));
+                        context_data_val = 0;
+                      } else {
+                        context_data_position++;
+                      }
+                    }
+                    value = context_w.charCodeAt(0);
+                    for (i = 0; i < 8; i++) {
+                      context_data_val = context_data_val << 1 | value & 1;
+                      if (context_data_position == bitsPerChar - 1) {
+                        context_data_position = 0;
+                        context_data.push(getCharFromInt(context_data_val));
+                        context_data_val = 0;
+                      } else {
+                        context_data_position++;
+                      }
+                      value = value >> 1;
+                    }
+                  } else {
+                    value = 1;
+                    for (i = 0; i < context_numBits; i++) {
+                      context_data_val = context_data_val << 1 | value;
+                      if (context_data_position == bitsPerChar - 1) {
+                        context_data_position = 0;
+                        context_data.push(getCharFromInt(context_data_val));
+                        context_data_val = 0;
+                      } else {
+                        context_data_position++;
+                      }
+                      value = 0;
+                    }
+                    value = context_w.charCodeAt(0);
+                    for (i = 0; i < 16; i++) {
+                      context_data_val = context_data_val << 1 | value & 1;
+                      if (context_data_position == bitsPerChar - 1) {
+                        context_data_position = 0;
+                        context_data.push(getCharFromInt(context_data_val));
+                        context_data_val = 0;
+                      } else {
+                        context_data_position++;
+                      }
+                      value = value >> 1;
+                    }
+                  }
+                  context_enlargeIn--;
+                  if (context_enlargeIn == 0) {
+                    context_enlargeIn = Math.pow(2, context_numBits);
+                    context_numBits++;
+                  }
+                  delete context_dictionaryToCreate[context_w];
+                } else {
+                  value = context_dictionary[context_w];
+                  for (i = 0; i < context_numBits; i++) {
+                    context_data_val = context_data_val << 1 | value & 1;
+                    if (context_data_position == bitsPerChar - 1) {
+                      context_data_position = 0;
+                      context_data.push(getCharFromInt(context_data_val));
+                      context_data_val = 0;
+                    } else {
+                      context_data_position++;
+                    }
+                    value = value >> 1;
+                  }
+                }
+                context_enlargeIn--;
+                if (context_enlargeIn == 0) {
+                  context_enlargeIn = Math.pow(2, context_numBits);
+                  context_numBits++;
+                }
+                context_dictionary[context_wc] = context_dictSize++;
+                context_w = String(context_c);
+              }
+            }
+            if (context_w !== "") {
+              if (Object.prototype.hasOwnProperty.call(context_dictionaryToCreate, context_w)) {
+                if (context_w.charCodeAt(0) < 256) {
+                  for (i = 0; i < context_numBits; i++) {
+                    context_data_val = context_data_val << 1;
+                    if (context_data_position == bitsPerChar - 1) {
+                      context_data_position = 0;
+                      context_data.push(getCharFromInt(context_data_val));
+                      context_data_val = 0;
+                    } else {
+                      context_data_position++;
+                    }
+                  }
+                  value = context_w.charCodeAt(0);
+                  for (i = 0; i < 8; i++) {
+                    context_data_val = context_data_val << 1 | value & 1;
+                    if (context_data_position == bitsPerChar - 1) {
+                      context_data_position = 0;
+                      context_data.push(getCharFromInt(context_data_val));
+                      context_data_val = 0;
+                    } else {
+                      context_data_position++;
+                    }
+                    value = value >> 1;
+                  }
+                } else {
+                  value = 1;
+                  for (i = 0; i < context_numBits; i++) {
+                    context_data_val = context_data_val << 1 | value;
+                    if (context_data_position == bitsPerChar - 1) {
+                      context_data_position = 0;
+                      context_data.push(getCharFromInt(context_data_val));
+                      context_data_val = 0;
+                    } else {
+                      context_data_position++;
+                    }
+                    value = 0;
+                  }
+                  value = context_w.charCodeAt(0);
+                  for (i = 0; i < 16; i++) {
+                    context_data_val = context_data_val << 1 | value & 1;
+                    if (context_data_position == bitsPerChar - 1) {
+                      context_data_position = 0;
+                      context_data.push(getCharFromInt(context_data_val));
+                      context_data_val = 0;
+                    } else {
+                      context_data_position++;
+                    }
+                    value = value >> 1;
+                  }
+                }
+                context_enlargeIn--;
+                if (context_enlargeIn == 0) {
+                  context_enlargeIn = Math.pow(2, context_numBits);
+                  context_numBits++;
+                }
+                delete context_dictionaryToCreate[context_w];
+              } else {
+                value = context_dictionary[context_w];
+                for (i = 0; i < context_numBits; i++) {
+                  context_data_val = context_data_val << 1 | value & 1;
+                  if (context_data_position == bitsPerChar - 1) {
+                    context_data_position = 0;
+                    context_data.push(getCharFromInt(context_data_val));
+                    context_data_val = 0;
+                  } else {
+                    context_data_position++;
+                  }
+                  value = value >> 1;
+                }
+              }
+              context_enlargeIn--;
+              if (context_enlargeIn == 0) {
+                context_enlargeIn = Math.pow(2, context_numBits);
+                context_numBits++;
+              }
+            }
+            value = 2;
+            for (i = 0; i < context_numBits; i++) {
+              context_data_val = context_data_val << 1 | value & 1;
+              if (context_data_position == bitsPerChar - 1) {
+                context_data_position = 0;
+                context_data.push(getCharFromInt(context_data_val));
+                context_data_val = 0;
+              } else {
+                context_data_position++;
+              }
+              value = value >> 1;
+            }
+            while (true) {
+              context_data_val = context_data_val << 1;
+              if (context_data_position == bitsPerChar - 1) {
+                context_data.push(getCharFromInt(context_data_val));
+                break;
+              } else
+                context_data_position++;
+            }
+            return context_data.join("");
+          },
+          decompress: function(compressed) {
+            if (compressed == null)
+              return "";
+            if (compressed == "")
+              return null;
+            return LZString2._decompress(compressed.length, 32768, function(index) {
+              return compressed.charCodeAt(index);
+            });
+          },
+          _decompress: function(length, resetValue, getNextValue) {
+            var dictionary = [], next, enlargeIn = 4, dictSize = 4, numBits = 3, entry = "", result3 = [], i, w, bits, resb, maxpower, power, c, data = { val: getNextValue(0), position: resetValue, index: 1 };
+            for (i = 0; i < 3; i += 1) {
+              dictionary[i] = i;
+            }
+            bits = 0;
+            maxpower = Math.pow(2, 2);
+            power = 1;
+            while (power != maxpower) {
+              resb = data.val & data.position;
+              data.position >>= 1;
+              if (data.position == 0) {
+                data.position = resetValue;
+                data.val = getNextValue(data.index++);
+              }
+              bits |= (resb > 0 ? 1 : 0) * power;
+              power <<= 1;
+            }
+            switch (next = bits) {
+              case 0:
+                bits = 0;
+                maxpower = Math.pow(2, 8);
+                power = 1;
+                while (power != maxpower) {
+                  resb = data.val & data.position;
+                  data.position >>= 1;
+                  if (data.position == 0) {
+                    data.position = resetValue;
+                    data.val = getNextValue(data.index++);
+                  }
+                  bits |= (resb > 0 ? 1 : 0) * power;
+                  power <<= 1;
+                }
+                c = f(bits);
+                break;
+              case 1:
+                bits = 0;
+                maxpower = Math.pow(2, 16);
+                power = 1;
+                while (power != maxpower) {
+                  resb = data.val & data.position;
+                  data.position >>= 1;
+                  if (data.position == 0) {
+                    data.position = resetValue;
+                    data.val = getNextValue(data.index++);
+                  }
+                  bits |= (resb > 0 ? 1 : 0) * power;
+                  power <<= 1;
+                }
+                c = f(bits);
+                break;
+              case 2:
+                return "";
+            }
+            dictionary[3] = c;
+            w = c;
+            result3.push(c);
+            while (true) {
+              if (data.index > length) {
+                return "";
+              }
+              bits = 0;
+              maxpower = Math.pow(2, numBits);
+              power = 1;
+              while (power != maxpower) {
+                resb = data.val & data.position;
+                data.position >>= 1;
+                if (data.position == 0) {
+                  data.position = resetValue;
+                  data.val = getNextValue(data.index++);
+                }
+                bits |= (resb > 0 ? 1 : 0) * power;
+                power <<= 1;
+              }
+              switch (c = bits) {
+                case 0:
+                  bits = 0;
+                  maxpower = Math.pow(2, 8);
+                  power = 1;
+                  while (power != maxpower) {
+                    resb = data.val & data.position;
+                    data.position >>= 1;
+                    if (data.position == 0) {
+                      data.position = resetValue;
+                      data.val = getNextValue(data.index++);
+                    }
+                    bits |= (resb > 0 ? 1 : 0) * power;
+                    power <<= 1;
+                  }
+                  dictionary[dictSize++] = f(bits);
+                  c = dictSize - 1;
+                  enlargeIn--;
+                  break;
+                case 1:
+                  bits = 0;
+                  maxpower = Math.pow(2, 16);
+                  power = 1;
+                  while (power != maxpower) {
+                    resb = data.val & data.position;
+                    data.position >>= 1;
+                    if (data.position == 0) {
+                      data.position = resetValue;
+                      data.val = getNextValue(data.index++);
+                    }
+                    bits |= (resb > 0 ? 1 : 0) * power;
+                    power <<= 1;
+                  }
+                  dictionary[dictSize++] = f(bits);
+                  c = dictSize - 1;
+                  enlargeIn--;
+                  break;
+                case 2:
+                  return result3.join("");
+              }
+              if (enlargeIn == 0) {
+                enlargeIn = Math.pow(2, numBits);
+                numBits++;
+              }
+              if (dictionary[c]) {
+                entry = dictionary[c];
+              } else {
+                if (c === dictSize) {
+                  entry = w + w.charAt(0);
+                } else {
+                  return null;
+                }
+              }
+              result3.push(entry);
+              dictionary[dictSize++] = w + entry.charAt(0);
+              enlargeIn--;
+              w = entry;
+              if (enlargeIn == 0) {
+                enlargeIn = Math.pow(2, numBits);
+                numBits++;
+              }
+            }
+          }
+        };
+        return LZString2;
+      }();
+      if (typeof define === "function" && define.amd) {
+        define(function() {
+          return LZString;
+        });
+      } else if (typeof module !== "undefined" && module != null) {
+        module.exports = LZString;
+      } else if (typeof angular !== "undefined" && angular != null) {
+        angular.module("LZString", []).factory("LZString", function() {
+          return LZString;
+        });
+      }
+    }
+  });
+
   // shared/google-sync/entry.ts
   var entry_exports = {};
   __export(entry_exports, {
@@ -7004,6 +7471,7 @@ var WeaveletGoogleSync = (() => {
     branchHistory: () => branchHistory,
     chatConfig: () => chatConfig,
     chatSearch: () => chatSearch,
+    cloudKitOperation: () => cloudKitOperation,
     composerContent: () => composerContent,
     documentOperation: () => documentOperation,
     drain: () => drain,
@@ -8931,7 +9399,7 @@ ${message.content}` : message.content).join("\n\n").trim();
     });
   };
 
-  // ../weavelet-main-integration-ew768sf2/worktree/node_modules/@babel/runtime/helpers/esm/typeof.js
+  // ../../var/folders/1r/xtsjvqk90yzdyjq5jfjn9phw0000gn/T/weavelet-main-integration-ew768sf2/worktree/node_modules/@babel/runtime/helpers/esm/typeof.js
   function _typeof(o) {
     "@babel/helpers - typeof";
     return _typeof = "function" == typeof Symbol && "symbol" == typeof Symbol.iterator ? function(o2) {
@@ -8941,13 +9409,13 @@ ${message.content}` : message.content).join("\n\n").trim();
     }, _typeof(o);
   }
 
-  // ../weavelet-main-integration-ew768sf2/worktree/node_modules/@babel/runtime/helpers/esm/classCallCheck.js
+  // ../../var/folders/1r/xtsjvqk90yzdyjq5jfjn9phw0000gn/T/weavelet-main-integration-ew768sf2/worktree/node_modules/@babel/runtime/helpers/esm/classCallCheck.js
   function _classCallCheck(a, n) {
     if (!(a instanceof n))
       throw new TypeError("Cannot call a class as a function");
   }
 
-  // ../weavelet-main-integration-ew768sf2/worktree/node_modules/@babel/runtime/helpers/esm/toPrimitive.js
+  // ../../var/folders/1r/xtsjvqk90yzdyjq5jfjn9phw0000gn/T/weavelet-main-integration-ew768sf2/worktree/node_modules/@babel/runtime/helpers/esm/toPrimitive.js
   function toPrimitive(t2, r) {
     if ("object" != _typeof(t2) || !t2)
       return t2;
@@ -8961,13 +9429,13 @@ ${message.content}` : message.content).join("\n\n").trim();
     return ("string" === r ? String : Number)(t2);
   }
 
-  // ../weavelet-main-integration-ew768sf2/worktree/node_modules/@babel/runtime/helpers/esm/toPropertyKey.js
+  // ../../var/folders/1r/xtsjvqk90yzdyjq5jfjn9phw0000gn/T/weavelet-main-integration-ew768sf2/worktree/node_modules/@babel/runtime/helpers/esm/toPropertyKey.js
   function toPropertyKey(t2) {
     var i = toPrimitive(t2, "string");
     return "symbol" == _typeof(i) ? i : i + "";
   }
 
-  // ../weavelet-main-integration-ew768sf2/worktree/node_modules/@babel/runtime/helpers/esm/createClass.js
+  // ../../var/folders/1r/xtsjvqk90yzdyjq5jfjn9phw0000gn/T/weavelet-main-integration-ew768sf2/worktree/node_modules/@babel/runtime/helpers/esm/createClass.js
   function _defineProperties(e, r) {
     for (var t2 = 0; t2 < r.length; t2++) {
       var o = r[t2];
@@ -8980,21 +9448,21 @@ ${message.content}` : message.content).join("\n\n").trim();
     }), e;
   }
 
-  // ../weavelet-main-integration-ew768sf2/worktree/node_modules/@babel/runtime/helpers/esm/assertThisInitialized.js
+  // ../../var/folders/1r/xtsjvqk90yzdyjq5jfjn9phw0000gn/T/weavelet-main-integration-ew768sf2/worktree/node_modules/@babel/runtime/helpers/esm/assertThisInitialized.js
   function _assertThisInitialized(e) {
     if (void 0 === e)
       throw new ReferenceError("this hasn't been initialised - super() hasn't been called");
     return e;
   }
 
-  // ../weavelet-main-integration-ew768sf2/worktree/node_modules/@babel/runtime/helpers/esm/setPrototypeOf.js
+  // ../../var/folders/1r/xtsjvqk90yzdyjq5jfjn9phw0000gn/T/weavelet-main-integration-ew768sf2/worktree/node_modules/@babel/runtime/helpers/esm/setPrototypeOf.js
   function _setPrototypeOf(t2, e) {
     return _setPrototypeOf = Object.setPrototypeOf ? Object.setPrototypeOf.bind() : function(t3, e2) {
       return t3.__proto__ = e2, t3;
     }, _setPrototypeOf(t2, e);
   }
 
-  // ../weavelet-main-integration-ew768sf2/worktree/node_modules/@babel/runtime/helpers/esm/inherits.js
+  // ../../var/folders/1r/xtsjvqk90yzdyjq5jfjn9phw0000gn/T/weavelet-main-integration-ew768sf2/worktree/node_modules/@babel/runtime/helpers/esm/inherits.js
   function _inherits(t2, e) {
     if ("function" != typeof e && null !== e)
       throw new TypeError("Super expression must either be null or a function");
@@ -9009,7 +9477,7 @@ ${message.content}` : message.content).join("\n\n").trim();
     }), e && _setPrototypeOf(t2, e);
   }
 
-  // ../weavelet-main-integration-ew768sf2/worktree/node_modules/@babel/runtime/helpers/esm/possibleConstructorReturn.js
+  // ../../var/folders/1r/xtsjvqk90yzdyjq5jfjn9phw0000gn/T/weavelet-main-integration-ew768sf2/worktree/node_modules/@babel/runtime/helpers/esm/possibleConstructorReturn.js
   function _possibleConstructorReturn(t2, e) {
     if (e && ("object" == _typeof(e) || "function" == typeof e))
       return e;
@@ -9018,14 +9486,14 @@ ${message.content}` : message.content).join("\n\n").trim();
     return _assertThisInitialized(t2);
   }
 
-  // ../weavelet-main-integration-ew768sf2/worktree/node_modules/@babel/runtime/helpers/esm/getPrototypeOf.js
+  // ../../var/folders/1r/xtsjvqk90yzdyjq5jfjn9phw0000gn/T/weavelet-main-integration-ew768sf2/worktree/node_modules/@babel/runtime/helpers/esm/getPrototypeOf.js
   function _getPrototypeOf(t2) {
     return _getPrototypeOf = Object.setPrototypeOf ? Object.getPrototypeOf.bind() : function(t3) {
       return t3.__proto__ || Object.getPrototypeOf(t3);
     }, _getPrototypeOf(t2);
   }
 
-  // ../weavelet-main-integration-ew768sf2/worktree/node_modules/@babel/runtime/helpers/esm/defineProperty.js
+  // ../../var/folders/1r/xtsjvqk90yzdyjq5jfjn9phw0000gn/T/weavelet-main-integration-ew768sf2/worktree/node_modules/@babel/runtime/helpers/esm/defineProperty.js
   function _defineProperty(e, r, t2) {
     return (r = toPropertyKey(r)) in e ? Object.defineProperty(e, r, {
       value: t2,
@@ -9035,19 +9503,19 @@ ${message.content}` : message.content).join("\n\n").trim();
     }) : e[r] = t2, e;
   }
 
-  // ../weavelet-main-integration-ew768sf2/worktree/node_modules/@babel/runtime/helpers/esm/arrayWithHoles.js
+  // ../../var/folders/1r/xtsjvqk90yzdyjq5jfjn9phw0000gn/T/weavelet-main-integration-ew768sf2/worktree/node_modules/@babel/runtime/helpers/esm/arrayWithHoles.js
   function _arrayWithHoles(r) {
     if (Array.isArray(r))
       return r;
   }
 
-  // ../weavelet-main-integration-ew768sf2/worktree/node_modules/@babel/runtime/helpers/esm/iterableToArray.js
+  // ../../var/folders/1r/xtsjvqk90yzdyjq5jfjn9phw0000gn/T/weavelet-main-integration-ew768sf2/worktree/node_modules/@babel/runtime/helpers/esm/iterableToArray.js
   function _iterableToArray(r) {
     if ("undefined" != typeof Symbol && null != r[Symbol.iterator] || null != r["@@iterator"])
       return Array.from(r);
   }
 
-  // ../weavelet-main-integration-ew768sf2/worktree/node_modules/@babel/runtime/helpers/esm/arrayLikeToArray.js
+  // ../../var/folders/1r/xtsjvqk90yzdyjq5jfjn9phw0000gn/T/weavelet-main-integration-ew768sf2/worktree/node_modules/@babel/runtime/helpers/esm/arrayLikeToArray.js
   function _arrayLikeToArray(r, a) {
     (null == a || a > r.length) && (a = r.length);
     for (var e = 0, n = Array(a); e < a; e++)
@@ -9055,7 +9523,7 @@ ${message.content}` : message.content).join("\n\n").trim();
     return n;
   }
 
-  // ../weavelet-main-integration-ew768sf2/worktree/node_modules/@babel/runtime/helpers/esm/unsupportedIterableToArray.js
+  // ../../var/folders/1r/xtsjvqk90yzdyjq5jfjn9phw0000gn/T/weavelet-main-integration-ew768sf2/worktree/node_modules/@babel/runtime/helpers/esm/unsupportedIterableToArray.js
   function _unsupportedIterableToArray(r, a) {
     if (r) {
       if ("string" == typeof r)
@@ -9065,17 +9533,17 @@ ${message.content}` : message.content).join("\n\n").trim();
     }
   }
 
-  // ../weavelet-main-integration-ew768sf2/worktree/node_modules/@babel/runtime/helpers/esm/nonIterableRest.js
+  // ../../var/folders/1r/xtsjvqk90yzdyjq5jfjn9phw0000gn/T/weavelet-main-integration-ew768sf2/worktree/node_modules/@babel/runtime/helpers/esm/nonIterableRest.js
   function _nonIterableRest() {
     throw new TypeError("Invalid attempt to destructure non-iterable instance.\nIn order to be iterable, non-array objects must have a [Symbol.iterator]() method.");
   }
 
-  // ../weavelet-main-integration-ew768sf2/worktree/node_modules/@babel/runtime/helpers/esm/toArray.js
+  // ../../var/folders/1r/xtsjvqk90yzdyjq5jfjn9phw0000gn/T/weavelet-main-integration-ew768sf2/worktree/node_modules/@babel/runtime/helpers/esm/toArray.js
   function _toArray(r) {
     return _arrayWithHoles(r) || _iterableToArray(r) || _unsupportedIterableToArray(r) || _nonIterableRest();
   }
 
-  // ../weavelet-main-integration-ew768sf2/worktree/node_modules/i18next/dist/esm/i18next.js
+  // ../../var/folders/1r/xtsjvqk90yzdyjq5jfjn9phw0000gn/T/weavelet-main-integration-ew768sf2/worktree/node_modules/i18next/dist/esm/i18next.js
   function ownKeys$6(object2, enumerableOnly) {
     var keys = Object.keys(object2);
     if (Object.getOwnPropertySymbols) {
@@ -18751,6 +19219,86 @@ ${messageContent}---
     throw new Error("Invalid assistant prefill operation.");
   }
 
+  // shared/google-sync/cloudKit.ts
+  var import_lz_string = __toESM(require_lz_string(), 1);
+  var cloudKitSnapshotLayout = (value, legacyVersion) => {
+    if (!value || typeof value !== "object" || Array.isArray(value)) {
+      throw new Error("Invalid CloudKit snapshot.");
+    }
+    if (!Object.hasOwn(value, "state"))
+      return { wrapped: false, version: legacyVersion };
+    const snapshot = value;
+    if (!snapshot.state || typeof snapshot.state !== "object" || Array.isArray(snapshot.state)) {
+      throw new Error("Invalid CloudKit snapshot state.");
+    }
+    const version = snapshot.version == null ? 0 : Number(snapshot.version);
+    if (!Number.isSafeInteger(version) || version < 0)
+      throw new Error("Invalid CloudKit snapshot version.");
+    return { wrapped: true, version };
+  };
+  var cloudKitLocalWins = (localUpdatedAt, serverUpdatedAt) => localUpdatedAt >= (serverUpdatedAt ?? 0);
+
+  // src/store/storage/cloud/guards.ts
+  var import_lz_string2 = __toESM(require_lz_string(), 1);
+  var MAX_CLOUD_SYNC_JSON_BYTES = 2e6;
+  var MAX_CLOUD_SYNC_COMPRESSED_BYTES = 1e6;
+  var MIN_DESTRUCTIVE_SIZE_RATIO = 0.2;
+  var getSnapshotState = (value) => {
+    if (!value || typeof value !== "object")
+      return null;
+    if ("state" in value && value.state && typeof value.state === "object") {
+      return value.state;
+    }
+    return value;
+  };
+  var computeCloudSyncMetrics = (value) => {
+    const json = JSON.stringify(value) ?? "";
+    const compressed = (0, import_lz_string2.compress)(json) ?? "";
+    const state = getSnapshotState(value);
+    const chats = state?.chats;
+    const contentStore = state?.contentStore;
+    return {
+      jsonBytes: new Blob([json]).size,
+      compressedBytes: new Blob([compressed]).size,
+      chatCount: Array.isArray(chats) ? chats.length : null,
+      contentEntryCount: contentStore && typeof contentStore === "object" ? Object.keys(contentStore).length : null
+    };
+  };
+  var getCloudSyncGuardMessage = (value, metrics, lastSuccessfulUploadMetrics, maxCompressedBytes = MAX_CLOUD_SYNC_COMPRESSED_BYTES) => {
+    const snapshotState = getSnapshotState(value);
+    if (snapshotState && Object.hasOwn(snapshotState, "folders") && !validateFolderHierarchy(snapshotState.folders)) {
+      return "Cloud sync skipped because the folder hierarchy is invalid.";
+    }
+    if (metrics.jsonBytes > MAX_CLOUD_SYNC_JSON_BYTES) {
+      return "Cloud sync skipped because the snapshot is too large to upload safely.";
+    }
+    if (metrics.compressedBytes > maxCompressedBytes) {
+      return "Cloud sync skipped because the compressed snapshot is too large to upload safely.";
+    }
+    if (metrics.chatCount === 0) {
+      return "Cloud sync skipped because the snapshot would erase all chats.";
+    }
+    const state = getSnapshotState(value);
+    const stateChats = state?.["chats"];
+    const chats = Array.isArray(stateChats) ? stateChats : null;
+    if (metrics.contentEntryCount === 0 && chats && chats.some(
+      (chat) => chat && typeof chat === "object" && "branchTree" in chat && chat.branchTree && typeof chat.branchTree === "object"
+    )) {
+      return "Cloud sync skipped because branch data is missing from the snapshot.";
+    }
+    if (lastSuccessfulUploadMetrics && metrics.chatCount !== null && lastSuccessfulUploadMetrics.chatCount !== null && lastSuccessfulUploadMetrics.chatCount > 0 && metrics.chatCount < lastSuccessfulUploadMetrics.chatCount && metrics.chatCount === 0) {
+      return "Cloud sync skipped because the snapshot removes every synced chat.";
+    }
+    if (lastSuccessfulUploadMetrics && lastSuccessfulUploadMetrics.compressedBytes > 0 && metrics.compressedBytes < lastSuccessfulUploadMetrics.compressedBytes * MIN_DESTRUCTIVE_SIZE_RATIO) {
+      return "Cloud sync skipped because the snapshot shrank too much compared with the last successful sync.";
+    }
+    return null;
+  };
+
+  // src/api/cloudkit.ts
+  var CLOUDKIT_RECORD_TYPE = "WeaveletSnapshot";
+  var CLOUDKIT_DEFAULT_RECORD_NAME = "weavelet-default-snapshot";
+
   // shared/google-sync/entry.ts
   var driveFolderName = (json) => JSON.stringify(defaultSyncFolderName(JSON.parse(json)));
   var driveListing = (json) => JSON.stringify({ parameters: driveListParameters(), suggestedName: nextSyncFolderName(DEFAULT_SYNC_FOLDER_NAME, JSON.parse(json)) });
@@ -18771,6 +19319,12 @@ ${messageContent}---
   global2.TextDecoder = class {
     decode(value) {
       return host("text", Array.from(value));
+    }
+  };
+  global2.Blob = class {
+    size;
+    constructor(parts) {
+      this.size = new TextEncoder().encode(parts.join("")).length;
     }
   };
   var sequence = 0;
@@ -18926,6 +19480,27 @@ ${messageContent}---
     });
   };
   var recordsResult = () => JSON.stringify(recordOutcome);
+  var cloudKitOperation = (inputJSON) => {
+    const input = JSON.parse(inputJSON);
+    switch (input.operation) {
+      case "constants":
+        return JSON.stringify({ recordName: CLOUDKIT_DEFAULT_RECORD_NAME, recordType: CLOUDKIT_RECORD_TYPE, version: STORE_VERSION });
+      case "layout":
+        return JSON.stringify(cloudKitSnapshotLayout(input.value, STORE_VERSION));
+      case "localWins":
+        return JSON.stringify(cloudKitLocalWins(input.localUpdatedAt, input.serverUpdatedAt));
+      case "uploadGuard": {
+        const value = JSON.parse(input.snapshotJSON);
+        const metrics = computeCloudSyncMetrics(value);
+        return JSON.stringify({
+          message: getCloudSyncGuardMessage(value, metrics, input.previousMetrics ?? null, 7e5),
+          metrics
+        });
+      }
+      default:
+        throw new Error("Unknown CloudKit operation");
+    }
+  };
   return __toCommonJS(entry_exports);
 })();
 
@@ -19230,5 +19805,29 @@ Files located in the node_modules and vendor directories are externally
 maintained libraries used by this software which have their own
 licenses; we recommend you read them, as their terms may differ from the
 terms above.
+
+*/
+/* Dependency lz-string
+MIT License
+
+Copyright (c) 2013 pieroxy
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
 
 */

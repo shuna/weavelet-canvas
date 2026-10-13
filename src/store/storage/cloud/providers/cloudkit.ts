@@ -1,6 +1,12 @@
 import { applyExternalSnapshot } from '../../applyExternalSnapshot';
-import { decompress } from 'lz-string';
 import type { StorageValue } from 'zustand/middleware';
+import {
+  cloudKitBytesToCompressed,
+  cloudKitCompressedToBytes,
+  cloudKitLocalWins,
+  cloudKitPayloadJSON,
+  cloudKitSnapshotLayout,
+} from '../../../../../shared/google-sync/cloudKit';
 
 import {
   CLOUDKIT_DEFAULT_RECORD_NAME,
@@ -27,14 +33,10 @@ import type { CloudSyncProvider, CloudSyncTarget } from '../types';
 // --- Base64 helpers ---
 // lz-string compress() outputs arbitrary UTF-16 code units (including surrogates
 // and code points above U+00FF). TextEncoder (UTF-8) cannot round-trip these.
-// We encode via Uint16Array → raw bytes → btoa, preserving every code unit.
+// We encode the little-endian raw bytes via btoa, preserving every code unit.
 
 export const lzStringToBase64 = (str: string): string => {
-  const u16 = new Uint16Array(str.length);
-  for (let i = 0; i < str.length; i++) {
-    u16[i] = str.charCodeAt(i);
-  }
-  const bytes = new Uint8Array(u16.buffer);
+  const bytes = cloudKitCompressedToBytes(str);
   let binary = '';
   for (let i = 0; i < bytes.length; i++) {
     binary += String.fromCharCode(bytes[i]);
@@ -42,19 +44,17 @@ export const lzStringToBase64 = (str: string): string => {
   return btoa(binary);
 };
 
-export const base64ToLzString = (b64: string): string => {
+const base64ToBytes = (b64: string): Uint8Array => {
   const binary = atob(b64);
   const bytes = new Uint8Array(binary.length);
   for (let i = 0; i < binary.length; i++) {
     bytes[i] = binary.charCodeAt(i);
   }
-  const u16 = new Uint16Array(bytes.buffer, bytes.byteOffset, bytes.length / 2);
-  let str = '';
-  for (let i = 0; i < u16.length; i++) {
-    str += String.fromCharCode(u16[i]);
-  }
-  return str;
+  return bytes;
 };
+
+export const base64ToLzString = (b64: string): string =>
+  cloudKitBytesToCompressed(base64ToBytes(b64));
 
 // --- Helpers ---
 
@@ -112,20 +112,11 @@ const normalizeRemoteRecord = (
   record: CloudKitRecord
 ): { state: Partial<PersistedStoreState>; version: number } => {
   const payload = record.fields?.payload?.value;
-  if (!payload) return { state: {}, version: 0 };
-
-  const compressed = base64ToLzString(payload);
-  const json = decompress(compressed);
-  if (!json) return { state: {}, version: 0 };
-
+  if (!payload) throw new Error('CloudKit record has no payload.');
+  const json = cloudKitPayloadJSON(base64ToBytes(payload));
   const parsed = JSON.parse(json);
-  if (parsed && typeof parsed === 'object' && 'state' in parsed) {
-    return {
-      state: (parsed.state ?? {}) as Partial<PersistedStoreState>,
-      version: parsed.version ?? 0,
-    };
-  }
-  return { state: parsed as Partial<PersistedStoreState>, version: STORE_VERSION };
+  const layout = cloudKitSnapshotLayout(parsed, STORE_VERSION);
+  return { state: (layout.wrapped ? parsed.state : parsed) as Partial<PersistedStoreState>, version: layout.version };
 };
 
 const hydrateFromServerRecord = async (record: CloudKitRecord, observed: ReturnType<typeof useStore.getState>, isCurrent: () => boolean): Promise<boolean> => {
@@ -176,11 +167,10 @@ export const createCloudKitCloudProvider = <S>(): CloudSyncProvider<S> => ({
     const payload = result.record.fields?.payload?.value;
     if (!payload) return null;
 
-    const compressed = base64ToLzString(payload);
-    const json = decompress(compressed);
-    if (!json) return null;
-
-    return JSON.parse(json) as StorageValue<S>;
+    const json = cloudKitPayloadJSON(base64ToBytes(payload));
+    const parsed = JSON.parse(json);
+    cloudKitSnapshotLayout(parsed, STORE_VERSION);
+    return parsed as StorageValue<S>;
   },
 
   writeItem: async (_name, file, target) => {
@@ -241,10 +231,7 @@ export const createCloudKitCloudProvider = <S>(): CloudSyncProvider<S> => ({
           return;
         }
 
-        const serverUpdatedAt =
-          fetchResult.record.fields?.updatedAt?.value ?? 0;
-
-        if (updatedAt >= serverUpdatedAt) {
+        if (cloudKitLocalWins(updatedAt, fetchResult.record.fields?.updatedAt?.value)) {
           // Local wins — retry with server's recordChangeTag
           const retryResult = await saveCloudKitRecord(
             config,

@@ -29,6 +29,7 @@ global.performance = { now: () => Date.now() };
 global.structuredClone = (value: unknown) => JSON.parse(JSON.stringify(value));
 global.TextEncoder = class { encode(value: string) { return new Uint8Array(host('utf8', value)); } };
 global.TextDecoder = class { decode(value: Uint8Array) { return host('text', Array.from(value)); } };
+global.Blob = class { size: number; constructor(parts: string[]) { this.size = new TextEncoder().encode(parts.join('')).length; } };
 let sequence = 0;
 let requests: { id: number; method: string; args: unknown[] }[] = [];
 const replies = new Map<number, { resolve: (value: any) => void; reject: (error: Error) => void }>();
@@ -158,3 +159,25 @@ export { generationPlan } from "./generationPlan";
 export { localGenerationInput, localGenerationOutput } from "./localGeneration";
 
 export { assistantPrefill } from './assistantPrefill';
+
+import { cloudKitLocalWins as localCloudKitWins, cloudKitSnapshotLayout as snapshotCloudKitLayout } from './cloudKit';
+import { computeCloudSyncMetrics, getCloudSyncGuardMessage } from '../../src/store/storage/cloud/guards';
+import { CLOUDKIT_DEFAULT_RECORD_NAME, CLOUDKIT_RECORD_TYPE } from '../../src/api/cloudkit';
+import { STORE_VERSION } from '../../src/store/version';
+export const cloudKitOperation = (inputJSON: string) => {
+  const input = JSON.parse(inputJSON);
+  switch (input.operation) {
+    case 'constants': return JSON.stringify({ recordName: CLOUDKIT_DEFAULT_RECORD_NAME, recordType: CLOUDKIT_RECORD_TYPE, version: STORE_VERSION });
+    case 'layout': return JSON.stringify(snapshotCloudKitLayout(input.value, STORE_VERSION));
+    case 'localWins': return JSON.stringify(localCloudKitWins(input.localUpdatedAt, input.serverUpdatedAt));
+    case 'uploadGuard': {
+      const value = JSON.parse(input.snapshotJSON);
+      const metrics = computeCloudSyncMetrics(value);
+      return JSON.stringify({
+        message: getCloudSyncGuardMessage(value, metrics, input.previousMetrics ?? null, 700_000),
+        metrics,
+      });
+    }
+    default: throw new Error('Unknown CloudKit operation');
+  }
+};

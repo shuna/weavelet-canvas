@@ -121,7 +121,9 @@
     "src/utils/remoteResponse.ts": "d4e9e92a91a6997656683701c2a26f9a62db0f1ba047ade5d816cfdc6cb45d74",
     "src/utils/thinkTagParser.ts": "8e8301456c2e9d14e5000fe30aac979404a61a1e358427858722091dbe382145",
     "src/utils/localGenerationInput.ts": "477c89a90619cbd2e2184df8a17a077bce1cd942191e6b5d0f99aaad8bce9660",
-    "src/utils/assistantPrefill.ts": "e07d4d9515e6d9690a5cf7982b24f500a1528d7c57af8c2a41629c50eb3e8c70"
+    "src/utils/assistantPrefill.ts": "e07d4d9515e6d9690a5cf7982b24f500a1528d7c57af8c2a41629c50eb3e8c70",
+    "src/store/storage/cloud/guards.ts": "37ed5eeab915587acc8e8edcf02f25d369245875760e4b3efd4757b25edc09db",
+    "src/api/cloudkit.ts": "18e15b3cf9321a54f4641d005c9415319037428fa6368025bd79a61a760b6f48"
   },
   "bundleInputs": {
     "shared/google-sync/importDefaults.generated.json": "2c2d78eba4c11ff5348beb24332cdeb018428fdf9d56bab5aaba1cae1848495a",
@@ -228,7 +230,10 @@
     "shared/google-sync/localGeneration.ts": "d4d08717c9abdf31b19de5197b3987d6cfab0cf57c7de008f5510a941fa6324c",
     "src/utils/assistantPrefill.ts": "e07d4d9515e6d9690a5cf7982b24f500a1528d7c57af8c2a41629c50eb3e8c70",
     "shared/google-sync/assistantPrefill.ts": "bf8d88fb34a26786744dea527c30503a4d0283f9f0f2d695b87347141b033e5e",
-    "shared/google-sync/entry.ts": "b532e5cc2c9397ccc4a2f3a8d7bfdabffc38cb4c5152c7ec7b1911270f7af5cc",
+    "shared/google-sync/cloudKit.ts": "88cace35875caae662216e2d44d8601c4c3ebe64e38bac1debb3ac66e329cca9",
+    "src/store/storage/cloud/guards.ts": "37ed5eeab915587acc8e8edcf02f25d369245875760e4b3efd4757b25edc09db",
+    "src/api/cloudkit.ts": "18e15b3cf9321a54f4641d005c9415319037428fa6368025bd79a61a760b6f48",
+    "shared/google-sync/entry.ts": "08aa128fb15b525412b90304b899bd75140274ef53d711ce29a4c89ffc874c24",
     "shared/google-sync/generate.mjs": "bce157c3313ac97c88aff3c7325450fea534bb76582eac5972260332c02a3e74",
     "shared/google-sync/importDefaults.generate.mjs": "2ff8904af4f192ed0809ceaaabcfbefa708321083aebb527d712fc2a0551b15a"
   },
@@ -253,6 +258,7 @@
     "@babel/runtime/helpers/esm/nonIterableRest.js": "c6107ade34a6ef9b5eea0c189fb87377d32faae61df50fdbc973aa4210e0efe8",
     "@babel/runtime/helpers/esm/toArray.js": "60f122f0e23ed82635618d56bf9511b96e5df76186ab2e1139e6882d1d4e634c",
     "i18next/dist/esm/i18next.js": "433f28508514f0bd6cd481d0dae4d5d610a91d4ac5d1bace8e211838dc2ab325",
+    "lz-string/libs/lz-string.js": "550034b821027008776cb9bcd1700bb5d31e8b3de224cb130fc966a75dab0e5e",
     "@babel/runtime/package.json": "7a3606cfd92078a1f9b227edad21a983024086adfd7bb550a54c7b7eecaffbfe",
     "@babel/runtime/LICENSE": "117da2af0d4ce0fe1c8e19b5cff9dcd806adf973d328d27b11d4448c4ff24f76",
     "diff-match-patch/package.json": "912519c458314dade9d95c1c3d138ce377065d36dd4408bdf3113f414eeb0fc6",
@@ -260,7 +266,9 @@
     "i18next/package.json": "83db2cd26ea2e9abb4b14cd90c203c4c1d46b91fa9b77a0163c0410827783a0f",
     "i18next/LICENSE": "039dfb9339375d01c041f7fa9a18add29f846cbc20e12e7866557440b38cacc9",
     "lodash/package.json": "5ef0a453b679125b155af19e1477f93b577ea826a57e1545f77608d326966e6a",
-    "lodash/LICENSE": "f71e8ed126b46346494aad5486874cd8f0aafe95092ed67d2e3cb6110f939abc"
+    "lodash/LICENSE": "f71e8ed126b46346494aad5486874cd8f0aafe95092ed67d2e3cb6110f939abc",
+    "lz-string/package.json": "f0990a8fd6c347d66c1469d18918f5460d372c6b3af8a0a5737dfd34c809e20d",
+    "lz-string/LICENSE": "433fc9dfe659dbfb1e91eed8351f13651e97bfa3ac6d03394c3d63f61d4bbc80"
   },
-  "bundleSHA256": "759ecf7b6deda96d2298ebf283bba110b2a827c30c21aa17c4ab41df4b81b2de"
+  "bundleSHA256": "835ccf998cac9e37a4ed385c08126fe05806a72dde13ad815a2491117bdee96e"
 }
