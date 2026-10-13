@@ -14,11 +14,56 @@ final class BranchEditorTests: XCTestCase {
         let input = try key.input(requestID: 42)
         XCTAssertEqual(try input.required("entries").array("entries")[0].required("chatId"), .string("chat-a"))
         XCTAssertEqual(try input.required("entries").array("entries")[0].required("nodes"), try fixture().required("chats").array("chats")[0].required("branchTree").required("nodes"))
-        XCTAssertEqual(input["contentStore"], state.exchange?.source["contentStore"])
+        XCTAssertEqual(try input.required("contentStore").required("inactive"), state.exchange?.source["contentStore"]?["inactive"])
+        XCTAssertNil(input["contentStore"]?["unreferenced"])
         let output = try SharedWebOperations.call("branchLayout", input)
         let graph = try BranchGraph(output, requestID: 42)
         XCTAssertTrue(graph.nodes.contains { $0.id == "n-inactive" && !$0.active && !$0.preview.isEmpty })
         XCTAssertThrowsError(try BranchGraph(output, requestID: 41))
+    }
+
+    func testCanonicalEquivalentIDsRemainDistinctAndRequestIDIsJSSafe() throws {
+        let composed = "é", decomposed = "e\u{301}"
+        let content = OrderedJSON.object([.init(key: "body", value: .object([
+            .init(key: "content", value: .array([.object([.init(key: "type", value: .string("text")), .init(key: "text", value: .string("本文"))])])),
+            .init(key: "refCount", value: .number("2"))]))])
+        let nodes = OrderedJSON.object([composed, decomposed].map { id in
+            .init(key: id, value: .object([.init(key: "id", value: .string(id)), .init(key: "parentId", value: .null),
+                .init(key: "role", value: .string("user")), .init(key: "contentHash", value: .string("body"))]))
+        })
+        let tree = OrderedJSON.object([.init(key: "nodes", value: nodes), .init(key: "activePath", value: .array([.string(composed)]))])
+        let first = BranchLayoutKey(chatID: composed, chatIndex: 0, title: composed, tree: tree, contentStore: content)
+        let second = BranchLayoutKey(chatID: decomposed, chatIndex: 0, title: composed, tree: tree, contentStore: content)
+        let third = BranchLayoutKey(chatID: composed, chatIndex: 0, title: decomposed, tree: tree, contentStore: content)
+        XCTAssertNotEqual(first, second)
+        XCTAssertNotEqual(first, third)
+        let requestID = Int(UInt32.max)
+        let output = try SharedWebOperations.call("branchLayout", first.input(requestID: requestID))
+        let graph = try BranchGraph(output, requestID: requestID)
+        XCTAssertEqual(graph.positionsByID.count, 2)
+        XCTAssertEqual(Set(graph.nodes.map(\.identity)).count, 2)
+        XCTAssertThrowsError(try BranchGraph(output, requestID: requestID - 1))
+    }
+
+    func testPreviewResolvesOnlyReferencedDeltaWithoutChangingRawStore() throws {
+        let root = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
+        let fixture = try OrderedJSON.decode(Data(contentsOf: root.appendingPathComponent("tests/fixtures/web-native/raw-delta-attributes.json")))
+        let rawStore = OrderedJSON.object([
+            .init(key: "base", value: .object([.init(key: "content", value: try fixture.required("base")), .init(key: "refCount", value: .number("1"))])),
+            .init(key: "delta", value: .object([.init(key: "content", value: .array([])), .init(key: "refCount", value: .number("1")),
+                .init(key: "delta", value: .object([.init(key: "baseHash", value: .string("base")), .init(key: "patches", value: try fixture.required("patches"))]))]))
+        ])
+        let node = OrderedJSON.object([.init(key: "id", value: .string("n")), .init(key: "parentId", value: .null),
+            .init(key: "role", value: .string("user")), .init(key: "contentHash", value: .string("delta"))])
+        let tree = OrderedJSON.object([.init(key: "nodes", value: .object([.init(key: "n", value: node)])), .init(key: "activePath", value: .array([.string("n")]))])
+        let key = BranchLayoutKey(chatID: "chat", chatIndex: 0, title: "chat", tree: tree, contentStore: rawStore)
+        let input = try key.input(requestID: 7)
+        XCTAssertNil(input["contentStore"]?["base"])
+        XCTAssertEqual(try input.required("contentStore").required("delta").required("content"), try fixture.required("expected"))
+        XCTAssertEqual(rawStore["delta"]?["content"], .array([]))
+        XCTAssertNotNil(rawStore["delta"]?["delta"])
+        let graph = try BranchGraph(SharedWebOperations.call("branchLayout", input), requestID: 7)
+        XCTAssertFalse(try XCTUnwrap(graph.nodes.first).preview.isEmpty)
     }
 
     func testViewModePersistsSeparatelyFromBubbleStyleAndFailedSaveKeepsState() throws {

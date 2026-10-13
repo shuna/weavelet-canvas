@@ -7,36 +7,55 @@ struct BranchLayoutKey: Equatable {
     let tree: OrderedJSON?
     let contentStore: OrderedJSON?
 
+    init(chatID: String, chatIndex: Int, title: String, tree: OrderedJSON?, contentStore: OrderedJSON?) {
+        self.chatID = chatID; self.chatIndex = chatIndex; self.title = title
+        self.tree = tree; self.contentStore = contentStore
+    }
+
     init(state: ChatState) {
         let selectedID = state.selectedConversationID
         let chats = (try? state.exchange?.source.required("chats").array("chats")) ?? []
         let index = chats.firstIndex { $0["id"] == .string(selectedID) } ?? -1
-        chatID = selectedID
-        chatIndex = index
-        title = state.conversation?.title ?? ""
-        tree = chats.indices.contains(index) ? chats[index]["branchTree"] : nil
-        contentStore = state.exchange?.source["contentStore"]
+        self.init(chatID: selectedID, chatIndex: index, title: state.conversation?.title ?? "",
+            tree: chats.indices.contains(index) ? chats[index]["branchTree"] : nil,
+            contentStore: state.exchange?.source["contentStore"])
+    }
+
+    static func == (lhs: Self, rhs: Self) -> Bool {
+        lhs.chatID.utf8.elementsEqual(rhs.chatID.utf8) && lhs.chatIndex == rhs.chatIndex &&
+        lhs.title.utf8.elementsEqual(rhs.title.utf8) && lhs.tree == rhs.tree && lhs.contentStore == rhs.contentStore
     }
 
     func input(requestID: Int) throws -> OrderedJSON {
         guard let tree, let contentStore, chatIndex >= 0 else { throw ExchangeError.invalid("分岐データがありません") }
+        let nodes = try tree.required("nodes")
+        var previewStore: [JSONField] = []
+        var seen = Set<Data>()
+        for field in try nodes.object("nodes") {
+            let hash = try field.value.required("contentHash").string("contentHash")
+            guard seen.insert(Data(hash.utf8)).inserted else { continue }
+            let entry = try contentStore.required(hash)
+            let preview = entry["delta"] == nil ? entry : entry.replacing("content", with: try SyncRecords.resolveProjectedContent(contentStore, hash: hash))
+            previewStore.append(.init(key: hash, value: preview))
+        }
         return .object([
             .init(key: "requestId", value: .number(String(requestID))),
             .init(key: "entries", value: .array([.object([
                 .init(key: "chatIndex", value: .number(String(chatIndex))),
                 .init(key: "chatId", value: .string(chatID)),
                 .init(key: "chatTitle", value: .string(title)),
-                .init(key: "nodes", value: try tree.required("nodes")),
+                .init(key: "nodes", value: nodes),
                 .init(key: "activePath", value: try tree.required("activePath"))
             ])])),
-            .init(key: "contentStore", value: contentStore)
+            .init(key: "contentStore", value: .object(previewStore))
         ])
     }
 }
 
 struct BranchGraph {
-    struct Node: Identifiable {
+    struct Node {
         let id: String
+        var identity: Data { Data(id.utf8) }
         let role: String
         let preview: String
         let label: String?
@@ -53,6 +72,9 @@ struct BranchGraph {
     let edges: [Edge]
     let width: CGFloat
     let height: CGFloat
+    var positionsByID: [Data: CGPoint] {
+        Dictionary(uniqueKeysWithValues: nodes.map { ($0.identity, CGPoint(x: $0.x + 140, y: $0.y + 40)) })
+    }
 
     init(_ output: OrderedJSON, requestID: Int) throws {
         guard Int(try output.required("requestId").number("requestId")) == requestID else { throw ExchangeError.invalid("古い分岐配置") }
@@ -109,11 +131,11 @@ struct BranchEditorView: View {
                 catch { self.error = "分岐を表示できません: \(error.localizedDescription)" }
                 return
             }
-            let requestID = Int.random(in: 1...Int.max)
+            let requestID = Int(UInt32.random(in: 1...UInt32.max))
             do {
-                let input = try key.input(requestID: requestID)
                 let computed = try await Task.detached(priority: .userInitiated) {
-                    try BranchGraph(SharedWebOperations.call("branchLayout", input), requestID: requestID)
+                    let input = try key.input(requestID: requestID)
+                    return try BranchGraph(SharedWebOperations.call("branchLayout", input), requestID: requestID)
                 }.value
                 guard !Task.isCancelled else { return }
                 graph = computed
@@ -127,9 +149,9 @@ struct BranchEditorView: View {
     private func graphCanvas(_ graph: BranchGraph) -> some View {
         ZStack(alignment: .topLeading) {
             Canvas { context, _ in
-                let positions = Dictionary(uniqueKeysWithValues: graph.nodes.map { ($0.id, CGPoint(x: $0.x + 140, y: $0.y + 40)) })
+                let positions = graph.positionsByID
                 for edge in graph.edges {
-                    guard let start = positions[edge.source], let end = positions[edge.target] else { continue }
+                    guard let start = positions[Data(edge.source.utf8)], let end = positions[Data(edge.target.utf8)] else { continue }
                     var path = Path()
                     path.move(to: CGPoint(x: start.x, y: start.y + 40))
                     path.addLine(to: CGPoint(x: start.x, y: (start.y + end.y) / 2))
@@ -138,7 +160,7 @@ struct BranchEditorView: View {
                     context.stroke(path, with: .color(edge.active ? .blue : .secondary), lineWidth: edge.active ? 2 : 1)
                 }
             }
-            ForEach(graph.nodes) { node in
+            ForEach(graph.nodes, id: \.identity) { node in
                 BranchNodeCard(node: node) {
                     do {
                         try state.navigate(chatID: state.selectedConversationID, nodeID: node.id, source: .branchEditor)
