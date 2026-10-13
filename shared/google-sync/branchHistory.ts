@@ -25,7 +25,7 @@ export function branchHistory(json: string): string {
     if (result.status === 'updated') {
       // External redundant messages include attributes; history rules restore
       // the runtime projection, so project them at this I/O boundary only.
-      result.state.chats = result.state.chats.map(chat => chat.branchTree ? {...chat,messages:materializeActivePath(chat.branchTree,result.state.contentStore,true)} : chat);
+      result.state.chats = result.state.chats.map(chat => result.affectedChatIds.includes(chat.id) && chat.branchTree ? {...chat,messages:materializeActivePath(chat.branchTree,result.state.contentStore,true)} : chat);
     }
     output = {status:result.status, affectedChatIds:result.affectedChatIds,
       changes:result.status === 'updated' ? diffJSONChanges(before, JSON.parse(JSON.stringify(result.state))) : []};

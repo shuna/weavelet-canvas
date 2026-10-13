@@ -68,8 +68,8 @@ export const createBranchSnapshot = (
       messages: structuredClone(chat.messages),
       branchTree: structuredClone(chat.branchTree),
       expectedActivePath: expectedById.get(chat.id)?.branchTree?.activePath.slice(),
-      ...(chat.config.systemPrompt !== expectedById.get(chat.id)?.config.systemPrompt
-        ? { systemPrompt: { value: chat.config.systemPrompt } }
+      ...(chat.config?.systemPrompt !== expectedById.get(chat.id)?.config?.systemPrompt
+        ? { systemPrompt: { value: chat.config?.systemPrompt } }
         : {}),
     }));
   return {

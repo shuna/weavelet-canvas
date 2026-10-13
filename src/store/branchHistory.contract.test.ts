@@ -42,6 +42,23 @@ describe('shared global branch history',()=>{
   const empty=apply(initial,removed.changes);const restored=call({operation:'undo',history:removed.history,chats:[empty.chat],contentStore:empty.contentStore});
   expect(apply({chats:[empty.chat],contentStore:empty.contentStore},restored.changes).chats[0].messages[0]).toEqual(initial.chat.messages[0]);
  });
+ it('leaves unrelated branched messages-only attributes and ordering completely unchanged on undo/redo',()=>{
+  const initial=source(), edited=edit(initial,undefined), changed=apply(initial,edited.changes);
+  const unrelated:any=structuredClone(changed.chat);unrelated.id='unrelated';unrelated.messages[0].onlyMessage={nested:{opaqueRef:44}};unrelated.messages[0].content[0].extraBody={opaqueRef:45};
+  const before={chats:[changed.chat,unrelated],contentStore:changed.contentStore};
+  const undo=call({operation:'undo',history:edited.history,...before});
+  expect(undo.changes.some((change:any)=>change.path[0]==='chats' && change.path[1]===1)).toBe(false);
+  const restored=apply(before,undo.changes);expect(restored.chats[1]).toEqual(unrelated);
+  const redo=call({operation:'redo',history:undo.history,...restored});expect(apply(restored,redo.changes).chats[1]).toEqual(unrelated);
+ });
+ it('captures and restores missing config without synthesizing a config object',()=>{
+  const initial:any=source();delete initial.chat.config;
+  const edited=edit(initial,undefined);expect(edited.history.past[0].chats[0]).not.toHaveProperty('systemPrompt');
+  const changed=apply(initial,edited.changes);expect(changed.chat).not.toHaveProperty('config');
+  const undo=call({operation:'undo',history:edited.history,chats:[changed.chat],contentStore:changed.contentStore});
+  const restored=apply({chats:[changed.chat],contentStore:changed.contentStore},undo.changes);expect(restored.chats[0]).not.toHaveProperty('config');
+  expect(restored.chats[0].messages).toEqual(initial.chat.messages);
+ });
  it('limits global capture to 50 and blocks busy/deleted chats without moving history',()=>{
   let state=source(),history:any;for(let n=0;n<52;n++){const result=edit(state,history);history=result.history;state=apply(state,result.changes);state.chat.messages[0].content[0].text=String(n);delete (state.chat as any).branchTree;}
   expect(history.past).toHaveLength(50);
