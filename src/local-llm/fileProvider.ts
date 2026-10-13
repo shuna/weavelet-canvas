@@ -125,3 +125,8 @@ export function resolveUrlToManifestKey(url: string, modelId: string): string | 
 
   return null;
 }
+
+/** Final files supplied to the Transformers.js custom cache. */
+export function getFinalModelFiles(names: string[]): string[] {
+  return names.filter((name) => !name.endsWith('.part'));
+}
