@@ -647,3 +647,15 @@ c9c62bcfで実Web useSubmitのOpenRouter送信前制約をautoPreSendSafetyAllow
 統合確認でInt.max request IDのJSC丸め、NFC/NFD Stringキー衝突、delta preview空を修正。request IDはUInt32、描画/ForEach/Task identityはUTF8 bytes、previewは参照hashだけ共有resolverで解決する。独立AstraのP2「旧graphが現在の別chatへ作用」はgraphと生成元keyを保持し、公開/表示/click時に最新keyを照合、navigate先も生成元chatIDとする限定修正で解消。同node IDを持つ2chatの回帰を含むCatalyst7件成功、先のNav/Store成功は再利用。独立Astra限定再確認は新規P2以上なし。
 
 Macのロック解除後、通常storeと別のFAKE合成fixtureで右上切替・左右split・branch-only・nodeclick→本文到達を確認。実表示でcomposerがgraphまで横断していることを観測し、20ea0be1でchatContent内へ3行移動、Chat pane下端固定へ修正。最終Catalyst build成功（/private/tmp/weavelet-branch-pane-final-build.log）、限定Astra新規なし、最終実画面で左右splitの入力がChat pane内に収まり、branch-onlyでは入力領域がないことを確認した。アプリを終了し両検証cloneのprocess消失を確認、通常store/Keychain/実クラウドに触れていない。上下splitの実操作、iPhone狭幅/最大文字サイズ/IME、pan/zoomの実手操作は未確認。複数chat graph・node編集/多選択/比較等のWeb全graph機能は残件であり、閲覧と到達を全完成としない。
+
+## 分岐node操作と比較の共有元（2026-10-14）
+
+4196cc96で分岐cardのmenuから既存NodeOptions、範囲clipboard、branch削除確認へ接続した。本文側と同じhandlerを使い、属性更新/コピー/削除規則をSwiftで再実装していない。対象は選択会話の全nodeで、非表示branchも扱う。独立Astraは新規P2以上なし。Catalyst build成功（/private/tmp/weavelet-branch-actions-build.log）。
+
+FAKE Catalyst実画面で非active nodeのlabel/star/pin保存、同nodeの範囲copy、削除確認の表示と取消を確認。保存fileでactivePath不変、未知node/body属性の保持、既存合成会話4件保持、clipboardの対象ID/属性保持を確認した。確認clone終了とprocess消失を確認。通常store/Keychain/実通信を使用していない。cut/paste・削除の実行、iPhone狭幅/最大文字サイズは未確認。
+
+d8c15c72/5a0e39baでWeb BranchDiffModalの行構築をpure branchDiffへ移し、実Web callerと固定JSC bridgeへ接続した。delta解決・textのみ抽出・role選択・差分行を同じ元で処理する。native比較画面への接続は次の範囲であり、この切出しだけで比較機能完成とはしない。
+
+fc195ef1/f045577aで独自の二次元LCS tableを既存diff-match-patch1.0.5へ置換した。新依存を追加せず、単語/空白をJSON行へ写して既存line helperを利用し、全行を復元する。辞書上限とdeadlineでは強調粒度が粗くなるが、元の両本文は保持する。同一長文が辞書上限の非対称処理で変更扱いになる独立AstraのP2は、同一入力の早期equal返却と回帰caseで修正した。限定再監査は新規P2以上なし。
+
+共有6件（両辞書上限、deadline、Unicode/空白と両本文復元を含む）、型検査、生成bundle鮮度、実JSC呼出は成功。ログ /private/tmp/weavelet-shared-word-diff-{web-final,types,bundle-final}.log。既存固定Apache-2.0依存の利用であり、archive済み公式repositoryを保守継続中とは扱わない。helperと版の境界は[公式利用例](https://github.com/google/diff-match-patch/wiki/Line-or-Word-Diffs)に従う。空白の強調区切りは旧算法と異なるcaseがあるが本文一致を維持する。deadlineは処理全体のhard timeoutではなく、Web同期描画の応答時間・大モデル/実機性能は未測定。未変更の全暗号化同期suiteを反復していない。
