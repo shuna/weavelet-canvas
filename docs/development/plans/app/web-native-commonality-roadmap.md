@@ -351,3 +351,10 @@ b2f5f976/6a345e4aで同じpure元のbranchLayoutと既存Web ensureBranchTreeSta
 現固定HF4.0.1/ORT dev722743c0e2にはCPU TensorScatterの型制限[公式修正](https://github.com/microsoft/onnxruntime/pull/29916)が未適用だった。a78972ccで最小の対応HF4.3.0へ固定し、その公式ORT dev8d85527a0で修正の包含を確認した。HF4.1/4.2は修正前、4.3.1の追加機能は今回不要。新しい型定義のconst type parameterに対応するTS5.4.5を固定し、空のverification mapへ既存型だけを明示する。protobufjsはWebの実webgpu入口では非同梱だが、両lockとinstalledに配布される既知脆弱版を残さず7.6.6へ対象固定する。新規の直接依存は追加しない。独立Astraの版/integrity/公開advisory照合とP2修正確認は新規P2以上なし、未発見問題の不存在を保証しない。
 
 WK実証ではORTのmjs/WASMも[公式配布手順](https://onnxruntime.ai/docs/tutorials/web/deploy.html)に従いローカルへ固定し、外部通信なし・実pipeline結果・取消/古い通知の拒否・Worker破棄を確認する。local_files_onlyだけではORT資産のCDN読込を止められない。Node版/sharpは同梱せず、固定ORT revisionのMIT本文とThirdPartyNoticesを保持する。Web実unloadModelはunload通知後にWorkerをterminateするため、workerのnull代入だけを見て解放規則を作り直さない。実分類、nativeのモデル資産管理・Local/Hybrid接続、実機性能はまだ完成していない。
+
+
+### 2026-10-14：Web配置へのUI調整とモデル実行境界
+
+UIはWebの会話上部（左モデル・右表示）、役割見出し/本文/末尾操作、composerのまとまりを優先してiOSへ寄せた。狭幅では操作Menuへの集約で44ptを維持し、時刻・強制カプセル・余白目的の固定高さは設けない。任意の吹き出し表示を保持する。広幅Catalyst実表示と独立Astraは確認済み、狭幅/最大文字サイズ/VoiceOver/iPhone、直接navigationやモデルdropdown等の残る配置差は完成扱いしない。
+
+分類器は既存Web workerをWKClassifierHostで実行し、モデルファイルの供給・OSフォルダー取込・取消だけnative境界へ置いた。nested OPFSとrequired .part判定は実Web側を修正/共有した。新たなSwift分類規則・別言語移植・persisted rootを増やさない。次は実Web Local/Hybrid callerを根拠として共有localModeration/localPolicyへ本番consumerを接続する。詳細証拠と未確認範囲は完成ledgerの同日節を参照する。

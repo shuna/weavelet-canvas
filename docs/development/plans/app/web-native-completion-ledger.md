@@ -797,3 +797,20 @@ a78972ccでHF4.3.0/対応ORT、TS5.4.5とprotobufjs7.6.6を限定固定した。
 同期generatorのTS版差により最初の鮮度確認は失敗したため再生成した。initialDefaults bytesは同一で、bundle差は生成時の依存path comment/CommonJS labelだけと原artifact比較で確認し、最終鮮度確認成功。新bundleのSHA256は32e77def3cfb948c48fd3cc3a5fe6b0f4d7afa326b58dc49fb828b8818bbe07b。共有業務を変更したとして全suiteを反復しない。
 
 WK分類器は実証中。既存Web workerのallowLocalModels=falseとlocal_files_onlyの組合せが新旧HFでcustomCache前に拒否される根本原因を確認し、共通workerで修正を進めている。実分類・任意モデル・Local/Hybrid UI・実機・実オンライン同期は未確認。Airの最新lockStateはpasscodeRequired=trueで、実機導入を成功扱いしない。
+
+
+## Web配置へのUI調整と分類器・モデルフォルダーの境界（2026-10-14）
+
+bd77e18e/45294bb4で会話タイトル下にWeb ChatViewTabsと同じ左モデル・右チャット/分岐/レイアウトの行を設け、既存設定sheetとsetChatActiveViewへ接続した。モデル未選択を明示し、モデル値を変更しない。streamは役割tileと本文の左右insetを12ptに揃え、本文と末尾操作を角丸の面へまとめた。狭幅では評価・文脈除外・保護を同じhandlerのMenuへ集約し、44pt操作領域を維持する。composerは役割・本文・操作を一つの面にまとめ、共用UITextViewを透明にした。時刻、強制カプセル、固定84pt本文高は追加しない。吹き出しの任意設定と既存IME処理を保持する。
+
+独立AstraのUI機能一式監査は新規P2以上なし。Catalyst統合test/buildで接続を確認し、FAKE隔離実画面では本文と役割tile左端、本文面、composer面、チャット→分岐→チャットの選択・モデル設定を開く/取消を確認した。実画面で空モデルの表示欠落を見つけ表示のみ補正。通常store/Keychain/実通信は使用しない。ウィンドウ縮小dragは変化せず、狭幅・最大文字サイズ・VoiceOver・iPhoneの確認とは扱わない。モデル選択は既存設定sheet入口であり、Webのモデルdropdown全操作が同位置に揃ったという証明ではない。上部の直接戻る/進む/新規入口など配置差は残る。
+
+分類器foundationはaab533d9で実Web workerのallowLocalModelsを修正、75d8e5b2でnested OPFSを標準directory traversalへ修正した。418088caでnativeモデルフォルダーI/Oを接続し、required以外の最終ファイルとmetadataを保持する。独立AstraのP2は3aed0417の共有required part判定とb96a475eのboot取消epoch確認で解消、限定再監査は新規P2以上なし。元WK4件/取消修正1件、directory8件/marker修正1件、Web storage/download13件/marker関連2件の別run成功を再利用する。全件を単一runで成功したとは扱わない。
+
+62c6214cで単一WKClassifierHostへ昇格し、callerのorigin/filesをscheme経由で実Web Workerへ供給する。299Bの合成constantモデルはテストbundle専用へ分離、全label/scoreを返す。Task.cancelからWorker終了と待機拒否、Worker到達時のUTF8/UTF16を確認。112757dfで既存Transformers.js multi-file定義からOSフォルダーpickerへ接続し、背景でinspect/stage後、MainActorでrawモデル・取消・busyを照合してawaitなしでatomic publishする。旧targetとmetadataを保持し、フォルダー存在表示をモデル内容の検証済み表示にしない。
+
+担当Catalyst host7件・folder接続6件の成功を再利用、昇格/接続一式の独立Astraは新規P2以上なし。親統合はfoundation代表2件成功（/private/tmp/weavelet-native-ui-placement-union-test.log）、新host Task.cancel代表1件成功（/private/tmp/weavelet-native-ui-placement-final-test.log）、folder登録/再起動代表1件成功（/private/tmp/weavelet-native-folder-ui-union-test.log）。最初のfolder指定名誤りは0件として回収し、正しい名前の1件を別runで確認した。3generator鮮度は各exit0。未変更の全業務・同期suiteを反復しない。
+
+本番Local/Hybrid consumerは未接続。constantモデルは任意モデルの精度・tokenization内容同値・省電力を証明せず、OS異常終了はdelegate境界の確認に留まる。実OS folder picker、実browser OPFS、大容量モデル、実機、実オンライン同期は未確認。
+
+最終UI Catalyst build成功（/private/tmp/weavelet-native-ui-placement-final-build.log）。45294bb4版の隔離cloneで「モデル未選択」のAX表示も確認した。検証cloneは終了後にprocess消失を確認、旧Enter cloneも終了した。cloneを終了済みとする根拠はinventoryの遅延表示ではなく実process不在。元作業ツリーは保全し、今回origin/mainはincoming 0件。
