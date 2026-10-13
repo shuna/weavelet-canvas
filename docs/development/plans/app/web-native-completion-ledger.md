@@ -814,3 +814,10 @@ bd77e18e/45294bb4で会話タイトル下にWeb ChatViewTabsと同じ左モデ�
 本番Local/Hybrid consumerは未接続。constantモデルは任意モデルの精度・tokenization内容同値・省電力を証明せず、OS異常終了はdelegate境界の確認に留まる。実OS folder picker、実browser OPFS、大容量モデル、実機、実オンライン同期は未確認。
 
 最終UI Catalyst build成功（/private/tmp/weavelet-native-ui-placement-final-build.log）。45294bb4版の隔離cloneで「モデル未選択」のAX表示も確認した。検証cloneは終了後にprocess消失を確認、旧Enter cloneも終了した。cloneを終了済みとする根拠はinventoryの遅延表示ではなく実process不在。元作業ツリーは保全し、今回origin/mainはincoming 0件。
+
+
+## iPhone Airの前段導入と分類器実行（2026-10-14）
+
+現在のlockStateを再確認しpasscodeRequired=falseを得たため、監査済み前段を署名ビルド・インストール・起動した（/private/tmp/weavelet-air-ui-classifier-{build,install,launch}.log）。最初のbuildは6439da7d時点で79306cfb前に完了。続く実機testでは79306cfbまでのnative側をビルドし、WKClassifierHostTests/testOfflineWorkerPipelineWithTrustedSyntheticFixtureが1件成功（/private/tmp/weavelet-air-classifier-runtime-test.log）。シミュレータは使わない。test後の通常起動も成功（/private/tmp/weavelet-air-ui-classifier-after-test-launch.log）。
+
+同テストは実Web Worker・HF pipeline・local WASM資産を使い、英語/日本語+emoji+NFD/空白/長文の4入力に対し2labelとscore、Worker到達時のUTF8/UTF16、unload後のWorker終了を確認する。299B constantモデルのためtokenizer内容同値、任意モデルの精度・メモリ/省電力を証明しない。テストstoreはnilで通常データを書き換えない。実機の見た目・IME/VoiceOver・実クラウド同期をこの実行から推定しない。本番auto Local/Hybrid consumerは別の進行中機能一式として未完了。
