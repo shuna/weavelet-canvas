@@ -634,8 +634,12 @@ struct MessageView: View {
         }
     }
 
+    private var hasMessageOperations: Bool {
+        edit != nil || insertBefore != nil || regenerate != nil || generateFromHere != nil || remove != nil || configure != nil || toggleCollapse != nil || moveUp != nil || moveDown != nil || replaceAndPrune != nil || deleteBranch != nil || copyRange != nil || pasteRange != nil
+    }
+
     @ViewBuilder private var messageOperations: some View {
-        if edit != nil || insertBefore != nil || regenerate != nil || generateFromHere != nil || remove != nil || configure != nil || toggleCollapse != nil || moveUp != nil || moveDown != nil || replaceAndPrune != nil || deleteBranch != nil || copyRange != nil || pasteRange != nil {
+        if hasMessageOperations {
             Menu {
                 if let edit { Button("編集", systemImage: "square.and.pencil", action: edit) }
                 if let regenerate { Button("再生成", systemImage:"arrow.clockwise",action:regenerate) }
@@ -732,7 +736,48 @@ struct MessageView: View {
                     .foregroundStyle(node.options.protected ? Color.blue : Color.secondary)
                     .accessibilityLabel(node.options.protected ? "保護中。解除" : "上書き・削除から保護")
             } else if node.options.protected { Image(systemName:"lock.fill").accessibilityLabel("上書き・削除から保護") }
-            messageOperations
+        }
+    }
+
+    @ViewBuilder private var branchControls: some View {
+        if siblings.count > 1 {
+            let position = (siblings.firstIndex(where: { $0.id.utf8.elementsEqual(node.id.utf8) }) ?? 0) + 1
+            HStack(spacing: 8) {
+                Button {
+                    select(siblings[position - 2].id)
+                } label: {
+                    Image(systemName: "chevron.left")
+                        .frame(minWidth: 44, minHeight: 44)
+                }
+                .disabled(position == 1)
+                .accessibilityLabel("前の分岐")
+                Text("分岐 \(position) / \(siblings.count)")
+                    .accessibilityLabel("分岐 \(position) / \(siblings.count)")
+                Button {
+                    select(siblings[position].id)
+                } label: {
+                    Image(systemName: "chevron.right")
+                        .frame(minWidth: 44, minHeight: 44)
+                }
+                .disabled(position == siblings.count)
+                .accessibilityLabel("次の分岐")
+            }
+        }
+    }
+
+    @ViewBuilder private var footerControls: some View {
+        if siblings.count > 1 || hasMessageOperations {
+            ViewThatFits(in: .horizontal) {
+                HStack(spacing: 8) {
+                    branchControls
+                    Spacer(minLength: 8)
+                    messageOperations
+                }
+                VStack(alignment: .leading, spacing: 0) {
+                    branchControls
+                    messageOperations.frame(maxWidth: .infinity, alignment: .trailing)
+                }
+            }
         }
     }
 
@@ -772,29 +817,7 @@ struct MessageView: View {
                         MessagePartView(part: part)
                     }
                 }
-                if siblings.count > 1 {
-                    let position = (siblings.firstIndex(where: { $0.id.utf8.elementsEqual(node.id.utf8) }) ?? 0) + 1
-                    HStack(spacing: 8) {
-                        Button {
-                            select(siblings[position - 2].id)
-                        } label: {
-                            Image(systemName: "chevron.left")
-                                .frame(minWidth: 44, minHeight: 44)
-                        }
-                        .disabled(position == 1)
-                        .accessibilityLabel("前の分岐")
-                        Text("分岐 \(position) / \(siblings.count)")
-                            .accessibilityLabel("分岐 \(position) / \(siblings.count)")
-                        Button {
-                            select(siblings[position].id)
-                        } label: {
-                            Image(systemName: "chevron.right")
-                                .frame(minWidth: 44, minHeight: 44)
-                        }
-                        .disabled(position == siblings.count)
-                        .accessibilityLabel("次の分岐")
-                    }
-                }
+                footerControls
             }
             .frame(maxWidth: isBubble ? nil : .infinity, alignment: .leading)
             .padding(isBubble ? 16 : 0)
