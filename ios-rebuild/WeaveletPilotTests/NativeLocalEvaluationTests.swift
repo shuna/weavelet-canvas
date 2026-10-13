@@ -164,7 +164,7 @@ final class NativeLocalEvaluationTests: XCTestCase {
     }
     func testRealGGUFExecutesSharedFiveAxisEvaluationWhenModelIsProvided() async throws {
         guard let path = ProcessInfo.processInfo.environment["WEAVELET_REAL_GGUF"] else { throw XCTSkip("Provide an existing test GGUF for native inference") }
-        let model = URL(fileURLWithPath:path)
+        let model = path.hasPrefix("/") ? URL(fileURLWithPath:path) : URL(fileURLWithPath:NSHomeDirectory()).appendingPathComponent(path)
         var progress: [OrderedJSON] = []
         let context = try json(#"{"userText":"Write a short story.","contextText":"[user]\nWrite a short story.","assistantText":"Anna and Ben played together."}"#)
         let result = try await NativeLocalEvaluation.runQuality(context:context,scope:"single",language:"en",modelURL:model,onProgress:{ progress.append($0) })
