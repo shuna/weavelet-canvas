@@ -68,7 +68,9 @@ import XCTest
     }
     func testLocalStopKeepsPartialOutputOnSaveFailureThenRetries() async throws {
         let store = try store()
+        let finished = expectation(description:"Cancelled generator delivered its late callback")
         let state = try state(store) { _, _, output in
+            defer { finished.fulfill() }
             _ = try await output("local partial")
             do { try await Task.sleep(nanoseconds:10_000_000_000) }
             catch { _ = try await output("late output after stop") }
@@ -89,7 +91,7 @@ import XCTest
         try FileManager.default.moveItem(at:moved,to:store.fileURL)
         try state.saveGenerationResult()
         XCTAssertNil(state.generation)
-        await Task.yield()
+        await fulfillment(of:[finished],timeout:2)
         XCTAssertEqual(ChatState(store:store).conversation?.visibleMessages.last?.content,"local partial")
     }
 }
