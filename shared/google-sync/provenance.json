@@ -292,7 +292,7 @@
     "src/utils/localModelImport.ts": "f15c25b57b27279b501c26632fbf8c0481b2b23263b22de8e63651dfd5ff7f1b",
     "shared/google-sync/localModelImport.ts": "60f00ad8a824ab478800fcbb21d6510ddd107978108182d5d2f0ee3f0d3c5473",
     "shared/google-sync/entry.ts": "29ed62a6ae5e8ade16b3737f10e3db4d4e70f4a32a9c1fcd059f98afa4a7f77c",
-    "shared/google-sync/generate.mjs": "614a56ac44395124172401efcf782ac45ad15ad3fd8b7f28c07a43dc7685308b",
+    "shared/google-sync/generate.mjs": "ccd0c5d7c697856c999b75aaacfa8357a8e48dd40196077b6c690183c8cdc1de",
     "shared/google-sync/importDefaults.generate.mjs": "2ff8904af4f192ed0809ceaaabcfbefa708321083aebb527d712fc2a0551b15a"
   },
   "dependencyInputs": {
@@ -343,5 +343,5 @@
     "remove-accents/package.json": "511775b39122274ad36e9dc32c47b2112a3fd4372e64284c2336b143be853c82",
     "remove-accents/LICENSE": "31279697ad2455927a227e7678f2bb71e9e06dde319f12ce345404b3b7a99b81"
   },
-  "bundleSHA256": "512e6320e0ad3b01e294bc5275e9c917040ad026e3b86d909949a30810e83e91"
+  "bundleSHA256": "923e570a4aa640994ce85a9741786140817d227ac76c5bff0a4b61deeee5169d"
 }

@@ -122,7 +122,7 @@ for (const pkg of [...packages].sort()) {
     if (!existsSync(file)) continue;
     provenance.dependencyInputs[relative] = createHash('sha256').update(readFileSync(file)).digest('hex');
     if (name === 'package.json') continue;
-    const license = readFileSync(file, 'utf8').replaceAll('\r\n', '\n');
+    const license = readFileSync(file, 'utf8').replaceAll('\r\n', '\n').replace(/\n+$/, '\n');
     writeFileSync(path.join(root, 'licenses', `${pkg.replaceAll('/', '-')}-${name}.txt`), license);
     licenses.push(`/* Dependency ${pkg}\n${license.replaceAll('*/', '* /')}\n*/`);
   }
