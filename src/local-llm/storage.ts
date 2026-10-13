@@ -18,7 +18,7 @@ import type {
   LocalModelSource,
 } from './types';
 import type { ModelFileProvider, CustomCacheAdapter } from './fileProvider';
-import { getFinalModelFiles, resolveUrlToManifestKey } from './fileProvider';
+import { getFinalModelFiles, hasRequiredModelParts, resolveUrlToManifestKey } from './fileProvider';
 import { getManifestFiles } from './ggufShardUtils';
 
 // ---------------------------------------------------------------------------
@@ -735,12 +735,11 @@ export async function verifyStoredModel(
   // gguf-sharded and multi-file share similar logic: check all required files
   const requiredFiles = getManifestFiles(manifest);
   let existingCount = 0;
-  let hasAnyPart = false;
+  const storedNames: string[] = [];
+  for await (const [name] of modelFiles(dir)) storedNames.push(name);
+  const hasAnyPart = hasRequiredModelParts(requiredFiles, storedNames);
 
   for (const f of requiredFiles) {
-    const partExists = await hasTempFile(modelId, f);
-    if (partExists) hasAnyPart = true;
-
     const exists = await fileExists(dir, f);
     if (exists) {
       const size = await fileSize(dir, f);

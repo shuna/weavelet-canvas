@@ -36,9 +36,9 @@
     "src/utils/modelReasoning.ts": "e0fb3e4e6e307747e43dad2e11824655c79213d1603ca683296b1d0bd955fd3c",
     "src/utils/remoteModelLimits.ts": "fb4c7db3118dd56a1e555d58deda1e5ded8472289b9486811907afb7a2a106ee",
     "src/utils/localGenerationOutput.ts": "f262c91d052afbcc5e5452eaf3ce95d779b741461f2287ebeba8905e95b5e781",
-    "src/local-llm/fileProvider.ts": "4f7f8aee9321478531566fdd442eee867fc2adcf548e385cc0962a552369ddab",
+    "src/local-llm/fileProvider.ts": "4046bf8b8036f227ee000132a829adfd95100e83826319dce5fadb840427d121",
     "src/local-llm/ggufShardUtils.ts": "33845697477f6a02eab2bcc6ce94412ce34cea521400fe7dcac1ffb9823e6ef7",
-    "src/local-llm/storage.ts": "d94c1a64258aecf3e7f3bed4d4d66633088168f4fe055d4d069c05ab141b1f1b",
+    "src/local-llm/storage.ts": "6f49aa9837c0cb2ba895a0fb94b6ae3e18f91b2f4512a5dde0b8518af3cac72a",
     "src/local-llm/rehydrationState.ts": "7985e2ff220ca3add44f1b0974ac5d265566d27c2ac1cd941bde5174242c8df4",
     "src/local-llm/assetRemoval.ts": "f6f358148e9313ff826924aa32813385098249e5117b082f86f94263ebac7a63",
     "src/local-llm/lowbit-q/types.ts": "0b061561953b4df738befdd4103326bc73fb77ae897e0ab21ff9d292365921bf",
@@ -310,8 +310,8 @@
     "src/utils/localModelImport.ts": "f15c25b57b27279b501c26632fbf8c0481b2b23263b22de8e63651dfd5ff7f1b",
     "shared/google-sync/localModelImport.ts": "60f00ad8a824ab478800fcbb21d6510ddd107978108182d5d2f0ee3f0d3c5473",
     "src/local-llm/ggufShardUtils.ts": "33845697477f6a02eab2bcc6ce94412ce34cea521400fe7dcac1ffb9823e6ef7",
-    "src/local-llm/fileProvider.ts": "4f7f8aee9321478531566fdd442eee867fc2adcf548e385cc0962a552369ddab",
-    "shared/google-sync/localModelFiles.ts": "ecd63bba6e2b1415acd24b030a707e4bade0f1f80927c995e89132c8f3d71c17",
+    "src/local-llm/fileProvider.ts": "4046bf8b8036f227ee000132a829adfd95100e83826319dce5fadb840427d121",
+    "shared/google-sync/localModelFiles.ts": "b677bf5a478483ecb3cc42e8d252de9e4456e12eb98fe64ffd528b9135b1edbe",
     "shared/google-sync/entry.ts": "846e5746956d521166f30f92453f031c08fb867b640d25481507f0de43afe1ab",
     "shared/google-sync/generate.mjs": "3b6c9ade9f1651fad5f4dfc1cce2b7e492d9be197fc8854ded1fbc553a058982",
     "shared/google-sync/importDefaults.generate.mjs": "2ff8904af4f192ed0809ceaaabcfbefa708321083aebb527d712fc2a0551b15a"
@@ -364,5 +364,5 @@
     "remove-accents/package.json": "511775b39122274ad36e9dc32c47b2112a3fd4372e64284c2336b143be853c82",
     "remove-accents/LICENSE": "31279697ad2455927a227e7678f2bb71e9e06dde319f12ce345404b3b7a99b81"
   },
-  "bundleSHA256": "ed554e24bfc662db5054da1bfedd9cdc02b7f635efc683a9e835c4b48081ff79"
+  "bundleSHA256": "77a992d2873319260a5ece523c817ffdb8aafcb700f81f8c0ded7968e5ffc72e"
 }

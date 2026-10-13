@@ -163,6 +163,19 @@ describe('OPFS writer and asset removal', () => {
     expect(await listFiles('nested-model')).toEqual(finalNames.slice(0,2));
   });
 
+  it('keeps required nested files partial while their marker remains', async () => {
+    const manifest: LocalModelManifest = {kind:'multi-file',requiredFiles:['config.json','onnx/model.onnx'],entrypoint:'onnx/model.onnx'};
+    await saveFile('marked-model', 'config.json', new Blob(['{}']));
+    await saveFile('marked-model', 'onnx/model.onnx', new Blob(['incomplete body']));
+    await saveFile('marked-model', 'onnx/optional.onnx.part', new Blob([]));
+    expect(await verifyStoredModel('marked-model', manifest)).toBe('saved');
+    await saveFile('marked-model', 'onnx/model.onnx.part', new Blob([]));
+    expect(await verifyStoredModel('marked-model', manifest)).toBe('partial');
+    expect(await new OpfsFileProvider('marked-model',manifest).isAvailable()).toBe(false);
+    expect(await hasTempFile('marked-model','onnx/model.onnx')).toBe(true);
+    expect(await (await readFile('marked-model','onnx/model.onnx')).text()).toBe('incomplete body');
+  });
+
   it('resumes and commits nested downloads and copies legacy parts without losing failure information', async () => {
     const path = 'onnx/model.onnx';
     let writer = await openDownloadWriter('resume-nested', path, 0);

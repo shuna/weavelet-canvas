@@ -130,3 +130,8 @@ export function resolveUrlToManifestKey(url: string, modelId: string): string | 
 export function getFinalModelFiles(names: string[]): string[] {
   return names.filter((name) => !name.endsWith('.part'));
 }
+
+/** A required file is incomplete while its download marker or legacy part remains. */
+export function hasRequiredModelParts(requiredFiles: string[], names: string[]): boolean {
+  return requiredFiles.some((path) => names.includes(path + '.part'));
+}

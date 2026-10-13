@@ -106,6 +106,25 @@ import CryptoKit
         XCTAssertEqual(try files.directoryEntries(model:metadata).last?.data,Data("binary\0original".utf8))
         XCTAssertFalse(try FileManager.default.contentsOfDirectory(atPath:files.directory.path).contains { $0.hasSuffix(".part") })
     }
+    func testRequiredPartMarkerRejectsSourceAndStoredReadAndKeepsOldTarget() throws {
+        let (root,files) = try setup(), metadata = model(), dir = try source(root)
+        try install(dir,files,metadata)
+        let target = try files.directoryURL(modelID:"org/classifier")
+        let original = try Data(contentsOf:target.appendingPathComponent("onnx/model.onnx"))
+        let replacement = try source(root,name:"replacement",suffix:"incomplete")
+        let inspection = try files.inspectDirectory(replacement,model:metadata)
+        try write(replacement,"onnx/model.onnx.part",Data())
+        XCTAssertThrowsError(try files.inspectDirectory(replacement,model:metadata))
+        XCTAssertThrowsError(try files.installDirectory(replacement,model:metadata,inspection:inspection))
+        XCTAssertEqual(try Data(contentsOf:target.appendingPathComponent("onnx/model.onnx")),original)
+        XCTAssertTrue(FileManager.default.fileExists(atPath:replacement.appendingPathComponent("onnx/model.onnx.part").path))
+        XCTAssertFalse(try FileManager.default.contentsOfDirectory(atPath:files.directory.path).contains { $0.hasSuffix(".part") })
+        try write(target,"onnx/model.onnx.part",Data())
+        XCTAssertThrowsError(try files.directoryEntries(model:metadata))
+        XCTAssertEqual(try Data(contentsOf:target.appendingPathComponent("onnx/model.onnx")),original)
+        XCTAssertTrue(FileManager.default.fileExists(atPath:target.appendingPathComponent("onnx/model.onnx.part").path))
+    }
+
     func testWrongModelAndStaleTargetInspectionCannotOverwriteNewGeneration() throws {
         let (root,files) = try setup(), metadata = model(), dir = try source(root)
         try install(dir,files,metadata)

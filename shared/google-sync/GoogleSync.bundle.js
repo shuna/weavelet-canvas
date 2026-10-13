@@ -26412,6 +26412,9 @@ ${text}`;
   function getFinalModelFiles(names) {
     return names.filter((name) => !name.endsWith(".part"));
   }
+  function hasRequiredModelParts(requiredFiles, names) {
+    return requiredFiles.some((path) => names.includes(path + ".part"));
+  }
 
   // shared/google-sync/localModelFiles.ts
   function localModelFiles(json) {
@@ -26424,6 +26427,8 @@ ${text}`;
     if (!Array.isArray(requiredFiles) || !requiredFiles.length || requiredFiles.some((path) => typeof path !== "string") || typeof entrypoint !== "string" || !requiredFiles.includes(entrypoint)) {
       throw new Error("Invalid multi-file manifest");
     }
+    if (hasRequiredModelParts(requiredFiles, files))
+      throw new Error("Required model file download is incomplete");
     return JSON.stringify({ id: model.id, requiredFiles, entrypoint, files: getFinalModelFiles(files) });
   }
 
