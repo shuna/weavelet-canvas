@@ -311,3 +311,14 @@ iOSの設定へ利用量の累計、モデル別推定費用・合計、累計�
 Webの5軸prompt、空応答fallback、採点/解析、local safety/hybrid判定を共有coreへ移し、Web実callerを接続。native品質評価は既存wllama/NativeLlamaと実GGUFへ接続し、共有promptと結果だけを使う。remote secretは遅延読取でlocal実行時に読まない。モデルregistryと端末実ファイルを区別し、評価中のGGUF置換をOSのファイル世代で拒否する。Web由来の分析モデル割当と既存ファイルimportを使用する段階で、割当/資産管理UI、Transformers分類器、自動/hybrid評価とiPhone向けnativeエンジンは残件。
 
 会話/フォルダー一覧を既存Viewの再利用でサイドバーへ移し、wideはチャットと同時表示、compactはpreferredCompactColumnで一覧/詳細へ移る。Apple公式APIの列制御を使用し、700px独自幅判定を廃止。wideの重複buttonと0件選択footerを除去。Catalyst確認と独立Astra監査の記録は[検証台帳](web-native-completion-ledger.md)。次はiPhoneのエンジン接続と残るモデル/評価設定、分岐表示・一覧並替えを進める。
+
+
+## 2026-10-14：Branch editor配置の共有と依存境界
+
+f0c80deeで既存Web workerの配置計算をpureなbranchLayout.tsへ移し、実workerは受信・送信だけを担当する。通常treeと切断cycleのfallbackは同じ処理を維持し、Swiftで別の配置算法を作らない。既存4ケースとWeb型検査は成功。native画面/bridgeへの接続は未完了で、この切出しをBranch editor機能完成として数えない。
+
+独立Astraの限定依存監査：既存dagre0.8.5はgraphlib2.1.8とlodashに依存し、静的importのためfallback未実行でも配布対象になる。公式repository自体は非archiveだが、[公式Dagre方針](https://github.com/dagrejs/dagre)は保守対象を@dagrejs/dagreだけとしており、旧packageの保守継続とは区別する。監査時点の公式3.1.1は@dagrejs/graphlib4.0.5を使用し、後者にはruntime依存がない。[公式graphlib](https://github.com/dagrejs/graphlib)。両MITで、追加配布には固定版来歴とcopyright/licenseを含める。公開advisory照合で該当0件だったことは安全保証ではない。
+
+旧Dagreを新nativeへ無条件配布する方針は採らず、Web側も同じ公式保守packageへ限定置換できるか検証する。通常tree不変、cycle/selfloop/componentのnode・edge・列挙順・有限位置を確認し、差があれば描画位置の差と意味の変化を区別する。元libraryと新libraryを恒久並存させず、npm/Yarnの固定版を揃える。現在は更新担当による確認中で、採用成功やnativeへの配布済みとは扱わない。
+
+native UIで描画する場合はJSCで配置だけを共有し、OSの表示・hit testing・pan/zoomへ接続する。Web BranchEditor全体をWKで使う案ではReactFlowの操作を再利用できる一方、追加配布依存と書込bridgeが増える。既存Markdown WKを置くだけではBranchEditor完成にならない。実装総コスト・ライセンス・実増分サイズ・非同期配置と古い結果拒否を比較して接続方式を決める。現時点でWK/JSCの速度、実配布サイズ、実機操作性は未測定。
