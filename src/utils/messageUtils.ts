@@ -1,8 +1,8 @@
 import useStore from '@store/store';
 import { countImageInputs } from '@utils/cost';
+import { addTokenUsage, estimateTokensByChars } from '@utils/chatTitle';
 import {
   MessageInterface,
-  TotalTokenUsed,
   isTextContent,
 } from '@type/chat';
 import { ModelOptions } from '@type/chat';
@@ -140,18 +140,6 @@ export const onEncoderReady = (fn: () => void): (() => void) => {
   return () => listeners.delete(fn);
 };
 
-const estimateTokensByChars = (messages: MessageInterface[]): number => {
-  let chars = 0;
-  for (const msg of messages) {
-    chars += msg.role.length + 4; // role + separators
-    for (const part of msg.content) {
-      if (isTextContent(part)) chars += part.text.length;
-    }
-  }
-  // Conservative: ~2 chars per token (handles CJK and mixed content)
-  return Math.ceil(chars / 2);
-};
-
 const hasCountableText = (messages: MessageInterface[]): boolean =>
   messages.some((message) =>
     message.content.some((part) => isTextContent(part) && part.text.trim().length > 0)
@@ -235,10 +223,6 @@ export const updateTotalTokenUsed = async (
   providerId?: string
 ): Promise<void> => {
   const setTotalTokenUsed = useStore.getState().setTotalTokenUsed;
-  const updatedTotalTokenUsed: TotalTokenUsed = JSON.parse(
-    JSON.stringify(useStore.getState().totalTokenUsed)
-  );
-
   const newImageTokens = countImageInputs(promptMessages);
 
   const [newPromptTokens, newCompletionTokens] = await Promise.all([
@@ -246,20 +230,8 @@ export const updateTotalTokenUsed = async (
     countTokens([completionMessage], model),
   ]);
 
-  const tokenKey = providerId ? `${model}:::${providerId}` : model;
-  const {
-    promptTokens = 0,
-    completionTokens = 0,
-    imageTokens = 0,
-  } = updatedTotalTokenUsed[tokenKey] ?? {};
-
-  updatedTotalTokenUsed[tokenKey] = {
-    promptTokens: promptTokens + newPromptTokens,
-    completionTokens: completionTokens + newCompletionTokens,
-    imageTokens: imageTokens + newImageTokens,
-  };
-
-  setTotalTokenUsed(updatedTotalTokenUsed);
+  setTotalTokenUsed(addTokenUsage(useStore.getState().totalTokenUsed, model, providerId,
+    newPromptTokens, newCompletionTokens, newImageTokens));
 };
 
 export default countTokens;

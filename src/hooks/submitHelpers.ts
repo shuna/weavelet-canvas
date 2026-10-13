@@ -21,10 +21,10 @@ import {
   GeneratingSession,
   MessageInterface,
   ModelOptions,
-  TextContentInterface,
 } from '@type/chat';
 import { FavoriteModel, ProviderConfig, ProviderId } from '@type/provider';
-import { normalizeProviderConfig } from '@store/provider-helpers';
+import { autoTitlePrompt, normalizeGeneratedTitle, resolveProviderForModel, setGeneratedTitle, titleRequestSettings } from '@utils/chatTitle';
+export { buildTitlePromptMessage, resolveProviderForModel, setGeneratedTitle } from '@utils/chatTitle';
 import { isSummaryEligible, normalizeBubbleSummaryText } from '@utils/bubbleSummary';
 import { buildBubbleSummaryPrompt } from '@utils/bubbleSummaryPrompt';
 
@@ -38,10 +38,8 @@ const effectiveSummaryChat = (chat: ChatInterface, chatIndex: number): ChatInter
   return { ...chat, omittedNodes: state.omittedNodeMaps[String(chatIndex)] ?? chat.omittedNodes ?? {} };
 };
 
-export type ResolvedProvider = {
-  endpoint: string;
-  key?: string;
-};
+import type { ResolvedProvider } from '@utils/chatTitle';
+export type { ResolvedProvider } from '@utils/chatTitle';
 export type SubmitMode = 'append' | 'midchat';
 
 export { createAssistantPlaceholder, insertAssistantPlaceholder } from '@utils/generationPlan';
@@ -65,34 +63,6 @@ export const buildGeneratingSession = (
   requestPath: 'sw',
   startedAt: Date.now(),
 });
-
-export const resolveProviderForModel = (
-  modelId: string,
-  favoriteModels: FavoriteModel[],
-  providers: ProviderMap,
-  fallback: ResolvedProvider,
-  providerId?: ProviderId
-): ResolvedProvider => {
-  // If providerId is specified, resolve directly
-  if (providerId) {
-    const provider = normalizeProviderConfig(providerId, providers[providerId]);
-    return { endpoint: provider.endpoint, key: provider.apiKey };
-  }
-
-  // Fallback to favoriteModels lookup
-  const favorite = favoriteModels.find((entry) => entry.modelId === modelId);
-  if (!favorite) return fallback;
-
-  const provider = normalizeProviderConfig(
-    favorite.providerId,
-    providers[favorite.providerId]
-  );
-
-  return {
-    endpoint: provider.endpoint,
-    key: provider.apiKey,
-  };
-};
 
 export const filterOmittedMessages = (
   messages: MessageInterface[],
@@ -180,16 +150,7 @@ export const generateTitleForChat = async (
   deps: TitleGenerationDeps
 ): Promise<string> => {
   try {
-    const titleModel = deps.titleModel ?? modelConfig.model;
-    const titleProviderId = deps.titleModel ? deps.titleProviderId : modelConfig.providerId;
-    const titleChatConfig = { ...modelConfig, model: titleModel, providerId: titleProviderId, openRouter: { routing: hardOpenRouterConstraints(modelConfig.openRouter), responseCache: { mode: 'off' as const } } };
-    const resolved = resolveProviderForModel(
-      titleModel,
-      deps.favoriteModels,
-      deps.providers,
-      deps.fallbackProvider,
-      titleProviderId
-    );
+    const { config: titleChatConfig, provider: resolved } = titleRequestSettings(modelConfig, deps);
 
     assertAuxiliaryEndpoint(modelConfig.openRouter, resolved.endpoint);
     if ((!resolved.key || resolved.key.length === 0) && resolved.endpoint === officialAPIEndpoint) {
@@ -241,31 +202,6 @@ export const generateBubbleSummary = async (
   return text;
 };
 
-export const buildTitlePromptMessage = (
-  userMessage: MessageInterface['content'],
-  assistantMessage: MessageInterface['content'],
-  language: string
-): MessageInterface => ({
-  role: 'user',
-  content: [
-    ...userMessage,
-    ...assistantMessage,
-    {
-      type: 'text',
-      text: `Generate a title in less than 6 words for the conversation so far (language: ${language})`,
-    } as TextContentInterface,
-  ],
-});
-
-export const setGeneratedTitle = (
-  chats: { title: string; titleSet: boolean }[],
-  chatIndex: number,
-  title: string
-) => {
-  chats[chatIndex].title = title;
-  chats[chatIndex].titleSet = true;
-};
-
 type AutoTitleDeps = TitleGenerationDeps & {
   sourceConfig?: ConfigInterface;
   chatId: string;
@@ -281,21 +217,12 @@ export const maybeGenerateAutoTitle = async ({
   ...deps
 }: AutoTitleDeps) => {
   const state = useStore.getState();
-  if (!state.autoTitle || !state.chats) return;
+  if (!state.chats) return;
 
   const chatIndex = state.chats.findIndex((chat) => chat.id === chatId);
-  if (chatIndex < 0 || state.chats[chatIndex]?.titleSet) return;
-
-  const messages = state.chats[chatIndex].messages;
-  const assistantMessage = messages[messages.length - 1];
-  const userMessage = messages[messages.length - 2];
-  if (!assistantMessage || !userMessage) return;
-
-  const promptMessage = buildTitlePromptMessage(
-    userMessage.content,
-    assistantMessage.content,
-    language
-  );
+  if (chatIndex < 0) return;
+  const promptMessage = autoTitlePrompt(state.chats[chatIndex], state.autoTitle, language);
+  if (!promptMessage) return;
 
   const titleChats = useStore.getState().chats;
   if (!titleChats) return;
@@ -306,12 +233,11 @@ export const maybeGenerateAutoTitle = async ({
   const ticket = beginAiTask({ requestId: crypto.randomUUID(), kind: 'title', chatId, dependencyIds: [] });
   let title: string;
   try {
-    title = (await generateTitleForChat([promptMessage], sourceConfig ?? titleChats[titleChatIndex].config, deps)).trim();
+    title = normalizeGeneratedTitle(await generateTitleForChat([promptMessage], sourceConfig ?? titleChats[titleChatIndex].config, deps));
     if (!isAiTaskCurrent(ticket)) return;
   } finally {
     finishAiTask(ticket);
   }
-  if (title.startsWith('"') && title.endsWith('"')) title = title.slice(1, -1);
   const latestChats = useStore.getState().chats!;
   const latestIndex = latestChats.findIndex(chat => chat.id === chatId);
   const updatedChats = cloneChatAtIndex(latestChats, latestIndex);

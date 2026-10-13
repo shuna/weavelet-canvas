@@ -1,10 +1,11 @@
 import { StoreSlice } from './store';
 import { Theme } from '@type/theme';
-import { _defaultChatConfig, _defaultSystemMessage,_defaultMenuWidth, defaultModel, _defaultImageDetail, _defaultDisplayChatSize } from '@constants/chat';
+import { _defaultChatConfig, _defaultSystemMessage,_defaultMenuWidth, _defaultImageDetail, _defaultDisplayChatSize } from '@constants/chat';
 import { BranchSwipeDirection, ConfigInterface, ImageDetail, StreamingMarkdownPolicy, TotalTokenUsed } from '@type/chat';
 import { ModelOptions } from '@type/chat';
 import type { ProviderId } from '@type/provider';
 import { normalizeConfigStream } from '@utils/streamSupport';
+import { TITLE_DEFAULTS } from '@utils/chatTitle';
 import { STORE_VERSION } from './version';
 
 const isSameConfig = (
@@ -99,9 +100,9 @@ export const createConfigSlice: StoreSlice<ConfigSlice> = (set, get) => ({
   theme: 'dark',
   hideMenuOptions: false,
   hideSideMenu: false,
-  autoTitle: false,
-  titleModel: defaultModel,
-  titleProviderId: undefined,
+  autoTitle: TITLE_DEFAULTS.autoTitle,
+  titleModel: TITLE_DEFAULTS.titleModel,
+  titleProviderId: TITLE_DEFAULTS.titleProviderId,
   bubbleSummaryConfig: undefined,
   setBubbleSummaryConfig: config => set({ bubbleSummaryConfig: config }),
   enterToSubmit: true,
