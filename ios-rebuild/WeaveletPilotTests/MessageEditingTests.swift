@@ -519,14 +519,23 @@ final class MessageEditingTests: XCTestCase {
         var messages = try chat.required("messages").array("messages"); messages[2] = messages[2].replacing("content", with: body)
         chat = chat.replacing("messages", with: .array(messages)); chats[0] = chat
         source = source.replacing("chats", with: .array(chats)).replacing("contentStore", with: contentStore)
+        // Delta patch text is defined against the Web JSON.stringify base;
+        // full-entry raw number spellings remain a separate I/O guarantee.
+        let resolvedBefore = try SyncRecords.resolveContent(contentStore, hash: "history-delta")
+        let expectedDeltaBody = OrderedJSON.array([.object([.init(key:"type",value:.string("text")),.init(key:"text",value:.string("Original delta")),
+            .init(key:"xMetadata",value:.object([.init(key:"z",value:.number("9007199254740992")),.init(key:"a",value:.number("1.23"))]))])])
+        XCTAssertEqual(try resolvedBefore.encoded(), try expectedDeltaBody.encoded())
+        let rawBase = try contentStore.required("h-last").encoded()
         var history: MessageEditing.HistoryState?
         let edited = try MessageEditing.save(in: source, chatID: "target", nodeID: "last", viewingPath: ["system","middle","last"], role: "assistant", parts: body,
             editedText: "Edited delta", mode: .overwrite, newIDs: [], now: 1000, onHistory: { history = $0 })
         let captured = try XCTUnwrap(history)
         let undone = try MessageEditing.moveHistory("undo", in: edited, history: captured, now: 2000)
-        XCTAssertEqual(try SyncRecords.resolveContent(undone.source.required("contentStore"), hash: "history-delta").encoded(), try body.encoded())
+        XCTAssertEqual(try SyncRecords.resolveContent(undone.source.required("contentStore"), hash: "history-delta").encoded(), try resolvedBefore.encoded())
+        XCTAssertEqual(try undone.source.required("contentStore").required("h-last").encoded(), rawBase)
         XCTAssertEqual(undone.source["contentStore"]?["history-delta"]?["delta"], delta)
         let redone = try MessageEditing.moveHistory("redo", in: undone.source, history: undone.history, now: 3000)
+        XCTAssertEqual(try redone.source.required("contentStore").required("h-last").encoded(), rawBase)
         let hash = try redone.source.required("chats").array("chats")[0].required("branchTree").required("nodes").required("last").required("contentHash").string("hash")
         XCTAssertEqual(try SyncRecords.resolveContent(redone.source.required("contentStore"), hash: hash).array("content")[0]["xMetadata"], try body.array("body")[0]["xMetadata"])
     }
