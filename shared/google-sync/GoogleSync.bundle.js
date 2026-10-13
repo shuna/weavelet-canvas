@@ -5540,7 +5540,7 @@ var WeaveletGoogleSync = (() => {
   // ../../var/folders/1r/xtsjvqk90yzdyjq5jfjn9phw0000gn/T/weavelet-main-integration-ew768sf2/worktree/node_modules/diff-match-patch/index.js
   var require_diff_match_patch = __commonJS({
     "../../var/folders/1r/xtsjvqk90yzdyjq5jfjn9phw0000gn/T/weavelet-main-integration-ew768sf2/worktree/node_modules/diff-match-patch/index.js"(exports, module) {
-      var diff_match_patch2 = function() {
+      var diff_match_patch3 = function() {
         this.Diff_Timeout = 1;
         this.Diff_EditCost = 4;
         this.Match_Threshold = 0.5;
@@ -5552,10 +5552,10 @@ var WeaveletGoogleSync = (() => {
       var DIFF_DELETE = -1;
       var DIFF_INSERT = 1;
       var DIFF_EQUAL = 0;
-      diff_match_patch2.Diff = function(op, text) {
+      diff_match_patch3.Diff = function(op, text) {
         return [op, text];
       };
-      diff_match_patch2.prototype.diff_main = function(text1, text2, opt_checklines, opt_deadline) {
+      diff_match_patch3.prototype.diff_main = function(text1, text2, opt_checklines, opt_deadline) {
         if (typeof opt_deadline == "undefined") {
           if (this.Diff_Timeout <= 0) {
             opt_deadline = Number.MAX_VALUE;
@@ -5569,7 +5569,7 @@ var WeaveletGoogleSync = (() => {
         }
         if (text1 == text2) {
           if (text1) {
-            return [new diff_match_patch2.Diff(DIFF_EQUAL, text1)];
+            return [new diff_match_patch3.Diff(DIFF_EQUAL, text1)];
           }
           return [];
         }
@@ -5587,30 +5587,30 @@ var WeaveletGoogleSync = (() => {
         text2 = text2.substring(0, text2.length - commonlength);
         var diffs = this.diff_compute_(text1, text2, checklines, deadline);
         if (commonprefix) {
-          diffs.unshift(new diff_match_patch2.Diff(DIFF_EQUAL, commonprefix));
+          diffs.unshift(new diff_match_patch3.Diff(DIFF_EQUAL, commonprefix));
         }
         if (commonsuffix) {
-          diffs.push(new diff_match_patch2.Diff(DIFF_EQUAL, commonsuffix));
+          diffs.push(new diff_match_patch3.Diff(DIFF_EQUAL, commonsuffix));
         }
         this.diff_cleanupMerge(diffs);
         return diffs;
       };
-      diff_match_patch2.prototype.diff_compute_ = function(text1, text2, checklines, deadline) {
+      diff_match_patch3.prototype.diff_compute_ = function(text1, text2, checklines, deadline) {
         var diffs;
         if (!text1) {
-          return [new diff_match_patch2.Diff(DIFF_INSERT, text2)];
+          return [new diff_match_patch3.Diff(DIFF_INSERT, text2)];
         }
         if (!text2) {
-          return [new diff_match_patch2.Diff(DIFF_DELETE, text1)];
+          return [new diff_match_patch3.Diff(DIFF_DELETE, text1)];
         }
         var longtext = text1.length > text2.length ? text1 : text2;
         var shorttext = text1.length > text2.length ? text2 : text1;
         var i = longtext.indexOf(shorttext);
         if (i != -1) {
           diffs = [
-            new diff_match_patch2.Diff(DIFF_INSERT, longtext.substring(0, i)),
-            new diff_match_patch2.Diff(DIFF_EQUAL, shorttext),
-            new diff_match_patch2.Diff(
+            new diff_match_patch3.Diff(DIFF_INSERT, longtext.substring(0, i)),
+            new diff_match_patch3.Diff(DIFF_EQUAL, shorttext),
+            new diff_match_patch3.Diff(
               DIFF_INSERT,
               longtext.substring(i + shorttext.length)
             )
@@ -5622,8 +5622,8 @@ var WeaveletGoogleSync = (() => {
         }
         if (shorttext.length == 1) {
           return [
-            new diff_match_patch2.Diff(DIFF_DELETE, text1),
-            new diff_match_patch2.Diff(DIFF_INSERT, text2)
+            new diff_match_patch3.Diff(DIFF_DELETE, text1),
+            new diff_match_patch3.Diff(DIFF_INSERT, text2)
           ];
         }
         var hm = this.diff_halfMatch_(text1, text2);
@@ -5636,7 +5636,7 @@ var WeaveletGoogleSync = (() => {
           var diffs_a = this.diff_main(text1_a, text2_a, checklines, deadline);
           var diffs_b = this.diff_main(text1_b, text2_b, checklines, deadline);
           return diffs_a.concat(
-            [new diff_match_patch2.Diff(DIFF_EQUAL, mid_common)],
+            [new diff_match_patch3.Diff(DIFF_EQUAL, mid_common)],
             diffs_b
           );
         }
@@ -5645,7 +5645,7 @@ var WeaveletGoogleSync = (() => {
         }
         return this.diff_bisect_(text1, text2, deadline);
       };
-      diff_match_patch2.prototype.diff_lineMode_ = function(text1, text2, deadline) {
+      diff_match_patch3.prototype.diff_lineMode_ = function(text1, text2, deadline) {
         var a = this.diff_linesToChars_(text1, text2);
         text1 = a.chars1;
         text2 = a.chars2;
@@ -5653,7 +5653,7 @@ var WeaveletGoogleSync = (() => {
         var diffs = this.diff_main(text1, text2, false, deadline);
         this.diff_charsToLines_(diffs, linearray);
         this.diff_cleanupSemantic(diffs);
-        diffs.push(new diff_match_patch2.Diff(DIFF_EQUAL, ""));
+        diffs.push(new diff_match_patch3.Diff(DIFF_EQUAL, ""));
         var pointer = 0;
         var count_delete = 0;
         var count_insert = 0;
@@ -5693,7 +5693,7 @@ var WeaveletGoogleSync = (() => {
         diffs.pop();
         return diffs;
       };
-      diff_match_patch2.prototype.diff_bisect_ = function(text1, text2, deadline) {
+      diff_match_patch3.prototype.diff_bisect_ = function(text1, text2, deadline) {
         var text1_length = text1.length;
         var text2_length = text2.length;
         var max_d = Math.ceil((text1_length + text2_length) / 2);
@@ -5777,11 +5777,11 @@ var WeaveletGoogleSync = (() => {
           }
         }
         return [
-          new diff_match_patch2.Diff(DIFF_DELETE, text1),
-          new diff_match_patch2.Diff(DIFF_INSERT, text2)
+          new diff_match_patch3.Diff(DIFF_DELETE, text1),
+          new diff_match_patch3.Diff(DIFF_INSERT, text2)
         ];
       };
-      diff_match_patch2.prototype.diff_bisectSplit_ = function(text1, text2, x, y, deadline) {
+      diff_match_patch3.prototype.diff_bisectSplit_ = function(text1, text2, x, y, deadline) {
         var text1a = text1.substring(0, x);
         var text2a = text2.substring(0, y);
         var text1b = text1.substring(x);
@@ -5790,7 +5790,7 @@ var WeaveletGoogleSync = (() => {
         var diffsb = this.diff_main(text1b, text2b, false, deadline);
         return diffs.concat(diffsb);
       };
-      diff_match_patch2.prototype.diff_linesToChars_ = function(text1, text2) {
+      diff_match_patch3.prototype.diff_linesToChars_ = function(text1, text2) {
         var lineArray = [];
         var lineHash = {};
         lineArray[0] = "";
@@ -5826,7 +5826,7 @@ var WeaveletGoogleSync = (() => {
         var chars2 = diff_linesToCharsMunge_(text2);
         return { chars1, chars2, lineArray };
       };
-      diff_match_patch2.prototype.diff_charsToLines_ = function(diffs, lineArray) {
+      diff_match_patch3.prototype.diff_charsToLines_ = function(diffs, lineArray) {
         for (var i = 0; i < diffs.length; i++) {
           var chars2 = diffs[i][1];
           var text = [];
@@ -5836,7 +5836,7 @@ var WeaveletGoogleSync = (() => {
           diffs[i][1] = text.join("");
         }
       };
-      diff_match_patch2.prototype.diff_commonPrefix = function(text1, text2) {
+      diff_match_patch3.prototype.diff_commonPrefix = function(text1, text2) {
         if (!text1 || !text2 || text1.charAt(0) != text2.charAt(0)) {
           return 0;
         }
@@ -5855,7 +5855,7 @@ var WeaveletGoogleSync = (() => {
         }
         return pointermid;
       };
-      diff_match_patch2.prototype.diff_commonSuffix = function(text1, text2) {
+      diff_match_patch3.prototype.diff_commonSuffix = function(text1, text2) {
         if (!text1 || !text2 || text1.charAt(text1.length - 1) != text2.charAt(text2.length - 1)) {
           return 0;
         }
@@ -5874,7 +5874,7 @@ var WeaveletGoogleSync = (() => {
         }
         return pointermid;
       };
-      diff_match_patch2.prototype.diff_commonOverlap_ = function(text1, text2) {
+      diff_match_patch3.prototype.diff_commonOverlap_ = function(text1, text2) {
         var text1_length = text1.length;
         var text2_length = text2.length;
         if (text1_length == 0 || text2_length == 0) {
@@ -5904,7 +5904,7 @@ var WeaveletGoogleSync = (() => {
           }
         }
       };
-      diff_match_patch2.prototype.diff_halfMatch_ = function(text1, text2) {
+      diff_match_patch3.prototype.diff_halfMatch_ = function(text1, text2) {
         if (this.Diff_Timeout <= 0) {
           return null;
         }
@@ -5983,7 +5983,7 @@ var WeaveletGoogleSync = (() => {
         var mid_common = hm[4];
         return [text1_a, text1_b, text2_a, text2_b, mid_common];
       };
-      diff_match_patch2.prototype.diff_cleanupSemantic = function(diffs) {
+      diff_match_patch3.prototype.diff_cleanupSemantic = function(diffs) {
         var changes = false;
         var equalities = [];
         var equalitiesLength = 0;
@@ -6014,7 +6014,7 @@ var WeaveletGoogleSync = (() => {
               diffs.splice(
                 equalities[equalitiesLength - 1],
                 0,
-                new diff_match_patch2.Diff(DIFF_DELETE, lastEquality)
+                new diff_match_patch3.Diff(DIFF_DELETE, lastEquality)
               );
               diffs[equalities[equalitiesLength - 1] + 1][0] = DIFF_INSERT;
               equalitiesLength--;
@@ -6043,7 +6043,7 @@ var WeaveletGoogleSync = (() => {
             var overlap_length2 = this.diff_commonOverlap_(insertion, deletion);
             if (overlap_length1 >= overlap_length2) {
               if (overlap_length1 >= deletion.length / 2 || overlap_length1 >= insertion.length / 2) {
-                diffs.splice(pointer, 0, new diff_match_patch2.Diff(
+                diffs.splice(pointer, 0, new diff_match_patch3.Diff(
                   DIFF_EQUAL,
                   insertion.substring(0, overlap_length1)
                 ));
@@ -6053,7 +6053,7 @@ var WeaveletGoogleSync = (() => {
               }
             } else {
               if (overlap_length2 >= deletion.length / 2 || overlap_length2 >= insertion.length / 2) {
-                diffs.splice(pointer, 0, new diff_match_patch2.Diff(
+                diffs.splice(pointer, 0, new diff_match_patch3.Diff(
                   DIFF_EQUAL,
                   deletion.substring(0, overlap_length2)
                 ));
@@ -6069,21 +6069,21 @@ var WeaveletGoogleSync = (() => {
           pointer++;
         }
       };
-      diff_match_patch2.prototype.diff_cleanupSemanticLossless = function(diffs) {
+      diff_match_patch3.prototype.diff_cleanupSemanticLossless = function(diffs) {
         function diff_cleanupSemanticScore_(one, two) {
           if (!one || !two) {
             return 6;
           }
           var char1 = one.charAt(one.length - 1);
           var char2 = two.charAt(0);
-          var nonAlphaNumeric1 = char1.match(diff_match_patch2.nonAlphaNumericRegex_);
-          var nonAlphaNumeric2 = char2.match(diff_match_patch2.nonAlphaNumericRegex_);
-          var whitespace1 = nonAlphaNumeric1 && char1.match(diff_match_patch2.whitespaceRegex_);
-          var whitespace2 = nonAlphaNumeric2 && char2.match(diff_match_patch2.whitespaceRegex_);
-          var lineBreak1 = whitespace1 && char1.match(diff_match_patch2.linebreakRegex_);
-          var lineBreak2 = whitespace2 && char2.match(diff_match_patch2.linebreakRegex_);
-          var blankLine1 = lineBreak1 && one.match(diff_match_patch2.blanklineEndRegex_);
-          var blankLine2 = lineBreak2 && two.match(diff_match_patch2.blanklineStartRegex_);
+          var nonAlphaNumeric1 = char1.match(diff_match_patch3.nonAlphaNumericRegex_);
+          var nonAlphaNumeric2 = char2.match(diff_match_patch3.nonAlphaNumericRegex_);
+          var whitespace1 = nonAlphaNumeric1 && char1.match(diff_match_patch3.whitespaceRegex_);
+          var whitespace2 = nonAlphaNumeric2 && char2.match(diff_match_patch3.whitespaceRegex_);
+          var lineBreak1 = whitespace1 && char1.match(diff_match_patch3.linebreakRegex_);
+          var lineBreak2 = whitespace2 && char2.match(diff_match_patch3.linebreakRegex_);
+          var blankLine1 = lineBreak1 && one.match(diff_match_patch3.blanklineEndRegex_);
+          var blankLine2 = lineBreak2 && two.match(diff_match_patch3.blanklineStartRegex_);
           if (blankLine1 || blankLine2) {
             return 5;
           } else if (lineBreak1 || lineBreak2) {
@@ -6145,12 +6145,12 @@ var WeaveletGoogleSync = (() => {
           pointer++;
         }
       };
-      diff_match_patch2.nonAlphaNumericRegex_ = /[^a-zA-Z0-9]/;
-      diff_match_patch2.whitespaceRegex_ = /\s/;
-      diff_match_patch2.linebreakRegex_ = /[\r\n]/;
-      diff_match_patch2.blanklineEndRegex_ = /\n\r?\n$/;
-      diff_match_patch2.blanklineStartRegex_ = /^\r?\n\r?\n/;
-      diff_match_patch2.prototype.diff_cleanupEfficiency = function(diffs) {
+      diff_match_patch3.nonAlphaNumericRegex_ = /[^a-zA-Z0-9]/;
+      diff_match_patch3.whitespaceRegex_ = /\s/;
+      diff_match_patch3.linebreakRegex_ = /[\r\n]/;
+      diff_match_patch3.blanklineEndRegex_ = /\n\r?\n$/;
+      diff_match_patch3.blanklineStartRegex_ = /^\r?\n\r?\n/;
+      diff_match_patch3.prototype.diff_cleanupEfficiency = function(diffs) {
         var changes = false;
         var equalities = [];
         var equalitiesLength = 0;
@@ -6182,7 +6182,7 @@ var WeaveletGoogleSync = (() => {
               diffs.splice(
                 equalities[equalitiesLength - 1],
                 0,
-                new diff_match_patch2.Diff(DIFF_DELETE, lastEquality)
+                new diff_match_patch3.Diff(DIFF_DELETE, lastEquality)
               );
               diffs[equalities[equalitiesLength - 1] + 1][0] = DIFF_INSERT;
               equalitiesLength--;
@@ -6204,8 +6204,8 @@ var WeaveletGoogleSync = (() => {
           this.diff_cleanupMerge(diffs);
         }
       };
-      diff_match_patch2.prototype.diff_cleanupMerge = function(diffs) {
-        diffs.push(new diff_match_patch2.Diff(DIFF_EQUAL, ""));
+      diff_match_patch3.prototype.diff_cleanupMerge = function(diffs) {
+        diffs.push(new diff_match_patch3.Diff(DIFF_EQUAL, ""));
         var pointer = 0;
         var count_delete = 0;
         var count_insert = 0;
@@ -6232,7 +6232,7 @@ var WeaveletGoogleSync = (() => {
                     if (pointer - count_delete - count_insert > 0 && diffs[pointer - count_delete - count_insert - 1][0] == DIFF_EQUAL) {
                       diffs[pointer - count_delete - count_insert - 1][1] += text_insert.substring(0, commonlength);
                     } else {
-                      diffs.splice(0, 0, new diff_match_patch2.Diff(
+                      diffs.splice(0, 0, new diff_match_patch3.Diff(
                         DIFF_EQUAL,
                         text_insert.substring(0, commonlength)
                       ));
@@ -6254,7 +6254,7 @@ var WeaveletGoogleSync = (() => {
                   diffs.splice(
                     pointer,
                     0,
-                    new diff_match_patch2.Diff(DIFF_DELETE, text_delete)
+                    new diff_match_patch3.Diff(DIFF_DELETE, text_delete)
                   );
                   pointer++;
                 }
@@ -6262,7 +6262,7 @@ var WeaveletGoogleSync = (() => {
                   diffs.splice(
                     pointer,
                     0,
-                    new diff_match_patch2.Diff(DIFF_INSERT, text_insert)
+                    new diff_match_patch3.Diff(DIFF_INSERT, text_insert)
                   );
                   pointer++;
                 }
@@ -6305,7 +6305,7 @@ var WeaveletGoogleSync = (() => {
           this.diff_cleanupMerge(diffs);
         }
       };
-      diff_match_patch2.prototype.diff_xIndex = function(diffs, loc) {
+      diff_match_patch3.prototype.diff_xIndex = function(diffs, loc) {
         var chars1 = 0;
         var chars2 = 0;
         var last_chars1 = 0;
@@ -6329,7 +6329,7 @@ var WeaveletGoogleSync = (() => {
         }
         return last_chars2 + (loc - last_chars1);
       };
-      diff_match_patch2.prototype.diff_prettyHtml = function(diffs) {
+      diff_match_patch3.prototype.diff_prettyHtml = function(diffs) {
         var html = [];
         var pattern_amp = /&/g;
         var pattern_lt = /</g;
@@ -6353,7 +6353,7 @@ var WeaveletGoogleSync = (() => {
         }
         return html.join("");
       };
-      diff_match_patch2.prototype.diff_text1 = function(diffs) {
+      diff_match_patch3.prototype.diff_text1 = function(diffs) {
         var text = [];
         for (var x = 0; x < diffs.length; x++) {
           if (diffs[x][0] !== DIFF_INSERT) {
@@ -6362,7 +6362,7 @@ var WeaveletGoogleSync = (() => {
         }
         return text.join("");
       };
-      diff_match_patch2.prototype.diff_text2 = function(diffs) {
+      diff_match_patch3.prototype.diff_text2 = function(diffs) {
         var text = [];
         for (var x = 0; x < diffs.length; x++) {
           if (diffs[x][0] !== DIFF_DELETE) {
@@ -6371,7 +6371,7 @@ var WeaveletGoogleSync = (() => {
         }
         return text.join("");
       };
-      diff_match_patch2.prototype.diff_levenshtein = function(diffs) {
+      diff_match_patch3.prototype.diff_levenshtein = function(diffs) {
         var levenshtein = 0;
         var insertions = 0;
         var deletions = 0;
@@ -6395,7 +6395,7 @@ var WeaveletGoogleSync = (() => {
         levenshtein += Math.max(insertions, deletions);
         return levenshtein;
       };
-      diff_match_patch2.prototype.diff_toDelta = function(diffs) {
+      diff_match_patch3.prototype.diff_toDelta = function(diffs) {
         var text = [];
         for (var x = 0; x < diffs.length; x++) {
           switch (diffs[x][0]) {
@@ -6412,7 +6412,7 @@ var WeaveletGoogleSync = (() => {
         }
         return text.join("	").replace(/%20/g, " ");
       };
-      diff_match_patch2.prototype.diff_fromDelta = function(text1, delta) {
+      diff_match_patch3.prototype.diff_fromDelta = function(text1, delta) {
         var diffs = [];
         var diffsLength = 0;
         var pointer = 0;
@@ -6422,7 +6422,7 @@ var WeaveletGoogleSync = (() => {
           switch (tokens[x].charAt(0)) {
             case "+":
               try {
-                diffs[diffsLength++] = new diff_match_patch2.Diff(DIFF_INSERT, decodeURI(param));
+                diffs[diffsLength++] = new diff_match_patch3.Diff(DIFF_INSERT, decodeURI(param));
               } catch (ex) {
                 throw new Error("Illegal escape in diff_fromDelta: " + param);
               }
@@ -6435,9 +6435,9 @@ var WeaveletGoogleSync = (() => {
               }
               var text = text1.substring(pointer, pointer += n);
               if (tokens[x].charAt(0) == "=") {
-                diffs[diffsLength++] = new diff_match_patch2.Diff(DIFF_EQUAL, text);
+                diffs[diffsLength++] = new diff_match_patch3.Diff(DIFF_EQUAL, text);
               } else {
-                diffs[diffsLength++] = new diff_match_patch2.Diff(DIFF_DELETE, text);
+                diffs[diffsLength++] = new diff_match_patch3.Diff(DIFF_DELETE, text);
               }
               break;
             default:
@@ -6451,7 +6451,7 @@ var WeaveletGoogleSync = (() => {
         }
         return diffs;
       };
-      diff_match_patch2.prototype.match_main = function(text, pattern, loc) {
+      diff_match_patch3.prototype.match_main = function(text, pattern, loc) {
         if (text == null || pattern == null || loc == null) {
           throw new Error("Null input. (match_main)");
         }
@@ -6466,7 +6466,7 @@ var WeaveletGoogleSync = (() => {
           return this.match_bitap_(text, pattern, loc);
         }
       };
-      diff_match_patch2.prototype.match_bitap_ = function(text, pattern, loc) {
+      diff_match_patch3.prototype.match_bitap_ = function(text, pattern, loc) {
         if (pattern.length > this.Match_MaxBits) {
           throw new Error("Pattern too long for this browser.");
         }
@@ -6537,7 +6537,7 @@ var WeaveletGoogleSync = (() => {
         }
         return best_loc;
       };
-      diff_match_patch2.prototype.match_alphabet_ = function(pattern) {
+      diff_match_patch3.prototype.match_alphabet_ = function(pattern) {
         var s = {};
         for (var i = 0; i < pattern.length; i++) {
           s[pattern.charAt(i)] = 0;
@@ -6547,7 +6547,7 @@ var WeaveletGoogleSync = (() => {
         }
         return s;
       };
-      diff_match_patch2.prototype.patch_addContext_ = function(patch, text) {
+      diff_match_patch3.prototype.patch_addContext_ = function(patch, text) {
         if (text.length == 0) {
           return;
         }
@@ -6566,21 +6566,21 @@ var WeaveletGoogleSync = (() => {
         padding += this.Patch_Margin;
         var prefix = text.substring(patch.start2 - padding, patch.start2);
         if (prefix) {
-          patch.diffs.unshift(new diff_match_patch2.Diff(DIFF_EQUAL, prefix));
+          patch.diffs.unshift(new diff_match_patch3.Diff(DIFF_EQUAL, prefix));
         }
         var suffix = text.substring(
           patch.start2 + patch.length1,
           patch.start2 + patch.length1 + padding
         );
         if (suffix) {
-          patch.diffs.push(new diff_match_patch2.Diff(DIFF_EQUAL, suffix));
+          patch.diffs.push(new diff_match_patch3.Diff(DIFF_EQUAL, suffix));
         }
         patch.start1 -= prefix.length;
         patch.start2 -= prefix.length;
         patch.length1 += prefix.length + suffix.length;
         patch.length2 += prefix.length + suffix.length;
       };
-      diff_match_patch2.prototype.patch_make = function(a, opt_b, opt_c) {
+      diff_match_patch3.prototype.patch_make = function(a, opt_b, opt_c) {
         var text1, diffs;
         if (typeof a == "string" && typeof opt_b == "string" && typeof opt_c == "undefined") {
           text1 = /** @type {string} */
@@ -6616,7 +6616,7 @@ var WeaveletGoogleSync = (() => {
           return [];
         }
         var patches = [];
-        var patch = new diff_match_patch2.patch_obj();
+        var patch = new diff_match_patch3.patch_obj();
         var patchDiffLength = 0;
         var char_count1 = 0;
         var char_count2 = 0;
@@ -6649,7 +6649,7 @@ var WeaveletGoogleSync = (() => {
                 if (patchDiffLength) {
                   this.patch_addContext_(patch, prepatch_text);
                   patches.push(patch);
-                  patch = new diff_match_patch2.patch_obj();
+                  patch = new diff_match_patch3.patch_obj();
                   patchDiffLength = 0;
                   prepatch_text = postpatch_text;
                   char_count1 = char_count2;
@@ -6670,14 +6670,14 @@ var WeaveletGoogleSync = (() => {
         }
         return patches;
       };
-      diff_match_patch2.prototype.patch_deepCopy = function(patches) {
+      diff_match_patch3.prototype.patch_deepCopy = function(patches) {
         var patchesCopy = [];
         for (var x = 0; x < patches.length; x++) {
           var patch = patches[x];
-          var patchCopy = new diff_match_patch2.patch_obj();
+          var patchCopy = new diff_match_patch3.patch_obj();
           patchCopy.diffs = [];
           for (var y = 0; y < patch.diffs.length; y++) {
-            patchCopy.diffs[y] = new diff_match_patch2.Diff(patch.diffs[y][0], patch.diffs[y][1]);
+            patchCopy.diffs[y] = new diff_match_patch3.Diff(patch.diffs[y][0], patch.diffs[y][1]);
           }
           patchCopy.start1 = patch.start1;
           patchCopy.start2 = patch.start2;
@@ -6687,7 +6687,7 @@ var WeaveletGoogleSync = (() => {
         }
         return patchesCopy;
       };
-      diff_match_patch2.prototype.patch_apply = function(patches, text) {
+      diff_match_patch3.prototype.patch_apply = function(patches, text) {
         if (patches.length == 0) {
           return [text, []];
         }
@@ -6767,7 +6767,7 @@ var WeaveletGoogleSync = (() => {
         text = text.substring(nullPadding.length, text.length - nullPadding.length);
         return [text, results];
       };
-      diff_match_patch2.prototype.patch_addPadding = function(patches) {
+      diff_match_patch3.prototype.patch_addPadding = function(patches) {
         var paddingLength = this.Patch_Margin;
         var nullPadding = "";
         for (var x = 1; x <= paddingLength; x++) {
@@ -6780,7 +6780,7 @@ var WeaveletGoogleSync = (() => {
         var patch = patches[0];
         var diffs = patch.diffs;
         if (diffs.length == 0 || diffs[0][0] != DIFF_EQUAL) {
-          diffs.unshift(new diff_match_patch2.Diff(DIFF_EQUAL, nullPadding));
+          diffs.unshift(new diff_match_patch3.Diff(DIFF_EQUAL, nullPadding));
           patch.start1 -= paddingLength;
           patch.start2 -= paddingLength;
           patch.length1 += paddingLength;
@@ -6796,7 +6796,7 @@ var WeaveletGoogleSync = (() => {
         patch = patches[patches.length - 1];
         diffs = patch.diffs;
         if (diffs.length == 0 || diffs[diffs.length - 1][0] != DIFF_EQUAL) {
-          diffs.push(new diff_match_patch2.Diff(DIFF_EQUAL, nullPadding));
+          diffs.push(new diff_match_patch3.Diff(DIFF_EQUAL, nullPadding));
           patch.length1 += paddingLength;
           patch.length2 += paddingLength;
         } else if (paddingLength > diffs[diffs.length - 1][1].length) {
@@ -6807,7 +6807,7 @@ var WeaveletGoogleSync = (() => {
         }
         return nullPadding;
       };
-      diff_match_patch2.prototype.patch_splitMax = function(patches) {
+      diff_match_patch3.prototype.patch_splitMax = function(patches) {
         var patch_size = this.Match_MaxBits;
         for (var x = 0; x < patches.length; x++) {
           if (patches[x].length1 <= patch_size) {
@@ -6819,13 +6819,13 @@ var WeaveletGoogleSync = (() => {
           var start2 = bigpatch.start2;
           var precontext = "";
           while (bigpatch.diffs.length !== 0) {
-            var patch = new diff_match_patch2.patch_obj();
+            var patch = new diff_match_patch3.patch_obj();
             var empty = true;
             patch.start1 = start1 - precontext.length;
             patch.start2 = start2 - precontext.length;
             if (precontext !== "") {
               patch.length1 = patch.length2 = precontext.length;
-              patch.diffs.push(new diff_match_patch2.Diff(DIFF_EQUAL, precontext));
+              patch.diffs.push(new diff_match_patch3.Diff(DIFF_EQUAL, precontext));
             }
             while (bigpatch.diffs.length !== 0 && patch.length1 < patch_size - this.Patch_Margin) {
               var diff_type = bigpatch.diffs[0][0];
@@ -6839,7 +6839,7 @@ var WeaveletGoogleSync = (() => {
                 patch.length1 += diff_text.length;
                 start1 += diff_text.length;
                 empty = false;
-                patch.diffs.push(new diff_match_patch2.Diff(diff_type, diff_text));
+                patch.diffs.push(new diff_match_patch3.Diff(diff_type, diff_text));
                 bigpatch.diffs.shift();
               } else {
                 diff_text = diff_text.substring(
@@ -6854,7 +6854,7 @@ var WeaveletGoogleSync = (() => {
                 } else {
                   empty = false;
                 }
-                patch.diffs.push(new diff_match_patch2.Diff(diff_type, diff_text));
+                patch.diffs.push(new diff_match_patch3.Diff(diff_type, diff_text));
                 if (diff_text == bigpatch.diffs[0][1]) {
                   bigpatch.diffs.shift();
                 } else {
@@ -6871,7 +6871,7 @@ var WeaveletGoogleSync = (() => {
               if (patch.diffs.length !== 0 && patch.diffs[patch.diffs.length - 1][0] === DIFF_EQUAL) {
                 patch.diffs[patch.diffs.length - 1][1] += postcontext;
               } else {
-                patch.diffs.push(new diff_match_patch2.Diff(DIFF_EQUAL, postcontext));
+                patch.diffs.push(new diff_match_patch3.Diff(DIFF_EQUAL, postcontext));
               }
             }
             if (!empty) {
@@ -6880,14 +6880,14 @@ var WeaveletGoogleSync = (() => {
           }
         }
       };
-      diff_match_patch2.prototype.patch_toText = function(patches) {
+      diff_match_patch3.prototype.patch_toText = function(patches) {
         var text = [];
         for (var x = 0; x < patches.length; x++) {
           text[x] = patches[x];
         }
         return text.join("");
       };
-      diff_match_patch2.prototype.patch_fromText = function(textline) {
+      diff_match_patch3.prototype.patch_fromText = function(textline) {
         var patches = [];
         if (!textline) {
           return patches;
@@ -6900,7 +6900,7 @@ var WeaveletGoogleSync = (() => {
           if (!m) {
             throw new Error("Invalid patch string: " + text[textPointer]);
           }
-          var patch = new diff_match_patch2.patch_obj();
+          var patch = new diff_match_patch3.patch_obj();
           patches.push(patch);
           patch.start1 = parseInt(m[1], 10);
           if (m[2] === "") {
@@ -6931,11 +6931,11 @@ var WeaveletGoogleSync = (() => {
               throw new Error("Illegal escape in patch_fromText: " + line);
             }
             if (sign == "-") {
-              patch.diffs.push(new diff_match_patch2.Diff(DIFF_DELETE, line));
+              patch.diffs.push(new diff_match_patch3.Diff(DIFF_DELETE, line));
             } else if (sign == "+") {
-              patch.diffs.push(new diff_match_patch2.Diff(DIFF_INSERT, line));
+              patch.diffs.push(new diff_match_patch3.Diff(DIFF_INSERT, line));
             } else if (sign == " ") {
-              patch.diffs.push(new diff_match_patch2.Diff(DIFF_EQUAL, line));
+              patch.diffs.push(new diff_match_patch3.Diff(DIFF_EQUAL, line));
             } else if (sign == "@") {
               break;
             } else if (sign === "") {
@@ -6947,14 +6947,14 @@ var WeaveletGoogleSync = (() => {
         }
         return patches;
       };
-      diff_match_patch2.patch_obj = function() {
+      diff_match_patch3.patch_obj = function() {
         this.diffs = [];
         this.start1 = null;
         this.start2 = null;
         this.length1 = 0;
         this.length2 = 0;
       };
-      diff_match_patch2.patch_obj.prototype.toString = function() {
+      diff_match_patch3.patch_obj.prototype.toString = function() {
         var coords1, coords2;
         if (this.length1 === 0) {
           coords1 = this.start1 + ",0";
@@ -6988,8 +6988,8 @@ var WeaveletGoogleSync = (() => {
         }
         return text.join("").replace(/%20/g, " ");
       };
-      module.exports = diff_match_patch2;
-      module.exports["diff_match_patch"] = diff_match_patch2;
+      module.exports = diff_match_patch3;
+      module.exports["diff_match_patch"] = diff_match_patch3;
       module.exports["DIFF_DELETE"] = DIFF_DELETE;
       module.exports["DIFF_INSERT"] = DIFF_INSERT;
       module.exports["DIFF_EQUAL"] = DIFF_EQUAL;
@@ -7468,6 +7468,7 @@ var WeaveletGoogleSync = (() => {
   __export(entry_exports, {
     assistantPrefill: () => assistantPrefill,
     branchClipboard: () => branchClipboard,
+    branchDiff: () => branchDiff2,
     branchEnsure: () => branchEnsure,
     branchHistory: () => branchHistory,
     branchLayout: () => branchLayout,
@@ -21251,6 +21252,39 @@ ${JSON.stringify(input.length === 1 ? input[0] : input)}`;
     return result3;
   }
 
+  // src/utils/diffUtils.ts
+  var import_diff_match_patch3 = __toESM(require_diff_match_patch(), 1);
+  function wordDiff(a, b) {
+    const dmp4 = new import_diff_match_patch3.diff_match_patch();
+    const encode2 = (text) => text.split(/(\s+)/).map((token) => JSON.stringify(token) + "\n").join("");
+    const { chars1, chars2, lineArray } = dmp4.diff_linesToChars_(encode2(a), encode2(b));
+    const diffs = dmp4.diff_main(chars1, chars2, false);
+    dmp4.diff_charsToLines_(diffs, lineArray);
+    return diffs.map(([operation, encoded]) => ({
+      type: operation === 0 ? "equal" : operation === 1 ? "added" : "removed",
+      // A capped dictionary entry may contain many JSON lines; restore them all.
+      text: encoded.split("\n").slice(0, -1).map((line) => JSON.parse(line)).join("")
+    }));
+  }
+
+  // src/utils/branchDiff.ts
+  function branchDiff({ tree, contentStore, pathA, pathB }) {
+    const maxLen = Math.max(pathA.length, pathB.length);
+    const rows = [];
+    for (let i = 0; i < maxLen; i++) {
+      const nodeA = pathA[i] ? tree.nodes[pathA[i]] : null;
+      const nodeB = pathB[i] ? tree.nodes[pathB[i]] : null;
+      const contentA = nodeA ? resolveContent(contentStore, nodeA.contentHash) : [];
+      const contentB = nodeB ? resolveContent(contentStore, nodeB.contentHash) : [];
+      const textA = contentA.filter(isTextContent).map((c) => c.text).join(" ");
+      const textB = contentB.filter(isTextContent).map((c) => c.text).join(" ");
+      const role = nodeA?.role || nodeB?.role || "unknown";
+      const segments = wordDiff(textA, textB);
+      rows.push({ role, segments, textA, textB });
+    }
+    return { rows, hasChanges: rows.some((r) => r.segments.some((s) => s.type !== "equal")) };
+  }
+
   // shared/google-sync/branchLayout.ts
   var nativePreview = (value) => Array.from(value, (scalar) => scalar.length === 1 && scalar.charCodeAt(0) >= 55296 && scalar.charCodeAt(0) <= 57343 ? "\uFFFD" : scalar).join("");
   function branchLayout(json) {
@@ -21258,6 +21292,9 @@ ${JSON.stringify(input.length === 1 ? input[0] : input)}`;
     for (const node of output2.rfNodes)
       node.data.contentPreview = nativePreview(node.data.contentPreview);
     return JSON.stringify(output2);
+  }
+  function branchDiff2(json) {
+    return JSON.stringify(branchDiff(JSON.parse(json)));
   }
   function branchEnsure(json) {
     const input = JSON.parse(json);
@@ -21449,8 +21486,8 @@ ${JSON.stringify(input.length === 1 ? input[0] : input)}`;
   }
 
   // src/store/storage/google/records.ts
-  var import_diff_match_patch3 = __toESM(require_diff_match_patch(), 1);
-  var dmp3 = new import_diff_match_patch3.default();
+  var import_diff_match_patch4 = __toESM(require_diff_match_patch(), 1);
+  var dmp3 = new import_diff_match_patch4.default();
   function resolveStrict2(store, hash, visited = /* @__PURE__ */ new Set()) {
     const entry = store[hash];
     if (!entry || visited.has(hash) || visited.size >= 100)
