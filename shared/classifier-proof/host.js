@@ -1,6 +1,6 @@
 let worker, workerURL, epoch = 0;
-const post = value => window.webkit.messageHandlers.classifierProof.postMessage(value);
-window.classifierProof = {
+const post = value => window.webkit.messageHandlers.classifierHost.postMessage(value);
+window.classifierHost = {
   async boot() {
     const generation = ++epoch;
     const code = await (await fetch('weavelet-classifier://bundle/worker.js')).text();
@@ -15,12 +15,14 @@ window.classifierProof = {
     worker.onerror = event => post({id:0,type:'error',message:event.message || 'Worker loading failed'});
   },
   async send(request) {
-    if (request.type === 'loadClassifier' || request.type === 'loadClassifierMissing') {
-      const missing = request.type === 'loadClassifierMissing'; request.type = 'loadClassifier';
-      const files = ['config.json','tokenizer.json','tokenizer_config.json','onnx/model_quantized.onnx'];
-      request.modelId = 'proof';
-      request.fileEntries = await Promise.all(files.filter(name => !missing || name !== 'onnx/model_quantized.onnx').map(async name => [name, new Blob([await (await fetch('weavelet-classifier://bundle/model/' + name)).arrayBuffer()])]));
+    const generation = epoch;
+    if (request.type === 'loadClassifier') {
+      const encode = path => path.split('/').map(part => encodeURIComponent(part).replace(/[!'()*]/g, c => '%' + c.charCodeAt(0).toString(16).toUpperCase())).join('/');
+      request.fileEntries = await Promise.all(request.names.map(async name => [name, new Blob([await (await fetch('weavelet-classifier://model/' + encode(name))).arrayBuffer()])]));
+      delete request.names;
+      if (generation !== epoch) return;
     }
+    if (this.observeInputs && request.type === 'classify') request.observeInput = true;
     worker.postMessage(request);
   },
   state() { return {workerAlive: !!worker, epoch}; },
@@ -31,5 +33,5 @@ window.classifierProof = {
     workerURL = null;
   },
 };
-window.addEventListener('pagehide', () => window.classifierProof.cancel());
-window.classifierProof.boot().catch(error => post({id:0,type:'error',message:error.message}));
+window.addEventListener('pagehide', () => window.classifierHost.cancel());
+window.classifierHost.boot().catch(error => post({id:0,type:'error',message:error.message}));

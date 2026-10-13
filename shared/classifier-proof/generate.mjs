@@ -6,12 +6,12 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const require = createRequire(import.meta.url), directory = path.join(root,'shared/classifier-proof');
-const output = path.join(directory,'ClassifierProofResources'), check = process.argv.includes('--check');
-const assets = {}, inputs = {};
+const output = path.join(directory,'ClassifierResources'), check = process.argv.includes('--check');
+const assets = {}, fixtureAssets = {}, inputs = {};
 const hash = data => createHash('sha256').update(data).digest('hex');
-function emit(name, data) {
-  data = Buffer.from(data); assets[name] = {bytes:data.length,sha256:hash(data)};
-  const file = path.join(output,name);
+function emit(name, data, fixture = false) {
+  data = Buffer.from(data); (fixture ? fixtureAssets : assets)[name] = {bytes:data.length,sha256:hash(data)};
+  const file = path.join(fixture ? path.join(directory,'ClassifierFixtureResources') : output,name);
   if (check) { if (!readFileSync(file).equals(data)) throw Error('Stale classifier proof asset: '+name); }
   else { mkdirSync(path.dirname(file),{recursive:true}); writeFileSync(file,data); }
 }
@@ -32,8 +32,8 @@ const tensorType=(name,elemType,dims)=>({name,type:{tensorType:{elemType,shape:{
 const graph={name:'trusted_classifier_fixture',input:['input_ids','attention_mask','token_type_ids'].map(n=>tensorType(n,7,['batch','sequence'])),output:[tensorType('logits',1,[1,2])],node:[{name:'fixture_logits',opType:'Constant',output:['logits'],attribute:[{name:'value',type:4,t:{dims:[1,2],dataType:1,floatData:[0,2]}}]}]};
 const model=onnx.ModelProto.create({irVersion:8,producerName:'Weavelet trusted proof fixture',opsetImport:[{domain:'',version:13}],graph});
 const error=onnx.ModelProto.verify(model);if(error)throw Error(error);
-emit('model/onnx/model_quantized.onnx',onnx.ModelProto.encode(model).finish());
-const json=(name,value)=>emit('model/'+name,JSON.stringify(value)+'\n');
+emit('onnx/model_quantized.onnx',onnx.ModelProto.encode(model).finish(),true);
+const json=(name,value)=>emit(name,JSON.stringify(value)+'\n',true);
 json('config.json',{model_type:'bert',architectures:['BertForSequenceClassification'],num_labels:2,id2label:{'0':'FIXTURE_ZERO','1':'FIXTURE_TWO'}});
 json('tokenizer_config.json',{tokenizer_class:'BertTokenizer',model_max_length:128,do_lower_case:true,unk_token:'[UNK]',sep_token:'[SEP]',pad_token:'[PAD]',cls_token:'[CLS]',mask_token:'[MASK]'});
 json('tokenizer.json',{version:'1.0',truncation:null,padding:null,added_tokens:[],normalizer:{type:'BertNormalizer',clean_text:true,handle_chinese_chars:true,strip_accents:null,lowercase:true},pre_tokenizer:{type:'BertPreTokenizer'},post_processor:{type:'BertProcessing',sep:['[SEP]',3],cls:['[CLS]',2]},decoder:{type:'WordPiece',prefix:'##',cleanup:true},model:{type:'WordPiece',unk_token:'[UNK]',continuing_subword_prefix:'##',max_input_chars_per_word:100,vocab:{'[PAD]':0,'[UNK]':1,'[CLS]':2,'[SEP]':3,'[MASK]':4,'hello':5}}});
@@ -54,7 +54,7 @@ for (const name of ['@huggingface/transformers','@huggingface/tokenizers','@hugg
 }
 emit('NOTICE.txt',notices.join('\n\n'));
 source('node_modules/@huggingface/tokenizers/types/static/tokenizer.d.ts');
-const provenance={purpose:'Offline WK trusted synthetic fixture proof only; not a safety classifier or product adoption',versions:{transformers:hf.version,onnxruntimeWeb:ort.version},schemaSource:'https://github.com/onnx/onnx/blob/main/onnx/onnx.proto',tokenizerSchemaSource:'installed @huggingface/tokenizers types/static/tokenizer.d.ts and implementations',licenseSources,inputs,assets,totalAssetBytes:Object.values(assets).reduce((n,a)=>n+a.bytes,0)};
+const provenance={purpose:'Offline WK classifier execution boundary; dynamic caller-supplied models; trusted synthetic fixture is test-only',versions:{transformers:hf.version,onnxruntimeWeb:ort.version},schemaSource:'https://github.com/onnx/onnx/blob/main/onnx/onnx.proto',tokenizerSchemaSource:'installed @huggingface/tokenizers types/static/tokenizer.d.ts and implementations',licenseSources,inputs,fixtureAssets,assets,totalAssetBytes:Object.values(assets).reduce((n,a)=>n+a.bytes,0)};
 const manifest=JSON.stringify(provenance,null,2)+'\n';
 if(check){if(readFileSync(path.join(output,'provenance.json'),'utf8')!==manifest)throw Error('Stale classifier proof provenance');}
 else writeFileSync(path.join(output,'provenance.json'),manifest);
