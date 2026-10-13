@@ -71,7 +71,7 @@ struct MessageInputView: UIViewRepresentable {
         view.delegate = context.coordinator
         view.font = .preferredFont(forTextStyle: .body)
         view.adjustsFontForContentSizeCategory = true
-        view.backgroundColor = .secondarySystemBackground
+        view.backgroundColor = .clear
         view.textColor = .label
         view.textContainerInset = UIEdgeInsets(top: 10, left: 5, bottom: 10, right: 5)
         view.layer.cornerRadius = 6

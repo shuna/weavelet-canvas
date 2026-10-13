@@ -73,7 +73,10 @@ struct ChatView: View {
                 .navigationSplitViewColumnWidth(min:260,ideal:300,max:380)
         } detail: {
         NavigationStack {
-            activeContent
+            VStack(spacing: 0) {
+                conversationBar
+                activeContent
+            }
             .navigationTitle((state.conversation.flatMap { $0.title.isEmpty ? nil : $0.title } ?? "Weavelet Pilot") + (RemoteFixture.enabled ? " · FAKE" : ""))
             .navigationBarTitleDisplayMode(.inline)
             .task {
@@ -109,15 +112,6 @@ struct ChatView: View {
                     .frame(minWidth:44,minHeight:44)
                 }
                 ToolbarItemGroup(placement: .topBarTrailing) {
-                    Menu("表示", systemImage: "rectangle.split.2x1") {
-                        ForEach(ChatActiveView.allCases) { mode in
-                            Button(mode.title, systemImage: state.chatActiveView == mode ? "checkmark" : "rectangle.split.2x1") {
-                                do { try state.setChatActiveView(mode) } catch { errorMessage = error.localizedDescription }
-                            }
-                        }
-                    }
-                    .disabled(state.exchange == nil || state.generation != nil)
-                    .frame(minWidth: 44, minHeight: 44)
                     Menu(horizontalSizeClass == .compact ? "その他" : "会話操作",systemImage:"ellipsis.circle") {
                         if advancedMode {
                         Button("本文を追加",systemImage:"plus.bubble") {
@@ -339,6 +333,60 @@ struct ChatView: View {
         .sheet(item: Binding(get: { showsSettings ? nil : shownCloudKitConnection }, set: { shownCloudKitConnection = $0 })) { connection in CloudKitSyncSettingsView(connection:connection) }
         .sheet(item: Binding(get: { showsSettings ? nil : shownFolderConnection }, set: { shownFolderConnection = $0 })) { connection in FolderSyncSettingsView(connection:connection) }
     }
+    private var conversationBar: some View {
+        let chat = (try? state.exchange?.source["chats"]?.array("chats"))?.first {
+            (try? $0["id"]?.string("id"))?.utf8.elementsEqual(state.conversation?.id.utf8 ?? "".utf8) == true
+        }
+        let config = chat?["config"]
+        let model = (try? config?["model"]?.displayString("model")) ?? "モデル設定"
+        let local = config?["modelSource"] == .string("local")
+        return HStack(spacing: 8) {
+            Button {
+                do { configDraft = try state.chatConfigDraft() }
+                catch { errorMessage = error.localizedDescription }
+            } label: {
+                HStack(spacing: 6) {
+                    Image(systemName: local ? "cpu" : "sparkles")
+                    Text(model).lineLimit(1).truncationMode(.middle)
+                    Image(systemName: "chevron.down").font(.caption)
+                }
+                .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
+                .contentShape(Rectangle())
+            }
+            .accessibilityLabel("会話のモデルと生成設定：\(model)")
+            HStack(spacing: 0) {
+                conversationViewButton(.chat, icon: "bubble.left.and.bubble.right")
+                conversationViewButton(.branchEditor, icon: "point.3.connected.trianglepath.dotted")
+                Menu("表示レイアウト", systemImage: "rectangle.split.2x1") {
+                    ForEach(ChatActiveView.allCases) { mode in
+                        Button(mode.title, systemImage: state.chatActiveView == mode ? "checkmark" : "rectangle.split.2x1") {
+                            do { try state.setChatActiveView(mode) } catch { errorMessage = error.localizedDescription }
+                        }
+                    }
+                }
+                .labelStyle(.iconOnly)
+                .frame(width: 44, height: 44)
+            }
+        }
+        .buttonStyle(.plain)
+        .font(.subheadline)
+        .padding(.horizontal, horizontalSizeClass == .compact ? 16 : 20)
+        .disabled(state.exchange == nil || state.generation != nil)
+        .background(Color(uiColor: .secondarySystemBackground))
+        .overlay(alignment: .bottom) { Divider() }
+    }
+    private func conversationViewButton(_ mode: ChatActiveView, icon: String) -> some View {
+        Button {
+            do { try state.setChatActiveView(mode) } catch { errorMessage = error.localizedDescription }
+        } label: {
+            Image(systemName: icon)
+                .frame(width: 44, height: 44)
+                .background(state.chatActiveView == mode ? Color.accentColor.opacity(0.12) : .clear, in: RoundedRectangle(cornerRadius: 8))
+        }
+        .foregroundStyle(state.chatActiveView == mode ? Color.accentColor : .secondary)
+        .accessibilityLabel(mode.title)
+        .accessibilityAddTraits(state.chatActiveView == mode ? .isSelected : [])
+    }
     @ViewBuilder private var activeContent: some View {
             Group {
                 switch state.chatActiveView {
@@ -538,6 +586,8 @@ struct ChatView: View {
             }
             if state.isLocalConversation { prefillInput(key:state.stickyPrefillKey) }
         }
+        .padding(12)
+        .background(Color(uiColor: .secondarySystemBackground), in: RoundedRectangle(cornerRadius: 16))
         .padding(.horizontal,20).padding(.vertical,8)
         .frame(maxWidth:900)
         .frame(maxWidth:.infinity)
@@ -743,7 +793,7 @@ struct MessageView: View {
         HStack(spacing: 8) {
             if advancedMode, let edit {
                 Button(action: edit) {
-                    Label(roleName, systemImage: icon)
+                    roleLabel
                     Image(systemName: "chevron.down").font(.caption)
                 }
                 .buttonStyle(.plain)
@@ -751,12 +801,23 @@ struct MessageView: View {
                 .frame(minHeight: 44)
                 .accessibilityLabel("\(roleName)：役割と本文を編集")
             } else {
-                Label(roleName,systemImage:icon)
+                roleLabel
                     .font(.headline)
                     .accessibilityAddTraits(.isHeader)
             }
             if node.options.starred { Image(systemName:"star.fill").accessibilityLabel("スター") }
             if node.options.pinned { Image(systemName:"pin.fill").accessibilityLabel("ピン留め") }
+        }
+    }
+    private var roleLabel: some View {
+        HStack(spacing: 8) {
+            Image(systemName: icon)
+                .font(.body.weight(.semibold))
+                .foregroundStyle(.white)
+                .frame(width: 30, height: 30)
+                .background(node.role == "user" ? Color(red: 0.78, green: 0.27, blue: 0.27) : node.role == "system" ? Color.blue : Color(red: 0.06, green: 0.64, blue: 0.50), in: RoundedRectangle(cornerRadius: 6))
+                .accessibilityHidden(true)
+            Text(roleName).fixedSize(horizontal: false, vertical: true)
         }
     }
 
@@ -805,15 +866,15 @@ struct MessageView: View {
                 }
                 .accessibilityLabel("表示形式: \(tabName)")
             }
-            if let openEvaluation {
-                Button(action:openEvaluation) { Image(systemName:"checkmark.shield").frame(width:44,height:44) }
-                    .accessibilityLabel("評価")
-            }
         }
     }
 
     private var secondaryHeaderControls: some View {
         HStack(spacing:2) {
+            if let openEvaluation {
+                Button(action:openEvaluation) { Image(systemName:"checkmark.shield").frame(width:44,height:44) }
+                    .accessibilityLabel("評価")
+            }
             if let toggleOmitted {
                 Button(action:toggleOmitted) { Image(systemName:node.options.omitted ? "eye.slash.fill" : "eye.slash").frame(width:44,height:44) }
                     .foregroundStyle(node.options.omitted ? Color.orange : Color.secondary)
@@ -825,6 +886,22 @@ struct MessageView: View {
                     .accessibilityLabel(node.options.protected ? "保護中。解除" : "上書き・削除から保護")
             } else if node.options.protected { Image(systemName:"lock.fill").accessibilityLabel("上書き・削除から保護") }
         }
+    }
+    private var metadataMenu: some View {
+        Menu {
+            if let openEvaluation { Button("評価", systemImage: "checkmark.shield", action: openEvaluation) }
+            if let toggleOmitted {
+                Button(node.options.omitted ? "文脈からの除外を解除" : "生成時の文脈から除外", systemImage: "eye.slash", action: toggleOmitted)
+            }
+            if let toggleProtected {
+                Button(node.options.protected ? "保護を解除" : "上書き・削除から保護", systemImage: "lock", action: toggleProtected)
+            }
+        } label: {
+            Image(systemName: node.options.protected ? "lock.fill" : node.options.omitted ? "eye.slash.fill" : "ellipsis.circle")
+                .frame(width: 44, height: 44)
+        }
+        .accessibilityLabel("評価・文脈・保護")
+        .accessibilityValue([node.options.omitted ? "文脈から除外中" : "", node.options.protected ? "保護中" : ""].filter { !$0.isEmpty }.joined(separator: "、"))
     }
 
     private var branchSwipe: some Gesture {
@@ -905,18 +982,29 @@ struct MessageView: View {
         let showsSummary = tab != "original" && summaryInfo?["valid"] == .bool(true)
         HStack(spacing: 0) {
             if isBubble && node.role == "user" { Spacer(minLength: 24) }
-            VStack(alignment: .leading, spacing: 12) {
+            VStack(alignment: .leading, spacing: 8) {
                 ViewThatFits(in:.horizontal) {
                     HStack(spacing:8) {
                         headerTitle
+                            .fixedSize()
                         Spacer(minLength:8)
                         headerControls
+                            .fixedSize()
+                    }
+                    HStack(spacing: 8) {
+                        headerTitle
+                        Spacer(minLength: 0)
+                        primaryHeaderControls
+                            .fixedSize()
+                        metadataMenu
                     }
                     VStack(alignment:.leading,spacing:0) {
                         headerTitle
-                        headerControls.frame(maxWidth:.infinity,alignment:.trailing)
+                        HStack(spacing: 2) { primaryHeaderControls; Spacer(minLength: 0); metadataMenu }
                     }
                 }
+                .padding(.horizontal, isBubble ? 0 : 12)
+                VStack(alignment: .leading, spacing: 8) {
                 if !node.options.label.isEmpty { Text(node.options.label).font(.subheadline).foregroundStyle(.secondary) }
                 if let generation {
                     Text(generation.running ? "生成中" : "未保存の生成結果").font(.caption).foregroundStyle(.secondary)
@@ -935,6 +1023,15 @@ struct MessageView: View {
                     }
                 }
                 footerControls
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(isBubble ? 0 : 12)
+                .background {
+                    if !isBubble {
+                        RoundedRectangle(cornerRadius: 16)
+                            .fill(Color(uiColor: .secondarySystemBackground))
+                    }
+                }
             }
             .frame(maxWidth: isBubble ? nil : .infinity, alignment: .leading)
             .padding(isBubble ? 16 : 0)
