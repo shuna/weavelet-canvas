@@ -41,17 +41,60 @@ enum LocalLlama {
         func check() throws { if cancelled { throw CancellationError() }; try Task.checkCancellation() }
     }
     static func generate(modelURL: URL, request: LocalLlamaRequest, onText: @escaping @Sendable (String) async throws -> Bool) async throws {
+        try await generate(modelURL:modelURL,request:request,loadedModel:nil,onText:onText)
+    }
+
+    @MainActor
+    static func withModelSession<T>(modelURL: URL, operation: (@escaping Generator) async throws -> T) async throws -> T {
+        #if arch(arm64) && (targetEnvironment(macCatalyst) || (os(iOS) && !targetEnvironment(simulator)))
+        try Task.checkCancellation()
+        guard modelURL.isFileURL else { throw LocalLlamaError.invalidRequest }
+        let cancellation = Cancellation()
+        let task = Task.detached { try loadModel(modelURL:modelURL,cancellation:cancellation) }
+        let model = try await withTaskCancellationHandler(operation: { try await task.value }, onCancel: { cancellation.cancel(); task.cancel() })
+        try Task.checkCancellation()
+        // The scoped generator and every detached request retain the model until their work completes.
+        return try await operation { url, request, onText in
+            guard url == modelURL else { throw LocalLlamaError.invalidRequest }
+            try await generate(modelURL:url,request:request,loadedModel:model,onText:onText)
+        }
+        #else
+        throw LocalLlamaError.unsupported
+        #endif
+    }
+
+    private final class Model: @unchecked Sendable {
+        let pointer: OpaquePointer
+        init(_ pointer: OpaquePointer) { self.pointer = pointer }
+        deinit {
+            #if arch(arm64) && (targetEnvironment(macCatalyst) || (os(iOS) && !targetEnvironment(simulator)))
+            llama_model_free(pointer)
+            #endif
+        }
+    }
+
+    private static func generate(modelURL: URL, request: LocalLlamaRequest, loadedModel: Model?, onText: @escaping @Sendable (String) async throws -> Bool) async throws {
         try Task.checkCancellation()
         let cancellation = Cancellation()
-        let task = Task.detached { try await run(modelURL:modelURL, request:request, cancellation:cancellation, onText:onText) }
+        let task = Task.detached {
+            #if arch(arm64) && (targetEnvironment(macCatalyst) || (os(iOS) && !targetEnvironment(simulator)))
+            try cancellation.check()
+            guard modelURL.isFileURL, request.maxTokens >= 0, Int32(exactly:request.maxTokens) != nil, request.temperature.isFinite,
+                  !request.messages.contains(where: { $0.role.utf8.contains(0) || $0.content.utf8.contains(0) }),
+                  request.assistantPrefix?.utf8.contains(0) != true, request.fallbackPrompt?.utf8.contains(0) != true else { throw LocalLlamaError.invalidRequest }
+            let model = try loadedModel ?? loadModel(modelURL:modelURL,cancellation:cancellation)
+            defer { withExtendedLifetime(model) {} }
+            try await run(model:model.pointer,request:request,cancellation:cancellation,onText:onText)
+            #else
+            throw LocalLlamaError.unsupported
+            #endif
+        }
         try await withTaskCancellationHandler(operation: { try await task.value }, onCancel: { cancellation.cancel(); task.cancel() })
     }
-    private static func run(modelURL: URL, request: LocalLlamaRequest, cancellation: Cancellation, onText: @escaping @Sendable (String) async throws -> Bool) async throws {
-        #if arch(arm64) && (targetEnvironment(macCatalyst) || (os(iOS) && !targetEnvironment(simulator)))
+
+    #if arch(arm64) && (targetEnvironment(macCatalyst) || (os(iOS) && !targetEnvironment(simulator)))
+    private static func loadModel(modelURL: URL, cancellation: Cancellation) throws -> Model {
         try cancellation.check()
-        guard modelURL.isFileURL, request.maxTokens >= 0, Int32(exactly:request.maxTokens) != nil, request.temperature.isFinite,
-              !request.messages.contains(where: { $0.role.utf8.contains(0) || $0.content.utf8.contains(0) }),
-              request.assistantPrefix?.utf8.contains(0) != true, request.fallbackPrompt?.utf8.contains(0) != true else { throw LocalLlamaError.invalidRequest }
         llama_backend_init()
         ggml_backend_load_all()
         guard ggml_backend_dev_by_type(GGML_BACKEND_DEVICE_TYPE_GPU) != nil else { throw LocalLlamaError.metalUnavailable }
@@ -63,8 +106,14 @@ enum LocalLlama {
         guard let model = llama_model_load_from_file(modelURL.path, modelParams) else {
             try cancellation.check(); throw LocalLlamaError.modelLoad
         }
-        defer { llama_model_free(model) }
+        return Model(model)
+    }
+    #endif
+
+    private static func run(model: OpaquePointer, request: LocalLlamaRequest, cancellation: Cancellation, onText: @escaping @Sendable (String) async throws -> Bool) async throws {
+        #if arch(arm64) && (targetEnvironment(macCatalyst) || (os(iOS) && !targetEnvironment(simulator)))
         try cancellation.check()
+        let pointer = Unmanaged.passUnretained(cancellation).toOpaque()
         guard let vocab = llama_model_get_vocab(model) else { throw LocalLlamaError.modelLoad }
         let prompt = try formattedPrompt(model:model, request:request)
         var params = llama_context_default_params()

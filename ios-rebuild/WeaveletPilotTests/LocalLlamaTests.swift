@@ -60,6 +60,72 @@ final class LocalLlamaTests: XCTestCase {
         #endif
     }
 
+    func testScopedModelSessionKeepsFreshContextsAndUnwindsCallbackFailure() async throws {
+        #if targetEnvironment(macCatalyst) && arch(arm64)
+        let path = ProcessInfo.processInfo.environment["WEAVELET_LLAMA_TEST_MODEL"] ?? "/private/tmp/weavelet-local-llama-test/stories260K.gguf"
+        guard FileManager.default.fileExists(atPath:path) else { throw XCTSkip("Optional official GGUF fixture is not bundled/downloaded by tests") }
+        let modelURL = URL(fileURLWithPath:path)
+        let request = LocalLlamaRequest(messages:[.init(role:"user",content:"Once upon a time")],assistantPrefix:nil,maxTokens:8,temperature:0,contextSize:128,fallbackPrompt:"Once upon a time")
+        enum CallbackFailure: Error { case expected }
+        do {
+            try await LocalLlama.withModelSession(modelURL:modelURL) { generate in
+                do {
+                    try await generate(modelURL.appendingPathExtension("other"),request) { _ in XCTFail("Different model used the session"); return false }
+                    XCTFail("Different model accepted")
+                } catch LocalLlamaError.invalidRequest {}
+                var first: [String] = []
+                for _ in 0..<2 {
+                    let texts = LocalLlamaTexts()
+                    try await generate(modelURL,request) { await texts.add($0,stop:false) }
+                    let values = await texts.values
+                    XCTAssertEqual(values.count,8)
+                    if first.isEmpty { first = values } else { XCTAssertEqual(values,first) }
+                }
+                try await generate(modelURL,request) { _ in throw CallbackFailure.expected }
+            }
+            XCTFail("Callback error swallowed")
+        } catch CallbackFailure.expected {}
+        // A new job must work after the old job's context, sampler and model have unwound.
+        let texts = LocalLlamaTexts()
+        try await LocalLlama.withModelSession(modelURL:modelURL) { generate in
+            try await generate(modelURL,request) { await texts.add($0) }
+        }
+        let values = await texts.values
+        XCTAssertEqual(values.count,1)
+        #else
+        throw XCTSkip("Catalyst arm64 engine boundary")
+        #endif
+    }
+
+    func testScopedModelSessionUnwindsCancellationDuringDecode() async throws {
+        #if targetEnvironment(macCatalyst) && arch(arm64)
+        let path = ProcessInfo.processInfo.environment["WEAVELET_LLAMA_TEST_MODEL"] ?? "/private/tmp/weavelet-local-llama-test/stories260K.gguf"
+        guard FileManager.default.fileExists(atPath:path) else { throw XCTSkip("Optional official GGUF fixture is not bundled/downloaded by tests") }
+        let modelURL = URL(fileURLWithPath:path)
+        let request = LocalLlamaRequest(messages:[],assistantPrefix:nil,maxTokens:16,temperature:0,contextSize:128,fallbackPrompt:"Once upon a time")
+        let (started, signal) = AsyncStream<Void>.makeStream()
+        let task = Task {
+            defer { signal.finish() }
+            try await LocalLlama.withModelSession(modelURL:modelURL) { generate in
+                try await generate(modelURL,request) { _ in
+                    signal.yield(())
+                    while !Task.isCancelled { await Task.yield() }
+                    try Task.checkCancellation()
+                    return false
+                }
+            }
+        }
+        for await _ in started { task.cancel(); break }
+        do { try await task.value; XCTFail("Cancellation swallowed") } catch is CancellationError {}
+        let texts = LocalLlamaTexts()
+        try await LocalLlama.generate(modelURL:modelURL,request:request) { await texts.add($0) }
+        let values = await texts.values
+        XCTAssertEqual(values.count,1)
+        #else
+        throw XCTSkip("Catalyst arm64 engine boundary")
+        #endif
+    }
+
     func testOfficialTinyGGUFDecodesAndCallbackStopsAfterOneOutput() async throws {
         #if targetEnvironment(macCatalyst) && arch(arm64)
         let path = ProcessInfo.processInfo.environment["WEAVELET_LLAMA_TEST_MODEL"] ?? "/private/tmp/weavelet-local-llama-test/stories260K.gguf"

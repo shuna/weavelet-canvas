@@ -18,7 +18,7 @@ enum NativeLocalEvaluation {
 
     @MainActor
     static func runQuality(context: OrderedJSON, scope: String, language: String = "en", modelURL: URL,
-                           generator: @escaping LocalLlama.Generator = LocalLlama.generate,
+                           generator: LocalLlama.Generator? = nil,
                            isCurrent: @escaping @MainActor @Sendable () -> Bool = { true },
                            onProgress: @escaping @MainActor (OrderedJSON) -> Void = { _ in }) async throws -> OrderedJSON {
         try Task.checkCancellation()
@@ -32,35 +32,41 @@ enum NativeLocalEvaluation {
             .array("quality axes").map { try $0.string("quality axis") }
         guard axes.count == 5 else { throw ExchangeError.invalid("品質評価軸") }
         for axis in axes { onProgress(.object([.init(key:axis,value:.string("waiting"))])) }
-        var outputs: [JSONField] = []
-        for axis in axes {
-            try Task.checkCancellation()
-            guard isCurrent() else { throw ExchangeError.invalid("評価対象が更新されました") }
-            try checkModel(modelURL,revision:revision)
-            onProgress(.object([.init(key:axis,value:.string("generating"))]))
-            var fields: [JSONField] = [.init(key:"operation",value:.string("localPrompt")),
-                .init(key:"axis",value:.string(axis)),.init(key:"text",value:.string(text)),
-                .init(key:"language",value:.string(language))]
-            if let assistantResponse { fields.append(.init(key:"assistantResponse",value:.string(assistantResponse))) }
-            let plan = try SharedWebOperations.call("evaluation",.object(fields))
-            let prompt = try plan.required("prompt").string("local prompt")
-            var raw = try await generate(prompt:prompt,options:plan.required("options"),modelURL:modelURL,revision:revision,
-                                         generator:generator,isCurrent:isCurrent)
-            if raw.trimmingCharacters(in:.whitespacesAndNewlines).isEmpty {
-                raw = try await generate(prompt:plan.required("fallback").string("fallback prompt"),
-                                         options:plan.required("fallbackOptions"),modelURL:modelURL,revision:revision,
-                                         generator:generator,isCurrent:isCurrent)
+        func evaluate(generator: @escaping LocalLlama.Generator) async throws -> OrderedJSON {
+            var outputs: [JSONField] = []
+            for axis in axes {
+                try Task.checkCancellation()
+                guard isCurrent() else { throw ExchangeError.invalid("評価対象が更新されました") }
+                try checkModel(modelURL,revision:revision)
+                onProgress(.object([.init(key:axis,value:.string("generating"))]))
+                var fields: [JSONField] = [.init(key:"operation",value:.string("localPrompt")),
+                    .init(key:"axis",value:.string(axis)),.init(key:"text",value:.string(text)),
+                    .init(key:"language",value:.string(language))]
+                if let assistantResponse { fields.append(.init(key:"assistantResponse",value:.string(assistantResponse))) }
+                let plan = try SharedWebOperations.call("evaluation",.object(fields))
+                let prompt = try plan.required("prompt").string("local prompt")
+                var raw = try await generate(prompt:prompt,options:plan.required("options"),modelURL:modelURL,revision:revision,
+                                             generator:generator,isCurrent:isCurrent)
+                if raw.trimmingCharacters(in:.whitespacesAndNewlines).isEmpty {
+                    raw = try await generate(prompt:plan.required("fallback").string("fallback prompt"),
+                                             options:plan.required("fallbackOptions"),modelURL:modelURL,revision:revision,
+                                             generator:generator,isCurrent:isCurrent)
+                }
+                try Task.checkCancellation()
+                guard isCurrent() else { throw ExchangeError.invalid("評価対象が更新されました") }
+                try checkModel(modelURL,revision:revision)
+                outputs.append(.init(key:axis,value:.string(raw.trimmingCharacters(in:.whitespacesAndNewlines))))
+                onProgress(.object([.init(key:axis,value:.string("done"))]))
             }
-            try Task.checkCancellation()
-            guard isCurrent() else { throw ExchangeError.invalid("評価対象が更新されました") }
             try checkModel(modelURL,revision:revision)
-            outputs.append(.init(key:axis,value:.string(raw.trimmingCharacters(in:.whitespacesAndNewlines))))
-            onProgress(.object([.init(key:axis,value:.string("done"))]))
+            return try SharedWebOperations.call("evaluation",.object([.init(key:"operation",value:.string("localQualityResult")),
+                .init(key:"outputs",value:.object(outputs)),
+                .init(key:"now",value:.number(String(Int(Date().timeIntervalSince1970 * 1000))))]))
         }
-        try checkModel(modelURL,revision:revision)
-        return try SharedWebOperations.call("evaluation",.object([.init(key:"operation",value:.string("localQualityResult")),
-            .init(key:"outputs",value:.object(outputs)),
-            .init(key:"now",value:.number(String(Int(Date().timeIntervalSince1970 * 1000))))]))
+        if let generator { return try await evaluate(generator:generator) }
+        return try await LocalLlama.withModelSession(modelURL:modelURL) { generate in
+            try await evaluate(generator:generate)
+        }
     }
 
     private actor Output {

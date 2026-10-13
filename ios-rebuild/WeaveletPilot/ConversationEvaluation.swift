@@ -128,7 +128,7 @@ enum ConversationEvaluation {
                         sourceContentStore:try (source["contentStore"] ?? .null).encoded(),providerState:try providerDependency(state,execution:execution).encoded())
     }
 
-    @MainActor static func run(_ prepared: Prepared, client: RemoteClient = RemoteClient(), localGenerator: @escaping LocalLlama.Generator = LocalLlama.generate,
+    @MainActor static func run(_ prepared: Prepared, client: RemoteClient = RemoteClient(), localGenerator: LocalLlama.Generator? = nil,
                              isCurrent: @escaping @MainActor @Sendable () -> Bool = { true }, onProgress: @escaping @MainActor (OrderedJSON) -> Void = { _ in }) async throws -> OrderedJSON {
         try Task.checkCancellation()
         guard isCurrent() else { throw ExchangeError.invalid("評価対象が更新されました") }

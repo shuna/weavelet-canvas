@@ -120,6 +120,7 @@ final class ChatState: ObservableObject {
     private var generationTask: Task<Void, Never>?
     private let store: LocalStateStore?
     private let localGenerate: LocalLlama.Generator
+    private let localEvaluationGenerate: LocalLlama.Generator?
     private var initialLoadFailed = false
     @Published private(set) var navigationFocus: NavigationFocus?
     @Published private(set) var canNavigateBack = false
@@ -130,9 +131,10 @@ final class ChatState: ObservableObject {
     var canUndoMessageEdit: Bool { generation == nil && (editingHistory?.canUndo ?? false) }
     var canRedoMessageEdit: Bool { generation == nil && (editingHistory?.canRedo ?? false) }
 
-    init(store: LocalStateStore? = nil, localGenerate: @escaping LocalLlama.Generator = LocalLlama.generate) {
+    init(store: LocalStateStore? = nil, localGenerate: LocalLlama.Generator? = nil) {
         self.store = store
-        self.localGenerate = localGenerate
+        self.localGenerate = localGenerate ?? LocalLlama.generate
+        self.localEvaluationGenerate = localGenerate
         do {
             stickyPrefillKey = try SharedWebOperations.call("assistantPrefill",.object([.init(key:"operation",value:.string("resolve")),.init(key:"mode",value:.string("append")),.init(key:"insertIndex",value:.null)])).required("key").string("prefill key")
             branchCandidates = try BranchNavigation.candidates(in: siblingSource(conversations))
@@ -1070,7 +1072,7 @@ final class ChatState: ObservableObject {
             guard let self else { return }
             defer { if self.evaluationJobs[key]?.id == id { self.evaluationTasks[key] = nil; self.evaluationJobs[key]?.busy = false } }
             do {
-                let result = try await ConversationEvaluation.run(prepared,client:client,localGenerator:self.localGenerate,isCurrent:{ [weak self] in
+                let result = try await ConversationEvaluation.run(prepared,client:client,localGenerator:self.localEvaluationGenerate,isCurrent:{ [weak self] in
                     guard let self, self.evaluationJobs[key]?.id == id, let source = self.exchange?.source,
                           let roots = try? self.publicationSnapshot().required("state") else { return false }
                     return (try? ConversationEvaluation.isCurrent(prepared,source:source,state:roots)) == true
