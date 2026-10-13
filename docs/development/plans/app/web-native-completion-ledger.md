@@ -1,5 +1,18 @@
 # Web / 新iOSの完成条件と証拠
 
+## ローカル推論の依存採用監査（2026-10-13）
+
+追加SDKやSwift tokenizerを導入せず、既存Webのllama.cpp/wllama sampling実装へC ABIで接続する。公式upstreamが保守中であることと固定revisionの安全性は別に判断する。独立Astraが公式13 advisoryを今回のC API入口へ分類した結果、server/RPC専用5件は対象外、関連6件は固定4abef75fへ修正取り込み済み、CVE-2026-27940は通常loaderのno_alloc=true経路に非該当、CVE-2026-33298は未修正だった。
+
+| 依存 | 判断と条件 |
+| --- | --- |
+| [llama.cpp](https://github.com/ggml-org/llama.cpp) / Metal | 公式C APIの直接接続を条件付き採用。MIT、保守継続を確認。CVE-2026-33298の[公式修正4e5b83b2](https://github.com/ggml-org/llama.cpp/commit/4e5b83b226919c146fbfa754641a6772bcb2d722)をbackportし、不正tensor byte-sizeを拒否することが受入条件。 |
+| [wllama](https://github.com/ngxson/wllama) | 既存Web用wrapperとsamplingコードを再利用。MIT、保守継続を確認。旧固定系列を使うため公式修正の追跡が必要。取得tag/SHAとpatch fingerprintを照合しHEAD fallbackを使わない。 |
+| lowbit独自patch | 既存形式の互換性のため同じCコードを使用。保守主体は本repoであり、upstreamの安全性保証に含めない。標準GGUFだけの成功をlowbit全形式の検証済みとしない。 |
+| JavaScriptCore / WKWebView | OS標準の既存共有経路を継続。新JS runtimeやMarkdown parserを追加しない。 |
+
+source取得cacheのpatch同一性、ライセンスnoticeのアプリ同梱、既存Websetupのtag不一致/HEADfallbackとpatch0006構文問題も修正対象とする。現Web利用8 WASM variant/4 JS glueの再生成にはemsdk≧5等が必要で、手元PATH/標準配置では未検出。現Webバイナリは修正済みと扱わず、source修正とartifact再生成・実ロードを分けて記録する。[公式advisory一覧](https://github.com/ggml-org/llama.cpp/security/advisories)の今回公開分を照合したもので、未公開問題・独自patch全体・全不正入力の安全なエラー復帰を保証するものではない。
+
 ## ローカル生成の共有入力とCatalystエンジン接続調査（2026-10-13）
 
 実Web buildLocalChatMessagesのrole/text変換とuseSubmitのprefill trimを共有元へ移し、Web callerとshared localGenerationInputで使用する。既存submit contextの省略・system prompt・本文順序を維持し、画像等をrole/string入力へ含めない既存動作も維持する。configは変更せず、モデルtemplate・推論・保存処理は今回変更していない。共有関連45件、型、bundle鮮度・差分確認の担当成功を再利用。親統合dd2d551eでは同一suiteを再実行していない。

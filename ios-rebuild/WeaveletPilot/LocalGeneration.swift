@@ -56,8 +56,8 @@ struct LocalGenerationRequest {
         let options = try input.required("options")
         let maxTokens = try options.required("maxTokens").number("max tokens")
         let temperature = try options.required("temperature").number("temperature")
-        guard maxTokens.isFinite, maxTokens > 0, maxTokens.rounded() == maxTokens, maxTokens <= Double(Int32.max),
-              temperature.isFinite, temperature >= 0, temperature <= Double(Float.greatestFiniteMagnitude) else {
+        guard maxTokens.isFinite, maxTokens >= 0, maxTokens.rounded() == maxTokens, maxTokens <= Double(Int32.max),
+              temperature.isFinite, abs(temperature) <= Double(Float.greatestFiniteMagnitude) else {
             throw ExchangeError.invalid("ローカル生成のtoken数またはtemperatureが不正です")
         }
         let messages = try input.required("messages").array("messages").map {
