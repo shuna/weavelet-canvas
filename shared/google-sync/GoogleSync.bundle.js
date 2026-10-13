@@ -729,7 +729,7 @@ var WeaveletGoogleSync = (() => {
           return string.match(reUnicodeWord) || [];
         }
         var runInContext = function runInContext2(context) {
-          context = context == null ? root : _.defaults(root.Object(), context, _.pick(root, contextProps));
+          context = context == null ? root : _23.defaults(root.Object(), context, _23.pick(root, contextProps));
           var Array2 = context.Array, Date2 = context.Date, Error2 = context.Error, Function2 = context.Function, Math2 = context.Math, Object2 = context.Object, RegExp2 = context.RegExp, String2 = context.String, TypeError2 = context.TypeError;
           var arrayProto = Array2.prototype, funcProto = Function2.prototype, objectProto = Object2.prototype;
           var coreJsData = context["__core-js_shared__"];
@@ -878,14 +878,14 @@ var WeaveletGoogleSync = (() => {
             return result4;
           }
           function lazyValue() {
-            var array = this.__wrapped__.value(), dir = this.__dir__, isArr = isArray(array), isRight = dir < 0, arrLength = isArr ? array.length : 0, view = getView(0, arrLength, this.__views__), start2 = view.start, end = view.end, length = end - start2, index = isRight ? end : start2 - 1, iteratees = this.__iteratees__, iterLength = iteratees.length, resIndex = 0, takeCount = nativeMin(length, this.__takeCount__);
+            var array = this.__wrapped__.value(), dir2 = this.__dir__, isArr = isArray(array), isRight = dir2 < 0, arrLength = isArr ? array.length : 0, view = getView(0, arrLength, this.__views__), start2 = view.start, end = view.end, length = end - start2, index = isRight ? end : start2 - 1, iteratees = this.__iteratees__, iterLength = iteratees.length, resIndex = 0, takeCount = nativeMin(length, this.__takeCount__);
             if (!isArr || !isRight && arrLength == length && takeCount == length) {
               return baseWrapperValue(array, this.__actions__);
             }
             var result4 = [];
             outer:
               while (length-- && resIndex < takeCount) {
-                index += dir;
+                index += dir2;
                 var iterIndex = -1, value = array[index];
                 while (++iterIndex < iterLength) {
                   var data = iteratees[iterIndex], iteratee2 = data.iteratee, type = data.type, computed = iteratee2(value);
@@ -1156,7 +1156,7 @@ var WeaveletGoogleSync = (() => {
           function baseAt(object2, paths) {
             var index = -1, length = paths.length, result4 = Array2(length), skip = object2 == null;
             while (++index < length) {
-              result4[index] = skip ? undefined2 : get(object2, paths[index]);
+              result4[index] = skip ? undefined2 : get2(object2, paths[index]);
             }
             return result4;
           }
@@ -1601,7 +1601,7 @@ var WeaveletGoogleSync = (() => {
               return matchesStrictComparable(toKey(path), srcValue);
             }
             return function(object2) {
-              var objValue = get(object2, path);
+              var objValue = get2(object2, path);
               return objValue === undefined2 && objValue === srcValue ? hasIn(object2, path) : baseIsEqual(srcValue, objValue, COMPARE_PARTIAL_FLAG | COMPARE_UNORDERED_FLAG);
             };
           }
@@ -2427,14 +2427,14 @@ var WeaveletGoogleSync = (() => {
               });
             });
           }
-          function createPadding(length, chars) {
-            chars = chars === undefined2 ? " " : baseToString(chars);
-            var charsLength = chars.length;
+          function createPadding(length, chars2) {
+            chars2 = chars2 === undefined2 ? " " : baseToString(chars2);
+            var charsLength = chars2.length;
             if (charsLength < 2) {
-              return charsLength ? baseRepeat(chars, length) : chars;
+              return charsLength ? baseRepeat(chars2, length) : chars2;
             }
-            var result4 = baseRepeat(chars, nativeCeil(length / stringSize(chars)));
-            return hasUnicode(chars) ? castSlice(stringToArray(result4), 0, length).join("") : result4.slice(0, length);
+            var result4 = baseRepeat(chars2, nativeCeil(length / stringSize(chars2)));
+            return hasUnicode(chars2) ? castSlice(stringToArray(result4), 0, length).join("") : result4.slice(0, length);
           }
           function createPartial(func, bitmask, thisArg, partials) {
             var isBind = bitmask & WRAP_BIND_FLAG, Ctor = createCtor(func);
@@ -2514,7 +2514,7 @@ var WeaveletGoogleSync = (() => {
               return func(number);
             };
           }
-          var createSet = !(Set2 && 1 / setToArray(new Set2([, -0]))[1] == INFINITY) ? noop : function(values2) {
+          var createSet = !(Set2 && 1 / setToArray(new Set2([, -0]))[1] == INFINITY) ? noop2 : function(values2) {
             return new Set2(values2);
           };
           function createToPairs(keysFunc) {
@@ -2741,7 +2741,7 @@ var WeaveletGoogleSync = (() => {
           function getAllKeysIn(object2) {
             return baseGetAllKeys(object2, keysIn, getSymbolsIn);
           }
-          var getData = !metaMap ? noop : function(func) {
+          var getData = !metaMap ? noop2 : function(func) {
             return metaMap.get(func);
           };
           function getFuncName(func) {
@@ -3938,7 +3938,7 @@ var WeaveletGoogleSync = (() => {
             debounced.flush = flush;
             return debounced;
           }
-          var defer = baseRest(function(func, args) {
+          var defer2 = baseRest(function(func, args) {
             return baseDelay(func, 1, args);
           });
           var delay = baseRest(function(func, wait, args) {
@@ -4356,7 +4356,7 @@ var WeaveletGoogleSync = (() => {
           function functionsIn(object2) {
             return object2 == null ? [] : baseFunctions(object2, keysIn(object2));
           }
-          function get(object2, path, defaultValue) {
+          function get2(object2, path, defaultValue) {
             var result4 = object2 == null ? undefined2 : baseGet(object2, path);
             return result4 === undefined2 ? defaultValue : result4;
           }
@@ -4574,9 +4574,9 @@ var WeaveletGoogleSync = (() => {
           }
           var camelCase = createCompounder(function(result4, word, index) {
             word = word.toLowerCase();
-            return result4 + (index ? capitalize(word) : word);
+            return result4 + (index ? capitalize2(word) : word);
           });
-          function capitalize(string) {
+          function capitalize2(string) {
             return upperFirst(toString(string).toLowerCase());
           }
           function deburr(string) {
@@ -4592,7 +4592,7 @@ var WeaveletGoogleSync = (() => {
             position -= target.length;
             return position >= 0 && string.slice(position, end) == target;
           }
-          function escape(string) {
+          function escape2(string) {
             string = toString(string);
             return string && reHasUnescapedHtml.test(string) ? string.replace(reUnescapedHtml, escapeHtmlChar) : string;
           }
@@ -4607,7 +4607,7 @@ var WeaveletGoogleSync = (() => {
             return result4 + (index ? " " : "") + word.toLowerCase();
           });
           var lowerFirst = createCaseFirst("toLowerCase");
-          function pad(string, length, chars) {
+          function pad(string, length, chars2) {
             string = toString(string);
             length = toInteger(length);
             var strLength = length ? stringSize(string) : 0;
@@ -4615,19 +4615,19 @@ var WeaveletGoogleSync = (() => {
               return string;
             }
             var mid = (length - strLength) / 2;
-            return createPadding(nativeFloor(mid), chars) + string + createPadding(nativeCeil(mid), chars);
+            return createPadding(nativeFloor(mid), chars2) + string + createPadding(nativeCeil(mid), chars2);
           }
-          function padEnd(string, length, chars) {
+          function padEnd(string, length, chars2) {
             string = toString(string);
             length = toInteger(length);
             var strLength = length ? stringSize(string) : 0;
-            return length && strLength < length ? string + createPadding(length - strLength, chars) : string;
+            return length && strLength < length ? string + createPadding(length - strLength, chars2) : string;
           }
-          function padStart(string, length, chars) {
+          function padStart(string, length, chars2) {
             string = toString(string);
             length = toInteger(length);
             var strLength = length ? stringSize(string) : 0;
-            return length && strLength < length ? createPadding(length - strLength, chars) + string : string;
+            return length && strLength < length ? createPadding(length - strLength, chars2) + string : string;
           }
           function parseInt2(string, radix, guard) {
             if (guard || radix == null) {
@@ -4733,37 +4733,37 @@ var WeaveletGoogleSync = (() => {
           function toUpper(value) {
             return toString(value).toUpperCase();
           }
-          function trim(string, chars, guard) {
+          function trim(string, chars2, guard) {
             string = toString(string);
-            if (string && (guard || chars === undefined2)) {
+            if (string && (guard || chars2 === undefined2)) {
               return baseTrim(string);
             }
-            if (!string || !(chars = baseToString(chars))) {
+            if (!string || !(chars2 = baseToString(chars2))) {
               return string;
             }
-            var strSymbols = stringToArray(string), chrSymbols = stringToArray(chars), start2 = charsStartIndex(strSymbols, chrSymbols), end = charsEndIndex(strSymbols, chrSymbols) + 1;
+            var strSymbols = stringToArray(string), chrSymbols = stringToArray(chars2), start2 = charsStartIndex(strSymbols, chrSymbols), end = charsEndIndex(strSymbols, chrSymbols) + 1;
             return castSlice(strSymbols, start2, end).join("");
           }
-          function trimEnd(string, chars, guard) {
+          function trimEnd(string, chars2, guard) {
             string = toString(string);
-            if (string && (guard || chars === undefined2)) {
+            if (string && (guard || chars2 === undefined2)) {
               return string.slice(0, trimmedEndIndex(string) + 1);
             }
-            if (!string || !(chars = baseToString(chars))) {
+            if (!string || !(chars2 = baseToString(chars2))) {
               return string;
             }
-            var strSymbols = stringToArray(string), end = charsEndIndex(strSymbols, stringToArray(chars)) + 1;
+            var strSymbols = stringToArray(string), end = charsEndIndex(strSymbols, stringToArray(chars2)) + 1;
             return castSlice(strSymbols, 0, end).join("");
           }
-          function trimStart(string, chars, guard) {
+          function trimStart(string, chars2, guard) {
             string = toString(string);
-            if (string && (guard || chars === undefined2)) {
+            if (string && (guard || chars2 === undefined2)) {
               return string.replace(reTrimStart, "");
             }
-            if (!string || !(chars = baseToString(chars))) {
+            if (!string || !(chars2 = baseToString(chars2))) {
               return string;
             }
-            var strSymbols = stringToArray(string), start2 = charsStartIndex(strSymbols, stringToArray(chars));
+            var strSymbols = stringToArray(string), start2 = charsStartIndex(strSymbols, stringToArray(chars2));
             return castSlice(strSymbols, start2).join("");
           }
           function truncate(string, options) {
@@ -4929,7 +4929,7 @@ var WeaveletGoogleSync = (() => {
             }
             return this;
           }
-          function noop() {
+          function noop2() {
           }
           function nthArg(n) {
             n = toInteger(n);
@@ -5054,7 +5054,7 @@ var WeaveletGoogleSync = (() => {
           lodash.debounce = debounce;
           lodash.defaults = defaults;
           lodash.defaultsDeep = defaultsDeep;
-          lodash.defer = defer;
+          lodash.defer = defer2;
           lodash.delay = delay;
           lodash.difference = difference2;
           lodash.differenceBy = differenceBy;
@@ -5185,7 +5185,7 @@ var WeaveletGoogleSync = (() => {
           lodash.add = add;
           lodash.attempt = attempt;
           lodash.camelCase = camelCase;
-          lodash.capitalize = capitalize;
+          lodash.capitalize = capitalize2;
           lodash.ceil = ceil;
           lodash.clamp = clamp;
           lodash.clone = clone2;
@@ -5198,7 +5198,7 @@ var WeaveletGoogleSync = (() => {
           lodash.divide = divide;
           lodash.endsWith = endsWith;
           lodash.eq = eq;
-          lodash.escape = escape;
+          lodash.escape = escape2;
           lodash.escapeRegExp = escapeRegExp;
           lodash.every = every;
           lodash.find = find;
@@ -5214,7 +5214,7 @@ var WeaveletGoogleSync = (() => {
           lodash.forInRight = forInRight;
           lodash.forOwn = forOwn;
           lodash.forOwnRight = forOwnRight;
-          lodash.get = get;
+          lodash.get = get2;
           lodash.gt = gt;
           lodash.gte = gte;
           lodash.has = has2;
@@ -5284,7 +5284,7 @@ var WeaveletGoogleSync = (() => {
           lodash.multiply = multiply;
           lodash.nth = nth;
           lodash.noConflict = noConflict;
-          lodash.noop = noop;
+          lodash.noop = noop2;
           lodash.now = now;
           lodash.pad = pad;
           lodash.padEnd = padEnd;
@@ -5503,17 +5503,17 @@ var WeaveletGoogleSync = (() => {
           }
           return lodash;
         };
-        var _ = runInContext();
+        var _23 = runInContext();
         if (typeof define == "function" && typeof define.amd == "object" && define.amd) {
-          root._ = _;
+          root._ = _23;
           define(function() {
-            return _;
+            return _23;
           });
         } else if (freeModule) {
-          (freeModule.exports = _)._ = _;
-          freeExports._ = _;
+          (freeModule.exports = _23)._ = _23;
+          freeExports._ = _23;
         } else {
-          root._ = _;
+          root._ = _23;
         }
       }).call(exports);
     }
@@ -5777,7 +5777,7 @@ var WeaveletGoogleSync = (() => {
         var lineHash = {};
         lineArray[0] = "";
         function diff_linesToCharsMunge_(text) {
-          var chars = "";
+          var chars3 = "";
           var lineStart = 0;
           var lineEnd = -1;
           var lineArrayLength = lineArray.length;
@@ -5788,19 +5788,19 @@ var WeaveletGoogleSync = (() => {
             }
             var line = text.substring(lineStart, lineEnd + 1);
             if (lineHash.hasOwnProperty ? lineHash.hasOwnProperty(line) : lineHash[line] !== void 0) {
-              chars += String.fromCharCode(lineHash[line]);
+              chars3 += String.fromCharCode(lineHash[line]);
             } else {
               if (lineArrayLength == maxLines) {
                 line = text.substring(lineStart);
                 lineEnd = text.length;
               }
-              chars += String.fromCharCode(lineArrayLength);
+              chars3 += String.fromCharCode(lineArrayLength);
               lineHash[line] = lineArrayLength;
               lineArray[lineArrayLength++] = line;
             }
             lineStart = lineEnd + 1;
           }
-          return chars;
+          return chars3;
         }
         var maxLines = 4e4;
         var chars1 = diff_linesToCharsMunge_(text1);
@@ -5810,10 +5810,10 @@ var WeaveletGoogleSync = (() => {
       };
       diff_match_patch2.prototype.diff_charsToLines_ = function(diffs, lineArray) {
         for (var i = 0; i < diffs.length; i++) {
-          var chars = diffs[i][1];
+          var chars2 = diffs[i][1];
           var text = [];
-          for (var j = 0; j < chars.length; j++) {
-            text[j] = lineArray[chars.charCodeAt(j)];
+          for (var j = 0; j < chars2.length; j++) {
+            text[j] = lineArray[chars2.charCodeAt(j)];
           }
           diffs[i][1] = text.join("");
         }
@@ -6990,6 +6990,7 @@ var WeaveletGoogleSync = (() => {
     driveHeaderID: () => driveHeaderID,
     driveListing: () => driveListing,
     fileExport: () => fileExport,
+    fileImport: () => fileImport,
     folderOperation: () => folderOperation,
     folderRows: () => folderRows,
     generationRequest: () => generationRequest,
@@ -7008,10 +7009,298 @@ var WeaveletGoogleSync = (() => {
     treeEdit: () => treeEdit
   });
 
-  // src/utils/branchUtils.ts
-  var import_lodash = __toESM(require_lodash(), 1);
+  // shared/google-sync/importDefaults.generated.json
+  var importDefaults_generated_default = {
+    keys: [
+      "lastContentEditedAt",
+      "apiKey",
+      "apiVersion",
+      "apiEndpoint",
+      "theme",
+      "autoTitle",
+      "titleModel",
+      "titleProviderId",
+      "bubbleSummaryConfig",
+      "advancedMode",
+      "prompts",
+      "defaultChatConfig",
+      "defaultSystemMessage",
+      "hideMenuOptions",
+      "hideSideMenu",
+      "folders",
+      "enterToSubmit",
+      "inlineLatex",
+      "markdownMode",
+      "streamingMarkdownPolicy",
+      "totalTokenUsed",
+      "countTotalTokens",
+      "displayChatSize",
+      "menuWidth",
+      "defaultImageDetail",
+      "animateBubbleNavigation",
+      "branchSwipeDirection",
+      "providers",
+      "favoriteModels",
+      "providerModelCache",
+      "providerCustomModels",
+      "_legacyCustomModels",
+      "onboardingCompleted",
+      "splitPanelRatio",
+      "splitPanelSwapped",
+      "chatActiveView",
+      "proxyEnabled",
+      "proxyEndpoint",
+      "proxyAuthToken",
+      "showDebugPanel",
+      "searchHistory",
+      "sidebarSearchHistory",
+      "chatFindHistory",
+      "verifiedStats",
+      "pendingVerifications",
+      "evaluationSettings",
+      "safetyThresholds",
+      "qualityThresholds",
+      "evaluationResults",
+      "localModelEnabled",
+      "localModels",
+      "favoriteLocalModelIds",
+      "localModelExecutionMode",
+      "activeLocalModels",
+      "savedModelMeta",
+      "chats",
+      "contentStore",
+      "branchClipboard"
+    ],
+    values: {
+      apiEndpoint: "https://api.openai.com/v1/chat/completions",
+      theme: "dark",
+      autoTitle: false,
+      titleModel: "",
+      advancedMode: true,
+      prompts: [
+        {
+          id: "0d3e9cb7-b585-43fa-acc3-840c189f6b93",
+          name: "English Translator",
+          prompt: "I want you to act as an English translator, spelling corrector and improver. I will speak to you in any language and you will detect the language, translate it and answer in the corrected and improved version of my text, in English. I want you to replace my simplified A0-level words and sentences with more beautiful and elegant, upper level English words and sentences. Keep the meaning same, but make them more literary. I want you to only reply the correction, the improvements and nothing else, do not write explanations. Do you understand?"
+        }
+      ],
+      defaultChatConfig: {
+        model: "",
+        max_tokens: 4e3,
+        temperature: 1,
+        presence_penalty: 0,
+        top_p: 1,
+        frequency_penalty: 0,
+        stream: true,
+        reasoning_effort: "none",
+        reasoning_budget_tokens: 0
+      },
+      defaultSystemMessage: "You are a large language model assistant.\nCarefully heed the user's instructions. \nRespond using Markdown.",
+      hideMenuOptions: false,
+      hideSideMenu: false,
+      folders: {},
+      enterToSubmit: true,
+      inlineLatex: false,
+      markdownMode: true,
+      streamingMarkdownPolicy: "auto",
+      totalTokenUsed: {},
+      countTotalTokens: false,
+      displayChatSize: false,
+      menuWidth: 260,
+      defaultImageDetail: "auto",
+      animateBubbleNavigation: true,
+      branchSwipeDirection: "left-next",
+      providers: {
+        openrouter: {
+          id: "openrouter",
+          name: "OpenRouter",
+          endpoint: "https://openrouter.ai/api/v1/chat/completions",
+          modelsEndpoint: "https://openrouter.ai/api/v1/models",
+          modelsRequireAuth: false
+        },
+        openai: {
+          id: "openai",
+          name: "OpenAI",
+          endpoint: "https://api.openai.com/v1/chat/completions",
+          modelsEndpoint: "https://api.openai.com/v1/models",
+          modelsRequireAuth: true
+        },
+        mistral: {
+          id: "mistral",
+          name: "Mistral",
+          endpoint: "https://api.mistral.ai/v1/chat/completions",
+          modelsEndpoint: "https://api.mistral.ai/v1/models",
+          modelsRequireAuth: true
+        },
+        groq: {
+          id: "groq",
+          name: "Groq",
+          endpoint: "https://api.groq.com/openai/v1/chat/completions",
+          modelsEndpoint: "https://api.groq.com/openai/v1/models",
+          modelsRequireAuth: true
+        },
+        together: {
+          id: "together",
+          name: "Together AI",
+          endpoint: "https://api.together.xyz/v1/chat/completions",
+          modelsEndpoint: "https://api.together.xyz/v1/models",
+          modelsRequireAuth: true
+        },
+        cohere: {
+          id: "cohere",
+          name: "Cohere",
+          endpoint: "https://api.cohere.ai/v2/chat",
+          modelsEndpoint: "https://api.cohere.ai/v2/models",
+          modelsRequireAuth: true
+        },
+        perplexity: {
+          id: "perplexity",
+          name: "Perplexity",
+          endpoint: "https://api.perplexity.ai/chat/completions",
+          modelsRequireAuth: false
+        },
+        deepseek: {
+          id: "deepseek",
+          name: "DeepSeek",
+          endpoint: "https://api.deepseek.com/chat/completions",
+          modelsEndpoint: "https://api.deepseek.com/models",
+          modelsRequireAuth: true
+        },
+        xai: {
+          id: "xai",
+          name: "xAI",
+          endpoint: "https://api.x.ai/v1/chat/completions",
+          modelsEndpoint: "https://api.x.ai/v1/models",
+          modelsRequireAuth: true
+        },
+        fireworks: {
+          id: "fireworks",
+          name: "Fireworks",
+          endpoint: "https://api.fireworks.ai/inference/v1/chat/completions",
+          modelsEndpoint: "https://api.fireworks.ai/inference/v1/models",
+          modelsRequireAuth: true
+        }
+      },
+      favoriteModels: [],
+      providerModelCache: {},
+      providerCustomModels: {},
+      onboardingCompleted: false,
+      splitPanelRatio: 0.5,
+      splitPanelSwapped: false,
+      chatActiveView: "chat",
+      proxyEnabled: false,
+      proxyEndpoint: "",
+      proxyAuthToken: "",
+      showDebugPanel: false,
+      searchHistory: [],
+      sidebarSearchHistory: [],
+      chatFindHistory: [],
+      verifiedStats: {},
+      pendingVerifications: {},
+      evaluationSettings: {
+        safetyPreSend: "manual",
+        safetyPostReceive: "manual",
+        qualityPreSend: "manual",
+        qualityPostReceive: "manual",
+        safetyEngine: "remote",
+        hybridRemoteOnSafe: true
+      },
+      safetyThresholds: {
+        sexual: {
+          review: 0.8,
+          block: 0.95
+        },
+        hate: {
+          review: 0.7,
+          block: 0.9
+        },
+        harassment: {
+          review: 0.75,
+          block: 0.92
+        },
+        "self-harm": {
+          review: 0.55,
+          block: 0.85
+        },
+        "sexual/minors": {
+          review: 0.08,
+          block: 0.2
+        },
+        "hate/threatening": {
+          review: 0.35,
+          block: 0.7
+        },
+        "violence/graphic": {
+          review: 0.55,
+          block: 0.82
+        },
+        violence: {
+          review: 0.75,
+          block: 0.93
+        },
+        "harassment/threatening": {
+          review: 0.45,
+          block: 0.75
+        },
+        "self-harm/intent": {
+          review: 0.35,
+          block: 0.7
+        },
+        "self-harm/instructions": {
+          review: 0.2,
+          block: 0.45
+        },
+        illicit: {
+          review: 0.7,
+          block: 0.9
+        },
+        "illicit/violent": {
+          review: 0.25,
+          block: 0.55
+        }
+      },
+      qualityThresholds: {
+        taskCompletion: {
+          red: 0.5,
+          green: 0.8
+        },
+        faithfulness: {
+          red: 0.5,
+          green: 0.8
+        },
+        coherence: {
+          red: 0.5,
+          green: 0.8
+        },
+        conciseness: {
+          red: 0.5,
+          green: 0.8
+        },
+        instructionFollowing: {
+          red: 0.5,
+          green: 0.8
+        }
+      },
+      evaluationResults: {},
+      localModelEnabled: false,
+      localModels: [],
+      favoriteLocalModelIds: [],
+      localModelExecutionMode: "sequential",
+      activeLocalModels: {},
+      savedModelMeta: {},
+      contentStore: {},
+      branchClipboard: null
+    }
+  };
 
   // src/types/chat.ts
+  var roles = ["user", "assistant", "system"];
+  function strToTextContent(ob) {
+    return {
+      type: "text",
+      text: ob
+    };
+  }
   function isTextContent(ob) {
     return ob !== void 0 && ob !== null && ob.type === "text";
   }
@@ -7047,6 +7336,9 @@ var WeaveletGoogleSync = (() => {
     next[index] = { ...content[index], text };
     return next;
   };
+
+  // src/utils/branchUtils.ts
+  var import_lodash = __toESM(require_lodash(), 1);
 
   // src/utils/streamingBuffer.ts
   var STREAMING_CONTENT_HASH_PREFIX = "__streaming:";
@@ -7320,6 +7612,241 @@ var WeaveletGoogleSync = (() => {
       }
     }
     return exported;
+  }
+  function validateDeltaIntegrity(store) {
+    const corrupt = /* @__PURE__ */ new Set();
+    for (const [hash, entry] of Object.entries(store)) {
+      if (!entry.delta)
+        continue;
+      if (!store[entry.delta.baseHash]) {
+        console.warn(
+          `[ContentStore] Broken delta: ${hash} references missing base ${entry.delta.baseHash}`
+        );
+        corrupt.add(hash);
+        continue;
+      }
+      const visited = /* @__PURE__ */ new Set();
+      let cur = hash;
+      let isCircular = false;
+      while (store[cur]?.delta) {
+        if (visited.has(cur)) {
+          isCircular = true;
+          break;
+        }
+        visited.add(cur);
+        cur = store[cur].delta.baseHash;
+      }
+      if (isCircular) {
+        console.warn(`[ContentStore] Circular delta chain detected at ${hash}`);
+        corrupt.add(hash);
+        continue;
+      }
+      try {
+        const patches = dmp.patch_fromText(entry.delta.patches);
+        const baseContent = store[cur]?.content;
+        if (baseContent) {
+          let text = contentToText(baseContent);
+          const chain = [];
+          let walk = hash;
+          while (store[walk]?.delta) {
+            chain.push(walk);
+            walk = store[walk].delta.baseHash;
+          }
+          let patchFailed = false;
+          for (const chainHash of chain.reverse()) {
+            const p = dmp.patch_fromText(store[chainHash].delta.patches);
+            const [result3, applied] = dmp.patch_apply(p, text);
+            if (applied.some((ok) => !ok)) {
+              patchFailed = true;
+              break;
+            }
+            text = result3;
+          }
+          if (patchFailed) {
+            console.warn(`[ContentStore] Patch apply failed for delta ${hash}`);
+            corrupt.add(hash);
+            continue;
+          }
+          JSON.parse(text);
+        }
+      } catch (e) {
+        console.warn(`[ContentStore] Delta validation error for ${hash}:`, e);
+        corrupt.add(hash);
+      }
+    }
+    if (corrupt.size > 0) {
+      console.warn(
+        `[ContentStore] ${corrupt.size} corrupt delta(s) detected at startup. Affected hashes will return empty content on read.`
+      );
+    }
+    return corrupt;
+  }
+
+  // src/utils/branchUtils.ts
+  function readMessageAttributes(owner) {
+    const value = owner.messageAttributesV1;
+    if (!Object.hasOwn(owner, "messageAttributesV1"))
+      return void 0;
+    if (!value || value.version !== 1 || !value.byNode || typeof value.byNode !== "object" || Array.isArray(value.byNode) || Object.keys(value).some((key) => key !== "version" && key !== "byNode") || Object.keys(value.byNode).some((id) => !Object.hasOwn(owner.nodes, id)) || Object.values(value.byNode).some((attributes) => !attributes || typeof attributes !== "object" || Array.isArray(attributes) || Object.hasOwn(attributes, "role") || Object.hasOwn(attributes, "content"))) {
+      throw new Error("Unsupported message attributes namespace.");
+    }
+    return value;
+  }
+  var extraMessageAttributes = (message) => {
+    const { role, content, ...attributes } = message;
+    return attributes;
+  };
+  function setMessageAttributes(owner, nodeId, message) {
+    const attributes = extraMessageAttributes(message);
+    if (!Object.keys(attributes).length)
+      return;
+    const previous = readMessageAttributes(owner);
+    owner.messageAttributesV1 = { version: 1, byNode: {
+      ...previous?.byNode,
+      [nodeId]: { ...previous?.byNode[nodeId], ...structuredClone(attributes) }
+    } };
+  }
+  function copyMessageAttributes(source, sourceId, target, targetId) {
+    const attributes = readMessageAttributes(source)?.byNode[sourceId];
+    if (!attributes)
+      return;
+    setMessageAttributes(target, targetId, { ...attributes, role: "user", content: [] });
+  }
+  function deleteMessageAttributes(owner, nodeId) {
+    const previous = readMessageAttributes(owner);
+    if (!previous || !Object.hasOwn(previous.byNode, nodeId))
+      return;
+    const byNode = { ...previous.byNode };
+    delete byNode[nodeId];
+    owner.messageAttributesV1 = { version: 1, byNode };
+  }
+  function captureProjectedMessageAttributes(chat, contentStore) {
+    if (!chat.branchTree)
+      return;
+    let next = chat.branchTree;
+    for (const [index, message] of (chat.messages ?? []).entries()) {
+      const attributes = extraMessageAttributes(message);
+      if (!Object.keys(attributes).length)
+        continue;
+      const nodeId = chat.branchTree.activePath[index], node = chat.branchTree.nodes[nodeId];
+      if (!node || node.role !== message.role || !(0, import_lodash.isEqual)(resolveContent(contentStore, node.contentHash), message.content))
+        throw new Error("Message attributes do not match the active branch.");
+      const existing = readMessageAttributes(next)?.byNode[nodeId];
+      for (const [key, value] of Object.entries(attributes))
+        if (existing && Object.hasOwn(existing, key) && !(0, import_lodash.isEqual)(existing[key], value))
+          throw new Error("Conflicting projected message attributes.");
+      if (next === chat.branchTree)
+        next = { ...next };
+      setMessageAttributes(next, nodeId, message);
+    }
+    chat.branchTree = next;
+  }
+  function projectMessageAttributes(owner, nodeId, message) {
+    return { ...structuredClone(readMessageAttributes(owner)?.byNode[nodeId] ?? {}), role: message.role, content: message.content };
+  }
+  function materializeActivePath(tree, contentStore, includeAttributes = false) {
+    return tree.activePath.map((id) => {
+      const node = tree.nodes[id];
+      const message = { role: node.role, content: resolveContent(contentStore, node.contentHash) };
+      return includeAttributes ? projectMessageAttributes(tree, id, message) : message;
+    });
+  }
+  function flatMessagesToBranchTree(messages, contentStore) {
+    const nodes = {};
+    const ids = [];
+    const tree = { nodes, rootId: "", activePath: ids };
+    for (let i = 0; i < messages.length; i++) {
+      const id = editingUUID();
+      ids.push(id);
+      const contentHash = addContent(contentStore, messages[i].content);
+      nodes[id] = {
+        id,
+        parentId: i === 0 ? null : ids[i - 1],
+        role: messages[i].role,
+        contentHash,
+        createdAt: Date.now() - (messages.length - i) * 1e3
+      };
+      setMessageAttributes(tree, id, messages[i]);
+    }
+    tree.rootId = ids[0] ?? "";
+    return tree;
+  }
+  function flatChatToBranchTree(chat, contentStore) {
+    if (chat.branchTree)
+      return;
+    const tree = flatMessagesToBranchTree(chat.messages, contentStore);
+    for (const field of ["collapsedNodes", "omittedNodes", "protectedNodes"]) {
+      if (!chat[field])
+        continue;
+      chat[field] = Object.fromEntries(Object.entries(chat[field]).map(([key, value]) => {
+        const index = Number(key);
+        const id = Number.isInteger(index) && index >= 0 && String(index) === key ? tree.activePath[index] : void 0;
+        return [id ?? key, value];
+      }));
+    }
+    chat.branchTree = tree;
+    chat.messages = materializeActivePath(tree, contentStore);
+  }
+  function getChildrenOf(tree, nodeId) {
+    return Object.values(tree.nodes).filter((n) => n.parentId === nodeId);
+  }
+  function getSiblingGroups(tree) {
+    const grouped = /* @__PURE__ */ new Map();
+    const nodes = Object.values(tree.nodes);
+    for (const node of nodes) {
+      const group = grouped.get(node.parentId) ?? [];
+      group.push(node);
+      grouped.set(node.parentId, group);
+    }
+    const groups = [];
+    const byParent = /* @__PURE__ */ new Map();
+    const byNode = /* @__PURE__ */ Object.create(null);
+    for (const node of nodes) {
+      const parent = node.parentId || null;
+      let groupIndex = byParent.get(parent);
+      if (groupIndex === void 0) {
+        groupIndex = groups.length;
+        byParent.set(parent, groupIndex);
+        const group = grouped.get(parent) ?? [];
+        groups.push(group);
+        group.forEach((sibling, index) => {
+          byNode[sibling.id] = { groupIndex, selectedIndex: index };
+        });
+      }
+      if (!byNode[node.id])
+        byNode[node.id] = { groupIndex, selectedIndex: -1 };
+    }
+    return { groups, byNode };
+  }
+  function buildPathToLeaf(tree, nodeId) {
+    const ancestors = [];
+    let cur = nodeId;
+    while (cur) {
+      ancestors.unshift(cur);
+      cur = tree.nodes[cur]?.parentId ?? null;
+    }
+    let tip = nodeId;
+    while (true) {
+      const children = getChildrenOf(tree, tip);
+      if (children.length === 0)
+        break;
+      children.sort((a, b) => b.createdAt - a.createdAt);
+      ancestors.push(children[0].id);
+      tip = children[0].id;
+    }
+    return ancestors;
+  }
+  function collectDescendants(tree, nodeId) {
+    const result3 = /* @__PURE__ */ new Set();
+    const queue = [nodeId];
+    while (queue.length > 0) {
+      const id = queue.pop();
+      result3.add(id);
+      for (const child of getChildrenOf(tree, id)) {
+        queue.push(child.id);
+      }
+    }
+    return result3;
   }
 
   // src/store/branch-domain.ts
@@ -7881,8 +8408,8 @@ var WeaveletGoogleSync = (() => {
     if (!chat)
       return { status: "chat-missing" };
     const index = chat.branchTree ? chat.branchTree.activePath.indexOf(input.nodeId) : Number(input.nodeId);
-    const exists = chat.branchTree ? !!chat.branchTree.nodes[input.nodeId] : Number.isInteger(index) && index >= 0 && String(index) === input.nodeId && !!chat.messages[index];
-    if (!exists)
+    const exists2 = chat.branchTree ? !!chat.branchTree.nodes[input.nodeId] : Number.isInteger(index) && index >= 0 && String(index) === input.nodeId && !!chat.messages[index];
+    if (!exists2)
       return { status: "node-missing" };
     if (activeOnly && index < 0)
       return { status: "invalid-target" };
@@ -7958,7 +8485,7 @@ var WeaveletGoogleSync = (() => {
     const target = resolveNodeTarget(chats, input);
     if (target.status !== "valid")
       return target;
-    const blockedNodeIds = target.chat.branchTree ? [...collectDescendants(target.chat.branchTree, input.nodeId)].filter((id) => target.chat.protectedNodes?.[id]) : target.chat.messages.slice(target.messageIndex).map((_, index) => String(target.messageIndex + index)).filter((id) => target.chat.protectedNodes?.[id]);
+    const blockedNodeIds = target.chat.branchTree ? [...collectDescendants(target.chat.branchTree, input.nodeId)].filter((id) => target.chat.protectedNodes?.[id]) : target.chat.messages.slice(target.messageIndex).map((_23, index) => String(target.messageIndex + index)).filter((id) => target.chat.protectedNodes?.[id]);
     if (blockedNodeIds.length)
       return { status: "protected", blockedNodeIds };
     const ensured = ensureBranchTreeState(chats, target.chatIndex, contentStore);
@@ -7976,42 +8503,42 @@ var WeaveletGoogleSync = (() => {
     const a = Object.keys(left), b = Object.keys(right);
     return a.length === b.length && a.every((key, index) => key === b[index] && orderedJSONEqual(left[key], right[key]));
   };
-  function appendChanges(before, after, path, output) {
+  function appendChanges(before, after, path, output2) {
     if (orderedJSONEqual(before, after))
       return;
     const opaque = (value) => value && typeof value === "object" && !Array.isArray(value) && Object.keys(value).length === 1 && Number.isInteger(value.opaqueRef);
     if (opaque(before) || opaque(after)) {
-      output.push({ op: "set", path, value: after });
+      output2.push({ op: "set", path, value: after });
       return;
     }
     if (Array.isArray(before) && Array.isArray(after)) {
       for (let i = 0; i < after.length; i++) {
         if (i < before.length)
-          appendChanges(before[i], after[i], [...path, i], output);
+          appendChanges(before[i], after[i], [...path, i], output2);
         else
-          output.push({ op: "set", path: [...path, i], value: after[i] });
+          output2.push({ op: "set", path: [...path, i], value: after[i] });
       }
       for (let i = before.length - 1; i >= after.length; i--)
-        output.push({ op: "remove", path: [...path, i] });
+        output2.push({ op: "remove", path: [...path, i] });
     } else if (before && after && typeof before === "object" && typeof after === "object" && !Array.isArray(before) && !Array.isArray(after)) {
       for (const key of Object.keys(before))
         if (!Object.hasOwn(after, key))
-          output.push({ op: "remove", path: [...path, key] });
+          output2.push({ op: "remove", path: [...path, key] });
       for (const key of Object.keys(after)) {
         if (Object.hasOwn(before, key))
-          appendChanges(before[key], after[key], [...path, key], output);
+          appendChanges(before[key], after[key], [...path, key], output2);
         else
-          output.push({ op: "set", path: [...path, key], value: after[key] });
+          output2.push({ op: "set", path: [...path, key], value: after[key] });
       }
       if (!orderedJSONEqual(Object.keys(before), Object.keys(after)))
-        output.push({ op: "keys", path, keys: Object.keys(after) });
+        output2.push({ op: "keys", path, keys: Object.keys(after) });
     } else
-      output.push({ op: "set", path, value: after });
+      output2.push({ op: "set", path, value: after });
   }
   function diffJSONChanges(before, after) {
-    const output = [];
-    appendChanges(before, after, [], output);
-    return output;
+    const output2 = [];
+    appendChanges(before, after, [], output2);
+    return output2;
   }
 
   // shared/google-sync/editing.ts
@@ -8112,171 +8639,5070 @@ var WeaveletGoogleSync = (() => {
     });
   }
 
-  // src/utils/branchUtils.ts
-  function readMessageAttributes(owner) {
-    const value = owner.messageAttributesV1;
-    if (!Object.hasOwn(owner, "messageAttributesV1"))
-      return void 0;
-    if (!value || value.version !== 1 || !value.byNode || typeof value.byNode !== "object" || Array.isArray(value.byNode) || Object.keys(value).some((key) => key !== "version" && key !== "byNode") || Object.keys(value.byNode).some((id) => !Object.hasOwn(owner.nodes, id)) || Object.values(value.byNode).some((attributes) => !attributes || typeof attributes !== "object" || Array.isArray(attributes) || Object.hasOwn(attributes, "role") || Object.hasOwn(attributes, "content"))) {
-      throw new Error("Unsupported message attributes namespace.");
-    }
-    return value;
-  }
-  var extraMessageAttributes = (message) => {
-    const { role, content, ...attributes } = message;
-    return attributes;
-  };
-  function setMessageAttributes(owner, nodeId, message) {
-    const attributes = extraMessageAttributes(message);
-    if (!Object.keys(attributes).length)
-      return;
-    const previous = readMessageAttributes(owner);
-    owner.messageAttributesV1 = { version: 1, byNode: {
-      ...previous?.byNode,
-      [nodeId]: { ...previous?.byNode[nodeId], ...structuredClone(attributes) }
-    } };
-  }
-  function copyMessageAttributes(source, sourceId, target, targetId) {
-    const attributes = readMessageAttributes(source)?.byNode[sourceId];
-    if (!attributes)
-      return;
-    setMessageAttributes(target, targetId, { ...attributes, role: "user", content: [] });
-  }
-  function deleteMessageAttributes(owner, nodeId) {
-    const previous = readMessageAttributes(owner);
-    if (!previous || !Object.hasOwn(previous.byNode, nodeId))
-      return;
-    const byNode = { ...previous.byNode };
-    delete byNode[nodeId];
-    owner.messageAttributesV1 = { version: 1, byNode };
-  }
-  function captureProjectedMessageAttributes(chat, contentStore) {
-    if (!chat.branchTree)
-      return;
-    let next = chat.branchTree;
-    for (const [index, message] of (chat.messages ?? []).entries()) {
-      const attributes = extraMessageAttributes(message);
-      if (!Object.keys(attributes).length)
-        continue;
-      const nodeId = chat.branchTree.activePath[index], node = chat.branchTree.nodes[nodeId];
-      if (!node || node.role !== message.role || !(0, import_lodash.isEqual)(resolveContent(contentStore, node.contentHash), message.content))
-        throw new Error("Message attributes do not match the active branch.");
-      const existing = readMessageAttributes(next)?.byNode[nodeId];
-      for (const [key, value] of Object.entries(attributes))
-        if (existing && Object.hasOwn(existing, key) && !(0, import_lodash.isEqual)(existing[key], value))
-          throw new Error("Conflicting projected message attributes.");
-      if (next === chat.branchTree)
-        next = { ...next };
-      setMessageAttributes(next, nodeId, message);
-    }
-    chat.branchTree = next;
-  }
-  function projectMessageAttributes(owner, nodeId, message) {
-    return { ...structuredClone(readMessageAttributes(owner)?.byNode[nodeId] ?? {}), role: message.role, content: message.content };
-  }
-  function materializeActivePath(tree, contentStore, includeAttributes = false) {
-    return tree.activePath.map((id) => {
-      const node = tree.nodes[id];
-      const message = { role: node.role, content: resolveContent(contentStore, node.contentHash) };
-      return includeAttributes ? projectMessageAttributes(tree, id, message) : message;
-    });
-  }
-  function flatMessagesToBranchTree(messages, contentStore) {
-    const nodes = {};
-    const ids = [];
-    const tree = { nodes, rootId: "", activePath: ids };
-    for (let i = 0; i < messages.length; i++) {
-      const id = editingUUID();
-      ids.push(id);
-      const contentHash = addContent(contentStore, messages[i].content);
-      nodes[id] = {
-        id,
-        parentId: i === 0 ? null : ids[i - 1],
-        role: messages[i].role,
-        contentHash,
-        createdAt: Date.now() - (messages.length - i) * 1e3
-      };
-      setMessageAttributes(tree, id, messages[i]);
-    }
-    tree.rootId = ids[0] ?? "";
-    return tree;
-  }
-  function flatChatToBranchTree(chat, contentStore) {
-    if (chat.branchTree)
-      return;
-    const tree = flatMessagesToBranchTree(chat.messages, contentStore);
-    for (const field of ["collapsedNodes", "omittedNodes", "protectedNodes"]) {
-      if (!chat[field])
-        continue;
-      chat[field] = Object.fromEntries(Object.entries(chat[field]).map(([key, value]) => {
-        const index = Number(key);
-        const id = Number.isInteger(index) && index >= 0 && String(index) === key ? tree.activePath[index] : void 0;
-        return [id ?? key, value];
-      }));
-    }
-    chat.branchTree = tree;
-    chat.messages = materializeActivePath(tree, contentStore);
-  }
-  function getChildrenOf(tree, nodeId) {
-    return Object.values(tree.nodes).filter((n) => n.parentId === nodeId);
-  }
-  function getSiblingGroups(tree) {
-    const grouped = /* @__PURE__ */ new Map();
-    const nodes = Object.values(tree.nodes);
-    for (const node of nodes) {
-      const group = grouped.get(node.parentId) ?? [];
-      group.push(node);
-      grouped.set(node.parentId, group);
-    }
-    const groups = [];
-    const byParent = /* @__PURE__ */ new Map();
-    const byNode = /* @__PURE__ */ Object.create(null);
-    for (const node of nodes) {
-      const parent = node.parentId || null;
-      let groupIndex = byParent.get(parent);
-      if (groupIndex === void 0) {
-        groupIndex = groups.length;
-        byParent.set(parent, groupIndex);
-        const group = grouped.get(parent) ?? [];
-        groups.push(group);
-        group.forEach((sibling, index) => {
-          byNode[sibling.id] = { groupIndex, selectedIndex: index };
-        });
+  // src/store/version.ts
+  var STORE_VERSION = 18;
+
+  // src/store/storage/prepareSave.ts
+  function findPersistedDataIntegrityErrors(chats, contentStore, clipboard, options = {}) {
+    const errors = [];
+    const seenChatIds = /* @__PURE__ */ new Set();
+    const checkContentHash = (hash, owner) => {
+      if (options.allowTransientStreamingHashes && typeof hash === "string" && isStreamingContentHash(hash)) {
+        return;
       }
-      if (!byNode[node.id])
-        byNode[node.id] = { groupIndex, selectedIndex: -1 };
-    }
-    return { groups, byNode };
-  }
-  function buildPathToLeaf(tree, nodeId) {
-    const ancestors = [];
-    let cur = nodeId;
-    while (cur) {
-      ancestors.unshift(cur);
-      cur = tree.nodes[cur]?.parentId ?? null;
-    }
-    let tip = nodeId;
-    while (true) {
-      const children = getChildrenOf(tree, tip);
-      if (children.length === 0)
-        break;
-      children.sort((a, b) => b.createdAt - a.createdAt);
-      ancestors.push(children[0].id);
-      tip = children[0].id;
-    }
-    return ancestors;
-  }
-  function collectDescendants(tree, nodeId) {
-    const result3 = /* @__PURE__ */ new Set();
-    const queue = [nodeId];
-    while (queue.length > 0) {
-      const id = queue.pop();
-      result3.add(id);
-      for (const child of getChildrenOf(tree, id)) {
-        queue.push(child.id);
+      if (typeof hash !== "string" || !contentStore[hash]) {
+        errors.push(`Missing contentHash for ${owner}: ${String(hash)}`);
+        return;
       }
+      const visited = /* @__PURE__ */ new Set();
+      let current = hash;
+      while (contentStore[current]?.delta) {
+        if (visited.has(current)) {
+          errors.push(`Circular delta chain for ${owner}: ${hash}`);
+          return;
+        }
+        visited.add(current);
+        current = contentStore[current].delta.baseHash;
+        if (!contentStore[current]) {
+          errors.push(`Missing delta base for ${owner}: ${current}`);
+          return;
+        }
+      }
+    };
+    for (const chat of chats) {
+      if (!chat || typeof chat.id !== "string" || chat.id.length === 0) {
+        errors.push("Chat has an invalid id");
+        continue;
+      }
+      if (seenChatIds.has(chat.id)) {
+        errors.push(`Duplicate chat id: ${chat.id}`);
+      }
+      seenChatIds.add(chat.id);
+      if (!chat.branchTree)
+        continue;
+      if (!chat.branchTree.nodes || typeof chat.branchTree.nodes !== "object" || Array.isArray(chat.branchTree.nodes)) {
+        errors.push(`Invalid branchTree nodes: ${chat.id}`);
+        continue;
+      }
+      for (const node of Object.values(chat.branchTree.nodes)) {
+        checkContentHash(node?.contentHash, `chat ${chat.id}`);
+      }
+    }
+    if (clipboard && (!clipboard.nodes || typeof clipboard.nodes !== "object" || Array.isArray(clipboard.nodes))) {
+      errors.push("Invalid branch clipboard nodes");
+    } else if (clipboard?.nodes) {
+      for (const node of Object.values(clipboard.nodes)) {
+        checkContentHash(node?.contentHash, "branch clipboard");
+      }
+    }
+    return errors;
+  }
+
+  // src/utils/folderHierarchy.ts
+  function validateFolderHierarchy(folders) {
+    if (!folders || typeof folders !== "object" || Array.isArray(folders))
+      return false;
+    const collection = folders;
+    for (const [id, folder] of Object.entries(collection)) {
+      if (!id || !folder || typeof folder !== "object" || folder.id !== id || typeof folder.name !== "string" || !Number.isFinite(folder.order) || typeof folder.expanded !== "boolean" || folder.parentId != null && (typeof folder.parentId !== "string" || !Object.hasOwn(collection, folder.parentId)))
+        return false;
+    }
+    const finished = /* @__PURE__ */ new Set();
+    for (const id of Object.keys(collection)) {
+      const path = /* @__PURE__ */ new Set();
+      let current = id;
+      while (current !== void 0 && !finished.has(current)) {
+        if (path.has(current))
+          return false;
+        path.add(current);
+        current = collection[current].parentId ?? void 0;
+      }
+      for (const member of path)
+        finished.add(member);
+    }
+    return true;
+  }
+  function getFolderParentId(folders, id) {
+    const parent = folders[id]?.parentId ?? void 0;
+    const visited = /* @__PURE__ */ new Set([id]);
+    let current = parent;
+    while (current !== void 0) {
+      if (visited.has(current) || !Object.hasOwn(folders, current))
+        return void 0;
+      visited.add(current);
+      current = folders[current]?.parentId ?? void 0;
+    }
+    return parent;
+  }
+  function getFolderAncestors(folders, id) {
+    const result3 = [];
+    const visited = /* @__PURE__ */ new Set();
+    let current = id;
+    while (current !== void 0 && Object.hasOwn(folders, current) && !visited.has(current)) {
+      visited.add(current);
+      result3.push(current);
+      current = result3.length === 1 ? getFolderParentId(folders, current) : folders[current]?.parentId ?? void 0;
     }
     return result3;
+  }
+  function getFolderSubtreeIds(folders, id) {
+    if (!Object.hasOwn(folders, id))
+      return [];
+    const children = /* @__PURE__ */ new Map();
+    for (const [childId, folder] of Object.entries(folders)) {
+      if (folder?.parentId != null) {
+        const list = children.get(folder.parentId) ?? [];
+        list.push(childId);
+        children.set(folder.parentId, list);
+      }
+    }
+    const result3 = [], visited = /* @__PURE__ */ new Set(), pending = [id];
+    while (pending.length) {
+      const current = pending.pop();
+      if (visited.has(current))
+        continue;
+      visited.add(current);
+      result3.push(current);
+      for (const child of children.get(current) ?? [])
+        pending.push(child);
+    }
+    return result3;
+  }
+
+  // src/utils/bubbleSummary.ts
+  var normalizeBubbleSummaryText = (text) => {
+    const trimmed = text.trim();
+    const json = trimmed.replace(/^```(?:json)?\s*\n([\s\S]*?)\n```$/i, "$1");
+    try {
+      const value = JSON.parse(json);
+      if (typeof value === "string")
+        return value.trim();
+      const messages = Array.isArray(value) ? value : [value];
+      if (messages.length && messages.every((message) => message && typeof message === "object" && (message.role === "user" || message.role === "assistant") && typeof message.content === "string")) {
+        return messages.map((message) => message.role === "assistant" ? `\u30A2\u30B7\u30B9\u30BF\u30F3\u30C8\uFF1A
+${message.content}` : message.content).join("\n\n").trim();
+      }
+    } catch {
+    }
+    return trimmed;
+  };
+  var textParts = (message) => {
+    if (!message?.content?.length || !message.content.every(isTextContent))
+      return null;
+    const parts = message.content.map((value) => value.text);
+    return parts.some((part) => part.trim()) ? parts : null;
+  };
+  var hasTool = (message) => !!message?.content?.some((value) => isToolCallContent(value) || isToolResultContent(value));
+  var equalParts = (left, right) => left.length === right.length && left.every((part, index) => part === right[index]);
+  var validGeneration = (value) => {
+    if (value === void 0)
+      return true;
+    const generation = value;
+    return !!generation && typeof generation === "object" && typeof generation.model === "string" && (generation.providerId === void 0 || typeof generation.providerId === "string") && Number.isFinite(generation.createdAt) && !!generation.settings && typeof generation.settings === "object" && Number.isFinite(generation.settings.temperature) && Number.isFinite(generation.settings.max_tokens) && (generation.settings.reasoning_effort === void 0 || typeof generation.settings.reasoning_effort === "string");
+  };
+  var isBubbleSummary = (value) => !!value && typeof value === "object" && typeof value.id === "string" && (value.mode === "single" || value.mode === "through" || value.mode === "range") && typeof value.text === "string" && typeof value.useForSubmit === "boolean" && (value.format === void 0 || value.format === "compact") && validGeneration(value.generation) && Array.isArray(value.sources) && value.sources.every((source) => !!source && typeof source.nodeId === "string" && (source.parentId === null || typeof source.parentId === "string") && (source.role === "user" || source.role === "assistant") && Array.isArray(source.textParts) && source.textParts.every((part) => typeof part === "string"));
+  var isSummaryEligible = (message) => !!message && (message.role === "user" || message.role === "assistant") && textParts(message) !== null && !hasTool(message);
+  var resolveValidSummary = (chat, summary, generatingNodeIds = []) => {
+    if (!isBubbleSummary(summary))
+      return null;
+    const candidate = summary, path = chat.branchTree?.activePath ?? chat.messages.map((_23, index) => String(index));
+    if (typeof candidate.text !== "string" || !candidate.text.trim() || !Array.isArray(candidate.sources) || !candidate.sources.length)
+      return null;
+    const indices = candidate.sources.map((source) => path.indexOf(source?.nodeId));
+    if (indices.some((index) => index < 0) || new Set(indices).size !== indices.length)
+      return null;
+    const first = Math.min(...indices), last = Math.max(...indices);
+    if (last - first + 1 !== indices.length)
+      return null;
+    for (let offset = 0; offset < candidate.sources.length; offset++) {
+      const index = first + offset, source = candidate.sources[offset], nodeId = path[index];
+      const node = chat.branchTree?.nodes[nodeId], message = chat.messages[index], parts = textParts(message);
+      if (!source || source.nodeId !== nodeId || generatingNodeIds.includes(nodeId) || !isSummaryEligible(message) || !parts || message.role !== source.role || !Array.isArray(source.textParts) || !equalParts(parts, source.textParts) || (node?.parentId ?? null) !== source.parentId)
+        return null;
+    }
+    return { first, last };
+  };
+  var getAppliedBubbleSummaries = (chat, messageIndex = chat.messages.length, generatingNodeIds = []) => {
+    const candidates = (Array.isArray(chat.summaries) ? chat.summaries : []).filter((summary) => summary?.useForSubmit).map((summary) => ({ summary, range: resolveValidSummary(chat, summary, generatingNodeIds) })).filter((value) => !!value.range && value.range.last < messageIndex);
+    const accepted = candidates.filter((candidate) => !candidates.some((other) => other !== candidate && candidate.range.first <= other.range.last && other.range.first <= candidate.range.last));
+    return accepted;
+  };
+  var bubbleSummarySubmitMessage = (summary) => ({ role: "user", content: [{ type: "text", text: `${summary.format === "compact" ? "Retained conversation context. Answer the latest request using the requirements and state below. Follow the retained language, tone, structure and length requirements and examples, not formatting added for this summary. Adoption and plans do not imply execution; preserve uncertainty about what has been done.\n" : "Past conversation summary:\n"}${normalizeBubbleSummaryText(summary.text)}` }] });
+  var applyBubbleSummariesForSubmit = (chat, messageIndex, generatingNodeIds = []) => {
+    const source = chat.messages.slice(0, messageIndex), path = chat.branchTree?.activePath ?? source.map((_23, index) => String(index));
+    const accepted = getAppliedBubbleSummaries(chat, messageIndex, generatingNodeIds).filter(({ summary }) => !summary.sources.some((source2) => chat.omittedNodes?.[source2.nodeId]));
+    const starts = new Map(accepted.map((value) => [value.range.first, value]));
+    const result3 = [];
+    for (let index = 0; index < source.length; index++) {
+      const replacement = starts.get(index);
+      if (replacement) {
+        result3.push(bubbleSummarySubmitMessage(replacement.summary));
+        index = replacement.range.last;
+        continue;
+      }
+      if (chat.omittedNodes?.[path[index]] && !hasTool(source[index]))
+        continue;
+      result3.push(source[index]);
+    }
+    return result3;
+  };
+
+  // src/constants/chatDefaults.ts
+  var defaultSystemMessage = "You are a large language model assistant.\nCarefully heed the user's instructions. \nRespond using Markdown.";
+  var defaultModel = "";
+  var defaultUserMaxToken = 4e3;
+  var _defaultChatConfig = {
+    model: defaultModel,
+    max_tokens: defaultUserMaxToken,
+    temperature: 1,
+    presence_penalty: 0,
+    top_p: 1,
+    frequency_penalty: 0,
+    stream: true,
+    reasoning_effort: "none",
+    reasoning_budget_tokens: 0
+  };
+  var _defaultImageDetail = "auto";
+
+  // src/utils/chatIdentity.ts
+  var ensureUniqueChatIds = (chats) => {
+    const seen = /* @__PURE__ */ new Set();
+    let changed = false;
+    chats.forEach((chat) => {
+      const hasValidId = typeof chat.id === "string" && chat.id.length > 0;
+      if (!hasValidId || seen.has(chat.id)) {
+        chat.id = editingUUID();
+        changed = true;
+      }
+      seen.add(chat.id);
+    });
+    return changed;
+  };
+  var assignFreshChatIds = (chats) => {
+    chats.forEach((chat) => {
+      chat.id = editingUUID();
+    });
+  };
+
+  // ../../../../../../../../Users/suzuki/weavelet-canvas/node_modules/@babel/runtime/helpers/esm/typeof.js
+  function _typeof(obj) {
+    "@babel/helpers - typeof";
+    return _typeof = "function" == typeof Symbol && "symbol" == typeof Symbol.iterator ? function(obj2) {
+      return typeof obj2;
+    } : function(obj2) {
+      return obj2 && "function" == typeof Symbol && obj2.constructor === Symbol && obj2 !== Symbol.prototype ? "symbol" : typeof obj2;
+    }, _typeof(obj);
+  }
+
+  // ../../../../../../../../Users/suzuki/weavelet-canvas/node_modules/@babel/runtime/helpers/esm/classCallCheck.js
+  function _classCallCheck(instance2, Constructor) {
+    if (!(instance2 instanceof Constructor)) {
+      throw new TypeError("Cannot call a class as a function");
+    }
+  }
+
+  // ../../../../../../../../Users/suzuki/weavelet-canvas/node_modules/@babel/runtime/helpers/esm/toPrimitive.js
+  function _toPrimitive(input, hint) {
+    if (_typeof(input) !== "object" || input === null)
+      return input;
+    var prim = input[Symbol.toPrimitive];
+    if (prim !== void 0) {
+      var res = prim.call(input, hint || "default");
+      if (_typeof(res) !== "object")
+        return res;
+      throw new TypeError("@@toPrimitive must return a primitive value.");
+    }
+    return (hint === "string" ? String : Number)(input);
+  }
+
+  // ../../../../../../../../Users/suzuki/weavelet-canvas/node_modules/@babel/runtime/helpers/esm/toPropertyKey.js
+  function _toPropertyKey(arg) {
+    var key = _toPrimitive(arg, "string");
+    return _typeof(key) === "symbol" ? key : String(key);
+  }
+
+  // ../../../../../../../../Users/suzuki/weavelet-canvas/node_modules/@babel/runtime/helpers/esm/createClass.js
+  function _defineProperties(target, props) {
+    for (var i = 0; i < props.length; i++) {
+      var descriptor = props[i];
+      descriptor.enumerable = descriptor.enumerable || false;
+      descriptor.configurable = true;
+      if ("value" in descriptor)
+        descriptor.writable = true;
+      Object.defineProperty(target, _toPropertyKey(descriptor.key), descriptor);
+    }
+  }
+  function _createClass(Constructor, protoProps, staticProps) {
+    if (protoProps)
+      _defineProperties(Constructor.prototype, protoProps);
+    if (staticProps)
+      _defineProperties(Constructor, staticProps);
+    Object.defineProperty(Constructor, "prototype", {
+      writable: false
+    });
+    return Constructor;
+  }
+
+  // ../../../../../../../../Users/suzuki/weavelet-canvas/node_modules/@babel/runtime/helpers/esm/assertThisInitialized.js
+  function _assertThisInitialized(self2) {
+    if (self2 === void 0) {
+      throw new ReferenceError("this hasn't been initialised - super() hasn't been called");
+    }
+    return self2;
+  }
+
+  // ../../../../../../../../Users/suzuki/weavelet-canvas/node_modules/@babel/runtime/helpers/esm/setPrototypeOf.js
+  function _setPrototypeOf(o, p) {
+    _setPrototypeOf = Object.setPrototypeOf ? Object.setPrototypeOf.bind() : function _setPrototypeOf2(o2, p2) {
+      o2.__proto__ = p2;
+      return o2;
+    };
+    return _setPrototypeOf(o, p);
+  }
+
+  // ../../../../../../../../Users/suzuki/weavelet-canvas/node_modules/@babel/runtime/helpers/esm/inherits.js
+  function _inherits(subClass, superClass) {
+    if (typeof superClass !== "function" && superClass !== null) {
+      throw new TypeError("Super expression must either be null or a function");
+    }
+    subClass.prototype = Object.create(superClass && superClass.prototype, {
+      constructor: {
+        value: subClass,
+        writable: true,
+        configurable: true
+      }
+    });
+    Object.defineProperty(subClass, "prototype", {
+      writable: false
+    });
+    if (superClass)
+      _setPrototypeOf(subClass, superClass);
+  }
+
+  // ../../../../../../../../Users/suzuki/weavelet-canvas/node_modules/@babel/runtime/helpers/esm/possibleConstructorReturn.js
+  function _possibleConstructorReturn(self2, call) {
+    if (call && (_typeof(call) === "object" || typeof call === "function")) {
+      return call;
+    } else if (call !== void 0) {
+      throw new TypeError("Derived constructors may only return object or undefined");
+    }
+    return _assertThisInitialized(self2);
+  }
+
+  // ../../../../../../../../Users/suzuki/weavelet-canvas/node_modules/@babel/runtime/helpers/esm/getPrototypeOf.js
+  function _getPrototypeOf(o) {
+    _getPrototypeOf = Object.setPrototypeOf ? Object.getPrototypeOf.bind() : function _getPrototypeOf2(o2) {
+      return o2.__proto__ || Object.getPrototypeOf(o2);
+    };
+    return _getPrototypeOf(o);
+  }
+
+  // ../../../../../../../../Users/suzuki/weavelet-canvas/node_modules/@babel/runtime/helpers/esm/defineProperty.js
+  function _defineProperty(obj, key, value) {
+    key = _toPropertyKey(key);
+    if (key in obj) {
+      Object.defineProperty(obj, key, {
+        value,
+        enumerable: true,
+        configurable: true,
+        writable: true
+      });
+    } else {
+      obj[key] = value;
+    }
+    return obj;
+  }
+
+  // ../../../../../../../../Users/suzuki/weavelet-canvas/node_modules/@babel/runtime/helpers/esm/arrayWithHoles.js
+  function _arrayWithHoles(arr) {
+    if (Array.isArray(arr))
+      return arr;
+  }
+
+  // ../../../../../../../../Users/suzuki/weavelet-canvas/node_modules/@babel/runtime/helpers/esm/iterableToArray.js
+  function _iterableToArray(iter) {
+    if (typeof Symbol !== "undefined" && iter[Symbol.iterator] != null || iter["@@iterator"] != null)
+      return Array.from(iter);
+  }
+
+  // ../../../../../../../../Users/suzuki/weavelet-canvas/node_modules/@babel/runtime/helpers/esm/arrayLikeToArray.js
+  function _arrayLikeToArray(arr, len) {
+    if (len == null || len > arr.length)
+      len = arr.length;
+    for (var i = 0, arr2 = new Array(len); i < len; i++)
+      arr2[i] = arr[i];
+    return arr2;
+  }
+
+  // ../../../../../../../../Users/suzuki/weavelet-canvas/node_modules/@babel/runtime/helpers/esm/unsupportedIterableToArray.js
+  function _unsupportedIterableToArray(o, minLen) {
+    if (!o)
+      return;
+    if (typeof o === "string")
+      return _arrayLikeToArray(o, minLen);
+    var n = Object.prototype.toString.call(o).slice(8, -1);
+    if (n === "Object" && o.constructor)
+      n = o.constructor.name;
+    if (n === "Map" || n === "Set")
+      return Array.from(o);
+    if (n === "Arguments" || /^(?:Ui|I)nt(?:8|16|32)(?:Clamped)?Array$/.test(n))
+      return _arrayLikeToArray(o, minLen);
+  }
+
+  // ../../../../../../../../Users/suzuki/weavelet-canvas/node_modules/@babel/runtime/helpers/esm/nonIterableRest.js
+  function _nonIterableRest() {
+    throw new TypeError("Invalid attempt to destructure non-iterable instance.\nIn order to be iterable, non-array objects must have a [Symbol.iterator]() method.");
+  }
+
+  // ../../../../../../../../Users/suzuki/weavelet-canvas/node_modules/@babel/runtime/helpers/esm/toArray.js
+  function _toArray(arr) {
+    return _arrayWithHoles(arr) || _iterableToArray(arr) || _unsupportedIterableToArray(arr) || _nonIterableRest();
+  }
+
+  // ../../../../../../../../Users/suzuki/weavelet-canvas/node_modules/i18next/dist/esm/i18next.js
+  function ownKeys$6(object2, enumerableOnly) {
+    var keys = Object.keys(object2);
+    if (Object.getOwnPropertySymbols) {
+      var symbols = Object.getOwnPropertySymbols(object2);
+      enumerableOnly && (symbols = symbols.filter(function(sym) {
+        return Object.getOwnPropertyDescriptor(object2, sym).enumerable;
+      })), keys.push.apply(keys, symbols);
+    }
+    return keys;
+  }
+  function _objectSpread$6(target) {
+    for (var i = 1; i < arguments.length; i++) {
+      var source = null != arguments[i] ? arguments[i] : {};
+      i % 2 ? ownKeys$6(Object(source), true).forEach(function(key) {
+        _defineProperty(target, key, source[key]);
+      }) : Object.getOwnPropertyDescriptors ? Object.defineProperties(target, Object.getOwnPropertyDescriptors(source)) : ownKeys$6(Object(source)).forEach(function(key) {
+        Object.defineProperty(target, key, Object.getOwnPropertyDescriptor(source, key));
+      });
+    }
+    return target;
+  }
+  var consoleLogger = {
+    type: "logger",
+    log: function log(args) {
+      this.output("log", args);
+    },
+    warn: function warn(args) {
+      this.output("warn", args);
+    },
+    error: function error(args) {
+      this.output("error", args);
+    },
+    output: function output(type, args) {
+      if (console && console[type])
+        console[type].apply(console, args);
+    }
+  };
+  var Logger = function() {
+    function Logger2(concreteLogger) {
+      var options = arguments.length > 1 && arguments[1] !== void 0 ? arguments[1] : {};
+      _classCallCheck(this, Logger2);
+      this.init(concreteLogger, options);
+    }
+    _createClass(Logger2, [{
+      key: "init",
+      value: function init2(concreteLogger) {
+        var options = arguments.length > 1 && arguments[1] !== void 0 ? arguments[1] : {};
+        this.prefix = options.prefix || "i18next:";
+        this.logger = concreteLogger || consoleLogger;
+        this.options = options;
+        this.debug = options.debug;
+      }
+    }, {
+      key: "setDebug",
+      value: function setDebug(bool) {
+        this.debug = bool;
+      }
+    }, {
+      key: "log",
+      value: function log2() {
+        for (var _len = arguments.length, args = new Array(_len), _key = 0; _key < _len; _key++) {
+          args[_key] = arguments[_key];
+        }
+        return this.forward(args, "log", "", true);
+      }
+    }, {
+      key: "warn",
+      value: function warn2() {
+        for (var _len2 = arguments.length, args = new Array(_len2), _key2 = 0; _key2 < _len2; _key2++) {
+          args[_key2] = arguments[_key2];
+        }
+        return this.forward(args, "warn", "", true);
+      }
+    }, {
+      key: "error",
+      value: function error2() {
+        for (var _len3 = arguments.length, args = new Array(_len3), _key3 = 0; _key3 < _len3; _key3++) {
+          args[_key3] = arguments[_key3];
+        }
+        return this.forward(args, "error", "");
+      }
+    }, {
+      key: "deprecate",
+      value: function deprecate() {
+        for (var _len4 = arguments.length, args = new Array(_len4), _key4 = 0; _key4 < _len4; _key4++) {
+          args[_key4] = arguments[_key4];
+        }
+        return this.forward(args, "warn", "WARNING DEPRECATED: ", true);
+      }
+    }, {
+      key: "forward",
+      value: function forward(args, lvl, prefix, debugOnly) {
+        if (debugOnly && !this.debug)
+          return null;
+        if (typeof args[0] === "string")
+          args[0] = "".concat(prefix).concat(this.prefix, " ").concat(args[0]);
+        return this.logger[lvl](args);
+      }
+    }, {
+      key: "create",
+      value: function create(moduleName) {
+        return new Logger2(this.logger, _objectSpread$6(_objectSpread$6({}, {
+          prefix: "".concat(this.prefix, ":").concat(moduleName, ":")
+        }), this.options));
+      }
+    }, {
+      key: "clone",
+      value: function clone2(options) {
+        options = options || this.options;
+        options.prefix = options.prefix || this.prefix;
+        return new Logger2(this.logger, options);
+      }
+    }]);
+    return Logger2;
+  }();
+  var baseLogger = new Logger();
+  var EventEmitter = function() {
+    function EventEmitter2() {
+      _classCallCheck(this, EventEmitter2);
+      this.observers = {};
+    }
+    _createClass(EventEmitter2, [{
+      key: "on",
+      value: function on(events, listener) {
+        var _this = this;
+        events.split(" ").forEach(function(event) {
+          _this.observers[event] = _this.observers[event] || [];
+          _this.observers[event].push(listener);
+        });
+        return this;
+      }
+    }, {
+      key: "off",
+      value: function off(event, listener) {
+        if (!this.observers[event])
+          return;
+        if (!listener) {
+          delete this.observers[event];
+          return;
+        }
+        this.observers[event] = this.observers[event].filter(function(l) {
+          return l !== listener;
+        });
+      }
+    }, {
+      key: "emit",
+      value: function emit(event) {
+        for (var _len = arguments.length, args = new Array(_len > 1 ? _len - 1 : 0), _key = 1; _key < _len; _key++) {
+          args[_key - 1] = arguments[_key];
+        }
+        if (this.observers[event]) {
+          var cloned = [].concat(this.observers[event]);
+          cloned.forEach(function(observer) {
+            observer.apply(void 0, args);
+          });
+        }
+        if (this.observers["*"]) {
+          var _cloned = [].concat(this.observers["*"]);
+          _cloned.forEach(function(observer) {
+            observer.apply(observer, [event].concat(args));
+          });
+        }
+      }
+    }]);
+    return EventEmitter2;
+  }();
+  function defer() {
+    var res;
+    var rej;
+    var promise = new Promise(function(resolve, reject) {
+      res = resolve;
+      rej = reject;
+    });
+    promise.resolve = res;
+    promise.reject = rej;
+    return promise;
+  }
+  function makeString(object2) {
+    if (object2 == null)
+      return "";
+    return "" + object2;
+  }
+  function copy(a, s, t2) {
+    a.forEach(function(m) {
+      if (s[m])
+        t2[m] = s[m];
+    });
+  }
+  function getLastOfPath(object2, path, Empty) {
+    function cleanKey(key2) {
+      return key2 && key2.indexOf("###") > -1 ? key2.replace(/###/g, ".") : key2;
+    }
+    function canNotTraverseDeeper() {
+      return !object2 || typeof object2 === "string";
+    }
+    var stack = typeof path !== "string" ? [].concat(path) : path.split(".");
+    while (stack.length > 1) {
+      if (canNotTraverseDeeper())
+        return {};
+      var key = cleanKey(stack.shift());
+      if (!object2[key] && Empty)
+        object2[key] = new Empty();
+      if (Object.prototype.hasOwnProperty.call(object2, key)) {
+        object2 = object2[key];
+      } else {
+        object2 = {};
+      }
+    }
+    if (canNotTraverseDeeper())
+      return {};
+    return {
+      obj: object2,
+      k: cleanKey(stack.shift())
+    };
+  }
+  function setPath(object2, path, newValue) {
+    var _getLastOfPath = getLastOfPath(object2, path, Object), obj = _getLastOfPath.obj, k = _getLastOfPath.k;
+    obj[k] = newValue;
+  }
+  function pushPath(object2, path, newValue, concat) {
+    var _getLastOfPath2 = getLastOfPath(object2, path, Object), obj = _getLastOfPath2.obj, k = _getLastOfPath2.k;
+    obj[k] = obj[k] || [];
+    if (concat)
+      obj[k] = obj[k].concat(newValue);
+    if (!concat)
+      obj[k].push(newValue);
+  }
+  function getPath(object2, path) {
+    var _getLastOfPath3 = getLastOfPath(object2, path), obj = _getLastOfPath3.obj, k = _getLastOfPath3.k;
+    if (!obj)
+      return void 0;
+    return obj[k];
+  }
+  function getPathWithDefaults(data, defaultData, key) {
+    var value = getPath(data, key);
+    if (value !== void 0) {
+      return value;
+    }
+    return getPath(defaultData, key);
+  }
+  function deepExtend(target, source, overwrite) {
+    for (var prop in source) {
+      if (prop !== "__proto__" && prop !== "constructor") {
+        if (prop in target) {
+          if (typeof target[prop] === "string" || target[prop] instanceof String || typeof source[prop] === "string" || source[prop] instanceof String) {
+            if (overwrite)
+              target[prop] = source[prop];
+          } else {
+            deepExtend(target[prop], source[prop], overwrite);
+          }
+        } else {
+          target[prop] = source[prop];
+        }
+      }
+    }
+    return target;
+  }
+  function regexEscape(str) {
+    return str.replace(/[\-\[\]\/\{\}\(\)\*\+\?\.\\\^\$\|]/g, "\\$&");
+  }
+  var _entityMap = {
+    "&": "&amp;",
+    "<": "&lt;",
+    ">": "&gt;",
+    '"': "&quot;",
+    "'": "&#39;",
+    "/": "&#x2F;"
+  };
+  function escape(data) {
+    if (typeof data === "string") {
+      return data.replace(/[&<>"'\/]/g, function(s) {
+        return _entityMap[s];
+      });
+    }
+    return data;
+  }
+  var isIE10 = typeof window !== "undefined" && window.navigator && typeof window.navigator.userAgentData === "undefined" && window.navigator.userAgent && window.navigator.userAgent.indexOf("MSIE") > -1;
+  var chars = [" ", ",", "?", "!", ";"];
+  function looksLikeObjectPath(key, nsSeparator, keySeparator) {
+    nsSeparator = nsSeparator || "";
+    keySeparator = keySeparator || "";
+    var possibleChars = chars.filter(function(c) {
+      return nsSeparator.indexOf(c) < 0 && keySeparator.indexOf(c) < 0;
+    });
+    if (possibleChars.length === 0)
+      return true;
+    var r = new RegExp("(".concat(possibleChars.map(function(c) {
+      return c === "?" ? "\\?" : c;
+    }).join("|"), ")"));
+    var matched = !r.test(key);
+    if (!matched) {
+      var ki = key.indexOf(keySeparator);
+      if (ki > 0 && !r.test(key.substring(0, ki))) {
+        matched = true;
+      }
+    }
+    return matched;
+  }
+  function ownKeys$5(object2, enumerableOnly) {
+    var keys = Object.keys(object2);
+    if (Object.getOwnPropertySymbols) {
+      var symbols = Object.getOwnPropertySymbols(object2);
+      enumerableOnly && (symbols = symbols.filter(function(sym) {
+        return Object.getOwnPropertyDescriptor(object2, sym).enumerable;
+      })), keys.push.apply(keys, symbols);
+    }
+    return keys;
+  }
+  function _objectSpread$5(target) {
+    for (var i = 1; i < arguments.length; i++) {
+      var source = null != arguments[i] ? arguments[i] : {};
+      i % 2 ? ownKeys$5(Object(source), true).forEach(function(key) {
+        _defineProperty(target, key, source[key]);
+      }) : Object.getOwnPropertyDescriptors ? Object.defineProperties(target, Object.getOwnPropertyDescriptors(source)) : ownKeys$5(Object(source)).forEach(function(key) {
+        Object.defineProperty(target, key, Object.getOwnPropertyDescriptor(source, key));
+      });
+    }
+    return target;
+  }
+  function _createSuper$3(Derived) {
+    var hasNativeReflectConstruct = _isNativeReflectConstruct$3();
+    return function _createSuperInternal() {
+      var Super = _getPrototypeOf(Derived), result3;
+      if (hasNativeReflectConstruct) {
+        var NewTarget = _getPrototypeOf(this).constructor;
+        result3 = Reflect.construct(Super, arguments, NewTarget);
+      } else {
+        result3 = Super.apply(this, arguments);
+      }
+      return _possibleConstructorReturn(this, result3);
+    };
+  }
+  function _isNativeReflectConstruct$3() {
+    if (typeof Reflect === "undefined" || !Reflect.construct)
+      return false;
+    if (Reflect.construct.sham)
+      return false;
+    if (typeof Proxy === "function")
+      return true;
+    try {
+      Boolean.prototype.valueOf.call(Reflect.construct(Boolean, [], function() {
+      }));
+      return true;
+    } catch (e) {
+      return false;
+    }
+  }
+  function deepFind(obj, path) {
+    var keySeparator = arguments.length > 2 && arguments[2] !== void 0 ? arguments[2] : ".";
+    if (!obj)
+      return void 0;
+    if (obj[path])
+      return obj[path];
+    var paths = path.split(keySeparator);
+    var current = obj;
+    for (var i = 0; i < paths.length; ++i) {
+      if (!current)
+        return void 0;
+      if (typeof current[paths[i]] === "string" && i + 1 < paths.length) {
+        return void 0;
+      }
+      if (current[paths[i]] === void 0) {
+        var j = 2;
+        var p = paths.slice(i, i + j).join(keySeparator);
+        var mix = current[p];
+        while (mix === void 0 && paths.length > i + j) {
+          j++;
+          p = paths.slice(i, i + j).join(keySeparator);
+          mix = current[p];
+        }
+        if (mix === void 0)
+          return void 0;
+        if (mix === null)
+          return null;
+        if (path.endsWith(p)) {
+          if (typeof mix === "string")
+            return mix;
+          if (p && typeof mix[p] === "string")
+            return mix[p];
+        }
+        var joinedPath = paths.slice(i + j).join(keySeparator);
+        if (joinedPath)
+          return deepFind(mix, joinedPath, keySeparator);
+        return void 0;
+      }
+      current = current[paths[i]];
+    }
+    return current;
+  }
+  var ResourceStore = function(_EventEmitter) {
+    _inherits(ResourceStore2, _EventEmitter);
+    var _super = _createSuper$3(ResourceStore2);
+    function ResourceStore2(data) {
+      var _this;
+      var options = arguments.length > 1 && arguments[1] !== void 0 ? arguments[1] : {
+        ns: ["translation"],
+        defaultNS: "translation"
+      };
+      _classCallCheck(this, ResourceStore2);
+      _this = _super.call(this);
+      if (isIE10) {
+        EventEmitter.call(_assertThisInitialized(_this));
+      }
+      _this.data = data || {};
+      _this.options = options;
+      if (_this.options.keySeparator === void 0) {
+        _this.options.keySeparator = ".";
+      }
+      if (_this.options.ignoreJSONStructure === void 0) {
+        _this.options.ignoreJSONStructure = true;
+      }
+      return _this;
+    }
+    _createClass(ResourceStore2, [{
+      key: "addNamespaces",
+      value: function addNamespaces(ns) {
+        if (this.options.ns.indexOf(ns) < 0) {
+          this.options.ns.push(ns);
+        }
+      }
+    }, {
+      key: "removeNamespaces",
+      value: function removeNamespaces(ns) {
+        var index = this.options.ns.indexOf(ns);
+        if (index > -1) {
+          this.options.ns.splice(index, 1);
+        }
+      }
+    }, {
+      key: "getResource",
+      value: function getResource(lng, ns, key) {
+        var options = arguments.length > 3 && arguments[3] !== void 0 ? arguments[3] : {};
+        var keySeparator = options.keySeparator !== void 0 ? options.keySeparator : this.options.keySeparator;
+        var ignoreJSONStructure = options.ignoreJSONStructure !== void 0 ? options.ignoreJSONStructure : this.options.ignoreJSONStructure;
+        var path = [lng, ns];
+        if (key && typeof key !== "string")
+          path = path.concat(key);
+        if (key && typeof key === "string")
+          path = path.concat(keySeparator ? key.split(keySeparator) : key);
+        if (lng.indexOf(".") > -1) {
+          path = lng.split(".");
+        }
+        var result3 = getPath(this.data, path);
+        if (result3 || !ignoreJSONStructure || typeof key !== "string")
+          return result3;
+        return deepFind(this.data && this.data[lng] && this.data[lng][ns], key, keySeparator);
+      }
+    }, {
+      key: "addResource",
+      value: function addResource(lng, ns, key, value) {
+        var options = arguments.length > 4 && arguments[4] !== void 0 ? arguments[4] : {
+          silent: false
+        };
+        var keySeparator = this.options.keySeparator;
+        if (keySeparator === void 0)
+          keySeparator = ".";
+        var path = [lng, ns];
+        if (key)
+          path = path.concat(keySeparator ? key.split(keySeparator) : key);
+        if (lng.indexOf(".") > -1) {
+          path = lng.split(".");
+          value = ns;
+          ns = path[1];
+        }
+        this.addNamespaces(ns);
+        setPath(this.data, path, value);
+        if (!options.silent)
+          this.emit("added", lng, ns, key, value);
+      }
+    }, {
+      key: "addResources",
+      value: function addResources(lng, ns, resources) {
+        var options = arguments.length > 3 && arguments[3] !== void 0 ? arguments[3] : {
+          silent: false
+        };
+        for (var m in resources) {
+          if (typeof resources[m] === "string" || Object.prototype.toString.apply(resources[m]) === "[object Array]")
+            this.addResource(lng, ns, m, resources[m], {
+              silent: true
+            });
+        }
+        if (!options.silent)
+          this.emit("added", lng, ns, resources);
+      }
+    }, {
+      key: "addResourceBundle",
+      value: function addResourceBundle(lng, ns, resources, deep, overwrite) {
+        var options = arguments.length > 5 && arguments[5] !== void 0 ? arguments[5] : {
+          silent: false
+        };
+        var path = [lng, ns];
+        if (lng.indexOf(".") > -1) {
+          path = lng.split(".");
+          deep = resources;
+          resources = ns;
+          ns = path[1];
+        }
+        this.addNamespaces(ns);
+        var pack = getPath(this.data, path) || {};
+        if (deep) {
+          deepExtend(pack, resources, overwrite);
+        } else {
+          pack = _objectSpread$5(_objectSpread$5({}, pack), resources);
+        }
+        setPath(this.data, path, pack);
+        if (!options.silent)
+          this.emit("added", lng, ns, resources);
+      }
+    }, {
+      key: "removeResourceBundle",
+      value: function removeResourceBundle(lng, ns) {
+        if (this.hasResourceBundle(lng, ns)) {
+          delete this.data[lng][ns];
+        }
+        this.removeNamespaces(ns);
+        this.emit("removed", lng, ns);
+      }
+    }, {
+      key: "hasResourceBundle",
+      value: function hasResourceBundle(lng, ns) {
+        return this.getResource(lng, ns) !== void 0;
+      }
+    }, {
+      key: "getResourceBundle",
+      value: function getResourceBundle(lng, ns) {
+        if (!ns)
+          ns = this.options.defaultNS;
+        if (this.options.compatibilityAPI === "v1")
+          return _objectSpread$5(_objectSpread$5({}, {}), this.getResource(lng, ns));
+        return this.getResource(lng, ns);
+      }
+    }, {
+      key: "getDataByLanguage",
+      value: function getDataByLanguage(lng) {
+        return this.data[lng];
+      }
+    }, {
+      key: "hasLanguageSomeTranslations",
+      value: function hasLanguageSomeTranslations(lng) {
+        var data = this.getDataByLanguage(lng);
+        var n = data && Object.keys(data) || [];
+        return !!n.find(function(v) {
+          return data[v] && Object.keys(data[v]).length > 0;
+        });
+      }
+    }, {
+      key: "toJSON",
+      value: function toJSON() {
+        return this.data;
+      }
+    }]);
+    return ResourceStore2;
+  }(EventEmitter);
+  var postProcessor = {
+    processors: {},
+    addPostProcessor: function addPostProcessor(module) {
+      this.processors[module.name] = module;
+    },
+    handle: function handle(processors, value, key, options, translator) {
+      var _this = this;
+      processors.forEach(function(processor) {
+        if (_this.processors[processor])
+          value = _this.processors[processor].process(value, key, options, translator);
+      });
+      return value;
+    }
+  };
+  function ownKeys$4(object2, enumerableOnly) {
+    var keys = Object.keys(object2);
+    if (Object.getOwnPropertySymbols) {
+      var symbols = Object.getOwnPropertySymbols(object2);
+      enumerableOnly && (symbols = symbols.filter(function(sym) {
+        return Object.getOwnPropertyDescriptor(object2, sym).enumerable;
+      })), keys.push.apply(keys, symbols);
+    }
+    return keys;
+  }
+  function _objectSpread$4(target) {
+    for (var i = 1; i < arguments.length; i++) {
+      var source = null != arguments[i] ? arguments[i] : {};
+      i % 2 ? ownKeys$4(Object(source), true).forEach(function(key) {
+        _defineProperty(target, key, source[key]);
+      }) : Object.getOwnPropertyDescriptors ? Object.defineProperties(target, Object.getOwnPropertyDescriptors(source)) : ownKeys$4(Object(source)).forEach(function(key) {
+        Object.defineProperty(target, key, Object.getOwnPropertyDescriptor(source, key));
+      });
+    }
+    return target;
+  }
+  function _createSuper$2(Derived) {
+    var hasNativeReflectConstruct = _isNativeReflectConstruct$2();
+    return function _createSuperInternal() {
+      var Super = _getPrototypeOf(Derived), result3;
+      if (hasNativeReflectConstruct) {
+        var NewTarget = _getPrototypeOf(this).constructor;
+        result3 = Reflect.construct(Super, arguments, NewTarget);
+      } else {
+        result3 = Super.apply(this, arguments);
+      }
+      return _possibleConstructorReturn(this, result3);
+    };
+  }
+  function _isNativeReflectConstruct$2() {
+    if (typeof Reflect === "undefined" || !Reflect.construct)
+      return false;
+    if (Reflect.construct.sham)
+      return false;
+    if (typeof Proxy === "function")
+      return true;
+    try {
+      Boolean.prototype.valueOf.call(Reflect.construct(Boolean, [], function() {
+      }));
+      return true;
+    } catch (e) {
+      return false;
+    }
+  }
+  var checkedLoadedFor = {};
+  var Translator = function(_EventEmitter) {
+    _inherits(Translator2, _EventEmitter);
+    var _super = _createSuper$2(Translator2);
+    function Translator2(services) {
+      var _this;
+      var options = arguments.length > 1 && arguments[1] !== void 0 ? arguments[1] : {};
+      _classCallCheck(this, Translator2);
+      _this = _super.call(this);
+      if (isIE10) {
+        EventEmitter.call(_assertThisInitialized(_this));
+      }
+      copy(["resourceStore", "languageUtils", "pluralResolver", "interpolator", "backendConnector", "i18nFormat", "utils"], services, _assertThisInitialized(_this));
+      _this.options = options;
+      if (_this.options.keySeparator === void 0) {
+        _this.options.keySeparator = ".";
+      }
+      _this.logger = baseLogger.create("translator");
+      return _this;
+    }
+    _createClass(Translator2, [{
+      key: "changeLanguage",
+      value: function changeLanguage2(lng) {
+        if (lng)
+          this.language = lng;
+      }
+    }, {
+      key: "exists",
+      value: function exists2(key) {
+        var options = arguments.length > 1 && arguments[1] !== void 0 ? arguments[1] : {
+          interpolation: {}
+        };
+        if (key === void 0 || key === null) {
+          return false;
+        }
+        var resolved = this.resolve(key, options);
+        return resolved && resolved.res !== void 0;
+      }
+    }, {
+      key: "extractFromKey",
+      value: function extractFromKey(key, options) {
+        var nsSeparator = options.nsSeparator !== void 0 ? options.nsSeparator : this.options.nsSeparator;
+        if (nsSeparator === void 0)
+          nsSeparator = ":";
+        var keySeparator = options.keySeparator !== void 0 ? options.keySeparator : this.options.keySeparator;
+        var namespaces = options.ns || this.options.defaultNS || [];
+        var wouldCheckForNsInKey = nsSeparator && key.indexOf(nsSeparator) > -1;
+        var seemsNaturalLanguage = !this.options.userDefinedKeySeparator && !options.keySeparator && !this.options.userDefinedNsSeparator && !options.nsSeparator && !looksLikeObjectPath(key, nsSeparator, keySeparator);
+        if (wouldCheckForNsInKey && !seemsNaturalLanguage) {
+          var m = key.match(this.interpolator.nestingRegexp);
+          if (m && m.length > 0) {
+            return {
+              key,
+              namespaces
+            };
+          }
+          var parts = key.split(nsSeparator);
+          if (nsSeparator !== keySeparator || nsSeparator === keySeparator && this.options.ns.indexOf(parts[0]) > -1)
+            namespaces = parts.shift();
+          key = parts.join(keySeparator);
+        }
+        if (typeof namespaces === "string")
+          namespaces = [namespaces];
+        return {
+          key,
+          namespaces
+        };
+      }
+    }, {
+      key: "translate",
+      value: function translate(keys, options, lastKey) {
+        var _this2 = this;
+        if (_typeof(options) !== "object" && this.options.overloadTranslationOptionHandler) {
+          options = this.options.overloadTranslationOptionHandler(arguments);
+        }
+        if (!options)
+          options = {};
+        if (keys === void 0 || keys === null)
+          return "";
+        if (!Array.isArray(keys))
+          keys = [String(keys)];
+        var returnDetails = options.returnDetails !== void 0 ? options.returnDetails : this.options.returnDetails;
+        var keySeparator = options.keySeparator !== void 0 ? options.keySeparator : this.options.keySeparator;
+        var _this$extractFromKey = this.extractFromKey(keys[keys.length - 1], options), key = _this$extractFromKey.key, namespaces = _this$extractFromKey.namespaces;
+        var namespace = namespaces[namespaces.length - 1];
+        var lng = options.lng || this.language;
+        var appendNamespaceToCIMode = options.appendNamespaceToCIMode || this.options.appendNamespaceToCIMode;
+        if (lng && lng.toLowerCase() === "cimode") {
+          if (appendNamespaceToCIMode) {
+            var nsSeparator = options.nsSeparator || this.options.nsSeparator;
+            if (returnDetails) {
+              return {
+                res: "".concat(namespace).concat(nsSeparator).concat(key),
+                usedKey: key,
+                exactUsedKey: key,
+                usedLng: lng,
+                usedNS: namespace
+              };
+            }
+            return "".concat(namespace).concat(nsSeparator).concat(key);
+          }
+          if (returnDetails) {
+            return {
+              res: key,
+              usedKey: key,
+              exactUsedKey: key,
+              usedLng: lng,
+              usedNS: namespace
+            };
+          }
+          return key;
+        }
+        var resolved = this.resolve(keys, options);
+        var res = resolved && resolved.res;
+        var resUsedKey = resolved && resolved.usedKey || key;
+        var resExactUsedKey = resolved && resolved.exactUsedKey || key;
+        var resType = Object.prototype.toString.apply(res);
+        var noObject = ["[object Number]", "[object Function]", "[object RegExp]"];
+        var joinArrays = options.joinArrays !== void 0 ? options.joinArrays : this.options.joinArrays;
+        var handleAsObjectInI18nFormat = !this.i18nFormat || this.i18nFormat.handleAsObject;
+        var handleAsObject = typeof res !== "string" && typeof res !== "boolean" && typeof res !== "number";
+        if (handleAsObjectInI18nFormat && res && handleAsObject && noObject.indexOf(resType) < 0 && !(typeof joinArrays === "string" && resType === "[object Array]")) {
+          if (!options.returnObjects && !this.options.returnObjects) {
+            if (!this.options.returnedObjectHandler) {
+              this.logger.warn("accessing an object - but returnObjects options is not enabled!");
+            }
+            var r = this.options.returnedObjectHandler ? this.options.returnedObjectHandler(resUsedKey, res, _objectSpread$4(_objectSpread$4({}, options), {}, {
+              ns: namespaces
+            })) : "key '".concat(key, " (").concat(this.language, ")' returned an object instead of string.");
+            if (returnDetails) {
+              resolved.res = r;
+              return resolved;
+            }
+            return r;
+          }
+          if (keySeparator) {
+            var resTypeIsArray = resType === "[object Array]";
+            var copy2 = resTypeIsArray ? [] : {};
+            var newKeyToUse = resTypeIsArray ? resExactUsedKey : resUsedKey;
+            for (var m in res) {
+              if (Object.prototype.hasOwnProperty.call(res, m)) {
+                var deepKey = "".concat(newKeyToUse).concat(keySeparator).concat(m);
+                copy2[m] = this.translate(deepKey, _objectSpread$4(_objectSpread$4({}, options), {
+                  joinArrays: false,
+                  ns: namespaces
+                }));
+                if (copy2[m] === deepKey)
+                  copy2[m] = res[m];
+              }
+            }
+            res = copy2;
+          }
+        } else if (handleAsObjectInI18nFormat && typeof joinArrays === "string" && resType === "[object Array]") {
+          res = res.join(joinArrays);
+          if (res)
+            res = this.extendTranslation(res, keys, options, lastKey);
+        } else {
+          var usedDefault = false;
+          var usedKey = false;
+          var needsPluralHandling = options.count !== void 0 && typeof options.count !== "string";
+          var hasDefaultValue = Translator2.hasDefaultValue(options);
+          var defaultValueSuffix = needsPluralHandling ? this.pluralResolver.getSuffix(lng, options.count, options) : "";
+          var defaultValue = options["defaultValue".concat(defaultValueSuffix)] || options.defaultValue;
+          if (!this.isValidLookup(res) && hasDefaultValue) {
+            usedDefault = true;
+            res = defaultValue;
+          }
+          if (!this.isValidLookup(res)) {
+            usedKey = true;
+            res = key;
+          }
+          var missingKeyNoValueFallbackToKey = options.missingKeyNoValueFallbackToKey || this.options.missingKeyNoValueFallbackToKey;
+          var resForMissing = missingKeyNoValueFallbackToKey && usedKey ? void 0 : res;
+          var updateMissing = hasDefaultValue && defaultValue !== res && this.options.updateMissing;
+          if (usedKey || usedDefault || updateMissing) {
+            this.logger.log(updateMissing ? "updateKey" : "missingKey", lng, namespace, key, updateMissing ? defaultValue : res);
+            if (keySeparator) {
+              var fk = this.resolve(key, _objectSpread$4(_objectSpread$4({}, options), {}, {
+                keySeparator: false
+              }));
+              if (fk && fk.res)
+                this.logger.warn("Seems the loaded translations were in flat JSON format instead of nested. Either set keySeparator: false on init or make sure your translations are published in nested format.");
+            }
+            var lngs = [];
+            var fallbackLngs = this.languageUtils.getFallbackCodes(this.options.fallbackLng, options.lng || this.language);
+            if (this.options.saveMissingTo === "fallback" && fallbackLngs && fallbackLngs[0]) {
+              for (var i = 0; i < fallbackLngs.length; i++) {
+                lngs.push(fallbackLngs[i]);
+              }
+            } else if (this.options.saveMissingTo === "all") {
+              lngs = this.languageUtils.toResolveHierarchy(options.lng || this.language);
+            } else {
+              lngs.push(options.lng || this.language);
+            }
+            var send = function send2(l, k, specificDefaultValue) {
+              var defaultForMissing = hasDefaultValue && specificDefaultValue !== res ? specificDefaultValue : resForMissing;
+              if (_this2.options.missingKeyHandler) {
+                _this2.options.missingKeyHandler(l, namespace, k, defaultForMissing, updateMissing, options);
+              } else if (_this2.backendConnector && _this2.backendConnector.saveMissing) {
+                _this2.backendConnector.saveMissing(l, namespace, k, defaultForMissing, updateMissing, options);
+              }
+              _this2.emit("missingKey", l, namespace, k, res);
+            };
+            if (this.options.saveMissing) {
+              if (this.options.saveMissingPlurals && needsPluralHandling) {
+                lngs.forEach(function(language) {
+                  _this2.pluralResolver.getSuffixes(language, options).forEach(function(suffix) {
+                    send([language], key + suffix, options["defaultValue".concat(suffix)] || defaultValue);
+                  });
+                });
+              } else {
+                send(lngs, key, defaultValue);
+              }
+            }
+          }
+          res = this.extendTranslation(res, keys, options, resolved, lastKey);
+          if (usedKey && res === key && this.options.appendNamespaceToMissingKey)
+            res = "".concat(namespace, ":").concat(key);
+          if ((usedKey || usedDefault) && this.options.parseMissingKeyHandler) {
+            if (this.options.compatibilityAPI !== "v1") {
+              res = this.options.parseMissingKeyHandler(this.options.appendNamespaceToMissingKey ? "".concat(namespace, ":").concat(key) : key, usedDefault ? res : void 0);
+            } else {
+              res = this.options.parseMissingKeyHandler(res);
+            }
+          }
+        }
+        if (returnDetails) {
+          resolved.res = res;
+          return resolved;
+        }
+        return res;
+      }
+    }, {
+      key: "extendTranslation",
+      value: function extendTranslation(res, key, options, resolved, lastKey) {
+        var _this3 = this;
+        if (this.i18nFormat && this.i18nFormat.parse) {
+          res = this.i18nFormat.parse(res, _objectSpread$4(_objectSpread$4({}, this.options.interpolation.defaultVariables), options), resolved.usedLng, resolved.usedNS, resolved.usedKey, {
+            resolved
+          });
+        } else if (!options.skipInterpolation) {
+          if (options.interpolation)
+            this.interpolator.init(_objectSpread$4(_objectSpread$4({}, options), {
+              interpolation: _objectSpread$4(_objectSpread$4({}, this.options.interpolation), options.interpolation)
+            }));
+          var skipOnVariables = typeof res === "string" && (options && options.interpolation && options.interpolation.skipOnVariables !== void 0 ? options.interpolation.skipOnVariables : this.options.interpolation.skipOnVariables);
+          var nestBef;
+          if (skipOnVariables) {
+            var nb = res.match(this.interpolator.nestingRegexp);
+            nestBef = nb && nb.length;
+          }
+          var data = options.replace && typeof options.replace !== "string" ? options.replace : options;
+          if (this.options.interpolation.defaultVariables)
+            data = _objectSpread$4(_objectSpread$4({}, this.options.interpolation.defaultVariables), data);
+          res = this.interpolator.interpolate(res, data, options.lng || this.language, options);
+          if (skipOnVariables) {
+            var na = res.match(this.interpolator.nestingRegexp);
+            var nestAft = na && na.length;
+            if (nestBef < nestAft)
+              options.nest = false;
+          }
+          if (options.nest !== false)
+            res = this.interpolator.nest(res, function() {
+              for (var _len = arguments.length, args = new Array(_len), _key = 0; _key < _len; _key++) {
+                args[_key] = arguments[_key];
+              }
+              if (lastKey && lastKey[0] === args[0] && !options.context) {
+                _this3.logger.warn("It seems you are nesting recursively key: ".concat(args[0], " in key: ").concat(key[0]));
+                return null;
+              }
+              return _this3.translate.apply(_this3, args.concat([key]));
+            }, options);
+          if (options.interpolation)
+            this.interpolator.reset();
+        }
+        var postProcess = options.postProcess || this.options.postProcess;
+        var postProcessorNames = typeof postProcess === "string" ? [postProcess] : postProcess;
+        if (res !== void 0 && res !== null && postProcessorNames && postProcessorNames.length && options.applyPostProcessor !== false) {
+          res = postProcessor.handle(postProcessorNames, res, key, this.options && this.options.postProcessPassResolved ? _objectSpread$4({
+            i18nResolved: resolved
+          }, options) : options, this);
+        }
+        return res;
+      }
+    }, {
+      key: "resolve",
+      value: function resolve(keys) {
+        var _this4 = this;
+        var options = arguments.length > 1 && arguments[1] !== void 0 ? arguments[1] : {};
+        var found;
+        var usedKey;
+        var exactUsedKey;
+        var usedLng;
+        var usedNS;
+        if (typeof keys === "string")
+          keys = [keys];
+        keys.forEach(function(k) {
+          if (_this4.isValidLookup(found))
+            return;
+          var extracted = _this4.extractFromKey(k, options);
+          var key = extracted.key;
+          usedKey = key;
+          var namespaces = extracted.namespaces;
+          if (_this4.options.fallbackNS)
+            namespaces = namespaces.concat(_this4.options.fallbackNS);
+          var needsPluralHandling = options.count !== void 0 && typeof options.count !== "string";
+          var needsZeroSuffixLookup = needsPluralHandling && !options.ordinal && options.count === 0 && _this4.pluralResolver.shouldUseIntlApi();
+          var needsContextHandling = options.context !== void 0 && (typeof options.context === "string" || typeof options.context === "number") && options.context !== "";
+          var codes = options.lngs ? options.lngs : _this4.languageUtils.toResolveHierarchy(options.lng || _this4.language, options.fallbackLng);
+          namespaces.forEach(function(ns) {
+            if (_this4.isValidLookup(found))
+              return;
+            usedNS = ns;
+            if (!checkedLoadedFor["".concat(codes[0], "-").concat(ns)] && _this4.utils && _this4.utils.hasLoadedNamespace && !_this4.utils.hasLoadedNamespace(usedNS)) {
+              checkedLoadedFor["".concat(codes[0], "-").concat(ns)] = true;
+              _this4.logger.warn('key "'.concat(usedKey, '" for languages "').concat(codes.join(", "), `" won't get resolved as namespace "`).concat(usedNS, '" was not yet loaded'), "This means something IS WRONG in your setup. You access the t function before i18next.init / i18next.loadNamespace / i18next.changeLanguage was done. Wait for the callback or Promise to resolve before accessing it!!!");
+            }
+            codes.forEach(function(code) {
+              if (_this4.isValidLookup(found))
+                return;
+              usedLng = code;
+              var finalKeys = [key];
+              if (_this4.i18nFormat && _this4.i18nFormat.addLookupKeys) {
+                _this4.i18nFormat.addLookupKeys(finalKeys, key, code, ns, options);
+              } else {
+                var pluralSuffix;
+                if (needsPluralHandling)
+                  pluralSuffix = _this4.pluralResolver.getSuffix(code, options.count, options);
+                var zeroSuffix = "".concat(_this4.options.pluralSeparator, "zero");
+                if (needsPluralHandling) {
+                  finalKeys.push(key + pluralSuffix);
+                  if (needsZeroSuffixLookup) {
+                    finalKeys.push(key + zeroSuffix);
+                  }
+                }
+                if (needsContextHandling) {
+                  var contextKey = "".concat(key).concat(_this4.options.contextSeparator).concat(options.context);
+                  finalKeys.push(contextKey);
+                  if (needsPluralHandling) {
+                    finalKeys.push(contextKey + pluralSuffix);
+                    if (needsZeroSuffixLookup) {
+                      finalKeys.push(contextKey + zeroSuffix);
+                    }
+                  }
+                }
+              }
+              var possibleKey;
+              while (possibleKey = finalKeys.pop()) {
+                if (!_this4.isValidLookup(found)) {
+                  exactUsedKey = possibleKey;
+                  found = _this4.getResource(code, ns, possibleKey, options);
+                }
+              }
+            });
+          });
+        });
+        return {
+          res: found,
+          usedKey,
+          exactUsedKey,
+          usedLng,
+          usedNS
+        };
+      }
+    }, {
+      key: "isValidLookup",
+      value: function isValidLookup(res) {
+        return res !== void 0 && !(!this.options.returnNull && res === null) && !(!this.options.returnEmptyString && res === "");
+      }
+    }, {
+      key: "getResource",
+      value: function getResource(code, ns, key) {
+        var options = arguments.length > 3 && arguments[3] !== void 0 ? arguments[3] : {};
+        if (this.i18nFormat && this.i18nFormat.getResource)
+          return this.i18nFormat.getResource(code, ns, key, options);
+        return this.resourceStore.getResource(code, ns, key, options);
+      }
+    }], [{
+      key: "hasDefaultValue",
+      value: function hasDefaultValue(options) {
+        var prefix = "defaultValue";
+        for (var option in options) {
+          if (Object.prototype.hasOwnProperty.call(options, option) && prefix === option.substring(0, prefix.length) && void 0 !== options[option]) {
+            return true;
+          }
+        }
+        return false;
+      }
+    }]);
+    return Translator2;
+  }(EventEmitter);
+  function capitalize(string) {
+    return string.charAt(0).toUpperCase() + string.slice(1);
+  }
+  var LanguageUtil = function() {
+    function LanguageUtil2(options) {
+      _classCallCheck(this, LanguageUtil2);
+      this.options = options;
+      this.supportedLngs = this.options.supportedLngs || false;
+      this.logger = baseLogger.create("languageUtils");
+    }
+    _createClass(LanguageUtil2, [{
+      key: "getScriptPartFromCode",
+      value: function getScriptPartFromCode(code) {
+        if (!code || code.indexOf("-") < 0)
+          return null;
+        var p = code.split("-");
+        if (p.length === 2)
+          return null;
+        p.pop();
+        if (p[p.length - 1].toLowerCase() === "x")
+          return null;
+        return this.formatLanguageCode(p.join("-"));
+      }
+    }, {
+      key: "getLanguagePartFromCode",
+      value: function getLanguagePartFromCode(code) {
+        if (!code || code.indexOf("-") < 0)
+          return code;
+        var p = code.split("-");
+        return this.formatLanguageCode(p[0]);
+      }
+    }, {
+      key: "formatLanguageCode",
+      value: function formatLanguageCode(code) {
+        if (typeof code === "string" && code.indexOf("-") > -1) {
+          var specialCases = ["hans", "hant", "latn", "cyrl", "cans", "mong", "arab"];
+          var p = code.split("-");
+          if (this.options.lowerCaseLng) {
+            p = p.map(function(part) {
+              return part.toLowerCase();
+            });
+          } else if (p.length === 2) {
+            p[0] = p[0].toLowerCase();
+            p[1] = p[1].toUpperCase();
+            if (specialCases.indexOf(p[1].toLowerCase()) > -1)
+              p[1] = capitalize(p[1].toLowerCase());
+          } else if (p.length === 3) {
+            p[0] = p[0].toLowerCase();
+            if (p[1].length === 2)
+              p[1] = p[1].toUpperCase();
+            if (p[0] !== "sgn" && p[2].length === 2)
+              p[2] = p[2].toUpperCase();
+            if (specialCases.indexOf(p[1].toLowerCase()) > -1)
+              p[1] = capitalize(p[1].toLowerCase());
+            if (specialCases.indexOf(p[2].toLowerCase()) > -1)
+              p[2] = capitalize(p[2].toLowerCase());
+          }
+          return p.join("-");
+        }
+        return this.options.cleanCode || this.options.lowerCaseLng ? code.toLowerCase() : code;
+      }
+    }, {
+      key: "isSupportedCode",
+      value: function isSupportedCode(code) {
+        if (this.options.load === "languageOnly" || this.options.nonExplicitSupportedLngs) {
+          code = this.getLanguagePartFromCode(code);
+        }
+        return !this.supportedLngs || !this.supportedLngs.length || this.supportedLngs.indexOf(code) > -1;
+      }
+    }, {
+      key: "getBestMatchFromCodes",
+      value: function getBestMatchFromCodes(codes) {
+        var _this = this;
+        if (!codes)
+          return null;
+        var found;
+        codes.forEach(function(code) {
+          if (found)
+            return;
+          var cleanedLng = _this.formatLanguageCode(code);
+          if (!_this.options.supportedLngs || _this.isSupportedCode(cleanedLng))
+            found = cleanedLng;
+        });
+        if (!found && this.options.supportedLngs) {
+          codes.forEach(function(code) {
+            if (found)
+              return;
+            var lngOnly = _this.getLanguagePartFromCode(code);
+            if (_this.isSupportedCode(lngOnly))
+              return found = lngOnly;
+            found = _this.options.supportedLngs.find(function(supportedLng) {
+              if (supportedLng.indexOf(lngOnly) === 0)
+                return supportedLng;
+            });
+          });
+        }
+        if (!found)
+          found = this.getFallbackCodes(this.options.fallbackLng)[0];
+        return found;
+      }
+    }, {
+      key: "getFallbackCodes",
+      value: function getFallbackCodes(fallbacks, code) {
+        if (!fallbacks)
+          return [];
+        if (typeof fallbacks === "function")
+          fallbacks = fallbacks(code);
+        if (typeof fallbacks === "string")
+          fallbacks = [fallbacks];
+        if (Object.prototype.toString.apply(fallbacks) === "[object Array]")
+          return fallbacks;
+        if (!code)
+          return fallbacks["default"] || [];
+        var found = fallbacks[code];
+        if (!found)
+          found = fallbacks[this.getScriptPartFromCode(code)];
+        if (!found)
+          found = fallbacks[this.formatLanguageCode(code)];
+        if (!found)
+          found = fallbacks[this.getLanguagePartFromCode(code)];
+        if (!found)
+          found = fallbacks["default"];
+        return found || [];
+      }
+    }, {
+      key: "toResolveHierarchy",
+      value: function toResolveHierarchy(code, fallbackCode) {
+        var _this2 = this;
+        var fallbackCodes = this.getFallbackCodes(fallbackCode || this.options.fallbackLng || [], code);
+        var codes = [];
+        var addCode = function addCode2(c) {
+          if (!c)
+            return;
+          if (_this2.isSupportedCode(c)) {
+            codes.push(c);
+          } else {
+            _this2.logger.warn("rejecting language code not found in supportedLngs: ".concat(c));
+          }
+        };
+        if (typeof code === "string" && code.indexOf("-") > -1) {
+          if (this.options.load !== "languageOnly")
+            addCode(this.formatLanguageCode(code));
+          if (this.options.load !== "languageOnly" && this.options.load !== "currentOnly")
+            addCode(this.getScriptPartFromCode(code));
+          if (this.options.load !== "currentOnly")
+            addCode(this.getLanguagePartFromCode(code));
+        } else if (typeof code === "string") {
+          addCode(this.formatLanguageCode(code));
+        }
+        fallbackCodes.forEach(function(fc) {
+          if (codes.indexOf(fc) < 0)
+            addCode(_this2.formatLanguageCode(fc));
+        });
+        return codes;
+      }
+    }]);
+    return LanguageUtil2;
+  }();
+  var sets = [{
+    lngs: ["ach", "ak", "am", "arn", "br", "fil", "gun", "ln", "mfe", "mg", "mi", "oc", "pt", "pt-BR", "tg", "tl", "ti", "tr", "uz", "wa"],
+    nr: [1, 2],
+    fc: 1
+  }, {
+    lngs: ["af", "an", "ast", "az", "bg", "bn", "ca", "da", "de", "dev", "el", "en", "eo", "es", "et", "eu", "fi", "fo", "fur", "fy", "gl", "gu", "ha", "hi", "hu", "hy", "ia", "it", "kk", "kn", "ku", "lb", "mai", "ml", "mn", "mr", "nah", "nap", "nb", "ne", "nl", "nn", "no", "nso", "pa", "pap", "pms", "ps", "pt-PT", "rm", "sco", "se", "si", "so", "son", "sq", "sv", "sw", "ta", "te", "tk", "ur", "yo"],
+    nr: [1, 2],
+    fc: 2
+  }, {
+    lngs: ["ay", "bo", "cgg", "fa", "ht", "id", "ja", "jbo", "ka", "km", "ko", "ky", "lo", "ms", "sah", "su", "th", "tt", "ug", "vi", "wo", "zh"],
+    nr: [1],
+    fc: 3
+  }, {
+    lngs: ["be", "bs", "cnr", "dz", "hr", "ru", "sr", "uk"],
+    nr: [1, 2, 5],
+    fc: 4
+  }, {
+    lngs: ["ar"],
+    nr: [0, 1, 2, 3, 11, 100],
+    fc: 5
+  }, {
+    lngs: ["cs", "sk"],
+    nr: [1, 2, 5],
+    fc: 6
+  }, {
+    lngs: ["csb", "pl"],
+    nr: [1, 2, 5],
+    fc: 7
+  }, {
+    lngs: ["cy"],
+    nr: [1, 2, 3, 8],
+    fc: 8
+  }, {
+    lngs: ["fr"],
+    nr: [1, 2],
+    fc: 9
+  }, {
+    lngs: ["ga"],
+    nr: [1, 2, 3, 7, 11],
+    fc: 10
+  }, {
+    lngs: ["gd"],
+    nr: [1, 2, 3, 20],
+    fc: 11
+  }, {
+    lngs: ["is"],
+    nr: [1, 2],
+    fc: 12
+  }, {
+    lngs: ["jv"],
+    nr: [0, 1],
+    fc: 13
+  }, {
+    lngs: ["kw"],
+    nr: [1, 2, 3, 4],
+    fc: 14
+  }, {
+    lngs: ["lt"],
+    nr: [1, 2, 10],
+    fc: 15
+  }, {
+    lngs: ["lv"],
+    nr: [1, 2, 0],
+    fc: 16
+  }, {
+    lngs: ["mk"],
+    nr: [1, 2],
+    fc: 17
+  }, {
+    lngs: ["mnk"],
+    nr: [0, 1, 2],
+    fc: 18
+  }, {
+    lngs: ["mt"],
+    nr: [1, 2, 11, 20],
+    fc: 19
+  }, {
+    lngs: ["or"],
+    nr: [2, 1],
+    fc: 2
+  }, {
+    lngs: ["ro"],
+    nr: [1, 2, 20],
+    fc: 20
+  }, {
+    lngs: ["sl"],
+    nr: [5, 1, 2, 3],
+    fc: 21
+  }, {
+    lngs: ["he", "iw"],
+    nr: [1, 2, 20, 21],
+    fc: 22
+  }];
+  var _rulesPluralsTypes = {
+    1: function _(n) {
+      return Number(n > 1);
+    },
+    2: function _2(n) {
+      return Number(n != 1);
+    },
+    3: function _3(n) {
+      return 0;
+    },
+    4: function _4(n) {
+      return Number(n % 10 == 1 && n % 100 != 11 ? 0 : n % 10 >= 2 && n % 10 <= 4 && (n % 100 < 10 || n % 100 >= 20) ? 1 : 2);
+    },
+    5: function _5(n) {
+      return Number(n == 0 ? 0 : n == 1 ? 1 : n == 2 ? 2 : n % 100 >= 3 && n % 100 <= 10 ? 3 : n % 100 >= 11 ? 4 : 5);
+    },
+    6: function _6(n) {
+      return Number(n == 1 ? 0 : n >= 2 && n <= 4 ? 1 : 2);
+    },
+    7: function _7(n) {
+      return Number(n == 1 ? 0 : n % 10 >= 2 && n % 10 <= 4 && (n % 100 < 10 || n % 100 >= 20) ? 1 : 2);
+    },
+    8: function _8(n) {
+      return Number(n == 1 ? 0 : n == 2 ? 1 : n != 8 && n != 11 ? 2 : 3);
+    },
+    9: function _9(n) {
+      return Number(n >= 2);
+    },
+    10: function _10(n) {
+      return Number(n == 1 ? 0 : n == 2 ? 1 : n < 7 ? 2 : n < 11 ? 3 : 4);
+    },
+    11: function _11(n) {
+      return Number(n == 1 || n == 11 ? 0 : n == 2 || n == 12 ? 1 : n > 2 && n < 20 ? 2 : 3);
+    },
+    12: function _12(n) {
+      return Number(n % 10 != 1 || n % 100 == 11);
+    },
+    13: function _13(n) {
+      return Number(n !== 0);
+    },
+    14: function _14(n) {
+      return Number(n == 1 ? 0 : n == 2 ? 1 : n == 3 ? 2 : 3);
+    },
+    15: function _15(n) {
+      return Number(n % 10 == 1 && n % 100 != 11 ? 0 : n % 10 >= 2 && (n % 100 < 10 || n % 100 >= 20) ? 1 : 2);
+    },
+    16: function _16(n) {
+      return Number(n % 10 == 1 && n % 100 != 11 ? 0 : n !== 0 ? 1 : 2);
+    },
+    17: function _17(n) {
+      return Number(n == 1 || n % 10 == 1 && n % 100 != 11 ? 0 : 1);
+    },
+    18: function _18(n) {
+      return Number(n == 0 ? 0 : n == 1 ? 1 : 2);
+    },
+    19: function _19(n) {
+      return Number(n == 1 ? 0 : n == 0 || n % 100 > 1 && n % 100 < 11 ? 1 : n % 100 > 10 && n % 100 < 20 ? 2 : 3);
+    },
+    20: function _20(n) {
+      return Number(n == 1 ? 0 : n == 0 || n % 100 > 0 && n % 100 < 20 ? 1 : 2);
+    },
+    21: function _21(n) {
+      return Number(n % 100 == 1 ? 1 : n % 100 == 2 ? 2 : n % 100 == 3 || n % 100 == 4 ? 3 : 0);
+    },
+    22: function _22(n) {
+      return Number(n == 1 ? 0 : n == 2 ? 1 : (n < 0 || n > 10) && n % 10 == 0 ? 2 : 3);
+    }
+  };
+  var deprecatedJsonVersions = ["v1", "v2", "v3"];
+  var suffixesOrder = {
+    zero: 0,
+    one: 1,
+    two: 2,
+    few: 3,
+    many: 4,
+    other: 5
+  };
+  function createRules() {
+    var rules = {};
+    sets.forEach(function(set) {
+      set.lngs.forEach(function(l) {
+        rules[l] = {
+          numbers: set.nr,
+          plurals: _rulesPluralsTypes[set.fc]
+        };
+      });
+    });
+    return rules;
+  }
+  var PluralResolver = function() {
+    function PluralResolver2(languageUtils) {
+      var options = arguments.length > 1 && arguments[1] !== void 0 ? arguments[1] : {};
+      _classCallCheck(this, PluralResolver2);
+      this.languageUtils = languageUtils;
+      this.options = options;
+      this.logger = baseLogger.create("pluralResolver");
+      if ((!this.options.compatibilityJSON || this.options.compatibilityJSON === "v4") && (typeof Intl === "undefined" || !Intl.PluralRules)) {
+        this.options.compatibilityJSON = "v3";
+        this.logger.error("Your environment seems not to be Intl API compatible, use an Intl.PluralRules polyfill. Will fallback to the compatibilityJSON v3 format handling.");
+      }
+      this.rules = createRules();
+    }
+    _createClass(PluralResolver2, [{
+      key: "addRule",
+      value: function addRule(lng, obj) {
+        this.rules[lng] = obj;
+      }
+    }, {
+      key: "getRule",
+      value: function getRule(code) {
+        var options = arguments.length > 1 && arguments[1] !== void 0 ? arguments[1] : {};
+        if (this.shouldUseIntlApi()) {
+          try {
+            return new Intl.PluralRules(code, {
+              type: options.ordinal ? "ordinal" : "cardinal"
+            });
+          } catch (_unused) {
+            return;
+          }
+        }
+        return this.rules[code] || this.rules[this.languageUtils.getLanguagePartFromCode(code)];
+      }
+    }, {
+      key: "needsPlural",
+      value: function needsPlural(code) {
+        var options = arguments.length > 1 && arguments[1] !== void 0 ? arguments[1] : {};
+        var rule = this.getRule(code, options);
+        if (this.shouldUseIntlApi()) {
+          return rule && rule.resolvedOptions().pluralCategories.length > 1;
+        }
+        return rule && rule.numbers.length > 1;
+      }
+    }, {
+      key: "getPluralFormsOfKey",
+      value: function getPluralFormsOfKey(code, key) {
+        var options = arguments.length > 2 && arguments[2] !== void 0 ? arguments[2] : {};
+        return this.getSuffixes(code, options).map(function(suffix) {
+          return "".concat(key).concat(suffix);
+        });
+      }
+    }, {
+      key: "getSuffixes",
+      value: function getSuffixes(code) {
+        var _this = this;
+        var options = arguments.length > 1 && arguments[1] !== void 0 ? arguments[1] : {};
+        var rule = this.getRule(code, options);
+        if (!rule) {
+          return [];
+        }
+        if (this.shouldUseIntlApi()) {
+          return rule.resolvedOptions().pluralCategories.sort(function(pluralCategory1, pluralCategory2) {
+            return suffixesOrder[pluralCategory1] - suffixesOrder[pluralCategory2];
+          }).map(function(pluralCategory) {
+            return "".concat(_this.options.prepend).concat(pluralCategory);
+          });
+        }
+        return rule.numbers.map(function(number) {
+          return _this.getSuffix(code, number, options);
+        });
+      }
+    }, {
+      key: "getSuffix",
+      value: function getSuffix(code, count) {
+        var options = arguments.length > 2 && arguments[2] !== void 0 ? arguments[2] : {};
+        var rule = this.getRule(code, options);
+        if (rule) {
+          if (this.shouldUseIntlApi()) {
+            return "".concat(this.options.prepend).concat(rule.select(count));
+          }
+          return this.getSuffixRetroCompatible(rule, count);
+        }
+        this.logger.warn("no plural rule found for: ".concat(code));
+        return "";
+      }
+    }, {
+      key: "getSuffixRetroCompatible",
+      value: function getSuffixRetroCompatible(rule, count) {
+        var _this2 = this;
+        var idx = rule.noAbs ? rule.plurals(count) : rule.plurals(Math.abs(count));
+        var suffix = rule.numbers[idx];
+        if (this.options.simplifyPluralSuffix && rule.numbers.length === 2 && rule.numbers[0] === 1) {
+          if (suffix === 2) {
+            suffix = "plural";
+          } else if (suffix === 1) {
+            suffix = "";
+          }
+        }
+        var returnSuffix = function returnSuffix2() {
+          return _this2.options.prepend && suffix.toString() ? _this2.options.prepend + suffix.toString() : suffix.toString();
+        };
+        if (this.options.compatibilityJSON === "v1") {
+          if (suffix === 1)
+            return "";
+          if (typeof suffix === "number")
+            return "_plural_".concat(suffix.toString());
+          return returnSuffix();
+        } else if (this.options.compatibilityJSON === "v2") {
+          return returnSuffix();
+        } else if (this.options.simplifyPluralSuffix && rule.numbers.length === 2 && rule.numbers[0] === 1) {
+          return returnSuffix();
+        }
+        return this.options.prepend && idx.toString() ? this.options.prepend + idx.toString() : idx.toString();
+      }
+    }, {
+      key: "shouldUseIntlApi",
+      value: function shouldUseIntlApi() {
+        return !deprecatedJsonVersions.includes(this.options.compatibilityJSON);
+      }
+    }]);
+    return PluralResolver2;
+  }();
+  function ownKeys$3(object2, enumerableOnly) {
+    var keys = Object.keys(object2);
+    if (Object.getOwnPropertySymbols) {
+      var symbols = Object.getOwnPropertySymbols(object2);
+      enumerableOnly && (symbols = symbols.filter(function(sym) {
+        return Object.getOwnPropertyDescriptor(object2, sym).enumerable;
+      })), keys.push.apply(keys, symbols);
+    }
+    return keys;
+  }
+  function _objectSpread$3(target) {
+    for (var i = 1; i < arguments.length; i++) {
+      var source = null != arguments[i] ? arguments[i] : {};
+      i % 2 ? ownKeys$3(Object(source), true).forEach(function(key) {
+        _defineProperty(target, key, source[key]);
+      }) : Object.getOwnPropertyDescriptors ? Object.defineProperties(target, Object.getOwnPropertyDescriptors(source)) : ownKeys$3(Object(source)).forEach(function(key) {
+        Object.defineProperty(target, key, Object.getOwnPropertyDescriptor(source, key));
+      });
+    }
+    return target;
+  }
+  var Interpolator = function() {
+    function Interpolator2() {
+      var options = arguments.length > 0 && arguments[0] !== void 0 ? arguments[0] : {};
+      _classCallCheck(this, Interpolator2);
+      this.logger = baseLogger.create("interpolator");
+      this.options = options;
+      this.format = options.interpolation && options.interpolation.format || function(value) {
+        return value;
+      };
+      this.init(options);
+    }
+    _createClass(Interpolator2, [{
+      key: "init",
+      value: function init2() {
+        var options = arguments.length > 0 && arguments[0] !== void 0 ? arguments[0] : {};
+        if (!options.interpolation)
+          options.interpolation = {
+            escapeValue: true
+          };
+        var iOpts = options.interpolation;
+        this.escape = iOpts.escape !== void 0 ? iOpts.escape : escape;
+        this.escapeValue = iOpts.escapeValue !== void 0 ? iOpts.escapeValue : true;
+        this.useRawValueToEscape = iOpts.useRawValueToEscape !== void 0 ? iOpts.useRawValueToEscape : false;
+        this.prefix = iOpts.prefix ? regexEscape(iOpts.prefix) : iOpts.prefixEscaped || "{{";
+        this.suffix = iOpts.suffix ? regexEscape(iOpts.suffix) : iOpts.suffixEscaped || "}}";
+        this.formatSeparator = iOpts.formatSeparator ? iOpts.formatSeparator : iOpts.formatSeparator || ",";
+        this.unescapePrefix = iOpts.unescapeSuffix ? "" : iOpts.unescapePrefix || "-";
+        this.unescapeSuffix = this.unescapePrefix ? "" : iOpts.unescapeSuffix || "";
+        this.nestingPrefix = iOpts.nestingPrefix ? regexEscape(iOpts.nestingPrefix) : iOpts.nestingPrefixEscaped || regexEscape("$t(");
+        this.nestingSuffix = iOpts.nestingSuffix ? regexEscape(iOpts.nestingSuffix) : iOpts.nestingSuffixEscaped || regexEscape(")");
+        this.nestingOptionsSeparator = iOpts.nestingOptionsSeparator ? iOpts.nestingOptionsSeparator : iOpts.nestingOptionsSeparator || ",";
+        this.maxReplaces = iOpts.maxReplaces ? iOpts.maxReplaces : 1e3;
+        this.alwaysFormat = iOpts.alwaysFormat !== void 0 ? iOpts.alwaysFormat : false;
+        this.resetRegExp();
+      }
+    }, {
+      key: "reset",
+      value: function reset() {
+        if (this.options)
+          this.init(this.options);
+      }
+    }, {
+      key: "resetRegExp",
+      value: function resetRegExp() {
+        var regexpStr = "".concat(this.prefix, "(.+?)").concat(this.suffix);
+        this.regexp = new RegExp(regexpStr, "g");
+        var regexpUnescapeStr = "".concat(this.prefix).concat(this.unescapePrefix, "(.+?)").concat(this.unescapeSuffix).concat(this.suffix);
+        this.regexpUnescape = new RegExp(regexpUnescapeStr, "g");
+        var nestingRegexpStr = "".concat(this.nestingPrefix, "(.+?)").concat(this.nestingSuffix);
+        this.nestingRegexp = new RegExp(nestingRegexpStr, "g");
+      }
+    }, {
+      key: "interpolate",
+      value: function interpolate(str, data, lng, options) {
+        var _this = this;
+        var match;
+        var value;
+        var replaces;
+        var defaultData = this.options && this.options.interpolation && this.options.interpolation.defaultVariables || {};
+        function regexSafe(val) {
+          return val.replace(/\$/g, "$$$$");
+        }
+        var handleFormat = function handleFormat2(key) {
+          if (key.indexOf(_this.formatSeparator) < 0) {
+            var path = getPathWithDefaults(data, defaultData, key);
+            return _this.alwaysFormat ? _this.format(path, void 0, lng, _objectSpread$3(_objectSpread$3(_objectSpread$3({}, options), data), {}, {
+              interpolationkey: key
+            })) : path;
+          }
+          var p = key.split(_this.formatSeparator);
+          var k = p.shift().trim();
+          var f = p.join(_this.formatSeparator).trim();
+          return _this.format(getPathWithDefaults(data, defaultData, k), f, lng, _objectSpread$3(_objectSpread$3(_objectSpread$3({}, options), data), {}, {
+            interpolationkey: k
+          }));
+        };
+        this.resetRegExp();
+        var missingInterpolationHandler = options && options.missingInterpolationHandler || this.options.missingInterpolationHandler;
+        var skipOnVariables = options && options.interpolation && options.interpolation.skipOnVariables !== void 0 ? options.interpolation.skipOnVariables : this.options.interpolation.skipOnVariables;
+        var todos = [{
+          regex: this.regexpUnescape,
+          safeValue: function safeValue(val) {
+            return regexSafe(val);
+          }
+        }, {
+          regex: this.regexp,
+          safeValue: function safeValue(val) {
+            return _this.escapeValue ? regexSafe(_this.escape(val)) : regexSafe(val);
+          }
+        }];
+        todos.forEach(function(todo) {
+          replaces = 0;
+          while (match = todo.regex.exec(str)) {
+            var matchedVar = match[1].trim();
+            value = handleFormat(matchedVar);
+            if (value === void 0) {
+              if (typeof missingInterpolationHandler === "function") {
+                var temp = missingInterpolationHandler(str, match, options);
+                value = typeof temp === "string" ? temp : "";
+              } else if (options && Object.prototype.hasOwnProperty.call(options, matchedVar)) {
+                value = "";
+              } else if (skipOnVariables) {
+                value = match[0];
+                continue;
+              } else {
+                _this.logger.warn("missed to pass in variable ".concat(matchedVar, " for interpolating ").concat(str));
+                value = "";
+              }
+            } else if (typeof value !== "string" && !_this.useRawValueToEscape) {
+              value = makeString(value);
+            }
+            var safeValue = todo.safeValue(value);
+            str = str.replace(match[0], safeValue);
+            if (skipOnVariables) {
+              todo.regex.lastIndex += value.length;
+              todo.regex.lastIndex -= match[0].length;
+            } else {
+              todo.regex.lastIndex = 0;
+            }
+            replaces++;
+            if (replaces >= _this.maxReplaces) {
+              break;
+            }
+          }
+        });
+        return str;
+      }
+    }, {
+      key: "nest",
+      value: function nest(str, fc) {
+        var _this2 = this;
+        var options = arguments.length > 2 && arguments[2] !== void 0 ? arguments[2] : {};
+        var match;
+        var value;
+        var clonedOptions;
+        function handleHasOptions(key, inheritedOptions) {
+          var sep = this.nestingOptionsSeparator;
+          if (key.indexOf(sep) < 0)
+            return key;
+          var c = key.split(new RegExp("".concat(sep, "[ ]*{")));
+          var optionsString = "{".concat(c[1]);
+          key = c[0];
+          optionsString = this.interpolate(optionsString, clonedOptions);
+          var matchedSingleQuotes = optionsString.match(/'/g);
+          var matchedDoubleQuotes = optionsString.match(/"/g);
+          if (matchedSingleQuotes && matchedSingleQuotes.length % 2 === 0 && !matchedDoubleQuotes || matchedDoubleQuotes.length % 2 !== 0) {
+            optionsString = optionsString.replace(/'/g, '"');
+          }
+          try {
+            clonedOptions = JSON.parse(optionsString);
+            if (inheritedOptions)
+              clonedOptions = _objectSpread$3(_objectSpread$3({}, inheritedOptions), clonedOptions);
+          } catch (e) {
+            this.logger.warn("failed parsing options string in nesting for key ".concat(key), e);
+            return "".concat(key).concat(sep).concat(optionsString);
+          }
+          delete clonedOptions.defaultValue;
+          return key;
+        }
+        while (match = this.nestingRegexp.exec(str)) {
+          var formatters = [];
+          clonedOptions = _objectSpread$3({}, options);
+          clonedOptions = clonedOptions.replace && typeof clonedOptions.replace !== "string" ? clonedOptions.replace : clonedOptions;
+          clonedOptions.applyPostProcessor = false;
+          delete clonedOptions.defaultValue;
+          var doReduce = false;
+          if (match[0].indexOf(this.formatSeparator) !== -1 && !/{.*}/.test(match[1])) {
+            var r = match[1].split(this.formatSeparator).map(function(elem) {
+              return elem.trim();
+            });
+            match[1] = r.shift();
+            formatters = r;
+            doReduce = true;
+          }
+          value = fc(handleHasOptions.call(this, match[1].trim(), clonedOptions), clonedOptions);
+          if (value && match[0] === str && typeof value !== "string")
+            return value;
+          if (typeof value !== "string")
+            value = makeString(value);
+          if (!value) {
+            this.logger.warn("missed to resolve ".concat(match[1], " for nesting ").concat(str));
+            value = "";
+          }
+          if (doReduce) {
+            value = formatters.reduce(function(v, f) {
+              return _this2.format(v, f, options.lng, _objectSpread$3(_objectSpread$3({}, options), {}, {
+                interpolationkey: match[1].trim()
+              }));
+            }, value.trim());
+          }
+          str = str.replace(match[0], value);
+          this.regexp.lastIndex = 0;
+        }
+        return str;
+      }
+    }]);
+    return Interpolator2;
+  }();
+  function ownKeys$2(object2, enumerableOnly) {
+    var keys = Object.keys(object2);
+    if (Object.getOwnPropertySymbols) {
+      var symbols = Object.getOwnPropertySymbols(object2);
+      enumerableOnly && (symbols = symbols.filter(function(sym) {
+        return Object.getOwnPropertyDescriptor(object2, sym).enumerable;
+      })), keys.push.apply(keys, symbols);
+    }
+    return keys;
+  }
+  function _objectSpread$2(target) {
+    for (var i = 1; i < arguments.length; i++) {
+      var source = null != arguments[i] ? arguments[i] : {};
+      i % 2 ? ownKeys$2(Object(source), true).forEach(function(key) {
+        _defineProperty(target, key, source[key]);
+      }) : Object.getOwnPropertyDescriptors ? Object.defineProperties(target, Object.getOwnPropertyDescriptors(source)) : ownKeys$2(Object(source)).forEach(function(key) {
+        Object.defineProperty(target, key, Object.getOwnPropertyDescriptor(source, key));
+      });
+    }
+    return target;
+  }
+  function parseFormatStr(formatStr) {
+    var formatName = formatStr.toLowerCase().trim();
+    var formatOptions = {};
+    if (formatStr.indexOf("(") > -1) {
+      var p = formatStr.split("(");
+      formatName = p[0].toLowerCase().trim();
+      var optStr = p[1].substring(0, p[1].length - 1);
+      if (formatName === "currency" && optStr.indexOf(":") < 0) {
+        if (!formatOptions.currency)
+          formatOptions.currency = optStr.trim();
+      } else if (formatName === "relativetime" && optStr.indexOf(":") < 0) {
+        if (!formatOptions.range)
+          formatOptions.range = optStr.trim();
+      } else {
+        var opts = optStr.split(";");
+        opts.forEach(function(opt) {
+          if (!opt)
+            return;
+          var _opt$split = opt.split(":"), _opt$split2 = _toArray(_opt$split), key = _opt$split2[0], rest = _opt$split2.slice(1);
+          var val = rest.join(":").trim().replace(/^'+|'+$/g, "");
+          if (!formatOptions[key.trim()])
+            formatOptions[key.trim()] = val;
+          if (val === "false")
+            formatOptions[key.trim()] = false;
+          if (val === "true")
+            formatOptions[key.trim()] = true;
+          if (!isNaN(val))
+            formatOptions[key.trim()] = parseInt(val, 10);
+        });
+      }
+    }
+    return {
+      formatName,
+      formatOptions
+    };
+  }
+  function createCachedFormatter(fn) {
+    var cache = {};
+    return function invokeFormatter(val, lng, options) {
+      var key = lng + JSON.stringify(options);
+      var formatter = cache[key];
+      if (!formatter) {
+        formatter = fn(lng, options);
+        cache[key] = formatter;
+      }
+      return formatter(val);
+    };
+  }
+  var Formatter = function() {
+    function Formatter2() {
+      var options = arguments.length > 0 && arguments[0] !== void 0 ? arguments[0] : {};
+      _classCallCheck(this, Formatter2);
+      this.logger = baseLogger.create("formatter");
+      this.options = options;
+      this.formats = {
+        number: createCachedFormatter(function(lng, opt) {
+          var formatter = new Intl.NumberFormat(lng, _objectSpread$2({}, opt));
+          return function(val) {
+            return formatter.format(val);
+          };
+        }),
+        currency: createCachedFormatter(function(lng, opt) {
+          var formatter = new Intl.NumberFormat(lng, _objectSpread$2(_objectSpread$2({}, opt), {}, {
+            style: "currency"
+          }));
+          return function(val) {
+            return formatter.format(val);
+          };
+        }),
+        datetime: createCachedFormatter(function(lng, opt) {
+          var formatter = new Intl.DateTimeFormat(lng, _objectSpread$2({}, opt));
+          return function(val) {
+            return formatter.format(val);
+          };
+        }),
+        relativetime: createCachedFormatter(function(lng, opt) {
+          var formatter = new Intl.RelativeTimeFormat(lng, _objectSpread$2({}, opt));
+          return function(val) {
+            return formatter.format(val, opt.range || "day");
+          };
+        }),
+        list: createCachedFormatter(function(lng, opt) {
+          var formatter = new Intl.ListFormat(lng, _objectSpread$2({}, opt));
+          return function(val) {
+            return formatter.format(val);
+          };
+        })
+      };
+      this.init(options);
+    }
+    _createClass(Formatter2, [{
+      key: "init",
+      value: function init2(services) {
+        var options = arguments.length > 1 && arguments[1] !== void 0 ? arguments[1] : {
+          interpolation: {}
+        };
+        var iOpts = options.interpolation;
+        this.formatSeparator = iOpts.formatSeparator ? iOpts.formatSeparator : iOpts.formatSeparator || ",";
+      }
+    }, {
+      key: "add",
+      value: function add(name, fc) {
+        this.formats[name.toLowerCase().trim()] = fc;
+      }
+    }, {
+      key: "addCached",
+      value: function addCached(name, fc) {
+        this.formats[name.toLowerCase().trim()] = createCachedFormatter(fc);
+      }
+    }, {
+      key: "format",
+      value: function format(value, _format, lng) {
+        var _this = this;
+        var options = arguments.length > 3 && arguments[3] !== void 0 ? arguments[3] : {};
+        var formats = _format.split(this.formatSeparator);
+        var result3 = formats.reduce(function(mem, f) {
+          var _parseFormatStr = parseFormatStr(f), formatName = _parseFormatStr.formatName, formatOptions = _parseFormatStr.formatOptions;
+          if (_this.formats[formatName]) {
+            var formatted = mem;
+            try {
+              var valOptions = options && options.formatParams && options.formatParams[options.interpolationkey] || {};
+              var l = valOptions.locale || valOptions.lng || options.locale || options.lng || lng;
+              formatted = _this.formats[formatName](mem, l, _objectSpread$2(_objectSpread$2(_objectSpread$2({}, formatOptions), options), valOptions));
+            } catch (error2) {
+              _this.logger.warn(error2);
+            }
+            return formatted;
+          } else {
+            _this.logger.warn("there was no format function for ".concat(formatName));
+          }
+          return mem;
+        }, value);
+        return result3;
+      }
+    }]);
+    return Formatter2;
+  }();
+  function ownKeys$1(object2, enumerableOnly) {
+    var keys = Object.keys(object2);
+    if (Object.getOwnPropertySymbols) {
+      var symbols = Object.getOwnPropertySymbols(object2);
+      enumerableOnly && (symbols = symbols.filter(function(sym) {
+        return Object.getOwnPropertyDescriptor(object2, sym).enumerable;
+      })), keys.push.apply(keys, symbols);
+    }
+    return keys;
+  }
+  function _objectSpread$1(target) {
+    for (var i = 1; i < arguments.length; i++) {
+      var source = null != arguments[i] ? arguments[i] : {};
+      i % 2 ? ownKeys$1(Object(source), true).forEach(function(key) {
+        _defineProperty(target, key, source[key]);
+      }) : Object.getOwnPropertyDescriptors ? Object.defineProperties(target, Object.getOwnPropertyDescriptors(source)) : ownKeys$1(Object(source)).forEach(function(key) {
+        Object.defineProperty(target, key, Object.getOwnPropertyDescriptor(source, key));
+      });
+    }
+    return target;
+  }
+  function _createSuper$1(Derived) {
+    var hasNativeReflectConstruct = _isNativeReflectConstruct$1();
+    return function _createSuperInternal() {
+      var Super = _getPrototypeOf(Derived), result3;
+      if (hasNativeReflectConstruct) {
+        var NewTarget = _getPrototypeOf(this).constructor;
+        result3 = Reflect.construct(Super, arguments, NewTarget);
+      } else {
+        result3 = Super.apply(this, arguments);
+      }
+      return _possibleConstructorReturn(this, result3);
+    };
+  }
+  function _isNativeReflectConstruct$1() {
+    if (typeof Reflect === "undefined" || !Reflect.construct)
+      return false;
+    if (Reflect.construct.sham)
+      return false;
+    if (typeof Proxy === "function")
+      return true;
+    try {
+      Boolean.prototype.valueOf.call(Reflect.construct(Boolean, [], function() {
+      }));
+      return true;
+    } catch (e) {
+      return false;
+    }
+  }
+  function removePending(q, name) {
+    if (q.pending[name] !== void 0) {
+      delete q.pending[name];
+      q.pendingCount--;
+    }
+  }
+  var Connector = function(_EventEmitter) {
+    _inherits(Connector2, _EventEmitter);
+    var _super = _createSuper$1(Connector2);
+    function Connector2(backend, store, services) {
+      var _this;
+      var options = arguments.length > 3 && arguments[3] !== void 0 ? arguments[3] : {};
+      _classCallCheck(this, Connector2);
+      _this = _super.call(this);
+      if (isIE10) {
+        EventEmitter.call(_assertThisInitialized(_this));
+      }
+      _this.backend = backend;
+      _this.store = store;
+      _this.services = services;
+      _this.languageUtils = services.languageUtils;
+      _this.options = options;
+      _this.logger = baseLogger.create("backendConnector");
+      _this.waitingReads = [];
+      _this.maxParallelReads = options.maxParallelReads || 10;
+      _this.readingCalls = 0;
+      _this.maxRetries = options.maxRetries >= 0 ? options.maxRetries : 5;
+      _this.retryTimeout = options.retryTimeout >= 1 ? options.retryTimeout : 350;
+      _this.state = {};
+      _this.queue = [];
+      if (_this.backend && _this.backend.init) {
+        _this.backend.init(services, options.backend, options);
+      }
+      return _this;
+    }
+    _createClass(Connector2, [{
+      key: "queueLoad",
+      value: function queueLoad(languages, namespaces, options, callback) {
+        var _this2 = this;
+        var toLoad = {};
+        var pending = {};
+        var toLoadLanguages = {};
+        var toLoadNamespaces = {};
+        languages.forEach(function(lng) {
+          var hasAllNamespaces = true;
+          namespaces.forEach(function(ns) {
+            var name = "".concat(lng, "|").concat(ns);
+            if (!options.reload && _this2.store.hasResourceBundle(lng, ns)) {
+              _this2.state[name] = 2;
+            } else if (_this2.state[name] < 0)
+              ;
+            else if (_this2.state[name] === 1) {
+              if (pending[name] === void 0)
+                pending[name] = true;
+            } else {
+              _this2.state[name] = 1;
+              hasAllNamespaces = false;
+              if (pending[name] === void 0)
+                pending[name] = true;
+              if (toLoad[name] === void 0)
+                toLoad[name] = true;
+              if (toLoadNamespaces[ns] === void 0)
+                toLoadNamespaces[ns] = true;
+            }
+          });
+          if (!hasAllNamespaces)
+            toLoadLanguages[lng] = true;
+        });
+        if (Object.keys(toLoad).length || Object.keys(pending).length) {
+          this.queue.push({
+            pending,
+            pendingCount: Object.keys(pending).length,
+            loaded: {},
+            errors: [],
+            callback
+          });
+        }
+        return {
+          toLoad: Object.keys(toLoad),
+          pending: Object.keys(pending),
+          toLoadLanguages: Object.keys(toLoadLanguages),
+          toLoadNamespaces: Object.keys(toLoadNamespaces)
+        };
+      }
+    }, {
+      key: "loaded",
+      value: function loaded(name, err, data) {
+        var s = name.split("|");
+        var lng = s[0];
+        var ns = s[1];
+        if (err)
+          this.emit("failedLoading", lng, ns, err);
+        if (data) {
+          this.store.addResourceBundle(lng, ns, data);
+        }
+        this.state[name] = err ? -1 : 2;
+        var loaded2 = {};
+        this.queue.forEach(function(q) {
+          pushPath(q.loaded, [lng], ns);
+          removePending(q, name);
+          if (err)
+            q.errors.push(err);
+          if (q.pendingCount === 0 && !q.done) {
+            Object.keys(q.loaded).forEach(function(l) {
+              if (!loaded2[l])
+                loaded2[l] = {};
+              var loadedKeys = q.loaded[l];
+              if (loadedKeys.length) {
+                loadedKeys.forEach(function(n) {
+                  if (loaded2[l][n] === void 0)
+                    loaded2[l][n] = true;
+                });
+              }
+            });
+            q.done = true;
+            if (q.errors.length) {
+              q.callback(q.errors);
+            } else {
+              q.callback();
+            }
+          }
+        });
+        this.emit("loaded", loaded2);
+        this.queue = this.queue.filter(function(q) {
+          return !q.done;
+        });
+      }
+    }, {
+      key: "read",
+      value: function read(lng, ns, fcName) {
+        var _this3 = this;
+        var tried = arguments.length > 3 && arguments[3] !== void 0 ? arguments[3] : 0;
+        var wait = arguments.length > 4 && arguments[4] !== void 0 ? arguments[4] : this.retryTimeout;
+        var callback = arguments.length > 5 ? arguments[5] : void 0;
+        if (!lng.length)
+          return callback(null, {});
+        if (this.readingCalls >= this.maxParallelReads) {
+          this.waitingReads.push({
+            lng,
+            ns,
+            fcName,
+            tried,
+            wait,
+            callback
+          });
+          return;
+        }
+        this.readingCalls++;
+        var resolver = function resolver2(err, data) {
+          _this3.readingCalls--;
+          if (_this3.waitingReads.length > 0) {
+            var next = _this3.waitingReads.shift();
+            _this3.read(next.lng, next.ns, next.fcName, next.tried, next.wait, next.callback);
+          }
+          if (err && data && tried < _this3.maxRetries) {
+            setTimeout(function() {
+              _this3.read.call(_this3, lng, ns, fcName, tried + 1, wait * 2, callback);
+            }, wait);
+            return;
+          }
+          callback(err, data);
+        };
+        var fc = this.backend[fcName].bind(this.backend);
+        if (fc.length === 2) {
+          try {
+            var r = fc(lng, ns);
+            if (r && typeof r.then === "function") {
+              r.then(function(data) {
+                return resolver(null, data);
+              })["catch"](resolver);
+            } else {
+              resolver(null, r);
+            }
+          } catch (err) {
+            resolver(err);
+          }
+          return;
+        }
+        return fc(lng, ns, resolver);
+      }
+    }, {
+      key: "prepareLoading",
+      value: function prepareLoading(languages, namespaces) {
+        var _this4 = this;
+        var options = arguments.length > 2 && arguments[2] !== void 0 ? arguments[2] : {};
+        var callback = arguments.length > 3 ? arguments[3] : void 0;
+        if (!this.backend) {
+          this.logger.warn("No backend was added via i18next.use. Will not load resources.");
+          return callback && callback();
+        }
+        if (typeof languages === "string")
+          languages = this.languageUtils.toResolveHierarchy(languages);
+        if (typeof namespaces === "string")
+          namespaces = [namespaces];
+        var toLoad = this.queueLoad(languages, namespaces, options, callback);
+        if (!toLoad.toLoad.length) {
+          if (!toLoad.pending.length)
+            callback();
+          return null;
+        }
+        toLoad.toLoad.forEach(function(name) {
+          _this4.loadOne(name);
+        });
+      }
+    }, {
+      key: "load",
+      value: function load(languages, namespaces, callback) {
+        this.prepareLoading(languages, namespaces, {}, callback);
+      }
+    }, {
+      key: "reload",
+      value: function reload(languages, namespaces, callback) {
+        this.prepareLoading(languages, namespaces, {
+          reload: true
+        }, callback);
+      }
+    }, {
+      key: "loadOne",
+      value: function loadOne(name) {
+        var _this5 = this;
+        var prefix = arguments.length > 1 && arguments[1] !== void 0 ? arguments[1] : "";
+        var s = name.split("|");
+        var lng = s[0];
+        var ns = s[1];
+        this.read(lng, ns, "read", void 0, void 0, function(err, data) {
+          if (err)
+            _this5.logger.warn("".concat(prefix, "loading namespace ").concat(ns, " for language ").concat(lng, " failed"), err);
+          if (!err && data)
+            _this5.logger.log("".concat(prefix, "loaded namespace ").concat(ns, " for language ").concat(lng), data);
+          _this5.loaded(name, err, data);
+        });
+      }
+    }, {
+      key: "saveMissing",
+      value: function saveMissing(languages, namespace, key, fallbackValue, isUpdate) {
+        var options = arguments.length > 5 && arguments[5] !== void 0 ? arguments[5] : {};
+        var clb = arguments.length > 6 && arguments[6] !== void 0 ? arguments[6] : function() {
+        };
+        if (this.services.utils && this.services.utils.hasLoadedNamespace && !this.services.utils.hasLoadedNamespace(namespace)) {
+          this.logger.warn('did not save key "'.concat(key, '" as the namespace "').concat(namespace, '" was not yet loaded'), "This means something IS WRONG in your setup. You access the t function before i18next.init / i18next.loadNamespace / i18next.changeLanguage was done. Wait for the callback or Promise to resolve before accessing it!!!");
+          return;
+        }
+        if (key === void 0 || key === null || key === "")
+          return;
+        if (this.backend && this.backend.create) {
+          var opts = _objectSpread$1(_objectSpread$1({}, options), {}, {
+            isUpdate
+          });
+          var fc = this.backend.create.bind(this.backend);
+          if (fc.length < 6) {
+            try {
+              var r;
+              if (fc.length === 5) {
+                r = fc(languages, namespace, key, fallbackValue, opts);
+              } else {
+                r = fc(languages, namespace, key, fallbackValue);
+              }
+              if (r && typeof r.then === "function") {
+                r.then(function(data) {
+                  return clb(null, data);
+                })["catch"](clb);
+              } else {
+                clb(null, r);
+              }
+            } catch (err) {
+              clb(err);
+            }
+          } else {
+            fc(languages, namespace, key, fallbackValue, clb, opts);
+          }
+        }
+        if (!languages || !languages[0])
+          return;
+        this.store.addResource(languages[0], namespace, key, fallbackValue);
+      }
+    }]);
+    return Connector2;
+  }(EventEmitter);
+  function get() {
+    return {
+      debug: false,
+      initImmediate: true,
+      ns: ["translation"],
+      defaultNS: ["translation"],
+      fallbackLng: ["dev"],
+      fallbackNS: false,
+      supportedLngs: false,
+      nonExplicitSupportedLngs: false,
+      load: "all",
+      preload: false,
+      simplifyPluralSuffix: true,
+      keySeparator: ".",
+      nsSeparator: ":",
+      pluralSeparator: "_",
+      contextSeparator: "_",
+      partialBundledLanguages: false,
+      saveMissing: false,
+      updateMissing: false,
+      saveMissingTo: "fallback",
+      saveMissingPlurals: true,
+      missingKeyHandler: false,
+      missingInterpolationHandler: false,
+      postProcess: false,
+      postProcessPassResolved: false,
+      returnNull: true,
+      returnEmptyString: true,
+      returnObjects: false,
+      joinArrays: false,
+      returnedObjectHandler: false,
+      parseMissingKeyHandler: false,
+      appendNamespaceToMissingKey: false,
+      appendNamespaceToCIMode: false,
+      overloadTranslationOptionHandler: function handle2(args) {
+        var ret = {};
+        if (_typeof(args[1]) === "object")
+          ret = args[1];
+        if (typeof args[1] === "string")
+          ret.defaultValue = args[1];
+        if (typeof args[2] === "string")
+          ret.tDescription = args[2];
+        if (_typeof(args[2]) === "object" || _typeof(args[3]) === "object") {
+          var options = args[3] || args[2];
+          Object.keys(options).forEach(function(key) {
+            ret[key] = options[key];
+          });
+        }
+        return ret;
+      },
+      interpolation: {
+        escapeValue: true,
+        format: function format(value, _format, lng, options) {
+          return value;
+        },
+        prefix: "{{",
+        suffix: "}}",
+        formatSeparator: ",",
+        unescapePrefix: "-",
+        nestingPrefix: "$t(",
+        nestingSuffix: ")",
+        nestingOptionsSeparator: ",",
+        maxReplaces: 1e3,
+        skipOnVariables: true
+      }
+    };
+  }
+  function transformOptions(options) {
+    if (typeof options.ns === "string")
+      options.ns = [options.ns];
+    if (typeof options.fallbackLng === "string")
+      options.fallbackLng = [options.fallbackLng];
+    if (typeof options.fallbackNS === "string")
+      options.fallbackNS = [options.fallbackNS];
+    if (options.supportedLngs && options.supportedLngs.indexOf("cimode") < 0) {
+      options.supportedLngs = options.supportedLngs.concat(["cimode"]);
+    }
+    return options;
+  }
+  function ownKeys(object2, enumerableOnly) {
+    var keys = Object.keys(object2);
+    if (Object.getOwnPropertySymbols) {
+      var symbols = Object.getOwnPropertySymbols(object2);
+      enumerableOnly && (symbols = symbols.filter(function(sym) {
+        return Object.getOwnPropertyDescriptor(object2, sym).enumerable;
+      })), keys.push.apply(keys, symbols);
+    }
+    return keys;
+  }
+  function _objectSpread(target) {
+    for (var i = 1; i < arguments.length; i++) {
+      var source = null != arguments[i] ? arguments[i] : {};
+      i % 2 ? ownKeys(Object(source), true).forEach(function(key) {
+        _defineProperty(target, key, source[key]);
+      }) : Object.getOwnPropertyDescriptors ? Object.defineProperties(target, Object.getOwnPropertyDescriptors(source)) : ownKeys(Object(source)).forEach(function(key) {
+        Object.defineProperty(target, key, Object.getOwnPropertyDescriptor(source, key));
+      });
+    }
+    return target;
+  }
+  function _createSuper(Derived) {
+    var hasNativeReflectConstruct = _isNativeReflectConstruct();
+    return function _createSuperInternal() {
+      var Super = _getPrototypeOf(Derived), result3;
+      if (hasNativeReflectConstruct) {
+        var NewTarget = _getPrototypeOf(this).constructor;
+        result3 = Reflect.construct(Super, arguments, NewTarget);
+      } else {
+        result3 = Super.apply(this, arguments);
+      }
+      return _possibleConstructorReturn(this, result3);
+    };
+  }
+  function _isNativeReflectConstruct() {
+    if (typeof Reflect === "undefined" || !Reflect.construct)
+      return false;
+    if (Reflect.construct.sham)
+      return false;
+    if (typeof Proxy === "function")
+      return true;
+    try {
+      Boolean.prototype.valueOf.call(Reflect.construct(Boolean, [], function() {
+      }));
+      return true;
+    } catch (e) {
+      return false;
+    }
+  }
+  function noop() {
+  }
+  function bindMemberFunctions(inst) {
+    var mems = Object.getOwnPropertyNames(Object.getPrototypeOf(inst));
+    mems.forEach(function(mem) {
+      if (typeof inst[mem] === "function") {
+        inst[mem] = inst[mem].bind(inst);
+      }
+    });
+  }
+  var I18n = function(_EventEmitter) {
+    _inherits(I18n2, _EventEmitter);
+    var _super = _createSuper(I18n2);
+    function I18n2() {
+      var _this;
+      var options = arguments.length > 0 && arguments[0] !== void 0 ? arguments[0] : {};
+      var callback = arguments.length > 1 ? arguments[1] : void 0;
+      _classCallCheck(this, I18n2);
+      _this = _super.call(this);
+      if (isIE10) {
+        EventEmitter.call(_assertThisInitialized(_this));
+      }
+      _this.options = transformOptions(options);
+      _this.services = {};
+      _this.logger = baseLogger;
+      _this.modules = {
+        external: []
+      };
+      bindMemberFunctions(_assertThisInitialized(_this));
+      if (callback && !_this.isInitialized && !options.isClone) {
+        if (!_this.options.initImmediate) {
+          _this.init(options, callback);
+          return _possibleConstructorReturn(_this, _assertThisInitialized(_this));
+        }
+        setTimeout(function() {
+          _this.init(options, callback);
+        }, 0);
+      }
+      return _this;
+    }
+    _createClass(I18n2, [{
+      key: "init",
+      value: function init2() {
+        var _this2 = this;
+        var options = arguments.length > 0 && arguments[0] !== void 0 ? arguments[0] : {};
+        var callback = arguments.length > 1 ? arguments[1] : void 0;
+        if (typeof options === "function") {
+          callback = options;
+          options = {};
+        }
+        if (!options.defaultNS && options.defaultNS !== false && options.ns) {
+          if (typeof options.ns === "string") {
+            options.defaultNS = options.ns;
+          } else if (options.ns.indexOf("translation") < 0) {
+            options.defaultNS = options.ns[0];
+          }
+        }
+        var defOpts = get();
+        this.options = _objectSpread(_objectSpread(_objectSpread({}, defOpts), this.options), transformOptions(options));
+        if (this.options.compatibilityAPI !== "v1") {
+          this.options.interpolation = _objectSpread(_objectSpread({}, defOpts.interpolation), this.options.interpolation);
+        }
+        if (options.keySeparator !== void 0) {
+          this.options.userDefinedKeySeparator = options.keySeparator;
+        }
+        if (options.nsSeparator !== void 0) {
+          this.options.userDefinedNsSeparator = options.nsSeparator;
+        }
+        function createClassOnDemand(ClassOrObject) {
+          if (!ClassOrObject)
+            return null;
+          if (typeof ClassOrObject === "function")
+            return new ClassOrObject();
+          return ClassOrObject;
+        }
+        if (!this.options.isClone) {
+          if (this.modules.logger) {
+            baseLogger.init(createClassOnDemand(this.modules.logger), this.options);
+          } else {
+            baseLogger.init(null, this.options);
+          }
+          var formatter;
+          if (this.modules.formatter) {
+            formatter = this.modules.formatter;
+          } else if (typeof Intl !== "undefined") {
+            formatter = Formatter;
+          }
+          var lu = new LanguageUtil(this.options);
+          this.store = new ResourceStore(this.options.resources, this.options);
+          var s = this.services;
+          s.logger = baseLogger;
+          s.resourceStore = this.store;
+          s.languageUtils = lu;
+          s.pluralResolver = new PluralResolver(lu, {
+            prepend: this.options.pluralSeparator,
+            compatibilityJSON: this.options.compatibilityJSON,
+            simplifyPluralSuffix: this.options.simplifyPluralSuffix
+          });
+          if (formatter && (!this.options.interpolation.format || this.options.interpolation.format === defOpts.interpolation.format)) {
+            s.formatter = createClassOnDemand(formatter);
+            s.formatter.init(s, this.options);
+            this.options.interpolation.format = s.formatter.format.bind(s.formatter);
+          }
+          s.interpolator = new Interpolator(this.options);
+          s.utils = {
+            hasLoadedNamespace: this.hasLoadedNamespace.bind(this)
+          };
+          s.backendConnector = new Connector(createClassOnDemand(this.modules.backend), s.resourceStore, s, this.options);
+          s.backendConnector.on("*", function(event) {
+            for (var _len = arguments.length, args = new Array(_len > 1 ? _len - 1 : 0), _key = 1; _key < _len; _key++) {
+              args[_key - 1] = arguments[_key];
+            }
+            _this2.emit.apply(_this2, [event].concat(args));
+          });
+          if (this.modules.languageDetector) {
+            s.languageDetector = createClassOnDemand(this.modules.languageDetector);
+            if (s.languageDetector.init)
+              s.languageDetector.init(s, this.options.detection, this.options);
+          }
+          if (this.modules.i18nFormat) {
+            s.i18nFormat = createClassOnDemand(this.modules.i18nFormat);
+            if (s.i18nFormat.init)
+              s.i18nFormat.init(this);
+          }
+          this.translator = new Translator(this.services, this.options);
+          this.translator.on("*", function(event) {
+            for (var _len2 = arguments.length, args = new Array(_len2 > 1 ? _len2 - 1 : 0), _key2 = 1; _key2 < _len2; _key2++) {
+              args[_key2 - 1] = arguments[_key2];
+            }
+            _this2.emit.apply(_this2, [event].concat(args));
+          });
+          this.modules.external.forEach(function(m) {
+            if (m.init)
+              m.init(_this2);
+          });
+        }
+        this.format = this.options.interpolation.format;
+        if (!callback)
+          callback = noop;
+        if (this.options.fallbackLng && !this.services.languageDetector && !this.options.lng) {
+          var codes = this.services.languageUtils.getFallbackCodes(this.options.fallbackLng);
+          if (codes.length > 0 && codes[0] !== "dev")
+            this.options.lng = codes[0];
+        }
+        if (!this.services.languageDetector && !this.options.lng) {
+          this.logger.warn("init: no languageDetector is used and no lng is defined");
+        }
+        var storeApi = ["getResource", "hasResourceBundle", "getResourceBundle", "getDataByLanguage"];
+        storeApi.forEach(function(fcName) {
+          _this2[fcName] = function() {
+            var _this2$store;
+            return (_this2$store = _this2.store)[fcName].apply(_this2$store, arguments);
+          };
+        });
+        var storeApiChained = ["addResource", "addResources", "addResourceBundle", "removeResourceBundle"];
+        storeApiChained.forEach(function(fcName) {
+          _this2[fcName] = function() {
+            var _this2$store2;
+            (_this2$store2 = _this2.store)[fcName].apply(_this2$store2, arguments);
+            return _this2;
+          };
+        });
+        var deferred = defer();
+        var load = function load2() {
+          var finish = function finish2(err, t2) {
+            if (_this2.isInitialized && !_this2.initializedStoreOnce)
+              _this2.logger.warn("init: i18next is already initialized. You should call init just once!");
+            _this2.isInitialized = true;
+            if (!_this2.options.isClone)
+              _this2.logger.log("initialized", _this2.options);
+            _this2.emit("initialized", _this2.options);
+            deferred.resolve(t2);
+            callback(err, t2);
+          };
+          if (_this2.languages && _this2.options.compatibilityAPI !== "v1" && !_this2.isInitialized)
+            return finish(null, _this2.t.bind(_this2));
+          _this2.changeLanguage(_this2.options.lng, finish);
+        };
+        if (this.options.resources || !this.options.initImmediate) {
+          load();
+        } else {
+          setTimeout(load, 0);
+        }
+        return deferred;
+      }
+    }, {
+      key: "loadResources",
+      value: function loadResources2(language) {
+        var _this3 = this;
+        var callback = arguments.length > 1 && arguments[1] !== void 0 ? arguments[1] : noop;
+        var usedCallback = callback;
+        var usedLng = typeof language === "string" ? language : this.language;
+        if (typeof language === "function")
+          usedCallback = language;
+        if (!this.options.resources || this.options.partialBundledLanguages) {
+          if (usedLng && usedLng.toLowerCase() === "cimode")
+            return usedCallback();
+          var toLoad = [];
+          var append = function append2(lng) {
+            if (!lng)
+              return;
+            var lngs = _this3.services.languageUtils.toResolveHierarchy(lng);
+            lngs.forEach(function(l) {
+              if (toLoad.indexOf(l) < 0)
+                toLoad.push(l);
+            });
+          };
+          if (!usedLng) {
+            var fallbacks = this.services.languageUtils.getFallbackCodes(this.options.fallbackLng);
+            fallbacks.forEach(function(l) {
+              return append(l);
+            });
+          } else {
+            append(usedLng);
+          }
+          if (this.options.preload) {
+            this.options.preload.forEach(function(l) {
+              return append(l);
+            });
+          }
+          this.services.backendConnector.load(toLoad, this.options.ns, function(e) {
+            if (!e && !_this3.resolvedLanguage && _this3.language)
+              _this3.setResolvedLanguage(_this3.language);
+            usedCallback(e);
+          });
+        } else {
+          usedCallback(null);
+        }
+      }
+    }, {
+      key: "reloadResources",
+      value: function reloadResources2(lngs, ns, callback) {
+        var deferred = defer();
+        if (!lngs)
+          lngs = this.languages;
+        if (!ns)
+          ns = this.options.ns;
+        if (!callback)
+          callback = noop;
+        this.services.backendConnector.reload(lngs, ns, function(err) {
+          deferred.resolve();
+          callback(err);
+        });
+        return deferred;
+      }
+    }, {
+      key: "use",
+      value: function use2(module) {
+        if (!module)
+          throw new Error("You are passing an undefined module! Please check the object you are passing to i18next.use()");
+        if (!module.type)
+          throw new Error("You are passing a wrong module! Please check the object you are passing to i18next.use()");
+        if (module.type === "backend") {
+          this.modules.backend = module;
+        }
+        if (module.type === "logger" || module.log && module.warn && module.error) {
+          this.modules.logger = module;
+        }
+        if (module.type === "languageDetector") {
+          this.modules.languageDetector = module;
+        }
+        if (module.type === "i18nFormat") {
+          this.modules.i18nFormat = module;
+        }
+        if (module.type === "postProcessor") {
+          postProcessor.addPostProcessor(module);
+        }
+        if (module.type === "formatter") {
+          this.modules.formatter = module;
+        }
+        if (module.type === "3rdParty") {
+          this.modules.external.push(module);
+        }
+        return this;
+      }
+    }, {
+      key: "setResolvedLanguage",
+      value: function setResolvedLanguage(l) {
+        if (!l || !this.languages)
+          return;
+        if (["cimode", "dev"].indexOf(l) > -1)
+          return;
+        for (var li = 0; li < this.languages.length; li++) {
+          var lngInLngs = this.languages[li];
+          if (["cimode", "dev"].indexOf(lngInLngs) > -1)
+            continue;
+          if (this.store.hasLanguageSomeTranslations(lngInLngs)) {
+            this.resolvedLanguage = lngInLngs;
+            break;
+          }
+        }
+      }
+    }, {
+      key: "changeLanguage",
+      value: function changeLanguage2(lng, callback) {
+        var _this4 = this;
+        this.isLanguageChangingTo = lng;
+        var deferred = defer();
+        this.emit("languageChanging", lng);
+        var setLngProps = function setLngProps2(l) {
+          _this4.language = l;
+          _this4.languages = _this4.services.languageUtils.toResolveHierarchy(l);
+          _this4.resolvedLanguage = void 0;
+          _this4.setResolvedLanguage(l);
+        };
+        var done = function done2(err, l) {
+          if (l) {
+            setLngProps(l);
+            _this4.translator.changeLanguage(l);
+            _this4.isLanguageChangingTo = void 0;
+            _this4.emit("languageChanged", l);
+            _this4.logger.log("languageChanged", l);
+          } else {
+            _this4.isLanguageChangingTo = void 0;
+          }
+          deferred.resolve(function() {
+            return _this4.t.apply(_this4, arguments);
+          });
+          if (callback)
+            callback(err, function() {
+              return _this4.t.apply(_this4, arguments);
+            });
+        };
+        var setLng = function setLng2(lngs) {
+          if (!lng && !lngs && _this4.services.languageDetector)
+            lngs = [];
+          var l = typeof lngs === "string" ? lngs : _this4.services.languageUtils.getBestMatchFromCodes(lngs);
+          if (l) {
+            if (!_this4.language) {
+              setLngProps(l);
+            }
+            if (!_this4.translator.language)
+              _this4.translator.changeLanguage(l);
+            if (_this4.services.languageDetector && _this4.services.languageDetector.cacheUserLanguage)
+              _this4.services.languageDetector.cacheUserLanguage(l);
+          }
+          _this4.loadResources(l, function(err) {
+            done(err, l);
+          });
+        };
+        if (!lng && this.services.languageDetector && !this.services.languageDetector.async) {
+          setLng(this.services.languageDetector.detect());
+        } else if (!lng && this.services.languageDetector && this.services.languageDetector.async) {
+          if (this.services.languageDetector.detect.length === 0) {
+            this.services.languageDetector.detect().then(setLng);
+          } else {
+            this.services.languageDetector.detect(setLng);
+          }
+        } else {
+          setLng(lng);
+        }
+        return deferred;
+      }
+    }, {
+      key: "getFixedT",
+      value: function getFixedT2(lng, ns, keyPrefix) {
+        var _this5 = this;
+        var fixedT = function fixedT2(key, opts) {
+          var options;
+          if (_typeof(opts) !== "object") {
+            for (var _len3 = arguments.length, rest = new Array(_len3 > 2 ? _len3 - 2 : 0), _key3 = 2; _key3 < _len3; _key3++) {
+              rest[_key3 - 2] = arguments[_key3];
+            }
+            options = _this5.options.overloadTranslationOptionHandler([key, opts].concat(rest));
+          } else {
+            options = _objectSpread({}, opts);
+          }
+          options.lng = options.lng || fixedT2.lng;
+          options.lngs = options.lngs || fixedT2.lngs;
+          options.ns = options.ns || fixedT2.ns;
+          options.keyPrefix = options.keyPrefix || keyPrefix || fixedT2.keyPrefix;
+          var keySeparator = _this5.options.keySeparator || ".";
+          var resultKey;
+          if (options.keyPrefix && Array.isArray(key)) {
+            resultKey = key.map(function(k) {
+              return "".concat(options.keyPrefix).concat(keySeparator).concat(k);
+            });
+          } else {
+            resultKey = options.keyPrefix ? "".concat(options.keyPrefix).concat(keySeparator).concat(key) : key;
+          }
+          return _this5.t(resultKey, options);
+        };
+        if (typeof lng === "string") {
+          fixedT.lng = lng;
+        } else {
+          fixedT.lngs = lng;
+        }
+        fixedT.ns = ns;
+        fixedT.keyPrefix = keyPrefix;
+        return fixedT;
+      }
+    }, {
+      key: "t",
+      value: function t2() {
+        var _this$translator;
+        return this.translator && (_this$translator = this.translator).translate.apply(_this$translator, arguments);
+      }
+    }, {
+      key: "exists",
+      value: function exists2() {
+        var _this$translator2;
+        return this.translator && (_this$translator2 = this.translator).exists.apply(_this$translator2, arguments);
+      }
+    }, {
+      key: "setDefaultNamespace",
+      value: function setDefaultNamespace2(ns) {
+        this.options.defaultNS = ns;
+      }
+    }, {
+      key: "hasLoadedNamespace",
+      value: function hasLoadedNamespace2(ns) {
+        var _this6 = this;
+        var options = arguments.length > 1 && arguments[1] !== void 0 ? arguments[1] : {};
+        if (!this.isInitialized) {
+          this.logger.warn("hasLoadedNamespace: i18next was not initialized", this.languages);
+          return false;
+        }
+        if (!this.languages || !this.languages.length) {
+          this.logger.warn("hasLoadedNamespace: i18n.languages were undefined or empty", this.languages);
+          return false;
+        }
+        var lng = this.resolvedLanguage || this.languages[0];
+        var fallbackLng = this.options ? this.options.fallbackLng : false;
+        var lastLng = this.languages[this.languages.length - 1];
+        if (lng.toLowerCase() === "cimode")
+          return true;
+        var loadNotPending = function loadNotPending2(l, n) {
+          var loadState = _this6.services.backendConnector.state["".concat(l, "|").concat(n)];
+          return loadState === -1 || loadState === 2;
+        };
+        if (options.precheck) {
+          var preResult = options.precheck(this, loadNotPending);
+          if (preResult !== void 0)
+            return preResult;
+        }
+        if (this.hasResourceBundle(lng, ns))
+          return true;
+        if (!this.services.backendConnector.backend || this.options.resources && !this.options.partialBundledLanguages)
+          return true;
+        if (loadNotPending(lng, ns) && (!fallbackLng || loadNotPending(lastLng, ns)))
+          return true;
+        return false;
+      }
+    }, {
+      key: "loadNamespaces",
+      value: function loadNamespaces2(ns, callback) {
+        var _this7 = this;
+        var deferred = defer();
+        if (!this.options.ns) {
+          if (callback)
+            callback();
+          return Promise.resolve();
+        }
+        if (typeof ns === "string")
+          ns = [ns];
+        ns.forEach(function(n) {
+          if (_this7.options.ns.indexOf(n) < 0)
+            _this7.options.ns.push(n);
+        });
+        this.loadResources(function(err) {
+          deferred.resolve();
+          if (callback)
+            callback(err);
+        });
+        return deferred;
+      }
+    }, {
+      key: "loadLanguages",
+      value: function loadLanguages2(lngs, callback) {
+        var deferred = defer();
+        if (typeof lngs === "string")
+          lngs = [lngs];
+        var preloaded = this.options.preload || [];
+        var newLngs = lngs.filter(function(lng) {
+          return preloaded.indexOf(lng) < 0;
+        });
+        if (!newLngs.length) {
+          if (callback)
+            callback();
+          return Promise.resolve();
+        }
+        this.options.preload = preloaded.concat(newLngs);
+        this.loadResources(function(err) {
+          deferred.resolve();
+          if (callback)
+            callback(err);
+        });
+        return deferred;
+      }
+    }, {
+      key: "dir",
+      value: function dir2(lng) {
+        if (!lng)
+          lng = this.resolvedLanguage || (this.languages && this.languages.length > 0 ? this.languages[0] : this.language);
+        if (!lng)
+          return "rtl";
+        var rtlLngs = ["ar", "shu", "sqr", "ssh", "xaa", "yhd", "yud", "aao", "abh", "abv", "acm", "acq", "acw", "acx", "acy", "adf", "ads", "aeb", "aec", "afb", "ajp", "apc", "apd", "arb", "arq", "ars", "ary", "arz", "auz", "avl", "ayh", "ayl", "ayn", "ayp", "bbz", "pga", "he", "iw", "ps", "pbt", "pbu", "pst", "prp", "prd", "ug", "ur", "ydd", "yds", "yih", "ji", "yi", "hbo", "men", "xmn", "fa", "jpr", "peo", "pes", "prs", "dv", "sam", "ckb"];
+        var languageUtils = this.services && this.services.languageUtils || new LanguageUtil(get());
+        return rtlLngs.indexOf(languageUtils.getLanguagePartFromCode(lng)) > -1 || lng.toLowerCase().indexOf("-arab") > 1 ? "rtl" : "ltr";
+      }
+    }, {
+      key: "cloneInstance",
+      value: function cloneInstance() {
+        var _this8 = this;
+        var options = arguments.length > 0 && arguments[0] !== void 0 ? arguments[0] : {};
+        var callback = arguments.length > 1 && arguments[1] !== void 0 ? arguments[1] : noop;
+        var mergedOptions = _objectSpread(_objectSpread(_objectSpread({}, this.options), options), {
+          isClone: true
+        });
+        var clone2 = new I18n2(mergedOptions);
+        if (options.debug !== void 0 || options.prefix !== void 0) {
+          clone2.logger = clone2.logger.clone(options);
+        }
+        var membersToCopy = ["store", "services", "language"];
+        membersToCopy.forEach(function(m) {
+          clone2[m] = _this8[m];
+        });
+        clone2.services = _objectSpread({}, this.services);
+        clone2.services.utils = {
+          hasLoadedNamespace: clone2.hasLoadedNamespace.bind(clone2)
+        };
+        clone2.translator = new Translator(clone2.services, clone2.options);
+        clone2.translator.on("*", function(event) {
+          for (var _len4 = arguments.length, args = new Array(_len4 > 1 ? _len4 - 1 : 0), _key4 = 1; _key4 < _len4; _key4++) {
+            args[_key4 - 1] = arguments[_key4];
+          }
+          clone2.emit.apply(clone2, [event].concat(args));
+        });
+        clone2.init(mergedOptions, callback);
+        clone2.translator.options = clone2.options;
+        clone2.translator.backendConnector.services.utils = {
+          hasLoadedNamespace: clone2.hasLoadedNamespace.bind(clone2)
+        };
+        return clone2;
+      }
+    }, {
+      key: "toJSON",
+      value: function toJSON() {
+        return {
+          options: this.options,
+          store: this.store,
+          language: this.language,
+          languages: this.languages,
+          resolvedLanguage: this.resolvedLanguage
+        };
+      }
+    }]);
+    return I18n2;
+  }(EventEmitter);
+  _defineProperty(I18n, "createInstance", function() {
+    var options = arguments.length > 0 && arguments[0] !== void 0 ? arguments[0] : {};
+    var callback = arguments.length > 1 ? arguments[1] : void 0;
+    return new I18n(options, callback);
+  });
+  var instance = I18n.createInstance();
+  instance.createInstance = I18n.createInstance;
+  var createInstance = instance.createInstance;
+  var dir = instance.dir;
+  var init = instance.init;
+  var loadResources = instance.loadResources;
+  var reloadResources = instance.reloadResources;
+  var use = instance.use;
+  var changeLanguage = instance.changeLanguage;
+  var getFixedT = instance.getFixedT;
+  var t = instance.t;
+  var exists = instance.exists;
+  var setDefaultNamespace = instance.setDefaultNamespace;
+  var hasLoadedNamespace = instance.hasLoadedNamespace;
+  var loadNamespaces = instance.loadNamespaces;
+  var loadLanguages = instance.loadLanguages;
+
+  // src/utils/import.ts
+  var hasOwn = (value, key) => Object.prototype.hasOwnProperty.call(value, key);
+  var isRecord = (value) => typeof value === "object" && value !== null;
+  var asConfigCarrier = (value) => isRecord(value) ? value : {};
+  var extractConfigOverrides = (value) => {
+    const source = asConfigCarrier(value);
+    const overrides = {};
+    if (typeof source.temperature === "number")
+      overrides.temperature = source.temperature;
+    if (typeof source.max_tokens === "number")
+      overrides.max_tokens = source.max_tokens;
+    if (typeof source.top_p === "number")
+      overrides.top_p = source.top_p;
+    if (typeof source.frequency_penalty === "number") {
+      overrides.frequency_penalty = source.frequency_penalty;
+    }
+    if (typeof source.presence_penalty === "number") {
+      overrides.presence_penalty = source.presence_penalty;
+    }
+    if (typeof source.model === "string" && source.model.length > 0) {
+      overrides.model = source.model;
+    }
+    return overrides;
+  };
+  var buildImportedConfig = (value) => ({
+    ..._defaultChatConfig,
+    ...extractConfigOverrides(value)
+  });
+  var isOpenAIMessageContentParts = (value) => isRecord(value) && hasOwn(value, "parts") && Array.isArray(value.parts) && value.parts.every((part) => typeof part === "string");
+  var isRole = (value) => typeof value === "string" && roles.includes(value);
+  var validateAndFixChats = (chats) => {
+    if (!Array.isArray(chats))
+      return false;
+    for (const chat of chats) {
+      if (!isRecord(chat))
+        return false;
+      const mutableChat = chat;
+      if (!(typeof mutableChat.id === "string"))
+        mutableChat.id = editingUUID();
+      if (!(typeof mutableChat.title === "string") || mutableChat.title === "")
+        return false;
+      if (mutableChat.titleSet === void 0)
+        mutableChat.titleSet = false;
+      if (!(typeof mutableChat.titleSet === "boolean"))
+        return false;
+      if (!validateMessage(mutableChat.messages))
+        return false;
+      if (!validateAndFixChatConfig(mutableChat.config))
+        return false;
+      if (mutableChat.summaryTargets !== void 0 && (!isRecord(mutableChat.summaryTargets) || Object.values(mutableChat.summaryTargets).some((value) => typeof value !== "boolean")))
+        return false;
+      if (mutableChat.summaries !== void 0 && (!Array.isArray(mutableChat.summaries) || !mutableChat.summaries.every(isBubbleSummary)))
+        return false;
+    }
+    ensureUniqueChatIds(chats);
+    return true;
+  };
+  var validateMessage = (messages) => {
+    if (!Array.isArray(messages))
+      return false;
+    for (const message of messages) {
+      if (!isRecord(message))
+        return false;
+      if (typeof message.content === "string") {
+        message.content = [strToTextContent(message.content)];
+      } else if (!Array.isArray(message.content)) {
+        return false;
+      }
+      if (!(typeof message.role === "string"))
+        return false;
+      if (!roles.includes(message.role))
+        return false;
+    }
+    return true;
+  };
+  var validateAndFixChatConfig = (config) => {
+    if (config === void 0)
+      return true;
+    if (!isRecord(config))
+      return false;
+    if (config.temperature === void 0)
+      config.temperature = _defaultChatConfig.temperature;
+    if (!(typeof config.temperature === "number"))
+      return false;
+    if (config.presence_penalty === void 0)
+      config.presence_penalty = _defaultChatConfig.presence_penalty;
+    if (!(typeof config.presence_penalty === "number"))
+      return false;
+    if (config.top_p === void 0)
+      config.top_p = _defaultChatConfig.top_p;
+    if (!(typeof config.top_p === "number"))
+      return false;
+    if (config.frequency_penalty === void 0)
+      config.frequency_penalty = _defaultChatConfig.frequency_penalty;
+    if (!(typeof config.frequency_penalty === "number"))
+      return false;
+    config.model = typeof config.model === "string" && config.model.length > 0 ? config.model : defaultModel;
+    return true;
+  };
+  var isLegacyImport = (importedData) => Array.isArray(importedData);
+  var isSingleChatImport = (importedData) => isRecord(importedData) && hasOwn(importedData, "messages") && Array.isArray(importedData.messages) && hasOwn(importedData, "config") && isRecord(importedData.config);
+  var validateFolders = (folders) => {
+    return validateFolderHierarchy(folders);
+  };
+  var validateExportV1 = (data) => {
+    return validateAndFixChats(data.chats) && validateFolders(data.folders);
+  };
+  var validateExportV2 = (data) => {
+    if (!validateAndFixChats(data.chats) || !validateFolders(data.folders))
+      return false;
+    if (data.chats) {
+      for (const chat of data.chats) {
+        if (chat.branchTree) {
+          const bt = chat.branchTree;
+          if (typeof bt.nodes !== "object" || !Array.isArray(bt.activePath))
+            return false;
+        }
+      }
+    }
+    return true;
+  };
+  var validateContentStore = (contentStore) => {
+    if (!isRecord(contentStore))
+      return false;
+    for (const entry of Object.values(contentStore)) {
+      if (!isRecord(entry))
+        return false;
+      if (!Array.isArray(entry.content))
+        return false;
+      if (typeof entry.refCount !== "number")
+        return false;
+      if (!entry.content.every(isContentInterface))
+        return false;
+    }
+    return true;
+  };
+  var isEvaluationSettings = (value) => {
+    if (!isRecord(value))
+      return false;
+    const modes = ["manual", "auto"];
+    return modes.includes(value.safetyPreSend) && modes.includes(value.safetyPostReceive) && modes.includes(value.qualityPreSend) && modes.includes(value.qualityPostReceive);
+  };
+  var isEvaluationResultMap = (value) => {
+    if (!isRecord(value))
+      return false;
+    return Object.values(value).every((entry) => {
+      if (!isRecord(entry))
+        return false;
+      if (entry.phase !== "pre-send" && entry.phase !== "post-receive")
+        return false;
+      return true;
+    });
+  };
+  var validateExportV3 = (data) => {
+    if (!validateAndFixChats(data.chats) || !validateFolders(data.folders) || !validateContentStore(data.contentStore)) {
+      return false;
+    }
+    if (data.chats) {
+      for (const chat of data.chats) {
+        if (!chat.branchTree)
+          continue;
+        const bt = chat.branchTree;
+        if (typeof bt.nodes !== "object" || !Array.isArray(bt.activePath)) {
+          return false;
+        }
+        for (const nodeId of bt.activePath) {
+          const node = bt.nodes[nodeId];
+          if (!node || typeof node.contentHash !== "string") {
+            return false;
+          }
+        }
+      }
+    }
+    if (data.evaluationSettings !== void 0 && !isEvaluationSettings(data.evaluationSettings)) {
+      return false;
+    }
+    if (data.evaluationResults !== void 0 && !isEvaluationResultMap(data.evaluationResults)) {
+      return false;
+    }
+    return true;
+  };
+  var isContentInterface = (content) => {
+    if (!isRecord(content) || typeof content.type !== "string")
+      return false;
+    if (content.type === "text") {
+      return typeof content.text === "string";
+    }
+    if (content.type === "image_url") {
+      return isRecord(content.image_url) && typeof content.image_url.url === "string" && typeof content.image_url.detail === "string";
+    }
+    if (content.type === "reasoning") {
+      return typeof content.text === "string";
+    }
+    if (content.type === "tool_call") {
+      return typeof content.id === "string" && typeof content.name === "string" && typeof content.arguments === "string";
+    }
+    if (content.type === "tool_result") {
+      return typeof content.tool_call_id === "string" && typeof content.content === "string";
+    }
+    return false;
+  };
+  var isOpenAIContent = (content) => {
+    return isOpenAIChat(content) || isOpenAIPlaygroundJSON(content) || isOpenAIDataExport(content);
+  };
+  var isOpenAIChat = (content) => {
+    return isRecord(content) && hasOwn(content, "mapping") && isRecord(content.mapping);
+  };
+  var isOpenAIDataExport = (content) => {
+    return Array.isArray(content) && content.length > 0 && isOpenAIChat(content[0]);
+  };
+  var isOpenAIPlaygroundJSON = (content) => {
+    if (!isRecord(content) || !hasOwn(content, "messages") || !Array.isArray(content.messages)) {
+      return false;
+    }
+    if (hasOwn(content, "config") || hasOwn(content, "version")) {
+      return false;
+    }
+    return true;
+  };
+  var PartialImportError = class extends Error {
+    constructor(message, result3) {
+      super(message);
+      this.result = result3;
+      this.name = "PartialImportError";
+    }
+  };
+  var convertOpenAIToConversationFormatPartialOK = (openAIChatExport) => {
+    return convertOpenAIToConversationFormat(openAIChatExport, true);
+  };
+  var convertOpenAIToConversationFormatPartialNTY = (openAIChatExport) => {
+    return convertOpenAIToConversationFormat(openAIChatExport, false);
+  };
+  var convertOpenAIToConversationFormat = (openAIChatExport, shouldAllowPartialImport) => {
+    const messages = [];
+    let maxDepth = -1;
+    const deepestPathIds = [];
+    const upwardPathIds = [];
+    const messageIds = [];
+    const emptyOrNullMessageIds = [];
+    let emptyOrNullMessagesCount = 0;
+    if (isOpenAIChat(openAIChatExport)) {
+      let deepestNode = null;
+      const traverseTree = (id, currentDepth2) => {
+        const node = openAIChatExport.mapping[id];
+        if (currentDepth2 > maxDepth) {
+          deepestNode = node;
+          maxDepth = currentDepth2;
+        }
+        for (const childId of node.children) {
+          traverseTree(childId, currentDepth2 + 1);
+        }
+      };
+      const rootNode = openAIChatExport.mapping[Object.keys(openAIChatExport.mapping)[0]];
+      traverseTree(rootNode.id, 0);
+      let currentDepth = 0;
+      while (deepestNode) {
+        deepestPathIds.push(deepestNode.id);
+        if (deepestNode.message) {
+          const { role } = deepestNode.message.author;
+          const content = deepestNode.message.content;
+          if (isOpenAIMessageContentParts(content)) {
+            const textContent = content.parts.join("") || "";
+            if (textContent.length > 0) {
+              if (!isRole(role)) {
+                emptyOrNullMessagesCount++;
+                emptyOrNullMessageIds.push(deepestNode.id);
+                continue;
+              }
+              messages.unshift({
+                role,
+                content: [{ type: "text", text: textContent }]
+              });
+              messageIds.push(deepestNode.id);
+            } else {
+              emptyOrNullMessagesCount++;
+              emptyOrNullMessageIds.push(deepestNode.id);
+            }
+          } else if (isContentInterface(content)) {
+            if (!isRole(role)) {
+              emptyOrNullMessagesCount++;
+              emptyOrNullMessageIds.push(deepestNode.id);
+              continue;
+            }
+            messages.unshift({ role, content: [content] });
+            messageIds.push(deepestNode.id);
+          } else {
+            emptyOrNullMessagesCount++;
+            emptyOrNullMessageIds.push(deepestNode.id);
+          }
+        } else {
+          emptyOrNullMessagesCount++;
+          emptyOrNullMessageIds.push(deepestNode.id);
+        }
+        const parentNodeId = deepestNode.parent ? deepestNode.parent : null;
+        deepestNode = parentNodeId ? openAIChatExport.mapping[parentNodeId] : null;
+        currentDepth++;
+      }
+      for (let i = deepestPathIds.length - 1; i >= 0; i--) {
+        upwardPathIds.push(deepestPathIds[i]);
+      }
+      const diffDeepestToMessages = deepestPathIds.filter((id) => !messageIds.includes(id));
+      const diffDeepestToMessagesAndEmpty = diffDeepestToMessages.filter((id) => !emptyOrNullMessageIds.includes(id));
+      if (!shouldAllowPartialImport) {
+        if (diffDeepestToMessagesAndEmpty.length > 0) {
+          const config2 = buildImportedConfig(openAIChatExport);
+          const result3 = {
+            id: editingUUID(),
+            title: openAIChatExport.title || "Untitled Chat",
+            messages,
+            config: config2,
+            titleSet: true,
+            imageDetail: _defaultImageDetail
+          };
+          throw new PartialImportError(
+            instance.t("partialImportMessages", {
+              ns: "import",
+              total: deepestPathIds.length,
+              count: messageIds.length
+            }),
+            result3
+          );
+        }
+      }
+    } else if (isOpenAIPlaygroundJSON(openAIChatExport)) {
+      openAIChatExport.messages.forEach((message) => {
+        const { role } = message;
+        const content = typeof message.content === "string" ? [strToTextContent(message.content)] : message.content;
+        if (Array.isArray(content)) {
+          const contentElements = content.map((part) => {
+            if (isTextContent(part)) {
+              return { type: "text", text: part.text };
+            } else if (isImageContent(part)) {
+              return {
+                type: "image_url",
+                image_url: {
+                  url: part.image_url.url,
+                  detail: part.image_url.detail || "auto"
+                }
+              };
+            }
+            return null;
+          }).filter((part) => part !== null);
+          if (contentElements.length > 0) {
+            messages.push({
+              role,
+              content: contentElements
+            });
+          }
+        }
+      });
+    }
+    const config = buildImportedConfig(openAIChatExport);
+    return {
+      id: editingUUID(),
+      title: "title" in openAIChatExport && typeof openAIChatExport.title === "string" ? openAIChatExport.title : "Untitled Chat",
+      messages,
+      config,
+      titleSet: true,
+      imageDetail: _defaultImageDetail
+    };
+  };
+  var importOpenAIChatExport = (openAIChatExport, shouldAllowPartialImport) => {
+    if (Array.isArray(openAIChatExport)) {
+      if (shouldAllowPartialImport) {
+        return openAIChatExport.map(convertOpenAIToConversationFormatPartialOK);
+      } else {
+        return openAIChatExport.map(convertOpenAIToConversationFormatPartialNTY);
+      }
+    } else {
+      return [
+        convertOpenAIToConversationFormat(
+          openAIChatExport,
+          shouldAllowPartialImport
+        )
+      ];
+    }
+    return [];
+  };
+
+  // src/utils/chatExport.ts
+  var clone = (value) => typeof structuredClone === "function" ? structuredClone(value) : JSON.parse(JSON.stringify(value));
+  var prepareChatForExport = (chat, sourceContentStore, options = {}) => {
+    const visibleBranchOnly = options.visibleBranchOnly ?? false;
+    if (!chat.branchTree) {
+      return {
+        chat: clone(chat),
+        contentStore: {}
+      };
+    }
+    chat = clone(chat);
+    captureProjectedMessageAttributes(chat, sourceContentStore);
+    const sourceTree = chat.branchTree;
+    const includedNodeIds = visibleBranchOnly ? sourceTree.activePath.filter((id) => sourceTree.nodes[id] !== void 0) : Object.keys(sourceTree.nodes);
+    const includedNodeSet = new Set(includedNodeIds);
+    const activePath = sourceTree.activePath.filter((id) => includedNodeSet.has(id));
+    const nodes = Object.fromEntries(
+      includedNodeIds.map((id) => [id, clone(sourceTree.nodes[id])])
+    );
+    const hashRefCounts = /* @__PURE__ */ new Map();
+    includedNodeIds.forEach((id) => {
+      const node = sourceTree.nodes[id];
+      hashRefCounts.set(node.contentHash, (hashRefCounts.get(node.contentHash) ?? 0) + 1);
+    });
+    const contentStore = {};
+    hashRefCounts.forEach((refCount, hash) => {
+      const entry = sourceContentStore[hash];
+      if (!entry)
+        return;
+      const { delta, ...fullEntry } = entry;
+      const content = delta ? resolveContent(sourceContentStore, hash) : entry.content;
+      contentStore[hash] = clone({
+        ...fullEntry,
+        content,
+        refCount
+      });
+    });
+    const filterNodeRecord = (record) => record ? Object.fromEntries(
+      Object.entries(record).filter(([id]) => includedNodeSet.has(id))
+    ) : void 0;
+    const collapsedNodes = filterNodeRecord(chat.collapsedNodes);
+    const omittedNodes = filterNodeRecord(chat.omittedNodes);
+    const protectedNodes = filterNodeRecord(chat.protectedNodes);
+    const summaryTargets = filterNodeRecord(chat.summaryTargets);
+    const summaries = chat.summaries?.filter((summary) => summary.sources.every(
+      (source) => includedNodeSet.has(source.nodeId) && (source.parentId === null || includedNodeSet.has(source.parentId))
+    ));
+    const exportedChat = clone(chat);
+    return {
+      chat: {
+        ...exportedChat,
+        messages: clone(materializeActivePath({ ...sourceTree, activePath }, sourceContentStore, true)),
+        branchTree: {
+          ...exportedChat.branchTree,
+          nodes,
+          ...sourceTree.messageAttributesV1 ? { messageAttributesV1: { version: 1, byNode: Object.fromEntries(Object.entries(readMessageAttributes(sourceTree).byNode).filter(([id]) => includedNodeSet.has(id))) } } : {},
+          rootId: includedNodeSet.has(sourceTree.rootId) ? sourceTree.rootId : activePath[0] ?? includedNodeIds[0] ?? "",
+          activePath
+        },
+        collapsedNodes,
+        omittedNodes,
+        protectedNodes,
+        summaryTargets,
+        summaries
+      },
+      contentStore
+    };
+  };
+  var contentToTextParts = (content) => {
+    return content.filter(isTextContent).map((c) => c.text);
+  };
+  var contentToString = (content) => {
+    return contentToTextParts(content).join("\n");
+  };
+  var chatToOpenAIFormat = (chat, contentStore, options = {}) => {
+    const visibleBranchOnly = options.visibleBranchOnly ?? false;
+    const modelSlug = chat.config?.model ?? "";
+    const configSystemPrompt = chat.config?.systemPrompt;
+    const mapping = {};
+    if (chat.branchTree) {
+      const tree = chat.branchTree;
+      const nodeIds = visibleBranchOnly ? tree.activePath.filter((id) => tree.nodes[id] !== void 0) : Object.keys(tree.nodes);
+      const filteredIds = nodeIds.filter((id) => tree.nodes[id]?.role !== "system");
+      const nodeSet = new Set(filteredIds);
+      const childrenMap = {};
+      for (const id of filteredIds) {
+        childrenMap[id] = [];
+      }
+      for (const id of filteredIds) {
+        const node = tree.nodes[id];
+        if (node.parentId && nodeSet.has(node.parentId)) {
+          childrenMap[node.parentId].push(id);
+        }
+      }
+      let systemNodeId = null;
+      if (configSystemPrompt) {
+        systemNodeId = "__system__";
+        const firstNonSystem = filteredIds.find((id) => {
+          const n = tree.nodes[id];
+          return n && !n.parentId;
+        }) ?? filteredIds[0];
+        mapping[systemNodeId] = {
+          id: systemNodeId,
+          message: {
+            author: { role: "system" },
+            content: { parts: [configSystemPrompt] },
+            metadata: { model_slug: modelSlug }
+          },
+          parent: null,
+          children: firstNonSystem ? [firstNonSystem] : []
+        };
+      }
+      for (const id of filteredIds) {
+        const node = tree.nodes[id];
+        const content = resolveContent(contentStore, node.contentHash);
+        const parts = contentToTextParts(content);
+        const parentInSet = node.parentId && nodeSet.has(node.parentId) ? node.parentId : null;
+        mapping[id] = {
+          id,
+          message: {
+            author: { role: node.role },
+            content: { parts },
+            metadata: { model_slug: modelSlug }
+          },
+          parent: parentInSet ?? systemNodeId,
+          children: childrenMap[id] ?? []
+        };
+      }
+      const activePath = tree.activePath.filter((id) => nodeSet.has(id));
+      const currentNode = activePath[activePath.length - 1] ?? filteredIds[0] ?? systemNodeId ?? "";
+      return {
+        title: chat.title,
+        create_time: tree.nodes[tree.rootId]?.createdAt ? Math.floor(tree.nodes[tree.rootId].createdAt / 1e3) : void 0,
+        mapping,
+        current_node: currentNode
+      };
+    }
+    let parentId = null;
+    const ids = [];
+    if (configSystemPrompt) {
+      const sysId = "msg-system";
+      ids.push(sysId);
+      mapping[sysId] = {
+        id: sysId,
+        message: {
+          author: { role: "system" },
+          content: { parts: [configSystemPrompt] },
+          metadata: { model_slug: modelSlug }
+        },
+        parent: null,
+        children: []
+      };
+      parentId = sysId;
+    }
+    chat.messages.forEach((msg, i) => {
+      if (msg.role === "system")
+        return;
+      const id = `msg-${i}`;
+      ids.push(id);
+      const parts = contentToTextParts(msg.content);
+      mapping[id] = {
+        id,
+        message: {
+          author: { role: msg.role },
+          content: { parts },
+          metadata: { model_slug: modelSlug }
+        },
+        parent: parentId,
+        children: []
+      };
+      if (parentId && mapping[parentId]) {
+        mapping[parentId].children.push(id);
+      }
+      parentId = id;
+    });
+    return {
+      title: chat.title,
+      mapping,
+      current_node: ids[ids.length - 1] ?? ""
+    };
+  };
+  var _orCounter = 0;
+  var orId = (prefix) => `${prefix}-${Date.now()}-${(++_orCounter).toString(36)}`;
+  var chatToOpenRouterFormat = (chat, contentStore) => {
+    const modelSlug = chat.config?.model ?? "";
+    const characterId = orId("char");
+    const now = new Date().toISOString();
+    const character = {
+      id: characterId,
+      model: modelSlug,
+      modelInfo: { slug: modelSlug, name: modelSlug },
+      description: "",
+      includeDefaultSystemPrompt: true,
+      isStreaming: true,
+      samplingParameters: {},
+      chatMemory: 8,
+      isDisabled: false,
+      isRemoved: false,
+      createdAt: now,
+      updatedAt: now,
+      plugins: []
+    };
+    const characters = { [characterId]: character };
+    const messages = {};
+    const items = {};
+    let prevMsgId;
+    const addMessage = (role, text, timestamp) => {
+      const msgId = orId("msg");
+      const itemId = orId("item");
+      const ts = timestamp ? new Date(timestamp).toISOString() : now;
+      const isUser = role === "user";
+      const item = {
+        id: itemId,
+        messageId: msgId,
+        data: {
+          type: "message",
+          role,
+          content: [{ type: isUser ? "input_text" : "output_text", text }]
+        }
+      };
+      items[itemId] = item;
+      const msg = {
+        id: msgId,
+        characterId: isUser ? "USER" : characterId,
+        contentType: "text",
+        context: "main-chat",
+        createdAt: ts,
+        updatedAt: ts,
+        isRetrying: false,
+        isEdited: false,
+        isCollapsed: false,
+        type: role,
+        items: [{ id: itemId, type: "message" }]
+      };
+      if (prevMsgId) {
+        msg.parentMessageId = prevMsgId;
+      }
+      if (!isUser) {
+        msg.isGenerating = false;
+      }
+      messages[msgId] = msg;
+      prevMsgId = msgId;
+    };
+    if (chat.config?.systemPrompt) {
+      addMessage("system", chat.config?.systemPrompt);
+    }
+    if (chat.branchTree) {
+      for (const id of chat.branchTree.activePath) {
+        const node = chat.branchTree.nodes[id];
+        if (!node || node.role === "system")
+          continue;
+        const content = resolveContent(contentStore, node.contentHash);
+        addMessage(node.role, contentToString(content), node.createdAt);
+      }
+    } else {
+      for (const msg of chat.messages) {
+        if (msg.role === "system")
+          continue;
+        addMessage(msg.role, contentToString(msg.content));
+      }
+    }
+    return {
+      version: "orpg.3.0",
+      title: chat.title,
+      characters,
+      messages,
+      items,
+      artifacts: {},
+      artifactFiles: {},
+      artifactVersions: {},
+      artifactFileContents: {}
+    };
+  };
+  var lmsStepId = () => `${Date.now()}-${Math.random().toString().slice(2, 18)}`;
+  var toLMStudioMessage = (role, text, modelSlug) => {
+    if (role === "assistant") {
+      const stepId = lmsStepId();
+      const contentBlock = {
+        type: "contentBlock",
+        stepIdentifier: stepId,
+        content: [{
+          type: "text",
+          text,
+          fromDraftModel: false,
+          tokensCount: 0,
+          isStructural: false
+        }],
+        genInfo: {
+          indexedModelIdentifier: modelSlug,
+          identifier: modelSlug
+        },
+        defaultShouldIncludeInContext: true,
+        shouldIncludeInContext: true
+      };
+      const version2 = {
+        type: "multiStep",
+        role: "assistant",
+        senderInfo: { senderName: modelSlug },
+        steps: [contentBlock]
+      };
+      return { versions: [version2], currentlySelected: 0 };
+    }
+    const version = {
+      type: "singleStep",
+      role,
+      content: [{ type: "text", text }]
+    };
+    return { versions: [version], currentlySelected: 0 };
+  };
+  var chatToLMStudioFormat = (chat, contentStore, options = {}) => {
+    const visibleBranchOnly = options.visibleBranchOnly ?? false;
+    const modelSlug = chat.config?.model ?? "";
+    const now = Date.now();
+    const messages = [];
+    let tokenCount = 0;
+    let userLastMessagedAt;
+    let assistantLastMessagedAt;
+    const systemPrompt = chat.config?.systemPrompt ?? "";
+    const addMsg = (role, text, timestamp) => {
+      if (!text)
+        return;
+      if (role === "system")
+        return;
+      messages.push(toLMStudioMessage(role, text, modelSlug));
+      if (role === "user" && timestamp)
+        userLastMessagedAt = timestamp;
+      if (role === "assistant" && timestamp)
+        assistantLastMessagedAt = timestamp;
+    };
+    if (chat.branchTree) {
+      const tree = chat.branchTree;
+      const nodeIds = visibleBranchOnly ? tree.activePath.filter((id) => tree.nodes[id] !== void 0) : tree.activePath;
+      for (const id of nodeIds) {
+        const node = tree.nodes[id];
+        if (!node)
+          continue;
+        const content = resolveContent(contentStore, node.contentHash);
+        addMsg(node.role, contentToString(content), node.createdAt);
+      }
+    } else {
+      for (const msg of chat.messages) {
+        addMsg(msg.role, contentToString(msg.content));
+      }
+    }
+    return {
+      name: chat.title,
+      pinned: false,
+      createdAt: chat.branchTree?.nodes[chat.branchTree.rootId]?.createdAt ?? now,
+      preset: "",
+      tokenCount,
+      userLastMessagedAt,
+      assistantLastMessagedAt,
+      systemPrompt,
+      messages,
+      usePerChatPredictionConfig: false,
+      perChatPredictionConfig: { fields: [] },
+      clientInput: "",
+      clientInputFiles: [],
+      userFilesSizeBytes: 0,
+      lastUsedModel: {
+        identifier: modelSlug,
+        indexedModelIdentifier: modelSlug,
+        instanceLoadTimeConfig: { fields: [] },
+        instanceOperationTimeConfig: { fields: [] }
+      },
+      notes: [],
+      plugins: [],
+      pluginConfigs: {},
+      disabledPluginTools: [],
+      looseFiles: []
+    };
+  };
+
+  // src/utils/systemPromptNormalize.ts
+  function extractTextFromContent(content) {
+    return content.filter(isTextContent).map((c) => c.text).filter(Boolean).join("\n");
+  }
+  function normalizeSystemPrompt(chat, contentStore) {
+    if (!chat.branchTree && chat.messages.some((message) => message.role === "system" && Object.keys(message).some((key) => key !== "role" && key !== "content"))) {
+      flatChatToBranchTree(chat, contentStore);
+    }
+    captureProjectedMessageAttributes(chat, contentStore);
+    if (chat.branchTree) {
+      normalizeWithBranchTree(chat, contentStore);
+    } else {
+      normalizeFlat(chat);
+    }
+  }
+  function normalizeFlat(chat) {
+    const systemTexts = [];
+    const nonSystemMessages = [];
+    for (const msg of chat.messages) {
+      if (msg.role === "system") {
+        const text = extractTextFromContent(msg.content);
+        if (text)
+          systemTexts.push(text);
+      } else {
+        nonSystemMessages.push(msg);
+      }
+    }
+    if (systemTexts.length > 0) {
+      const existing = chat.config.systemPrompt ?? "";
+      const parts = existing ? [existing] : [];
+      for (const text of systemTexts) {
+        if (!existing.includes(text)) {
+          parts.push(text);
+        }
+      }
+      chat.config.systemPrompt = parts.join("\n\n");
+    }
+    chat.messages = nonSystemMessages;
+  }
+  function normalizeWithBranchTree(chat, contentStore) {
+    const tree = chat.branchTree;
+    const { nodes } = tree;
+    const collectedSystemTexts = [];
+    const systemNodeIds = /* @__PURE__ */ new Set();
+    for (const [id, node] of Object.entries(nodes)) {
+      if (node.role === "system") {
+        systemNodeIds.add(id);
+        const content = resolveContent(contentStore, node.contentHash);
+        const text = extractTextFromContent(content);
+        if (text)
+          collectedSystemTexts.push(text);
+      }
+    }
+    if (collectedSystemTexts.length > 0) {
+      const existingParts = [];
+      if (chat.config.systemPrompt)
+        existingParts.push(chat.config.systemPrompt);
+      const existing = chat.config.systemPrompt ?? "";
+      for (const text of collectedSystemTexts) {
+        if (!existing.includes(text)) {
+          existingParts.push(text);
+        }
+      }
+      chat.config.systemPrompt = existingParts.join("\n\n");
+    }
+    const activeRootId = tree.activePath[0];
+    const activeRootIsSystem = activeRootId && nodes[activeRootId]?.role === "system";
+    for (const sysId of systemNodeIds) {
+      if (sysId === activeRootId && activeRootIsSystem)
+        continue;
+      const sysNode = nodes[sysId];
+      if (!sysNode)
+        continue;
+      for (const [id, node] of Object.entries(nodes)) {
+        if (node.parentId === sysId) {
+          nodes[id] = { ...node, parentId: sysNode.parentId };
+        }
+      }
+      const apIdx = tree.activePath.indexOf(sysId);
+      if (apIdx >= 0) {
+        tree.activePath.splice(apIdx, 1);
+      }
+      if (!readMessageAttributes(tree)?.byNode[sysId])
+        delete nodes[sysId];
+    }
+    const topNodeId = tree.activePath[0];
+    const topNode = topNodeId ? nodes[topNodeId] : void 0;
+    if (chat.config.systemPrompt) {
+      const systemContent = [
+        { type: "text", text: chat.config.systemPrompt }
+      ];
+      if (topNode && topNode.role === "system") {
+        const newHash = addContent(contentStore, systemContent);
+        nodes[topNodeId] = { ...topNode, contentHash: newHash };
+      }
+    } else {
+      if (topNode && topNode.role === "system") {
+        const nextId = tree.activePath[1];
+        if (nextId && nodes[nextId]) {
+          nodes[nextId] = { ...nodes[nextId], parentId: null };
+        }
+        tree.activePath.splice(0, 1);
+        if (!readMessageAttributes(tree)?.byNode[topNodeId])
+          delete nodes[topNodeId];
+        if (tree.rootId === topNodeId && tree.activePath.length > 0) {
+          tree.rootId = tree.activePath[0];
+        }
+      }
+    }
+    if (!nodes[tree.rootId]) {
+      const newRoot = Object.values(nodes).find((n) => n.parentId === null);
+      if (newRoot)
+        tree.rootId = newRoot.id;
+      else if (tree.activePath.length > 0)
+        tree.rootId = tree.activePath[0];
+    }
+    if (tree.activePath.length > 0) {
+      chat.messages = materializeActivePath(tree, contentStore);
+    } else {
+      chat.messages = [];
+    }
+  }
+
+  // src/utils/fileImport.ts
+  var cloneState = (value) => JSON.parse(JSON.stringify(value));
+  var deepClone = (value) => typeof structuredClone === "function" ? structuredClone(value) : cloneState(value);
+  var isRecord2 = (value) => typeof value === "object" && value !== null;
+  var createImportPlan = (base, mode, includeSettings, initial) => ({
+    // JSON-only hosts must retain explicit undefined roots until the final persisted diff.
+    ...Object.fromEntries(Object.keys(mode === "replace" && includeSettings ? initial : base).map((key) => [key, void 0])),
+    ...deepClone(mode === "replace" && includeSettings ? initial : base),
+    chats: mode === "replace" ? [] : deepClone(base.chats),
+    folders: mode === "replace" ? {} : deepClone(base.folders),
+    contentStore: mode === "replace" ? {} : deepClone(base.contentStore),
+    branchClipboard: mode === "replace" ? null : deepClone(base.branchClipboard),
+    evaluationResults: mode === "replace" ? {} : deepClone(base.evaluationResults)
+  });
+  var mergeChats = (plan, chatsToImport) => {
+    const chatIdMap = {};
+    chatsToImport.forEach((chat) => {
+      const prevId = chat.id;
+      assignFreshChatIds([chat]);
+      chatIdMap[prevId] = chat.id;
+    });
+    const contentStore = plan.contentStore ?? {};
+    for (const chat of chatsToImport) {
+      captureProjectedMessageAttributes(chat, contentStore);
+      normalizeSystemPrompt(chat, contentStore);
+    }
+    const existingChats = plan.chats;
+    if (existingChats) {
+      plan.chats = chatsToImport.concat(existingChats);
+    } else {
+      plan.chats = chatsToImport;
+    }
+    return chatIdMap;
+  };
+  var remapEvaluationResultKeys = (results, chatIdMap) => {
+    if (!results)
+      return {};
+    return Object.fromEntries(
+      Object.entries(results).map(([key, value]) => {
+        const firstSep = key.indexOf(":");
+        const secondSep = key.indexOf(":", firstSep + 1);
+        if (firstSep < 0 || secondSep < 0)
+          return [key, value];
+        const chatId = key.slice(0, firstSep);
+        const nextChatId = chatIdMap[chatId] ?? chatId;
+        return [`${nextChatId}${key.slice(firstSep)}`, value];
+      })
+    );
+  };
+  var clearMissingFolderReferences = (chats, folders) => {
+    if (!chats)
+      return;
+    chats.forEach((chat) => {
+      if (chat.folder && !Object.hasOwn(folders, chat.folder)) {
+        delete chat.folder;
+      }
+    });
+  };
+  var shiftAndMergeFolders = (plan, folders) => {
+    const offset = Object.keys(folders).length;
+    const currentFolders = plan.folders;
+    Object.values(currentFolders).forEach((folder) => {
+      folder.order += offset;
+    });
+    plan.folders = { ...folders, ...currentFolders };
+  };
+  var decodeLegacyRemoteImport = (raw) => {
+    if (!Number.isInteger(raw.version) || raw.version < 0 || raw.version >= STORE_VERSION) {
+      throw new Error("\u3053\u306E\u540C\u671F\u30C7\u30FC\u30BF\u306E\u7248\u306F\u53D6\u308A\u8FBC\u3081\u307E\u305B\u3093\u3002\u5BFE\u5FDC\u3059\u308B\u7248\u3067\u958B\u3044\u3066\u304F\u3060\u3055\u3044\u3002");
+    }
+    if (!isRecord2(raw.state) || !Array.isArray(raw.state.chats)) {
+      throw new Error("Invalid legacy remote snapshot");
+    }
+    const state = deepClone(raw.state);
+    const chats = state.chats;
+    const hasInlineNodes = chats.some((chat) => chat.branchTree && Object.values(chat.branchTree.nodes).some((node) => "content" in node && !node.contentHash));
+    const version = hasInlineNodes ? 2 : isRecord2(state.contentStore) ? 3 : 1;
+    if (version === 3 || hasInlineNodes) {
+      const hashedChats = hasInlineNodes ? chats.map((chat) => chat.branchTree ? {
+        ...chat,
+        branchTree: { ...chat.branchTree, nodes: Object.fromEntries(
+          Object.entries(chat.branchTree.nodes).filter(([, node]) => node.contentHash !== void 0)
+        ) }
+      } : chat) : chats;
+      const errors = findPersistedDataIntegrityErrors(hashedChats, state.contentStore ?? {}, null);
+      if (errors.length)
+        throw new Error(`Invalid legacy remote snapshot: ${errors.join("; ")}`);
+    }
+    for (const chat of chats) {
+      if (hasInlineNodes && chat.branchTree) {
+        for (const node of Object.values(chat.branchTree.nodes)) {
+          if (node.contentHash) {
+            node.content = resolveContent(state.contentStore, node.contentHash);
+            delete node.contentHash;
+          }
+        }
+      }
+      if (chat.messages === void 0) {
+        if (!chat.branchTree)
+          throw new Error("Invalid legacy remote snapshot: missing chat messages");
+        chat.messages = version === 3 ? materializeActivePath(chat.branchTree, state.contentStore) : [];
+      }
+    }
+    return { ...state, version, chats, folders: state.folders ?? {} };
+  };
+  var detectImportType = (parsedData) => {
+    if (isRecord2(parsedData) && parsedData.version === 3)
+      return "ExportV3";
+    if (isRecord2(parsedData) && parsedData.version === 2)
+      return "ExportV2";
+    if (isRecord2(parsedData) && parsedData.version === 1)
+      return "ExportV1";
+    if (isOpenAIContent(parsedData))
+      return "OpenAIContent";
+    if (isLegacyImport(parsedData))
+      return "LegacyImport";
+    if (isSingleChatImport(parsedData))
+      return "SingleChat";
+    return "";
+  };
+  var buildSuccessResult = (message) => ({
+    success: true,
+    message
+  });
+  var buildFailureResult = (message) => ({
+    success: false,
+    message
+  });
+  var importLegacyChats = (plan, chatsToImport, t2) => {
+    if (!validateAndFixChats(chatsToImport)) {
+      return buildFailureResult(
+        t2("notifications.invalidChatsDataFormat", { ns: "import" })
+      );
+    }
+    const folderNameToIdMap = {};
+    const parsedFolders = [];
+    chatsToImport.forEach((chat) => {
+      const folder = chat.folder;
+      if (!folder)
+        return;
+      if (!parsedFolders.includes(folder)) {
+        parsedFolders.push(folder);
+        folderNameToIdMap[folder] = editingUUID();
+      }
+      chat.folder = folderNameToIdMap[folder];
+    });
+    const newFolders = parsedFolders.reduce((acc, folderName, index) => {
+      const id = folderNameToIdMap[folderName];
+      const nextFolder = {
+        id,
+        name: folderName,
+        expanded: false,
+        order: index
+      };
+      return { [id]: nextFolder, ...acc };
+    }, {});
+    shiftAndMergeFolders(plan, newFolders);
+    const contentStore = { ...plan.contentStore };
+    for (const chat of chatsToImport) {
+      if (!chat.branchTree) {
+        flatChatToBranchTree(chat, contentStore);
+      }
+    }
+    plan.contentStore = contentStore;
+    mergeChats(plan, chatsToImport);
+    return chatsToImport.length > 0 ? buildSuccessResult(t2("notifications.successfulImport", { ns: "import" })) : buildFailureResult(t2("notifications.nothingImported", { ns: "import" }));
+  };
+  var mergeImportedContent = (plan, chats, importedContentStore) => {
+    const existingContentStore = new Map(Object.entries(plan.contentStore).map(([hash, entry]) => [hash, { ...entry }]));
+    const importedEntries = Object.entries(importedContentStore);
+    const reservedHashes = /* @__PURE__ */ new Set([...existingContentStore.keys(), ...Object.keys(importedContentStore)]);
+    for (const entry of [...existingContentStore.values(), ...Object.values(importedContentStore)]) {
+      if (entry.delta)
+        reservedHashes.add(entry.delta.baseHash);
+    }
+    for (const chat of [...plan.chats ?? [], ...chats]) {
+      for (const node of Object.values(chat.branchTree?.nodes ?? {}))
+        reservedHashes.add(node.contentHash);
+    }
+    for (const node of Object.values(plan.branchClipboard?.nodes ?? {}))
+      reservedHashes.add(node.contentHash);
+    const hashMap = /* @__PURE__ */ new Map();
+    const reserveHash = (hash) => {
+      let target = hash;
+      do {
+        target += "_";
+      } while (reservedHashes.has(target));
+      reservedHashes.add(target);
+      hashMap.set(hash, target);
+    };
+    for (const [hash, entry] of importedEntries) {
+      const existing = existingContentStore.get(hash);
+      if (existing && JSON.stringify({ ...existing, refCount: 0 }) !== JSON.stringify({ ...entry, refCount: 0 })) {
+        reserveHash(hash);
+      }
+    }
+    let changed = true;
+    while (changed) {
+      changed = false;
+      for (const [hash, entry] of importedEntries) {
+        if (entry.delta && hashMap.has(entry.delta.baseHash) && !hashMap.has(hash) && existingContentStore.has(hash)) {
+          reserveHash(hash);
+          changed = true;
+        }
+      }
+    }
+    for (const [hash, entry] of importedEntries) {
+      const target = hashMap.get(hash) ?? hash;
+      const imported = deepClone(entry);
+      if (imported.delta) {
+        imported.delta.baseHash = hashMap.get(imported.delta.baseHash) ?? imported.delta.baseHash;
+      }
+      const existing = existingContentStore.get(target);
+      existingContentStore.set(target, existing ? { ...existing, refCount: existing.refCount + imported.refCount } : imported);
+    }
+    for (const chat of chats) {
+      for (const node of Object.values(chat.branchTree?.nodes ?? {})) {
+        node.contentHash = hashMap.get(node.contentHash) ?? node.contentHash;
+      }
+    }
+    plan.contentStore = Object.fromEntries(existingContentStore);
+  };
+  var importExportV3 = (plan, parsedData, t2, mode, includeSettings) => {
+    if (!validateExportV3(parsedData)) {
+      return buildFailureResult(
+        t2("notifications.invalidFormatForVersion", { ns: "import" })
+      );
+    }
+    const chats = parsedData.chats ?? [];
+    clearMissingFolderReferences(chats, parsedData.folders);
+    shiftAndMergeFolders(plan, parsedData.folders);
+    mergeImportedContent(plan, chats, parsedData.contentStore);
+    const chatIdMap = mergeChats(plan, chats);
+    if (parsedData.evaluationResults) {
+      const remapped = remapEvaluationResultKeys(parsedData.evaluationResults, chatIdMap);
+      const existingResults = plan.evaluationResults;
+      plan.evaluationResults = { ...existingResults, ...remapped };
+    }
+    if (includeSettings && mode === "replace" && parsedData.evaluationSettings) {
+      const currentDefaults = plan.evaluationSettings;
+      plan.evaluationSettings = { ...currentDefaults, ...parsedData.evaluationSettings };
+    }
+    return chats.length > 0 || Object.keys(parsedData.folders).length > 0 ? buildSuccessResult(t2("notifications.successfulImport", { ns: "import" })) : buildFailureResult(t2("notifications.quotaExceeded", { ns: "import" }));
+  };
+  var importExportV2 = (plan, parsedData, t2) => {
+    if (!validateExportV2(parsedData)) {
+      return buildFailureResult(
+        t2("notifications.invalidFormatForVersion", { ns: "import" })
+      );
+    }
+    clearMissingFolderReferences(parsedData.chats, parsedData.folders);
+    shiftAndMergeFolders(plan, parsedData.folders);
+    const contentStore = { ...plan.contentStore };
+    if (parsedData.chats) {
+      for (const chat of parsedData.chats) {
+        if (chat.branchTree) {
+          for (const node of Object.values(chat.branchTree.nodes)) {
+            if (node.content && !node.contentHash) {
+              node.contentHash = addContent(contentStore, node.content);
+              delete node.content;
+            }
+          }
+        } else {
+          flatChatToBranchTree(chat, contentStore);
+        }
+      }
+    }
+    plan.contentStore = contentStore;
+    if (parsedData.chats) {
+      mergeChats(plan, parsedData.chats);
+    }
+    return parsedData.chats && parsedData.chats.length > 0 || Object.keys(parsedData.folders).length > 0 ? buildSuccessResult(t2("notifications.successfulImport", { ns: "import" })) : buildFailureResult(t2("notifications.quotaExceeded", { ns: "import" }));
+  };
+  var importExportV1 = (plan, parsedData, t2) => {
+    if (!validateExportV1(parsedData)) {
+      return buildFailureResult(
+        t2("notifications.invalidFormatForVersion", { ns: "import" })
+      );
+    }
+    clearMissingFolderReferences(parsedData.chats, parsedData.folders);
+    shiftAndMergeFolders(plan, parsedData.folders);
+    if (parsedData.chats) {
+      const contentStore = { ...plan.contentStore };
+      for (const chat of parsedData.chats) {
+        if (!chat.branchTree) {
+          flatChatToBranchTree(chat, contentStore);
+        }
+      }
+      plan.contentStore = contentStore;
+      mergeChats(plan, parsedData.chats);
+    }
+    return parsedData.chats && parsedData.chats.length > 0 || Object.keys(parsedData.folders).length > 0 ? buildSuccessResult(t2("notifications.successfulImport", { ns: "import" })) : buildFailureResult(t2("notifications.quotaExceeded", { ns: "import" }));
+  };
+  var importOpenAIData = (plan, chatsToImport, shouldAllowPartialImport, t2) => {
+    const chats = importOpenAIChatExport(chatsToImport, shouldAllowPartialImport);
+    const contentStore = { ...plan.contentStore };
+    for (const chat of chats) {
+      if (!chat.branchTree) {
+        flatChatToBranchTree(chat, contentStore);
+      }
+    }
+    plan.contentStore = contentStore;
+    mergeChats(plan, chats);
+    return chats.length > 0 ? buildSuccessResult(t2("notifications.successfulImport", { ns: "import" })) : buildFailureResult(t2("notifications.quotaExceeded", { ns: "import" }));
+  };
+  var validateOpenAIMappings = (data) => {
+    for (const chat of Array.isArray(data) ? data : [data]) {
+      if (!isRecord2(chat) || !Object.hasOwn(chat, "mapping"))
+        continue;
+      if (!isRecord2(chat.mapping) || Array.isArray(chat.mapping))
+        throw new Error("Invalid OpenAI mapping");
+      const mapping = chat.mapping;
+      const ids = Object.keys(mapping);
+      if (!ids.length)
+        throw new Error("Empty OpenAI mapping");
+      if (chat.current_node !== void 0 && chat.current_node !== null && (typeof chat.current_node !== "string" || !Object.hasOwn(mapping, chat.current_node))) {
+        throw new Error("Invalid OpenAI current_node");
+      }
+      const parents = /* @__PURE__ */ new Map();
+      const children = /* @__PURE__ */ new Map();
+      for (const id of ids) {
+        const node = mapping[id];
+        if (!isRecord2(node) || node.id !== id || !Array.isArray(node.children) || node.parent !== null && (typeof node.parent !== "string" || !Object.hasOwn(mapping, node.parent)) || node.children.some((child) => typeof child !== "string" || !Object.hasOwn(mapping, child))) {
+          throw new Error("Invalid OpenAI node references");
+        }
+        if (isRecord2(node.message) && isRecord2(node.message.author) && !["user", "assistant", "system"].includes(String(node.message.author.role))) {
+          throw new Error("Unsupported OpenAI message role");
+        }
+        parents.set(id, node.parent === null ? [] : [node.parent]);
+        children.set(id, node.children);
+      }
+      for (const edges of [parents, children]) {
+        const indegrees = new Map(ids.map((id) => [id, 0]));
+        for (const targets of edges.values())
+          for (const target of targets)
+            indegrees.set(target, indegrees.get(target) + 1);
+        const queue = ids.filter((id) => indegrees.get(id) === 0);
+        for (let index = 0; index < queue.length; index++) {
+          for (const target of edges.get(queue[index])) {
+            indegrees.set(target, indegrees.get(target) - 1);
+            if (indegrees.get(target) === 0)
+              queue.push(target);
+          }
+        }
+        if (queue.length !== ids.length)
+          throw new Error("Circular OpenAI mapping");
+      }
+    }
+  };
+  var importParsedData = (base, parsedData, type, t2, shouldAllowPartialImport, mode, includeSettings = true, initial = base, decisions = {}, resolveDecision) => {
+    if (type === "OpenAIContent")
+      validateOpenAIMappings(parsedData);
+    let chatsToImport = parsedData;
+    let removedChatsCount = 0;
+    let reduceImport = decisions.reduceImport === true;
+    shouldAllowPartialImport ||= decisions.allowPartialImport === true;
+    while (true) {
+      const plan = createImportPlan(base, mode, includeSettings, initial);
+      try {
+        const data = deepClone(chatsToImport);
+        let result3;
+        switch (type) {
+          case "OpenAIContent":
+            result3 = importOpenAIData(
+              plan,
+              data,
+              shouldAllowPartialImport,
+              t2
+            );
+            break;
+          case "SingleChat":
+            result3 = importLegacyChats(plan, [data], t2);
+            break;
+          case "LegacyImport":
+            result3 = importLegacyChats(plan, data, t2);
+            break;
+          case "ExportV3":
+            result3 = importExportV3(plan, data, t2, mode, includeSettings);
+            break;
+          case "ExportV2":
+            result3 = importExportV2(plan, data, t2);
+            break;
+          case "ExportV1":
+            result3 = importExportV1(plan, data, t2);
+            break;
+          default:
+            result3 = buildFailureResult(t2("notifications.unrecognisedDataFormat", { ns: "import" }));
+        }
+        return { result: result3, plan, removedChatsCount };
+      } catch (error2) {
+        if (error2.name === "QuotaExceededError") {
+          const chats = type === "ExportV1" && isRecord2(chatsToImport) ? chatsToImport.chats : chatsToImport;
+          if (!Array.isArray(chats) || !chats.length) {
+            return { result: buildFailureResult(t2("notifications.quotaExceeded", { ns: "import" })), plan };
+          }
+          if (reduceImport) {
+            chats.pop();
+            removedChatsCount++;
+            continue;
+          }
+          if (decisions.reduceImport === void 0 && resolveDecision)
+            decisions.reduceImport = resolveDecision({ kind: "reduce-import", message: t2("reduceMessagesFailedImportWarning") });
+          if (decisions.reduceImport === void 0)
+            return { result: buildFailureResult(t2("reduceMessagesFailedImportWarning")), plan, decision: { kind: "reduce-import", message: t2("reduceMessagesFailedImportWarning") } };
+          if (decisions.reduceImport) {
+            reduceImport = true;
+            continue;
+          }
+          return { result: buildFailureResult(t2("notifications.quotaExceeded", { ns: "import" })), plan };
+        }
+        if (error2 instanceof PartialImportError) {
+          if (decisions.allowPartialImport === void 0 && resolveDecision)
+            decisions.allowPartialImport = resolveDecision({ kind: "partial-import", message: error2.message });
+          if (decisions.allowPartialImport === void 0)
+            return { result: buildFailureResult(error2.message), plan, decision: { kind: "partial-import", message: error2.message } };
+          if (decisions.allowPartialImport) {
+            shouldAllowPartialImport = true;
+            reduceImport = true;
+            continue;
+          }
+          return { result: buildFailureResult(t2("notifications.nothingImported", { ns: "import" })), plan };
+        }
+        return { result: buildFailureResult(error2.message), plan };
+      }
+    }
+  };
+  var prepareMissingPreviewContent = (chats, store, t2) => {
+    const originalHashes = new Set(Object.keys(store));
+    const retained = /* @__PURE__ */ new Map();
+    const references = [];
+    let recovered = 0;
+    const asContent = (value) => {
+      const content = typeof value === "string" ? [{ type: "text", text: value }] : value;
+      return validateExportV3({
+        version: 3,
+        chats: [],
+        folders: {},
+        contentStore: { candidate: { content, refCount: 1 } }
+      }) ? content : void 0;
+    };
+    for (const value of chats) {
+      if (!isRecord2(value))
+        continue;
+      delete value.__previewMissingContent;
+      const tree = value.branchTree;
+      if (!isRecord2(tree) || !isRecord2(tree.nodes))
+        continue;
+      for (const node of Object.values(tree.nodes)) {
+        if (!isRecord2(node) || typeof node.contentHash !== "string" || originalHashes.has(node.contentHash) || isStreamingContentHash(node.contentHash))
+          continue;
+        const hash = node.contentHash;
+        let content = asContent(node.content);
+        const path = tree.activePath;
+        const messages = value.messages;
+        if (!content && Array.isArray(path) && Array.isArray(messages) && path.length === messages.length) {
+          const message = messages[path.indexOf(node.id)];
+          if (isRecord2(message) && message.role === node.role) {
+            const candidate = asContent(message.content);
+            if (candidate) {
+              const candidateHash = computeContentHash(candidate);
+              if (hash === candidateHash || hash.startsWith(candidateHash) && /^_+$/.test(hash.slice(candidateHash.length)))
+                content = candidate;
+            }
+          }
+        }
+        references.push({ chat: value, node, hash });
+        if (content) {
+          const previous = retained.get(hash);
+          retained.set(hash, previous === void 0 ? content : JSON.stringify(previous) === JSON.stringify(content) ? previous : null);
+        }
+      }
+    }
+    for (const { chat, node, hash } of references) {
+      let content = retained.get(hash);
+      if (content)
+        recovered++;
+      else {
+        const missing = chat.__previewMissingContent ??= [];
+        missing.push(hash);
+        content = [{ type: "text", text: t2("preview.missingContent", { ns: "import", hash }) }];
+      }
+      node.contentHash = addContent(store, content);
+      delete node.content;
+    }
+    return recovered;
+  };
+  var validatePreviewSource = (source) => {
+    if (!validateFolders(source.folders))
+      throw new Error("Invalid folder hierarchy");
+    const errors = findPersistedDataIntegrityErrors(source.chats, source.contentStore, null);
+    if (errors.length)
+      throw new Error(errors.join("; "));
+    for (const [hash, entry] of Object.entries(source.contentStore)) {
+      if (isStreamingContentHash(hash) || entry.delta && isStreamingContentHash(entry.delta.baseHash)) {
+        throw new Error("Streaming content cannot be previewed");
+      }
+    }
+    if (validateDeltaIntegrity(source.contentStore).size)
+      throw new Error("Invalid delta content");
+    for (const chat of source.chats) {
+      const tree = chat.branchTree;
+      if (!tree)
+        continue;
+      const ids = Object.keys(tree.nodes);
+      if (!Array.isArray(tree.activePath) || ids.length && !tree.nodes[tree.rootId]) {
+        throw new Error("Invalid branch root or active path");
+      }
+      const checked = /* @__PURE__ */ new Set();
+      for (const id of ids) {
+        const node = tree.nodes[id];
+        if (!node || node.id !== id || !["user", "assistant", "system"].includes(node.role) || node.parentId !== null && !tree.nodes[node.parentId])
+          throw new Error("Invalid branch node");
+        const path = /* @__PURE__ */ new Set();
+        let current = id;
+        while (current !== null && !checked.has(current)) {
+          if (path.has(current))
+            throw new Error("Circular branch tree");
+          path.add(current);
+          current = tree.nodes[current].parentId;
+        }
+        path.forEach((value) => checked.add(value));
+        const content = resolveContent(source.contentStore, node.contentHash);
+        if (!validateExportV3({
+          version: 3,
+          chats: [],
+          folders: {},
+          contentStore: { resolved: { content, refCount: 1 } }
+        }))
+          throw new Error("Invalid resolved content");
+      }
+      const activeIds = /* @__PURE__ */ new Set();
+      let previous = null;
+      for (const id of tree.activePath) {
+        if (!tree.nodes[id] || activeIds.has(id) || tree.nodes[id].parentId !== previous) {
+          throw new Error("Invalid active path");
+        }
+        activeIds.add(id);
+        previous = id;
+      }
+    }
+  };
+  var prepareImportData = (data, base, t2, decisions = {}, resolveDecision, allowEmpty = false) => {
+    const raw = deepClone(data);
+    const payload = isRecord2(raw) && isRecord2(raw.state) ? raw.state : raw;
+    const rawChats = isRecord2(payload) && Array.isArray(payload.chats) ? payload.chats : Array.isArray(payload) ? payload : [payload];
+    let recoveredContentCount = 0;
+    if (isRecord2(payload) && isRecord2(payload.contentStore)) {
+      const contentStore = payload.contentStore;
+      if (!validateExportV3({ version: 3, chats: [], folders: {}, contentStore }))
+        throw new Error("Invalid content store");
+      for (const [hash, entry] of Object.entries(contentStore)) {
+        if (isStreamingContentHash(hash) || entry?.delta && isStreamingContentHash(entry.delta.baseHash)) {
+          throw new Error("Streaming content cannot be previewed");
+        }
+      }
+      if (validateDeltaIntegrity(contentStore).size)
+        throw new Error("Invalid delta content");
+      recoveredContentCount = prepareMissingPreviewContent(rawChats, contentStore, t2);
+      const hashedChats = rawChats.map((chat) => isRecord2(chat) && isRecord2(chat.branchTree) && isRecord2(chat.branchTree.nodes) ? { ...chat, branchTree: { ...chat.branchTree, nodes: Object.fromEntries(
+        Object.entries(chat.branchTree.nodes).filter(([, node]) => isRecord2(node) && node.contentHash !== void 0)
+      ) } } : chat);
+      const errors = findPersistedDataIntegrityErrors(hashedChats, contentStore, null).filter((error2) => !error2.startsWith("Duplicate chat id:"));
+      if (errors.length)
+        throw new Error(errors.join("; "));
+    }
+    for (const chat of rawChats) {
+      if (isRecord2(chat) && isRecord2(chat.branchTree) && isRecord2(chat.branchTree.nodes)) {
+        for (const node of Object.values(chat.branchTree.nodes)) {
+          if (isRecord2(node) && typeof node.contentHash === "string" && isStreamingContentHash(node.contentHash)) {
+            throw new Error("Streaming content cannot be previewed");
+          }
+        }
+      }
+    }
+    const parsed = isRecord2(raw) && Object.hasOwn(raw, "state") && typeof raw.version === "number" ? decodeLegacyRemoteImport(raw) : raw;
+    const type = detectImportType(parsed);
+    if (!type)
+      throw new Error(t2("notifications.unrecognisedDataFormat", { ns: "import" }));
+    const { result: result3, plan, decision } = importParsedData(base, parsed, type, t2, false, "replace", false, base, decisions, resolveDecision);
+    if (decision)
+      return { status: "decision-required", decision, result: result3 };
+    const validEmpty = allowEmpty && !plan.chats?.length && !Object.keys(plan.folders).length && (type === "ExportV3" ? validateExportV3(parsed) : type === "ExportV2" ? validateExportV2(parsed) : type === "ExportV1" ? validateExportV1(parsed) : false);
+    if (!result3.success && !validEmpty)
+      return { status: "failed", result: result3 };
+    const source = previewSourceFromPlan(plan);
+    if (isRecord2(parsed) && type.startsWith("Export")) {
+      source.extensions = Object.fromEntries(Object.entries(parsed).filter(([key]) => !["version", "chats", "folders", "contentStore", "evaluationSettings", "evaluationResults"].includes(key)));
+      if ("evaluationSettings" in parsed)
+        source.evaluationSettings = deepClone(parsed.evaluationSettings);
+    }
+    source.recoveredContentCount = recoveredContentCount;
+    source.unavailableContent = {};
+    for (const chat of source.chats) {
+      if (chat.__previewMissingContent?.length)
+        source.unavailableContent[chat.id] = chat.__previewMissingContent;
+      delete chat.__previewMissingContent;
+    }
+    validatePreviewSource(source);
+    return { status: "ready", source, type };
+  };
+  var previewSourceFromPlan = (plan) => {
+    for (const chat of plan.chats ?? []) {
+      if (!chat.branchTree)
+        flatChatToBranchTree(chat, plan.contentStore);
+    }
+    const source = {
+      chats: plan.chats ?? [],
+      folders: plan.folders,
+      contentStore: plan.contentStore,
+      evaluationResults: plan.evaluationResults ?? {}
+    };
+    return source;
+  };
+  var validateImportSelection = (source, ids, t2, options, completeFileImport = false) => {
+    if (!completeFileImport)
+      validatePreviewSource(source);
+    const selectedIds = new Set(ids);
+    const selected = source.chats.filter((chat) => selectedIds.has(chat.id));
+    if (selected.some((chat) => source.unavailableContent?.[chat.id]?.length)) {
+      throw new Error(t2("preview.cannotImportMissingContent", { ns: "import" }));
+    }
+    const includedFolderIds = new Set(options.selectedFolderIds);
+    if (selected.length !== selectedIds.size || [...includedFolderIds].some((id) => !Object.hasOwn(source.folders, id))) {
+      throw new Error(t2("notifications.nothingImported", { ns: "import" }));
+    }
+    for (const chat of selected)
+      if (chat.folder)
+        includedFolderIds.add(chat.folder);
+    for (const id of includedFolderIds) {
+      const parentId = source.folders[id]?.parentId;
+      if (parentId)
+        includedFolderIds.add(parentId);
+    }
+    if (!selected.length && !includedFolderIds.size) {
+      throw new Error(t2("notifications.nothingImported", { ns: "import" }));
+    }
+    return { selectedIds, selected, includedFolderIds };
+  };
+  var buildPreviewAppendPatch = (base, source, ids, t2, options, completeFileImport = false, currentChatId) => {
+    const { selectedIds, selected, includedFolderIds } = validateImportSelection(source, ids, t2, options, completeFileImport);
+    const rootId = editingUUID();
+    const folderIdMap = Object.fromEntries([...includedFolderIds].map((id) => [id, editingUUID()]));
+    const folders = { ...base.folders };
+    for (const [id, folder] of Object.entries(folders)) {
+      if (!folder.parentId)
+        folders[id] = { ...folder, order: folder.order + 1 };
+    }
+    folders[rootId] = {
+      id: rootId,
+      name: t2("preview.importFolderName", { fileName: options.fileName, ns: "import", defaultValue: "Import: {{fileName}}" }),
+      expanded: true,
+      order: 0
+    };
+    for (const id of includedFolderIds) {
+      const folder = source.folders[id];
+      const nextId = folderIdMap[id];
+      folders[nextId] = {
+        ...deepClone(folder),
+        id: nextId,
+        parentId: folder.parentId ? folderIdMap[folder.parentId] : rootId
+      };
+    }
+    const plan = { ...base, contentStore: deepClone(base.contentStore ?? {}) };
+    const chatIdMap = {};
+    const chats = selected.map((original) => {
+      const prepared = completeFileImport ? void 0 : prepareChatForExport(original, source.contentStore);
+      const chat = prepared?.chat ?? deepClone(original);
+      assignFreshChatIds([chat]);
+      chatIdMap[original.id] = chat.id;
+      chat.folder = original.folder ? folderIdMap[original.folder] : rootId;
+      chat.messages = completeFileImport ? chat.messages.map(({ role, content }) => ({ role, content })) : materializeActivePath(chat.branchTree, source.contentStore);
+      if (prepared)
+        mergeImportedContent(plan, [chat], prepared.contentStore);
+      return chat;
+    });
+    if (completeFileImport)
+      mergeImportedContent(plan, chats, source.contentStore);
+    const contentStore = plan.contentStore;
+    const evaluationResults = Object.fromEntries(Object.entries(source.evaluationResults).filter(([key]) => selectedIds.has(key.slice(0, key.indexOf(":")))));
+    const selectedChatId = currentChatId;
+    const mergedChats = [...chats, ...base.chats ?? []];
+    return {
+      chats: mergedChats,
+      folders,
+      contentStore,
+      evaluationResults: { ...base.evaluationResults, ...remapEvaluationResultKeys(evaluationResults, chatIdMap) },
+      currentChatIndex: selectedChatId ? mergedChats.findIndex((chat) => chat.id === selectedChatId) : mergedChats.length ? 0 : -1
+    };
+  };
+
+  // src/utils/fileImportProjection.ts
+  function importOpaquePaths(data) {
+    const paths = [];
+    const object2 = (v) => v && typeof v === "object" && !Array.isArray(v);
+    const fields = (v, p, known) => {
+      if (object2(v)) {
+        for (const key of Object.keys(v))
+          if (!known.includes(key))
+            paths.push([...p, key]);
+      }
+    };
+    const parts = (v, p) => {
+      if (!Array.isArray(v))
+        return;
+      v.forEach((part, index) => {
+        const at = [...p, index];
+        if (!object2(part))
+          return;
+        const known = part.type === "text" || part.type === "reasoning" ? ["type", "text"] : part.type === "image_url" ? ["type", "image_url"] : part.type === "tool_call" ? ["type", "id", "name", "arguments"] : part.type === "tool_result" ? ["type", "tool_call_id", "content"] : ["type"];
+        fields(part, at, known);
+        if (part.type === "image_url")
+          fields(part.image_url, [...at, "image_url"], ["url", "detail"]);
+      });
+    };
+    const message = (v, p) => {
+      fields(v, p, ["role", "content"]);
+      if (object2(v))
+        parts(v.content, [...p, "content"]);
+    };
+    const node = (v, p) => {
+      fields(v, p, ["id", "parentId", "role", "contentHash", "content"]);
+      if (object2(v))
+        parts(v.content, [...p, "content"]);
+    };
+    const tree = (v, p, extra = []) => {
+      fields(v, p, ["nodes", "rootId", "activePath", "messageAttributesV1", ...extra]);
+      if (object2(v?.nodes))
+        for (const [id, n] of Object.entries(v.nodes))
+          node(n, [...p, "nodes", id]);
+      if (object2(v?.messageAttributesV1?.byNode))
+        for (const [id, attrs] of Object.entries(v.messageAttributesV1.byNode))
+          fields(attrs, [...p, "messageAttributesV1", "byNode", id], []);
+    };
+    const chat = (v, p) => {
+      fields(v, p, ["id", "title", "titleSet", "folder", "config", "messages", "branchTree", "collapsedNodes", "omittedNodes", "protectedNodes", "summaryTargets", "summaries"]);
+      if (!object2(v))
+        return;
+      fields(v.config, [...p, "config"], ["model", "systemPrompt", "temperature", "presence_penalty", "top_p", "frequency_penalty"]);
+      if (Array.isArray(v.messages))
+        v.messages.forEach((m, index) => message(m, [...p, "messages", index]));
+      tree(v.branchTree, [...p, "branchTree"]);
+      if (Array.isArray(v.summaries))
+        v.summaries.forEach((s, index) => {
+          const at = [...p, "summaries", index];
+          fields(s, at, ["id", "mode", "text", "useForSubmit", "format", "sources", "generation"]);
+          if (Array.isArray(s?.sources))
+            s.sources.forEach((item, i) => fields(item, [...at, "sources", i], ["nodeId", "parentId", "role", "textParts"]));
+          fields(s?.generation, [...at, "generation"], ["model", "providerId", "settings", "createdAt"]);
+          if (object2(s?.generation?.settings))
+            fields(s.generation.settings, [...at, "generation", "settings"], ["temperature", "max_tokens", "reasoning_effort"]);
+        });
+    };
+    const openAI = (v, p) => {
+      fields(v, p, ["title", "mapping", "current_node", "messages", "model", "temperature", "max_tokens", "top_p", "frequency_penalty", "presence_penalty"]);
+      if (Array.isArray(v?.messages))
+        v.messages.forEach((m, i) => message(m, [...p, "messages", i]));
+      if (object2(v?.mapping))
+        for (const [id, n] of Object.entries(v.mapping)) {
+          const at = [...p, "mapping", id];
+          fields(n, at, ["id", "parent", "children", "message"]);
+          fields(n?.message, [...at, "message"], ["author", "content"]);
+          fields(n?.message?.author, [...at, "message", "author"], ["role"]);
+          const content = n?.message?.content;
+          if (object2(content) && Object.hasOwn(content, "parts"))
+            fields(content, [...at, "message", "content"], ["parts"]);
+          else if (object2(content)) {
+            const offset = paths.length;
+            parts([content], [...at, "message", "content"]);
+            for (let i = offset; i < paths.length; i++)
+              paths[i].splice(at.length + 2, 1);
+          }
+        }
+    };
+    const root = (v, p) => {
+      if (Array.isArray(v)) {
+        v.forEach((item, index) => isOpenAIContent(item) ? openAI(item, [...p, index]) : chat(item, [...p, index]));
+        return;
+      }
+      if (!object2(v))
+        return;
+      if (object2(v.state)) {
+        fields(v, p, ["version", "state"]);
+        root(v.state, [...p, "state"]);
+        return;
+      }
+      if (Array.isArray(v.chats) || object2(v.contentStore) || object2(v.folders)) {
+        fields(v, p, ["version", "chats", "folders", "contentStore", "evaluationSettings", "evaluationResults", "recoveredContentCount", "unavailableContent", "extensions", "branchClipboard"]);
+        v.chats?.forEach((c, i) => chat(c, [...p, "chats", i]));
+        if (object2(v.contentStore))
+          for (const [hash, e] of Object.entries(v.contentStore)) {
+            fields(e, [...p, "contentStore", hash], ["content", "refCount", "delta"]);
+            parts(e?.content, [...p, "contentStore", hash, "content"]);
+            fields(e?.delta, [...p, "contentStore", hash, "delta"], ["baseHash", "patch"]);
+          }
+        if (object2(v.folders))
+          for (const [id, f] of Object.entries(v.folders))
+            fields(f, [...p, "folders", id], ["id", "name", "order", "expanded", "parentId"]);
+        fields(v.evaluationSettings, [...p, "evaluationSettings"], ["safetyPreSend", "safetyPostReceive", "qualityPreSend", "qualityPostReceive"]);
+        if (object2(v.evaluationResults))
+          for (const [id, r] of Object.entries(v.evaluationResults))
+            fields(r, [...p, "evaluationResults", id], ["phase"]);
+        if (object2(v.extensions))
+          fields(v.extensions, [...p, "extensions"], []);
+        const clip = v.branchClipboard;
+        if (object2(clip)) {
+          fields(clip, [...p, "branchClipboard"], ["nodes", "nodeIds", "sourceChat", "messageAttributesV1", "collapsedNodes", "omittedNodes", "protectedNodes"]);
+          tree(clip, [...p, "branchClipboard"], ["nodeIds", "sourceChat", "collapsedNodes", "omittedNodes", "protectedNodes"]);
+        }
+      } else if (isOpenAIContent(v))
+        openAI(v, p);
+      else
+        chat(v, p);
+    };
+    root(data, []);
+    return paths;
+  }
+
+  // shared/google-sync/fileImport.ts
+  function importDefaults() {
+    const initial = Object.fromEntries(importDefaults_generated_default.keys.map((key) => [key, importDefaults_generated_default.values[key]]));
+    return createImportPlan(initial, "replace", false, initial);
+  }
+  function fileImport(json) {
+    const input = JSON.parse(json);
+    const t2 = (key, opts) => String(input.messages?.[key] ?? opts?.defaultValue ?? key).replace(/\{\{(\w+)\}\}/g, (_23, name) => String(opts?.[name] ?? ""));
+    if (input.operation === "defaults")
+      return JSON.stringify(importDefaults());
+    if (input.operation === "inspect") {
+      if (!["data", "state", "source"].includes(input.kind))
+        throw new Error("Invalid import projection kind.");
+      const data = input.data, contentStorePaths = [];
+      if (data && typeof data === "object" && !Array.isArray(data)) {
+        if (data.contentStore && typeof data.contentStore === "object")
+          contentStorePaths.push(["contentStore"]);
+        if (data.state?.contentStore && typeof data.state.contentStore === "object")
+          contentStorePaths.push(["state", "contentStore"]);
+      }
+      return JSON.stringify({ opaquePaths: importOpaquePaths(data), contentStorePaths });
+    }
+    const run = () => {
+      if (input.operation === "preview") {
+        const source2 = input.source;
+        return { ...source2.extensions, version: 3, chats: source2.chats, folders: source2.folders, contentStore: source2.contentStore, evaluationResults: source2.evaluationResults, ...source2.evaluationSettings ? { evaluationSettings: source2.evaluationSettings } : {} };
+      }
+      if (input.operation === "prepare") {
+        const prepared = prepareImportData(input.data, input.defaults ?? importDefaults(), t2, input.decisions, void 0, input.allowEmpty === true);
+        if (prepared.status !== "ready")
+          return prepared;
+        const source2 = prepared.source;
+        return { ...prepared, previewV3: { ...source2.extensions, version: 3, chats: source2.chats, folders: source2.folders, contentStore: source2.contentStore, evaluationResults: source2.evaluationResults, ...source2.evaluationSettings ? { evaluationSettings: source2.evaluationSettings } : {} } };
+      }
+      if (input.operation !== "plan")
+        throw new Error("Invalid import operation.");
+      if (input.mode !== "append" && input.mode !== "replace")
+        throw new Error("Invalid import mode.");
+      const base = input.base, source = input.source;
+      validatePreviewSource(source);
+      const ids = input.selectedChatIds ?? source.chats.map((chat) => chat.id), folders = input.selectedFolderIds ?? Object.keys(source.folders);
+      let data, currentChatIndex;
+      if (input.mode === "append") {
+        const patch = buildPreviewAppendPatch(base, source, ids, t2, { fileName: input.fileName ?? "", selectedFolderIds: folders }, false, input.currentChatId);
+        const { currentChatIndex: index, ...rest } = patch;
+        data = { ...base, ...rest };
+        currentChatIndex = index;
+      } else {
+        const resetBase = { ...base, ...createImportPlan(base, "replace", input.includeSettings === true, { ...importDefaults(), ...input.defaults }) };
+        const empty = resetBase;
+        const options = { fileName: input.fileName ?? "", selectedFolderIds: folders };
+        if (ids.length || folders.length)
+          validateImportSelection(source, ids, t2, options);
+        const complete = ids.length === source.chats.length && folders.length === Object.keys(source.folders).length;
+        const selected = complete ? void 0 : buildPreviewAppendPatch(empty, source, ids, t2, options);
+        data = complete ? { ...resetBase, chats: structuredClone(source.chats), folders: structuredClone(source.folders), contentStore: structuredClone(source.contentStore), evaluationResults: structuredClone(source.evaluationResults), branchClipboard: null } : { ...resetBase, chats: selected.chats, folders: selected.folders, contentStore: selected.contentStore, evaluationResults: selected.evaluationResults, branchClipboard: null };
+        currentChatIndex = ids.length ? 0 : -1;
+        if (input.includeSettings && source.evaluationSettings)
+          data.evaluationSettings = { ...resetBase.evaluationSettings, ...source.evaluationSettings };
+      }
+      const persisted = JSON.parse(JSON.stringify(data));
+      return {
+        result: { success: true, message: t2("notifications.successfulImport", { ns: "import" }) },
+        changes: diffJSONChanges(base, persisted),
+        currentChatIndex,
+        extensionChanges: diffJSONChanges(input.baseExtensions ?? {}, JSON.parse(JSON.stringify({ ...input.baseExtensions, ...source.extensions })))
+      };
+    };
+    const existingIDs = [...input.base?.chats ?? [], ...input.source?.chats ?? []].flatMap((chat) => [chat.id, ...Object.keys(chat.branchTree?.nodes ?? {})]);
+    if (input.newIDs !== void 0)
+      return JSON.stringify(withEditingRuntime(input.newIDs, existingIDs, input.now ?? Date.now(), run));
+    const clock = Date.now;
+    if (input.now !== void 0)
+      Date.now = () => input.now;
+    try {
+      return JSON.stringify(run());
+    } finally {
+      Date.now = clock;
+    }
   }
 
   // src/utils/branchHistory.ts
@@ -8454,7 +13880,7 @@ var WeaveletGoogleSync = (() => {
       else
         delete next[input.nodeId];
     } else if (input.value) {
-      for (const id of chat.branchTree?.activePath ?? chat.messages.map((_, index2) => String(index2)))
+      for (const id of chat.branchTree?.activePath ?? chat.messages.map((_23, index2) => String(index2)))
         next[id] = true;
     }
     if (Object.keys(previous).length === Object.keys(next).length && Object.keys(next).every((id) => previous[id] === next[id]))
@@ -8597,7 +14023,7 @@ var WeaveletGoogleSync = (() => {
     if (!from.chat.branchTree) {
       if (from.messageIndex > to.messageIndex)
         return { status: "not-ancestor" };
-      return { status: "valid", chatIndex: from.chatIndex, nodeIds: from.chat.messages.slice(from.messageIndex, to.messageIndex + 1).map((_, index) => String(from.messageIndex + index)) };
+      return { status: "valid", chatIndex: from.chatIndex, nodeIds: from.chat.messages.slice(from.messageIndex, to.messageIndex + 1).map((_23, index) => String(from.messageIndex + index)) };
     }
     const clipboard = copyBranchSequenceState(chats, from.chatIndex, input.fromNodeId, input.toNodeId);
     return clipboard ? { status: "valid", chatIndex: from.chatIndex, nodeIds: clipboard.nodeIds } : { status: "not-ancestor" };
@@ -8692,7 +14118,7 @@ var WeaveletGoogleSync = (() => {
     const input = JSON.parse(json);
     let history = input.history ?? { past: [], future: [] };
     const busy = input.busyChatIds ?? [];
-    let output = {};
+    let output2 = {};
     if (input.operation === "edit") {
       const bridges = { messageEdit, nodeRemoval, nodeOptions, treeEdit, branchClipboard };
       const bridge = bridges[input.kind];
@@ -8701,7 +14127,7 @@ var WeaveletGoogleSync = (() => {
       const result3 = JSON.parse(bridge(JSON.stringify(input.input), (before, after) => {
         history = captureBranchHistory(history, before, after);
       }));
-      output = input.kind === "nodeOptions" || input.kind === "treeEdit" || input.kind === "branchClipboard" ? result3 : { changes: result3 };
+      output2 = input.kind === "nodeOptions" || input.kind === "treeEdit" || input.kind === "branchClipboard" ? result3 : { changes: result3 };
     } else if (input.operation === "undo" || input.operation === "redo") {
       const before = { chats: input.chats, contentStore: input.contentStore };
       const result3 = stepBranchHistory(history, before, input.operation, busy);
@@ -8709,7 +14135,7 @@ var WeaveletGoogleSync = (() => {
       if (result3.status === "updated") {
         result3.state.chats = result3.state.chats.map((chat) => result3.affectedChatIds.includes(chat.id) && chat.branchTree ? { ...chat, messages: materializeActivePath(chat.branchTree, result3.state.contentStore, true) } : chat);
       }
-      output = {
+      output2 = {
         status: result3.status,
         affectedChatIds: result3.affectedChatIds,
         changes: result3.status === "updated" ? diffJSONChanges(before, JSON.parse(JSON.stringify(result3.state))) : []
@@ -8723,7 +14149,7 @@ var WeaveletGoogleSync = (() => {
       history = invalidateBranchHistory(history, ids);
     } else if (input.operation !== "can" && input.operation !== "initialize")
       throw new Error("Invalid history operation.");
-    return JSON.stringify({ ...output, history, can: { undo: canStepBranchHistory(history, "undo", busy), redo: canStepBranchHistory(history, "redo", busy) } });
+    return JSON.stringify({ ...output2, history, can: { undo: canStepBranchHistory(history, "undo", busy), redo: canStepBranchHistory(history, "redo", busy) } });
   }
 
   // src/utils/branchSearch.ts
@@ -8820,77 +14246,6 @@ var WeaveletGoogleSync = (() => {
           stack.push(children[i]);
         }
       }
-    }
-    return result3;
-  }
-
-  // src/utils/folderHierarchy.ts
-  function validateFolderHierarchy(folders) {
-    if (!folders || typeof folders !== "object" || Array.isArray(folders))
-      return false;
-    const collection = folders;
-    for (const [id, folder] of Object.entries(collection)) {
-      if (!id || !folder || typeof folder !== "object" || folder.id !== id || typeof folder.name !== "string" || !Number.isFinite(folder.order) || typeof folder.expanded !== "boolean" || folder.parentId != null && (typeof folder.parentId !== "string" || !Object.hasOwn(collection, folder.parentId)))
-        return false;
-    }
-    const finished = /* @__PURE__ */ new Set();
-    for (const id of Object.keys(collection)) {
-      const path = /* @__PURE__ */ new Set();
-      let current = id;
-      while (current !== void 0 && !finished.has(current)) {
-        if (path.has(current))
-          return false;
-        path.add(current);
-        current = collection[current].parentId ?? void 0;
-      }
-      for (const member of path)
-        finished.add(member);
-    }
-    return true;
-  }
-  function getFolderParentId(folders, id) {
-    const parent = folders[id]?.parentId ?? void 0;
-    const visited = /* @__PURE__ */ new Set([id]);
-    let current = parent;
-    while (current !== void 0) {
-      if (visited.has(current) || !Object.hasOwn(folders, current))
-        return void 0;
-      visited.add(current);
-      current = folders[current]?.parentId ?? void 0;
-    }
-    return parent;
-  }
-  function getFolderAncestors(folders, id) {
-    const result3 = [];
-    const visited = /* @__PURE__ */ new Set();
-    let current = id;
-    while (current !== void 0 && Object.hasOwn(folders, current) && !visited.has(current)) {
-      visited.add(current);
-      result3.push(current);
-      current = result3.length === 1 ? getFolderParentId(folders, current) : folders[current]?.parentId ?? void 0;
-    }
-    return result3;
-  }
-  function getFolderSubtreeIds(folders, id) {
-    if (!Object.hasOwn(folders, id))
-      return [];
-    const children = /* @__PURE__ */ new Map();
-    for (const [childId, folder] of Object.entries(folders)) {
-      if (folder?.parentId != null) {
-        const list = children.get(folder.parentId) ?? [];
-        list.push(childId);
-        children.set(folder.parentId, list);
-      }
-    }
-    const result3 = [], visited = /* @__PURE__ */ new Set(), pending = [id];
-    while (pending.length) {
-      const current = pending.pop();
-      if (visited.has(current))
-        continue;
-      visited.add(current);
-      result3.push(current);
-      for (const child of children.get(current) ?? [])
-        pending.push(child);
     }
     return result3;
   }
@@ -9314,8 +14669,8 @@ var WeaveletGoogleSync = (() => {
   async function toRecords(snapshot) {
     const started = performance.now();
     const serialized = JSON.stringify(snapshot);
-    const copy = JSON.parse(serialized);
-    const state = withoutBrowserLocalSettings(copy.state);
+    const copy2 = JSON.parse(serialized);
+    const state = withoutBrowserLocalSettings(copy2.state);
     if (state.folders !== void 0 && !validateFolderHierarchy(state.folders))
       throw new Error("Invalid folder hierarchy; sync stopped.");
     const records = /* @__PURE__ */ Object.create(null);
@@ -9373,7 +14728,7 @@ var WeaveletGoogleSync = (() => {
         entryRefs.chats[chat.id] = /* @__PURE__ */ Object.create(null);
         for (const node of Object.values(chat.branchTree.nodes)) {
           const statsKey = `${chat.id}:::${node.id}`;
-          const generationId = node.openRouterObservation?.generationId ?? copy.state.pendingVerifications?.[statsKey]?.generationId ?? copy.state.verifiedStats?.[statsKey]?.generationId;
+          const generationId = node.openRouterObservation?.generationId ?? copy2.state.pendingVerifications?.[statsKey]?.generationId ?? copy2.state.verifiedStats?.[statsKey]?.generationId;
           if (generationId)
             node.openRouterObservation = { ...node.openRouterObservation, generationId };
           translate(node, entryRefs.chats[chat.id]);
@@ -9410,7 +14765,7 @@ var WeaveletGoogleSync = (() => {
       } else
         records[JSON.stringify(path)] = canonical(value);
     };
-    flatten({ version: copy.version ?? 0, state, chats, order, nodeOrder, contentEntryFormat: 1, contentEntryRefs: entryRefs, retainedContentEntries: retained }, []);
+    flatten({ version: copy2.version ?? 0, state, chats, order, nodeOrder, contentEntryFormat: 1, contentEntryRefs: entryRefs, retainedContentEntries: retained }, []);
     for (const [id, entry] of Object.entries(entries))
       records[JSON.stringify(["contentEntries", id])] = canonical(entry);
     for (const [id, parts] of Object.entries(content))
@@ -10251,10 +15606,10 @@ var WeaveletGoogleSync = (() => {
     }
     try {
       return await toRecordsAsync(await fromRecordsAsync(merged));
-    } catch (error) {
+    } catch (error2) {
       const structural = [...localEdits].filter((id) => cloudEdits.has(id) && !chats.has(id));
       if (!structural.length)
-        throw error;
+        throw error2;
       for (const id of structural)
         copyEntity(["chats", id], localSnapshot.state.chats?.some((chat) => chat.id === id) ? crypto.randomUUID() : void 0);
       return toRecordsAsync(await fromRecordsAsync(merged));
@@ -10328,9 +15683,9 @@ var WeaveletGoogleSync = (() => {
             return;
           try {
             results[index] = await work(values[index]);
-          } catch (error) {
+          } catch (error2) {
             failed = true;
-            failure = error;
+            failure = error2;
           }
         }
       };
@@ -10452,13 +15807,13 @@ var WeaveletGoogleSync = (() => {
               await this.loadCache(cached);
             }
             return await work();
-          } catch (error) {
+          } catch (error2) {
             this.cacheFingerprint = void 0;
             this.cache = emptyCache();
             this.remoteCache = void 0;
             this.persistedCommits.clear();
             this.encodedCommits.clear();
-            throw error;
+            throw error2;
           }
         };
         return typeof navigator !== "undefined" && navigator.locks ? navigator.locks.request(`weavelet-google-sync:${this.dataset}`, guarded) : guarded();
@@ -10692,9 +16047,9 @@ var WeaveletGoogleSync = (() => {
           }
         this.cache.token = page.token;
         await this.save();
-      } catch (error) {
-        if (!retry || !(error instanceof SyncFileNotFoundError))
-          throw error;
+      } catch (error2) {
+        if (!retry || !(error2 instanceof SyncFileNotFoundError))
+          throw error2;
         this.cache.token = void 0;
         await this.discoverPacks();
         await this.refresh(false);
@@ -10772,9 +16127,9 @@ var WeaveletGoogleSync = (() => {
         }
         await this.loadPack(manifest, true);
         (this.cache.packs ??= {})[pending.id] = manifest;
-      } catch (error) {
-        if (!(error instanceof SyncFileNotFoundError))
-          throw error;
+      } catch (error2) {
+        if (!(error2 instanceof SyncFileNotFoundError))
+          throw error2;
         await this.discoverPacks();
         const replacements = Object.values(this.cache.packs ?? {}).filter((pack) => Object.keys(pack.commits).some((id) => Object.hasOwn(pending.manifest.commits, id)));
         for (const [id, hash] of Object.entries(pending.manifest.commits))
@@ -10959,7 +16314,7 @@ var WeaveletGoogleSync = (() => {
           try {
             await fromRecordsAsync(merged);
             await assertNoConcurrentOrphans(base, local, remote, merged);
-          } catch (error) {
+          } catch (error2) {
             await fromRecordsAsync(local);
             await fromRecordsAsync(remote);
             throw new SyncConflictError(changes2.map((change) => change.key));
@@ -10997,8 +16352,8 @@ var WeaveletGoogleSync = (() => {
           }
           return found;
         };
-        const sets = heads.map((id) => ancestors(id));
-        const common = [...sets[0]].filter((id) => sets.every((set) => set.has(id)));
+        const sets2 = heads.map((id) => ancestors(id));
+        const common = [...sets2[0]].filter((id) => sets2.every((set) => set.has(id)));
         const base = common.length ? await hashRecordsAsync(await this.remote(false, common)) : {};
         cloud = await this.remote(false, [heads[0]]);
         for (const head of heads.slice(1))
@@ -11175,7 +16530,10 @@ var WeaveletGoogleSync = (() => {
   }
   function folderRows(json) {
     const input = JSON.parse(json);
-    return JSON.stringify(orderedFolders(input.folders).map((folder) => Object.fromEntries(folderFields.filter((key) => Object.hasOwn(folder, key)).map((key) => [key, folder[key]]))));
+    return JSON.stringify(orderedFolders(input.folders).map((folder) => ({
+      ...Object.fromEntries(folderFields.filter((key) => Object.hasOwn(folder, key)).map((key) => [key, folder[key]])),
+      path: getFolderAncestors(input.folders, folder.id).reverse().map((id) => input.folders[id].name).join(" / ")
+    })));
   }
 
   // src/utils/reasoning.ts
@@ -11312,84 +16670,6 @@ var WeaveletGoogleSync = (() => {
     return body;
   };
 
-  // src/utils/bubbleSummary.ts
-  var normalizeBubbleSummaryText = (text) => {
-    const trimmed = text.trim();
-    const json = trimmed.replace(/^```(?:json)?\s*\n([\s\S]*?)\n```$/i, "$1");
-    try {
-      const value = JSON.parse(json);
-      if (typeof value === "string")
-        return value.trim();
-      const messages = Array.isArray(value) ? value : [value];
-      if (messages.length && messages.every((message) => message && typeof message === "object" && (message.role === "user" || message.role === "assistant") && typeof message.content === "string")) {
-        return messages.map((message) => message.role === "assistant" ? `\u30A2\u30B7\u30B9\u30BF\u30F3\u30C8\uFF1A
-${message.content}` : message.content).join("\n\n").trim();
-      }
-    } catch {
-    }
-    return trimmed;
-  };
-  var textParts = (message) => {
-    if (!message?.content?.length || !message.content.every(isTextContent))
-      return null;
-    const parts = message.content.map((value) => value.text);
-    return parts.some((part) => part.trim()) ? parts : null;
-  };
-  var hasTool = (message) => !!message?.content?.some((value) => isToolCallContent(value) || isToolResultContent(value));
-  var equalParts = (left, right) => left.length === right.length && left.every((part, index) => part === right[index]);
-  var validGeneration = (value) => {
-    if (value === void 0)
-      return true;
-    const generation = value;
-    return !!generation && typeof generation === "object" && typeof generation.model === "string" && (generation.providerId === void 0 || typeof generation.providerId === "string") && Number.isFinite(generation.createdAt) && !!generation.settings && typeof generation.settings === "object" && Number.isFinite(generation.settings.temperature) && Number.isFinite(generation.settings.max_tokens) && (generation.settings.reasoning_effort === void 0 || typeof generation.settings.reasoning_effort === "string");
-  };
-  var isBubbleSummary = (value) => !!value && typeof value === "object" && typeof value.id === "string" && (value.mode === "single" || value.mode === "through" || value.mode === "range") && typeof value.text === "string" && typeof value.useForSubmit === "boolean" && (value.format === void 0 || value.format === "compact") && validGeneration(value.generation) && Array.isArray(value.sources) && value.sources.every((source) => !!source && typeof source.nodeId === "string" && (source.parentId === null || typeof source.parentId === "string") && (source.role === "user" || source.role === "assistant") && Array.isArray(source.textParts) && source.textParts.every((part) => typeof part === "string"));
-  var isSummaryEligible = (message) => !!message && (message.role === "user" || message.role === "assistant") && textParts(message) !== null && !hasTool(message);
-  var resolveValidSummary = (chat, summary, generatingNodeIds = []) => {
-    if (!isBubbleSummary(summary))
-      return null;
-    const candidate = summary, path = chat.branchTree?.activePath ?? chat.messages.map((_, index) => String(index));
-    if (typeof candidate.text !== "string" || !candidate.text.trim() || !Array.isArray(candidate.sources) || !candidate.sources.length)
-      return null;
-    const indices = candidate.sources.map((source) => path.indexOf(source?.nodeId));
-    if (indices.some((index) => index < 0) || new Set(indices).size !== indices.length)
-      return null;
-    const first = Math.min(...indices), last = Math.max(...indices);
-    if (last - first + 1 !== indices.length)
-      return null;
-    for (let offset = 0; offset < candidate.sources.length; offset++) {
-      const index = first + offset, source = candidate.sources[offset], nodeId = path[index];
-      const node = chat.branchTree?.nodes[nodeId], message = chat.messages[index], parts = textParts(message);
-      if (!source || source.nodeId !== nodeId || generatingNodeIds.includes(nodeId) || !isSummaryEligible(message) || !parts || message.role !== source.role || !Array.isArray(source.textParts) || !equalParts(parts, source.textParts) || (node?.parentId ?? null) !== source.parentId)
-        return null;
-    }
-    return { first, last };
-  };
-  var getAppliedBubbleSummaries = (chat, messageIndex = chat.messages.length, generatingNodeIds = []) => {
-    const candidates = (Array.isArray(chat.summaries) ? chat.summaries : []).filter((summary) => summary?.useForSubmit).map((summary) => ({ summary, range: resolveValidSummary(chat, summary, generatingNodeIds) })).filter((value) => !!value.range && value.range.last < messageIndex);
-    const accepted = candidates.filter((candidate) => !candidates.some((other) => other !== candidate && candidate.range.first <= other.range.last && other.range.first <= candidate.range.last));
-    return accepted;
-  };
-  var bubbleSummarySubmitMessage = (summary) => ({ role: "user", content: [{ type: "text", text: `${summary.format === "compact" ? "Retained conversation context. Answer the latest request using the requirements and state below. Follow the retained language, tone, structure and length requirements and examples, not formatting added for this summary. Adoption and plans do not imply execution; preserve uncertainty about what has been done.\n" : "Past conversation summary:\n"}${normalizeBubbleSummaryText(summary.text)}` }] });
-  var applyBubbleSummariesForSubmit = (chat, messageIndex, generatingNodeIds = []) => {
-    const source = chat.messages.slice(0, messageIndex), path = chat.branchTree?.activePath ?? source.map((_, index) => String(index));
-    const accepted = getAppliedBubbleSummaries(chat, messageIndex, generatingNodeIds).filter(({ summary }) => !summary.sources.some((source2) => chat.omittedNodes?.[source2.nodeId]));
-    const starts = new Map(accepted.map((value) => [value.range.first, value]));
-    const result3 = [];
-    for (let index = 0; index < source.length; index++) {
-      const replacement = starts.get(index);
-      if (replacement) {
-        result3.push(bubbleSummarySubmitMessage(replacement.summary));
-        index = replacement.range.last;
-        continue;
-      }
-      if (chat.omittedNodes?.[path[index]] && !hasTool(source[index]))
-        continue;
-      result3.push(source[index]);
-    }
-    return result3;
-  };
-
   // src/utils/submitContext.ts
   var modelSupportsSystemRole = (modelId) => {
     return !isReasoningModel(modelId);
@@ -11423,7 +16703,7 @@ ${message.content}` : message.content).join("\n\n").trim();
   var filterOmittedMessages = (messages, activePath, omittedNodes) => {
     if (Object.keys(omittedNodes).length === 0)
       return messages;
-    return messages.filter((_, idx) => {
+    return messages.filter((_23, idx) => {
       const nodeId = activePath?.[idx] ?? String(idx);
       if (!omittedNodes[nodeId])
         return true;
@@ -11482,401 +16762,11 @@ ${message.content}` : message.content).join("\n\n").trim();
     ));
   };
 
-  // src/constants/chatDefaults.ts
-  var defaultSystemMessage = "You are a large language model assistant.\nCarefully heed the user's instructions. \nRespond using Markdown.";
-  var defaultModel = "";
-  var defaultUserMaxToken = 4e3;
-  var _defaultChatConfig = {
-    model: defaultModel,
-    max_tokens: defaultUserMaxToken,
-    temperature: 1,
-    presence_penalty: 0,
-    top_p: 1,
-    frequency_penalty: 0,
-    stream: true,
-    reasoning_effort: "none",
-    reasoning_budget_tokens: 0
-  };
-  var _defaultImageDetail = "auto";
-
   // src/utils/chatShallowClone.ts
   var deepCloneSingleChat = (chat, id = editingUUID()) => {
     return {
       ...structuredClone(chat),
       id
-    };
-  };
-
-  // src/utils/chatExport.ts
-  var clone = (value) => typeof structuredClone === "function" ? structuredClone(value) : JSON.parse(JSON.stringify(value));
-  var prepareChatForExport = (chat, sourceContentStore, options = {}) => {
-    const visibleBranchOnly = options.visibleBranchOnly ?? false;
-    if (!chat.branchTree) {
-      return {
-        chat: clone(chat),
-        contentStore: {}
-      };
-    }
-    chat = clone(chat);
-    captureProjectedMessageAttributes(chat, sourceContentStore);
-    const sourceTree = chat.branchTree;
-    const includedNodeIds = visibleBranchOnly ? sourceTree.activePath.filter((id) => sourceTree.nodes[id] !== void 0) : Object.keys(sourceTree.nodes);
-    const includedNodeSet = new Set(includedNodeIds);
-    const activePath = sourceTree.activePath.filter((id) => includedNodeSet.has(id));
-    const nodes = Object.fromEntries(
-      includedNodeIds.map((id) => [id, clone(sourceTree.nodes[id])])
-    );
-    const hashRefCounts = /* @__PURE__ */ new Map();
-    includedNodeIds.forEach((id) => {
-      const node = sourceTree.nodes[id];
-      hashRefCounts.set(node.contentHash, (hashRefCounts.get(node.contentHash) ?? 0) + 1);
-    });
-    const contentStore = {};
-    hashRefCounts.forEach((refCount, hash) => {
-      const entry = sourceContentStore[hash];
-      if (!entry)
-        return;
-      const { delta, ...fullEntry } = entry;
-      const content = delta ? resolveContent(sourceContentStore, hash) : entry.content;
-      contentStore[hash] = clone({
-        ...fullEntry,
-        content,
-        refCount
-      });
-    });
-    const filterNodeRecord = (record) => record ? Object.fromEntries(
-      Object.entries(record).filter(([id]) => includedNodeSet.has(id))
-    ) : void 0;
-    const collapsedNodes = filterNodeRecord(chat.collapsedNodes);
-    const omittedNodes = filterNodeRecord(chat.omittedNodes);
-    const protectedNodes = filterNodeRecord(chat.protectedNodes);
-    const summaryTargets = filterNodeRecord(chat.summaryTargets);
-    const summaries = chat.summaries?.filter((summary) => summary.sources.every(
-      (source) => includedNodeSet.has(source.nodeId) && (source.parentId === null || includedNodeSet.has(source.parentId))
-    ));
-    const exportedChat = clone(chat);
-    return {
-      chat: {
-        ...exportedChat,
-        messages: clone(materializeActivePath({ ...sourceTree, activePath }, sourceContentStore, true)),
-        branchTree: {
-          ...exportedChat.branchTree,
-          nodes,
-          ...sourceTree.messageAttributesV1 ? { messageAttributesV1: { version: 1, byNode: Object.fromEntries(Object.entries(readMessageAttributes(sourceTree).byNode).filter(([id]) => includedNodeSet.has(id))) } } : {},
-          rootId: includedNodeSet.has(sourceTree.rootId) ? sourceTree.rootId : activePath[0] ?? includedNodeIds[0] ?? "",
-          activePath
-        },
-        collapsedNodes,
-        omittedNodes,
-        protectedNodes,
-        summaryTargets,
-        summaries
-      },
-      contentStore
-    };
-  };
-  var contentToTextParts = (content) => {
-    return content.filter(isTextContent).map((c) => c.text);
-  };
-  var contentToString = (content) => {
-    return contentToTextParts(content).join("\n");
-  };
-  var chatToOpenAIFormat = (chat, contentStore, options = {}) => {
-    const visibleBranchOnly = options.visibleBranchOnly ?? false;
-    const modelSlug = chat.config?.model ?? "";
-    const configSystemPrompt = chat.config?.systemPrompt;
-    const mapping = {};
-    if (chat.branchTree) {
-      const tree = chat.branchTree;
-      const nodeIds = visibleBranchOnly ? tree.activePath.filter((id) => tree.nodes[id] !== void 0) : Object.keys(tree.nodes);
-      const filteredIds = nodeIds.filter((id) => tree.nodes[id]?.role !== "system");
-      const nodeSet = new Set(filteredIds);
-      const childrenMap = {};
-      for (const id of filteredIds) {
-        childrenMap[id] = [];
-      }
-      for (const id of filteredIds) {
-        const node = tree.nodes[id];
-        if (node.parentId && nodeSet.has(node.parentId)) {
-          childrenMap[node.parentId].push(id);
-        }
-      }
-      let systemNodeId = null;
-      if (configSystemPrompt) {
-        systemNodeId = "__system__";
-        const firstNonSystem = filteredIds.find((id) => {
-          const n = tree.nodes[id];
-          return n && !n.parentId;
-        }) ?? filteredIds[0];
-        mapping[systemNodeId] = {
-          id: systemNodeId,
-          message: {
-            author: { role: "system" },
-            content: { parts: [configSystemPrompt] },
-            metadata: { model_slug: modelSlug }
-          },
-          parent: null,
-          children: firstNonSystem ? [firstNonSystem] : []
-        };
-      }
-      for (const id of filteredIds) {
-        const node = tree.nodes[id];
-        const content = resolveContent(contentStore, node.contentHash);
-        const parts = contentToTextParts(content);
-        const parentInSet = node.parentId && nodeSet.has(node.parentId) ? node.parentId : null;
-        mapping[id] = {
-          id,
-          message: {
-            author: { role: node.role },
-            content: { parts },
-            metadata: { model_slug: modelSlug }
-          },
-          parent: parentInSet ?? systemNodeId,
-          children: childrenMap[id] ?? []
-        };
-      }
-      const activePath = tree.activePath.filter((id) => nodeSet.has(id));
-      const currentNode = activePath[activePath.length - 1] ?? filteredIds[0] ?? systemNodeId ?? "";
-      return {
-        title: chat.title,
-        create_time: tree.nodes[tree.rootId]?.createdAt ? Math.floor(tree.nodes[tree.rootId].createdAt / 1e3) : void 0,
-        mapping,
-        current_node: currentNode
-      };
-    }
-    let parentId = null;
-    const ids = [];
-    if (configSystemPrompt) {
-      const sysId = "msg-system";
-      ids.push(sysId);
-      mapping[sysId] = {
-        id: sysId,
-        message: {
-          author: { role: "system" },
-          content: { parts: [configSystemPrompt] },
-          metadata: { model_slug: modelSlug }
-        },
-        parent: null,
-        children: []
-      };
-      parentId = sysId;
-    }
-    chat.messages.forEach((msg, i) => {
-      if (msg.role === "system")
-        return;
-      const id = `msg-${i}`;
-      ids.push(id);
-      const parts = contentToTextParts(msg.content);
-      mapping[id] = {
-        id,
-        message: {
-          author: { role: msg.role },
-          content: { parts },
-          metadata: { model_slug: modelSlug }
-        },
-        parent: parentId,
-        children: []
-      };
-      if (parentId && mapping[parentId]) {
-        mapping[parentId].children.push(id);
-      }
-      parentId = id;
-    });
-    return {
-      title: chat.title,
-      mapping,
-      current_node: ids[ids.length - 1] ?? ""
-    };
-  };
-  var _orCounter = 0;
-  var orId = (prefix) => `${prefix}-${Date.now()}-${(++_orCounter).toString(36)}`;
-  var chatToOpenRouterFormat = (chat, contentStore) => {
-    const modelSlug = chat.config?.model ?? "";
-    const characterId = orId("char");
-    const now = new Date().toISOString();
-    const character = {
-      id: characterId,
-      model: modelSlug,
-      modelInfo: { slug: modelSlug, name: modelSlug },
-      description: "",
-      includeDefaultSystemPrompt: true,
-      isStreaming: true,
-      samplingParameters: {},
-      chatMemory: 8,
-      isDisabled: false,
-      isRemoved: false,
-      createdAt: now,
-      updatedAt: now,
-      plugins: []
-    };
-    const characters = { [characterId]: character };
-    const messages = {};
-    const items = {};
-    let prevMsgId;
-    const addMessage = (role, text, timestamp) => {
-      const msgId = orId("msg");
-      const itemId = orId("item");
-      const ts = timestamp ? new Date(timestamp).toISOString() : now;
-      const isUser = role === "user";
-      const item = {
-        id: itemId,
-        messageId: msgId,
-        data: {
-          type: "message",
-          role,
-          content: [{ type: isUser ? "input_text" : "output_text", text }]
-        }
-      };
-      items[itemId] = item;
-      const msg = {
-        id: msgId,
-        characterId: isUser ? "USER" : characterId,
-        contentType: "text",
-        context: "main-chat",
-        createdAt: ts,
-        updatedAt: ts,
-        isRetrying: false,
-        isEdited: false,
-        isCollapsed: false,
-        type: role,
-        items: [{ id: itemId, type: "message" }]
-      };
-      if (prevMsgId) {
-        msg.parentMessageId = prevMsgId;
-      }
-      if (!isUser) {
-        msg.isGenerating = false;
-      }
-      messages[msgId] = msg;
-      prevMsgId = msgId;
-    };
-    if (chat.config?.systemPrompt) {
-      addMessage("system", chat.config?.systemPrompt);
-    }
-    if (chat.branchTree) {
-      for (const id of chat.branchTree.activePath) {
-        const node = chat.branchTree.nodes[id];
-        if (!node || node.role === "system")
-          continue;
-        const content = resolveContent(contentStore, node.contentHash);
-        addMessage(node.role, contentToString(content), node.createdAt);
-      }
-    } else {
-      for (const msg of chat.messages) {
-        if (msg.role === "system")
-          continue;
-        addMessage(msg.role, contentToString(msg.content));
-      }
-    }
-    return {
-      version: "orpg.3.0",
-      title: chat.title,
-      characters,
-      messages,
-      items,
-      artifacts: {},
-      artifactFiles: {},
-      artifactVersions: {},
-      artifactFileContents: {}
-    };
-  };
-  var lmsStepId = () => `${Date.now()}-${Math.random().toString().slice(2, 18)}`;
-  var toLMStudioMessage = (role, text, modelSlug) => {
-    if (role === "assistant") {
-      const stepId = lmsStepId();
-      const contentBlock = {
-        type: "contentBlock",
-        stepIdentifier: stepId,
-        content: [{
-          type: "text",
-          text,
-          fromDraftModel: false,
-          tokensCount: 0,
-          isStructural: false
-        }],
-        genInfo: {
-          indexedModelIdentifier: modelSlug,
-          identifier: modelSlug
-        },
-        defaultShouldIncludeInContext: true,
-        shouldIncludeInContext: true
-      };
-      const version2 = {
-        type: "multiStep",
-        role: "assistant",
-        senderInfo: { senderName: modelSlug },
-        steps: [contentBlock]
-      };
-      return { versions: [version2], currentlySelected: 0 };
-    }
-    const version = {
-      type: "singleStep",
-      role,
-      content: [{ type: "text", text }]
-    };
-    return { versions: [version], currentlySelected: 0 };
-  };
-  var chatToLMStudioFormat = (chat, contentStore, options = {}) => {
-    const visibleBranchOnly = options.visibleBranchOnly ?? false;
-    const modelSlug = chat.config?.model ?? "";
-    const now = Date.now();
-    const messages = [];
-    let tokenCount = 0;
-    let userLastMessagedAt;
-    let assistantLastMessagedAt;
-    const systemPrompt = chat.config?.systemPrompt ?? "";
-    const addMsg = (role, text, timestamp) => {
-      if (!text)
-        return;
-      if (role === "system")
-        return;
-      messages.push(toLMStudioMessage(role, text, modelSlug));
-      if (role === "user" && timestamp)
-        userLastMessagedAt = timestamp;
-      if (role === "assistant" && timestamp)
-        assistantLastMessagedAt = timestamp;
-    };
-    if (chat.branchTree) {
-      const tree = chat.branchTree;
-      const nodeIds = visibleBranchOnly ? tree.activePath.filter((id) => tree.nodes[id] !== void 0) : tree.activePath;
-      for (const id of nodeIds) {
-        const node = tree.nodes[id];
-        if (!node)
-          continue;
-        const content = resolveContent(contentStore, node.contentHash);
-        addMsg(node.role, contentToString(content), node.createdAt);
-      }
-    } else {
-      for (const msg of chat.messages) {
-        addMsg(msg.role, contentToString(msg.content));
-      }
-    }
-    return {
-      name: chat.title,
-      pinned: false,
-      createdAt: chat.branchTree?.nodes[chat.branchTree.rootId]?.createdAt ?? now,
-      preset: "",
-      tokenCount,
-      userLastMessagedAt,
-      assistantLastMessagedAt,
-      systemPrompt,
-      messages,
-      usePerChatPredictionConfig: false,
-      perChatPredictionConfig: { fields: [] },
-      clientInput: "",
-      clientInputFiles: [],
-      userFilesSizeBytes: 0,
-      lastUsedModel: {
-        identifier: modelSlug,
-        indexedModelIdentifier: modelSlug,
-        instanceLoadTimeConfig: { fields: [] },
-        instanceOperationTimeConfig: { fields: [] }
-      },
-      notes: [],
-      plugins: [],
-      pluginConfigs: {},
-      disabledPluginTools: [],
-      looseFiles: []
     };
   };
 
@@ -11928,7 +16818,7 @@ ${message.content}` : message.content).join("\n\n").trim();
   }
   function deleteLibraryChats(chats, indices, store, create) {
     const selected = new Set(indices);
-    const remaining = chats.filter((_, index) => !selected.has(index));
+    const remaining = chats.filter((_23, index) => !selected.has(index));
     const removed = /* @__PURE__ */ new Map();
     for (const [index, chat] of chats.entries()) {
       if (!selected.has(index))
@@ -12012,9 +16902,6 @@ ${message.content}` : message.content).join("\n\n").trim();
     config: { ..._defaultChatConfig, systemPrompt: defaultSystemMessage },
     imageDetail: _defaultImageDetail
   });
-
-  // src/store/version.ts
-  var STORE_VERSION = 18;
 
   // src/utils/syncDocument.ts
   var import_lodash2 = __toESM(require_lodash(), 1);
@@ -12592,8 +17479,8 @@ ${messageContent}---
       }
     }).then((value) => {
       outcome = { status: "done", value: value ?? null };
-    }, (error) => {
-      outcome = { status: "error", error: String(error.message ?? error), conflictKeys: error.keys };
+    }, (error2) => {
+      outcome = { status: "error", error: String(error2.message ?? error2), conflictKeys: error2.keys };
     });
   };
   var drain = () => {
@@ -12632,14 +17519,39 @@ ${messageContent}---
       }
     }).then((value) => {
       recordOutcome = { valueJSON: JSON.stringify(value) };
-    }, (error) => {
-      recordOutcome = { error: String(error.message ?? error) };
+    }, (error2) => {
+      recordOutcome = { error: String(error2.message ?? error2) };
     });
   };
   var recordsResult = () => JSON.stringify(recordOutcome);
   return __toCommonJS(entry_exports);
 })();
 
+/* Dependency @babel/runtime
+MIT License
+
+Copyright (c) 2014-present Sebastian McKenzie and other contributors
+
+Permission is hereby granted, free of charge, to any person obtaining
+a copy of this software and associated documentation files (the
+"Software"), to deal in the Software without restriction, including
+without limitation the rights to use, copy, modify, merge, publish,
+distribute, sublicense, and/or sell copies of the Software, and to
+permit persons to whom the Software is furnished to do so, subject to
+the following conditions:
+
+The above copyright notice and this permission notice shall be
+included in all copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
+NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE
+LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION
+OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION
+WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+
+*/
 /* Dependency diff-match-patch
 
                                  Apache License
@@ -12843,6 +17755,30 @@ ${messageContent}---
    WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
    See the License for the specific language governing permissions and
    limitations under the License.
+*/
+/* Dependency i18next
+The MIT License (MIT)
+
+Copyright (c) 2022 i18next
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
 */
 /* Dependency lodash
 Copyright OpenJS Foundation and other contributors <https://openjsf.org/>

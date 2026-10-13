@@ -34,6 +34,14 @@ describe('shared file import core',()=>{
   const result=call({operation:'plan',mode:'replace',base,source:prepared.source,newIDs:[],now:20}),output=apply(base,result.changes);
   expect(output.chats).toEqual(prepared.source.chats);expect(output.xBase).toEqual({opaqueRef:55});expect(output).not.toHaveProperty('apiKey');expect(output).not.toHaveProperty('currentChatIndex');expect(result.currentChatIndex).toBe(0);
  });
+ it('resets all known initial roots including undefined values only when settings replacement is selected',()=>{
+  const prepared=prepare(v3()),defaults=call({operation:'defaults'});
+  const base={...defaults,chats:[chat('existing')],theme:'custom',apiKey:'FAKE ONLY',evaluationSettings:{safetyPreSend:'off'},xOpaque:{opaqueRef:91}};
+  const keep=call({operation:'plan',mode:'replace',base,source:prepared.source,includeSettings:false,newIDs:[]});
+  expect(apply(base,keep.changes).theme).toBe('custom');expect(apply(base,keep.changes).apiKey).toBe('FAKE ONLY');
+  const reset=apply(base,call({operation:'plan',mode:'replace',base,source:prepared.source,includeSettings:true,newIDs:[]}).changes);
+  expect(reset.theme).toBe(defaults.theme);expect(reset.evaluationSettings).toEqual(defaults.evaluationSettings);expect(reset).not.toHaveProperty('apiKey');expect(reset.xOpaque).toEqual({opaqueRef:91});
+ });
  it('reports missing content and disallows selected import instead of silently accepting the placeholder',()=>{
   const data:any={...v3(),chats:[{...chat(),messages:[],branchTree:{rootId:'node',activePath:['node'],nodes:{node:{id:'node',parentId:null,role:'user',contentHash:'missing',createdAt:1}}}}]};const result=prepare(data);
   expect(result.status).toBe('ready');expect(result.source.unavailableContent[result.source.chats[0].id]).toEqual(['missing']);expect(()=>call({operation:'plan',mode:'append',base:{chats:[],folders:{},contentStore:{}},source:result.source,newIDs:ids(),now:1})).toThrow('cannotImportMissingContent');
@@ -47,6 +55,13 @@ describe('shared file import core',()=>{
   const data={version:3,chats:[],folders:{},contentStore:{}};expect(prepare(data).status).toBe('failed');expect(prepare({version:3,chats:[],folders:{}},{allowEmpty:true}).status).toBe('failed');const prepared=prepare(data,{allowEmpty:true});expect(prepared.status).toBe('ready');
   const base={chats:[chat()],folders:{},contentStore:{},xRoot:{opaqueRef:77}};const result=call({operation:'plan',mode:'replace',base,source:prepared.source,newIDs:[]});expect(apply(base,result.changes).chats).toEqual([]);expect(result.currentChatIndex).toBe(-1);
   expect(()=>call({operation:'plan',mode:'append',base,source:prepared.source,newIDs:[]})).toThrow('nothingImported');
+ });
+ it('uses the Web Playground classifier for model-less settings at the raw boundary',()=>{
+  const data={messages:[{role:'user',content:'hello'}],temperature:0.7,max_tokens:123};
+  const inspected=call({operation:'inspect',kind:'data',data});
+  expect(inspected.opaquePaths).not.toContainEqual(['temperature']);expect(inspected.opaquePaths).not.toContainEqual(['max_tokens']);
+  const prepared=prepare(data);expect(prepared.status).toBe('ready');expect(prepared.source.chats[0].config.temperature).toBe(0.7);
+  const tree=prepared.source.chats[0].branchTree;expect(resolveContent(prepared.source.contentStore,tree.nodes[tree.rootId].contentHash)).toEqual([{type:'text',text:'hello'}]);
  });
  it('provides actual defaults and shared raw projection paths without including runtime actions',()=>{
   const defaults=call({operation:'defaults'});expect(defaults.chats).toEqual([]);expect(defaults.contentStore).toEqual({});expect(defaults.evaluationSettings.safetyPreSend).toBe('manual');expect(defaults).not.toHaveProperty('setChats');

@@ -26,6 +26,10 @@ struct ChatView: View {
     @State private var googleConnection: GoogleSyncConnection?
     @State private var input = ""
     @State private var showsImporter = false
+    @State private var importPreview: ChatImportPreview?
+    @State private var isPreparingImport = false
+    @State private var pendingPartialImport: (data: Data, filename: String, message: String)?
+    @State private var confirmsPartialImport = false
     @State private var showsExporter = false
     @State private var showsExportOptions = false
     @State private var pendingExport: ChatExport.Artifact?
@@ -176,7 +180,7 @@ struct ChatView: View {
                         .disabled(state.exchange == nil || state.generation != nil)
                         .frame(minWidth: 44, minHeight: 44)
                     Menu("ファイル", systemImage: "doc") {
-                        Button("V3 JSONを読み込む") { showsImporter = true }
+                        Button("ファイルを取り込む") { showsImporter = true }.disabled(isPreparingImport)
                         Button("読み込んだV3 JSONを書き出す") {
                             do {
                                 exportContentType = .json; exportFilename = "weavelet-native-v3"
@@ -198,7 +202,8 @@ struct ChatView: View {
                     guard let url = try result.get().first else { return }
                     let access = url.startAccessingSecurityScopedResource()
                     defer { if access { url.stopAccessingSecurityScopedResource() } }
-                    try state.importWebData(Data(contentsOf: url))
+                    let data = try Data(contentsOf: url)
+                    prepareImport(data, filename: url.lastPathComponent)
                 } catch {
                     if (error as? CocoaError)?.code != .userCancelled { errorMessage = error.localizedDescription }
                 }
@@ -242,6 +247,17 @@ struct ChatView: View {
                     pendingExport = nil; showsExporter = true
                 }
             }) { ChatExportView(state: state) { pendingExport = $0 } }
+            .confirmationDialog("一部のデータを除いて取り込みますか？", isPresented: $confirmsPartialImport, titleVisibility: .visible) {
+                Button("取り込める内容を確認する") {
+                    if let pending = pendingPartialImport {
+                        pendingPartialImport = nil
+                        prepareImport(pending.data, filename: pending.filename, allowPartialImport: true)
+                    }
+                }
+                Button("取消", role: .cancel) { pendingPartialImport = nil }
+            } message: { Text(pendingPartialImport?.message ?? "") }
+            .sheet(item: $importPreview) { preview in FileImportView(state: state, preview: preview) }
+            .overlay { if isPreparingImport { ProgressView("取り込み内容を確認中").padding().background(.regularMaterial, in: RoundedRectangle(cornerRadius: 12)) } }
             .sheet(item: $draft) { draft in MessageEditorView(state: state, draft: draft) }
             .sheet(item: $clipboardDraft) { draft in BranchClipboardView(state: state, draft: draft) }
             .sheet(item: $optionsDraft) { draft in NodeOptionsView(state: state, draft: draft) }
@@ -275,6 +291,19 @@ struct ChatView: View {
             }
         }
     }
+    private func prepareImport(_ data: Data, filename: String, allowPartialImport: Bool = false) {
+        isPreparingImport = true
+        Task {
+            defer { isPreparingImport = false }
+            do { importPreview = try await state.prepareImport(data: data, filename: filename, allowPartialImport: allowPartialImport) }
+            catch let decision as ChatImportDecisionRequired {
+                pendingPartialImport = (data, filename, decision.message)
+                confirmsPartialImport = true
+            }
+            catch { errorMessage = error.localizedDescription }
+        }
+    }
+
     private func move(_ nodeID: String, direction: NodeMoveDirection) {
         do {
             let result = try state.saveNodeTransform(state.nodeMoveDraft(nodeID: nodeID, direction: direction))
@@ -651,6 +680,134 @@ struct ConversationLibraryView: View {
     }
 }
 
+
+struct FileImportView: View {
+    @ObservedObject var state: ChatState
+    let preview: ChatImportPreview
+    @Environment(\.dismiss) private var dismiss
+    @State private var mode = ChatImportMode.append
+    @State private var selectedChats: Set<Data> = []
+    @State private var selectedFolders: Set<Data> = []
+    @State private var includeSettings = false
+    @State private var isSaving = false
+    @State private var confirmsReplacement = false
+    @State private var initialized = false
+    @State private var errorMessage: String?
+    private var unavailableSelection: Bool { preview.conversations.contains { selectedChats.contains($0.identity) && !(preview.unavailableContent[$0.id] ?? []).isEmpty } }
+    var body: some View {
+        NavigationStack {
+            Form {
+                Section {
+                    Text(preview.filename).font(.headline)
+                    Text("確認中は保存済みの会話を変更しません。").font(.footnote).foregroundStyle(.secondary)
+                    Picker("取り込み方法", selection: $mode) {
+                        Text("選択した項目を追加").tag(ChatImportMode.append)
+                        Text("ファイル全体で置換").tag(ChatImportMode.replace)
+                    }
+                    if mode == .replace {
+                        Text("現在の会話とフォルダを、このファイルの内容で置き換えます。")
+                        Toggle("設定も初期化して取り込む", isOn: $includeSettings)
+                    } else {
+                        HStack {
+                            Button("すべて選択") { selectAll() }
+                            Spacer()
+                            Button("選択解除") { selectedChats.removeAll(); selectedFolders.removeAll() }
+                        }
+                    }
+                    Text("会話 \(selectedChats.count)件・フォルダ \(selectedFolders.count)件")
+                }
+                if preview.recoveredContentCount > 0 {
+                    Section { Text("復元できた本文: \(preview.recoveredContentCount)件") }
+                }
+                Section("会話") {
+                    ForEach(preview.conversations, id: \.identity) { chat in
+                        VStack(alignment: .leading) {
+                            Toggle(isOn: selection(chat.id, in: $selectedChats)) { Text(chat.title) }.disabled(mode == .replace)
+                            NavigationLink("内容を確認（\(chat.nodes.count)件）") { ImportConversationPreview(conversation: chat, style: state.style) }
+                            if let missing = preview.unavailableContent[chat.id], !missing.isEmpty {
+                                Text("本文が見つからない項目が\(missing.count)件あります。この会話は取り込めません。")
+                                    .font(.footnote).foregroundStyle(.red)
+                            }
+                        }
+                    }
+                }
+                if !preview.folderRows.isEmpty {
+                    Section("フォルダ") {
+                        ForEach(preview.folderRows, id: \.identity) { folder in
+                            Toggle(folder.path.isEmpty ? folder.name : folder.path, isOn: selection(folder.id, in: $selectedFolders)).disabled(mode == .replace)
+                        }
+                        Text("選択した会話の所属先と、その親フォルダも含めます。").font(.footnote).foregroundStyle(.secondary)
+                    }
+                }
+                if let errorMessage { Section { Text(errorMessage).foregroundStyle(.red) } }
+                Section {
+                    Button(isSaving ? "保存中" : mode == .replace ? "置換を確認" : "選択項目を取り込む") {
+                        if mode == .replace { confirmsReplacement = true } else { commit() }
+                    }.disabled(isSaving || unavailableSelection || (mode == .append && selectedChats.isEmpty && selectedFolders.isEmpty) || state.generation != nil)
+                }
+            }
+            .disabled(isSaving)
+            .navigationTitle("取り込み内容を確認")
+            .toolbar { ToolbarItem(placement: .cancellationAction) { Button("取消") { dismiss() }.disabled(isSaving) } }
+            .interactiveDismissDisabled(isSaving)
+            .onAppear { if !initialized { selectAll(); initialized = true } }
+            .onChange(of: mode) { _, value in if value == .replace { selectAll() } }
+            .confirmationDialog("保存済みの会話とフォルダを置き換えますか？", isPresented: $confirmsReplacement, titleVisibility: .visible) {
+                Button("このファイルで置き換える", role: .destructive) { commit() }
+                Button("取消", role: .cancel) {}
+            } message: { Text(includeSettings ? "保存済みの会話・フォルダ・設定を初期化して、ファイルの内容に置き換えます。" : "保存済みの会話とフォルダを、ファイルの内容に置き換えます。設定は保持します。") }
+        }
+    }
+    private func selection(_ id: String, in values: Binding<Set<Data>>) -> Binding<Bool> {
+        Binding(get: { values.wrappedValue.contains(Data(id.utf8)) }, set: { chosen in
+            if chosen { values.wrappedValue.insert(Data(id.utf8)) } else { values.wrappedValue.remove(Data(id.utf8)) }
+        })
+    }
+    private func selectAll() {
+        selectedChats = Set(preview.conversations.map(\.identity)); selectedFolders = Set(preview.folderRows.map(\.identity))
+    }
+    private func commit() {
+        isSaving = true; errorMessage = nil
+        Task {
+            defer { isSaving = false }
+            do {
+                try await state.commitImport(preview, mode: mode, selectedChatIDs: preview.conversations.filter { selectedChats.contains($0.identity) }.map(\.id), selectedFolderIDs: preview.folderRows.filter { selectedFolders.contains($0.identity) }.map(\.id), includeSettings: mode == .replace && includeSettings)
+                dismiss()
+            } catch { errorMessage = error.localizedDescription }
+        }
+    }
+}
+
+struct ImportConversationPreview: View {
+    let conversation: Conversation
+    let style: ChatStyle
+    private var otherNodes: [MessageNode] {
+        let visible = Set(conversation.visibleMessages.map(\.identity))
+        return conversation.nodes.filter { !visible.contains($0.identity) }
+    }
+    private func expanded(_ node: MessageNode) -> MessageNode {
+        var value = node
+        value.options.collapsed = false
+        return value
+    }
+    var body: some View {
+        ScrollView {
+            LazyVStack(alignment: .leading, spacing: 20) {
+                Text("閲覧専用").font(.footnote).foregroundStyle(.secondary)
+                ForEach(conversation.visibleMessages, id: \.identity) { node in
+                    MessageView(node: expanded(node), siblings: [], style: style, select: { _ in })
+                }
+                if !otherNodes.isEmpty {
+                    DisclosureGroup("その他の分岐（\(otherNodes.count)件）") {
+                        ForEach(otherNodes, id: \.identity) { node in
+                            MessageView(node: expanded(node), siblings: [], style: style, select: { _ in })
+                        }
+                    }
+                }
+            }.padding()
+        }.navigationTitle(conversation.title)
+    }
+}
 
 struct ChatExportView: View {
     @ObservedObject var state: ChatState

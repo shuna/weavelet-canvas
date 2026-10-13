@@ -158,6 +158,7 @@ final class ChatState: ObservableObject {
         let defaults = try ChatImport.call("defaults")
         let prepared = try ChatImport.call("prepare", fields: [
             .init(key:"data",value:projected),.init(key:"defaults",value:defaults),
+            .init(key:"allowEmpty",value:.bool(true)),
             .init(key:"decisions",value:.object(allowPartialImport ? [.init(key:"allowPartialImport",value:.bool(true))] : []))])
         let status = try prepared.required("status").string("import status")
         if status == "decision-required" {
@@ -177,11 +178,13 @@ final class ChatState: ObservableObject {
         }
         return ChatImportPreview(filename:filename,conversations:imported.conversations,folderRows:try ChatFolders.rows(in:imported.source),
             recoveredContentCount:Int(try source.required("recoveredContentCount").number("recovered count")),unavailableContent:unavailable,
-            source:source,baselineSnapshot:baseline,baselineSidecar:document?.v3Sidecar,baselineRootOrder:document?.v3RootOrder,partialImportAccepted:allowPartialImport)
+            source:source,baselineSnapshot:baseline,baselineSidecar:document?.v3Sidecar,baselineRootOrder:document?.v3RootOrder)
     }
-    func commitImport(_ preview: ChatImportPreview, mode: ChatImportMode, selectedChatIDs: [String], selectedFolderIDs: [String], includeSettings: Bool, allowPartialImport: Bool) async throws {
+    func commitImport(_ preview: ChatImportPreview, mode: ChatImportMode, selectedChatIDs: [String], selectedFolderIDs: [String], includeSettings: Bool) async throws {
         guard generation == nil else { throw ExchangeError.invalid("生成中は取り込めません") }
-        guard document?.snapshot == preview.baselineSnapshot, document?.v3Sidecar == preview.baselineSidecar, document?.v3RootOrder == preview.baselineRootOrder else { throw ExchangeError.invalid("取り込み準備後に保存データが変更されています") }
+        guard try document?.snapshot.encoded() == preview.baselineSnapshot?.encoded(),
+              try document?.v3Sidecar.encoded() == preview.baselineSidecar?.encoded(),
+              document?.v3RootOrder.map({ Data($0.utf8) }) == preview.baselineRootOrder?.map({ Data($0.utf8) }) else { throw ExchangeError.invalid("取り込み準備後に保存データが変更されています") }
         guard !initialLoadFailed || mode == .replace else { throw ExchangeError.invalid("保存ファイルを読めなかったため追加できません。明示的な置換が必要です") }
         let base = try document ?? SyncDocument(v3:ChatLibrary.emptySource)
         var boundary = SharedWebProjection()

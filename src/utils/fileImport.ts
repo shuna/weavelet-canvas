@@ -26,7 +26,6 @@ import { BranchNodeLegacy, ChatInterface, Folder, FolderCollection } from '@type
 import { ExportV1, ExportV2, ExportV3, OpenAIChat, OpenAIPlaygroundJSON } from '@type/export';
 import type { EvaluationResultMap } from '@type/evaluation';
 
-import {defaultSettings} from '../store/evaluation-slice';
 export type ImportResult = {
   success: boolean;
   message: string;
@@ -58,7 +57,9 @@ const extractModelId = (chat: unknown): string | undefined => {
 };
 
 // Hosts pass detached persisted data; runtime functions never enter a plan.
-const createImportPlan = (base: StoreState, mode: ImportMode, includeSettings: boolean, initial: StoreState): StoreState => ({
+export const createImportPlan = (base: StoreState, mode: ImportMode, includeSettings: boolean, initial: StoreState): StoreState => ({
+  // JSON-only hosts must retain explicit undefined roots until the final persisted diff.
+  ...Object.fromEntries(Object.keys(mode === 'replace' && includeSettings ? initial : base).map(key => [key, undefined])),
   ...deepClone(mode === 'replace' && includeSettings ? initial : base),
   chats: mode === 'replace' ? [] : deepClone(base.chats),
   folders: mode === 'replace' ? {} : deepClone(base.folders),
@@ -130,7 +131,7 @@ const shiftAndMergeFolders = (plan: StoreState, folders: FolderCollection) => {
 
 export type ImportDecisions = {allowPartialImport?:boolean;reduceImport?:boolean};
 export type ImportDecision = {kind:'partial-import'|'reduce-import';message:string};
-export const importDefaults = () => createImportPlan({evaluationSettings:deepClone(defaultSettings)} as StoreState,'replace',false,{} as StoreState);
+
 
 // Raw sync backups enter the existing import converters only by explicit file import.
 export const decodeLegacyRemoteImport = (raw: LegacyRemoteSnapshot) => {

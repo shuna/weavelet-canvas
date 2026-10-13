@@ -45,7 +45,7 @@ export interface EvaluationSlice {
   clearEvaluationAxisProgress: (key: string) => void;
 }
 
-export const defaultSettings: EvaluationSettings = {
+const defaultSettings: EvaluationSettings = {
   safetyPreSend: 'manual',
   safetyPostReceive: 'manual',
   qualityPreSend: 'manual',

@@ -49,6 +49,55 @@ import XCTest
         XCTAssertEqual(try source.required("contentStore").required(hash).required("content").array("parts").count, 5)
     }
 
+    func testSelectiveFileAppendPublishesRemappedChatThroughEncryptedSync() async throws {
+        let dir = try directory(), drive = FakeSyncDrive(), keys = TestSyncKeys()
+        let store = LocalStateStore(fileURL: dir.appendingPathComponent("append.json"))
+        let sender = try state(store)
+        let originalState = try sender.publicationSnapshot().required("state")
+        let before = try XCTUnwrap(sender.exchange).source.required("chats").array("chats")
+        let original = try XCTUnwrap(before.first { $0["id"] == .string("chat-a") })
+        let preview = try await sender.prepareImport(data: fixture("io-corpus", "exportV3").encoded(), filename: "fixture.json")
+        let previewChat = try XCTUnwrap(preview.conversations.first { $0.nodes.contains { $0.id == "n-user" } })
+        try await sender.commitImport(preview, mode: .append, selectedChatIDs: [previewChat.id], selectedFolderIDs: [], includeSettings: false)
+        let after = try XCTUnwrap(sender.exchange).source.required("chats").array("chats")
+        XCTAssertEqual(after.count, before.count + 1)
+        let appendedState = try sender.publicationSnapshot().required("state")
+        XCTAssertEqual(try appendedState.required("xRaw").encoded(), try originalState.required("xRaw").encoded())
+        XCTAssertEqual(appendedState["theme"], originalState["theme"])
+        XCTAssertEqual(after.first { $0["id"] == .string("chat-a") }, original)
+        let oldIDs = Set(try before.map { try $0.required("id").string("id") })
+        let appended = try XCTUnwrap(after.first { chat in
+            guard case .string(let id) = chat["id"] else { return false }
+            return !oldIDs.contains(id)
+        })
+        let appendedID = try appended.required("id").string("id")
+        XCTAssertNotEqual(appendedID, "chat-a")
+        XCTAssertEqual(try ChatState(store: store).exportWebData(), try sender.exportWebData())
+        let publisher = GoogleSyncController(chatState: sender, drive: drive, store: SyncStateStore(fileURL: dir.appendingPathComponent("append-sync.json")), keyStore: keys)
+        try await publisher.create(password: password, folderName: "FAKE selective import")
+        let receiverStore = LocalStateStore(fileURL: dir.appendingPathComponent("received.json"))
+        let receiver = ChatState(store: receiverStore)
+        let subscriber = GoogleSyncController(chatState: receiver, drive: drive, store: SyncStateStore(fileURL: dir.appendingPathComponent("received-sync.json")), keyStore: keys)
+        try await subscriber.open(dataset: XCTUnwrap(publisher.dataset))
+        let unlocked = try await subscriber.restoreKey()
+        XCTAssertTrue(unlocked)
+        try await subscriber.download()
+        // Local raw numbers stay exact; the existing Web wire uses JSON number semantics.
+        let expectedWireState = try SyncRecords.decodeWire(SyncRecords.encodeWire(originalState))
+        XCTAssertEqual(try receiver.publicationSnapshot().required("state").required("xRaw"), try expectedWireState.required("xRaw"))
+        let received = try XCTUnwrap(receiver.exchange).source.required("chats").array("chats")
+        // Web records canonicalize keys and regenerate local content references; compare the full shared conversion result.
+        let expectedSnapshot = try SyncRecords.fromRecords(SyncRecords.toRecords(sender.publicationSnapshot()))
+        let expectedChats = try SyncDocument(snapshot: expectedSnapshot).uiProjection().required("chats").array("chats")
+        let receivedChat = try XCTUnwrap(received.first { $0["id"] == .string(appendedID) })
+        XCTAssertEqual(receivedChat, expectedChats.first { $0["id"] == .string(appendedID) })
+        let nodes = try receivedChat.required("branchTree").required("nodes")
+        XCTAssertEqual(try nodes.required("n-inactive").required("xFixtureNode")["unknown"], .string("keep-n-inactive"))
+        let hash = try nodes.required("n-user").required("contentHash").string("hash")
+        XCTAssertEqual(try XCTUnwrap(receiver.exchange).source.required("contentStore").required(hash).required("content").array("parts").count, 5)
+        XCTAssertEqual(try ChatState(store: receiverStore).exportWebData(), try receiver.exportWebData())
+    }
+
     func testClipboardCrossEncryptedSyncThenPastePreservesMapsPartsAndRestart() async throws {
         let dir = try directory(), drive = FakeSyncDrive(), keys = TestSyncKeys()
         let senderStore = LocalStateStore(fileURL: dir.appendingPathComponent("sender.json"))

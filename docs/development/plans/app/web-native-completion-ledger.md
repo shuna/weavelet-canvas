@@ -1,5 +1,15 @@
 # Web / 新iOSの完成条件と証拠
 
+## 形式判定・プレビュー・選択追加・全置換の共有取り込み（2026-10-13追記）
+
+実Web importServiceの変換・検証・選択追加を `src/utils/fileImport.ts` へ抽出し、Webとnativeが同じ入口を使う。nativeはJSON/gzip読込、raw境界、確認UI、atomic保存を担う。既知設定の全置換初期値は実Web `getInitialState/createPartializedState` から生成し、Swift側へ既定値を再実装しない。設定の初期化は既定オフ。選択IDはUTF8 identityを使用し、古いプレビューからの保存はsnapshot/sidecarのbyte照合で拒否する。
+
+Astra指摘のsummary設定投影、初期値のundefined削除、Unicode識別子の混同、古い状態照合を修正。追加調査で見つかったPlayground判定の独自model必須条件は実Web `isOpenAIContent` 共用へ変更した。手動確認では実Web converterの文字列本文無視を検出し、既存 `strToTextContent` による正規化を共有元へ追加した。情報欠落を既定値・比較方法の緩和で隠していない。独立Astraは修正した範囲だけ再確認し、新規なし。
+
+再利用する成功証拠: importService65件、フォルダ16件、Catalyst取り込み7件（raw属性・summary・Unicode・stale拒否・保存失敗/retry・設定リセット・空置換・再起動）。最終の文字列本文修正後は共有取り込み/utility19件・型検査と、nativeの該当接続1件だけを再確認した。選択追加→暗号化同期の代表1件も成功。初回同期の2assert失敗はWeb `records.ts` のtoRecords/fromRecordsが本文hashとキー順を変換するためで、期待chatを実共有変換から取得する全体比較へ訂正し、受信hash先の5parts・未知属性の確認を維持した。全suiteを最終ソースで一括再実行した結果ではない。ログ `/private/tmp/weavelet-import-{projection,string}-catalyst.log`。
+
+実Catalystで合成ファイルの閲覧専用プレビュー、本文1件、設定初期化の既定オフ、追加保存、一覧と本文表示、既存会話保持を確認。手動の再起動・書出し・同期は自動の成功証拠と重複するため反復しない。最新origin/main `7a0a383a` は統合先の祖先であることを確認し、元作業ツリーの未コミット変更を保全した。実クラウド・実機・狭幅・VoiceOverは未確認。本文のrich表示など全体目標の残件へ進む。
+
 ## 形式・範囲指定の書き出しとgzip V3（2026-10-13追記）
 
 実Web ExportChat/DownloadChatのpayload構築をfileExportへ共有し、nativeは同じ入口へ接続した。全件V3/V1/OpenAI/OpenRouter/LMStudioと、単体・表示枝V3/OpenAI/LMStudio/Markdownを提供する。OpenRouterは全件/単体の現在枝を出力し、独立の表示枝指定は持たない。V1は全件のみ。V3/OpenAIの全枝出力と、現在枝・変換先で表せる本文だけを出す形式をUIで区別した。Markdownの既存変換はDOM処理から分離し共用する。
@@ -134,7 +144,11 @@ GoogleAuthenticationはOSの認証画面、PKCE/state、URLSession、Keychainで
 
 Webの既存実処理を基準に共有範囲を一機能分定め、nativeは共有処理への接続と環境固有部分を実装する。比較テストは共有設計の代用にせず、境界変換と理由のある別実装の互換性確認に限定する。独立Astraは段階の完成時に監査、修正箇所を再確認する。Catalystを通常のnative検証先とし、iOS固有の背景実行等はCatalystで証明できたと扱わない。既存ユーザーデータと本番同期先への未検証書込みは行わず、隔離したテストデータで保存・同期の実装を進める。
 
-ゲートは部品ごとに増やさず、操作から保存・再読込みまたは同期結果まで通る機能一式ごとにまとめる。関連テスト・必要なビルド・Astra監査は原則一回、修正時は影響箇所だけ再確認する。同じsource・依存・fixture・設定への担当者と親の重複テストは行わない。中間確認は原因切分け・誤方針の早期検出・不可逆または高リスク操作の直前に限定する。
+検証は関連機能群の代表経路へまとめ、保存・再起動・書出し・暗号同期を機能追加ごとに一律反復しない。基盤変更時のみ影響範囲を追加する。テスト作成前に実WebのID再採番・本文参照変換・キー順を確認し、共有元では業務規則、nativeでは引数/結果変換・情報保持・保存失敗時の保全を検証する。関連コードが不変の成功結果は再利用し、期待値の変更には実処理の根拠を残す。完成条件を満たした機能群は追加監査循環をせず次へ進む。関連テスト・必要なビルド・Astra監査は原則一回、修正時は影響箇所だけ再確認する。同じsource・依存・fixture・設定への担当者と親の重複テストは行わない。中間確認は原因切分け・誤方針の早期検出・不可逆または高リスク操作の直前に限定する。
+
+### 取り込み完了後の本文表示の配置判断（2026-10-13）
+
+現在の `MarkdownRenderer.tsx` は実Webの remark-gfm / remark-math / rehype-katex / rehype-highlight と `preprocessLaTeX` を使用する。旧iOS `MessageBubble.swift` の `inlineOnlyPreservingWhitespace` はブロック構造を扱わず、この経路の拡張を既定にしない。次の表示段階はWeb由来の解析・前処理と `resolveStreamingMarkdownMode` の共用を先に検討し、描画、選択、リンク操作、画像読み込みはnative境界として配置する。描画方式の採否は未決定で、導入前に複数メッセージ・長文・生成中の更新でコストを確認する。表・コード・数式・画像の表示、原文切替、選択とコピー、Dynamic Typeを一式の受入に含め、旧iOSと見た目だけ一致しても完成とは扱わない。
 
 ## 今回の独立監査と統合確認
 

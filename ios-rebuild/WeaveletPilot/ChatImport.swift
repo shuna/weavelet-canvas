@@ -17,7 +17,6 @@ struct ChatImportPreview: Identifiable {
     let baselineSnapshot: OrderedJSON?
     let baselineSidecar: OrderedJSON?
     let baselineRootOrder: [String]?
-    let partialImportAccepted: Bool
 }
 
 // The Web inspector identifies opaque fields; Swift only transports their raw values.

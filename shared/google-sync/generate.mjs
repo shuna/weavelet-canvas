@@ -1,3 +1,4 @@
+import { generateImportDefaults } from './importDefaults.generate.mjs';
 import { build, version as esbuildVersion } from 'esbuild';
 import ts from 'typescript';
 import { fileURLToPath } from 'node:url';
@@ -7,6 +8,7 @@ import { createHash } from 'node:crypto';
 const root = path.dirname(fileURLToPath(import.meta.url));
 const check = process.argv[2] === '--check';
 const webRoot = path.resolve(process.argv[check ? 3 : 2] ?? path.join(root, '../..'));
+const initialStateInputs = await generateImportDefaults(webRoot, path.join(root, 'importDefaults.generated.json'), check);
 if (check) {
   const provenance = JSON.parse(readFileSync(path.join(root, 'provenance.json'), 'utf8'));
   for (const [filename, expected] of Object.entries(provenance.inputs)) {
@@ -30,7 +32,7 @@ if (check) {
   process.exit(0);
 }
 const sourceNames = ['sync', 'replay', 'merge', 'mergeBranches', 'records', 'decodeParts', 'crypto'];
-const inputs = {};
+const inputs = { ...initialStateInputs };
 for (const name of sourceNames) {
   const input = `src/store/storage/google/${name}.ts`;
   copyFileSync(path.join(webRoot, input), path.join(root, 'source', `${name}.ts`));
@@ -83,7 +85,7 @@ for (const filename of Object.keys(bundled.metafile.inputs)) {
 const provenance = JSON.parse(readFileSync(path.join(root, 'provenance.json'), 'utf8'));
 provenance.inputs = inputs;
 provenance.bundleInputs = {};
-for (const filename of [...Object.keys(bundled.metafile.inputs), path.join(root, 'generate.mjs')]) {
+for (const filename of [...Object.keys(bundled.metafile.inputs), path.join(root, 'generate.mjs'), path.join(root, 'importDefaults.generate.mjs')]) {
   const input = path.resolve(filename);
   if (input.startsWith(root + path.sep) || input.startsWith(path.resolve(root, '../../src') + path.sep)) {
     provenance.bundleInputs[path.relative(path.join(root, '../..'), input)] = createHash('sha256').update(readFileSync(input)).digest('hex');

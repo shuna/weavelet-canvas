@@ -1,4 +1,5 @@
 import { applyFolderOperation, orderedFolders, type FolderOperation } from '../../src/utils/chatFolders';
+import { getFolderAncestors } from '../../src/utils/folderHierarchy';
 import type { ChatInterface, FolderCollection } from '../../src/types/chat';
 
 // Only known folder fields and chat identities/membership cross the JS boundary.
@@ -22,5 +23,8 @@ export function folderOperation(json: string): string {
 }
 export function folderRows(json: string): string {
   const input = JSON.parse(json) as Pick<Projection, 'folders'>;
-  return JSON.stringify(orderedFolders(input.folders).map(folder => Object.fromEntries(folderFields.filter(key => Object.hasOwn(folder, key)).map(key => [key, folder[key]]))));
+  return JSON.stringify(orderedFolders(input.folders).map(folder => ({
+    ...Object.fromEntries(folderFields.filter(key => Object.hasOwn(folder, key)).map(key => [key, folder[key]])),
+    path: getFolderAncestors(input.folders, folder.id).reverse().map(id => input.folders[id].name).join(' / '),
+  })));
 }

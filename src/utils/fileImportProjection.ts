@@ -1,3 +1,5 @@
+import { isOpenAIContent } from './import';
+
 // Native's raw boundary wraps only fields the Web import converters copy opaquely.
 // Validation, repair and format detection remain in the actual import core.
 export type ImportOpaquePath=(string|number)[];
@@ -21,7 +23,7 @@ export function importOpaquePaths(data:unknown):ImportOpaquePath[]{
   if(Array.isArray(v.messages))v.messages.forEach((m:any,index:number)=>message(m,[...p,'messages',index]));tree(v.branchTree,[...p,'branchTree']);
   if(Array.isArray(v.summaries))v.summaries.forEach((s:any,index:number)=>{const at=[...p,'summaries',index];fields(s,at,['id','mode','text','useForSubmit','format','sources','generation']);
    if(Array.isArray(s?.sources))s.sources.forEach((item:any,i:number)=>fields(item,[...at,'sources',i],['nodeId','parentId','role','textParts']));
-   fields(s?.generation,[...at,'generation'],['model','providerId','settings','createdAt']);if(object(s?.generation?.settings))fields(s.generation.settings,[...at,'generation','settings'],[]);
+   fields(s?.generation,[...at,'generation'],['model','providerId','settings','createdAt']);if(object(s?.generation?.settings))fields(s.generation.settings,[...at,'generation','settings'],['temperature','max_tokens','reasoning_effort']);
   });
  };
  const openAI=(v:any,p:ImportOpaquePath)=>{
@@ -32,7 +34,7 @@ export function importOpaquePaths(data:unknown):ImportOpaquePath[]{
   }
  };
  const root=(v:any,p:ImportOpaquePath)=>{
-  if(Array.isArray(v)){v.forEach((item,index)=>object(item?.mapping)?openAI(item,[...p,index]):chat(item,[...p,index]));return;}
+  if(Array.isArray(v)){v.forEach((item,index)=>isOpenAIContent(item)?openAI(item,[...p,index]):chat(item,[...p,index]));return;}
   if(!object(v))return;
   if(object(v.state)){fields(v,p,['version','state']);root(v.state,[...p,'state']);return;}
   if(Array.isArray(v.chats)||object(v.contentStore)||object(v.folders)){
@@ -44,7 +46,7 @@ export function importOpaquePaths(data:unknown):ImportOpaquePath[]{
    if(object(v.evaluationResults))for(const [id,r]of Object.entries(v.evaluationResults))fields(r,[...p,'evaluationResults',id],['phase']);
    if(object(v.extensions))fields(v.extensions,[...p,'extensions'],[]);
    const clip=v.branchClipboard;if(object(clip)){fields(clip,[...p,'branchClipboard'],['nodes','nodeIds','sourceChat','messageAttributesV1','collapsedNodes','omittedNodes','protectedNodes']);tree(clip,[...p,'branchClipboard'],['nodeIds','sourceChat','collapsedNodes','omittedNodes','protectedNodes']);}
-  }else if(object(v.mapping)||(Array.isArray(v.messages)&&typeof v.model==='string'))openAI(v,p);else chat(v,p);
+  }else if(isOpenAIContent(v))openAI(v,p);else chat(v,p);
  };
  root(data,[]);return paths;
 }

@@ -497,7 +497,8 @@ export const convertOpenAIToConversationFormat = (
   } else if (isOpenAIPlaygroundJSON(openAIChatExport)) {
     // Handle the playground export format
     openAIChatExport.messages.forEach((message) => {
-      const { role, content } = message;
+      const { role } = message;
+      const content = typeof message.content === 'string' ? [strToTextContent(message.content)] : message.content;
       if (Array.isArray(content)) {
         const contentElements: ContentInterface[] = content
           .map((part) => {

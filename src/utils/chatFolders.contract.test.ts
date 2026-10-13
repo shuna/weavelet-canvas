@@ -63,6 +63,14 @@ describe('shared folder operations', () => {
     expect(input).toEqual(before);
   });
 
+  it('labels same-name folders with their ancestor paths for import selection', () => {
+    const make = (id: string, name: string, parentId?: string) => ({ id, name, parentId, order: 0, expanded: true });
+    const folders = { a: make('a', 'A'), b: make('b', 'B'), x: make('x', 'Same', 'a'), y: make('y', 'Same', 'b') };
+    const rows = JSON.parse(folderRows(JSON.stringify({ folders })));
+    expect(rows.find((row: any) => row.id === 'x').path).toBe('A / Same');
+    expect(rows.find((row: any) => row.id === 'y').path).toBe('B / Same');
+  });
+
   it('rejects invalid identities before changing anything', () => {
     const input = structuredClone(fixture.input), before = structuredClone(input);
     for (const operation of [{ type: 'create', id: 'f-a' }, { type: 'remove', id: 'missing' }, { type: 'move', chatIds: ['missing'], folderId: 'f-a' }, { type: 'move', chatIds: ['chat-a'], folderId: 'missing' }] as const) {

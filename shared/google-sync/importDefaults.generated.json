@@ -1,0 +1,282 @@
+{
+  "keys": [
+    "lastContentEditedAt",
+    "apiKey",
+    "apiVersion",
+    "apiEndpoint",
+    "theme",
+    "autoTitle",
+    "titleModel",
+    "titleProviderId",
+    "bubbleSummaryConfig",
+    "advancedMode",
+    "prompts",
+    "defaultChatConfig",
+    "defaultSystemMessage",
+    "hideMenuOptions",
+    "hideSideMenu",
+    "folders",
+    "enterToSubmit",
+    "inlineLatex",
+    "markdownMode",
+    "streamingMarkdownPolicy",
+    "totalTokenUsed",
+    "countTotalTokens",
+    "displayChatSize",
+    "menuWidth",
+    "defaultImageDetail",
+    "animateBubbleNavigation",
+    "branchSwipeDirection",
+    "providers",
+    "favoriteModels",
+    "providerModelCache",
+    "providerCustomModels",
+    "_legacyCustomModels",
+    "onboardingCompleted",
+    "splitPanelRatio",
+    "splitPanelSwapped",
+    "chatActiveView",
+    "proxyEnabled",
+    "proxyEndpoint",
+    "proxyAuthToken",
+    "showDebugPanel",
+    "searchHistory",
+    "sidebarSearchHistory",
+    "chatFindHistory",
+    "verifiedStats",
+    "pendingVerifications",
+    "evaluationSettings",
+    "safetyThresholds",
+    "qualityThresholds",
+    "evaluationResults",
+    "localModelEnabled",
+    "localModels",
+    "favoriteLocalModelIds",
+    "localModelExecutionMode",
+    "activeLocalModels",
+    "savedModelMeta",
+    "chats",
+    "contentStore",
+    "branchClipboard"
+  ],
+  "values": {
+    "apiEndpoint": "https://api.openai.com/v1/chat/completions",
+    "theme": "dark",
+    "autoTitle": false,
+    "titleModel": "",
+    "advancedMode": true,
+    "prompts": [
+      {
+        "id": "0d3e9cb7-b585-43fa-acc3-840c189f6b93",
+        "name": "English Translator",
+        "prompt": "I want you to act as an English translator, spelling corrector and improver. I will speak to you in any language and you will detect the language, translate it and answer in the corrected and improved version of my text, in English. I want you to replace my simplified A0-level words and sentences with more beautiful and elegant, upper level English words and sentences. Keep the meaning same, but make them more literary. I want you to only reply the correction, the improvements and nothing else, do not write explanations. Do you understand?"
+      }
+    ],
+    "defaultChatConfig": {
+      "model": "",
+      "max_tokens": 4000,
+      "temperature": 1,
+      "presence_penalty": 0,
+      "top_p": 1,
+      "frequency_penalty": 0,
+      "stream": true,
+      "reasoning_effort": "none",
+      "reasoning_budget_tokens": 0
+    },
+    "defaultSystemMessage": "You are a large language model assistant.\nCarefully heed the user's instructions. \nRespond using Markdown.",
+    "hideMenuOptions": false,
+    "hideSideMenu": false,
+    "folders": {},
+    "enterToSubmit": true,
+    "inlineLatex": false,
+    "markdownMode": true,
+    "streamingMarkdownPolicy": "auto",
+    "totalTokenUsed": {},
+    "countTotalTokens": false,
+    "displayChatSize": false,
+    "menuWidth": 260,
+    "defaultImageDetail": "auto",
+    "animateBubbleNavigation": true,
+    "branchSwipeDirection": "left-next",
+    "providers": {
+      "openrouter": {
+        "id": "openrouter",
+        "name": "OpenRouter",
+        "endpoint": "https://openrouter.ai/api/v1/chat/completions",
+        "modelsEndpoint": "https://openrouter.ai/api/v1/models",
+        "modelsRequireAuth": false
+      },
+      "openai": {
+        "id": "openai",
+        "name": "OpenAI",
+        "endpoint": "https://api.openai.com/v1/chat/completions",
+        "modelsEndpoint": "https://api.openai.com/v1/models",
+        "modelsRequireAuth": true
+      },
+      "mistral": {
+        "id": "mistral",
+        "name": "Mistral",
+        "endpoint": "https://api.mistral.ai/v1/chat/completions",
+        "modelsEndpoint": "https://api.mistral.ai/v1/models",
+        "modelsRequireAuth": true
+      },
+      "groq": {
+        "id": "groq",
+        "name": "Groq",
+        "endpoint": "https://api.groq.com/openai/v1/chat/completions",
+        "modelsEndpoint": "https://api.groq.com/openai/v1/models",
+        "modelsRequireAuth": true
+      },
+      "together": {
+        "id": "together",
+        "name": "Together AI",
+        "endpoint": "https://api.together.xyz/v1/chat/completions",
+        "modelsEndpoint": "https://api.together.xyz/v1/models",
+        "modelsRequireAuth": true
+      },
+      "cohere": {
+        "id": "cohere",
+        "name": "Cohere",
+        "endpoint": "https://api.cohere.ai/v2/chat",
+        "modelsEndpoint": "https://api.cohere.ai/v2/models",
+        "modelsRequireAuth": true
+      },
+      "perplexity": {
+        "id": "perplexity",
+        "name": "Perplexity",
+        "endpoint": "https://api.perplexity.ai/chat/completions",
+        "modelsRequireAuth": false
+      },
+      "deepseek": {
+        "id": "deepseek",
+        "name": "DeepSeek",
+        "endpoint": "https://api.deepseek.com/chat/completions",
+        "modelsEndpoint": "https://api.deepseek.com/models",
+        "modelsRequireAuth": true
+      },
+      "xai": {
+        "id": "xai",
+        "name": "xAI",
+        "endpoint": "https://api.x.ai/v1/chat/completions",
+        "modelsEndpoint": "https://api.x.ai/v1/models",
+        "modelsRequireAuth": true
+      },
+      "fireworks": {
+        "id": "fireworks",
+        "name": "Fireworks",
+        "endpoint": "https://api.fireworks.ai/inference/v1/chat/completions",
+        "modelsEndpoint": "https://api.fireworks.ai/inference/v1/models",
+        "modelsRequireAuth": true
+      }
+    },
+    "favoriteModels": [],
+    "providerModelCache": {},
+    "providerCustomModels": {},
+    "onboardingCompleted": false,
+    "splitPanelRatio": 0.5,
+    "splitPanelSwapped": false,
+    "chatActiveView": "chat",
+    "proxyEnabled": false,
+    "proxyEndpoint": "",
+    "proxyAuthToken": "",
+    "showDebugPanel": false,
+    "searchHistory": [],
+    "sidebarSearchHistory": [],
+    "chatFindHistory": [],
+    "verifiedStats": {},
+    "pendingVerifications": {},
+    "evaluationSettings": {
+      "safetyPreSend": "manual",
+      "safetyPostReceive": "manual",
+      "qualityPreSend": "manual",
+      "qualityPostReceive": "manual",
+      "safetyEngine": "remote",
+      "hybridRemoteOnSafe": true
+    },
+    "safetyThresholds": {
+      "sexual": {
+        "review": 0.8,
+        "block": 0.95
+      },
+      "hate": {
+        "review": 0.7,
+        "block": 0.9
+      },
+      "harassment": {
+        "review": 0.75,
+        "block": 0.92
+      },
+      "self-harm": {
+        "review": 0.55,
+        "block": 0.85
+      },
+      "sexual/minors": {
+        "review": 0.08,
+        "block": 0.2
+      },
+      "hate/threatening": {
+        "review": 0.35,
+        "block": 0.7
+      },
+      "violence/graphic": {
+        "review": 0.55,
+        "block": 0.82
+      },
+      "violence": {
+        "review": 0.75,
+        "block": 0.93
+      },
+      "harassment/threatening": {
+        "review": 0.45,
+        "block": 0.75
+      },
+      "self-harm/intent": {
+        "review": 0.35,
+        "block": 0.7
+      },
+      "self-harm/instructions": {
+        "review": 0.2,
+        "block": 0.45
+      },
+      "illicit": {
+        "review": 0.7,
+        "block": 0.9
+      },
+      "illicit/violent": {
+        "review": 0.25,
+        "block": 0.55
+      }
+    },
+    "qualityThresholds": {
+      "taskCompletion": {
+        "red": 0.5,
+        "green": 0.8
+      },
+      "faithfulness": {
+        "red": 0.5,
+        "green": 0.8
+      },
+      "coherence": {
+        "red": 0.5,
+        "green": 0.8
+      },
+      "conciseness": {
+        "red": 0.5,
+        "green": 0.8
+      },
+      "instructionFollowing": {
+        "red": 0.5,
+        "green": 0.8
+      }
+    },
+    "evaluationResults": {},
+    "localModelEnabled": false,
+    "localModels": [],
+    "favoriteLocalModelIds": [],
+    "localModelExecutionMode": "sequential",
+    "activeLocalModels": {},
+    "savedModelMeta": {},
+    "contentStore": {},
+    "branchClipboard": null
+  }
+}

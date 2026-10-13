@@ -1,8 +1,13 @@
-import {prepareImportData,buildPreviewAppendPatch,importDefaults,validatePreviewSource,validateImportSelection,type ImportPreviewSource,type ImportDecisions,type Translator} from '../../src/utils/fileImport';
+import initialState from './importDefaults.generated.json';
+import {prepareImportData,buildPreviewAppendPatch,createImportPlan,validatePreviewSource,validateImportSelection,type ImportPreviewSource,type ImportDecisions,type Translator} from '../../src/utils/fileImport';
 import {importOpaquePaths} from '../../src/utils/fileImportProjection';
 import {diffJSONChanges} from '../../src/utils/jsonChanges';
 import {withEditingRuntime} from './editing';
 import type {StoreState} from '../../src/store/store';
+function importDefaults(): StoreState {
+ const initial=Object.fromEntries(initialState.keys.map(key=>[key,initialState.values[key as keyof typeof initialState.values]])) as unknown as StoreState;
+ return createImportPlan(initial,'replace',false,initial);
+}
 export function fileImport(json:string):string {
  const input=JSON.parse(json);
  const t:Translator=(key,opts)=>String(input.messages?.[key]??opts?.defaultValue??key).replace(/\{\{(\w+)\}\}/g,(_,name)=>String(opts?.[name]??''));
@@ -34,15 +39,16 @@ export function fileImport(json:string):string {
    const {currentChatIndex:index,...rest}=patch;data={...base,...rest};currentChatIndex=index;
   }else{
    // The same selection helper validates missing bodies and folder ancestor closure.
-   const empty={...base,chats:[],folders:{},contentStore:{},branchClipboard:null,evaluationResults:{}} as StoreState;
+   const resetBase={...base,...createImportPlan(base,'replace',input.includeSettings===true,{...importDefaults(),...input.defaults})};
+   const empty=resetBase;
    const options={fileName:input.fileName??'',selectedFolderIds:folders};
    if(ids.length||folders.length)validateImportSelection(source,ids,t,options);
    const complete=ids.length===source.chats.length&&folders.length===Object.keys(source.folders).length;
    const selected=complete?undefined:buildPreviewAppendPatch(empty,source,ids,t,options);
-   data=complete?{...base,chats:structuredClone(source.chats),folders:structuredClone(source.folders),contentStore:structuredClone(source.contentStore),evaluationResults:structuredClone(source.evaluationResults),branchClipboard:null}:
-     {...base,chats:selected!.chats,folders:selected!.folders,contentStore:selected!.contentStore,evaluationResults:selected!.evaluationResults,branchClipboard:null};
+   data=complete?{...resetBase,chats:structuredClone(source.chats),folders:structuredClone(source.folders),contentStore:structuredClone(source.contentStore),evaluationResults:structuredClone(source.evaluationResults),branchClipboard:null}:
+     {...resetBase,chats:selected!.chats,folders:selected!.folders,contentStore:selected!.contentStore,evaluationResults:selected!.evaluationResults,branchClipboard:null};
    currentChatIndex=ids.length?0:-1;
-   if(input.includeSettings&&source.evaluationSettings)data.evaluationSettings={...input.defaults?.evaluationSettings??importDefaults().evaluationSettings,...source.evaluationSettings};
+   if(input.includeSettings&&source.evaluationSettings)data.evaluationSettings={...resetBase.evaluationSettings,...source.evaluationSettings};
   }
   const persisted=JSON.parse(JSON.stringify(data));
   return {result:{success:true,message:t('notifications.successfulImport',{ns:'import'})},changes:diffJSONChanges(base,persisted),currentChatIndex,
