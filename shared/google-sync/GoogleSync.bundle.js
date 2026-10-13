@@ -6989,6 +6989,7 @@ var WeaveletGoogleSync = (() => {
     driveFolderName: () => driveFolderName,
     driveHeaderID: () => driveHeaderID,
     driveListing: () => driveListing,
+    fileExport: () => fileExport,
     folderOperation: () => folderOperation,
     folderRows: () => folderRows,
     generationRequest: () => generationRequest,
@@ -7304,6 +7305,21 @@ var WeaveletGoogleSync = (() => {
   function resolveContentText(store, hash) {
     const content = resolveContent(store, hash);
     return content.filter((c) => c.type === "text").map((c) => c.text).join(" ");
+  }
+  function buildExportContentStore(store) {
+    const exported = {};
+    for (const [hash, entry] of Object.entries(store)) {
+      const { delta, ...fullEntry } = entry;
+      if (delta) {
+        exported[hash] = {
+          ...fullEntry,
+          content: resolveContent(store, hash)
+        };
+      } else {
+        exported[hash] = fullEntry;
+      }
+    }
+    return exported;
   }
 
   // src/store/branch-domain.ts
@@ -11559,6 +11575,310 @@ ${message.content}` : message.content).join("\n\n").trim();
       contentStore
     };
   };
+  var contentToTextParts = (content) => {
+    return content.filter(isTextContent).map((c) => c.text);
+  };
+  var contentToString = (content) => {
+    return contentToTextParts(content).join("\n");
+  };
+  var chatToOpenAIFormat = (chat, contentStore, options = {}) => {
+    const visibleBranchOnly = options.visibleBranchOnly ?? false;
+    const modelSlug = chat.config?.model ?? "";
+    const configSystemPrompt = chat.config?.systemPrompt;
+    const mapping = {};
+    if (chat.branchTree) {
+      const tree = chat.branchTree;
+      const nodeIds = visibleBranchOnly ? tree.activePath.filter((id) => tree.nodes[id] !== void 0) : Object.keys(tree.nodes);
+      const filteredIds = nodeIds.filter((id) => tree.nodes[id]?.role !== "system");
+      const nodeSet = new Set(filteredIds);
+      const childrenMap = {};
+      for (const id of filteredIds) {
+        childrenMap[id] = [];
+      }
+      for (const id of filteredIds) {
+        const node = tree.nodes[id];
+        if (node.parentId && nodeSet.has(node.parentId)) {
+          childrenMap[node.parentId].push(id);
+        }
+      }
+      let systemNodeId = null;
+      if (configSystemPrompt) {
+        systemNodeId = "__system__";
+        const firstNonSystem = filteredIds.find((id) => {
+          const n = tree.nodes[id];
+          return n && !n.parentId;
+        }) ?? filteredIds[0];
+        mapping[systemNodeId] = {
+          id: systemNodeId,
+          message: {
+            author: { role: "system" },
+            content: { parts: [configSystemPrompt] },
+            metadata: { model_slug: modelSlug }
+          },
+          parent: null,
+          children: firstNonSystem ? [firstNonSystem] : []
+        };
+      }
+      for (const id of filteredIds) {
+        const node = tree.nodes[id];
+        const content = resolveContent(contentStore, node.contentHash);
+        const parts = contentToTextParts(content);
+        const parentInSet = node.parentId && nodeSet.has(node.parentId) ? node.parentId : null;
+        mapping[id] = {
+          id,
+          message: {
+            author: { role: node.role },
+            content: { parts },
+            metadata: { model_slug: modelSlug }
+          },
+          parent: parentInSet ?? systemNodeId,
+          children: childrenMap[id] ?? []
+        };
+      }
+      const activePath = tree.activePath.filter((id) => nodeSet.has(id));
+      const currentNode = activePath[activePath.length - 1] ?? filteredIds[0] ?? systemNodeId ?? "";
+      return {
+        title: chat.title,
+        create_time: tree.nodes[tree.rootId]?.createdAt ? Math.floor(tree.nodes[tree.rootId].createdAt / 1e3) : void 0,
+        mapping,
+        current_node: currentNode
+      };
+    }
+    let parentId = null;
+    const ids = [];
+    if (configSystemPrompt) {
+      const sysId = "msg-system";
+      ids.push(sysId);
+      mapping[sysId] = {
+        id: sysId,
+        message: {
+          author: { role: "system" },
+          content: { parts: [configSystemPrompt] },
+          metadata: { model_slug: modelSlug }
+        },
+        parent: null,
+        children: []
+      };
+      parentId = sysId;
+    }
+    chat.messages.forEach((msg, i) => {
+      if (msg.role === "system")
+        return;
+      const id = `msg-${i}`;
+      ids.push(id);
+      const parts = contentToTextParts(msg.content);
+      mapping[id] = {
+        id,
+        message: {
+          author: { role: msg.role },
+          content: { parts },
+          metadata: { model_slug: modelSlug }
+        },
+        parent: parentId,
+        children: []
+      };
+      if (parentId && mapping[parentId]) {
+        mapping[parentId].children.push(id);
+      }
+      parentId = id;
+    });
+    return {
+      title: chat.title,
+      mapping,
+      current_node: ids[ids.length - 1] ?? ""
+    };
+  };
+  var _orCounter = 0;
+  var orId = (prefix) => `${prefix}-${Date.now()}-${(++_orCounter).toString(36)}`;
+  var chatToOpenRouterFormat = (chat, contentStore) => {
+    const modelSlug = chat.config?.model ?? "";
+    const characterId = orId("char");
+    const now = new Date().toISOString();
+    const character = {
+      id: characterId,
+      model: modelSlug,
+      modelInfo: { slug: modelSlug, name: modelSlug },
+      description: "",
+      includeDefaultSystemPrompt: true,
+      isStreaming: true,
+      samplingParameters: {},
+      chatMemory: 8,
+      isDisabled: false,
+      isRemoved: false,
+      createdAt: now,
+      updatedAt: now,
+      plugins: []
+    };
+    const characters = { [characterId]: character };
+    const messages = {};
+    const items = {};
+    let prevMsgId;
+    const addMessage = (role, text, timestamp) => {
+      const msgId = orId("msg");
+      const itemId = orId("item");
+      const ts = timestamp ? new Date(timestamp).toISOString() : now;
+      const isUser = role === "user";
+      const item = {
+        id: itemId,
+        messageId: msgId,
+        data: {
+          type: "message",
+          role,
+          content: [{ type: isUser ? "input_text" : "output_text", text }]
+        }
+      };
+      items[itemId] = item;
+      const msg = {
+        id: msgId,
+        characterId: isUser ? "USER" : characterId,
+        contentType: "text",
+        context: "main-chat",
+        createdAt: ts,
+        updatedAt: ts,
+        isRetrying: false,
+        isEdited: false,
+        isCollapsed: false,
+        type: role,
+        items: [{ id: itemId, type: "message" }]
+      };
+      if (prevMsgId) {
+        msg.parentMessageId = prevMsgId;
+      }
+      if (!isUser) {
+        msg.isGenerating = false;
+      }
+      messages[msgId] = msg;
+      prevMsgId = msgId;
+    };
+    if (chat.config?.systemPrompt) {
+      addMessage("system", chat.config?.systemPrompt);
+    }
+    if (chat.branchTree) {
+      for (const id of chat.branchTree.activePath) {
+        const node = chat.branchTree.nodes[id];
+        if (!node || node.role === "system")
+          continue;
+        const content = resolveContent(contentStore, node.contentHash);
+        addMessage(node.role, contentToString(content), node.createdAt);
+      }
+    } else {
+      for (const msg of chat.messages) {
+        if (msg.role === "system")
+          continue;
+        addMessage(msg.role, contentToString(msg.content));
+      }
+    }
+    return {
+      version: "orpg.3.0",
+      title: chat.title,
+      characters,
+      messages,
+      items,
+      artifacts: {},
+      artifactFiles: {},
+      artifactVersions: {},
+      artifactFileContents: {}
+    };
+  };
+  var lmsStepId = () => `${Date.now()}-${Math.random().toString().slice(2, 18)}`;
+  var toLMStudioMessage = (role, text, modelSlug) => {
+    if (role === "assistant") {
+      const stepId = lmsStepId();
+      const contentBlock = {
+        type: "contentBlock",
+        stepIdentifier: stepId,
+        content: [{
+          type: "text",
+          text,
+          fromDraftModel: false,
+          tokensCount: 0,
+          isStructural: false
+        }],
+        genInfo: {
+          indexedModelIdentifier: modelSlug,
+          identifier: modelSlug
+        },
+        defaultShouldIncludeInContext: true,
+        shouldIncludeInContext: true
+      };
+      const version2 = {
+        type: "multiStep",
+        role: "assistant",
+        senderInfo: { senderName: modelSlug },
+        steps: [contentBlock]
+      };
+      return { versions: [version2], currentlySelected: 0 };
+    }
+    const version = {
+      type: "singleStep",
+      role,
+      content: [{ type: "text", text }]
+    };
+    return { versions: [version], currentlySelected: 0 };
+  };
+  var chatToLMStudioFormat = (chat, contentStore, options = {}) => {
+    const visibleBranchOnly = options.visibleBranchOnly ?? false;
+    const modelSlug = chat.config?.model ?? "";
+    const now = Date.now();
+    const messages = [];
+    let tokenCount = 0;
+    let userLastMessagedAt;
+    let assistantLastMessagedAt;
+    const systemPrompt = chat.config?.systemPrompt ?? "";
+    const addMsg = (role, text, timestamp) => {
+      if (!text)
+        return;
+      if (role === "system")
+        return;
+      messages.push(toLMStudioMessage(role, text, modelSlug));
+      if (role === "user" && timestamp)
+        userLastMessagedAt = timestamp;
+      if (role === "assistant" && timestamp)
+        assistantLastMessagedAt = timestamp;
+    };
+    if (chat.branchTree) {
+      const tree = chat.branchTree;
+      const nodeIds = visibleBranchOnly ? tree.activePath.filter((id) => tree.nodes[id] !== void 0) : tree.activePath;
+      for (const id of nodeIds) {
+        const node = tree.nodes[id];
+        if (!node)
+          continue;
+        const content = resolveContent(contentStore, node.contentHash);
+        addMsg(node.role, contentToString(content), node.createdAt);
+      }
+    } else {
+      for (const msg of chat.messages) {
+        addMsg(msg.role, contentToString(msg.content));
+      }
+    }
+    return {
+      name: chat.title,
+      pinned: false,
+      createdAt: chat.branchTree?.nodes[chat.branchTree.rootId]?.createdAt ?? now,
+      preset: "",
+      tokenCount,
+      userLastMessagedAt,
+      assistantLastMessagedAt,
+      systemPrompt,
+      messages,
+      usePerChatPredictionConfig: false,
+      perChatPredictionConfig: { fields: [] },
+      clientInput: "",
+      clientInputFiles: [],
+      userFilesSizeBytes: 0,
+      lastUsedModel: {
+        identifier: modelSlug,
+        indexedModelIdentifier: modelSlug,
+        instanceLoadTimeConfig: { fields: [] },
+        instanceOperationTimeConfig: { fields: [] }
+      },
+      notes: [],
+      plugins: [],
+      pluginConfigs: {},
+      disabledPluginTools: [],
+      looseFiles: []
+    };
+  };
 
   // src/utils/chatLibrary.ts
   function createLibraryChat(id, title, config, imageDetail, systemPrompt, folder) {
@@ -12041,6 +12361,128 @@ ${message.content}` : message.content).join("\n\n").trim();
       default:
         throw new Error("Unsupported message attributes operation.");
     }
+  }
+
+  // src/utils/chatMarkdown.ts
+  var chatToMarkdown = (chat) => {
+    let markdown = `# ${chat.title}
+
+`;
+    let i = 0;
+    while (i < chat.messages.length) {
+      let message = chat.messages[i];
+      let messageContent = contentToMarkdown(message.content);
+      while (hasUnclosedCodeBlock(messageContent) && i + 1 < chat.messages.length && chat.messages[i + 1].role === message.role) {
+        i++;
+        messageContent += contentToMarkdown(chat.messages[i].content);
+      }
+      if (hasUnclosedCodeBlock(messageContent)) {
+        messageContent += "\n```\n";
+      }
+      markdown += `### **${message.role}**:
+
+${messageContent}---
+
+`;
+      i++;
+    }
+    return markdown;
+  };
+  var contentToMarkdown = (contents) => {
+    let text = "";
+    contents.forEach((content) => {
+      if (content) {
+        if (isTextContent(content)) {
+          text += content.text;
+        } else if (isImageContent(content)) {
+          text += `![image](${content.image_url.url})`;
+        }
+        text += "\n\n";
+      }
+    });
+    return text;
+  };
+  var hasUnclosedCodeBlock = (text) => {
+    if (!text) {
+      return false;
+    }
+    const codeBlockPattern = /```/g;
+    const matches = text.match(codeBlockPattern);
+    return matches ? matches.length % 2 !== 0 : false;
+  };
+
+  // src/utils/fileExport.ts
+  function buildFileExportPayload(input) {
+    const { v3, scope, format } = input;
+    if (v3.version !== 3)
+      throw new Error("Unsupported export source.");
+    if (format === "openrouter" && input.visibleBranchOnly)
+      throw new Error("OpenRouter export uses the current branch; a separate branch scope is unsupported.");
+    const store = v3.contentStore;
+    if (scope === "all") {
+      switch (format) {
+        case "v3":
+          return { ...v3, contentStore: buildExportContentStore(store) };
+        case "v1":
+          return { chats: v3.chats?.map((chat2) => {
+            const expanded = { ...chat2 };
+            if (expanded.branchTree)
+              expanded.messages = prepareChatForExport(chat2, store).chat.messages;
+            const { branchTree, collapsedNodes, ...rest } = expanded;
+            return rest;
+          }), folders: v3.folders, version: 1 };
+        case "openai":
+          return v3.chats?.map((chat2) => chatToOpenAIFormat(chat2, store)) ?? [];
+        case "openrouter":
+          return v3.chats?.map((chat2) => chatToOpenRouterFormat(chat2, store)) ?? [];
+        case "lmstudio":
+          return v3.chats?.map((chat2) => chatToLMStudioFormat(chat2, store)) ?? [];
+        default:
+          throw new Error("Unsupported all-chat export format.");
+      }
+    }
+    if (scope !== "chat")
+      throw new Error("Invalid export scope.");
+    let chat = v3.chats?.find((chat2) => chat2.id === input.chatId);
+    if (!chat)
+      throw new Error("Export chat is missing.");
+    if (input.visiblePath && chat.branchTree) {
+      if (input.visiblePath.some((id) => !Object.hasOwn(chat.branchTree.nodes, id)))
+        throw new Error("Invalid export viewing path.");
+      chat = switchActivePathState([chat], 0, input.visiblePath, store)[0];
+    }
+    const options = { visibleBranchOnly: input.visibleBranchOnly };
+    switch (format) {
+      case "v3": {
+        const prepared = prepareChatForExport(chat, store, options), exportedChat = { ...prepared.chat };
+        delete exportedChat.folder;
+        return {
+          chats: [exportedChat],
+          contentStore: prepared.contentStore,
+          folders: {},
+          evaluationSettings: v3.evaluationSettings,
+          evaluationResults: Object.fromEntries(Object.entries(v3.evaluationResults ?? {}).filter(([key]) => key.startsWith(`${chat.id}:`))),
+          version: 3
+        };
+      }
+      case "openai":
+        return [chatToOpenAIFormat(chat, store, options)];
+      case "openrouter":
+        return chatToOpenRouterFormat(chat, store);
+      case "lmstudio":
+        return chatToLMStudioFormat(chat, store, options);
+      case "markdown":
+        return chatToMarkdown(input.visibleBranchOnly ? prepareChatForExport(chat, store, options).chat : chat);
+      default:
+        throw new Error("Unsupported single-chat export format.");
+    }
+  }
+
+  // shared/google-sync/fileExport.ts
+  function fileExport(json) {
+    const input = JSON.parse(json);
+    const payload = buildFileExportPayload(input);
+    return JSON.stringify({ payload, ...input.scope === "all" && input.format === "v3" ? { payloadChanges: diffJSONChanges(input.v3, JSON.parse(JSON.stringify(payload))) } : {}, mimeType: input.format === "markdown" ? "text/markdown" : "application/json", extension: input.format === "markdown" ? "md" : "json" });
   }
 
   // shared/google-sync/entry.ts

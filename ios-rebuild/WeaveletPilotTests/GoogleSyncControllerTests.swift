@@ -21,6 +21,34 @@ import XCTest
         try state.applySnapshot(full.replacing("state",with:raw))
         return state
     }
+    func testCompressedV3ExportImportPublishesCompleteTreeThroughEncryptedSync() async throws {
+        let dir = try directory(), drive = FakeSyncDrive(), keys = TestSyncKeys()
+        let original = try state(LocalStateStore(fileURL: dir.appendingPathComponent("original.json")))
+        let artifact = try original.exportWebData(format: .v3, scope: .all, compressed: true)
+        XCTAssertEqual(Array(artifact.data.prefix(2)), [0x1f, 0x8b])
+        let senderStore = LocalStateStore(fileURL: dir.appendingPathComponent("sender.json"))
+        let sender = ChatState(store: senderStore)
+        try sender.importWebData(artifact.data)
+        XCTAssertEqual(try sender.exportWebData(), try original.exportWebData())
+        XCTAssertEqual(try ChatState(store: senderStore).exportWebData(), try sender.exportWebData())
+        let publisher = GoogleSyncController(chatState: sender, drive: drive, store: SyncStateStore(fileURL: dir.appendingPathComponent("sender-sync.json")), keyStore: keys)
+        try await publisher.create(password: password, folderName: "FAKE gzip exchange")
+        let receiver = ChatState(store: LocalStateStore(fileURL: dir.appendingPathComponent("receiver.json")))
+        let subscriber = GoogleSyncController(chatState: receiver, drive: drive, store: SyncStateStore(fileURL: dir.appendingPathComponent("receiver-sync.json")), keyStore: keys)
+        try await subscriber.open(dataset: XCTUnwrap(publisher.dataset))
+        let unlocked = try await subscriber.restoreKey()
+        XCTAssertTrue(unlocked)
+        try await subscriber.download()
+        let source = try XCTUnwrap(receiver.exchange).source
+        let chat = try XCTUnwrap(source.required("chats").array("chats").first { $0["id"] == .string("chat-a") })
+        let nodes = try chat.required("branchTree").required("nodes")
+        XCTAssertEqual(Set(try nodes.object("nodes").map(\.key)), Set(["n-system", "n-user", "n-assistant", "n-inactive"]))
+        XCTAssertEqual(try nodes.required("n-inactive").required("xFixtureNode")["unknown"], .string("keep-n-inactive"))
+        XCTAssertEqual(try chat.required("protectedNodes")["n-assistant"], .bool(true))
+        let hash = try nodes.required("n-user").required("contentHash").string("hash")
+        XCTAssertEqual(try source.required("contentStore").required(hash).required("content").array("parts").count, 5)
+    }
+
     func testClipboardCrossEncryptedSyncThenPastePreservesMapsPartsAndRestart() async throws {
         let dir = try directory(), drive = FakeSyncDrive(), keys = TestSyncKeys()
         let senderStore = LocalStateStore(fileURL: dir.appendingPathComponent("sender.json"))

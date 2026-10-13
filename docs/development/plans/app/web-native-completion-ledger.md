@@ -1,5 +1,15 @@
 # Web / 新iOSの完成条件と証拠
 
+## 形式・範囲指定の書き出しとgzip V3（2026-10-13追記）
+
+実Web ExportChat/DownloadChatのpayload構築をfileExportへ共有し、nativeは同じ入口へ接続した。全件V3/V1/OpenAI/OpenRouter/LMStudioと、単体・表示枝V3/OpenAI/LMStudio/Markdownを提供する。OpenRouterは全件/単体の現在枝を出力し、独立の表示枝指定は持たない。V1は全件のみ。V3/OpenAIの全枝出力と、現在枝・変換先で表せる本文だけを出す形式をUIで区別した。Markdownの既存変換はDOM処理から分離し共用する。
+
+全件V3は未変更raw領域を維持するpayloadChangesで出力し、既存無引数exportも維持した。単体V3は所属folderを除外し、対象会話の評価結果だけを出す。独立Astraで見つかったsummaries/summaryTargetsのopaque化による失敗・欠落は、絞込みに必要なmap/参照IDを公開し他属性をopaque保持する修正で解消。情報が省かれる外部形式のnative説明不足も修正し、再監査は新規なし。
+
+gzipはnative zlibを利用し、圧縮V3の取込はmagic判定後に既存V3経路へ渡す。CRC/切断/余剰データを拒否し、解析または保存失敗前に既存状態を公開しない。標準Node zlib生成fixtureの展開、原文数値表記・未知rootを含むgzip往復、再起動、圧縮V3の取込から暗号化同期までを検証した。
+
+検証: Web関連117件・型検査成功。初回Catalyst10件中2件は追加fixtureに必須の評価phase/settingsがないため失敗し、有効なfixtureへ訂正（raw未知値の比較は維持）。監査回帰追加後の関連11件は全成功。bundle鮮度・差分検査成功。実Catalystの形式/範囲sheetから全件V3+gzipを保存し、`/private/tmp/weavelet-v3-all.json.gz` をPython gzipで展開してV3・2会話・6nodeを確認した。ログ `/private/tmp/weavelet-file-export-catalyst-final.log`。旧形式の取込、追加/置換/選択取込UI、PNG書出しは残件。実クラウド・実機・狭幅・VoiceOverは未検証。
+
 ## 範囲コピー・切り取り・貼り付け・会話間移動（2026-10-13追記）
 
 実Web callerの範囲検証・本文存在確認・copy/cut/paste/moveをbranch-clipboard共通処理へ抽出し、nativeも同じ処理を呼ぶ。複数会話とclipboardを一度に保存し、保存成功後だけ表示・共有編集履歴を公開する。clipboard正本は既存full snapshot.state.branchClipboardであり、V3 sidecarやOS clipboardへ別実装しない。copyのみでも再起動・同期で保持し、古い操作の拒否にはclipboardを含むsnapshotを照合する。
@@ -109,7 +119,7 @@ GoogleAuthenticationはOSの認証画面、PKCE/state、URLSession、Keychainで
 | C 復旧・背景 | 中断後再接続・既適用識別・部分本文保持をCatalystと必要な実機で確認 | 未実装 |
 | D モデル資産 | 探索/取得/再開/import/検証/partial復元/容量不足/変換 | 未実装 |
 | D 実行寿命・削除 | engine別load/share/owner/cancel/unload、利用者とwriter停止後削除 | 未実装 |
-| E 全I/O項目 | 全persist rootとネスト項目、全交換版、未知項目、非表示枝の双方向fixtureと実読書き | 55rootとネスト代表項目のcorpus、Web関連138件、native全26件。CatalystでV3実ファイル往復の全値・順序一致。旧版/delta等は未完了 |
+| E 全I/O項目 | 全persist rootとネスト項目、全交換版、未知項目、非表示枝の双方向fixtureと実読書き | 55rootとネスト代表項目のcorpus、Web関連138件、native全26件。CatalystでV3実ファイル往復の全値・順序一致。上記形式/範囲exportとgzip V3往復を接続。旧版取込等は未完了 |
 | E 内部保存・旧データ | 新native保存の再起動復元、旧iOS/Webデータ無損失取込、保存失敗時保持 | 取込V3と閲覧状態の隔離保存を実装。Catalyst全33件、実UI再起動で選択会話・表示方式・分岐復元を確認。旧データ移行・同期state全体は未完了 |
 | E Google同期 | Web/native相互の暗号envelope・record/asset/commit/pack、競合・中断・誤鍵・再試行の結果一致 | native serviceとWeb実protocol共有bundleを統合。隔離11件、Web実コードとのmultipart/pack/属性packet相互確認、Astra受入。OAuth・アプリ全state/UI・実オンライン相互は未完了 |
 | E CloudKit同期 | record/field/圧縮とchangeTag競合、Web/native相互読書き、失敗時保持 | Web実payload/record wrapperを合成検証。native圧縮wireの固定vector一致、provider接続未実装、旧iOS形式は不一致 |
