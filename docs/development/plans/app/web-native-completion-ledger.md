@@ -1,5 +1,13 @@
 # Web / 新iOSの完成条件と証拠
 
+## 本文挿入の共有接続（2026-10-13追記）
+
+Web insertNodeの対象判定・tree準備・挿入をinsertNodeStateへ抽出し、実Web callerとnative編集bridgeから同じ処理を利用する。WebのhistoryBaseは維持。nativeは各メッセージの「前に挿入」から既存入力sheetへ接続し、保存成功後に更新する。全本文保存へ元source照合と生成中拒否を追加し、古いdraftや未保存生成の上書きを防ぐ。挿入の空本文・3role・保護nodeの前への追加は既存Webどおり許可し、枝削除や編集undoを本段階へ混ぜていない。
+
+Web関連5suite100件と型検査成功。Catalyst関連26件のうち編集14件・生成11件は初回成功。隔離fakeDriveの挿入同期テスト1件は、本文objectをtype/text順とした期待値が失敗した。実Web records.tsのcanonical（63–67行）がkeyをソートしcontent record（179行）へ適用するため、受信はtext/type順となる。期待値をその正確なwire順へ修正し根拠をテストに記載した。配列順・値・非表示nodeの一致は維持し、該当1件の再実行が成功。最終26件の単一runではない。保存失敗/retry、stale/生成中拒否、root/中間/flat、再読込/export/record、共有暗号同期からfresh受信/再読込を含む。
+
+独立Astraは新規なし、bundle鮮度・差分検査成功。Catalyst実操作で中間メッセージの「前に挿入」→本文入力→保存→指定位置への表示と既存後続本文の保持を確認。ログは `/private/tmp/weavelet-insertion-catalyst.log` と `/private/tmp/weavelet-insertion-sync-final.log`。実クラウド・実機・狭幅は未検証。prune/undoと残る全機能は引き続き未完了。
+
 ## ノード属性設定の接続（2026-10-13追記）
 
 label/star/pinは実Web setNodeFieldの環境非依存処理を共有し、collapsed/omitted/protectedも実setNodeMapの更新処理へ接続した。Web側の履歴・runtime map・生成無効化は既存callerに残す。nativeは6項目の設定画面・状態表示・折りたたみを提供し、共有結果を保存成功後に公開する。未変更のfalse属性、未知属性、contentStoreを保持し、flat会話は必要な操作だけtree化する。生成中・古いdraft・保存失敗では元データを維持する。
@@ -53,7 +61,7 @@ GoogleAuthenticationはOSの認証画面、PKCE/state、URLSession、Keychainで
 | A 会話ライブラリ | 新規・改名・複製・削除・複数操作のWeb/native共通fixtureとCatalyst操作 | 共通8case、Web関連54件、Catalyst全41件＋修正回帰1件、独立Astra受入。実UIで作成・改名・複製・書出し・複数削除・再起動を確認 |
 | A フォルダと所属 | 属性・削除時所属解除・複数移動の共有処理とUI | Web共有utility/native接続を実装。Web33・Catalyst29成功、独立Astra新規なしで受入。手動UI未確認 |
 | A 探索・到達・履歴 | タイトル/本文/label/starのscope・順序・戻る/進むを実データで確認 | 上記共有処理/native接続・保存再読込み・実UIを確認。pixel scroll anchorと全view切替は未接続 |
-| B 木と本文編集 | role・system prompt・挿入/編集/明示分岐/prune/順序・undoの共通fixtureとUI | 上書き・role・明示分岐・末尾追加を共通15caseとCatalyst実UIで確認。一般挿入/prune/undoは未実装 |
+| B 木と本文編集 | role・system prompt・挿入/編集/明示分岐/prune/順序・undoの共通fixtureとUI | 上書き・role・明示分岐・末尾追加を共通15caseとCatalyst実UIで確認。一般挿入は上記共有接続とCatalyst操作を確認。prune/undoは未実装 |
 | B 分岐閲覧 | 任意nodeの切替と後続path、端の停止・履歴・表示保持 | 任意深度の兄弟切替と共有後続path・保存・履歴をCatalystで検証 |
 | B 移動・属性 | clipboard/copy/cut/paste/会話間移動、label/star/pin/除外/保護の共通結果 | 6属性のWeb実処理共有・native設定・保存/交換/隔離同期を確認。clipboard/copy/cut/paste/会話間移動は未実装 |
 | B 表示・draft・添付 | 5種content/Markdown/コード/表/画像、draft/IME、添付と編集位置保持 | V3の5種本文を投影表示、画像はURL文字表示。Markdown/画像描画・編集は未実装 |

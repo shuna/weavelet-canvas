@@ -21,6 +21,36 @@ import XCTest
         try state.applySnapshot(full.replacing("state",with:raw))
         return state
     }
+    func testInsertedMessageCrossesEncryptedSyncAndRestartsWithoutLosingOtherNodes() async throws {
+        let dir = try directory(), drive = FakeSyncDrive(), keys = TestSyncKeys()
+        let sender = try state(LocalStateStore(fileURL: dir.appendingPathComponent("sender.json")))
+        let publisher = GoogleSyncController(chatState: sender, drive: drive, store: SyncStateStore(fileURL: dir.appendingPathComponent("sender-sync.json")), keyStore: keys)
+        try await publisher.create(password: password, folderName: "FAKE insertion")
+        let before = try XCTUnwrap(sender.exchange).source
+        var draft = try sender.messageInsertionDraft(beforeNodeID: "n-user")
+        draft.text = "同期する挿入本文"
+        try sender.saveMessage(draft, mode: .insert, newIDs: ["inserted-sync"], now: 4000)
+        try await publisher.synchronize()
+        let receiverStore = LocalStateStore(fileURL: dir.appendingPathComponent("receiver.json"))
+        let receiver = ChatState(store: receiverStore)
+        let subscriber = GoogleSyncController(chatState: receiver, drive: drive, store: SyncStateStore(fileURL: dir.appendingPathComponent("receiver-sync.json")), keyStore: keys)
+        try await subscriber.open(dataset: XCTUnwrap(publisher.dataset))
+        let unlocked = try await subscriber.restoreKey()
+        XCTAssertTrue(unlocked)
+        try await subscriber.download()
+        let received = try XCTUnwrap(receiver.exchange).source
+        let chat = try received.required("chats").array("chats").first { $0["id"] == .string("chat-a") }
+        let tree = try XCTUnwrap(chat).required("branchTree")
+        XCTAssertEqual(tree["activePath"], .array(["n-system", "inserted-sync", "n-user", "n-assistant"].map(OrderedJSON.string)))
+        XCTAssertEqual(tree["nodes"]?["n-user"]?["parentId"], .string("inserted-sync"))
+        let hash = try tree.required("nodes").required("inserted-sync").required("contentHash").string("hash")
+        // Web records.ts canonical sorts object keys; content array order and values remain exact.
+        XCTAssertEqual(received["contentStore"]?[hash]?["content"], .array([.object([.init(key: "text", value: .string("同期する挿入本文")), .init(key: "type", value: .string("text"))])]))
+        let originalChat = try before.required("chats").array("chats").first { $0["id"] == .string("chat-a") }
+        XCTAssertEqual(tree["nodes"]?["n-inactive"], originalChat?["branchTree"]?["nodes"]?["n-inactive"])
+        XCTAssertEqual(try ChatState(store: receiverStore).exportWebData(), try receiver.exportWebData())
+    }
+
     func testCreateManualSyncDisconnectRestoreKeyDownloadPreserveAllLocalRootsAndRawValues() async throws {
         let dir = try directory(), local = LocalStateStore(fileURL:dir.appendingPathComponent("local.json")), cache = SyncStateStore(fileURL:dir.appendingPathComponent("sync.json"))
         let state = try state(local), drive = FakeSyncDrive(), keys = TestSyncKeys()

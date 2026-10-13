@@ -23,7 +23,7 @@
     "src/utils/streamingBuffer.ts": "4040506b5be29b03bf1a67b82efe71357c2f77b7b3b35d9e2edae03d7acf5ae9",
     "src/utils/contentStore.ts": "66ac2636c8d01cdefdb2f86ecf7208c5133d6449de54b3a03e77526ceaadaae4",
     "src/utils/branchUtils.ts": "5779a38a2dd9601635e387d495d3a703360860f016769c60dde3a91b788692a9",
-    "src/store/branch-domain.ts": "71d46546326155a1840472afb77fbcd8dfeba801e1f3e5ccb67ec442287a2cb4",
+    "src/store/branch-domain.ts": "bdccf4fa5b9475536b49c9773bfe2caccd0de3efe918329e6dc5b033f67788c0",
     "src/utils/nodeOptions.ts": "e549f540ad7bb4be11377c56edaa995394639ab05f6a9e8a39fbf919878c18ac",
     "src/utils/branchSearch.ts": "bc8e0483f624ac6bee834f696c99b13345965c601903650238ef32ad22509962",
     "src/utils/folderHierarchy.ts": "43c27d7124d1fd75625f01199c68add22f91d55a4b95e7b0b54c2fa52e2e6f93",
@@ -55,10 +55,10 @@
     "src/utils/jsonChanges.ts": "b6b3069fbd3632e4ace431aa4334923955f7a0c933e848f18a985f36de1d2e7b",
     "src/utils/streamingBuffer.ts": "4040506b5be29b03bf1a67b82efe71357c2f77b7b3b35d9e2edae03d7acf5ae9",
     "src/utils/contentStore.ts": "66ac2636c8d01cdefdb2f86ecf7208c5133d6449de54b3a03e77526ceaadaae4",
-    "shared/google-sync/editing.ts": "54a29f1cd3f949d208537eaf7d2fb6dace3c9290edf36893bd3e3ee0d7fe87ea",
+    "shared/google-sync/editing.ts": "0e7f1eea8e27de11cffa550d8a52e23e94225f7f31504015a051b807952b54f5",
     "shared/google-sync/adapters/uuid.ts": "27a7e045a0ebbb429ad65b4f3d1757f34c5b4187d8555aa523afaf337ddb010a",
     "src/utils/branchUtils.ts": "5779a38a2dd9601635e387d495d3a703360860f016769c60dde3a91b788692a9",
-    "src/store/branch-domain.ts": "71d46546326155a1840472afb77fbcd8dfeba801e1f3e5ccb67ec442287a2cb4",
+    "src/store/branch-domain.ts": "bdccf4fa5b9475536b49c9773bfe2caccd0de3efe918329e6dc5b033f67788c0",
     "src/utils/nodeOptions.ts": "e549f540ad7bb4be11377c56edaa995394639ab05f6a9e8a39fbf919878c18ac",
     "shared/google-sync/nodeOptions.ts": "45970c9ac17c065576ef10c3a67d49d1542eddb81d0e5e287d7761e63956c0db",
     "src/utils/branchSearch.ts": "bc8e0483f624ac6bee834f696c99b13345965c601903650238ef32ad22509962",
@@ -116,5 +116,5 @@
     "lodash/package.json": "8e41b07c744a0de0d2c1c23ed41418ecb0849abb56395d28802e601b4730d7c2",
     "lodash/LICENSE": "f71e8ed126b46346494aad5486874cd8f0aafe95092ed67d2e3cb6110f939abc"
   },
-  "bundleSHA256": "d0a392cd2908d419db3e82baa1c2168b05aa8b9da27015e322ac5466f840ae9c"
+  "bundleSHA256": "e1ecb44bd6c0e7534de9c002e620c1a5e786c65f7fa8ff0555fdde27173189a1"
 }

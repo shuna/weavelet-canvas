@@ -7389,7 +7389,7 @@ var WeaveletGoogleSync = (() => {
       chat.messages = materializeActivePath(chat.branchTree, isolated.contentStore);
     const wasFlat = !chat.branchTree;
     return withEditingRuntime(input.newIDs, Object.keys(chat.branchTree?.nodes ?? {}), input.now, () => {
-      let result3 = ensureBranchTreeState([chat], 0, isolated.contentStore);
+      let result3 = input.mode === "insert" && wasFlat ? { chats: [chat], contentStore: isolated.contentStore } : ensureBranchTreeState([chat], 0, isolated.contentStore);
       if (!wasFlat) {
         const path = input.viewingPath;
         if (path.some((id) => !Object.hasOwn(result3.chats[0].branchTree.nodes, id)))
@@ -7399,26 +7399,36 @@ var WeaveletGoogleSync = (() => {
         else
           result3.chats[0].branchTree.activePath = [];
       }
-      const tree = result3.chats[0].branchTree;
-      let index = -1;
-      if (input.mode !== "append") {
-        const flatID = input.nodeID?.startsWith("message-") ? input.nodeID.slice(8) : input.nodeID;
-        index = wasFlat && flatID !== void 0 && String(Number(flatID)) === flatID ? Number(flatID) : tree.activePath.indexOf(input.nodeID);
-        if (!Number.isInteger(index) || index < 0 || index >= tree.activePath.length)
-          throw new Error("Invalid message node ID.");
-        if (input.mode === "overwrite" && result3.chats[0].protectedNodes?.[tree.activePath[index]])
-          throw new Error("Protected message.");
-      }
-      if (input.mode === "append")
-        result3 = appendNodeToActivePathState(result3.chats, 0, input.role, parts, result3.contentStore);
-      else if (input.mode === "branch") {
-        const branch = createBranchState(result3.chats, 0, tree.activePath[index], parts, result3.contentStore);
-        result3 = branch;
-        if (branch.chats[0].branchTree.nodes[branch.newId].role !== input.role) {
-          result3.chats = updateNodeRoleState(branch.chats, 0, branch.newId, input.role, branch.contentStore);
+      if (input.mode === "insert") {
+        if (input.nodeID === void 0)
+          throw new Error("Invalid insert target.");
+        const beforeNodeId = wasFlat && input.nodeID?.startsWith("message-") ? input.nodeID.slice(8) : input.nodeID;
+        const inserted = insertNodeState(result3.chats, { chatId: chat.id, beforeNodeId, role: input.role, content: parts }, result3.contentStore);
+        if (inserted.status !== "updated")
+          throw new Error(`Invalid insert target: ${inserted.status}`);
+        result3 = inserted;
+      } else {
+        const tree = result3.chats[0].branchTree;
+        let index = -1;
+        if (input.mode !== "append") {
+          const flatID = input.nodeID?.startsWith("message-") ? input.nodeID.slice(8) : input.nodeID;
+          index = wasFlat && flatID !== void 0 && String(Number(flatID)) === flatID ? Number(flatID) : tree.activePath.indexOf(input.nodeID);
+          if (!Number.isInteger(index) || index < 0 || index >= tree.activePath.length)
+            throw new Error("Invalid message node ID.");
+          if (input.mode === "overwrite" && result3.chats[0].protectedNodes?.[tree.activePath[index]])
+            throw new Error("Protected message.");
         }
-      } else
-        result3 = upsertWithAutoBranchState(result3.chats, 0, index, { role: input.role, content: parts }, result3.contentStore);
+        if (input.mode === "append")
+          result3 = appendNodeToActivePathState(result3.chats, 0, input.role, parts, result3.contentStore);
+        else if (input.mode === "branch") {
+          const branch = createBranchState(result3.chats, 0, tree.activePath[index], parts, result3.contentStore);
+          result3 = branch;
+          if (branch.chats[0].branchTree.nodes[branch.newId].role !== input.role) {
+            result3.chats = updateNodeRoleState(branch.chats, 0, branch.newId, input.role, branch.contentStore);
+          }
+        } else
+          result3 = upsertWithAutoBranchState(result3.chats, 0, index, { role: input.role, content: parts }, result3.contentStore);
+      }
       for (const [hash, entry] of Object.entries(result3.contentStore)) {
         if (entry.delta && JSON.stringify(entry.delta) !== JSON.stringify(before.contentStore[hash]?.delta)) {
           const content = resolveContent(result3.contentStore, hash);
@@ -7617,12 +7627,21 @@ var WeaveletGoogleSync = (() => {
     };
     return result3;
   };
+  var cloneNode = (node) => ({ ...node });
   var ensureBranchReadyState = (chats, chatIndex, currentContentStore) => {
     const ensured = ensureBranchTreeState(chats, chatIndex, currentContentStore);
     return {
       chats: cloneChatAt(ensured.chats, chatIndex),
       contentStore: { ...ensured.contentStore }
     };
+  };
+  var cloneNodeIfPresent = (tree, nodeId) => {
+    if (!nodeId)
+      return;
+    const node = tree.nodes[nodeId];
+    if (!node)
+      return;
+    tree.nodes[nodeId] = cloneNode(node);
   };
   var prepareBranchMutationState = (chats, chatIndex, currentContentStore) => {
     const { chats: updatedChats, contentStore } = ensureBranchReadyState(
@@ -7768,6 +7787,35 @@ var WeaveletGoogleSync = (() => {
       contentStore
     });
   };
+  var insertMessageAtIndexState = (chats, chatIndex, messageIndex, message, currentContentStore) => {
+    const { chats: updatedChats, chat, tree, contentStore } = prepareBranchMutationState(chats, chatIndex, currentContentStore);
+    const prevId = messageIndex > 0 ? tree.activePath[messageIndex - 1] ?? null : null;
+    const nextId = tree.activePath[messageIndex];
+    const newId = editingUUID();
+    tree.nodes[newId] = {
+      id: newId,
+      parentId: prevId,
+      role: message.role,
+      contentHash: addContent(contentStore, message.content),
+      createdAt: Date.now()
+    };
+    if (nextId) {
+      cloneNodeIfPresent(tree, nextId);
+      tree.nodes[nextId].parentId = newId;
+    }
+    setMessageAttributes(tree, newId, message);
+    tree.activePath.splice(messageIndex, 0, newId);
+    if (messageIndex === 0) {
+      tree.rootId = newId;
+    }
+    const finalized = finalizePreparedBranchMutationState({
+      chats: updatedChats,
+      chat,
+      tree,
+      contentStore
+    });
+    return { ...finalized, newId };
+  };
   var updateNodeRoleState = (chats, chatIndex, nodeId, role, contentStore) => {
     const updatedChats = cloneChatAt(chats, chatIndex);
     const chat = updatedChats[chatIndex];
@@ -7849,6 +7897,18 @@ var WeaveletGoogleSync = (() => {
       nodeId,
       historyBase: ensured
     };
+  };
+  var insertNodeState = (chats, input, contentStore) => {
+    const chatIndex = chats?.findIndex((chat) => chat.id === input.chatId) ?? -1;
+    if (chatIndex < 0)
+      return { status: "chat-missing" };
+    const target = input.beforeNodeId === null ? null : resolveNodeTarget(chats, { chatId: input.chatId, nodeId: input.beforeNodeId }, true);
+    if (target && target.status !== "valid")
+      return target;
+    const index = target?.messageIndex ?? chats[chatIndex].messages.length;
+    const ensured = ensureBranchTreeState(chats, chatIndex, contentStore);
+    const result3 = insertMessageAtIndexState(ensured.chats, chatIndex, index, { role: input.role, content: input.content }, ensured.contentStore);
+    return { status: "updated", ...result3, nodeId: result3.newId, historyBase: ensured };
   };
 
   // src/utils/nodeOptions.ts
