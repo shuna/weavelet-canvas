@@ -597,3 +597,18 @@ Webの単一定義/ID・重複判定・未指定役割の自動割当をpure共�
 FAKE Catalystで実file pickerから既存検証用1.1MB GGUFを新規登録し、生成/分析の自動割当、端末内ファイルあり、有効化を確認。そのまま本文の品質評価へ接続し、5軸進捗→完了、source=localの5有限score保存と合成会話3件保持を確認した。toyモデルの評価品質・実用性を保証した結果ではない。実API/クラウドへ送信せず、通常store/Keychainを変更していない。
 
 同じ隔離実画面で親子インデント、Workの折畳みによるchild消失、全会話検索でNested chatへ移動した際の祖先展開と本文到達も確認。表示中会話の強調とselected accessibility traitをWebのactive rowに合わせて追加し、Catalyst buildと実表示を確認した（/private/tmp/weavelet-sidebar-active-build.log）。確認アプリ終了とprocess消失を確認。今回のGGUF登録/階層UIはAirへ再installしていない。iPhone実推論・狭幅/大きな文字・実クラウド相互運用、複数GGUF/分類器/自動評価など全体残件は維持する。
+
+
+## 文字同一性・分析モデル寿命・ローカルprompt境界（2026-10-13）
+
+5a8b2b7aではOrderedJSONの文字列とobject keyの同一性をJavaScript同様のUTF8 byte比較へ合わせた。数値表記・項目順・保存形式を変更しない。担当native全275件のrunは1skip・1failureを含み、全件成功とはしない。失敗したNodeOptionsStateTestsは変更前にも再現し、I/O corpusの不正OpenRouter設定を生成要求として使っていた。実Web validatorに従い元設定の拒否を確認したうえで、要求専用の有効configに限ってomitted挙動を検証するよう訂正。保存corpusと情報保持assertは維持し、該当testのみ成功。ログ /private/tmp/weavelet-{json-equality-test,json-equality-baseline-test,node-options-valid-request}.log。独立Astraは新規P2以上なし。
+
+8351c4eaはWeb同様に品質評価一式でGGUFを1回loadし、各軸context/samplerは独立させた。scoped ownerと生成taskのstrong referenceで解放順を維持する。担当関連26件成功、親で実GGUF5軸とdecode取消の2件成功（/private/tmp/weavelet-model-session-integration.log）。loader1回/context5回を確認したが、消費電力や大モデル性能の証拠ではない。50c4bfd1はUTF16文字数truncateで生じる孤立surrogateを、Web wllamaのTextEncoderと同じ置換文字にする処理をbridgeのprompt出力だけへ適用。共有1件/型検査/bundle鮮度とnative接続1件成功、独立Astra新規P2以上なし。元会話本文や外部JSON全体の正規化は行わない。
+
+## 生成中のチャット行と入力欄の配置（2026-10-13）
+
+7b979c0aで通常appendにも既存Web共有generationPlanを利用し、生成開始時にassistant IDを予約する。要求はrequestPathからplaceholderを除外し、確定時は同じIDを更新。生成中・保存失敗の出力は対象MessageView内へ表示し、従来の末尾別枠と空行の重複を除いた。空出力時の空assistant保持は実Web共有finalizeに基づくため、旧nativeの「assistantなし」期待だけを訂正した。タイトルの通常append条件、prefill、usage、部分保存・保存再試行は維持する。
+
+親統合でRemoteGeneration22件＋ConversationTitle6件の28件が成功（/private/tmp/weavelet-inline-generation-integration.log）。共有元業務ruleと保存/同期基盤の既存成功は再利用し、全暗号化同期往復を反復しない。独立Astraは新規P2以上なし。
+
+入力欄はWeb EditViewの本文→操作列に合わせ、本文を全幅で置き、その下に左の生成設定・右の送信/停止を配置した。Binding、画像入力、操作時のguardには変更なし。Catalyst最終build成功（/private/tmp/weavelet-composer-layout-build.log）、独立Astraの限定追確認も新規P2以上なし。実画面確認はMacのロックにより開始できず、未確認として残す。iPhone狭幅、IME、最大文字サイズ、生成行の実画面・スクロール追従、Airへの今回版導入は未確認。WebのBranch editor/分割表示は表示styleとは別機能であり、吹き出し切替で代用して完成扱いにはしない。

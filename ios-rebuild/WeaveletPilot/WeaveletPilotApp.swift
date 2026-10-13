@@ -291,6 +291,11 @@ struct ChatView: View {
     }
     private func composer(_ conversation: Conversation) -> some View {
         VStack(alignment:.leading,spacing:6) {
+            TextField("送信する本文",text:Binding(
+                get:{ state.composerDraft(chatID:conversation.id).text },
+                set:{ state.setComposerText(chatID:conversation.id,text:$0) }),axis:.vertical)
+                .lineLimit(3...8).textFieldStyle(.roundedBorder)
+                .disabled(state.generation != nil)
             HStack(alignment:.bottom,spacing:8) {
                 Button {
                     do { configDraft = try state.chatConfigDraft() }
@@ -298,11 +303,7 @@ struct ChatView: View {
                 } label: { Image(systemName:"slider.horizontal.3").frame(width:44,height:44) }
                 .accessibilityLabel("会話の生成設定")
                 .disabled(state.generation != nil)
-                TextField("送信する本文",text:Binding(
-                    get:{ state.composerDraft(chatID:conversation.id).text },
-                    set:{ state.setComposerText(chatID:conversation.id,text:$0) }),axis:.vertical)
-                    .lineLimit(3...8).textFieldStyle(.roundedBorder)
-                    .disabled(state.generation != nil)
+                Spacer(minLength:0)
                 if state.generation?.running == true {
                     Button("停止",systemImage:"stop.fill") { state.stopGeneration() }
                         .frame(minWidth:44,minHeight:44)
