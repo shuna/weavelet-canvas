@@ -755,10 +755,6 @@ final class MessageEditingTests: XCTestCase {
         var replacement = try state.messageReplacementDraft(nodeID: "middle"); replacement.text = "Retry replacement"
         let before = try state.publicationSnapshot(), disk = try Data(contentsOf: local.fileURL), path = state.conversation?.visibleMessages.map(\.id)
         fault.reject = true
-        for operation in BranchClipboardOperation.allCases {
-            var draft = clipboardDraft; draft.operation = operation
-            XCTAssertThrowsError(try state.saveBranchClipboard(draft,newIDs:[],now:1000))
-        }
         XCTAssertThrowsError(try state.saveMessageReplacingAndPruning(replacement, newIDs: [], now: 1000))
         for draft in [move, deletion] { XCTAssertThrowsError(try state.saveNodeTransform(draft, newIDs: [], now: 1000)) }
         XCTAssertEqual(try state.publicationSnapshot(), before); XCTAssertEqual(try Data(contentsOf: local.fileURL), disk); XCTAssertEqual(state.conversation?.visibleMessages.map(\.id), path)
@@ -924,6 +920,10 @@ final class MessageEditingTests: XCTestCase {
             XCTAssertThrowsError(try state.saveNodeRemoval(draft, now: 1000))
             XCTAssertEqual(state.generation?.id, generation.id); XCTAssertEqual(state.generation?.output.text, generation.output.text)
             XCTAssertEqual(try state.publicationSnapshot(), before); XCTAssertEqual(try Data(contentsOf: store.fileURL), disk)
+        }
+        for operation in BranchClipboardOperation.allCases {
+            var draft = clipboardDraft; draft.operation = operation
+            XCTAssertThrowsError(try state.saveBranchClipboard(draft,newIDs:[],now:1000))
         }
         XCTAssertThrowsError(try state.saveMessageReplacingAndPruning(replacement, newIDs: [], now: 1000))
         for draft in [move, deletion] { XCTAssertThrowsError(try state.saveNodeTransform(draft, newIDs: [], now: 1000)) }

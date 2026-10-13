@@ -16,16 +16,17 @@
     "src/store/storage/google/records.ts": "21f44f6ba31a25f7ecd7cea71b54354b3579a09414e9895fd1ee592618dfb9e9",
     "src/store/storage/google/decodeParts.ts": "5b07a57eea273940ded90e83228af04aeb121a594289a4f831151351919dfe9b",
     "src/store/storage/google/crypto.ts": "c1ca1e5735caf368fde182c900b1dfac2c32f13993b286136e0ae0b392c6041e",
-    "src/types/chat.ts": "6895334a5416188b0d37b71b23dc79f67c15c4839e7b6bb041bd78d58a0a9ce4",
+    "src/types/chat.ts": "d5fb2155a0e5dae23f318086245c4998818cb71abcbcbfa732410dfdc2b82bad",
     "src/utils/contentValidation.ts": "b4813de36a5bba6e32af6ab35ce46362ea29cf6d9018e15e416b4589af81c2ba",
     "src/utils/messageText.ts": "816b71106b7911d0d041af5f47d30ab53945b15a976484cb0191af662acb21ac",
     "src/utils/streamingBuffer.ts": "4040506b5be29b03bf1a67b82efe71357c2f77b7b3b35d9e2edae03d7acf5ae9",
     "src/utils/contentStore.ts": "66ac2636c8d01cdefdb2f86ecf7208c5133d6449de54b3a03e77526ceaadaae4",
-    "src/store/branch-domain.ts": "bb99d99817f11f3520ed63ec7bba42b3d0bc55f9eb7709b4107919f147abdd8c",
+    "src/store/branch-domain.ts": "d4ab6d06c59944d2d2a992f0b5d285d7f816e82f0a563b6c91815f2acb8ab851",
     "src/utils/jsonChanges.ts": "b6b3069fbd3632e4ace431aa4334923955f7a0c933e848f18a985f36de1d2e7b",
     "src/utils/branchUtils.ts": "5779a38a2dd9601635e387d495d3a703360860f016769c60dde3a91b788692a9",
     "src/utils/branchHistory.ts": "df602c874e3e624217070847d34d28ad0ee93fe0c042c69c7eba8e704dd563ca",
     "src/utils/nodeOptions.ts": "e549f540ad7bb4be11377c56edaa995394639ab05f6a9e8a39fbf919878c18ac",
+    "src/store/branch-clipboard.ts": "41af5c4b6a80d15c0fcc13c4835318a74d1f65979e608fbcedf403eb8e5fd93b",
     "src/utils/branchSearch.ts": "bc8e0483f624ac6bee834f696c99b13345965c601903650238ef32ad22509962",
     "src/utils/folderHierarchy.ts": "43c27d7124d1fd75625f01199c68add22f91d55a4b95e7b0b54c2fa52e2e6f93",
     "src/utils/chatSearch.ts": "ab0cec09d902d6527236c20a729ba4cb963a67c2485c640e7c5d4109cfef316a",
@@ -50,12 +51,12 @@
     "src/utils/syncDocument.ts": "bc7cca9616aa593538dfb194b861ea7415ce3c7e7da42620a9fca0a89acb4120"
   },
   "bundleInputs": {
-    "src/types/chat.ts": "6895334a5416188b0d37b71b23dc79f67c15c4839e7b6bb041bd78d58a0a9ce4",
+    "src/types/chat.ts": "d5fb2155a0e5dae23f318086245c4998818cb71abcbcbfa732410dfdc2b82bad",
     "src/utils/contentValidation.ts": "b4813de36a5bba6e32af6ab35ce46362ea29cf6d9018e15e416b4589af81c2ba",
     "src/utils/messageText.ts": "816b71106b7911d0d041af5f47d30ab53945b15a976484cb0191af662acb21ac",
     "src/utils/streamingBuffer.ts": "4040506b5be29b03bf1a67b82efe71357c2f77b7b3b35d9e2edae03d7acf5ae9",
     "src/utils/contentStore.ts": "66ac2636c8d01cdefdb2f86ecf7208c5133d6449de54b3a03e77526ceaadaae4",
-    "src/store/branch-domain.ts": "bb99d99817f11f3520ed63ec7bba42b3d0bc55f9eb7709b4107919f147abdd8c",
+    "src/store/branch-domain.ts": "d4ab6d06c59944d2d2a992f0b5d285d7f816e82f0a563b6c91815f2acb8ab851",
     "src/utils/jsonChanges.ts": "b6b3069fbd3632e4ace431aa4334923955f7a0c933e848f18a985f36de1d2e7b",
     "shared/google-sync/editing.ts": "77410b115683a59fe2f6c8819c67dfe6a1d2eae4992807440edb500146cbb240",
     "shared/google-sync/adapters/uuid.ts": "27a7e045a0ebbb429ad65b4f3d1757f34c5b4187d8555aa523afaf337ddb010a",
@@ -65,7 +66,9 @@
     "src/utils/nodeOptions.ts": "e549f540ad7bb4be11377c56edaa995394639ab05f6a9e8a39fbf919878c18ac",
     "shared/google-sync/nodeOptions.ts": "ef6789818d18693dfbe4a161f9e81829a0f40b28618dea3d27581a9ea0b5080b",
     "shared/google-sync/treeEdit.ts": "d77c1af8c52eca08f1eadc8ffca27bc7eb6918ef2748cd95e64e8edc7d3e46d4",
-    "shared/google-sync/branchHistory.ts": "09027e59cb0adfa88367ade5184835aeb182eda8e3f6e9a328f92fa5308abce2",
+    "src/store/branch-clipboard.ts": "41af5c4b6a80d15c0fcc13c4835318a74d1f65979e608fbcedf403eb8e5fd93b",
+    "shared/google-sync/branchClipboard.ts": "c6007c4267a954c11d659b1c8e5602bf40f491f6a1e897e8e989b42d92fa5f5d",
+    "shared/google-sync/branchHistory.ts": "aaeb5b4fc1e92e11782ffe21dbd303c4b0653c0068f18e468d473649263185a4",
     "src/utils/branchSearch.ts": "bc8e0483f624ac6bee834f696c99b13345965c601903650238ef32ad22509962",
     "src/utils/folderHierarchy.ts": "43c27d7124d1fd75625f01199c68add22f91d55a4b95e7b0b54c2fa52e2e6f93",
     "src/utils/chatSearch.ts": "ab0cec09d902d6527236c20a729ba4cb963a67c2485c640e7c5d4109cfef316a",
@@ -110,7 +113,7 @@
     "src/utils/syncDocument.ts": "bc7cca9616aa593538dfb194b861ea7415ce3c7e7da42620a9fca0a89acb4120",
     "src/store/storage/google/records.ts": "21f44f6ba31a25f7ecd7cea71b54354b3579a09414e9895fd1ee592618dfb9e9",
     "shared/google-sync/document.ts": "f30ff4f414326a0f47c0cc35b8538aa58d7ff6acf7c459d805f637854cf47e8b",
-    "shared/google-sync/entry.ts": "da3088750425187c61b7b081165853745d416144fa025b4d5f6510485bc55c30",
+    "shared/google-sync/entry.ts": "e9cf5f2f4660a97ada6791800977eb93efae4e732769e62a9cebc8dcd361b439",
     "shared/google-sync/generate.mjs": "416532bf17f1c392c3c60e7319b4f0868454f98496c6c6c0c4b367f12e0ddf22"
   },
   "dependencyInputs": {
@@ -121,5 +124,5 @@
     "lodash/package.json": "8e41b07c744a0de0d2c1c23ed41418ecb0849abb56395d28802e601b4730d7c2",
     "lodash/LICENSE": "f71e8ed126b46346494aad5486874cd8f0aafe95092ed67d2e3cb6110f939abc"
   },
-  "bundleSHA256": "2c9053186d99f2a68805ac33c94a4d8db49942a1bf44c1e60f4247f26aaefad2"
+  "bundleSHA256": "575ea5eecb59c50e88f439f75f6813e084eab19b3beabb40c30a247df02d6121"
 }

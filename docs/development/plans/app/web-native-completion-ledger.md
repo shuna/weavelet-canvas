@@ -1,5 +1,15 @@
 # Web / 新iOSの完成条件と証拠
 
+## 範囲コピー・切り取り・貼り付け・会話間移動（2026-10-13追記）
+
+実Web callerの範囲検証・本文存在確認・copy/cut/paste/moveをbranch-clipboard共通処理へ抽出し、nativeも同じ処理を呼ぶ。複数会話とclipboardを一度に保存し、保存成功後だけ表示・共有編集履歴を公開する。clipboard正本は既存full snapshot.state.branchClipboardであり、V3 sidecarやOS clipboardへ別実装しない。copyのみでも再起動・同期で保持し、古い操作の拒否にはclipboardを含むsnapshotを照合する。
+
+collapsed/omitted/protectedを旧形式と互換のoptional clipboard mapsとして保持し、貼付先の新IDへ移す。protected範囲のcut/moveは共有側で拒否し、copyは許可する。既存IndexedDbStorageの参照保持を使い、cut後のGC・再読込み後にも貼り付けられることを検証。remove/pasteが変更前entryの参照数を書き換える問題もentry分離で修正した。空会話への貼付は既存Webどおり実在する挿入先nodeを要求する。
+
+独立Astraで、native差分用の再構築配列を履歴captureへ渡すと無関係な会話も変更扱いになるP2を検出。履歴には実処理の参照を保った結果を渡し、差分用配列と分離した。3会話の回帰でA/Bの履歴へCが入らず、Cの更新でA/B履歴が失われず、UndoがCの属性や表示pathを変えないことを確認。修正後の監査は新規なし。
+
+検証: Web関連196件、監査修正関連64件と型検査成功（重複あり）。初回Catalystは追加テストの配置誤りでcompile失敗し、生成中拒否loopを正しいテストへ移動後、関連31件が全成功（編集30件＋暗号化同期往復1件）。同期先でclipboardの3maps・未知node属性・5種本文を保持して貼付でき、両側の再起動でもclipboardが残ることを確認。Catalyst実操作はcopy→paste→undoで元の表示に復元することを確認した。cut/moveは自動テストで確認し、手動実行は未実施。ログ `/private/tmp/weavelet-clipboard-catalyst-final.log`。bundle鮮度・差分確認成功。実クラウド・実機・狭幅・VoiceOverは未検証。
+
 ## 上下移動・後続整理付き編集・子孫削除（2026-10-13追記）
 
 実Web moveNode/replaceNodeAndPrune/deleteBranchの規則をbranch-domainの共通入口へまとめ、実Web callerとnative treeEditから利用する。先頭systemとの交換・経路端の移動は変更なし。置換と後続整理は指定範囲にprotectedがあれば本文だけ保存して理由を返す。保護された対象への置換と、保護された子孫を含む枝削除は共有入口で拒否し、Web/nativeとも理由を表示する。これは既存の「削除から保護」表示を破っていたWeb経路の修正であり、pinnedの明示削除は引き続き許可する。
@@ -91,7 +101,7 @@ GoogleAuthenticationはOSの認証画面、PKCE/state、URLSession、Keychainで
 | A 探索・到達・履歴 | タイトル/本文/label/starのscope・順序・戻る/進むを実データで確認 | 上記共有処理/native接続・保存再読込み・実UIを確認。pixel scroll anchorと全view切替は未接続 |
 | B 木と本文編集 | role・system prompt・挿入/編集/明示分岐/prune/順序・undoの共通fixtureとUI | 上書き・role・明示分岐・末尾追加を共通15caseとCatalyst実UIで確認。一般挿入は上記共有接続とCatalyst操作を確認。1件削除・非表示枝整理を共有接続済み。共有undo/redoを上記の範囲で接続済み。上下移動・後続prune・子孫削除UIも上記の範囲で接続・検証済み |
 | B 分岐閲覧 | 任意nodeの切替と後続path、端の停止・履歴・表示保持 | 任意深度の兄弟切替と共有後続path・保存・履歴をCatalystで検証 |
-| B 移動・属性 | clipboard/copy/cut/paste/会話間移動、label/star/pin/除外/保護の共通結果 | 6属性のWeb実処理共有・native設定・保存/交換/隔離同期を確認。clipboard/copy/cut/paste/会話間移動は未実装 |
+| B 移動・属性 | clipboard/copy/cut/paste/会話間移動、label/star/pin/除外/保護の共通結果 | 6属性のWeb実処理共有・native設定・保存/交換/隔離同期を確認。clipboard/copy/cut/paste/会話間移動を上記の共有処理・保存・隔離同期へ接続済み |
 | B 表示・draft・添付 | 5種content/Markdown/コード/表/画像、draft/IME、添付と編集位置保持 | V3の5種本文を投影表示、画像はURL文字表示。Markdown/画像描画・編集は未実装 |
 | C 生成入力・provider | 設定優先順位、モデル能力、system/tool/image/reasoning、token budget/prefillの一致 | OpenAI互換remoteの共通request4件とnative設定・入力を接続。他provider/モデル能力/token budget等は未実装 |
 | C 実行・取消・適用 | streaming/非stream/local、Stop、遅延結果拒否、usage/本文終端一回適用 | remote関連8件＋SSE修正関連3件成功（重複あり）、隔離CatalystでStop・再起動・正常完了・書出しを確認。独立Astra受入。local/usage等は未実装 |

@@ -6981,6 +6981,7 @@ var WeaveletGoogleSync = (() => {
   // shared/google-sync/entry.ts
   var entry_exports = {};
   __export(entry_exports, {
+    branchClipboard: () => branchClipboard,
     branchHistory: () => branchHistory,
     chatSearch: () => chatSearch,
     documentOperation: () => documentOperation,
@@ -7703,6 +7704,107 @@ var WeaveletGoogleSync = (() => {
       removeMessageAtIndexFromPreparedState(state, messageIndex + 1);
     }
     return finalizePreparedBranchMutationState(state);
+  };
+  var copyBranchSequenceState = (chats, chatIndex, fromNodeId, toNodeId) => {
+    const tree = chats[chatIndex]?.branchTree;
+    if (!tree?.nodes[fromNodeId] || !tree.nodes[toNodeId])
+      return null;
+    const nodeIds = [];
+    let cur = toNodeId;
+    const visited = /* @__PURE__ */ new Set();
+    while (cur) {
+      if (visited.has(cur) || !tree.nodes[cur])
+        return null;
+      visited.add(cur);
+      nodeIds.unshift(cur);
+      if (cur === fromNodeId)
+        break;
+      cur = tree.nodes[cur]?.parentId ?? null;
+    }
+    if (nodeIds[0] !== fromNodeId)
+      return null;
+    const nodes = {};
+    nodeIds.forEach((id) => {
+      nodes[id] = { ...tree.nodes[id] };
+    });
+    const clipboard = { nodeIds, sourceChat: chats[chatIndex].id, nodes };
+    for (const field of ["collapsedNodes", "omittedNodes", "protectedNodes"]) {
+      const source = chats[chatIndex][field];
+      if (source)
+        clipboard[field] = Object.fromEntries(nodeIds.filter((id) => Object.hasOwn(source, id)).map((id) => [id, source[id]]));
+    }
+    for (const id of nodeIds)
+      copyMessageAttributes(tree, id, clipboard, id);
+    return clipboard;
+  };
+  var removeBranchSequenceState = (chats, chatIndex, nodeIds, currentContentStore) => {
+    const contentStore = Object.fromEntries(Object.entries(currentContentStore).map(([hash, entry]) => [hash, { ...entry }]));
+    const updatedChats = cloneChatAt(chats, chatIndex);
+    const chat = updatedChats[chatIndex];
+    captureProjectedMessageAttributes(chat, contentStore);
+    const tree = chat.branchTree;
+    const removed = new Set(nodeIds);
+    for (const node of Object.values(tree.nodes)) {
+      if (removed.has(node.id) || !node.parentId || !removed.has(node.parentId))
+        continue;
+      let parentId = node.parentId;
+      while (parentId && removed.has(parentId))
+        parentId = tree.nodes[parentId].parentId;
+      tree.nodes[node.id] = { ...node, parentId };
+    }
+    for (const id of nodeIds) {
+      releaseContent(contentStore, tree.nodes[id].contentHash);
+      deleteMessageAttributes(tree, id);
+      delete tree.nodes[id];
+    }
+    tree.activePath = tree.activePath.filter((id) => !removed.has(id));
+    if (tree.activePath.length === 0) {
+      const root = Object.values(tree.nodes).find((node) => !node.parentId);
+      if (root)
+        tree.activePath = buildPathToLeaf(tree, root.id);
+    }
+    tree.rootId = tree.activePath[0] ?? "";
+    chat.messages = materializeActivePath(tree, contentStore);
+    return { chats: updatedChats, contentStore };
+  };
+  var pasteBranchSequenceState = (chats, targetChatIndex, afterNodeId, clipboard, currentContentStore) => {
+    const contentStore = Object.fromEntries(Object.entries(currentContentStore).map(([hash, entry]) => [hash, { ...entry }]));
+    const updatedChats = cloneChatAt(chats, targetChatIndex);
+    captureProjectedMessageAttributes(updatedChats[targetChatIndex], contentStore);
+    const tree = updatedChats[targetChatIndex].branchTree;
+    const idMap = {};
+    clipboard.nodeIds.forEach((id) => {
+      idMap[id] = editingUUID();
+    });
+    for (const field of ["collapsedNodes", "omittedNodes", "protectedNodes"]) {
+      const source = clipboard[field];
+      if (source && clipboard.nodeIds.some((id) => Object.hasOwn(source, id))) {
+        updatedChats[targetChatIndex][field] = { ...updatedChats[targetChatIndex][field], ...Object.fromEntries(clipboard.nodeIds.filter((id) => Object.hasOwn(source, id)).map((id) => [idMap[id], source[id]])) };
+      }
+    }
+    let prevId = afterNodeId;
+    for (const origId of clipboard.nodeIds) {
+      const newId = idMap[origId];
+      const srcNode = clipboard.nodes[origId];
+      retainContent(contentStore, srcNode.contentHash);
+      tree.nodes[newId] = {
+        ...srcNode,
+        id: newId,
+        parentId: prevId,
+        createdAt: Date.now()
+      };
+      copyMessageAttributes(clipboard, origId, tree, newId);
+      prevId = newId;
+    }
+    const destinationPath = buildPathToLeaf(tree, afterNodeId);
+    const insertIdx = destinationPath.indexOf(afterNodeId);
+    tree.activePath = [
+      ...destinationPath.slice(0, insertIdx + 1),
+      ...clipboard.nodeIds.map((id) => idMap[id])
+    ];
+    tree.rootId = tree.activePath[0] ?? "";
+    updatedChats[targetChatIndex].messages = materializeActivePath(tree, contentStore);
+    return { chats: updatedChats, contentStore };
   };
   var updateNodeRoleState = (chats, chatIndex, nodeId, role, contentStore) => {
     const updatedChats = cloneChatAt(chats, chatIndex);
@@ -8453,6 +8555,122 @@ var WeaveletGoogleSync = (() => {
     });
   }
 
+  // src/store/branch-clipboard.ts
+  var hasClipboardContent = (clipboard, store) => clipboard.nodeIds.length > 0 && clipboard.nodeIds.every((id) => {
+    const node = clipboard.nodes[id];
+    if (!node)
+      return false;
+    const target = getStreamingTargetFromHash(node.contentHash);
+    if (target)
+      return peekBufferedContent(target.chatId, target.nodeId) !== void 0;
+    let hash = node.contentHash;
+    const visited = /* @__PURE__ */ new Set();
+    while (hash) {
+      if (visited.has(hash) || !store[hash])
+        return false;
+      visited.add(hash);
+      hash = store[hash].delta?.baseHash;
+    }
+    return true;
+  });
+  var validateSequenceRange = (chats, input) => {
+    const from = resolveNodeTarget(chats, { chatId: input.chatId, nodeId: input.fromNodeId });
+    const to = resolveNodeTarget(chats, { chatId: input.chatId, nodeId: input.toNodeId });
+    if (from.status !== "valid" || to.status !== "valid")
+      return { status: "missing" };
+    if (!from.chat.branchTree) {
+      if (from.messageIndex > to.messageIndex)
+        return { status: "not-ancestor" };
+      return { status: "valid", chatIndex: from.chatIndex, nodeIds: from.chat.messages.slice(from.messageIndex, to.messageIndex + 1).map((_, index) => String(from.messageIndex + index)) };
+    }
+    const clipboard = copyBranchSequenceState(chats, from.chatIndex, input.fromNodeId, input.toNodeId);
+    return clipboard ? { status: "valid", chatIndex: from.chatIndex, nodeIds: clipboard.nodeIds } : { status: "not-ancestor" };
+  };
+  function branchClipboardState(chats, contentStore, clipboard, input) {
+    let prepared = { chats, contentStore };
+    let sourceIndex = -1, fromIndex = -1, toIndex = -1, rangeIds = [];
+    if (input.operation !== "paste") {
+      const range = validateSequenceRange(chats, { chatId: input.sourceChatId, fromNodeId: input.fromNodeId, toNodeId: input.toNodeId });
+      if (range.status !== "valid")
+        return range;
+      sourceIndex = range.chatIndex;
+      rangeIds = range.nodeIds;
+      if (input.operation !== "copy") {
+        const blockedNodeIds = rangeIds.filter((id) => chats[sourceIndex].protectedNodes?.[id]);
+        if (blockedNodeIds.length)
+          return { status: "protected", blockedNodeIds };
+      }
+      if (!chats[sourceIndex].branchTree) {
+        fromIndex = Number(input.fromNodeId);
+        toIndex = Number(input.toNodeId);
+      }
+    }
+    const target = input.operation === "paste" || input.operation === "move" ? resolveNodeTarget(chats, { chatId: input.targetChatId, nodeId: input.afterNodeId }) : void 0;
+    if (target && target.status !== "valid")
+      return { status: "missing" };
+    if (input.operation === "move" && target?.status === "valid" && sourceIndex === target.chatIndex && rangeIds.includes(input.afterNodeId))
+      return { status: "invalid-target" };
+    if (input.operation === "paste") {
+      if (!clipboard)
+        return { status: "clipboard-empty" };
+      if (!hasClipboardContent(clipboard, contentStore))
+        return { status: "content-missing" };
+    }
+    if (sourceIndex >= 0) {
+      prepared = ensureBranchTreeState(prepared.chats, sourceIndex, prepared.contentStore);
+      const tree = prepared.chats[sourceIndex].branchTree;
+      clipboard = copyBranchSequenceState(prepared.chats, sourceIndex, fromIndex >= 0 ? tree.activePath[fromIndex] : input.fromNodeId, toIndex >= 0 ? tree.activePath[toIndex] : input.toNodeId);
+      if (input.operation !== "copy" && !hasClipboardContent(clipboard, prepared.contentStore))
+        return { status: "content-missing" };
+    }
+    let afterNodeId = input.afterNodeId;
+    if (target?.status === "valid") {
+      prepared = ensureBranchTreeState(prepared.chats, target.chatIndex, prepared.contentStore);
+      if (!target.chat.branchTree)
+        afterNodeId = prepared.chats[target.chatIndex].branchTree.activePath[target.messageIndex];
+    }
+    const historyBase = prepared;
+    if (input.operation === "copy")
+      return { status: "copied", ...prepared, clipboard };
+    let result3 = prepared;
+    if (input.operation === "cut" || input.operation === "move")
+      result3 = removeBranchSequenceState(result3.chats, sourceIndex, clipboard.nodeIds, result3.contentStore);
+    if (input.operation === "paste" || input.operation === "move")
+      result3 = pasteBranchSequenceState(result3.chats, target.chatIndex, afterNodeId, clipboard, result3.contentStore);
+    return {
+      status: input.operation === "cut" ? "cut" : input.operation === "move" ? "moved" : "pasted",
+      ...result3,
+      clipboard,
+      historyBase,
+      ...target?.status === "valid" ? { nodeIds: result3.chats[target.chatIndex].branchTree.activePath.slice(-clipboard.nodeIds.length) } : {}
+    };
+  }
+
+  // shared/google-sync/branchClipboard.ts
+  function branchClipboard(json, capture) {
+    const input = JSON.parse(json);
+    if (!["copy", "cut", "paste", "move"].includes(input.operation))
+      throw new Error("Invalid clipboard operation.");
+    const before = { chats: input.chats, contentStore: input.contentStore, clipboard: input.clipboard };
+    const isolated = structuredClone(before);
+    for (const chat of isolated.chats)
+      if (!Array.isArray(chat.messages) && chat.branchTree)
+        chat.messages = materializeActivePath(chat.branchTree, isolated.contentStore);
+    const result3 = withEditingRuntime(input.newIDs, isolated.chats.flatMap((chat) => Object.keys(chat.branchTree?.nodes ?? {})), input.now, () => branchClipboardState(isolated.chats, isolated.contentStore, isolated.clipboard, input));
+    if (!("chats" in result3))
+      return JSON.stringify({ ...result3, changes: [] });
+    for (const [hash, entry] of Object.entries(result3.contentStore))
+      if (entry.delta && JSON.stringify(entry.delta) !== JSON.stringify(before.contentStore[hash]?.delta)) {
+        const content = resolveContent(result3.contentStore, hash), { delta: _delta, ...full } = entry;
+        result3.contentStore[hash] = { ...full, content };
+      }
+    const chats = result3.chats.map((chat, index) => chat !== isolated.chats[index] && chat.branchTree ? { ...chat, messages: materializeActivePath(chat.branchTree, result3.contentStore, true) } : before.chats[index]);
+    if ("historyBase" in result3)
+      capture?.(result3.historyBase, result3);
+    const affectedChatIds = chats.filter((chat, index) => !orderedJSONEqual(before.chats[index], chat)).map((chat) => chat.id);
+    return JSON.stringify({ status: result3.status, affectedChatIds, ..."nodeIds" in result3 ? { nodeIds: result3.nodeIds } : {}, changes: diffJSONChanges(before, JSON.parse(JSON.stringify({ chats, contentStore: result3.contentStore, clipboard: result3.clipboard }))) });
+  }
+
   // shared/google-sync/branchHistory.ts
   function branchHistory(json) {
     const input = JSON.parse(json);
@@ -8460,14 +8678,14 @@ var WeaveletGoogleSync = (() => {
     const busy = input.busyChatIds ?? [];
     let output = {};
     if (input.operation === "edit") {
-      const bridges = { messageEdit, nodeRemoval, nodeOptions, treeEdit };
+      const bridges = { messageEdit, nodeRemoval, nodeOptions, treeEdit, branchClipboard };
       const bridge = bridges[input.kind];
       if (!bridge)
         throw new Error("Invalid history edit.");
       const result3 = JSON.parse(bridge(JSON.stringify(input.input), (before, after) => {
         history = captureBranchHistory(history, before, after);
       }));
-      output = input.kind === "nodeOptions" || input.kind === "treeEdit" ? result3 : { changes: result3 };
+      output = input.kind === "nodeOptions" || input.kind === "treeEdit" || input.kind === "branchClipboard" ? result3 : { changes: result3 };
     } else if (input.operation === "undo" || input.operation === "redo") {
       const before = { chats: input.chats, contentStore: input.contentStore };
       const result3 = stepBranchHistory(history, before, input.operation, busy);

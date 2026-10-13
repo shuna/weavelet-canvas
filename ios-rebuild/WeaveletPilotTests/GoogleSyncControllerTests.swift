@@ -21,6 +21,50 @@ import XCTest
         try state.applySnapshot(full.replacing("state",with:raw))
         return state
     }
+    func testClipboardCrossEncryptedSyncThenPastePreservesMapsPartsAndRestart() async throws {
+        let dir = try directory(), drive = FakeSyncDrive(), keys = TestSyncKeys()
+        let senderStore = LocalStateStore(fileURL: dir.appendingPathComponent("sender.json"))
+        let sender = try state(senderStore)
+        var options = try sender.nodeOptionsDraft(nodeID: "n-user")
+        options.value.omitted = true; options.value.collapsed = true; options.value.protected = true
+        try sender.saveNodeOptions(options, now: 8000)
+        let publisher = GoogleSyncController(chatState: sender, drive: drive, store: SyncStateStore(fileURL: dir.appendingPathComponent("sender-sync.json")), keyStore: keys)
+        try await publisher.create(password: password, folderName: "FAKE clipboard")
+        var copy = try sender.branchClipboardDraft(nodeID: "n-user", operation: .copy)
+        copy.toNodeID = "n-user"
+        _ = try sender.saveBranchClipboard(copy, now: 8001)
+        let copied = try sender.publicationSnapshot().required("state").required("branchClipboard")
+        XCTAssertEqual(try ChatState(store: senderStore).publicationSnapshot().required("state")["branchClipboard"], copied)
+        try await publisher.synchronize()
+        let receiverStore = LocalStateStore(fileURL: dir.appendingPathComponent("receiver.json"))
+        let receiver = ChatState(store: receiverStore)
+        let subscriber = GoogleSyncController(chatState: receiver, drive: drive, store: SyncStateStore(fileURL: dir.appendingPathComponent("receiver-sync.json")), keyStore: keys)
+        try await subscriber.open(dataset: XCTUnwrap(publisher.dataset))
+        let unlocked = try await subscriber.restoreKey()
+        XCTAssertTrue(unlocked)
+        try await subscriber.download()
+        let transferred = try receiver.publicationSnapshot().required("state").required("branchClipboard")
+        for key in ["collapsedNodes", "omittedNodes", "protectedNodes"] {
+            XCTAssertEqual(try transferred.required(key)["n-user"], .bool(true))
+        }
+        let paste = try receiver.branchClipboardDraft(nodeID: "n-user", operation: .paste)
+        _ = try receiver.saveBranchClipboard(paste, newIDs: ["synced-clipboard"], now: 8002)
+        let source = try XCTUnwrap(receiver.exchange).source
+        let chat = try XCTUnwrap(source.required("chats").array("chats").first { $0["id"] == .string("chat-a") })
+        let tree = try chat.required("branchTree"), node = try tree.required("nodes").required("synced-clipboard")
+        XCTAssertEqual(tree["activePath"], .array(["n-system", "n-user", "synced-clipboard"].map(OrderedJSON.string)))
+        XCTAssertEqual(try node.required("xFixtureNode")["unknown"], .string("keep-n-user"))
+        for key in ["collapsedNodes", "omittedNodes", "protectedNodes"] {
+            XCTAssertEqual(try chat.required(key)["synced-clipboard"], .bool(true))
+        }
+        let hash = try node.required("contentHash").string("hash")
+        let parts = try source.required("contentStore").required(hash).required("content").array("parts")
+        XCTAssertEqual(parts.count, 5)
+        XCTAssertEqual(parts.first?["text"], .string("本文\n日本語🙂"))
+        XCTAssertEqual(try ChatState(store: receiverStore).exportWebData(), try receiver.exportWebData())
+        XCTAssertEqual(try ChatState(store: receiverStore).publicationSnapshot().required("state")["branchClipboard"], transferred)
+    }
+
     func testTreeTransformsCrossEncryptedSyncPreservingRemainingNodeMetadata() async throws {
         let dir = try directory(), drive = FakeSyncDrive(), keys = TestSyncKeys()
         let sender = try state(LocalStateStore(fileURL: dir.appendingPathComponent("sender.json")))
