@@ -179,6 +179,13 @@ final class RemoteGenerationTests: XCTestCase {
         FakeRemoteProtocol.packets = [.init(bytes:Data(#"{"choices":[{"message":{"content":"FAKE observed reply"},"finish_reason":"stop"}],"usage":{"prompt_tokens":13,"completion_tokens":7,"cost":0}}"#.utf8))]
         var credential = record(stream:false); credential.settings.endpoint = "https://openrouter.ai/api/v1/chat/completions"
         try app.startGeneration(input:"FAKE question",record:credential,client:remote)
+        let reserved = try XCTUnwrap(app.generation?.plan?["targetNodeId"]?.string("target"))
+        let preparedChat = try XCTUnwrap(app.exchange).source.required("chats").array("chats")[0]
+        let preparedPath = try XCTUnwrap(preparedChat["branchTree"]?["activePath"]).array("path")
+        XCTAssertEqual(preparedPath.last, .string(reserved))
+        XCTAssertEqual(preparedChat["branchTree"]?["nodes"]?[reserved]?["role"], .string("assistant"))
+        XCTAssertEqual(try preparedChat.required("messages").array("messages").last?["content"],
+                       .array([.object([.init(key:"type",value:.string("text")),.init(key:"text",value:.string(""))])]))
         let baseline = try app.publicationSnapshot(), disk = try Data(contentsOf:local.fileURL)
         reject = true
         try await wait { app.generation?.running == false }
@@ -193,7 +200,10 @@ final class RemoteGenerationTests: XCTestCase {
         XCTAssertEqual(saved?["untouched"],totals["untouched"])
         let chat = try app.exchange!.source.required("chats").array("chats")[0]
         let node = try chat.required("branchTree").required("activePath").array("path").last!.string("target")
+        XCTAssertEqual(node, reserved)
         XCTAssertEqual(chat["branchTree"]?["nodes"]?[node]?["openRouterObservation"]?["cost"],.number("0"))
+        let wire = try OrderedJSON.decode(XCTUnwrap(FakeRemoteProtocol.requests.first?.httpBody)).required("messages").array("messages")
+        XCTAssertEqual(wire.last?["role"], .string("user"))
         XCTAssertThrowsError(try app.saveGenerationResult())
         XCTAssertEqual(try ChatState(store:local).publicationSnapshot(),try app.publicationSnapshot())
     }
@@ -493,8 +503,10 @@ final class RemoteGenerationTests: XCTestCase {
             // Attribute projection may reorder object keys; every value and array position must remain identical.
             XCTAssertEqual(Data(try SyncRecords.canonical(.array(Array(messages.prefix(original.count)))).utf8),
                            Data(try SyncRecords.canonical(.array(original)).utf8))
-            XCTAssertEqual(messages.count, original.count + (partial ? 2 : 1))
+            // Web generationPlan keeps its reserved empty assistant when no stream parts arrive.
+            XCTAssertEqual(messages.count, original.count + 2)
             if partial { XCTAssertEqual(try messages.last!.required("content").array("parts")[0]["text"],.string("Recovered<th")) }
+            else { XCTAssertEqual(messages.last?["content"],.array([.object([.init(key:"type",value:.string("text")),.init(key:"text",value:.string(""))])])) }
             XCTAssertEqual(ChatState(store: store).exchange?.source, state.exchange?.source)
         }
     }

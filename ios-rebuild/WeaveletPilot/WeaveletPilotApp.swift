@@ -71,23 +71,19 @@ struct ChatView: View {
                     if let conversation = state.conversation {
                         ForEach(conversation.visibleMessages, id: \.identity) { node in
                             let summaryInfo = try? state.summaryInfo(chatID:conversation.id,nodeID:node.id)
+                            let generation = generation(at:node, in:conversation)
                             if summaryInfo?["hidden"] != .bool(true) {
-                                messageRow(node:node,conversation:conversation,summaryInfo:summaryInfo)
+                                messageRow(node:node,conversation:conversation,summaryInfo:summaryInfo,generation:generation)
                                     .id(node.identity)
                                     .disabled(state.generation != nil)
+                                if let generation, !generation.running {
+                                    Button("生成結果の保存を再試行") {
+                                        do { try state.saveGenerationResult() } catch { state.generationError = error.localizedDescription }
+                                    }.frame(minHeight: 44)
+                                }
                                 if state.isLocalConversation && node.role == "user" && !node.options.collapsed {
                                     prefillInput(key:state.assistantPrefillKey(nodeID:node.id))
                                 }
-                            }
-                        }
-                        if let generation = state.generation {
-                            VStack(alignment: .leading, spacing: 8) {
-                                Text(generation.running ? "生成中" : "未保存の生成結果").font(.headline)
-                                if !generation.output.reasoning.isEmpty { MessagePartView(part: .reasoning(generation.output.reasoning), isGenerating: generation.running) }
-                                if !generation.output.text.isEmpty { MessagePartView(part: .text(generation.output.text), isGenerating: generation.running) }
-                                if !generation.running { Button("生成結果の保存を再試行") {
-                                    do { try state.saveGenerationResult() } catch { state.generationError = error.localizedDescription }
-                                }.frame(minHeight: 44) }
                             }
                         }
                         if let generationError = state.generationError { Text(generationError).foregroundStyle(.red) }
@@ -382,12 +378,20 @@ struct ChatView: View {
         }
     }
 
-    private func messageRow(node: MessageNode, conversation: Conversation, summaryInfo: OrderedJSON?) -> some View {
+    private func generation(at node: MessageNode, in conversation: Conversation) -> ActiveGeneration? {
+        guard let generation = state.generation,
+              generation.chatID.utf8.elementsEqual(conversation.id.utf8),
+              case .string(let target) = generation.plan?["targetNodeId"],
+              target.utf8.elementsEqual(node.id.utf8) else { return nil }
+        return generation
+    }
+
+    private func messageRow(node: MessageNode, conversation: Conversation, summaryInfo: OrderedJSON?, generation: ActiveGeneration?) -> some View {
         let summarySelection: ((String,Bool) -> Void)? = state.exchange == nil || state.generation != nil ? nil : { id, use in
             do { try state.mutateSummary(chatID:conversation.id,action:"use",summaryID:id,use:use) }
             catch { errorMessage = error.localizedDescription }
         }
-        return MessageView(node: node, siblings: state.siblings(for: node.id), style: state.style, edit: state.exchange == nil || state.generation != nil ? nil : {
+        return MessageView(node: node, siblings: state.siblings(for: node.id), style: state.style, generation: generation, edit: state.exchange == nil || state.generation != nil ? nil : {
             do { draft = try state.messageDraft(nodeID: node.id) }
             catch { errorMessage = error.localizedDescription }
         }, insertBefore: state.exchange == nil || state.generation != nil ? nil : {
@@ -469,6 +473,7 @@ struct MessageView: View {
     let node: MessageNode
     let siblings: [MessageNode]
     let style: ChatStyle
+    var generation: ActiveGeneration? = nil
     var edit: (() -> Void)? = nil
     var insertBefore: (() -> Void)? = nil
     var regenerate: (() -> Void)? = nil
@@ -631,7 +636,11 @@ struct MessageView: View {
                     }
                 }
                 if !node.options.label.isEmpty { Text(node.options.label).font(.subheadline).foregroundStyle(.secondary) }
-                if showsSummary, let text = try? summary?["text"]?.string("summary text") {
+                if let generation {
+                    Text(generation.running ? "生成中" : "未保存の生成結果").font(.caption).foregroundStyle(.secondary)
+                    if !generation.output.reasoning.isEmpty { MessagePartView(part: .reasoning(generation.output.reasoning), isGenerating: generation.running) }
+                    if !generation.output.text.isEmpty { MessagePartView(part: .text(generation.output.text), isGenerating: generation.running) }
+                } else if showsSummary, let text = try? summary?["text"]?.string("summary text") {
                     Text(tab == "compact" ? "圧縮" : "要約").font(.caption).foregroundStyle(.secondary)
                     MarkdownTextView(text:text)
                 } else if node.options.collapsed {

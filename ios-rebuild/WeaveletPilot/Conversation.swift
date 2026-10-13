@@ -71,6 +71,7 @@ struct ActiveGeneration {
     var running = true
     var completedSuccessfully = false
     var usesRemoteTransport = true
+    var titleAfterAppend = false
 }
 
 struct NavigationFocus: Equatable {
@@ -635,16 +636,23 @@ final class ChatState: ObservableObject {
         let source = try MessageEditing.save(in: exchange.source, chatID: conversation.id, nodeID: nil, viewingPath: conversation.visibleMessages.map(\.id), role: "user", parts: body, mode: .append, newIDs: ids, now: now, history: editingHistory) { history = $0 }
         let changed = try WebExchange(source: source)
         let path = changed.conversations.first { $0.identity == conversation.identity }!.visibleMessages.map(\.id)
-        try beginGeneration(source:source,chatID:conversation.id,path:path,history:history,plan:nil,regenerate:false,record:record,client:client,readProviderCredential:readProviderCredential,now:now)
+        let appended = try MessageEditing.generation(in:source,chatID:conversation.id,operation:"prepare",action:.append,
+            viewingPath:path,newIDs:[UUID().uuidString.lowercased()],now:now,history:history) { history = $0 }
+        guard appended.output["status"] == .string("updated") else { throw ExchangeError.invalid("生成先を準備できませんでした") }
+        let plan = try appended.output.required("plan")
+        let requestPath = try plan.required("requestPath").array("requestPath").map { try $0.string("node ID") }
+        try beginGeneration(source:appended.source,chatID:conversation.id,path:requestPath,history:history,plan:plan,regenerate:false,
+            record:record,client:client,readProviderCredential:readProviderCredential,now:now,titleAfterAppend:true)
     }
 
     private func beginGeneration(source: OrderedJSON, chatID: String, path: [String], history: MessageEditing.HistoryState?, plan: OrderedJSON?, regenerate: Bool,
-                                 record: RemoteCredentialRecord? = nil, client: RemoteClient, readProviderCredential: @escaping ProviderModels.CredentialReader, now: Double) throws {
+                                 record: RemoteCredentialRecord? = nil, client: RemoteClient, readProviderCredential: @escaping ProviderModels.CredentialReader, now: Double,
+                                 titleAfterAppend: Bool = false) throws {
         let sourceChat = try source.required("chats").array("chats").first { try $0.required("id").string("id").utf8.elementsEqual(chatID.utf8) }!
         let savedState = try publicationSnapshot().required("state")
         let modelState = ChatConfig.modelState(in:savedState)
         if sourceChat["config"]?["modelSource"] == .string("local") {
-            try beginLocalGeneration(source:source,chat:sourceChat,chatID:chatID,path:path,history:history,plan:plan,now:now)
+            try beginLocalGeneration(source:source,chat:sourceChat,chatID:chatID,path:path,history:history,plan:plan,now:now,titleAfterAppend:titleAfterAppend)
             return
         }
         let legacy = try record ?? RemoteCredentials.load()
@@ -657,7 +665,7 @@ final class ChatState: ObservableObject {
         let streaming = try RemoteRequest.streaming(request)
         try applyLibrary(source, selectedID: chatID, resetViewFor: chatID, editing: history, now: now)
         let id = UUID()
-        generation = ActiveGeneration(id: id, chatID: chatID, baseSource: try publishedSource(), path: path, plan: plan)
+        generation = ActiveGeneration(id: id, chatID: chatID, baseSource: try publishedSource(), path: path, plan: plan, titleAfterAppend: titleAfterAppend)
         pendingTitleContext = (id,legacy,client,readProviderCredential)
         generationError = nil
         generationTask = Task { @MainActor [weak self] in
@@ -767,7 +775,8 @@ final class ChatState: ObservableObject {
         return modelID
     }
 
-    private func beginLocalGeneration(source: OrderedJSON, chat: OrderedJSON, chatID: String, path: [String], history: MessageEditing.HistoryState?, plan: OrderedJSON?, now: Double) throws {
+    private func beginLocalGeneration(source: OrderedJSON, chat: OrderedJSON, chatID: String, path: [String], history: MessageEditing.HistoryState?, plan: OrderedJSON?, now: Double,
+                                      titleAfterAppend: Bool) throws {
         let config = try chat.required("config")
         let modelID = try config.required("model").string("model")
         let prefillKey = try plan?["prefillKey"]?.string("prefill key") ?? stickyPrefillKey
@@ -779,7 +788,7 @@ final class ChatState: ObservableObject {
             _ = try output.consumeLocal("",input:request.input)
             try applyLibrary(source,selectedID:chatID,resetViewFor:chatID,editing:history,now:now)
             let id = UUID()
-            generation = ActiveGeneration(id:id,chatID:chatID,baseSource:try publishedSource(),path:path,plan:plan,output:output,usesRemoteTransport:false)
+            generation = ActiveGeneration(id:id,chatID:chatID,baseSource:try publishedSource(),path:path,plan:plan,output:output,usesRemoteTransport:false,titleAfterAppend:titleAfterAppend)
             generationError = nil
             generationTask = Task { @MainActor [weak self] in
                 guard let self else { return }
@@ -833,23 +842,19 @@ final class ChatState: ObservableObject {
     private func persistGeneration(_ current: ActiveGeneration) throws {
         let titleContext = pendingTitleContext?.id == current.id ? pendingTitleContext : nil
         guard exchange?.source == current.baseSource else { throw ExchangeError.invalid("生成開始後に会話が変更されています") }
-        if try current.output.isEmpty && current.plan == nil && current.output.observation.object("observation").isEmpty { generation = nil; return }
+        if try current.output.isEmpty && current.output.observation.object("observation").isEmpty { generation = nil; return }
         let now = Date().timeIntervalSince1970 * 1000
         var history: MessageEditing.HistoryState?
-        var source: OrderedJSON
-        if let plan = current.plan {
-            let finalized = try MessageEditing.generation(in:current.baseSource,chatID:current.chatID,operation:"finalize",viewingPath:current.path,plan:plan,
-                parts:current.output.parts,now:now,history:editingHistory) { history = $0 }
-            guard finalized.output["status"] == .string("updated") else { throw ExchangeError.invalid("生成先が変更されているため、結果を保存できません") }
-            source = finalized.source
-        } else {
-            source = try MessageEditing.save(in: current.baseSource, chatID: current.chatID, nodeID: nil, viewingPath: current.path, role: "assistant", parts: current.output.parts, mode: .append, newIDs: [UUID().uuidString.lowercased()], now: now, history: editingHistory) { history = $0 }
-        }
+        guard let plan = current.plan else { throw ExchangeError.invalid("生成先がありません") }
+        let finalized = try MessageEditing.generation(in:current.baseSource,chatID:current.chatID,operation:"finalize",viewingPath:current.path,plan:plan,
+            parts:current.output.parts,now:now,history:editingHistory) { history = $0 }
+        guard finalized.output["status"] == .string("updated") else { throw ExchangeError.invalid("生成先が変更されているため、結果を保存できません") }
+        var source = finalized.source
         let accounting = try generationAccounting(source:source,current:current)
         source = accounting.source
         try applyLibrary(source, selectedID: current.chatID, resetViewFor: current.chatID, tokenUsage:accounting.usage, editing: history, now: now)
         generation = nil
-        if current.completedSuccessfully && current.plan == nil {
+        if current.completedSuccessfully && current.titleAfterAppend {
             let config = try current.baseSource.required("chats").array("chats").first { $0["id"].flatMap { try? $0.string("id") }?.utf8.elementsEqual(current.chatID.utf8) == true }?["config"]
             startAutomaticTitle(chatID:current.chatID,sourceConfig:config,legacy:titleContext?.legacy,client:titleContext?.client,readProviderCredential:titleContext?.read ?? RemoteCredentials.load(providerID:))
         }
@@ -1159,7 +1164,7 @@ final class ChatState: ObservableObject {
         let nextEditing = try editing ?? (navigation != nil ? editingHistory : MessageEditing.invalidatingHistory(editingHistory, before: before, after: changed.source))
         try store?.save(SavedChatState(exchange: changed, document: candidate, conversations: views, selectedConversationID: selectedID, style: displayStyle))
         if preserveGeneration, let current = generation {
-            generation = ActiveGeneration(id: current.id, chatID: current.chatID, baseSource: changed.source, path: current.path, plan: current.plan, output: current.output, running: current.running, completedSuccessfully:current.completedSuccessfully, usesRemoteTransport:current.usesRemoteTransport)
+            generation = ActiveGeneration(id: current.id, chatID: current.chatID, baseSource: changed.source, path: current.path, plan: current.plan, output: current.output, running: current.running, completedSuccessfully:current.completedSuccessfully, usesRemoteTransport:current.usesRemoteTransport, titleAfterAppend:current.titleAfterAppend)
         } else { invalidateGeneration() }
         branchCandidates = candidates
         conversations = views
