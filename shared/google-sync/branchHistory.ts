@@ -1,3 +1,4 @@
+import { generationPlan } from './generationPlan';
 import { captureBranchHistory, invalidateBranchHistory, changedBranchChatIds, canStepBranchHistory, stepBranchHistory, type BranchHistory, type BranchHistoryState } from '../../src/utils/branchHistory';
 import { diffJSONChanges, orderedJSONEqual } from '../../src/utils/jsonChanges';
 import { materializeActivePath } from '../../src/utils/branchUtils';
@@ -13,13 +14,14 @@ export function branchHistory(json: string): string {
   const busy: string[] = input.busyChatIds ?? [];
   let output: Record<string, unknown> = {};
   if (input.operation === 'edit') {
-    const bridges = {messageEdit,nodeRemoval,nodeOptions,treeEdit,branchClipboard};
+    const bridges = {messageEdit,nodeRemoval,nodeOptions,treeEdit,branchClipboard,generationPlan};
     const bridge = bridges[input.kind as keyof typeof bridges];
     if (!bridge) throw new Error('Invalid history edit.');
     const result = JSON.parse(bridge(JSON.stringify(input.input), (before, after) => {
       history = captureBranchHistory(history, before, after);
     }));
-    output = input.kind === 'nodeOptions' || input.kind === 'treeEdit' || input.kind === 'branchClipboard' ? result : {changes:result};
+    output = input.kind === 'nodeOptions' || input.kind === 'treeEdit' || input.kind === 'branchClipboard' || input.kind === 'generationPlan' ? result : {changes:result};
+    if(input.kind==='generationPlan'&&input.input.operation==='prepare'&&result.status==='updated')history=invalidateBranchHistory(history,[input.input.chat.id]);
   } else if (input.operation === 'undo' || input.operation === 'redo') {
     const before: BranchHistoryState = {chats:input.chats, contentStore:input.contentStore};
     const result = stepBranchHistory(history, before, input.operation, busy);

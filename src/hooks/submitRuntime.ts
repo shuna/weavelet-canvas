@@ -1,3 +1,4 @@
+import { finalizeGenerationState } from '@utils/generationPlan';
 import { cancelAiTask, cancelAiTaskRequest, isAiTaskCurrent, type AiTaskTicket } from './aiTaskLifetime';
 import { isOpenRouterEndpoint, observeOpenRouterHeaders, observeOpenRouterUsage, type OpenRouterRequestContext } from '@utils/openrouterControls';
 import { recordOpenRouterObservation } from '@utils/openrouterObservation';
@@ -433,26 +434,10 @@ export const finalizeStreamingNode = (chatId: string, targetNodeId: string) => {
       return state;
     }
 
-    const updatedChats = cloneChatAt(chats, chatIndex);
-    const updatedChat = updatedChats[chatIndex];
-    const updatedTree = updatedChat.branchTree!;
-    const updatedContentStore = { ...state.contentStore };
     const finalizedContent = finalizeStreamingBuffer(chatId, targetNodeId);
-
-    updatedTree.nodes[targetNodeId] = {
-      ...updatedTree.nodes[targetNodeId],
-      contentHash: addContent(updatedContentStore, finalizedContent),
-    };
-
-    if (updatedTree.activePath.includes(targetNodeId)) {
-      updatedChat.messages = materializeActivePath(updatedTree, updatedContentStore);
-    }
-
-    return {
-      ...state,
-      chats: updatedChats,
-      contentStore: updatedContentStore,
-    };
+    const result = finalizeGenerationState(chats,chatIndex,targetNodeId,finalizedContent,state.contentStore);
+    if (result.status !== 'updated') return state;
+    return {...state,chats:result.chats,contentStore:result.contentStore};
   });
 };
 

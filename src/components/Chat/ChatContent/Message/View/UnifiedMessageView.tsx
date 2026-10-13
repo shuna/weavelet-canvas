@@ -9,7 +9,6 @@ import {
   isImageContent,
   isTextContent,
 } from '@type/chat';
-import { resolveRegenerateTarget } from '@utils/branchUtils';
 import { useEditViewLogic } from './useEditViewLogic';
 import { MessageEditForm } from './EditView';
 import ContentActions from './ContentActions';
@@ -130,19 +129,11 @@ const UnifiedMessageView = memo(
       if (isCurrentChatGenerating) return;
       const index = resolveCurrentMessageIndex();
       if (index < 0) return;
-      const plan = resolveRegenerateTarget(
-        role as Role,
-        index,
-        useStore.getState().chats![currentChatIndex].messages.length
-      );
-      if (!plan) return;
       if (!confirmChatModelFavorite(currentChatIndex)) return;
-      if (plan.removeIndex >= 0) {
-        const chat = useStore.getState().chats?.find(chat => chat.id === currentChatId);
-        const result = removeNode({ chatId: currentChatId, nodeId: chat?.branchTree?.activePath[plan.removeIndex] ?? String(plan.removeIndex) });
-        if (result.status !== 'updated') return;
-      }
-      handleRegenerate(plan.submitMode === 'append' ? 'append' : 'midchat', plan.insertIndex);
+      const chat = useStore.getState().chats?.find(chat => chat.id === currentChatId);
+      const result = useStore.getState().prepareRegenerateNode({chatId:currentChatId,nodeId:nodeId??chat?.branchTree?.activePath[index]??String(index)});
+      if (result.status !== 'updated') return;
+      handleRegenerate(result.submitMode!,result.insertIndex!);
     };
 
     const [contentElement, setContentElement] = useState<HTMLDivElement | null>(null);

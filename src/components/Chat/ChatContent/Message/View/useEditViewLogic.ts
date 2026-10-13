@@ -365,7 +365,7 @@ export function useEditViewLogic({
     }
     if (!confirmChatModelFavorite(currentChatIndex)) return;
     if (summaryId) { if (commitSummary(removeCount)) handleSubmitMidChat(nextIndex); return; }
-    if (replaceNodeAndPrune({ ...editTarget(), role: chats[currentChatIndex].messages[resolvedMessageIndex].role, content: _content, removeCount }).status !== 'updated') return;
+    if (useStore.getState().prepareContinueNode({ ...editTarget(), content: _content }).status !== 'updated') return;
     clearDraft();
     setIsEdit(false);
     handleSubmitMidChat(nextIndex);

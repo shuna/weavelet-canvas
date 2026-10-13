@@ -1,3 +1,4 @@
+import { resolveAssistantPrefillKey } from '@utils/generationPlan';
 import { localModelRuntime } from '@src/local-llm/runtime';
 import { beginAiTask, finishAiTask, isAiTaskCurrent } from './aiTaskLifetime';
 import i18next from 'i18next';
@@ -124,7 +125,7 @@ const useSubmit = () => {
     const isLocal = isLocalModelConfig(submitConfig);
     const resolved = isLocal ? undefined : resolveProviderForModel(submitConfig.model, initialState.favoriteModels, initialState.providers, fallbackProvider, submitConfig.providerId);
     const apiVersion = initialState.apiVersion;
-    const prefillKey = mode === 'append' ? '__sticky__' : (chats[chatIndex].branchTree?.activePath[(insertIndex ?? 1) - 1] ?? '__sticky__');
+    const prefillKey = resolveAssistantPrefillKey(chats[chatIndex],mode,insertIndex);
     const assistantPrefill = initialState.assistantPrefillMap[prefillKey]?.trim() || undefined;
     const titleSettings = { titleModel: initialState.titleModel, titleProviderId: initialState.titleProviderId, favoriteModels: initialState.favoriteModels, providers: initialState.providers };
     const evaluationSettings = initialState.evaluationSettings;

@@ -6995,6 +6995,7 @@ var WeaveletGoogleSync = (() => {
     fileImport: () => fileImport,
     folderOperation: () => folderOperation,
     folderRows: () => folderRows,
+    generationPlan: () => generationPlan,
     generationRequest: () => generationRequest,
     libraryDefaults: () => libraryDefaults,
     libraryOperation: () => libraryOperation,
@@ -7852,6 +7853,26 @@ var WeaveletGoogleSync = (() => {
       }
     }
     return result3;
+  }
+  function resolveRegenerateTarget(role, messageIndex, messagesLength) {
+    if (role === "system")
+      return null;
+    if (role === "assistant") {
+      const afterRemoval = messagesLength - 1;
+      return {
+        removeIndex: messageIndex,
+        submitMode: messageIndex >= afterRemoval ? "append" : "insert",
+        insertIndex: messageIndex
+      };
+    }
+    const nextIndex = messageIndex + 1;
+    const hasNext = nextIndex < messagesLength;
+    const lengthAfterRemoval = hasNext ? messagesLength - 1 : messagesLength;
+    return {
+      removeIndex: hasNext ? nextIndex : -1,
+      submitMode: nextIndex >= lengthAfterRemoval ? "append" : "insert",
+      insertIndex: nextIndex
+    };
   }
 
   // src/store/branch-domain.ts
@@ -13710,6 +13731,162 @@ ${message.content}` : message.content).join("\n\n").trim();
     }
   }
 
+  // src/utils/generationPlan.ts
+  var createAssistantPlaceholder = () => ({
+    role: "assistant",
+    content: [{ type: "text", text: "" }]
+  });
+  var insertAssistantPlaceholder = (chats, chatIndex, mode, contentStore, insertIndex) => {
+    const assistantMessage = createAssistantPlaceholder();
+    const messageIndex = mode === "append" ? chats[chatIndex].messages.length : insertIndex ?? 0;
+    if (mode === "append") {
+      const appended = appendNodeToActivePathState(
+        chats,
+        chatIndex,
+        "assistant",
+        assistantMessage.content,
+        contentStore
+      );
+      return {
+        updatedChats: appended.chats,
+        messageIndex,
+        targetNodeId: appended.newId,
+        contentStore: appended.contentStore
+      };
+    }
+    const inserted = insertMessageAtIndexState(
+      chats,
+      chatIndex,
+      messageIndex,
+      assistantMessage,
+      contentStore
+    );
+    return {
+      updatedChats: inserted.chats,
+      messageIndex,
+      targetNodeId: inserted.newId,
+      contentStore: inserted.contentStore
+    };
+  };
+  function prepareRegenerateState(chats, input, contentStore) {
+    const target = resolveNodeTarget(chats, input, true);
+    if (target.status !== "valid")
+      return target;
+    const plan = resolveRegenerateTarget(target.chat.messages[target.messageIndex].role, target.messageIndex, target.chat.messages.length);
+    if (!plan)
+      return { status: "invalid" };
+    if (plan.removeIndex < 0)
+      return { status: "updated", chats, contentStore, submitMode: plan.submitMode === "append" ? "append" : "midchat", insertIndex: plan.insertIndex };
+    const removeId = target.chat.branchTree?.activePath[plan.removeIndex] ?? String(plan.removeIndex);
+    const result3 = removeNodeState(chats, { chatId: input.chatId, nodeId: removeId }, contentStore);
+    if (result3.status !== "updated")
+      return result3.status === "protected" ? { ...result3, blockedNodeIds: [removeId] } : result3;
+    return { ...result3, submitMode: plan.submitMode === "append" ? "append" : "midchat", insertIndex: plan.insertIndex };
+  }
+  function prepareContinueState(chats, input, contentStore) {
+    const target = resolveNodeTarget(chats, input, true);
+    if (target.status !== "valid")
+      return target;
+    if (target.chat.protectedNodes?.[input.nodeId])
+      return { status: "protected", blockedNodeIds: [input.nodeId] };
+    const nextIndex = target.messageIndex + 1;
+    const removeCount = nextIndex < target.chat.messages.length ? 1 : 0;
+    const nextId = target.chat.branchTree?.activePath[nextIndex] ?? String(nextIndex);
+    if (removeCount && target.chat.protectedNodes?.[nextId])
+      return { status: "protected", blockedNodeIds: [nextId] };
+    const message = target.chat.messages[target.messageIndex];
+    const result3 = replaceNodeAndPruneState(chats, { ...input, role: message.role, content: input.content ?? message.content, removeCount }, contentStore);
+    if (result3.status !== "updated")
+      return result3;
+    return { ...result3, submitMode: "midchat", insertIndex: nextIndex };
+  }
+  function finalizeGenerationState(chats, chatIndex, targetNodeId, content, store) {
+    const chat = chats[chatIndex], node = chat?.branchTree?.nodes[targetNodeId];
+    if (!node)
+      return { status: "missing" };
+    const updatedChats = cloneChatAt(chats, chatIndex);
+    const updatedChat = updatedChats[chatIndex], tree = updatedChat.branchTree;
+    const contentStore = Object.fromEntries(Object.entries(store).map(([hash, entry]) => [hash, { ...entry }]));
+    releaseContent(contentStore, node.contentHash);
+    tree.nodes[targetNodeId] = { ...tree.nodes[targetNodeId], contentHash: addContent(contentStore, content) };
+    if (tree.activePath.includes(targetNodeId))
+      updatedChat.messages = materializeActivePath(tree, contentStore);
+    return { status: "updated", chats: updatedChats, contentStore };
+  }
+  var resolveAssistantPrefillKey = (chat, mode, insertIndex) => mode === "append" ? "__sticky__" : chat.branchTree?.activePath[(insertIndex ?? 1) - 1] ?? "__sticky__";
+
+  // shared/google-sync/generationPlan.ts
+  function generationPlan(json, capture) {
+    const input = JSON.parse(json);
+    const before = { chat: input.chat, contentStore: input.contentStore };
+    const isolated = structuredClone(before);
+    if (!Array.isArray(isolated.chat.messages) && isolated.chat.branchTree)
+      isolated.chat.messages = materializeActivePath(isolated.chat.branchTree, isolated.contentStore, true);
+    const run = () => {
+      let state = { chats: [isolated.chat], contentStore: isolated.contentStore };
+      const wasFlat = !isolated.chat.branchTree;
+      if (input.operation === "prepare" && !wasFlat) {
+        state = ensureBranchTreeState(state.chats, 0, state.contentStore);
+        if (input.viewingPath.some((id) => !Object.hasOwn(state.chats[0].branchTree.nodes, id)))
+          throw Error("Invalid viewing path.");
+        state.chats = switchActivePathState(state.chats, 0, input.viewingPath, state.contentStore);
+      }
+      let plan = input.plan;
+      if (input.operation === "prepare") {
+        let mode = "append", index = null;
+        if (input.action === "regenerate" || input.action === "continue") {
+          if (input.nodeID === void 0)
+            throw Error("Missing generation target.");
+          const nodeId = wasFlat && input.nodeID.startsWith("message-") ? input.nodeID.slice(8) : input.nodeID;
+          const target = { chatId: isolated.chat.id, nodeId };
+          const result3 = input.action === "regenerate" ? prepareRegenerateState(state.chats, target, state.contentStore) : prepareContinueState(state.chats, { ...target, content: input.parts }, state.contentStore);
+          if (result3.status !== "updated")
+            return JSON.stringify({ status: result3.status, changes: [], ..."blockedNodeIds" in result3 ? { blockedNodeIds: result3.blockedNodeIds } : {} });
+          if ("historyBase" in result3)
+            capture?.(result3.historyBase, result3);
+          state = { chats: result3.chats, contentStore: result3.contentStore };
+          mode = result3.submitMode;
+          index = result3.insertIndex;
+        } else if (input.action !== "append")
+          throw Error("Invalid generation action.");
+        const prefillKey = resolveAssistantPrefillKey(state.chats[0], mode, index);
+        const prepared = insertAssistantPlaceholder(state.chats, 0, mode, state.contentStore, index);
+        state = { chats: prepared.updatedChats, contentStore: prepared.contentStore };
+        const activePath = state.chats[0].branchTree.activePath;
+        plan = { targetNodeId: prepared.targetNodeId, messageIndex: prepared.messageIndex, activePath: [...activePath], requestPath: activePath.slice(0, prepared.messageIndex), prefillKey };
+      } else if (input.operation === "finalize") {
+        if (!plan || !Array.isArray(input.parts))
+          throw Error("Missing generation result.");
+        if (input.parts.length) {
+          const result3 = finalizeGenerationState(state.chats, 0, plan.targetNodeId, input.parts, state.contentStore);
+          if (result3.status !== "updated")
+            return JSON.stringify({ status: result3.status, changes: [] });
+          state = { chats: result3.chats, contentStore: result3.contentStore };
+        }
+      } else
+        throw Error("Invalid generation operation.");
+      for (const [hash, entry] of Object.entries(state.contentStore))
+        if (entry.delta && JSON.stringify(entry.delta) !== JSON.stringify(before.contentStore[hash]?.delta)) {
+          const content = resolveContent(state.contentStore, hash);
+          const { delta: _delta, ...full } = entry;
+          state.contentStore[hash] = { ...full, content };
+        }
+      const chat = state.chats[0];
+      if (chat.branchTree)
+        chat.messages = materializeActivePath(chat.branchTree, state.contentStore, true);
+      return JSON.stringify({ status: "updated", plan, changes: diffJSONChanges(before, JSON.parse(JSON.stringify({ chat, contentStore: state.contentStore }))) });
+    };
+    if (input.newIDs !== void 0)
+      return withEditingRuntime(input.newIDs, Object.keys(isolated.chat.branchTree?.nodes ?? {}), input.now, run);
+    const clock = Date.now;
+    Date.now = () => input.now;
+    try {
+      return run();
+    } finally {
+      Date.now = clock;
+    }
+  }
+
   // src/utils/branchHistory.ts
   var HISTORY_LIMIT = 50;
   var changedBranchChatIds = (previous, next, sameBranch = (a, b) => a.messages === b.messages && a.branchTree === b.branchTree) => {
@@ -14125,14 +14302,16 @@ ${message.content}` : message.content).join("\n\n").trim();
     const busy = input.busyChatIds ?? [];
     let output2 = {};
     if (input.operation === "edit") {
-      const bridges = { messageEdit, nodeRemoval, nodeOptions, treeEdit, branchClipboard };
+      const bridges = { messageEdit, nodeRemoval, nodeOptions, treeEdit, branchClipboard, generationPlan };
       const bridge = bridges[input.kind];
       if (!bridge)
         throw new Error("Invalid history edit.");
       const result3 = JSON.parse(bridge(JSON.stringify(input.input), (before, after) => {
         history = captureBranchHistory(history, before, after);
       }));
-      output2 = input.kind === "nodeOptions" || input.kind === "treeEdit" || input.kind === "branchClipboard" ? result3 : { changes: result3 };
+      output2 = input.kind === "nodeOptions" || input.kind === "treeEdit" || input.kind === "branchClipboard" || input.kind === "generationPlan" ? result3 : { changes: result3 };
+      if (input.kind === "generationPlan" && input.input.operation === "prepare" && result3.status === "updated")
+        history = invalidateBranchHistory(history, [input.input.chat.id]);
     } else if (input.operation === "undo" || input.operation === "redo") {
       const before = { chats: input.chats, contentStore: input.contentStore };
       const result3 = stepBranchHistory(history, before, input.operation, busy);

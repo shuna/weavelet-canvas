@@ -15,10 +15,6 @@ import { countTokens, updateTotalTokenUsed } from '@utils/messageUtils';
 import { getModelContextInfo } from '@utils/modelLookup';
 import { fitsContextWindow } from '@utils/tokenBudget';
 import {
-  appendNodeToActivePathState,
-  insertMessageAtIndexState,
-} from '@store/branch-domain';
-import {
   ChatInterface,
   ConfigInterface,
   GeneratingSession,
@@ -47,57 +43,7 @@ export type ResolvedProvider = {
 };
 export type SubmitMode = 'append' | 'midchat';
 
-export const createAssistantPlaceholder = (): MessageInterface => ({
-  role: 'assistant',
-  content: [{ type: 'text', text: '' }],
-});
-
-export const insertAssistantPlaceholder = (
-  chats: ChatInterface[],
-  chatIndex: number,
-  mode: SubmitMode,
-  contentStore: ContentStoreData,
-  insertIndex: number | null
-): {
-  updatedChats: ChatInterface[];
-  messageIndex: number;
-  targetNodeId: string;
-  contentStore: ContentStoreData;
-} => {
-  const assistantMessage = createAssistantPlaceholder();
-  const messageIndex =
-    mode === 'append' ? chats[chatIndex].messages.length : insertIndex ?? 0;
-
-  if (mode === 'append') {
-    const appended = appendNodeToActivePathState(
-      chats,
-      chatIndex,
-      'assistant',
-      assistantMessage.content,
-      contentStore
-    );
-    return {
-      updatedChats: appended.chats,
-      messageIndex,
-      targetNodeId: appended.newId,
-      contentStore: appended.contentStore,
-    };
-  }
-
-  const inserted = insertMessageAtIndexState(
-    chats,
-    chatIndex,
-    messageIndex,
-    assistantMessage,
-    contentStore
-  );
-  return {
-    updatedChats: inserted.chats,
-    messageIndex,
-    targetNodeId: inserted.newId,
-    contentStore: inserted.contentStore,
-  };
-};
+export { createAssistantPlaceholder, insertAssistantPlaceholder } from '@utils/generationPlan';
 
 export const buildGeneratingSession = (
   sessionId: string,

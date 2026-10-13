@@ -1,3 +1,4 @@
+import { prepareRegenerateState, prepareContinueState } from '@utils/generationPlan';
 import { branchClipboardState, type SequenceRange, type SequenceFailure } from './branch-clipboard';
 import { captureBranchHistory, invalidateBranchHistory, stepBranchHistory, canStepBranchHistory, type BranchSnapshot } from '@utils/branchHistory';
 import { invalidateAiTasks } from '@hooks/aiTaskLifetime';
@@ -119,6 +120,8 @@ type NodeEdit = NodeTarget & { role: Role; content: ContentInterface[] };
 type NodeResult = { status: 'updated' | 'unchanged' | 'chat-missing' | 'node-missing' | 'invalid-target' | 'protected' | 'busy' };
 
 export interface BranchSlice {
+  prepareRegenerateNode: (input: NodeTarget) => {status:string;submitMode?:'append'|'midchat';insertIndex?:number};
+  prepareContinueNode: (input: NodeTarget & {content:ContentInterface[]}) => {status:string;insertIndex?:number};
   contentStore: ContentStoreData;
   setContentStore: (contentStore: ContentStoreData) => void;
   applyBranchState: (
@@ -453,6 +456,18 @@ export const createBranchSlice: StoreSlice<BranchSlice> = (set, get) => {
     if (result.status !== 'updated') return result;
     get().applyBranchState(result.chats, result.contentStore, { historyBase: result.historyBase });
     return { status: 'updated', nodeId: result.nodeId };
+  },
+  prepareRegenerateNode: (input) => {
+    const result = prepareRegenerateState(withRuntimeFlatNodeMaps(get().chats,get()),input,get().contentStore);
+    if(result.status!=='updated')return result;
+    if('historyBase' in result)get().applyBranchState(result.chats,result.contentStore,{historyBase:result.historyBase});
+    return {status:'updated',submitMode:result.submitMode,insertIndex:result.insertIndex};
+  },
+  prepareContinueNode: (input) => {
+    const result=prepareContinueState(withRuntimeFlatNodeMaps(get().chats,get()),input,get().contentStore);
+    if(result.status!=='updated')return result;
+    get().applyBranchState(result.chats,result.contentStore,{historyBase:result.historyBase});
+    return {status:'updated',insertIndex:result.insertIndex};
   },
   removeNode: (input) => {
     const preserveNode = Object.values(get().generatingSessions).some(session => session.chatId === input.chatId && session.targetNodeId === input.nodeId);

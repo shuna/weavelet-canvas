@@ -60,9 +60,10 @@
     "src/store/provider-config.ts": "6c073c4b84fea5bffd1ccd9109abf3cb972379dd8a1393ab4475c293c24eaa0b",
     "src/store/provider-helpers.ts": "d8cd473cdba8eeb950294a784a7266a58d7aff80d31095cabd1c29459aa43ac1",
     "src/store/provider-slice.ts": "25afb7e1369d8fa9fc44cfe80a719022027027c604355c5054932945bb4da400",
+    "src/utils/generationPlan.ts": "dbda2b94cf30abfcbda13fbf9d88098d4818d7187d304663a4004780a9d4fde6",
     "src/store/branch-clipboard.ts": "41af5c4b6a80d15c0fcc13c4835318a74d1f65979e608fbcedf403eb8e5fd93b",
     "src/utils/branchHistory.ts": "df602c874e3e624217070847d34d28ad0ee93fe0c042c69c7eba8e704dd563ca",
-    "src/store/branch-slice.ts": "95971d3536c78fe461227075068737f28c27f652d45d58b10099f5da88af4cc0",
+    "src/store/branch-slice.ts": "109896405681ecfe273aee11991c2efafc031b4480643da6f0457a67e0a646e7",
     "src/store/storage/prepareSave.ts": "99e7f268013eabd2edb3686014a3e56b68e5f2e449f30108c376191878ce436f",
     "src/store/storage/google/metrics.ts": "988f9bfae513fa4cc69421cd2f9cde2ba08cefd05a2fe18bdb64426b2af12993",
     "src/store/storage/google/crypto.ts": "c1ca1e5735caf368fde182c900b1dfac2c32f13993b286136e0ae0b392c6041e",
@@ -140,6 +141,8 @@
     "src/utils/fileImport.ts": "9827cfdc6d4e1f3c1ffdcfbf16dbb35dcd04ec9370515299c4d36500c840caf5",
     "src/utils/fileImportProjection.ts": "41f36d09865a475d81b0929f1302e351e8ab6999b54b5fad015eea2fbe3d7fc2",
     "shared/google-sync/fileImport.ts": "616c8b88774276d152ca6c05ff84b9d180cd506f36d32cd1d784bbea9464928b",
+    "src/utils/generationPlan.ts": "dbda2b94cf30abfcbda13fbf9d88098d4818d7187d304663a4004780a9d4fde6",
+    "shared/google-sync/generationPlan.ts": "21a593b2a5d1018f1aab48b286e90a4af70efa6d4ea0555208c1b039fdcb5fa3",
     "src/utils/branchHistory.ts": "df602c874e3e624217070847d34d28ad0ee93fe0c042c69c7eba8e704dd563ca",
     "shared/google-sync/nodeRemoval.ts": "d7e6d28e38b5da3e9c1af23d67a5574336ff9a01a03a89c69c3c3ef9efcabcca",
     "src/utils/nodeOptions.ts": "e549f540ad7bb4be11377c56edaa995394639ab05f6a9e8a39fbf919878c18ac",
@@ -147,7 +150,7 @@
     "shared/google-sync/treeEdit.ts": "d77c1af8c52eca08f1eadc8ffca27bc7eb6918ef2748cd95e64e8edc7d3e46d4",
     "src/store/branch-clipboard.ts": "41af5c4b6a80d15c0fcc13c4835318a74d1f65979e608fbcedf403eb8e5fd93b",
     "shared/google-sync/branchClipboard.ts": "c6007c4267a954c11d659b1c8e5602bf40f491f6a1e897e8e989b42d92fa5f5d",
-    "shared/google-sync/branchHistory.ts": "aaeb5b4fc1e92e11782ffe21dbd303c4b0653c0068f18e468d473649263185a4",
+    "shared/google-sync/branchHistory.ts": "1891c120e15ffb3bbf98be841147a8781ff5267154428516c7682851e4a9b69c",
     "src/utils/branchSearch.ts": "bc8e0483f624ac6bee834f696c99b13345965c601903650238ef32ad22509962",
     "src/utils/chatSearch.ts": "ab0cec09d902d6527236c20a729ba4cb963a67c2485c640e7c5d4109cfef316a",
     "shared/google-sync/search.ts": "ac646051fe9d7c4e58512136592477fb6e1760ca53905e071dd3b2f7d4214047",
@@ -208,7 +211,7 @@
     "src/utils/remoteResponse.ts": "d4e9e92a91a6997656683701c2a26f9a62db0f1ba047ade5d816cfdc6cb45d74",
     "src/utils/thinkTagParser.ts": "8e8301456c2e9d14e5000fe30aac979404a61a1e358427858722091dbe382145",
     "shared/google-sync/remoteOutput.ts": "054fb79ed6166797ded127e6ba8bf74bc4bc72efb7f8429fad77df98bd933ac9",
-    "shared/google-sync/entry.ts": "3cc641ef191210a61236efd8fefb73a2736bd8b1f14bc41b3edf396e3948eb48",
+    "shared/google-sync/entry.ts": "03a46afcf0e58daabeccd168eecea48767841e8e645602b7fe6fa5a711b51528",
     "shared/google-sync/generate.mjs": "fe5cea14c3f66829c4627c74b4b790a15e6a660457b399e5413dcb1035afdc1b",
     "shared/google-sync/importDefaults.generate.mjs": "2ff8904af4f192ed0809ceaaabcfbefa708321083aebb527d712fc2a0551b15a"
   },
@@ -242,5 +245,5 @@
     "lodash/package.json": "8e41b07c744a0de0d2c1c23ed41418ecb0849abb56395d28802e601b4730d7c2",
     "lodash/LICENSE": "f71e8ed126b46346494aad5486874cd8f0aafe95092ed67d2e3cb6110f939abc"
   },
-  "bundleSHA256": "0aa35f806de22c232fb6230527a0469431d40d885a998085da368afde690d3a9"
+  "bundleSHA256": "13aef39451c5fc5272f09701dd40731e03a62ad0b2cc3d51fbe62b3a2747f2ae"
 }
