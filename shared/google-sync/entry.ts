@@ -201,7 +201,9 @@ export const cloudKitOperation = (inputJSON: string) => {
   }
 };
 
-export { generationUsage, generationObservation, generationLiveUsage } from "./usage";
+export { generationUsage, generationUsagePlan, generationObservation, generationLiveUsage, generationLiveUsagePlan } from "./usage";
+export { generationContext } from './generation';
+export { tokenizerOperation, tokenBudgetOperation } from './tokenizer';
 
 export { usageCost } from "./usageCost";
 

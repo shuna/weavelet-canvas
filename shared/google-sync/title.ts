@@ -8,12 +8,13 @@ import type { ReasoningModelState } from '../../src/utils/modelReasoning';
 
 type Selection = { status: 'ready'; model: string; providerId?: string; credentialProviderId?: string; endpoint: string;
   config: ConfigInterface; promptMessage: MessageInterface };
-type Input = { operation: 'select' | 'plan' | 'apply' | 'settings' | 'saveSettings'; chat: ChatInterface; autoTitle?: boolean; language?: string;
+type Input = { operation: 'select' | 'plan' | 'apply' | 'usagePlan' | 'settings' | 'saveSettings'; chat: ChatInterface; autoTitle?: boolean; language?: string;
   sourceConfig?: ConfigInterface; settings?: TitleSettings; selection?: Selection; responseText?: string;
   transport?: { hasApiKey: boolean; endpointURL: { protocol: string; hostname: string };
     apiVersion?: string; customHeaders?: Record<string, string>; viaProxy?: boolean };
   modelState?: ReasoningModelState; capabilities?: { supportsReasoning: boolean; requiresReasoning: boolean };
   countTotalTokens?: boolean; totalTokenUsed?: TotalTokenUsed;
+  counts?: {promptTokens: number; completionTokens: number};
   state?: Record<string, unknown>; value?: { autoTitle: boolean; titleModel: string; titleProviderId?: string } };
 
 /** The same title policy drives the Web caller and the native JSON bridge. */
@@ -61,6 +62,11 @@ export function titleOperation(json: string): string {
     return JSON.stringify({ status: 'ready', request, model: selection.model, providerId: selection.providerId,
       promptMessage: selection.promptMessage });
   }
+  if (input.operation === 'usagePlan') {
+    if (!input.selection || typeof input.responseText !== 'string') throw new Error('Missing title selection or response.');
+    return JSON.stringify({model: input.selection.model, promptMessages: [input.selection.promptMessage],
+      completionMessage: {role: 'assistant', content: [{type: 'text', text: normalizeGeneratedTitle(input.responseText)}]}});
+  }
   if (input.operation === 'apply') {
     if (!input.selection || typeof input.responseText !== 'string') throw new Error('Missing title selection or response.');
     if (input.chat.titleSet) return JSON.stringify({ status: 'skipped', changes: [] });
@@ -70,9 +76,8 @@ export function titleOperation(json: string): string {
     const before = { chat: input.chat, ...(input.countTotalTokens ? { totalTokenUsed: input.totalTokenUsed ?? {} } : {}) };
     const after: { chat: ChatInterface; totalTokenUsed?: TotalTokenUsed } = { ...before, chat };
     if (input.countTotalTokens) {
-      // shortcut: JSC has no Web tokenizer worker; replace these counts when a native tokenizer adapter exists.
       after.totalTokenUsed = addTokenUsage(input.totalTokenUsed ?? {}, input.selection.model, input.selection.providerId,
-        estimateTokensByChars([input.selection.promptMessage]), estimateTokensByChars([assistantMessage]),
+        input.counts?.promptTokens ?? estimateTokensByChars([input.selection.promptMessage]), input.counts?.completionTokens ?? estimateTokensByChars([assistantMessage]),
         countImageInputs([input.selection.promptMessage]));
     }
     return JSON.stringify({ status: 'updated', title, changes: diffJSONChanges(before, after),

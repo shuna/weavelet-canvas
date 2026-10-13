@@ -8477,11 +8477,14 @@ var WeaveletGoogleSync = (() => {
     fileImport: () => fileImport,
     folderOperation: () => folderOperation,
     folderRows: () => folderRows,
+    generationContext: () => generationContext,
     generationLiveUsage: () => generationLiveUsage,
+    generationLiveUsagePlan: () => generationLiveUsagePlan,
     generationObservation: () => generationObservation,
     generationPlan: () => generationPlan,
     generationRequest: () => generationRequest,
     generationUsage: () => generationUsage,
+    generationUsagePlan: () => generationUsagePlan,
     libraryDefaults: () => libraryDefaults,
     libraryOperation: () => libraryOperation,
     localGenerationInput: () => localGenerationInput,
@@ -8506,6 +8509,8 @@ var WeaveletGoogleSync = (() => {
     start: () => start,
     summaryOperation: () => summaryOperation,
     titleOperation: () => titleOperation,
+    tokenBudgetOperation: () => tokenBudgetOperation,
+    tokenizerOperation: () => tokenizerOperation,
     treeEdit: () => treeEdit,
     usageCost: () => usageCost
   });
@@ -11828,6 +11833,17 @@ var WeaveletGoogleSync = (() => {
     );
     return clampCompletionTokens(defaultReservedCompletion, normalizedContextLength);
   };
+  var getPromptBudgetForContext = (contextLength, requestedCompletionTokens) => {
+    const normalizedContextLength = normalizeContextLength(contextLength);
+    const reservedCompletion = getReservedCompletionTokens(
+      normalizedContextLength,
+      requestedCompletionTokens
+    );
+    return Math.max(
+      getMinPromptTokensForContext(normalizedContextLength),
+      normalizedContextLength - reservedCompletion
+    );
+  };
   var fitsContextWindow = (promptTokens, contextLength, requestedCompletionTokens) => {
     const normalizedContextLength = normalizeContextLength(contextLength);
     return Math.max(0, Math.floor(promptTokens)) + getReservedCompletionTokens(normalizedContextLength, requestedCompletionTokens) <= normalizedContextLength;
@@ -13901,11 +13917,12 @@ ${message.content}` : message.content).join("\n\n").trim();
       chat ? { chat, generatingNodeIds: input.generatingNodeIds ?? [] } : void 0
     );
   }
+  var generationContext = (json) => JSON.stringify(getGenerationMessages(JSON.parse(json)));
   var generationRequest = (json) => {
     const input = JSON.parse(json);
     if (input.modelState !== void 0)
       input.config = normalizeRemoteConfig(input.config, input.modelState);
-    const messages = input.auxiliary ? input.messages ?? [] : getGenerationMessages(input);
+    const messages = input.tokenMessages ?? (input.auxiliary ? input.messages ?? [] : getGenerationMessages(input));
     if (messages.length === 0)
       throw new Error("\u9001\u4FE1\u3059\u308B\u672C\u6587\u304C\u3042\u308A\u307E\u305B\u3093");
     const body = buildRequestBody(
@@ -14372,7 +14389,7 @@ ${JSON.stringify(input.length === 1 ? input[0] : input)}`;
       if (hardOpenRouterConstraints(selection.config.openRouter) && !isOpenRouterURL(input.transport.endpointURL))
         throw new Error("OpenRouter auxiliary constraints require an OpenRouter endpoint.");
       const context = remoteModelContextInfo(input.modelState ?? {}, selection.model, selection.providerId).contextLength;
-      if (!fitsContextWindow(estimateTokensByChars([selection.promptMessage]), context, selection.config.max_tokens))
+      if (!fitsContextWindow(input.promptTokens ?? estimateTokensByChars([selection.promptMessage]), context, selection.config.max_tokens))
         throw new Error("\u8981\u7D04\u5BFE\u8C61\u304C\u30E2\u30C7\u30EB\u306E\u30B3\u30F3\u30C6\u30AD\u30B9\u30C8\u4E0A\u9650\u3092\u8D85\u3048\u3066\u3044\u307E\u3059");
       const request3 = JSON.parse(generationRequest(JSON.stringify({
         auxiliary: true,
@@ -14390,6 +14407,20 @@ ${JSON.stringify(input.length === 1 ? input[0] : input)}`;
       })));
       return JSON.stringify({ request: request3 });
     }
+    if (input.operation === "usagePlan") {
+      if (!input.selection || typeof input.responseText !== "string")
+        throw new Error("Missing summary selection or response.");
+      const selection = input.selection, text = normalizeBubbleSummaryText(input.responseText);
+      const path = input.chat.branchTree?.activePath ?? input.chat.messages.map((_23, index) => String(index));
+      const indices = selection.sourceNodeIds.map((id) => path.indexOf(id));
+      return JSON.stringify({
+        model: selection.model,
+        promptMessages: [selection.promptMessage],
+        completionMessage: { role: "assistant", content: [{ type: "text", text }] },
+        originalMessages: indices.some((index) => index < 0) ? [] : indices.map((index) => input.chat.messages[index]),
+        replacementMessage: bubbleSummarySubmitMessage({ ...selection.summary, text })
+      });
+    }
     if (input.operation === "apply") {
       if (!input.selection || typeof input.responseText !== "string")
         throw new Error("Missing summary selection or response.");
@@ -14404,8 +14435,8 @@ ${JSON.stringify(input.length === 1 ? input[0] : input)}`;
         input.totalTokenUsed ?? {},
         selection.model,
         selection.providerId,
-        estimateTokensByChars([selection.promptMessage]),
-        estimateTokensByChars([completion]),
+        input.counts?.promptTokens ?? estimateTokensByChars([selection.promptMessage]),
+        input.counts?.completionTokens ?? estimateTokensByChars([completion]),
         0
       );
       const metadata = {
@@ -14430,8 +14461,8 @@ ${JSON.stringify(input.length === 1 ? input[0] : input)}`;
         const indices = selection.sourceNodeIds.map((id) => path.indexOf(id));
         if (indices.some((index) => index < 0))
           throw new Error("\u5BFE\u8C61\u306E\u539F\u6587\u3084\u72B6\u614B\u304C\u5909\u308F\u308A\u307E\u3057\u305F\u3002\u5BFE\u8C61\u3092\u78BA\u8A8D\u3057\u3066\u751F\u6210\u3057\u76F4\u3057\u3066\u304F\u3060\u3055\u3044\u3002");
-        const originalTokens = estimateTokensByChars(indices.map((index) => input.chat.messages[index]));
-        const replacementTokens = estimateTokensByChars([bubbleSummarySubmitMessage(saved)]);
+        const originalTokens = input.counts?.originalTokens ?? estimateTokensByChars(indices.map((index) => input.chat.messages[index]));
+        const replacementTokens = input.counts?.replacementTokens ?? estimateTokensByChars([bubbleSummarySubmitMessage(saved)]);
         const result3 = evaluateBubbleSummary(input.chat, selection, text, input.generatingNodeIds, originalTokens, replacementTokens);
         after.chat = result3.chat;
         return JSON.stringify({
@@ -14514,6 +14545,15 @@ ${JSON.stringify(input.length === 1 ? input[0] : input)}`;
         promptMessage: selection.promptMessage
       });
     }
+    if (input.operation === "usagePlan") {
+      if (!input.selection || typeof input.responseText !== "string")
+        throw new Error("Missing title selection or response.");
+      return JSON.stringify({
+        model: input.selection.model,
+        promptMessages: [input.selection.promptMessage],
+        completionMessage: { role: "assistant", content: [{ type: "text", text: normalizeGeneratedTitle(input.responseText) }] }
+      });
+    }
     if (input.operation === "apply") {
       if (!input.selection || typeof input.responseText !== "string")
         throw new Error("Missing title selection or response.");
@@ -14529,8 +14569,8 @@ ${JSON.stringify(input.length === 1 ? input[0] : input)}`;
           input.totalTokenUsed ?? {},
           input.selection.model,
           input.selection.providerId,
-          estimateTokensByChars([input.selection.promptMessage]),
-          estimateTokensByChars([assistantMessage]),
+          input.counts?.promptTokens ?? estimateTokensByChars([input.selection.promptMessage]),
+          input.counts?.completionTokens ?? estimateTokensByChars([assistantMessage]),
           countImageInputs([input.selection.promptMessage])
         );
       }
@@ -25431,6 +25471,18 @@ ${messageContent}---
   var liveCompletionForCounting = (message) => message?.content[0]?.type === "text" ? message : void 0;
 
   // shared/google-sync/usage.ts
+  function generationUsagePlan(json) {
+    const input = JSON.parse(json);
+    return JSON.stringify(prepareSubmitUsage(input.chat, input.targetNodeId, input.generatingNodeIds) ?? null);
+  }
+  function generationLiveUsagePlan(json) {
+    const input = JSON.parse(json);
+    return JSON.stringify({
+      model: input.config.model,
+      promptMessages: getGenerationMessages(input),
+      completionMessage: liveCompletionForCounting({ role: "assistant", content: input.completionParts }) ?? null
+    });
+  }
   function generationUsage(json) {
     const input = JSON.parse(json);
     if (!input.countTotalTokens)
@@ -25439,7 +25491,7 @@ ${messageContent}---
     if (!prepared)
       return JSON.stringify({ changes: [] });
     const totals = input.totalTokenUsed ?? {};
-    const updated = addPreparedSubmitUsage(totals, prepared, prepared.kind === "estimated" ? {
+    const updated = addPreparedSubmitUsage(totals, prepared, prepared.kind === "estimated" ? input.counts ?? {
       promptTokens: estimateTokensByChars(prepared.promptMessages),
       completionTokens: estimateTokensByChars([prepared.completionMessage])
     } : void 0);
@@ -25459,12 +25511,58 @@ ${messageContent}---
     const prompt = getGenerationMessages(input);
     const completionMessage = { role: "assistant", content: input.completionParts };
     const countableCompletion = liveCompletionForCounting(completionMessage);
-    const completionTokens = countableCompletion ? estimateTokensByChars([countableCompletion]) : 0;
+    const completionTokens = countableCompletion ? input.counts?.completionTokens ?? estimateTokensByChars([countableCompletion]) : 0;
     return JSON.stringify({ [buildTokenUsageKey(input.config.model, input.config.providerId)]: {
-      promptTokens: estimateTokensByChars(prompt),
+      promptTokens: input.counts?.promptTokens ?? estimateTokensByChars(prompt),
       completionTokens,
       imageTokens: countImageInputs(prompt)
     } });
+  }
+
+  // src/utils/tokenizerCountingCore.ts
+  var ensureNonZeroTokenCount = (count, messages) => {
+    const hasText = messages.some((message) => message.content.some((part) => isTextContent(part) && part.text.trim().length > 0));
+    return count > 0 || !hasText ? count : estimateTokensByChars(messages);
+  };
+  var fallbackLimitMessageIndices = (messages, limit) => {
+    const indices = [];
+    let tokens = 0;
+    for (let i = messages.length - 1; i >= 0; i--) {
+      const estimate = estimateTokensByChars([messages[i]]);
+      if (estimate + tokens > limit)
+        break;
+      tokens += estimate;
+      indices.unshift(i);
+    }
+    return indices;
+  };
+
+  // src/utils/liveTokenUsage.ts
+  var LIVE_TOKEN_RECOUNT_THROTTLE_MS = 300;
+
+  // shared/google-sync/tokenizer.ts
+  function tokenizerOperation(json) {
+    const input = JSON.parse(json);
+    switch (input.operation) {
+      case "ensureCount":
+        return JSON.stringify(ensureNonZeroTokenCount(input.count, input.messages));
+      case "fallbackCount":
+        return JSON.stringify(estimateTokensByChars(input.messages));
+      case "fallbackLimit":
+        return JSON.stringify(fallbackLimitMessageIndices(input.messages, input.limit));
+      case "throttle":
+        return JSON.stringify(LIVE_TOKEN_RECOUNT_THROTTLE_MS);
+    }
+    throw new Error("Unknown tokenizer operation.");
+  }
+  function tokenBudgetOperation(json) {
+    const input = JSON.parse(json);
+    const context = remoteModelContextInfo(input.modelState ?? {}, input.config.model, input.config.providerId);
+    return JSON.stringify({
+      ...context,
+      promptBudget: getPromptBudgetForContext(context.contextLength, input.config.max_tokens),
+      ...input.promptTokens === void 0 ? {} : { fits: fitsContextWindow(input.promptTokens, context.contextLength, input.config.max_tokens) }
+    });
   }
 
   // src/utils/modelCostCore.ts

@@ -82,3 +82,14 @@ it('shows originals when an applied range contains an omitted source', () => {
   expect(last.tab).toBe('original');
   expect(applyBubbleSummariesForSubmit(value, 2)).toEqual([value.messages[1]]);
 });
+
+it('uses tokenizer summary usage and savings counts with the shared source order', () => {
+  const value = chat(), selection = select(value);
+  const plan = call({operation: 'usagePlan', chat: value, selection, responseText: '  Short  '});
+  expect(plan.originalMessages).toEqual(value.messages);
+  expect(plan.completionMessage.content[0].text).toBe('Short');
+  const result = call({operation: 'apply', chat: value, selection, responseText: '  Short  ',
+    counts: {promptTokens: 123, completionTokens: 45, originalTokens: 100, replacementTokens: 1}});
+  expect(result.savesTokens).toBe(true);
+  expect(result.changes).toContainEqual({op: 'set', path: ['totalTokenUsed', result.usageKey], value: {promptTokens: 123, completionTokens: 45, imageTokens: 0}});
+});

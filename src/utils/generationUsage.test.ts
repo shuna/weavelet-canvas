@@ -25,6 +25,13 @@ const chat = (): ChatInterface => ({
 const call = (input: object) => JSON.parse(generationUsage(JSON.stringify(input)));
 
 describe('generation usage shared with Web', () => {
+  it('accepts tokenizer counts while retaining observed counter precedence', () => {
+    const source = chat();
+    const input = {chat: source, targetNodeId: 'd', countTotalTokens: true, totalTokenUsed: {}, counts: {promptTokens: 123, completionTokens: 45}};
+    expect(call(input).changes).toContainEqual({op: 'set', path: ['totalTokenUsed', 'model:::openrouter'], value: {promptTokens: 123, completionTokens: 45, imageTokens: 0}});
+    source.branchTree!.nodes.d.openRouterObservation = {promptTokens: 0, completionTokens: 0};
+    expect(call(input).changes).toContainEqual({op: 'set', path: ['totalTokenUsed', 'model:::openrouter'], value: {promptTokens: 0, completionTokens: 0, imageTokens: 0}});
+  });
   it('uses complete zero-valued observation and preserves image and unknown fields', () => {
     const source = chat();
     source.branchTree!.nodes.d.openRouterObservation = { promptTokens: 0, completionTokens: 0 };

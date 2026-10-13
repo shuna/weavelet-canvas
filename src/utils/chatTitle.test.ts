@@ -62,3 +62,13 @@ describe('shared title operation', () => {
         { op: 'set', path: ['titleProviderId'], value: 'openai' }]);
   });
 });
+
+it('accepts tokenizer title counts after the shared title normalization', () => {
+  const selection = call({operation: 'select', chat, autoTitle: true, language: 'ja',
+    settings: {favoriteModels: [], providers: {}, fallbackProvider: {endpoint: 'https://fixture.invalid/v1/chat/completions'}}});
+  const plan = call({operation: 'usagePlan', selection, responseText: '  "Title"  '});
+  expect(plan.completionMessage.content[0].text).toBe('Title');
+  const result = call({operation: 'apply', chat, selection, responseText: '  "Title"  ', countTotalTokens: true,
+    totalTokenUsed: {}, counts: {promptTokens: 123, completionTokens: 45}});
+  expect(result.changes).toContainEqual({op: 'set', path: ['totalTokenUsed', result.usageKey], value: {promptTokens: 123, completionTokens: 45, imageTokens: 0}});
+});

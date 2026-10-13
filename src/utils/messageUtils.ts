@@ -3,9 +3,9 @@ import { countImageInputs } from '@utils/cost';
 import { addTokenUsage, estimateTokensByChars } from '@utils/chatTitle';
 import {
   MessageInterface,
-  isTextContent,
 } from '@type/chat';
 import { ModelOptions } from '@type/chat';
+import { ensureNonZeroTokenCount, fallbackLimitMessageIndices } from './tokenizerCountingCore';
 
 type WorkerPayload =
   | { type: 'init' }
@@ -140,19 +140,6 @@ export const onEncoderReady = (fn: () => void): (() => void) => {
   return () => listeners.delete(fn);
 };
 
-const hasCountableText = (messages: MessageInterface[]): boolean =>
-  messages.some((message) =>
-    message.content.some((part) => isTextContent(part) && part.text.trim().length > 0)
-  );
-
-const ensureNonZeroTokenCount = (
-  count: number,
-  messages: MessageInterface[]
-): number => {
-  if (count > 0 || !hasCountableText(messages)) return count;
-  return estimateTokensByChars(messages);
-};
-
 export const countTokens = async (
   messages: MessageInterface[],
   model: ModelOptions
@@ -178,20 +165,8 @@ export const countTokens = async (
   }
 };
 
-const fallbackLimitMessages = (
-  messages: MessageInterface[],
-  limit: number
-): MessageInterface[] => {
-  const limited: MessageInterface[] = [];
-  let tokens = 0;
-  for (let i = messages.length - 1; i >= 0; i--) {
-    const est = estimateTokensByChars([messages[i]]);
-    if (est + tokens > limit) break;
-    tokens += est;
-    limited.unshift(messages[i]);
-  }
-  return limited;
-};
+const fallbackLimitMessages = (messages: MessageInterface[], limit: number): MessageInterface[] =>
+  fallbackLimitMessageIndices(messages, limit).map(index => messages[index]);
 
 export const limitMessageTokens = async (
   messages: MessageInterface[],

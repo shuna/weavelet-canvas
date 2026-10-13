@@ -25,10 +25,12 @@ export function getGenerationMessages(input: GenerationContextInput): MessageInt
     input.config.model, path, input.omittedNodes ?? chat?.omittedNodes, input.config.systemPrompt,
     chat ? { chat, generatingNodeIds: input.generatingNodeIds ?? [] } : undefined);
 }
+export const generationContext = (json: string): string => JSON.stringify(getGenerationMessages(JSON.parse(json)));
 
 export const generationRequest = (json: string): string => {
   const input: {
     messages?: MessageInterface[];
+    tokenMessages?: MessageInterface[];
     contentStore?: ContentStoreData;
     chat?: ChatInterface;
     generatingNodeIds?: string[];
@@ -41,7 +43,7 @@ export const generationRequest = (json: string): string => {
     capabilities?: { supportsReasoning: boolean; requiresReasoning: boolean };
   } = JSON.parse(json);
   if (input.modelState !== undefined) input.config = normalizeRemoteConfig(input.config, input.modelState);
-  const messages = input.auxiliary ? input.messages ?? [] : getGenerationMessages(input);
+  const messages = input.tokenMessages ?? (input.auxiliary ? input.messages ?? [] : getGenerationMessages(input));
   if (messages.length === 0) throw new Error('送信する本文がありません');
   const body = buildRequestBody(messages, input.config, input.modelState !== undefined
     ? getRequestReasoningCapabilities(input.config, input.modelState) : input.capabilities!,

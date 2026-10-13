@@ -11,12 +11,13 @@ import { officialAPIEndpoint } from '../../src/store/provider-config';
 import type { BubbleSummary, ChatInterface, ConfigInterface, MessageInterface, TotalTokenUsed } from '../../src/types/chat';
 import type { ReasoningModelState } from '../../src/utils/modelReasoning';
 
-type Input = { operation: 'select' | 'plan' | 'apply' | 'mutate' | 'describe'; chat: ChatInterface;
+type Input = { operation: 'select' | 'plan' | 'apply' | 'usagePlan' | 'mutate' | 'describe'; chat: ChatInterface;
   sourceNodeIds?: string[]; mode?: BubbleSummary['mode']; originNodeId?: string; format?: BubbleSummary['format'];
   config?: ConfigInterface; settings?: SummarySettings; summaryId?: string; now?: number; generatingNodeIds?: string[]; busyJobs?: BusySummaryJob[];
   selection?: SummarySelection; modelState?: ReasoningModelState;
   transport?: { endpointURL: { protocol: string; hostname: string }; hasApiKey: boolean; apiVersion?: string; customHeaders?: Record<string, string>; viaProxy?: boolean };
   responseText?: string; finishReason?: string; stale?: boolean; countTotalTokens?: boolean; totalTokenUsed?: TotalTokenUsed;
+  promptTokens?: number; counts?: {promptTokens: number; completionTokens: number; originalTokens?: number; replacementTokens?: number};
   action?: 'remove' | 'use' | 'target'; nodeId?: string; use?: boolean; chosenSummaryId?: string };
 
 export function summaryOperation(json: string): string {
@@ -46,9 +47,8 @@ export function summaryOperation(json: string): string {
     if (!input.transport.hasApiKey && selection.endpoint === officialAPIEndpoint) throw new Error('noApiKeyWarning');
     if (hardOpenRouterConstraints(selection.config.openRouter) && !isOpenRouterURL(input.transport.endpointURL))
       throw new Error('OpenRouter auxiliary constraints require an OpenRouter endpoint.');
-    // shortcut: JSC has no Web tokenizer worker; replace this estimate when a native tokenizer adapter exists.
     const context = remoteModelContextInfo(input.modelState ?? {}, selection.model, selection.providerId).contextLength;
-    if (!fitsContextWindow(estimateTokensByChars([selection.promptMessage]), context, selection.config.max_tokens))
+    if (!fitsContextWindow(input.promptTokens ?? estimateTokensByChars([selection.promptMessage]), context, selection.config.max_tokens))
       throw new Error('要約対象がモデルのコンテキスト上限を超えています');
     const request = JSON.parse(generationRequest(JSON.stringify({ auxiliary: true, messages: [selection.promptMessage],
       config: selection.config, modelState: input.modelState,
@@ -56,6 +56,16 @@ export function summaryOperation(json: string): string {
         hasApiKey: input.transport.hasApiKey, apiVersion: input.transport.apiVersion,
         customHeaders: input.transport.customHeaders, viaProxy: input.transport.viaProxy } })));
     return JSON.stringify({ request });
+  }
+  if (input.operation === 'usagePlan') {
+    if (!input.selection || typeof input.responseText !== 'string') throw new Error('Missing summary selection or response.');
+    const selection = input.selection, text = normalizeBubbleSummaryText(input.responseText);
+    const path = input.chat.branchTree?.activePath ?? input.chat.messages.map((_, index) => String(index));
+    const indices = selection.sourceNodeIds.map(id => path.indexOf(id));
+    return JSON.stringify({model: selection.model, promptMessages: [selection.promptMessage],
+      completionMessage: {role: 'assistant', content: [{type: 'text', text}]},
+      originalMessages: indices.some(index => index < 0) ? [] : indices.map(index => input.chat.messages[index]),
+      replacementMessage: bubbleSummarySubmitMessage({...selection.summary, text})});
   }
   if (input.operation === 'apply') {
     if (!input.selection || typeof input.responseText !== 'string') throw new Error('Missing summary selection or response.');
@@ -67,7 +77,7 @@ export function summaryOperation(json: string): string {
     const after = { ...before };
     const completion: MessageInterface = { role: 'assistant', content: [{ type: 'text', text }] };
     after.totalTokenUsed = addTokenUsage(input.totalTokenUsed ?? {}, selection.model, selection.providerId,
-      estimateTokensByChars([selection.promptMessage]), estimateTokensByChars([completion]), 0);
+      input.counts?.promptTokens ?? estimateTokensByChars([selection.promptMessage]), input.counts?.completionTokens ?? estimateTokensByChars([completion]), 0);
     const metadata = { usageKey: selection.providerId ? `${selection.model}:::${selection.providerId}` : selection.model,
       counterFields: ['promptTokens', 'completionTokens', 'imageTokens'] };
     if (input.stale) return JSON.stringify({ changes: diffJSONChanges(before, after), ...metadata,
@@ -79,8 +89,8 @@ export function summaryOperation(json: string): string {
       const path = input.chat.branchTree?.activePath ?? input.chat.messages.map((_, index) => String(index));
       const indices = selection.sourceNodeIds.map(id => path.indexOf(id));
       if (indices.some(index => index < 0)) throw new Error('対象の原文や状態が変わりました。対象を確認して生成し直してください。');
-      const originalTokens = estimateTokensByChars(indices.map(index => input.chat.messages[index]));
-      const replacementTokens = estimateTokensByChars([bubbleSummarySubmitMessage(saved)]);
+      const originalTokens = input.counts?.originalTokens ?? estimateTokensByChars(indices.map(index => input.chat.messages[index]));
+      const replacementTokens = input.counts?.replacementTokens ?? estimateTokensByChars([bubbleSummarySubmitMessage(saved)]);
       const result = evaluateBubbleSummary(input.chat, selection, text, input.generatingNodeIds, originalTokens, replacementTokens);
       after.chat = result.chat;
       return JSON.stringify({ changes: diffJSONChanges(before, after), summary: result.summary,
