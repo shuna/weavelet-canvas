@@ -665,3 +665,9 @@ fc195ef1/f045577aで独自の二次元LCS tableを既存diff-match-patch1.0.5へ
 03c6f8e3で現在枝との比較・同会話の2node比較を分岐menuへ接続した。実Web handleNodeDiffのLCA/trimを既存branchUtilsのbuildNodeDiffPathsへ切り出し、Webとnativeが同じ元を呼ぶ。nativeはdeltaの読取り投影、背景JSC呼出、SwiftUIの差分/両原文/選択copyだけを担当し、保存文書を変更しない。source key変更で比較対象とsheetを破棄し、結果公開時にも会話IDと元データを照合する。
 
 担当Catalyst関連9件（比較境界の追加2件を含む）・build・型検査・bundle鮮度成功を再利用。ログ /private/tmp/weavelet-native-branch-diff-{test,build,tsc,generate}.log。統合は同sourceのcherry-pickのみで差分確認成功、独立Astraは新規P2以上なし。FAKE実画面確認はMacロックで開始できず、比較sheet表示/VoiceOver/狭幅は未確認。clone processも起動していない。複数会話graph/多選択の操作は後続範囲であり、全Branch editor完成とはしない。
+
+## 会話一覧・共通操作・設定の配置（2026-10-14）
+
+7d847396でWeb Menuの配置を基準に、一覧上部へ既存検索（library初期mode）、一覧下端へ同期/ファイル/設定を置いた。共通file importer/exporter・取込確認・検索/設定sheetはNavigationSplitView全体へ接続し、compact一覧から利用できるようにした。compact/detailOnlyでは詳細側の代替入口を保持する。設定は一般・会話設定・同期とデータ・評価・ローカルモデルへ分類、画面名を「設定」にした。通常会話行はiconと一行title、明示的選択modeだけ44ptのcheck操作を出す。既存選択/move/delete/生成guard/保存失敗表示を再利用し、新規業務処理は追加していない。
+
+担当最終Catalyst build・差分確認成功（/tmp/weavelet-native-sidebar-placement-{build,diff-check}.log）を再利用。親統合の差分確認成功、独立Astraは新規P2以上なし。UI入口の移動だけのため業務ruleや全暗号化同期suiteを複製・再実行しない。実表示、compactでのsheet遷移、最大文字サイズ/VoiceOverはMacロックにより未確認。実機へ今回版を再installしていない。プロンプト管理など未実装機能を配置変更で完成扱いにはしない。
