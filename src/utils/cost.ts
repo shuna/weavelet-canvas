@@ -1,96 +1,15 @@
-import { getModelCost, isKnownModel, type ModelCostEntry } from '@utils/modelLookup';
-import type { MessageInterface, TotalTokenUsed } from '@type/chat';
+import { getModelCost, isKnownModel } from '@utils/modelLookup';
+import type { TotalTokenUsed } from '@type/chat';
 import type { ProviderId } from '@type/provider';
+import { calculateUsageCostCore } from './costCore';
 
-export type UsageCostResult =
-  | { kind: 'known'; cost: number; isFree: boolean }
-  | { kind: 'unknown'; reason: 'model-not-registered' | 'no-pricing-data' };
-
-export const parseTokenKey = (
-  key: string
-): { modelId: string; providerId?: ProviderId } => {
-  const sep = key.indexOf(':::');
-  if (sep >= 0) {
-    return {
-      modelId: key.slice(0, sep),
-      providerId: key.slice(sep + 3) as ProviderId,
-    };
-  }
-  return { modelId: key };
-};
-
+export type { UsageCostResult } from './costCore';
+export { parseTokenKey, buildTokenUsageKey, mergeTotalTokenUsed } from './costCore';
 export { countImageInputs } from './chatTitle';
 
-export const buildTokenUsageKey = (
-  modelId: string,
-  providerId?: ProviderId
-): string => (providerId ? `${modelId}:::${providerId}` : modelId);
-
-export const mergeTotalTokenUsed = (
-  base: TotalTokenUsed,
-  increment: TotalTokenUsed
-): TotalTokenUsed => {
-  const merged: TotalTokenUsed = { ...base };
-
-  Object.entries(increment).forEach(([key, usage]) => {
-    if (!usage) return;
-    const existing = merged[key] ?? {
-      promptTokens: 0,
-      completionTokens: 0,
-      imageTokens: 0,
-    };
-
-    merged[key] = {
-      promptTokens: existing.promptTokens + usage.promptTokens,
-      completionTokens: existing.completionTokens + usage.completionTokens,
-      imageTokens: existing.imageTokens + usage.imageTokens,
-    };
-  });
-
-  return merged;
-};
-
-const resolveUnitCost = (
-  priceEntry: ModelCostEntry['prompt'] | ModelCostEntry['image'] | undefined,
-  usage: number
-): number | null => {
-  if (!priceEntry) return usage === 0 ? 0 : null;
-  if (priceEntry.price == null) return usage === 0 ? 0 : null;
-  return (priceEntry.price / priceEntry.unit) * usage;
-};
-
-export const calculateUsageCost = (
-  usage: TotalTokenUsed[string] | undefined,
-  modelId: string,
-  providerId?: ProviderId
-): UsageCostResult => {
-  if (!usage) return { kind: 'known', cost: 0, isFree: true };
-
-  const costEntry = getModelCost(modelId, providerId);
-  if (!costEntry) {
-    return isKnownModel(modelId)
-      ? { kind: 'unknown', reason: 'no-pricing-data' }
-      : { kind: 'unknown', reason: 'model-not-registered' };
-  }
-
-  const promptCost = resolveUnitCost(costEntry.prompt, usage.promptTokens);
-  const completionCost = resolveUnitCost(
-    costEntry.completion,
-    usage.completionTokens
-  );
-  const imageCost = resolveUnitCost(costEntry.image, usage.imageTokens);
-
-  if (promptCost == null || completionCost == null || imageCost == null) {
-    return { kind: 'unknown', reason: 'no-pricing-data' };
-  }
-
-  const totalCost = promptCost + completionCost + imageCost;
-  return {
-    kind: 'known',
-    cost: totalCost,
-    isFree:
-      (costEntry.prompt.price ?? 0) === 0 &&
-      (costEntry.completion.price ?? 0) === 0 &&
-      (costEntry.image?.price ?? 0) === 0,
-  };
+export const calculateUsageCost = (usage: TotalTokenUsed[string] | undefined,
+  modelId: string, providerId?: ProviderId) => {
+  if (!usage) return calculateUsageCostCore(usage, undefined, false);
+  const cost = getModelCost(modelId, providerId);
+  return calculateUsageCostCore(usage, cost, cost ? true : isKnownModel(modelId));
 };

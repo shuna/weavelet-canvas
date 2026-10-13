@@ -9,13 +9,9 @@ import {
 } from './tokenBudget';
 import { getMaxCompletionTokensForContext } from './tokenBudget';
 import { localModelRuntime } from '@src/local-llm/runtime';
+import { getModelCostCore, isKnownModelCore, type ModelCostEntry } from './modelCostCore';
 
-
-export interface ModelCostEntry {
-  prompt: { price: number | null; unit: number };
-  completion: { price: number | null; unit: number };
-  image?: { price: number | null; unit: number };
-}
+export type { ModelCostEntry } from './modelCostCore';
 
 export function getModelType(
   modelId: string,
@@ -111,35 +107,7 @@ export function getModelCost(
   modelSource?: 'remote' | 'local'
 ): ModelCostEntry | undefined {
   if (modelSource === 'local') return undefined;
-  const state = useStore.getState();
-
-  const custom = findProviderCustomModel(state.providerCustomModels, modelId, providerId);
-  if (custom) {
-    return {
-      prompt: { price: custom.promptPrice ?? null, unit: 1_000_000 },
-      completion: { price: custom.completionPrice ?? null, unit: 1_000_000 },
-      image: { price: custom.imagePrice ?? null, unit: 1 },
-    };
-  }
-
-  const fav = findFavorite(state.favoriteModels, modelId, providerId);
-  if (fav) {
-    return {
-      prompt: { price: fav.promptPrice ?? null, unit: 1_000_000 },
-      completion: { price: fav.completionPrice ?? null, unit: 1_000_000 },
-      image: { price: fav.imagePrice ?? null, unit: 1 },
-    };
-  }
-
-  const cached = findCachedModel(state.providerModelCache, modelId, providerId);
-  if (cached) {
-    return {
-      prompt: { price: cached.promptPrice ?? null, unit: 1_000_000 },
-      completion: { price: cached.completionPrice ?? null, unit: 1_000_000 },
-    };
-  }
-
-  return undefined;
+  return getModelCostCore(useStore.getState(), modelId, providerId, modelSource);
 }
 
 export function getModelSupportsReasoning(modelId: string, providerId?: ProviderId, modelSource?: 'remote' | 'local'): boolean {
@@ -261,21 +229,7 @@ export function useModelCapabilities(
 }
 
 export function isKnownModel(modelId: string): boolean {
-  const state = useStore.getState();
-
-  if (state.providerCustomModels) {
-    for (const models of Object.values(state.providerCustomModels)) {
-      if (models?.some((m) => m.modelId === modelId)) return true;
-    }
-  }
-
-  if (state.favoriteModels.some((f) => f.modelId === modelId)) return true;
-
-  for (const models of Object.values(state.providerModelCache)) {
-    if (models?.some((m) => m.id === modelId)) return true;
-  }
-
-  return false;
+  return isKnownModelCore(useStore.getState(), modelId);
 }
 
 export function getModelDefaultMaxTokens(
