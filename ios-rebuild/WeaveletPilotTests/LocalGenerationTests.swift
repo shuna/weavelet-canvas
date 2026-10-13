@@ -66,6 +66,40 @@ import XCTest
         XCTAssertEqual(after["xRoot"],before["xRoot"])
         XCTAssertEqual(try after.required("chats").array("chats")[0]["config"],try before.required("chats").array("chats")[0]["config"])
     }
+    func testPrefillUsesSharedKeysAndOutputAndStaysOutOfSavedState() async throws {
+        let store = try store()
+        let state = try state(store) { _, request, output in
+            XCTAssertEqual(request.assistantPrefix,"seed:")
+            XCTAssertTrue(try XCTUnwrap(request.fallbackPrompt).hasSuffix("assistant:seed:"))
+            _ = try await output("generated")
+        }
+        try install(state,store:store)
+        let key = state.stickyPrefillKey
+        state.setAssistantPrefill(key:key,text:" \u{FEFF}seed: ")
+        try state.startGeneration(input:"prefill input")
+        XCTAssertEqual(state.generation?.output.text,"seed:")
+        try await wait { state.generation == nil }
+        XCTAssertEqual(state.assistantPrefill(key:key),"")
+        XCTAssertEqual(state.conversation?.visibleMessages.last?.parts,[.text("seed:generated")])
+        let user = try XCTUnwrap(state.conversation?.visibleMessages.last(where:{$0.role == "user"}))
+        let assistant = try XCTUnwrap(state.conversation?.visibleMessages.last)
+        // Web treats last-message regeneration as append; add a successor to exercise midchat.
+        var tail = try state.messageDraft(nodeID:nil)
+        tail.role = "user"; tail.text = "Following user"
+        try state.saveMessage(tail,mode:.append)
+        state.setAssistantPrefill(key:state.assistantPrefillKey(nodeID:user.id),text:"seed:")
+        state.setAssistantPrefill(key:key,text:"sticky draft must survive")
+        let draft = try state.messageGenerationDraft(nodeID:assistant.id,operation:.regenerate)
+        try state.startGeneration(draft)
+        try await wait { state.generation == nil }
+        XCTAssertEqual(state.assistantPrefill(key:state.assistantPrefillKey(nodeID:user.id)),"")
+        XCTAssertEqual(state.assistantPrefill(key:key),"sticky draft must survive")
+        let restarted = ChatState(store:store)
+        XCTAssertEqual(restarted.assistantPrefill(key:key),"")
+        XCTAssertEqual(try restarted.exportWebData(),try state.exportWebData())
+        XCTAssertFalse(String(decoding:try Data(contentsOf:store.fileURL),as:UTF8.self).contains("sticky draft must survive"))
+    }
+
     func testLocalStopKeepsPartialOutputOnSaveFailureThenRetries() async throws {
         let store = try store()
         let finished = expectation(description:"Cancelled generator delivered its late callback")
@@ -76,15 +110,17 @@ import XCTest
             catch { _ = try await output("late output after stop") }
         }
         try install(state,store:store)
+        state.setAssistantPrefill(key:state.stickyPrefillKey,text:"seed:")
         try state.startGeneration(input:"local stop")
-        try await wait { state.generation?.output.text == "local partial" }
+        state.setAssistantPrefill(key:state.stickyPrefillKey,text:"next generation draft")
+        try await wait { state.generation?.output.text == "seed:local partial" }
         let prepared = try state.exportWebData(), disk = try Data(contentsOf:store.fileURL)
         let moved = store.fileURL.appendingPathExtension("saved")
         try FileManager.default.moveItem(at:store.fileURL,to:moved)
         try FileManager.default.createDirectory(at:store.fileURL,withIntermediateDirectories:false)
         state.stopGeneration()
         XCTAssertEqual(state.generation?.running,false)
-        XCTAssertEqual(state.generation?.output.text,"local partial")
+        XCTAssertEqual(state.generation?.output.text,"seed:local partial")
         XCTAssertEqual(try state.exportWebData(),prepared)
         XCTAssertEqual(try Data(contentsOf:moved),disk)
         try FileManager.default.removeItem(at:store.fileURL)
@@ -92,6 +128,7 @@ import XCTest
         try state.saveGenerationResult()
         XCTAssertNil(state.generation)
         await fulfillment(of:[finished],timeout:2)
-        XCTAssertEqual(ChatState(store:store).conversation?.visibleMessages.last?.parts,[.text("local partial")])
+        XCTAssertEqual(ChatState(store:store).conversation?.visibleMessages.last?.parts,[.text("seed:local partial")])
+        XCTAssertEqual(state.assistantPrefill(key:state.stickyPrefillKey),"next generation draft")
     }
 }

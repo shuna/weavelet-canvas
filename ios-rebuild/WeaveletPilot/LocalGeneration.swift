@@ -48,10 +48,11 @@ enum SharedGenerationContext {
 struct LocalGenerationRequest {
     let engine: LocalLlamaRequest
     let input: OrderedJSON
-    static func make(source: OrderedJSON, chat: OrderedJSON, config: OrderedJSON, path: [String]) throws -> Self {
+    static func make(source: OrderedJSON, chat: OrderedJSON, config: OrderedJSON, path: [String], assistantPrefill: String? = nil) throws -> Self {
         var boundary = SharedWebProjection()
         let projected = try boundary.requestConfig(config)
-        let fields = try SharedGenerationContext.fields(source:source,chat:chat,config:projected,path:path,boundary:&boundary)
+        var fields = try SharedGenerationContext.fields(source:source,chat:chat,config:projected,path:path,boundary:&boundary)
+        if let assistantPrefill { fields.append(.init(key:"assistantPrefill",value:.string(assistantPrefill))) }
         let projectedInput = try SharedWebOperations.call("localGenerationInput",.object(fields))
         let input = try OrderedJSONChanges.apply(.array([.object([.init(key:"op",value:.string("set")),.init(key:"path",value:.array([])),.init(key:"value",value:projectedInput)])]),to:.null,opaque:boundary.opaque)
         let options = try input.required("options")

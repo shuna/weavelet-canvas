@@ -95,6 +95,9 @@ struct ChatView: View {
                             }
                             .id(node.identity)
                             .disabled(state.generation != nil)
+                            if state.isLocalConversation && node.role == "user" && !node.options.collapsed {
+                                prefillInput(key:state.assistantPrefillKey(nodeID:node.id))
+                            }
                         }
                         if state.exchange != nil {
                             Button("本文を追加", systemImage: "plus.bubble") {
@@ -156,6 +159,7 @@ struct ChatView: View {
                                     }
                                 }
                             }
+                            if state.isLocalConversation { prefillInput(key:state.stickyPrefillKey) }
                             Button("送信", systemImage: "paperplane") {
                                 do {
                                     try state.sendComposer()
@@ -326,6 +330,17 @@ struct ChatView: View {
         }
         .environment(\.markdownSettings, (try? state.publicationSnapshot().required("state")) ?? .object([]))
     }
+    private func prefillInput(key: String) -> some View {
+        DisclosureGroup("アシスタントの先頭文") {
+            TextField("応答の書き出し",text:Binding(
+                get:{ state.assistantPrefill(key:key) },
+                set:{ state.setAssistantPrefill(key:key,text:$0) }),axis:.vertical)
+                .lineLimit(2...6).textFieldStyle(.roundedBorder)
+            Text("端末内の生成で使う一時入力です。生成中に変更した内容は次回用に残ります。")
+                .font(.caption).foregroundStyle(.secondary)
+        }
+    }
+
     private func prepareImport(_ data: Data, filename: String, allowPartialImport: Bool = false) {
         isPreparingImport = true
         Task {

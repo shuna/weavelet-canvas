@@ -105,6 +105,8 @@ final class ChatState: ObservableObject {
     @Published private(set) var remoteSettings = RemoteSettings()
     @Published var generationError: String?
     @Published private var composerDrafts: [Data:ComposerDraft] = [:]
+    @Published private var assistantPrefills: [Data:String] = [:]
+    private(set) var stickyPrefillKey = ""
     private var generationTask: Task<Void, Never>?
     private let store: LocalStateStore?
     private let localGenerate: LocalLlama.Generator
@@ -122,6 +124,7 @@ final class ChatState: ObservableObject {
         self.store = store
         self.localGenerate = localGenerate
         do {
+            stickyPrefillKey = try SharedWebOperations.call("assistantPrefill",.object([.init(key:"operation",value:.string("resolve")),.init(key:"mode",value:.string("append")),.init(key:"insertIndex",value:.null)])).required("key").string("prefill key")
             branchCandidates = try BranchNavigation.candidates(in: siblingSource(conversations))
             if let saved = try store?.load() {
                 let candidates = try BranchNavigation.candidates(in: saved.exchange.source)
@@ -506,6 +509,29 @@ final class ChatState: ObservableObject {
         remoteSettings = record.settings
     }
 
+    var isLocalConversation: Bool {
+        guard let chats = try? exchange?.source.required("chats").array("chats") else { return false }
+        return chats.first { $0["id"] == .string(selectedID) }?["config"]?["modelSource"] == .string("local")
+    }
+    func assistantPrefill(key: String) -> String { assistantPrefills[Data(key.utf8)] ?? "" }
+    func setAssistantPrefill(key: String, text: String) { assistantPrefills[Data(key.utf8)] = text }
+    func assistantPrefillKey(nodeID: String) -> String {
+        if let chats = try? exchange?.source.required("chats").array("chats"),
+           chats.first(where: { $0["id"] == .string(selectedID) })?["branchTree"] == nil,
+           nodeID.hasPrefix("message-") { return String(nodeID.dropFirst(8)) }
+        return nodeID
+    }
+    private func consumeAssistantPrefill(key: String, prefix: OrderedJSON?) {
+        do {
+            var fields: [JSONField] = [.init(key:"operation",value:.string("consume")),.init(key:"modelSource",value:.string("local"))]
+            if let draft = assistantPrefills[Data(key.utf8)] { fields.append(.init(key:"draft",value:.string(draft))) }
+            if let prefix { fields.append(.init(key:"prefix",value:prefix)) }
+            if try SharedWebOperations.call("assistantPrefill",.object(fields)).required("consumed").boolean("consumed prefill") {
+                assistantPrefills.removeValue(forKey:Data(key.utf8))
+            }
+        } catch { generationError = "先頭文の入力状態を更新できませんでした。入力は保持しています。\n" + error.localizedDescription }
+    }
+
     func composerDraft(chatID: String) -> ComposerDraft { composerDrafts[Data(chatID.utf8)] ?? .empty }
     func composerImageDetail(chatID: String) throws -> String {
         guard let chat = try exchange?.source.required("chats").array("chats").first(where: { try $0.required("id").string("id").utf8.elementsEqual(chatID.utf8) }) else { throw ExchangeError.invalid("入力先の会話がありません") }
@@ -623,20 +649,30 @@ final class ChatState: ObservableObject {
     private func beginLocalGeneration(source: OrderedJSON, chat: OrderedJSON, chatID: String, path: [String], history: MessageEditing.HistoryState?, plan: OrderedJSON?, now: Double) throws {
         let config = try chat.required("config")
         let modelID = try config.required("model").string("model")
-        let modelURL = try localModelFiles.installed(modelID:modelID)
-        let request = try LocalGenerationRequest.make(source:source,chat:chat,config:config,path:path)
-        try applyLibrary(source,selectedID:chatID,resetViewFor:chatID,editing:history,now:now)
-        let id = UUID()
-        generation = ActiveGeneration(id:id,chatID:chatID,baseSource:try publishedSource(),path:path,plan:plan)
-        generationError = nil
-        generationTask = Task { @MainActor [weak self] in
-            guard let self else { return }
-            do {
-                try await self.localGenerate(modelURL,request.engine) { [weak self] text in
-                    try await self?.receiveLocalOutput(text,id:id,input:request.input) ?? true
-                }
-                self.finishGeneration(id:id,error:nil)
-            } catch { self.finishGeneration(id:id,error:error) }
+        let prefillKey = try plan?["prefillKey"]?.string("prefill key") ?? stickyPrefillKey
+        let request = try LocalGenerationRequest.make(source:source,chat:chat,config:config,path:path,assistantPrefill:assistantPrefills[Data(prefillKey.utf8)])
+        let prefix = request.input["assistantPrefix"]
+        do {
+            let modelURL = try localModelFiles.installed(modelID:modelID)
+            var output = RemoteOutput()
+            _ = try output.consumeLocal("",input:request.input)
+            try applyLibrary(source,selectedID:chatID,resetViewFor:chatID,editing:history,now:now)
+            let id = UUID()
+            generation = ActiveGeneration(id:id,chatID:chatID,baseSource:try publishedSource(),path:path,plan:plan,output:output)
+            generationError = nil
+            generationTask = Task { @MainActor [weak self] in
+                guard let self else { return }
+                defer { self.consumeAssistantPrefill(key:prefillKey,prefix:prefix) }
+                do {
+                    try await self.localGenerate(modelURL,request.engine) { [weak self] text in
+                        try await self?.receiveLocalOutput(text,id:id,input:request.input) ?? true
+                    }
+                    self.finishGeneration(id:id,error:nil)
+                } catch { self.finishGeneration(id:id,error:error) }
+            }
+        } catch {
+            consumeAssistantPrefill(key:prefillKey,prefix:prefix)
+            throw error
         }
     }
 
@@ -735,6 +771,7 @@ final class ChatState: ObservableObject {
     }
 
     private func applyLibrary(_ source: OrderedJSON, selectedID: String, resetViewFor: String? = nil, resetViewsFor: [String] = [], preserveGeneration: Bool = false, navigation: BranchNavigation.HistoryResult? = nil, editing: MessageEditing.HistoryState? = nil, clipboard: OrderedJSON? = nil, now: Double = Date().timeIntervalSince1970 * 1000) throws {
+        guard !initialLoadFailed else { throw ExchangeError.invalid("保存ファイルを読めなかったため更新できません。明示的な置換が必要です") }
         let base = try document ?? SyncDocument(v3: exchange?.source ?? ChatLibrary.emptySource)
         let before = try exchange?.source ?? base.uiProjection()
         var candidate = try base.applyingV3Edits(source, comparedTo: before, now: now)
@@ -786,6 +823,7 @@ final class ChatState: ObservableObject {
         return try ChatExport.make(v3:v3,format:format,scope:scope,chatID:conversation?.id,visiblePath:scope == .all ? nil : conversation?.visibleMessages.map(\.id),compressed:compressed)
     }
     func applySnapshot(_ snapshot: OrderedJSON) throws {
+        guard !initialLoadFailed else { throw ExchangeError.invalid("保存ファイルを読めなかったため更新できません。明示的な置換が必要です") }
         let base = try document ?? SyncDocument(v3: exchange?.source ?? ChatLibrary.emptySource)
         let candidate = try base.mergingSnapshot(snapshot)
         try applyDocument(candidate)

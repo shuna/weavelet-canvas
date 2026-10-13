@@ -111,7 +111,15 @@ final class LocalStateStoreTests: XCTestCase {
             state.style = .bubbles
             state.selectSibling("10", of: "2")
             XCTAssertThrowsError(try state.importWebData(Data("invalid import".utf8)))
+            XCTAssertThrowsError(try state.createChat(defaults:.webInitial()))
+            XCTAssertThrowsError(try state.applyFolder(.create(id:"must-not-replace-unread-file")))
+            let snapshot = try SyncDocument(v3:source()).snapshot
+            XCTAssertThrowsError(try state.applySnapshot(snapshot))
             XCTAssertEqual(try Data(contentsOf: store.fileURL), malformed)
+            XCTAssertNil(state.exchange)
+            try state.importWebData(source().encoded())
+            try state.createChat(defaults:.webInitial(),id:"after-explicit-replacement")
+            XCTAssertEqual(ChatState(store:store).selectedConversationID,"after-explicit-replacement")
         }
     }
 
