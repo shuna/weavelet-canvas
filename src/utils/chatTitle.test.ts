@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { _defaultChatConfig } from '@constants/chatDefaults';
 import type { ChatInterface } from '@type/chat';
+import { addTokenUsage } from './chatTitle';
 import { titleOperation } from '../../shared/google-sync/title';
 
 const chat = { id: 'chat', title: 'New Chat', titleSet: false, config: _defaultChatConfig,
@@ -11,19 +12,22 @@ const chat = { id: 'chat', title: 'New Chat', titleSet: false, config: _defaultC
 const call = (input: object) => JSON.parse(titleOperation(JSON.stringify(input)));
 
 describe('shared title operation', () => {
+  it('retains Web defaults for missing usage counters', () => {
+    expect(addTokenUsage({ model: { promptTokens: 3 } } as any, 'model', undefined, 2, 4, 1)).toMatchObject({ model: { promptTokens: 5, completionTokens: 4, imageTokens: 1 } });
+  });
   it('selects the Web title model and provider and patches only title and usage', () => {
-    const selection = call({ operation: 'select', chat, autoTitle: true, language: 'ja', settings: {
+    const selection = call({ operation: 'select', chat: { ...chat, config: { ...chat.config, modelSource: 'local' } }, autoTitle: true, language: 'ja', settings: {
       titleModel: 'openai/gpt-4.1', titleProviderId: 'openrouter', favoriteModels: [], providers: {
         openrouter: { id: 'openrouter', name: 'OpenRouter', endpoint: 'https://openrouter.ai/api/v1/chat/completions', modelsRequireAuth: true },
       }, fallbackProvider: { endpoint: 'https://api.openai.com/v1/chat/completions' },
     } });
     expect(selection).toMatchObject({ status: 'ready', model: 'openai/gpt-4.1', providerId: 'openrouter',
-      credentialProviderId: 'openrouter', config: { openRouter: { responseCache: { mode: 'off' } } } });
+      credentialProviderId: 'openrouter', config: { modelSource: 'remote', openRouter: { responseCache: { mode: 'off' } } } });
     expect(selection.promptMessage.content.at(-1).text).toContain('language: ja');
     vi.stubGlobal('URL', undefined);
     let plan;
     try {
-      plan = call({ operation: 'plan', chat, selection, capabilities: { supportsReasoning: false, requiresReasoning: false },
+      plan = call({ operation: 'plan', chat, selection, modelState: { favoriteModels: [], providers: {} }, capabilities: { supportsReasoning: false, requiresReasoning: false },
         transport: { hasApiKey: true, endpointURL: { protocol: 'https:', hostname: 'openrouter.ai' }, viaProxy: true } });
     } finally { vi.unstubAllGlobals(); }
     expect(plan.request.body).toMatchObject({ model: 'openai/gpt-4.1', stream: false,

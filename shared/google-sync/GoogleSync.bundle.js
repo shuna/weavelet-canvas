@@ -7500,1904 +7500,31 @@ var WeaveletGoogleSync = (() => {
     result: () => result2,
     settle: () => settle,
     start: () => start,
+    titleOperation: () => titleOperation,
     treeEdit: () => treeEdit
   });
 
-  // shared/google-sync/importDefaults.generated.json
-  var importDefaults_generated_default = {
-    keys: [
-      "lastContentEditedAt",
-      "apiKey",
-      "apiVersion",
-      "apiEndpoint",
-      "theme",
-      "autoTitle",
-      "titleModel",
-      "titleProviderId",
-      "bubbleSummaryConfig",
-      "advancedMode",
-      "prompts",
-      "defaultChatConfig",
-      "defaultSystemMessage",
-      "hideMenuOptions",
-      "hideSideMenu",
-      "folders",
-      "enterToSubmit",
-      "inlineLatex",
-      "markdownMode",
-      "streamingMarkdownPolicy",
-      "totalTokenUsed",
-      "countTotalTokens",
-      "displayChatSize",
-      "menuWidth",
-      "defaultImageDetail",
-      "animateBubbleNavigation",
-      "branchSwipeDirection",
-      "providers",
-      "favoriteModels",
-      "providerModelCache",
-      "providerCustomModels",
-      "_legacyCustomModels",
-      "onboardingCompleted",
-      "splitPanelRatio",
-      "splitPanelSwapped",
-      "chatActiveView",
-      "proxyEnabled",
-      "proxyEndpoint",
-      "proxyAuthToken",
-      "showDebugPanel",
-      "searchHistory",
-      "sidebarSearchHistory",
-      "chatFindHistory",
-      "verifiedStats",
-      "pendingVerifications",
-      "evaluationSettings",
-      "safetyThresholds",
-      "qualityThresholds",
-      "evaluationResults",
-      "localModelEnabled",
-      "localModels",
-      "favoriteLocalModelIds",
-      "localModelExecutionMode",
-      "activeLocalModels",
-      "savedModelMeta",
-      "chats",
-      "contentStore",
-      "branchClipboard"
-    ],
-    values: {
-      apiEndpoint: "https://api.openai.com/v1/chat/completions",
-      theme: "dark",
-      autoTitle: false,
-      titleModel: "",
-      advancedMode: true,
-      prompts: [
-        {
-          id: "0d3e9cb7-b585-43fa-acc3-840c189f6b93",
-          name: "English Translator",
-          prompt: "I want you to act as an English translator, spelling corrector and improver. I will speak to you in any language and you will detect the language, translate it and answer in the corrected and improved version of my text, in English. I want you to replace my simplified A0-level words and sentences with more beautiful and elegant, upper level English words and sentences. Keep the meaning same, but make them more literary. I want you to only reply the correction, the improvements and nothing else, do not write explanations. Do you understand?"
-        }
-      ],
-      defaultChatConfig: {
-        model: "",
-        max_tokens: 4e3,
-        temperature: 1,
-        presence_penalty: 0,
-        top_p: 1,
-        frequency_penalty: 0,
-        stream: true,
-        reasoning_effort: "none",
-        reasoning_budget_tokens: 0
-      },
-      defaultSystemMessage: "You are a large language model assistant.\nCarefully heed the user's instructions. \nRespond using Markdown.",
-      hideMenuOptions: false,
-      hideSideMenu: false,
-      folders: {},
-      enterToSubmit: true,
-      inlineLatex: false,
-      markdownMode: true,
-      streamingMarkdownPolicy: "auto",
-      totalTokenUsed: {},
-      countTotalTokens: false,
-      displayChatSize: false,
-      menuWidth: 260,
-      defaultImageDetail: "auto",
-      animateBubbleNavigation: true,
-      branchSwipeDirection: "left-next",
-      providers: {
-        openrouter: {
-          id: "openrouter",
-          name: "OpenRouter",
-          endpoint: "https://openrouter.ai/api/v1/chat/completions",
-          modelsEndpoint: "https://openrouter.ai/api/v1/models",
-          modelsRequireAuth: false
-        },
-        openai: {
-          id: "openai",
-          name: "OpenAI",
-          endpoint: "https://api.openai.com/v1/chat/completions",
-          modelsEndpoint: "https://api.openai.com/v1/models",
-          modelsRequireAuth: true
-        },
-        mistral: {
-          id: "mistral",
-          name: "Mistral",
-          endpoint: "https://api.mistral.ai/v1/chat/completions",
-          modelsEndpoint: "https://api.mistral.ai/v1/models",
-          modelsRequireAuth: true
-        },
-        groq: {
-          id: "groq",
-          name: "Groq",
-          endpoint: "https://api.groq.com/openai/v1/chat/completions",
-          modelsEndpoint: "https://api.groq.com/openai/v1/models",
-          modelsRequireAuth: true
-        },
-        together: {
-          id: "together",
-          name: "Together AI",
-          endpoint: "https://api.together.xyz/v1/chat/completions",
-          modelsEndpoint: "https://api.together.xyz/v1/models",
-          modelsRequireAuth: true
-        },
-        cohere: {
-          id: "cohere",
-          name: "Cohere",
-          endpoint: "https://api.cohere.ai/v2/chat",
-          modelsEndpoint: "https://api.cohere.ai/v2/models",
-          modelsRequireAuth: true
-        },
-        perplexity: {
-          id: "perplexity",
-          name: "Perplexity",
-          endpoint: "https://api.perplexity.ai/chat/completions",
-          modelsRequireAuth: false
-        },
-        deepseek: {
-          id: "deepseek",
-          name: "DeepSeek",
-          endpoint: "https://api.deepseek.com/chat/completions",
-          modelsEndpoint: "https://api.deepseek.com/models",
-          modelsRequireAuth: true
-        },
-        xai: {
-          id: "xai",
-          name: "xAI",
-          endpoint: "https://api.x.ai/v1/chat/completions",
-          modelsEndpoint: "https://api.x.ai/v1/models",
-          modelsRequireAuth: true
-        },
-        fireworks: {
-          id: "fireworks",
-          name: "Fireworks",
-          endpoint: "https://api.fireworks.ai/inference/v1/chat/completions",
-          modelsEndpoint: "https://api.fireworks.ai/inference/v1/models",
-          modelsRequireAuth: true
-        }
-      },
-      favoriteModels: [],
-      providerModelCache: {},
-      providerCustomModels: {},
-      onboardingCompleted: false,
-      splitPanelRatio: 0.5,
-      splitPanelSwapped: false,
-      chatActiveView: "chat",
-      proxyEnabled: false,
-      proxyEndpoint: "",
-      proxyAuthToken: "",
-      showDebugPanel: false,
-      searchHistory: [],
-      sidebarSearchHistory: [],
-      chatFindHistory: [],
-      verifiedStats: {},
-      pendingVerifications: {},
-      evaluationSettings: {
-        safetyPreSend: "manual",
-        safetyPostReceive: "manual",
-        qualityPreSend: "manual",
-        qualityPostReceive: "manual",
-        safetyEngine: "remote",
-        hybridRemoteOnSafe: true
-      },
-      safetyThresholds: {
-        sexual: {
-          review: 0.8,
-          block: 0.95
-        },
-        hate: {
-          review: 0.7,
-          block: 0.9
-        },
-        harassment: {
-          review: 0.75,
-          block: 0.92
-        },
-        "self-harm": {
-          review: 0.55,
-          block: 0.85
-        },
-        "sexual/minors": {
-          review: 0.08,
-          block: 0.2
-        },
-        "hate/threatening": {
-          review: 0.35,
-          block: 0.7
-        },
-        "violence/graphic": {
-          review: 0.55,
-          block: 0.82
-        },
-        violence: {
-          review: 0.75,
-          block: 0.93
-        },
-        "harassment/threatening": {
-          review: 0.45,
-          block: 0.75
-        },
-        "self-harm/intent": {
-          review: 0.35,
-          block: 0.7
-        },
-        "self-harm/instructions": {
-          review: 0.2,
-          block: 0.45
-        },
-        illicit: {
-          review: 0.7,
-          block: 0.9
-        },
-        "illicit/violent": {
-          review: 0.25,
-          block: 0.55
-        }
-      },
-      qualityThresholds: {
-        taskCompletion: {
-          red: 0.5,
-          green: 0.8
-        },
-        faithfulness: {
-          red: 0.5,
-          green: 0.8
-        },
-        coherence: {
-          red: 0.5,
-          green: 0.8
-        },
-        conciseness: {
-          red: 0.5,
-          green: 0.8
-        },
-        instructionFollowing: {
-          red: 0.5,
-          green: 0.8
-        }
-      },
-      evaluationResults: {},
-      localModelEnabled: false,
-      localModels: [],
-      favoriteLocalModelIds: [],
-      localModelExecutionMode: "sequential",
-      activeLocalModels: {},
-      savedModelMeta: {},
-      contentStore: {},
-      branchClipboard: null
-    }
+  // src/utils/api.ts
+  var isAzureEndpoint = (endpoint) => {
+    return endpoint.includes("openai.azure.com");
   };
 
-  // src/types/chat.ts
-  var roles = ["user", "assistant", "system"];
-  function strToTextContent(ob) {
-    return {
-      type: "text",
-      text: ob
-    };
-  }
-  function isTextContent(ob) {
-    return ob !== void 0 && ob !== null && ob.type === "text";
-  }
-  function isImageContent(ob) {
-    return ob !== void 0 && ob !== null && ob.image_url !== void 0;
-  }
-  function isToolCallContent(ob) {
-    return ob !== void 0 && ob !== null && ob.type === "tool_call";
-  }
-  function isToolResultContent(ob) {
-    return ob !== void 0 && ob !== null && ob.type === "tool_result";
-  }
-
-  // src/utils/contentValidation.ts
-  var hasMeaningfulContent = (content) => content.some((part) => {
-    if (isImageContent(part))
-      return true;
-    return isTextContent(part) && part.text.trim().length > 0;
-  });
-  var hasMeaningfulMessageContent = (messages) => messages.some((message) => hasMeaningfulContent(message.content));
-
-  // src/utils/messageText.ts
-  var firstTextIndex = (content) => content.findIndex((item) => item.type === "text");
-  var textValueOf = (content) => {
-    const index = firstTextIndex(content);
-    return index >= 0 ? content[index].text : "";
-  };
-  var replaceTextValue = (content, text) => {
-    const index = firstTextIndex(content);
-    if (index < 0) {
-      return [{ type: "text", text }, ...content];
-    }
-    const next = [...content];
-    next[index] = { ...content[index], text };
-    return next;
-  };
-
-  // src/utils/branchUtils.ts
-  var import_lodash = __toESM(require_lodash(), 1);
-
-  // src/utils/streamingBuffer.ts
-  var STREAMING_CONTENT_HASH_PREFIX = "__streaming:";
-  var streamingBuffers = /* @__PURE__ */ new Map();
-  var cloneContentItem = (content) => {
-    if (content.type === "image_url")
-      return { ...content, image_url: { ...content.image_url } };
-    return { ...content };
-  };
-  var cloneContent = (content) => content.map(cloneContentItem);
-  var bufferKey = (chatId, nodeId) => JSON.stringify([chatId, nodeId]);
-  var isStreamingContentHash = (hash) => hash.startsWith(STREAMING_CONTENT_HASH_PREFIX);
-  var getStreamingTargetFromHash = (hash) => {
-    if (!isStreamingContentHash(hash))
-      return null;
-    try {
-      const target = JSON.parse(hash.slice(STREAMING_CONTENT_HASH_PREFIX.length));
-      return Array.isArray(target) && target.length === 2 && target.every((value) => typeof value === "string") ? { chatId: target[0], nodeId: target[1] } : null;
-    } catch {
-      return null;
-    }
-  };
-  var getBufferedContent = (chatId, nodeId) => {
-    const key = bufferKey(chatId, nodeId);
-    const entry = streamingBuffers.get(key);
-    return entry ? cloneContent(entry.content) : void 0;
-  };
-  var peekBufferedContent = (chatId, nodeId) => {
-    const key = bufferKey(chatId, nodeId);
-    return streamingBuffers.get(key)?.content;
-  };
-  var finalizeStreamingSnapshotState = (chats, contentStore) => {
-    if (!chats || chats.length === 0) {
-      return { chats, contentStore, changed: false };
-    }
-    let updatedChats = chats;
-    let updatedContentStore = contentStore;
-    let changed = false;
-    const rematerializedChatIndexes = /* @__PURE__ */ new Set();
-    chats.forEach((chat, chatIndex) => {
-      const tree = chat.branchTree;
-      if (!tree)
-        return;
-      Object.values(tree.nodes).forEach((node) => {
-        if (!isStreamingContentHash(node.contentHash))
-          return;
-        const bufferedContent = getBufferedContent(chat.id, node.id);
-        if (!bufferedContent)
-          return;
-        if (!changed) {
-          updatedChats = chats.slice();
-          updatedContentStore = Object.fromEntries(Object.entries(contentStore).map(([hash, entry]) => [hash, { ...entry }]));
-          changed = true;
-        }
-        if (updatedChats[chatIndex] === chats[chatIndex]) {
-          updatedChats = cloneChatAt(updatedChats, chatIndex);
-        }
-        const updatedChat = updatedChats[chatIndex];
-        const updatedTree = updatedChat.branchTree;
-        updatedTree.nodes[node.id] = {
-          ...updatedTree.nodes[node.id],
-          contentHash: addContent(updatedContentStore, bufferedContent)
-        };
-        rematerializedChatIndexes.add(chatIndex);
-      });
-    });
-    rematerializedChatIndexes.forEach((chatIndex) => {
-      const chat = updatedChats[chatIndex];
-      if (!chat.branchTree)
-        return;
-      chat.messages = materializeActivePath(chat.branchTree, updatedContentStore);
-    });
-    return { chats: updatedChats, contentStore: updatedContentStore, changed };
-  };
-
-  // src/utils/contentStore.ts
-  var import_diff_match_patch = __toESM(require_diff_match_patch());
-  var dmp = new import_diff_match_patch.diff_match_patch();
-  var MAX_CHAIN_DEPTH = 5;
-  var pendingGCHashes = /* @__PURE__ */ new Set();
-  var DELTA_SIZE_THRESHOLD = 0.7;
-  function isDeltaEligible(content) {
-    return content.length > 0 && content.every((c) => c.type === "text");
-  }
-  function computeContentHash(content) {
-    const str = JSON.stringify(content);
-    let hash = 2166136261;
-    for (let i = 0; i < str.length; i++) {
-      hash ^= str.charCodeAt(i);
-      hash = hash * 16777619 >>> 0;
-    }
-    return hash.toString(36);
-  }
-  function getChainDepth(store, hash) {
-    let depth = 0;
-    let current = hash;
-    const visited = /* @__PURE__ */ new Set();
-    while (store[current]?.delta) {
-      if (visited.has(current))
-        return MAX_CHAIN_DEPTH + 1;
-      visited.add(current);
-      depth++;
-      current = store[current].delta.baseHash;
-    }
-    return depth;
-  }
-  function contentToText(content) {
-    return JSON.stringify(content);
-  }
-  function addContent(store, content) {
-    let hash = computeContentHash(content);
-    const serialized = JSON.stringify(content);
-    while (store[hash] && !isContentMatch(store, hash, serialized)) {
-      hash += "_";
-    }
-    if (store[hash]) {
-      store[hash].refCount++;
-    } else {
-      store[hash] = { content, refCount: 1 };
-    }
-    return hash;
-  }
-  function isContentMatch(store, hash, serialized) {
-    const entry = store[hash];
-    if (!entry)
-      return false;
-    if (entry.delta) {
-      const resolved = resolveContent(store, hash);
-      return JSON.stringify(resolved) === serialized;
-    }
-    return JSON.stringify(entry.content) === serialized;
-  }
-  function addContentDelta(store, content, baseHash) {
-    const baseEntry = store[baseHash];
-    if (!baseEntry)
-      return addContent(store, content);
-    if (!isDeltaEligible(content))
-      return addContent(store, content);
-    const baseContent = resolveContent(store, baseHash);
-    if (!isDeltaEligible(baseContent))
-      return addContent(store, content);
-    if (getChainDepth(store, baseHash) >= MAX_CHAIN_DEPTH - 1) {
-      return addContent(store, content);
-    }
-    let hash = computeContentHash(content);
-    const serialized = JSON.stringify(content);
-    while (store[hash] && !isContentMatch(store, hash, serialized)) {
-      hash += "_";
-    }
-    if (store[hash]) {
-      store[hash].refCount++;
-      return hash;
-    }
-    const baseText = contentToText(baseContent);
-    const newText = contentToText(content);
-    const patches = dmp.patch_make(baseText, newText);
-    const patchText = dmp.patch_toText(patches);
-    if (patchText.length >= newText.length * DELTA_SIZE_THRESHOLD) {
-      store[hash] = { content, refCount: 1 };
-      return hash;
-    }
-    store[hash] = {
-      content: [],
-      refCount: 1,
-      delta: {
-        baseHash,
-        patches: patchText
-      }
-    };
-    return hash;
-  }
-  function retainContent(store, hash) {
-    if (isStreamingContentHash(hash))
-      return;
-    if (store[hash]) {
-      store[hash].refCount++;
-    }
-  }
-  function promoteDependents(store, baseHash) {
-    for (const [hash, entry] of Object.entries(store)) {
-      if (entry.delta?.baseHash === baseHash) {
-        const resolved = resolveContent(store, hash);
-        entry.content = resolved;
-        delete entry.delta;
+  // src/api/requestTransport.ts
+  function prepareRequestTransport(endpoint, config, hasApiKey, customHeaders, apiVersionToUse) {
+    const headers = { "Content-Type": "application/json", ...customHeaders };
+    const authentication = hasApiKey ? [{ name: "Authorization", prefix: "Bearer " }] : [];
+    if (isAzureEndpoint(endpoint) && hasApiKey) {
+      authentication.push({ name: "api-key", prefix: "" });
+      const apiVersion = apiVersionToUse ?? "2024-02-01";
+      const path = `openai/deployments/${config.model}/chat/completions?api-version=${apiVersion}`;
+      if (!endpoint.endsWith(path)) {
+        if (!endpoint.endsWith("/"))
+          endpoint += "/";
+        endpoint += path;
       }
     }
+    return { endpoint: endpoint.trim(), headers, authentication };
   }
-  function releaseContent(store, hash) {
-    if (isStreamingContentHash(hash))
-      return;
-    if (!store[hash])
-      return;
-    store[hash].refCount--;
-    if (store[hash].refCount <= 0) {
-      promoteDependents(store, hash);
-      pendingGCHashes.add(hash);
-    }
-  }
-  function resolveContent(store, hash) {
-    if (isStreamingContentHash(hash)) {
-      const target = getStreamingTargetFromHash(hash);
-      return target ? peekBufferedContent(target.chatId, target.nodeId) ?? [] : [];
-    }
-    const entry = store[hash];
-    if (!entry)
-      return [];
-    if (!entry.delta) {
-      return entry.content;
-    }
-    const text = resolveDeltaContentJSON(store, hash);
-    return text === null ? [] : JSON.parse(text);
-  }
-  function resolveDeltaContentJSON(store, hash) {
-    const visited = /* @__PURE__ */ new Set();
-    let current = hash;
-    const deltaChain = [];
-    while (store[current]?.delta) {
-      if (visited.has(current)) {
-        console.error(`[ContentStore] Circular delta chain detected at ${current}`);
-        return null;
-      }
-      visited.add(current);
-      deltaChain.push({
-        hash: current,
-        patches: store[current].delta.patches
-      });
-      current = store[current].delta.baseHash;
-    }
-    const baseEntry = store[current];
-    if (!baseEntry) {
-      console.error(`[ContentStore] Missing delta base: ${current}`);
-      return null;
-    }
-    let text = contentToText(baseEntry.content);
-    for (const { patches: patchText } of deltaChain.reverse()) {
-      const patches = dmp.patch_fromText(patchText);
-      const [result3, applied] = dmp.patch_apply(patches, text);
-      if (applied.some((ok) => !ok)) {
-        console.error(`[ContentStore] Patch apply failed for delta chain`);
-        return null;
-      }
-      text = result3;
-    }
-    try {
-      JSON.parse(text);
-      return text;
-    } catch {
-      console.error(`[ContentStore] Failed to parse resolved delta content`);
-      return null;
-    }
-  }
-  function isContentEqual(store, hash, content) {
-    const resolved = resolveContent(store, hash);
-    return JSON.stringify(resolved) === JSON.stringify(content);
-  }
-  function resolveContentText(store, hash) {
-    const content = resolveContent(store, hash);
-    return content.filter((c) => c.type === "text").map((c) => c.text).join(" ");
-  }
-  function buildExportContentStore(store) {
-    const exported = {};
-    for (const [hash, entry] of Object.entries(store)) {
-      const { delta, ...fullEntry } = entry;
-      if (delta) {
-        exported[hash] = {
-          ...fullEntry,
-          content: resolveContent(store, hash)
-        };
-      } else {
-        exported[hash] = fullEntry;
-      }
-    }
-    return exported;
-  }
-  function validateDeltaIntegrity(store) {
-    const corrupt = /* @__PURE__ */ new Set();
-    for (const [hash, entry] of Object.entries(store)) {
-      if (!entry.delta)
-        continue;
-      if (!store[entry.delta.baseHash]) {
-        console.warn(
-          `[ContentStore] Broken delta: ${hash} references missing base ${entry.delta.baseHash}`
-        );
-        corrupt.add(hash);
-        continue;
-      }
-      const visited = /* @__PURE__ */ new Set();
-      let cur = hash;
-      let isCircular = false;
-      while (store[cur]?.delta) {
-        if (visited.has(cur)) {
-          isCircular = true;
-          break;
-        }
-        visited.add(cur);
-        cur = store[cur].delta.baseHash;
-      }
-      if (isCircular) {
-        console.warn(`[ContentStore] Circular delta chain detected at ${hash}`);
-        corrupt.add(hash);
-        continue;
-      }
-      try {
-        const patches = dmp.patch_fromText(entry.delta.patches);
-        const baseContent = store[cur]?.content;
-        if (baseContent) {
-          let text = contentToText(baseContent);
-          const chain = [];
-          let walk = hash;
-          while (store[walk]?.delta) {
-            chain.push(walk);
-            walk = store[walk].delta.baseHash;
-          }
-          let patchFailed = false;
-          for (const chainHash of chain.reverse()) {
-            const p = dmp.patch_fromText(store[chainHash].delta.patches);
-            const [result3, applied] = dmp.patch_apply(p, text);
-            if (applied.some((ok) => !ok)) {
-              patchFailed = true;
-              break;
-            }
-            text = result3;
-          }
-          if (patchFailed) {
-            console.warn(`[ContentStore] Patch apply failed for delta ${hash}`);
-            corrupt.add(hash);
-            continue;
-          }
-          JSON.parse(text);
-        }
-      } catch (e) {
-        console.warn(`[ContentStore] Delta validation error for ${hash}:`, e);
-        corrupt.add(hash);
-      }
-    }
-    if (corrupt.size > 0) {
-      console.warn(
-        `[ContentStore] ${corrupt.size} corrupt delta(s) detected at startup. Affected hashes will return empty content on read.`
-      );
-    }
-    return corrupt;
-  }
-
-  // src/utils/branchUtils.ts
-  function readMessageAttributes(owner) {
-    const value = owner.messageAttributesV1;
-    if (!Object.hasOwn(owner, "messageAttributesV1"))
-      return void 0;
-    if (!value || value.version !== 1 || !value.byNode || typeof value.byNode !== "object" || Array.isArray(value.byNode) || Object.keys(value).some((key) => key !== "version" && key !== "byNode") || Object.keys(value.byNode).some((id) => !Object.hasOwn(owner.nodes, id)) || Object.values(value.byNode).some((attributes) => !attributes || typeof attributes !== "object" || Array.isArray(attributes) || Object.hasOwn(attributes, "role") || Object.hasOwn(attributes, "content"))) {
-      throw new Error("Unsupported message attributes namespace.");
-    }
-    return value;
-  }
-  var extraMessageAttributes = (message) => {
-    const { role, content, ...attributes } = message;
-    return attributes;
-  };
-  function setMessageAttributes(owner, nodeId, message) {
-    const attributes = extraMessageAttributes(message);
-    if (!Object.keys(attributes).length)
-      return;
-    const previous = readMessageAttributes(owner);
-    owner.messageAttributesV1 = { version: 1, byNode: {
-      ...previous?.byNode,
-      [nodeId]: { ...previous?.byNode[nodeId], ...structuredClone(attributes) }
-    } };
-  }
-  function copyMessageAttributes(source, sourceId, target, targetId) {
-    const attributes = readMessageAttributes(source)?.byNode[sourceId];
-    if (!attributes)
-      return;
-    setMessageAttributes(target, targetId, { ...attributes, role: "user", content: [] });
-  }
-  function deleteMessageAttributes(owner, nodeId) {
-    const previous = readMessageAttributes(owner);
-    if (!previous || !Object.hasOwn(previous.byNode, nodeId))
-      return;
-    const byNode = { ...previous.byNode };
-    delete byNode[nodeId];
-    owner.messageAttributesV1 = { version: 1, byNode };
-  }
-  function captureProjectedMessageAttributes(chat, contentStore) {
-    if (!chat.branchTree)
-      return;
-    let next = chat.branchTree;
-    for (const [index, message] of (chat.messages ?? []).entries()) {
-      const attributes = extraMessageAttributes(message);
-      if (!Object.keys(attributes).length)
-        continue;
-      const nodeId = chat.branchTree.activePath[index], node = chat.branchTree.nodes[nodeId];
-      if (!node || node.role !== message.role || !(0, import_lodash.isEqual)(resolveContent(contentStore, node.contentHash), message.content))
-        throw new Error("Message attributes do not match the active branch.");
-      const existing = readMessageAttributes(next)?.byNode[nodeId];
-      for (const [key, value] of Object.entries(attributes))
-        if (existing && Object.hasOwn(existing, key) && !(0, import_lodash.isEqual)(existing[key], value))
-          throw new Error("Conflicting projected message attributes.");
-      if (next === chat.branchTree)
-        next = { ...next };
-      setMessageAttributes(next, nodeId, message);
-    }
-    chat.branchTree = next;
-  }
-  function projectMessageAttributes(owner, nodeId, message) {
-    return { ...structuredClone(readMessageAttributes(owner)?.byNode[nodeId] ?? {}), role: message.role, content: message.content };
-  }
-  function materializeActivePath(tree, contentStore, includeAttributes = false) {
-    return tree.activePath.map((id) => {
-      const node = tree.nodes[id];
-      const message = { role: node.role, content: resolveContent(contentStore, node.contentHash) };
-      return includeAttributes ? projectMessageAttributes(tree, id, message) : message;
-    });
-  }
-  function flatMessagesToBranchTree(messages, contentStore) {
-    const nodes = {};
-    const ids = [];
-    const tree = { nodes, rootId: "", activePath: ids };
-    for (let i = 0; i < messages.length; i++) {
-      const id = editingUUID();
-      ids.push(id);
-      const contentHash = addContent(contentStore, messages[i].content);
-      nodes[id] = {
-        id,
-        parentId: i === 0 ? null : ids[i - 1],
-        role: messages[i].role,
-        contentHash,
-        createdAt: Date.now() - (messages.length - i) * 1e3
-      };
-      setMessageAttributes(tree, id, messages[i]);
-    }
-    tree.rootId = ids[0] ?? "";
-    return tree;
-  }
-  function flatChatToBranchTree(chat, contentStore) {
-    if (chat.branchTree)
-      return;
-    const tree = flatMessagesToBranchTree(chat.messages, contentStore);
-    for (const field of ["collapsedNodes", "omittedNodes", "protectedNodes"]) {
-      if (!chat[field])
-        continue;
-      chat[field] = Object.fromEntries(Object.entries(chat[field]).map(([key, value]) => {
-        const index = Number(key);
-        const id = Number.isInteger(index) && index >= 0 && String(index) === key ? tree.activePath[index] : void 0;
-        return [id ?? key, value];
-      }));
-    }
-    chat.branchTree = tree;
-    chat.messages = materializeActivePath(tree, contentStore);
-  }
-  function getChildrenOf(tree, nodeId) {
-    return Object.values(tree.nodes).filter((n) => n.parentId === nodeId);
-  }
-  function getSiblingGroups(tree) {
-    const grouped = /* @__PURE__ */ new Map();
-    const nodes = Object.values(tree.nodes);
-    for (const node of nodes) {
-      const group = grouped.get(node.parentId) ?? [];
-      group.push(node);
-      grouped.set(node.parentId, group);
-    }
-    const groups = [];
-    const byParent = /* @__PURE__ */ new Map();
-    const byNode = /* @__PURE__ */ Object.create(null);
-    for (const node of nodes) {
-      const parent = node.parentId || null;
-      let groupIndex = byParent.get(parent);
-      if (groupIndex === void 0) {
-        groupIndex = groups.length;
-        byParent.set(parent, groupIndex);
-        const group = grouped.get(parent) ?? [];
-        groups.push(group);
-        group.forEach((sibling, index) => {
-          byNode[sibling.id] = { groupIndex, selectedIndex: index };
-        });
-      }
-      if (!byNode[node.id])
-        byNode[node.id] = { groupIndex, selectedIndex: -1 };
-    }
-    return { groups, byNode };
-  }
-  function buildPathToLeaf(tree, nodeId) {
-    const ancestors = [];
-    let cur = nodeId;
-    while (cur) {
-      ancestors.unshift(cur);
-      cur = tree.nodes[cur]?.parentId ?? null;
-    }
-    let tip = nodeId;
-    while (true) {
-      const children = getChildrenOf(tree, tip);
-      if (children.length === 0)
-        break;
-      children.sort((a, b) => b.createdAt - a.createdAt);
-      ancestors.push(children[0].id);
-      tip = children[0].id;
-    }
-    return ancestors;
-  }
-  function collectDescendants(tree, nodeId) {
-    const result3 = /* @__PURE__ */ new Set();
-    const queue = [nodeId];
-    while (queue.length > 0) {
-      const id = queue.pop();
-      result3.add(id);
-      for (const child of getChildrenOf(tree, id)) {
-        queue.push(child.id);
-      }
-    }
-    return result3;
-  }
-  function resolveRegenerateTarget(role, messageIndex, messagesLength) {
-    if (role === "system")
-      return null;
-    if (role === "assistant") {
-      const afterRemoval = messagesLength - 1;
-      return {
-        removeIndex: messageIndex,
-        submitMode: messageIndex >= afterRemoval ? "append" : "insert",
-        insertIndex: messageIndex
-      };
-    }
-    const nextIndex = messageIndex + 1;
-    const hasNext = nextIndex < messagesLength;
-    const lengthAfterRemoval = hasNext ? messagesLength - 1 : messagesLength;
-    return {
-      removeIndex: hasNext ? nextIndex : -1,
-      submitMode: nextIndex >= lengthAfterRemoval ? "append" : "insert",
-      insertIndex: nextIndex
-    };
-  }
-
-  // src/store/branch-domain.ts
-  var extractSystemText = (content) => content.filter(isTextContent).map((c) => c.text).filter(Boolean).join("\n");
-  var syncBubbleToConfig = (chat, tree, contentStore) => {
-    const topNodeId = tree.activePath[0];
-    if (!topNodeId)
-      return;
-    const topNode = tree.nodes[topNodeId];
-    if (!topNode || topNode.role !== "system")
-      return;
-    const content = resolveContent(contentStore, topNode.contentHash);
-    chat.config = { ...chat.config, systemPrompt: extractSystemText(content) || void 0 };
-  };
-  var cloneChatAt = (chats, chatIndex) => {
-    const result3 = chats.slice();
-    const chat = result3[chatIndex];
-    result3[chatIndex] = {
-      ...chat,
-      messages: chat.messages.slice(),
-      branchTree: chat.branchTree ? {
-        ...chat.branchTree,
-        nodes: { ...chat.branchTree.nodes },
-        activePath: chat.branchTree.activePath.slice(),
-        ...chat.branchTree.messageAttributesV1 ? { messageAttributesV1: structuredClone(readMessageAttributes(chat.branchTree)) } : {}
-      } : void 0,
-      collapsedNodes: chat.collapsedNodes ? { ...chat.collapsedNodes } : void 0,
-      omittedNodes: chat.omittedNodes ? { ...chat.omittedNodes } : void 0,
-      protectedNodes: chat.protectedNodes ? { ...chat.protectedNodes } : void 0
-    };
-    return result3;
-  };
-  var cloneNode = (node) => ({ ...node });
-  var ensureBranchReadyState = (chats, chatIndex, currentContentStore) => {
-    const contentStore = Object.fromEntries(Object.entries(currentContentStore).map(([hash, entry]) => [hash, { ...entry }]));
-    const ensured = ensureBranchTreeState(chats, chatIndex, contentStore);
-    return { chats: cloneChatAt(ensured.chats, chatIndex), contentStore: ensured.contentStore };
-  };
-  var cloneNodeIfPresent = (tree, nodeId) => {
-    if (!nodeId)
-      return;
-    const node = tree.nodes[nodeId];
-    if (!node)
-      return;
-    tree.nodes[nodeId] = cloneNode(node);
-  };
-  var prepareBranchMutationState = (chats, chatIndex, currentContentStore) => {
-    const { chats: updatedChats, contentStore } = ensureBranchReadyState(
-      chats,
-      chatIndex,
-      currentContentStore
-    );
-    const chat = updatedChats[chatIndex];
-    return {
-      chats: updatedChats,
-      chat,
-      tree: chat.branchTree,
-      contentStore
-    };
-  };
-  var finalizePreparedBranchMutationState = ({
-    chats,
-    chat,
-    tree,
-    contentStore
-  }) => {
-    tree.rootId = tree.activePath[0] ?? "";
-    chat.messages = materializeActivePath(tree, contentStore);
-    return { chats, contentStore };
-  };
-  var removeMessageAtIndexFromPreparedState = (state, messageIndex, options) => {
-    const { tree, contentStore } = state;
-    const nodeId = tree.activePath[messageIndex];
-    if (!nodeId)
-      return;
-    const parentId = tree.nodes[nodeId]?.parentId ?? null;
-    const nextId = tree.activePath[messageIndex + 1] ?? null;
-    Object.values(tree.nodes).forEach((node) => {
-      if (node.parentId !== nodeId)
-        return;
-      tree.nodes[node.id] = {
-        ...node,
-        parentId
-      };
-    });
-    if (nextId) {
-      cloneNodeIfPresent(tree, nextId);
-      tree.nodes[nextId].parentId = parentId;
-    }
-    if (!options?.preserveNode) {
-      releaseContent(contentStore, tree.nodes[nodeId].contentHash);
-      deleteMessageAttributes(tree, nodeId);
-      delete tree.nodes[nodeId];
-    }
-    tree.activePath.splice(messageIndex, 1);
-  };
-  var ensureBranchTreeState = (chats, chatIndex, currentContentStore) => {
-    if (chats[chatIndex]?.branchTree) {
-      if (chats[chatIndex].messages.some((message) => Object.keys(message).some((key) => key !== "role" && key !== "content"))) {
-        const updatedChats2 = cloneChatAt(chats, chatIndex);
-        captureProjectedMessageAttributes(updatedChats2[chatIndex], currentContentStore);
-        return { chats: updatedChats2, contentStore: currentContentStore };
-      }
-      return { chats, contentStore: currentContentStore };
-    }
-    const contentStore = Object.fromEntries(Object.entries(currentContentStore).map(([hash, entry]) => [hash, { ...entry }]));
-    const updatedChats = cloneChatAt(chats, chatIndex);
-    flatChatToBranchTree(updatedChats[chatIndex], contentStore);
-    return { chats: updatedChats, contentStore };
-  };
-  var createBranchState = (chats, chatIndex, fromNodeId, newContent, currentContentStore) => {
-    const contentStore = { ...currentContentStore };
-    const updatedChats = cloneChatAt(chats, chatIndex);
-    captureProjectedMessageAttributes(updatedChats[chatIndex], contentStore);
-    const tree = updatedChats[chatIndex].branchTree;
-    const fromNode = tree.nodes[fromNodeId];
-    const newId = editingUUID();
-    const contentHash = newContent ? addContentDelta(contentStore, newContent, fromNode.contentHash) : (() => {
-      retainContent(contentStore, fromNode.contentHash);
-      return fromNode.contentHash;
-    })();
-    tree.nodes[newId] = {
-      id: newId,
-      parentId: fromNode.parentId,
-      role: fromNode.role,
-      contentHash,
-      createdAt: Date.now()
-    };
-    copyMessageAttributes(tree, fromNodeId, tree, newId);
-    const fromIdx = tree.activePath.indexOf(fromNodeId);
-    tree.activePath = [...tree.activePath.slice(0, fromIdx), newId];
-    if (fromIdx === 0)
-      syncBubbleToConfig(updatedChats[chatIndex], tree, contentStore);
-    updatedChats[chatIndex].messages = materializeActivePath(tree, contentStore);
-    return { chats: updatedChats, contentStore, newId };
-  };
-  var switchActivePathState = (chats, chatIndex, newPath, contentStore) => {
-    const updatedChats = cloneChatAt(chats, chatIndex);
-    captureProjectedMessageAttributes(updatedChats[chatIndex], contentStore);
-    const tree = updatedChats[chatIndex].branchTree;
-    tree.activePath = newPath;
-    updatedChats[chatIndex].messages = materializeActivePath(tree, contentStore);
-    return updatedChats;
-  };
-  var deleteBranchState = (chats, chatIndex, nodeId, currentContentStore) => {
-    const contentStore = Object.fromEntries(Object.entries(currentContentStore).map(([hash, entry]) => [hash, { ...entry }]));
-    const updatedChats = cloneChatAt(chats, chatIndex);
-    captureProjectedMessageAttributes(updatedChats[chatIndex], contentStore);
-    const tree = updatedChats[chatIndex].branchTree;
-    const toDelete = collectDescendants(tree, nodeId);
-    const parentId = tree.nodes[nodeId]?.parentId;
-    toDelete.forEach((id) => {
-      releaseContent(contentStore, tree.nodes[id].contentHash);
-      deleteMessageAttributes(tree, id);
-      delete tree.nodes[id];
-    });
-    if (tree.activePath.some((id) => toDelete.has(id))) {
-      if (parentId) {
-        const siblings = getChildrenOf(tree, parentId);
-        if (siblings.length > 0) {
-          tree.activePath = buildPathToLeaf(tree, siblings[0].id);
-        } else {
-          const parentIdx = tree.activePath.indexOf(parentId);
-          tree.activePath = tree.activePath.slice(0, parentIdx + 1);
-        }
-      } else {
-        tree.activePath = [];
-      }
-      updatedChats[chatIndex].messages = materializeActivePath(tree, contentStore);
-    }
-    if (tree.activePath.length)
-      tree.rootId = tree.activePath[0];
-    else if (!tree.nodes[tree.rootId])
-      tree.rootId = "";
-    return { chats: updatedChats, contentStore };
-  };
-  var pruneHiddenNodesState = (chats, chatIndex, currentContentStore) => {
-    const contentStore = Object.fromEntries(Object.entries(currentContentStore).map(([hash, entry]) => [hash, { ...entry }]));
-    const updatedChats = cloneChatAt(chats, chatIndex);
-    captureProjectedMessageAttributes(updatedChats[chatIndex], contentStore);
-    const tree = updatedChats[chatIndex].branchTree;
-    const activeSet = new Set(tree.activePath);
-    const protectedSet = /* @__PURE__ */ new Set();
-    for (const node of Object.values(tree.nodes)) {
-      if (node.pinned) {
-        for (const id of collectDescendants(tree, node.id)) {
-          protectedSet.add(id);
-        }
-      }
-    }
-    const chatProtectedNodes = updatedChats[chatIndex].protectedNodes;
-    if (chatProtectedNodes) {
-      for (const [id, value] of Object.entries(chatProtectedNodes)) {
-        if (value && tree.nodes[id]) {
-          protectedSet.add(id);
-        }
-      }
-    }
-    const toDelete = Object.keys(tree.nodes).filter(
-      (id) => !activeSet.has(id) && !protectedSet.has(id)
-    );
-    toDelete.forEach((id) => {
-      releaseContent(contentStore, tree.nodes[id].contentHash);
-      deleteMessageAttributes(tree, id);
-      delete tree.nodes[id];
-    });
-    for (const id of Object.keys(tree.nodes)) {
-      const node = tree.nodes[id];
-      if (node.parentId && !tree.nodes[node.parentId]) {
-        tree.nodes[id] = cloneNode(node);
-        tree.nodes[id].parentId = null;
-      }
-    }
-    if (tree.activePath.length > 0)
-      tree.rootId = tree.activePath[0];
-    else if (!tree.nodes[tree.rootId])
-      tree.rootId = "";
-    return { chats: updatedChats, contentStore };
-  };
-  var setBranchNodeFieldState = (chats, chatIndex, nodeId, field, value) => {
-    const updated = cloneChatAt(chats, chatIndex);
-    const tree = updated[chatIndex].branchTree;
-    tree.nodes[nodeId] = { ...tree.nodes[nodeId], [field]: value };
-    return updated;
-  };
-  var appendNodeToActivePathState = (chats, chatIndex, role, content, currentContentStore) => {
-    const { chats: updatedChats, chat, tree, contentStore } = prepareBranchMutationState(chats, chatIndex, currentContentStore);
-    const parentId = tree.activePath[tree.activePath.length - 1] ?? null;
-    const newId = editingUUID();
-    tree.nodes[newId] = {
-      id: newId,
-      parentId,
-      role,
-      contentHash: addContent(contentStore, content),
-      createdAt: Date.now()
-    };
-    tree.activePath.push(newId);
-    const finalized = finalizePreparedBranchMutationState({
-      chats: updatedChats,
-      chat,
-      tree,
-      contentStore
-    });
-    return { ...finalized, newId };
-  };
-  var upsertMessageAtIndexState = (chats, chatIndex, messageIndex, message, currentContentStore) => {
-    const { chats: updatedChats, chat, tree, contentStore } = prepareBranchMutationState(chats, chatIndex, currentContentStore);
-    const existingId = tree.activePath[messageIndex];
-    const previousRole = existingId ? tree.nodes[existingId].role : void 0;
-    chat.messages[messageIndex] = message;
-    if (existingId)
-      setMessageAttributes(tree, existingId, message);
-    if (existingId) {
-      const oldHash = tree.nodes[existingId].contentHash;
-      const newHash = addContentDelta(contentStore, message.content, oldHash);
-      releaseContent(contentStore, oldHash);
-      tree.nodes[existingId] = {
-        ...tree.nodes[existingId],
-        role: message.role,
-        contentHash: newHash
-      };
-    } else if (messageIndex === tree.activePath.length) {
-      const parentId = messageIndex === 0 ? null : tree.activePath[messageIndex - 1] ?? null;
-      const newId = editingUUID();
-      tree.nodes[newId] = {
-        id: newId,
-        parentId,
-        role: message.role,
-        contentHash: addContent(contentStore, message.content),
-        createdAt: Date.now()
-      };
-      setMessageAttributes(tree, newId, message);
-      tree.activePath.push(newId);
-      if (messageIndex === 0) {
-        tree.rootId = newId;
-      }
-    }
-    if (messageIndex === 0) {
-      if (previousRole === "system" && message.role !== "system") {
-        chat.config = { ...chat.config, systemPrompt: void 0 };
-      } else {
-        syncBubbleToConfig(chat, tree, contentStore);
-      }
-    }
-    return finalizePreparedBranchMutationState({
-      chats: updatedChats,
-      chat,
-      tree,
-      contentStore
-    });
-  };
-  var insertMessageAtIndexState = (chats, chatIndex, messageIndex, message, currentContentStore) => {
-    const { chats: updatedChats, chat, tree, contentStore } = prepareBranchMutationState(chats, chatIndex, currentContentStore);
-    const prevId = messageIndex > 0 ? tree.activePath[messageIndex - 1] ?? null : null;
-    const nextId = tree.activePath[messageIndex];
-    const newId = editingUUID();
-    tree.nodes[newId] = {
-      id: newId,
-      parentId: prevId,
-      role: message.role,
-      contentHash: addContent(contentStore, message.content),
-      createdAt: Date.now()
-    };
-    if (nextId) {
-      cloneNodeIfPresent(tree, nextId);
-      tree.nodes[nextId].parentId = newId;
-    }
-    setMessageAttributes(tree, newId, message);
-    tree.activePath.splice(messageIndex, 0, newId);
-    if (messageIndex === 0) {
-      tree.rootId = newId;
-    }
-    const finalized = finalizePreparedBranchMutationState({
-      chats: updatedChats,
-      chat,
-      tree,
-      contentStore
-    });
-    return { ...finalized, newId };
-  };
-  var removeMessageAtIndexState = (chats, chatIndex, messageIndex, currentContentStore, options) => {
-    const state = prepareBranchMutationState(chats, chatIndex, currentContentStore);
-    removeMessageAtIndexFromPreparedState(state, messageIndex, options);
-    return finalizePreparedBranchMutationState(state);
-  };
-  var moveMessageState = (chats, chatIndex, messageIndex, direction, currentContentStore) => {
-    const { chats: updatedChats, chat, tree, contentStore } = prepareBranchMutationState(chats, chatIndex, currentContentStore);
-    const targetIndex = direction === "up" ? messageIndex - 1 : messageIndex + 1;
-    const topNode = tree.activePath[0] ? tree.nodes[tree.activePath[0]] : void 0;
-    if (topNode?.role === "system") {
-      if (messageIndex === 0 || targetIndex === 0) {
-        return finalizePreparedBranchMutationState({
-          chats: updatedChats,
-          chat,
-          tree,
-          contentStore
-        });
-      }
-    }
-    if (targetIndex < 0 || targetIndex >= tree.activePath.length || messageIndex < 0 || messageIndex >= tree.activePath.length) {
-      return finalizePreparedBranchMutationState({
-        chats: updatedChats,
-        chat,
-        tree,
-        contentStore
-      });
-    }
-    const start2 = Math.min(messageIndex, targetIndex);
-    const end = Math.max(messageIndex, targetIndex);
-    const reorderedPath = tree.activePath.slice();
-    const [movedId] = reorderedPath.splice(messageIndex, 1);
-    reorderedPath.splice(targetIndex, 0, movedId);
-    tree.activePath = reorderedPath;
-    for (let index = start2; index <= end + 1; index += 1) {
-      const nodeId = tree.activePath[index];
-      if (!nodeId)
-        continue;
-      cloneNodeIfPresent(tree, nodeId);
-      tree.nodes[nodeId].parentId = index === 0 ? null : tree.activePath[index - 1] ?? null;
-    }
-    return finalizePreparedBranchMutationState({
-      chats: updatedChats,
-      chat,
-      tree,
-      contentStore
-    });
-  };
-  var replaceMessageAndPruneFollowingState = (chats, chatIndex, messageIndex, message, currentContentStore, removeCount = 0) => {
-    const state = prepareBranchMutationState(chats, chatIndex, currentContentStore);
-    const { tree, contentStore } = state;
-    const existingId = tree.activePath[messageIndex];
-    state.chat.messages[messageIndex] = message;
-    if (existingId)
-      setMessageAttributes(tree, existingId, message);
-    if (existingId) {
-      const oldHash = tree.nodes[existingId].contentHash;
-      const newHash = addContentDelta(contentStore, message.content, oldHash);
-      releaseContent(contentStore, oldHash);
-      tree.nodes[existingId] = {
-        ...tree.nodes[existingId],
-        role: message.role,
-        contentHash: newHash
-      };
-    } else if (messageIndex === tree.activePath.length) {
-      const parentId = messageIndex === 0 ? null : tree.activePath[messageIndex - 1] ?? null;
-      const newId = editingUUID();
-      tree.nodes[newId] = {
-        id: newId,
-        parentId,
-        role: message.role,
-        contentHash: addContent(contentStore, message.content),
-        createdAt: Date.now()
-      };
-      setMessageAttributes(tree, newId, message);
-      tree.activePath.push(newId);
-    }
-    for (let removed = 0; removed < removeCount; removed += 1) {
-      removeMessageAtIndexFromPreparedState(state, messageIndex + 1);
-    }
-    return finalizePreparedBranchMutationState(state);
-  };
-  var copyBranchSequenceState = (chats, chatIndex, fromNodeId, toNodeId) => {
-    const tree = chats[chatIndex]?.branchTree;
-    if (!tree?.nodes[fromNodeId] || !tree.nodes[toNodeId])
-      return null;
-    const nodeIds = [];
-    let cur = toNodeId;
-    const visited = /* @__PURE__ */ new Set();
-    while (cur) {
-      if (visited.has(cur) || !tree.nodes[cur])
-        return null;
-      visited.add(cur);
-      nodeIds.unshift(cur);
-      if (cur === fromNodeId)
-        break;
-      cur = tree.nodes[cur]?.parentId ?? null;
-    }
-    if (nodeIds[0] !== fromNodeId)
-      return null;
-    const nodes = {};
-    nodeIds.forEach((id) => {
-      nodes[id] = { ...tree.nodes[id] };
-    });
-    const clipboard = { nodeIds, sourceChat: chats[chatIndex].id, nodes };
-    for (const field of ["collapsedNodes", "omittedNodes", "protectedNodes"]) {
-      const source = chats[chatIndex][field];
-      if (source)
-        clipboard[field] = Object.fromEntries(nodeIds.filter((id) => Object.hasOwn(source, id)).map((id) => [id, source[id]]));
-    }
-    for (const id of nodeIds)
-      copyMessageAttributes(tree, id, clipboard, id);
-    return clipboard;
-  };
-  var removeBranchSequenceState = (chats, chatIndex, nodeIds, currentContentStore) => {
-    const contentStore = Object.fromEntries(Object.entries(currentContentStore).map(([hash, entry]) => [hash, { ...entry }]));
-    const updatedChats = cloneChatAt(chats, chatIndex);
-    const chat = updatedChats[chatIndex];
-    captureProjectedMessageAttributes(chat, contentStore);
-    const tree = chat.branchTree;
-    const removed = new Set(nodeIds);
-    for (const node of Object.values(tree.nodes)) {
-      if (removed.has(node.id) || !node.parentId || !removed.has(node.parentId))
-        continue;
-      let parentId = node.parentId;
-      while (parentId && removed.has(parentId))
-        parentId = tree.nodes[parentId].parentId;
-      tree.nodes[node.id] = { ...node, parentId };
-    }
-    for (const id of nodeIds) {
-      releaseContent(contentStore, tree.nodes[id].contentHash);
-      deleteMessageAttributes(tree, id);
-      delete tree.nodes[id];
-    }
-    tree.activePath = tree.activePath.filter((id) => !removed.has(id));
-    if (tree.activePath.length === 0) {
-      const root = Object.values(tree.nodes).find((node) => !node.parentId);
-      if (root)
-        tree.activePath = buildPathToLeaf(tree, root.id);
-    }
-    tree.rootId = tree.activePath[0] ?? "";
-    chat.messages = materializeActivePath(tree, contentStore);
-    return { chats: updatedChats, contentStore };
-  };
-  var pasteBranchSequenceState = (chats, targetChatIndex, afterNodeId, clipboard, currentContentStore) => {
-    const contentStore = Object.fromEntries(Object.entries(currentContentStore).map(([hash, entry]) => [hash, { ...entry }]));
-    const updatedChats = cloneChatAt(chats, targetChatIndex);
-    captureProjectedMessageAttributes(updatedChats[targetChatIndex], contentStore);
-    const tree = updatedChats[targetChatIndex].branchTree;
-    const idMap = {};
-    clipboard.nodeIds.forEach((id) => {
-      idMap[id] = editingUUID();
-    });
-    for (const field of ["collapsedNodes", "omittedNodes", "protectedNodes"]) {
-      const source = clipboard[field];
-      if (source && clipboard.nodeIds.some((id) => Object.hasOwn(source, id))) {
-        updatedChats[targetChatIndex][field] = { ...updatedChats[targetChatIndex][field], ...Object.fromEntries(clipboard.nodeIds.filter((id) => Object.hasOwn(source, id)).map((id) => [idMap[id], source[id]])) };
-      }
-    }
-    let prevId = afterNodeId;
-    for (const origId of clipboard.nodeIds) {
-      const newId = idMap[origId];
-      const srcNode = clipboard.nodes[origId];
-      retainContent(contentStore, srcNode.contentHash);
-      tree.nodes[newId] = {
-        ...srcNode,
-        id: newId,
-        parentId: prevId,
-        createdAt: Date.now()
-      };
-      copyMessageAttributes(clipboard, origId, tree, newId);
-      prevId = newId;
-    }
-    const destinationPath = buildPathToLeaf(tree, afterNodeId);
-    const insertIdx = destinationPath.indexOf(afterNodeId);
-    tree.activePath = [
-      ...destinationPath.slice(0, insertIdx + 1),
-      ...clipboard.nodeIds.map((id) => idMap[id])
-    ];
-    tree.rootId = tree.activePath[0] ?? "";
-    updatedChats[targetChatIndex].messages = materializeActivePath(tree, contentStore);
-    return { chats: updatedChats, contentStore };
-  };
-  var updateNodeRoleState = (chats, chatIndex, nodeId, role, contentStore) => {
-    const updatedChats = cloneChatAt(chats, chatIndex);
-    const chat = updatedChats[chatIndex];
-    captureProjectedMessageAttributes(chat, contentStore);
-    const tree = chat.branchTree;
-    const prevRole = tree.nodes[nodeId]?.role;
-    tree.nodes[nodeId] = { ...tree.nodes[nodeId], role };
-    const isTopNode = tree.activePath[0] === nodeId;
-    if (isTopNode) {
-      if (prevRole === "system" && role !== "system") {
-        chat.config = { ...chat.config, systemPrompt: void 0 };
-      } else if (prevRole !== "system" && role === "system") {
-        syncBubbleToConfig(chat, tree, contentStore);
-      }
-    }
-    chat.messages = materializeActivePath(tree, contentStore);
-    return updatedChats;
-  };
-  var upsertWithAutoBranchState = (chats, chatIndex, messageIndex, message, currentContentStore) => {
-    const { chats: ensuredChats, contentStore: ensuredStore } = ensureBranchReadyState(chats, chatIndex, currentContentStore);
-    const tree = ensuredChats[chatIndex].branchTree;
-    const existingId = tree.activePath[messageIndex];
-    if (!existingId) {
-      return upsertMessageAtIndexState(
-        ensuredChats,
-        chatIndex,
-        messageIndex,
-        message,
-        ensuredStore
-      );
-    }
-    const node = tree.nodes[existingId];
-    const contentChanged = !isContentEqual(ensuredStore, node.contentHash, message.content);
-    const roleChanged = node.role !== message.role;
-    const previousAttributes = JSON.stringify(tree.messageAttributesV1);
-    setMessageAttributes(tree, existingId, message);
-    const attributesChanged = JSON.stringify(tree.messageAttributesV1) !== previousAttributes;
-    if (!contentChanged && !roleChanged && !attributesChanged) {
-      return { chats: ensuredChats, contentStore: ensuredStore, noOp: true };
-    }
-    if (!contentChanged && !roleChanged)
-      return { chats: ensuredChats, contentStore: ensuredStore };
-    if (!contentChanged) {
-      return { chats: updateNodeRoleState(ensuredChats, chatIndex, existingId, message.role, ensuredStore), contentStore: ensuredStore };
-    }
-    return upsertMessageAtIndexState(
-      ensuredChats,
-      chatIndex,
-      messageIndex,
-      message,
-      ensuredStore
-    );
-  };
-  var resolveNodeTarget = (chats, input, activeOnly = false) => {
-    const chatIndex = chats?.findIndex((chat2) => chat2.id === input.chatId) ?? -1;
-    const chat = chats?.[chatIndex];
-    if (!chat)
-      return { status: "chat-missing" };
-    const index = chat.branchTree ? chat.branchTree.activePath.indexOf(input.nodeId) : Number(input.nodeId);
-    const exists2 = chat.branchTree ? !!chat.branchTree.nodes[input.nodeId] : Number.isInteger(index) && index >= 0 && String(index) === input.nodeId && !!chat.messages[index];
-    if (!exists2)
-      return { status: "node-missing" };
-    if (activeOnly && index < 0)
-      return { status: "invalid-target" };
-    return { status: "valid", chatIndex, messageIndex: index, chat };
-  };
-  var setNodeDisplayFieldState = (chats, input, field, value, contentStore) => {
-    const target = resolveNodeTarget(chats, input);
-    if (target.status !== "valid")
-      return target;
-    const ensured = ensureBranchTreeState(chats, target.chatIndex, contentStore);
-    const nodeId = target.chat.branchTree ? input.nodeId : ensured.chats[target.chatIndex].branchTree.activePath[target.messageIndex];
-    if (ensured.chats[target.chatIndex].branchTree.nodes[nodeId][field] === value)
-      return { status: "unchanged" };
-    return {
-      status: "updated",
-      chats: setBranchNodeFieldState(ensured.chats, target.chatIndex, nodeId, field, value),
-      contentStore: ensured.contentStore,
-      nodeId,
-      historyBase: ensured
-    };
-  };
-  var insertNodeState = (chats, input, contentStore) => {
-    const chatIndex = chats?.findIndex((chat) => chat.id === input.chatId) ?? -1;
-    if (chatIndex < 0)
-      return { status: "chat-missing" };
-    const target = input.beforeNodeId === null ? null : resolveNodeTarget(chats, { chatId: input.chatId, nodeId: input.beforeNodeId }, true);
-    if (target && target.status !== "valid")
-      return target;
-    const index = target?.messageIndex ?? chats[chatIndex].messages.length;
-    const ensured = ensureBranchTreeState(chats, chatIndex, contentStore);
-    const result3 = insertMessageAtIndexState(ensured.chats, chatIndex, index, { role: input.role, content: input.content }, ensured.contentStore);
-    return { status: "updated", ...result3, nodeId: result3.newId, historyBase: ensured };
-  };
-  var removeNodeState = (chats, input, contentStore, options) => {
-    const target = resolveNodeTarget(chats, input, true);
-    if (target.status !== "valid")
-      return target;
-    if ((target.chat.protectedNodes ?? {})[input.nodeId])
-      return { status: "protected" };
-    const ensured = ensureBranchReadyState(chats, target.chatIndex, contentStore);
-    const result3 = removeMessageAtIndexState(ensured.chats, target.chatIndex, target.messageIndex, ensured.contentStore, options);
-    return { status: "updated", ...result3, historyBase: ensured };
-  };
-  var moveNodeState = (chats, input, contentStore) => {
-    const target = resolveNodeTarget(chats, input, true);
-    if (target.status !== "valid")
-      return target;
-    if (input.direction === "up" ? target.messageIndex === 0 : target.messageIndex === target.chat.messages.length - 1)
-      return { status: "unchanged" };
-    const topRole = target.chat.messages[0]?.role;
-    if (topRole === "system" && (target.messageIndex === 0 || input.direction === "up" && target.messageIndex === 1))
-      return { status: "unchanged" };
-    const ensured = ensureBranchTreeState(chats, target.chatIndex, contentStore);
-    const result3 = moveMessageState(ensured.chats, target.chatIndex, target.messageIndex, input.direction, ensured.contentStore);
-    return { status: "updated", ...result3, historyBase: ensured };
-  };
-  var replaceNodeAndPruneState = (chats, input, contentStore) => {
-    if (!Number.isInteger(input.removeCount) || input.removeCount < 0)
-      return { status: "invalid-input", removedNodeIds: [], pruneBlockedBy: [] };
-    const target = resolveNodeTarget(chats, input, true);
-    if (target.status !== "valid")
-      return { status: "missing", removedNodeIds: [], pruneBlockedBy: [] };
-    if (target.chat.protectedNodes?.[input.nodeId])
-      return { status: "protected", blockedNodeIds: [input.nodeId], removedNodeIds: [], pruneBlockedBy: [] };
-    const ensured = ensureBranchTreeState(chats, target.chatIndex, contentStore);
-    const prepared = ensured.chats[target.chatIndex];
-    const following = prepared.branchTree.activePath.slice(target.messageIndex + 1, target.messageIndex + 1 + input.removeCount);
-    const pruneBlockedBy = following.filter((id) => prepared.protectedNodes?.[id]);
-    const result3 = replaceMessageAndPruneFollowingState(ensured.chats, target.chatIndex, target.messageIndex, { role: input.role, content: input.content }, ensured.contentStore, pruneBlockedBy.length ? 0 : input.removeCount);
-    return { status: "updated", ...result3, historyBase: ensured, removedNodeIds: pruneBlockedBy.length ? [] : following, pruneBlockedBy };
-  };
-  var deleteNodeBranchState = (chats, input, contentStore) => {
-    const target = resolveNodeTarget(chats, input);
-    if (target.status !== "valid")
-      return target;
-    const blockedNodeIds = target.chat.branchTree ? [...collectDescendants(target.chat.branchTree, input.nodeId)].filter((id) => target.chat.protectedNodes?.[id]) : target.chat.messages.slice(target.messageIndex).map((_23, index) => String(target.messageIndex + index)).filter((id) => target.chat.protectedNodes?.[id]);
-    if (blockedNodeIds.length)
-      return { status: "protected", blockedNodeIds };
-    const ensured = ensureBranchTreeState(chats, target.chatIndex, contentStore);
-    const nodeId = target.chat.branchTree ? input.nodeId : ensured.chats[target.chatIndex].branchTree.activePath[target.messageIndex];
-    const removedNodeIds = [...collectDescendants(ensured.chats[target.chatIndex].branchTree, nodeId)];
-    return { status: "updated", ...deleteBranchState(ensured.chats, target.chatIndex, nodeId, ensured.contentStore), historyBase: ensured, removedNodeIds };
-  };
-
-  // src/utils/jsonChanges.ts
-  var orderedJSONEqual = (left, right) => {
-    if (Object.is(left, right))
-      return true;
-    if (!left || !right || typeof left !== "object" || typeof right !== "object" || Array.isArray(left) !== Array.isArray(right))
-      return false;
-    const a = Object.keys(left), b = Object.keys(right);
-    return a.length === b.length && a.every((key, index) => key === b[index] && orderedJSONEqual(left[key], right[key]));
-  };
-  function appendChanges(before, after, path, output2) {
-    if (orderedJSONEqual(before, after))
-      return;
-    const opaque = (value) => value && typeof value === "object" && !Array.isArray(value) && Object.keys(value).length === 1 && Number.isInteger(value.opaqueRef);
-    if (opaque(before) || opaque(after)) {
-      output2.push({ op: "set", path, value: after });
-      return;
-    }
-    if (Array.isArray(before) && Array.isArray(after)) {
-      for (let i = 0; i < after.length; i++) {
-        if (i < before.length)
-          appendChanges(before[i], after[i], [...path, i], output2);
-        else
-          output2.push({ op: "set", path: [...path, i], value: after[i] });
-      }
-      for (let i = before.length - 1; i >= after.length; i--)
-        output2.push({ op: "remove", path: [...path, i] });
-    } else if (before && after && typeof before === "object" && typeof after === "object" && !Array.isArray(before) && !Array.isArray(after)) {
-      for (const key of Object.keys(before))
-        if (!Object.hasOwn(after, key))
-          output2.push({ op: "remove", path: [...path, key] });
-      for (const key of Object.keys(after)) {
-        if (Object.hasOwn(before, key))
-          appendChanges(before[key], after[key], [...path, key], output2);
-        else
-          output2.push({ op: "set", path: [...path, key], value: after[key] });
-      }
-      if (!orderedJSONEqual(Object.keys(before), Object.keys(after)))
-        output2.push({ op: "keys", path, keys: Object.keys(after) });
-    } else
-      output2.push({ op: "set", path, value: after });
-  }
-  function diffJSONChanges(before, after) {
-    const output2 = [];
-    appendChanges(before, after, [], output2);
-    return output2;
-  }
-
-  // shared/google-sync/editing.ts
-  var runtime;
-  function editingUUID() {
-    if (!runtime)
-      return crypto.randomUUID();
-    const id = runtime.ids.shift();
-    if (!id || runtime.reserved.has(id))
-      throw new Error("Invalid new node ID.");
-    runtime.reserved.add(id);
-    return id;
-  }
-  function withEditingRuntime(newIDs, existingIDs, now, operation) {
-    const clock = Date.now;
-    runtime = { ids: [...newIDs], reserved: new Set(existingIDs) };
-    Date.now = () => now;
-    try {
-      return operation();
-    } finally {
-      Date.now = clock;
-      runtime = void 0;
-    }
-  }
-  function messageEdit(json, capture) {
-    const input = JSON.parse(json);
-    if (input.operation === "textValue")
-      return JSON.stringify(textValueOf(input.parts));
-    if (input.editedText !== void 0 && typeof input.editedText !== "string")
-      throw new Error("Invalid text.");
-    const parts = input.editedText !== void 0 && input.editedText !== textValueOf(input.parts) ? replaceTextValue(input.parts, input.editedText) : input.parts;
-    if (!["user", "assistant", "system"].includes(input.role) || !Array.isArray(input.parts))
-      throw new Error("Invalid message.");
-    if (input.mode === "append" && input.editedText !== void 0 && !hasMeaningfulContent(parts))
-      throw new Error("\u672C\u6587\u3092\u5165\u529B\u3057\u3066\u304F\u3060\u3055\u3044");
-    const before = { chat: input.chat, contentStore: input.contentStore };
-    const isolated = structuredClone(before);
-    let chat = isolated.chat;
-    if (!Array.isArray(chat.messages) && chat.branchTree)
-      chat.messages = materializeActivePath(chat.branchTree, isolated.contentStore);
-    const wasFlat = !chat.branchTree;
-    return withEditingRuntime(input.newIDs, Object.keys(chat.branchTree?.nodes ?? {}), input.now, () => {
-      let result3 = input.mode === "insert" && wasFlat ? { chats: [chat], contentStore: isolated.contentStore } : ensureBranchTreeState([chat], 0, isolated.contentStore);
-      if (!wasFlat) {
-        const path = input.viewingPath;
-        if (path.some((id) => !Object.hasOwn(result3.chats[0].branchTree.nodes, id)))
-          throw new Error("Invalid viewing path.");
-        if (path.length)
-          result3.chats = switchActivePathState(result3.chats, 0, path, result3.contentStore);
-        else
-          result3.chats[0].branchTree.activePath = [];
-      }
-      let historyBase = result3;
-      if (input.mode === "insert") {
-        if (input.nodeID === void 0)
-          throw new Error("Invalid insert target.");
-        const beforeNodeId = wasFlat && input.nodeID?.startsWith("message-") ? input.nodeID.slice(8) : input.nodeID;
-        const inserted = insertNodeState(result3.chats, { chatId: chat.id, beforeNodeId, role: input.role, content: parts }, result3.contentStore);
-        if (inserted.status !== "updated")
-          throw new Error(`Invalid insert target: ${inserted.status}`);
-        historyBase = inserted.historyBase ?? historyBase;
-        result3 = inserted;
-      } else {
-        const tree = result3.chats[0].branchTree;
-        let index = -1;
-        if (input.mode !== "append") {
-          const flatID = input.nodeID?.startsWith("message-") ? input.nodeID.slice(8) : input.nodeID;
-          index = wasFlat && flatID !== void 0 && String(Number(flatID)) === flatID ? Number(flatID) : tree.activePath.indexOf(input.nodeID);
-          if (!Number.isInteger(index) || index < 0 || index >= tree.activePath.length)
-            throw new Error("Invalid message node ID.");
-          if (input.mode === "overwrite" && result3.chats[0].protectedNodes?.[tree.activePath[index]])
-            throw new Error("Protected message.");
-        }
-        if (input.mode === "append")
-          result3 = appendNodeToActivePathState(result3.chats, 0, input.role, parts, result3.contentStore);
-        else if (input.mode === "branch") {
-          const branch = createBranchState(result3.chats, 0, tree.activePath[index], parts, result3.contentStore);
-          result3 = branch;
-          if (branch.chats[0].branchTree.nodes[branch.newId].role !== input.role) {
-            result3.chats = updateNodeRoleState(branch.chats, 0, branch.newId, input.role, branch.contentStore);
-          }
-        } else
-          result3 = upsertWithAutoBranchState(result3.chats, 0, index, { role: input.role, content: parts }, result3.contentStore);
-      }
-      const changed = !("noOp" in result3 && result3.noOp);
-      for (const [hash, entry] of Object.entries(result3.contentStore)) {
-        if (entry.delta && JSON.stringify(entry.delta) !== JSON.stringify(before.contentStore[hash]?.delta)) {
-          const content = resolveContent(result3.contentStore, hash);
-          const { delta: _delta, ...full } = entry;
-          result3.contentStore[hash] = { ...full, content };
-        }
-      }
-      chat = result3.chats[0];
-      chat.messages = materializeActivePath(chat.branchTree, result3.contentStore, true);
-      if (changed)
-        capture?.(historyBase, result3);
-      return JSON.stringify(diffJSONChanges(before, JSON.parse(JSON.stringify({ chat, contentStore: result3.contentStore }))));
-    });
-  }
-
-  // src/store/version.ts
-  var STORE_VERSION = 18;
-
-  // src/store/storage/prepareSave.ts
-  function findPersistedDataIntegrityErrors(chats, contentStore, clipboard, options = {}) {
-    const errors = [];
-    const seenChatIds = /* @__PURE__ */ new Set();
-    const checkContentHash = (hash, owner) => {
-      if (options.allowTransientStreamingHashes && typeof hash === "string" && isStreamingContentHash(hash)) {
-        return;
-      }
-      if (typeof hash !== "string" || !contentStore[hash]) {
-        errors.push(`Missing contentHash for ${owner}: ${String(hash)}`);
-        return;
-      }
-      const visited = /* @__PURE__ */ new Set();
-      let current = hash;
-      while (contentStore[current]?.delta) {
-        if (visited.has(current)) {
-          errors.push(`Circular delta chain for ${owner}: ${hash}`);
-          return;
-        }
-        visited.add(current);
-        current = contentStore[current].delta.baseHash;
-        if (!contentStore[current]) {
-          errors.push(`Missing delta base for ${owner}: ${current}`);
-          return;
-        }
-      }
-    };
-    for (const chat of chats) {
-      if (!chat || typeof chat.id !== "string" || chat.id.length === 0) {
-        errors.push("Chat has an invalid id");
-        continue;
-      }
-      if (seenChatIds.has(chat.id)) {
-        errors.push(`Duplicate chat id: ${chat.id}`);
-      }
-      seenChatIds.add(chat.id);
-      if (!chat.branchTree)
-        continue;
-      if (!chat.branchTree.nodes || typeof chat.branchTree.nodes !== "object" || Array.isArray(chat.branchTree.nodes)) {
-        errors.push(`Invalid branchTree nodes: ${chat.id}`);
-        continue;
-      }
-      for (const node of Object.values(chat.branchTree.nodes)) {
-        checkContentHash(node?.contentHash, `chat ${chat.id}`);
-      }
-    }
-    if (clipboard && (!clipboard.nodes || typeof clipboard.nodes !== "object" || Array.isArray(clipboard.nodes))) {
-      errors.push("Invalid branch clipboard nodes");
-    } else if (clipboard?.nodes) {
-      for (const node of Object.values(clipboard.nodes)) {
-        checkContentHash(node?.contentHash, "branch clipboard");
-      }
-    }
-    return errors;
-  }
-
-  // src/utils/folderHierarchy.ts
-  function validateFolderHierarchy(folders) {
-    if (!folders || typeof folders !== "object" || Array.isArray(folders))
-      return false;
-    const collection = folders;
-    for (const [id, folder] of Object.entries(collection)) {
-      if (!id || !folder || typeof folder !== "object" || folder.id !== id || typeof folder.name !== "string" || !Number.isFinite(folder.order) || typeof folder.expanded !== "boolean" || folder.parentId != null && (typeof folder.parentId !== "string" || !Object.hasOwn(collection, folder.parentId)))
-        return false;
-    }
-    const finished = /* @__PURE__ */ new Set();
-    for (const id of Object.keys(collection)) {
-      const path = /* @__PURE__ */ new Set();
-      let current = id;
-      while (current !== void 0 && !finished.has(current)) {
-        if (path.has(current))
-          return false;
-        path.add(current);
-        current = collection[current].parentId ?? void 0;
-      }
-      for (const member of path)
-        finished.add(member);
-    }
-    return true;
-  }
-  function getFolderParentId(folders, id) {
-    const parent = folders[id]?.parentId ?? void 0;
-    const visited = /* @__PURE__ */ new Set([id]);
-    let current = parent;
-    while (current !== void 0) {
-      if (visited.has(current) || !Object.hasOwn(folders, current))
-        return void 0;
-      visited.add(current);
-      current = folders[current]?.parentId ?? void 0;
-    }
-    return parent;
-  }
-  function getFolderAncestors(folders, id) {
-    const result3 = [];
-    const visited = /* @__PURE__ */ new Set();
-    let current = id;
-    while (current !== void 0 && Object.hasOwn(folders, current) && !visited.has(current)) {
-      visited.add(current);
-      result3.push(current);
-      current = result3.length === 1 ? getFolderParentId(folders, current) : folders[current]?.parentId ?? void 0;
-    }
-    return result3;
-  }
-  function getFolderSubtreeIds(folders, id) {
-    if (!Object.hasOwn(folders, id))
-      return [];
-    const children = /* @__PURE__ */ new Map();
-    for (const [childId, folder] of Object.entries(folders)) {
-      if (folder?.parentId != null) {
-        const list = children.get(folder.parentId) ?? [];
-        list.push(childId);
-        children.set(folder.parentId, list);
-      }
-    }
-    const result3 = [], visited = /* @__PURE__ */ new Set(), pending = [id];
-    while (pending.length) {
-      const current = pending.pop();
-      if (visited.has(current))
-        continue;
-      visited.add(current);
-      result3.push(current);
-      for (const child of children.get(current) ?? [])
-        pending.push(child);
-    }
-    return result3;
-  }
-
-  // src/utils/bubbleSummary.ts
-  var normalizeBubbleSummaryText = (text) => {
-    const trimmed = text.trim();
-    const json = trimmed.replace(/^```(?:json)?\s*\n([\s\S]*?)\n```$/i, "$1");
-    try {
-      const value = JSON.parse(json);
-      if (typeof value === "string")
-        return value.trim();
-      const messages = Array.isArray(value) ? value : [value];
-      if (messages.length && messages.every((message) => message && typeof message === "object" && (message.role === "user" || message.role === "assistant") && typeof message.content === "string")) {
-        return messages.map((message) => message.role === "assistant" ? `\u30A2\u30B7\u30B9\u30BF\u30F3\u30C8\uFF1A
-${message.content}` : message.content).join("\n\n").trim();
-      }
-    } catch {
-    }
-    return trimmed;
-  };
-  var textParts = (message) => {
-    if (!message?.content?.length || !message.content.every(isTextContent))
-      return null;
-    const parts = message.content.map((value) => value.text);
-    return parts.some((part) => part.trim()) ? parts : null;
-  };
-  var hasTool = (message) => !!message?.content?.some((value) => isToolCallContent(value) || isToolResultContent(value));
-  var equalParts = (left, right) => left.length === right.length && left.every((part, index) => part === right[index]);
-  var validGeneration = (value) => {
-    if (value === void 0)
-      return true;
-    const generation = value;
-    return !!generation && typeof generation === "object" && typeof generation.model === "string" && (generation.providerId === void 0 || typeof generation.providerId === "string") && Number.isFinite(generation.createdAt) && !!generation.settings && typeof generation.settings === "object" && Number.isFinite(generation.settings.temperature) && Number.isFinite(generation.settings.max_tokens) && (generation.settings.reasoning_effort === void 0 || typeof generation.settings.reasoning_effort === "string");
-  };
-  var isBubbleSummary = (value) => !!value && typeof value === "object" && typeof value.id === "string" && (value.mode === "single" || value.mode === "through" || value.mode === "range") && typeof value.text === "string" && typeof value.useForSubmit === "boolean" && (value.format === void 0 || value.format === "compact") && validGeneration(value.generation) && Array.isArray(value.sources) && value.sources.every((source) => !!source && typeof source.nodeId === "string" && (source.parentId === null || typeof source.parentId === "string") && (source.role === "user" || source.role === "assistant") && Array.isArray(source.textParts) && source.textParts.every((part) => typeof part === "string"));
-  var isSummaryEligible = (message) => !!message && (message.role === "user" || message.role === "assistant") && textParts(message) !== null && !hasTool(message);
-  var resolveValidSummary = (chat, summary, generatingNodeIds = []) => {
-    if (!isBubbleSummary(summary))
-      return null;
-    const candidate = summary, path = chat.branchTree?.activePath ?? chat.messages.map((_23, index) => String(index));
-    if (typeof candidate.text !== "string" || !candidate.text.trim() || !Array.isArray(candidate.sources) || !candidate.sources.length)
-      return null;
-    const indices = candidate.sources.map((source) => path.indexOf(source?.nodeId));
-    if (indices.some((index) => index < 0) || new Set(indices).size !== indices.length)
-      return null;
-    const first = Math.min(...indices), last = Math.max(...indices);
-    if (last - first + 1 !== indices.length)
-      return null;
-    for (let offset = 0; offset < candidate.sources.length; offset++) {
-      const index = first + offset, source = candidate.sources[offset], nodeId = path[index];
-      const node = chat.branchTree?.nodes[nodeId], message = chat.messages[index], parts = textParts(message);
-      if (!source || source.nodeId !== nodeId || generatingNodeIds.includes(nodeId) || !isSummaryEligible(message) || !parts || message.role !== source.role || !Array.isArray(source.textParts) || !equalParts(parts, source.textParts) || (node?.parentId ?? null) !== source.parentId)
-        return null;
-    }
-    return { first, last };
-  };
-  var getAppliedBubbleSummaries = (chat, messageIndex = chat.messages.length, generatingNodeIds = []) => {
-    const candidates = (Array.isArray(chat.summaries) ? chat.summaries : []).filter((summary) => summary?.useForSubmit).map((summary) => ({ summary, range: resolveValidSummary(chat, summary, generatingNodeIds) })).filter((value) => !!value.range && value.range.last < messageIndex);
-    const accepted = candidates.filter((candidate) => !candidates.some((other) => other !== candidate && candidate.range.first <= other.range.last && other.range.first <= candidate.range.last));
-    return accepted;
-  };
-  var bubbleSummarySubmitMessage = (summary) => ({ role: "user", content: [{ type: "text", text: `${summary.format === "compact" ? "Retained conversation context. Answer the latest request using the requirements and state below. Follow the retained language, tone, structure and length requirements and examples, not formatting added for this summary. Adoption and plans do not imply execution; preserve uncertainty about what has been done.\n" : "Past conversation summary:\n"}${normalizeBubbleSummaryText(summary.text)}` }] });
-  var applyBubbleSummariesForSubmit = (chat, messageIndex, generatingNodeIds = []) => {
-    const source = chat.messages.slice(0, messageIndex), path = chat.branchTree?.activePath ?? source.map((_23, index) => String(index));
-    const accepted = getAppliedBubbleSummaries(chat, messageIndex, generatingNodeIds).filter(({ summary }) => !summary.sources.some((source2) => chat.omittedNodes?.[source2.nodeId]));
-    const starts = new Map(accepted.map((value) => [value.range.first, value]));
-    const result3 = [];
-    for (let index = 0; index < source.length; index++) {
-      const replacement = starts.get(index);
-      if (replacement) {
-        result3.push(bubbleSummarySubmitMessage(replacement.summary));
-        index = replacement.range.last;
-        continue;
-      }
-      if (chat.omittedNodes?.[path[index]] && !hasTool(source[index]))
-        continue;
-      result3.push(source[index]);
-    }
-    return result3;
-  };
-
-  // src/constants/chatDefaults.ts
-  var defaultSystemMessage = "You are a large language model assistant.\nCarefully heed the user's instructions. \nRespond using Markdown.";
-  var defaultModel = "";
-  var defaultUserMaxToken = 4e3;
-  var _defaultChatConfig = {
-    model: defaultModel,
-    max_tokens: defaultUserMaxToken,
-    temperature: 1,
-    presence_penalty: 0,
-    top_p: 1,
-    frequency_penalty: 0,
-    stream: true,
-    reasoning_effort: "none",
-    reasoning_budget_tokens: 0
-  };
-  var _defaultImageDetail = "auto";
-
-  // src/utils/chatIdentity.ts
-  var ensureUniqueChatIds = (chats) => {
-    const seen = /* @__PURE__ */ new Set();
-    let changed = false;
-    chats.forEach((chat) => {
-      const hasValidId = typeof chat.id === "string" && chat.id.length > 0;
-      if (!hasValidId || seen.has(chat.id)) {
-        chat.id = editingUUID();
-        changed = true;
-      }
-      seen.add(chat.id);
-    });
-    return changed;
-  };
-  var assignFreshChatIds = (chats) => {
-    chats.forEach((chat) => {
-      chat.id = editingUUID();
-    });
-  };
 
   // node_modules/@babel/runtime/helpers/esm/typeof.js
   function _typeof(o) {
@@ -12416,10 +10543,2971 @@ ${message.content}` : message.content).join("\n\n").trim();
   var loadNamespaces = instance.loadNamespaces;
   var loadLanguages = instance.loadLanguages;
 
+  // src/utils/openrouterRequest.ts
+  var isOpenRouterURL = (url) => url.protocol === "https:" && ["openrouter.ai", "eu.openrouter.ai", "us.openrouter.ai"].includes(url.hostname);
+  function validateOpenRouterSettings(settings, model, responseCacheEnabled = true) {
+    if (settings === void 0)
+      return;
+    const object2 = (v) => typeof v === "object" && v !== null && !Array.isArray(v);
+    if (!object2(settings) || [settings.routing, settings.promptCache, ...responseCacheEnabled ? [settings.responseCache] : []].some((v) => v !== void 0 && !object2(v)))
+      return "openRouter.errors.invalid";
+    const r = settings.routing;
+    if (r) {
+      if (r.max_price !== void 0 && !object2(r.max_price))
+        return "openRouter.errors.price";
+      for (const list of [r.order, r.only, r.ignore]) {
+        if (list !== void 0 && (!Array.isArray(list) || list.some((v) => typeof v !== "string" || !v.trim()) || new Set(list).size !== list.length))
+          return "openRouter.errors.slugs";
+      }
+      if ([...r.order ?? [], ...r.only ?? []].some((v) => r.ignore?.includes(v)) || r.order?.some((v) => r.only?.length && !r.only.includes(v)))
+        return "openRouter.errors.conflict";
+      if (r.order?.length && r.sort)
+        return "openRouter.errors.conflict";
+      if (r.sort !== void 0 && !["price", "throughput", "latency"].includes(r.sort))
+        return "openRouter.errors.invalid";
+      if (r.data_collection !== void 0 && !["allow", "deny"].includes(r.data_collection))
+        return "openRouter.errors.invalid";
+      for (const v of [r.allow_fallbacks, r.require_parameters, r.zdr])
+        if (v !== void 0 && typeof v !== "boolean")
+          return "openRouter.errors.invalid";
+      for (const v of [r.max_price?.prompt, r.max_price?.completion])
+        if (v !== void 0 && (typeof v !== "number" || !Number.isFinite(v) || v < 0))
+          return "openRouter.errors.price";
+    }
+    if (settings.stickySession !== void 0 && typeof settings.stickySession !== "boolean")
+      return "openRouter.errors.invalid";
+    const p = settings.promptCache;
+    if (p) {
+      if (!["provider-default", "claude-conversation", "claude-system"].includes(p.mode) || p.ttl !== void 0 && !["5m", "1h"].includes(p.ttl))
+        return "openRouter.errors.invalid";
+      if (p.mode !== "provider-default" && model !== void 0 && !model.startsWith("anthropic/claude-"))
+        return "openRouter.errors.model";
+    }
+    const c = settings.responseCache;
+    if (c && responseCacheEnabled) {
+      if (!["inherit", "off", "on"].includes(c.mode))
+        return "openRouter.errors.invalid";
+      if (c.ttlSeconds !== void 0 && (!Number.isInteger(c.ttlSeconds) || c.ttlSeconds < 1 || c.ttlSeconds > 86400))
+        return "openRouter.errors.ttl";
+    }
+  }
+  function hardOpenRouterConstraints(settings) {
+    const error2 = validateOpenRouterSettings(settings, void 0, false);
+    if (error2)
+      throw new Error(instance.t(`model:${error2}`));
+    const r = settings?.routing;
+    if (!r)
+      return;
+    const constrained = {
+      only: r.only?.length ? [...r.only] : void 0,
+      ignore: r.ignore?.length ? [...r.ignore] : void 0,
+      max_price: r.max_price && Object.values(r.max_price).some((v) => v !== void 0) ? { ...r.max_price } : void 0,
+      data_collection: r.data_collection === "deny" ? "deny" : void 0,
+      zdr: r.zdr === true ? true : void 0
+    };
+    return Object.values(constrained).some((v) => v !== void 0) ? constrained : void 0;
+  }
+  function applyOpenRouterControls(endpointIsOpenRouter, config, body, headers, context) {
+    const settings = config.openRouter;
+    if (!endpointIsOpenRouter) {
+      if (settings && config.providerId === "openrouter")
+        throw new Error(instance.t("model:openRouter.errors.endpoint"));
+      return;
+    }
+    const error2 = validateOpenRouterSettings(settings, config.model, context?.viaProxy === true);
+    if (error2)
+      throw new Error(instance.t(`model:${error2}`));
+    const routing = context?.auxiliary ? hardOpenRouterConstraints(settings) : settings?.routing;
+    if (routing) {
+      const { order, only, ignore, sort, allow_fallbacks, require_parameters, max_price, data_collection, zdr } = routing;
+      body.provider = { order, only, ignore, sort, allow_fallbacks, require_parameters, max_price, data_collection, zdr };
+    }
+    if (context?.chatId && settings?.stickySession)
+      body.session_id = `weavelet:${context.chatId}${context.auxiliary ? ":title" : ""}`;
+    const p = context?.auxiliary ? void 0 : settings?.promptCache;
+    if (p && p.mode !== "provider-default") {
+      const cache = { type: "ephemeral", ...p.ttl === "1h" ? { ttl: "1h" } : {} };
+      if (p.mode === "claude-conversation")
+        body.cache_control = cache;
+      else {
+        const messages = body.messages;
+        const index = messages.findIndex((m) => m.role === "system");
+        const message = messages[index];
+        const lastText = message?.content.map((c2) => c2.type).lastIndexOf("text") ?? -1;
+        if (lastText < 0)
+          throw new Error(instance.t("model:openRouter.errors.system"));
+        body.messages = messages.map((m, i) => i !== index ? m : {
+          ...m,
+          content: m.content.map((c2, j) => j !== lastText ? c2 : { ...c2, cache_control: cache })
+        });
+      }
+    }
+    if (!context?.viaProxy)
+      return;
+    const c = settings?.responseCache;
+    if (context?.auxiliary || settings?.routing?.zdr || c?.mode === "off")
+      headers["X-OpenRouter-Cache"] = "false";
+    else if (c?.mode === "on") {
+      headers["X-OpenRouter-Cache"] = "true";
+      headers["X-OpenRouter-Cache-TTL"] = String(c.ttlSeconds ?? 300);
+      if (context?.regenerate)
+        headers["X-OpenRouter-Cache-Clear"] = "true";
+    }
+  }
+
+  // src/local-llm/catalog.ts
+  var CURATED_MODELS = [
+    {
+      id: "smollm2-360m-instruct-q8",
+      label: "SmolLM2 360M Instruct (Q8_0)",
+      engine: "wllama",
+      tasks: ["generation", "analysis"],
+      huggingFaceRepo: "HuggingFaceTB/SmolLM2-360M-Instruct-GGUF",
+      revision: "main",
+      downloadFiles: ["smollm2-360m-instruct-q8_0.gguf"],
+      manifest: {
+        kind: "single-file",
+        entrypoint: "smollm2-360m-instruct-q8_0.gguf"
+      },
+      // 386 MB — measured from HF repo (only quantization available)
+      expectedDownloadSize: 386404992,
+      recommendedDeviceTier: "low",
+      notes: "Smallest recommended model. Good for basic text generation on low-end devices.",
+      displayMeta: {
+        supportsTextInference: true,
+        quantization: "Q8_0",
+        parameterSizeLabel: "360M",
+        sourceLabel: "catalog",
+        recommended: true,
+        contextLength: 8192
+      }
+    },
+    {
+      id: "qwen3-0.6b-q4km",
+      label: "Qwen3 0.6B (Q4_K_M)",
+      engine: "wllama",
+      tasks: ["generation", "analysis"],
+      huggingFaceRepo: "bartowski/Qwen_Qwen3-0.6B-GGUF",
+      revision: "main",
+      downloadFiles: ["Qwen_Qwen3-0.6B-Q4_K_M.gguf"],
+      manifest: {
+        kind: "single-file",
+        entrypoint: "Qwen_Qwen3-0.6B-Q4_K_M.gguf"
+      },
+      // 484 MB — measured from HF repo
+      expectedDownloadSize: 484220320,
+      recommendedDeviceTier: "standard",
+      notes: "Balanced size and capability. Latest Qwen3 architecture with generation and analysis.",
+      displayMeta: {
+        supportsTextInference: true,
+        quantization: "Q4_K_M",
+        parameterSizeLabel: "0.6B",
+        sourceLabel: "catalog",
+        recommended: true,
+        contextLength: 40960
+      }
+    },
+    {
+      id: "llm-jp-3-1.8b-instruct-q4km",
+      label: "LLM-jp-3 1.8B Instruct (Q4_K_M)",
+      engine: "wllama",
+      tasks: ["generation", "analysis"],
+      huggingFaceRepo: "alfredplpl/llm-jp-3-1.8b-instruct-gguf",
+      revision: "main",
+      downloadFiles: ["llm-jp-3-1.8b-instruct-Q4_K_M.gguf"],
+      manifest: {
+        kind: "single-file",
+        entrypoint: "llm-jp-3-1.8b-instruct-Q4_K_M.gguf"
+      },
+      // 1.16 GB — measured from HF repo
+      expectedDownloadSize: 1164239104,
+      recommendedDeviceTier: "high",
+      notes: "Japanese-focused model. Good quality for Japanese text generation and analysis.",
+      displayMeta: {
+        supportsTextInference: true,
+        quantization: "Q4_K_M",
+        parameterSizeLabel: "1.8B",
+        sourceLabel: "catalog",
+        recommended: true,
+        contextLength: 4096
+      }
+    }
+  ];
+  function getCatalogModel(id) {
+    return CURATED_MODELS.find((m) => m.id === id);
+  }
+
+  // src/utils/tokenBudget.ts
+  var UNKNOWN_MODEL_CONTEXT_LENGTH = 8192;
+  var UNKNOWN_MODEL_UI_CONTEXT_LENGTH = 128e3;
+  var MIN_PROMPT_RATIO = 0.1;
+  var normalizeContextLength = (contextLength) => Math.max(1, Math.floor(contextLength));
+  var getMinPromptTokensForContext = (contextLength) => Math.max(1, Math.floor(normalizeContextLength(contextLength) * MIN_PROMPT_RATIO));
+  var getMaxCompletionTokensForContext = (contextLength) => {
+    const normalizedContextLength = normalizeContextLength(contextLength);
+    return Math.max(0, normalizedContextLength - getMinPromptTokensForContext(normalizedContextLength));
+  };
+  var clampCompletionTokens = (requestedCompletionTokens, contextLength) => Math.min(
+    Math.max(0, Math.floor(requestedCompletionTokens)),
+    getMaxCompletionTokensForContext(contextLength)
+  );
+
+  // src/utils/localModelLimits.ts
+  var DEFAULT_LOCAL_MODEL_CONTEXT_LENGTH = 2048;
+  function localModelContextLength(state, modelId, capabilities) {
+    if (capabilities?.contextLength)
+      return capabilities.contextLength;
+    const stored = state.localModels?.find((model) => model.id === modelId);
+    if (stored?.displayMeta?.contextLength)
+      return stored.displayMeta.contextLength;
+    const catalog = getCatalogModel(modelId);
+    if (catalog?.displayMeta?.contextLength)
+      return catalog.displayMeta.contextLength;
+    return DEFAULT_LOCAL_MODEL_CONTEXT_LENGTH;
+  }
+  var localModelDefaultMaxTokens = (state, modelId, capabilities) => getMaxCompletionTokensForContext(localModelContextLength(state, modelId, capabilities));
+
+  // src/utils/reasoning.ts
+  var getEffectiveVerbosity = (verbosity, allowMax) => verbosity === "max" && !allowMax ? "medium" : verbosity;
+  var normalizeModelId = (modelId) => modelId.toLowerCase();
+  var getClaudeVersion = (id) => {
+    const match = /claude(?:-[a-z]+)*[-.](\d+(?:[.-]\d+)?)/.exec(id);
+    if (!match)
+      return void 0;
+    const version = parseFloat(match[1].replace("-", "."));
+    return Number.isFinite(version) ? version : void 0;
+  };
+  var isClaudeReasoningModel = (modelId) => {
+    const id = normalizeModelId(modelId);
+    if (!id.includes("claude"))
+      return false;
+    if (id.includes("thinking"))
+      return true;
+    const version = getClaudeVersion(id);
+    if (version === void 0)
+      return true;
+    return version >= 3.7;
+  };
+  var isOpenRouterAdaptiveReasoningModel = (modelId, providerId) => {
+    if (providerId !== "openrouter")
+      return false;
+    const id = normalizeModelId(modelId);
+    if (!id.includes("claude"))
+      return false;
+    const version = getClaudeVersion(id);
+    if (version === void 0)
+      return true;
+    return version >= 4.6;
+  };
+  var isOpenRouterClaudeEffortModel = (modelId, providerId) => {
+    if (providerId !== "openrouter")
+      return false;
+    const id = normalizeModelId(modelId);
+    if (!id.includes("claude"))
+      return false;
+    const version = getClaudeVersion(id);
+    if (version === void 0)
+      return true;
+    return version >= 4.7;
+  };
+  var isOpenRouterClaudeVerbosityModel = (modelId, providerId) => {
+    if (providerId !== "openrouter")
+      return false;
+    const id = normalizeModelId(modelId);
+    const version = getClaudeVersion(id);
+    if (version === void 0)
+      return false;
+    if (id.includes("opus"))
+      return version >= 4.5;
+    if (id.includes("sonnet"))
+      return version >= 4.6;
+    return /(?:fable|mythos)/.test(id) && version >= 5;
+  };
+  var supportsMaxVerbosity = (modelId, providerId) => {
+    if (!isOpenRouterClaudeVerbosityModel(modelId, providerId))
+      return false;
+    const id = normalizeModelId(modelId);
+    const version = getClaudeVersion(id);
+    return version !== void 0 && version >= 4.6;
+  };
+
+  // src/api/providerModels.ts
+  var isRecord = (value) => typeof value === "object" && value !== null;
+  var asProviderModelListPayload = (value) => isRecord(value) ? value : {};
+  var asProviderModelPayload = (value) => isRecord(value) ? value : {};
+  var asProviderPricingPayload = (value) => isRecord(value) ? value : {};
+  var toStringValue = (value) => typeof value === "string" && value.length > 0 ? value : void 0;
+  var toNumberValue = (value) => typeof value === "number" && Number.isFinite(value) ? value : void 0;
+  var toMillionTokenPrice = (value) => {
+    if (typeof value === "number" && Number.isFinite(value)) {
+      return value * 1e6;
+    }
+    if (typeof value === "string") {
+      const parsed = parseFloat(value);
+      return Number.isFinite(parsed) ? parsed * 1e6 : void 0;
+    }
+    return void 0;
+  };
+  var getModelEntries = (value) => {
+    const payload = asProviderModelListPayload(value);
+    if (Array.isArray(payload.data))
+      return payload.data;
+    if (Array.isArray(payload.models))
+      return payload.models;
+    return [];
+  };
+  var isSupportedModelId = (modelId) => {
+    const normalizedId = modelId.toLowerCase();
+    return !(normalizedId.includes("embed") || normalizedId.includes("tts") || normalizedId.includes("whisper") || normalizedId.includes("dall-e") || normalizedId.includes("moderation"));
+  };
+  var REASONING_MODEL_RE = (
+    // OpenAI o-series: o1, o1-mini, o3, o3-mini, o4-mini, etc.
+    // Uses word-boundary to avoid false positives like "proto1", "falcon-40b"
+    /(?:^|[-/])o[134](?:$|[-/])/
+  );
+  var REASONING_MODEL_NAMES = [
+    "deepseek-r1",
+    "deepseek-reasoner",
+    "qwq"
+  ];
+  var isVisionModel = (modelId) => {
+    const id = modelId.toLowerCase();
+    if (/gpt-4[o-]/.test(id) && !id.includes("audio-preview"))
+      return true;
+    if (/claude-3/.test(id))
+      return true;
+    if (id.includes("gemini"))
+      return true;
+    if (id.includes("vision"))
+      return true;
+    return false;
+  };
+  var isAudioModel = (modelId) => {
+    const id = modelId.toLowerCase();
+    if (id.includes("audio"))
+      return true;
+    if (id.includes("realtime"))
+      return true;
+    return false;
+  };
+  var isReasoningModel = (modelId) => {
+    const id = modelId.toLowerCase();
+    return REASONING_MODEL_RE.test(id) || REASONING_MODEL_NAMES.some((name) => id.includes(name)) || isClaudeReasoningModel(id);
+  };
+  var normalizeModelEntry = (providerId, entry) => {
+    const payload = asProviderModelPayload(entry);
+    const id = toStringValue(payload.id) ?? toStringValue(payload.name);
+    const name = toStringValue(payload.name) ?? toStringValue(payload.id);
+    if (!id || !name || !isSupportedModelId(id)) {
+      return null;
+    }
+    const pricing = asProviderPricingPayload(payload.pricing);
+    const promptPrice = toMillionTokenPrice(pricing.prompt);
+    const completionPrice = toMillionTokenPrice(pricing.completion);
+    const arch = isRecord(payload.architecture) ? payload.architecture : {};
+    const modality = typeof arch.modality === "string" ? arch.modality : "";
+    const inputModality = modality.split("->")[0] ?? "";
+    const modelType = inputModality.includes("image") ? "image" : "text";
+    const supportedParameters = Array.isArray(payload.supported_parameters) ? payload.supported_parameters.filter(
+      (value) => typeof value === "string"
+    ) : void 0;
+    const declaresReasoning = supportedParameters?.some(
+      (param) => param === "reasoning" || param === "include_reasoning"
+    ) ?? false;
+    const reasoning = isRecord(payload.reasoning) ? payload.reasoning : {};
+    return {
+      id,
+      name,
+      providerId,
+      supportedParameters,
+      contextLength: toNumberValue(payload.context_length) ?? toNumberValue(payload.context_window),
+      maxCompletionTokens: toNumberValue(
+        isRecord(payload.top_provider) ? payload.top_provider.max_completion_tokens : void 0
+      ),
+      promptPrice,
+      completionPrice,
+      created: toNumberValue(payload.created),
+      modelType,
+      streamSupport: true,
+      supportsReasoning: declaresReasoning || isReasoningModel(id),
+      reasoningMandatory: reasoning.mandatory === true,
+      supportsVision: modelType === "image" || isVisionModel(id),
+      supportsAudio: isAudioModel(id)
+    };
+  };
+  function normalizeModels(providerId, data) {
+    return getModelEntries(data).map((entry) => normalizeModelEntry(providerId, entry)).filter((model) => model !== null);
+  }
+
+  // src/utils/modelReasoning.ts
+  var inferMandatoryReasoning = (modelId, providerId) => providerId === "openrouter" && /claude-opus-5[.-]5(?:$|:)/.test(modelId.toLowerCase());
+  function findProviderCustomModel(providerCustomModels, modelId, providerId) {
+    if (!providerCustomModels)
+      return void 0;
+    if (providerId) {
+      return providerCustomModels[providerId]?.find((m) => m.modelId === modelId);
+    }
+    for (const models of Object.values(providerCustomModels)) {
+      if (!models)
+        continue;
+      const found = models.find((m) => m.modelId === modelId);
+      if (found)
+        return found;
+    }
+    return void 0;
+  }
+  function findFavorite(favorites, modelId, providerId) {
+    if (providerId) {
+      return favorites.find(
+        (f) => f.modelId === modelId && f.providerId === providerId
+      );
+    }
+    return favorites.find((f) => f.modelId === modelId);
+  }
+  function findCachedModel(cache, modelId, providerId) {
+    if (providerId && cache[providerId]) {
+      return cache[providerId].find((m) => m.id === modelId);
+    }
+    for (const models of Object.values(cache)) {
+      if (!models)
+        continue;
+      const found = models.find((m) => m.id === modelId);
+      if (found)
+        return found;
+    }
+    return void 0;
+  }
+  function modelSupportsReasoning(state, modelId, providerId, modelSource) {
+    if (modelSource === "local")
+      return false;
+    const inferred = isReasoningModel(modelId);
+    const custom = findProviderCustomModel(state.providerCustomModels, modelId, providerId);
+    if (custom?.supportsReasoning != null)
+      return custom.supportsReasoning;
+    const fav = findFavorite(state.favoriteModels ?? [], modelId, providerId);
+    if (fav?.supportsReasoning != null)
+      return fav.supportsReasoning || inferred;
+    const cached = findCachedModel(state.providerModelCache ?? {}, modelId, providerId);
+    if (cached?.supportsReasoning != null)
+      return cached.supportsReasoning || inferred;
+    return inferred;
+  }
+  function modelRequiresReasoning(state, modelId, providerId) {
+    const favorite = findFavorite(state.favoriteModels ?? [], modelId, providerId);
+    const cached = findCachedModel(state.providerModelCache ?? {}, modelId, providerId);
+    return favorite?.reasoningMandatory ?? cached?.reasoningMandatory ?? inferMandatoryReasoning(modelId, providerId);
+  }
+  function buildReasoningCapabilities(config, supportsReasoning, requiresReasoning) {
+    return { supportsReasoning, requiresReasoning: !!(supportsReasoning || config.force_reasoning) && config.providerId === "openrouter" && config.reasoning_effort === "none" && requiresReasoning() };
+  }
+  function getRequestReasoningCapabilities(config, state) {
+    return buildReasoningCapabilities(
+      config,
+      modelSupportsReasoning(state, config.model, config.providerId),
+      () => modelRequiresReasoning(state, config.model, config.providerId)
+    );
+  }
+
+  // src/constants/chatDefaults.ts
+  var defaultSystemMessage = "You are a large language model assistant.\nCarefully heed the user's instructions. \nRespond using Markdown.";
+  var defaultModel = "";
+  var defaultUserMaxToken = 4e3;
+  var _defaultChatConfig = {
+    model: defaultModel,
+    max_tokens: defaultUserMaxToken,
+    temperature: 1,
+    presence_penalty: 0,
+    top_p: 1,
+    frequency_penalty: 0,
+    stream: true,
+    reasoning_effort: "none",
+    reasoning_budget_tokens: 0
+  };
+  var _defaultImageDetail = "auto";
+
+  // src/utils/remoteModelLimits.ts
+  function remoteModelContextInfo(state, modelId, providerId) {
+    const custom = findProviderCustomModel(state.providerCustomModels, modelId, providerId);
+    if (custom?.contextLength)
+      return { contextLength: custom.contextLength, isFallback: false };
+    const fav = findFavorite(state.favoriteModels ?? [], modelId, providerId);
+    if (fav?.contextLength)
+      return { contextLength: fav.contextLength, isFallback: false };
+    const cached = findCachedModel(state.providerModelCache ?? {}, modelId, providerId);
+    if (cached?.contextLength)
+      return { contextLength: cached.contextLength, isFallback: false };
+    return { contextLength: UNKNOWN_MODEL_CONTEXT_LENGTH, isFallback: true };
+  }
+  function remoteModelStreamSupported(state, modelId, providerId) {
+    const custom = findProviderCustomModel(state.providerCustomModels, modelId, providerId);
+    if (custom?.streamSupport != null)
+      return custom.streamSupport;
+    const fav = findFavorite(state.favoriteModels ?? [], modelId, providerId);
+    if (fav?.streamSupport != null)
+      return fav.streamSupport;
+    const cached = findCachedModel(state.providerModelCache ?? {}, modelId, providerId);
+    if (cached?.streamSupport != null)
+      return cached.streamSupport;
+    return true;
+  }
+  function remoteModelDefaultMaxTokens(state, modelId, providerId) {
+    const context = remoteModelContextInfo(state, modelId, providerId);
+    const outputLimit = [
+      findProviderCustomModel(state.providerCustomModels, modelId, providerId),
+      findFavorite(state.favoriteModels ?? [], modelId, providerId),
+      findCachedModel(state.providerModelCache ?? {}, modelId, providerId)
+    ].map((model) => model?.maxCompletionTokens).find((limit) => limit != null && Number.isFinite(limit) && limit > 0);
+    const contextLimit = getMaxCompletionTokensForContext(context.contextLength);
+    if (outputLimit != null)
+      return context.isFallback ? outputLimit : Math.min(outputLimit, contextLimit);
+    return context.isFallback ? defaultUserMaxToken : contextLimit;
+  }
+
+  // src/utils/modelSettingsCore.ts
+  var modelKey = ({ model, providerId, modelSource }) => JSON.stringify([modelSource === "local" ? "local" : "remote", providerId ?? "", model]);
+  var defaultOpenRouterSettings = () => ({
+    responseCache: { mode: "off" },
+    stickySession: true
+  });
+  var pickModelSettings = (config) => ({
+    openRouter: config.openRouter ? structuredClone(config.openRouter) : void 0,
+    max_tokens: config.max_tokens,
+    temperature: config.temperature,
+    presence_penalty: config.presence_penalty,
+    top_p: config.top_p,
+    frequency_penalty: config.frequency_penalty,
+    stream: config.stream,
+    reasoning_effort: config.reasoning_effort,
+    reasoning_budget_tokens: config.reasoning_budget_tokens,
+    verbosity: config.verbosity,
+    force_reasoning: config.force_reasoning
+  });
+  var savedModelSettings = (config, target, getModelDefaultMaxTokens) => {
+    if (modelKey(config) === modelKey(target))
+      return pickModelSettings(config);
+    const saved = config.modelSettings?.[modelKey(target)];
+    if (saved)
+      return { ...saved, openRouter: saved.openRouter ? structuredClone(saved.openRouter) : void 0 };
+    return {
+      ...pickModelSettings(_defaultChatConfig),
+      openRouter: target.providerId === "openrouter" && target.modelSource !== "local" ? defaultOpenRouterSettings() : void 0,
+      max_tokens: getModelDefaultMaxTokens(target.model, target.providerId, target.modelSource)
+    };
+  };
+  var switchConfigModel = (config, target, getModelDefaultMaxTokens) => {
+    if (modelKey(config) === modelKey(target))
+      return config;
+    const modelSettings = {
+      ...config.modelSettings,
+      [modelKey(config)]: { ...config.modelSettings?.[modelKey(config)], ...pickModelSettings(config) }
+    };
+    return {
+      ...config,
+      ...savedModelSettings({ ...config, modelSettings }, target, getModelDefaultMaxTokens),
+      ...target,
+      modelSettings
+    };
+  };
+
+  // src/utils/streamSupportCore.ts
+  var normalizeConfigStream = (config, getModelDefaultMaxTokens, isModelStreamSupported) => ({
+    ...config,
+    max_tokens: config.max_tokens === defaultUserMaxToken ? getModelDefaultMaxTokens(config.model, config.providerId, config.modelSource) : config.max_tokens,
+    stream: isModelStreamSupported(config.model, config.providerId, config.modelSource) ? config.stream !== false : false
+  });
+
+  // src/utils/jsonChanges.ts
+  var orderedJSONEqual = (left, right) => {
+    if (Object.is(left, right))
+      return true;
+    if (!left || !right || typeof left !== "object" || typeof right !== "object" || Array.isArray(left) !== Array.isArray(right))
+      return false;
+    const a = Object.keys(left), b = Object.keys(right);
+    return a.length === b.length && a.every((key, index) => key === b[index] && orderedJSONEqual(left[key], right[key]));
+  };
+  function appendChanges(before, after, path, output2) {
+    if (orderedJSONEqual(before, after))
+      return;
+    const opaque = (value) => value && typeof value === "object" && !Array.isArray(value) && Object.keys(value).length === 1 && Number.isInteger(value.opaqueRef);
+    if (opaque(before) || opaque(after)) {
+      output2.push({ op: "set", path, value: after });
+      return;
+    }
+    if (Array.isArray(before) && Array.isArray(after)) {
+      for (let i = 0; i < after.length; i++) {
+        if (i < before.length)
+          appendChanges(before[i], after[i], [...path, i], output2);
+        else
+          output2.push({ op: "set", path: [...path, i], value: after[i] });
+      }
+      for (let i = before.length - 1; i >= after.length; i--)
+        output2.push({ op: "remove", path: [...path, i] });
+    } else if (before && after && typeof before === "object" && typeof after === "object" && !Array.isArray(before) && !Array.isArray(after)) {
+      for (const key of Object.keys(before))
+        if (!Object.hasOwn(after, key))
+          output2.push({ op: "remove", path: [...path, key] });
+      for (const key of Object.keys(after)) {
+        if (Object.hasOwn(before, key))
+          appendChanges(before[key], after[key], [...path, key], output2);
+        else
+          output2.push({ op: "set", path: [...path, key], value: after[key] });
+      }
+      if (!orderedJSONEqual(Object.keys(before), Object.keys(after)))
+        output2.push({ op: "keys", path, keys: Object.keys(after) });
+    } else
+      output2.push({ op: "set", path, value: after });
+  }
+  function diffJSONChanges(before, after) {
+    const output2 = [];
+    appendChanges(before, after, [], output2);
+    return output2;
+  }
+
+  // shared/google-sync/chatConfig.ts
+  function normalizeRemoteConfig(config, modelState) {
+    if (config.modelSource === "local")
+      throw new Error("Local model configuration is not supported by this remote adapter.");
+    return normalizeConfigStream(
+      config,
+      (model, providerId) => remoteModelDefaultMaxTokens(modelState, model, providerId),
+      (model, providerId) => remoteModelStreamSupported(modelState, model, providerId)
+    );
+  }
+  function normalizeChatConfig(config, modelState = {}, localCapabilities) {
+    const defaultMaxTokens = (model, providerId, source) => source === "local" ? localModelDefaultMaxTokens(modelState, model, localCapabilities?.[model]) : remoteModelDefaultMaxTokens(modelState, model, providerId);
+    return normalizeConfigStream(config, defaultMaxTokens, (model, providerId, source) => source === "local" ? true : remoteModelStreamSupported(modelState, model, providerId));
+  }
+  function saveDefaultChatConfig(config, modelState = {}, localCapabilities) {
+    const contextLength = config.modelSource === "local" ? localModelContextLength(modelState, config.model, localCapabilities?.[config.model]) : (() => {
+      const info = remoteModelContextInfo(modelState, config.model, config.providerId);
+      return info.isFallback ? UNKNOWN_MODEL_UI_CONTEXT_LENGTH : info.contextLength;
+    })();
+    return normalizeChatConfig(config.max_tokens === void 0 ? config : { ...config, max_tokens: clampCompletionTokens(config.max_tokens, contextLength) }, modelState, localCapabilities);
+  }
+  function chatConfig(json) {
+    const input = JSON.parse(json);
+    let config = input.config;
+    const state = input.modelState ?? {};
+    if (input.operation === "switch") {
+      if (!input.target)
+        throw new Error("Missing model target.");
+      config = switchConfigModel(
+        config,
+        { model: input.target.model, providerId: input.target.providerId, modelSource: input.target.modelSource },
+        (model, providerId, source) => source === "local" ? localModelDefaultMaxTokens(state, model, input.localCapabilities?.[model]) : remoteModelDefaultMaxTokens(state, model, providerId)
+      );
+    } else if (input.operation !== "normalize" && input.operation !== "saveDefaults")
+      throw new Error("Unknown chat config operation.");
+    const next = input.operation === "saveDefaults" ? saveDefaultChatConfig(config, state, input.localCapabilities) : normalizeChatConfig(config, state, input.localCapabilities);
+    return JSON.stringify({ changes: diffJSONChanges(input.config, JSON.parse(JSON.stringify(next))) });
+  }
+
+  // src/utils/branchUtils.ts
+  var import_lodash = __toESM(require_lodash(), 1);
+
+  // src/types/chat.ts
+  var roles = ["user", "assistant", "system"];
+  function strToTextContent(ob) {
+    return {
+      type: "text",
+      text: ob
+    };
+  }
+  function isTextContent(ob) {
+    return ob !== void 0 && ob !== null && ob.type === "text";
+  }
+  function isImageContent(ob) {
+    return ob !== void 0 && ob !== null && ob.image_url !== void 0;
+  }
+  function isToolCallContent(ob) {
+    return ob !== void 0 && ob !== null && ob.type === "tool_call";
+  }
+  function isToolResultContent(ob) {
+    return ob !== void 0 && ob !== null && ob.type === "tool_result";
+  }
+
+  // src/utils/contentValidation.ts
+  var hasMeaningfulContent = (content) => content.some((part) => {
+    if (isImageContent(part))
+      return true;
+    return isTextContent(part) && part.text.trim().length > 0;
+  });
+  var hasMeaningfulMessageContent = (messages) => messages.some((message) => hasMeaningfulContent(message.content));
+
+  // src/utils/messageText.ts
+  var firstTextIndex = (content) => content.findIndex((item) => item.type === "text");
+  var textValueOf = (content) => {
+    const index = firstTextIndex(content);
+    return index >= 0 ? content[index].text : "";
+  };
+  var replaceTextValue = (content, text) => {
+    const index = firstTextIndex(content);
+    if (index < 0) {
+      return [{ type: "text", text }, ...content];
+    }
+    const next = [...content];
+    next[index] = { ...content[index], text };
+    return next;
+  };
+
+  // src/utils/streamingBuffer.ts
+  var STREAMING_CONTENT_HASH_PREFIX = "__streaming:";
+  var streamingBuffers = /* @__PURE__ */ new Map();
+  var cloneContentItem = (content) => {
+    if (content.type === "image_url")
+      return { ...content, image_url: { ...content.image_url } };
+    return { ...content };
+  };
+  var cloneContent = (content) => content.map(cloneContentItem);
+  var bufferKey = (chatId, nodeId) => JSON.stringify([chatId, nodeId]);
+  var isStreamingContentHash = (hash) => hash.startsWith(STREAMING_CONTENT_HASH_PREFIX);
+  var getStreamingTargetFromHash = (hash) => {
+    if (!isStreamingContentHash(hash))
+      return null;
+    try {
+      const target = JSON.parse(hash.slice(STREAMING_CONTENT_HASH_PREFIX.length));
+      return Array.isArray(target) && target.length === 2 && target.every((value) => typeof value === "string") ? { chatId: target[0], nodeId: target[1] } : null;
+    } catch {
+      return null;
+    }
+  };
+  var getBufferedContent = (chatId, nodeId) => {
+    const key = bufferKey(chatId, nodeId);
+    const entry = streamingBuffers.get(key);
+    return entry ? cloneContent(entry.content) : void 0;
+  };
+  var peekBufferedContent = (chatId, nodeId) => {
+    const key = bufferKey(chatId, nodeId);
+    return streamingBuffers.get(key)?.content;
+  };
+  var finalizeStreamingSnapshotState = (chats, contentStore) => {
+    if (!chats || chats.length === 0) {
+      return { chats, contentStore, changed: false };
+    }
+    let updatedChats = chats;
+    let updatedContentStore = contentStore;
+    let changed = false;
+    const rematerializedChatIndexes = /* @__PURE__ */ new Set();
+    chats.forEach((chat, chatIndex) => {
+      const tree = chat.branchTree;
+      if (!tree)
+        return;
+      Object.values(tree.nodes).forEach((node) => {
+        if (!isStreamingContentHash(node.contentHash))
+          return;
+        const bufferedContent = getBufferedContent(chat.id, node.id);
+        if (!bufferedContent)
+          return;
+        if (!changed) {
+          updatedChats = chats.slice();
+          updatedContentStore = Object.fromEntries(Object.entries(contentStore).map(([hash, entry]) => [hash, { ...entry }]));
+          changed = true;
+        }
+        if (updatedChats[chatIndex] === chats[chatIndex]) {
+          updatedChats = cloneChatAt(updatedChats, chatIndex);
+        }
+        const updatedChat = updatedChats[chatIndex];
+        const updatedTree = updatedChat.branchTree;
+        updatedTree.nodes[node.id] = {
+          ...updatedTree.nodes[node.id],
+          contentHash: addContent(updatedContentStore, bufferedContent)
+        };
+        rematerializedChatIndexes.add(chatIndex);
+      });
+    });
+    rematerializedChatIndexes.forEach((chatIndex) => {
+      const chat = updatedChats[chatIndex];
+      if (!chat.branchTree)
+        return;
+      chat.messages = materializeActivePath(chat.branchTree, updatedContentStore);
+    });
+    return { chats: updatedChats, contentStore: updatedContentStore, changed };
+  };
+
+  // src/utils/contentStore.ts
+  var import_diff_match_patch = __toESM(require_diff_match_patch());
+  var dmp = new import_diff_match_patch.diff_match_patch();
+  var MAX_CHAIN_DEPTH = 5;
+  var pendingGCHashes = /* @__PURE__ */ new Set();
+  var DELTA_SIZE_THRESHOLD = 0.7;
+  function isDeltaEligible(content) {
+    return content.length > 0 && content.every((c) => c.type === "text");
+  }
+  function computeContentHash(content) {
+    const str = JSON.stringify(content);
+    let hash = 2166136261;
+    for (let i = 0; i < str.length; i++) {
+      hash ^= str.charCodeAt(i);
+      hash = hash * 16777619 >>> 0;
+    }
+    return hash.toString(36);
+  }
+  function getChainDepth(store, hash) {
+    let depth = 0;
+    let current = hash;
+    const visited = /* @__PURE__ */ new Set();
+    while (store[current]?.delta) {
+      if (visited.has(current))
+        return MAX_CHAIN_DEPTH + 1;
+      visited.add(current);
+      depth++;
+      current = store[current].delta.baseHash;
+    }
+    return depth;
+  }
+  function contentToText(content) {
+    return JSON.stringify(content);
+  }
+  function addContent(store, content) {
+    let hash = computeContentHash(content);
+    const serialized = JSON.stringify(content);
+    while (store[hash] && !isContentMatch(store, hash, serialized)) {
+      hash += "_";
+    }
+    if (store[hash]) {
+      store[hash].refCount++;
+    } else {
+      store[hash] = { content, refCount: 1 };
+    }
+    return hash;
+  }
+  function isContentMatch(store, hash, serialized) {
+    const entry = store[hash];
+    if (!entry)
+      return false;
+    if (entry.delta) {
+      const resolved = resolveContent(store, hash);
+      return JSON.stringify(resolved) === serialized;
+    }
+    return JSON.stringify(entry.content) === serialized;
+  }
+  function addContentDelta(store, content, baseHash) {
+    const baseEntry = store[baseHash];
+    if (!baseEntry)
+      return addContent(store, content);
+    if (!isDeltaEligible(content))
+      return addContent(store, content);
+    const baseContent = resolveContent(store, baseHash);
+    if (!isDeltaEligible(baseContent))
+      return addContent(store, content);
+    if (getChainDepth(store, baseHash) >= MAX_CHAIN_DEPTH - 1) {
+      return addContent(store, content);
+    }
+    let hash = computeContentHash(content);
+    const serialized = JSON.stringify(content);
+    while (store[hash] && !isContentMatch(store, hash, serialized)) {
+      hash += "_";
+    }
+    if (store[hash]) {
+      store[hash].refCount++;
+      return hash;
+    }
+    const baseText = contentToText(baseContent);
+    const newText = contentToText(content);
+    const patches = dmp.patch_make(baseText, newText);
+    const patchText = dmp.patch_toText(patches);
+    if (patchText.length >= newText.length * DELTA_SIZE_THRESHOLD) {
+      store[hash] = { content, refCount: 1 };
+      return hash;
+    }
+    store[hash] = {
+      content: [],
+      refCount: 1,
+      delta: {
+        baseHash,
+        patches: patchText
+      }
+    };
+    return hash;
+  }
+  function retainContent(store, hash) {
+    if (isStreamingContentHash(hash))
+      return;
+    if (store[hash]) {
+      store[hash].refCount++;
+    }
+  }
+  function promoteDependents(store, baseHash) {
+    for (const [hash, entry] of Object.entries(store)) {
+      if (entry.delta?.baseHash === baseHash) {
+        const resolved = resolveContent(store, hash);
+        entry.content = resolved;
+        delete entry.delta;
+      }
+    }
+  }
+  function releaseContent(store, hash) {
+    if (isStreamingContentHash(hash))
+      return;
+    if (!store[hash])
+      return;
+    store[hash].refCount--;
+    if (store[hash].refCount <= 0) {
+      promoteDependents(store, hash);
+      pendingGCHashes.add(hash);
+    }
+  }
+  function resolveContent(store, hash) {
+    if (isStreamingContentHash(hash)) {
+      const target = getStreamingTargetFromHash(hash);
+      return target ? peekBufferedContent(target.chatId, target.nodeId) ?? [] : [];
+    }
+    const entry = store[hash];
+    if (!entry)
+      return [];
+    if (!entry.delta) {
+      return entry.content;
+    }
+    const text = resolveDeltaContentJSON(store, hash);
+    return text === null ? [] : JSON.parse(text);
+  }
+  function resolveDeltaContentJSON(store, hash) {
+    const visited = /* @__PURE__ */ new Set();
+    let current = hash;
+    const deltaChain = [];
+    while (store[current]?.delta) {
+      if (visited.has(current)) {
+        console.error(`[ContentStore] Circular delta chain detected at ${current}`);
+        return null;
+      }
+      visited.add(current);
+      deltaChain.push({
+        hash: current,
+        patches: store[current].delta.patches
+      });
+      current = store[current].delta.baseHash;
+    }
+    const baseEntry = store[current];
+    if (!baseEntry) {
+      console.error(`[ContentStore] Missing delta base: ${current}`);
+      return null;
+    }
+    let text = contentToText(baseEntry.content);
+    for (const { patches: patchText } of deltaChain.reverse()) {
+      const patches = dmp.patch_fromText(patchText);
+      const [result3, applied] = dmp.patch_apply(patches, text);
+      if (applied.some((ok) => !ok)) {
+        console.error(`[ContentStore] Patch apply failed for delta chain`);
+        return null;
+      }
+      text = result3;
+    }
+    try {
+      JSON.parse(text);
+      return text;
+    } catch {
+      console.error(`[ContentStore] Failed to parse resolved delta content`);
+      return null;
+    }
+  }
+  function isContentEqual(store, hash, content) {
+    const resolved = resolveContent(store, hash);
+    return JSON.stringify(resolved) === JSON.stringify(content);
+  }
+  function resolveContentText(store, hash) {
+    const content = resolveContent(store, hash);
+    return content.filter((c) => c.type === "text").map((c) => c.text).join(" ");
+  }
+  function buildExportContentStore(store) {
+    const exported = {};
+    for (const [hash, entry] of Object.entries(store)) {
+      const { delta, ...fullEntry } = entry;
+      if (delta) {
+        exported[hash] = {
+          ...fullEntry,
+          content: resolveContent(store, hash)
+        };
+      } else {
+        exported[hash] = fullEntry;
+      }
+    }
+    return exported;
+  }
+  function validateDeltaIntegrity(store) {
+    const corrupt = /* @__PURE__ */ new Set();
+    for (const [hash, entry] of Object.entries(store)) {
+      if (!entry.delta)
+        continue;
+      if (!store[entry.delta.baseHash]) {
+        console.warn(
+          `[ContentStore] Broken delta: ${hash} references missing base ${entry.delta.baseHash}`
+        );
+        corrupt.add(hash);
+        continue;
+      }
+      const visited = /* @__PURE__ */ new Set();
+      let cur = hash;
+      let isCircular = false;
+      while (store[cur]?.delta) {
+        if (visited.has(cur)) {
+          isCircular = true;
+          break;
+        }
+        visited.add(cur);
+        cur = store[cur].delta.baseHash;
+      }
+      if (isCircular) {
+        console.warn(`[ContentStore] Circular delta chain detected at ${hash}`);
+        corrupt.add(hash);
+        continue;
+      }
+      try {
+        const patches = dmp.patch_fromText(entry.delta.patches);
+        const baseContent = store[cur]?.content;
+        if (baseContent) {
+          let text = contentToText(baseContent);
+          const chain = [];
+          let walk = hash;
+          while (store[walk]?.delta) {
+            chain.push(walk);
+            walk = store[walk].delta.baseHash;
+          }
+          let patchFailed = false;
+          for (const chainHash of chain.reverse()) {
+            const p = dmp.patch_fromText(store[chainHash].delta.patches);
+            const [result3, applied] = dmp.patch_apply(p, text);
+            if (applied.some((ok) => !ok)) {
+              patchFailed = true;
+              break;
+            }
+            text = result3;
+          }
+          if (patchFailed) {
+            console.warn(`[ContentStore] Patch apply failed for delta ${hash}`);
+            corrupt.add(hash);
+            continue;
+          }
+          JSON.parse(text);
+        }
+      } catch (e) {
+        console.warn(`[ContentStore] Delta validation error for ${hash}:`, e);
+        corrupt.add(hash);
+      }
+    }
+    if (corrupt.size > 0) {
+      console.warn(
+        `[ContentStore] ${corrupt.size} corrupt delta(s) detected at startup. Affected hashes will return empty content on read.`
+      );
+    }
+    return corrupt;
+  }
+
+  // src/store/branch-domain.ts
+  var extractSystemText = (content) => content.filter(isTextContent).map((c) => c.text).filter(Boolean).join("\n");
+  var syncBubbleToConfig = (chat, tree, contentStore) => {
+    const topNodeId = tree.activePath[0];
+    if (!topNodeId)
+      return;
+    const topNode = tree.nodes[topNodeId];
+    if (!topNode || topNode.role !== "system")
+      return;
+    const content = resolveContent(contentStore, topNode.contentHash);
+    chat.config = { ...chat.config, systemPrompt: extractSystemText(content) || void 0 };
+  };
+  var cloneChatAt = (chats, chatIndex) => {
+    const result3 = chats.slice();
+    const chat = result3[chatIndex];
+    result3[chatIndex] = {
+      ...chat,
+      messages: chat.messages.slice(),
+      branchTree: chat.branchTree ? {
+        ...chat.branchTree,
+        nodes: { ...chat.branchTree.nodes },
+        activePath: chat.branchTree.activePath.slice(),
+        ...chat.branchTree.messageAttributesV1 ? { messageAttributesV1: structuredClone(readMessageAttributes(chat.branchTree)) } : {}
+      } : void 0,
+      collapsedNodes: chat.collapsedNodes ? { ...chat.collapsedNodes } : void 0,
+      omittedNodes: chat.omittedNodes ? { ...chat.omittedNodes } : void 0,
+      protectedNodes: chat.protectedNodes ? { ...chat.protectedNodes } : void 0
+    };
+    return result3;
+  };
+  var cloneNode = (node) => ({ ...node });
+  var ensureBranchReadyState = (chats, chatIndex, currentContentStore) => {
+    const contentStore = Object.fromEntries(Object.entries(currentContentStore).map(([hash, entry]) => [hash, { ...entry }]));
+    const ensured = ensureBranchTreeState(chats, chatIndex, contentStore);
+    return { chats: cloneChatAt(ensured.chats, chatIndex), contentStore: ensured.contentStore };
+  };
+  var cloneNodeIfPresent = (tree, nodeId) => {
+    if (!nodeId)
+      return;
+    const node = tree.nodes[nodeId];
+    if (!node)
+      return;
+    tree.nodes[nodeId] = cloneNode(node);
+  };
+  var prepareBranchMutationState = (chats, chatIndex, currentContentStore) => {
+    const { chats: updatedChats, contentStore } = ensureBranchReadyState(
+      chats,
+      chatIndex,
+      currentContentStore
+    );
+    const chat = updatedChats[chatIndex];
+    return {
+      chats: updatedChats,
+      chat,
+      tree: chat.branchTree,
+      contentStore
+    };
+  };
+  var finalizePreparedBranchMutationState = ({
+    chats,
+    chat,
+    tree,
+    contentStore
+  }) => {
+    tree.rootId = tree.activePath[0] ?? "";
+    chat.messages = materializeActivePath(tree, contentStore);
+    return { chats, contentStore };
+  };
+  var removeMessageAtIndexFromPreparedState = (state, messageIndex, options) => {
+    const { tree, contentStore } = state;
+    const nodeId = tree.activePath[messageIndex];
+    if (!nodeId)
+      return;
+    const parentId = tree.nodes[nodeId]?.parentId ?? null;
+    const nextId = tree.activePath[messageIndex + 1] ?? null;
+    Object.values(tree.nodes).forEach((node) => {
+      if (node.parentId !== nodeId)
+        return;
+      tree.nodes[node.id] = {
+        ...node,
+        parentId
+      };
+    });
+    if (nextId) {
+      cloneNodeIfPresent(tree, nextId);
+      tree.nodes[nextId].parentId = parentId;
+    }
+    if (!options?.preserveNode) {
+      releaseContent(contentStore, tree.nodes[nodeId].contentHash);
+      deleteMessageAttributes(tree, nodeId);
+      delete tree.nodes[nodeId];
+    }
+    tree.activePath.splice(messageIndex, 1);
+  };
+  var ensureBranchTreeState = (chats, chatIndex, currentContentStore) => {
+    if (chats[chatIndex]?.branchTree) {
+      if (chats[chatIndex].messages.some((message) => Object.keys(message).some((key) => key !== "role" && key !== "content"))) {
+        const updatedChats2 = cloneChatAt(chats, chatIndex);
+        captureProjectedMessageAttributes(updatedChats2[chatIndex], currentContentStore);
+        return { chats: updatedChats2, contentStore: currentContentStore };
+      }
+      return { chats, contentStore: currentContentStore };
+    }
+    const contentStore = Object.fromEntries(Object.entries(currentContentStore).map(([hash, entry]) => [hash, { ...entry }]));
+    const updatedChats = cloneChatAt(chats, chatIndex);
+    flatChatToBranchTree(updatedChats[chatIndex], contentStore);
+    return { chats: updatedChats, contentStore };
+  };
+  var createBranchState = (chats, chatIndex, fromNodeId, newContent, currentContentStore) => {
+    const contentStore = { ...currentContentStore };
+    const updatedChats = cloneChatAt(chats, chatIndex);
+    captureProjectedMessageAttributes(updatedChats[chatIndex], contentStore);
+    const tree = updatedChats[chatIndex].branchTree;
+    const fromNode = tree.nodes[fromNodeId];
+    const newId = editingUUID();
+    const contentHash = newContent ? addContentDelta(contentStore, newContent, fromNode.contentHash) : (() => {
+      retainContent(contentStore, fromNode.contentHash);
+      return fromNode.contentHash;
+    })();
+    tree.nodes[newId] = {
+      id: newId,
+      parentId: fromNode.parentId,
+      role: fromNode.role,
+      contentHash,
+      createdAt: Date.now()
+    };
+    copyMessageAttributes(tree, fromNodeId, tree, newId);
+    const fromIdx = tree.activePath.indexOf(fromNodeId);
+    tree.activePath = [...tree.activePath.slice(0, fromIdx), newId];
+    if (fromIdx === 0)
+      syncBubbleToConfig(updatedChats[chatIndex], tree, contentStore);
+    updatedChats[chatIndex].messages = materializeActivePath(tree, contentStore);
+    return { chats: updatedChats, contentStore, newId };
+  };
+  var switchActivePathState = (chats, chatIndex, newPath, contentStore) => {
+    const updatedChats = cloneChatAt(chats, chatIndex);
+    captureProjectedMessageAttributes(updatedChats[chatIndex], contentStore);
+    const tree = updatedChats[chatIndex].branchTree;
+    tree.activePath = newPath;
+    updatedChats[chatIndex].messages = materializeActivePath(tree, contentStore);
+    return updatedChats;
+  };
+  var deleteBranchState = (chats, chatIndex, nodeId, currentContentStore) => {
+    const contentStore = Object.fromEntries(Object.entries(currentContentStore).map(([hash, entry]) => [hash, { ...entry }]));
+    const updatedChats = cloneChatAt(chats, chatIndex);
+    captureProjectedMessageAttributes(updatedChats[chatIndex], contentStore);
+    const tree = updatedChats[chatIndex].branchTree;
+    const toDelete = collectDescendants(tree, nodeId);
+    const parentId = tree.nodes[nodeId]?.parentId;
+    toDelete.forEach((id) => {
+      releaseContent(contentStore, tree.nodes[id].contentHash);
+      deleteMessageAttributes(tree, id);
+      delete tree.nodes[id];
+    });
+    if (tree.activePath.some((id) => toDelete.has(id))) {
+      if (parentId) {
+        const siblings = getChildrenOf(tree, parentId);
+        if (siblings.length > 0) {
+          tree.activePath = buildPathToLeaf(tree, siblings[0].id);
+        } else {
+          const parentIdx = tree.activePath.indexOf(parentId);
+          tree.activePath = tree.activePath.slice(0, parentIdx + 1);
+        }
+      } else {
+        tree.activePath = [];
+      }
+      updatedChats[chatIndex].messages = materializeActivePath(tree, contentStore);
+    }
+    if (tree.activePath.length)
+      tree.rootId = tree.activePath[0];
+    else if (!tree.nodes[tree.rootId])
+      tree.rootId = "";
+    return { chats: updatedChats, contentStore };
+  };
+  var pruneHiddenNodesState = (chats, chatIndex, currentContentStore) => {
+    const contentStore = Object.fromEntries(Object.entries(currentContentStore).map(([hash, entry]) => [hash, { ...entry }]));
+    const updatedChats = cloneChatAt(chats, chatIndex);
+    captureProjectedMessageAttributes(updatedChats[chatIndex], contentStore);
+    const tree = updatedChats[chatIndex].branchTree;
+    const activeSet = new Set(tree.activePath);
+    const protectedSet = /* @__PURE__ */ new Set();
+    for (const node of Object.values(tree.nodes)) {
+      if (node.pinned) {
+        for (const id of collectDescendants(tree, node.id)) {
+          protectedSet.add(id);
+        }
+      }
+    }
+    const chatProtectedNodes = updatedChats[chatIndex].protectedNodes;
+    if (chatProtectedNodes) {
+      for (const [id, value] of Object.entries(chatProtectedNodes)) {
+        if (value && tree.nodes[id]) {
+          protectedSet.add(id);
+        }
+      }
+    }
+    const toDelete = Object.keys(tree.nodes).filter(
+      (id) => !activeSet.has(id) && !protectedSet.has(id)
+    );
+    toDelete.forEach((id) => {
+      releaseContent(contentStore, tree.nodes[id].contentHash);
+      deleteMessageAttributes(tree, id);
+      delete tree.nodes[id];
+    });
+    for (const id of Object.keys(tree.nodes)) {
+      const node = tree.nodes[id];
+      if (node.parentId && !tree.nodes[node.parentId]) {
+        tree.nodes[id] = cloneNode(node);
+        tree.nodes[id].parentId = null;
+      }
+    }
+    if (tree.activePath.length > 0)
+      tree.rootId = tree.activePath[0];
+    else if (!tree.nodes[tree.rootId])
+      tree.rootId = "";
+    return { chats: updatedChats, contentStore };
+  };
+  var setBranchNodeFieldState = (chats, chatIndex, nodeId, field, value) => {
+    const updated = cloneChatAt(chats, chatIndex);
+    const tree = updated[chatIndex].branchTree;
+    tree.nodes[nodeId] = { ...tree.nodes[nodeId], [field]: value };
+    return updated;
+  };
+  var appendNodeToActivePathState = (chats, chatIndex, role, content, currentContentStore) => {
+    const { chats: updatedChats, chat, tree, contentStore } = prepareBranchMutationState(chats, chatIndex, currentContentStore);
+    const parentId = tree.activePath[tree.activePath.length - 1] ?? null;
+    const newId = editingUUID();
+    tree.nodes[newId] = {
+      id: newId,
+      parentId,
+      role,
+      contentHash: addContent(contentStore, content),
+      createdAt: Date.now()
+    };
+    tree.activePath.push(newId);
+    const finalized = finalizePreparedBranchMutationState({
+      chats: updatedChats,
+      chat,
+      tree,
+      contentStore
+    });
+    return { ...finalized, newId };
+  };
+  var upsertMessageAtIndexState = (chats, chatIndex, messageIndex, message, currentContentStore) => {
+    const { chats: updatedChats, chat, tree, contentStore } = prepareBranchMutationState(chats, chatIndex, currentContentStore);
+    const existingId = tree.activePath[messageIndex];
+    const previousRole = existingId ? tree.nodes[existingId].role : void 0;
+    chat.messages[messageIndex] = message;
+    if (existingId)
+      setMessageAttributes(tree, existingId, message);
+    if (existingId) {
+      const oldHash = tree.nodes[existingId].contentHash;
+      const newHash = addContentDelta(contentStore, message.content, oldHash);
+      releaseContent(contentStore, oldHash);
+      tree.nodes[existingId] = {
+        ...tree.nodes[existingId],
+        role: message.role,
+        contentHash: newHash
+      };
+    } else if (messageIndex === tree.activePath.length) {
+      const parentId = messageIndex === 0 ? null : tree.activePath[messageIndex - 1] ?? null;
+      const newId = editingUUID();
+      tree.nodes[newId] = {
+        id: newId,
+        parentId,
+        role: message.role,
+        contentHash: addContent(contentStore, message.content),
+        createdAt: Date.now()
+      };
+      setMessageAttributes(tree, newId, message);
+      tree.activePath.push(newId);
+      if (messageIndex === 0) {
+        tree.rootId = newId;
+      }
+    }
+    if (messageIndex === 0) {
+      if (previousRole === "system" && message.role !== "system") {
+        chat.config = { ...chat.config, systemPrompt: void 0 };
+      } else {
+        syncBubbleToConfig(chat, tree, contentStore);
+      }
+    }
+    return finalizePreparedBranchMutationState({
+      chats: updatedChats,
+      chat,
+      tree,
+      contentStore
+    });
+  };
+  var insertMessageAtIndexState = (chats, chatIndex, messageIndex, message, currentContentStore) => {
+    const { chats: updatedChats, chat, tree, contentStore } = prepareBranchMutationState(chats, chatIndex, currentContentStore);
+    const prevId = messageIndex > 0 ? tree.activePath[messageIndex - 1] ?? null : null;
+    const nextId = tree.activePath[messageIndex];
+    const newId = editingUUID();
+    tree.nodes[newId] = {
+      id: newId,
+      parentId: prevId,
+      role: message.role,
+      contentHash: addContent(contentStore, message.content),
+      createdAt: Date.now()
+    };
+    if (nextId) {
+      cloneNodeIfPresent(tree, nextId);
+      tree.nodes[nextId].parentId = newId;
+    }
+    setMessageAttributes(tree, newId, message);
+    tree.activePath.splice(messageIndex, 0, newId);
+    if (messageIndex === 0) {
+      tree.rootId = newId;
+    }
+    const finalized = finalizePreparedBranchMutationState({
+      chats: updatedChats,
+      chat,
+      tree,
+      contentStore
+    });
+    return { ...finalized, newId };
+  };
+  var removeMessageAtIndexState = (chats, chatIndex, messageIndex, currentContentStore, options) => {
+    const state = prepareBranchMutationState(chats, chatIndex, currentContentStore);
+    removeMessageAtIndexFromPreparedState(state, messageIndex, options);
+    return finalizePreparedBranchMutationState(state);
+  };
+  var moveMessageState = (chats, chatIndex, messageIndex, direction, currentContentStore) => {
+    const { chats: updatedChats, chat, tree, contentStore } = prepareBranchMutationState(chats, chatIndex, currentContentStore);
+    const targetIndex = direction === "up" ? messageIndex - 1 : messageIndex + 1;
+    const topNode = tree.activePath[0] ? tree.nodes[tree.activePath[0]] : void 0;
+    if (topNode?.role === "system") {
+      if (messageIndex === 0 || targetIndex === 0) {
+        return finalizePreparedBranchMutationState({
+          chats: updatedChats,
+          chat,
+          tree,
+          contentStore
+        });
+      }
+    }
+    if (targetIndex < 0 || targetIndex >= tree.activePath.length || messageIndex < 0 || messageIndex >= tree.activePath.length) {
+      return finalizePreparedBranchMutationState({
+        chats: updatedChats,
+        chat,
+        tree,
+        contentStore
+      });
+    }
+    const start2 = Math.min(messageIndex, targetIndex);
+    const end = Math.max(messageIndex, targetIndex);
+    const reorderedPath = tree.activePath.slice();
+    const [movedId] = reorderedPath.splice(messageIndex, 1);
+    reorderedPath.splice(targetIndex, 0, movedId);
+    tree.activePath = reorderedPath;
+    for (let index = start2; index <= end + 1; index += 1) {
+      const nodeId = tree.activePath[index];
+      if (!nodeId)
+        continue;
+      cloneNodeIfPresent(tree, nodeId);
+      tree.nodes[nodeId].parentId = index === 0 ? null : tree.activePath[index - 1] ?? null;
+    }
+    return finalizePreparedBranchMutationState({
+      chats: updatedChats,
+      chat,
+      tree,
+      contentStore
+    });
+  };
+  var replaceMessageAndPruneFollowingState = (chats, chatIndex, messageIndex, message, currentContentStore, removeCount = 0) => {
+    const state = prepareBranchMutationState(chats, chatIndex, currentContentStore);
+    const { tree, contentStore } = state;
+    const existingId = tree.activePath[messageIndex];
+    state.chat.messages[messageIndex] = message;
+    if (existingId)
+      setMessageAttributes(tree, existingId, message);
+    if (existingId) {
+      const oldHash = tree.nodes[existingId].contentHash;
+      const newHash = addContentDelta(contentStore, message.content, oldHash);
+      releaseContent(contentStore, oldHash);
+      tree.nodes[existingId] = {
+        ...tree.nodes[existingId],
+        role: message.role,
+        contentHash: newHash
+      };
+    } else if (messageIndex === tree.activePath.length) {
+      const parentId = messageIndex === 0 ? null : tree.activePath[messageIndex - 1] ?? null;
+      const newId = editingUUID();
+      tree.nodes[newId] = {
+        id: newId,
+        parentId,
+        role: message.role,
+        contentHash: addContent(contentStore, message.content),
+        createdAt: Date.now()
+      };
+      setMessageAttributes(tree, newId, message);
+      tree.activePath.push(newId);
+    }
+    for (let removed = 0; removed < removeCount; removed += 1) {
+      removeMessageAtIndexFromPreparedState(state, messageIndex + 1);
+    }
+    return finalizePreparedBranchMutationState(state);
+  };
+  var copyBranchSequenceState = (chats, chatIndex, fromNodeId, toNodeId) => {
+    const tree = chats[chatIndex]?.branchTree;
+    if (!tree?.nodes[fromNodeId] || !tree.nodes[toNodeId])
+      return null;
+    const nodeIds = [];
+    let cur = toNodeId;
+    const visited = /* @__PURE__ */ new Set();
+    while (cur) {
+      if (visited.has(cur) || !tree.nodes[cur])
+        return null;
+      visited.add(cur);
+      nodeIds.unshift(cur);
+      if (cur === fromNodeId)
+        break;
+      cur = tree.nodes[cur]?.parentId ?? null;
+    }
+    if (nodeIds[0] !== fromNodeId)
+      return null;
+    const nodes = {};
+    nodeIds.forEach((id) => {
+      nodes[id] = { ...tree.nodes[id] };
+    });
+    const clipboard = { nodeIds, sourceChat: chats[chatIndex].id, nodes };
+    for (const field of ["collapsedNodes", "omittedNodes", "protectedNodes"]) {
+      const source = chats[chatIndex][field];
+      if (source)
+        clipboard[field] = Object.fromEntries(nodeIds.filter((id) => Object.hasOwn(source, id)).map((id) => [id, source[id]]));
+    }
+    for (const id of nodeIds)
+      copyMessageAttributes(tree, id, clipboard, id);
+    return clipboard;
+  };
+  var removeBranchSequenceState = (chats, chatIndex, nodeIds, currentContentStore) => {
+    const contentStore = Object.fromEntries(Object.entries(currentContentStore).map(([hash, entry]) => [hash, { ...entry }]));
+    const updatedChats = cloneChatAt(chats, chatIndex);
+    const chat = updatedChats[chatIndex];
+    captureProjectedMessageAttributes(chat, contentStore);
+    const tree = chat.branchTree;
+    const removed = new Set(nodeIds);
+    for (const node of Object.values(tree.nodes)) {
+      if (removed.has(node.id) || !node.parentId || !removed.has(node.parentId))
+        continue;
+      let parentId = node.parentId;
+      while (parentId && removed.has(parentId))
+        parentId = tree.nodes[parentId].parentId;
+      tree.nodes[node.id] = { ...node, parentId };
+    }
+    for (const id of nodeIds) {
+      releaseContent(contentStore, tree.nodes[id].contentHash);
+      deleteMessageAttributes(tree, id);
+      delete tree.nodes[id];
+    }
+    tree.activePath = tree.activePath.filter((id) => !removed.has(id));
+    if (tree.activePath.length === 0) {
+      const root = Object.values(tree.nodes).find((node) => !node.parentId);
+      if (root)
+        tree.activePath = buildPathToLeaf(tree, root.id);
+    }
+    tree.rootId = tree.activePath[0] ?? "";
+    chat.messages = materializeActivePath(tree, contentStore);
+    return { chats: updatedChats, contentStore };
+  };
+  var pasteBranchSequenceState = (chats, targetChatIndex, afterNodeId, clipboard, currentContentStore) => {
+    const contentStore = Object.fromEntries(Object.entries(currentContentStore).map(([hash, entry]) => [hash, { ...entry }]));
+    const updatedChats = cloneChatAt(chats, targetChatIndex);
+    captureProjectedMessageAttributes(updatedChats[targetChatIndex], contentStore);
+    const tree = updatedChats[targetChatIndex].branchTree;
+    const idMap = {};
+    clipboard.nodeIds.forEach((id) => {
+      idMap[id] = editingUUID();
+    });
+    for (const field of ["collapsedNodes", "omittedNodes", "protectedNodes"]) {
+      const source = clipboard[field];
+      if (source && clipboard.nodeIds.some((id) => Object.hasOwn(source, id))) {
+        updatedChats[targetChatIndex][field] = { ...updatedChats[targetChatIndex][field], ...Object.fromEntries(clipboard.nodeIds.filter((id) => Object.hasOwn(source, id)).map((id) => [idMap[id], source[id]])) };
+      }
+    }
+    let prevId = afterNodeId;
+    for (const origId of clipboard.nodeIds) {
+      const newId = idMap[origId];
+      const srcNode = clipboard.nodes[origId];
+      retainContent(contentStore, srcNode.contentHash);
+      tree.nodes[newId] = {
+        ...srcNode,
+        id: newId,
+        parentId: prevId,
+        createdAt: Date.now()
+      };
+      copyMessageAttributes(clipboard, origId, tree, newId);
+      prevId = newId;
+    }
+    const destinationPath = buildPathToLeaf(tree, afterNodeId);
+    const insertIdx = destinationPath.indexOf(afterNodeId);
+    tree.activePath = [
+      ...destinationPath.slice(0, insertIdx + 1),
+      ...clipboard.nodeIds.map((id) => idMap[id])
+    ];
+    tree.rootId = tree.activePath[0] ?? "";
+    updatedChats[targetChatIndex].messages = materializeActivePath(tree, contentStore);
+    return { chats: updatedChats, contentStore };
+  };
+  var updateNodeRoleState = (chats, chatIndex, nodeId, role, contentStore) => {
+    const updatedChats = cloneChatAt(chats, chatIndex);
+    const chat = updatedChats[chatIndex];
+    captureProjectedMessageAttributes(chat, contentStore);
+    const tree = chat.branchTree;
+    const prevRole = tree.nodes[nodeId]?.role;
+    tree.nodes[nodeId] = { ...tree.nodes[nodeId], role };
+    const isTopNode = tree.activePath[0] === nodeId;
+    if (isTopNode) {
+      if (prevRole === "system" && role !== "system") {
+        chat.config = { ...chat.config, systemPrompt: void 0 };
+      } else if (prevRole !== "system" && role === "system") {
+        syncBubbleToConfig(chat, tree, contentStore);
+      }
+    }
+    chat.messages = materializeActivePath(tree, contentStore);
+    return updatedChats;
+  };
+  var upsertWithAutoBranchState = (chats, chatIndex, messageIndex, message, currentContentStore) => {
+    const { chats: ensuredChats, contentStore: ensuredStore } = ensureBranchReadyState(chats, chatIndex, currentContentStore);
+    const tree = ensuredChats[chatIndex].branchTree;
+    const existingId = tree.activePath[messageIndex];
+    if (!existingId) {
+      return upsertMessageAtIndexState(
+        ensuredChats,
+        chatIndex,
+        messageIndex,
+        message,
+        ensuredStore
+      );
+    }
+    const node = tree.nodes[existingId];
+    const contentChanged = !isContentEqual(ensuredStore, node.contentHash, message.content);
+    const roleChanged = node.role !== message.role;
+    const previousAttributes = JSON.stringify(tree.messageAttributesV1);
+    setMessageAttributes(tree, existingId, message);
+    const attributesChanged = JSON.stringify(tree.messageAttributesV1) !== previousAttributes;
+    if (!contentChanged && !roleChanged && !attributesChanged) {
+      return { chats: ensuredChats, contentStore: ensuredStore, noOp: true };
+    }
+    if (!contentChanged && !roleChanged)
+      return { chats: ensuredChats, contentStore: ensuredStore };
+    if (!contentChanged) {
+      return { chats: updateNodeRoleState(ensuredChats, chatIndex, existingId, message.role, ensuredStore), contentStore: ensuredStore };
+    }
+    return upsertMessageAtIndexState(
+      ensuredChats,
+      chatIndex,
+      messageIndex,
+      message,
+      ensuredStore
+    );
+  };
+  var resolveNodeTarget = (chats, input, activeOnly = false) => {
+    const chatIndex = chats?.findIndex((chat2) => chat2.id === input.chatId) ?? -1;
+    const chat = chats?.[chatIndex];
+    if (!chat)
+      return { status: "chat-missing" };
+    const index = chat.branchTree ? chat.branchTree.activePath.indexOf(input.nodeId) : Number(input.nodeId);
+    const exists2 = chat.branchTree ? !!chat.branchTree.nodes[input.nodeId] : Number.isInteger(index) && index >= 0 && String(index) === input.nodeId && !!chat.messages[index];
+    if (!exists2)
+      return { status: "node-missing" };
+    if (activeOnly && index < 0)
+      return { status: "invalid-target" };
+    return { status: "valid", chatIndex, messageIndex: index, chat };
+  };
+  var setNodeDisplayFieldState = (chats, input, field, value, contentStore) => {
+    const target = resolveNodeTarget(chats, input);
+    if (target.status !== "valid")
+      return target;
+    const ensured = ensureBranchTreeState(chats, target.chatIndex, contentStore);
+    const nodeId = target.chat.branchTree ? input.nodeId : ensured.chats[target.chatIndex].branchTree.activePath[target.messageIndex];
+    if (ensured.chats[target.chatIndex].branchTree.nodes[nodeId][field] === value)
+      return { status: "unchanged" };
+    return {
+      status: "updated",
+      chats: setBranchNodeFieldState(ensured.chats, target.chatIndex, nodeId, field, value),
+      contentStore: ensured.contentStore,
+      nodeId,
+      historyBase: ensured
+    };
+  };
+  var insertNodeState = (chats, input, contentStore) => {
+    const chatIndex = chats?.findIndex((chat) => chat.id === input.chatId) ?? -1;
+    if (chatIndex < 0)
+      return { status: "chat-missing" };
+    const target = input.beforeNodeId === null ? null : resolveNodeTarget(chats, { chatId: input.chatId, nodeId: input.beforeNodeId }, true);
+    if (target && target.status !== "valid")
+      return target;
+    const index = target?.messageIndex ?? chats[chatIndex].messages.length;
+    const ensured = ensureBranchTreeState(chats, chatIndex, contentStore);
+    const result3 = insertMessageAtIndexState(ensured.chats, chatIndex, index, { role: input.role, content: input.content }, ensured.contentStore);
+    return { status: "updated", ...result3, nodeId: result3.newId, historyBase: ensured };
+  };
+  var removeNodeState = (chats, input, contentStore, options) => {
+    const target = resolveNodeTarget(chats, input, true);
+    if (target.status !== "valid")
+      return target;
+    if ((target.chat.protectedNodes ?? {})[input.nodeId])
+      return { status: "protected" };
+    const ensured = ensureBranchReadyState(chats, target.chatIndex, contentStore);
+    const result3 = removeMessageAtIndexState(ensured.chats, target.chatIndex, target.messageIndex, ensured.contentStore, options);
+    return { status: "updated", ...result3, historyBase: ensured };
+  };
+  var moveNodeState = (chats, input, contentStore) => {
+    const target = resolveNodeTarget(chats, input, true);
+    if (target.status !== "valid")
+      return target;
+    if (input.direction === "up" ? target.messageIndex === 0 : target.messageIndex === target.chat.messages.length - 1)
+      return { status: "unchanged" };
+    const topRole = target.chat.messages[0]?.role;
+    if (topRole === "system" && (target.messageIndex === 0 || input.direction === "up" && target.messageIndex === 1))
+      return { status: "unchanged" };
+    const ensured = ensureBranchTreeState(chats, target.chatIndex, contentStore);
+    const result3 = moveMessageState(ensured.chats, target.chatIndex, target.messageIndex, input.direction, ensured.contentStore);
+    return { status: "updated", ...result3, historyBase: ensured };
+  };
+  var replaceNodeAndPruneState = (chats, input, contentStore) => {
+    if (!Number.isInteger(input.removeCount) || input.removeCount < 0)
+      return { status: "invalid-input", removedNodeIds: [], pruneBlockedBy: [] };
+    const target = resolveNodeTarget(chats, input, true);
+    if (target.status !== "valid")
+      return { status: "missing", removedNodeIds: [], pruneBlockedBy: [] };
+    if (target.chat.protectedNodes?.[input.nodeId])
+      return { status: "protected", blockedNodeIds: [input.nodeId], removedNodeIds: [], pruneBlockedBy: [] };
+    const ensured = ensureBranchTreeState(chats, target.chatIndex, contentStore);
+    const prepared = ensured.chats[target.chatIndex];
+    const following = prepared.branchTree.activePath.slice(target.messageIndex + 1, target.messageIndex + 1 + input.removeCount);
+    const pruneBlockedBy = following.filter((id) => prepared.protectedNodes?.[id]);
+    const result3 = replaceMessageAndPruneFollowingState(ensured.chats, target.chatIndex, target.messageIndex, { role: input.role, content: input.content }, ensured.contentStore, pruneBlockedBy.length ? 0 : input.removeCount);
+    return { status: "updated", ...result3, historyBase: ensured, removedNodeIds: pruneBlockedBy.length ? [] : following, pruneBlockedBy };
+  };
+  var deleteNodeBranchState = (chats, input, contentStore) => {
+    const target = resolveNodeTarget(chats, input);
+    if (target.status !== "valid")
+      return target;
+    const blockedNodeIds = target.chat.branchTree ? [...collectDescendants(target.chat.branchTree, input.nodeId)].filter((id) => target.chat.protectedNodes?.[id]) : target.chat.messages.slice(target.messageIndex).map((_23, index) => String(target.messageIndex + index)).filter((id) => target.chat.protectedNodes?.[id]);
+    if (blockedNodeIds.length)
+      return { status: "protected", blockedNodeIds };
+    const ensured = ensureBranchTreeState(chats, target.chatIndex, contentStore);
+    const nodeId = target.chat.branchTree ? input.nodeId : ensured.chats[target.chatIndex].branchTree.activePath[target.messageIndex];
+    const removedNodeIds = [...collectDescendants(ensured.chats[target.chatIndex].branchTree, nodeId)];
+    return { status: "updated", ...deleteBranchState(ensured.chats, target.chatIndex, nodeId, ensured.contentStore), historyBase: ensured, removedNodeIds };
+  };
+
+  // shared/google-sync/editing.ts
+  var runtime;
+  function editingUUID() {
+    if (!runtime)
+      return crypto.randomUUID();
+    const id = runtime.ids.shift();
+    if (!id || runtime.reserved.has(id))
+      throw new Error("Invalid new node ID.");
+    runtime.reserved.add(id);
+    return id;
+  }
+  function withEditingRuntime(newIDs, existingIDs, now, operation) {
+    const clock = Date.now;
+    runtime = { ids: [...newIDs], reserved: new Set(existingIDs) };
+    Date.now = () => now;
+    try {
+      return operation();
+    } finally {
+      Date.now = clock;
+      runtime = void 0;
+    }
+  }
+  function messageEdit(json, capture) {
+    const input = JSON.parse(json);
+    if (input.operation === "textValue")
+      return JSON.stringify(textValueOf(input.parts));
+    if (input.editedText !== void 0 && typeof input.editedText !== "string")
+      throw new Error("Invalid text.");
+    const parts = input.editedText !== void 0 && input.editedText !== textValueOf(input.parts) ? replaceTextValue(input.parts, input.editedText) : input.parts;
+    if (!["user", "assistant", "system"].includes(input.role) || !Array.isArray(input.parts))
+      throw new Error("Invalid message.");
+    if (input.mode === "append" && input.editedText !== void 0 && !hasMeaningfulContent(parts))
+      throw new Error("\u672C\u6587\u3092\u5165\u529B\u3057\u3066\u304F\u3060\u3055\u3044");
+    const before = { chat: input.chat, contentStore: input.contentStore };
+    const isolated = structuredClone(before);
+    let chat = isolated.chat;
+    if (!Array.isArray(chat.messages) && chat.branchTree)
+      chat.messages = materializeActivePath(chat.branchTree, isolated.contentStore);
+    const wasFlat = !chat.branchTree;
+    return withEditingRuntime(input.newIDs, Object.keys(chat.branchTree?.nodes ?? {}), input.now, () => {
+      let result3 = input.mode === "insert" && wasFlat ? { chats: [chat], contentStore: isolated.contentStore } : ensureBranchTreeState([chat], 0, isolated.contentStore);
+      if (!wasFlat) {
+        const path = input.viewingPath;
+        if (path.some((id) => !Object.hasOwn(result3.chats[0].branchTree.nodes, id)))
+          throw new Error("Invalid viewing path.");
+        if (path.length)
+          result3.chats = switchActivePathState(result3.chats, 0, path, result3.contentStore);
+        else
+          result3.chats[0].branchTree.activePath = [];
+      }
+      let historyBase = result3;
+      if (input.mode === "insert") {
+        if (input.nodeID === void 0)
+          throw new Error("Invalid insert target.");
+        const beforeNodeId = wasFlat && input.nodeID?.startsWith("message-") ? input.nodeID.slice(8) : input.nodeID;
+        const inserted = insertNodeState(result3.chats, { chatId: chat.id, beforeNodeId, role: input.role, content: parts }, result3.contentStore);
+        if (inserted.status !== "updated")
+          throw new Error(`Invalid insert target: ${inserted.status}`);
+        historyBase = inserted.historyBase ?? historyBase;
+        result3 = inserted;
+      } else {
+        const tree = result3.chats[0].branchTree;
+        let index = -1;
+        if (input.mode !== "append") {
+          const flatID = input.nodeID?.startsWith("message-") ? input.nodeID.slice(8) : input.nodeID;
+          index = wasFlat && flatID !== void 0 && String(Number(flatID)) === flatID ? Number(flatID) : tree.activePath.indexOf(input.nodeID);
+          if (!Number.isInteger(index) || index < 0 || index >= tree.activePath.length)
+            throw new Error("Invalid message node ID.");
+          if (input.mode === "overwrite" && result3.chats[0].protectedNodes?.[tree.activePath[index]])
+            throw new Error("Protected message.");
+        }
+        if (input.mode === "append")
+          result3 = appendNodeToActivePathState(result3.chats, 0, input.role, parts, result3.contentStore);
+        else if (input.mode === "branch") {
+          const branch = createBranchState(result3.chats, 0, tree.activePath[index], parts, result3.contentStore);
+          result3 = branch;
+          if (branch.chats[0].branchTree.nodes[branch.newId].role !== input.role) {
+            result3.chats = updateNodeRoleState(branch.chats, 0, branch.newId, input.role, branch.contentStore);
+          }
+        } else
+          result3 = upsertWithAutoBranchState(result3.chats, 0, index, { role: input.role, content: parts }, result3.contentStore);
+      }
+      const changed = !("noOp" in result3 && result3.noOp);
+      for (const [hash, entry] of Object.entries(result3.contentStore)) {
+        if (entry.delta && JSON.stringify(entry.delta) !== JSON.stringify(before.contentStore[hash]?.delta)) {
+          const content = resolveContent(result3.contentStore, hash);
+          const { delta: _delta, ...full } = entry;
+          result3.contentStore[hash] = { ...full, content };
+        }
+      }
+      chat = result3.chats[0];
+      chat.messages = materializeActivePath(chat.branchTree, result3.contentStore, true);
+      if (changed)
+        capture?.(historyBase, result3);
+      return JSON.stringify(diffJSONChanges(before, JSON.parse(JSON.stringify({ chat, contentStore: result3.contentStore }))));
+    });
+  }
+
+  // src/utils/branchUtils.ts
+  function readMessageAttributes(owner) {
+    const value = owner.messageAttributesV1;
+    if (!Object.hasOwn(owner, "messageAttributesV1"))
+      return void 0;
+    if (!value || value.version !== 1 || !value.byNode || typeof value.byNode !== "object" || Array.isArray(value.byNode) || Object.keys(value).some((key) => key !== "version" && key !== "byNode") || Object.keys(value.byNode).some((id) => !Object.hasOwn(owner.nodes, id)) || Object.values(value.byNode).some((attributes) => !attributes || typeof attributes !== "object" || Array.isArray(attributes) || Object.hasOwn(attributes, "role") || Object.hasOwn(attributes, "content"))) {
+      throw new Error("Unsupported message attributes namespace.");
+    }
+    return value;
+  }
+  var extraMessageAttributes = (message) => {
+    const { role, content, ...attributes } = message;
+    return attributes;
+  };
+  function setMessageAttributes(owner, nodeId, message) {
+    const attributes = extraMessageAttributes(message);
+    if (!Object.keys(attributes).length)
+      return;
+    const previous = readMessageAttributes(owner);
+    owner.messageAttributesV1 = { version: 1, byNode: {
+      ...previous?.byNode,
+      [nodeId]: { ...previous?.byNode[nodeId], ...structuredClone(attributes) }
+    } };
+  }
+  function copyMessageAttributes(source, sourceId, target, targetId) {
+    const attributes = readMessageAttributes(source)?.byNode[sourceId];
+    if (!attributes)
+      return;
+    setMessageAttributes(target, targetId, { ...attributes, role: "user", content: [] });
+  }
+  function deleteMessageAttributes(owner, nodeId) {
+    const previous = readMessageAttributes(owner);
+    if (!previous || !Object.hasOwn(previous.byNode, nodeId))
+      return;
+    const byNode = { ...previous.byNode };
+    delete byNode[nodeId];
+    owner.messageAttributesV1 = { version: 1, byNode };
+  }
+  function captureProjectedMessageAttributes(chat, contentStore) {
+    if (!chat.branchTree)
+      return;
+    let next = chat.branchTree;
+    for (const [index, message] of (chat.messages ?? []).entries()) {
+      const attributes = extraMessageAttributes(message);
+      if (!Object.keys(attributes).length)
+        continue;
+      const nodeId = chat.branchTree.activePath[index], node = chat.branchTree.nodes[nodeId];
+      if (!node || node.role !== message.role || !(0, import_lodash.isEqual)(resolveContent(contentStore, node.contentHash), message.content))
+        throw new Error("Message attributes do not match the active branch.");
+      const existing = readMessageAttributes(next)?.byNode[nodeId];
+      for (const [key, value] of Object.entries(attributes))
+        if (existing && Object.hasOwn(existing, key) && !(0, import_lodash.isEqual)(existing[key], value))
+          throw new Error("Conflicting projected message attributes.");
+      if (next === chat.branchTree)
+        next = { ...next };
+      setMessageAttributes(next, nodeId, message);
+    }
+    chat.branchTree = next;
+  }
+  function projectMessageAttributes(owner, nodeId, message) {
+    return { ...structuredClone(readMessageAttributes(owner)?.byNode[nodeId] ?? {}), role: message.role, content: message.content };
+  }
+  function materializeActivePath(tree, contentStore, includeAttributes = false) {
+    return tree.activePath.map((id) => {
+      const node = tree.nodes[id];
+      const message = { role: node.role, content: resolveContent(contentStore, node.contentHash) };
+      return includeAttributes ? projectMessageAttributes(tree, id, message) : message;
+    });
+  }
+  function flatMessagesToBranchTree(messages, contentStore) {
+    const nodes = {};
+    const ids = [];
+    const tree = { nodes, rootId: "", activePath: ids };
+    for (let i = 0; i < messages.length; i++) {
+      const id = editingUUID();
+      ids.push(id);
+      const contentHash = addContent(contentStore, messages[i].content);
+      nodes[id] = {
+        id,
+        parentId: i === 0 ? null : ids[i - 1],
+        role: messages[i].role,
+        contentHash,
+        createdAt: Date.now() - (messages.length - i) * 1e3
+      };
+      setMessageAttributes(tree, id, messages[i]);
+    }
+    tree.rootId = ids[0] ?? "";
+    return tree;
+  }
+  function flatChatToBranchTree(chat, contentStore) {
+    if (chat.branchTree)
+      return;
+    const tree = flatMessagesToBranchTree(chat.messages, contentStore);
+    for (const field of ["collapsedNodes", "omittedNodes", "protectedNodes"]) {
+      if (!chat[field])
+        continue;
+      chat[field] = Object.fromEntries(Object.entries(chat[field]).map(([key, value]) => {
+        const index = Number(key);
+        const id = Number.isInteger(index) && index >= 0 && String(index) === key ? tree.activePath[index] : void 0;
+        return [id ?? key, value];
+      }));
+    }
+    chat.branchTree = tree;
+    chat.messages = materializeActivePath(tree, contentStore);
+  }
+  function getChildrenOf(tree, nodeId) {
+    return Object.values(tree.nodes).filter((n) => n.parentId === nodeId);
+  }
+  function getSiblingGroups(tree) {
+    const grouped = /* @__PURE__ */ new Map();
+    const nodes = Object.values(tree.nodes);
+    for (const node of nodes) {
+      const group = grouped.get(node.parentId) ?? [];
+      group.push(node);
+      grouped.set(node.parentId, group);
+    }
+    const groups = [];
+    const byParent = /* @__PURE__ */ new Map();
+    const byNode = /* @__PURE__ */ Object.create(null);
+    for (const node of nodes) {
+      const parent = node.parentId || null;
+      let groupIndex = byParent.get(parent);
+      if (groupIndex === void 0) {
+        groupIndex = groups.length;
+        byParent.set(parent, groupIndex);
+        const group = grouped.get(parent) ?? [];
+        groups.push(group);
+        group.forEach((sibling, index) => {
+          byNode[sibling.id] = { groupIndex, selectedIndex: index };
+        });
+      }
+      if (!byNode[node.id])
+        byNode[node.id] = { groupIndex, selectedIndex: -1 };
+    }
+    return { groups, byNode };
+  }
+  function buildPathToLeaf(tree, nodeId) {
+    const ancestors = [];
+    let cur = nodeId;
+    while (cur) {
+      ancestors.unshift(cur);
+      cur = tree.nodes[cur]?.parentId ?? null;
+    }
+    let tip = nodeId;
+    while (true) {
+      const children = getChildrenOf(tree, tip);
+      if (children.length === 0)
+        break;
+      children.sort((a, b) => b.createdAt - a.createdAt);
+      ancestors.push(children[0].id);
+      tip = children[0].id;
+    }
+    return ancestors;
+  }
+  function collectDescendants(tree, nodeId) {
+    const result3 = /* @__PURE__ */ new Set();
+    const queue = [nodeId];
+    while (queue.length > 0) {
+      const id = queue.pop();
+      result3.add(id);
+      for (const child of getChildrenOf(tree, id)) {
+        queue.push(child.id);
+      }
+    }
+    return result3;
+  }
+  function resolveRegenerateTarget(role, messageIndex, messagesLength) {
+    if (role === "system")
+      return null;
+    if (role === "assistant") {
+      const afterRemoval = messagesLength - 1;
+      return {
+        removeIndex: messageIndex,
+        submitMode: messageIndex >= afterRemoval ? "append" : "insert",
+        insertIndex: messageIndex
+      };
+    }
+    const nextIndex = messageIndex + 1;
+    const hasNext = nextIndex < messagesLength;
+    const lengthAfterRemoval = hasNext ? messagesLength - 1 : messagesLength;
+    return {
+      removeIndex: hasNext ? nextIndex : -1,
+      submitMode: nextIndex >= lengthAfterRemoval ? "append" : "insert",
+      insertIndex: nextIndex
+    };
+  }
+
+  // src/api/requestBody.ts
+  var OPENROUTER_ONLY_EFFORTS = /* @__PURE__ */ new Set([
+    "none",
+    "minimal",
+    "xhigh"
+  ]);
+  var needsMaxTokensOnly = (modelId) => {
+    const id = modelId.toLowerCase();
+    return id.includes("claude");
+  };
+  var EFFORT_TO_MAX_TOKENS = {
+    none: 0,
+    minimal: 1024,
+    low: 2048,
+    medium: 8192,
+    high: 16384,
+    xhigh: 32768
+  };
+  var buildRequestBody = (messages, config, capabilities, overrides) => {
+    const {
+      providerId,
+      reasoning_effort,
+      reasoning_budget_tokens,
+      verbosity,
+      force_reasoning,
+      modelSettings,
+      openRouter,
+      systemPrompt,
+      modelSource,
+      ...apiConfig
+    } = config;
+    const body = {
+      messages: messages.map(({ role, content }) => ({ role, content })),
+      ...apiConfig,
+      max_tokens: config.max_tokens > 0 ? config.max_tokens : void 0,
+      ...overrides
+    };
+    if (capabilities.supportsReasoning || force_reasoning) {
+      if (providerId === "openrouter") {
+        const reasoning = {};
+        const isEffortClaude = isOpenRouterClaudeEffortModel(config.model, providerId);
+        if (reasoning_effort === "none") {
+          if (capabilities.requiresReasoning) {
+            reasoning.effort = "low";
+          } else {
+            reasoning.enabled = false;
+          }
+        } else if (reasoning_budget_tokens && reasoning_budget_tokens > 0 && !isEffortClaude) {
+          reasoning.max_tokens = reasoning_budget_tokens;
+        } else if (reasoning_effort) {
+          if (isEffortClaude) {
+            reasoning.effort = reasoning_effort === "minimal" ? "low" : reasoning_effort;
+          } else if (isOpenRouterAdaptiveReasoningModel(config.model, providerId)) {
+            reasoning.enabled = true;
+            reasoning.effort = reasoning_effort === "minimal" ? "low" : reasoning_effort;
+          } else if (needsMaxTokensOnly(config.model)) {
+            const mapped = EFFORT_TO_MAX_TOKENS[reasoning_effort];
+            if (mapped > 0)
+              reasoning.max_tokens = mapped;
+          } else {
+            reasoning.effort = reasoning_effort;
+          }
+        }
+        if (Object.keys(reasoning).length > 0) {
+          body.reasoning = reasoning;
+        }
+      } else {
+        if (reasoning_effort && !OPENROUTER_ONLY_EFFORTS.has(reasoning_effort)) {
+          body.reasoning_effort = reasoning_effort;
+        }
+        if (reasoning_budget_tokens && reasoning_budget_tokens > 0) {
+          body.reasoning_budget_tokens = reasoning_budget_tokens;
+        }
+      }
+    }
+    if (isOpenRouterClaudeVerbosityModel(config.model, providerId) && verbosity) {
+      body.verbosity = getEffectiveVerbosity(verbosity, supportsMaxVerbosity(config.model, providerId));
+    }
+    return body;
+  };
+
+  // src/utils/bubbleSummary.ts
+  var normalizeBubbleSummaryText = (text) => {
+    const trimmed = text.trim();
+    const json = trimmed.replace(/^```(?:json)?\s*\n([\s\S]*?)\n```$/i, "$1");
+    try {
+      const value = JSON.parse(json);
+      if (typeof value === "string")
+        return value.trim();
+      const messages = Array.isArray(value) ? value : [value];
+      if (messages.length && messages.every((message) => message && typeof message === "object" && (message.role === "user" || message.role === "assistant") && typeof message.content === "string")) {
+        return messages.map((message) => message.role === "assistant" ? `\u30A2\u30B7\u30B9\u30BF\u30F3\u30C8\uFF1A
+${message.content}` : message.content).join("\n\n").trim();
+      }
+    } catch {
+    }
+    return trimmed;
+  };
+  var textParts = (message) => {
+    if (!message?.content?.length || !message.content.every(isTextContent))
+      return null;
+    const parts = message.content.map((value) => value.text);
+    return parts.some((part) => part.trim()) ? parts : null;
+  };
+  var hasTool = (message) => !!message?.content?.some((value) => isToolCallContent(value) || isToolResultContent(value));
+  var equalParts = (left, right) => left.length === right.length && left.every((part, index) => part === right[index]);
+  var validGeneration = (value) => {
+    if (value === void 0)
+      return true;
+    const generation = value;
+    return !!generation && typeof generation === "object" && typeof generation.model === "string" && (generation.providerId === void 0 || typeof generation.providerId === "string") && Number.isFinite(generation.createdAt) && !!generation.settings && typeof generation.settings === "object" && Number.isFinite(generation.settings.temperature) && Number.isFinite(generation.settings.max_tokens) && (generation.settings.reasoning_effort === void 0 || typeof generation.settings.reasoning_effort === "string");
+  };
+  var isBubbleSummary = (value) => !!value && typeof value === "object" && typeof value.id === "string" && (value.mode === "single" || value.mode === "through" || value.mode === "range") && typeof value.text === "string" && typeof value.useForSubmit === "boolean" && (value.format === void 0 || value.format === "compact") && validGeneration(value.generation) && Array.isArray(value.sources) && value.sources.every((source) => !!source && typeof source.nodeId === "string" && (source.parentId === null || typeof source.parentId === "string") && (source.role === "user" || source.role === "assistant") && Array.isArray(source.textParts) && source.textParts.every((part) => typeof part === "string"));
+  var isSummaryEligible = (message) => !!message && (message.role === "user" || message.role === "assistant") && textParts(message) !== null && !hasTool(message);
+  var resolveValidSummary = (chat, summary, generatingNodeIds = []) => {
+    if (!isBubbleSummary(summary))
+      return null;
+    const candidate = summary, path = chat.branchTree?.activePath ?? chat.messages.map((_23, index) => String(index));
+    if (typeof candidate.text !== "string" || !candidate.text.trim() || !Array.isArray(candidate.sources) || !candidate.sources.length)
+      return null;
+    const indices = candidate.sources.map((source) => path.indexOf(source?.nodeId));
+    if (indices.some((index) => index < 0) || new Set(indices).size !== indices.length)
+      return null;
+    const first = Math.min(...indices), last = Math.max(...indices);
+    if (last - first + 1 !== indices.length)
+      return null;
+    for (let offset = 0; offset < candidate.sources.length; offset++) {
+      const index = first + offset, source = candidate.sources[offset], nodeId = path[index];
+      const node = chat.branchTree?.nodes[nodeId], message = chat.messages[index], parts = textParts(message);
+      if (!source || source.nodeId !== nodeId || generatingNodeIds.includes(nodeId) || !isSummaryEligible(message) || !parts || message.role !== source.role || !Array.isArray(source.textParts) || !equalParts(parts, source.textParts) || (node?.parentId ?? null) !== source.parentId)
+        return null;
+    }
+    return { first, last };
+  };
+  var getAppliedBubbleSummaries = (chat, messageIndex = chat.messages.length, generatingNodeIds = []) => {
+    const candidates = (Array.isArray(chat.summaries) ? chat.summaries : []).filter((summary) => summary?.useForSubmit).map((summary) => ({ summary, range: resolveValidSummary(chat, summary, generatingNodeIds) })).filter((value) => !!value.range && value.range.last < messageIndex);
+    const accepted = candidates.filter((candidate) => !candidates.some((other) => other !== candidate && candidate.range.first <= other.range.last && other.range.first <= candidate.range.last));
+    return accepted;
+  };
+  var bubbleSummarySubmitMessage = (summary) => ({ role: "user", content: [{ type: "text", text: `${summary.format === "compact" ? "Retained conversation context. Answer the latest request using the requirements and state below. Follow the retained language, tone, structure and length requirements and examples, not formatting added for this summary. Adoption and plans do not imply execution; preserve uncertainty about what has been done.\n" : "Past conversation summary:\n"}${normalizeBubbleSummaryText(summary.text)}` }] });
+  var applyBubbleSummariesForSubmit = (chat, messageIndex, generatingNodeIds = []) => {
+    const source = chat.messages.slice(0, messageIndex), path = chat.branchTree?.activePath ?? source.map((_23, index) => String(index));
+    const accepted = getAppliedBubbleSummaries(chat, messageIndex, generatingNodeIds).filter(({ summary }) => !summary.sources.some((source2) => chat.omittedNodes?.[source2.nodeId]));
+    const starts = new Map(accepted.map((value) => [value.range.first, value]));
+    const result3 = [];
+    for (let index = 0; index < source.length; index++) {
+      const replacement = starts.get(index);
+      if (replacement) {
+        result3.push(bubbleSummarySubmitMessage(replacement.summary));
+        index = replacement.range.last;
+        continue;
+      }
+      if (chat.omittedNodes?.[path[index]] && !hasTool(source[index]))
+        continue;
+      result3.push(source[index]);
+    }
+    return result3;
+  };
+
+  // src/utils/submitContext.ts
+  var modelSupportsSystemRole = (modelId) => {
+    return !isReasoningModel2(modelId);
+  };
+  var isReasoningModel2 = (modelId) => modelId.startsWith("o1-") || modelId.startsWith("o3-") || modelId.startsWith("o1 ");
+  var sanitizeMessageContent = (content) => content.filter((part) => {
+    if (part.type === "reasoning")
+      return false;
+    if (isImageContent(part))
+      return true;
+    if (isToolCallContent(part) || isToolResultContent(part))
+      return true;
+    return isTextContent(part) && part.text.trim().length > 0;
+  });
+  var hasToolContent = (message) => message.content.some((c) => isToolCallContent(c) || isToolResultContent(c));
+  var ensureRoleAlternation = (messages) => {
+    const result3 = [];
+    for (const msg of messages) {
+      if (result3.length > 0 && result3[result3.length - 1].role === msg.role && !hasToolContent(result3[result3.length - 1]) && !hasToolContent(msg)) {
+        const prev = result3[result3.length - 1];
+        result3[result3.length - 1] = {
+          ...prev,
+          content: [...prev.content, ...msg.content]
+        };
+      } else {
+        result3.push(msg);
+      }
+    }
+    return result3;
+  };
+  var filterOmittedMessages = (messages, activePath, omittedNodes) => {
+    if (Object.keys(omittedNodes).length === 0)
+      return messages;
+    return messages.filter((_23, idx) => {
+      const nodeId = activePath?.[idx] ?? String(idx);
+      if (!omittedNodes[nodeId])
+        return true;
+      if (hasToolContent(messages[idx]))
+        return true;
+      return false;
+    });
+  };
+  var sanitizeMessagesForSubmit = (messages) => ensureRoleAlternation(
+    messages.map((message) => ({
+      ...message,
+      content: sanitizeMessageContent(message.content)
+    })).filter((message) => message.content.length > 0)
+  );
+  var getSubmitContextMessages = (messages, messageIndex, modelId, activePath, omittedNodes = {}, systemPrompt, summaryContext) => {
+    const sliced = messages.slice(0, messageIndex);
+    const filtered = summaryContext ? applyBubbleSummariesForSubmit({ ...summaryContext.chat, messages, omittedNodes }, messageIndex, summaryContext.generatingNodeIds) : filterOmittedMessages(sliced, activePath, omittedNodes);
+    const withoutSystem = filtered.filter((m) => m.role !== "system");
+    const sanitized = sanitizeMessagesForSubmit(withoutSystem);
+    const supportsSystem = modelId ? modelSupportsSystemRole(modelId) : true;
+    if (systemPrompt && supportsSystem) {
+      return [
+        { role: "system", content: [{ type: "text", text: systemPrompt }] },
+        ...sanitized
+      ];
+    }
+    return sanitized;
+  };
+
+  // shared/google-sync/generation.ts
+  function getGenerationMessages(input) {
+    const path = input.activePath ?? input.chat?.branchTree?.activePath;
+    let chat = input.chat;
+    if (chat?.branchTree && input.contentStore) {
+      const branchTree = { ...chat.branchTree, activePath: path };
+      chat = { ...chat, branchTree, messages: materializeActivePath(branchTree, input.contentStore) };
+    }
+    const projected = chat?.messages ?? input.messages ?? [];
+    return getSubmitContextMessages(
+      projected,
+      input.messageIndex ?? projected.length,
+      input.config.model,
+      path,
+      input.omittedNodes ?? chat?.omittedNodes,
+      input.config.systemPrompt,
+      chat ? { chat, generatingNodeIds: input.generatingNodeIds ?? [] } : void 0
+    );
+  }
+  var generationRequest = (json) => {
+    const input = JSON.parse(json);
+    if (input.modelState !== void 0)
+      input.config = normalizeRemoteConfig(input.config, input.modelState);
+    const messages = input.auxiliary ? input.messages ?? [] : getGenerationMessages(input);
+    if (messages.length === 0)
+      throw new Error("\u9001\u4FE1\u3059\u308B\u672C\u6587\u304C\u3042\u308A\u307E\u305B\u3093");
+    const body = buildRequestBody(
+      messages,
+      input.config,
+      input.modelState !== void 0 ? getRequestReasoningCapabilities(input.config, input.modelState) : input.capabilities,
+      { stream: input.auxiliary ? false : input.config.stream }
+    );
+    if (!input.transport)
+      return JSON.stringify(body);
+    const transport = prepareRequestTransport(input.transport.endpoint, input.config, input.transport.hasApiKey, input.transport.customHeaders, input.transport.apiVersion);
+    applyOpenRouterControls(
+      isOpenRouterURL(input.transport.endpointURL),
+      input.config,
+      body,
+      transport.headers,
+      { chatId: input.transport.chatId, regenerate: input.transport.regenerate, viaProxy: input.transport.viaProxy ?? false, auxiliary: input.auxiliary }
+    );
+    return JSON.stringify({ ...transport, body });
+  };
+
+  // src/store/provider-config.ts
+  var officialAPIEndpoint = "https://api.openai.com/v1/chat/completions";
+  var DEFAULT_PROVIDERS = {
+    openrouter: {
+      id: "openrouter",
+      name: "OpenRouter",
+      endpoint: "https://openrouter.ai/api/v1/chat/completions",
+      modelsEndpoint: "https://openrouter.ai/api/v1/models",
+      modelsRequireAuth: false
+    },
+    openai: {
+      id: "openai",
+      name: "OpenAI",
+      endpoint: officialAPIEndpoint,
+      modelsEndpoint: "https://api.openai.com/v1/models",
+      modelsRequireAuth: true
+    },
+    mistral: {
+      id: "mistral",
+      name: "Mistral",
+      endpoint: "https://api.mistral.ai/v1/chat/completions",
+      modelsEndpoint: "https://api.mistral.ai/v1/models",
+      modelsRequireAuth: true
+    },
+    groq: {
+      id: "groq",
+      name: "Groq",
+      endpoint: "https://api.groq.com/openai/v1/chat/completions",
+      modelsEndpoint: "https://api.groq.com/openai/v1/models",
+      modelsRequireAuth: true
+    },
+    together: {
+      id: "together",
+      name: "Together AI",
+      endpoint: "https://api.together.xyz/v1/chat/completions",
+      modelsEndpoint: "https://api.together.xyz/v1/models",
+      modelsRequireAuth: true
+    },
+    cohere: {
+      id: "cohere",
+      name: "Cohere",
+      endpoint: "https://api.cohere.ai/v2/chat",
+      modelsEndpoint: "https://api.cohere.ai/v2/models",
+      modelsRequireAuth: true
+    },
+    perplexity: {
+      id: "perplexity",
+      name: "Perplexity",
+      endpoint: "https://api.perplexity.ai/chat/completions",
+      modelsEndpoint: void 0,
+      modelsRequireAuth: false
+    },
+    deepseek: {
+      id: "deepseek",
+      name: "DeepSeek",
+      endpoint: "https://api.deepseek.com/chat/completions",
+      modelsEndpoint: "https://api.deepseek.com/models",
+      modelsRequireAuth: true
+    },
+    xai: {
+      id: "xai",
+      name: "xAI",
+      endpoint: "https://api.x.ai/v1/chat/completions",
+      modelsEndpoint: "https://api.x.ai/v1/models",
+      modelsRequireAuth: true
+    },
+    fireworks: {
+      id: "fireworks",
+      name: "Fireworks",
+      endpoint: "https://api.fireworks.ai/inference/v1/chat/completions",
+      modelsEndpoint: "https://api.fireworks.ai/inference/v1/models",
+      modelsRequireAuth: true
+    }
+  };
+
+  // src/store/provider-helpers.ts
+  var normalizeProviderConfig = (providerId, provider) => {
+    const defaults = DEFAULT_PROVIDERS[providerId];
+    const endpoint = typeof provider?.endpoint === "string" ? provider.endpoint.trim() : "";
+    return {
+      ...defaults,
+      ...provider,
+      endpoint: endpoint || defaults.endpoint
+    };
+  };
+  var enrichFavoriteModel = (favorite, providerModel) => {
+    if (!providerModel)
+      return favorite;
+    return {
+      ...favorite,
+      contextLength: favorite.contextLength ?? providerModel.contextLength,
+      maxCompletionTokens: favorite.maxCompletionTokens ?? providerModel.maxCompletionTokens,
+      promptPrice: favorite.promptPrice ?? providerModel.promptPrice,
+      completionPrice: favorite.completionPrice ?? providerModel.completionPrice,
+      modelType: favorite.modelType ?? providerModel.modelType,
+      streamSupport: favorite.streamSupport ?? providerModel.streamSupport,
+      supportsReasoning: favorite.supportsReasoning ?? providerModel.supportsReasoning,
+      reasoningMandatory: favorite.reasoningMandatory ?? providerModel.reasoningMandatory,
+      supportsVision: favorite.supportsVision ?? providerModel.supportsVision,
+      supportsAudio: favorite.supportsAudio ?? providerModel.supportsAudio
+    };
+  };
+  var backfillFavoritesFromProviderModels = (favoriteModels, providerId, models) => {
+    const modelMap = new Map(models.map((model) => [model.id, model]));
+    return favoriteModels.map((favorite) => {
+      if (favorite.providerId !== providerId)
+        return favorite;
+      return enrichFavoriteModel(favorite, modelMap.get(favorite.modelId));
+    });
+  };
+
+  // src/utils/chatTitle.ts
+  var TITLE_DEFAULTS = { autoTitle: false, titleModel: defaultModel, titleProviderId: void 0 };
+  var resolveProviderForModel = (modelId, favoriteModels, providers, fallback, providerId) => {
+    if (providerId) {
+      const provider2 = normalizeProviderConfig(providerId, providers[providerId]);
+      return { endpoint: provider2.endpoint, key: provider2.apiKey };
+    }
+    const favorite = favoriteModels.find((entry) => entry.modelId === modelId);
+    if (!favorite)
+      return fallback;
+    const provider = normalizeProviderConfig(favorite.providerId, providers[favorite.providerId]);
+    return { endpoint: provider.endpoint, key: provider.apiKey };
+  };
+  var titleRequestSettings = (config, settings) => {
+    const model = settings.titleModel ?? config.model;
+    const providerId = settings.titleModel ? settings.titleProviderId : config.providerId;
+    const credentialProviderId = providerId ?? settings.favoriteModels.find((entry) => entry.modelId === model)?.providerId;
+    return {
+      model,
+      providerId,
+      credentialProviderId,
+      config: { ...config, modelSource: "remote", model, providerId, openRouter: {
+        routing: hardOpenRouterConstraints(config.openRouter),
+        responseCache: { mode: "off" }
+      } },
+      provider: resolveProviderForModel(model, settings.favoriteModels, settings.providers, settings.fallbackProvider, providerId)
+    };
+  };
+  var buildTitlePromptMessage = (userMessage, assistantMessage, language) => ({
+    role: "user",
+    content: [...userMessage, ...assistantMessage, {
+      type: "text",
+      text: `Generate a title in less than 6 words for the conversation so far (language: ${language})`
+    }]
+  });
+  var autoTitlePrompt = (chat, enabled, language) => {
+    if (!enabled || chat.titleSet)
+      return;
+    const assistant = chat.messages.at(-1), user = chat.messages.at(-2);
+    if (!assistant || !user)
+      return;
+    return buildTitlePromptMessage(user.content, assistant.content, language);
+  };
+  var normalizeGeneratedTitle = (response) => {
+    let title = response.trim();
+    if (title.startsWith('"') && title.endsWith('"'))
+      title = title.slice(1, -1);
+    return title;
+  };
+  var estimateTokensByChars = (messages) => Math.ceil(messages.reduce((chars2, message) => chars2 + message.role.length + 4 + message.content.reduce((partChars, part) => partChars + (part.type === "text" ? part.text.length : 0), 0), 0) / 2);
+  var addTokenUsage = (total, model, providerId, promptTokens, completionTokens, imageTokens) => {
+    const key = providerId ? `${model}:::${providerId}` : model;
+    const previous = total[key] ?? { promptTokens: 0, completionTokens: 0, imageTokens: 0 };
+    const { promptTokens: priorPrompt = 0, completionTokens: priorCompletion = 0, imageTokens: priorImages = 0 } = previous;
+    return { ...total, [key]: {
+      ...previous,
+      promptTokens: priorPrompt + promptTokens,
+      completionTokens: priorCompletion + completionTokens,
+      imageTokens: priorImages + imageTokens
+    } };
+  };
+  var countImageInputs = (messages) => messages.reduce(
+    (total, message) => total + message.content.reduce(
+      (count, content) => count + (isImageContent(content) ? 1 : 0),
+      0
+    ),
+    0
+  );
+
+  // shared/google-sync/title.ts
+  function titleOperation(json) {
+    const input = JSON.parse(json);
+    if (input.operation === "settings") {
+      const state = input.state ?? {};
+      return JSON.stringify({
+        autoTitle: typeof state.autoTitle === "boolean" ? state.autoTitle : TITLE_DEFAULTS.autoTitle,
+        titleModel: typeof state.titleModel === "string" ? state.titleModel : TITLE_DEFAULTS.titleModel,
+        titleProviderId: typeof state.titleProviderId === "string" ? state.titleProviderId : TITLE_DEFAULTS.titleProviderId
+      });
+    }
+    if (input.operation === "saveSettings") {
+      const value = input.value;
+      if (!value || typeof value.autoTitle !== "boolean" || typeof value.titleModel !== "string" || value.titleProviderId !== void 0 && !Object.hasOwn(DEFAULT_PROVIDERS, value.titleProviderId))
+        throw new Error("Invalid title settings.");
+      const state = input.state ?? {};
+      const changes = ["autoTitle", "titleModel", "titleProviderId"].flatMap((key) => {
+        const next = value[key];
+        if (next === void 0)
+          return Object.hasOwn(state, key) ? [{ op: "remove", path: [key] }] : [];
+        return state[key] === next ? [] : [{ op: "set", path: [key], value: next }];
+      });
+      return JSON.stringify({ changes });
+    }
+    if (input.operation === "select") {
+      if (!input.settings || input.language === void 0)
+        throw new Error("Missing title settings.");
+      const promptMessage = autoTitlePrompt(input.chat, !!input.autoTitle, input.language);
+      if (!promptMessage)
+        return JSON.stringify({ status: "skipped" });
+      const { model, providerId, credentialProviderId, provider, config } = titleRequestSettings(input.sourceConfig ?? input.chat.config, input.settings);
+      return JSON.stringify({ status: "ready", model, providerId, credentialProviderId, endpoint: provider.endpoint, config, promptMessage });
+    }
+    if (input.operation === "plan") {
+      if (!input.selection || !input.transport)
+        throw new Error("Missing title selection or transport.");
+      const selection = input.selection;
+      if (selection.status !== "ready")
+        throw new Error("Invalid title selection.");
+      if (!input.transport.hasApiKey && selection.endpoint === officialAPIEndpoint)
+        throw new Error("noApiKeyWarning");
+      if (hardOpenRouterConstraints(selection.config.openRouter) && !isOpenRouterURL(input.transport.endpointURL))
+        throw new Error("OpenRouter auxiliary constraints require an OpenRouter endpoint.");
+      const request3 = JSON.parse(generationRequest(JSON.stringify({
+        auxiliary: true,
+        messages: [selection.promptMessage],
+        config: selection.config,
+        modelState: input.modelState,
+        capabilities: input.capabilities,
+        transport: {
+          endpoint: selection.endpoint,
+          endpointURL: input.transport.endpointURL,
+          hasApiKey: input.transport.hasApiKey,
+          apiVersion: input.transport.apiVersion,
+          customHeaders: input.transport.customHeaders,
+          viaProxy: input.transport.viaProxy
+        }
+      })));
+      return JSON.stringify({
+        status: "ready",
+        request: request3,
+        model: selection.model,
+        providerId: selection.providerId,
+        promptMessage: selection.promptMessage
+      });
+    }
+    if (input.operation === "apply") {
+      if (!input.selection || typeof input.responseText !== "string")
+        throw new Error("Missing title selection or response.");
+      if (input.chat.titleSet)
+        return JSON.stringify({ status: "skipped", changes: [] });
+      const title = normalizeGeneratedTitle(input.responseText);
+      const chat = { ...input.chat, title, titleSet: true };
+      const assistantMessage = { role: "assistant", content: [{ type: "text", text: title }] };
+      const before = { chat: input.chat, ...input.countTotalTokens ? { totalTokenUsed: input.totalTokenUsed ?? {} } : {} };
+      const after = { ...before, chat };
+      if (input.countTotalTokens) {
+        after.totalTokenUsed = addTokenUsage(
+          input.totalTokenUsed ?? {},
+          input.selection.model,
+          input.selection.providerId,
+          estimateTokensByChars([input.selection.promptMessage]),
+          estimateTokensByChars([assistantMessage]),
+          countImageInputs([input.selection.promptMessage])
+        );
+      }
+      return JSON.stringify({
+        status: "updated",
+        title,
+        changes: diffJSONChanges(before, after),
+        usage: {
+          model: input.selection.model,
+          providerId: input.selection.providerId,
+          promptMessage: input.selection.promptMessage,
+          assistantMessage
+        }
+      });
+    }
+    throw new Error("Unknown title operation.");
+  }
+
+  // shared/google-sync/importDefaults.generated.json
+  var importDefaults_generated_default = {
+    keys: [
+      "lastContentEditedAt",
+      "apiKey",
+      "apiVersion",
+      "apiEndpoint",
+      "theme",
+      "autoTitle",
+      "titleModel",
+      "titleProviderId",
+      "bubbleSummaryConfig",
+      "advancedMode",
+      "prompts",
+      "defaultChatConfig",
+      "defaultSystemMessage",
+      "hideMenuOptions",
+      "hideSideMenu",
+      "folders",
+      "enterToSubmit",
+      "inlineLatex",
+      "markdownMode",
+      "streamingMarkdownPolicy",
+      "totalTokenUsed",
+      "countTotalTokens",
+      "displayChatSize",
+      "menuWidth",
+      "defaultImageDetail",
+      "animateBubbleNavigation",
+      "branchSwipeDirection",
+      "providers",
+      "favoriteModels",
+      "providerModelCache",
+      "providerCustomModels",
+      "_legacyCustomModels",
+      "onboardingCompleted",
+      "splitPanelRatio",
+      "splitPanelSwapped",
+      "chatActiveView",
+      "proxyEnabled",
+      "proxyEndpoint",
+      "proxyAuthToken",
+      "showDebugPanel",
+      "searchHistory",
+      "sidebarSearchHistory",
+      "chatFindHistory",
+      "verifiedStats",
+      "pendingVerifications",
+      "evaluationSettings",
+      "safetyThresholds",
+      "qualityThresholds",
+      "evaluationResults",
+      "localModelEnabled",
+      "localModels",
+      "favoriteLocalModelIds",
+      "localModelExecutionMode",
+      "activeLocalModels",
+      "savedModelMeta",
+      "chats",
+      "contentStore",
+      "branchClipboard"
+    ],
+    values: {
+      apiEndpoint: "https://api.openai.com/v1/chat/completions",
+      theme: "dark",
+      autoTitle: false,
+      titleModel: "",
+      advancedMode: true,
+      prompts: [
+        {
+          id: "0d3e9cb7-b585-43fa-acc3-840c189f6b93",
+          name: "English Translator",
+          prompt: "I want you to act as an English translator, spelling corrector and improver. I will speak to you in any language and you will detect the language, translate it and answer in the corrected and improved version of my text, in English. I want you to replace my simplified A0-level words and sentences with more beautiful and elegant, upper level English words and sentences. Keep the meaning same, but make them more literary. I want you to only reply the correction, the improvements and nothing else, do not write explanations. Do you understand?"
+        }
+      ],
+      defaultChatConfig: {
+        model: "",
+        max_tokens: 4e3,
+        temperature: 1,
+        presence_penalty: 0,
+        top_p: 1,
+        frequency_penalty: 0,
+        stream: true,
+        reasoning_effort: "none",
+        reasoning_budget_tokens: 0
+      },
+      defaultSystemMessage: "You are a large language model assistant.\nCarefully heed the user's instructions. \nRespond using Markdown.",
+      hideMenuOptions: false,
+      hideSideMenu: false,
+      folders: {},
+      enterToSubmit: true,
+      inlineLatex: false,
+      markdownMode: true,
+      streamingMarkdownPolicy: "auto",
+      totalTokenUsed: {},
+      countTotalTokens: false,
+      displayChatSize: false,
+      menuWidth: 260,
+      defaultImageDetail: "auto",
+      animateBubbleNavigation: true,
+      branchSwipeDirection: "left-next",
+      providers: {
+        openrouter: {
+          id: "openrouter",
+          name: "OpenRouter",
+          endpoint: "https://openrouter.ai/api/v1/chat/completions",
+          modelsEndpoint: "https://openrouter.ai/api/v1/models",
+          modelsRequireAuth: false
+        },
+        openai: {
+          id: "openai",
+          name: "OpenAI",
+          endpoint: "https://api.openai.com/v1/chat/completions",
+          modelsEndpoint: "https://api.openai.com/v1/models",
+          modelsRequireAuth: true
+        },
+        mistral: {
+          id: "mistral",
+          name: "Mistral",
+          endpoint: "https://api.mistral.ai/v1/chat/completions",
+          modelsEndpoint: "https://api.mistral.ai/v1/models",
+          modelsRequireAuth: true
+        },
+        groq: {
+          id: "groq",
+          name: "Groq",
+          endpoint: "https://api.groq.com/openai/v1/chat/completions",
+          modelsEndpoint: "https://api.groq.com/openai/v1/models",
+          modelsRequireAuth: true
+        },
+        together: {
+          id: "together",
+          name: "Together AI",
+          endpoint: "https://api.together.xyz/v1/chat/completions",
+          modelsEndpoint: "https://api.together.xyz/v1/models",
+          modelsRequireAuth: true
+        },
+        cohere: {
+          id: "cohere",
+          name: "Cohere",
+          endpoint: "https://api.cohere.ai/v2/chat",
+          modelsEndpoint: "https://api.cohere.ai/v2/models",
+          modelsRequireAuth: true
+        },
+        perplexity: {
+          id: "perplexity",
+          name: "Perplexity",
+          endpoint: "https://api.perplexity.ai/chat/completions",
+          modelsRequireAuth: false
+        },
+        deepseek: {
+          id: "deepseek",
+          name: "DeepSeek",
+          endpoint: "https://api.deepseek.com/chat/completions",
+          modelsEndpoint: "https://api.deepseek.com/models",
+          modelsRequireAuth: true
+        },
+        xai: {
+          id: "xai",
+          name: "xAI",
+          endpoint: "https://api.x.ai/v1/chat/completions",
+          modelsEndpoint: "https://api.x.ai/v1/models",
+          modelsRequireAuth: true
+        },
+        fireworks: {
+          id: "fireworks",
+          name: "Fireworks",
+          endpoint: "https://api.fireworks.ai/inference/v1/chat/completions",
+          modelsEndpoint: "https://api.fireworks.ai/inference/v1/models",
+          modelsRequireAuth: true
+        }
+      },
+      favoriteModels: [],
+      providerModelCache: {},
+      providerCustomModels: {},
+      onboardingCompleted: false,
+      splitPanelRatio: 0.5,
+      splitPanelSwapped: false,
+      chatActiveView: "chat",
+      proxyEnabled: false,
+      proxyEndpoint: "",
+      proxyAuthToken: "",
+      showDebugPanel: false,
+      searchHistory: [],
+      sidebarSearchHistory: [],
+      chatFindHistory: [],
+      verifiedStats: {},
+      pendingVerifications: {},
+      evaluationSettings: {
+        safetyPreSend: "manual",
+        safetyPostReceive: "manual",
+        qualityPreSend: "manual",
+        qualityPostReceive: "manual",
+        safetyEngine: "remote",
+        hybridRemoteOnSafe: true
+      },
+      safetyThresholds: {
+        sexual: {
+          review: 0.8,
+          block: 0.95
+        },
+        hate: {
+          review: 0.7,
+          block: 0.9
+        },
+        harassment: {
+          review: 0.75,
+          block: 0.92
+        },
+        "self-harm": {
+          review: 0.55,
+          block: 0.85
+        },
+        "sexual/minors": {
+          review: 0.08,
+          block: 0.2
+        },
+        "hate/threatening": {
+          review: 0.35,
+          block: 0.7
+        },
+        "violence/graphic": {
+          review: 0.55,
+          block: 0.82
+        },
+        violence: {
+          review: 0.75,
+          block: 0.93
+        },
+        "harassment/threatening": {
+          review: 0.45,
+          block: 0.75
+        },
+        "self-harm/intent": {
+          review: 0.35,
+          block: 0.7
+        },
+        "self-harm/instructions": {
+          review: 0.2,
+          block: 0.45
+        },
+        illicit: {
+          review: 0.7,
+          block: 0.9
+        },
+        "illicit/violent": {
+          review: 0.25,
+          block: 0.55
+        }
+      },
+      qualityThresholds: {
+        taskCompletion: {
+          red: 0.5,
+          green: 0.8
+        },
+        faithfulness: {
+          red: 0.5,
+          green: 0.8
+        },
+        coherence: {
+          red: 0.5,
+          green: 0.8
+        },
+        conciseness: {
+          red: 0.5,
+          green: 0.8
+        },
+        instructionFollowing: {
+          red: 0.5,
+          green: 0.8
+        }
+      },
+      evaluationResults: {},
+      localModelEnabled: false,
+      localModels: [],
+      favoriteLocalModelIds: [],
+      localModelExecutionMode: "sequential",
+      activeLocalModels: {},
+      savedModelMeta: {},
+      contentStore: {},
+      branchClipboard: null
+    }
+  };
+
+  // src/store/version.ts
+  var STORE_VERSION = 18;
+
+  // src/store/storage/prepareSave.ts
+  function findPersistedDataIntegrityErrors(chats, contentStore, clipboard, options = {}) {
+    const errors = [];
+    const seenChatIds = /* @__PURE__ */ new Set();
+    const checkContentHash = (hash, owner) => {
+      if (options.allowTransientStreamingHashes && typeof hash === "string" && isStreamingContentHash(hash)) {
+        return;
+      }
+      if (typeof hash !== "string" || !contentStore[hash]) {
+        errors.push(`Missing contentHash for ${owner}: ${String(hash)}`);
+        return;
+      }
+      const visited = /* @__PURE__ */ new Set();
+      let current = hash;
+      while (contentStore[current]?.delta) {
+        if (visited.has(current)) {
+          errors.push(`Circular delta chain for ${owner}: ${hash}`);
+          return;
+        }
+        visited.add(current);
+        current = contentStore[current].delta.baseHash;
+        if (!contentStore[current]) {
+          errors.push(`Missing delta base for ${owner}: ${current}`);
+          return;
+        }
+      }
+    };
+    for (const chat of chats) {
+      if (!chat || typeof chat.id !== "string" || chat.id.length === 0) {
+        errors.push("Chat has an invalid id");
+        continue;
+      }
+      if (seenChatIds.has(chat.id)) {
+        errors.push(`Duplicate chat id: ${chat.id}`);
+      }
+      seenChatIds.add(chat.id);
+      if (!chat.branchTree)
+        continue;
+      if (!chat.branchTree.nodes || typeof chat.branchTree.nodes !== "object" || Array.isArray(chat.branchTree.nodes)) {
+        errors.push(`Invalid branchTree nodes: ${chat.id}`);
+        continue;
+      }
+      for (const node of Object.values(chat.branchTree.nodes)) {
+        checkContentHash(node?.contentHash, `chat ${chat.id}`);
+      }
+    }
+    if (clipboard && (!clipboard.nodes || typeof clipboard.nodes !== "object" || Array.isArray(clipboard.nodes))) {
+      errors.push("Invalid branch clipboard nodes");
+    } else if (clipboard?.nodes) {
+      for (const node of Object.values(clipboard.nodes)) {
+        checkContentHash(node?.contentHash, "branch clipboard");
+      }
+    }
+    return errors;
+  }
+
+  // src/utils/folderHierarchy.ts
+  function validateFolderHierarchy(folders) {
+    if (!folders || typeof folders !== "object" || Array.isArray(folders))
+      return false;
+    const collection = folders;
+    for (const [id, folder] of Object.entries(collection)) {
+      if (!id || !folder || typeof folder !== "object" || folder.id !== id || typeof folder.name !== "string" || !Number.isFinite(folder.order) || typeof folder.expanded !== "boolean" || folder.parentId != null && (typeof folder.parentId !== "string" || !Object.hasOwn(collection, folder.parentId)))
+        return false;
+    }
+    const finished = /* @__PURE__ */ new Set();
+    for (const id of Object.keys(collection)) {
+      const path = /* @__PURE__ */ new Set();
+      let current = id;
+      while (current !== void 0 && !finished.has(current)) {
+        if (path.has(current))
+          return false;
+        path.add(current);
+        current = collection[current].parentId ?? void 0;
+      }
+      for (const member of path)
+        finished.add(member);
+    }
+    return true;
+  }
+  function getFolderParentId(folders, id) {
+    const parent = folders[id]?.parentId ?? void 0;
+    const visited = /* @__PURE__ */ new Set([id]);
+    let current = parent;
+    while (current !== void 0) {
+      if (visited.has(current) || !Object.hasOwn(folders, current))
+        return void 0;
+      visited.add(current);
+      current = folders[current]?.parentId ?? void 0;
+    }
+    return parent;
+  }
+  function getFolderAncestors(folders, id) {
+    const result3 = [];
+    const visited = /* @__PURE__ */ new Set();
+    let current = id;
+    while (current !== void 0 && Object.hasOwn(folders, current) && !visited.has(current)) {
+      visited.add(current);
+      result3.push(current);
+      current = result3.length === 1 ? getFolderParentId(folders, current) : folders[current]?.parentId ?? void 0;
+    }
+    return result3;
+  }
+  function getFolderSubtreeIds(folders, id) {
+    if (!Object.hasOwn(folders, id))
+      return [];
+    const children = /* @__PURE__ */ new Map();
+    for (const [childId, folder] of Object.entries(folders)) {
+      if (folder?.parentId != null) {
+        const list = children.get(folder.parentId) ?? [];
+        list.push(childId);
+        children.set(folder.parentId, list);
+      }
+    }
+    const result3 = [], visited = /* @__PURE__ */ new Set(), pending = [id];
+    while (pending.length) {
+      const current = pending.pop();
+      if (visited.has(current))
+        continue;
+      visited.add(current);
+      result3.push(current);
+      for (const child of children.get(current) ?? [])
+        pending.push(child);
+    }
+    return result3;
+  }
+
+  // src/utils/chatIdentity.ts
+  var ensureUniqueChatIds = (chats) => {
+    const seen = /* @__PURE__ */ new Set();
+    let changed = false;
+    chats.forEach((chat) => {
+      const hasValidId = typeof chat.id === "string" && chat.id.length > 0;
+      if (!hasValidId || seen.has(chat.id)) {
+        chat.id = editingUUID();
+        changed = true;
+      }
+      seen.add(chat.id);
+    });
+    return changed;
+  };
+  var assignFreshChatIds = (chats) => {
+    chats.forEach((chat) => {
+      chat.id = editingUUID();
+    });
+  };
+
   // src/utils/import.ts
   var hasOwn = (value, key) => Object.prototype.hasOwnProperty.call(value, key);
-  var isRecord = (value) => typeof value === "object" && value !== null;
-  var asConfigCarrier = (value) => isRecord(value) ? value : {};
+  var isRecord2 = (value) => typeof value === "object" && value !== null;
+  var asConfigCarrier = (value) => isRecord2(value) ? value : {};
   var extractConfigOverrides = (value) => {
     const source = asConfigCarrier(value);
     const overrides = {};
@@ -12444,13 +13532,13 @@ ${message.content}` : message.content).join("\n\n").trim();
     ..._defaultChatConfig,
     ...extractConfigOverrides(value)
   });
-  var isOpenAIMessageContentParts = (value) => isRecord(value) && hasOwn(value, "parts") && Array.isArray(value.parts) && value.parts.every((part) => typeof part === "string");
+  var isOpenAIMessageContentParts = (value) => isRecord2(value) && hasOwn(value, "parts") && Array.isArray(value.parts) && value.parts.every((part) => typeof part === "string");
   var isRole = (value) => typeof value === "string" && roles.includes(value);
   var validateAndFixChats = (chats) => {
     if (!Array.isArray(chats))
       return false;
     for (const chat of chats) {
-      if (!isRecord(chat))
+      if (!isRecord2(chat))
         return false;
       const mutableChat = chat;
       if (!(typeof mutableChat.id === "string"))
@@ -12465,7 +13553,7 @@ ${message.content}` : message.content).join("\n\n").trim();
         return false;
       if (!validateAndFixChatConfig(mutableChat.config))
         return false;
-      if (mutableChat.summaryTargets !== void 0 && (!isRecord(mutableChat.summaryTargets) || Object.values(mutableChat.summaryTargets).some((value) => typeof value !== "boolean")))
+      if (mutableChat.summaryTargets !== void 0 && (!isRecord2(mutableChat.summaryTargets) || Object.values(mutableChat.summaryTargets).some((value) => typeof value !== "boolean")))
         return false;
       if (mutableChat.summaries !== void 0 && (!Array.isArray(mutableChat.summaries) || !mutableChat.summaries.every(isBubbleSummary)))
         return false;
@@ -12477,7 +13565,7 @@ ${message.content}` : message.content).join("\n\n").trim();
     if (!Array.isArray(messages))
       return false;
     for (const message of messages) {
-      if (!isRecord(message))
+      if (!isRecord2(message))
         return false;
       if (typeof message.content === "string") {
         message.content = [strToTextContent(message.content)];
@@ -12494,7 +13582,7 @@ ${message.content}` : message.content).join("\n\n").trim();
   var validateAndFixChatConfig = (config) => {
     if (config === void 0)
       return true;
-    if (!isRecord(config))
+    if (!isRecord2(config))
       return false;
     if (config.temperature === void 0)
       config.temperature = _defaultChatConfig.temperature;
@@ -12516,7 +13604,7 @@ ${message.content}` : message.content).join("\n\n").trim();
     return true;
   };
   var isLegacyImport = (importedData) => Array.isArray(importedData);
-  var isSingleChatImport = (importedData) => isRecord(importedData) && hasOwn(importedData, "messages") && Array.isArray(importedData.messages) && hasOwn(importedData, "config") && isRecord(importedData.config);
+  var isSingleChatImport = (importedData) => isRecord2(importedData) && hasOwn(importedData, "messages") && Array.isArray(importedData.messages) && hasOwn(importedData, "config") && isRecord2(importedData.config);
   var validateFolders = (folders) => {
     return validateFolderHierarchy(folders);
   };
@@ -12538,10 +13626,10 @@ ${message.content}` : message.content).join("\n\n").trim();
     return true;
   };
   var validateContentStore = (contentStore) => {
-    if (!isRecord(contentStore))
+    if (!isRecord2(contentStore))
       return false;
     for (const entry of Object.values(contentStore)) {
-      if (!isRecord(entry))
+      if (!isRecord2(entry))
         return false;
       if (!Array.isArray(entry.content))
         return false;
@@ -12553,16 +13641,16 @@ ${message.content}` : message.content).join("\n\n").trim();
     return true;
   };
   var isEvaluationSettings = (value) => {
-    if (!isRecord(value))
+    if (!isRecord2(value))
       return false;
     const modes = ["manual", "auto"];
     return modes.includes(value.safetyPreSend) && modes.includes(value.safetyPostReceive) && modes.includes(value.qualityPreSend) && modes.includes(value.qualityPostReceive);
   };
   var isEvaluationResultMap = (value) => {
-    if (!isRecord(value))
+    if (!isRecord2(value))
       return false;
     return Object.values(value).every((entry) => {
-      if (!isRecord(entry))
+      if (!isRecord2(entry))
         return false;
       if (entry.phase !== "pre-send" && entry.phase !== "post-receive")
         return false;
@@ -12598,13 +13686,13 @@ ${message.content}` : message.content).join("\n\n").trim();
     return true;
   };
   var isContentInterface = (content) => {
-    if (!isRecord(content) || typeof content.type !== "string")
+    if (!isRecord2(content) || typeof content.type !== "string")
       return false;
     if (content.type === "text") {
       return typeof content.text === "string";
     }
     if (content.type === "image_url") {
-      return isRecord(content.image_url) && typeof content.image_url.url === "string" && typeof content.image_url.detail === "string";
+      return isRecord2(content.image_url) && typeof content.image_url.url === "string" && typeof content.image_url.detail === "string";
     }
     if (content.type === "reasoning") {
       return typeof content.text === "string";
@@ -12621,13 +13709,13 @@ ${message.content}` : message.content).join("\n\n").trim();
     return isOpenAIChat(content) || isOpenAIPlaygroundJSON(content) || isOpenAIDataExport(content);
   };
   var isOpenAIChat = (content) => {
-    return isRecord(content) && hasOwn(content, "mapping") && isRecord(content.mapping);
+    return isRecord2(content) && hasOwn(content, "mapping") && isRecord2(content.mapping);
   };
   var isOpenAIDataExport = (content) => {
     return Array.isArray(content) && content.length > 0 && isOpenAIChat(content[0]);
   };
   var isOpenAIPlaygroundJSON = (content) => {
-    if (!isRecord(content) || !hasOwn(content, "messages") || !Array.isArray(content.messages)) {
+    if (!isRecord2(content) || !hasOwn(content, "messages") || !Array.isArray(content.messages)) {
       return false;
     }
     if (hasOwn(content, "config") || hasOwn(content, "version")) {
@@ -13294,7 +14382,7 @@ ${message.content}` : message.content).join("\n\n").trim();
   // src/utils/fileImport.ts
   var cloneState = (value) => JSON.parse(JSON.stringify(value));
   var deepClone = (value) => typeof structuredClone === "function" ? structuredClone(value) : cloneState(value);
-  var isRecord2 = (value) => typeof value === "object" && value !== null;
+  var isRecord3 = (value) => typeof value === "object" && value !== null;
   var createImportPlan = (base, mode, includeSettings, initial) => ({
     // JSON-only hosts must retain explicit undefined roots until the final persisted diff.
     ...Object.fromEntries(Object.keys(mode === "replace" && includeSettings ? initial : base).map((key) => [key, void 0])),
@@ -13361,13 +14449,13 @@ ${message.content}` : message.content).join("\n\n").trim();
     if (!Number.isInteger(raw.version) || raw.version < 0 || raw.version >= STORE_VERSION) {
       throw new Error("\u3053\u306E\u540C\u671F\u30C7\u30FC\u30BF\u306E\u7248\u306F\u53D6\u308A\u8FBC\u3081\u307E\u305B\u3093\u3002\u5BFE\u5FDC\u3059\u308B\u7248\u3067\u958B\u3044\u3066\u304F\u3060\u3055\u3044\u3002");
     }
-    if (!isRecord2(raw.state) || !Array.isArray(raw.state.chats)) {
+    if (!isRecord3(raw.state) || !Array.isArray(raw.state.chats)) {
       throw new Error("Invalid legacy remote snapshot");
     }
     const state = deepClone(raw.state);
     const chats = state.chats;
     const hasInlineNodes = chats.some((chat) => chat.branchTree && Object.values(chat.branchTree.nodes).some((node) => "content" in node && !node.contentHash));
-    const version = hasInlineNodes ? 2 : isRecord2(state.contentStore) ? 3 : 1;
+    const version = hasInlineNodes ? 2 : isRecord3(state.contentStore) ? 3 : 1;
     if (version === 3 || hasInlineNodes) {
       const hashedChats = hasInlineNodes ? chats.map((chat) => chat.branchTree ? {
         ...chat,
@@ -13397,11 +14485,11 @@ ${message.content}` : message.content).join("\n\n").trim();
     return { ...state, version, chats, folders: state.folders ?? {} };
   };
   var detectImportType = (parsedData) => {
-    if (isRecord2(parsedData) && parsedData.version === 3)
+    if (isRecord3(parsedData) && parsedData.version === 3)
       return "ExportV3";
-    if (isRecord2(parsedData) && parsedData.version === 2)
+    if (isRecord3(parsedData) && parsedData.version === 2)
       return "ExportV2";
-    if (isRecord2(parsedData) && parsedData.version === 1)
+    if (isRecord3(parsedData) && parsedData.version === 1)
       return "ExportV1";
     if (isOpenAIContent(parsedData))
       return "OpenAIContent";
@@ -13598,9 +14686,9 @@ ${message.content}` : message.content).join("\n\n").trim();
   };
   var validateOpenAIMappings = (data) => {
     for (const chat of Array.isArray(data) ? data : [data]) {
-      if (!isRecord2(chat) || !Object.hasOwn(chat, "mapping"))
+      if (!isRecord3(chat) || !Object.hasOwn(chat, "mapping"))
         continue;
-      if (!isRecord2(chat.mapping) || Array.isArray(chat.mapping))
+      if (!isRecord3(chat.mapping) || Array.isArray(chat.mapping))
         throw new Error("Invalid OpenAI mapping");
       const mapping = chat.mapping;
       const ids = Object.keys(mapping);
@@ -13613,10 +14701,10 @@ ${message.content}` : message.content).join("\n\n").trim();
       const children = /* @__PURE__ */ new Map();
       for (const id of ids) {
         const node = mapping[id];
-        if (!isRecord2(node) || node.id !== id || !Array.isArray(node.children) || node.parent !== null && (typeof node.parent !== "string" || !Object.hasOwn(mapping, node.parent)) || node.children.some((child) => typeof child !== "string" || !Object.hasOwn(mapping, child))) {
+        if (!isRecord3(node) || node.id !== id || !Array.isArray(node.children) || node.parent !== null && (typeof node.parent !== "string" || !Object.hasOwn(mapping, node.parent)) || node.children.some((child) => typeof child !== "string" || !Object.hasOwn(mapping, child))) {
           throw new Error("Invalid OpenAI node references");
         }
-        if (isRecord2(node.message) && isRecord2(node.message.author) && !["user", "assistant", "system"].includes(String(node.message.author.role))) {
+        if (isRecord3(node.message) && isRecord3(node.message.author) && !["user", "assistant", "system"].includes(String(node.message.author.role))) {
           throw new Error("Unsupported OpenAI message role");
         }
         parents.set(id, node.parent === null ? [] : [node.parent]);
@@ -13682,7 +14770,7 @@ ${message.content}` : message.content).join("\n\n").trim();
         return { result: result3, plan, removedChatsCount };
       } catch (error2) {
         if (error2.name === "QuotaExceededError") {
-          const chats = type === "ExportV1" && isRecord2(chatsToImport) ? chatsToImport.chats : chatsToImport;
+          const chats = type === "ExportV1" && isRecord3(chatsToImport) ? chatsToImport.chats : chatsToImport;
           if (!Array.isArray(chats) || !chats.length) {
             return { result: buildFailureResult(t2("notifications.quotaExceeded", { ns: "import" })), plan };
           }
@@ -13732,14 +14820,14 @@ ${message.content}` : message.content).join("\n\n").trim();
       }) ? content : void 0;
     };
     for (const value of chats) {
-      if (!isRecord2(value))
+      if (!isRecord3(value))
         continue;
       delete value.__previewMissingContent;
       const tree = value.branchTree;
-      if (!isRecord2(tree) || !isRecord2(tree.nodes))
+      if (!isRecord3(tree) || !isRecord3(tree.nodes))
         continue;
       for (const node of Object.values(tree.nodes)) {
-        if (!isRecord2(node) || typeof node.contentHash !== "string" || originalHashes.has(node.contentHash) || isStreamingContentHash(node.contentHash))
+        if (!isRecord3(node) || typeof node.contentHash !== "string" || originalHashes.has(node.contentHash) || isStreamingContentHash(node.contentHash))
           continue;
         const hash = node.contentHash;
         let content = asContent(node.content);
@@ -13747,7 +14835,7 @@ ${message.content}` : message.content).join("\n\n").trim();
         const messages = value.messages;
         if (!content && Array.isArray(path) && Array.isArray(messages) && path.length === messages.length) {
           const message = messages[path.indexOf(node.id)];
-          if (isRecord2(message) && message.role === node.role) {
+          if (isRecord3(message) && message.role === node.role) {
             const candidate = asContent(message.content);
             if (candidate) {
               const candidateHash = computeContentHash(candidate);
@@ -13834,10 +14922,10 @@ ${message.content}` : message.content).join("\n\n").trim();
   };
   var prepareImportData = (data, base, t2, decisions = {}, resolveDecision, allowEmpty = false) => {
     const raw = deepClone(data);
-    const payload = isRecord2(raw) && isRecord2(raw.state) ? raw.state : raw;
-    const rawChats = isRecord2(payload) && Array.isArray(payload.chats) ? payload.chats : Array.isArray(payload) ? payload : [payload];
+    const payload = isRecord3(raw) && isRecord3(raw.state) ? raw.state : raw;
+    const rawChats = isRecord3(payload) && Array.isArray(payload.chats) ? payload.chats : Array.isArray(payload) ? payload : [payload];
     let recoveredContentCount = 0;
-    if (isRecord2(payload) && isRecord2(payload.contentStore)) {
+    if (isRecord3(payload) && isRecord3(payload.contentStore)) {
       const contentStore = payload.contentStore;
       if (!validateExportV3({ version: 3, chats: [], folders: {}, contentStore }))
         throw new Error("Invalid content store");
@@ -13849,23 +14937,23 @@ ${message.content}` : message.content).join("\n\n").trim();
       if (validateDeltaIntegrity(contentStore).size)
         throw new Error("Invalid delta content");
       recoveredContentCount = prepareMissingPreviewContent(rawChats, contentStore, t2);
-      const hashedChats = rawChats.map((chat) => isRecord2(chat) && isRecord2(chat.branchTree) && isRecord2(chat.branchTree.nodes) ? { ...chat, branchTree: { ...chat.branchTree, nodes: Object.fromEntries(
-        Object.entries(chat.branchTree.nodes).filter(([, node]) => isRecord2(node) && node.contentHash !== void 0)
+      const hashedChats = rawChats.map((chat) => isRecord3(chat) && isRecord3(chat.branchTree) && isRecord3(chat.branchTree.nodes) ? { ...chat, branchTree: { ...chat.branchTree, nodes: Object.fromEntries(
+        Object.entries(chat.branchTree.nodes).filter(([, node]) => isRecord3(node) && node.contentHash !== void 0)
       ) } } : chat);
       const errors = findPersistedDataIntegrityErrors(hashedChats, contentStore, null).filter((error2) => !error2.startsWith("Duplicate chat id:"));
       if (errors.length)
         throw new Error(errors.join("; "));
     }
     for (const chat of rawChats) {
-      if (isRecord2(chat) && isRecord2(chat.branchTree) && isRecord2(chat.branchTree.nodes)) {
+      if (isRecord3(chat) && isRecord3(chat.branchTree) && isRecord3(chat.branchTree.nodes)) {
         for (const node of Object.values(chat.branchTree.nodes)) {
-          if (isRecord2(node) && typeof node.contentHash === "string" && isStreamingContentHash(node.contentHash)) {
+          if (isRecord3(node) && typeof node.contentHash === "string" && isStreamingContentHash(node.contentHash)) {
             throw new Error("Streaming content cannot be previewed");
           }
         }
       }
     }
-    const parsed = isRecord2(raw) && Object.hasOwn(raw, "state") && typeof raw.version === "number" ? decodeLegacyRemoteImport(raw) : raw;
+    const parsed = isRecord3(raw) && Object.hasOwn(raw, "state") && typeof raw.version === "number" ? decodeLegacyRemoteImport(raw) : raw;
     const type = detectImportType(parsed);
     if (!type)
       throw new Error(t2("notifications.unrecognisedDataFormat", { ns: "import" }));
@@ -13876,7 +14964,7 @@ ${message.content}` : message.content).join("\n\n").trim();
     if (!result3.success && !validEmpty)
       return { status: "failed", result: result3 };
     const source = previewSourceFromPlan(plan);
-    if (isRecord2(parsed) && type.startsWith("Export")) {
+    if (isRecord3(parsed) && type.startsWith("Export")) {
       source.extensions = Object.fromEntries(Object.entries(parsed).filter(([key]) => !["version", "chats", "folders", "contentStore", "evaluationSettings", "evaluationResults"].includes(key)));
       if ("evaluationSettings" in parsed)
         source.evaluationSettings = deepClone(parsed.evaluationSettings);
@@ -17432,812 +18520,6 @@ ${message.content}` : message.content).join("\n\n").trim();
     })));
   }
 
-  // src/utils/api.ts
-  var isAzureEndpoint = (endpoint) => {
-    return endpoint.includes("openai.azure.com");
-  };
-
-  // src/api/requestTransport.ts
-  function prepareRequestTransport(endpoint, config, hasApiKey, customHeaders, apiVersionToUse) {
-    const headers = { "Content-Type": "application/json", ...customHeaders };
-    const authentication = hasApiKey ? [{ name: "Authorization", prefix: "Bearer " }] : [];
-    if (isAzureEndpoint(endpoint) && hasApiKey) {
-      authentication.push({ name: "api-key", prefix: "" });
-      const apiVersion = apiVersionToUse ?? "2024-02-01";
-      const path = `openai/deployments/${config.model}/chat/completions?api-version=${apiVersion}`;
-      if (!endpoint.endsWith(path)) {
-        if (!endpoint.endsWith("/"))
-          endpoint += "/";
-        endpoint += path;
-      }
-    }
-    return { endpoint: endpoint.trim(), headers, authentication };
-  }
-
-  // src/utils/openrouterRequest.ts
-  var isOpenRouterURL = (url) => url.protocol === "https:" && ["openrouter.ai", "eu.openrouter.ai", "us.openrouter.ai"].includes(url.hostname);
-  function validateOpenRouterSettings(settings, model, responseCacheEnabled = true) {
-    if (settings === void 0)
-      return;
-    const object2 = (v) => typeof v === "object" && v !== null && !Array.isArray(v);
-    if (!object2(settings) || [settings.routing, settings.promptCache, ...responseCacheEnabled ? [settings.responseCache] : []].some((v) => v !== void 0 && !object2(v)))
-      return "openRouter.errors.invalid";
-    const r = settings.routing;
-    if (r) {
-      if (r.max_price !== void 0 && !object2(r.max_price))
-        return "openRouter.errors.price";
-      for (const list of [r.order, r.only, r.ignore]) {
-        if (list !== void 0 && (!Array.isArray(list) || list.some((v) => typeof v !== "string" || !v.trim()) || new Set(list).size !== list.length))
-          return "openRouter.errors.slugs";
-      }
-      if ([...r.order ?? [], ...r.only ?? []].some((v) => r.ignore?.includes(v)) || r.order?.some((v) => r.only?.length && !r.only.includes(v)))
-        return "openRouter.errors.conflict";
-      if (r.order?.length && r.sort)
-        return "openRouter.errors.conflict";
-      if (r.sort !== void 0 && !["price", "throughput", "latency"].includes(r.sort))
-        return "openRouter.errors.invalid";
-      if (r.data_collection !== void 0 && !["allow", "deny"].includes(r.data_collection))
-        return "openRouter.errors.invalid";
-      for (const v of [r.allow_fallbacks, r.require_parameters, r.zdr])
-        if (v !== void 0 && typeof v !== "boolean")
-          return "openRouter.errors.invalid";
-      for (const v of [r.max_price?.prompt, r.max_price?.completion])
-        if (v !== void 0 && (typeof v !== "number" || !Number.isFinite(v) || v < 0))
-          return "openRouter.errors.price";
-    }
-    if (settings.stickySession !== void 0 && typeof settings.stickySession !== "boolean")
-      return "openRouter.errors.invalid";
-    const p = settings.promptCache;
-    if (p) {
-      if (!["provider-default", "claude-conversation", "claude-system"].includes(p.mode) || p.ttl !== void 0 && !["5m", "1h"].includes(p.ttl))
-        return "openRouter.errors.invalid";
-      if (p.mode !== "provider-default" && model !== void 0 && !model.startsWith("anthropic/claude-"))
-        return "openRouter.errors.model";
-    }
-    const c = settings.responseCache;
-    if (c && responseCacheEnabled) {
-      if (!["inherit", "off", "on"].includes(c.mode))
-        return "openRouter.errors.invalid";
-      if (c.ttlSeconds !== void 0 && (!Number.isInteger(c.ttlSeconds) || c.ttlSeconds < 1 || c.ttlSeconds > 86400))
-        return "openRouter.errors.ttl";
-    }
-  }
-  function hardOpenRouterConstraints(settings) {
-    const error2 = validateOpenRouterSettings(settings, void 0, false);
-    if (error2)
-      throw new Error(instance.t(`model:${error2}`));
-    const r = settings?.routing;
-    if (!r)
-      return;
-    const constrained = {
-      only: r.only?.length ? [...r.only] : void 0,
-      ignore: r.ignore?.length ? [...r.ignore] : void 0,
-      max_price: r.max_price && Object.values(r.max_price).some((v) => v !== void 0) ? { ...r.max_price } : void 0,
-      data_collection: r.data_collection === "deny" ? "deny" : void 0,
-      zdr: r.zdr === true ? true : void 0
-    };
-    return Object.values(constrained).some((v) => v !== void 0) ? constrained : void 0;
-  }
-  function applyOpenRouterControls(endpointIsOpenRouter, config, body, headers, context) {
-    const settings = config.openRouter;
-    if (!endpointIsOpenRouter) {
-      if (settings && config.providerId === "openrouter")
-        throw new Error(instance.t("model:openRouter.errors.endpoint"));
-      return;
-    }
-    const error2 = validateOpenRouterSettings(settings, config.model, context?.viaProxy === true);
-    if (error2)
-      throw new Error(instance.t(`model:${error2}`));
-    const routing = context?.auxiliary ? hardOpenRouterConstraints(settings) : settings?.routing;
-    if (routing) {
-      const { order, only, ignore, sort, allow_fallbacks, require_parameters, max_price, data_collection, zdr } = routing;
-      body.provider = { order, only, ignore, sort, allow_fallbacks, require_parameters, max_price, data_collection, zdr };
-    }
-    if (context?.chatId && settings?.stickySession)
-      body.session_id = `weavelet:${context.chatId}${context.auxiliary ? ":title" : ""}`;
-    const p = context?.auxiliary ? void 0 : settings?.promptCache;
-    if (p && p.mode !== "provider-default") {
-      const cache = { type: "ephemeral", ...p.ttl === "1h" ? { ttl: "1h" } : {} };
-      if (p.mode === "claude-conversation")
-        body.cache_control = cache;
-      else {
-        const messages = body.messages;
-        const index = messages.findIndex((m) => m.role === "system");
-        const message = messages[index];
-        const lastText = message?.content.map((c2) => c2.type).lastIndexOf("text") ?? -1;
-        if (lastText < 0)
-          throw new Error(instance.t("model:openRouter.errors.system"));
-        body.messages = messages.map((m, i) => i !== index ? m : {
-          ...m,
-          content: m.content.map((c2, j) => j !== lastText ? c2 : { ...c2, cache_control: cache })
-        });
-      }
-    }
-    if (!context?.viaProxy)
-      return;
-    const c = settings?.responseCache;
-    if (context?.auxiliary || settings?.routing?.zdr || c?.mode === "off")
-      headers["X-OpenRouter-Cache"] = "false";
-    else if (c?.mode === "on") {
-      headers["X-OpenRouter-Cache"] = "true";
-      headers["X-OpenRouter-Cache-TTL"] = String(c.ttlSeconds ?? 300);
-      if (context?.regenerate)
-        headers["X-OpenRouter-Cache-Clear"] = "true";
-    }
-  }
-
-  // src/local-llm/catalog.ts
-  var CURATED_MODELS = [
-    {
-      id: "smollm2-360m-instruct-q8",
-      label: "SmolLM2 360M Instruct (Q8_0)",
-      engine: "wllama",
-      tasks: ["generation", "analysis"],
-      huggingFaceRepo: "HuggingFaceTB/SmolLM2-360M-Instruct-GGUF",
-      revision: "main",
-      downloadFiles: ["smollm2-360m-instruct-q8_0.gguf"],
-      manifest: {
-        kind: "single-file",
-        entrypoint: "smollm2-360m-instruct-q8_0.gguf"
-      },
-      // 386 MB — measured from HF repo (only quantization available)
-      expectedDownloadSize: 386404992,
-      recommendedDeviceTier: "low",
-      notes: "Smallest recommended model. Good for basic text generation on low-end devices.",
-      displayMeta: {
-        supportsTextInference: true,
-        quantization: "Q8_0",
-        parameterSizeLabel: "360M",
-        sourceLabel: "catalog",
-        recommended: true,
-        contextLength: 8192
-      }
-    },
-    {
-      id: "qwen3-0.6b-q4km",
-      label: "Qwen3 0.6B (Q4_K_M)",
-      engine: "wllama",
-      tasks: ["generation", "analysis"],
-      huggingFaceRepo: "bartowski/Qwen_Qwen3-0.6B-GGUF",
-      revision: "main",
-      downloadFiles: ["Qwen_Qwen3-0.6B-Q4_K_M.gguf"],
-      manifest: {
-        kind: "single-file",
-        entrypoint: "Qwen_Qwen3-0.6B-Q4_K_M.gguf"
-      },
-      // 484 MB — measured from HF repo
-      expectedDownloadSize: 484220320,
-      recommendedDeviceTier: "standard",
-      notes: "Balanced size and capability. Latest Qwen3 architecture with generation and analysis.",
-      displayMeta: {
-        supportsTextInference: true,
-        quantization: "Q4_K_M",
-        parameterSizeLabel: "0.6B",
-        sourceLabel: "catalog",
-        recommended: true,
-        contextLength: 40960
-      }
-    },
-    {
-      id: "llm-jp-3-1.8b-instruct-q4km",
-      label: "LLM-jp-3 1.8B Instruct (Q4_K_M)",
-      engine: "wllama",
-      tasks: ["generation", "analysis"],
-      huggingFaceRepo: "alfredplpl/llm-jp-3-1.8b-instruct-gguf",
-      revision: "main",
-      downloadFiles: ["llm-jp-3-1.8b-instruct-Q4_K_M.gguf"],
-      manifest: {
-        kind: "single-file",
-        entrypoint: "llm-jp-3-1.8b-instruct-Q4_K_M.gguf"
-      },
-      // 1.16 GB — measured from HF repo
-      expectedDownloadSize: 1164239104,
-      recommendedDeviceTier: "high",
-      notes: "Japanese-focused model. Good quality for Japanese text generation and analysis.",
-      displayMeta: {
-        supportsTextInference: true,
-        quantization: "Q4_K_M",
-        parameterSizeLabel: "1.8B",
-        sourceLabel: "catalog",
-        recommended: true,
-        contextLength: 4096
-      }
-    }
-  ];
-  function getCatalogModel(id) {
-    return CURATED_MODELS.find((m) => m.id === id);
-  }
-
-  // src/utils/tokenBudget.ts
-  var UNKNOWN_MODEL_CONTEXT_LENGTH = 8192;
-  var UNKNOWN_MODEL_UI_CONTEXT_LENGTH = 128e3;
-  var MIN_PROMPT_RATIO = 0.1;
-  var normalizeContextLength = (contextLength) => Math.max(1, Math.floor(contextLength));
-  var getMinPromptTokensForContext = (contextLength) => Math.max(1, Math.floor(normalizeContextLength(contextLength) * MIN_PROMPT_RATIO));
-  var getMaxCompletionTokensForContext = (contextLength) => {
-    const normalizedContextLength = normalizeContextLength(contextLength);
-    return Math.max(0, normalizedContextLength - getMinPromptTokensForContext(normalizedContextLength));
-  };
-  var clampCompletionTokens = (requestedCompletionTokens, contextLength) => Math.min(
-    Math.max(0, Math.floor(requestedCompletionTokens)),
-    getMaxCompletionTokensForContext(contextLength)
-  );
-
-  // src/utils/localModelLimits.ts
-  var DEFAULT_LOCAL_MODEL_CONTEXT_LENGTH = 2048;
-  function localModelContextLength(state, modelId, capabilities) {
-    if (capabilities?.contextLength)
-      return capabilities.contextLength;
-    const stored = state.localModels?.find((model) => model.id === modelId);
-    if (stored?.displayMeta?.contextLength)
-      return stored.displayMeta.contextLength;
-    const catalog = getCatalogModel(modelId);
-    if (catalog?.displayMeta?.contextLength)
-      return catalog.displayMeta.contextLength;
-    return DEFAULT_LOCAL_MODEL_CONTEXT_LENGTH;
-  }
-  var localModelDefaultMaxTokens = (state, modelId, capabilities) => getMaxCompletionTokensForContext(localModelContextLength(state, modelId, capabilities));
-
-  // src/utils/reasoning.ts
-  var getEffectiveVerbosity = (verbosity, allowMax) => verbosity === "max" && !allowMax ? "medium" : verbosity;
-  var normalizeModelId = (modelId) => modelId.toLowerCase();
-  var getClaudeVersion = (id) => {
-    const match = /claude(?:-[a-z]+)*[-.](\d+(?:[.-]\d+)?)/.exec(id);
-    if (!match)
-      return void 0;
-    const version = parseFloat(match[1].replace("-", "."));
-    return Number.isFinite(version) ? version : void 0;
-  };
-  var isClaudeReasoningModel = (modelId) => {
-    const id = normalizeModelId(modelId);
-    if (!id.includes("claude"))
-      return false;
-    if (id.includes("thinking"))
-      return true;
-    const version = getClaudeVersion(id);
-    if (version === void 0)
-      return true;
-    return version >= 3.7;
-  };
-  var isOpenRouterAdaptiveReasoningModel = (modelId, providerId) => {
-    if (providerId !== "openrouter")
-      return false;
-    const id = normalizeModelId(modelId);
-    if (!id.includes("claude"))
-      return false;
-    const version = getClaudeVersion(id);
-    if (version === void 0)
-      return true;
-    return version >= 4.6;
-  };
-  var isOpenRouterClaudeEffortModel = (modelId, providerId) => {
-    if (providerId !== "openrouter")
-      return false;
-    const id = normalizeModelId(modelId);
-    if (!id.includes("claude"))
-      return false;
-    const version = getClaudeVersion(id);
-    if (version === void 0)
-      return true;
-    return version >= 4.7;
-  };
-  var isOpenRouterClaudeVerbosityModel = (modelId, providerId) => {
-    if (providerId !== "openrouter")
-      return false;
-    const id = normalizeModelId(modelId);
-    const version = getClaudeVersion(id);
-    if (version === void 0)
-      return false;
-    if (id.includes("opus"))
-      return version >= 4.5;
-    if (id.includes("sonnet"))
-      return version >= 4.6;
-    return /(?:fable|mythos)/.test(id) && version >= 5;
-  };
-  var supportsMaxVerbosity = (modelId, providerId) => {
-    if (!isOpenRouterClaudeVerbosityModel(modelId, providerId))
-      return false;
-    const id = normalizeModelId(modelId);
-    const version = getClaudeVersion(id);
-    return version !== void 0 && version >= 4.6;
-  };
-
-  // src/api/providerModels.ts
-  var isRecord3 = (value) => typeof value === "object" && value !== null;
-  var asProviderModelListPayload = (value) => isRecord3(value) ? value : {};
-  var asProviderModelPayload = (value) => isRecord3(value) ? value : {};
-  var asProviderPricingPayload = (value) => isRecord3(value) ? value : {};
-  var toStringValue = (value) => typeof value === "string" && value.length > 0 ? value : void 0;
-  var toNumberValue = (value) => typeof value === "number" && Number.isFinite(value) ? value : void 0;
-  var toMillionTokenPrice = (value) => {
-    if (typeof value === "number" && Number.isFinite(value)) {
-      return value * 1e6;
-    }
-    if (typeof value === "string") {
-      const parsed = parseFloat(value);
-      return Number.isFinite(parsed) ? parsed * 1e6 : void 0;
-    }
-    return void 0;
-  };
-  var getModelEntries = (value) => {
-    const payload = asProviderModelListPayload(value);
-    if (Array.isArray(payload.data))
-      return payload.data;
-    if (Array.isArray(payload.models))
-      return payload.models;
-    return [];
-  };
-  var isSupportedModelId = (modelId) => {
-    const normalizedId = modelId.toLowerCase();
-    return !(normalizedId.includes("embed") || normalizedId.includes("tts") || normalizedId.includes("whisper") || normalizedId.includes("dall-e") || normalizedId.includes("moderation"));
-  };
-  var REASONING_MODEL_RE = (
-    // OpenAI o-series: o1, o1-mini, o3, o3-mini, o4-mini, etc.
-    // Uses word-boundary to avoid false positives like "proto1", "falcon-40b"
-    /(?:^|[-/])o[134](?:$|[-/])/
-  );
-  var REASONING_MODEL_NAMES = [
-    "deepseek-r1",
-    "deepseek-reasoner",
-    "qwq"
-  ];
-  var isVisionModel = (modelId) => {
-    const id = modelId.toLowerCase();
-    if (/gpt-4[o-]/.test(id) && !id.includes("audio-preview"))
-      return true;
-    if (/claude-3/.test(id))
-      return true;
-    if (id.includes("gemini"))
-      return true;
-    if (id.includes("vision"))
-      return true;
-    return false;
-  };
-  var isAudioModel = (modelId) => {
-    const id = modelId.toLowerCase();
-    if (id.includes("audio"))
-      return true;
-    if (id.includes("realtime"))
-      return true;
-    return false;
-  };
-  var isReasoningModel = (modelId) => {
-    const id = modelId.toLowerCase();
-    return REASONING_MODEL_RE.test(id) || REASONING_MODEL_NAMES.some((name) => id.includes(name)) || isClaudeReasoningModel(id);
-  };
-  var normalizeModelEntry = (providerId, entry) => {
-    const payload = asProviderModelPayload(entry);
-    const id = toStringValue(payload.id) ?? toStringValue(payload.name);
-    const name = toStringValue(payload.name) ?? toStringValue(payload.id);
-    if (!id || !name || !isSupportedModelId(id)) {
-      return null;
-    }
-    const pricing = asProviderPricingPayload(payload.pricing);
-    const promptPrice = toMillionTokenPrice(pricing.prompt);
-    const completionPrice = toMillionTokenPrice(pricing.completion);
-    const arch = isRecord3(payload.architecture) ? payload.architecture : {};
-    const modality = typeof arch.modality === "string" ? arch.modality : "";
-    const inputModality = modality.split("->")[0] ?? "";
-    const modelType = inputModality.includes("image") ? "image" : "text";
-    const supportedParameters = Array.isArray(payload.supported_parameters) ? payload.supported_parameters.filter(
-      (value) => typeof value === "string"
-    ) : void 0;
-    const declaresReasoning = supportedParameters?.some(
-      (param) => param === "reasoning" || param === "include_reasoning"
-    ) ?? false;
-    const reasoning = isRecord3(payload.reasoning) ? payload.reasoning : {};
-    return {
-      id,
-      name,
-      providerId,
-      supportedParameters,
-      contextLength: toNumberValue(payload.context_length) ?? toNumberValue(payload.context_window),
-      maxCompletionTokens: toNumberValue(
-        isRecord3(payload.top_provider) ? payload.top_provider.max_completion_tokens : void 0
-      ),
-      promptPrice,
-      completionPrice,
-      created: toNumberValue(payload.created),
-      modelType,
-      streamSupport: true,
-      supportsReasoning: declaresReasoning || isReasoningModel(id),
-      reasoningMandatory: reasoning.mandatory === true,
-      supportsVision: modelType === "image" || isVisionModel(id),
-      supportsAudio: isAudioModel(id)
-    };
-  };
-  function normalizeModels(providerId, data) {
-    return getModelEntries(data).map((entry) => normalizeModelEntry(providerId, entry)).filter((model) => model !== null);
-  }
-
-  // src/utils/modelReasoning.ts
-  var inferMandatoryReasoning = (modelId, providerId) => providerId === "openrouter" && /claude-opus-5[.-]5(?:$|:)/.test(modelId.toLowerCase());
-  function findProviderCustomModel(providerCustomModels, modelId, providerId) {
-    if (!providerCustomModels)
-      return void 0;
-    if (providerId) {
-      return providerCustomModels[providerId]?.find((m) => m.modelId === modelId);
-    }
-    for (const models of Object.values(providerCustomModels)) {
-      if (!models)
-        continue;
-      const found = models.find((m) => m.modelId === modelId);
-      if (found)
-        return found;
-    }
-    return void 0;
-  }
-  function findFavorite(favorites, modelId, providerId) {
-    if (providerId) {
-      return favorites.find(
-        (f) => f.modelId === modelId && f.providerId === providerId
-      );
-    }
-    return favorites.find((f) => f.modelId === modelId);
-  }
-  function findCachedModel(cache, modelId, providerId) {
-    if (providerId && cache[providerId]) {
-      return cache[providerId].find((m) => m.id === modelId);
-    }
-    for (const models of Object.values(cache)) {
-      if (!models)
-        continue;
-      const found = models.find((m) => m.id === modelId);
-      if (found)
-        return found;
-    }
-    return void 0;
-  }
-  function modelSupportsReasoning(state, modelId, providerId, modelSource) {
-    if (modelSource === "local")
-      return false;
-    const inferred = isReasoningModel(modelId);
-    const custom = findProviderCustomModel(state.providerCustomModels, modelId, providerId);
-    if (custom?.supportsReasoning != null)
-      return custom.supportsReasoning;
-    const fav = findFavorite(state.favoriteModels ?? [], modelId, providerId);
-    if (fav?.supportsReasoning != null)
-      return fav.supportsReasoning || inferred;
-    const cached = findCachedModel(state.providerModelCache ?? {}, modelId, providerId);
-    if (cached?.supportsReasoning != null)
-      return cached.supportsReasoning || inferred;
-    return inferred;
-  }
-  function modelRequiresReasoning(state, modelId, providerId) {
-    const favorite = findFavorite(state.favoriteModels ?? [], modelId, providerId);
-    const cached = findCachedModel(state.providerModelCache ?? {}, modelId, providerId);
-    return favorite?.reasoningMandatory ?? cached?.reasoningMandatory ?? inferMandatoryReasoning(modelId, providerId);
-  }
-  function buildReasoningCapabilities(config, supportsReasoning, requiresReasoning) {
-    return { supportsReasoning, requiresReasoning: !!(supportsReasoning || config.force_reasoning) && config.providerId === "openrouter" && config.reasoning_effort === "none" && requiresReasoning() };
-  }
-  function getRequestReasoningCapabilities(config, state) {
-    return buildReasoningCapabilities(
-      config,
-      modelSupportsReasoning(state, config.model, config.providerId),
-      () => modelRequiresReasoning(state, config.model, config.providerId)
-    );
-  }
-
-  // src/utils/remoteModelLimits.ts
-  function remoteModelContextInfo(state, modelId, providerId) {
-    const custom = findProviderCustomModel(state.providerCustomModels, modelId, providerId);
-    if (custom?.contextLength)
-      return { contextLength: custom.contextLength, isFallback: false };
-    const fav = findFavorite(state.favoriteModels ?? [], modelId, providerId);
-    if (fav?.contextLength)
-      return { contextLength: fav.contextLength, isFallback: false };
-    const cached = findCachedModel(state.providerModelCache ?? {}, modelId, providerId);
-    if (cached?.contextLength)
-      return { contextLength: cached.contextLength, isFallback: false };
-    return { contextLength: UNKNOWN_MODEL_CONTEXT_LENGTH, isFallback: true };
-  }
-  function remoteModelStreamSupported(state, modelId, providerId) {
-    const custom = findProviderCustomModel(state.providerCustomModels, modelId, providerId);
-    if (custom?.streamSupport != null)
-      return custom.streamSupport;
-    const fav = findFavorite(state.favoriteModels ?? [], modelId, providerId);
-    if (fav?.streamSupport != null)
-      return fav.streamSupport;
-    const cached = findCachedModel(state.providerModelCache ?? {}, modelId, providerId);
-    if (cached?.streamSupport != null)
-      return cached.streamSupport;
-    return true;
-  }
-  function remoteModelDefaultMaxTokens(state, modelId, providerId) {
-    const context = remoteModelContextInfo(state, modelId, providerId);
-    const outputLimit = [
-      findProviderCustomModel(state.providerCustomModels, modelId, providerId),
-      findFavorite(state.favoriteModels ?? [], modelId, providerId),
-      findCachedModel(state.providerModelCache ?? {}, modelId, providerId)
-    ].map((model) => model?.maxCompletionTokens).find((limit) => limit != null && Number.isFinite(limit) && limit > 0);
-    const contextLimit = getMaxCompletionTokensForContext(context.contextLength);
-    if (outputLimit != null)
-      return context.isFallback ? outputLimit : Math.min(outputLimit, contextLimit);
-    return context.isFallback ? defaultUserMaxToken : contextLimit;
-  }
-
-  // src/utils/modelSettingsCore.ts
-  var modelKey = ({ model, providerId, modelSource }) => JSON.stringify([modelSource === "local" ? "local" : "remote", providerId ?? "", model]);
-  var defaultOpenRouterSettings = () => ({
-    responseCache: { mode: "off" },
-    stickySession: true
-  });
-  var pickModelSettings = (config) => ({
-    openRouter: config.openRouter ? structuredClone(config.openRouter) : void 0,
-    max_tokens: config.max_tokens,
-    temperature: config.temperature,
-    presence_penalty: config.presence_penalty,
-    top_p: config.top_p,
-    frequency_penalty: config.frequency_penalty,
-    stream: config.stream,
-    reasoning_effort: config.reasoning_effort,
-    reasoning_budget_tokens: config.reasoning_budget_tokens,
-    verbosity: config.verbosity,
-    force_reasoning: config.force_reasoning
-  });
-  var savedModelSettings = (config, target, getModelDefaultMaxTokens) => {
-    if (modelKey(config) === modelKey(target))
-      return pickModelSettings(config);
-    const saved = config.modelSettings?.[modelKey(target)];
-    if (saved)
-      return { ...saved, openRouter: saved.openRouter ? structuredClone(saved.openRouter) : void 0 };
-    return {
-      ...pickModelSettings(_defaultChatConfig),
-      openRouter: target.providerId === "openrouter" && target.modelSource !== "local" ? defaultOpenRouterSettings() : void 0,
-      max_tokens: getModelDefaultMaxTokens(target.model, target.providerId, target.modelSource)
-    };
-  };
-  var switchConfigModel = (config, target, getModelDefaultMaxTokens) => {
-    if (modelKey(config) === modelKey(target))
-      return config;
-    const modelSettings = {
-      ...config.modelSettings,
-      [modelKey(config)]: { ...config.modelSettings?.[modelKey(config)], ...pickModelSettings(config) }
-    };
-    return {
-      ...config,
-      ...savedModelSettings({ ...config, modelSettings }, target, getModelDefaultMaxTokens),
-      ...target,
-      modelSettings
-    };
-  };
-
-  // src/utils/streamSupportCore.ts
-  var normalizeConfigStream = (config, getModelDefaultMaxTokens, isModelStreamSupported) => ({
-    ...config,
-    max_tokens: config.max_tokens === defaultUserMaxToken ? getModelDefaultMaxTokens(config.model, config.providerId, config.modelSource) : config.max_tokens,
-    stream: isModelStreamSupported(config.model, config.providerId, config.modelSource) ? config.stream !== false : false
-  });
-
-  // shared/google-sync/chatConfig.ts
-  function normalizeRemoteConfig(config, modelState) {
-    if (config.modelSource === "local")
-      throw new Error("Local model configuration is not supported by this remote adapter.");
-    return normalizeConfigStream(
-      config,
-      (model, providerId) => remoteModelDefaultMaxTokens(modelState, model, providerId),
-      (model, providerId) => remoteModelStreamSupported(modelState, model, providerId)
-    );
-  }
-  function normalizeChatConfig(config, modelState = {}, localCapabilities) {
-    const defaultMaxTokens = (model, providerId, source) => source === "local" ? localModelDefaultMaxTokens(modelState, model, localCapabilities?.[model]) : remoteModelDefaultMaxTokens(modelState, model, providerId);
-    return normalizeConfigStream(config, defaultMaxTokens, (model, providerId, source) => source === "local" ? true : remoteModelStreamSupported(modelState, model, providerId));
-  }
-  function saveDefaultChatConfig(config, modelState = {}, localCapabilities) {
-    const contextLength = config.modelSource === "local" ? localModelContextLength(modelState, config.model, localCapabilities?.[config.model]) : (() => {
-      const info = remoteModelContextInfo(modelState, config.model, config.providerId);
-      return info.isFallback ? UNKNOWN_MODEL_UI_CONTEXT_LENGTH : info.contextLength;
-    })();
-    return normalizeChatConfig(config.max_tokens === void 0 ? config : { ...config, max_tokens: clampCompletionTokens(config.max_tokens, contextLength) }, modelState, localCapabilities);
-  }
-  function chatConfig(json) {
-    const input = JSON.parse(json);
-    let config = input.config;
-    const state = input.modelState ?? {};
-    if (input.operation === "switch") {
-      if (!input.target)
-        throw new Error("Missing model target.");
-      config = switchConfigModel(
-        config,
-        { model: input.target.model, providerId: input.target.providerId, modelSource: input.target.modelSource },
-        (model, providerId, source) => source === "local" ? localModelDefaultMaxTokens(state, model, input.localCapabilities?.[model]) : remoteModelDefaultMaxTokens(state, model, providerId)
-      );
-    } else if (input.operation !== "normalize" && input.operation !== "saveDefaults")
-      throw new Error("Unknown chat config operation.");
-    const next = input.operation === "saveDefaults" ? saveDefaultChatConfig(config, state, input.localCapabilities) : normalizeChatConfig(config, state, input.localCapabilities);
-    return JSON.stringify({ changes: diffJSONChanges(input.config, JSON.parse(JSON.stringify(next))) });
-  }
-
-  // src/api/requestBody.ts
-  var OPENROUTER_ONLY_EFFORTS = /* @__PURE__ */ new Set([
-    "none",
-    "minimal",
-    "xhigh"
-  ]);
-  var needsMaxTokensOnly = (modelId) => {
-    const id = modelId.toLowerCase();
-    return id.includes("claude");
-  };
-  var EFFORT_TO_MAX_TOKENS = {
-    none: 0,
-    minimal: 1024,
-    low: 2048,
-    medium: 8192,
-    high: 16384,
-    xhigh: 32768
-  };
-  var buildRequestBody = (messages, config, capabilities, overrides) => {
-    const {
-      providerId,
-      reasoning_effort,
-      reasoning_budget_tokens,
-      verbosity,
-      force_reasoning,
-      modelSettings,
-      openRouter,
-      systemPrompt,
-      modelSource,
-      ...apiConfig
-    } = config;
-    const body = {
-      messages: messages.map(({ role, content }) => ({ role, content })),
-      ...apiConfig,
-      max_tokens: config.max_tokens > 0 ? config.max_tokens : void 0,
-      ...overrides
-    };
-    if (capabilities.supportsReasoning || force_reasoning) {
-      if (providerId === "openrouter") {
-        const reasoning = {};
-        const isEffortClaude = isOpenRouterClaudeEffortModel(config.model, providerId);
-        if (reasoning_effort === "none") {
-          if (capabilities.requiresReasoning) {
-            reasoning.effort = "low";
-          } else {
-            reasoning.enabled = false;
-          }
-        } else if (reasoning_budget_tokens && reasoning_budget_tokens > 0 && !isEffortClaude) {
-          reasoning.max_tokens = reasoning_budget_tokens;
-        } else if (reasoning_effort) {
-          if (isEffortClaude) {
-            reasoning.effort = reasoning_effort === "minimal" ? "low" : reasoning_effort;
-          } else if (isOpenRouterAdaptiveReasoningModel(config.model, providerId)) {
-            reasoning.enabled = true;
-            reasoning.effort = reasoning_effort === "minimal" ? "low" : reasoning_effort;
-          } else if (needsMaxTokensOnly(config.model)) {
-            const mapped = EFFORT_TO_MAX_TOKENS[reasoning_effort];
-            if (mapped > 0)
-              reasoning.max_tokens = mapped;
-          } else {
-            reasoning.effort = reasoning_effort;
-          }
-        }
-        if (Object.keys(reasoning).length > 0) {
-          body.reasoning = reasoning;
-        }
-      } else {
-        if (reasoning_effort && !OPENROUTER_ONLY_EFFORTS.has(reasoning_effort)) {
-          body.reasoning_effort = reasoning_effort;
-        }
-        if (reasoning_budget_tokens && reasoning_budget_tokens > 0) {
-          body.reasoning_budget_tokens = reasoning_budget_tokens;
-        }
-      }
-    }
-    if (isOpenRouterClaudeVerbosityModel(config.model, providerId) && verbosity) {
-      body.verbosity = getEffectiveVerbosity(verbosity, supportsMaxVerbosity(config.model, providerId));
-    }
-    return body;
-  };
-
-  // src/utils/submitContext.ts
-  var modelSupportsSystemRole = (modelId) => {
-    return !isReasoningModel2(modelId);
-  };
-  var isReasoningModel2 = (modelId) => modelId.startsWith("o1-") || modelId.startsWith("o3-") || modelId.startsWith("o1 ");
-  var sanitizeMessageContent = (content) => content.filter((part) => {
-    if (part.type === "reasoning")
-      return false;
-    if (isImageContent(part))
-      return true;
-    if (isToolCallContent(part) || isToolResultContent(part))
-      return true;
-    return isTextContent(part) && part.text.trim().length > 0;
-  });
-  var hasToolContent = (message) => message.content.some((c) => isToolCallContent(c) || isToolResultContent(c));
-  var ensureRoleAlternation = (messages) => {
-    const result3 = [];
-    for (const msg of messages) {
-      if (result3.length > 0 && result3[result3.length - 1].role === msg.role && !hasToolContent(result3[result3.length - 1]) && !hasToolContent(msg)) {
-        const prev = result3[result3.length - 1];
-        result3[result3.length - 1] = {
-          ...prev,
-          content: [...prev.content, ...msg.content]
-        };
-      } else {
-        result3.push(msg);
-      }
-    }
-    return result3;
-  };
-  var filterOmittedMessages = (messages, activePath, omittedNodes) => {
-    if (Object.keys(omittedNodes).length === 0)
-      return messages;
-    return messages.filter((_23, idx) => {
-      const nodeId = activePath?.[idx] ?? String(idx);
-      if (!omittedNodes[nodeId])
-        return true;
-      if (hasToolContent(messages[idx]))
-        return true;
-      return false;
-    });
-  };
-  var sanitizeMessagesForSubmit = (messages) => ensureRoleAlternation(
-    messages.map((message) => ({
-      ...message,
-      content: sanitizeMessageContent(message.content)
-    })).filter((message) => message.content.length > 0)
-  );
-  var getSubmitContextMessages = (messages, messageIndex, modelId, activePath, omittedNodes = {}, systemPrompt, summaryContext) => {
-    const sliced = messages.slice(0, messageIndex);
-    const filtered = summaryContext ? applyBubbleSummariesForSubmit({ ...summaryContext.chat, messages, omittedNodes }, messageIndex, summaryContext.generatingNodeIds) : filterOmittedMessages(sliced, activePath, omittedNodes);
-    const withoutSystem = filtered.filter((m) => m.role !== "system");
-    const sanitized = sanitizeMessagesForSubmit(withoutSystem);
-    const supportsSystem = modelId ? modelSupportsSystemRole(modelId) : true;
-    if (systemPrompt && supportsSystem) {
-      return [
-        { role: "system", content: [{ type: "text", text: systemPrompt }] },
-        ...sanitized
-      ];
-    }
-    return sanitized;
-  };
-
-  // shared/google-sync/generation.ts
-  function getGenerationMessages(input) {
-    const path = input.activePath ?? input.chat?.branchTree?.activePath;
-    let chat = input.chat;
-    if (chat?.branchTree && input.contentStore) {
-      const branchTree = { ...chat.branchTree, activePath: path };
-      chat = { ...chat, branchTree, messages: materializeActivePath(branchTree, input.contentStore) };
-    }
-    const projected = chat?.messages ?? input.messages ?? [];
-    return getSubmitContextMessages(
-      projected,
-      input.messageIndex ?? projected.length,
-      input.config.model,
-      path,
-      input.omittedNodes ?? chat?.omittedNodes,
-      input.config.systemPrompt,
-      chat ? { chat, generatingNodeIds: input.generatingNodeIds ?? [] } : void 0
-    );
-  }
-  var generationRequest = (json) => {
-    const input = JSON.parse(json);
-    if (input.modelState !== void 0)
-      input.config = normalizeRemoteConfig(input.config, input.modelState);
-    const messages = getGenerationMessages(input);
-    if (messages.length === 0)
-      throw new Error("\u9001\u4FE1\u3059\u308B\u672C\u6587\u304C\u3042\u308A\u307E\u305B\u3093");
-    const body = buildRequestBody(
-      messages,
-      input.config,
-      input.modelState !== void 0 ? getRequestReasoningCapabilities(input.config, input.modelState) : input.capabilities,
-      { stream: input.config.stream }
-    );
-    if (!input.transport)
-      return JSON.stringify(body);
-    const transport = prepareRequestTransport(input.transport.endpoint, input.config, input.transport.hasApiKey, input.transport.customHeaders, input.transport.apiVersion);
-    applyOpenRouterControls(
-      isOpenRouterURL(input.transport.endpointURL),
-      input.config,
-      body,
-      transport.headers,
-      { chatId: input.transport.chatId, regenerate: input.transport.regenerate, viaProxy: false }
-    );
-    return JSON.stringify({ ...transport, body });
-  };
-
   // src/utils/chatShallowClone.ts
   var deepCloneSingleChat = (chat, id = editingUUID()) => {
     return {
@@ -18871,33 +19153,6 @@ ${messageContent}---
       text: textValueOf(prepared)
     });
   }
-
-  // src/store/provider-helpers.ts
-  var enrichFavoriteModel = (favorite, providerModel) => {
-    if (!providerModel)
-      return favorite;
-    return {
-      ...favorite,
-      contextLength: favorite.contextLength ?? providerModel.contextLength,
-      maxCompletionTokens: favorite.maxCompletionTokens ?? providerModel.maxCompletionTokens,
-      promptPrice: favorite.promptPrice ?? providerModel.promptPrice,
-      completionPrice: favorite.completionPrice ?? providerModel.completionPrice,
-      modelType: favorite.modelType ?? providerModel.modelType,
-      streamSupport: favorite.streamSupport ?? providerModel.streamSupport,
-      supportsReasoning: favorite.supportsReasoning ?? providerModel.supportsReasoning,
-      reasoningMandatory: favorite.reasoningMandatory ?? providerModel.reasoningMandatory,
-      supportsVision: favorite.supportsVision ?? providerModel.supportsVision,
-      supportsAudio: favorite.supportsAudio ?? providerModel.supportsAudio
-    };
-  };
-  var backfillFavoritesFromProviderModels = (favoriteModels, providerId, models) => {
-    const modelMap = new Map(models.map((model) => [model.id, model]));
-    return favoriteModels.map((favorite) => {
-      if (favorite.providerId !== providerId)
-        return favorite;
-      return enrichFavoriteModel(favorite, modelMap.get(favorite.modelId));
-    });
-  };
 
   // shared/google-sync/providerModels.ts
   function providerModelList(json) {

@@ -18,6 +18,7 @@ struct WeaveletPilotApp: App {
 
 struct ChatView: View {
     @ObservedObject var state: ChatState
+    @State private var titleSettingsDraft: ConversationTitleSettingsDraft?
     @State private var defaultConfigDraft: ChatConfigDraft?
     @State private var showsSettings = false
     @State private var showsLibrary = false
@@ -130,6 +131,7 @@ struct ChatView: View {
                             }
                         }
                         if let generationError = state.generationError { Text(generationError).foregroundStyle(.red) }
+                        if let titleError = state.titleError { Text(titleError).foregroundStyle(.red) }
                         if state.exchange != nil {
                             Button("会話の生成設定",systemImage:"slider.horizontal.3") {
                                 do { configDraft = try state.chatConfigDraft() }
@@ -333,6 +335,9 @@ struct ChatView: View {
                             if folderConnection == nil { folderConnection = FolderSyncConnection(state:state) }
                             shownFolderConnection = folderConnection
                         }.disabled(state.generation != nil)
+                        Button("タイトルの自動生成") {
+                            do { titleSettingsDraft = try state.titleSettingsDraft() } catch { state.generationError = error.localizedDescription }
+                        }.disabled(state.generation != nil)
                         Button("新規会話の既定設定") {
                             do { defaultConfigDraft = try state.defaultChatConfigDraft() }
                             catch { state.generationError = error.localizedDescription }
@@ -345,6 +350,7 @@ struct ChatView: View {
                     }
                     .sheet(item: $shownCloudKitConnection) { connection in CloudKitSyncSettingsView(connection:connection) }
                     .sheet(item: $shownFolderConnection) { connection in FolderSyncSettingsView(connection:connection) }
+                    .sheet(item: $titleSettingsDraft) { draft in ConversationTitleSettingsView(state:state,draft:draft) }
                     .sheet(item: $defaultConfigDraft) { draft in ChatConfigView(state:state,draft:draft) }
                     .sheet(isPresented: $showsRemoteSettings) { RemoteSettingsView(state: state) }
                     .navigationTitle("表示設定")

@@ -35,19 +35,20 @@ export const generationRequest = (json: string): string => {
     config: ConfigInterface;
     activePath?: string[];
     omittedNodes?: Record<string, boolean>;
+    auxiliary?: boolean;
     modelState?: ReasoningModelState;
-    transport?: { endpoint: string; endpointURL: { protocol: string; hostname: string }; hasApiKey: boolean; apiVersion?: string; customHeaders?: Record<string, string>; chatId?: string; regenerate?: boolean };
+    transport?: { endpoint: string; endpointURL: { protocol: string; hostname: string }; hasApiKey: boolean; apiVersion?: string; customHeaders?: Record<string, string>; chatId?: string; regenerate?: boolean; viaProxy?: boolean };
     capabilities?: { supportsReasoning: boolean; requiresReasoning: boolean };
   } = JSON.parse(json);
   if (input.modelState !== undefined) input.config = normalizeRemoteConfig(input.config, input.modelState);
-  const messages = getGenerationMessages(input);
+  const messages = input.auxiliary ? input.messages ?? [] : getGenerationMessages(input);
   if (messages.length === 0) throw new Error('送信する本文がありません');
   const body = buildRequestBody(messages, input.config, input.modelState !== undefined
     ? getRequestReasoningCapabilities(input.config, input.modelState) : input.capabilities!,
-    { stream: input.config.stream });
+    { stream: input.auxiliary ? false : input.config.stream });
   if (!input.transport) return JSON.stringify(body);
   const transport = prepareRequestTransport(input.transport.endpoint, input.config, input.transport.hasApiKey, input.transport.customHeaders, input.transport.apiVersion);
   applyOpenRouterControls(isOpenRouterURL(input.transport.endpointURL), input.config, body, transport.headers,
-    { chatId: input.transport.chatId, regenerate: input.transport.regenerate, viaProxy: false });
+    { chatId: input.transport.chatId, regenerate: input.transport.regenerate, viaProxy: input.transport.viaProxy ?? false, auxiliary: input.auxiliary });
   return JSON.stringify({ ...transport, body });
 };

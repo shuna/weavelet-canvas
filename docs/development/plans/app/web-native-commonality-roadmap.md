@@ -261,3 +261,11 @@ CloudKitはWebのFULL persistenceを使用し、Google/フォルダーのbrowser
 旧版は通常受信と競合取得の双方でLWW再送前に検証し、raw BYTESとrecord metadataをnative保存へ隔離する。異なるpayloadを全て保持し、同一payloadのみ重複を省く。解除しても隔離データは保持し、各データのJSON書出しをUIから利用できる。保存失敗・版違い・不正folderは現在の会話へ適用しない。旧版の自動変換を追加したとは扱わない。
 
 追加SDKはなく、キューはOS scheduling、storeはnativeのatomic I/Oと設定/保全metadata、版判定・階層検証・容量/縮小判定は実Webの共有処理という境界を維持する。詳細と検証成功範囲は[検証台帳](web-native-completion-ledger.md)へ追記した。実CloudKitの署名/コンテナー許可、実Web相互運用、OS background期限切れ、今回のUI操作確認は未完了である。
+
+## 2026-10-13：タイトル自動生成の共有とnative接続
+
+実WebのsubmitHelpersを基準に、タイトル用モデル/provider選択、本文構築、引用符処理、利用量加算、設定既定値を `src/utils/chatTitle.ts` へ切り出し、Web callerとnative bundleで共用した。画像件数処理も同じ純粋な共有元に置き、既存cost exportは維持する。公式endpoint定数は既存provider-configを共有元とし、nativeへVite認証初期化を持ち込まない。追加ライブラリや別言語への移植はない。
+
+iOSは保存済みの通常送信完了後にタイトルを要求する。再生成・ここから続ける操作では開始しない。要求は非streamingとし、URLSession/認証情報/redirect制御は既存native境界を再利用する。設定は既存モデル選択画面へ接続し、保存では3つの設定rootだけ変更する。応答反映時は最新の会話・設定・本文の元bytesを確認し、削除、手動命名、本文変更、import/syncによる全体置換の後に古い結果を書き込まない。タイトルと利用量は同じ原子的保存で反映する。
+
+利用量は既存Webの文字数fallbackを共有しており、nativeにWebのWASM tokenizer workerがないため、正確なtoken数の同等性は未完了。今回の接続成功を評価/要約や全機能の完成と扱わない。検証結果・独立Astra監査の修正は[検証台帳](web-native-completion-ledger.md)に記録した。

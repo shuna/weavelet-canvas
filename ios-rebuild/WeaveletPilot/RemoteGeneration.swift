@@ -207,6 +207,13 @@ struct RemoteClient {
             self.session = URLSession(configuration: config, delegate: RemoteRedirectPolicy(), delegateQueue: nil)
         }
     }
+    func auxiliaryClient() -> RemoteClient { ownsSession ? RemoteClient() : self }
+    func completeJSON(_ request: URLRequest) async throws -> OrderedJSON {
+        defer { if ownsSession { session.invalidateAndCancel() } }
+        let (data,response) = try await session.data(for:request)
+        try check(response); try Task.checkCancellation()
+        return try OrderedJSON.decode(data)
+    }
     func complete(_ request: URLRequest, streaming: Bool, onOutput: @escaping @MainActor (RemoteOutput) -> Void) async throws {
         defer { if ownsSession { session.invalidateAndCancel() } }
         if !streaming {

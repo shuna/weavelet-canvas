@@ -1,4 +1,5 @@
-export const officialAPIEndpoint = 'https://api.openai.com/v1/chat/completions';
+import { officialAPIEndpoint } from '../store/provider-config';
+export { officialAPIEndpoint };
 const customAPIEndpoint =
   import.meta.env.VITE_CUSTOM_API_ENDPOINT || 'https://chatgpt-api.shn.hk/v1/';
 export const defaultAPIEndpoint =

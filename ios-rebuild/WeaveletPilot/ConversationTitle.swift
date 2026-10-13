@@ -52,7 +52,7 @@ enum ConversationTitle {
         ]))
         var input = OrderedJSON.object([
             .init(key:"operation",value:.string("select")),
-            .init(key:"chat",value:try projectedChat(chat,&boundary)),
+            .init(key:"chat",value:try projectedChat(chat,boundary:&boundary)),
             .init(key:"autoTitle",value:try global.required("autoTitle")),
             .init(key:"language",value:.string(language)),
             .init(key:"settings",value:try settings(state,global:global,fallbackEndpoint:fallbackEndpoint))
@@ -86,7 +86,7 @@ enum ConversationTitle {
         if let apiVersion = state["apiVersion"] { transport = transport.replacing("apiVersion",with:apiVersion) }
         let plan = try SharedWebOperations.call("titleOperation",.object([
             .init(key:"operation",value:.string("plan")),
-            .init(key:"chat",value:try projectedChat(rawChat,&boundary)),
+            .init(key:"chat",value:try projectedChat(rawChat,boundary:&boundary)),
             .init(key:"selection",value:selection),
             .init(key:"modelState",value:ChatConfig.modelState(in:state)),
             .init(key:"transport",value:transport)
@@ -109,10 +109,9 @@ enum ConversationTitle {
     }
 
     @MainActor static func generate(_ prepared: PreparedConversationTitle, client: RemoteClient = RemoteClient()) async throws -> String {
-        var responseText: String?
-        try await client.complete(prepared.request,streaming:false) { output in responseText = output.text }
-        guard let responseText else { throw ExchangeError.invalid("タイトル生成応答がありません") }
-        return responseText
+        let response = try await client.completeJSON(prepared.request)
+        guard let choice = try response.required("choices").array("choices").first else { throw ExchangeError.invalid("タイトル生成応答がありません") }
+        return try choice.required("message").required("content").string("title response")
     }
 
     static func apply(_ responseText: String, prepared: PreparedConversationTitle, source: OrderedJSON, state: OrderedJSON,
@@ -135,7 +134,7 @@ enum ConversationTitle {
         ])]),to:.null,opaque:boundary.opaque)
         guard try currentPrompt.encoded() == prepared.promptMessage.encoded() else { return nil }
         var input = OrderedJSON.object([
-            .init(key:"operation",value:.string("apply")),.init(key:"chat",value:try projectedChat(currentChat,&boundary)),
+            .init(key:"operation",value:.string("apply")),.init(key:"chat",value:try projectedChat(currentChat,boundary:&boundary)),
             .init(key:"selection",value:current),.init(key:"responseText",value:.string(responseText))
         ])
         let countTokens = state["countTotalTokens"] == .bool(true)

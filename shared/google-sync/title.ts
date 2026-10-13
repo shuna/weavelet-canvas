@@ -1,10 +1,8 @@
 import { generationRequest } from './generation';
 import { diffJSONChanges } from '../../src/utils/jsonChanges';
-import { addTokenUsage, autoTitlePrompt, estimateTokensByChars, normalizeGeneratedTitle, TITLE_DEFAULTS, titleRequestSettings, type TitleSettings } from '../../src/utils/chatTitle';
-import { countImageInputs } from '../../src/utils/cost';
-import { DEFAULT_PROVIDERS } from '../../src/store/provider-config';
+import { addTokenUsage, countImageInputs, autoTitlePrompt, estimateTokensByChars, normalizeGeneratedTitle, TITLE_DEFAULTS, titleRequestSettings, type TitleSettings } from '../../src/utils/chatTitle';
+import { DEFAULT_PROVIDERS, officialAPIEndpoint } from '../../src/store/provider-config';
 import { hardOpenRouterConstraints, isOpenRouterURL } from '../../src/utils/openrouterRequest';
-import { officialAPIEndpoint } from '../../src/constants/auth';
 import type { ChatInterface, ConfigInterface, MessageInterface, TotalTokenUsed } from '../../src/types/chat';
 import type { ReasoningModelState } from '../../src/utils/modelReasoning';
 

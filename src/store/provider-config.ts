@@ -1,5 +1,7 @@
 import { ProviderConfig, ProviderId } from '@type/provider';
 
+export const officialAPIEndpoint = 'https://api.openai.com/v1/chat/completions';
+
 export const DEFAULT_PROVIDERS: Record<ProviderId, ProviderConfig> = {
   openrouter: {
     id: 'openrouter',
@@ -11,7 +13,7 @@ export const DEFAULT_PROVIDERS: Record<ProviderId, ProviderConfig> = {
   openai: {
     id: 'openai',
     name: 'OpenAI',
-    endpoint: 'https://api.openai.com/v1/chat/completions',
+    endpoint: officialAPIEndpoint,
     modelsEndpoint: 'https://api.openai.com/v1/models',
     modelsRequireAuth: true,
   },

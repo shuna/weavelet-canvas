@@ -107,6 +107,9 @@ final class ChatState: ObservableObject {
     @Published private var composerDrafts: [Data:ComposerDraft] = [:]
     @Published private var assistantPrefills: [Data:String] = [:]
     private(set) var stickyPrefillKey = ""
+    @Published var titleError: String?
+    private var titleTasks: [Data:(id:UUID,task:Task<Void,Never>)] = [:]
+    private var pendingTitleContext: (id:UUID,legacy:RemoteCredentialRecord,client:RemoteClient,read:ProviderModels.CredentialReader)?
     private var generationTask: Task<Void, Never>?
     private let store: LocalStateStore?
     private let localGenerate: LocalLlama.Generator
@@ -162,7 +165,7 @@ final class ChatState: ObservableObject {
         let candidates = try BranchNavigation.candidates(in: imported.source)
         let nextEditing = try exchange.map { try MessageEditing.invalidatingHistory(editingHistory, before: $0.source, after: imported.source) } ?? nil
         try store?.save(SavedChatState(exchange: imported, document: candidate, conversations: imported.conversations, selectedConversationID: selected, style: displayStyle))
-        invalidateGeneration()
+        invalidateGeneration(); cancelTitles()
         conversations = imported.conversations
         selectedID = selected
         exchange = imported
@@ -572,7 +575,7 @@ final class ChatState: ObservableObject {
         parts.remove(at:index)
         composerDrafts[Data(chatID.utf8)] = ComposerDraft(parts:.array(parts),text:before.text,hasMeaningfulContent:false)
     }
-    func sendComposer(record: RemoteCredentialRecord? = nil, client: RemoteClient = RemoteClient(), nodeIDs: [String]? = nil, readProviderCredential: ProviderModels.CredentialReader = RemoteCredentials.load(providerID:)) throws {
+    func sendComposer(record: RemoteCredentialRecord? = nil, client: RemoteClient = RemoteClient(), nodeIDs: [String]? = nil, readProviderCredential: @escaping ProviderModels.CredentialReader = RemoteCredentials.load(providerID:)) throws {
         guard let conversation else { throw ExchangeError.invalid("送信先の会話がありません") }
         let identity = conversation.identity
         let draft = composerDraft(chatID:conversation.id)
@@ -586,7 +589,7 @@ final class ChatState: ObservableObject {
     }
 
     func startGeneration(_ draft: MessageGenerationDraft, record: RemoteCredentialRecord? = nil, client: RemoteClient = RemoteClient(), nodeIDs: [String]? = nil,
-                         readProviderCredential: ProviderModels.CredentialReader = RemoteCredentials.load(providerID:)) throws {
+                         readProviderCredential: @escaping ProviderModels.CredentialReader = RemoteCredentials.load(providerID:)) throws {
         guard generation == nil, let exchange else { throw ExchangeError.invalid("生成結果を保存してから操作してください") }
         guard try draft.source.encoded() == exchange.source.encoded() else { throw ExchangeError.invalid("会話が変更されています。操作を開き直してください") }
         let now = Date().timeIntervalSince1970 * 1000
@@ -603,13 +606,13 @@ final class ChatState: ObservableObject {
             record:record,client:client,readProviderCredential:readProviderCredential,now:now)
     }
 
-    func startGeneration(input: String, record: RemoteCredentialRecord? = nil, client: RemoteClient = RemoteClient(), nodeIDs: [String]? = nil, readProviderCredential: ProviderModels.CredentialReader = RemoteCredentials.load(providerID:)) throws {
+    func startGeneration(input: String, record: RemoteCredentialRecord? = nil, client: RemoteClient = RemoteClient(), nodeIDs: [String]? = nil, readProviderCredential: @escaping ProviderModels.CredentialReader = RemoteCredentials.load(providerID:)) throws {
         try startGeneration(parts:.array([.object([.init(key:"type",value:.string("text")),.init(key:"text",value:.string(input))])]),record:record,client:client,nodeIDs:nodeIDs,readProviderCredential:readProviderCredential)
     }
-    func startGeneration(parts: OrderedJSON, record: RemoteCredentialRecord? = nil, client: RemoteClient = RemoteClient(), nodeIDs: [String]? = nil, readProviderCredential: ProviderModels.CredentialReader = RemoteCredentials.load(providerID:)) throws {
+    func startGeneration(parts: OrderedJSON, record: RemoteCredentialRecord? = nil, client: RemoteClient = RemoteClient(), nodeIDs: [String]? = nil, readProviderCredential: @escaping ProviderModels.CredentialReader = RemoteCredentials.load(providerID:)) throws {
         try startGeneration(prepared:ComposerContent.prepare(parts),record:record,client:client,nodeIDs:nodeIDs,readProviderCredential:readProviderCredential)
     }
-    private func startGeneration(prepared: ComposerDraft, record: RemoteCredentialRecord? = nil, client: RemoteClient, nodeIDs: [String]?, readProviderCredential: ProviderModels.CredentialReader) throws {
+    private func startGeneration(prepared: ComposerDraft, record: RemoteCredentialRecord? = nil, client: RemoteClient, nodeIDs: [String]?, readProviderCredential: @escaping ProviderModels.CredentialReader) throws {
         guard generation == nil, let exchange, let conversation else { throw ExchangeError.invalid("保存済み会話を選択し、生成の終了を待ってください") }
         guard prepared.hasMeaningfulContent else { throw ExchangeError.invalid("本文または画像を入力してください") }
         let sourceChat = try exchange.source.required("chats").array("chats").first { try $0.required("id").string("ID").utf8.elementsEqual(conversation.id.utf8) }!
@@ -625,7 +628,7 @@ final class ChatState: ObservableObject {
     }
 
     private func beginGeneration(source: OrderedJSON, chatID: String, path: [String], history: MessageEditing.HistoryState?, plan: OrderedJSON?, regenerate: Bool,
-                                 record: RemoteCredentialRecord? = nil, client: RemoteClient, readProviderCredential: ProviderModels.CredentialReader, now: Double) throws {
+                                 record: RemoteCredentialRecord? = nil, client: RemoteClient, readProviderCredential: @escaping ProviderModels.CredentialReader, now: Double) throws {
         let sourceChat = try source.required("chats").array("chats").first { try $0.required("id").string("id").utf8.elementsEqual(chatID.utf8) }!
         let savedState = try publicationSnapshot().required("state")
         let modelState = ChatConfig.modelState(in:savedState)
@@ -633,7 +636,8 @@ final class ChatState: ObservableObject {
             try beginLocalGeneration(source:source,chat:sourceChat,chatID:chatID,path:path,history:history,plan:plan,now:now)
             return
         }
-        let credential = try ProviderModels.generationCredential(config:sourceChat["config"] ?? .object([]),state:savedState,legacy:try record ?? RemoteCredentials.load(),read:readProviderCredential)
+        let legacy = try record ?? RemoteCredentials.load()
+        let credential = try ProviderModels.generationCredential(config:sourceChat["config"] ?? .object([]),state:savedState,legacy:legacy,read:readProviderCredential)
         let apiVersion: String?
         if case .string(let value) = savedState["apiVersion"] { apiVersion = value }
         else if savedState["apiVersion"] == nil || savedState["apiVersion"] == .null { apiVersion = nil }
@@ -643,6 +647,7 @@ final class ChatState: ObservableObject {
         try applyLibrary(source, selectedID: chatID, resetViewFor: chatID, editing: history, now: now)
         let id = UUID()
         generation = ActiveGeneration(id: id, chatID: chatID, baseSource: try publishedSource(), path: path, plan: plan)
+        pendingTitleContext = (id,legacy,client,readProviderCredential)
         generationError = nil
         generationTask = Task { @MainActor [weak self] in
             do {
@@ -720,11 +725,12 @@ final class ChatState: ObservableObject {
         generation = current
         generationTask = nil
         if let error { generationError = "生成を完了できませんでした。\n" + error.localizedDescription }
-        do { try persistGeneration(current) }
+        do { try persistGeneration(current, generateTitle:error == nil) }
         catch { generationError = "生成結果を保存できませんでした。部分本文を保持しています。\n" + error.localizedDescription }
     }
 
-    private func persistGeneration(_ current: ActiveGeneration) throws {
+    private func persistGeneration(_ current: ActiveGeneration, generateTitle: Bool = false) throws {
+        let titleContext = pendingTitleContext?.id == current.id ? pendingTitleContext : nil
         guard exchange?.source == current.baseSource else { throw ExchangeError.invalid("生成開始後に会話が変更されています") }
         if current.output.isEmpty && current.plan == nil { generation = nil; return }
         let now = Date().timeIntervalSince1970 * 1000
@@ -740,9 +746,14 @@ final class ChatState: ObservableObject {
         }
         try applyLibrary(source, selectedID: current.chatID, resetViewFor: current.chatID, editing: history, now: now)
         generation = nil
+        if generateTitle && current.plan == nil {
+            let config = try current.baseSource.required("chats").array("chats").first { $0["id"].flatMap { try? $0.string("id") }?.utf8.elementsEqual(current.chatID.utf8) == true }?["config"]
+            startAutomaticTitle(chatID:current.chatID,sourceConfig:config,legacy:titleContext?.legacy,client:titleContext?.client,readProviderCredential:titleContext?.read ?? RemoteCredentials.load(providerID:))
+        }
     }
 
     private func invalidateGeneration() {
+        pendingTitleContext = nil
         generationTask?.cancel()
         generationTask = nil
         generation = nil
@@ -754,6 +765,54 @@ final class ChatState: ObservableObject {
         if let folder { created = try ChatFolders.apply(in: created, operation: .move(chatIDs: [id], folderID: folder)) }
         try applyLibrary(created, selectedID: id, now: now)
     }
+
+    func startAutomaticTitle(chatID: String, sourceConfig: OrderedJSON? = nil, legacy: RemoteCredentialRecord? = nil,
+                                       client: RemoteClient? = nil, readProviderCredential: @escaping ProviderModels.CredentialReader = RemoteCredentials.load(providerID:),
+                                       language: String = Locale.current.language.languageCode?.identifier ?? "en") {
+        do {
+            let snapshot = try publicationSnapshot(), roots = try snapshot.required("state")
+            let settings = try SharedWebOperations.call("titleOperation",.object([.init(key:"operation",value:.string("settings")),.init(key:"state",value:titleSettingRoots(roots))]))
+            guard settings["autoTitle"] == .bool(true), let exchange else { return }
+            let credential = try legacy ?? RemoteCredentials.load()
+            guard let prepared = try ConversationTitle.prepare(source:exchange.source,state:roots,chatID:chatID,language:language,sourceConfig:sourceConfig,legacy:credential,readProviderCredential:readProviderCredential) else { return }
+            let titleClient = client?.auxiliaryClient() ?? RemoteClient()
+            let key = Data(chatID.utf8), id = UUID()
+            titleTasks[key]?.task.cancel(); titleError = nil
+            let task = Task { @MainActor [weak self] in
+                guard let self else { return }
+                defer { if self.titleTasks[key]?.id == id { self.titleTasks[key] = nil } }
+                do {
+                    let response = try await ConversationTitle.generate(prepared,client:titleClient)
+                    try Task.checkCancellation()
+                    guard self.titleTasks[key]?.id == id else { return }
+                    try self.applyGeneratedTitle(response,prepared:prepared,language:language,fallbackEndpoint:credential.settings.endpoint)
+                } catch is CancellationError {} catch { if self.titleTasks[key]?.id == id { self.titleError = "タイトル生成に失敗しました。\n" + error.localizedDescription } }
+            }
+            titleTasks[key] = (id,task)
+        } catch { titleError = "タイトル生成に失敗しました。\n" + error.localizedDescription }
+    }
+    func applyGeneratedTitle(_ response: String, prepared: PreparedConversationTitle, language: String, fallbackEndpoint: String) throws {
+        guard let exchange, let updated = try ConversationTitle.apply(response,prepared:prepared,source:exchange.source,state:publicationSnapshot().required("state"),language:language,fallbackEndpoint:fallbackEndpoint) else { return }
+        try applyLibrary(updated.source,selectedID:selectedID,preserveGeneration:true,tokenUsage:updated.tokenUsage)
+    }
+    private func titleSettingRoots(_ roots: OrderedJSON) -> OrderedJSON { .object(["autoTitle","titleModel","titleProviderId"].compactMap { key in roots[key].map { .init(key:key,value:$0) } }) }
+    func titleSettingsDraft() throws -> ConversationTitleSettingsDraft {
+        var catalog = try defaultChatConfigDraft()
+        let original = titleSettingRoots(try catalog.snapshot.required("state"))
+        let value = try SharedWebOperations.call("titleOperation",.object([.init(key:"operation",value:.string("settings")),.init(key:"state",value:original)]))
+        catalog.config = catalog.config.replacing("model",with:try value.required("titleModel")).replacing("modelSource",with:.string("remote"))
+        if let provider = value["titleProviderId"] { catalog.config = catalog.config.replacing("providerId",with:provider) }
+        else { catalog.config = .object(try catalog.config.object("config").filter { $0.key != "providerId" }) }
+        return .init(original:original,value:value,catalog:catalog)
+    }
+    func saveTitleSettings(_ draft: ConversationTitleSettingsDraft, value: OrderedJSON) throws {
+        let snapshot = try syncInputSnapshot(), roots = try snapshot.required("state")
+        guard try titleSettingRoots(roots).encoded() == draft.original.encoded() else { throw ExchangeError.invalid("タイトル設定が変更されています。設定を開き直してください") }
+        let result = try SharedWebOperations.call("titleOperation",.object([.init(key:"operation",value:.string("saveSettings")),.init(key:"state",value:titleSettingRoots(roots)),.init(key:"value",value:value)]))
+        let updated = try OrderedJSONChanges.apply(result.required("changes"),to:roots)
+        try applySnapshot(snapshot.replacing("state",with:updated))
+    }
+    private func cancelTitles() { for value in titleTasks.values { value.task.cancel() }; titleTasks.removeAll() }
 
     func renameChat(id: String, title: String, now: Double = Date().timeIntervalSince1970 * 1000) throws {
         guard let exchange else { throw ExchangeError.invalid("サンプル会話は変更できません") }
@@ -786,7 +845,7 @@ final class ChatState: ObservableObject {
         try applyLibrary(ChatFolders.apply(in: source, operation: operation), selectedID: exchange == nil ? "" : selectedID, preserveGeneration: true, now: now)
     }
 
-    private func applyLibrary(_ source: OrderedJSON, selectedID: String, resetViewFor: String? = nil, resetViewsFor: [String] = [], preserveGeneration: Bool = false, navigation: BranchNavigation.HistoryResult? = nil, editing: MessageEditing.HistoryState? = nil, clipboard: OrderedJSON? = nil, now: Double = Date().timeIntervalSince1970 * 1000) throws {
+    private func applyLibrary(_ source: OrderedJSON, selectedID: String, resetViewFor: String? = nil, resetViewsFor: [String] = [], preserveGeneration: Bool = false, tokenUsage: OrderedJSON? = nil, navigation: BranchNavigation.HistoryResult? = nil, editing: MessageEditing.HistoryState? = nil, clipboard: OrderedJSON? = nil, now: Double = Date().timeIntervalSince1970 * 1000) throws {
         guard !initialLoadFailed else { throw ExchangeError.invalid("保存ファイルを読めなかったため更新できません。明示的な置換が必要です") }
         let base = try document ?? SyncDocument(v3: exchange?.source ?? ChatLibrary.emptySource)
         let before = try exchange?.source ?? base.uiProjection()
@@ -795,6 +854,7 @@ final class ChatState: ObservableObject {
             candidate = try candidate.mergingSnapshot(.object([.init(key:"version",value:candidate.snapshot.required("version")),
                 .init(key:"state",value:.object([.init(key:"branchClipboard",value:clipboard)]))]))
         }
+        if let tokenUsage { candidate = try candidate.mergingSnapshot(candidate.snapshot.replacing("state",with:candidate.snapshot.required("state").replacing("totalTokenUsed",with:tokenUsage))) }
         let changed = try WebExchange(source: candidate.uiProjection())
         let candidates = try BranchNavigation.candidates(in: changed.source)
         var views = changed.conversations
@@ -876,7 +936,7 @@ final class ChatState: ObservableObject {
         let nextNavigation = try historySelecting(selected, in: changed.source)
         let nextEditing = try exchange.map { try MessageEditing.invalidatingHistory(editingHistory, before: $0.source, after: changed.source) } ?? nil
         try store?.save(SavedChatState(exchange: changed, document: candidate, conversations: views, selectedConversationID: selected, style: displayStyle))
-        invalidateGeneration()
+        invalidateGeneration(); cancelTitles()
         branchCandidates = candidates
         if let nextNavigation { publishNavigation(nextNavigation, focus: nil) }
         editingHistory = nextEditing

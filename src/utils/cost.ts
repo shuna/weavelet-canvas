@@ -1,6 +1,5 @@
 import { getModelCost, isKnownModel, type ModelCostEntry } from '@utils/modelLookup';
 import type { MessageInterface, TotalTokenUsed } from '@type/chat';
-import { isImageContent } from '@type/chat';
 import type { ProviderId } from '@type/provider';
 
 export type UsageCostResult =
@@ -20,16 +19,7 @@ export const parseTokenKey = (
   return { modelId: key };
 };
 
-export const countImageInputs = (messages: MessageInterface[]): number =>
-  messages.reduce(
-    (total, message) =>
-      total +
-      message.content.reduce(
-        (count, content) => count + (isImageContent(content) ? 1 : 0),
-        0
-      ),
-    0
-  );
+export { countImageInputs } from './chatTitle';
 
 export const buildTokenUsageKey = (
   modelId: string,

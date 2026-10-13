@@ -1,3 +1,4 @@
+import { isImageContent } from '@type/chat';
 import type { ChatInterface, ConfigInterface, MessageInterface, TextContentInterface, TotalTokenUsed } from '@type/chat';
 import type { FavoriteModel, ProviderConfig, ProviderId } from '@type/provider';
 import { normalizeProviderConfig } from '@store/provider-helpers';
@@ -39,7 +40,7 @@ export const titleRequestSettings = (config: ConfigInterface, settings: TitleSet
     model,
     providerId,
     credentialProviderId,
-    config: { ...config, model, providerId, openRouter: {
+    config: { ...config, modelSource: 'remote' as const, model, providerId, openRouter: {
       routing: hardOpenRouterConstraints(config.openRouter), responseCache: { mode: 'off' as const },
     } },
     provider: resolveProviderForModel(model, settings.favoriteModels, settings.providers, settings.fallbackProvider, providerId),
@@ -81,9 +82,21 @@ export const addTokenUsage = (total: TotalTokenUsed, model: string, providerId: 
   promptTokens: number, completionTokens: number, imageTokens: number): TotalTokenUsed => {
   const key = providerId ? `${model}:::${providerId}` : model;
   const previous = total[key] ?? { promptTokens: 0, completionTokens: 0, imageTokens: 0 };
+  const { promptTokens: priorPrompt = 0, completionTokens: priorCompletion = 0, imageTokens: priorImages = 0 } = previous;
   return { ...total, [key]: { ...previous,
-    promptTokens: previous.promptTokens + promptTokens,
-    completionTokens: previous.completionTokens + completionTokens,
-    imageTokens: previous.imageTokens + imageTokens,
+    promptTokens: priorPrompt + promptTokens,
+    completionTokens: priorCompletion + completionTokens,
+    imageTokens: priorImages + imageTokens,
   } };
 };
+
+export const countImageInputs = (messages: MessageInterface[]): number =>
+  messages.reduce(
+    (total, message) =>
+      total +
+      message.content.reduce(
+        (count, content) => count + (isImageContent(content) ? 1 : 0),
+        0
+      ),
+    0
+  );

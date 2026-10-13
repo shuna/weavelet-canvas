@@ -291,7 +291,7 @@ GoogleAuthenticationはOSの認証画面、PKCE/state、URLSession、Keychainで
 | B 表示・draft・添付 | 5種content/Markdown/コード/表/画像、draft/IME、添付と編集位置保持 | 実Web Markdown/コード/表/数式を共有描画し、native画像表示・画像取得・会話別draftを接続。上記機能群のCatalyst/Astra確認済み。IME・選択/コピー手動操作・狭幅等は残件 |
 | C 生成入力・provider | 設定優先順位、モデル能力、system/tool/image/reasoning、token budget/prefillの一致 | OpenAI互換remoteの共通request4件とnative設定・入力を接続。他provider/モデル能力/token budget等は未実装 |
 | C 実行・取消・適用 | streaming/非stream/local、Stop、遅延結果拒否、usage/本文終端一回適用 | remote関連8件＋SSE修正関連3件成功（重複あり）、隔離CatalystでStop・再起動・正常完了・書出しを確認。独立Astra受入。local/usage等は未実装 |
-| C 評価・命名 | safety/quality/local fallback/auto title、世代照合と各設定の一致 | 未実装 |
+| C 評価・命名 | safety/quality/local fallback/auto title、世代照合と各設定の一致 | 自動命名の共有・native接続済み。評価/正確なtoken数は残件 |
 | C 復旧・背景 | 中断後再接続・既適用識別・部分本文保持をCatalystと必要な実機で確認 | 未実装 |
 | D モデル資産 | 探索/取得/再開/import/検証/partial復元/容量不足/変換 | 未実装 |
 | D 実行寿命・削除 | engine別load/share/owner/cancel/unload、利用者とwriter停止後削除 | 未実装 |
@@ -473,3 +473,15 @@ root位置の原因：実Web `mergeSyncDocumentSnapshot` は `{...existing.state
 ログ：`/private/tmp/weavelet-cloudkit-auto-{web,types,freshness,catalyst,final,final-retry,shrink}.log`。新キュー/storeの型検査のみのworker結果をXcode実行結果と混同していない。旧版JSON書出しはraw payload→既存LZ復元の結果を接続テストで確認した。backgroundは期限切れ/完了時の終了処理を実装し、Apple公式API仕様を確認したが、実OSによる期限切れ・送信完了を確認した結果ではない。
 
 手動UI：FAKE profile指定で最新Catalystを起動し、当該processは確認できた。CUAの対象取得がcgWindowNotFoundになり、同じBundle IDの別セッション2件が稼働中で対象windowを選別できなかったため、UI成功として扱わない。別セッションには触れず、今回起動したFAKE processだけを終了し、不在を確認した。実CloudKit/実iCloud Drive/実Google OAuthの操作はしていない。追加の検証用管理基盤、別Bundle IDへの改変、全領域テスト/監査の再循環は追加していない。
+
+## タイトル自動生成・設定・利用量保存（2026-10-13）
+
+Webの実callerから純粋な規則を共有し、nativeはURLSession、認証情報のbind、raw JSON投影/差分復元、世代照合、原子的保存、UIを担当する。通常送信の応答保存後だけ自動生成し、再生成/続行では起動しない。設定3rootの保存は他の会話/設定を保持する。利用量の未知属性・未変更entry・大数値を保持し、タイトル保存失敗ではmemory/diskの元データを維持する。NFC/NFDが異なるchat ID・本文・設定はbytesで区別する。
+
+独立Astraの3 P2を修正した：local主モデルからremoteタイトル要求を作る時のmodelSource、再生成/続行の誤起動、外側の未追跡Taskによる全体置換後の起動。補助configは共有元でremoteに設定、appendだけに限定、同期準備の直後にHTTPTaskを登録し全体置換時にcancelする。限定再監査は新規なし。bundle生成時に画像件数→cost→modelLookup→Web storeの依存混入が失敗し、既存純粋関数を移動して再exportした。その後JSC初期化がauthのVite環境参照で失敗し、同じ公式endpoint定数をpure provider-configへ移動して修正。定数移動の独立限定確認も新規なし。
+
+成功結果：Web関連43件の成功範囲。定数移動後は影響するタイトル3+submit9の12件だけ再確認し成功、変更のない残り31件は再利用した。Web型検査とbundle鮮度も成功。CatalystはRemote18+Local4が成功、タイトル6件はfixture修正後の限定runで全成功。現在28件の成功範囲であり、最終ソースの全28件を単一runした結果ではない。タイトル6件ではmock通信、変更済み本文、Unicode bytes、通常生成→命名→保存→再起動、再生成/続行の非起動、同ID/同本文import後の遅延応答非適用、保存失敗と設定root保全を確認した。
+
+失敗は区別する：最初の2 buildは引数label/escaping不足で実行前に失敗。bundle初期化失敗ではタイトルと生成の接続testが失敗。その修正後の残る2ケースは新fixtureのnode ID個数不足とURLProtocolのhttpBody取得不足で失敗し、既存RemoteRequest.fixtureBodyと実append経路の必要ID数へ合わせた。期待値や比較を緩めていない。ログは `/private/tmp/weavelet-title-{web-final,web-source-final,types-final,freshness-final,catalyst-source-fixed,catalyst-title-final}.log`。
+
+省略した重複確認：変更のない保存/暗号化同期の全往復、全iOS依存監査、全Web/nativeテスト。追加SDKはない。native利用量は共有文字数fallbackでありWASM tokenizerによる正確なWeb token数との一致は未確認。実API通信、今回の設定UI操作、実機は未確認。実Google/CloudKit/iCloud Driveの相互運用と残機能の完成条件は維持する。

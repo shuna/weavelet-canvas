@@ -1,3 +1,4 @@
+export { titleOperation } from './title';
 export { fileImport } from './fileImport';
 export { branchHistory } from './branchHistory';
 export { nodeRemoval } from './nodeRemoval';
