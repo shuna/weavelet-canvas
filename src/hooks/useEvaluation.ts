@@ -11,6 +11,7 @@ import { useCallback } from 'react';
 import useStore from '@store/store';
 import { runSafetyCheck, runQualityEvaluation } from '@api/evaluation';
 import { runLocalModeration, runLocalQualityEvaluation } from '@api/localEvaluation';
+import { localSafetyPolicy } from '@utils/localEvaluationCore';
 import {
   createLocalModelOwner,
   prepareModelsForExecution,
@@ -103,7 +104,7 @@ async function runEvaluationForPhase(
     if (!isAiTaskCurrent(ticket)) return;
     if (shouldSafety && textToCheck) {
       // --- Local safety (if engine is local or hybrid) ---
-      if (safetyEngine === 'local' || safetyEngine === 'hybrid') {
+      if (localSafetyPolicy(safetyEngine, hybridRemoteOnSafe).runLocal) {
         try {
           result.localSafety = await runLocalModeration(textToCheck, localModelOwnerId, ticket.controller.signal, moderationModelId);
         } catch (e) {
@@ -113,20 +114,7 @@ async function runEvaluationForPhase(
 
       if (!isAiTaskCurrent(ticket)) return;
       // --- Remote safety ---
-      // In 'local' mode, if local failed, fall back to remote as a safety net
-      const localOnlyButFailed = safetyEngine === 'local' && !result.localSafety;
-      const shouldRunRemote =
-        safetyEngine === 'remote' ||
-        localOnlyButFailed ||
-        (safetyEngine === 'hybrid' && (
-          // Always run remote if local found issues
-          result.localSafety?.screening === 'warn' ||
-          result.localSafety?.screening === 'block-candidate' ||
-          // Also run remote if hybridRemoteOnSafe is true (default)
-          hybridRemoteOnSafe ||
-          // Also run remote if local failed (no result)
-          !result.localSafety
-        ));
+      const shouldRunRemote = localSafetyPolicy(safetyEngine, hybridRemoteOnSafe, result.localSafety).runRemote;
 
       if (shouldRunRemote) {
         try {

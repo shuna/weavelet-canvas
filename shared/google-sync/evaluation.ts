@@ -1,9 +1,10 @@
+import { localAxisPrompt, localAxisScore, localModeration, localQualityResult, localSafetyPolicy, parseLocalQualityResponse } from '../../src/utils/localEvaluationCore';
 import { hardOpenRouterConstraints } from '../../src/utils/openrouterRequest';
 import { buildJudgeRequest, buildSafetyRequest, parseJudgeResponse, parseSafetyResponse } from '../../src/utils/evaluationCore';
 import { resolveEvalContextCore } from '../../src/utils/evaluationContextCore';
 import { defaultEvaluationSettings, mutateEvaluationState, type EvaluationAction, type EvaluationState } from '../../src/utils/evaluationState';
 import { defaultQualityThresholds, defaultSafetyThresholds, evaluationResultKey, getSafetyStatus, moderationCategoryKeys, qualityAxisKeys, summarizeSafetyScores, systemQualityAxisKeys } from '../../src/types/evaluation';
-import type { EvaluationResult, EvaluationScope, EvaluationOmittedMode, QualityEvaluationMode } from '../../src/types/evaluation';
+import type { EvaluationResult, EvaluationScope, EvaluationOmittedMode, QualityEvaluationMode, QualityScores, LocalModerationResult, SafetyEngineMode } from '../../src/types/evaluation';
 import type { ChatInterface, OpenRouterChatSettings } from '../../src/types/chat';
 import { diffJSONChanges } from '../../src/utils/jsonChanges';
 
@@ -15,6 +16,13 @@ type Input =
   | {operation: 'parseQuality'; text: string; mode?: QualityEvaluationMode; now: number}
   | {operation: 'parseSafety'; data: Parameters<typeof parseSafetyResponse>[0]; now: number}
   | {operation: 'resultKey'; chatId?: string; nodeId?: string; chatID?: string; nodeID?: string; phase: 'pre-send'|'post-receive'}
+  | {operation: 'localAxes'}
+  | {operation: 'localPrompt'; axis: keyof QualityScores; text: string; assistantResponse?: string; language: string}
+  | {operation: 'localAxisScore'; raw: string}
+  | {operation: 'localQualityResult'; outputs: Partial<Record<keyof QualityScores, string>>; now: number}
+  | {operation: 'localParse'; raw: string; now: number}
+  | {operation: 'localModeration'; labels: {label: string; score: number}[]; now: number}
+  | {operation: 'localPolicy'; safetyEngine: SafetyEngineMode; hybridRemoteOnSafe: boolean; localSafety?: LocalModerationResult}
   | {operation: 'defaults'}
   | {operation: 'display'; result: EvaluationResult; safetyThresholds?: typeof defaultSafetyThresholds; qualityThresholds?: typeof defaultQualityThresholds}
   | {operation: 'mutate'; state: EvaluationState; action: EvaluationAction};
@@ -35,6 +43,13 @@ export function evaluation(json: string): string {
     case 'parseQuality': return JSON.stringify({...parseJudgeResponse(input.text, input.mode), timestamp: input.now});
     case 'parseSafety': return JSON.stringify(parseSafetyResponse(input.data, input.now));
     case 'resultKey': return JSON.stringify(evaluationResultKey(input.chatId ?? input.chatID ?? '', input.nodeId ?? input.nodeID ?? '', input.phase));
+    case 'localAxes': return JSON.stringify(qualityAxisKeys);
+    case 'localPrompt': return JSON.stringify(localAxisPrompt(input.axis, input.text, input.assistantResponse, input.language));
+    case 'localAxisScore': return JSON.stringify(localAxisScore(input.raw));
+    case 'localQualityResult': return JSON.stringify(localQualityResult(input.outputs, input.now));
+    case 'localParse': return JSON.stringify(parseLocalQualityResponse(input.raw, input.now));
+    case 'localModeration': return JSON.stringify(localModeration(input.labels, input.now));
+    case 'localPolicy': return JSON.stringify(localSafetyPolicy(input.safetyEngine, input.hybridRemoteOnSafe, input.localSafety));
     case 'defaults': return JSON.stringify({evaluationSettings: defaultEvaluationSettings, safetyThresholds: defaultSafetyThresholds, qualityThresholds: defaultQualityThresholds});
     case 'display': {
       const safetyThresholds = input.safetyThresholds ?? defaultSafetyThresholds;
