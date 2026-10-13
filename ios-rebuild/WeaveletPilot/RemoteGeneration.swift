@@ -40,17 +40,11 @@ enum RemoteRequest {
         return data
     }
     #endif
-    static func make(source: OrderedJSON, chatID: String, path: [String], settings: RemoteSettings, key: String, modelState: OrderedJSON? = nil, apiVersion: String? = nil, customHeaders: OrderedJSON? = nil, regenerate: Bool = false) throws -> URLRequest {
+    static func make(source: OrderedJSON, chatID: String, path: [String], settings: RemoteSettings, key: String, modelState: OrderedJSON? = nil, apiVersion: String? = nil, customHeaders: OrderedJSON? = nil, regenerate: Bool = false, tokenMessages: OrderedJSON? = nil) throws -> URLRequest {
         let url = try settings.validatedURL()
         let chat = try source.required("chats").array("chats").first { try $0.required("id").string("ID").utf8.elementsEqual(chatID.utf8) }
         guard let chat else { throw ExchangeError.invalid("chat ID") }
-        var config = try chat["config"] ?? ChatDefaults.webInitial().config
-        let savedModel = try config["model"]?.string("model") ?? ""
-        if savedModel.trimmingCharacters(in:.whitespacesAndNewlines).isEmpty {
-            config = config.replacing("model",with:.string(settings.model)).replacing("stream",with:.bool(settings.stream))
-        }
-        guard case .string(let model) = config["model"], !model.trimmingCharacters(in:.whitespacesAndNewlines).isEmpty else { throw ExchangeError.invalid("会話のモデルIDを設定してください") }
-        guard config["modelSource"] != .string("local") else { throw ExchangeError.invalid("ローカルモデルはremote通信へ送信できません") }
+        let config = try configuration(chat:chat,settings:settings)
         var boundary = SharedWebProjection()
         var transport: [JSONField] = [.init(key:"endpoint",value:.string(settings.endpoint)),
             .init(key:"endpointURL",value:.object([.init(key:"protocol",value:.string("https:")),.init(key:"hostname",value:.string(url.host!.lowercased()))])),
@@ -66,6 +60,11 @@ enum RemoteRequest {
             projectedConfig = projectedConfig.replacing("openRouter",with:controls.replacing("routing",with:routing.replacing("max_price",with:projectedPrices)))
         }
         var fields = try SharedGenerationContext.fields(source:source,chat:chat,config:projectedConfig,path:path,boundary:&boundary)
+        if let tokenMessages {
+            fields.append(.init(key:"tokenMessages",value:.array(try tokenMessages.array("token messages").map { message in
+                message.replacing("content",with:try boundary.parts(message.required("content")))
+            })))
+        }
         fields.append(.init(key:"transport",value:.object(transport)))
         fields.append(.init(key:"modelState",value:modelState ?? .object([])))
         let input = OrderedJSON.object(fields)
@@ -73,6 +72,23 @@ enum RemoteRequest {
         let projectedBody = try envelope.required("body")
         let body = try OrderedJSONChanges.apply(.array([.object([.init(key: "op", value: .string("set")), .init(key: "path", value: .array([])), .init(key: "value", value: projectedBody)])]), to: .null, opaque: boundary.opaque)
         return try bindEnvelope(envelope,body:body,originalURL:url,key:key)
+    }
+    static func configuration(chat: OrderedJSON, settings: RemoteSettings) throws -> OrderedJSON {
+        var config = try chat["config"] ?? ChatDefaults.webInitial().config
+        let savedModel = try config["model"]?.string("model") ?? ""
+        if savedModel.trimmingCharacters(in:.whitespacesAndNewlines).isEmpty {
+            config = config.replacing("model",with:.string(settings.model)).replacing("stream",with:.bool(settings.stream))
+        }
+        guard case .string(let model) = config["model"], !model.trimmingCharacters(in:.whitespacesAndNewlines).isEmpty else { throw ExchangeError.invalid("会話のモデルIDを設定してください") }
+        guard config["modelSource"] != .string("local") else { throw ExchangeError.invalid("ローカルモデルはremote通信へ送信できません") }
+        return config
+    }
+    static func tokenContext(source: OrderedJSON, chat: OrderedJSON, config: OrderedJSON, path: [String]) throws -> OrderedJSON {
+        var boundary = SharedWebProjection()
+        let fields = try SharedGenerationContext.fields(source:source,chat:chat,config:boundary.requestConfig(config),path:path,boundary:&boundary)
+        let messages = try SharedWebOperations.call("generationContext",.object(fields))
+        return try OrderedJSONChanges.apply(.array([.object([.init(key:"op",value:.string("set")),
+            .init(key:"path",value:.array([])),.init(key:"value",value:messages)])]),to:.null,opaque:boundary.opaque)
     }
     // The shared code never sees the secret. Only verified HTTP metadata can bind it.
     static func bindEnvelope(_ envelope: OrderedJSON, body: OrderedJSON, originalURL: URL, key: String) throws -> URLRequest {

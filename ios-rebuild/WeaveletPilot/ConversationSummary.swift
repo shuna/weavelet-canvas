@@ -115,7 +115,7 @@ enum ConversationSummary {
     static func prepare(source: OrderedJSON, state: OrderedJSON, chatID: String, sourceNodeIDs: [String], mode: String, originNodeID: String,
                         format: String? = nil, summaryID: String, now: Double, config: OrderedJSON? = nil, generatingNodeIDs: [String] = [],
                         busyJobs: [(originNodeID: String, sourceNodeIDs: [String])] = [],
-                        legacy: RemoteCredentialRecord, readProviderCredential: ProviderModels.CredentialReader = RemoteCredentials.load(providerID:)) throws -> PreparedSummary? {
+                        legacy: RemoteCredentialRecord, readProviderCredential: ProviderModels.CredentialReader = RemoteCredentials.load(providerID:), promptTokens: Int? = nil) throws -> PreparedSummary? {
         guard let rawChat = try chat(source,id:chatID) else { return nil }
         let wireSources = try sourceNodeIDs.map { try wireNodeID($0,chat:rawChat) }
         let wireOrigin = try wireNodeID(originNodeID,chat:rawChat)
@@ -130,11 +130,13 @@ enum ConversationSummary {
         guard selection["status"] == .string("ready") else { return nil }
         let (credential,url) = try AuxiliaryRemoteRequest.credential(selection:selection,state:state,legacy:legacy,read:readProviderCredential)
         let transport = AuxiliaryRemoteRequest.transport(url:url,key:credential.key,apiVersion:state["apiVersion"])
-        let plan = try SharedWebOperations.call("summaryOperation",.object([
+        var planInput = OrderedJSON.object([
             .init(key:"operation",value:.string("plan")),.init(key:"chat",value:try projectedChat(rawChat,boundary:&boundary)),
             .init(key:"selection",value:selection),.init(key:"modelState",value:ChatConfig.modelState(in:state)),
             .init(key:"transport",value:transport)
-        ]))
+        ])
+        if let promptTokens { planInput = planInput.replacing("promptTokens",with:.number(String(promptTokens))) }
+        let plan = try SharedWebOperations.call("summaryOperation",planInput)
         let request = try AuxiliaryRemoteRequest.bind(plan.required("request"),boundary:boundary,url:url,key:credential.key)
         return try PreparedSummary(chatID:chatID,sourceNodeIDs:wireSources,mode:mode,originNodeID:wireOrigin,format:format,
             summaryID:summaryID,now:now,config:config,originalChat:rawChat,expectedChatConfig:rawChat["config"] ?? .object([]),
@@ -149,8 +151,16 @@ enum ConversationSummary {
         let reason = choice["finish_reason"] == .null ? nil : try choice["finish_reason"]?.string("finish reason")
         return (text,reason)
     }
+    static func usagePlan(_ response: String, prepared: PreparedSummary, source: OrderedJSON) throws -> OrderedJSON {
+        let rawChat = try chat(source,id:prepared.chatID) ?? prepared.originalChat
+        var boundary = prepared.boundary
+        let plan = try SharedWebOperations.call("summaryOperation",.object([.init(key:"operation",value:.string("usagePlan")),
+            .init(key:"chat",value:try projectedChat(rawChat,boundary:&boundary)),.init(key:"selection",value:prepared.selection),
+            .init(key:"responseText",value:.string(response))]))
+        return try restored(plan,boundary:boundary)
+    }
     static func apply(_ response: (text: String, finishReason: String?), prepared: PreparedSummary, source: OrderedJSON, state: OrderedJSON,
-                      generatingNodeIDs: [String] = []) throws -> (source: OrderedJSON, tokenUsage: OrderedJSON?, summary: OrderedJSON?, savesTokens: Bool?, warning: String?, error: String?)? {
+                      generatingNodeIDs: [String] = [], counts: OrderedJSON? = nil) throws -> (source: OrderedJSON, tokenUsage: OrderedJSON?, summary: OrderedJSON?, savesTokens: Bool?, warning: String?, error: String?)? {
         let latestChat = try chat(source,id:prepared.chatID)
         let rawChat = latestChat ?? prepared.originalChat
         let stale = try latestChat == nil || (rawChat["config"] ?? .object([])).encoded() != prepared.expectedChatConfig.encoded()
@@ -165,6 +175,7 @@ enum ConversationSummary {
             .init(key:"stale",value:.bool(stale))
         ])
         if let reason = response.finishReason { input = input.replacing("finishReason",with:.string(reason)) }
+        if let counts { input = input.replacing("counts",with:counts) }
         let result = try SharedWebOperations.call("summaryOperation",input)
         let base = OrderedJSON.object([.init(key:"chat",value:rawChat),.init(key:"totalTokenUsed",value:state["totalTokenUsed"] ?? .object([]))])
         let updated = try OrderedJSONChanges.apply(result.required("changes"),to:base,opaque:boundary.opaque)

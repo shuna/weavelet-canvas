@@ -85,6 +85,7 @@ struct ActiveGeneration {
     var completedSuccessfully = false
     var usesRemoteTransport = true
     var titleAfterAppend = false
+    var tokenCounts: OrderedJSON?
 }
 
 struct NavigationFocus: Equatable {
@@ -140,6 +141,10 @@ final class ChatState: ObservableObject {
     private let store: LocalStateStore?
     private let localGenerate: LocalLlama.Generator
     private let localEvaluationGenerate: LocalLlama.Generator?
+    private let tokenCounting: NativeTokenCounting
+    private var liveUsageTask: Task<Void,Never>?
+    private var liveUsageVersion = 0
+    @Published private var liveTokenCounts: (generationID: UUID, source: OrderedJSON, parts: OrderedJSON, counts: OrderedJSON)?
     private let localModerationClassify: NativeLocalModeration.Classifier?
     private var initialLoadFailed = false
     @Published private(set) var navigationFocus: NavigationFocus?
@@ -151,8 +156,9 @@ final class ChatState: ObservableObject {
     var canUndoMessageEdit: Bool { generation == nil && (editingHistory?.canUndo ?? false) }
     var canRedoMessageEdit: Bool { generation == nil && (editingHistory?.canRedo ?? false) }
 
-    init(store: LocalStateStore? = nil, localGenerate: LocalLlama.Generator? = nil, localClassify: NativeLocalModeration.Classifier? = nil) {
+    init(store: LocalStateStore? = nil, localGenerate: LocalLlama.Generator? = nil, localClassify: NativeLocalModeration.Classifier? = nil, tokenCounting: NativeTokenCounting? = nil) {
         self.store = store
+        self.tokenCounting = tokenCounting ?? NativeTokenCounting()
         self.localGenerate = localGenerate ?? { url, request, onText in
             try await LocalLlama.generate(modelURL:url,request:request,onText:onText)
         }
@@ -758,32 +764,58 @@ final class ChatState: ObservableObject {
         if case .string(let value) = savedState["apiVersion"] { apiVersion = value }
         else if savedState["apiVersion"] == nil || savedState["apiVersion"] == .null { apiVersion = nil }
         else { throw ExchangeError.invalid("API versionの形式が不正です") }
-        let request = try RemoteRequest.make(source: source, chatID: chatID, path: path, settings: credential.settings, key: credential.key, modelState:modelState,apiVersion:apiVersion,regenerate:regenerate)
-        let streaming = try RemoteRequest.streaming(request)
-        guard let body = request.httpBody else { throw ExchangeError.invalid("送信本文がありません") }
-        let userContent = try ConversationEvaluation.transmittedUserContent(OrderedJSON.decode(body).required("messages"))
+        let config = try RemoteRequest.configuration(chat:sourceChat,settings:credential.settings)
+        let contextMessages = try RemoteRequest.tokenContext(source:source,chat:sourceChat,config:config,path:path)
         try ConversationEvaluation.enforcePreSendSafety(settings:ConversationEvaluation.autoSettings(savedState),chat:sourceChat)
         try applyLibrary(source, selectedID: chatID, resetViewFor: chatID, editing: history, now: now)
         let id = UUID()
         generation = ActiveGeneration(id: id, chatID: chatID, baseSource: try publishedSource(), path: path, plan: plan, titleAfterAppend: titleAfterAppend)
         generationError = nil
         automaticEvaluationError = nil
-        if let userContent {
-            let nodeID = try plan?.required("targetNodeId").string("target node") ?? ""
-            automaticEvaluationContext = (id,chatID,nodeID,path,userContent,legacy,client,readProviderCredential)
-            startAutomaticEvaluation(phase:"pre-send",generationID:id)
-        }
+        let requestChat = try publishedSource().required("chats").array("chats").first { $0["id"] == .string(chatID) }
         pendingTitleContext = (id,legacy,client,readProviderCredential)
+        startLiveTokenCounting(generationID:id)
         generationTask = Task { @MainActor [weak self] in
+            guard let self else { return }
+            @MainActor func check() throws {
+                try Task.checkCancellation()
+                guard self.generation?.id == id, self.generation?.running == true,
+                      self.exchange?.source == self.generation?.baseSource,
+                      try self.generation?.baseSource.required("chats").array("chats").first(where:{ $0["id"] == .string(chatID) }) == requestChat,
+                      try ChatConfig.modelState(in:self.publicationSnapshot().required("state")) == modelState,
+                      try self.publicationSnapshot().required("state")["providers"] == savedState["providers"],
+                      try self.publicationSnapshot().required("state")["apiVersion"] == savedState["apiVersion"] else { throw CancellationError() }
+            }
             do {
+                try check()
+                let budget = try SharedWebOperations.call("tokenBudgetOperation",.object([
+                    .init(key:"config",value:config),.init(key:"modelState",value:modelState)]))
+                let messages = try await self.tokenCounting.limit(messages:contextMessages,model:config.required("model").string("model"),limit:budget.required("promptBudget").nativeTokenInteger("prompt budget"))
+                try check()
+                guard try !messages.array("limited messages").isEmpty else { throw ExchangeError.invalid("送信本文がtoken上限を超えています") }
+                let promptTokens = try await self.tokenCounting.count(messages:messages,model:config.required("model").string("model"))
+                try check()
+                let checked = try SharedWebOperations.call("tokenBudgetOperation",.object([
+                    .init(key:"config",value:config),.init(key:"modelState",value:modelState),.init(key:"promptTokens",value:.number(String(promptTokens)))]))
+                guard checked["fits"] == .bool(true) else { throw ExchangeError.invalid("送信本文がtoken上限を超えています") }
+                let request = try RemoteRequest.make(source:source,chatID:chatID,path:path,settings:credential.settings,key:credential.key,
+                    modelState:modelState,apiVersion:apiVersion,regenerate:regenerate,tokenMessages:messages)
+                let streaming = try RemoteRequest.streaming(request)
+                let userContent = try ConversationEvaluation.transmittedUserContent(messages)
+                if let userContent {
+                    let nodeID = try plan?.required("targetNodeId").string("target node") ?? ""
+                    self.automaticEvaluationContext = (id,chatID,nodeID,path,userContent,legacy,client,readProviderCredential)
+                    self.startAutomaticEvaluation(phase:"pre-send",generationID:id)
+                }
                 try await client.complete(request, streaming: streaming) { [weak self] output in
                     guard let self, self.generation?.id == id, self.generation?.running == true,
                           self.exchange?.source == self.generation?.baseSource else { return }
                     self.generation?.output = output
                 }
-                self?.finishGeneration(id: id, error: nil)
+                try await self.prepareGenerationTokenCounts(id:id)
+                self.finishGeneration(id:id,error:nil)
             } catch {
-                self?.finishGeneration(id: id, error: error)
+                self.finishGeneration(id:id,error:error)
             }
         }
     }
@@ -948,6 +980,7 @@ final class ChatState: ObservableObject {
     }
 
     private func finishGeneration(id: UUID, error: Error?, completed: Bool = true) {
+        liveUsageVersion += 1; liveUsageTask = nil; liveTokenCounts = nil
         guard var current = generation, current.id == id, current.running, exchange?.source == current.baseSource else { return }
         current.running = false
         current.completedSuccessfully = completed && error == nil
@@ -990,6 +1023,69 @@ final class ChatState: ObservableObject {
         }
     }
 
+    @MainActor private func prepareGenerationTokenCounts(id: UUID) async throws {
+        guard let current = generation, current.id == id, current.usesRemoteTransport, usageCountingEnabled else { return }
+        let usagePlan = try generationTokenPlan(current)
+        guard usagePlan != .null, usagePlan["kind"] == .string("estimated") else { return }
+        let counts = try await tokenCounting.counts(plan:usagePlan)
+        try Task.checkCancellation()
+        guard generation?.id == id, generation?.output.parts == current.output.parts,
+              let latest = generation, exchange?.source == latest.baseSource, try generationTokenPlan(latest) == usagePlan else { throw CancellationError() }
+        generation?.tokenCounts = counts
+    }
+
+    private func generationTokenPlan(_ current: ActiveGeneration) throws -> OrderedJSON {
+        guard let plan = current.plan else { return .null }
+        let finalized = try MessageEditing.generation(in:current.baseSource,chatID:current.chatID,operation:"finalize",viewingPath:current.path,plan:plan,
+            parts:current.output.parts,now:Date().timeIntervalSince1970 * 1000,history:nil,onHistory:{ _ in })
+        guard var chat = try finalized.source.required("chats").array("chats").first(where:{ $0["id"] == .string(current.chatID) }) else { return .null }
+        let target = try plan.required("targetNodeId").string("target")
+        if try !current.output.observation.object("observation").isEmpty {
+            let observed = try SharedWebOperations.call("generationObservation",.object([.init(key:"chat",value:chat),.init(key:"targetNodeId",value:.string(target)),.init(key:"observation",value:current.output.observation)]))
+            chat = try OrderedJSONChanges.apply(observed.required("changes"),to:chat)
+        }
+        return try SharedWebOperations.call("generationUsagePlan",.object([.init(key:"chat",value:chat),.init(key:"targetNodeId",value:.string(target))]))
+    }
+
+    private func startLiveTokenCounting(generationID: UUID) {
+        liveUsageVersion += 1; liveTokenCounts = nil
+        let version = liveUsageVersion
+        guard usageCountingEnabled else { liveUsageTask = nil; return }
+        liveUsageTask = Task { @MainActor [weak self] in
+            guard let self else { return }
+            var promptSource: OrderedJSON?
+            var promptCount: Int?
+            var promptModel: String?
+            var encoderReady = self.tokenCounting.isReady
+            while let current = self.generation, current.id == generationID, current.running, self.usageCountingEnabled, self.liveUsageVersion == version {
+                do {
+                    guard let chat = try current.baseSource.required("chats").array("chats").first(where:{ $0["id"] == .string(current.chatID) }) else { throw CancellationError() }
+                    var boundary = SharedWebProjection()
+                    var fields = try SharedGenerationContext.fields(source:current.baseSource,chat:chat,config:chat["config"] ?? ChatDefaults.webInitial().config,path:current.path,boundary:&boundary)
+                    fields.append(.init(key:"completionParts",value:current.output.parts))
+                    let projected = try SharedWebOperations.call("generationLiveUsagePlan",.object(fields))
+                    let plan = try OrderedJSONChanges.apply(.array([.object([.init(key:"op",value:.string("set")),.init(key:"path",value:.array([])),.init(key:"value",value:projected)])]),to:.null,opaque:boundary.opaque)
+                    let model = try plan.required("model").string("token model")
+                    let prompt = try plan.required("promptMessages")
+                    if encoderReady != self.tokenCounting.isReady { promptCount = nil; encoderReady = self.tokenCounting.isReady }
+                    if promptSource != prompt || promptModel != model { promptCount = nil; promptSource = prompt; promptModel = model }
+                    if promptCount == nil { promptCount = try await self.tokenCounting.count(messages:prompt,model:model) }
+                    let completion: Int
+                    if let message = plan["completionMessage"], message != .null { completion = try await self.tokenCounting.count(messages:.array([message]),model:model) }
+                    else { completion = 0 }
+                    let counts = OrderedJSON.object([.init(key:"promptTokens",value:.number(String(promptCount!))),.init(key:"completionTokens",value:.number(String(completion)))])
+                    try Task.checkCancellation()
+                    guard self.liveUsageVersion == version, self.generation?.id == generationID, self.generation?.running == true, self.usageCountingEnabled else { return }
+                    if self.generation?.baseSource == current.baseSource, self.generation?.output.parts == current.output.parts {
+                        self.liveTokenCounts = (generationID,current.baseSource,current.output.parts,counts)
+                    }
+                    let delay = try SharedWebOperations.call("tokenizerOperation",.object([.init(key:"operation",value:.string("throttle"))])).number("live interval")
+                    try await Task.sleep(nanoseconds:UInt64(delay * 1_000_000))
+                } catch is CancellationError { return } catch { return }
+            }
+        }
+    }
+
     private func generationAccounting(source: OrderedJSON, current: ActiveGeneration) throws -> (source: OrderedJSON, usage: OrderedJSON?) {
         guard current.usesRemoteTransport else { return (source,nil) }
         var chats = try source.required("chats").array("chats")
@@ -1006,7 +1102,9 @@ final class ChatState: ObservableObject {
         let roots = try publicationSnapshot().required("state")
         guard current.completedSuccessfully, roots["countTotalTokens"] == .bool(true) else { return (updated,nil) }
         let totals = roots["totalTokenUsed"] ?? .object([])
-        let result = try SharedWebOperations.call("generationUsage",.object([.init(key:"chat",value:chat),.init(key:"targetNodeId",value:.string(target)),.init(key:"countTotalTokens",value:.bool(true)),.init(key:"totalTokenUsed",value:totals)]))
+        var usageFields: [JSONField] = [.init(key:"chat",value:chat),.init(key:"targetNodeId",value:.string(target)),.init(key:"countTotalTokens",value:.bool(true)),.init(key:"totalTokenUsed",value:totals)]
+        if let counts = current.tokenCounts { usageFields.append(.init(key:"counts",value:counts)) }
+        let result = try SharedWebOperations.call("generationUsage",.object(usageFields))
         let next = try OrderedJSONChanges.apply(result.required("changes"),to:.object([.init(key:"totalTokenUsed",value:totals)]))
         try NativeUsage.validateCounters(result:result,before:totals,after:next["totalTokenUsed"] ?? .object([]))
         return (updated,next["totalTokenUsed"])
@@ -1017,6 +1115,7 @@ final class ChatState: ObservableObject {
         guard !initialLoadFailed else { throw ExchangeError.invalid("保存ファイルを復旧してから設定してください") }
         guard usageCountingEnabled != enabled else { return }
         try applyLibrary(exchange?.source ?? ChatLibrary.emptySource,selectedID:selectedID,preserveGeneration:true,usageEnabled:enabled)
+        if let generation, generation.running { startLiveTokenCounting(generationID:generation.id) }
     }
     func resetUsageTotals() throws {
         guard !initialLoadFailed else { throw ExchangeError.invalid("保存ファイルを復旧してから設定してください") }
@@ -1031,6 +1130,9 @@ final class ChatState: ObservableObject {
             let config = try chat["config"] ?? ChatDefaults.webInitial().config
             var input = try SharedGenerationContext.fields(source:current.baseSource,chat:chat,config:config,path:current.path,boundary:&boundary)
             input.append(.init(key:"completionParts",value:current.output.parts))
+            if let liveTokenCounts, liveTokenCounts.generationID == current.id, liveTokenCounts.source == current.baseSource, liveTokenCounts.parts == current.output.parts {
+                input.append(.init(key:"counts",value:liveTokenCounts.counts))
+            }
             let overlay = try SharedWebOperations.call("generationLiveUsage",.object(input))
             fields.append(.init(key:"liveTokenUsed",value:overlay))
         }
@@ -1038,6 +1140,7 @@ final class ChatState: ObservableObject {
     }
 
     private func invalidateGeneration() {
+        liveUsageVersion += 1; liveUsageTask = nil; liveTokenCounts = nil
         if let current = generation, current.running { cancelAutomaticEvaluation(generationID:current.id) }
         pendingTitleContext = nil
         generationTask?.cancel()
@@ -1071,14 +1174,22 @@ final class ChatState: ObservableObject {
                     let response = try await ConversationTitle.generate(prepared,client:titleClient)
                     try Task.checkCancellation()
                     guard self.titleTasks[key]?.id == id else { return }
-                    try self.applyGeneratedTitle(response,prepared:prepared,language:language,fallbackEndpoint:credential.settings.endpoint)
+                    let counts: OrderedJSON?
+                    if self.usageCountingEnabled {
+                        let plan = try SharedWebOperations.call("titleOperation",.object([.init(key:"operation",value:.string("usagePlan")),
+                            .init(key:"selection",value:prepared.selection),.init(key:"responseText",value:.string(response))]))
+                        counts = try await self.tokenCounting.counts(plan:plan)
+                    } else { counts = nil }
+                    try Task.checkCancellation()
+                    guard self.titleTasks[key]?.id == id else { return }
+                    try self.applyGeneratedTitle(response,prepared:prepared,language:language,fallbackEndpoint:credential.settings.endpoint,counts:counts)
                 } catch is CancellationError {} catch { if self.titleTasks[key]?.id == id { self.titleError = "タイトル生成に失敗しました。\n" + error.localizedDescription } }
             }
             titleTasks[key] = (id,task)
         } catch { titleError = "タイトル生成に失敗しました。\n" + error.localizedDescription }
     }
-    func applyGeneratedTitle(_ response: String, prepared: PreparedConversationTitle, language: String, fallbackEndpoint: String) throws {
-        guard let exchange, let updated = try ConversationTitle.apply(response,prepared:prepared,source:exchange.source,state:publicationSnapshot().required("state"),language:language,fallbackEndpoint:fallbackEndpoint) else { return }
+    func applyGeneratedTitle(_ response: String, prepared: PreparedConversationTitle, language: String, fallbackEndpoint: String, counts: OrderedJSON? = nil) throws {
+        guard let exchange, let updated = try ConversationTitle.apply(response,prepared:prepared,source:exchange.source,state:publicationSnapshot().required("state"),language:language,fallbackEndpoint:fallbackEndpoint,counts:counts) else { return }
         try applyLibrary(updated.source,selectedID:selectedID,preserveGeneration:true,tokenUsage:updated.tokenUsage)
     }
     private func titleSettingRoots(_ roots: OrderedJSON) -> OrderedJSON { .object(["autoTitle","titleModel","titleProviderId"].compactMap { key in roots[key].map { .init(key:key,value:$0) } }) }
@@ -1149,7 +1260,7 @@ final class ChatState: ObservableObject {
         let busy = summaryJobs.values.filter { $0.busy && $0.chatID.utf8.elementsEqual(draft.chatID.utf8) }.map { ($0.originNodeID,$0.sourceNodeIDs) }
         guard let prepared = try ConversationSummary.prepare(source:exchange.source,state:roots,chatID:draft.chatID,sourceNodeIDs:sourceNodeIDs,mode:mode,originNodeID:draft.nodeID,
             format:format,summaryID:UUID().uuidString.lowercased(),now:Date().timeIntervalSince1970 * 1000,config:roots["bubbleSummaryConfig"],generatingNodeIDs:summaryGeneratingIDs,busyJobs:busy,
-            legacy:record ?? RemoteCredentials.load(),readProviderCredential:readProviderCredential) else { return }
+            legacy:record ?? RemoteCredentials.load(),readProviderCredential:readProviderCredential,promptTokens:0) else { return }
         let key = SummaryIdentity(chatID:draft.chatID,nodeID:draft.nodeID), id = UUID()
         summaryJobs = summaryJobs.filter { _, job in
             job.busy || !job.chatID.utf8.elementsEqual(draft.chatID.utf8) || !job.sourceNodeIDs.contains { previous in sourceNodeIDs.contains { $0.utf8.elementsEqual(previous.utf8) } }
@@ -1159,10 +1270,23 @@ final class ChatState: ObservableObject {
             guard let self else { return }
             defer { if self.summaryJobs[key]?.id == id { self.summaryTasks[key] = nil; self.summaryJobs[key]?.busy = false } }
             do {
+                let prompt = try prepared.selection.required("promptMessage")
+                let promptTokens = try await self.tokenCounting.count(messages:.array([prompt]),model:prepared.selection.required("model").string("summary model"))
+                try Task.checkCancellation()
+                guard self.summaryJobs[key]?.id == id,
+                      try self.exchange?.source.required("chats").array("chats").first(where:{ $0["id"] == .string(draft.chatID) }) == prepared.originalChat,
+                      try self.publicationSnapshot().required("state")["bubbleSummaryConfig"] == roots["bubbleSummaryConfig"],
+                      try ChatConfig.modelState(in:self.publicationSnapshot().required("state")) == ChatConfig.modelState(in:roots),
+                      try self.publicationSnapshot().required("state")["providers"] == roots["providers"] else { throw CancellationError() }
+                let budget = try SharedWebOperations.call("tokenBudgetOperation",.object([.init(key:"config",value:prepared.selection.required("config")),
+                    .init(key:"modelState",value:ChatConfig.modelState(in:roots)),.init(key:"promptTokens",value:.number(String(promptTokens)))]))
+                guard budget["fits"] == .bool(true) else { throw ExchangeError.invalid("要約対象がモデルのコンテキスト上限を超えています") }
                 let response = try await ConversationSummary.generate(prepared,client:client)
+                let countPlan = try ConversationSummary.usagePlan(response.text,prepared:prepared,source:self.exchange?.source ?? ChatLibrary.emptySource)
+                let counts = try await self.tokenCounting.counts(plan:countPlan)
                 try Task.checkCancellation()
                 guard self.summaryJobs[key]?.id == id, let source = self.exchange?.source else { return }
-                guard let result = try ConversationSummary.apply(response,prepared:prepared,source:source,state:self.publicationSnapshot().required("state"),generatingNodeIDs:self.summaryGeneratingIDs) else { throw ExchangeError.invalid("原文や設定が変更されました。生成し直してください") }
+                guard let result = try ConversationSummary.apply(response,prepared:prepared,source:source,state:self.publicationSnapshot().required("state"),generatingNodeIDs:self.summaryGeneratingIDs,counts:counts) else { throw ExchangeError.invalid("原文や設定が変更されました。生成し直してください") }
                 var updated = result.source
                 if let summary = result.summary, let summaryID = try summary["id"]?.string("summary") {
                     updated = try ConversationSummary.mutate(source:updated,chatID:draft.chatID,action:"use",summaryID:summaryID,use:result.savesTokens ?? true)
@@ -1207,8 +1331,10 @@ final class ChatState: ObservableObject {
         if ["safetyPreSend","safetyPostReceive","qualityPreSend","qualityPostReceive"].contains(key),
            value == .string("auto") || value == .string("manual") {
             action = .object([.init(key:"type",value:.string("setSetting")),.init(key:"key",value:.string(key)),.init(key:"value",value:value)])
-        } else if key == "safetyEngine", value == .string("remote") {
+        } else if key == "safetyEngine", [.string("remote"),.string("local"),.string("hybrid")].contains(value) {
             action = .object([.init(key:"type",value:.string("setSafetyEngine")),.init(key:"value",value:value)])
+        } else if key == "hybridRemoteOnSafe", value == .bool(true) || value == .bool(false) {
+            action = .object([.init(key:"type",value:.string("setHybridRemoteOnSafe")),.init(key:"value",value:value)])
         } else { throw ExchangeError.invalid("評価設定") }
         let roots = try publicationSnapshot().required("state")
         let settings = try evaluationSettings()
@@ -1380,7 +1506,7 @@ final class ChatState: ObservableObject {
         let nextEditing = try editing ?? (navigation != nil ? editingHistory : MessageEditing.invalidatingHistory(editingHistory, before: before, after: changed.source))
         try store?.save(SavedChatState(exchange: changed, document: candidate, conversations: views, selectedConversationID: selectedID, style: displayStyle))
         if preserveGeneration, let current = generation {
-            generation = ActiveGeneration(id: current.id, chatID: current.chatID, baseSource: changed.source, path: current.path, plan: current.plan, output: current.output, running: current.running, completedSuccessfully:current.completedSuccessfully, usesRemoteTransport:current.usesRemoteTransport, titleAfterAppend:current.titleAfterAppend)
+            generation = ActiveGeneration(id: current.id, chatID: current.chatID, baseSource: changed.source, path: current.path, plan: current.plan, output: current.output, running: current.running, completedSuccessfully:current.completedSuccessfully, usesRemoteTransport:current.usesRemoteTransport, titleAfterAppend:current.titleAfterAppend,tokenCounts:current.tokenCounts)
         } else { invalidateGeneration() }
         branchCandidates = candidates
         conversations = views

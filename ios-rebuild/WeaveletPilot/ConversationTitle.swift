@@ -87,7 +87,7 @@ enum ConversationTitle {
     }
 
     static func apply(_ responseText: String, prepared: PreparedConversationTitle, source: OrderedJSON, state: OrderedJSON,
-                      language: String, fallbackEndpoint: String) throws -> (source: OrderedJSON, tokenUsage: OrderedJSON?)? {
+                      language: String, fallbackEndpoint: String, counts: OrderedJSON? = nil) throws -> (source: OrderedJSON, tokenUsage: OrderedJSON?)? {
         guard let currentChat = try chat(source,id:prepared.chatID),
               try (currentChat["config"] ?? .object([])).encoded() == prepared.expectedConfig.encoded() else { return nil }
         var boundary = SharedWebProjection()
@@ -114,6 +114,7 @@ enum ConversationTitle {
             input = input.replacing("countTotalTokens",with:.bool(true))
                 .replacing("totalTokenUsed",with:state["totalTokenUsed"] ?? .object([]))
         }
+        if let counts { input = input.replacing("counts",with:counts) }
         let result = try SharedWebOperations.call("titleOperation",input)
         guard result["status"] == .string("updated") else { return nil }
         let base = OrderedJSON.object([.init(key:"chat",value:currentChat)] + (countTokens ? [.init(key:"totalTokenUsed",value:state["totalTokenUsed"] ?? .object([]))] : []))
