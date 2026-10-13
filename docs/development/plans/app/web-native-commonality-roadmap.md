@@ -230,3 +230,6 @@ lodashのtemplate/unset/omitとBabelのwrapRegExpにも採用版のadvisoryが�
 - CloudKitのnative接続とフォルダ同期は別providerとして扱う。既存CloudKitデータがiCloud Drive上へ自動的に現れるとは扱わない。Google DriveのOAuth登録は未実施とユーザー確認済みで、実装・隔離テストを先行する。実Google/CloudKit/iCloud Driveの相互運用が未確認であることは完成条件に残す。
 
 既存機能の再利用方針に沿い、まず共有filesystem transportとnativeファイル操作の境界を確定し、実フォルダの隔離テスト・Catalyst・独立Astra監査を一式で行う。新しい依存ライブラリや小変更単位の監査ゲートは追加しない。
+
+
+フォルダー同期の実装追記：Web実FileSystemTransport/EncryptedSyncを共有bundleからnativeへ接続した。nativeのファイル/権限/保存境界、UI、journal再開は実装済み。Web関連17 cases、Catalyst関連26 casesの成功範囲（複数run）、実native ciphertext→actual Web→nativeのrecords一致、標準picker/bookmark復元、独立Astra指摘解消を確認した。詳細は[検証台帳](web-native-completion-ledger.md)に記録する。実iCloud配信/placeholder/競合コピーと実ブラウザ権限の確認は残件で、native CloudKit接続も継続対象である。

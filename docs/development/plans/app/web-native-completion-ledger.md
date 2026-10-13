@@ -1,6 +1,25 @@
 # Web / 新iOSの完成条件と証拠
 
 
+## Web共有フォルダー同期とnativeファイル接続（2026-10-13）
+
+共有 `a08e5e36` / native `53b483a4`。実Web FileSystemTransport/EncryptedSyncを固定bundleから呼び、manifest・ID・履歴・暗号化・競合・compaction無効の規則を共有する。nativeはsecurity-scoped URL/bookmark、NSFileCoordinator、原子的な期待bytes照合と保存、iCloud未downloadの開始/到着待ちを担当する。空フォルダーでの作成、既存接続、解除、鍵復元、初回保存再開、受信、競合解決とjournal回復をUIへ接続した。GoogleSyncControllerの既存公開/回復処理をmode指定で再利用し、Googleの既存経路は既定modeで維持する。
+
+初回保存は実Webのif-emptyを使い、その意図をjournalに残す。作成中に他の履歴が先に到着した場合に上書きしない。filesystem target metadataはbookmarkと同じnative同期storeの別rootへ保存し、フォルダー切替では選択を解除してから更新する。正常保存/公開後にだけinitializedとheader再開状態を更新する。フォルダーへの書込完了はiCloud配信完了を意味しない。NSFileCoordinatorの保証は協調するFile Provider/書込者の順序付けであり、非協調する全外部writerへの汎用CASとは記載しない。
+
+検証済み：Web filesystem関連17 tests、型、bundle鮮度が成功。Catalyst初回25 cases中24成功（raw file 4、folder接続3、既存Google controller17）。残る1caseはtmp URLのscope取得が常にfalseというテスト前提が実環境と異なった。拒否を明示注入し、metadata参照前の拒否と未取得scopeの未解放を確認するテストへ訂正した。native修正後はraw file 5＋folder接続4の9 casesが成功。変更のないGoogle17件は初回結果を再利用し、最終26 casesを単一runした結果ではない。ログ `/private/tmp/weavelet-folder-sync-{catalyst,final,web,types,freshness}.log`。
+
+代表経路：全項目の既存io-corpusでnative作成/暗号化ファイル保存→受信/アプリ保存/再起動→別側設定更新→再起動したpublisherへの受信を確認。欠損したimmutable履歴の拒否、元stateとjournal保持、復元後の再開、初回前に到着した他履歴の保持も確認した。さらに実Swiftが生成した暗号化ファイルを、actual Web FileSystemTransport/EncryptedSyncでunlock/pullし全records一致を確認、Webで編集/pushしたbytesをfixture化してnative受信でも全records一致を確認した。fixtureは `tests/fixtures/web-native/filesystem-native-web-wire.json`（合成データ、FAKE passphrase）。Web caller確認はNode上のdisk facadeであり実ブラウザの権限/ファイルAPI試験とは分ける。
+
+Web往復用の最初のdisk facadeはcreate=trueで空fileを作る実API動作を欠いてENOENTになった。facadeを実APIに合わせて修正し同じ全records確認が成功（`/private/tmp/weavelet-folder-sync-web-interop{,-final}.log`）。検証専用scriptは `/private/tmp/weavelet-folder-sync-web-interop.test.ts` に保全し、常設の検証管理基盤は追加していない。native受信のwire fixtureケースは通常のCatalyst testに含めた。
+
+独立Astraでdirectoryを列挙から落とす問題、確定不存在がNotFoundにならない問題、scope開始前のmetadata参照を発見し修正。directory/空file/不存在/権限拒否/downloadPendingを区別する。追加でrootの再検証とsymlinkのdownload拒否、contentを持たないdirectoryをdownloadPendingにしない扱いを確認した。指摘範囲の限定再監査は新規なしで、全体の再監査は行っていない。
+
+Catalyst実UI：最新build成功（`/private/tmp/weavelet-folder-sync-ui-build.log`）。旧検証processがmodalを開いたまま残っていたため、modalを閉じた後にQuit menuで終了し、PID消失を確認して最新buildを起動した。Apple標準pickerで `/private/tmp/weavelet-folder-picker-proof-parent/sync` を選択し参照保存、正常終了/再起動後のbookmark復元と同フォルダーの読み取り（同期data不存在の正しい表示）を確認。pickerにはiCloud Drive入口も表示されたが実cloudを操作していない。通常領域・実Keychainは使わずDebug fixture storeへ保存した。終了後にPID消失とbuilt Info.plist復元を確認した。前項の既定設定UI記録では終了操作だけでterminal確認を省いていたため、今回確認で補正した。
+
+共有bundle SHA256 `759ecf7b6deda96d2298ebf283bba110b2a827c30c21aa17c4ab41df4b81b2de`。実iCloud配信・placeholderの実際の到着/オフライン/競合コピー、iPhone/iPad実機、ブラウザの実folder権限は未確認。CloudKitは対象として維持し、native接続は残件。全機能移植や実cloud全項目の互換性が完了したという意味ではない。
+
+
 ## 新規会話の既定設定接続（2026-10-13）
 
 実Webのnew chat config構築をnewChatDefaults/newChatConfigへ切り出し、generateDefaultChat/createLibraryChatとnative shared bridgeから共用した（共有 `a179263c`、native `40bf8e92`）。保存済defaultChatConfig/defaultSystemMessage/defaultImageDetailとモデル情報を、新規作成と全削除後の補充へ渡す。初期値固定のnative UI呼出を撤去した。既定設定UIは既存ChatConfigViewを再利用し、3rootだけをfull snapshotへ保存する。保存時のtoken clampは実Webのpure関数を呼び、未指定tokenはnullへ変換しない。全global設定UIやOpenRouter全controlの移植完了を意味しない。
