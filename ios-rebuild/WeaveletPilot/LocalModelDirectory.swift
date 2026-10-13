@@ -15,6 +15,17 @@ extension LocalModelFiles {
         let size: UInt64
         fileprivate let revision: ModelFileRevision
     }
+    final class DirectoryStage {
+        fileprivate let pending: URL
+        fileprivate let target: URL
+        fileprivate let inspection: DirectoryInspection
+        fileprivate var published = false
+        fileprivate init(pending: URL, target: URL, inspection: DirectoryInspection) {
+            self.pending = pending; self.target = target; self.inspection = inspection
+        }
+        func discard() { try? FileManager.default.removeItem(at:pending) }
+        deinit { discard() }
+    }
     private static let directoryLock = NSLock()
 
     func directoryURL(modelID: String) throws -> URL {
@@ -30,7 +41,7 @@ extension LocalModelFiles {
     }
 
     func inspectDirectory(_ source: URL, model: OrderedJSON) throws -> DirectoryInspection {
-        Self.directoryLock.lock(); defer { Self.directoryLock.unlock() }
+        try Task.checkCancellation()
         let scoped = source.startAccessingSecurityScopedResource()
         defer { if scoped { source.stopAccessingSecurityScopedResource() } }
         let reader = try ModelDirectoryAccess(source)
@@ -63,7 +74,13 @@ extension LocalModelFiles {
     }
 
     func installDirectory(_ source: URL, model: OrderedJSON, inspection: DirectoryInspection) throws {
-        Self.directoryLock.lock(); defer { Self.directoryLock.unlock() }
+        let staged = try stageDirectory(source,model:model,inspection:inspection)
+        defer { staged.discard() }
+        try publishDirectory(staged,model:model)
+    }
+
+    func stageDirectory(_ source: URL, model: OrderedJSON, inspection: DirectoryInspection) throws -> DirectoryStage {
+        try Task.checkCancellation()
         guard try directoryPlan(model).encoded() == inspection.declaration else {
             throw ExchangeError.invalid("確認したモデルと登録先のモデルが一致しません")
         }
@@ -79,8 +96,10 @@ extension LocalModelFiles {
         try FileManager.default.createDirectory(at:directory,withIntermediateDirectories:true)
         let pending = directory.appendingPathComponent(".model-\(UUID().uuidString).part")
         try FileManager.default.createDirectory(at:pending,withIntermediateDirectories:false)
-        defer { try? FileManager.default.removeItem(at:pending) }
+        var staged = false
+        defer { if !staged { try? FileManager.default.removeItem(at:pending) } }
         for file in inspection.files {
+            try Task.checkCancellation()
             let handle = try reader.openFile(file.path)
             defer { try? handle.close() }
             guard try ModelFileRevision(handle.fileDescriptor) == file.revision else {
@@ -100,19 +119,33 @@ extension LocalModelFiles {
         for file in inspection.files { try reader.check(file.path,revision:file.revision) }
         try reader.checkDirectories()
         try reader.checkRootPath()
-        guard try directoryRevision(target) == inspection.targetRevision else {
+        try Task.checkCancellation()
+        let result = DirectoryStage(pending:pending,target:target,inspection:inspection)
+        staged = true
+        return result
+    }
+
+    func publishDirectory(_ staged: DirectoryStage, model: OrderedJSON) throws {
+        guard Self.directoryLock.try() else { throw ExchangeError.invalid("端末内のモデルファイルを処理中です。もう一度選択してください") }
+        defer { Self.directoryLock.unlock() }
+        try Task.checkCancellation()
+        guard !staged.published, try directoryPlan(model).encoded() == staged.inspection.declaration,
+              try directoryURL(modelID:model.required("id").string("id")) == staged.target else {
+            throw ExchangeError.invalid("確認したモデルと登録先のモデルが一致しません")
+        }
+        guard try directoryRevision(staged.target) == staged.inspection.targetRevision else {
             throw ExchangeError.invalid("確認後に登録先のモデルが変わりました")
         }
         // Darwin exchanges directories atomically; the previous generation becomes pending.
         let flags: UInt32
-        if FileManager.default.fileExists(atPath:target.path) {
+        if FileManager.default.fileExists(atPath:staged.target.path) {
             flags = UInt32(RENAME_SWAP)
         } else { flags = UInt32(RENAME_EXCL) }
-        guard renamex_np(pending.path,target.path,flags) == 0 else { throw modelFilePOSIXError() }
+        guard renamex_np(staged.pending.path,staged.target.path,flags) == 0 else { throw modelFilePOSIXError() }
+        staged.published = true
     }
 
     func directoryEntries(model: OrderedJSON) throws -> [(path: String, data: Data)] {
-        Self.directoryLock.lock(); defer { Self.directoryLock.unlock() }
         let plan = try directoryPlan(model)
         let reader = try ModelDirectoryAccess(directoryURL(modelID:plan.required("id").string("id")))
         let names = try reader.enumerate()
@@ -138,6 +171,10 @@ extension LocalModelFiles {
         try reader.checkDirectories()
         try reader.checkRootPath()
         return entries
+    }
+
+    func directoryIsPresent(modelID: String) throws -> Bool {
+        try directoryRevision(directoryURL(modelID:modelID)) != nil
     }
 
     private func directoryRevision(_ target: URL) throws -> ModelFileRevision? {
@@ -231,6 +268,7 @@ private final class ModelDirectoryAccess {
             defer { closedir(stream) }
             errno = 0
             while let item = readdir(stream) {
+                try Task.checkCancellation()
                 let name = withUnsafePointer(to:&item.pointee.d_name) { pointer in
                     pointer.withMemoryRebound(to:CChar.self,capacity:1024) { String(validatingCString:$0) }
                 }
@@ -258,6 +296,7 @@ private final class ModelDirectoryAccess {
     func transfer(_ input: FileHandle, to output: FileHandle? = nil) throws -> String {
         var hash = SHA256()
         while let chunk = try input.read(upToCount:1024 * 1024), !chunk.isEmpty {
+            try Task.checkCancellation()
             hash.update(data:chunk)
             try output?.write(contentsOf:chunk)
         }

@@ -4,6 +4,8 @@ import UniformTypeIdentifiers
 struct LocalModelSettingsView: View {
     @ObservedObject var state: ChatState
     @State private var importingModelID: String?
+    @State private var importingDirectoryModel: OrderedJSON?
+    @State private var importTask: Task<Void, Never>?
     @State private var showsImporter = false
     @State private var copying = false
     @State private var errorMessage: String?
@@ -14,6 +16,9 @@ struct LocalModelSettingsView: View {
     }
     private func singleGGUF(_ model: OrderedJSON) -> Bool {
         model["engine"] == .string("wllama") && model["manifest"]?["kind"] == .string("single-file")
+    }
+    private func multiFile(_ model: OrderedJSON) -> Bool {
+        model["engine"] == .string("transformers.js") && model["manifest"]?["kind"] == .string("multi-file")
     }
     private func save(_ action: () throws -> Void) {
         do { try action(); errorMessage = nil }
@@ -51,7 +56,7 @@ struct LocalModelSettingsView: View {
                         .font(.footnote).foregroundStyle(.secondary)
                 }
                 Section("新しいモデル") {
-                    Button("単一GGUFを登録") { importingModelID = nil; showsImporter = true }
+                    Button("単一GGUFを登録") { importingDirectoryModel = nil; importingModelID = nil; showsImporter = true }
                         .frame(minHeight:44)
                     Text("選択したファイルをこの端末に保存し、空いている生成・分析の役割に割り当てます。")
                         .font(.footnote).foregroundStyle(.secondary)
@@ -68,7 +73,13 @@ struct LocalModelSettingsView: View {
                                     let available = (try? state.localModelFiles.installed(modelID:id)) != nil
                                     Text(available ? "この端末にファイルあり" : "この端末のファイル未指定").font(.footnote)
                                     Button(available ? "GGUFファイルを置き換える" : "GGUFファイルを選択") {
-                                        importingModelID = id; showsImporter = true
+                                        importingDirectoryModel = nil; importingModelID = id; showsImporter = true
+                                    }.frame(minHeight:44)
+                                } else if multiFile(model) {
+                                    let present = (try? state.localModelFiles.directoryIsPresent(modelID:id)) == true
+                                    Text(present ? "この端末にフォルダーあり（内容未確認）" : "この端末のフォルダー未指定").font(.footnote)
+                                    Button(present ? "モデルフォルダーを置き換える" : "モデルフォルダーを選択") {
+                                        importingDirectoryModel = model; importingModelID = id; showsImporter = true
                                     }.frame(minHeight:44)
                                 } else {
                                     Text("この形式の端末内実行は未対応です。定義は保持します。")
@@ -86,25 +97,35 @@ struct LocalModelSettingsView: View {
         }
         .disabled(copying || state.generation != nil || state.evaluationJobs.values.contains { $0.busy })
         .navigationTitle("ローカルモデル")
-        .fileImporter(isPresented:$showsImporter,allowedContentTypes:[UTType(filenameExtension:"gguf") ?? .data]) { result in
+        .fileImporter(isPresented:$showsImporter,allowedContentTypes:importingDirectoryModel == nil ? [UTType(filenameExtension:"gguf") ?? .data] : [.folder]) { result in
             do {
                 let source = try result.get()
-                let modelID = importingModelID, files = state.localModelFiles
-                copying = true; errorMessage = nil
-                Task { @MainActor in
-                    defer { copying = false }
+                let modelID = importingModelID, model = importingDirectoryModel, files = state.localModelFiles
+                copying = true; errorMessage = nil; fileStatus = nil
+                importTask = Task { @MainActor in
+                    defer { copying = false; importTask = nil }
                     do {
-                        if let modelID {
+                        if let model {
+                            let importedID = try await state.importModelDirectory(source,model:model)
+                            fileStatus = "モデルフォルダーを保存しました（" + importedID + "）"
+                        } else if let modelID {
                             try await Task.detached { try files.install(source,modelID:modelID) }.value
                             fileStatus = "ファイルを保存しました（" + modelID + "）"
                         } else {
                             let importedID = try await state.importSingleGGUF(source)
                             fileStatus = "モデルを登録しました（" + importedID + "）"
                         }
-                    } catch { errorMessage = error.localizedDescription }
+                    } catch is CancellationError { fileStatus = "フォルダーの保存を取り消しました" }
+                    catch { errorMessage = error.localizedDescription }
                 }
             } catch { errorMessage = error.localizedDescription }
         }
+        .toolbar {
+            if copying && importingDirectoryModel != nil {
+                ToolbarItem(placement:.cancellationAction) { Button("取消") { importTask?.cancel() } }
+            }
+        }
+        .onDisappear { if importingDirectoryModel != nil { importTask?.cancel() } }
     }
 }
 
