@@ -32,7 +32,7 @@ final class ChatExportTests: XCTestCase {
     func testSharedScopedFormatsUseVisiblePathModelImageAndRawEvaluationValues() throws {
         var source = try input(), chats = try source.required("chats").array("chats")
         chats[0] = chats[0].replacing("folder",with:.string("folder-a")); source = source.replacing("chats",with:.array(chats))
-        let evaluation = OrderedJSON.object([.init(key:"z",value:.number("9007199254740993")),.init(key:"a",value:.number("1.2300"))])
+        let evaluation = OrderedJSON.object([.init(key:"phase",value:.string("pre-send")),.init(key:"z",value:.number("9007199254740993")),.init(key:"a",value:.number("1.2300"))])
         source = source.replacing("evaluationResults",with:.object([.init(key:"target:test",value:evaluation),.init(key:"other:test",value:evaluation)]))
         let state = ChatState(store:try store()); try state.importWebData(source.encoded())
         let markdown = try state.exportWebData(format:.markdown,scope:.chat)
@@ -62,9 +62,9 @@ final class ChatExportTests: XCTestCase {
     }
     func testStandardNodeGzipFixtureAndCRCTruncationRejectionKeepSavedState() throws {
         // Node node:zlib gzipSync(Buffer.from(raw, 'utf8')); fixed standard gzip member.
-        let encoded = "H4sIAAAAAAAAE6tWKkstKs7Mz1OyMtZRSs5ILClWsoqOBTLz80pS80qCS/KLUpWsqmt1lNLyc1KAaiGc1LLEnNLEEqDG4NSSksy8dAzxoNTi0pwSqHCFW2lJKdggpSolK0sDA3NDS0sjUxNzEwNLS6DFiUpWhnpGxgYGOkrl+UUpSlZKz6YvfTZnzYtV8z7M79mvVFsLAKdGQwipAAAA"
+        let encoded = "H4sIAAAAAAAAE22POwoCMRCG7zL1IlFXJDmAtbilWITdUQNrgslkfSx7A3sb0cpGvIO3EUuPYHyBwlbz+Obn/6eEAq1TRoNoR5BOJTkQw1FojSbUlJCxCKKsIhibPAu37wELmXtJQZggkdKT5x6cHCOt+hYT1BkImEntZQ7RFxhHA0xRFfgL56GoWtmX1On+QgzQ+Zw+2ZY9T/6VGtYgOGPdJuetTtyNGefhSwmi2Wi1GYtgYezT8Lo9Xnfn22l/P2wuUFUPGWa0XBYBAAA="
         let compressed = try XCTUnwrap(Data(base64Encoded:encoded))
-        let raw = Data("{\"version\":3,\"chats\":[],\"contentStore\":{},\"folders\":{},\"evaluationSettings\":{},\"evaluationResults\":{},\"xFuture\":{\"z\":9007199254740993,\"a\":1.2300,\"word\":\"日本語🌿\"}}".utf8)
+        let raw = Data("{\"version\":3,\"chats\":[],\"contentStore\":{},\"folders\":{},\"evaluationSettings\":{\"safetyPreSend\":\"manual\",\"safetyPostReceive\":\"manual\",\"qualityPreSend\":\"manual\",\"qualityPostReceive\":\"manual\"},\"evaluationResults\":{},\"xFuture\":{\"z\":9007199254740993,\"a\":1.2300,\"word\":\"日本語🌿\"}}".utf8)
         XCTAssertEqual(try NativeGzip.decompress(compressed),raw)
         let local = try store(), state = ChatState(store:local); try state.importWebData(compressed)
         XCTAssertEqual(try state.exportWebData(),try OrderedJSON.decode(raw).encoded())
