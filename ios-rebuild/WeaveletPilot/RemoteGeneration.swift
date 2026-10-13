@@ -40,7 +40,7 @@ enum RemoteRequest {
         return data
     }
     #endif
-    static func make(source: OrderedJSON, chatID: String, path: [String], settings: RemoteSettings, key: String, modelState: OrderedJSON? = nil, apiVersion: String? = nil, customHeaders: OrderedJSON? = nil) throws -> URLRequest {
+    static func make(source: OrderedJSON, chatID: String, path: [String], settings: RemoteSettings, key: String, modelState: OrderedJSON? = nil, apiVersion: String? = nil, customHeaders: OrderedJSON? = nil, regenerate: Bool = false) throws -> URLRequest {
         let url = try settings.validatedURL()
         let chat = try source.required("chats").array("chats").first { try $0.required("id").string("ID").utf8.elementsEqual(chatID.utf8) }
         guard let chat else { throw ExchangeError.invalid("chat ID") }
@@ -64,6 +64,7 @@ enum RemoteRequest {
         var transport: [JSONField] = [.init(key:"endpoint",value:.string(settings.endpoint)),
             .init(key:"endpointURL",value:.object([.init(key:"protocol",value:.string("https:")),.init(key:"hostname",value:.string(url.host!.lowercased()))])),
             .init(key:"hasApiKey",value:.bool(!key.isEmpty)),.init(key:"chatId",value:.string(chatID))]
+        transport.append(.init(key:"regenerate",value:.bool(regenerate)))
         if let apiVersion { transport.append(.init(key:"apiVersion",value:.string(apiVersion))) }
         if let customHeaders { transport.append(.init(key:"customHeaders",value:customHeaders)) }
         var projectedConfig = try boundary.requestConfig(config)

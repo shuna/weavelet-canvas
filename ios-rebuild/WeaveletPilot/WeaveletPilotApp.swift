@@ -58,6 +58,10 @@ struct ChatView: View {
                             }, insertBefore: state.exchange == nil || state.generation != nil ? nil : {
                                 do { draft = try state.messageInsertionDraft(beforeNodeID: node.id) }
                                 catch { errorMessage = error.localizedDescription }
+                            }, regenerate: state.exchange == nil || state.generation != nil ? nil : {
+                                generate(node.id, operation: .regenerate)
+                            }, generateFromHere: state.exchange == nil || state.generation != nil ? nil : {
+                                generate(node.id, operation: .fromHere)
                             }, remove: state.exchange == nil || state.generation != nil ? nil : {
                                 do { removalDraft = try state.nodeRemovalDraft(nodeID: node.id); showsRemoval = true }
                                 catch { errorMessage = error.localizedDescription }
@@ -336,6 +340,13 @@ struct ChatView: View {
         }
     }
 
+    private func generate(_ nodeID: String, operation: MessageGenerationOperation) {
+        do {
+            let draft = try state.messageGenerationDraft(nodeID:nodeID,operation:operation)
+            try state.startGeneration(draft,record:RemoteCredentials.load())
+        } catch { errorMessage = error.localizedDescription }
+    }
+
     private func move(_ nodeID: String, direction: NodeMoveDirection) {
         do {
             let result = try state.saveNodeTransform(state.nodeMoveDraft(nodeID: nodeID, direction: direction))
@@ -352,6 +363,8 @@ struct MessageView: View {
     let style: ChatStyle
     var edit: (() -> Void)? = nil
     var insertBefore: (() -> Void)? = nil
+    var regenerate: (() -> Void)? = nil
+    var generateFromHere: (() -> Void)? = nil
     var remove: (() -> Void)? = nil
     var moveUp: (() -> Void)? = nil
     var moveDown: (() -> Void)? = nil
@@ -405,9 +418,11 @@ struct MessageView: View {
                         MessagePartView(part: part)
                     }
                 }
-                if edit != nil || insertBefore != nil || remove != nil || configure != nil || toggleCollapse != nil || moveUp != nil || moveDown != nil || replaceAndPrune != nil || deleteBranch != nil || copyRange != nil || pasteRange != nil {
+                if edit != nil || insertBefore != nil || regenerate != nil || generateFromHere != nil || remove != nil || configure != nil || toggleCollapse != nil || moveUp != nil || moveDown != nil || replaceAndPrune != nil || deleteBranch != nil || copyRange != nil || pasteRange != nil {
                     Menu("メッセージ操作", systemImage: "ellipsis") {
                         if let edit { Button("編集", systemImage: "square.and.pencil", action: edit) }
+                        if let regenerate { Button("再生成", systemImage:"arrow.clockwise",action:regenerate) }
+                        if let generateFromHere { Button("ここから生成",systemImage:"sparkles",action:generateFromHere) }
                         if let insertBefore { Button("前に挿入", systemImage: "text.insert", action: insertBefore) }
                         if let toggleCollapse { Button(node.options.collapsed ? "本文を展開" : "本文を折りたたむ", systemImage: node.options.collapsed ? "chevron.down" : "chevron.up", action: toggleCollapse) }
                         if let configure { Button("メッセージ設定", systemImage: "slider.horizontal.3", action: configure) }

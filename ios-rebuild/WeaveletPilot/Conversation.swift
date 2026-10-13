@@ -66,6 +66,7 @@ struct ActiveGeneration {
     let chatID: String
     let baseSource: OrderedJSON
     let path: [String]
+    var plan: OrderedJSON? = nil
     var output = RemoteOutput()
     var running = true
 }
@@ -535,6 +536,29 @@ final class ChatState: ObservableObject {
         try startGeneration(prepared:prepared,record:record,client:client,nodeIDs:nodeIDs,readProviderCredential:readProviderCredential)
         composerDrafts.removeValue(forKey:identity)
     }
+    func messageGenerationDraft(nodeID: String, operation: MessageGenerationOperation) throws -> MessageGenerationDraft {
+        guard generation == nil, let exchange, let conversation else { throw ExchangeError.invalid("保存済み会話を選択し、生成の終了を待ってください") }
+        return MessageGenerationDraft(chatID:conversation.id,nodeID:nodeID,operation:operation,source:exchange.source,path:conversation.visibleMessages.map(\.id))
+    }
+
+    func startGeneration(_ draft: MessageGenerationDraft, record: RemoteCredentialRecord, client: RemoteClient = RemoteClient(), nodeIDs: [String]? = nil,
+                         readProviderCredential: ProviderModels.CredentialReader = RemoteCredentials.load(providerID:)) throws {
+        guard generation == nil, let exchange else { throw ExchangeError.invalid("生成結果を保存してから操作してください") }
+        guard try draft.source.encoded() == exchange.source.encoded() else { throw ExchangeError.invalid("会話が変更されています。操作を開き直してください") }
+        let now = Date().timeIntervalSince1970 * 1000
+        var history: MessageEditing.HistoryState?
+        let prepared = try MessageEditing.generation(in:exchange.source,chatID:draft.chatID,operation:"prepare",action:draft.operation,nodeID:draft.nodeID,
+            viewingPath:draft.path,newIDs:nodeIDs,now:now,history:editingHistory) { history = $0 }
+        guard prepared.output["status"] == .string("updated") else {
+            if prepared.output["status"] == .string("protected") { throw ExchangeError.invalid("保護されたメッセージは置き換えられません") }
+            throw ExchangeError.invalid("このメッセージからは生成できません。対象と表示経路を確認してください")
+        }
+        let plan = try prepared.output.required("plan")
+        let requestPath = try plan.required("requestPath").array("requestPath").map { try $0.string("node ID") }
+        try beginGeneration(source:prepared.source,chatID:draft.chatID,path:requestPath,history:history,plan:plan,regenerate:draft.operation == .regenerate,
+            record:record,client:client,readProviderCredential:readProviderCredential,now:now)
+    }
+
     func startGeneration(input: String, record: RemoteCredentialRecord, client: RemoteClient = RemoteClient(), nodeIDs: [String]? = nil, readProviderCredential: ProviderModels.CredentialReader = RemoteCredentials.load(providerID:)) throws {
         try startGeneration(parts:.array([.object([.init(key:"type",value:.string("text")),.init(key:"text",value:.string(input))])]),record:record,client:client,nodeIDs:nodeIDs,readProviderCredential:readProviderCredential)
     }
@@ -553,6 +577,12 @@ final class ChatState: ObservableObject {
         let source = try MessageEditing.save(in: exchange.source, chatID: conversation.id, nodeID: nil, viewingPath: conversation.visibleMessages.map(\.id), role: "user", parts: body, mode: .append, newIDs: ids, now: now, history: editingHistory) { history = $0 }
         let changed = try WebExchange(source: source)
         let path = changed.conversations.first { $0.identity == conversation.identity }!.visibleMessages.map(\.id)
+        try beginGeneration(source:source,chatID:conversation.id,path:path,history:history,plan:nil,regenerate:false,record:record,client:client,readProviderCredential:readProviderCredential,now:now)
+    }
+
+    private func beginGeneration(source: OrderedJSON, chatID: String, path: [String], history: MessageEditing.HistoryState?, plan: OrderedJSON?, regenerate: Bool,
+                                 record: RemoteCredentialRecord, client: RemoteClient, readProviderCredential: ProviderModels.CredentialReader, now: Double) throws {
+        let sourceChat = try source.required("chats").array("chats").first { try $0.required("id").string("id").utf8.elementsEqual(chatID.utf8) }!
         let savedState = try publicationSnapshot().required("state")
         let modelState = ChatConfig.modelState(in:savedState)
         let credential = try ProviderModels.generationCredential(config:sourceChat["config"] ?? .object([]),state:savedState,legacy:record,read:readProviderCredential)
@@ -560,11 +590,11 @@ final class ChatState: ObservableObject {
         if case .string(let value) = savedState["apiVersion"] { apiVersion = value }
         else if savedState["apiVersion"] == nil || savedState["apiVersion"] == .null { apiVersion = nil }
         else { throw ExchangeError.invalid("API versionの形式が不正です") }
-        let request = try RemoteRequest.make(source: source, chatID: conversation.id, path: path, settings: credential.settings, key: credential.key, modelState:modelState,apiVersion:apiVersion)
+        let request = try RemoteRequest.make(source: source, chatID: chatID, path: path, settings: credential.settings, key: credential.key, modelState:modelState,apiVersion:apiVersion,regenerate:regenerate)
         let streaming = try RemoteRequest.streaming(request)
-        try applyLibrary(source, selectedID: conversation.id, resetViewFor: conversation.id, editing: history, now: now)
+        try applyLibrary(source, selectedID: chatID, resetViewFor: chatID, editing: history, now: now)
         let id = UUID()
-        generation = ActiveGeneration(id: id, chatID: conversation.id, baseSource: try publishedSource(), path: path)
+        generation = ActiveGeneration(id: id, chatID: chatID, baseSource: try publishedSource(), path: path, plan: plan)
         generationError = nil
         generationTask = Task { @MainActor [weak self] in
             do {
@@ -609,10 +639,18 @@ final class ChatState: ObservableObject {
 
     private func persistGeneration(_ current: ActiveGeneration) throws {
         guard exchange?.source == current.baseSource else { throw ExchangeError.invalid("生成開始後に会話が変更されています") }
-        if current.output.isEmpty { generation = nil; return }
+        if current.output.isEmpty && current.plan == nil { generation = nil; return }
         let now = Date().timeIntervalSince1970 * 1000
         var history: MessageEditing.HistoryState?
-        let source = try MessageEditing.save(in: current.baseSource, chatID: current.chatID, nodeID: nil, viewingPath: current.path, role: "assistant", parts: current.output.parts, mode: .append, newIDs: [UUID().uuidString.lowercased()], now: now, history: editingHistory) { history = $0 }
+        let source: OrderedJSON
+        if let plan = current.plan {
+            let finalized = try MessageEditing.generation(in:current.baseSource,chatID:current.chatID,operation:"finalize",viewingPath:current.path,plan:plan,
+                parts:current.output.parts,now:now,history:editingHistory) { history = $0 }
+            guard finalized.output["status"] == .string("updated") else { throw ExchangeError.invalid("生成先が変更されているため、結果を保存できません") }
+            source = finalized.source
+        } else {
+            source = try MessageEditing.save(in: current.baseSource, chatID: current.chatID, nodeID: nil, viewingPath: current.path, role: "assistant", parts: current.output.parts, mode: .append, newIDs: [UUID().uuidString.lowercased()], now: now, history: editingHistory) { history = $0 }
+        }
         try applyLibrary(source, selectedID: current.chatID, resetViewFor: current.chatID, editing: history, now: now)
         generation = nil
     }
@@ -683,7 +721,7 @@ final class ChatState: ObservableObject {
         let nextEditing = try editing ?? (navigation != nil ? editingHistory : MessageEditing.invalidatingHistory(editingHistory, before: before, after: changed.source))
         try store?.save(SavedChatState(exchange: changed, document: candidate, conversations: views, selectedConversationID: selectedID, style: displayStyle))
         if preserveGeneration, let current = generation {
-            generation = ActiveGeneration(id: current.id, chatID: current.chatID, baseSource: changed.source, path: current.path, output: current.output, running: current.running)
+            generation = ActiveGeneration(id: current.id, chatID: current.chatID, baseSource: changed.source, path: current.path, plan: current.plan, output: current.output, running: current.running)
         } else { invalidateGeneration() }
         branchCandidates = candidates
         conversations = views

@@ -289,6 +289,86 @@ final class RemoteGenerationTests: XCTestCase {
             XCTAssertEqual(FakeRemoteProtocol.requests.first?.value(forHTTPHeaderField: "Authorization"), "Bearer FAKE")
         }
     }
+    func testRegenerateAndContinueReplaceAssistantKeepFollowingNodeAndStopRestartExport() async throws {
+        let local = try store(), state = try state(local,stream:false)
+        var tail = try state.messageDraft(nodeID:nil); tail.text = "Following user"
+        try state.saveMessage(tail,mode:.append,newIDs:["system","user","old-assistant","tail"])
+        let seeded = try XCTUnwrap(state.exchange).source
+        var chats = try seeded.required("chats").array("chats")
+        let treeSeed = try chats[0].required("branchTree"), nodesSeed = try treeSeed.required("nodes")
+        let markedTail = try nodesSeed.required("tail").replacing("xFuture",with:.number("9007199254740993"))
+        chats[0] = chats[0].replacing("branchTree",with:treeSeed.replacing("nodes",with:nodesSeed.replacing("tail",with:markedTail)))
+        try state.importWebData(seeded.replacing("chats",with:.array(chats)).encoded())
+        let before = try XCTUnwrap(state.exchange).source
+        let oldChat = try before.required("chats").array("chats")[0]
+        let tailNode = try oldChat.required("branchTree").required("nodes").required("tail")
+        let tailContent = try before.required("contentStore").required(tailNode.required("contentHash").string("hash")).required("content")
+        let remote = client()
+        FakeRemoteProtocol.packets = [.init(bytes:try fixture().required("responses").required("nonstream").encoded())]
+        let draft = try state.messageGenerationDraft(nodeID:"old-assistant",operation:.regenerate)
+        XCTAssertEqual(try XCTUnwrap(state.exchange).source.encoded(),try before.encoded())
+        try state.startGeneration(draft,record:record(stream:false),client:remote,nodeIDs:["replacement"])
+        try await wait { state.generation == nil }
+        XCTAssertNil(state.generationError); XCTAssertFalse(state.canUndoMessageEdit)
+        let regenerated = try XCTUnwrap(state.exchange).source
+        let tree = try regenerated.required("chats").array("chats")[0].required("branchTree")
+        XCTAssertEqual(tree["activePath"],.array(["system","user","replacement","tail"].map(OrderedJSON.string)))
+        XCTAssertNil(tree["nodes"]?["old-assistant"])
+        XCTAssertEqual(tree["nodes"]?["tail"]?["parentId"],.string("replacement"))
+        XCTAssertEqual(try regenerated.required("contentStore").required(tailNode.required("contentHash").string("hash")).required("content").encoded(),try tailContent.encoded())
+        let body = try OrderedJSON.decode(XCTUnwrap(FakeRemoteProtocol.requests.first?.httpBody))
+        let tailBytes = try tailContent.encoded()
+        XCTAssertFalse(try body.required("messages").array("messages").contains { message in
+            (try? message.required("content").encoded()) == tailBytes
+        })
+        var config = try state.chatConfigDraft(); config.config = config.config.replacing("stream",with:.bool(true)); try state.saveChatConfig(config)
+        let streaming = client()
+        FakeRemoteProtocol.holdLast = true
+        FakeRemoteProtocol.packets = [.init(bytes:Data("data: {\"choices\":[{\"delta\":{\"content\":\"Partial<th\"}}]}\n\n".utf8)),.init(bytes:Data("data: [DONE]\n\n".utf8),delay:0.1)]
+        let next = try state.messageGenerationDraft(nodeID:"user",operation:.fromHere)
+        try state.startGeneration(next,record:record(),client:streaming,nodeIDs:["continued"])
+        try await wait { state.generation?.output.text == "Partial" }
+        state.stopGeneration(); FakeRemoteProtocol.releaseLast?()
+        XCTAssertNil(state.generation)
+        let completed = try XCTUnwrap(state.exchange).source
+        let finalTree = try completed.required("chats").array("chats")[0].required("branchTree")
+        XCTAssertEqual(finalTree["activePath"],.array(["system","user","continued","tail"].map(OrderedJSON.string)))
+        XCTAssertNil(finalTree["nodes"]?["replacement"])
+        XCTAssertEqual(finalTree["nodes"]?["tail"]?["parentId"],.string("continued"))
+        XCTAssertEqual(try finalTree.required("nodes").required("tail").required("xFuture").encoded(),try tailNode.required("xFuture").encoded())
+        let hash = try finalTree.required("nodes").required("continued").required("contentHash").string("hash")
+        XCTAssertEqual(try SyncRecords.resolveContent(hash,store:completed.required("contentStore")),.array([.object([.init(key:"type",value:.string("text")),.init(key:"text",value:.string("Partial<th"))])]))
+        let restarted = ChatState(store:local)
+        XCTAssertNil(restarted.persistenceError)
+        XCTAssertEqual(try restarted.exportWebData(),try state.exportWebData())
+    }
+
+    func testRegenerationPreparationAndFinalSaveFailureKeepSourceAndDraftGuards() async throws {
+        let local = try store(), state = try state(local,stream:false), remote = client()
+        let draft = try state.messageGenerationDraft(nodeID:"message-2",operation:.regenerate)
+        let original = try XCTUnwrap(state.exchange).source.encoded(), disk = try Data(contentsOf:local.fileURL)
+        let directory = local.fileURL.deletingLastPathComponent()
+        defer { try? FileManager.default.setAttributes([.posixPermissions:0o700],ofItemAtPath:directory.path) }
+        try FileManager.default.setAttributes([.posixPermissions:0o500],ofItemAtPath:directory.path)
+        XCTAssertThrowsError(try state.startGeneration(draft,record:record(stream:false),client:remote))
+        XCTAssertEqual(try XCTUnwrap(state.exchange).source.encoded(),original); XCTAssertEqual(try Data(contentsOf:local.fileURL),disk)
+        XCTAssertTrue(FakeRemoteProtocol.requests.isEmpty); XCTAssertNil(state.generation)
+        try FileManager.default.setAttributes([.posixPermissions:0o700],ofItemAtPath:directory.path)
+        FakeRemoteProtocol.packets = [.init(bytes:try fixture().required("responses").required("nonstream").encoded(),delay:0.05)]
+        try state.startGeneration(draft,record:record(stream:false),client:remote)
+        let prepared = try XCTUnwrap(state.exchange).source.encoded(), preparedDisk = try Data(contentsOf:local.fileURL)
+        XCTAssertThrowsError(try state.startGeneration(draft,record:record(stream:false),client:remote))
+        try FileManager.default.setAttributes([.posixPermissions:0o500],ofItemAtPath:directory.path)
+        try await wait { state.generation?.running == false }
+        XCTAssertEqual(state.generation?.output.text,"Answer 日本語")
+        XCTAssertEqual(try XCTUnwrap(state.exchange).source.encoded(),prepared); XCTAssertEqual(try Data(contentsOf:local.fileURL),preparedDisk)
+        try FileManager.default.setAttributes([.posixPermissions:0o700],ofItemAtPath:directory.path)
+        try state.saveGenerationResult()
+        XCTAssertNil(state.generation)
+        XCTAssertThrowsError(try state.startGeneration(draft,record:record(stream:false),client:remote))
+        XCTAssertEqual(try ChatState(store:local).exportWebData(),try state.exportWebData())
+    }
+
     func testStopKeepsPartialAndRejectsDelayedResult() async throws {
         let store = try store()
         let state = try state(store)

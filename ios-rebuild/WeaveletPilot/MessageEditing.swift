@@ -2,6 +2,15 @@ import Foundation
 
 enum MessageSaveMode: String { case overwrite, branch, append, insert }
 
+enum MessageGenerationOperation: String { case regenerate; case fromHere = "continue" }
+struct MessageGenerationDraft {
+    let chatID: String
+    let nodeID: String
+    let operation: MessageGenerationOperation
+    let source: OrderedJSON
+    let path: [String]
+}
+
 enum NodeRemovalOperation: String { case remove, pruneHidden }
 
 struct NodeRemovalDraft {
@@ -136,7 +145,7 @@ enum MessageEditing {
             next = try historyState(output)
         } else {
             output = try SharedWebOperations.call(kind, input)
-            if kind == "treeEdit" { changes = try output.required("changes") }
+            if kind == "treeEdit" || kind == "generationPlan" { changes = try output.required("changes") }
             else if kind == "nodeOptions" {
                 guard output["status"] == .string("updated") || output["status"] == .string("unchanged") else { throw ExchangeError.invalid("メッセージがありません") }
                 changes = try output.required("changes")
@@ -151,6 +160,26 @@ enum MessageEditing {
             onHistory?(HistoryState(raw: raw, canUndo: next.canUndo, canRedo: next.canRedo))
         }
         return (result, output)
+    }
+
+    static func generation(in source: OrderedJSON, chatID: String, operation: String, action: MessageGenerationOperation? = nil,
+                           nodeID: String? = nil, viewingPath: [String], plan: OrderedJSON? = nil, parts: OrderedJSON? = nil,
+                           newIDs: [String]? = nil, now: Double, history: HistoryState?, onHistory: @escaping (HistoryState) -> Void) throws -> (source: OrderedJSON, output: OrderedJSON) {
+        guard let chat = try source.required("chats").array("chats").first(where:{ try $0.required("id").string("id").utf8.elementsEqual(chatID.utf8) }) else { throw ExchangeError.invalid("chat ID") }
+        var target = nodeID
+        if let nodeID, chat["branchTree"] == nil {
+            guard nodeID.hasPrefix("message-"), let index = Int(nodeID.dropFirst(8)), index >= 0, nodeID.utf8.elementsEqual("message-\(index)".utf8) else { throw ExchangeError.invalid("flat node ID") }
+            target = String(index)
+        }
+        return try perform(in:source,chatID:chatID,kind:"generationPlan",history:history,onHistory:onHistory) { boundary in
+            var fields: [JSONField] = [.init(key:"operation",value:.string(operation)),.init(key:"viewingPath",value:.array(viewingPath.map(OrderedJSON.string))),.init(key:"now",value:.number(String(now)))]
+            if let action { fields.append(.init(key:"action",value:.string(action.rawValue))) }
+            if let target { fields.append(.init(key:"nodeID",value:.string(target))) }
+            if let plan { fields.append(.init(key:"plan",value:plan)) }
+            if let parts { fields.append(.init(key:"parts",value:try boundary.parts(parts))) }
+            if let newIDs { fields.append(.init(key:"newIDs",value:.array(newIDs.map(OrderedJSON.string)))) }
+            return fields
+        }
     }
 
     static func remove(in source: OrderedJSON, chatID: String, nodeID: String?, viewingPath: [String],
