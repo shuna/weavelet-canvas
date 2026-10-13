@@ -1,5 +1,13 @@
 # Web / 新iOSの完成条件と証拠
 
+## iOS全体の採用境界監査と先頭文入力（2026-10-13）
+
+採用境界の監査を再構築版の全40 Swift source、C/C++境界・ビルド、共有bundle/描画依存とlicenseへ拡張。[計画の全範囲監査](web-native-commonality-roadmap.md#ios全範囲への監査拡張2026-10-13)に分担・coverage・必要独自の根拠・条件付き依存を記載した。初期load失敗後の新規作成/snapshot適用による原保存file上書きを修正。MalformedSaveの既存ケースへ拒否/元bytes保持/明示置換後の通常作成を追加し成功（`/private/tmp/weavelet-ios-audit-preservation.log`）。独立Astraの修正確認は新規なし。Markdown license欠落、nested依存来歴、到達可能なKaTeX展開DoSは別担当が補完/公式版更新中で、未修正分を受入済みとしない。
+
+先頭文入力は実Webの一時map/key/消費規則を共有helperへ切り出し、Web実callerとnativeから使用。native UIはuser nodeと通常入力欄に配置し、入力は保存・同期しない。共有normalizeでtrimしたprefixを既存localInput/Outputへ渡し、最初のtoken前から表示する。途中再生成では共有plan.prefillKey、末尾再生成/通常送信では共有sticky keyを使用。生成中に別値へ編集されたdraftは残す。
+
+共有関連41 tests・型・生成鮮度成功。native初回4ケース中3成功。残るケースは末尾assistant再生成をmidchatと誤認したfixtureが原因で、実`prepareRegenerateState → resolveRegenerateTarget`は末尾をappendとする。後続userをfixtureへ追加して本当にmidchatを通し、消費対象・未消費sticky保持・保存/再起動の非永続性assertを変えず該当1ケース成功（`/private/tmp/weavelet-prefill-{catalyst,final}.log`）。停止・保存失敗・再試行・late output拒否の既存確認にもprefixを通した。独立Astraはこの機能差分に新規なし。隔離Catalyst実UIでuser行の先頭文欄の展開・編集を確認。実モデルとのprefill手動生成、全UI/AXは今回未確認。実装commit `c3f85dd0`、共有 `502f485a`。
+
 ## ローカル生成接続の実装・検証状況（2026-10-13）
 
 共有入力に加えて、実Webのfallback prompt・stop・出力処理・モデル設定規則を共通化した。nativeは端末専用GGUFコピー、公式llama.cpp/Metal、既存wllama sampling、取消・原子的保存への接続を担当する。モデルIDのUTF8をSHA-256でファイル名にし、同期metadataと実ファイルの存在を混同しない。ファイルは同期snapshotへ入れない。

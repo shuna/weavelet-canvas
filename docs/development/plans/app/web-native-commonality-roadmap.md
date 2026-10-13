@@ -182,3 +182,36 @@ Finish editing/document sharing first, including attribute handling and operatio
 方針・既存構築への反映：Web setupの誤tagとHEAD fallbackを廃止し、正確tag/SHAを検証。既存sourceを削除せず不一致時は停止する。壊れたpatch 0006を修正し、公式GGUFサイズoverflow修正を0007として両環境のsourceへ適用。nativeではsource/patch/build-input/artifact照合とMIT notice同梱を追加した。独自Swift sampling案を採らずwllama C++を利用し、BOS/EOS処理も実Webと同じ呼出条件に修正した。配布WASMの再生成完了前にWebを修正済みとは扱わない。
 
 公式根拠：[llama.cpp](https://github.com/ggml-org/llama.cpp)、[wllama](https://github.com/ngxson/wllama)、[wllama releases](https://github.com/ngxson/wllama/releases)、[GGUF公式修正](https://github.com/ggml-org/llama.cpp/commit/4e5b83b226919c146fbfa754641a6772bcb2d722)、[CVE-2026-33298 advisory](https://github.com/ggml-org/llama.cpp/security/advisories/GHSA-96jg-mvhq-q7q7)。調査時には両upstreamとも非archive・MIT・保守継続中だったが、古い固定版の安全性とは別判定である。
+
+
+### iOS全範囲への監査拡張（2026-10-13）
+
+ユーザー指定により、上記ローカル推論だけでなく、再構築版`ios-rebuild`の全40 Swift source、NativeLlama C/C++接続・build、Xcode project/Info/Resources、同期とMarkdownの共有bundle・生成手順・実際に取り込まれるnpm依存まで監査範囲を広げた。独立AstraがI/O・保存・同期・認証/通信/暗号、独立SolがUI/ドメイン、別担当が生成物/依存/licenseを分担した。旧`ios2`は依存持込み有無の確認対象で、新PBXに旧source/外部SPM参照はない。旧版全sourceの品質監査まで完了したという意味ではない。
+
+| 領域と確認したsource | 境界・採用判定 |
+| --- | --- |
+| `MessageEditing`, `MessageAttributes`, `NodeOptions`, `BranchNavigation`, `ChatLibrary`, `ChatFolders`, `ChatSearch`, `ChatConfig` | 編集・属性・分岐・一覧・検索・設定の規則は実Web共有元を使用。SwiftはID/引数/結果の変換・型付け・状態公開。不要な別アルゴリズムや追加SDKを要する具体例なし |
+| `Conversation`, `LocalGeneration`, `Samples` | アプリ状態、Task取消/遅延結果拒否、端末GGUFファイル、サンプル表示はnative責務。Composer/local要求と出力は共有コード。初期保存読込失敗後の上書き問題を発見し下記修正 |
+| `WeaveletPilotApp`, `ChatConfigView`, `ChatSearchView`, `NodeOptionsView`, `ProviderModelsView`, `GoogleSyncSettingsView` | SwiftUIの画面と操作配置はnative固有。画面の存在だけで全同期providerや全機能が実装済みとは扱わない |
+| `MarkdownTextView`, `AttachmentImageView`, `ImageInputView` | WebのReact/Markdown描画をWKWebViewで再利用。画像入出力はImageIO/PhotosUI。別parser・画像SDK追加は不要 |
+| `OrderedJSON`, `OrderedJSONChanges`, `WebExchange`, `ChatImport`, `ChatExport` | JSON原数値・key順・未知属性・UTF8識別の保持は必要独自境界。標準JSON/Doubleへの置換では契約を満たさない。取込/書出しの規則はWeb共有 |
+| `LocalStateStore`, `SyncDocument`, `SyncStateStore`, `SyncRecords`, `SyncSession`, `GoogleSyncController` | atomic保存、baseline照合、同期公開journal回復はアプリ固有の保全。文書変換/差分復元は共有。新DB/同期SDKを追加して置き換える根拠なし |
+| `SyncCrypto`, `RemoteCredentials` | AES-GCMはCryptoKit、PBKDF2はCommonCrypto、乱数/鍵保存はSecurity/Keychain。独自部分はWeb互換salt/nonce/AAD/envelopeと接続であり、独自暗号算法ではない |
+| `GoogleAuthentication`, `DriveTransport`, `RemoteGeneration`, `ProviderModels` | OS認証画面/URLSession＋必要なOAuth/Drive/SSE接続。生成要求・結果の意味処理と一覧整形は共有。Googleは公式iOS SDKを推奨するが現方式も公式native OAuth仕様の範囲。PKCE/state/refresh等の保守は本アプリの責任で、全面的にOS任せとは記載しない |
+| `NativeGzip`, `SyncCompression` | OS zlibと既存LZStringによる形式互換。CloudKit圧縮は互換fixtureの定義であり、現UIでCloudKit同期採用済みの証拠はない |
+| `LocalLlama`, `NativeLlama/*` | 先の公式C API/既存wllama C++監査と修正済み生成物の証拠を再利用。Catalyst arm64の確認をiOS実機や全lowbit形式の保証へ拡張しない |
+
+外部依存の判断：同期bundleにはlodash 4.17.21、diff-match-patch 1.0.5、@babel/runtime 7.21.0、i18next 22.4.11が実際に含まれ、LZStringは別resource。MarkdownにはReact/ReactDOM 18.2、react-markdown 8.0.5、root KaTeX 0.16.4とrehype-katex配下0.15.6、highlight.js 11.7等が含まれる。npm全体をアプリへ同梱する方式ではない。React/react-markdown/KaTeX/lodash/i18next upstreamの活動と、採用中の固定版の安全性は別に扱う。OS framework全OS版CVEや全異常入力の網羅検証は今回の証拠に含めない。
+
+`diff-match-patch`はGoogle公式由来だが、[Google原repo](https://github.com/google/diff-match-patch)は2024-08-05 archived、[npm配布元](https://github.com/JackuB/diff-match-patch)の最終pushは2023年。保守継続中とは分類しない。既存保存deltaの構文と復元挙動を維持するため条件付きで継続し、将来の置換には既存patch適用結果の保証が必要。保守停止を隠して「公式だから安全」とせず、理由なく別差分算法や新依存へ移さない。
+
+具体的修正：初期保存の読込失敗後、createChat/applyFolderが空の文書から`applyLibrary`経由で既存fileを上書きできた。`applyLibrary`と公開`applySnapshot`の保存前に失敗状態の拒否を追加し、明示import/replaceのみ保存成功後に解除する。既存MalformedSaveテストへcreate/folder/snapshot拒否、元bytes保持、明示置換後create成功を追加して成功。独立Astraの限定確認は新規なし。通常style変更はexchange/documentがない時に保存しない既存仕様を維持した。
+
+license監査ではMarkdown生成器がLICENSE不在を黙って省略しており、追跡100package中24がNOTICE未記載だった。実metafileを再確認して欠落24すべてがruntime入力であると確定し、固定版公式licenseを照合して補完中。新しい管理基盤や依存は追加しない。依存advisory照合と最終配布noticeの確認結果は完成条件の台帳へ追記する。
+
+検索ごとのbundle読込/全件走査や生成中のプロセス終了は運用上の懸念として残るが、実測・再現なしでcacheや独自indexを追加しない。全機能の動的試験や実Googleアカウント接続を今回の静的全範囲監査と混同しない。[Google native OAuth仕様](https://developers.google.com/identity/protocols/oauth2/native-app)、[Apple認証セッション](https://developer.apple.com/documentation/authenticationservices/aswebauthenticationsession)、[Apple AES.GCM](https://developer.apple.com/documentation/cryptokit/aes/gcm)。
+
+
+依存安全性の追加確認：KaTeXのUnicode添字/edefによるmaxExpand迂回は、`MarkdownTextView → shared/markdown/host → MarkdownRenderer`の未信頼会話数式から到達する。trust=falseでも展開DoSの対象であり更新必須。rootだけでなくrehype-katex配下0.15.6も公式0.18.2へ限定更新し、CSS/fontsを含め再生成する方針とした。現generatorがnested node_modulesパスを潰す来歴不備も修正対象。既存React/Markdown全体の入替えや独自数式フィルターは追加しない。[Unicode添字advisory](https://github.com/KaTeX/KaTeX/security/advisories/GHSA-cvr6-37gx-v8wc)、[edef advisory](https://github.com/KaTeX/KaTeX/security/advisories/GHSA-64fm-8hw2-v72w)。
+
+lodashのtemplate/unset/omitとBabelのwrapRegExpにも採用版のadvisoryがあるが、今回の実共有入口（isEqual等）・bundle入力には該当呼出しなし。現exploitと断定せず、公式修正版への限定更新を既存の同期/描画bundle再生成とまとめて評価する。KaTeXのprotocol/includegraphics/htmlDataは既定trust=falseで通常経路を制限し、[238p](https://github.com/KaTeX/KaTeX/security/advisories/GHSA-238p-pmpm-9mq7)は既存prototype汚染が前提で成立未確認。これらの静的条件と、更新後の確認結果を分けて記録する。
