@@ -358,3 +358,8 @@ WK実証ではORTのmjs/WASMも[公式配布手順](https://onnxruntime.ai/docs/
 UIはWebの会話上部（左モデル・右表示）、役割見出し/本文/末尾操作、composerのまとまりを優先してiOSへ寄せた。狭幅では操作Menuへの集約で44ptを維持し、時刻・強制カプセル・余白目的の固定高さは設けない。任意の吹き出し表示を保持する。広幅Catalyst実表示と独立Astraは確認済み、狭幅/最大文字サイズ/VoiceOver/iPhone、直接navigationやモデルdropdown等の残る配置差は完成扱いしない。
 
 分類器は既存Web workerをWKClassifierHostで実行し、モデルファイルの供給・OSフォルダー取込・取消だけnative境界へ置いた。nested OPFSとrequired .part判定は実Web側を修正/共有した。新たなSwift分類規則・別言語移植・persisted rootを増やさない。次は実Web Local/Hybrid callerを根拠として共有localModeration/localPolicyへ本番consumerを接続する。詳細証拠と未確認範囲は完成ledgerの同日節を参照する。
+
+
+### 2026-10-14：自動Local/Hybridの共有元とnative接続
+
+実Webのmoderationモデル選択を抽出し、Web2callerとnativeで同じ元を利用する。既存threshold/policy/結果mutatorもそのまま共有し、Swiftはファイル供給・WK lifetime・通信/資格情報・atomic保存の接続だけを担当する。Webの準備失敗によるfallback未到達も同じ機能群内で局所修正した。nativeの方式Picker/Hybrid設定を接続し、任意の未知設定値を保持する。Catalyst境界と独立Astraは確認済み、実モデル/クラウド/全画面の未証明は完成ledgerへ残す。全機能再現と全I/O/実同期互換の最終条件は縮小しない。

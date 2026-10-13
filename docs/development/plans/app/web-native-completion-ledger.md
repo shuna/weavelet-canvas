@@ -821,3 +821,21 @@ bd77e18e/45294bb4で会話タイトル下にWeb ChatViewTabsと同じ左モデ�
 現在のlockStateを再確認しpasscodeRequired=falseを得たため、監査済み前段を署名ビルド・インストール・起動した（/private/tmp/weavelet-air-ui-classifier-{build,install,launch}.log）。最初のbuildは6439da7d時点で79306cfb前に完了。続く実機testでは79306cfbまでのnative側をビルドし、WKClassifierHostTests/testOfflineWorkerPipelineWithTrustedSyntheticFixtureが1件成功（/private/tmp/weavelet-air-classifier-runtime-test.log）。シミュレータは使わない。test後の通常起動も成功（/private/tmp/weavelet-air-ui-classifier-after-test-launch.log）。
 
 同テストは実Web Worker・HF pipeline・local WASM資産を使い、英語/日本語+emoji+NFD/空白/長文の4入力に対し2labelとscore、Worker到達時のUTF8/UTF16、unload後のWorker終了を確認する。299B constantモデルのためtokenizer内容同値、任意モデルの精度・メモリ/省電力を証明しない。テストstoreはnilで通常データを書き換えない。実機の見た目・IME/VoiceOver・実クラウド同期をこの実行から推定しない。本番auto Local/Hybrid consumerは別の進行中機能一式として未完了。
+
+
+## 自動Local/Hybrid安全性判定の本番接続（2026-10-14）
+
+6439da7dで実Web runLocalModeration/useEvaluationのanalysis優先→moderationの既存選択をpure helperへ抽出し、同じevaluation bridgeをnativeで使用した。空ID、無効設定、未知metadataを変えない。GGUF analysisがmoderationを隠す既存仕様をnativeだけで変更しない。665b6ac4ではWebのmodel preparation失敗がlocalSafety catchの外へ飛び共有fallback policyへ届かない原因を修正。準備失敗時にlocal分類/qualityを再試行せず、Local/Hybridの既存remote safety fallbackを使用し、取消/古いticketは通信・保存しない。qualityの勝手なremote代替やmanual経路の変更はない。
+
+a9c2cadaでNativeLocalModerationから既存WKClassifierHost→共有localModeration/localPolicy→autoApplyへ接続した。モデルbytesは背景directoryEntries、snapshot/modelファイル世代を読込/推論の前後で照合する。Task取消・古い入力・ファイル変更はfallbackを拒否。Local結果をatomic保存後に共有policyでremote要否を決め、必要時だけOpenAI credentialを取得する。Local保存失敗時にremoteを開始せず、remote失敗後も保存済みLocal結果は保持する。UIの方式Picker/Hybrid safe時のremote設定は既存setterへ接続し、未知方式を表示保持。79306cfbで宣言taskを持つ既存multi-file定義も2roleの選択候補へ出す。manual safetyは実Webどおりremote、quality規則は既存のまま。
+
+共有6件・Web関連18件・単独型検査成功を再利用（/private/tmp/weavelet-moderation-selector-{test,tsc}.log、/private/tmp/weavelet-evaluation-fallback-{test,tsc}.log）。担当Catalyst新境界5件と既存evaluation15件成功、最初のsource全体不変assertはapplySnapshotが評価rootもsourceへ投影する実処理に反していたため、変更対象evaluationResults以外の全fieldを厳密比較へ訂正し新5件を最終runで確認した（/tmp/weavelet-native-auto-local-boundary-final.log）。親統合では成功/保存失敗代表2件のみ成功（/private/tmp/weavelet-native-auto-local-union-test.log）。境界testは推論注入であり、実WK7件とAir1件の実行証拠とは区別する。
+
+独立Astraの機能一式監査は新規P2以上なし。最終親bundle鮮度2件・差分確認成功。未変更の全業務・全暗号・全同期suiteを反復しない。実分類モデル精度、任意モデル取得・選択の全UI、実オンラインprovider/クラウド、実機の本consumer使用はこの時点では未確認。旧Google native OAuth client未登録、CloudKit実機DevelopmentとWebProductionの相互運用未証明を残す。全体ゴールを完了扱いしない。
+
+
+51e82374の新代表1件は推論注入を使用せず、テストbundleの299B→端末model directory→本番runAutoSafety/classifier:nil→実WK→共有localModeration→autoApply保存→store再読込→SyncRecords往復を通した。Catalyst担当1件成功（/tmp/weavelet-native-auto-local-real-wk-test.log）。Localのblock-candidateでも共有policyどおり認証読込/remote要求なし、rawScoresの全label順/score/Local情報とその他roots/sourceを保持した。ローカル保存の精密値は厳密保持し、recordsでは既存Web Number変換による丸めを明示assertし、records canonical往復の一致も確認する。精密値が同期でも完全byte保持されるという証明へ拡張しない。
+
+本consumer a9c2cada版もAir署名build・install・通常launch成功（/private/tmp/weavelet-air-auto-local-{build,install,launch}.log）。設定PickerのCatalyst隔離実画面はcgWindowNotFoundで未取得。起動したWeaveletLocalSettingsCheck cloneはprocessを確認したため、終了済みとは扱わない。通常storeを使わないFAKE cloneで、今回UI操作・生成は行っていない。
+
+同代表経路のAir実機1件も成功（/private/tmp/weavelet-air-auto-local-real-path-test.log、Executed 1/0 failures）。実WKから保存・再読込・recordsまでの本consumer接続を実機で確認した。test後の通常launch成功（/private/tmp/weavelet-air-auto-local-final-launch.log）。精密値のrecords期待はSyncRecords.swift:25の標準JSON.parse/stringifyと実Web src/store/storage/google/records.ts:83–87のNumber化に基づく。丸めをローカル保存の期待へ持ち込まず、外部同期の既存制約として区別した。
