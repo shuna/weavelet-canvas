@@ -28,6 +28,11 @@ PATCHES_DIR="$REPO_ROOT/vendor/wllama-patches"
 LOWBITQ_SETUP="$REPO_ROOT/vendor/wllama/lowbit-q/setup.sh"
 WLLAMA_VERSION="$(cat "$REPO_ROOT/vendor/wllama/lowbit-q/WLLAMA_VERSION" | tr -d '[:space:]')"
 WLLAMA_REPO="https://github.com/ngxson/wllama.git"
+WLLAMA_COMMIT="5e63e3b226a077b33dc7c608f1fe630f3d21f539"
+if [ "$WLLAMA_VERSION" != "2.3.7" ]; then
+  echo "ERROR: expected WLLAMA_VERSION 2.3.7." >&2
+  exit 1
+fi
 
 echo "=== scripts/wllama/setup.sh ==="
 echo "  wllama version:    v$WLLAMA_VERSION"
@@ -38,14 +43,19 @@ echo ""
 # ---------------------------------------------------------------------------
 # Step 1: Clone wllama at pinned version
 # ---------------------------------------------------------------------------
-if [ -d "$FORK_DIR" ]; then
-  echo "[1/3] Source directory exists, cleaning..."
-  rm -rf "$FORK_DIR"
+if [ -e "$FORK_DIR" ] || [ -L "$FORK_DIR" ]; then
+  existing_commit=$(git -C "$FORK_DIR" rev-parse HEAD 2>/dev/null || true)
+  echo "ERROR: source already exists (HEAD: ${existing_commit:-unknown}; expected: $WLLAMA_COMMIT)." >&2
+  echo "Preserving existing patches; use a separate checkout for setup." >&2
+  exit 1
 fi
 
 echo "[1/3] Cloning wllama v$WLLAMA_VERSION into vendor/wllama-src/ ..."
-git clone --depth 1 --branch "v$WLLAMA_VERSION" "$WLLAMA_REPO" "$FORK_DIR" 2>/dev/null \
-  || git clone --depth 1 "$WLLAMA_REPO" "$FORK_DIR"
+git clone --depth 1 --branch "v$WLLAMA_VERSION" "$WLLAMA_REPO" "$FORK_DIR"
+if [ "$(git -C "$FORK_DIR" rev-parse HEAD)" != "$WLLAMA_COMMIT" ]; then
+  echo "ERROR: cloned revision does not match $WLLAMA_COMMIT; source preserved for inspection." >&2
+  exit 1
+fi
 
 cd "$FORK_DIR"
 if [ -f ".gitmodules" ]; then

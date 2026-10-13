@@ -48,7 +48,7 @@ diff --git a/llama.cpp/ggml/src/ggml.c b/llama.cpp/ggml/src/ggml.c
 diff --git a/llama.cpp/src/llama-graph.cpp b/llama.cpp/src/llama-graph.cpp
 --- a/llama.cpp/src/llama-graph.cpp
 +++ b/llama.cpp/src/llama-graph.cpp
-@@ -487,11 +487,17 @@
+@@ -487,10 +487,16 @@
 
      inputs.clear();
 

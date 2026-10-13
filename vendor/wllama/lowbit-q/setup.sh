@@ -35,6 +35,11 @@ REPO_ROOT="$(cd "$SCRIPT_DIR/../../.." && pwd)"
 FORK_DIR="$REPO_ROOT/vendor/wllama-src"
 WLLAMA_VERSION="$(cat "$SCRIPT_DIR/WLLAMA_VERSION" | tr -d '[:space:]')"
 WLLAMA_REPO="https://github.com/ngxson/wllama.git"
+WLLAMA_COMMIT="5e63e3b226a077b33dc7c608f1fe630f3d21f539"
+if [ "$WLLAMA_VERSION" != "2.3.7" ]; then
+  echo "ERROR: expected WLLAMA_VERSION 2.3.7." >&2
+  exit 1
+fi
 SKIP_CLONE="${WLLAMA_SKIP_CLONE:-0}"
 
 echo "=== vendor/wllama/lowbit-q setup ==="
@@ -53,14 +58,19 @@ if [ "$SKIP_CLONE" = "1" ]; then
     exit 1
   fi
 else
-  if [ -d "$FORK_DIR" ]; then
-    echo "[1/5] Source directory exists, cleaning..."
-    rm -rf "$FORK_DIR"
+  if [ -e "$FORK_DIR" ] || [ -L "$FORK_DIR" ]; then
+    existing_commit=$(git -C "$FORK_DIR" rev-parse HEAD 2>/dev/null || true)
+    echo "ERROR: source already exists (HEAD: ${existing_commit:-unknown}; expected: $WLLAMA_COMMIT)." >&2
+    echo "Preserving existing patches; use a separate checkout for setup." >&2
+    exit 1
   fi
 
   echo "[1/5] Cloning wllama v$WLLAMA_VERSION..."
-  git clone --depth 1 --branch "v$WLLAMA_VERSION" "$WLLAMA_REPO" "$FORK_DIR" 2>/dev/null \
-    || git clone --depth 1 "$WLLAMA_REPO" "$FORK_DIR"
+  git clone --depth 1 --branch "v$WLLAMA_VERSION" "$WLLAMA_REPO" "$FORK_DIR"
+  if [ "$(git -C "$FORK_DIR" rev-parse HEAD)" != "$WLLAMA_COMMIT" ]; then
+    echo "ERROR: cloned revision does not match $WLLAMA_COMMIT; source preserved for inspection." >&2
+    exit 1
+  fi
 
   # wllama uses llama.cpp as a submodule
   cd "$FORK_DIR"
@@ -68,6 +78,12 @@ else
     echo "    Initializing llama.cpp submodule..."
     git submodule update --init --depth 1
   fi
+fi
+
+# The wrapper may have already applied base patches; verify without resetting them.
+if [ "$(git -C "$FORK_DIR" rev-parse HEAD)" != "$WLLAMA_COMMIT" ]; then
+  echo "ERROR: source revision does not match $WLLAMA_COMMIT; no patches applied." >&2
+  exit 1
 fi
 
 # -----------------------------------------------------------------------
