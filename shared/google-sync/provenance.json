@@ -97,7 +97,7 @@
     "src/utils/branchNavigation.ts": "9d2929d918ddb5645e278989c809bbd6a89f00456f888f3d669a73fb8db904a6",
     "src/store/navigation-slice.ts": "166890cd5817fd39c9ae4d73da0954dc05081d2b6dbd05eb272c537d9cd01c0f",
     "src/types/evaluation.ts": "4003aabc888d815667259dd49d9efb74a599281e9970841782893d2307eb415c",
-    "src/utils/evaluationState.ts": "9dfecfd104425d3788222624e1deffb7b7b270cb3a47108c362048170df72c9d",
+    "src/utils/evaluationState.ts": "bd7b651bb6df9f27960235b37af02b28a3a08f2c3b41ff61a4d97637b64170bd",
     "src/store/evaluation-slice.ts": "17ea8dac39f8f06cb02f1fbf1f6056cc96d4672256b80b42afb90f4443739ec8",
     "src/utils/localModelRole.ts": "29491f084ef6ce804a416749b115e6b63a772a735ec2d4fbea21c42e75367816",
     "src/store/local-model-slice.ts": "96228dcfd3472550069d0a6803d4a2267c0f2c6f9580f7d77ba4251c9630ea86",
@@ -268,7 +268,7 @@
     "src/utils/evaluationCore.ts": "74e675aabbb05628328ebf5ae49c464f212b6b4a40ad7158415c693c815634d6",
     "src/utils/evaluationContextCore.ts": "77c0946260540461fb041f82947b5c47d91b58e9fdfc71d0e139a35529dcf4fd",
     "src/utils/evaluationAutoCore.ts": "509166a974da3caf0a47d9fd1788c4abdf3a0d27ce8f8bf1177748255cfca533",
-    "src/utils/evaluationState.ts": "9dfecfd104425d3788222624e1deffb7b7b270cb3a47108c362048170df72c9d",
+    "src/utils/evaluationState.ts": "bd7b651bb6df9f27960235b37af02b28a3a08f2c3b41ff61a4d97637b64170bd",
     "shared/google-sync/evaluation.ts": "2e7b19e4ab9fdb1e19c643858272cdcdad5940e4b94d0daf037163c72757865f",
     "src/utils/localModelRole.ts": "29491f084ef6ce804a416749b115e6b63a772a735ec2d4fbea21c42e75367816",
     "shared/google-sync/localModelRole.ts": "8ce5bc1651e340c87134a35f4fbf149af159c296ca924a874c95b76b51dc96a5",
@@ -316,5 +316,5 @@
     "lz-string/package.json": "f0990a8fd6c347d66c1469d18918f5460d372c6b3af8a0a5737dfd34c809e20d",
     "lz-string/LICENSE": "433fc9dfe659dbfb1e91eed8351f13651e97bfa3ac6d03394c3d63f61d4bbc80"
   },
-  "bundleSHA256": "61662d8a1300dd8845b7c4e50b349f06b442489fcdaff0e9a1b0e8f5320e317c"
+  "bundleSHA256": "ac8835715d700285a893c087c1ebc58e9d4ab0cd43adfe98c383198b7cf8bce4"
 }

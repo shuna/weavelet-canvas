@@ -14,6 +14,7 @@ export type EvaluationState = {
 };
 export type EvaluationAction =
   | {type: 'set-result'; key: string; phase: 'pre-send'|'post-receive'; dimension: 'safety'|'quality'; result: SafetyCheckResult | QualityEvaluationResult; context: EvaluationContextInfo}
+  | {type: 'setAutoResult'; key: string; result: EvaluationResult}
   | {type: 'setResult'; key: string; result: EvaluationResult}
   | {type: 'removeResult'; key: string}
   | {type: 'setSetting'; key: keyof EvaluationSettings; value: EvaluationTriggerMode}
@@ -21,6 +22,20 @@ export type EvaluationAction =
   | {type: 'setHybridRemoteOnSafe'; value: boolean}
   | {type: 'setSafetyThreshold'; key: keyof ModerationCategories; value: SafetyCategoryThreshold}
   | {type: 'setQualityThreshold'; key: keyof QualityScores; value: QualityAxisThreshold};
+
+export function applyAutoEvaluationResult(existing: EvaluationResult | undefined, incoming: EvaluationResult): EvaluationResult {
+  const entry = {...existing, phase: incoming.phase};
+  if (incoming.safety !== undefined) {
+    entry.safety = incoming.safety;
+    delete entry.safetyContext;
+  }
+  if (incoming.quality !== undefined) {
+    entry.quality = incoming.quality;
+    delete entry.qualityContext;
+  }
+  if (incoming.localSafety !== undefined) entry.localSafety = incoming.localSafety;
+  return entry;
+}
 
 export function mutateEvaluationState<T extends EvaluationState>(state: T, action: EvaluationAction): T {
   switch (action.type) {
@@ -32,6 +47,8 @@ export function mutateEvaluationState<T extends EvaluationState>(state: T, actio
       return {...state, evaluationResults: {...state.evaluationResults, [action.key]: entry}};
     }
     case 'setResult': return { ...state, evaluationResults: { ...state.evaluationResults, [action.key]: action.result } };
+    case 'setAutoResult': return { ...state, evaluationResults: { ...state.evaluationResults,
+      [action.key]: applyAutoEvaluationResult(state.evaluationResults[action.key], action.result) } };
     case 'removeResult': {
       if (!(action.key in state.evaluationResults)) return state;
       const evaluationResults = { ...state.evaluationResults };

@@ -91,7 +91,7 @@ final class ConversationEvaluationTests: XCTestCase {
         let source = try source()
         let defaults = try SharedWebOperations.call("evaluation",.object([.init(key:"operation",value:.string("defaults"))])).required("evaluationSettings")
         let state = try state().replacing("evaluationSettings",with:defaults.replacing("qualityPreSend",with:.string("auto")))
-            .replacing("evaluationResults",with:try json(#"{"chat:assistant:pre-send":{"phase":"pre-send","safety":{"xLarge":9007199254740993},"xFuture":1.234567890123456789},"chat:assistant:post-receive":{"phase":"post-receive","untouched":true}}"#))
+            .replacing("evaluationResults",with:try json(#"{"chat:assistant:pre-send":{"phase":"pre-send","safety":{"xLarge":9007199254740993},"safetyContext":{"scope":"full-context"},"qualityContext":{"scope":"single"},"localSafety":{"screening":"safe"},"xFuture":1.234567890123456789},"chat:assistant:post-receive":{"phase":"post-receive","untouched":true}}"#))
         let content = try json(#"[{"type":"text","text":"質問"}]"#)
         let prepared = try XCTUnwrap(ConversationEvaluation.prepareAuto(source:source,state:state,chatID:"chat",nodeID:"assistant",
             phase:"pre-send",userContent:content,legacy:RemoteCredentialRecord(),files:nil,readProviderCredential:read))
@@ -101,6 +101,13 @@ final class ConversationEvaluationTests: XCTestCase {
         let updated = try ConversationEvaluation.autoApply(result,dimension:"quality",prepared:prepared,source:source,state:state)
         XCTAssertEqual(updated["evaluationResults"]?[prepared.key]?["quality"]?["future"],.number("9007199254740993"))
         XCTAssertEqual(updated["evaluationResults"]?[prepared.key]?["safety"]?["xLarge"],.number("9007199254740993"))
+        XCTAssertNil(updated["evaluationResults"]?[prepared.key]?["qualityContext"])
+        XCTAssertEqual(updated["evaluationResults"]?[prepared.key]?["safetyContext"]?["scope"],.string("full-context"))
+        XCTAssertEqual(updated["evaluationResults"]?[prepared.key]?["xFuture"],.number("1.234567890123456789"))
+        let local = try json(#"{"screening":"warn","raw":9007199254740993}"#)
+        let withLocal = try ConversationEvaluation.autoApply(local,dimension:"localSafety",prepared:prepared,source:source,state:updated)
+        XCTAssertEqual(withLocal["evaluationResults"]?[prepared.key]?["localSafety"]?["raw"],.number("9007199254740993"))
+        XCTAssertEqual(withLocal["evaluationResults"]?[prepared.key]?["quality"]?["future"],.number("9007199254740993"))
         XCTAssertEqual(updated["evaluationResults"]?["chat:assistant:post-receive"]?["untouched"],.bool(true))
         let modifiedStore = try source.required("contentStore").replacing("u",with:.object([.init(key:"content",value:try json(#"[{"type":"text","text":"changed"}]"#)),.init(key:"refCount",value:.number("1"))]))
         XCTAssertFalse(try ConversationEvaluation.autoIsCurrent(prepared,source:source.replacing("contentStore",with:modifiedStore),state:state))
@@ -262,6 +269,7 @@ final class ConversationEvaluationTests: XCTestCase {
         let safeSource = source.replacing("chats",with:.array([chat.replacing("config",with:try json(#"{"model":"fake-model","providerId":"openrouter"}"#))]))
         let defaults = try SharedWebOperations.call("evaluation",.object([.init(key:"operation",value:.string("defaults"))])).required("evaluationSettings")
         let state = try state().replacing("evaluationSettings",with:defaults.replacing("safetyPostReceive",with:.string("auto")))
+            .replacing("evaluationResults",with:try json(#"{"chat:assistant:post-receive":{"phase":"post-receive","safetyContext":{"scope":"single"},"future":9007199254740993}}"#))
         let prepared = try XCTUnwrap(ConversationEvaluation.prepareAuto(source:safeSource,state:state,chatID:"chat",nodeID:"assistant",
             phase:"post-receive",userContent:json(#"[{"type":"text","text":"質問"}]"#),
             assistantContent:json(#"[{"type":"text","text":"回答"}]"#),legacy:RemoteCredentialRecord(),files:nil,readProviderCredential:read))
@@ -274,6 +282,8 @@ final class ConversationEvaluationTests: XCTestCase {
         XCTAssertEqual(result["categoryScores"]?["violence"],.number("0.1234567890123456789"))
         let updated = try ConversationEvaluation.autoApply(result,dimension:"safety",prepared:prepared,source:safeSource,state:state)
         XCTAssertEqual(updated["evaluationResults"]?[prepared.key]?["safety"]?["categoryScores"]?["violence"],.number("0.1234567890123456789"))
+        XCTAssertNil(updated["evaluationResults"]?[prepared.key]?["safetyContext"])
+        XCTAssertEqual(updated["evaluationResults"]?[prepared.key]?["future"],.number("9007199254740993"))
     }
 
     func testAutoPostUsesFinalAssistantAndRejectsChangedAssistant() throws {

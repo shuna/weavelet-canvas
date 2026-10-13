@@ -13,6 +13,7 @@ import { runSafetyCheck, runQualityEvaluation } from '@api/evaluation';
 import { runLocalModeration, runLocalQualityEvaluation } from '@api/localEvaluation';
 import { localSafetyPolicy } from '@utils/localEvaluationCore';
 import { autoEvaluationPlan } from '@utils/evaluationAutoCore';
+import { applyAutoEvaluationResult } from '@utils/evaluationState';
 import {
   createLocalModelOwner,
   prepareModelsForExecution,
@@ -155,7 +156,8 @@ async function runEvaluationForPhase(
     }
 
     if (isAiTaskCurrent(ticket) && (result.safety || result.quality || result.localSafety)) {
-      useStore.getState().setEvaluationResult(key, result);
+      const current = useStore.getState();
+      current.setEvaluationResult(key, applyAutoEvaluationResult(current.evaluationResults[key], result));
     }
   } finally {
     unregisterOwner?.();

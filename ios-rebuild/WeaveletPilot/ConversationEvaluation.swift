@@ -433,15 +433,15 @@ extension ConversationEvaluation {
 
     static func autoApply(_ result: OrderedJSON, dimension: String, prepared: AutoPrepared, source: OrderedJSON, state: OrderedJSON) throws -> OrderedJSON {
         guard try autoIsCurrent(prepared,source:source,state:state) else { throw ExchangeError.invalid("自動評価対象が更新されました") }
+        guard ["safety", "quality", "localSafety"].contains(dimension) else { throw ExchangeError.invalid("評価項目") }
         let previous = state["evaluationResults"]?[prepared.key] ?? .object([])
         var boundary = SharedWebProjection()
         let projected = OrderedJSON.object(try previous.object("評価結果").map { .init(key:$0.key,value:try boundary.reference($0.value)) })
         let input = OrderedJSON.object([.init(key:"operation",value:.string("mutate")),
             .init(key:"state",value:.object([.init(key:"evaluationResults",value:.object([.init(key:prepared.key,value:projected)]))])),
-            .init(key:"action",value:.object([.init(key:"type",value:.string("set-result")),.init(key:"key",value:.string(prepared.key)),
-                .init(key:"phase",value:.string(prepared.phase)),.init(key:"dimension",value:.string(dimension)),
-                .init(key:"result",value:try boundary.reference(result)),.init(key:"context",value:.object([.init(key:"scope",value:.string("single")),
-                    .init(key:"omittedMode",value:.string("respect-omitted"))]))]))])
+            .init(key:"action",value:.object([.init(key:"type",value:.string("setAutoResult")),.init(key:"key",value:.string(prepared.key)),
+                .init(key:"result",value:.object([.init(key:"phase",value:.string(prepared.phase)),
+                    .init(key:dimension,value:try boundary.reference(result))]))]))])
         let changes = try SharedWebOperations.call("evaluation",input).required("changes")
         let raw = OrderedJSON.object([.init(key:"evaluationResults",value:.object([.init(key:prepared.key,value:previous)]))])
         let updated = try OrderedJSONChanges.apply(changes,to:raw,opaque:boundary.opaque)
