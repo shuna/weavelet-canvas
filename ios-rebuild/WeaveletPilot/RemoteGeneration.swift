@@ -110,6 +110,53 @@ enum RemoteRequest {
 
 }
 
+enum AuxiliaryRemoteRequest {
+    static func providerSettings(state: OrderedJSON, fallbackEndpoint: String) throws -> OrderedJSON {
+        let favorites = try (state["favoriteModels"] ?? .array([])).array("favoriteModels").map { item in
+            OrderedJSON.object(["modelId", "providerId"].compactMap { key in item[key].map { .init(key:key,value:$0) } })
+        }
+        let providers = try (state["providers"] ?? .object([])).object("providers").map { field in
+            JSONField(key:field.key,value:.object(["id", "endpoint"].compactMap { key in field.value[key].map { .init(key:key,value:$0) } }))
+        }
+        return .object([
+            .init(key:"favoriteModels",value:.array(favorites)),
+            .init(key:"providers",value:.object(providers)),
+            .init(key:"fallbackProvider",value:.object([.init(key:"endpoint",value:.string(fallbackEndpoint))]))
+        ])
+    }
+    static func credential(selection: OrderedJSON, state: OrderedJSON, legacy: RemoteCredentialRecord,
+                           read: ProviderModels.CredentialReader) throws -> (record: RemoteCredentialRecord, url: URL) {
+        let providerID = try selection["credentialProviderId"]?.string("provider ID")
+        let config = OrderedJSON.object(providerID.map { [.init(key:"providerId",value:.string($0))] } ?? [])
+        let record = try ProviderModels.generationCredential(config:config,state:state,legacy:legacy,read:read)
+        let url = try record.settings.validatedURL()
+        let endpoint = try selection.required("endpoint").string("endpoint")
+        guard try ProviderModels.url(endpoint).absoluteString == url.absoluteString else {
+            throw ExchangeError.invalid("補助生成先が端末認証設定のendpointと一致しません")
+        }
+        return (record,url)
+    }
+    static func transport(url: URL, key: String, apiVersion: OrderedJSON?) -> OrderedJSON {
+        var value = OrderedJSON.object([
+            .init(key:"hasApiKey",value:.bool(!key.isEmpty)),
+            .init(key:"endpointURL",value:.object([
+                .init(key:"protocol",value:.string(url.scheme! + ":")),
+                .init(key:"hostname",value:.string(url.host!.lowercased()))
+            ]))
+        ])
+        if let apiVersion { value = value.replacing("apiVersion",with:apiVersion) }
+        return value
+    }
+    static func bind(_ envelope: OrderedJSON, boundary: SharedWebProjection, url: URL, key: String) throws -> URLRequest {
+        let body = try OrderedJSONChanges.apply(.array([.object([
+            .init(key:"op",value:.string("set")),.init(key:"path",value:.array([])),.init(key:"value",value:try envelope.required("body"))
+        ])]),to:.null,opaque:boundary.opaque)
+        let request = try RemoteRequest.bindEnvelope(envelope,body:body,originalURL:url,key:key)
+        guard try !RemoteRequest.streaming(request) else { throw ExchangeError.invalid("補助生成は非streamingが必要です") }
+        return request
+    }
+}
+
 struct RemoteOutput {
     private(set) var text = ""
     private(set) var reasoning = ""

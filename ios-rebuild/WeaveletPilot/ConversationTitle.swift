@@ -19,21 +19,11 @@ enum ConversationTitle {
     }
 
     private static func settings(_ state: OrderedJSON, global: OrderedJSON, fallbackEndpoint: String) throws -> OrderedJSON {
-        let favorites = try (state["favoriteModels"] ?? .array([])).array("favoriteModels").map { item in
-            OrderedJSON.object(["modelId", "providerId"].compactMap { key in item[key].map { .init(key:key,value:$0) } })
-        }
-        let providers = try (state["providers"] ?? .object([])).object("providers").map { field in
-            JSONField(key:field.key,value:.object(["id", "endpoint"].compactMap { key in field.value[key].map { .init(key:key,value:$0) } }))
-        }
-        var fields: [JSONField] = [
-            .init(key:"favoriteModels",value:.array(favorites)),
-            .init(key:"providers",value:.object(providers)),
-            .init(key:"fallbackProvider",value:.object([.init(key:"endpoint",value:.string(fallbackEndpoint))]))
-        ]
+        var result = try AuxiliaryRemoteRequest.providerSettings(state:state,fallbackEndpoint:fallbackEndpoint)
         for key in ["titleModel", "titleProviderId"] {
-            if let value = global[key] { fields.append(.init(key:key,value:value)) }
+            if let value = global[key] { result = result.replacing(key,with:value) }
         }
-        return .object(fields)
+        return result
     }
 
     private static func projectedChat(_ chat: OrderedJSON, boundary: inout SharedWebProjection) throws -> OrderedJSON {
@@ -68,22 +58,8 @@ enum ConversationTitle {
         let selection = try select(chat:rawChat,state:state,language:language,sourceConfig:sourceConfig,
                                    fallbackEndpoint:legacy.settings.endpoint,boundary:&boundary)
         guard selection["status"] == .string("ready") else { return nil }
-        let providerID = try selection["credentialProviderId"]?.string("provider ID")
-        let credentialConfig = OrderedJSON.object(providerID.map { [.init(key:"providerId",value:.string($0))] } ?? [])
-        let credential = try ProviderModels.generationCredential(config:credentialConfig,state:state,legacy:legacy,read:readProviderCredential)
-        let endpoint = try selection.required("endpoint").string("endpoint")
-        let authorizedURL = try credential.settings.validatedURL()
-        guard try ProviderModels.url(endpoint).absoluteString == authorizedURL.absoluteString else {
-            throw ExchangeError.invalid("タイトル生成先が端末認証設定のendpointと一致しません")
-        }
-        var transport = OrderedJSON.object([
-            .init(key:"hasApiKey",value:.bool(!credential.key.isEmpty)),
-            .init(key:"endpointURL",value:.object([
-                .init(key:"protocol",value:.string(authorizedURL.scheme! + ":")),
-                .init(key:"hostname",value:.string(authorizedURL.host!.lowercased()))
-            ]))
-        ])
-        if let apiVersion = state["apiVersion"] { transport = transport.replacing("apiVersion",with:apiVersion) }
+        let (credential,authorizedURL) = try AuxiliaryRemoteRequest.credential(selection:selection,state:state,legacy:legacy,read:readProviderCredential)
+        let transport = AuxiliaryRemoteRequest.transport(url:authorizedURL,key:credential.key,apiVersion:state["apiVersion"])
         let plan = try SharedWebOperations.call("titleOperation",.object([
             .init(key:"operation",value:.string("plan")),
             .init(key:"chat",value:try projectedChat(rawChat,boundary:&boundary)),
@@ -93,11 +69,7 @@ enum ConversationTitle {
         ]))
         guard plan["status"] == .string("ready") else { return nil }
         let envelope = try plan.required("request")
-        let body = try OrderedJSONChanges.apply(.array([.object([
-            .init(key:"op",value:.string("set")),.init(key:"path",value:.array([])),.init(key:"value",value:try envelope.required("body"))
-        ])]),to:.null,opaque:boundary.opaque)
-        let request = try RemoteRequest.bindEnvelope(envelope,body:body,originalURL:authorizedURL,key:credential.key)
-        guard try !RemoteRequest.streaming(request) else { throw ExchangeError.invalid("タイトル生成は非streamingが必要です") }
+        let request = try AuxiliaryRemoteRequest.bind(envelope,boundary:boundary,url:authorizedURL,key:credential.key)
         let promptMessage = try OrderedJSONChanges.apply(.array([.object([
             .init(key:"op",value:.string("set")),.init(key:"path",value:.array([])),.init(key:"value",value:selection.required("promptMessage"))
         ])]),to:.null,opaque:boundary.opaque)
