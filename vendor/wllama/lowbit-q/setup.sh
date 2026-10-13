@@ -43,7 +43,7 @@ fi
 SKIP_CLONE="${WLLAMA_SKIP_CLONE:-0}"
 
 echo "=== vendor/wllama/lowbit-q setup ==="
-echo "  wllama version:   v$WLLAMA_VERSION"
+echo "  wllama version:   $WLLAMA_VERSION"
 echo "  source directory: $FORK_DIR"
 echo "  skip clone:       $SKIP_CLONE"
 echo ""
@@ -65,8 +65,8 @@ else
     exit 1
   fi
 
-  echo "[1/5] Cloning wllama v$WLLAMA_VERSION..."
-  git clone --depth 1 --branch "v$WLLAMA_VERSION" "$WLLAMA_REPO" "$FORK_DIR"
+  echo "[1/5] Cloning wllama $WLLAMA_VERSION..."
+  git clone --depth 1 --branch "$WLLAMA_VERSION" "$WLLAMA_REPO" "$FORK_DIR"
   if [ "$(git -C "$FORK_DIR" rev-parse HEAD)" != "$WLLAMA_COMMIT" ]; then
     echo "ERROR: cloned revision does not match $WLLAMA_COMMIT; source preserved for inspection." >&2
     exit 1

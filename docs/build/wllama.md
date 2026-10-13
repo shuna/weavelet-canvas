@@ -20,7 +20,7 @@ weavelet-canvas の wllama WASM バイナリおよび JS バンドルを再ビ�
 bash scripts/wllama/setup.sh
 ```
 
-このスクリプトは公式 `v2.3.7` を取得し、commit `5e63e3b226a077b33dc7c608f1fe630f3d21f539` と照合してから `vendor/wllama-patches/` の差分を適用します。取得失敗時に HEAD へ切り替えません。既存 `vendor/wllama-src/` がある場合は変更せず停止します。再セットアップは既存sourceを保全した別checkoutで行ってください。lowbit-Qの単独setupも同じ制約に従います。
+このスクリプトは公式 `2.3.7` を取得し、commit `5e63e3b226a077b33dc7c608f1fe630f3d21f539` と照合してから `vendor/wllama-patches/` の差分を適用します。取得失敗時に HEAD へ切り替えません。既存 `vendor/wllama-src/` がある場合は変更せず停止します。再セットアップは既存sourceを保全した別checkoutで行ってください。lowbit-Qの単独setupも同じ制約に従います。
 
 ## WASM ビルド
 
