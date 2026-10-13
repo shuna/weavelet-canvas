@@ -729,3 +729,11 @@ FAKE隔離Catalyst実画面でユーザー/アシスタントの本文下部へ�
 独立Astraの新P2「raw prompt CSVがopaqueとなり[object Object]へ」「raw systemPromptが空欄扱いされlibrary挿入で消失/preset確認省略」は49612d69で修正。CSVは既知文字列をrawのまま共有元へ渡し、最終UTF8化だけ実Web Blob相当のrepairを行う。修正前22byte対44byteの失敗を再現し、修正後plain/gzip一致と元JSON不変を確認した。systemPromptは当該fieldのnative編集/挿入/置換を明示拒否し、他設定保存ではrawを維持する。通常Unicode/NFC/NFD/日本語/emojiを拒否しない。関連16件成功（/private/tmp/weavelet-utf16-prompt-config-tests.log）、限定再監査は前P2解消・新規P2以上なし。
 
 孤立UTF16を含む本文とsystemPromptのnative編集は未対応で、情報を失う操作を明示拒否する。表示/Markdown・CSVのOS UTF8変換とJSONのexact保全を区別する。実機・実クラウド・大入力性能は未確認。Air lockStateはpasscodeRequired=trueのため今回版の実機実行を再開していない。
+
+## 入力欄・添付入口の配置（2026-10-14）
+
+b3cc6abbでcomposerの空欄3行の固定高さを1...8行・最低44ptへ変更し、実Webの配置を元に添付/slash/設定を左、送信/停止を右へ並べた。常時表示されていた画像ファイル/写真の別行を既存ImageInputViewのpopoverへまとめ、OS file/photos/PasteButton入口を保持する。picker完了の監視は常時存在する外側に置き、宛先delivery/読込/追加/エラー/生成guard/preview取消/local prefillは既存のまま。
+
+担当Catalyst build/差分確認成功（/tmp/weavelet-native-composer-placement-{build,diff-check}.log）、独立Astraは新規P2以上なし。親のUTF16修正との統合Catalyst buildも成功（/private/tmp/weavelet-ui-utf16-union-build.log）、bundle鮮度と差分確認成功。FAKE隔離実画面で入力欄の高さ削減・操作順・添付popover開閉、OSファイル選択の起動/取消後にパネルへ戻ることを確認、clone終了とprocess消失を確認した。通常store/実送信/私的画像選択は行わない。
+
+写真picker起動/画像読込・貼付け・狭幅/最大文字サイズ/VoiceOver・Air導入は未確認。UI配置変更だけのため、未変更の画像変換/業務rule/全同期suiteを反復しない。
