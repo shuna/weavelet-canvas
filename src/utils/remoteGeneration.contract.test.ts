@@ -32,6 +32,24 @@ describe('OpenAI-compatible native remote request contract', () => {
     expect(result.body.messages.some((message: any) => 'xMessage' in message)).toBe(false);
     expect(test.source.apiKey).toBe('FAKE-imported-not-request-key');
   });
+  it('materializes the requested branch with the actual Web routine rather than redundant messages', () => {
+    const source: any = { chats: [{ id: 'target', config: { model: 'FAKE-model', max_tokens: 100, stream: false },
+      messages: [{ role: 'user', content: [{ type: 'text', text: 'stale' }] }], branchTree: { rootId: 'root', activePath: ['root', 'a'], nodes: {
+        root: { id: 'root', parentId: null, role: 'user', contentHash: 'root' },
+        a: { id: 'a', parentId: 'root', role: 'assistant', contentHash: 'a' },
+        b: { id: 'b', parentId: 'root', role: 'assistant', contentHash: 'b' },
+      } } }], contentStore: {
+        root: { content: [{ type: 'text', text: 'prompt', xPart: { opaqueRef: 0 } }], refCount: 1 },
+        a: { content: [{ type: 'text', text: 'unselected' }], refCount: 1 },
+        b: { content: [{ type: 'text', text: 'selected' }, { type: 'text', text: 'second', xFuture: ['kept'] }], refCount: 1 },
+      } };
+    const before = structuredClone(source);
+    const body = JSON.parse(generationRequest(JSON.stringify({ chat: source.chats[0], contentStore: source.contentStore,
+      activePath: ['root', 'b'], config: source.chats[0].config, capabilities: { supportsReasoning: false, requiresReasoning: false } })));
+    expect(body.messages).toEqual([{ role: 'user', content: source.contentStore.root.content }, { role: 'assistant', content: source.contentStore.b.content }]);
+    expect(source).toEqual(before);
+  });
+
   it('passes the saved summary and original path to the shared request builder', () => {
     const chat = { ...structuredClone(fixture.cases[0].source.chats[0]), branchTree: undefined,
       messages: [{ role: 'user', content: [{ type: 'text', text: 'Original' }] }],

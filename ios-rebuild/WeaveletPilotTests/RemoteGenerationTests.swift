@@ -50,6 +50,22 @@ final class RemoteGenerationTests: XCTestCase {
         let root = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
         return try OrderedJSON.decode(Data(contentsOf: root.appendingPathComponent("tests/fixtures/web-native/remote-generation.json")))
     }
+    func testActualSharedBranchMaterializationPreservesRawPartOrderNumbersAndOpaqueShapedConfig() throws {
+        let source = try OrderedJSON.decode(Data(#"""
+        {"xRoot":9007199254740993,"chats":[{"id":"target","config":{"model":"FAKE-model","max_tokens":100,"temperature":1.234567890123456789,"xFuture":{"opaqueRef":0}},"messages":[{"role":"user","content":[{"type":"text","text":"stale"}]}],"branchTree":{"rootId":"root","activePath":["root","a"],"nodes":{"root":{"id":"root","parentId":null,"role":"user","contentHash":"root"},"a":{"id":"a","parentId":"root","role":"assistant","contentHash":"a"},"b":{"id":"b","parentId":"root","role":"assistant","contentHash":"b"}}}}],"contentStore":{"root":{"content":[{"type":"text","text":"prompt","xPart":9007199254740993}],"refCount":1},"a":{"content":[{"type":"text","text":"unselected"}],"refCount":1},"b":{"content":[{"type":"text","text":"selected","xBig":1.234567890123456789},{"type":"text","text":"second","xFuture":{"opaqueRef":0}}],"refCount":1}}}
+        """#.utf8)), before = try source.encoded()
+        let request = try RemoteRequest.make(source: source, chatID: "target", path: ["root", "b"], settings: RemoteSettings(endpoint: "https://fixture.invalid/v1/chat/completions", model: "FAKE-model", stream: false), key: "FAKE")
+        let body = try OrderedJSON.decode(XCTUnwrap(request.httpBody))
+        let messages = try body.required("messages").array("messages")
+        XCTAssertEqual(messages.count, 2)
+        XCTAssertEqual(messages[0]["role"], .string("user")); XCTAssertEqual(messages[1]["role"], .string("assistant"))
+        XCTAssertEqual(try messages[0].required("content").encoded(), try source.required("contentStore").required("root").required("content").encoded())
+        XCTAssertEqual(try messages[1].required("content").encoded(), try source.required("contentStore").required("b").required("content").encoded())
+        XCTAssertEqual(body["temperature"], .number("1.234567890123456789"))
+        XCTAssertEqual(body["xFuture"], .object([.init(key:"opaqueRef",value:.number("0"))]))
+        XCTAssertEqual(try source.encoded(), before)
+    }
+
     func testSavedSummaryUsesSharedSubmissionRules() throws {
         let source = try OrderedJSON.decode(Data(#"{"chats":[{"id":"summary-chat","config":{"model":"fake-model","max_tokens":100},"messages":[{"role":"user","content":[{"type":"text","text":"Original"}]}],"summaries":[{"id":"s","mode":"single","useForSubmit":true,"text":"Saved context","sources":[{"nodeId":"0","parentId":null,"role":"user","textParts":["Original"]}]}]}]}"#.utf8))
         let request = try RemoteRequest.make(source: source, chatID: "summary-chat", path: ["0"], settings: record().settings, key: "FAKE")

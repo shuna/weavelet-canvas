@@ -13,41 +13,41 @@ struct MessageDraft: Identifiable {
     var role: String
     var text: String
 
-    var originalText: String { Self.firstText(originalParts) }
+    let originalText: String
     var changed: Bool { role != originalRole || !text.utf8.elementsEqual(originalText.utf8) }
-    var parts: OrderedJSON {
-        guard !text.utf8.elementsEqual(originalText.utf8), case .array(var parts) = originalParts else { return originalParts }
-        if let index = parts.firstIndex(where: { $0["type"] == .string("text") }) {
-            parts[index] = parts[index].replacing("text", with: .string(text))
-        } else {
-            parts.insert(.object([JSONField(key: "type", value: .string("text")), JSONField(key: "text", value: .string(text))]), at: 0)
-        }
-        return .array(parts)
+    init(chatID: String, nodeID: String?, path: [String], originalParts: OrderedJSON, originalRole: String,
+         isProtected: Bool, role: String, text: String) throws {
+        self.chatID = chatID; self.nodeID = nodeID; self.path = path; self.originalParts = originalParts
+        self.originalRole = originalRole; self.isProtected = isProtected; self.role = role; self.text = text
+        originalText = try MessageEditing.textValue(of: originalParts)
     }
-    private static func firstText(_ parts: OrderedJSON) -> String {
-        guard case .array(let values) = parts, let part = values.first(where: { $0["type"] == .string("text") }), case .string(let text) = part["text"] else { return "" }
-        return text
-    }
+
 }
 
 enum MessageEditing {
+    static func textValue(of parts: OrderedJSON) throws -> String {
+        var boundary = SharedWebProjection()
+        return try SharedWebOperations.call("messageEdit", .object([.init(key: "operation", value: .string("textValue")),
+            .init(key: "parts", value: boundary.parts(parts))])).string("textValue")
+    }
     static func save(in source: OrderedJSON, chatID: String, nodeID: String?, viewingPath: [String], role: String,
-                     parts: OrderedJSON, mode: MessageSaveMode, newIDs: [String], now: Double) throws -> OrderedJSON {
+                     parts: OrderedJSON, editedText: String? = nil, mode: MessageSaveMode, newIDs: [String], now: Double) throws -> OrderedJSON {
         var chats = try source.required("chats").array("chats")
         guard let index = try chats.firstIndex(where: { try $0.required("id").string("id").utf8.elementsEqual(chatID.utf8) }) else { throw ExchangeError.invalid("chat ID") }
         var boundary = SharedWebProjection()
         let projectedChat = try boundary.chat(chats[index])
         let projectedStore = try boundary.store(source.required("contentStore"))
         let projectedParts = try boundary.parts(parts)
-        let input = OrderedJSON.object([
+        var fields: [JSONField] = [
             .init(key: "chat", value: projectedChat), .init(key: "contentStore", value: projectedStore),
             .init(key: "viewingPath", value: .array(viewingPath.map(OrderedJSON.string))),
             .init(key: "nodeID", value: nodeID.map(OrderedJSON.string) ?? .null),
             .init(key: "role", value: .string(role)), .init(key: "parts", value: projectedParts),
             .init(key: "mode", value: .string(mode == .append ? "append" : mode == .branch ? "branch" : "overwrite")),
             .init(key: "newIDs", value: .array(newIDs.map(OrderedJSON.string))), .init(key: "now", value: .number(String(now)))
-        ])
-        let changes = try SharedWebOperations.call("messageEdit", input)
+        ]
+        if let editedText { fields.append(.init(key: "editedText", value: .string(editedText))) }
+        let changes = try SharedWebOperations.call("messageEdit", .object(fields))
         let original = OrderedJSON.object([.init(key: "chat", value: chats[index]), .init(key: "contentStore", value: try source.required("contentStore"))])
         let changed = try OrderedJSONChanges.apply(changes, to: original, opaque: boundary.opaque)
         chats[index] = try changed.required("chat")
@@ -120,6 +120,9 @@ struct SharedWebProjection {
             result.append(.init(key: field.key, value: folder))
         }
         return .object(result)
+    }
+    mutating func requestConfig(_ value: OrderedJSON) throws -> OrderedJSON {
+        try fields(value, known: ["model", "stream", "max_tokens", "providerId", "reasoning_effort", "reasoning_budget_tokens", "verbosity", "force_reasoning", "systemPrompt", "modelSource", "modelSettings", "openRouter"])
     }
     mutating func config(_ value: OrderedJSON) throws -> OrderedJSON {
         try fields(value, known: ["systemPrompt"])

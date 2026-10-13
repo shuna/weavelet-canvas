@@ -46,16 +46,21 @@ enum RemoteRequest {
         guard let chat else { throw ExchangeError.invalid("chat ID") }
         var config = try chat["config"] ?? ChatDefaults.webInitial().config
         config = config.replacing("model", with: .string(settings.model)).replacing("stream", with: .bool(settings.stream))
-        let messages = try projectedMessages(source: source, chat: chat, path: path)
-        var contextChat = chat.replacing("messages", with: .array(messages))
-        if let tree = chat["branchTree"] {
-            contextChat = contextChat.replacing("branchTree", with: tree.replacing("activePath", with: .array(path.map(OrderedJSON.string))))
+        var boundary = SharedWebProjection()
+        let store = try boundary.store(source["contentStore"] ?? .object([]))
+        var contextChat = chat
+        if chat["branchTree"] == nil {
+            let messages = try chat.required("messages").array("messages").map { message in
+                OrderedJSON.object([.init(key: "role", value: try message.required("role")),
+                    .init(key: "content", value: try boundary.parts(message.required("content")))])
+            }
+            contextChat = contextChat.replacing("messages", with: .array(messages))
         }
         // shortcut: Catalog capabilities remain unavailable until native model settings are connected; force_reasoning uses the shared builder.
         let input = OrderedJSON.object([
-            .init(key: "messages", value: .array(messages)),
+            .init(key: "contentStore", value: store),
             .init(key: "chat", value: contextChat),
-            .init(key: "config", value: config),
+            .init(key: "config", value: try boundary.requestConfig(config)),
             .init(key: "activePath", value: .array(path.map(OrderedJSON.string))),
             .init(key: "omittedNodes", value: chat["omittedNodes"] ?? .object([])),
             .init(key: "capabilities", value: .object([
@@ -63,7 +68,8 @@ enum RemoteRequest {
                 .init(key: "requiresReasoning", value: .bool(false)),
             ])),
         ])
-        let body = try SharedWebOperations.call("generationRequest", input)
+        let projectedBody = try SharedWebOperations.call("generationRequest", input)
+        let body = try OrderedJSONChanges.apply(.array([.object([.init(key: "op", value: .string("set")), .init(key: "path", value: .array([])), .init(key: "value", value: projectedBody)])]), to: .null, opaque: boundary.opaque)
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
         request.timeoutInterval = 120
@@ -71,22 +77,6 @@ enum RemoteRequest {
         if !key.isEmpty { request.setValue("Bearer \(key)", forHTTPHeaderField: "Authorization") }
         request.httpBody = try body.encoded()
         return request
-    }
-    private static func projectedMessages(source: OrderedJSON, chat: OrderedJSON, path: [String]) throws -> [OrderedJSON] {
-        if let tree = chat["branchTree"] {
-            let nodes = try tree.required("nodes")
-            let storedMessages = try chat.required("messages").array("messages")
-            let storedPath = try tree.required("activePath").array("path").map { try $0.string("ID") }
-            return try path.map { id in
-                let node = try nodes.required(id)
-                let content = try source.required("contentStore").required(node.required("contentHash").string("hash")).required("content")
-                let index = storedPath.firstIndex { $0.utf8.elementsEqual(id.utf8) }
-                let original = index.flatMap { storedMessages.indices.contains($0) ? storedMessages[$0] : nil } ?? .object([])
-                return try original.replacing("role", with: node.required("role")).replacing("content", with: content)
-            }
-        } else {
-            return try chat.required("messages").array("messages")
-        }
     }
 }
 

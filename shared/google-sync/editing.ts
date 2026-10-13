@@ -1,3 +1,5 @@
+import { hasMeaningfulContent } from '../../src/utils/contentValidation';
+import { textValueOf, replaceTextValue } from '../../src/utils/messageText';
 import {
   ensureBranchTreeState, switchActivePathState, upsertWithAutoBranchState,
   createBranchState, appendNodeToActivePathState, updateNodeRoleState,
@@ -19,8 +21,12 @@ export function editingUUID(): string {
 }
 export function messageEdit(json: string): string {
   const input: { chat: ChatInterface; contentStore: ContentStoreData; nodeID?: string; viewingPath: string[];
-    role: Role; parts: ContentInterface[]; mode: 'overwrite' | 'branch' | 'append'; newIDs: string[]; now: number } = JSON.parse(json);
+    role: Role; parts: ContentInterface[]; editedText?: string; operation?: 'textValue'; mode: 'overwrite' | 'branch' | 'append'; newIDs: string[]; now: number } = JSON.parse(json);
+  if (input.operation === 'textValue') return JSON.stringify(textValueOf(input.parts));
+  if (input.editedText !== undefined && typeof input.editedText !== 'string') throw new Error('Invalid text.');
+  const parts = input.editedText !== undefined && input.editedText !== textValueOf(input.parts) ? replaceTextValue(input.parts, input.editedText) : input.parts;
   if (!['user', 'assistant', 'system'].includes(input.role) || !Array.isArray(input.parts)) throw new Error('Invalid message.');
+  if (input.mode === 'append' && input.editedText !== undefined && !hasMeaningfulContent(parts)) throw new Error('本文を入力してください');
   const before = { chat: input.chat, contentStore: input.contentStore };
   const isolated = structuredClone(before);
   let chat = isolated.chat;
@@ -45,14 +51,14 @@ export function messageEdit(json: string): string {
       if (!Number.isInteger(index) || index < 0 || index >= tree.activePath.length) throw new Error('Invalid message node ID.');
       if (input.mode === 'overwrite' && result.chats[0].protectedNodes?.[tree.activePath[index]]) throw new Error('Protected message.');
     }
-    if (input.mode === 'append') result = appendNodeToActivePathState(result.chats, 0, input.role, input.parts, result.contentStore);
+    if (input.mode === 'append') result = appendNodeToActivePathState(result.chats, 0, input.role, parts, result.contentStore);
     else if (input.mode === 'branch') {
-      const branch = createBranchState(result.chats, 0, tree.activePath[index], input.parts, result.contentStore);
+      const branch = createBranchState(result.chats, 0, tree.activePath[index], parts, result.contentStore);
       result = branch;
       if (branch.chats[0].branchTree!.nodes[branch.newId].role !== input.role) {
         result.chats = updateNodeRoleState(branch.chats, 0, branch.newId, input.role, branch.contentStore);
       }
-    } else result = upsertWithAutoBranchState(result.chats, 0, index, { role: input.role, content: input.parts }, result.contentStore);
+    } else result = upsertWithAutoBranchState(result.chats, 0, index, { role: input.role, content: parts }, result.contentStore);
     // DMP patch strings cannot carry opaque references back to raw native JSON.
     // Expand only deltas produced by this operation while their projected base
     // is still available; existing native deltas stay in the raw document.

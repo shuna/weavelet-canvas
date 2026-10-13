@@ -67,7 +67,6 @@ final class MessageEditingTests: XCTestCase {
             draft.role = try test.required("role").string("role")
             let parts = try test.required("parts").array("parts")
             draft.text = try parts.first(where: { $0["type"] == .string("text") })!.required("text").string("text")
-            XCTAssertEqual(try SyncRecords.canonical(draft.parts), try SyncRecords.canonical(test.required("parts")))
             let mode: MessageSaveMode
             switch try test.required("mode").string("mode") {
             case "branch": mode = .branch
@@ -91,6 +90,20 @@ final class MessageEditingTests: XCTestCase {
             XCTAssertEqual(exported, source, name)
         }
     }
+    func testSavedDraftUsesSharedTextReplacementAndPreservesRawPartMetadataOrder() throws {
+        let input = try cases()[0].required("input")
+        let parts = try OrderedJSON.decode(Data(#"[{"type":"reasoning","text":"reason"},{"type":"text","text":"old","xBig":9007199254740993},{"type":"text","text":"second","xRaw":1.234567890123456789}]"#.utf8))
+        XCTAssertEqual(try MessageEditing.textValue(of: parts), "old")
+        let changed = try MessageEditing.save(in: input, chatID: "target", nodeID: "middle", viewingPath: ["system", "middle", "last"], role: "assistant", parts: parts, editedText: "edited", mode: .overwrite, newIDs: [], now: 1000)
+        let chat = try changed.required("chats").array("chats")[0]
+        let node = try chat.required("branchTree").required("nodes").required("middle")
+        let actual = try changed.required("contentStore").required(node.required("contentHash").string("hash")).required("content")
+        var expected = try parts.array("parts")
+        expected[1] = expected[1].replacing("text", with: .string("edited"))
+        XCTAssertEqual(try actual.encoded(), try OrderedJSON.array(expected).encoded())
+        XCTAssertEqual(try MessageEditing.textValue(of: .array([.object([.init(key: "type", value: .string("reasoning")), .init(key: "text", value: .string("reason"))])])), "")
+    }
+
     func testSharedEditingPreservesOpaqueNumbersWhenCopiedToNewBranchAndContent() throws {
         var input = try cases()[0].required("input")
         var chats = try input.required("chats").array("chats"), chat = chats[0]

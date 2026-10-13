@@ -50,6 +50,30 @@ describe('native editing adapter calls the actual Web domain', () => {
     expect(input).toEqual(before);
     expect(materializeActivePath(output.chat.branchTree, output.contentStore).every(message => Object.keys(message).every(key => key === 'role' || key === 'content'))).toBe(true);
   });
+  it('applies the extracted Web text rule once at save and preserves all other parts and source values', () => {
+    const item = fixture.cases[0], input = structuredClone(item.input);
+    const parts = [{ type: 'reasoning', text: 'reason' }, { type: 'text', text: 'old', xFuture: { opaqueRef: 0 } }, { type: 'text', text: 'second' }];
+    const before = structuredClone({ input, parts });
+    expect(JSON.parse(messageEdit(JSON.stringify({ operation: 'textValue', parts })))).toBe('old');
+    const output = apply({ chat: input.chats[0], contentStore: input.contentStore }, JSON.parse(messageEdit(JSON.stringify({
+      chat: input.chats[0], contentStore: input.contentStore, parts, editedText: 'edited', nodeID: 'middle',
+      viewingPath: ['system', 'middle', 'last'], role: 'user', mode: 'overwrite', newIDs: [], now: 1000,
+    }))));
+    expect(resolveContent(output.contentStore, output.chat.branchTree.nodes.middle.contentHash)).toEqual([
+      parts[0], { ...parts[1], text: 'edited' }, parts[2],
+    ]);
+    expect({ input, parts }).toEqual(before);
+  });
+
+  it('uses the existing Web append validation after shared draft replacement, including later text parts', () => {
+    const item = fixture.cases.find((item: any) => item.name === 'empty-append');
+    const input = { chat: item.input.chats[0], contentStore: item.input.contentStore, role: 'user', mode: 'append', viewingPath: [], newIDs: ['new-node'], now: 1000 };
+    expect(() => messageEdit(JSON.stringify({ ...input, parts: [{ type: 'text', text: '' }], editedText: '  ' }))).toThrow('本文を入力してください');
+    const changes = JSON.parse(messageEdit(JSON.stringify({ ...input, parts: [{ type: 'text', text: 'old' }, { type: 'text', text: 'second' }], editedText: '' })));
+    const output = apply({ chat: input.chat, contentStore: input.contentStore }, changes);
+    expect(resolveContent(output.contentStore, output.chat.branchTree.nodes['new-node'].contentHash)).toEqual([{ type: 'text', text: '' }, { type: 'text', text: 'second' }]);
+  });
+
   it.each(['middle-overwrite-retains-descendants-and-all-parts', 'flat-overwrite'])('agrees with the current NodeTarget save and Web edit timestamps for %s', name => {
     const item = fixture.cases.find((item: any) => item.name === name);
     const input = structuredClone(item.input);
