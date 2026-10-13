@@ -4,6 +4,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import PopupModal from '@components/PopupModal';
 import { PromptLibraryPicker } from '@components/PromptLibraryMenu/PromptLibraryMenu';
+import { appendSystemLibraryPrompt } from '@utils/promptApplication';
 import { SettingsGroup } from '@components/SettingsMenu/SettingsMenu';
 import { ConfigInterface, ImageDetail, ReasoningEffort, Verbosity } from '@type/chat';
 import {
@@ -163,7 +164,7 @@ export const SystemPromptField = ({
         <PromptLibraryPicker
           setIsModalOpen={setIsPickerOpen}
           onInsert={(text) => {
-            setSystemPrompt((prev) => prev ? prev + '\n\n' + text : text);
+            setSystemPrompt((prev) => appendSystemLibraryPrompt(prev, text));
           }}
         />
       )}

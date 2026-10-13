@@ -6,7 +6,8 @@ import { matchSorter } from 'match-sorter';
 import { Prompt } from '@type/prompt';
 
 import useHideOnOutsideClick from '@hooks/useHideOnOutsideClick';
-import { ContentInterface, TextContentInterface } from '@type/chat';
+import { ContentInterface } from '@type/chat';
+import { appendCommandLibraryPrompt } from '@utils/promptApplication';
 
 const CommandPrompt = ({
   _setContent,
@@ -70,16 +71,7 @@ const CommandPrompt = ({
             <li
               className='px-4 py-2 hover:bg-gray-100 dark:hover:bg-gray-600 dark:hover:text-white cursor-pointer text-start w-full'
               onClick={() => {
-                _setContent((prev) => {
-                  const currentText =
-                    prev.length > 0 && (prev[0] as TextContentInterface).text !== undefined
-                      ? (prev[0] as TextContentInterface).text
-                      : '';
-                  return [
-                    { type: 'text', text: currentText + cp.prompt } as TextContentInterface,
-                    ...prev.slice(1),
-                  ];
-                });
+                _setContent((prev) => appendCommandLibraryPrompt(prev, cp.prompt));
                 setDropDown(false);
               }}
               key={cp.id}
