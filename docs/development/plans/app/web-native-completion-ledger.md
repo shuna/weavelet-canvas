@@ -698,3 +698,12 @@ match-sorter/remove-accentsのMIT本文と固定入力hashを配布bundleへ同�
 変更した一fieldだけを既存syncInputSnapshot/applySnapshotで原子的に保存する。raw値・他root/順序・共有既定値・不正alias拒否・保存失敗/再起動を確認したCatalyst関連3件とbuildが成功（/tmp/weavelet-native-display-settings-catalyst-tests.log）。親統合のbundle鮮度/差分確認成功、独立Astraは新規P2以上なし。表示/共有/同期基盤は変更せず既存成功を再利用、同じ業務ruleを両環境へ複製していない。
 
 実画面の色/数式/生成中表示切替・最大文字サイズ/VoiceOver・Air導入は未確認。enterToSubmit、branch swipe/animation、chat size、advanced mode、language等のGeneral機能は後続範囲であり、この4項目を全設定完成とはしない。
+## built-inシステム文プリセット（2026-10-14）
+
+4cc42c7eでWebのSYSTEM_PROMPT_PRESETSと同じraw Markdown本文を共有bridgeから読み、既定systemMessage/非auxiliaryのconfig.systemPromptへ接続した。原文をSwift/別JSONへ複製せず、限定text loaderで実MD pathを解決して定数/MD両方のhashを記録する。選択前にname/description/概算token数を表示し、community由来や約30k tokens/requestという既存情報を維持する。性能向上や評価品質を保証するものではない。
+
+実Web applyPresetのECMAScript trimによる置換確認条件をpure共有元へ切り出し、Webとnativeで共用。nativeはactorで選択内容/確認要否を取得し、結果公開/確定時に入力・保存元・会話・生成を再検証、取消/離脱後は反映しない。変更はlocal draftだけで、保存の既存経路を維持する。
+
+新しい共有predicate8case・native実JSC2件（MD本文のtrim後全byte一致、確認条件と保存境界）・型検査・Catalyst build・鮮度/差分確認が成功。ログ /tmp/weavelet-native-system-presets-{tsc,web-tests,catalyst-tests,freshness,diff-check}.log。親統合のhash/差分確認成功、独立Astraは新規P2以上なし。bundle実file増分121,821 byteはapp全体/圧縮配布/速度の測定ではない。新依存は追加していない。未変更領域のテスト/監査を反復していない。
+
+実メニュー表示/説明の収まり・IME/最大文字サイズ/VoiceOver・Air導入・実クラウド相互運用は未確認。
