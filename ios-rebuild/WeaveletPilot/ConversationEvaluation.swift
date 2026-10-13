@@ -328,9 +328,10 @@ extension ConversationEvaluation {
             let credential = try ProviderModels.credential(provider,read:readProviderCredential)
             guard !credential.key.isEmpty else { throw ExchangeError.invalid("OpenAI API keyがありません") }
             let url = try credential.settings.validatedURL()
-            let envelope = try SharedWebOperations.call("evaluation",.object([.init(key:"operation",value:.string("safetyRequest")),
-                .init(key:"endpoint",value:.string(url.absoluteString)),.init(key:"text",value:.string(text)),
-                .init(key:"openRouter",value:config["openRouter"] ?? .null)]))
+            var requestFields: [JSONField] = [.init(key:"operation",value:.string("safetyRequest")),
+                .init(key:"endpoint",value:.string(url.absoluteString)),.init(key:"text",value:.string(text))]
+            if let openRouter = config["openRouter"], openRouter != .null { requestFields.append(.init(key:"openRouter",value:openRouter)) }
+            let envelope = try SharedWebOperations.call("evaluation",.object(requestFields))
             let bound = OrderedJSON.object([.init(key:"endpoint",value:try envelope.required("endpoint")),
                 .init(key:"headers",value:try envelope.required("headers")),
                 .init(key:"authentication",value:.array([.object([.init(key:"name",value:.string("Authorization")),.init(key:"prefix",value:.string("Bearer "))])]))])

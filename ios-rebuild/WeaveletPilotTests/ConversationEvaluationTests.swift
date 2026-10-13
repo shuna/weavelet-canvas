@@ -199,6 +199,26 @@ final class ConversationEvaluationTests: XCTestCase {
         XCTAssertNil(prepared.quality)
     }
 
+    func testAutoRemoteSafetyUsesDedicatedOpenAICredentialWithoutOpenRouterSettings() async throws {
+        let source = try source()
+        let chat = try source.required("chats").array("chats")[0]
+        let safeSource = source.replacing("chats",with:.array([chat.replacing("config",with:try json(#"{"model":"fake-model","providerId":"openrouter"}"#))]))
+        let defaults = try SharedWebOperations.call("evaluation",.object([.init(key:"operation",value:.string("defaults"))])).required("evaluationSettings")
+        let state = try state().replacing("evaluationSettings",with:defaults.replacing("safetyPostReceive",with:.string("auto")))
+        let prepared = try XCTUnwrap(ConversationEvaluation.prepareAuto(source:safeSource,state:state,chatID:"chat",nodeID:"assistant",
+            phase:"post-receive",userContent:json(#"[{"type":"text","text":"質問"}]"#),
+            assistantContent:json(#"[{"type":"text","text":"回答"}]"#),legacy:RemoteCredentialRecord(),files:nil,readProviderCredential:read))
+        let safety = try XCTUnwrap(prepared.safety)
+        XCTAssertEqual(try request(safety).url?.absoluteString,"https://api.openai.com/v1/moderations")
+        XCTAssertEqual(try request(safety).value(forHTTPHeaderField:"Authorization"),"Bearer FAKE-openai")
+        XCTAssertEqual(try OrderedJSON.decode(XCTUnwrap(request(safety).httpBody))["input"],.string("回答"))
+        EvaluationProtocol.reply = Data(#"{"results":[{"flagged":true,"categories":{"violence":true},"category_scores":{"violence":0.1234567890123456789}}]}"#.utf8)
+        let result = try await ConversationEvaluation.run(safety,client:client())
+        XCTAssertEqual(result["categoryScores"]?["violence"],.number("0.1234567890123456789"))
+        let updated = try ConversationEvaluation.autoApply(result,dimension:"safety",prepared:prepared,source:safeSource,state:state)
+        XCTAssertEqual(updated["evaluationResults"]?[prepared.key]?["safety"]?["categoryScores"]?["violence"],.number("0.1234567890123456789"))
+    }
+
     func testAutoPostUsesFinalAssistantAndRejectsChangedAssistant() throws {
         let defaults = try SharedWebOperations.call("evaluation",.object([.init(key:"operation",value:.string("defaults"))])).required("evaluationSettings")
         let state = try state().replacing("evaluationSettings",with:defaults.replacing("qualityPostReceive",with:.string("auto")))
