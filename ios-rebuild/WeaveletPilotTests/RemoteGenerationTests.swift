@@ -11,7 +11,7 @@ private final class FakeRemoteProtocol: URLProtocol {
     static var releaseLast: (() -> Void)?
     private let lock = NSLock()
     private var stopped = false
-    override class func canInit(with request: URLRequest) -> Bool { ["fixture.invalid", "unit-fixture.openai.azure.com"].contains(request.url?.host ?? "") }
+    override class func canInit(with request: URLRequest) -> Bool { ["fixture.invalid", "unit-fixture.openai.azure.com", "openrouter.ai"].contains(request.url?.host ?? "") }
     override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
     override func startLoading() {
         var captured = request
@@ -82,7 +82,11 @@ final class RemoteGenerationTests: XCTestCase {
         XCTAssertEqual(body["session_id"],.string("weavelet:or-chat")); XCTAssertEqual(body["cache_control"]?["ttl"],.string("1h"))
         XCTAssertNil(request.value(forHTTPHeaderField:"X-OpenRouter-Cache"))
         XCTAssertFalse(String(decoding:try XCTUnwrap(request.httpBody),as:UTF8.self).contains("FAKE-native-secret"))
-        let unrelated = try RemoteRequest.make(source:source,chatID:"or-chat",path:[],settings:RemoteSettings(endpoint:"https://fixture.invalid/v1/chat/completions"),key:"FAKE-native-secret")
+        // Web applyOpenRouterControls rejects OpenRouter settings at a non-OpenRouter origin.
+        XCTAssertThrowsError(try RemoteRequest.make(source:source,chatID:"or-chat",path:[],settings:RemoteSettings(endpoint:"https://fixture.invalid/v1/chat/completions"),key:"FAKE-native-secret"))
+        let unrelatedChat = try source.required("chats").array("chats")[0].replacing("config",with:config.replacing("providerId",with:.string("openai")))
+        let unrelatedSource = source.replacing("chats",with:.array([unrelatedChat]))
+        let unrelated = try RemoteRequest.make(source:unrelatedSource,chatID:"or-chat",path:[],settings:RemoteSettings(endpoint:"https://fixture.invalid/v1/chat/completions"),key:"FAKE-native-secret")
         let unrelatedBody = try OrderedJSON.decode(XCTUnwrap(unrelated.httpBody))
         XCTAssertNil(unrelatedBody["provider"]); XCTAssertNil(unrelatedBody["session_id"]); XCTAssertNil(unrelatedBody["cache_control"])
         XCTAssertEqual(try source.encoded(),before)
@@ -124,9 +128,11 @@ final class RemoteGenerationTests: XCTestCase {
         chats[index] = chats[index].replacing("config",with:config)
         let modelState = try OrderedJSON.decode(Data(#"{"favoriteModels":[{"modelId":"anthropic/claude-opus-5.5","providerId":"openrouter","supportsReasoning":true,"reasoningMandatory":true,"streamSupport":false,"xRaw":{"huge":9007199254740993,"decimal":1.2300}}],"providerModelCache":{},"providerCustomModels":{}}"#.utf8))
         let roots = try modelState.object("modelState")
-        try state.applySnapshot(.object([.init(key:"version",value:snapshot.required("version")),.init(key:"state",value:.object([.init(key:"chats",value:.array(chats)),.init(key:"providers",value:.object([.init(key:"openrouter",value:.object([.init(key:"id",value:.string("openrouter")),.init(key:"name",value:.string("FAKE OpenRouter")),.init(key:"endpoint",value:.string("https://fixture.invalid/v1/chat/completions")),.init(key:"modelsRequireAuth",value:.bool(false)),.init(key:"apiKey",value:.string("FAKE-snapshot-unused"))]))]))] + roots))]))
+        try state.applySnapshot(.object([.init(key:"version",value:snapshot.required("version")),.init(key:"state",value:.object([.init(key:"chats",value:.array(chats)),.init(key:"providers",value:.object([.init(key:"openrouter",value:.object([.init(key:"id",value:.string("openrouter")),.init(key:"name",value:.string("FAKE OpenRouter")),.init(key:"endpoint",value:.string("https://openrouter.ai/api/v1/chat/completions")),.init(key:"modelsRequireAuth",value:.bool(false)),.init(key:"apiKey",value:.string("FAKE-snapshot-unused"))]))]))] + roots))]))
         let source = try XCTUnwrap(state.exchange).source, sourceBytes = try source.encoded(), before = try state.publicationSnapshot().encoded()
+        // Match the shared OpenRouter origin rule; the injected URLProtocol captures every request.
         var credentials = record(stream:true)
+        credentials.settings.endpoint = "https://openrouter.ai/api/v1/chat/completions"
         credentials.settings.model = "unused-device-model"
         let direct = try RemoteRequest.make(source:source,chatID:chatID,path:XCTUnwrap(state.conversation).visibleMessages.map(\.id),settings:credentials.settings,key:credentials.key,modelState:modelState)
         let directBody = try OrderedJSON.decode(XCTUnwrap(direct.httpBody))
@@ -144,6 +150,7 @@ final class RemoteGenerationTests: XCTestCase {
         let sent = try OrderedJSON.decode(XCTUnwrap(FakeRemoteProtocol.requests.first?.httpBody))
         XCTAssertEqual(sent["reasoning"],directBody["reasoning"])
         XCTAssertEqual(selectedProviders,["openrouter"])
+        XCTAssertEqual(FakeRemoteProtocol.requests.first?.url?.host,"openrouter.ai")
         XCTAssertEqual(FakeRemoteProtocol.requests.first?.value(forHTTPHeaderField:"Authorization"),"Bearer FAKE-bound-provider")
         let after = try state.publicationSnapshot().required("state")
         for field in roots { XCTAssertEqual(try after.required(field.key).encoded(),try field.value.encoded()) }
