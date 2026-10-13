@@ -23,6 +23,7 @@ struct ChatView: View {
     @State private var showsSettings = false
     @State private var columnVisibility: NavigationSplitViewVisibility = .automatic
     @State private var preferredCompactColumn: NavigationSplitViewColumn = .detail
+    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
     @State private var showsSearch = false
     @State private var showsRemoteSettings = false
     @Environment(\.scenePhase) private var scenePhase
@@ -61,7 +62,6 @@ struct ChatView: View {
                 preferredCompactColumn = .detail
             }, onClose: {
                 preferredCompactColumn = .detail
-                columnVisibility = .detailOnly
             })
                 .navigationSplitViewColumnWidth(min:260,ideal:300,max:380)
         } detail: {
@@ -119,12 +119,13 @@ struct ChatView: View {
             .onChange(of:scenePhase) { _, phase in if phase == .background { cloudKitConnection?.flushInBackground() } else if phase == .active { cloudKitConnection?.resumeOnForeground() } }
             .toolbar {
                 ToolbarItemGroup(placement: .topBarLeading) {
-                    Button("会話一覧", systemImage: "sidebar.left") {
-                        preferredCompactColumn = .sidebar
-                        columnVisibility = .all
+                    if horizontalSizeClass == .compact {
+                        Button("会話一覧", systemImage: "sidebar.left") {
+                            preferredCompactColumn = .sidebar
+                        }
+                            .disabled(state.generation != nil)
+                            .frame(minWidth: 44, minHeight: 44)
                     }
-                        .disabled(state.generation != nil)
-                        .frame(minWidth: 44, minHeight: 44)
                     Menu("履歴",systemImage:"arrow.uturn.backward.circle") {
                         Button("編集を元に戻す",systemImage:"arrow.uturn.backward") {
                             do { try state.undoMessageEdit() } catch { errorMessage = error.localizedDescription }
@@ -728,6 +729,7 @@ struct ConversationLibraryView: View {
     @ObservedObject var state: ChatState
     let onSelect: () -> Void
     let onClose: () -> Void
+    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
     @State private var selected = Set<Data>()
     @State private var pendingDelete: [String] = []
     @State private var showsDelete = false
@@ -767,7 +769,8 @@ struct ConversationLibraryView: View {
                 }
             }
             .disabled(state.generation != nil)
-            .navigationTitle("会話一覧")
+            .navigationTitle("会話")
+            .navigationBarTitleDisplayMode(.inline)
             .onAppear {
                 perform {
                     folders = try state.folderRows()
@@ -778,7 +781,9 @@ struct ConversationLibraryView: View {
             }
             .onChange(of: state.exchange?.source) { _, _ in perform {} }
             .toolbar {
-                ToolbarItem(placement: .topBarLeading) { Button("閉じる",action:onClose) }
+                if horizontalSizeClass == .compact {
+                    ToolbarItem(placement: .topBarLeading) { Button("閉じる",action:onClose) }
+                }
                 ToolbarItem(placement: .topBarTrailing) {
                     Button("新規フォルダ", systemImage: "folder.badge.plus") { perform { try state.applyFolder(.create(id: UUID().uuidString.lowercased())) } }
                         .disabled(state.generation != nil)
@@ -789,18 +794,26 @@ struct ConversationLibraryView: View {
                     }
                     .disabled(state.generation != nil)
                 }
-                ToolbarItem(placement: .bottomBar) {
-                    Menu("選択を移動（\(selected.count)）") {
-                        moveButtons(ids: state.conversations.filter { selected.contains($0.identity) }.map(\.id))
-                    }.disabled(selected.isEmpty || state.generation != nil)
-                }
-                ToolbarItem(placement: .bottomBar) {
-                    Button("選択を削除（\(selected.count)）", role: .destructive) {
-                        pendingDelete = state.conversations.filter { selected.contains($0.identity) }.map(\.id)
-                        showsDelete = true
+                if !selected.isEmpty {
+                    ToolbarItem(placement: .bottomBar) {
+                        Menu {
+                            moveButtons(ids: state.conversations.filter { selected.contains($0.identity) }.map(\.id))
+                        } label: {
+                            Image(systemName: "folder").frame(minWidth: 44, minHeight: 44)
+                        }
+                        .accessibilityLabel("選択した\(selected.count)件を移動")
+                        .disabled(state.generation != nil)
                     }
-                    .disabled(selected.isEmpty || state.generation != nil)
-                    .frame(minHeight: 44)
+                    ToolbarItem(placement: .bottomBar) {
+                        Button(role: .destructive) {
+                            pendingDelete = state.conversations.filter { selected.contains($0.identity) }.map(\.id)
+                            showsDelete = true
+                        } label: {
+                            Image(systemName: "trash").frame(minWidth: 44, minHeight: 44)
+                        }
+                        .accessibilityLabel("選択した\(selected.count)件を削除")
+                        .disabled(state.generation != nil)
+                    }
                 }
             }
             .confirmationDialog("会話を削除しますか？", isPresented: $showsDelete, titleVisibility: .visible) {
