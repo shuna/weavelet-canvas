@@ -109,6 +109,9 @@ struct MarkdownWebView: UIViewRepresentable {
         func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) { ready = true; update() }
         func webView(_ webView: WKWebView, didFail navigation: WKNavigation!, withError error: Error) { parent.failure = "本文を整形できませんでした。原文を表示しています。" }
         func webView(_ webView: WKWebView, didFailProvisionalNavigation navigation: WKNavigation!, withError error: Error) { parent.failure = "本文を整形できませんでした。原文を表示しています。" }
+        func webViewWebContentProcessDidTerminate(_ webView: WKWebView) {
+            parent.failure = "本文表示が終了しました。原文を表示しています。"
+        }
         func userContentController(_ controller: WKUserContentController, didReceive message: WKScriptMessage) {
             guard message.frameInfo.isMainFrame, let body = message.body as? [String: Any], let type = body["type"] as? String else { return }
             switch type {

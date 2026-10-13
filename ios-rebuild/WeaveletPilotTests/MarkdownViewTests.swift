@@ -28,6 +28,13 @@ import WebKit
         XCTAssertTrue((result?["text"] as? String)?.contains("日本語🙂") == true)
         XCTAssertEqual(result?["table"] as? Bool, true); XCTAssertEqual(result?["math"] as? Bool, true)
         XCTAssertEqual(result?["code"] as? Bool, true); XCTAssertEqual(result?["injected"] as? Bool, false)
+        // Verify the OS clipboard boundary without retaining or exposing the user's previous clipboard.
+        let clipboard = UIPasteboard.general
+        let previousItems = clipboard.items
+        defer { clipboard.items = previousItems }
+        let copied = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in clipboard.string == "let value = 1\n" }, object: nil)
+        _ = try await view.evaluateJavaScript("document.querySelector('button[aria-label=\"copy codeblock\"]').click()")
+        await fulfillment(of: [copied], timeout: 5)
         // Update the same host rather than reload it; Markdown is now literal and the native font size changes.
         input["content"] = literal; input["markdownMode"] = false; input["fontSize"] = 28
         _ = try await view.callAsyncJavaScript("await new Promise((resolve,reject) => { const observer=new MutationObserver(check); const timer=setTimeout(() => {observer.disconnect();reject(Error('Raw display did not update'));},5000); function check(){if(document.getElementById('root').textContent===input.content){observer.disconnect();clearTimeout(timer);resolve(true);}} observer.observe(document.body,{childList:true,subtree:true,characterData:true}); window.weaveletMarkdown.update(input); check(); });", arguments: ["input": input], in: nil, contentWorld: .page)
@@ -35,5 +42,7 @@ import WebKit
         XCTAssertTrue((updated?["text"] as? String)?.contains(literal) == true)
         XCTAssertEqual(updated?["font"] as? String, "28px")
         XCTAssertEqual(updated?["table"] as? Bool, false); XCTAssertEqual(updated?["injected"] as? Bool, false)
+        coordinator.webViewWebContentProcessDidTerminate(view)
+        XCTAssertEqual(failure, "本文表示が終了しました。原文を表示しています。")
     }
 }

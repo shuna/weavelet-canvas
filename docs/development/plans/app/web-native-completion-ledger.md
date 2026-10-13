@@ -1,5 +1,17 @@
 # Web / 新iOSの完成条件と証拠
 
+## 検証運用の更新と画像composer接続（2026-10-13）
+
+確認済みの共有元・保存/書出し/暗号化同期の結果は、関連コードが不変なら再利用する。現在の追加範囲は画像入力とチャット別の一時draft。実Webの `replaceTextValue/textValueOf/hasMeaningfulMessageContent` を共有composerから直接呼び、本文位置・parts順序・画像のみの送信判定をSwiftへ複製しない。共有composerの新2件＋既存12件、型検査、bundle鮮度確認は担当成功結果を再利用する。
+
+残る必須確認はnativeの引数/結果変換、画像元bytesと入力時detail、配送先chatの保持、保存失敗時のdraft保全、および一式のCatalystと独立Astra監査。WKコピーの未確認境界も今回の接続確認へまとめる。未変更の保存・同期基盤の全経路、共有元と同じ業務規則のnative複製テスト、小変更ごとのCatalyst/監査は省略する。失敗があれば実Web呼出経路を根拠に原因を記録し、修正箇所と影響範囲だけ確認する。
+
+画像ファイル/写真/PasteButtonとチャット別draftを接続した。本文入力中はnative値だけを更新し、送信時に一度shared composerへ渡す。画像選択完了前に別会話へ移っても元の配送先と入力時detailを保持し、添付取消でも本文を保持する。append保存成功後だけdraftを消し、保存失敗時は本文・画像と保存済みデータを維持する。独立Astraはこの機能一式に新規指摘なし。
+
+Catalyst初回15件中14件成功。切断PNGの拒否1件はImageIOの形式情報だけではヘッダのみの入力を通す実装不備だったため、1pxサムネイルの実decode確認を追加した。元bytes/期待値を維持し、ImageInputTests2件だけ再実行して成功、監査もその6行だけ再確認して新規なし。RemoteGenerationTests12件・MarkdownViewTests1件は初回成功を再利用する。保存失敗/retry、画像のみ送信、古い生成結果拒否、raw属性、再起動/書出しの既存代表経路が含まれる。WKコードのDOMボタン→OS clipboard、表示process終了時の原文fallbackも成功。ログは `/private/tmp/weavelet-composer-catalyst.log` と `/private/tmp/weavelet-composer-image-final.log`。最終ソースで全15件を単一runした結果ではない。
+
+写真pickerの実操作、IME/狭幅/VoiceOver、実機、実クラウドは未確認。同期/保存基盤と共有元の既存成功suiteは重複実行していない。これらは入力接続の部分成果であり、Web全機能の再現完了とは扱わない。
+
 ## 共有Markdownとnative画像表示の接続（2026-10-13追記）
 
 実WebのMarkdownRenderer/ContentBodyをローカルWKWebViewへ同梱し、GFM・KaTeX・highlightと生成中のpolicy/250ms更新を共有した。言語一覧とLaTeX前処理は環境非依存部分だけ切り出し、Webの旧exportを維持。Swift側は原文切替、OS文字サイズ、コピー、リンクscheme制限、高さ通知を担当し、本文をJavaScript文字列へ連結しない。保存元・外部I/O・同期は変更していない。画像添付はURLSessionとImageIOで非同期取得・縮小し、読込/失敗表示と拡大を追加した。表示用decodeは最大2048px、元データは維持する。
@@ -8,7 +20,7 @@
 
 Catalyst実画面で10メッセージ（160行長文を含む）の数式・コード・本文、原文切替、添付画像の表示/拡大を確認。初期構成でWebContentが8プロセス・各約90〜140MiBとなるため、画面外の本文はWebViewを破棄し高さだけ保持した。先頭表示時の観測は3プロセス・各約104〜106MiB。測定条件の統制されたbenchmarkや実機消費電力の証拠ではない。一時データ領域の共有案は効果を確認できず撤去した。最終ライフサイクル変更のCatalyst build成功、同期/保存試験は表示変更と無関係なので反復していない。
 
-残る表示受入: 狭幅・VoiceOver・実機のDynamic Type/消費メモリ、継続スクロール時の安定性、実操作の選択/コピー。コピー操作はUI自動化が同名要素を区別できず未確認、コード上のOS接続と原文切替の証拠をコピーの実操作成功とは扱わない。豊富な本文表示の接続は進んだが、この残件や全機能移植を完了扱いにしない。
+残る表示受入: 狭幅・VoiceOver・実機のDynamic Type/消費メモリ、継続スクロール時の安定性、実操作の選択/コピー。コピーの手動操作はUI自動化が同名要素を区別できず未確認。後続composer一式では実DOMボタンからOS clipboardへの接続を自動確認したが、ユーザー操作による選択/コピーの確認とは区別する。豊富な本文表示の接続は進んだが、この残件や全機能移植を完了扱いにしない。
 
 ## 形式判定・プレビュー・選択追加・全置換の共有取り込み（2026-10-13追記）
 
