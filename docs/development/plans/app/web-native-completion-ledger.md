@@ -573,3 +573,11 @@ Web由来の同一wllama/llama pin・patch・lowbit C・samplerをiPhoneOS arm64
 担当成功結果：両engine build/verify、両unsigned app build、iPhone archiveのMachO IOS/min17.0確認。親で成果物を取り込み両verify成功、署名付きAir向けbuild/install成功（/private/tmp/weavelet-air-engine-{build,install}.log）。entitlementは既存team/appIDとiCloud.com.sstcr.WeaveletCanvas・CloudKit・Developmentを維持。独立Astraは新規P2以上なし。端末キャッシュへ既存1.1MBの検証用GGUFをコピーし、既存5軸実推論testを実機で実行する準備をした。XcodeはAirロック解除待ちの後、runner起動前の接続喪失でexit65終了。device lockStateもpasscodeRequired=trueを確認したため、テスト本体の失敗や成功とは扱わない（/private/tmp/weavelet-air-engine-real-test.log）。ロック解除後に同じ対象testを再実行する。物理端末runnerで使用するapp container相対GGUFパスをtestに追加、業務処理は変更しない。
 
 未変更の共有業務rule/全同期往復/全依存監査は再実行しない。iPhone実推論、広いモデルのメモリ/消費電力、狭幅UI/IME/Dynamic Type、Production CloudKitとWebの実相互運用は未確認。今回のDevelopment署名installだけではクラウド互換性完成とはしない。
+
+## フォルダ階層のサイドバー表示（2026-10-13）
+
+WebのChatHistoryList/ChatFolderと既存folderHierarchy helperを基準に、共有folderRowsで親IDの正規化・親子順・深さ・可視状態・pathを投影する。nativeは表示順/インデント/折畳みをこの情報へ接続し、子フォルダを親の会話より前へ表示する。壊れた親chainは既存Web helperと同じくrootへ露出する。移動menuは同名フォルダをpathで区別、削除説明は子と会話がparentへ繰上がる実共有処理へ合わせた。
+
+独立Astra P2：wide sidebarの表示中に検索/履歴で別階層chatへ移るとonAppearが再実行されず選択会話がhidden。選択IDのUTF8 bytes変更時にも共通revealを呼び、既存共有move(empty chatIds)で祖先を開くよう修正。親で確認した空folder IDのroot sentinel自己再帰は、shared表示入口で非空key==idのidentity検証を追加して拒否。循環parent chainのroot表示とは区別し、元データを削除・再構築して隠していない。
+
+共有18件・Catalyst folder7件、bundle生成鮮度、差分確認が成功。Catalyst初回は専用worktreeのengine cache未準備で停止、親の検証済みcacheをcloneして成功。独立Astraの限定再監査は新規P2以上なし。変更のない保存/暗号化同期の全往復は再実行しない。実画面の階層/選択遷移、狭幅/大きな文字は未確認。drag並替え・parent編集・Web全機能再現完了とは扱わない。最新origin/mainをfetchし、統合branchの祖先で追加差分なしと確認した。
