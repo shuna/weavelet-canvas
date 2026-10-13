@@ -461,6 +461,150 @@ final class MessageEditingTests: XCTestCase {
         XCTAssertEqual(try state.publicationSnapshot(), protectedSnapshot); XCTAssertEqual(try Data(contentsOf: local.fileURL), protectedDisk)
     }
 
+    func testHistoryUndoRedoForEachMessageModeAndRemovalPrunePreservesRawIO() throws {
+        for mode in [MessageSaveMode.overwrite, .branch, .append, .insert] {
+            let local = try store(), state = ChatState(store: local)
+            var input = try cases()[0].required("input").replacing("xHuge", with: .number("9007199254740993"))
+            var chats = try input.required("chats").array("chats"), chat = chats[0], tree = try chat.required("branchTree"), nodes = try tree.required("nodes")
+            nodes = nodes.replacing("middle", with: try nodes.required("middle").replacing("xOpaque", with: .object([.init(key:"z",value:.number("9007199254740993")),.init(key:"a",value:.number("1.2300"))])))
+            tree = tree.replacing("nodes", with: nodes); chat = chat.replacing("branchTree", with: tree); chats[0] = chat; input = input.replacing("chats", with: .array(chats))
+            try state.importWebData(input.encoded())
+            let original = try XCTUnwrap(state.exchange).source
+            var draft = try mode == .insert ? state.messageInsertionDraft(beforeNodeID: "middle") : state.messageDraft(nodeID: mode == .append ? nil : "middle")
+            draft.text = "History edited \(mode.rawValue)"
+            try state.saveMessage(draft, mode: mode, newIDs: ["history-new"], now: 1000)
+            XCTAssertTrue(state.canUndoMessageEdit); XCTAssertFalse(state.canRedoMessageEdit)
+            let editedPath = state.conversation?.visibleMessages.map(\.id)
+            try state.undoMessageEdit(now: 2000)
+            XCTAssertFalse(state.canUndoMessageEdit); XCTAssertTrue(state.canRedoMessageEdit)
+            XCTAssertEqual(state.conversation?.visibleMessages.map(\.id), ["system", "middle", "last"])
+            let undone = try XCTUnwrap(state.exchange).source
+            XCTAssertEqual(try undone.required("chats").array("chats")[0].required("branchTree").required("nodes").required("middle").required("xOpaque").encoded(), try nodes.required("middle").required("xOpaque").encoded())
+            XCTAssertEqual(undone["xHuge"], original["xHuge"])
+            XCTAssertEqual(try undone.required("chats").array("chats")[1].encoded(), try original.required("chats").array("chats")[1].encoded())
+            try state.redoMessageEdit(now: 3000)
+            XCTAssertEqual(state.conversation?.visibleMessages.map(\.id), editedPath)
+            XCTAssertTrue(state.canUndoMessageEdit); XCTAssertFalse(state.canRedoMessageEdit)
+            let fresh = ChatState(store: local)
+            XCTAssertFalse(fresh.canUndoMessageEdit); XCTAssertFalse(fresh.canRedoMessageEdit)
+            XCTAssertEqual(try fresh.publicationSnapshot().encoded(), try state.publicationSnapshot().encoded())
+            XCTAssertEqual(try OrderedJSON.decode(fresh.exportWebData())["xHuge"], .number("9007199254740993"))
+            let records = try SyncRecords.toRecords(fresh.publicationSnapshot())
+            XCTAssertEqual(try SyncRecords.canonical(SyncRecords.toRecords(SyncRecords.fromRecords(records))), try SyncRecords.canonical(records))
+        }
+        for operation in [NodeRemovalOperation.remove, .pruneHidden] {
+            let state = ChatState(store: try store()); try state.importWebData(cases()[0].required("input").encoded())
+            let draft = try operation == .remove ? state.nodeRemovalDraft(nodeID: "middle") : state.pruneHiddenDraft()
+            try state.saveNodeRemoval(draft, now: 1000)
+            let removed = try XCTUnwrap(state.exchange).source.required("chats").array("chats")[0].required("branchTree").required("nodes")
+            XCTAssertNil(removed[operation == .remove ? "middle" : "hidden"])
+            try state.undoMessageEdit(now: 2000)
+            let restored = try XCTUnwrap(state.exchange).source.required("chats").array("chats")[0].required("branchTree").required("nodes")
+            XCTAssertNotNil(restored[operation == .remove ? "middle" : "hidden"])
+            try state.redoMessageEdit(now: 3000)
+            XCTAssertNil(try XCTUnwrap(state.exchange).source.required("chats").array("chats")[0].required("branchTree").required("nodes")[operation == .remove ? "middle" : "hidden"])
+        }
+    }
+
+    func testHistoryKeepsOriginalDeltaAndOpaqueBodyThroughUndoRedo() throws {
+        var source = try cases()[0].required("input"), chats = try source.required("chats").array("chats"), chat = chats[0]
+        var tree = try chat.required("branchTree"), nodes = try tree.required("nodes"), contentStore = try source.required("contentStore")
+        let body = OrderedJSON.array([.object([.init(key:"type",value:.string("text")),.init(key:"text",value:.string("Original delta")),
+            .init(key:"xMetadata",value:.object([.init(key:"z",value:.number("9007199254740993")),.init(key:"a",value:.number("1.2300"))]))])])
+        let delta = OrderedJSON.object([.init(key:"baseHash",value:.string("h-last")),.init(key:"patches",value:.string(""))])
+        contentStore = contentStore.replacing("h-last", with: try contentStore.required("h-last").replacing("content", with: body))
+        contentStore = contentStore.replacing("history-delta", with: .object([.init(key:"content",value:.array([])),.init(key:"refCount",value:.number("1")),.init(key:"delta",value:delta)]))
+        nodes = nodes.replacing("last", with: try nodes.required("last").replacing("contentHash", with: .string("history-delta")))
+        tree = tree.replacing("nodes", with: nodes); chat = chat.replacing("branchTree", with: tree)
+        var messages = try chat.required("messages").array("messages"); messages[2] = messages[2].replacing("content", with: body)
+        chat = chat.replacing("messages", with: .array(messages)); chats[0] = chat
+        source = source.replacing("chats", with: .array(chats)).replacing("contentStore", with: contentStore)
+        var history: MessageEditing.HistoryState?
+        let edited = try MessageEditing.save(in: source, chatID: "target", nodeID: "last", viewingPath: ["system","middle","last"], role: "assistant", parts: body,
+            editedText: "Edited delta", mode: .overwrite, newIDs: [], now: 1000, onHistory: { history = $0 })
+        let captured = try XCTUnwrap(history)
+        let undone = try MessageEditing.moveHistory("undo", in: edited, history: captured, now: 2000)
+        XCTAssertEqual(try SyncRecords.resolveContent(undone.source.required("contentStore"), hash: "history-delta").encoded(), try body.encoded())
+        XCTAssertEqual(undone.source["contentStore"]?["history-delta"]?["delta"], delta)
+        let redone = try MessageEditing.moveHistory("redo", in: undone.source, history: undone.history, now: 3000)
+        let hash = try redone.source.required("chats").array("chats")[0].required("branchTree").required("nodes").required("last").required("contentHash").string("hash")
+        XCTAssertEqual(try SyncRecords.resolveContent(redone.source.required("contentStore"), hash: hash).array("content")[0]["xMetadata"], try body.array("body")[0]["xMetadata"])
+    }
+
+    func testHistoryFlatPreparedBaseNodeOptionsAndGlobalSelection() throws {
+        let state = ChatState(store: try store()), fixture = try cases().first { $0["name"] == .string("flat-overwrite") }!
+        try state.importWebData(fixture.required("input").encoded())
+        var insertion = try state.messageInsertionDraft(beforeNodeID: "message-0"); insertion.text = "Inserted"
+        try state.saveMessage(insertion, mode: .insert, newIDs: ["original", "inserted"], now: 1000)
+        try state.undoMessageEdit(now: 2000)
+        // Web history starts after legacy flat-to-tree preparation.
+        XCTAssertEqual(state.conversation?.visibleMessages.map(\.id), ["original"])
+        XCTAssertNotNil(try XCTUnwrap(state.exchange).source.required("chats").array("chats")[0]["branchTree"])
+        try state.redoMessageEdit(now: 3000)
+        var options = try state.nodeOptionsDraft(nodeID: "inserted"); options.value.label = "Undo label"; options.value.starred = true
+        try state.saveNodeOptions(options, now: 4000)
+        XCTAssertEqual(state.conversation?.nodes.first { $0.id == "inserted" }?.options.label, "Undo label")
+        try state.undoMessageEdit(now: 5000)
+        XCTAssertEqual(state.conversation?.nodes.first { $0.id == "inserted" }?.options.label, "")
+        XCTAssertEqual(state.conversation?.nodes.first { $0.id == "inserted" }?.options.starred, false)
+        try state.redoMessageEdit(now: 6000)
+        var map = try state.nodeOptionsDraft(nodeID: "inserted"); map.value.collapsed = true
+        try state.saveNodeOptions(map, now: 7000)
+        try state.navigate(chatID: "other", source: .chatSwitch)
+        try state.undoMessageEdit(now: 8000)
+        XCTAssertEqual(state.selectedConversationID, "other")
+        let target = try XCTUnwrap(state.exchange).source.required("chats").array("chats")[0]
+        XCTAssertNil(target["branchTree"]?["nodes"]?["inserted"]?["label"])
+        XCTAssertEqual(target["collapsedNodes"]?["inserted"], .bool(true))
+        try state.redoMessageEdit(now: 9000)
+        XCTAssertEqual(state.selectedConversationID, "other")
+        XCTAssertEqual(try XCTUnwrap(state.exchange).source.required("chats").array("chats")[0]["branchTree"]?["nodes"]?["inserted"]?["label"], .string("Undo label"))
+    }
+
+    func testHistorySaveFailureKeepsStacksSourceDiskThenRetryAndExternalUpdateInvalidates() throws {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent("history-fault-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let fault = InsertionWriteFault(), local = LocalStateStore(fileURL: directory.appendingPathComponent("local.json")) { data,url in
+            if fault.reject { throw CocoaError(.fileWriteNoPermission) }; try data.write(to: url, options: .atomic)
+        }
+        let state = ChatState(store: local); try state.importWebData(cases()[0].required("input").encoded())
+        var draft = try state.messageDraft(nodeID: "middle"); draft.text = "Undo failure"
+        try state.saveMessage(draft, mode: .overwrite, newIDs: ["unused"], now: 1000)
+        var snapshot = try state.publicationSnapshot(), disk = try Data(contentsOf: local.fileURL)
+        fault.reject = true; XCTAssertThrowsError(try state.undoMessageEdit(now: 2000))
+        XCTAssertTrue(state.canUndoMessageEdit); XCTAssertFalse(state.canRedoMessageEdit)
+        XCTAssertEqual(try state.publicationSnapshot(), snapshot); XCTAssertEqual(try Data(contentsOf: local.fileURL), disk)
+        fault.reject = false; try state.undoMessageEdit(now: 2000)
+        snapshot = try state.publicationSnapshot(); disk = try Data(contentsOf: local.fileURL)
+        fault.reject = true; XCTAssertThrowsError(try state.redoMessageEdit(now: 3000))
+        XCTAssertFalse(state.canUndoMessageEdit); XCTAssertTrue(state.canRedoMessageEdit)
+        XCTAssertEqual(try state.publicationSnapshot(), snapshot); XCTAssertEqual(try Data(contentsOf: local.fileURL), disk)
+        var freshDraft = try state.messageDraft(nodeID: "middle"); freshDraft.text = "Failed replacement"
+        XCTAssertThrowsError(try state.saveMessage(freshDraft, mode: .overwrite, newIDs: ["unused"], now: 4000))
+        XCTAssertTrue(state.canRedoMessageEdit); XCTAssertFalse(state.canUndoMessageEdit)
+        fault.reject = false; try state.redoMessageEdit(now: 3000)
+        var replacement = try cases()[0].required("input"), chats = try replacement.required("chats").array("chats")
+        chats[0] = chats[0].replacing("branchTree", with: try chats[0].required("branchTree").replacing("activePath", with: .array([.string("system"), .string("hidden")])))
+        replacement = replacement.replacing("chats", with: .array(chats))
+        let preImport = try state.publicationSnapshot(), preImportDisk = try Data(contentsOf: local.fileURL)
+        fault.reject = true; XCTAssertThrowsError(try state.importWebData(replacement.encoded()))
+        XCTAssertTrue(state.canUndoMessageEdit); XCTAssertFalse(state.canRedoMessageEdit)
+        XCTAssertEqual(try state.publicationSnapshot(), preImport); XCTAssertEqual(try Data(contentsOf: local.fileURL), preImportDisk)
+        fault.reject = false; try state.importWebData(replacement.encoded())
+        XCTAssertFalse(state.canUndoMessageEdit); XCTAssertFalse(state.canRedoMessageEdit)
+        var newDraft = try state.messageDraft(nodeID: "hidden"); newDraft.text = "Sync update invalidates"
+        try state.saveMessage(newDraft, mode: .overwrite, newIDs: ["unused"], now: 5000)
+        XCTAssertTrue(state.canUndoMessageEdit)
+        let incoming = try SyncDocument(v3: cases()[0].required("input")).snapshot
+        let preSync = try state.publicationSnapshot(), preSyncDisk = try Data(contentsOf: local.fileURL)
+        fault.reject = true; XCTAssertThrowsError(try state.applySynchronizedSnapshot(incoming, expected: state.syncInputSnapshot()))
+        XCTAssertTrue(state.canUndoMessageEdit); XCTAssertFalse(state.canRedoMessageEdit)
+        XCTAssertEqual(try state.publicationSnapshot(), preSync); XCTAssertEqual(try Data(contentsOf: local.fileURL), preSyncDisk)
+        fault.reject = false; try state.applySynchronizedSnapshot(incoming, expected: state.syncInputSnapshot())
+        XCTAssertFalse(state.canUndoMessageEdit); XCTAssertFalse(state.canRedoMessageEdit)
+    }
+
     @MainActor func testEveryMessageSaveModeRejectsActiveGenerationWithoutDiscardingPartialOutput() async throws {
         let store=try store(), state=ChatState(store:store)
         try state.importWebData(cases()[0].required("input").encoded())
@@ -487,6 +631,10 @@ final class MessageEditingTests: XCTestCase {
             XCTAssertEqual(state.generation?.id, generation.id); XCTAssertEqual(state.generation?.output.text, generation.output.text)
             XCTAssertEqual(try state.publicationSnapshot(), before); XCTAssertEqual(try Data(contentsOf: store.fileURL), disk)
         }
+        XCTAssertFalse(state.canUndoMessageEdit); XCTAssertFalse(state.canRedoMessageEdit)
+        XCTAssertThrowsError(try state.undoMessageEdit(now: 1000)); XCTAssertThrowsError(try state.redoMessageEdit(now: 1000))
+        XCTAssertEqual(state.generation?.id, generation.id); XCTAssertEqual(state.generation?.output.text, generation.output.text)
+        XCTAssertEqual(try state.publicationSnapshot(), before); XCTAssertEqual(try Data(contentsOf: store.fileURL), disk)
         state.stopGeneration()
     }
 

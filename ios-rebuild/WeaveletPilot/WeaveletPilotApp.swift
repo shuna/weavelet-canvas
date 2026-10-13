@@ -123,6 +123,12 @@ struct ChatView: View {
             }
             .toolbar {
                 ToolbarItemGroup(placement: .bottomBar) {
+                    Button("編集を元に戻す", systemImage: "arrow.uturn.backward") {
+                        do { try state.undoMessageEdit() } catch { errorMessage = error.localizedDescription }
+                    }.disabled(!state.canUndoMessageEdit)
+                    Button("編集をやり直す", systemImage: "arrow.uturn.forward") {
+                        do { try state.redoMessageEdit() } catch { errorMessage = error.localizedDescription }
+                    }.disabled(!state.canRedoMessageEdit)
                     Button("戻る", systemImage: "chevron.backward") {
                         do { try state.moveNavigation(.back) } catch { errorMessage = error.localizedDescription }
                     }.disabled(!state.canNavigateBack || state.generation != nil)

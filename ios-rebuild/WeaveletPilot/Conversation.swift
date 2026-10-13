@@ -93,6 +93,9 @@ final class ChatState: ObservableObject {
     @Published private(set) var canNavigateForward = false
     private var navigationHistory: OrderedJSON?
     private var branchCandidates: [BranchNavigation.ChatCandidates] = []
+    @Published private var editingHistory: MessageEditing.HistoryState?
+    var canUndoMessageEdit: Bool { generation == nil && (editingHistory?.canUndo ?? false) }
+    var canRedoMessageEdit: Bool { generation == nil && (editingHistory?.canRedo ?? false) }
 
     init(store: LocalStateStore? = nil) {
         self.store = store
@@ -132,11 +135,13 @@ final class ChatState: ObservableObject {
         let imported = try WebExchange(source: candidate.uiProjection())
         let selected = imported.conversations.first?.id ?? ""
         let candidates = try BranchNavigation.candidates(in: imported.source)
+        let nextEditing = try exchange.map { try MessageEditing.invalidatingHistory(editingHistory, before: $0.source, after: imported.source) } ?? nil
         try store?.save(SavedChatState(exchange: imported, document: candidate, conversations: imported.conversations, selectedConversationID: selected, style: displayStyle))
         invalidateGeneration()
         conversations = imported.conversations
         selectedID = selected
         exchange = imported
+        editingHistory = nextEditing
         document = candidate
         initialLoadFailed = false
         branchCandidates = candidates
@@ -216,12 +221,13 @@ final class ChatState: ObservableObject {
     func saveNodeOptions(_ draft: NodeOptionsDraft, newIDs: [String]? = nil, now: Double = Date().timeIntervalSince1970 * 1000) throws {
         guard generation == nil else { throw ExchangeError.invalid("生成結果を保存してから設定してください") }
         guard let exchange, exchange.source == draft.source else { throw ExchangeError.invalid("会話が変更されました。設定を開き直してください") }
-        let result = try NodeOptions.save(in: exchange.source, chatID: draft.chatID, nodeID: draft.nodeID, value: draft.value, newIDs: newIDs, now: now)
-        if result.status == .unchanged { return }
-        guard result.status == .updated else { throw ExchangeError.invalid("メッセージがありません") }
-        // A flat message receives a new node ID only when the shared Web operation creates its tree.
-        let oldChat = try exchange.source.required("chats").array("chats").first { $0["id"] == .string(draft.chatID) }
-        try applyLibrary(result.source, selectedID: selectedID, resetViewFor: oldChat?["branchTree"] == nil ? draft.chatID : nil, now: now)
+        guard let sourceChat = try exchange.source.required("chats").array("chats").first(where: { try $0.required("id").string("id").utf8.elementsEqual(draft.chatID.utf8) }) else { throw ExchangeError.invalid("chat ID") }
+        let count = try sourceChat["branchTree"] == nil ? sourceChat.required("messages").array("messages").count : 0
+        let ids = newIDs ?? (0..<count).map { _ in UUID().uuidString.lowercased() }
+        var history: MessageEditing.HistoryState?
+        let source = try MessageEditing.saveOptions(in: exchange.source, chatID: draft.chatID, nodeID: draft.nodeID, value: draft.value, newIDs: ids, now: now, history: editingHistory) { history = $0 }
+        if source == exchange.source { return }
+        try applyLibrary(source, selectedID: selectedID, resetViewFor: sourceChat["branchTree"] == nil ? draft.chatID : nil, editing: history, now: now)
     }
 
     func messageDraft(nodeID: String?) throws -> MessageDraft {
@@ -276,9 +282,10 @@ final class ChatState: ObservableObject {
         guard let chat = try exchange.source.required("chats").array("chats").first(where: { try $0.required("id").string("id").utf8.elementsEqual(draft.chatID.utf8) }) else { throw ExchangeError.invalid("chat ID") }
         let count = try chat["branchTree"] == nil && draft.operation == .remove ? chat.required("messages").array("messages").count : 0
         let ids = newIDs ?? (0..<count).map { _ in UUID().uuidString.lowercased() }
-        let source = try MessageEditing.remove(in: exchange.source, chatID: draft.chatID, nodeID: draft.nodeID, viewingPath: draft.path, operation: draft.operation, newIDs: ids, now: now)
+        var history: MessageEditing.HistoryState?
+        let source = try MessageEditing.remove(in: exchange.source, chatID: draft.chatID, nodeID: draft.nodeID, viewingPath: draft.path, operation: draft.operation, newIDs: ids, now: now, history: editingHistory) { history = $0 }
         if source == exchange.source { return }
-        try applyLibrary(source, selectedID: draft.chatID, resetViewFor: draft.chatID, now: now)
+        try applyLibrary(source, selectedID: draft.chatID, resetViewFor: draft.chatID, editing: history, now: now)
     }
 
     func saveMessage(_ draft: MessageDraft, mode: MessageSaveMode, newIDs: [String]? = nil, now: Double = Date().timeIntervalSince1970 * 1000) throws {
@@ -288,9 +295,20 @@ final class ChatState: ObservableObject {
         guard let sourceChat else { throw ExchangeError.invalid("chat ID") }
         let needed = try sourceChat["branchTree"] == nil ? sourceChat.required("messages").array("messages").count + 1 : 1
         let ids = newIDs ?? (0..<needed).map { _ in UUID().uuidString.lowercased() }
+        var history: MessageEditing.HistoryState?
         let source = try MessageEditing.save(in: exchange.source, chatID: draft.chatID, nodeID: draft.nodeID, viewingPath: draft.path, role: draft.role,
-                                             parts: draft.originalParts, editedText: draft.text, mode: mode, newIDs: ids, now: now)
-        try applyLibrary(source, selectedID: draft.chatID, resetViewFor: draft.chatID, now: now)
+                                             parts: draft.originalParts, editedText: draft.text, mode: mode, newIDs: ids, now: now, history: editingHistory) { history = $0 }
+        try applyLibrary(source, selectedID: draft.chatID, resetViewFor: draft.chatID, editing: history, now: now)
+    }
+
+    func undoMessageEdit(now: Double = Date().timeIntervalSince1970 * 1000) throws { try moveMessageHistory("undo", now: now) }
+    func redoMessageEdit(now: Double = Date().timeIntervalSince1970 * 1000) throws { try moveMessageHistory("redo", now: now) }
+    private func moveMessageHistory(_ operation: String, now: Double) throws {
+        guard generation == nil, let exchange else { throw ExchangeError.invalid("生成結果を保存してから編集履歴を移動してください") }
+        let result = try MessageEditing.moveHistory(operation, in: exchange.source, history: editingHistory, now: now)
+        guard result.updated else { return }
+        try applyLibrary(result.source, selectedID: selectedID,
+                         resetViewFor: result.affectedChatIDs.first { $0.utf8.elementsEqual(selectedID.utf8) }, editing: result.history, now: now)
     }
 
     func loadRemoteSettings(read: () throws -> RemoteCredentialRecord = RemoteCredentials.load) throws {
@@ -312,11 +330,12 @@ final class ChatState: ObservableObject {
         let ids = nodeIDs ?? (0..<count).map { _ in UUID().uuidString.lowercased() }
         let body = OrderedJSON.array([.object([JSONField(key: "type", value: .string("text")), JSONField(key: "text", value: .string(input))])])
         let now = Date().timeIntervalSince1970 * 1000
-        let source = try MessageEditing.save(in: exchange.source, chatID: conversation.id, nodeID: nil, viewingPath: conversation.visibleMessages.map(\.id), role: "user", parts: body, mode: .append, newIDs: ids, now: now)
+        var history: MessageEditing.HistoryState?
+        let source = try MessageEditing.save(in: exchange.source, chatID: conversation.id, nodeID: nil, viewingPath: conversation.visibleMessages.map(\.id), role: "user", parts: body, mode: .append, newIDs: ids, now: now, history: editingHistory) { history = $0 }
         let changed = try WebExchange(source: source)
         let path = changed.conversations.first { $0.identity == conversation.identity }!.visibleMessages.map(\.id)
         let request = try RemoteRequest.make(source: source, chatID: conversation.id, path: path, settings: record.settings, key: record.key)
-        try applyLibrary(source, selectedID: conversation.id, resetViewFor: conversation.id, now: now)
+        try applyLibrary(source, selectedID: conversation.id, resetViewFor: conversation.id, editing: history, now: now)
         let id = UUID()
         generation = ActiveGeneration(id: id, chatID: conversation.id, baseSource: try publishedSource(), path: path)
         generationError = nil
@@ -360,8 +379,9 @@ final class ChatState: ObservableObject {
         guard exchange?.source == current.baseSource else { throw ExchangeError.invalid("生成開始後に会話が変更されています") }
         if current.output.isEmpty { generation = nil; return }
         let now = Date().timeIntervalSince1970 * 1000
-        let source = try MessageEditing.save(in: current.baseSource, chatID: current.chatID, nodeID: nil, viewingPath: current.path, role: "assistant", parts: current.output.parts, mode: .append, newIDs: [UUID().uuidString.lowercased()], now: now)
-        try applyLibrary(source, selectedID: current.chatID, resetViewFor: current.chatID, now: now)
+        var history: MessageEditing.HistoryState?
+        let source = try MessageEditing.save(in: current.baseSource, chatID: current.chatID, nodeID: nil, viewingPath: current.path, role: "assistant", parts: current.output.parts, mode: .append, newIDs: [UUID().uuidString.lowercased()], now: now, history: editingHistory) { history = $0 }
+        try applyLibrary(source, selectedID: current.chatID, resetViewFor: current.chatID, editing: history, now: now)
         generation = nil
     }
 
@@ -409,7 +429,7 @@ final class ChatState: ObservableObject {
         try applyLibrary(ChatFolders.apply(in: source, operation: operation), selectedID: exchange == nil ? "" : selectedID, preserveGeneration: true, now: now)
     }
 
-    private func applyLibrary(_ source: OrderedJSON, selectedID: String, resetViewFor: String? = nil, preserveGeneration: Bool = false, navigation: BranchNavigation.HistoryResult? = nil, now: Double = Date().timeIntervalSince1970 * 1000) throws {
+    private func applyLibrary(_ source: OrderedJSON, selectedID: String, resetViewFor: String? = nil, preserveGeneration: Bool = false, navigation: BranchNavigation.HistoryResult? = nil, editing: MessageEditing.HistoryState? = nil, now: Double = Date().timeIntervalSince1970 * 1000) throws {
         let base = try document ?? SyncDocument(v3: exchange?.source ?? ChatLibrary.emptySource)
         let before = try exchange?.source ?? base.uiProjection()
         let candidate = try base.applyingV3Edits(source, comparedTo: before, now: now)
@@ -423,6 +443,7 @@ final class ChatState: ObservableObject {
             }
         }
         let nextNavigation = try navigation ?? historySelecting(selectedID, in: changed.source)
+        let nextEditing = try editing ?? (navigation != nil ? editingHistory : MessageEditing.invalidatingHistory(editingHistory, before: before, after: changed.source))
         try store?.save(SavedChatState(exchange: changed, document: candidate, conversations: views, selectedConversationID: selectedID, style: displayStyle))
         if preserveGeneration, let current = generation {
             generation = ActiveGeneration(id: current.id, chatID: current.chatID, baseSource: changed.source, path: current.path, output: current.output, running: current.running)
@@ -432,6 +453,7 @@ final class ChatState: ObservableObject {
         self.selectedID = selectedID
         if let nextNavigation { publishNavigation(nextNavigation, focus: nil) }
         exchange = changed
+        editingHistory = nextEditing
         document = candidate
         persistenceError = nil
     }
@@ -477,10 +499,12 @@ final class ChatState: ObservableObject {
         }
         let selected = views.contains { $0.id.utf8.elementsEqual(selectedID.utf8) } ? selectedID : views.first?.id ?? ""
         let nextNavigation = try historySelecting(selected, in: changed.source)
+        let nextEditing = try exchange.map { try MessageEditing.invalidatingHistory(editingHistory, before: $0.source, after: changed.source) } ?? nil
         try store?.save(SavedChatState(exchange: changed, document: candidate, conversations: views, selectedConversationID: selected, style: displayStyle))
         invalidateGeneration()
         branchCandidates = candidates
         if let nextNavigation { publishNavigation(nextNavigation, focus: nil) }
+        editingHistory = nextEditing
         document = candidate; exchange = changed; conversations = views; selectedID = selected; persistenceError = nil
     }
 

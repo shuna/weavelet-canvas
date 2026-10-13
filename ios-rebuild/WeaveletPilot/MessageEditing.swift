@@ -38,63 +38,117 @@ struct MessageDraft: Identifiable {
 }
 
 enum MessageEditing {
-    static func remove(in source: OrderedJSON, chatID: String, nodeID: String?, viewingPath: [String],
-                       operation: NodeRemovalOperation, newIDs: [String], now: Double) throws -> OrderedJSON {
-        var chats = try source.required("chats").array("chats")
-        guard let index = try chats.firstIndex(where: { try $0.required("id").string("id").utf8.elementsEqual(chatID.utf8) }) else { throw ExchangeError.invalid("chat ID") }
-        let chat = chats[index]
-        var boundary = SharedWebProjection()
-        var projected = try boundary.chat(chat)
-        // Pruning reads pinned as a flag; the remaining node metadata stays opaque.
-        if let tree = chat["branchTree"] {
-            let projectedTree = try projected.required("branchTree"), projectedNodes = try projectedTree.required("nodes")
-            let nodes = try tree.required("nodes").object("nodes").map { field -> JSONField in
-                var node = try projectedNodes.required(field.key)
-                if let pinned = field.value["pinned"] { node = node.replacing("pinned", with: pinned) }
-                return .init(key: field.key, value: node)
-            }
-            projected = projected.replacing("branchTree", with: projectedTree.replacing("nodes", with: .object(nodes)))
-        }
-        let store = try source.required("contentStore")
-        let input = OrderedJSON.object([
-            .init(key: "chat", value: projected), .init(key: "contentStore", value: try boundary.store(store)),
-            .init(key: "nodeID", value: nodeID.map(OrderedJSON.string) ?? .null),
-            .init(key: "viewingPath", value: .array(viewingPath.map(OrderedJSON.string))),
-            .init(key: "operation", value: .string(operation.rawValue)),
-            .init(key: "newIDs", value: .array(newIDs.map(OrderedJSON.string))), .init(key: "now", value: .number(String(now)))])
-        let changes = try SharedWebOperations.call("nodeRemoval", input)
-        let changed = try OrderedJSONChanges.apply(changes, to: .object([.init(key: "chat", value: chat), .init(key: "contentStore", value: store)]), opaque: boundary.opaque)
-        chats[index] = try changed.required("chat")
-        return source.replacing("chats", with: .array(chats)).replacing("contentStore", with: try changed.required("contentStore"))
+    struct HistoryState {
+        let raw: OrderedJSON
+        let canUndo: Bool
+        let canRedo: Bool
+    }
+    struct HistoryMove {
+        let source: OrderedJSON
+        let history: HistoryState
+        let affectedChatIDs: [String]
+        let updated: Bool
     }
 
+    private static func historyState(_ result: OrderedJSON) throws -> HistoryState {
+        let can = try result.required("can")
+        return try HistoryState(raw: result.required("history"), canUndo: can.required("undo").boolean("undo"), canRedo: can.required("redo").boolean("redo"))
+    }
+    private static func perform(in source: OrderedJSON, chatID: String, kind: String, history: HistoryState?,
+                                onHistory: ((HistoryState) -> Void)?, fields: (inout SharedWebProjection) throws -> [JSONField]) throws -> OrderedJSON {
+        var chats = try source.required("chats").array("chats")
+        guard let index = try chats.firstIndex(where: { try $0.required("id").string("id").utf8.elementsEqual(chatID.utf8) }) else { throw ExchangeError.invalid("chat ID") }
+        var boundary = SharedWebProjection()
+        let chat = try boundary.editingChat(chats[index])
+        let store = try boundary.store(source.required("contentStore"))
+        let input = try OrderedJSON.object([.init(key: "chat", value: chat), .init(key: "contentStore", value: store)] + fields(&boundary))
+        let changes: OrderedJSON
+        var next: HistoryState?
+        if onHistory != nil {
+            let payload = try OrderedJSON.object([.init(key: "operation", value: .string("edit")), .init(key: "kind", value: .string(kind)),
+                .init(key: "input", value: input), .init(key: "history", value: boundary.history(history?.raw))])
+            let output = try SharedWebOperations.call("branchHistory", payload)
+            changes = try output.required("changes")
+            next = try historyState(output)
+        } else {
+            let output = try SharedWebOperations.call(kind, input)
+            if kind == "nodeOptions" {
+                guard output["status"] == .string("updated") || output["status"] == .string("unchanged") else { throw ExchangeError.invalid("メッセージがありません") }
+                changes = try output.required("changes")
+            } else { changes = output }
+        }
+        let original = OrderedJSON.object([.init(key: "chat", value: chats[index]), .init(key: "contentStore", value: try source.required("contentStore"))])
+        let changed = try OrderedJSONChanges.apply(changes, to: original, opaque: boundary.opaque)
+        chats[index] = try changed.required("chat")
+        let result = source.replacing("chats", with: .array(chats)).replacing("contentStore", with: try changed.required("contentStore"))
+        if let next {
+            let raw = try OrderedJSONChanges.apply(.array([.object([.init(key: "op", value: .string("set")), .init(key: "path", value: .array([])), .init(key: "value", value: next.raw)])]), to: .null, opaque: boundary.opaque)
+            onHistory?(HistoryState(raw: raw, canUndo: next.canUndo, canRedo: next.canRedo))
+        }
+        return result
+    }
+
+    static func remove(in source: OrderedJSON, chatID: String, nodeID: String?, viewingPath: [String],
+                       operation: NodeRemovalOperation, newIDs: [String], now: Double,
+                       history: HistoryState? = nil, onHistory: ((HistoryState) -> Void)? = nil) throws -> OrderedJSON {
+        try perform(in: source, chatID: chatID, kind: "nodeRemoval", history: history, onHistory: onHistory) { _ in [
+            .init(key: "nodeID", value: nodeID.map(OrderedJSON.string) ?? .null),
+            .init(key: "viewingPath", value: .array(viewingPath.map(OrderedJSON.string))), .init(key: "operation", value: .string(operation.rawValue)),
+            .init(key: "newIDs", value: .array(newIDs.map(OrderedJSON.string))), .init(key: "now", value: .number(String(now)))] }
+    }
     static func textValue(of parts: OrderedJSON) throws -> String {
         var boundary = SharedWebProjection()
         return try SharedWebOperations.call("messageEdit", .object([.init(key: "operation", value: .string("textValue")),
             .init(key: "parts", value: boundary.parts(parts))])).string("textValue")
     }
     static func save(in source: OrderedJSON, chatID: String, nodeID: String?, viewingPath: [String], role: String,
-                     parts: OrderedJSON, editedText: String? = nil, mode: MessageSaveMode, newIDs: [String], now: Double) throws -> OrderedJSON {
-        var chats = try source.required("chats").array("chats")
-        guard let index = try chats.firstIndex(where: { try $0.required("id").string("id").utf8.elementsEqual(chatID.utf8) }) else { throw ExchangeError.invalid("chat ID") }
+                     parts: OrderedJSON, editedText: String? = nil, mode: MessageSaveMode, newIDs: [String], now: Double,
+                     history: HistoryState? = nil, onHistory: ((HistoryState) -> Void)? = nil) throws -> OrderedJSON {
+        try perform(in: source, chatID: chatID, kind: "messageEdit", history: history, onHistory: onHistory) { boundary in
+            var fields: [JSONField] = [.init(key: "viewingPath", value: .array(viewingPath.map(OrderedJSON.string))),
+                .init(key: "nodeID", value: nodeID.map(OrderedJSON.string) ?? .null), .init(key: "role", value: .string(role)),
+                .init(key: "parts", value: try boundary.parts(parts)), .init(key: "mode", value: .string(mode.rawValue)),
+                .init(key: "newIDs", value: .array(newIDs.map(OrderedJSON.string))), .init(key: "now", value: .number(String(now)))]
+            if let editedText { fields.append(.init(key: "editedText", value: .string(editedText))) }
+            return fields
+        }
+    }
+    static func saveOptions(in source: OrderedJSON, chatID: String, nodeID: String, value: NodeOptions.Value, newIDs: [String], now: Double,
+                            history: HistoryState?, onHistory: @escaping (HistoryState) -> Void) throws -> OrderedJSON {
+        _ = try NodeOptions.read(in: source, chatID: chatID, nodeID: nodeID)
+        guard let chat = try source.required("chats").array("chats").first(where: { try $0.required("id").string("id").utf8.elementsEqual(chatID.utf8) }) else { throw ExchangeError.invalid("chat ID") }
+        let target = chat["branchTree"] == nil ? String(nodeID.dropFirst(8)) : nodeID
+        return try perform(in: source, chatID: chatID, kind: "nodeOptions", history: history, onHistory: onHistory) { _ in [
+            .init(key: "operation", value: .string("save")), .init(key: "nodeId", value: .string(target)),
+            .init(key: "value", value: .object([.init(key: "label", value: .string(value.label)), .init(key: "starred", value: .bool(value.starred)),
+                .init(key: "pinned", value: .bool(value.pinned)), .init(key: "collapsed", value: .bool(value.collapsed)),
+                .init(key: "omitted", value: .bool(value.omitted)), .init(key: "protected", value: .bool(value.protected))])),
+            .init(key: "newIDs", value: .array(newIDs.map(OrderedJSON.string))), .init(key: "now", value: .number(String(now)))] }
+    }
+
+    static func moveHistory(_ operation: String, in source: OrderedJSON, history: HistoryState?, now: Double) throws -> HistoryMove {
         var boundary = SharedWebProjection()
-        let projectedChat = try boundary.chat(chats[index])
-        let projectedStore = try boundary.store(source.required("contentStore"))
-        let projectedParts = try boundary.parts(parts)
-        var fields: [JSONField] = [
-            .init(key: "chat", value: projectedChat), .init(key: "contentStore", value: projectedStore),
-            .init(key: "viewingPath", value: .array(viewingPath.map(OrderedJSON.string))),
-            .init(key: "nodeID", value: nodeID.map(OrderedJSON.string) ?? .null),
-            .init(key: "role", value: .string(role)), .init(key: "parts", value: projectedParts),
-            .init(key: "mode", value: .string(mode.rawValue)),
-            .init(key: "newIDs", value: .array(newIDs.map(OrderedJSON.string))), .init(key: "now", value: .number(String(now)))
-        ]
-        if let editedText { fields.append(.init(key: "editedText", value: .string(editedText))) }
-        let changes = try SharedWebOperations.call("messageEdit", .object(fields))
-        let original = OrderedJSON.object([.init(key: "chat", value: chats[index]), .init(key: "contentStore", value: try source.required("contentStore"))])
-        let changed = try OrderedJSONChanges.apply(changes, to: original, opaque: boundary.opaque)
-        chats[index] = try changed.required("chat")
-        return source.replacing("chats", with: .array(chats)).replacing("contentStore", with: try changed.required("contentStore"))
+        let chats = try source.required("chats").array("chats").map { try boundary.editingChat($0) }
+        let store = try boundary.store(source.required("contentStore"))
+        let input = try OrderedJSON.object([.init(key: "operation", value: .string(operation)), .init(key: "history", value: boundary.history(history?.raw)),
+            .init(key: "chats", value: .array(chats)), .init(key: "contentStore", value: store), .init(key: "busyChatIds", value: .array([])), .init(key: "now", value: .number(String(now)))])
+        let output = try SharedWebOperations.call("branchHistory", input)
+        let changed = try OrderedJSONChanges.apply(output.required("changes"), to: source, opaque: boundary.opaque)
+        let state = try historyState(output)
+        let restored = try OrderedJSONChanges.apply(.array([.object([.init(key: "op", value: .string("set")), .init(key: "path", value: .array([])), .init(key: "value", value: state.raw)])]), to: .null, opaque: boundary.opaque)
+        return try HistoryMove(source: changed, history: HistoryState(raw: restored, canUndo: state.canUndo, canRedo: state.canRedo),
+            affectedChatIDs: output.required("affectedChatIds").array("affectedChatIds").map { try $0.string("chat ID") }, updated: output["status"] == .string("updated"))
+    }
+    static func invalidatingHistory(_ history: HistoryState?, before: OrderedJSON, after: OrderedJSON) throws -> HistoryState? {
+        guard let history else { return nil }
+        var boundary = SharedWebProjection()
+        let previous = try before.required("chats").array("chats").map { try boundary.editingChat($0) }
+        let next = try after.required("chats").array("chats").map { try boundary.editingChat($0) }
+        let output = try SharedWebOperations.call("branchHistory", .object([.init(key: "operation", value: .string("invalidate")),
+            .init(key: "history", value: boundary.history(history.raw)), .init(key: "before", value: .array(previous)), .init(key: "after", value: .array(next))]))
+        let state = try historyState(output)
+        let restored = try OrderedJSONChanges.apply(.array([.object([.init(key: "op", value: .string("set")), .init(key: "path", value: .array([])), .init(key: "value", value: state.raw)])]), to: .null, opaque: boundary.opaque)
+        return HistoryState(raw: restored, canUndo: state.canUndo, canRedo: state.canRedo)
     }
 }
 
@@ -185,6 +239,35 @@ struct SharedWebProjection {
                 projectedTree = projectedTree.replacing("messageAttributesV1", with: attributes.replacing("byNode", with: .object(byNode)))
             }
             result = result.replacing("branchTree", with: projectedTree)
+        }
+        return result
+    }
+    mutating func editingChat(_ value: OrderedJSON) throws -> OrderedJSON {
+        var result = try chat(value)
+        if let tree = value["branchTree"] {
+            let projectedTree = try result.required("branchTree"), projectedNodes = try projectedTree.required("nodes")
+            let nodes = try tree.required("nodes").object("nodes").map { field -> JSONField in
+                var node = try projectedNodes.required(field.key)
+                for key in ["label", "starred", "pinned"] { if let value = field.value[key] { node = node.replacing(key, with: value) } }
+                return .init(key: field.key, value: node)
+            }
+            result = result.replacing("branchTree", with: projectedTree.replacing("nodes", with: .object(nodes)))
+        }
+        return result
+    }
+    mutating func history(_ value: OrderedJSON?) throws -> OrderedJSON {
+        guard let value else { return .null }
+        var result = value
+        for key in ["past", "future"] {
+            let snapshots = try value.required(key).array(key).map { snapshot -> OrderedJSON in
+                let chats = try snapshot.required("chats").array("chats").map { chat -> OrderedJSON in
+                    var projected = try editingChat(chat)
+                    for field in ["expectedActivePath", "systemPrompt"] { if let value = chat[field] { projected = projected.replacing(field, with: value) } }
+                    return projected
+                }
+                return try snapshot.replacing("chats", with: .array(chats)).replacing("contentStore", with: store(snapshot.required("contentStore")))
+            }
+            result = result.replacing(key, with: .array(snapshots))
         }
         return result
     }
