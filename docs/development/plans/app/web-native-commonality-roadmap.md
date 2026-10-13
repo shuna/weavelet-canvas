@@ -322,3 +322,10 @@ f0c80deeで既存Web workerの配置計算をpureなbranchLayout.tsへ移し、�
 旧Dagreを新nativeへ無条件配布する方針は採らず、Web側も同じ公式保守packageへ限定置換できるか検証する。通常tree不変、cycle/selfloop/componentのnode・edge・列挙順・有限位置を確認し、差があれば描画位置の差と意味の変化を区別する。元libraryと新libraryを恒久並存させず、npm/Yarnの固定版を揃える。現在は更新担当による確認中で、採用成功やnativeへの配布済みとは扱わない。
 
 native UIで描画する場合はJSCで配置だけを共有し、OSの表示・hit testing・pan/zoomへ接続する。Web BranchEditor全体をWKで使う案ではReactFlowの操作を再利用できる一方、追加配布依存と書込bridgeが増える。既存Markdown WKを置くだけではBranchEditor完成にならない。実装総コスト・ライセンス・実増分サイズ・非同期配置と古い結果拒否を比較して接続方式を決める。現時点でWK/JSCの速度、実配布サイズ、実機操作性は未測定。
+
+
+### 公式版への置換・配布境界の確認
+
+3376d079で@dagrejs/dagre3.1.1と@dagrejs/graphlib4.0.5へ置換し、旧dagre/graphlib項目と自前型宣言を除去した。npm/Yarn両lockを揃え、通常treeは同じ算法を維持。切断cycle・自己loop・複数componentの採取結果ではnode/edge順と有限座標、サンプルpixel座標が旧版と一致した。関連6件/Web型検査/Vite build/frozen Yarn installは成功。yarn check --integrityは失敗。コピー元cacheのintegrityに現lockと旧lock双方にない105キーを確認したため既存不一致を含むが、失敗全体が既存由来と断定せず、lock全体の正規化は行っていない。
+
+b2f5f976/6a345e4aで同じpure元のbranchLayoutと既存Web ensureBranchTreeStateのbranchEnsureを固定bridgeへ公開。ID/時刻はホストが供給し、flat変換の属性保持とraw値のnative復元は既存境界へ接続する。関連13件、型検査、bundle鮮度、macOS JavaScriptCoreの実呼出が成功。Dagre ESMが内包するGraphlibにもMIT本文・固定版来歴・実配布hashを付けた。独立Astraは共有元/配布境界の新規P2以上なし。固定bundleは944610から1024346 byteへ79736 byte増加した（licenseとbridgeを含む実file差）。これはapp全体や圧縮配布サイズ、実行速度/消費電力の測定ではない。native UIの接続・非同期処理・古い結果拒否は次の同機能一式で確認する。

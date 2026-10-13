@@ -623,3 +623,12 @@ Web hydration→partializeの全値比較6件成功。Catalyst代表2件ではCl
 初回Googleは新receiverに保存済み文書がなくpublicationSnapshotが拒否された。既存受信fixtureと同じく空V3を先に読み込んで独立保存を準備し、元assertを維持して再実行成功。ログ /private/tmp/weavelet-current-roots-{web,native}-final.log、失敗は /private/tmp/weavelet-current-roots-native.log。独立Astraは新規P2以上なし。既存保存失敗/誤鍵/競合/取消/全wireの成功結果は基盤不変更につき再利用し、全suiteを繰り返していない。検証はFAKE transport・隔離storeであり、実CloudKit/Google接続や全ネスト項目の全組合せ完成を主張しない。
 
 9d764849ではWeb自動評価のtext-only抽出とphase別auto判定を共有autoEvaluationPlanへ切り出し、実Webpre/post callerとnative用bridgeへ接続した。担当関連16件・型検査・bundle鮮度が成功、独立Astraは新規P2以上なし。nativeの生成前後接続は別担当で実装中であり、この共有抽出だけを自動評価全体の完成とはしない。
+
+
+## 自動評価：生成接続と監査指摘の修正中（2026-10-14）
+
+c9c62bcfで実Web useSubmitのOpenRouter送信前制約をautoPreSendSafetyAllowedへ切り出した。画像のみでもpre safety autoかつengineがlocal以外ならhard制約を拒否する条件を共有し、autoPlanの空text判定と分ける。親初回bundleはWeb storeを含むre-export元openrouterControlsをimportして失敗し、同じ関数のpure元openrouterRequestへ接続して再生成成功。共有関連17件・型検査・最終鮮度成功、存在しないuseSubmit.test.tsを新たに実行した証拠とは数えない。
+
+1ec6d172/d4e22492でnative生成前後のnonblocking評価・予約済みassistant IDへのphase別保存・設定UIを接続した。optional OpenRouter設定は不在keyを省略し、JSON nullによるshared validator拒否と区別する。担当12件＋追補1件の成功を再利用し、親で新しいBranch bridgeも含むbundleに対する評価13件が成功（/private/tmp/weavelet-auto-evaluation-integration.log）。保存元の精密値/未知属性を保持し、保存成功前に結果を公開しない。Local/Hybrid classifierは未接続として明示し、remoteへ偽装しない。
+
+独立AstraはP2を2件確認：merged user本文を評価する一方で最後のraw user一件しか世代照合せず、前方user編集/最新omittedで古い評価を保存できる点と、一方dimensionの準備失敗が他方の評価も停止する点。必要送信依存の照合とdimension別準備エラーへ限定修正を依頼した。現段階は一式の受入未完了。指摘修正後はその影響範囲だけ確認し、既存全同期・全suiteを反復しない。実API/実機/狭幅UIは未確認。
