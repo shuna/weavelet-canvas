@@ -136,12 +136,16 @@ enum LocalLlama {
     }
     private static func tokenize(_ prompt: String, vocab: OpaquePointer) throws -> [llama_token] {
         guard let length = Int32(exactly:prompt.utf8.count) else { throw LocalLlamaError.tokenize }
-        let needed = prompt.withCString { llama_tokenize(vocab,$0,length,nil,0,true,true) }
+        let needed = prompt.withCString { llama_tokenize(vocab,$0,length,nil,0,false,true) }
         guard needed != Int32.min else { throw LocalLlamaError.tokenize }
         var tokens = [llama_token](repeating:0,count:Int(abs(needed)))
-        let count = prompt.withCString { llama_tokenize(vocab,$0,length,&tokens,Int32(tokens.count),true,true) }
+        let count = prompt.withCString { llama_tokenize(vocab,$0,length,&tokens,Int32(tokens.count),false,true) }
         guard count >= 0 else { throw LocalLlamaError.tokenize }
-        return Array(tokens.prefix(Int(count)))
+        tokens = Array(tokens.prefix(Int(count)))
+        // wllama action_tokenize uses add_special=false; createCompletion adds BOS only when missing.
+        let bos = llama_vocab_bos(vocab)
+        if llama_vocab_get_add_bos(vocab), tokens.first != bos { tokens.insert(bos,at:0) }
+        return tokens
     }
     private static func piece(_ token: llama_token, vocab: OpaquePointer) throws -> [UInt8] {
         var output = [CChar](repeating:0,count:128)
