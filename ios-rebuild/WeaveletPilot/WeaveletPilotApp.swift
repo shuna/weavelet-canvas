@@ -852,7 +852,8 @@ struct ConversationLibraryView: View {
 
 
     private func conversationRow(_ conversation: Conversation) -> some View {
-        HStack {
+        let active = state.selectedConversationID.utf8.elementsEqual(conversation.id.utf8)
+        return HStack {
             if state.exchange != nil {
                 Button {
                     if !selected.insert(conversation.identity).inserted { selected.remove(conversation.identity) }
@@ -873,6 +874,7 @@ struct ConversationLibraryView: View {
                     .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
             }
             .buttonStyle(.borderless)
+            .accessibilityAddTraits(active ? .isSelected : [])
             if state.exchange != nil {
                 Menu {
                     Button("改名") {
@@ -894,6 +896,7 @@ struct ConversationLibraryView: View {
                 .accessibilityLabel("会話の操作: \(conversation.title)")
             }
         }
+        .background(active ? Color.primary.opacity(0.08) : Color.clear, in: RoundedRectangle(cornerRadius:8))
     }
 
     private func folderTree(_ folder: ChatFolderRow) -> AnyView {

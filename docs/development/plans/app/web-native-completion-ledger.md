@@ -589,3 +589,11 @@ Webの単一定義/ID・重複判定・未指定役割の自動割当をpure共�
 担当の共有3件/Web型検査/bundlecheck/Catalyst境界2件は成功。担当が誤って開始したSimulator runはINT停止・未確認扱い、このtaskが起動したUDIDのみshutdownし、指定されたCatalystで再実行した。親統合の生成provenance競合は双方の実sourceから再生成して解消、bundlecheck成功。
 
 独立AstraのP2は4件：NFC/NFD model IDの別定義混同と世代見逃し、duplicate候補scan後のGGUF再指定見逃し、Task取消後の登録継続、実Web callerでの既存ID衝突検証の未接続。担当へ限定修正を依頼済みで、現段階は受入未完了。主生成との競合はcommit前syncInputSnapshotの既存guardで拒否されるため追加guardは不要。修正後は該当範囲のみ確認し、既存全同期/全suiteを繰り返さない。
+
+### 同機能の指摘解消・統合確認
+
+42756ae3で4件を限定修正した。IDはUTF8、設定世代はencoded bytes、既存候補fileはOS世代をscan前後/commit前に検証、各await後とfile確定/state保存前にTask取消を確認。Web callerも現登録IDを渡してOPFS保存前に衝突を拒否する。追加Catalyst2件と既存2件の成功結果を再利用、Web共有3件/型検査/生成鮮度成功。独立Astra限定再監査は新規P2以上なし。親統合後にmodel import2＋folder hierarchy1の接続3件を実行し全件成功（/private/tmp/weavelet-local-import-hierarchy-integration.log）。未変更の全同期往復/全suiteは反復していない。
+
+FAKE Catalystで実file pickerから既存検証用1.1MB GGUFを新規登録し、生成/分析の自動割当、端末内ファイルあり、有効化を確認。そのまま本文の品質評価へ接続し、5軸進捗→完了、source=localの5有限score保存と合成会話3件保持を確認した。toyモデルの評価品質・実用性を保証した結果ではない。実API/クラウドへ送信せず、通常store/Keychainを変更していない。
+
+同じ隔離実画面で親子インデント、Workの折畳みによるchild消失、全会話検索でNested chatへ移動した際の祖先展開と本文到達も確認。表示中会話の強調とselected accessibility traitをWebのactive rowに合わせて追加し、Catalyst buildと実表示を確認した（/private/tmp/weavelet-sidebar-active-build.log）。確認アプリ終了とprocess消失を確認。今回のGGUF登録/階層UIはAirへ再installしていない。iPhone実推論・狭幅/大きな文字・実クラウド相互運用、複数GGUF/分類器/自動評価など全体残件は維持する。
