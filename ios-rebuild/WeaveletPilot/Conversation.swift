@@ -249,13 +249,20 @@ final class ChatState: ObservableObject {
             parts = .array([.object([JSONField(key: "type", value: .string("text")), JSONField(key: "text", value: .string(""))])])
             role = "user"
         } else { throw ExchangeError.invalid("node ID") }
-        var draft = try MessageDraft(chatID: conversation.id, nodeID: nodeID, path: conversation.visibleMessages.map(\.id), originalParts: parts, originalRole: role, isProtected: protected, role: role, text: "")
+        var draft = try MessageDraft(chatID: conversation.id, nodeID: nodeID, path: conversation.visibleMessages.map(\.id), source: exchange.source, originalParts: parts, originalRole: role, isProtected: protected, role: role, text: "")
         draft.text = draft.originalText
         return draft
     }
 
+    func messageInsertionDraft(beforeNodeID: String) throws -> MessageDraft {
+        guard let exchange, let conversation, conversation.nodes.contains(where: { $0.id.utf8.elementsEqual(beforeNodeID.utf8) }) else { throw ExchangeError.invalid("挿入先のメッセージがありません") }
+        let parts = OrderedJSON.array([.object([.init(key:"type",value:.string("text")),.init(key:"text",value:.string(""))])])
+        return try MessageDraft(chatID:conversation.id,nodeID:beforeNodeID,path:conversation.visibleMessages.map(\.id),source:exchange.source,isInsertion:true,originalParts:parts,originalRole:"user",isProtected:false,role:"user",text:"")
+    }
+
     func saveMessage(_ draft: MessageDraft, mode: MessageSaveMode, newIDs: [String]? = nil, now: Double = Date().timeIntervalSince1970 * 1000) throws {
-        guard let exchange else { throw ExchangeError.invalid("保存済み会話がありません") }
+        guard generation == nil else { throw ExchangeError.invalid("生成結果を保存してから本文を編集してください") }
+        guard let exchange, exchange.source == draft.source else { throw ExchangeError.invalid("会話が変更されました。本文を開き直してください") }
         let sourceChat = try exchange.source.required("chats").array("chats").first { try $0.required("id").string("id").utf8.elementsEqual(draft.chatID.utf8) }
         guard let sourceChat else { throw ExchangeError.invalid("chat ID") }
         let needed = try sourceChat["branchTree"] == nil ? sourceChat.required("messages").array("messages").count + 1 : 1

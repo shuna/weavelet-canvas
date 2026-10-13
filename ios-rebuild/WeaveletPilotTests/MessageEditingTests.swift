@@ -322,4 +322,97 @@ final class MessageEditingTests: XCTestCase {
         XCTAssertEqual(try XCTUnwrap(state.exchange).source.required("chats").array("chats")[0]["config"], .object([]))
     }
 
+    func testRootMiddleAndFlatInsertionSaveRestartExportAndSharedRecords() throws {
+        let tests=try cases(), branch=try tests[0].required("input"), flat=try XCTUnwrap(tests.first { $0["name"] == .string("flat-overwrite") }).required("input")
+        let cases:[(OrderedJSON,String,[String],[String],String,String)] = [
+            (branch,"system",["insert-root"],["insert-root","system","middle","last"],"system",""),
+            (branch,"middle",["insert-middle"],["system","insert-middle","middle","last"],"assistant","Inserted middle"),
+            (flat,"message-0",["flat-original","insert-flat"],["insert-flat","flat-original"],"user","Inserted flat")
+        ]
+        for (input,target,ids,path,role,text) in cases {
+            let store=try store(), state=ChatState(store:store)
+            try state.importWebData(input.replacing("xHuge",with:.number("9007199254740993")).encoded())
+            let before=try XCTUnwrap(state.exchange).source
+            var draft=try state.messageInsertionDraft(beforeNodeID:target)
+            XCTAssertTrue(draft.isInsertion); XCTAssertEqual(draft.beforeNodeID,target); XCTAssertEqual(draft.source,before)
+            draft.role=role; draft.text=text
+            try state.saveMessage(draft,mode:.insert,newIDs:ids,now:1700000000123)
+            XCTAssertEqual(state.conversation?.visibleMessages.map(\.id),path)
+            let inserted=try XCTUnwrap(state.conversation?.nodes.first { $0.id == ids.last! })
+            XCTAssertEqual(inserted.role,role); XCTAssertEqual(inserted.parts,[.text(text)])
+            let after=try XCTUnwrap(state.exchange).source
+            XCTAssertEqual(after["xHuge"],.number("9007199254740993"))
+            XCTAssertEqual(try after.required("chats").array("chats")[1],try before.required("chats").array("chats")[1])
+            for field in try before.required("contentStore").object("store") {
+                XCTAssertEqual(try after.required("contentStore").required(field.key).encoded(),try field.value.encoded())
+            }
+            let fresh=ChatState(store:store)
+            XCTAssertNil(fresh.persistenceError); XCTAssertEqual(fresh.conversation?.visibleMessages.map(\.id),path)
+            XCTAssertEqual(try fresh.publicationSnapshot().encoded(),try state.publicationSnapshot().encoded())
+            let exported=try OrderedJSON.decode(fresh.exportWebData())
+            XCTAssertEqual(try WebExchange(source:exported).conversations[0].visibleMessages.map(\.id),path)
+            XCTAssertEqual(exported["xHuge"],.number("9007199254740993"))
+            let records=try SyncRecords.toRecords(fresh.publicationSnapshot()), roundtrip=try SyncRecords.fromRecords(records)
+            XCTAssertEqual(try SyncRecords.canonical(SyncRecords.toRecords(roundtrip)),try SyncRecords.canonical(records))
+        }
+    }
+    func testInsertionSaveFailureKeepsDraftSnapshotViewHistoryDiskThenRetryAndStaleDraftRejectsEveryMode() throws {
+        let root=FileManager.default.temporaryDirectory.appendingPathComponent("insert-save-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at:root,withIntermediateDirectories:true)
+        defer { try? FileManager.default.removeItem(at:root) }
+        let fault=InsertionWriteFault(), store=LocalStateStore(fileURL:root.appendingPathComponent("local.json")) { data,url in
+            if fault.reject { throw CocoaError(.fileWriteNoPermission) }; try data.write(to:url,options:.atomic)
+        }
+        let state=ChatState(store:store); try state.importWebData(cases()[0].required("input").encoded())
+        var draft=try state.messageInsertionDraft(beforeNodeID:"middle"); draft.text="Retry insertion"
+        let before=try state.publicationSnapshot(), disk=try Data(contentsOf:store.fileURL), path=state.conversation?.visibleMessages.map(\.id), focus=state.navigationFocus, canBack=state.canNavigateBack
+        fault.reject=true
+        XCTAssertThrowsError(try state.saveMessage(draft,mode:.insert,newIDs:["retry-insert"],now:1000))
+        XCTAssertEqual(try state.publicationSnapshot(),before); XCTAssertEqual(try Data(contentsOf:store.fileURL),disk)
+        XCTAssertEqual(state.conversation?.visibleMessages.map(\.id),path); XCTAssertEqual(state.navigationFocus,focus); XCTAssertEqual(state.canNavigateBack,canBack)
+        XCTAssertEqual(draft.text,"Retry insertion")
+        fault.reject=false; try state.saveMessage(draft,mode:.insert,newIDs:["retry-insert"],now:1000)
+        XCTAssertEqual(state.conversation?.visibleMessages.map(\.id),["system","retry-insert","middle","last"])
+        var stale=try state.messageDraft(nodeID:"middle"); stale.text="Old window draft"
+        try state.renameChat(id:stale.chatID,title:"Another window edit",now:2000)
+        let changed=try state.publicationSnapshot(), changedDisk=try Data(contentsOf:store.fileURL)
+        for mode in [MessageSaveMode.overwrite,.branch,.append,.insert] {
+            XCTAssertThrowsError(try state.saveMessage(stale,mode:mode,newIDs:["stale-new"],now:3000))
+            XCTAssertEqual(try state.publicationSnapshot(),changed); XCTAssertEqual(try Data(contentsOf:store.fileURL),changedDisk)
+        }
+    }
+    @MainActor func testEveryMessageSaveModeRejectsActiveGenerationWithoutDiscardingPartialOutput() async throws {
+        let store=try store(), state=ChatState(store:store)
+        try state.importWebData(cases()[0].required("input").encoded())
+        var draft=try state.messageInsertionDraft(beforeNodeID:"middle"); draft.text="Must not save"
+        let config=URLSessionConfiguration.ephemeral; config.protocolClasses=[HeldInsertionProtocol.self]
+        let client=RemoteClient(session:URLSession(configuration:config))
+        let record=RemoteCredentialRecord(settings:RemoteSettings(endpoint:"https://fixture.invalid/v1/chat/completions",model:"FAKE-model",stream:true),key:"FAKE")
+        try state.startGeneration(input:"Generating",record:record,client:client,nodeIDs:["generation-input"])
+        for _ in 0..<300 {
+            if state.generation?.output.text == "Partial insertion guard" { break }
+            try await Task.sleep(nanoseconds:5_000_000)
+        }
+        let generation=try XCTUnwrap(state.generation)
+        XCTAssertEqual(generation.output.text,"Partial insertion guard")
+        let before=try state.publicationSnapshot(), disk=try Data(contentsOf:store.fileURL)
+        for mode in [MessageSaveMode.overwrite,.branch,.append,.insert] {
+            XCTAssertThrowsError(try state.saveMessage(draft,mode:mode,newIDs:["blocked"],now:1000))
+            XCTAssertEqual(state.generation?.id,generation.id); XCTAssertEqual(state.generation?.output.text,generation.output.text)
+            XCTAssertEqual(try state.publicationSnapshot(),before); XCTAssertEqual(try Data(contentsOf:store.fileURL),disk)
+        }
+        state.stopGeneration()
+    }
+
+}
+
+private final class InsertionWriteFault { var reject=false }
+private final class HeldInsertionProtocol: URLProtocol {
+    override class func canInit(with request:URLRequest) -> Bool { request.url?.host == "fixture.invalid" }
+    override class func canonicalRequest(for request:URLRequest) -> URLRequest { request }
+    override func startLoading() {
+        client?.urlProtocol(self,didReceive:HTTPURLResponse(url:request.url!,statusCode:200,httpVersion:nil,headerFields:["Content-Type":"text/event-stream"])!,cacheStoragePolicy:.notAllowed)
+        client?.urlProtocol(self,didLoad:Data("data: {\"choices\":[{\"delta\":{\"content\":\"Partial insertion guard\"}}]}\n\n".utf8))
+    }
+    override func stopLoading() {}
 }

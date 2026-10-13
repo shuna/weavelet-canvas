@@ -42,6 +42,9 @@ struct ChatView: View {
                             MessageView(node: node, siblings: state.siblings(for: node.id), style: state.style, edit: state.exchange == nil || state.generation != nil ? nil : {
                                 do { draft = try state.messageDraft(nodeID: node.id) }
                                 catch { errorMessage = error.localizedDescription }
+                            }, insertBefore: state.exchange == nil || state.generation != nil ? nil : {
+                                do { draft = try state.messageInsertionDraft(beforeNodeID: node.id) }
+                                catch { errorMessage = error.localizedDescription }
                             }, configure: state.exchange == nil || state.generation != nil ? nil : {
                                 do { optionsDraft = try state.nodeOptionsDraft(nodeID: node.id) }
                                 catch { errorMessage = error.localizedDescription }
@@ -206,6 +209,7 @@ struct MessageView: View {
     let siblings: [MessageNode]
     let style: ChatStyle
     var edit: (() -> Void)? = nil
+    var insertBefore: (() -> Void)? = nil
     var configure: (() -> Void)? = nil
     var toggleCollapse: (() -> Void)? = nil
     let select: (String) -> Void
@@ -255,10 +259,13 @@ struct MessageView: View {
                         MessagePartView(part: part)
                     }
                 }
-                if edit != nil || configure != nil || toggleCollapse != nil {
+                if edit != nil || insertBefore != nil || configure != nil || toggleCollapse != nil {
                     HStack(spacing: 16) {
                         if let edit {
                             Button("編集", systemImage: "square.and.pencil", action: edit).frame(minHeight: 44)
+                        }
+                        if let insertBefore {
+                            Button("前に挿入", systemImage:"text.insert", action:insertBefore).frame(minHeight:44)
                         }
                         if let toggleCollapse {
                             Button(node.options.collapsed ? "本文を展開" : "本文を折りたたむ", systemImage: node.options.collapsed ? "chevron.down" : "chevron.up", action: toggleCollapse)
@@ -571,18 +578,22 @@ struct MessageEditorView: View {
                 Picker("役割", selection: $draft.role) {
                     Text("ユーザー").tag("user")
                     Text("アシスタント").tag("assistant")
-                    if draft.nodeID != nil && (draft.path.first?.utf8.elementsEqual(draft.nodeID!.utf8) == true || draft.originalRole == "system") {
+                    if draft.isInsertion || (draft.nodeID != nil && (draft.path.first?.utf8.elementsEqual(draft.nodeID!.utf8) == true || draft.originalRole == "system")) {
                         Text("システム").tag("system")
                     }
                 }
                 Section("本文") {
                     TextEditor(text: $draft.text).frame(minHeight: 220)
-                    Text("最初のテキストを編集します。他の本文要素は保持します。")
-                        .font(.footnote).foregroundStyle(.secondary)
+                    if !draft.isInsertion {
+                        Text("最初のテキストを編集します。他の本文要素は保持します。")
+                            .font(.footnote).foregroundStyle(.secondary)
+                    }
                 }
                 if draft.isProtected { Text("保護されたメッセージです。分岐として保存できます。") }
                 if let errorMessage { Text(errorMessage).foregroundStyle(.red) }
-                if draft.nodeID != nil {
+                if draft.isInsertion {
+                    Button("挿入して保存") { save(.insert) }
+                } else if draft.nodeID != nil {
                     Button("上書き保存") { save(.overwrite) }
                         .disabled(draft.isProtected || !draft.changed)
                     Button("分岐として保存") { save(.branch) }
@@ -591,7 +602,7 @@ struct MessageEditorView: View {
                         .disabled(draft.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                 }
             }
-            .navigationTitle(draft.nodeID == nil ? "本文を追加" : "本文を編集")
+            .navigationTitle(draft.isInsertion ? "本文を挿入" : draft.nodeID == nil ? "本文を追加" : "本文を編集")
             .toolbar { ToolbarItem(placement: .cancellationAction) { Button("取消") { dismiss() } } }
         }
     }

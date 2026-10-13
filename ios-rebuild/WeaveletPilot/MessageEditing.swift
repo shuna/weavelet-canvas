@@ -1,12 +1,15 @@
 import Foundation
 
-enum MessageSaveMode { case overwrite, branch, append }
+enum MessageSaveMode: String { case overwrite, branch, append, insert }
 
 struct MessageDraft: Identifiable {
     let id = UUID()
     let chatID: String
     let nodeID: String?
     let path: [String]
+    let source: OrderedJSON
+    let isInsertion: Bool
+    var beforeNodeID: String? { isInsertion ? nodeID : nil }
     let originalParts: OrderedJSON
     let originalRole: String
     let isProtected: Bool
@@ -15,9 +18,9 @@ struct MessageDraft: Identifiable {
 
     let originalText: String
     var changed: Bool { role != originalRole || !text.utf8.elementsEqual(originalText.utf8) }
-    init(chatID: String, nodeID: String?, path: [String], originalParts: OrderedJSON, originalRole: String,
+    init(chatID: String, nodeID: String?, path: [String], source: OrderedJSON, isInsertion: Bool = false, originalParts: OrderedJSON, originalRole: String,
          isProtected: Bool, role: String, text: String) throws {
-        self.chatID = chatID; self.nodeID = nodeID; self.path = path; self.originalParts = originalParts
+        self.chatID = chatID; self.nodeID = nodeID; self.path = path; self.source = source; self.isInsertion = isInsertion; self.originalParts = originalParts
         self.originalRole = originalRole; self.isProtected = isProtected; self.role = role; self.text = text
         originalText = try MessageEditing.textValue(of: originalParts)
     }
@@ -43,7 +46,7 @@ enum MessageEditing {
             .init(key: "viewingPath", value: .array(viewingPath.map(OrderedJSON.string))),
             .init(key: "nodeID", value: nodeID.map(OrderedJSON.string) ?? .null),
             .init(key: "role", value: .string(role)), .init(key: "parts", value: projectedParts),
-            .init(key: "mode", value: .string(mode == .append ? "append" : mode == .branch ? "branch" : "overwrite")),
+            .init(key: "mode", value: .string(mode.rawValue)),
             .init(key: "newIDs", value: .array(newIDs.map(OrderedJSON.string))), .init(key: "now", value: .number(String(now)))
         ]
         if let editedText { fields.append(.init(key: "editedText", value: .string(editedText))) }
