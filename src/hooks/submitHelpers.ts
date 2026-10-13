@@ -28,6 +28,7 @@ import { autoTitlePrompt, normalizeGeneratedTitle, resolveProviderForModel, setG
 export { buildTitlePromptMessage, resolveProviderForModel, setGeneratedTitle } from '@utils/chatTitle';
 import { isSummaryEligible, normalizeBubbleSummaryText } from '@utils/bubbleSummary';
 import { buildBubbleSummaryPrompt } from '@utils/bubbleSummaryPrompt';
+import { addPreparedSubmitUsage, prepareSubmitUsage } from '@utils/generationUsage';
 
 type ProviderMap = Partial<Record<ProviderId, ProviderConfig>>;
 
@@ -104,35 +105,20 @@ export const applySubmitTokenUsage = async (
 
   const chatIndex = state.chats.findIndex((chat) => chat.id === chatId);
   if (chatIndex < 0) return;
-
   const chat = state.chats[chatIndex];
-  const assistantMessageIndex = chat.branchTree?.activePath.indexOf(targetNodeId) ?? -1;
-  if (assistantMessageIndex < 0) return;
-
-  const config = chat.config;
-  const observation = chat.branchTree?.nodes[targetNodeId]?.openRouterObservation;
-  if (observation?.promptTokens !== undefined && observation.completionTokens !== undefined) {
-    const key = config.providerId ? `${config.model}:::${config.providerId}` : config.model;
-    const total = state.totalTokenUsed[key] ?? { promptTokens: 0, completionTokens: 0, imageTokens: 0 };
-    state.setTotalTokenUsed({ ...state.totalTokenUsed, [key]: {
-      ...total, promptTokens: total.promptTokens + observation.promptTokens,
-      completionTokens: total.completionTokens + observation.completionTokens,
-    } });
+  const prepared = prepareSubmitUsage({ ...chat,
+    omittedNodes: state.omittedNodeMaps[String(chatIndex)] ?? chat.omittedNodes ?? {} }, targetNodeId);
+  if (!prepared) return;
+  if (prepared.kind === 'observed') {
+    state.setTotalTokenUsed(addPreparedSubmitUsage(state.totalTokenUsed, prepared));
     return;
   }
-  const messages = chat.messages;
-  const assistantMessage = messages[assistantMessageIndex];
-  if (!assistantMessage) return;
-
-  const promptMessages = getSubmitContextMessages(messages, 'append', assistantMessageIndex, config.model, chatIndex, config.systemPrompt);
-
-
-  await updateTotalTokenUsed(
-    config.model,
-    promptMessages,
-    assistantMessage,
-    config.providerId
-  );
+  const [promptTokens, completionTokens] = await Promise.all([
+    countTokens(prepared.promptMessages, prepared.model),
+    countTokens([prepared.completionMessage], prepared.model),
+  ]);
+  useStore.getState().setTotalTokenUsed(addPreparedSubmitUsage(useStore.getState().totalTokenUsed,
+    prepared, { promptTokens, completionTokens }));
 };
 
 type TitleGenerationDeps = {

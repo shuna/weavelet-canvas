@@ -12,6 +12,32 @@ export interface OpenRouterRequestContext {
 export const isOpenRouterURL = (url: { protocol: string; hostname: string }): boolean =>
   url.protocol === 'https:' && ['openrouter.ai', 'eu.openrouter.ai', 'us.openrouter.ai'].includes(url.hostname);
 
+export function observeOpenRouterHeaders(headers: Pick<Headers, 'get'>): OpenRouterObservation {
+  const o: OpenRouterObservation = {};
+  const status = headers.get('X-OpenRouter-Cache-Status');
+  if (status === 'HIT' || status === 'MISS') o.responseCacheStatus = status;
+  for (const [field, header] of [['responseCacheAge', 'X-OpenRouter-Cache-Age'], ['responseCacheTTL', 'X-OpenRouter-Cache-TTL']] as const) {
+    const raw = headers.get(header);
+    if (raw !== null && raw.trim() && Number.isFinite(Number(raw))) o[field] = Number(raw);
+  }
+  const source = headers.get('X-OpenRouter-Cache-Source-Id');
+  if (source) o.responseCacheSourceId = source;
+  const id = headers.get('X-Generation-Id');
+  if (id) o.generationId = id;
+  return o;
+}
+
+export function observeOpenRouterUsage(usage: unknown): OpenRouterObservation {
+  if (!usage || typeof usage !== 'object') return {};
+  const u = usage as Record<string, unknown>;
+  const details = u.prompt_tokens_details as Record<string, unknown> | undefined;
+  const observation: OpenRouterObservation = {};
+  for (const [field, v] of Object.entries({ promptTokens: u.prompt_tokens, completionTokens: u.completion_tokens, cost: u.cost, cachedTokens: details?.cached_tokens, cacheWriteTokens: details?.cache_write_tokens })) {
+    if (typeof v === 'number' && Number.isFinite(v) && v >= 0) Object.assign(observation, { [field]: v });
+  }
+  return observation;
+}
+
 export function validateOpenRouterSettings(settings: OpenRouterChatSettings | undefined, model?: string, responseCacheEnabled = true): string | undefined {
   if (settings === undefined) return;
   const object = (v: unknown) => typeof v === 'object' && v !== null && !Array.isArray(v);
