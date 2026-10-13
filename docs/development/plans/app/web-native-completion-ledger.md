@@ -671,3 +671,12 @@ fc195ef1/f045577aで独自の二次元LCS tableを既存diff-match-patch1.0.5へ
 7d847396でWeb Menuの配置を基準に、一覧上部へ既存検索（library初期mode）、一覧下端へ同期/ファイル/設定を置いた。共通file importer/exporter・取込確認・検索/設定sheetはNavigationSplitView全体へ接続し、compact一覧から利用できるようにした。compact/detailOnlyでは詳細側の代替入口を保持する。設定は一般・会話設定・同期とデータ・評価・ローカルモデルへ分類、画面名を「設定」にした。通常会話行はiconと一行title、明示的選択modeだけ44ptのcheck操作を出す。既存選択/move/delete/生成guard/保存失敗表示を再利用し、新規業務処理は追加していない。
 
 担当最終Catalyst build・差分確認成功（/tmp/weavelet-native-sidebar-placement-{build,diff-check}.log）を再利用。親統合の差分確認成功、独立Astraは新規P2以上なし。UI入口の移動だけのため業務ruleや全暗号化同期suiteを複製・再実行しない。実表示、compactでのsheet遷移、最大文字サイズ/VoiceOverはMacロックにより未確認。実機へ今回版を再installしていない。プロンプト管理など未実装機能を配置変更で完成扱いにはしない。
+## プロンプトライブラリ・CSV・既存適用処理の共有（2026-10-14）
+
+4bb71b7bでWeb popup/inline/Import/ExportのCRUDとCSV処理をpure promptLibraryへ接続し、native設定から名前/本文/分類label、追加/削除/全削除、保存/取消、CSV追記/置換とCSV/gzip書出しを利用できるようにした。CSVは実Webと同じheader付きPapaParse、Object.valuesの先頭2列、各行の新ID、名前/本文のみの書出しを維持する。未編集の未知prompt/root属性・順序・精密値はopaque参照と既存applySnapshotで保持する。古いdraftは保存前に拒否し、保存失敗では元のmemory/diskを維持する。
+
+独立AstraのP2「CSV全読込/JSC変換/UUID生成/gzipの同期UI実行」はdb7a353dでdetachedへ移した。公開前に操作token・画面表示・draft ID/内容・保存元snapshotを照合し、取消/離脱後の結果を拒否する。限定再監査は新規P2以上なし。共有元2件、native境界2件とasync追加1件（最終関連3件）、型検査、Catalyst build、bundle鮮度成功を再利用。親統合後の生成hash/差分確認も成功。ログ /private/tmp/weavelet-native-prompt-{vitest,test,tsc,freshness,build}.log、/private/tmp/weavelet-native-prompt-async-{test,build,freshness}.log。未変更の全暗号化同期suiteは反復していない。
+
+93ab2f28/23e83c97ではWebのsystem library挿入とCommandPrompt適用をpure promptApplicationへ接続した。実useEditViewLogicは元partsをそのまま編集用にcloneするため、従来の先頭part再構築は画像消失/reasoning変換/未知属性欠落を起こす。先頭textは属性を保持して追記し、非textは新しいtextを前置して元の全partsを順序・参照ごと保持する限定修正を行った。systemの二重改行規則は不変更。型検査/関連18件成功、同じprompt一式の独立監査で追加P2以上なし。ログ /tmp/weavelet-shared-prompt-preservation-{tsc,tests,diff-check}.log。期待値変更はこの実呼出経路のデータ欠落修正に基づき、比較方法を緩めていない。
+
+今回のnativeライブラリ実表示/大CSV応答性/実機導入は未確認。composer・本文編集・system設定へのnative適用は次の接続範囲であり、ライブラリ管理だけで全prompt機能完成とはしない。CSVには意図的に分類label/任意metadataを含めず、全データJSONの往復保全とは別のWeb互換出力として扱う。
