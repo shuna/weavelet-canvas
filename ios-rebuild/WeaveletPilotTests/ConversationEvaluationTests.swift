@@ -251,14 +251,14 @@ final class ConversationEvaluationTests: XCTestCase {
         XCTAssertNil(app.generation)
     }
 
-    func testAutoLocalSafetyIsExplicitlyUnsupportedWithoutRemoteFallback() throws {
+    func testAutoLocalSafetyDefersRemotePreparation() throws {
         let defaults = try SharedWebOperations.call("evaluation",.object([.init(key:"operation",value:.string("defaults"))])).required("evaluationSettings")
         let state = try state().replacing("evaluationSettings",with:defaults.replacing("safetyPreSend",with:.string("auto"))
             .replacing("safetyEngine",with:.string("local")))
         let prepared = try XCTUnwrap(ConversationEvaluation.prepareAuto(source:source(),state:state,chatID:"chat",nodeID:"assistant",
             phase:"pre-send",userContent:json(#"[{"type":"text","text":"質問"}]"#),legacy:RemoteCredentialRecord(),files:nil,
             readProviderCredential:{ _ in XCTFail("Local safety must not read remote credential"); return nil }))
-        XCTAssertTrue(prepared.unsupportedSafety)
+        XCTAssertEqual(prepared.localSafetyText,"質問")
         XCTAssertNil(prepared.safety)
         XCTAssertNil(prepared.quality)
     }

@@ -140,6 +140,7 @@ final class ChatState: ObservableObject {
     private let store: LocalStateStore?
     private let localGenerate: LocalLlama.Generator
     private let localEvaluationGenerate: LocalLlama.Generator?
+    private let localModerationClassify: NativeLocalModeration.Classifier?
     private var initialLoadFailed = false
     @Published private(set) var navigationFocus: NavigationFocus?
     @Published private(set) var canNavigateBack = false
@@ -150,12 +151,13 @@ final class ChatState: ObservableObject {
     var canUndoMessageEdit: Bool { generation == nil && (editingHistory?.canUndo ?? false) }
     var canRedoMessageEdit: Bool { generation == nil && (editingHistory?.canRedo ?? false) }
 
-    init(store: LocalStateStore? = nil, localGenerate: LocalLlama.Generator? = nil) {
+    init(store: LocalStateStore? = nil, localGenerate: LocalLlama.Generator? = nil, localClassify: NativeLocalModeration.Classifier? = nil) {
         self.store = store
         self.localGenerate = localGenerate ?? { url, request, onText in
             try await LocalLlama.generate(modelURL:url,request:request,onText:onText)
         }
         self.localEvaluationGenerate = localGenerate
+        self.localModerationClassify = localClassify
         do {
             stickyPrefillKey = try SharedWebOperations.call("assistantPrefill",.object([.init(key:"operation",value:.string("resolve")),.init(key:"mode",value:.string("append")),.init(key:"insertIndex",value:.null)])).required("key").string("prefill key")
             branchCandidates = try BranchNavigation.candidates(in: siblingSource(conversations))
@@ -1269,11 +1271,10 @@ final class ChatState: ObservableObject {
                 language:Locale.preferredLanguages.first ?? "en",legacy:context.record ?? RemoteCredentialRecord(),
                 files:localModelFiles,readProviderCredential:context.read)
             guard let prepared else { return }
-            var preparationErrors = [prepared.safetyError,prepared.qualityError].compactMap { $0 }
-            if prepared.unsupportedSafety { preparationErrors.insert("この端末の Local / Hybrid 安全性判定は未対応です。評価設定で Remote を選択してください。",at:0) }
+            let preparationErrors = [prepared.safetyError,prepared.qualityError].compactMap { $0 }
             if !preparationErrors.isEmpty { automaticEvaluationError = preparationErrors.joined(separator:"\n") }
             for item in [("safety",prepared.safety),("quality",prepared.quality)] {
-                guard let request = item.1 else { continue }
+                guard item.1 != nil || (item.0 == "safety" && prepared.localSafetyText != nil) else { continue }
                 let jobID = UUID()
                 let task = Task { @MainActor [weak self] in
                     guard let self else { return }
@@ -1285,16 +1286,26 @@ final class ChatState: ObservableObject {
                         }
                     }
                     do {
-                        let result = try await ConversationEvaluation.run(request,client:context.client,localGenerator:self.localEvaluationGenerate,isCurrent:{ [weak self] in
+                        let isCurrent: @MainActor @Sendable () -> Bool = { [weak self] in
                             guard let self, !self.cancelledAutomaticEvaluationIDs.contains(generationID),
                                   let source = self.exchange?.source,
                                   let state = try? self.publicationSnapshot().required("state") else { return false }
                             return (try? ConversationEvaluation.autoIsCurrent(prepared,source:source,state:state)) == true
-                        })
-                        try Task.checkCancellation()
-                        guard !self.cancelledAutomaticEvaluationIDs.contains(generationID), let source = self.exchange?.source else { return }
-                        let updated = try ConversationEvaluation.autoApply(result,dimension:item.0,prepared:prepared,source:source,state:self.publicationSnapshot().required("state"))
-                        try self.applyLibrary(source,selectedID:self.selectedID,preserveGeneration:true,evaluationResults:try updated.required("evaluationResults"))
+                        }
+                        @MainActor func publish(_ dimension: String, _ result: OrderedJSON) throws {
+                            try Task.checkCancellation()
+                            guard isCurrent(), let source = self.exchange?.source else { throw CancellationError() }
+                            let updated = try ConversationEvaluation.autoApply(result,dimension:dimension,prepared:prepared,source:source,state:self.publicationSnapshot().required("state"))
+                            try self.applyLibrary(source,selectedID:self.selectedID,preserveGeneration:true,evaluationResults:try updated.required("evaluationResults"))
+                        }
+                        if item.0 == "safety" {
+                            try await ConversationEvaluation.runAutoSafety(prepared,state:state,files:self.localModelFiles,
+                                client:context.client,readProviderCredential:context.read,classifier:self.localModerationClassify,
+                                isCurrent:isCurrent,onResult:publish)
+                        } else if let request = item.1 {
+                            let result = try await ConversationEvaluation.run(request,client:context.client,localGenerator:self.localEvaluationGenerate,isCurrent:isCurrent)
+                            try publish("quality",result)
+                        }
                     } catch is CancellationError {} catch { self.automaticEvaluationError = error.localizedDescription }
                 }
                 automaticEvaluationTasks[generationID,default:[:]][jobID] = task

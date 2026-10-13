@@ -250,7 +250,7 @@ extension ConversationEvaluation {
         let settings: Data
         let safety: Prepared?
         let quality: Prepared?
-        let unsupportedSafety: Bool
+        let localSafetyText: String?
         let safetyError: String?
         let qualityError: String?
     }
@@ -342,27 +342,17 @@ extension ConversationEvaluation {
         }
         var safety: Prepared?
         var safetyError: String?
-        var unsupportedSafety = false
+        var localSafetyText: String?
         if safetyRequested {
           do {
           let policy = try SharedWebOperations.call("evaluation",.object([.init(key:"operation",value:.string("localPolicy")),
               .init(key:"safetyEngine",value:settings["safetyEngine"] ?? .string("remote")),
               .init(key:"hybridRemoteOnSafe",value:settings["hybridRemoteOnSafe"] ?? .bool(true))]))
-          unsupportedSafety = policy["runLocal"] == .bool(true)
-          if !unsupportedSafety, policy["runRemote"] == .bool(true),
-           let text = try plan["safetyText"]?.string("安全性本文"), !text.isEmpty {
-            guard let provider = try ProviderModels.providers(in:state).first(where: { $0.id.utf8.elementsEqual("openai".utf8) }) else { throw ExchangeError.invalid("OpenAI providerがありません") }
-            let credential = try ProviderModels.credential(provider,read:readProviderCredential)
-            guard !credential.key.isEmpty else { throw ExchangeError.invalid("OpenAI API keyがありません") }
-            let url = try credential.settings.validatedURL()
-            var requestFields: [JSONField] = [.init(key:"operation",value:.string("safetyRequest")),
-                .init(key:"endpoint",value:.string(url.absoluteString)),.init(key:"text",value:.string(text))]
-            if let openRouter = config["openRouter"], openRouter != .null { requestFields.append(.init(key:"openRouter",value:openRouter)) }
-            let envelope = try SharedWebOperations.call("evaluation",.object(requestFields))
-            let bound = OrderedJSON.object([.init(key:"endpoint",value:try envelope.required("endpoint")),
-                .init(key:"headers",value:try envelope.required("headers")),
-                .init(key:"authentication",value:.array([.object([.init(key:"name",value:.string("Authorization")),.init(key:"prefix",value:.string("Bearer "))])]))])
-            safety = prepared("safety",.remote(try RemoteRequest.bindEnvelope(bound,body:envelope.required("body"),originalURL:url,key:credential.key)))
+          if let text = try plan["safetyText"]?.string("安全性本文"), !text.isEmpty {
+            if policy["runLocal"] == .bool(true) { localSafetyText = text }
+            else if policy["runRemote"] == .bool(true) {
+                safety = prepared("safety",.remote(try autoSafetyRequest(text:text,config:config,state:state,readProviderCredential:readProviderCredential)))
+            }
           }
           } catch { safetyError = error.localizedDescription }
         }
@@ -411,7 +401,54 @@ extension ConversationEvaluation {
         })
         return AutoPrepared(phase:phase,chatID:chatID,nodeID:nodeID,key:key,userContent:userContent,requestPath:selectedPath,requestDependency:dependency,assistantContent:assistantContent,
                             config:try config.encoded(),providerState:try providerState.encoded(),settings:try settings.encoded(),
-                            safety:safety,quality:quality,unsupportedSafety:unsupportedSafety,safetyError:safetyError,qualityError:qualityError)
+                            safety:safety,quality:quality,localSafetyText:localSafetyText,safetyError:safetyError,qualityError:qualityError)
+    }
+
+    private static func autoSafetyRequest(text: String, config: OrderedJSON, state: OrderedJSON,
+                                          readProviderCredential: ProviderModels.CredentialReader) throws -> URLRequest {
+        guard let provider = try ProviderModels.providers(in:state).first(where: { $0.id.utf8.elementsEqual("openai".utf8) }) else { throw ExchangeError.invalid("OpenAI providerがありません") }
+        let credential = try ProviderModels.credential(provider,read:readProviderCredential)
+        guard !credential.key.isEmpty else { throw ExchangeError.invalid("OpenAI API keyがありません") }
+        let url = try credential.settings.validatedURL()
+        var requestFields: [JSONField] = [.init(key:"operation",value:.string("safetyRequest")),
+            .init(key:"endpoint",value:.string(url.absoluteString)),.init(key:"text",value:.string(text))]
+        if let openRouter = config["openRouter"], openRouter != .null { requestFields.append(.init(key:"openRouter",value:openRouter)) }
+        let envelope = try SharedWebOperations.call("evaluation",.object(requestFields))
+        let bound = OrderedJSON.object([.init(key:"endpoint",value:try envelope.required("endpoint")),
+            .init(key:"headers",value:try envelope.required("headers")),
+            .init(key:"authentication",value:.array([.object([.init(key:"name",value:.string("Authorization")),.init(key:"prefix",value:.string("Bearer "))])]))])
+        return try RemoteRequest.bindEnvelope(bound,body:envelope.required("body"),originalURL:url,key:credential.key)
+    }
+
+    @MainActor static func runAutoSafety(_ prepared: AutoPrepared, state: OrderedJSON, files: LocalModelFiles,
+        client: RemoteClient, readProviderCredential: ProviderModels.CredentialReader,
+        classifier: NativeLocalModeration.Classifier? = nil,
+        isCurrent: @escaping @MainActor @Sendable () -> Bool,
+        onResult: @escaping @MainActor (String, OrderedJSON) throws -> Void) async throws {
+        @MainActor func check() throws { try Task.checkCancellation(); guard isCurrent() else { throw CancellationError() } }
+        try check()
+        if let text = prepared.localSafetyText {
+            let local = try await NativeLocalModeration.run(text:text,state:state,files:files,classifier:classifier,isCurrent:isCurrent)
+            try check()
+            if let local { try onResult("localSafety",local) }
+            let settings = try autoSettings(state)
+            var fields: [JSONField] = [.init(key:"operation",value:.string("localPolicy")),
+                .init(key:"safetyEngine",value:settings["safetyEngine"] ?? .string("remote")),
+                .init(key:"hybridRemoteOnSafe",value:settings["hybridRemoteOnSafe"] ?? .bool(true))]
+            if let local { fields.append(.init(key:"localSafety",value:local)) }
+            guard try SharedWebOperations.call("evaluation",.object(fields))["runRemote"] == .bool(true) else { return }
+            try check()
+            let config = try OrderedJSON.decode(prepared.config)
+            let request = try autoSafetyRequest(text:text,config:config,state:state,readProviderCredential:readProviderCredential)
+            let remote = Prepared(chatID:prepared.chatID,nodeID:prepared.nodeID,key:prepared.key,phase:prepared.phase,
+                dimension:"safety",mode:"user",scope:"single",omittedMode:"respect-omitted",context:.object([]),
+                execution:.remote(request),language:"en",sourceChat:Data(),sourceContentStore:Data(),providerState:Data())
+            let result = try await run(remote,client:client,isCurrent:isCurrent)
+            try check(); try onResult("safety",result)
+        } else if let request = prepared.safety {
+            let result = try await run(request,client:client,isCurrent:isCurrent)
+            try check(); try onResult("safety",result)
+        }
     }
 
     static func autoIsCurrent(_ prepared: AutoPrepared, source: OrderedJSON, state: OrderedJSON) throws -> Bool {

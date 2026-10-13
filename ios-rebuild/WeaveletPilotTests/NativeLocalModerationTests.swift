@@ -1,0 +1,150 @@
+import XCTest
+@testable import WeaveletPilot
+
+private final class ModerationProtocol: URLProtocol {
+    static var fail = false
+    static var requests = 0
+    override class func canInit(with request: URLRequest) -> Bool { request.url?.host == "api.openai.com" }
+    override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
+    override func startLoading() {
+        Self.requests += 1
+        if Self.fail { client?.urlProtocol(self,didFailWithError:URLError(.cannotConnectToHost)); return }
+        client?.urlProtocol(self,didReceive:HTTPURLResponse(url:request.url!,statusCode:200,httpVersion:nil,headerFields:nil)!,cacheStoragePolicy:.notAllowed)
+        client?.urlProtocol(self,didLoad:Data(#"{"results":[{"flagged":false,"categories":{},"category_scores":{}}]}"#.utf8))
+        client?.urlProtocolDidFinishLoading(self)
+    }
+    override func stopLoading() {}
+}
+
+@MainActor final class NativeLocalModerationTests: XCTestCase {
+    private final class Fault { var reject = false }
+    private struct Fixture {
+        let app: ChatState
+        let source: OrderedJSON
+        let state: OrderedJSON
+        let prepared: ConversationEvaluation.AutoPrepared
+        let modelRoot: URL
+        let fault: Fault
+    }
+    private func fixture(engine: String = "hybrid", remoteOnSafe: Bool = false) throws -> Fixture {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent("local-moderation-\(UUID())")
+        addTeardownBlock { try? FileManager.default.removeItem(at:root) }
+        let fault = Fault()
+        let store = LocalStateStore(fileURL:root.appendingPathComponent("state.json")) { bytes,url in
+            if fault.reject { throw CocoaError(.fileWriteNoPermission) }
+            try bytes.write(to:url,options:.atomic)
+        }
+        let app = ChatState(store:store)
+        try app.importWebData(Data(#"{"version":3,"chats":[{"id":"chat","title":"Fixture","config":{"model":"fake"},"messages":[{"role":"user","content":[{"type":"text","text":"日本語🙂"}]},{"role":"assistant","content":[{"type":"text","text":"response"}]}]}]}"#.utf8))
+        try app.ensureBranchTreeForEditor(chatID:"chat")
+        let model = try OrderedJSON.decode(Data(#"{"id":"moderator","engine":"transformers.js","origin":"fixture/trusted","tasks":["moderation"],"manifest":{"kind":"multi-file","entrypoint":"onnx/model.onnx","requiredFiles":["config.json","onnx/model.onnx"]},"unknown":9007199254740993}"#.utf8))
+        var snapshot = try app.publicationSnapshot()
+        var state = try snapshot.required("state")
+        let settings = try ConversationEvaluation.autoSettings(state).replacing("safetyPreSend",with:.string("auto"))
+            .replacing("safetyEngine",with:.string(engine)).replacing("hybridRemoteOnSafe",with:.bool(remoteOnSafe))
+        state = state.replacing("evaluationSettings",with:settings).replacing("localModelEnabled",with:.bool(true))
+            .replacing("activeLocalModels",with:.object([.init(key:"moderation",value:.string("moderator"))]))
+            .replacing("localModels",with:.array([model])).replacing("xRaw",with:.number("9007199254740993"))
+        snapshot = snapshot.replacing("state",with:state)
+        try app.applySnapshot(snapshot)
+        let modelRoot = try app.localModelFiles.directoryURL(modelID:"moderator")
+        try FileManager.default.createDirectory(at:modelRoot.appendingPathComponent("onnx"),withIntermediateDirectories:true)
+        try Data("config".utf8).write(to:modelRoot.appendingPathComponent("config.json"))
+        try Data([0,1,2]).write(to:modelRoot.appendingPathComponent("onnx/model.onnx"))
+        let source = try XCTUnwrap(app.exchange?.source)
+        let nodeID = try source.required("chats").array("chats")[0].required("branchTree").required("activePath").array("path").last!.string("id")
+        let prepared = try XCTUnwrap(ConversationEvaluation.prepareAuto(source:source,state:state,chatID:"chat",nodeID:nodeID,
+            phase:"pre-send",userContent:.array([.object([.init(key:"type",value:.string("text")),.init(key:"text",value:.string("日本語🙂"))])]),
+            legacy:RemoteCredentialRecord(),files:app.localModelFiles,readProviderCredential:{ _ in XCTFail("Preparation must stay lazy"); return nil }))
+        return Fixture(app:app,source:source,state:state,prepared:prepared,modelRoot:modelRoot,fault:fault)
+    }
+    private func client() -> RemoteClient {
+        let configuration = URLSessionConfiguration.ephemeral; configuration.protocolClasses = [ModerationProtocol.self]
+        return RemoteClient(session:URLSession(configuration:configuration,delegate:RemoteRedirectPolicy(),delegateQueue:nil))
+    }
+    private func credential(_ id: String) -> RemoteCredentialRecord? {
+        XCTAssertEqual(id,"openai")
+        return RemoteCredentialRecord(settings:RemoteSettings(endpoint:"https://api.openai.com/v1/chat/completions",model:"fake",stream:false),key:"FAKE")
+    }
+    private func publish(_ fixture: Fixture, _ dimension: String, _ result: OrderedJSON) throws {
+        let snapshot = try fixture.app.publicationSnapshot()
+        let updated = try ConversationEvaluation.autoApply(result,dimension:dimension,prepared:fixture.prepared,source:fixture.source,state:snapshot.required("state"))
+        try fixture.app.applySnapshot(snapshot.replacing("state",with:updated))
+    }
+    func testSafeLocalResultSavesWithoutReadingRemoteCredential() async throws {
+        let fixture = try fixture()
+        let original = try fixture.app.publicationSnapshot()
+        try await ConversationEvaluation.runAutoSafety(fixture.prepared,state:fixture.state,files:fixture.app.localModelFiles,client:client(),
+            readProviderCredential:{ _ in XCTFail("Safe Hybrid must not read Keychain"); return nil },classifier:{ origin,files,text in
+                XCTAssertEqual(origin,"fixture/trusted"); XCTAssertEqual(text,"日本語🙂")
+                XCTAssertEqual(files.last?.data,Data([0,1,2])); return [("safe",0.99)]
+            },isCurrent:{ true },onResult:{ try self.publish(fixture,$0,$1) })
+        let after = try fixture.app.publicationSnapshot()
+        XCTAssertEqual(after["state"]?["evaluationResults"]?[fixture.prepared.key]?["localSafety"]?["screening"],.string("safe"))
+        XCTAssertNil(after["state"]?["evaluationResults"]?[fixture.prepared.key]?["safety"])
+        XCTAssertEqual(after["state"]?["localModels"],original["state"]?["localModels"])
+        XCTAssertEqual(after["state"]?["xRaw"],.number("9007199254740993"))
+        for field in try fixture.source.object("source") where field.key != "evaluationResults" {
+            XCTAssertEqual(fixture.app.exchange?.source[field.key],field.value)
+        }
+    }
+    func testLocalFailureUsesSharedPolicyAndRemoteFallback() async throws {
+        let fixture = try fixture(engine:"local")
+        ModerationProtocol.fail = false; ModerationProtocol.requests = 0
+        var reads = 0
+        try await ConversationEvaluation.runAutoSafety(fixture.prepared,state:fixture.state,files:fixture.app.localModelFiles,client:client(),
+            readProviderCredential:{ id in reads += 1; return self.credential(id) },classifier:{ _,_,_ in throw URLError(.cannotDecodeContentData) },
+            isCurrent:{ true },onResult:{ try self.publish(fixture,$0,$1) })
+        XCTAssertEqual(reads,1); XCTAssertEqual(ModerationProtocol.requests,1)
+        let results = try fixture.app.publicationSnapshot()["state"]?["evaluationResults"]?[fixture.prepared.key]
+        XCTAssertNotNil(results?["safety"]); XCTAssertNil(results?["localSafety"])
+    }
+    func testRemoteFailureRetainsAlreadySavedLocalResult() async throws {
+        let fixture = try fixture(remoteOnSafe:true)
+        ModerationProtocol.fail = true; defer { ModerationProtocol.fail = false }
+        do {
+            try await ConversationEvaluation.runAutoSafety(fixture.prepared,state:fixture.state,files:fixture.app.localModelFiles,client:client(),
+                readProviderCredential:credential,classifier:{ _,_,_ in [("safe",0.99)] },isCurrent:{ true },onResult:{ try self.publish(fixture,$0,$1) })
+            XCTFail("Remote error must remain visible")
+        } catch {}
+        XCTAssertEqual(try fixture.app.publicationSnapshot()["state"]?["evaluationResults"]?[fixture.prepared.key]?["localSafety"]?["screening"],.string("safe"))
+    }
+    func testCancelledAndStaleInferenceCannotFallbackOrSave() async throws {
+        for mode in ["task", "stale", "revision"] {
+            let fixture = try fixture()
+            let before = try fixture.app.publicationSnapshot()
+            var current = true
+            let entered = expectation(description:"classifier entered")
+            var release: CheckedContinuation<Void,Never>?
+            let task = Task {
+                try await ConversationEvaluation.runAutoSafety(fixture.prepared,state:fixture.state,files:fixture.app.localModelFiles,client:client(),
+                    readProviderCredential:{ _ in XCTFail("Stale local must not fall back"); return nil },classifier:{ _,_,_ in
+                        await withCheckedContinuation { release = $0; entered.fulfill() }
+                        return [("safe",0.99)]
+                    },isCurrent:{ current },onResult:{ _,_ in XCTFail("Late result must not save") })
+            }
+            await fulfillment(of:[entered],timeout:5)
+            if mode == "task" { task.cancel() }
+            else if mode == "stale" { current = false }
+            else { try Data([3,4,5,6]).write(to:fixture.modelRoot.appendingPathComponent("onnx/model.onnx")) }
+            release?.resume()
+            switch await task.result {
+            case .success: XCTFail("Cancelled/stale inference succeeded")
+            case .failure(let error): XCTAssertTrue(error is CancellationError)
+            }
+            XCTAssertEqual(try fixture.app.publicationSnapshot(),before)
+        }
+    }
+    func testSaveFailurePublishesNothingAndDoesNotStartRemote() async throws {
+        let fixture = try fixture(remoteOnSafe:true)
+        let before = try fixture.app.publicationSnapshot()
+        fixture.fault.reject = true
+        do {
+            try await ConversationEvaluation.runAutoSafety(fixture.prepared,state:fixture.state,files:fixture.app.localModelFiles,client:client(),
+                readProviderCredential:{ _ in XCTFail("Failed save must stop before remote"); return nil },classifier:{ _,_,_ in [("safe",0.99)] },
+                isCurrent:{ true },onResult:{ try self.publish(fixture,$0,$1) })
+            XCTFail("Failed save must throw")
+        } catch {}
+        XCTAssertEqual(try fixture.app.publicationSnapshot(),before)
+    }
+}

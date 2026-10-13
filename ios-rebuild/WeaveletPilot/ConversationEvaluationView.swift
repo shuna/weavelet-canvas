@@ -127,14 +127,24 @@ struct EvaluationSettingsView: View {
                 Picker("送信前",selection:mode("safetyPreSend")) { Text("手動").tag("manual"); Text("自動").tag("auto") }
                 Picker("受信後",selection:mode("safetyPostReceive")) { Text("手動").tag("manual"); Text("自動").tag("auto") }
                 let engine = (try? state.evaluationSettings()["safetyEngine"]?.string("engine")) ?? "remote"
-                LabeledContent("判定方式",value:engine == "remote" ? "Remote" : engine == "local" ? "Local" : "Hybrid")
-                if engine != "remote" {
-                    Text("この端末の自動安全性判定は Local / Hybrid に未対応です。設定は保持されます。")
-                        .font(.footnote).foregroundStyle(.secondary)
-                    Button("Remote に変更") {
-                        do { try state.saveEvaluationSetting("safetyEngine",value:.string("remote")); errorMessage = nil }
+                Picker("判定方式",selection:Binding(get:{ engine },set:{ value in
+                    do { try state.saveEvaluationSetting("safetyEngine",value:.string(value)); errorMessage = nil }
+                    catch { errorMessage = error.localizedDescription }
+                })) {
+                    Text("Remote").tag("remote"); Text("Local").tag("local"); Text("Hybrid").tag("hybrid")
+                    if !["remote","local","hybrid"].contains(engine) { Text(engine).tag(engine) }
+                }
+                if engine == "hybrid" {
+                    Toggle("Localで安全な場合もRemote判定",isOn:Binding(get:{
+                        (try? state.evaluationSettings()["hybridRemoteOnSafe"]) != .bool(false)
+                    },set:{ value in
+                        do { try state.saveEvaluationSetting("hybridRemoteOnSafe",value:.bool(value)); errorMessage = nil }
                         catch { errorMessage = error.localizedDescription }
-                    }
+                    }))
+                }
+                if engine == "local" || engine == "hybrid" {
+                    Text("選択したローカルモデルで自動判定します。読み込みや判定に失敗した場合は Remote を使用します。")
+                        .font(.footnote).foregroundStyle(.secondary)
                 }
             }
             Section("品質") {
