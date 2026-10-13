@@ -561,6 +561,29 @@ final class MessageEditingTests: XCTestCase {
         XCTAssertEqual(try XCTUnwrap(state.exchange).source.required("chats").array("chats")[0]["branchTree"]?["nodes"]?["inserted"]?["label"], .string("Undo label"))
     }
 
+    func testGlobalUndoRedoRefreshesAffectedChatPathWhileAnotherChatStaysSelected() throws {
+        let local = try store(), state = ChatState(store: local)
+        try state.importWebData(cases()[0].required("input").encoded())
+        try state.saveNodeRemoval(state.nodeRemovalDraft(nodeID: "last"), now: 1000)
+        XCTAssertEqual(state.conversation?.visibleMessages.map(\.id), ["system", "middle"])
+        try state.navigate(chatID: "other", source: .chatSwitch)
+        try state.undoMessageEdit(now: 2000)
+        XCTAssertEqual(state.selectedConversationID, "other")
+        XCTAssertEqual(state.conversations.first { $0.id == "target" }?.visibleMessages.map(\.id), ["system", "middle", "last"])
+        try state.navigate(chatID: "target", source: .chatSwitch)
+        XCTAssertEqual(state.conversation?.visibleMessages.map(\.id), ["system", "middle", "last"])
+        XCTAssertEqual(try XCTUnwrap(state.exchange).source.required("chats").array("chats")[0]["branchTree"]?["activePath"], .array(["system", "middle", "last"].map(OrderedJSON.string)))
+        try state.navigate(chatID: "other", source: .chatSwitch)
+        try state.redoMessageEdit(now: 3000)
+        XCTAssertEqual(state.selectedConversationID, "other")
+        XCTAssertEqual(state.conversations.first { $0.id == "target" }?.visibleMessages.map(\.id), ["system", "middle"])
+        try state.navigate(chatID: "target", source: .chatSwitch)
+        XCTAssertEqual(state.conversation?.visibleMessages.map(\.id), ["system", "middle"])
+        let fresh = ChatState(store: local)
+        XCTAssertEqual(fresh.conversation?.visibleMessages.map(\.id), ["system", "middle"])
+        XCTAssertEqual(try fresh.publicationSnapshot().encoded(), try state.publicationSnapshot().encoded())
+    }
+
     func testHistorySaveFailureKeepsStacksSourceDiskThenRetryAndExternalUpdateInvalidates() throws {
         let directory = FileManager.default.temporaryDirectory.appendingPathComponent("history-fault-\(UUID().uuidString)")
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)

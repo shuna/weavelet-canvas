@@ -308,7 +308,7 @@ final class ChatState: ObservableObject {
         let result = try MessageEditing.moveHistory(operation, in: exchange.source, history: editingHistory, now: now)
         guard result.updated else { return }
         try applyLibrary(result.source, selectedID: selectedID,
-                         resetViewFor: result.affectedChatIDs.first { $0.utf8.elementsEqual(selectedID.utf8) }, editing: result.history, now: now)
+                         resetViewsFor: result.affectedChatIDs, editing: result.history, now: now)
     }
 
     func loadRemoteSettings(read: () throws -> RemoteCredentialRecord = RemoteCredentials.load) throws {
@@ -429,7 +429,7 @@ final class ChatState: ObservableObject {
         try applyLibrary(ChatFolders.apply(in: source, operation: operation), selectedID: exchange == nil ? "" : selectedID, preserveGeneration: true, now: now)
     }
 
-    private func applyLibrary(_ source: OrderedJSON, selectedID: String, resetViewFor: String? = nil, preserveGeneration: Bool = false, navigation: BranchNavigation.HistoryResult? = nil, editing: MessageEditing.HistoryState? = nil, now: Double = Date().timeIntervalSince1970 * 1000) throws {
+    private func applyLibrary(_ source: OrderedJSON, selectedID: String, resetViewFor: String? = nil, resetViewsFor: [String] = [], preserveGeneration: Bool = false, navigation: BranchNavigation.HistoryResult? = nil, editing: MessageEditing.HistoryState? = nil, now: Double = Date().timeIntervalSince1970 * 1000) throws {
         let base = try document ?? SyncDocument(v3: exchange?.source ?? ChatLibrary.emptySource)
         let before = try exchange?.source ?? base.uiProjection()
         let candidate = try base.applyingV3Edits(source, comparedTo: before, now: now)
@@ -437,7 +437,8 @@ final class ChatState: ObservableObject {
         let candidates = try BranchNavigation.candidates(in: changed.source)
         var views = changed.conversations
         for index in views.indices {
-            if exchange != nil, resetViewFor.map({ !views[index].id.utf8.elementsEqual($0.utf8) }) ?? true, let previous = conversations.first(where: { $0.identity == views[index].identity }) {
+            if exchange != nil, resetViewFor.map({ !views[index].id.utf8.elementsEqual($0.utf8) }) ?? true,
+               !resetViewsFor.contains(where: { views[index].id.utf8.elementsEqual($0.utf8) }), let previous = conversations.first(where: { $0.identity == views[index].identity }) {
                 views[index].selectedLeafID = previous.selectedLeafID
                 views[index].displayedPathIDs = previous.displayedPathIDs
             }
