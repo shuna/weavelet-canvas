@@ -2,7 +2,16 @@
 
 ## iOS全体の採用境界監査と先頭文入力（2026-10-13）
 
-採用境界の監査を再構築版の全40 Swift source、C/C++境界・ビルド、共有bundle/描画依存とlicenseへ拡張。[計画の全範囲監査](web-native-commonality-roadmap.md#ios全範囲への監査拡張2026-10-13)に分担・coverage・必要独自の根拠・条件付き依存を記載した。初期load失敗後の新規作成/snapshot適用による原保存file上書きを修正。MalformedSaveの既存ケースへ拒否/元bytes保持/明示置換後の通常作成を追加し成功（`/private/tmp/weavelet-ios-audit-preservation.log`）。独立Astraの修正確認は新規なし。Markdown license欠落、nested依存来歴、到達可能なKaTeX展開DoSは別担当が補完/公式版更新中で、未修正分を受入済みとしない。
+採用境界の監査を再構築版の全40 Swift source、C/C++境界・ビルド、共有bundle/描画依存とlicenseへ拡張。[計画の全範囲監査](web-native-commonality-roadmap.md#ios全範囲への監査拡張2026-10-13)に分担・coverage・必要独自の根拠・条件付き依存を記載した。初期load失敗後の新規作成/snapshot適用による原保存file上書きを修正。MalformedSaveの既存ケースへ拒否/元bytes保持/明示置換後の通常作成を追加し成功（`/private/tmp/weavelet-ios-audit-preservation.log`）。独立Astraの修正確認は新規なし。Markdown license欠落、nested依存来歴、到達可能なKaTeX展開DoSも補完/公式版更新を完了した。最終確認は以下の通り。
+
+
+依存修正の最終状態（親 `c42d4eeb` / `61e7a98`）：KaTeX 0.18.2、lodash 4.18.1、Babel runtime 7.26.10へ限定更新し、npm/Yarnの両lockとCIのresolutionsを整合。lodash 4.18.0の公式deprecatedを親・独立Astraが発見したため採用を撤回し、非deprecatedの後続4.18.1へ修正した。全100 actual package/versionのNOTICEを確認し、旧欠落24件の固定版license・出典を保持した。実際のnested pathを記録し、補完licenseが存在しない／版が一致しない生成を拒否する。
+
+再利用と追加確認：依存更新時の関連117 tests、型、両bundle鮮度が成功。最終Yarn配置変更後はrenderer 3 testsだけを再確認した。lodash版選択修正後は影響する76 tests、Yarn frozen install、Google bundle鮮度が成功し、無関係suiteを再実行していない。公式KaTeX 0.18.2のUnicode/edef回帰入力を各5秒上限の隔離processで拒否し、許容budget 256の正常描画も成功（`/private/tmp/weavelet-katex-regressions.log`）。最終単一runで全117 testsを再実行したという意味ではない。
+
+親Catalystビルドと既存MarkdownViewTests 1 caseが成功（`/private/tmp/weavelet-ios-full-audit-markdown.log`）。実WKWebViewで数式・表・code・HTML非実行、copy、原文/文字サイズ更新、描画process終了時のfallbackを確認した。統合36ファイルは担当最終版とbyte一致し、ビルド済みappのNOTICE・JS・CSS・sourcesもsourceと一致。独立Astraは修正一式を確認し、最後のlodash限定再確認で残件なし。テストの大量複製や新しい監査基盤は追加していない。
+
+最終SHA256：GoogleSync `bdb6ce0eaab7569a53a196afd4036ef070d5fcd8986047a4a3ca29199d08044a`、Markdown JS `4b928f759eed6ef3c8b20260f40e31ae57377904cb2c122bbfeeaf1f0a49ccd3`。担当ログ `/private/tmp/weavelet-native-deps-*`、lodash再確認 `/private/tmp/weavelet-lodash-patch-*`。生成JSのhighlight grammar文字列内の末尾空白警告は意味を変えないため保持した。既存npm lockのjose/workers-types不足は本変更とは分けて残し、全repo npm ci整合を確認済みとは扱わない。全repoに残る無関係advisory、iOS実機、実クラウド、全UI/AXは未確認。新iOS全範囲の採用境界監査と、全機能の動的完成は別である。
 
 先頭文入力は実Webの一時map/key/消費規則を共有helperへ切り出し、Web実callerとnativeから使用。native UIはuser nodeと通常入力欄に配置し、入力は保存・同期しない。共有normalizeでtrimしたprefixを既存localInput/Outputへ渡し、最初のtoken前から表示する。途中再生成では共有plan.prefillKey、末尾再生成/通常送信では共有sticky keyを使用。生成中に別値へ編集されたdraftは残す。
 

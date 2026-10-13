@@ -201,17 +201,21 @@ Finish editing/document sharing first, including attribute handling and operatio
 | `NativeGzip`, `SyncCompression` | OS zlibと既存LZStringによる形式互換。CloudKit圧縮は互換fixtureの定義であり、現UIでCloudKit同期採用済みの証拠はない |
 | `LocalLlama`, `NativeLlama/*` | 先の公式C API/既存wllama C++監査と修正済み生成物の証拠を再利用。Catalyst arm64の確認をiOS実機や全lowbit形式の保証へ拡張しない |
 
-外部依存の判断：同期bundleにはlodash 4.17.21、diff-match-patch 1.0.5、@babel/runtime 7.21.0、i18next 22.4.11が実際に含まれ、LZStringは別resource。MarkdownにはReact/ReactDOM 18.2、react-markdown 8.0.5、root KaTeX 0.16.4とrehype-katex配下0.15.6、highlight.js 11.7等が含まれる。npm全体をアプリへ同梱する方式ではない。React/react-markdown/KaTeX/lodash/i18next upstreamの活動と、採用中の固定版の安全性は別に扱う。OS framework全OS版CVEや全異常入力の網羅検証は今回の証拠に含めない。
+監査開始時の外部依存：同期bundleにはlodash 4.17.21、diff-match-patch 1.0.5、@babel/runtime 7.21.0、i18next 22.4.11が実際に含まれ、LZStringは別resource。MarkdownにはReact/ReactDOM 18.2、react-markdown 8.0.5、root KaTeX 0.16.4とrehype-katex配下0.15.6、highlight.js 11.7等が含まれる。npm全体をアプリへ同梱する方式ではない。React/react-markdown/KaTeX/lodash/i18next upstreamの活動と、採用中の固定版の安全性は別に扱う。OS framework全OS版CVEや全異常入力の網羅検証は今回の証拠に含めない。
 
 `diff-match-patch`はGoogle公式由来だが、[Google原repo](https://github.com/google/diff-match-patch)は2024-08-05 archived、[npm配布元](https://github.com/JackuB/diff-match-patch)の最終pushは2023年。保守継続中とは分類しない。既存保存deltaの構文と復元挙動を維持するため条件付きで継続し、将来の置換には既存patch適用結果の保証が必要。保守停止を隠して「公式だから安全」とせず、理由なく別差分算法や新依存へ移さない。
 
 具体的修正：初期保存の読込失敗後、createChat/applyFolderが空の文書から`applyLibrary`経由で既存fileを上書きできた。`applyLibrary`と公開`applySnapshot`の保存前に失敗状態の拒否を追加し、明示import/replaceのみ保存成功後に解除する。既存MalformedSaveテストへcreate/folder/snapshot拒否、元bytes保持、明示置換後create成功を追加して成功。独立Astraの限定確認は新規なし。通常style変更はexchange/documentがない時に保存しない既存仕様を維持した。
 
-license監査ではMarkdown生成器がLICENSE不在を黙って省略しており、追跡100package中24がNOTICE未記載だった。実metafileを再確認して欠落24すべてがruntime入力であると確定し、固定版公式licenseを照合して補完中。新しい管理基盤や依存は追加しない。依存advisory照合と最終配布noticeの確認結果は完成条件の台帳へ追記する。
+license監査ではMarkdown生成器がLICENSE不在を黙って省略しており、追跡100package中24がNOTICE未記載だった。実metafileを再確認して欠落24すべてがruntime入力であると確定し、固定版の公式配布元・repositoryのlicenseを照合して24件を補完した。生成器はnested packageの実パス・版を保持し、license欠落や補完版の不一致をエラーとする。新しい管理基盤や依存は追加していない。最終配布NOTICEと依存修正の検証結果は完成条件の台帳に記録する。
 
 検索ごとのbundle読込/全件走査や生成中のプロセス終了は運用上の懸念として残るが、実測・再現なしでcacheや独自indexを追加しない。全機能の動的試験や実Googleアカウント接続を今回の静的全範囲監査と混同しない。[Google native OAuth仕様](https://developers.google.com/identity/protocols/oauth2/native-app)、[Apple認証セッション](https://developer.apple.com/documentation/authenticationservices/aswebauthenticationsession)、[Apple AES.GCM](https://developer.apple.com/documentation/cryptokit/aes/gcm)。
 
 
-依存安全性の追加確認：KaTeXのUnicode添字/edefによるmaxExpand迂回は、`MarkdownTextView → shared/markdown/host → MarkdownRenderer`の未信頼会話数式から到達する。trust=falseでも展開DoSの対象であり更新必須。rootだけでなくrehype-katex配下0.15.6も公式0.18.2へ限定更新し、CSS/fontsを含め再生成する方針とした。現generatorがnested node_modulesパスを潰す来歴不備も修正対象。既存React/Markdown全体の入替えや独自数式フィルターは追加しない。[Unicode添字advisory](https://github.com/KaTeX/KaTeX/security/advisories/GHSA-cvr6-37gx-v8wc)、[edef advisory](https://github.com/KaTeX/KaTeX/security/advisories/GHSA-64fm-8hw2-v72w)。
+依存安全性の追加確認：KaTeXのUnicode添字/edefによるmaxExpand迂回は、`MarkdownTextView → shared/markdown/host → MarkdownRenderer`の未信頼会話数式から到達する。trust=falseでも展開DoSの対象であり更新必須。rootだけでなくrehype-katex配下0.15.6も公式0.18.2へ限定更新し、CSS/fontsを含め再生成した。generatorがnested node_modulesパスを潰す来歴不備も修正済み。既存React/Markdown全体の入替えや独自数式フィルターは追加しない。[Unicode添字advisory](https://github.com/KaTeX/KaTeX/security/advisories/GHSA-cvr6-37gx-v8wc)、[edef advisory](https://github.com/KaTeX/KaTeX/security/advisories/GHSA-64fm-8hw2-v72w)。
 
 lodashのtemplate/unset/omitとBabelのwrapRegExpにも採用版のadvisoryがあるが、今回の実共有入口（isEqual等）・bundle入力には該当呼出しなし。現exploitと断定せず、公式修正版への限定更新を既存の同期/描画bundle再生成とまとめて評価する。KaTeXのprotocol/includegraphics/htmlDataは既定trust=falseで通常経路を制限し、[238p](https://github.com/KaTeX/KaTeX/security/advisories/GHSA-238p-pmpm-9mq7)は既存prototype汚染が前提で成立未確認。これらの静的条件と、更新後の確認結果を分けて記録する。
+
+最終採用版はKaTeX 0.18.2、lodash 4.18.1、@babel/runtime 7.26.10。npm overridesとCIで使うYarn resolutions/lockを揃えた。lodash 4.18.0はadvisoryの修正閾値を満たす一方、公式registryに「Bad release」のdeprecated指定があり、採用を撤回した。後続4.18.1の非deprecatedとnpm gitHead／公式tagの一致を確認して採用した。版番号だけでなく配布状態を確認する必要がある具体例として記録する。既存業務ルールや保存形式、新たなSDKは追加していない。
+
+全範囲の静的監査と今回の修正確認は完了。関連Web検証、公式KaTeX回帰、Catalyst描画接続、配布NOTICEの一致、独立Astraの指摘解消を確認した。詳細は[検証台帳](web-native-completion-ledger.md)参照。これはiOS全面再構築の機能完成、実機／実クラウド試験、全推移依存の脆弱性不存在を意味しない。
