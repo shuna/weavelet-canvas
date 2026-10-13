@@ -50,6 +50,71 @@ describe('native editing adapter calls the actual Web domain', () => {
     expect(input).toEqual(before);
     expect(materializeActivePath(output.chat.branchTree, output.contentStore).every(message => Object.keys(message).every(key => key === 'role' || key === 'content'))).toBe(true);
   });
+  it.each(['system', 'middle', null])('inserts before %s with the real Web caller, preserving attributes, flags and empty parts', beforeNodeId => {
+    const input = structuredClone(fixture.cases[0].input);
+    const chat = input.chats[0];
+    chat.protectedNodes = { middle: true }; chat.omittedNodes = { last: true };
+    chat.branchTree.xTree = { opaqueRef: 20 }; chat.branchTree.nodes.middle.xNode = { opaqueRef: 21 };
+    const before = structuredClone(input), parts = [{ type: 'text', text: '', xPart: { opaqueRef: 22 } }, { type: 'text', text: 'second' }];
+    const changes = JSON.parse(messageEdit(JSON.stringify({ chat, contentStore: input.contentStore, mode: 'insert', nodeID: beforeNodeId,
+      viewingPath: chat.branchTree.activePath, role: 'user', parts, newIDs: ['inserted'], now: 1000 })));
+    const output = apply({ chat, contentStore: input.contentStore }, changes);
+    const index = beforeNodeId === null ? 3 : chat.branchTree.activePath.indexOf(beforeNodeId);
+    const path = [...chat.branchTree.activePath]; path.splice(index, 0, 'inserted');
+    expect(output.chat.branchTree.activePath).toEqual(path);
+    expect(output.chat.branchTree.rootId).toBe(path[0]);
+    expect(output.chat.branchTree.nodes.inserted.parentId).toBe(index ? path[index - 1] : null);
+    if (beforeNodeId) expect(output.chat.branchTree.nodes[beforeNodeId].parentId).toBe('inserted');
+    expect(resolveContent(output.contentStore, output.chat.branchTree.nodes.inserted.contentHash)).toEqual(parts);
+    expect(output.chat.branchTree.nodes.inserted).not.toHaveProperty('xNode');
+    expect(output.chat.branchTree.xTree).toEqual(chat.branchTree.xTree);
+    expect(output.chat.branchTree.nodes.middle.xNode).toEqual(chat.branchTree.nodes.middle.xNode);
+    expect(output.chat.protectedNodes).toEqual({ middle: true }); expect(output.chat.omittedNodes).toEqual({ last: true });
+    for (const [hash, entry] of Object.entries(input.contentStore)) expect(output.contentStore[hash]).toEqual(entry);
+    let state: StoreState;
+    const get = () => state;
+    const set = ((partial: unknown) => { state = { ...state, ...(typeof partial === 'function' ? (partial as any)(state) : partial) }; }) as StoreApi<StoreState>['setState'];
+    state = { ...createChatSlice(set, get), ...createBranchSlice(set, get), chats: [chat], contentStore: input.contentStore } as StoreState;
+    const clock = vi.spyOn(Date, 'now').mockReturnValue(1000); webIDs = ['inserted'];
+    try {
+      expect(state.insertNode({ chatId: chat.id, beforeNodeId, role: 'user', content: parts as any })).toEqual({ status: 'updated', nodeId: 'inserted' });
+      const expected = recordChatEdits([chat], [output.chat], 1000).chats[0];
+      expected.messages = materializeActivePath(expected.branchTree!, output.contentStore);
+      expect(state.chats![0]).toEqual(expected); expect(state.contentStore).toEqual(output.contentStore);
+      expect(state.branchHistoryPast).toHaveLength(1);
+    } finally { clock.mockRestore(); webIDs = []; }
+    expect(input).toEqual(before);
+  });
+
+  it('inserts into flat chats through actual conversion, preserving index flags and message attributes', () => {
+    const input = structuredClone(fixture.cases.find((item: any) => item.name === 'flat-overwrite').input);
+    const chat = input.chats[0]; chat.collapsedNodes = { '0': true }; chat.omittedNodes = { '0': true }; chat.protectedNodes = { '0': true };
+    chat.messages[0].xMessage = { opaqueRef: 30 };
+    const before = structuredClone(input);
+    const output = apply({ chat, contentStore: input.contentStore }, JSON.parse(messageEdit(JSON.stringify({ chat, contentStore: input.contentStore,
+      mode: 'insert', nodeID: 'message-0', viewingPath: [], role: 'user', parts: [{ type: 'text', text: '' }], newIDs: ['converted', 'inserted'], now: 1000 }))));
+    expect(output.chat.branchTree.activePath).toEqual(['inserted', 'converted']);
+    expect(output.chat.collapsedNodes).toEqual({ converted: true }); expect(output.chat.omittedNodes).toEqual({ converted: true }); expect(output.chat.protectedNodes).toEqual({ converted: true });
+    expect(output.chat.branchTree.messageAttributesV1.byNode.converted).toEqual({ xMessage: { opaqueRef: 30 } });
+    expect(output.chat.branchTree.messageAttributesV1.byNode.inserted).toBeUndefined();
+    expect(resolveContent(output.contentStore, output.chat.branchTree.nodes.converted.contentHash)).toEqual(chat.messages[0].content);
+    expect(input).toEqual(before);
+  });
+
+  it('rejects missing, noncanonical and inactive insert targets without changing inputs', () => {
+    const input = structuredClone(fixture.cases[0].input), chat = input.chats[0];
+    chat.branchTree.nodes.inactive = { ...chat.branchTree.nodes.last, id: 'inactive', parentId: 'system' };
+    const before = structuredClone(input);
+    for (const nodeID of ['missing', 'inactive', undefined]) {
+      expect(() => messageEdit(JSON.stringify({ chat, contentStore: input.contentStore, mode: 'insert', nodeID,
+        viewingPath: chat.branchTree.activePath, role: 'user', parts: [], newIDs: [], now: 1000 }))).toThrow('Invalid insert target');
+    }
+    const flat = structuredClone(fixture.cases.find((item: any) => item.name === 'flat-overwrite').input);
+    for (const nodeID of ['01', '-1', '2']) expect(() => messageEdit(JSON.stringify({ chat: flat.chats[0], contentStore: flat.contentStore,
+      mode: 'insert', nodeID, viewingPath: [], role: 'user', parts: [], newIDs: [], now: 1000 }))).toThrow('Invalid insert target');
+    expect(input).toEqual(before);
+  });
+
   it('applies the extracted Web text rule once at save and preserves all other parts and source values', () => {
     const item = fixture.cases[0], input = structuredClone(item.input);
     const parts = [{ type: 'reasoning', text: 'reason' }, { type: 'text', text: 'old', xFuture: { opaqueRef: 0 } }, { type: 'text', text: 'second' }];

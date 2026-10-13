@@ -26,7 +26,7 @@ import {
   deleteBranchState,
   pruneHiddenNodesState,
   ensureBranchTreeState,
-  insertMessageAtIndexState,
+  insertNodeState,
   moveMessageState,
   pasteBranchSequenceState,
   removeMessageAtIndexState,
@@ -640,15 +640,10 @@ export const createBranchSlice: StoreSlice<BranchSlice> = (set, get) => {
     return { status: 'updated', nodeId: result.newId };
   },
   insertNode: (input) => {
-    const chatIndex = get().chats?.findIndex(chat => chat.id === input.chatId) ?? -1;
-    if (chatIndex < 0) return { status: 'chat-missing' };
-    const target = input.beforeNodeId === null ? null : resolveNodeTarget(withRuntimeFlatNodeMaps(get().chats, get()), { chatId: input.chatId, nodeId: input.beforeNodeId }, true);
-    if (target && target.status !== 'valid') return target;
-    const index = target?.messageIndex ?? get().chats![chatIndex].messages.length;
-    const ensured = ensureBranchTreeState(withRuntimeFlatNodeMaps(get().chats, get())!, chatIndex, get().contentStore);
-    const result = insertMessageAtIndexState(ensured.chats, chatIndex, index, { role: input.role, content: input.content }, ensured.contentStore);
-    get().applyBranchState(result.chats, result.contentStore, { historyBase: ensured });
-    return { status: 'updated', nodeId: result.newId };
+    const result = insertNodeState(withRuntimeFlatNodeMaps(get().chats, get()), input, get().contentStore);
+    if (result.status !== 'updated') return result;
+    get().applyBranchState(result.chats, result.contentStore, { historyBase: result.historyBase });
+    return { status: 'updated', nodeId: result.nodeId };
   },
   removeNode: (input) => {
     const target = resolveNodeTarget(withRuntimeFlatNodeMaps(get().chats, get()), input, true);

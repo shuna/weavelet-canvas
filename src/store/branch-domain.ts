@@ -886,3 +886,18 @@ export const setNodeDisplayFieldState = (
   return { status: 'updated' as const, chats: setBranchNodeFieldState(ensured.chats, target.chatIndex, nodeId, field, value),
     contentStore: ensured.contentStore, nodeId, historyBase: ensured };
 };
+
+export const insertNodeState = (
+  chats: ChatInterface[] | undefined,
+  input: { chatId: string; beforeNodeId: string | null; role: Role; content: ContentInterface[] },
+  contentStore: ContentStoreData
+) => {
+  const chatIndex = chats?.findIndex(chat => chat.id === input.chatId) ?? -1;
+  if (chatIndex < 0) return { status: 'chat-missing' as const };
+  const target = input.beforeNodeId === null ? null : resolveNodeTarget(chats, { chatId: input.chatId, nodeId: input.beforeNodeId }, true);
+  if (target && target.status !== 'valid') return target;
+  const index = target?.messageIndex ?? chats![chatIndex].messages.length;
+  const ensured = ensureBranchTreeState(chats!, chatIndex, contentStore);
+  const result = insertMessageAtIndexState(ensured.chats, chatIndex, index, { role: input.role, content: input.content }, ensured.contentStore);
+  return { status: 'updated' as const, ...result, nodeId: result.newId, historyBase: ensured };
+};

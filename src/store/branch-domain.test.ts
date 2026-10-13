@@ -8,6 +8,7 @@ import {
   deleteBranchState,
   ensureBranchTreeState,
   insertMessageAtIndexState,
+  insertNodeState,
   moveMessageState,
   pasteBranchSequenceState,
   removeMessageAtIndexState,
@@ -533,5 +534,14 @@ describe('upsertWithAutoBranchState', () => {
 
     // Content updated in-place
     expect(result.chats[0].messages[1].content).toEqual(textContent('edited response'));
+  });
+});
+
+describe('insertNodeState identity boundary', () => {
+  it('rejects missing chat and non-active target without mutation', () => {
+    const chat = createChat(), contentStore = {};
+    expect(insertNodeState([chat], { chatId: 'missing', beforeNodeId: null, role: 'user', content: [] }, contentStore)).toEqual({ status: 'chat-missing' });
+    expect(insertNodeState([chat], { chatId: chat.id, beforeNodeId: '01', role: 'user', content: [] }, contentStore)).toEqual({ status: 'node-missing' });
+    expect(chat.branchTree).toBeUndefined(); expect(contentStore).toEqual({});
   });
 });

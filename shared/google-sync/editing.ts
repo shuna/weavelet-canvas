@@ -2,7 +2,7 @@ import { hasMeaningfulContent } from '../../src/utils/contentValidation';
 import { textValueOf, replaceTextValue } from '../../src/utils/messageText';
 import {
   ensureBranchTreeState, switchActivePathState, upsertWithAutoBranchState,
-  createBranchState, appendNodeToActivePathState, updateNodeRoleState,
+  createBranchState, appendNodeToActivePathState, updateNodeRoleState, insertNodeState,
 } from '../../src/store/branch-domain';
 import { materializeActivePath } from '../../src/utils/branchUtils';
 import { diffJSONChanges } from '../../src/utils/jsonChanges';
@@ -27,8 +27,8 @@ export function withEditingRuntime<T>(newIDs: string[], existingIDs: string[], n
   finally { Date.now = clock; runtime = undefined; }
 }
 export function messageEdit(json: string): string {
-  const input: { chat: ChatInterface; contentStore: ContentStoreData; nodeID?: string; viewingPath: string[];
-    role: Role; parts: ContentInterface[]; editedText?: string; operation?: 'textValue'; mode: 'overwrite' | 'branch' | 'append'; newIDs: string[]; now: number } = JSON.parse(json);
+  const input: { chat: ChatInterface; contentStore: ContentStoreData; nodeID?: string | null; viewingPath: string[];
+    role: Role; parts: ContentInterface[]; editedText?: string; operation?: 'textValue'; mode: 'overwrite' | 'branch' | 'append' | 'insert'; newIDs: string[]; now: number } = JSON.parse(json);
   if (input.operation === 'textValue') return JSON.stringify(textValueOf(input.parts));
   if (input.editedText !== undefined && typeof input.editedText !== 'string') throw new Error('Invalid text.');
   const parts = input.editedText !== undefined && input.editedText !== textValueOf(input.parts) ? replaceTextValue(input.parts, input.editedText) : input.parts;
@@ -40,29 +40,37 @@ export function messageEdit(json: string): string {
   if (!Array.isArray(chat.messages) && chat.branchTree) chat.messages = materializeActivePath(chat.branchTree, isolated.contentStore);
   const wasFlat = !chat.branchTree;
   return withEditingRuntime(input.newIDs, Object.keys(chat.branchTree?.nodes ?? {}), input.now, () => {
-    let result = ensureBranchTreeState([chat], 0, isolated.contentStore);
+    let result = input.mode === 'insert' && wasFlat ? { chats: [chat], contentStore: isolated.contentStore } : ensureBranchTreeState([chat], 0, isolated.contentStore);
     if (!wasFlat) {
       const path = input.viewingPath;
       if (path.some(id => !Object.hasOwn(result.chats[0].branchTree!.nodes, id))) throw new Error('Invalid viewing path.');
       if (path.length) result.chats = switchActivePathState(result.chats, 0, path, result.contentStore);
       else result.chats[0].branchTree!.activePath = [];
     }
-    const tree = result.chats[0].branchTree!;
-    let index = -1;
-    if (input.mode !== 'append') {
-      const flatID = input.nodeID?.startsWith('message-') ? input.nodeID.slice(8) : input.nodeID;
-      index = wasFlat && flatID !== undefined && String(Number(flatID)) === flatID ? Number(flatID) : tree.activePath.indexOf(input.nodeID!);
-      if (!Number.isInteger(index) || index < 0 || index >= tree.activePath.length) throw new Error('Invalid message node ID.');
-      if (input.mode === 'overwrite' && result.chats[0].protectedNodes?.[tree.activePath[index]]) throw new Error('Protected message.');
-    }
-    if (input.mode === 'append') result = appendNodeToActivePathState(result.chats, 0, input.role, parts, result.contentStore);
-    else if (input.mode === 'branch') {
-      const branch = createBranchState(result.chats, 0, tree.activePath[index], parts, result.contentStore);
-      result = branch;
-      if (branch.chats[0].branchTree!.nodes[branch.newId].role !== input.role) {
-        result.chats = updateNodeRoleState(branch.chats, 0, branch.newId, input.role, branch.contentStore);
+    if (input.mode === 'insert') {
+      if (input.nodeID === undefined) throw new Error('Invalid insert target.');
+      const beforeNodeId = wasFlat && input.nodeID?.startsWith('message-') ? input.nodeID.slice(8) : input.nodeID;
+      const inserted = insertNodeState(result.chats, { chatId: chat.id, beforeNodeId, role: input.role, content: parts }, result.contentStore);
+      if (inserted.status !== 'updated') throw new Error(`Invalid insert target: ${inserted.status}`);
+      result = inserted;
+    } else {
+      const tree = result.chats[0].branchTree!;
+      let index = -1;
+      if (input.mode !== 'append') {
+        const flatID = input.nodeID?.startsWith('message-') ? input.nodeID.slice(8) : input.nodeID;
+        index = wasFlat && flatID !== undefined && String(Number(flatID)) === flatID ? Number(flatID) : tree.activePath.indexOf(input.nodeID!);
+        if (!Number.isInteger(index) || index < 0 || index >= tree.activePath.length) throw new Error('Invalid message node ID.');
+        if (input.mode === 'overwrite' && result.chats[0].protectedNodes?.[tree.activePath[index]]) throw new Error('Protected message.');
       }
-    } else result = upsertWithAutoBranchState(result.chats, 0, index, { role: input.role, content: parts }, result.contentStore);
+      if (input.mode === 'append') result = appendNodeToActivePathState(result.chats, 0, input.role, parts, result.contentStore);
+      else if (input.mode === 'branch') {
+        const branch = createBranchState(result.chats, 0, tree.activePath[index], parts, result.contentStore);
+        result = branch;
+        if (branch.chats[0].branchTree!.nodes[branch.newId].role !== input.role) {
+          result.chats = updateNodeRoleState(branch.chats, 0, branch.newId, input.role, branch.contentStore);
+        }
+      } else result = upsertWithAutoBranchState(result.chats, 0, index, { role: input.role, content: parts }, result.contentStore);
+    }
     // DMP patch strings cannot carry opaque references back to raw native JSON.
     // Expand only deltas produced by this operation while their projected base
     // is still available; existing native deltas stay in the raw document.
