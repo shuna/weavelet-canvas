@@ -38,7 +38,7 @@ struct BranchLayoutKey: Equatable {
         let indices = multiViewChatIndices.count > 1 ? multiViewChatIndices : [chatIndex]
         entries = indices.compactMap { index in
             guard chats.indices.contains(index), let id = try? chats[index].required("id").string("id"),
-                  let title = try? chats[index].required("title").string("title") else { return nil }
+                  let title = try? chats[index].required("title").displayString("title") else { return nil }
             return Entry(chatID: id, chatIndex: index, title: title, tree: chats[index]["branchTree"])
         }
     }

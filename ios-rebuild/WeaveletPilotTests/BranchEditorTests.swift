@@ -259,4 +259,24 @@ final class BranchEditorTests: XCTestCase {
         XCTAssertNil(try state.syncInputSnapshot().required("state")["multiViewChatIndices"])
     }
 
+    func testMultiViewRepairsRawSurrogateTitleOnlyForDisplayAndKeepsSnapshotBytes() throws {
+        let original = try fixture()
+        let rawTitle = try OrderedJSON.decode(Data(#"{"title":"A\uD800B"}"#.utf8)).required("title")
+        var chats = try original.required("chats").array("chats")
+        chats[0] = chats[0].replacing("title", with: rawTitle)
+        chats[1] = chats[0].replacing("id", with: .string("chat-b")).replacing("title", with: .string("Other"))
+        let state = ChatState()
+        try state.importWebData(original.replacing("chats", with: .array(chats)).encoded())
+        state.multiViewChatIndices = [0, 1]
+        let before = try state.syncInputSnapshot().encoded()
+        let key = BranchLayoutKey(state: state)
+        let input = try key.input(requestID: 12)
+        XCTAssertEqual(key.entries.count, 2)
+        XCTAssertEqual(try input.required("entries").array("entries")[0]["chatTitle"], .string("A�B"))
+        let graph = try BranchGraph(SharedWebOperations.call("branchLayout", input), requestID: 12)
+        XCTAssertEqual(graph.headers(in: key).map(\.title), ["A�B", "Other"])
+        XCTAssertEqual(try state.syncInputSnapshot().encoded(), before)
+        XCTAssertEqual(try state.exchange?.source.required("chats").array("chats")[0]["title"], rawTitle)
+    }
+
 }
