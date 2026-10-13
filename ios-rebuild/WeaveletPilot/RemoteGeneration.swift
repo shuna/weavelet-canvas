@@ -40,7 +40,7 @@ enum RemoteRequest {
         return data
     }
     #endif
-    static func make(source: OrderedJSON, chatID: String, path: [String], settings: RemoteSettings, key: String, modelState: OrderedJSON? = nil) throws -> URLRequest {
+    static func make(source: OrderedJSON, chatID: String, path: [String], settings: RemoteSettings, key: String, modelState: OrderedJSON? = nil, apiVersion: String? = nil, customHeaders: OrderedJSON? = nil) throws -> URLRequest {
         let url = try settings.validatedURL()
         let chat = try source.required("chats").array("chats").first { try $0.required("id").string("ID").utf8.elementsEqual(chatID.utf8) }
         guard let chat else { throw ExchangeError.invalid("chat ID") }
@@ -61,21 +61,58 @@ enum RemoteRequest {
             }
             contextChat = contextChat.replacing("messages", with: .array(messages))
         }
+        var transport: [JSONField] = [.init(key:"endpoint",value:.string(settings.endpoint)),
+            .init(key:"endpointURL",value:.object([.init(key:"protocol",value:.string("https:")),.init(key:"hostname",value:.string(url.host!.lowercased()))])),
+            .init(key:"hasApiKey",value:.bool(!key.isEmpty)),.init(key:"chatId",value:.string(chatID))]
+        if let apiVersion { transport.append(.init(key:"apiVersion",value:.string(apiVersion))) }
+        if let customHeaders { transport.append(.init(key:"customHeaders",value:customHeaders)) }
+        var projectedConfig = try boundary.requestConfig(config)
+        if let controls = config["openRouter"], let routing = controls["routing"], case .object(let prices) = routing["max_price"] {
+            let projectedPrices = OrderedJSON.object(try prices.map { field in
+                JSONField(key:field.key,value:["prompt","completion"].contains(field.key) ? field.value : try boundary.reference(field.value))
+            })
+            projectedConfig = projectedConfig.replacing("openRouter",with:controls.replacing("routing",with:routing.replacing("max_price",with:projectedPrices)))
+        }
         let input = OrderedJSON.object([
+            .init(key:"transport",value:.object(transport)),
             .init(key: "contentStore", value: store),
             .init(key: "chat", value: contextChat),
-            .init(key: "config", value: try boundary.requestConfig(config)),
+            .init(key: "config", value: projectedConfig),
             .init(key: "activePath", value: .array(path.map(OrderedJSON.string))),
             .init(key: "omittedNodes", value: chat["omittedNodes"] ?? .object([])),
             .init(key: "modelState", value: modelState ?? .object([])),
         ])
-        let projectedBody = try SharedWebOperations.call("generationRequest", input)
+        let envelope = try SharedWebOperations.call("generationRequest", input)
+        let projectedBody = try envelope.required("body")
         let body = try OrderedJSONChanges.apply(.array([.object([.init(key: "op", value: .string("set")), .init(key: "path", value: .array([])), .init(key: "value", value: projectedBody)])]), to: .null, opaque: boundary.opaque)
-        var request = URLRequest(url: url)
-        request.httpMethod = "POST"
-        request.timeoutInterval = 120
-        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        if !key.isEmpty { request.setValue("Bearer \(key)", forHTTPHeaderField: "Authorization") }
+        return try bindEnvelope(envelope,body:body,originalURL:url,key:key)
+    }
+    // The shared code never sees the secret. Only verified HTTP metadata can bind it.
+    static func bindEnvelope(_ envelope: OrderedJSON, body: OrderedJSON, originalURL: URL, key: String) throws -> URLRequest {
+        let endpoint = try envelope.required("endpoint").string("endpoint")
+        let destination = try RemoteSettings(endpoint:endpoint).validatedURL()
+        guard ProviderModels.sameOrigin(destination,originalURL) else { throw ExchangeError.invalid("生成先が認証設定のoriginから変更されています") }
+        var request = URLRequest(url:destination); request.httpMethod = "POST"; request.timeoutInterval = 120
+        var names: [String:String] = [:]
+        func validate(_ name: String, _ value: String) throws {
+            guard name.range(of:"\\A[!#$%&'*+.^_`|~0-9A-Za-z-]+\\z",options:.regularExpression) != nil,
+                  !value.unicodeScalars.contains(where:{ ($0.value < 32 && $0.value != 9) || $0.value == 127 }) else { throw ExchangeError.invalid("HTTPヘッダーの名前または値が不正です") }
+        }
+        for field in try envelope.required("headers").object("headers") {
+            let value = try field.value.string("header value"); try validate(field.key,value)
+            let folded = field.key.lowercased()
+            guard names[folded] == nil else { throw ExchangeError.invalid("同じHTTPヘッダー名が大文字小文字違いで重複しています") }
+            names[folded] = field.key; request.setValue(value,forHTTPHeaderField:field.key)
+        }
+        var authenticationNames = Set<String>()
+        for descriptor in try envelope.required("authentication").array("authentication") {
+            let name = try descriptor.required("name").string("auth name"), prefix = try descriptor.required("prefix").string("auth prefix")
+            guard !key.isEmpty, (name == "Authorization" && prefix == "Bearer ") || (name == "api-key" && prefix.isEmpty) else { throw ExchangeError.invalid("認証ヘッダーの指定が不正です") }
+            let folded = name.lowercased()
+            guard authenticationNames.insert(folded).inserted, names[folded] == nil || names[folded] == name else { throw ExchangeError.invalid("認証ヘッダーが大文字小文字違いで重複しています") }
+            let value = prefix + key; try validate(name,value)
+            request.setValue(value,forHTTPHeaderField:name)
+        }
         request.httpBody = try body.encoded()
         return request
     }

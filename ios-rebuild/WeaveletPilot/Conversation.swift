@@ -556,7 +556,11 @@ final class ChatState: ObservableObject {
         let savedState = try publicationSnapshot().required("state")
         let modelState = ChatConfig.modelState(in:savedState)
         let credential = try ProviderModels.generationCredential(config:sourceChat["config"] ?? .object([]),state:savedState,legacy:record,read:readProviderCredential)
-        let request = try RemoteRequest.make(source: source, chatID: conversation.id, path: path, settings: credential.settings, key: credential.key, modelState:modelState)
+        let apiVersion: String?
+        if case .string(let value) = savedState["apiVersion"] { apiVersion = value }
+        else if savedState["apiVersion"] == nil || savedState["apiVersion"] == .null { apiVersion = nil }
+        else { throw ExchangeError.invalid("API versionの形式が不正です") }
+        let request = try RemoteRequest.make(source: source, chatID: conversation.id, path: path, settings: credential.settings, key: credential.key, modelState:modelState,apiVersion:apiVersion)
         let streaming = try RemoteRequest.streaming(request)
         try applyLibrary(source, selectedID: conversation.id, resetViewFor: conversation.id, editing: history, now: now)
         let id = UUID()

@@ -11,7 +11,7 @@ private final class FakeRemoteProtocol: URLProtocol {
     static var releaseLast: (() -> Void)?
     private let lock = NSLock()
     private var stopped = false
-    override class func canInit(with request: URLRequest) -> Bool { request.url?.host == "fixture.invalid" }
+    override class func canInit(with request: URLRequest) -> Bool { ["fixture.invalid", "unit-fixture.openai.azure.com"].contains(request.url?.host ?? "") }
     override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
     override func startLoading() {
         var captured = request
@@ -64,6 +64,54 @@ final class RemoteGenerationTests: XCTestCase {
         XCTAssertEqual(body["temperature"], .number("1.234567890123456789"))
         XCTAssertEqual(body["xFuture"], .object([.init(key:"opaqueRef",value:.number("0"))]))
         XCTAssertEqual(try source.encoded(), before)
+    }
+
+    func testSharedOpenRouterControlsReachOnlyEligibleEndpointAndKeepRawValues() throws {
+        let metadata = OrderedJSON.object([.init(key:"huge",value:.number("9007199254740993")),.init(key:"decimal",value:.number("1.2300")),.init(key:"marker",value:.object([.init(key:"opaqueRef",value:.number("0"))]))])
+        let price = OrderedJSON.object([.init(key:"prompt",value:.number("0.0100")),.init(key:"completion",value:.number("0.0200")),.init(key:"xFuture",value:metadata)])
+        let routing = OrderedJSON.object([.init(key:"order",value:.array([.string("fake-provider")])),.init(key:"only",value:.array([.string("fake-provider")])),.init(key:"ignore",value:.array([.string("fake-other")])),.init(key:"allow_fallbacks",value:.bool(false)),.init(key:"require_parameters",value:.bool(true)),.init(key:"max_price",value:price),.init(key:"data_collection",value:.string("deny")),.init(key:"zdr",value:.bool(true))])
+        let controls = OrderedJSON.object([.init(key:"routing",value:routing),.init(key:"stickySession",value:.bool(true)),.init(key:"promptCache",value:.object([.init(key:"mode",value:.string("claude-conversation")),.init(key:"ttl",value:.string("1h"))])),.init(key:"responseCache",value:.object([.init(key:"mode",value:.string("on")),.init(key:"ttlSeconds",value:.number("30"))]))])
+        let config = OrderedJSON.object([.init(key:"model",value:.string("anthropic/claude-3.7-sonnet")),.init(key:"providerId",value:.string("openrouter")),.init(key:"stream",value:.bool(false)),.init(key:"max_tokens",value:.number("100")),.init(key:"openRouter",value:controls)])
+        let source = OrderedJSON.object([.init(key:"chats",value:.array([.object([.init(key:"id",value:.string("or-chat")),.init(key:"config",value:config),.init(key:"messages",value:.array([.object([.init(key:"role",value:.string("user")),.init(key:"content",value:.array([.object([.init(key:"type",value:.string("text")),.init(key:"text",value:.string("Prompt")),.init(key:"xFuture",value:metadata)])]))])]))])]))]), before = try source.encoded()
+        let request = try RemoteRequest.make(source:source,chatID:"or-chat",path:[],settings:RemoteSettings(endpoint:"https://openrouter.ai/api/v1/chat/completions"),key:"FAKE-native-secret")
+        let body = try OrderedJSON.decode(XCTUnwrap(request.httpBody)), provider = try body.required("provider")
+        XCTAssertEqual(provider["order"],routing["order"]); XCTAssertEqual(provider["only"],routing["only"]); XCTAssertEqual(provider["ignore"],routing["ignore"])
+        XCTAssertEqual(provider["allow_fallbacks"],.bool(false)); XCTAssertEqual(provider["require_parameters"],.bool(true)); XCTAssertEqual(provider["zdr"],.bool(true))
+        XCTAssertEqual(provider["data_collection"],.string("deny")); XCTAssertEqual(provider["max_price"]?["prompt"],.number("0.01"))
+        XCTAssertEqual(try provider.required("max_price").required("xFuture").encoded(),try metadata.encoded())
+        XCTAssertEqual(body["session_id"],.string("weavelet:or-chat")); XCTAssertEqual(body["cache_control"]?["ttl"],.string("1h"))
+        XCTAssertNil(request.value(forHTTPHeaderField:"X-OpenRouter-Cache"))
+        XCTAssertFalse(String(decoding:try XCTUnwrap(request.httpBody),as:UTF8.self).contains("FAKE-native-secret"))
+        let unrelated = try RemoteRequest.make(source:source,chatID:"or-chat",path:[],settings:RemoteSettings(endpoint:"https://fixture.invalid/v1/chat/completions"),key:"FAKE-native-secret")
+        let unrelatedBody = try OrderedJSON.decode(XCTUnwrap(unrelated.httpBody))
+        XCTAssertNil(unrelatedBody["provider"]); XCTAssertNil(unrelatedBody["session_id"]); XCTAssertNil(unrelatedBody["cache_control"])
+        XCTAssertEqual(try source.encoded(),before)
+    }
+    func testAzureUsesSavedApiVersionAndNativeAuthenticationRejectsInvalidHeadersOrOrigin() async throws {
+        let local = try store(), state = try state(local,stream:false)
+        let saved = try state.publicationSnapshot(), apiVersion = OrderedJSON.string("2025-01-01-preview")
+        try state.applySnapshot(.object([.init(key:"version",value:saved.required("version")),.init(key:"state",value:.object([.init(key:"apiVersion",value:apiVersion)]))]))
+        var credentials = record(stream:false); credentials.settings.endpoint = "https://unit-fixture.openai.azure.com"
+        let remote = client(); FakeRemoteProtocol.packets = [.init(bytes:try fixture().required("responses").required("nonstream").encoded())]
+        try state.startGeneration(input:"Azure boundary",record:credentials,client:remote)
+        try await wait { state.generation == nil }
+        XCTAssertNil(state.generationError)
+        let sent = try XCTUnwrap(FakeRemoteProtocol.requests.first)
+        XCTAssertEqual(sent.url?.path,"/openai/deployments/fake-model/chat/completions"); XCTAssertEqual(sent.url?.query,"api-version=2025-01-01-preview")
+        XCTAssertEqual(sent.value(forHTTPHeaderField:"Authorization"),"Bearer FAKE"); XCTAssertEqual(sent.value(forHTTPHeaderField:"api-key"),"FAKE")
+        XCTAssertEqual(try state.publicationSnapshot().required("state").required("apiVersion").encoded(),try apiVersion.encoded())
+        let source = try XCTUnwrap(state.exchange).source, before = try source.encoded()
+        let path = try XCTUnwrap(state.conversation).visibleMessages.map(\.id)
+        let exactOverride = try RemoteRequest.make(source:source,chatID:"remote",path:path,settings:credentials.settings,key:"FAKE",customHeaders:.object([.init(key:"Authorization",value:.string("FAKE-overridden"))]))
+        XCTAssertEqual(exactOverride.value(forHTTPHeaderField:"Authorization"),"Bearer FAKE")
+        // HTTP names are case insensitive; reject aliases instead of emitting two auth values.
+        for headers in [OrderedJSON.object([.init(key:"authorization",value:.string("FAKE-other"))]),.object([.init(key:"X-Trace",value:.string("line\r\nbreak"))]),.object([.init(key:"X-Trace\n",value:.string("trace"))]),.object([.init(key:"Content-Type",value:.string("a")),.init(key:"content-type",value:.string("b"))])] {
+            XCTAssertThrowsError(try RemoteRequest.make(source:source,chatID:"remote",path:path,settings:credentials.settings,key:"FAKE",customHeaders:headers))
+        }
+        XCTAssertThrowsError(try RemoteRequest.make(source:source,chatID:"remote",path:path,settings:credentials.settings,key:"FAKE\r\ninvalid"))
+        let forged = OrderedJSON.object([.init(key:"endpoint",value:.string("https://other.invalid/completions")),.init(key:"headers",value:.object([])),.init(key:"authentication",value:.array([.object([.init(key:"name",value:.string("Authorization")),.init(key:"prefix",value:.string("Bearer "))])]))])
+        XCTAssertThrowsError(try RemoteRequest.bindEnvelope(forged,body:.object([]),originalURL:credentials.settings.validatedURL(),key:"FAKE"))
+        XCTAssertEqual(try source.encoded(),before)
     }
 
     func testSavedModelCatalogReachesSharedReasoningBodyWithoutChangingRawCatalog() async throws {
