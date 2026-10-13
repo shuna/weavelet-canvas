@@ -342,4 +342,4 @@ b2f5f976/6a345e4aで同じpure元のbranchLayoutと既存Web ensureBranchTreeSta
 
 次のnative prompt適用ではWebの既存match-sorter6.3.1をname検索に限定再利用する。独立Astraはinstalled/両lockの版一致、remove-accents0.4.2と既存修正版Babel runtime7.26.10への依存を確認。公式[match-sorter Releases](https://github.com/kentcdodds/match-sorter/releases)と[remove-accents](https://github.com/tyxla/remove-accents)を根拠に、MIT本文/著作権と実入力hashの配布保持を条件付き採用可とした。確認できた公開advisoryに両検索packageの該当を見つけず、[Babel advisory](https://github.com/babel/babel/security/advisories/GHSA-968p-4wvh-cqc8)は既存固定版で修正済み。未発見問題の不存在は保証しない。
 
-検索経路はDOM/Node/network不要だが、同順位のlocaleCompareによる全Unicode順序一致をsource共有だけで保証しない。完成bundleの実JSCで名前/同順位/アクセントを確認し、UI外で検索して古い結果を拒否する。ESMとremove-accents原文約18.5KBは実配布増分や実機性能の測定ではない。現段階はnative適用の実装中であり、採用条件確認前に配布/完成済みとは扱わない。
+検索経路はDOM/Node/network不要だが、同順位のlocaleCompareによる全Unicode順序一致をsource共有だけで保証しない。a90b5b8c/86fef754でMIT本文と固定hashを配布へ含め、完成bundleの実JSCで名前/同順位/アクセント、UI外検索と古い入力の拒否を確認した。独立Astraのquery同値性指摘はbb18b7f3でUTF8基準へ修正し、限定再監査は新規P2以上なし。実bundle増分22,935 byte。ESM等の原文約18.5KB、app全体/圧縮配布/実機性能とは区別する。適用の接続範囲と実UI等の未確認は[検証台帳](web-native-completion-ledger.md)に記録した。
