@@ -173,7 +173,7 @@ const normalizeModelEntry = (
   };
 };
 
-function normalizeModels(
+export function normalizeModels(
   providerId: ProviderId,
   data: unknown
 ): ProviderModel[] {

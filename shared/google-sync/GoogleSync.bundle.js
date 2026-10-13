@@ -7003,6 +7003,7 @@ var WeaveletGoogleSync = (() => {
     navigationOperation: () => navigationOperation,
     nodeOptions: () => nodeOptions,
     nodeRemoval: () => nodeRemoval,
+    providerModelList: () => providerModelList,
     recordsResult: () => recordsResult,
     recordsStart: () => recordsStart,
     result: () => result2,
@@ -16604,6 +16605,34 @@ ${message.content}` : message.content).join("\n\n").trim();
   };
 
   // src/api/providerModels.ts
+  var isRecord3 = (value) => typeof value === "object" && value !== null;
+  var asProviderModelListPayload = (value) => isRecord3(value) ? value : {};
+  var asProviderModelPayload = (value) => isRecord3(value) ? value : {};
+  var asProviderPricingPayload = (value) => isRecord3(value) ? value : {};
+  var toStringValue = (value) => typeof value === "string" && value.length > 0 ? value : void 0;
+  var toNumberValue = (value) => typeof value === "number" && Number.isFinite(value) ? value : void 0;
+  var toMillionTokenPrice = (value) => {
+    if (typeof value === "number" && Number.isFinite(value)) {
+      return value * 1e6;
+    }
+    if (typeof value === "string") {
+      const parsed = parseFloat(value);
+      return Number.isFinite(parsed) ? parsed * 1e6 : void 0;
+    }
+    return void 0;
+  };
+  var getModelEntries = (value) => {
+    const payload = asProviderModelListPayload(value);
+    if (Array.isArray(payload.data))
+      return payload.data;
+    if (Array.isArray(payload.models))
+      return payload.models;
+    return [];
+  };
+  var isSupportedModelId = (modelId) => {
+    const normalizedId = modelId.toLowerCase();
+    return !(normalizedId.includes("embed") || normalizedId.includes("tts") || normalizedId.includes("whisper") || normalizedId.includes("dall-e") || normalizedId.includes("moderation"));
+  };
   var REASONING_MODEL_RE = (
     // OpenAI o-series: o1, o1-mini, o3, o3-mini, o4-mini, etc.
     // Uses word-boundary to avoid false positives like "proto1", "falcon-40b"
@@ -16614,10 +16643,74 @@ ${message.content}` : message.content).join("\n\n").trim();
     "deepseek-reasoner",
     "qwq"
   ];
+  var isVisionModel = (modelId) => {
+    const id = modelId.toLowerCase();
+    if (/gpt-4[o-]/.test(id) && !id.includes("audio-preview"))
+      return true;
+    if (/claude-3/.test(id))
+      return true;
+    if (id.includes("gemini"))
+      return true;
+    if (id.includes("vision"))
+      return true;
+    return false;
+  };
+  var isAudioModel = (modelId) => {
+    const id = modelId.toLowerCase();
+    if (id.includes("audio"))
+      return true;
+    if (id.includes("realtime"))
+      return true;
+    return false;
+  };
   var isReasoningModel = (modelId) => {
     const id = modelId.toLowerCase();
     return REASONING_MODEL_RE.test(id) || REASONING_MODEL_NAMES.some((name) => id.includes(name)) || isClaudeReasoningModel(id);
   };
+  var normalizeModelEntry = (providerId, entry) => {
+    const payload = asProviderModelPayload(entry);
+    const id = toStringValue(payload.id) ?? toStringValue(payload.name);
+    const name = toStringValue(payload.name) ?? toStringValue(payload.id);
+    if (!id || !name || !isSupportedModelId(id)) {
+      return null;
+    }
+    const pricing = asProviderPricingPayload(payload.pricing);
+    const promptPrice = toMillionTokenPrice(pricing.prompt);
+    const completionPrice = toMillionTokenPrice(pricing.completion);
+    const arch = isRecord3(payload.architecture) ? payload.architecture : {};
+    const modality = typeof arch.modality === "string" ? arch.modality : "";
+    const inputModality = modality.split("->")[0] ?? "";
+    const modelType = inputModality.includes("image") ? "image" : "text";
+    const supportedParameters = Array.isArray(payload.supported_parameters) ? payload.supported_parameters.filter(
+      (value) => typeof value === "string"
+    ) : void 0;
+    const declaresReasoning = supportedParameters?.some(
+      (param) => param === "reasoning" || param === "include_reasoning"
+    ) ?? false;
+    const reasoning = isRecord3(payload.reasoning) ? payload.reasoning : {};
+    return {
+      id,
+      name,
+      providerId,
+      supportedParameters,
+      contextLength: toNumberValue(payload.context_length) ?? toNumberValue(payload.context_window),
+      maxCompletionTokens: toNumberValue(
+        isRecord3(payload.top_provider) ? payload.top_provider.max_completion_tokens : void 0
+      ),
+      promptPrice,
+      completionPrice,
+      created: toNumberValue(payload.created),
+      modelType,
+      streamSupport: true,
+      supportsReasoning: declaresReasoning || isReasoningModel(id),
+      reasoningMandatory: reasoning.mandatory === true,
+      supportsVision: modelType === "image" || isVisionModel(id),
+      supportsAudio: isAudioModel(id)
+    };
+  };
+  function normalizeModels(providerId, data) {
+    return getModelEntries(data).map((entry) => normalizeModelEntry(providerId, entry)).filter((model) => model !== null);
+  }
 
   // src/utils/modelReasoning.ts
   var inferMandatoryReasoning = (modelId, providerId) => providerId === "openrouter" && /claude-opus-5[.-]5(?:$|:)/.test(modelId.toLowerCase());
@@ -17614,6 +17707,12 @@ ${messageContent}---
       hasMeaningfulContent: hasMeaningfulMessageContent([{ role: "user", content: prepared }]),
       text: textValueOf(prepared)
     });
+  }
+
+  // shared/google-sync/providerModels.ts
+  function providerModelList(json) {
+    const input = JSON.parse(json);
+    return JSON.stringify({ models: normalizeModels(input.providerId, input.data) });
   }
 
   // shared/google-sync/entry.ts
