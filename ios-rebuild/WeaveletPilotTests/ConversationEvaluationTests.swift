@@ -110,6 +110,63 @@ final class ConversationEvaluationTests: XCTestCase {
         XCTAssertFalse(try ConversationEvaluation.autoIsCurrent(prepared,source:source.replacing("chats",with:.array([omittedChat])),state:state))
     }
 
+    func testAutoTracksEveryTransmittedPathNodeIncludingEarlierMergedUser() throws {
+        let source = try json(#"{"chats":[{"id":"chat","config":{"model":"fake-model"},"branchTree":{"activePath":["first","last","assistant"],"nodes":{"first":{"id":"first","parentId":null,"role":"user","contentHash":"f"},"last":{"id":"last","parentId":"first","role":"user","contentHash":"l"},"assistant":{"id":"assistant","parentId":"last","role":"assistant","contentHash":"a"}}},"omittedNodes":{}}],"contentStore":{"f":{"content":[{"type":"text","text":"first","xFuture":9007199254740993}],"refCount":1},"l":{"content":[{"type":"text","text":"last"}],"refCount":1},"a":{"content":[],"refCount":1}}}"#)
+        let path = ["first","last"]
+        let request = try RemoteRequest.make(source:source,chatID:"chat",path:path,
+            settings:RemoteSettings(endpoint:"https://fixture.invalid/v1/chat/completions",model:"fake-model",stream:false),key:"FAKE")
+        let body = try OrderedJSON.decode(XCTUnwrap(request.httpBody))
+        let sent = try XCTUnwrap(ConversationEvaluation.transmittedUserContent(body.required("messages")))
+        let defaults = try SharedWebOperations.call("evaluation",.object([.init(key:"operation",value:.string("defaults"))])).required("evaluationSettings")
+        let state = try state().replacing("evaluationSettings",with:defaults.replacing("qualityPreSend",with:.string("auto")))
+        let prepared = try XCTUnwrap(ConversationEvaluation.prepareAuto(source:source,state:state,chatID:"chat",nodeID:"assistant",
+            phase:"pre-send",userContent:sent,requestPath:path,legacy:RemoteCredentialRecord(),files:nil,readProviderCredential:read))
+        XCTAssertTrue(try ConversationEvaluation.autoIsCurrent(prepared,source:source,state:state))
+        let changedFirst = source.replacing("contentStore",with:try source.required("contentStore").replacing("f",with:json(#"{"content":[{"type":"text","text":"changed"}],"refCount":1}"#)))
+        XCTAssertFalse(try ConversationEvaluation.autoIsCurrent(prepared,source:changedFirst,state:state))
+        let changedNumber = source.replacing("contentStore",with:try source.required("contentStore").replacing("f",with:json(#"{"content":[{"type":"text","text":"first","xFuture":9007199254740994}],"refCount":1}"#)))
+        XCTAssertFalse(try ConversationEvaluation.autoIsCurrent(prepared,source:changedNumber,state:state))
+        let chat = try source.required("chats").array("chats")[0]
+        let omitted = source.replacing("chats",with:.array([chat.replacing("omittedNodes",with:try json(#"{"last":true}"#))]))
+        let omittedRequest = try RemoteRequest.make(source:omitted,chatID:"chat",path:path,
+            settings:RemoteSettings(endpoint:"https://fixture.invalid/v1/chat/completions",model:"fake-model",stream:false),key:"FAKE")
+        let omittedBody = try OrderedJSON.decode(XCTUnwrap(omittedRequest.httpBody))
+        let omittedSent = try XCTUnwrap(ConversationEvaluation.transmittedUserContent(omittedBody.required("messages")))
+        XCTAssertEqual(try ConversationEvaluation.autoPlan(userContent:omittedSent,phase:"pre-send",settings:state.required("evaluationSettings"))["userText"],.string("first"))
+        let omittedPrepared = try XCTUnwrap(ConversationEvaluation.prepareAuto(source:omitted,state:state,chatID:"chat",nodeID:"assistant",
+            phase:"pre-send",userContent:omittedSent,requestPath:path,legacy:RemoteCredentialRecord(),files:nil,readProviderCredential:read))
+        XCTAssertFalse(try ConversationEvaluation.autoIsCurrent(omittedPrepared,source:omitted.replacing("contentStore",with:try omitted.required("contentStore").replacing("f",with:json(#"{"content":[{"type":"text","text":"changed"}],"refCount":1}"#))),state:state))
+    }
+
+    func testAutoDimensionPreparationFailuresDoNotSuppressOtherDimension() async throws {
+        let source = try source()
+        let chat = try source.required("chats").array("chats")[0]
+        let safeSource = source.replacing("chats",with:.array([chat.replacing("config",with:try json(#"{"model":"fake-model","providerId":"openrouter"}"#))]))
+        let defaults = try SharedWebOperations.call("evaluation",.object([.init(key:"operation",value:.string("defaults"))])).required("evaluationSettings")
+        let state = try state().replacing("evaluationSettings",with:defaults.replacing("safetyPreSend",with:.string("auto")).replacing("qualityPreSend",with:.string("auto")))
+        let user = try json(#"[{"type":"text","text":"質問"}]"#)
+        let safetyFails = try XCTUnwrap(ConversationEvaluation.prepareAuto(source:safeSource,state:state,chatID:"chat",nodeID:"assistant",
+            phase:"pre-send",userContent:user,legacy:RemoteCredentialRecord(),files:nil,readProviderCredential:{ id in id == "openai" ? nil : self.read(id) }))
+        XCTAssertNil(safetyFails.safety)
+        XCTAssertNotNil(safetyFails.safetyError)
+        let preparedQuality = try XCTUnwrap(safetyFails.quality)
+        EvaluationProtocol.reply = Data(#"{"choices":[{"message":{"content":"{\"scores\":{\"taskCompletion\":0.8}}"}}]}"#.utf8)
+        let quality = try await ConversationEvaluation.run(preparedQuality,client:client())
+        XCTAssertEqual(quality["scores"]?["taskCompletion"],.number("0.8"))
+        let qualitySaved = try ConversationEvaluation.autoApply(quality,dimension:"quality",prepared:safetyFails,source:safeSource,state:state)
+        XCTAssertNotNil(qualitySaved["evaluationResults"]?[safetyFails.key]?["quality"])
+        let qualityFails = try XCTUnwrap(ConversationEvaluation.prepareAuto(source:safeSource,state:state,chatID:"chat",nodeID:"assistant",
+            phase:"pre-send",userContent:user,legacy:RemoteCredentialRecord(),files:nil,readProviderCredential:{ id in id == "openrouter" ? nil : self.read(id) }))
+        let preparedSafety = try XCTUnwrap(qualityFails.safety)
+        XCTAssertNil(qualityFails.quality)
+        XCTAssertNotNil(qualityFails.qualityError)
+        EvaluationProtocol.reply = Data(#"{"results":[{"flagged":false,"categories":{"violence":false},"category_scores":{"violence":0.12}}]}"#.utf8)
+        let safety = try await ConversationEvaluation.run(preparedSafety,client:client())
+        XCTAssertEqual(safety["flagged"],.bool(false))
+        let safetySaved = try ConversationEvaluation.autoApply(safety,dimension:"safety",prepared:qualityFails,source:safeSource,state:state)
+        XCTAssertNotNil(safetySaved["evaluationResults"]?[qualityFails.key]?["safety"])
+    }
+
     func testAutomaticPreQualityRunsBesideGenerationAndPersistsOnReservedNode() async throws {
         let directory = FileManager.default.temporaryDirectory.appendingPathComponent("native-auto-eval-\(UUID().uuidString)")
         let app = ChatState(store:LocalStateStore(fileURL:directory.appendingPathComponent("state.json")))

@@ -122,7 +122,7 @@ final class ChatState: ObservableObject {
     @Published var generationError: String?
     @Published var automaticEvaluationError: String?
     private var automaticEvaluationTasks: [UUID: [UUID:Task<Void,Never>]] = [:]
-    private var automaticEvaluationContext: (id: UUID, chatID: String, nodeID: String, userContent: OrderedJSON, record: RemoteCredentialRecord?, client: RemoteClient, read: ProviderModels.CredentialReader)?
+    private var automaticEvaluationContext: (id: UUID, chatID: String, nodeID: String, requestPath: [String], userContent: OrderedJSON, record: RemoteCredentialRecord?, client: RemoteClient, read: ProviderModels.CredentialReader)?
     @Published private var composerDrafts: [Data:ComposerDraft] = [:]
     @Published private var assistantPrefills: [Data:String] = [:]
     private(set) var stickyPrefillKey = ""
@@ -720,7 +720,7 @@ final class ChatState: ObservableObject {
         automaticEvaluationError = nil
         if let userContent {
             let nodeID = try plan?.required("targetNodeId").string("target node") ?? ""
-            automaticEvaluationContext = (id,chatID,nodeID,userContent,legacy,client,readProviderCredential)
+            automaticEvaluationContext = (id,chatID,nodeID,path,userContent,legacy,client,readProviderCredential)
             startAutomaticEvaluation(phase:"pre-send",generationID:id)
         }
         pendingTitleContext = (id,legacy,client,readProviderCredential)
@@ -851,7 +851,7 @@ final class ChatState: ObservableObject {
             automaticEvaluationError = nil
             if let userContent {
                 let nodeID = try plan?.required("targetNodeId").string("target node") ?? ""
-                automaticEvaluationContext = (id,chatID,nodeID,userContent,nil,RemoteClient(),RemoteCredentials.load(providerID:))
+                automaticEvaluationContext = (id,chatID,nodeID,path,userContent,nil,RemoteClient(),RemoteCredentials.load(providerID:))
                 startAutomaticEvaluation(phase:"pre-send",generationID:id)
             }
             generationTask = Task { @MainActor [weak self] in
@@ -1217,11 +1217,13 @@ final class ChatState: ObservableObject {
         do {
             let assistantContent = phase == "post-receive" ? try ConversationEvaluation.savedAssistantContent(source:source,chatID:context.chatID,nodeID:context.nodeID) : nil
             let prepared = try ConversationEvaluation.prepareAuto(source:source,state:state,chatID:context.chatID,nodeID:context.nodeID,
-                phase:phase,userContent:context.userContent,assistantContent:assistantContent,
+                phase:phase,userContent:context.userContent,assistantContent:assistantContent,requestPath:context.requestPath,
                 language:Locale.preferredLanguages.first ?? "en",legacy:context.record ?? RemoteCredentialRecord(),
                 files:localModelFiles,readProviderCredential:context.read)
             guard let prepared else { return }
-            if prepared.unsupportedSafety { automaticEvaluationError = "この端末の Local / Hybrid 安全性判定は未対応です。評価設定で Remote を選択してください。" }
+            var preparationErrors = [prepared.safetyError,prepared.qualityError].compactMap { $0 }
+            if prepared.unsupportedSafety { preparationErrors.insert("この端末の Local / Hybrid 安全性判定は未対応です。評価設定で Remote を選択してください。",at:0) }
+            if !preparationErrors.isEmpty { automaticEvaluationError = preparationErrors.joined(separator:"\n") }
             for item in [("safety",prepared.safety),("quality",prepared.quality)] {
                 guard let request = item.1 else { continue }
                 let jobID = UUID()

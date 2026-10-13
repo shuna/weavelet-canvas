@@ -242,16 +242,17 @@ extension ConversationEvaluation {
         let nodeID: String
         let key: String
         let userContent: OrderedJSON
-        let sourceUserContent: Data
-        let userNodeID: String
+        let requestPath: [String]
+        let requestDependency: Data
         let assistantContent: OrderedJSON?
         let config: Data
-        let omittedNodes: Data
         let providerState: Data
         let settings: Data
         let safety: Prepared?
         let quality: Prepared?
         let unsupportedSafety: Bool
+        let safetyError: String?
+        let qualityError: String?
     }
 
     static func autoPlan(userContent: OrderedJSON, assistantContent: OrderedJSON? = nil, phase: String, settings: OrderedJSON) throws -> OrderedJSON {
@@ -281,6 +282,30 @@ extension ConversationEvaluation {
         return try target.chat.required("messages").array("messages")[target.index].required("content")
     }
 
+    private static func requestDependency(source: OrderedJSON, chat: OrderedJSON, path: [String]) throws -> Data {
+        let tree = try chat.required("branchTree")
+        let activePath = try tree.required("activePath").array("active path").map { try $0.string("node ID") }
+        guard activePath.count >= path.count,
+              zip(activePath,path).prefix(path.count).allSatisfy({ $0.0.utf8.elementsEqual($0.1.utf8) }) else {
+            throw ExchangeError.invalid("送信経路が更新されました")
+        }
+        let nodes = try tree.required("nodes")
+        let hashes = try path.map { try nodes.required($0).required("contentHash").string("content hash") }
+        var boundary = SharedWebProjection()
+        let content = try boundary.store(source.required("contentStore"),resolving:hashes,strict:true)
+        let messages = try zip(path,hashes).map { id,hash in
+            OrderedJSON.object([.init(key:"id",value:.string(id)),
+                .init(key:"role",value:try nodes.required(id).required("role")),
+                .init(key:"content",value:try content.required(hash).required("content"))])
+        }
+        let omitted = chat["omittedNodes"] ?? .object([])
+        let relevantOmitted = OrderedJSON.object(path.compactMap { id in omitted[id].map { .init(key:id,value:$0) } })
+        let projected = OrderedJSON.object([.init(key:"messages",value:.array(messages)),.init(key:"omittedNodes",value:relevantOmitted)])
+        let restored = try OrderedJSONChanges.apply(.array([.object([.init(key:"op",value:.string("set")),
+            .init(key:"path",value:.array([])),.init(key:"value",value:projected)])]),to:.null,opaque:boundary.opaque)
+        return try restored.encoded()
+    }
+
     static func enforcePreSendSafety(settings: OrderedJSON, chat: OrderedJSON) throws {
         var fields: [JSONField] = [.init(key:"operation",value:.string("autoPreSendAllowed")),.init(key:"settings",value:settings)]
         if let openRouter = chat["config"]?["openRouter"], openRouter != .null { fields.append(.init(key:"openRouter",value:openRouter)) }
@@ -289,7 +314,7 @@ extension ConversationEvaluation {
     }
 
     static func prepareAuto(source: OrderedJSON, state: OrderedJSON, chatID: String, nodeID: String, phase: String,
-                            userContent: OrderedJSON, assistantContent: OrderedJSON? = nil, language: String = "en",
+                            userContent: OrderedJSON, assistantContent: OrderedJSON? = nil, requestPath: [String]? = nil, language: String = "en",
                             legacy: RemoteCredentialRecord, files: LocalModelFiles?,
                             readProviderCredential: ProviderModels.CredentialReader) throws -> AutoPrepared? {
         guard phase == "pre-send" || phase == "post-receive" else { throw ExchangeError.invalid("評価phase") }
@@ -302,10 +327,8 @@ extension ConversationEvaluation {
             throw ExchangeError.invalid("自動評価対象")
         }
         let path = try chat.required("branchTree").required("activePath").array("active path").map { try $0.string("node ID") }
-        let ancestors = Array(path.prefix(while: { !$0.utf8.elementsEqual(nodeID.utf8) }))
-        guard let userNodeID = try ancestors.reversed().first(where: { try chat.required("branchTree").required("nodes").required($0).required("role") == .string("user") }),
-              let sourceUser = try targetMessage(chat:chat,source:source,nodeID:userNodeID) else { throw ExchangeError.invalid("送信user対象") }
-        let sourceUserContent = try sourceUser.chat.required("messages").array("messages")[sourceUser.index].required("content").encoded()
+        let selectedPath = requestPath ?? Array(path.prefix(while: { !$0.utf8.elementsEqual(nodeID.utf8) }))
+        let dependency = try requestDependency(source:source,chat:chat,path:selectedPath)
         let key = try SharedWebOperations.call("evaluation",.object([.init(key:"operation",value:.string("resultKey")),
             .init(key:"chatId",value:.string(chatID)),.init(key:"nodeId",value:.string(nodeID)),.init(key:"phase",value:.string(phase))])).string("評価key")
         let context = OrderedJSON.object([.init(key:"userText",value:try plan.required("userText"))] +
@@ -318,11 +341,15 @@ extension ConversationEvaluation {
                      sourceChat:Data(),sourceContentStore:Data(),providerState:Data())
         }
         var safety: Prepared?
-        let policy = try SharedWebOperations.call("evaluation",.object([.init(key:"operation",value:.string("localPolicy")),
-            .init(key:"safetyEngine",value:settings["safetyEngine"] ?? .string("remote")),
-            .init(key:"hybridRemoteOnSafe",value:settings["hybridRemoteOnSafe"] ?? .bool(true))]))
-        let unsupportedSafety = safetyRequested && policy["runLocal"] == .bool(true)
-        if safetyRequested && !unsupportedSafety, policy["runRemote"] == .bool(true),
+        var safetyError: String?
+        var unsupportedSafety = false
+        if safetyRequested {
+          do {
+          let policy = try SharedWebOperations.call("evaluation",.object([.init(key:"operation",value:.string("localPolicy")),
+              .init(key:"safetyEngine",value:settings["safetyEngine"] ?? .string("remote")),
+              .init(key:"hybridRemoteOnSafe",value:settings["hybridRemoteOnSafe"] ?? .bool(true))]))
+          unsupportedSafety = policy["runLocal"] == .bool(true)
+          if !unsupportedSafety, policy["runRemote"] == .bool(true),
            let text = try plan["safetyText"]?.string("安全性本文"), !text.isEmpty {
             guard let provider = try ProviderModels.providers(in:state).first(where: { $0.id.utf8.elementsEqual("openai".utf8) }) else { throw ExchangeError.invalid("OpenAI providerがありません") }
             let credential = try ProviderModels.credential(provider,read:readProviderCredential)
@@ -336,9 +363,13 @@ extension ConversationEvaluation {
                 .init(key:"headers",value:try envelope.required("headers")),
                 .init(key:"authentication",value:.array([.object([.init(key:"name",value:.string("Authorization")),.init(key:"prefix",value:.string("Bearer "))])]))])
             safety = prepared("safety",.remote(try RemoteRequest.bindEnvelope(bound,body:envelope.required("body"),originalURL:url,key:credential.key)))
+          }
+          } catch { safetyError = error.localizedDescription }
         }
         var quality: Prepared?
+        var qualityError: String?
         if qualityRequested {
+          do {
             let userText = try plan.required("userText").string("品質本文")
             if state["localModelEnabled"] == .bool(true), case .string(let modelID) = state["activeLocalModels"]?["analysis"], !modelID.isEmpty {
                 guard let files else { throw ExchangeError.invalid("この端末の分析モデルを選択してください") }
@@ -373,20 +404,20 @@ extension ConversationEvaluation {
                 guard body["stream"] != .bool(true) else { throw ExchangeError.invalid("評価は非streamingが必要です") }
                 quality = prepared("quality",.remote(try RemoteRequest.bindEnvelope(bound,body:body,originalURL:credential.url,key:credential.record.key)))
             }
+          } catch { qualityError = error.localizedDescription }
         }
         let providerState = OrderedJSON.object(["providers","localModelEnabled","activeLocalModels","localModels"].compactMap { field in
             state[field].map { .init(key:field,value:$0) }
         })
-        return AutoPrepared(phase:phase,chatID:chatID,nodeID:nodeID,key:key,userContent:userContent,sourceUserContent:sourceUserContent,userNodeID:userNodeID,assistantContent:assistantContent,
-                            config:try config.encoded(),omittedNodes:try (chat["omittedNodes"] ?? .object([])).encoded(),providerState:try providerState.encoded(),settings:try settings.encoded(),
-                            safety:safety,quality:quality,unsupportedSafety:unsupportedSafety)
+        return AutoPrepared(phase:phase,chatID:chatID,nodeID:nodeID,key:key,userContent:userContent,requestPath:selectedPath,requestDependency:dependency,assistantContent:assistantContent,
+                            config:try config.encoded(),providerState:try providerState.encoded(),settings:try settings.encoded(),
+                            safety:safety,quality:quality,unsupportedSafety:unsupportedSafety,safetyError:safetyError,qualityError:qualityError)
     }
 
     static func autoIsCurrent(_ prepared: AutoPrepared, source: OrderedJSON, state: OrderedJSON) throws -> Bool {
         guard let chat = try source.required("chats").array("chats").first(where: { $0["id"] == .string(prepared.chatID) }),
               let target = try targetMessage(chat:chat,source:source,nodeID:prepared.nodeID), target.role == "assistant",
               try chat.required("config").encoded() == prepared.config,
-              try (chat["omittedNodes"] ?? .object([])).encoded() == prepared.omittedNodes,
               try autoSettings(state).encoded() == prepared.settings else { return false }
         let providers = OrderedJSON.object(["providers","localModelEnabled","activeLocalModels","localModels"].compactMap { field in
             state[field].map { .init(key:field,value:$0) }
@@ -395,9 +426,8 @@ extension ConversationEvaluation {
         if let expected = prepared.assistantContent {
             guard try target.chat.required("messages").array("messages")[target.index].required("content").encoded() == expected.encoded() else { return false }
         }
-        // The reserved assistant changes during this generation; only the last transmitted user is a pre-send dependency.
-        guard let user = try targetMessage(chat:chat,source:source,nodeID:prepared.userNodeID),
-              try user.chat.required("messages").array("messages")[user.index].required("content").encoded() == prepared.sourceUserContent else { return false }
+        // The reserved assistant may change while all nodes used for the request remain stable.
+        guard try requestDependency(source:source,chat:chat,path:prepared.requestPath) == prepared.requestDependency else { return false }
         return true
     }
 
