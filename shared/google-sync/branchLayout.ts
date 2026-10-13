@@ -22,6 +22,6 @@ export function branchEnsure(json: string): string {
   const isolated = structuredClone(before);
   return withEditingRuntime(input.newIDs, [], input.now, () => {
     const result = ensureBranchTreeState([isolated.chat], 0, isolated.contentStore);
-    return JSON.stringify(diffJSONChanges(before, {chat: result.chats[0], contentStore: result.contentStore}));
+    return JSON.stringify(diffJSONChanges(before, JSON.parse(JSON.stringify({chat: result.chats[0], contentStore: result.contentStore}))));
   });
 }

@@ -120,6 +120,7 @@
     "src/store/storage/google/overview.ts": "2cf5c0d58e0d715d7a94e264f6ef075ecdf12a9f0a136d06acca33af38ecbb2c",
     "src/store/storage/sync/EncryptedSync.ts": "0d0a7cbc7b354577e6dacd7fa73cdf264803b1fbe7d38ebcb22692ebcc41f415",
     "src/store/storage/filesystem/transport.ts": "51bd3abb64d9d685785ff30375cf7f691ce324026659480072c60c2c39e07aa5",
+    "src/utils/branchLayout.ts": "5cc4a2b874914cf882eec7932acef99a5e3481757e6b5d94c168539388c14e2a",
     "src/utils/syncDocument.ts": "bc7cca9616aa593538dfb194b861ea7415ce3c7e7da42620a9fca0a89acb4120",
     "src/utils/chatMarkdown.ts": "7fa68fc26091374a7f3a5fa5885ec19547870612058c09927ef4bb1cb9ebeafa",
     "src/utils/fileExport.ts": "51f4f9fc072140849730d8be079703f39a7380a80e29532a9443560413f2bc29",
@@ -232,6 +233,8 @@
     "src/utils/newChatDefaults.ts": "4d7875d8c3b84559bcd381186f338f32b51c38df8d630a38a300d0edc29a7068",
     "src/utils/chatLibrary.ts": "530bd76d5d4ddc1ef268d511dfb747b13f751a86777a92a9449689c0f0d0a39f",
     "shared/google-sync/library.ts": "c17f54bddd63e50cacf55583f2cc740f62a56f5b165eb3de0a4393cdce89299f",
+    "src/utils/branchLayout.ts": "5cc4a2b874914cf882eec7932acef99a5e3481757e6b5d94c168539388c14e2a",
+    "shared/google-sync/branchLayout.ts": "55ec0401526dc4d3a72ffcb3476e62c6921be0fd8007af96d3352dd560440fde",
     "src/store/chat-edit-time.ts": "1d7abac60c3dbc063fcaaef270dd846c2cf2d78dc0aa1a286b99ffc708ecac8c",
     "src/utils/syncDocument.ts": "bc7cca9616aa593538dfb194b861ea7415ce3c7e7da42620a9fca0a89acb4120",
     "src/store/storage/google/records.ts": "21f44f6ba31a25f7ecd7cea71b54354b3579a09414e9895fd1ee592618dfb9e9",
@@ -271,8 +274,8 @@
     "shared/google-sync/localModelRole.ts": "8ce5bc1651e340c87134a35f4fbf149af159c296ca924a874c95b76b51dc96a5",
     "src/utils/localModelImport.ts": "f15c25b57b27279b501c26632fbf8c0481b2b23263b22de8e63651dfd5ff7f1b",
     "shared/google-sync/localModelImport.ts": "60f00ad8a824ab478800fcbb21d6510ddd107978108182d5d2f0ee3f0d3c5473",
-    "shared/google-sync/entry.ts": "6f38ad42bdc514a7051691a7a4f7d520e4eca389c1905209be023a4a16bb7870",
-    "shared/google-sync/generate.mjs": "bce157c3313ac97c88aff3c7325450fea534bb76582eac5972260332c02a3e74",
+    "shared/google-sync/entry.ts": "87aa2ed3592de76ac647a8c3d078f523f2cddb7402cc2b49148c347f4712ee10",
+    "shared/google-sync/generate.mjs": "db52acf4a78e8f2fd00ec7aa508e5f23a3d345b92c2dcc08441c521ee461ed59",
     "shared/google-sync/importDefaults.generate.mjs": "2ff8904af4f192ed0809ceaaabcfbefa708321083aebb527d712fc2a0551b15a"
   },
   "dependencyInputs": {
@@ -296,9 +299,14 @@
     "i18next/dist/esm/i18next.js": "433f28508514f0bd6cd481d0dae4d5d610a91d4ac5d1bace8e211838dc2ab325",
     "lodash/lodash.js": "f5465f55566bf544aad0a31c6135889ca1ed81eea8f53ec61c6cbe86926f07cf",
     "diff-match-patch/index.js": "7cead2c7cb3e4ff5c02e173cd6b81d22005e67c47ac2ce28e4b5c73d9ffcfdb2",
+    "@dagrejs/dagre/dist/dagre.esm.js": "93f5f23d1bee1217531900366798277689400850a5560f238d4f213c8d552a63",
     "lz-string/libs/lz-string.js": "550034b821027008776cb9bcd1700bb5d31e8b3de224cb130fc966a75dab0e5e",
     "@babel/runtime/package.json": "7a3606cfd92078a1f9b227edad21a983024086adfd7bb550a54c7b7eecaffbfe",
     "@babel/runtime/LICENSE": "117da2af0d4ce0fe1c8e19b5cff9dcd806adf973d328d27b11d4448c4ff24f76",
+    "@dagrejs/dagre/package.json": "04cfcaac9c3a3bc1f7a0c464d468abea4297d87cbb5bca1ae90249c4b1dbbd2c",
+    "@dagrejs/dagre/LICENSE": "6a349742a6cb219d5a2fc8d0844f6d89a6efc62e20c664450d884fc7ff2d6015",
+    "@dagrejs/graphlib/package.json": "28a498e7b7014f66daa3642f842edc2ef44dfe7ef9424cf9a3fbcdf887094e9b",
+    "@dagrejs/graphlib/LICENSE": "6a349742a6cb219d5a2fc8d0844f6d89a6efc62e20c664450d884fc7ff2d6015",
     "diff-match-patch/package.json": "912519c458314dade9d95c1c3d138ce377065d36dd4408bdf3113f414eeb0fc6",
     "diff-match-patch/LICENSE": "58d1e17ffe5109a7ae296caafcadfdbe6a7d176f0bc4ab01e12a689b0499d8bd",
     "i18next/package.json": "83db2cd26ea2e9abb4b14cd90c203c4c1d46b91fa9b77a0163c0410827783a0f",
@@ -308,5 +316,5 @@
     "lz-string/package.json": "f0990a8fd6c347d66c1469d18918f5460d372c6b3af8a0a5737dfd34c809e20d",
     "lz-string/LICENSE": "433fc9dfe659dbfb1e91eed8351f13651e97bfa3ac6d03394c3d63f61d4bbc80"
   },
-  "bundleSHA256": "323cc7226efa0ff1d01caa17a46a987353964c37eea3d2ab7f8efba94540c875"
+  "bundleSHA256": "61662d8a1300dd8845b7c4e50b349f06b442489fcdaff0e9a1b0e8f5320e317c"
 }

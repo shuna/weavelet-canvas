@@ -68,4 +68,6 @@ it('materializes a flat chat through the Web ensure path and preserves original 
   expect(after.chat.unknownChat).toEqual({large:'unchanged'});
   expect(after.contentStore.unrelated).toEqual(before.contentStore.unrelated);
   expect(JSON.parse(json).chat.branchTree).toBeUndefined();
+  const withoutMaps = JSON.parse(branchEnsure(JSON.stringify({chat:{...chat,collapsedNodes:undefined},contentStore:{},newIDs:['id-1','id-2'],now:10000}))) as DocumentPatch[];
+  expect(withoutMaps.filter(patch => patch.op === 'set').every(patch => Object.hasOwn(patch, 'value'))).toBe(true);
 });
