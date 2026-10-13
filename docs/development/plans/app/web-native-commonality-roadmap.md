@@ -269,3 +269,11 @@ CloudKitはWebのFULL persistenceを使用し、Google/フォルダーのbrowser
 iOSは保存済みの通常送信完了後にタイトルを要求する。再生成・ここから続ける操作では開始しない。要求は非streamingとし、URLSession/認証情報/redirect制御は既存native境界を再利用する。設定は既存モデル選択画面へ接続し、保存では3つの設定rootだけ変更する。応答反映時は最新の会話・設定・本文の元bytesを確認し、削除、手動命名、本文変更、import/syncによる全体置換の後に古い結果を書き込まない。タイトルと利用量は同じ原子的保存で反映する。
 
 利用量は既存Webの文字数fallbackを共有しており、nativeにWebのWASM tokenizer workerがないため、正確なtoken数の同等性は未完了。今回の接続成功を評価/要約や全機能の完成と扱わない。検証結果・独立Astra監査の修正は[検証台帳](web-native-completion-ledger.md)に記録した。
+
+## 2026-10-13：主生成の利用量・OpenRouter観測保存
+
+実Webの正常終了時の累算を `generationUsage.ts` へ切り出し、実Web callerとnative bridgeを接続した。生成先がactivePath上にあること、観測されたprompt/completion値の優先、観測がない時の送信文脈再構成、画像件数の扱いは共有規則とする。Webのtokenizer workerは維持し、nativeは同じ文字数fallbackを使用する。OpenRouterのusage/header解析と生成先nodeの観測更新も実Webから純粋処理を分離し、再利用する。
+
+nativeは正常終了したremote生成だけ累算し、Stop・通信失敗・localでは累算しない。これは実Web callerの現在の挙動に合わせた判断であり、localの計測機能を独自に追加した結果ではない。本文・観測・累算を一回の原子的保存で反映し、保存失敗時の再試行で二重加算しない。本文到着前のusage-only停止も観測を保持する。変更対象のcounterがJSC数値安全範囲を超える場合は、丸めずに保存を拒否して生成結果と原文を保持する。同じ数値境界検証をタイトル利用量にも適用する。
+
+未変更の未知属性・巨大整数は保持する。利用量設定/費用表示UI、正確なtokenizer、OpenRouter事後照合、実API/実オンライン同期の証明は残件とし、今回の機能群へ追加の管理基盤や依存SDKは導入しない。

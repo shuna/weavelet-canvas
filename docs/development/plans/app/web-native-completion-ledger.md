@@ -485,3 +485,15 @@ Webの実callerから純粋な規則を共有し、nativeはURLSession、認証�
 失敗は区別する：最初の2 buildは引数label/escaping不足で実行前に失敗。bundle初期化失敗ではタイトルと生成の接続testが失敗。その修正後の残る2ケースは新fixtureのnode ID個数不足とURLProtocolのhttpBody取得不足で失敗し、既存RemoteRequest.fixtureBodyと実append経路の必要ID数へ合わせた。期待値や比較を緩めていない。ログは `/private/tmp/weavelet-title-{web-final,web-source-final,types-final,freshness-final,catalyst-source-fixed,catalyst-title-final}.log`。
 
 省略した重複確認：変更のない保存/暗号化同期の全往復、全iOS依存監査、全Web/nativeテスト。追加SDKはない。native利用量は共有文字数fallbackでありWASM tokenizerによる正確なWeb token数との一致は未確認。実API通信、今回の設定UI操作、実機は未確認。実Google/CloudKit/iCloud Driveの相互運用と残機能の完成条件は維持する。
+
+## 主生成の利用量・OpenRouter観測保存（2026-10-13）
+
+実Web callerを先に調査した。remote正常returnで現在ticketの生成先だけ累算し、Stop・通信失敗・localでは累算しない。観測されたprompt/completion値が両方ある場合はそれを優先してimageTokensを維持し、それ以外は保存済みchatから実Webの送信文脈を再構成する。この既存処理を共有元に切り出し、Webのworker計測は維持した。送信時のtoken limit/retryやfavorite由来providerと、従来の累算文脈/keyが異なる場合がある点は既存仕様の残差として明示する。
+
+nativeは検証済み要求originを共有処理へ渡し、OpenRouterの対象originだけusage/headerを観測する。本文・観測・利用量を同じatomic保存へ接続した。保存失敗では元memory/diskと未保存生成結果を保持し、再試行で一度だけ加算する。未変更entryと観測時のimageTokensの巨大整数・未知属性は保持する。変更対象counterのJSC安全範囲外は保存拒否とし、丸めた値を書き込まない。同じ境界検証をタイトルにも共用した。
+
+独立Astra P2：usage-only SSEの後に本文未到着でStop/切断すると空出力earlyreturnで観測が失われる経路を修正。空本文でも観測があればassistant/観測保存へ進め、累算禁止を維持した。限定再監査は新規なし。統合時に同一chatの他の生成中nodeをsummary判定へ渡す既存Web挙動も保持した。
+
+成功範囲：workerのWeb関連39件と型検査を再利用し、複数生成の影響4件を限定再確認した（1件追加で共有側40件）。親はremoteOutput4+title3の7件、Web型検査、bundle鮮度が成功。Web合計47件の成功範囲であり、単一runではない。Catalyst初回31件中30件成功。新通信失敗fixtureがデータと切断を同時に送っていたため、実byte消費前に切断し観測assertが1件失敗した。データ受信後に切断するfixtureへ修正し、期待値を維持した。監査修正後はタイトル6+利用量関連4の10件を限定確認し成功。現在Remote22+Local4+Title6の32件の成功範囲で、最終ソース全32件の単一runではない。監査修正後の最初のbuildはthrowing条件式のtry不足で実行前に失敗した。Web追加header testは実parserが使用するX-OpenRouter-Cache-Statusへfixtureを訂正して成功した。
+
+ログ：`/private/tmp/weavelet-usage-{web-final,types-final,freshness-final,catalyst,catalyst-limited,catalyst-fix}.log`。変更のない保存/暗号化同期全往復、全依存監査、全Web/native suiteを反復しない。新規UI/SDKは追加していない。利用量設定/費用UI、正確なtoken数、OpenRouter事後照合、実APIと実クラウド相互運用は未完了であり、全体目標は継続する。

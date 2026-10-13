@@ -69,6 +69,8 @@ struct ActiveGeneration {
     var plan: OrderedJSON? = nil
     var output = RemoteOutput()
     var running = true
+    var completedSuccessfully = false
+    var usesRemoteTransport = true
 }
 
 struct NavigationFocus: Equatable {
@@ -679,7 +681,7 @@ final class ChatState: ObservableObject {
             _ = try output.consumeLocal("",input:request.input)
             try applyLibrary(source,selectedID:chatID,resetViewFor:chatID,editing:history,now:now)
             let id = UUID()
-            generation = ActiveGeneration(id:id,chatID:chatID,baseSource:try publishedSource(),path:path,plan:plan,output:output)
+            generation = ActiveGeneration(id:id,chatID:chatID,baseSource:try publishedSource(),path:path,plan:plan,output:output,usesRemoteTransport:false)
             generationError = nil
             generationTask = Task { @MainActor [weak self] in
                 guard let self else { return }
@@ -709,7 +711,7 @@ final class ChatState: ObservableObject {
             var output = generation.output
             try output.flush()
             self.generation?.output = output
-            finishGeneration(id:generation.id,error:nil)
+            finishGeneration(id:generation.id,error:nil,completed:false)
         } catch { finishGeneration(id:generation.id,error:error) }
     }
 
@@ -719,23 +721,24 @@ final class ChatState: ObservableObject {
         generationError = nil
     }
 
-    private func finishGeneration(id: UUID, error: Error?) {
+    private func finishGeneration(id: UUID, error: Error?, completed: Bool = true) {
         guard var current = generation, current.id == id, current.running, exchange?.source == current.baseSource else { return }
         current.running = false
+        current.completedSuccessfully = completed && error == nil
         generation = current
         generationTask = nil
         if let error { generationError = "生成を完了できませんでした。\n" + error.localizedDescription }
-        do { try persistGeneration(current, generateTitle:error == nil) }
+        do { try persistGeneration(current) }
         catch { generationError = "生成結果を保存できませんでした。部分本文を保持しています。\n" + error.localizedDescription }
     }
 
-    private func persistGeneration(_ current: ActiveGeneration, generateTitle: Bool = false) throws {
+    private func persistGeneration(_ current: ActiveGeneration) throws {
         let titleContext = pendingTitleContext?.id == current.id ? pendingTitleContext : nil
         guard exchange?.source == current.baseSource else { throw ExchangeError.invalid("生成開始後に会話が変更されています") }
-        if current.output.isEmpty && current.plan == nil { generation = nil; return }
+        if try current.output.isEmpty && current.plan == nil && current.output.observation.object("observation").isEmpty { generation = nil; return }
         let now = Date().timeIntervalSince1970 * 1000
         var history: MessageEditing.HistoryState?
-        let source: OrderedJSON
+        var source: OrderedJSON
         if let plan = current.plan {
             let finalized = try MessageEditing.generation(in:current.baseSource,chatID:current.chatID,operation:"finalize",viewingPath:current.path,plan:plan,
                 parts:current.output.parts,now:now,history:editingHistory) { history = $0 }
@@ -744,12 +747,36 @@ final class ChatState: ObservableObject {
         } else {
             source = try MessageEditing.save(in: current.baseSource, chatID: current.chatID, nodeID: nil, viewingPath: current.path, role: "assistant", parts: current.output.parts, mode: .append, newIDs: [UUID().uuidString.lowercased()], now: now, history: editingHistory) { history = $0 }
         }
-        try applyLibrary(source, selectedID: current.chatID, resetViewFor: current.chatID, editing: history, now: now)
+        let accounting = try generationAccounting(source:source,current:current)
+        source = accounting.source
+        try applyLibrary(source, selectedID: current.chatID, resetViewFor: current.chatID, tokenUsage:accounting.usage, editing: history, now: now)
         generation = nil
-        if generateTitle && current.plan == nil {
+        if current.completedSuccessfully && current.plan == nil {
             let config = try current.baseSource.required("chats").array("chats").first { $0["id"].flatMap { try? $0.string("id") }?.utf8.elementsEqual(current.chatID.utf8) == true }?["config"]
             startAutomaticTitle(chatID:current.chatID,sourceConfig:config,legacy:titleContext?.legacy,client:titleContext?.client,readProviderCredential:titleContext?.read ?? RemoteCredentials.load(providerID:))
         }
+    }
+
+    private func generationAccounting(source: OrderedJSON, current: ActiveGeneration) throws -> (source: OrderedJSON, usage: OrderedJSON?) {
+        guard current.usesRemoteTransport else { return (source,nil) }
+        var chats = try source.required("chats").array("chats")
+        guard let index = chats.firstIndex(where: { $0["id"].flatMap { try? $0.string("id") }?.utf8.elementsEqual(current.chatID.utf8) == true }) else { return (source,nil) }
+        var chat = chats[index]
+        guard let targetValue = try current.plan?["targetNodeId"] ?? chat.required("branchTree").required("activePath").array("path").last else { throw ExchangeError.invalid("利用量の生成先がありません") }
+        let target = try targetValue.string("target")
+        if try !current.output.observation.object("observation").isEmpty {
+            let result = try SharedWebOperations.call("generationObservation",.object([.init(key:"chat",value:chat),.init(key:"targetNodeId",value:.string(target)),.init(key:"observation",value:current.output.observation)]))
+            chat = try OrderedJSONChanges.apply(result.required("changes"),to:chat)
+            chats[index] = chat
+        }
+        let updated = source.replacing("chats",with:.array(chats))
+        let roots = try publicationSnapshot().required("state")
+        guard current.completedSuccessfully, roots["countTotalTokens"] == .bool(true) else { return (updated,nil) }
+        let totals = roots["totalTokenUsed"] ?? .object([])
+        let result = try SharedWebOperations.call("generationUsage",.object([.init(key:"chat",value:chat),.init(key:"targetNodeId",value:.string(target)),.init(key:"countTotalTokens",value:.bool(true)),.init(key:"totalTokenUsed",value:totals)]))
+        let next = try OrderedJSONChanges.apply(result.required("changes"),to:.object([.init(key:"totalTokenUsed",value:totals)]))
+        try NativeUsage.validateCounters(result:result,before:totals,after:next["totalTokenUsed"] ?? .object([]))
+        return (updated,next["totalTokenUsed"])
     }
 
     private func invalidateGeneration() {
@@ -869,7 +896,7 @@ final class ChatState: ObservableObject {
         let nextEditing = try editing ?? (navigation != nil ? editingHistory : MessageEditing.invalidatingHistory(editingHistory, before: before, after: changed.source))
         try store?.save(SavedChatState(exchange: changed, document: candidate, conversations: views, selectedConversationID: selectedID, style: displayStyle))
         if preserveGeneration, let current = generation {
-            generation = ActiveGeneration(id: current.id, chatID: current.chatID, baseSource: changed.source, path: current.path, plan: current.plan, output: current.output, running: current.running)
+            generation = ActiveGeneration(id: current.id, chatID: current.chatID, baseSource: changed.source, path: current.path, plan: current.plan, output: current.output, running: current.running, completedSuccessfully:current.completedSuccessfully, usesRemoteTransport:current.usesRemoteTransport)
         } else { invalidateGeneration() }
         branchCandidates = candidates
         conversations = views

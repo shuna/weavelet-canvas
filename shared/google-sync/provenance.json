@@ -58,7 +58,7 @@
     "src/constants/auth.ts": "1649fb0ae05e8cbbac3053bd18fa4be352bf92e45be0f0cd683f40a14f9f585c",
     "src/store/auth-slice.ts": "48b83c1d9c4f2a01288069a3338e21221e77aea66fae9e38008338c855c8f8c6",
     "src/store/provider-helpers.ts": "d8cd473cdba8eeb950294a784a7266a58d7aff80d31095cabd1c29459aa43ac1",
-    "src/utils/openrouterRequest.ts": "393051298e964cb5997851198d512720cc7406fa5f5fe78e8da32957ede9052e",
+    "src/utils/openrouterRequest.ts": "b608183eadce3da1c3f04a1b71bb68866e562ed77e6d669de0d77a697f21f60a",
     "src/utils/chatTitle.ts": "0afee5d73c186004972f2f1f957d014132941545bf88675644bff417661df448",
     "src/store/version.ts": "c1ce6b0ecd6bd3a6fd71d6e862e940486bf61c3e2c7cda6bdab9650ae75715f4",
     "src/store/config-slice.ts": "6e93080c8f940ab5f8d16f0a19f99609101dc0fa014855a47889de10be70db75",
@@ -126,12 +126,13 @@
     "src/store/storage/cloud/guards.ts": "37ed5eeab915587acc8e8edcf02f25d369245875760e4b3efd4757b25edc09db",
     "src/api/cloudkit.ts": "18e15b3cf9321a54f4641d005c9415319037428fa6368025bd79a61a760b6f48",
     "src/store/storage/cloud/snapshotFile.ts": "a7b014e2ddef3023af317be88bd50dd4ed72d3d2330f857f9771f85846c5f652",
-    "src/store/storage/cloud/createCloudPersistStorage.ts": "1c9d66a5e3b41bc2d7cb4e2a47ac0c2f7f42b2009bd060176c5e8d327def7217"
+    "src/store/storage/cloud/createCloudPersistStorage.ts": "1c9d66a5e3b41bc2d7cb4e2a47ac0c2f7f42b2009bd060176c5e8d327def7217",
+    "src/utils/generationUsage.ts": "5c35fc81cb9da4b183d7b524c5b0d3ec9b2b9abe46392e9e0a4a515fc5902bc1"
   },
   "bundleInputs": {
     "src/utils/api.ts": "09a664ad06a1878e071598ea913f7f5b07da281ac3e20ebbfc6a6c32ad8890c4",
     "src/api/requestTransport.ts": "0c038fecdd7db5ac64b094a27f9bf00b5b8672e5ad0297f2656305462d7b3f98",
-    "src/utils/openrouterRequest.ts": "393051298e964cb5997851198d512720cc7406fa5f5fe78e8da32957ede9052e",
+    "src/utils/openrouterRequest.ts": "b608183eadce3da1c3f04a1b71bb68866e562ed77e6d669de0d77a697f21f60a",
     "src/local-llm/catalog.ts": "f34dd449cffe021b4ea6c7ebd01eda14fde53d1094c426f867936fdbbc36b38d",
     "src/utils/tokenBudget.ts": "a38b22bc57f7ac045790acd56bd35a9da91fedf1849705a86959acff2511f977",
     "src/utils/localModelLimits.ts": "1a7675396bcc6db7f65998cc2263f65f5f72e346e028d17a5cd8dbe924fe1b80",
@@ -160,7 +161,7 @@
     "src/store/provider-config.ts": "1a95c527511f09f542671d485426f0295ab56290209939e0b87392bfae1c24c2",
     "src/store/provider-helpers.ts": "d8cd473cdba8eeb950294a784a7266a58d7aff80d31095cabd1c29459aa43ac1",
     "src/utils/chatTitle.ts": "0afee5d73c186004972f2f1f957d014132941545bf88675644bff417661df448",
-    "shared/google-sync/title.ts": "331f07d3c360b4a424e0db879509b4c40576dfaca76f45adb507f34d4b221903",
+    "shared/google-sync/title.ts": "8d347e906e435d8a3c77e6e7411b959ac301f1c7f98d5a0b26c2c95dcbf2ce2f",
     "shared/google-sync/importDefaults.generated.json": "2c2d78eba4c11ff5348beb24332cdeb018428fdf9d56bab5aaba1cae1848495a",
     "src/store/version.ts": "c1ce6b0ecd6bd3a6fd71d6e862e940486bf61c3e2c7cda6bdab9650ae75715f4",
     "src/store/storage/prepareSave.ts": "99e7f268013eabd2edb3686014a3e56b68e5f2e449f30108c376191878ce436f",
@@ -229,7 +230,7 @@
     "src/utils/apiContent.ts": "9ed9e28b97e3eb591afa5c502cb2e7cc7ee3653d4628e4018d7a66c1ac506111",
     "src/utils/remoteResponse.ts": "d4e9e92a91a6997656683701c2a26f9a62db0f1ba047ade5d816cfdc6cb45d74",
     "src/utils/thinkTagParser.ts": "8e8301456c2e9d14e5000fe30aac979404a61a1e358427858722091dbe382145",
-    "shared/google-sync/remoteOutput.ts": "054fb79ed6166797ded127e6ba8bf74bc4bc72efb7f8429fad77df98bd933ac9",
+    "shared/google-sync/remoteOutput.ts": "0881d8d92277aa1362cc5e342b300901c9af164092e768978fa56eee83f2dfd2",
     "src/utils/localGenerationOutput.ts": "f262c91d052afbcc5e5452eaf3ce95d779b741461f2287ebeba8905e95b5e781",
     "src/utils/localGenerationInput.ts": "477c89a90619cbd2e2184df8a17a077bce1cd942191e6b5d0f99aaad8bce9660",
     "shared/google-sync/localGeneration.ts": "d4d08717c9abdf31b19de5197b3987d6cfab0cf57c7de008f5510a941fa6324c",
@@ -240,7 +241,9 @@
     "src/api/cloudkit.ts": "18e15b3cf9321a54f4641d005c9415319037428fa6368025bd79a61a760b6f48",
     "src/store/storage/cloud/snapshotFile.ts": "a7b014e2ddef3023af317be88bd50dd4ed72d3d2330f857f9771f85846c5f652",
     "src/store/storage/cloud/createCloudPersistStorage.ts": "1c9d66a5e3b41bc2d7cb4e2a47ac0c2f7f42b2009bd060176c5e8d327def7217",
-    "shared/google-sync/entry.ts": "739eda0fd1806149ae26733533b87122fe740220ede79d9265bd6f94e501ed2a",
+    "src/utils/generationUsage.ts": "5c35fc81cb9da4b183d7b524c5b0d3ec9b2b9abe46392e9e0a4a515fc5902bc1",
+    "shared/google-sync/usage.ts": "4e7cbcebd548440e60d913e20b3bb742b5e0e229de48ac77d22f1c47c261d3f1",
+    "shared/google-sync/entry.ts": "be3ba7c9befa4aeb7460c211856ae75a1d2c1c6e096794e87663e1c77c47e160",
     "shared/google-sync/generate.mjs": "bce157c3313ac97c88aff3c7325450fea534bb76582eac5972260332c02a3e74",
     "shared/google-sync/importDefaults.generate.mjs": "2ff8904af4f192ed0809ceaaabcfbefa708321083aebb527d712fc2a0551b15a"
   },
@@ -277,5 +280,5 @@
     "lz-string/package.json": "f0990a8fd6c347d66c1469d18918f5460d372c6b3af8a0a5737dfd34c809e20d",
     "lz-string/LICENSE": "433fc9dfe659dbfb1e91eed8351f13651e97bfa3ac6d03394c3d63f61d4bbc80"
   },
-  "bundleSHA256": "a289663fd213315906e4aac08f4762754fdeeb7b152472aab602eb05d2508d92"
+  "bundleSHA256": "b538bb404ca8c194b80f8d7dfdc1be19245beaa719669987c6e2d2140ab77aa2"
 }

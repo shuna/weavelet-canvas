@@ -146,6 +146,7 @@ enum ConversationTitle {
         guard result["status"] == .string("updated") else { return nil }
         let base = OrderedJSON.object([.init(key:"chat",value:currentChat)] + (countTokens ? [.init(key:"totalTokenUsed",value:state["totalTokenUsed"] ?? .object([]))] : []))
         let updated = try OrderedJSONChanges.apply(result.required("changes"),to:base,opaque:boundary.opaque)
+        if countTokens { try NativeUsage.validateCounters(result:result,before:state["totalTokenUsed"] ?? .object([]),after:updated["totalTokenUsed"] ?? .object([])) }
         var chats = try source.required("chats").array("chats")
         guard let index = chats.firstIndex(where: {
             guard case .string(let value) = $0["id"] else { return false }

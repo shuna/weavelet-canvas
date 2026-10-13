@@ -76,6 +76,8 @@ export function titleOperation(json: string): string {
         countImageInputs([input.selection.promptMessage]));
     }
     return JSON.stringify({ status: 'updated', title, changes: diffJSONChanges(before, after),
+      ...(input.countTotalTokens ? { usageKey: input.selection.providerId ? `${input.selection.model}:::${input.selection.providerId}` : input.selection.model,
+        counterFields: ['promptTokens', 'completionTokens', 'imageTokens'] } : {}),
       usage: { model: input.selection.model, providerId: input.selection.providerId,
         promptMessage: input.selection.promptMessage, assistantMessage } });
   }

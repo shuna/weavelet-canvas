@@ -163,6 +163,89 @@ final class RemoteGenerationTests: XCTestCase {
         XCTAssertEqual(try messages[0].required("content").array("content")[0].required("text").string("text"), "Past conversation summary:\nSaved context")
     }
 
+    private func enableUsage(_ app: ChatState, totals: OrderedJSON = .object([])) throws {
+        let snapshot = try app.publicationSnapshot()
+        try app.applySnapshot(snapshot.replacing("state",with:snapshot.required("state").replacing("countTotalTokens",with:.bool(true)).replacing("totalTokenUsed",with:totals)))
+    }
+    func testObservedUsageAndReplySaveAtomicallyAndRetryCountsOnlyOnce() async throws {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent("usage-failure-\(UUID().uuidString)")
+        var reject = false
+        let local = LocalStateStore(fileURL:directory.appendingPathComponent("state.json")) { bytes,url in
+            if reject { throw CocoaError(.fileWriteNoPermission) }; try bytes.write(to:url,options:.atomic)
+        }
+        let app = try state(local,stream:false), remote = client()
+        let totals = try OrderedJSON.decode(Data(#"{"fake-model":{"promptTokens":5,"completionTokens":6,"imageTokens":9007199254740993,"future":1.2300},"untouched":{"promptTokens":9007199254740993}}"#.utf8))
+        try enableUsage(app,totals:totals)
+        FakeRemoteProtocol.packets = [.init(bytes:Data(#"{"choices":[{"message":{"content":"FAKE observed reply"},"finish_reason":"stop"}],"usage":{"prompt_tokens":13,"completion_tokens":7,"cost":0}}"#.utf8))]
+        var credential = record(stream:false); credential.settings.endpoint = "https://openrouter.ai/api/v1/chat/completions"
+        try app.startGeneration(input:"FAKE question",record:credential,client:remote)
+        let baseline = try app.publicationSnapshot(), disk = try Data(contentsOf:local.fileURL)
+        reject = true
+        try await wait { app.generation?.running == false }
+        XCTAssertNotNil(app.generationError)
+        XCTAssertEqual(try app.publicationSnapshot(),baseline); XCTAssertEqual(try Data(contentsOf:local.fileURL),disk)
+        reject = false; try app.saveGenerationResult()
+        let saved = try app.publicationSnapshot()["state"]?["totalTokenUsed"]
+        XCTAssertEqual(saved?["fake-model"]?["promptTokens"],.number("18"))
+        XCTAssertEqual(saved?["fake-model"]?["completionTokens"],.number("13"))
+        XCTAssertEqual(saved?["fake-model"]?["imageTokens"],totals["fake-model"]?["imageTokens"])
+        XCTAssertEqual(saved?["fake-model"]?["future"],totals["fake-model"]?["future"])
+        XCTAssertEqual(saved?["untouched"],totals["untouched"])
+        let chat = try app.exchange!.source.required("chats").array("chats")[0]
+        let node = try chat.required("branchTree").required("activePath").array("path").last!.string("target")
+        XCTAssertEqual(chat["branchTree"]?["nodes"]?[node]?["openRouterObservation"]?["cost"],.number("0"))
+        XCTAssertThrowsError(try app.saveGenerationResult())
+        XCTAssertEqual(try ChatState(store:local).publicationSnapshot(),try app.publicationSnapshot())
+    }
+    func testStopAndNetworkFailureKeepObservationWithoutAddingUsage() async throws {
+        for stopping in [true,false] {
+            let app = try state(store()), remote = client()
+            let totals = try OrderedJSON.decode(Data(#"{"fake-model":{"promptTokens":5,"completionTokens":6,"imageTokens":2}}"#.utf8))
+            try enableUsage(app,totals:totals)
+            let event = Data("data: {\"choices\":[{\"delta\":{\"content\":\"Partial\"}}],\"usage\":{\"prompt_tokens\":10,\"completion_tokens\":3}}\n\n".utf8)
+            FakeRemoteProtocol.packets = [.init(bytes:event),.init(bytes:Data("data: [DONE]\n\n".utf8),delay:0.05)]
+            if stopping { FakeRemoteProtocol.holdLast = true }
+            else { FakeRemoteProtocol.packets = [.init(bytes:event),.init(bytes:Data(),delay:0.05)]; FakeRemoteProtocol.failure = URLError(.networkConnectionLost) }
+            var credential = record(); credential.settings.endpoint = "https://openrouter.ai/api/v1/chat/completions"
+            try app.startGeneration(input:"FAKE question",record:credential,client:remote)
+            if stopping { try await wait { app.generation?.output.text == "Partial" }; app.stopGeneration(); FakeRemoteProtocol.releaseLast?() }
+            try await wait { app.generation == nil }
+            XCTAssertEqual(try app.publicationSnapshot()["state"]?["totalTokenUsed"],totals)
+            let chat = try app.exchange!.source.required("chats").array("chats")[0]
+            let node = try chat.required("branchTree").required("activePath").array("path").last!.string("target")
+            XCTAssertEqual(chat["branchTree"]?["nodes"]?[node]?["openRouterObservation"]?["promptTokens"],.number("10"))
+        }
+    }
+    func testUsageOnlyStopPreservesObservationOnEmptyAssistant() async throws {
+        let app = try state(store()), remote = client()
+        try enableUsage(app)
+        FakeRemoteProtocol.holdLast = true
+        FakeRemoteProtocol.packets = [.init(bytes:Data("data: {\"choices\":[],\"usage\":{\"prompt_tokens\":10,\"completion_tokens\":0,\"cost\":0}}\n\n".utf8)),.init(bytes:Data("data: [DONE]\n\n".utf8),delay:0.1)]
+        var credential = record(); credential.settings.endpoint = "https://openrouter.ai/api/v1/chat/completions"
+        try app.startGeneration(input:"FAKE question",record:credential,client:remote)
+        try await wait { app.generation?.output.observation["promptTokens"] == .number("10") }
+        XCTAssertTrue(try XCTUnwrap(app.generation).output.isEmpty)
+        app.stopGeneration(); FakeRemoteProtocol.releaseLast?()
+        XCTAssertNil(app.generation); XCTAssertNil(app.generationError)
+        XCTAssertEqual(try app.publicationSnapshot()["state"]?["totalTokenUsed"],.object([]))
+        let chat = try app.exchange!.source.required("chats").array("chats")[0]
+        let target = try chat.required("branchTree").required("activePath").array("path").last!.string("target")
+        XCTAssertEqual(chat["branchTree"]?["nodes"]?[target]?["openRouterObservation"]?["cost"],.number("0"))
+    }
+
+    func testUnsafeChangedUsagePreservesPendingReplyAndRawCounters() async throws {
+        let local = try store(), app = try state(local,stream:false), remote = client()
+        let totals = try OrderedJSON.decode(Data(#"{"fake-model":{"promptTokens":9007199254740993,"completionTokens":6,"imageTokens":0}}"#.utf8))
+        try enableUsage(app,totals:totals)
+        FakeRemoteProtocol.packets = [.init(bytes:Data(#"{"choices":[{"message":{"content":"Pending reply"}}],"usage":{"prompt_tokens":1,"completion_tokens":1}}"#.utf8))]
+        var credential = record(stream:false); credential.settings.endpoint = "https://openrouter.ai/api/v1/chat/completions"
+        try app.startGeneration(input:"FAKE question",record:credential,client:remote)
+        let baseline = try app.publicationSnapshot(), disk = try Data(contentsOf:local.fileURL)
+        try await wait { app.generation?.running == false }
+        XCTAssertNotNil(app.generationError); XCTAssertEqual(app.generation?.output.text,"Pending reply")
+        XCTAssertEqual(try app.publicationSnapshot(),baseline); XCTAssertEqual(try Data(contentsOf:local.fileURL),disk)
+    }
+
     private func store() throws -> LocalStateStore {
         let directory = FileManager.default.temporaryDirectory.appendingPathComponent("weavelet-remote-test-\(UUID().uuidString)")
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)

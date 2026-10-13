@@ -115,6 +115,7 @@ struct RemoteOutput {
     private(set) var reasoning = ""
     private(set) var parts: OrderedJSON = .array([])
     private(set) var isEmpty = true
+    private(set) var observation: OrderedJSON = .object([])
     private var state: OrderedJSON?
     private var session: SharedWebOperations.Session?
     private mutating func apply(_ input: [JSONField]) throws -> Bool {
@@ -127,8 +128,18 @@ struct RemoteOutput {
         let nextReasoning = try nextState.required("reasoning").string("response reasoning")
         let nextParts = try output.required("parts"), empty = try output.required("isEmpty").boolean("response empty")
         let finished = try output.required("finished").boolean("response finished")
+        observation = nextState["observation"] ?? .object([])
         state = nextState; text = nextText; reasoning = nextReasoning; parts = nextParts; isEmpty = empty
         return finished
+    }
+    mutating func observeHeaders(_ response: URLResponse, request: URLRequest) throws {
+        guard let http = response as? HTTPURLResponse, let url = request.url else { return }
+        let headers = http.allHeaderFields.compactMap { field -> JSONField? in
+            guard let name = field.key as? String, let value = field.value as? String else { return nil }
+            return .init(key:name.lowercased(),value:.string(value))
+        }
+        _ = try apply([.init(key:"operation",value:.string("headers")),.init(key:"headers",value:.object(headers)),
+            .init(key:"endpointURL",value:.object([.init(key:"protocol",value:.string((url.scheme ?? "") + ":")),.init(key:"hostname",value:.string(url.host?.lowercased() ?? ""))]))])
     }
     mutating func consume(_ value: OrderedJSON, streaming: Bool) throws -> Bool {
         try apply([.init(key:"operation",value:.string("consume")),.init(key:"value",value:value),.init(key:"streaming",value:.bool(streaming))])
@@ -220,6 +231,7 @@ struct RemoteClient {
             let (data, response) = try await session.data(for: request)
             try check(response)
             var output = RemoteOutput()
+            try output.observeHeaders(response,request:request)
             _ = try output.consume(OrderedJSON.decode(data), streaming: false)
             guard !output.isEmpty else { throw ExchangeError.invalid("完了応答が空です") }
             try Task.checkCancellation()
@@ -230,6 +242,7 @@ struct RemoteClient {
         try check(response)
         var parser = RemoteSSE()
         var output = RemoteOutput()
+        try output.observeHeaders(response,request:request)
         var finished = false
         func consume(_ event: String) async throws -> Bool {
             if event == "[DONE]" {
@@ -300,3 +313,17 @@ final class PilotRemoteFixtureProtocol: URLProtocol {
     override func stopLoading() { lock.lock(); stopped = true; lock.unlock() }
 }
 #endif
+
+enum NativeUsage {
+    static func validateCounters(result: OrderedJSON, before: OrderedJSON, after: OrderedJSON) throws {
+        if let key = try result["usageKey"]?.string("usage key"), let fields = result["counterFields"] {
+            for field in try fields.array("counter fields") {
+                let name = try field.string("counter")
+                for value in [before[key]?[name],after[key]?[name]].compactMap({ $0 }) {
+                    let number = try value.number("usage counter")
+                    guard number.isFinite, abs(number) <= 9_007_199_254_740_991 else { throw ExchangeError.invalid("利用量の数値が共有処理の安全範囲を超えるため、生成結果を保持しています") }
+                }
+            }
+        }
+    }
+}

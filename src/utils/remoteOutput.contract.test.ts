@@ -29,4 +29,15 @@ describe('shared actual remote response conversion', () => {
     expect(()=>consume(event({tool_calls:[]}))).toThrow('tool calls');
     expect(()=>consume({error:{message:'fake'}})).toThrow('Remote API');
   });
+  it('merges actual OpenRouter headers and usage-only events only for eligible origins', () => {
+    const headers = { 'x-openrouter-cache-status': 'HIT', 'x-openrouter-cache-age': '4' };
+    let result = JSON.parse(remoteOutput(JSON.stringify({ operation: 'headers', headers,
+      endpointURL: { protocol: 'https:', hostname: 'openrouter.ai' } })));
+    result = consume({ choices: [], usage: { prompt_tokens: 0, completion_tokens: 7, cost: 0, prompt_tokens_details: { cached_tokens: 3 } } }, result.state);
+    expect(result).toMatchObject({ parts: [], isEmpty: true, state: { observation: {
+      responseCacheStatus: 'HIT', responseCacheAge: 4, promptTokens: 0, completionTokens: 7, cost: 0, cachedTokens: 3 } } });
+    const unrelated = JSON.parse(remoteOutput(JSON.stringify({ operation: 'headers', headers,
+      endpointURL: { protocol: 'https:', hostname: 'fixture.invalid' } })));
+    expect(consume({ choices: [], usage: { prompt_tokens: 3, completion_tokens: 4 } }, unrelated.state).state.observation).toBeUndefined();
+  });
 });

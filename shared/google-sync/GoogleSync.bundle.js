@@ -7482,8 +7482,10 @@ var WeaveletGoogleSync = (() => {
     fileImport: () => fileImport,
     folderOperation: () => folderOperation,
     folderRows: () => folderRows,
+    generationObservation: () => generationObservation,
     generationPlan: () => generationPlan,
     generationRequest: () => generationRequest,
+    generationUsage: () => generationUsage,
     libraryDefaults: () => libraryDefaults,
     libraryOperation: () => libraryOperation,
     localGenerationInput: () => localGenerationInput,
@@ -10545,6 +10547,36 @@ var WeaveletGoogleSync = (() => {
 
   // src/utils/openrouterRequest.ts
   var isOpenRouterURL = (url) => url.protocol === "https:" && ["openrouter.ai", "eu.openrouter.ai", "us.openrouter.ai"].includes(url.hostname);
+  function observeOpenRouterHeaders(headers) {
+    const o = {};
+    const status = headers.get("X-OpenRouter-Cache-Status");
+    if (status === "HIT" || status === "MISS")
+      o.responseCacheStatus = status;
+    for (const [field, header] of [["responseCacheAge", "X-OpenRouter-Cache-Age"], ["responseCacheTTL", "X-OpenRouter-Cache-TTL"]]) {
+      const raw = headers.get(header);
+      if (raw !== null && raw.trim() && Number.isFinite(Number(raw)))
+        o[field] = Number(raw);
+    }
+    const source = headers.get("X-OpenRouter-Cache-Source-Id");
+    if (source)
+      o.responseCacheSourceId = source;
+    const id = headers.get("X-Generation-Id");
+    if (id)
+      o.generationId = id;
+    return o;
+  }
+  function observeOpenRouterUsage(usage) {
+    if (!usage || typeof usage !== "object")
+      return {};
+    const u = usage;
+    const details = u.prompt_tokens_details;
+    const observation = {};
+    for (const [field, v] of Object.entries({ promptTokens: u.prompt_tokens, completionTokens: u.completion_tokens, cost: u.cost, cachedTokens: details?.cached_tokens, cacheWriteTokens: details?.cache_write_tokens })) {
+      if (typeof v === "number" && Number.isFinite(v) && v >= 0)
+        Object.assign(observation, { [field]: v });
+    }
+    return observation;
+  }
   function validateOpenRouterSettings(settings, model, responseCacheEnabled = true) {
     if (settings === void 0)
       return;
@@ -13059,6 +13091,10 @@ ${message.content}` : message.content).join("\n\n").trim();
         status: "updated",
         title,
         changes: diffJSONChanges(before, after),
+        ...input.countTotalTokens ? {
+          usageKey: input.selection.providerId ? `${input.selection.model}:::${input.selection.providerId}` : input.selection.model,
+          counterFields: ["promptTokens", "completionTokens", "imageTokens"]
+        } : {},
         usage: {
           model: input.selection.model,
           providerId: input.selection.providerId,
@@ -19363,7 +19399,11 @@ ${messageContent}---
     const state = input.state ?? { text: "", reasoning: "", think: parser.checkpoint() };
     parser.restore(state.think);
     let finished = false;
-    if (input.operation === "flush") {
+    if (input.operation === "headers") {
+      state.observeUsage = !!input.endpointURL && isOpenRouterURL(input.endpointURL);
+      if (state.observeUsage)
+        state.observation = { ...state.observation, ...observeOpenRouterHeaders({ get: (name) => input.headers?.[name.toLowerCase()] ?? null }) };
+    } else if (input.operation === "flush") {
       const tail = parser.flush();
       state.text += tail.content;
       state.reasoning += tail.reasoning;
@@ -19372,6 +19412,8 @@ ${messageContent}---
       const value = input.value;
       if (!value || value.error != null)
         throw new Error("Remote API error.");
+      if (state.observeUsage)
+        state.observation = { ...state.observation, ...observeOpenRouterUsage(value.usage) };
       const choice = value.choices?.[0];
       const payload = input.streaming ? choice?.delta : choice?.message;
       if (payload) {
@@ -19557,6 +19599,100 @@ ${messageContent}---
   // src/store/storage/cloud/createCloudPersistStorage.ts
   var import_lz_string3 = __toESM(require_lz_string(), 1);
   var CLOUD_SYNC_IDLE_MS = 5e3;
+
+  // src/utils/generationUsage.ts
+  function prepareSubmitUsage(chat, targetNodeId, generatingNodeIds = [targetNodeId]) {
+    const index = chat.branchTree?.activePath.indexOf(targetNodeId) ?? -1;
+    if (index < 0)
+      return;
+    const { model, providerId, systemPrompt } = chat.config;
+    const observation = chat.branchTree?.nodes[targetNodeId]?.openRouterObservation;
+    if (observation?.promptTokens !== void 0 && observation.completionTokens !== void 0) {
+      return {
+        kind: "observed",
+        model,
+        providerId,
+        promptTokens: observation.promptTokens,
+        completionTokens: observation.completionTokens
+      };
+    }
+    const completionMessage = chat.messages[index];
+    if (!completionMessage)
+      return;
+    return {
+      kind: "estimated",
+      model,
+      providerId,
+      completionMessage,
+      promptMessages: getSubmitContextMessages(
+        chat.messages,
+        index,
+        model,
+        chat.branchTree?.activePath,
+        chat.omittedNodes ?? {},
+        systemPrompt,
+        { chat, generatingNodeIds }
+      )
+    };
+  }
+  function addPreparedSubmitUsage(total, prepared, counts) {
+    if (prepared.kind === "estimated") {
+      if (!counts)
+        throw new Error("Missing estimated token counts.");
+      return addTokenUsage(
+        total,
+        prepared.model,
+        prepared.providerId,
+        counts.promptTokens,
+        counts.completionTokens,
+        countImageInputs(prepared.promptMessages)
+      );
+    }
+    const key = prepared.providerId ? `${prepared.model}:::${prepared.providerId}` : prepared.model;
+    const prior = total[key] ?? { promptTokens: 0, completionTokens: 0, imageTokens: 0 };
+    return { ...total, [key]: {
+      ...prior,
+      promptTokens: (prior.promptTokens ?? 0) + prepared.promptTokens,
+      completionTokens: (prior.completionTokens ?? 0) + prepared.completionTokens
+    } };
+  }
+  function withOpenRouterObservation(chat, nodeId, patch) {
+    if (!Object.keys(patch).length)
+      return;
+    const tree = chat.branchTree;
+    const node = tree?.nodes[nodeId];
+    if (!tree || !node)
+      return;
+    return { ...chat, branchTree: { ...tree, nodes: { ...tree.nodes, [nodeId]: {
+      ...node,
+      openRouterObservation: { ...node.openRouterObservation, ...patch }
+    } } } };
+  }
+
+  // shared/google-sync/usage.ts
+  function generationUsage(json) {
+    const input = JSON.parse(json);
+    if (!input.countTotalTokens)
+      return JSON.stringify({ changes: [] });
+    const prepared = prepareSubmitUsage(input.chat, input.targetNodeId, input.generatingNodeIds);
+    if (!prepared)
+      return JSON.stringify({ changes: [] });
+    const totals = input.totalTokenUsed ?? {};
+    const updated = addPreparedSubmitUsage(totals, prepared, prepared.kind === "estimated" ? {
+      promptTokens: estimateTokensByChars(prepared.promptMessages),
+      completionTokens: estimateTokensByChars([prepared.completionMessage])
+    } : void 0);
+    return JSON.stringify({
+      changes: diffJSONChanges({ totalTokenUsed: totals }, { totalTokenUsed: updated }),
+      usageKey: prepared.providerId ? `${prepared.model}:::${prepared.providerId}` : prepared.model,
+      counterFields: prepared.kind === "observed" ? ["promptTokens", "completionTokens"] : ["promptTokens", "completionTokens", "imageTokens"]
+    });
+  }
+  function generationObservation(json) {
+    const input = JSON.parse(json);
+    const updated = withOpenRouterObservation(input.chat, input.targetNodeId, input.observation);
+    return JSON.stringify({ changes: updated ? diffJSONChanges(input.chat, updated) : [] });
+  }
 
   // shared/google-sync/entry.ts
   var driveFolderName = (json) => JSON.stringify(defaultSyncFolderName(JSON.parse(json)));
