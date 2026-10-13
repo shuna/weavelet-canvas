@@ -737,3 +737,11 @@ b3cc6abbでcomposerの空欄3行の固定高さを1...8行・最低44ptへ変更
 担当Catalyst build/差分確認成功（/tmp/weavelet-native-composer-placement-{build,diff-check}.log）、独立Astraは新規P2以上なし。親のUTF16修正との統合Catalyst buildも成功（/private/tmp/weavelet-ui-utf16-union-build.log）、bundle鮮度と差分確認成功。FAKE隔離実画面で入力欄の高さ削減・操作順・添付popover開閉、OSファイル選択の起動/取消後にパネルへ戻ることを確認、clone終了とprocess消失を確認した。通常store/実送信/私的画像選択は行わない。
 
 写真picker起動/画像読込・貼付け・狭幅/最大文字サイズ/VoiceOver・Air導入は未確認。UI配置変更だけのため、未変更の画像変換/業務rule/全同期suiteを反復しない。
+
+## 分岐のスワイプ方向・本文移動の設定（2026-10-14）
+
+7a41a609でbranchSwipeDirectionを実Web resolveBranchSwipeDirectionのscalar共有呼出へ接続した。nativeは本文選択/縦scrollを妨げないよう本文下の分岐番号44pt領域だけでOS横操作を受け、既存siblings/selectSibling/branchSwitchへ渡す。gesture中の会話/node/兄弟順/設定変更を照合し、取消時に状態を解除する。左右の設定意味をSwiftで再実装しない。animateBubbleNavigationは実Webのsmooth/autoスクロールに対応するnavigationFocusのscrollToへ接続し、Reduce Motionではアニメーションしない。
+
+担当Catalyst buildと新規境界2件、型検査、bundle鮮度、差分確認成功（/tmp/weavelet-native-branch-display-{build-test,tsc,freshness,diff-check}.log）。既定/未知値保持/保存失敗/再起動とactualJSC方向を確認。独立Astraは新規P2以上なし。FAKE実画面で既定左swipe→2/2・右swipe→1/2、縦操作で切替なしを確認。設定UIでright-nextへ変更後は右swipe→2/2・左swipe→1/2を確認し、元のleft-nextへ戻した。設定値変更とgestureの接続を、表示だけから推定していない。clone終了とprocess消失を確認した。
+
+実iPhone touch・本文選択との実併用・狭幅/最大文字サイズ/VoiceOver・スクロールanimationの実表示は未確認。Catalystのwindow幅縮小は操作しても達成できず、狭幅成功と扱わない。本文全体でswipeできるとは記載しない。
