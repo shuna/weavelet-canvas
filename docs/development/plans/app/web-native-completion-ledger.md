@@ -745,3 +745,15 @@ b3cc6abbでcomposerの空欄3行の固定高さを1...8行・最低44ptへ変更
 担当Catalyst buildと新規境界2件、型検査、bundle鮮度、差分確認成功（/tmp/weavelet-native-branch-display-{build-test,tsc,freshness,diff-check}.log）。既定/未知値保持/保存失敗/再起動とactualJSC方向を確認。独立Astraは新規P2以上なし。FAKE実画面で既定左swipe→2/2・右swipe→1/2、縦操作で切替なしを確認。設定UIでright-nextへ変更後は右swipe→2/2・左swipe→1/2を確認し、元のleft-nextへ戻した。設定値変更とgestureの接続を、表示だけから推定していない。clone終了とprocess消失を確認した。
 
 実iPhone touch・本文選択との実併用・狭幅/最大文字サイズ/VoiceOver・スクロールanimationの実表示は未確認。Catalystのwindow幅縮小は操作しても達成できず、狭幅成功と扱わない。本文全体でswipeできるとは記載しない。
+
+## Enter入力の共有元・native接続（2026-10-14）
+
+510dd989/a035c86b/34112ff6で実Web useEditViewLogicのEnter条件をpure enterSubmissionへ切り出し、Web callerと固定native bridge、General設定、composer/本文editorへ接続した。Ctrl+Shift生成・設定とShift/Ctrlによる保存/生成・IME/229/mobile除外は同じ元を使用する。stickyは実callerのoptional型をそのまま受け、undefinedは従来どおり非stickyとして扱う。最初の親tscは末尾diff-checkのexit0を成功と誤認したが、logからsticky型エラーを回収・修正し、最終単独tscのexit0/空logを確認した。誤った中間結果を再利用しない。
+
+nativeはmarkedTextRangeを読むため標準UITextView adapterを使い、hardware入口とソフトinsertTextを分離する。画面キーボードのReturnは標準改行、hardware判定だけ共有元へ渡す。選択範囲・外部draft・Dynamic Type・生成disabledと既存handlerを保持。editor生成は既存共有replaceAndPruneで全後続を扱い、保護tailなら適用前に拒否、atomic保存成功後にfresh draftへ更新して既存生成へ接続する。保存失敗前は元データ、生成開始失敗後は保存済本文とfresh sourceを保持する。挿入draftの生成キーは未対応として明示拒否し、保存後の生成操作へ案内する。
+
+共有13件、native4境界、型検査/鮮度/差分確認の成功を再利用（/private/tmp/weavelet-enter-{webtest,test-final,tsc,bundle}.log）。独立AstraのP2「Swift String同値性でNFC→NFD外部更新が反映されず次入力で旧表現を書き戻す」は9be9aa18でUTF8完全一致へ修正し、該当1件成功（/private/tmp/weavelet-enter-unicode.log）。親の新General設定と代表OS境界2件も成功（/private/tmp/weavelet-enter-integrated-tests.log）、限定再監査はP2解消・新規P2以上なし。
+
+FAKE実画面では本文のfocus/貼付け・Shift+Return後の続き入力を2行として確認した。普通Return1回は改行となり、送信成功を確認できなかった。IME確定/入力モード/Responder入口の原因は確定していない。直後にMacがロックされ追加Return再試行とアプリ終了は未実施。5aec5a60で標準UIKeyCommand入口を補い、共有action有りのReturnだけ登録、IME中の登録/実行を拒否する。e4fef0e4でmain actor内のSessionを再利用した。macOS JSC bundle初期化probeはcold67.86ms/steady14.88–14.95msで、4回のResponder判定ごとの初期化を避ける根拠とし、Catalyst UI遅延の実測とは区別する。Responder dispatchの既存境界1件成功（/private/tmp/weavelet-enter-session.log）、最終統合Catalyst build成功（/private/tmp/weavelet-enter-final-build.log）、追加限定Astraは新規P2以上なし。
+
+最終UIKeyCommand版の実Return送信・IME確定・二重発火・狭幅/最大文字サイズ/VoiceOver・Air導入は未確認。最新版隔離clone /private/tmp/weavelet-layout-shell-ui-proof/WeaveletEnterCommandsCheck.app は準備のみ。前版WeaveletEnterCheckはPID18416でロック時点の起動を確認、終了済みとは記録しない。未送信合成draftが残り、通常store/Keychain/実通信は使用していない。Airは今回もpasscodeRequired=true。未変更の全業務/全同期suiteは反復せず、実操作の再確認を残件とする。
