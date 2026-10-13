@@ -22,6 +22,7 @@ struct ChatView: View {
     @State private var defaultConfigDraft: ChatConfigDraft?
     @State private var showsSettings = false
     @State private var columnVisibility: NavigationSplitViewVisibility = .automatic
+    @State private var preferredCompactColumn: NavigationSplitViewColumn = .detail
     @State private var showsSearch = false
     @State private var showsRemoteSettings = false
     @Environment(\.scenePhase) private var scenePhase
@@ -55,11 +56,13 @@ struct ChatView: View {
     @State private var evaluationDraft: ConversationEvaluationDraft?
 
     var body: some View {
-        GeometryReader { layout in
-        NavigationSplitView(columnVisibility:$columnVisibility) {
+        NavigationSplitView(columnVisibility:$columnVisibility, preferredCompactColumn:$preferredCompactColumn) {
             ConversationLibraryView(state:state, onSelect: {
-                if layout.size.width < 700 { columnVisibility = .detailOnly }
-            }, onClose: { columnVisibility = .detailOnly })
+                preferredCompactColumn = .detail
+            }, onClose: {
+                preferredCompactColumn = .detail
+                columnVisibility = .detailOnly
+            })
                 .navigationSplitViewColumnWidth(min:260,ideal:300,max:380)
         } detail: {
         NavigationStack {
@@ -117,7 +120,8 @@ struct ChatView: View {
             .toolbar {
                 ToolbarItemGroup(placement: .topBarLeading) {
                     Button("会話一覧", systemImage: "sidebar.left") {
-                        columnVisibility = layout.size.width < 700 || columnVisibility == .detailOnly ? .all : .detailOnly
+                        preferredCompactColumn = .sidebar
+                        columnVisibility = .all
                     }
                         .disabled(state.generation != nil)
                         .frame(minWidth: 44, minHeight: 44)
@@ -284,11 +288,6 @@ struct ChatView: View {
                     .toolbar { ToolbarItem(placement: .confirmationAction) { Button("完了") { showsSettings = false } } }
                 }
             }
-        }
-        }
-        .onChange(of:layout.size.width) { oldWidth, width in
-            if oldWidth < 700 && width >= 700 { columnVisibility = .all }
-            else if oldWidth >= 700 && width < 700 { columnVisibility = .detailOnly }
         }
         }
         .environment(\.markdownSettings, (try? state.publicationSnapshot().required("state")) ?? .object([]))
