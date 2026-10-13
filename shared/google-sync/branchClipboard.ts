@@ -19,7 +19,7 @@ export function branchClipboard(json:string,capture?:BranchEditCapture):string {
  }
  // Only changed chats leave the native raw document; unrelated projections stay untouched.
  const chats=result.chats.map((chat,index)=>chat!==isolated.chats[index]&&chat.branchTree?{...chat,messages:materializeActivePath(chat.branchTree,result.contentStore,true)}:before.chats[index]);
- if('historyBase' in result)capture?.(result.historyBase,{chats,contentStore:result.contentStore});
+ if('historyBase' in result)capture?.(result.historyBase,result);
  const affectedChatIds=chats.filter((chat,index)=>!orderedJSONEqual(before.chats[index],chat)).map(chat=>chat.id);
  return JSON.stringify({status:result.status,affectedChatIds,...('nodeIds' in result?{nodeIds:result.nodeIds}:{}),changes:diffJSONChanges(before,JSON.parse(JSON.stringify({chats,contentStore:result.contentStore,clipboard:result.clipboard})))});
 }

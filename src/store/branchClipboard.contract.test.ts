@@ -52,6 +52,22 @@ describe('shared branch clipboard operations',()=>{
   expect(restored.chats[0].messages).toEqual(initial.chats[0].messages);expect(restored.chats[1].messages).toEqual(initial.chats[1].messages);
   const get=store(initial);expect(withEditingRuntime(['copy-middle','copy-last'],Object.keys(initial.chats[0].branchTree.nodes),10,()=>get().moveBranchSequence({sourceChatId:'source',fromNodeId:'middle',toNodeId:'last',targetChatId:'target',afterNodeId:'target-root'})).status).toBe('moved');expect(get().branchHistoryPast[0].chats.map(chat=>chat.id)).toEqual(['source','target']);expect(initial.contentStore.middle.refCount).toBe(1);
  });
+ it('captures only the operated chats when a third chat is unchanged, preserving its later navigation and history invalidation scope',()=>{
+  for(const operation of ['paste','move']) {
+    const initial=source();const unrelated=structuredClone(initial.chats[1]);unrelated.id='unrelated';unrelated.title='third';
+    unrelated.messages[0].onlyMessage={opaqueRef:77};initial.chats.push(unrelated);
+    const copied=apply(initial,run(input(initial,'copy')).changes);
+    const result=JSON.parse(branchHistory(JSON.stringify({operation:'edit',kind:'branchClipboard',input:input(copied,operation)})));
+    expect(result.history.past[0].chats.map((chat:any)=>chat.id)).toEqual(operation==='paste'?['target']:['source','target']);
+    const changed=apply(copied,result.changes);expect(changed.chats[2]).toEqual(unrelated);
+    const navigated=structuredClone(changed.chats);navigated[2].branchTree.activePath=['target-root'];navigated[2].messages=[navigated[2].messages[0]];
+    const invalidated=JSON.parse(branchHistory(JSON.stringify({operation:'invalidate',history:result.history,before:changed.chats,after:navigated})));
+    expect(invalidated.history).toEqual(result.history);
+    const undo=JSON.parse(branchHistory(JSON.stringify({operation:'undo',history:invalidated.history,chats:navigated,contentStore:changed.contentStore})));
+    expect(undo.affectedChatIds).toEqual(operation==='paste'?['target']:['source','target']);
+    expect(apply({chats:navigated,contentStore:changed.contentStore},undo.changes).chats[2]).toEqual(navigated[2]);
+  }
+ });
  it('rejects cut/move selected protection, cycles/not-ancestor, targets inside selection, missing clipboard/content before publication',()=>{
   const initial=source();initial.chats[0].protectedNodes={last:true};for(const operation of ['cut','move'])expect(run(input(initial,operation))).toEqual({status:'protected',blockedNodeIds:['last'],changes:[]});
   expect(run(input(initial,'copy',{fromNodeId:'hidden',toNodeId:'last'})).status).toBe('not-ancestor');expect(run(input(initial,'paste'))).toEqual({status:'clipboard-empty',changes:[]});
