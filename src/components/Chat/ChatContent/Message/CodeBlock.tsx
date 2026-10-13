@@ -6,15 +6,17 @@ import TickIcon from '@icon/TickIcon';
 const CodeBlock = ({
   lang,
   codeChildren,
+  onCopy,
 }: {
   lang: string;
   codeChildren: React.ReactNode & React.ReactNode[];
+  onCopy?: (text: string) => Promise<void>;
 }) => {
   const codeRef = useRef<HTMLElement>(null);
 
   return (
     <div className='bg-black rounded-md'>
-      <CodeBar lang={lang} codeRef={codeRef} />
+      <CodeBar lang={lang} codeRef={codeRef} onCopy={onCopy} />
       <div className='p-4 overflow-y-auto'>
         <code ref={codeRef} className={`!whitespace-pre hljs language-${lang}`}>
           {codeChildren}
@@ -28,9 +30,11 @@ const CodeBar = React.memo(
   ({
     lang,
     codeRef,
+    onCopy,
   }: {
     lang: string;
     codeRef: React.RefObject<HTMLElement>;
+    onCopy?: (text: string) => Promise<void>;
   }) => {
     const [isCopied, setIsCopied] = useState<boolean>(false);
     return (
@@ -42,7 +46,7 @@ const CodeBar = React.memo(
           onClick={async () => {
             const codeString = codeRef.current?.textContent;
             if (codeString)
-              navigator.clipboard.writeText(codeString).then(() => {
+              (onCopy ? onCopy(codeString) : navigator.clipboard.writeText(codeString)).then(() => {
                 setIsCopied(true);
                 setTimeout(() => setIsCopied(false), 3000);
               });

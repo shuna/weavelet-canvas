@@ -1,0 +1,5 @@
+/* WK owns the surrounding bubble and scroll view. */
+html, body, #root { height: auto; min-height: 0; background: transparent !important; }
+body { font-family: -apple-system, system-ui, sans-serif; overflow-wrap: anywhere; }
+.markdown { font-size: 1rem; }
+.markdown pre { overflow-x: auto; }

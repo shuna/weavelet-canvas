@@ -8,13 +8,13 @@ import rehypeHighlight from 'rehype-highlight';
 import remarkMath from 'remark-math';
 import remarkGfm from 'remark-gfm';
 
-import { codeLanguageSubset } from '@constants/chat';
+import { codeLanguageSubset } from '@constants/markdown';
 import CodeBlock from '../CodeBlock';
-import { preprocessLaTeX } from '@utils/chat';
+import { preprocessLaTeX } from '@utils/markdown';
 
 const hasCodeBlockPattern = /^```/m;
 
-const code = memo((props: CodeProps) => {
+const renderCode = (props: CodeProps, onCopy?: (text: string) => Promise<void>) => {
   const { inline, className, children } = props;
   const match = /language-(\w+)/.exec(className || '');
   const lang = match && match[1];
@@ -22,9 +22,10 @@ const code = memo((props: CodeProps) => {
   if (inline) {
     return <code className={className}>{children}</code>;
   } else {
-    return <CodeBlock lang={lang || 'text'} codeChildren={children} />;
+    return <CodeBlock lang={lang || 'text'} codeChildren={children} onCopy={onCopy} />;
   }
-});
+};
+const code = memo((props: CodeProps) => renderCode(props));
 
 const p = memo(
   (
@@ -59,10 +60,14 @@ const MarkdownRenderer = memo(
   ({
     content,
     inlineLatex,
+    onCopy,
   }: {
     content: string;
     inlineLatex: boolean;
+    onCopy?: (text: string) => Promise<void>;
   }) => {
+    const codeComponent = useMemo(() => onCopy
+      ? memo((props: CodeProps) => renderCode(props, onCopy)) : code, [onCopy]);
     const rehypePlugins = useMemo(
       () =>
         hasCodeBlockPattern.test(content)
@@ -80,7 +85,7 @@ const MarkdownRenderer = memo(
         rehypePlugins={rehypePlugins as any}
         linkTarget='_new'
         components={{
-          code,
+          code: codeComponent,
           p,
         }}
       >

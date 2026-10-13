@@ -33,43 +33,7 @@ export const generateDefaultChat = (
   return chat;
 };
 
-export const codeLanguageSubset = [
-  'python',
-  'javascript',
-  'java',
-  'go',
-  'bash',
-  'c',
-  'cpp',
-  'csharp',
-  'css',
-  'diff',
-  'graphql',
-  'json',
-  'kotlin',
-  'less',
-  'lua',
-  'makefile',
-  'markdown',
-  'objectivec',
-  'perl',
-  'php',
-  'php-template',
-  'plaintext',
-  'python-repl',
-  'r',
-  'ruby',
-  'rust',
-  'scss',
-  'shell',
-  'sql',
-  'swift',
-  'typescript',
-  'vbnet',
-  'wasm',
-  'xml',
-  'yaml',
-];
+export { codeLanguageSubset } from './markdown';
 
 export const _defaultMenuWidth = 260;
 export const _defaultDisplayChatSize = false;

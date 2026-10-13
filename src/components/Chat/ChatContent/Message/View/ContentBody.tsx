@@ -1,7 +1,7 @@
 import React, { Suspense, memo, useDeferredValue, useEffect, useRef, useState } from 'react';
 import { perfStart, perfEnd } from '@utils/perfTrace';
 import type { StreamingMarkdownPolicy } from '@type/chat';
-import { resolveStreamingMarkdownMode } from '@utils/markdownStreamingPolicy';
+import { resolveStreamingMarkdownMode, type StreamingMarkdownEnvironment } from '@utils/markdownStreamingPolicy';
 import { useStreamEndStatusStore, type StreamEndReason } from '@store/stream-end-status-store';
 
 const MarkdownRenderer = React.lazy(() => import('./MarkdownRenderer'));
@@ -73,6 +73,8 @@ const ContentBody = memo(function ContentBody({
   inlineLatex,
   isGeneratingMessage,
   nodeId,
+  environment,
+  onCopy,
 }: {
   currentTextContent: string;
   markdownMode: boolean;
@@ -80,6 +82,8 @@ const ContentBody = memo(function ContentBody({
   inlineLatex: boolean;
   isGeneratingMessage: boolean;
   nodeId?: string;
+  environment?: StreamingMarkdownEnvironment;
+  onCopy?: (text: string) => Promise<void>;
 }) {
   const hasCodeBlock = currentTextContent.includes('```');
   const streamingMode = resolveStreamingMarkdownMode({
@@ -87,6 +91,7 @@ const ContentBody = memo(function ContentBody({
     isGeneratingMessage,
     textLength: currentTextContent.length,
     hasCodeBlock,
+    environment,
   });
   const deferredContent = useDeferredValue(currentTextContent);
   const [debouncedContent, setDebouncedContent] = useState(currentTextContent);
@@ -141,6 +146,7 @@ const ContentBody = memo(function ContentBody({
                 <MarkdownRenderer
                   content={renderContent}
                   inlineLatex={inlineLatex}
+                  onCopy={onCopy}
                 />
               </Suspense>
               {isGeneratingMessage && (
