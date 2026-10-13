@@ -31,7 +31,8 @@ import {
   pasteBranchSequenceState,
   removeMessageAtIndexState,
   removeBranchSequenceState,
-  setBranchNodeFieldState,
+  setNodeDisplayFieldState,
+  resolveNodeTarget,
   replaceMessageAndPruneFollowingState,
   switchActivePathState,
   switchBranchAtNodeState,
@@ -259,20 +260,6 @@ type NodeTarget = { chatId: string; nodeId: string };
 type NodeEdit = NodeTarget & { role: Role; content: ContentInterface[] };
 type NodeResult = { status: 'updated' | 'unchanged' | 'chat-missing' | 'node-missing' | 'invalid-target' | 'protected' | 'busy' };
 
-const resolveNodeTarget = (chats: ChatInterface[] | undefined, input: NodeTarget, activeOnly = false) => {
-  const chatIndex = chats?.findIndex((chat) => chat.id === input.chatId) ?? -1;
-  const chat = chats?.[chatIndex];
-  if (!chat) return { status: 'chat-missing' as const };
-  const index = chat.branchTree
-    ? chat.branchTree.activePath.indexOf(input.nodeId)
-    : Number(input.nodeId);
-  const exists = chat.branchTree ? !!chat.branchTree.nodes[input.nodeId]
-    : Number.isInteger(index) && index >= 0 && String(index) === input.nodeId && !!chat.messages[index];
-  if (!exists) return { status: 'node-missing' as const };
-  if (activeOnly && index < 0) return { status: 'invalid-target' as const };
-  return { status: 'valid' as const, chatIndex, messageIndex: index, chat };
-};
-
 export interface BranchSlice {
   contentStore: ContentStoreData;
   setContentStore: (contentStore: ContentStoreData) => void;
@@ -366,13 +353,9 @@ export interface BranchSlice {
 
 export const createBranchSlice: StoreSlice<BranchSlice> = (set, get) => {
   const setNodeField = (input: NodeTarget, field: 'label' | 'starred' | 'pinned', value: string | true | undefined): NodeResult => {
-    const target = resolveNodeTarget(withRuntimeFlatNodeMaps(get().chats, get()), input);
-    if (target.status !== 'valid') return target;
-    const ensured = ensureBranchTreeState(withRuntimeFlatNodeMaps(get().chats, get())!, target.chatIndex, get().contentStore);
-    const nodeId = target.chat.branchTree ? input.nodeId : ensured.chats[target.chatIndex].branchTree!.activePath[target.messageIndex];
-    if (ensured.chats[target.chatIndex].branchTree!.nodes[nodeId][field] === value) return { status: 'unchanged' };
-    const chats = setBranchNodeFieldState(ensured.chats, target.chatIndex, nodeId, field, value);
-    get().applyBranchState(chats, ensured.contentStore, { historyBase: ensured });
+    const result = setNodeDisplayFieldState(withRuntimeFlatNodeMaps(get().chats, get()), input, field, value, get().contentStore);
+    if (result.status !== 'updated') return result;
+    get().applyBranchState(result.chats, result.contentStore, { historyBase: result.historyBase });
     return { status: 'updated' };
   };
   return ({

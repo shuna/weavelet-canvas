@@ -19,6 +19,13 @@ export function editingUUID(): string {
   runtime!.reserved.add(id);
   return id;
 }
+export function withEditingRuntime<T>(newIDs: string[], existingIDs: string[], now: number, operation: () => T): T {
+  const clock = Date.now;
+  runtime = { ids: [...newIDs], reserved: new Set(existingIDs) };
+  Date.now = () => now;
+  try { return operation(); }
+  finally { Date.now = clock; runtime = undefined; }
+}
 export function messageEdit(json: string): string {
   const input: { chat: ChatInterface; contentStore: ContentStoreData; nodeID?: string; viewingPath: string[];
     role: Role; parts: ContentInterface[]; editedText?: string; operation?: 'textValue'; mode: 'overwrite' | 'branch' | 'append'; newIDs: string[]; now: number } = JSON.parse(json);
@@ -32,10 +39,7 @@ export function messageEdit(json: string): string {
   let chat = isolated.chat;
   if (!Array.isArray(chat.messages) && chat.branchTree) chat.messages = materializeActivePath(chat.branchTree, isolated.contentStore);
   const wasFlat = !chat.branchTree;
-  const clock = Date.now;
-  runtime = { ids: [...input.newIDs], reserved: new Set(Object.keys(chat.branchTree?.nodes ?? {})) };
-  Date.now = () => input.now;
-  try {
+  return withEditingRuntime(input.newIDs, Object.keys(chat.branchTree?.nodes ?? {}), input.now, () => {
     let result = ensureBranchTreeState([chat], 0, isolated.contentStore);
     if (!wasFlat) {
       const path = input.viewingPath;
@@ -74,5 +78,5 @@ export function messageEdit(json: string): string {
     // projection inside the Web functions stays role/content only.
     chat.messages = materializeActivePath(chat.branchTree!, result.contentStore, true);
     return JSON.stringify(diffJSONChanges(before, JSON.parse(JSON.stringify({ chat, contentStore: result.contentStore }))));
-  } finally { Date.now = clock; runtime = undefined; }
+  });
 }

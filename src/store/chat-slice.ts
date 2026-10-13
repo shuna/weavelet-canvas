@@ -1,3 +1,4 @@
+import { setChatNodeMapState, updateChatNodeField, type NodeMapField } from '@utils/nodeOptions';
 import { applyFolderOperation } from '@utils/chatFolders';
 import { addLibraryChat, deleteLibraryChats, duplicateLibraryChat, renameLibraryChat } from '@utils/chatLibrary';
 import { invalidateAiTasks } from '@hooks/aiTaskLifetime';
@@ -61,20 +62,6 @@ export interface ChatSlice {
   setSummaryForSubmit: (chatId: string, summaryId: string, use: boolean) => void;
 }
 
-type NodeMapField = 'collapsedNodes' | 'omittedNodes' | 'protectedNodes' | 'summaryTargets';
-
-/** Produce a new chats array with updated node-map field for one chat. */
-const updateChatNodeField = (
-  chats: ChatInterface[],
-  chatIndex: number,
-  field: NodeMapField,
-  value: Record<string, boolean>
-): ChatInterface[] => {
-  const updated = chats.slice();
-  updated[chatIndex] = { ...updated[chatIndex], [field]: value };
-  return updated;
-};
-
 const buildNodeMaps = (chats: ChatInterface[] | undefined, field: NodeMapField) => {
   const next: Record<string, Record<string, boolean>> = {};
   chats?.forEach((chat, index) => {
@@ -108,23 +95,9 @@ export const createChatSlice: StoreSlice<ChatSlice> = (setState, get) => {
     };
   }, replace);
   const setNodeMap = (input: { chatId: string; nodeId?: string; value: boolean }, field: NodeMapField, runtime: 'collapsedNodeMaps' | 'omittedNodeMaps' | 'protectedNodeMaps') => {
-    const chats = get().chats;
-    const index = chats?.findIndex(chat => chat.id === input.chatId) ?? -1;
-    const chat = chats?.[index];
-    if (!chat) return { status: 'missing' as const };
-    if (input.nodeId !== undefined && !(chat.branchTree ? chat.branchTree.nodes[input.nodeId]
-      : String(Number(input.nodeId)) === input.nodeId && Number(input.nodeId) >= 0 && chat.messages[Number(input.nodeId)])) return { status: 'missing' as const };
-    const previous = chat[field] ?? {};
-    const next = input.nodeId !== undefined ? { ...previous } : {};
-    if (input.nodeId !== undefined) {
-      if (!!previous[input.nodeId] === input.value) return { status: 'unchanged' as const };
-      if (input.value) next[input.nodeId] = true;
-      else delete next[input.nodeId];
-    } else if (input.value) {
-      for (const id of chat.branchTree?.activePath ?? chat.messages.map((_, index) => String(index))) next[id] = true;
-    }
-    if (Object.keys(previous).length === Object.keys(next).length && Object.keys(next).every(id => previous[id] === next[id])) return { status: 'unchanged' as const };
-    set({ chats: updateChatNodeField(chats!, index, field, next), [runtime]: { ...get()[runtime], [String(index)]: next } });
+    const result = setChatNodeMapState(get().chats, input, field);
+    if (result.status !== 'updated') return result;
+    set({ chats: result.chats, [runtime]: { ...get()[runtime], [String(result.chatIndex)]: result.map } });
     if (field === 'omittedNodes') invalidateAiTasks([input.chatId], input.nodeId ? [input.nodeId] : undefined);
     return { status: 'updated' as const };
   };

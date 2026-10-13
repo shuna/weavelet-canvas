@@ -859,3 +859,30 @@ export const upsertWithAutoBranchState = (
     ensuredChats, chatIndex, messageIndex, message, ensuredStore
   );
 };
+
+export const resolveNodeTarget = (chats: ChatInterface[] | undefined, input: { chatId: string; nodeId: string }, activeOnly = false) => {
+  const chatIndex = chats?.findIndex((chat) => chat.id === input.chatId) ?? -1;
+  const chat = chats?.[chatIndex];
+  if (!chat) return { status: 'chat-missing' as const };
+  const index = chat.branchTree
+    ? chat.branchTree.activePath.indexOf(input.nodeId)
+    : Number(input.nodeId);
+  const exists = chat.branchTree ? !!chat.branchTree.nodes[input.nodeId]
+    : Number.isInteger(index) && index >= 0 && String(index) === input.nodeId && !!chat.messages[index];
+  if (!exists) return { status: 'node-missing' as const };
+  if (activeOnly && index < 0) return { status: 'invalid-target' as const };
+  return { status: 'valid' as const, chatIndex, messageIndex: index, chat };
+};
+
+export const setNodeDisplayFieldState = (
+  chats: ChatInterface[] | undefined, input: { chatId: string; nodeId: string },
+  field: 'label' | 'starred' | 'pinned', value: string | true | undefined, contentStore: ContentStoreData
+) => {
+  const target = resolveNodeTarget(chats, input);
+  if (target.status !== 'valid') return target;
+  const ensured = ensureBranchTreeState(chats!, target.chatIndex, contentStore);
+  const nodeId = target.chat.branchTree ? input.nodeId : ensured.chats[target.chatIndex].branchTree!.activePath[target.messageIndex];
+  if (ensured.chats[target.chatIndex].branchTree!.nodes[nodeId][field] === value) return { status: 'unchanged' as const };
+  return { status: 'updated' as const, chats: setBranchNodeFieldState(ensured.chats, target.chatIndex, nodeId, field, value),
+    contentStore: ensured.contentStore, nodeId, historyBase: ensured };
+};
