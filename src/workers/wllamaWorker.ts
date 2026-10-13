@@ -1,3 +1,4 @@
+import { localFallbackPrompt, appendAssistantPrefix, trimLocalStopStrings } from '@utils/localGenerationOutput';
 /**
  * Web Worker for wllama (llama.cpp WASM) inference.
  *
@@ -1125,7 +1126,7 @@ async function handleGenerate(req: GenerateRequest) {
     // assistantPrefix (if any) is appended after template expansion so it becomes
     // the start of the assistant turn that the model continues.
     const rawLength = req.messages.reduce((n, m) => n + m.content.length, 0);
-    let prompt = req.messages.map((m) => `${m.role}: ${m.content}`).join('\n\n') + '\n\nassistant:';
+    let prompt = localFallbackPrompt(req.messages);
     const chatTemplate = wllama.getChatTemplate();
     if (chatTemplate) {
       try {
@@ -1139,9 +1140,7 @@ async function handleGenerate(req: GenerateRequest) {
         console.warn('[wllamaWorker] chat template formatting failed, using raw serialization:', (e as Error).message);
       }
     }
-    if (req.assistantPrefix) {
-      prompt += req.assistantPrefix;
-    }
+    prompt = appendAssistantPrefix(prompt,req.assistantPrefix);
 
     // wllama only supports stopTokens (token IDs), not string stop sequences.
     // Multi-token stop strings cannot be reliably mapped to single token IDs,
@@ -1165,17 +1164,8 @@ async function handleGenerate(req: GenerateRequest) {
       fullText = chunk.currentText;
       tokensGenerated++;
 
-      // Check if any stop sequence appears in the generated text
-      if (stopStrings.length > 0) {
-        for (const stop of stopStrings) {
-          const idx = fullText.indexOf(stop);
-          if (idx !== -1) {
-            fullText = fullText.slice(0, idx);
-            stopped = true;
-            break;
-          }
-        }
-      }
+      const output = trimLocalStopStrings(fullText,stopStrings);
+      fullText = output.text; stopped = output.stopped;
 
       respond(req.id, 'chunk', { text: fullText });
 

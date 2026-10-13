@@ -1,3 +1,4 @@
+import { localModelContextLength } from './localModelLimits';
 import { remoteModelContextInfo, remoteModelStreamSupported, remoteModelDefaultMaxTokens } from './remoteModelLimits';
 import { findProviderCustomModel, findFavorite, findCachedModel, modelSupportsReasoning, modelRequiresReasoning } from './modelReasoning';
 import useStore from '@store/store';
@@ -8,9 +9,7 @@ import {
 } from './tokenBudget';
 import { getMaxCompletionTokensForContext } from './tokenBudget';
 import { localModelRuntime } from '@src/local-llm/runtime';
-import { getCatalogModel } from '@src/local-llm/catalog';
 
-const DEFAULT_LOCAL_MODEL_CONTEXT_LENGTH = 2048;
 
 export interface ModelCostEntry {
   prompt: { price: number | null; unit: number };
@@ -70,20 +69,7 @@ export function useModelType(
  * 4. DEFAULT_LOCAL_MODEL_CONTEXT_LENGTH fallback
  */
 function resolveLocalModelContextLength(modelId: string): number {
-  // 1. Check runtime capabilities (available after model load)
-  const caps = localModelRuntime.getCapabilities(modelId);
-  if (caps?.contextLength) return caps.contextLength;
-
-  // 2. Check store for persisted context length from previous load
-  const state = useStore.getState();
-  const storeDef = state.localModels?.find((m: { id: string }) => m.id === modelId);
-  if (storeDef?.displayMeta?.contextLength) return storeDef.displayMeta.contextLength;
-
-  // 3. Check curated catalog
-  const cat = getCatalogModel(modelId);
-  if (cat?.displayMeta?.contextLength) return cat.displayMeta.contextLength;
-
-  return DEFAULT_LOCAL_MODEL_CONTEXT_LENGTH;
+  return localModelContextLength(useStore.getState(),modelId,localModelRuntime.getCapabilities(modelId) ?? undefined);
 }
 
 export function getModelMaxToken(

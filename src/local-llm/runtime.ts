@@ -1,3 +1,4 @@
+import { localGenerationOptions } from '@utils/localGenerationOutput';
 /**
  * LocalModelRuntime — manages the lifecycle of local LLM engine workers.
  *
@@ -976,9 +977,7 @@ export class LocalModelRuntime {
             epoch,
             messages: input.messages,
             assistantPrefix: input.assistantPrefix,
-            maxTokens: opts.maxTokens ?? 256,
-            temperature: opts.temperature ?? 0.7,
-            stop: opts.stop,
+            ...localGenerationOptions(opts),
           }) as { fullText: string; tokensGenerated: number };
 
           return result.fullText;

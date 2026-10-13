@@ -130,4 +130,4 @@ export { remoteOutput } from "./remoteOutput";
 
 export { generationPlan } from "./generationPlan";
 
-export { localGenerationInput } from "./localGeneration";
+export { localGenerationInput, localGenerationOutput } from "./localGeneration";

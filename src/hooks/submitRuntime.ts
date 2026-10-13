@@ -1,3 +1,4 @@
+import { prepareLocalGenerationOutput } from '@utils/localGenerationOutput';
 import { createLocalGenerationInput } from '@utils/localGenerationInput';
 import { finalizeGenerationState } from '@utils/generationPlan';
 import { cancelAiTask, cancelAiTaskRequest, isAiTaskCurrent, type AiTaskTicket } from './aiTaskLifetime';
@@ -651,7 +652,7 @@ export const executeLocalSubmit = async ({
   // Seed the streaming buffer with the prefix immediately so it's visible
   // before the first generated token arrives.
   if (prefix) {
-    setStreamingBufferText(chatId, targetNodeId, prefix);
+    setStreamingBufferText(chatId, targetNodeId, prepareLocalGenerationOutput('',prefix).text);
     notifyStreamingUpdate(chatId, targetNodeId);
   }
 
@@ -674,7 +675,7 @@ export const executeLocalSubmit = async ({
         resetStallTimer();
         // wllama sends currentText (full generated text-so-far), not deltas.
         // Prepend the prefix so the buffer always shows the complete content.
-        setStreamingBufferText(chatId, targetNodeId, prefix + text);
+        setStreamingBufferText(chatId, targetNodeId, prepareLocalGenerationOutput(text,prefix).text);
         notifyStreamingUpdate(chatId, targetNodeId);
       },
       'chat',

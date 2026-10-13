@@ -11,9 +11,9 @@ describe('shared actual local generation input',()=>{
       {type:'image_url',image_url:{url:'data:fake',detail:'auto'}},{type:'text',text:'second'},{type:'reasoning',text:'excluded'}]},
       {role:'assistant',content:[{type:'text',text:'answer'}]}];
     const result=JSON.parse(localGenerationInput(JSON.stringify({messages,config,assistantPrefill:' \n prefix \t'})));
-    expect(result).toEqual({messages:[{role:'system',content:'system'},{role:'user',content:'first\nsecond'},{role:'assistant',content:'answer'}],config,assistantPrefix:'prefix'});
+    expect(result).toEqual({messages:[{role:'system',content:'system'},{role:'user',content:'first\nsecond'},{role:'assistant',content:'answer'}],config,assistantPrefix:'prefix',fallbackPrompt:'system: system\n\nuser: first\nsecond\n\nassistant: answer\n\nassistant:prefix',options:{maxTokens:4000,temperature:1}});
     expect(result.messages).toEqual(actualWebMessages(messages,'append',messages.length,config.model,undefined,config.systemPrompt));
-    expect(createLocalGenerationInput(result.messages,config,normalizeAssistantPrefill(' \n prefix \t'))).toEqual(result);
+    expect(createLocalGenerationInput(result.messages,config,normalizeAssistantPrefill(' \n prefix \t'))).toEqual({messages:result.messages,config,assistantPrefix:'prefix'});
   });
   it('keeps actual image-only empty text mapping, omission/target boundary, and empty-prefix absence',()=>{
     const messages:MessageInterface[]=[{role:'user',content:[{type:'image_url',image_url:{url:'data:fake',detail:'low'}}]},

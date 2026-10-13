@@ -7000,6 +7000,7 @@ var WeaveletGoogleSync = (() => {
     libraryDefaults: () => libraryDefaults,
     libraryOperation: () => libraryOperation,
     localGenerationInput: () => localGenerationInput,
+    localGenerationOutput: () => localGenerationOutput,
     messageAttributesOperation: () => messageAttributesOperation,
     messageEdit: () => messageEdit,
     navigationOperation: () => navigationOperation,
@@ -16855,6 +16856,113 @@ ${message.content}` : message.content).join("\n\n").trim();
     }
   }
 
+  // src/local-llm/catalog.ts
+  var CURATED_MODELS = [
+    {
+      id: "smollm2-360m-instruct-q8",
+      label: "SmolLM2 360M Instruct (Q8_0)",
+      engine: "wllama",
+      tasks: ["generation", "analysis"],
+      huggingFaceRepo: "HuggingFaceTB/SmolLM2-360M-Instruct-GGUF",
+      revision: "main",
+      downloadFiles: ["smollm2-360m-instruct-q8_0.gguf"],
+      manifest: {
+        kind: "single-file",
+        entrypoint: "smollm2-360m-instruct-q8_0.gguf"
+      },
+      // 386 MB — measured from HF repo (only quantization available)
+      expectedDownloadSize: 386404992,
+      recommendedDeviceTier: "low",
+      notes: "Smallest recommended model. Good for basic text generation on low-end devices.",
+      displayMeta: {
+        supportsTextInference: true,
+        quantization: "Q8_0",
+        parameterSizeLabel: "360M",
+        sourceLabel: "catalog",
+        recommended: true,
+        contextLength: 8192
+      }
+    },
+    {
+      id: "qwen3-0.6b-q4km",
+      label: "Qwen3 0.6B (Q4_K_M)",
+      engine: "wllama",
+      tasks: ["generation", "analysis"],
+      huggingFaceRepo: "bartowski/Qwen_Qwen3-0.6B-GGUF",
+      revision: "main",
+      downloadFiles: ["Qwen_Qwen3-0.6B-Q4_K_M.gguf"],
+      manifest: {
+        kind: "single-file",
+        entrypoint: "Qwen_Qwen3-0.6B-Q4_K_M.gguf"
+      },
+      // 484 MB — measured from HF repo
+      expectedDownloadSize: 484220320,
+      recommendedDeviceTier: "standard",
+      notes: "Balanced size and capability. Latest Qwen3 architecture with generation and analysis.",
+      displayMeta: {
+        supportsTextInference: true,
+        quantization: "Q4_K_M",
+        parameterSizeLabel: "0.6B",
+        sourceLabel: "catalog",
+        recommended: true,
+        contextLength: 40960
+      }
+    },
+    {
+      id: "llm-jp-3-1.8b-instruct-q4km",
+      label: "LLM-jp-3 1.8B Instruct (Q4_K_M)",
+      engine: "wllama",
+      tasks: ["generation", "analysis"],
+      huggingFaceRepo: "alfredplpl/llm-jp-3-1.8b-instruct-gguf",
+      revision: "main",
+      downloadFiles: ["llm-jp-3-1.8b-instruct-Q4_K_M.gguf"],
+      manifest: {
+        kind: "single-file",
+        entrypoint: "llm-jp-3-1.8b-instruct-Q4_K_M.gguf"
+      },
+      // 1.16 GB — measured from HF repo
+      expectedDownloadSize: 1164239104,
+      recommendedDeviceTier: "high",
+      notes: "Japanese-focused model. Good quality for Japanese text generation and analysis.",
+      displayMeta: {
+        supportsTextInference: true,
+        quantization: "Q4_K_M",
+        parameterSizeLabel: "1.8B",
+        sourceLabel: "catalog",
+        recommended: true,
+        contextLength: 4096
+      }
+    }
+  ];
+  function getCatalogModel(id) {
+    return CURATED_MODELS.find((m) => m.id === id);
+  }
+
+  // src/utils/tokenBudget.ts
+  var UNKNOWN_MODEL_CONTEXT_LENGTH = 8192;
+  var MIN_PROMPT_RATIO = 0.1;
+  var normalizeContextLength = (contextLength) => Math.max(1, Math.floor(contextLength));
+  var getMinPromptTokensForContext = (contextLength) => Math.max(1, Math.floor(normalizeContextLength(contextLength) * MIN_PROMPT_RATIO));
+  var getMaxCompletionTokensForContext = (contextLength) => {
+    const normalizedContextLength = normalizeContextLength(contextLength);
+    return Math.max(0, normalizedContextLength - getMinPromptTokensForContext(normalizedContextLength));
+  };
+
+  // src/utils/localModelLimits.ts
+  var DEFAULT_LOCAL_MODEL_CONTEXT_LENGTH = 2048;
+  function localModelContextLength(state, modelId, capabilities) {
+    if (capabilities?.contextLength)
+      return capabilities.contextLength;
+    const stored = state.localModels?.find((model) => model.id === modelId);
+    if (stored?.displayMeta?.contextLength)
+      return stored.displayMeta.contextLength;
+    const catalog = getCatalogModel(modelId);
+    if (catalog?.displayMeta?.contextLength)
+      return catalog.displayMeta.contextLength;
+    return DEFAULT_LOCAL_MODEL_CONTEXT_LENGTH;
+  }
+  var localModelDefaultMaxTokens = (state, modelId, capabilities) => getMaxCompletionTokensForContext(localModelContextLength(state, modelId, capabilities));
+
   // src/utils/reasoning.ts
   var getEffectiveVerbosity = (verbosity, allowMax) => verbosity === "max" && !allowMax ? "medium" : verbosity;
   var normalizeModelId = (modelId) => modelId.toLowerCase();
@@ -17096,16 +17204,6 @@ ${message.content}` : message.content).join("\n\n").trim();
     );
   }
 
-  // src/utils/tokenBudget.ts
-  var UNKNOWN_MODEL_CONTEXT_LENGTH = 8192;
-  var MIN_PROMPT_RATIO = 0.1;
-  var normalizeContextLength = (contextLength) => Math.max(1, Math.floor(contextLength));
-  var getMinPromptTokensForContext = (contextLength) => Math.max(1, Math.floor(normalizeContextLength(contextLength) * MIN_PROMPT_RATIO));
-  var getMaxCompletionTokensForContext = (contextLength) => {
-    const normalizedContextLength = normalizeContextLength(contextLength);
-    return Math.max(0, normalizedContextLength - getMinPromptTokensForContext(normalizedContextLength));
-  };
-
   // src/utils/remoteModelLimits.ts
   function remoteModelContextInfo(state, modelId, providerId) {
     const custom = findProviderCustomModel(state.providerCustomModels, modelId, providerId);
@@ -17211,17 +17309,18 @@ ${message.content}` : message.content).join("\n\n").trim();
     const input = JSON.parse(json);
     const state = input.modelState ?? {};
     let config = input.config;
+    const defaultMaxTokens = (model, providerId, source) => source === "local" ? localModelDefaultMaxTokens(state, model, input.localCapabilities?.[model]) : remoteModelDefaultMaxTokens(state, model, providerId);
     if (input.operation === "switch") {
-      if (!input.target || input.target.modelSource === "local")
-        throw new Error("Missing or unsupported remote model target.");
+      if (!input.target)
+        throw new Error("Missing model target.");
       config = switchConfigModel(
         config,
         { model: input.target.model, providerId: input.target.providerId, modelSource: input.target.modelSource },
-        (model, providerId) => remoteModelDefaultMaxTokens(state, model, providerId)
+        defaultMaxTokens
       );
     } else if (input.operation !== "normalize")
       throw new Error("Unknown chat config operation.");
-    const next = normalizeRemoteConfig(config, state);
+    const next = normalizeConfigStream(config, defaultMaxTokens, (model, providerId, source) => source === "local" ? true : remoteModelStreamSupported(state, model, providerId));
     return JSON.stringify({ changes: diffJSONChanges(input.config, JSON.parse(JSON.stringify(next))) });
   }
 
@@ -18317,6 +18416,28 @@ ${messageContent}---
     return JSON.stringify({ state, parts, finished, isEmpty: parts.length === 0 });
   }
 
+  // src/utils/localGenerationOutput.ts
+  var localGenerationOptions = (options) => ({
+    maxTokens: options.maxTokens ?? 256,
+    temperature: options.temperature ?? 0.7,
+    stop: options.stop
+  });
+  var appendAssistantPrefix = (prompt, prefix) => prefix ? prompt + prefix : prompt;
+  var localFallbackPrompt = (messages, prefix) => appendAssistantPrefix(messages.map((message) => `${message.role}: ${message.content}`).join("\n\n") + "\n\nassistant:", prefix);
+  function trimLocalStopStrings(fullText, stopStrings = []) {
+    for (const stop of stopStrings) {
+      const index = fullText.indexOf(stop);
+      if (index !== -1)
+        return { text: fullText.slice(0, index), stopped: true };
+    }
+    return { text: fullText, stopped: false };
+  }
+  function prepareLocalGenerationOutput(fullText, prefix = "", stopStrings = []) {
+    const output2 = trimLocalStopStrings(fullText, stopStrings);
+    const text = prefix + output2.text;
+    return { parts: text ? [{ type: "text", text }] : [], text, reasoning: "", isEmpty: !text, stopped: output2.stopped };
+  }
+
   // src/utils/localGenerationInput.ts
   var normalizeAssistantPrefill = (value) => value?.trim() || void 0;
   function buildLocalChatMessages(contextMessages) {
@@ -18333,7 +18454,16 @@ ${messageContent}---
   function localGenerationInput(json) {
     const input = JSON.parse(json);
     const messages = buildLocalChatMessages(getGenerationMessages(input));
-    return JSON.stringify(createLocalGenerationInput(messages, input.config, normalizeAssistantPrefill(input.assistantPrefill)));
+    const prepared = createLocalGenerationInput(messages, input.config, normalizeAssistantPrefill(input.assistantPrefill));
+    return JSON.stringify({
+      ...prepared,
+      fallbackPrompt: localFallbackPrompt(prepared.messages, prepared.assistantPrefix),
+      options: localGenerationOptions({ maxTokens: input.config.max_tokens, temperature: input.config.temperature })
+    });
+  }
+  function localGenerationOutput(json) {
+    const input = JSON.parse(json);
+    return JSON.stringify(prepareLocalGenerationOutput(input.fullText, input.prefix, input.stop));
   }
 
   // shared/google-sync/entry.ts

@@ -57,6 +57,6 @@ describe('shared remote chat config actual Web rules', () => {
     const result = JSON.parse(chatConfig(JSON.stringify({operation:'switch',config,target:{model:'other'}})));
     expect(apply(config,result.changes)).not.toHaveProperty('providerId');
     expect(apply(config,result.changes)).not.toHaveProperty('modelSource');
-    expect(()=>chatConfig(JSON.stringify({operation:'switch',config,target:{model:'local',modelSource:'local'}}))).toThrow('unsupported');
+    expect(apply(config,JSON.parse(chatConfig(JSON.stringify({operation:'switch',config,target:{model:'local',modelSource:'local'}}))).changes)).toMatchObject({model:'local',modelSource:'local',max_tokens:1844,stream:true});
   });
 });
