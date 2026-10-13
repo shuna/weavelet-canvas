@@ -260,6 +260,27 @@ final class ChatState: ObservableObject {
         return try MessageDraft(chatID:conversation.id,nodeID:beforeNodeID,path:conversation.visibleMessages.map(\.id),source:exchange.source,isInsertion:true,originalParts:parts,originalRole:"user",isProtected:false,role:"user",text:"")
     }
 
+    func nodeRemovalDraft(nodeID: String) throws -> NodeRemovalDraft {
+        guard let exchange, let conversation, conversation.visibleMessages.contains(where: { $0.id.utf8.elementsEqual(nodeID.utf8) }) else { throw ExchangeError.invalid("削除するメッセージがありません") }
+        return NodeRemovalDraft(chatID: conversation.id, nodeID: nodeID, source: exchange.source, path: conversation.visibleMessages.map(\.id), operation: .remove)
+    }
+
+    func pruneHiddenDraft() throws -> NodeRemovalDraft {
+        guard let exchange, let conversation else { throw ExchangeError.invalid("保存済み会話を選択してください") }
+        return NodeRemovalDraft(chatID: conversation.id, nodeID: nil, source: exchange.source, path: conversation.visibleMessages.map(\.id), operation: .pruneHidden)
+    }
+
+    func saveNodeRemoval(_ draft: NodeRemovalDraft, newIDs: [String]? = nil, now: Double = Date().timeIntervalSince1970 * 1000) throws {
+        guard generation == nil else { throw ExchangeError.invalid("生成結果を保存してからメッセージを削除してください") }
+        guard let exchange, exchange.source == draft.source else { throw ExchangeError.invalid("会話が変更されました。削除操作を開き直してください") }
+        guard let chat = try exchange.source.required("chats").array("chats").first(where: { try $0.required("id").string("id").utf8.elementsEqual(draft.chatID.utf8) }) else { throw ExchangeError.invalid("chat ID") }
+        let count = try chat["branchTree"] == nil && draft.operation == .remove ? chat.required("messages").array("messages").count : 0
+        let ids = newIDs ?? (0..<count).map { _ in UUID().uuidString.lowercased() }
+        let source = try MessageEditing.remove(in: exchange.source, chatID: draft.chatID, nodeID: draft.nodeID, viewingPath: draft.path, operation: draft.operation, newIDs: ids, now: now)
+        if source == exchange.source { return }
+        try applyLibrary(source, selectedID: draft.chatID, resetViewFor: draft.chatID, now: now)
+    }
+
     func saveMessage(_ draft: MessageDraft, mode: MessageSaveMode, newIDs: [String]? = nil, now: Double = Date().timeIntervalSince1970 * 1000) throws {
         guard generation == nil else { throw ExchangeError.invalid("生成結果を保存してから本文を編集してください") }
         guard let exchange, exchange.source == draft.source else { throw ExchangeError.invalid("会話が変更されました。本文を開き直してください") }

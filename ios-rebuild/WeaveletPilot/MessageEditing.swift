@@ -2,6 +2,16 @@ import Foundation
 
 enum MessageSaveMode: String { case overwrite, branch, append, insert }
 
+enum NodeRemovalOperation: String { case remove, pruneHidden }
+
+struct NodeRemovalDraft {
+    let chatID: String
+    let nodeID: String?
+    let source: OrderedJSON
+    let path: [String]
+    let operation: NodeRemovalOperation
+}
+
 struct MessageDraft: Identifiable {
     let id = UUID()
     let chatID: String
@@ -28,6 +38,36 @@ struct MessageDraft: Identifiable {
 }
 
 enum MessageEditing {
+    static func remove(in source: OrderedJSON, chatID: String, nodeID: String?, viewingPath: [String],
+                       operation: NodeRemovalOperation, newIDs: [String], now: Double) throws -> OrderedJSON {
+        var chats = try source.required("chats").array("chats")
+        guard let index = try chats.firstIndex(where: { try $0.required("id").string("id").utf8.elementsEqual(chatID.utf8) }) else { throw ExchangeError.invalid("chat ID") }
+        let chat = chats[index]
+        var boundary = SharedWebProjection()
+        var projected = try boundary.chat(chat)
+        // Pruning reads pinned as a flag; the remaining node metadata stays opaque.
+        if let tree = chat["branchTree"] {
+            let projectedTree = try projected.required("branchTree"), projectedNodes = try projectedTree.required("nodes")
+            let nodes = try tree.required("nodes").object("nodes").map { field -> JSONField in
+                var node = try projectedNodes.required(field.key)
+                if let pinned = field.value["pinned"] { node = node.replacing("pinned", with: pinned) }
+                return .init(key: field.key, value: node)
+            }
+            projected = projected.replacing("branchTree", with: projectedTree.replacing("nodes", with: .object(nodes)))
+        }
+        let store = try source.required("contentStore")
+        let input = OrderedJSON.object([
+            .init(key: "chat", value: projected), .init(key: "contentStore", value: try boundary.store(store)),
+            .init(key: "nodeID", value: nodeID.map(OrderedJSON.string) ?? .null),
+            .init(key: "viewingPath", value: .array(viewingPath.map(OrderedJSON.string))),
+            .init(key: "operation", value: .string(operation.rawValue)),
+            .init(key: "newIDs", value: .array(newIDs.map(OrderedJSON.string))), .init(key: "now", value: .number(String(now)))])
+        let changes = try SharedWebOperations.call("nodeRemoval", input)
+        let changed = try OrderedJSONChanges.apply(changes, to: .object([.init(key: "chat", value: chat), .init(key: "contentStore", value: store)]), opaque: boundary.opaque)
+        chats[index] = try changed.required("chat")
+        return source.replacing("chats", with: .array(chats)).replacing("contentStore", with: try changed.required("contentStore"))
+    }
+
     static func textValue(of parts: OrderedJSON) throws -> String {
         var boundary = SharedWebProjection()
         return try SharedWebOperations.call("messageEdit", .object([.init(key: "operation", value: .string("textValue")),

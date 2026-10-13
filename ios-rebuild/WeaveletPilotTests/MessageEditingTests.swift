@@ -381,10 +381,91 @@ final class MessageEditingTests: XCTestCase {
             XCTAssertEqual(try state.publicationSnapshot(),changed); XCTAssertEqual(try Data(contentsOf:store.fileURL),changedDisk)
         }
     }
+    func testRemovalReparentsSuccessorsAndRootThenFlatEmptyChatRestartExportRecords() throws {
+        for (caseName, nodeID, expectedPath, ids) in [("branch", "middle", ["system", "last"], [String]()), ("branch", "system", ["middle", "last"], [String]()), ("flat-overwrite", "message-0", [String](), ["converted"])] {
+            let fixtures = try cases()
+            let fixture = caseName == "branch" ? fixtures[0] : fixtures.first { $0["name"] == .string(caseName) }!
+            let local = try store(), state = ChatState(store: local)
+            let input = try fixture.required("input").replacing("xHuge", with: .number("9007199254740993"))
+            try state.importWebData(input.encoded())
+            let before = try XCTUnwrap(state.exchange).source
+            try state.saveNodeRemoval(state.nodeRemovalDraft(nodeID: nodeID), newIDs: ids, now: 1000)
+            XCTAssertEqual(state.conversation?.visibleMessages.map(\.id), expectedPath)
+            let after = try XCTUnwrap(state.exchange).source, chat = try after.required("chats").array("chats")[0]
+            XCTAssertNil(chat["branchTree"]?["nodes"]?[nodeID])
+            if nodeID == "middle" { XCTAssertEqual(chat["branchTree"]?["nodes"]?["last"]?["parentId"], .string("system")) }
+            if nodeID == "system" { XCTAssertEqual(chat["branchTree"]?["nodes"]?["middle"]?["parentId"], .null); XCTAssertEqual(chat["branchTree"]?["nodes"]?["hidden"]?["parentId"], .null) }
+            if expectedPath.isEmpty { XCTAssertEqual(chat["branchTree"]?["rootId"], .string("")); XCTAssertEqual(chat["messages"], .array([])); XCTAssertEqual(try chat.required("branchTree").required("nodes").object("nodes").count, 0) }
+            XCTAssertEqual(after["xHuge"], before["xHuge"])
+            XCTAssertEqual(try after.required("chats").array("chats")[1], try before.required("chats").array("chats")[1])
+            let fresh = ChatState(store: local)
+            XCTAssertNil(fresh.persistenceError); XCTAssertEqual(fresh.conversation?.visibleMessages.map(\.id), expectedPath)
+            XCTAssertEqual(try fresh.publicationSnapshot().encoded(), try state.publicationSnapshot().encoded())
+            let exported = try OrderedJSON.decode(fresh.exportWebData())
+            XCTAssertEqual(exported["xHuge"], .number("9007199254740993"))
+            XCTAssertEqual(try WebExchange(source: exported).conversations[0].visibleMessages.map(\.id), expectedPath)
+            let records = try SyncRecords.toRecords(fresh.publicationSnapshot())
+            XCTAssertEqual(try SyncRecords.canonical(SyncRecords.toRecords(SyncRecords.fromRecords(records))), try SyncRecords.canonical(records))
+        }
+    }
+
+    func testPruneRetainsPinnedDescendantsProtectedNodesAndRawValuesButRemovesUnpinnedHidden() throws {
+        for (pin, protect, remaining) in [(false, false, ["system", "middle", "last"]), (true, false, ["system", "middle", "hidden", "last", "hidden-child"]), (false, true, ["system", "middle", "hidden", "last"])] {
+            var input = try cases()[0].required("input"), chats = try input.required("chats").array("chats"), chat = chats[0]
+            var tree = try chat.required("branchTree"), nodes = try tree.required("nodes")
+            let hidden = try nodes.required("hidden").replacing("pinned", with: .bool(pin)).replacing("xHuge", with: .number("9007199254740993"))
+            nodes = nodes.replacing("hidden", with: hidden).replacing("hidden-child", with: hidden.replacing("id", with: .string("hidden-child")).replacing("parentId", with: .string("hidden")).replacing("pinned", with: .bool(false)))
+            tree = tree.replacing("nodes", with: nodes)
+            chat = chat.replacing("branchTree", with: tree).replacing("protectedNodes", with: .object([.init(key: "hidden", value: .bool(protect))]))
+            chats[0] = chat; input = input.replacing("chats", with: .array(chats))
+            let contentStore = try input.required("contentStore")
+            input = input.replacing("contentStore", with: contentStore.replacing("h-hidden", with: try contentStore.required("h-hidden").replacing("refCount", with: .number("2"))))
+            let local = try store(), state = ChatState(store: local); try state.importWebData(input.encoded())
+            try state.saveNodeRemoval(state.pruneHiddenDraft(), now: 1000)
+            let result = try XCTUnwrap(state.exchange).source.required("chats").array("chats")[0].required("branchTree").required("nodes")
+            XCTAssertEqual(try result.object("nodes").map(\.key), remaining)
+            if pin || protect { XCTAssertEqual(result["hidden"]?["xHuge"], .number("9007199254740993")) }
+            XCTAssertEqual(ChatState(store: local).conversation?.visibleMessages.map(\.id), ["system", "middle", "last"])
+            let exported = try OrderedJSON.decode(state.exportWebData())
+            if pin || protect { XCTAssertEqual(try exported.required("chats").array("chats")[0]["branchTree"]?["nodes"]?["hidden"]?["xHuge"], .number("9007199254740993")) }
+        }
+        let flat = try cases().first { $0["name"] == .string("flat-overwrite") }!.required("input")
+        let unchanged = try MessageEditing.remove(in: flat, chatID: "target", nodeID: nil, viewingPath: ["message-0"], operation: .pruneHidden, newIDs: [], now: 1000)
+        XCTAssertEqual(unchanged, flat)
+    }
+
+    func testRemovalProtectionSaveFailureRetryAndStalePreparationKeepState() throws {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent("removal-fault-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let fault = InsertionWriteFault(), local = LocalStateStore(fileURL: directory.appendingPathComponent("local.json")) { data, url in
+            if fault.reject { throw CocoaError(.fileWriteNoPermission) }; try data.write(to: url, options: .atomic)
+        }
+        let state = ChatState(store: local); try state.importWebData(cases()[0].required("input").encoded())
+        let removal = try state.nodeRemovalDraft(nodeID: "middle"), prune = try state.pruneHiddenDraft()
+        let snapshot = try state.publicationSnapshot(), disk = try Data(contentsOf: local.fileURL), path = state.conversation?.visibleMessages.map(\.id), focus = state.navigationFocus
+        fault.reject = true
+        for draft in [removal, prune] {
+            XCTAssertThrowsError(try state.saveNodeRemoval(draft, now: 1000))
+            XCTAssertEqual(try state.publicationSnapshot(), snapshot); XCTAssertEqual(try Data(contentsOf: local.fileURL), disk)
+            XCTAssertEqual(state.conversation?.visibleMessages.map(\.id), path); XCTAssertEqual(state.navigationFocus, focus)
+        }
+        fault.reject = false; try state.saveNodeRemoval(removal, now: 1000)
+        let changed = try state.publicationSnapshot(), changedDisk = try Data(contentsOf: local.fileURL)
+        for draft in [removal, prune] { XCTAssertThrowsError(try state.saveNodeRemoval(draft)); XCTAssertEqual(try state.publicationSnapshot(), changed); XCTAssertEqual(try Data(contentsOf: local.fileURL), changedDisk) }
+        var protectedInput = try cases()[0].required("input"), chats = try protectedInput.required("chats").array("chats")
+        chats[0] = chats[0].replacing("protectedNodes", with: .object([.init(key: "middle", value: .bool(true))]))
+        protectedInput = protectedInput.replacing("chats", with: .array(chats)); try state.importWebData(protectedInput.encoded())
+        let protectedSnapshot = try state.publicationSnapshot(), protectedDisk = try Data(contentsOf: local.fileURL)
+        XCTAssertThrowsError(try state.saveNodeRemoval(state.nodeRemovalDraft(nodeID: "middle")))
+        XCTAssertEqual(try state.publicationSnapshot(), protectedSnapshot); XCTAssertEqual(try Data(contentsOf: local.fileURL), protectedDisk)
+    }
+
     @MainActor func testEveryMessageSaveModeRejectsActiveGenerationWithoutDiscardingPartialOutput() async throws {
         let store=try store(), state=ChatState(store:store)
         try state.importWebData(cases()[0].required("input").encoded())
         var draft=try state.messageInsertionDraft(beforeNodeID:"middle"); draft.text="Must not save"
+        let removal = try state.nodeRemovalDraft(nodeID: "middle"), prune = try state.pruneHiddenDraft()
         let config=URLSessionConfiguration.ephemeral; config.protocolClasses=[HeldInsertionProtocol.self]
         let client=RemoteClient(session:URLSession(configuration:config))
         let record=RemoteCredentialRecord(settings:RemoteSettings(endpoint:"https://fixture.invalid/v1/chat/completions",model:"FAKE-model",stream:true),key:"FAKE")
@@ -400,6 +481,11 @@ final class MessageEditingTests: XCTestCase {
             XCTAssertThrowsError(try state.saveMessage(draft,mode:mode,newIDs:["blocked"],now:1000))
             XCTAssertEqual(state.generation?.id,generation.id); XCTAssertEqual(state.generation?.output.text,generation.output.text)
             XCTAssertEqual(try state.publicationSnapshot(),before); XCTAssertEqual(try Data(contentsOf:store.fileURL),disk)
+        }
+        for draft in [removal, prune] {
+            XCTAssertThrowsError(try state.saveNodeRemoval(draft, now: 1000))
+            XCTAssertEqual(state.generation?.id, generation.id); XCTAssertEqual(state.generation?.output.text, generation.output.text)
+            XCTAssertEqual(try state.publicationSnapshot(), before); XCTAssertEqual(try Data(contentsOf: store.fileURL), disk)
         }
         state.stopGeneration()
     }

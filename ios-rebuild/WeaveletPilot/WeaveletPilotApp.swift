@@ -31,6 +31,8 @@ struct ChatView: View {
     @State private var errorMessage: String?
     @State private var draft: MessageDraft?
     @State private var optionsDraft: NodeOptionsDraft?
+    @State private var removalDraft: NodeRemovalDraft?
+    @State private var showsRemoval = false
 
     var body: some View {
         NavigationStack {
@@ -44,6 +46,9 @@ struct ChatView: View {
                                 catch { errorMessage = error.localizedDescription }
                             }, insertBefore: state.exchange == nil || state.generation != nil ? nil : {
                                 do { draft = try state.messageInsertionDraft(beforeNodeID: node.id) }
+                                catch { errorMessage = error.localizedDescription }
+                            }, remove: state.exchange == nil || state.generation != nil ? nil : {
+                                do { removalDraft = try state.nodeRemovalDraft(nodeID: node.id); showsRemoval = true }
                                 catch { errorMessage = error.localizedDescription }
                             }, configure: state.exchange == nil || state.generation != nil ? nil : {
                                 do { optionsDraft = try state.nodeOptionsDraft(nodeID: node.id) }
@@ -67,6 +72,11 @@ struct ChatView: View {
                             }
                             .frame(minHeight: 44)
                             .disabled(state.generation != nil)
+                            Button("非表示の枝を整理", systemImage: "line.3.horizontal.decrease") {
+                                do { removalDraft = try state.pruneHiddenDraft(); showsRemoval = true }
+                                catch { errorMessage = error.localizedDescription }
+                            }
+                            .frame(minHeight: 44).disabled(state.generation != nil)
                         }
                         if let generation = state.generation {
                             VStack(alignment: .leading, spacing: 8) {
@@ -170,6 +180,18 @@ struct ChatView: View {
             .alert("データを処理できませんでした", isPresented: Binding(get: { errorMessage != nil || state.persistenceError != nil }, set: { if !$0 { errorMessage = nil; state.persistenceError = nil } })) {
                 Button("閉じる", role: .cancel) { errorMessage = nil; state.persistenceError = nil }
             } message: { Text(errorMessage ?? state.persistenceError ?? "") }
+            .confirmationDialog(removalDraft?.operation == .remove ? "メッセージを削除しますか？" : "非表示の枝を整理しますか？", isPresented: $showsRemoval, titleVisibility: .visible) {
+                Button(removalDraft?.operation == .remove ? "削除" : "整理", role: .destructive) {
+                    guard let removalDraft else { return }
+                    do { try state.saveNodeRemoval(removalDraft); self.removalDraft = nil }
+                    catch { errorMessage = error.localizedDescription }
+                }
+                Button("キャンセル", role: .cancel) { removalDraft = nil }
+            } message: {
+                Text(removalDraft?.operation == .remove
+                     ? "このメッセージ1件を削除します。後続のメッセージは残ります。保護されたメッセージは削除できません。"
+                     : "現在表示していない枝を整理します。ピン留めされたメッセージとその子孫、保護されたメッセージは残ります。")
+            }
             .sheet(item: $draft) { draft in MessageEditorView(state: state, draft: draft) }
             .sheet(item: $optionsDraft) { draft in NodeOptionsView(state: state, draft: draft) }
             .sheet(isPresented: $showsSearch) {
@@ -210,6 +232,7 @@ struct MessageView: View {
     let style: ChatStyle
     var edit: (() -> Void)? = nil
     var insertBefore: (() -> Void)? = nil
+    var remove: (() -> Void)? = nil
     var configure: (() -> Void)? = nil
     var toggleCollapse: (() -> Void)? = nil
     let select: (String) -> Void
@@ -259,23 +282,15 @@ struct MessageView: View {
                         MessagePartView(part: part)
                     }
                 }
-                if edit != nil || insertBefore != nil || configure != nil || toggleCollapse != nil {
-                    HStack(spacing: 16) {
-                        if let edit {
-                            Button("編集", systemImage: "square.and.pencil", action: edit).frame(minHeight: 44)
-                        }
-                        if let insertBefore {
-                            Button("前に挿入", systemImage:"text.insert", action:insertBefore).frame(minHeight:44)
-                        }
-                        if let toggleCollapse {
-                            Button(node.options.collapsed ? "本文を展開" : "本文を折りたたむ", systemImage: node.options.collapsed ? "chevron.down" : "chevron.up", action: toggleCollapse)
-                                .labelStyle(.iconOnly).frame(minWidth: 44, minHeight: 44)
-                        }
-                        if let configure {
-                            Button("メッセージ設定", systemImage: "ellipsis", action: configure)
-                                .labelStyle(.iconOnly).frame(minWidth: 44, minHeight: 44)
-                        }
+                if edit != nil || insertBefore != nil || remove != nil || configure != nil || toggleCollapse != nil {
+                    Menu("メッセージ操作", systemImage: "ellipsis") {
+                        if let edit { Button("編集", systemImage: "square.and.pencil", action: edit) }
+                        if let insertBefore { Button("前に挿入", systemImage: "text.insert", action: insertBefore) }
+                        if let toggleCollapse { Button(node.options.collapsed ? "本文を展開" : "本文を折りたたむ", systemImage: node.options.collapsed ? "chevron.down" : "chevron.up", action: toggleCollapse) }
+                        if let configure { Button("メッセージ設定", systemImage: "slider.horizontal.3", action: configure) }
+                        if let remove { Button("削除", systemImage: "trash", role: .destructive, action: remove) }
                     }
+                    .frame(minWidth: 44, minHeight: 44)
                 }
                 if siblings.count > 1 {
                     let position = (siblings.firstIndex(where: { $0.id.utf8.elementsEqual(node.id.utf8) }) ?? 0) + 1
