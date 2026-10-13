@@ -164,11 +164,12 @@ import { cloudKitLocalWins as localCloudKitWins, cloudKitSnapshotLayout as snaps
 import { computeCloudSyncMetrics, getCloudSyncGuardMessage } from '../../src/store/storage/cloud/guards';
 import { validateFolderHierarchy } from '../../src/utils/folderHierarchy';
 import { CLOUDKIT_DEFAULT_RECORD_NAME, CLOUDKIT_RECORD_TYPE } from '../../src/api/cloudkit';
+import { CLOUD_SYNC_IDLE_MS } from '../../src/store/storage/cloud/createCloudPersistStorage';
 import { STORE_VERSION } from '../../src/store/version';
 export const cloudKitOperation = (inputJSON: string) => {
   const input = JSON.parse(inputJSON);
   switch (input.operation) {
-    case 'constants': return JSON.stringify({ recordName: CLOUDKIT_DEFAULT_RECORD_NAME, recordType: CLOUDKIT_RECORD_TYPE, version: STORE_VERSION });
+    case 'constants': return JSON.stringify({ recordName: CLOUDKIT_DEFAULT_RECORD_NAME, recordType: CLOUDKIT_RECORD_TYPE, version: STORE_VERSION, idleMs: CLOUD_SYNC_IDLE_MS });
     case 'layout': return JSON.stringify(snapshotCloudKitLayout(input.value, STORE_VERSION));
     case 'localWins': return JSON.stringify(localCloudKitWins(input.localUpdatedAt, input.serverUpdatedAt));
     case 'receiveGuard': {

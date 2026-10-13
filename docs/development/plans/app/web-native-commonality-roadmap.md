@@ -250,3 +250,14 @@ CloudKitは廃止せず、Google Drive、ローカルフォルダー/iCloud Driv
 CloudKitはWebのFULL persistenceを使用し、Google/フォルダーのbrowser-local除外規則を流用しない。nativeのKeychain認証情報をsnapshotへ追加していない。CloudKit payloadをGoogle/フォルダーのパスフレーズ暗号化形式に変換する変更も行わない。標準recordはWebの `weavelet-default-snapshot` / `WeaveletSnapshot` を共有定数から参照し、旧iOS専用 `weavelet-ios-snapshot` の旧形式を自動上書きしない。
 
 今回の機能群は手動受信・送信・競合処理まで。自動同期、旧版のローカル隔離/移行UI、実コンテナーの相互運用は残件。関連Web55 casesの成功範囲と影響5 casesの再確認、Catalyst接続6 casesとrecord変換1 caseの成功範囲、独立Astra2指摘の修正を[検証台帳](web-native-completion-ledger.md)へ記録した。フォルダー同期の成功結果は再利用し、変更のない全領域の監査・保存/同期テストを反復しない。
+
+
+## 2026-10-13：CloudKit自動送信・旧版隔離の接続
+
+手動同期に続き、保存済みdocumentの変更をnativeキューへ接続した。待機時間は実Webの `CLOUD_SYNC_IDLE_MS` をbundle定数として共用し、5秒のidle待機、連続編集の集約、送信の直列化、送信中の追加変更の保持をnative Task/Combineで実装する。業務ガード・LWW・payload形式は共有元を維持する。backgroundへの移行ではAppleの[background task API](https://developer.apple.com/documentation/UIKit/UIApplication/beginBackgroundTask%28expirationHandler%3A%29)で送信開始を試み、完了時と期限切れ時にtaskを終了する。OSによる送信完了は保証しない。
+
+自動同期は受信/送信を確認してから有効化し、enabled設定と成功済みsnapshotのdigestを原子的に保存する。再起動時に保存済みローカルが成功時点と同じなら受信し、未送信の変更があるなら共有CAS/LWWで送信する。通常の通信失敗はforeground復帰で再開し、旧版検出による停止とは区別する。cold dirty restartでメモリ内metricsがない場合は、再取得した有効なremote snapshotの共通metricsを使用してCAS再送前に縮小ガードを適用する。
+
+旧版は通常受信と競合取得の双方でLWW再送前に検証し、raw BYTESとrecord metadataをnative保存へ隔離する。異なるpayloadを全て保持し、同一payloadのみ重複を省く。解除しても隔離データは保持し、各データのJSON書出しをUIから利用できる。保存失敗・版違い・不正folderは現在の会話へ適用しない。旧版の自動変換を追加したとは扱わない。
+
+追加SDKはなく、キューはOS scheduling、storeはnativeのatomic I/Oと設定/保全metadata、版判定・階層検証・容量/縮小判定は実Webの共有処理という境界を維持する。詳細と検証成功範囲は[検証台帳](web-native-completion-ledger.md)へ追記した。実CloudKitの署名/コンテナー許可、実Web相互運用、OS background期限切れ、今回のUI操作確認は未完了である。

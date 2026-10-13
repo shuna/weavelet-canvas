@@ -458,3 +458,18 @@ root位置の原因：実Web `mergeSyncDocumentSnapshot` は `{...existing.state
 独立Astra：受信版違いを適用するP1と循環folderを保存するP2を共有receiveGuardで修正。未知wrapper rootの保持も追加し、限定再監査は新規なし。SDKのCAS、取得済みsystem fields保持、更新時刻固定、古い状態での受信、保存失敗時の更新順序には新規なし。native旧版隔離/移行UIは未実装なので、版違いは元CloudKitレコードを維持したまま拒否する。
 
 ログ：`/private/tmp/weavelet-cloudkit-integration.log`（build失敗）、`weavelet-cloudkit-integration-retry.log`（host変換失敗）、`weavelet-cloudkit-integration-final.log`（5 cases成功/1 root位置相違）、`weavelet-cloudkit-corpus-debug.log`（差の原因確認）、`weavelet-cloudkit-corpus-final.log`（該当1 case成功）。bundle SHA256 `fcbb7e2724bf5e7e6fc2a5a3668cf5746e33197a4abf0ed28a751cfe245f3df3`。テストはFAKE corpus/CKRecord/transportと隔離ローカル保存のみ。実CloudKitアカウント・新app IDのコンテナー利用許可・署名・実Web相互運用・実iCloud Drive配信・実Google OAuthは未確認。CloudKit自動同期と旧版の隔離/移行UIも残件であり、全機能のWeb/iOS互換性完成とはしない。
+
+
+## CloudKit自動送信・旧版原文保全（2026-10-13）
+
+前段の手動同期に、保存イベント、5秒idle、直列送信、再起動時の未送信変更保持、foregroundでの復帰を接続。idle値は実Web共通定数を参照する。native queueとmetadata/archive storeは専用worktreeからlocal commitを回収し、controller/Appへ接続した。CloudKit SDKは実操作まで遅延作成するため、自動同期OFFの起動ではアカウントへ接続しない。
+
+旧版はraw BYTESを原子的に保存し、異なるpayloadを全て順序保持、同一payloadだけ重複排除する。新しい旧版受信や接続解除で以前の未書出データを消さない。UIで個別JSON書出しを利用可能にした。隔離保存失敗、壊れたmetadata、通常保存失敗は既存bytes/会話を維持する。
+
+再利用した成功：前段CloudKit transport変換、既存LZ wire、変更のないCloudKit provider50 cases、フォルダー暗号化同期一式。今回Webは共有bridge5+実Web cloud scheduler6の11 cases、型検査、bundle鮮度成功。native初回はqueue3/store3/controller9の15 casesが成功。Astra指摘修正後はcontroller11 casesを再確認し、追加したdirty restartの縮小保護は影響3 casesのみ確認した。現在はqueue3/store3/controller12、合計18 casesの成功範囲を確認済みだが、最終ソースで全18件を単一runした結果ではない。指摘修正後の最初のbuildは追加テストのtry漏れで実行前に失敗し、修正後の11 casesは成功した。
+
+独立AstraのP1：dirty restartの競合で旧版がlocalより古いと隔離せず上書きする経路を、LWW前の共有receiveGuard/原文隔離へ修正。P2：一時的な通信失敗後に有効設定のまま停止する経路をforeground再開へ接続。旧版停止は別フラグとし、自動再送しない。限定再確認は新規なし。追加でcold restartにmetricsがなく縮小保護が抜ける経路を共通remote metricsによるCAS再送前ガードへ修正し、限定監査は新規なし。thresholdや期待値を弱めていない。解除は設定保存より先にnative queue/sessionを止める。
+
+ログ：`/private/tmp/weavelet-cloudkit-auto-{web,types,freshness,catalyst,final,final-retry,shrink}.log`。新キュー/storeの型検査のみのworker結果をXcode実行結果と混同していない。旧版JSON書出しはraw payload→既存LZ復元の結果を接続テストで確認した。backgroundは期限切れ/完了時の終了処理を実装し、Apple公式API仕様を確認したが、実OSによる期限切れ・送信完了を確認した結果ではない。
+
+手動UI：FAKE profile指定で最新Catalystを起動し、当該processは確認できた。CUAの対象取得がcgWindowNotFoundになり、同じBundle IDの別セッション2件が稼働中で対象windowを選別できなかったため、UI成功として扱わない。別セッションには触れず、今回起動したFAKE processだけを終了し、不在を確認した。実CloudKit/実iCloud Drive/実Google OAuthの操作はしていない。追加の検証用管理基盤、別Bundle IDへの改変、全領域テスト/監査の再循環は追加していない。

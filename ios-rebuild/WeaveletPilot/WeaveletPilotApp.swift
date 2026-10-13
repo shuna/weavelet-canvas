@@ -23,6 +23,7 @@ struct ChatView: View {
     @State private var showsLibrary = false
     @State private var showsSearch = false
     @State private var showsRemoteSettings = false
+    @Environment(\.scenePhase) private var scenePhase
     @State private var cloudKitConnection: CloudKitSyncConnection?
     @State private var shownCloudKitConnection: CloudKitSyncConnection?
     @State private var folderConnection: FolderSyncConnection?
@@ -189,7 +190,10 @@ struct ChatView: View {
             .task {
                 guard ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] == nil else { return }
                 do { try state.loadRemoteSettings() } catch { state.generationError = error.localizedDescription }
+                if cloudKitConnection == nil { cloudKitConnection = CloudKitSyncConnection(state:state) }
+                cloudKitConnection?.run { try await cloudKitConnection?.restoreAutomaticSync() }
             }
+            .onChange(of:scenePhase) { _, phase in if phase == .background { cloudKitConnection?.flushInBackground() } else if phase == .active { cloudKitConnection?.resumeOnForeground() } }
             .toolbar {
                 ToolbarItemGroup(placement: .bottomBar) {
                     Button("編集を元に戻す", systemImage: "arrow.uturn.backward") {

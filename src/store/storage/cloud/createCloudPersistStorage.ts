@@ -11,7 +11,7 @@ import type {
   CloudSyncProvider,
 } from './types';
 
-const CLOUD_SYNC_IDLE_MS = 5000;
+export const CLOUD_SYNC_IDLE_MS = 5000;
 
 type PendingCloudUpload = {
   name: string;

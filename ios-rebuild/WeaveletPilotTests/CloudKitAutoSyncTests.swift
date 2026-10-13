@@ -8,7 +8,7 @@ import XCTest
         var sends = 0
         let queue = CloudKitAutoSync(delayNanoseconds: 60_000_000_000, send: {
             sends += 1
-            if sends == 1 { started.fulfill(); await gate.wait() }
+            if sends == 1 { await gate.wait(started) }
         }, onError: { XCTFail("unexpected error: \($0)") })
 
         queue.enqueue(); queue.enqueue()
@@ -47,8 +47,7 @@ import XCTest
         var sends = 0
         let queue = CloudKitAutoSync(delayNanoseconds: 60_000_000_000, send: {
             sends += 1
-            started.fulfill()
-            await gate.wait()
+            await gate.wait(started)
         }, onError: { XCTFail("unexpected error: \($0)") })
 
         queue.enqueue(); queue.cancel()
@@ -67,6 +66,8 @@ import XCTest
 
 @MainActor private final class SendGate {
     private var continuation: CheckedContinuation<Void, Never>?
-    func wait() async { await withCheckedContinuation { continuation = $0 } }
+    func wait(_ started: XCTestExpectation) async {
+        await withCheckedContinuation { continuation = $0; started.fulfill() }
+    }
     func release() { continuation?.resume(); continuation = nil }
 }

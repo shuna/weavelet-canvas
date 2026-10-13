@@ -53,7 +53,7 @@ describe('shared CloudKit wire rules', () => {
     };
     const call = (input: object) => JSON.parse(bridge.cloudKitOperation(JSON.stringify(input)));
     expect(call({ operation: 'constants' })).toEqual({
-      recordName: 'weavelet-default-snapshot', recordType: 'WeaveletSnapshot', version: 18,
+      recordName: 'weavelet-default-snapshot', recordType: 'WeaveletSnapshot', version: 18, idleMs: 5000,
     });
     expect(call({ operation: 'layout', value: { state: {}, version: 18 } }))
       .toEqual({ wrapped: true, version: 18 });
