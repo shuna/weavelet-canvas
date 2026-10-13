@@ -839,3 +839,10 @@ a9c2cadaでNativeLocalModerationから既存WKClassifierHost→共有localModera
 本consumer a9c2cada版もAir署名build・install・通常launch成功（/private/tmp/weavelet-air-auto-local-{build,install,launch}.log）。設定PickerのCatalyst隔離実画面はcgWindowNotFoundで未取得。起動したWeaveletLocalSettingsCheck cloneはprocessを確認したため、終了済みとは扱わない。通常storeを使わないFAKE cloneで、今回UI操作・生成は行っていない。
 
 同代表経路のAir実機1件も成功（/private/tmp/weavelet-air-auto-local-real-path-test.log、Executed 1/0 failures）。実WKから保存・再読込・recordsまでの本consumer接続を実機で確認した。test後の通常launch成功（/private/tmp/weavelet-air-auto-local-final-launch.log）。精密値のrecords期待はSyncRecords.swift:25の標準JSON.parse/stringifyと実Web src/store/storage/google/records.ts:83–87のNumber化に基づく。丸めをローカル保存の期待へ持ち込まず、外部同期の既存制約として区別した。
+
+
+## Web OPFS nested資産の実ブラウザ境界（2026-10-14）
+
+変更のない75d8e5b2/3aed0417の成功結果と独立Astraを再利用し、実ブラウザAPIの未確認だけを追加した。専用localhost originで実storage.tsのsaveFile/openDownloadWriter/verifyStoredModel/commitTempFile/listFiles/OpfsFileProvider/getFileEntries/readFile/deleteModelを呼び、nested final・required markerのpartial判定・commit後saved・optional finalの列挙・3byte内容・合成model削除を確認した。Codex In-app BrowserのAXでPASSを確認しtabを閉じ、専用Vite processの終了を確認。実iCloud folder権限・任意モデル実行の証明へ拡張しない。
+
+ログ /private/tmp/weavelet-opfs-browser-result.log、再現HTML /private/tmp/weavelet-opfs-browser-proof.html。HTMLは事前にactualproviderのtuple返却を確認してentry[0]を使用し、常設管理基盤へ追加しない。元作業ツリー内の一時HTMLは取り除いた。通常ユーザーデータ・Google/CloudKit・iPhoneを操作せず、Web source変更や全suiteの反復はない。
