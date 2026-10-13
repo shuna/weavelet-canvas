@@ -288,6 +288,35 @@ final class ChatState: ObservableObject {
         try applyLibrary(source, selectedID: draft.chatID, resetViewFor: draft.chatID, editing: history, now: now)
     }
 
+    var hasBranchClipboard: Bool {
+        guard let clipboard = document?.snapshot["state"]?["branchClipboard"], case .array(let ids) = clipboard["nodeIds"] else { return false }
+        return !ids.isEmpty
+    }
+    func branchClipboardDraft(nodeID: String, operation: BranchClipboardOperation = .copy) throws -> BranchClipboardDraft {
+        guard let exchange, let conversation, conversation.nodes.contains(where: { $0.id.utf8.elementsEqual(nodeID.utf8) }) else { throw ExchangeError.invalid("対象メッセージがありません") }
+        return try BranchClipboardDraft(source: exchange.source, snapshot: publicationSnapshot(), operation: operation, sourceChatID: conversation.id,
+            fromNodeID: nodeID, toNodeID: nodeID, targetChatID: conversation.id, afterNodeID: nodeID)
+    }
+    func saveBranchClipboard(_ draft: BranchClipboardDraft, newIDs: [String]? = nil, now: Double = Date().timeIntervalSince1970 * 1000) throws -> BranchClipboardResult {
+        guard generation == nil else { throw ExchangeError.invalid("生成結果を保存してから範囲を操作してください") }
+        guard let exchange, let document, exchange.source == draft.source, document.snapshot == draft.snapshot else { throw ExchangeError.invalid("会話またはコピーした範囲が変更されました。操作を開き直してください") }
+        let clipboard = try document.snapshot.required("state")["branchClipboard"] ?? .null
+        // Native allocates an upper-bound UUID pool, never reconstructing the selected tree range.
+        let selected = try exchange.source.required("chats").array("chats").filter { chat in
+            let id = try chat.required("id").string("id")
+            return id.utf8.elementsEqual(draft.sourceChatID.utf8) || id.utf8.elementsEqual(draft.targetChatID.utf8)
+        }
+        let flatCount = try selected.reduce(0) { total,chat in total + (chat["branchTree"] == nil ? try chat.required("messages").array("messages").count : 0) }
+        let sourceCount = conversations.first { $0.id.utf8.elementsEqual(draft.sourceChatID.utf8) }?.nodes.count ?? 0
+        let additional = draft.operation == .move ? sourceCount : draft.operation == .paste ? (try clipboard["nodeIds"]?.array("nodeIds").count ?? 0) : 0
+        let ids = newIDs ?? (0..<(flatCount + additional)).map { _ in UUID().uuidString.lowercased() }
+        let changed = try MessageEditing.clipboard(in: exchange.source, clipboard: clipboard, draft: draft, newIDs: ids, now: now, history: editingHistory)
+        if changed.result.explanation == nil {
+            try applyLibrary(changed.source, selectedID: selectedID, resetViewsFor: changed.affectedChatIDs, editing: changed.history, clipboard: changed.clipboard, now: now)
+        }
+        return changed.result
+    }
+
     func nodeMoveDraft(nodeID: String, direction: NodeMoveDirection) throws -> NodeTransformDraft {
         try nodeTransformDraft(nodeID: nodeID, operation: .move, direction: direction)
     }
@@ -470,10 +499,14 @@ final class ChatState: ObservableObject {
         try applyLibrary(ChatFolders.apply(in: source, operation: operation), selectedID: exchange == nil ? "" : selectedID, preserveGeneration: true, now: now)
     }
 
-    private func applyLibrary(_ source: OrderedJSON, selectedID: String, resetViewFor: String? = nil, resetViewsFor: [String] = [], preserveGeneration: Bool = false, navigation: BranchNavigation.HistoryResult? = nil, editing: MessageEditing.HistoryState? = nil, now: Double = Date().timeIntervalSince1970 * 1000) throws {
+    private func applyLibrary(_ source: OrderedJSON, selectedID: String, resetViewFor: String? = nil, resetViewsFor: [String] = [], preserveGeneration: Bool = false, navigation: BranchNavigation.HistoryResult? = nil, editing: MessageEditing.HistoryState? = nil, clipboard: OrderedJSON? = nil, now: Double = Date().timeIntervalSince1970 * 1000) throws {
         let base = try document ?? SyncDocument(v3: exchange?.source ?? ChatLibrary.emptySource)
         let before = try exchange?.source ?? base.uiProjection()
-        let candidate = try base.applyingV3Edits(source, comparedTo: before, now: now)
+        var candidate = try base.applyingV3Edits(source, comparedTo: before, now: now)
+        if let clipboard {
+            candidate = try candidate.mergingSnapshot(.object([.init(key:"version",value:candidate.snapshot.required("version")),
+                .init(key:"state",value:.object([.init(key:"branchClipboard",value:clipboard)]))]))
+        }
         let changed = try WebExchange(source: candidate.uiProjection())
         let candidates = try BranchNavigation.candidates(in: changed.source)
         var views = changed.conversations

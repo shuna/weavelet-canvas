@@ -39,6 +39,36 @@ struct NodeTransformResult {
     }
 }
 
+enum BranchClipboardOperation: String, CaseIterable { case copy, cut, paste, move }
+struct BranchClipboardDraft: Identifiable {
+    let id = UUID()
+    let source: OrderedJSON
+    let snapshot: OrderedJSON
+    var operation: BranchClipboardOperation
+    var sourceChatID: String
+    var fromNodeID: String
+    var toNodeID: String
+    var targetChatID: String
+    var afterNodeID: String
+}
+struct BranchClipboardResult {
+    let status: String
+    let nodeIDs: [String]
+    let blockedNodeIDs: [String]
+    var explanation: String? {
+        switch status {
+        case "copied", "cut", "pasted", "moved": return nil
+        case "protected": return "保護されたメッセージを含むため、範囲を取り除けません。対象: " + blockedNodeIDs.joined(separator: ", ")
+        case "missing", "chat-missing", "node-missing": return "対象の会話またはメッセージがありません。操作を開き直してください。"
+        case "not-ancestor": return "始点から終点へ親子関係でつながる範囲を選んでください。"
+        case "invalid-target": return "貼り付け先に実在するメッセージを選んでください。移動する範囲内には貼り付けできません。"
+        case "empty-clipboard", "clipboard-empty": return "コピーした範囲がありません。"
+        case "content-missing": return "範囲の本文を読み取れません。保存データは変更していません。"
+        default: return "操作できませんでした: " + status
+        }
+    }
+}
+
 struct MessageDraft: Identifiable {
     let id = UUID()
     let chatID: String
@@ -184,6 +214,35 @@ enum MessageEditing {
         return try (changed.source, NodeTransformResult(status: changed.output.required("status").string("status"), removedNodeIDs: ids("removedNodeIds"), pruneBlockedBy: ids("pruneBlockedBy"), blockedNodeIDs: ids("blockedNodeIds")))
     }
 
+    static func clipboard(in source: OrderedJSON, clipboard: OrderedJSON, draft: BranchClipboardDraft, newIDs: [String], now: Double,
+                          history: HistoryState?) throws -> (source: OrderedJSON, clipboard: OrderedJSON, history: HistoryState, affectedChatIDs: [String], result: BranchClipboardResult) {
+        var boundary = SharedWebProjection()
+        let originals = try source.required("chats").array("chats")
+        let chats = try originals.map { try boundary.editingChat($0) }
+        func nodeID(_ id: String, chatID: String) throws -> String {
+            guard let chat = try originals.first(where: { try $0.required("id").string("id").utf8.elementsEqual(chatID.utf8) }) else { return id }
+            guard chat["branchTree"] == nil else { return id }
+            guard id.hasPrefix("message-"), let index = Int(id.dropFirst(8)), index >= 0, id.utf8.elementsEqual("message-\(index)".utf8) else { return id }
+            return String(index)
+        }
+        let input = try OrderedJSON.object([.init(key:"chats",value:.array(chats)),.init(key:"contentStore",value:boundary.store(source.required("contentStore"))),
+            .init(key:"clipboard",value:boundary.clipboard(clipboard)),.init(key:"operation",value:.string(draft.operation.rawValue)),
+            .init(key:"sourceChatId",value:.string(draft.sourceChatID)),.init(key:"fromNodeId",value:.string(nodeID(draft.fromNodeID,chatID:draft.sourceChatID))),
+            .init(key:"toNodeId",value:.string(nodeID(draft.toNodeID,chatID:draft.sourceChatID))),.init(key:"targetChatId",value:.string(draft.targetChatID)),
+            .init(key:"afterNodeId",value:.string(nodeID(draft.afterNodeID,chatID:draft.targetChatID))),
+            .init(key:"newIDs",value:.array(newIDs.map(OrderedJSON.string))),.init(key:"now",value:.number(String(now)))])
+        let output = try SharedWebOperations.call("branchHistory", .object([.init(key:"operation",value:.string("edit")),.init(key:"kind",value:.string("branchClipboard")),
+            .init(key:"input",value:input),.init(key:"history",value:boundary.history(history?.raw))]))
+        let original = try OrderedJSON.object([.init(key:"chats",value:source.required("chats")),.init(key:"contentStore",value:source.required("contentStore")),.init(key:"clipboard",value:clipboard)])
+        let changed = try OrderedJSONChanges.apply(output.required("changes"), to: original, opaque: boundary.opaque)
+        let state = try historyState(output)
+        let restored = try OrderedJSONChanges.apply(.array([.object([.init(key:"op",value:.string("set")),.init(key:"path",value:.array([])),.init(key:"value",value:state.raw)])]), to: .null, opaque: boundary.opaque)
+        func ids(_ key: String) throws -> [String] { try output[key]?.array(key).map { try $0.string("ID") } ?? [] }
+        return try (source.replacing("chats",with:changed.required("chats")).replacing("contentStore",with:changed.required("contentStore")), changed.required("clipboard"),
+            HistoryState(raw:restored,canUndo:state.canUndo,canRedo:state.canRedo), ids("affectedChatIds"),
+            BranchClipboardResult(status:output.required("status").string("status"),nodeIDs:ids("nodeIds"),blockedNodeIDs:ids("blockedNodeIds")))
+    }
+
     static func moveHistory(_ operation: String, in source: OrderedJSON, history: HistoryState?, now: Double) throws -> HistoryMove {
         var boundary = SharedWebProjection()
         let chats = try source.required("chats").array("chats").map { try boundary.editingChat($0) }
@@ -311,6 +370,15 @@ struct SharedWebProjection {
             }
             result = result.replacing("branchTree", with: projectedTree.replacing("nodes", with: .object(nodes)))
         }
+        return result
+    }
+    mutating func clipboard(_ value: OrderedJSON) throws -> OrderedJSON {
+        if value == .null { return .null }
+        var result = try fields(value, known: ["nodeIds", "sourceChat", "nodes", "messageAttributesV1", "collapsedNodes", "omittedNodes", "protectedNodes"])
+        let tree = OrderedJSON.object([.init(key:"nodes",value:try value.required("nodes")),.init(key:"rootId",value:.string("")),.init(key:"activePath",value:try value.required("nodeIds"))] + (value["messageAttributesV1"].map { [.init(key:"messageAttributesV1",value:$0)] } ?? []))
+        let projected = try editingChat(.object([.init(key:"branchTree",value:tree)])).required("branchTree")
+        result = result.replacing("nodes",with:try projected.required("nodes"))
+        if let attributes = projected["messageAttributesV1"] { result = result.replacing("messageAttributesV1",with:attributes) }
         return result
     }
     mutating func history(_ value: OrderedJSON?) throws -> OrderedJSON {

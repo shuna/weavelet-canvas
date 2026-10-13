@@ -35,6 +35,7 @@ struct ChatView: View {
     @State private var showsRemoval = false
     @State private var branchDeletion: NodeTransformDraft?
     @State private var showsBranchDeletion = false
+    @State private var clipboardDraft: BranchClipboardDraft?
 
     var body: some View {
         NavigationStack {
@@ -61,6 +62,12 @@ struct ChatView: View {
                                 catch { errorMessage = error.localizedDescription }
                             }, deleteBranch: state.exchange == nil || state.generation != nil ? nil : {
                                 do { branchDeletion = try state.branchDeletionDraft(nodeID: node.id); showsBranchDeletion = true }
+                                catch { errorMessage = error.localizedDescription }
+                            }, copyRange: state.exchange == nil || state.generation != nil ? nil : {
+                                do { clipboardDraft = try state.branchClipboardDraft(nodeID: node.id) }
+                                catch { errorMessage = error.localizedDescription }
+                            }, pasteRange: state.exchange == nil || state.generation != nil || !state.hasBranchClipboard ? nil : {
+                                do { clipboardDraft = try state.branchClipboardDraft(nodeID: node.id, operation: .paste) }
                                 catch { errorMessage = error.localizedDescription }
                             }, configure: state.exchange == nil || state.generation != nil ? nil : {
                                 do { optionsDraft = try state.nodeOptionsDraft(nodeID: node.id) }
@@ -224,6 +231,7 @@ struct ChatView: View {
                 Text("このメッセージとすべての子孫を、非表示の枝も含めて削除します。保護されたメッセージが含まれる場合は削除しません。ピン留めは削除を防ぎません。")
             }
             .sheet(item: $draft) { draft in MessageEditorView(state: state, draft: draft) }
+            .sheet(item: $clipboardDraft) { draft in BranchClipboardView(state: state, draft: draft) }
             .sheet(item: $optionsDraft) { draft in NodeOptionsView(state: state, draft: draft) }
             .sheet(isPresented: $showsSearch) {
                 ChatSearchView(state: state) { result, mode in
@@ -276,6 +284,8 @@ struct MessageView: View {
     var moveDown: (() -> Void)? = nil
     var replaceAndPrune: (() -> Void)? = nil
     var deleteBranch: (() -> Void)? = nil
+    var copyRange: (() -> Void)? = nil
+    var pasteRange: (() -> Void)? = nil
     var configure: (() -> Void)? = nil
     var toggleCollapse: (() -> Void)? = nil
     let select: (String) -> Void
@@ -325,7 +335,7 @@ struct MessageView: View {
                         MessagePartView(part: part)
                     }
                 }
-                if edit != nil || insertBefore != nil || remove != nil || configure != nil || toggleCollapse != nil || moveUp != nil || moveDown != nil || replaceAndPrune != nil || deleteBranch != nil {
+                if edit != nil || insertBefore != nil || remove != nil || configure != nil || toggleCollapse != nil || moveUp != nil || moveDown != nil || replaceAndPrune != nil || deleteBranch != nil || copyRange != nil || pasteRange != nil {
                     Menu("メッセージ操作", systemImage: "ellipsis") {
                         if let edit { Button("編集", systemImage: "square.and.pencil", action: edit) }
                         if let insertBefore { Button("前に挿入", systemImage: "text.insert", action: insertBefore) }
@@ -334,6 +344,8 @@ struct MessageView: View {
                         if let moveUp { Button("上へ移動", systemImage: "arrow.up", action: moveUp) }
                         if let moveDown { Button("下へ移動", systemImage: "arrow.down", action: moveDown) }
                         if let replaceAndPrune { Button("後続を整理して編集", systemImage: "square.and.pencil", action: replaceAndPrune) }
+                        if let copyRange { Button("範囲コピー・切り取り・移動", systemImage: "doc.on.doc", action: copyRange) }
+                        if let pasteRange { Button("ここへ貼り付け", systemImage: "doc.on.clipboard", action: pasteRange) }
                         if let remove { Button("1件削除", systemImage: "trash", role: .destructive, action: remove) }
                         if let deleteBranch { Button("枝全体を削除", systemImage: "trash.fill", role: .destructive, action: deleteBranch) }
                     }
@@ -627,6 +639,82 @@ struct ConversationLibraryView: View {
     }
 }
 
+
+struct BranchClipboardView: View {
+    @ObservedObject var state: ChatState
+    @Environment(\.dismiss) private var dismiss
+    @State var draft: BranchClipboardDraft
+    @State private var errorMessage: String?
+    @State private var showsConfirmation = false
+    private var source: Conversation? { state.conversations.first { $0.id.utf8.elementsEqual(draft.sourceChatID.utf8) } }
+    private var target: Conversation? { state.conversations.first { $0.id.utf8.elementsEqual(draft.targetChatID.utf8) } }
+    private var usesTarget: Bool { draft.operation == .paste || draft.operation == .move }
+    private var label: String {
+        switch draft.operation { case .copy: return "コピー"; case .cut: return "切り取り"; case .paste: return "貼り付け"; case .move: return "会話間移動" }
+    }
+    private func identifier(_ value: Binding<String>) -> Binding<Data> {
+        Binding(get: { Data(value.wrappedValue.utf8) }, set: { value.wrappedValue = String(decoding: $0, as: UTF8.self) })
+    }
+    var body: some View {
+        NavigationStack {
+            Form {
+                Picker("操作", selection: $draft.operation) {
+                    Text("コピー").tag(BranchClipboardOperation.copy); Text("切り取り").tag(BranchClipboardOperation.cut)
+                    Text("貼り付け").tag(BranchClipboardOperation.paste); Text("会話間移動").tag(BranchClipboardOperation.move)
+                }
+                if draft.operation != .paste {
+                    Section("範囲") {
+                        Picker("元の会話", selection: identifier($draft.sourceChatID)) {
+                            ForEach(state.conversations, id: \.identity) { chat in Text(chat.title).tag(chat.identity) }
+                        }
+                        Picker("始点", selection: identifier($draft.fromNodeID)) { nodeChoices(source) }
+                        Picker("終点", selection: identifier($draft.toNodeID)) { nodeChoices(source) }
+                        Text("始点から終点へ親子関係でつながる範囲を選びます。非表示のメッセージも選択できます。")
+                            .font(.footnote).foregroundStyle(.secondary)
+                    }
+                } else if !state.hasBranchClipboard { Text("コピーした範囲がありません。") }
+                if usesTarget {
+                    Section("貼り付け先") {
+                        Picker("会話", selection: identifier($draft.targetChatID)) {
+                            ForEach(state.conversations, id: \.identity) { chat in Text(chat.title).tag(chat.identity) }
+                        }
+                        Picker("このメッセージの後へ", selection: identifier($draft.afterNodeID)) { nodeChoices(target) }
+                        if target?.nodes.isEmpty != false { Text("貼り付け先にはメッセージが必要です。") }
+                        Text("貼り付けた範囲を表示します。元の後続や、範囲外の枝は残します。")
+                            .font(.footnote).foregroundStyle(.secondary)
+                    }
+                }
+                if let errorMessage { Text(errorMessage).foregroundStyle(.red) }
+                Button(label) {
+                    if draft.operation == .cut || draft.operation == .move { showsConfirmation = true } else { save() }
+                }
+                .disabled(state.generation != nil || (usesTarget && target?.nodes.isEmpty != false) || (draft.operation == .paste && !state.hasBranchClipboard))
+            }
+            .navigationTitle("メッセージ範囲")
+            .toolbar { ToolbarItem(placement: .cancellationAction) { Button("取消") { dismiss() } } }
+            .onChange(of: Data(draft.sourceChatID.utf8)) { _, _ in
+                draft.fromNodeID = source?.nodes.first?.id ?? ""; draft.toNodeID = draft.fromNodeID
+            }
+            .onChange(of: Data(draft.targetChatID.utf8)) { _, _ in draft.afterNodeID = target?.nodes.first?.id ?? "" }
+            .confirmationDialog(draft.operation == .cut ? "範囲を切り取りますか？" : "範囲を移動しますか？", isPresented: $showsConfirmation, titleVisibility: .visible) {
+                Button(label, role: .destructive) { save() }; Button("キャンセル", role: .cancel) {}
+            } message: {
+                Text("元の会話から選択範囲を取り除きます。範囲外の子や後続は残ります。保護されたメッセージを含む場合は操作を行いません。ピン留めは操作を防ぎません。")
+            }
+        }
+    }
+    @ViewBuilder private func nodeChoices(_ chat: Conversation?) -> some View {
+        ForEach(chat?.nodes ?? [], id: \.identity) { node in
+            Text("\(node.role): \(node.parts.compactMap { if case .text(let text) = $0 { return text }; return nil }.joined().prefix(40)) · \(node.id)").tag(node.identity)
+        }
+    }
+    private func save() {
+        do {
+            let result = try state.saveBranchClipboard(draft)
+            if let explanation = result.explanation { errorMessage = explanation } else { dismiss() }
+        } catch { errorMessage = error.localizedDescription }
+    }
+}
 
 struct MessageEditorView: View {
     @ObservedObject var state: ChatState
