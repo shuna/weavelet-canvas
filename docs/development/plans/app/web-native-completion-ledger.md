@@ -691,3 +691,10 @@ a90b5b8c/86fef754で入力欄と既存本文編集へslash pickerを配置し、
 match-sorter/remove-accentsのMIT本文と固定入力hashを配布bundleへ同梱した。license出力だけCRLFを正規化し入力hashは元bytesを保持、最終bundle増分22,935 byte（アプリ全体/圧縮配布/速度ではない）。native adapterは未知partも読取り保持するが、既存保存境界の未対応type拒否を緩めていない。対応typeの未知属性/精密値の保存を確認した結果を、全未知typeの編集対応へ拡張しない。
 
 実画面/IME/VoiceOver・Airへの今回版導入は未確認。Air lockStateは改めてpasscodeRequired=trueを確認し実機処理を再開していない。built-in systemプリセットと残るGeneral操作は後続範囲。origin/mainをfetchし7a0a383aが統合branchの祖先で追加差分0件と確認した。
+## 外観とMarkdown表示の設定（2026-10-14）
+
+48074d3fでtheme（light/dark）、markdownMode、inlineLatex、streamingMarkdownPolicy（auto/always/never）を一般設定へ接続した。既定値は既存Web import defaultsから読み、既存MarkdownTextViewのsnapshot消費とOS preferredColorSchemeを使う。native独自のsystem theme値をWebデータへ保存せず、未知/不正な元値も明示的に選び直すまで保持する。ChatStyleのstream/bubble選択は別設定のまま。
+
+変更した一fieldだけを既存syncInputSnapshot/applySnapshotで原子的に保存する。raw値・他root/順序・共有既定値・不正alias拒否・保存失敗/再起動を確認したCatalyst関連3件とbuildが成功（/tmp/weavelet-native-display-settings-catalyst-tests.log）。親統合のbundle鮮度/差分確認成功、独立Astraは新規P2以上なし。表示/共有/同期基盤は変更せず既存成功を再利用、同じ業務ruleを両環境へ複製していない。
+
+実画面の色/数式/生成中表示切替・最大文字サイズ/VoiceOver・Air導入は未確認。enterToSubmit、branch swipe/animation、chat size、advanced mode、language等のGeneral機能は後続範囲であり、この4項目を全設定完成とはしない。
