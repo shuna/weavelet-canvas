@@ -102,6 +102,8 @@
     "src/utils/localModelRole.ts": "29491f084ef6ce804a416749b115e6b63a772a735ec2d4fbea21c42e75367816",
     "src/store/local-model-slice.ts": "96228dcfd3472550069d0a6803d4a2267c0f2c6f9580f7d77ba4251c9630ea86",
     "src/store/store.ts": "debe9137fec89588382491a3a50673ae8a0635618b10a28103c7e8c26d497176",
+    "src/components/Chat/ChatContent/Message/CommandPrompt/CommandPrompt.tsx": "f263bcba31adf57b468d45903916a7dd6c9edff203b5b6a911337afd089b1535",
+    "src/components/ConfigMenu/ConfigMenu.tsx": "36c4ee2fb5e6027e25c596ea4197ca8e16a32bc33bce029d769b3db14b0f7241",
     "src/store/storage/google/sync.ts": "09ac529bf26b4a2c51c182d2e07215e0491aea7a981f938fdbeed830006b404a",
     "src/store/storage/google/merge.ts": "0fcbea479b8011fa1c396a1b42e7ed6be4c613c93d4ce0f704676710e3158c61",
     "src/store/storage/google/mergeBranches.ts": "261afbf402cb9dcfb438e315f01ac72a9ddcae5eead2ba2f7bee454aa8e5d55e",
@@ -126,6 +128,7 @@
     "src/utils/date.ts": "36233be4e64f54ddd34210bb10618a017b76c2ee0bd40f81d049c33a0c966279",
     "src/utils/prompt.ts": "91810afceac8a5548505eda01ba145b60aba16d997f8c7a73ca3f704500b74ce",
     "src/utils/promptLibrary.ts": "25de088cddbebd66b619e301778b1c85e3e3016a8d61d06cb0754b9b0944f099",
+    "src/utils/promptApplication.ts": "166716b81d0c6ef105366a8069fa42b7af3b322204a9b3a950fb00dfa81b03f9",
     "src/utils/syncDocument.ts": "bc7cca9616aa593538dfb194b861ea7415ce3c7e7da42620a9fca0a89acb4120",
     "src/utils/chatMarkdown.ts": "7fa68fc26091374a7f3a5fa5885ec19547870612058c09927ef4bb1cb9ebeafa",
     "src/utils/fileExport.ts": "51f4f9fc072140849730d8be079703f39a7380a80e29532a9443560413f2bc29",
@@ -247,6 +250,8 @@
     "src/utils/prompt.ts": "91810afceac8a5548505eda01ba145b60aba16d997f8c7a73ca3f704500b74ce",
     "src/utils/promptLibrary.ts": "25de088cddbebd66b619e301778b1c85e3e3016a8d61d06cb0754b9b0944f099",
     "shared/google-sync/promptLibrary.ts": "153630cb2fee750145aeb2c877b68de1773a8ac167e9fe0832094062495bcb73",
+    "src/utils/promptApplication.ts": "166716b81d0c6ef105366a8069fa42b7af3b322204a9b3a950fb00dfa81b03f9",
+    "shared/google-sync/promptApplication.ts": "40e2718ff6a69ebc2c5ceb789ae38957ebc62e136dc64c87727da2eb7ffa9941",
     "src/store/chat-edit-time.ts": "1d7abac60c3dbc063fcaaef270dd846c2cf2d78dc0aa1a286b99ffc708ecac8c",
     "src/utils/syncDocument.ts": "bc7cca9616aa593538dfb194b861ea7415ce3c7e7da42620a9fca0a89acb4120",
     "src/store/storage/google/records.ts": "21f44f6ba31a25f7ecd7cea71b54354b3579a09414e9895fd1ee592618dfb9e9",
@@ -286,8 +291,8 @@
     "shared/google-sync/localModelRole.ts": "8ce5bc1651e340c87134a35f4fbf149af159c296ca924a874c95b76b51dc96a5",
     "src/utils/localModelImport.ts": "f15c25b57b27279b501c26632fbf8c0481b2b23263b22de8e63651dfd5ff7f1b",
     "shared/google-sync/localModelImport.ts": "60f00ad8a824ab478800fcbb21d6510ddd107978108182d5d2f0ee3f0d3c5473",
-    "shared/google-sync/entry.ts": "3f45cec830f76481908a78899cb2999bcb5cb781926fce2ed37af07fdfdffd04",
-    "shared/google-sync/generate.mjs": "db52acf4a78e8f2fd00ec7aa508e5f23a3d345b92c2dcc08441c521ee461ed59",
+    "shared/google-sync/entry.ts": "29ed62a6ae5e8ade16b3737f10e3db4d4e70f4a32a9c1fcd059f98afa4a7f77c",
+    "shared/google-sync/generate.mjs": "614a56ac44395124172401efcf782ac45ad15ad3fd8b7f28c07a43dc7685308b",
     "shared/google-sync/importDefaults.generate.mjs": "2ff8904af4f192ed0809ceaaabcfbefa708321083aebb527d712fc2a0551b15a"
   },
   "dependencyInputs": {
@@ -313,6 +318,9 @@
     "diff-match-patch/index.js": "7cead2c7cb3e4ff5c02e173cd6b81d22005e67c47ac2ce28e4b5c73d9ffcfdb2",
     "@dagrejs/dagre/dist/dagre.esm.js": "93f5f23d1bee1217531900366798277689400850a5560f238d4f213c8d552a63",
     "papaparse/papaparse.min.js": "b8e870c5d2b29772f10c9fa9a693c8b896aac8540ed6701e3cc6304c683febdb",
+    "@babel/runtime/helpers/esm/extends.js": "94d2689b0907907fbb08bae35e63abb07b35ebec5cdfd06ec9bdd8db3f611f1c",
+    "remove-accents/index.js": "6c79592c7a668e6aab46bbc21fda180f15e64eccd222194b20eb0b0863ce58b2",
+    "match-sorter/dist/match-sorter.esm.js": "46d6322a797bbf49cd758021ce6f558239e5ff3aabf591664078c2f407cafc02",
     "lz-string/libs/lz-string.js": "550034b821027008776cb9bcd1700bb5d31e8b3de224cb130fc966a75dab0e5e",
     "@babel/runtime/package.json": "7a3606cfd92078a1f9b227edad21a983024086adfd7bb550a54c7b7eecaffbfe",
     "@babel/runtime/LICENSE": "117da2af0d4ce0fe1c8e19b5cff9dcd806adf973d328d27b11d4448c4ff24f76",
@@ -328,8 +336,12 @@
     "lodash/LICENSE": "f71e8ed126b46346494aad5486874cd8f0aafe95092ed67d2e3cb6110f939abc",
     "lz-string/package.json": "f0990a8fd6c347d66c1469d18918f5460d372c6b3af8a0a5737dfd34c809e20d",
     "lz-string/LICENSE": "433fc9dfe659dbfb1e91eed8351f13651e97bfa3ac6d03394c3d63f61d4bbc80",
+    "match-sorter/package.json": "6b12a03a16ab07208b25b629fdd1f31bb1178f1d8b1194842315f32e4e441f2e",
+    "match-sorter/LICENSE": "bfa09d57d1de35570dfd7b14e1dc3f5af860728b76bdf79d8c50c5e505eef4f2",
     "papaparse/package.json": "e73a790cd141d46912f038f56132266d5e3a7bb7b087f0961e74b81f8e360c1e",
-    "papaparse/LICENSE": "99aa68e4b42758b09828a46515f70369e5463458ab7a990189f641af2b8d9b4e"
+    "papaparse/LICENSE": "99aa68e4b42758b09828a46515f70369e5463458ab7a990189f641af2b8d9b4e",
+    "remove-accents/package.json": "511775b39122274ad36e9dc32c47b2112a3fd4372e64284c2336b143be853c82",
+    "remove-accents/LICENSE": "31279697ad2455927a227e7678f2bb71e9e06dde319f12ce345404b3b7a99b81"
   },
-  "bundleSHA256": "52ad4a4f684a95388050e5cfeee0b31dd75e9e3971e2d28917088ce47e97ff31"
+  "bundleSHA256": "512e6320e0ad3b01e294bc5275e9c917040ad026e3b86d909949a30810e83e91"
 }

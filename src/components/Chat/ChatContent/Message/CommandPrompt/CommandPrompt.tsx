@@ -2,12 +2,11 @@ import React, { useEffect, useRef, useState } from 'react';
 import useStore from '@store/store';
 
 import { useTranslation } from 'react-i18next';
-import { matchSorter } from 'match-sorter';
 import { Prompt } from '@type/prompt';
 
 import useHideOnOutsideClick from '@hooks/useHideOnOutsideClick';
 import { ContentInterface } from '@type/chat';
-import { appendCommandLibraryPrompt } from '@utils/promptApplication';
+import { appendCommandLibraryPrompt, searchPromptLibrary } from '@utils/promptApplication';
 
 const CommandPrompt = ({
   _setContent,
@@ -30,9 +29,7 @@ const CommandPrompt = ({
   }, [dropDown]);
 
   useEffect(() => {
-    const filteredPrompts = matchSorter(useStore.getState().prompts, input, {
-      keys: ['name'],
-    });
+    const filteredPrompts = searchPromptLibrary(useStore.getState().prompts, input);
     _setPrompts(filteredPrompts);
   }, [input]);
 

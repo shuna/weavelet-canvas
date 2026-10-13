@@ -1,3 +1,4 @@
+import { matchSorter } from 'match-sorter';
 import type { ContentInterface } from '@type/chat';
 
 export function appendSystemLibraryPrompt(previous: string, text: string): string {
@@ -10,4 +11,8 @@ export function appendCommandLibraryPrompt(previous: ContentInterface[], text: s
     return [{ ...first, text: first.text + text }, ...previous.slice(1)];
   }
   return [{ type: 'text', text }, ...previous];
+}
+
+export function searchPromptLibrary<T extends { name: string }>(prompts: T[], query: string): T[] {
+  return matchSorter(prompts, query, { keys: ['name'] });
 }

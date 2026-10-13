@@ -86,6 +86,8 @@ struct MessageDraft: Identifiable {
     let source: OrderedJSON
     let isInsertion: Bool
     var beforeNodeID: String? { isInsertion ? nodeID : nil }
+    var promptParts: OrderedJSON?
+    var parts: OrderedJSON { promptParts ?? originalParts }
     let originalParts: OrderedJSON
     let originalRole: String
     let isProtected: Bool
@@ -99,7 +101,7 @@ struct MessageDraft: Identifiable {
     }
 
     let originalText: String
-    var changed: Bool { role != originalRole || !text.utf8.elementsEqual(originalText.utf8) }
+    var changed: Bool { role != originalRole || !text.utf8.elementsEqual(originalText.utf8) || (promptParts.map { $0 != originalParts } ?? false) }
     init(chatID: String, nodeID: String?, path: [String], source: OrderedJSON, isInsertion: Bool = false, originalParts: OrderedJSON, originalRole: String,
          isProtected: Bool, role: String, text: String) throws {
         self.chatID = chatID; self.nodeID = nodeID; self.path = path; self.source = source; self.isInsertion = isInsertion; self.originalParts = originalParts

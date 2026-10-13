@@ -129,7 +129,8 @@ struct ChatConfigView: View {
     @State private var importingModelID = ""
     @State private var copyingModel = false
     @State private var fileStatus: String?
-    private static let fields = ["model", "providerId", "max_tokens", "temperature", "reasoning_effort", "reasoning_budget_tokens", "verbosity"]
+    @State private var promptRequest: PromptPickerRequest?
+    private static let fields = ["model", "providerId", "max_tokens", "temperature", "reasoning_effort", "reasoning_budget_tokens", "verbosity", "systemPrompt"]
     init(state: ChatState, draft: ChatConfigDraft, auxiliary: Bool = false, saveAction: ((ChatConfigDraft) throws -> Void)? = nil) {
         self.auxiliary = auxiliary; self.saveAction = saveAction
         self.state = state; _draft = State(initialValue:draft)
@@ -155,10 +156,17 @@ struct ChatConfigView: View {
                 if draft.defaultSettings != nil {
                     Section("新規会話の初期値") {
                         TextField("システム文",text:Binding(get:{draft.defaultSettings?.systemMessage ?? ""},set:{draft.defaultSettings?.systemMessage = $0}),axis:.vertical)
+                        promptLibraryButton
                         Picker("画像品質",selection:Binding(get:{draft.defaultSettings?.imageDetail ?? "auto"},set:{draft.defaultSettings?.imageDetail = $0})) {
                             Text("自動").tag("auto"); Text("低").tag("low"); Text("高").tag("high")
                         }
                         Text("保存済みの会話は変更しません。").font(.footnote).foregroundStyle(.secondary)
+                    }
+                }
+                if draft.defaultSettings == nil && !auxiliary {
+                    Section("システム文") {
+                        TextField("会話のシステム文", text: binding("systemPrompt"), axis: .vertical)
+                        promptLibraryButton
                     }
                 }
                 Picker("実行場所",selection:$modelSource) {
@@ -213,6 +221,14 @@ struct ChatConfigView: View {
                     }
                 } catch { errorMessage = error.localizedDescription }
             }
+            .sheet(item: $promptRequest) { request in
+                PromptPickerView(request: request) { result in
+                    guard case .system(let applied) = result else { throw ExchangeError.invalid("システム文がありません") }
+                    try state.validatePromptPicker(request, input: .system(text: systemText))
+                    if draft.defaultSettings != nil { draft.defaultSettings?.systemMessage = applied }
+                    else { values["systemPrompt"] = applied }
+                }
+            }
             .sheet(isPresented:$showsLocalModelSettings) { NavigationStack { LocalModelSettingsView(state:state) } }
             .sheet(isPresented:$showsModels) {
                 ProviderModelsView(state:state,draft:$draft) { row in
@@ -225,6 +241,15 @@ struct ChatConfigView: View {
                 ToolbarItem(placement:.confirmationAction) { Button("保存",action:save).disabled(copyingModel) }
             }
         }
+    }
+    private var systemText: String { draft.defaultSettings?.systemMessage ?? values["systemPrompt"] ?? "" }
+    private var promptLibraryButton: some View {
+        Button("ライブラリから挿入") {
+            do { promptRequest = try state.promptPickerRequest(.system(text: systemText)) }
+            catch { errorMessage = error.localizedDescription }
+        }
+        .frame(minHeight: 44)
+        .disabled(state.generation != nil)
     }
     private func editedDraft() throws -> ChatConfigDraft {
             var changed = draft

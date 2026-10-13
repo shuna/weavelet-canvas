@@ -24,6 +24,7 @@ export { libraryOperation, libraryDefaults } from './library';
 export { messageEdit } from './editing';
 export { branchLayout, branchEnsure, branchDiff, branchPath, branchNodeDiffPaths } from './branchLayout';
 export { promptLibraryOperation } from './promptLibrary';
+export { promptApplicationOperation } from './promptApplication';
 export { documentOperation, messageAttributesOperation } from './document';
 
 const global = globalThis as any;

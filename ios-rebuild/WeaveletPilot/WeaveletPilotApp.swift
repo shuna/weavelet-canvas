@@ -56,6 +56,7 @@ struct ChatView: View {
     @State private var clipboardDraft: BranchClipboardDraft?
     @State private var summaryDraft: ConversationSummaryDraft?
     @State private var evaluationDraft: ConversationEvaluationDraft?
+    @State private var composerPromptRequest: PromptPickerRequest?
 
     var body: some View {
         let closeLibrary: (() -> Void)? = horizontalSizeClass == .compact ? { preferredCompactColumn = .detail } : nil
@@ -204,6 +205,14 @@ struct ChatView: View {
         } message: { Text(pendingPartialImport?.message ?? "") }
         .sheet(item: $importPreview) { preview in FileImportView(state: state, preview: preview) }
         .overlay { if isPreparingImport { ProgressView("取り込み内容を確認中").padding().background(.regularMaterial, in: RoundedRectangle(cornerRadius: 12)) } }
+        .sheet(item: $composerPromptRequest) { request in
+            PromptPickerView(request: request) { result in
+                guard case .command(let applied) = result, case .command(let parts, let text) = request.input else { throw ExchangeError.invalid("入力先がありません") }
+                let current = state.composerDraft(chatID: request.chatID)
+                try state.validatePromptPicker(request, input: .command(parts: current.parts, text: current.text))
+                try state.setComposerPrompt(applied, chatID: request.chatID, expected: ComposerDraft(parts: parts, text: text, hasMeaningfulContent: false))
+            }
+        }
         .sheet(isPresented: $showsSearch) {
             ChatSearchView(state: state, initialMode: searchMode) { result, mode in
                 try state.navigate(chatID: result.chatID, nodeID: result.nodeID, source: mode == .grep ? .grep : .search)
@@ -394,6 +403,14 @@ struct ChatView: View {
                 .lineLimit(3...8).textFieldStyle(.roundedBorder)
                 .disabled(state.generation != nil)
             HStack(alignment:.bottom,spacing:8) {
+                Button {
+                    do {
+                        let input = state.composerDraft(chatID: conversation.id)
+                        composerPromptRequest = try state.promptPickerRequest(.command(parts: input.parts, text: input.text))
+                    } catch { errorMessage = error.localizedDescription }
+                } label: { Text("/").frame(width: 44, height: 44) }
+                .accessibilityLabel("プロンプトライブラリ")
+                .disabled(state.generation != nil)
                 Button {
                     do { configDraft = try state.chatConfigDraft() }
                     catch { errorMessage = error.localizedDescription }
@@ -1355,6 +1372,7 @@ struct MessageEditorView: View {
     @State private var errorMessage: String?
     @State private var showsPruneConfirmation = false
     @State private var savedWarning: String?
+    @State private var promptRequest: PromptPickerRequest?
 
     var body: some View {
         NavigationStack {
@@ -1367,6 +1385,14 @@ struct MessageEditorView: View {
                     }
                 }
                 Section("本文") {
+                    Button {
+                        do {
+                            guard try state.exchange?.source.encoded() == draft.source.encoded() else { throw ExchangeError.invalid("会話が変更されました。本文を開き直してください") }
+                            promptRequest = try state.promptPickerRequest(.command(parts: draft.parts, text: draft.text))
+                        } catch { errorMessage = error.localizedDescription }
+                    } label: { Text("/").frame(minWidth: 44, minHeight: 44) }
+                    .accessibilityLabel("プロンプトライブラリ")
+                    .disabled(state.generation != nil)
                     TextEditor(text: $draft.text).frame(minHeight: 220)
                     if !draft.isInsertion {
                         Text("最初のテキストを編集します。他の本文要素は保持します。")
@@ -1401,6 +1427,15 @@ struct MessageEditorView: View {
             .alert("本文を保存しました", isPresented: Binding(get: { savedWarning != nil }, set: { if !$0 { savedWarning = nil } })) {
                 Button("閉じる") { dismiss() }
             } message: { Text(savedWarning ?? "") }
+            .sheet(item: $promptRequest) { request in
+                PromptPickerView(request: request) { result in
+                    guard case .command(let applied) = result else { throw ExchangeError.invalid("本文がありません") }
+                    try state.validatePromptPicker(request, input: .command(parts: draft.parts, text: draft.text))
+                    guard try state.exchange?.source.encoded() == draft.source.encoded() else { throw ExchangeError.invalid("会話が変更されました。本文を開き直してください") }
+                    draft.promptParts = applied.parts
+                    draft.text = applied.text
+                }
+            }
             .toolbar { ToolbarItem(placement: .cancellationAction) { Button("取消") { dismiss() } } }
         }
     }

@@ -33,6 +33,9 @@ if (check) {
 }
 const sourceNames = ['sync', 'replay', 'merge', 'mergeBranches', 'records', 'decodeParts', 'crypto'];
 const inputs = { ...initialStateInputs };
+for (const input of ['src/components/Chat/ChatContent/Message/CommandPrompt/CommandPrompt.tsx', 'src/components/ConfigMenu/ConfigMenu.tsx']) {
+  inputs[input] = createHash('sha256').update(readFileSync(path.join(webRoot, input))).digest('hex');
+}
 for (const name of sourceNames) {
   const input = `src/store/storage/google/${name}.ts`;
   copyFileSync(path.join(webRoot, input), path.join(root, 'source', `${name}.ts`));
@@ -119,7 +122,7 @@ for (const pkg of [...packages].sort()) {
     if (!existsSync(file)) continue;
     provenance.dependencyInputs[relative] = createHash('sha256').update(readFileSync(file)).digest('hex');
     if (name === 'package.json') continue;
-    const license = readFileSync(file, 'utf8');
+    const license = readFileSync(file, 'utf8').replaceAll('\r\n', '\n');
     writeFileSync(path.join(root, 'licenses', `${pkg.replaceAll('/', '-')}-${name}.txt`), license);
     licenses.push(`/* Dependency ${pkg}\n${license.replaceAll('*/', '* /')}\n*/`);
   }

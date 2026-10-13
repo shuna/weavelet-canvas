@@ -534,7 +534,7 @@ final class ChatState: ObservableObject {
     func saveMessageReplacingAndPruning(_ draft: MessageDraft, newIDs: [String]? = nil, now: Double = Date().timeIntervalSince1970 * 1000) throws -> NodeTransformResult {
         guard let nodeID = draft.nodeID else { throw ExchangeError.invalid("対象メッセージがありません") }
         return try saveTreeEdit(source: draft.source, chatID: draft.chatID, nodeID: nodeID, path: draft.path, operation: "replaceAndPrune", role: draft.role,
-                               parts: draft.originalParts, editedText: draft.text, removeCount: draft.removeCount, newIDs: newIDs, now: now)
+                               parts: draft.parts, editedText: draft.text, removeCount: draft.removeCount, newIDs: newIDs, now: now)
     }
     private func saveTreeEdit(source: OrderedJSON, chatID: String, nodeID: String, path: [String], operation: String,
                               direction: NodeMoveDirection? = nil, role: String? = nil, parts: OrderedJSON? = nil, editedText: String? = nil,
@@ -562,7 +562,7 @@ final class ChatState: ObservableObject {
         let ids = newIDs ?? (0..<needed).map { _ in UUID().uuidString.lowercased() }
         var history: MessageEditing.HistoryState?
         let source = try MessageEditing.save(in: exchange.source, chatID: draft.chatID, nodeID: draft.nodeID, viewingPath: draft.path, role: draft.role,
-                                             parts: draft.originalParts, editedText: draft.text, mode: mode, newIDs: ids, now: now, history: editingHistory) { history = $0 }
+                                             parts: draft.parts, editedText: draft.text, mode: mode, newIDs: ids, now: now, history: editingHistory) { history = $0 }
         try applyLibrary(source, selectedID: draft.chatID, resetViewFor: draft.chatID, editing: history, now: now)
     }
 
@@ -614,6 +614,14 @@ final class ChatState: ObservableObject {
     func composerImageDetail(chatID: String) throws -> String {
         guard let chat = try exchange?.source.required("chats").array("chats").first(where: { try $0.required("id").string("id").utf8.elementsEqual(chatID.utf8) }) else { throw ExchangeError.invalid("入力先の会話がありません") }
         return try chat["imageDetail"]?.string("imageDetail") ?? ChatDefaults.webInitial().imageDetail
+    }
+    func setComposerPrompt(_ applied: ComposerDraft, chatID: String, expected: ComposerDraft) throws {
+        let current = composerDraft(chatID: chatID)
+        guard generation == nil, selectedConversationID.utf8.elementsEqual(chatID.utf8),
+              current.text.utf8.elementsEqual(expected.text.utf8), try current.parts.encoded() == expected.parts.encoded() else {
+            throw ExchangeError.invalid("入力または会話が変更されました。プロンプトを選び直してください")
+        }
+        composerDrafts[Data(chatID.utf8)] = applied
     }
     func setComposerText(chatID: String, text: String) {
         var draft = composerDraft(chatID:chatID)

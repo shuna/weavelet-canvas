@@ -7562,6 +7562,427 @@ var WeaveletGoogleSync = (() => {
     }
   });
 
+  // ../../var/folders/1r/xtsjvqk90yzdyjq5jfjn9phw0000gn/T/weavelet-main-integration-ew768sf2/worktree/node_modules/remove-accents/index.js
+  var require_remove_accents = __commonJS({
+    "../../var/folders/1r/xtsjvqk90yzdyjq5jfjn9phw0000gn/T/weavelet-main-integration-ew768sf2/worktree/node_modules/remove-accents/index.js"(exports, module) {
+      var characterMap = {
+        "\xC0": "A",
+        "\xC1": "A",
+        "\xC2": "A",
+        "\xC3": "A",
+        "\xC4": "A",
+        "\xC5": "A",
+        "\u1EA4": "A",
+        "\u1EAE": "A",
+        "\u1EB2": "A",
+        "\u1EB4": "A",
+        "\u1EB6": "A",
+        "\xC6": "AE",
+        "\u1EA6": "A",
+        "\u1EB0": "A",
+        "\u0202": "A",
+        "\xC7": "C",
+        "\u1E08": "C",
+        "\xC8": "E",
+        "\xC9": "E",
+        "\xCA": "E",
+        "\xCB": "E",
+        "\u1EBE": "E",
+        "\u1E16": "E",
+        "\u1EC0": "E",
+        "\u1E14": "E",
+        "\u1E1C": "E",
+        "\u0206": "E",
+        "\xCC": "I",
+        "\xCD": "I",
+        "\xCE": "I",
+        "\xCF": "I",
+        "\u1E2E": "I",
+        "\u020A": "I",
+        "\xD0": "D",
+        "\xD1": "N",
+        "\xD2": "O",
+        "\xD3": "O",
+        "\xD4": "O",
+        "\xD5": "O",
+        "\xD6": "O",
+        "\xD8": "O",
+        "\u1ED0": "O",
+        "\u1E4C": "O",
+        "\u1E52": "O",
+        "\u020E": "O",
+        "\xD9": "U",
+        "\xDA": "U",
+        "\xDB": "U",
+        "\xDC": "U",
+        "\xDD": "Y",
+        "\xE0": "a",
+        "\xE1": "a",
+        "\xE2": "a",
+        "\xE3": "a",
+        "\xE4": "a",
+        "\xE5": "a",
+        "\u1EA5": "a",
+        "\u1EAF": "a",
+        "\u1EB3": "a",
+        "\u1EB5": "a",
+        "\u1EB7": "a",
+        "\xE6": "ae",
+        "\u1EA7": "a",
+        "\u1EB1": "a",
+        "\u0203": "a",
+        "\xE7": "c",
+        "\u1E09": "c",
+        "\xE8": "e",
+        "\xE9": "e",
+        "\xEA": "e",
+        "\xEB": "e",
+        "\u1EBF": "e",
+        "\u1E17": "e",
+        "\u1EC1": "e",
+        "\u1E15": "e",
+        "\u1E1D": "e",
+        "\u0207": "e",
+        "\xEC": "i",
+        "\xED": "i",
+        "\xEE": "i",
+        "\xEF": "i",
+        "\u1E2F": "i",
+        "\u020B": "i",
+        "\xF0": "d",
+        "\xF1": "n",
+        "\xF2": "o",
+        "\xF3": "o",
+        "\xF4": "o",
+        "\xF5": "o",
+        "\xF6": "o",
+        "\xF8": "o",
+        "\u1ED1": "o",
+        "\u1E4D": "o",
+        "\u1E53": "o",
+        "\u020F": "o",
+        "\xF9": "u",
+        "\xFA": "u",
+        "\xFB": "u",
+        "\xFC": "u",
+        "\xFD": "y",
+        "\xFF": "y",
+        "\u0100": "A",
+        "\u0101": "a",
+        "\u0102": "A",
+        "\u0103": "a",
+        "\u0104": "A",
+        "\u0105": "a",
+        "\u0106": "C",
+        "\u0107": "c",
+        "\u0108": "C",
+        "\u0109": "c",
+        "\u010A": "C",
+        "\u010B": "c",
+        "\u010C": "C",
+        "\u010D": "c",
+        "C\u0306": "C",
+        "c\u0306": "c",
+        "\u010E": "D",
+        "\u010F": "d",
+        "\u0110": "D",
+        "\u0111": "d",
+        "\u0112": "E",
+        "\u0113": "e",
+        "\u0114": "E",
+        "\u0115": "e",
+        "\u0116": "E",
+        "\u0117": "e",
+        "\u0118": "E",
+        "\u0119": "e",
+        "\u011A": "E",
+        "\u011B": "e",
+        "\u011C": "G",
+        "\u01F4": "G",
+        "\u011D": "g",
+        "\u01F5": "g",
+        "\u011E": "G",
+        "\u011F": "g",
+        "\u0120": "G",
+        "\u0121": "g",
+        "\u0122": "G",
+        "\u0123": "g",
+        "\u0124": "H",
+        "\u0125": "h",
+        "\u0126": "H",
+        "\u0127": "h",
+        "\u1E2A": "H",
+        "\u1E2B": "h",
+        "\u0128": "I",
+        "\u0129": "i",
+        "\u012A": "I",
+        "\u012B": "i",
+        "\u012C": "I",
+        "\u012D": "i",
+        "\u012E": "I",
+        "\u012F": "i",
+        "\u0130": "I",
+        "\u0131": "i",
+        "\u0132": "IJ",
+        "\u0133": "ij",
+        "\u0134": "J",
+        "\u0135": "j",
+        "\u0136": "K",
+        "\u0137": "k",
+        "\u1E30": "K",
+        "\u1E31": "k",
+        "K\u0306": "K",
+        "k\u0306": "k",
+        "\u0139": "L",
+        "\u013A": "l",
+        "\u013B": "L",
+        "\u013C": "l",
+        "\u013D": "L",
+        "\u013E": "l",
+        "\u013F": "L",
+        "\u0140": "l",
+        "\u0141": "l",
+        "\u0142": "l",
+        "\u1E3E": "M",
+        "\u1E3F": "m",
+        "M\u0306": "M",
+        "m\u0306": "m",
+        "\u0143": "N",
+        "\u0144": "n",
+        "\u0145": "N",
+        "\u0146": "n",
+        "\u0147": "N",
+        "\u0148": "n",
+        "\u0149": "n",
+        "N\u0306": "N",
+        "n\u0306": "n",
+        "\u014C": "O",
+        "\u014D": "o",
+        "\u014E": "O",
+        "\u014F": "o",
+        "\u0150": "O",
+        "\u0151": "o",
+        "\u0152": "OE",
+        "\u0153": "oe",
+        "P\u0306": "P",
+        "p\u0306": "p",
+        "\u0154": "R",
+        "\u0155": "r",
+        "\u0156": "R",
+        "\u0157": "r",
+        "\u0158": "R",
+        "\u0159": "r",
+        "R\u0306": "R",
+        "r\u0306": "r",
+        "\u0212": "R",
+        "\u0213": "r",
+        "\u015A": "S",
+        "\u015B": "s",
+        "\u015C": "S",
+        "\u015D": "s",
+        "\u015E": "S",
+        "\u0218": "S",
+        "\u0219": "s",
+        "\u015F": "s",
+        "\u0160": "S",
+        "\u0161": "s",
+        "\u0162": "T",
+        "\u0163": "t",
+        "\u021B": "t",
+        "\u021A": "T",
+        "\u0164": "T",
+        "\u0165": "t",
+        "\u0166": "T",
+        "\u0167": "t",
+        "T\u0306": "T",
+        "t\u0306": "t",
+        "\u0168": "U",
+        "\u0169": "u",
+        "\u016A": "U",
+        "\u016B": "u",
+        "\u016C": "U",
+        "\u016D": "u",
+        "\u016E": "U",
+        "\u016F": "u",
+        "\u0170": "U",
+        "\u0171": "u",
+        "\u0172": "U",
+        "\u0173": "u",
+        "\u0216": "U",
+        "\u0217": "u",
+        "V\u0306": "V",
+        "v\u0306": "v",
+        "\u0174": "W",
+        "\u0175": "w",
+        "\u1E82": "W",
+        "\u1E83": "w",
+        "X\u0306": "X",
+        "x\u0306": "x",
+        "\u0176": "Y",
+        "\u0177": "y",
+        "\u0178": "Y",
+        "Y\u0306": "Y",
+        "y\u0306": "y",
+        "\u0179": "Z",
+        "\u017A": "z",
+        "\u017B": "Z",
+        "\u017C": "z",
+        "\u017D": "Z",
+        "\u017E": "z",
+        "\u017F": "s",
+        "\u0192": "f",
+        "\u01A0": "O",
+        "\u01A1": "o",
+        "\u01AF": "U",
+        "\u01B0": "u",
+        "\u01CD": "A",
+        "\u01CE": "a",
+        "\u01CF": "I",
+        "\u01D0": "i",
+        "\u01D1": "O",
+        "\u01D2": "o",
+        "\u01D3": "U",
+        "\u01D4": "u",
+        "\u01D5": "U",
+        "\u01D6": "u",
+        "\u01D7": "U",
+        "\u01D8": "u",
+        "\u01D9": "U",
+        "\u01DA": "u",
+        "\u01DB": "U",
+        "\u01DC": "u",
+        "\u1EE8": "U",
+        "\u1EE9": "u",
+        "\u1E78": "U",
+        "\u1E79": "u",
+        "\u01FA": "A",
+        "\u01FB": "a",
+        "\u01FC": "AE",
+        "\u01FD": "ae",
+        "\u01FE": "O",
+        "\u01FF": "o",
+        "\xDE": "TH",
+        "\xFE": "th",
+        "\u1E54": "P",
+        "\u1E55": "p",
+        "\u1E64": "S",
+        "\u1E65": "s",
+        "X\u0301": "X",
+        "x\u0301": "x",
+        "\u0403": "\u0413",
+        "\u0453": "\u0433",
+        "\u040C": "\u041A",
+        "\u045C": "\u043A",
+        "A\u030B": "A",
+        "a\u030B": "a",
+        "E\u030B": "E",
+        "e\u030B": "e",
+        "I\u030B": "I",
+        "i\u030B": "i",
+        "\u01F8": "N",
+        "\u01F9": "n",
+        "\u1ED2": "O",
+        "\u1ED3": "o",
+        "\u1E50": "O",
+        "\u1E51": "o",
+        "\u1EEA": "U",
+        "\u1EEB": "u",
+        "\u1E80": "W",
+        "\u1E81": "w",
+        "\u1EF2": "Y",
+        "\u1EF3": "y",
+        "\u0200": "A",
+        "\u0201": "a",
+        "\u0204": "E",
+        "\u0205": "e",
+        "\u0208": "I",
+        "\u0209": "i",
+        "\u020C": "O",
+        "\u020D": "o",
+        "\u0210": "R",
+        "\u0211": "r",
+        "\u0214": "U",
+        "\u0215": "u",
+        "B\u030C": "B",
+        "b\u030C": "b",
+        "\u010C\u0323": "C",
+        "\u010D\u0323": "c",
+        "\xCA\u030C": "E",
+        "\xEA\u030C": "e",
+        "F\u030C": "F",
+        "f\u030C": "f",
+        "\u01E6": "G",
+        "\u01E7": "g",
+        "\u021E": "H",
+        "\u021F": "h",
+        "J\u030C": "J",
+        "\u01F0": "j",
+        "\u01E8": "K",
+        "\u01E9": "k",
+        "M\u030C": "M",
+        "m\u030C": "m",
+        "P\u030C": "P",
+        "p\u030C": "p",
+        "Q\u030C": "Q",
+        "q\u030C": "q",
+        "\u0158\u0329": "R",
+        "\u0159\u0329": "r",
+        "\u1E66": "S",
+        "\u1E67": "s",
+        "V\u030C": "V",
+        "v\u030C": "v",
+        "W\u030C": "W",
+        "w\u030C": "w",
+        "X\u030C": "X",
+        "x\u030C": "x",
+        "Y\u030C": "Y",
+        "y\u030C": "y",
+        "A\u0327": "A",
+        "a\u0327": "a",
+        "B\u0327": "B",
+        "b\u0327": "b",
+        "\u1E10": "D",
+        "\u1E11": "d",
+        "\u0228": "E",
+        "\u0229": "e",
+        "\u0190\u0327": "E",
+        "\u025B\u0327": "e",
+        "\u1E28": "H",
+        "\u1E29": "h",
+        "I\u0327": "I",
+        "i\u0327": "i",
+        "\u0197\u0327": "I",
+        "\u0268\u0327": "i",
+        "M\u0327": "M",
+        "m\u0327": "m",
+        "O\u0327": "O",
+        "o\u0327": "o",
+        "Q\u0327": "Q",
+        "q\u0327": "q",
+        "U\u0327": "U",
+        "u\u0327": "u",
+        "X\u0327": "X",
+        "x\u0327": "x",
+        "Z\u0327": "Z",
+        "z\u0327": "z"
+      };
+      var chars2 = Object.keys(characterMap).join("|");
+      var allAccents = new RegExp(chars2, "g");
+      var firstAccent = new RegExp(chars2, "");
+      var removeAccents2 = function(string) {
+        return string.replace(allAccents, function(match) {
+          return characterMap[match];
+        });
+      };
+      var hasAccents = function(string) {
+        return !!string.match(firstAccent);
+      };
+      module.exports = removeAccents2;
+      module.exports.has = hasAccents;
+      module.exports.remove = removeAccents2;
+    }
+  });
+
   // ../../var/folders/1r/xtsjvqk90yzdyjq5jfjn9phw0000gn/T/weavelet-main-integration-ew768sf2/worktree/node_modules/lz-string/libs/lz-string.js
   var require_lz_string = __commonJS({
     "../../var/folders/1r/xtsjvqk90yzdyjq5jfjn9phw0000gn/T/weavelet-main-integration-ew768sf2/worktree/node_modules/lz-string/libs/lz-string.js"(exports, module) {
@@ -8070,6 +8491,7 @@ var WeaveletGoogleSync = (() => {
     navigationOperation: () => navigationOperation,
     nodeOptions: () => nodeOptions,
     nodeRemoval: () => nodeRemoval,
+    promptApplicationOperation: () => promptApplicationOperation,
     promptLibraryOperation: () => promptLibraryOperation,
     providerModelList: () => providerModelList,
     recordsResult: () => recordsResult,
@@ -22002,6 +22424,312 @@ ${JSON.stringify(input.length === 1 ? input[0] : input)}`;
     }
   }
 
+  // ../../var/folders/1r/xtsjvqk90yzdyjq5jfjn9phw0000gn/T/weavelet-main-integration-ew768sf2/worktree/node_modules/@babel/runtime/helpers/esm/extends.js
+  function _extends() {
+    return _extends = Object.assign ? Object.assign.bind() : function(n) {
+      for (var e = 1; e < arguments.length; e++) {
+        var t2 = arguments[e];
+        for (var r in t2)
+          ({}).hasOwnProperty.call(t2, r) && (n[r] = t2[r]);
+      }
+      return n;
+    }, _extends.apply(null, arguments);
+  }
+
+  // ../../var/folders/1r/xtsjvqk90yzdyjq5jfjn9phw0000gn/T/weavelet-main-integration-ew768sf2/worktree/node_modules/match-sorter/dist/match-sorter.esm.js
+  var import_remove_accents = __toESM(require_remove_accents());
+  var rankings = {
+    CASE_SENSITIVE_EQUAL: 7,
+    EQUAL: 6,
+    STARTS_WITH: 5,
+    WORD_STARTS_WITH: 4,
+    CONTAINS: 3,
+    ACRONYM: 2,
+    MATCHES: 1,
+    NO_MATCH: 0
+  };
+  matchSorter.rankings = rankings;
+  var defaultBaseSortFn = function defaultBaseSortFn2(a, b) {
+    return String(a.rankedValue).localeCompare(String(b.rankedValue));
+  };
+  function matchSorter(items, value, options) {
+    if (options === void 0) {
+      options = {};
+    }
+    var _options = options, keys = _options.keys, _options$threshold = _options.threshold, threshold = _options$threshold === void 0 ? rankings.MATCHES : _options$threshold, _options$baseSort = _options.baseSort, baseSort = _options$baseSort === void 0 ? defaultBaseSortFn : _options$baseSort, _options$sorter = _options.sorter, sorter = _options$sorter === void 0 ? function(matchedItems2) {
+      return matchedItems2.sort(function(a, b) {
+        return sortRankedValues(a, b, baseSort);
+      });
+    } : _options$sorter;
+    var matchedItems = items.reduce(reduceItemsToRanked, []);
+    return sorter(matchedItems).map(function(_ref) {
+      var item = _ref.item;
+      return item;
+    });
+    function reduceItemsToRanked(matches, item, index) {
+      var rankingInfo = getHighestRanking(item, keys, value, options);
+      var rank = rankingInfo.rank, _rankingInfo$keyThres = rankingInfo.keyThreshold, keyThreshold = _rankingInfo$keyThres === void 0 ? threshold : _rankingInfo$keyThres;
+      if (rank >= keyThreshold) {
+        matches.push(_extends({}, rankingInfo, {
+          item,
+          index
+        }));
+      }
+      return matches;
+    }
+  }
+  function getHighestRanking(item, keys, value, options) {
+    if (!keys) {
+      var stringItem = item;
+      return {
+        // ends up being duplicate of 'item' in matches but consistent
+        rankedValue: stringItem,
+        rank: getMatchRanking(stringItem, value, options),
+        keyIndex: -1,
+        keyThreshold: options.threshold
+      };
+    }
+    var valuesToRank = getAllValuesToRank(item, keys);
+    return valuesToRank.reduce(function(_ref2, _ref3, i) {
+      var rank = _ref2.rank, rankedValue = _ref2.rankedValue, keyIndex = _ref2.keyIndex, keyThreshold = _ref2.keyThreshold;
+      var itemValue = _ref3.itemValue, attributes = _ref3.attributes;
+      var newRank = getMatchRanking(itemValue, value, options);
+      var newRankedValue = rankedValue;
+      var minRanking = attributes.minRanking, maxRanking = attributes.maxRanking, threshold = attributes.threshold;
+      if (newRank < minRanking && newRank >= rankings.MATCHES) {
+        newRank = minRanking;
+      } else if (newRank > maxRanking) {
+        newRank = maxRanking;
+      }
+      if (newRank > rank) {
+        rank = newRank;
+        keyIndex = i;
+        keyThreshold = threshold;
+        newRankedValue = itemValue;
+      }
+      return {
+        rankedValue: newRankedValue,
+        rank,
+        keyIndex,
+        keyThreshold
+      };
+    }, {
+      rankedValue: item,
+      rank: rankings.NO_MATCH,
+      keyIndex: -1,
+      keyThreshold: options.threshold
+    });
+  }
+  function getMatchRanking(testString, stringToRank, options) {
+    testString = prepareValueForComparison(testString, options);
+    stringToRank = prepareValueForComparison(stringToRank, options);
+    if (stringToRank.length > testString.length) {
+      return rankings.NO_MATCH;
+    }
+    if (testString === stringToRank) {
+      return rankings.CASE_SENSITIVE_EQUAL;
+    }
+    testString = testString.toLowerCase();
+    stringToRank = stringToRank.toLowerCase();
+    if (testString === stringToRank) {
+      return rankings.EQUAL;
+    }
+    if (testString.startsWith(stringToRank)) {
+      return rankings.STARTS_WITH;
+    }
+    if (testString.includes(" " + stringToRank)) {
+      return rankings.WORD_STARTS_WITH;
+    }
+    if (testString.includes(stringToRank)) {
+      return rankings.CONTAINS;
+    } else if (stringToRank.length === 1) {
+      return rankings.NO_MATCH;
+    }
+    if (getAcronym(testString).includes(stringToRank)) {
+      return rankings.ACRONYM;
+    }
+    return getClosenessRanking(testString, stringToRank);
+  }
+  function getAcronym(string) {
+    var acronym = "";
+    var wordsInString = string.split(" ");
+    wordsInString.forEach(function(wordInString) {
+      var splitByHyphenWords = wordInString.split("-");
+      splitByHyphenWords.forEach(function(splitByHyphenWord) {
+        acronym += splitByHyphenWord.substr(0, 1);
+      });
+    });
+    return acronym;
+  }
+  function getClosenessRanking(testString, stringToRank) {
+    var matchingInOrderCharCount = 0;
+    var charNumber = 0;
+    function findMatchingCharacter(matchChar2, string, index) {
+      for (var j = index, J2 = string.length; j < J2; j++) {
+        var stringChar = string[j];
+        if (stringChar === matchChar2) {
+          matchingInOrderCharCount += 1;
+          return j + 1;
+        }
+      }
+      return -1;
+    }
+    function getRanking(spread2) {
+      var spreadPercentage = 1 / spread2;
+      var inOrderPercentage = matchingInOrderCharCount / stringToRank.length;
+      var ranking = rankings.MATCHES + inOrderPercentage * spreadPercentage;
+      return ranking;
+    }
+    var firstIndex = findMatchingCharacter(stringToRank[0], testString, 0);
+    if (firstIndex < 0) {
+      return rankings.NO_MATCH;
+    }
+    charNumber = firstIndex;
+    for (var i = 1, I = stringToRank.length; i < I; i++) {
+      var matchChar = stringToRank[i];
+      charNumber = findMatchingCharacter(matchChar, testString, charNumber);
+      var found = charNumber > -1;
+      if (!found) {
+        return rankings.NO_MATCH;
+      }
+    }
+    var spread = charNumber - firstIndex;
+    return getRanking(spread);
+  }
+  function sortRankedValues(a, b, baseSort) {
+    var aFirst = -1;
+    var bFirst = 1;
+    var aRank = a.rank, aKeyIndex = a.keyIndex;
+    var bRank = b.rank, bKeyIndex = b.keyIndex;
+    var same = aRank === bRank;
+    if (same) {
+      if (aKeyIndex === bKeyIndex) {
+        return baseSort(a, b);
+      } else {
+        return aKeyIndex < bKeyIndex ? aFirst : bFirst;
+      }
+    } else {
+      return aRank > bRank ? aFirst : bFirst;
+    }
+  }
+  function prepareValueForComparison(value, _ref4) {
+    var keepDiacritics = _ref4.keepDiacritics;
+    value = "" + value;
+    if (!keepDiacritics) {
+      value = (0, import_remove_accents.default)(value);
+    }
+    return value;
+  }
+  function getItemValues(item, key) {
+    if (typeof key === "object") {
+      key = key.key;
+    }
+    var value;
+    if (typeof key === "function") {
+      value = key(item);
+    } else if (item == null) {
+      value = null;
+    } else if (Object.hasOwnProperty.call(item, key)) {
+      value = item[key];
+    } else if (key.includes(".")) {
+      return getNestedValues(key, item);
+    } else {
+      value = null;
+    }
+    if (value == null) {
+      return [];
+    }
+    if (Array.isArray(value)) {
+      return value;
+    }
+    return [String(value)];
+  }
+  function getNestedValues(path, item) {
+    var keys = path.split(".");
+    var values = [item];
+    for (var i = 0, I = keys.length; i < I; i++) {
+      var nestedKey = keys[i];
+      var nestedValues = [];
+      for (var j = 0, J2 = values.length; j < J2; j++) {
+        var nestedItem = values[j];
+        if (nestedItem == null)
+          continue;
+        if (Object.hasOwnProperty.call(nestedItem, nestedKey)) {
+          var nestedValue = nestedItem[nestedKey];
+          if (nestedValue != null) {
+            nestedValues.push(nestedValue);
+          }
+        } else if (nestedKey === "*") {
+          nestedValues = nestedValues.concat(nestedItem);
+        }
+      }
+      values = nestedValues;
+    }
+    if (Array.isArray(values[0])) {
+      var result3 = [];
+      return result3.concat.apply(result3, values);
+    }
+    return values;
+  }
+  function getAllValuesToRank(item, keys) {
+    var allValues = [];
+    for (var j = 0, J2 = keys.length; j < J2; j++) {
+      var key = keys[j];
+      var attributes = getKeyAttributes(key);
+      var itemValues = getItemValues(item, key);
+      for (var i = 0, I = itemValues.length; i < I; i++) {
+        allValues.push({
+          itemValue: itemValues[i],
+          attributes
+        });
+      }
+    }
+    return allValues;
+  }
+  var defaultKeyAttributes = {
+    maxRanking: Infinity,
+    minRanking: -Infinity
+  };
+  function getKeyAttributes(key) {
+    if (typeof key === "string") {
+      return defaultKeyAttributes;
+    }
+    return _extends({}, defaultKeyAttributes, key);
+  }
+
+  // src/utils/promptApplication.ts
+  function appendSystemLibraryPrompt(previous, text) {
+    return previous ? previous + "\n\n" + text : text;
+  }
+  function appendCommandLibraryPrompt(previous, text) {
+    const first = previous[0];
+    if (first?.type === "text") {
+      return [{ ...first, text: first.text + text }, ...previous.slice(1)];
+    }
+    return [{ type: "text", text }, ...previous];
+  }
+  function searchPromptLibrary(prompts, query) {
+    return matchSorter(prompts, query, { keys: ["name"] });
+  }
+
+  // shared/google-sync/promptApplication.ts
+  function promptApplicationOperation(json) {
+    const input = JSON.parse(json);
+    switch (input.operation) {
+      case "search":
+        return JSON.stringify(searchPromptLibrary(input.prompts, input.query));
+      case "system":
+        return JSON.stringify(appendSystemLibraryPrompt(input.previous, input.text));
+      case "command": {
+        const current = input.editedText === void 0 ? input.parts : replaceTextValue(input.parts, input.editedText);
+        const parts = appendCommandLibraryPrompt(current, input.text);
+        return JSON.stringify({ parts, text: textValueOf(parts), hasMeaningfulContent: hasMeaningfulContent(parts) });
+      }
+      default:
+        throw new Error("Unknown prompt application operation.");
+    }
+  }
+
   // src/utils/syncDocument.ts
   var import_lodash2 = __toESM(require_lodash(), 1);
 
@@ -24564,6 +25292,29 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
 */
+/* Dependency match-sorter
+The MIT License (MIT)
+Copyright (c) 2020 Kent C. Dodds
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
+*/
 /* Dependency papaparse
 The MIT License (MIT)
 
@@ -24585,5 +25336,30 @@ FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR
 COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER
 IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
 CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+
+*/
+/* Dependency remove-accents
+The MIT License (MIT)
+
+Copyright (c) 2015 Marin Atanasov
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
 
 */

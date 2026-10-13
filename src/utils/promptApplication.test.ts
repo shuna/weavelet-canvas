@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { ContentInterface, TextContentInterface } from '@type/chat';
-import { appendCommandLibraryPrompt, appendSystemLibraryPrompt } from './promptApplication';
+import { appendCommandLibraryPrompt, appendSystemLibraryPrompt, searchPromptLibrary } from './promptApplication';
 
 describe('system prompt library insertion from SystemPromptField.onInsert', () => {
   it.each([
@@ -67,5 +67,22 @@ describe('command prompt insertion from CommandPrompt application callback', () 
     expect(result[1]).toBe(first);
     expect(result[2]).toBe(laterText);
     expect(previous).toEqual(before);
+  });
+});
+
+// The real CommandPrompt caller uses this helper with the installed match-sorter.
+describe('prompt name search shared with CommandPrompt', () => {
+  it('searches names with accents and duplicate ties without filtering labels or prompt bodies', () => {
+    const prompts = [
+      { name: 'Alpha', id: 'first', label: 'system', prompt: 'body' },
+      { name: 'Alpha', id: 'second', label: 'user', prompt: 'body' },
+      { name: 'café', id: 'accent', prompt: 'body' },
+      { name: 'Cafe', id: 'plain', prompt: 'body' },
+      { name: 'Elsewhere', id: 'body-only', prompt: 'Alpha' },
+    ];
+    expect(searchPromptLibrary(prompts, 'alpha').map(p => p.id)).toEqual(['first', 'second']);
+    expect(searchPromptLibrary(prompts, 'cafe').map(p => p.id)).toEqual(['accent', 'plain']);
+    expect(searchPromptLibrary(prompts, 'body')).toEqual([]);
+    expect(prompts[0].name).toBe('Alpha');
   });
 });
