@@ -231,27 +231,19 @@ final class ChatState: ObservableObject {
             parts = .array([.object([JSONField(key: "type", value: .string("text")), JSONField(key: "text", value: .string(""))])])
             role = "user"
         } else { throw ExchangeError.invalid("node ID") }
-        var draft = MessageDraft(chatID: conversation.id, nodeID: nodeID, path: conversation.visibleMessages.map(\.id), originalParts: parts, originalRole: role, isProtected: protected, role: role, text: "")
+        var draft = try MessageDraft(chatID: conversation.id, nodeID: nodeID, path: conversation.visibleMessages.map(\.id), originalParts: parts, originalRole: role, isProtected: protected, role: role, text: "")
         draft.text = draft.originalText
         return draft
     }
 
     func saveMessage(_ draft: MessageDraft, mode: MessageSaveMode, newIDs: [String]? = nil, now: Double = Date().timeIntervalSince1970 * 1000) throws {
         guard let exchange else { throw ExchangeError.invalid("保存済み会話がありません") }
-        if mode == .append {
-            let meaningful = try draft.parts.array("parts").contains { part in
-                if part["type"] == .string("image_url") { return true }
-                if part["type"] == .string("text"), case .string(let text) = part["text"] { return !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
-                return false
-            }
-            guard meaningful else { throw ExchangeError.invalid("本文を入力してください") }
-        }
         let sourceChat = try exchange.source.required("chats").array("chats").first { try $0.required("id").string("id").utf8.elementsEqual(draft.chatID.utf8) }
         guard let sourceChat else { throw ExchangeError.invalid("chat ID") }
         let needed = try sourceChat["branchTree"] == nil ? sourceChat.required("messages").array("messages").count + 1 : 1
         let ids = newIDs ?? (0..<needed).map { _ in UUID().uuidString.lowercased() }
         let source = try MessageEditing.save(in: exchange.source, chatID: draft.chatID, nodeID: draft.nodeID, viewingPath: draft.path, role: draft.role,
-                                             parts: draft.parts, mode: mode, newIDs: ids, now: now)
+                                             parts: draft.originalParts, editedText: draft.text, mode: mode, newIDs: ids, now: now)
         try applyLibrary(source, selectedID: draft.chatID, resetViewFor: draft.chatID, now: now)
     }
 

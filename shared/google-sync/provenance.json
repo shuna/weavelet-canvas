@@ -17,6 +17,8 @@
     "src/store/storage/google/decodeParts.ts": "5b07a57eea273940ded90e83228af04aeb121a594289a4f831151351919dfe9b",
     "src/store/storage/google/crypto.ts": "c1ca1e5735caf368fde182c900b1dfac2c32f13993b286136e0ae0b392c6041e",
     "src/types/chat.ts": "6895334a5416188b0d37b71b23dc79f67c15c4839e7b6bb041bd78d58a0a9ce4",
+    "src/utils/contentValidation.ts": "b4813de36a5bba6e32af6ab35ce46362ea29cf6d9018e15e416b4589af81c2ba",
+    "src/utils/messageText.ts": "816b71106b7911d0d041af5f47d30ab53945b15a976484cb0191af662acb21ac",
     "src/utils/jsonChanges.ts": "b6b3069fbd3632e4ace431aa4334923955f7a0c933e848f18a985f36de1d2e7b",
     "src/utils/branchUtils.ts": "5779a38a2dd9601635e387d495d3a703360860f016769c60dde3a91b788692a9",
     "src/store/branch-domain.ts": "15d7b6968347427807142dd0e07270543004124b87104fc9684000faaa93fb52",
@@ -47,8 +49,10 @@
   },
   "bundleInputs": {
     "src/types/chat.ts": "6895334a5416188b0d37b71b23dc79f67c15c4839e7b6bb041bd78d58a0a9ce4",
+    "src/utils/contentValidation.ts": "b4813de36a5bba6e32af6ab35ce46362ea29cf6d9018e15e416b4589af81c2ba",
+    "src/utils/messageText.ts": "816b71106b7911d0d041af5f47d30ab53945b15a976484cb0191af662acb21ac",
     "src/utils/jsonChanges.ts": "b6b3069fbd3632e4ace431aa4334923955f7a0c933e848f18a985f36de1d2e7b",
-    "shared/google-sync/editing.ts": "1fb42aa53aa26b83b02db201c82aa72cd971a4883b1f01ad6b27410650b6a03c",
+    "shared/google-sync/editing.ts": "3546931a460bce35ba12bc24768cfb9385ab58b4c3ae0de202446fe10e03b776",
     "shared/google-sync/adapters/uuid.ts": "27a7e045a0ebbb429ad65b4f3d1757f34c5b4187d8555aa523afaf337ddb010a",
     "src/utils/branchUtils.ts": "5779a38a2dd9601635e387d495d3a703360860f016769c60dde3a91b788692a9",
     "src/store/branch-domain.ts": "15d7b6968347427807142dd0e07270543004124b87104fc9684000faaa93fb52",
@@ -87,7 +91,7 @@
     "src/api/requestBody.ts": "fddc6e59dda8049e43d7fc96b91686b611caf98d235a1528c5d083031cb5502d",
     "src/utils/bubbleSummary.ts": "57746185ac8e2cccf69656af0e0d1f229e6f56d4ee47a2c0e6f280d24d8f7702",
     "src/utils/submitContext.ts": "12fc43ead2afc57ce27c3fc290fb95b5774349cc6b12a81ec496f55313e48210",
-    "shared/google-sync/generation.ts": "e4a6ac76b49c27e5bad0be108fa9336971c1d91748989cd9c2b6fced63ae2289",
+    "shared/google-sync/generation.ts": "89f96c231b7674060442d92d1b8e8ac66ac29e79abae9443d8973a8c7f9ac7c5",
     "src/constants/chatDefaults.ts": "343b32f06a7a409071d619102229692b47bcf29871dad0e1258fffe9e906de54",
     "src/utils/chatShallowClone.ts": "105a942dc9ad825dbbcfccc302b682ede001be10953209d43ed7be6dba71b8ec",
     "src/utils/chatExport.ts": "552130b7f2c2140eabce1d48d82eeb5eb29b0179d3d4f196d28d2e53145ddade",
@@ -109,5 +113,5 @@
     "lodash/package.json": "8e41b07c744a0de0d2c1c23ed41418ecb0849abb56395d28802e601b4730d7c2",
     "lodash/LICENSE": "f71e8ed126b46346494aad5486874cd8f0aafe95092ed67d2e3cb6110f939abc"
   },
-  "bundleSHA256": "3a5d4c0c1e06a04821e4716b7978d57b4bf5d787f784a2ee5ca33e79db0fd717"
+  "bundleSHA256": "3393e2c537d233a27f53fb960813778bd212e6a9e01249092efcb9f75ee27389"
 }

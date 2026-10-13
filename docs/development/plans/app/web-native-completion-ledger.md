@@ -1,5 +1,13 @@
 # Web / 新iOSの完成条件と証拠
 
+## 残存する生成・編集の重複除去（2026-10-13追記）
+
+限定再監査で特定した2箇所を修正した。生成要求の選択path→role/content投影は実WebのmaterializeActivePathへ接続し、Swift独自投影を削除。編集draftの最初のtext取得・属性を保つ置換は、Web useEditViewLogicからmessageTextへそのまま抽出し、双方の実callerが利用する。nativeは編集開始時に原文を取得し、保存時にoriginalPartsとeditedTextを渡す。キーストロークごとのJSC実行は追加していない。
+
+appendの空本文判定も共有保存経路でWeb hasMeaningfulContentを使用する。後続text・画像・未知属性を失わず、通信設定とraw数値精度の復元はnative境界に残す。既存15編集fixtureの期待値は変更していない。Web104件と追加append境界を含む編集22件（重複あり）、統合Catalyst編集/生成/検索到達26件、型検査・bundle鮮度・差分検査成功。独立Astraは新規なし。ログは `/private/tmp/weavelet-shared-request-draft-{catalyst,types}.log`。実API送信・実機・全provider能力は未確認。
+
+統合先はcodex/shared-main-integration。取得済みorigin/main `7a0a383a`（#523）を祖先に含むことを確認。元作業ツリーの未コミット変更を維持し、GitHubへは書き込んでいない。
+
 ## 検索・任意分岐への到達・履歴の接続（2026-10-13追記）
 
 Webの会話/祖先フォルダ名フィルタ、全文grep、branch本文/label/star検索を実callerから共有し、native検索画面へ接続した。空白の扱い、scope、DFS/activePath順序、flat会話の到達先は既存Webに従う。旧native保存に表示専用pathが残っている場合は現在の表示pathを一時入力に渡す。検索自体は保存元を変更しない。

@@ -7019,6 +7019,29 @@ var WeaveletGoogleSync = (() => {
   // src/utils/branchUtils.ts
   var import_lodash = __toESM(require_lodash(), 1);
 
+  // src/utils/contentValidation.ts
+  var hasMeaningfulContent = (content) => content.some((part) => {
+    if (isImageContent(part))
+      return true;
+    return isTextContent(part) && part.text.trim().length > 0;
+  });
+
+  // src/utils/messageText.ts
+  var firstTextIndex = (content) => content.findIndex((item) => item.type === "text");
+  var textValueOf = (content) => {
+    const index = firstTextIndex(content);
+    return index >= 0 ? content[index].text : "";
+  };
+  var replaceTextValue = (content, text) => {
+    const index = firstTextIndex(content);
+    if (index < 0) {
+      return [{ type: "text", text }, ...content];
+    }
+    const next = [...content];
+    next[index] = { ...content[index], text };
+    return next;
+  };
+
   // src/utils/jsonChanges.ts
   var orderedJSONEqual = (left, right) => {
     if (Object.is(left, right))
@@ -7079,8 +7102,15 @@ var WeaveletGoogleSync = (() => {
   }
   function messageEdit(json) {
     const input = JSON.parse(json);
+    if (input.operation === "textValue")
+      return JSON.stringify(textValueOf(input.parts));
+    if (input.editedText !== void 0 && typeof input.editedText !== "string")
+      throw new Error("Invalid text.");
+    const parts = input.editedText !== void 0 && input.editedText !== textValueOf(input.parts) ? replaceTextValue(input.parts, input.editedText) : input.parts;
     if (!["user", "assistant", "system"].includes(input.role) || !Array.isArray(input.parts))
       throw new Error("Invalid message.");
+    if (input.mode === "append" && input.editedText !== void 0 && !hasMeaningfulContent(parts))
+      throw new Error("\u672C\u6587\u3092\u5165\u529B\u3057\u3066\u304F\u3060\u3055\u3044");
     const before = { chat: input.chat, contentStore: input.contentStore };
     const isolated = structuredClone(before);
     let chat = isolated.chat;
@@ -7112,15 +7142,15 @@ var WeaveletGoogleSync = (() => {
           throw new Error("Protected message.");
       }
       if (input.mode === "append")
-        result3 = appendNodeToActivePathState(result3.chats, 0, input.role, input.parts, result3.contentStore);
+        result3 = appendNodeToActivePathState(result3.chats, 0, input.role, parts, result3.contentStore);
       else if (input.mode === "branch") {
-        const branch = createBranchState(result3.chats, 0, tree.activePath[index], input.parts, result3.contentStore);
+        const branch = createBranchState(result3.chats, 0, tree.activePath[index], parts, result3.contentStore);
         result3 = branch;
         if (branch.chats[0].branchTree.nodes[branch.newId].role !== input.role) {
           result3.chats = updateNodeRoleState(branch.chats, 0, branch.newId, input.role, branch.contentStore);
         }
       } else
-        result3 = upsertWithAutoBranchState(result3.chats, 0, index, { role: input.role, content: input.parts }, result3.contentStore);
+        result3 = upsertWithAutoBranchState(result3.chats, 0, index, { role: input.role, content: parts }, result3.contentStore);
       for (const [hash, entry] of Object.entries(result3.contentStore)) {
         if (entry.delta && JSON.stringify(entry.delta) !== JSON.stringify(before.contentStore[hash]?.delta)) {
           const content = resolveContent(result3.contentStore, hash);
@@ -10510,14 +10540,21 @@ ${message.content}` : message.content).join("\n\n").trim();
   // shared/google-sync/generation.ts
   var generationRequest = (json) => {
     const input = JSON.parse(json);
+    const path = input.activePath ?? input.chat?.branchTree?.activePath;
+    let chat = input.chat;
+    if (chat?.branchTree && input.contentStore) {
+      const branchTree = { ...chat.branchTree, activePath: path };
+      chat = { ...chat, branchTree, messages: materializeActivePath(branchTree, input.contentStore) };
+    }
+    const projected = chat?.messages ?? input.messages ?? [];
     const messages = getSubmitContextMessages(
-      input.messages,
-      input.messages.length,
+      projected,
+      projected.length,
       input.config.model,
-      input.activePath,
-      input.omittedNodes,
+      path,
+      input.omittedNodes ?? chat?.omittedNodes,
       input.config.systemPrompt,
-      input.chat ? { chat: input.chat, generatingNodeIds: input.generatingNodeIds ?? [] } : void 0
+      chat ? { chat, generatingNodeIds: input.generatingNodeIds ?? [] } : void 0
     );
     if (messages.length === 0)
       throw new Error("\u9001\u4FE1\u3059\u308B\u672C\u6587\u304C\u3042\u308A\u307E\u305B\u3093");
