@@ -1,12 +1,12 @@
 import { useEffect, useRef } from 'react';
 
 import { fetchCreditBalance, fetchGenerationStats } from '@api/openrouter';
-import useStore from '@store/store';
+import useStore, { type StoreState } from '@store/store';
 import { debugReport } from '@store/debug-store';
 import { toVerifiedStats } from '@store/openrouter-stats-slice';
 import { resolveOpenRouterApiKey } from '@utils/openrouterVerification';
 
-const EMPTY_PENDING_VERIFICATIONS = {};
+const EMPTY_PENDING_VERIFICATIONS: StoreState['pendingVerifications'] = {};
 const NO_AUTO_RETRY_AT = Number.MAX_SAFE_INTEGER;
 
 const formatDebugTime = (time = Date.now()): string =>

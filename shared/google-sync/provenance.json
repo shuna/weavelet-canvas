@@ -5,7 +5,7 @@
   "checkFreshness": "node shared/google-sync/generate.mjs --check [Web repository root]",
   "generator": {
     "esbuild": "0.16.17",
-    "typescript": "4.9.5"
+    "typescript": "5.4.5"
   },
   "freshness": "Regenerate after Web changes; compare inputs hashes with current source. Commit protocol/merge tests must pass on both platforms.",
   "inputs": {
@@ -361,5 +361,5 @@
     "remove-accents/package.json": "511775b39122274ad36e9dc32c47b2112a3fd4372e64284c2336b143be853c82",
     "remove-accents/LICENSE": "31279697ad2455927a227e7678f2bb71e9e06dde319f12ce345404b3b7a99b81"
   },
-  "bundleSHA256": "63febd45691f46972206bfc254d17148bc3dbe6324dfb952ec0ec948612a2cea"
+  "bundleSHA256": "32e77def3cfb948c48fd3cc3a5fe6b0f4d7afa326b58dc49fb828b8818bbe07b"
 }
