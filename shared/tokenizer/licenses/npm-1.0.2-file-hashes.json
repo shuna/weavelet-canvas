@@ -1,0 +1,9 @@
+{
+  "package.json": "ccca4b07fad4976b15b2c5188e0decb13f0dc1c0d0894dd3f9d33f9a1b875696",
+  "lite/init.js": "cd40cea6957f634b96cd582e5fd82bb8b18b13f051882f8298346fbc62e3a7fd",
+  "lite/tiktoken_bg.js": "4ae19000b4c744bc519703ac65588d35ecd95be9a0897307cd933b657e05b671",
+  "lite/tiktoken_bg.wasm": "cfed79ec63802c342d28b276a0bf5744646fbe742ebc4ca062649f9db4924bda",
+  "lite/tiktoken.cjs": "bf20a8730117f88cd7b806369bdeae0464d7a17bfbff005d01fcf7843e1b31e1",
+  "lite/tiktoken_bg.cjs": "2607d98ad6b62276d8a379ff5a7ef3757cf2ecd4d4e5a2c6644fca510e9c76a3",
+  "encoders/cl100k_base.json": "49a4e05dea02c8fafbd50cc4725c4aab8f39386c0afedef118e0dfebc2fe523a"
+}

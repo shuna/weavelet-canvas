@@ -22,6 +22,7 @@ type LimitMessage = {
   messages: MessageInterface[];
   model: ModelOptions;
   limit: number;
+  indicesOnly?: boolean;
 };
 
 type WorkerRequest = InitMessage | CountMessage | LimitMessage;
@@ -30,6 +31,7 @@ type WorkerResponse =
   | { id: number; type: 'ready' }
   | { id: number; type: 'countTokensResult'; count: number }
   | { id: number; type: 'limitMessagesResult'; messages: MessageInterface[] }
+  | { id: number; type: 'limitMessagesResult'; indices: number[] }
   | { id: number; type: 'error'; message: string };
 
 let encoder: Tiktoken | null = null;
@@ -82,10 +84,11 @@ const limitMessages = (
   messages: MessageInterface[],
   limit: number,
   model: ModelOptions
-): MessageInterface[] => {
-  if (!encoder) return messages;
+): { messages: MessageInterface[]; indices: number[] } => {
+  if (!encoder) return { messages, indices: messages.map((_, index) => index) };
 
   const limitedMessages: MessageInterface[] = [];
+  const indices: number[] = [];
   let tokenCount = 0;
 
   for (let index = messages.length - 1; index >= 0; index -= 1) {
@@ -93,9 +96,10 @@ const limitMessages = (
     if (nextCount + tokenCount > limit) break;
     tokenCount += nextCount;
     limitedMessages.unshift({ ...messages[index] });
+    indices.unshift(index);
   }
 
-  return limitedMessages;
+  return { messages: limitedMessages, indices };
 };
 
 self.onmessage = async (event: MessageEvent<WorkerRequest>) => {
@@ -120,11 +124,10 @@ self.onmessage = async (event: MessageEvent<WorkerRequest>) => {
       return;
     }
 
-    const response: WorkerResponse = {
-      id: request.id,
-      type: 'limitMessagesResult',
-      messages: limitMessages(request.messages, request.limit, request.model),
-    };
+    const limited = limitMessages(request.messages, request.limit, request.model);
+    const response: WorkerResponse = request.indicesOnly
+      ? { id: request.id, type: 'limitMessagesResult', indices: limited.indices }
+      : { id: request.id, type: 'limitMessagesResult', messages: limited.messages };
     self.postMessage(response);
   } catch (error: unknown) {
     const response: WorkerResponse = {

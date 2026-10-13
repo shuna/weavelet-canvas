@@ -1,0 +1,13 @@
+{"cases":[
+  {"model":"gpt-4","limit":4096,"messages":[]},
+  {"model":"gpt-4","limit":16,"messages":[
+    {"id":"system","role":"system","content":[{"type":"text","text":"System"}]},
+    {"id":"user","role":"user","content":[{"type":"text","text":"日本語🙂 é A\ud800B\n次の行"},{"type":"text","text":"second"},{"type":"reasoning","text":"hidden"}],"unknown":{"number":9007199254740993,"nfd":"é","lone":"\ud800"}},
+    {"id":"assistant","role":"assistant","content":[{"type":"text","text":"answer"}],"unknown":{"number":9007199254740993,"lone":"\ud800","nfd":"é"}}
+  ]},
+  {"model":"gpt-3.5-turbo","limit":32,"messages":[
+    {"id":"first","role":"user","content":[{"type":"text","text":"hello"},{"type":"image_url","image_url":{"url":"https://fixture.invalid/image.png"}}]},
+    {"id":"second","role":"assistant","content":[{"type":"text","text":"é é </script> \"quotes\""}]}
+  ]},
+  {"model":"unknown-provider-model","limit":0,"messages":[{"id":"special","role":"user","content":[{"type":"text","text":"<|im_start|>literal<|im_end|>"}]}]}
+]}

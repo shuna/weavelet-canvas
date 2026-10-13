@@ -1,0 +1,77 @@
+{
+  "purpose": "Fixed offline WK execution of the actual Web cl100k tokenizer worker; provider counts remain observed counts",
+  "version": "1.0.2",
+  "officialSource": {
+    "fileHashes": {
+      "package.json": "ccca4b07fad4976b15b2c5188e0decb13f0dc1c0d0894dd3f9d33f9a1b875696",
+      "lite/init.js": "cd40cea6957f634b96cd582e5fd82bb8b18b13f051882f8298346fbc62e3a7fd",
+      "lite/tiktoken_bg.js": "4ae19000b4c744bc519703ac65588d35ecd95be9a0897307cd933b657e05b671",
+      "lite/tiktoken_bg.wasm": "cfed79ec63802c342d28b276a0bf5744646fbe742ebc4ca062649f9db4924bda",
+      "lite/tiktoken.cjs": "bf20a8730117f88cd7b806369bdeae0464d7a17bfbff005d01fcf7843e1b31e1",
+      "lite/tiktoken_bg.cjs": "2607d98ad6b62276d8a379ff5a7ef3757cf2ecd4d4e5a2c6644fca510e9c76a3",
+      "encoders/cl100k_base.json": "49a4e05dea02c8fafbd50cc4725c4aab8f39386c0afedef118e0dfebc2fe523a"
+    },
+    "npm": "https://registry.npmjs.org/@dqbd/tiktoken/1.0.2",
+    "integrity": "sha512-AjGTBRWsMoVmVeN55NLyupyM8TNamOUBl6tj5t/leLDVup3CFGO9tVagNL1jf3GyZLkWZSTmYVbPQ/M2LEcNzw==",
+    "gitHead": "68efa86723b67247a039548f03fa2286dfcf030a",
+    "license": "https://raw.githubusercontent.com/dqbd/tiktoken/68efa86723b67247a039548f03fa2286dfcf030a/LICENSE"
+  },
+  "inputs": {
+    "node_modules/@dqbd/tiktoken/package.json": "ccca4b07fad4976b15b2c5188e0decb13f0dc1c0d0894dd3f9d33f9a1b875696",
+    "shared/tokenizer/licenses/npm-1.0.2-file-hashes.json": "345dcb8632826796ec544c53375261c486d6e3e0eaefc4bd3640f4e9d70ce61b",
+    "node_modules/@dqbd/tiktoken/lite/init.js": "cd40cea6957f634b96cd582e5fd82bb8b18b13f051882f8298346fbc62e3a7fd",
+    "node_modules/@dqbd/tiktoken/lite/tiktoken_bg.js": "4ae19000b4c744bc519703ac65588d35ecd95be9a0897307cd933b657e05b671",
+    "node_modules/@dqbd/tiktoken/lite/tiktoken_bg.wasm": "cfed79ec63802c342d28b276a0bf5744646fbe742ebc4ca062649f9db4924bda",
+    "node_modules/@dqbd/tiktoken/lite/tiktoken.cjs": "bf20a8730117f88cd7b806369bdeae0464d7a17bfbff005d01fcf7843e1b31e1",
+    "node_modules/@dqbd/tiktoken/lite/tiktoken_bg.cjs": "2607d98ad6b62276d8a379ff5a7ef3757cf2ecd4d4e5a2c6644fca510e9c76a3",
+    "node_modules/@dqbd/tiktoken/encoders/cl100k_base.json": "49a4e05dea02c8fafbd50cc4725c4aab8f39386c0afedef118e0dfebc2fe523a",
+    "shared/tokenizer/licenses/tiktoken-1.0.2-LICENSE.txt": "418cb499b436128d653d79941333a5437b7be2ea9213dcc2f04d15d5d2c51d86",
+    "../../var/folders/1r/xtsjvqk90yzdyjq5jfjn9phw0000gn/T/weavelet-main-integration-ew768sf2/worktree/node_modules/@dqbd/tiktoken/lite/tiktoken_bg.js": "4ae19000b4c744bc519703ac65588d35ecd95be9a0897307cd933b657e05b671",
+    "../../var/folders/1r/xtsjvqk90yzdyjq5jfjn9phw0000gn/T/weavelet-main-integration-ew768sf2/worktree/node_modules/@dqbd/tiktoken/lite/init.js": "cd40cea6957f634b96cd582e5fd82bb8b18b13f051882f8298346fbc62e3a7fd",
+    "shared/tokenizer/tiktoken.ts": "0e49ad2cc359a385a71b0070b1b5d5026a2350509af960c231cb738c33f518f5",
+    "src/types/chat.ts": "d5fb2155a0e5dae23f318086245c4998818cb71abcbcbfa732410dfdc2b82bad",
+    "src/utils/tokenizerSerialization.ts": "5954863e4ef30bc50ead674ba0e04cf6a4f04f5cc70e26f2ae3b1d0ae55496f4",
+    "../../var/folders/1r/xtsjvqk90yzdyjq5jfjn9phw0000gn/T/weavelet-main-integration-ew768sf2/worktree/node_modules/@dqbd/tiktoken/encoders/cl100k_base.json": "49a4e05dea02c8fafbd50cc4725c4aab8f39386c0afedef118e0dfebc2fe523a",
+    "src/workers/tokenizerWorker.ts": "3548cef75156e3f8444825726821e1e1d8d23d7e178578f40f2df60055277664",
+    "shared/tokenizer/worker.ts": "7dc2d1682a0c4faa17aca2d9c222b189c889627c7e3616503986a6ab07465298",
+    "shared/tokenizer/host.js": "ad0ee0fcd2c200ccd449595c64ed634c2a370358e2676bb02691f5a7e2cf05a1",
+    "shared/tokenizer/index.html": "c2b00da5b1d07aeea7ebdf16661b715b0d4b2e002f2be92800f7aa5937e29f96",
+    "shared/tokenizer/vectors.json": "d7cdc19e8a7962dc12bb0cba653c15b839df57ab7110e6bdace3c7db730f6fbb",
+    "shared/tokenizer/generate.mjs": "5b0e9556445e9b4e40d09470194de0f112d8704e78eac1d0f1bf6a15c2b73034",
+    "node_modules/esbuild/package.json": "eb6b6b4ce6848f39b793823f4d5934917ed56e98e2ffd1a30542153f5f091c34",
+    "package-lock.json": "b7d01f67af70cb4db932872f0a3bcb4f56abc2cc2cd9a9ac2959f9177a9201d4"
+  },
+  "assets": {
+    "worker.js": {
+      "bytes": 1098451,
+      "sha256": "58dda2be50f01d1301faa500156cbbf159538524cfda035a1e5f79f34a4038d7"
+    },
+    "tiktoken_bg.wasm": {
+      "bytes": 798642,
+      "sha256": "cfed79ec63802c342d28b276a0bf5744646fbe742ebc4ca062649f9db4924bda"
+    },
+    "host.js": {
+      "bytes": 1304,
+      "sha256": "ad0ee0fcd2c200ccd449595c64ed634c2a370358e2676bb02691f5a7e2cf05a1"
+    },
+    "index.html": {
+      "bytes": 283,
+      "sha256": "c2b00da5b1d07aeea7ebdf16661b715b0d4b2e002f2be92800f7aa5937e29f96"
+    },
+    "NOTICE.txt": {
+      "bytes": 1078,
+      "sha256": "418cb499b436128d653d79941333a5437b7be2ea9213dcc2f04d15d5d2c51d86"
+    }
+  },
+  "fixtureAssets": {
+    "vectors.json": {
+      "bytes": 1060,
+      "sha256": "d7cdc19e8a7962dc12bb0cba653c15b839df57ab7110e6bdace3c7db730f6fbb"
+    },
+    "expected.json": {
+      "bytes": 109,
+      "sha256": "e9510463c40a16c780982b389672d9f158676cac560a98649141fabc076d1ac5"
+    }
+  },
+  "totalAssetBytes": 1899758
+}
