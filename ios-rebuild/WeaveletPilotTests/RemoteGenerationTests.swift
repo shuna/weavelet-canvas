@@ -291,6 +291,11 @@ final class RemoteGenerationTests: XCTestCase {
     }
     func testRegenerateAndContinueReplaceAssistantKeepFollowingNodeAndStopRestartExport() async throws {
         let local = try store(), state = try state(local,stream:false)
+        // The general transport fixture has six messages; seed this middle-replacement case explicitly.
+        let initial = try XCTUnwrap(state.exchange).source
+        let original = try initial.required("chats").array("chats")[0]
+        let threeMessages = try Array(original.required("messages").array("messages").prefix(3))
+        try state.importWebData(initial.replacing("chats",with:.array([original.replacing("messages",with:.array(threeMessages))])).encoded())
         var tail = try state.messageDraft(nodeID:nil); tail.text = "Following user"
         try state.saveMessage(tail,mode:.append,newIDs:["system","user","old-assistant","tail"])
         let seeded = try XCTUnwrap(state.exchange).source
@@ -337,7 +342,7 @@ final class RemoteGenerationTests: XCTestCase {
         XCTAssertEqual(finalTree["nodes"]?["tail"]?["parentId"],.string("continued"))
         XCTAssertEqual(try finalTree.required("nodes").required("tail").required("xFuture").encoded(),try tailNode.required("xFuture").encoded())
         let hash = try finalTree.required("nodes").required("continued").required("contentHash").string("hash")
-        XCTAssertEqual(try SyncRecords.resolveContent(hash,store:completed.required("contentStore")),.array([.object([.init(key:"type",value:.string("text")),.init(key:"text",value:.string("Partial<th"))])]))
+        XCTAssertEqual(try SyncRecords.resolveContent(completed.required("contentStore"),hash:hash),.array([.object([.init(key:"type",value:.string("text")),.init(key:"text",value:.string("Partial<th"))])]))
         let restarted = ChatState(store:local)
         XCTAssertNil(restarted.persistenceError)
         XCTAssertEqual(try restarted.exportWebData(),try state.exportWebData())

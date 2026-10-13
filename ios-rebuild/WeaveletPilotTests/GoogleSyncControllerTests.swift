@@ -21,6 +21,60 @@ import XCTest
         try state.applySnapshot(full.replacing("state",with:raw))
         return state
     }
+    func testRegeneratedMiddleMessageCrossesEncryptedSyncAndPreservesSuccessor() async throws {
+        let dir = try directory(), drive = FakeSyncDrive(), keys = TestSyncKeys()
+        let senderStore = LocalStateStore(fileURL:dir.appendingPathComponent("sender.json"))
+        let sender = try state(senderStore)
+        // Use the existing legacy transport with a fully intercepted synthetic endpoint.
+        var settings = try sender.chatConfigDraft()
+        settings.config = .object(try settings.config.object("config").filter { $0.key != "providerId" })
+        settings.config = settings.config.replacing("stream",with:.bool(false))
+        try sender.saveChatConfig(settings)
+        var options = try sender.nodeOptionsDraft(nodeID:"n-assistant")
+        options.value.protected = false
+        try sender.saveNodeOptions(options)
+        var tail = try sender.messageDraft(nodeID:nil)
+        tail.role = "user"; tail.text = "後続の本文を保持"
+        try sender.saveMessage(tail,mode:.append,newIDs:["sync-successor"])
+        let before = try XCTUnwrap(sender.exchange).source
+        let publisher = GoogleSyncController(chatState:sender,drive:drive,store:SyncStateStore(fileURL:dir.appendingPathComponent("sender-sync.json")),keyStore:keys)
+        try await publisher.create(password:password,folderName:"FAKE regeneration")
+        let config = URLSessionConfiguration.ephemeral; config.protocolClasses = [RegenerationSyncResponse.self]
+        let session = URLSession(configuration:config); defer { session.invalidateAndCancel() }
+        let draft = try sender.messageGenerationDraft(nodeID:"n-assistant",operation:.regenerate)
+        let record = RemoteCredentialRecord(settings:RemoteSettings(endpoint:"https://fixture.invalid/v1/chat/completions",model:"fake-model",stream:false),key:"FAKE")
+        try sender.startGeneration(draft,record:record,client:RemoteClient(session:session),nodeIDs:["sync-generated"])
+        let deadline = Date().addingTimeInterval(5)
+        while sender.generation != nil && Date() < deadline { try await Task.sleep(for:.milliseconds(10)) }
+        XCTAssertNil(sender.generation); XCTAssertNil(sender.generationError)
+        XCTAssertEqual(try ChatState(store:senderStore).exportWebData(),try sender.exportWebData())
+        try await publisher.synchronize()
+        let receiverStore = LocalStateStore(fileURL:dir.appendingPathComponent("receiver.json"))
+        let receiver = ChatState(store:receiverStore)
+        let subscriber = GoogleSyncController(chatState:receiver,drive:drive,store:SyncStateStore(fileURL:dir.appendingPathComponent("receiver-sync.json")),keyStore:keys)
+        try await subscriber.open(dataset:XCTUnwrap(publisher.dataset))
+        let unlocked = try await subscriber.restoreKey(); XCTAssertTrue(unlocked)
+        try await subscriber.download()
+        let received = try XCTUnwrap(receiver.exchange).source
+        let chat = try XCTUnwrap(received.required("chats").array("chats").first { $0["id"] == .string("chat-a") })
+        let tree = try chat.required("branchTree"), nodes = try tree.required("nodes")
+        XCTAssertNil(nodes["n-assistant"])
+        XCTAssertEqual(tree["activePath"],.array(["n-system","n-user","sync-generated","sync-successor"].map(OrderedJSON.string)))
+        XCTAssertEqual(nodes["sync-successor"]?["parentId"],.string("sync-generated"))
+        let hash = try nodes.required("sync-generated").required("contentHash").string("hash")
+        XCTAssertEqual(received["contentStore"]?[hash]?["content"],.array([.object([.init(key:"text",value:.string("同期対象の再生成")),.init(key:"type",value:.string("text"))])]))
+        let original = try XCTUnwrap(before.required("chats").array("chats").first { $0["id"] == .string("chat-a") })
+        // Web records.restoreEntry allocates a local content hash; preserve metadata and resolved content separately.
+        let inactive = try nodes.required("n-inactive"), previousInactive = try original.required("branchTree").required("nodes").required("n-inactive")
+        XCTAssertEqual(inactive.replacing("contentHash",with:.null),previousInactive.replacing("contentHash",with:.null))
+        let receivedParts = try SyncRecords.resolveContent(received.required("contentStore"),hash:inactive.required("contentHash").string("hash"))
+        let originalParts = try SyncRecords.resolveContent(before.required("contentStore"),hash:previousInactive.required("contentHash").string("hash"))
+        // records.ts canonicalizes object keys for wire storage; array order and values remain significant.
+        XCTAssertEqual(try SyncRecords.canonical(receivedParts),try SyncRecords.canonical(originalParts))
+        XCTAssertEqual(nodes["n-user"]?["xFixtureNode"],original["branchTree"]?["nodes"]?["n-user"]?["xFixtureNode"])
+        XCTAssertEqual(try ChatState(store:receiverStore).exportWebData(),try receiver.exportWebData())
+    }
+
     func testCompressedV3ExportImportPublishesCompleteTreeThroughEncryptedSync() async throws {
         let dir = try directory(), drive = FakeSyncDrive(), keys = TestSyncKeys()
         let original = try state(LocalStateStore(fileURL: dir.appendingPathComponent("original.json")))
@@ -486,5 +540,16 @@ private final class HeldControllerGeneration: URLProtocol {
     override class func canInit(with request: URLRequest) -> Bool { request.url?.host == "fixture.invalid" }
     override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
     override func startLoading() {}
+    override func stopLoading() {}
+}
+
+private final class RegenerationSyncResponse: URLProtocol {
+    override class func canInit(with request: URLRequest) -> Bool { true }
+    override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
+    override func startLoading() {
+        client?.urlProtocol(self,didReceive:HTTPURLResponse(url:request.url!,statusCode:200,httpVersion:nil,headerFields:["Content-Type":"application/json"])!,cacheStoragePolicy:.notAllowed)
+        client?.urlProtocol(self,didLoad:Data(#"{"choices":[{"message":{"content":"同期対象の再生成"},"finish_reason":"stop"}]}"#.utf8))
+        client?.urlProtocolDidFinishLoading(self)
+    }
     override func stopLoading() {}
 }
