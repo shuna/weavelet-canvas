@@ -1,5 +1,5 @@
 import { applyFolderOperation, orderedFolders, type FolderOperation } from '../../src/utils/chatFolders';
-import { getFolderAncestors } from '../../src/utils/folderHierarchy';
+import { getFolderAncestors, getFolderParentId } from '../../src/utils/folderHierarchy';
 import type { ChatInterface, FolderCollection } from '../../src/types/chat';
 
 // Only known folder fields and chat identities/membership cross the JS boundary.
@@ -23,8 +23,24 @@ export function folderOperation(json: string): string {
 }
 export function folderRows(json: string): string {
   const input = JSON.parse(json) as Pick<Projection, 'folders'>;
-  return JSON.stringify(orderedFolders(input.folders).map(folder => ({
-    ...Object.fromEntries(folderFields.filter(key => Object.hasOwn(folder, key)).map(key => [key, folder[key]])),
-    path: getFolderAncestors(input.folders, folder.id).reverse().map(id => input.folders[id].name).join(' / '),
-  })));
+  const children = new Map<string, ReturnType<typeof orderedFolders>>();
+  for (const folder of orderedFolders(input.folders)) {
+    const parent = getFolderParentId(input.folders, folder.id) ?? '';
+    children.set(parent, [...(children.get(parent) ?? []), folder]);
+  }
+  const rows: object[] = [];
+  function append(parent: string, depth: number, visible: boolean) {
+    for (const folder of children.get(parent) ?? []) {
+      rows.push({
+        ...Object.fromEntries(folderFields.filter(key => Object.hasOwn(folder, key)).map(key => [key, folder[key]])),
+        displayParentId: parent,
+        depth,
+        visible,
+        path: getFolderAncestors(input.folders, folder.id).reverse().map(id => input.folders[id].name).join(' / '),
+      });
+      append(folder.id, depth + 1, visible && folder.expanded);
+    }
+  }
+  append('', 0, true);
+  return JSON.stringify(rows);
 }

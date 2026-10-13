@@ -33,6 +33,9 @@ struct ChatFolderRow: Identifiable {
     let expanded: Bool
     let order: Double
     let color: String?
+    var displayParentID: String = ""
+    var depth: Int = 0
+    var visible: Bool = true
     var path: String = ""
     var identity: Data { Data(id.utf8) }
 }
@@ -107,7 +110,7 @@ enum ChatFolders {
         try SharedWebOperations.call("folderRows", input(source)).array("rows").map { row in
             let color: String?
             if case .string(let text) = row["color"] { color = text } else { color = nil }
-            return try ChatFolderRow(id: row.required("id").string("id"), name: row.required("name").string("name"), expanded: row.required("expanded").boolean("expanded"), order: row.required("order").number("order"), color: color, path: row["path"]?.string("path") ?? "")
+            return try ChatFolderRow(id: row.required("id").string("id"), name: row.required("name").string("name"), expanded: row.required("expanded").boolean("expanded"), order: row.required("order").number("order"), color: color, displayParentID: row.required("displayParentId").string("displayParentId"), depth: Int(row.required("depth").number("depth")), visible: row.required("visible").boolean("visible"), path: row["path"]?.string("path") ?? "")
         }
     }
     static func membership(of chat: OrderedJSON) -> String? {

@@ -71,6 +71,19 @@ describe('shared folder operations', () => {
     expect(rows.find((row: any) => row.id === 'y').path).toBe('B / Same');
   });
 
+  it('projects nested folders in preorder and keeps broken chains at the root', () => {
+    const folder = (id: string, order: number, parentId?: string, expanded = true) => ({ id, name: id, order, parentId, expanded });
+    const folders = {
+      child: folder('child', 1, 'root'), root: folder('root', 4, undefined, false), sibling: folder('sibling', 2, 'root'),
+      other: folder('other', 3), orphan: folder('orphan', 5, 'missing'), cycleA: folder('cycleA', 6, 'cycleB'), cycleB: folder('cycleB', 7, 'cycleA'),
+    };
+    const rows = JSON.parse(folderRows(JSON.stringify({ folders })));
+    expect(rows.map((row: any) => row.id)).toEqual(['other', 'root', 'child', 'sibling', 'orphan', 'cycleA', 'cycleB']);
+    expect(rows.find((row: any) => row.id === 'child')).toMatchObject({ displayParentId: 'root', depth: 1, visible: false, path: 'root / child' });
+    expect(rows.find((row: any) => row.id === 'orphan')).toMatchObject({ displayParentId: '', depth: 0, visible: true, path: 'orphan' });
+    expect(rows.find((row: any) => row.id === 'cycleA')).toMatchObject({ displayParentId: '', depth: 0, visible: true, path: 'cycleA' });
+  });
+
   it('rejects invalid identities before changing anything', () => {
     const input = structuredClone(fixture.input), before = structuredClone(input);
     for (const operation of [{ type: 'create', id: 'f-a' }, { type: 'remove', id: 'missing' }, { type: 'move', chatIds: ['missing'], folderId: 'f-a' }, { type: 'move', chatIds: ['chat-a'], folderId: 'missing' }] as const) {

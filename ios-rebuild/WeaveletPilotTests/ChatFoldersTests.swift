@@ -83,6 +83,23 @@ final class ChatFoldersTests: XCTestCase {
         XCTAssertEqual(moved["xRoot"], input["xRoot"])
     }
 
+    func testNestedRowProjectionAndRevealSelectedFolder() throws {
+        let input = try fixture().required("input")
+        let folders = try input.required("folders")
+            .replacing("f-a", with: input.required("folders").required("f-a").replacing("expanded", with: .bool(false)))
+            .replacing("f-b", with: input.required("folders").required("f-b").replacing("parentId", with: .string("f-a")))
+            .replacing("f-c", with: input.required("folders").required("f-c").replacing("parentId", with: .string("f-b")))
+        let source = input.replacing("folders", with: folders)
+        let rows = try ChatFolders.rows(in: source)
+        XCTAssertEqual(rows.map(\.id), ["f-a", "f-b", "f-c"])
+        XCTAssertEqual(rows.map(\.depth), [0, 1, 2])
+        XCTAssertEqual(rows.map(\.visible), [true, false, false])
+        XCTAssertEqual(rows[2].displayParentID, "f-b")
+        let revealed = try ChatFolders.apply(in: source, operation: .move(chatIDs: [], folderID: "f-c"))
+        XCTAssertEqual(revealed["chats"], source["chats"])
+        XCTAssertEqual(try ChatFolders.rows(in: revealed).map(\.visible), [true, true, true])
+    }
+
     func testInvalidOperationLeavesOriginalDocumentUnchanged() throws {
         let input = try fixture().required("input"), before = try input.encoded()
         XCTAssertThrowsError(try ChatFolders.apply(in: input, operation: .create(id: "f-a")))

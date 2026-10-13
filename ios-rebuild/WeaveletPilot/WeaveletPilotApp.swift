@@ -750,15 +750,8 @@ struct ConversationLibraryView: View {
                     Text("サンプル会話です。新規作成で保存用の会話を開始します。")
                         .foregroundStyle(.secondary)
                 }
-                ForEach(folders, id: \.identity) { folder in
-                    Section {
-                        folderHeader(folder)
-                        if folder.expanded {
-                            ForEach(state.conversations.filter { state.folderID(for: $0.id)?.utf8.elementsEqual(folder.id.utf8) == true }, id: \.identity) { conversation in
-                                conversationRow(conversation)
-                            }
-                        }
-                    }
+                ForEach(folders.filter { $0.displayParentID.isEmpty }, id: \.identity) { folder in
+                    folderTree(folder)
                 }
                 Section(folders.isEmpty ? "会話" : "未所属") {
                     ForEach(state.conversations.filter { conversation in
@@ -773,8 +766,9 @@ struct ConversationLibraryView: View {
             .onAppear {
                 perform {
                     folders = try state.folderRows()
-                    if let id = state.folderID(for: state.selectedConversationID), let folder = folders.first(where: { $0.id.utf8.elementsEqual(id.utf8) }), !folder.expanded {
-                        try state.applyFolder(.expanded(id: id, expanded: true))
+                    if let id = state.folderID(for: state.selectedConversationID), let folder = folders.first(where: { $0.id.utf8.elementsEqual(id.utf8) }), (!folder.visible || !folder.expanded) {
+                        try state.applyFolder(.move(chatIDs: [], folderID: id))
+                        folders = try state.folderRows()
                     }
                 }
             }
@@ -844,7 +838,7 @@ struct ConversationLibraryView: View {
             .confirmationDialog("フォルダを削除しますか？", isPresented: $showsFolderDelete, titleVisibility: .visible) {
                 Button("削除", role: .destructive) { if let id = folderDeleteID { perform { try state.applyFolder(.remove(id: id)) } } }
                 Button("取消", role: .cancel) {}
-            } message: { Text("会話は削除せず、未所属へ移します。") }
+            } message: { Text("会話と子フォルダは親フォルダへ移ります。親がない場合は未所属・最上位になります。") }
             .sheet(isPresented: $showsFolderRename) {
                 NavigationStack {
                     Form { TextField("名前", text: $folderRenameTitle); if let errorMessage { Text(errorMessage).foregroundStyle(.red) } }
@@ -909,6 +903,22 @@ struct ConversationLibraryView: View {
         }
     }
 
+    private func folderTree(_ folder: ChatFolderRow) -> AnyView {
+        AnyView(Group {
+            folderHeader(folder)
+                .padding(.leading, CGFloat(folder.depth) * 16)
+            if folder.expanded {
+                ForEach(folders.filter { $0.displayParentID.utf8.elementsEqual(folder.id.utf8) }, id: \.identity) { child in
+                    folderTree(child)
+                }
+                ForEach(state.conversations.filter { state.folderID(for: $0.id)?.utf8.elementsEqual(folder.id.utf8) == true }, id: \.identity) { conversation in
+                    conversationRow(conversation)
+                        .padding(.leading, CGFloat(folder.depth + 1) * 16)
+                }
+            }
+        })
+    }
+
     private func folderHeader(_ folder: ChatFolderRow) -> some View {
         HStack {
             Button { perform { try state.applyFolder(.expanded(id: folder.id, expanded: !folder.expanded)) } } label: {
@@ -934,7 +944,7 @@ struct ConversationLibraryView: View {
     @ViewBuilder private func moveButtons(ids: [String]) -> some View {
         Button("未所属") { if perform({ try state.applyFolder(.move(chatIDs: ids, folderID: nil)) }) { selected.removeAll() } }
         ForEach(folders, id: \.identity) { folder in
-            Button(folder.name.isEmpty ? "（名前なし）" : folder.name) {
+            Button(folder.path.isEmpty ? "（名前なし）" : folder.path) {
                 if perform({ try state.applyFolder(.move(chatIDs: ids, folderID: folder.id)) }) { selected.removeAll() }
             }
         }
