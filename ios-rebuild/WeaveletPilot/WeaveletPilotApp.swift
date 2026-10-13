@@ -409,9 +409,17 @@ struct ChatView: View {
             TextField("送信する本文",text:Binding(
                 get:{ state.composerDraft(chatID:conversation.id).text },
                 set:{ state.setComposerText(chatID:conversation.id,text:$0) }),axis:.vertical)
-                .lineLimit(3...8).textFieldStyle(.roundedBorder)
+                .lineLimit(1...8).textFieldStyle(.roundedBorder)
+                .frame(minHeight:44)
                 .disabled(state.generation != nil)
             HStack(alignment:.bottom,spacing:8) {
+                if let detail = try? state.composerImageDetail(chatID:conversation.id) {
+                    ImageInputView(destinationID:conversation.id) { chatID, urls in
+                        do { try state.addComposerImages(chatID:chatID,urls:urls,detail:detail) }
+                        catch { state.generationError = error.localizedDescription }
+                    }
+                    .disabled(state.generation != nil)
+                }
                 Button {
                     do {
                         let input = state.composerDraft(chatID: conversation.id)
@@ -438,13 +446,6 @@ struct ChatView: View {
                     .frame(minWidth:44,minHeight:44)
                     .disabled(state.generation != nil)
                 }
-            }
-            if let detail = try? state.composerImageDetail(chatID:conversation.id) {
-                ImageInputView(destinationID:conversation.id) { chatID, urls in
-                    do { try state.addComposerImages(chatID:chatID,urls:urls,detail:detail) }
-                    catch { state.generationError = error.localizedDescription }
-                }
-                .disabled(state.generation != nil)
             }
             if let parts = try? state.composerDraft(chatID:conversation.id).parts.array("composer parts") {
                 let images = Array(parts.enumerated()).filter { $0.element["type"] == .string("image_url") }

@@ -59,6 +59,7 @@ struct ImageInputView: View {
         let receive: (String, [String]) -> Void
     }
     @State private var delivery: Delivery?
+    @State private var showsInput = false
     @State private var filePresented = false
     @State private var photosPresented = false
     @State private var photos: [PhotosPickerItem] = []
@@ -80,10 +81,36 @@ struct ImageInputView: View {
         }
     }
     var body: some View {
+        Button("画像を添付", systemImage: "paperclip") { showsInput = true }
+            .labelStyle(.iconOnly)
+            .frame(width:44,height:44)
+            .popover(isPresented:$showsInput,arrowEdge:.bottom) {
+                inputPanel
+                    .padding(16)
+                    .frame(minWidth:220,idealWidth:260,maxWidth:320)
+                    .presentationCompactAdaptation(.popover)
+            }
+            .onChange(of:photosPresented) { _, presented in
+                guard !presented, !photos.isEmpty, let recipient = delivery else { return }
+                let items = photos
+                load(recipient) {
+                    var urls: [String] = []
+                    for item in items {
+                        guard let bytes = try await item.loadTransferable(type:Data.self) else { throw ImageInput.Failure.unavailable }
+                        urls.append(try await ImageInput.fromBytes(bytes))
+                    }
+                    return urls
+                }
+            }
+    }
+
+    private var inputPanel: some View {
         VStack(alignment:.leading,spacing:8) {
-            HStack {
+            VStack(alignment:.leading,spacing:8) {
                 Button("画像ファイル",systemImage:"photo.badge.plus") { begin(); filePresented = true }
+                    .frame(maxWidth:.infinity,minHeight:44,alignment:.leading)
                 Button("写真",systemImage:"photo.on.rectangle") { begin(); photos = []; photosPresented = true }
+                    .frame(maxWidth:.infinity,minHeight:44,alignment:.leading)
                 PasteButton(supportedContentTypes:[.image]) { providers in
                     let recipient = Delivery(id:destinationID,receive:onAdd)
                     load(recipient) {
@@ -92,6 +119,7 @@ struct ImageInputView: View {
                         return urls
                     }
                 }
+                .frame(minHeight:44)
             }
             .disabled(loading)
             if loading { ProgressView("画像を読み込み中") }
@@ -110,17 +138,6 @@ struct ImageInputView: View {
             }
         }
         .photosPicker(isPresented:$photosPresented,selection:$photos,matching:.images,preferredItemEncoding:.current)
-        .onChange(of:photosPresented) { _, presented in
-            guard !presented, !photos.isEmpty, let recipient = delivery else { return }
-            let items = photos
-            load(recipient) {
-                var urls: [String] = []
-                for item in items {
-                    guard let bytes = try await item.loadTransferable(type:Data.self) else { throw ImageInput.Failure.unavailable }
-                    urls.append(try await ImageInput.fromBytes(bytes))
-                }
-                return urls
-            }
-        }
+
     }
 }
