@@ -423,7 +423,28 @@ struct ChatView: View {
             }
     }
     private func composer(_ conversation: Conversation) -> some View {
-        VStack(alignment:.leading,spacing:6) {
+        let roleName = state.inputRole == "assistant" ? "アシスタント" : "ユーザー"
+        let roleIcon = state.inputRole == "assistant" ? "sparkles" : "person.fill"
+        return VStack(alignment:.leading,spacing:6) {
+            if advancedMode {
+                Menu {
+                    Button("ユーザー", systemImage: "person.fill") {
+                        do { try state.setInputRole("user") } catch { state.generationError = error.localizedDescription }
+                    }
+                    Button("アシスタント", systemImage: "sparkles") {
+                        do { try state.setInputRole("assistant") } catch { state.generationError = error.localizedDescription }
+                    }
+                } label: {
+                    Label(roleName, systemImage: roleIcon)
+                    Image(systemName: "chevron.down").font(.caption)
+                }
+                .frame(minWidth: 44, minHeight: 44)
+                .accessibilityLabel("入力の役割：\(roleName)")
+                .disabled(state.generation != nil)
+            } else {
+                Label(roleName, systemImage: roleIcon)
+                    .accessibilityLabel("入力の役割：\(roleName)")
+            }
             MessageInputView(text: Binding(
                 get: { state.composerDraft(chatID: conversation.id).text },
                 set: { state.setComposerText(chatID: conversation.id, text: $0) }),

@@ -123,6 +123,7 @@ final class ChatState: ObservableObject {
     @Published var automaticEvaluationError: String?
     private var automaticEvaluationTasks: [UUID: [UUID:Task<Void,Never>]] = [:]
     private var automaticEvaluationContext: (id: UUID, chatID: String, nodeID: String, requestPath: [String], userContent: OrderedJSON, record: RemoteCredentialRecord?, client: RemoteClient, read: ProviderModels.CredentialReader)?
+    @Published private(set) var inputRole = "user"
     @Published private var composerDrafts: [Data:ComposerDraft] = [:]
     @Published private var assistantPrefills: [Data:String] = [:]
     private(set) var stickyPrefillKey = ""
@@ -642,6 +643,11 @@ final class ChatState: ObservableObject {
         } catch { generationError = "先頭文の入力状態を更新できませんでした。入力は保持しています。\n" + error.localizedDescription }
     }
 
+    func setInputRole(_ role: String) throws {
+        guard generation == nil else { throw ExchangeError.invalid("生成結果を保存してから入力の役割を変更してください") }
+        guard role == "user" || role == "assistant" else { throw ExchangeError.invalid("入力の役割が正しくありません") }
+        inputRole = role
+    }
     func composerDraft(chatID: String) -> ComposerDraft { composerDrafts[Data(chatID.utf8)] ?? .empty }
     func composerImageDetail(chatID: String) throws -> String {
         guard let chat = try exchange?.source.required("chats").array("chats").first(where: { try $0.required("id").string("id").utf8.elementsEqual(chatID.utf8) }) else { throw ExchangeError.invalid("入力先の会話がありません") }
@@ -679,7 +685,7 @@ final class ChatState: ObservableObject {
         let identity = conversation.identity
         let draft = composerDraft(chatID:conversation.id)
         let prepared = try ComposerContent.prepare(draft.parts,text:draft.text)
-        try startGeneration(prepared:prepared,record:record,client:client,nodeIDs:nodeIDs,readProviderCredential:readProviderCredential)
+        try startGeneration(prepared:prepared,role:inputRole,record:record,client:client,nodeIDs:nodeIDs,readProviderCredential:readProviderCredential)
         composerDrafts.removeValue(forKey:identity)
     }
     func messageGenerationDraft(nodeID: String, operation: MessageGenerationOperation) throws -> MessageGenerationDraft {
@@ -711,7 +717,7 @@ final class ChatState: ObservableObject {
     func startGeneration(parts: OrderedJSON, record: RemoteCredentialRecord? = nil, client: RemoteClient = RemoteClient(), nodeIDs: [String]? = nil, readProviderCredential: @escaping ProviderModels.CredentialReader = RemoteCredentials.load(providerID:)) throws {
         try startGeneration(prepared:ComposerContent.prepare(parts),record:record,client:client,nodeIDs:nodeIDs,readProviderCredential:readProviderCredential)
     }
-    private func startGeneration(prepared: ComposerDraft, record: RemoteCredentialRecord? = nil, client: RemoteClient, nodeIDs: [String]?, readProviderCredential: @escaping ProviderModels.CredentialReader) throws {
+    private func startGeneration(prepared: ComposerDraft, role: String = "user", record: RemoteCredentialRecord? = nil, client: RemoteClient, nodeIDs: [String]?, readProviderCredential: @escaping ProviderModels.CredentialReader) throws {
         guard generation == nil, let exchange, let conversation else { throw ExchangeError.invalid("保存済み会話を選択し、生成の終了を待ってください") }
         guard prepared.hasMeaningfulContent else { throw ExchangeError.invalid("本文または画像を入力してください") }
         let sourceChat = try exchange.source.required("chats").array("chats").first { try $0.required("id").string("ID").utf8.elementsEqual(conversation.id.utf8) }!
@@ -720,7 +726,7 @@ final class ChatState: ObservableObject {
         let body = prepared.parts
         let now = Date().timeIntervalSince1970 * 1000
         var history: MessageEditing.HistoryState?
-        let source = try MessageEditing.save(in: exchange.source, chatID: conversation.id, nodeID: nil, viewingPath: conversation.visibleMessages.map(\.id), role: "user", parts: body, mode: .append, newIDs: ids, now: now, history: editingHistory) { history = $0 }
+        let source = try MessageEditing.save(in: exchange.source, chatID: conversation.id, nodeID: nil, viewingPath: conversation.visibleMessages.map(\.id), role: role, parts: body, mode: .append, newIDs: ids, now: now, history: editingHistory) { history = $0 }
         let changed = try WebExchange(source: source)
         let path = changed.conversations.first { $0.identity == conversation.identity }!.visibleMessages.map(\.id)
         let appended = try MessageEditing.generation(in:source,chatID:conversation.id,operation:"prepare",action:.append,

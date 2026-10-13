@@ -639,4 +639,121 @@ final class RemoteGenerationTests: XCTestCase {
         XCTAssertEqual(events, ["kept"])
     }
 
+    private func roleComposerParts() throws -> OrderedJSON {
+        try OrderedJSON.decode(Data(#"[{"type":"image_url","image_url":{"url":"data:image/png;base64,FAKE_ROLE_IMAGE","detail":"auto","xRaw":1.2300}},{"type":"text","text":"Role seed","xRaw":9007199254740993},{"type":"reasoning","text":"private","xKeep":{"opaqueRef":0}}]"#.utf8))
+    }
+    func testInputRoleIsRuntimeGlobalKeepsDraftAndFailureThenLegacySendUsesUser() async throws {
+        let location = try store()
+        var rejects = false, rejectedWrites = 0
+        let local = LocalStateStore(fileURL: location.fileURL) { data, file in
+            if rejects { rejectedWrites += 1; throw CocoaError(.fileWriteNoPermission) }
+            try data.write(to: file, options: .atomic)
+        }
+        let app = try state(local, stream: false), chatID = try XCTUnwrap(app.conversation).id
+        let parts = try roleComposerParts(), draft = ComposerDraft(parts: parts, text: "Role seed", hasMeaningfulContent: true)
+        try app.setComposerPrompt(draft, chatID: chatID, expected: .empty)
+        XCTAssertEqual(app.inputRole, "user")
+        let beforeSelection = try app.publicationSnapshot(), diskBefore = try Data(contentsOf: local.fileURL)
+        for role in ["assistant", "user", "assistant"] {
+            try app.setInputRole(role)
+            XCTAssertEqual(app.inputRole, role)
+            XCTAssertEqual(try app.composerDraft(chatID: chatID).parts.encoded(), try parts.encoded())
+            XCTAssertEqual(app.composerDraft(chatID: chatID).text, draft.text)
+        }
+        XCTAssertThrowsError(try app.setInputRole("system"))
+        XCTAssertEqual(app.inputRole, "assistant")
+        XCTAssertEqual(try app.publicationSnapshot().encoded(), try beforeSelection.encoded())
+        XCTAssertEqual(try Data(contentsOf: local.fileURL), diskBefore)
+        try app.createChat(defaults: ChatDefaults.webInitial(), id: "other-role-chat")
+        XCTAssertEqual(app.inputRole, "assistant")
+        XCTAssertEqual(app.composerDraft(chatID: "other-role-chat").parts, .array([]))
+        app.selectedConversationID = chatID
+        XCTAssertEqual(app.conversation?.id, chatID)
+        XCTAssertEqual(app.inputRole, "assistant")
+        XCTAssertEqual(ChatState(store: local).inputRole, "user")
+        XCTAssertNil(try app.publicationSnapshot().required("state")["inputRole"])
+        let before = try app.publicationSnapshot(), disk = try Data(contentsOf: local.fileURL)
+        let remote = client()
+        FakeRemoteProtocol.packets = [.init(bytes: try fixture().required("responses").required("nonstream").encoded(), delay: 0.05)]
+        // Unknown new part types retain the existing closed validation, without losing the draft on rejection.
+        let futureParts = try OrderedJSON.array(parts.array("parts") + [.object([.init(key: "type", value: .string("future_part")), .init(key: "raw", value: .number("1.2300"))])])
+        let futureDraft = ComposerDraft(parts: futureParts, text: draft.text, hasMeaningfulContent: true)
+        try app.setComposerPrompt(futureDraft, chatID: chatID, expected: draft)
+        try app.setInputRole("user"); try app.setInputRole("assistant")
+        XCTAssertEqual(try app.composerDraft(chatID: chatID).parts.encoded(), try futureParts.encoded())
+        XCTAssertThrowsError(try app.sendComposer(record: record(stream: false), client: remote))
+        XCTAssertEqual(try app.composerDraft(chatID: chatID).parts.encoded(), try futureParts.encoded())
+        XCTAssertEqual(try app.publicationSnapshot().encoded(), try before.encoded())
+        XCTAssertEqual(try Data(contentsOf: local.fileURL), disk)
+        XCTAssertTrue(FakeRemoteProtocol.requests.isEmpty)
+        try app.setComposerPrompt(draft, chatID: chatID, expected: futureDraft)
+        rejects = true
+        XCTAssertThrowsError(try app.sendComposer(record: record(stream: false), client: remote))
+        XCTAssertEqual(rejectedWrites, 1)
+        XCTAssertNil(app.generation)
+        XCTAssertEqual(app.inputRole, "assistant")
+        XCTAssertEqual(try app.composerDraft(chatID: chatID).parts.encoded(), try parts.encoded())
+        XCTAssertEqual(app.composerDraft(chatID: chatID).text, draft.text)
+        XCTAssertEqual(try app.publicationSnapshot().encoded(), try before.encoded())
+        XCTAssertEqual(try Data(contentsOf: local.fileURL), disk)
+        XCTAssertTrue(FakeRemoteProtocol.requests.isEmpty)
+        rejects = false
+        // Existing non-composer callers keep their user default even when sticky input is assistant.
+        try app.startGeneration(input: "Legacy input", record: record(stream: false), client: remote)
+        XCTAssertEqual(app.conversation?.visibleMessages.dropLast().last?.role, "user")
+        XCTAssertThrowsError(try app.setInputRole("user"))
+        XCTAssertEqual(app.inputRole, "assistant")
+        try await wait { app.generation == nil }
+        XCTAssertEqual(app.inputRole, "assistant")
+        XCTAssertEqual(try app.composerDraft(chatID: chatID).parts.encoded(), try parts.encoded())
+        XCTAssertEqual(app.composerDraft(chatID: chatID).text, draft.text)
+    }
+    func testAssistantComposerUsesSharedAppendRequestContextAndPreservesInactiveBranches() async throws {
+        let local = try store(), app = ChatState(store: local)
+        let root = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
+        var source = try OrderedJSON.decode(Data(contentsOf: root.appendingPathComponent("tests/fixtures/web-native/io-corpus.json"))).required("exportV3")
+        var chats = try source.required("chats").array("chats")
+        let configured = try fixture().required("cases").array("cases")[0].required("source").required("chats").array("chats")[0].required("config")
+        let config = OrderedJSON.object(try configured.object("config").filter { $0.key != "providerId" }).replacing("stream", with: .bool(false))
+        chats[0] = chats[0].replacing("config", with: config)
+        source = source.replacing("chats", with: .array(chats))
+        try app.importWebData(source.encoded())
+        let chatID = try XCTUnwrap(app.conversation).id, parts = try roleComposerParts()
+        let originalNodes = try app.exchange!.source.required("chats").array("chats")[0].required("branchTree").required("nodes")
+        let inactive = try app.exchange!.source.required("contentStore").required("inactive").encoded()
+        let previousAssistant = try app.exchange!.source.required("contentStore").required("answer").required("content").array("content")[0]
+        try app.setComposerPrompt(ComposerDraft(parts: parts, text: "Role seed", hasMeaningfulContent: true), chatID: chatID, expected: .empty)
+        try app.setInputRole("assistant")
+        let remote = client()
+        FakeRemoteProtocol.packets = [.init(bytes: try fixture().required("responses").required("nonstream").encoded(), delay: 0.05)]
+        try app.sendComposer(record: record(stream: false), client: remote, nodeIDs: ["role-seed"])
+        XCTAssertEqual(app.composerDraft(chatID: chatID).parts, .array([]))
+        XCTAssertEqual(app.inputRole, "assistant")
+        XCTAssertThrowsError(try app.setInputRole("user"))
+        XCTAssertEqual(try app.messageDraft(nodeID: "role-seed").role, "assistant")
+        XCTAssertEqual(try app.messageDraft(nodeID: "role-seed").parts.encoded(), try parts.encoded())
+        XCTAssertEqual(app.conversation?.visibleMessages.suffix(2).map(\.role), ["assistant", "assistant"])
+        let appended = try app.exchange!.source.required("chats").array("chats")[0].required("branchTree")
+        XCTAssertEqual(try appended.required("activePath").array("path").dropLast(), [.string("n-system"), .string("n-user"), .string("n-assistant"), .string("role-seed")])
+        XCTAssertFalse(app.canUndoMessageEdit) // Existing generation guard protects editing history while busy.
+        try await wait { app.generation == nil }
+        let body = try OrderedJSON.decode(XCTUnwrap(FakeRemoteProtocol.requests.first?.httpBody))
+        let transmitted = try body.required("messages").array("messages")
+        XCTAssertEqual(transmitted.last?["role"], .string("assistant"))
+        // Actual Web submitContext merges consecutive assistant content and drops reasoning only on the wire.
+        XCTAssertEqual(try transmitted.last?.required("content").encoded(), try OrderedJSON.array([previousAssistant, parts.array("parts")[0], parts.array("parts")[1]]).encoded())
+        XCTAssertEqual(try app.messageDraft(nodeID: "role-seed").parts.encoded(), try parts.encoded())
+        let savedNodes = try app.exchange!.source.required("chats").array("chats")[0].required("branchTree").required("nodes")
+        for field in try originalNodes.object("nodes") { XCTAssertEqual(try savedNodes.required(field.key).encoded(), try field.value.encoded()) }
+        XCTAssertEqual(try app.exchange!.source.required("contentStore").required("inactive").encoded(), inactive)
+        XCTAssertEqual(app.conversation?.visibleMessages.last?.role, "assistant")
+        XCTAssertNil(app.generationError)
+        let savedParts = try XCTUnwrap(app.conversation?.visibleMessages.last?.parts)
+        XCTAssertEqual(savedParts.compactMap { if case .text(let text) = $0 { return text }; return nil }.joined(), "Answer 日本語")
+        // Shared generation preparation invalidates this chat's editing history, as Web useSubmit does.
+        XCTAssertFalse(app.canUndoMessageEdit)
+        XCTAssertEqual(ChatState(store: local).exchange?.source, app.exchange?.source)
+        XCTAssertEqual(ChatState(store: local).inputRole, "user")
+    }
+
 }
