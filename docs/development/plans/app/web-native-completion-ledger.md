@@ -564,4 +564,12 @@ Webのlocal-model-sliceの有効化・役割割当setterをpure共有元localMod
 
 再利用した成功結果：共有元3件、Web型検査、bundle生成/鮮度。native接続2件は保存失敗時メモリ/disk保持、raw巨大数値・他task・metadata保持、保存/再起動と端末ファイル未指定の拒否を確認。初回fixtureはV3 extrasをsnapshot settingsと誤認して空配列の添字で失敗。実syncDocument.v3DocumentLayoutでは共有5root以外がsidecarとなるため、実settings経路applySnapshotへ修正しXCTUnwrapを使った。元V3 sidecarの書出し保持も別に確認し、期待値を緩めていない。保存失敗testの初回成功を再利用、変更したtestのみ再実行成功。ログ /private/tmp/weavelet-local-role-catalyst{,-fixed}.log。独立Astraは一式/fixture限定追確認とも新規P2以上なし。
 
-FAKE Catalyst cloneで設定route、役割menu、空定義説明と配置を確認。通常store/Keychainへ触れず、有効化や割当の手動保存・ファイルpicker操作は行っていない。新しいモデル定義の登録、download、複数GGUF/Transformers管理、auto/hybrid評価は残件。V3未知extrasの保全とlive store設定は別の経路であり、V3 extrasを勝手に設定へ昇格しない。実機狭幅・最大文字サイズ・実同期相互運用は未確認。
+FAKE Catalyst cloneで設定route、役割menu、空定義説明と配置を確認。確認アプリ終了とprocess消失を確認。通常store/Keychainへ触れず、有効化や割当の手動保存・ファイルpicker操作は行っていない。新しいモデル定義の登録、download、複数GGUF/Transformers管理、auto/hybrid評価は残件。V3未知extrasの保全とlive store設定は別の経路であり、V3 extrasを勝手に設定へ昇格しない。実機狭幅・最大文字サイズ・実同期相互運用は未確認。
+
+## iPhoneOSのnative GGUF engine（2026-10-13）
+
+Web由来の同一wllama/llama pin・patch・lowbit C・samplerをiPhoneOS arm64へビルド。Swift処理の別実装は追加せずLocalLlamaの既存実行経路のplatform guardだけ広げた。Catalyst成果物とiPhoneOS成果物を分離し、それぞれのbuild-input/artifact hashをverifyする。暗号/同期/署名権限は変更していない。
+
+担当成功結果：両engine build/verify、両unsigned app build、iPhone archiveのMachO IOS/min17.0確認。親で成果物を取り込み両verify成功、署名付きAir向けbuild/install成功（/private/tmp/weavelet-air-engine-{build,install}.log）。entitlementは既存team/appIDとiCloud.com.sstcr.WeaveletCanvas・CloudKit・Developmentを維持。独立Astraは新規P2以上なし。端末キャッシュへ既存1.1MBの検証用GGUFをコピーし、既存5軸実推論testを実機で実行する準備をした。現在XcodeはAirロック解除待ちで、実機推論・起動の成功とは扱わない（/private/tmp/weavelet-air-engine-real-test.log）。物理端末runnerで使用するapp container相対GGUFパスをtestに追加、業務処理は変更しない。
+
+未変更の共有業務rule/全同期往復/全依存監査は再実行しない。iPhone実推論、広いモデルのメモリ/消費電力、狭幅UI/IME/Dynamic Type、Production CloudKitとWebの実相互運用は未確認。今回のDevelopment署名installだけではクラウド互換性完成とはしない。
