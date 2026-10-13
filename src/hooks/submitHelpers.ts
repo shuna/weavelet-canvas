@@ -21,6 +21,7 @@ import {
   GeneratingSession,
   MessageInterface,
   ModelOptions,
+  TextContentInterface,
 } from '@type/chat';
 import { FavoriteModel, ProviderConfig, ProviderId } from '@type/provider';
 import { autoTitlePrompt, normalizeGeneratedTitle, resolveProviderForModel, setGeneratedTitle, titleRequestSettings } from '@utils/chatTitle';

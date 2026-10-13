@@ -12,7 +12,8 @@ type Selection = { status: 'ready'; model: string; providerId?: string; credenti
   config: ConfigInterface; promptMessage: MessageInterface };
 type Input = { operation: 'select' | 'plan' | 'apply' | 'settings' | 'saveSettings'; chat: ChatInterface; autoTitle?: boolean; language?: string;
   sourceConfig?: ConfigInterface; settings?: TitleSettings; selection?: Selection; responseText?: string;
-  transport?: { hasApiKey: boolean; apiVersion?: string; customHeaders?: Record<string, string>; viaProxy?: boolean };
+  transport?: { hasApiKey: boolean; endpointURL: { protocol: string; hostname: string };
+    apiVersion?: string; customHeaders?: Record<string, string>; viaProxy?: boolean };
   modelState?: ReasoningModelState; capabilities?: { supportsReasoning: boolean; requiresReasoning: boolean };
   countTotalTokens?: boolean; totalTokenUsed?: TotalTokenUsed;
   state?: Record<string, unknown>; value?: { autoTitle: boolean; titleModel: string; titleProviderId?: string } };
@@ -31,20 +32,18 @@ export function titleOperation(json: string): string {
     if (!value || typeof value.autoTitle !== 'boolean' || typeof value.titleModel !== 'string'
       || (value.titleProviderId !== undefined && !Object.hasOwn(DEFAULT_PROVIDERS, value.titleProviderId))) throw new Error('Invalid title settings.');
     const state = input.state ?? {};
-    const before = Object.fromEntries(['autoTitle', 'titleModel', 'titleProviderId']
-      .filter(key => Object.hasOwn(state, key)).map(key => [key, state[key]]));
-    const after: Record<string, unknown> = { ...before, autoTitle: value.autoTitle, titleModel: value.titleModel };
-    if (value.titleProviderId !== undefined) after.titleProviderId = value.titleProviderId;
-    else delete after.titleProviderId;
-    return JSON.stringify({ changes: diffJSONChanges(before, after) });
+    const changes = (['autoTitle', 'titleModel', 'titleProviderId'] as const).flatMap(key => {
+      const next = value[key];
+      if (next === undefined) return Object.hasOwn(state, key) ? [{ op: 'remove', path: [key] }] : [];
+      return state[key] === next ? [] : [{ op: 'set', path: [key], value: next }];
+    });
+    return JSON.stringify({ changes });
   }
   if (input.operation === 'select') {
     if (!input.settings || input.language === undefined) throw new Error('Missing title settings.');
     const promptMessage = autoTitlePrompt(input.chat, !!input.autoTitle, input.language);
     if (!promptMessage) return JSON.stringify({ status: 'skipped' });
     const { model, providerId, credentialProviderId, provider, config } = titleRequestSettings(input.sourceConfig ?? input.chat.config, input.settings);
-    if (hardOpenRouterConstraints((input.sourceConfig ?? input.chat.config).openRouter)
-      && !isOpenRouterURL(new URL(provider.endpoint))) throw new Error('OpenRouter auxiliary constraints require an OpenRouter endpoint.');
     return JSON.stringify({ status: 'ready', model, providerId, credentialProviderId, endpoint: provider.endpoint, config, promptMessage } satisfies Selection);
   }
   if (input.operation === 'plan') {
@@ -52,11 +51,12 @@ export function titleOperation(json: string): string {
     const selection = input.selection;
     if (selection.status !== 'ready') throw new Error('Invalid title selection.');
     if (!input.transport.hasApiKey && selection.endpoint === officialAPIEndpoint) throw new Error('noApiKeyWarning');
-    const url = new URL(selection.endpoint);
+    if (hardOpenRouterConstraints(selection.config.openRouter)
+      && !isOpenRouterURL(input.transport.endpointURL)) throw new Error('OpenRouter auxiliary constraints require an OpenRouter endpoint.');
     const request = JSON.parse(generationRequest(JSON.stringify({
       auxiliary: true, messages: [selection.promptMessage], config: selection.config,
       modelState: input.modelState, capabilities: input.capabilities,
-      transport: { endpoint: selection.endpoint, endpointURL: { protocol: url.protocol, hostname: url.hostname },
+      transport: { endpoint: selection.endpoint, endpointURL: input.transport.endpointURL,
         hasApiKey: input.transport.hasApiKey, apiVersion: input.transport.apiVersion,
         customHeaders: input.transport.customHeaders, viaProxy: input.transport.viaProxy },
     })));

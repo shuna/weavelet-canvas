@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { _defaultChatConfig } from '@constants/chatDefaults';
 import type { ChatInterface } from '@type/chat';
 import { titleOperation } from '../../shared/google-sync/title';
@@ -20,8 +20,12 @@ describe('shared title operation', () => {
     expect(selection).toMatchObject({ status: 'ready', model: 'openai/gpt-4.1', providerId: 'openrouter',
       credentialProviderId: 'openrouter', config: { openRouter: { responseCache: { mode: 'off' } } } });
     expect(selection.promptMessage.content.at(-1).text).toContain('language: ja');
-    const plan = call({ operation: 'plan', chat, selection, capabilities: { supportsReasoning: false, requiresReasoning: false },
-      transport: { hasApiKey: true, viaProxy: true } });
+    vi.stubGlobal('URL', undefined);
+    let plan;
+    try {
+      plan = call({ operation: 'plan', chat, selection, capabilities: { supportsReasoning: false, requiresReasoning: false },
+        transport: { hasApiKey: true, endpointURL: { protocol: 'https:', hostname: 'openrouter.ai' }, viaProxy: true } });
+    } finally { vi.unstubAllGlobals(); }
     expect(plan.request.body).toMatchObject({ model: 'openai/gpt-4.1', stream: false,
       messages: [selection.promptMessage] });
     expect(plan.request.headers['X-OpenRouter-Cache']).toBe('false');
@@ -48,5 +52,9 @@ describe('shared title operation', () => {
       { op: 'set', path: ['titleModel'], value: 'gpt-4.1' },
       { op: 'remove', path: ['titleProviderId'] },
     ]));
+    expect(call({ operation: 'saveSettings', state: { untouched: 42 },
+      value: { autoTitle: true, titleModel: 'gpt-4.1', titleProviderId: 'openai' } }).changes)
+      .toEqual([{ op: 'set', path: ['autoTitle'], value: true }, { op: 'set', path: ['titleModel'], value: 'gpt-4.1' },
+        { op: 'set', path: ['titleProviderId'], value: 'openai' }]);
   });
 });
