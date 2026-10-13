@@ -20855,6 +20855,20 @@ ${text}`;
     };
   }
 
+  // src/utils/evaluationAutoCore.ts
+  function autoEvaluationPlan({ phase, userContent, assistantContent, settings }) {
+    const extractText2 = (content) => content.filter((part) => part.type === "text").map((part) => part.text).join("\n");
+    const userText = extractText2(userContent);
+    const assistantText = assistantContent === void 0 ? void 0 : extractText2(assistantContent);
+    return {
+      userText,
+      assistantText,
+      safetyText: phase === "pre-send" ? userText : assistantText ?? "",
+      shouldSafety: !!userText && (phase === "pre-send" ? settings.safetyPreSend : settings.safetyPostReceive) === "auto",
+      shouldQuality: !!userText && (phase === "pre-send" ? settings.qualityPreSend : settings.qualityPostReceive) === "auto"
+    };
+  }
+
   // src/utils/evaluationState.ts
   var defaultEvaluationSettings = {
     safetyPreSend: "manual",
@@ -20898,6 +20912,8 @@ ${text}`;
   function evaluation(json) {
     const input = JSON.parse(json);
     switch (input.operation) {
+      case "autoPlan":
+        return JSON.stringify(autoEvaluationPlan(input));
       case "context":
         return JSON.stringify(resolveEvalContextCore(input.chat, input.omittedNodes ?? input.chat.omittedNodes ?? {}, input.messageIndex, input.role, input.scope, input.omittedMode));
       case "judgeRequest": {

@@ -71,6 +71,20 @@ beforeEach(() => {
 });
 
 describe('asynchronous evaluation execution', () => {
+  it('routes only text parts through the shared automatic plan', async () => {
+    fixture.state.localModelEnabled = false;
+    fixture.state.evaluationSettings.safetyEngine = 'remote';
+    fixture.state.evaluationSettings.safetyPreSend = 'auto';
+    fixture.state.evaluationSettings.qualityPreSend = 'manual';
+    await runPreSendEvaluation([
+      {type:'text',text:'first'}, {type:'reasoning',text:'hidden'}, {type:'text',text:'second'},
+    ], context);
+    expect(fixture.safety).toHaveBeenCalledWith('first\nsecond', undefined, expect.any(AbortSignal));
+    expect(fixture.quality).not.toHaveBeenCalled();
+    await runPreSendEvaluation([{type:'reasoning',text:'hidden'}], context);
+    expect(fixture.state.setEvaluationPending).toHaveBeenCalledTimes(2);
+  });
+
   it('uses the initially selected model after preparation awaits an assignment change', async () => {
     const preparation = deferred<void>();
     fixture.prepare.mockReturnValueOnce(preparation.promise);

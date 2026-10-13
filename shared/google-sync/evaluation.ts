@@ -2,6 +2,7 @@ import { localAxisPrompt, localAxisScore, localModeration, localQualityResult, l
 import { hardOpenRouterConstraints } from '../../src/utils/openrouterRequest';
 import { buildJudgeRequest, buildSafetyRequest, parseJudgeResponse, parseSafetyResponse } from '../../src/utils/evaluationCore';
 import { resolveEvalContextCore } from '../../src/utils/evaluationContextCore';
+import { autoEvaluationPlan, type AutoEvaluationInput } from '../../src/utils/evaluationAutoCore';
 import { defaultEvaluationSettings, mutateEvaluationState, type EvaluationAction, type EvaluationState } from '../../src/utils/evaluationState';
 import { defaultQualityThresholds, defaultSafetyThresholds, evaluationResultKey, getSafetyStatus, moderationCategoryKeys, qualityAxisKeys, summarizeSafetyScores, systemQualityAxisKeys } from '../../src/types/evaluation';
 import type { EvaluationResult, EvaluationScope, EvaluationOmittedMode, QualityEvaluationMode, QualityScores, LocalModerationResult, SafetyEngineMode } from '../../src/types/evaluation';
@@ -9,6 +10,7 @@ import type { ChatInterface, OpenRouterChatSettings } from '../../src/types/chat
 import { diffJSONChanges } from '../../src/utils/jsonChanges';
 
 type Input =
+  | ({operation: 'autoPlan'} & AutoEvaluationInput)
   | {operation: 'context'; chat: ChatInterface; omittedNodes?: Record<string, boolean>; messageIndex: number; role: string; scope: EvaluationScope; omittedMode: EvaluationOmittedMode}
   | {operation: 'judgeRequest'; userPrompt: string; assistantResponse?: string; endpoint: string; model: string; hasApiKey?: boolean; language?: string; mode?: QualityEvaluationMode; openRouter?: OpenRouterChatSettings; viaProxy?: boolean; endpointURL?: {protocol: string; hostname: string}}
   | {operation: 'safetyAllowed'; openRouter?: OpenRouterChatSettings}
@@ -34,6 +36,7 @@ const wllamaPromptText = (value: string): string => Array.from(value, scalar =>
 export function evaluation(json: string): string {
   const input = JSON.parse(json) as Input;
   switch (input.operation) {
+    case 'autoPlan': return JSON.stringify(autoEvaluationPlan(input));
     case 'context': return JSON.stringify(resolveEvalContextCore(input.chat, input.omittedNodes ?? input.chat.omittedNodes ?? {}, input.messageIndex, input.role, input.scope, input.omittedMode));
     case 'judgeRequest': {
       const {chatUrl, headers, body} = buildJudgeRequest(input);

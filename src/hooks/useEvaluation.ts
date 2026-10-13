@@ -12,6 +12,7 @@ import useStore from '@store/store';
 import { runSafetyCheck, runQualityEvaluation } from '@api/evaluation';
 import { runLocalModeration, runLocalQualityEvaluation } from '@api/localEvaluation';
 import { localSafetyPolicy } from '@utils/localEvaluationCore';
+import { autoEvaluationPlan } from '@utils/evaluationAutoCore';
 import {
   createLocalModelOwner,
   prepareModelsForExecution,
@@ -22,13 +23,6 @@ import type { EvaluationResult, QualityScores, AxisProgressState } from '@type/e
 import type { ContentInterface } from '@type/chat';
 import type { ResolvedProvider } from './submitHelpers';
 import i18next from 'i18next';
-
-function extractText(content: ContentInterface[]): string {
-  return content
-    .filter((c): c is { type: 'text'; text: string } => c.type === 'text')
-    .map((c) => c.text)
-    .join('\n');
-}
 
 export interface EvaluationContext {
   chatId: string;
@@ -57,24 +51,17 @@ function evaluationTask(chatId: string, nodeId: string, phase: 'pre-send' | 'pos
 
 async function runEvaluationForPhase(
   phase: 'pre-send' | 'post-receive',
-  userText: string,
-  assistantText: string | undefined,
+  userContent: ContentInterface[],
+  assistantContent: ContentInterface[] | undefined,
   ctx: EvaluationContext
 ): Promise<void> {
   const store = useStore.getState();
   const settings = store.evaluationSettings;
+  const { userText, assistantText, safetyText, shouldSafety, shouldQuality } = autoEvaluationPlan({phase, userContent, assistantContent, settings});
   const analysisModelId = store.localModelEnabled ? (store.activeLocalModels.analysis ?? null) : null;
   const moderationModelId = store.localModelEnabled
     ? (analysisModelId ?? store.activeLocalModels.moderation ?? null) : null;
   const key = evaluationResultKey(ctx.chatId, ctx.nodeId, phase);
-
-  const shouldSafety =
-    (phase === 'pre-send' && settings.safetyPreSend === 'auto') ||
-    (phase === 'post-receive' && settings.safetyPostReceive === 'auto');
-
-  const shouldQuality =
-    (phase === 'pre-send' && settings.qualityPreSend === 'auto') ||
-    (phase === 'post-receive' && settings.qualityPostReceive === 'auto');
 
   if (!shouldSafety && !shouldQuality) return;
 
@@ -86,7 +73,6 @@ async function runEvaluationForPhase(
   let unregisterOwner: (() => void) | undefined;
 
   try {
-    const textToCheck = phase === 'pre-send' ? userText : (assistantText ?? '');
     const { safetyEngine, hybridRemoteOnSafe } = settings;
 
     // Prepare local evaluation models before first use
@@ -102,11 +88,11 @@ async function runEvaluationForPhase(
     }
 
     if (!isAiTaskCurrent(ticket)) return;
-    if (shouldSafety && textToCheck) {
+    if (shouldSafety && safetyText) {
       // --- Local safety (if engine is local or hybrid) ---
       if (localSafetyPolicy(safetyEngine, hybridRemoteOnSafe).runLocal) {
         try {
-          result.localSafety = await runLocalModeration(textToCheck, localModelOwnerId, ticket.controller.signal, moderationModelId);
+          result.localSafety = await runLocalModeration(safetyText, localModelOwnerId, ticket.controller.signal, moderationModelId);
         } catch (e) {
           console.warn('[evaluation] local safety screening failed:', e);
         }
@@ -118,7 +104,7 @@ async function runEvaluationForPhase(
 
       if (shouldRunRemote) {
         try {
-          result.safety = await runSafetyCheck(textToCheck, ctx.openRouter, ticket.controller.signal);
+          result.safety = await runSafetyCheck(safetyText, ctx.openRouter, ticket.controller.signal);
         } catch (e) {
           console.warn('[evaluation] remote safety check failed:', e);
           showToast(e instanceof Error ? e.message : String(e), 'error');
@@ -190,9 +176,7 @@ export async function runPreSendEvaluation(
   userContent: ContentInterface[],
   ctx: EvaluationContext
 ): Promise<void> {
-  const userText = extractText(userContent);
-  if (!userText) return;
-  await runEvaluationForPhase('pre-send', userText, undefined, ctx);
+  await runEvaluationForPhase('pre-send', userContent, undefined, ctx);
 }
 
 /**
@@ -204,10 +188,7 @@ export async function runPostReceiveEvaluation(
   assistantContent: ContentInterface[],
   ctx: EvaluationContext
 ): Promise<void> {
-  const userText = extractText(userContent);
-  const assistantText = extractText(assistantContent);
-  if (!userText) return;
-  await runEvaluationForPhase('post-receive', userText, assistantText, ctx);
+  await runEvaluationForPhase('post-receive', userContent, assistantContent, ctx);
 }
 
 /**
