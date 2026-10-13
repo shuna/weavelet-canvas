@@ -779,3 +779,21 @@ Catalyst buildと追加境界2件成功（/tmp/weavelet-native-composer-role-ver
 3eeccaabでcompact toolbarの常設7操作を5操作へ減らした。実Web MobileBar/ChatViewTabsのモバイル配置を確認し、既存「その他」にファイル/設定をまとめ、会話一覧・履歴・表示・検索の入口、sidebar下端の共通操作、regular/detailOnlyの配置を維持する。handler/保存/disabledは変更しない。最終統合Catalyst build成功（/private/tmp/weavelet-native-role-toolbar-build.log）、追加App差分の独立Astraは新規P2以上なし。共有元/TSの変更はなく、既存成功結果を再利用し、全同期・全業務suiteは反復しない。bundle鮮度と差分確認も成功。
 
 実compact画面・役割menu・IME/実Enter・最大文字サイズ/VoiceOver・Air導入・実オンライン同期は未確認。CUAは既存隔離アプリのwindowを取得できず、inventoryでは起動中のため終了済みと扱わない。未知新part型の送信は既存どおり未対応で、入力を保持して明示拒否する。Web配置全差分の解消とは扱わない。
+
+## 複数会話の分岐表示とcompactの分割適応（2026-10-14）
+
+54cf4743で実Web BranchEditorView31–44に従い、選択2件以上では選択順のentries、0/1件では現在会話を既存共有branchLayoutへ渡す。選択はWebと同じ一時状態で、保存・同期rootを増やさない。会話ごとのheader、全entriesに対する世代確認、会話とnodeを指定した既存navigation/menu/同会話比較へ接続した。raw inputのnode ID/parent/pathは変更しない。nativeの描画identityだけをchatIndexとraw UTF8 IDで区別し、共有edgeには最小のchatIndex metadataを追加する。152e6cf1でcompactのsplit表示は実Web mobileと同じくchat表示へ適応し、選択viewとregularの分割を維持する。
+
+共有/worker関連10件成功、Catalyst関連11件のうち10件成功後、追加fixtureのcreatedAt欠落を実node仕様に従って補完し残る1件が成功（/private/tmp/weavelet-multiview-{test-final,navigate}.log）。単一の最終11件runではない。跨会話の同node ID/NFC/NFD、正しい移動先、古いkey拒否、非永続選択、flat変換時の保存失敗保全を確認。独立AstraのP2「孤立surrogate titleで会話自体を落とす」を67bae591でdisplayStringの表示投影だけへ修正し、raw snapshot bytes保持と会話/header保持の該当1件成功（/private/tmp/weavelet-multiview-surrogate.log）。限定再監査はP2解消・新規P2以上なし。
+
+親統合Catalyst build成功（/private/tmp/weavelet-multiview-integrated-build.log）。後述のTS更新後のbundleでも代表1件成功（/private/tmp/weavelet-multiview-new-generator-test.log）。変更のない業務・全I/O・全同期suiteは再実行しない。実UI・大規模graph・VoiceOver・実機は未確認。Web側の既存ReactFlow跨会話raw ID衝突は今回変更しておらず、nativeの描画ID分離とWeb側の完了を混同しない。
+
+## 分類器の採用前セキュリティとWeb依存更新（2026-10-14）
+
+a78972ccでHF4.3.0/対応ORT、TS5.4.5とprotobufjs7.6.6を限定固定した。[計画の採用境界](web-native-commonality-roadmap.md#2026-10-14local分類器の採用境界と限定更新)に公式修正・代替方式・未確認範囲を記録した。npm側の変更48packageを公式metadata/integrityと公開advisoryへ照合した。独立AstraのP2「npmだけprotobufjs修正版、Yarn/installedは旧版」を対象resolution/overrideと関連4依存の更新で解消、限定再監査は新規P2以上なし。関係のないnpm lockの既知jose/workers-types欠落を今回の更新へ混ぜず、npm ci成功とは扱わない。npmのYarn全optional削除も回収して正式Yarn生成へ戻した。
+
+最終TS型検査、Web production build、既存runtime6件、Yarn frozen install成功（/private/tmp/weavelet-transformers-{final-types,web-build,runtime-tests,final-frozen}.log）。runtime testはworker facadeの確認であり、実classifierの成功とは扱わない。TS4.9は新依存型の構文で失敗し、TS5.9 probeは既存大buffer型を広く変える必要があったため採用せず、TS5.4と既存map型の明示だけでstrict条件を維持した。
+
+同期generatorのTS版差により最初の鮮度確認は失敗したため再生成した。initialDefaults bytesは同一で、bundle差は生成時の依存path comment/CommonJS labelだけと原artifact比較で確認し、最終鮮度確認成功。新bundleのSHA256は32e77def3cfb948c48fd3cc3a5fe6b0f4d7afa326b58dc49fb828b8818bbe07b。共有業務を変更したとして全suiteを反復しない。
+
+WK分類器は実証中。既存Web workerのallowLocalModels=falseとlocal_files_onlyの組合せが新旧HFでcustomCache前に拒否される根本原因を確認し、共通workerで修正を進めている。実分類・任意モデル・Local/Hybrid UI・実機・実オンライン同期は未確認。Airの最新lockStateはpasscodeRequired=trueで、実機導入を成功扱いしない。

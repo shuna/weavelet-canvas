@@ -343,3 +343,11 @@ b2f5f976/6a345e4aで同じpure元のbranchLayoutと既存Web ensureBranchTreeSta
 次のnative prompt適用ではWebの既存match-sorter6.3.1をname検索に限定再利用する。独立Astraはinstalled/両lockの版一致、remove-accents0.4.2と既存修正版Babel runtime7.26.10への依存を確認。公式[match-sorter Releases](https://github.com/kentcdodds/match-sorter/releases)と[remove-accents](https://github.com/tyxla/remove-accents)を根拠に、MIT本文/著作権と実入力hashの配布保持を条件付き採用可とした。確認できた公開advisoryに両検索packageの該当を見つけず、[Babel advisory](https://github.com/babel/babel/security/advisories/GHSA-968p-4wvh-cqc8)は既存固定版で修正済み。未発見問題の不存在は保証しない。
 
 検索経路はDOM/Node/network不要だが、同順位のlocaleCompareによる全Unicode順序一致をsource共有だけで保証しない。a90b5b8c/86fef754でMIT本文と固定hashを配布へ含め、完成bundleの実JSCで名前/同順位/アクセント、UI外検索と古い入力の拒否を確認した。独立Astraのquery同値性指摘はbb18b7f3でUTF8基準へ修正し、限定再監査は新規P2以上なし。実bundle増分22,935 byte。ESM等の原文約18.5KB、app全体/圧縮配布/実機性能とは区別する。適用の接続範囲と実UI等の未確認は[検証台帳](web-native-completion-ledger.md)に記録した。
+
+## 2026-10-14：local分類器の採用境界と限定更新
+
+独立Astraの採用前調査では、実Web Transformers.jsのpipeline/tokenizer/MultiFileManifestをWKWebViewとWorkerで再利用する小実証を第一候補とした。新classifier/tokenizerをSwiftで再実装しない。公式[ORT Objective-C API](https://onnxruntime.ai/docs/get-started/with-obj-c.html)と[Swift tokenizer](https://github.com/huggingface/swift-transformers/blob/main/README.md)は代替候補だが、tensor前後処理・tokenizer同値・追加依存・Catalyst配布確認の費用が加わる。CoreML事前変換だけへ絞ると既存ONNXモデル契約の対応範囲を縮小するため採用しない。CoreML/ANEの恩恵とWK/WASMの性能・消費電力は実測前に断定せず、実証で不足が分かった場合にnative ORT境界を検討する。判定閾値とhybrid規則は既存共有元に残す。
+
+現固定HF4.0.1/ORT dev722743c0e2にはCPU TensorScatterの型制限[公式修正](https://github.com/microsoft/onnxruntime/pull/29916)が未適用だった。a78972ccで最小の対応HF4.3.0へ固定し、その公式ORT dev8d85527a0で修正の包含を確認した。HF4.1/4.2は修正前、4.3.1の追加機能は今回不要。新しい型定義のconst type parameterに対応するTS5.4.5を固定し、空のverification mapへ既存型だけを明示する。protobufjsはWebの実webgpu入口では非同梱だが、両lockとinstalledに配布される既知脆弱版を残さず7.6.6へ対象固定する。新規の直接依存は追加しない。独立Astraの版/integrity/公開advisory照合とP2修正確認は新規P2以上なし、未発見問題の不存在を保証しない。
+
+WK実証ではORTのmjs/WASMも[公式配布手順](https://onnxruntime.ai/docs/tutorials/web/deploy.html)に従いローカルへ固定し、外部通信なし・実pipeline結果・取消/古い通知の拒否・Worker破棄を確認する。local_files_onlyだけではORT資産のCDN読込を止められない。Node版/sharpは同梱せず、固定ORT revisionのMIT本文とThirdPartyNoticesを保持する。Web実unloadModelはunload通知後にWorkerをterminateするため、workerのnull代入だけを見て解放規則を作り直さない。実分類、nativeのモデル資産管理・Local/Hybrid接続、実機性能はまだ完成していない。
