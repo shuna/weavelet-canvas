@@ -180,7 +180,8 @@
     "src/utils/chatMarkdown.ts": "7fa68fc26091374a7f3a5fa5885ec19547870612058c09927ef4bb1cb9ebeafa",
     "src/utils/fileExport.ts": "51f4f9fc072140849730d8be079703f39a7380a80e29532a9443560413f2bc29",
     "shared/google-sync/fileExport.ts": "255ed86dc22b18a75cc450f5f1040f4ab19a3ad7e9241e4cc680691c1875ffab",
-    "shared/google-sync/entry.ts": "c27845c949d7c1452da756db8e7271880d596b2a1478a50e9063f5b5f2f62775",
+    "shared/google-sync/composer.ts": "ff722f6cd2b796ab0e0f3a13f384c30ab74f1f3aa66a186141ab1a39c85f2595",
+    "shared/google-sync/entry.ts": "b1f3197adaf93e2a3314def20de7e8b2fb78a0dd375cd7a24256e0d6199f2315",
     "shared/google-sync/generate.mjs": "fe5cea14c3f66829c4627c74b4b790a15e6a660457b399e5413dcb1035afdc1b",
     "shared/google-sync/importDefaults.generate.mjs": "2ff8904af4f192ed0809ceaaabcfbefa708321083aebb527d712fc2a0551b15a"
   },
@@ -214,5 +215,5 @@
     "lodash/package.json": "8e41b07c744a0de0d2c1c23ed41418ecb0849abb56395d28802e601b4730d7c2",
     "lodash/LICENSE": "f71e8ed126b46346494aad5486874cd8f0aafe95092ed67d2e3cb6110f939abc"
   },
-  "bundleSHA256": "94482aa7d3be4ab8b4a3ca062c34bb95ab2e6163dc284ac0c558d0d75f02ad60"
+  "bundleSHA256": "3f1efed2abec509afe849f5fa2cef624dbc53ad09c463ec98b5dc3f714bdb227"
 }

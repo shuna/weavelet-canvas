@@ -31,9 +31,9 @@ var WeaveletGoogleSync = (() => {
   ));
   var __toCommonJS = (mod) => __copyProps(__defProp({}, "__esModule", { value: true }), mod);
 
-  // ../../../../../../../../Users/suzuki/weavelet-canvas/node_modules/lodash/lodash.js
+  // ../../../Users/suzuki/weavelet-canvas/node_modules/lodash/lodash.js
   var require_lodash = __commonJS({
-    "../../../../../../../../Users/suzuki/weavelet-canvas/node_modules/lodash/lodash.js"(exports, module) {
+    "../../../Users/suzuki/weavelet-canvas/node_modules/lodash/lodash.js"(exports, module) {
       /**
        * @license
        * Lodash <https://lodash.com/>
@@ -5519,9 +5519,9 @@ var WeaveletGoogleSync = (() => {
     }
   });
 
-  // ../../../../../../../../Users/suzuki/weavelet-canvas/node_modules/diff-match-patch/index.js
+  // ../../../Users/suzuki/weavelet-canvas/node_modules/diff-match-patch/index.js
   var require_diff_match_patch = __commonJS({
-    "../../../../../../../../Users/suzuki/weavelet-canvas/node_modules/diff-match-patch/index.js"(exports, module) {
+    "../../../Users/suzuki/weavelet-canvas/node_modules/diff-match-patch/index.js"(exports, module) {
       var diff_match_patch2 = function() {
         this.Diff_Timeout = 1;
         this.Diff_EditCost = 4;
@@ -6984,6 +6984,7 @@ var WeaveletGoogleSync = (() => {
     branchClipboard: () => branchClipboard,
     branchHistory: () => branchHistory,
     chatSearch: () => chatSearch,
+    composerContent: () => composerContent,
     documentOperation: () => documentOperation,
     drain: () => drain,
     driveFolderName: () => driveFolderName,
@@ -7320,6 +7321,7 @@ var WeaveletGoogleSync = (() => {
       return true;
     return isTextContent(part) && part.text.trim().length > 0;
   });
+  var hasMeaningfulMessageContent = (messages) => messages.some((message) => hasMeaningfulContent(message.content));
 
   // src/utils/messageText.ts
   var firstTextIndex = (content) => content.findIndex((item) => item.type === "text");
@@ -8884,7 +8886,7 @@ ${message.content}` : message.content).join("\n\n").trim();
     });
   };
 
-  // ../../../../../../../../Users/suzuki/weavelet-canvas/node_modules/@babel/runtime/helpers/esm/typeof.js
+  // ../../../Users/suzuki/weavelet-canvas/node_modules/@babel/runtime/helpers/esm/typeof.js
   function _typeof(obj) {
     "@babel/helpers - typeof";
     return _typeof = "function" == typeof Symbol && "symbol" == typeof Symbol.iterator ? function(obj2) {
@@ -8894,14 +8896,14 @@ ${message.content}` : message.content).join("\n\n").trim();
     }, _typeof(obj);
   }
 
-  // ../../../../../../../../Users/suzuki/weavelet-canvas/node_modules/@babel/runtime/helpers/esm/classCallCheck.js
+  // ../../../Users/suzuki/weavelet-canvas/node_modules/@babel/runtime/helpers/esm/classCallCheck.js
   function _classCallCheck(instance2, Constructor) {
     if (!(instance2 instanceof Constructor)) {
       throw new TypeError("Cannot call a class as a function");
     }
   }
 
-  // ../../../../../../../../Users/suzuki/weavelet-canvas/node_modules/@babel/runtime/helpers/esm/toPrimitive.js
+  // ../../../Users/suzuki/weavelet-canvas/node_modules/@babel/runtime/helpers/esm/toPrimitive.js
   function _toPrimitive(input, hint) {
     if (_typeof(input) !== "object" || input === null)
       return input;
@@ -8915,13 +8917,13 @@ ${message.content}` : message.content).join("\n\n").trim();
     return (hint === "string" ? String : Number)(input);
   }
 
-  // ../../../../../../../../Users/suzuki/weavelet-canvas/node_modules/@babel/runtime/helpers/esm/toPropertyKey.js
+  // ../../../Users/suzuki/weavelet-canvas/node_modules/@babel/runtime/helpers/esm/toPropertyKey.js
   function _toPropertyKey(arg) {
     var key = _toPrimitive(arg, "string");
     return _typeof(key) === "symbol" ? key : String(key);
   }
 
-  // ../../../../../../../../Users/suzuki/weavelet-canvas/node_modules/@babel/runtime/helpers/esm/createClass.js
+  // ../../../Users/suzuki/weavelet-canvas/node_modules/@babel/runtime/helpers/esm/createClass.js
   function _defineProperties(target, props) {
     for (var i = 0; i < props.length; i++) {
       var descriptor = props[i];
@@ -8943,7 +8945,7 @@ ${message.content}` : message.content).join("\n\n").trim();
     return Constructor;
   }
 
-  // ../../../../../../../../Users/suzuki/weavelet-canvas/node_modules/@babel/runtime/helpers/esm/assertThisInitialized.js
+  // ../../../Users/suzuki/weavelet-canvas/node_modules/@babel/runtime/helpers/esm/assertThisInitialized.js
   function _assertThisInitialized(self2) {
     if (self2 === void 0) {
       throw new ReferenceError("this hasn't been initialised - super() hasn't been called");
@@ -8951,7 +8953,7 @@ ${message.content}` : message.content).join("\n\n").trim();
     return self2;
   }
 
-  // ../../../../../../../../Users/suzuki/weavelet-canvas/node_modules/@babel/runtime/helpers/esm/setPrototypeOf.js
+  // ../../../Users/suzuki/weavelet-canvas/node_modules/@babel/runtime/helpers/esm/setPrototypeOf.js
   function _setPrototypeOf(o, p) {
     _setPrototypeOf = Object.setPrototypeOf ? Object.setPrototypeOf.bind() : function _setPrototypeOf2(o2, p2) {
       o2.__proto__ = p2;
@@ -8960,7 +8962,7 @@ ${message.content}` : message.content).join("\n\n").trim();
     return _setPrototypeOf(o, p);
   }
 
-  // ../../../../../../../../Users/suzuki/weavelet-canvas/node_modules/@babel/runtime/helpers/esm/inherits.js
+  // ../../../Users/suzuki/weavelet-canvas/node_modules/@babel/runtime/helpers/esm/inherits.js
   function _inherits(subClass, superClass) {
     if (typeof superClass !== "function" && superClass !== null) {
       throw new TypeError("Super expression must either be null or a function");
@@ -8979,7 +8981,7 @@ ${message.content}` : message.content).join("\n\n").trim();
       _setPrototypeOf(subClass, superClass);
   }
 
-  // ../../../../../../../../Users/suzuki/weavelet-canvas/node_modules/@babel/runtime/helpers/esm/possibleConstructorReturn.js
+  // ../../../Users/suzuki/weavelet-canvas/node_modules/@babel/runtime/helpers/esm/possibleConstructorReturn.js
   function _possibleConstructorReturn(self2, call) {
     if (call && (_typeof(call) === "object" || typeof call === "function")) {
       return call;
@@ -8989,7 +8991,7 @@ ${message.content}` : message.content).join("\n\n").trim();
     return _assertThisInitialized(self2);
   }
 
-  // ../../../../../../../../Users/suzuki/weavelet-canvas/node_modules/@babel/runtime/helpers/esm/getPrototypeOf.js
+  // ../../../Users/suzuki/weavelet-canvas/node_modules/@babel/runtime/helpers/esm/getPrototypeOf.js
   function _getPrototypeOf(o) {
     _getPrototypeOf = Object.setPrototypeOf ? Object.getPrototypeOf.bind() : function _getPrototypeOf2(o2) {
       return o2.__proto__ || Object.getPrototypeOf(o2);
@@ -8997,7 +8999,7 @@ ${message.content}` : message.content).join("\n\n").trim();
     return _getPrototypeOf(o);
   }
 
-  // ../../../../../../../../Users/suzuki/weavelet-canvas/node_modules/@babel/runtime/helpers/esm/defineProperty.js
+  // ../../../Users/suzuki/weavelet-canvas/node_modules/@babel/runtime/helpers/esm/defineProperty.js
   function _defineProperty(obj, key, value) {
     key = _toPropertyKey(key);
     if (key in obj) {
@@ -9013,19 +9015,19 @@ ${message.content}` : message.content).join("\n\n").trim();
     return obj;
   }
 
-  // ../../../../../../../../Users/suzuki/weavelet-canvas/node_modules/@babel/runtime/helpers/esm/arrayWithHoles.js
+  // ../../../Users/suzuki/weavelet-canvas/node_modules/@babel/runtime/helpers/esm/arrayWithHoles.js
   function _arrayWithHoles(arr) {
     if (Array.isArray(arr))
       return arr;
   }
 
-  // ../../../../../../../../Users/suzuki/weavelet-canvas/node_modules/@babel/runtime/helpers/esm/iterableToArray.js
+  // ../../../Users/suzuki/weavelet-canvas/node_modules/@babel/runtime/helpers/esm/iterableToArray.js
   function _iterableToArray(iter) {
     if (typeof Symbol !== "undefined" && iter[Symbol.iterator] != null || iter["@@iterator"] != null)
       return Array.from(iter);
   }
 
-  // ../../../../../../../../Users/suzuki/weavelet-canvas/node_modules/@babel/runtime/helpers/esm/arrayLikeToArray.js
+  // ../../../Users/suzuki/weavelet-canvas/node_modules/@babel/runtime/helpers/esm/arrayLikeToArray.js
   function _arrayLikeToArray(arr, len) {
     if (len == null || len > arr.length)
       len = arr.length;
@@ -9034,7 +9036,7 @@ ${message.content}` : message.content).join("\n\n").trim();
     return arr2;
   }
 
-  // ../../../../../../../../Users/suzuki/weavelet-canvas/node_modules/@babel/runtime/helpers/esm/unsupportedIterableToArray.js
+  // ../../../Users/suzuki/weavelet-canvas/node_modules/@babel/runtime/helpers/esm/unsupportedIterableToArray.js
   function _unsupportedIterableToArray(o, minLen) {
     if (!o)
       return;
@@ -9049,17 +9051,17 @@ ${message.content}` : message.content).join("\n\n").trim();
       return _arrayLikeToArray(o, minLen);
   }
 
-  // ../../../../../../../../Users/suzuki/weavelet-canvas/node_modules/@babel/runtime/helpers/esm/nonIterableRest.js
+  // ../../../Users/suzuki/weavelet-canvas/node_modules/@babel/runtime/helpers/esm/nonIterableRest.js
   function _nonIterableRest() {
     throw new TypeError("Invalid attempt to destructure non-iterable instance.\nIn order to be iterable, non-array objects must have a [Symbol.iterator]() method.");
   }
 
-  // ../../../../../../../../Users/suzuki/weavelet-canvas/node_modules/@babel/runtime/helpers/esm/toArray.js
+  // ../../../Users/suzuki/weavelet-canvas/node_modules/@babel/runtime/helpers/esm/toArray.js
   function _toArray(arr) {
     return _arrayWithHoles(arr) || _iterableToArray(arr) || _unsupportedIterableToArray(arr) || _nonIterableRest();
   }
 
-  // ../../../../../../../../Users/suzuki/weavelet-canvas/node_modules/i18next/dist/esm/i18next.js
+  // ../../../Users/suzuki/weavelet-canvas/node_modules/i18next/dist/esm/i18next.js
   function ownKeys$6(object2, enumerableOnly) {
     var keys = Object.keys(object2);
     if (Object.getOwnPropertySymbols) {
@@ -17370,6 +17372,20 @@ ${messageContent}---
     const input = JSON.parse(json);
     const payload = buildFileExportPayload(input);
     return JSON.stringify({ payload, ...input.scope === "all" && input.format === "v3" ? { payloadChanges: diffJSONChanges(input.v3, JSON.parse(JSON.stringify(payload))) } : {}, mimeType: input.format === "markdown" ? "text/markdown" : "application/json", extension: input.format === "markdown" ? "md" : "json" });
+  }
+
+  // shared/google-sync/composer.ts
+  function composerContent(json) {
+    const input = JSON.parse(json);
+    if (input.operation !== "prepare")
+      throw new Error("Unknown composer operation.");
+    const parts = input.text === void 0 ? input.parts : replaceTextValue(input.parts, input.text);
+    const prepared = input.images?.length ? [...parts, ...input.images.map((image) => ({ type: "image_url", image_url: { url: image.url, detail: image.detail } }))] : parts;
+    return JSON.stringify({
+      parts: prepared,
+      hasMeaningfulContent: hasMeaningfulMessageContent([{ role: "user", content: prepared }]),
+      text: textValueOf(prepared)
+    });
   }
 
   // shared/google-sync/entry.ts
