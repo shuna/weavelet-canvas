@@ -198,7 +198,7 @@ Finish editing/document sharing first, including attribute handling and operatio
 | `LocalStateStore`, `SyncDocument`, `SyncStateStore`, `SyncRecords`, `SyncSession`, `GoogleSyncController` | atomic保存、baseline照合、同期公開journal回復はアプリ固有の保全。文書変換/差分復元は共有。新DB/同期SDKを追加して置き換える根拠なし |
 | `SyncCrypto`, `RemoteCredentials` | AES-GCMはCryptoKit、PBKDF2はCommonCrypto、乱数/鍵保存はSecurity/Keychain。独自部分はWeb互換salt/nonce/AAD/envelopeと接続であり、独自暗号算法ではない |
 | `GoogleAuthentication`, `DriveTransport`, `RemoteGeneration`, `ProviderModels` | OS認証画面/URLSession＋必要なOAuth/Drive/SSE接続。生成要求・結果の意味処理と一覧整形は共有。Googleは公式iOS SDKを推奨するが現方式も公式native OAuth仕様の範囲。PKCE/state/refresh等の保守は本アプリの責任で、全面的にOS任せとは記載しない |
-| `NativeGzip`, `SyncCompression` | OS zlibと既存LZStringによる形式互換。CloudKit圧縮は互換fixtureの定義であり、現UIでCloudKit同期採用済みの証拠はない |
+| `NativeGzip`, `SyncCompression` | OS zlibと既存LZStringによる形式互換。CloudKitは後述の共有snapshot規則・native CKDatabase・手動同期UIへ接続済み。実クラウド確認は未完了 |
 | `LocalLlama`, `NativeLlama/*` | 先の公式C API/既存wllama C++監査と修正済み生成物の証拠を再利用。Catalyst arm64の確認をiOS実機や全lowbit形式の保証へ拡張しない |
 
 監査開始時の外部依存：同期bundleにはlodash 4.17.21、diff-match-patch 1.0.5、@babel/runtime 7.21.0、i18next 22.4.11が実際に含まれ、LZStringは別resource。MarkdownにはReact/ReactDOM 18.2、react-markdown 8.0.5、root KaTeX 0.16.4とrehype-katex配下0.15.6、highlight.js 11.7等が含まれる。npm全体をアプリへ同梱する方式ではない。React/react-markdown/KaTeX/lodash/i18next upstreamの活動と、採用中の固定版の安全性は別に扱う。OS framework全OS版CVEや全異常入力の網羅検証は今回の証拠に含めない。
@@ -233,3 +233,20 @@ lodashのtemplate/unset/omitとBabelのwrapRegExpにも採用版のadvisoryが�
 
 
 フォルダー同期の実装追記：Web実FileSystemTransport/EncryptedSyncを共有bundleからnativeへ接続した。nativeのファイル/権限/保存境界、UI、journal再開は実装済み。Web関連17 cases、Catalyst関連26 casesの成功範囲（複数run）、実native ciphertext→actual Web→nativeのrecords一致、標準picker/bookmark復元、独立Astra指摘解消を確認した。詳細は[検証台帳](web-native-completion-ledger.md)に記録する。実iCloud配信/placeholder/競合コピーと実ブラウザ権限の確認は残件で、native CloudKit接続も継続対象である。
+
+
+## 2026-10-13：CloudKitの共有規則とnative接続
+
+CloudKitは廃止せず、Google Drive、ローカルフォルダー/iCloud Driveと別の同期先として維持する。ユーザー確認により旧iOSの公開コンテナーID `iCloud.com.sstcr.WeaveletCanvas` を引き継ぐ。新アプリID `com.weavelet.nativepilot` のコンテナー利用許可と署名は別途成立させる必要がある。`CLOUDKIT_CONTAINER_ID` はInfo.plistとentitlementsで共通参照、DebugはDevelopment、ReleaseはProduction。Webのコンテナーと環境も一致させる。Appleの[コンテナー指定](https://developer.apple.com/documentation/cloudkit/identifying-an-app-s-containers)・[iCloud entitlement](https://developer.apple.com/documentation/bundleresources/entitlements/com.apple.developer.icloud-services)に従う。
+
+| 処理 | 配置・採用の判断 |
+| --- | --- |
+| snapshotの形式判定、BYTES用UTF16LE codec、更新時刻の競合判定 | `shared/google-sync/cloudKit.ts`。既存Web providerも共有元を呼ぶ。既存LZStringを再利用し、別言語へ移植しない |
+| 容量・全件消去・大幅縮小の保護 | 実Web `cloud/guards.ts` をnative bundleから利用。圧縮文字列のBlob UTF8サイズを使う既存仕様を維持し、native Data.countへ置換しない |
+| 受信のデータ版・フォルダー階層 | 実WebのSTORE_VERSIONとfolderHierarchy utilityを共有。nativeに旧版の隔離・移行UIはまだないため、版違いを適用せず元レコードを維持して拒否する |
+| CloudKit通信・認証・CAS | Apple公式CloudKit SDKのprivate CKDatabase。取得済みCKRecordのsystem fieldsを保持して `.ifServerRecordUnchanged` で保存し、競合時は実Webと同じ再取得・時刻判定・1回の再試行。追加SDK・独自認証・独自CAS算法なし |
+| raw JSON・保存・UI | nativeの既存OrderedJSON/原子的保存を再利用。巨大整数、未知root、未知wrapper metadataを保持し、保存成功後に表示へ反映する |
+
+CloudKitはWebのFULL persistenceを使用し、Google/フォルダーのbrowser-local除外規則を流用しない。nativeのKeychain認証情報をsnapshotへ追加していない。CloudKit payloadをGoogle/フォルダーのパスフレーズ暗号化形式に変換する変更も行わない。標準recordはWebの `weavelet-default-snapshot` / `WeaveletSnapshot` を共有定数から参照し、旧iOS専用 `weavelet-ios-snapshot` の旧形式を自動上書きしない。
+
+今回の機能群は手動受信・送信・競合処理まで。自動同期、旧版のローカル隔離/移行UI、実コンテナーの相互運用は残件。関連Web55 casesの成功範囲と影響5 casesの再確認、Catalyst接続6 casesとrecord変換1 caseの成功範囲、独立Astra2指摘の修正を[検証台帳](web-native-completion-ledger.md)へ記録した。フォルダー同期の成功結果は再利用し、変更のない全領域の監査・保存/同期テストを反復しない。

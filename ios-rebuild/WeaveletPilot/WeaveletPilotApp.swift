@@ -23,6 +23,8 @@ struct ChatView: View {
     @State private var showsLibrary = false
     @State private var showsSearch = false
     @State private var showsRemoteSettings = false
+    @State private var cloudKitConnection: CloudKitSyncConnection?
+    @State private var shownCloudKitConnection: CloudKitSyncConnection?
     @State private var folderConnection: FolderSyncConnection?
     @State private var shownFolderConnection: FolderSyncConnection?
     @State private var shownGoogleConnection: GoogleSyncConnection?
@@ -319,6 +321,10 @@ struct ChatView: View {
                             if googleConnection == nil { googleConnection = GoogleSyncConnection(state: state) }
                             shownGoogleConnection = googleConnection
                         }.disabled(state.generation != nil)
+                        Button("CloudKit同期") {
+                            if cloudKitConnection == nil { cloudKitConnection = CloudKitSyncConnection(state:state) }
+                            shownCloudKitConnection = cloudKitConnection
+                        }.disabled(state.generation != nil)
                         Button("フォルダー同期・iCloud Drive") {
                             if folderConnection == nil { folderConnection = FolderSyncConnection(state:state) }
                             shownFolderConnection = folderConnection
@@ -333,6 +339,7 @@ struct ChatView: View {
                     .sheet(item: $shownGoogleConnection) { connection in
                         GoogleSyncSettingsView(connection: connection)
                     }
+                    .sheet(item: $shownCloudKitConnection) { connection in CloudKitSyncSettingsView(connection:connection) }
                     .sheet(item: $shownFolderConnection) { connection in FolderSyncSettingsView(connection:connection) }
                     .sheet(item: $defaultConfigDraft) { draft in ChatConfigView(state:state,draft:draft) }
                     .sheet(isPresented: $showsRemoteSettings) { RemoteSettingsView(state: state) }

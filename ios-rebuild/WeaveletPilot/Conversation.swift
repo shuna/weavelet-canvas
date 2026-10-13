@@ -850,6 +850,11 @@ final class ChatState: ObservableObject {
         if let document { return document.snapshot }
         return try SyncDocument(v3:ChatLibrary.emptySource).snapshot
     }
+    func applyCloudKitSnapshot(_ snapshot: OrderedJSON, expected: OrderedJSON) throws {
+        guard try syncInputSnapshot() == expected else { throw SyncSessionError.invalid("Local data changed during CloudKit sync") }
+        // CloudKit uses full Web persistence, unlike encrypted record sync which excludes browser settings.
+        try applySnapshot(snapshot)
+    }
     func applySynchronizedSnapshot(_ snapshot: OrderedJSON, expected: OrderedJSON) throws {
         guard try syncInputSnapshot() == expected else { throw SyncSessionError.invalid("Local data changed during sync") }
         let base = try document ?? SyncDocument(v3: exchange?.source ?? ChatLibrary.emptySource)

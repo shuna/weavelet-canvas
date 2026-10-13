@@ -441,3 +441,20 @@ full snapshotとV3 sidecarを分けて保存し、未知root・未参照entry・
 検証: Web全体134 suites/1,473 tests成功（既存benchmark1件skip）、型検査とVite build成功。最終の新規delta修正後は共有編集20 cases成功（新規2 casesを含む）。Catalyst初回95 casesで3ケース/4assertが失敗し、原因修正後の影響7 suites/55 casesではnull保存の1ケースだけ失敗した。その列挙境界を修正して文書6 cases成功、最終delta修正と追加保存回帰を含む編集10 casesも成功。変更のない成功結果を再利用して現在の97 casesを検証済みとするが、最終ソースで全97件を単一runした結果ではない。bundle鮮度・差分検査成功。独立Astraのこの機能単位の最終静的監査は残件なし。
 
 bundle SHA256: `5a8d351d59b02366f93b67fae015cb0f2b02db6e3bf5480feeec8cda12e22573`。検証ログは `/private/tmp/weavelet-sharing-{web,types,build,catalyst,catalyst-final,catalyst-null,catalyst-editing}.log`。実UI・実機・実クラウドを今回は再検証していない。full-stateの保存/公開境界は接続済みだが、OAuth・同期UI・実クラウド相互運用、他providerや全機能のiOS移植は引き続き未完了。
+
+
+## CloudKit共有規則・native手動同期（2026-10-13）
+
+配置はWebの既存snapshot規則・LWW・upload guardsを共有、nativeはApple CloudKit SDK、raw JSON保持、原子的保存、UIのみ。共有コード・native transportはそれぞれ専用worktreeでlocal commitを回収し、元のdirty workspaceは変更していない。公開コンテナーIDはユーザー承認の `iCloud.com.sstcr.WeaveletCanvas` を設定した。追加依存SDKなし。Google/フォルダーの設定除外をCloudKit FULL persistenceへ誤流用しない。
+
+- 再利用する成功結果：フォルダー同期17 Web/26 Catalyst、既存LZ wire fixture、変更のないCloudKit Web関連50 cases。CloudKit全体55 casesの成功後、変更を加えた共有5 casesのみ再確認した。Web型検査・bundle鮮度も成功。
+- 今回の必須確認：native接続6 cases（全項目・巨大整数・未知root/wrapper・再起動、取得済みrecord CAS/時刻固定、server採用、受信中の編集、保存失敗保全/再試行、missing/破損/版違い/循環folder/解除時の非適用）とCKRecord変換1 case。現在の全7 casesについて成功範囲を確認したが、最終ソースで全7件の単一runをした結果ではない。
+- 省略した重複確認：Google/フォルダー暗号化全経路、全Webテスト、全nativeテスト、以前の全iOS依存監査。共通版判定やLWWの業務テストをSwiftへ大量複製せず、native接続・保全へ絞った。
+
+失敗と修正：初回buildは新テストのtry漏れで実行前に失敗。実行後はnative6ケース中5ケースが圧縮UTF16の孤立surrogateをhost UTF8変換へ渡す際のエラーで失敗（他の保全assertの派生失敗を含む）。TextEncoder境界で標準 `toWellFormed()` を使い、圧縮payload自体は変更しない。共有テストでは孤立surrogateを拒否するnative host mockを通して実Web Blobとmetrics一致を確認した。現Catalystで接続5ケース成功、残る全項目1ケースはroot位置の期待値だけが相違した。
+
+root位置の原因：実Web `mergeSyncDocumentSnapshot` は `{...existing.state,...incoming.state}` で既存root位置を維持し、新rootを末尾へ追加する。受信JSONと保存JSONは値・キー集合・全ての内部順序が一致し、state直下のroot位置だけが既存文書に従っていた。期待値をこの実処理へ修正し、root位置を既存順序+新rootとして明示確認、UTF8キー集合と各rootのOrderedJSON値を全件比較した。全体canonical化で内部配列順・数値・参照の差を隠していない。該当1ケースだけ再実行して成功し、他の5ケースの成功を再利用した。
+
+独立Astra：受信版違いを適用するP1と循環folderを保存するP2を共有receiveGuardで修正。未知wrapper rootの保持も追加し、限定再監査は新規なし。SDKのCAS、取得済みsystem fields保持、更新時刻固定、古い状態での受信、保存失敗時の更新順序には新規なし。native旧版隔離/移行UIは未実装なので、版違いは元CloudKitレコードを維持したまま拒否する。
+
+ログ：`/private/tmp/weavelet-cloudkit-integration.log`（build失敗）、`weavelet-cloudkit-integration-retry.log`（host変換失敗）、`weavelet-cloudkit-integration-final.log`（5 cases成功/1 root位置相違）、`weavelet-cloudkit-corpus-debug.log`（差の原因確認）、`weavelet-cloudkit-corpus-final.log`（該当1 case成功）。bundle SHA256 `fcbb7e2724bf5e7e6fc2a5a3668cf5746e33197a4abf0ed28a751cfe245f3df3`。テストはFAKE corpus/CKRecord/transportと隔離ローカル保存のみ。実CloudKitアカウント・新app IDのコンテナー利用許可・署名・実Web相互運用・実iCloud Drive配信・実Google OAuthは未確認。CloudKit自動同期と旧版の隔離/移行UIも残件であり、全機能のWeb/iOS互換性完成とはしない。

@@ -8,10 +8,17 @@ protocol CloudKitTransporting {
               updatedAt: Int64, deviceId: String, expected: CloudKitSnapshotRecord?) async throws -> CloudKitSnapshotRecord
 }
 
-enum CloudKitTransportError: Error {
+enum CloudKitTransportError: LocalizedError {
     case missingContainerIdentifier
     case invalidRecord
     case unexpectedSaveResult
+    var errorDescription: String? {
+        switch self {
+        case .missingContainerIdentifier: return "CloudKitコンテナーIDが設定されていません。"
+        case .invalidRecord: return "CloudKitレコードの形式が不正です。元データを維持しています。"
+        case .unexpectedSaveResult: return "CloudKitの保存結果を確認できませんでした。"
+        }
+    }
 }
 
 struct CloudKitSnapshotRecord {
