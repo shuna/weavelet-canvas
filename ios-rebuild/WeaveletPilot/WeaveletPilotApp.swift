@@ -20,6 +20,7 @@ struct ChatView: View {
     @ObservedObject var state: ChatState
     @State private var showsSettings = false
     @State private var showsLibrary = false
+    @State private var showsSearch = false
     @State private var showsRemoteSettings = false
     @State private var shownGoogleConnection: GoogleSyncConnection?
     @State private var googleConnection: GoogleSyncConnection?
@@ -32,11 +33,12 @@ struct ChatView: View {
 
     var body: some View {
         NavigationStack {
+            ScrollViewReader { scroll in
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 20) {
                     if let conversation = state.conversation {
                         ForEach(conversation.visibleMessages, id: \.identity) { node in
-                            MessageView(node: node, siblings: node.id.utf8.elementsEqual(conversation.selectedLeafID.utf8) ? siblings(of: node.id, in: conversation.nodes) : [], style: state.style, edit: state.exchange == nil || state.generation != nil ? nil : {
+                            MessageView(node: node, siblings: state.siblings(for: node.id), style: state.style, edit: state.exchange == nil || state.generation != nil ? nil : {
                                 do { draft = try state.messageDraft(nodeID: node.id) }
                                 catch { errorMessage = error.localizedDescription }
                             }) { siblingID in
@@ -87,12 +89,24 @@ struct ChatView: View {
                 .frame(maxWidth: 900)
                 .frame(maxWidth: .infinity)
             }
+            .onChange(of: state.navigationFocus) { _, focus in
+                if let focus { scroll.scrollTo(Data(focus.nodeID.utf8), anchor: .center) }
+            }
+            }
             .navigationTitle(RemoteFixture.enabled ? "Weavelet Pilot · FAKE" : "Weavelet Pilot")
             .task {
                 guard ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] == nil else { return }
                 do { try state.loadRemoteSettings() } catch { state.generationError = error.localizedDescription }
             }
             .toolbar {
+                ToolbarItemGroup(placement: .bottomBar) {
+                    Button("戻る", systemImage: "chevron.backward") {
+                        do { try state.moveNavigation(.back) } catch { errorMessage = error.localizedDescription }
+                    }.disabled(!state.canNavigateBack || state.generation != nil)
+                    Button("進む", systemImage: "chevron.forward") {
+                        do { try state.moveNavigation(.forward) } catch { errorMessage = error.localizedDescription }
+                    }.disabled(!state.canNavigateForward || state.generation != nil)
+                }
                 ToolbarItemGroup(placement: .topBarLeading) {
                     Button("会話一覧", systemImage: "list.bullet") { showsLibrary = true }
                         .disabled(state.generation != nil)
@@ -106,6 +120,9 @@ struct ChatView: View {
                     .disabled(state.generation != nil)
                 }
                 ToolbarItemGroup(placement: .topBarTrailing) {
+                    Button("検索", systemImage: "magnifyingglass") { showsSearch = true }
+                        .disabled(state.exchange == nil || state.generation != nil)
+                        .frame(minWidth: 44, minHeight: 44)
                     Menu("ファイル", systemImage: "doc") {
                         Button("V3 JSONを読み込む") { showsImporter = true }
                         Button("読み込んだV3 JSONを書き出す") {
@@ -141,6 +158,11 @@ struct ChatView: View {
                 Button("閉じる", role: .cancel) { errorMessage = nil; state.persistenceError = nil }
             } message: { Text(errorMessage ?? state.persistenceError ?? "") }
             .sheet(item: $draft) { draft in MessageEditorView(state: state, draft: draft) }
+            .sheet(isPresented: $showsSearch) {
+                ChatSearchView(state: state) { result, mode in
+                    try state.navigate(chatID: result.chatID, nodeID: result.nodeID, source: mode == .grep ? .grep : .search)
+                }
+            }
             .sheet(isPresented: $showsLibrary) { ConversationLibraryView(state: state) }
             .sheet(isPresented: $showsSettings) {
                 NavigationStack {

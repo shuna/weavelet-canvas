@@ -1,7 +1,7 @@
 import { v4 as uuidv4 } from 'uuid';
 import { StoreSlice } from './store';
 import { ChatView } from '@type/chat';
-import { buildPathToLeaf } from '@utils/branchUtils';
+import { resolveNavigationTarget, navigationEntry, entryWithNavigationKey, navigationEntryWithAnchor, captureNavigationHistory, restoredNavigationPath, emptyNavigationHistory, initializeNavigationHistory, pushNavigationHistory, moveNavigationHistory, canMoveNavigationHistory } from '@utils/branchNavigation';
 
 export interface NavScrollAnchor {
   firstVisibleItemIndex: number;
@@ -40,7 +40,7 @@ export interface NavigationSlice {
   initNavigationEntry: () => void;
 }
 
-const MAX_HISTORY = 100;
+
 
 
 function captureVisibleAnchor(chatId: string, get: () => any): boolean {
@@ -71,7 +71,7 @@ function captureVisibleAnchor(chatId: string, get: () => any): boolean {
 function withSavedAnchor(entry: NavEntry, get: () => any): NavEntry {
   if (!captureVisibleAnchor(entry.chatId, get) && entry.scrollAnchor) return entry;
   const anchor = get().getChatScrollAnchor?.(entry.chatId);
-  return anchor ? { ...entry, scrollAnchor: { ...anchor } } : entry;
+  return navigationEntryWithAnchor(entry,anchor);
 }
 
 function resolveChatIndex(
@@ -90,14 +90,11 @@ export const createNavigationSlice: StoreSlice<NavigationSlice> = (
   return ({
   navigateToNode: ({ chatId, nodeId, view, source, history, selectChat = true, focus }) => {
     const state = get();
-    const chatIndex = resolveChatIndex(state.chats, chatId);
-    const chat = state.chats?.[chatIndex];
-    if (!chat) return 'chat-missing';
-    if (nodeId && !chat.branchTree?.nodes[nodeId]) return 'node-missing';
-    const tree = chat.branchTree;
-    const preservePath = (source === 'search' || source === 'grep') && nodeId && tree?.activePath.includes(nodeId);
-    const path = nodeId && tree && !preservePath ? buildPathToLeaf(tree, nodeId) : [...(tree?.activePath ?? [])];
-    if (history === 'push') state.pushNavigationEntry({ chatId, activePath: path, focusedNodeId: nodeId, viewContext: view ?? state.chatActiveView, source });
+    const target = resolveNavigationTarget(state.chats,chatId,nodeId,source);
+    if (target.status !== 'reached') return target.status;
+    const {chatIndex,path} = target;
+    const tree = state.chats![chatIndex].branchTree;
+    if (history === 'push') state.pushNavigationEntry(navigationEntry(target,view ?? state.chatActiveView,source));
     if (tree && (path.length !== tree.activePath.length || path.some((id, index) => id !== tree.activePath[index]))) {
       state.switchActivePathSilent(chatIndex, path);
     }
@@ -107,38 +104,14 @@ export const createNavigationSlice: StoreSlice<NavigationSlice> = (
     if (nodeId && focus === 'bubble') state.setPendingChatFocus({ chatIndex, nodeId });
     return 'reached';
   },
-  navHistoryPast: [],
-  navHistoryCurrent: null,
-  navHistoryFuture: [],
-  navEntryMap: new Map(),
+  ...emptyNavigationHistory(),
+
   isRestoringNavigation: false,
 
   initNavigationEntry: () => {
-    if (get().navHistoryCurrent) return;
-
-    const chats = get().chats;
-    const chatIndex = get().currentChatIndex;
-    if (!chats || chatIndex < 0 || chatIndex >= chats.length) return;
-
-    const chat = chats[chatIndex];
-    const entry: NavEntry = {
-      key: uuidv4(),
-      chatId: chat.id,
-      activePath: chat.branchTree
-        ? [...(chats[chatIndex] as any).branchTree?.activePath ?? []]
-        : [],
-      viewContext: get().chatActiveView,
-      source: 'init',
-    };
-
-    // Get the actual activePath from the materialized state
-    if (chat.branchTree?.activePath) {
-      entry.activePath = [...chat.branchTree.activePath];
-    }
-
-    const map = new Map(get().navEntryMap);
-    map.set(entry.key, entry);
-    set({ navHistoryCurrent: entry, navEntryMap: map });
+    const state = get();
+    if (state.navHistoryCurrent || !state.chats?.[state.currentChatIndex]) return;
+    set(initializeNavigationHistory(state,state.chats?.[state.currentChatIndex],uuidv4(),state.chatActiveView));
   },
 
   pushNavigationEntry: (partial) => {
@@ -154,33 +127,18 @@ export const createNavigationSlice: StoreSlice<NavigationSlice> = (
     const current = get().navHistoryCurrent;
     if (current && partial.source !== 'scroll') get().captureCurrentNavigationEntry();
     const capturedCurrent = get().navHistoryCurrent;
-    const rawEntry: NavEntry = { ...partial, key };
+    const rawEntry = entryWithNavigationKey(partial,key);
     const entry = partial.source === 'scroll' || partial.chatId !== capturedCurrent?.chatId
       ? withSavedAnchor(rawEntry, get)
       : rawEntry;
-    const past = [...get().navHistoryPast];
-
-    if (capturedCurrent) {
-      past.push(capturedCurrent);
-      if (past.length > MAX_HISTORY) past.shift();
-    }
-
-    const map = new Map(get().navEntryMap);
-    map.set(key, entry);
-
-    set({
-      navHistoryPast: past,
-      navHistoryCurrent: entry,
-      navHistoryFuture: [],
-      navEntryMap: map,
-    });
+    set(pushNavigationHistory(get(),entry));
   },
 
   captureCurrentNavigationEntry: () => {
     if (get().isRestoringNavigation) return;
     const current = get().navHistoryCurrent;
     if (!current) return;
-    set({ navHistoryCurrent: withSavedAnchor(current, get) });
+    set(captureNavigationHistory(get(),withSavedAnchor(current,get)));
   },
 
   updateCurrentNavigationEntryAnchor: () => {
@@ -207,14 +165,8 @@ export const createNavigationSlice: StoreSlice<NavigationSlice> = (
     if (entry.activePath.length > 0) {
       const chat = chats![idx];
       if (chat.branchTree) {
-        const tree = chat.branchTree;
-        const validPath = entry.activePath.every((id, index) =>
-          tree.nodes[id]?.parentId === (index === 0 ? null : entry.activePath[index - 1])
-        );
-        if (validPath) {
-          get().switchActivePathSilent(idx, entry.activePath);
-        }
-        // else: path invalid, keep current activePath
+        const path = restoredNavigationPath(chat,entry.activePath);
+        if (path) get().switchActivePathSilent(idx,path);
       }
     }
 
@@ -236,52 +188,20 @@ export const createNavigationSlice: StoreSlice<NavigationSlice> = (
   },
 
   navBack: () => {
-    const past = get().navHistoryPast;
-    const current = get().navHistoryCurrent;
-    if (past.length === 0 || !current) return;
-
-    const targetIndex = past.map((entry) => resolveChatIndex(get().chats, entry.chatId) >= 0).lastIndexOf(true);
-    if (targetIndex < 0) return;
-    const target = past[targetIndex];
-    const newPast = past.slice(0, targetIndex);
-
+    if (!moveNavigationHistory(get(),get().chats,'back')) return;
     get().captureCurrentNavigationEntry();
-    const future = [...past.slice(targetIndex + 1), get().navHistoryCurrent!, ...get().navHistoryFuture];
-
-    set({
-      navHistoryPast: newPast,
-      navHistoryCurrent: target,
-      navHistoryFuture: future,
-      isRestoringNavigation: true,
-    });
-
-    get().restoreNavigationEntry(target);
+    const next = moveNavigationHistory(get(),get().chats,'back')!;
+    set({...next,isRestoringNavigation:true});
+    get().restoreNavigationEntry(next.navHistoryCurrent!);
   },
-
   navForward: () => {
-    const future = get().navHistoryFuture;
-    const current = get().navHistoryCurrent;
-    if (future.length === 0 || !current) return;
-
-    const targetIndex = future.findIndex((entry) => resolveChatIndex(get().chats, entry.chatId) >= 0);
-    if (targetIndex < 0) return;
-    const target = future[targetIndex];
-    const newFuture = future.slice(targetIndex + 1);
-
+    if (!moveNavigationHistory(get(),get().chats,'forward')) return;
     get().captureCurrentNavigationEntry();
-    const past = [...get().navHistoryPast, get().navHistoryCurrent!, ...future.slice(0, targetIndex)];
-
-    set({
-      navHistoryPast: past,
-      navHistoryCurrent: target,
-      navHistoryFuture: newFuture,
-      isRestoringNavigation: true,
-    });
-
-    get().restoreNavigationEntry(target);
+    const next = moveNavigationHistory(get(),get().chats,'forward')!;
+    set({...next,isRestoringNavigation:true});
+    get().restoreNavigationEntry(next.navHistoryCurrent!);
   },
-
-  canNavBack: () => get().navHistoryPast.some((entry) => resolveChatIndex(get().chats, entry.chatId) >= 0),
-  canNavForward: () => get().navHistoryFuture.some((entry) => resolveChatIndex(get().chats, entry.chatId) >= 0),
+  canNavBack: () => canMoveNavigationHistory(get(),get().chats,'back'),
+  canNavForward: () => canMoveNavigationHistory(get(),get().chats,'forward'),
 });
 };

@@ -14,22 +14,21 @@ struct MessageNode: Decodable, Identifiable, Equatable {
     enum CodingKeys: String, CodingKey { case id, parentId, createdAt }
 }
 
-// Web object keys enumerate array indices first, then ordinary keys in insertion order.
-func siblings(of nodeID: String, in nodes: [MessageNode]) -> [MessageNode] {
-    guard let target = nodes.first(where: { $0.id.utf8.elementsEqual(nodeID.utf8) }) else { return [] }
-    func index(_ id: String) -> UInt32? {
-        guard let value = UInt32(id), value < UInt32.max, String(value) == id else { return nil }
-        return value
-    }
-    let ordered = nodes.enumerated().sorted { lhs, rhs in
-        switch (index(lhs.element.id), index(rhs.element.id)) {
-        case let (left?, right?): return left < right
-        case (_?, nil): return true
-        case (nil, _?): return false
-        case (nil, nil): return lhs.offset < rhs.offset
-        }
-    }
-    return ordered.map(\.element).filter { $0.parentId.map { Data($0.utf8) } == target.parentId.map { Data($0.utf8) } }
+// Samples and fixture callers use the same Web sibling ordering as imported documents.
+func siblingSource(_ conversations: [Conversation]) -> OrderedJSON {
+    .object([.init(key: "chats", value: .array(conversations.map { chat in
+        .object([.init(key: "id", value: .string(chat.id)), .init(key: "branchTree", value: .object([
+            .init(key: "activePath", value: .array(chat.visibleMessages.map { .string($0.id) })),
+            .init(key: "nodes", value: .object(chat.nodes.map { node in
+                .init(key: node.id, value: .object([.init(key: "id", value: .string(node.id)), .init(key: "parentId", value: node.parentId.map(OrderedJSON.string) ?? .null)]))
+            }))
+        ]))])
+    }))])
+}
+func siblings(of nodeID: String, in nodes: [MessageNode]) throws -> [MessageNode] {
+    let chat = Conversation(id: "sample", title: "", nodes: nodes, selectedLeafID: "")
+    let ids = try BranchNavigation.candidates(in: siblingSource([chat])).first?.candidates(for: nodeID)?.siblingIDs ?? []
+    return ids.compactMap { id in nodes.first { $0.id.utf8.elementsEqual(id.utf8) } }
 }
 
 struct Conversation: Identifiable {
@@ -70,6 +69,11 @@ struct ActiveGeneration {
     var running = true
 }
 
+struct NavigationFocus: Equatable {
+    let nodeID: String
+    let token = UUID()
+}
+
 final class ChatState: ObservableObject {
     @Published private(set) var conversations = Conversation.samples
     @Published private var selectedID = Conversation.samples[0].id
@@ -83,17 +87,24 @@ final class ChatState: ObservableObject {
     private var generationTask: Task<Void, Never>?
     private let store: LocalStateStore?
     private var initialLoadFailed = false
+    @Published private(set) var navigationFocus: NavigationFocus?
+    @Published private(set) var canNavigateBack = false
+    @Published private(set) var canNavigateForward = false
+    private var navigationHistory: OrderedJSON?
+    private var branchCandidates: [BranchNavigation.ChatCandidates] = []
 
     init(store: LocalStateStore? = nil) {
         self.store = store
-        guard let store else { return }
         do {
-            if let saved = try store.load() {
+            branchCandidates = try BranchNavigation.candidates(in: siblingSource(conversations))
+            if let saved = try store?.load() {
+                let candidates = try BranchNavigation.candidates(in: saved.exchange.source)
                 conversations = saved.conversations
                 selectedID = saved.selectedConversationID
                 displayStyle = saved.style
                 exchange = saved.exchange
                 document = saved.document
+                branchCandidates = candidates
             }
         } catch { initialLoadFailed = true; persistenceError = "保存した会話を復元できませんでした。保存ファイルは変更していません。\n" + error.localizedDescription }
     }
@@ -102,7 +113,10 @@ final class ChatState: ObservableObject {
         get { selectedID }
         set {
             guard conversations.contains(where: { $0.id.utf8.elementsEqual(newValue.utf8) }) else { return }
-            update(conversations: conversations, selectedID: newValue, style: displayStyle)
+            if exchange != nil {
+                do { try navigate(chatID: newValue, source: .chatSwitch) }
+                catch { persistenceError = error.localizedDescription }
+            } else { update(conversations: conversations, selectedID: newValue, style: displayStyle) }
         }
     }
     var style: ChatStyle {
@@ -116,6 +130,7 @@ final class ChatState: ObservableObject {
         let candidate = try document.map { try $0.importingV3(rawV3) } ?? SyncDocument(v3: rawV3)
         let imported = try WebExchange(source: candidate.uiProjection())
         let selected = imported.conversations.first?.id ?? ""
+        let candidates = try BranchNavigation.candidates(in: imported.source)
         try store?.save(SavedChatState(exchange: imported, document: candidate, conversations: imported.conversations, selectedConversationID: selected, style: displayStyle))
         invalidateGeneration()
         conversations = imported.conversations
@@ -123,17 +138,72 @@ final class ChatState: ObservableObject {
         exchange = imported
         document = candidate
         initialLoadFailed = false
+        branchCandidates = candidates
+        navigationHistory = nil; navigationFocus = nil; canNavigateBack = false; canNavigateForward = false
         persistenceError = nil
     }
 
+    func siblings(for nodeID: String) -> [MessageNode] {
+        guard let conversation else { return [] }
+        let ids = branchCandidates.first { $0.chatID.utf8.elementsEqual(conversation.id.utf8) }?.candidates(for: nodeID)?.siblingIDs ?? []
+        return ids.compactMap { id in conversation.nodes.first { $0.id.utf8.elementsEqual(id.utf8) } }
+    }
+
     func selectSibling(_ nodeID: String, of currentID: String) {
-        guard let index = conversations.firstIndex(where: { $0.id.utf8.elementsEqual(selectedID.utf8) }),
-              conversations[index].selectedLeafID.utf8.elementsEqual(currentID.utf8),
-              siblings(of: currentID, in: conversations[index].nodes).contains(where: { $0.id.utf8.elementsEqual(nodeID.utf8) }) else { return }
-        var changed = conversations
-        changed[index].selectedLeafID = nodeID
-        changed[index].displayedPathIDs = nil
-        update(conversations: changed, selectedID: selectedID, style: displayStyle)
+        guard generation == nil, !nodeID.utf8.elementsEqual(currentID.utf8),
+              let index = conversations.firstIndex(where: { $0.id.utf8.elementsEqual(selectedID.utf8) }),
+              siblings(for: currentID).contains(where: { $0.id.utf8.elementsEqual(nodeID.utf8) }) else { return }
+        if exchange != nil {
+            do { try navigate(chatID: selectedID, nodeID: nodeID, source: .branchSwitch) }
+            catch { persistenceError = error.localizedDescription }
+        } else {
+            var changed = conversations
+            changed[index].selectedLeafID = nodeID
+            changed[index].displayedPathIDs = nil
+            update(conversations: changed, selectedID: selectedID, style: displayStyle)
+        }
+    }
+
+    private func currentNavigationHistory(in source: OrderedJSON) throws -> BranchNavigation.HistoryResult {
+        let history = try navigationHistory ?? BranchNavigation.emptyHistory()
+        return try BranchNavigation.history(history, action: .initialize, in: source, chatID: selectedID, view: "chat", viewingPath: conversation?.visibleMessages.map(\.id))
+    }
+
+    func navigate(chatID: String, nodeID: String? = nil, source: BranchNavigation.Source) throws {
+        guard generation == nil, let exchange else { throw ExchangeError.invalid("生成結果を保存してから会話を移動してください") }
+        let history = try currentNavigationHistory(in: exchange.source)
+        let path = conversations.first { $0.id.utf8.elementsEqual(chatID.utf8) }?.visibleMessages.map(\.id)
+        let target = try BranchNavigation.navigate(in: exchange.source, chatID: chatID, nodeID: nodeID, source: source, viewingPath: path)
+        guard target.status == .reached else { throw ExchangeError.invalid("移動先の会話またはメッセージがありません") }
+        let next = try BranchNavigation.history(history.history, action: .push, in: target.source, target: target, view: "chat", navigationSource: source)
+        try applyLibrary(target.source, selectedID: chatID, resetViewFor: chatID, navigation: next)
+        navigationFocus = (target.focusedNodeID ?? target.path.last).map { NavigationFocus(nodeID: $0) }
+    }
+
+    func moveNavigation(_ direction: BranchNavigation.HistoryAction) throws {
+        guard generation == nil, let exchange, direction == .back || direction == .forward else { throw ExchangeError.invalid("現在は履歴を移動できません") }
+        let current = try currentNavigationHistory(in: exchange.source)
+        let next = try BranchNavigation.history(current.history, action: direction, in: exchange.source)
+        guard next.history != current.history, let entry = next.entry else { return }
+        let target = try BranchNavigation.restore(in: exchange.source, entry: entry)
+        guard target.status == .reached, let chatID = target.chatID else { throw ExchangeError.invalid("移動先の会話がありません") }
+        try applyLibrary(target.source, selectedID: chatID, resetViewFor: chatID, navigation: next)
+        navigationFocus = (target.focusedNodeID ?? target.path.last).map { NavigationFocus(nodeID: $0) }
+    }
+
+    private func historySelecting(_ chatID: String, in source: OrderedJSON) throws -> BranchNavigation.HistoryResult? {
+        guard !selectedID.utf8.elementsEqual(chatID.utf8), let exchange else { return nil }
+        let current = try currentNavigationHistory(in: exchange.source)
+        let target = try BranchNavigation.navigate(in: source, chatID: chatID, source: .chatSwitch)
+        guard target.status == .reached else { return nil }
+        return try BranchNavigation.history(current.history, action: .push, in: source, target: target, view: "chat", navigationSource: .chatSwitch)
+    }
+
+    private func publishNavigation(_ next: BranchNavigation.HistoryResult, focus: String?) {
+        navigationHistory = next.history
+        canNavigateBack = next.canBack
+        canNavigateForward = next.canForward
+        navigationFocus = focus.map { NavigationFocus(nodeID: $0) }
     }
 
     func messageDraft(nodeID: String?) throws -> MessageDraft {
@@ -301,11 +371,12 @@ final class ChatState: ObservableObject {
         try applyLibrary(ChatFolders.apply(in: source, operation: operation), selectedID: exchange == nil ? "" : selectedID, preserveGeneration: true, now: now)
     }
 
-    private func applyLibrary(_ source: OrderedJSON, selectedID: String, resetViewFor: String? = nil, preserveGeneration: Bool = false, now: Double = Date().timeIntervalSince1970 * 1000) throws {
+    private func applyLibrary(_ source: OrderedJSON, selectedID: String, resetViewFor: String? = nil, preserveGeneration: Bool = false, navigation: BranchNavigation.HistoryResult? = nil, now: Double = Date().timeIntervalSince1970 * 1000) throws {
         let base = try document ?? SyncDocument(v3: exchange?.source ?? ChatLibrary.emptySource)
         let before = try exchange?.source ?? base.uiProjection()
         let candidate = try base.applyingV3Edits(source, comparedTo: before, now: now)
         let changed = try WebExchange(source: candidate.uiProjection())
+        let candidates = try BranchNavigation.candidates(in: changed.source)
         var views = changed.conversations
         for index in views.indices {
             if exchange != nil, resetViewFor.map({ !views[index].id.utf8.elementsEqual($0.utf8) }) ?? true, let previous = conversations.first(where: { $0.identity == views[index].identity }) {
@@ -313,12 +384,15 @@ final class ChatState: ObservableObject {
                 views[index].displayedPathIDs = previous.displayedPathIDs
             }
         }
+        let nextNavigation = try navigation ?? historySelecting(selectedID, in: changed.source)
         try store?.save(SavedChatState(exchange: changed, document: candidate, conversations: views, selectedConversationID: selectedID, style: displayStyle))
         if preserveGeneration, let current = generation {
             generation = ActiveGeneration(id: current.id, chatID: current.chatID, baseSource: changed.source, path: current.path, output: current.output, running: current.running)
         } else { invalidateGeneration() }
+        branchCandidates = candidates
         conversations = views
         self.selectedID = selectedID
+        if let nextNavigation { publishNavigation(nextNavigation, focus: nil) }
         exchange = changed
         document = candidate
         persistenceError = nil
@@ -354,6 +428,7 @@ final class ChatState: ObservableObject {
     }
     private func applyDocument(_ candidate: SyncDocument) throws {
         let changed = try WebExchange(source: candidate.uiProjection())
+        let candidates = try BranchNavigation.candidates(in: changed.source)
         var views = changed.conversations
         for index in views.indices {
             if let previous = conversations.first(where: { $0.identity == views[index].identity }),
@@ -363,8 +438,11 @@ final class ChatState: ObservableObject {
             }
         }
         let selected = views.contains { $0.id.utf8.elementsEqual(selectedID.utf8) } ? selectedID : views.first?.id ?? ""
+        let nextNavigation = try historySelecting(selected, in: changed.source)
         try store?.save(SavedChatState(exchange: changed, document: candidate, conversations: views, selectedConversationID: selected, style: displayStyle))
         invalidateGeneration()
+        branchCandidates = candidates
+        if let nextNavigation { publishNavigation(nextNavigation, focus: nil) }
         document = candidate; exchange = changed; conversations = views; selectedID = selected; persistenceError = nil
     }
 

@@ -1,3 +1,5 @@
+export { chatSearch } from './search';
+export { navigationOperation } from './navigation';
 export const driveFolderName = (json: string) => JSON.stringify(defaultSyncFolderName(JSON.parse(json)));
 import { defaultSyncFolderName, driveListParameters, nextSyncFolderName, DEFAULT_SYNC_FOLDER_NAME } from '../../src/store/storage/google/datasetListing';
 export const driveListing = (json: string) => JSON.stringify({ parameters: driveListParameters(), suggestedName: nextSyncFolderName(DEFAULT_SYNC_FOLDER_NAME, JSON.parse(json)) });

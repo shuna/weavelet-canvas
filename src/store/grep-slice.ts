@@ -1,7 +1,7 @@
 import { StoreSlice } from './store';
-import { SearchResult, searchBranchNodes } from '@utils/branchSearch';
+import type { SearchResult } from '@utils/branchSearch';
+import { grepChats } from '@utils/chatSearch';
 import { ContentStoreData } from '@utils/contentStore';
-import { ChatInterface, isTextContent } from '@type/chat';
 
 export interface GrepResult {
   chatId: string;
@@ -26,48 +26,6 @@ export interface GrepSlice {
   clearSidebarSearchHistory: () => void;
   saveChatFindHistory: (query: string) => void;
   clearChatFindHistory: () => void;
-}
-
-/**
- * Fallback search for legacy chats without branchTree.
- * Searches message text content directly.
- */
-function searchLegacyChat(
-  chat: ChatInterface,
-  chatIndex: number,
-  query: string
-): SearchResult[] {
-  const lowerQuery = query.toLowerCase();
-  const results: SearchResult[] = [];
-
-  for (let i = 0; i < chat.messages.length; i++) {
-    const msg = chat.messages[i];
-    const textParts = msg.content
-      .filter(isTextContent)
-      .map((c) => c.text);
-    const fullText = textParts.join(' ');
-    const lowerText = fullText.toLowerCase();
-    const idx = lowerText.indexOf(lowerQuery);
-    if (idx < 0) continue;
-
-    const start = Math.max(0, idx - 40);
-    const end = Math.min(fullText.length, idx + query.length + 40);
-    let snippet = '';
-    if (start > 0) snippet += '...';
-    snippet += fullText.slice(start, end);
-    if (end < fullText.length) snippet += '...';
-
-    results.push({
-      nodeId: `legacy-${i}`,
-      chatId: chat.id,
-      chatIndex,
-      snippet,
-      isOnActivePath: true,
-      matchType: 'content',
-    });
-  }
-
-  return results;
 }
 
 export const createGrepSlice: StoreSlice<GrepSlice> = (set, get) => ({
@@ -98,33 +56,7 @@ export const createGrepSlice: StoreSlice<GrepSlice> = (set, get) => ({
     }
 
     const contentStore = get().contentStore as ContentStoreData;
-    const results: GrepResult[] = [];
-
-    for (let i = 0; i < chats.length; i++) {
-      const chat = chats[i];
-
-      let matches: SearchResult[];
-
-      if (chat.branchTree) {
-        matches = searchBranchNodes(
-          query,
-          [{ tree: chat.branchTree, chatId: chat.id, chatIndex: i }],
-          contentStore,
-          'all'
-        );
-      } else {
-        matches = searchLegacyChat(chat, i, query);
-      }
-
-      if (matches.length > 0) {
-        results.push({
-          chatId: chat.id,
-          chatIndex: i,
-          chatTitle: chat.title,
-          matches,
-        });
-      }
-    }
+    const results = grepChats(chats, contentStore, query);
 
     set({ grepResults: results, isGrepSearching: false });
   },

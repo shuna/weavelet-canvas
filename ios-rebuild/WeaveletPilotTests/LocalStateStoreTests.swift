@@ -27,13 +27,13 @@ final class LocalStateStoreTests: XCTestCase {
         state.selectedConversationID = "chat-b"
         let restored = ChatState(store: store)
         XCTAssertNil(restored.persistenceError)
-        XCTAssertEqual(restored.exchange?.source, source)
+        XCTAssertEqual(restored.exchange?.source, try corpusSelectingInactive(source))
         XCTAssertEqual(restored.style, .bubbles)
         XCTAssertEqual(restored.selectedConversationID, "chat-b")
         XCTAssertEqual(restored.conversations[0].visibleMessages.map(\.id), ["n-system", "n-user", "n-inactive"])
         XCTAssertEqual(restored.conversations[0].visibleMessages.last?.parts, [.text("別分岐の本文")])
         XCTAssertEqual(restored.conversations[1].visibleMessages, state.conversations[1].visibleMessages)
-        XCTAssertEqual(try XCTUnwrap(restored.exchange).encoded(), try source.encoded())
+        XCTAssertEqual(try XCTUnwrap(restored.exchange).encoded(), try corpusSelectingInactive(source).encoded())
     }
 
     func testExplicitPathAndEmptyExportRestore() throws {

@@ -22,14 +22,14 @@ final class ConversationTests: XCTestCase {
         XCTAssertEqual(shared.count, 8)
         for test in shared {
             let original = test.nodes
-            XCTAssertEqual(siblings(of: test.nodeId, in: test.nodes).map(\.id), test.expectedIds, test.name)
+            XCTAssertEqual(try siblings(of: test.nodeId, in: test.nodes).map(\.id), test.expectedIds, test.name)
             XCTAssertEqual(test.nodes, original, test.name)
         }
     }
 
-    func testIntegerKeyBounds() {
+    func testIntegerKeyBounds() throws {
         let nodes = ["4294967295", "01", "4294967294", "0", "枝"].map { MessageNode(id: $0, parentId: nil, createdAt: 0) }
-        XCTAssertEqual(siblings(of: "枝", in: nodes).map(\.id), ["0", "4294967294", "4294967295", "01", "枝"])
+        XCTAssertEqual(try siblings(of: "枝", in: nodes).map(\.id), ["0", "4294967294", "4294967295", "01", "枝"])
     }
 
     func testStyleAndSiblingSelectionShareConversationState() {

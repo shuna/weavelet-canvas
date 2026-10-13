@@ -6,7 +6,7 @@ Webと新iOSの共通契約を接続する最初の試作。旧`ios2`のアプ�
 
 - 同じ会話状態による整列表示／ユーザー右・アシスタント左の吹き出し表示。取込後の表示設定・選択会話・会話別の閲覧分岐を保存・復元する。
 - role明示、時刻なし、本文とアイコンの左端整列、長文の折返し。
-- 末端の兄弟一覧と選択。一般の枝切替・後続経路選択は未実装。
+- 任意深度の兄弟選択、共有Web規則による後続path選択、検索到達、戻る/進む。
 - リポジトリの`tests/fixtures/web-native/branch-siblings.json`のshared 8ケースを、WebとSwiftから同じファイルで検証。fixtureのWeb観測ケースはSwiftへ強制しない。
 
 - 展開V3 JSONのファイル取込み・再書出し。順序付きJSONを交換用に保持し、表示用モデルは別に構成する。未知項目・非表示分岐・未参照本文を保持する。
@@ -30,7 +30,7 @@ xcodebuild -project ios-rebuild/WeaveletPilot.xcodeproj \
 
 内部表現やローカル保存はCore Data等で最適化可能。現在は交換データを`OrderedJSON`で保持し、`WebExchange`から表示用モデルを取り出す。これは内部DB形式をWebへ合わせる要求ではない。読み込み失敗時は現在の会話を変更しない。
 
-OpenAI互換remote送信は実装済み。Google同期serviceは接続済みだが、アプリ全state・認証・同期UIへの接続は未完了。添付取得、他provider、旧Web形式・旧iOS移行は未対応。delta本文は共有resolverで表示用に展開し、保存元のdeltaを保持する。分岐選択は閲覧のみで、再書出しは保存sourceのactivePathを保持する。parserは重複key、深さ256超、孤立surrogateを拒否する。これらは全体完成までに扱いを確定する制約。
+OpenAI互換remote送信は実装済み。Google同期serviceは接続済みだが、アプリ全state・認証・同期UIへの接続は未完了。添付取得、他provider、旧Web形式・旧iOS移行は未対応。delta本文は共有resolverで表示用に展開し、保存元のdeltaを保持する。分岐選択は共有Web処理でactivePathとmessagesを更新し、保存・再書出しへ反映する。parserは重複key、深さ256超、孤立surrogateを拒否する。これらは全体完成までに扱いを確定する制約。
 
 Catalystの結果はiPhone/iPad実機、Dynamic Type、VoiceOver、IME、キーボード表示中の検証を代替しない。
 

@@ -213,6 +213,8 @@ import XCTest
         try state.startGeneration(input:"still generating",record:record,client:client,nodeIDs:["generation-user"])
         let generation = try XCTUnwrap(state.generation)
         let snapshot = try state.publicationSnapshot()
+        XCTAssertThrowsError(try state.navigate(chatID: state.selectedConversationID, source: .search))
+        XCTAssertThrowsError(try state.moveNavigation(.back))
         do { try await controller.recover(); XCTFail("active generation must be preserved") } catch {}
         XCTAssertEqual(state.generation?.id,generation.id)
         XCTAssertEqual(try state.publicationSnapshot(),snapshot)

@@ -37,7 +37,7 @@ final class WebExchangeTests: XCTestCase {
         state.selectSibling("n-inactive", of: "n-assistant")
         XCTAssertEqual(state.conversation?.visibleMessages.last?.parts, [.text("別分岐の本文")])
         state.style = .bubbles
-        XCTAssertEqual(try OrderedJSON.decode(XCTUnwrap(state.exchange).encoded()), source)
+        XCTAssertEqual(try OrderedJSON.decode(XCTUnwrap(state.exchange).encoded()), try corpusSelectingInactive(source))
         XCTAssertNotNil(source["xFixtureExport"])
         XCTAssertNotNil(source["evaluationResults"])
         XCTAssertNotNil(source["contentStore"]?["unreferenced"])

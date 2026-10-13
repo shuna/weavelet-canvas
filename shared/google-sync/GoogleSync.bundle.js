@@ -6981,6 +6981,7 @@ var WeaveletGoogleSync = (() => {
   // shared/google-sync/entry.ts
   var entry_exports = {};
   __export(entry_exports, {
+    chatSearch: () => chatSearch,
     documentOperation: () => documentOperation,
     drain: () => drain,
     driveFolderName: () => driveFolderName,
@@ -6993,218 +6994,13 @@ var WeaveletGoogleSync = (() => {
     libraryOperation: () => libraryOperation,
     messageAttributesOperation: () => messageAttributesOperation,
     messageEdit: () => messageEdit,
+    navigationOperation: () => navigationOperation,
     recordsResult: () => recordsResult,
     recordsStart: () => recordsStart,
     result: () => result2,
     settle: () => settle,
     start: () => start
   });
-
-  // src/store/storage/google/datasetListing.ts
-  var DEFAULT_SYNC_FOLDER_NAME = "Weavelet encrypted sync";
-  var defaultSyncFolderName = (id) => `${DEFAULT_SYNC_FOLDER_NAME} (${id})`;
-  function nextSyncFolderName(name, names) {
-    const base = name.trim();
-    const used = new Set(names);
-    let candidate = base, suffix = 2;
-    while (used.has(candidate))
-      candidate = `${base} (${suffix++})`;
-    return candidate;
-  }
-  var DRIVE_LIST_FIELDS = "id,kind,name,mimeType,modifiedTime,size";
-  var DRIVE_LIST_QUERY = "trashed = false and (mimeType = 'application/json' or appProperties has { key='weaveletSync' and value='1' } or (mimeType = 'application/octet-stream' and name contains '.json'))";
-  function driveListParameters(q = DRIVE_LIST_QUERY, fields = DRIVE_LIST_FIELDS) {
-    return { q, orderBy: "modifiedTime desc", pageSize: "1000", fields: `nextPageToken,incompleteSearch,files(${fields})` };
-  }
-
-  // src/store/storage/google/datasetHeader.ts
-  var SYNC_FOLDER_TYPE = "application/vnd.google-apps.folder";
-  function encryptedSyncHeaderId(file) {
-    if (file.mimeType !== SYNC_FOLDER_TYPE || file.appProperties?.weaveletSync !== "1" || !file.appProperties.headerId) {
-      throw new Error("Legacy sync files are read-only. Create a new encrypted sync folder.");
-    }
-    return file.appProperties.headerId;
-  }
-
-  // src/store/storage/google/settings.ts
-  var BROWSER_LOCAL_SETTINGS = [
-    "hideMenuOptions",
-    "hideSideMenu",
-    "menuWidth",
-    "splitPanelRatio",
-    "splitPanelSwapped",
-    "chatActiveView",
-    "showDebugPanel",
-    "proxyEnabled"
-  ];
-  var SYNC_LOCAL_SETTINGS = [
-    ...BROWSER_LOCAL_SETTINGS,
-    "pendingVerifications",
-    "verifiedStats",
-    "providerModelCache",
-    "totalTokenUsed",
-    "theme",
-    "advancedMode",
-    "enterToSubmit",
-    "inlineLatex",
-    "markdownMode",
-    "streamingMarkdownPolicy",
-    "displayChatSize",
-    "animateBubbleNavigation",
-    "branchSwipeDirection"
-  ];
-  function withoutBrowserLocalSettings(state) {
-    const shared2 = { ...state };
-    for (const key of SYNC_LOCAL_SETTINGS)
-      delete shared2[key];
-    return shared2;
-  }
-  function isBrowserLocalRecord(key) {
-    let path;
-    try {
-      path = JSON.parse(key);
-    } catch {
-      return false;
-    }
-    if (!Array.isArray(path) || path[0] !== "state")
-      return false;
-    const field = path[1];
-    return SYNC_LOCAL_SETTINGS.some((key2) => key2 === field);
-  }
-  function isNonBlockingRecord(key) {
-    if (isBrowserLocalRecord(key))
-      return true;
-    let path;
-    try {
-      path = JSON.parse(key);
-    } catch {
-      return false;
-    }
-    if (!Array.isArray(path))
-      return false;
-    return path.length === 4 && path[0] === "state" && path[1] === "folders" && path[3] === "expanded" || path.length >= 3 && path.length <= 4 && path[0] === "chats" && path[2] === "collapsedNodes" || path.length === 4 && path[0] === "chats" && path[2] === "branchTree" && path[3] === "activePath";
-  }
-  function selectActivePath(key, values, records) {
-    if (!key.endsWith(',"activePath"]'))
-      return;
-    const path = JSON.parse(key);
-    if (path.length !== 4 || path[0] !== "chats" || path[2] !== "branchTree" || path[3] !== "activePath")
-      return;
-    if (records[JSON.stringify(["chats", path[1], "id"])] === void 0)
-      return null;
-    const prefix = ["chats", path[1], "branchTree"];
-    const candidates = values.filter((value) => value !== null).map((value) => JSON.parse(value)).filter((value) => Array.isArray(value) && value.every((id) => typeof id === "string"));
-    if (!candidates.length)
-      return;
-    const validPrefix = (ids) => {
-      let length = 0;
-      for (const id of ids) {
-        if (records[JSON.stringify([...prefix, "nodes", id, "id"])] !== JSON.stringify(id) || records[JSON.stringify([...prefix, "nodes", id, "parentId"])] !== JSON.stringify(length ? ids[length - 1] : null))
-          break;
-        length++;
-      }
-      return ids.slice(0, length);
-    };
-    for (const candidate of candidates)
-      if (validPrefix(candidate).length === candidate.length)
-        return JSON.stringify(candidate);
-    const retained = candidates.map(validPrefix).sort((a, b) => b.length - a.length)[0];
-    const root = records[JSON.stringify([...prefix, "rootId"])];
-    return JSON.stringify(retained.length ? retained : root ? validPrefix([JSON.parse(root)]) : []);
-  }
-
-  // shared/google-sync/adapters/host.ts
-  function host(operation, ...args) {
-    const result3 = JSON.parse(nativeSyncCall(JSON.stringify({ operation, args: args.map((value) => JSON.stringify(value ?? null)) })));
-    if (!result3.ok)
-      throw new Error(result3.error);
-    return result3.value;
-  }
-  var bytes = (value) => Array.from(value);
-
-  // shared/google-sync/adapters/crypto.ts
-  var digest = async (value) => host("digest", typeof value === "string" ? value : bytes(value));
-  var encode = (value) => new Uint8Array(host("encode", value));
-  var decode = (value) => host("decode", bytes(value));
-  var encrypt = async (key, value, context) => new Uint8Array(host("encrypt", key, bytes(value), context));
-  var decrypt = async (key, value, context) => new Uint8Array(host("decrypt", key, bytes(value), context));
-  var createKeyEnvelope = async (password, dataset) => host("createKeyEnvelope", password, dataset);
-  var unlockKey = async (envelope, password, dataset) => host("unlockKey", envelope, password, dataset);
-
-  // src/utils/folderHierarchy.ts
-  function validateFolderHierarchy(folders) {
-    if (!folders || typeof folders !== "object" || Array.isArray(folders))
-      return false;
-    const collection = folders;
-    for (const [id, folder] of Object.entries(collection)) {
-      if (!id || !folder || typeof folder !== "object" || folder.id !== id || typeof folder.name !== "string" || !Number.isFinite(folder.order) || typeof folder.expanded !== "boolean" || folder.parentId != null && (typeof folder.parentId !== "string" || !Object.hasOwn(collection, folder.parentId)))
-        return false;
-    }
-    const finished = /* @__PURE__ */ new Set();
-    for (const id of Object.keys(collection)) {
-      const path = /* @__PURE__ */ new Set();
-      let current = id;
-      while (current !== void 0 && !finished.has(current)) {
-        if (path.has(current))
-          return false;
-        path.add(current);
-        current = collection[current].parentId ?? void 0;
-      }
-      for (const member of path)
-        finished.add(member);
-    }
-    return true;
-  }
-  function getFolderParentId(folders, id) {
-    const parent = folders[id]?.parentId ?? void 0;
-    const visited = /* @__PURE__ */ new Set([id]);
-    let current = parent;
-    while (current !== void 0) {
-      if (visited.has(current) || !Object.hasOwn(folders, current))
-        return void 0;
-      visited.add(current);
-      current = folders[current]?.parentId ?? void 0;
-    }
-    return parent;
-  }
-  function getFolderAncestors(folders, id) {
-    const result3 = [];
-    const visited = /* @__PURE__ */ new Set();
-    let current = id;
-    while (current !== void 0 && Object.hasOwn(folders, current) && !visited.has(current)) {
-      visited.add(current);
-      result3.push(current);
-      current = result3.length === 1 ? getFolderParentId(folders, current) : folders[current]?.parentId ?? void 0;
-    }
-    return result3;
-  }
-  function getFolderSubtreeIds(folders, id) {
-    if (!Object.hasOwn(folders, id))
-      return [];
-    const children = /* @__PURE__ */ new Map();
-    for (const [childId, folder] of Object.entries(folders)) {
-      if (folder?.parentId != null) {
-        const list = children.get(folder.parentId) ?? [];
-        list.push(childId);
-        children.set(folder.parentId, list);
-      }
-    }
-    const result3 = [], visited = /* @__PURE__ */ new Set(), pending = [id];
-    while (pending.length) {
-      const current = pending.pop();
-      if (visited.has(current))
-        continue;
-      visited.add(current);
-      result3.push(current);
-      for (const child of children.get(current) ?? [])
-        pending.push(child);
-    }
-    return result3;
-  }
-
-  // shared/google-sync/adapters/metrics.ts
-  var recordMetric = () => {
-  };
 
   // src/types/chat.ts
   function isTextContent(ob) {
@@ -7445,6 +7241,55 @@ var WeaveletGoogleSync = (() => {
     }
     chat.branchTree = tree;
     chat.messages = materializeActivePath(tree, contentStore);
+  }
+  function getChildrenOf(tree, nodeId) {
+    return Object.values(tree.nodes).filter((n) => n.parentId === nodeId);
+  }
+  function getSiblingGroups(tree) {
+    const grouped = /* @__PURE__ */ new Map();
+    const nodes = Object.values(tree.nodes);
+    for (const node of nodes) {
+      const group = grouped.get(node.parentId) ?? [];
+      group.push(node);
+      grouped.set(node.parentId, group);
+    }
+    const groups = [];
+    const byParent = /* @__PURE__ */ new Map();
+    const byNode = /* @__PURE__ */ Object.create(null);
+    for (const node of nodes) {
+      const parent = node.parentId || null;
+      let groupIndex = byParent.get(parent);
+      if (groupIndex === void 0) {
+        groupIndex = groups.length;
+        byParent.set(parent, groupIndex);
+        const group = grouped.get(parent) ?? [];
+        groups.push(group);
+        group.forEach((sibling, index) => {
+          byNode[sibling.id] = { groupIndex, selectedIndex: index };
+        });
+      }
+      if (!byNode[node.id])
+        byNode[node.id] = { groupIndex, selectedIndex: -1 };
+    }
+    return { groups, byNode };
+  }
+  function buildPathToLeaf(tree, nodeId) {
+    const ancestors = [];
+    let cur = nodeId;
+    while (cur) {
+      ancestors.unshift(cur);
+      cur = tree.nodes[cur]?.parentId ?? null;
+    }
+    let tip = nodeId;
+    while (true) {
+      const children = getChildrenOf(tree, tip);
+      if (children.length === 0)
+        break;
+      children.sort((a, b) => b.createdAt - a.createdAt);
+      ancestors.push(children[0].id);
+      tip = children[0].id;
+    }
+    return ancestors;
   }
 
   // src/store/branch-domain.ts
@@ -7930,6 +7775,526 @@ var WeaveletGoogleSync = (() => {
     const resolved = resolveContent(store, hash);
     return JSON.stringify(resolved) === JSON.stringify(content);
   }
+  function resolveContentText(store, hash) {
+    const content = resolveContent(store, hash);
+    return content.filter((c) => c.type === "text").map((c) => c.text).join(" ");
+  }
+
+  // src/utils/branchSearch.ts
+  function searchBranchNodes(query, entries, contentStore, scope, options) {
+    const hasQuery = query.trim().length > 0;
+    const starredOnly = options?.starredOnly ?? false;
+    if (!hasQuery && !starredOnly)
+      return [];
+    const lowerQuery = hasQuery ? query.toLowerCase() : "";
+    const results = [];
+    const textCache = /* @__PURE__ */ new Map();
+    for (const { tree, chatId, chatIndex } of entries) {
+      const activePathSet = new Set(tree.activePath);
+      const nodeIds = scope === "activePath" ? tree.activePath : dfsOrder(tree);
+      for (const nodeId of nodeIds) {
+        const node = tree.nodes[nodeId];
+        if (!node)
+          continue;
+        if (starredOnly && !node.starred)
+          continue;
+        let text = textCache.get(node.contentHash);
+        if (text === void 0) {
+          text = resolveContentText(contentStore, node.contentHash);
+          textCache.set(node.contentHash, text);
+        }
+        const labelMatch = hasQuery && node.label ? node.label.toLowerCase().includes(lowerQuery) : false;
+        const lowerText = text.toLowerCase();
+        const contentMatchIdx = hasQuery ? lowerText.indexOf(lowerQuery) : -1;
+        const contentMatch = contentMatchIdx >= 0;
+        if (hasQuery && !contentMatch && !labelMatch)
+          continue;
+        let snippet;
+        let matchType;
+        if (contentMatch) {
+          const start2 = Math.max(0, contentMatchIdx - 40);
+          const end = Math.min(text.length, contentMatchIdx + query.length + 40);
+          snippet = "";
+          if (start2 > 0)
+            snippet += "...";
+          snippet += text.slice(start2, end);
+          if (end < text.length)
+            snippet += "...";
+          matchType = "content";
+        } else if (labelMatch) {
+          snippet = text.length > 80 ? `${text.slice(0, 80)}...` : text;
+          matchType = "label";
+        } else {
+          snippet = text.length > 80 ? `${text.slice(0, 80)}...` : text;
+          matchType = "content";
+        }
+        results.push({
+          nodeId,
+          chatId,
+          chatIndex,
+          snippet,
+          isOnActivePath: activePathSet.has(nodeId),
+          matchType,
+          label: node.label,
+          starred: node.starred,
+          pinned: node.pinned
+        });
+      }
+    }
+    return results;
+  }
+  function dfsOrder(tree) {
+    const result3 = [];
+    const childrenMap = /* @__PURE__ */ new Map();
+    const hasParentInTree = /* @__PURE__ */ new Set();
+    for (const node of Object.values(tree.nodes)) {
+      if (node.parentId && tree.nodes[node.parentId]) {
+        hasParentInTree.add(node.id);
+        const siblings = childrenMap.get(node.parentId);
+        if (siblings)
+          siblings.push(node.id);
+        else
+          childrenMap.set(node.parentId, [node.id]);
+      }
+    }
+    const roots = [];
+    for (const node of Object.values(tree.nodes)) {
+      if (!hasParentInTree.has(node.id)) {
+        roots.push(node.id);
+      }
+    }
+    roots.sort((a, b) => a === tree.rootId ? -1 : b === tree.rootId ? 1 : 0);
+    const stack = [...roots].reverse();
+    while (stack.length > 0) {
+      const id = stack.pop();
+      result3.push(id);
+      const children = childrenMap.get(id);
+      if (children) {
+        for (let i = children.length - 1; i >= 0; i--) {
+          stack.push(children[i]);
+        }
+      }
+    }
+    return result3;
+  }
+
+  // src/utils/folderHierarchy.ts
+  function validateFolderHierarchy(folders) {
+    if (!folders || typeof folders !== "object" || Array.isArray(folders))
+      return false;
+    const collection = folders;
+    for (const [id, folder] of Object.entries(collection)) {
+      if (!id || !folder || typeof folder !== "object" || folder.id !== id || typeof folder.name !== "string" || !Number.isFinite(folder.order) || typeof folder.expanded !== "boolean" || folder.parentId != null && (typeof folder.parentId !== "string" || !Object.hasOwn(collection, folder.parentId)))
+        return false;
+    }
+    const finished = /* @__PURE__ */ new Set();
+    for (const id of Object.keys(collection)) {
+      const path = /* @__PURE__ */ new Set();
+      let current = id;
+      while (current !== void 0 && !finished.has(current)) {
+        if (path.has(current))
+          return false;
+        path.add(current);
+        current = collection[current].parentId ?? void 0;
+      }
+      for (const member of path)
+        finished.add(member);
+    }
+    return true;
+  }
+  function getFolderParentId(folders, id) {
+    const parent = folders[id]?.parentId ?? void 0;
+    const visited = /* @__PURE__ */ new Set([id]);
+    let current = parent;
+    while (current !== void 0) {
+      if (visited.has(current) || !Object.hasOwn(folders, current))
+        return void 0;
+      visited.add(current);
+      current = folders[current]?.parentId ?? void 0;
+    }
+    return parent;
+  }
+  function getFolderAncestors(folders, id) {
+    const result3 = [];
+    const visited = /* @__PURE__ */ new Set();
+    let current = id;
+    while (current !== void 0 && Object.hasOwn(folders, current) && !visited.has(current)) {
+      visited.add(current);
+      result3.push(current);
+      current = result3.length === 1 ? getFolderParentId(folders, current) : folders[current]?.parentId ?? void 0;
+    }
+    return result3;
+  }
+  function getFolderSubtreeIds(folders, id) {
+    if (!Object.hasOwn(folders, id))
+      return [];
+    const children = /* @__PURE__ */ new Map();
+    for (const [childId, folder] of Object.entries(folders)) {
+      if (folder?.parentId != null) {
+        const list = children.get(folder.parentId) ?? [];
+        list.push(childId);
+        children.set(folder.parentId, list);
+      }
+    }
+    const result3 = [], visited = /* @__PURE__ */ new Set(), pending = [id];
+    while (pending.length) {
+      const current = pending.pop();
+      if (visited.has(current))
+        continue;
+      visited.add(current);
+      result3.push(current);
+      for (const child of children.get(current) ?? [])
+        pending.push(child);
+    }
+    return result3;
+  }
+
+  // src/utils/chatSearch.ts
+  function matchesChatHistoryFilter(query, chat, folders, currentChatId) {
+    const lower = query.toLowerCase();
+    const folder = chat.folder ? folders[chat.folder] : void 0;
+    const folderName = folder ? getFolderAncestors(folders, folder.id).map((id) => folders[id].name.toLowerCase()).join(" ") : "";
+    return chat.title.toLowerCase().includes(lower) || folderName.includes(lower) || chat.id === currentChatId;
+  }
+  function searchLegacyChat(chat, chatIndex, query) {
+    const lowerQuery = query.toLowerCase();
+    const results = [];
+    for (let i = 0; i < chat.messages.length; i++) {
+      const msg = chat.messages[i];
+      const textParts2 = msg.content.filter(isTextContent).map((c) => c.text);
+      const fullText = textParts2.join(" ");
+      const lowerText = fullText.toLowerCase();
+      const idx = lowerText.indexOf(lowerQuery);
+      if (idx < 0)
+        continue;
+      const start2 = Math.max(0, idx - 40);
+      const end = Math.min(fullText.length, idx + query.length + 40);
+      let snippet = "";
+      if (start2 > 0)
+        snippet += "...";
+      snippet += fullText.slice(start2, end);
+      if (end < fullText.length)
+        snippet += "...";
+      results.push({
+        nodeId: `legacy-${i}`,
+        chatId: chat.id,
+        chatIndex,
+        snippet,
+        isOnActivePath: true,
+        matchType: "content"
+      });
+    }
+    return results;
+  }
+  function grepChats(chats, contentStore, query) {
+    const normalized = query.trim();
+    if (!normalized)
+      return [];
+    return chats.flatMap((chat, chatIndex) => {
+      const matches = chat.branchTree ? searchBranchNodes(normalized, [{ tree: chat.branchTree, chatId: chat.id, chatIndex }], contentStore, "all") : searchLegacyChat(chat, chatIndex, normalized);
+      return matches.length ? [{ chatId: chat.id, chatIndex, chatTitle: chat.title, matches }] : [];
+    });
+  }
+
+  // shared/google-sync/search.ts
+  function resultsJSON(results) {
+    return JSON.stringify(results, (key, value) => key === "snippet" && typeof value === "string" ? value.replace(/([\uD800-\uDBFF][\uDC00-\uDFFF])|[\uD800-\uDFFF]/g, (_unit, pair) => pair ?? "\uFFFD") : value);
+  }
+  function chatSearch(json) {
+    const input = JSON.parse(json);
+    if (input.currentPath)
+      input.chats = input.chats.map((chat) => chat.id === input.currentChatID && chat.branchTree ? { ...chat, branchTree: { ...chat.branchTree, activePath: input.currentPath } } : chat);
+    const indexed = input.chats.map((chat, index) => ({ chat, index })).filter(({ chat }) => !input.chatID || chat.id === input.chatID);
+    if (input.mode === "library") {
+      return resultsJSON(indexed.filter(({ chat }) => matchesChatHistoryFilter(input.query, chat, input.folders, input.currentChatID)).map(({ chat, index }) => ({
+        chatId: chat.id,
+        nodeId: null,
+        resultId: chat.id,
+        chatIndex: index,
+        chatTitle: chat.title,
+        snippet: chat.title,
+        matchType: "title",
+        isOnActivePath: true
+      })));
+    }
+    if (input.mode === "grep") {
+      const groups = grepChats(input.chats, input.contentStore, input.query);
+      return resultsJSON(groups.filter((group) => !input.chatID || group.chatId === input.chatID).flatMap((group) => group.matches.map((match) => ({ ...match, resultId: match.nodeId, nodeId: match.nodeId.startsWith("legacy-") && !input.chats[match.chatIndex].branchTree ? null : match.nodeId, chatTitle: group.chatTitle }))));
+    }
+    if (input.mode !== "nodes")
+      throw new Error("Unknown search mode.");
+    const entries = indexed.filter(({ chat }) => chat.branchTree).map(({ chat, index }) => ({ tree: chat.branchTree, chatId: chat.id, chatIndex: index }));
+    return resultsJSON(searchBranchNodes(input.query, entries, input.contentStore, input.scope ?? "all", { starredOnly: input.starredOnly }).map((match) => ({ ...match, resultId: match.nodeId, chatTitle: input.chats[match.chatIndex].title })));
+  }
+
+  // src/utils/branchNavigation.ts
+  function resolveNavigationTarget(chats, chatId, nodeId, source = "branch-switch") {
+    const chatIndex = chats?.findIndex((chat2) => chat2.id === chatId) ?? -1;
+    const chat = chats?.[chatIndex];
+    if (!chat)
+      return { status: "chat-missing" };
+    if (nodeId && !chat.branchTree?.nodes[nodeId])
+      return { status: "node-missing" };
+    const tree = chat.branchTree;
+    const preservePath = (source === "search" || source === "grep") && nodeId && tree?.activePath.includes(nodeId);
+    const path = nodeId && tree && !preservePath ? buildPathToLeaf(tree, nodeId) : [...tree?.activePath ?? []];
+    return { status: "reached", chatIndex, chatId, path, focusedNodeId: nodeId };
+  }
+  function navigationEntry(target, viewContext, source) {
+    return { chatId: target.chatId, activePath: target.path, focusedNodeId: target.focusedNodeId, viewContext, source };
+  }
+  function entryWithNavigationKey(entry, key) {
+    return { ...entry, key };
+  }
+  function navigationEntryWithAnchor(entry, anchor) {
+    return anchor ? { ...entry, scrollAnchor: { ...anchor } } : entry;
+  }
+  function captureNavigationHistory(history, entry) {
+    return { navHistoryPast: history.navHistoryPast, navHistoryCurrent: entry, navHistoryFuture: history.navHistoryFuture, navEntryMap: history.navEntryMap };
+  }
+  function restoredNavigationPath(chat, path) {
+    const tree = chat.branchTree;
+    if (!tree)
+      return;
+    const valid = path.length > 0 && path.every((id, index) => tree.nodes[id]?.parentId === (index === 0 ? null : path[index - 1]));
+    return valid ? [...path] : void 0;
+  }
+  var emptyNavigationHistory = () => ({ navHistoryPast: [], navHistoryCurrent: null, navHistoryFuture: [], navEntryMap: /* @__PURE__ */ new Map() });
+  function initializeNavigationHistory(history, chat, key, viewContext) {
+    if (history.navHistoryCurrent || !chat)
+      return history;
+    const entry = { key, chatId: chat.id, activePath: [...chat.branchTree?.activePath ?? []], viewContext, source: "init" };
+    const navEntryMap = new Map(history.navEntryMap);
+    navEntryMap.set(key, entry);
+    return { navHistoryPast: history.navHistoryPast, navHistoryFuture: history.navHistoryFuture, navHistoryCurrent: entry, navEntryMap };
+  }
+  function pushNavigationHistory(history, entry) {
+    const navHistoryPast = [...history.navHistoryPast];
+    if (history.navHistoryCurrent) {
+      navHistoryPast.push(history.navHistoryCurrent);
+      if (navHistoryPast.length > 100)
+        navHistoryPast.shift();
+    }
+    const navEntryMap = new Map(history.navEntryMap);
+    navEntryMap.set(entry.key, entry);
+    return { navHistoryPast, navHistoryCurrent: entry, navHistoryFuture: [], navEntryMap };
+  }
+  function moveNavigationHistory(history, chats, direction) {
+    const valid = (entry) => !!chats?.some((chat) => chat.id === entry.chatId);
+    const current = history.navHistoryCurrent;
+    if (!current)
+      return;
+    if (direction === "back") {
+      const past = history.navHistoryPast, index2 = past.map(valid).lastIndexOf(true);
+      if (index2 < 0)
+        return;
+      return { navEntryMap: history.navEntryMap, navHistoryPast: past.slice(0, index2), navHistoryCurrent: past[index2], navHistoryFuture: [...past.slice(index2 + 1), current, ...history.navHistoryFuture] };
+    }
+    const future = history.navHistoryFuture, index = future.findIndex(valid);
+    if (index < 0)
+      return;
+    return { navEntryMap: history.navEntryMap, navHistoryPast: [...history.navHistoryPast, current, ...future.slice(0, index)], navHistoryCurrent: future[index], navHistoryFuture: future.slice(index + 1) };
+  }
+  function canMoveNavigationHistory(history, chats, direction) {
+    return (direction === "back" ? history.navHistoryPast : history.navHistoryFuture).some((entry) => chats?.some((chat) => chat.id === entry.chatId));
+  }
+
+  // shared/google-sync/navigation.ts
+  var decodeHistory = (value) => ({ ...value, navEntryMap: new Map(value.navEntryMap) });
+  var encodeHistory = (value) => ({ ...value, navEntryMap: [...value.navEntryMap.entries()] });
+  function navigationOperation(json) {
+    const input = JSON.parse(json), source = input.source;
+    switch (input.operation) {
+      case "navigate": {
+        let target = resolveNavigationTarget(source.chats, input.chatId, input.nodeId, input.navigationSource);
+        if (target.status !== "reached")
+          return JSON.stringify({ ...target, changes: [] });
+        let chats = source.chats;
+        if (input.viewingPath && chats[target.chatIndex].branchTree)
+          chats = switchActivePathState(chats, target.chatIndex, input.viewingPath, source.contentStore);
+        target = resolveNavigationTarget(chats, input.chatId, input.nodeId, input.navigationSource);
+        if (target.status !== "reached")
+          return JSON.stringify({ ...target, changes: [] });
+        if (chats[target.chatIndex].branchTree)
+          chats = switchActivePathState(chats, target.chatIndex, target.path, source.contentStore);
+        return JSON.stringify({ ...target, changes: diffJSONChanges(source, { ...source, chats }) });
+      }
+      case "restore": {
+        const chatIndex = source.chats.findIndex((chat2) => chat2.id === input.entry.chatId), chat = source.chats[chatIndex];
+        if (!chat)
+          return JSON.stringify({ status: "chat-missing", changes: [] });
+        const path = restoredNavigationPath(chat, input.entry.activePath);
+        const chats = path ? switchActivePathState(source.chats, chatIndex, path, source.contentStore) : source.chats;
+        return JSON.stringify({ status: "reached", chatId: chat.id, chatIndex, path: path ?? [...chat.branchTree?.activePath ?? []], focusedNodeId: input.entry.focusedNodeId, changes: diffJSONChanges(source, { ...source, chats }) });
+      }
+      case "candidates":
+        return JSON.stringify(source.chats.map((chat) => {
+          const grouped = chat.branchTree ? getSiblingGroups(chat.branchTree) : { groups: [], byNode: {} };
+          return {
+            chatId: chat.id,
+            activePath: [...chat.branchTree?.activePath ?? []],
+            nodeIDs: Object.keys(chat.branchTree?.nodes ?? {}),
+            groups: grouped.groups.map((group) => group.map((node) => node.id)),
+            byNode: grouped.byNode
+          };
+        }));
+      case "historyEmpty":
+        return JSON.stringify(encodeHistory(emptyNavigationHistory()));
+      case "history": {
+        const history = decodeHistory(input.history);
+        let next = history;
+        if (input.action === "initialize") {
+          const chat = source.chats.find((chat2) => chat2.id === input.chatId);
+          const displayed = chat?.branchTree && input.viewingPath ? { ...chat, branchTree: { ...chat.branchTree, activePath: input.viewingPath } } : chat;
+          next = initializeNavigationHistory(history, displayed, input.key, input.view);
+        } else if (input.action === "push") {
+          const partial = input.target ? navigationEntry(input.target, input.view, input.navigationSource) : input.entry;
+          next = pushNavigationHistory(history, entryWithNavigationKey(partial, input.key));
+        } else if (input.action === "capture") {
+          next = captureNavigationHistory(history, history.navHistoryCurrent && navigationEntryWithAnchor(history.navHistoryCurrent, input.scrollAnchor));
+        } else
+          next = moveNavigationHistory(history, source.chats, input.action) ?? history;
+        return JSON.stringify({ history: encodeHistory(next), entry: next.navHistoryCurrent, canBack: canMoveNavigationHistory(next, source.chats, "back"), canForward: canMoveNavigationHistory(next, source.chats, "forward") });
+      }
+      default:
+        throw new Error("Unknown navigation operation");
+    }
+  }
+
+  // src/store/storage/google/datasetListing.ts
+  var DEFAULT_SYNC_FOLDER_NAME = "Weavelet encrypted sync";
+  var defaultSyncFolderName = (id) => `${DEFAULT_SYNC_FOLDER_NAME} (${id})`;
+  function nextSyncFolderName(name, names) {
+    const base = name.trim();
+    const used = new Set(names);
+    let candidate = base, suffix = 2;
+    while (used.has(candidate))
+      candidate = `${base} (${suffix++})`;
+    return candidate;
+  }
+  var DRIVE_LIST_FIELDS = "id,kind,name,mimeType,modifiedTime,size";
+  var DRIVE_LIST_QUERY = "trashed = false and (mimeType = 'application/json' or appProperties has { key='weaveletSync' and value='1' } or (mimeType = 'application/octet-stream' and name contains '.json'))";
+  function driveListParameters(q = DRIVE_LIST_QUERY, fields = DRIVE_LIST_FIELDS) {
+    return { q, orderBy: "modifiedTime desc", pageSize: "1000", fields: `nextPageToken,incompleteSearch,files(${fields})` };
+  }
+
+  // src/store/storage/google/datasetHeader.ts
+  var SYNC_FOLDER_TYPE = "application/vnd.google-apps.folder";
+  function encryptedSyncHeaderId(file) {
+    if (file.mimeType !== SYNC_FOLDER_TYPE || file.appProperties?.weaveletSync !== "1" || !file.appProperties.headerId) {
+      throw new Error("Legacy sync files are read-only. Create a new encrypted sync folder.");
+    }
+    return file.appProperties.headerId;
+  }
+
+  // src/store/storage/google/settings.ts
+  var BROWSER_LOCAL_SETTINGS = [
+    "hideMenuOptions",
+    "hideSideMenu",
+    "menuWidth",
+    "splitPanelRatio",
+    "splitPanelSwapped",
+    "chatActiveView",
+    "showDebugPanel",
+    "proxyEnabled"
+  ];
+  var SYNC_LOCAL_SETTINGS = [
+    ...BROWSER_LOCAL_SETTINGS,
+    "pendingVerifications",
+    "verifiedStats",
+    "providerModelCache",
+    "totalTokenUsed",
+    "theme",
+    "advancedMode",
+    "enterToSubmit",
+    "inlineLatex",
+    "markdownMode",
+    "streamingMarkdownPolicy",
+    "displayChatSize",
+    "animateBubbleNavigation",
+    "branchSwipeDirection"
+  ];
+  function withoutBrowserLocalSettings(state) {
+    const shared2 = { ...state };
+    for (const key of SYNC_LOCAL_SETTINGS)
+      delete shared2[key];
+    return shared2;
+  }
+  function isBrowserLocalRecord(key) {
+    let path;
+    try {
+      path = JSON.parse(key);
+    } catch {
+      return false;
+    }
+    if (!Array.isArray(path) || path[0] !== "state")
+      return false;
+    const field = path[1];
+    return SYNC_LOCAL_SETTINGS.some((key2) => key2 === field);
+  }
+  function isNonBlockingRecord(key) {
+    if (isBrowserLocalRecord(key))
+      return true;
+    let path;
+    try {
+      path = JSON.parse(key);
+    } catch {
+      return false;
+    }
+    if (!Array.isArray(path))
+      return false;
+    return path.length === 4 && path[0] === "state" && path[1] === "folders" && path[3] === "expanded" || path.length >= 3 && path.length <= 4 && path[0] === "chats" && path[2] === "collapsedNodes" || path.length === 4 && path[0] === "chats" && path[2] === "branchTree" && path[3] === "activePath";
+  }
+  function selectActivePath(key, values, records) {
+    if (!key.endsWith(',"activePath"]'))
+      return;
+    const path = JSON.parse(key);
+    if (path.length !== 4 || path[0] !== "chats" || path[2] !== "branchTree" || path[3] !== "activePath")
+      return;
+    if (records[JSON.stringify(["chats", path[1], "id"])] === void 0)
+      return null;
+    const prefix = ["chats", path[1], "branchTree"];
+    const candidates = values.filter((value) => value !== null).map((value) => JSON.parse(value)).filter((value) => Array.isArray(value) && value.every((id) => typeof id === "string"));
+    if (!candidates.length)
+      return;
+    const validPrefix = (ids) => {
+      let length = 0;
+      for (const id of ids) {
+        if (records[JSON.stringify([...prefix, "nodes", id, "id"])] !== JSON.stringify(id) || records[JSON.stringify([...prefix, "nodes", id, "parentId"])] !== JSON.stringify(length ? ids[length - 1] : null))
+          break;
+        length++;
+      }
+      return ids.slice(0, length);
+    };
+    for (const candidate of candidates)
+      if (validPrefix(candidate).length === candidate.length)
+        return JSON.stringify(candidate);
+    const retained = candidates.map(validPrefix).sort((a, b) => b.length - a.length)[0];
+    const root = records[JSON.stringify([...prefix, "rootId"])];
+    return JSON.stringify(retained.length ? retained : root ? validPrefix([JSON.parse(root)]) : []);
+  }
+
+  // shared/google-sync/adapters/host.ts
+  function host(operation, ...args) {
+    const result3 = JSON.parse(nativeSyncCall(JSON.stringify({ operation, args: args.map((value) => JSON.stringify(value ?? null)) })));
+    if (!result3.ok)
+      throw new Error(result3.error);
+    return result3.value;
+  }
+  var bytes = (value) => Array.from(value);
+
+  // shared/google-sync/adapters/crypto.ts
+  var digest = async (value) => host("digest", typeof value === "string" ? value : bytes(value));
+  var encode = (value) => new Uint8Array(host("encode", value));
+  var decode = (value) => host("decode", bytes(value));
+  var encrypt = async (key, value, context) => new Uint8Array(host("encrypt", key, bytes(value), context));
+  var decrypt = async (key, value, context) => new Uint8Array(host("decrypt", key, bytes(value), context));
+  var createKeyEnvelope = async (password, dataset) => host("createKeyEnvelope", password, dataset);
+  var unlockKey = async (envelope, password, dataset) => host("unlockKey", envelope, password, dataset);
+
+  // shared/google-sync/adapters/metrics.ts
+  var recordMetric = () => {
+  };
 
   // shared/google-sync/source/records.ts
   var import_diff_match_patch2 = __toESM(require_diff_match_patch(), 1);

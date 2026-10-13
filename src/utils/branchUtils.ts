@@ -220,17 +220,37 @@ export function getChildrenOf(
   return Object.values(tree.nodes).filter((n) => n.parentId === nodeId);
 }
 
-export function getSiblingsOf(
-  tree: BranchTree,
-  nodeId: string
-): BranchNode[] {
+// Group once for batch callers. Object.values order and the original root-parent
+// rule are shared with the single-node Web accessor below.
+export function getSiblingGroups(tree: BranchTree) {
+  const grouped = new Map<string | null, BranchNode[]>();
+  const nodes = Object.values(tree.nodes);
+  for (const node of nodes) {
+    const group = grouped.get(node.parentId) ?? [];
+    group.push(node); grouped.set(node.parentId,group);
+  }
+  const groups: BranchNode[][] = [];
+  const byParent = new Map<string | null,number>();
+  const byNode: Record<string,{groupIndex:number;selectedIndex:number}> = Object.create(null);
+  for (const node of nodes) {
+    const parent = node.parentId || null;
+    let groupIndex = byParent.get(parent);
+    if (groupIndex === undefined) {
+      groupIndex = groups.length; byParent.set(parent,groupIndex);
+      const group = grouped.get(parent) ?? [];
+      groups.push(group);
+      group.forEach((sibling,index) => { byNode[sibling.id] = {groupIndex:groupIndex!,selectedIndex:index}; });
+    }
+    // Invalid falsy parents still follow the former accessor's null-parent lookup.
+    if (!byNode[node.id]) byNode[node.id] = {groupIndex,selectedIndex:-1};
+  }
+  return {groups,byNode};
+}
+export function getSiblingsOf(tree: BranchTree, nodeId: string): BranchNode[] {
   const node = tree.nodes[nodeId];
   if (!node) return [];
-  if (!node.parentId) {
-    // Root-level node: siblings are all nodes with parentId === null
-    return Object.values(tree.nodes).filter((n) => n.parentId === null);
-  }
-  return getChildrenOf(tree, node.parentId);
+  const result = getSiblingGroups(tree);
+  return result.groups[result.byNode[node.id].groupIndex];
 }
 
 export function buildPathToLeaf(

@@ -1,3 +1,4 @@
+import { matchesChatHistoryFilter } from '@utils/chatSearch';
 import { getFolderAncestors, getFolderParentId } from '@utils/folderHierarchy';
 import { expandExistingFolder, readDraggedChatIds } from './chatHistoryFolderUtils';
 import React, { useEffect, useRef, useState } from 'react';
@@ -89,17 +90,8 @@ const ChatHistoryList = ({
 
     if (chats) {
       chats.forEach((chat, index) => {
-        const _filterLowerCase = filterRef.current.toLowerCase();
-        const _chatTitle = chat.title.toLowerCase();
         const folder = chat.folder ? folders[chat.folder] : undefined;
-        const _chatFolderName = folder ? getFolderAncestors(folders, folder.id).map(id => folders[id].name.toLowerCase()).join(' ') : '';
-
-        if (
-          !_chatTitle.includes(_filterLowerCase) &&
-          !_chatFolderName.includes(_filterLowerCase) &&
-          index !== useStore.getState().currentChatIndex
-        )
-          return;
+        if (!matchesChatHistoryFilter(filterRef.current, chat, folders, chats[useStore.getState().currentChatIndex]?.id)) return;
 
         if (!chat.folder) {
           _noFolders.push({
