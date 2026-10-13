@@ -16548,6 +16548,17 @@ ${message.content}` : message.content).join("\n\n").trim();
     const version = parseFloat(match[1].replace("-", "."));
     return Number.isFinite(version) ? version : void 0;
   };
+  var isClaudeReasoningModel = (modelId) => {
+    const id = normalizeModelId(modelId);
+    if (!id.includes("claude"))
+      return false;
+    if (id.includes("thinking"))
+      return true;
+    const version = getClaudeVersion(id);
+    if (version === void 0)
+      return true;
+    return version >= 3.7;
+  };
   var isOpenRouterAdaptiveReasoningModel = (modelId, providerId) => {
     if (providerId !== "openrouter")
       return false;
@@ -16590,6 +16601,91 @@ ${message.content}` : message.content).join("\n\n").trim();
     const version = getClaudeVersion(id);
     return version !== void 0 && version >= 4.6;
   };
+
+  // src/api/providerModels.ts
+  var REASONING_MODEL_RE = (
+    // OpenAI o-series: o1, o1-mini, o3, o3-mini, o4-mini, etc.
+    // Uses word-boundary to avoid false positives like "proto1", "falcon-40b"
+    /(?:^|[-/])o[134](?:$|[-/])/
+  );
+  var REASONING_MODEL_NAMES = [
+    "deepseek-r1",
+    "deepseek-reasoner",
+    "qwq"
+  ];
+  var isReasoningModel = (modelId) => {
+    const id = modelId.toLowerCase();
+    return REASONING_MODEL_RE.test(id) || REASONING_MODEL_NAMES.some((name) => id.includes(name)) || isClaudeReasoningModel(id);
+  };
+
+  // src/utils/modelReasoning.ts
+  var inferMandatoryReasoning = (modelId, providerId) => providerId === "openrouter" && /claude-opus-5[.-]5(?:$|:)/.test(modelId.toLowerCase());
+  function findProviderCustomModel(providerCustomModels, modelId, providerId) {
+    if (!providerCustomModels)
+      return void 0;
+    if (providerId) {
+      return providerCustomModels[providerId]?.find((m) => m.modelId === modelId);
+    }
+    for (const models of Object.values(providerCustomModels)) {
+      if (!models)
+        continue;
+      const found = models.find((m) => m.modelId === modelId);
+      if (found)
+        return found;
+    }
+    return void 0;
+  }
+  function findFavorite(favorites, modelId, providerId) {
+    if (providerId) {
+      return favorites.find(
+        (f) => f.modelId === modelId && f.providerId === providerId
+      );
+    }
+    return favorites.find((f) => f.modelId === modelId);
+  }
+  function findCachedModel(cache, modelId, providerId) {
+    if (providerId && cache[providerId]) {
+      return cache[providerId].find((m) => m.id === modelId);
+    }
+    for (const models of Object.values(cache)) {
+      if (!models)
+        continue;
+      const found = models.find((m) => m.id === modelId);
+      if (found)
+        return found;
+    }
+    return void 0;
+  }
+  function modelSupportsReasoning(state, modelId, providerId, modelSource) {
+    if (modelSource === "local")
+      return false;
+    const inferred = isReasoningModel(modelId);
+    const custom = findProviderCustomModel(state.providerCustomModels, modelId, providerId);
+    if (custom?.supportsReasoning != null)
+      return custom.supportsReasoning;
+    const fav = findFavorite(state.favoriteModels ?? [], modelId, providerId);
+    if (fav?.supportsReasoning != null)
+      return fav.supportsReasoning || inferred;
+    const cached = findCachedModel(state.providerModelCache ?? {}, modelId, providerId);
+    if (cached?.supportsReasoning != null)
+      return cached.supportsReasoning || inferred;
+    return inferred;
+  }
+  function modelRequiresReasoning(state, modelId, providerId) {
+    const favorite = findFavorite(state.favoriteModels ?? [], modelId, providerId);
+    const cached = findCachedModel(state.providerModelCache ?? {}, modelId, providerId);
+    return favorite?.reasoningMandatory ?? cached?.reasoningMandatory ?? inferMandatoryReasoning(modelId, providerId);
+  }
+  function buildReasoningCapabilities(config, supportsReasoning, requiresReasoning) {
+    return { supportsReasoning, requiresReasoning: !!(supportsReasoning || config.force_reasoning) && config.providerId === "openrouter" && config.reasoning_effort === "none" && requiresReasoning() };
+  }
+  function getRequestReasoningCapabilities(config, state) {
+    return buildReasoningCapabilities(
+      config,
+      modelSupportsReasoning(state, config.model, config.providerId),
+      () => modelRequiresReasoning(state, config.model, config.providerId)
+    );
+  }
 
   // src/api/requestBody.ts
   var OPENROUTER_ONLY_EFFORTS = /* @__PURE__ */ new Set([
@@ -16674,9 +16770,9 @@ ${message.content}` : message.content).join("\n\n").trim();
 
   // src/utils/submitContext.ts
   var modelSupportsSystemRole = (modelId) => {
-    return !isReasoningModel(modelId);
+    return !isReasoningModel2(modelId);
   };
-  var isReasoningModel = (modelId) => modelId.startsWith("o1-") || modelId.startsWith("o3-") || modelId.startsWith("o1 ");
+  var isReasoningModel2 = (modelId) => modelId.startsWith("o1-") || modelId.startsWith("o3-") || modelId.startsWith("o1 ");
   var sanitizeMessageContent = (content) => content.filter((part) => {
     if (part.type === "reasoning")
       return false;
@@ -16759,7 +16855,7 @@ ${message.content}` : message.content).join("\n\n").trim();
     return JSON.stringify(buildRequestBody(
       messages,
       input.config,
-      input.capabilities,
+      input.modelState !== void 0 ? getRequestReasoningCapabilities(input.config, input.modelState) : input.capabilities,
       { stream: input.config.stream }
     ));
   };

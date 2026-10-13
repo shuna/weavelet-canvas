@@ -1,3 +1,4 @@
+import { getRequestReasoningCapabilities, type ReasoningModelState } from '../../src/utils/modelReasoning';
 import { materializeActivePath } from '../../src/utils/branchUtils';
 import type { ContentStoreData } from '../../src/utils/contentStore';
 import { buildRequestBody } from '../../src/api/requestBody';
@@ -13,7 +14,8 @@ export const generationRequest = (json: string): string => {
     config: ConfigInterface;
     activePath?: string[];
     omittedNodes?: Record<string, boolean>;
-    capabilities: { supportsReasoning: boolean; requiresReasoning: boolean };
+    modelState?: ReasoningModelState;
+    capabilities?: { supportsReasoning: boolean; requiresReasoning: boolean };
   } = JSON.parse(json);
   const path = input.activePath ?? input.chat?.branchTree?.activePath;
   let chat = input.chat;
@@ -26,6 +28,7 @@ export const generationRequest = (json: string): string => {
     input.config.model, path, input.omittedNodes ?? chat?.omittedNodes, input.config.systemPrompt,
     chat ? { chat, generatingNodeIds: input.generatingNodeIds ?? [] } : undefined);
   if (messages.length === 0) throw new Error('送信する本文がありません');
-  return JSON.stringify(buildRequestBody(messages, input.config, input.capabilities,
+  return JSON.stringify(buildRequestBody(messages, input.config, input.modelState !== undefined
+    ? getRequestReasoningCapabilities(input.config, input.modelState) : input.capabilities!,
     { stream: input.config.stream }));
 };

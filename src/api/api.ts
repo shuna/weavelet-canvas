@@ -5,10 +5,8 @@ import {
   MessageInterface,
 } from '@type/chat';
 import { isAzureEndpoint } from '@utils/api';
-import {
-  getModelRequiresReasoning,
-  getModelSupportsReasoning,
-} from '@utils/modelLookup';
+import { getModelSupportsReasoning, getModelRequiresReasoning } from '@utils/modelLookup';
+import { buildReasoningCapabilities } from '@utils/modelReasoning';
 import { buildRequestBody as buildSharedRequestBody } from './requestBody';
 
 const buildRequestBody = (
@@ -16,11 +14,8 @@ const buildRequestBody = (
   config: ConfigInterface,
   overrides?: Record<string, unknown>
 ): Record<string, unknown> => {
-  const supportsReasoning = getModelSupportsReasoning(config.model, config.providerId);
-  const requiresReasoning = !!(supportsReasoning || config.force_reasoning) &&
-    config.providerId === 'openrouter' && config.reasoning_effort === 'none' &&
-    getModelRequiresReasoning(config.model, config.providerId);
-  return buildSharedRequestBody(messages, config, { supportsReasoning, requiresReasoning }, overrides);
+  return buildSharedRequestBody(messages, config, buildReasoningCapabilities(config, getModelSupportsReasoning(config.model, config.providerId),
+    () => getModelRequiresReasoning(config.model, config.providerId)), overrides);
 };
 
 export const getChatCompletion = async (

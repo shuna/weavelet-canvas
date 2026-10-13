@@ -1,3 +1,4 @@
+import { findProviderCustomModel, findFavorite, findCachedModel, modelSupportsReasoning, modelRequiresReasoning } from './modelReasoning';
 import useStore from '@store/store';
 import type { CustomProviderModel, ProviderId, FavoriteModel, ProviderModel } from '@type/provider';
 import { isVisionModel, isAudioModel, isReasoningModel } from '@api/providerModels';
@@ -12,63 +13,10 @@ import { getCatalogModel } from '@src/local-llm/catalog';
 
 const DEFAULT_LOCAL_MODEL_CONTEXT_LENGTH = 2048;
 
-const inferMandatoryReasoning = (
-  modelId: string,
-  providerId?: ProviderId
-): boolean =>
-  providerId === 'openrouter' &&
-  /claude-opus-5[.-]5(?:$|:)/.test(modelId.toLowerCase());
-
 export interface ModelCostEntry {
   prompt: { price: number | null; unit: number };
   completion: { price: number | null; unit: number };
   image?: { price: number | null; unit: number };
-}
-
-function findProviderCustomModel(
-  providerCustomModels: Partial<Record<ProviderId, CustomProviderModel[]>> | undefined,
-  modelId: string,
-  providerId?: ProviderId
-): CustomProviderModel | undefined {
-  if (!providerCustomModels) return undefined;
-  if (providerId) {
-    return providerCustomModels[providerId]?.find((m) => m.modelId === modelId);
-  }
-  for (const models of Object.values(providerCustomModels)) {
-    if (!models) continue;
-    const found = models.find((m) => m.modelId === modelId);
-    if (found) return found;
-  }
-  return undefined;
-}
-
-function findFavorite(
-  favorites: FavoriteModel[],
-  modelId: string,
-  providerId?: ProviderId
-): FavoriteModel | undefined {
-  if (providerId) {
-    return favorites.find(
-      (f) => f.modelId === modelId && f.providerId === providerId
-    );
-  }
-  return favorites.find((f) => f.modelId === modelId);
-}
-
-function findCachedModel(
-  cache: Partial<Record<ProviderId, ProviderModel[]>>,
-  modelId: string,
-  providerId?: ProviderId
-): ProviderModel | undefined {
-  if (providerId && cache[providerId]) {
-    return cache[providerId]!.find((m) => m.id === modelId);
-  }
-  for (const models of Object.values(cache)) {
-    if (!models) continue;
-    const found = models.find((m) => m.id === modelId);
-    if (found) return found;
-  }
-  return undefined;
 }
 
 export function getModelType(
@@ -220,69 +168,19 @@ export function getModelCost(
   return undefined;
 }
 
-export function getModelSupportsReasoning(
-  modelId: string,
-  providerId?: ProviderId,
-  modelSource?: 'remote' | 'local'
-): boolean {
+export function getModelSupportsReasoning(modelId: string, providerId?: ProviderId, modelSource?: 'remote' | 'local'): boolean {
   if (modelSource === 'local') return false;
-  const state = useStore.getState();
-  const inferred = isReasoningModel(modelId);
-
-  const custom = findProviderCustomModel(state.providerCustomModels, modelId, providerId);
-  if (custom?.supportsReasoning != null) return custom.supportsReasoning;
-
-  const fav = findFavorite(state.favoriteModels, modelId, providerId);
-  if (fav?.supportsReasoning != null) return fav.supportsReasoning || inferred;
-
-  const cached = findCachedModel(state.providerModelCache, modelId, providerId);
-  if (cached?.supportsReasoning != null) return cached.supportsReasoning || inferred;
-
-  return inferred;
+  return modelSupportsReasoning(useStore.getState(), modelId, providerId, modelSource);
 }
-
-export function useModelSupportsReasoning(
-  modelId: string,
-  providerId?: ProviderId,
-  modelSource?: 'remote' | 'local'
-): boolean {
+export function useModelSupportsReasoning(modelId: string, providerId?: ProviderId, modelSource?: 'remote' | 'local'): boolean {
   if (modelSource === 'local') return false;
-  return useStore((state) => {
-    const inferred = isReasoningModel(modelId);
-    const custom = findProviderCustomModel(state.providerCustomModels, modelId, providerId);
-    if (custom?.supportsReasoning != null) return custom.supportsReasoning;
-
-    const fav = findFavorite(state.favoriteModels, modelId, providerId);
-    if (fav?.supportsReasoning != null) return fav.supportsReasoning || inferred;
-
-    const cached = findCachedModel(state.providerModelCache, modelId, providerId);
-    if (cached?.supportsReasoning != null) return cached.supportsReasoning || inferred;
-
-    return inferred;
-  });
+  return useStore(state => modelSupportsReasoning(state, modelId, providerId, modelSource));
 }
-
-export function getModelRequiresReasoning(
-  modelId: string,
-  providerId?: ProviderId
-): boolean {
-  const state = useStore.getState();
-  const favorite = findFavorite(state.favoriteModels, modelId, providerId);
-  const cached = findCachedModel(state.providerModelCache, modelId, providerId);
-  return favorite?.reasoningMandatory ?? cached?.reasoningMandatory ??
-    inferMandatoryReasoning(modelId, providerId);
+export function getModelRequiresReasoning(modelId: string, providerId?: ProviderId): boolean {
+  return modelRequiresReasoning(useStore.getState(), modelId, providerId);
 }
-
-export function useModelRequiresReasoning(
-  modelId: string,
-  providerId?: ProviderId
-): boolean {
-  return useStore((state) => {
-    const favorite = findFavorite(state.favoriteModels, modelId, providerId);
-    const cached = findCachedModel(state.providerModelCache, modelId, providerId);
-    return favorite?.reasoningMandatory ?? cached?.reasoningMandatory ??
-      inferMandatoryReasoning(modelId, providerId);
-  });
+export function useModelRequiresReasoning(modelId: string, providerId?: ProviderId): boolean {
+  return useStore(state => modelRequiresReasoning(state, modelId, providerId));
 }
 
 export function isModelStreamSupported(
