@@ -581,3 +581,11 @@ WebのChatHistoryList/ChatFolderと既存folderHierarchy helperを基準に、�
 独立Astra P2：wide sidebarの表示中に検索/履歴で別階層chatへ移るとonAppearが再実行されず選択会話がhidden。選択IDのUTF8 bytes変更時にも共通revealを呼び、既存共有move(empty chatIds)で祖先を開くよう修正。親で確認した空folder IDのroot sentinel自己再帰は、shared表示入口で非空key==idのidentity検証を追加して拒否。循環parent chainのroot表示とは区別し、元データを削除・再構築して隠していない。
 
 共有18件・Catalyst folder7件、bundle生成鮮度、差分確認が成功。Catalyst初回は専用worktreeのengine cache未準備で停止、親の検証済みcacheをcloneして成功。独立Astraの限定再監査は新規P2以上なし。変更のない保存/暗号化同期の全往復は再実行しない。実画面の階層/選択遷移、狭幅/大きな文字は未確認。drag並替え・parent編集・Web全機能再現完了とは扱わない。最新origin/mainをfetchし、統合branchの祖先で追加差分なしと確認した。
+
+## 単一GGUFの新規登録：監査指摘の修正中（2026-10-13）
+
+Webの単一定義/ID・重複判定・未指定役割の自動割当をpure共有元へ分離し、実Web callerとnative登録UIへ接続。nativeはOSのSHA256、copy/hash照合、no-overwrite link、既存原子的state保存を担当。未知model metadataはopaque参照で維持し、OPFSのsavedModelMetaを端末コピーだけで捏造しない。新規SDKは追加していない。
+
+担当の共有3件/Web型検査/bundlecheck/Catalyst境界2件は成功。担当が誤って開始したSimulator runはINT停止・未確認扱い、このtaskが起動したUDIDのみshutdownし、指定されたCatalystで再実行した。親統合の生成provenance競合は双方の実sourceから再生成して解消、bundlecheck成功。
+
+独立AstraのP2は4件：NFC/NFD model IDの別定義混同と世代見逃し、duplicate候補scan後のGGUF再指定見逃し、Task取消後の登録継続、実Web callerでの既存ID衝突検証の未接続。担当へ限定修正を依頼済みで、現段階は受入未完了。主生成との競合はcommit前syncInputSnapshotの既存guardで拒否されるため追加guardは不要。修正後は該当範囲のみ確認し、既存全同期/全suiteを繰り返さない。
