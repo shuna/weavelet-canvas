@@ -2,6 +2,7 @@ import Foundation
 
 struct CloudKitSyncStore {
     struct LegacyRemoteArchive: Equatable {
+        let id: String
         let payload: Data
         let snapshotVersion: Int64
         let recordName: String
@@ -13,7 +14,7 @@ struct CloudKitSyncStore {
     struct State: Equatable {
         let enabled: Bool
         let baselineDigest: String?
-        let legacyRemote: LegacyRemoteArchive?
+        let legacyRemotes: [LegacyRemoteArchive]
     }
 
     let fileURL: URL
@@ -55,12 +56,12 @@ struct CloudKitSyncStore {
         guard try integer(root.required("version"), "version") == 1 else { throw ExchangeError.invalid("CloudKit sync state version") }
         let enabled = try root["enabled"]?.boolean("enabled") ?? false
         let baselineDigest = try root["baselineDigest"]?.string("baselineDigest")
-        var legacyRemote: LegacyRemoteArchive?
-        if let archive = root["legacyRemote"] {
+        let legacyRemotes = try (root["legacyRemotes"]?.array("legacyRemotes") ?? []).map { archive in
             _ = try archive.object("legacyRemote")
             let encoded = try archive.required("payloadBase64").string("payloadBase64")
             guard let payload = Data(base64Encoded: encoded) else { throw ExchangeError.invalid("legacyRemote payload") }
-            legacyRemote = try LegacyRemoteArchive(
+            return try LegacyRemoteArchive(
+                id: archive.required("id").string("id"),
                 payload: payload,
                 snapshotVersion: integer(archive.required("snapshotVersion"), "snapshotVersion"),
                 recordName: archive.required("recordName").string("recordName"),
@@ -69,7 +70,7 @@ struct CloudKitSyncStore {
                 deviceId: archive.required("deviceId").string("deviceId")
             )
         }
-        return State(enabled: enabled, baselineDigest: baselineDigest, legacyRemote: legacyRemote)
+        return State(enabled: enabled, baselineDigest: baselineDigest, legacyRemotes: legacyRemotes)
     }
 
     func load() throws -> State { try Self.state(read()) }
@@ -91,13 +92,17 @@ struct CloudKitSyncStore {
 
     func archiveLegacyRemote(_ record: CloudKitSnapshotRecord) throws {
         let root = try read()
-        var archive = root["legacyRemote"] ?? .object([])
-        archive = archive.replacing("payloadBase64", with: .string(record.payload.base64EncodedString()))
-            .replacing("snapshotVersion", with: .number(String(record.snapshotVersion)))
-            .replacing("recordName", with: .string(record.recordName))
-            .replacing("recordType", with: .string(record.recordType))
-            .replacing("updatedAt", with: .number(String(record.updatedAt)))
-            .replacing("deviceId", with: .string(record.deviceId))
-        try save(root.replacing("legacyRemote", with: archive))
+        var archives = try root["legacyRemotes"]?.array("legacyRemotes") ?? []
+        if try archives.contains(where: { Data(base64Encoded: try $0.required("payloadBase64").string("payloadBase64")) == record.payload }) { return }
+        archives.append(.object([
+            .init(key: "id", value: .string(UUID().uuidString)),
+            .init(key: "payloadBase64", value: .string(record.payload.base64EncodedString())),
+            .init(key: "snapshotVersion", value: .number(String(record.snapshotVersion))),
+            .init(key: "recordName", value: .string(record.recordName)),
+            .init(key: "recordType", value: .string(record.recordType)),
+            .init(key: "updatedAt", value: .number(String(record.updatedAt))),
+            .init(key: "deviceId", value: .string(record.deviceId))
+        ]))
+        try save(root.replacing("legacyRemotes", with: .array(archives)))
     }
 }

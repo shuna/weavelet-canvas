@@ -16,23 +16,27 @@ final class CloudKitSyncStoreTests: XCTestCase {
         return try CloudKitSnapshotRecord(raw)
     }
 
-    func testArchiveRetainsRawRemoteAfterRestartAndDisabling() throws {
+    func testArchivesDistinctRawRemotesAfterRestartAndDisabling() throws {
         let url = location(), store = CloudKitSyncStore(fileURL: url)
-        let remote = try record()
+        let first = try record(), second = try record(payload: Data([1, 2, 3]))
         try store.saveEnabled(true)
         try store.saveBaselineDigest("prior-sync")
-        try store.archiveLegacyRemote(remote)
+        try store.archiveLegacyRemote(first)
+        try store.archiveLegacyRemote(second)
+        try store.archiveLegacyRemote(first)
         try store.saveEnabled(false)
 
         let reopened = try CloudKitSyncStore(fileURL: url).load()
         XCTAssertFalse(reopened.enabled)
         XCTAssertEqual(reopened.baselineDigest, "prior-sync")
-        XCTAssertEqual(reopened.legacyRemote?.payload, remote.payload)
-        XCTAssertEqual(reopened.legacyRemote?.snapshotVersion, 17)
-        XCTAssertEqual(reopened.legacyRemote?.updatedAt, 9_007_199_254_740_993)
-        XCTAssertEqual(reopened.legacyRemote?.recordName, "current")
-        XCTAssertEqual(reopened.legacyRemote?.recordType, "Snapshot")
-        XCTAssertEqual(reopened.legacyRemote?.deviceId, "legacy-device")
+        XCTAssertEqual(reopened.legacyRemotes.count, 2)
+        XCTAssertEqual(reopened.legacyRemotes.map(\.payload), [first.payload, second.payload])
+        XCTAssertEqual(Set(reopened.legacyRemotes.map(\.id)).count, 2)
+        XCTAssertEqual(reopened.legacyRemotes[0].snapshotVersion, 17)
+        XCTAssertEqual(reopened.legacyRemotes[0].updatedAt, 9_007_199_254_740_993)
+        XCTAssertEqual(reopened.legacyRemotes[0].recordName, "current")
+        XCTAssertEqual(reopened.legacyRemotes[0].recordType, "Snapshot")
+        XCTAssertEqual(reopened.legacyRemotes[0].deviceId, "legacy-device")
     }
 
     func testFailedWriteKeepsExistingBytesAndUnknownFields() throws {
