@@ -192,7 +192,9 @@
     "src/utils/fileExport.ts": "51f4f9fc072140849730d8be079703f39a7380a80e29532a9443560413f2bc29",
     "shared/google-sync/fileExport.ts": "255ed86dc22b18a75cc450f5f1040f4ab19a3ad7e9241e4cc680691c1875ffab",
     "shared/google-sync/composer.ts": "ff722f6cd2b796ab0e0f3a13f384c30ab74f1f3aa66a186141ab1a39c85f2595",
-    "shared/google-sync/providerModels.ts": "af4d47a693b5d10b63aaf4f5d612428a018c1a2d3aa1a0ad88b1031e988a80a5",
+    "src/store/provider-config.ts": "6c073c4b84fea5bffd1ccd9109abf3cb972379dd8a1393ab4475c293c24eaa0b",
+    "src/store/provider-helpers.ts": "d8cd473cdba8eeb950294a784a7266a58d7aff80d31095cabd1c29459aa43ac1",
+    "shared/google-sync/providerModels.ts": "73ff6e578c94bd9f9bd9942281d6abca27dd40ed4a66caca5d5c2cfacae858db",
     "shared/google-sync/entry.ts": "d7416c330f891810be4bf8d9c1ee76e289921d9801489885a54eec37cd76999b",
     "shared/google-sync/generate.mjs": "fe5cea14c3f66829c4627c74b4b790a15e6a660457b399e5413dcb1035afdc1b",
     "shared/google-sync/importDefaults.generate.mjs": "2ff8904af4f192ed0809ceaaabcfbefa708321083aebb527d712fc2a0551b15a"
@@ -227,5 +229,5 @@
     "lodash/package.json": "8e41b07c744a0de0d2c1c23ed41418ecb0849abb56395d28802e601b4730d7c2",
     "lodash/LICENSE": "f71e8ed126b46346494aad5486874cd8f0aafe95092ed67d2e3cb6110f939abc"
   },
-  "bundleSHA256": "793a7ddf521473c6c0222b135b5384065c35e4959d0ff7ea0e9363ea709a8ed0"
+  "bundleSHA256": "3bb530d1f687afc75f0643b0ca3662e614e6d70e563c3b7f4fc219128fc883ef"
 }

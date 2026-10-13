@@ -17709,9 +17709,49 @@ ${messageContent}---
     });
   }
 
+  // src/store/provider-helpers.ts
+  var enrichFavoriteModel = (favorite, providerModel) => {
+    if (!providerModel)
+      return favorite;
+    return {
+      ...favorite,
+      contextLength: favorite.contextLength ?? providerModel.contextLength,
+      maxCompletionTokens: favorite.maxCompletionTokens ?? providerModel.maxCompletionTokens,
+      promptPrice: favorite.promptPrice ?? providerModel.promptPrice,
+      completionPrice: favorite.completionPrice ?? providerModel.completionPrice,
+      modelType: favorite.modelType ?? providerModel.modelType,
+      streamSupport: favorite.streamSupport ?? providerModel.streamSupport,
+      supportsReasoning: favorite.supportsReasoning ?? providerModel.supportsReasoning,
+      reasoningMandatory: favorite.reasoningMandatory ?? providerModel.reasoningMandatory,
+      supportsVision: favorite.supportsVision ?? providerModel.supportsVision,
+      supportsAudio: favorite.supportsAudio ?? providerModel.supportsAudio
+    };
+  };
+  var backfillFavoritesFromProviderModels = (favoriteModels, providerId, models) => {
+    const modelMap = new Map(models.map((model) => [model.id, model]));
+    return favoriteModels.map((favorite) => {
+      if (favorite.providerId !== providerId)
+        return favorite;
+      return enrichFavoriteModel(favorite, modelMap.get(favorite.modelId));
+    });
+  };
+
   // shared/google-sync/providerModels.ts
   function providerModelList(json) {
     const input = JSON.parse(json);
+    if (input.operation === "cache") {
+      if (!input.state || !input.models)
+        throw new Error("Missing model cache input.");
+      const state = input.state;
+      const next = {
+        ...state,
+        providerModelCache: { ...state.providerModelCache, [input.providerId]: input.models },
+        favoriteModels: backfillFavoritesFromProviderModels(state.favoriteModels ?? [], input.providerId, input.models)
+      };
+      return JSON.stringify({ changes: diffJSONChanges(state, JSON.parse(JSON.stringify(next))) });
+    }
+    if (input.operation !== void 0 && input.operation !== "normalize")
+      throw new Error("Unknown provider model operation.");
     return JSON.stringify({ models: normalizeModels(input.providerId, input.data) });
   }
 
