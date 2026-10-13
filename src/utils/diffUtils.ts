@@ -7,7 +7,7 @@ export interface DiffSegment {
 
 export function wordDiff(a: string, b: string): DiffSegment[] {
   const dmp = new diff_match_patch();
-  // shortcut: dictionary caps and the positive deadline can group words; all input text is retained.
+  // shortcut: caps/deadline group words; revisit mapping if finer large-input highlighting is required.
   const encode = (text: string) => text.split(/(\s+)/).map(token => JSON.stringify(token) + '\n').join('');
   const {chars1, chars2, lineArray} = dmp.diff_linesToChars_(encode(a), encode(b));
   const diffs = dmp.diff_main(chars1, chars2, false);
