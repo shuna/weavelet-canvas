@@ -40,7 +40,7 @@ struct PromptPickerView: View {
             .searchable(text: $query, prompt: "名前を検索")
             .navigationTitle("プロンプトを選択")
             .toolbar { ToolbarItem(placement: .cancellationAction) { Button("取消") { selectionTask?.cancel(); dismiss() } } }
-            .task(id: query) {
+            .task(id: Data(query.utf8)) {
                 let searched = query
                 do {
                     let result = try await worker.search(snapshot: request.snapshot, query: searched)
