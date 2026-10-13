@@ -65,7 +65,8 @@ enum ChatExport {
         if let changes = output["payloadChanges"] {
             raw = try OrderedJSONChanges.apply(changes, to: v3, opaque: boundary.opaque).encoded()
         } else if output["mimeType"] == .string("text/markdown") {
-            raw = Data(try output.required("payload").string("Markdown").utf8)
+            // Web Blob converts text to Unicode scalar values; JSON payloads above retain their code units.
+            raw = Data(try output.required("payload").displayString("Markdown").utf8)
         } else {
             let payload = try OrderedJSONChanges.apply(.array([.object([.init(key:"op",value:.string("set")),.init(key:"path",value:.array([])),.init(key:"value",value:output.required("payload"))])]), to: .null, opaque: boundary.opaque)
             raw = try payload.encoded()

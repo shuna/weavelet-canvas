@@ -41,10 +41,10 @@ enum SyncRecords {
             switch try request.required("operation").string("operation") {
             case "digest":
                 let bytes: Data
-                if case .string(let text) = args[0] { bytes = Data(text.utf8) } else { bytes = try args[0].syncData() }
+                if args[0].isString { bytes = Data(try args[0].displayString("text").utf8) } else { bytes = try args[0].syncData() }
                 value = .string(hash(bytes))
             case "uuid": value = .string(UUID().uuidString.lowercased())
-            case "utf8": value = .syncBytes(Data(try args[0].string("text").utf8))
+            case "utf8": value = .syncBytes(Data(try args[0].displayString("text").utf8))
             case "text":
                 guard let text = String(data: try args[0].syncData(), encoding: .utf8) else { throw RecordError.invalid("Invalid UTF8") }
                 value = .string(text)

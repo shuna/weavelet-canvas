@@ -104,15 +104,47 @@ final class WebExchangeTests: XCTestCase {
         let parsed = try OrderedJSON.decode(source)
         let fields = try parsed.object("test")
         XCTAssertEqual(fields.count, 6)
-        XCTAssertNotEqual(Data(fields[0].key.utf8), Data(fields[1].key.utf8))
+        XCTAssertNotEqual(Data(fields[0].key.text.utf8), Data(fields[1].key.text.utf8))
         XCTAssertEqual(parsed["é"], .number("1"))
         XCTAssertEqual(parsed["e\u{0301}"], .number("2"))
         XCTAssertEqual(parsed["integer"], .number("123456789012345678901234567890"))
         XCTAssertEqual(try OrderedJSON.decode(parsed.encoded()), parsed)
-        for invalid in ["", #"{"a":1,"a":2}"#, "[1,]", #"{"a":01}"#, #"{"a":"\uD800"}"#, "[true false]", "null trailing"] {
+        for invalid in ["", #"{"a":1,"a":2}"#, "[1,]", #"{"a":01}"#, #"{"a":"\uD80Z"}"#, "[true false]", "null trailing"] {
             XCTAssertThrowsError(try OrderedJSON.decode(Data(invalid.utf8)), invalid)
         }
         XCTAssertThrowsError(try OrderedJSON.decode(Data((String(repeating: "[", count: 258) + "0" + String(repeating: "]", count: 258)).utf8)))
+    }
+
+    func testLoneUTF16ValuesKeysPathsAndDuplicateValidationRemainLossless() throws {
+        let input = #"{"\ud800":"\udc00","\udc00":"\ud800","�":"replacement","é":1,"e\u0301":2,"large":9007199254740993,"decimal":1.2300,"pair":"\ud800\udc00"}"#
+        let raw = try OrderedJSON.decode(Data(input.utf8))
+        let fields = try raw.object("raw")
+        XCTAssertEqual(fields[0].key.utf16, [0xd800])
+        XCTAssertEqual(fields[1].key.utf16, [0xdc00])
+        XCTAssertEqual(Set(fields.map(\.key)).count, fields.count)
+        XCTAssertEqual(raw[fields[0].key], .utf16String([0xdc00]))
+        XCTAssertEqual(raw[fields[1].key], .utf16String([0xd800]))
+        XCTAssertEqual(raw["�"], .string("replacement"))
+        XCTAssertEqual(raw["pair"], .string("𐀀"))
+        XCTAssertEqual(try OrderedJSON.decode(raw.encoded()), raw)
+        let encoded = String(decoding: try raw.encoded(), as: UTF8.self)
+        XCTAssertTrue(encoded.contains(#""\ud800":"\udc00""#))
+        XCTAssertTrue(encoded.contains("9007199254740993"))
+        XCTAssertTrue(encoded.contains("1.2300"))
+        let change = try OrderedJSON.decode(Data(#"[{"op":"set","path":["\ud800"],"value":"changed"}]"#.utf8))
+        let changed = try OrderedJSONChanges.apply(change, to: raw)
+        XCTAssertEqual(changed[fields[0].key], .string("changed"))
+        XCTAssertEqual(changed[fields[1].key], .utf16String([0xd800]))
+        XCTAssertEqual(try ChatImport.value(at: .array([fields[1].key.json]), in: raw), .utf16String([0xd800]))
+        let keys = OrderedJSON.array(fields.reversed().map { $0.key.json })
+        let reorder = OrderedJSON.array([.object([.init(key:"op",value:.string("keys")),.init(key:"path",value:.array([])),.init(key:"keys",value:keys)])])
+        XCTAssertEqual(try OrderedJSONChanges.apply(reorder,to:raw).object("raw").map(\.key), fields.reversed().map(\.key))
+        XCTAssertThrowsError(try fields[0].key.native("OS key"))
+        XCTAssertThrowsError(try raw.required(fields[0].key).string("native string"))
+        for invalid in [#"{"\ud800":1,"\uD800":2}"#, #""\ud800\q""#, #""\ud800\u12""#, #""\ud800"#] {
+            XCTAssertThrowsError(try OrderedJSON.decode(Data(invalid.utf8)), invalid)
+        }
+        XCTAssertThrowsError(try OrderedJSON.decode(Data([34, 0xed, 0xa0, 0x80, 34])))
     }
 
     func testOrderedEqualityDistinguishesCanonicalUnicodeInIDsAttributesAndKeys() throws {

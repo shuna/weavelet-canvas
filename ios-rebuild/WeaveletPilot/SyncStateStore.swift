@@ -134,7 +134,7 @@ final class SyncStateStore: @unchecked Sendable {
             var storedEntries = state["entries"] ?? .object([])
             _ = try storedEntries.object("entries")
             for entry in entries { storedEntries = storedEntries.replacing(entry.key, with: entry.value) }
-            if !remove.isEmpty { storedEntries = .object(try storedEntries.object("entries").filter { field in !remove.contains { $0.utf8.elementsEqual(field.key.utf8) } }) }
+            if !remove.isEmpty { storedEntries = .object(try storedEntries.object("entries").filter { field in !remove.contains { field.key.matches($0) } }) }
             state = state.replacing("entries", with: storedEntries)
             if let cache { state = state.replacing("cache", with: cache) }
             if let accepted { state = state.replacing("accepted", with: try Self.encodeSnapshot(accepted)) }

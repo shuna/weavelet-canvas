@@ -1,23 +1,47 @@
 import Foundation
+import JavaScriptCore
+
+// JSON keys use code units: Swift String repairs lone surrogates and normalizes equality.
+struct JSONString: Hashable, ExpressibleByStringLiteral {
+    let utf16: [UInt16]
+    init(_ value: String) { utf16 = Array(value.utf16) }
+    init(utf16: [UInt16]) { self.utf16 = utf16 }
+    init(stringLiteral value: String) { self.init(value) }
+    // Only native display/OS APIs use this repaired projection; JSON keeps utf16.
+    var text: String { String(decoding: utf16, as: UTF16.self) }
+    func native(_ field: String) throws -> String {
+        let value = text
+        guard value.utf16.elementsEqual(utf16) else { throw ExchangeError.invalid(field) }
+        return value
+    }
+    var json: OrderedJSON {
+        let value = text
+        return value.utf16.elementsEqual(utf16) ? .string(value) : .utf16String(utf16)
+    }
+    func matches(_ value: String) -> Bool { utf16.elementsEqual(value.utf16) }
+    static func == (lhs: Self, rhs: String) -> Bool { lhs.matches(rhs) }
+    static func != (lhs: Self, rhs: String) -> Bool { !lhs.matches(rhs) }
+}
 
 struct JSONField: Equatable {
-    let key: String
+    let key: JSONString
     let value: OrderedJSON
-
-    static func == (lhs: Self, rhs: Self) -> Bool {
-        lhs.key.utf8.elementsEqual(rhs.key.utf8) && lhs.value == rhs.value
-    }
+    init(key: String, value: OrderedJSON) { self.key = JSONString(key); self.value = value }
+    init(key: JSONString, value: OrderedJSON) { self.key = key; self.value = value }
 }
 
 // Object order and number spelling are retained; no Dictionary or Double round trip.
 indirect enum OrderedJSON: Equatable {
-    case object([JSONField]), array([OrderedJSON]), string(String), number(String), bool(Bool), null
+    case object([JSONField]), array([OrderedJSON]), string(String), utf16String([UInt16]), number(String), bool(Bool), null
 
     static func == (lhs: Self, rhs: Self) -> Bool {
         switch (lhs, rhs) {
         case (.object(let left), .object(let right)): return left == right
         case (.array(let left), .array(let right)): return left == right
         case (.string(let left), .string(let right)): return left.utf8.elementsEqual(right.utf8)
+        case (.utf16String(let left), .utf16String(let right)): return left == right
+        case (.string(let left), .utf16String(let right)): return left.utf16.elementsEqual(right)
+        case (.utf16String(let left), .string(let right)): return left.elementsEqual(right.utf16)
         case (.number(let left), .number(let right)): return left == right
         case (.bool(let left), .bool(let right)): return left == right
         case (.null, .null): return true
@@ -25,14 +49,18 @@ indirect enum OrderedJSON: Equatable {
         }
     }
 
-    subscript(_ key: String) -> OrderedJSON? {
+    subscript(_ key: String) -> OrderedJSON? { self[JSONString(key)] }
+
+    subscript(_ key: JSONString) -> OrderedJSON? {
         guard case .object(let fields) = self else { return nil }
-        return fields.first { $0.key.utf8.elementsEqual(key.utf8) }?.value
+        return fields.first { $0.key == key }?.value
     }
 
-    func replacing(_ key: String, with value: OrderedJSON) -> OrderedJSON {
+    func replacing(_ key: String, with value: OrderedJSON) -> OrderedJSON { replacing(JSONString(key), with: value) }
+
+    func replacing(_ key: JSONString, with value: OrderedJSON) -> OrderedJSON {
         guard case .object(var fields) = self else { return self }
-        if let index = fields.firstIndex(where: { $0.key.utf8.elementsEqual(key.utf8) }) {
+        if let index = fields.firstIndex(where: { $0.key == key }) {
             fields[index] = JSONField(key: key, value: value)
         } else {
             fields.append(JSONField(key: key, value: value))
@@ -47,9 +75,10 @@ indirect enum OrderedJSON: Equatable {
         func encode(_ value: OrderedJSON) throws -> String {
             switch value {
             case .object(let fields):
-                return "{" + (try fields.map { try string($0.key) + ":" + encode($0.value) }).joined(separator: ",") + "}"
+                return "{" + (try fields.map { try encode($0.key.json) + ":" + encode($0.value) }).joined(separator: ",") + "}"
             case .array(let items): return "[" + (try items.map(encode)).joined(separator: ",") + "]"
             case .string(let value): return try string(value)
+            case .utf16String(let units): return "\"" + units.map { String(format: "\\u%04x", $0) }.joined() + "\""
             case .number(let value): return value
             case .bool(let value): return value ? "true" : "false"
             case .null: return "null"
@@ -82,7 +111,7 @@ private struct JSONParser {
         return true
     }
 
-    mutating func string() throws -> String {
+    mutating func string() throws -> JSONString {
         skipWhitespace()
         let start = offset
         guard consume(34) else { throw ExchangeError.invalid("JSON文字列") }
@@ -93,7 +122,15 @@ private struct JSONParser {
                 guard offset < bytes.count else { throw ExchangeError.invalid("JSONエスケープ") }
                 offset += 1
             } else if byte == 34 {
-                return try JSONDecoder().decode(String.self, from: Data(bytes[start..<offset]))
+                let data = Data(bytes[start..<offset])
+                if let value = try? JSONDecoder().decode(String.self, from: data) { return JSONString(value) }
+                // JSON.parse accepts escaped lone surrogates; extract units before Swift bridging repairs them.
+                guard let token = String(data: data, encoding: .utf8), let context = JSContext(),
+                      let parsed = context.objectForKeyedSubscript("JSON")?.invokeMethod("parse", withArguments: [token]),
+                      context.exception == nil, parsed.isString,
+                      let units = context.evaluateScript("s => Array.from({length: s.length}, (_, i) => s.charCodeAt(i))")?.call(withArguments: [parsed])?.toArray() as? [NSNumber],
+                      context.exception == nil else { throw ExchangeError.invalid("JSON文字列") }
+                return JSONString(utf16: units.map(\.uint16Value))
             }
         }
         throw ExchangeError.invalid("JSON文字列の終端")
@@ -104,14 +141,14 @@ private struct JSONParser {
         guard depth <= 256 else { throw ExchangeError.invalid("JSONの入れ子が深すぎます") }
         skipWhitespace()
         guard offset < bytes.count else { throw ExchangeError.invalid("JSON値") }
-        if bytes[offset] == 34 { return .string(try string()) }
+        if bytes[offset] == 34 { return try string().json }
         if consume(123) {
             var fields: [JSONField] = []
-            var keys = Set<Data>()
+            var keys = Set<JSONString>()
             if consume(125) { return .object(fields) }
             repeat {
                 let key = try string()
-                guard keys.insert(Data(key.utf8)).inserted, consume(58) else { throw ExchangeError.invalid("JSONの重複keyまたは区切り") }
+                guard keys.insert(key).inserted, consume(58) else { throw ExchangeError.invalid("JSONの重複keyまたは区切り") }
                 fields.append(JSONField(key: key, value: try value(depth: depth + 1)))
                 if consume(125) { return .object(fields) }
             } while consume(44)
@@ -159,15 +196,28 @@ extension OrderedJSON {
         return value
     }
     func string(_ field: String) throws -> String {
-        guard case .string(let value) = self else { throw ExchangeError.invalid(field) }
-        return value
+        return try stringKey(field).native(field)
     }
+    func displayString(_ field: String) throws -> String { try stringKey(field).text }
+    func stringKey(_ field: String) throws -> JSONString {
+        switch self {
+        case .string(let value): return JSONString(value)
+        case .utf16String(let units): return JSONString(utf16: units)
+        default: throw ExchangeError.invalid(field)
+        }
+    }
+    var isString: Bool { if case .string = self { return true }; if case .utf16String = self { return true }; return false }
+    static func string(_ key: JSONString) -> OrderedJSON { key.json }
     func number(_ field: String) throws -> Double {
         guard case .number(let raw) = self, let value = Double(raw), value.isFinite else { throw ExchangeError.invalid(field) }
         return value
     }
     func boolean(_ field: String) throws -> Bool {
         guard case .bool(let value) = self else { throw ExchangeError.invalid(field) }
+        return value
+    }
+    func required(_ key: JSONString) throws -> OrderedJSON {
+        guard let value = self[key] else { throw ExchangeError.invalid(key.text) }
         return value
     }
     func required(_ key: String) throws -> OrderedJSON {

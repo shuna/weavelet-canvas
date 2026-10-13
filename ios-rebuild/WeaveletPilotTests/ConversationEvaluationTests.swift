@@ -188,7 +188,7 @@ final class ConversationEvaluationTests: XCTestCase {
         try app.startGeneration(input:"Question",record:credential,client:client)
         let completed = expectation(description:"generation and automatic quality persisted")
         let subscription = app.$document.compactMap { $0?.snapshot["state"]?["evaluationResults"] }.sink { results in
-            if (try? results.object("results"))?.contains(where: { $0.key.hasSuffix(":pre-send") && $0.value["quality"] != nil }) == true { completed.fulfill() }
+            if (try? results.object("results"))?.contains(where: { $0.key.text.hasSuffix(":pre-send") && $0.value["quality"] != nil }) == true { completed.fulfill() }
         }
         await fulfillment(of:[completed],timeout:5)
         withExtendedLifetime(subscription) {}

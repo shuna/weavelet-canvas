@@ -67,7 +67,7 @@ enum SharedWebOperations {
 enum ChatFolders {
     private static let folderFields = ["id", "name", "order", "expanded", "color", "parentId"]
     private static func projection(_ value: OrderedJSON, fields: [String]) throws -> OrderedJSON {
-        .object(try value.object("projection").filter { field in fields.contains { $0.utf8.elementsEqual(field.key.utf8) } })
+        .object(try value.object("projection").filter { field in fields.contains { field.key.matches($0) } })
     }
     private static func input(_ source: OrderedJSON) throws -> OrderedJSON {
         let folders = try source.required("folders").object("folders").map { field in
@@ -80,12 +80,15 @@ enum ChatFolders {
     // Bodies, unknown attributes and unchanged number spellings never pass through JS.
     private static func patch(_ original: OrderedJSON, _ change: OrderedJSON) throws -> OrderedJSON {
         let removed = try change.required("remove").array("remove").map { try $0.string("field") }
-        var result = OrderedJSON.object(try original.object("object").filter { field in !removed.contains { $0.utf8.elementsEqual(field.key.utf8) } })
+        var result = OrderedJSON.object(try original.object("object").filter { field in !removed.contains { field.key.matches($0) } })
         for field in try change.required("set").object("set") { result = result.replacing(field.key, with: field.value) }
         return result
     }
     static func apply(in source: OrderedJSON, operation: ChatFolderOperation) throws -> OrderedJSON {
-        try apply(in: source, operationJSON: operation.json)
+        var json = operation.json
+        if case .rename(let id, let name) = operation, let original = source["folders"]?[id]?["name"],
+           name.utf8.elementsEqual(try original.displayString("folder name").utf8) { json = json.replacing("name", with: original) }
+        return try apply(in: source, operationJSON: json)
     }
     static func apply(in source: OrderedJSON, operationJSON: OrderedJSON) throws -> OrderedJSON {
         let output = try SharedWebOperations.call("folderOperation", input(source).replacing("operation", with: operationJSON))
@@ -110,7 +113,7 @@ enum ChatFolders {
         try SharedWebOperations.call("folderRows", input(source)).array("rows").map { row in
             let color: String?
             if case .string(let text) = row["color"] { color = text } else { color = nil }
-            return try ChatFolderRow(id: row.required("id").string("id"), name: row.required("name").string("name"), expanded: row.required("expanded").boolean("expanded"), order: row.required("order").number("order"), color: color, displayParentID: row.required("displayParentId").string("displayParentId"), depth: Int(row.required("depth").number("depth")), visible: row.required("visible").boolean("visible"), path: row["path"]?.string("path") ?? "")
+            return try ChatFolderRow(id: row.required("id").string("id"), name: row.required("name").displayString("name"), expanded: row.required("expanded").boolean("expanded"), order: row.required("order").number("order"), color: color, displayParentID: row.required("displayParentId").string("displayParentId"), depth: Int(row.required("depth").number("depth")), visible: row.required("visible").boolean("visible"), path: row["path"]?.displayString("path") ?? "")
         }
     }
     static func membership(of chat: OrderedJSON) -> String? {

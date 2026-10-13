@@ -28,7 +28,7 @@ enum PromptLibrary {
     private static func project(_ prompts: OrderedJSON, boundary: inout SharedWebProjection) throws -> OrderedJSON {
         .array(try prompts.array("prompts").map { prompt in
             .object(try prompt.object("prompt").map { field in
-                let known = ["id", "name", "prompt", "label"].contains { $0.utf8.elementsEqual(field.key.utf8) }
+                let known = ["id", "name", "prompt", "label"].contains { field.key.matches($0) }
                 let value: OrderedJSON
                 if known, case .string = field.value { value = field.value }
                 else { value = try boundary.reference(field.value) }

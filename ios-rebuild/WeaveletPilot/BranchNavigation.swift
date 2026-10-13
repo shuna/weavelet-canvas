@@ -57,7 +57,7 @@ enum BranchNavigation {
             let byNode = try chat.required("byNode").object("nodes").map { field in
                 let groupIndex = Int(try field.value.required("groupIndex").number("group index"))
                 guard groups.indices.contains(groupIndex) else { throw ExchangeError.invalid("sibling group") }
-                return NodeCandidates(nodeID:field.key,siblingIDs:groups[groupIndex],selectedIndex:Int(try field.value.required("selectedIndex").number("index")))
+                return NodeCandidates(nodeID:try field.key.native("node ID"),siblingIDs:groups[groupIndex],selectedIndex:Int(try field.value.required("selectedIndex").number("index")))
             }
             let nodePositions = Dictionary(uniqueKeysWithValues:byNode.enumerated().map { (Data($0.element.nodeID.utf8),$0.offset) })
             return try ChatCandidates(chatID:chat.required("chatId").string("chat ID"),activePath:chat.required("activePath").array("path").map { try $0.string("node ID") },nodeIDs:chat.required("nodeIDs").array("nodes").map { try $0.string("node ID") },byNode:byNode,nodePositions:nodePositions)

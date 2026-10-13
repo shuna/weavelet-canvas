@@ -4,8 +4,8 @@ import Foundation
 struct SyncDocument {
     let snapshot: OrderedJSON
     let v3Sidecar: OrderedJSON
-    let v3RootOrder: [String]
-    init(snapshot: OrderedJSON, v3Sidecar: OrderedJSON = .object([]), v3RootOrder: [String] = []) throws {
+    let v3RootOrder: [JSONString]
+    init(snapshot: OrderedJSON, v3Sidecar: OrderedJSON = .object([]), v3RootOrder: [JSONString] = []) throws {
         _ = try snapshot.object("snapshot")
         _ = try snapshot.required("state").object("state")
         _ = try snapshot.required("version").number("version")
@@ -15,8 +15,8 @@ struct SyncDocument {
     init(v3: OrderedJSON) throws {
         let layout = try SharedWebOperations.call("documentOperation", .object([.init(key: "operation", value: .string("v3Layout")), .init(key: "v3", value: .object([.init(key: "version", value: try v3.required("version"))] + v3.object("V3").filter { $0.key != "version" }.map { .init(key: $0.key, value: .null) }))]))
         func roots(_ key: String) throws -> OrderedJSON {
-            let names = try layout.required(key).array(key).map { try $0.string("root") }
-            return .object(try v3.object("V3").filter { field in names.contains { $0.utf8.elementsEqual(field.key.utf8) } })
+            let names = try layout.required(key).array(key).map { try $0.stringKey("root") }
+            return .object(try v3.object("V3").filter { field in names.contains { $0 == field.key } })
         }
         try self.init(snapshot: .object([.init(key: "version", value: try layout.required("version")), .init(key: "state", value: roots("sharedRoots"))]), v3Sidecar: roots("sidecarRoots"), v3RootOrder: v3.object("V3").map(\.key))
     }
@@ -58,8 +58,8 @@ struct SyncDocument {
         let output = try SharedWebOperations.call("documentOperation", .object([.init(key: "operation", value: .string("project")), .init(key: "document", value: projected(&boundary))]))
         let restored = try OrderedJSONChanges.apply(.array([.object([.init(key: "op", value: .string("set")), .init(key: "path", value: .array([])), .init(key: "value", value: output)])]), to: .null, opaque: boundary.opaque)
         let fields = try restored.object("projection")
-        let ordered = v3RootOrder.compactMap { key in fields.first { $0.key.utf8.elementsEqual(key.utf8) } }
-        return .object(ordered + fields.filter { field in !v3RootOrder.contains { $0.utf8.elementsEqual(field.key.utf8) } })
+        let ordered = v3RootOrder.compactMap { key in fields.first { $0.key == key } }
+        return .object(ordered + fields.filter { field in !v3RootOrder.contains { $0 == field.key } })
     }
     func applyingV3Edits(_ edited: OrderedJSON, comparedTo before: OrderedJSON, now: Double = Date().timeIntervalSince1970 * 1000) throws -> SyncDocument {
         var boundary = SharedWebProjection()
@@ -77,7 +77,7 @@ struct SyncDocument {
             var value = snapshot
             for key in try path.array("source path") {
                 switch key {
-                case .string(let name): value = try value.required(name)
+                case .string, .utf16String: value = try value.required(key.stringKey("source key"))
                 case .number(let raw):
                     let values = try value.array("source array")
                     guard let index = Int(raw), values.indices.contains(index) else { throw ExchangeError.invalid("raw source index") }
@@ -108,7 +108,7 @@ struct SyncDocument {
         for path in order {
             guard let change = planned.first(where: { $0["sourcePath"] == .array(path) }) else { throw ExchangeError.invalid("raw snapshot source path") }
             var value = incoming
-            for key in path { value = try value.required(key.string("source key")) }
+            for key in path { value = try value.required(key.stringKey("source key")) }
             changes.append(change.replacing("value", with: value))
         }
         return try Self.fromRaw(OrderedJSONChanges.apply(.array(changes), to: raw), order: v3RootOrder)
@@ -125,9 +125,9 @@ struct SyncDocument {
         }
         let imported = try OrderedJSONChanges.apply(.array(changes), to: raw)
         let names = try v3.object("V3").map(\.key)
-        let order = v3RootOrder + names.filter { name in !v3RootOrder.contains { $0.utf8.elementsEqual(name.utf8) } }
+        let order = v3RootOrder + names.filter { name in !v3RootOrder.contains { $0 == name } }
         return try Self.fromRaw(imported, order: order)
     }
     func exportData() throws -> Data { try uiProjection().encoded() }
-    private static func fromRaw(_ raw: OrderedJSON, order: [String]) throws -> SyncDocument { try .init(snapshot: raw.required("snapshot"), v3Sidecar: raw.required("v3Sidecar"), v3RootOrder: order) }
+    private static func fromRaw(_ raw: OrderedJSON, order: [JSONString]) throws -> SyncDocument { try .init(snapshot: raw.required("snapshot"), v3Sidecar: raw.required("v3Sidecar"), v3RootOrder: order) }
 }

@@ -86,10 +86,10 @@ enum RemoteRequest {
                   !value.unicodeScalars.contains(where:{ ($0.value < 32 && $0.value != 9) || $0.value == 127 }) else { throw ExchangeError.invalid("HTTPヘッダーの名前または値が不正です") }
         }
         for field in try envelope.required("headers").object("headers") {
-            let value = try field.value.string("header value"); try validate(field.key,value)
-            let folded = field.key.lowercased()
+            let name = try field.key.native("header key"), value = try field.value.string("header value"); try validate(name,value)
+            let folded = name.lowercased()
             guard names[folded] == nil else { throw ExchangeError.invalid("同じHTTPヘッダー名が大文字小文字違いで重複しています") }
-            names[folded] = field.key; request.setValue(value,forHTTPHeaderField:field.key)
+            names[folded] = name; request.setValue(value,forHTTPHeaderField:name)
         }
         var authenticationNames = Set<String>()
         for descriptor in try envelope.required("authentication").array("authentication") {

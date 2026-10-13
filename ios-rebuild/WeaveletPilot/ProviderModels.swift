@@ -53,7 +53,7 @@ enum ProviderModels {
         let root = try state["providers"] ?? ChatImport.call("defaults").required("providers")
         return try root.object("providers").map { field in
             let value = field.value, id = try value.required("id").string("provider ID")
-            guard id.utf8.elementsEqual(field.key.utf8) else { throw ExchangeError.invalid("provider IDが一致しません") }
+            guard field.key.matches(id) else { throw ExchangeError.invalid("provider IDが一致しません") }
             return try ProviderDescriptor(id:id,name:value.required("name").string("provider name"),endpoint:value.required("endpoint").string("endpoint"),modelsEndpoint:value["modelsEndpoint"]?.string("models endpoint"),modelsRequireAuth:value.required("modelsRequireAuth").boolean("models auth"))
         }
     }
@@ -86,7 +86,7 @@ enum ProviderModels {
         for field in try state["providerModelCache"]?.object("cache") ?? [] { cache.append(.init(key:field.key,value:try boundary.reference(field.value))) }
         let known = ["modelId","providerId","contextLength","maxCompletionTokens","promptPrice","completionPrice","modelType","streamSupport","supportsReasoning","reasoningMandatory","supportsVision","supportsAudio"]
         for item in try state["favoriteModels"]?.array("favorites") ?? [] {
-            favorites.append(.object(try item.object("favorite").map { .init(key:$0.key,value:known.contains($0.key) ? $0.value : try boundary.reference($0.value)) }))
+            favorites.append(.object(try item.object("favorite").map { .init(key:$0.key,value:known.contains(where: $0.key.matches) ? $0.value : try boundary.reference($0.value)) }))
         }
         let base = OrderedJSON.object(try state.object("state").filter { $0.key == "providerModelCache" || $0.key == "favoriteModels" })
         var projectedState: [JSONField] = []

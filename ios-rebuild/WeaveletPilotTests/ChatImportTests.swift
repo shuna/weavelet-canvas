@@ -38,6 +38,44 @@ final class ChatImportTests: XCTestCase {
         do { try await state.commitImport(preview,mode:.append,selectedChatIDs:[selected],selectedFolderIDs:[],includeSettings:false); XCTFail("stale preview accepted") } catch {}
         XCTAssertEqual(try state.publicationSnapshot(),after)
     }
+    func testLoneUTF16MetadataAndKnownTextSurviveSharedImportSaveRestartAndExport() async throws {
+        let raw = try OrderedJSON.decode(Data(#"{"\ud800":"\udc00","\udc00":"\ud800","�":"replacement","number":9007199254740993,"decimal":1.2300}"#.utf8))
+        let rootKey = JSONString(utf16: [0x78, 0xd800])
+        var input = try fixture(), chats = try input.required("chats").array("chats")
+        chats[0] = chats[0].replacing("id",with:.utf16String([0xd800])).replacing("title",with:.utf16String([0x41,0xd800,0x42])).replacing("xUTF16",with:raw)
+        input = input.replacing("chats",with:.array(chats)).replacing(rootKey,with:raw)
+        let store = try local(), state = ChatState(store:store)
+        let preview = try await state.prepareImport(data:input.encoded(),filename:"utf16.json")
+        let first = try XCTUnwrap(preview.conversations.first)
+        XCTAssertFalse(first.id.isEmpty)
+        let previewChats = try preview.source.required("chats").array("chats")
+        XCTAssertNotEqual(previewChats[0]["id"], .utf16String([0xd800]))
+        XCTAssertEqual(try previewChats[0].required("id").string("shared normalized ID"), first.id)
+        XCTAssertEqual(first.title, "A�B")
+        XCTAssertEqual(previewChats[0]["title"], .utf16String([0x41,0xd800,0x42]))
+        XCTAssertEqual(previewChats[0]["xUTF16"], raw)
+        try await state.commitImport(preview,mode:.replace,selectedChatIDs:preview.conversations.map(\.id),selectedFolderIDs:[],includeSettings:true)
+        let exported = try OrderedJSON.decode(state.exportWebData())
+        XCTAssertEqual(exported[rootKey], raw)
+        let exportedChats = try exported.required("chats").array("chats")
+        XCTAssertEqual(exportedChats[0]["xUTF16"], raw)
+        XCTAssertEqual(exportedChats[0]["title"], .utf16String([0x41,0xd800,0x42]))
+        let restarted = ChatState(store:store)
+        XCTAssertEqual(try restarted.exportWebData(),try state.exportWebData())
+        XCTAssertEqual(restarted.document?.v3RootOrder,state.document?.v3RootOrder)
+        // Preview commits keep the base order; direct V3 import captures the exported raw root order.
+        let directStore = try local(), direct = ChatState(store:directStore)
+        try direct.importWebData(exported.encoded())
+        XCTAssertEqual(try XCTUnwrap(direct.document).v3RootOrder, try exported.object("V3").map(\.key))
+        XCTAssertTrue(try XCTUnwrap(direct.document).v3RootOrder.contains(rootKey))
+        XCTAssertEqual(ChatState(store:directStore).document?.v3RootOrder,direct.document?.v3RootOrder)
+        XCTAssertEqual(try ChatState(store:directStore).exportWebData(),try direct.exportWebData())
+        let before = try state.publicationSnapshot(), disk = try Data(contentsOf:store.fileURL)
+        do { _ = try await state.prepareImport(data:Data(#"{"version":3,"x":"\ud800\q"}"#.utf8),filename:"invalid.json"); XCTFail("invalid escape accepted") } catch {}
+        XCTAssertEqual(try state.publicationSnapshot(),before)
+        XCTAssertEqual(try Data(contentsOf:store.fileURL),disk)
+    }
+
     func testLegacyPrepareUsesSharedConversionAndSaveFailureCanRetryWithoutPublishing() async throws {
         let store = try local(), state = ChatState(store:store)
         try state.importWebData(fixture().encoded())

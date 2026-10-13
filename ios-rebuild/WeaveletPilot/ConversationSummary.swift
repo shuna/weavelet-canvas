@@ -45,7 +45,7 @@ enum ConversationSummary {
     }
     private static func project(_ value: OrderedJSON, known: [String], boundary: inout SharedWebProjection) throws -> OrderedJSON {
         .object(try value.object("summary field").map { field in
-            .init(key:field.key,value:known.contains(field.key) ? field.value : try boundary.reference(field.value))
+            .init(key:field.key,value:known.contains(where: field.key.matches) ? field.value : try boundary.reference(field.value))
         })
     }
     private static func projectedConfig(_ config: OrderedJSON, boundary: inout SharedWebProjection) throws -> OrderedJSON {

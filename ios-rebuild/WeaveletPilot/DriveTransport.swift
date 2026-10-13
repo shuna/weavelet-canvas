@@ -110,7 +110,7 @@ actor DriveTransport: SyncDrive {
         let parameters = try definition.required("parameters").object("parameters")
         var files: [OrderedJSON] = []; var page: String?; var seen = Set<String>()
         repeat {
-            var query = try parameters.map { URLQueryItem(name: $0.key, value: try $0.value.string($0.key)) }
+            var query = try parameters.map { URLQueryItem(name: try $0.key.native("query key"), value: try $0.value.string("query value")) }
             if let page { query.append(URLQueryItem(name: "pageToken", value: page)) }
             let result = try await json("/files", query: query)
             guard result["incompleteSearch"] != .bool(true) else { throw DriveTransportError.invalidResponse }

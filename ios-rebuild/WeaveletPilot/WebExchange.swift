@@ -11,18 +11,18 @@ struct WebExchange {
         _ = try source.object("export")
         guard try source.required("version").number("version") == 3 else { throw ExchangeError.invalid("versionは3のみ対応") }
         let store = try source.required("contentStore")
-        var bodies: [Data: [MessagePart]] = [:]
+        var bodies: [JSONString: [MessagePart]] = [:]
         for field in try store.object("contentStore") {
             _ = try field.value.object("contentStore entry")
             guard field.value["delta"] == nil else { throw ExchangeError.invalid("deltaは展開済みV3へ書き出してください") }
             let refCount = try field.value.required("refCount").number("refCount")
             guard refCount >= 0, refCount.rounded() == refCount else { throw ExchangeError.invalid("refCount") }
-            bodies[Data(field.key.utf8)] = try Self.parts(field.value.required("content"))
+            bodies[field.key] = try Self.parts(field.value.required("content"))
         }
         let folders = try source.required("folders")
         for field in try folders.object("folders") {
             _ = try field.value.required("id").string("folder.id")
-            _ = try field.value.required("name").string("folder.name")
+            _ = try field.value.required("name").stringKey("folder.name")
             _ = try field.value.required("order").number("folder.order")
             _ = try field.value.required("expanded").boolean("folder.expanded")
         }
@@ -49,7 +49,7 @@ struct WebExchange {
         for chat in try capturedSource.required("chats").array("chats") {
             let id = try chat.required("id").string("chat.id")
             guard !id.isEmpty, chatIDs.insert(Data(id.utf8)).inserted else { throw ExchangeError.invalid("chat.id重複または空") }
-            let title = try chat.required("title").string("chat.title")
+            let title = try chat.required("title").displayString("chat.title")
             if let flag = chat["titleSet"] { _ = try flag.boolean("titleSet") }
             if let folder = chat["folder"] { _ = try folder.string("chat.folder") }
             if let detail = chat["imageDetail"] { try Self.imageDetail(detail) }
@@ -71,7 +71,7 @@ struct WebExchange {
                 for field in try tree.required("nodes").object("nodes") {
                     let node = field.value
                     let nodeID = try node.required("id").string("node.id")
-                    guard !nodeID.isEmpty, nodeID.utf8.elementsEqual(field.key.utf8) else { throw ExchangeError.invalid("node.id/key") }
+                    guard !nodeID.isEmpty, field.key.matches(nodeID) else { throw ExchangeError.invalid("node.id/key") }
                     let parent = try node.required("parentId")
                     let parentID: String?
                     if parent == .null { parentID = nil } else {
@@ -79,8 +79,8 @@ struct WebExchange {
                         guard parentID != "" else { throw ExchangeError.invalid("parentId空") }
                     }
                     let hash = try node.required("contentHash").string("contentHash")
-                    guard let parts = bodies[Data(hash.utf8)] else { throw ExchangeError.invalid("contentHash参照欠損: \(hash)") }
-                    if let label = node["label"] { _ = try label.string("label") }
+                    guard let parts = bodies[JSONString(hash)] else { throw ExchangeError.invalid("contentHash参照欠損: \(hash)") }
+                    if let label = node["label"] { _ = try label.stringKey("label") }
                     for key in ["starred", "pinned"] { if let flag = node[key] { _ = try flag.boolean(key) } }
                     nodes.append(MessageNode(id: nodeID, parentId: parentID, createdAt: try node.required("createdAt").number("createdAt"), role: try Self.role(node.required("role")), parts: parts, options: try NodeOptions.read(chat: chat, nodeID: nodeID)))
                 }
@@ -119,18 +119,18 @@ struct WebExchange {
         try value.array("content").map { part in
             let type = try part.required("type").string("content.type")
             switch type {
-            case "text": return .text(try part.required("text").string("text"))
-            case "reasoning": return .reasoning(try part.required("text").string("reasoning.text"))
+            case "text": return .text(try part.required("text").displayString("text"))
+            case "reasoning": return .reasoning(try part.required("text").displayString("reasoning.text"))
             case "image_url":
                 let image = try part.required("image_url")
-                let url = try image.required("url").string("image_url.url")
+                let url = try image.required("url").displayString("image_url.url")
                 let detail = try image.required("detail")
                 try imageDetail(detail)
                 return .image(url: url, detail: try detail.string("image detail"))
             case "tool_call":
-                return .toolCall(id: try part.required("id").string("tool_call.id"), name: try part.required("name").string("tool_call.name"), arguments: try part.required("arguments").string("tool_call.arguments"))
+                return .toolCall(id: try part.required("id").displayString("tool_call.id"), name: try part.required("name").displayString("tool_call.name"), arguments: try part.required("arguments").displayString("tool_call.arguments"))
             case "tool_result":
-                return .toolResult(callID: try part.required("tool_call_id").string("tool_result.tool_call_id"), content: try part.required("content").string("tool_result.content"))
+                return .toolResult(callID: try part.required("tool_call_id").displayString("tool_result.tool_call_id"), content: try part.required("content").displayString("tool_result.content"))
             default: throw ExchangeError.invalid("未対応のcontent.type: \(type)")
             }
         }
@@ -142,7 +142,7 @@ struct WebExchange {
             if let value = config[key] { _ = try value.number("config.\(key)") }
         }
         for key in ["model", "providerId", "systemPrompt", "reasoning_effort", "verbosity", "modelSource"] {
-            if let value = config[key] { _ = try value.string("config.\(key)") }
+            if let value = config[key] { _ = try value.stringKey("config.\(key)") }
         }
         for key in ["stream", "force_reasoning"] { if let value = config[key] { _ = try value.boolean("config.\(key)") } }
         if let settings = config["modelSettings"] {

@@ -350,8 +350,8 @@ import XCTest
         XCTAssertEqual(try state.publicationSnapshot()["state"]?["theme"],before["state"]?["theme"])
         XCTAssertEqual(try state.publicationSnapshot()["state"]?["xRaw"],before["state"]?["xRaw"])
         for field in try additions.object("current roots") {
-            XCTAssertEqual(try state.publicationSnapshot()["state"]?[field.key],field.value,field.key)
-            XCTAssertEqual(try ChatState(store:local).publicationSnapshot()["state"]?[field.key],field.value,field.key)
+            XCTAssertEqual(try state.publicationSnapshot()["state"]?[field.key],field.value,field.key.text)
+            XCTAssertEqual(try ChatState(store:local).publicationSnapshot()["state"]?[field.key],field.value,field.key.text)
         }
         let receiverStore = LocalStateStore(fileURL:dir.appendingPathComponent("receiver-current-roots.json"))
         let receiver = ChatState(store:receiverStore)

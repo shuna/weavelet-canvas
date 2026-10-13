@@ -261,7 +261,7 @@ final class ChatState: ObservableObject {
         let imported = try WebExchange(source:previewV3)
         var unavailable: [String:[String]] = [:]
         for field in try source.required("unavailableContent").object("unavailable content") {
-            unavailable[field.key] = try field.value.array("unavailable nodes").map { try $0.string("node ID") }
+            unavailable[try field.key.native("chat ID")] = try field.value.array("unavailable nodes").map { try $0.string("node ID") }
         }
         return ChatImportPreview(filename:filename,conversations:imported.conversations,folderRows:try ChatFolders.rows(in:imported.source),
             recoveredContentCount:Int(try source.required("recoveredContentCount").number("recovered count")),unavailableContent:unavailable,
@@ -271,7 +271,7 @@ final class ChatState: ObservableObject {
         guard generation == nil else { throw ExchangeError.invalid("生成中は取り込めません") }
         guard try document?.snapshot.encoded() == preview.baselineSnapshot?.encoded(),
               try document?.v3Sidecar.encoded() == preview.baselineSidecar?.encoded(),
-              document?.v3RootOrder.map({ Data($0.utf8) }) == preview.baselineRootOrder?.map({ Data($0.utf8) }) else { throw ExchangeError.invalid("取り込み準備後に保存データが変更されています") }
+              document?.v3RootOrder == preview.baselineRootOrder else { throw ExchangeError.invalid("取り込み準備後に保存データが変更されています") }
         guard !initialLoadFailed || mode == .replace else { throw ExchangeError.invalid("保存ファイルを読めなかったため追加できません。明示的な置換が必要です") }
         let base = try document ?? SyncDocument(v3:ChatLibrary.emptySource)
         var boundary = SharedWebProjection()

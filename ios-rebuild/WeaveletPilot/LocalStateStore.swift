@@ -62,8 +62,8 @@ struct SavedChatState {
                 snapshot = storedSnapshot
             }
             let sidecar = try OrderedJSON.decode(Data(saved.required("v3Sidecar").string("sidecar").utf8))
-            let order = try saved.required("v3RootOrder").array("root order").map { try $0.string("root") }
-            guard Set(order.map { Data($0.utf8) }).count == order.count else { throw ExchangeError.invalid("V3 root order") }
+            let order = try saved.required("v3RootOrder").array("root order").map { try $0.stringKey("root") }
+            guard Set(order).count == order.count else { throw ExchangeError.invalid("V3 root order") }
             document = try SyncDocument(snapshot: snapshot, v3Sidecar: sidecar, v3RootOrder: order)
         }
         let exchange = try WebExchange(source: document.uiProjection())

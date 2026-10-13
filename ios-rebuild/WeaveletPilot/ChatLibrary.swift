@@ -39,8 +39,10 @@ enum ChatLibrary {
     }
 
     static func rename(in source: OrderedJSON, id: String, title: String) throws -> OrderedJSON {
-        try apply(in: source, operation: .object([
-            .init(key: "type", value: .string("rename")), .init(key: "id", value: .string(id)), .init(key: "title", value: .string(title))
+        let original = try source.required("chats").array("chats").first { $0["id"] == .string(id) }?["title"]
+        let savedTitle = try original.flatMap { title.utf8.elementsEqual(try $0.displayString("title").utf8) ? $0 : nil } ?? .string(title)
+        return try apply(in: source, operation: .object([
+            .init(key: "type", value: .string("rename")), .init(key: "id", value: .string(id)), .init(key: "title", value: savedTitle)
         ]))
     }
 

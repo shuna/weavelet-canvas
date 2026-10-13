@@ -42,7 +42,7 @@ struct ConversationEvaluationView: View {
                         ProgressView("評価中")
                         if let fields = try? job?.progress.object("axis progress") {
                             ForEach(Array(fields.enumerated()),id:\.offset) { _, field in
-                                HStack { Text(label(field.key)); Spacer(); Text(label((try? field.value.string("progress")) ?? "")) }
+                                HStack { Text(label(field.key.text)); Spacer(); Text(label((try? field.value.string("progress")) ?? "")) }
                             }
                         }
                         Button("停止",role:.destructive) { state.stopEvaluation(chatID:draft.chatID,nodeID:draft.nodeID) }

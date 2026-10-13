@@ -29,6 +29,29 @@ final class ChatExportTests: XCTestCase {
         XCTAssertEqual(try OrderedJSON.decode(restarted.exportWebData()).required("xFuture").encoded(),try future.encoded())
         XCTAssertEqual(try state.publicationSnapshot(),snapshot); XCTAssertEqual(try Data(contentsOf:local.fileURL),disk)
     }
+    func testLoneUTF16KnownTextUsesWebMarkdownUTF8BoundaryWithoutChangingJSON() throws {
+        let text = OrderedJSON.utf16String([0x41,0xd800,0x42])
+        var source = try input(), chats = try source.required("chats").array("chats")
+        var store = try source.required("contentStore"), entry = try store.required("h-middle")
+        var parts = try entry.required("content").array("content")
+        parts[0] = parts[0].replacing("text",with:text)
+        entry = entry.replacing("content",with:.array(parts)); store = store.replacing("h-middle",with:entry)
+        var messages = try chats[0].required("messages").array("messages")
+        messages[1] = messages[1].replacing("content",with:.array(parts))
+        chats[0] = chats[0].replacing("messages",with:.array(messages))
+        source = source.replacing("chats",with:.array(chats)).replacing("contentStore",with:store)
+        let state = ChatState(store:try self.store())
+        try state.importWebData(source.encoded())
+        let before = try state.publicationSnapshot().encoded()
+        // The native text editor rejects a lossy draft instead of writing the display replacement back.
+        XCTAssertThrowsError(try state.messageDraft(nodeID:"middle"))
+        let markdown = try state.exportWebData(format:.markdown,scope:.chat)
+        XCTAssertTrue(String(decoding:markdown.data,as:UTF8.self).contains("A�B"))
+        let json = try OrderedJSON.decode(state.exportWebData(format:.v3,scope:.all).data)
+        XCTAssertEqual(try json.required("contentStore").required("h-middle").required("content").array("parts")[0]["text"],text)
+        XCTAssertEqual(try state.publicationSnapshot().encoded(),before)
+    }
+
     func testSharedScopedFormatsUseVisiblePathModelImageAndRawEvaluationValues() throws {
         var source = try input(), chats = try source.required("chats").array("chats")
         chats[0] = chats[0].replacing("folder",with:.string("folder-a")); source = source.replacing("chats",with:.array(chats))

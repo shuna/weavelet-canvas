@@ -39,12 +39,29 @@ import XCTest
         // Web mergeSyncDocumentSnapshot overlays roots: existing root positions stay, new roots append.
         let incomingKeys = try incoming.object("state").map(\.key)
         XCTAssertEqual(try received.object("state").map(\.key),previousRoots + incomingKeys.filter { !previousRoots.contains($0) })
-        XCTAssertEqual(Set(try received.object("state").map { Data($0.key.utf8) }),Set(try incoming.object("state").map { Data($0.key.utf8) }))
-        for field in try incoming.object("state") { XCTAssertEqual(received[field.key],field.value,field.key) }
+        XCTAssertEqual(Set(try received.object("state").map { Data($0.key.text.utf8) }),Set(try incoming.object("state").map { Data($0.key.text.utf8) }))
+        for field in try incoming.object("state") { XCTAssertEqual(received[field.key],field.value,field.key.text) }
         XCTAssertEqual(try local.publicationSnapshot()["xWrapper"],snapshot["xWrapper"])
         XCTAssertEqual(try ChatState(store:store).publicationSnapshot(),try local.publicationSnapshot())
         XCTAssertEqual(try CloudKitSnapshots.decode(fake.snapshot!.payload),snapshot)
     }
+    func testLoneUTF16KeysAndValuesSurviveCloudKitDecodeMergeAndRestart() async throws {
+        let dir = try directory()
+        defer { try? FileManager.default.removeItem(at:dir) }
+        let store = LocalStateStore(fileURL:dir.appendingPathComponent("local.json")), local = try state(store)
+        let raw = try OrderedJSON.decode(Data(#"{"\ud800":"\udc00","\udc00":"\ud800","�":"replacement","number":9007199254740993}"#.utf8))
+        let key = JSONString(utf16:[0x78,0xdc00])
+        let before = try local.publicationSnapshot()
+        let incoming = try before.replacing("state",with:before.required("state").replacing(key,with:raw)).replacing(key,with:raw)
+        let fake = FakeCloudKit(snapshot:try remote(incoming))
+        let connection = CloudKitSyncConnection(state:local,transport:fake,syncStore:CloudKitSyncStore(fileURL:dir.appendingPathComponent("sync.json")),deviceID:"FAKE")
+        XCTAssertEqual(try CloudKitSnapshots.decode(fake.snapshot!.payload),incoming)
+        try await connection.download()
+        XCTAssertEqual(try local.publicationSnapshot()["state"]?[key],raw)
+        XCTAssertEqual(try local.publicationSnapshot()[key],raw)
+        XCTAssertEqual(try ChatState(store:store).publicationSnapshot(),try local.publicationSnapshot())
+    }
+
     func testUploadUsesCapturedConflictRecordAndTimestampOnce() async throws {
         let dir = try directory(), local = try state(LocalStateStore(fileURL:dir.appendingPathComponent("local.json")))
         let server = try remote(local.publicationSnapshot(),time:50), fake = FakeCloudKit(snapshot:server)

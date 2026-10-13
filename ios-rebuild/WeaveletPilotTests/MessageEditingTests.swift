@@ -36,7 +36,7 @@ final class MessageEditingTests: XCTestCase {
         XCTAssertEqual(try SyncRecords.canonical(actual), try SyncRecords.canonical(expected), name)
         let nodes = try actual.required("chats").array("chats")[0].required("branchTree").required("nodes").object("nodes")
         let expectedNodes = try expected.required("chats").array("chats")[0].required("branchTree").required("nodes").object("nodes")
-        XCTAssertEqual(nodes.map { Data($0.key.utf8) }, expectedNodes.map { Data($0.key.utf8) }, name)
+        XCTAssertEqual(nodes.map { Data($0.key.text.utf8) }, expectedNodes.map { Data($0.key.text.utf8) }, name)
     }
     private func currentExpected(_ test: OrderedJSON) throws -> OrderedJSON {
         var expected = try test.required("expected")
@@ -423,7 +423,7 @@ final class MessageEditingTests: XCTestCase {
             let local = try store(), state = ChatState(store: local); try state.importWebData(input.encoded())
             try state.saveNodeRemoval(state.pruneHiddenDraft(), now: 1000)
             let result = try XCTUnwrap(state.exchange).source.required("chats").array("chats")[0].required("branchTree").required("nodes")
-            XCTAssertEqual(try result.object("nodes").map(\.key), remaining)
+            XCTAssertEqual(try result.object("nodes").map(\.key), remaining.map { JSONString($0) })
             if pin || protect { XCTAssertEqual(result["hidden"]?["xHuge"], .number("9007199254740993")) }
             XCTAssertEqual(ChatState(store: local).conversation?.visibleMessages.map(\.id), ["system", "middle", "last"])
             let exported = try OrderedJSON.decode(state.exportWebData())

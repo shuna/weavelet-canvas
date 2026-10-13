@@ -19,7 +19,7 @@ struct ChatSearchResult: Identifiable {
 
 enum ChatSearch {
     private static func fields(_ value: OrderedJSON, _ names: [String]) throws -> OrderedJSON {
-        .object(try value.object("search object").filter { field in names.contains { $0.utf8.elementsEqual(field.key.utf8) } })
+        .object(try value.object("search object").filter { field in names.contains { field.key.matches($0) } })
     }
     static func results(in source: OrderedJSON, query: String, mode: ChatSearchMode, scope: ChatSearchScope = .all,
                         starredOnly: Bool = false, chatID: String? = nil, currentChatID: String? = nil, currentPath: [String]? = nil) throws -> [ChatSearchResult] {

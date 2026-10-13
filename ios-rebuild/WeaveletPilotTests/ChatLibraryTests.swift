@@ -26,8 +26,8 @@ final class ChatLibraryTests: XCTestCase {
         XCTAssertEqual(actualChats.count, expectedChats.count, name)
         for (actualChat, expectedChat) in zip(actualChats, expectedChats) {
             if let tree = expectedChat["branchTree"] {
-                XCTAssertEqual(try actualChat.required("branchTree").required("nodes").object("nodes").map { Data($0.key.utf8) },
-                               try tree.required("nodes").object("nodes").map { Data($0.key.utf8) }, name)
+                XCTAssertEqual(try actualChat.required("branchTree").required("nodes").object("nodes").map { Data($0.key.text.utf8) },
+                               try tree.required("nodes").object("nodes").map { Data($0.key.text.utf8) }, name)
             }
         }
     }

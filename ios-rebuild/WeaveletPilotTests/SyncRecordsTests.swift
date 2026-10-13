@@ -12,7 +12,7 @@ final class SyncRecordsTests: XCTestCase {
         let policy = try OrderedJSON.decode(Data(contentsOf: root.appendingPathComponent("tests/fixtures/web-native/sync-local-settings-policy.json")))
         XCTAssertEqual(policy["fixtureVersion"], .number("1"))
         let keys = try policy.required("syncLocalSettings").array("policy").map { Data(try $0.string("key").utf8) }
-        let state = try snapshot.required("state").object("state").filter { !keys.contains(Data($0.key.utf8)) }
+        let state = try snapshot.required("state").object("state").filter { !keys.contains(Data($0.key.text.utf8)) }
         return snapshot.replacing("state", with: .object(state))
     }
     private func baseCase() throws -> OrderedJSON { try fixture().required("cases").array("cases")[0] }
@@ -46,14 +46,14 @@ final class SyncRecordsTests: XCTestCase {
             let actualChats = try reversedSnapshot.required("state").required("chats").array("chats")
             for (expected, actual) in zip(expectedChats, actualChats) {
                 if let tree = expected["branchTree"] {
-                    let expectedIDs = try tree.required("nodes").object("nodes").map { Data($0.key.utf8) }
-                    let actualIDs = try actual.required("branchTree").required("nodes").object("nodes").map { Data($0.key.utf8) }
+                    let expectedIDs = try tree.required("nodes").object("nodes").map { Data($0.key.text.utf8) }
+                    let actualIDs = try actual.required("branchTree").required("nodes").object("nodes").map { Data($0.key.text.utf8) }
                     XCTAssertEqual(actualIDs, expectedIDs, name)
                 }
             }
             if let clipboard = restored["state"]?["branchClipboard"] {
-                let expectedIDs = try clipboard.required("nodes").object("nodes").map { Data($0.key.utf8) }
-                let actualIDs = try reversedSnapshot.required("state").required("branchClipboard").required("nodes").object("nodes").map { Data($0.key.utf8) }
+                let expectedIDs = try clipboard.required("nodes").object("nodes").map { Data($0.key.text.utf8) }
+                let actualIDs = try reversedSnapshot.required("state").required("branchClipboard").required("nodes").object("nodes").map { Data($0.key.text.utf8) }
                 XCTAssertEqual(actualIDs, expectedIDs, name)
             }
             let upgraded = try SyncRecords.toRecords(restored)
@@ -68,6 +68,27 @@ final class SyncRecordsTests: XCTestCase {
             XCTAssertEqual(Data(canonical.utf8), Data(try vector.required("canonical").string("canonical").utf8))
             XCTAssertEqual(SyncRecords.digest(canonical), try vector.required("sha256").string("sha256"))
         }
+    }
+
+    func testLoneUTF16KeysAndValuesSurviveRecordsWireAndTextEncoderPrimitives() throws {
+        let metadata = try OrderedJSON.decode(Data(#"{"\ud800":"\udc00","\udc00":"\ud800","�":"replacement"}"#.utf8))
+        let rawKey = JSONString(utf16:[0x78,0xd800])
+        let base = try baseCase().required("snapshot")
+        let snapshot = try base.replacing("state",with:base.required("state").replacing("xUTF16",with:metadata).replacing(rawKey,with:metadata))
+        let records = try SyncRecords.toRecords(snapshot)
+        let restored = try SyncRecords.fromRecords(SyncRecords.decodeWire(SyncRecords.encodeWire(records)))
+        XCTAssertEqual(restored["state"]?["xUTF16"], metadata)
+        XCTAssertEqual(restored["state"]?[rawKey], metadata)
+        XCTAssertEqual(try SyncRecords.canonical(metadata), #"{"\ud800":"\udc00","\udc00":"\ud800","�":"replacement"}"#)
+        func primitive(_ operation: String) throws -> OrderedJSON {
+            let argument = String(decoding: try OrderedJSON.utf16String([0xd800]).encoded(),as:UTF8.self)
+            let input = OrderedJSON.object([.init(key:"operation",value:.string(operation)),.init(key:"args",value:.array([.string(argument)]))])
+            return try OrderedJSON.decode(Data(SyncRecords.primitive(String(decoding:input.encoded(),as:UTF8.self)).utf8))
+        }
+        XCTAssertEqual(try primitive("utf8")["value"]?.syncData(), Data("�".utf8))
+        XCTAssertEqual(try primitive("digest")["value"], .string(SyncRecords.digest("�")))
+        XCTAssertNotEqual(OrderedJSON.utf16String([0xd800]), .string("�"))
+        XCTAssertEqual(try OrderedJSON.decode(metadata.encoded()),metadata)
     }
 
     func testCryptoCompressionRecordBoundaryRoundTrip() throws {
@@ -115,7 +136,7 @@ final class SyncRecordsTests: XCTestCase {
         let orphanUnpinned = try orphan.replacing(path(["chats", "chat-a", "branchTree", "nodes", "n-inactive", "pinned"]), with: .string("false"))
         let badPath = try original.replacing(path(["chats", "chat-a", "branchTree", "activePath"]), with: .string("[\"missing\"]"))
         let badContent = try original.replacing(path(["chats", "chat-a", "branchTree", "nodes", "n-inactive", "contentHash"]), with: .string("\"missing\""))
-        let missingAssets = OrderedJSON.object(try original.object("records").filter { !$0.key.hasPrefix("[\"assets\"") })
+        let missingAssets = OrderedJSON.object(try original.object("records").filter { !$0.key.text.hasPrefix("[\"assets\"") })
         let invalidPath = original.replacing("[]", with: .string("true"))
         let nonStringPath = original.replacing("[1]", with: .string("true"))
         for invalid in [forbidden, conflict, cycle, orphanUnpinned, badPath, badContent, missingAssets, invalidPath, nonStringPath] {
@@ -180,8 +201,8 @@ final class SyncRecordsTests: XCTestCase {
         let restoredState = try restored.required("state")
         let restoredTree = try restoredState.required("chats").array("chats")[0].required("branchTree")
         let expected = ["2", "10", "01", "é", "e\u{0301}"].map { Data($0.utf8) }
-        XCTAssertEqual(try restoredTree.required("nodes").object("nodes").map { Data($0.key.utf8) }, expected)
-        XCTAssertEqual(try restoredState.required("branchClipboard").required("nodes").object("nodes").map { Data($0.key.utf8) }, expected)
+        XCTAssertEqual(try restoredTree.required("nodes").object("nodes").map { Data($0.key.text.utf8) }, expected)
+        XCTAssertEqual(try restoredState.required("branchClipboard").required("nodes").object("nodes").map { Data($0.key.text.utf8) }, expected)
         XCTAssertEqual(restoredTree["nodeOrder"], treeUnknown)
         XCTAssertEqual(restoredState["nodeOrder"], stateUnknown)
     }
@@ -222,7 +243,7 @@ final class SyncRecordsTests: XCTestCase {
     private let extensionNames = Set(["contentEntryFormat", "contentEntries", "contentEntryRefs", "retainedContentEntries"])
     private func removingRecords(_ records: OrderedJSON, where predicate: ([String]) -> Bool) throws -> OrderedJSON {
         .object(try records.object("records").filter { field in
-            let parts = try OrderedJSON.decode(Data(field.key.utf8)).array("path").map { try $0.string("part") }
+            let parts = try OrderedJSON.decode(Data(field.key.text.utf8)).array("path").map { try $0.string("part") }
             return !predicate(parts)
         })
     }

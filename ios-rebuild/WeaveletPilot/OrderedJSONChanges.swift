@@ -20,15 +20,16 @@ enum OrderedJSONChanges {
                 let op = try change.required("op").string("op")
                 if op == "set" { return try restore(change.required("value")) }
                 guard op == "keys" else { throw ExchangeError.invalid("change operation") }
-                let keys = try change.required("keys").array("keys").map { try $0.string("key") }
+                let keys = try change.required("keys").array("keys").map { try $0.stringKey("key") }
                 let fields = try value.object("object")
-                guard keys.count == fields.count, Set(keys.map { Data($0.utf8) }).count == keys.count else { throw ExchangeError.invalid("change keys") }
+                guard keys.count == fields.count, Set(keys).count == keys.count else { throw ExchangeError.invalid("change keys") }
                 return .object(try keys.map { JSONField(key: $0, value: try value.required($0)) })
             }
             let remaining = path.dropFirst(), op = try change.required("op").string("op")
             switch (value, head) {
-            case (.object(var fields), .string(let key)):
-                let index = fields.firstIndex { $0.key.utf8.elementsEqual(key.utf8) }
+            case (.object(var fields), _) where head.isString:
+                let key = try head.stringKey("path key")
+                let index = fields.firstIndex { $0.key == key }
                 if remaining.isEmpty, op == "remove" { if let index { fields.remove(at: index) }; return .object(fields) }
                 let updated = try changing(index.map { fields[$0].value } ?? .object([]), path: remaining, change: change)
                 if let index { fields[index] = JSONField(key: key, value: updated) } else { fields.append(JSONField(key: key, value: updated)) }

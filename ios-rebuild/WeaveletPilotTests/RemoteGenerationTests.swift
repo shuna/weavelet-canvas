@@ -327,7 +327,7 @@ final class RemoteGenerationTests: XCTestCase {
             let request = try RemoteRequest.make(source: source, chatID: "remote", path: [], settings: settings, key: test.required("key").string("key"))
             let expected = try test.required("expected")
             XCTAssertEqual(request.url?.absoluteString, try expected.required("endpoint").string("endpoint"))
-            for header in try expected.required("headers").object("headers") { XCTAssertEqual(request.value(forHTTPHeaderField: header.key), try header.value.string("header")) }
+            for header in try expected.required("headers").object("headers") { XCTAssertEqual(request.value(forHTTPHeaderField: header.key.text), try header.value.string("header")) }
             let body = try OrderedJSON.decode(XCTUnwrap(request.httpBody))
             // The fixture's device override is superseded by the saved conversation's stream.
             let expectedBody = try expected.required("body").replacing("stream",with:source.required("chats").array("chats")[0].required("config").required("stream"))

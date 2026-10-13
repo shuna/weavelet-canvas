@@ -16,7 +16,7 @@ struct ChatImportPreview: Identifiable {
     let source: OrderedJSON
     let baselineSnapshot: OrderedJSON?
     let baselineSidecar: OrderedJSON?
-    let baselineRootOrder: [String]?
+    let baselineRootOrder: [JSONString]?
 }
 
 // The Web inspector identifies opaque fields; Swift only transports their raw values.
@@ -25,7 +25,7 @@ enum ChatImport {
         var value = source
         for component in try path.array("import path") {
             switch component {
-            case .string(let key): value = try value.required(key)
+            case .string, .utf16String: value = try value.required(component.stringKey("import key"))
             case .number(let raw):
                 let values = try value.array("import array")
                 guard let index = Int(raw), values.indices.contains(index) else { throw ExchangeError.invalid("import path index") }

@@ -9,7 +9,7 @@ final class MessageAttributesTests: XCTestCase {
         return result
     }
     private func drop(_ key: String, from value: OrderedJSON) throws -> OrderedJSON {
-        .object(try value.object("object").filter { !$0.key.utf8.elementsEqual(key.utf8) })
+        .object(try value.object("object").filter { !$0.key.text.utf8.elementsEqual(key.utf8) })
     }
     private func assertJSON(_ actual: OrderedJSON?, _ expected: OrderedJSON, file: StaticString = #filePath, line: UInt = #line) throws {
         XCTAssertEqual(try SyncRecords.canonical(XCTUnwrap(actual, file: file, line: line)), try SyncRecords.canonical(expected), file: file, line: line)
@@ -90,7 +90,7 @@ final class MessageAttributesTests: XCTestCase {
             let value = try OrderedJSON.decode(Data(records.required(key).string("record").utf8))
             try assertJSON(value, expected.required(id))
             XCTAssertFalse(try records.object("records").contains { field in
-                let path = try OrderedJSON.decode(Data(field.key.utf8)).array("path")
+                let path = try OrderedJSON.decode(Data(field.key.text.utf8)).array("path")
                 return path.count > 6 && Array(path.prefix(6)) == [.string("chats"), .string("message-chat"), .string("branchTree"), .string("messageAttributesV1"), .string("byNode"), .string(id)]
             })
         }

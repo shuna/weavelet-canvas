@@ -11,10 +11,13 @@ enum NodeOptions {
         static func == (left:Value,right:Value) -> Bool {
             left.label.utf8.elementsEqual(right.label.utf8) && left.starred == right.starred && left.pinned == right.pinned && left.collapsed == right.collapsed && left.omitted == right.omitted && left.protected == right.protected
         }
-        fileprivate var json: OrderedJSON { .object([
-            .init(key:"label",value:.string(label)),.init(key:"starred",value:.bool(starred)),.init(key:"pinned",value:.bool(pinned)),
+        func json(preservingLabel original: OrderedJSON?) throws -> OrderedJSON {
+            let savedLabel = try original.flatMap { label.utf8.elementsEqual(try $0.displayString("label").utf8) ? $0 : nil } ?? .string(label)
+            return .object([
+            .init(key:"label",value:savedLabel),.init(key:"starred",value:.bool(starred)),.init(key:"pinned",value:.bool(pinned)),
             .init(key:"collapsed",value:.bool(collapsed)),.init(key:"omitted",value:.bool(omitted)),.init(key:"protected",value:.bool(protected))
-        ]) }
+        ])
+        }
     }
     enum Status: String { case updated, unchanged, chatMissing = "chat-missing", nodeMissing = "node-missing" }
     struct Result {
@@ -49,7 +52,7 @@ enum NodeOptions {
             _ = try map.object(field)
             return try map[id]?.boolean(field) ?? false
         }
-        return try Value(label:node?["label"]?.string("label") ?? "",starred:flag("starred"),pinned:flag("pinned"),collapsed:mapped("collapsedNodes"),omitted:mapped("omittedNodes"),protected:mapped("protectedNodes"))
+        return try Value(label:node?["label"]?.displayString("label") ?? "",starred:flag("starred"),pinned:flag("pinned"),collapsed:mapped("collapsedNodes"),omitted:mapped("omittedNodes"),protected:mapped("protectedNodes"))
     }
     static func read(in source: OrderedJSON, chatID: String, nodeID: String) throws -> Value {
         guard let chat=try source.required("chats").array("chats").first(where:{ try $0.required("id").string("chat ID").utf8.elementsEqual(chatID.utf8) }) else { throw ExchangeError.invalid("chat ID") }
@@ -73,7 +76,7 @@ enum NodeOptions {
         let store=try source.required("contentStore")
         let projectedStore=try boundary.store(store)
         let ids=try newIDs ?? (0..<(chat["branchTree"] == nil ? chat.required("messages").array("messages").count : 0)).map { _ in UUID().uuidString.lowercased() }
-        let input=OrderedJSON.object([.init(key:"operation",value:.string("save")),.init(key:"chat",value:projected),.init(key:"contentStore",value:projectedStore),.init(key:"nodeId",value:.string(id)),.init(key:"value",value:value.json),.init(key:"newIDs",value:.array(ids.map(OrderedJSON.string))),.init(key:"now",value:.number(String(now)))])
+        let input=OrderedJSON.object([.init(key:"operation",value:.string("save")),.init(key:"chat",value:projected),.init(key:"contentStore",value:projectedStore),.init(key:"nodeId",value:.string(id)),.init(key:"value",value:try value.json(preservingLabel:chat["branchTree"]?["nodes"]?[id]?["label"])),.init(key:"newIDs",value:.array(ids.map(OrderedJSON.string))),.init(key:"now",value:.number(String(now)))])
         let output=try SharedWebOperations.call("nodeOptions",input)
         guard let status=Status(rawValue:try output.required("status").string("status")) else { throw ExchangeError.invalid("node options status") }
         let changed=try OrderedJSONChanges.apply(output.required("changes"),to:.object([.init(key:"chat",value:chat),.init(key:"contentStore",value:store)]),opaque:boundary.opaque)

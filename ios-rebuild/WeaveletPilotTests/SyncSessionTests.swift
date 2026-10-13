@@ -17,7 +17,7 @@ final class SyncSessionTests: XCTestCase {
         XCTAssertEqual(policy["fixtureVersion"], .number("1"))
         let keys = try policy.required("syncLocalSettings").array("policy").map { Data(try $0.string("key").utf8) }
         return .object(try records.object("records").filter { field in
-            let path = try OrderedJSON.decode(Data(field.key.utf8)).array("record path")
+            let path = try OrderedJSON.decode(Data(field.key.text.utf8)).array("record path")
             guard path.count >= 2, path[0] == .string("state") else { return true }
             return try !keys.contains(Data(path[1].string("root").utf8))
         })
@@ -334,7 +334,7 @@ actor FakeSyncDrive: SyncDrive {
         case "remove":
             let id = try args[0].string("id")
             if files[id] != nil {
-                files = .object(try files.object("files").filter { !$0.key.utf8.elementsEqual(id.utf8) })
+                files = .object(try files.object("files").filter { !$0.key.text.utf8.elementsEqual(id.utf8) })
                 events.append(.object([JSONField(key: "fileId", value: .string(id)), JSONField(key: "removed", value: .bool(true))]))
             }; return .null
         default: throw DriveTransportError.invalidResponse

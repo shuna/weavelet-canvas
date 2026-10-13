@@ -216,9 +216,7 @@ enum MessageEditing {
         let target = chat["branchTree"] == nil ? String(nodeID.dropFirst(8)) : nodeID
         return try perform(in: source, chatID: chatID, kind: "nodeOptions", history: history, onHistory: onHistory) { _ in [
             .init(key: "operation", value: .string("save")), .init(key: "nodeId", value: .string(target)),
-            .init(key: "value", value: .object([.init(key: "label", value: .string(value.label)), .init(key: "starred", value: .bool(value.starred)),
-                .init(key: "pinned", value: .bool(value.pinned)), .init(key: "collapsed", value: .bool(value.collapsed)),
-                .init(key: "omitted", value: .bool(value.omitted)), .init(key: "protected", value: .bool(value.protected))])),
+            .init(key: "value", value: try value.json(preservingLabel:chat["branchTree"]?["nodes"]?[target]?["label"])),
             .init(key: "newIDs", value: .array(newIDs.map(OrderedJSON.string))), .init(key: "now", value: .number(String(now)))] }.source
     }
 
@@ -316,7 +314,7 @@ struct SharedWebProjection {
     mutating private func fields(_ value: OrderedJSON, known: [String]) throws -> OrderedJSON {
         var output: [JSONField] = []
         for field in try value.object("object") {
-            output.append(.init(key: field.key, value: known.contains(field.key) ? field.value : try reference(field.value)))
+            output.append(.init(key: field.key, value: known.contains(where: field.key.matches) ? field.value : try reference(field.value)))
         }
         return .object(output)
     }
@@ -332,11 +330,11 @@ struct SharedWebProjection {
             case "tool_result": known = ["type", "tool_call_id", "content"]
             default: throw ExchangeError.invalid("content.type")
             }
-            for key in known where key != "image_url" { _ = try part.required(key).string(key) }
+            for key in known where key != "image_url" { _ = try part.required(key).stringKey(key) }
             var projected = try fields(part, known: known)
             if type == "image_url" {
                 let image = try part.required("image_url")
-                _ = try image.required("url").string("image_url.url")
+                _ = try image.required("url").stringKey("image_url.url")
                 _ = try image.required("detail").string("image_url.detail")
                 projected = projected.replacing("image_url", with: try fields(image, known: ["url", "detail"]))
             }

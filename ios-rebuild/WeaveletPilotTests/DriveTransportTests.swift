@@ -19,7 +19,7 @@ final class DriveTransportTests: XCTestCase {
             requests += 1
             let query = URLComponents(url: request.url!, resolvingAgainstBaseURL: false)!.queryItems!
             for field in try definition.required("parameters").object("parameters") {
-                XCTAssertEqual(query.first { $0.name == field.key }?.value, try field.value.string(field.key))
+                XCTAssertEqual(query.first { field.key.matches($0.name) }?.value, try field.value.string(field.key.text))
             }
             if requests == 1 { return (200, self.json("{\"files\":[{\"id\":\"FAKE-a\"}],\"nextPageToken\":\"FAKE-next\"}")) }
             XCTAssertEqual(query.first { $0.name == "pageToken" }?.value, "FAKE-next")
