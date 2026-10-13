@@ -329,3 +329,8 @@ native UIで描画する場合はJSCで配置だけを共有し、OSの表示・
 3376d079で@dagrejs/dagre3.1.1と@dagrejs/graphlib4.0.5へ置換し、旧dagre/graphlib項目と自前型宣言を除去した。npm/Yarn両lockを揃え、通常treeは同じ算法を維持。切断cycle・自己loop・複数componentの採取結果ではnode/edge順と有限座標、サンプルpixel座標が旧版と一致した。関連6件/Web型検査/Vite build/frozen Yarn installは成功。yarn check --integrityは失敗。コピー元cacheのintegrityに現lockと旧lock双方にない105キーを確認したため既存不一致を含むが、失敗全体が既存由来と断定せず、lock全体の正規化は行っていない。
 
 b2f5f976/6a345e4aで同じpure元のbranchLayoutと既存Web ensureBranchTreeStateのbranchEnsureを固定bridgeへ公開。ID/時刻はホストが供給し、flat変換の属性保持とraw値のnative復元は既存境界へ接続する。関連13件、型検査、bundle鮮度、macOS JavaScriptCoreの実呼出が成功。Dagre ESMが内包するGraphlibにもMIT本文・固定版来歴・実配布hashを付けた。独立Astraは共有元/配布境界の新規P2以上なし。固定bundleは944610から1024346 byteへ79736 byte増加した（licenseとbridgeを含む実file差）。これはapp全体や圧縮配布サイズ、実行速度/消費電力の測定ではない。native UIの接続・非同期処理・古い結果拒否は次の同機能一式で確認する。
+## 2026-10-14：プロンプトCSVの依存境界
+
+プロンプトライブラリの接続に先立つ独立Astraの限定監査では、Web既存PapaParse5.4.1の文字列parse/unparse再利用を条件付き採用可とした。installed・npm/Yarn lockの版/integrity一致を確認。package.jsonの範囲指定だけで固定済みとはせず、lockと生成provenanceを維持する。[公式Releases](https://github.com/mholt/PapaParse/releases)で保守継続を確認し、確認した[ReDoS advisory](https://github.com/advisories/GHSA-qvjc-g5vr-mfgr)の対象は5.2.0未満。公開照合は未発見問題の不存在を保証しない。
+
+[公式API](https://www.papaparse.com/docs)のCSV文字列処理を共有し、WebのBlob/URL/documentによる保存とnativeのOSファイルI/Oは分離する。worker/download/File/Node-stream経路はnative共有入口へ持ち込まない。配布物へ固定版の[MIT本文・著作権](https://github.com/mholt/PapaParse/blob/master/LICENSE)を保持し、完成bundleの実JSC読込とCSV往復を採用条件とする。現段階は実装中で、native配布・プロンプト機能完成とは扱わない。
