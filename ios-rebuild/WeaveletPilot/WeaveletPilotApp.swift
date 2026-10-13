@@ -118,7 +118,7 @@ struct ChatView: View {
                     }
                     .disabled(state.exchange == nil || state.generation != nil)
                     .frame(minWidth: 44, minHeight: 44)
-                    Menu("会話操作",systemImage:"ellipsis.circle") {
+                    Menu(horizontalSizeClass == .compact ? "その他" : "会話操作",systemImage:"ellipsis.circle") {
                         if advancedMode {
                         Button("本文を追加",systemImage:"plus.bubble") {
                             do { draft = try state.messageDraft(nodeID:nil) }
@@ -129,12 +129,17 @@ struct ChatView: View {
                             do { removalDraft = try state.pruneHiddenDraft(); showsRemoval = true }
                             catch { errorMessage = error.localizedDescription }
                         }.disabled(state.exchange == nil || state.generation != nil)
+                        if horizontalSizeClass == .compact {
+                            Divider()
+                            fileMenu
+                            Button("設定", systemImage: "slider.horizontal.3") { showsSettings = true }
+                        }
                     }
                     .frame(minWidth:44,minHeight:44)
                     Button("検索", systemImage: "magnifyingglass") { searchMode = .grep; showsSearch = true }
                         .disabled(state.exchange == nil || state.generation != nil)
                         .frame(minWidth: 44, minHeight: 44)
-                    if horizontalSizeClass == .compact || columnVisibility == .detailOnly {
+                    if horizontalSizeClass != .compact && columnVisibility == .detailOnly {
                         fileMenu
                         Button("設定", systemImage: "slider.horizontal.3") { showsSettings = true }
                             .frame(minWidth: 44, minHeight: 44)
