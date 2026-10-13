@@ -14,7 +14,7 @@ import {
   buildPromptCountCacheKey,
 } from '@utils/liveTokenUsage';
 import type { MessageInterface, TotalTokenUsed } from '@type/chat';
-import { isTextContent } from '@type/chat';
+import { liveCompletionForCounting } from '@utils/generationUsage';
 import { peekBufferedContent } from '@utils/streamingBuffer';
 
 const useLiveTotalTokenUsed = (): TotalTokenUsed => {
@@ -79,10 +79,8 @@ const useLiveTotalTokenUsed = (): TotalTokenUsed => {
           ? { role: 'assistant', content: liveContent }
           : completionMessage;
 
-        const completionTokens =
-          liveCompletionMessage && isTextContent(liveCompletionMessage.content[0])
-            ? await countTokens([liveCompletionMessage], chat.config.model)
-            : 0;
+        const countableCompletion = liveCompletionForCounting(liveCompletionMessage);
+        const completionTokens = countableCompletion ? await countTokens([countableCompletion], chat.config.model) : 0;
 
         return {
           key: buildTokenUsageKey(chat.config.model, chat.config.providerId),

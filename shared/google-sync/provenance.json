@@ -46,7 +46,8 @@
     "src/local-llm/lowbit-q/lowbitQManager.ts": "a36f0fe1025b2afc27558ab930fd5edeb1ee8d3cdec37479987ea4ae702f0643",
     "src/store/debug-store.ts": "bd8b783585f4e8ed03d07ca2cf2d777c358b7ca71941138d2d5a12026e2fc3ad",
     "src/local-llm/runtime.ts": "0e6964286b59f1848358cfa0c60d6a54082f619be6c09b8848949149c3af9807",
-    "src/utils/modelLookup.ts": "940be9cee0b9d542645eb091868ff734b13d13518c7122a574792aff0317d659",
+    "src/utils/modelCostCore.ts": "202c19599fe56bcd6d5b5fb8908bdfd248888af29b28e30e5e68912252de6024",
+    "src/utils/modelLookup.ts": "ab195754372c3fc93114c69d1a8d8abb44e027e476a0bcbaa220fa7d723550fd",
     "src/utils/streamSupport.ts": "d0ffd1a167819fea0dc8e78c21658c1171bffe9dcbffb2b6215ed8b7dcd4c0a0",
     "src/constants/markdown.ts": "afb3cd6c39a726e377ee2e64194bc94d65f2a2dc91540277c4ecf40027d71930",
     "src/constants/chat.ts": "9b8959b3af7d3c21a3bbe1bcb5f767436853e4d526f72131053e4ea8d350d47f",
@@ -127,7 +128,8 @@
     "src/api/cloudkit.ts": "18e15b3cf9321a54f4641d005c9415319037428fa6368025bd79a61a760b6f48",
     "src/store/storage/cloud/snapshotFile.ts": "a7b014e2ddef3023af317be88bd50dd4ed72d3d2330f857f9771f85846c5f652",
     "src/store/storage/cloud/createCloudPersistStorage.ts": "1c9d66a5e3b41bc2d7cb4e2a47ac0c2f7f42b2009bd060176c5e8d327def7217",
-    "src/utils/generationUsage.ts": "5c35fc81cb9da4b183d7b524c5b0d3ec9b2b9abe46392e9e0a4a515fc5902bc1"
+    "src/utils/costCore.ts": "0249e8c912f158c518c6c76e22ac94ca4bdbf05fee4506fef09c545661769c7d",
+    "src/utils/generationUsage.ts": "e45a927c9503b60671e08ea6f63ec32a4673b70f6aadf5ba8a996f8fd41ef4ce"
   },
   "bundleInputs": {
     "src/utils/api.ts": "09a664ad06a1878e071598ea913f7f5b07da281ac3e20ebbfc6a6c32ad8890c4",
@@ -241,9 +243,12 @@
     "src/api/cloudkit.ts": "18e15b3cf9321a54f4641d005c9415319037428fa6368025bd79a61a760b6f48",
     "src/store/storage/cloud/snapshotFile.ts": "a7b014e2ddef3023af317be88bd50dd4ed72d3d2330f857f9771f85846c5f652",
     "src/store/storage/cloud/createCloudPersistStorage.ts": "1c9d66a5e3b41bc2d7cb4e2a47ac0c2f7f42b2009bd060176c5e8d327def7217",
-    "src/utils/generationUsage.ts": "5c35fc81cb9da4b183d7b524c5b0d3ec9b2b9abe46392e9e0a4a515fc5902bc1",
-    "shared/google-sync/usage.ts": "4e7cbcebd548440e60d913e20b3bb742b5e0e229de48ac77d22f1c47c261d3f1",
-    "shared/google-sync/entry.ts": "be3ba7c9befa4aeb7460c211856ae75a1d2c1c6e096794e87663e1c77c47e160",
+    "src/utils/costCore.ts": "0249e8c912f158c518c6c76e22ac94ca4bdbf05fee4506fef09c545661769c7d",
+    "src/utils/generationUsage.ts": "e45a927c9503b60671e08ea6f63ec32a4673b70f6aadf5ba8a996f8fd41ef4ce",
+    "shared/google-sync/usage.ts": "6e915eaae397dff9e560dffa85c17fb49a4e874a837718f511727c98b6b73f00",
+    "src/utils/modelCostCore.ts": "202c19599fe56bcd6d5b5fb8908bdfd248888af29b28e30e5e68912252de6024",
+    "shared/google-sync/usageCost.ts": "870d6ce0732ad6dbe3ddb2c6e9f19c4b147e4c3073fabfce01275786efbe0cc5",
+    "shared/google-sync/entry.ts": "6a3ee981452f470c4ae17ca22f1b819f648d08c52febe1085b8c9d075d6af6cb",
     "shared/google-sync/generate.mjs": "bce157c3313ac97c88aff3c7325450fea534bb76582eac5972260332c02a3e74",
     "shared/google-sync/importDefaults.generate.mjs": "2ff8904af4f192ed0809ceaaabcfbefa708321083aebb527d712fc2a0551b15a"
   },
@@ -280,5 +285,5 @@
     "lz-string/package.json": "f0990a8fd6c347d66c1469d18918f5460d372c6b3af8a0a5737dfd34c809e20d",
     "lz-string/LICENSE": "433fc9dfe659dbfb1e91eed8351f13651e97bfa3ac6d03394c3d63f61d4bbc80"
   },
-  "bundleSHA256": "b538bb404ca8c194b80f8d7dfdc1be19245beaa719669987c6e2d2140ab77aa2"
+  "bundleSHA256": "b3fc2799f9bcbc9827f3a202392448e76de4b5cd34f0fce41be3b5e06cda2e27"
 }

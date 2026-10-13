@@ -779,6 +779,31 @@ final class ChatState: ObservableObject {
         return (updated,next["totalTokenUsed"])
     }
 
+    var usageCountingEnabled: Bool { (try? publicationSnapshot()["state"]?["countTotalTokens"]) == .bool(true) }
+    func saveUsageCounting(_ enabled: Bool) throws {
+        guard !initialLoadFailed else { throw ExchangeError.invalid("保存ファイルを復旧してから設定してください") }
+        guard usageCountingEnabled != enabled else { return }
+        try applyLibrary(exchange?.source ?? ChatLibrary.emptySource,selectedID:selectedID,preserveGeneration:true,usageEnabled:enabled)
+    }
+    func resetUsageTotals() throws {
+        guard !initialLoadFailed else { throw ExchangeError.invalid("保存ファイルを復旧してから設定してください") }
+        try applyLibrary(exchange?.source ?? ChatLibrary.emptySource,selectedID:selectedID,preserveGeneration:true,tokenUsage:.object([]))
+    }
+    func usageCostReport() throws -> OrderedJSON {
+        let roots = try publicationSnapshot().required("state")
+        var fields: [JSONField] = [.init(key:"state",value:ChatConfig.modelState(in:roots)),.init(key:"totalTokenUsed",value:roots["totalTokenUsed"] ?? .object([]))]
+        if let current = generation, current.running,
+           let chat = try current.baseSource.required("chats").array("chats").first(where: { $0["id"].flatMap { try? $0.string("id") }?.utf8.elementsEqual(current.chatID.utf8) == true }) {
+            var boundary = SharedWebProjection()
+            let config = try chat["config"] ?? ChatDefaults.webInitial().config
+            var input = try SharedGenerationContext.fields(source:current.baseSource,chat:chat,config:config,path:current.path,boundary:&boundary)
+            input.append(.init(key:"completionParts",value:current.output.parts))
+            let overlay = try SharedWebOperations.call("generationLiveUsage",.object(input))
+            fields.append(.init(key:"liveTokenUsed",value:overlay))
+        }
+        return try SharedWebOperations.call("usageCost",.object(fields))
+    }
+
     private func invalidateGeneration() {
         pendingTitleContext = nil
         generationTask?.cancel()
@@ -872,7 +897,7 @@ final class ChatState: ObservableObject {
         try applyLibrary(ChatFolders.apply(in: source, operation: operation), selectedID: exchange == nil ? "" : selectedID, preserveGeneration: true, now: now)
     }
 
-    private func applyLibrary(_ source: OrderedJSON, selectedID: String, resetViewFor: String? = nil, resetViewsFor: [String] = [], preserveGeneration: Bool = false, tokenUsage: OrderedJSON? = nil, navigation: BranchNavigation.HistoryResult? = nil, editing: MessageEditing.HistoryState? = nil, clipboard: OrderedJSON? = nil, now: Double = Date().timeIntervalSince1970 * 1000) throws {
+    private func applyLibrary(_ source: OrderedJSON, selectedID: String, resetViewFor: String? = nil, resetViewsFor: [String] = [], preserveGeneration: Bool = false, tokenUsage: OrderedJSON? = nil, usageEnabled: Bool? = nil, navigation: BranchNavigation.HistoryResult? = nil, editing: MessageEditing.HistoryState? = nil, clipboard: OrderedJSON? = nil, now: Double = Date().timeIntervalSince1970 * 1000) throws {
         guard !initialLoadFailed else { throw ExchangeError.invalid("保存ファイルを読めなかったため更新できません。明示的な置換が必要です") }
         let base = try document ?? SyncDocument(v3: exchange?.source ?? ChatLibrary.emptySource)
         let before = try exchange?.source ?? base.uiProjection()
@@ -882,6 +907,7 @@ final class ChatState: ObservableObject {
                 .init(key:"state",value:.object([.init(key:"branchClipboard",value:clipboard)]))]))
         }
         if let tokenUsage { candidate = try candidate.mergingSnapshot(candidate.snapshot.replacing("state",with:candidate.snapshot.required("state").replacing("totalTokenUsed",with:tokenUsage))) }
+        if let usageEnabled { candidate = try candidate.mergingSnapshot(candidate.snapshot.replacing("state",with:candidate.snapshot.required("state").replacing("countTotalTokens",with:.bool(usageEnabled)))) }
         let changed = try WebExchange(source: candidate.uiProjection())
         let candidates = try BranchNavigation.candidates(in: changed.source)
         var views = changed.conversations

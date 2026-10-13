@@ -496,4 +496,16 @@ nativeは検証済み要求originを共有処理へ渡し、OpenRouterの対象o
 
 成功範囲：workerのWeb関連39件と型検査を再利用し、複数生成の影響4件を限定再確認した（1件追加で共有側40件）。親はremoteOutput4+title3の7件、Web型検査、bundle鮮度が成功。Web合計47件の成功範囲であり、単一runではない。Catalyst初回31件中30件成功。新通信失敗fixtureがデータと切断を同時に送っていたため、実byte消費前に切断し観測assertが1件失敗した。データ受信後に切断するfixtureへ修正し、期待値を維持した。監査修正後はタイトル6+利用量関連4の10件を限定確認し成功。現在Remote22+Local4+Title6の32件の成功範囲で、最終ソース全32件の単一runではない。監査修正後の最初のbuildはthrowing条件式のtry不足で実行前に失敗した。Web追加header testは実parserが使用するX-OpenRouter-Cache-Statusへfixtureを訂正して成功した。
 
-ログ：`/private/tmp/weavelet-usage-{web-final,types-final,freshness-final,catalyst,catalyst-limited,catalyst-fix}.log`。変更のない保存/暗号化同期全往復、全依存監査、全Web/native suiteを反復しない。新規UI/SDKは追加していない。利用量設定/費用UI、正確なtoken数、OpenRouter事後照合、実APIと実クラウド相互運用は未完了であり、全体目標は継続する。
+ログ：`/private/tmp/weavelet-usage-{web-final,types-final,freshness-final,catalyst,catalyst-limited,catalyst-fix}.log`。変更のない保存/暗号化同期全往復、全依存監査、全Web/native suiteを反復しない。この段階で新規UI/SDKは追加していない。利用量設定/費用UI、正確なtoken数、OpenRouter事後照合、実APIと実クラウド相互運用を残件とし、全体目標を継続する。
+
+## 利用量設定・費用表示・live推定（2026-10-13）
+
+WebのgetModelCost/isKnownModel/calculateUsageCost、費用表/sidebarの合計判定を純粋な共有元へ分離し、実Web callerとnative bridgeを接続した。custom/favorite/cacheの優先順、モデル未登録と料金情報欠落の区別、無料とゼロの違い、toPrecision(3)を維持する。全体の設計を作り直さず、UI・保存・workerだけ各環境の境界へ残す。
+
+iOS設定へ累計ON/OFF、モデル別費用と合計、確認付きリセットを追加。ON/OFFはcountTotalTokensだけ、リセットはtotalTokenUsedだけ変更し、他のroot・未知属性・会話・進行中生成を維持する。live表示は共有送信文脈と文字数fallbackのoverlayを費用計算へ渡し、元memory/diskへ保存しない。実Webのcompletion先頭typeによるlive計数条件も共有関数へ接続した。価格・live値は推定表示であり、実請求額とは区別する。
+
+成功結果：workerの共有費用関連17件とWeb/shared型検査、合計共通化後の影響9件を再利用。親のlive共有5件、Web型検査、bundle鮮度も成功。Catalyst Remote22+Title6+新設定3、計31件の成功範囲を確認。最初の2 buildはthrowing nil-coalescingのtry漏れと、テストがprivate generation setterへ代入したため実行前に失敗。テストはsetterを公開せず実mock URLSessionからstreamを開始する経路へ変更した。実行後は31件中30件成功、live fixtureのproviders root未指定が1件失敗した。実nativeと同じ既存defaultsを参照するfixtureへ修正し、その1件のみ成功。合計共有元変更後も価格接続2件だけ再確認して成功した。全31件の最終ソース単一runとは扱わない。
+
+新設定3件はtoggle/reset後の再起動・他項目保持、保存失敗時memory/disk保持、実mock stream中のlive report非保存と設定/reset後の生成保持を確認する。独立Astraの機能群監査と合計共有化の限定確認は新規なし。ログは `/private/tmp/weavelet-cost-{web-live,types,freshness-final,catalyst,catalyst-retry,catalyst-final,catalyst-live,catalyst-summary}.log`。最新mainはfetchし、origin/main 7a0a383aが既に統合branchの祖先であることを確認した。
+
+変更のない暗号化同期全往復、全依存監査、全suiteを反復しない。実UIの手動操作、正確なtokenizer、OpenRouter事後照合、実APIと実クラウド相互運用は未確認。既存同期/I/Oの全体完成条件は維持する。

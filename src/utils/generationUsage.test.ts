@@ -1,3 +1,4 @@
+import { generationLiveUsage } from '../../shared/google-sync/usage';
 import { describe, expect, it } from 'vitest';
 import { _defaultChatConfig } from '@constants/chatDefaults';
 import type { ChatInterface, MessageInterface } from '@type/chat';
@@ -74,5 +75,12 @@ describe('generation usage shared with Web', () => {
       observation: { promptTokens: 0, unknown: 'new' } })));
     expect(result.changes).toContainEqual({ op: 'set', path: ['branchTree', 'nodes', 'd', 'openRouterObservation', 'promptTokens'], value: 0 });
     expect(result.changes.some((change: { path: string[] }) => change.path.includes('cost') || change.path.includes('title'))).toBe(false);
+  });
+  it('adds live display counts through shared context without counting reasoning-first output', () => {
+    const config = { model: 'fake', providerId: 'openai' };
+    const input = { config, messages: [{ role: 'user', content: [{ type: 'text', text: 'Hello' }] }],
+      completionParts: [{ type: 'text', text: 'Live' }] };
+    expect(JSON.parse(generationLiveUsage(JSON.stringify(input)))).toEqual({ 'fake:::openai': { promptTokens: 7, completionTokens: 9, imageTokens: 0 } });
+    expect(JSON.parse(generationLiveUsage(JSON.stringify({ ...input, completionParts: [{ type: 'reasoning', text: 'Reason' }, ...input.completionParts] })))['fake:::openai'].completionTokens).toBe(0);
   });
 });

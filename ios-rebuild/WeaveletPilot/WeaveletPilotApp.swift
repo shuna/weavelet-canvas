@@ -342,6 +342,7 @@ struct ChatView: View {
                             do { defaultConfigDraft = try state.defaultChatConfigDraft() }
                             catch { state.generationError = error.localizedDescription }
                         }.disabled(state.generation != nil)
+                        NavigationLink("利用量と費用") { UsageCostSettingsView(state:state) }
                         Button("remote生成設定") { showsRemoteSettings = true }
                             .disabled(state.generation != nil)
                     }

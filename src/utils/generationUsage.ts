@@ -49,3 +49,6 @@ export function withOpenRouterObservation(chat: ChatInterface, nodeId: string,
     ...node, openRouterObservation: { ...node.openRouterObservation, ...patch },
   } } } };
 }
+
+export const liveCompletionForCounting = (message: MessageInterface | undefined): MessageInterface | undefined =>
+  message?.content[0]?.type === 'text' ? message : undefined;

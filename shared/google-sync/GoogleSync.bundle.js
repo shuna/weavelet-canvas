@@ -7482,6 +7482,7 @@ var WeaveletGoogleSync = (() => {
     fileImport: () => fileImport,
     folderOperation: () => folderOperation,
     folderRows: () => folderRows,
+    generationLiveUsage: () => generationLiveUsage,
     generationObservation: () => generationObservation,
     generationPlan: () => generationPlan,
     generationRequest: () => generationRequest,
@@ -7503,7 +7504,8 @@ var WeaveletGoogleSync = (() => {
     settle: () => settle,
     start: () => start,
     titleOperation: () => titleOperation,
-    treeEdit: () => treeEdit
+    treeEdit: () => treeEdit,
+    usageCost: () => usageCost
   });
 
   // src/utils/api.ts
@@ -19600,6 +19602,57 @@ ${messageContent}---
   var import_lz_string3 = __toESM(require_lz_string(), 1);
   var CLOUD_SYNC_IDLE_MS = 5e3;
 
+  // src/utils/costCore.ts
+  var parseTokenKey = (key) => {
+    const sep = key.indexOf(":::");
+    return sep >= 0 ? { modelId: key.slice(0, sep), providerId: key.slice(sep + 3) } : { modelId: key };
+  };
+  var buildTokenUsageKey = (modelId, providerId) => providerId ? `${modelId}:::${providerId}` : modelId;
+  var mergeTotalTokenUsed = (base, increment) => {
+    const merged = { ...base };
+    Object.entries(increment).forEach(([key, usage]) => {
+      if (!usage)
+        return;
+      const existing = merged[key] ?? { promptTokens: 0, completionTokens: 0, imageTokens: 0 };
+      merged[key] = {
+        promptTokens: existing.promptTokens + usage.promptTokens,
+        completionTokens: existing.completionTokens + usage.completionTokens,
+        imageTokens: existing.imageTokens + usage.imageTokens
+      };
+    });
+    return merged;
+  };
+  var resolveUnitCost = (priceEntry, usage) => {
+    if (!priceEntry)
+      return usage === 0 ? 0 : null;
+    if (priceEntry.price == null)
+      return usage === 0 ? 0 : null;
+    return priceEntry.price / priceEntry.unit * usage;
+  };
+  var calculateUsageCostCore = (usage, costEntry, knownModel) => {
+    if (!usage)
+      return { kind: "known", cost: 0, isFree: true };
+    if (!costEntry)
+      return { kind: "unknown", reason: knownModel ? "no-pricing-data" : "model-not-registered" };
+    const promptCost = resolveUnitCost(costEntry.prompt, usage.promptTokens);
+    const completionCost = resolveUnitCost(costEntry.completion, usage.completionTokens);
+    const imageCost = resolveUnitCost(costEntry.image, usage.imageTokens);
+    if (promptCost == null || completionCost == null || imageCost == null)
+      return { kind: "unknown", reason: "no-pricing-data" };
+    return {
+      kind: "known",
+      cost: promptCost + completionCost + imageCost,
+      isFree: (costEntry.prompt.price ?? 0) === 0 && (costEntry.completion.price ?? 0) === 0 && (costEntry.image?.price ?? 0) === 0
+    };
+  };
+  var summarizeUsageCosts = (rows) => {
+    if (rows.some((row) => row.kind === "unknown"))
+      return { kind: "unknown" };
+    const cost = rows.reduce((sum, row) => sum + (row.kind === "known" ? row.cost : 0), 0);
+    const isFree = rows.length > 0 && rows.every((row) => row.kind === "known" && row.isFree);
+    return { kind: "known", cost, isFree, ...isFree ? {} : { display: cost.toPrecision(3) } };
+  };
+
   // src/utils/generationUsage.ts
   function prepareSubmitUsage(chat, targetNodeId, generatingNodeIds = [targetNodeId]) {
     const index = chat.branchTree?.activePath.indexOf(targetNodeId) ?? -1;
@@ -19668,6 +19721,7 @@ ${messageContent}---
       openRouterObservation: { ...node.openRouterObservation, ...patch }
     } } } };
   }
+  var liveCompletionForCounting = (message) => message?.content[0]?.type === "text" ? message : void 0;
 
   // shared/google-sync/usage.ts
   function generationUsage(json) {
@@ -19692,6 +19746,73 @@ ${messageContent}---
     const input = JSON.parse(json);
     const updated = withOpenRouterObservation(input.chat, input.targetNodeId, input.observation);
     return JSON.stringify({ changes: updated ? diffJSONChanges(input.chat, updated) : [] });
+  }
+  function generationLiveUsage(json) {
+    const input = JSON.parse(json);
+    const prompt = getGenerationMessages(input);
+    const completionMessage = { role: "assistant", content: input.completionParts };
+    const countableCompletion = liveCompletionForCounting(completionMessage);
+    const completionTokens = countableCompletion ? estimateTokensByChars([countableCompletion]) : 0;
+    return JSON.stringify({ [buildTokenUsageKey(input.config.model, input.config.providerId)]: {
+      promptTokens: estimateTokensByChars(prompt),
+      completionTokens,
+      imageTokens: countImageInputs(prompt)
+    } });
+  }
+
+  // src/utils/modelCostCore.ts
+  function getModelCostCore(state, modelId, providerId, modelSource) {
+    if (modelSource === "local")
+      return void 0;
+    const custom = findProviderCustomModel(state.providerCustomModels, modelId, providerId);
+    if (custom)
+      return {
+        prompt: { price: custom.promptPrice ?? null, unit: 1e6 },
+        completion: { price: custom.completionPrice ?? null, unit: 1e6 },
+        image: { price: custom.imagePrice ?? null, unit: 1 }
+      };
+    const favorite = findFavorite(state.favoriteModels ?? [], modelId, providerId);
+    if (favorite)
+      return {
+        prompt: { price: favorite.promptPrice ?? null, unit: 1e6 },
+        completion: { price: favorite.completionPrice ?? null, unit: 1e6 },
+        image: { price: favorite.imagePrice ?? null, unit: 1 }
+      };
+    const cached = findCachedModel(state.providerModelCache ?? {}, modelId, providerId);
+    if (cached)
+      return {
+        prompt: { price: cached.promptPrice ?? null, unit: 1e6 },
+        completion: { price: cached.completionPrice ?? null, unit: 1e6 }
+      };
+  }
+  function isKnownModelCore(state, modelId) {
+    if (Object.values(state.providerCustomModels ?? {}).some((models) => models?.some((model) => model.modelId === modelId)))
+      return true;
+    if (state.favoriteModels?.some((model) => model.modelId === modelId))
+      return true;
+    return Object.values(state.providerModelCache ?? {}).some((models) => models?.some((model) => model.id === modelId));
+  }
+
+  // shared/google-sync/usageCost.ts
+  function usageCost(json) {
+    const input = JSON.parse(json);
+    const totals = input.liveTokenUsed ? mergeTotalTokenUsed(input.totalTokenUsed ?? {}, input.liveTokenUsed) : input.totalTokenUsed ?? {};
+    const rows = Object.entries(totals).map(([key, usage]) => {
+      const { modelId, providerId } = parseTokenKey(key);
+      const costEntry = getModelCostCore(input.state ?? {}, modelId, providerId);
+      const result3 = calculateUsageCostCore(
+        usage,
+        costEntry,
+        costEntry ? true : isKnownModelCore(input.state ?? {}, modelId)
+      );
+      return {
+        key,
+        label: key.replace(":::", " / "),
+        ...result3,
+        ...result3.kind === "known" && !result3.isFree ? { display: result3.cost.toPrecision(3) } : {}
+      };
+    });
+    return JSON.stringify({ rows, total: summarizeUsageCosts(rows) });
   }
 
   // shared/google-sync/entry.ts
