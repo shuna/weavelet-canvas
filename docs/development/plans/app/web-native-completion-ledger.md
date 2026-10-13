@@ -680,3 +680,14 @@ fc195ef1/f045577aで独自の二次元LCS tableを既存diff-match-patch1.0.5へ
 93ab2f28/23e83c97ではWebのsystem library挿入とCommandPrompt適用をpure promptApplicationへ接続した。実useEditViewLogicは元partsをそのまま編集用にcloneするため、従来の先頭part再構築は画像消失/reasoning変換/未知属性欠落を起こす。先頭textは属性を保持して追記し、非textは新しいtextを前置して元の全partsを順序・参照ごと保持する限定修正を行った。systemの二重改行規則は不変更。型検査/関連18件成功、同じprompt一式の独立監査で追加P2以上なし。ログ /tmp/weavelet-shared-prompt-preservation-{tsc,tests,diff-check}.log。期待値変更はこの実呼出経路のデータ欠落修正に基づき、比較方法を緩めていない。
 
 今回のnativeライブラリ実表示/大CSV応答性/実機導入は未確認。composer・本文編集・system設定へのnative適用は次の接続範囲であり、ライブラリ管理だけで全prompt機能完成とはしない。CSVには意図的に分類label/任意metadataを含めず、全データJSONの往復保全とは別のWeb互換出力として扱う。
+### プロンプトの入力・編集・system設定へのnative適用
+
+a90b5b8c/86fef754で入力欄と既存本文編集へslash pickerを配置し、実Web CommandPromptの名前検索と適用を固定共有bridgeへ接続した。JSC contextはactor内で再利用し、UI外で検索/適用、取消・検索語・会話・元snapshot・最新入力を照合する。選択はdraftだけを更新する。共有結果の全partsを既存保存/置換整理/undoへ渡すため、MessageDraftへ適用済みpartsを保持する接続だけを追加した。既定systemMessageと通常非auxiliaryのconfig.systemPromptは別保存先のまま、同じ共有二重改行挿入を使う。
+
+担当Web関連19件・native関連6件（実JSC名前/アクセント/同名、raw属性、古い入力、composer未保存、保存/prune/undo、通常/既定system分離とmodel切替）・型検査・bundle鮮度・Catalyst build成功を再利用。ログ /tmp/weavelet-native-prompt-usage-{catalyst-build,catalyst-tests,web-tests,tsc,freshness,diff-check}.log。parentでは並行CSV修正との結合build成功（/private/tmp/weavelet-prompt-union-build.log）、生成hash/差分確認成功。
+
+独立AstraのP2「queryをSwift Stringの同値性でtask識別し、分解形e+combining accentから合成形éへ変えた時に再検索しない」はbb18b7f3でtask IDをUTF8 bytesへ修正。実match-sorter/JSCではcaféに対する両queryの結果が異なるため、同じ表示文字でも変更を見逃さない。該当検索testだけ追補・再実行成功（/private/tmp/weavelet-prompt-query-identity-test.log）、final appの再compileを含む。限定再監査は前回P2解消・新規P2以上なし。未変更領域のテスト/監査は反復していない。
+
+match-sorter/remove-accentsのMIT本文と固定入力hashを配布bundleへ同梱した。license出力だけCRLFを正規化し入力hashは元bytesを保持、最終bundle増分22,935 byte（アプリ全体/圧縮配布/速度ではない）。native adapterは未知partも読取り保持するが、既存保存境界の未対応type拒否を緩めていない。対応typeの未知属性/精密値の保存を確認した結果を、全未知typeの編集対応へ拡張しない。
+
+実画面/IME/VoiceOver・Airへの今回版導入は未確認。Air lockStateは改めてpasscodeRequired=trueを確認し実機処理を再開していない。built-in systemプリセットと残るGeneral操作は後続範囲。origin/mainをfetchし7a0a383aが統合branchの祖先で追加差分0件と確認した。
