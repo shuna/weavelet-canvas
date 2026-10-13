@@ -157,11 +157,14 @@ final class ConversationTitleTests: XCTestCase {
         XCTAssertThrowsError(try app.applyGeneratedTitle("Generated",prepared:prepared,language:"English",fallbackEndpoint:legacy.settings.endpoint))
         XCTAssertEqual(try app.publicationSnapshot(),snapshot); XCTAssertEqual(try Data(contentsOf:store.fileURL),disk)
         fault.reject = false
+        let withProvider = try app.publicationSnapshot()
+        try app.applySnapshot(withProvider.replacing("state",with:withProvider.required("state").replacing("titleProviderId",with:.string("openai"))))
         let draft = try app.titleSettingsDraft()
         try app.saveTitleSettings(draft,value:.object([.init(key:"autoTitle",value:.bool(false)),.init(key:"titleModel",value:.string("changed-model"))]))
         XCTAssertEqual(try app.publicationSnapshot()["state"]?["xTitleRoot"],.number("9007199254740993"))
         XCTAssertEqual(try app.publicationSnapshot()["state"]?["chats"],snapshot["state"]?["chats"])
         XCTAssertEqual(try app.publicationSnapshot()["state"]?["titleModel"],.string("changed-model"))
+        XCTAssertNil(try app.publicationSnapshot()["state"]?["titleProviderId"])
     }
 
 }

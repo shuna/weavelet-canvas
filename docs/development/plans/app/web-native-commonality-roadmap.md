@@ -290,3 +290,10 @@ iOSの設定へ利用量の累計、モデル別推定費用・合計、累計�
 ## 2026-10-13：実機導入の基盤修正
 
 監査済みcheckpointをiPhone Airへ署名・インストール・起動した。Automatic signingのチームとCloudKitコンテナー権限を明示し、iOS署名に支障があったMarkdown同梱フォルダ名をMarkdownResourcesへ変更した。共有処理と既存アセットを維持し、同じ変更はCatalystの既存表示接続テストで確認した。実機導入とクラウドの実接続確認は別の証拠として扱い、Debug DevelopmentとWeb Productionの相互運用は未確認。詳細は[検証台帳](web-native-completion-ledger.md)に記録する。
+
+
+## 2026-10-13：バブル要約・圧縮
+
+既存Webの対象選択、原文snapshot、要求構築、応答評価、要約CRUD、表示判定を純粋な共有元へ分離し、実Web callerとnative JSC接続で使用する。SwiftにはID/未知値の変換、URLSession、原子的保存、SwiftUIだけを残した。単一・ここまで・選択範囲、読みやすい要約・圧縮、生成/停止、生成設定、候補の表示/送信採用と削除を接続した。削減成功時の自動採用、削減しない場合の原文継続、送信除外nodeを含む範囲の原文復帰も共通規則へ従う。
+
+実Webは非空の要約応答について累計ON/OFFとは独立に利用量を累算するため、その挙動を維持する。主生成やタイトルと同じ条件へ勝手に統一しない。nativeは共有文字数fallbackを使い、Web workerの正確なtoken数との同等性は未確認。Catalyst機能群確認と独立Astra監査後の限定再監査を完了。詳細は[検証台帳](web-native-completion-ledger.md)。要約追加のiPhone Air再インストール、実API、実クラウド同期はこの段階で行っていない。

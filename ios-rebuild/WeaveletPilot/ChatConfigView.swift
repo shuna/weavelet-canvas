@@ -3,6 +3,8 @@ import UniformTypeIdentifiers
 
 struct ChatConfigView: View {
     @ObservedObject var state: ChatState
+    let auxiliary: Bool
+    let saveAction: ((ChatConfigDraft) throws -> Void)?
     @Environment(\.dismiss) private var dismiss
     @State private var draft: ChatConfigDraft
     @State private var values: [String:String]
@@ -20,7 +22,8 @@ struct ChatConfigView: View {
     @State private var copyingModel = false
     @State private var fileStatus: String?
     private static let fields = ["model", "providerId", "max_tokens", "temperature", "reasoning_effort", "reasoning_budget_tokens", "verbosity"]
-    init(state: ChatState, draft: ChatConfigDraft) {
+    init(state: ChatState, draft: ChatConfigDraft, auxiliary: Bool = false, saveAction: ((ChatConfigDraft) throws -> Void)? = nil) {
+        self.auxiliary = auxiliary; self.saveAction = saveAction
         self.state = state; _draft = State(initialValue:draft)
         let source = draft.config["modelSource"] == .string("local") ? "local" : "remote"
         _modelSource = State(initialValue:source); _originalSource = State(initialValue:source)
@@ -52,7 +55,7 @@ struct ChatConfigView: View {
                 }
                 Picker("実行場所",selection:$modelSource) {
                     Text("オンライン").tag("remote")
-                    Text("この端末（GGUF）").tag("local")
+                    if !auxiliary { Text("この端末（GGUF）").tag("local") }
                 }
                 if modelSource == "remote" { Button("保存済みモデル一覧から選択") {
                     do { draft = try editedDraft(); syncFields(); showsModels = true }
@@ -77,7 +80,7 @@ struct ChatConfigView: View {
                 }
                 Text("モデル切替時は保存済み設定を復元します。モデルに応じて出力上限を調整し、非対応モデルではストリーミングを使いません。ローカル実行は端末内のモデルファイルを使用します。")
                     .font(.footnote).foregroundStyle(.secondary)
-                Toggle("streaming",isOn:$stream)
+                if !auxiliary { Toggle("streaming",isOn:$stream) }
                 TextField("最大出力token（空欄で解除）",text:binding("max_tokens"))
                 TextField("temperature（空欄で解除）",text:binding("temperature"))
                 TextField("reasoning effort（任意）",text:binding("reasoning_effort")).textInputAutocapitalization(.never)
@@ -87,7 +90,7 @@ struct ChatConfigView: View {
                 if let errorMessage { Text(errorMessage).foregroundStyle(.red) }
             }
             .disabled(copyingModel)
-            .navigationTitle(draft.defaultSettings == nil ? "会話の生成設定" : "新規会話の既定設定")
+            .navigationTitle(auxiliary ? "要約の生成設定" : draft.defaultSettings == nil ? "会話の生成設定" : "新規会話の既定設定")
             .fileImporter(isPresented:$showsModelImporter,allowedContentTypes:[UTType(filenameExtension:"gguf") ?? .data]) { result in
                 do {
                     let source = try result.get(), modelID = importingModelID, files = state.localModelFiles
@@ -147,7 +150,8 @@ struct ChatConfigView: View {
     private func save() {
         do {
             let edited = try editedDraft()
-            if edited.defaultSettings != nil { try state.saveDefaultChatConfig(edited) }
+            if let saveAction { try saveAction(edited) }
+            else if edited.defaultSettings != nil { try state.saveDefaultChatConfig(edited) }
             else { try state.saveChatConfig(edited) }
             dismiss()
         }

@@ -51,6 +51,7 @@ struct ChatView: View {
     @State private var branchDeletion: NodeTransformDraft?
     @State private var showsBranchDeletion = false
     @State private var clipboardDraft: BranchClipboardDraft?
+    @State private var summaryDraft: ConversationSummaryDraft?
 
     var body: some View {
         NavigationStack {
@@ -59,6 +60,8 @@ struct ChatView: View {
                 LazyVStack(alignment: .leading, spacing: 20) {
                     if let conversation = state.conversation {
                         ForEach(conversation.visibleMessages, id: \.identity) { node in
+                            let summaryInfo = try? state.summaryInfo(chatID:conversation.id,nodeID:node.id)
+                            if summaryInfo?["hidden"] != .bool(true) {
                             MessageView(node: node, siblings: state.siblings(for: node.id), style: state.style, edit: state.exchange == nil || state.generation != nil ? nil : {
                                 do { draft = try state.messageDraft(nodeID: node.id) }
                                 catch { errorMessage = error.localizedDescription }
@@ -97,6 +100,9 @@ struct ChatView: View {
                                     changed.value.collapsed.toggle()
                                     try state.saveNodeOptions(changed)
                                 } catch { errorMessage = error.localizedDescription }
+                            }, summaryInfo: summaryInfo, openSummary: state.exchange == nil ? nil : {
+                                do { summaryDraft = try state.summaryDraft(nodeID:node.id) }
+                                catch { errorMessage = error.localizedDescription }
                             }) { siblingID in
                                 state.selectSibling(siblingID, of: node.id)
                             }
@@ -104,6 +110,7 @@ struct ChatView: View {
                             .disabled(state.generation != nil)
                             if state.isLocalConversation && node.role == "user" && !node.options.collapsed {
                                 prefillInput(key:state.assistantPrefillKey(nodeID:node.id))
+                            }
                             }
                         }
                         if state.exchange != nil {
@@ -309,6 +316,7 @@ struct ChatView: View {
             .sheet(item: $draft) { draft in MessageEditorView(state: state, draft: draft) }
             .sheet(item: $clipboardDraft) { draft in BranchClipboardView(state: state, draft: draft) }
             .sheet(item: $configDraft) { draft in ChatConfigView(state:state,draft:draft) }
+            .sheet(item: $summaryDraft) { draft in ConversationSummaryView(state:state,draft:draft) }
             .sheet(item: $optionsDraft) { draft in NodeOptionsView(state: state, draft: draft) }
             .sheet(isPresented: $showsSearch) {
                 ChatSearchView(state: state) { result, mode in
@@ -419,6 +427,8 @@ struct MessageView: View {
     var pasteRange: (() -> Void)? = nil
     var configure: (() -> Void)? = nil
     var toggleCollapse: (() -> Void)? = nil
+    var summaryInfo: OrderedJSON? = nil
+    var openSummary: (() -> Void)? = nil
     let select: (String) -> Void
 
     private var roleName: String {
@@ -439,6 +449,9 @@ struct MessageView: View {
 
     var body: some View {
         let isBubble = style == .bubbles
+        let summary = summaryInfo?["summary"]
+        let tab = (try? summaryInfo?["tab"]?.string("tab")) ?? "original"
+        let showsSummary = tab != "original" && summaryInfo?["valid"] == .bool(true)
         HStack(spacing: 0) {
             if isBubble && node.role == "user" { Spacer(minLength: 24) }
             VStack(alignment: .leading, spacing: 12) {
@@ -454,7 +467,10 @@ struct MessageView: View {
                         if node.options.protected { Image(systemName: "lock.fill").accessibilityLabel("上書き・削除から保護") }
                     }.foregroundStyle(.secondary)
                 }
-                if node.options.collapsed {
+                if showsSummary, let text = try? summary?["text"]?.string("summary text") {
+                    Text(tab == "compact" ? "圧縮" : "要約").font(.caption).foregroundStyle(.secondary)
+                    MarkdownTextView(text:text)
+                } else if node.options.collapsed {
                     Text("本文を折りたたみ中").foregroundStyle(.secondary)
                 } else if node.parts.isEmpty {
                     MarkdownTextView(text: node.content)
@@ -462,6 +478,10 @@ struct MessageView: View {
                     ForEach(Array(node.parts.enumerated()), id: \.offset) { _, part in
                         MessagePartView(part: part)
                     }
+                }
+                if let openSummary {
+                    Button("要約・圧縮",systemImage:"text.alignleft",action:openSummary)
+                        .frame(minHeight:44)
                 }
                 if edit != nil || insertBefore != nil || regenerate != nil || generateFromHere != nil || remove != nil || configure != nil || toggleCollapse != nil || moveUp != nil || moveDown != nil || replaceAndPrune != nil || deleteBranch != nil || copyRange != nil || pasteRange != nil {
                     Menu("メッセージ操作", systemImage: "ellipsis") {

@@ -1,4 +1,5 @@
 import XCTest
+import Combine
 @testable import WeaveletPilot
 
 private final class SummaryResponseProtocol: URLProtocol {
@@ -56,4 +57,68 @@ final class ConversationSummaryTests: XCTestCase {
         let prepared = try XCTUnwrap(ConversationSummary.prepare(source:flat,state:state,chatID:"chat",sourceNodeIDs:["message-0"],mode:"single",originNodeID:"message-0",summaryID:"summary",now:1000,legacy:legacy))
         XCTAssertEqual(try prepared.summary.required("sources").array("sources")[0]["nodeId"],.string("0"))
     }
+    func testUsageAndOpaqueAttributesSurviveFlatApplyAndCounterOverflowIsRejected() throws {
+        let raw = try source.required("chats").array("chats")[0]
+        let opaque = OrderedJSON.number("9007199254740993")
+        let flat = source.replacing("chats",with:.array([.object(try raw.object("chat").filter { $0.key != "branchTree" }).replacing("future",with:opaque)]))
+        let prepared = try XCTUnwrap(ConversationSummary.prepare(source:flat,state:state,chatID:"chat",sourceNodeIDs:["message-0"],mode:"single",originNodeID:"message-0",summaryID:"summary",now:1000,legacy:legacy))
+        let result = try XCTUnwrap(ConversationSummary.apply(("Short",nil),prepared:prepared,source:flat,state:state))
+        XCTAssertNotNil(result.tokenUsage)
+        XCTAssertEqual(try result.source.required("chats").array("chats")[0]["future"],opaque)
+        XCTAssertEqual(try ConversationSummary.sourceDisplayIDs(XCTUnwrap(result.summary),source:result.source,chatID:"chat"),["message-0"])
+        let unsafe = state.replacing("totalTokenUsed",with:.object([.init(key:"fake-model",value:.object([.init(key:"promptTokens",value:opaque),.init(key:"completionTokens",value:.number("0")),.init(key:"imageTokens",value:.number("0"))]))]))
+        XCTAssertThrowsError(try ConversationSummary.apply(("Short",nil),prepared:prepared,source:flat,state:unsafe))
+    }
+
+    func testSettingsRootRemovalAndFailedMutationKeepPersistedData() throws {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent("native-summary-\(UUID().uuidString)")
+        var reject = false
+        let store = LocalStateStore(fileURL:directory.appendingPathComponent("state.json")) { bytes,url in
+            if reject { throw CocoaError(.fileWriteNoPermission) }
+            try bytes.write(to:url,options:.atomic)
+        }
+        let app = ChatState(store:store)
+        let chat = try source.required("chats").array("chats")[0]
+        let flat = source.replacing("chats",with:.array([.object(try chat.object("chat").filter { $0.key != "branchTree" })]))
+        try app.importWebData(flat.replacing("version",with:.number("3")).encoded())
+        let snapshot = try app.publicationSnapshot(), roots = try snapshot.required("state")
+        try app.applySnapshot(snapshot.replacing("state",with:roots.replacing("xSummary",with:.number("9007199254740993")).replacing("bubbleSummaryConfig",with:try source.required("chats").array("chats")[0].required("config"))))
+        let config = try app.publicationSnapshot().required("state")["bubbleSummaryConfig"]
+        try app.saveSummaryConfig(nil,expected:config)
+        XCTAssertNil(try app.publicationSnapshot().required("state")["bubbleSummaryConfig"])
+        XCTAssertEqual(try ChatState(store:store).publicationSnapshot(),try app.publicationSnapshot())
+        let before = try app.publicationSnapshot(), disk = try Data(contentsOf:store.fileURL)
+        reject = true
+        XCTAssertThrowsError(try app.mutateSummary(chatID:"chat",action:"target",nodeID:try XCTUnwrap(app.conversation?.visibleMessages.first?.id)))
+        XCTAssertEqual(try app.publicationSnapshot(),before)
+        XCTAssertEqual(try Data(contentsOf:store.fileURL),disk)
+        XCTAssertEqual(try before.required("state")["xSummary"],.number("9007199254740993"))
+    }
+
+    func testGeneratedSummaryAppliesAndRestartsThroughTheNativeStore() async throws {
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent("native-summary-job-\(UUID().uuidString)")
+        let store = LocalStateStore(fileURL:dir.appendingPathComponent("state.json"))
+        let app = ChatState(store:store)
+        let raw = try source.required("chats").array("chats")[0]
+        var messages = try raw.required("messages").array("messages")
+        messages[0] = messages[0].replacing("content",with:.array([.object([.init(key:"type",value:.string("text")),.init(key:"text",value:.string(String(repeating:"Long original source. ",count:80)))])]))
+        let flat = source.replacing("chats",with:.array([.object(try raw.object("chat").filter { $0.key != "branchTree" }).replacing("messages",with:.array(messages))]))
+        try app.importWebData(flat.replacing("version",with:.number("3")).encoded())
+        let nodeID = try XCTUnwrap(app.conversation?.visibleMessages.first?.id)
+        let draft = try app.summaryDraft(nodeID:nodeID)
+        let completed = expectation(description:"summary stored")
+        let subscription = app.$summaryJobs.dropFirst().sink { jobs in
+            if let job = jobs.values.first, !job.busy { completed.fulfill() }
+        }
+        let config = URLSessionConfiguration.ephemeral; config.protocolClasses = [SummaryResponseProtocol.self]
+        try app.startSummary(draft,sourceNodeIDs:[nodeID],mode:"single",format:nil,record:legacy,client:RemoteClient(session:URLSession(configuration:config)))
+        await fulfillment(of:[completed],timeout:5)
+        withExtendedLifetime(subscription) {}
+        XCTAssertNil(app.summaryJob(chatID:"chat",nodeID:nodeID)?.error)
+        let info = try XCTUnwrap(app.summaryInfo(chatID:"chat",nodeID:nodeID))
+        XCTAssertEqual(info["tab"],.string("summary"))
+        XCTAssertEqual(info["summary"]?["useForSubmit"],.bool(true))
+        XCTAssertEqual(try ChatState(store:store).publicationSnapshot(),try app.publicationSnapshot())
+    }
+
 }

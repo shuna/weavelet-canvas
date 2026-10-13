@@ -520,3 +520,14 @@ iOS設定へ累計ON/OFF、モデル別費用と合計、確認付きリセッ�
 失敗は区別する。初回署名はアカウント/プロファイル不足、その後はコンテナー変数の解決とbundleフォルダ名で失敗。初回Catalyst確認は専用worktreeにnative library cacheがなく実行前に失敗し、既存cacheをコピーしてsource/input/artifactの既存ハッシュ検証を通した後に成功した。最終再インストール直後の起動は端末ロックで失敗したが、解除後の再起動とプロセス確認は成功。ログは/private/tmp/weavelet-air-{final-build,final-install,final-launch,final-processes,markdown-catalyst-final,native-cache}.log。
 
 既存の共有業務処理・同期テスト結果を再利用し、全suite/暗号化同期往復/依存監査を反復していない。実機の画面手動操作と実クラウド相互運用は未確認。Development権限での起動はWeb Production同期の成功証明にはならない。
+
+
+## バブル要約・圧縮（2026-10-13）
+
+Web実処理由来の選択・原文保持・生成要求・評価・CRUD・表示判定を共有し、nativeへ接続。UIは単一/ここまで/範囲target、要約/圧縮、停止、設定と保存候補を扱う。flat message-Nとwire NはbranchTreeがない場合だけ変換し、branch IDを再解釈しない。unknown値と巨大整数はopaque参照で保持、対象counterの安全範囲超過は保存を拒否する。応答が古い/出力上限到達でも実Web同様の利用量更新だけを反映し、無効な要約を書き込まない。設定rootの削除は完全なstate置換経路を使い、旧rootをmergeで復活させない。
+
+再利用した成功結果：共有workerの7ファイル53件と型検査。親統合後は変更に影響する共有操作・要約送信・submitHelpersの3ファイル26件、Web型検査、bundle鮮度を確認し成功。Catalyst初回は10件中title既存5件成功。要約prepareが共有planの返却にないstatusを要求して全要約がnilになる不具合を修正。新fixtureのcontentHash参照欠損と、未登録provider指定を実データ構造に合わせて修正した。root削除title1件とSummary4件の限定run成功、その後の監査修正と生成→自動採用→再起動接続test追加後はSummary5件成功。計11件の成功範囲であり、最終ソース全11件の単一runではない。保存失敗時memory/disk保持、設定root削除、unknown巨大整数、unsafe counter、stale原文、flat変換、実mock通信と生成後保存を含む。
+
+独立Astraはplan返却判定、重複終了jobによる生成中job隠蔽、削減成功の未採用、omit時の表示/送信不一致を指摘。plan必須request読取、busy優先＋重複終了job除去、共有use操作を利用量と同atomic保存へ接続、既存送信omit条件を共通関数へ分離して表示にも適用した。指摘範囲の再監査は新規なし。SummaryIdentityはUnicode正規化で別IDを混同しないようUTF8 bytesで比較/hash。古いtaskのdeferが新ticketを解除しない。ログは/private/tmp/weavelet-summary-{bundle-final,freshness-final,types-final,web-final,catalyst,catalyst-fixed,catalyst-final}.log。
+
+省略した重複確認：全保存/暗号化同期往復、全依存監査、変更のない全suite。追加SDKなし。画面手動操作、正確なtokenizer、実API/実クラウド同期、要約追加後の実機再インストールは未確認。Air上の導入済み版は前の監査済みcheckpointを維持する。全体目標の完了とは扱わない。

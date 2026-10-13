@@ -109,6 +109,9 @@ final class ChatState: ObservableObject {
     @Published private var composerDrafts: [Data:ComposerDraft] = [:]
     @Published private var assistantPrefills: [Data:String] = [:]
     private(set) var stickyPrefillKey = ""
+    @Published private(set) var summaryJobs: [SummaryIdentity: SummaryJob] = [:]
+    @Published private var summaryChosen: [SummaryIdentity:String] = [:]
+    private var summaryTasks: [SummaryIdentity:Task<Void,Never>] = [:]
     @Published var titleError: String?
     private var titleTasks: [Data:(id:UUID,task:Task<Void,Never>)] = [:]
     private var pendingTitleContext: (id:UUID,legacy:RemoteCredentialRecord,client:RemoteClient,read:ProviderModels.CredentialReader)?
@@ -167,7 +170,7 @@ final class ChatState: ObservableObject {
         let candidates = try BranchNavigation.candidates(in: imported.source)
         let nextEditing = try exchange.map { try MessageEditing.invalidatingHistory(editingHistory, before: $0.source, after: imported.source) } ?? nil
         try store?.save(SavedChatState(exchange: imported, document: candidate, conversations: imported.conversations, selectedConversationID: selected, style: displayStyle))
-        invalidateGeneration(); cancelTitles()
+        invalidateGeneration(); cancelTitles(); cancelSummaries()
         conversations = imported.conversations
         selectedID = selected
         exchange = imported
@@ -862,8 +865,92 @@ final class ChatState: ObservableObject {
         guard try titleSettingRoots(roots).encoded() == draft.original.encoded() else { throw ExchangeError.invalid("タイトル設定が変更されています。設定を開き直してください") }
         let result = try SharedWebOperations.call("titleOperation",.object([.init(key:"operation",value:.string("saveSettings")),.init(key:"state",value:titleSettingRoots(roots)),.init(key:"value",value:value)]))
         let updated = try OrderedJSONChanges.apply(result.required("changes"),to:roots)
-        try applySnapshot(snapshot.replacing("state",with:updated))
+        try applyGlobalState(updated)
     }
+    private func applyGlobalState(_ roots: OrderedJSON) throws {
+        let base = try document ?? SyncDocument(v3:exchange?.source ?? ChatLibrary.emptySource)
+        try applyDocument(SyncDocument(snapshot:base.snapshot.replacing("state",with:roots),v3Sidecar:base.v3Sidecar,v3RootOrder:base.v3RootOrder))
+    }
+    private var summaryGeneratingIDs: [String] {
+        guard let target = generation?.plan?["targetNodeId"], case .string(let id) = target else { return [] }
+        return [id]
+    }
+    func summaryInfo(chatID: String, nodeID: String, mode: String? = nil) throws -> OrderedJSON? {
+        guard let exchange else { return nil }
+        return try ConversationSummary.describe(source:exchange.source,chatID:chatID,nodeID:nodeID,mode:mode,originNodeID:nodeID,
+            chosenSummaryID:summaryChosen[.init(chatID:chatID,nodeID:nodeID)],generatingNodeIDs:summaryGeneratingIDs)
+    }
+    func summaryDraft(nodeID: String) throws -> ConversationSummaryDraft {
+        guard let conversation, let info = try summaryInfo(chatID:conversation.id,nodeID:nodeID) else { throw ExchangeError.invalid("要約する会話がありません") }
+        return .init(chatID:conversation.id,nodeID:nodeID,info:info)
+    }
+    func mutateSummary(chatID: String, action: String, summaryID: String? = nil, nodeID: String? = nil, use: Bool? = nil) throws {
+        guard let exchange else { throw ExchangeError.invalid("保存済み会話がありません") }
+        let source = try ConversationSummary.mutate(source:exchange.source,chatID:chatID,action:action,summaryID:summaryID,nodeID:nodeID,use:use)
+        try applyLibrary(source,selectedID:selectedID,preserveGeneration:true)
+        if action == "use", let summaryID, let chat = try source.required("chats").array("chats").first(where: { $0["id"].flatMap { try? $0.string("id") }?.utf8.elementsEqual(chatID.utf8) == true }),
+           let summary = try chat["summaries"]?.array("summaries").first(where: { $0["id"].flatMap { try? $0.string("id") }?.utf8.elementsEqual(summaryID.utf8) == true }) {
+            for nodeID in try ConversationSummary.sourceDisplayIDs(summary,source:source,chatID:chatID) { summaryChosen[.init(chatID:chatID,nodeID:nodeID)] = summaryID }
+        }
+    }
+    func summaryConfigDraft(chatID: String) throws -> ChatConfigDraft {
+        guard let exchange, let chat = try exchange.source.required("chats").array("chats").first(where: { $0["id"].flatMap { try? $0.string("id") }?.utf8.elementsEqual(chatID.utf8) == true }) else { throw ExchangeError.invalid("会話がありません") }
+        let snapshot = try publicationSnapshot(), roots = try snapshot.required("state")
+        let sourceConfig = try chat["config"] ?? ChatDefaults.webInitial().config
+        let config = try roots["bubbleSummaryConfig"] ?? (sourceConfig["modelSource"] == .string("local") ? ChatDefaults.webInitial().config : sourceConfig)
+        return .init(chatID:chatID,source:exchange.source,snapshot:snapshot,modelState:ChatConfig.modelState(in:roots),config:config)
+    }
+    func saveSummaryConfig(_ config: OrderedJSON?, expected: OrderedJSON?) throws {
+        let roots = try syncInputSnapshot().required("state")
+        guard try roots["bubbleSummaryConfig"]?.encoded() == expected?.encoded() else { throw ExchangeError.invalid("要約設定が変更されました。開き直してください") }
+        var next = OrderedJSON.object(try roots.object("state").filter { $0.key != "bubbleSummaryConfig" })
+        if let config { next = next.replacing("bubbleSummaryConfig",with:config) }
+        try applyGlobalState(next)
+    }
+    func summaryJob(chatID: String, nodeID: String) -> SummaryJob? {
+        let matches = summaryJobs.values.filter { $0.chatID.utf8.elementsEqual(chatID.utf8) && ($0.originNodeID.utf8.elementsEqual(nodeID.utf8) || $0.sourceNodeIDs.contains { $0.utf8.elementsEqual(nodeID.utf8) }) }
+        return matches.first(where: { $0.busy }) ?? matches.first
+    }
+    func startSummary(_ draft: ConversationSummaryDraft, sourceNodeIDs: [String], mode: String, format: String?,
+                      record: RemoteCredentialRecord? = nil, client: RemoteClient = RemoteClient(), readProviderCredential: ProviderModels.CredentialReader = RemoteCredentials.load(providerID:)) throws {
+        guard let exchange else { throw ExchangeError.invalid("保存済み会話がありません") }
+        let roots = try publicationSnapshot().required("state")
+        let busy = summaryJobs.values.filter { $0.busy && $0.chatID.utf8.elementsEqual(draft.chatID.utf8) }.map { ($0.originNodeID,$0.sourceNodeIDs) }
+        guard let prepared = try ConversationSummary.prepare(source:exchange.source,state:roots,chatID:draft.chatID,sourceNodeIDs:sourceNodeIDs,mode:mode,originNodeID:draft.nodeID,
+            format:format,summaryID:UUID().uuidString.lowercased(),now:Date().timeIntervalSince1970 * 1000,config:roots["bubbleSummaryConfig"],generatingNodeIDs:summaryGeneratingIDs,busyJobs:busy,
+            legacy:record ?? RemoteCredentials.load(),readProviderCredential:readProviderCredential) else { return }
+        let key = SummaryIdentity(chatID:draft.chatID,nodeID:draft.nodeID), id = UUID()
+        summaryJobs = summaryJobs.filter { _, job in
+            job.busy || !job.chatID.utf8.elementsEqual(draft.chatID.utf8) || !job.sourceNodeIDs.contains { previous in sourceNodeIDs.contains { $0.utf8.elementsEqual(previous.utf8) } }
+        }
+        summaryJobs[key] = SummaryJob(id:id,chatID:draft.chatID,originNodeID:draft.nodeID,sourceNodeIDs:sourceNodeIDs,busy:true)
+        summaryTasks[key] = Task { @MainActor [weak self] in
+            guard let self else { return }
+            defer { if self.summaryJobs[key]?.id == id { self.summaryTasks[key] = nil; self.summaryJobs[key]?.busy = false } }
+            do {
+                let response = try await ConversationSummary.generate(prepared,client:client)
+                try Task.checkCancellation()
+                guard self.summaryJobs[key]?.id == id, let source = self.exchange?.source else { return }
+                guard let result = try ConversationSummary.apply(response,prepared:prepared,source:source,state:self.publicationSnapshot().required("state"),generatingNodeIDs:self.summaryGeneratingIDs) else { throw ExchangeError.invalid("原文や設定が変更されました。生成し直してください") }
+                var updated = result.source
+                if let summary = result.summary, let summaryID = try summary["id"]?.string("summary") {
+                    updated = try ConversationSummary.mutate(source:updated,chatID:draft.chatID,action:"use",summaryID:summaryID,use:result.savesTokens ?? true)
+                }
+                try self.applyLibrary(updated,selectedID:self.selectedID,preserveGeneration:true,tokenUsage:result.tokenUsage)
+                if let summary = result.summary, let summaryID = try summary["id"]?.string("summary") {
+                    for nodeID in try ConversationSummary.sourceDisplayIDs(summary,source:result.source,chatID:draft.chatID) { self.summaryChosen[.init(chatID:draft.chatID,nodeID:nodeID)] = summaryID }
+                }
+                self.summaryJobs[key]?.warning = result.warning
+                self.summaryJobs[key]?.error = result.error
+            } catch is CancellationError {} catch { if self.summaryJobs[key]?.id == id { self.summaryJobs[key]?.error = error.localizedDescription } }
+        }
+    }
+    func stopSummary(chatID: String, nodeID: String) {
+        let key = SummaryIdentity(chatID:chatID,nodeID:nodeID)
+        summaryTasks[key]?.cancel(); summaryTasks[key] = nil; summaryJobs[key] = nil
+    }
+    private func cancelSummaries() { for task in summaryTasks.values { task.cancel() }; summaryTasks.removeAll(); summaryJobs.removeAll(); summaryChosen.removeAll() }
+
     private func cancelTitles() { for value in titleTasks.values { value.task.cancel() }; titleTasks.removeAll() }
 
     func renameChat(id: String, title: String, now: Double = Date().timeIntervalSince1970 * 1000) throws {
@@ -989,7 +1076,7 @@ final class ChatState: ObservableObject {
         let nextNavigation = try historySelecting(selected, in: changed.source)
         let nextEditing = try exchange.map { try MessageEditing.invalidatingHistory(editingHistory, before: $0.source, after: changed.source) } ?? nil
         try store?.save(SavedChatState(exchange: changed, document: candidate, conversations: views, selectedConversationID: selected, style: displayStyle))
-        invalidateGeneration(); cancelTitles()
+        invalidateGeneration(); cancelTitles(); cancelSummaries()
         branchCandidates = candidates
         if let nextNavigation { publishNavigation(nextNavigation, focus: nil) }
         editingHistory = nextEditing

@@ -1,11 +1,11 @@
 import type { BubbleSummary, ChatInterface, ConfigInterface, MessageInterface } from '@type/chat';
 import type { FavoriteModel, ProviderConfig, ProviderId } from '@type/provider';
 import { isTextContent } from '@type/chat';
-import { bubbleSummarySubmitMessage, getAppliedBubbleSummaries, isBubbleSummary, isSummaryEligible, normalizeBubbleSummaryText, resolveValidSummary } from './bubbleSummary';
+import { bubbleSummarySubmitMessage, getSubmittableBubbleSummaries, isBubbleSummary, isSummaryEligible, normalizeBubbleSummaryText, resolveValidSummary } from './bubbleSummary';
 import { buildBubbleSummaryPrompt } from './bubbleSummaryPrompt';
 import { resolveProviderForModel } from './chatTitle';
 import { hardOpenRouterConstraints } from './openrouterRequest';
-import { pickModelSettings } from './modelSettings';
+import { pickModelSettings } from './modelSettingsCore';
 
 export type SummarySettings = { favoriteModels: FavoriteModel[]; providers: Partial<Record<ProviderId, ProviderConfig>>; fallbackProvider: { endpoint: string; key?: string } };
 export type SummarySelection = { status: 'ready'; summary: BubbleSummary; config: ConfigInterface; promptMessage: MessageInterface;
@@ -113,7 +113,7 @@ export function describeBubbleSummary(chat: ChatInterface, nodeId: string, gener
     : pathIds.filter(id => chat.summaryTargets?.[id]);
   const candidates = (Array.isArray(chat.summaries) ? chat.summaries : []).filter(isBubbleSummary)
     .filter(summary => summary.sources.some(source => source.nodeId === nodeId));
-  const applied = getAppliedBubbleSummaries(chat, chat.messages.length, generatingNodeIds);
+  const applied = getSubmittableBubbleSummaries(chat, chat.messages.length, generatingNodeIds);
   const summary = candidates.find(value => applied.some(item => item.summary.id === value.id))
     ?? candidates.find(value => value.id === chosenSummaryId) ?? candidates.at(-1);
   const range = summary ? resolveValidSummary(chat, summary, generatingNodeIds) : null;

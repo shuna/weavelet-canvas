@@ -37,6 +37,12 @@ enum ConversationSummary {
               id.utf8.elementsEqual(String(index).utf8) else { return id }
         return "message-\(index)"
     }
+    static func sourceDisplayIDs(_ summary: OrderedJSON, source: OrderedJSON, chatID: String) throws -> [String] {
+        guard let rawChat = try chat(source,id:chatID) else { return [] }
+        return try summary.required("sources").array("sources").map {
+            displayNodeID(try $0.required("nodeId").string("node ID"),chat:rawChat)
+        }
+    }
     private static func project(_ value: OrderedJSON, known: [String], boundary: inout SharedWebProjection) throws -> OrderedJSON {
         .object(try value.object("summary field").map { field in
             .init(key:field.key,value:known.contains(field.key) ? field.value : try boundary.reference(field.value))
@@ -129,7 +135,6 @@ enum ConversationSummary {
             .init(key:"selection",value:selection),.init(key:"modelState",value:ChatConfig.modelState(in:state)),
             .init(key:"transport",value:transport)
         ]))
-        guard plan["status"] == .string("ready") else { return nil }
         let request = try AuxiliaryRemoteRequest.bind(plan.required("request"),boundary:boundary,url:url,key:credential.key)
         return try PreparedSummary(chatID:chatID,sourceNodeIDs:wireSources,mode:mode,originNodeID:wireOrigin,format:format,
             summaryID:summaryID,now:now,config:config,originalChat:rawChat,expectedChatConfig:rawChat["config"] ?? .object([]),
@@ -152,11 +157,10 @@ enum ConversationSummary {
             || (rawChat["branchTree"] ?? .null).encoded() != prepared.expectedBranchTree.encoded()
         let wireGenerating = try generatingNodeIDs.map { try wireNodeID($0,chat:rawChat) }
         var boundary = prepared.boundary
-        let countTokens = state["countTotalTokens"] == .bool(true)
         var input = OrderedJSON.object([
             .init(key:"operation",value:.string("apply")),.init(key:"chat",value:try projectedChat(rawChat,boundary:&boundary)),
             .init(key:"selection",value:prepared.selection),.init(key:"responseText",value:.string(response.text)),
-            .init(key:"countTotalTokens",value:.bool(countTokens)),.init(key:"totalTokenUsed",value:state["totalTokenUsed"] ?? .object([])),
+            .init(key:"totalTokenUsed",value:state["totalTokenUsed"] ?? .object([])),
             .init(key:"generatingNodeIds",value:.array(wireGenerating.map(OrderedJSON.string))),
             .init(key:"stale",value:.bool(stale))
         ])
@@ -164,13 +168,13 @@ enum ConversationSummary {
         let result = try SharedWebOperations.call("summaryOperation",input)
         let base = OrderedJSON.object([.init(key:"chat",value:rawChat),.init(key:"totalTokenUsed",value:state["totalTokenUsed"] ?? .object([]))])
         let updated = try OrderedJSONChanges.apply(result.required("changes"),to:base,opaque:boundary.opaque)
-        if countTokens { try NativeUsage.validateCounters(result:result,before:state["totalTokenUsed"] ?? .object([]),after:updated["totalTokenUsed"] ?? .object([])) }
+        try NativeUsage.validateCounters(result:result,before:state["totalTokenUsed"] ?? .object([]),after:updated["totalTokenUsed"] ?? .object([]))
         var chats = try source.required("chats").array("chats")
         if let index = chats.firstIndex(where: {
             guard case .string(let value) = $0["id"] else { return false }
             return value.utf8.elementsEqual(prepared.chatID.utf8)
         }) { chats[index] = try updated.required("chat") }
-        return (source.replacing("chats",with:.array(chats)),countTokens ? updated["totalTokenUsed"] : nil,
+        return (source.replacing("chats",with:.array(chats)),updated["totalTokenUsed"],
                 try result["summary"].flatMap { $0 == .null ? nil : try restored($0,boundary:boundary) },
                 try result["savesTokens"]?.boolean("saves tokens"),try result["warning"]?.string("summary warning"),
                 try result["error"]?.string("summary error"))

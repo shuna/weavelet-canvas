@@ -1,6 +1,7 @@
 import { expect, it } from 'vitest';
 import type { ChatInterface } from '@type/chat';
 import { summaryOperation } from '../../shared/google-sync/bubbleSummary';
+import { applyBubbleSummariesForSubmit } from './bubbleSummary';
 
 const chat = (): ChatInterface => ({ id: 'chat', title: 'Chat', titleSet: true, imageDetail: 'auto',
   config: { model: 'test-model', max_tokens: 1000, temperature: 1, presence_penalty: 0, top_p: 1, frequency_penalty: 0 },
@@ -68,4 +69,16 @@ it('toggles a target on a branchless chat with numeric Web node IDs', () => {
   const value = chat(); delete value.branchTree;
   const result = call({ operation: 'mutate', chat: value, action: 'target', nodeId: '0' });
   expect(result.changes).toContainEqual({ op: 'set', path: ['summaryTargets', '0'], value: true });
+});
+
+it('shows originals when an applied range contains an omitted source', () => {
+  const value = chat(), selection = select(value);
+  value.summaries = [{ ...selection.summary, text: 'Alpha and Beta', useForSubmit: true }];
+  expect(call({ operation: 'describe', chat: value, nodeId: 'a' }).hidden).toBe(true);
+  value.omittedNodes = { a: true };
+  const first = call({ operation: 'describe', chat: value, nodeId: 'a' });
+  const last = call({ operation: 'describe', chat: value, nodeId: 'b' });
+  expect(first.hidden).toBe(false);
+  expect(last.tab).toBe('original');
+  expect(applyBubbleSummariesForSubmit(value, 2)).toEqual([value.messages[1]]);
 });
