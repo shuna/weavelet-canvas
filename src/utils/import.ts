@@ -17,7 +17,7 @@ import {
   defaultModel,
   _defaultChatConfig,
   _defaultImageDetail,
-} from '@constants/chat';
+} from '@constants/chatDefaults';
 import { ExportV1, ExportV2, ExportV3, OpenAIChat, OpenAIPlaygroundJSON } from '@type/export';
 import { BranchNode, BranchTree } from '@type/chat';
 import type { EvaluationResultMap, EvaluationSettings } from '@type/evaluation';

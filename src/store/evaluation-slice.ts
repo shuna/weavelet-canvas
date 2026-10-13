@@ -1,4 +1,4 @@
-import { StoreSlice } from './store';
+import type { StoreSlice } from './store';
 import type {
   EvaluationSettings,
   EvaluationTriggerMode,
@@ -45,7 +45,7 @@ export interface EvaluationSlice {
   clearEvaluationAxisProgress: (key: string) => void;
 }
 
-const defaultSettings: EvaluationSettings = {
+export const defaultSettings: EvaluationSettings = {
   safetyPreSend: 'manual',
   safetyPostReceive: 'manual',
   qualityPreSend: 'manual',

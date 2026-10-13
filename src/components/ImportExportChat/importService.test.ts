@@ -782,6 +782,20 @@ describe('importService', () => {
     });
   });
 
+  it('keeps imported runtime-name metadata in the existing persistence sidecar without replacing the actual action', async () => {
+    const action=vi.fn();(testContext.storeState as any).setChats=action;
+    const result=await importChatFromFile(new File([JSON.stringify({version:3,chats:[createChat('old')],folders:{},contentStore:{},setChats:{opaqueData:'fake'}})],'opaque.json'),t);
+    expect(result.success).toBe(true);expect((testContext.storeState as any).setChats).toBe(action);expect(action).not.toHaveBeenCalled();
+    const {createPartializedState}=await import('@store/persistence');expect((createPartializedState(testContext.storeState as any) as any).setChats).toEqual({opaqueData:'fake'});
+  });
+
+  it('rejects V3 metadata that collides with a known persisted setting before committing instead of dropping or applying it', async () => {
+    testContext.storeState.apiKey='existing-key';
+    const result=await importChatFromFile(new File([JSON.stringify({version:3,chats:[createChat('old')],folders:{},contentStore:{},apiKey:'file-secret'})],'collision.json'),t,'replace',true);
+    expect(result.success).toBe(false);expect(result.message).toContain('metadata conflicts');
+    expect(testContext.storeState.apiKey).toBe('existing-key');expect(testContext.setState).not.toHaveBeenCalled();expect(testContext.saveChatData).not.toHaveBeenCalled();
+  });
+
   it.each([1, 2, 3])('commits version %s with its settings priority in one write', async (version) => {
     for (const mode of ['append', 'replace'] as const) {
       for (const includeSettings of [false, true]) {
@@ -797,7 +811,7 @@ describe('importService', () => {
         testContext.setState.mockClear();
         const importedSettings = { safetyPreSend: 'auto', safetyPostReceive: 'auto', qualityPreSend: 'auto', qualityPostReceive: 'auto' };
         const payload = { version, folders: {}, contentStore: {}, chats: [createChat('imported')],
-          apiKey: 'file-secret', theme: 'file-theme', evaluationSettings: importedSettings,
+          evaluationSettings: importedSettings,
           evaluationResults: { 'imported:node:pre-send': { phase: 'pre-send' } },
         };
         const result = await importChatFromFile(new File([JSON.stringify(payload)], 'priority.json'), t, mode, includeSettings);
