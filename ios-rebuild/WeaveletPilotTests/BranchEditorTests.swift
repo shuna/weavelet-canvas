@@ -66,6 +66,24 @@ final class BranchEditorTests: XCTestCase {
         XCTAssertFalse(try XCTUnwrap(graph.nodes.first).preview.isEmpty)
     }
 
+    func testOldGraphCannotPublishOrSelectSameNodeIDInAnotherChat() throws {
+        let original = try fixture()
+        var chats = try original.required("chats").array("chats")
+        chats[1] = chats[0].replacing("id", with: .string("chat-b")).replacing("title", with: .string("別の会話"))
+        let state = ChatState()
+        try state.importWebData(original.replacing("chats", with: .array(chats)).encoded())
+        let oldKey = BranchLayoutKey(state: state)
+        let oldGraph = try BranchGraph(SharedWebOperations.call("branchLayout", oldKey.input(requestID: 11)), requestID: 11)
+        XCTAssertTrue(oldGraph.nodes.contains { $0.id == "n-inactive" })
+        state.selectedConversationID = "chat-b"
+        let before = state.exchange?.source
+        XCTAssertFalse(oldKey.isCurrent(in: state))
+        XCTAssertNotEqual(oldKey, BranchLayoutKey(state: state))
+        XCTAssertFalse(try oldKey.select("n-inactive", in: state))
+        XCTAssertEqual(state.selectedConversationID, "chat-b")
+        XCTAssertEqual(state.exchange?.source, before)
+    }
+
     func testViewModePersistsSeparatelyFromBubbleStyleAndFailedSaveKeepsState() throws {
         let directory = FileManager.default.temporaryDirectory.appendingPathComponent("weavelet-branch-view-\(UUID().uuidString)")
         let url = directory.appendingPathComponent("state.json")

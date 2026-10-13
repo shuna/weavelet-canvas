@@ -26,6 +26,14 @@ struct BranchLayoutKey: Equatable {
         lhs.title.utf8.elementsEqual(rhs.title.utf8) && lhs.tree == rhs.tree && lhs.contentStore == rhs.contentStore
     }
 
+    func isCurrent(in state: ChatState) -> Bool { self == Self(state: state) }
+
+    func select(_ nodeID: String, in state: ChatState) throws -> Bool {
+        guard isCurrent(in: state) else { return false }
+        try state.navigate(chatID: chatID, nodeID: nodeID, source: .branchEditor)
+        return true
+    }
+
     func input(requestID: Int) throws -> OrderedJSON {
         guard let tree, let contentStore, chatIndex >= 0 else { throw ExchangeError.invalid("分岐データがありません") }
         let nodes = try tree.required("nodes")
@@ -96,7 +104,7 @@ struct BranchGraph {
 
 struct BranchEditorView: View {
     @ObservedObject var state: ChatState
-    @State private var graph: BranchGraph?
+    @State private var rendered: (key: BranchLayoutKey, graph: BranchGraph)?
     @State private var error: String?
     @State private var scale: CGFloat = 1
     @GestureState private var gestureScale: CGFloat = 1
@@ -104,9 +112,10 @@ struct BranchEditorView: View {
     var body: some View {
         let key = BranchLayoutKey(state: state)
         Group {
-            if let graph {
+            if let rendered, rendered.key == key {
+                let graph = rendered.graph
                 ScrollView([.horizontal, .vertical]) {
-                    graphCanvas(graph)
+                    graphCanvas(graph, sourceKey: rendered.key)
                         .frame(width: max(300, graph.width), height: max(100, graph.height))
                         .scaleEffect(scale * gestureScale, anchor: .topLeading)
                         .frame(width: graph.width * scale * gestureScale, height: graph.height * scale * gestureScale, alignment: .topLeading)
@@ -125,7 +134,7 @@ struct BranchEditorView: View {
             }
         }
         .task(id: key) {
-            graph = nil; error = nil
+            rendered = nil; error = nil
             if key.tree == nil {
                 do { try state.ensureBranchTreeForEditor() }
                 catch { self.error = "分岐を表示できません: \(error.localizedDescription)" }
@@ -137,16 +146,16 @@ struct BranchEditorView: View {
                     let input = try key.input(requestID: requestID)
                     return try BranchGraph(SharedWebOperations.call("branchLayout", input), requestID: requestID)
                 }.value
-                guard !Task.isCancelled else { return }
-                graph = computed
+                guard !Task.isCancelled, key.isCurrent(in: state) else { return }
+                rendered = (key, computed)
             } catch {
-                guard !Task.isCancelled else { return }
+                guard !Task.isCancelled, key.isCurrent(in: state) else { return }
                 self.error = "分岐を表示できません: \(error.localizedDescription)"
             }
         }
     }
 
-    private func graphCanvas(_ graph: BranchGraph) -> some View {
+    private func graphCanvas(_ graph: BranchGraph, sourceKey: BranchLayoutKey) -> some View {
         ZStack(alignment: .topLeading) {
             Canvas { context, _ in
                 let positions = graph.positionsByID
@@ -163,8 +172,9 @@ struct BranchEditorView: View {
             ForEach(graph.nodes, id: \.identity) { node in
                 BranchNodeCard(node: node) {
                     do {
-                        try state.navigate(chatID: state.selectedConversationID, nodeID: node.id, source: .branchEditor)
-                        if state.chatActiveView == .branchEditor { try state.setChatActiveView(.chat) }
+                        if try sourceKey.select(node.id, in: state), state.chatActiveView == .branchEditor {
+                            try state.setChatActiveView(.chat)
+                        }
                     }
                     catch { self.error = error.localizedDescription }
                 }
