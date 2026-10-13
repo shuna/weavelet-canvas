@@ -33,6 +33,23 @@ enum ChatExport {
                     if let configuration = chat["config"], let model = configuration["model"] {
                         result = result.replacing("config", with: try result.required("config").replacing("model", with: model))
                     }
+                    if let targets = chat["summaryTargets"] { result = result.replacing("summaryTargets", with: targets) }
+                    if let summaries = chat["summaries"] {
+                        if summaries == .null { result = result.replacing("summaries", with: .null) }
+                        else {
+                            let projectedSummaries = try summaries.array("summaries").map { summary -> OrderedJSON in
+                                let sources = try summary.required("sources").array("sources").map { source -> OrderedJSON in
+                                    .object(try source.object("summary source").map { field in
+                                        .init(key:field.key,value:field.key == "nodeId" || field.key == "parentId" ? field.value : try boundary.reference(field.value))
+                                    })
+                                }
+                                return .object(try summary.object("summary").map { field in
+                                    .init(key:field.key,value:field.key == "sources" ? .array(sources) : try boundary.reference(field.value))
+                                })
+                            }
+                            result = result.replacing("summaries", with: .array(projectedSummaries))
+                        }
+                    }
                     return result
                 })
             } else if field.key == "contentStore", case .object = field.value { value = try boundary.store(field.value, strict: true) }

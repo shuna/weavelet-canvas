@@ -60,6 +60,29 @@ final class ChatExportTests: XCTestCase {
         XCTAssertThrowsError(try state.exportWebData(format:.openRouter,scope:.branch))
         XCTAssertThrowsError(try state.exportWebData(format:.markdown,scope:.all))
     }
+    func testScopedV3SummaryFilteringReadsOnlyIDsAndKeepsOpaqueAttributes() throws {
+        var source = try input(), chats = try source.required("chats").array("chats")
+        chats[0] = chats[0].replacing("summaryTargets",with:.object([.init(key:"system",value:.bool(true)),.init(key:"middle",value:.bool(false)),.init(key:"hidden",value:.bool(true))]))
+        let state = ChatState(store:try store())
+        source = source.replacing("chats",with:.array(chats)); try state.importWebData(source.encoded())
+        var artifact = try OrderedJSON.decode(state.exportWebData(format:.v3,scope:.branch).data).required("chats").array("chats")[0]
+        XCTAssertEqual(artifact["summaryTargets"],.object([.init(key:"system",value:.bool(true)),.init(key:"middle",value:.bool(false))]))
+        chats[0] = chats[0].replacing("summaries",with:.array([])); source = source.replacing("chats",with:.array(chats)); try state.importWebData(source.encoded())
+        artifact = try OrderedJSON.decode(state.exportWebData(format:.v3,scope:.branch).data).required("chats").array("chats")[0]
+        XCTAssertEqual(artifact["summaries"],.array([]))
+        let raw = OrderedJSON.object([.init(key:"z",value:.number("9007199254740993")),.init(key:"a",value:.number("1.2300"))])
+        let keptSource = OrderedJSON.object([.init(key:"nodeId",value:.string("middle")),.init(key:"parentId",value:.string("system")),
+            .init(key:"role",value:.string("user")),.init(key:"textParts",value:.array([.string("Original"),.string("Second")])),.init(key:"xFuture",value:raw)])
+        let kept = OrderedJSON.object([.init(key:"id",value:.string("kept")),.init(key:"mode",value:.string("range")),.init(key:"sources",value:.array([keptSource])),
+            .init(key:"text",value:.string("Summary 日本語")),.init(key:"useForSubmit",value:.bool(true)),.init(key:"xFuture",value:raw)])
+        let hidden = kept.replacing("id",with:.string("hidden-summary")).replacing("sources",with:.array([keptSource.replacing("nodeId",with:.string("hidden"))]))
+        chats[0] = chats[0].replacing("summaries",with:.array([kept,hidden])); source = source.replacing("chats",with:.array(chats)); try state.importWebData(source.encoded())
+        artifact = try OrderedJSON.decode(state.exportWebData(format:.v3,scope:.branch).data).required("chats").array("chats")[0]
+        XCTAssertEqual(try artifact.required("summaries").encoded(),try OrderedJSON.array([kept]).encoded())
+        let complete = try OrderedJSON.decode(state.exportWebData(format:.v3,scope:.chat).data).required("chats").array("chats")[0]
+        XCTAssertEqual(try complete.required("summaries").encoded(),try OrderedJSON.array([kept,hidden]).encoded())
+    }
+
     func testStandardNodeGzipFixtureAndCRCTruncationRejectionKeepSavedState() throws {
         // Node node:zlib gzipSync(Buffer.from(raw, 'utf8')); fixed standard gzip member.
         let encoded = "H4sIAAAAAAAAE22POwoCMRCG7zL1IlFXJDmAtbilWITdUQNrgslkfSx7A3sb0cpGvIO3EUuPYHyBwlbz+Obn/6eEAq1TRoNoR5BOJTkQw1FojSbUlJCxCKKsIhibPAu37wELmXtJQZggkdKT5x6cHCOt+hYT1BkImEntZQ7RFxhHA0xRFfgL56GoWtmX1On+QgzQ+Zw+2ZY9T/6VGtYgOGPdJuetTtyNGefhSwmi2Wi1GYtgYezT8Lo9Xnfn22l/P2wuUFUPGWa0XBYBAAA="

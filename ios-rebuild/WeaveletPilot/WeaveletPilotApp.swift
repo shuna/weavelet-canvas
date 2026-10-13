@@ -667,11 +667,21 @@ struct ChatExportView: View {
                 Picker("範囲", selection: $scope) { ForEach(format.scopes) { Text($0.label).tag($0) } }
                 if scope != .all { Text(state.conversation?.title ?? "会話がありません") }
                 if format == .v3 { Toggle("gzipで圧縮", isOn: $compressed) }
-                if format == .openRouter || format == .lmStudio || format == .v1 {
-                    Text("各会話の現在枝を書き出します。選択した会話では現在表示中の経路を使います。")
+                switch format {
+                case .v3:
+                    Text("V3は分岐と属性を保持します。表示枝を指定すると、その枝だけを書き出します。")
                         .font(.footnote).foregroundStyle(.secondary)
-                } else if format == .markdown {
-                    Text("現在の本文と画像URLを書き出します。推論・tool call・tool resultは含めません。")
+                case .v1:
+                    Text("各会話の現在枝を書き出します。分岐ツリーと折りたたみ設定は含めません。")
+                        .font(.footnote).foregroundStyle(.secondary)
+                case .openAI:
+                    Text("全分岐または表示枝のテキスト本文を書き出します。メッセージの属性、画像・推論・tool call・tool resultは含めません。")
+                        .font(.footnote).foregroundStyle(.secondary)
+                case .openRouter, .lmStudio:
+                    Text("各会話の現在枝のテキスト本文を書き出します。選択した会話では表示中の経路を使います。メッセージの属性、画像・推論・tool call・tool resultは含めません。")
+                        .font(.footnote).foregroundStyle(.secondary)
+                case .markdown:
+                    Text("現在の本文と画像URLを書き出します。メッセージの属性、推論・tool call・tool resultは含めません。")
                         .font(.footnote).foregroundStyle(.secondary)
                 }
                 if let errorMessage { Text(errorMessage).foregroundStyle(.red) }
