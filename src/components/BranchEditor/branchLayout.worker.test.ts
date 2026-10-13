@@ -40,8 +40,26 @@ describe('branch layout worker', () => {
   });
 
   it('preserves rendering of an imported disconnected cycle', () => {
-    const { rfNodes } = layout({ root: null, child: 'root', a: 'b', b: 'a' });
+    const { rfNodes, rfEdges } = layout({ root: null, child: 'root', a: 'b', b: 'a' });
     expect(rfNodes).toHaveLength(4);
+    expect(rfNodes.map(node => node.id)).toEqual(['root', 'child', 'a', 'b']);
+    expect(rfEdges.map(edge => [edge.source, edge.target])).toEqual([['root', 'child'], ['b', 'a'], ['a', 'b']]);
+    expect(rfNodes.every(node => Number.isFinite(node.position.x) && Number.isFinite(node.position.y))).toBe(true);
+  });
+
+  it('keeps a self-loop and every node in the imported graph', () => {
+    const { rfNodes, rfEdges } = layout({ root: null, child: 'root', loop: 'loop' });
+    expect(rfNodes.map(node => node.id)).toEqual(['root', 'child', 'loop']);
+    expect(rfEdges.map(edge => [edge.source, edge.target])).toEqual([['root', 'child'], ['loop', 'loop']]);
+    expect(rfNodes.every(node => Number.isFinite(node.position.x) && Number.isFinite(node.position.y))).toBe(true);
+  });
+
+  it('preserves the order and edges of multiple disconnected components', () => {
+    const { rfNodes, rfEdges } = layout({ root: null, child: 'root', a: 'b', b: 'a', c: 'd', d: 'c' });
+    expect(rfNodes.map(node => node.id)).toEqual(['root', 'child', 'a', 'b', 'c', 'd']);
+    expect(rfEdges.map(edge => [edge.source, edge.target])).toEqual([
+      ['root', 'child'], ['b', 'a'], ['a', 'b'], ['d', 'c'], ['c', 'd'],
+    ]);
     expect(rfNodes.every(node => Number.isFinite(node.position.x) && Number.isFinite(node.position.y))).toBe(true);
   });
 

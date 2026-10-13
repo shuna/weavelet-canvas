@@ -1,4 +1,4 @@
-import dagre from 'dagre';
+import dagre from '@dagrejs/dagre';
 
 const NODE_W = 280;
 const NODE_H = 80;
