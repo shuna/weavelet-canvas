@@ -1,3 +1,4 @@
+import type { BranchEditCapture, BranchHistoryState } from '../../src/utils/branchHistory';
 import { hasMeaningfulContent } from '../../src/utils/contentValidation';
 import { textValueOf, replaceTextValue } from '../../src/utils/messageText';
 import {
@@ -26,7 +27,7 @@ export function withEditingRuntime<T>(newIDs: string[], existingIDs: string[], n
   try { return operation(); }
   finally { Date.now = clock; runtime = undefined; }
 }
-export function messageEdit(json: string): string {
+export function messageEdit(json: string, capture?: BranchEditCapture): string {
   const input: { chat: ChatInterface; contentStore: ContentStoreData; nodeID?: string | null; viewingPath: string[];
     role: Role; parts: ContentInterface[]; editedText?: string; operation?: 'textValue'; mode: 'overwrite' | 'branch' | 'append' | 'insert'; newIDs: string[]; now: number } = JSON.parse(json);
   if (input.operation === 'textValue') return JSON.stringify(textValueOf(input.parts));
@@ -47,11 +48,13 @@ export function messageEdit(json: string): string {
       if (path.length) result.chats = switchActivePathState(result.chats, 0, path, result.contentStore);
       else result.chats[0].branchTree!.activePath = [];
     }
+    let historyBase: BranchHistoryState = result;
     if (input.mode === 'insert') {
       if (input.nodeID === undefined) throw new Error('Invalid insert target.');
       const beforeNodeId = wasFlat && input.nodeID?.startsWith('message-') ? input.nodeID.slice(8) : input.nodeID;
       const inserted = insertNodeState(result.chats, { chatId: chat.id, beforeNodeId, role: input.role, content: parts }, result.contentStore);
       if (inserted.status !== 'updated') throw new Error(`Invalid insert target: ${inserted.status}`);
+      historyBase = inserted.historyBase ?? historyBase;
       result = inserted;
     } else {
       const tree = result.chats[0].branchTree!;
@@ -71,6 +74,7 @@ export function messageEdit(json: string): string {
         }
       } else result = upsertWithAutoBranchState(result.chats, 0, index, { role: input.role, content: parts }, result.contentStore);
     }
+    const changed = !('noOp' in result && result.noOp);
     // DMP patch strings cannot carry opaque references back to raw native JSON.
     // Expand only deltas produced by this operation while their projected base
     // is still available; existing native deltas stay in the raw document.
@@ -85,6 +89,7 @@ export function messageEdit(json: string): string {
     // Native's external source includes the full projection; LLM/UI runtime
     // projection inside the Web functions stays role/content only.
     chat.messages = materializeActivePath(chat.branchTree!, result.contentStore, true);
+    if (changed) capture?.(historyBase, result);
     return JSON.stringify(diffJSONChanges(before, JSON.parse(JSON.stringify({ chat, contentStore: result.contentStore }))));
   });
 }

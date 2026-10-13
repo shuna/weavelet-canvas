@@ -267,7 +267,7 @@ export const deleteBranchState = (
   nodeId: string,
   currentContentStore: ContentStoreData
 ) => {
-  const contentStore = { ...currentContentStore };
+  const contentStore = Object.fromEntries(Object.entries(currentContentStore).map(([hash, entry]) => [hash, { ...entry }]));
   const updatedChats = cloneChatAt(chats, chatIndex);
   captureProjectedMessageAttributes(updatedChats[chatIndex], contentStore);
   const tree = updatedChats[chatIndex].branchTree!;
@@ -295,6 +295,8 @@ export const deleteBranchState = (
     updatedChats[chatIndex].messages = materializeActivePath(tree, contentStore);
   }
 
+  if (tree.activePath.length) tree.rootId = tree.activePath[0];
+  else if (!tree.nodes[tree.rootId]) tree.rootId = '';
   return { chats: updatedChats, contentStore };
 };
 

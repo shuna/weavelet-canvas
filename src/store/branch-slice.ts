@@ -1,3 +1,4 @@
+import { captureBranchHistory, invalidateBranchHistory, stepBranchHistory, canStepBranchHistory, type BranchSnapshot } from '@utils/branchHistory';
 import { invalidateAiTasks } from '@hooks/aiTaskLifetime';
 import i18next from 'i18next';
 import { StoreSlice, StoreState } from './store';
@@ -107,118 +108,6 @@ export interface ScrollAnchor {
   offsetWithinItem: number;
   wasAtBottom: boolean;
 }
-
-interface BranchChatSnapshot {
-  id: string;
-  messages: ChatInterface['messages'];
-  branchTree: ChatInterface['branchTree'];
-  expectedActivePath?: string[];
-  systemPrompt?: { value: string | undefined };
-}
-
-interface BranchSnapshot {
-  chats: BranchChatSnapshot[];
-  contentStore: ContentStoreData;
-}
-
-const HISTORY_LIMIT = 50;
-
-const changedBranchChatIds = (
-  previous: ChatInterface[],
-  next: ChatInterface[]
-) => {
-  const nextById = new Map(next.map((chat) => [chat.id, chat]));
-  const previousById = new Map(previous.map((chat) => [chat.id, chat]));
-  const ids = new Set<string>();
-  for (const chat of previous) {
-    const updated = nextById.get(chat.id);
-    if (!updated || chat.messages !== updated.messages || chat.branchTree !== updated.branchTree) {
-      ids.add(chat.id);
-    }
-  }
-  for (const chat of next) {
-    if (!previousById.has(chat.id)) ids.add(chat.id);
-  }
-  return [...ids];
-};
-
-const snapshotContentStore = (
-  chats: BranchChatSnapshot[],
-  contentStore: ContentStoreData
-) => {
-  const snapshot: ContentStoreData = {};
-  const add = (hash: string) => {
-    const entry = contentStore[hash];
-    if (snapshot[hash] || !entry) return;
-    snapshot[hash] = structuredClone(entry);
-    if (entry.delta) add(entry.delta.baseHash);
-  };
-  for (const chat of chats) {
-    Object.values(chat.branchTree?.nodes ?? {}).forEach((node) => add(node.contentHash));
-  }
-  return snapshot;
-};
-
-const createBranchSnapshot = (
-  chats: ChatInterface[],
-  contentStore: ContentStoreData,
-  chatIds: string[],
-  expectedChats: ChatInterface[] = chats
-): BranchSnapshot => {
-  const ids = new Set(chatIds);
-  const expectedById = new Map(expectedChats.map((chat) => [chat.id, chat]));
-  const snapshotChats = chats
-    .filter((chat) => ids.has(chat.id))
-    .map((chat) => ({
-      id: chat.id,
-      messages: structuredClone(chat.messages),
-      branchTree: structuredClone(chat.branchTree),
-      expectedActivePath: expectedById.get(chat.id)?.branchTree?.activePath.slice(),
-      ...(chat.config.systemPrompt !== expectedById.get(chat.id)?.config.systemPrompt
-        ? { systemPrompt: { value: chat.config.systemPrompt } }
-        : {}),
-    }));
-  return {
-    chats: snapshotChats,
-    contentStore: snapshotContentStore(snapshotChats, contentStore),
-  };
-};
-
-const isUsableActivePath = (
-  tree: NonNullable<ChatInterface['branchTree']>,
-  path: string[]
-) => path.length > 0 && path.every((id, index) => {
-  const node = tree.nodes[id];
-  return !!node && (index === 0 ? node.parentId === null : node.parentId === path[index - 1]);
-});
-
-const pathsEqual = (first: string[], second: string[]) =>
-  first.length === second.length && first.every((id, index) => id === second[index]);
-
-const restoreBranchSnapshot = (
-  chats: ChatInterface[],
-  contentStore: ContentStoreData,
-  snapshot: BranchSnapshot
-) => {
-  const snapshots = new Map(snapshot.chats.map((chat) => [chat.id, chat]));
-  const restored = chats.map((chat) => {
-    const saved = snapshots.get(chat.id);
-    if (!saved) return chat;
-    const config = saved.systemPrompt
-      ? { ...chat.config, systemPrompt: saved.systemPrompt.value }
-      : chat.config;
-    if (!saved.branchTree) return { ...chat, config, messages: structuredClone(saved.messages), branchTree: undefined };
-    const branchTree = structuredClone(saved.branchTree);
-    const currentPath = chat.branchTree?.activePath;
-    if (currentPath && saved.expectedActivePath &&
-      !pathsEqual(currentPath, saved.expectedActivePath) &&
-      isUsableActivePath(branchTree, currentPath)) {
-      branchTree.activePath = currentPath.slice();
-    }
-    return { ...chat, config, branchTree, messages: materializeActivePath(branchTree, contentStore) };
-  });
-  return restored;
-};
 
 const withRuntimeFlatNodeMaps = (chats: ChatInterface[] | undefined, state: StoreState) => chats?.map((chat, index) => {
   if (chat.branchTree) return chat;
@@ -372,15 +261,10 @@ export const createBranchSlice: StoreSlice<BranchSlice> = (set, get) => {
     // Legacy tree creation has no undo step; record the edit against that prepared tree.
     const historyChats = options?.historyBase?.chats ?? prevChats;
     const historyStore = options?.historyBase?.contentStore ?? get().contentStore;
-    const changedIds = historyChats ? changedBranchChatIds(historyChats, chats) : [];
-    const history = options?.recordHistory !== false && prevChats && changedIds.length > 0
-      ? {
-          branchHistoryPast: [...get().branchHistoryPast, createBranchSnapshot(
-            historyChats!, historyStore, changedIds, chats
-          )].slice(-HISTORY_LIMIT),
-          branchHistoryFuture: [],
-        }
-      : {};
+    const previousHistory = {past: get().branchHistoryPast, future: get().branchHistoryFuture};
+    const nextHistory = options?.recordHistory !== false && prevChats
+      ? captureBranchHistory(previousHistory, {chats: historyChats!, contentStore: historyStore}, {chats, contentStore}) : previousHistory;
+    const history = nextHistory === previousHistory ? {} : {branchHistoryPast: nextHistory.past, branchHistoryFuture: nextHistory.future};
     const clipboard = options?.clipboard ? { branchClipboard: options.clipboard } : {};
     const sameOrder = prevChats?.length === chats.length &&
       prevChats.every((chat, index) => chat.id === chats[index].id);
@@ -416,68 +300,36 @@ export const createBranchSlice: StoreSlice<BranchSlice> = (set, get) => {
     }
   },
   invalidateBranchHistory: (chatIds) => {
-    if (chatIds.length === 0) return;
-    const ids = new Set(chatIds);
-    const touches = (snapshot: BranchSnapshot) => snapshot.chats.some((chat) => ids.has(chat.id));
-    set({
-      branchHistoryPast: get().branchHistoryPast.filter((snapshot) => !touches(snapshot)),
-      branchHistoryFuture: get().branchHistoryFuture.filter((snapshot) => !touches(snapshot)),
-    });
+    if (!chatIds.length) return;
+    const history = invalidateBranchHistory({past:get().branchHistoryPast,future:get().branchHistoryFuture},chatIds);
+    set({branchHistoryPast:history.past,branchHistoryFuture:history.future});
   },
   branchHistoryPast: [],
   branchHistoryFuture: [],
   undoBranch: () => {
-    const past = get().branchHistoryPast;
-    if (past.length === 0) return;
-    const snapshot = past[past.length - 1];
-    const currentChats = get().chats;
-    if (!currentChats || snapshot.chats.some((chat) =>
-      !currentChats.some((current) => current.id === chat.id) ||
-      Object.values(get().generatingSessions).some((session) => session.chatId === chat.id)
-    )) return;
-    const currentContentStore = get().contentStore;
-    const current = createBranchSnapshot(
-      currentChats, currentContentStore, snapshot.chats.map((chat) => chat.id),
-      restoreBranchSnapshot(currentChats, currentContentStore, snapshot)
-    );
-    const contentStore = { ...snapshot.contentStore, ...currentContentStore };
-    set({
-      branchHistoryPast: past.slice(0, -1),
-      branchHistoryFuture: [...get().branchHistoryFuture, current],
-    });
-    get().setChats(restoreBranchSnapshot(currentChats, contentStore, snapshot), { preserveBranchHistory: true });
-    set({ contentStore });
-    invalidateAiTasks(snapshot.chats.map(chat => chat.id));
+    const state = get();
+    if (!state.chats) return;
+    const result = stepBranchHistory({past:state.branchHistoryPast,future:state.branchHistoryFuture},
+      {chats:state.chats,contentStore:state.contentStore}, 'undo', Object.values(state.generatingSessions).map(session=>session.chatId));
+    if (result.status !== 'updated') return;
+    set({branchHistoryPast:result.history.past,branchHistoryFuture:result.history.future});
+    get().setChats(result.state.chats, {preserveBranchHistory:true});
+    set({contentStore:result.state.contentStore});
+    invalidateAiTasks(result.affectedChatIds);
   },
+  canUndoBranch: () => canStepBranchHistory({past:get().branchHistoryPast,future:get().branchHistoryFuture}, 'undo', Object.values(get().generatingSessions).map(session=>session.chatId)),
   redoBranch: () => {
-    const future = get().branchHistoryFuture;
-    if (future.length === 0) return;
-    const snapshot = future[future.length - 1];
-    const currentChats = get().chats;
-    if (!currentChats || snapshot.chats.some((chat) =>
-      !currentChats.some((current) => current.id === chat.id) ||
-      Object.values(get().generatingSessions).some((session) => session.chatId === chat.id)
-    )) return;
-    const currentContentStore = get().contentStore;
-    const current = createBranchSnapshot(
-      currentChats, currentContentStore, snapshot.chats.map((chat) => chat.id),
-      restoreBranchSnapshot(currentChats, currentContentStore, snapshot)
-    );
-    const contentStore = { ...snapshot.contentStore, ...currentContentStore };
-    set({
-      branchHistoryFuture: future.slice(0, -1),
-      branchHistoryPast: [...get().branchHistoryPast, current],
-    });
-    get().setChats(restoreBranchSnapshot(currentChats, contentStore, snapshot), { preserveBranchHistory: true });
-    set({ contentStore });
-    invalidateAiTasks(snapshot.chats.map(chat => chat.id));
+    const state = get();
+    if (!state.chats) return;
+    const result = stepBranchHistory({past:state.branchHistoryPast,future:state.branchHistoryFuture},
+      {chats:state.chats,contentStore:state.contentStore}, 'redo', Object.values(state.generatingSessions).map(session=>session.chatId));
+    if (result.status !== 'updated') return;
+    set({branchHistoryPast:result.history.past,branchHistoryFuture:result.history.future});
+    get().setChats(result.state.chats, {preserveBranchHistory:true});
+    set({contentStore:result.state.contentStore});
+    invalidateAiTasks(result.affectedChatIds);
   },
-  canUndoBranch: () => get().branchHistoryPast.length > 0 && !Object.values(get().generatingSessions).some(
-    (session) => get().branchHistoryPast.at(-1)?.chats.some((chat) => chat.id === session.chatId)
-  ),
-  canRedoBranch: () => get().branchHistoryFuture.length > 0 && !Object.values(get().generatingSessions).some(
-    (session) => get().branchHistoryFuture.at(-1)?.chats.some((chat) => chat.id === session.chatId)
-  ),
+  canRedoBranch: () => canStepBranchHistory({past:get().branchHistoryPast,future:get().branchHistoryFuture}, 'redo', Object.values(get().generatingSessions).map(session=>session.chatId)),
   branchClipboard: null,
   branchEditorFocusNodeId: null,
   setBranchEditorFocusNodeId: (nodeId) => {
