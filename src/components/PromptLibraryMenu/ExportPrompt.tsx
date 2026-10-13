@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import useStore from '@store/store';
-import { exportPrompts } from '@utils/prompt';
+import { exportPrompts, promptsToCSV } from '@utils/prompt';
 
 const ExportPrompt = ({ hideTitle }: { hideTitle?: boolean }) => {
   const { t } = useTranslation();
@@ -10,10 +10,7 @@ const ExportPrompt = ({ hideTitle }: { hideTitle?: boolean }) => {
   const handleExport = async () => {
     const prompts = useStore.getState().prompts;
     if (useGzip) {
-      const Papa = await import('papaparse');
-      const csvString = Papa.default.unparse(
-        prompts.map((p) => ({ name: p.name, prompt: p.prompt }))
-      );
+      const csvString = promptsToCSV(prompts);
       if (typeof CompressionStream === 'undefined') {
         // Fallback: plain CSV
         exportPrompts(prompts);

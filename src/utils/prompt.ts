@@ -14,10 +14,12 @@ export const importPromptCSV = (csvString: string, header: boolean = true) => {
   return results.data as Record<string, string>[];
 };
 
-export const exportPrompts = (prompts: Prompt[]) => {
-  const csvString = Papa.unparse(
+export const promptsToCSV = (prompts: Prompt[]) => Papa.unparse(
     prompts.map((prompt) => ({ name: prompt.name, prompt: prompt.prompt }))
   );
+
+export const exportPrompts = (prompts: Prompt[]) => {
+  const csvString = promptsToCSV(prompts);
 
   const blob = new Blob([csvString], {
     type: 'text/csv;charset=utf-8;',

@@ -219,6 +219,7 @@ struct ChatView: View {
                         }
                         .pickerStyle(.inline)
                         NavigationLink("利用量と費用") { UsageCostSettingsView(state:state) }
+                        NavigationLink("プロンプトライブラリ") { PromptLibraryView(state:state) }
                     }
                     Section("会話設定") {
                         Button("タイトルの自動生成") {

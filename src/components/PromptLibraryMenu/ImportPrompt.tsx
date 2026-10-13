@@ -3,7 +3,7 @@ import { useTranslation } from 'react-i18next';
 import { v4 as uuidv4 } from 'uuid';
 import useStore from '@store/store';
 
-import { importPromptCSV } from '@utils/prompt';
+import { applyPromptLibraryAction, parsePromptLibraryCSV } from '@utils/promptLibrary';
 import { showToast } from '@utils/showToast';
 
 type ImportMode = 'append' | 'replace';
@@ -27,19 +27,10 @@ const ImportPrompt = ({ hideTitle }: { hideTitle?: boolean }) => {
     reader.onload = (event) => {
       const csvString = event.target?.result as string;
       try {
-        const results = importPromptCSV(csvString);
-        const newPrompts = results.map((data) => {
-          const columns = Object.values(data);
-          return { id: uuidv4(), name: columns[0], prompt: columns[1] };
-        });
-
+        const rows = parsePromptLibraryCSV(csvString);
+        const newIDs = rows.map(() => uuidv4());
         const setPrompts = useStore.getState().setPrompts;
-        if (mode === 'replace') {
-          setPrompts(newPrompts);
-        } else {
-          const existing = useStore.getState().prompts;
-          setPrompts(existing.concat(newPrompts));
-        }
+        setPrompts(applyPromptLibraryAction(useStore.getState().prompts, {type: 'import', mode, rows, newIDs}));
         setAlert({ message: String(t('importSuccess', { ns: 'import', defaultValue: 'Successfully imported!' })), success: true });
       } catch (error: unknown) {
         setAlert({ message: (error as Error).message, success: false });

@@ -123,6 +123,9 @@
     "src/utils/branchLayout.ts": "5cc4a2b874914cf882eec7932acef99a5e3481757e6b5d94c168539388c14e2a",
     "src/utils/diffUtils.ts": "94fa0a5a590d7bf21abfb95821d9014984c90e4210702cb709740c43c2404d91",
     "src/utils/branchDiff.ts": "0d7fd12643518dce808580e02c9684d99df23df0a2f980ccd5f6af7c59995615",
+    "src/utils/date.ts": "36233be4e64f54ddd34210bb10618a017b76c2ee0bd40f81d049c33a0c966279",
+    "src/utils/prompt.ts": "91810afceac8a5548505eda01ba145b60aba16d997f8c7a73ca3f704500b74ce",
+    "src/utils/promptLibrary.ts": "25de088cddbebd66b619e301778b1c85e3e3016a8d61d06cb0754b9b0944f099",
     "src/utils/syncDocument.ts": "bc7cca9616aa593538dfb194b861ea7415ce3c7e7da42620a9fca0a89acb4120",
     "src/utils/chatMarkdown.ts": "7fa68fc26091374a7f3a5fa5885ec19547870612058c09927ef4bb1cb9ebeafa",
     "src/utils/fileExport.ts": "51f4f9fc072140849730d8be079703f39a7380a80e29532a9443560413f2bc29",
@@ -239,6 +242,11 @@
     "src/utils/diffUtils.ts": "94fa0a5a590d7bf21abfb95821d9014984c90e4210702cb709740c43c2404d91",
     "src/utils/branchDiff.ts": "0d7fd12643518dce808580e02c9684d99df23df0a2f980ccd5f6af7c59995615",
     "shared/google-sync/branchLayout.ts": "5eb46fe1c1fae3389ac6cfe31d6cf320bff2fba3e0c8f01802a33dc3e1495e3b",
+    "src/constants/prompt.ts": "291c8c6e5599483daecd8ecf38b3bb4498d42f65eb96665eb7a69c744d007492",
+    "src/utils/date.ts": "36233be4e64f54ddd34210bb10618a017b76c2ee0bd40f81d049c33a0c966279",
+    "src/utils/prompt.ts": "91810afceac8a5548505eda01ba145b60aba16d997f8c7a73ca3f704500b74ce",
+    "src/utils/promptLibrary.ts": "25de088cddbebd66b619e301778b1c85e3e3016a8d61d06cb0754b9b0944f099",
+    "shared/google-sync/promptLibrary.ts": "153630cb2fee750145aeb2c877b68de1773a8ac167e9fe0832094062495bcb73",
     "src/store/chat-edit-time.ts": "1d7abac60c3dbc063fcaaef270dd846c2cf2d78dc0aa1a286b99ffc708ecac8c",
     "src/utils/syncDocument.ts": "bc7cca9616aa593538dfb194b861ea7415ce3c7e7da42620a9fca0a89acb4120",
     "src/store/storage/google/records.ts": "21f44f6ba31a25f7ecd7cea71b54354b3579a09414e9895fd1ee592618dfb9e9",
@@ -278,7 +286,7 @@
     "shared/google-sync/localModelRole.ts": "8ce5bc1651e340c87134a35f4fbf149af159c296ca924a874c95b76b51dc96a5",
     "src/utils/localModelImport.ts": "f15c25b57b27279b501c26632fbf8c0481b2b23263b22de8e63651dfd5ff7f1b",
     "shared/google-sync/localModelImport.ts": "60f00ad8a824ab478800fcbb21d6510ddd107978108182d5d2f0ee3f0d3c5473",
-    "shared/google-sync/entry.ts": "d0f62eb67aa51b80edfe99d179da5938443ac97c1fd96a0fcdfab9f018ccc857",
+    "shared/google-sync/entry.ts": "3f45cec830f76481908a78899cb2999bcb5cb781926fce2ed37af07fdfdffd04",
     "shared/google-sync/generate.mjs": "db52acf4a78e8f2fd00ec7aa508e5f23a3d345b92c2dcc08441c521ee461ed59",
     "shared/google-sync/importDefaults.generate.mjs": "2ff8904af4f192ed0809ceaaabcfbefa708321083aebb527d712fc2a0551b15a"
   },
@@ -304,6 +312,7 @@
     "lodash/lodash.js": "f5465f55566bf544aad0a31c6135889ca1ed81eea8f53ec61c6cbe86926f07cf",
     "diff-match-patch/index.js": "7cead2c7cb3e4ff5c02e173cd6b81d22005e67c47ac2ce28e4b5c73d9ffcfdb2",
     "@dagrejs/dagre/dist/dagre.esm.js": "93f5f23d1bee1217531900366798277689400850a5560f238d4f213c8d552a63",
+    "papaparse/papaparse.min.js": "b8e870c5d2b29772f10c9fa9a693c8b896aac8540ed6701e3cc6304c683febdb",
     "lz-string/libs/lz-string.js": "550034b821027008776cb9bcd1700bb5d31e8b3de224cb130fc966a75dab0e5e",
     "@babel/runtime/package.json": "7a3606cfd92078a1f9b227edad21a983024086adfd7bb550a54c7b7eecaffbfe",
     "@babel/runtime/LICENSE": "117da2af0d4ce0fe1c8e19b5cff9dcd806adf973d328d27b11d4448c4ff24f76",
@@ -318,7 +327,9 @@
     "lodash/package.json": "5ef0a453b679125b155af19e1477f93b577ea826a57e1545f77608d326966e6a",
     "lodash/LICENSE": "f71e8ed126b46346494aad5486874cd8f0aafe95092ed67d2e3cb6110f939abc",
     "lz-string/package.json": "f0990a8fd6c347d66c1469d18918f5460d372c6b3af8a0a5737dfd34c809e20d",
-    "lz-string/LICENSE": "433fc9dfe659dbfb1e91eed8351f13651e97bfa3ac6d03394c3d63f61d4bbc80"
+    "lz-string/LICENSE": "433fc9dfe659dbfb1e91eed8351f13651e97bfa3ac6d03394c3d63f61d4bbc80",
+    "papaparse/package.json": "e73a790cd141d46912f038f56132266d5e3a7bb7b087f0961e74b81f8e360c1e",
+    "papaparse/LICENSE": "99aa68e4b42758b09828a46515f70369e5463458ab7a990189f641af2b8d9b4e"
   },
-  "bundleSHA256": "d9a5ef41eeb4c652843d10ec0c1c510bab686d9dfcf1d583af24fc3dd5df4226"
+  "bundleSHA256": "52ad4a4f684a95388050e5cfeee0b31dd75e9e3971e2d28917088ce47e97ff31"
 }

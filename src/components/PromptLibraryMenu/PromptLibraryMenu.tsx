@@ -10,6 +10,7 @@ import CrossIcon from '@icon/CrossIcon';
 import { v4 as uuidv4 } from 'uuid';
 import ImportPrompt from './ImportPrompt';
 import ExportPrompt from './ExportPrompt';
+import {applyPromptLibraryAction} from '@utils/promptLibrary';
 
 const PromptLibraryMenu = () => {
   const { t } = useTranslation();
@@ -57,15 +58,15 @@ const PromptLibraryMenuPopUp = ({
   };
 
   const addPrompt = () => {
-    _setPrompts((prev) => [...prev, { id: uuidv4(), name: '', prompt: '' }]);
+    _setPrompts((prev) => applyPromptLibraryAction(prev, {type: 'add', id: uuidv4()}));
   };
 
   const deletePrompt = (index: number) => {
-    _setPrompts((prev) => prev.filter((_, i) => i !== index));
+    _setPrompts((prev) => applyPromptLibraryAction(prev, {type: 'remove', index}));
   };
 
   const clearPrompts = () => {
-    _setPrompts([]);
+    _setPrompts((prev) => applyPromptLibraryAction(prev, {type: 'clear'}));
   };
 
   const handleOnFocus = (e: React.FocusEvent<HTMLTextAreaElement, Element>) => {
@@ -111,9 +112,7 @@ const PromptLibraryMenuPopUp = ({
                   onBlur={handleOnBlur}
                   onChange={(e) => {
                     const val = e.target.value;
-                    _setPrompts((prev) =>
-                      prev.map((p, i) => (i === index ? { ...p, name: val } : p))
-                    );
+                    _setPrompts((prev) => applyPromptLibraryAction(prev, {type: 'edit', index, field: 'name', value: val}));
                   }}
                   onInput={handleInput}
                   value={prompt.name}
@@ -124,9 +123,7 @@ const PromptLibraryMenuPopUp = ({
                   value={prompt.label ?? ''}
                   onChange={(e) => {
                     const val = e.target.value as '' | 'system' | 'user';
-                    _setPrompts((prev) =>
-                      prev.map((p, i) => (i === index ? { ...p, label: val || undefined } : p))
-                    );
+                    _setPrompts((prev) => applyPromptLibraryAction(prev, {type: 'edit', index, field: 'label', value: val || null}));
                   }}
                 >
                   <option value=''>{t('noLabel', '-')}</option>
@@ -141,9 +138,7 @@ const PromptLibraryMenuPopUp = ({
                   onBlur={handleOnBlur}
                   onChange={(e) => {
                     const val = e.target.value;
-                    _setPrompts((prev) =>
-                      prev.map((p, i) => (i === index ? { ...p, prompt: val } : p))
-                    );
+                    _setPrompts((prev) => applyPromptLibraryAction(prev, {type: 'edit', index, field: 'prompt', value: val}));
                   }}
                   onInput={handleInput}
                   value={prompt.prompt}
@@ -217,7 +212,7 @@ const PromptLibraryInline = ({ onSettingsChanged }: { onSettingsChanged?: () => 
       const stored = useStore.getState().prompts;
       const isDifferent =
         current.length !== stored.length ||
-        current.some((p, i) => p.id !== stored[i]?.id || p.name !== stored[i]?.name || p.prompt !== stored[i]?.prompt);
+        current.some((p, i) => p.id !== stored[i]?.id || p.name !== stored[i]?.name || p.prompt !== stored[i]?.prompt || p.label !== stored[i]?.label);
       if (isDifferent) {
         setPrompts(current);
         onSettingsChangedRef.current?.();
@@ -226,15 +221,15 @@ const PromptLibraryInline = ({ onSettingsChanged }: { onSettingsChanged?: () => 
   }, []);
 
   const addPrompt = () => {
-    _setPrompts((prev) => [...prev, { id: uuidv4(), name: '', prompt: '' }]);
+    _setPrompts((prev) => applyPromptLibraryAction(prev, {type: 'add', id: uuidv4()}));
   };
 
   const deletePrompt = (index: number) => {
-    _setPrompts((prev) => prev.filter((_, i) => i !== index));
+    _setPrompts((prev) => applyPromptLibraryAction(prev, {type: 'remove', index}));
   };
 
   const clearPrompts = () => {
-    _setPrompts([]);
+    _setPrompts((prev) => applyPromptLibraryAction(prev, {type: 'clear'}));
   };
 
   const handleOnFocus = (e: React.FocusEvent<HTMLTextAreaElement, Element>) => {
@@ -287,9 +282,7 @@ const PromptLibraryInline = ({ onSettingsChanged }: { onSettingsChanged?: () => 
                     onBlur={handleOnBlur}
                     onChange={(e) => {
                       const val = e.target.value;
-                      _setPrompts((prev) =>
-                        prev.map((p, i) => (i === index ? { ...p, name: val } : p))
-                      );
+                      _setPrompts((prev) => applyPromptLibraryAction(prev, {type: 'edit', index, field: 'name', value: val}));
                     }}
                     onInput={handleInput}
                     value={prompt.name}
@@ -300,9 +293,7 @@ const PromptLibraryInline = ({ onSettingsChanged }: { onSettingsChanged?: () => 
                     value={prompt.label ?? ''}
                     onChange={(e) => {
                       const val = e.target.value as '' | 'system' | 'user';
-                      _setPrompts((prev) =>
-                        prev.map((p, i) => (i === index ? { ...p, label: val || undefined } : p))
-                      );
+                      _setPrompts((prev) => applyPromptLibraryAction(prev, {type: 'edit', index, field: 'label', value: val || null}));
                     }}
                   >
                     <option value=''>{t('noLabel', '-')}</option>
@@ -317,9 +308,7 @@ const PromptLibraryInline = ({ onSettingsChanged }: { onSettingsChanged?: () => 
                     onBlur={handleOnBlur}
                     onChange={(e) => {
                       const val = e.target.value;
-                      _setPrompts((prev) =>
-                        prev.map((p, i) => (i === index ? { ...p, prompt: val } : p))
-                      );
+                      _setPrompts((prev) => applyPromptLibraryAction(prev, {type: 'edit', index, field: 'prompt', value: val}));
                     }}
                     onInput={handleInput}
                     value={prompt.prompt}
