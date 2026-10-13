@@ -1,3 +1,4 @@
+import { buildLocalChatMessages as buildSharedLocalChatMessages } from '@utils/localGenerationInput';
 import {
   filterOmittedMessages as filterSharedOmittedMessages,
   getSubmitContextMessages as getSharedSubmitContextMessages,
@@ -355,13 +356,7 @@ export function buildLocalChatMessages(
   const contextMessages = getSubmitContextMessages(
     messages, mode, messageIndex, modelId, chatIndex, systemPrompt,
   );
-  return contextMessages.map((m) => ({
-    role: m.role,
-    content: m.content
-      .filter((c): c is TextContentInterface => c.type === 'text')
-      .map((c) => c.text)
-      .join('\n'),
-  }));
+  return buildSharedLocalChatMessages(contextMessages);
 }
 
 /**

@@ -6999,6 +6999,7 @@ var WeaveletGoogleSync = (() => {
     generationRequest: () => generationRequest,
     libraryDefaults: () => libraryDefaults,
     libraryOperation: () => libraryOperation,
+    localGenerationInput: () => localGenerationInput,
     messageAttributesOperation: () => messageAttributesOperation,
     messageEdit: () => messageEdit,
     navigationOperation: () => navigationOperation,
@@ -17369,10 +17370,7 @@ ${message.content}` : message.content).join("\n\n").trim();
   };
 
   // shared/google-sync/generation.ts
-  var generationRequest = (json) => {
-    const input = JSON.parse(json);
-    if (input.modelState !== void 0)
-      input.config = normalizeRemoteConfig(input.config, input.modelState);
+  function getGenerationMessages(input) {
     const path = input.activePath ?? input.chat?.branchTree?.activePath;
     let chat = input.chat;
     if (chat?.branchTree && input.contentStore) {
@@ -17380,15 +17378,21 @@ ${message.content}` : message.content).join("\n\n").trim();
       chat = { ...chat, branchTree, messages: materializeActivePath(branchTree, input.contentStore) };
     }
     const projected = chat?.messages ?? input.messages ?? [];
-    const messages = getSubmitContextMessages(
+    return getSubmitContextMessages(
       projected,
-      projected.length,
+      input.messageIndex ?? projected.length,
       input.config.model,
       path,
       input.omittedNodes ?? chat?.omittedNodes,
       input.config.systemPrompt,
       chat ? { chat, generatingNodeIds: input.generatingNodeIds ?? [] } : void 0
     );
+  }
+  var generationRequest = (json) => {
+    const input = JSON.parse(json);
+    if (input.modelState !== void 0)
+      input.config = normalizeRemoteConfig(input.config, input.modelState);
+    const messages = getGenerationMessages(input);
     if (messages.length === 0)
       throw new Error("\u9001\u4FE1\u3059\u308B\u672C\u6587\u304C\u3042\u308A\u307E\u305B\u3093");
     const body = buildRequestBody(
@@ -18311,6 +18315,25 @@ ${messageContent}---
       ...state.text ? [{ type: "text", text: state.text }] : []
     ];
     return JSON.stringify({ state, parts, finished, isEmpty: parts.length === 0 });
+  }
+
+  // src/utils/localGenerationInput.ts
+  var normalizeAssistantPrefill = (value) => value?.trim() || void 0;
+  function buildLocalChatMessages(contextMessages) {
+    return contextMessages.map((message) => ({
+      role: message.role,
+      content: message.content.filter((part) => part.type === "text").map((part) => part.text).join("\n")
+    }));
+  }
+  function createLocalGenerationInput(messages, config, assistantPrefill) {
+    return { messages, config, assistantPrefix: assistantPrefill || void 0 };
+  }
+
+  // shared/google-sync/localGeneration.ts
+  function localGenerationInput(json) {
+    const input = JSON.parse(json);
+    const messages = buildLocalChatMessages(getGenerationMessages(input));
+    return JSON.stringify(createLocalGenerationInput(messages, input.config, normalizeAssistantPrefill(input.assistantPrefill)));
   }
 
   // shared/google-sync/entry.ts

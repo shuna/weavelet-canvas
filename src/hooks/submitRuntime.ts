@@ -1,3 +1,4 @@
+import { createLocalGenerationInput } from '@utils/localGenerationInput';
 import { finalizeGenerationState } from '@utils/generationPlan';
 import { cancelAiTask, cancelAiTaskRequest, isAiTaskCurrent, type AiTaskTicket } from './aiTaskLifetime';
 import { isOpenRouterEndpoint, observeOpenRouterHeaders, observeOpenRouterUsage, type OpenRouterRequestContext } from '@utils/openrouterControls';
@@ -581,7 +582,8 @@ export const executeLocalSubmit = async ({
     messages, mode, messages.length, config.model,
     undefined, config.systemPrompt,
   );
-  const prefix = assistantPrefill ?? '';
+  const input = createLocalGenerationInput(chatMessages, config, assistantPrefill);
+  const prefix = input.assistantPrefix ?? '';
 
   // Initialize streaming buffer for the target node (same pattern as handleStreamEvent)
   sessionChunkTargets.set(sessionId, { chatId, targetNodeId });
@@ -661,7 +663,7 @@ export const executeLocalSubmit = async ({
 
     resetStallTimer();
     await engine.generate(
-      { messages: chatMessages, assistantPrefix: prefix || undefined },
+      { messages: input.messages, assistantPrefix: input.assistantPrefix },
       {
         maxTokens: config.max_tokens,
         temperature: config.temperature,

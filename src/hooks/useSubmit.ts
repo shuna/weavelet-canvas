@@ -1,3 +1,4 @@
+import { normalizeAssistantPrefill } from '@utils/localGenerationInput';
 import { resolveAssistantPrefillKey } from '@utils/generationPlan';
 import { localModelRuntime } from '@src/local-llm/runtime';
 import { beginAiTask, finishAiTask, isAiTaskCurrent } from './aiTaskLifetime';
@@ -126,7 +127,7 @@ const useSubmit = () => {
     const resolved = isLocal ? undefined : resolveProviderForModel(submitConfig.model, initialState.favoriteModels, initialState.providers, fallbackProvider, submitConfig.providerId);
     const apiVersion = initialState.apiVersion;
     const prefillKey = resolveAssistantPrefillKey(chats[chatIndex],mode,insertIndex);
-    const assistantPrefill = initialState.assistantPrefillMap[prefillKey]?.trim() || undefined;
+    const assistantPrefill = normalizeAssistantPrefill(initialState.assistantPrefillMap[prefillKey]);
     const titleSettings = { titleModel: initialState.titleModel, titleProviderId: initialState.titleProviderId, favoriteModels: initialState.favoriteModels, providers: initialState.providers };
     const evaluationSettings = initialState.evaluationSettings;
     const ticket = beginAiTask({ requestId: sessionId, chatId, nodeId: targetNodeId, kind: 'generation', dependencyIds: updatedChats[chatIndex].branchTree?.activePath.slice(0, messageIndex) ?? [], cancel: () => stopSubmitSession(sessionId) });

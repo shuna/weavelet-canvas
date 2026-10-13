@@ -129,3 +129,5 @@ export { providerModelList } from "./providerModels";
 export { remoteOutput } from "./remoteOutput";
 
 export { generationPlan } from "./generationPlan";
+
+export { localGenerationInput } from "./localGeneration";
