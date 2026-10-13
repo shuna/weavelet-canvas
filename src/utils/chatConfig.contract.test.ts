@@ -1,7 +1,9 @@
 import { describe, expect, it, vi } from 'vitest';
 import { chatConfig, normalizeRemoteConfig } from '../../shared/google-sync/chatConfig';
+import { libraryDefaults } from '../../shared/google-sync/library';
 import { generationRequest } from '../../shared/google-sync/generation';
 import { _defaultChatConfig } from '../constants/chatDefaults';
+import { generateDefaultChat } from '../constants/chat';
 import useStore from '@store/store';
 import { switchConfigModel } from './modelSettings';
 import { normalizeConfigStream } from './streamSupport';
@@ -58,5 +60,37 @@ describe('shared remote chat config actual Web rules', () => {
     expect(apply(config,result.changes)).not.toHaveProperty('providerId');
     expect(apply(config,result.changes)).not.toHaveProperty('modelSource');
     expect(apply(config,JSON.parse(chatConfig(JSON.stringify({operation:'switch',config,target:{model:'local',modelSource:'local'}}))).changes)).toMatchObject({model:'local',modelSource:'local',max_tokens:1844,stream:true});
+  });
+  it('uses saved defaults for both the Web creator and native bridge without changing them', () => {
+    const saved = {..._defaultChatConfig,model:'target',providerId:'openrouter' as const,systemPrompt:'old prompt',xOpaque:{kept:true}} as unknown as ConfigInterface;
+    const savedState = {defaultChatConfig:saved,defaultSystemMessage:'',defaultImageDetail:'high' as const,...state};
+    const spy = vi.spyOn(useStore,'getState').mockReturnValue(savedState as never);
+    const web = generateDefaultChat('saved defaults');
+    expect(web.config).toMatchObject({model:'target',max_tokens:3200,stream:false});
+    expect(web.config.systemPrompt).toBeUndefined();
+    const native = JSON.parse(libraryDefaults({state:savedState,modelState:state}));
+    expect(native).toMatchObject({config:{model:'target',max_tokens:3200,stream:false,xOpaque:{kept:true}},imageDetail:'high',
+      settings:{defaultChatConfig:{systemPrompt:'old prompt',xOpaque:{kept:true}},defaultSystemMessage:'',defaultImageDetail:'high'}});
+    expect(native.config).not.toHaveProperty('systemPrompt');
+    expect(saved).toEqual({..._defaultChatConfig,model:'target',providerId:'openrouter',systemPrompt:'old prompt',xOpaque:{kept:true}});
+    spy.mockRestore();
+  });
+  it('normalizes local defaults with the shared local limit', () => {
+    const result = JSON.parse(libraryDefaults(JSON.stringify({state:{defaultChatConfig:{..._defaultChatConfig,model:'local-test',modelSource:'local'},
+      defaultSystemMessage:'system',defaultImageDetail:'low'},modelState:{}})));
+    expect(result.config).toMatchObject({model:'local-test',modelSource:'local',max_tokens:1844,stream:true,systemPrompt:'system'});
+  });
+  it('clamps saved defaults with the Web UI context rule without changing normalize', () => {
+    const config = {..._defaultChatConfig,model:'unknown',max_tokens:999999};
+    const saved = apply(config,JSON.parse(chatConfig(JSON.stringify({operation:'saveDefaults',config}))).changes);
+    const normalized = apply(config,JSON.parse(chatConfig(JSON.stringify({operation:'normalize',config}))).changes);
+    expect(saved.max_tokens).toBe(115200);
+    expect(normalized.max_tokens).toBe(999999);
+  });
+  it('keeps an omitted saved token setting omitted', () => {
+    const config = {..._defaultChatConfig,model:'unknown'} as any;
+    delete config.max_tokens;
+    const changes = JSON.parse(chatConfig(JSON.stringify({operation:'saveDefaults',config}))).changes;
+    expect(apply(config,changes)).not.toHaveProperty('max_tokens');
   });
 });

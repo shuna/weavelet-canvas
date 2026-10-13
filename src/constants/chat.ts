@@ -7,6 +7,7 @@ import useStore from '@store/store';
 import { normalizeConfigStream } from '@utils/streamSupport';
 import { createLibraryChat } from '@utils/chatLibrary';
 import { defaultSystemMessage } from './chatDefaults';
+import { newChatDefaults } from '@utils/newChatDefaults';
 
 const date = new Date();
 const dateString =
@@ -27,8 +28,9 @@ export const generateDefaultChat = (
   folder?: string
 ): ChatInterface => {
   const state = useStore.getState();
-  const chat = createLibraryChat(uuidv4(), title, state.defaultChatConfig,
-    state.defaultImageDetail, state.defaultSystemMessage, folder);
+  const defaults = newChatDefaults(state);
+  const chat = createLibraryChat(uuidv4(), title, defaults.defaultChatConfig,
+    defaults.defaultImageDetail, defaults.defaultSystemMessage, folder);
   chat.config = normalizeConfigStream(chat.config);
   return chat;
 };

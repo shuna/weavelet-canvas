@@ -31,9 +31,9 @@ var WeaveletGoogleSync = (() => {
   ));
   var __toCommonJS = (mod) => __copyProps(__defProp({}, "__esModule", { value: true }), mod);
 
-  // node_modules/lodash/lodash.js
+  // ../weavelet-main-integration-ew768sf2/worktree/node_modules/lodash/lodash.js
   var require_lodash = __commonJS({
-    "node_modules/lodash/lodash.js"(exports, module) {
+    "../weavelet-main-integration-ew768sf2/worktree/node_modules/lodash/lodash.js"(exports, module) {
       /**
        * @license
        * Lodash <https://lodash.com/>
@@ -5537,9 +5537,9 @@ var WeaveletGoogleSync = (() => {
     }
   });
 
-  // node_modules/diff-match-patch/index.js
+  // ../weavelet-main-integration-ew768sf2/worktree/node_modules/diff-match-patch/index.js
   var require_diff_match_patch = __commonJS({
-    "node_modules/diff-match-patch/index.js"(exports, module) {
+    "../weavelet-main-integration-ew768sf2/worktree/node_modules/diff-match-patch/index.js"(exports, module) {
       var diff_match_patch2 = function() {
         this.Diff_Timeout = 1;
         this.Diff_EditCost = 4;
@@ -8931,7 +8931,7 @@ ${message.content}` : message.content).join("\n\n").trim();
     });
   };
 
-  // node_modules/@babel/runtime/helpers/esm/typeof.js
+  // ../weavelet-main-integration-ew768sf2/worktree/node_modules/@babel/runtime/helpers/esm/typeof.js
   function _typeof(o) {
     "@babel/helpers - typeof";
     return _typeof = "function" == typeof Symbol && "symbol" == typeof Symbol.iterator ? function(o2) {
@@ -8941,13 +8941,13 @@ ${message.content}` : message.content).join("\n\n").trim();
     }, _typeof(o);
   }
 
-  // node_modules/@babel/runtime/helpers/esm/classCallCheck.js
+  // ../weavelet-main-integration-ew768sf2/worktree/node_modules/@babel/runtime/helpers/esm/classCallCheck.js
   function _classCallCheck(a, n) {
     if (!(a instanceof n))
       throw new TypeError("Cannot call a class as a function");
   }
 
-  // node_modules/@babel/runtime/helpers/esm/toPrimitive.js
+  // ../weavelet-main-integration-ew768sf2/worktree/node_modules/@babel/runtime/helpers/esm/toPrimitive.js
   function toPrimitive(t2, r) {
     if ("object" != _typeof(t2) || !t2)
       return t2;
@@ -8961,13 +8961,13 @@ ${message.content}` : message.content).join("\n\n").trim();
     return ("string" === r ? String : Number)(t2);
   }
 
-  // node_modules/@babel/runtime/helpers/esm/toPropertyKey.js
+  // ../weavelet-main-integration-ew768sf2/worktree/node_modules/@babel/runtime/helpers/esm/toPropertyKey.js
   function toPropertyKey(t2) {
     var i = toPrimitive(t2, "string");
     return "symbol" == _typeof(i) ? i : i + "";
   }
 
-  // node_modules/@babel/runtime/helpers/esm/createClass.js
+  // ../weavelet-main-integration-ew768sf2/worktree/node_modules/@babel/runtime/helpers/esm/createClass.js
   function _defineProperties(e, r) {
     for (var t2 = 0; t2 < r.length; t2++) {
       var o = r[t2];
@@ -8980,21 +8980,21 @@ ${message.content}` : message.content).join("\n\n").trim();
     }), e;
   }
 
-  // node_modules/@babel/runtime/helpers/esm/assertThisInitialized.js
+  // ../weavelet-main-integration-ew768sf2/worktree/node_modules/@babel/runtime/helpers/esm/assertThisInitialized.js
   function _assertThisInitialized(e) {
     if (void 0 === e)
       throw new ReferenceError("this hasn't been initialised - super() hasn't been called");
     return e;
   }
 
-  // node_modules/@babel/runtime/helpers/esm/setPrototypeOf.js
+  // ../weavelet-main-integration-ew768sf2/worktree/node_modules/@babel/runtime/helpers/esm/setPrototypeOf.js
   function _setPrototypeOf(t2, e) {
     return _setPrototypeOf = Object.setPrototypeOf ? Object.setPrototypeOf.bind() : function(t3, e2) {
       return t3.__proto__ = e2, t3;
     }, _setPrototypeOf(t2, e);
   }
 
-  // node_modules/@babel/runtime/helpers/esm/inherits.js
+  // ../weavelet-main-integration-ew768sf2/worktree/node_modules/@babel/runtime/helpers/esm/inherits.js
   function _inherits(t2, e) {
     if ("function" != typeof e && null !== e)
       throw new TypeError("Super expression must either be null or a function");
@@ -9009,7 +9009,7 @@ ${message.content}` : message.content).join("\n\n").trim();
     }), e && _setPrototypeOf(t2, e);
   }
 
-  // node_modules/@babel/runtime/helpers/esm/possibleConstructorReturn.js
+  // ../weavelet-main-integration-ew768sf2/worktree/node_modules/@babel/runtime/helpers/esm/possibleConstructorReturn.js
   function _possibleConstructorReturn(t2, e) {
     if (e && ("object" == _typeof(e) || "function" == typeof e))
       return e;
@@ -9018,14 +9018,14 @@ ${message.content}` : message.content).join("\n\n").trim();
     return _assertThisInitialized(t2);
   }
 
-  // node_modules/@babel/runtime/helpers/esm/getPrototypeOf.js
+  // ../weavelet-main-integration-ew768sf2/worktree/node_modules/@babel/runtime/helpers/esm/getPrototypeOf.js
   function _getPrototypeOf(t2) {
     return _getPrototypeOf = Object.setPrototypeOf ? Object.getPrototypeOf.bind() : function(t3) {
       return t3.__proto__ || Object.getPrototypeOf(t3);
     }, _getPrototypeOf(t2);
   }
 
-  // node_modules/@babel/runtime/helpers/esm/defineProperty.js
+  // ../weavelet-main-integration-ew768sf2/worktree/node_modules/@babel/runtime/helpers/esm/defineProperty.js
   function _defineProperty(e, r, t2) {
     return (r = toPropertyKey(r)) in e ? Object.defineProperty(e, r, {
       value: t2,
@@ -9035,19 +9035,19 @@ ${message.content}` : message.content).join("\n\n").trim();
     }) : e[r] = t2, e;
   }
 
-  // node_modules/@babel/runtime/helpers/esm/arrayWithHoles.js
+  // ../weavelet-main-integration-ew768sf2/worktree/node_modules/@babel/runtime/helpers/esm/arrayWithHoles.js
   function _arrayWithHoles(r) {
     if (Array.isArray(r))
       return r;
   }
 
-  // node_modules/@babel/runtime/helpers/esm/iterableToArray.js
+  // ../weavelet-main-integration-ew768sf2/worktree/node_modules/@babel/runtime/helpers/esm/iterableToArray.js
   function _iterableToArray(r) {
     if ("undefined" != typeof Symbol && null != r[Symbol.iterator] || null != r["@@iterator"])
       return Array.from(r);
   }
 
-  // node_modules/@babel/runtime/helpers/esm/arrayLikeToArray.js
+  // ../weavelet-main-integration-ew768sf2/worktree/node_modules/@babel/runtime/helpers/esm/arrayLikeToArray.js
   function _arrayLikeToArray(r, a) {
     (null == a || a > r.length) && (a = r.length);
     for (var e = 0, n = Array(a); e < a; e++)
@@ -9055,7 +9055,7 @@ ${message.content}` : message.content).join("\n\n").trim();
     return n;
   }
 
-  // node_modules/@babel/runtime/helpers/esm/unsupportedIterableToArray.js
+  // ../weavelet-main-integration-ew768sf2/worktree/node_modules/@babel/runtime/helpers/esm/unsupportedIterableToArray.js
   function _unsupportedIterableToArray(r, a) {
     if (r) {
       if ("string" == typeof r)
@@ -9065,17 +9065,17 @@ ${message.content}` : message.content).join("\n\n").trim();
     }
   }
 
-  // node_modules/@babel/runtime/helpers/esm/nonIterableRest.js
+  // ../weavelet-main-integration-ew768sf2/worktree/node_modules/@babel/runtime/helpers/esm/nonIterableRest.js
   function _nonIterableRest() {
     throw new TypeError("Invalid attempt to destructure non-iterable instance.\nIn order to be iterable, non-array objects must have a [Symbol.iterator]() method.");
   }
 
-  // node_modules/@babel/runtime/helpers/esm/toArray.js
+  // ../weavelet-main-integration-ew768sf2/worktree/node_modules/@babel/runtime/helpers/esm/toArray.js
   function _toArray(r) {
     return _arrayWithHoles(r) || _iterableToArray(r) || _unsupportedIterableToArray(r) || _nonIterableRest();
   }
 
-  // node_modules/i18next/dist/esm/i18next.js
+  // ../weavelet-main-integration-ew768sf2/worktree/node_modules/i18next/dist/esm/i18next.js
   function ownKeys$6(object2, enumerableOnly) {
     var keys = Object.keys(object2);
     if (Object.getOwnPropertySymbols) {
@@ -16928,6 +16928,7 @@ ${message.content}` : message.content).join("\n\n").trim();
 
   // src/utils/tokenBudget.ts
   var UNKNOWN_MODEL_CONTEXT_LENGTH = 8192;
+  var UNKNOWN_MODEL_UI_CONTEXT_LENGTH = 128e3;
   var MIN_PROMPT_RATIO = 0.1;
   var normalizeContextLength = (contextLength) => Math.max(1, Math.floor(contextLength));
   var getMinPromptTokensForContext = (contextLength) => Math.max(1, Math.floor(normalizeContextLength(contextLength) * MIN_PROMPT_RATIO));
@@ -16935,6 +16936,10 @@ ${message.content}` : message.content).join("\n\n").trim();
     const normalizedContextLength = normalizeContextLength(contextLength);
     return Math.max(0, normalizedContextLength - getMinPromptTokensForContext(normalizedContextLength));
   };
+  var clampCompletionTokens = (requestedCompletionTokens, contextLength) => Math.min(
+    Math.max(0, Math.floor(requestedCompletionTokens)),
+    getMaxCompletionTokensForContext(contextLength)
+  );
 
   // src/utils/localModelLimits.ts
   var DEFAULT_LOCAL_MODEL_CONTEXT_LENGTH = 2048;
@@ -17293,22 +17298,32 @@ ${message.content}` : message.content).join("\n\n").trim();
       (model, providerId) => remoteModelStreamSupported(modelState, model, providerId)
     );
   }
+  function normalizeChatConfig(config, modelState = {}, localCapabilities) {
+    const defaultMaxTokens = (model, providerId, source) => source === "local" ? localModelDefaultMaxTokens(modelState, model, localCapabilities?.[model]) : remoteModelDefaultMaxTokens(modelState, model, providerId);
+    return normalizeConfigStream(config, defaultMaxTokens, (model, providerId, source) => source === "local" ? true : remoteModelStreamSupported(modelState, model, providerId));
+  }
+  function saveDefaultChatConfig(config, modelState = {}, localCapabilities) {
+    const contextLength = config.modelSource === "local" ? localModelContextLength(modelState, config.model, localCapabilities?.[config.model]) : (() => {
+      const info = remoteModelContextInfo(modelState, config.model, config.providerId);
+      return info.isFallback ? UNKNOWN_MODEL_UI_CONTEXT_LENGTH : info.contextLength;
+    })();
+    return normalizeChatConfig(config.max_tokens === void 0 ? config : { ...config, max_tokens: clampCompletionTokens(config.max_tokens, contextLength) }, modelState, localCapabilities);
+  }
   function chatConfig(json) {
     const input = JSON.parse(json);
-    const state = input.modelState ?? {};
     let config = input.config;
-    const defaultMaxTokens = (model, providerId, source) => source === "local" ? localModelDefaultMaxTokens(state, model, input.localCapabilities?.[model]) : remoteModelDefaultMaxTokens(state, model, providerId);
+    const state = input.modelState ?? {};
     if (input.operation === "switch") {
       if (!input.target)
         throw new Error("Missing model target.");
       config = switchConfigModel(
         config,
         { model: input.target.model, providerId: input.target.providerId, modelSource: input.target.modelSource },
-        defaultMaxTokens
+        (model, providerId, source) => source === "local" ? localModelDefaultMaxTokens(state, model, input.localCapabilities?.[model]) : remoteModelDefaultMaxTokens(state, model, providerId)
       );
-    } else if (input.operation !== "normalize")
+    } else if (input.operation !== "normalize" && input.operation !== "saveDefaults")
       throw new Error("Unknown chat config operation.");
-    const next = normalizeConfigStream(config, defaultMaxTokens, (model, providerId, source) => source === "local" ? true : remoteModelStreamSupported(state, model, providerId));
+    const next = input.operation === "saveDefaults" ? saveDefaultChatConfig(config, state, input.localCapabilities) : normalizeChatConfig(config, state, input.localCapabilities);
     return JSON.stringify({ changes: diffJSONChanges(input.config, JSON.parse(JSON.stringify(next))) });
   }
 
@@ -17509,18 +17524,26 @@ ${message.content}` : message.content).join("\n\n").trim();
     };
   };
 
+  // src/utils/newChatDefaults.ts
+  var newChatDefaults = (state = {}) => ({
+    defaultChatConfig: state.defaultChatConfig ?? _defaultChatConfig,
+    defaultSystemMessage: state.defaultSystemMessage ?? defaultSystemMessage,
+    defaultImageDetail: state.defaultImageDetail ?? _defaultImageDetail
+  });
+  var newChatConfig = (config, systemPrompt) => ({
+    ...structuredClone(config),
+    reasoning_effort: config.reasoning_effort ?? "none",
+    reasoning_budget_tokens: config.reasoning_budget_tokens ?? 0,
+    systemPrompt: systemPrompt || void 0
+  });
+
   // src/utils/chatLibrary.ts
   function createLibraryChat(id, title, config, imageDetail, systemPrompt, folder) {
     return {
       id,
       title: title ? title : "New Chat",
       messages: [],
-      config: {
-        ...structuredClone(config),
-        reasoning_effort: config.reasoning_effort ?? "none",
-        reasoning_budget_tokens: config.reasoning_budget_tokens ?? 0,
-        systemPrompt: systemPrompt || void 0
-      },
+      config: newChatConfig(config, systemPrompt),
       titleSet: false,
       folder,
       imageDetail
@@ -17637,10 +17660,12 @@ ${message.content}` : message.content).join("\n\n").trim();
     }
     return JSON.stringify(diffJSONChanges({ chats, contentStore }, JSON.parse(JSON.stringify(next))));
   }
-  var libraryDefaults = () => JSON.stringify({
-    config: { ..._defaultChatConfig, systemPrompt: defaultSystemMessage },
-    imageDetail: _defaultImageDetail
-  });
+  var libraryDefaults = (value = "{}") => {
+    const input = typeof value === "string" ? JSON.parse(value) : value;
+    const settings = newChatDefaults(input.state);
+    const config = normalizeChatConfig(newChatConfig(settings.defaultChatConfig, settings.defaultSystemMessage), input.modelState, input.localCapabilities);
+    return JSON.stringify({ config, imageDetail: settings.defaultImageDetail, settings });
+  };
 
   // src/utils/syncDocument.ts
   var import_lodash2 = __toESM(require_lodash(), 1);

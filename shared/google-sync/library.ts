@@ -1,8 +1,11 @@
-import { _defaultChatConfig, _defaultImageDetail, defaultSystemMessage } from '../../src/constants/chatDefaults';
 import { addLibraryChat, createLibraryChat, deleteLibraryChats, duplicateLibraryChat, renameLibraryChat } from '../../src/utils/chatLibrary';
+import { newChatConfig, newChatDefaults, type NewChatDefaults } from '../../src/utils/newChatDefaults';
 import { diffJSONChanges } from '../../src/utils/jsonChanges';
 import type { ChatInterface, ConfigInterface, ImageDetail } from '../../src/types/chat';
 import type { ContentStoreData } from '../../src/utils/contentStore';
+import { normalizeChatConfig } from './chatConfig';
+import type { LocalContextCapabilities, LocalModelState } from '../../src/utils/localModelLimits';
+import type { ReasoningModelState } from '../../src/utils/modelReasoning';
 
 type LibraryInput = {
   chats: ChatInterface[];
@@ -46,7 +49,15 @@ export function libraryOperation(json: string): string {
   return JSON.stringify(diffJSONChanges({ chats, contentStore }, JSON.parse(JSON.stringify(next))));
 }
 
-export const libraryDefaults = () => JSON.stringify({
-  config: { ..._defaultChatConfig, systemPrompt: defaultSystemMessage },
-  imageDetail: _defaultImageDetail,
-});
+type LibraryDefaultsInput = {
+  state?: Partial<NewChatDefaults>;
+  modelState?: ReasoningModelState & LocalModelState;
+  localCapabilities?: Record<string, LocalContextCapabilities>;
+};
+
+export const libraryDefaults = (value: string | LibraryDefaultsInput = '{}') => {
+  const input = typeof value === 'string' ? JSON.parse(value) as LibraryDefaultsInput : value;
+  const settings = newChatDefaults(input.state);
+  const config = normalizeChatConfig(newChatConfig(settings.defaultChatConfig, settings.defaultSystemMessage), input.modelState, input.localCapabilities);
+  return JSON.stringify({ config, imageDetail: settings.defaultImageDetail, settings });
+};

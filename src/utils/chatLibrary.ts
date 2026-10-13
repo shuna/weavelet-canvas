@@ -3,18 +3,14 @@ import { deepCloneSingleChat } from './chatShallowClone';
 import { releaseContent, retainContent, type ContentStoreData } from './contentStore';
 import { isStreamingContentHash, finalizeStreamingSnapshotState } from './streamingBuffer';
 import { prepareChatForExport } from './chatExport';
+import { newChatConfig } from './newChatDefaults';
 
 export function createLibraryChat(id: string, title: string | undefined, config: ConfigInterface, imageDetail: ImageDetail, systemPrompt?: string, folder?: string): ChatInterface {
   return {
     id,
     title: title ? title : 'New Chat',
     messages: [],
-    config: {
-      ...structuredClone(config),
-      reasoning_effort: config.reasoning_effort ?? 'none',
-      reasoning_budget_tokens: config.reasoning_budget_tokens ?? 0,
-      systemPrompt: systemPrompt || undefined,
-    },
+    config: newChatConfig(config, systemPrompt),
     titleSet: false,
     folder,
     imageDetail,
