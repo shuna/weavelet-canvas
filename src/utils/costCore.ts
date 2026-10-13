@@ -46,3 +46,10 @@ export const calculateUsageCostCore = (usage: TotalTokenUsed[string] | undefined
     isFree: (costEntry.prompt.price ?? 0) === 0 && (costEntry.completion.price ?? 0) === 0
       && (costEntry.image?.price ?? 0) === 0 };
 };
+
+export const summarizeUsageCosts = (rows: UsageCostResult[]) => {
+  if (rows.some(row => row.kind === 'unknown')) return { kind: 'unknown' as const };
+  const cost = rows.reduce((sum, row) => sum + (row.kind === 'known' ? row.cost : 0), 0);
+  const isFree = rows.length > 0 && rows.every(row => row.kind === 'known' && row.isFree);
+  return { kind: 'known' as const, cost, isFree, ...(isFree ? {} : { display: cost.toPrecision(3) }) };
+};

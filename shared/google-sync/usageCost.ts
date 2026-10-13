@@ -1,7 +1,7 @@
 import type { TotalTokenUsed } from '../../src/types/chat';
 import type { ReasoningModelState } from '../../src/utils/modelReasoning';
 import { getModelCostCore, isKnownModelCore } from '../../src/utils/modelCostCore';
-import { calculateUsageCostCore, mergeTotalTokenUsed, parseTokenKey } from '../../src/utils/costCore';
+import { calculateUsageCostCore, mergeTotalTokenUsed, parseTokenKey, summarizeUsageCosts } from '../../src/utils/costCore';
 
 export function usageCost(json: string): string {
   const input = JSON.parse(json) as { state: ReasoningModelState; totalTokenUsed: TotalTokenUsed;
@@ -16,10 +16,5 @@ export function usageCost(json: string): string {
     return { key, label: key.replace(':::', ' / '), ...result,
       ...(result.kind === 'known' && !result.isFree ? { display: result.cost.toPrecision(3) } : {}) };
   });
-  const total = rows.some(row => row.kind === 'unknown') ? { kind: 'unknown' as const } : (() => {
-    const cost = rows.reduce((sum, row) => sum + (row.kind === 'known' ? row.cost : 0), 0);
-    const isFree = rows.length > 0 && rows.every(row => row.kind === 'known' && row.isFree);
-    return { kind: 'known' as const, cost, isFree, ...(isFree ? {} : { display: cost.toPrecision(3) }) };
-  })();
-  return JSON.stringify({ rows, total });
+  return JSON.stringify({ rows, total: summarizeUsageCosts(rows) });
 }

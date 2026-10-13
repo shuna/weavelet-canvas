@@ -9,14 +9,9 @@ import Toggle from '@components/Toggle/Toggle';
 import CalculatorIcon from '@icon/CalculatorIcon';
 import { ModelOptions } from '@type/chat';
 import { calculateUsageCost, parseTokenKey } from '@utils/cost';
+import { summarizeUsageCosts, type UsageCostResult } from '@utils/costCore';
 
-type CostMapping = {
-  label: string;
-  kind: 'known' | 'unknown';
-  cost?: number;
-  isFree?: boolean;
-  reason?: 'model-not-registered' | 'no-pricing-data';
-}[];
+type CostMapping = (UsageCostResult & { label: string })[];
 
 const TotalTokenCost = () => {
   const { t } = useTranslation(['main', 'model']);
@@ -45,6 +40,8 @@ const TotalTokenCost = () => {
 
     setCostMapping(updatedCostMapping);
   }, [totalTokenUsed]);
+
+  const totalSummary = summarizeUsageCosts(costMapping);
 
   return countTotalTokens ? (
     <div className='flex flex-col items-center gap-2'>
@@ -77,21 +74,11 @@ const TotalTokenCost = () => {
             <tr className='bg-white border-b dark:bg-gray-800 dark:border-gray-700 font-bold'>
               <td className='px-4 py-2'>{t('total', { ns: 'main' })}</td>
               <td className='px-4 py-2'>
-                {costMapping.some((entry) => entry.kind === 'unknown')
+                {totalSummary.kind === 'unknown'
                   ? t('tokenCostNoPricingData', { ns: 'main' })
-                  : (() => {
-                      const total = costMapping.reduce(
-                        (prev, curr) => prev + (curr.cost ?? 0),
-                        0
-                      );
-                      const hasEntries = costMapping.length > 0;
-                      const allFree =
-                        hasEntries &&
-                        costMapping.every((entry) => entry.kind === 'known' && entry.isFree);
-                      return allFree
-                        ? t('free', { ns: 'main', defaultValue: 'Free' })
-                        : total.toPrecision(3);
-                    })()}
+                  : totalSummary.isFree
+                    ? t('free', { ns: 'main', defaultValue: 'Free' })
+                    : totalSummary.display}
               </td>
             </tr>
           </tbody>
@@ -134,34 +121,23 @@ export const TotalTokenCostDisplay = () => {
 
   const [totalCost, setTotalCost] = useState<number>(0);
   const [allFree, setAllFree] = useState<boolean>(false);
+  const [totalDisplay, setTotalDisplay] = useState('0.00');
   const [isDisplayRefreshing, setIsDisplayRefreshing] = useState(false);
   const refreshTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
-    let updatedTotalCost = 0;
-    let hasUnknownCost = false;
-    let hasEntries = false;
-    let hasOnlyFreeModels = true;
-    Object.entries(totalTokenUsed).forEach(([key, tokenCost]) => {
-      hasEntries = true;
+    const rows = Object.entries(totalTokenUsed).map(([key, tokenCost]) => {
       const { modelId, providerId } = parseTokenKey(key);
-      const result = calculateUsageCost(
+      return calculateUsageCost(
         tokenCost,
         modelId as ModelOptions,
         providerId
       );
-      if (result.kind === 'unknown') {
-        hasUnknownCost = true;
-        return;
-      }
-      if (!result.isFree) {
-        hasOnlyFreeModels = false;
-      }
-      updatedTotalCost += result.cost;
     });
-
-    setTotalCost(hasUnknownCost ? Number.NaN : updatedTotalCost);
-    setAllFree(hasEntries && hasOnlyFreeModels && !hasUnknownCost);
+    const summary = summarizeUsageCosts(rows);
+    setTotalCost(summary.kind === 'unknown' ? Number.NaN : summary.cost);
+    setAllFree(summary.kind === 'known' && summary.isFree);
+    setTotalDisplay(summary.kind === 'known' ? summary.display ?? '0.00' : '0.00');
   }, [totalTokenUsed]);
 
   useEffect(() => {
@@ -192,7 +168,7 @@ export const TotalTokenCostDisplay = () => {
           ? t('tokenCostNoPricingData', { ns: 'main' })
           : allFree
             ? t('free', { ns: 'main', defaultValue: 'Free' })
-            : `USD ${totalCost.toPrecision(3)}`}
+            : `USD ${totalDisplay}`}
       </span>
     </a>
   );

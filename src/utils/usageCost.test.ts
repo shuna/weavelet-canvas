@@ -1,10 +1,19 @@
 import { describe, expect, it } from 'vitest';
 import { usageCost } from '../../shared/google-sync/usageCost';
+import { summarizeUsageCosts } from './costCore';
 
 const report = (input: object) => JSON.parse(usageCost(JSON.stringify(input)));
 const usage = { promptTokens: 1_000_000, completionTokens: 0, imageTokens: 0 };
 
 describe('shared usage cost report', () => {
+  it('shares empty, free and unknown total rules with both Web displays', () => {
+    expect(summarizeUsageCosts([])).toEqual({ kind: 'known', cost: 0, isFree: false, display: '0.00' });
+    expect(summarizeUsageCosts([{ kind: 'known', cost: 0, isFree: true }]))
+      .toEqual({ kind: 'known', cost: 0, isFree: true });
+    expect(summarizeUsageCosts([{ kind: 'known', cost: 1, isFree: false },
+      { kind: 'unknown', reason: 'no-pricing-data' }])).toEqual({ kind: 'unknown' });
+  });
+
   it('uses custom, favorite, then cached pricing and includes live usage without modifying persisted totals', () => {
     const totalTokenUsed = { 'custom:::openrouter': usage, 'favorite:::openrouter': usage, 'cached:::openrouter': usage };
     const state = {
