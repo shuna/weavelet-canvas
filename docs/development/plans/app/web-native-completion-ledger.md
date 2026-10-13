@@ -757,3 +757,15 @@ nativeはmarkedTextRangeを読むため標準UITextView adapterを使い、hardw
 FAKE実画面では本文のfocus/貼付け・Shift+Return後の続き入力を2行として確認した。普通Return1回は改行となり、送信成功を確認できなかった。IME確定/入力モード/Responder入口の原因は確定していない。直後にMacがロックされ追加Return再試行とアプリ終了は未実施。5aec5a60で標準UIKeyCommand入口を補い、共有action有りのReturnだけ登録、IME中の登録/実行を拒否する。e4fef0e4でmain actor内のSessionを再利用した。macOS JSC bundle初期化probeはcold67.86ms/steady14.88–14.95msで、4回のResponder判定ごとの初期化を避ける根拠とし、Catalyst UI遅延の実測とは区別する。Responder dispatchの既存境界1件成功（/private/tmp/weavelet-enter-session.log）、最終統合Catalyst build成功（/private/tmp/weavelet-enter-final-build.log）、追加限定Astraは新規P2以上なし。
 
 最終UIKeyCommand版の実Return送信・IME確定・二重発火・狭幅/最大文字サイズ/VoiceOver・Air導入は未確認。最新版隔離clone /private/tmp/weavelet-layout-shell-ui-proof/WeaveletEnterCommandsCheck.app は準備のみ。前版WeaveletEnterCheckはPID18416でロック時点の起動を確認、終了済みとは記録しない。未送信合成draftが残り、通常store/Keychain/実通信は使用していない。Airは今回もpasscodeRequired=true。未変更の全業務/全同期suiteは反復せず、実操作の再確認を残件とする。
+
+## advanced表示と挿入本文の生成（2026-10-14）
+
+f3c46f5bでadvancedModeを一般設定と先頭systemの表示・役割編集・追加/挿入・生成設定入口へ接続した。実Web ChatContentとDownloadChatの表示条件をpure advancedDisplayへ切り出し、両Web callerとnativeで共用する。DownloadChatのこのfilterは画像captureだけであり、Markdown/JSONのfileExportには適用されていない。nativeも表示用配列だけを制限し、書出し・保存・生成要求・同期のsystemを保持する。native headerの役割操作は既存editorへ接続し、非advancedでも設定sheetから現在会話の生成設定へ到達できる。既定値/未知値保持/onefield atomic保存は既存経路を使う。通常composerのinputRoleは引き続き残件。
+
+共有1件・native新2件、型検査、鮮度/差分確認、最終Catalyst build成功（/tmp/weavelet-native-advanced-display-{shared-tests,build-test,tsc,freshness,diff-check,build}.log）。actualJSC表示順とID、非表示systemのMarkdown/V3/syncInputSnapshot保持、既存role上書き/Undoのmultipart metadata/contentStore保持を確認。独立Astraは新規P2以上なし。実表示・role編集sheet・非advanced時設定入口・VoiceOverはMacロックで未確認。
+
+116fe122で挿入draftの生成を明示拒否する残件を解消した。実Web NewMessageButton100/branch-slice454で挿入の返却nodeIdを編集対象にし、useEditViewLogic384-398で後続整理する経路に従う。nativeは既存共有insertNodeStateとreplaceNodeAndPruneStateの2操作・2段Undoを使い、返却IDからfresh draftへ接続する。Swiftで再採番/枝整理を作らず、opaque/historyの既存境界を維持する。native挿入sheetは未保存draftのため1atomic applyとし、保護後続や保存失敗では途中挿入も履歴も公開しない。Webは先に空挿入を保存するというUI lifecycle差を、成功後のデータ互換と区別する。
+
+新挿入と既存通常生成の関連2件が成功（/private/tmp/weavelet-insert-test-final.log）。branch/flat、NFD/精密値/未知属性/非表示・未参照データ、古いdraft、保護tail、保存fault、Undo2段を含む。初期testの「empty remote credentialなら同期throwする」という期待は実処理上成立せず、同期境界を確認できるmissing local modelへ訂正した。型検査/鮮度/差分確認成功、独立Astraは新規P2以上なし。親統合後は新bundleで代表2件のみ確認成功（/private/tmp/weavelet-advanced-insertion-union-tests.log）、050f8704に生成成果物を保存。未変更の全同期/全業務suiteは再実行しない。実UI・実機・実オンライン同期は未確認。
+
+provider抽出の補足：CohereはWeb provider-config41-46にendpointが列記される一方、現行submitRuntime797-812/1172以降はchoices形式、remoteResponse45-52もOpenAI系messageを扱う。列記と生成支持を混同しない。native ProviderModels65-69はCohere固有形式を明示拒否している。今回の抽出だけではWebのCohere実動を証明しておらず、Cohere parserを「既存共有処理」として再利用可能とは記録しない。追加SDK/通信実行/独自変換を今回導入していない。
