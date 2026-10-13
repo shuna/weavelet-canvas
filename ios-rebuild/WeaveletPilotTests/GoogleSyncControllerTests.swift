@@ -215,6 +215,8 @@ import XCTest
         let snapshot = try state.publicationSnapshot()
         XCTAssertThrowsError(try state.navigate(chatID: state.selectedConversationID, source: .search))
         XCTAssertThrowsError(try state.moveNavigation(.back))
+        let options = try state.nodeOptionsDraft(nodeID: XCTUnwrap(state.conversation?.visibleMessages.first?.id))
+        XCTAssertThrowsError(try state.saveNodeOptions(options))
         do { try await controller.recover(); XCTFail("active generation must be preserved") } catch {}
         XCTAssertEqual(state.generation?.id,generation.id)
         XCTAssertEqual(try state.publicationSnapshot(),snapshot)

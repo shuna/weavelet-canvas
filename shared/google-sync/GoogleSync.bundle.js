@@ -6995,6 +6995,7 @@ var WeaveletGoogleSync = (() => {
     messageAttributesOperation: () => messageAttributesOperation,
     messageEdit: () => messageEdit,
     navigationOperation: () => navigationOperation,
+    nodeOptions: () => nodeOptions,
     recordsResult: () => recordsResult,
     recordsStart: () => recordsStart,
     result: () => result2,
@@ -7089,6 +7090,265 @@ var WeaveletGoogleSync = (() => {
     return output;
   }
 
+  // src/utils/streamingBuffer.ts
+  var STREAMING_CONTENT_HASH_PREFIX = "__streaming:";
+  var streamingBuffers = /* @__PURE__ */ new Map();
+  var cloneContentItem = (content) => {
+    if (content.type === "image_url")
+      return { ...content, image_url: { ...content.image_url } };
+    return { ...content };
+  };
+  var cloneContent = (content) => content.map(cloneContentItem);
+  var bufferKey = (chatId, nodeId) => JSON.stringify([chatId, nodeId]);
+  var isStreamingContentHash = (hash) => hash.startsWith(STREAMING_CONTENT_HASH_PREFIX);
+  var getStreamingTargetFromHash = (hash) => {
+    if (!isStreamingContentHash(hash))
+      return null;
+    try {
+      const target = JSON.parse(hash.slice(STREAMING_CONTENT_HASH_PREFIX.length));
+      return Array.isArray(target) && target.length === 2 && target.every((value) => typeof value === "string") ? { chatId: target[0], nodeId: target[1] } : null;
+    } catch {
+      return null;
+    }
+  };
+  var getBufferedContent = (chatId, nodeId) => {
+    const key = bufferKey(chatId, nodeId);
+    const entry = streamingBuffers.get(key);
+    return entry ? cloneContent(entry.content) : void 0;
+  };
+  var peekBufferedContent = (chatId, nodeId) => {
+    const key = bufferKey(chatId, nodeId);
+    return streamingBuffers.get(key)?.content;
+  };
+  var finalizeStreamingSnapshotState = (chats, contentStore) => {
+    if (!chats || chats.length === 0) {
+      return { chats, contentStore, changed: false };
+    }
+    let updatedChats = chats;
+    let updatedContentStore = contentStore;
+    let changed = false;
+    const rematerializedChatIndexes = /* @__PURE__ */ new Set();
+    chats.forEach((chat, chatIndex) => {
+      const tree = chat.branchTree;
+      if (!tree)
+        return;
+      Object.values(tree.nodes).forEach((node) => {
+        if (!isStreamingContentHash(node.contentHash))
+          return;
+        const bufferedContent = getBufferedContent(chat.id, node.id);
+        if (!bufferedContent)
+          return;
+        if (!changed) {
+          updatedChats = chats.slice();
+          updatedContentStore = Object.fromEntries(Object.entries(contentStore).map(([hash, entry]) => [hash, { ...entry }]));
+          changed = true;
+        }
+        if (updatedChats[chatIndex] === chats[chatIndex]) {
+          updatedChats = cloneChatAt(updatedChats, chatIndex);
+        }
+        const updatedChat = updatedChats[chatIndex];
+        const updatedTree = updatedChat.branchTree;
+        updatedTree.nodes[node.id] = {
+          ...updatedTree.nodes[node.id],
+          contentHash: addContent(updatedContentStore, bufferedContent)
+        };
+        rematerializedChatIndexes.add(chatIndex);
+      });
+    });
+    rematerializedChatIndexes.forEach((chatIndex) => {
+      const chat = updatedChats[chatIndex];
+      if (!chat.branchTree)
+        return;
+      chat.messages = materializeActivePath(chat.branchTree, updatedContentStore);
+    });
+    return { chats: updatedChats, contentStore: updatedContentStore, changed };
+  };
+
+  // src/utils/contentStore.ts
+  var import_diff_match_patch = __toESM(require_diff_match_patch());
+  var dmp = new import_diff_match_patch.diff_match_patch();
+  var MAX_CHAIN_DEPTH = 5;
+  var pendingGCHashes = /* @__PURE__ */ new Set();
+  var DELTA_SIZE_THRESHOLD = 0.7;
+  function isDeltaEligible(content) {
+    return content.length > 0 && content.every((c) => c.type === "text");
+  }
+  function computeContentHash(content) {
+    const str = JSON.stringify(content);
+    let hash = 2166136261;
+    for (let i = 0; i < str.length; i++) {
+      hash ^= str.charCodeAt(i);
+      hash = hash * 16777619 >>> 0;
+    }
+    return hash.toString(36);
+  }
+  function getChainDepth(store, hash) {
+    let depth = 0;
+    let current = hash;
+    const visited = /* @__PURE__ */ new Set();
+    while (store[current]?.delta) {
+      if (visited.has(current))
+        return MAX_CHAIN_DEPTH + 1;
+      visited.add(current);
+      depth++;
+      current = store[current].delta.baseHash;
+    }
+    return depth;
+  }
+  function contentToText(content) {
+    return JSON.stringify(content);
+  }
+  function addContent(store, content) {
+    let hash = computeContentHash(content);
+    const serialized = JSON.stringify(content);
+    while (store[hash] && !isContentMatch(store, hash, serialized)) {
+      hash += "_";
+    }
+    if (store[hash]) {
+      store[hash].refCount++;
+    } else {
+      store[hash] = { content, refCount: 1 };
+    }
+    return hash;
+  }
+  function isContentMatch(store, hash, serialized) {
+    const entry = store[hash];
+    if (!entry)
+      return false;
+    if (entry.delta) {
+      const resolved = resolveContent(store, hash);
+      return JSON.stringify(resolved) === serialized;
+    }
+    return JSON.stringify(entry.content) === serialized;
+  }
+  function addContentDelta(store, content, baseHash) {
+    const baseEntry = store[baseHash];
+    if (!baseEntry)
+      return addContent(store, content);
+    if (!isDeltaEligible(content))
+      return addContent(store, content);
+    const baseContent = resolveContent(store, baseHash);
+    if (!isDeltaEligible(baseContent))
+      return addContent(store, content);
+    if (getChainDepth(store, baseHash) >= MAX_CHAIN_DEPTH - 1) {
+      return addContent(store, content);
+    }
+    let hash = computeContentHash(content);
+    const serialized = JSON.stringify(content);
+    while (store[hash] && !isContentMatch(store, hash, serialized)) {
+      hash += "_";
+    }
+    if (store[hash]) {
+      store[hash].refCount++;
+      return hash;
+    }
+    const baseText = contentToText(baseContent);
+    const newText = contentToText(content);
+    const patches = dmp.patch_make(baseText, newText);
+    const patchText = dmp.patch_toText(patches);
+    if (patchText.length >= newText.length * DELTA_SIZE_THRESHOLD) {
+      store[hash] = { content, refCount: 1 };
+      return hash;
+    }
+    store[hash] = {
+      content: [],
+      refCount: 1,
+      delta: {
+        baseHash,
+        patches: patchText
+      }
+    };
+    return hash;
+  }
+  function retainContent(store, hash) {
+    if (isStreamingContentHash(hash))
+      return;
+    if (store[hash]) {
+      store[hash].refCount++;
+    }
+  }
+  function promoteDependents(store, baseHash) {
+    for (const [hash, entry] of Object.entries(store)) {
+      if (entry.delta?.baseHash === baseHash) {
+        const resolved = resolveContent(store, hash);
+        entry.content = resolved;
+        delete entry.delta;
+      }
+    }
+  }
+  function releaseContent(store, hash) {
+    if (isStreamingContentHash(hash))
+      return;
+    if (!store[hash])
+      return;
+    store[hash].refCount--;
+    if (store[hash].refCount <= 0) {
+      promoteDependents(store, hash);
+      pendingGCHashes.add(hash);
+    }
+  }
+  function resolveContent(store, hash) {
+    if (isStreamingContentHash(hash)) {
+      const target = getStreamingTargetFromHash(hash);
+      return target ? peekBufferedContent(target.chatId, target.nodeId) ?? [] : [];
+    }
+    const entry = store[hash];
+    if (!entry)
+      return [];
+    if (!entry.delta) {
+      return entry.content;
+    }
+    const text = resolveDeltaContentJSON(store, hash);
+    return text === null ? [] : JSON.parse(text);
+  }
+  function resolveDeltaContentJSON(store, hash) {
+    const visited = /* @__PURE__ */ new Set();
+    let current = hash;
+    const deltaChain = [];
+    while (store[current]?.delta) {
+      if (visited.has(current)) {
+        console.error(`[ContentStore] Circular delta chain detected at ${current}`);
+        return null;
+      }
+      visited.add(current);
+      deltaChain.push({
+        hash: current,
+        patches: store[current].delta.patches
+      });
+      current = store[current].delta.baseHash;
+    }
+    const baseEntry = store[current];
+    if (!baseEntry) {
+      console.error(`[ContentStore] Missing delta base: ${current}`);
+      return null;
+    }
+    let text = contentToText(baseEntry.content);
+    for (const { patches: patchText } of deltaChain.reverse()) {
+      const patches = dmp.patch_fromText(patchText);
+      const [result3, applied] = dmp.patch_apply(patches, text);
+      if (applied.some((ok) => !ok)) {
+        console.error(`[ContentStore] Patch apply failed for delta chain`);
+        return null;
+      }
+      text = result3;
+    }
+    try {
+      JSON.parse(text);
+      return text;
+    } catch {
+      console.error(`[ContentStore] Failed to parse resolved delta content`);
+      return null;
+    }
+  }
+  function isContentEqual(store, hash, content) {
+    const resolved = resolveContent(store, hash);
+    return JSON.stringify(resolved) === JSON.stringify(content);
+  }
+  function resolveContentText(store, hash) {
+    const content = resolveContent(store, hash);
+    return content.filter((c) => c.type === "text").map((c) => c.text).join(" ");
+  }
+
   // shared/google-sync/editing.ts
   var runtime;
   function editingUUID() {
@@ -7099,6 +7359,17 @@ var WeaveletGoogleSync = (() => {
       throw new Error("Invalid new node ID.");
     runtime.reserved.add(id);
     return id;
+  }
+  function withEditingRuntime(newIDs, existingIDs, now, operation) {
+    const clock = Date.now;
+    runtime = { ids: [...newIDs], reserved: new Set(existingIDs) };
+    Date.now = () => now;
+    try {
+      return operation();
+    } finally {
+      Date.now = clock;
+      runtime = void 0;
+    }
   }
   function messageEdit(json) {
     const input = JSON.parse(json);
@@ -7117,10 +7388,7 @@ var WeaveletGoogleSync = (() => {
     if (!Array.isArray(chat.messages) && chat.branchTree)
       chat.messages = materializeActivePath(chat.branchTree, isolated.contentStore);
     const wasFlat = !chat.branchTree;
-    const clock = Date.now;
-    runtime = { ids: [...input.newIDs], reserved: new Set(Object.keys(chat.branchTree?.nodes ?? {})) };
-    Date.now = () => input.now;
-    try {
+    return withEditingRuntime(input.newIDs, Object.keys(chat.branchTree?.nodes ?? {}), input.now, () => {
       let result3 = ensureBranchTreeState([chat], 0, isolated.contentStore);
       if (!wasFlat) {
         const path = input.viewingPath;
@@ -7161,10 +7429,7 @@ var WeaveletGoogleSync = (() => {
       chat = result3.chats[0];
       chat.messages = materializeActivePath(chat.branchTree, result3.contentStore, true);
       return JSON.stringify(diffJSONChanges(before, JSON.parse(JSON.stringify({ chat, contentStore: result3.contentStore }))));
-    } finally {
-      Date.now = clock;
-      runtime = void 0;
-    }
+    });
   }
 
   // src/utils/branchUtils.ts
@@ -7431,6 +7696,12 @@ var WeaveletGoogleSync = (() => {
     updatedChats[chatIndex].messages = materializeActivePath(tree, contentStore);
     return updatedChats;
   };
+  var setBranchNodeFieldState = (chats, chatIndex, nodeId, field, value) => {
+    const updated = cloneChatAt(chats, chatIndex);
+    const tree = updated[chatIndex].branchTree;
+    tree.nodes[nodeId] = { ...tree.nodes[nodeId], [field]: value };
+    return updated;
+  };
   var appendNodeToActivePathState = (chats, chatIndex, role, content, currentContentStore) => {
     const { chats: updatedChats, chat, tree, contentStore } = prepareBranchMutationState(chats, chatIndex, currentContentStore);
     const parentId = tree.activePath[tree.activePath.length - 1] ?? null;
@@ -7550,264 +7821,112 @@ var WeaveletGoogleSync = (() => {
       ensuredStore
     );
   };
-
-  // src/utils/streamingBuffer.ts
-  var STREAMING_CONTENT_HASH_PREFIX = "__streaming:";
-  var streamingBuffers = /* @__PURE__ */ new Map();
-  var cloneContentItem = (content) => {
-    if (content.type === "image_url")
-      return { ...content, image_url: { ...content.image_url } };
-    return { ...content };
+  var resolveNodeTarget = (chats, input, activeOnly = false) => {
+    const chatIndex = chats?.findIndex((chat2) => chat2.id === input.chatId) ?? -1;
+    const chat = chats?.[chatIndex];
+    if (!chat)
+      return { status: "chat-missing" };
+    const index = chat.branchTree ? chat.branchTree.activePath.indexOf(input.nodeId) : Number(input.nodeId);
+    const exists = chat.branchTree ? !!chat.branchTree.nodes[input.nodeId] : Number.isInteger(index) && index >= 0 && String(index) === input.nodeId && !!chat.messages[index];
+    if (!exists)
+      return { status: "node-missing" };
+    if (activeOnly && index < 0)
+      return { status: "invalid-target" };
+    return { status: "valid", chatIndex, messageIndex: index, chat };
   };
-  var cloneContent = (content) => content.map(cloneContentItem);
-  var bufferKey = (chatId, nodeId) => JSON.stringify([chatId, nodeId]);
-  var isStreamingContentHash = (hash) => hash.startsWith(STREAMING_CONTENT_HASH_PREFIX);
-  var getStreamingTargetFromHash = (hash) => {
-    if (!isStreamingContentHash(hash))
-      return null;
-    try {
-      const target = JSON.parse(hash.slice(STREAMING_CONTENT_HASH_PREFIX.length));
-      return Array.isArray(target) && target.length === 2 && target.every((value) => typeof value === "string") ? { chatId: target[0], nodeId: target[1] } : null;
-    } catch {
-      return null;
-    }
-  };
-  var getBufferedContent = (chatId, nodeId) => {
-    const key = bufferKey(chatId, nodeId);
-    const entry = streamingBuffers.get(key);
-    return entry ? cloneContent(entry.content) : void 0;
-  };
-  var peekBufferedContent = (chatId, nodeId) => {
-    const key = bufferKey(chatId, nodeId);
-    return streamingBuffers.get(key)?.content;
-  };
-  var finalizeStreamingSnapshotState = (chats, contentStore) => {
-    if (!chats || chats.length === 0) {
-      return { chats, contentStore, changed: false };
-    }
-    let updatedChats = chats;
-    let updatedContentStore = contentStore;
-    let changed = false;
-    const rematerializedChatIndexes = /* @__PURE__ */ new Set();
-    chats.forEach((chat, chatIndex) => {
-      const tree = chat.branchTree;
-      if (!tree)
-        return;
-      Object.values(tree.nodes).forEach((node) => {
-        if (!isStreamingContentHash(node.contentHash))
-          return;
-        const bufferedContent = getBufferedContent(chat.id, node.id);
-        if (!bufferedContent)
-          return;
-        if (!changed) {
-          updatedChats = chats.slice();
-          updatedContentStore = Object.fromEntries(Object.entries(contentStore).map(([hash, entry]) => [hash, { ...entry }]));
-          changed = true;
-        }
-        if (updatedChats[chatIndex] === chats[chatIndex]) {
-          updatedChats = cloneChatAt(updatedChats, chatIndex);
-        }
-        const updatedChat = updatedChats[chatIndex];
-        const updatedTree = updatedChat.branchTree;
-        updatedTree.nodes[node.id] = {
-          ...updatedTree.nodes[node.id],
-          contentHash: addContent(updatedContentStore, bufferedContent)
-        };
-        rematerializedChatIndexes.add(chatIndex);
-      });
-    });
-    rematerializedChatIndexes.forEach((chatIndex) => {
-      const chat = updatedChats[chatIndex];
-      if (!chat.branchTree)
-        return;
-      chat.messages = materializeActivePath(chat.branchTree, updatedContentStore);
-    });
-    return { chats: updatedChats, contentStore: updatedContentStore, changed };
-  };
-
-  // src/utils/contentStore.ts
-  var import_diff_match_patch = __toESM(require_diff_match_patch());
-  var dmp = new import_diff_match_patch.diff_match_patch();
-  var MAX_CHAIN_DEPTH = 5;
-  var pendingGCHashes = /* @__PURE__ */ new Set();
-  var DELTA_SIZE_THRESHOLD = 0.7;
-  function isDeltaEligible(content) {
-    return content.length > 0 && content.every((c) => c.type === "text");
-  }
-  function computeContentHash(content) {
-    const str = JSON.stringify(content);
-    let hash = 2166136261;
-    for (let i = 0; i < str.length; i++) {
-      hash ^= str.charCodeAt(i);
-      hash = hash * 16777619 >>> 0;
-    }
-    return hash.toString(36);
-  }
-  function getChainDepth(store, hash) {
-    let depth = 0;
-    let current = hash;
-    const visited = /* @__PURE__ */ new Set();
-    while (store[current]?.delta) {
-      if (visited.has(current))
-        return MAX_CHAIN_DEPTH + 1;
-      visited.add(current);
-      depth++;
-      current = store[current].delta.baseHash;
-    }
-    return depth;
-  }
-  function contentToText(content) {
-    return JSON.stringify(content);
-  }
-  function addContent(store, content) {
-    let hash = computeContentHash(content);
-    const serialized = JSON.stringify(content);
-    while (store[hash] && !isContentMatch(store, hash, serialized)) {
-      hash += "_";
-    }
-    if (store[hash]) {
-      store[hash].refCount++;
-    } else {
-      store[hash] = { content, refCount: 1 };
-    }
-    return hash;
-  }
-  function isContentMatch(store, hash, serialized) {
-    const entry = store[hash];
-    if (!entry)
-      return false;
-    if (entry.delta) {
-      const resolved = resolveContent(store, hash);
-      return JSON.stringify(resolved) === serialized;
-    }
-    return JSON.stringify(entry.content) === serialized;
-  }
-  function addContentDelta(store, content, baseHash) {
-    const baseEntry = store[baseHash];
-    if (!baseEntry)
-      return addContent(store, content);
-    if (!isDeltaEligible(content))
-      return addContent(store, content);
-    const baseContent = resolveContent(store, baseHash);
-    if (!isDeltaEligible(baseContent))
-      return addContent(store, content);
-    if (getChainDepth(store, baseHash) >= MAX_CHAIN_DEPTH - 1) {
-      return addContent(store, content);
-    }
-    let hash = computeContentHash(content);
-    const serialized = JSON.stringify(content);
-    while (store[hash] && !isContentMatch(store, hash, serialized)) {
-      hash += "_";
-    }
-    if (store[hash]) {
-      store[hash].refCount++;
-      return hash;
-    }
-    const baseText = contentToText(baseContent);
-    const newText = contentToText(content);
-    const patches = dmp.patch_make(baseText, newText);
-    const patchText = dmp.patch_toText(patches);
-    if (patchText.length >= newText.length * DELTA_SIZE_THRESHOLD) {
-      store[hash] = { content, refCount: 1 };
-      return hash;
-    }
-    store[hash] = {
-      content: [],
-      refCount: 1,
-      delta: {
-        baseHash,
-        patches: patchText
-      }
+  var setNodeDisplayFieldState = (chats, input, field, value, contentStore) => {
+    const target = resolveNodeTarget(chats, input);
+    if (target.status !== "valid")
+      return target;
+    const ensured = ensureBranchTreeState(chats, target.chatIndex, contentStore);
+    const nodeId = target.chat.branchTree ? input.nodeId : ensured.chats[target.chatIndex].branchTree.activePath[target.messageIndex];
+    if (ensured.chats[target.chatIndex].branchTree.nodes[nodeId][field] === value)
+      return { status: "unchanged" };
+    return {
+      status: "updated",
+      chats: setBranchNodeFieldState(ensured.chats, target.chatIndex, nodeId, field, value),
+      contentStore: ensured.contentStore,
+      nodeId,
+      historyBase: ensured
     };
-    return hash;
-  }
-  function retainContent(store, hash) {
-    if (isStreamingContentHash(hash))
-      return;
-    if (store[hash]) {
-      store[hash].refCount++;
+  };
+
+  // src/utils/nodeOptions.ts
+  var updateChatNodeField = (chats, chatIndex, field, value) => {
+    const updated = chats.slice();
+    updated[chatIndex] = { ...updated[chatIndex], [field]: value };
+    return updated;
+  };
+  var setChatNodeMapState = (chats, input, field) => {
+    const index = chats?.findIndex((chat2) => chat2.id === input.chatId) ?? -1;
+    const chat = chats?.[index];
+    if (!chat)
+      return { status: "missing" };
+    if (input.nodeId !== void 0 && !(chat.branchTree ? chat.branchTree.nodes[input.nodeId] : String(Number(input.nodeId)) === input.nodeId && Number(input.nodeId) >= 0 && chat.messages[Number(input.nodeId)]))
+      return { status: "missing" };
+    const previous = chat[field] ?? {};
+    const next = input.nodeId !== void 0 ? { ...previous } : {};
+    if (input.nodeId !== void 0) {
+      if (!!previous[input.nodeId] === input.value)
+        return { status: "unchanged" };
+      if (input.value)
+        next[input.nodeId] = true;
+      else
+        delete next[input.nodeId];
+    } else if (input.value) {
+      for (const id of chat.branchTree?.activePath ?? chat.messages.map((_, index2) => String(index2)))
+        next[id] = true;
     }
-  }
-  function promoteDependents(store, baseHash) {
-    for (const [hash, entry] of Object.entries(store)) {
-      if (entry.delta?.baseHash === baseHash) {
-        const resolved = resolveContent(store, hash);
-        entry.content = resolved;
-        delete entry.delta;
+    if (Object.keys(previous).length === Object.keys(next).length && Object.keys(next).every((id) => previous[id] === next[id]))
+      return { status: "unchanged" };
+    return { status: "updated", chats: updateChatNodeField(chats, index, field, next), chatIndex: index, map: next };
+  };
+
+  // shared/google-sync/nodeOptions.ts
+  function nodeOptions(json) {
+    const input = JSON.parse(json);
+    const target = resolveNodeTarget([input.chat], { chatId: input.chat.id, nodeId: input.nodeId });
+    if (target.status !== "valid")
+      return JSON.stringify({ status: target.status, changes: [] });
+    const node = target.chat.branchTree?.nodes[input.nodeId];
+    const value = {
+      label: node?.label ?? "",
+      starred: !!node?.starred,
+      pinned: !!node?.pinned,
+      collapsed: !!target.chat.collapsedNodes?.[input.nodeId],
+      omitted: !!target.chat.omittedNodes?.[input.nodeId],
+      protected: !!target.chat.protectedNodes?.[input.nodeId]
+    };
+    if (input.operation === "read")
+      return JSON.stringify({ status: "read", nodeId: input.nodeId, value });
+    if (input.operation !== "save" || !input.value || typeof input.value.label !== "string" || ["starred", "pinned", "collapsed", "omitted", "protected"].some((field) => typeof input.value[field] !== "boolean"))
+      throw new Error("Invalid node options.");
+    const before = { chat: input.chat, contentStore: input.contentStore };
+    let { chat, contentStore } = structuredClone(before), nodeId = input.nodeId;
+    return withEditingRuntime(input.newIDs ?? [], Object.keys(chat.branchTree?.nodes ?? {}), input.now ?? Date.now(), () => {
+      for (const field of ["label", "starred", "pinned"]) {
+        if (input.value[field] === value[field])
+          continue;
+        const next = input.value[field] || void 0;
+        const result3 = setNodeDisplayFieldState([chat], { chatId: chat.id, nodeId }, field, next, contentStore);
+        if (result3.status === "updated") {
+          chat = result3.chats[0];
+          contentStore = result3.contentStore;
+          nodeId = result3.nodeId;
+        }
       }
-    }
-  }
-  function releaseContent(store, hash) {
-    if (isStreamingContentHash(hash))
-      return;
-    if (!store[hash])
-      return;
-    store[hash].refCount--;
-    if (store[hash].refCount <= 0) {
-      promoteDependents(store, hash);
-      pendingGCHashes.add(hash);
-    }
-  }
-  function resolveContent(store, hash) {
-    if (isStreamingContentHash(hash)) {
-      const target = getStreamingTargetFromHash(hash);
-      return target ? peekBufferedContent(target.chatId, target.nodeId) ?? [] : [];
-    }
-    const entry = store[hash];
-    if (!entry)
-      return [];
-    if (!entry.delta) {
-      return entry.content;
-    }
-    const text = resolveDeltaContentJSON(store, hash);
-    return text === null ? [] : JSON.parse(text);
-  }
-  function resolveDeltaContentJSON(store, hash) {
-    const visited = /* @__PURE__ */ new Set();
-    let current = hash;
-    const deltaChain = [];
-    while (store[current]?.delta) {
-      if (visited.has(current)) {
-        console.error(`[ContentStore] Circular delta chain detected at ${current}`);
-        return null;
+      for (const [field, option] of [["collapsedNodes", "collapsed"], ["omittedNodes", "omitted"], ["protectedNodes", "protected"]]) {
+        if (input.value[option] === value[option])
+          continue;
+        const result3 = setChatNodeMapState([chat], { chatId: chat.id, nodeId, value: input.value[option] }, field);
+        if (result3.status === "updated")
+          chat = result3.chats[0];
       }
-      visited.add(current);
-      deltaChain.push({
-        hash: current,
-        patches: store[current].delta.patches
-      });
-      current = store[current].delta.baseHash;
-    }
-    const baseEntry = store[current];
-    if (!baseEntry) {
-      console.error(`[ContentStore] Missing delta base: ${current}`);
-      return null;
-    }
-    let text = contentToText(baseEntry.content);
-    for (const { patches: patchText } of deltaChain.reverse()) {
-      const patches = dmp.patch_fromText(patchText);
-      const [result3, applied] = dmp.patch_apply(patches, text);
-      if (applied.some((ok) => !ok)) {
-        console.error(`[ContentStore] Patch apply failed for delta chain`);
-        return null;
-      }
-      text = result3;
-    }
-    try {
-      JSON.parse(text);
-      return text;
-    } catch {
-      console.error(`[ContentStore] Failed to parse resolved delta content`);
-      return null;
-    }
-  }
-  function isContentEqual(store, hash, content) {
-    const resolved = resolveContent(store, hash);
-    return JSON.stringify(resolved) === JSON.stringify(content);
-  }
-  function resolveContentText(store, hash) {
-    const content = resolveContent(store, hash);
-    return content.filter((c) => c.type === "text").map((c) => c.text).join(" ");
+      if (chat.branchTree && !input.chat.branchTree)
+        chat.messages = materializeActivePath(chat.branchTree, contentStore, true);
+      const changes = diffJSONChanges(before, JSON.parse(JSON.stringify({ chat, contentStore })));
+      return JSON.stringify({ status: changes.length ? "updated" : "unchanged", nodeId, path: chat.branchTree?.activePath, changes });
+    });
   }
 
   // src/utils/branchSearch.ts

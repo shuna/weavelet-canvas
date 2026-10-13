@@ -30,6 +30,7 @@ struct ChatView: View {
     @State private var exportDocument: WebJSONDocument?
     @State private var errorMessage: String?
     @State private var draft: MessageDraft?
+    @State private var optionsDraft: NodeOptionsDraft?
 
     var body: some View {
         NavigationStack {
@@ -41,6 +42,15 @@ struct ChatView: View {
                             MessageView(node: node, siblings: state.siblings(for: node.id), style: state.style, edit: state.exchange == nil || state.generation != nil ? nil : {
                                 do { draft = try state.messageDraft(nodeID: node.id) }
                                 catch { errorMessage = error.localizedDescription }
+                            }, configure: state.exchange == nil || state.generation != nil ? nil : {
+                                do { optionsDraft = try state.nodeOptionsDraft(nodeID: node.id) }
+                                catch { errorMessage = error.localizedDescription }
+                            }, toggleCollapse: state.exchange == nil || state.generation != nil ? nil : {
+                                do {
+                                    var changed = try state.nodeOptionsDraft(nodeID: node.id)
+                                    changed.value.collapsed.toggle()
+                                    try state.saveNodeOptions(changed)
+                                } catch { errorMessage = error.localizedDescription }
                             }) { siblingID in
                                 state.selectSibling(siblingID, of: node.id)
                             }
@@ -158,6 +168,7 @@ struct ChatView: View {
                 Button("閉じる", role: .cancel) { errorMessage = nil; state.persistenceError = nil }
             } message: { Text(errorMessage ?? state.persistenceError ?? "") }
             .sheet(item: $draft) { draft in MessageEditorView(state: state, draft: draft) }
+            .sheet(item: $optionsDraft) { draft in NodeOptionsView(state: state, draft: draft) }
             .sheet(isPresented: $showsSearch) {
                 ChatSearchView(state: state) { result, mode in
                     try state.navigate(chatID: result.chatID, nodeID: result.nodeID, source: mode == .grep ? .grep : .search)
@@ -195,6 +206,8 @@ struct MessageView: View {
     let siblings: [MessageNode]
     let style: ChatStyle
     var edit: (() -> Void)? = nil
+    var configure: (() -> Void)? = nil
+    var toggleCollapse: (() -> Void)? = nil
     let select: (String) -> Void
 
     private var roleName: String {
@@ -221,7 +234,18 @@ struct MessageView: View {
                 Label(roleName, systemImage: icon)
                     .font(.headline)
                     .accessibilityAddTraits(.isHeader)
-                if node.parts.isEmpty {
+                if !node.options.label.isEmpty { Text(node.options.label).font(.subheadline).foregroundStyle(.secondary) }
+                if node.options.starred || node.options.pinned || node.options.omitted || node.options.protected {
+                    HStack(spacing: 12) {
+                        if node.options.starred { Image(systemName: "star.fill").accessibilityLabel("スター") }
+                        if node.options.pinned { Image(systemName: "pin.fill").accessibilityLabel("ピン留め") }
+                        if node.options.omitted { Image(systemName: "eye.slash").accessibilityLabel("生成時の文脈から除外") }
+                        if node.options.protected { Image(systemName: "lock.fill").accessibilityLabel("上書き・削除から保護") }
+                    }.foregroundStyle(.secondary)
+                }
+                if node.options.collapsed {
+                    Text("本文を折りたたみ中").foregroundStyle(.secondary)
+                } else if node.parts.isEmpty {
                     Text(node.content)
                         .font(.body)
                         .textSelection(.enabled)
@@ -231,9 +255,20 @@ struct MessageView: View {
                         MessagePartView(part: part)
                     }
                 }
-                if let edit {
-                    Button("編集", systemImage: "square.and.pencil", action: edit)
-                        .frame(minHeight: 44)
+                if edit != nil || configure != nil || toggleCollapse != nil {
+                    HStack(spacing: 16) {
+                        if let edit {
+                            Button("編集", systemImage: "square.and.pencil", action: edit).frame(minHeight: 44)
+                        }
+                        if let toggleCollapse {
+                            Button(node.options.collapsed ? "本文を展開" : "本文を折りたたむ", systemImage: node.options.collapsed ? "chevron.down" : "chevron.up", action: toggleCollapse)
+                                .labelStyle(.iconOnly).frame(minWidth: 44, minHeight: 44)
+                        }
+                        if let configure {
+                            Button("メッセージ設定", systemImage: "ellipsis", action: configure)
+                                .labelStyle(.iconOnly).frame(minWidth: 44, minHeight: 44)
+                        }
+                    }
                 }
                 if siblings.count > 1 {
                     let position = (siblings.firstIndex(where: { $0.id.utf8.elementsEqual(node.id.utf8) }) ?? 0) + 1

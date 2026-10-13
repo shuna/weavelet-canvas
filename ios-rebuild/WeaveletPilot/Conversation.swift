@@ -8,6 +8,7 @@ struct MessageNode: Decodable, Identifiable, Equatable {
     var role: String = "assistant"
     var content: String = ""
     var parts: [MessagePart] = []
+    var options: NodeOptions.Value = .init()
 
     var identity: Data { Data(id.utf8) }
 
@@ -204,6 +205,23 @@ final class ChatState: ObservableObject {
         canNavigateBack = next.canBack
         canNavigateForward = next.canForward
         navigationFocus = focus.map { NavigationFocus(nodeID: $0) }
+    }
+
+    func nodeOptionsDraft(nodeID: String) throws -> NodeOptionsDraft {
+        guard let exchange, let conversation,
+              let node = conversation.nodes.first(where: { $0.id.utf8.elementsEqual(nodeID.utf8) }) else { throw ExchangeError.invalid("メッセージがありません") }
+        return NodeOptionsDraft(chatID: conversation.id, nodeID: nodeID, source: exchange.source, original: node.options, value: node.options)
+    }
+
+    func saveNodeOptions(_ draft: NodeOptionsDraft, newIDs: [String]? = nil, now: Double = Date().timeIntervalSince1970 * 1000) throws {
+        guard generation == nil else { throw ExchangeError.invalid("生成結果を保存してから設定してください") }
+        guard let exchange, exchange.source == draft.source else { throw ExchangeError.invalid("会話が変更されました。設定を開き直してください") }
+        let result = try NodeOptions.save(in: exchange.source, chatID: draft.chatID, nodeID: draft.nodeID, value: draft.value, newIDs: newIDs, now: now)
+        if result.status == .unchanged { return }
+        guard result.status == .updated else { throw ExchangeError.invalid("メッセージがありません") }
+        // A flat message receives a new node ID only when the shared Web operation creates its tree.
+        let oldChat = try exchange.source.required("chats").array("chats").first { $0["id"] == .string(draft.chatID) }
+        try applyLibrary(result.source, selectedID: selectedID, resetViewFor: oldChat?["branchTree"] == nil ? draft.chatID : nil, now: now)
     }
 
     func messageDraft(nodeID: String?) throws -> MessageDraft {

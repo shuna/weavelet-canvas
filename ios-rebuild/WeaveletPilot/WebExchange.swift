@@ -62,7 +62,7 @@ struct WebExchange {
             var flat: [MessageNode] = []
             for (index, message) in messages.enumerated() {
                 let parts = try Self.parts(message.required("content"))
-                flat.append(MessageNode(id: "message-\(index)", parentId: index == 0 ? nil : "message-\(index - 1)", createdAt: 0, role: try Self.role(message.required("role")), parts: parts))
+                flat.append(MessageNode(id: "message-\(index)", parentId: index == 0 ? nil : "message-\(index - 1)", createdAt: 0, role: try Self.role(message.required("role")), parts: parts, options: chat["branchTree"] == nil ? try NodeOptions.read(chat: chat, nodeID: "message-\(index)") : .init()))
             }
             if let tree = chat["branchTree"] {
                 _ = try tree.object("branchTree")
@@ -82,7 +82,7 @@ struct WebExchange {
                     guard let parts = bodies[Data(hash.utf8)] else { throw ExchangeError.invalid("contentHash参照欠損: \(hash)") }
                     if let label = node["label"] { _ = try label.string("label") }
                     for key in ["starred", "pinned"] { if let flag = node[key] { _ = try flag.boolean(key) } }
-                    nodes.append(MessageNode(id: nodeID, parentId: parentID, createdAt: try node.required("createdAt").number("createdAt"), role: try Self.role(node.required("role")), parts: parts))
+                    nodes.append(MessageNode(id: nodeID, parentId: parentID, createdAt: try node.required("createdAt").number("createdAt"), role: try Self.role(node.required("role")), parts: parts, options: try NodeOptions.read(chat: chat, nodeID: nodeID)))
                 }
                 try Self.validateAcyclic(nodes)
                 let path = try tree.required("activePath").array("activePath").map { try $0.string("activePath ID") }

@@ -1,3 +1,4 @@
+export { nodeOptions } from './nodeOptions';
 export { chatSearch } from './search';
 export { navigationOperation } from './navigation';
 export const driveFolderName = (json: string) => JSON.stringify(defaultSyncFolderName(JSON.parse(json)));
