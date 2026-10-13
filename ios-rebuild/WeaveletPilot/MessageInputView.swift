@@ -19,6 +19,26 @@ enum EnterSubmission {
 
 final class MessageInputTextView: UITextView {
     var submission: ((String, Bool, Bool, Bool) -> Bool)?
+    var commandAvailable: ((UIKeyModifierFlags) -> Bool)?
+    // Catalyst text input may bypass pressesBegan; register only shared submission actions.
+    override var keyCommands: [UIKeyCommand]? {
+        var commands = super.keyCommands ?? []
+        guard isEditable, markedTextRange == nil else { return commands }
+        for modifiers: UIKeyModifierFlags in [[], .shift, .control, [.control, .shift]] where commandAvailable?(modifiers) == true {
+            let command = UIKeyCommand(input: "\r", modifierFlags: modifiers, action: #selector(submitHardwareReturn(_:)))
+            command.wantsPriorityOverSystemBehavior = true
+            commands.append(command)
+        }
+        return commands
+    }
+    override func canPerformAction(_ action: Selector, withSender sender: Any?) -> Bool {
+        if action == #selector(submitHardwareReturn(_:)) { return isEditable && markedTextRange == nil }
+        return super.canPerformAction(action, withSender: sender)
+    }
+    @objc private func submitHardwareReturn(_ command: UIKeyCommand) {
+        guard markedTextRange == nil else { return }
+        _ = handleHardwareKey("Enter", modifiers: command.modifierFlags)
+    }
     // Read marked text before UIKit processes the key that confirms the IME candidate.
     func handleHardwareKey(_ key: String, modifiers: UIKeyModifierFlags) -> Bool {
         guard isEditable else { return false }
@@ -76,6 +96,12 @@ struct MessageInputView: UIViewRepresentable {
             let input = self.input
             view.isEditable = input.enabled
             view.accessibilityLabel = input.label
+            view.commandAvailable = { [weak self] modifiers in
+                guard let input = self?.input, input.enabled else { return false }
+                return (try? EnterSubmission.action(key: "Enter", composing: false,
+                    control: modifiers.contains(.control), shift: modifiers.contains(.shift),
+                    enterToSubmit: input.enterToSubmit(), sticky: input.sticky)) != nil
+            }
             view.submission = { [weak self] key, composing, control, shift in
                 guard let input = self?.input, input.enabled else { return false }
                 do {
