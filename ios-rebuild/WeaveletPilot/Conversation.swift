@@ -519,7 +519,11 @@ final class ChatState: ObservableObject {
         let source = try MessageEditing.save(in: exchange.source, chatID: conversation.id, nodeID: nil, viewingPath: conversation.visibleMessages.map(\.id), role: "user", parts: body, mode: .append, newIDs: ids, now: now, history: editingHistory) { history = $0 }
         let changed = try WebExchange(source: source)
         let path = changed.conversations.first { $0.identity == conversation.identity }!.visibleMessages.map(\.id)
-        let request = try RemoteRequest.make(source: source, chatID: conversation.id, path: path, settings: record.settings, key: record.key)
+        let savedState = try publicationSnapshot().required("state")
+        let modelState = OrderedJSON.object(["favoriteModels", "providerModelCache", "providerCustomModels"].compactMap { key in
+            savedState[key].map { JSONField(key:key,value:$0) }
+        })
+        let request = try RemoteRequest.make(source: source, chatID: conversation.id, path: path, settings: record.settings, key: record.key, modelState:modelState)
         try applyLibrary(source, selectedID: conversation.id, resetViewFor: conversation.id, editing: history, now: now)
         let id = UUID()
         generation = ActiveGeneration(id: id, chatID: conversation.id, baseSource: try publishedSource(), path: path)

@@ -66,6 +66,36 @@ final class RemoteGenerationTests: XCTestCase {
         XCTAssertEqual(try source.encoded(), before)
     }
 
+    func testSavedModelCatalogReachesSharedReasoningBodyWithoutChangingRawCatalog() async throws {
+        let local = try store(), state = try state(local)
+        let snapshot = try state.publicationSnapshot(), saved = try snapshot.required("state")
+        var chats = try saved.required("chats").array("chats")
+        let chatID = try XCTUnwrap(state.conversation).id
+        let index = try XCTUnwrap(chats.firstIndex { $0["id"] == .string(chatID) })
+        let config = try chats[index].required("config").replacing("providerId",with:.string("openrouter")).replacing("reasoning_effort",with:.string("none"))
+        chats[index] = chats[index].replacing("config",with:config)
+        let modelState = try OrderedJSON.decode(Data(#"{"favoriteModels":[{"modelId":"anthropic/claude-opus-5.5","providerId":"openrouter","supportsReasoning":true,"reasoningMandatory":true,"xRaw":{"huge":9007199254740993,"decimal":1.2300}}],"providerModelCache":{},"providerCustomModels":{}}"#.utf8))
+        let roots = try modelState.object("modelState")
+        try state.applySnapshot(.object([.init(key:"version",value:snapshot.required("version")),.init(key:"state",value:.object([.init(key:"chats",value:.array(chats))] + roots))]))
+        let source = try XCTUnwrap(state.exchange).source, sourceBytes = try source.encoded(), before = try state.publicationSnapshot().encoded()
+        var credentials = record(stream:false)
+        credentials.settings.model = "anthropic/claude-opus-5.5"
+        let direct = try RemoteRequest.make(source:source,chatID:chatID,path:XCTUnwrap(state.conversation).visibleMessages.map(\.id),settings:credentials.settings,key:credentials.key,modelState:modelState)
+        let directBody = try OrderedJSON.decode(XCTUnwrap(direct.httpBody))
+        XCTAssertEqual(directBody["reasoning"]?["effort"],.string("low"))
+        XCTAssertEqual(directBody["model"],.string(credentials.settings.model)); XCTAssertEqual(directBody["stream"],.bool(false))
+        XCTAssertEqual(try source.encoded(),sourceBytes); XCTAssertEqual(try state.publicationSnapshot().encoded(),before)
+        let remote = client()
+        FakeRemoteProtocol.packets = [.init(bytes:try fixture().required("responses").required("nonstream").encoded())]
+        try state.startGeneration(input:"Catalog boundary",record:credentials,client:remote)
+        try await wait { state.generation == nil }
+        XCTAssertNil(state.generationError)
+        let sent = try OrderedJSON.decode(XCTUnwrap(FakeRemoteProtocol.requests.first?.httpBody))
+        XCTAssertEqual(sent["reasoning"],directBody["reasoning"])
+        let after = try state.publicationSnapshot().required("state")
+        for field in roots { XCTAssertEqual(try after.required(field.key).encoded(),try field.value.encoded()) }
+    }
+
     func testSavedSummaryUsesSharedSubmissionRules() throws {
         let source = try OrderedJSON.decode(Data(#"{"chats":[{"id":"summary-chat","config":{"model":"fake-model","max_tokens":100},"messages":[{"role":"user","content":[{"type":"text","text":"Original"}]}],"summaries":[{"id":"s","mode":"single","useForSubmit":true,"text":"Saved context","sources":[{"nodeId":"0","parentId":null,"role":"user","textParts":["Original"]}]}]}]}"#.utf8))
         let request = try RemoteRequest.make(source: source, chatID: "summary-chat", path: ["0"], settings: record().settings, key: "FAKE")

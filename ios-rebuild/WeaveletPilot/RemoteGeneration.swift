@@ -40,7 +40,7 @@ enum RemoteRequest {
         return data
     }
     #endif
-    static func make(source: OrderedJSON, chatID: String, path: [String], settings: RemoteSettings, key: String) throws -> URLRequest {
+    static func make(source: OrderedJSON, chatID: String, path: [String], settings: RemoteSettings, key: String, modelState: OrderedJSON? = nil) throws -> URLRequest {
         let url = try settings.validatedURL()
         let chat = try source.required("chats").array("chats").first { try $0.required("id").string("ID").utf8.elementsEqual(chatID.utf8) }
         guard let chat else { throw ExchangeError.invalid("chat ID") }
@@ -56,17 +56,13 @@ enum RemoteRequest {
             }
             contextChat = contextChat.replacing("messages", with: .array(messages))
         }
-        // shortcut: Catalog capabilities remain unavailable until native model settings are connected; force_reasoning uses the shared builder.
         let input = OrderedJSON.object([
             .init(key: "contentStore", value: store),
             .init(key: "chat", value: contextChat),
             .init(key: "config", value: try boundary.requestConfig(config)),
             .init(key: "activePath", value: .array(path.map(OrderedJSON.string))),
             .init(key: "omittedNodes", value: chat["omittedNodes"] ?? .object([])),
-            .init(key: "capabilities", value: .object([
-                .init(key: "supportsReasoning", value: .bool(false)),
-                .init(key: "requiresReasoning", value: .bool(false)),
-            ])),
+            .init(key: "modelState", value: modelState ?? .object([])),
         ])
         let projectedBody = try SharedWebOperations.call("generationRequest", input)
         let body = try OrderedJSONChanges.apply(.array([.object([.init(key: "op", value: .string("set")), .init(key: "path", value: .array([])), .init(key: "value", value: projectedBody)])]), to: .null, opaque: boundary.opaque)
