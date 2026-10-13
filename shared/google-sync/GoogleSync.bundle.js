@@ -7006,6 +7006,7 @@ var WeaveletGoogleSync = (() => {
     providerModelList: () => providerModelList,
     recordsResult: () => recordsResult,
     recordsStart: () => recordsStart,
+    remoteOutput: () => remoteOutput,
     result: () => result2,
     settle: () => settle,
     start: () => start,
@@ -17753,6 +17754,239 @@ ${messageContent}---
     if (input.operation !== void 0 && input.operation !== "normalize")
       throw new Error("Unknown provider model operation.");
     return JSON.stringify({ models: normalizeModels(input.providerId, input.data) });
+  }
+
+  // src/utils/apiContent.ts
+  var REASONING_TYPES = /* @__PURE__ */ new Set([
+    "reasoning",
+    "thinking",
+    "reasoning.text",
+    "reasoning.summary",
+    "redacted_thinking"
+  ]);
+  var collectTextFromBlock = (block) => {
+    if (typeof block === "string")
+      return block;
+    if (!block || typeof block !== "object")
+      return "";
+    const type = block.type ?? "";
+    if (type && REASONING_TYPES.has(type))
+      return "";
+    if (type === "text" || type === "output_text" || !type)
+      return block.text ?? block.content ?? block.value ?? "";
+    return "";
+  };
+  var collectReasoningFromBlock = (block) => {
+    if (typeof block === "string")
+      return "";
+    if (!block || typeof block !== "object")
+      return "";
+    const type = block.type ?? "";
+    if (type === "reasoning" || type === "thinking" || type === "reasoning.text" || type === "reasoning.summary" || type === "redacted_thinking") {
+      return block.text ?? block.summary ?? block.reasoning ?? block.thinking ?? block.content ?? "";
+    }
+    return "";
+  };
+  var extractTextFromApiContent = (content) => {
+    if (typeof content === "string")
+      return content;
+    if (Array.isArray(content))
+      return content.map(collectTextFromBlock).join("");
+    if (content && typeof content === "object")
+      return collectTextFromBlock(content);
+    return "";
+  };
+  var extractReasoningFromReasoningDetails = (reasoningDetails) => {
+    if (!reasoningDetails || !Array.isArray(reasoningDetails))
+      return "";
+    return reasoningDetails.map((detail) => {
+      if (detail.type === "reasoning.text")
+        return detail.text ?? "";
+      if (detail.type === "reasoning.summary")
+        return detail.summary ?? "";
+      return "";
+    }).join("");
+  };
+  var extractReasoningFromApiContent = (content) => {
+    if (typeof content === "string")
+      return "";
+    if (Array.isArray(content))
+      return content.map(collectReasoningFromBlock).join("");
+    if (content && typeof content === "object")
+      return collectReasoningFromBlock(content);
+    return "";
+  };
+
+  // src/utils/remoteResponse.ts
+  var extractReasoningFromEvent = (event) => {
+    const delta = event.choices?.[0]?.delta;
+    if (!delta)
+      return "";
+    if (delta.reasoning)
+      return delta.reasoning;
+    if (delta.reasoning_content)
+      return delta.reasoning_content;
+    const detailsText = extractReasoningFromReasoningDetails(delta.reasoning_details);
+    if (detailsText)
+      return detailsText;
+    const contentReasoning = extractReasoningFromApiContent(delta.content);
+    if (contentReasoning)
+      return contentReasoning;
+    return "";
+  };
+  var extractReasoningFromMessage = (message) => {
+    if (message.reasoning)
+      return message.reasoning;
+    if (message.reasoning_content)
+      return message.reasoning_content;
+    const detailsText = extractReasoningFromReasoningDetails(message.reasoning_details);
+    if (detailsText)
+      return detailsText;
+    const contentReasoning = extractReasoningFromApiContent(message.content);
+    if (contentReasoning)
+      return contentReasoning;
+    return "";
+  };
+  function extractNonStreamingOutput(message, parser) {
+    const reasoningText = extractReasoningFromMessage(message);
+    const rawMessageText = extractTextFromApiContent(message.content);
+    const parsedContent = parser.process(rawMessageText);
+    const flushedContent = parser.flush();
+    return {
+      content: parsedContent.content + flushedContent.content || rawMessageText,
+      reasoning: reasoningText + parsedContent.reasoning + flushedContent.reasoning
+    };
+  }
+
+  // src/utils/thinkTagParser.ts
+  var ThinkTagParser = class {
+    state = "outside";
+    pending = "";
+    /**
+     * Process a chunk of text. Returns the content and reasoning portions found
+     * in this chunk. Either (or both) may be empty strings.
+     */
+    process(text) {
+      let content = "";
+      let reasoning = "";
+      let buffer = this.pending + text;
+      this.pending = "";
+      while (buffer.length > 0) {
+        if (this.state === "outside") {
+          const openIdx = buffer.indexOf("<think>");
+          if (openIdx === -1) {
+            const partial = this.findPartialTag(buffer, "<think>");
+            if (partial > 0) {
+              content += buffer.slice(0, buffer.length - partial);
+              this.pending = buffer.slice(buffer.length - partial);
+            } else {
+              content += buffer;
+            }
+            break;
+          } else {
+            content += buffer.slice(0, openIdx);
+            buffer = buffer.slice(openIdx + 7);
+            this.state = "inside";
+          }
+        } else {
+          const closeIdx = buffer.indexOf("</think>");
+          if (closeIdx === -1) {
+            const partial = this.findPartialTag(buffer, "</think>");
+            if (partial > 0) {
+              reasoning += buffer.slice(0, buffer.length - partial);
+              this.pending = buffer.slice(buffer.length - partial);
+            } else {
+              reasoning += buffer;
+            }
+            break;
+          } else {
+            reasoning += buffer.slice(0, closeIdx);
+            buffer = buffer.slice(closeIdx + 8);
+            this.state = "outside";
+          }
+        }
+      }
+      return { content, reasoning };
+    }
+    /**
+     * Flush any remaining buffered text at the end of the stream.
+     * Partial tags are treated as literal text.
+     */
+    flush() {
+      const remaining = this.pending;
+      this.pending = "";
+      if (this.state === "inside") {
+        return { content: "", reasoning: remaining };
+      }
+      return { content: remaining, reasoning: "" };
+    }
+    checkpoint() {
+      return { state: this.state, pending: this.pending };
+    }
+    restore(checkpoint) {
+      this.state = checkpoint.state;
+      this.pending = checkpoint.pending;
+    }
+    /** Check if `buffer` ends with a prefix of `tag` (for partial tag detection). */
+    findPartialTag(buffer, tag) {
+      const maxLen = Math.min(tag.length - 1, buffer.length);
+      for (let len = maxLen; len > 0; len--) {
+        if (buffer.endsWith(tag.slice(0, len))) {
+          return len;
+        }
+      }
+      return 0;
+    }
+  };
+
+  // shared/google-sync/remoteOutput.ts
+  function remoteOutput(json) {
+    const input = JSON.parse(json);
+    const parser = new ThinkTagParser();
+    const state = input.state ?? { text: "", reasoning: "", think: parser.checkpoint() };
+    parser.restore(state.think);
+    let finished = false;
+    if (input.operation === "flush") {
+      const tail = parser.flush();
+      state.text += tail.content;
+      state.reasoning += tail.reasoning;
+      finished = true;
+    } else if (input.operation === "consume") {
+      const value = input.value;
+      if (!value || value.error != null)
+        throw new Error("Remote API error.");
+      const choice = value.choices?.[0];
+      const payload = input.streaming ? choice?.delta : choice?.message;
+      if (payload) {
+        if (Object.hasOwn(payload, "tool_calls") || Object.hasOwn(payload, "function_call"))
+          throw new Error("Generated tool calls are not supported by this remote path.");
+        if (input.streaming) {
+          state.reasoning += extractReasoningFromEvent(value);
+          const parsed = parser.process(extractTextFromApiContent(payload.content));
+          state.text += parsed.content;
+          state.reasoning += parsed.reasoning;
+        } else {
+          if (!payload.content)
+            throw new Error("Failed to retrieve completion content.");
+          const parsed = extractNonStreamingOutput(payload, parser);
+          state.text += parsed.content;
+          state.reasoning += parsed.reasoning;
+          finished = true;
+        }
+        if (choice.finish_reason) {
+          state.finishReason = choice.finish_reason;
+          finished = true;
+        }
+      } else if (!input.streaming)
+        throw new Error("Failed to retrieve completion content.");
+    } else
+      throw new Error("Unknown remote output operation.");
+    state.think = parser.checkpoint();
+    const parts = [
+      ...state.reasoning ? [{ type: "reasoning", text: state.reasoning }] : [],
+      ...state.text ? [{ type: "text", text: state.text }] : []
+    ];
+    return JSON.stringify({ state, parts, finished, isEmpty: parts.length === 0 });
   }
 
   // shared/google-sync/entry.ts

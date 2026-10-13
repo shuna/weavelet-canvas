@@ -108,7 +108,10 @@
     "src/utils/submitContext.ts": "12fc43ead2afc57ce27c3fc290fb95b5774349cc6b12a81ec496f55313e48210",
     "src/utils/syncDocument.ts": "bc7cca9616aa593538dfb194b861ea7415ce3c7e7da42620a9fca0a89acb4120",
     "src/utils/chatMarkdown.ts": "7fa68fc26091374a7f3a5fa5885ec19547870612058c09927ef4bb1cb9ebeafa",
-    "src/utils/fileExport.ts": "51f4f9fc072140849730d8be079703f39a7380a80e29532a9443560413f2bc29"
+    "src/utils/fileExport.ts": "51f4f9fc072140849730d8be079703f39a7380a80e29532a9443560413f2bc29",
+    "src/utils/apiContent.ts": "9ed9e28b97e3eb591afa5c502cb2e7cc7ee3653d4628e4018d7a66c1ac506111",
+    "src/utils/remoteResponse.ts": "d4e9e92a91a6997656683701c2a26f9a62db0f1ba047ade5d816cfdc6cb45d74",
+    "src/utils/thinkTagParser.ts": "8e8301456c2e9d14e5000fe30aac979404a61a1e358427858722091dbe382145"
   },
   "bundleInputs": {
     "shared/google-sync/importDefaults.generated.json": "2c2d78eba4c11ff5348beb24332cdeb018428fdf9d56bab5aaba1cae1848495a",
@@ -195,7 +198,11 @@
     "src/store/provider-config.ts": "6c073c4b84fea5bffd1ccd9109abf3cb972379dd8a1393ab4475c293c24eaa0b",
     "src/store/provider-helpers.ts": "d8cd473cdba8eeb950294a784a7266a58d7aff80d31095cabd1c29459aa43ac1",
     "shared/google-sync/providerModels.ts": "73ff6e578c94bd9f9bd9942281d6abca27dd40ed4a66caca5d5c2cfacae858db",
-    "shared/google-sync/entry.ts": "d7416c330f891810be4bf8d9c1ee76e289921d9801489885a54eec37cd76999b",
+    "src/utils/apiContent.ts": "9ed9e28b97e3eb591afa5c502cb2e7cc7ee3653d4628e4018d7a66c1ac506111",
+    "src/utils/remoteResponse.ts": "d4e9e92a91a6997656683701c2a26f9a62db0f1ba047ade5d816cfdc6cb45d74",
+    "src/utils/thinkTagParser.ts": "8e8301456c2e9d14e5000fe30aac979404a61a1e358427858722091dbe382145",
+    "shared/google-sync/remoteOutput.ts": "054fb79ed6166797ded127e6ba8bf74bc4bc72efb7f8429fad77df98bd933ac9",
+    "shared/google-sync/entry.ts": "3cc641ef191210a61236efd8fefb73a2736bd8b1f14bc41b3edf396e3948eb48",
     "shared/google-sync/generate.mjs": "fe5cea14c3f66829c4627c74b4b790a15e6a660457b399e5413dcb1035afdc1b",
     "shared/google-sync/importDefaults.generate.mjs": "2ff8904af4f192ed0809ceaaabcfbefa708321083aebb527d712fc2a0551b15a"
   },
@@ -229,5 +236,5 @@
     "lodash/package.json": "8e41b07c744a0de0d2c1c23ed41418ecb0849abb56395d28802e601b4730d7c2",
     "lodash/LICENSE": "f71e8ed126b46346494aad5486874cd8f0aafe95092ed67d2e3cb6110f939abc"
   },
-  "bundleSHA256": "3bb530d1f687afc75f0643b0ca3662e614e6d70e563c3b7f4fc219128fc883ef"
+  "bundleSHA256": "abc408fc1cddd2a3528af25efc5faf12848ead678ea0963ef4e94d05faf8ddd1"
 }

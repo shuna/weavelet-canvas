@@ -39,9 +39,8 @@ import {
 } from '@utils/streamingBuffer';
 import type { EventSourceDataInterface, NonStreamingResponse } from '@type/api';
 import { ThinkTagParser } from '@utils/thinkTagParser';
+import { extractReasoningFromEvent, extractNonStreamingOutput } from '@utils/remoteResponse';
 import {
-  extractReasoningFromApiContent,
-  extractReasoningFromReasoningDetails,
   extractTextFromApiContent,
 } from '@utils/apiContent';
 import { getEffectiveStreamEnabled } from '@utils/streamSupport';
@@ -101,46 +100,6 @@ const hasSystemMessages = (messages: MessageInterface[]): boolean =>
 const removeSystemMessages = (
   messages: MessageInterface[]
 ): MessageInterface[] => messages.filter((message) => message.role !== 'system');
-
-/**
- * Extract reasoning text from an SSE event delta.
- * Handles three formats:
- *  1. delta.reasoning (simple string — most providers via OpenRouter)
- *  2. delta.reasoning_content (DeepSeek-style)
- *  3. delta.reasoning_details (structured array with type: "reasoning.text")
- */
-const extractReasoningFromEvent = (event: EventSourceDataInterface): string => {
-  const delta = event.choices?.[0]?.delta;
-  if (!delta) return '';
-
-  // Format 1: simple reasoning string
-  if (delta.reasoning) return delta.reasoning;
-
-  // Format 2: DeepSeek reasoning_content
-  if (delta.reasoning_content) return delta.reasoning_content;
-
-  // Format 3: reasoning_details array
-  const detailsText = extractReasoningFromReasoningDetails(delta.reasoning_details);
-  if (detailsText) return detailsText;
-
-  // Format 4: content blocks that carry thinking/reasoning items
-  const contentReasoning = extractReasoningFromApiContent(delta.content as never);
-  if (contentReasoning) return contentReasoning;
-
-  return '';
-};
-
-const extractReasoningFromMessage = (
-  message: NonStreamingResponse['choices'][number]['message']
-): string => {
-  if (message.reasoning) return message.reasoning;
-  if (message.reasoning_content) return message.reasoning_content;
-  const detailsText = extractReasoningFromReasoningDetails(message.reasoning_details);
-  if (detailsText) return detailsText;
-  const contentReasoning = extractReasoningFromApiContent(message.content as never);
-  if (contentReasoning) return contentReasoning;
-  return '';
-};
 
 const shouldRetryWithoutSystemMessages = (
   error: unknown,
@@ -862,19 +821,9 @@ export const executeSubmitStream = async ({
 
       const nonStreamData = data as NonStreamingResponse;
       lastFinishReason = nonStreamData.choices[0].finish_reason ?? 'stop';
-      // Extract reasoning from non-streaming response
-      const msg = nonStreamData.choices[0].message;
-      const reasoningText = extractReasoningFromMessage(msg);
-      // Parse <think> tags from content
-      const rawMessageText = extractTextFromApiContent(msg.content as never);
-      const parsedContent = thinkTagParser.process(rawMessageText);
-      const flushedContent = thinkTagParser.flush();
-      const finalContent = parsedContent.content + flushedContent.content;
-      const thinkReasoning = parsedContent.reasoning + flushedContent.reasoning;
-      writeChunkToStore(chatId, targetNodeId, finalContent || rawMessageText);
-      if (reasoningText || thinkReasoning) {
-        writeReasoningChunk(chatId, targetNodeId, reasoningText + thinkReasoning);
-      }
+      const output = extractNonStreamingOutput(nonStreamData.choices[0].message, thinkTagParser);
+      writeChunkToStore(chatId, targetNodeId, output.content);
+      if (output.reasoning) writeReasoningChunk(chatId, targetNodeId, output.reasoning);
       return;
     }
 
