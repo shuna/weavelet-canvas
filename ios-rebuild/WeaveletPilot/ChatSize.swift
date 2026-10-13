@@ -9,8 +9,8 @@ actor ChatSize {
             let messages = try chat.required("messages").array("messages").map { message in
                 OrderedJSON.array(try message.required("content").array("content").map { part in
                     try Task.checkCancellation()
-                    let text = try? part["text"]?.string("text")
-                    let url = try? part["image_url"]?["url"]?.string("image URL")
+                    let text = try? part["text"]?.stringKey("text")
+                    let url = try? part["image_url"]?["url"]?.stringKey("image URL")
                     return try .object([.init(key: "type", value: part.required("type")),
                         .init(key: "textLength", value: .number(String(text?.utf16.count ?? 0))),
                         .init(key: "hasImageURL", value: .bool(part["image_url"] != nil)),

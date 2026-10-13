@@ -49,6 +49,13 @@ final class ChatSizeTests: XCTestCase {
         catch is CancellationError { }
         catch { XCTFail("wrong cancellation error: \(error)") }
     }
+    func testRawUTF16LengthsReachSharedSizeRuleWithoutRepair() async throws {
+        let source = try json(#"{"chats":[{"id":"raw","messages":[{"content":[{"type":"text","text":"\ud800"},{"type":"image_url","image_url":{"url":"\udc00\ud800"}}]}]}]}"#)
+        let before = try source.encoded()
+        let sizes = try await ChatSize().sizes(source: source, enabled: true)
+        XCTAssertEqual(sizes[Data("raw".utf8)], "3")
+        XCTAssertEqual(try source.encoded(), before)
+    }
     func testDisplaySizeSaveFailureKeepsRawOptionAndOtherData() throws {
         var rejects = false
         let directory = FileManager.default.temporaryDirectory.appendingPathComponent("chat-size-\(UUID().uuidString)")
