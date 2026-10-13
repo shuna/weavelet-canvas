@@ -24,18 +24,18 @@ import {
   appendNodeToActivePathState,
   copyBranchSequenceState,
   createBranchState,
-  deleteBranchState,
   pruneHiddenNodesState,
   ensureBranchTreeState,
   insertNodeState,
-  moveMessageState,
+  moveNodeState,
+  replaceNodeAndPruneState,
+  deleteNodeBranchState,
   pasteBranchSequenceState,
   removeMessageAtIndexState,
   removeNodeState,
   removeBranchSequenceState,
   setNodeDisplayFieldState,
   resolveNodeTarget,
-  replaceMessageAndPruneFollowingState,
   switchActivePathState,
   switchBranchAtNodeState,
   truncateActivePathState,
@@ -208,7 +208,7 @@ export interface BranchSlice {
   insertNode: (input: { chatId: string; beforeNodeId: string | null; role: Role; content: ContentInterface[] }) => { status: 'updated'; nodeId: string } | { status: 'chat-missing' | 'node-missing' | 'invalid-target' };
   removeNode: (input: NodeTarget) => NodeResult;
   moveNode: (input: NodeTarget & { direction: 'up' | 'down' }) => NodeResult;
-  replaceNodeAndPrune: (input: NodeEdit & { removeCount: number }) => { status: 'updated' | 'missing' | 'invalid-input'; removedNodeIds: string[]; pruneBlockedBy: string[] };
+  replaceNodeAndPrune: (input: NodeEdit & { removeCount: number }) => { status: 'updated' | 'missing' | 'invalid-input' | 'protected'; blockedNodeIds?: string[]; removedNodeIds: string[]; pruneBlockedBy: string[] };
   updateNodeRole: (input: NodeTarget & { role: Role }) => NodeResult;
   setNodeStar: (input: NodeTarget & { value: boolean }) => NodeResult;
   setNodePin: (input: NodeTarget & { value: boolean }) => NodeResult;
@@ -220,7 +220,7 @@ export interface BranchSlice {
   switchBranchAtNode: (chatIndex: number, nodeId: string) => void;
   switchActivePath: (chatIndex: number, newPath: string[]) => void;
   switchActivePathSilent: (chatIndex: number, newPath: string[]) => void;
-  deleteBranch: (chatIndex: number, nodeId: string) => void;
+  deleteBranch: (chatIndex: number, nodeId: string) => {status: 'updated' | 'protected' | 'chat-missing' | 'node-missing' | 'invalid-target'; blockedNodeIds?: string[]};
   pruneHiddenNodes: (chatIndex: number) => void;
   updateLastNodeContent: (
     chatIndex: number,
@@ -506,27 +506,16 @@ export const createBranchSlice: StoreSlice<BranchSlice> = (set, get) => {
     return { status: 'updated' };
   },
   moveNode: (input) => {
-    const target = resolveNodeTarget(withRuntimeFlatNodeMaps(get().chats, get()), input, true);
-    if (target.status !== 'valid') return target;
-    if (input.direction === 'up' ? target.messageIndex === 0 : target.messageIndex === target.chat.messages.length - 1) return { status: 'unchanged' };
-    const topRole = target.chat.messages[0]?.role;
-    if (topRole === 'system' && (target.messageIndex === 0 || (input.direction === 'up' && target.messageIndex === 1))) return { status: 'unchanged' };
-    const ensured = ensureBranchTreeState(withRuntimeFlatNodeMaps(get().chats, get())!, target.chatIndex, get().contentStore);
-    const result = moveMessageState(ensured.chats, target.chatIndex, target.messageIndex, input.direction, ensured.contentStore);
-    get().applyBranchState(result.chats, result.contentStore, { historyBase: ensured });
-    return { status: 'updated' };
+    const result = moveNodeState(withRuntimeFlatNodeMaps(get().chats,get()),input,get().contentStore);
+    if (result.status !== 'updated') return result;
+    get().applyBranchState(result.chats,result.contentStore,{historyBase:result.historyBase});
+    return {status:'updated'};
   },
   replaceNodeAndPrune: (input) => {
-    if (!Number.isInteger(input.removeCount) || input.removeCount < 0) return { status: 'invalid-input', removedNodeIds: [], pruneBlockedBy: [] };
-    const target = resolveNodeTarget(withRuntimeFlatNodeMaps(get().chats, get()), input, true);
-    if (target.status !== 'valid') return { status: 'missing', removedNodeIds: [], pruneBlockedBy: [] };
-    const ensured = ensureBranchTreeState(withRuntimeFlatNodeMaps(get().chats, get())!, target.chatIndex, get().contentStore);
-    const prepared = ensured.chats[target.chatIndex];
-    const following = prepared.branchTree!.activePath.slice(target.messageIndex + 1, target.messageIndex + 1 + input.removeCount);
-    const pruneBlockedBy = following.filter(id => prepared.protectedNodes?.[id]);
-    const result = replaceMessageAndPruneFollowingState(ensured.chats, target.chatIndex, target.messageIndex, { role: input.role, content: input.content }, ensured.contentStore, pruneBlockedBy.length ? 0 : input.removeCount);
-    get().applyBranchState(result.chats, result.contentStore, { historyBase: ensured });
-    return { status: 'updated', removedNodeIds: pruneBlockedBy.length ? [] : following, pruneBlockedBy };
+    const result = replaceNodeAndPruneState(withRuntimeFlatNodeMaps(get().chats,get()),input,get().contentStore);
+    if (result.status !== 'updated') return result;
+    get().applyBranchState(result.chats,result.contentStore,{historyBase:result.historyBase});
+    return {status:'updated',removedNodeIds:result.removedNodeIds,pruneBlockedBy:result.pruneBlockedBy};
   },
 
   ensureBranchTree: (chatIndex) => {
@@ -582,13 +571,12 @@ export const createBranchSlice: StoreSlice<BranchSlice> = (set, get) => {
   },
 
   deleteBranch: (chatIndex, nodeId) => {
-    const { chats, contentStore } = deleteBranchState(
-      withRuntimeFlatNodeMaps(get().chats, get())!,
-      chatIndex,
-      nodeId,
-      get().contentStore
-    );
-    get().applyBranchState(chats, contentStore);
+    const chats = withRuntimeFlatNodeMaps(get().chats,get());
+    if (!chats?.[chatIndex]) return {status:'chat-missing'};
+    const result = deleteNodeBranchState(chats,{chatId:chats[chatIndex].id,nodeId},get().contentStore);
+    if (result.status !== 'updated') return result;
+    get().applyBranchState(result.chats,result.contentStore,{historyBase:result.historyBase});
+    return {status:'updated'};
   },
 
   pruneHiddenNodes: (chatIndex) => {

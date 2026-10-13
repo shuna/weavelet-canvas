@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useWorkspaceStore, useWorkspaceReadOnly } from '@store/workspaceScope';
+import { showToast } from '@utils/showToast';
 import { buildPathToLeaf } from '@utils/branchUtils';
 
 interface NodeContextMenuProps {
@@ -56,7 +57,8 @@ const NodeContextMenu = ({
     : null;
 
   const handleDelete = () => {
-    deleteBranch(chatIndex, nodeId);
+    const result = deleteBranch(chatIndex, nodeId);
+    if (result.status === 'protected') showToast(t('protectedCannotDelete', {ns:'main'}), 'warning');
     onClose();
   };
 

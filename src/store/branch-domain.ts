@@ -187,7 +187,7 @@ export const ensureBranchTreeState = (
     return { chats, contentStore: currentContentStore };
   }
 
-  const contentStore = { ...currentContentStore };
+  const contentStore = Object.fromEntries(Object.entries(currentContentStore).map(([hash, entry]) => [hash, { ...entry }]));
   const updatedChats = cloneChatAt(chats, chatIndex);
   flatChatToBranchTree(updatedChats[chatIndex], contentStore);
 
@@ -913,4 +913,47 @@ export const removeNodeState = (
   const ensured = ensureBranchReadyState(chats!, target.chatIndex, contentStore);
   const result = removeMessageAtIndexState(ensured.chats, target.chatIndex, target.messageIndex, ensured.contentStore, options);
   return { status: 'updated' as const, ...result, historyBase: ensured };
+};
+
+export const moveNodeState = (
+  chats: ChatInterface[] | undefined, input: {chatId:string;nodeId:string;direction:'up'|'down'}, contentStore: ContentStoreData
+) => {
+  const target = resolveNodeTarget(chats, input, true);
+  if (target.status !== 'valid') return target;
+  if (input.direction === 'up' ? target.messageIndex === 0 : target.messageIndex === target.chat.messages.length - 1) return {status:'unchanged' as const};
+  const topRole = target.chat.messages[0]?.role;
+  if (topRole === 'system' && (target.messageIndex === 0 || (input.direction === 'up' && target.messageIndex === 1))) return {status:'unchanged' as const};
+  const ensured = ensureBranchTreeState(chats!, target.chatIndex, contentStore);
+  const result = moveMessageState(ensured.chats, target.chatIndex, target.messageIndex, input.direction, ensured.contentStore);
+  return {status:'updated' as const, ...result, historyBase:ensured};
+};
+
+export const replaceNodeAndPruneState = (
+  chats: ChatInterface[] | undefined, input: {chatId:string;nodeId:string;role:Role;content:ContentInterface[];removeCount:number}, contentStore: ContentStoreData
+) => {
+  if (!Number.isInteger(input.removeCount) || input.removeCount < 0) return {status:'invalid-input' as const,removedNodeIds:[],pruneBlockedBy:[]};
+  const target = resolveNodeTarget(chats, input, true);
+  if (target.status !== 'valid') return {status:'missing' as const,removedNodeIds:[],pruneBlockedBy:[]};
+  if (target.chat.protectedNodes?.[input.nodeId]) return {status:'protected' as const,blockedNodeIds:[input.nodeId],removedNodeIds:[],pruneBlockedBy:[]};
+  const ensured = ensureBranchTreeState(chats!, target.chatIndex, contentStore);
+  const prepared = ensured.chats[target.chatIndex];
+  const following = prepared.branchTree!.activePath.slice(target.messageIndex+1,target.messageIndex+1+input.removeCount);
+  const pruneBlockedBy = following.filter(id=>prepared.protectedNodes?.[id]);
+  const result = replaceMessageAndPruneFollowingState(ensured.chats,target.chatIndex,target.messageIndex,{role:input.role,content:input.content},ensured.contentStore,pruneBlockedBy.length ? 0 : input.removeCount);
+  return {status:'updated' as const,...result,historyBase:ensured,removedNodeIds:pruneBlockedBy.length ? [] : following,pruneBlockedBy};
+};
+
+export const deleteNodeBranchState = (
+  chats: ChatInterface[] | undefined, input: {chatId:string;nodeId:string}, contentStore: ContentStoreData
+) => {
+  const target = resolveNodeTarget(chats,input);
+  if (target.status !== 'valid') return target;
+  const blockedNodeIds = target.chat.branchTree
+    ? [...collectDescendants(target.chat.branchTree,input.nodeId)].filter(id=>target.chat.protectedNodes?.[id])
+    : target.chat.messages.slice(target.messageIndex).map((_,index)=>String(target.messageIndex+index)).filter(id=>target.chat.protectedNodes?.[id]);
+  if (blockedNodeIds.length) return {status:'protected' as const,blockedNodeIds};
+  const ensured = ensureBranchTreeState(chats!,target.chatIndex,contentStore);
+  const nodeId = target.chat.branchTree ? input.nodeId : ensured.chats[target.chatIndex].branchTree!.activePath[target.messageIndex];
+  const removedNodeIds = [...collectDescendants(ensured.chats[target.chatIndex].branchTree!,nodeId)];
+  return {status:'updated' as const,...deleteBranchState(ensured.chats,target.chatIndex,nodeId,ensured.contentStore),historyBase:ensured,removedNodeIds};
 };
