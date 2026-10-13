@@ -27,7 +27,7 @@ import NodeContextMenu from './NodeContextMenu';
 import BranchDiffModal from './BranchDiffModal';
 import MessageDetailModal from './MessageDetailModal';
 import BranchStepEdge from './BranchStepEdge';
-import { buildPathToLeaf, findLCA } from '@utils/branchUtils';
+import { buildPathToLeaf, buildNodeDiffPaths } from '@utils/branchUtils';
 import { perfStart, perfEnd } from '@utils/perfTrace';
 import BranchSearchBar from './BranchSearchBar';
 import { useTranslation } from 'react-i18next';
@@ -724,24 +724,7 @@ const BranchEditorCanvas = ({
       // Verify both nodes exist in this tree
       if (!tree.nodes[nodeIdA] || !tree.nodes[nodeIdB]) return;
 
-      // Build paths from each node to leaf
-      const fullPathA = buildPathToLeaf(tree, nodeIdA);
-      const fullPathB = buildPathToLeaf(tree, nodeIdB);
-
-      // Find LCA and trim paths to start after it
-      const lca = findLCA(tree, nodeIdA, nodeIdB);
-      let pathA = fullPathA;
-      let pathB = fullPathB;
-      if (lca) {
-        const idxA = fullPathA.indexOf(lca);
-        const idxB = fullPathB.indexOf(lca);
-        if (idxA >= 0) pathA = fullPathA.slice(idxA + 1);
-        if (idxB >= 0) pathB = fullPathB.slice(idxB + 1);
-        // If one of the nodes IS the LCA, include it
-        if (nodeIdA === lca) pathA = fullPathA.slice(idxA);
-        if (nodeIdB === lca) pathB = fullPathB.slice(idxB);
-      }
-
+      const {pathA, pathB} = buildNodeDiffPaths(tree, nodeIdA, nodeIdB);
       setDiffPaths({ pathA, pathB, chatIndex: chatIndexA });
       setShowDiff(true);
     },

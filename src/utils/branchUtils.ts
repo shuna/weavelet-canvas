@@ -297,6 +297,23 @@ export function findLCA(
   return null;
 }
 
+export function buildNodeDiffPaths(tree: BranchTree, nodeIdA: string, nodeIdB: string): {pathA: string[]; pathB: string[]} {
+  const fullPathA = buildPathToLeaf(tree, nodeIdA);
+  const fullPathB = buildPathToLeaf(tree, nodeIdB);
+  const lca = findLCA(tree, nodeIdA, nodeIdB);
+  let pathA = fullPathA;
+  let pathB = fullPathB;
+  if (lca) {
+    const idxA = fullPathA.indexOf(lca);
+    const idxB = fullPathB.indexOf(lca);
+    if (idxA >= 0) pathA = fullPathA.slice(idxA + 1);
+    if (idxB >= 0) pathB = fullPathB.slice(idxB + 1);
+    if (nodeIdA === lca) pathA = fullPathA.slice(idxA);
+    if (nodeIdB === lca) pathB = fullPathB.slice(idxB);
+  }
+  return {pathA, pathB};
+}
+
 export function collectDescendants(
   tree: BranchTree,
   nodeId: string

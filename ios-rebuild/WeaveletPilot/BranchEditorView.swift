@@ -113,6 +113,8 @@ struct BranchEditorView: View {
     let deleteBranch: (String) -> Void
     let clipboard: (String, BranchClipboardOperation) -> Void
     @State private var rendered: (key: BranchLayoutKey, graph: BranchGraph)?
+    @State private var compareTarget: (key: BranchLayoutKey, nodeID: String)?
+    @State private var comparison: BranchDiffRequest?
     @State private var error: String?
     @State private var scale: CGFloat = 1
     @GestureState private var gestureScale: CGFloat = 1
@@ -141,6 +143,8 @@ struct BranchEditorView: View {
                 ProgressView("分岐を配置中")
             }
         }
+        .sheet(item: $comparison) { request in BranchDiffView(state: state, request: request) }
+        .onChange(of: key) { _, _ in compareTarget = nil; comparison = nil }
         .task(id: key) {
             rendered = nil; error = nil
             if key.tree == nil {
@@ -178,6 +182,8 @@ struct BranchEditorView: View {
                 }
             }
             ForEach(graph.nodes, id: \.identity) { node in
+                let target = compareTarget?.key == sourceKey ? compareTarget?.nodeID : nil
+                let otherNode = target.flatMap { $0.utf8.elementsEqual(node.id.utf8) ? nil : $0 }
                 BranchNodeCard(node: node, canEdit: state.exchange != nil && state.generation == nil,
                     canDelete: !(node.role == "system" && sourceKey.isRoot(node.id)),
                     hasClipboard: state.hasBranchClipboard, select: {
@@ -191,6 +197,16 @@ struct BranchEditorView: View {
                    deleteBranch: { if sourceKey.isCurrent(in: state), state.generation == nil { deleteBranch(node.id) } },
                    clipboard: { operation in
                        if sourceKey.isCurrent(in: state), state.generation == nil { clipboard(node.id, operation) }
+                   }, compareCurrent: {
+                       if sourceKey.isCurrent(in: state) { comparison = BranchDiffRequest(key: sourceKey, mode: .current(nodeID: node.id)) }
+                   }, setCompareTarget: {
+                       if sourceKey.isCurrent(in: state) { compareTarget = (sourceKey, node.id) }
+                   }, compareSelected: otherNode.map { first in
+                       { if sourceKey.isCurrent(in: state), compareTarget?.key == sourceKey,
+                            compareTarget?.nodeID.utf8.elementsEqual(first.utf8) == true {
+                           comparison = BranchDiffRequest(key: sourceKey, mode: .nodes(first: first, second: node.id))
+                           compareTarget = nil
+                       } }
                    })
                 .position(x: node.x + 140, y: node.y + 40)
             }
@@ -207,6 +223,9 @@ private struct BranchNodeCard: View {
     let configure: () -> Void
     let deleteBranch: () -> Void
     let clipboard: (BranchClipboardOperation) -> Void
+    let compareCurrent: () -> Void
+    let setCompareTarget: () -> Void
+    let compareSelected: (() -> Void)?
 
     var body: some View {
         HStack(spacing: 0) {
@@ -227,18 +246,25 @@ private struct BranchNodeCard: View {
             .accessibilityLabel("\(node.label ?? node.role)、\(node.preview)")
             Menu {
                 Button("ラベル・スター・ピン留め", systemImage: "slider.horizontal.3", action: configure)
+                    .disabled(!canEdit)
                 Divider()
-                Button("範囲をコピー", systemImage: "doc.on.doc") { clipboard(.copy) }
-                Button("範囲を切り取り", systemImage: "scissors") { clipboard(.cut) }
-                if hasClipboard { Button("範囲を貼り付け", systemImage: "doc.on.clipboard") { clipboard(.paste) } }
+                Button("範囲をコピー", systemImage: "doc.on.doc") { clipboard(.copy) }.disabled(!canEdit)
+                Button("範囲を切り取り", systemImage: "scissors") { clipboard(.cut) }.disabled(!canEdit)
+                if hasClipboard { Button("範囲を貼り付け", systemImage: "doc.on.clipboard") { clipboard(.paste) }.disabled(!canEdit) }
                 if canDelete {
                     Divider()
-                    Button("枝全体を削除", systemImage: "trash", role: .destructive, action: deleteBranch)
+                    Button("枝全体を削除", systemImage: "trash", role: .destructive, action: deleteBranch).disabled(!canEdit)
+                }
+                Divider()
+                Button("現在の枝と比較", systemImage: "square.split.2x1", action: compareCurrent)
+                if let compareSelected {
+                    Button("選択ノードと比較", systemImage: "square.on.square", action: compareSelected)
+                } else {
+                    Button("比較対象に指定", systemImage: "square.dashed", action: setCompareTarget)
                 }
             } label: {
                 Image(systemName: "ellipsis.circle").frame(width: 44, height: 80)
             }
-            .disabled(!canEdit)
             .accessibilityLabel("メッセージ操作")
         }
         .frame(width: 280, height: 80)

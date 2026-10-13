@@ -22,6 +22,53 @@ final class BranchEditorTests: XCTestCase {
         XCTAssertThrowsError(try BranchGraph(output, requestID: 41))
     }
 
+    func testCurrentAndTwoNodeComparisonsUseSharedWebPaths() throws {
+        let state = ChatState()
+        try state.importWebData(fixture().encoded())
+        let key = BranchLayoutKey(state: state)
+        let current = try BranchComparison.compare(.init(key: key, mode: .current(nodeID: "n-inactive")))
+        XCTAssertTrue(current.hasChanges)
+        XCTAssertEqual(current.rows.count, 3)
+        XCTAssertEqual(current.rows.last?.textA, "別分岐の本文")
+        XCTAssertEqual(current.rows.last?.textB, "表示中の回答")
+        let nodes = try BranchComparison.compare(.init(key: key, mode: .nodes(first: "n-inactive", second: "n-assistant")))
+        XCTAssertEqual(nodes.rows.count, 1) // The Web excludes the shared n-user ancestor.
+        XCTAssertEqual(nodes.rows[0].textA, "別分岐の本文")
+        XCTAssertEqual(nodes.rows[0].textB, "表示中の回答")
+        let ancestor = try BranchComparison.compare(.init(key: key, mode: .nodes(first: "n-user", second: "n-assistant")))
+        XCTAssertEqual(ancestor.rows.count, 2) // The selected ancestor itself stays in the first path.
+        XCTAssertEqual(ancestor.rows[0].textA, "本文\n日本語🙂")
+        XCTAssertEqual(ancestor.rows[0].textB, "表示中の回答")
+        let same = try BranchComparison.compare(.init(key: key, mode: .current(nodeID: "n-assistant")))
+        XCTAssertFalse(same.hasChanges)
+        XCTAssertEqual(same.rows.last?.textA, same.rows.last?.textB)
+        state.selectedConversationID = "chat-b"
+        XCTAssertFalse(key.isCurrent(in: state))
+    }
+
+    func testComparisonResolvesDeltaForReadOnlyTextWithoutChangingRawStore() throws {
+        let root = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
+        let delta = try OrderedJSON.decode(Data(contentsOf: root.appendingPathComponent("tests/fixtures/web-native/raw-delta-attributes.json")))
+        let store = OrderedJSON.object([
+            .init(key: "base", value: .object([.init(key: "content", value: try delta.required("base")), .init(key: "refCount", value: .number("1"))])),
+            .init(key: "delta", value: .object([.init(key: "content", value: .array([])), .init(key: "refCount", value: .number("1")),
+                .init(key: "delta", value: .object([.init(key: "baseHash", value: .string("base")), .init(key: "patches", value: try delta.required("patches"))]))]))
+        ])
+        let nodes = OrderedJSON.object([("base", "base"), ("delta", "delta")].map { pair in
+            JSONField(key: pair.0, value: .object([.init(key: "id", value: .string(pair.0)), .init(key: "parentId", value: .null),
+                .init(key: "role", value: .string("user")), .init(key: "contentHash", value: .string(pair.1)),
+                .init(key: "createdAt", value: .number("1"))]))
+        })
+        let tree = OrderedJSON.object([.init(key: "nodes", value: nodes), .init(key: "activePath", value: .array([.string("base")]))])
+        let key = BranchLayoutKey(chatID: "chat", chatIndex: 0, title: "chat", tree: tree, contentStore: store)
+        let compared = try BranchComparison.compare(.init(key: key, mode: .nodes(first: "base", second: "delta")))
+        XCTAssertFalse(compared.hasChanges)
+        XCTAssertEqual(compared.rows[0].textA, "body")
+        XCTAssertEqual(compared.rows[0].textB, "body")
+        XCTAssertEqual(store["delta"]?["content"], .array([]))
+        XCTAssertNotNil(store["delta"]?["delta"])
+    }
+
     func testCanonicalEquivalentIDsRemainDistinctAndRequestIDIsJSSafe() throws {
         let composed = "é", decomposed = "e\u{301}"
         let content = OrderedJSON.object([.init(key: "body", value: .object([

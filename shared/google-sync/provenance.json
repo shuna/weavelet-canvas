@@ -14,7 +14,7 @@
     "src/utils/chatFolders.ts": "2da5de3f25f587c475b75eee69ec7d8e56f60ae6dccc9dac7df640ea23827942",
     "src/utils/chatShallowClone.ts": "105a942dc9ad825dbbcfccc302b682ede001be10953209d43ed7be6dba71b8ec",
     "src/types/chat.ts": "d5fb2155a0e5dae23f318086245c4998818cb71abcbcbfa732410dfdc2b82bad",
-    "src/utils/branchUtils.ts": "5779a38a2dd9601635e387d495d3a703360860f016769c60dde3a91b788692a9",
+    "src/utils/branchUtils.ts": "fb47fee03f89e3684f190e3dc4c1691df46b4f8372a0d54b0c2384298c2f6ff1",
     "src/store/branch-domain.ts": "d4ab6d06c59944d2d2a992f0b5d285d7f816e82f0a563b6c91815f2acb8ab851",
     "src/utils/streamingBuffer.ts": "4040506b5be29b03bf1a67b82efe71357c2f77b7b3b35d9e2edae03d7acf5ae9",
     "src/utils/contentStore.ts": "66ac2636c8d01cdefdb2f86ecf7208c5133d6449de54b3a03e77526ceaadaae4",
@@ -167,7 +167,7 @@
     "src/store/branch-domain.ts": "d4ab6d06c59944d2d2a992f0b5d285d7f816e82f0a563b6c91815f2acb8ab851",
     "shared/google-sync/editing.ts": "77410b115683a59fe2f6c8819c67dfe6a1d2eae4992807440edb500146cbb240",
     "shared/google-sync/adapters/uuid.ts": "27a7e045a0ebbb429ad65b4f3d1757f34c5b4187d8555aa523afaf337ddb010a",
-    "src/utils/branchUtils.ts": "5779a38a2dd9601635e387d495d3a703360860f016769c60dde3a91b788692a9",
+    "src/utils/branchUtils.ts": "fb47fee03f89e3684f190e3dc4c1691df46b4f8372a0d54b0c2384298c2f6ff1",
     "src/api/requestBody.ts": "fddc6e59dda8049e43d7fc96b91686b611caf98d235a1528c5d083031cb5502d",
     "src/utils/bubbleSummary.ts": "d59580e0f3c7af3dacef2f90885d55710e28188c2dd49b8c3b33c240e985b9d0",
     "src/utils/submitContext.ts": "12fc43ead2afc57ce27c3fc290fb95b5774349cc6b12a81ec496f55313e48210",
@@ -238,7 +238,7 @@
     "src/utils/branchLayout.ts": "5cc4a2b874914cf882eec7932acef99a5e3481757e6b5d94c168539388c14e2a",
     "src/utils/diffUtils.ts": "94fa0a5a590d7bf21abfb95821d9014984c90e4210702cb709740c43c2404d91",
     "src/utils/branchDiff.ts": "0d7fd12643518dce808580e02c9684d99df23df0a2f980ccd5f6af7c59995615",
-    "shared/google-sync/branchLayout.ts": "2fd7f4598b04037c9a8175bb0fc80b227833d9fd9ba976008903d5385beb318a",
+    "shared/google-sync/branchLayout.ts": "5eb46fe1c1fae3389ac6cfe31d6cf320bff2fba3e0c8f01802a33dc3e1495e3b",
     "src/store/chat-edit-time.ts": "1d7abac60c3dbc063fcaaef270dd846c2cf2d78dc0aa1a286b99ffc708ecac8c",
     "src/utils/syncDocument.ts": "bc7cca9616aa593538dfb194b861ea7415ce3c7e7da42620a9fca0a89acb4120",
     "src/store/storage/google/records.ts": "21f44f6ba31a25f7ecd7cea71b54354b3579a09414e9895fd1ee592618dfb9e9",
@@ -278,7 +278,7 @@
     "shared/google-sync/localModelRole.ts": "8ce5bc1651e340c87134a35f4fbf149af159c296ca924a874c95b76b51dc96a5",
     "src/utils/localModelImport.ts": "f15c25b57b27279b501c26632fbf8c0481b2b23263b22de8e63651dfd5ff7f1b",
     "shared/google-sync/localModelImport.ts": "60f00ad8a824ab478800fcbb21d6510ddd107978108182d5d2f0ee3f0d3c5473",
-    "shared/google-sync/entry.ts": "3f75fa39051ac093228860ac7b1e0bf9d8d386bfd0db0736b626f2d208e0102d",
+    "shared/google-sync/entry.ts": "d0f62eb67aa51b80edfe99d179da5938443ac97c1fd96a0fcdfab9f018ccc857",
     "shared/google-sync/generate.mjs": "db52acf4a78e8f2fd00ec7aa508e5f23a3d345b92c2dcc08441c521ee461ed59",
     "shared/google-sync/importDefaults.generate.mjs": "2ff8904af4f192ed0809ceaaabcfbefa708321083aebb527d712fc2a0551b15a"
   },
@@ -320,5 +320,5 @@
     "lz-string/package.json": "f0990a8fd6c347d66c1469d18918f5460d372c6b3af8a0a5737dfd34c809e20d",
     "lz-string/LICENSE": "433fc9dfe659dbfb1e91eed8351f13651e97bfa3ac6d03394c3d63f61d4bbc80"
   },
-  "bundleSHA256": "905753387bd76650c992c3cd08e07d079d0711e8eff17679ee2c4d254c459167"
+  "bundleSHA256": "d9a5ef41eeb4c652843d10ec0c1c510bab686d9dfcf1d583af24fc3dd5df4226"
 }

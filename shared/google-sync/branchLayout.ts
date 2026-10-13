@@ -5,6 +5,8 @@ import type {ChatInterface} from '../../src/types/chat';
 import type {ContentStoreData} from '../../src/utils/contentStore';
 import {withEditingRuntime} from './editing';
 import {branchDiff as buildBranchDiff, type BranchDiffInput} from '../../src/utils/branchDiff';
+import {buildPathToLeaf, buildNodeDiffPaths} from '../../src/utils/branchUtils';
+import type {BranchTree} from '../../src/types/chat';
 
 // The Web preview can end halfway through a UTF-16 pair after its 80-unit slice.
 const nativePreview = (value: string) => Array.from(value, scalar =>
@@ -18,6 +20,18 @@ export function branchLayout(json: string): string {
 
 export function branchDiff(json: string): string {
   return JSON.stringify(buildBranchDiff(JSON.parse(json) as BranchDiffInput));
+}
+
+export function branchPath(json: string): string {
+  const {tree, nodeId} = JSON.parse(json) as {tree: BranchTree; nodeId: string};
+  if (!tree.nodes[nodeId]) throw new Error('node-missing');
+  return JSON.stringify(buildPathToLeaf(tree, nodeId));
+}
+
+export function branchNodeDiffPaths(json: string): string {
+  const {tree, nodeIdA, nodeIdB} = JSON.parse(json) as {tree: BranchTree; nodeIdA: string; nodeIdB: string};
+  if (!tree.nodes[nodeIdA] || !tree.nodes[nodeIdB]) throw new Error('node-missing');
+  return JSON.stringify(buildNodeDiffPaths(tree, nodeIdA, nodeIdB));
 }
 
 export function branchEnsure(json: string): string {

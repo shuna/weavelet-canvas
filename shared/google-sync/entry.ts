@@ -22,7 +22,7 @@ export { folderOperation, folderRows } from './folders';
 export { generationRequest } from './generation';
 export { libraryOperation, libraryDefaults } from './library';
 export { messageEdit } from './editing';
-export { branchLayout, branchEnsure, branchDiff } from './branchLayout';
+export { branchLayout, branchEnsure, branchDiff, branchPath, branchNodeDiffPaths } from './branchLayout';
 export { documentOperation, messageAttributesOperation } from './document';
 
 const global = globalThis as any;

@@ -31,9 +31,9 @@ var WeaveletGoogleSync = (() => {
   ));
   var __toCommonJS = (mod) => __copyProps(__defProp({}, "__esModule", { value: true }), mod);
 
-  // node_modules/lodash/lodash.js
+  // ../../var/folders/1r/xtsjvqk90yzdyjq5jfjn9phw0000gn/T/weavelet-main-integration-ew768sf2/worktree/node_modules/lodash/lodash.js
   var require_lodash = __commonJS({
-    "node_modules/lodash/lodash.js"(exports, module) {
+    "../../var/folders/1r/xtsjvqk90yzdyjq5jfjn9phw0000gn/T/weavelet-main-integration-ew768sf2/worktree/node_modules/lodash/lodash.js"(exports, module) {
       /**
        * @license
        * Lodash <https://lodash.com/>
@@ -5537,9 +5537,9 @@ var WeaveletGoogleSync = (() => {
     }
   });
 
-  // node_modules/diff-match-patch/index.js
+  // ../../var/folders/1r/xtsjvqk90yzdyjq5jfjn9phw0000gn/T/weavelet-main-integration-ew768sf2/worktree/node_modules/diff-match-patch/index.js
   var require_diff_match_patch = __commonJS({
-    "node_modules/diff-match-patch/index.js"(exports, module) {
+    "../../var/folders/1r/xtsjvqk90yzdyjq5jfjn9phw0000gn/T/weavelet-main-integration-ew768sf2/worktree/node_modules/diff-match-patch/index.js"(exports, module) {
       var diff_match_patch3 = function() {
         this.Diff_Timeout = 1;
         this.Diff_EditCost = 4;
@@ -6996,9 +6996,9 @@ var WeaveletGoogleSync = (() => {
     }
   });
 
-  // node_modules/lz-string/libs/lz-string.js
+  // ../../var/folders/1r/xtsjvqk90yzdyjq5jfjn9phw0000gn/T/weavelet-main-integration-ew768sf2/worktree/node_modules/lz-string/libs/lz-string.js
   var require_lz_string = __commonJS({
-    "node_modules/lz-string/libs/lz-string.js"(exports, module) {
+    "../../var/folders/1r/xtsjvqk90yzdyjq5jfjn9phw0000gn/T/weavelet-main-integration-ew768sf2/worktree/node_modules/lz-string/libs/lz-string.js"(exports, module) {
       var LZString = function() {
         var f = String.fromCharCode;
         var keyStrBase64 = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/=";
@@ -7472,6 +7472,8 @@ var WeaveletGoogleSync = (() => {
     branchEnsure: () => branchEnsure,
     branchHistory: () => branchHistory,
     branchLayout: () => branchLayout,
+    branchNodeDiffPaths: () => branchNodeDiffPaths,
+    branchPath: () => branchPath,
     chatConfig: () => chatConfig,
     chatSearch: () => chatSearch,
     cloudKitOperation: () => cloudKitOperation,
@@ -7537,7 +7539,7 @@ var WeaveletGoogleSync = (() => {
     return { endpoint: endpoint.trim(), headers, authentication };
   }
 
-  // node_modules/@babel/runtime/helpers/esm/typeof.js
+  // ../../var/folders/1r/xtsjvqk90yzdyjq5jfjn9phw0000gn/T/weavelet-main-integration-ew768sf2/worktree/node_modules/@babel/runtime/helpers/esm/typeof.js
   function _typeof(o) {
     "@babel/helpers - typeof";
     return _typeof = "function" == typeof Symbol && "symbol" == typeof Symbol.iterator ? function(o2) {
@@ -7547,13 +7549,13 @@ var WeaveletGoogleSync = (() => {
     }, _typeof(o);
   }
 
-  // node_modules/@babel/runtime/helpers/esm/classCallCheck.js
+  // ../../var/folders/1r/xtsjvqk90yzdyjq5jfjn9phw0000gn/T/weavelet-main-integration-ew768sf2/worktree/node_modules/@babel/runtime/helpers/esm/classCallCheck.js
   function _classCallCheck(a, n) {
     if (!(a instanceof n))
       throw new TypeError("Cannot call a class as a function");
   }
 
-  // node_modules/@babel/runtime/helpers/esm/toPrimitive.js
+  // ../../var/folders/1r/xtsjvqk90yzdyjq5jfjn9phw0000gn/T/weavelet-main-integration-ew768sf2/worktree/node_modules/@babel/runtime/helpers/esm/toPrimitive.js
   function toPrimitive(t2, r) {
     if ("object" != _typeof(t2) || !t2)
       return t2;
@@ -7567,13 +7569,13 @@ var WeaveletGoogleSync = (() => {
     return ("string" === r ? String : Number)(t2);
   }
 
-  // node_modules/@babel/runtime/helpers/esm/toPropertyKey.js
+  // ../../var/folders/1r/xtsjvqk90yzdyjq5jfjn9phw0000gn/T/weavelet-main-integration-ew768sf2/worktree/node_modules/@babel/runtime/helpers/esm/toPropertyKey.js
   function toPropertyKey(t2) {
     var i = toPrimitive(t2, "string");
     return "symbol" == _typeof(i) ? i : i + "";
   }
 
-  // node_modules/@babel/runtime/helpers/esm/createClass.js
+  // ../../var/folders/1r/xtsjvqk90yzdyjq5jfjn9phw0000gn/T/weavelet-main-integration-ew768sf2/worktree/node_modules/@babel/runtime/helpers/esm/createClass.js
   function _defineProperties(e, r) {
     for (var t2 = 0; t2 < r.length; t2++) {
       var o = r[t2];
@@ -7586,21 +7588,21 @@ var WeaveletGoogleSync = (() => {
     }), e;
   }
 
-  // node_modules/@babel/runtime/helpers/esm/assertThisInitialized.js
+  // ../../var/folders/1r/xtsjvqk90yzdyjq5jfjn9phw0000gn/T/weavelet-main-integration-ew768sf2/worktree/node_modules/@babel/runtime/helpers/esm/assertThisInitialized.js
   function _assertThisInitialized(e) {
     if (void 0 === e)
       throw new ReferenceError("this hasn't been initialised - super() hasn't been called");
     return e;
   }
 
-  // node_modules/@babel/runtime/helpers/esm/setPrototypeOf.js
+  // ../../var/folders/1r/xtsjvqk90yzdyjq5jfjn9phw0000gn/T/weavelet-main-integration-ew768sf2/worktree/node_modules/@babel/runtime/helpers/esm/setPrototypeOf.js
   function _setPrototypeOf(t2, e) {
     return _setPrototypeOf = Object.setPrototypeOf ? Object.setPrototypeOf.bind() : function(t3, e2) {
       return t3.__proto__ = e2, t3;
     }, _setPrototypeOf(t2, e);
   }
 
-  // node_modules/@babel/runtime/helpers/esm/inherits.js
+  // ../../var/folders/1r/xtsjvqk90yzdyjq5jfjn9phw0000gn/T/weavelet-main-integration-ew768sf2/worktree/node_modules/@babel/runtime/helpers/esm/inherits.js
   function _inherits(t2, e) {
     if ("function" != typeof e && null !== e)
       throw new TypeError("Super expression must either be null or a function");
@@ -7615,7 +7617,7 @@ var WeaveletGoogleSync = (() => {
     }), e && _setPrototypeOf(t2, e);
   }
 
-  // node_modules/@babel/runtime/helpers/esm/possibleConstructorReturn.js
+  // ../../var/folders/1r/xtsjvqk90yzdyjq5jfjn9phw0000gn/T/weavelet-main-integration-ew768sf2/worktree/node_modules/@babel/runtime/helpers/esm/possibleConstructorReturn.js
   function _possibleConstructorReturn(t2, e) {
     if (e && ("object" == _typeof(e) || "function" == typeof e))
       return e;
@@ -7624,14 +7626,14 @@ var WeaveletGoogleSync = (() => {
     return _assertThisInitialized(t2);
   }
 
-  // node_modules/@babel/runtime/helpers/esm/getPrototypeOf.js
+  // ../../var/folders/1r/xtsjvqk90yzdyjq5jfjn9phw0000gn/T/weavelet-main-integration-ew768sf2/worktree/node_modules/@babel/runtime/helpers/esm/getPrototypeOf.js
   function _getPrototypeOf(t2) {
     return _getPrototypeOf = Object.setPrototypeOf ? Object.getPrototypeOf.bind() : function(t3) {
       return t3.__proto__ || Object.getPrototypeOf(t3);
     }, _getPrototypeOf(t2);
   }
 
-  // node_modules/@babel/runtime/helpers/esm/defineProperty.js
+  // ../../var/folders/1r/xtsjvqk90yzdyjq5jfjn9phw0000gn/T/weavelet-main-integration-ew768sf2/worktree/node_modules/@babel/runtime/helpers/esm/defineProperty.js
   function _defineProperty(e, r, t2) {
     return (r = toPropertyKey(r)) in e ? Object.defineProperty(e, r, {
       value: t2,
@@ -7641,19 +7643,19 @@ var WeaveletGoogleSync = (() => {
     }) : e[r] = t2, e;
   }
 
-  // node_modules/@babel/runtime/helpers/esm/arrayWithHoles.js
+  // ../../var/folders/1r/xtsjvqk90yzdyjq5jfjn9phw0000gn/T/weavelet-main-integration-ew768sf2/worktree/node_modules/@babel/runtime/helpers/esm/arrayWithHoles.js
   function _arrayWithHoles(r) {
     if (Array.isArray(r))
       return r;
   }
 
-  // node_modules/@babel/runtime/helpers/esm/iterableToArray.js
+  // ../../var/folders/1r/xtsjvqk90yzdyjq5jfjn9phw0000gn/T/weavelet-main-integration-ew768sf2/worktree/node_modules/@babel/runtime/helpers/esm/iterableToArray.js
   function _iterableToArray(r) {
     if ("undefined" != typeof Symbol && null != r[Symbol.iterator] || null != r["@@iterator"])
       return Array.from(r);
   }
 
-  // node_modules/@babel/runtime/helpers/esm/arrayLikeToArray.js
+  // ../../var/folders/1r/xtsjvqk90yzdyjq5jfjn9phw0000gn/T/weavelet-main-integration-ew768sf2/worktree/node_modules/@babel/runtime/helpers/esm/arrayLikeToArray.js
   function _arrayLikeToArray(r, a) {
     (null == a || a > r.length) && (a = r.length);
     for (var e = 0, n = Array(a); e < a; e++)
@@ -7661,7 +7663,7 @@ var WeaveletGoogleSync = (() => {
     return n;
   }
 
-  // node_modules/@babel/runtime/helpers/esm/unsupportedIterableToArray.js
+  // ../../var/folders/1r/xtsjvqk90yzdyjq5jfjn9phw0000gn/T/weavelet-main-integration-ew768sf2/worktree/node_modules/@babel/runtime/helpers/esm/unsupportedIterableToArray.js
   function _unsupportedIterableToArray(r, a) {
     if (r) {
       if ("string" == typeof r)
@@ -7671,17 +7673,17 @@ var WeaveletGoogleSync = (() => {
     }
   }
 
-  // node_modules/@babel/runtime/helpers/esm/nonIterableRest.js
+  // ../../var/folders/1r/xtsjvqk90yzdyjq5jfjn9phw0000gn/T/weavelet-main-integration-ew768sf2/worktree/node_modules/@babel/runtime/helpers/esm/nonIterableRest.js
   function _nonIterableRest() {
     throw new TypeError("Invalid attempt to destructure non-iterable instance.\nIn order to be iterable, non-array objects must have a [Symbol.iterator]() method.");
   }
 
-  // node_modules/@babel/runtime/helpers/esm/toArray.js
+  // ../../var/folders/1r/xtsjvqk90yzdyjq5jfjn9phw0000gn/T/weavelet-main-integration-ew768sf2/worktree/node_modules/@babel/runtime/helpers/esm/toArray.js
   function _toArray(r) {
     return _arrayWithHoles(r) || _iterableToArray(r) || _unsupportedIterableToArray(r) || _nonIterableRest();
   }
 
-  // node_modules/i18next/dist/esm/i18next.js
+  // ../../var/folders/1r/xtsjvqk90yzdyjq5jfjn9phw0000gn/T/weavelet-main-integration-ew768sf2/worktree/node_modules/i18next/dist/esm/i18next.js
   function ownKeys$6(object2, enumerableOnly) {
     var keys = Object.keys(object2);
     if (Object.getOwnPropertySymbols) {
@@ -12546,6 +12548,41 @@ var WeaveletGoogleSync = (() => {
       tip = children[0].id;
     }
     return ancestors;
+  }
+  function findLCA(tree, nodeIdA, nodeIdB) {
+    const ancestorsA = /* @__PURE__ */ new Set();
+    let cur = nodeIdA;
+    while (cur) {
+      ancestorsA.add(cur);
+      cur = tree.nodes[cur]?.parentId ?? null;
+    }
+    cur = nodeIdB;
+    while (cur) {
+      if (ancestorsA.has(cur))
+        return cur;
+      cur = tree.nodes[cur]?.parentId ?? null;
+    }
+    return null;
+  }
+  function buildNodeDiffPaths(tree, nodeIdA, nodeIdB) {
+    const fullPathA = buildPathToLeaf(tree, nodeIdA);
+    const fullPathB = buildPathToLeaf(tree, nodeIdB);
+    const lca = findLCA(tree, nodeIdA, nodeIdB);
+    let pathA = fullPathA;
+    let pathB = fullPathB;
+    if (lca) {
+      const idxA = fullPathA.indexOf(lca);
+      const idxB = fullPathB.indexOf(lca);
+      if (idxA >= 0)
+        pathA = fullPathA.slice(idxA + 1);
+      if (idxB >= 0)
+        pathB = fullPathB.slice(idxB + 1);
+      if (nodeIdA === lca)
+        pathA = fullPathA.slice(idxA);
+      if (nodeIdB === lca)
+        pathB = fullPathB.slice(idxB);
+    }
+    return { pathA, pathB };
   }
   function collectDescendants(tree, nodeId) {
     const result3 = /* @__PURE__ */ new Set();
@@ -19095,7 +19132,7 @@ ${JSON.stringify(input.length === 1 ? input[0] : input)}`;
     return JSON.stringify({ config, imageDetail: settings.defaultImageDetail, settings });
   };
 
-  // node_modules/@dagrejs/dagre/dist/dagre.esm.js
+  // ../../var/folders/1r/xtsjvqk90yzdyjq5jfjn9phw0000gn/T/weavelet-main-integration-ew768sf2/worktree/node_modules/@dagrejs/dagre/dist/dagre.esm.js
   var Te = Object.defineProperty;
   var In = (e, n, t2) => n in e ? Te(e, n, { enumerable: true, configurable: true, writable: true, value: t2 }) : e[n] = t2;
   var Sn = (e, n) => {
@@ -21297,6 +21334,18 @@ ${JSON.stringify(input.length === 1 ? input[0] : input)}`;
   }
   function branchDiff2(json) {
     return JSON.stringify(branchDiff(JSON.parse(json)));
+  }
+  function branchPath(json) {
+    const { tree, nodeId } = JSON.parse(json);
+    if (!tree.nodes[nodeId])
+      throw new Error("node-missing");
+    return JSON.stringify(buildPathToLeaf(tree, nodeId));
+  }
+  function branchNodeDiffPaths(json) {
+    const { tree, nodeIdA, nodeIdB } = JSON.parse(json);
+    if (!tree.nodes[nodeIdA] || !tree.nodes[nodeIdB])
+      throw new Error("node-missing");
+    return JSON.stringify(buildNodeDiffPaths(tree, nodeIdA, nodeIdB));
   }
   function branchEnsure(json) {
     const input = JSON.parse(json);
