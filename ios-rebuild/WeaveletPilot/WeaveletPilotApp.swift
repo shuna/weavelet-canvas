@@ -33,6 +33,8 @@ struct ChatView: View {
     @State private var optionsDraft: NodeOptionsDraft?
     @State private var removalDraft: NodeRemovalDraft?
     @State private var showsRemoval = false
+    @State private var branchDeletion: NodeTransformDraft?
+    @State private var showsBranchDeletion = false
 
     var body: some View {
         NavigationStack {
@@ -49,6 +51,16 @@ struct ChatView: View {
                                 catch { errorMessage = error.localizedDescription }
                             }, remove: state.exchange == nil || state.generation != nil ? nil : {
                                 do { removalDraft = try state.nodeRemovalDraft(nodeID: node.id); showsRemoval = true }
+                                catch { errorMessage = error.localizedDescription }
+                            }, moveUp: state.exchange == nil || state.generation != nil ? nil : {
+                                move(node.id, direction: .up)
+                            }, moveDown: state.exchange == nil || state.generation != nil ? nil : {
+                                move(node.id, direction: .down)
+                            }, replaceAndPrune: state.exchange == nil || state.generation != nil ? nil : {
+                                do { draft = try state.messageReplacementDraft(nodeID: node.id) }
+                                catch { errorMessage = error.localizedDescription }
+                            }, deleteBranch: state.exchange == nil || state.generation != nil ? nil : {
+                                do { branchDeletion = try state.branchDeletionDraft(nodeID: node.id); showsBranchDeletion = true }
                                 catch { errorMessage = error.localizedDescription }
                             }, configure: state.exchange == nil || state.generation != nil ? nil : {
                                 do { optionsDraft = try state.nodeOptionsDraft(nodeID: node.id) }
@@ -198,6 +210,19 @@ struct ChatView: View {
                      ? "このメッセージ1件を削除します。後続のメッセージは残ります。保護されたメッセージは削除できません。"
                      : "現在表示していない枝を整理します。ピン留めされたメッセージとその子孫、保護されたメッセージは残ります。")
             }
+            .confirmationDialog("枝全体を削除しますか？", isPresented: $showsBranchDeletion, titleVisibility: .visible) {
+                Button("枝全体を削除", role: .destructive) {
+                    guard let branchDeletion else { return }
+                    do {
+                        let result = try state.saveNodeTransform(branchDeletion)
+                        if let explanation = result.explanation { errorMessage = explanation }
+                        else { self.branchDeletion = nil }
+                    } catch { errorMessage = error.localizedDescription }
+                }
+                Button("キャンセル", role: .cancel) { branchDeletion = nil }
+            } message: {
+                Text("このメッセージとすべての子孫を、非表示の枝も含めて削除します。保護されたメッセージが含まれる場合は削除しません。ピン留めは削除を防ぎません。")
+            }
             .sheet(item: $draft) { draft in MessageEditorView(state: state, draft: draft) }
             .sheet(item: $optionsDraft) { draft in NodeOptionsView(state: state, draft: draft) }
             .sheet(isPresented: $showsSearch) {
@@ -230,6 +255,14 @@ struct ChatView: View {
             }
         }
     }
+    private func move(_ nodeID: String, direction: NodeMoveDirection) {
+        do {
+            let result = try state.saveNodeTransform(state.nodeMoveDraft(nodeID: nodeID, direction: direction))
+            if let explanation = result.explanation { errorMessage = explanation }
+            else if result.status == "unchanged" { errorMessage = "位置を変更しませんでした。上下の端や、先頭のシステムメッセージとの交換では移動できません。" }
+        } catch { errorMessage = error.localizedDescription }
+    }
+
 }
 
 struct MessageView: View {
@@ -239,6 +272,10 @@ struct MessageView: View {
     var edit: (() -> Void)? = nil
     var insertBefore: (() -> Void)? = nil
     var remove: (() -> Void)? = nil
+    var moveUp: (() -> Void)? = nil
+    var moveDown: (() -> Void)? = nil
+    var replaceAndPrune: (() -> Void)? = nil
+    var deleteBranch: (() -> Void)? = nil
     var configure: (() -> Void)? = nil
     var toggleCollapse: (() -> Void)? = nil
     let select: (String) -> Void
@@ -288,13 +325,17 @@ struct MessageView: View {
                         MessagePartView(part: part)
                     }
                 }
-                if edit != nil || insertBefore != nil || remove != nil || configure != nil || toggleCollapse != nil {
+                if edit != nil || insertBefore != nil || remove != nil || configure != nil || toggleCollapse != nil || moveUp != nil || moveDown != nil || replaceAndPrune != nil || deleteBranch != nil {
                     Menu("メッセージ操作", systemImage: "ellipsis") {
                         if let edit { Button("編集", systemImage: "square.and.pencil", action: edit) }
                         if let insertBefore { Button("前に挿入", systemImage: "text.insert", action: insertBefore) }
                         if let toggleCollapse { Button(node.options.collapsed ? "本文を展開" : "本文を折りたたむ", systemImage: node.options.collapsed ? "chevron.down" : "chevron.up", action: toggleCollapse) }
                         if let configure { Button("メッセージ設定", systemImage: "slider.horizontal.3", action: configure) }
-                        if let remove { Button("削除", systemImage: "trash", role: .destructive, action: remove) }
+                        if let moveUp { Button("上へ移動", systemImage: "arrow.up", action: moveUp) }
+                        if let moveDown { Button("下へ移動", systemImage: "arrow.down", action: moveDown) }
+                        if let replaceAndPrune { Button("後続を整理して編集", systemImage: "square.and.pencil", action: replaceAndPrune) }
+                        if let remove { Button("1件削除", systemImage: "trash", role: .destructive, action: remove) }
+                        if let deleteBranch { Button("枝全体を削除", systemImage: "trash.fill", role: .destructive, action: deleteBranch) }
                     }
                     .frame(minWidth: 44, minHeight: 44)
                 }
@@ -592,6 +633,8 @@ struct MessageEditorView: View {
     @Environment(\.dismiss) private var dismiss
     @State var draft: MessageDraft
     @State private var errorMessage: String?
+    @State private var showsPruneConfirmation = false
+    @State private var savedWarning: String?
 
     var body: some View {
         NavigationStack {
@@ -610,9 +653,16 @@ struct MessageEditorView: View {
                             .font(.footnote).foregroundStyle(.secondary)
                     }
                 }
-                if draft.isProtected { Text("保護されたメッセージです。分岐として保存できます。") }
+                if draft.isReplacingAndPruning {
+                    if draft.isProtected { Text("このメッセージは保護されているため置換できません。") }
+                    Stepper("削除する後続: \(draft.removeCount)件", value: $draft.removeCount, in: 0...draft.followingCount)
+                    Text("表示経路上の後続を指定します。範囲内に保護されたメッセージがある場合は本文だけを保存し、後続を削除しません。")
+                        .font(.footnote).foregroundStyle(.secondary)
+                } else if draft.isProtected { Text("保護されたメッセージです。分岐として保存できます。") }
                 if let errorMessage { Text(errorMessage).foregroundStyle(.red) }
-                if draft.isInsertion {
+                if draft.isReplacingAndPruning {
+                    Button("置換して後続を整理") { showsPruneConfirmation = true }.disabled(draft.isProtected)
+                } else if draft.isInsertion {
                     Button("挿入して保存") { save(.insert) }
                 } else if draft.nodeID != nil {
                     Button("上書き保存") { save(.overwrite) }
@@ -623,9 +673,26 @@ struct MessageEditorView: View {
                         .disabled(draft.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                 }
             }
-            .navigationTitle(draft.isInsertion ? "本文を挿入" : draft.nodeID == nil ? "本文を追加" : "本文を編集")
+            .navigationTitle(draft.isReplacingAndPruning ? "本文と後続を編集" : draft.isInsertion ? "本文を挿入" : draft.nodeID == nil ? "本文を追加" : "本文を編集")
+            .confirmationDialog("本文を置換して後続を整理しますか？", isPresented: $showsPruneConfirmation, titleVisibility: .visible) {
+                Button("置換して整理", role: .destructive) { saveReplacingAndPruning() }
+                Button("キャンセル", role: .cancel) {}
+            } message: { Text("本文を置換し、表示経路上の後続\(draft.removeCount)件を整理します。保護された後続が範囲内にある場合は本文だけを保存します。ピン留めは整理を防ぎません。") }
+            .alert("本文を保存しました", isPresented: Binding(get: { savedWarning != nil }, set: { if !$0 { savedWarning = nil } })) {
+                Button("閉じる") { dismiss() }
+            } message: { Text(savedWarning ?? "") }
             .toolbar { ToolbarItem(placement: .cancellationAction) { Button("取消") { dismiss() } } }
         }
+    }
+
+    private func saveReplacingAndPruning() {
+        do {
+            let result = try state.saveMessageReplacingAndPruning(draft)
+            if let explanation = result.explanation { errorMessage = explanation }
+            else if !result.pruneBlockedBy.isEmpty {
+                savedWarning = "保護された後続があるため、本文だけを保存しました。後続は削除していません。対象: " + result.pruneBlockedBy.joined(separator: ", ")
+            } else { dismiss() }
+        } catch { errorMessage = error.localizedDescription }
     }
 
     private func save(_ mode: MessageSaveMode) {

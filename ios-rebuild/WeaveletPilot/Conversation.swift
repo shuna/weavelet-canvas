@@ -288,6 +288,47 @@ final class ChatState: ObservableObject {
         try applyLibrary(source, selectedID: draft.chatID, resetViewFor: draft.chatID, editing: history, now: now)
     }
 
+    func nodeMoveDraft(nodeID: String, direction: NodeMoveDirection) throws -> NodeTransformDraft {
+        try nodeTransformDraft(nodeID: nodeID, operation: .move, direction: direction)
+    }
+    func branchDeletionDraft(nodeID: String) throws -> NodeTransformDraft {
+        try nodeTransformDraft(nodeID: nodeID, operation: .deleteBranch, direction: nil)
+    }
+    private func nodeTransformDraft(nodeID: String, operation: NodeTransformOperation, direction: NodeMoveDirection?) throws -> NodeTransformDraft {
+        guard let exchange, let conversation, conversation.nodes.contains(where: { $0.id.utf8.elementsEqual(nodeID.utf8) }) else { throw ExchangeError.invalid("対象メッセージがありません") }
+        return NodeTransformDraft(chatID: conversation.id, nodeID: nodeID, source: exchange.source, path: conversation.visibleMessages.map(\.id), operation: operation, direction: direction)
+    }
+    func messageReplacementDraft(nodeID: String) throws -> MessageDraft {
+        var draft = try messageDraft(nodeID: nodeID)
+        draft.isReplacingAndPruning = true; draft.removeCount = draft.followingCount
+        return draft
+    }
+    func saveNodeTransform(_ draft: NodeTransformDraft, newIDs: [String]? = nil, now: Double = Date().timeIntervalSince1970 * 1000) throws -> NodeTransformResult {
+        try saveTreeEdit(source: draft.source, chatID: draft.chatID, nodeID: draft.nodeID, path: draft.path, operation: draft.operation.rawValue,
+                         direction: draft.direction, newIDs: newIDs, now: now)
+    }
+    func saveMessageReplacingAndPruning(_ draft: MessageDraft, newIDs: [String]? = nil, now: Double = Date().timeIntervalSince1970 * 1000) throws -> NodeTransformResult {
+        guard let nodeID = draft.nodeID else { throw ExchangeError.invalid("対象メッセージがありません") }
+        return try saveTreeEdit(source: draft.source, chatID: draft.chatID, nodeID: nodeID, path: draft.path, operation: "replaceAndPrune", role: draft.role,
+                               parts: draft.originalParts, editedText: draft.text, removeCount: draft.removeCount, newIDs: newIDs, now: now)
+    }
+    private func saveTreeEdit(source: OrderedJSON, chatID: String, nodeID: String, path: [String], operation: String,
+                              direction: NodeMoveDirection? = nil, role: String? = nil, parts: OrderedJSON? = nil, editedText: String? = nil,
+                              removeCount: Int? = nil, newIDs: [String]?, now: Double) throws -> NodeTransformResult {
+        guard generation == nil else { throw ExchangeError.invalid("生成結果を保存してからメッセージを操作してください") }
+        guard let exchange, exchange.source == source else { throw ExchangeError.invalid("会話が変更されました。操作を開き直してください") }
+        guard let chat = try source.required("chats").array("chats").first(where: { try $0.required("id").string("id").utf8.elementsEqual(chatID.utf8) }) else { throw ExchangeError.invalid("chat ID") }
+        let count = try chat["branchTree"] == nil ? chat.required("messages").array("messages").count : 0
+        let ids = newIDs ?? (0..<count).map { _ in UUID().uuidString.lowercased() }
+        var history: MessageEditing.HistoryState?
+        let changed = try MessageEditing.transform(in: source, chatID: chatID, nodeID: nodeID, viewingPath: path, operation: operation, direction: direction,
+            role: role, parts: parts, editedText: editedText, removeCount: removeCount, newIDs: ids, now: now, history: editingHistory) { history = $0 }
+        if changed.result.status == "updated" {
+            try applyLibrary(changed.source, selectedID: selectedID, resetViewFor: chatID, editing: history, now: now)
+        }
+        return changed.result
+    }
+
     func saveMessage(_ draft: MessageDraft, mode: MessageSaveMode, newIDs: [String]? = nil, now: Double = Date().timeIntervalSince1970 * 1000) throws {
         guard generation == nil else { throw ExchangeError.invalid("生成結果を保存してから本文を編集してください") }
         guard let exchange, exchange.source == draft.source else { throw ExchangeError.invalid("会話が変更されました。本文を開き直してください") }

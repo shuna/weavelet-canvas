@@ -12,6 +12,33 @@ struct NodeRemovalDraft {
     let operation: NodeRemovalOperation
 }
 
+enum NodeMoveDirection: String { case up, down }
+enum NodeTransformOperation: String { case move, deleteBranch }
+struct NodeTransformDraft {
+    let chatID: String
+    let nodeID: String
+    let source: OrderedJSON
+    let path: [String]
+    let operation: NodeTransformOperation
+    let direction: NodeMoveDirection?
+}
+struct NodeTransformResult {
+    let status: String
+    let removedNodeIDs: [String]
+    let pruneBlockedBy: [String]
+    let blockedNodeIDs: [String]
+    var explanation: String? {
+        switch status {
+        case "protected": return "保護されたメッセージを含むため、変更できません。対象: " + blockedNodeIDs.joined(separator: ", ")
+        case "missing", "chat-missing", "node-missing", "invalid-target": return "対象メッセージがないか、現在の表示経路から外れています。操作を開き直してください。"
+        case "invalid-input": return "操作の対象または範囲が正しくありません。"
+        case "busy": return "生成結果を保存してから操作してください。"
+        case "updated", "unchanged": return nil
+        default: return "操作できませんでした: " + status
+        }
+    }
+}
+
 struct MessageDraft: Identifiable {
     let id = UUID()
     let chatID: String
@@ -25,6 +52,12 @@ struct MessageDraft: Identifiable {
     let isProtected: Bool
     var role: String
     var text: String
+    var isReplacingAndPruning = false
+    var removeCount = 0
+    var followingCount: Int {
+        guard let nodeID, let index = path.firstIndex(where: { $0.utf8.elementsEqual(nodeID.utf8) }) else { return 0 }
+        return path.count - index - 1
+    }
 
     let originalText: String
     var changed: Bool { role != originalRole || !text.utf8.elementsEqual(originalText.utf8) }
@@ -55,7 +88,7 @@ enum MessageEditing {
         return try HistoryState(raw: result.required("history"), canUndo: can.required("undo").boolean("undo"), canRedo: can.required("redo").boolean("redo"))
     }
     private static func perform(in source: OrderedJSON, chatID: String, kind: String, history: HistoryState?,
-                                onHistory: ((HistoryState) -> Void)?, fields: (inout SharedWebProjection) throws -> [JSONField]) throws -> OrderedJSON {
+                                onHistory: ((HistoryState) -> Void)?, fields: (inout SharedWebProjection) throws -> [JSONField]) throws -> (source: OrderedJSON, output: OrderedJSON) {
         var chats = try source.required("chats").array("chats")
         guard let index = try chats.firstIndex(where: { try $0.required("id").string("id").utf8.elementsEqual(chatID.utf8) }) else { throw ExchangeError.invalid("chat ID") }
         var boundary = SharedWebProjection()
@@ -63,16 +96,18 @@ enum MessageEditing {
         let store = try boundary.store(source.required("contentStore"))
         let input = try OrderedJSON.object([.init(key: "chat", value: chat), .init(key: "contentStore", value: store)] + fields(&boundary))
         let changes: OrderedJSON
+        let output: OrderedJSON
         var next: HistoryState?
         if onHistory != nil {
             let payload = try OrderedJSON.object([.init(key: "operation", value: .string("edit")), .init(key: "kind", value: .string(kind)),
                 .init(key: "input", value: input), .init(key: "history", value: boundary.history(history?.raw))])
-            let output = try SharedWebOperations.call("branchHistory", payload)
+            output = try SharedWebOperations.call("branchHistory", payload)
             changes = try output.required("changes")
             next = try historyState(output)
         } else {
-            let output = try SharedWebOperations.call(kind, input)
-            if kind == "nodeOptions" {
+            output = try SharedWebOperations.call(kind, input)
+            if kind == "treeEdit" { changes = try output.required("changes") }
+            else if kind == "nodeOptions" {
                 guard output["status"] == .string("updated") || output["status"] == .string("unchanged") else { throw ExchangeError.invalid("メッセージがありません") }
                 changes = try output.required("changes")
             } else { changes = output }
@@ -85,7 +120,7 @@ enum MessageEditing {
             let raw = try OrderedJSONChanges.apply(.array([.object([.init(key: "op", value: .string("set")), .init(key: "path", value: .array([])), .init(key: "value", value: next.raw)])]), to: .null, opaque: boundary.opaque)
             onHistory?(HistoryState(raw: raw, canUndo: next.canUndo, canRedo: next.canRedo))
         }
-        return result
+        return (result, output)
     }
 
     static func remove(in source: OrderedJSON, chatID: String, nodeID: String?, viewingPath: [String],
@@ -94,7 +129,7 @@ enum MessageEditing {
         try perform(in: source, chatID: chatID, kind: "nodeRemoval", history: history, onHistory: onHistory) { _ in [
             .init(key: "nodeID", value: nodeID.map(OrderedJSON.string) ?? .null),
             .init(key: "viewingPath", value: .array(viewingPath.map(OrderedJSON.string))), .init(key: "operation", value: .string(operation.rawValue)),
-            .init(key: "newIDs", value: .array(newIDs.map(OrderedJSON.string))), .init(key: "now", value: .number(String(now)))] }
+            .init(key: "newIDs", value: .array(newIDs.map(OrderedJSON.string))), .init(key: "now", value: .number(String(now)))] }.source
     }
     static func textValue(of parts: OrderedJSON) throws -> String {
         var boundary = SharedWebProjection()
@@ -111,7 +146,7 @@ enum MessageEditing {
                 .init(key: "newIDs", value: .array(newIDs.map(OrderedJSON.string))), .init(key: "now", value: .number(String(now)))]
             if let editedText { fields.append(.init(key: "editedText", value: .string(editedText))) }
             return fields
-        }
+        }.source
     }
     static func saveOptions(in source: OrderedJSON, chatID: String, nodeID: String, value: NodeOptions.Value, newIDs: [String], now: Double,
                             history: HistoryState?, onHistory: @escaping (HistoryState) -> Void) throws -> OrderedJSON {
@@ -123,7 +158,30 @@ enum MessageEditing {
             .init(key: "value", value: .object([.init(key: "label", value: .string(value.label)), .init(key: "starred", value: .bool(value.starred)),
                 .init(key: "pinned", value: .bool(value.pinned)), .init(key: "collapsed", value: .bool(value.collapsed)),
                 .init(key: "omitted", value: .bool(value.omitted)), .init(key: "protected", value: .bool(value.protected))])),
-            .init(key: "newIDs", value: .array(newIDs.map(OrderedJSON.string))), .init(key: "now", value: .number(String(now)))] }
+            .init(key: "newIDs", value: .array(newIDs.map(OrderedJSON.string))), .init(key: "now", value: .number(String(now)))] }.source
+    }
+
+    static func transform(in source: OrderedJSON, chatID: String, nodeID: String, viewingPath: [String], operation: String,
+                          direction: NodeMoveDirection? = nil, role: String? = nil, parts: OrderedJSON? = nil, editedText: String? = nil,
+                          removeCount: Int? = nil, newIDs: [String], now: Double, history: HistoryState?, onHistory: @escaping (HistoryState) -> Void) throws -> (source: OrderedJSON, result: NodeTransformResult) {
+        guard let chat = try source.required("chats").array("chats").first(where: { try $0.required("id").string("id").utf8.elementsEqual(chatID.utf8) }) else { throw ExchangeError.invalid("chat ID") }
+        let target: String
+        if chat["branchTree"] == nil {
+            guard nodeID.hasPrefix("message-"), let index = Int(nodeID.dropFirst(8)), index >= 0, nodeID.utf8.elementsEqual("message-\(index)".utf8) else { throw ExchangeError.invalid("flat node ID") }
+            target = String(index)
+        } else { target = nodeID }
+        let changed = try perform(in: source, chatID: chatID, kind: "treeEdit", history: history, onHistory: onHistory) { boundary in
+            var fields: [JSONField] = [.init(key:"nodeID",value:.string(target)),.init(key:"viewingPath",value:.array(viewingPath.map(OrderedJSON.string))),
+                .init(key:"operation",value:.string(operation)),.init(key:"newIDs",value:.array(newIDs.map(OrderedJSON.string))),.init(key:"now",value:.number(String(now)))]
+            if let direction { fields.append(.init(key:"direction",value:.string(direction.rawValue))) }
+            if let role { fields.append(.init(key:"role",value:.string(role))) }
+            if let parts { fields.append(.init(key:"parts",value:try boundary.parts(parts))) }
+            if let editedText { fields.append(.init(key:"editedText",value:.string(editedText))) }
+            if let removeCount { fields.append(.init(key:"removeCount",value:.number(String(removeCount)))) }
+            return fields
+        }
+        func ids(_ key: String) throws -> [String] { try changed.output[key]?.array(key).map { try $0.string("node ID") } ?? [] }
+        return try (changed.source, NodeTransformResult(status: changed.output.required("status").string("status"), removedNodeIDs: ids("removedNodeIds"), pruneBlockedBy: ids("pruneBlockedBy"), blockedNodeIDs: ids("blockedNodeIds")))
     }
 
     static func moveHistory(_ operation: String, in source: OrderedJSON, history: HistoryState?, now: Double) throws -> HistoryMove {
