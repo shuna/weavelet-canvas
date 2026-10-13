@@ -20856,6 +20856,9 @@ ${text}`;
   }
 
   // src/utils/evaluationAutoCore.ts
+  function autoPreSendSafetyAllowed(settings, openRouter) {
+    return !(hardOpenRouterConstraints(openRouter) && settings.safetyPreSend === "auto" && settings.safetyEngine !== "local");
+  }
   function autoEvaluationPlan({ phase, userContent, assistantContent, settings }) {
     const extractText2 = (content) => content.filter((part) => part.type === "text").map((part) => part.text).join("\n");
     const userText = extractText2(userContent);
@@ -20912,6 +20915,8 @@ ${text}`;
   function evaluation(json) {
     const input = JSON.parse(json);
     switch (input.operation) {
+      case "autoPreSendAllowed":
+        return JSON.stringify(autoPreSendSafetyAllowed(input.settings, input.openRouter));
       case "autoPlan":
         return JSON.stringify(autoEvaluationPlan(input));
       case "context":

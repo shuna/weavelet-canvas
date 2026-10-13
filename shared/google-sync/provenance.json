@@ -137,7 +137,7 @@
     "src/utils/localEvaluationCore.ts": "94497825893cdee79d20b804553c048ee3f74659cb090c1f61cdad3850665b03",
     "src/utils/evaluationCore.ts": "74e675aabbb05628328ebf5ae49c464f212b6b4a40ad7158415c693c815634d6",
     "src/utils/evaluationContextCore.ts": "77c0946260540461fb041f82947b5c47d91b58e9fdfc71d0e139a35529dcf4fd",
-    "src/utils/evaluationAutoCore.ts": "9a5d4bb982bc32d7e27473f3cadea001c48b39729674263d397861971ca93656",
+    "src/utils/evaluationAutoCore.ts": "509166a974da3caf0a47d9fd1788c4abdf3a0d27ce8f8bf1177748255cfca533",
     "src/utils/localModelImport.ts": "f15c25b57b27279b501c26632fbf8c0481b2b23263b22de8e63651dfd5ff7f1b"
   },
   "bundleInputs": {
@@ -264,9 +264,9 @@
     "src/utils/localEvaluationCore.ts": "94497825893cdee79d20b804553c048ee3f74659cb090c1f61cdad3850665b03",
     "src/utils/evaluationCore.ts": "74e675aabbb05628328ebf5ae49c464f212b6b4a40ad7158415c693c815634d6",
     "src/utils/evaluationContextCore.ts": "77c0946260540461fb041f82947b5c47d91b58e9fdfc71d0e139a35529dcf4fd",
-    "src/utils/evaluationAutoCore.ts": "9a5d4bb982bc32d7e27473f3cadea001c48b39729674263d397861971ca93656",
+    "src/utils/evaluationAutoCore.ts": "509166a974da3caf0a47d9fd1788c4abdf3a0d27ce8f8bf1177748255cfca533",
     "src/utils/evaluationState.ts": "9dfecfd104425d3788222624e1deffb7b7b270cb3a47108c362048170df72c9d",
-    "shared/google-sync/evaluation.ts": "9e79fc31d3060e2ee22f93c894ef6bd8edaf3be5aeefdabfd3a826746bfa8085",
+    "shared/google-sync/evaluation.ts": "2e7b19e4ab9fdb1e19c643858272cdcdad5940e4b94d0daf037163c72757865f",
     "src/utils/localModelRole.ts": "29491f084ef6ce804a416749b115e6b63a772a735ec2d4fbea21c42e75367816",
     "shared/google-sync/localModelRole.ts": "8ce5bc1651e340c87134a35f4fbf149af159c296ca924a874c95b76b51dc96a5",
     "src/utils/localModelImport.ts": "f15c25b57b27279b501c26632fbf8c0481b2b23263b22de8e63651dfd5ff7f1b",
@@ -308,5 +308,5 @@
     "lz-string/package.json": "f0990a8fd6c347d66c1469d18918f5460d372c6b3af8a0a5737dfd34c809e20d",
     "lz-string/LICENSE": "433fc9dfe659dbfb1e91eed8351f13651e97bfa3ac6d03394c3d63f61d4bbc80"
   },
-  "bundleSHA256": "3079228476028579e5d9f50ea05b1c26ca5147638c5194625d1afe70b9431e85"
+  "bundleSHA256": "323cc7226efa0ff1d01caa17a46a987353964c37eea3d2ab7f8efba94540c875"
 }

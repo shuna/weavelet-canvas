@@ -1,5 +1,5 @@
 import {describe, expect, it} from 'vitest';
-import {autoEvaluationPlan, type AutoEvaluationInput} from './evaluationAutoCore';
+import {autoEvaluationPlan, autoPreSendSafetyAllowed, type AutoEvaluationInput} from './evaluationAutoCore';
 import {evaluation} from '../../shared/google-sync/evaluation';
 import type {EvaluationSettings} from '../types/evaluation';
 
@@ -14,6 +14,16 @@ const content: AutoEvaluationInput['userContent'] = [
 const bridge = (input: AutoEvaluationInput) => JSON.parse(evaluation(JSON.stringify({operation:'autoPlan',...input})));
 
 describe('automatic evaluation plan', () => {
+  it('checks pre-send safety constraints independently of text availability', () => {
+    const routing = {routing:{only:['fixture-provider'],require_parameters:true}};
+    const imageOnly: AutoEvaluationInput = {phase:'pre-send', userContent:[{type:'image_url',image_url:{url:'data:image/png;base64,FAKE',detail:'auto'}}],settings};
+    expect(autoEvaluationPlan(imageOnly).shouldSafety).toBe(false);
+    expect(autoPreSendSafetyAllowed(settings,routing)).toBe(false);
+    expect(JSON.parse(evaluation(JSON.stringify({operation:'autoPreSendAllowed',settings,openRouter:routing})))).toBe(false);
+    expect(autoPreSendSafetyAllowed({...settings,safetyEngine:'local'},routing)).toBe(true);
+    expect(autoPreSendSafetyAllowed({...settings,safetyPreSend:'manual'},routing)).toBe(true);
+    expect(autoPreSendSafetyAllowed(settings)).toBe(true);
+  });
   it('uses text parts and pre-send settings without adding manual context', () => {
     const input: AutoEvaluationInput = {phase:'pre-send',userContent:content,settings};
     const expected = {userText:'first\nsecond',safetyText:'first\nsecond',shouldSafety:true,shouldQuality:false};

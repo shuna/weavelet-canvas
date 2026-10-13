@@ -1,5 +1,10 @@
-import type {ContentInterface} from '../types/chat';
+import type {ContentInterface, OpenRouterChatSettings} from '../types/chat';
 import type {EvaluationSettings} from '../types/evaluation';
+import {hardOpenRouterConstraints} from './openrouterRequest';
+
+export function autoPreSendSafetyAllowed(settings: EvaluationSettings, openRouter?: OpenRouterChatSettings): boolean {
+  return !(hardOpenRouterConstraints(openRouter) && settings.safetyPreSend === 'auto' && settings.safetyEngine !== 'local');
+}
 
 export interface AutoEvaluationInput {
   phase: 'pre-send' | 'post-receive';

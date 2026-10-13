@@ -4,7 +4,7 @@ import { resolveAssistantPrefillKey } from '@utils/generationPlan';
 import { localModelRuntime } from '@src/local-llm/runtime';
 import { beginAiTask, finishAiTask, isAiTaskCurrent } from './aiTaskLifetime';
 import i18next from 'i18next';
-import { hardOpenRouterConstraints } from '@utils/openrouterControls';
+import { autoPreSendSafetyAllowed } from '@utils/evaluationAutoCore';
 import { normalizeConfigStream } from '@utils/streamSupport';
 import { useWorkspaceStore, useWorkspaceReadOnly } from '@store/workspaceScope';
 import { useTranslation } from 'react-i18next';
@@ -171,7 +171,7 @@ const useSubmit = () => {
 
       if (!isAiTaskCurrent(ticket)) return;
 
-      if (hardOpenRouterConstraints(submitConfig.openRouter) && evaluationSettings.safetyPreSend === 'auto' && evaluationSettings.safetyEngine !== 'local') {
+      if (!autoPreSendSafetyAllowed(evaluationSettings, submitConfig.openRouter)) {
         throw new Error(i18next.t('model:openRouter.errors.safety') as string);
       }
       // Pre-send evaluation (async, non-blocking)
