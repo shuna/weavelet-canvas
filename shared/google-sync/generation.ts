@@ -1,3 +1,5 @@
+import { prepareRequestTransport } from '../../src/api/requestTransport';
+import { isOpenRouterURL, applyOpenRouterControls } from '../../src/utils/openrouterRequest';
 import { normalizeRemoteConfig } from './chatConfig';
 import { getRequestReasoningCapabilities, type ReasoningModelState } from '../../src/utils/modelReasoning';
 import { materializeActivePath } from '../../src/utils/branchUtils';
@@ -16,6 +18,7 @@ export const generationRequest = (json: string): string => {
     activePath?: string[];
     omittedNodes?: Record<string, boolean>;
     modelState?: ReasoningModelState;
+    transport?: { endpoint: string; endpointURL: { protocol: string; hostname: string }; hasApiKey: boolean; apiVersion?: string; customHeaders?: Record<string, string>; chatId?: string; regenerate?: boolean };
     capabilities?: { supportsReasoning: boolean; requiresReasoning: boolean };
   } = JSON.parse(json);
   if (input.modelState !== undefined) input.config = normalizeRemoteConfig(input.config, input.modelState);
@@ -30,7 +33,12 @@ export const generationRequest = (json: string): string => {
     input.config.model, path, input.omittedNodes ?? chat?.omittedNodes, input.config.systemPrompt,
     chat ? { chat, generatingNodeIds: input.generatingNodeIds ?? [] } : undefined);
   if (messages.length === 0) throw new Error('送信する本文がありません');
-  return JSON.stringify(buildRequestBody(messages, input.config, input.modelState !== undefined
+  const body = buildRequestBody(messages, input.config, input.modelState !== undefined
     ? getRequestReasoningCapabilities(input.config, input.modelState) : input.capabilities!,
-    { stream: input.config.stream }));
+    { stream: input.config.stream });
+  if (!input.transport) return JSON.stringify(body);
+  const transport = prepareRequestTransport(input.transport.endpoint, input.config, input.transport.hasApiKey, input.transport.customHeaders, input.transport.apiVersion);
+  applyOpenRouterControls(isOpenRouterURL(input.transport.endpointURL), input.config, body, transport.headers,
+    { chatId: input.transport.chatId, regenerate: input.transport.regenerate, viaProxy: false });
+  return JSON.stringify({ ...transport, body });
 };

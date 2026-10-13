@@ -4,7 +4,7 @@ import {
   ConfigInterface,
   MessageInterface,
 } from '@type/chat';
-import { isAzureEndpoint } from '@utils/api';
+import { prepareRequestTransport, bindRequestAuthentication } from './requestTransport';
 import { getModelSupportsReasoning, getModelRequiresReasoning } from '@utils/modelLookup';
 import { buildReasoningCapabilities } from '@utils/modelReasoning';
 import { buildRequestBody as buildSharedRequestBody } from './requestBody';
@@ -28,26 +28,9 @@ export const getChatCompletion = async (
   signal?: AbortSignal,
   context?: OpenRouterRequestContext
 ) => {
-  const headers: HeadersInit = {
-    'Content-Type': 'application/json',
-    ...customHeaders,
-  };
-  if (apiKey) headers.Authorization = `Bearer ${apiKey}`;
-
-  if (isAzureEndpoint(endpoint) && apiKey) {
-    headers['api-key'] = apiKey;
-
-    const apiVersion = apiVersionToUse ?? '2024-02-01';
-    const path = `openai/deployments/${config.model}/chat/completions?api-version=${apiVersion}`;
-
-    if (!endpoint.endsWith(path)) {
-      if (!endpoint.endsWith('/')) {
-        endpoint += '/';
-      }
-      endpoint += path;
-    }
-  }
-  endpoint = endpoint.trim();
+  const transport = prepareRequestTransport(endpoint, config, !!apiKey, customHeaders, apiVersionToUse);
+  endpoint = transport.endpoint;
+  const headers = bindRequestAuthentication(transport, apiKey);
 
   const body = buildRequestBody(messages, config, { stream: false });
   const proxyConfig = getProxyConfig();
@@ -70,26 +53,9 @@ export const getChatCompletionStream = async (
   signal?: AbortSignal,
   context?: OpenRouterRequestContext
 ) => {
-  const headers: HeadersInit = {
-    'Content-Type': 'application/json',
-    ...customHeaders,
-  };
-  if (apiKey) headers.Authorization = `Bearer ${apiKey}`;
-
-  if (isAzureEndpoint(endpoint) && apiKey) {
-    headers['api-key'] = apiKey;
-
-    const apiVersion = apiVersionToUse ?? '2024-02-01';
-    const path = `openai/deployments/${config.model}/chat/completions?api-version=${apiVersion}`;
-
-    if (!endpoint.endsWith(path)) {
-      if (!endpoint.endsWith('/')) {
-        endpoint += '/';
-      }
-      endpoint += path;
-    }
-  }
-  endpoint = endpoint.trim();
+  const transport = prepareRequestTransport(endpoint, config, !!apiKey, customHeaders, apiVersionToUse);
+  endpoint = transport.endpoint;
+  const headers = bindRequestAuthentication(transport, apiKey);
   const body = buildRequestBody(messages, config, { stream: true });
   const proxyConfig = getProxyConfig();
   applyOpenRouterControls(endpoint, config, body, headers as Record<string, string>, { ...context, viaProxy: !!proxyConfig });
@@ -135,26 +101,9 @@ export const prepareStreamRequest = (
   apiVersionToUse?: string,
   context?: OpenRouterRequestContext
 ): { endpoint: string; headers: Record<string, string>; body: object } => {
-  const headers: Record<string, string> = {
-    'Content-Type': 'application/json',
-    ...customHeaders,
-  };
-  if (apiKey) headers.Authorization = `Bearer ${apiKey}`;
-
-  if (isAzureEndpoint(endpoint) && apiKey) {
-    headers['api-key'] = apiKey;
-
-    const apiVersion = apiVersionToUse ?? '2024-02-01';
-    const path = `openai/deployments/${config.model}/chat/completions?api-version=${apiVersion}`;
-
-    if (!endpoint.endsWith(path)) {
-      if (!endpoint.endsWith('/')) {
-        endpoint += '/';
-      }
-      endpoint += path;
-    }
-  }
-  endpoint = endpoint.trim();
+  const transport = prepareRequestTransport(endpoint, config, !!apiKey, customHeaders, apiVersionToUse);
+  endpoint = transport.endpoint;
+  const headers = bindRequestAuthentication(transport, apiKey);
 
   const body = buildRequestBody(messages, config, { stream: true });
 

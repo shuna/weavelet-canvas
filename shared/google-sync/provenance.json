@@ -103,6 +103,9 @@
     "src/store/storage/google/datasetHeader.ts": "e62a0cd0ecb2d29862377e848c9b0d904e0e2e00ead656e9794def1e946b3f3a",
     "src/store/storage/google/overview.ts": "2cf5c0d58e0d715d7a94e264f6ef075ecdf12a9f0a136d06acca33af38ecbb2c",
     "src/store/storage/sync/EncryptedSync.ts": "0d0a7cbc7b354577e6dacd7fa73cdf264803b1fbe7d38ebcb22692ebcc41f415",
+    "src/utils/api.ts": "09a664ad06a1878e071598ea913f7f5b07da281ac3e20ebbfc6a6c32ad8890c4",
+    "src/api/requestTransport.ts": "0c038fecdd7db5ac64b094a27f9bf00b5b8672e5ad0297f2656305462d7b3f98",
+    "src/utils/openrouterRequest.ts": "393051298e964cb5997851198d512720cc7406fa5f5fe78e8da32957ede9052e",
     "src/utils/modelSettingsCore.ts": "8c08f794f5ca97e6707e3ddc039efb0e77219805e45e014639839a4823eaead1",
     "src/api/requestBody.ts": "fddc6e59dda8049e43d7fc96b91686b611caf98d235a1528c5d083031cb5502d",
     "src/utils/submitContext.ts": "12fc43ead2afc57ce27c3fc290fb95b5774349cc6b12a81ec496f55313e48210",
@@ -173,6 +176,9 @@
     "shared/google-sync/source/sync.ts": "09ac529bf26b4a2c51c182d2e07215e0491aea7a981f938fdbeed830006b404a",
     "src/utils/chatFolders.ts": "2da5de3f25f587c475b75eee69ec7d8e56f60ae6dccc9dac7df640ea23827942",
     "shared/google-sync/folders.ts": "e76671e117e4583f124a3fe5d62f59188a17eae8201e523c748538c6282c23a5",
+    "src/utils/api.ts": "09a664ad06a1878e071598ea913f7f5b07da281ac3e20ebbfc6a6c32ad8890c4",
+    "src/api/requestTransport.ts": "0c038fecdd7db5ac64b094a27f9bf00b5b8672e5ad0297f2656305462d7b3f98",
+    "src/utils/openrouterRequest.ts": "393051298e964cb5997851198d512720cc7406fa5f5fe78e8da32957ede9052e",
     "src/utils/reasoning.ts": "bfc44972f20ef4f253d6817c13d41a334e157ee0e7a6fffd784e37aa0fcab3d1",
     "src/api/providerModels.ts": "837f04e342072953445dd58b607d0b36ef6012e591764c0ef85ea95b3dabdd29",
     "src/utils/modelReasoning.ts": "e0fb3e4e6e307747e43dad2e11824655c79213d1603ca683296b1d0bd955fd3c",
@@ -183,7 +189,7 @@
     "shared/google-sync/chatConfig.ts": "6da9883c0ffbdfa4b503a95feb271059bdb65334c092ff11ea037040778305fc",
     "src/api/requestBody.ts": "fddc6e59dda8049e43d7fc96b91686b611caf98d235a1528c5d083031cb5502d",
     "src/utils/submitContext.ts": "12fc43ead2afc57ce27c3fc290fb95b5774349cc6b12a81ec496f55313e48210",
-    "shared/google-sync/generation.ts": "991c461027c479418b960b0284aa7c16bbdec3161b3550af8215a88ba880f0f8",
+    "shared/google-sync/generation.ts": "bd2cf0347c154fb6f89bf8094c8d33ee008f0515b8b871aec7481a911785900e",
     "src/utils/chatShallowClone.ts": "105a942dc9ad825dbbcfccc302b682ede001be10953209d43ed7be6dba71b8ec",
     "src/utils/chatLibrary.ts": "1ae29e8a4180971b75a2192422afe668240d426c07435c6ab95a5251d090a451",
     "shared/google-sync/library.ts": "e247758695f7ffc57b5cb2358b314334cf50508d78e0e79d56fa4b4fcb172340",
@@ -236,5 +242,5 @@
     "lodash/package.json": "8e41b07c744a0de0d2c1c23ed41418ecb0849abb56395d28802e601b4730d7c2",
     "lodash/LICENSE": "f71e8ed126b46346494aad5486874cd8f0aafe95092ed67d2e3cb6110f939abc"
   },
-  "bundleSHA256": "abc408fc1cddd2a3528af25efc5faf12848ead678ea0963ef4e94d05faf8ddd1"
+  "bundleSHA256": "0aa35f806de22c232fb6230527a0469431d40d885a998085da368afde690d3a9"
 }

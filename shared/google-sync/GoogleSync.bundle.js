@@ -16541,6 +16541,140 @@ ${message.content}` : message.content).join("\n\n").trim();
     })));
   }
 
+  // src/utils/api.ts
+  var isAzureEndpoint = (endpoint) => {
+    return endpoint.includes("openai.azure.com");
+  };
+
+  // src/api/requestTransport.ts
+  function prepareRequestTransport(endpoint, config, hasApiKey, customHeaders, apiVersionToUse) {
+    const headers = { "Content-Type": "application/json", ...customHeaders };
+    const authentication = hasApiKey ? [{ name: "Authorization", prefix: "Bearer " }] : [];
+    if (isAzureEndpoint(endpoint) && hasApiKey) {
+      authentication.push({ name: "api-key", prefix: "" });
+      const apiVersion = apiVersionToUse ?? "2024-02-01";
+      const path = `openai/deployments/${config.model}/chat/completions?api-version=${apiVersion}`;
+      if (!endpoint.endsWith(path)) {
+        if (!endpoint.endsWith("/"))
+          endpoint += "/";
+        endpoint += path;
+      }
+    }
+    return { endpoint: endpoint.trim(), headers, authentication };
+  }
+
+  // src/utils/openrouterRequest.ts
+  var isOpenRouterURL = (url) => url.protocol === "https:" && ["openrouter.ai", "eu.openrouter.ai", "us.openrouter.ai"].includes(url.hostname);
+  function validateOpenRouterSettings(settings, model, responseCacheEnabled = true) {
+    if (settings === void 0)
+      return;
+    const object2 = (v) => typeof v === "object" && v !== null && !Array.isArray(v);
+    if (!object2(settings) || [settings.routing, settings.promptCache, ...responseCacheEnabled ? [settings.responseCache] : []].some((v) => v !== void 0 && !object2(v)))
+      return "openRouter.errors.invalid";
+    const r = settings.routing;
+    if (r) {
+      if (r.max_price !== void 0 && !object2(r.max_price))
+        return "openRouter.errors.price";
+      for (const list of [r.order, r.only, r.ignore]) {
+        if (list !== void 0 && (!Array.isArray(list) || list.some((v) => typeof v !== "string" || !v.trim()) || new Set(list).size !== list.length))
+          return "openRouter.errors.slugs";
+      }
+      if ([...r.order ?? [], ...r.only ?? []].some((v) => r.ignore?.includes(v)) || r.order?.some((v) => r.only?.length && !r.only.includes(v)))
+        return "openRouter.errors.conflict";
+      if (r.order?.length && r.sort)
+        return "openRouter.errors.conflict";
+      if (r.sort !== void 0 && !["price", "throughput", "latency"].includes(r.sort))
+        return "openRouter.errors.invalid";
+      if (r.data_collection !== void 0 && !["allow", "deny"].includes(r.data_collection))
+        return "openRouter.errors.invalid";
+      for (const v of [r.allow_fallbacks, r.require_parameters, r.zdr])
+        if (v !== void 0 && typeof v !== "boolean")
+          return "openRouter.errors.invalid";
+      for (const v of [r.max_price?.prompt, r.max_price?.completion])
+        if (v !== void 0 && (typeof v !== "number" || !Number.isFinite(v) || v < 0))
+          return "openRouter.errors.price";
+    }
+    if (settings.stickySession !== void 0 && typeof settings.stickySession !== "boolean")
+      return "openRouter.errors.invalid";
+    const p = settings.promptCache;
+    if (p) {
+      if (!["provider-default", "claude-conversation", "claude-system"].includes(p.mode) || p.ttl !== void 0 && !["5m", "1h"].includes(p.ttl))
+        return "openRouter.errors.invalid";
+      if (p.mode !== "provider-default" && model !== void 0 && !model.startsWith("anthropic/claude-"))
+        return "openRouter.errors.model";
+    }
+    const c = settings.responseCache;
+    if (c && responseCacheEnabled) {
+      if (!["inherit", "off", "on"].includes(c.mode))
+        return "openRouter.errors.invalid";
+      if (c.ttlSeconds !== void 0 && (!Number.isInteger(c.ttlSeconds) || c.ttlSeconds < 1 || c.ttlSeconds > 86400))
+        return "openRouter.errors.ttl";
+    }
+  }
+  function hardOpenRouterConstraints(settings) {
+    const error2 = validateOpenRouterSettings(settings, void 0, false);
+    if (error2)
+      throw new Error(instance.t(`model:${error2}`));
+    const r = settings?.routing;
+    if (!r)
+      return;
+    const constrained = {
+      only: r.only?.length ? [...r.only] : void 0,
+      ignore: r.ignore?.length ? [...r.ignore] : void 0,
+      max_price: r.max_price && Object.values(r.max_price).some((v) => v !== void 0) ? { ...r.max_price } : void 0,
+      data_collection: r.data_collection === "deny" ? "deny" : void 0,
+      zdr: r.zdr === true ? true : void 0
+    };
+    return Object.values(constrained).some((v) => v !== void 0) ? constrained : void 0;
+  }
+  function applyOpenRouterControls(endpointIsOpenRouter, config, body, headers, context) {
+    const settings = config.openRouter;
+    if (!endpointIsOpenRouter) {
+      if (settings && config.providerId === "openrouter")
+        throw new Error(instance.t("model:openRouter.errors.endpoint"));
+      return;
+    }
+    const error2 = validateOpenRouterSettings(settings, config.model, context?.viaProxy === true);
+    if (error2)
+      throw new Error(instance.t(`model:${error2}`));
+    const routing = context?.auxiliary ? hardOpenRouterConstraints(settings) : settings?.routing;
+    if (routing) {
+      const { order, only, ignore, sort, allow_fallbacks, require_parameters, max_price, data_collection, zdr } = routing;
+      body.provider = { order, only, ignore, sort, allow_fallbacks, require_parameters, max_price, data_collection, zdr };
+    }
+    if (context?.chatId && settings?.stickySession)
+      body.session_id = `weavelet:${context.chatId}${context.auxiliary ? ":title" : ""}`;
+    const p = context?.auxiliary ? void 0 : settings?.promptCache;
+    if (p && p.mode !== "provider-default") {
+      const cache = { type: "ephemeral", ...p.ttl === "1h" ? { ttl: "1h" } : {} };
+      if (p.mode === "claude-conversation")
+        body.cache_control = cache;
+      else {
+        const messages = body.messages;
+        const index = messages.findIndex((m) => m.role === "system");
+        const message = messages[index];
+        const lastText = message?.content.map((c2) => c2.type).lastIndexOf("text") ?? -1;
+        if (lastText < 0)
+          throw new Error(instance.t("model:openRouter.errors.system"));
+        body.messages = messages.map((m, i) => i !== index ? m : {
+          ...m,
+          content: m.content.map((c2, j) => j !== lastText ? c2 : { ...c2, cache_control: cache })
+        });
+      }
+    }
+    if (!context?.viaProxy)
+      return;
+    const c = settings?.responseCache;
+    if (context?.auxiliary || settings?.routing?.zdr || c?.mode === "off")
+      headers["X-OpenRouter-Cache"] = "false";
+    else if (c?.mode === "on") {
+      headers["X-OpenRouter-Cache"] = "true";
+      headers["X-OpenRouter-Cache-TTL"] = String(c.ttlSeconds ?? 300);
+      if (context?.regenerate)
+        headers["X-OpenRouter-Cache-Clear"] = "true";
+    }
+  }
+
   // src/utils/reasoning.ts
   var getEffectiveVerbosity = (verbosity, allowMax) => verbosity === "max" && !allowMax ? "medium" : verbosity;
   var normalizeModelId = (modelId) => modelId.toLowerCase();
@@ -17078,12 +17212,23 @@ ${message.content}` : message.content).join("\n\n").trim();
     );
     if (messages.length === 0)
       throw new Error("\u9001\u4FE1\u3059\u308B\u672C\u6587\u304C\u3042\u308A\u307E\u305B\u3093");
-    return JSON.stringify(buildRequestBody(
+    const body = buildRequestBody(
       messages,
       input.config,
       input.modelState !== void 0 ? getRequestReasoningCapabilities(input.config, input.modelState) : input.capabilities,
       { stream: input.config.stream }
-    ));
+    );
+    if (!input.transport)
+      return JSON.stringify(body);
+    const transport = prepareRequestTransport(input.transport.endpoint, input.config, input.transport.hasApiKey, input.transport.customHeaders, input.transport.apiVersion);
+    applyOpenRouterControls(
+      isOpenRouterURL(input.transport.endpointURL),
+      input.config,
+      body,
+      transport.headers,
+      { chatId: input.transport.chatId, regenerate: input.transport.regenerate, viaProxy: false }
+    );
+    return JSON.stringify({ ...transport, body });
   };
 
   // src/utils/chatShallowClone.ts
