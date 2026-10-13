@@ -24,13 +24,11 @@ describe('command prompt insertion from CommandPrompt application callback', () 
     { previous: [{ type: 'text', text: 'existing' }], text: 'prompt', expected: 'existingprompt' },
     { previous: [{ type: 'text', text: ' \n' }], text: ' prompt ', expected: ' \n prompt ' },
     { previous: [{ type: 'text', text: 'existing' }], text: '', expected: 'existing' },
-    { previous: [{ type: 'reasoning', text: 'reason' }], text: 'prompt', expected: 'reasonprompt' },
-    { previous: [{ type: 'image_url', image_url: { url: 'first-image', detail: 'auto' } }], text: 'prompt', expected: 'prompt' },
-  ])('uses the first .text when defined without a separator: $expected', ({ previous, text, expected }) => {
+  ])('appends to first text content without a separator: $expected', ({ previous, text, expected }) => {
     expect(appendCommandLibraryPrompt(previous, text)).toEqual([{ type: 'text', text: expected }]);
   });
 
-  it('reconstructs the first part, dropping its extra attributes, and preserves every remaining part exactly', () => {
+  it('appends to first text content while preserving its metadata and every remaining part exactly', () => {
     const first: TextContentInterface & { metadata: { label: string } } = {
       type: 'text', text: 'first', metadata: { label: 'first metadata' },
     };
@@ -39,15 +37,35 @@ describe('command prompt insertion from CommandPrompt application callback', () 
     const previous = [first, second, image];
     const before = structuredClone(previous);
     const result = appendCommandLibraryPrompt(previous, 'prompt');
-    expect(result).toEqual([{ type: 'text', text: 'firstprompt' }, second, image]);
+    expect(result).toEqual([{ ...first, text: 'firstprompt' }, second, image]);
+    expect((result[0] as typeof first).metadata).toBe(first.metadata);
     expect(result[1]).toBe(second);
     expect(result[2]).toBe(image);
     expect(previous).toEqual(before);
   });
 
-  it('replaces a non-text first part rather than inserting before it or appending to a later text part', () => {
+  it('prepends text for the cloned image-only content received by message editing', () => {
+    const original = [{ type: 'image_url' as const, image_url: { url: 'imported-image', detail: 'high' as const }, metadata: { label: 'image metadata' } }];
+    const editingContent = structuredClone(original);
+    const before = structuredClone(editingContent);
+    const result = appendCommandLibraryPrompt(editingContent, 'prompt');
+    expect(result).toEqual([{ type: 'text', text: 'prompt' }, ...original]);
+    expect(result[1]).toBe(editingContent[0]);
+    expect(editingContent).toEqual(before);
+  });
+
+  it.each<ContentInterface>([
+    { type: 'image_url', image_url: { url: 'first-image', detail: 'auto' } },
+    { type: 'reasoning', text: 'reason' },
+    { type: 'tool_result', tool_call_id: 'call', content: 'result' },
+  ])('prepends text without changing a $type first part or appending to later text', (first) => {
     const laterText = { type: 'text' as const, text: 'later text', metadata: { retained: true } };
-    const previous: ContentInterface[] = [{ type: 'tool_result', tool_call_id: 'call', content: 'result' }, laterText];
-    expect(appendCommandLibraryPrompt(previous, 'prompt')).toEqual([{ type: 'text', text: 'prompt' }, laterText]);
+    const previous = [first, laterText];
+    const before = structuredClone(previous);
+    const result = appendCommandLibraryPrompt(previous, 'prompt');
+    expect(result).toEqual([{ type: 'text', text: 'prompt' }, first, laterText]);
+    expect(result[1]).toBe(first);
+    expect(result[2]).toBe(laterText);
+    expect(previous).toEqual(before);
   });
 });
