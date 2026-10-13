@@ -20,7 +20,7 @@ export function branchHistory(json: string): string {
     const result = JSON.parse(bridge(JSON.stringify(input.input), (before, after) => {
       history = captureBranchHistory(history, before, after);
     }));
-    output = input.kind === 'nodeOptions' || input.kind === 'treeEdit' || input.kind === 'branchClipboard' || input.kind === 'generationPlan' ? result : {changes:result};
+    output = input.kind === 'nodeOptions' || input.kind === 'treeEdit' || input.kind === 'branchClipboard' || input.kind === 'generationPlan' || (input.kind === 'messageEdit' && input.input.operation === 'insertGenerate') ? result : {changes:result};
     if(input.kind==='generationPlan'&&input.input.operation==='prepare'&&result.status==='updated')history=invalidateBranchHistory(history,[input.input.chat.id]);
   } else if (input.operation === 'undo' || input.operation === 'redo') {
     const before: BranchHistoryState = {chats:input.chats, contentStore:input.contentStore};

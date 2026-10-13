@@ -3,7 +3,7 @@ import { hasMeaningfulContent } from '../../src/utils/contentValidation';
 import { textValueOf, replaceTextValue } from '../../src/utils/messageText';
 import {
   ensureBranchTreeState, switchActivePathState, upsertWithAutoBranchState,
-  createBranchState, appendNodeToActivePathState, updateNodeRoleState, insertNodeState,
+  createBranchState, appendNodeToActivePathState, updateNodeRoleState, insertNodeState, replaceNodeAndPruneState,
 } from '../../src/store/branch-domain';
 import { materializeActivePath } from '../../src/utils/branchUtils';
 import { diffJSONChanges } from '../../src/utils/jsonChanges';
@@ -29,7 +29,7 @@ export function withEditingRuntime<T>(newIDs: string[], existingIDs: string[], n
 }
 export function messageEdit(json: string, capture?: BranchEditCapture): string {
   const input: { chat: ChatInterface; contentStore: ContentStoreData; nodeID?: string | null; viewingPath: string[];
-    role: Role; parts: ContentInterface[]; editedText?: string; operation?: 'textValue'; mode: 'overwrite' | 'branch' | 'append' | 'insert'; newIDs: string[]; now: number } = JSON.parse(json);
+    role: Role; parts: ContentInterface[]; editedText?: string; operation?: 'textValue' | 'insertGenerate'; mode: 'overwrite' | 'branch' | 'append' | 'insert'; newIDs: string[]; now: number } = JSON.parse(json);
   if (input.operation === 'textValue') return JSON.stringify(textValueOf(input.parts));
   if (input.editedText !== undefined && typeof input.editedText !== 'string') throw new Error('Invalid text.');
   const parts = input.editedText !== undefined && input.editedText !== textValueOf(input.parts) ? replaceTextValue(input.parts, input.editedText) : input.parts;
@@ -49,13 +49,25 @@ export function messageEdit(json: string, capture?: BranchEditCapture): string {
       else result.chats[0].branchTree!.activePath = [];
     }
     let historyBase: BranchHistoryState = result;
+    let insertedNodeID: string | undefined;
     if (input.mode === 'insert') {
       if (input.nodeID === undefined) throw new Error('Invalid insert target.');
       const beforeNodeId = wasFlat && input.nodeID?.startsWith('message-') ? input.nodeID.slice(8) : input.nodeID;
-      const inserted = insertNodeState(result.chats, { chatId: chat.id, beforeNodeId, role: input.role, content: parts }, result.contentStore);
+      const inserted = insertNodeState(result.chats, { chatId: chat.id, beforeNodeId, role: input.role, content: input.operation === 'insertGenerate' ? [{type:'text',text:''}] : parts }, result.contentStore);
       if (inserted.status !== 'updated') throw new Error(`Invalid insert target: ${inserted.status}`);
       historyBase = inserted.historyBase ?? historyBase;
       result = inserted;
+      if (input.operation === 'insertGenerate') {
+        // Web inserts an empty node first, then Generate replaces it and prunes its following path.
+        capture?.(historyBase, result);
+        insertedNodeID = inserted.nodeId;
+        historyBase = result;
+        const index = result.chats[0].branchTree!.activePath.indexOf(insertedNodeID);
+        const generated = replaceNodeAndPruneState(result.chats, {chatId:chat.id,nodeId:insertedNodeID,role:input.role,content:parts,
+          removeCount:Math.max(0,result.chats[0].messages.length-(index+1))}, result.contentStore);
+        if (generated.status !== 'updated' || generated.pruneBlockedBy.length) return JSON.stringify({...generated,changes:[]});
+        result = generated;
+      }
     } else {
       const tree = result.chats[0].branchTree!;
       let index = -1;
@@ -90,6 +102,7 @@ export function messageEdit(json: string, capture?: BranchEditCapture): string {
     // projection inside the Web functions stays role/content only.
     chat.messages = materializeActivePath(chat.branchTree!, result.contentStore, true);
     if (changed) capture?.(historyBase, result);
-    return JSON.stringify(diffJSONChanges(before, JSON.parse(JSON.stringify({ chat, contentStore: result.contentStore }))));
+    const changes = diffJSONChanges(before, JSON.parse(JSON.stringify({ chat, contentStore: result.contentStore })));
+    return JSON.stringify(input.operation === 'insertGenerate' ? {status:'updated',nodeID:insertedNodeID,changes} : changes);
   });
 }

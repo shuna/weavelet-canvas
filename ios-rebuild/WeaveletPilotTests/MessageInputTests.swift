@@ -122,4 +122,79 @@ import SwiftUI
         XCTAssertNoThrow(try state.saveMessage(fresh, mode: .overwrite))
     }
 
+    func testInsertionGenerateUsesInsertedNodePreservesRawDataAndTwoUndoSteps() throws {
+        let root = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
+        let fixture = try OrderedJSON.decode(Data(contentsOf: root.appendingPathComponent("tests/fixtures/web-native/message-editing.json")))
+        let cases = try fixture.required("cases").array("cases")
+        for original in [try cases[0].required("input"), try XCTUnwrap(cases.first { $0["name"] == .string("flat-overwrite") }).required("input")] {
+            var configured = try original.required("chats").array("chats")
+            configured[0] = configured[0].replacing("config", with: try configured[0].required("config").replacing("modelSource", with: .string("local")))
+            let source = original.replacing("chats", with: .array(configured))
+            let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+            try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+            defer { try? FileManager.default.removeItem(at: directory) }
+            final class Fault { var rejects = false }
+            let fault = Fault()
+            let local = LocalStateStore(fileURL: directory.appendingPathComponent("state.json")) { data, url in
+                if fault.rejects { throw CocoaError(.fileWriteNoPermission) }
+                try data.write(to: url, options: .atomic)
+            }
+            let state = ChatState(store: local)
+            try state.importWebData(source.encoded())
+            let beforeIDs = try XCTUnwrap(state.conversation).visibleMessages.map(\.id)
+            let beforeNodeID = beforeIDs.count > 1 ? beforeIDs[1] : beforeIDs[0]
+            var draft = try state.messageInsertionDraft(beforeNodeID: beforeNodeID)
+            draft.text = "Inserted e\u{0301}"
+            draft.promptParts = .array([
+                .object([.init(key: "type", value: .string("text")), .init(key: "text", value: .string("")), .init(key: "xRaw", value: .number("9007199254740993"))]),
+                .object([.init(key: "type", value: .string("text")), .init(key: "text", value: .string("tail e\u{0301}")), .init(key: "xTail", value: .string("kept"))])])
+            let before = try XCTUnwrap(state.exchange).source
+            let disk = try Data(contentsOf: local.fileURL)
+            fault.rejects = true
+            XCTAssertThrowsError(try state.saveMessageForGeneration(draft))
+            XCTAssertEqual(state.exchange?.source, before)
+            XCTAssertEqual(try Data(contentsOf: local.fileURL), disk)
+            XCTAssertFalse(state.canUndoMessageEdit)
+            fault.rejects = false
+            let fresh = try state.saveMessageForGeneration(draft)
+            let insertedID = try XCTUnwrap(fresh.nodeID)
+            XCTAssertFalse(insertedID.utf8.elementsEqual(beforeNodeID.utf8))
+            XCTAssertEqual(state.conversation?.visibleMessages.last?.id, insertedID)
+            XCTAssertEqual(state.conversation?.visibleMessages.count, beforeIDs.count > 1 ? 2 : 1)
+            XCTAssertTrue(fresh.text.utf8.elementsEqual(draft.text.utf8))
+            XCTAssertEqual(try fresh.parts.array("parts")[0]["xRaw"], .number("9007199254740993"))
+            XCTAssertEqual(try fresh.parts.array("parts")[1], try draft.parts.array("parts")[1])
+            XCTAssertEqual(state.exchange?.source["xRoot"], before["xRoot"])
+            XCTAssertEqual(state.exchange?.source["contentStore"]?["unreferenced"], before["contentStore"]?["unreferenced"])
+            if beforeIDs.count > 1 {
+                XCTAssertEqual(try state.exchange?.source.required("chats").array("chats")[0]["branchTree"]?["nodes"]?["hidden"], try before.required("chats").array("chats")[0]["branchTree"]?["nodes"]?["hidden"])
+            }
+            let saved = try XCTUnwrap(state.exchange).source
+            let generation = try state.messageGenerationDraft(nodeID: insertedID, operation: .append)
+            XCTAssertThrowsError(try state.startGeneration(generation, record: RemoteCredentialRecord(), readProviderCredential: { _ in XCTFail("local preparation must not read remote credentials"); return nil }))
+            XCTAssertEqual(state.exchange?.source, saved)
+            XCTAssertEqual(fresh.source, state.exchange?.source)
+            XCTAssertThrowsError(try state.saveMessageForGeneration(draft))
+            try state.undoMessageEdit()
+            XCTAssertEqual(state.conversation?.visibleMessages.count, beforeIDs.count + 1)
+            XCTAssertEqual(try state.messageDraft(nodeID: insertedID).text, "")
+            try state.undoMessageEdit()
+            XCTAssertEqual(state.conversation?.visibleMessages.count, beforeIDs.count)
+            XCTAssertFalse(state.conversation?.visibleMessages.contains { $0.id.utf8.elementsEqual(insertedID.utf8) } ?? true)
+            XCTAssertEqual(state.exchange?.source["xRoot"], before["xRoot"])
+
+            var chats = try source.required("chats").array("chats")
+            chats[0] = chats[0].replacing("protectedNodes", with: .object([.init(key: beforeNodeID.hasPrefix("message-") ? String(beforeNodeID.dropFirst(8)) : beforeNodeID, value: .bool(true))]))
+            try state.importWebData(source.replacing("chats", with: .array(chats)).encoded())
+            draft = try state.messageInsertionDraft(beforeNodeID: beforeNodeID)
+            draft.text = "Protected following"
+            let protectedSource = try XCTUnwrap(state.exchange).source
+            let protectedDisk = try Data(contentsOf: local.fileURL)
+            XCTAssertThrowsError(try state.saveMessageForGeneration(draft))
+            XCTAssertEqual(state.exchange?.source, protectedSource)
+            XCTAssertEqual(try Data(contentsOf: local.fileURL), protectedDisk)
+            XCTAssertEqual(draft.text, "Protected following")
+        }
+    }
+
 }

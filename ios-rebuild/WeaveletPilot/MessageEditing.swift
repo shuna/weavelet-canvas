@@ -147,7 +147,7 @@ enum MessageEditing {
             next = try historyState(output)
         } else {
             output = try SharedWebOperations.call(kind, input)
-            if kind == "treeEdit" || kind == "generationPlan" { changes = try output.required("changes") }
+            if kind == "treeEdit" || kind == "generationPlan" || (kind == "messageEdit" && input["operation"] == .string("insertGenerate")) { changes = try output.required("changes") }
             else if kind == "nodeOptions" {
                 guard output["status"] == .string("updated") || output["status"] == .string("unchanged") else { throw ExchangeError.invalid("メッセージがありません") }
                 changes = try output.required("changes")
@@ -209,6 +209,20 @@ enum MessageEditing {
             return fields
         }.source
     }
+    static func insertionForGeneration(in source: OrderedJSON, draft: MessageDraft, newIDs: [String], now: Double,
+                                      history: HistoryState?, onHistory: @escaping (HistoryState) -> Void) throws -> (source: OrderedJSON, nodeID: String) {
+        let changed = try perform(in: source, chatID: draft.chatID, kind: "messageEdit", history: history, onHistory: onHistory) { boundary in
+            [.init(key: "operation", value: .string("insertGenerate")), .init(key: "mode", value: .string("insert")),
+             .init(key: "viewingPath", value: .array(draft.path.map(OrderedJSON.string))), .init(key: "nodeID", value: draft.nodeID.map(OrderedJSON.string) ?? .null),
+             .init(key: "role", value: .string(draft.role)), .init(key: "parts", value: try boundary.parts(draft.parts)), .init(key: "editedText", value: .string(draft.text)),
+             .init(key: "newIDs", value: .array(newIDs.map(OrderedJSON.string))), .init(key: "now", value: .number(String(now)))]
+        }
+        guard changed.output["status"] == .string("updated"), try changed.output["pruneBlockedBy"]?.array("protected nodes").isEmpty != false else {
+            throw ExchangeError.invalid("挿入する本文の生成を準備できません。保護された後続や対象の表示経路を確認してください")
+        }
+        return try (changed.source, changed.output.required("nodeID").string("inserted node ID"))
+    }
+
     static func saveOptions(in source: OrderedJSON, chatID: String, nodeID: String, value: NodeOptions.Value, newIDs: [String], now: Double,
                             history: HistoryState?, onHistory: @escaping (HistoryState) -> Void) throws -> OrderedJSON {
         _ = try NodeOptions.read(in: source, chatID: chatID, nodeID: nodeID)

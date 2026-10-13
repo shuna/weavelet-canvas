@@ -541,7 +541,15 @@ final class ChatState: ObservableObject {
               conversation?.id.utf8.elementsEqual(draft.chatID.utf8) == true else {
             throw ExchangeError.invalid("会話が変更されました。本文を開き直してください")
         }
-        guard !draft.isInsertion else { throw ExchangeError.invalid("挿入する本文は保存してから、そのメッセージの生成操作を選んでください") }
+        if draft.isInsertion {
+            guard let chat = try draft.source.required("chats").array("chats").first(where: { try $0.required("id").string("id").utf8.elementsEqual(draft.chatID.utf8) }) else { throw ExchangeError.invalid("chat ID") }
+            let count = try chat["branchTree"] == nil ? chat.required("messages").array("messages").count + 1 : 1
+            var history: MessageEditing.HistoryState?
+            let changed = try MessageEditing.insertionForGeneration(in: draft.source, draft: draft,
+                newIDs: (0..<count).map { _ in UUID().uuidString.lowercased() }, now: now, history: editingHistory) { history = $0 }
+            try applyLibrary(changed.source, selectedID: draft.chatID, resetViewFor: draft.chatID, editing: history, now: now)
+            return try messageDraft(nodeID: changed.nodeID)
+        }
         if let nodeID = draft.nodeID {
             guard let chat = try draft.source.required("chats").array("chats").first(where: { try $0.required("id").string("id").utf8.elementsEqual(draft.chatID.utf8) }) else { throw ExchangeError.invalid("chat ID") }
             let count = try chat["branchTree"] == nil ? chat.required("messages").array("messages").count : 0
