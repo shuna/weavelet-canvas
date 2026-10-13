@@ -13300,8 +13300,8 @@ ${message.content}` : message.content).join("\n\n").trim();
       if (content)
         recovered++;
       else {
-        const missing = chat.__previewMissingContent ??= [];
-        missing.push(hash);
+        const missing2 = chat.__previewMissingContent ??= [];
+        missing2.push(hash);
         content = [{ type: "text", text: t2("preview.missingContent", { ns: "import", hash }) }];
       }
       node.contentHash = addContent(store, content);
@@ -15368,13 +15368,13 @@ ${message.content}` : message.content).join("\n\n").trim();
 
   // shared/google-sync/source/decodeParts.ts
   function decodeParts(parts) {
-    const bytes2 = new Uint8Array(parts.reduce((size, part) => size + part.length, 0));
+    const bytes3 = new Uint8Array(parts.reduce((size, part) => size + part.length, 0));
     let offset = 0;
     for (const part of parts) {
-      bytes2.set(part, offset);
+      bytes3.set(part, offset);
       offset += part.length;
     }
-    return { bytes: bytes2, value: decode(bytes2) };
+    return { bytes: bytes3, value: decode(bytes3) };
   }
 
   // shared/google-sync/adapters/processing.ts
@@ -15799,6 +15799,7 @@ ${message.content}` : message.content).join("\n\n").trim();
 
   // shared/google-sync/adapters/transport.ts
   var SyncFileNotFoundError = class extends Error {
+    name = "NotFoundError";
   };
 
   // shared/google-sync/adapters/cache.ts
@@ -15904,8 +15905,8 @@ ${message.content}` : message.content).join("\n\n").trim();
           files: this.cache.compaction.files.map(({ id, kind, size }) => ({ id, kind, size }))
         }
       };
-      const bytes2 = await encrypt(this.requireKey(), await encodeAsync(stored), this.context("cache"));
-      await writeSyncCache(this.dataset, bytes2, entries, remove);
+      const bytes3 = await encrypt(this.requireKey(), await encodeAsync(stored), this.context("cache"));
+      await writeSyncCache(this.dataset, bytes3, entries, remove);
       for (const id of Object.keys(commits)) {
         this.persistedCommits.add(id);
         this.encodedCommits.delete(id);
@@ -15913,7 +15914,7 @@ ${message.content}` : message.content).join("\n\n").trim();
       for (const upload of uploads)
         for (const file of upload.files)
           delete file.bytes;
-      this.cacheFingerprint = await digest(bytes2);
+      this.cacheFingerprint = await digest(bytes3);
       const packs = Object.values(this.cache.packs ?? {});
       const covered = new Set(packs.flatMap((pack) => Object.keys(pack.commits)));
       reportSyncHistory({
@@ -15924,9 +15925,9 @@ ${message.content}` : message.content).join("\n\n").trim();
         cleanupTargets: this.cache.compaction?.remove.length ?? 0
       });
     }
-    async loadCache(bytes2) {
+    async loadCache(bytes3) {
       this.remoteCache = void 0;
-      const stored = await decodeAsync(await decrypt(this.requireKey(), bytes2, this.context("cache")));
+      const stored = await decodeAsync(await decrypt(this.requireKey(), bytes3, this.context("cache")));
       if (stored.version === 1) {
         this.cache = stored;
         if (stored.baseline)
@@ -16018,9 +16019,9 @@ ${message.content}` : message.content).join("\n\n").trim();
         const [saved] = await readSyncEntries(this.dataset, ["initial-key"]);
         if (!saved)
           return;
-        const bytes2 = await decrypt(this.requireKey(), saved, this.context("initial-key"));
+        const bytes3 = await decrypt(this.requireKey(), saved, this.context("initial-key"));
         await this.transport.folder(this.dataset, header);
-        await this.transport.put(header, this.dataset, "key", bytes2);
+        await this.transport.put(header, this.dataset, "key", bytes3);
         await writeSyncCache(this.dataset, void 0, [], ["initial-key"]);
       });
     }
@@ -16073,9 +16074,9 @@ ${message.content}` : message.content).join("\n\n").trim();
           payload = await encodeAsync(commit);
         } else {
           const chunks = await this.parallel(manifest.parts, async (part) => {
-            const bytes2 = await decrypt(this.requireKey(), await this.transport.read(part), this.context(part));
-            completedFile(bytes2.length);
-            return bytes2;
+            const bytes3 = await decrypt(this.requireKey(), await this.transport.read(part), this.context(part));
+            completedFile(bytes3.length);
+            return bytes3;
           });
           const decoded = await decodePartsAsync(chunks);
           payload = decoded.bytes;
@@ -16100,23 +16101,23 @@ ${message.content}` : message.content).join("\n\n").trim();
       return pack;
     }
     async loadPack(pack, verify = false) {
-      const missing = Object.keys(pack.commits).some((commit) => !this.cache.commits[commit]);
+      const missing2 = Object.keys(pack.commits).some((commit) => !this.cache.commits[commit]);
       const retained = Object.fromEntries(Object.keys(pack.commits).filter((commit) => this.cache.commits[commit]).map((commit) => [commit, this.cache.commits[commit]]));
       for (const [commit, hash] of Object.entries(await hashCommitsAsync(retained))) {
         if (hash !== pack.commits[commit])
           throw new Error("Sync pack history mismatch.");
       }
-      if (!missing && !verify) {
+      if (!missing2 && !verify) {
         recordPackAccess(true);
         return;
       }
       syncPhase("downloading", pack.parts.length);
       const chunks = await this.parallel(pack.parts, async (part) => {
-        const bytes2 = await decrypt(this.requireKey(), await this.transport.read(part, verify ? "verification" : "pack"), this.context(part));
-        completedFile(bytes2.length);
-        return bytes2;
+        const bytes3 = await decrypt(this.requireKey(), await this.transport.read(part, verify ? "verification" : "pack"), this.context(part));
+        completedFile(bytes3.length);
+        return bytes3;
       });
-      const size = chunks.reduce((total, bytes2) => total + bytes2.length, 0);
+      const size = chunks.reduce((total, bytes3) => total + bytes3.length, 0);
       if (size !== pack.bytes)
         throw new Error("Incomplete sync pack.");
       const { value: data } = await decodePartsAsync(chunks);
@@ -16139,10 +16140,10 @@ ${message.content}` : message.content).join("\n\n").trim();
         recordPackAccess(false);
       if (encoded.size)
         this.remoteCache = void 0;
-      for (const [commit, bytes2] of encoded) {
+      for (const [commit, bytes3] of encoded) {
         this.cache.commits[commit] = data.commits[commit];
         if (!this.persistedCommits.has(commit))
-          this.encodedCommits.set(commit, bytes2);
+          this.encodedCommits.set(commit, bytes3);
       }
     }
     async discoverPacks(ids) {
@@ -16198,20 +16199,20 @@ ${message.content}` : message.content).join("\n\n").trim();
           if (change.dataset === this.dataset && change.kind === "commit" && !removed.has(change.id))
             ids.add(change.id);
         }
-        const missing = [...ids].filter((id) => !this.cache.commits[id]);
-        if (missing.length) {
+        const missing2 = [...ids].filter((id) => !this.cache.commits[id]);
+        if (missing2.length) {
           syncPhase("downloading");
           const manifests = /* @__PURE__ */ new Map();
           let partCount = 0;
-          const unbundled = missing.filter((id) => !covered.has(id));
+          const unbundled = missing2.filter((id) => !covered.has(id));
           const downloaded = await this.parallel(unbundled, async (id) => [id, await this.downloadManifest(id)]);
           for (const [id, manifest] of downloaded) {
             manifests.set(id, manifest);
             if (manifest.version === 1)
               partCount += manifest.parts.length;
           }
-          syncPhase("downloading", missing.length + partCount, void 0, missing.length);
-          for (const id of missing)
+          syncPhase("downloading", missing2.length + partCount, void 0, missing2.length);
+          for (const id of missing2)
             await this.loadCommit(id, manifests);
         }
         for (const commit of Object.values(this.cache.commits))
@@ -16257,11 +16258,11 @@ ${message.content}` : message.content).join("\n\n").trim();
       syncPhase("uploading", remaining.length, remaining.reduce((total, file) => total + file.size, 0));
       const send = async (file) => {
         this.requireKey();
-        const [bytes2] = await readSyncEntries(this.dataset, [`outbox:${file.id}`]);
-        if (!bytes2 || bytes2.length !== file.size)
+        const [bytes3] = await readSyncEntries(this.dataset, [`outbox:${file.id}`]);
+        if (!bytes3 || bytes3.length !== file.size)
           throw new Error("Missing local upload data.");
-        await decrypt(this.requireKey(), bytes2, this.context(file.id));
-        await this.transport.put(file.id, this.dataset, file.kind, bytes2);
+        await decrypt(this.requireKey(), bytes3, this.context(file.id));
+        await this.transport.put(file.id, this.dataset, file.kind, bytes3);
         const ack = await encrypt(this.requireKey(), encode(pending.id), this.context(`ack:${file.id}`));
         await writeSyncCache(this.dataset, void 0, [[`ack:${file.id}`, ack]]);
         file.sent = true;
@@ -16374,14 +16375,14 @@ ${message.content}` : message.content).join("\n\n").trim();
         const [id, ...parts] = await this.transport.ids(1 + Math.ceil(payload.length / PACK_BYTES));
         const files = [];
         for (let i = 0; i < parts.length; i++) {
-          const bytes3 = await encrypt(this.requireKey(), payload.slice(i * PACK_BYTES, (i + 1) * PACK_BYTES), this.context(parts[i]));
-          files.push({ id: parts[i], kind: "pack-part", bytes: bytes3, size: bytes3.length, sent: false });
+          const bytes4 = await encrypt(this.requireKey(), payload.slice(i * PACK_BYTES, (i + 1) * PACK_BYTES), this.context(parts[i]));
+          files.push({ id: parts[i], kind: "pack-part", bytes: bytes4, size: bytes4.length, sent: false });
         }
         const manifest = { version: 1, commits: hashes, parts, bytes: payload.length };
-        const bytes2 = await encrypt(this.requireKey(), await encodeAsync(manifest), this.context(id));
-        if (bytes2.length > PACK_BYTES + 28)
+        const bytes3 = await encrypt(this.requireKey(), await encodeAsync(manifest), this.context(id));
+        if (bytes3.length > PACK_BYTES + 28)
           throw new Error("Sync pack index too large.");
-        files.push({ id, kind: "pack", bytes: bytes2, size: bytes2.length, sent: false });
+        files.push({ id, kind: "pack", bytes: bytes3, size: bytes3.length, sent: false });
         this.cache.compaction = { id, manifest, files, remove: [...new Set(group2.sources)] };
         await this.save();
         reportCompaction({ status: "running", reason: "new", sourceFiles: this.cache.compaction.remove.length, newFiles: files.length });
@@ -16398,13 +16399,13 @@ ${message.content}` : message.content).join("\n\n").trim();
       syncPhase("encrypting", parts.length + 1);
       const files = [];
       for (let i = 0; i < parts.length; i++) {
-        const bytes3 = await encrypt(this.requireKey(), payload.slice(i * partBytes, (i + 1) * partBytes), this.context(parts[i]));
-        files.push({ id: parts[i], kind: "part", bytes: bytes3, size: bytes3.length, sent: false });
-        completedFile(bytes3.length);
+        const bytes4 = await encrypt(this.requireKey(), payload.slice(i * partBytes, (i + 1) * partBytes), this.context(parts[i]));
+        files.push({ id: parts[i], kind: "part", bytes: bytes4, size: bytes4.length, sent: false });
+        completedFile(bytes4.length);
       }
-      const bytes2 = await encrypt(this.requireKey(), await encodeAsync(inline ? { ...commit, version: 2 } : { version: 1, parts }), this.context(id));
-      files.push({ id, kind: "commit", bytes: bytes2, size: bytes2.length, sent: false });
-      completedFile(bytes2.length);
+      const bytes3 = await encrypt(this.requireKey(), await encodeAsync(inline ? { ...commit, version: 2 } : { version: 1, parts }), this.context(id));
+      files.push({ id, kind: "commit", bytes: bytes3, size: bytes3.length, sent: false });
+      completedFile(bytes3.length);
       this.encodedCommits.set(id, payload);
       this.cache.pending = { id, commit, baseline, files };
       await this.save();
@@ -16620,6 +16621,259 @@ ${message.content}` : message.content).join("\n\n").trim();
         this.cache.baseline = baseline;
         await this.save(remove);
       });
+    }
+  };
+
+  // shared/google-sync/adapters/filesystem.ts
+  var request;
+  var setFileSystemHost = (next) => {
+    request = next;
+  };
+  var call = (method, ...args) => {
+    if (!request)
+      throw new Error("File system host is unavailable.");
+    return request(method, args);
+  };
+  var bytes2 = (value) => new Uint8Array(value);
+  var NativeFileHandle = class {
+    constructor(name, create) {
+      this.name = name;
+      this.create = create;
+    }
+    kind = "file";
+    async read() {
+      try {
+        return bytes2(await call("fs.read", this.name));
+      } catch (error2) {
+        if (this.create && error2 instanceof Error && error2.name === "NotFoundError")
+          return new Uint8Array();
+        throw error2;
+      }
+    }
+    async getFile() {
+      const value = await this.read();
+      return {
+        size: value.length,
+        arrayBuffer: async () => value.buffer.slice(value.byteOffset, value.byteOffset + value.byteLength),
+        text: async () => new TextDecoder().decode(value)
+      };
+    }
+    async createWritable(_options) {
+      let expected;
+      try {
+        expected = bytes2(await call("fs.read", this.name));
+      } catch (error2) {
+        if (!(error2 instanceof Error) || error2.name !== "NotFoundError")
+          throw error2;
+        expected = null;
+      }
+      let staged = new Uint8Array();
+      let closed = false;
+      return {
+        write: async (value) => {
+          staged = typeof value === "string" ? new TextEncoder().encode(value) : value.slice();
+        },
+        close: async () => {
+          if (closed)
+            return;
+          await call("fs.write", this.name, Array.from(staged), expected && Array.from(expected));
+          closed = true;
+        },
+        abort: async () => {
+          closed = true;
+        }
+      };
+    }
+  };
+  var NativeDirectoryHandle = class {
+    name = "native-sync";
+    kind = "directory";
+    async isSameEntry(other) {
+      return other === this;
+    }
+    async getFileHandle(name, options) {
+      if (!options?.create)
+        await call("fs.read", name);
+      return new NativeFileHandle(name, options?.create === true);
+    }
+    async *values() {
+      for (const entry of await call("fs.list")) {
+        if (entry.kind === "file")
+          yield new NativeFileHandle(entry.name, false);
+        else
+          yield { name: entry.name, kind: entry.kind };
+      }
+    }
+  };
+  var directory = new NativeDirectoryHandle();
+  var nativeFileSystemDirectory = () => directory;
+  async function savedNativeFileSystemTarget(value) {
+    if (value === void 0) {
+      const saved = await call("fs.target", "get");
+      return saved ? { ...saved, handle: directory } : void 0;
+    }
+    await call("fs.target", value === null ? "clear" : "set", value === null ? void 0 : {
+      dataset: value.dataset,
+      initialized: value.initialized,
+      downloadPending: value.downloadPending,
+      headerId: value.headerId
+    });
+    return value ?? void 0;
+  }
+
+  // src/store/storage/filesystem/transport.ts
+  var FILE_SYSTEM_MANIFEST = "weavelet-sync.json";
+  var kinds = ["key", "commit", "part", "pack", "pack-part"];
+  var validId = (id) => /^fs-[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(id);
+  var missing = (error2) => error2 instanceof Error && error2.name === "NotFoundError";
+  var FileSystemTransport = class {
+    constructor(directory2) {
+      this.directory = directory2;
+    }
+    // shortcut: retain immutable history because cloud clients can deliver deletes before replacement files, revisit with a client-independent retention protocol.
+    supportsCompaction = false;
+    async ids(count) {
+      return Array.from({ length: count }, () => `fs-${crypto.randomUUID()}`);
+    }
+    async manifest() {
+      let handle2;
+      try {
+        handle2 = await this.directory.getFileHandle(FILE_SYSTEM_MANIFEST);
+      } catch (error2) {
+        if (missing(error2))
+          return;
+        throw error2;
+      }
+      const file = await handle2.getFile();
+      if (file.size === 0)
+        return;
+      const value = JSON.parse(await file.text());
+      if (value?.version !== 1 || !validId(value.dataset) || !validId(value.headerId) || value.dataset === value.headerId) {
+        throw new Error("\u540C\u671F\u30D5\u30A9\u30EB\u30C0\u30FC\u306E\u60C5\u5831\u304C\u4E0D\u6B63\u3067\u3059\u3002");
+      }
+      return value;
+    }
+    async folder(id, headerId) {
+      if (!validId(id) || !validId(headerId))
+        throw new Error("\u540C\u671FID\u304C\u4E0D\u6B63\u3067\u3059\u3002");
+      const saved = await savedNativeFileSystemTarget();
+      const resuming = saved?.dataset === id && saved.headerId === headerId && await saved.handle.isSameEntry(this.directory);
+      for await (const entry of this.directory.values()) {
+        if (entry.name !== ".DS_Store" && !(resuming && (entry.name === FILE_SYSTEM_MANIFEST || entry.name === `${headerId}.key.bin`))) {
+          throw new Error("\u65B0\u898F\u4FDD\u5B58\u306B\u306F\u7A7A\u306E\u5C02\u7528\u30D5\u30A9\u30EB\u30C0\u30FC\u3092\u9078\u629E\u3057\u3066\u304F\u3060\u3055\u3044\u3002");
+        }
+      }
+      await savedNativeFileSystemTarget({ handle: this.directory, dataset: id, headerId, initialized: false });
+      await this.write(FILE_SYSTEM_MANIFEST, JSON.stringify({ version: 1, dataset: id, headerId }));
+      return { id };
+    }
+    async keyHeader(dataset) {
+      const manifest = await this.manifest();
+      if (!manifest || manifest.dataset !== dataset)
+        throw new Error("\u4FDD\u5B58\u5148\u306E\u540C\u671FID\u304C\u4E00\u81F4\u3057\u307E\u305B\u3093\u3002");
+      return manifest.headerId;
+    }
+    async locate(id) {
+      if (!validId(id))
+        throw new Error("\u540C\u671F\u30D5\u30A1\u30A4\u30EBID\u304C\u4E0D\u6B63\u3067\u3059\u3002");
+      let found;
+      for (const kind of kinds) {
+        try {
+          const handle2 = await this.directory.getFileHandle(`${id}.${kind}.bin`);
+          if (found)
+            throw new Error("\u540C\u671F\u30D5\u30A1\u30A4\u30EBID\u304C\u91CD\u8907\u3057\u3066\u3044\u307E\u3059\u3002");
+          found = handle2;
+        } catch (error2) {
+          if (!missing(error2))
+            throw error2;
+        }
+      }
+      return found;
+    }
+    async read(id) {
+      const handle2 = await this.locate(id);
+      if (!handle2)
+        throw new SyncFileNotFoundError("\u540C\u671F\u30D5\u30A1\u30A4\u30EB\u304C\u307E\u3060\u5230\u7740\u3057\u3066\u3044\u307E\u305B\u3093\u3002");
+      return new Uint8Array(await (await handle2.getFile()).arrayBuffer());
+    }
+    async write(name, bytes3) {
+      const handle2 = await this.directory.getFileHandle(name, { create: true });
+      const writer = await handle2.createWritable({ mode: "exclusive" });
+      try {
+        const existing = new Uint8Array(await (await handle2.getFile()).arrayBuffer());
+        const expected = typeof bytes3 === "string" ? new TextEncoder().encode(bytes3) : bytes3;
+        if (existing.length && await digest(existing) !== await digest(expected))
+          throw new Error("\u65E2\u5B58\u306E\u540C\u671F\u30D5\u30A1\u30A4\u30EB\u3068\u5185\u5BB9\u304C\u4E00\u81F4\u3057\u307E\u305B\u3093\u3002\u4E0A\u66F8\u304D\u3092\u505C\u6B62\u3057\u307E\u3057\u305F\u3002");
+        await writer.write(bytes3);
+        await writer.close();
+      } catch (error2) {
+        await writer.abort().catch(() => {
+        });
+        throw error2;
+      }
+    }
+    async put(id, dataset, kind, bytes3) {
+      await this.keyHeader(dataset);
+      if (!kinds.some((value) => value === kind))
+        throw new Error("\u540C\u671F\u30D5\u30A1\u30A4\u30EB\u7A2E\u5225\u304C\u4E0D\u6B63\u3067\u3059\u3002");
+      const existing = await this.locate(id);
+      if (existing) {
+        const previous = new Uint8Array(await (await existing.getFile()).arrayBuffer());
+        if (existing.name !== `${id}.${kind}.bin` || previous.length && await digest(previous) !== await digest(bytes3)) {
+          throw new Error("\u65E2\u5B58\u306E\u540C\u671F\u30D5\u30A1\u30A4\u30EB\u3068\u5185\u5BB9\u304C\u4E00\u81F4\u3057\u307E\u305B\u3093\u3002\u4E0A\u66F8\u304D\u3092\u505C\u6B62\u3057\u307E\u3057\u305F\u3002");
+        }
+        if (previous.length)
+          return;
+      }
+      await this.write(`${id}.${kind}.bin`, bytes3);
+    }
+    async scan() {
+      const manifest = await this.manifest();
+      if (!manifest)
+        throw new Error("\u540C\u671F\u30D5\u30A9\u30EB\u30C0\u30FC\u306E\u60C5\u5831\u304C\u898B\u3064\u304B\u308A\u307E\u305B\u3093\u3002");
+      const files = [];
+      const ids = /* @__PURE__ */ new Set();
+      for await (const entry of this.directory.values()) {
+        if (!entry.name.endsWith(".bin"))
+          continue;
+        const match = /^(fs-[0-9a-f-]{36})\.(key|commit|part|pack|pack-part)\.bin$/.exec(entry.name);
+        if (entry.kind !== "file" || !match || !validId(match[1]) || ids.has(match[1]))
+          throw new Error("\u540C\u671F\u30D5\u30A1\u30A4\u30EB\u306B\u4E0D\u6B63\u306A\u540D\u524D\u307E\u305F\u306F\u7AF6\u5408\u30B3\u30D4\u30FC\u304C\u3042\u308A\u307E\u3059\u3002");
+        ids.add(match[1]);
+        files.push({ id: match[1], dataset: manifest.dataset, kind: match[2] });
+      }
+      return files.sort((a, b) => a.id.localeCompare(b.id));
+    }
+    async startToken() {
+      return "[]";
+    }
+    async history(dataset) {
+      await this.keyHeader(dataset);
+      const files = await this.scan();
+      return { commits: files.filter((file) => file.kind === "commit").map((file) => file.id), packs: files.filter((file) => file.kind === "pack").map((file) => file.id) };
+    }
+    async commits(dataset) {
+      await this.keyHeader(dataset);
+      return (await this.scan()).filter((file) => file.kind === "commit").map((file) => file.id);
+    }
+    async packs(dataset) {
+      await this.keyHeader(dataset);
+      return (await this.scan()).filter((file) => file.kind === "pack").map((file) => file.id);
+    }
+    async changes(token) {
+      const previous = JSON.parse(token);
+      if (!Array.isArray(previous) || previous.some((id) => typeof id !== "string" || !validId(id)))
+        throw new Error("\u540C\u671F\u5C65\u6B74\u306E\u72B6\u614B\u304C\u4E0D\u6B63\u3067\u3059\u3002");
+      const current = await this.scan();
+      const ids = new Set(current.map((file) => file.id));
+      const known = new Set(previous);
+      if (previous.some((id) => !ids.has(id)))
+        throw new Error("\u65E2\u5B58\u306E\u540C\u671F\u30D5\u30A1\u30A4\u30EB\u304C\u898B\u3064\u304B\u308A\u307E\u305B\u3093\u3002\u540C\u671F\u30A2\u30D7\u30EA\u306E\u5FA9\u5143\u3092\u78BA\u8A8D\u3057\u3066\u304B\u3089\u518D\u958B\u3057\u3066\u304F\u3060\u3055\u3044\u3002");
+      const changes = current.filter((file) => !known.has(file.id));
+      return { token: JSON.stringify([...ids]), changes };
+    }
+    async remove(_id) {
+      throw new Error("\u30D5\u30A1\u30A4\u30EB\u540C\u671F\u3067\u306F\u5C65\u6B74\u3092\u81EA\u52D5\u524A\u9664\u3057\u307E\u305B\u3093\u3002");
     }
   };
 
@@ -18522,22 +18776,23 @@ ${messageContent}---
   var sequence = 0;
   var requests = [];
   var replies = /* @__PURE__ */ new Map();
-  var request = (method, args) => new Promise((resolve, reject) => {
+  var request2 = (method, args) => new Promise((resolve, reject) => {
     const id = ++sequence;
     requests.push({ id, method, args });
     replies.set(id, { resolve, reject });
   });
+  setFileSystemHost(request2);
   var drive = new Proxy({}, { get: (_target, method) => {
     if (method === "supportsCompaction")
       return true;
     if (method === "keyHeader")
-      return (dataset) => request("metadata", [dataset]).then((file) => encryptedSyncHeaderId(file));
+      return (dataset) => request2("metadata", [dataset]).then((file) => encryptedSyncHeaderId(file));
     if (method === "history")
       return async (dataset) => ({
-        commits: await request("commits", [dataset]),
-        packs: await request("packs", [dataset])
+        commits: await request2("commits", [dataset]),
+        packs: await request2("packs", [dataset])
       });
-    return (...args) => request(method, args.map((arg) => arg instanceof Uint8Array ? Array.from(arg) : arg)).then((value) => {
+    return (...args) => request2(method, args.map((arg) => arg instanceof Uint8Array ? Array.from(arg) : arg)).then((value) => {
       if (method === "read")
         return new Uint8Array(value);
       if (method === "changes")
@@ -18551,24 +18806,41 @@ ${messageContent}---
     });
   } });
   var session;
+  var transportMode = "drive";
+  var markFilesystemAccepted = async () => {
+    if (transportMode !== "filesystem")
+      return;
+    const target = await savedNativeFileSystemTarget();
+    if (target)
+      await savedNativeFileSystemTarget({ ...target, initialized: true, downloadPending: false, headerId: void 0 });
+  };
   var outcome;
   var start = (operation, json) => {
     outcome = { status: "pending" };
     const args = JSON.parse(json);
+    transportMode = args.transportMode === "filesystem" ? "filesystem" : "drive";
+    const transport = transportMode === "filesystem" ? new FileSystemTransport(nativeFileSystemDirectory()) : drive;
     Promise.resolve().then(async () => {
       switch (operation) {
         case "create": {
-          const created = await EncryptedSync.create(drive, args.password, args.options);
+          const created = await EncryptedSync.create(transport, args.password, args.options);
           session = created.session;
           return created.file;
         }
         case "open":
-          session = new EncryptedSync(args.dataset, drive, args.options);
+          session = new EncryptedSync(args.dataset, transport, args.options);
           return null;
+        case "inspectFolder":
+          return { manifest: await new FileSystemTransport(nativeFileSystemDirectory()).manifest() ?? null };
         case "unlock":
           return session.unlock(args.password);
-        case "restoreKey":
-          return session.restoreKey();
+        case "restoreKey": {
+          const restored = await session.restoreKey();
+          const target = transportMode === "filesystem" && await savedNativeFileSystemTarget();
+          if (restored && target?.headerId)
+            await session.resumeCreation(target.headerId);
+          return restored;
+        }
         case "push":
           host("stageAccepted", session.dataset, args.snapshot);
           return session.push(args.snapshot, args.replace);
@@ -18580,13 +18852,17 @@ ${messageContent}---
           return session.resolve(args.snapshot, args.mode);
         case "pull":
           return session.pull();
-        case "acceptLocal":
+        case "acceptLocal": {
           host("stageAccepted", session.dataset, args.snapshot);
-          return session.acceptLocal(args.snapshot);
+          await session.acceptLocal(args.snapshot);
+          await markFilesystemAccepted();
+          return null;
+        }
         case "receive": {
           const snapshot = await session.pull();
           host("stageAccepted", session.dataset, snapshot);
           await session.acceptLocal(snapshot);
+          await markFilesystemAccepted();
           return snapshot;
         }
         case "resolve": {
@@ -18594,6 +18870,7 @@ ${messageContent}---
           const snapshot = await session.resolve(args.snapshot, args.mode);
           host("stageAccepted", session.dataset, snapshot);
           await session.acceptLocal(snapshot);
+          await markFilesystemAccepted();
           return snapshot;
         }
         case "close":

@@ -56,6 +56,12 @@ const bundled = await build({ metafile: true, entryPoints: [path.join(root, 'ent
   plugins: [{ name: 'native-boundaries', setup(build) {
     build.onResolve({ filter: /^uuid$/ }, () => ({ path: path.join(root, 'adapters/uuid.ts') }));
     build.onResolve({ filter: /^\.\.\/sync\/EncryptedSync$/ }, () => ({ path: path.join(webRoot, 'src/store/storage/sync/EncryptedSync.ts') }));
+    build.onResolve({ filter: /^\.\.\/sync\/transport$/ }, args => {
+      if (args.importer === path.join(webRoot, 'src/store/storage/filesystem/transport.ts')) return { path: path.join(root, 'adapters/transport.ts') };
+    });
+    build.onResolve({ filter: /^\.\/handleStore$/ }, args => {
+      if (args.importer === path.join(webRoot, 'src/store/storage/filesystem/transport.ts')) return { path: path.join(root, 'adapters/filesystemHandleStore.ts') };
+    });
     build.onResolve({ filter: /^\.\.\/google\// }, args => {
       const name = args.path.slice('../google/'.length);
       if (adapters.has(name)) return { path: path.join(root, 'adapters', `${name}.ts`) };

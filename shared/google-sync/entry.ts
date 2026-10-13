@@ -10,6 +10,8 @@ export const driveListing = (json: string) => JSON.stringify({ parameters: drive
 import { encryptedSyncHeaderId } from '../../src/store/storage/google/datasetHeader';
 export const driveHeaderID = (json: string) => JSON.stringify(encryptedSyncHeaderId(JSON.parse(json)));
 import { EncryptedDriveSync } from './source/sync';
+import { FileSystemTransport } from '../../src/store/storage/filesystem/transport';
+import { nativeFileSystemDirectory, savedNativeFileSystemTarget, setFileSystemHost } from './adapters/filesystem';
 import { DriveNotFoundError } from './adapters/transport';
 import { host } from './adapters/host';
 import { toRecords, fromRecords, canonical, resolveStrict } from './source/records';
@@ -34,6 +36,7 @@ const request = (method: string, args: unknown[]) => new Promise((resolve, rejec
   const id = ++sequence;
   requests.push({ id, method, args }); replies.set(id, { resolve, reject });
 });
+setFileSystemHost(request);
 const drive = new Proxy({}, { get: (_target, method: string) => {
   if (method === 'supportsCompaction') return true;
   if (method === 'keyHeader') return (dataset: string) => request('metadata', [dataset]).then(file => encryptedSyncHeaderId(file as any));
@@ -50,28 +53,49 @@ const drive = new Proxy({}, { get: (_target, method: string) => {
   });
 } });
 let session: EncryptedDriveSync;
+let transportMode: 'drive' | 'filesystem' = 'drive';
+const markFilesystemAccepted = async () => {
+  if (transportMode !== 'filesystem') return;
+  const target = await savedNativeFileSystemTarget();
+  if (target) await savedNativeFileSystemTarget({ ...target, initialized: true, downloadPending: false, headerId: undefined });
+};
 let outcome: { status: string; value?: unknown; error?: string; conflictKeys?: string[] };
 export const start = (operation: string, json: string) => {
   outcome = { status: 'pending' };
   const args = JSON.parse(json);
+  transportMode = args.transportMode === 'filesystem' ? 'filesystem' : 'drive';
+  const transport = transportMode === 'filesystem'
+    ? new FileSystemTransport(nativeFileSystemDirectory()) : drive;
   Promise.resolve().then(async () => {
     switch (operation) {
       case 'create': {
-        const created = await EncryptedDriveSync.create(drive as any, args.password, args.options);
+        const created = await EncryptedDriveSync.create(transport as any, args.password, args.options);
         session = created.session; return created.file;
       }
-      case 'open': session = new EncryptedDriveSync(args.dataset, drive as any, args.options); return null;
+      case 'open': session = new EncryptedDriveSync(args.dataset, transport as any, args.options); return null;
+      case 'inspectFolder': return { manifest: await new FileSystemTransport(nativeFileSystemDirectory()).manifest() ?? null };
       case 'unlock': return session.unlock(args.password);
-      case 'restoreKey': return session.restoreKey();
+      case 'restoreKey': {
+        const restored = await session.restoreKey();
+        const target = transportMode === 'filesystem' && await savedNativeFileSystemTarget();
+        if (restored && target?.headerId) await session.resumeCreation(target.headerId);
+        return restored;
+      }
       case 'push': host('stageAccepted', session.dataset, args.snapshot); return session.push(args.snapshot, args.replace);
       case 'synchronize': host('stageAccepted', session.dataset, args.snapshot); return session.synchronize(args.snapshot,args.replace);
       case 'resolveForPublication': host('stageAccepted', session.dataset, args.snapshot); return session.resolve(args.snapshot,args.mode);
       case 'pull': return session.pull();
-      case 'acceptLocal': host('stageAccepted',session.dataset,args.snapshot); return session.acceptLocal(args.snapshot);
+      case 'acceptLocal': {
+        host('stageAccepted',session.dataset,args.snapshot);
+        await session.acceptLocal(args.snapshot);
+        await markFilesystemAccepted();
+        return null;
+      }
       case 'receive': {
         const snapshot = await session.pull();
         host('stageAccepted', session.dataset, snapshot);
         await session.acceptLocal(snapshot);
+        await markFilesystemAccepted();
         return snapshot;
       }
       case 'resolve': {
@@ -79,6 +103,7 @@ export const start = (operation: string, json: string) => {
         const snapshot = await session.resolve(args.snapshot, args.mode);
         host('stageAccepted', session.dataset, snapshot);
         await session.acceptLocal(snapshot);
+        await markFilesystemAccepted();
         return snapshot;
       }
       case 'close': session.close(); return null;
