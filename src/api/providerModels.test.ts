@@ -84,3 +84,27 @@ describe('fetchProviderModels', () => {
     vi.unstubAllGlobals();
   });
 });
+
+describe('fetchProviderModels failure versus empty result', () => {
+  const provider: ProviderConfig = {id:'openrouter',name:'fake',endpoint:'https://example.test/chat',modelsEndpoint:'https://example.test/models',modelsRequireAuth:false};
+  it('does not treat an unavailable endpoint or missing required key as a fetched empty list', async () => {
+    const fetch = vi.fn(); vi.stubGlobal('fetch',fetch);
+    await expect(fetchProviderModels({...provider,modelsEndpoint:undefined})).resolves.toBeNull();
+    await expect(fetchProviderModels({...provider,modelsRequireAuth:true})).resolves.toBeNull();
+    expect(fetch).not.toHaveBeenCalled(); vi.unstubAllGlobals();
+  });
+  it('throws for HTTP, network, and JSON failures', async () => {
+    const fetch = vi.fn().mockResolvedValueOnce({ok:false,status:503})
+      .mockRejectedValueOnce(new Error('fake network failure'))
+      .mockResolvedValueOnce({ok:true,json:()=>Promise.reject(new Error('fake JSON failure'))});
+    vi.stubGlobal('fetch',fetch);
+    await expect(fetchProviderModels(provider)).rejects.toThrow('HTTP 503');
+    await expect(fetchProviderModels(provider)).rejects.toThrow('network');
+    await expect(fetchProviderModels(provider)).rejects.toThrow('JSON');
+    vi.unstubAllGlobals();
+  });
+  it('returns an empty array for a successful empty response', async () => {
+    vi.stubGlobal('fetch',vi.fn().mockResolvedValue({ok:true,json:async()=>({data:[]})}));
+    await expect(fetchProviderModels(provider)).resolves.toEqual([]); vi.unstubAllGlobals();
+  });
+});

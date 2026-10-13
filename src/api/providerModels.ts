@@ -182,31 +182,14 @@ export function normalizeModels(
     .filter((model): model is ProviderModel => model !== null);
 }
 
+/** Null means no request was made; a successful empty response remains []. */
 export async function fetchProviderModels(
   provider: ProviderConfig
-): Promise<ProviderModel[]> {
-  if (!provider.modelsEndpoint) {
-    return [];
-  }
-
-  if (provider.modelsRequireAuth && !provider.apiKey) {
-    return [];
-  }
-
-  try {
-    const headers: HeadersInit = {};
-    if (provider.modelsRequireAuth && provider.apiKey) {
-      headers['Authorization'] = `Bearer ${provider.apiKey}`;
-    }
-
-    const response = await fetch(provider.modelsEndpoint, { headers });
-    if (!response.ok) {
-      return [];
-    }
-
-    const json = await response.json();
-    return normalizeModels(provider.id, json);
-  } catch {
-    return [];
-  }
+): Promise<ProviderModel[] | null> {
+  if (!provider.modelsEndpoint || (provider.modelsRequireAuth && !provider.apiKey)) return null;
+  const headers: HeadersInit = {};
+  if (provider.modelsRequireAuth && provider.apiKey) headers['Authorization'] = `Bearer ${provider.apiKey}`;
+  const response = await fetch(provider.modelsEndpoint, { headers });
+  if (!response.ok) throw new Error(`Model list request failed (HTTP ${response.status}).`);
+  return normalizeModels(provider.id, await response.json());
 }

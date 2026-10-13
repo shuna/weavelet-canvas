@@ -1,3 +1,5 @@
+import i18next from 'i18next';
+import { showToast } from '@utils/showToast';
 import { useCallback, useEffect, useState } from 'react';
 import { fetchProviderModels } from '@api/providerModels';
 import useStore from '@store/store';
@@ -119,7 +121,9 @@ export const useProviderModels = (providers: Record<ProviderId, ProviderConfig>)
       setProviderLoading(providerId, true);
       try {
         const result = await fetchProviderModels(providers[providerId]);
-        updateModels(providerId, result);
+        if (result !== null) updateModels(providerId, result);
+      } catch {
+        showToast(i18next.t('provider.fetchFailed', { ns: 'model', defaultValue: 'Could not load models. The saved list has been kept.' }), 'error');
       } finally {
         setProviderLoading(providerId, false);
       }
@@ -132,7 +136,9 @@ export const useProviderModels = (providers: Record<ProviderId, ProviderConfig>)
       setProviderLoading(providerId, true);
       try {
         const result = await fetchProviderModels(providerConfig);
-        updateModels(providerId, result);
+        if (result !== null) updateModels(providerId, result);
+      } catch {
+        showToast(i18next.t('provider.fetchFailed', { ns: 'model', defaultValue: 'Could not load models. The saved list has been kept.' }), 'error');
       } finally {
         setProviderLoading(providerId, false);
       }
