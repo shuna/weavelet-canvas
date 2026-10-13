@@ -35,12 +35,13 @@ WLLAMA_BUILD_WEBGPU=1 bash scripts/wllama/build.sh
 WLLAMA_BUILD_WEBGPU=1 EMDAWNWEBGPU_DIR=/path/to/emdawnwebgpu_pkg bash scripts/wllama/build.sh
 ```
 
-全 8 バリアントをビルドする場合は `vendor/wllama-src/` から直接実行します:
+全8バリアントとABI別JS glueを同時に更新する場合:
 
 ```bash
-cd vendor/wllama-src
-./scripts/build_all_wasm.sh
+WLLAMA_SYNC_VENDOR_JS=1 WLLAMA_BUILD_WEBGPU=1 WLLAMA_BUILD_WEBGPU_ASYNCIFY=1 bash scripts/wllama/build.sh
 ```
+
+2026-10-13の再生成は公式emsdk 5.0.5（隔離配置）、wllama `2.3.7` / `5e63e3b226a077b33dc7c608f1fe630f3d21f539`、llama.cpp `4abef75f2cf2eee75eb5083b30a94cf981587394` に追跡済みpatch 0001–0007を適用して実行しました。0007は公式commit `4e5b83b226919c146fbfa754641a6772bcb2d722` のGGUF byte-size overflow修正です。CPU compat/Memory64・WebGPU JSPI/AsyncifyのST/MT、全8 WASMと4種glueを生成し、既存 `tests/wasm-all-variants.spec.ts` のモデルパスだけを隔離コピーでtiny実モデルに差し替え、Chromiumで全8件のload・推論・exitを確認しました。モデルは配布物に含めません。Firefox/Safari・大モデル・既存OPFS実データの動作はこの再生成では未確認です。
 
 ## ワーカーコード差し替え (JS のみ更新)
 
