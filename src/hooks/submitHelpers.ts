@@ -27,7 +27,7 @@ import { FavoriteModel, ProviderConfig, ProviderId } from '@type/provider';
 import { autoTitlePrompt, normalizeGeneratedTitle, resolveProviderForModel, setGeneratedTitle, titleRequestSettings } from '@utils/chatTitle';
 export { buildTitlePromptMessage, resolveProviderForModel, setGeneratedTitle } from '@utils/chatTitle';
 import { isSummaryEligible, normalizeBubbleSummaryText } from '@utils/bubbleSummary';
-import { buildBubbleSummaryPrompt } from '@utils/bubbleSummaryPrompt';
+import { prepareBubbleSummaryRequest } from '@utils/bubbleSummaryOperations';
 import { addPreparedSubmitUsage, prepareSubmitUsage } from '@utils/generationUsage';
 
 type ProviderMap = Partial<Record<ProviderId, ProviderConfig>>;
@@ -171,18 +171,16 @@ export const generateBubbleSummary = async (
   signal?: AbortSignal
 ): Promise<string> => {
   const modelConfig = deps.summaryConfig ?? chat.config;
-  if (isLocalModelConfig(modelConfig)) throw new Error('ローカルモデルでは要約生成を利用できません');
   const messages = sourceIndexes.map(index => chat.messages[index]).filter(isSummaryEligible);
   if (messages.length !== sourceIndexes.length) throw new Error('要約対象にできないバブルが含まれています');
-  const model = modelConfig.model;
-  const resolved = resolveProviderForModel(model, deps.favoriteModels, deps.providers, deps.fallbackProvider, modelConfig.providerId);
-  assertAuxiliaryEndpoint(modelConfig.openRouter, resolved.endpoint);
-  if ((!resolved.key || resolved.key.length === 0) && resolved.endpoint === officialAPIEndpoint) throw new Error(deps.t('noApiKeyWarning'));
-  const config = { ...modelConfig, openRouter: { routing: hardOpenRouterConstraints(modelConfig.openRouter), responseCache: { mode: 'off' as const } } };
-  const request: MessageInterface[] = [{ role: 'user', content: [{ type: 'text', text: buildBubbleSummaryPrompt(messages, deps.summaryFormat) }] }];
+  const prepared = prepareBubbleSummaryRequest(messages, modelConfig, deps, deps.summaryFormat);
+  const { model, config, endpoint, key } = prepared;
+  assertAuxiliaryEndpoint(modelConfig.openRouter, endpoint);
+  if ((!key || key.length === 0) && endpoint === officialAPIEndpoint) throw new Error(deps.t('noApiKeyWarning'));
+  const request: MessageInterface[] = [prepared.promptMessage];
   const context = getModelContextInfo(model, modelConfig.providerId, modelConfig.modelSource).contextLength;
   if (!fitsContextWindow(await countTokens(request, model), context, modelConfig.max_tokens)) throw new Error('要約対象がモデルのコンテキスト上限を超えています');
-  const data = await getChatCompletion(resolved.endpoint, request, config, resolved.key, undefined, deps.apiVersion, signal, { auxiliary: true });
+  const data = await getChatCompletion(endpoint, request, config, key, undefined, deps.apiVersion, signal, { auxiliary: true });
   const text = normalizeBubbleSummaryText(data.choices[0]?.message.content ?? '');
   if (!text) throw new Error('要約を生成できませんでした');
   await updateTotalTokenUsed(model, request, { role: 'assistant', content: [{ type: 'text', text }] }, modelConfig.providerId);

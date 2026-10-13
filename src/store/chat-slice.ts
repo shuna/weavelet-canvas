@@ -10,6 +10,8 @@ import { addContent, type ContentStoreData } from '@utils/contentStore';
 import { materializeActivePath } from '@utils/branchUtils';
 import { generateDefaultChat } from '@constants/chat';
 import { isBubbleSummary, isSummaryEligible } from '@utils/bubbleSummary';
+import { removeBubbleSummary as removeBubbleSummaryPure, saveBubbleSummary as saveBubbleSummaryPure,
+  setSummaryForSubmit as setSummaryForSubmitPure, toggleSummaryTarget } from '@utils/bubbleSummaryOperations';
 import { recordChatEdits, hasFolderContentEdits } from './chat-edit-time';
 
 export interface ChatSlice {
@@ -411,32 +413,22 @@ export const createChatSlice: StoreSlice<ChatSlice> = (setState, get) => {
       const chat = chats?.[chatIndex];
       const nodeId = chat?.branchTree?.activePath[messageIndex] ?? String(messageIndex);
       if (!chats || !chat || !isSummaryEligible(chat.messages[messageIndex])) return;
-      const summaryTargets = { ...(chat.summaryTargets ?? {}) };
-      if (summaryTargets[nodeId]) delete summaryTargets[nodeId]; else summaryTargets[nodeId] = true;
-      set({ chats: updateChatNodeField(chats, chatIndex, 'summaryTargets', summaryTargets) });
+      const updated = toggleSummaryTarget(chat, nodeId, messageIndex);
+      set({ chats: updateChatNodeField(chats, chatIndex, 'summaryTargets', updated.summaryTargets ?? {}) });
     },
     removeBubbleSummary: (chatId, summaryId) => {
       const chats = get().chats;
-      if (chats) set({ chats: chats.map(chat => chat.id === chatId ? { ...chat, summaries: chat.summaries?.filter(summary => summary.id !== summaryId) } : chat) });
+      if (chats) set({ chats: chats.map(chat => chat.id === chatId ? removeBubbleSummaryPure(chat, summaryId) : chat) });
     },
     saveBubbleSummary: (chatId: string, summary: BubbleSummary) => {
       const chats = get().chats;
       if (!chats || !isBubbleSummary(summary)) return;
-      set({ chats: chats.map(chat => chat.id !== chatId ? chat : {
-        ...chat,
-        summaries: [...(Array.isArray(chat.summaries) ? chat.summaries.filter(item => item.id !== summary.id) : []), summary],
-      }) });
+      set({ chats: chats.map(chat => chat.id !== chatId ? chat : saveBubbleSummaryPure(chat, summary)) });
     },
     setSummaryForSubmit: (chatId: string, summaryId: string, use: boolean) => {
       const chats = get().chats;
       if (!chats) return;
-      set({ chats: chats.map(chat => {
-        if (chat.id !== chatId || !Array.isArray(chat.summaries)) return chat;
-        const chosen = chat.summaries.find(summary => summary.id === summaryId);
-        if (!chosen) return chat;
-        const overlaps = (left: BubbleSummary, right: BubbleSummary) => left.sources.some(source => right.sources.some(other => source.nodeId === other.nodeId));
-        return { ...chat, summaries: chat.summaries.map(summary => ({ ...summary, useForSubmit: summary.id === summaryId ? use : overlaps(summary, chosen) ? false : summary.useForSubmit })) };
-      }) });
+      set({ chats: chats.map(chat => chat.id === chatId ? setSummaryForSubmitPure(chat, summaryId, use) : chat) });
     },
   };
 };

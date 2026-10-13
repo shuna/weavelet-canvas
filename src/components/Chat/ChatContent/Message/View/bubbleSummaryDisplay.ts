@@ -2,7 +2,7 @@ import { create } from 'zustand';
 import type { BubbleSummary } from '@type/chat';
 import useStore from '@store/store';
 import { useWorkspaceStore, useWorkspaceReadOnly, useWorkspaceScope } from '@store/workspaceScope';
-import { getAppliedBubbleSummaries, isBubbleSummary, resolveValidSummary } from '@utils/bubbleSummary';
+import { describeBubbleSummary } from '@utils/bubbleSummaryOperations';
 
 // Remember which saved summary the range controls select; persisted send state determines display.
 export const useSummaryDisplay = create<{
@@ -26,19 +26,13 @@ export function useBubbleSummary(nodeId?: string) {
   const maps = useStore(state => state.omittedNodeMaps);
   const sessions = useStore(state => state.generatingSessions);
   const chosen = useSummaryDisplay(state => state.chosen);
-  const candidates = (Array.isArray(chat?.summaries) ? chat?.summaries ?? [] : []).filter(isBubbleSummary)
-    .filter(summary => summary.sources.some(source => source.nodeId === nodeId));
   const effectiveChat = chat ? { ...chat, omittedNodes: maps[String(currentChatIndex)] ?? chat.omittedNodes } : undefined;
   const generating = Object.values(sessions).filter(session => session.chatId === chat?.id).map(session => session.targetNodeId);
-  const applied = effectiveChat ? getAppliedBubbleSummaries(effectiveChat, chat?.messages.length, generating) : [];
-  const summary = candidates.find(value => applied.some(item => item.summary.id === value.id))
-    ?? candidates.find(value => value.id === (!readOnly ? chosen[`${chat?.id}:${nodeId}`] : undefined)) ?? candidates[candidates.length - 1];
-  const range = effectiveChat && summary ? resolveValidSummary(effectiveChat, summary, generating) : null;
-  const defaultTab = applied.some(value => value.summary.id === summary?.id) ? summary?.format === 'compact' ? 'compact' : 'summary' : 'original';
+  const described = effectiveChat && nodeId ? describeBubbleSummary(effectiveChat, nodeId, generating,
+    !readOnly ? chosen[`${chat?.id}:${nodeId}`] : undefined) : undefined;
+  const { candidates = [], summary, range = null, readable, compact } = described ?? {};
+  const defaultTab = described?.tab ?? 'original';
   const tab = readOnly ? scope?.summaryTabs?.[`${chat?.id}:${nodeId}`] ?? defaultTab : defaultTab;
-  const versions = candidates.filter(value => summary && value.sources.length === summary.sources.length && value.sources.every((source, index) => source.nodeId === summary.sources[index].nodeId));
-  const readable = versions.find(value => value.id === (!readOnly ? chosen[`${chat?.id}:${nodeId}`] : undefined) && value.format !== 'compact') ?? versions.filter(value => value.format !== 'compact').at(-1);
-  const compact = versions.find(value => value.id === (!readOnly ? chosen[`${chat?.id}:${nodeId}`] : undefined) && value.format === 'compact') ?? versions.filter(value => value.format === 'compact').at(-1);
   const changeTab = (value: 'original' | 'summary' | 'compact') => {
     const next = value === 'original' ? summary : value === 'compact' ? compact : readable;
     if (!chat || !next) return;
