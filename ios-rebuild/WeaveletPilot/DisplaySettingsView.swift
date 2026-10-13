@@ -30,7 +30,7 @@ struct DisplaySettingsView: View {
         Form {
             switch Result(catching: {
                 try (state.displaySetting(.theme), state.displaySetting(.inlineLatex),
-                     state.displaySetting(.markdownMode), state.displaySetting(.streamingMarkdownPolicy))
+                     state.displaySetting(.markdownMode), state.displaySetting(.streamingMarkdownPolicy), state.displaySetting(.displayChatSize))
             }) {
             case .success(let values):
                 Section("外観") {
@@ -39,6 +39,9 @@ struct DisplaySettingsView: View {
                         Text("ライト").tag("light")
                         Text("ダーク").tag("dark")
                     }.frame(minHeight: 44)
+                }
+                Section("会話一覧") {
+                    boolean(.displayChatSize, title: "会話サイズを表示", value: values.4)
                 }
                 Section("本文の表示") {
                     boolean(.markdownMode, title: "Markdownで表示", value: values.2)

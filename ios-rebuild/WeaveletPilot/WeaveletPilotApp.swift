@@ -874,10 +874,16 @@ struct ConversationLibraryView<Footer: View>: View {
     @State private var showsFolderRename = false
     @State private var folderDeleteID: String?
     @State private var showsFolderDelete = false
+    @State private var chatSizes: [Data: String] = [:]
+    @State private var sizeWorker = ChatSize()
+    @State private var sizeTask: Task<Void, Never>?
+    @State private var sizeRequestID = UUID()
+    @State private var sizeError: String?
 
     var body: some View {
         NavigationStack {
             List {
+                if let sizeError { Text(sizeError).foregroundStyle(.red) }
                 if state.exchange == nil {
                     Text("サンプル会話です。新規作成で保存用の会話を開始します。")
                         .foregroundStyle(.secondary)
@@ -909,6 +915,8 @@ struct ConversationLibraryView<Footer: View>: View {
             .navigationTitle("会話")
             .navigationBarTitleDisplayMode(.inline)
             .onAppear { revealSelectedConversation() }
+            .onReceive(state.$exchange) { refreshChatSizes($0?.source) }
+            .onDisappear { sizeTask?.cancel(); sizeRequestID = UUID() }
             .onChange(of: Data(state.selectedConversationID.utf8)) { _, _ in revealSelectedConversation() }
             .onChange(of: state.exchange?.source) { _, _ in perform {} }
             .toolbar {
@@ -1004,6 +1012,24 @@ struct ConversationLibraryView<Footer: View>: View {
     }
 
 
+    private func refreshChatSizes(_ source: OrderedJSON?) {
+        sizeTask?.cancel()
+        sizeRequestID = UUID()
+        chatSizes = [:]; sizeError = nil
+        guard (try? state.displaySetting(.displayChatSize)) == .bool(true), let source else { sizeTask = nil; return }
+        let requestID = sizeRequestID
+        sizeTask = Task { @MainActor in
+            defer { if requestID == sizeRequestID { sizeTask = nil } }
+            do {
+                let result = try await sizeWorker.sizes(source: source, enabled: true)
+                try Task.checkCancellation()
+                guard requestID == sizeRequestID else { return }
+                chatSizes = result
+            } catch is CancellationError { }
+            catch { if requestID == sizeRequestID { sizeError = error.localizedDescription } }
+        }
+    }
+
     private func conversationRow(_ conversation: Conversation) -> some View {
         let active = state.selectedConversationID.utf8.elementsEqual(conversation.id.utf8)
         return HStack {
@@ -1027,9 +1053,13 @@ struct ConversationLibraryView<Footer: View>: View {
                 if state.selectedConversationID.utf8.elementsEqual(conversation.id.utf8), state.persistenceError == nil { onSelect() }
                 else { errorMessage = state.persistenceError }
             } label: {
-                Text(conversation.title.isEmpty ? "（タイトルなし）" : conversation.title)
-                    .lineLimit(1)
-                    .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
+                HStack(spacing: 4) {
+                    Text(conversation.title.isEmpty ? "（タイトルなし）" : conversation.title).lineLimit(1)
+                    if (try? state.displaySetting(.displayChatSize)) == .bool(true), let size = chatSizes[conversation.identity] {
+                        Text("(\(size))").font(.caption).foregroundStyle(.secondary).fixedSize()
+                    }
+                }
+                .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
             }
             .buttonStyle(.borderless)
             .accessibilityAddTraits(active ? .isSelected : [])

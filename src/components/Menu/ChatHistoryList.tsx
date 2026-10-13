@@ -1,4 +1,5 @@
 import { matchesChatHistoryFilter } from '@utils/chatSearch';
+import { measureChatSize } from '@utils/chatSize';
 import { getFolderAncestors, getFolderParentId } from '@utils/folderHierarchy';
 import { expandExistingFolder, readDraggedChatIds } from './chatHistoryFolderUtils';
 import React, { useEffect, useRef, useState } from 'react';
@@ -16,8 +17,6 @@ import {
   ChatHistoryFolderInterface,
   ChatInterface,
   FolderCollection,
-  isImageContent,
-  isTextContent,
 } from '@type/chat';
 
 const ChatHistoryList = ({
@@ -100,21 +99,7 @@ const ChatHistoryList = ({
             id: chat.id,
             chatSize: !displayChatSize
               ? undefined
-              : chat.messages.reduce(
-                  (prev, current) =>
-                    prev +
-                    current.content.reduce(
-                      (prevInner, currCont) =>
-                        prevInner +
-                        (isTextContent(currCont)
-                          ? currCont.text.length
-                          : isImageContent(currCont)
-                          ? currCont.image_url.url.length
-                          : 0),
-                      0
-                    ),
-                  0
-                ),
+              : measureChatSize(chat.messages),
           });
         } else if (folder) {
           if (!_folders[chat.folder]) _folders[chat.folder] = [];
@@ -124,21 +109,7 @@ const ChatHistoryList = ({
             id: chat.id,
             chatSize: !displayChatSize
               ? undefined
-              : chat.messages.reduce(
-                  (prev, current) =>
-                    prev +
-                    current.content.reduce(
-                      (prevInner, currCont) =>
-                        prevInner +
-                        (isTextContent(currCont)
-                          ? currCont.text.length
-                          : isImageContent(currCont)
-                          ? currCont.image_url.url.length
-                          : 0),
-                      0
-                    ),
-                  0
-                ),
+              : measureChatSize(chat.messages),
           });
         } else {
           _noFolders.push({
@@ -147,21 +118,7 @@ const ChatHistoryList = ({
             id: chat.id,
             chatSize: !displayChatSize
               ? undefined
-              : chat.messages.reduce(
-                  (prev, current) =>
-                    prev +
-                    current.content.reduce(
-                      (prevInner, currCont) =>
-                        prevInner +
-                        (isTextContent(currCont)
-                          ? currCont.text.length
-                          : isImageContent(currCont)
-                          ? currCont.image_url.url.length
-                          : 0),
-                      0
-                    ),
-                  0
-                ),
+              : measureChatSize(chat.messages),
           });
         }
       });

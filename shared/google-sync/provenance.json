@@ -104,6 +104,9 @@
     "src/store/store.ts": "debe9137fec89588382491a3a50673ae8a0635618b10a28103c7e8c26d497176",
     "src/components/Chat/ChatContent/Message/CommandPrompt/CommandPrompt.tsx": "f263bcba31adf57b468d45903916a7dd6c9edff203b5b6a911337afd089b1535",
     "src/components/ConfigMenu/ConfigMenu.tsx": "a724082a0729eea1650afa6b6fa79176e23d6d900e84fdb5231530b85e25dced",
+    "src/components/Menu/ChatHistoryList.tsx": "33cd5fd88c8b11837b58a94c3b2906c421c2ca1e7e5d85747cca70c606a840ec",
+    "src/components/Menu/ChatHistory.tsx": "34e202eeb2609342f7305cafee113b226b216781203fcc6c997363dea8195ee6",
+    "src/utils/chat.ts": "aac9b0b57617cfb3cfd299dddc0bb5a4c6a6014f1e349077165fd52eea60f5ff",
     "src/store/storage/google/sync.ts": "09ac529bf26b4a2c51c182d2e07215e0491aea7a981f938fdbeed830006b404a",
     "src/store/storage/google/merge.ts": "0fcbea479b8011fa1c396a1b42e7ed6be4c613c93d4ce0f704676710e3158c61",
     "src/store/storage/google/mergeBranches.ts": "261afbf402cb9dcfb438e315f01ac72a9ddcae5eead2ba2f7bee454aa8e5d55e",
@@ -131,6 +134,7 @@
     "src/constants/presets/claude-fable-5.md": "da0117f337a202776a2be5d88b2b3249d3f5ee4002942e1bc0d380dde93fff9d",
     "src/constants/systemPromptPresets.ts": "9ed66d651de0fbedf99e3a96e0790c9c95f2f2e3392e28ada233c0bf415a8c70",
     "src/utils/promptApplication.ts": "b4048aca9bf2ff4942409fc43a2b82f8935aa077e46e2b96d66f2c4806d51eb3",
+    "src/utils/chatSize.ts": "3a205e9eb2641ddcbd16aae7795adb57a75c4d77c2e34ac9d3324471aa9a6dba",
     "src/utils/syncDocument.ts": "bc7cca9616aa593538dfb194b861ea7415ce3c7e7da42620a9fca0a89acb4120",
     "src/utils/chatMarkdown.ts": "7fa68fc26091374a7f3a5fa5885ec19547870612058c09927ef4bb1cb9ebeafa",
     "src/utils/fileExport.ts": "51f4f9fc072140849730d8be079703f39a7380a80e29532a9443560413f2bc29",
@@ -256,6 +260,8 @@
     "src/constants/systemPromptPresets.ts": "9ed66d651de0fbedf99e3a96e0790c9c95f2f2e3392e28ada233c0bf415a8c70",
     "src/utils/promptApplication.ts": "b4048aca9bf2ff4942409fc43a2b82f8935aa077e46e2b96d66f2c4806d51eb3",
     "shared/google-sync/promptApplication.ts": "232e9a65bc6e0f48962e0df18dff2f12681f8c1778c4607d2ea93c4b3ed7b637",
+    "src/utils/chatSize.ts": "3a205e9eb2641ddcbd16aae7795adb57a75c4d77c2e34ac9d3324471aa9a6dba",
+    "shared/google-sync/chatSize.ts": "c7de3ee7ad5aa75eb144f4dfeab8070854ee7196d8d34d1b25555f346c39c1ab",
     "src/store/chat-edit-time.ts": "1d7abac60c3dbc063fcaaef270dd846c2cf2d78dc0aa1a286b99ffc708ecac8c",
     "src/utils/syncDocument.ts": "bc7cca9616aa593538dfb194b861ea7415ce3c7e7da42620a9fca0a89acb4120",
     "src/store/storage/google/records.ts": "21f44f6ba31a25f7ecd7cea71b54354b3579a09414e9895fd1ee592618dfb9e9",
@@ -295,8 +301,8 @@
     "shared/google-sync/localModelRole.ts": "8ce5bc1651e340c87134a35f4fbf149af159c296ca924a874c95b76b51dc96a5",
     "src/utils/localModelImport.ts": "f15c25b57b27279b501c26632fbf8c0481b2b23263b22de8e63651dfd5ff7f1b",
     "shared/google-sync/localModelImport.ts": "60f00ad8a824ab478800fcbb21d6510ddd107978108182d5d2f0ee3f0d3c5473",
-    "shared/google-sync/entry.ts": "29ed62a6ae5e8ade16b3737f10e3db4d4e70f4a32a9c1fcd059f98afa4a7f77c",
-    "shared/google-sync/generate.mjs": "4f32557df9ed07d7b4dbf739c6135a58e4e315d4b25bdd5bc10973a9caadf3bd",
+    "shared/google-sync/entry.ts": "a37abb42c799a033797804e81f545a623b820a21bc6fd852697856f58963ec65",
+    "shared/google-sync/generate.mjs": "84f51992c29940fa86da221d6d545bed1e6fac879f3571d834e263ae1be54ffa",
     "shared/google-sync/importDefaults.generate.mjs": "2ff8904af4f192ed0809ceaaabcfbefa708321083aebb527d712fc2a0551b15a"
   },
   "dependencyInputs": {
@@ -347,5 +353,5 @@
     "remove-accents/package.json": "511775b39122274ad36e9dc32c47b2112a3fd4372e64284c2336b143be853c82",
     "remove-accents/LICENSE": "31279697ad2455927a227e7678f2bb71e9e06dde319f12ce345404b3b7a99b81"
   },
-  "bundleSHA256": "7f222d23c05817a07bb985d43b1f8d0275fc531a2d10c1456f50f24046aa8aee"
+  "bundleSHA256": "2a001ccb5c2e597d235ec7775233bb8c9a3eb4d1f2b1fb01bd3a228554e2c1e8"
 }

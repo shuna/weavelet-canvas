@@ -8463,6 +8463,7 @@ var WeaveletGoogleSync = (() => {
     branchPath: () => branchPath,
     chatConfig: () => chatConfig,
     chatSearch: () => chatSearch,
+    chatSizes: () => chatSizes,
     cloudKitOperation: () => cloudKitOperation,
     composerContent: () => composerContent,
     documentOperation: () => documentOperation,
@@ -24339,6 +24340,25 @@ Do not attempt to edit, create, or delete files in these directories. If Claude 
       default:
         throw new Error("Unknown prompt application operation.");
     }
+  }
+
+  // src/utils/chatSize.ts
+  var formatNumber = (num) => {
+    return new Intl.NumberFormat("en-US", {
+      useGrouping: true,
+      minimumFractionDigits: 0,
+      maximumFractionDigits: 0
+    }).format(num).replace(/,/g, " ");
+  };
+  function chatSizeFromLengths(messages) {
+    return messages.reduce((total, parts) => total + parts.reduce((subtotal, part) => subtotal + (part.type === "text" ? part.textLength : part.hasImageURL ? part.imageURLLength : 0), 0), 0);
+  }
+  var chatSizeLabel = (size) => size ? formatNumber(size) : void 0;
+
+  // shared/google-sync/chatSize.ts
+  function chatSizes(json) {
+    const chats = JSON.parse(json);
+    return JSON.stringify(chats.map((chat) => ({ id: chat.id, label: chatSizeLabel(chatSizeFromLengths(chat.messages)) })));
   }
 
   // src/utils/syncDocument.ts

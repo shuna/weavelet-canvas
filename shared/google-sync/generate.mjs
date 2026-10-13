@@ -33,7 +33,7 @@ if (check) {
 }
 const sourceNames = ['sync', 'replay', 'merge', 'mergeBranches', 'records', 'decodeParts', 'crypto'];
 const inputs = { ...initialStateInputs };
-for (const input of ['src/components/Chat/ChatContent/Message/CommandPrompt/CommandPrompt.tsx', 'src/components/ConfigMenu/ConfigMenu.tsx']) {
+for (const input of ['src/components/Chat/ChatContent/Message/CommandPrompt/CommandPrompt.tsx', 'src/components/ConfigMenu/ConfigMenu.tsx', 'src/components/Menu/ChatHistoryList.tsx', 'src/components/Menu/ChatHistory.tsx', 'src/utils/chat.ts']) {
   inputs[input] = createHash('sha256').update(readFileSync(path.join(webRoot, input))).digest('hex');
 }
 for (const name of sourceNames) {
