@@ -21,6 +21,44 @@ import XCTest
         try state.applySnapshot(full.replacing("state",with:raw))
         return state
     }
+    func testTreeTransformsCrossEncryptedSyncPreservingRemainingNodeMetadata() async throws {
+        let dir = try directory(), drive = FakeSyncDrive(), keys = TestSyncKeys()
+        let sender = try state(LocalStateStore(fileURL: dir.appendingPathComponent("sender.json")))
+        let publisher = GoogleSyncController(chatState: sender, drive: drive, store: SyncStateStore(fileURL: dir.appendingPathComponent("sender-sync.json")), keyStore: keys)
+        try await publisher.create(password: password, folderName: "FAKE tree transforms")
+        var insertion = try sender.messageInsertionDraft(beforeNodeID: "n-user")
+        insertion.text = "移動して整理する本文"
+        try sender.saveMessage(insertion, mode: .insert, newIDs: ["transform-temporary"], now: 7000)
+        _ = try sender.saveNodeTransform(sender.nodeMoveDraft(nodeID: "transform-temporary", direction: .down), now: 7001)
+        XCTAssertEqual(sender.conversation?.visibleMessages.map(\.id), ["n-system", "n-user", "transform-temporary", "n-assistant"])
+        var replacement = try sender.messageDraft(nodeID: "n-user")
+        replacement.text = "後続整理後の本文"
+        replacement.removeCount = 1
+        _ = try sender.saveMessageReplacingAndPruning(replacement, now: 7002)
+        _ = try sender.saveNodeTransform(sender.branchDeletionDraft(nodeID: "n-inactive"), now: 7003)
+        try await publisher.synchronize()
+        let receiverStore = LocalStateStore(fileURL: dir.appendingPathComponent("receiver.json"))
+        let receiver = ChatState(store: receiverStore)
+        let subscriber = GoogleSyncController(chatState: receiver, drive: drive, store: SyncStateStore(fileURL: dir.appendingPathComponent("receiver-sync.json")), keyStore: keys)
+        try await subscriber.open(dataset: XCTUnwrap(publisher.dataset))
+        let unlocked = try await subscriber.restoreKey()
+        XCTAssertTrue(unlocked)
+        try await subscriber.download()
+        let source = try XCTUnwrap(receiver.exchange).source
+        let chat = try XCTUnwrap(source.required("chats").array("chats").first { $0["id"] == .string("chat-a") })
+        let tree = try chat.required("branchTree"), nodes = try tree.required("nodes")
+        XCTAssertEqual(tree["activePath"], .array(["n-system", "n-user", "n-assistant"].map(OrderedJSON.string)))
+        XCTAssertNil(nodes["n-inactive"])
+        XCTAssertNil(nodes["transform-temporary"])
+        XCTAssertEqual(try nodes.required("n-user").required("xFixtureNode")["unknown"], .string("keep-n-user"))
+        XCTAssertEqual(try chat.required("protectedNodes")["n-assistant"], .bool(true))
+        let hash = try nodes.required("n-user").required("contentHash").string("hash")
+        let parts = try source.required("contentStore").required(hash).required("content").array("content")
+        XCTAssertEqual(parts.first?["text"], .string("後続整理後の本文"))
+        XCTAssertEqual(parts.count, 5)
+        XCTAssertEqual(try ChatState(store: receiverStore).exportWebData(), try receiver.exportWebData())
+    }
+
     func testUndoneRemovalPublishesRestoredNodeThroughEncryptedSync() async throws {
         let dir = try directory(), drive = FakeSyncDrive(), keys = TestSyncKeys()
         let sender = try state(LocalStateStore(fileURL: dir.appendingPathComponent("sender.json")))

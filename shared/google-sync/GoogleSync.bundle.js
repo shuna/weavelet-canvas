@@ -7002,7 +7002,8 @@ var WeaveletGoogleSync = (() => {
     recordsStart: () => recordsStart,
     result: () => result2,
     settle: () => settle,
-    start: () => start
+    start: () => start,
+    treeEdit: () => treeEdit
   });
 
   // src/utils/branchUtils.ts
@@ -7407,7 +7408,7 @@ var WeaveletGoogleSync = (() => {
       }
       return { chats, contentStore: currentContentStore };
     }
-    const contentStore = { ...currentContentStore };
+    const contentStore = Object.fromEntries(Object.entries(currentContentStore).map(([hash, entry]) => [hash, { ...entry }]));
     const updatedChats = cloneChatAt(chats, chatIndex);
     flatChatToBranchTree(updatedChats[chatIndex], contentStore);
     return { chats: updatedChats, contentStore };
@@ -7445,6 +7446,38 @@ var WeaveletGoogleSync = (() => {
     tree.activePath = newPath;
     updatedChats[chatIndex].messages = materializeActivePath(tree, contentStore);
     return updatedChats;
+  };
+  var deleteBranchState = (chats, chatIndex, nodeId, currentContentStore) => {
+    const contentStore = Object.fromEntries(Object.entries(currentContentStore).map(([hash, entry]) => [hash, { ...entry }]));
+    const updatedChats = cloneChatAt(chats, chatIndex);
+    captureProjectedMessageAttributes(updatedChats[chatIndex], contentStore);
+    const tree = updatedChats[chatIndex].branchTree;
+    const toDelete = collectDescendants(tree, nodeId);
+    const parentId = tree.nodes[nodeId]?.parentId;
+    toDelete.forEach((id) => {
+      releaseContent(contentStore, tree.nodes[id].contentHash);
+      deleteMessageAttributes(tree, id);
+      delete tree.nodes[id];
+    });
+    if (tree.activePath.some((id) => toDelete.has(id))) {
+      if (parentId) {
+        const siblings = getChildrenOf(tree, parentId);
+        if (siblings.length > 0) {
+          tree.activePath = buildPathToLeaf(tree, siblings[0].id);
+        } else {
+          const parentIdx = tree.activePath.indexOf(parentId);
+          tree.activePath = tree.activePath.slice(0, parentIdx + 1);
+        }
+      } else {
+        tree.activePath = [];
+      }
+      updatedChats[chatIndex].messages = materializeActivePath(tree, contentStore);
+    }
+    if (tree.activePath.length)
+      tree.rootId = tree.activePath[0];
+    else if (!tree.nodes[tree.rootId])
+      tree.rootId = "";
+    return { chats: updatedChats, contentStore };
   };
   var pruneHiddenNodesState = (chats, chatIndex, currentContentStore) => {
     const contentStore = Object.fromEntries(Object.entries(currentContentStore).map(([hash, entry]) => [hash, { ...entry }]));
@@ -7595,6 +7628,82 @@ var WeaveletGoogleSync = (() => {
     removeMessageAtIndexFromPreparedState(state, messageIndex, options);
     return finalizePreparedBranchMutationState(state);
   };
+  var moveMessageState = (chats, chatIndex, messageIndex, direction, currentContentStore) => {
+    const { chats: updatedChats, chat, tree, contentStore } = prepareBranchMutationState(chats, chatIndex, currentContentStore);
+    const targetIndex = direction === "up" ? messageIndex - 1 : messageIndex + 1;
+    const topNode = tree.activePath[0] ? tree.nodes[tree.activePath[0]] : void 0;
+    if (topNode?.role === "system") {
+      if (messageIndex === 0 || targetIndex === 0) {
+        return finalizePreparedBranchMutationState({
+          chats: updatedChats,
+          chat,
+          tree,
+          contentStore
+        });
+      }
+    }
+    if (targetIndex < 0 || targetIndex >= tree.activePath.length || messageIndex < 0 || messageIndex >= tree.activePath.length) {
+      return finalizePreparedBranchMutationState({
+        chats: updatedChats,
+        chat,
+        tree,
+        contentStore
+      });
+    }
+    const start2 = Math.min(messageIndex, targetIndex);
+    const end = Math.max(messageIndex, targetIndex);
+    const reorderedPath = tree.activePath.slice();
+    const [movedId] = reorderedPath.splice(messageIndex, 1);
+    reorderedPath.splice(targetIndex, 0, movedId);
+    tree.activePath = reorderedPath;
+    for (let index = start2; index <= end + 1; index += 1) {
+      const nodeId = tree.activePath[index];
+      if (!nodeId)
+        continue;
+      cloneNodeIfPresent(tree, nodeId);
+      tree.nodes[nodeId].parentId = index === 0 ? null : tree.activePath[index - 1] ?? null;
+    }
+    return finalizePreparedBranchMutationState({
+      chats: updatedChats,
+      chat,
+      tree,
+      contentStore
+    });
+  };
+  var replaceMessageAndPruneFollowingState = (chats, chatIndex, messageIndex, message, currentContentStore, removeCount = 0) => {
+    const state = prepareBranchMutationState(chats, chatIndex, currentContentStore);
+    const { tree, contentStore } = state;
+    const existingId = tree.activePath[messageIndex];
+    state.chat.messages[messageIndex] = message;
+    if (existingId)
+      setMessageAttributes(tree, existingId, message);
+    if (existingId) {
+      const oldHash = tree.nodes[existingId].contentHash;
+      const newHash = addContentDelta(contentStore, message.content, oldHash);
+      releaseContent(contentStore, oldHash);
+      tree.nodes[existingId] = {
+        ...tree.nodes[existingId],
+        role: message.role,
+        contentHash: newHash
+      };
+    } else if (messageIndex === tree.activePath.length) {
+      const parentId = messageIndex === 0 ? null : tree.activePath[messageIndex - 1] ?? null;
+      const newId = editingUUID();
+      tree.nodes[newId] = {
+        id: newId,
+        parentId,
+        role: message.role,
+        contentHash: addContent(contentStore, message.content),
+        createdAt: Date.now()
+      };
+      setMessageAttributes(tree, newId, message);
+      tree.activePath.push(newId);
+    }
+    for (let removed = 0; removed < removeCount; removed += 1) {
+      removeMessageAtIndexFromPreparedState(state, messageIndex + 1);
+    }
+    return finalizePreparedBranchMutationState(state);
+  };
   var updateNodeRoleState = (chats, chatIndex, nodeId, role, contentStore) => {
     const updatedChats = cloneChatAt(chats, chatIndex);
     const chat = updatedChats[chatIndex];
@@ -7698,6 +7807,46 @@ var WeaveletGoogleSync = (() => {
     const ensured = ensureBranchReadyState(chats, target.chatIndex, contentStore);
     const result3 = removeMessageAtIndexState(ensured.chats, target.chatIndex, target.messageIndex, ensured.contentStore, options);
     return { status: "updated", ...result3, historyBase: ensured };
+  };
+  var moveNodeState = (chats, input, contentStore) => {
+    const target = resolveNodeTarget(chats, input, true);
+    if (target.status !== "valid")
+      return target;
+    if (input.direction === "up" ? target.messageIndex === 0 : target.messageIndex === target.chat.messages.length - 1)
+      return { status: "unchanged" };
+    const topRole = target.chat.messages[0]?.role;
+    if (topRole === "system" && (target.messageIndex === 0 || input.direction === "up" && target.messageIndex === 1))
+      return { status: "unchanged" };
+    const ensured = ensureBranchTreeState(chats, target.chatIndex, contentStore);
+    const result3 = moveMessageState(ensured.chats, target.chatIndex, target.messageIndex, input.direction, ensured.contentStore);
+    return { status: "updated", ...result3, historyBase: ensured };
+  };
+  var replaceNodeAndPruneState = (chats, input, contentStore) => {
+    if (!Number.isInteger(input.removeCount) || input.removeCount < 0)
+      return { status: "invalid-input", removedNodeIds: [], pruneBlockedBy: [] };
+    const target = resolveNodeTarget(chats, input, true);
+    if (target.status !== "valid")
+      return { status: "missing", removedNodeIds: [], pruneBlockedBy: [] };
+    if (target.chat.protectedNodes?.[input.nodeId])
+      return { status: "protected", blockedNodeIds: [input.nodeId], removedNodeIds: [], pruneBlockedBy: [] };
+    const ensured = ensureBranchTreeState(chats, target.chatIndex, contentStore);
+    const prepared = ensured.chats[target.chatIndex];
+    const following = prepared.branchTree.activePath.slice(target.messageIndex + 1, target.messageIndex + 1 + input.removeCount);
+    const pruneBlockedBy = following.filter((id) => prepared.protectedNodes?.[id]);
+    const result3 = replaceMessageAndPruneFollowingState(ensured.chats, target.chatIndex, target.messageIndex, { role: input.role, content: input.content }, ensured.contentStore, pruneBlockedBy.length ? 0 : input.removeCount);
+    return { status: "updated", ...result3, historyBase: ensured, removedNodeIds: pruneBlockedBy.length ? [] : following, pruneBlockedBy };
+  };
+  var deleteNodeBranchState = (chats, input, contentStore) => {
+    const target = resolveNodeTarget(chats, input);
+    if (target.status !== "valid")
+      return target;
+    const blockedNodeIds = target.chat.branchTree ? [...collectDescendants(target.chat.branchTree, input.nodeId)].filter((id) => target.chat.protectedNodes?.[id]) : target.chat.messages.slice(target.messageIndex).map((_, index) => String(target.messageIndex + index)).filter((id) => target.chat.protectedNodes?.[id]);
+    if (blockedNodeIds.length)
+      return { status: "protected", blockedNodeIds };
+    const ensured = ensureBranchTreeState(chats, target.chatIndex, contentStore);
+    const nodeId = target.chat.branchTree ? input.nodeId : ensured.chats[target.chatIndex].branchTree.activePath[target.messageIndex];
+    const removedNodeIds = [...collectDescendants(ensured.chats[target.chatIndex].branchTree, nodeId)];
+    return { status: "updated", ...deleteBranchState(ensured.chats, target.chatIndex, nodeId, ensured.contentStore), historyBase: ensured, removedNodeIds };
   };
 
   // src/utils/jsonChanges.ts
@@ -8246,6 +8395,64 @@ var WeaveletGoogleSync = (() => {
     });
   }
 
+  // shared/google-sync/treeEdit.ts
+  function treeEdit(json, capture) {
+    const input = JSON.parse(json);
+    const before = { chat: input.chat, contentStore: input.contentStore };
+    const isolated = structuredClone(before);
+    if (!Array.isArray(isolated.chat.messages) && isolated.chat.branchTree)
+      isolated.chat.messages = materializeActivePath(isolated.chat.branchTree, isolated.contentStore);
+    const nodeId = !isolated.chat.branchTree && input.nodeID.startsWith("message-") ? input.nodeID.slice(8) : input.nodeID;
+    return withEditingRuntime(input.newIDs, Object.keys(isolated.chat.branchTree?.nodes ?? {}), input.now, () => {
+      let chats = [isolated.chat];
+      if (isolated.chat.branchTree) {
+        if (input.viewingPath.some((id) => !Object.hasOwn(isolated.chat.branchTree.nodes, id)))
+          throw new Error("Invalid viewing path.");
+        chats = switchActivePathState(chats, 0, input.viewingPath, isolated.contentStore);
+      }
+      const target = { chatId: isolated.chat.id, nodeId };
+      let result3;
+      switch (input.operation) {
+        case "move":
+          if (input.direction !== "up" && input.direction !== "down")
+            throw new Error("Invalid move direction.");
+          result3 = moveNodeState(chats, { ...target, direction: input.direction }, isolated.contentStore);
+          break;
+        case "replaceAndPrune":
+          if (!["user", "assistant", "system"].includes(input.role) || !Array.isArray(input.parts))
+            throw new Error("Invalid replacement message.");
+          if (input.editedText !== void 0 && typeof input.editedText !== "string")
+            throw new Error("Invalid text.");
+          const parts = input.editedText !== void 0 && input.editedText !== textValueOf(input.parts) ? replaceTextValue(input.parts, input.editedText) : input.parts;
+          result3 = replaceNodeAndPruneState(chats, { ...target, role: input.role, content: parts, removeCount: input.removeCount }, isolated.contentStore);
+          break;
+        case "deleteBranch":
+          result3 = deleteNodeBranchState(chats, target, isolated.contentStore);
+          break;
+        default:
+          throw new Error("Invalid tree operation.");
+      }
+      if (result3.status !== "updated")
+        return JSON.stringify({ ...result3, changes: [] });
+      for (const [hash, entry] of Object.entries(result3.contentStore)) {
+        if (entry.delta && JSON.stringify(entry.delta) !== JSON.stringify(before.contentStore[hash]?.delta)) {
+          const content = resolveContent(result3.contentStore, hash), { delta: _delta, ...full } = entry;
+          result3.contentStore[hash] = { ...full, content };
+        }
+      }
+      const chat = result3.chats[0];
+      if (chat.branchTree)
+        chat.messages = materializeActivePath(chat.branchTree, result3.contentStore, true);
+      capture?.(result3.historyBase, result3);
+      return JSON.stringify({
+        status: result3.status,
+        ..."removedNodeIds" in result3 ? { removedNodeIds: result3.removedNodeIds } : {},
+        ..."pruneBlockedBy" in result3 ? { pruneBlockedBy: result3.pruneBlockedBy } : {},
+        changes: diffJSONChanges(before, JSON.parse(JSON.stringify({ chat, contentStore: result3.contentStore })))
+      });
+    });
+  }
+
   // shared/google-sync/branchHistory.ts
   function branchHistory(json) {
     const input = JSON.parse(json);
@@ -8253,14 +8460,14 @@ var WeaveletGoogleSync = (() => {
     const busy = input.busyChatIds ?? [];
     let output = {};
     if (input.operation === "edit") {
-      const bridges = { messageEdit, nodeRemoval, nodeOptions };
+      const bridges = { messageEdit, nodeRemoval, nodeOptions, treeEdit };
       const bridge = bridges[input.kind];
       if (!bridge)
         throw new Error("Invalid history edit.");
       const result3 = JSON.parse(bridge(JSON.stringify(input.input), (before, after) => {
         history = captureBranchHistory(history, before, after);
       }));
-      output = input.kind === "nodeOptions" ? result3 : { changes: result3 };
+      output = input.kind === "nodeOptions" || input.kind === "treeEdit" ? result3 : { changes: result3 };
     } else if (input.operation === "undo" || input.operation === "redo") {
       const before = { chats: input.chats, contentStore: input.contentStore };
       const result3 = stepBranchHistory(history, before, input.operation, busy);

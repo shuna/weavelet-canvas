@@ -112,3 +112,5 @@ export const recordsStart = (operation: string, json: string) => {
   }).then(value => { recordOutcome = { valueJSON: JSON.stringify(value) }; }, error => { recordOutcome = { error: String(error.message ?? error) }; });
 };
 export const recordsResult = () => JSON.stringify(recordOutcome);
+
+export { treeEdit } from "./treeEdit";
