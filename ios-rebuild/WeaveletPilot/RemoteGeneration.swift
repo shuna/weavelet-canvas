@@ -50,17 +50,8 @@ enum RemoteRequest {
             config = config.replacing("model",with:.string(settings.model)).replacing("stream",with:.bool(settings.stream))
         }
         guard case .string(let model) = config["model"], !model.trimmingCharacters(in:.whitespacesAndNewlines).isEmpty else { throw ExchangeError.invalid("会話のモデルIDを設定してください") }
-        guard config["modelSource"] != .string("local") else { throw ExchangeError.invalid("localモデルの生成は未対応です") }
+        guard config["modelSource"] != .string("local") else { throw ExchangeError.invalid("ローカルモデルはremote通信へ送信できません") }
         var boundary = SharedWebProjection()
-        let store = try boundary.store(source["contentStore"] ?? .object([]))
-        var contextChat = chat
-        if chat["branchTree"] == nil {
-            let messages = try chat.required("messages").array("messages").map { message in
-                OrderedJSON.object([.init(key: "role", value: try message.required("role")),
-                    .init(key: "content", value: try boundary.parts(message.required("content")))])
-            }
-            contextChat = contextChat.replacing("messages", with: .array(messages))
-        }
         var transport: [JSONField] = [.init(key:"endpoint",value:.string(settings.endpoint)),
             .init(key:"endpointURL",value:.object([.init(key:"protocol",value:.string("https:")),.init(key:"hostname",value:.string(url.host!.lowercased()))])),
             .init(key:"hasApiKey",value:.bool(!key.isEmpty)),.init(key:"chatId",value:.string(chatID))]
@@ -74,15 +65,10 @@ enum RemoteRequest {
             })
             projectedConfig = projectedConfig.replacing("openRouter",with:controls.replacing("routing",with:routing.replacing("max_price",with:projectedPrices)))
         }
-        let input = OrderedJSON.object([
-            .init(key:"transport",value:.object(transport)),
-            .init(key: "contentStore", value: store),
-            .init(key: "chat", value: contextChat),
-            .init(key: "config", value: projectedConfig),
-            .init(key: "activePath", value: .array(path.map(OrderedJSON.string))),
-            .init(key: "omittedNodes", value: chat["omittedNodes"] ?? .object([])),
-            .init(key: "modelState", value: modelState ?? .object([])),
-        ])
+        var fields = try SharedGenerationContext.fields(source:source,chat:chat,config:projectedConfig,path:path,boundary:&boundary)
+        fields.append(.init(key:"transport",value:.object(transport)))
+        fields.append(.init(key:"modelState",value:modelState ?? .object([])))
+        let input = OrderedJSON.object(fields)
         let envelope = try SharedWebOperations.call("generationRequest", input)
         let projectedBody = try envelope.required("body")
         let body = try OrderedJSONChanges.apply(.array([.object([.init(key: "op", value: .string("set")), .init(key: "path", value: .array([])), .init(key: "value", value: projectedBody)])]), to: .null, opaque: boundary.opaque)
@@ -146,6 +132,19 @@ struct RemoteOutput {
     }
     mutating func consume(_ value: OrderedJSON, streaming: Bool) throws -> Bool {
         try apply([.init(key:"operation",value:.string("consume")),.init(key:"value",value:value),.init(key:"streaming",value:.bool(streaming))])
+    }
+    mutating func consumeLocal(_ fullText: String, input: OrderedJSON) throws -> Bool {
+        if session == nil { session = try SharedWebOperations.Session() }
+        let output = try session!.call("localGenerationOutput",.object([
+            .init(key:"fullText",value:.string(fullText)),.init(key:"prefix",value:input["assistantPrefix"] ?? .string("")),
+            .init(key:"stop",value:input["options"]?["stop"] ?? .array([]))]))
+        let nextText = try output.required("text").string("local text")
+        let nextReasoning = try output.required("reasoning").string("local reasoning")
+        let nextParts = try output.required("parts")
+        let empty = try output.required("isEmpty").boolean("local empty")
+        let stopped = try output.required("stopped").boolean("local stop")
+        text = nextText; reasoning = nextReasoning; parts = nextParts; isEmpty = empty
+        return stopped
     }
     mutating func flush() throws {
         guard state != nil else { return }

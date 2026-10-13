@@ -158,8 +158,7 @@ struct ChatView: View {
                             }
                             Button("送信", systemImage: "paperplane") {
                                 do {
-                                    let record = try RemoteCredentials.load()
-                                    try state.sendComposer(record:record)
+                                    try state.sendComposer()
                                 } catch { state.generationError = error.localizedDescription }
                             }
                             .frame(minHeight: 44)
@@ -343,7 +342,7 @@ struct ChatView: View {
     private func generate(_ nodeID: String, operation: MessageGenerationOperation) {
         do {
             let draft = try state.messageGenerationDraft(nodeID:nodeID,operation:operation)
-            try state.startGeneration(draft,record:RemoteCredentials.load())
+            try state.startGeneration(draft)
         } catch { errorMessage = error.localizedDescription }
     }
 

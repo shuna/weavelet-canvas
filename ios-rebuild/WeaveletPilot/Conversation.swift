@@ -107,6 +107,7 @@ final class ChatState: ObservableObject {
     @Published private var composerDrafts: [Data:ComposerDraft] = [:]
     private var generationTask: Task<Void, Never>?
     private let store: LocalStateStore?
+    private let localGenerate: LocalLlama.Generator
     private var initialLoadFailed = false
     @Published private(set) var navigationFocus: NavigationFocus?
     @Published private(set) var canNavigateBack = false
@@ -117,8 +118,9 @@ final class ChatState: ObservableObject {
     var canUndoMessageEdit: Bool { generation == nil && (editingHistory?.canUndo ?? false) }
     var canRedoMessageEdit: Bool { generation == nil && (editingHistory?.canRedo ?? false) }
 
-    init(store: LocalStateStore? = nil) {
+    init(store: LocalStateStore? = nil, localGenerate: @escaping LocalLlama.Generator = LocalLlama.generate) {
         self.store = store
+        self.localGenerate = localGenerate
         do {
             branchCandidates = try BranchNavigation.candidates(in: siblingSource(conversations))
             if let saved = try store?.load() {
@@ -528,7 +530,7 @@ final class ChatState: ObservableObject {
         parts.remove(at:index)
         composerDrafts[Data(chatID.utf8)] = ComposerDraft(parts:.array(parts),text:before.text,hasMeaningfulContent:false)
     }
-    func sendComposer(record: RemoteCredentialRecord, client: RemoteClient = RemoteClient(), nodeIDs: [String]? = nil, readProviderCredential: ProviderModels.CredentialReader = RemoteCredentials.load(providerID:)) throws {
+    func sendComposer(record: RemoteCredentialRecord? = nil, client: RemoteClient = RemoteClient(), nodeIDs: [String]? = nil, readProviderCredential: ProviderModels.CredentialReader = RemoteCredentials.load(providerID:)) throws {
         guard let conversation else { throw ExchangeError.invalid("送信先の会話がありません") }
         let identity = conversation.identity
         let draft = composerDraft(chatID:conversation.id)
@@ -541,7 +543,7 @@ final class ChatState: ObservableObject {
         return MessageGenerationDraft(chatID:conversation.id,nodeID:nodeID,operation:operation,source:exchange.source,path:conversation.visibleMessages.map(\.id))
     }
 
-    func startGeneration(_ draft: MessageGenerationDraft, record: RemoteCredentialRecord, client: RemoteClient = RemoteClient(), nodeIDs: [String]? = nil,
+    func startGeneration(_ draft: MessageGenerationDraft, record: RemoteCredentialRecord? = nil, client: RemoteClient = RemoteClient(), nodeIDs: [String]? = nil,
                          readProviderCredential: ProviderModels.CredentialReader = RemoteCredentials.load(providerID:)) throws {
         guard generation == nil, let exchange else { throw ExchangeError.invalid("生成結果を保存してから操作してください") }
         guard try draft.source.encoded() == exchange.source.encoded() else { throw ExchangeError.invalid("会話が変更されています。操作を開き直してください") }
@@ -559,13 +561,13 @@ final class ChatState: ObservableObject {
             record:record,client:client,readProviderCredential:readProviderCredential,now:now)
     }
 
-    func startGeneration(input: String, record: RemoteCredentialRecord, client: RemoteClient = RemoteClient(), nodeIDs: [String]? = nil, readProviderCredential: ProviderModels.CredentialReader = RemoteCredentials.load(providerID:)) throws {
+    func startGeneration(input: String, record: RemoteCredentialRecord? = nil, client: RemoteClient = RemoteClient(), nodeIDs: [String]? = nil, readProviderCredential: ProviderModels.CredentialReader = RemoteCredentials.load(providerID:)) throws {
         try startGeneration(parts:.array([.object([.init(key:"type",value:.string("text")),.init(key:"text",value:.string(input))])]),record:record,client:client,nodeIDs:nodeIDs,readProviderCredential:readProviderCredential)
     }
-    func startGeneration(parts: OrderedJSON, record: RemoteCredentialRecord, client: RemoteClient = RemoteClient(), nodeIDs: [String]? = nil, readProviderCredential: ProviderModels.CredentialReader = RemoteCredentials.load(providerID:)) throws {
+    func startGeneration(parts: OrderedJSON, record: RemoteCredentialRecord? = nil, client: RemoteClient = RemoteClient(), nodeIDs: [String]? = nil, readProviderCredential: ProviderModels.CredentialReader = RemoteCredentials.load(providerID:)) throws {
         try startGeneration(prepared:ComposerContent.prepare(parts),record:record,client:client,nodeIDs:nodeIDs,readProviderCredential:readProviderCredential)
     }
-    private func startGeneration(prepared: ComposerDraft, record: RemoteCredentialRecord, client: RemoteClient, nodeIDs: [String]?, readProviderCredential: ProviderModels.CredentialReader) throws {
+    private func startGeneration(prepared: ComposerDraft, record: RemoteCredentialRecord? = nil, client: RemoteClient, nodeIDs: [String]?, readProviderCredential: ProviderModels.CredentialReader) throws {
         guard generation == nil, let exchange, let conversation else { throw ExchangeError.invalid("保存済み会話を選択し、生成の終了を待ってください") }
         guard prepared.hasMeaningfulContent else { throw ExchangeError.invalid("本文または画像を入力してください") }
         let sourceChat = try exchange.source.required("chats").array("chats").first { try $0.required("id").string("ID").utf8.elementsEqual(conversation.id.utf8) }!
@@ -581,11 +583,15 @@ final class ChatState: ObservableObject {
     }
 
     private func beginGeneration(source: OrderedJSON, chatID: String, path: [String], history: MessageEditing.HistoryState?, plan: OrderedJSON?, regenerate: Bool,
-                                 record: RemoteCredentialRecord, client: RemoteClient, readProviderCredential: ProviderModels.CredentialReader, now: Double) throws {
+                                 record: RemoteCredentialRecord? = nil, client: RemoteClient, readProviderCredential: ProviderModels.CredentialReader, now: Double) throws {
         let sourceChat = try source.required("chats").array("chats").first { try $0.required("id").string("id").utf8.elementsEqual(chatID.utf8) }!
         let savedState = try publicationSnapshot().required("state")
         let modelState = ChatConfig.modelState(in:savedState)
-        let credential = try ProviderModels.generationCredential(config:sourceChat["config"] ?? .object([]),state:savedState,legacy:record,read:readProviderCredential)
+        if sourceChat["config"]?["modelSource"] == .string("local") {
+            try beginLocalGeneration(source:source,chat:sourceChat,chatID:chatID,path:path,history:history,plan:plan,now:now)
+            return
+        }
+        let credential = try ProviderModels.generationCredential(config:sourceChat["config"] ?? .object([]),state:savedState,legacy:try record ?? RemoteCredentials.load(),read:readProviderCredential)
         let apiVersion: String?
         if case .string(let value) = savedState["apiVersion"] { apiVersion = value }
         else if savedState["apiVersion"] == nil || savedState["apiVersion"] == .null { apiVersion = nil }
@@ -608,6 +614,35 @@ final class ChatState: ObservableObject {
                 self?.finishGeneration(id: id, error: error)
             }
         }
+    }
+
+    var localModelFiles: LocalModelFiles {
+        LocalModelFiles(directory:(store ?? LocalStateStore.applicationStore).fileURL.deletingLastPathComponent().appendingPathComponent("models",isDirectory:true))
+    }
+
+    private func beginLocalGeneration(source: OrderedJSON, chat: OrderedJSON, chatID: String, path: [String], history: MessageEditing.HistoryState?, plan: OrderedJSON?, now: Double) throws {
+        let config = try chat.required("config")
+        let modelID = try config.required("model").string("model")
+        let modelURL = try localModelFiles.installed(modelID:modelID)
+        let request = try LocalGenerationRequest.make(source:source,chat:chat,config:config,path:path)
+        try applyLibrary(source,selectedID:chatID,resetViewFor:chatID,editing:history,now:now)
+        let id = UUID()
+        generation = ActiveGeneration(id:id,chatID:chatID,baseSource:try publishedSource(),path:path,plan:plan)
+        generationError = nil
+        generationTask = Task { @MainActor [weak self] in
+            guard let self else { return }
+            do {
+                try await self.localGenerate(modelURL,request.engine) { [weak self] text in
+                    try await self?.receiveLocalOutput(text,id:id,input:request.input) ?? true
+                }
+                self.finishGeneration(id:id,error:nil)
+            } catch { self.finishGeneration(id:id,error:error) }
+        }
+    }
+
+    @MainActor private func receiveLocalOutput(_ text: String, id: UUID, input: OrderedJSON) throws -> Bool {
+        guard generation?.id == id, generation?.running == true, exchange?.source == generation?.baseSource else { return true }
+        return try generation!.output.consumeLocal(text,input:input)
     }
 
     func stopGeneration() {

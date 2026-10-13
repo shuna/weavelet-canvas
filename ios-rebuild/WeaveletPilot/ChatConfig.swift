@@ -11,7 +11,7 @@ struct ChatConfigDraft: Identifiable {
 
 enum ChatConfig {
     static func modelState(in state: OrderedJSON) -> OrderedJSON {
-        .object(["favoriteModels", "providerModelCache", "providerCustomModels"].compactMap { key in
+        .object(["favoriteModels", "providerModelCache", "providerCustomModels", "localModels"].compactMap { key in
             state[key].map { JSONField(key:key,value:$0) }
         })
     }
@@ -26,9 +26,9 @@ enum ChatConfig {
         }
         return result
     }
-    static func switched(_ config: OrderedJSON, model: String, providerID: String?, modelState: OrderedJSON) throws -> OrderedJSON {
+    static func switched(_ config: OrderedJSON, model: String, providerID: String?, modelState: OrderedJSON, modelSource: String = "remote") throws -> OrderedJSON {
         var boundary = SharedWebProjection()
-        var target: [JSONField] = [.init(key:"model",value:.string(model)),.init(key:"modelSource",value:.string("remote"))]
+        var target: [JSONField] = [.init(key:"model",value:.string(model)),.init(key:"modelSource",value:.string(modelSource))]
         if let providerID, !providerID.isEmpty { target.append(.init(key:"providerId",value:.string(providerID))) }
         let input = OrderedJSON.object([.init(key:"operation",value:.string("switch")),.init(key:"config",value:try projection(config,boundary:&boundary)),
             .init(key:"modelState",value:modelState),.init(key:"target",value:.object(target))])
