@@ -73,4 +73,36 @@ import WebKit
         XCTAssertNotNil(proof.failure)
     }
 
+    func testCancelDuringBootFetchDoesNotCreateWorkerAfterFetchCompletes() async throws {
+        let proof = WKClassifierProof(); defer { proof.shutdown() }
+        _ = try await proof.start()
+        let view = try XCTUnwrap(proof.webView)
+        let waiting = try await view.callAsyncJavaScript("""
+            window.classifierProof.cancel();
+            const originalFetch = window.fetch.bind(window);
+            const entered = new Promise(resolve => window.proofFetchEntered = resolve);
+            window.fetch = (input, init) => {
+                if (input !== 'weavelet-classifier://bundle/worker.js') return originalFetch(input, init);
+                return originalFetch(input, init).then(response => new Promise(resolve => {
+                    window.releaseProofBootFetch = () => resolve(response);
+                    window.proofFetchEntered();
+                }));
+            };
+            window.pendingProofBoot = window.classifierProof.boot();
+            await entered;
+            return window.classifierProof.state();
+            """, arguments: [:], in: nil, contentWorld: .page) as? [String: Any]
+        XCTAssertEqual(waiting?["workerAlive"] as? Bool, false)
+        let before = proof.acceptedMessages
+        proof.cancel()
+        let resumed = try await view.callAsyncJavaScript("""
+            window.releaseProofBootFetch();
+            await window.pendingProofBoot;
+            window.webkit.messageHandlers.classifierProof.postMessage({id:100,type:'classifyResult',labels:[{label:'STALE',score:1}]});
+            return window.classifierProof.state();
+            """, arguments: [:], in: nil, contentWorld: .page) as? [String: Any]
+        XCTAssertEqual(resumed?["workerAlive"] as? Bool, false)
+        XCTAssertEqual(proof.acceptedMessages, before)
+    }
+
 }

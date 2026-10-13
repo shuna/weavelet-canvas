@@ -4,6 +4,7 @@ window.classifierProof = {
   async boot() {
     const generation = ++epoch;
     const code = await (await fetch('weavelet-classifier://bundle/worker.js')).text();
+    if (generation !== epoch) return;
     workerURL = URL.createObjectURL(new Blob([code], {type: 'text/javascript'}));
     worker = new Worker(workerURL, {type: 'module'});
     worker.onmessage = ({data}) => {
