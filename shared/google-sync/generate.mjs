@@ -108,6 +108,8 @@ for (const filename of Object.keys(bundled.metafile.inputs)) {
   const parts = relative.split('/');
   packages.add(parts[0].startsWith('@') ? parts.slice(0, 2).join('/') : parts[0]);
 }
+// Dagre's distributed ESM file embeds Graphlib, so Graphlib has no separate metafile input.
+if (packages.has('@dagrejs/dagre')) packages.add('@dagrejs/graphlib');
 const licenses = [];
 mkdirSync(path.join(root, 'licenses'), { recursive: true });
 for (const pkg of [...packages].sort()) {

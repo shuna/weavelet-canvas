@@ -1,0 +1,27 @@
+import {layoutBranchEntries, type WorkerInput} from '../../src/utils/branchLayout';
+import {ensureBranchTreeState} from '../../src/store/branch-domain';
+import {diffJSONChanges} from '../../src/utils/jsonChanges';
+import type {ChatInterface} from '../../src/types/chat';
+import type {ContentStoreData} from '../../src/utils/contentStore';
+import {withEditingRuntime} from './editing';
+
+// The Web preview can end halfway through a UTF-16 pair after its 80-unit slice.
+const nativePreview = (value: string) => Array.from(value, scalar =>
+  scalar.length === 1 && scalar.charCodeAt(0) >= 0xd800 && scalar.charCodeAt(0) <= 0xdfff ? '\ufffd' : scalar).join('');
+
+export function branchLayout(json: string): string {
+  const output = layoutBranchEntries(JSON.parse(json) as WorkerInput);
+  for (const node of output.rfNodes) node.data.contentPreview = nativePreview(node.data.contentPreview);
+  return JSON.stringify(output);
+}
+
+export function branchEnsure(json: string): string {
+  const input: {chat: ChatInterface; contentStore: ContentStoreData; newIDs: string[]; now: number} = JSON.parse(json);
+  const before = {chat: input.chat, contentStore: input.contentStore};
+  if (input.chat.branchTree) return JSON.stringify([]);
+  const isolated = structuredClone(before);
+  return withEditingRuntime(input.newIDs, [], input.now, () => {
+    const result = ensureBranchTreeState([isolated.chat], 0, isolated.contentStore);
+    return JSON.stringify(diffJSONChanges(before, {chat: result.chats[0], contentStore: result.contentStore}));
+  });
+}

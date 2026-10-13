@@ -22,6 +22,7 @@ export { folderOperation, folderRows } from './folders';
 export { generationRequest } from './generation';
 export { libraryOperation, libraryDefaults } from './library';
 export { messageEdit } from './editing';
+export { branchLayout, branchEnsure } from './branchLayout';
 export { documentOperation, messageAttributesOperation } from './document';
 
 const global = globalThis as any;
@@ -145,6 +146,7 @@ export const recordsResult = () => JSON.stringify(recordOutcome);
 export { treeEdit } from "./treeEdit";
 
 export { branchClipboard } from "./branchClipboard";
+export { branchLayout } from './branchLayout';
 
 export { fileExport } from "./fileExport";
 
