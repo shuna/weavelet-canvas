@@ -210,3 +210,5 @@ export { evaluation } from './evaluation';
 export { localModelRole } from './localModelRole';
 
 export { localModelImport } from './localModelImport';
+
+export { localModelFiles } from './localModelFiles';

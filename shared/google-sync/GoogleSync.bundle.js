@@ -8486,6 +8486,7 @@ var WeaveletGoogleSync = (() => {
     libraryOperation: () => libraryOperation,
     localGenerationInput: () => localGenerationInput,
     localGenerationOutput: () => localGenerationOutput,
+    localModelFiles: () => localModelFiles,
     localModelImport: () => localModelImport,
     localModelRole: () => localModelRole,
     messageAttributesOperation: () => messageAttributesOperation,
@@ -26390,6 +26391,40 @@ ${text}`;
       return JSON.stringify(prepareSingleGGUFImport(input.name, input.hash, input.size, input.candidates, input.existingModel, input.existingIDs));
     const before = { localModels: input.state.localModels, activeLocalModels: input.state.activeLocalModels };
     return JSON.stringify({ changes: diffJSONChanges(before, commitSingleGGUFImport(before, input.model, input.existingIDs)) });
+  }
+
+  // src/local-llm/ggufShardUtils.ts
+  function getManifestFiles(manifest) {
+    switch (manifest.kind) {
+      case "single-file":
+        return [manifest.entrypoint];
+      case "gguf-sharded":
+        return manifest.shards;
+      case "multi-file":
+        return manifest.requiredFiles;
+    }
+  }
+  function getManifestPrimaryFile(manifest) {
+    return manifest.entrypoint;
+  }
+
+  // src/local-llm/fileProvider.ts
+  function getFinalModelFiles(names) {
+    return names.filter((name) => !name.endsWith(".part"));
+  }
+
+  // shared/google-sync/localModelFiles.ts
+  function localModelFiles(json) {
+    const { model, files = [] } = JSON.parse(json);
+    if (typeof model.id !== "string" || !model.id.trim() || model.engine !== "transformers.js" || model.manifest?.kind !== "multi-file") {
+      throw new Error("Select a Transformers.js multi-file model");
+    }
+    const requiredFiles = getManifestFiles(model.manifest);
+    const entrypoint = getManifestPrimaryFile(model.manifest);
+    if (!Array.isArray(requiredFiles) || !requiredFiles.length || requiredFiles.some((path) => typeof path !== "string") || typeof entrypoint !== "string" || !requiredFiles.includes(entrypoint)) {
+      throw new Error("Invalid multi-file manifest");
+    }
+    return JSON.stringify({ id: model.id, requiredFiles, entrypoint, files: getFinalModelFiles(files) });
   }
 
   // shared/google-sync/entry.ts
