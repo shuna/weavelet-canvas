@@ -14,6 +14,7 @@ import type {
   AxisProgressMap,
 } from '@type/evaluation';
 import { defaultQualityThresholds, defaultSafetyThresholds } from '@type/evaluation';
+import { defaultEvaluationSettings, mutateEvaluationState } from '@utils/evaluationState';
 
 export interface EvaluationSlice {
   evaluationSettings: EvaluationSettings;
@@ -45,17 +46,8 @@ export interface EvaluationSlice {
   clearEvaluationAxisProgress: (key: string) => void;
 }
 
-const defaultSettings: EvaluationSettings = {
-  safetyPreSend: 'manual',
-  safetyPostReceive: 'manual',
-  qualityPreSend: 'manual',
-  qualityPostReceive: 'manual',
-  safetyEngine: 'remote',
-  hybridRemoteOnSafe: true,
-};
-
 export const createEvaluationSlice: StoreSlice<EvaluationSlice> = (set, get) => ({
-  evaluationSettings: defaultSettings,
+  evaluationSettings: defaultEvaluationSettings,
   safetyThresholds: defaultSafetyThresholds,
   qualityThresholds: defaultQualityThresholds,
   evaluationResults: {},
@@ -64,13 +56,13 @@ export const createEvaluationSlice: StoreSlice<EvaluationSlice> = (set, get) => 
 
   setSafetyThreshold: (category, threshold) => {
     set((prev: EvaluationSlice) => ({
-      safetyThresholds: { ...prev.safetyThresholds, [category]: threshold },
+      safetyThresholds: mutateEvaluationState(prev, {type: 'setSafetyThreshold', key: category, value: threshold}).safetyThresholds,
     }));
   },
 
   setQualityThreshold: (axis, threshold) => {
     set((prev: EvaluationSlice) => ({
-      qualityThresholds: { ...prev.qualityThresholds, [axis]: threshold },
+      qualityThresholds: mutateEvaluationState(prev, {type: 'setQualityThreshold', key: axis, value: threshold}).qualityThresholds,
     }));
   },
 
@@ -78,23 +70,20 @@ export const createEvaluationSlice: StoreSlice<EvaluationSlice> = (set, get) => 
     const current = get().evaluationSettings[key];
     if (current === mode) return;
     set((prev: EvaluationSlice) => ({
-      evaluationSettings: { ...prev.evaluationSettings, [key]: mode },
+      evaluationSettings: mutateEvaluationState(prev, {type: 'setSetting', key, value: mode}).evaluationSettings,
     }));
   },
 
   setEvaluationResult: (key, result) => {
     set((prev: EvaluationSlice) => ({
-      evaluationResults: { ...prev.evaluationResults, [key]: result },
+      evaluationResults: mutateEvaluationState(prev, {type: 'setResult', key, result}).evaluationResults,
     }));
   },
 
   clearEvaluationResult: (key) => {
-    const results = get().evaluationResults;
-    if (!(key in results)) return;
-    const next = { ...results };
-    delete next[key];
+    if (!(key in get().evaluationResults)) return;
     set((prev: EvaluationSlice) => ({
-      evaluationResults: next,
+      evaluationResults: mutateEvaluationState(prev, {type: 'removeResult', key}).evaluationResults,
     }));
   },
 
@@ -106,13 +95,13 @@ export const createEvaluationSlice: StoreSlice<EvaluationSlice> = (set, get) => 
 
   setSafetyEngine: (mode) => {
     set((prev: EvaluationSlice) => ({
-      evaluationSettings: { ...prev.evaluationSettings, safetyEngine: mode },
+      evaluationSettings: mutateEvaluationState(prev, {type: 'setSafetyEngine', value: mode}).evaluationSettings,
     }));
   },
 
   setHybridRemoteOnSafe: (enabled) => {
     set((prev: EvaluationSlice) => ({
-      evaluationSettings: { ...prev.evaluationSettings, hybridRemoteOnSafe: enabled },
+      evaluationSettings: mutateEvaluationState(prev, {type: 'setHybridRemoteOnSafe', value: enabled}).evaluationSettings,
     }));
   },
 

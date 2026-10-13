@@ -44,9 +44,9 @@ var WeaveletGoogleSync = (() => {
        */
       (function() {
         var undefined2;
-        var VERSION = "4.18.1";
+        var VERSION = "4.17.21";
         var LARGE_ARRAY_SIZE = 200;
-        var CORE_ERROR_TEXT = "Unsupported core-js use. Try https://npms.io/search?q=ponyfill.", FUNC_ERROR_TEXT = "Expected a function", INVALID_TEMPL_VAR_ERROR_TEXT = "Invalid `variable` option passed into `_.template`", INVALID_TEMPL_IMPORTS_ERROR_TEXT = "Invalid `imports` option passed into `_.template`";
+        var CORE_ERROR_TEXT = "Unsupported core-js use. Try https://npms.io/search?q=ponyfill.", FUNC_ERROR_TEXT = "Expected a function", INVALID_TEMPL_VAR_ERROR_TEXT = "Invalid `variable` option passed into `_.template`";
         var HASH_UNDEFINED = "__lodash_hash_undefined__";
         var MAX_MEMOIZE_SIZE = 500;
         var PLACEHOLDER = "__lodash_placeholder__";
@@ -1972,21 +1972,8 @@ var WeaveletGoogleSync = (() => {
           }
           function baseUnset(object2, path) {
             path = castPath(path, object2);
-            var index = -1, length = path.length;
-            if (!length) {
-              return true;
-            }
-            while (++index < length) {
-              var key = toKey(path[index]);
-              if (key === "__proto__" && !hasOwnProperty.call(object2, "__proto__")) {
-                return false;
-              }
-              if ((key === "constructor" || key === "prototype") && index < length - 1) {
-                return false;
-              }
-            }
-            var obj = parent(object2, path);
-            return obj == null || delete obj[toKey(last(path))];
+            object2 = parent(object2, path);
+            return object2 == null || delete object2[toKey(last(path))];
           }
           function baseUpdate(object2, path, updater, customizer) {
             return baseSet(object2, path, updater(baseGet(object2, path)), customizer);
@@ -3313,7 +3300,7 @@ var WeaveletGoogleSync = (() => {
             var index = -1, length = pairs == null ? 0 : pairs.length, result4 = {};
             while (++index < length) {
               var pair = pairs[index];
-              baseAssignValue(result4, pair[0], pair[1]);
+              result4[pair[0]] = pair[1];
             }
             return result4;
           }
@@ -4697,13 +4684,8 @@ var WeaveletGoogleSync = (() => {
               options = undefined2;
             }
             string = toString(string);
-            options = assignWith({}, options, settings, customDefaultsAssignIn);
-            var imports = assignWith({}, options.imports, settings.imports, customDefaultsAssignIn), importsKeys = keys(imports), importsValues = baseValues(imports, importsKeys);
-            arrayEach(importsKeys, function(key) {
-              if (reForbiddenIdentifierChars.test(key)) {
-                throw new Error2(INVALID_TEMPL_IMPORTS_ERROR_TEXT);
-              }
-            });
+            options = assignInWith({}, options, settings, customDefaultsAssignIn);
+            var imports = assignInWith({}, options.imports, settings.imports, customDefaultsAssignIn), importsKeys = keys(imports), importsValues = baseValues(imports, importsKeys);
             var isEscaping, isEvaluating, index = 0, interpolate = options.interpolate || reNoMatch, source = "__p += '";
             var reDelimiters = RegExp2(
               (options.escape || reNoMatch).source + "|" + interpolate.source + "|" + (interpolate === reInterpolate ? reEsTemplate : reNoMatch).source + "|" + (options.evaluate || reNoMatch).source + "|$",
@@ -7478,6 +7460,7 @@ var WeaveletGoogleSync = (() => {
     driveFolderName: () => driveFolderName,
     driveHeaderID: () => driveHeaderID,
     driveListing: () => driveListing,
+    evaluation: () => evaluation,
     fileExport: () => fileExport,
     fileImport: () => fileImport,
     folderOperation: () => folderOperation,
@@ -7532,137 +7515,168 @@ var WeaveletGoogleSync = (() => {
   }
 
   // node_modules/@babel/runtime/helpers/esm/typeof.js
-  function _typeof(o) {
+  function _typeof(obj) {
     "@babel/helpers - typeof";
-    return _typeof = "function" == typeof Symbol && "symbol" == typeof Symbol.iterator ? function(o2) {
-      return typeof o2;
-    } : function(o2) {
-      return o2 && "function" == typeof Symbol && o2.constructor === Symbol && o2 !== Symbol.prototype ? "symbol" : typeof o2;
-    }, _typeof(o);
+    return _typeof = "function" == typeof Symbol && "symbol" == typeof Symbol.iterator ? function(obj2) {
+      return typeof obj2;
+    } : function(obj2) {
+      return obj2 && "function" == typeof Symbol && obj2.constructor === Symbol && obj2 !== Symbol.prototype ? "symbol" : typeof obj2;
+    }, _typeof(obj);
   }
 
   // node_modules/@babel/runtime/helpers/esm/classCallCheck.js
-  function _classCallCheck(a, n) {
-    if (!(a instanceof n))
+  function _classCallCheck(instance2, Constructor) {
+    if (!(instance2 instanceof Constructor)) {
       throw new TypeError("Cannot call a class as a function");
+    }
   }
 
   // node_modules/@babel/runtime/helpers/esm/toPrimitive.js
-  function toPrimitive(t2, r) {
-    if ("object" != _typeof(t2) || !t2)
-      return t2;
-    var e = t2[Symbol.toPrimitive];
-    if (void 0 !== e) {
-      var i = e.call(t2, r || "default");
-      if ("object" != _typeof(i))
-        return i;
+  function _toPrimitive(input, hint) {
+    if (_typeof(input) !== "object" || input === null)
+      return input;
+    var prim = input[Symbol.toPrimitive];
+    if (prim !== void 0) {
+      var res = prim.call(input, hint || "default");
+      if (_typeof(res) !== "object")
+        return res;
       throw new TypeError("@@toPrimitive must return a primitive value.");
     }
-    return ("string" === r ? String : Number)(t2);
+    return (hint === "string" ? String : Number)(input);
   }
 
   // node_modules/@babel/runtime/helpers/esm/toPropertyKey.js
-  function toPropertyKey(t2) {
-    var i = toPrimitive(t2, "string");
-    return "symbol" == _typeof(i) ? i : i + "";
+  function _toPropertyKey(arg) {
+    var key = _toPrimitive(arg, "string");
+    return _typeof(key) === "symbol" ? key : String(key);
   }
 
   // node_modules/@babel/runtime/helpers/esm/createClass.js
-  function _defineProperties(e, r) {
-    for (var t2 = 0; t2 < r.length; t2++) {
-      var o = r[t2];
-      o.enumerable = o.enumerable || false, o.configurable = true, "value" in o && (o.writable = true), Object.defineProperty(e, toPropertyKey(o.key), o);
+  function _defineProperties(target, props) {
+    for (var i = 0; i < props.length; i++) {
+      var descriptor = props[i];
+      descriptor.enumerable = descriptor.enumerable || false;
+      descriptor.configurable = true;
+      if ("value" in descriptor)
+        descriptor.writable = true;
+      Object.defineProperty(target, _toPropertyKey(descriptor.key), descriptor);
     }
   }
-  function _createClass(e, r, t2) {
-    return r && _defineProperties(e.prototype, r), t2 && _defineProperties(e, t2), Object.defineProperty(e, "prototype", {
+  function _createClass(Constructor, protoProps, staticProps) {
+    if (protoProps)
+      _defineProperties(Constructor.prototype, protoProps);
+    if (staticProps)
+      _defineProperties(Constructor, staticProps);
+    Object.defineProperty(Constructor, "prototype", {
       writable: false
-    }), e;
+    });
+    return Constructor;
   }
 
   // node_modules/@babel/runtime/helpers/esm/assertThisInitialized.js
-  function _assertThisInitialized(e) {
-    if (void 0 === e)
+  function _assertThisInitialized(self2) {
+    if (self2 === void 0) {
       throw new ReferenceError("this hasn't been initialised - super() hasn't been called");
-    return e;
+    }
+    return self2;
   }
 
   // node_modules/@babel/runtime/helpers/esm/setPrototypeOf.js
-  function _setPrototypeOf(t2, e) {
-    return _setPrototypeOf = Object.setPrototypeOf ? Object.setPrototypeOf.bind() : function(t3, e2) {
-      return t3.__proto__ = e2, t3;
-    }, _setPrototypeOf(t2, e);
+  function _setPrototypeOf(o, p) {
+    _setPrototypeOf = Object.setPrototypeOf ? Object.setPrototypeOf.bind() : function _setPrototypeOf2(o2, p2) {
+      o2.__proto__ = p2;
+      return o2;
+    };
+    return _setPrototypeOf(o, p);
   }
 
   // node_modules/@babel/runtime/helpers/esm/inherits.js
-  function _inherits(t2, e) {
-    if ("function" != typeof e && null !== e)
+  function _inherits(subClass, superClass) {
+    if (typeof superClass !== "function" && superClass !== null) {
       throw new TypeError("Super expression must either be null or a function");
-    t2.prototype = Object.create(e && e.prototype, {
+    }
+    subClass.prototype = Object.create(superClass && superClass.prototype, {
       constructor: {
-        value: t2,
+        value: subClass,
         writable: true,
         configurable: true
       }
-    }), Object.defineProperty(t2, "prototype", {
+    });
+    Object.defineProperty(subClass, "prototype", {
       writable: false
-    }), e && _setPrototypeOf(t2, e);
+    });
+    if (superClass)
+      _setPrototypeOf(subClass, superClass);
   }
 
   // node_modules/@babel/runtime/helpers/esm/possibleConstructorReturn.js
-  function _possibleConstructorReturn(t2, e) {
-    if (e && ("object" == _typeof(e) || "function" == typeof e))
-      return e;
-    if (void 0 !== e)
+  function _possibleConstructorReturn(self2, call2) {
+    if (call2 && (_typeof(call2) === "object" || typeof call2 === "function")) {
+      return call2;
+    } else if (call2 !== void 0) {
       throw new TypeError("Derived constructors may only return object or undefined");
-    return _assertThisInitialized(t2);
+    }
+    return _assertThisInitialized(self2);
   }
 
   // node_modules/@babel/runtime/helpers/esm/getPrototypeOf.js
-  function _getPrototypeOf(t2) {
-    return _getPrototypeOf = Object.setPrototypeOf ? Object.getPrototypeOf.bind() : function(t3) {
-      return t3.__proto__ || Object.getPrototypeOf(t3);
-    }, _getPrototypeOf(t2);
+  function _getPrototypeOf(o) {
+    _getPrototypeOf = Object.setPrototypeOf ? Object.getPrototypeOf.bind() : function _getPrototypeOf2(o2) {
+      return o2.__proto__ || Object.getPrototypeOf(o2);
+    };
+    return _getPrototypeOf(o);
   }
 
   // node_modules/@babel/runtime/helpers/esm/defineProperty.js
-  function _defineProperty(e, r, t2) {
-    return (r = toPropertyKey(r)) in e ? Object.defineProperty(e, r, {
-      value: t2,
-      enumerable: true,
-      configurable: true,
-      writable: true
-    }) : e[r] = t2, e;
+  function _defineProperty(obj, key, value) {
+    key = _toPropertyKey(key);
+    if (key in obj) {
+      Object.defineProperty(obj, key, {
+        value,
+        enumerable: true,
+        configurable: true,
+        writable: true
+      });
+    } else {
+      obj[key] = value;
+    }
+    return obj;
   }
 
   // node_modules/@babel/runtime/helpers/esm/arrayWithHoles.js
-  function _arrayWithHoles(r) {
-    if (Array.isArray(r))
-      return r;
+  function _arrayWithHoles(arr) {
+    if (Array.isArray(arr))
+      return arr;
   }
 
   // node_modules/@babel/runtime/helpers/esm/iterableToArray.js
-  function _iterableToArray(r) {
-    if ("undefined" != typeof Symbol && null != r[Symbol.iterator] || null != r["@@iterator"])
-      return Array.from(r);
+  function _iterableToArray(iter) {
+    if (typeof Symbol !== "undefined" && iter[Symbol.iterator] != null || iter["@@iterator"] != null)
+      return Array.from(iter);
   }
 
   // node_modules/@babel/runtime/helpers/esm/arrayLikeToArray.js
-  function _arrayLikeToArray(r, a) {
-    (null == a || a > r.length) && (a = r.length);
-    for (var e = 0, n = Array(a); e < a; e++)
-      n[e] = r[e];
-    return n;
+  function _arrayLikeToArray(arr, len) {
+    if (len == null || len > arr.length)
+      len = arr.length;
+    for (var i = 0, arr2 = new Array(len); i < len; i++)
+      arr2[i] = arr[i];
+    return arr2;
   }
 
   // node_modules/@babel/runtime/helpers/esm/unsupportedIterableToArray.js
-  function _unsupportedIterableToArray(r, a) {
-    if (r) {
-      if ("string" == typeof r)
-        return _arrayLikeToArray(r, a);
-      var t2 = {}.toString.call(r).slice(8, -1);
-      return "Object" === t2 && r.constructor && (t2 = r.constructor.name), "Map" === t2 || "Set" === t2 ? Array.from(r) : "Arguments" === t2 || /^(?:Ui|I)nt(?:8|16|32)(?:Clamped)?Array$/.test(t2) ? _arrayLikeToArray(r, a) : void 0;
-    }
+  function _unsupportedIterableToArray(o, minLen) {
+    if (!o)
+      return;
+    if (typeof o === "string")
+      return _arrayLikeToArray(o, minLen);
+    var n = Object.prototype.toString.call(o).slice(8, -1);
+    if (n === "Object" && o.constructor)
+      n = o.constructor.name;
+    if (n === "Map" || n === "Set")
+      return Array.from(o);
+    if (n === "Arguments" || /^(?:Ui|I)nt(?:8|16|32)(?:Clamped)?Array$/.test(n))
+      return _arrayLikeToArray(o, minLen);
   }
 
   // node_modules/@babel/runtime/helpers/esm/nonIterableRest.js
@@ -7671,8 +7685,8 @@ var WeaveletGoogleSync = (() => {
   }
 
   // node_modules/@babel/runtime/helpers/esm/toArray.js
-  function _toArray(r) {
-    return _arrayWithHoles(r) || _iterableToArray(r) || _unsupportedIterableToArray(r) || _nonIterableRest();
+  function _toArray(arr) {
+    return _arrayWithHoles(arr) || _iterableToArray(arr) || _unsupportedIterableToArray(arr) || _nonIterableRest();
   }
 
   // node_modules/i18next/dist/esm/i18next.js
@@ -20173,6 +20187,444 @@ ${messageContent}---
       };
     });
     return JSON.stringify({ rows, total: summarizeUsageCosts(rows) });
+  }
+
+  // src/types/evaluation.ts
+  var moderationCategoryKeys = [
+    "sexual",
+    "hate",
+    "harassment",
+    "self-harm",
+    "sexual/minors",
+    "hate/threatening",
+    "violence/graphic",
+    "violence",
+    "harassment/threatening",
+    "self-harm/intent",
+    "self-harm/instructions",
+    "illicit",
+    "illicit/violent"
+  ];
+  var defaultSafetyThresholds = {
+    sexual: { review: 0.8, block: 0.95 },
+    hate: { review: 0.7, block: 0.9 },
+    harassment: { review: 0.75, block: 0.92 },
+    "self-harm": { review: 0.55, block: 0.85 },
+    "sexual/minors": { review: 0.08, block: 0.2 },
+    "hate/threatening": { review: 0.35, block: 0.7 },
+    "violence/graphic": { review: 0.55, block: 0.82 },
+    violence: { review: 0.75, block: 0.93 },
+    "harassment/threatening": { review: 0.45, block: 0.75 },
+    "self-harm/intent": { review: 0.35, block: 0.7 },
+    "self-harm/instructions": { review: 0.2, block: 0.45 },
+    illicit: { review: 0.7, block: 0.9 },
+    "illicit/violent": { review: 0.25, block: 0.55 }
+  };
+  function getSafetyStatus(score, threshold) {
+    if (score >= threshold.block)
+      return "block";
+    if (score >= threshold.review)
+      return "review";
+    return "safe";
+  }
+  function summarizeSafetyScores(scores, thresholds) {
+    const reviewCategories = [];
+    const blockCategories = [];
+    for (const category of moderationCategoryKeys) {
+      const score = scores[category];
+      if (typeof score !== "number")
+        continue;
+      const status = getSafetyStatus(score, thresholds[category]);
+      if (status === "block") {
+        blockCategories.push(category);
+      } else if (status === "review") {
+        reviewCategories.push(category);
+      }
+    }
+    return {
+      status: blockCategories.length > 0 ? "block" : reviewCategories.length > 0 ? "review" : "safe",
+      reviewCategories,
+      blockCategories
+    };
+  }
+  var qualityAxisKeys = [
+    "taskCompletion",
+    "faithfulness",
+    "coherence",
+    "conciseness",
+    "instructionFollowing"
+  ];
+  var systemQualityAxisKeys = [
+    "roleClarity",
+    "constraintConsistency",
+    "safetyAdequacy",
+    "conciseness",
+    "operability"
+  ];
+  var defaultQualityThresholds = {
+    taskCompletion: { red: 0.5, green: 0.8 },
+    faithfulness: { red: 0.5, green: 0.8 },
+    coherence: { red: 0.5, green: 0.8 },
+    conciseness: { red: 0.5, green: 0.8 },
+    instructionFollowing: { red: 0.5, green: 0.8 }
+  };
+  function evaluationResultKey(chatId, nodeId, phase) {
+    return `${chatId}:${nodeId}:${phase}`;
+  }
+
+  // src/utils/evaluationCore.ts
+  var QUALITY_SYSTEM_PROMPT = `You are an expert evaluation judge. You will receive a user prompt and an AI response. Evaluate the response quality on these 5 axes (score 0.0-1.0 each):
+
+1. taskCompletion: Does the response address everything the prompt asked for?
+2. faithfulness: Is the response factually grounded and free of hallucinations?
+3. coherence: Is the response logically consistent and well-structured?
+4. conciseness: Is the response appropriately brief without unnecessary content?
+5. instructionFollowing: Does the response obey explicit constraints (format, language, length, etc.)?
+
+Also provide:
+- promptSuggestions: concrete ways the user could improve their prompt
+- configSuggestions: recommendations for model or parameter changes
+
+Respond ONLY with valid JSON in this exact format:
+{
+  "scores": { "taskCompletion": 0.0, "faithfulness": 0.0, "coherence": 0.0, "conciseness": 0.0, "instructionFollowing": 0.0 },
+  "reasoning": { "taskCompletion": "...", "faithfulness": "...", "coherence": "...", "conciseness": "...", "instructionFollowing": "..." },
+  "promptSuggestions": ["..."],
+  "configSuggestions": ["..."]
+}`;
+  var QUALITY_PROMPT_ONLY_SYSTEM = `You are an expert prompt evaluation judge. You will receive a user prompt BEFORE it is sent to an AI. Evaluate the prompt quality and predict potential issues. Score these 5 axes (0.0-1.0) based on how well the prompt is crafted:
+
+1. taskCompletion: Is the prompt clear enough to get a complete response?
+2. faithfulness: Does the prompt provide enough context for a grounded response?
+3. coherence: Is the prompt itself logically structured?
+4. conciseness: Is the prompt appropriately brief without missing information?
+5. instructionFollowing: Does the prompt include explicit constraints (format, language, etc.)?
+
+Also provide:
+- promptSuggestions: concrete ways to improve this prompt before sending
+- configSuggestions: recommendations for model or parameter choices
+
+Respond ONLY with valid JSON in this exact format:
+{
+  "scores": { "taskCompletion": 0.0, "faithfulness": 0.0, "coherence": 0.0, "conciseness": 0.0, "instructionFollowing": 0.0 },
+  "reasoning": { "taskCompletion": "...", "faithfulness": "...", "coherence": "...", "conciseness": "...", "instructionFollowing": "..." },
+  "promptSuggestions": ["..."],
+  "configSuggestions": ["..."]
+}`;
+  var QUALITY_SYSTEM_ROLE_PROMPT = `You are an expert evaluation judge for AI system prompts. You will receive a system prompt used to configure an AI assistant. Evaluate the system prompt quality on these 5 axes (score 0.0-1.0 each):
+
+1. roleClarity: Does the system prompt clearly define the assistant's role and persona?
+2. constraintConsistency: Are the constraints, priorities, and rules internally consistent?
+3. safetyAdequacy: Are safety constraints appropriate and well-defined?
+4. conciseness: Is the prompt appropriately brief without unnecessary redundancy?
+5. operability: Is the prompt practical and easy to maintain in production?
+
+Also provide:
+- promptSuggestions: concrete ways to improve this system prompt
+- configSuggestions: recommendations for model or parameter changes
+
+Respond ONLY with valid JSON in this exact format:
+{
+  "scores": { "roleClarity": 0.0, "constraintConsistency": 0.0, "safetyAdequacy": 0.0, "conciseness": 0.0, "operability": 0.0 },
+  "reasoning": { "roleClarity": "...", "constraintConsistency": "...", "safetyAdequacy": "...", "conciseness": "...", "operability": "..." },
+  "promptSuggestions": ["..."],
+  "configSuggestions": ["..."]
+}`;
+  function buildSystemJudgeMessages(systemPromptText, conversationContext, language) {
+    const langInstruction = language && language !== "en" ? `
+
+IMPORTANT: Write ALL reasoning, promptSuggestions, and configSuggestions text in ${language}. The JSON keys must remain in English.` : "";
+    const evalSystemPrompt = QUALITY_SYSTEM_ROLE_PROMPT + langInstruction;
+    let userContent = `## System Prompt to Evaluate
+${systemPromptText}`;
+    if (conversationContext) {
+      userContent += `
+
+## Conversation Context
+${conversationContext}`;
+    }
+    return [
+      { role: "system", content: evalSystemPrompt },
+      { role: "user", content: userContent }
+    ];
+  }
+  function buildJudgeMessages(userPrompt, assistantResponse, language) {
+    const isPreSend = !assistantResponse;
+    const basePrompt = isPreSend ? QUALITY_PROMPT_ONLY_SYSTEM : QUALITY_SYSTEM_PROMPT;
+    const langInstruction = language && language !== "en" ? `
+
+IMPORTANT: Write ALL reasoning, promptSuggestions, and configSuggestions text in ${language}. The JSON keys must remain in English.` : "";
+    const systemPrompt = basePrompt + langInstruction;
+    const userContent = isPreSend ? `## User Prompt
+${userPrompt}` : `## User Prompt
+${userPrompt}
+
+## AI Response
+${assistantResponse}`;
+    return [
+      { role: "system", content: systemPrompt },
+      { role: "user", content: userContent }
+    ];
+  }
+  function parseJudgeResponse(text, mode) {
+    const jsonMatch = text.match(/```(?:json)?\s*([\s\S]*?)```/) || [null, text];
+    const jsonStr = jsonMatch[1]?.trim() ?? text.trim();
+    const parsed = JSON.parse(jsonStr);
+    if (mode === "system") {
+      const scores2 = {
+        roleClarity: 0,
+        constraintConsistency: 0,
+        safetyAdequacy: 0,
+        conciseness: 0,
+        operability: 0
+      };
+      for (const key of systemQualityAxisKeys) {
+        const val = parsed.scores?.[key];
+        if (typeof val === "number" && val >= 0 && val <= 1) {
+          scores2[key] = val;
+        }
+      }
+      return {
+        kind: "system",
+        scores: scores2,
+        reasoning: parsed.reasoning ?? {},
+        promptSuggestions: Array.isArray(parsed.promptSuggestions) ? parsed.promptSuggestions : [],
+        configSuggestions: Array.isArray(parsed.configSuggestions) ? parsed.configSuggestions : []
+      };
+    }
+    const scores = {
+      taskCompletion: 0,
+      faithfulness: 0,
+      coherence: 0,
+      conciseness: 0,
+      instructionFollowing: 0
+    };
+    for (const key of qualityAxisKeys) {
+      const val = parsed.scores?.[key];
+      if (typeof val === "number" && val >= 0 && val <= 1) {
+        scores[key] = val;
+      }
+    }
+    return {
+      kind: "standard",
+      scores,
+      reasoning: parsed.reasoning ?? {},
+      promptSuggestions: Array.isArray(parsed.promptSuggestions) ? parsed.promptSuggestions : [],
+      configSuggestions: Array.isArray(parsed.configSuggestions) ? parsed.configSuggestions : []
+    };
+  }
+  function buildQualityJudgeMessages(userPrompt, assistantResponse, language, mode) {
+    return mode === "system" ? buildSystemJudgeMessages(userPrompt, assistantResponse, language) : buildJudgeMessages(userPrompt, assistantResponse, language);
+  }
+  function parseSafetyResponse(data, now) {
+    const result3 = data.results?.[0];
+    if (!result3)
+      throw new Error("[EVAL_MODERATION_EMPTY_RESULTS]");
+    return { flagged: result3.flagged ?? false, categories: result3.categories ?? {}, categoryScores: result3.category_scores ?? {}, timestamp: now };
+  }
+  function buildJudgeRequest(input) {
+    if (!input.model)
+      throw new Error("[EVAL_MODEL_NOT_SELECTED]");
+    const chatUrl = input.endpoint.includes("/chat/completions") ? input.endpoint : input.endpoint.replace(/\/chat\/completions\/?$/, "").replace(/\/+$/, "") + "/chat/completions";
+    const headers = { "Content-Type": "application/json" };
+    if (input.apiKey)
+      headers.Authorization = `Bearer ${input.apiKey}`;
+    const body = {
+      model: input.model,
+      messages: buildQualityJudgeMessages(input.userPrompt, input.assistantResponse, input.language, input.mode),
+      temperature: 0,
+      max_tokens: 2048
+    };
+    if (/openai\.com|openrouter\.ai|together\.xyz|fireworks\.ai|groq\.com|mistral\.ai|deepinfra\.com/i.test(chatUrl))
+      body.response_format = { type: "json_object" };
+    let isOpenRouter = false;
+    try {
+      isOpenRouter = isOpenRouterURL(new URL(chatUrl));
+    } catch {
+    }
+    applyOpenRouterControls(isOpenRouter, { model: input.model, max_tokens: 0, temperature: 0, top_p: 1, presence_penalty: 0, frequency_penalty: 0, openRouter: { routing: hardOpenRouterConstraints(input.openRouter), responseCache: { mode: "off" } } }, body, headers, { auxiliary: true, viaProxy: input.viaProxy ?? false });
+    return { chatUrl, headers, body };
+  }
+
+  // src/utils/evaluationContextCore.ts
+  function extractText(msg) {
+    return msg.content.filter(isTextContent).map((c) => c.text).join("\n");
+  }
+  function collectUserText(messages) {
+    return messages.filter((m) => m.role === "user").map(extractText).filter(Boolean).join("\n");
+  }
+  function collectAllText(messages) {
+    return messages.map((m) => {
+      const text = extractText(m);
+      if (!text)
+        return "";
+      return `[${m.role}]
+${text}`;
+    }).filter(Boolean).join("\n\n");
+  }
+  function buildContextMessages(messages, targetIndex, activePath, omittedNodes, includeOmitted) {
+    const sliced = messages.slice(0, targetIndex);
+    const filtered = includeOmitted ? sliced : filterOmittedMessages(sliced, activePath, omittedNodes);
+    return sanitizeMessagesForSubmit(filtered);
+  }
+  function resolveEvalContextCore(chat, omittedNodes, messageIndex, role, scope, omittedMode) {
+    const targetMsg = chat.messages[messageIndex];
+    if (!targetMsg)
+      return null;
+    const currentText = extractText(targetMsg);
+    const includeOmitted = omittedMode === "include-omitted";
+    if (role === "system") {
+      const systemText = chat.config.systemPrompt || currentText;
+      if (!systemText)
+        return null;
+      if (scope === "single") {
+        return {
+          userText: systemText,
+          contextText: systemText
+        };
+      }
+      const contextMsgs2 = buildContextMessages(
+        chat.messages,
+        chat.messages.length,
+        chat.branchTree?.activePath,
+        omittedNodes,
+        includeOmitted
+      );
+      return {
+        userText: systemText,
+        contextText: collectAllText(contextMsgs2)
+      };
+    }
+    if (scope === "single") {
+      if (role === "user") {
+        return {
+          userText: currentText,
+          contextText: currentText
+        };
+      }
+      const userTexts = [];
+      for (let i = messageIndex - 1; i >= 0; i--) {
+        const msg = chat.messages[i];
+        if (msg.role !== "user")
+          break;
+        userTexts.unshift(extractText(msg));
+      }
+      const userText = userTexts.join("\n");
+      return {
+        userText,
+        contextText: userText,
+        // single = just the preceding user turn
+        assistantText: currentText
+      };
+    }
+    if (role === "user") {
+      const contextMsgs2 = buildContextMessages(
+        chat.messages,
+        messageIndex,
+        chat.branchTree?.activePath,
+        omittedNodes,
+        includeOmitted
+      );
+      const sanitizedTarget = sanitizeMessagesForSubmit([targetMsg]);
+      const allMsgs = [...contextMsgs2, ...sanitizedTarget];
+      return {
+        userText: collectUserText(allMsgs),
+        contextText: collectAllText(allMsgs)
+      };
+    }
+    const contextMsgs = buildContextMessages(
+      chat.messages,
+      messageIndex,
+      chat.branchTree?.activePath,
+      omittedNodes,
+      includeOmitted
+    );
+    return {
+      userText: collectUserText(contextMsgs),
+      contextText: collectAllText(contextMsgs),
+      assistantText: currentText
+    };
+  }
+
+  // src/utils/evaluationState.ts
+  var defaultEvaluationSettings = {
+    safetyPreSend: "manual",
+    safetyPostReceive: "manual",
+    qualityPreSend: "manual",
+    qualityPostReceive: "manual",
+    safetyEngine: "remote",
+    hybridRemoteOnSafe: true
+  };
+  function mutateEvaluationState(state, action) {
+    switch (action.type) {
+      case "set-result": {
+        const existing = state.evaluationResults[action.key] ?? { phase: action.phase };
+        const entry = action.dimension === "safety" ? { ...existing, phase: action.phase, safety: action.result, safetyContext: action.context } : { ...existing, phase: action.phase, quality: action.result, qualityContext: action.context };
+        return { ...state, evaluationResults: { ...state.evaluationResults, [action.key]: entry } };
+      }
+      case "setResult":
+        return { ...state, evaluationResults: { ...state.evaluationResults, [action.key]: action.result } };
+      case "removeResult": {
+        if (!(action.key in state.evaluationResults))
+          return state;
+        const evaluationResults = { ...state.evaluationResults };
+        delete evaluationResults[action.key];
+        return { ...state, evaluationResults };
+      }
+      case "setSetting":
+        return state.evaluationSettings[action.key] === action.value ? state : { ...state, evaluationSettings: { ...state.evaluationSettings, [action.key]: action.value } };
+      case "setSafetyEngine":
+        return { ...state, evaluationSettings: { ...state.evaluationSettings, safetyEngine: action.value } };
+      case "setHybridRemoteOnSafe":
+        return { ...state, evaluationSettings: { ...state.evaluationSettings, hybridRemoteOnSafe: action.value } };
+      case "setSafetyThreshold":
+        return { ...state, safetyThresholds: { ...state.safetyThresholds, [action.key]: action.value } };
+      case "setQualityThreshold":
+        return { ...state, qualityThresholds: { ...state.qualityThresholds, [action.key]: action.value } };
+    }
+  }
+
+  // shared/google-sync/evaluation.ts
+  function evaluation(json) {
+    const input = JSON.parse(json);
+    switch (input.operation) {
+      case "context":
+        return JSON.stringify(resolveEvalContextCore(input.chat, input.omittedNodes ?? input.chat.omittedNodes ?? {}, input.messageIndex, input.role, input.scope, input.omittedMode));
+      case "judgeRequest": {
+        const { chatUrl, headers, body } = buildJudgeRequest(input);
+        return JSON.stringify({ chatUrl, headers, body, authentication: input.hasApiKey ? "bearer" : null });
+      }
+      case "parseQuality":
+        return JSON.stringify({ ...parseJudgeResponse(input.text, input.mode), timestamp: input.now });
+      case "parseSafety":
+        return JSON.stringify(parseSafetyResponse(input.data, input.now));
+      case "resultKey":
+        return JSON.stringify(evaluationResultKey(input.chatId ?? input.chatID ?? "", input.nodeId ?? input.nodeID ?? "", input.phase));
+      case "defaults":
+        return JSON.stringify({ evaluationSettings: defaultEvaluationSettings, safetyThresholds: defaultSafetyThresholds, qualityThresholds: defaultQualityThresholds });
+      case "display": {
+        const safetyThresholds = input.safetyThresholds ?? defaultSafetyThresholds;
+        const qualityThresholds = input.qualityThresholds ?? defaultQualityThresholds;
+        const safety = input.result.safety;
+        const quality = input.result.quality;
+        const keys = quality?.kind === "system" ? systemQualityAxisKeys : qualityAxisKeys;
+        const qThresholds = qualityThresholds;
+        return JSON.stringify({
+          phase: input.result.phase,
+          safety: safety && { flagged: safety.flagged, ...summarizeSafetyScores(safety.categoryScores, safetyThresholds), categories: moderationCategoryKeys.map((key) => ({ key, flagged: safety.categories[key] ?? false, score: safety.categoryScores[key], status: safety.categoryScores[key] === void 0 ? null : getSafetyStatus(safety.categoryScores[key], safetyThresholds[key]) })) },
+          quality: quality && { kind: quality.kind, axes: keys.map((key) => {
+            const score = quality.scores[key];
+            const threshold = qThresholds[key] ?? { red: 0.5, green: 0.8 };
+            return { key, score, status: score >= threshold.green ? "green" : score >= threshold.red ? "yellow" : "red", reasoning: quality.reasoning[key] ?? "" };
+          }), promptSuggestions: quality.promptSuggestions, configSuggestions: quality.configSuggestions },
+          localSafety: input.result.localSafety
+        });
+      }
+      case "mutate":
+        return JSON.stringify({ changes: diffJSONChanges(input.state, mutateEvaluationState(input.state, input.action)) });
+      default:
+        throw new Error("Invalid evaluation operation.");
+    }
   }
 
   // shared/google-sync/entry.ts

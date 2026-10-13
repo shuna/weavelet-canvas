@@ -198,3 +198,5 @@ export const cloudKitOperation = (inputJSON: string) => {
 export { generationUsage, generationObservation, generationLiveUsage } from "./usage";
 
 export { usageCost } from "./usageCost";
+
+export { evaluation } from './evaluation';
