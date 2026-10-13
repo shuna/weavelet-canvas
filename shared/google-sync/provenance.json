@@ -110,6 +110,7 @@
     "src/store/storage/google/sync.ts": "09ac529bf26b4a2c51c182d2e07215e0491aea7a981f938fdbeed830006b404a",
     "src/store/storage/google/merge.ts": "0fcbea479b8011fa1c396a1b42e7ed6be4c613c93d4ce0f704676710e3158c61",
     "src/store/storage/google/mergeBranches.ts": "261afbf402cb9dcfb438e315f01ac72a9ddcae5eead2ba2f7bee454aa8e5d55e",
+    "src/utils/enterSubmission.ts": "0ddea1b35a7a85b398d392102151535a48ce5592087d9985ff8e47a0e26e3270",
     "src/utils/api.ts": "09a664ad06a1878e071598ea913f7f5b07da281ac3e20ebbfc6a6c32ad8890c4",
     "src/api/requestTransport.ts": "0c038fecdd7db5ac64b094a27f9bf00b5b8672e5ad0297f2656305462d7b3f98",
     "src/utils/jsonChanges.ts": "b6b3069fbd3632e4ace431aa4334923955f7a0c933e848f18a985f36de1d2e7b",
@@ -156,6 +157,8 @@
     "src/utils/localModelImport.ts": "f15c25b57b27279b501c26632fbf8c0481b2b23263b22de8e63651dfd5ff7f1b"
   },
   "bundleInputs": {
+    "src/utils/enterSubmission.ts": "0ddea1b35a7a85b398d392102151535a48ce5592087d9985ff8e47a0e26e3270",
+    "shared/google-sync/enterSubmission.ts": "976ffe1bc168f9ea7280e7427c72fadb28c4cdfe75800d3a472dd128a4251215",
     "src/utils/api.ts": "09a664ad06a1878e071598ea913f7f5b07da281ac3e20ebbfc6a6c32ad8890c4",
     "src/api/requestTransport.ts": "0c038fecdd7db5ac64b094a27f9bf00b5b8672e5ad0297f2656305462d7b3f98",
     "src/utils/openrouterRequest.ts": "b608183eadce3da1c3f04a1b71bb68866e562ed77e6d669de0d77a697f21f60a",
@@ -301,7 +304,7 @@
     "shared/google-sync/localModelRole.ts": "8ce5bc1651e340c87134a35f4fbf149af159c296ca924a874c95b76b51dc96a5",
     "src/utils/localModelImport.ts": "f15c25b57b27279b501c26632fbf8c0481b2b23263b22de8e63651dfd5ff7f1b",
     "shared/google-sync/localModelImport.ts": "60f00ad8a824ab478800fcbb21d6510ddd107978108182d5d2f0ee3f0d3c5473",
-    "shared/google-sync/entry.ts": "a37abb42c799a033797804e81f545a623b820a21bc6fd852697856f58963ec65",
+    "shared/google-sync/entry.ts": "c25ed6e095e73bf1f700e8182662f43f4d5989a9f480ac6f4a383afbf3373d32",
     "shared/google-sync/generate.mjs": "84f51992c29940fa86da221d6d545bed1e6fac879f3571d834e263ae1be54ffa",
     "shared/google-sync/importDefaults.generate.mjs": "2ff8904af4f192ed0809ceaaabcfbefa708321083aebb527d712fc2a0551b15a"
   },
@@ -353,5 +356,5 @@
     "remove-accents/package.json": "511775b39122274ad36e9dc32c47b2112a3fd4372e64284c2336b143be853c82",
     "remove-accents/LICENSE": "31279697ad2455927a227e7678f2bb71e9e06dde319f12ce345404b3b7a99b81"
   },
-  "bundleSHA256": "6a97d44e085c1a94ad9fca748db77fd85e2f285f6efe76bc7964c4f7f27732e8"
+  "bundleSHA256": "94ba79b83d18edf8e2754a8698432637cbac4cff88c187a17ead3daf82e06921"
 }

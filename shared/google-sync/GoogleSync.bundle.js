@@ -31,9 +31,9 @@ var WeaveletGoogleSync = (() => {
   ));
   var __toCommonJS = (mod) => __copyProps(__defProp({}, "__esModule", { value: true }), mod);
 
-  // ../../var/folders/1r/xtsjvqk90yzdyjq5jfjn9phw0000gn/T/weavelet-main-integration-ew768sf2/worktree/node_modules/lodash/lodash.js
+  // node_modules/lodash/lodash.js
   var require_lodash = __commonJS({
-    "../../var/folders/1r/xtsjvqk90yzdyjq5jfjn9phw0000gn/T/weavelet-main-integration-ew768sf2/worktree/node_modules/lodash/lodash.js"(exports, module) {
+    "node_modules/lodash/lodash.js"(exports, module) {
       /**
        * @license
        * Lodash <https://lodash.com/>
@@ -5537,9 +5537,9 @@ var WeaveletGoogleSync = (() => {
     }
   });
 
-  // ../../var/folders/1r/xtsjvqk90yzdyjq5jfjn9phw0000gn/T/weavelet-main-integration-ew768sf2/worktree/node_modules/diff-match-patch/index.js
+  // node_modules/diff-match-patch/index.js
   var require_diff_match_patch = __commonJS({
-    "../../var/folders/1r/xtsjvqk90yzdyjq5jfjn9phw0000gn/T/weavelet-main-integration-ew768sf2/worktree/node_modules/diff-match-patch/index.js"(exports, module) {
+    "node_modules/diff-match-patch/index.js"(exports, module) {
       var diff_match_patch3 = function() {
         this.Diff_Timeout = 1;
         this.Diff_EditCost = 4;
@@ -6996,9 +6996,9 @@ var WeaveletGoogleSync = (() => {
     }
   });
 
-  // ../../var/folders/1r/xtsjvqk90yzdyjq5jfjn9phw0000gn/T/weavelet-main-integration-ew768sf2/worktree/node_modules/papaparse/papaparse.min.js
+  // node_modules/papaparse/papaparse.min.js
   var require_papaparse_min = __commonJS({
-    "../../var/folders/1r/xtsjvqk90yzdyjq5jfjn9phw0000gn/T/weavelet-main-integration-ew768sf2/worktree/node_modules/papaparse/papaparse.min.js"(exports, module) {
+    "node_modules/papaparse/papaparse.min.js"(exports, module) {
       /* @license
       Papa Parse
       v5.4.1
@@ -7562,9 +7562,9 @@ var WeaveletGoogleSync = (() => {
     }
   });
 
-  // ../../var/folders/1r/xtsjvqk90yzdyjq5jfjn9phw0000gn/T/weavelet-main-integration-ew768sf2/worktree/node_modules/remove-accents/index.js
+  // node_modules/remove-accents/index.js
   var require_remove_accents = __commonJS({
-    "../../var/folders/1r/xtsjvqk90yzdyjq5jfjn9phw0000gn/T/weavelet-main-integration-ew768sf2/worktree/node_modules/remove-accents/index.js"(exports, module) {
+    "node_modules/remove-accents/index.js"(exports, module) {
       var characterMap = {
         "\xC0": "A",
         "\xC1": "A",
@@ -7983,9 +7983,9 @@ var WeaveletGoogleSync = (() => {
     }
   });
 
-  // ../../var/folders/1r/xtsjvqk90yzdyjq5jfjn9phw0000gn/T/weavelet-main-integration-ew768sf2/worktree/node_modules/lz-string/libs/lz-string.js
+  // node_modules/lz-string/libs/lz-string.js
   var require_lz_string = __commonJS({
-    "../../var/folders/1r/xtsjvqk90yzdyjq5jfjn9phw0000gn/T/weavelet-main-integration-ew768sf2/worktree/node_modules/lz-string/libs/lz-string.js"(exports, module) {
+    "node_modules/lz-string/libs/lz-string.js"(exports, module) {
       var LZString = function() {
         var f = String.fromCharCode;
         var keyStrBase64 = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/=";
@@ -8471,6 +8471,7 @@ var WeaveletGoogleSync = (() => {
     driveFolderName: () => driveFolderName,
     driveHeaderID: () => driveHeaderID,
     driveListing: () => driveListing,
+    enterSubmissionOperation: () => enterSubmissionOperation,
     evaluation: () => evaluation,
     fileExport: () => fileExport,
     fileImport: () => fileImport,
@@ -8507,6 +8508,23 @@ var WeaveletGoogleSync = (() => {
     usageCost: () => usageCost
   });
 
+  // src/utils/enterSubmission.ts
+  function enterSubmission(input) {
+    if (input.isComposing || input.keyCode === 229 || input.key !== "Enter" || input.isMobile)
+      return null;
+    if (input.ctrlKey && input.shiftKey)
+      return "generate";
+    if (input.enterToSubmit && !input.shiftKey || !input.enterToSubmit && (input.ctrlKey || input.shiftKey)) {
+      return input.sticky ? "generate" : "save";
+    }
+    return null;
+  }
+
+  // shared/google-sync/enterSubmission.ts
+  function enterSubmissionOperation(json) {
+    return JSON.stringify({ action: enterSubmission(JSON.parse(json)) });
+  }
+
   // src/utils/api.ts
   var isAzureEndpoint = (endpoint) => {
     return endpoint.includes("openai.azure.com");
@@ -8529,7 +8547,7 @@ var WeaveletGoogleSync = (() => {
     return { endpoint: endpoint.trim(), headers, authentication };
   }
 
-  // ../../var/folders/1r/xtsjvqk90yzdyjq5jfjn9phw0000gn/T/weavelet-main-integration-ew768sf2/worktree/node_modules/@babel/runtime/helpers/esm/typeof.js
+  // node_modules/@babel/runtime/helpers/esm/typeof.js
   function _typeof(o) {
     "@babel/helpers - typeof";
     return _typeof = "function" == typeof Symbol && "symbol" == typeof Symbol.iterator ? function(o2) {
@@ -8539,13 +8557,13 @@ var WeaveletGoogleSync = (() => {
     }, _typeof(o);
   }
 
-  // ../../var/folders/1r/xtsjvqk90yzdyjq5jfjn9phw0000gn/T/weavelet-main-integration-ew768sf2/worktree/node_modules/@babel/runtime/helpers/esm/classCallCheck.js
+  // node_modules/@babel/runtime/helpers/esm/classCallCheck.js
   function _classCallCheck(a, n) {
     if (!(a instanceof n))
       throw new TypeError("Cannot call a class as a function");
   }
 
-  // ../../var/folders/1r/xtsjvqk90yzdyjq5jfjn9phw0000gn/T/weavelet-main-integration-ew768sf2/worktree/node_modules/@babel/runtime/helpers/esm/toPrimitive.js
+  // node_modules/@babel/runtime/helpers/esm/toPrimitive.js
   function toPrimitive(t2, r) {
     if ("object" != _typeof(t2) || !t2)
       return t2;
@@ -8559,13 +8577,13 @@ var WeaveletGoogleSync = (() => {
     return ("string" === r ? String : Number)(t2);
   }
 
-  // ../../var/folders/1r/xtsjvqk90yzdyjq5jfjn9phw0000gn/T/weavelet-main-integration-ew768sf2/worktree/node_modules/@babel/runtime/helpers/esm/toPropertyKey.js
+  // node_modules/@babel/runtime/helpers/esm/toPropertyKey.js
   function toPropertyKey(t2) {
     var i = toPrimitive(t2, "string");
     return "symbol" == _typeof(i) ? i : i + "";
   }
 
-  // ../../var/folders/1r/xtsjvqk90yzdyjq5jfjn9phw0000gn/T/weavelet-main-integration-ew768sf2/worktree/node_modules/@babel/runtime/helpers/esm/createClass.js
+  // node_modules/@babel/runtime/helpers/esm/createClass.js
   function _defineProperties(e, r) {
     for (var t2 = 0; t2 < r.length; t2++) {
       var o = r[t2];
@@ -8578,21 +8596,21 @@ var WeaveletGoogleSync = (() => {
     }), e;
   }
 
-  // ../../var/folders/1r/xtsjvqk90yzdyjq5jfjn9phw0000gn/T/weavelet-main-integration-ew768sf2/worktree/node_modules/@babel/runtime/helpers/esm/assertThisInitialized.js
+  // node_modules/@babel/runtime/helpers/esm/assertThisInitialized.js
   function _assertThisInitialized(e) {
     if (void 0 === e)
       throw new ReferenceError("this hasn't been initialised - super() hasn't been called");
     return e;
   }
 
-  // ../../var/folders/1r/xtsjvqk90yzdyjq5jfjn9phw0000gn/T/weavelet-main-integration-ew768sf2/worktree/node_modules/@babel/runtime/helpers/esm/setPrototypeOf.js
+  // node_modules/@babel/runtime/helpers/esm/setPrototypeOf.js
   function _setPrototypeOf(t2, e) {
     return _setPrototypeOf = Object.setPrototypeOf ? Object.setPrototypeOf.bind() : function(t3, e2) {
       return t3.__proto__ = e2, t3;
     }, _setPrototypeOf(t2, e);
   }
 
-  // ../../var/folders/1r/xtsjvqk90yzdyjq5jfjn9phw0000gn/T/weavelet-main-integration-ew768sf2/worktree/node_modules/@babel/runtime/helpers/esm/inherits.js
+  // node_modules/@babel/runtime/helpers/esm/inherits.js
   function _inherits(t2, e) {
     if ("function" != typeof e && null !== e)
       throw new TypeError("Super expression must either be null or a function");
@@ -8607,7 +8625,7 @@ var WeaveletGoogleSync = (() => {
     }), e && _setPrototypeOf(t2, e);
   }
 
-  // ../../var/folders/1r/xtsjvqk90yzdyjq5jfjn9phw0000gn/T/weavelet-main-integration-ew768sf2/worktree/node_modules/@babel/runtime/helpers/esm/possibleConstructorReturn.js
+  // node_modules/@babel/runtime/helpers/esm/possibleConstructorReturn.js
   function _possibleConstructorReturn(t2, e) {
     if (e && ("object" == _typeof(e) || "function" == typeof e))
       return e;
@@ -8616,14 +8634,14 @@ var WeaveletGoogleSync = (() => {
     return _assertThisInitialized(t2);
   }
 
-  // ../../var/folders/1r/xtsjvqk90yzdyjq5jfjn9phw0000gn/T/weavelet-main-integration-ew768sf2/worktree/node_modules/@babel/runtime/helpers/esm/getPrototypeOf.js
+  // node_modules/@babel/runtime/helpers/esm/getPrototypeOf.js
   function _getPrototypeOf(t2) {
     return _getPrototypeOf = Object.setPrototypeOf ? Object.getPrototypeOf.bind() : function(t3) {
       return t3.__proto__ || Object.getPrototypeOf(t3);
     }, _getPrototypeOf(t2);
   }
 
-  // ../../var/folders/1r/xtsjvqk90yzdyjq5jfjn9phw0000gn/T/weavelet-main-integration-ew768sf2/worktree/node_modules/@babel/runtime/helpers/esm/defineProperty.js
+  // node_modules/@babel/runtime/helpers/esm/defineProperty.js
   function _defineProperty(e, r, t2) {
     return (r = toPropertyKey(r)) in e ? Object.defineProperty(e, r, {
       value: t2,
@@ -8633,19 +8651,19 @@ var WeaveletGoogleSync = (() => {
     }) : e[r] = t2, e;
   }
 
-  // ../../var/folders/1r/xtsjvqk90yzdyjq5jfjn9phw0000gn/T/weavelet-main-integration-ew768sf2/worktree/node_modules/@babel/runtime/helpers/esm/arrayWithHoles.js
+  // node_modules/@babel/runtime/helpers/esm/arrayWithHoles.js
   function _arrayWithHoles(r) {
     if (Array.isArray(r))
       return r;
   }
 
-  // ../../var/folders/1r/xtsjvqk90yzdyjq5jfjn9phw0000gn/T/weavelet-main-integration-ew768sf2/worktree/node_modules/@babel/runtime/helpers/esm/iterableToArray.js
+  // node_modules/@babel/runtime/helpers/esm/iterableToArray.js
   function _iterableToArray(r) {
     if ("undefined" != typeof Symbol && null != r[Symbol.iterator] || null != r["@@iterator"])
       return Array.from(r);
   }
 
-  // ../../var/folders/1r/xtsjvqk90yzdyjq5jfjn9phw0000gn/T/weavelet-main-integration-ew768sf2/worktree/node_modules/@babel/runtime/helpers/esm/arrayLikeToArray.js
+  // node_modules/@babel/runtime/helpers/esm/arrayLikeToArray.js
   function _arrayLikeToArray(r, a) {
     (null == a || a > r.length) && (a = r.length);
     for (var e = 0, n = Array(a); e < a; e++)
@@ -8653,7 +8671,7 @@ var WeaveletGoogleSync = (() => {
     return n;
   }
 
-  // ../../var/folders/1r/xtsjvqk90yzdyjq5jfjn9phw0000gn/T/weavelet-main-integration-ew768sf2/worktree/node_modules/@babel/runtime/helpers/esm/unsupportedIterableToArray.js
+  // node_modules/@babel/runtime/helpers/esm/unsupportedIterableToArray.js
   function _unsupportedIterableToArray(r, a) {
     if (r) {
       if ("string" == typeof r)
@@ -8663,17 +8681,17 @@ var WeaveletGoogleSync = (() => {
     }
   }
 
-  // ../../var/folders/1r/xtsjvqk90yzdyjq5jfjn9phw0000gn/T/weavelet-main-integration-ew768sf2/worktree/node_modules/@babel/runtime/helpers/esm/nonIterableRest.js
+  // node_modules/@babel/runtime/helpers/esm/nonIterableRest.js
   function _nonIterableRest() {
     throw new TypeError("Invalid attempt to destructure non-iterable instance.\nIn order to be iterable, non-array objects must have a [Symbol.iterator]() method.");
   }
 
-  // ../../var/folders/1r/xtsjvqk90yzdyjq5jfjn9phw0000gn/T/weavelet-main-integration-ew768sf2/worktree/node_modules/@babel/runtime/helpers/esm/toArray.js
+  // node_modules/@babel/runtime/helpers/esm/toArray.js
   function _toArray(r) {
     return _arrayWithHoles(r) || _iterableToArray(r) || _unsupportedIterableToArray(r) || _nonIterableRest();
   }
 
-  // ../../var/folders/1r/xtsjvqk90yzdyjq5jfjn9phw0000gn/T/weavelet-main-integration-ew768sf2/worktree/node_modules/i18next/dist/esm/i18next.js
+  // node_modules/i18next/dist/esm/i18next.js
   function ownKeys$6(object2, enumerableOnly) {
     var keys = Object.keys(object2);
     if (Object.getOwnPropertySymbols) {
@@ -20127,7 +20145,7 @@ ${JSON.stringify(input.length === 1 ? input[0] : input)}`;
     return JSON.stringify({ config, imageDetail: settings.defaultImageDetail, settings });
   };
 
-  // ../../var/folders/1r/xtsjvqk90yzdyjq5jfjn9phw0000gn/T/weavelet-main-integration-ew768sf2/worktree/node_modules/@dagrejs/dagre/dist/dagre.esm.js
+  // node_modules/@dagrejs/dagre/dist/dagre.esm.js
   var Te = Object.defineProperty;
   var In = (e, n, t2) => n in e ? Te(e, n, { enumerable: true, configurable: true, writable: true, value: t2 }) : e[n] = t2;
   var Sn = (e, n) => {
@@ -24029,7 +24047,7 @@ Do not attempt to edit, create, or delete files in these directories. If Claude 
     }
   ];
 
-  // ../../var/folders/1r/xtsjvqk90yzdyjq5jfjn9phw0000gn/T/weavelet-main-integration-ew768sf2/worktree/node_modules/@babel/runtime/helpers/esm/extends.js
+  // node_modules/@babel/runtime/helpers/esm/extends.js
   function _extends() {
     return _extends = Object.assign ? Object.assign.bind() : function(n) {
       for (var e = 1; e < arguments.length; e++) {
@@ -24041,7 +24059,7 @@ Do not attempt to edit, create, or delete files in these directories. If Claude 
     }, _extends.apply(null, arguments);
   }
 
-  // ../../var/folders/1r/xtsjvqk90yzdyjq5jfjn9phw0000gn/T/weavelet-main-integration-ew768sf2/worktree/node_modules/match-sorter/dist/match-sorter.esm.js
+  // node_modules/match-sorter/dist/match-sorter.esm.js
   var import_remove_accents = __toESM(require_remove_accents());
   var rankings = {
     CASE_SENSITIVE_EQUAL: 7,
