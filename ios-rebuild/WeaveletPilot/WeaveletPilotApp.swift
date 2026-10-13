@@ -27,6 +27,10 @@ struct ChatView: View {
     @State private var input = ""
     @State private var showsImporter = false
     @State private var showsExporter = false
+    @State private var showsExportOptions = false
+    @State private var pendingExport: ChatExport.Artifact?
+    @State private var exportContentType: UTType = .json
+    @State private var exportFilename = "weavelet-native-v3"
     @State private var exportDocument: WebJSONDocument?
     @State private var errorMessage: String?
     @State private var draft: MessageDraft?
@@ -175,11 +179,13 @@ struct ChatView: View {
                         Button("V3 JSONを読み込む") { showsImporter = true }
                         Button("読み込んだV3 JSONを書き出す") {
                             do {
+                                exportContentType = .json; exportFilename = "weavelet-native-v3"
                                 exportDocument = WebJSONDocument(data: try state.exportWebData())
                                 showsExporter = true
                             } catch { errorMessage = error.localizedDescription }
                         }
                         .disabled(state.exchange == nil)
+                        Button("形式・範囲を指定して書き出す") { showsExportOptions = true }.disabled(state.exchange == nil)
                     }
                     .frame(minWidth: 44, minHeight: 44)
                     .disabled(state.generation != nil)
@@ -187,7 +193,7 @@ struct ChatView: View {
                         .frame(minWidth: 44, minHeight: 44)
                 }
             }
-            .fileImporter(isPresented: $showsImporter, allowedContentTypes: [.json], allowsMultipleSelection: false) { result in
+            .fileImporter(isPresented: $showsImporter, allowedContentTypes: [.json, .gzip], allowsMultipleSelection: false) { result in
                 do {
                     guard let url = try result.get().first else { return }
                     let access = url.startAccessingSecurityScopedResource()
@@ -197,7 +203,7 @@ struct ChatView: View {
                     if (error as? CocoaError)?.code != .userCancelled { errorMessage = error.localizedDescription }
                 }
             }
-            .fileExporter(isPresented: $showsExporter, document: exportDocument, contentType: .json, defaultFilename: "weavelet-native-v3") { result in
+            .fileExporter(isPresented: $showsExporter, document: exportDocument, contentType: exportContentType, defaultFilename: exportFilename) { result in
                 if case .failure(let error) = result, (error as? CocoaError)?.code != .userCancelled {
                     errorMessage = error.localizedDescription
                 }
@@ -230,6 +236,12 @@ struct ChatView: View {
             } message: {
                 Text("このメッセージとすべての子孫を、非表示の枝も含めて削除します。保護されたメッセージが含まれる場合は削除しません。ピン留めは削除を防ぎません。")
             }
+            .sheet(isPresented: $showsExportOptions, onDismiss: {
+                if let artifact = pendingExport {
+                    exportDocument = WebJSONDocument(data: artifact.data); exportContentType = artifact.contentType; exportFilename = artifact.filename
+                    pendingExport = nil; showsExporter = true
+                }
+            }) { ChatExportView(state: state) { pendingExport = $0 } }
             .sheet(item: $draft) { draft in MessageEditorView(state: state, draft: draft) }
             .sheet(item: $clipboardDraft) { draft in BranchClipboardView(state: state, draft: draft) }
             .sheet(item: $optionsDraft) { draft in NodeOptionsView(state: state, draft: draft) }
@@ -419,7 +431,7 @@ struct MessagePartView: View {
 }
 
 struct WebJSONDocument: FileDocument {
-    static var readableContentTypes: [UTType] { [.json] }
+    static var readableContentTypes: [UTType] { [.json, .gzip, UTType(filenameExtension:"md") ?? .plainText] }
     let data: Data
     init(data: Data) { self.data = data }
     init(configuration: ReadConfiguration) throws {
@@ -639,6 +651,41 @@ struct ConversationLibraryView: View {
     }
 }
 
+
+struct ChatExportView: View {
+    @ObservedObject var state: ChatState
+    @Environment(\.dismiss) private var dismiss
+    let exported: (ChatExport.Artifact) -> Void
+    @State private var format = ChatExport.Format.v3
+    @State private var scope = ChatExport.Scope.all
+    @State private var compressed = false
+    @State private var errorMessage: String?
+    var body: some View {
+        NavigationStack {
+            Form {
+                Picker("形式", selection: $format) { ForEach(ChatExport.Format.allCases) { Text($0.label).tag($0) } }
+                Picker("範囲", selection: $scope) { ForEach(format.scopes) { Text($0.label).tag($0) } }
+                if scope != .all { Text(state.conversation?.title ?? "会話がありません") }
+                if format == .v3 { Toggle("gzipで圧縮", isOn: $compressed) }
+                if format == .openRouter || format == .lmStudio || format == .v1 {
+                    Text("各会話の現在枝を書き出します。選択した会話では現在表示中の経路を使います。")
+                        .font(.footnote).foregroundStyle(.secondary)
+                } else if format == .markdown {
+                    Text("現在の本文と画像URLを書き出します。推論・tool call・tool resultは含めません。")
+                        .font(.footnote).foregroundStyle(.secondary)
+                }
+                if let errorMessage { Text(errorMessage).foregroundStyle(.red) }
+                Button("書き出しファイルを選ぶ") {
+                    do { exported(try state.exportWebData(format:format,scope:scope,compressed:format == .v3 && compressed)); dismiss() }
+                    catch { errorMessage = error.localizedDescription }
+                }.disabled(state.generation != nil || state.exchange == nil)
+            }
+            .navigationTitle("会話を書き出す")
+            .onChange(of: format) { _, next in if !next.scopes.contains(scope) { scope = next.scopes.first ?? .all } }
+            .toolbar { ToolbarItem(placement: .cancellationAction) { Button("取消") { dismiss() } } }
+        }
+    }
+}
 
 struct BranchClipboardView: View {
     @ObservedObject var state: ChatState

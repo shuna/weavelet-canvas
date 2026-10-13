@@ -130,7 +130,7 @@ final class ChatState: ObservableObject {
     var conversation: Conversation? { conversations.first { $0.id.utf8.elementsEqual(selectedID.utf8) } }
 
     func importWebData(_ data: Data) throws {
-        let rawV3 = try OrderedJSON.decode(data)
+        let rawV3 = try OrderedJSON.decode(NativeGzip.isCompressed(data) ? NativeGzip.decompress(data) : data)
         let candidate = try document.map { try $0.importingV3(rawV3) } ?? SyncDocument(v3: rawV3)
         let imported = try WebExchange(source: candidate.uiProjection())
         let selected = imported.conversations.first?.id ?? ""
@@ -544,6 +544,11 @@ final class ChatState: ObservableObject {
     func exportWebData() throws -> Data {
         guard let document else { throw ExchangeError.invalid("保存済み会話がありません") }
         return try document.exportData()
+    }
+    func exportWebData(format: ChatExport.Format, scope: ChatExport.Scope, compressed: Bool = false) throws -> ChatExport.Artifact {
+        guard generation == nil else { throw ExchangeError.invalid("生成結果を保存してから書き出してください") }
+        let v3 = try OrderedJSON.decode(exportWebData())
+        return try ChatExport.make(v3:v3,format:format,scope:scope,chatID:conversation?.id,visiblePath:scope == .all ? nil : conversation?.visibleMessages.map(\.id),compressed:compressed)
     }
     func applySnapshot(_ snapshot: OrderedJSON) throws {
         let base = try document ?? SyncDocument(v3: exchange?.source ?? ChatLibrary.emptySource)
