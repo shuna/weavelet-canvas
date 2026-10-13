@@ -27,7 +27,17 @@ final class NodeOptionsStateTests: XCTestCase {
         var assistant = try state.nodeOptionsDraft(nodeID: "n-assistant")
         assistant.value.omitted = true
         try state.saveNodeOptions(assistant, now: 1001)
-        let request = try RemoteRequest.make(source: XCTUnwrap(state.exchange).source, chatID: "chat-a", path: ["n-system", "n-user", "n-assistant"], settings: RemoteSettings(endpoint: "https://fixture.invalid/v1/chat/completions", model: "fake", stream: false), key: "FAKE")
+        let savedSource = try XCTUnwrap(state.exchange).source
+        let settings = RemoteSettings(endpoint: "https://openrouter.ai/api/v1/chat/completions", model: "fake", stream: false)
+        // The I/O corpus intentionally combines order+sort and a non-Claude model with Claude caching.
+        XCTAssertThrowsError(try RemoteRequest.make(source:savedSource,chatID:"chat-a",path:["n-system","n-user","n-assistant"],settings:settings,key:"FAKE"))
+        // Check omitted-node behavior with a valid request-only config; persisted corpus stays untouched.
+        let requestChats = try savedSource.required("chats").array("chats").map { chat in
+            chat["id"] == .string("chat-a") ? chat.replacing("config",with:.object([
+                .init(key:"model",value:.string("fake")),.init(key:"stream",value:.bool(false))
+            ])) : chat
+        }
+        let request = try RemoteRequest.make(source:savedSource.replacing("chats",with:.array(requestChats)),chatID:"chat-a",path:["n-system","n-user","n-assistant"],settings:settings,key:"FAKE")
         let body = try OrderedJSON.decode(XCTUnwrap(request.httpBody))
         // Web retains omitted tool exchanges, while ordinary text is excluded.
         XCTAssertTrue(try body.required("messages").array("messages").contains { $0["role"] == .string("user") })

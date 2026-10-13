@@ -133,7 +133,9 @@ final class ChatState: ObservableObject {
 
     init(store: LocalStateStore? = nil, localGenerate: LocalLlama.Generator? = nil) {
         self.store = store
-        self.localGenerate = localGenerate ?? LocalLlama.generate
+        self.localGenerate = localGenerate ?? { url, request, onText in
+            try await LocalLlama.generate(modelURL:url,request:request,onText:onText)
+        }
         self.localEvaluationGenerate = localGenerate
         do {
             stickyPrefillKey = try SharedWebOperations.call("assistantPrefill",.object([.init(key:"operation",value:.string("resolve")),.init(key:"mode",value:.string("append")),.init(key:"insertIndex",value:.null)])).required("key").string("prefill key")
