@@ -6,6 +6,7 @@ export interface DiffSegment {
 }
 
 export function wordDiff(a: string, b: string): DiffSegment[] {
+  if (a === b) return [{type:'equal',text:a}];
   const dmp = new diff_match_patch();
   // shortcut: caps/deadline group words; revisit mapping if finer large-input highlighting is required.
   const encode = (text: string) => text.split(/(\s+)/).map(token => JSON.stringify(token) + '\n').join('');

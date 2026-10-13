@@ -26,6 +26,7 @@ describe('shared word diff', () => {
     const a = Array.from({length:40020}, (_, index) => `a-${index}`).join(' ');
     const b = Array.from({length:26000}, (_, index) => `b-${index}`).join('\t');
     preservesBoth(a, b);
+    expect(wordDiff(a, a)).toEqual([{type:'equal',text:a}]);
   });
 
   it('preserves both inputs when the positive library deadline expires', () => {

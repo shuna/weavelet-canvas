@@ -121,7 +121,7 @@
     "src/store/storage/sync/EncryptedSync.ts": "0d0a7cbc7b354577e6dacd7fa73cdf264803b1fbe7d38ebcb22692ebcc41f415",
     "src/store/storage/filesystem/transport.ts": "51bd3abb64d9d685785ff30375cf7f691ce324026659480072c60c2c39e07aa5",
     "src/utils/branchLayout.ts": "5cc4a2b874914cf882eec7932acef99a5e3481757e6b5d94c168539388c14e2a",
-    "src/utils/diffUtils.ts": "261319df358fb7825964aa5f4768055138497a766043f275c7235f19ea4a38b6",
+    "src/utils/diffUtils.ts": "94fa0a5a590d7bf21abfb95821d9014984c90e4210702cb709740c43c2404d91",
     "src/utils/branchDiff.ts": "0d7fd12643518dce808580e02c9684d99df23df0a2f980ccd5f6af7c59995615",
     "src/utils/syncDocument.ts": "bc7cca9616aa593538dfb194b861ea7415ce3c7e7da42620a9fca0a89acb4120",
     "src/utils/chatMarkdown.ts": "7fa68fc26091374a7f3a5fa5885ec19547870612058c09927ef4bb1cb9ebeafa",
@@ -236,7 +236,7 @@
     "src/utils/chatLibrary.ts": "530bd76d5d4ddc1ef268d511dfb747b13f751a86777a92a9449689c0f0d0a39f",
     "shared/google-sync/library.ts": "c17f54bddd63e50cacf55583f2cc740f62a56f5b165eb3de0a4393cdce89299f",
     "src/utils/branchLayout.ts": "5cc4a2b874914cf882eec7932acef99a5e3481757e6b5d94c168539388c14e2a",
-    "src/utils/diffUtils.ts": "261319df358fb7825964aa5f4768055138497a766043f275c7235f19ea4a38b6",
+    "src/utils/diffUtils.ts": "94fa0a5a590d7bf21abfb95821d9014984c90e4210702cb709740c43c2404d91",
     "src/utils/branchDiff.ts": "0d7fd12643518dce808580e02c9684d99df23df0a2f980ccd5f6af7c59995615",
     "shared/google-sync/branchLayout.ts": "2fd7f4598b04037c9a8175bb0fc80b227833d9fd9ba976008903d5385beb318a",
     "src/store/chat-edit-time.ts": "1d7abac60c3dbc063fcaaef270dd846c2cf2d78dc0aa1a286b99ffc708ecac8c",
@@ -320,5 +320,5 @@
     "lz-string/package.json": "f0990a8fd6c347d66c1469d18918f5460d372c6b3af8a0a5737dfd34c809e20d",
     "lz-string/LICENSE": "433fc9dfe659dbfb1e91eed8351f13651e97bfa3ac6d03394c3d63f61d4bbc80"
   },
-  "bundleSHA256": "6956e2fdbac878512b426d673e0c653713c55eeae08cb2a3b0bf161e60547619"
+  "bundleSHA256": "905753387bd76650c992c3cd08e07d079d0711e8eff17679ee2c4d254c459167"
 }
