@@ -707,3 +707,9 @@ match-sorter/remove-accentsのMIT本文と固定入力hashを配布bundleへ同�
 新しい共有predicate8case・native実JSC2件（MD本文のtrim後全byte一致、確認条件と保存境界）・型検査・Catalyst build・鮮度/差分確認が成功。ログ /tmp/weavelet-native-system-presets-{tsc,web-tests,catalyst-tests,freshness,diff-check}.log。親統合のhash/差分確認成功、独立Astraは新規P2以上なし。bundle実file増分121,821 byteはapp全体/圧縮配布/速度の測定ではない。新依存は追加していない。未変更領域のテスト/監査を反復していない。
 
 実メニュー表示/説明の収まり・IME/最大文字サイズ/VoiceOver・Air導入・実クラウド相互運用は未確認。
+
+## 会話一覧のサイズ表示（2026-10-14）
+
+b19399bbでWeb一覧の3箇所のサイズ計算と既存formatNumberをpure chatSizeへ接続し、native一覧のcaptionとdisplayChatSize設定から共用した。text判定を先に行い、それ以外はimage_urlの存在によってURL長を数える実Webの規則を維持する。nativeはactive messages/delta投影のUTF16長だけを渡し、本文やbase64をJSCへ再転送しない。表示offでは投影自体を省き、取消/古い結果を公開しない。ゼロのcaptionは出さず、一行titleと44ptの操作領域を保つ。
+
+共有3件・native4件、型検査、Catalyst build、bundle鮮度と差分確認の成功を再利用。ログ /tmp/weavelet-native-chat-size-{web-tests,catalyst-tests,tsc,freshness,diff-check}.log。独立Astraは新規P2以上なし。delta fixtureの初期期待値26は、実Web投影と従来式で14文字の本文2つを数える28と確認し、期待値だけを訂正した。比較条件を緩めていない。実表示/最大文字サイズ/VoiceOver・Air導入は未確認。
