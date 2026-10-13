@@ -21,6 +21,38 @@ import XCTest
         try state.applySnapshot(full.replacing("state",with:raw))
         return state
     }
+    func testUndoneRemovalPublishesRestoredNodeThroughEncryptedSync() async throws {
+        let dir = try directory(), drive = FakeSyncDrive(), keys = TestSyncKeys()
+        let sender = try state(LocalStateStore(fileURL: dir.appendingPathComponent("sender.json")))
+        let publisher = GoogleSyncController(chatState: sender, drive: drive, store: SyncStateStore(fileURL: dir.appendingPathComponent("sender-sync.json")), keyStore: keys)
+        try await publisher.create(password: password, folderName: "FAKE undo")
+        var insertion = try sender.messageInsertionDraft(beforeNodeID: "n-user")
+        insertion.text = "取り消しで復元した本文"
+        try sender.saveMessage(insertion, mode: .insert, newIDs: ["undo-sync"], now: 6000)
+        try sender.saveNodeRemoval(sender.nodeRemovalDraft(nodeID: "undo-sync"), now: 6001)
+        try sender.undoMessageEdit(now: 6002)
+        XCTAssertTrue(sender.conversation?.nodes.contains { $0.id == "undo-sync" } == true)
+        try sender.redoMessageEdit(now: 6003)
+        XCTAssertFalse(sender.conversation?.nodes.contains { $0.id == "undo-sync" } == true)
+        try sender.undoMessageEdit(now: 6004)
+        try await publisher.synchronize()
+        let receiverStore = LocalStateStore(fileURL: dir.appendingPathComponent("receiver.json"))
+        let receiver = ChatState(store: receiverStore)
+        let subscriber = GoogleSyncController(chatState: receiver, drive: drive, store: SyncStateStore(fileURL: dir.appendingPathComponent("receiver-sync.json")), keyStore: keys)
+        try await subscriber.open(dataset: XCTUnwrap(publisher.dataset))
+        let unlocked = try await subscriber.restoreKey()
+        XCTAssertTrue(unlocked)
+        try await subscriber.download()
+        let received = try XCTUnwrap(receiver.exchange).source
+        let chat = try XCTUnwrap(received.required("chats").array("chats").first { $0["id"] == .string("chat-a") })
+        let tree = try chat.required("branchTree")
+        XCTAssertEqual(tree["activePath"], .array(["n-system", "undo-sync", "n-user", "n-assistant"].map(OrderedJSON.string)))
+        let hash = try tree.required("nodes").required("undo-sync").required("contentHash").string("hash")
+        XCTAssertEqual(try received.required("contentStore").required(hash).required("content").array("content").first?["text"], .string("取り消しで復元した本文"))
+        XCTAssertFalse(receiver.canUndoMessageEdit)
+        XCTAssertEqual(try ChatState(store: receiverStore).exportWebData(), try receiver.exportWebData())
+    }
+
     func testRemovalAndPruneCrossEncryptedSyncWithoutRemovingProtectedSuccessor() async throws {
         let dir = try directory(), drive = FakeSyncDrive(), keys = TestSyncKeys()
         let sender = try state(LocalStateStore(fileURL: dir.appendingPathComponent("sender.json")))

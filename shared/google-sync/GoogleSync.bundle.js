@@ -6981,6 +6981,7 @@ var WeaveletGoogleSync = (() => {
   // shared/google-sync/entry.ts
   var entry_exports = {};
   __export(entry_exports, {
+    branchHistory: () => branchHistory,
     chatSearch: () => chatSearch,
     documentOperation: () => documentOperation,
     drain: () => drain,
@@ -7004,6 +7005,9 @@ var WeaveletGoogleSync = (() => {
     start: () => start
   });
 
+  // src/utils/branchUtils.ts
+  var import_lodash = __toESM(require_lodash(), 1);
+
   // src/types/chat.ts
   function isTextContent(ob) {
     return ob !== void 0 && ob !== null && ob.type === "text";
@@ -7017,9 +7021,6 @@ var WeaveletGoogleSync = (() => {
   function isToolResultContent(ob) {
     return ob !== void 0 && ob !== null && ob.type === "tool_result";
   }
-
-  // src/utils/branchUtils.ts
-  var import_lodash = __toESM(require_lodash(), 1);
 
   // src/utils/contentValidation.ts
   var hasMeaningfulContent = (content) => content.some((part) => {
@@ -7043,53 +7044,6 @@ var WeaveletGoogleSync = (() => {
     next[index] = { ...content[index], text };
     return next;
   };
-
-  // src/utils/jsonChanges.ts
-  var orderedJSONEqual = (left, right) => {
-    if (Object.is(left, right))
-      return true;
-    if (!left || !right || typeof left !== "object" || typeof right !== "object" || Array.isArray(left) !== Array.isArray(right))
-      return false;
-    const a = Object.keys(left), b = Object.keys(right);
-    return a.length === b.length && a.every((key, index) => key === b[index] && orderedJSONEqual(left[key], right[key]));
-  };
-  function appendChanges(before, after, path, output) {
-    if (orderedJSONEqual(before, after))
-      return;
-    const opaque = (value) => value && typeof value === "object" && !Array.isArray(value) && Object.keys(value).length === 1 && Number.isInteger(value.opaqueRef);
-    if (opaque(before) || opaque(after)) {
-      output.push({ op: "set", path, value: after });
-      return;
-    }
-    if (Array.isArray(before) && Array.isArray(after)) {
-      for (let i = 0; i < after.length; i++) {
-        if (i < before.length)
-          appendChanges(before[i], after[i], [...path, i], output);
-        else
-          output.push({ op: "set", path: [...path, i], value: after[i] });
-      }
-      for (let i = before.length - 1; i >= after.length; i--)
-        output.push({ op: "remove", path: [...path, i] });
-    } else if (before && after && typeof before === "object" && typeof after === "object" && !Array.isArray(before) && !Array.isArray(after)) {
-      for (const key of Object.keys(before))
-        if (!Object.hasOwn(after, key))
-          output.push({ op: "remove", path: [...path, key] });
-      for (const key of Object.keys(after)) {
-        if (Object.hasOwn(before, key))
-          appendChanges(before[key], after[key], [...path, key], output);
-        else
-          output.push({ op: "set", path: [...path, key], value: after[key] });
-      }
-      if (!orderedJSONEqual(Object.keys(before), Object.keys(after)))
-        output.push({ op: "keys", path, keys: Object.keys(after) });
-    } else
-      output.push({ op: "set", path, value: after });
-  }
-  function diffJSONChanges(before, after) {
-    const output = [];
-    appendChanges(before, after, [], output);
-    return output;
-  }
 
   // src/utils/streamingBuffer.ts
   var STREAMING_CONTENT_HASH_PREFIX = "__streaming:";
@@ -7348,266 +7302,6 @@ var WeaveletGoogleSync = (() => {
   function resolveContentText(store, hash) {
     const content = resolveContent(store, hash);
     return content.filter((c) => c.type === "text").map((c) => c.text).join(" ");
-  }
-
-  // shared/google-sync/editing.ts
-  var runtime;
-  function editingUUID() {
-    if (!runtime)
-      return crypto.randomUUID();
-    const id = runtime.ids.shift();
-    if (!id || runtime.reserved.has(id))
-      throw new Error("Invalid new node ID.");
-    runtime.reserved.add(id);
-    return id;
-  }
-  function withEditingRuntime(newIDs, existingIDs, now, operation) {
-    const clock = Date.now;
-    runtime = { ids: [...newIDs], reserved: new Set(existingIDs) };
-    Date.now = () => now;
-    try {
-      return operation();
-    } finally {
-      Date.now = clock;
-      runtime = void 0;
-    }
-  }
-  function messageEdit(json) {
-    const input = JSON.parse(json);
-    if (input.operation === "textValue")
-      return JSON.stringify(textValueOf(input.parts));
-    if (input.editedText !== void 0 && typeof input.editedText !== "string")
-      throw new Error("Invalid text.");
-    const parts = input.editedText !== void 0 && input.editedText !== textValueOf(input.parts) ? replaceTextValue(input.parts, input.editedText) : input.parts;
-    if (!["user", "assistant", "system"].includes(input.role) || !Array.isArray(input.parts))
-      throw new Error("Invalid message.");
-    if (input.mode === "append" && input.editedText !== void 0 && !hasMeaningfulContent(parts))
-      throw new Error("\u672C\u6587\u3092\u5165\u529B\u3057\u3066\u304F\u3060\u3055\u3044");
-    const before = { chat: input.chat, contentStore: input.contentStore };
-    const isolated = structuredClone(before);
-    let chat = isolated.chat;
-    if (!Array.isArray(chat.messages) && chat.branchTree)
-      chat.messages = materializeActivePath(chat.branchTree, isolated.contentStore);
-    const wasFlat = !chat.branchTree;
-    return withEditingRuntime(input.newIDs, Object.keys(chat.branchTree?.nodes ?? {}), input.now, () => {
-      let result3 = input.mode === "insert" && wasFlat ? { chats: [chat], contentStore: isolated.contentStore } : ensureBranchTreeState([chat], 0, isolated.contentStore);
-      if (!wasFlat) {
-        const path = input.viewingPath;
-        if (path.some((id) => !Object.hasOwn(result3.chats[0].branchTree.nodes, id)))
-          throw new Error("Invalid viewing path.");
-        if (path.length)
-          result3.chats = switchActivePathState(result3.chats, 0, path, result3.contentStore);
-        else
-          result3.chats[0].branchTree.activePath = [];
-      }
-      if (input.mode === "insert") {
-        if (input.nodeID === void 0)
-          throw new Error("Invalid insert target.");
-        const beforeNodeId = wasFlat && input.nodeID?.startsWith("message-") ? input.nodeID.slice(8) : input.nodeID;
-        const inserted = insertNodeState(result3.chats, { chatId: chat.id, beforeNodeId, role: input.role, content: parts }, result3.contentStore);
-        if (inserted.status !== "updated")
-          throw new Error(`Invalid insert target: ${inserted.status}`);
-        result3 = inserted;
-      } else {
-        const tree = result3.chats[0].branchTree;
-        let index = -1;
-        if (input.mode !== "append") {
-          const flatID = input.nodeID?.startsWith("message-") ? input.nodeID.slice(8) : input.nodeID;
-          index = wasFlat && flatID !== void 0 && String(Number(flatID)) === flatID ? Number(flatID) : tree.activePath.indexOf(input.nodeID);
-          if (!Number.isInteger(index) || index < 0 || index >= tree.activePath.length)
-            throw new Error("Invalid message node ID.");
-          if (input.mode === "overwrite" && result3.chats[0].protectedNodes?.[tree.activePath[index]])
-            throw new Error("Protected message.");
-        }
-        if (input.mode === "append")
-          result3 = appendNodeToActivePathState(result3.chats, 0, input.role, parts, result3.contentStore);
-        else if (input.mode === "branch") {
-          const branch = createBranchState(result3.chats, 0, tree.activePath[index], parts, result3.contentStore);
-          result3 = branch;
-          if (branch.chats[0].branchTree.nodes[branch.newId].role !== input.role) {
-            result3.chats = updateNodeRoleState(branch.chats, 0, branch.newId, input.role, branch.contentStore);
-          }
-        } else
-          result3 = upsertWithAutoBranchState(result3.chats, 0, index, { role: input.role, content: parts }, result3.contentStore);
-      }
-      for (const [hash, entry] of Object.entries(result3.contentStore)) {
-        if (entry.delta && JSON.stringify(entry.delta) !== JSON.stringify(before.contentStore[hash]?.delta)) {
-          const content = resolveContent(result3.contentStore, hash);
-          const { delta: _delta, ...full } = entry;
-          result3.contentStore[hash] = { ...full, content };
-        }
-      }
-      chat = result3.chats[0];
-      chat.messages = materializeActivePath(chat.branchTree, result3.contentStore, true);
-      return JSON.stringify(diffJSONChanges(before, JSON.parse(JSON.stringify({ chat, contentStore: result3.contentStore }))));
-    });
-  }
-
-  // src/utils/branchUtils.ts
-  function readMessageAttributes(owner) {
-    const value = owner.messageAttributesV1;
-    if (!Object.hasOwn(owner, "messageAttributesV1"))
-      return void 0;
-    if (!value || value.version !== 1 || !value.byNode || typeof value.byNode !== "object" || Array.isArray(value.byNode) || Object.keys(value).some((key) => key !== "version" && key !== "byNode") || Object.keys(value.byNode).some((id) => !Object.hasOwn(owner.nodes, id)) || Object.values(value.byNode).some((attributes) => !attributes || typeof attributes !== "object" || Array.isArray(attributes) || Object.hasOwn(attributes, "role") || Object.hasOwn(attributes, "content"))) {
-      throw new Error("Unsupported message attributes namespace.");
-    }
-    return value;
-  }
-  var extraMessageAttributes = (message) => {
-    const { role, content, ...attributes } = message;
-    return attributes;
-  };
-  function setMessageAttributes(owner, nodeId, message) {
-    const attributes = extraMessageAttributes(message);
-    if (!Object.keys(attributes).length)
-      return;
-    const previous = readMessageAttributes(owner);
-    owner.messageAttributesV1 = { version: 1, byNode: {
-      ...previous?.byNode,
-      [nodeId]: { ...previous?.byNode[nodeId], ...structuredClone(attributes) }
-    } };
-  }
-  function copyMessageAttributes(source, sourceId, target, targetId) {
-    const attributes = readMessageAttributes(source)?.byNode[sourceId];
-    if (!attributes)
-      return;
-    setMessageAttributes(target, targetId, { ...attributes, role: "user", content: [] });
-  }
-  function deleteMessageAttributes(owner, nodeId) {
-    const previous = readMessageAttributes(owner);
-    if (!previous || !Object.hasOwn(previous.byNode, nodeId))
-      return;
-    const byNode = { ...previous.byNode };
-    delete byNode[nodeId];
-    owner.messageAttributesV1 = { version: 1, byNode };
-  }
-  function captureProjectedMessageAttributes(chat, contentStore) {
-    if (!chat.branchTree)
-      return;
-    let next = chat.branchTree;
-    for (const [index, message] of (chat.messages ?? []).entries()) {
-      const attributes = extraMessageAttributes(message);
-      if (!Object.keys(attributes).length)
-        continue;
-      const nodeId = chat.branchTree.activePath[index], node = chat.branchTree.nodes[nodeId];
-      if (!node || node.role !== message.role || !(0, import_lodash.isEqual)(resolveContent(contentStore, node.contentHash), message.content))
-        throw new Error("Message attributes do not match the active branch.");
-      const existing = readMessageAttributes(next)?.byNode[nodeId];
-      for (const [key, value] of Object.entries(attributes))
-        if (existing && Object.hasOwn(existing, key) && !(0, import_lodash.isEqual)(existing[key], value))
-          throw new Error("Conflicting projected message attributes.");
-      if (next === chat.branchTree)
-        next = { ...next };
-      setMessageAttributes(next, nodeId, message);
-    }
-    chat.branchTree = next;
-  }
-  function projectMessageAttributes(owner, nodeId, message) {
-    return { ...structuredClone(readMessageAttributes(owner)?.byNode[nodeId] ?? {}), role: message.role, content: message.content };
-  }
-  function materializeActivePath(tree, contentStore, includeAttributes = false) {
-    return tree.activePath.map((id) => {
-      const node = tree.nodes[id];
-      const message = { role: node.role, content: resolveContent(contentStore, node.contentHash) };
-      return includeAttributes ? projectMessageAttributes(tree, id, message) : message;
-    });
-  }
-  function flatMessagesToBranchTree(messages, contentStore) {
-    const nodes = {};
-    const ids = [];
-    const tree = { nodes, rootId: "", activePath: ids };
-    for (let i = 0; i < messages.length; i++) {
-      const id = editingUUID();
-      ids.push(id);
-      const contentHash = addContent(contentStore, messages[i].content);
-      nodes[id] = {
-        id,
-        parentId: i === 0 ? null : ids[i - 1],
-        role: messages[i].role,
-        contentHash,
-        createdAt: Date.now() - (messages.length - i) * 1e3
-      };
-      setMessageAttributes(tree, id, messages[i]);
-    }
-    tree.rootId = ids[0] ?? "";
-    return tree;
-  }
-  function flatChatToBranchTree(chat, contentStore) {
-    if (chat.branchTree)
-      return;
-    const tree = flatMessagesToBranchTree(chat.messages, contentStore);
-    for (const field of ["collapsedNodes", "omittedNodes", "protectedNodes"]) {
-      if (!chat[field])
-        continue;
-      chat[field] = Object.fromEntries(Object.entries(chat[field]).map(([key, value]) => {
-        const index = Number(key);
-        const id = Number.isInteger(index) && index >= 0 && String(index) === key ? tree.activePath[index] : void 0;
-        return [id ?? key, value];
-      }));
-    }
-    chat.branchTree = tree;
-    chat.messages = materializeActivePath(tree, contentStore);
-  }
-  function getChildrenOf(tree, nodeId) {
-    return Object.values(tree.nodes).filter((n) => n.parentId === nodeId);
-  }
-  function getSiblingGroups(tree) {
-    const grouped = /* @__PURE__ */ new Map();
-    const nodes = Object.values(tree.nodes);
-    for (const node of nodes) {
-      const group = grouped.get(node.parentId) ?? [];
-      group.push(node);
-      grouped.set(node.parentId, group);
-    }
-    const groups = [];
-    const byParent = /* @__PURE__ */ new Map();
-    const byNode = /* @__PURE__ */ Object.create(null);
-    for (const node of nodes) {
-      const parent = node.parentId || null;
-      let groupIndex = byParent.get(parent);
-      if (groupIndex === void 0) {
-        groupIndex = groups.length;
-        byParent.set(parent, groupIndex);
-        const group = grouped.get(parent) ?? [];
-        groups.push(group);
-        group.forEach((sibling, index) => {
-          byNode[sibling.id] = { groupIndex, selectedIndex: index };
-        });
-      }
-      if (!byNode[node.id])
-        byNode[node.id] = { groupIndex, selectedIndex: -1 };
-    }
-    return { groups, byNode };
-  }
-  function buildPathToLeaf(tree, nodeId) {
-    const ancestors = [];
-    let cur = nodeId;
-    while (cur) {
-      ancestors.unshift(cur);
-      cur = tree.nodes[cur]?.parentId ?? null;
-    }
-    let tip = nodeId;
-    while (true) {
-      const children = getChildrenOf(tree, tip);
-      if (children.length === 0)
-        break;
-      children.sort((a, b) => b.createdAt - a.createdAt);
-      ancestors.push(children[0].id);
-      tip = children[0].id;
-    }
-    return ancestors;
-  }
-  function collectDescendants(tree, nodeId) {
-    const result3 = /* @__PURE__ */ new Set();
-    const queue = [nodeId];
-    while (queue.length > 0) {
-      const id = queue.pop();
-      result3.add(id);
-      for (const child of getChildrenOf(tree, id)) {
-        queue.push(child.id);
-      }
-    }
-    return result3;
   }
 
   // src/store/branch-domain.ts
@@ -8006,8 +7700,423 @@ var WeaveletGoogleSync = (() => {
     return { status: "updated", ...result3, historyBase: ensured };
   };
 
+  // src/utils/jsonChanges.ts
+  var orderedJSONEqual = (left, right) => {
+    if (Object.is(left, right))
+      return true;
+    if (!left || !right || typeof left !== "object" || typeof right !== "object" || Array.isArray(left) !== Array.isArray(right))
+      return false;
+    const a = Object.keys(left), b = Object.keys(right);
+    return a.length === b.length && a.every((key, index) => key === b[index] && orderedJSONEqual(left[key], right[key]));
+  };
+  function appendChanges(before, after, path, output) {
+    if (orderedJSONEqual(before, after))
+      return;
+    const opaque = (value) => value && typeof value === "object" && !Array.isArray(value) && Object.keys(value).length === 1 && Number.isInteger(value.opaqueRef);
+    if (opaque(before) || opaque(after)) {
+      output.push({ op: "set", path, value: after });
+      return;
+    }
+    if (Array.isArray(before) && Array.isArray(after)) {
+      for (let i = 0; i < after.length; i++) {
+        if (i < before.length)
+          appendChanges(before[i], after[i], [...path, i], output);
+        else
+          output.push({ op: "set", path: [...path, i], value: after[i] });
+      }
+      for (let i = before.length - 1; i >= after.length; i--)
+        output.push({ op: "remove", path: [...path, i] });
+    } else if (before && after && typeof before === "object" && typeof after === "object" && !Array.isArray(before) && !Array.isArray(after)) {
+      for (const key of Object.keys(before))
+        if (!Object.hasOwn(after, key))
+          output.push({ op: "remove", path: [...path, key] });
+      for (const key of Object.keys(after)) {
+        if (Object.hasOwn(before, key))
+          appendChanges(before[key], after[key], [...path, key], output);
+        else
+          output.push({ op: "set", path: [...path, key], value: after[key] });
+      }
+      if (!orderedJSONEqual(Object.keys(before), Object.keys(after)))
+        output.push({ op: "keys", path, keys: Object.keys(after) });
+    } else
+      output.push({ op: "set", path, value: after });
+  }
+  function diffJSONChanges(before, after) {
+    const output = [];
+    appendChanges(before, after, [], output);
+    return output;
+  }
+
+  // shared/google-sync/editing.ts
+  var runtime;
+  function editingUUID() {
+    if (!runtime)
+      return crypto.randomUUID();
+    const id = runtime.ids.shift();
+    if (!id || runtime.reserved.has(id))
+      throw new Error("Invalid new node ID.");
+    runtime.reserved.add(id);
+    return id;
+  }
+  function withEditingRuntime(newIDs, existingIDs, now, operation) {
+    const clock = Date.now;
+    runtime = { ids: [...newIDs], reserved: new Set(existingIDs) };
+    Date.now = () => now;
+    try {
+      return operation();
+    } finally {
+      Date.now = clock;
+      runtime = void 0;
+    }
+  }
+  function messageEdit(json, capture) {
+    const input = JSON.parse(json);
+    if (input.operation === "textValue")
+      return JSON.stringify(textValueOf(input.parts));
+    if (input.editedText !== void 0 && typeof input.editedText !== "string")
+      throw new Error("Invalid text.");
+    const parts = input.editedText !== void 0 && input.editedText !== textValueOf(input.parts) ? replaceTextValue(input.parts, input.editedText) : input.parts;
+    if (!["user", "assistant", "system"].includes(input.role) || !Array.isArray(input.parts))
+      throw new Error("Invalid message.");
+    if (input.mode === "append" && input.editedText !== void 0 && !hasMeaningfulContent(parts))
+      throw new Error("\u672C\u6587\u3092\u5165\u529B\u3057\u3066\u304F\u3060\u3055\u3044");
+    const before = { chat: input.chat, contentStore: input.contentStore };
+    const isolated = structuredClone(before);
+    let chat = isolated.chat;
+    if (!Array.isArray(chat.messages) && chat.branchTree)
+      chat.messages = materializeActivePath(chat.branchTree, isolated.contentStore);
+    const wasFlat = !chat.branchTree;
+    return withEditingRuntime(input.newIDs, Object.keys(chat.branchTree?.nodes ?? {}), input.now, () => {
+      let result3 = input.mode === "insert" && wasFlat ? { chats: [chat], contentStore: isolated.contentStore } : ensureBranchTreeState([chat], 0, isolated.contentStore);
+      if (!wasFlat) {
+        const path = input.viewingPath;
+        if (path.some((id) => !Object.hasOwn(result3.chats[0].branchTree.nodes, id)))
+          throw new Error("Invalid viewing path.");
+        if (path.length)
+          result3.chats = switchActivePathState(result3.chats, 0, path, result3.contentStore);
+        else
+          result3.chats[0].branchTree.activePath = [];
+      }
+      let historyBase = result3;
+      if (input.mode === "insert") {
+        if (input.nodeID === void 0)
+          throw new Error("Invalid insert target.");
+        const beforeNodeId = wasFlat && input.nodeID?.startsWith("message-") ? input.nodeID.slice(8) : input.nodeID;
+        const inserted = insertNodeState(result3.chats, { chatId: chat.id, beforeNodeId, role: input.role, content: parts }, result3.contentStore);
+        if (inserted.status !== "updated")
+          throw new Error(`Invalid insert target: ${inserted.status}`);
+        historyBase = inserted.historyBase ?? historyBase;
+        result3 = inserted;
+      } else {
+        const tree = result3.chats[0].branchTree;
+        let index = -1;
+        if (input.mode !== "append") {
+          const flatID = input.nodeID?.startsWith("message-") ? input.nodeID.slice(8) : input.nodeID;
+          index = wasFlat && flatID !== void 0 && String(Number(flatID)) === flatID ? Number(flatID) : tree.activePath.indexOf(input.nodeID);
+          if (!Number.isInteger(index) || index < 0 || index >= tree.activePath.length)
+            throw new Error("Invalid message node ID.");
+          if (input.mode === "overwrite" && result3.chats[0].protectedNodes?.[tree.activePath[index]])
+            throw new Error("Protected message.");
+        }
+        if (input.mode === "append")
+          result3 = appendNodeToActivePathState(result3.chats, 0, input.role, parts, result3.contentStore);
+        else if (input.mode === "branch") {
+          const branch = createBranchState(result3.chats, 0, tree.activePath[index], parts, result3.contentStore);
+          result3 = branch;
+          if (branch.chats[0].branchTree.nodes[branch.newId].role !== input.role) {
+            result3.chats = updateNodeRoleState(branch.chats, 0, branch.newId, input.role, branch.contentStore);
+          }
+        } else
+          result3 = upsertWithAutoBranchState(result3.chats, 0, index, { role: input.role, content: parts }, result3.contentStore);
+      }
+      const changed = !("noOp" in result3 && result3.noOp);
+      for (const [hash, entry] of Object.entries(result3.contentStore)) {
+        if (entry.delta && JSON.stringify(entry.delta) !== JSON.stringify(before.contentStore[hash]?.delta)) {
+          const content = resolveContent(result3.contentStore, hash);
+          const { delta: _delta, ...full } = entry;
+          result3.contentStore[hash] = { ...full, content };
+        }
+      }
+      chat = result3.chats[0];
+      chat.messages = materializeActivePath(chat.branchTree, result3.contentStore, true);
+      if (changed)
+        capture?.(historyBase, result3);
+      return JSON.stringify(diffJSONChanges(before, JSON.parse(JSON.stringify({ chat, contentStore: result3.contentStore }))));
+    });
+  }
+
+  // src/utils/branchUtils.ts
+  function readMessageAttributes(owner) {
+    const value = owner.messageAttributesV1;
+    if (!Object.hasOwn(owner, "messageAttributesV1"))
+      return void 0;
+    if (!value || value.version !== 1 || !value.byNode || typeof value.byNode !== "object" || Array.isArray(value.byNode) || Object.keys(value).some((key) => key !== "version" && key !== "byNode") || Object.keys(value.byNode).some((id) => !Object.hasOwn(owner.nodes, id)) || Object.values(value.byNode).some((attributes) => !attributes || typeof attributes !== "object" || Array.isArray(attributes) || Object.hasOwn(attributes, "role") || Object.hasOwn(attributes, "content"))) {
+      throw new Error("Unsupported message attributes namespace.");
+    }
+    return value;
+  }
+  var extraMessageAttributes = (message) => {
+    const { role, content, ...attributes } = message;
+    return attributes;
+  };
+  function setMessageAttributes(owner, nodeId, message) {
+    const attributes = extraMessageAttributes(message);
+    if (!Object.keys(attributes).length)
+      return;
+    const previous = readMessageAttributes(owner);
+    owner.messageAttributesV1 = { version: 1, byNode: {
+      ...previous?.byNode,
+      [nodeId]: { ...previous?.byNode[nodeId], ...structuredClone(attributes) }
+    } };
+  }
+  function copyMessageAttributes(source, sourceId, target, targetId) {
+    const attributes = readMessageAttributes(source)?.byNode[sourceId];
+    if (!attributes)
+      return;
+    setMessageAttributes(target, targetId, { ...attributes, role: "user", content: [] });
+  }
+  function deleteMessageAttributes(owner, nodeId) {
+    const previous = readMessageAttributes(owner);
+    if (!previous || !Object.hasOwn(previous.byNode, nodeId))
+      return;
+    const byNode = { ...previous.byNode };
+    delete byNode[nodeId];
+    owner.messageAttributesV1 = { version: 1, byNode };
+  }
+  function captureProjectedMessageAttributes(chat, contentStore) {
+    if (!chat.branchTree)
+      return;
+    let next = chat.branchTree;
+    for (const [index, message] of (chat.messages ?? []).entries()) {
+      const attributes = extraMessageAttributes(message);
+      if (!Object.keys(attributes).length)
+        continue;
+      const nodeId = chat.branchTree.activePath[index], node = chat.branchTree.nodes[nodeId];
+      if (!node || node.role !== message.role || !(0, import_lodash.isEqual)(resolveContent(contentStore, node.contentHash), message.content))
+        throw new Error("Message attributes do not match the active branch.");
+      const existing = readMessageAttributes(next)?.byNode[nodeId];
+      for (const [key, value] of Object.entries(attributes))
+        if (existing && Object.hasOwn(existing, key) && !(0, import_lodash.isEqual)(existing[key], value))
+          throw new Error("Conflicting projected message attributes.");
+      if (next === chat.branchTree)
+        next = { ...next };
+      setMessageAttributes(next, nodeId, message);
+    }
+    chat.branchTree = next;
+  }
+  function projectMessageAttributes(owner, nodeId, message) {
+    return { ...structuredClone(readMessageAttributes(owner)?.byNode[nodeId] ?? {}), role: message.role, content: message.content };
+  }
+  function materializeActivePath(tree, contentStore, includeAttributes = false) {
+    return tree.activePath.map((id) => {
+      const node = tree.nodes[id];
+      const message = { role: node.role, content: resolveContent(contentStore, node.contentHash) };
+      return includeAttributes ? projectMessageAttributes(tree, id, message) : message;
+    });
+  }
+  function flatMessagesToBranchTree(messages, contentStore) {
+    const nodes = {};
+    const ids = [];
+    const tree = { nodes, rootId: "", activePath: ids };
+    for (let i = 0; i < messages.length; i++) {
+      const id = editingUUID();
+      ids.push(id);
+      const contentHash = addContent(contentStore, messages[i].content);
+      nodes[id] = {
+        id,
+        parentId: i === 0 ? null : ids[i - 1],
+        role: messages[i].role,
+        contentHash,
+        createdAt: Date.now() - (messages.length - i) * 1e3
+      };
+      setMessageAttributes(tree, id, messages[i]);
+    }
+    tree.rootId = ids[0] ?? "";
+    return tree;
+  }
+  function flatChatToBranchTree(chat, contentStore) {
+    if (chat.branchTree)
+      return;
+    const tree = flatMessagesToBranchTree(chat.messages, contentStore);
+    for (const field of ["collapsedNodes", "omittedNodes", "protectedNodes"]) {
+      if (!chat[field])
+        continue;
+      chat[field] = Object.fromEntries(Object.entries(chat[field]).map(([key, value]) => {
+        const index = Number(key);
+        const id = Number.isInteger(index) && index >= 0 && String(index) === key ? tree.activePath[index] : void 0;
+        return [id ?? key, value];
+      }));
+    }
+    chat.branchTree = tree;
+    chat.messages = materializeActivePath(tree, contentStore);
+  }
+  function getChildrenOf(tree, nodeId) {
+    return Object.values(tree.nodes).filter((n) => n.parentId === nodeId);
+  }
+  function getSiblingGroups(tree) {
+    const grouped = /* @__PURE__ */ new Map();
+    const nodes = Object.values(tree.nodes);
+    for (const node of nodes) {
+      const group = grouped.get(node.parentId) ?? [];
+      group.push(node);
+      grouped.set(node.parentId, group);
+    }
+    const groups = [];
+    const byParent = /* @__PURE__ */ new Map();
+    const byNode = /* @__PURE__ */ Object.create(null);
+    for (const node of nodes) {
+      const parent = node.parentId || null;
+      let groupIndex = byParent.get(parent);
+      if (groupIndex === void 0) {
+        groupIndex = groups.length;
+        byParent.set(parent, groupIndex);
+        const group = grouped.get(parent) ?? [];
+        groups.push(group);
+        group.forEach((sibling, index) => {
+          byNode[sibling.id] = { groupIndex, selectedIndex: index };
+        });
+      }
+      if (!byNode[node.id])
+        byNode[node.id] = { groupIndex, selectedIndex: -1 };
+    }
+    return { groups, byNode };
+  }
+  function buildPathToLeaf(tree, nodeId) {
+    const ancestors = [];
+    let cur = nodeId;
+    while (cur) {
+      ancestors.unshift(cur);
+      cur = tree.nodes[cur]?.parentId ?? null;
+    }
+    let tip = nodeId;
+    while (true) {
+      const children = getChildrenOf(tree, tip);
+      if (children.length === 0)
+        break;
+      children.sort((a, b) => b.createdAt - a.createdAt);
+      ancestors.push(children[0].id);
+      tip = children[0].id;
+    }
+    return ancestors;
+  }
+  function collectDescendants(tree, nodeId) {
+    const result3 = /* @__PURE__ */ new Set();
+    const queue = [nodeId];
+    while (queue.length > 0) {
+      const id = queue.pop();
+      result3.add(id);
+      for (const child of getChildrenOf(tree, id)) {
+        queue.push(child.id);
+      }
+    }
+    return result3;
+  }
+
+  // src/utils/branchHistory.ts
+  var HISTORY_LIMIT = 50;
+  var changedBranchChatIds = (previous, next, sameBranch = (a, b) => a.messages === b.messages && a.branchTree === b.branchTree) => {
+    const nextById = new Map(next.map((chat) => [chat.id, chat]));
+    const previousById = new Map(previous.map((chat) => [chat.id, chat]));
+    const ids = /* @__PURE__ */ new Set();
+    for (const chat of previous) {
+      const updated = nextById.get(chat.id);
+      if (!updated || !sameBranch(chat, updated)) {
+        ids.add(chat.id);
+      }
+    }
+    for (const chat of next) {
+      if (!previousById.has(chat.id))
+        ids.add(chat.id);
+    }
+    return [...ids];
+  };
+  var snapshotContentStore = (chats, contentStore) => {
+    const snapshot = {};
+    const add = (hash) => {
+      const entry = contentStore[hash];
+      if (snapshot[hash] || !entry)
+        return;
+      snapshot[hash] = structuredClone(entry);
+      if (entry.delta)
+        add(entry.delta.baseHash);
+    };
+    for (const chat of chats) {
+      Object.values(chat.branchTree?.nodes ?? {}).forEach((node) => add(node.contentHash));
+    }
+    return snapshot;
+  };
+  var createBranchSnapshot = (chats, contentStore, chatIds, expectedChats = chats) => {
+    const ids = new Set(chatIds);
+    const expectedById = new Map(expectedChats.map((chat) => [chat.id, chat]));
+    const snapshotChats = chats.filter((chat) => ids.has(chat.id)).map((chat) => ({
+      id: chat.id,
+      messages: structuredClone(chat.messages),
+      branchTree: structuredClone(chat.branchTree),
+      expectedActivePath: expectedById.get(chat.id)?.branchTree?.activePath.slice(),
+      ...chat.config?.systemPrompt !== expectedById.get(chat.id)?.config?.systemPrompt ? { systemPrompt: { value: chat.config?.systemPrompt } } : {}
+    }));
+    return {
+      chats: snapshotChats,
+      contentStore: snapshotContentStore(snapshotChats, contentStore)
+    };
+  };
+  var isUsableActivePath = (tree, path) => path.length > 0 && path.every((id, index) => {
+    const node = tree.nodes[id];
+    return !!node && (index === 0 ? node.parentId === null : node.parentId === path[index - 1]);
+  });
+  var pathsEqual = (first, second) => first.length === second.length && first.every((id, index) => id === second[index]);
+  var restoreBranchSnapshot = (chats, contentStore, snapshot) => {
+    const snapshots = new Map(snapshot.chats.map((chat) => [chat.id, chat]));
+    const restored = chats.map((chat) => {
+      const saved = snapshots.get(chat.id);
+      if (!saved)
+        return chat;
+      const config = saved.systemPrompt ? { ...chat.config, systemPrompt: saved.systemPrompt.value } : chat.config;
+      if (!saved.branchTree)
+        return { ...chat, config, messages: structuredClone(saved.messages), branchTree: void 0 };
+      const branchTree = structuredClone(saved.branchTree);
+      const currentPath = chat.branchTree?.activePath;
+      if (currentPath && saved.expectedActivePath && !pathsEqual(currentPath, saved.expectedActivePath) && isUsableActivePath(branchTree, currentPath)) {
+        branchTree.activePath = currentPath.slice();
+      }
+      return { ...chat, config, branchTree, messages: materializeActivePath(branchTree, contentStore) };
+    });
+    return restored;
+  };
+  var captureBranchHistory = (history, before, after) => {
+    const ids = changedBranchChatIds(before.chats, after.chats);
+    return ids.length ? { past: [...history.past, createBranchSnapshot(before.chats, before.contentStore, ids, after.chats)].slice(-HISTORY_LIMIT), future: [] } : history;
+  };
+  var invalidateBranchHistory = (history, chatIds) => {
+    const ids = new Set(chatIds);
+    const keep = (snapshot) => !snapshot.chats.some((chat) => ids.has(chat.id));
+    return { past: history.past.filter(keep), future: history.future.filter(keep) };
+  };
+  var canStepBranchHistory = (history, direction, busyChatIds) => {
+    const snapshot = (direction === "undo" ? history.past : history.future).at(-1);
+    return !!snapshot && !snapshot.chats.some((chat) => busyChatIds.includes(chat.id));
+  };
+  var stepBranchHistory = (history, state, direction, busyChatIds) => {
+    const snapshot = (direction === "undo" ? history.past : history.future).at(-1);
+    const affectedChatIds = snapshot?.chats.map((chat) => chat.id) ?? [];
+    if (!snapshot)
+      return { status: "empty", history, state, affectedChatIds };
+    if (affectedChatIds.some((id) => !state.chats.some((chat) => chat.id === id)))
+      return { status: "chat-missing", history, state, affectedChatIds };
+    if (!canStepBranchHistory(history, direction, busyChatIds))
+      return { status: "busy", history, state, affectedChatIds };
+    const current = createBranchSnapshot(state.chats, state.contentStore, affectedChatIds, restoreBranchSnapshot(state.chats, state.contentStore, snapshot));
+    const contentStore = { ...snapshot.contentStore, ...state.contentStore };
+    return {
+      status: "updated",
+      affectedChatIds,
+      state: { chats: restoreBranchSnapshot(state.chats, contentStore, snapshot), contentStore },
+      history: direction === "undo" ? { past: history.past.slice(0, -1), future: [...history.future, current] } : { past: [...history.past, current], future: history.future.slice(0, -1) }
+    };
+  };
+
   // shared/google-sync/nodeRemoval.ts
-  function nodeRemoval(json) {
+  function nodeRemoval(json, capture) {
     const input = JSON.parse(json);
     if (input.operation !== "remove" && input.operation !== "pruneHidden")
       throw new Error("Invalid removal operation.");
@@ -8024,6 +8133,7 @@ var WeaveletGoogleSync = (() => {
           throw new Error("Invalid viewing path.");
         result3.chats = switchActivePathState(result3.chats, 0, input.viewingPath, result3.contentStore);
       }
+      let historyBase = result3;
       if (input.operation === "remove") {
         if (input.nodeID == null)
           throw new Error("Invalid removal target.");
@@ -8031,6 +8141,7 @@ var WeaveletGoogleSync = (() => {
         const removed = removeNodeState(result3.chats, { chatId: chat.id, nodeId }, result3.contentStore);
         if (removed.status !== "updated")
           throw new Error(`Cannot remove node: ${removed.status}`);
+        historyBase = removed.historyBase ?? historyBase;
         result3 = removed;
       } else {
         if (wasFlat)
@@ -8048,6 +8159,7 @@ var WeaveletGoogleSync = (() => {
       contentStore = result3.contentStore;
       if (chat.branchTree)
         chat.messages = materializeActivePath(chat.branchTree, contentStore, true);
+      capture?.(historyBase, result3);
       return JSON.stringify(diffJSONChanges(before, JSON.parse(JSON.stringify({ chat, contentStore }))));
     });
   }
@@ -8084,7 +8196,7 @@ var WeaveletGoogleSync = (() => {
   };
 
   // shared/google-sync/nodeOptions.ts
-  function nodeOptions(json) {
+  function nodeOptions(json, capture) {
     const input = JSON.parse(json);
     const target = resolveNodeTarget([input.chat], { chatId: input.chat.id, nodeId: input.nodeId });
     if (target.status !== "valid")
@@ -8105,12 +8217,14 @@ var WeaveletGoogleSync = (() => {
     const before = { chat: input.chat, contentStore: input.contentStore };
     let { chat, contentStore } = structuredClone(before), nodeId = input.nodeId;
     return withEditingRuntime(input.newIDs ?? [], Object.keys(chat.branchTree?.nodes ?? {}), input.now ?? Date.now(), () => {
+      let historyBase;
       for (const field of ["label", "starred", "pinned"]) {
         if (input.value[field] === value[field])
           continue;
         const next = input.value[field] || void 0;
         const result3 = setNodeDisplayFieldState([chat], { chatId: chat.id, nodeId }, field, next, contentStore);
         if (result3.status === "updated") {
+          historyBase ??= result3.historyBase;
           chat = result3.chats[0];
           contentStore = result3.contentStore;
           nodeId = result3.nodeId;
@@ -8125,9 +8239,50 @@ var WeaveletGoogleSync = (() => {
       }
       if (chat.branchTree && !input.chat.branchTree)
         chat.messages = materializeActivePath(chat.branchTree, contentStore, true);
+      if (historyBase)
+        capture?.(historyBase, { chats: [chat], contentStore });
       const changes = diffJSONChanges(before, JSON.parse(JSON.stringify({ chat, contentStore })));
       return JSON.stringify({ status: changes.length ? "updated" : "unchanged", nodeId, path: chat.branchTree?.activePath, changes });
     });
+  }
+
+  // shared/google-sync/branchHistory.ts
+  function branchHistory(json) {
+    const input = JSON.parse(json);
+    let history = input.history ?? { past: [], future: [] };
+    const busy = input.busyChatIds ?? [];
+    let output = {};
+    if (input.operation === "edit") {
+      const bridges = { messageEdit, nodeRemoval, nodeOptions };
+      const bridge = bridges[input.kind];
+      if (!bridge)
+        throw new Error("Invalid history edit.");
+      const result3 = JSON.parse(bridge(JSON.stringify(input.input), (before, after) => {
+        history = captureBranchHistory(history, before, after);
+      }));
+      output = input.kind === "nodeOptions" ? result3 : { changes: result3 };
+    } else if (input.operation === "undo" || input.operation === "redo") {
+      const before = { chats: input.chats, contentStore: input.contentStore };
+      const result3 = stepBranchHistory(history, before, input.operation, busy);
+      history = result3.history;
+      if (result3.status === "updated") {
+        result3.state.chats = result3.state.chats.map((chat) => result3.affectedChatIds.includes(chat.id) && chat.branchTree ? { ...chat, messages: materializeActivePath(chat.branchTree, result3.state.contentStore, true) } : chat);
+      }
+      output = {
+        status: result3.status,
+        affectedChatIds: result3.affectedChatIds,
+        changes: result3.status === "updated" ? diffJSONChanges(before, JSON.parse(JSON.stringify(result3.state))) : []
+      };
+    } else if (input.operation === "invalidate") {
+      const ids = input.chatIds ?? changedBranchChatIds(
+        input.before,
+        input.after,
+        (a, b) => orderedJSONEqual(a.messages, b.messages) && orderedJSONEqual(a.branchTree, b.branchTree)
+      );
+      history = invalidateBranchHistory(history, ids);
+    } else if (input.operation !== "can" && input.operation !== "initialize")
+      throw new Error("Invalid history operation.");
+    return JSON.stringify({ ...output, history, can: { undo: canStepBranchHistory(history, "undo", busy), redo: canStepBranchHistory(history, "redo", busy) } });
   }
 
   // src/utils/branchSearch.ts
@@ -8467,7 +8622,7 @@ var WeaveletGoogleSync = (() => {
           return JSON.stringify({ ...target, changes: [] });
         if (chats[target.chatIndex].branchTree)
           chats = switchActivePathState(chats, target.chatIndex, target.path, source.contentStore);
-        return JSON.stringify({ ...target, changes: diffJSONChanges(source, { ...source, chats }) });
+        return JSON.stringify({ ...target, changes: diffJSONChanges(source, JSON.parse(JSON.stringify({ ...source, chats }))) });
       }
       case "restore": {
         const chatIndex = source.chats.findIndex((chat2) => chat2.id === input.entry.chatId), chat = source.chats[chatIndex];
@@ -8475,7 +8630,7 @@ var WeaveletGoogleSync = (() => {
           return JSON.stringify({ status: "chat-missing", changes: [] });
         const path = restoredNavigationPath(chat, input.entry.activePath);
         const chats = path ? switchActivePathState(source.chats, chatIndex, path, source.contentStore) : source.chats;
-        return JSON.stringify({ status: "reached", chatId: chat.id, chatIndex, path: path ?? [...chat.branchTree?.activePath ?? []], focusedNodeId: input.entry.focusedNodeId, changes: diffJSONChanges(source, { ...source, chats }) });
+        return JSON.stringify({ status: "reached", chatId: chat.id, chatIndex, path: path ?? [...chat.branchTree?.activePath ?? []], focusedNodeId: input.entry.focusedNodeId, changes: diffJSONChanges(source, JSON.parse(JSON.stringify({ ...source, chats }))) });
       }
       case "candidates":
         return JSON.stringify(source.chats.map((chat) => {

@@ -18,14 +18,15 @@ export function navigationOperation(json: string): string {
       if (target.status !== 'reached') return JSON.stringify({...target,changes:[]});
       if (chats[target.chatIndex].branchTree)
         chats = switchActivePathState(chats,target.chatIndex,target.path,source.contentStore);
-      return JSON.stringify({...target,changes:diffJSONChanges(source,{...source,chats})});
+      // Web clones may add undefined optional maps; omit them at the JSON boundary before diffing.
+      return JSON.stringify({...target,changes:diffJSONChanges(source,JSON.parse(JSON.stringify({...source,chats})))});
     }
     case 'restore': {
       const chatIndex = source.chats.findIndex((chat:any)=>chat.id === input.entry.chatId), chat = source.chats[chatIndex];
       if (!chat) return JSON.stringify({status:'chat-missing',changes:[]});
       const path = restoredNavigationPath(chat,input.entry.activePath);
       const chats = path ? switchActivePathState(source.chats,chatIndex,path,source.contentStore) : source.chats;
-      return JSON.stringify({status:'reached',chatId:chat.id,chatIndex,path:path ?? [...(chat.branchTree?.activePath ?? [])],focusedNodeId:input.entry.focusedNodeId,changes:diffJSONChanges(source,{...source,chats})});
+      return JSON.stringify({status:'reached',chatId:chat.id,chatIndex,path:path ?? [...(chat.branchTree?.activePath ?? [])],focusedNodeId:input.entry.focusedNodeId,changes:diffJSONChanges(source,JSON.parse(JSON.stringify({...source,chats})))});
     }
     case 'candidates': return JSON.stringify(source.chats.map((chat:any) => {
       const grouped = chat.branchTree ? getSiblingGroups(chat.branchTree) : {groups:[],byNode:{}};

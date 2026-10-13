@@ -1,3 +1,4 @@
+export { branchHistory } from './branchHistory';
 export { nodeRemoval } from './nodeRemoval';
 export { nodeOptions } from './nodeOptions';
 export { chatSearch } from './search';

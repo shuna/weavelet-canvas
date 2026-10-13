@@ -8,6 +8,21 @@ const fixture = () => JSON.parse(readFileSync(new URL('../../tests/fixtures/web-
 const call = (input:any) => JSON.parse(navigationOperation(JSON.stringify(input)));
 const entry = (chatId:string,key:string) => ({chatId,key,activePath:[],source:'chat-switch' as const});
 describe('shared branch navigation',()=>{
+  it('omits undefined optional maps before producing native navigation and restore patches',()=>{
+    const source=fixture();
+    for(const key of ['collapsedNodes','omittedNodes','protectedNodes']) delete source.chats[0][key];
+    const before=structuredClone(source);
+    for(const input of [
+      {operation:'navigate',chatId:'chat-a',nodeId:'n-inactive',navigationSource:'search'},
+      {operation:'restore',entry:{chatId:'chat-a',activePath:['n-system','n-user','n-inactive']}},
+    ]) {
+      const result=call({...input,source});
+      expect(result.path).toEqual(['n-system','n-user','n-inactive']);
+      expect(result.changes.filter((patch:any)=>patch.op==='set').every((patch:any)=>Object.hasOwn(patch,'value'))).toBe(true);
+      expect(result.changes.some((patch:any)=>['collapsedNodes','omittedNodes','protectedNodes'].includes(patch.path.at(-1)))).toBe(false);
+    }
+    expect(source).toEqual(before);
+  });
   it('uses current Web target and newest descendant rules while preserving search/grep continuation',()=>{
     const source=fixture();
     expect(resolveNavigationTarget(source.chats,'chat-a','n-user','branch-switch').path).toEqual(['n-system','n-user','n-inactive']);
