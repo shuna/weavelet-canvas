@@ -44,7 +44,9 @@ describe('shared CloudKit wire rules', () => {
     const nativeSyncCall = (requestJSON: string) => {
       const request = JSON.parse(requestJSON);
       if (request.operation !== 'utf8') throw new Error(`Unexpected host call: ${request.operation}`);
-      return JSON.stringify({ ok: true, value: Array.from(new TextEncoder().encode(JSON.parse(request.args[0]))) });
+      const text = JSON.parse(request.args[0]) as string;
+      if (text !== (text as string & { toWellFormed(): string }).toWellFormed()) throw new Error('Native host rejected an isolated surrogate');
+      return JSON.stringify({ ok: true, value: Array.from(new TextEncoder().encode(text)) });
     };
     const bridge = runInNewContext(`${bundle}\nWeaveletGoogleSync`, { nativeSyncCall }) as {
       cloudKitOperation: (input: string) => string;
@@ -57,8 +59,20 @@ describe('shared CloudKit wire rules', () => {
       .toEqual({ wrapped: true, version: 18 });
     expect(call({ operation: 'localWins', localUpdatedAt: 100, serverUpdatedAt: 101 })).toBe(false);
     const snapshot = { state: { chats: [{ id: 'one' }], contentStore: {} }, version: 18 };
+    expect(call({ operation: 'receiveGuard', snapshotJSON: JSON.stringify(snapshot) }))
+      .toEqual({ compatibleVersion: true, validFolders: true });
+    expect(call({ operation: 'receiveGuard', snapshotJSON: JSON.stringify({ ...snapshot, version: 17 }) }))
+      .toEqual({ compatibleVersion: false, validFolders: true });
+    expect(call({ operation: 'receiveGuard', snapshotJSON: JSON.stringify({
+      ...snapshot, state: { ...snapshot.state, folders: { loop: { id: 'loop', name: 'Loop', order: 0, expanded: true, parentId: 'loop' } } },
+    }) })).toEqual({ compatibleVersion: true, validFolders: false });
     const guarded = call({ operation: 'uploadGuard', snapshotJSON: JSON.stringify(snapshot), previousMetrics: null });
     expect(guarded).toEqual({ message: null, metrics: computeCloudSyncMetrics(snapshot) });
+    const surrogateSnapshot = { state: { chats: [{ id: 'one', title: '\ud800\udfff11' }], contentStore: {} }, version: 18 };
+    const compressed = compress(JSON.stringify(surrogateSnapshot));
+    expect(compressed).not.toBe((compressed as string & { toWellFormed(): string }).toWellFormed());
+    expect(call({ operation: 'uploadGuard', snapshotJSON: JSON.stringify(surrogateSnapshot), previousMetrics: null }).metrics)
+      .toEqual(computeCloudSyncMetrics(surrogateSnapshot));
     expect(call({ operation: 'uploadGuard', snapshotJSON: JSON.stringify({ state: { chats: [] } }), previousMetrics: null }).message)
       .toContain('erase all chats');
   });

@@ -27,7 +27,7 @@ global.crypto = { randomUUID: () => host("uuid") };
 global.console = { error: () => {}, warn: () => {}, log: () => {} };
 global.performance = { now: () => Date.now() };
 global.structuredClone = (value: unknown) => JSON.parse(JSON.stringify(value));
-global.TextEncoder = class { encode(value: string) { return new Uint8Array(host('utf8', value)); } };
+global.TextEncoder = class { encode(value: string) { return new Uint8Array(host('utf8', (value as string & { toWellFormed(): string }).toWellFormed())); } };
 global.TextDecoder = class { decode(value: Uint8Array) { return host('text', Array.from(value)); } };
 global.Blob = class { size: number; constructor(parts: string[]) { this.size = new TextEncoder().encode(parts.join('')).length; } };
 let sequence = 0;
@@ -162,6 +162,7 @@ export { assistantPrefill } from './assistantPrefill';
 
 import { cloudKitLocalWins as localCloudKitWins, cloudKitSnapshotLayout as snapshotCloudKitLayout } from './cloudKit';
 import { computeCloudSyncMetrics, getCloudSyncGuardMessage } from '../../src/store/storage/cloud/guards';
+import { validateFolderHierarchy } from '../../src/utils/folderHierarchy';
 import { CLOUDKIT_DEFAULT_RECORD_NAME, CLOUDKIT_RECORD_TYPE } from '../../src/api/cloudkit';
 import { STORE_VERSION } from '../../src/store/version';
 export const cloudKitOperation = (inputJSON: string) => {
@@ -170,6 +171,15 @@ export const cloudKitOperation = (inputJSON: string) => {
     case 'constants': return JSON.stringify({ recordName: CLOUDKIT_DEFAULT_RECORD_NAME, recordType: CLOUDKIT_RECORD_TYPE, version: STORE_VERSION });
     case 'layout': return JSON.stringify(snapshotCloudKitLayout(input.value, STORE_VERSION));
     case 'localWins': return JSON.stringify(localCloudKitWins(input.localUpdatedAt, input.serverUpdatedAt));
+    case 'receiveGuard': {
+      const value = JSON.parse(input.snapshotJSON);
+      const layout = snapshotCloudKitLayout(value, STORE_VERSION);
+      const state = layout.wrapped ? value.state : value;
+      return JSON.stringify({
+        compatibleVersion: layout.version === STORE_VERSION,
+        validFolders: !Object.hasOwn(state, 'folders') || validateFolderHierarchy(state.folders),
+      });
+    }
     case 'uploadGuard': {
       const value = JSON.parse(input.snapshotJSON);
       const metrics = computeCloudSyncMetrics(value);

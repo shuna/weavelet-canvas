@@ -19313,7 +19313,7 @@ ${messageContent}---
   global2.structuredClone = (value) => JSON.parse(JSON.stringify(value));
   global2.TextEncoder = class {
     encode(value) {
-      return new Uint8Array(host("utf8", value));
+      return new Uint8Array(host("utf8", value.toWellFormed()));
     }
   };
   global2.TextDecoder = class {
@@ -19489,6 +19489,15 @@ ${messageContent}---
         return JSON.stringify(cloudKitSnapshotLayout(input.value, STORE_VERSION));
       case "localWins":
         return JSON.stringify(cloudKitLocalWins(input.localUpdatedAt, input.serverUpdatedAt));
+      case "receiveGuard": {
+        const value = JSON.parse(input.snapshotJSON);
+        const layout = cloudKitSnapshotLayout(value, STORE_VERSION);
+        const state = layout.wrapped ? value.state : value;
+        return JSON.stringify({
+          compatibleVersion: layout.version === STORE_VERSION,
+          validFolders: !Object.hasOwn(state, "folders") || validateFolderHierarchy(state.folders)
+        });
+      }
       case "uploadGuard": {
         const value = JSON.parse(input.snapshotJSON);
         const metrics = computeCloudSyncMetrics(value);
