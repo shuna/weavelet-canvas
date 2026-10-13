@@ -1,5 +1,11 @@
 # Web / 新iOSの完成条件と証拠
 
+## remote推論能力の共有接続（2026-10-13）
+
+nativeの能力false固定を廃止し、既存Web modelLookup/APIの実判定を `modelReasoning.ts` へ切り出した。Webのget/useとAPIも同じ元を使う。customの明示値、favorite/cacheとID推定、mandatoryの明示false等の優先規則は維持する。nativeは保存snapshotのfavoriteModels/providerModelCache/providerCustomModelsを読み取り専用で渡し、metadataを要求bodyへ混入させない。既存の端末model/stream指定は維持し、provider取得・モデル切替・stream/token補正は別の残件とする。
+
+共有元の既存57＋新2件、型検査、bundle鮮度の担当成功結果を再利用。Catalystは要求境界・raw値保持・代表生成の4件が一回で成功し、保存済みモデル情報から実ChatState送信へ推論設定が届くことと、保存後の3rootのbyte保持を確認した。ログ `/private/tmp/weavelet-model-capability-catalyst.log`。独立Astraは新規なし。保存/同期基盤、SSE、画像/表示の未変更領域は反復検証していない。実API・実クラウド・実機は未確認であり、生成機能全体の完成とはしない。
+
 ## 検証運用の更新と画像composer接続（2026-10-13）
 
 確認済みの共有元・保存/書出し/暗号化同期の結果は、関連コードが不変なら再利用する。現在の追加範囲は画像入力とチャット別の一時draft。実Webの `replaceTextValue/textValueOf/hasMeaningfulMessageContent` を共有composerから直接呼び、本文位置・parts順序・画像のみの送信判定をSwiftへ複製しない。共有composerの新2件＋既存12件、型検査、bundle鮮度確認は担当成功結果を再利用する。
@@ -144,7 +150,7 @@ GoogleAuthenticationはOSの認証画面、PKCE/state、URLSession、Keychainで
 | B 木と本文編集 | role・system prompt・挿入/編集/明示分岐/prune/順序・undoの共通fixtureとUI | 上書き・role・明示分岐・末尾追加を共通15caseとCatalyst実UIで確認。一般挿入は上記共有接続とCatalyst操作を確認。1件削除・非表示枝整理を共有接続済み。共有undo/redoを上記の範囲で接続済み。上下移動・後続prune・子孫削除UIも上記の範囲で接続・検証済み |
 | B 分岐閲覧 | 任意nodeの切替と後続path、端の停止・履歴・表示保持 | 任意深度の兄弟切替と共有後続path・保存・履歴をCatalystで検証 |
 | B 移動・属性 | clipboard/copy/cut/paste/会話間移動、label/star/pin/除外/保護の共通結果 | 6属性のWeb実処理共有・native設定・保存/交換/隔離同期を確認。clipboard/copy/cut/paste/会話間移動を上記の共有処理・保存・隔離同期へ接続済み |
-| B 表示・draft・添付 | 5種content/Markdown/コード/表/画像、draft/IME、添付と編集位置保持 | V3の5種本文を投影表示、画像はURL文字表示。Markdown/画像描画・編集は未実装 |
+| B 表示・draft・添付 | 5種content/Markdown/コード/表/画像、draft/IME、添付と編集位置保持 | 実Web Markdown/コード/表/数式を共有描画し、native画像表示・画像取得・会話別draftを接続。上記機能群のCatalyst/Astra確認済み。IME・選択/コピー手動操作・狭幅等は残件 |
 | C 生成入力・provider | 設定優先順位、モデル能力、system/tool/image/reasoning、token budget/prefillの一致 | OpenAI互換remoteの共通request4件とnative設定・入力を接続。他provider/モデル能力/token budget等は未実装 |
 | C 実行・取消・適用 | streaming/非stream/local、Stop、遅延結果拒否、usage/本文終端一回適用 | remote関連8件＋SSE修正関連3件成功（重複あり）、隔離CatalystでStop・再起動・正常完了・書出しを確認。独立Astra受入。local/usage等は未実装 |
 | C 評価・命名 | safety/quality/local fallback/auto title、世代照合と各設定の一致 | 未実装 |
