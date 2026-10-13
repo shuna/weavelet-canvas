@@ -127,8 +127,8 @@ export const chatToOpenAIFormat = (
   options: { visibleBranchOnly?: boolean } = {}
 ): OpenAIChat => {
   const visibleBranchOnly = options.visibleBranchOnly ?? false;
-  const modelSlug = chat.config.model;
-  const configSystemPrompt = chat.config.systemPrompt;
+  const modelSlug = chat.config?.model ?? '';
+  const configSystemPrompt = chat.config?.systemPrompt;
 
   const mapping: OpenAIChat['mapping'] = {};
 
@@ -260,7 +260,7 @@ export const chatToOpenRouterFormat = (
   chat: ChatInterface,
   contentStore: ContentStoreData
 ): OpenRouterChat => {
-  const modelSlug = chat.config.model;
+  const modelSlug = chat.config?.model ?? '';
   const characterId = orId('char');
   const now = new Date().toISOString();
 
@@ -327,8 +327,8 @@ export const chatToOpenRouterFormat = (
   };
 
   // Prepend config system prompt
-  if (chat.config.systemPrompt) {
-    addMessage('system', chat.config.systemPrompt);
+  if (chat.config?.systemPrompt) {
+    addMessage('system', chat.config?.systemPrompt);
   }
 
   if (chat.branchTree) {
@@ -407,14 +407,14 @@ export const chatToLMStudioFormat = (
   options: { visibleBranchOnly?: boolean } = {}
 ): LMStudioChat => {
   const visibleBranchOnly = options.visibleBranchOnly ?? false;
-  const modelSlug = chat.config.model;
+  const modelSlug = chat.config?.model ?? '';
   const now = Date.now();
   const messages: LMStudioMessage[] = [];
   let tokenCount = 0;
   let userLastMessagedAt: number | undefined;
   let assistantLastMessagedAt: number | undefined;
   // Use config.systemPrompt as the authoritative source
-  const systemPrompt = chat.config.systemPrompt ?? '';
+  const systemPrompt = chat.config?.systemPrompt ?? '';
 
   const addMsg = (role: string, text: string, timestamp?: number) => {
     if (!text) return;

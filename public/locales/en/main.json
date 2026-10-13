@@ -1,4 +1,6 @@
 {
+  "exportPayloadNotice": "V3 preserves branches and metadata. OpenAI can include all branches but omits metadata and non-text content. V1, OpenRouter, LM Studio and Markdown use the current branch and omit information.",
+  "exportOpenRouterBranchesNotice": "OpenRouter exports the current branch; a separate visible-branch option is unavailable.",
   "bootstrap": {
     "title": "Opening your workspace",
     "restoring": "Restoring settings…",

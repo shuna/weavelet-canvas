@@ -1,4 +1,6 @@
 {
+  "exportPayloadNotice": "V3は分岐と属性を保持します。OpenAIは全分岐を含められますが、属性と本文以外の内容を省きます。V1・OpenRouter・LM Studio・Markdownは現在の分岐を使い、情報を省きます。",
+  "exportOpenRouterBranchesNotice": "OpenRouterは現在の分岐を出力します。表示中の分岐だけを指定する切替には対応していません。",
   "bootstrap": {
     "title": "ワークスペースを準備しています",
     "restoring": "設定を復元しています…",

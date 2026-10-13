@@ -3,7 +3,6 @@ import { useTranslation } from 'react-i18next';
 import useStore from '@store/store';
 import PopupModal from '@components/PopupModal';
 import {
-  chatToMarkdown,
   downloadImg,
   downloadMarkdown,
   htmlToImg,
@@ -13,8 +12,7 @@ import downloadFile, { downloadFileGzip } from '@utils/downloadFile';
 import { createRoot } from 'react-dom/client';
 import Message from './Message';
 import { MessageInterface } from '@type/chat';
-import { ExportV3 } from '@type/export';
-import { prepareChatForExport, chatToOpenAIFormat, chatToOpenRouterFormat, chatToLMStudioFormat } from '@utils/chatExport';
+import { buildFileExportPayload } from '@utils/fileExport';
 
 const getVisibleMessages = (): Array<{ message: MessageInterface; originalIndex: number }> => {
   const state = useStore.getState();
@@ -109,51 +107,14 @@ const DownloadChat = React.memo(
           }
           break;
         }
-        case 'markdown': {
-          const exportChat = visibleBranchOnly
-            ? prepareChatForExport(chat, contentStore, { visibleBranchOnly: true }).chat
-            : chat;
-          const markdown = chatToMarkdown(exportChat);
-          downloadMarkdown(markdown, `${filename}.md`);
-          break;
-        }
-        case 'json': {
-          const prepared = prepareChatForExport(chat, contentStore, { visibleBranchOnly });
-          const exportedChat = { ...prepared.chat };
-          delete exportedChat.folder;
-          const exportedEvaluationResults = Object.fromEntries(
-            Object.entries(evaluationResults).filter(([key]) =>
-              key.startsWith(`${exportedChat.id}:`)
-            )
-          );
-          const fileData = {
-            chats: [exportedChat],
-            contentStore: prepared.contentStore,
-            folders: {},
-            evaluationSettings,
-            evaluationResults: exportedEvaluationResults,
-            version: 3,
-          } satisfies ExportV3;
-          if (useGzip) {
-            await downloadFileGzip(fileData, exportedChat.title);
-          } else {
-            downloadFile(fileData, exportedChat.title);
-          }
-          break;
-        }
-        case 'chatgpt': {
-          const openaiData = chatToOpenAIFormat(chat, contentStore, { visibleBranchOnly });
-          downloadFile([openaiData], filename);
-          break;
-        }
-        case 'openrouter': {
-          const orData = chatToOpenRouterFormat(chat, contentStore);
-          downloadFile(orData, filename);
-          break;
-        }
-        case 'lmstudio': {
-          const lmsData = chatToLMStudioFormat(chat, contentStore, { visibleBranchOnly });
-          downloadFile(lmsData, filename);
+        default: {
+          const format = downloadFormat === 'json' ? 'v3' : downloadFormat === 'chatgpt' ? 'openai' : downloadFormat;
+          const payload = buildFileExportPayload({scope:'chat',format,chatId:chat.id,
+            visibleBranchOnly:format==='openrouter'?false:visibleBranchOnly,
+            v3:{chats,contentStore,folders:{},evaluationSettings,evaluationResults,version:3}});
+          if (format === 'markdown') downloadMarkdown(payload as string,`${filename}.md`);
+          else if (format === 'v3' && useGzip) await downloadFileGzip(payload as object,chat.title);
+          else downloadFile(payload as object,format==='v3'?chat.title:filename);
           break;
         }
       }
@@ -202,10 +163,12 @@ const DownloadChat = React.memo(
                   </label>
                 ))}
               </div>
+              <p className='text-xs text-gray-500'>{t(downloadFormat==='openrouter'?'exportOpenRouterBranchesNotice':'exportPayloadNotice')}</p>
               <label className='flex items-center gap-2 text-xs text-gray-500 dark:text-gray-400 cursor-pointer'>
                 <input
                   type='checkbox'
-                  checked={visibleBranchOnly}
+                  checked={downloadFormat==='openrouter'?false:visibleBranchOnly}
+                  disabled={downloadFormat==='openrouter'}
                   onChange={(e) => setVisibleBranchOnly(e.target.checked)}
                   className='rounded'
                 />

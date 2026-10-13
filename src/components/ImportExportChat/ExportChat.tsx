@@ -5,11 +5,7 @@ import useStore from '@store/store';
 
 import downloadFile, { downloadFileGzip } from '@utils/downloadFile';
 import { getToday } from '@utils/date';
-import { buildExportContentStore } from '@utils/contentStore';
-
-import { ChatInterface } from '@type/chat';
-import { ExportV1, ExportV3 } from '@type/export';
-import { chatToOpenAIFormat, chatToOpenRouterFormat, chatToLMStudioFormat, prepareChatForExport } from '@utils/chatExport';
+import { buildFileExportPayload } from '@utils/fileExport';
 
 type ExportFormat = 'v3' | 'v1' | 'openai' | 'openrouter' | 'lmstudio';
 
@@ -27,36 +23,7 @@ const ExportChat = ({ hideTitle }: { hideTitle?: boolean }) => {
     const evaluationResults = useStore.getState().evaluationResults;
 
     const filename = getToday();
-    let fileData: object;
-
-    if (format === 'lmstudio') {
-      fileData = chats?.map((chat) => chatToLMStudioFormat(chat, contentStore)) ?? [];
-    } else if (format === 'openai') {
-      fileData = chats?.map((chat) => chatToOpenAIFormat(chat, contentStore)) ?? [];
-    } else if (format === 'openrouter') {
-      fileData = chats?.map((chat) => chatToOpenRouterFormat(chat, contentStore)) ?? [];
-    } else if (format === 'v1') {
-      // Legacy: expand contentHash back to inline content, strip branchTree
-      const v1Chats = chats?.map((chat) => {
-        const expanded = { ...chat };
-        if (expanded.branchTree) {
-          expanded.messages = prepareChatForExport(chat, contentStore).chat.messages;
-        }
-        const { branchTree, collapsedNodes, ...rest } = expanded;
-        return rest as ChatInterface;
-      });
-      fileData = { chats: v1Chats, folders, version: 1 } satisfies ExportV1;
-    } else {
-      // V3 Compact: contentStore + chats with contentHash references
-      fileData = {
-        chats,
-        contentStore: buildExportContentStore(contentStore),
-        folders,
-        evaluationSettings,
-        evaluationResults,
-        version: 3,
-      } satisfies ExportV3;
-    }
+    const fileData = buildFileExportPayload({scope:'all',format,v3:{chats,folders,contentStore,evaluationSettings,evaluationResults,version:3}}) as object;
 
     if (useGzip && !isExternalFormat) {
       await downloadFileGzip(fileData, filename);
@@ -124,6 +91,7 @@ const ExportChat = ({ hideTitle }: { hideTitle?: boolean }) => {
           {t('exportFormatLMStudio')}
         </label>
       </div>
+      <p className='mt-2 text-xs text-gray-500'>{t('exportPayloadNotice')}</p>
       <div className='flex items-center justify-between mt-3'>
         <label className='flex items-center gap-1.5 cursor-pointer text-xs text-gray-500 dark:text-gray-400'>
           <input
