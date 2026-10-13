@@ -170,7 +170,7 @@ export function parseSafetyResponse(data: {results?: Array<{flagged?: boolean; c
   return { flagged: result.flagged ?? false, categories: result.categories ?? {}, categoryScores: result.category_scores ?? {}, timestamp: now };
 }
 
-export function buildJudgeRequest(input: {userPrompt: string; assistantResponse?: string; endpoint: string; model: string; apiKey?: string; language?: string; mode?: QualityEvaluationMode; openRouter?: OpenRouterChatSettings; viaProxy?: boolean}) {
+export function buildJudgeRequest(input: {userPrompt: string; assistantResponse?: string; endpoint: string; model: string; apiKey?: string; language?: string; mode?: QualityEvaluationMode; openRouter?: OpenRouterChatSettings; viaProxy?: boolean; endpointURL?: {protocol: string; hostname: string}}) {
   if (!input.model) throw new Error('[EVAL_MODEL_NOT_SELECTED]');
   const chatUrl = input.endpoint.includes('/chat/completions') ? input.endpoint : input.endpoint.replace(/\/chat\/completions\/?$/, '').replace(/\/+$/, '') + '/chat/completions';
   const headers: Record<string, string> = { 'Content-Type': 'application/json' };
@@ -183,7 +183,17 @@ export function buildJudgeRequest(input: {userPrompt: string; assistantResponse?
   };
   if (/openai\.com|openrouter\.ai|together\.xyz|fireworks\.ai|groq\.com|mistral\.ai|deepinfra\.com/i.test(chatUrl)) body.response_format = { type: 'json_object' };
   let isOpenRouter = false;
-  try { isOpenRouter = isOpenRouterURL(new URL(chatUrl)); } catch { /* endpoint validation stays with transport */ }
+  if (input.endpointURL) isOpenRouter = isOpenRouterURL(input.endpointURL);
+  else try { isOpenRouter = isOpenRouterURL(new URL(chatUrl)); } catch { /* endpoint validation stays with transport */ }
   applyOpenRouterControls(isOpenRouter, { model: input.model, max_tokens: 0, temperature: 0, top_p: 1, presence_penalty: 0, frequency_penalty: 0, openRouter: { routing: hardOpenRouterConstraints(input.openRouter), responseCache: { mode: 'off' } } } as Parameters<typeof applyOpenRouterControls>[1], body, headers, { auxiliary: true, viaProxy: input.viaProxy ?? false });
   return { chatUrl, headers, body };
+}
+
+export function buildSafetyRequest(input: {endpoint: string; text: string; openRouter?: OpenRouterChatSettings}) {
+  if (hardOpenRouterConstraints(input.openRouter)) throw new Error('[EVAL_SAFETY_OPENROUTER_CONSTRAINTS]');
+  return {
+    endpoint: input.endpoint.replace(/\/chat\/completions\/?$/, '').replace(/\/+$/, '') + '/moderations',
+    headers: {'Content-Type': 'application/json'},
+    body: {input: input.text},
+  };
 }

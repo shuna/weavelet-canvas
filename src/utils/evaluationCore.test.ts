@@ -26,6 +26,21 @@ describe('shared evaluation', () => {
     expect(request.body.messages[0].content).toContain('in ja');
   });
 
+  it('uses native URL metadata for OpenRouter routing when JSC has no URL', () => {
+    const originalURL = globalThis.URL;
+    Object.defineProperty(globalThis, 'URL', {value: undefined, configurable: true});
+    try {
+      const request = run({operation: 'judgeRequest', userPrompt: 'hello', endpoint: 'https://openrouter.ai/api/v1', endpointURL: {protocol: 'https:', hostname: 'openrouter.ai'}, model: 'judge', openRouter: {routing: {only: ['provider-a']}}, viaProxy: true});
+      expect(request.body.provider.only).toEqual(['provider-a']);
+      expect(request.headers['X-OpenRouter-Cache']).toBe('false');
+    } finally { Object.defineProperty(globalThis, 'URL', {value: originalURL, configurable: true}); }
+  });
+
+  it('builds safety transport and rejects hard routing constraints', () => {
+    expect(run({operation: 'safetyRequest', endpoint: 'https://api.openai.com/v1/chat/completions', text: 'check'})).toEqual({endpoint: 'https://api.openai.com/v1/moderations', headers: {'Content-Type': 'application/json'}, body: {input: 'check'}});
+    expect(() => run({operation: 'safetyRequest', endpoint: 'https://api.openai.com/v1', text: 'check', openRouter: {routing: {only: ['provider-a']}}})).toThrow('[EVAL_SAFETY_OPENROUTER_CONSTRAINTS]');
+  });
+
   it('parses fenced judge JSON, caps axes, and keeps safety API fields', () => {
     const quality = run({operation: 'parseQuality', text: '```json\n{"scores":{"taskCompletion":2,"faithfulness":0.7},"promptSuggestions":["x"]}\n```', now: 10});
     expect(quality.scores.taskCompletion).toBe(0);

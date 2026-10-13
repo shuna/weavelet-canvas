@@ -9,7 +9,7 @@ import i18next from 'i18next';
 
 import type { SafetyCheckResult, QualityEvaluationResult, QualityEvaluationMode } from '@type/evaluation';
 import useStore from '@store/store';
-import { buildJudgeRequest, parseJudgeResponse, parseSafetyResponse } from '@utils/evaluationCore';
+import { buildJudgeRequest, buildSafetyRequest, parseJudgeResponse, parseSafetyResponse } from '@utils/evaluationCore';
 import { DEFAULT_PROVIDERS } from '@store/provider-config';
 import { getProxyConfig, fetchViaProxy, runModerationViaProxy } from '@utils/proxyClient';
 
@@ -57,7 +57,8 @@ export async function runSafetyCheck(
 ): Promise<SafetyCheckResult> {
   if (hardOpenRouterConstraints(openRouter)) throw new Error(i18next.t('model:openRouter.errors.safety') as string);
   const { endpoint, apiKey } = resolveOpenAiCredentials();
-  const moderationUrl = deriveBaseUrl(endpoint) + '/moderations';
+  const moderation = buildSafetyRequest({endpoint, text, openRouter});
+  const moderationUrl = moderation.endpoint;
   const { proxyEndpoint, proxyAuthToken } = useStore.getState();
 
   if (!proxyEndpoint) {
@@ -72,7 +73,7 @@ export async function runSafetyCheck(
     {
       endpoint: moderationUrl,
       apiKey,
-      input: text,
+      input: moderation.body.input,
     },
     signal
   ).catch((e) => {

@@ -1,4 +1,5 @@
-import { buildJudgeRequest, parseJudgeResponse, parseSafetyResponse } from '../../src/utils/evaluationCore';
+import { hardOpenRouterConstraints } from '../../src/utils/openrouterRequest';
+import { buildJudgeRequest, buildSafetyRequest, parseJudgeResponse, parseSafetyResponse } from '../../src/utils/evaluationCore';
 import { resolveEvalContextCore } from '../../src/utils/evaluationContextCore';
 import { defaultEvaluationSettings, mutateEvaluationState, type EvaluationAction, type EvaluationState } from '../../src/utils/evaluationState';
 import { defaultQualityThresholds, defaultSafetyThresholds, evaluationResultKey, getSafetyStatus, moderationCategoryKeys, qualityAxisKeys, summarizeSafetyScores, systemQualityAxisKeys } from '../../src/types/evaluation';
@@ -8,7 +9,9 @@ import { diffJSONChanges } from '../../src/utils/jsonChanges';
 
 type Input =
   | {operation: 'context'; chat: ChatInterface; omittedNodes?: Record<string, boolean>; messageIndex: number; role: string; scope: EvaluationScope; omittedMode: EvaluationOmittedMode}
-  | {operation: 'judgeRequest'; userPrompt: string; assistantResponse?: string; endpoint: string; model: string; hasApiKey?: boolean; language?: string; mode?: QualityEvaluationMode; openRouter?: OpenRouterChatSettings; viaProxy?: boolean}
+  | {operation: 'judgeRequest'; userPrompt: string; assistantResponse?: string; endpoint: string; model: string; hasApiKey?: boolean; language?: string; mode?: QualityEvaluationMode; openRouter?: OpenRouterChatSettings; viaProxy?: boolean; endpointURL?: {protocol: string; hostname: string}}
+  | {operation: 'safetyAllowed'; openRouter?: OpenRouterChatSettings}
+  | {operation: 'safetyRequest'; endpoint: string; text: string; openRouter?: OpenRouterChatSettings}
   | {operation: 'parseQuality'; text: string; mode?: QualityEvaluationMode; now: number}
   | {operation: 'parseSafety'; data: Parameters<typeof parseSafetyResponse>[0]; now: number}
   | {operation: 'resultKey'; chatId?: string; nodeId?: string; chatID?: string; nodeID?: string; phase: 'pre-send'|'post-receive'}
@@ -24,6 +27,11 @@ export function evaluation(json: string): string {
       const {chatUrl, headers, body} = buildJudgeRequest(input);
       return JSON.stringify({chatUrl, headers, body, authentication: input.hasApiKey ? 'bearer' : null});
     }
+    case 'safetyAllowed': {
+      if (hardOpenRouterConstraints(input.openRouter)) throw new Error('[EVAL_SAFETY_OPENROUTER_CONSTRAINTS]');
+      return JSON.stringify(true);
+    }
+    case 'safetyRequest': return JSON.stringify(buildSafetyRequest(input));
     case 'parseQuality': return JSON.stringify({...parseJudgeResponse(input.text, input.mode), timestamp: input.now});
     case 'parseSafety': return JSON.stringify(parseSafetyResponse(input.data, input.now));
     case 'resultKey': return JSON.stringify(evaluationResultKey(input.chatId ?? input.chatID ?? '', input.nodeId ?? input.nodeID ?? '', input.phase));
