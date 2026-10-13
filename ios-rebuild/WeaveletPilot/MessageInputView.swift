@@ -1,10 +1,12 @@
 import SwiftUI
 import UIKit
 
-enum EnterSubmission {
+@MainActor enum EnterSubmission {
     enum Action: String { case generate, save }
+    private static var session: SharedWebOperations.Session?
     static func action(key: String, composing: Bool, control: Bool, shift: Bool, enterToSubmit: Bool, sticky: Bool) throws -> Action? {
-        let result = try SharedWebOperations.call("enterSubmissionOperation", .object([
+        if session == nil { session = try SharedWebOperations.Session() }
+        let result = try session!.call("enterSubmissionOperation", .object([
             .init(key: "key", value: .string(key)), .init(key: "isComposing", value: .bool(composing)),
             .init(key: "keyCode", value: .number(composing ? "229" : "13")), .init(key: "isMobile", value: .bool(false)),
             .init(key: "ctrlKey", value: .bool(control)), .init(key: "shiftKey", value: .bool(shift)),
@@ -89,7 +91,7 @@ struct MessageInputView: UIViewRepresentable {
         return CGSize(width: width, height: max(minimumHeight, min(fitted.height, limit)))
     }
     func makeCoordinator() -> Coordinator { Coordinator(self) }
-    final class Coordinator: NSObject, UITextViewDelegate {
+    @MainActor final class Coordinator: NSObject, UITextViewDelegate {
         var input: MessageInputView
         init(_ input: MessageInputView) { self.input = input }
         func update(_ view: MessageInputTextView) {
