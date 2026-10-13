@@ -5,6 +5,27 @@ import Darwin
 // Device files are not proof that synchronized model metadata is available here.
 struct LocalModelFiles {
     let directory: URL
+    struct Revision: Equatable {
+        let device: UInt64
+        let inode: UInt64
+        let size: UInt64
+        let modified: Date
+    }
+    func revision(_ url: URL) throws -> Revision {
+        let attributes = try FileManager.default.attributesOfItem(atPath:url.path)
+        guard let device = attributes[.systemNumber] as? NSNumber,
+              let inode = attributes[.systemFileNumber] as? NSNumber,
+              let size = attributes[.size] as? NSNumber,
+              let modified = attributes[.modificationDate] as? Date else {
+            throw ExchangeError.invalid("モデルのファイル世代を確認できません")
+        }
+        return Revision(device:device.uint64Value,inode:inode.uint64Value,size:size.uint64Value,modified:modified)
+    }
+    func checkRevision(_ url: URL, expected: Revision) throws {
+        guard let current = try? revision(url), current == expected else {
+            throw ExchangeError.invalid("登録中にモデルのファイルが置き換わりました")
+        }
+    }
     func url(modelID: String) throws -> URL {
         guard !modelID.trimmingCharacters(in:.whitespacesAndNewlines).isEmpty else { throw ExchangeError.invalid("モデルIDを入力してください") }
         let name = SHA256.hash(data:Data(modelID.utf8)).map { String(format:"%02x",$0) }.joined()

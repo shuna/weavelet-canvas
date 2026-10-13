@@ -702,31 +702,44 @@ final class ChatState: ObservableObject {
         let active = roots["activeLocalModels"] ?? .object([])
         let files = localModelFiles
         let inspected = try await Task.detached { try files.inspect(source) }.value
-        let candidates: [OrderedJSON] = await Task.detached {
+        try Task.checkCancellation()
+        let candidates: [(id:String, value:OrderedJSON, revision:LocalModelFiles.Revision)] = await Task.detached {
             models.compactMap { model in
                 guard let id = try? model.required("id").string("id"),
                       model["engine"] == .string("wllama"), model["manifest"]?["kind"] == .string("single-file"),
-                      let installed = try? files.installed(modelID:id), let fingerprint = try? files.inspect(installed) else { return nil }
+                      let installed = try? files.installed(modelID:id), let revision = try? files.revision(installed),
+                      let fingerprint = try? files.inspect(installed), (try? files.revision(installed)) == revision else { return nil }
                 let projectedModel = OrderedJSON.object([
                     .init(key:"id",value:.string(id)),.init(key:"engine",value:.string("wllama")),
                     .init(key:"manifest",value:.object([.init(key:"kind",value:.string("single-file"))]))
                 ])
-                return .object([.init(key:"model",value:projectedModel),
-                    .init(key:"hash",value:.string(fingerprint.hash)),.init(key:"size",value:.number(String(fingerprint.size)))])
+                return (id,.object([.init(key:"model",value:projectedModel),
+                    .init(key:"hash",value:.string(fingerprint.hash)),.init(key:"size",value:.number(String(fingerprint.size)))]),revision)
             }
         }.value
+        try Task.checkCancellation()
         let ids = try models.map { try $0.required("id").string("id") }
         let prepared = try SharedWebOperations.call("localModelImport",.object([
             .init(key:"operation",value:.string("prepare")),.init(key:"name",value:.string(inspected.name)),
             .init(key:"hash",value:.string(inspected.hash)),.init(key:"size",value:.number(String(inspected.size))),
-            .init(key:"candidates",value:.array(candidates)),.init(key:"existingIDs",value:.array(ids.map(OrderedJSON.string))) ]))
+            .init(key:"candidates",value:.array(candidates.map(\.value))),.init(key:"existingIDs",value:.array(ids.map(OrderedJSON.string))) ]))
         let proposed = try prepared.required("model")
         let modelID = try proposed.required("id").string("model ID")
         let existing = prepared["existing"] == .bool(true)
-        let model = existing ? (models.first { $0["id"] == .string(modelID) } ?? proposed) : proposed
+        let selected = candidates.first { $0.id.utf8.elementsEqual(modelID.utf8) }
+        let model: OrderedJSON
+        if existing {
+            guard let matching = models.first(where:{ ($0["id"].flatMap { try? $0.string("id") })?.utf8.elementsEqual(modelID.utf8) == true }) else {
+                throw ExchangeError.invalid("登録済みモデルが見つかりません")
+            }
+            model = matching
+        } else { model = proposed }
+        try Task.checkCancellation()
         if !existing { try await Task.detached { try files.installNew(source,modelID:modelID,hash:inspected.hash) }.value }
+        try Task.checkCancellation()
         let current = try syncInputSnapshot().required("state")
-        guard (current["localModels"] ?? .array([])) == (roots["localModels"] ?? .array([])), (current["activeLocalModels"] ?? .object([])) == active else {
+        guard try (current["localModels"] ?? .array([])).encoded() == (roots["localModels"] ?? .array([])).encoded(),
+                  try (current["activeLocalModels"] ?? .object([])).encoded() == active.encoded() else {
             throw ExchangeError.invalid("モデル設定が変更されました。もう一度登録してください")
         }
         var boundary = SharedWebProjection()
@@ -741,6 +754,11 @@ final class ChatState: ObservableObject {
         let result = try SharedWebOperations.call("localModelImport",.object([
             .init(key:"operation",value:.string("commit")),.init(key:"state",value:projected),
             .init(key:"model",value:commitModel),.init(key:"existingIDs",value:.array(ids.map(OrderedJSON.string))) ]))
+        try Task.checkCancellation()
+        if existing {
+            guard let selected else { throw ExchangeError.invalid("登録済みモデルのファイルを確認できません") }
+            try files.checkRevision(files.installed(modelID:selected.id),expected:selected.revision)
+        }
         try applyGlobalState(OrderedJSONChanges.apply(result.required("changes"),to:current.replacing("localModels",with:current["localModels"] ?? .array([])).replacing("activeLocalModels",with:current["activeLocalModels"] ?? .object([])),opaque:boundary.opaque))
         return modelID
     }

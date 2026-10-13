@@ -118,6 +118,53 @@ final class NativeLocalEvaluationTests: XCTestCase {
         XCTAssertEqual(try app.localModelDefinitions().count,1)
     }
 
+    func testSingleGGUFImportUsesByteExactExistingID() async throws {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent("single-gguf-id-\(UUID())")
+        defer { try? FileManager.default.removeItem(at:directory) }
+        try FileManager.default.createDirectory(at:directory,withIntermediateDirectories:true)
+        let source = directory.appendingPathComponent("same.gguf")
+        try Data("GGUF SAME".utf8).write(to:source)
+        let app = ChatState(store:LocalStateStore(fileURL:directory.appendingPathComponent("state.json")))
+        try app.importWebData(Data(#"{"version":3,"chats":[]}"#.utf8))
+        let composed = "caf\u{E9}", decomposed = "cafe\u{301}"
+        func model(_ id:String, task:String) -> OrderedJSON {
+            .object([.init(key:"id",value:.string(id)),.init(key:"engine",value:.string("wllama")),
+                     .init(key:"tasks",value:.array([.string(task)])),
+                     .init(key:"manifest",value:.object([.init(key:"kind",value:.string("single-file")),.init(key:"entrypoint",value:.string("same.gguf"))]))])
+        }
+        let snapshot = try app.publicationSnapshot()
+        let roots = try snapshot.required("state").replacing("localModels",with:.array([model(composed,task:"generation"),model(decomposed,task:"analysis")]))
+        try app.applySnapshot(snapshot.replacing("state",with:roots))
+        let files = app.localModelFiles, fingerprint = try files.inspect(source)
+        try files.installNew(source,modelID:decomposed,hash:fingerprint.hash)
+        let importedID = try await app.importSingleGGUF(source)
+        XCTAssertTrue(importedID.utf8.elementsEqual(decomposed.utf8))
+        XCTAssertNil(app.activeLocalModel("generation"))
+        XCTAssertEqual(app.activeLocalModel("analysis")?.utf8.elementsEqual(decomposed.utf8),true)
+        XCTAssertEqual(try app.localModelDefinitions().count,2)
+        let target = try files.installed(modelID:decomposed), revision = try files.revision(target)
+        try Data("GGUF NEW".utf8).write(to:source)
+        try files.install(source,modelID:decomposed)
+        XCTAssertThrowsError(try files.checkRevision(target,expected:revision))
+    }
+
+    func testCancelledSingleGGUFImportDoesNotPublishModel() async throws {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent("single-gguf-cancel-\(UUID())")
+        defer { try? FileManager.default.removeItem(at:directory) }
+        try FileManager.default.createDirectory(at:directory,withIntermediateDirectories:true)
+        let source = directory.appendingPathComponent("cancel.gguf")
+        try Data("GGUF CANCEL".utf8).write(to:source)
+        let app = ChatState(store:LocalStateStore(fileURL:directory.appendingPathComponent("state.json")))
+        try app.importWebData(Data(#"{"version":3,"chats":[]}"#.utf8))
+        let cancelled = Task { @MainActor in
+            withUnsafeCurrentTask { $0?.cancel() }
+            return try await app.importSingleGGUF(source)
+        }
+        do { _ = try await cancelled.value; XCTFail("cancelled import should not publish") }
+        catch is CancellationError { }
+        XCTAssertTrue(try app.localModelDefinitions().isEmpty)
+    }
+
     func testRoleSettingsSaveFailureKeepsMemoryAndDisk() throws {
         let directory = FileManager.default.temporaryDirectory.appendingPathComponent("local-role-failure-\(UUID())")
         defer { try? FileManager.default.removeItem(at:directory) }

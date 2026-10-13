@@ -596,7 +596,7 @@ const LocalModelSettings = () => {
 
       const model: LocalModelDefinition = isShardSet
         ? existingModel ?? {id: modelId, engine: 'wllama', tasks: ['generation', 'analysis'], label: displayLabel, origin: primaryFile.name, source: 'opfs', manifest, fileSize: totalSize, lastFileName: primaryFile.name}
-        : prepareSingleGGUFImport(primaryFile.name, fileHash, totalSize, [], existingModel ?? undefined).model;
+        : prepareSingleGGUFImport(primaryFile.name, fileHash, totalSize, [], existingModel ?? undefined, store.localModels.map(({id}) => id)).model;
 
       if (!existingModel) {
         // Save all files to OPFS
