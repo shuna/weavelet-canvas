@@ -76,7 +76,13 @@ enum ConversationTitle {
         guard try ProviderModels.url(endpoint).absoluteString == authorizedURL.absoluteString else {
             throw ExchangeError.invalid("タイトル生成先が端末認証設定のendpointと一致しません")
         }
-        var transport = OrderedJSON.object([.init(key:"hasApiKey",value:.bool(!credential.key.isEmpty))])
+        var transport = OrderedJSON.object([
+            .init(key:"hasApiKey",value:.bool(!credential.key.isEmpty)),
+            .init(key:"endpointURL",value:.object([
+                .init(key:"protocol",value:.string(authorizedURL.scheme! + ":")),
+                .init(key:"hostname",value:.string(authorizedURL.host!.lowercased()))
+            ]))
+        ])
         if let apiVersion = state["apiVersion"] { transport = transport.replacing("apiVersion",with:apiVersion) }
         let plan = try SharedWebOperations.call("titleOperation",.object([
             .init(key:"operation",value:.string("plan")),
