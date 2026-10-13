@@ -28,6 +28,11 @@ struct BranchLayoutKey: Equatable {
 
     func isCurrent(in state: ChatState) -> Bool { self == Self(state: state) }
 
+    func isRoot(_ nodeID: String) -> Bool {
+        guard let rootID = try? tree?.required("rootId").string("rootId") else { return false }
+        return rootID.utf8.elementsEqual(nodeID.utf8)
+    }
+
     func select(_ nodeID: String, in state: ChatState) throws -> Bool {
         guard isCurrent(in: state) else { return false }
         try state.navigate(chatID: chatID, nodeID: nodeID, source: .branchEditor)
@@ -104,6 +109,9 @@ struct BranchGraph {
 
 struct BranchEditorView: View {
     @ObservedObject var state: ChatState
+    let configure: (String) -> Void
+    let deleteBranch: (String) -> Void
+    let clipboard: (String, BranchClipboardOperation) -> Void
     @State private var rendered: (key: BranchLayoutKey, graph: BranchGraph)?
     @State private var error: String?
     @State private var scale: CGFloat = 1
@@ -170,14 +178,20 @@ struct BranchEditorView: View {
                 }
             }
             ForEach(graph.nodes, id: \.identity) { node in
-                BranchNodeCard(node: node) {
+                BranchNodeCard(node: node, canEdit: state.exchange != nil && state.generation == nil,
+                    canDelete: !(node.role == "system" && sourceKey.isRoot(node.id)),
+                    hasClipboard: state.hasBranchClipboard, select: {
                     do {
                         if try sourceKey.select(node.id, in: state), state.chatActiveView == .branchEditor {
                             try state.setChatActiveView(.chat)
                         }
                     }
                     catch { self.error = error.localizedDescription }
-                }
+                }, configure: { if sourceKey.isCurrent(in: state), state.generation == nil { configure(node.id) } },
+                   deleteBranch: { if sourceKey.isCurrent(in: state), state.generation == nil { deleteBranch(node.id) } },
+                   clipboard: { operation in
+                       if sourceKey.isCurrent(in: state), state.generation == nil { clipboard(node.id, operation) }
+                   })
                 .position(x: node.x + 140, y: node.y + 40)
             }
         }
@@ -186,25 +200,49 @@ struct BranchEditorView: View {
 
 private struct BranchNodeCard: View {
     let node: BranchGraph.Node
+    let canEdit: Bool
+    let canDelete: Bool
+    let hasClipboard: Bool
     let select: () -> Void
+    let configure: () -> Void
+    let deleteBranch: () -> Void
+    let clipboard: (BranchClipboardOperation) -> Void
 
     var body: some View {
-        Button(action: select) {
-            VStack(alignment: .leading, spacing: 4) {
-                HStack {
-                    Text(node.label ?? node.role.capitalized).font(.caption.bold()).lineLimit(1)
-                    Spacer(minLength: 4)
-                    if node.active { Image(systemName: "checkmark.circle.fill").accessibilityLabel("現在の経路") }
+        HStack(spacing: 0) {
+            Button(action: select) {
+                VStack(alignment: .leading, spacing: 4) {
+                    HStack {
+                        Text(node.label ?? node.role.capitalized).font(.caption.bold()).lineLimit(1)
+                        Spacer(minLength: 4)
+                        if node.active { Image(systemName: "checkmark.circle.fill").accessibilityLabel("現在の経路") }
+                    }
+                    Text(node.preview.isEmpty ? "本文なし" : node.preview).font(.caption).lineLimit(2)
+                        .frame(maxWidth: .infinity, alignment: .leading)
                 }
-                Text(node.preview.isEmpty ? "本文なし" : node.preview).font(.caption).lineLimit(2)
-                    .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(10)
+                .frame(width: 236, height: 80, alignment: .topLeading)
             }
-            .padding(10)
-            .frame(width: 280, height: 80, alignment: .topLeading)
-            .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 10))
-            .overlay(RoundedRectangle(cornerRadius: 10).stroke(node.active ? Color.blue : Color.secondary.opacity(0.5), lineWidth: node.active ? 2 : 1))
+            .buttonStyle(.plain)
+            .accessibilityLabel("\(node.label ?? node.role)、\(node.preview)")
+            Menu {
+                Button("ラベル・スター・ピン留め", systemImage: "slider.horizontal.3", action: configure)
+                Divider()
+                Button("範囲をコピー", systemImage: "doc.on.doc") { clipboard(.copy) }
+                Button("範囲を切り取り", systemImage: "scissors") { clipboard(.cut) }
+                if hasClipboard { Button("範囲を貼り付け", systemImage: "doc.on.clipboard") { clipboard(.paste) } }
+                if canDelete {
+                    Divider()
+                    Button("枝全体を削除", systemImage: "trash", role: .destructive, action: deleteBranch)
+                }
+            } label: {
+                Image(systemName: "ellipsis.circle").frame(width: 44, height: 80)
+            }
+            .disabled(!canEdit)
+            .accessibilityLabel("メッセージ操作")
         }
-        .buttonStyle(.plain)
-        .accessibilityLabel("\(node.label ?? node.role)、\(node.preview)")
+        .frame(width: 280, height: 80)
+        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 10))
+        .overlay(RoundedRectangle(cornerRadius: 10).stroke(node.active ? Color.blue : Color.secondary.opacity(0.5), lineWidth: node.active ? 2 : 1))
     }
 }

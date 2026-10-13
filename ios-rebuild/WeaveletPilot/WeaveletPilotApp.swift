@@ -266,19 +266,37 @@ struct ChatView: View {
             Group {
                 switch state.chatActiveView {
                 case .chat: chatContent
-                case .branchEditor: BranchEditorView(state: state)
+                case .branchEditor: branchEditor
                 case .splitHorizontal:
                     GeometryReader { geometry in
                         if geometry.size.width >= 700 {
-                            HStack(spacing: 0) { chatContent; Divider(); BranchEditorView(state: state) }
+                            HStack(spacing: 0) { chatContent; Divider(); branchEditor }
                         } else {
-                            VStack(spacing: 0) { chatContent; Divider(); BranchEditorView(state: state) }
+                            VStack(spacing: 0) { chatContent; Divider(); branchEditor }
                         }
                     }
                 case .splitVertical:
-                    VStack(spacing: 0) { chatContent; Divider(); BranchEditorView(state: state) }
+                    VStack(spacing: 0) { chatContent; Divider(); branchEditor }
                 }
             }
+    }
+    private var branchEditor: some View {
+        BranchEditorView(state: state, configure: configureNode, deleteBranch: deleteNodeBranch, clipboard: openBranchClipboard)
+    }
+
+    private func configureNode(_ nodeID: String) {
+        do { optionsDraft = try state.nodeOptionsDraft(nodeID: nodeID) }
+        catch { errorMessage = error.localizedDescription }
+    }
+
+    private func deleteNodeBranch(_ nodeID: String) {
+        do { branchDeletion = try state.branchDeletionDraft(nodeID: nodeID); showsBranchDeletion = true }
+        catch { errorMessage = error.localizedDescription }
+    }
+
+    private func openBranchClipboard(_ nodeID: String, operation: BranchClipboardOperation) {
+        do { clipboardDraft = try state.branchClipboardDraft(nodeID: nodeID, operation: operation) }
+        catch { errorMessage = error.localizedDescription }
     }
     private var chatContent: some View {
             ScrollViewReader { scroll in
@@ -448,17 +466,13 @@ struct ChatView: View {
             do { draft = try state.messageReplacementDraft(nodeID: node.id) }
             catch { errorMessage = error.localizedDescription }
         }, deleteBranch: state.exchange == nil || state.generation != nil ? nil : {
-            do { branchDeletion = try state.branchDeletionDraft(nodeID: node.id); showsBranchDeletion = true }
-            catch { errorMessage = error.localizedDescription }
+            deleteNodeBranch(node.id)
         }, copyRange: state.exchange == nil || state.generation != nil ? nil : {
-            do { clipboardDraft = try state.branchClipboardDraft(nodeID: node.id) }
-            catch { errorMessage = error.localizedDescription }
+            openBranchClipboard(node.id, operation: .copy)
         }, pasteRange: state.exchange == nil || state.generation != nil || !state.hasBranchClipboard ? nil : {
-            do { clipboardDraft = try state.branchClipboardDraft(nodeID: node.id, operation: .paste) }
-            catch { errorMessage = error.localizedDescription }
+            openBranchClipboard(node.id, operation: .paste)
         }, configure: state.exchange == nil || state.generation != nil ? nil : {
-            do { optionsDraft = try state.nodeOptionsDraft(nodeID: node.id) }
-            catch { errorMessage = error.localizedDescription }
+            configureNode(node.id)
         }, toggleCollapse: state.exchange == nil || state.generation != nil ? nil : {
             do {
                 var changed = try state.nodeOptionsDraft(nodeID: node.id)
