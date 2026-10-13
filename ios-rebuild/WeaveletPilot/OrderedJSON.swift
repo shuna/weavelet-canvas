@@ -3,11 +3,27 @@ import Foundation
 struct JSONField: Equatable {
     let key: String
     let value: OrderedJSON
+
+    static func == (lhs: Self, rhs: Self) -> Bool {
+        lhs.key.utf8.elementsEqual(rhs.key.utf8) && lhs.value == rhs.value
+    }
 }
 
 // Object order and number spelling are retained; no Dictionary or Double round trip.
 indirect enum OrderedJSON: Equatable {
     case object([JSONField]), array([OrderedJSON]), string(String), number(String), bool(Bool), null
+
+    static func == (lhs: Self, rhs: Self) -> Bool {
+        switch (lhs, rhs) {
+        case (.object(let left), .object(let right)): return left == right
+        case (.array(let left), .array(let right)): return left == right
+        case (.string(let left), .string(let right)): return left.utf8.elementsEqual(right.utf8)
+        case (.number(let left), .number(let right)): return left == right
+        case (.bool(let left), .bool(let right)): return left == right
+        case (.null, .null): return true
+        default: return false
+        }
+    }
 
     subscript(_ key: String) -> OrderedJSON? {
         guard case .object(let fields) = self else { return nil }

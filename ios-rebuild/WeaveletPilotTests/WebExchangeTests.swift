@@ -115,6 +115,38 @@ final class WebExchangeTests: XCTestCase {
         XCTAssertThrowsError(try OrderedJSON.decode(Data((String(repeating: "[", count: 258) + "0" + String(repeating: "]", count: 258)).utf8)))
     }
 
+    func testOrderedEqualityDistinguishesCanonicalUnicodeInIDsAttributesAndKeys() throws {
+        let composed = "\u{00E9}", decomposed = "e\u{0301}"
+        let original = OrderedJSON.object([
+            .init(key: "id", value: .string(composed)),
+            .init(key: "attribute", value: .array([.string(composed)])),
+            .init(key: composed, value: .number("1"))
+        ])
+        XCTAssertNotEqual(original, original.replacing("id", with: .string(decomposed)))
+        XCTAssertNotEqual(original, original.replacing("attribute", with: .array([.string(decomposed)])))
+        let changedKey = OrderedJSON.object([
+            .init(key: "id", value: .string(composed)),
+            .init(key: "attribute", value: .array([.string(composed)])),
+            .init(key: decomposed, value: .number("1"))
+        ])
+        XCTAssertNotEqual(original, changedKey)
+        XCTAssertEqual(try OrderedJSON.decode(original.encoded()), original)
+        XCTAssertNotEqual(OrderedJSON.number("1"), .number("1.0"))
+    }
+
+    func testSyncRejectsStaleSnapshotWhenOnlyUnicodeNormalizationChanged() throws {
+        let state = ChatState()
+        try state.importWebData(corpus().required("exportV3").encoded())
+        let first = try state.syncInputSnapshot()
+        try state.applySnapshot(first.replacing("state", with: try first.required("state").replacing("xUnicode", with: .string("\u{00E9}"))))
+        let expected = try state.syncInputSnapshot()
+        try state.applySnapshot(expected.replacing("state", with: try expected.required("state").replacing("xUnicode", with: .string("e\u{0301}"))))
+        let current = try state.syncInputSnapshot()
+        XCTAssertNotEqual(current, expected)
+        XCTAssertThrowsError(try state.applySynchronizedSnapshot(expected, expected: expected))
+        XCTAssertEqual(try state.syncInputSnapshot().encoded(), try current.encoded())
+    }
+
     func testEmptyExportClearsViewWithoutLosingSource() throws {
         let source = try corpus().required("exportV3").replacing("chats", with: .array([]))
         let state = ChatState()
