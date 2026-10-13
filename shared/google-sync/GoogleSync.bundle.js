@@ -13368,15 +13368,32 @@ var WeaveletGoogleSync = (() => {
           result3.chats[0].branchTree.activePath = [];
       }
       let historyBase = result3;
+      let insertedNodeID;
       if (input.mode === "insert") {
         if (input.nodeID === void 0)
           throw new Error("Invalid insert target.");
         const beforeNodeId = wasFlat && input.nodeID?.startsWith("message-") ? input.nodeID.slice(8) : input.nodeID;
-        const inserted = insertNodeState(result3.chats, { chatId: chat.id, beforeNodeId, role: input.role, content: parts }, result3.contentStore);
+        const inserted = insertNodeState(result3.chats, { chatId: chat.id, beforeNodeId, role: input.role, content: input.operation === "insertGenerate" ? [{ type: "text", text: "" }] : parts }, result3.contentStore);
         if (inserted.status !== "updated")
           throw new Error(`Invalid insert target: ${inserted.status}`);
         historyBase = inserted.historyBase ?? historyBase;
         result3 = inserted;
+        if (input.operation === "insertGenerate") {
+          capture?.(historyBase, result3);
+          insertedNodeID = inserted.nodeId;
+          historyBase = result3;
+          const index = result3.chats[0].branchTree.activePath.indexOf(insertedNodeID);
+          const generated = replaceNodeAndPruneState(result3.chats, {
+            chatId: chat.id,
+            nodeId: insertedNodeID,
+            role: input.role,
+            content: parts,
+            removeCount: Math.max(0, result3.chats[0].messages.length - (index + 1))
+          }, result3.contentStore);
+          if (generated.status !== "updated" || generated.pruneBlockedBy.length)
+            return JSON.stringify({ ...generated, changes: [] });
+          result3 = generated;
+        }
       } else {
         const tree = result3.chats[0].branchTree;
         let index = -1;
@@ -13411,7 +13428,8 @@ var WeaveletGoogleSync = (() => {
       chat.messages = materializeActivePath(chat.branchTree, result3.contentStore, true);
       if (changed)
         capture?.(historyBase, result3);
-      return JSON.stringify(diffJSONChanges(before, JSON.parse(JSON.stringify({ chat, contentStore: result3.contentStore }))));
+      const changes = diffJSONChanges(before, JSON.parse(JSON.stringify({ chat, contentStore: result3.contentStore })));
+      return JSON.stringify(input.operation === "insertGenerate" ? { status: "updated", nodeID: insertedNodeID, changes } : changes);
     });
   }
 
@@ -17319,7 +17337,7 @@ ${JSON.stringify(input.length === 1 ? input[0] : input)}`;
       const result3 = JSON.parse(bridge(JSON.stringify(input.input), (before, after) => {
         history = captureBranchHistory(history, before, after);
       }));
-      output2 = input.kind === "nodeOptions" || input.kind === "treeEdit" || input.kind === "branchClipboard" || input.kind === "generationPlan" ? result3 : { changes: result3 };
+      output2 = input.kind === "nodeOptions" || input.kind === "treeEdit" || input.kind === "branchClipboard" || input.kind === "generationPlan" || input.kind === "messageEdit" && input.input.operation === "insertGenerate" ? result3 : { changes: result3 };
       if (input.kind === "generationPlan" && input.input.operation === "prepare" && result3.status === "updated")
         history = invalidateBranchHistory(history, [input.input.chat.id]);
     } else if (input.operation === "undo" || input.operation === "redo") {

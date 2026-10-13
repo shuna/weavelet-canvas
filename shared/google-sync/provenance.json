@@ -185,7 +185,7 @@
     "src/utils/streamingBuffer.ts": "4040506b5be29b03bf1a67b82efe71357c2f77b7b3b35d9e2edae03d7acf5ae9",
     "src/utils/contentStore.ts": "66ac2636c8d01cdefdb2f86ecf7208c5133d6449de54b3a03e77526ceaadaae4",
     "src/store/branch-domain.ts": "d4ab6d06c59944d2d2a992f0b5d285d7f816e82f0a563b6c91815f2acb8ab851",
-    "shared/google-sync/editing.ts": "77410b115683a59fe2f6c8819c67dfe6a1d2eae4992807440edb500146cbb240",
+    "shared/google-sync/editing.ts": "bbc1882c0939239d88fbb91ccd48657f080ebd958e4997a7a46f927d28287747",
     "shared/google-sync/adapters/uuid.ts": "27a7e045a0ebbb429ad65b4f3d1757f34c5b4187d8555aa523afaf337ddb010a",
     "src/utils/branchUtils.ts": "fb47fee03f89e3684f190e3dc4c1691df46b4f8372a0d54b0c2384298c2f6ff1",
     "src/api/requestBody.ts": "fddc6e59dda8049e43d7fc96b91686b611caf98d235a1528c5d083031cb5502d",
@@ -219,7 +219,7 @@
     "shared/google-sync/treeEdit.ts": "d77c1af8c52eca08f1eadc8ffca27bc7eb6918ef2748cd95e64e8edc7d3e46d4",
     "src/store/branch-clipboard.ts": "41af5c4b6a80d15c0fcc13c4835318a74d1f65979e608fbcedf403eb8e5fd93b",
     "shared/google-sync/branchClipboard.ts": "c6007c4267a954c11d659b1c8e5602bf40f491f6a1e897e8e989b42d92fa5f5d",
-    "shared/google-sync/branchHistory.ts": "1891c120e15ffb3bbf98be841147a8781ff5267154428516c7682851e4a9b69c",
+    "shared/google-sync/branchHistory.ts": "3437e337e9905745707f5c421f52f398a93c02b2047a85c24ee3e96656a28ce6",
     "src/utils/branchSearch.ts": "bc8e0483f624ac6bee834f696c99b13345965c601903650238ef32ad22509962",
     "src/utils/chatSearch.ts": "ab0cec09d902d6527236c20a729ba4cb963a67c2485c640e7c5d4109cfef316a",
     "shared/google-sync/search.ts": "ac646051fe9d7c4e58512136592477fb6e1760ca53905e071dd3b2f7d4214047",
@@ -361,5 +361,5 @@
     "remove-accents/package.json": "511775b39122274ad36e9dc32c47b2112a3fd4372e64284c2336b143be853c82",
     "remove-accents/LICENSE": "31279697ad2455927a227e7678f2bb71e9e06dde319f12ce345404b3b7a99b81"
   },
-  "bundleSHA256": "056ed5c29a43e148ce2623502e9428b10e876b3165a070635cd8e7670d19f2a2"
+  "bundleSHA256": "740decf51d587ed8ebbec87d1c18f6ac1636f5956a896532771aab4c55589c8e"
 }
