@@ -1,4 +1,5 @@
 import XCTest
+import Darwin
 @testable import WeaveletPilot
 
 private actor LocalEvaluationCalls {
@@ -84,6 +85,30 @@ final class NativeLocalEvaluationTests: XCTestCase {
         } catch {
             let prompts = await calls.prompts
             XCTAssertTrue(prompts.isEmpty)
+        }
+    }
+
+    func testReplacingModelDuringFirstAxisRejectsMixedResult() async throws {
+        let (files,directory) = try modelFixture()
+        defer { try? FileManager.default.removeItem(at:directory) }
+        let modelURL = try files.installed(modelID:"analysis-model")
+        let calls = LocalEvaluationCalls()
+        let generator: LocalLlama.Generator = { _, request, onText in
+            _ = await calls.record(request)
+            let replacement = directory.appendingPathComponent("replacement.gguf")
+            try Data("GGUF REPLACEMENT".utf8).write(to:replacement)
+            guard rename(replacement.path,modelURL.path) == 0 else { throw POSIXError(.EIO) }
+            _ = try await onText("good")
+        }
+        var progress: [OrderedJSON] = []
+        do {
+            _ = try await NativeLocalEvaluation.runQuality(context:json(#"{"userText":"question","contextText":"question"}"#),
+                scope:"single",modelURL:modelURL,generator:generator,onProgress:{ progress.append($0) })
+            XCTFail("mixed-model evaluation accepted")
+        } catch {
+            let prompts = await calls.prompts
+            XCTAssertEqual(prompts.count,1)
+            XCTAssertFalse(progress.contains { $0["taskCompletion"] == .string("done") })
         }
     }
 }

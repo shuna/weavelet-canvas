@@ -27,6 +27,7 @@ enum NativeLocalEvaluation {
         let text = try (scope == "full-context" ? context.required("contextText") : context.required("userText")).string("評価文")
         guard !text.isEmpty else { throw ExchangeError.invalid("評価文が空です") }
         let assistantResponse = try context["assistantText"]?.string("応答")
+        let revision = try modelRevision(modelURL)
         let axes = try SharedWebOperations.call("evaluation",.object([.init(key:"operation",value:.string("localAxes"))]))
             .array("quality axes").map { try $0.string("quality axis") }
         guard axes.count == 5 else { throw ExchangeError.invalid("品質評価軸") }
@@ -35,6 +36,7 @@ enum NativeLocalEvaluation {
         for axis in axes {
             try Task.checkCancellation()
             guard isCurrent() else { throw ExchangeError.invalid("評価対象が更新されました") }
+            try checkModel(modelURL,revision:revision)
             onProgress(.object([.init(key:axis,value:.string("generating"))]))
             var fields: [JSONField] = [.init(key:"operation",value:.string("localPrompt")),
                 .init(key:"axis",value:.string(axis)),.init(key:"text",value:.string(text)),
@@ -42,18 +44,20 @@ enum NativeLocalEvaluation {
             if let assistantResponse { fields.append(.init(key:"assistantResponse",value:.string(assistantResponse))) }
             let plan = try SharedWebOperations.call("evaluation",.object(fields))
             let prompt = try plan.required("prompt").string("local prompt")
-            var raw = try await generate(prompt:prompt,options:plan.required("options"),modelURL:modelURL,
+            var raw = try await generate(prompt:prompt,options:plan.required("options"),modelURL:modelURL,revision:revision,
                                          generator:generator,isCurrent:isCurrent)
             if raw.trimmingCharacters(in:.whitespacesAndNewlines).isEmpty {
                 raw = try await generate(prompt:plan.required("fallback").string("fallback prompt"),
-                                         options:plan.required("fallbackOptions"),modelURL:modelURL,
+                                         options:plan.required("fallbackOptions"),modelURL:modelURL,revision:revision,
                                          generator:generator,isCurrent:isCurrent)
             }
             try Task.checkCancellation()
             guard isCurrent() else { throw ExchangeError.invalid("評価対象が更新されました") }
+            try checkModel(modelURL,revision:revision)
             outputs.append(.init(key:axis,value:.string(raw.trimmingCharacters(in:.whitespacesAndNewlines))))
             onProgress(.object([.init(key:axis,value:.string("done"))]))
         }
+        try checkModel(modelURL,revision:revision)
         return try SharedWebOperations.call("evaluation",.object([.init(key:"operation",value:.string("localQualityResult")),
             .init(key:"outputs",value:.object(outputs)),
             .init(key:"now",value:.number(String(Int(Date().timeIntervalSince1970 * 1000))))]))
@@ -64,10 +68,35 @@ enum NativeLocalEvaluation {
         func receive(_ cumulative: String) { text = cumulative }
     }
 
+    private struct ModelRevision: Equatable {
+        let device: UInt64
+        let inode: UInt64
+        let size: UInt64
+        let modified: Date
+    }
+
+    private static func modelRevision(_ url: URL) throws -> ModelRevision {
+        let attributes = try FileManager.default.attributesOfItem(atPath:url.path)
+        guard let device = attributes[.systemNumber] as? NSNumber,
+              let inode = attributes[.systemFileNumber] as? NSNumber,
+              let size = attributes[.size] as? NSNumber,
+              let modified = attributes[.modificationDate] as? Date else {
+            throw ExchangeError.invalid("評価モデルのファイル世代を確認できません")
+        }
+        return ModelRevision(device:device.uint64Value,inode:inode.uint64Value,size:size.uint64Value,modified:modified)
+    }
+
+    private static func checkModel(_ url: URL, revision: ModelRevision) throws {
+        guard let current = try? modelRevision(url), current == revision else {
+            throw ExchangeError.invalid("評価中にモデルが置き換わりました")
+        }
+    }
+
     @MainActor
-    private static func generate(prompt: String, options: OrderedJSON, modelURL: URL,
+    private static func generate(prompt: String, options: OrderedJSON, modelURL: URL, revision: ModelRevision,
                                  generator: @escaping LocalLlama.Generator,
                                  isCurrent: @escaping @MainActor @Sendable () -> Bool) async throws -> String {
+        try checkModel(modelURL,revision:revision)
         let maxTokens = try options.required("maxTokens").number("max tokens")
         let temperature = try options.required("temperature").number("temperature")
         guard maxTokens >= 0, maxTokens.rounded() == maxTokens, maxTokens <= Double(Int32.max),
@@ -85,6 +114,7 @@ enum NativeLocalEvaluation {
         }
         try Task.checkCancellation()
         guard isCurrent() else { throw ExchangeError.invalid("評価対象が更新されました") }
+        try checkModel(modelURL,revision:revision)
         return await output.text
     }
 }
