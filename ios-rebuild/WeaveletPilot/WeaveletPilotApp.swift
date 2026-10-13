@@ -87,6 +87,7 @@ struct ChatView: View {
                             }
                         }
                         if let generationError = state.generationError { Text(generationError).foregroundStyle(.red) }
+                        if let automaticEvaluationError = state.automaticEvaluationError { Text(automaticEvaluationError).foregroundStyle(.red) }
                         if let titleError = state.titleError { Text(titleError).foregroundStyle(.red) }
                     } else {
                         ContentUnavailableView("会話がありません", systemImage: "bubble.left.and.bubble.right")
@@ -269,6 +270,7 @@ struct ChatView: View {
                             catch { state.generationError = error.localizedDescription }
                         }.disabled(state.generation != nil)
                         NavigationLink("利用量と費用") { UsageCostSettingsView(state:state) }
+                        NavigationLink("評価設定") { EvaluationSettingsView(state:state) }
                         NavigationLink("ローカルモデル") { LocalModelSettingsView(state:state) }
                         Button("remote生成設定") { showsRemoteSettings = true }
                             .disabled(state.generation != nil)

@@ -110,3 +110,43 @@ struct ConversationEvaluationView: View {
         }
     }
 }
+
+struct EvaluationSettingsView: View {
+    @ObservedObject var state: ChatState
+    @State private var errorMessage: String?
+
+    private func mode(_ key: String) -> Binding<String> {
+        Binding(get: { (try? state.evaluationSettings()[key]?.string(key)) ?? "manual" }, set: { value in
+            do { try state.saveEvaluationSetting(key,value:.string(value)); errorMessage = nil }
+            catch { errorMessage = error.localizedDescription }
+        })
+    }
+    var body: some View {
+        Form {
+            Section("安全性") {
+                Picker("送信前",selection:mode("safetyPreSend")) { Text("手動").tag("manual"); Text("自動").tag("auto") }
+                Picker("受信後",selection:mode("safetyPostReceive")) { Text("手動").tag("manual"); Text("自動").tag("auto") }
+                let engine = (try? state.evaluationSettings()["safetyEngine"]?.string("engine")) ?? "remote"
+                LabeledContent("判定方式",value:engine == "remote" ? "Remote" : engine == "local" ? "Local" : "Hybrid")
+                if engine != "remote" {
+                    Text("この端末の自動安全性判定は Local / Hybrid に未対応です。設定は保持されます。")
+                        .font(.footnote).foregroundStyle(.secondary)
+                    Button("Remote に変更") {
+                        do { try state.saveEvaluationSetting("safetyEngine",value:.string("remote")); errorMessage = nil }
+                        catch { errorMessage = error.localizedDescription }
+                    }
+                }
+            }
+            Section("品質") {
+                Picker("送信前",selection:mode("qualityPreSend")) { Text("手動").tag("manual"); Text("自動").tag("auto") }
+                Picker("受信後",selection:mode("qualityPostReceive")) { Text("手動").tag("manual"); Text("自動").tag("auto") }
+            }
+            if let errorMessage { Text(errorMessage).foregroundStyle(.red) }
+            if let automaticEvaluationError = state.automaticEvaluationError {
+                Text(automaticEvaluationError).foregroundStyle(.red)
+            }
+        }
+        .disabled(state.generation != nil)
+        .navigationTitle("評価設定")
+    }
+}

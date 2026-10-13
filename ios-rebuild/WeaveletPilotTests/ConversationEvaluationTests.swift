@@ -16,6 +16,35 @@ private final class EvaluationProtocol: URLProtocol {
     override func stopLoading() {}
 }
 
+private final class AutoEvaluationProtocol: URLProtocol {
+    static var requests: [URLRequest] = []
+    static var generationDelay = 0.0
+    override class func canInit(with request: URLRequest) -> Bool { request.url?.host == "fixture.invalid" }
+    override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
+    override func startLoading() {
+        var captured = request
+        captured.httpBody = RemoteRequest.fixtureBody(request)
+        Self.requests.append(captured)
+        let streaming = (try? OrderedJSON.decode(captured.httpBody ?? Data()))?["stream"] == .bool(true)
+        let response = streaming
+            ? Data("data: {\"choices\":[{\"delta\":{\"content\":\"Answer\"},\"finish_reason\":\"stop\"}]}\n\ndata: [DONE]\n\n".utf8)
+            : Data(#"{"choices":[{"message":{"content":"{\"scores\":{\"taskCompletion\":0.8}}"}}]}"#.utf8)
+        client?.urlProtocol(self,didReceive:HTTPURLResponse(url:request.url!,statusCode:200,httpVersion:nil,
+            headerFields:["Content-Type":streaming ? "text/event-stream" : "application/json"])!,cacheStoragePolicy:.notAllowed)
+        let delay = streaming ? Self.generationDelay : 0.1
+        if delay == 0 {
+            client?.urlProtocol(self,didLoad:response)
+            client?.urlProtocolDidFinishLoading(self)
+        } else {
+            DispatchQueue.main.asyncAfter(deadline:.now() + delay) { [self] in
+                client?.urlProtocol(self,didLoad:response)
+                client?.urlProtocolDidFinishLoading(self)
+            }
+        }
+    }
+    override func stopLoading() {}
+}
+
 @MainActor
 final class ConversationEvaluationTests: XCTestCase {
     private func json(_ text: String) throws -> OrderedJSON { try OrderedJSON.decode(Data(text.utf8)) }
@@ -37,6 +66,150 @@ final class ConversationEvaluationTests: XCTestCase {
     private func read(_ id: String) -> RemoteCredentialRecord? {
         let endpoint = id == "openai" ? "https://api.openai.com/v1/chat/completions" : "https://openrouter.ai/api/v1/chat/completions"
         return RemoteCredentialRecord(settings:RemoteSettings(endpoint:endpoint,model:"fake-model",stream:false),key:"FAKE-\(id)")
+    }
+
+    func testAutoPlanAndPreSendGuardUseSharedRules() throws {
+        let defaults = try SharedWebOperations.call("evaluation",.object([.init(key:"operation",value:.string("defaults"))])).required("evaluationSettings")
+        let settings = defaults.replacing("safetyPreSend",with:.string("auto")).replacing("qualityPreSend",with:.string("auto"))
+        let content = try json(#"[{"type":"text","text":"first"},{"type":"image_url","image_url":{"url":"data:image/png;base64,AA=="}},{"type":"text","text":"second"}]"#)
+        let plan = try ConversationEvaluation.autoPlan(userContent:content,phase:"pre-send",settings:settings)
+        XCTAssertEqual(plan["userText"],.string("first\nsecond"))
+        XCTAssertEqual(plan["safetyText"],.string("first\nsecond"))
+        XCTAssertEqual(plan["shouldSafety"],.bool(true))
+        XCTAssertEqual(plan["shouldQuality"],.bool(true))
+        let chat = try source().required("chats").array("chats")[0]
+        XCTAssertThrowsError(try ConversationEvaluation.enforcePreSendSafety(settings:settings,chat:chat))
+        let local = settings.replacing("safetyEngine",with:.string("local"))
+        XCTAssertNoThrow(try ConversationEvaluation.enforcePreSendSafety(settings:local,chat:chat))
+        let imageOnly = try json(#"[{"type":"image_url","image_url":{"url":"data:image/png;base64,AA=="}}]"#)
+        XCTAssertEqual(try ConversationEvaluation.autoPlan(userContent:imageOnly,phase:"pre-send",settings:settings)["shouldSafety"],.bool(false))
+        XCTAssertThrowsError(try ConversationEvaluation.enforcePreSendSafety(settings:settings,chat:chat))
+        XCTAssertNoThrow(try ConversationEvaluation.enforcePreSendSafety(settings:local,chat:chat))
+    }
+
+    func testAutoPreReceiveKeepsReservedTargetAndRejectsChangedUserOrConfig() throws {
+        let source = try source()
+        let defaults = try SharedWebOperations.call("evaluation",.object([.init(key:"operation",value:.string("defaults"))])).required("evaluationSettings")
+        let state = try state().replacing("evaluationSettings",with:defaults.replacing("qualityPreSend",with:.string("auto")))
+            .replacing("evaluationResults",with:try json(#"{"chat:assistant:pre-send":{"phase":"pre-send","safety":{"xLarge":9007199254740993},"xFuture":1.234567890123456789},"chat:assistant:post-receive":{"phase":"post-receive","untouched":true}}"#))
+        let content = try json(#"[{"type":"text","text":"質問"}]"#)
+        let prepared = try XCTUnwrap(ConversationEvaluation.prepareAuto(source:source,state:state,chatID:"chat",nodeID:"assistant",
+            phase:"pre-send",userContent:content,legacy:RemoteCredentialRecord(),files:nil,readProviderCredential:read))
+        XCTAssertNotNil(prepared.quality)
+        XCTAssertTrue(try ConversationEvaluation.autoIsCurrent(prepared,source:source,state:state))
+        let result = try json(#"{"kind":"quality","scores":{"taskCompletion":0.7},"future":9007199254740993}"#)
+        let updated = try ConversationEvaluation.autoApply(result,dimension:"quality",prepared:prepared,source:source,state:state)
+        XCTAssertEqual(updated["evaluationResults"]?[prepared.key]?["quality"]?["future"],.number("9007199254740993"))
+        XCTAssertEqual(updated["evaluationResults"]?[prepared.key]?["safety"]?["xLarge"],.number("9007199254740993"))
+        XCTAssertEqual(updated["evaluationResults"]?["chat:assistant:post-receive"]?["untouched"],.bool(true))
+        let modifiedStore = try source.required("contentStore").replacing("u",with:.object([.init(key:"content",value:try json(#"[{"type":"text","text":"changed"}]"#)),.init(key:"refCount",value:.number("1"))]))
+        XCTAssertFalse(try ConversationEvaluation.autoIsCurrent(prepared,source:source.replacing("contentStore",with:modifiedStore),state:state))
+        let changedChat = try source.required("chats").array("chats")[0].replacing("config",with:.object([.init(key:"model",value:.string("changed"))]))
+        XCTAssertFalse(try ConversationEvaluation.autoIsCurrent(prepared,source:source.replacing("chats",with:.array([changedChat])),state:state))
+        let omittedChat = try source.required("chats").array("chats")[0].replacing("omittedNodes",with:try json(#"{"user":true}"#))
+        XCTAssertFalse(try ConversationEvaluation.autoIsCurrent(prepared,source:source.replacing("chats",with:.array([omittedChat])),state:state))
+    }
+
+    func testAutomaticPreQualityRunsBesideGenerationAndPersistsOnReservedNode() async throws {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent("native-auto-eval-\(UUID().uuidString)")
+        let app = ChatState(store:LocalStateStore(fileURL:directory.appendingPathComponent("state.json")))
+        try app.importWebData(json(#"{"version":3,"chats":[{"id":"auto-chat","title":"Auto","config":{"model":"fake-model","max_tokens":100,"stream":true},"messages":[{"role":"user","content":[{"type":"text","text":"Previous"}]}]}]}"#).encoded())
+        try app.saveEvaluationSetting("qualityPreSend",value:.string("auto"))
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.protocolClasses = [AutoEvaluationProtocol.self]
+        let client = RemoteClient(session:URLSession(configuration:configuration,delegate:RemoteRedirectPolicy(),delegateQueue:nil))
+        let credential = RemoteCredentialRecord(settings:RemoteSettings(endpoint:"https://fixture.invalid/v1/chat/completions",model:"fake-model",stream:true),key:"FAKE")
+        AutoEvaluationProtocol.requests = []
+        AutoEvaluationProtocol.generationDelay = 0
+        try app.startGeneration(input:"Question",record:credential,client:client)
+        let completed = expectation(description:"generation and automatic quality persisted")
+        let subscription = app.$document.compactMap { $0?.snapshot["state"]?["evaluationResults"] }.sink { results in
+            if (try? results.object("results"))?.contains(where: { $0.key.hasSuffix(":pre-send") && $0.value["quality"] != nil }) == true { completed.fulfill() }
+        }
+        await fulfillment(of:[completed],timeout:5)
+        withExtendedLifetime(subscription) {}
+        let nodes = app.conversation!.visibleMessages
+        XCTAssertEqual(nodes.last?.role,"assistant")
+        let target = try XCTUnwrap(nodes.last?.id)
+        let resultKey = try XCTUnwrap(ConversationEvaluation.resultKey(source:app.exchange!.source,chatID:"auto-chat",nodeID:target))
+        let preKey = resultKey.replacingOccurrences(of:":post-receive",with:":pre-send")
+        XCTAssertEqual(try app.publicationSnapshot()["state"]?["evaluationResults"]?[preKey]?["quality"]?["scores"]?["taskCompletion"],.number("0.8"))
+        XCTAssertNil(app.automaticEvaluationError)
+        XCTAssertEqual(AutoEvaluationProtocol.requests.count,2)
+    }
+
+    func testStoppingGenerationCancelsPendingAutomaticEvaluation() async throws {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent("native-auto-stop-\(UUID().uuidString)")
+        let app = ChatState(store:LocalStateStore(fileURL:directory.appendingPathComponent("state.json")))
+        try app.importWebData(json(#"{"version":3,"chats":[{"id":"auto-chat","title":"Auto","config":{"model":"fake-model","max_tokens":100,"stream":true},"messages":[{"role":"user","content":[{"type":"text","text":"Previous"}]}]}]}"#).encoded())
+        try app.saveEvaluationSetting("qualityPreSend",value:.string("auto"))
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.protocolClasses = [AutoEvaluationProtocol.self]
+        let client = RemoteClient(session:URLSession(configuration:configuration,delegate:RemoteRedirectPolicy(),delegateQueue:nil))
+        AutoEvaluationProtocol.requests = []
+        AutoEvaluationProtocol.generationDelay = 0.2
+        defer { AutoEvaluationProtocol.generationDelay = 0 }
+        try app.startGeneration(input:"Question",record:RemoteCredentialRecord(settings:RemoteSettings(endpoint:"https://fixture.invalid/v1/chat/completions",model:"fake-model",stream:true),key:"FAKE"),client:client)
+        app.stopGeneration()
+        try await Task.sleep(for:.milliseconds(300))
+        XCTAssertNil(app.generation)
+        let results = try app.publicationSnapshot()["state"]?["evaluationResults"]
+        XCTAssertTrue((try results?.object("results"))?.isEmpty ?? true)
+    }
+
+    func testAutomaticEvaluationDoesNotOverwriteStateAfterGenerationSaveFailure() async throws {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent("native-auto-save-\(UUID().uuidString)")
+        var reject = false
+        let store = LocalStateStore(fileURL:directory.appendingPathComponent("state.json")) { bytes,url in
+            if reject { throw CocoaError(.fileWriteNoPermission) }
+            try bytes.write(to:url,options:.atomic)
+        }
+        let app = ChatState(store:store)
+        try app.importWebData(json(#"{"version":3,"chats":[{"id":"auto-chat","title":"Auto","config":{"model":"fake-model","max_tokens":100,"stream":true},"messages":[{"role":"user","content":[{"type":"text","text":"Previous"}]}]}]}"#).encoded())
+        try app.saveEvaluationSetting("qualityPreSend",value:.string("auto"))
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.protocolClasses = [AutoEvaluationProtocol.self]
+        let client = RemoteClient(session:URLSession(configuration:configuration,delegate:RemoteRedirectPolicy(),delegateQueue:nil))
+        AutoEvaluationProtocol.generationDelay = 0.2
+        defer { AutoEvaluationProtocol.generationDelay = 0 }
+        try app.startGeneration(input:"Question",record:RemoteCredentialRecord(settings:RemoteSettings(endpoint:"https://fixture.invalid/v1/chat/completions",model:"fake-model",stream:true),key:"FAKE"),client:client)
+        let before = try Data(contentsOf:store.fileURL)
+        reject = true
+        let failedSave = expectation(description:"generation save failed")
+        let subscription = app.$generation.dropFirst().filter { $0?.running == false }.first().sink { _ in failedSave.fulfill() }
+        await fulfillment(of:[failedSave],timeout:5)
+        withExtendedLifetime(subscription) {}
+        XCTAssertNotNil(app.generation)
+        XCTAssertEqual(try Data(contentsOf:store.fileURL),before)
+        XCTAssertTrue((try app.publicationSnapshot()["state"]?["evaluationResults"]?.object("results"))?.isEmpty ?? true)
+        reject = false
+        try app.saveGenerationResult()
+        XCTAssertNil(app.generation)
+    }
+
+    func testAutoLocalSafetyIsExplicitlyUnsupportedWithoutRemoteFallback() throws {
+        let defaults = try SharedWebOperations.call("evaluation",.object([.init(key:"operation",value:.string("defaults"))])).required("evaluationSettings")
+        let state = try state().replacing("evaluationSettings",with:defaults.replacing("safetyPreSend",with:.string("auto"))
+            .replacing("safetyEngine",with:.string("local")))
+        let prepared = try XCTUnwrap(ConversationEvaluation.prepareAuto(source:source(),state:state,chatID:"chat",nodeID:"assistant",
+            phase:"pre-send",userContent:json(#"[{"type":"text","text":"質問"}]"#),legacy:RemoteCredentialRecord(),files:nil,
+            readProviderCredential:{ _ in XCTFail("Local safety must not read remote credential"); return nil }))
+        XCTAssertTrue(prepared.unsupportedSafety)
+        XCTAssertNil(prepared.safety)
+        XCTAssertNil(prepared.quality)
+    }
+
+    func testAutoPostUsesFinalAssistantAndRejectsChangedAssistant() throws {
+        let defaults = try SharedWebOperations.call("evaluation",.object([.init(key:"operation",value:.string("defaults"))])).required("evaluationSettings")
+        let state = try state().replacing("evaluationSettings",with:defaults.replacing("qualityPostReceive",with:.string("auto")))
+        let assistant = try json(#"[{"type":"text","text":"回答"}]"#)
+        let prepared = try XCTUnwrap(ConversationEvaluation.prepareAuto(source:source(),state:state,chatID:"chat",nodeID:"assistant",
+            phase:"post-receive",userContent:json(#"[{"type":"text","text":"質問"}]"#),assistantContent:assistant,
+            legacy:RemoteCredentialRecord(),files:nil,readProviderCredential:read))
+        XCTAssertEqual(prepared.quality?.context["assistantText"],.string("回答"))
+        XCTAssertTrue(try ConversationEvaluation.autoIsCurrent(prepared,source:source(),state:state))
+        let store = try source().required("contentStore").replacing("a",with:.object([.init(key:"content",value:json(#"[{"type":"text","text":"changed"}]"#)),.init(key:"refCount",value:.number("1"))]))
+        XCTAssertFalse(try ConversationEvaluation.autoIsCurrent(prepared,source:source().replacing("contentStore",with:store),state:state))
     }
 
     func testQualityUsesSharedJudgeRequestAndPreservesOtherResultAndUnsafeNumbers() async throws {

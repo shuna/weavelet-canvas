@@ -107,6 +107,9 @@ final class ChatState: ObservableObject {
     @Published private(set) var generation: ActiveGeneration?
     @Published private(set) var remoteSettings = RemoteSettings()
     @Published var generationError: String?
+    @Published var automaticEvaluationError: String?
+    private var automaticEvaluationTasks: [UUID: [UUID:Task<Void,Never>]] = [:]
+    private var automaticEvaluationContext: (id: UUID, chatID: String, nodeID: String, userContent: OrderedJSON, record: RemoteCredentialRecord?, client: RemoteClient, read: ProviderModels.CredentialReader)?
     @Published private var composerDrafts: [Data:ComposerDraft] = [:]
     @Published private var assistantPrefills: [Data:String] = [:]
     private(set) var stickyPrefillKey = ""
@@ -663,11 +666,20 @@ final class ChatState: ObservableObject {
         else { throw ExchangeError.invalid("API versionの形式が不正です") }
         let request = try RemoteRequest.make(source: source, chatID: chatID, path: path, settings: credential.settings, key: credential.key, modelState:modelState,apiVersion:apiVersion,regenerate:regenerate)
         let streaming = try RemoteRequest.streaming(request)
+        guard let body = request.httpBody else { throw ExchangeError.invalid("送信本文がありません") }
+        let userContent = try ConversationEvaluation.transmittedUserContent(OrderedJSON.decode(body).required("messages"))
+        try ConversationEvaluation.enforcePreSendSafety(settings:ConversationEvaluation.autoSettings(savedState),chat:sourceChat)
         try applyLibrary(source, selectedID: chatID, resetViewFor: chatID, editing: history, now: now)
         let id = UUID()
         generation = ActiveGeneration(id: id, chatID: chatID, baseSource: try publishedSource(), path: path, plan: plan, titleAfterAppend: titleAfterAppend)
-        pendingTitleContext = (id,legacy,client,readProviderCredential)
         generationError = nil
+        automaticEvaluationError = nil
+        if let userContent {
+            let nodeID = try plan?.required("targetNodeId").string("target node") ?? ""
+            automaticEvaluationContext = (id,chatID,nodeID,userContent,legacy,client,readProviderCredential)
+            startAutomaticEvaluation(phase:"pre-send",generationID:id)
+        }
+        pendingTitleContext = (id,legacy,client,readProviderCredential)
         generationTask = Task { @MainActor [weak self] in
             do {
                 try await client.complete(request, streaming: streaming) { [weak self] output in
@@ -781,6 +793,8 @@ final class ChatState: ObservableObject {
         let modelID = try config.required("model").string("model")
         let prefillKey = try plan?["prefillKey"]?.string("prefill key") ?? stickyPrefillKey
         let request = try LocalGenerationRequest.make(source:source,chat:chat,config:config,path:path,assistantPrefill:assistantPrefills[Data(prefillKey.utf8)])
+        let userContent = try ConversationEvaluation.transmittedUserContent(request.input.required("messages"))
+        try ConversationEvaluation.enforcePreSendSafety(settings:ConversationEvaluation.autoSettings(publicationSnapshot().required("state")),chat:chat)
         let prefix = request.input["assistantPrefix"]
         do {
             let modelURL = try localModelFiles.installed(modelID:modelID)
@@ -790,6 +804,12 @@ final class ChatState: ObservableObject {
             let id = UUID()
             generation = ActiveGeneration(id:id,chatID:chatID,baseSource:try publishedSource(),path:path,plan:plan,output:output,usesRemoteTransport:false,titleAfterAppend:titleAfterAppend)
             generationError = nil
+            automaticEvaluationError = nil
+            if let userContent {
+                let nodeID = try plan?.required("targetNodeId").string("target node") ?? ""
+                automaticEvaluationContext = (id,chatID,nodeID,userContent,nil,RemoteClient(),RemoteCredentials.load(providerID:))
+                startAutomaticEvaluation(phase:"pre-send",generationID:id)
+            }
             generationTask = Task { @MainActor [weak self] in
                 guard let self else { return }
                 defer { self.consumeAssistantPrefill(key:prefillKey,prefix:prefix) }
@@ -813,6 +833,7 @@ final class ChatState: ObservableObject {
 
     func stopGeneration() {
         guard let generation, generation.running else { return }
+        cancelAutomaticEvaluation(generationID:generation.id)
         generationTask?.cancel()
         do {
             var output = generation.output
@@ -824,7 +845,11 @@ final class ChatState: ObservableObject {
 
     func saveGenerationResult() throws {
         guard let generation, !generation.running else { throw ExchangeError.invalid("生成結果がありません") }
-        try persistGeneration(generation)
+        do { try persistGeneration(generation) }
+        catch {
+            cancelAutomaticEvaluation(generationID:generation.id,clearContext:false)
+            throw error
+        }
         generationError = nil
     }
 
@@ -836,13 +861,20 @@ final class ChatState: ObservableObject {
         generationTask = nil
         if let error { generationError = "生成を完了できませんでした。\n" + error.localizedDescription }
         do { try persistGeneration(current) }
-        catch { generationError = "生成結果を保存できませんでした。部分本文を保持しています。\n" + error.localizedDescription }
+        catch {
+            cancelAutomaticEvaluation(generationID:id,clearContext:false)
+            generationError = "生成結果を保存できませんでした。部分本文を保持しています。\n" + error.localizedDescription
+        }
     }
 
     private func persistGeneration(_ current: ActiveGeneration) throws {
         let titleContext = pendingTitleContext?.id == current.id ? pendingTitleContext : nil
         guard exchange?.source == current.baseSource else { throw ExchangeError.invalid("生成開始後に会話が変更されています") }
-        if try current.output.isEmpty && current.output.observation.object("observation").isEmpty { generation = nil; return }
+        if try current.output.isEmpty && current.output.observation.object("observation").isEmpty {
+            cancelAutomaticEvaluation(generationID:current.id)
+            generation = nil
+            return
+        }
         let now = Date().timeIntervalSince1970 * 1000
         var history: MessageEditing.HistoryState?
         guard let plan = current.plan else { throw ExchangeError.invalid("生成先がありません") }
@@ -854,6 +886,10 @@ final class ChatState: ObservableObject {
         source = accounting.source
         try applyLibrary(source, selectedID: current.chatID, resetViewFor: current.chatID, tokenUsage:accounting.usage, editing: history, now: now)
         generation = nil
+        if current.completedSuccessfully, automaticEvaluationContext?.id == current.id {
+            cancelledAutomaticEvaluationIDs.remove(current.id)
+            startAutomaticEvaluation(phase:"post-receive",generationID:current.id)
+        } else { cancelAutomaticEvaluation(generationID:current.id) }
         if current.completedSuccessfully && current.titleAfterAppend {
             let config = try current.baseSource.required("chats").array("chats").first { $0["id"].flatMap { try? $0.string("id") }?.utf8.elementsEqual(current.chatID.utf8) == true }?["config"]
             startAutomaticTitle(chatID:current.chatID,sourceConfig:config,legacy:titleContext?.legacy,client:titleContext?.client,readProviderCredential:titleContext?.read ?? RemoteCredentials.load(providerID:))
@@ -908,6 +944,7 @@ final class ChatState: ObservableObject {
     }
 
     private func invalidateGeneration() {
+        if let current = generation, current.running { cancelAutomaticEvaluation(generationID:current.id) }
         pendingTitleContext = nil
         generationTask?.cancel()
         generationTask = nil
@@ -1066,6 +1103,27 @@ final class ChatState: ObservableObject {
         for key in ["safetyThresholds", "qualityThresholds"] { if let value = roots[key] { input = input.replacing(key,with:value) } }
         return try SharedWebOperations.call("evaluation",input)
     }
+    func evaluationSettings() throws -> OrderedJSON {
+        let roots = try publicationSnapshot().required("state")
+        return try roots["evaluationSettings"] ?? SharedWebOperations.call("evaluation",.object([.init(key:"operation",value:.string("defaults"))])).required("evaluationSettings")
+    }
+    func saveEvaluationSetting(_ key: String, value: OrderedJSON) throws {
+        guard generation == nil else { throw ExchangeError.invalid("生成終了後に評価設定を変更してください") }
+        let action: OrderedJSON
+        if ["safetyPreSend","safetyPostReceive","qualityPreSend","qualityPostReceive"].contains(key),
+           value == .string("auto") || value == .string("manual") {
+            action = .object([.init(key:"type",value:.string("setSetting")),.init(key:"key",value:.string(key)),.init(key:"value",value:value)])
+        } else if key == "safetyEngine", value == .string("remote") {
+            action = .object([.init(key:"type",value:.string("setSafetyEngine")),.init(key:"value",value:value)])
+        } else { throw ExchangeError.invalid("評価設定") }
+        let roots = try publicationSnapshot().required("state")
+        let settings = try evaluationSettings()
+        let input = OrderedJSON.object([.init(key:"operation",value:.string("mutate")),
+            .init(key:"state",value:.object([.init(key:"evaluationSettings",value:settings)])),.init(key:"action",value:action)])
+        let changes = try SharedWebOperations.call("evaluation",input).required("changes")
+        let updated = try OrderedJSONChanges.apply(changes,to:.object([.init(key:"evaluationSettings",value:settings)]))
+        try applyGlobalState(roots.replacing("evaluationSettings",with:updated.required("evaluationSettings")))
+    }
     func startEvaluation(_ draft: ConversationEvaluationDraft, dimension: String, scope: String, omittedMode: String,
                          record: RemoteCredentialRecord? = nil, client: RemoteClient = RemoteClient(), readProviderCredential: ProviderModels.CredentialReader = RemoteCredentials.load(providerID:)) throws {
         guard let source = exchange?.source else { throw ExchangeError.invalid("保存済み会話がありません") }
@@ -1098,9 +1156,62 @@ final class ChatState: ObservableObject {
         let key = SummaryIdentity(chatID:chatID,nodeID:nodeID)
         evaluationTasks[key]?.cancel(); evaluationTasks[key] = nil; evaluationJobs[key] = nil
     }
+    private var cancelledAutomaticEvaluationIDs: Set<UUID> = []
+
+    private func cancelAutomaticEvaluation(generationID: UUID, clearContext: Bool = true) {
+        cancelledAutomaticEvaluationIDs.insert(generationID)
+        if let tasks = automaticEvaluationTasks[generationID], !tasks.isEmpty {
+            for task in tasks.values { task.cancel() }
+        } else { cancelledAutomaticEvaluationIDs.remove(generationID) }
+        if clearContext, automaticEvaluationContext?.id == generationID { automaticEvaluationContext = nil }
+    }
+
+    private func startAutomaticEvaluation(phase: String, generationID: UUID) {
+        guard let context = automaticEvaluationContext, context.id == generationID,
+              let source = exchange?.source, let state = try? publicationSnapshot().required("state") else { return }
+        defer { if phase == "post-receive" { automaticEvaluationContext = nil } }
+        do {
+            let assistantContent = phase == "post-receive" ? try ConversationEvaluation.savedAssistantContent(source:source,chatID:context.chatID,nodeID:context.nodeID) : nil
+            let prepared = try ConversationEvaluation.prepareAuto(source:source,state:state,chatID:context.chatID,nodeID:context.nodeID,
+                phase:phase,userContent:context.userContent,assistantContent:assistantContent,
+                language:Locale.preferredLanguages.first ?? "en",legacy:context.record ?? RemoteCredentialRecord(),
+                files:localModelFiles,readProviderCredential:context.read)
+            guard let prepared else { return }
+            if prepared.unsupportedSafety { automaticEvaluationError = "この端末の Local / Hybrid 安全性判定は未対応です。評価設定で Remote を選択してください。" }
+            for item in [("safety",prepared.safety),("quality",prepared.quality)] {
+                guard let request = item.1 else { continue }
+                let jobID = UUID()
+                let task = Task { @MainActor [weak self] in
+                    guard let self else { return }
+                    defer {
+                        self.automaticEvaluationTasks[generationID]?[jobID] = nil
+                        if self.automaticEvaluationTasks[generationID]?.isEmpty == true {
+                            self.automaticEvaluationTasks[generationID] = nil
+                            self.cancelledAutomaticEvaluationIDs.remove(generationID)
+                        }
+                    }
+                    do {
+                        let result = try await ConversationEvaluation.run(request,client:context.client,localGenerator:self.localEvaluationGenerate,isCurrent:{ [weak self] in
+                            guard let self, !self.cancelledAutomaticEvaluationIDs.contains(generationID),
+                                  let source = self.exchange?.source,
+                                  let state = try? self.publicationSnapshot().required("state") else { return false }
+                            return (try? ConversationEvaluation.autoIsCurrent(prepared,source:source,state:state)) == true
+                        })
+                        try Task.checkCancellation()
+                        guard !self.cancelledAutomaticEvaluationIDs.contains(generationID), let source = self.exchange?.source else { return }
+                        let updated = try ConversationEvaluation.autoApply(result,dimension:item.0,prepared:prepared,source:source,state:self.publicationSnapshot().required("state"))
+                        try self.applyLibrary(source,selectedID:self.selectedID,preserveGeneration:true,evaluationResults:try updated.required("evaluationResults"))
+                    } catch is CancellationError {} catch { self.automaticEvaluationError = error.localizedDescription }
+                }
+                automaticEvaluationTasks[generationID,default:[:]][jobID] = task
+            }
+        } catch { automaticEvaluationError = error.localizedDescription }
+    }
+
     private func cancelEvaluations() {
         for task in evaluationTasks.values { task.cancel() }
         evaluationTasks.removeAll(); evaluationJobs.removeAll()
+        for id in automaticEvaluationTasks.keys { cancelAutomaticEvaluation(generationID:id) }
     }
 
     private func cancelTitles() { for value in titleTasks.values { value.task.cancel() }; titleTasks.removeAll() }
