@@ -11,6 +11,10 @@ struct ChatConfigDraft: Identifiable {
 }
 
 enum ChatConfig {
+    static func systemPromptForEditing(_ config: OrderedJSON) throws -> String {
+        try config["systemPrompt"]?.string("systemPromptはこの画面では編集・挿入できません") ?? ""
+    }
+
     static func modelState(in state: OrderedJSON) -> OrderedJSON {
         .object(["favoriteModels", "providerModelCache", "providerCustomModels", "localModels"].compactMap { key in
             state[key].map { JSONField(key:key,value:$0) }

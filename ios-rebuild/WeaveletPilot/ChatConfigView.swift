@@ -145,6 +145,7 @@ struct ChatConfigView: View {
             let text: String
             switch draft.config[key] {
             case .string(let value), .number(let value): text = value
+            case .utf16String(let units): text = JSONString(utf16: units).text
             default: text = ""
             }
             return (key,text)
@@ -171,6 +172,11 @@ struct ChatConfigView: View {
                 if draft.defaultSettings == nil && !auxiliary {
                     Section("システム文") {
                         TextField("会話のシステム文", text: binding("systemPrompt"), axis: .vertical)
+                            .disabled(!canEditSystemPrompt)
+                        if !canEditSystemPrompt {
+                            Text("文字情報を保持できないため、このシステム文はこの画面では編集・挿入できません。ほかの設定は保存できます。")
+                                .font(.footnote).foregroundStyle(.secondary)
+                        }
                         systemPromptActions
                     }
                 }
@@ -264,6 +270,10 @@ struct ChatConfigView: View {
             }
         }
     }
+    private var canEditSystemPrompt: Bool { draft.defaultSettings != nil || (try? ChatConfig.systemPromptForEditing(draft.config)) != nil }
+    private func requireSystemPromptEditing() throws {
+        if draft.defaultSettings == nil { _ = try ChatConfig.systemPromptForEditing(draft.config) }
+    }
     private var systemText: String { draft.defaultSettings?.systemMessage ?? values["systemPrompt"] ?? "" }
     private var systemPromptActions: some View {
         HStack {
@@ -279,14 +289,17 @@ struct ChatConfigView: View {
             Spacer()
             promptLibraryButton
         }
+        .disabled(!canEditSystemPrompt)
     }
     private func setSystemPrompt(_ text: String, request: PromptPickerRequest) throws {
+        try requireSystemPromptEditing()
         try state.validatePromptPicker(request, input: .system(text: systemText))
         if draft.defaultSettings != nil { draft.defaultSettings?.systemMessage = text }
         else { values["systemPrompt"] = text }
     }
     private func choosePreset(_ id: String) {
         do {
+            try requireSystemPromptEditing()
             let previous = systemText
             let request = try state.promptPickerRequest(.system(text: previous))
             presetTask = Task { @MainActor in
@@ -306,7 +319,10 @@ struct ChatConfigView: View {
     }
     private var promptLibraryButton: some View {
         Button("ライブラリから挿入") {
-            do { promptRequest = try state.promptPickerRequest(.system(text: systemText)) }
+            do {
+                try requireSystemPromptEditing()
+                promptRequest = try state.promptPickerRequest(.system(text: systemText))
+            }
             catch { errorMessage = error.localizedDescription }
         }
         .frame(minHeight: 44)
@@ -319,6 +335,7 @@ struct ChatConfigView: View {
             }
             var patches: [OrderedJSON] = []
             for key in Self.fields where key != "model" && key != "providerId" && Self.valuesDiffer(values[key],originalValues[key]) {
+                if key == "systemPrompt" { try requireSystemPromptEditing() }
                 let text = values[key] ?? "", value: OrderedJSON
                 if text.isEmpty { patches.append(.object([.init(key:"op",value:.string("remove")),.init(key:"path",value:.array([.string(key)]))])); continue }
                 if ["max_tokens", "temperature", "reasoning_budget_tokens"].contains(key) {
@@ -335,6 +352,7 @@ struct ChatConfigView: View {
         for key in Self.fields {
             switch draft.config[key] {
             case .string(let value), .number(let value): values[key] = value
+            case .utf16String(let units): values[key] = JSONString(utf16: units).text
             default: values[key] = ""
             }
         }

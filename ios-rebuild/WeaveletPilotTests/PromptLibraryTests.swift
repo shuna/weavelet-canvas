@@ -36,6 +36,23 @@ final class PromptLibraryTests: XCTestCase {
         XCTAssertNil(try appended.array("prompts")[1]["label"])
     }
 
+    func testLoneUTF16CSVMatchesSharedWebUTF8OutputWithoutOpaqueMarkersOrJSONChanges() throws {
+        let prompts = try OrderedJSON.decode(Data(#"[{"id":"p","name":"N\ud800","prompt":"P\udc00","label":"L\ud800","xRaw":{"\ud800":9007199254740993}}]"#.utf8))
+        let before = try prompts.encoded()
+        let shared = try SharedWebOperations.call("promptLibraryOperation",.object([.init(key:"operation",value:.string("exportCSV")),.init(key:"prompts",value:prompts)]))
+        // The actual Web exporter gives CSV text to Blob, which repairs lone units when encoding UTF8.
+        let expected = Data(try shared.required("csv").displayString("Web CSV").utf8)
+        XCTAssertTrue(String(decoding:expected,as:UTF8.self).contains("N�"))
+        XCTAssertTrue(String(decoding:expected,as:UTF8.self).contains("P�"))
+        XCTAssertEqual(try PromptLibrary.exportCSV(prompts,gzip:false),expected)
+        XCTAssertEqual(try NativeGzip.decompress(PromptLibrary.exportCSV(prompts,gzip:true)),expected)
+        XCTAssertEqual(try prompts.encoded(),before)
+        let edited = try PromptLibrary.apply(prompts,action:.object([.init(key:"type",value:.string("edit")),.init(key:"index",value:.number("0")),.init(key:"field",value:.string("label")),.init(key:"value",value:.string("system"))]))
+        XCTAssertEqual(try edited.array("prompts")[0]["name"],.utf16String([0x4e,0xd800]))
+        XCTAssertEqual(try edited.array("prompts")[0]["prompt"],.utf16String([0x50,0xdc00]))
+        XCTAssertEqual(try edited.array("prompts")[0]["xRaw"],try prompts.array("prompts")[0]["xRaw"])
+    }
+
     func testSaveFailureAndStaleDraftKeepSnapshotAndDisk() throws {
         let url = try directory().appendingPathComponent("state.json")
         let fault = PromptWriteFault()

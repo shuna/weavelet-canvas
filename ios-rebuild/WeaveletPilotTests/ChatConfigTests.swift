@@ -60,6 +60,42 @@ final class ChatConfigTests: XCTestCase {
         XCTAssertEqual(try OrderedJSON.decode(restarted.exportWebData()).required("xUntouched").encoded(),try raw.encoded())
     }
 
+    func testLoneSystemPromptRejectsNativeEditingWhileOtherConfigSavesPreserveIt() throws {
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent("raw-system-prompt-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at:dir,withIntermediateDirectories:true)
+        defer { try? FileManager.default.removeItem(at:dir) }
+        let root = URL(fileURLWithPath:#filePath).deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
+        var source = try OrderedJSON.decode(Data(contentsOf:root.appendingPathComponent("tests/fixtures/web-native/remote-generation.json"))).required("cases").array("cases")[0].required("source")
+        let raw = OrderedJSON.utf16String([0x41,0xd800,0x42])
+        var chats = try source.required("chats").array("chats")
+        chats[0] = try chats[0].replacing("config",with:chats[0].required("config").replacing("systemPrompt",with:raw))
+        source = source.replacing("chats",with:.array(chats))
+        let store = LocalStateStore(fileURL:dir.appendingPathComponent("state.json")), state = ChatState(store:store)
+        try state.importWebData(source.encoded())
+        var draft = try state.chatConfigDraft()
+        let before = try state.publicationSnapshot().encoded(), disk = try Data(contentsOf:store.fileURL)
+        XCTAssertThrowsError(try ChatConfig.systemPromptForEditing(draft.config))
+        XCTAssertEqual(try state.publicationSnapshot().encoded(),before)
+        XCTAssertEqual(try Data(contentsOf:store.fileURL),disk)
+        // The shared routines preserve this nonempty previous value and require preset confirmation.
+        let appended = try SharedWebOperations.call("promptApplicationOperation",.object([.init(key:"operation",value:.string("system")),.init(key:"previous",value:raw),.init(key:"text",value:.string("library"))]))
+        XCTAssertEqual(try appended.stringKey("shared append").utf16,[0x41,0xd800,0x42,10,10] + Array("library".utf16))
+        let presets = try SharedWebOperations.call("promptApplicationOperation",.object([.init(key:"operation",value:.string("presets"))])).array("presets")
+        let choice = try SharedWebOperations.call("promptApplicationOperation",.object([.init(key:"operation",value:.string("preset")),.init(key:"id",value:presets[0].required("id")),.init(key:"previous",value:raw)]))
+        XCTAssertEqual(choice["needsConfirmation"],.bool(true))
+        for units: [UInt16] in [[0xd800],[0xdc00]] {
+            XCTAssertThrowsError(try ChatConfig.systemPromptForEditing(.object([.init(key:"systemPrompt",value:.utf16String(units))])))
+        }
+        let ordinary = "日本語é e\u{301}𐀀"
+        XCTAssertEqual(Array(try ChatConfig.systemPromptForEditing(.object([.init(key:"systemPrompt",value:.string(ordinary))])).utf16),Array(ordinary.utf16))
+        XCTAssertEqual(try ChatConfig.systemPromptForEditing(.object([])),"")
+        draft.config = draft.config.replacing("temperature",with:.number("0.25"))
+        try state.saveChatConfig(draft)
+        XCTAssertEqual(try state.chatConfigDraft().config["systemPrompt"],raw)
+        XCTAssertEqual(try ChatState(store:store).chatConfigDraft().config["systemPrompt"],raw)
+        XCTAssertEqual(try OrderedJSON.decode(state.exportWebData()).required("chats").array("chats")[0]["config"]?["systemPrompt"],raw)
+    }
+
     func testFreshDefaultSettingsSaveFailureStaleGuardAndEmptySystemMessage() throws {
         let dir = FileManager.default.temporaryDirectory.appendingPathComponent("default-edit-\(UUID().uuidString)")
         try FileManager.default.createDirectory(at:dir,withIntermediateDirectories:true)

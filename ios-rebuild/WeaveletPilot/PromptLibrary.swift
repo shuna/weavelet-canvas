@@ -30,7 +30,7 @@ enum PromptLibrary {
             .object(try prompt.object("prompt").map { field in
                 let known = ["id", "name", "prompt", "label"].contains { field.key.matches($0) }
                 let value: OrderedJSON
-                if known, case .string = field.value { value = field.value }
+                if known, field.value.isString { value = field.value }
                 else { value = try boundary.reference(field.value) }
                 return .init(key: field.key, value: value)
             })
@@ -66,7 +66,7 @@ enum PromptLibrary {
             .init(key: "operation", value: .string("exportCSV")),
             .init(key: "prompts", value: try project(prompts, boundary: &boundary))
         ]))
-        return try result.required("csv").string("CSV")
+        return try result.required("csv").displayString("CSV")
     }
 
     static func importCSV(_ url: URL, into prompts: OrderedJSON, mode: String) throws -> OrderedJSON {
