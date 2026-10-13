@@ -659,3 +659,9 @@ d8c15c72/5a0e39baでWeb BranchDiffModalの行構築をpure branchDiffへ移し�
 fc195ef1/f045577aで独自の二次元LCS tableを既存diff-match-patch1.0.5へ置換した。新依存を追加せず、単語/空白をJSON行へ写して既存line helperを利用し、全行を復元する。辞書上限とdeadlineでは強調粒度が粗くなるが、元の両本文は保持する。同一長文が辞書上限の非対称処理で変更扱いになる独立AstraのP2は、同一入力の早期equal返却と回帰caseで修正した。限定再監査は新規P2以上なし。
 
 共有6件（両辞書上限、deadline、Unicode/空白と両本文復元を含む）、型検査、生成bundle鮮度、実JSC呼出は成功。ログ /private/tmp/weavelet-shared-word-diff-{web-final,types,bundle-final}.log。既存固定Apache-2.0依存の利用であり、archive済み公式repositoryを保守継続中とは扱わない。helperと版の境界は[公式利用例](https://github.com/google/diff-match-patch/wiki/Line-or-Word-Diffs)に従う。空白の強調区切りは旧算法と異なるcaseがあるが本文一致を維持する。deadlineは処理全体のhard timeoutではなく、Web同期描画の応答時間・大モデル/実機性能は未測定。未変更の全暗号化同期suiteを反復していない。
+
+### 比較画面のnative接続
+
+03c6f8e3で現在枝との比較・同会話の2node比較を分岐menuへ接続した。実Web handleNodeDiffのLCA/trimを既存branchUtilsのbuildNodeDiffPathsへ切り出し、Webとnativeが同じ元を呼ぶ。nativeはdeltaの読取り投影、背景JSC呼出、SwiftUIの差分/両原文/選択copyだけを担当し、保存文書を変更しない。source key変更で比較対象とsheetを破棄し、結果公開時にも会話IDと元データを照合する。
+
+担当Catalyst関連9件（比較境界の追加2件を含む）・build・型検査・bundle鮮度成功を再利用。ログ /private/tmp/weavelet-native-branch-diff-{test,build,tsc,generate}.log。統合は同sourceのcherry-pickのみで差分確認成功、独立Astraは新規P2以上なし。FAKE実画面確認はMacロックで開始できず、比較sheet表示/VoiceOver/狭幅は未確認。clone processも起動していない。複数会話graph/多選択の操作は後続範囲であり、全Branch editor完成とはしない。
