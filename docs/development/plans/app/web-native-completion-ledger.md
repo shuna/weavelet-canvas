@@ -1,5 +1,15 @@
 # Web / 新iOSの完成条件と証拠
 
+## 共有Markdownとnative画像表示の接続（2026-10-13追記）
+
+実WebのMarkdownRenderer/ContentBodyをローカルWKWebViewへ同梱し、GFM・KaTeX・highlightと生成中のpolicy/250ms更新を共有した。言語一覧とLaTeX前処理は環境非依存部分だけ切り出し、Webの旧exportを維持。Swift側は原文切替、OS文字サイズ、コピー、リンクscheme制限、高さ通知を担当し、本文をJavaScript文字列へ連結しない。保存元・外部I/O・同期は変更していない。画像添付はURLSessionとImageIOで非同期取得・縮小し、読込/失敗表示と拡大を追加した。表示用decodeは最大2048px、元データは維持する。
+
+共有元renderer3件と既存policy5件・型診断・生成鮮度の担当成功結果を再利用。Catalyst画像2件、WK接続1件成功。WK初回はSDKのcallback引数ラベルでcompile失敗し修正。画面外requestAnimationFrame待ちを中止し、DOM更新を待つ方式へ変更した後、旧DOMにも本文が含まれるため待機完了を早く判定するテスト不備を修正した。内容・表・数式・script非実行・原文・fontSizeのassertは維持し、WK1件のみ再実行した。ログ `/private/tmp/weavelet-rich-display-{catalyst-final,markdown-final}.log`。Astraの生成終了後もisGeneratingがtrueになる指摘をrunningへ接続して解消し、該当箇所だけ再確認、新規なし。
+
+Catalyst実画面で10メッセージ（160行長文を含む）の数式・コード・本文、原文切替、添付画像の表示/拡大を確認。初期構成でWebContentが8プロセス・各約90〜140MiBとなるため、画面外の本文はWebViewを破棄し高さだけ保持した。先頭表示時の観測は3プロセス・各約104〜106MiB。測定条件の統制されたbenchmarkや実機消費電力の証拠ではない。一時データ領域の共有案は効果を確認できず撤去した。最終ライフサイクル変更のCatalyst build成功、同期/保存試験は表示変更と無関係なので反復していない。
+
+残る表示受入: 狭幅・VoiceOver・実機のDynamic Type/消費メモリ、継続スクロール時の安定性、実操作の選択/コピー。コピー操作はUI自動化が同名要素を区別できず未確認、コード上のOS接続と原文切替の証拠をコピーの実操作成功とは扱わない。豊富な本文表示の接続は進んだが、この残件や全機能移植を完了扱いにしない。
+
 ## 形式判定・プレビュー・選択追加・全置換の共有取り込み（2026-10-13追記）
 
 実Web importServiceの変換・検証・選択追加を `src/utils/fileImport.ts` へ抽出し、Webとnativeが同じ入口を使う。nativeはJSON/gzip読込、raw境界、確認UI、atomic保存を担う。既知設定の全置換初期値は実Web `getInitialState/createPartializedState` から生成し、Swift側へ既定値を再実装しない。設定の初期化は既定オフ。選択IDはUTF8 identityを使用し、古いプレビューからの保存はsnapshot/sidecarのbyte照合で拒否する。
@@ -148,7 +158,7 @@ Webの既存実処理を基準に共有範囲を一機能分定め、nativeは�
 
 ### 取り込み完了後の本文表示の配置判断（2026-10-13）
 
-現在の `MarkdownRenderer.tsx` は実Webの remark-gfm / remark-math / rehype-katex / rehype-highlight と `preprocessLaTeX` を使用する。旧iOS `MessageBubble.swift` の `inlineOnlyPreservingWhitespace` はブロック構造を扱わず、この経路の拡張を既定にしない。次の表示段階はWeb由来の解析・前処理と `resolveStreamingMarkdownMode` の共用を先に検討し、描画、選択、リンク操作、画像読み込みはnative境界として配置する。描画方式の採否は未決定で、導入前に複数メッセージ・長文・生成中の更新でコストを確認する。表・コード・数式・画像の表示、原文切替、選択とコピー、Dynamic Typeを一式の受入に含め、旧iOSと見た目だけ一致しても完成とは扱わない。
+現在の `MarkdownRenderer.tsx` は実Webの remark-gfm / remark-math / rehype-katex / rehype-highlight と `preprocessLaTeX` を使用する。旧iOS `MessageBubble.swift` の `inlineOnlyPreservingWhitespace` はブロック構造を扱わず、この経路の拡張を既定にしない。次の表示段階はWeb由来の解析・前処理と `resolveStreamingMarkdownMode` の共用を先に検討し、描画、選択、リンク操作、画像読み込みはnative境界として配置する。解析ASTだけでは数式・表の描画を別実装するため、既存React描画をWKで共用する方式を選び、上記の実測と残る受入を記録した。表・コード・数式・画像の表示、原文切替、選択とコピー、Dynamic Typeを一式の受入に含め、旧iOSと見た目だけ一致しても完成とは扱わない。
 
 ## 今回の独立監査と統合確認
 

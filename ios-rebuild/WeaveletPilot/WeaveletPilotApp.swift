@@ -108,8 +108,8 @@ struct ChatView: View {
                         if let generation = state.generation {
                             VStack(alignment: .leading, spacing: 8) {
                                 Text(generation.running ? "生成中" : "未保存の生成結果").font(.headline)
-                                if !generation.output.reasoning.isEmpty { MessagePartView(part: .reasoning(generation.output.reasoning)) }
-                                if !generation.output.text.isEmpty { MessagePartView(part: .text(generation.output.text)) }
+                                if !generation.output.reasoning.isEmpty { MessagePartView(part: .reasoning(generation.output.reasoning), isGenerating: generation.running) }
+                                if !generation.output.text.isEmpty { MessagePartView(part: .text(generation.output.text), isGenerating: generation.running) }
                                 if generation.running { Button("停止") { state.stopGeneration() }.frame(minHeight: 44) }
                                 else { Button("生成結果の保存を再試行") {
                                     do { try state.saveGenerationResult() } catch { state.generationError = error.localizedDescription }
@@ -290,6 +290,7 @@ struct ChatView: View {
                 }
             }
         }
+        .environment(\.markdownSettings, (try? state.publicationSnapshot().required("state")) ?? .object([]))
     }
     private func prepareImport(_ data: Data, filename: String, allowPartialImport: Bool = false) {
         isPreparingImport = true
@@ -367,10 +368,7 @@ struct MessageView: View {
                 if node.options.collapsed {
                     Text("本文を折りたたみ中").foregroundStyle(.secondary)
                 } else if node.parts.isEmpty {
-                    Text(node.content)
-                        .font(.body)
-                        .textSelection(.enabled)
-                        .fixedSize(horizontal: false, vertical: true)
+                    MarkdownTextView(text: node.content)
                 } else {
                     ForEach(Array(node.parts.enumerated()), id: \.offset) { _, part in
                         MessagePartView(part: part)
@@ -433,16 +431,16 @@ struct MessageView: View {
 
 struct MessagePartView: View {
     let part: MessagePart
+    var isGenerating = false
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
             switch part {
-            case .text(let text): Text(text)
+            case .text(let text): MarkdownTextView(text: text, isGenerating: isGenerating)
             case .reasoning(let text):
                 Text("推論").font(.headline)
-                Text(text)
+                MarkdownTextView(text: text, isGenerating: isGenerating)
             case .image(let url, let detail):
-                Text("画像（\(detail)）").font(.headline)
-                Text(url)
+                AttachmentImageView(url: url, detail: detail)
             case .toolCall(let id, let name, let arguments):
                 Text("ツール呼び出し: \(name)").font(.headline)
                 Text("ID: \(id)")
