@@ -411,12 +411,22 @@ struct ChatView: View {
     }
     private func composer(_ conversation: Conversation) -> some View {
         VStack(alignment:.leading,spacing:6) {
-            TextField("送信する本文",text:Binding(
-                get:{ state.composerDraft(chatID:conversation.id).text },
-                set:{ state.setComposerText(chatID:conversation.id,text:$0) }),axis:.vertical)
-                .lineLimit(1...8).textFieldStyle(.roundedBorder)
-                .frame(minHeight:44)
-                .disabled(state.generation != nil)
+            MessageInputView(text: Binding(
+                get: { state.composerDraft(chatID: conversation.id).text },
+                set: { state.setComposerText(chatID: conversation.id, text: $0) }),
+                label: "送信する本文", enabled: state.generation == nil, sticky: true,
+                enterToSubmit: { try state.displaySetting(.enterToSubmit) == .bool(true) },
+                submit: { _ in
+                    guard state.conversation?.identity == conversation.identity, state.generation == nil else { return }
+                    do { try state.sendComposer() }
+                    catch { state.generationError = error.localizedDescription }
+                }, failure: { state.generationError = $0.localizedDescription })
+                .id(conversation.identity)
+                .overlay(alignment: .topLeading) {
+                    if state.composerDraft(chatID: conversation.id).text.isEmpty {
+                        Text("送信する本文").foregroundStyle(.secondary).padding(.horizontal, 10).padding(.vertical, 10).allowsHitTesting(false)
+                    }
+                }
             HStack(alignment:.bottom,spacing:8) {
                 if let detail = try? state.composerImageDetail(chatID:conversation.id) {
                     ImageInputView(destinationID:conversation.id) { chatID, urls in
@@ -1501,7 +1511,10 @@ struct MessageEditorView: View {
                     } label: { Text("/").frame(minWidth: 44, minHeight: 44) }
                     .accessibilityLabel("プロンプトライブラリ")
                     .disabled(state.generation != nil)
-                    TextEditor(text: $draft.text).frame(minHeight: 220)
+                    MessageInputView(text: $draft.text, label: "本文", enabled: state.generation == nil, sticky: false,
+                        minimumHeight: 220,
+                        enterToSubmit: { try state.displaySetting(.enterToSubmit) == .bool(true) },
+                        submit: submit, failure: { errorMessage = $0.localizedDescription })
                     if !draft.isInsertion {
                         Text("最初のテキストを編集します。他の本文要素は保持します。")
                             .font(.footnote).foregroundStyle(.secondary)
@@ -1546,6 +1559,28 @@ struct MessageEditorView: View {
             }
             .toolbar { ToolbarItem(placement: .cancellationAction) { Button("取消") { dismiss() } } }
         }
+    }
+
+    private func generate() {
+        do {
+            draft = try state.saveMessageForGeneration(draft)
+            guard let nodeID = draft.nodeID else { throw ExchangeError.invalid("生成するメッセージがありません") }
+            try state.startGeneration(state.messageGenerationDraft(nodeID: nodeID, operation: .append))
+            dismiss()
+        } catch { errorMessage = error.localizedDescription }
+    }
+
+    private func submit(_ action: EnterSubmission.Action) {
+        guard state.generation == nil else { return }
+        if action == .generate { generate(); return }
+        if draft.isReplacingAndPruning {
+            guard !draft.isProtected else { return }
+            showsPruneConfirmation = true
+        } else if draft.isInsertion { save(.insert) }
+        else if draft.nodeID != nil {
+            guard !draft.isProtected, draft.changed else { return }
+            save(.overwrite)
+        } else if !draft.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { save(.append) }
     }
 
     private func saveReplacingAndPruning() {

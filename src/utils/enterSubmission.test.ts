@@ -7,6 +7,7 @@ describe('actual edit-view Enter policy', () => {
   it.each([
     [{}, 'generate'],
     [{ sticky: false }, 'save'],
+    [{ sticky: undefined }, 'save'],
     [{ shiftKey: true }, null],
     [{ enterToSubmit: false }, null],
     [{ enterToSubmit: false, shiftKey: true }, 'generate'],

@@ -536,6 +536,30 @@ final class ChatState: ObservableObject {
         return try saveTreeEdit(source: draft.source, chatID: draft.chatID, nodeID: nodeID, path: draft.path, operation: "replaceAndPrune", role: draft.role,
                                parts: draft.parts, editedText: draft.text, removeCount: draft.removeCount, newIDs: newIDs, now: now)
     }
+    func saveMessageForGeneration(_ draft: MessageDraft, now: Double = Date().timeIntervalSince1970 * 1000) throws -> MessageDraft {
+        guard generation == nil, let exchange, exchange.source == draft.source,
+              conversation?.id.utf8.elementsEqual(draft.chatID.utf8) == true else {
+            throw ExchangeError.invalid("会話が変更されました。本文を開き直してください")
+        }
+        guard !draft.isInsertion else { throw ExchangeError.invalid("挿入する本文は保存してから、そのメッセージの生成操作を選んでください") }
+        if let nodeID = draft.nodeID {
+            guard let chat = try draft.source.required("chats").array("chats").first(where: { try $0.required("id").string("id").utf8.elementsEqual(draft.chatID.utf8) }) else { throw ExchangeError.invalid("chat ID") }
+            let count = try chat["branchTree"] == nil ? chat.required("messages").array("messages").count : 0
+            var history: MessageEditing.HistoryState?
+            let changed = try MessageEditing.transform(in: draft.source, chatID: draft.chatID, nodeID: nodeID, viewingPath: draft.path,
+                operation: "replaceAndPrune", role: draft.role, parts: draft.parts, editedText: draft.text,
+                removeCount: draft.followingCount, newIDs: (0..<count).map { _ in UUID().uuidString.lowercased() }, now: now,
+                history: editingHistory) { history = $0 }
+            if let explanation = changed.result.explanation { throw ExchangeError.invalid(explanation) }
+            guard changed.result.pruneBlockedBy.isEmpty else { throw ExchangeError.invalid("保護された後続があるため、本文と後続を変更できません") }
+            if changed.result.status == "updated" {
+                try applyLibrary(changed.source, selectedID: draft.chatID, resetViewFor: draft.chatID, editing: history, now: now)
+            }
+        } else { try saveMessage(draft, mode: .append, now: now) }
+        guard let nodeID = conversation?.visibleMessages.last?.id else { throw ExchangeError.invalid("生成するメッセージがありません") }
+        return try messageDraft(nodeID: nodeID)
+    }
+
     private func saveTreeEdit(source: OrderedJSON, chatID: String, nodeID: String, path: [String], operation: String,
                               direction: NodeMoveDirection? = nil, role: String? = nil, parts: OrderedJSON? = nil, editedText: String? = nil,
                               removeCount: Int? = nil, newIDs: [String]?, now: Double) throws -> NodeTransformResult {

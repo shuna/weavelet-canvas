@@ -6,7 +6,7 @@ export function enterSubmission(input: {
   ctrlKey: boolean;
   shiftKey: boolean;
   enterToSubmit: boolean;
-  sticky: boolean;
+  sticky?: boolean;
 }): 'generate' | 'save' | null {
   // Safari may finish composition before the confirming Enter keydown.
   if (input.isComposing || input.keyCode === 229 || input.key !== 'Enter' || input.isMobile) return null;
