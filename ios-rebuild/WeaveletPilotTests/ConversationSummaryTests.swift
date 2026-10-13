@@ -37,6 +37,23 @@ final class ConversationSummaryTests: XCTestCase {
         var messages = try chat.required("messages").array("messages")
         messages[0] = messages[0].replacing("content",with:.array([.object([.init(key:"type",value:.string("text")),.init(key:"text",value:.string("Changed"))])]))
         let changed = source.replacing("chats",with:.array([chat.replacing("messages",with:.array(messages))]))
-        XCTAssertNil(try ConversationSummary.apply(response,prepared:prepared,source:changed,state:state))
+        let staleState = state.replacing("countTotalTokens",with:.bool(true))
+        let stale = try XCTUnwrap(ConversationSummary.apply(response,prepared:prepared,source:changed,state:staleState))
+        XCTAssertNil(stale.summary)
+        XCTAssertNotNil(stale.error)
+        XCTAssertNotNil(stale.tokenUsage)
+        XCTAssertNil(try stale.source.required("chats").array("chats")[0]["summaries"])
+    }
+
+    func testFlatMessageIDsMapToLegacySummaryPathOnlyWithoutBranchTree() throws {
+        let raw = try source.required("chats").array("chats")[0]
+        let flat = source.replacing("chats",with:.array([.object(try raw.object("chat").filter { $0.key != "branchTree" })]))
+        let description = try XCTUnwrap(ConversationSummary.describe(source:flat,chatID:"chat",nodeID:"message-0"))
+        XCTAssertEqual(try description.required("sourceNodeIds").array("IDs"),[.string("message-0")])
+        XCTAssertEqual(try description.required("path").array("path")[0]["nodeId"],.string("message-0"))
+        let targeted = try ConversationSummary.mutate(source:flat,chatID:"chat",action:"target",nodeID:"message-0")
+        XCTAssertEqual(try targeted.required("chats").array("chats")[0]["summaryTargets"]?["0"],.bool(true))
+        let prepared = try XCTUnwrap(ConversationSummary.prepare(source:flat,state:state,chatID:"chat",sourceNodeIDs:["message-0"],mode:"single",originNodeID:"message-0",summaryID:"summary",now:1000,legacy:legacy))
+        XCTAssertEqual(try prepared.summary.required("sources").array("sources")[0]["nodeId"],.string("0"))
     }
 }

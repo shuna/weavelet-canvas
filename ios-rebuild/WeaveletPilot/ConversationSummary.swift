@@ -9,11 +9,12 @@ struct PreparedSummary {
     let summaryID: String
     let now: Double
     let config: OrderedJSON?
+    let originalChat: OrderedJSON
     let expectedChatConfig: OrderedJSON
+    let expectedBranchTree: OrderedJSON
     let summary: OrderedJSON
-    let selectedConfig: OrderedJSON
-    let promptMessage: OrderedJSON
     let selection: OrderedJSON
+    let boundary: SharedWebProjection
     let request: URLRequest
     let fallbackEndpoint: String
 }
@@ -24,6 +25,17 @@ enum ConversationSummary {
             guard case .string(let value) = $0["id"] else { return false }
             return value.utf8.elementsEqual(id.utf8)
         }
+    }
+    private static func wireNodeID(_ id: String, chat: OrderedJSON) throws -> String {
+        if chat["branchTree"] != nil { return id }
+        guard id.hasPrefix("message-"), let index = Int(id.dropFirst(8)), index >= 0,
+              id.utf8.elementsEqual("message-\(index)".utf8) else { throw ExchangeError.invalid("flat node ID") }
+        return String(index)
+    }
+    private static func displayNodeID(_ id: String, chat: OrderedJSON) -> String {
+        guard chat["branchTree"] == nil, let index = Int(id), index >= 0,
+              id.utf8.elementsEqual(String(index).utf8) else { return id }
+        return "message-\(index)"
     }
     private static func project(_ value: OrderedJSON, known: [String], boundary: inout SharedWebProjection) throws -> OrderedJSON {
         .object(try value.object("summary field").map { field in
@@ -99,9 +111,15 @@ enum ConversationSummary {
                         busyJobs: [(originNodeID: String, sourceNodeIDs: [String])] = [],
                         legacy: RemoteCredentialRecord, readProviderCredential: ProviderModels.CredentialReader = RemoteCredentials.load(providerID:)) throws -> PreparedSummary? {
         guard let rawChat = try chat(source,id:chatID) else { return nil }
+        let wireSources = try sourceNodeIDs.map { try wireNodeID($0,chat:rawChat) }
+        let wireOrigin = try wireNodeID(originNodeID,chat:rawChat)
+        let wireGenerating = try generatingNodeIDs.map { try wireNodeID($0,chat:rawChat) }
+        let wireBusy = try busyJobs.map { job in
+            (originNodeID:try wireNodeID(job.originNodeID,chat:rawChat),sourceNodeIDs:try job.sourceNodeIDs.map { try wireNodeID($0,chat:rawChat) })
+        }
         var boundary = SharedWebProjection()
-        let selection = try select(chat:rawChat,sourceNodeIDs:sourceNodeIDs,mode:mode,originNodeID:originNodeID,format:format,
-                                   config:config,summaryID:summaryID,now:now,generatingNodeIDs:generatingNodeIDs,busyJobs:busyJobs,
+        let selection = try select(chat:rawChat,sourceNodeIDs:wireSources,mode:mode,originNodeID:wireOrigin,format:format,
+                                   config:config,summaryID:summaryID,now:now,generatingNodeIDs:wireGenerating,busyJobs:wireBusy,
                                    state:state,fallbackEndpoint:legacy.settings.endpoint,boundary:&boundary)
         guard selection["status"] == .string("ready") else { return nil }
         let (credential,url) = try AuxiliaryRemoteRequest.credential(selection:selection,state:state,legacy:legacy,read:readProviderCredential)
@@ -113,12 +131,11 @@ enum ConversationSummary {
         ]))
         guard plan["status"] == .string("ready") else { return nil }
         let request = try AuxiliaryRemoteRequest.bind(plan.required("request"),boundary:boundary,url:url,key:credential.key)
-        return try PreparedSummary(chatID:chatID,sourceNodeIDs:sourceNodeIDs,mode:mode,originNodeID:originNodeID,format:format,
-            summaryID:summaryID,now:now,config:config,expectedChatConfig:rawChat["config"] ?? .object([]),
+        return try PreparedSummary(chatID:chatID,sourceNodeIDs:wireSources,mode:mode,originNodeID:wireOrigin,format:format,
+            summaryID:summaryID,now:now,config:config,originalChat:rawChat,expectedChatConfig:rawChat["config"] ?? .object([]),
+            expectedBranchTree:rawChat["branchTree"] ?? .null,
             summary:restored(selection.required("summary"),boundary:boundary),
-            selectedConfig:restored(selection.required("config"),boundary:boundary),
-            promptMessage:restored(selection.required("promptMessage"),boundary:boundary),
-            selection:selection,request:request,fallbackEndpoint:legacy.settings.endpoint)
+            selection:selection,boundary:boundary,request:request,fallbackEndpoint:legacy.settings.endpoint)
     }
     static func generate(_ prepared: PreparedSummary, client: RemoteClient = RemoteClient()) async throws -> (text: String, finishReason: String?) {
         let response = try await client.completeJSON(prepared.request)
@@ -129,25 +146,19 @@ enum ConversationSummary {
     }
     static func apply(_ response: (text: String, finishReason: String?), prepared: PreparedSummary, source: OrderedJSON, state: OrderedJSON,
                       generatingNodeIDs: [String] = []) throws -> (source: OrderedJSON, tokenUsage: OrderedJSON?, summary: OrderedJSON?, savesTokens: Bool?, warning: String?, error: String?)? {
-        guard let rawChat = try chat(source,id:prepared.chatID),
-              try (rawChat["config"] ?? .object([])).encoded() == prepared.expectedChatConfig.encoded() else { return nil }
-        var boundary = SharedWebProjection()
-        let current = try select(chat:rawChat,sourceNodeIDs:prepared.sourceNodeIDs,mode:prepared.mode,originNodeID:prepared.originNodeID,
-                                 format:prepared.format,config:prepared.config,summaryID:prepared.summaryID,now:prepared.now,
-                                 generatingNodeIDs:generatingNodeIDs,busyJobs:[],state:state,fallbackEndpoint:prepared.fallbackEndpoint,boundary:&boundary)
-        guard current["status"] == .string("ready"),
-              try current.required("model").encoded() == prepared.selection.required("model").encoded(),
-              try (current["providerId"] ?? .null).encoded() == (prepared.selection["providerId"] ?? .null).encoded(),
-              try current.required("endpoint").encoded() == prepared.selection.required("endpoint").encoded(),
-              try restored(current.required("summary"),boundary:boundary).encoded() == prepared.summary.encoded(),
-              try restored(current.required("config"),boundary:boundary).encoded() == prepared.selectedConfig.encoded(),
-              try restored(current.required("promptMessage"),boundary:boundary).encoded() == prepared.promptMessage.encoded() else { return nil }
+        let latestChat = try chat(source,id:prepared.chatID)
+        let rawChat = latestChat ?? prepared.originalChat
+        let stale = try latestChat == nil || (rawChat["config"] ?? .object([])).encoded() != prepared.expectedChatConfig.encoded()
+            || (rawChat["branchTree"] ?? .null).encoded() != prepared.expectedBranchTree.encoded()
+        let wireGenerating = try generatingNodeIDs.map { try wireNodeID($0,chat:rawChat) }
+        var boundary = prepared.boundary
         let countTokens = state["countTotalTokens"] == .bool(true)
         var input = OrderedJSON.object([
             .init(key:"operation",value:.string("apply")),.init(key:"chat",value:try projectedChat(rawChat,boundary:&boundary)),
-            .init(key:"selection",value:current),.init(key:"responseText",value:.string(response.text)),
+            .init(key:"selection",value:prepared.selection),.init(key:"responseText",value:.string(response.text)),
             .init(key:"countTotalTokens",value:.bool(countTokens)),.init(key:"totalTokenUsed",value:state["totalTokenUsed"] ?? .object([])),
-            .init(key:"generatingNodeIds",value:.array(generatingNodeIDs.map(OrderedJSON.string)))
+            .init(key:"generatingNodeIds",value:.array(wireGenerating.map(OrderedJSON.string))),
+            .init(key:"stale",value:.bool(stale))
         ])
         if let reason = response.finishReason { input = input.replacing("finishReason",with:.string(reason)) }
         let result = try SharedWebOperations.call("summaryOperation",input)
@@ -155,11 +166,10 @@ enum ConversationSummary {
         let updated = try OrderedJSONChanges.apply(result.required("changes"),to:base,opaque:boundary.opaque)
         if countTokens { try NativeUsage.validateCounters(result:result,before:state["totalTokenUsed"] ?? .object([]),after:updated["totalTokenUsed"] ?? .object([])) }
         var chats = try source.required("chats").array("chats")
-        guard let index = chats.firstIndex(where: {
+        if let index = chats.firstIndex(where: {
             guard case .string(let value) = $0["id"] else { return false }
             return value.utf8.elementsEqual(prepared.chatID.utf8)
-        }) else { return nil }
-        chats[index] = try updated.required("chat")
+        }) { chats[index] = try updated.required("chat") }
         return (source.replacing("chats",with:.array(chats)),countTokens ? updated["totalTokenUsed"] : nil,
                 try result["summary"].flatMap { $0 == .null ? nil : try restored($0,boundary:boundary) },
                 try result["savesTokens"]?.boolean("saves tokens"),try result["warning"]?.string("summary warning"),
@@ -173,7 +183,7 @@ enum ConversationSummary {
                                         .init(key:"chat",value:try projectedChat(rawChat,boundary:&boundary)),
                                         .init(key:"action",value:.string(action))])
         if let summaryID { input = input.replacing("summaryId",with:.string(summaryID)) }
-        if let nodeID { input = input.replacing("nodeId",with:.string(nodeID)) }
+        if let nodeID { input = input.replacing("nodeId",with:.string(try wireNodeID(nodeID,chat:rawChat))) }
         if let use { input = input.replacing("use",with:.bool(use)) }
         let changes = try SharedWebOperations.call("summaryOperation",input).required("changes")
         let updated = try OrderedJSONChanges.apply(changes,to:rawChat,opaque:boundary.opaque)
@@ -189,14 +199,34 @@ enum ConversationSummary {
     static func describe(source: OrderedJSON, chatID: String, nodeID: String, mode: String? = nil, originNodeID: String? = nil,
                          chosenSummaryID: String? = nil, generatingNodeIDs: [String] = []) throws -> OrderedJSON? {
         guard let rawChat = try chat(source,id:chatID) else { return nil }
+        let wireNode = try wireNodeID(nodeID,chat:rawChat)
+        let wireOrigin = try originNodeID.map { try wireNodeID($0,chat:rawChat) }
+        let wireGenerating = try generatingNodeIDs.map { try wireNodeID($0,chat:rawChat) }
         var boundary = SharedWebProjection()
         var input = OrderedJSON.object([.init(key:"operation",value:.string("describe")),
                                         .init(key:"chat",value:try projectedChat(rawChat,boundary:&boundary)),
-                                        .init(key:"nodeId",value:.string(nodeID)),
-                                        .init(key:"generatingNodeIds",value:.array(generatingNodeIDs.map(OrderedJSON.string)))])
+                                        .init(key:"nodeId",value:.string(wireNode)),
+                                        .init(key:"generatingNodeIds",value:.array(wireGenerating.map(OrderedJSON.string)))])
         if let mode { input = input.replacing("mode",with:.string(mode)) }
-        if let originNodeID { input = input.replacing("originNodeId",with:.string(originNodeID)) }
+        if let wireOrigin { input = input.replacing("originNodeId",with:.string(wireOrigin)) }
         if let chosenSummaryID { input = input.replacing("chosenSummaryId",with:.string(chosenSummaryID)) }
-        return try restored(SharedWebOperations.call("summaryOperation",input),boundary:boundary)
+        var result = try restored(SharedWebOperations.call("summaryOperation",input),boundary:boundary)
+        if rawChat["branchTree"] == nil {
+            if let path = result["path"] {
+                result = result.replacing("path",with:.array(try path.array("summary path").map { entry in
+                    guard let id = try entry["nodeId"]?.string("node ID") else { return entry }
+                    return entry.replacing("nodeId",with:.string(displayNodeID(id,chat:rawChat)))
+                }))
+            }
+            if let ids = result["sourceNodeIds"] {
+                result = result.replacing("sourceNodeIds",with:.array(try ids.array("source IDs").map {
+                    .string(displayNodeID(try $0.string("node ID"),chat:rawChat))
+                }))
+            }
+            if let anchor = try result["anchor"]?.string("anchor") {
+                result = result.replacing("anchor",with:.string(displayNodeID(anchor,chat:rawChat)))
+            }
+        }
+        return result
     }
 }
