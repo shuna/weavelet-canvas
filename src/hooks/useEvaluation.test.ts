@@ -38,8 +38,9 @@ const context = { chatId: 'chat', nodeId: 'assistant', endpoint: 'https://exampl
 const key = evaluationResultKey('chat', 'assistant', 'pre-send');
 const deferred = <T,>() => {
   let resolve!: (value: T) => void;
-  const promise = new Promise<T>((done) => { resolve = done; });
-  return { promise, resolve };
+  let reject!: (reason: unknown) => void;
+  const promise = new Promise<T>((done, fail) => { resolve = done; reject = fail; });
+  return { promise, resolve, reject };
 };
 
 beforeEach(() => {
@@ -71,6 +72,53 @@ beforeEach(() => {
 });
 
 describe('asynchronous evaluation execution', () => {
+  it.each(['local', 'hybrid'])('uses shared remote safety fallback after %s preparation fails without retrying local quality', async (engine) => {
+    fixture.state.evaluationSettings.safetyEngine = engine;
+    fixture.state.evaluationSettings.hybridRemoteOnSafe = false;
+    fixture.state.evaluationSettings.safetyPreSend = 'auto';
+    fixture.prepare.mockRejectedValueOnce(new Error('Model unavailable'));
+    await expect(runPreSendEvaluation(userContent, context)).resolves.toBeUndefined();
+    expect(fixture.safety).toHaveBeenCalledWith('question', undefined, expect.any(AbortSignal));
+    expect(fixture.ensureLoaded).not.toHaveBeenCalled();
+    expect(fixture.classify).not.toHaveBeenCalled();
+    expect(fixture.generate).not.toHaveBeenCalled();
+    expect(fixture.quality).not.toHaveBeenCalled();
+    expect(fixture.state.setEvaluationResult).toHaveBeenCalledWith(key, expect.objectContaining({safety:{flagged:false}}));
+    expect(fixture.state.evaluationResults[key].localSafety).toBeUndefined();
+    expect(fixture.state.evaluationResults[key].quality).toBeUndefined();
+    expect(fixture.release).toHaveBeenCalledTimes(1);
+    expect(fixture.unregister).toHaveBeenCalledTimes(1);
+    expect(fixture.state.setEvaluationPending).toHaveBeenLastCalledWith(key, false);
+  });
+
+  it.each(['cancelled', 'obsolete'])('does not fall back or save after %s local model preparation fails', async (state) => {
+    fixture.state.evaluationSettings.safetyPreSend = 'auto';
+    const preparation = deferred<void>();
+    fixture.prepare.mockReturnValueOnce(preparation.promise);
+    const pending = runPreSendEvaluation(userContent, context);
+    if (state === 'cancelled') invalidateAiTasks(['chat']);
+    else fixture.state.chats[0].branchTree.nodes.user.contentHash = 'changed';
+    preparation.reject(new Error('Model unavailable'));
+    await expect(pending).resolves.toBeUndefined();
+    expect(fixture.safety).not.toHaveBeenCalled();
+    expect(fixture.quality).not.toHaveBeenCalled();
+    expect(fixture.ensureLoaded).not.toHaveBeenCalled();
+    expect(fixture.state.setEvaluationResult).not.toHaveBeenCalled();
+    expect(fixture.release).toHaveBeenCalledTimes(1);
+    expect(fixture.unregister).toHaveBeenCalledTimes(1);
+  });
+
+  it('keeps quality-only preparation failure local without starting remote quality', async () => {
+    fixture.prepare.mockRejectedValueOnce(new Error('Analysis unavailable'));
+    await expect(runPreSendEvaluation(userContent, context)).resolves.toBeUndefined();
+    expect(fixture.safety).not.toHaveBeenCalled();
+    expect(fixture.quality).not.toHaveBeenCalled();
+    expect(fixture.ensureLoaded).not.toHaveBeenCalled();
+    expect(fixture.state.setEvaluationResult).not.toHaveBeenCalled();
+    expect(fixture.release).toHaveBeenCalledTimes(1);
+    expect(fixture.unregister).toHaveBeenCalledTimes(1);
+  });
+
   it('routes only text parts through the shared automatic plan', async () => {
     fixture.state.localModelEnabled = false;
     fixture.state.evaluationSettings.safetyEngine = 'remote';

@@ -71,6 +71,7 @@ async function runEvaluationForPhase(
   const result: EvaluationResult = { phase };
   let localModelOwnerId: string | undefined;
   let unregisterOwner: (() => void) | undefined;
+  let localModelsPrepared = true;
 
   try {
     const { safetyEngine, hybridRemoteOnSafe } = settings;
@@ -83,14 +84,19 @@ async function runEvaluationForPhase(
       if (evalIds.length > 0) {
         localModelOwnerId = createLocalModelOwner(`evaluation:${key}:${phase}`);
         unregisterOwner = localModelRuntime.registerOwnerCancellation(localModelOwnerId, () => cancelAiTask(ticket));
-        await prepareModelsForExecution(localModelOwnerId, evalIds, { signal: ticket.controller.signal });
+        try {
+          await prepareModelsForExecution(localModelOwnerId, evalIds, { signal: ticket.controller.signal });
+        } catch (e) {
+          localModelsPrepared = false;
+          console.warn('[evaluation] local model preparation failed:', e);
+        }
       }
     }
 
-    if (!isAiTaskCurrent(ticket)) return;
+    if (!isAiTaskCurrent(ticket) || ticket.controller.signal.aborted) return;
     if (shouldSafety && safetyText) {
       // --- Local safety (if engine is local or hybrid) ---
-      if (localSafetyPolicy(safetyEngine, hybridRemoteOnSafe).runLocal) {
+      if (localModelsPrepared && localSafetyPolicy(safetyEngine, hybridRemoteOnSafe).runLocal) {
         try {
           result.localSafety = await runLocalModeration(safetyText, localModelOwnerId, ticket.controller.signal, moderationModelId);
         } catch (e) {
@@ -98,7 +104,7 @@ async function runEvaluationForPhase(
         }
       }
 
-      if (!isAiTaskCurrent(ticket)) return;
+      if (!isAiTaskCurrent(ticket) || ticket.controller.signal.aborted) return;
       // --- Remote safety ---
       const shouldRunRemote = localSafetyPolicy(safetyEngine, hybridRemoteOnSafe, result.localSafety).runRemote;
 
@@ -112,11 +118,11 @@ async function runEvaluationForPhase(
       }
     }
 
-    if (!isAiTaskCurrent(ticket)) return;
+    if (!isAiTaskCurrent(ticket) || ticket.controller.signal.aborted) return;
     if (shouldQuality && userText) {
       if (analysisModelId) {
         // Use local quality evaluation as the primary evaluator
-        if (userText) {
+        if (localModelsPrepared && userText) {
           try {
             const axisProgress = (axis: keyof QualityScores, state: AxisProgressState) => {
               if (isAiTaskCurrent(ticket)) useStore.getState().setEvaluationAxisProgress(key, { [axis]: state });
@@ -154,7 +160,7 @@ async function runEvaluationForPhase(
       }
     }
 
-    if (isAiTaskCurrent(ticket) && (result.safety || result.quality || result.localSafety)) {
+    if (isAiTaskCurrent(ticket) && !ticket.controller.signal.aborted && (result.safety || result.quality || result.localSafety)) {
       const current = useStore.getState();
       current.setEvaluationResult(key, applyAutoEvaluationResult(current.evaluationResults[key], result));
     }
