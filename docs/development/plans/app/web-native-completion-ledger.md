@@ -1,5 +1,20 @@
 # Web / 新iOSの完成条件と証拠
 
+
+## 新規会話の既定設定接続（2026-10-13）
+
+実Webのnew chat config構築をnewChatDefaults/newChatConfigへ切り出し、generateDefaultChat/createLibraryChatとnative shared bridgeから共用した（共有 `a179263c`、native `40bf8e92`）。保存済defaultChatConfig/defaultSystemMessage/defaultImageDetailとモデル情報を、新規作成と全削除後の補充へ渡す。初期値固定のnative UI呼出を撤去した。既定設定UIは既存ChatConfigViewを再利用し、3rootだけをfull snapshotへ保存する。保存時のtoken clampは実Webのpure関数を呼び、未指定tokenはnullへ変換しない。全global設定UIやOpenRouter全controlの移植完了を意味しない。
+
+共有契約7 tests・型・bundle生成/鮮度の担当成功と、親の既存Web chat-library 8 tests成功を再利用。独立AstraでmodelStateをstate内に入れる境界不一致を発見し、top-level引数へ分離した。native新規作成テストは保存cacheによるstream=false/max4000→3200を確認する。該当差分の再監査は新規なし。
+
+Catalyst初回12 cases中11成功。残る1caseは既定設定をV3 rootへ置いたfixtureの誤りだった。実syncDocument.tsのDOCUMENT_SHARED_ROOTS/v3DocumentLayoutは会話・本文・folder・evaluationだけをV3共有rootとし、既定設定はfull snapshotのstateに属する。fixtureを正式snapshot経路へ訂正し、情報保持assertを維持して該当1case成功。Webの形式に沿う訂正であることを独立Astraも限定確認した。最終12 casesを一括で再実行した結果ではない。
+
+代表経路ではV3未知raw値のimport/export、保存済既定値から新規作成、保存/再起動、fakeDrive暗号化同期、受信/再起動、全削除後の補充を確認。別caseでfresh設定保存、保存失敗時の元disk/state保持、stale拒否、空systemによる旧prompt解除、既存会話不変を確認した。オンライン比較は実Web recordsのJSON数値/キー順規則で、file I/Oのraw byte保持と区別する。ログ `/private/tmp/weavelet-default-settings-{catalyst,final,web-library}.log`。
+
+隔離FAKE Catalyst実画面で既定設定を開き、system文とmodelを編集・保存・再表示し保持を確認。最初のAXクリックは別fieldへ入力したため、画面で位置を確認して検証用の値へ直した。これは入力自動化の訂正であり実装変更ではない。通常データ、実API/Keychainは使用せず、終了後にbuilt Info.plistのfixture flagを元へ戻した。実UIの新規作成は自動接続テストと重複するため反復しない。実機・VoiceOver・実クラウドは未確認。
+
+最新共有bundle SHA256: `da914d5e84430562f5a7d49b02ab8aa736ed752d3cee8e3440119ae9c9802e9b`。次の同期方針は[計画の最終方針](web-native-commonality-roadmap.md#2026-10-13apple同期とフォルダー同期の最終方針)を参照。CloudKit除外指示は撤回され、CloudKitを維持したうえでWeb/iOS共通のローカルフォルダー同期とnative iCloud Drive対応を追加する。Google OAuth未登録のため実接続を待たず隔離検証を先行する。
+
 ## iOS全体の採用境界監査と先頭文入力（2026-10-13）
 
 採用境界の監査を再構築版の全40 Swift source、C/C++境界・ビルド、共有bundle/描画依存とlicenseへ拡張。[計画の全範囲監査](web-native-commonality-roadmap.md#ios全範囲への監査拡張2026-10-13)に分担・coverage・必要独自の根拠・条件付き依存を記載した。初期load失敗後の新規作成/snapshot適用による原保存file上書きを修正。MalformedSaveの既存ケースへ拒否/元bytes保持/明示置換後の通常作成を追加し成功（`/private/tmp/weavelet-ios-audit-preservation.log`）。独立Astraの修正確認は新規なし。Markdown license欠落、nested依存来歴、到達可能なKaTeX展開DoSも補完/公式版更新を完了した。最終確認は以下の通り。

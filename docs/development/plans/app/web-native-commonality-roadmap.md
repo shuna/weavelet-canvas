@@ -219,3 +219,14 @@ lodashのtemplate/unset/omitとBabelのwrapRegExpにも採用版のadvisoryが�
 最終採用版はKaTeX 0.18.2、lodash 4.18.1、@babel/runtime 7.26.10。npm overridesとCIで使うYarn resolutions/lockを揃えた。lodash 4.18.0はadvisoryの修正閾値を満たす一方、公式registryに「Bad release」のdeprecated指定があり、採用を撤回した。後続4.18.1の非deprecatedとnpm gitHead／公式tagの一致を確認して採用した。版番号だけでなく配布状態を確認する必要がある具体例として記録する。既存業務ルールや保存形式、新たなSDKは追加していない。
 
 全範囲の静的監査と今回の修正確認は完了。関連Web検証、公式KaTeX回帰、Catalyst描画接続、配布NOTICEの一致、独立Astraの指摘解消を確認した。詳細は[検証台帳](web-native-completion-ledger.md)参照。これはiOS全面再構築の機能完成、実機／実クラウド試験、全推移依存の脆弱性不存在を意味しない。
+
+## 2026-10-13：Apple同期とフォルダー同期の最終方針
+
+「iOSではCloudKitを使わない」という途中の指示はユーザーが撤回した。CloudKitはWeb/iOSの同期対象として維持し、それとは別にローカルフォルダー同期を両環境で利用可能にする。Webには既存のFileSystemSync/FileSystemTransportがあるため再実装せず、共有暗号化同期engine・manifest・immutableファイル形式を基準にnative接続を追加する。
+
+- Web：対応ブラウザのFile System Access APIで選んだフォルダを使用し、既存IndexedDB handle保存と権限再確認を利用する。macOS/Windows上のiCloud Drive同期フォルダも候補だが、実フォルダの相互運用は未検証。ブラウザのローカル書込完了をクラウド配信完了とは表示しない。
+- iOS/Catalyst：端末内フォルダとiCloud DriveをAppleの文書/ファイルAPIで扱う。フォルダ選択、security-scopedアクセス/再起動後の参照復元、ファイル調整、iCloudファイルの利用可能状態をnative責務とする。新しいCloudKit→Drive変換層や独自同期算法は作らない。
+- 同じフォルダ同期datasetをWeb/iOSで読み書きできることを、既存共有同期規則で検証する。未到着・途中書込・遅延配信・同時編集・競合コピー・権限失効・保存失敗の保全を機能一式に含める。既存transportがcloud clientの配信順序を理由にcompactionを無効にしている制約を保つ。
+- CloudKitのnative接続とフォルダ同期は別providerとして扱う。既存CloudKitデータがiCloud Drive上へ自動的に現れるとは扱わない。Google DriveのOAuth登録は未実施とユーザー確認済みで、実装・隔離テストを先行する。実Google/CloudKit/iCloud Driveの相互運用が未確認であることは完成条件に残す。
+
+既存機能の再利用方針に沿い、まず共有filesystem transportとnativeファイル操作の境界を確定し、実フォルダの隔離テスト・Catalyst・独立Astra監査を一式で行う。新しい依存ライブラリや小変更単位の監査ゲートは追加しない。
