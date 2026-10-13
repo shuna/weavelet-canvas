@@ -185,7 +185,9 @@ export function buildJudgeRequest(input: {userPrompt: string; assistantResponse?
   let isOpenRouter = false;
   if (input.endpointURL) isOpenRouter = isOpenRouterURL(input.endpointURL);
   else try { isOpenRouter = isOpenRouterURL(new URL(chatUrl)); } catch { /* endpoint validation stays with transport */ }
-  applyOpenRouterControls(isOpenRouter, { model: input.model, max_tokens: 0, temperature: 0, top_p: 1, presence_penalty: 0, frequency_penalty: 0, openRouter: { routing: hardOpenRouterConstraints(input.openRouter), responseCache: { mode: 'off' } } } as Parameters<typeof applyOpenRouterControls>[1], body, headers, { auxiliary: true, viaProxy: input.viaProxy ?? false });
+  const routing = hardOpenRouterConstraints(input.openRouter);
+  if (routing && !isOpenRouter) throw new Error('[EVAL_OPENROUTER_AUXILIARY_ENDPOINT_REQUIRED]');
+  applyOpenRouterControls(isOpenRouter, { model: input.model, max_tokens: 0, temperature: 0, top_p: 1, presence_penalty: 0, frequency_penalty: 0, openRouter: { routing, responseCache: { mode: 'off' } } } as Parameters<typeof applyOpenRouterControls>[1], body, headers, { auxiliary: true, viaProxy: input.viaProxy ?? false });
   return { chatUrl, headers, body };
 }
 

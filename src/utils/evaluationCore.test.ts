@@ -36,6 +36,12 @@ describe('shared evaluation', () => {
     } finally { Object.defineProperty(globalThis, 'URL', {value: originalURL, configurable: true}); }
   });
 
+  it('rejects hard routing on a non-OpenRouter judge endpoint with or without native URL metadata', () => {
+    const input = {operation: 'judgeRequest', userPrompt: 'hello', endpoint: 'https://api.openai.com/v1', model: 'judge', openRouter: {routing: {only: ['provider-a']}}};
+    expect(() => run(input)).toThrow('[EVAL_OPENROUTER_AUXILIARY_ENDPOINT_REQUIRED]');
+    expect(() => run({...input, endpointURL: {protocol: 'https:', hostname: 'api.openai.com'}})).toThrow('[EVAL_OPENROUTER_AUXILIARY_ENDPOINT_REQUIRED]');
+  });
+
   it('builds safety transport and rejects hard routing constraints', () => {
     expect(run({operation: 'safetyRequest', endpoint: 'https://api.openai.com/v1/chat/completions', text: 'check'})).toEqual({endpoint: 'https://api.openai.com/v1/moderations', headers: {'Content-Type': 'application/json'}, body: {input: 'check'}});
     expect(() => run({operation: 'safetyRequest', endpoint: 'https://api.openai.com/v1', text: 'check', openRouter: {routing: {only: ['provider-a']}}})).toThrow('[EVAL_SAFETY_OPENROUTER_CONSTRAINTS]');
