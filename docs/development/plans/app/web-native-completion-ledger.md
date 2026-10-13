@@ -1,5 +1,13 @@
 # Web / 新iOSの完成条件と証拠
 
+## メッセージ削除・非表示枝整理（2026-10-13追記）
+
+メッセージ1件の削除は後続メッセージを残す既存Web removeNode、非表示枝整理は表示path・pinnedとその子孫・protectedを残す既存pruneHiddenNodesStateへ接続する。nativeは共有差分を保存してから公開し、確認画面を開いて以降のsource変更と生成中保存を拒否する。pinnedは共有規則が読むbooleanとして投影し、その他の未知属性はopaque参照で保持する。子孫ごとの枝削除と編集undoは別の未完了項目。
+
+共有元で2件を修正した。共通変更準備とpruneで本文entryを分離し、releaseContentによるrefCount変更・delta昇格が変更前stateへ漏れることを防ぐ。activePathが空のpruneでrootが削除された場合はrootIdを空文字へ直し、同期record復元の不正参照を防ぐ。別のdeleteBranchStateには独立したstore浅copyとreleaseContentによる同entry共有問題が残る（branch-domain.tsのdeleteBranchState）。子孫削除の接続時に修正する残件として記録し、この結果を全削除経路の修正完了とは扱わない。
+
+検証: Web関連7suite140件、型検査成功。Catalyst関連29件が一括成功し、root/中間/flat/全件削除、pinned子孫・protected保持、保存失敗/retry、古いdraft/生成中拒否、再読込/export/recordと隔離fakeDriveへの削除反映・fresh受信を含む。独立Astraは新規なし、bundle鮮度・差分検査成功。ログ `/private/tmp/weavelet-removal-catalyst.log`。手動Catalystはメニュー→1件削除確認→キャンセルと、非表示枝整理の例外説明→キャンセルを確認した。手動の最終削除は実行せず、削除結果は隔離自動テストの証拠とする。実クラウド・実機・狭幅は未検証。
+
 ## 本文挿入の共有接続（2026-10-13追記）
 
 Web insertNodeの対象判定・tree準備・挿入をinsertNodeStateへ抽出し、実Web callerとnative編集bridgeから同じ処理を利用する。WebのhistoryBaseは維持。nativeは各メッセージの「前に挿入」から既存入力sheetへ接続し、保存成功後に更新する。全本文保存へ元source照合と生成中拒否を追加し、古いdraftや未保存生成の上書きを防ぐ。挿入の空本文・3role・保護nodeの前への追加は既存Webどおり許可し、枝削除や編集undoを本段階へ混ぜていない。
@@ -61,7 +69,7 @@ GoogleAuthenticationはOSの認証画面、PKCE/state、URLSession、Keychainで
 | A 会話ライブラリ | 新規・改名・複製・削除・複数操作のWeb/native共通fixtureとCatalyst操作 | 共通8case、Web関連54件、Catalyst全41件＋修正回帰1件、独立Astra受入。実UIで作成・改名・複製・書出し・複数削除・再起動を確認 |
 | A フォルダと所属 | 属性・削除時所属解除・複数移動の共有処理とUI | Web共有utility/native接続を実装。Web33・Catalyst29成功、独立Astra新規なしで受入。手動UI未確認 |
 | A 探索・到達・履歴 | タイトル/本文/label/starのscope・順序・戻る/進むを実データで確認 | 上記共有処理/native接続・保存再読込み・実UIを確認。pixel scroll anchorと全view切替は未接続 |
-| B 木と本文編集 | role・system prompt・挿入/編集/明示分岐/prune/順序・undoの共通fixtureとUI | 上書き・role・明示分岐・末尾追加を共通15caseとCatalyst実UIで確認。一般挿入は上記共有接続とCatalyst操作を確認。prune/undoは未実装 |
+| B 木と本文編集 | role・system prompt・挿入/編集/明示分岐/prune/順序・undoの共通fixtureとUI | 上書き・role・明示分岐・末尾追加を共通15caseとCatalyst実UIで確認。一般挿入は上記共有接続とCatalyst操作を確認。1件削除・非表示枝整理を共有接続済み。後続prune・子孫削除・undoは未実装 |
 | B 分岐閲覧 | 任意nodeの切替と後続path、端の停止・履歴・表示保持 | 任意深度の兄弟切替と共有後続path・保存・履歴をCatalystで検証 |
 | B 移動・属性 | clipboard/copy/cut/paste/会話間移動、label/star/pin/除外/保護の共通結果 | 6属性のWeb実処理共有・native設定・保存/交換/隔離同期を確認。clipboard/copy/cut/paste/会話間移動は未実装 |
 | B 表示・draft・添付 | 5種content/Markdown/コード/表/画像、draft/IME、添付と編集位置保持 | V3の5種本文を投影表示、画像はURL文字表示。Markdown/画像描画・編集は未実装 |

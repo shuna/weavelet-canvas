@@ -1,3 +1,4 @@
+export { nodeRemoval } from './nodeRemoval';
 export { nodeOptions } from './nodeOptions';
 export { chatSearch } from './search';
 export { navigationOperation } from './navigation';

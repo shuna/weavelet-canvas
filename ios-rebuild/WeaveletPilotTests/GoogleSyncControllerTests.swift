@@ -21,6 +21,33 @@ import XCTest
         try state.applySnapshot(full.replacing("state",with:raw))
         return state
     }
+    func testRemovalAndPruneCrossEncryptedSyncWithoutRemovingProtectedSuccessor() async throws {
+        let dir = try directory(), drive = FakeSyncDrive(), keys = TestSyncKeys()
+        let sender = try state(LocalStateStore(fileURL: dir.appendingPathComponent("sender.json")))
+        let publisher = GoogleSyncController(chatState: sender, drive: drive, store: SyncStateStore(fileURL: dir.appendingPathComponent("sender-sync.json")), keyStore: keys)
+        try await publisher.create(password: password, folderName: "FAKE removal")
+        try sender.saveNodeRemoval(sender.nodeRemovalDraft(nodeID: "n-user"), now: 5000)
+        try sender.saveNodeRemoval(sender.pruneHiddenDraft(), now: 5001)
+        try await publisher.synchronize()
+        let receiverStore = LocalStateStore(fileURL: dir.appendingPathComponent("receiver.json"))
+        let receiver = ChatState(store: receiverStore)
+        let subscriber = GoogleSyncController(chatState: receiver, drive: drive, store: SyncStateStore(fileURL: dir.appendingPathComponent("receiver-sync.json")), keyStore: keys)
+        try await subscriber.open(dataset: XCTUnwrap(publisher.dataset))
+        let unlocked = try await subscriber.restoreKey()
+        XCTAssertTrue(unlocked)
+        try await subscriber.download()
+        let received = try XCTUnwrap(receiver.exchange).source
+        let chats = try received.required("chats").array("chats")
+        let chat = try XCTUnwrap(chats.first { $0["id"] == .string("chat-a") })
+        let tree = try chat.required("branchTree"), nodes = try tree.required("nodes")
+        XCTAssertEqual(tree["activePath"], .array(["n-system", "n-assistant"].map(OrderedJSON.string)))
+        XCTAssertEqual(try nodes.object("nodes").map(\.key), ["n-system", "n-assistant"])
+        XCTAssertEqual(nodes["n-assistant"]?["parentId"], .string("n-system"))
+        XCTAssertEqual(chat["protectedNodes"]?["n-assistant"], .bool(true))
+        XCTAssertNotNil(chats.first { $0["id"] == .string("chat-b") })
+        XCTAssertEqual(try ChatState(store: receiverStore).exportWebData(), try receiver.exportWebData())
+    }
+
     func testInsertedMessageCrossesEncryptedSyncAndRestartsWithoutLosingOtherNodes() async throws {
         let dir = try directory(), drive = FakeSyncDrive(), keys = TestSyncKeys()
         let sender = try state(LocalStateStore(fileURL: dir.appendingPathComponent("sender.json")))

@@ -23,7 +23,7 @@
     "src/utils/streamingBuffer.ts": "4040506b5be29b03bf1a67b82efe71357c2f77b7b3b35d9e2edae03d7acf5ae9",
     "src/utils/contentStore.ts": "66ac2636c8d01cdefdb2f86ecf7208c5133d6449de54b3a03e77526ceaadaae4",
     "src/utils/branchUtils.ts": "5779a38a2dd9601635e387d495d3a703360860f016769c60dde3a91b788692a9",
-    "src/store/branch-domain.ts": "bdccf4fa5b9475536b49c9773bfe2caccd0de3efe918329e6dc5b033f67788c0",
+    "src/store/branch-domain.ts": "2d43fc2850062f2d0fe247cf90a33640cbaa64b5ab5bf40b25e33a5ae61349d1",
     "src/utils/nodeOptions.ts": "e549f540ad7bb4be11377c56edaa995394639ab05f6a9e8a39fbf919878c18ac",
     "src/utils/branchSearch.ts": "bc8e0483f624ac6bee834f696c99b13345965c601903650238ef32ad22509962",
     "src/utils/folderHierarchy.ts": "43c27d7124d1fd75625f01199c68add22f91d55a4b95e7b0b54c2fa52e2e6f93",
@@ -58,7 +58,8 @@
     "shared/google-sync/editing.ts": "0e7f1eea8e27de11cffa550d8a52e23e94225f7f31504015a051b807952b54f5",
     "shared/google-sync/adapters/uuid.ts": "27a7e045a0ebbb429ad65b4f3d1757f34c5b4187d8555aa523afaf337ddb010a",
     "src/utils/branchUtils.ts": "5779a38a2dd9601635e387d495d3a703360860f016769c60dde3a91b788692a9",
-    "src/store/branch-domain.ts": "bdccf4fa5b9475536b49c9773bfe2caccd0de3efe918329e6dc5b033f67788c0",
+    "src/store/branch-domain.ts": "2d43fc2850062f2d0fe247cf90a33640cbaa64b5ab5bf40b25e33a5ae61349d1",
+    "shared/google-sync/nodeRemoval.ts": "fbad7c0e32f3daf147c21e90792864868d4da3ff1c39000bbe3a5384961b7277",
     "src/utils/nodeOptions.ts": "e549f540ad7bb4be11377c56edaa995394639ab05f6a9e8a39fbf919878c18ac",
     "shared/google-sync/nodeOptions.ts": "45970c9ac17c065576ef10c3a67d49d1542eddb81d0e5e287d7761e63956c0db",
     "src/utils/branchSearch.ts": "bc8e0483f624ac6bee834f696c99b13345965c601903650238ef32ad22509962",
@@ -105,7 +106,7 @@
     "src/utils/syncDocument.ts": "bc7cca9616aa593538dfb194b861ea7415ce3c7e7da42620a9fca0a89acb4120",
     "src/store/storage/google/records.ts": "21f44f6ba31a25f7ecd7cea71b54354b3579a09414e9895fd1ee592618dfb9e9",
     "shared/google-sync/document.ts": "f30ff4f414326a0f47c0cc35b8538aa58d7ff6acf7c459d805f637854cf47e8b",
-    "shared/google-sync/entry.ts": "dddee61fd869b06f9e4536634667ffb1a6af5951bdfebeee78405b345a61d80b",
+    "shared/google-sync/entry.ts": "6c30c8345f1054e0bddef4b747dbf3d02990640fbcfd093d532e31683874bfbf",
     "shared/google-sync/generate.mjs": "416532bf17f1c392c3c60e7319b4f0868454f98496c6c6c0c4b367f12e0ddf22"
   },
   "dependencyInputs": {
@@ -116,5 +117,5 @@
     "lodash/package.json": "8e41b07c744a0de0d2c1c23ed41418ecb0849abb56395d28802e601b4730d7c2",
     "lodash/LICENSE": "f71e8ed126b46346494aad5486874cd8f0aafe95092ed67d2e3cb6110f939abc"
   },
-  "bundleSHA256": "e1ecb44bd6c0e7534de9c002e620c1a5e786c65f7fa8ff0555fdde27173189a1"
+  "bundleSHA256": "e4d5babd89e601f50ca936ddea57167e1d7839da58b044169587ccda5d4ac9fc"
 }

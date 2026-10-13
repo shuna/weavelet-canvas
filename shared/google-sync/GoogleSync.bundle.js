@@ -6996,6 +6996,7 @@ var WeaveletGoogleSync = (() => {
     messageEdit: () => messageEdit,
     navigationOperation: () => navigationOperation,
     nodeOptions: () => nodeOptions,
+    nodeRemoval: () => nodeRemoval,
     recordsResult: () => recordsResult,
     recordsStart: () => recordsStart,
     result: () => result2,
@@ -7596,6 +7597,18 @@ var WeaveletGoogleSync = (() => {
     }
     return ancestors;
   }
+  function collectDescendants(tree, nodeId) {
+    const result3 = /* @__PURE__ */ new Set();
+    const queue = [nodeId];
+    while (queue.length > 0) {
+      const id = queue.pop();
+      result3.add(id);
+      for (const child of getChildrenOf(tree, id)) {
+        queue.push(child.id);
+      }
+    }
+    return result3;
+  }
 
   // src/store/branch-domain.ts
   var extractSystemText = (content) => content.filter(isTextContent).map((c) => c.text).filter(Boolean).join("\n");
@@ -7629,11 +7642,9 @@ var WeaveletGoogleSync = (() => {
   };
   var cloneNode = (node) => ({ ...node });
   var ensureBranchReadyState = (chats, chatIndex, currentContentStore) => {
-    const ensured = ensureBranchTreeState(chats, chatIndex, currentContentStore);
-    return {
-      chats: cloneChatAt(ensured.chats, chatIndex),
-      contentStore: { ...ensured.contentStore }
-    };
+    const contentStore = Object.fromEntries(Object.entries(currentContentStore).map(([hash, entry]) => [hash, { ...entry }]));
+    const ensured = ensureBranchTreeState(chats, chatIndex, contentStore);
+    return { chats: cloneChatAt(ensured.chats, chatIndex), contentStore: ensured.contentStore };
   };
   var cloneNodeIfPresent = (tree, nodeId) => {
     if (!nodeId)
@@ -7666,6 +7677,32 @@ var WeaveletGoogleSync = (() => {
     tree.rootId = tree.activePath[0] ?? "";
     chat.messages = materializeActivePath(tree, contentStore);
     return { chats, contentStore };
+  };
+  var removeMessageAtIndexFromPreparedState = (state, messageIndex, options) => {
+    const { tree, contentStore } = state;
+    const nodeId = tree.activePath[messageIndex];
+    if (!nodeId)
+      return;
+    const parentId = tree.nodes[nodeId]?.parentId ?? null;
+    const nextId = tree.activePath[messageIndex + 1] ?? null;
+    Object.values(tree.nodes).forEach((node) => {
+      if (node.parentId !== nodeId)
+        return;
+      tree.nodes[node.id] = {
+        ...node,
+        parentId
+      };
+    });
+    if (nextId) {
+      cloneNodeIfPresent(tree, nextId);
+      tree.nodes[nextId].parentId = parentId;
+    }
+    if (!options?.preserveNode) {
+      releaseContent(contentStore, tree.nodes[nodeId].contentHash);
+      deleteMessageAttributes(tree, nodeId);
+      delete tree.nodes[nodeId];
+    }
+    tree.activePath.splice(messageIndex, 1);
   };
   var ensureBranchTreeState = (chats, chatIndex, currentContentStore) => {
     if (chats[chatIndex]?.branchTree) {
@@ -7714,6 +7751,49 @@ var WeaveletGoogleSync = (() => {
     tree.activePath = newPath;
     updatedChats[chatIndex].messages = materializeActivePath(tree, contentStore);
     return updatedChats;
+  };
+  var pruneHiddenNodesState = (chats, chatIndex, currentContentStore) => {
+    const contentStore = Object.fromEntries(Object.entries(currentContentStore).map(([hash, entry]) => [hash, { ...entry }]));
+    const updatedChats = cloneChatAt(chats, chatIndex);
+    captureProjectedMessageAttributes(updatedChats[chatIndex], contentStore);
+    const tree = updatedChats[chatIndex].branchTree;
+    const activeSet = new Set(tree.activePath);
+    const protectedSet = /* @__PURE__ */ new Set();
+    for (const node of Object.values(tree.nodes)) {
+      if (node.pinned) {
+        for (const id of collectDescendants(tree, node.id)) {
+          protectedSet.add(id);
+        }
+      }
+    }
+    const chatProtectedNodes = updatedChats[chatIndex].protectedNodes;
+    if (chatProtectedNodes) {
+      for (const [id, value] of Object.entries(chatProtectedNodes)) {
+        if (value && tree.nodes[id]) {
+          protectedSet.add(id);
+        }
+      }
+    }
+    const toDelete = Object.keys(tree.nodes).filter(
+      (id) => !activeSet.has(id) && !protectedSet.has(id)
+    );
+    toDelete.forEach((id) => {
+      releaseContent(contentStore, tree.nodes[id].contentHash);
+      deleteMessageAttributes(tree, id);
+      delete tree.nodes[id];
+    });
+    for (const id of Object.keys(tree.nodes)) {
+      const node = tree.nodes[id];
+      if (node.parentId && !tree.nodes[node.parentId]) {
+        tree.nodes[id] = cloneNode(node);
+        tree.nodes[id].parentId = null;
+      }
+    }
+    if (tree.activePath.length > 0)
+      tree.rootId = tree.activePath[0];
+    else if (!tree.nodes[tree.rootId])
+      tree.rootId = "";
+    return { chats: updatedChats, contentStore };
   };
   var setBranchNodeFieldState = (chats, chatIndex, nodeId, field, value) => {
     const updated = cloneChatAt(chats, chatIndex);
@@ -7816,6 +7896,11 @@ var WeaveletGoogleSync = (() => {
     });
     return { ...finalized, newId };
   };
+  var removeMessageAtIndexState = (chats, chatIndex, messageIndex, currentContentStore, options) => {
+    const state = prepareBranchMutationState(chats, chatIndex, currentContentStore);
+    removeMessageAtIndexFromPreparedState(state, messageIndex, options);
+    return finalizePreparedBranchMutationState(state);
+  };
   var updateNodeRoleState = (chats, chatIndex, nodeId, role, contentStore) => {
     const updatedChats = cloneChatAt(chats, chatIndex);
     const chat = updatedChats[chatIndex];
@@ -7910,6 +7995,62 @@ var WeaveletGoogleSync = (() => {
     const result3 = insertMessageAtIndexState(ensured.chats, chatIndex, index, { role: input.role, content: input.content }, ensured.contentStore);
     return { status: "updated", ...result3, nodeId: result3.newId, historyBase: ensured };
   };
+  var removeNodeState = (chats, input, contentStore, options) => {
+    const target = resolveNodeTarget(chats, input, true);
+    if (target.status !== "valid")
+      return target;
+    if ((target.chat.protectedNodes ?? {})[input.nodeId])
+      return { status: "protected" };
+    const ensured = ensureBranchReadyState(chats, target.chatIndex, contentStore);
+    const result3 = removeMessageAtIndexState(ensured.chats, target.chatIndex, target.messageIndex, ensured.contentStore, options);
+    return { status: "updated", ...result3, historyBase: ensured };
+  };
+
+  // shared/google-sync/nodeRemoval.ts
+  function nodeRemoval(json) {
+    const input = JSON.parse(json);
+    if (input.operation !== "remove" && input.operation !== "pruneHidden")
+      throw new Error("Invalid removal operation.");
+    const before = { chat: input.chat, contentStore: input.contentStore };
+    let { chat, contentStore } = structuredClone(before);
+    if (!Array.isArray(chat.messages) && chat.branchTree)
+      chat.messages = materializeActivePath(chat.branchTree, contentStore);
+    const wasFlat = !chat.branchTree;
+    return withEditingRuntime(input.newIDs, Object.keys(chat.branchTree?.nodes ?? {}), input.now, () => {
+      let result3 = { chats: [chat], contentStore };
+      if (!wasFlat) {
+        result3 = ensureBranchTreeState(result3.chats, 0, result3.contentStore);
+        if (input.viewingPath.some((id) => !Object.hasOwn(result3.chats[0].branchTree.nodes, id)))
+          throw new Error("Invalid viewing path.");
+        result3.chats = switchActivePathState(result3.chats, 0, input.viewingPath, result3.contentStore);
+      }
+      if (input.operation === "remove") {
+        if (input.nodeID == null)
+          throw new Error("Invalid removal target.");
+        const nodeId = wasFlat && input.nodeID.startsWith("message-") ? input.nodeID.slice(8) : input.nodeID;
+        const removed = removeNodeState(result3.chats, { chatId: chat.id, nodeId }, result3.contentStore);
+        if (removed.status !== "updated")
+          throw new Error(`Cannot remove node: ${removed.status}`);
+        result3 = removed;
+      } else {
+        if (wasFlat)
+          return "[]";
+        result3 = pruneHiddenNodesState(result3.chats, 0, result3.contentStore);
+      }
+      for (const [hash, entry] of Object.entries(result3.contentStore)) {
+        if (entry.delta && JSON.stringify(entry.delta) !== JSON.stringify(before.contentStore[hash]?.delta)) {
+          const content = resolveContent(result3.contentStore, hash);
+          const { delta: _delta, ...full } = entry;
+          result3.contentStore[hash] = { ...full, content };
+        }
+      }
+      chat = result3.chats[0];
+      contentStore = result3.contentStore;
+      if (chat.branchTree)
+        chat.messages = materializeActivePath(chat.branchTree, contentStore, true);
+      return JSON.stringify(diffJSONChanges(before, JSON.parse(JSON.stringify({ chat, contentStore }))));
+    });
+  }
 
   // src/utils/nodeOptions.ts
   var updateChatNodeField = (chats, chatIndex, field, value) => {
