@@ -632,3 +632,18 @@ c9c62bcfで実Web useSubmitのOpenRouter送信前制約をautoPreSendSafetyAllow
 1ec6d172/d4e22492でnative生成前後のnonblocking評価・予約済みassistant IDへのphase別保存・設定UIを接続した。optional OpenRouter設定は不在keyを省略し、JSON nullによるshared validator拒否と区別する。担当12件＋追補1件の成功を再利用し、親で新しいBranch bridgeも含むbundleに対する評価13件が成功（/private/tmp/weavelet-auto-evaluation-integration.log）。保存元の精密値/未知属性を保持し、保存成功前に結果を公開しない。Local/Hybrid classifierは未接続として明示し、remoteへ偽装しない。
 
 独立AstraはP2を2件確認：merged user本文を評価する一方で最後のraw user一件しか世代照合せず、前方user編集/最新omittedで古い評価を保存できる点と、一方dimensionの準備失敗が他方の評価も停止する点。必要送信依存の照合とdimension別準備エラーへ限定修正を依頼した。現段階は一式の受入未完了。指摘修正後はその影響範囲だけ確認し、既存全同期・全suiteを反復しない。実API/実機/狭幅UIは未確認。
+
+
+### 自動評価の指摘解消と結果適用の共有
+
+5d93b13bで送信requestPathの順序・role・解決済み本文と該当omittedをencoded bytesで照合し、生成先assistant自身を除外した。安全性/品質の準備は別do-catchとし、片方の失敗を表示しても準備できた側は実行する。担当Catalyst関連15件成功、omitted本文assertの限定追加確認も成功。独立Astra限定再確認は前回2件解消・新規P2以上なし。親結合2件（生成並行auto品質＋graph view保存失敗）も成功した（/private/tmp/weavelet-branch-auto-integration.log）。
+
+結果適用では、実Webautoのentry全置換とnativeのmanual context付与が別の規則になっていたため18a9feb6でapplyAutoEvaluationResult/setAutoResultへ共通化した。成功dimensionだけ更新し、未更新dimension/未知entry属性を保持。更新dimの旧manual contextを除き、incoming phaseとlocalSafetyを同じ元で扱う。手動set-resultは不変更、nativeはopaque参照でraw精密値を復元する。共有6件・型検査・bundle鮮度、Catalyst境界2件成功。独立Astraは新規P2以上なし。新SDK、別状態管理、テスト比較の緩和は追加していない。
+
+## 分岐図・分割表示のnative接続（2026-10-14）
+
+46f32d04/fee105fd/5513f7f2でselected chatの共有配置→native card/edge→共通navigateを接続。右上のChat/Branch editor/左右・上下splitを既存snapshot.state.chatActiveViewへ保存し、吹き出しstyleやSavedChatStateへ二重保存しない。flat chatは既存shared ensureで変換して元raw値へ差分を復元し、保存失敗時は変更を公開しない。入力生成/参照delta解決/JSC配置はdetachedで行い、元delta/unknown metadataを再保存用に再構築しない。
+
+統合確認でInt.max request IDのJSC丸め、NFC/NFD Stringキー衝突、delta preview空を修正。request IDはUInt32、描画/ForEach/Task identityはUTF8 bytes、previewは参照hashだけ共有resolverで解決する。独立AstraのP2「旧graphが現在の別chatへ作用」はgraphと生成元keyを保持し、公開/表示/click時に最新keyを照合、navigate先も生成元chatIDとする限定修正で解消。同node IDを持つ2chatの回帰を含むCatalyst7件成功、先のNav/Store成功は再利用。独立Astra限定再確認は新規P2以上なし。
+
+Macのロック解除後、通常storeと別のFAKE合成fixtureで右上切替・左右split・branch-only・nodeclick→本文到達を確認。実表示でcomposerがgraphまで横断していることを観測し、20ea0be1でchatContent内へ3行移動、Chat pane下端固定へ修正。最終Catalyst build成功（/private/tmp/weavelet-branch-pane-final-build.log）、限定Astra新規なし、最終実画面で左右splitの入力がChat pane内に収まり、branch-onlyでは入力領域がないことを確認した。アプリを終了し両検証cloneのprocess消失を確認、通常store/Keychain/実クラウドに触れていない。上下splitの実操作、iPhone狭幅/最大文字サイズ/IME、pan/zoomの実手操作は未確認。複数chat graph・node編集/多選択/比較等のWeb全graph機能は残件であり、閲覧と到達を全完成としない。
