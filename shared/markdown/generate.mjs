@@ -35,22 +35,44 @@ for (const name of readdirSync(path.join(katexDirectory, 'fonts'))) emit(`fonts/
 emit('index.html', readFileSync(path.join(directory, 'index.html')));
 const sources = [...Object.keys(bundle.metafile.inputs).map(name => path.resolve(root, name)),
   path.join(root, 'src/main.css'), path.join(root, 'tailwind.config.cjs'), path.join(directory, 'host.css'), path.join(directory, 'index.html'), fileURLToPath(import.meta.url)];
-// Same package discovery as the shared Google bundle; KaTeX covers its CSS/fonts.
-const packages = new Set(['katex', 'tailwindcss', '@tailwindcss/typography', 'postcss', 'autoprefixer']);
+// Keep nested package paths: their version and license may differ from the root copy.
+const packages = new Map();
+const addPackage = base => {
+  const metadata = JSON.parse(readFileSync(path.join(base, 'package.json'), 'utf8'));
+  packages.set(base, metadata);
+};
+for (const pkg of ['katex', 'tailwindcss', '@tailwindcss/typography', 'postcss', 'autoprefixer']) addPackage(path.join(root, 'node_modules', pkg));
 for (const filename of sources) {
-  if (!filename.includes('/node_modules/')) continue;
-  const parts = filename.split('/node_modules/').pop().split('/');
-  packages.add(parts[0].startsWith('@') ? parts.slice(0, 2).join('/') : parts[0]);
+  const marker = '/node_modules/';
+  const index = filename.lastIndexOf(marker);
+  if (index < 0) continue;
+  const parts = filename.slice(index + marker.length).split('/');
+  const pkg = parts[0].startsWith('@') ? parts.slice(0, 2).join('/') : parts[0];
+  addPackage(path.join(filename.slice(0, index + marker.length), pkg));
 }
+const supplementalPath = path.join(directory, 'licenses/sources.json');
+const supplemental = JSON.parse(readFileSync(supplementalPath, 'utf8'));
+sources.push(supplementalPath);
 const notices = [];
-for (const pkg of [...packages].sort()) {
-  const base = path.join(root, 'node_modules', pkg);
-  for (const name of readdirSync(base).filter(name => ['package.json', 'license', 'license.md', 'license.txt'].includes(name.toLowerCase())).sort()) {
+for (const [base, metadata] of [...packages].sort(([a], [b]) => a.localeCompare(b))) {
+  const pkg = metadata.name;
+  const files = readdirSync(base).filter(name => ['package.json', 'license', 'license.md', 'license.txt'].includes(name.toLowerCase())).sort();
+  for (const name of files) {
     const file = path.join(base, name);
     sources.push(file);
-    if (name !== 'package.json') notices.push(`Dependency: ${pkg} (${name})\n${readFileSync(file, 'utf8')}`);
+    if (name !== 'package.json') notices.push(`Dependency: ${pkg}@${metadata.version} (${name})
+${readFileSync(file, 'utf8')}`);
+  }
+  if (!files.some(name => name !== 'package.json')) {
+    const extra = supplemental[pkg];
+    if (!extra || extra.version !== metadata.version) throw Error(`Missing fixed-version Markdown license: ${pkg}@${metadata.version}`);
+    const file = path.join(directory, 'licenses', extra.file);
+    sources.push(file);
+    notices.push(`Dependency: ${pkg} (${metadata.version}, supplemental license)
+Source: ${extra.source}
+${extra.termsSource ? `MIT terms: ${extra.termsSource}\n` : ''}${readFileSync(file, 'utf8')}`);
   }
 }
 emit('NOTICE.txt', notices.join('\n\n').trimEnd() + '\n');
-const hashes = Object.fromEntries(sources.sort().map(filename => [filename.includes('/node_modules/') ? 'node_modules/' + filename.split('/node_modules/').pop() : path.relative(root, filename), createHash('sha256').update(readFileSync(filename)).digest('hex')]));
+const hashes = Object.fromEntries(sources.sort().map(filename => [path.relative(root, filename), createHash('sha256').update(readFileSync(filename)).digest('hex')]));
 emit('sources.json', JSON.stringify(hashes, null, 2) + '\n');

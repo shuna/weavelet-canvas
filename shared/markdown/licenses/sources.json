@@ -1,0 +1,134 @@
+{
+  "format": {
+    "version": "0.2.2",
+    "source": "https://raw.githubusercontent.com/samsonjs/format/4f898096759776b7c84fa7a25b13c923dadfe46e/Readme.md",
+    "file": "format-0.2.2.txt",
+    "termsSource": "https://github.com/facebook/react/blob/v18.2.0/LICENSE",
+    "declaredLicense": "MIT (fixed README; original license link responds 403)"
+  },
+  "inline-style-parser": {
+    "version": "0.1.1",
+    "source": "https://raw.githubusercontent.com/reworkcss/css/v2.2.4/LICENSE",
+    "file": "inline-style-parser-0.1.1.txt",
+    "noticeSource": "https://raw.githubusercontent.com/remarkablemark/inline-style-parser/f9a2d42e2e519b0453cfebbe18b463610ef1a7e5/README.md"
+  },
+  "micromark": {
+    "version": "3.1.0",
+    "source": "https://raw.githubusercontent.com/micromark/micromark/7da9cab3304cf7f03b06fb4d5390b5b328215fc7/license",
+    "file": "micromark-3.1.0.txt"
+  },
+  "micromark-core-commonmark": {
+    "version": "1.0.6",
+    "source": "https://raw.githubusercontent.com/micromark/micromark/146480ee71b7a0cd9efae706fed6d30befcf4c08/license",
+    "file": "micromark-core-commonmark-1.0.6.txt"
+  },
+  "micromark-factory-destination": {
+    "version": "1.0.0",
+    "source": "https://raw.githubusercontent.com/micromark/micromark/3.0.0/license",
+    "file": "micromark-factory-destination-1.0.0.txt",
+    "versionEvidence": "https://raw.githubusercontent.com/micromark/micromark/3.0.0/packages/micromark-factory-destination/package.json"
+  },
+  "micromark-factory-label": {
+    "version": "1.0.2",
+    "source": "https://raw.githubusercontent.com/micromark/micromark/5082478a15237c25cc93fedd2be3250839759748/license",
+    "file": "micromark-factory-label-1.0.2.txt"
+  },
+  "micromark-factory-space": {
+    "version": "1.0.0",
+    "source": "https://raw.githubusercontent.com/micromark/micromark/3.0.0/license",
+    "file": "micromark-factory-space-1.0.0.txt",
+    "versionEvidence": "https://raw.githubusercontent.com/micromark/micromark/3.0.0/packages/micromark-factory-space/package.json"
+  },
+  "micromark-factory-title": {
+    "version": "1.0.2",
+    "source": "https://raw.githubusercontent.com/micromark/micromark/77d9d891dd5279ac0715b337a03ec0cc5080c92f/license",
+    "file": "micromark-factory-title-1.0.2.txt"
+  },
+  "micromark-factory-whitespace": {
+    "version": "1.0.0",
+    "source": "https://raw.githubusercontent.com/micromark/micromark/3.0.0/license",
+    "file": "micromark-factory-whitespace-1.0.0.txt",
+    "versionEvidence": "https://raw.githubusercontent.com/micromark/micromark/3.0.0/packages/micromark-factory-whitespace/package.json"
+  },
+  "micromark-util-character": {
+    "version": "1.1.0",
+    "source": "https://raw.githubusercontent.com/micromark/micromark/micromark-util-character@1.1.0/license",
+    "file": "micromark-util-character-1.1.0.txt"
+  },
+  "micromark-util-chunked": {
+    "version": "1.0.0",
+    "source": "https://raw.githubusercontent.com/micromark/micromark/3.0.0/license",
+    "file": "micromark-util-chunked-1.0.0.txt",
+    "versionEvidence": "https://raw.githubusercontent.com/micromark/micromark/3.0.0/packages/micromark-util-chunked/package.json"
+  },
+  "micromark-util-classify-character": {
+    "version": "1.0.0",
+    "source": "https://raw.githubusercontent.com/micromark/micromark/3.0.0/license",
+    "file": "micromark-util-classify-character-1.0.0.txt",
+    "versionEvidence": "https://raw.githubusercontent.com/micromark/micromark/3.0.0/packages/micromark-util-classify-character/package.json"
+  },
+  "micromark-util-combine-extensions": {
+    "version": "1.0.0",
+    "source": "https://raw.githubusercontent.com/micromark/micromark/3.0.0/license",
+    "file": "micromark-util-combine-extensions-1.0.0.txt",
+    "versionEvidence": "https://raw.githubusercontent.com/micromark/micromark/3.0.0/packages/micromark-util-combine-extensions/package.json"
+  },
+  "micromark-util-decode-numeric-character-reference": {
+    "version": "1.0.0",
+    "source": "https://raw.githubusercontent.com/micromark/micromark/3.0.0/license",
+    "file": "micromark-util-decode-numeric-character-reference-1.0.0.txt",
+    "versionEvidence": "https://raw.githubusercontent.com/micromark/micromark/3.0.0/packages/micromark-util-decode-numeric-character-reference/package.json"
+  },
+  "micromark-util-decode-string": {
+    "version": "1.0.2",
+    "source": "https://raw.githubusercontent.com/micromark/micromark/048fed42f410d633be14ca0716ac53dd4ac1b3ec/license",
+    "file": "micromark-util-decode-string-1.0.2.txt"
+  },
+  "micromark-util-encode": {
+    "version": "1.0.1",
+    "source": "https://raw.githubusercontent.com/micromark/micromark/9a3a2dd28b996049fe7de46d6e6f905d20bf5caf/license",
+    "file": "micromark-util-encode-1.0.1.txt"
+  },
+  "micromark-util-html-tag-name": {
+    "version": "1.1.0",
+    "source": "https://raw.githubusercontent.com/micromark/micromark/d838b56d11868798997150585f60063b458cb09b/license",
+    "file": "micromark-util-html-tag-name-1.1.0.txt"
+  },
+  "micromark-util-normalize-identifier": {
+    "version": "1.0.0",
+    "source": "https://raw.githubusercontent.com/micromark/micromark/3.0.0/license",
+    "file": "micromark-util-normalize-identifier-1.0.0.txt",
+    "versionEvidence": "https://raw.githubusercontent.com/micromark/micromark/3.0.0/packages/micromark-util-normalize-identifier/package.json"
+  },
+  "micromark-util-resolve-all": {
+    "version": "1.0.0",
+    "source": "https://raw.githubusercontent.com/micromark/micromark/3.0.0/license",
+    "file": "micromark-util-resolve-all-1.0.0.txt",
+    "versionEvidence": "https://raw.githubusercontent.com/micromark/micromark/3.0.0/packages/micromark-util-resolve-all/package.json"
+  },
+  "micromark-util-sanitize-uri": {
+    "version": "1.1.0",
+    "source": "https://raw.githubusercontent.com/micromark/micromark/86248b9ba63939a2fbd2d8c8d331283b7fac55c7/license",
+    "file": "micromark-util-sanitize-uri-1.1.0.txt"
+  },
+  "micromark-util-subtokenize": {
+    "version": "1.0.2",
+    "source": "https://raw.githubusercontent.com/micromark/micromark/c7999166204c1101571c2495ee69a639ec6d6a32/license",
+    "file": "micromark-util-subtokenize-1.0.2.txt"
+  },
+  "rehype-katex": {
+    "version": "6.0.2",
+    "source": "https://raw.githubusercontent.com/remarkjs/remark-math/26bb0e35e7db88adb463697c652a84b442e88fb5/license",
+    "file": "rehype-katex-6.0.2.txt"
+  },
+  "rehype-parse": {
+    "version": "8.0.4",
+    "source": "https://raw.githubusercontent.com/rehypejs/rehype/8524f7865482e495f7eec4715694d4b9ffebe591/license",
+    "file": "rehype-parse-8.0.4.txt"
+  },
+  "remark-math": {
+    "version": "5.1.1",
+    "source": "https://raw.githubusercontent.com/remarkjs/remark-math/dc2d10c2b3165311ab3f568f58742246f9c2a654/license",
+    "file": "remark-math-5.1.1.txt"
+  }
+}
