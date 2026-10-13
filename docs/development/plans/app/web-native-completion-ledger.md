@@ -769,3 +769,13 @@ f3c46f5bでadvancedModeを一般設定と先頭systemの表示・役割編集・
 新挿入と既存通常生成の関連2件が成功（/private/tmp/weavelet-insert-test-final.log）。branch/flat、NFD/精密値/未知属性/非表示・未参照データ、古いdraft、保護tail、保存fault、Undo2段を含む。初期testの「empty remote credentialなら同期throwする」という期待は実処理上成立せず、同期境界を確認できるmissing local modelへ訂正した。型検査/鮮度/差分確認成功、独立Astraは新規P2以上なし。親統合後は新bundleで代表2件のみ確認成功（/private/tmp/weavelet-advanced-insertion-union-tests.log）、050f8704に生成成果物を保存。未変更の全同期/全業務suiteは再実行しない。実UI・実機・実オンライン同期は未確認。
 
 provider抽出の補足：CohereはWeb provider-config41-46にendpointが列記される一方、現行submitRuntime797-812/1172以降はchoices形式、remoteResponse45-52もOpenAI系messageを扱う。列記と生成支持を混同しない。native ProviderModels65-69はCohere固有形式を明示拒否している。今回の抽出だけではWebのCohere実動を証明しておらず、Cohere parserを「既存共有処理」として再利用可能とは記録しない。追加SDK/通信実行/独自変換を今回導入していない。
+
+## composerの役割とcompact上部の配置（2026-10-14）
+
+078a66afで通常composerのinputRole残件を接続した。実Web input-slice8–19と同じruntime global・初期user・非永続とし、役割は常時表示、advanced時のみ44ptの選択menuを出す。選択roleを既存MessageEditing.saveの共有appendからgeneration/submitContextへ渡し、Swiftに役割結合ルールを追加しない。送信buttonとEnterは既存sendComposerを共用し、legacy startGeneration(input/parts)のuser既定を保つ。生成中の変更は拒否する。
+
+Catalyst buildと追加境界2件成功（/tmp/weavelet-native-composer-role-verified-build-test.log）。assistant本文と生成placeholderを分けた保存、実共有submitContextによる連続assistantのwire結合、正式parts/画像/reasoning/精密値/未知属性/非active枝保持、runtime roleの非永続、保存失敗時のdraft/source/disk保持を確認。初期testの未知future_partは既存closed validationで拒否されるため、成功入力を正式partsへ直し、未知型拒否時のraw draft保全を別途確認した。本文参照は実WebExchangeのparts、生成開始後のUndoは既存共有generationPlanによる履歴無効化を根拠として期待を訂正した。比較条件を弱めていない。独立Astraは新規P2以上なし。
+
+3eeccaabでcompact toolbarの常設7操作を5操作へ減らした。実Web MobileBar/ChatViewTabsのモバイル配置を確認し、既存「その他」にファイル/設定をまとめ、会話一覧・履歴・表示・検索の入口、sidebar下端の共通操作、regular/detailOnlyの配置を維持する。handler/保存/disabledは変更しない。最終統合Catalyst build成功（/private/tmp/weavelet-native-role-toolbar-build.log）、追加App差分の独立Astraは新規P2以上なし。共有元/TSの変更はなく、既存成功結果を再利用し、全同期・全業務suiteは反復しない。bundle鮮度と差分確認も成功。
+
+実compact画面・役割menu・IME/実Enter・最大文字サイズ/VoiceOver・Air導入・実オンライン同期は未確認。CUAは既存隔離アプリのwindowを取得できず、inventoryでは起動中のため終了済みと扱わない。未知新part型の送信は既存どおり未対応で、入力を保持して明示拒否する。Web配置全差分の解消とは扱わない。
