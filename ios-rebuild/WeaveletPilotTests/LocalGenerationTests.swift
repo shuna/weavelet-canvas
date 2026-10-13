@@ -60,7 +60,7 @@ import XCTest
         XCTAssertNil(state.generationError)
         let restarted = ChatState(store:store)
         XCTAssertEqual(try restarted.exportWebData(),try state.exportWebData())
-        XCTAssertEqual(restarted.conversation?.visibleMessages.last?.content,"<think>local text</think> answer")
+        XCTAssertEqual(restarted.conversation?.visibleMessages.last?.parts,[.text("<think>local text</think> answer")])
         let after = try XCTUnwrap(state.exchange).source
         let before = try OrderedJSON.decode(original)
         XCTAssertEqual(after["xRoot"],before["xRoot"])
@@ -92,6 +92,6 @@ import XCTest
         try state.saveGenerationResult()
         XCTAssertNil(state.generation)
         await fulfillment(of:[finished],timeout:2)
-        XCTAssertEqual(ChatState(store:store).conversation?.visibleMessages.last?.content,"local partial")
+        XCTAssertEqual(ChatState(store:store).conversation?.visibleMessages.last?.parts,[.text("local partial")])
     }
 }
