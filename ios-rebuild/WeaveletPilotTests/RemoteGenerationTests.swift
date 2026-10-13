@@ -103,6 +103,26 @@ final class RemoteGenerationTests: XCTestCase {
     private func streamPackets() throws -> [FakeRemoteProtocol.Packet] {
         try fixture().required("responses").required("stream").array("stream").map { .init(bytes: Data(try $0.string("event").utf8), delay: 0.01) }
     }
+    func testComposerRawBoundaryAndDelayedImagesUseOriginalChatIdentity() throws {
+        let opaque = OrderedJSON.object([.init(key:"huge",value:.number("9007199254740993")),.init(key:"decimal",value:.number("1.2300")),.init(key:"marker",value:.object([.init(key:"opaqueRef",value:.number("0"))]))])
+        let text = OrderedJSON.object([.init(key:"type",value:.string("text")),.init(key:"text",value:.string("old")),.init(key:"unknown",value:opaque)])
+        let second = text.replacing("text",with:.string("second"))
+        let prepared = try ComposerContent.prepare(.array([text,second]),text:"new")
+        let parts = try prepared.parts.array("parts")
+        XCTAssertEqual(try parts[0].required("unknown").encoded(),try opaque.encoded())
+        XCTAssertEqual(try parts[1].encoded(),try second.encoded())
+        let state = try state(store()), originalID = try XCTUnwrap(state.conversation).id
+        try state.setComposerText(chatID:originalID,text:"original input")
+        let detail = try state.composerImageDetail(chatID:originalID)
+        try state.createChat(defaults:ChatDefaults.webInitial(),id:"new-chat")
+        try state.addComposerImages(chatID:originalID,urls:["data:image/png;base64,FAKE_LATE"],detail:detail)
+        XCTAssertEqual(state.composerDraft(chatID:"new-chat").parts,.array([]))
+        let oldDraft = state.composerDraft(chatID:originalID)
+        XCTAssertEqual(oldDraft.text,"original input")
+        XCTAssertEqual(try oldDraft.parts.array("parts").last?["image_url"]?["detail"],.string(detail))
+        XCTAssertEqual(state.conversation?.id,"new-chat")
+        XCTAssertEqual(try ComposerContent.prepare(.array([]),images:[("data:image/png;base64,FAKE_ONLY","auto")]).hasMeaningfulContent,true)
+    }
     func testSharedWebRequestProjectionAndSourcePreservation() throws {
         let fixture = try fixture()
         XCTAssertEqual(fixture["fixtureVersion"], .number("1"))
@@ -129,7 +149,10 @@ final class RemoteGenerationTests: XCTestCase {
             let old = try XCTUnwrap(state.exchange).source
             let client = client()
             FakeRemoteProtocol.packets = streaming ? try streamPackets() : [.init(bytes: try fixture().required("responses").required("nonstream").encoded())]
-            try state.startGeneration(input: "New user", record: record(stream: streaming), client: client)
+            if streaming {
+                let imageOnly = OrderedJSON.array([.object([.init(key:"type",value:.string("image_url")),.init(key:"image_url",value:.object([.init(key:"url",value:.string("data:image/png;base64,FAKE_ONLY")),.init(key:"detail",value:.string("auto"))]))])])
+                try state.startGeneration(parts:imageOnly,record:record(stream:true),client:client)
+            } else { try state.startGeneration(input:"New user",record:record(stream:false),client:client) }
             try await wait { state.generation == nil }
             XCTAssertNil(state.generationError)
             let source = try XCTUnwrap(state.exchange).source
@@ -149,6 +172,7 @@ final class RemoteGenerationTests: XCTestCase {
             XCTAssertEqual(try OrderedJSON.decode(XCTUnwrap(fresh.exchange).encoded()), source)
             let requestBody = try OrderedJSON.decode(XCTUnwrap(FakeRemoteProtocol.requests.first?.httpBody))
             let wireMessages = try requestBody.required("messages").array("messages")
+            if streaming { XCTAssertEqual(try wireMessages.last!.required("content").array("parts").last?["image_url"]?["url"],.string("data:image/png;base64,FAKE_ONLY")) }
             XCTAssertFalse(wireMessages.contains { $0["xMessage"] != nil })
             XCTAssertFalse(try wireMessages.contains { message in try message.required("content").array("parts").contains { $0["text"] == .string("Omitted") } })
             XCTAssertEqual(FakeRemoteProtocol.requests.count, 1)
@@ -203,12 +227,18 @@ final class RemoteGenerationTests: XCTestCase {
         let directory = store.fileURL.deletingLastPathComponent()
         try FileManager.default.setAttributes([.posixPermissions: 0o500], ofItemAtPath: directory.path)
         defer { try? FileManager.default.setAttributes([.posixPermissions: 0o700], ofItemAtPath: directory.path) }
-        XCTAssertThrowsError(try state.startGeneration(input: "Preserved input", record: record(stream: false), client: client))
+        let chatID = try XCTUnwrap(state.conversation).id
+        try state.setComposerText(chatID:chatID,text:"Preserved input")
+        try state.addComposerImages(chatID:chatID,urls:["data:image/png;base64,FAKE_COMPOSER_IMAGE"],detail:"high")
+        let draft = state.composerDraft(chatID:chatID)
+        XCTAssertThrowsError(try state.sendComposer(record:record(stream:false),client:client))
+        XCTAssertEqual(state.composerDraft(chatID:chatID).parts,draft.parts)
         XCTAssertEqual(state.exchange?.source, original)
         XCTAssertEqual(try Data(contentsOf: store.fileURL), oldDisk)
         XCTAssertTrue(FakeRemoteProtocol.requests.isEmpty)
         try FileManager.default.setAttributes([.posixPermissions: 0o700], ofItemAtPath: directory.path)
-        try state.startGeneration(input: "Preserved input", record: record(stream: false), client: client)
+        try state.sendComposer(record:record(stream:false),client:client)
+        XCTAssertEqual(state.composerDraft(chatID:chatID).parts,.array([]))
         let userSource = state.exchange?.source
         let userDisk = try Data(contentsOf: store.fileURL)
         try FileManager.default.setAttributes([.posixPermissions: 0o500], ofItemAtPath: directory.path)
@@ -218,6 +248,10 @@ final class RemoteGenerationTests: XCTestCase {
         XCTAssertEqual(try Data(contentsOf: store.fileURL), userDisk)
         try FileManager.default.setAttributes([.posixPermissions: 0o700], ofItemAtPath: directory.path)
         try state.saveGenerationResult()
+        let body = try OrderedJSON.decode(XCTUnwrap(FakeRemoteProtocol.requests.first?.httpBody))
+        let sent = try body.required("messages").array("messages").last!.required("content").array("parts")
+        XCTAssertEqual(sent.last?["image_url"]?["url"],.string("data:image/png;base64,FAKE_COMPOSER_IMAGE"))
+        XCTAssertEqual(sent.last?["image_url"]?["detail"],.string("high"))
         XCTAssertNil(state.generation)
         XCTAssertEqual(ChatState(store: store).exchange?.source, state.exchange?.source)
     }

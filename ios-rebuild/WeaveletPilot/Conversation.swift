@@ -75,6 +75,24 @@ struct NavigationFocus: Equatable {
     let token = UUID()
 }
 
+struct ComposerDraft {
+    let parts: OrderedJSON
+    let text: String
+    let hasMeaningfulContent: Bool
+    static let empty = ComposerDraft(parts:.array([]),text:"",hasMeaningfulContent:false)
+}
+enum ComposerContent {
+    static func prepare(_ parts: OrderedJSON, text: String? = nil, images: [(url:String,detail:String)] = []) throws -> ComposerDraft {
+        var boundary = SharedWebProjection()
+        var fields: [JSONField] = [.init(key:"operation",value:.string("prepare")),.init(key:"parts",value:try boundary.parts(parts))]
+        if let text { fields.append(.init(key:"text",value:.string(text))) }
+        if !images.isEmpty { fields.append(.init(key:"images",value:.array(images.map { .object([.init(key:"url",value:.string($0.url)),.init(key:"detail",value:.string($0.detail))]) }))) }
+        let result = try SharedWebOperations.call("composerContent",.object(fields))
+        let restored = try OrderedJSONChanges.apply(.array([.object([.init(key:"op",value:.string("set")),.init(key:"path",value:.array([])),.init(key:"value",value:result.required("parts"))])]),to:.null,opaque:boundary.opaque)
+        return try ComposerDraft(parts:restored,text:result.required("text").string("composer text"),hasMeaningfulContent:result.required("hasMeaningfulContent").boolean("composer content"))
+    }
+}
+
 final class ChatState: ObservableObject {
     @Published private(set) var conversations = Conversation.samples
     @Published private var selectedID = Conversation.samples[0].id
@@ -85,6 +103,7 @@ final class ChatState: ObservableObject {
     @Published private(set) var generation: ActiveGeneration?
     @Published private(set) var remoteSettings = RemoteSettings()
     @Published var generationError: String?
+    @Published private var composerDrafts: [Data:ComposerDraft] = [:]
     private var generationTask: Task<Void, Never>?
     private let store: LocalStateStore?
     private var initialLoadFailed = false
@@ -450,13 +469,35 @@ final class ChatState: ObservableObject {
         remoteSettings = record.settings
     }
 
+    func composerDraft(chatID: String) -> ComposerDraft { composerDrafts[Data(chatID.utf8)] ?? .empty }
+    func composerImageDetail(chatID: String) throws -> String {
+        guard let chat = try exchange?.source.required("chats").array("chats").first(where: { try $0.required("id").string("id").utf8.elementsEqual(chatID.utf8) }) else { throw ExchangeError.invalid("入力先の会話がありません") }
+        return try chat["imageDetail"]?.string("imageDetail") ?? ChatDefaults.webInitial().imageDetail
+    }
+    func setComposerText(chatID: String, text: String) throws {
+        composerDrafts[Data(chatID.utf8)] = try ComposerContent.prepare(composerDraft(chatID:chatID).parts,text:text)
+    }
+    func addComposerImages(chatID: String, urls: [String], detail: String) throws {
+        guard conversations.contains(where: { $0.id.utf8.elementsEqual(chatID.utf8) }) else { throw ExchangeError.invalid("画像の入力先の会話がありません") }
+        composerDrafts[Data(chatID.utf8)] = try ComposerContent.prepare(composerDraft(chatID:chatID).parts,images:urls.map { ($0,detail) })
+    }
+    func sendComposer(record: RemoteCredentialRecord, client: RemoteClient = RemoteClient(), nodeIDs: [String]? = nil) throws {
+        guard let conversation else { throw ExchangeError.invalid("送信先の会話がありません") }
+        let identity = conversation.identity
+        try startGeneration(parts:composerDraft(chatID:conversation.id).parts,record:record,client:client,nodeIDs:nodeIDs)
+        composerDrafts.removeValue(forKey:identity)
+    }
     func startGeneration(input: String, record: RemoteCredentialRecord, client: RemoteClient = RemoteClient(), nodeIDs: [String]? = nil) throws {
+        try startGeneration(parts:.array([.object([.init(key:"type",value:.string("text")),.init(key:"text",value:.string(input))])]),record:record,client:client,nodeIDs:nodeIDs)
+    }
+    func startGeneration(parts: OrderedJSON, record: RemoteCredentialRecord, client: RemoteClient = RemoteClient(), nodeIDs: [String]? = nil) throws {
         guard generation == nil, let exchange, let conversation else { throw ExchangeError.invalid("保存済み会話を選択し、生成の終了を待ってください") }
-        guard !input.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { throw ExchangeError.invalid("本文を入力してください") }
+        let prepared = try ComposerContent.prepare(parts)
+        guard prepared.hasMeaningfulContent else { throw ExchangeError.invalid("本文または画像を入力してください") }
         let sourceChat = try exchange.source.required("chats").array("chats").first { try $0.required("id").string("ID").utf8.elementsEqual(conversation.id.utf8) }!
         let count = try sourceChat["branchTree"] == nil ? sourceChat.required("messages").array("messages").count + 1 : 1
         let ids = nodeIDs ?? (0..<count).map { _ in UUID().uuidString.lowercased() }
-        let body = OrderedJSON.array([.object([JSONField(key: "type", value: .string("text")), JSONField(key: "text", value: .string(input))])])
+        let body = prepared.parts
         let now = Date().timeIntervalSince1970 * 1000
         var history: MessageEditing.HistoryState?
         let source = try MessageEditing.save(in: exchange.source, chatID: conversation.id, nodeID: nil, viewingPath: conversation.visibleMessages.map(\.id), role: "user", parts: body, mode: .append, newIDs: ids, now: now, history: editingHistory) { history = $0 }

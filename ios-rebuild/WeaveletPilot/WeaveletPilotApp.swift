@@ -24,7 +24,6 @@ struct ChatView: View {
     @State private var showsRemoteSettings = false
     @State private var shownGoogleConnection: GoogleSyncConnection?
     @State private var googleConnection: GoogleSyncConnection?
-    @State private var input = ""
     @State private var showsImporter = false
     @State private var importPreview: ChatImportPreview?
     @State private var isPreparingImport = false
@@ -118,18 +117,38 @@ struct ChatView: View {
                         }
                         if let generationError = state.generationError { Text(generationError).foregroundStyle(.red) }
                         if state.exchange != nil {
-                            TextField("送信する本文", text: $input, axis: .vertical)
+                            TextField("送信する本文", text: Binding(
+                                get: { state.composerDraft(chatID:conversation.id).text },
+                                set: { text in
+                                    do { try state.setComposerText(chatID:conversation.id,text:text) }
+                                    catch { state.generationError = error.localizedDescription }
+                                }), axis: .vertical)
                                 .lineLimit(3...8).textFieldStyle(.roundedBorder)
                                 .disabled(state.generation != nil)
+                            if let detail = try? state.composerImageDetail(chatID:conversation.id) {
+                                ImageInputView(destinationID:conversation.id) { chatID, urls in
+                                    do { try state.addComposerImages(chatID:chatID,urls:urls,detail:detail) }
+                                    catch { state.generationError = error.localizedDescription }
+                                }
+                                .disabled(state.generation != nil)
+                            }
+                            if let parts = try? state.composerDraft(chatID:conversation.id).parts.array("composer parts") {
+                                ForEach(Array(parts.enumerated()),id: \.offset) { _, part in
+                                    if case .string("image_url") = part["type"],
+                                       case .string(let url) = part["image_url"]?["url"],
+                                       case .string(let detail) = part["image_url"]?["detail"] {
+                                        AttachmentImageView(url:url,detail:detail)
+                                    }
+                                }
+                            }
                             Button("送信", systemImage: "paperplane") {
                                 do {
                                     let record = try RemoteCredentials.load()
-                                    try state.startGeneration(input: input, record: record)
-                                    input = ""
+                                    try state.sendComposer(record:record)
                                 } catch { state.generationError = error.localizedDescription }
                             }
                             .frame(minHeight: 44)
-                            .disabled(state.generation != nil || input.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                            .disabled(state.generation != nil || !state.composerDraft(chatID:conversation.id).hasMeaningfulContent)
                         }
                     } else {
                         ContentUnavailableView("会話がありません", systemImage: "bubble.left.and.bubble.right")
