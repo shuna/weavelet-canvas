@@ -1,10 +1,9 @@
 import React, { useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useWorkspaceStore } from '@store/workspaceScope';
-import { BranchTree, isTextContent } from '@type/chat';
-import { wordDiff, DiffSegment } from '@utils/diffUtils';
+import type { BranchTree } from '@type/chat';
+import { branchDiff } from '@utils/branchDiff';
 import PopupModal from '@components/PopupModal';
-import { resolveContent } from '@utils/contentStore';
 
 interface BranchDiffModalProps {
   chatIndex: number;
@@ -27,42 +26,8 @@ const BranchDiffModal = ({
   ) as BranchTree;
   const contentStore = useStore((state) => state.contentStore);
 
-  const diffRows = useMemo(() => {
-    const maxLen = Math.max(pathA.length, pathB.length);
-    const rows: {
-      role: string;
-      segments: DiffSegment[];
-      textA: string;
-      textB: string;
-    }[] = [];
-
-    for (let i = 0; i < maxLen; i++) {
-      const nodeA = pathA[i] ? tree.nodes[pathA[i]] : null;
-      const nodeB = pathB[i] ? tree.nodes[pathB[i]] : null;
-
-      const contentA = nodeA ? resolveContent(contentStore, nodeA.contentHash) : [];
-      const contentB = nodeB ? resolveContent(contentStore, nodeB.contentHash) : [];
-
-      const textA = contentA
-            .filter(isTextContent)
-            .map((c) => c.text)
-            .join(' ');
-      const textB = contentB
-            .filter(isTextContent)
-            .map((c) => c.text)
-            .join(' ');
-
-      const role = nodeA?.role || nodeB?.role || 'unknown';
-      const segments = wordDiff(textA, textB);
-
-      rows.push({ role, segments, textA, textB });
-    }
-    return rows;
-  }, [pathA, pathB, tree, contentStore]);
-
-  const hasChanges = diffRows.some((r) =>
-    r.segments.some((s) => s.type !== 'equal')
-  );
+  const {rows: diffRows, hasChanges} = useMemo(() =>
+    branchDiff({tree, contentStore, pathA, pathB}), [pathA, pathB, tree, contentStore]);
 
   return (
     <PopupModal

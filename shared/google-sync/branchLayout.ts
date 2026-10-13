@@ -4,6 +4,7 @@ import {diffJSONChanges} from '../../src/utils/jsonChanges';
 import type {ChatInterface} from '../../src/types/chat';
 import type {ContentStoreData} from '../../src/utils/contentStore';
 import {withEditingRuntime} from './editing';
+import {branchDiff as buildBranchDiff, type BranchDiffInput} from '../../src/utils/branchDiff';
 
 // The Web preview can end halfway through a UTF-16 pair after its 80-unit slice.
 const nativePreview = (value: string) => Array.from(value, scalar =>
@@ -13,6 +14,10 @@ export function branchLayout(json: string): string {
   const output = layoutBranchEntries(JSON.parse(json) as WorkerInput);
   for (const node of output.rfNodes) node.data.contentPreview = nativePreview(node.data.contentPreview);
   return JSON.stringify(output);
+}
+
+export function branchDiff(json: string): string {
+  return JSON.stringify(buildBranchDiff(JSON.parse(json) as BranchDiffInput));
 }
 
 export function branchEnsure(json: string): string {
