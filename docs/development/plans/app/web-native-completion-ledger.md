@@ -1,5 +1,15 @@
 # Web / 新iOSの完成条件と証拠
 
+## ローカル生成の共有入力とCatalystエンジン接続調査（2026-10-13）
+
+実Web buildLocalChatMessagesのrole/text変換とuseSubmitのprefill trimを共有元へ移し、Web callerとshared localGenerationInputで使用する。既存submit contextの省略・system prompt・本文順序を維持し、画像等をrole/string入力へ含めない既存動作も維持する。configは変更せず、モデルtemplate・推論・保存処理は今回変更していない。共有関連45件、型、bundle鮮度・差分確認の担当成功を再利用。親統合dd2d551eでは同一suiteを再実行していない。
+
+エンジン調査はwllama正確tag 2.3.7（5e63e3b2）、llama.cpp 4abef75fを一時取得し、既存Web patch0001–0005とlowbit C/loader/graphを適用。既存ローカルWeb sourceのllama.cppも同revisionだった。setupのv2.3.7指定は実tagと不一致でHEADへfallbackし、patch0006は構文エラー（corrupt patch:71）があるため、現Web artifactと再取得sourceが完全一致するとは扱わない。Webバイナリ・取得scriptは未変更。0006はWASM memory64用としてprobeへ未適用で、native採用版の最終決定とはしない。
+
+Catalyst arm64 C/C++/Metal静的libraryをビルドし、ASMにもarm64-apple-ios17.0-macabiを指定後、全157 objectのMACCATALYSTとSwift import/link、llama_chat_apply_template実行が成功。アプリ固有のtemplate規則をSwiftへ再実装せず接続できる根拠とする。成果は `/private/tmp/weavelet-catalyst-llama-{source,build,build-input,probe}`、ログは同prefixのconfigure.log/build*.log/swift.log。モデル未取得であり、実推論・Metal実行・消費電力・アプリ統合は未確認。
+
+localModels/activeLocalModels/savedModelMeta等は実Webのfull snapshot・同期対象。nativeのファイル参照は端末ローカルに分離し、同期metadataを実ファイル存在の証明に使わない。次は同エンジンの読込・生成・停止と共有入力のnative接続を一式で実装する。AstraとアプリCatalyst確認はその一式にまとめ、今回の共有抽出やビルドprobeごとの監査ゲートは追加しない。未変更の保存/暗号化同期suiteは再利用する。全ローカル機能（分割GGUF、ONNX/評価等）の完成とは扱わない。
+
 ## 再生成・途中生成の共有接続（2026-10-13）
 
 既存WebのresolveRegenerateTarget、削除/後続付替え、placeholder作成と同target確定をgenerationPlanへ共通化し、実Webの再生成・次のみ生成・完了callerも委譲する。再生成は旧assistantの意図的置換であり、勝手に旧枝を残す仕様へ変更しない。保護/pinned判定は実処理を維持。nativeは既存メッセージ操作メニューから同じprepare/finalizeを利用し、共有requestPathで送信範囲を決める。生成開始前の保存成功後だけ通信し、停止・保存失敗時の部分出力と再試行を既存経路で扱う。
