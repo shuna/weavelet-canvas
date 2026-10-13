@@ -38,4 +38,27 @@ final class ConversationTitleTests: XCTestCase {
         let changed = source.replacing("chats",with:.array([chat.replacing("messages",with:.array(changedMessages))]))
         XCTAssertNil(try ConversationTitle.apply(response,prepared:prepared,source:changed,state:state,language:"English",fallbackEndpoint:legacy.settings.endpoint))
     }
+
+    func testChatIDsAndPromptSnapshotsUseExactUnicodeBytes() throws {
+        let nfd = "cafe\u{301}", nfc = "café"
+        let original = try source.required("chats").array("chats")[0]
+        let other = original.replacing("id",with:.string(nfd)).replacing("title",with:.string("Other"))
+        let targetMessages = try OrderedJSON.decode(Data(#"[{"role":"user","content":[{"type":"text","text":"Target"}]},{"role":"assistant","content":[{"type":"text","text":"Cafe\u0301"}]}]"#.utf8))
+        let targetConfig = try original.required("config").replacing("future",with:.string(nfd))
+        let target = original.replacing("id",with:.string(nfc)).replacing("messages",with:targetMessages).replacing("config",with:targetConfig)
+        let both = source.replacing("chats",with:.array([other,target]))
+        let prepared = try XCTUnwrap(ConversationTitle.prepare(source:both,state:state,chatID:nfc,language:"English",sourceConfig:targetConfig,legacy:legacy))
+        let prompt = String(decoding:try prepared.promptMessage.encoded(),as:UTF8.self)
+        XCTAssertTrue(prompt.contains("Target"))
+        XCTAssertFalse(prompt.contains("What is a weavelet?"))
+        let result = try XCTUnwrap(ConversationTitle.apply("A Small Title",prepared:prepared,source:both,state:state,language:"English",fallbackEndpoint:legacy.settings.endpoint))
+        let chats = try result.source.required("chats").array("chats")
+        XCTAssertEqual(chats[0]["title"],.string("Other"))
+        XCTAssertEqual(chats[1]["title"],.string("A Small Title"))
+        let changedMessages = try OrderedJSON.decode(Data(#"[{"role":"user","content":[{"type":"text","text":"Target"}]},{"role":"assistant","content":[{"type":"text","text":"Café"}]}]"#.utf8))
+        let changed = both.replacing("chats",with:.array([other,target.replacing("messages",with:changedMessages)]))
+        XCTAssertNil(try ConversationTitle.apply("A Small Title",prepared:prepared,source:changed,state:state,language:"English",fallbackEndpoint:legacy.settings.endpoint))
+        let changedConfig = both.replacing("chats",with:.array([other,target.replacing("config",with:targetConfig.replacing("future",with:.string(nfc)))]))
+        XCTAssertNil(try ConversationTitle.apply("A Small Title",prepared:prepared,source:changedConfig,state:state,language:"English",fallbackEndpoint:legacy.settings.endpoint))
+    }
 }

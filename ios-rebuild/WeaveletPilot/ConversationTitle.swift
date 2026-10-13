@@ -4,6 +4,7 @@ struct PreparedConversationTitle {
     let chatID: String
     let sourceConfig: OrderedJSON?
     let expectedConfig: OrderedJSON
+    let expectedResolvedConfig: OrderedJSON
     let promptMessage: OrderedJSON
     let selection: OrderedJSON
     let request: URLRequest
@@ -11,7 +12,10 @@ struct PreparedConversationTitle {
 
 enum ConversationTitle {
     private static func chat(_ source: OrderedJSON, id: String) throws -> OrderedJSON? {
-        try source.required("chats").array("chats").first { $0["id"] == .string(id) }
+        try source.required("chats").array("chats").first {
+            guard case .string(let value) = $0["id"] else { return false }
+            return value.utf8.elementsEqual(id.utf8)
+        }
     }
 
     private static func settings(_ state: OrderedJSON, fallbackEndpoint: String) throws -> OrderedJSON {
@@ -85,8 +89,11 @@ enum ConversationTitle {
         let promptMessage = try OrderedJSONChanges.apply(.array([.object([
             .init(key:"op",value:.string("set")),.init(key:"path",value:.array([])),.init(key:"value",value:selection.required("promptMessage"))
         ])]),to:.null,opaque:boundary.opaque)
+        let resolvedConfig = try OrderedJSONChanges.apply(.array([.object([
+            .init(key:"op",value:.string("set")),.init(key:"path",value:.array([])),.init(key:"value",value:selection.required("config"))
+        ])]),to:.null,opaque:boundary.opaque)
         return PreparedConversationTitle(chatID:chatID,sourceConfig:sourceConfig,expectedConfig:rawChat["config"] ?? .object([]),
-                                         promptMessage:promptMessage,selection:selection,request:request)
+                                         expectedResolvedConfig:resolvedConfig,promptMessage:promptMessage,selection:selection,request:request)
     }
 
     @MainActor static func generate(_ prepared: PreparedConversationTitle, client: RemoteClient = RemoteClient()) async throws -> String {
@@ -98,18 +105,23 @@ enum ConversationTitle {
 
     static func apply(_ responseText: String, prepared: PreparedConversationTitle, source: OrderedJSON, state: OrderedJSON,
                       language: String, fallbackEndpoint: String) throws -> (source: OrderedJSON, tokenUsage: OrderedJSON?)? {
-        guard let currentChat = try chat(source,id:prepared.chatID), currentChat["config"] ?? .object([]) == prepared.expectedConfig else { return nil }
+        guard let currentChat = try chat(source,id:prepared.chatID),
+              try (currentChat["config"] ?? .object([])).encoded() == prepared.expectedConfig.encoded() else { return nil }
         var boundary = SharedWebProjection()
         let current = try select(chat:currentChat,state:state,language:language,sourceConfig:prepared.sourceConfig,
                                  fallbackEndpoint:fallbackEndpoint,boundary:&boundary)
         guard current["status"] == .string("ready"),
-              current["model"] == prepared.selection["model"],
-              current["providerId"] == prepared.selection["providerId"],
-              current["endpoint"] == prepared.selection["endpoint"] else { return nil }
+              try current.required("model").encoded() == prepared.selection.required("model").encoded(),
+              try (current["providerId"] ?? .null).encoded() == (prepared.selection["providerId"] ?? .null).encoded(),
+              try current.required("endpoint").encoded() == prepared.selection.required("endpoint").encoded() else { return nil }
+        let currentConfig = try OrderedJSONChanges.apply(.array([.object([
+            .init(key:"op",value:.string("set")),.init(key:"path",value:.array([])),.init(key:"value",value:current.required("config"))
+        ])]),to:.null,opaque:boundary.opaque)
+        guard try currentConfig.encoded() == prepared.expectedResolvedConfig.encoded() else { return nil }
         let currentPrompt = try OrderedJSONChanges.apply(.array([.object([
             .init(key:"op",value:.string("set")),.init(key:"path",value:.array([])),.init(key:"value",value:current.required("promptMessage"))
         ])]),to:.null,opaque:boundary.opaque)
-        guard currentPrompt == prepared.promptMessage else { return nil }
+        guard try currentPrompt.encoded() == prepared.promptMessage.encoded() else { return nil }
         var input = OrderedJSON.object([
             .init(key:"operation",value:.string("apply")),.init(key:"chat",value:try projectedChat(currentChat,&boundary)),
             .init(key:"selection",value:current),.init(key:"responseText",value:.string(responseText))
@@ -124,7 +136,10 @@ enum ConversationTitle {
         let base = OrderedJSON.object([.init(key:"chat",value:currentChat)] + (countTokens ? [.init(key:"totalTokenUsed",value:state["totalTokenUsed"] ?? .object([]))] : []))
         let updated = try OrderedJSONChanges.apply(result.required("changes"),to:base,opaque:boundary.opaque)
         var chats = try source.required("chats").array("chats")
-        guard let index = chats.firstIndex(where: { $0["id"] == .string(prepared.chatID) }) else { return nil }
+        guard let index = chats.firstIndex(where: {
+            guard case .string(let value) = $0["id"] else { return false }
+            return value.utf8.elementsEqual(prepared.chatID.utf8)
+        }) else { return nil }
         chats[index] = try updated.required("chat")
         return (source.replacing("chats",with:.array(chats)),countTokens ? updated["totalTokenUsed"] : nil)
     }
