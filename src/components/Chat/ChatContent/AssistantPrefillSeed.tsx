@@ -1,3 +1,4 @@
+import { isAssistantPrefillEnabled } from '@utils/assistantPrefill';
 import { InfoTooltip } from '@components/ConfigMenu/fields';
 import React, { useRef, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -22,7 +23,7 @@ const AssistantPrefillSeed = ({ nodeId }: Props) => {
     if (open && textareaRef.current) textareaRef.current.focus();
   }, [open]);
 
-  if (config?.modelSource !== 'local') return null;
+  if (!isAssistantPrefillEnabled(config?.modelSource)) return null;
 
   const hasContent = draft.trim().length > 0;
 

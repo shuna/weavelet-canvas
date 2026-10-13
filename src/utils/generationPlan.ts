@@ -93,5 +93,5 @@ export function finalizeGenerationState(chats: ChatInterface[],chatIndex:number,
   return {status:'updated' as const,chats:updatedChats,contentStore};
 }
 
-export const resolveAssistantPrefillKey = (chat: ChatInterface, mode: SubmitMode, insertIndex: number | null): string =>
+export const resolveAssistantPrefillKey = (chat: {branchTree?: {activePath: string[]}}, mode: SubmitMode, insertIndex: number | null): string =>
   mode === 'append' ? '__sticky__' : (chat.branchTree?.activePath[(insertIndex ?? 1) - 1] ?? '__sticky__');

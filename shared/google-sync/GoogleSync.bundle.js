@@ -6981,6 +6981,7 @@ var WeaveletGoogleSync = (() => {
   // shared/google-sync/entry.ts
   var entry_exports = {};
   __export(entry_exports, {
+    assistantPrefill: () => assistantPrefill,
     branchClipboard: () => branchClipboard,
     branchHistory: () => branchHistory,
     chatConfig: () => chatConfig,
@@ -18446,8 +18447,8 @@ ${messageContent}---
       content: message.content.filter((part) => part.type === "text").map((part) => part.text).join("\n")
     }));
   }
-  function createLocalGenerationInput(messages, config, assistantPrefill) {
-    return { messages, config, assistantPrefix: assistantPrefill || void 0 };
+  function createLocalGenerationInput(messages, config, assistantPrefill2) {
+    return { messages, config, assistantPrefix: assistantPrefill2 || void 0 };
   }
 
   // shared/google-sync/localGeneration.ts
@@ -18464,6 +18465,24 @@ ${messageContent}---
   function localGenerationOutput(json) {
     const input = JSON.parse(json);
     return JSON.stringify(prepareLocalGenerationOutput(input.fullText, input.prefix, input.stop));
+  }
+
+  // src/utils/assistantPrefill.ts
+  var isAssistantPrefillEnabled = (modelSource) => modelSource === "local";
+  function shouldConsumeAssistantPrefill(isLocal, draft, prefix) {
+    return isLocal && prefix !== void 0 && draft?.trim() === prefix;
+  }
+
+  // shared/google-sync/assistantPrefill.ts
+  function assistantPrefill(json) {
+    const input = JSON.parse(json);
+    if (input.operation === "resolve") {
+      return JSON.stringify({ key: resolveAssistantPrefillKey({ branchTree: input.activePath ? { activePath: input.activePath } : void 0 }, input.mode, input.insertIndex) });
+    }
+    if (input.operation === "consume") {
+      return JSON.stringify({ consumed: shouldConsumeAssistantPrefill(isAssistantPrefillEnabled(input.modelSource), input.draft, input.prefix) });
+    }
+    throw new Error("Invalid assistant prefill operation.");
   }
 
   // shared/google-sync/entry.ts

@@ -1,3 +1,4 @@
+import { shouldConsumeAssistantPrefill } from '@utils/assistantPrefill';
 import { normalizeAssistantPrefill } from '@utils/localGenerationInput';
 import { resolveAssistantPrefillKey } from '@utils/generationPlan';
 import { localModelRuntime } from '@src/local-llm/runtime';
@@ -300,7 +301,7 @@ const useSubmit = () => {
       clearSubmitSessionRuntime(sessionId);
       finishAiTask(ticket);
       // Clear the prefill that was consumed (if any local generation happened)
-      if (isLocal && useStore.getState().assistantPrefillMap[prefillKey]?.trim() === assistantPrefill) {
+      if (shouldConsumeAssistantPrefill(isLocal, useStore.getState().assistantPrefillMap[prefillKey], assistantPrefill)) {
         useStore.getState().clearAssistantPrefill(prefillKey);
       }
     }

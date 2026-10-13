@@ -1,3 +1,4 @@
+import { isAssistantPrefillLocation } from '@utils/assistantPrefill';
 import { normalizeBubbleSummaryText } from '@utils/bubbleSummary';
 import { useSyncReview, acknowledgeSyncNode } from '@store/storage/google/conflicts';
 import { useTranslation } from 'react-i18next';
@@ -209,7 +210,7 @@ const Message = React.memo(
                   sticky={sticky}
                 />
               </div>
-              {role === 'user' && (
+              {isAssistantPrefillLocation({sticky: true, role}) && (
                 <AssistantPrefillSeed nodeId={STICKY_PREFILL_KEY} />
               )}
             </>
@@ -245,8 +246,8 @@ const Message = React.memo(
                 />
                 </BubbleSummaryView>
               </div>
-              {!readOnly && role === 'user' && resolvedNodeId && !isCollapsed && (
-                <AssistantPrefillSeed nodeId={resolvedNodeId} />
+              {isAssistantPrefillLocation({sticky: false, role, nodeId: resolvedNodeId, readOnly, collapsed: isCollapsed}) && (
+                <AssistantPrefillSeed nodeId={resolvedNodeId!} />
               )}
             </>
           )}

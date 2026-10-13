@@ -131,3 +131,5 @@ export { remoteOutput } from "./remoteOutput";
 export { generationPlan } from "./generationPlan";
 
 export { localGenerationInput, localGenerationOutput } from "./localGeneration";
+
+export { assistantPrefill } from './assistantPrefill';
