@@ -1,6 +1,103 @@
 import SwiftUI
 import UniformTypeIdentifiers
 
+struct LocalModelSettingsView: View {
+    @ObservedObject var state: ChatState
+    @State private var importingModelID: String?
+    @State private var showsImporter = false
+    @State private var copying = false
+    @State private var errorMessage: String?
+    @State private var fileStatus: String?
+
+    private func name(_ model: OrderedJSON) -> String {
+        (try? model["label"]?.string("label")) ?? (try? model["id"]?.string("id")) ?? "モデル"
+    }
+    private func singleGGUF(_ model: OrderedJSON) -> Bool {
+        model["engine"] == .string("wllama") && model["manifest"]?["kind"] == .string("single-file")
+    }
+    private func save(_ action: () throws -> Void) {
+        do { try action(); errorMessage = nil }
+        catch { errorMessage = error.localizedDescription }
+    }
+    var body: some View {
+        Form {
+            Toggle("ローカルモデルを使用",isOn:Binding(get:{state.localModelsEnabled},set:{enabled in
+                save { try state.saveLocalModelRole(enabled:enabled) }
+            }))
+            switch Result(catching:{try state.localModelDefinitions()}) {
+            case .success(let models):
+                Section("役割") {
+                    ForEach(["generation","analysis"],id:\.self) { task in
+                        let selectedID = state.activeLocalModel(task)
+                        let selected = models.first { model in
+                            guard let id = try? model["id"]?.string("id"), let selectedID else { return false }
+                            return id.utf8.elementsEqual(selectedID.utf8)
+                        }
+                        Menu {
+                            Button("未指定") { save { try state.saveLocalModelRole(task:task) } }
+                            ForEach(models.indices,id:\.self) { index in
+                                let model = models[index]
+                                if singleGGUF(model), let id = try? model["id"]?.string("id"),
+                                   let tasks = try? model["tasks"]?.array("tasks"), tasks.contains(.string(task)) {
+                                    Button(name(model)) { save { try state.saveLocalModelRole(task:task,modelID:id) } }
+                                }
+                            }
+                        } label: {
+                            LabeledContent(task == "generation" ? "生成" : "分析・品質評価",value:selected.map(name) ?? selectedID ?? "未指定")
+                                .frame(minHeight:44)
+                        }
+                    }
+                    Text("ファイルの保存先は端末ごとに異なります。役割とモデル定義はWebと共通です。")
+                        .font(.footnote).foregroundStyle(.secondary)
+                }
+                Section("保存済みのモデル定義") {
+                    if models.isEmpty { Text("登録済みのモデル定義がありません。") }
+                    ForEach(models.indices,id:\.self) { index in
+                        let model = models[index]
+                        VStack(alignment:.leading,spacing:8) {
+                            Text(name(model)).font(.headline)
+                            if let id = try? model["id"]?.string("id") {
+                                Text(id).font(.caption).foregroundStyle(.secondary).textSelection(.enabled)
+                                if singleGGUF(model) {
+                                    let available = (try? state.localModelFiles.installed(modelID:id)) != nil
+                                    Text(available ? "この端末にファイルあり" : "この端末のファイル未指定").font(.footnote)
+                                    Button(available ? "GGUFファイルを置き換える" : "GGUFファイルを選択") {
+                                        importingModelID = id; showsImporter = true
+                                    }.frame(minHeight:44)
+                                } else {
+                                    Text("この形式の端末内実行は未対応です。定義は保持します。")
+                                        .font(.footnote).foregroundStyle(.secondary)
+                                }
+                            }
+                        }
+                    }
+                }
+            case .failure(let error): Text(error.localizedDescription).foregroundStyle(.red)
+            }
+            if copying { ProgressView("ファイルを保存中…") }
+            if let fileStatus { Text(fileStatus).font(.footnote) }
+            if let errorMessage { Text(errorMessage).foregroundStyle(.red) }
+        }
+        .disabled(copying || state.generation != nil || state.evaluationJobs.values.contains { $0.busy })
+        .navigationTitle("ローカルモデル")
+        .fileImporter(isPresented:$showsImporter,allowedContentTypes:[UTType(filenameExtension:"gguf") ?? .data]) { result in
+            do {
+                let source = try result.get()
+                guard let modelID = importingModelID else { return }
+                let files = state.localModelFiles
+                copying = true; errorMessage = nil
+                Task { @MainActor in
+                    defer { copying = false }
+                    do {
+                        try await Task.detached { try files.install(source,modelID:modelID) }.value
+                        fileStatus = "ファイルを保存しました（" + modelID + "）"
+                    } catch { errorMessage = error.localizedDescription }
+                }
+            } catch { errorMessage = error.localizedDescription }
+        }
+    }
+}
+
 struct ChatConfigView: View {
     @ObservedObject var state: ChatState
     let auxiliary: Bool

@@ -557,3 +557,11 @@ WebのlocalEvaluation/useEvaluationからprompt・fallback・400/150文字切詰
 sidebarはNavigationSplitViewで既存会話/フォルダーViewとcallbackを再利用。compactの制御には[Apple公式preferredCompactColumn API](https://developer.apple.com/documentation/swiftui/navigationsplitview/init(columnvisibility:preferredcompactcolumn:sidebar:detail:))を使用した。FAKE Catalyst実画面で一覧/チャット/下端入力の同時表示、標準toggle、タイトルの欠け解消、0件選択footer非表示、選択1件の移動/削除iconの収まりを確認した。子sidebarのtraitがcompactになるためwideにも閉じるbuttonが残った問題は、root traitでoptional callbackを渡して修正、限定Astraは新規なし。UI最終build成功（/private/tmp/weavelet-sidebar-final-build.log）。確認アプリ終了とprocess消失を確認。通常データ・Keychainへ触れず、移動/削除は実行していない。
 
 iPhone compact・最大Dynamic Type・キーボード、Web/nativeの実クラウド相互運用は未確認。nativeの分析モデル割当/資産管理UI、Transformers分類器、auto/hybrid評価、iPhone向けGGUF engine buildは残る。前の「未接続local品質」はCatalyst単一GGUF品質まで更新したのであり、全local完成にはしない。一覧並替えには既存native操作APIがなく、サイドバー移植だけでは未実装部分を補っていない。
+
+## ローカルモデルの役割設定（2026-10-13）
+
+Webのlocal-model-sliceの有効化・役割割当setterをpure共有元localModelRoleへ切り出し、実Web callerとnative JSC接続が同じ処理を呼ぶ。native設定画面では有効化、generation/analysisの割当・解除、既存単一GGUF定義への端末ファイル再指定を接続した。モデル定義/他task/保存metadataはdeltaの対象外で、未知形式の定義も削除しない。既存LocalModelFiles.installの一時copy＋renameを再利用し、新規SDKは追加していない。
+
+再利用した成功結果：共有元3件、Web型検査、bundle生成/鮮度。native接続2件は保存失敗時メモリ/disk保持、raw巨大数値・他task・metadata保持、保存/再起動と端末ファイル未指定の拒否を確認。初回fixtureはV3 extrasをsnapshot settingsと誤認して空配列の添字で失敗。実syncDocument.v3DocumentLayoutでは共有5root以外がsidecarとなるため、実settings経路applySnapshotへ修正しXCTUnwrapを使った。元V3 sidecarの書出し保持も別に確認し、期待値を緩めていない。保存失敗testの初回成功を再利用、変更したtestのみ再実行成功。ログ /private/tmp/weavelet-local-role-catalyst{,-fixed}.log。独立Astraは一式/fixture限定追確認とも新規P2以上なし。
+
+FAKE Catalyst cloneで設定route、役割menu、空定義説明と配置を確認。通常store/Keychainへ触れず、有効化や割当の手動保存・ファイルpicker操作は行っていない。新しいモデル定義の登録、download、複数GGUF/Transformers管理、auto/hybrid評価は残件。V3未知extrasの保全とlive store設定は別の経路であり、V3 extrasを勝手に設定へ昇格しない。実機狭幅・最大文字サイズ・実同期相互運用は未確認。

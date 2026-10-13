@@ -25,6 +25,57 @@ final class NativeLocalEvaluationTests: XCTestCase {
         try json(#"{"localModelEnabled":true,"activeLocalModels":{"analysis":"analysis-model"},"localModels":[{"id":"analysis-model","engine":"wllama","tasks":["analysis","quality"],"manifest":{"kind":"single-file","entrypoint":"fake.gguf"}}],"xLarge":9007199254740993}"#)
     }
 
+    func testSharedRoleSettingsPreserveMetadataAndRestart() throws {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent("local-role-\(UUID())")
+        defer { try? FileManager.default.removeItem(at:directory) }
+        let store = LocalStateStore(fileURL:directory.appendingPathComponent("state.json")), app = ChatState(store:store)
+        try app.importWebData(Data(#"{"version":3,"chats":[],"localModelEnabled":false,"activeLocalModels":{"generation":"g","moderation":"m","xRaw":9007199254740993},"localModels":[{"id":"analysis-model","engine":"wllama","tasks":["analysis"],"manifest":{"kind":"single-file","entrypoint":"fake.gguf"},"xRaw":9007199254740993}],"savedModelMeta":{"analysis-model":{"storedBytes":9007199254740993}},"xRoot":{"value":9007199254740993}}"#.utf8))
+        // V3 extras are sidecar data; live settings enter through the store snapshot.
+        let snapshot = try app.publicationSnapshot(), v3 = try OrderedJSON.decode(app.exportWebData())
+        var settings = try snapshot.required("state")
+        for key in ["localModelEnabled","activeLocalModels","localModels","savedModelMeta","xRoot"] {
+            settings = settings.replacing(key,with:try v3.required(key))
+        }
+        try app.applySnapshot(snapshot.replacing("state",with:settings))
+        let before = try app.publicationSnapshot(), exportBefore = try OrderedJSON.decode(app.exportWebData())
+        try app.saveLocalModelRole(enabled:true)
+        try app.saveLocalModelRole(task:"analysis",modelID:"analysis-model")
+        XCTAssertTrue(app.localModelsEnabled)
+        XCTAssertEqual(app.activeLocalModel("analysis"),"analysis-model")
+        let model = try XCTUnwrap(app.localModelDefinitions().first)
+        XCTAssertEqual(model["xRaw"],.number("9007199254740993"))
+        let roots = try app.publicationSnapshot().required("state")
+        for key in ["localModels","savedModelMeta","xRoot"] {
+            XCTAssertEqual(roots[key],before["state"]?[key])
+            XCTAssertEqual(try OrderedJSON.decode(app.exportWebData())[key],exportBefore[key])
+        }
+        XCTAssertEqual(roots["activeLocalModels"]?["xRaw"],.number("9007199254740993"))
+        XCTAssertEqual(roots["activeLocalModels"]?["moderation"],.string("m"))
+        XCTAssertThrowsError(try NativeLocalEvaluation.modelURL(state:roots,files:app.localModelFiles))
+        try app.saveLocalModelRole(task:"analysis")
+        XCTAssertNil(app.activeLocalModel("analysis"))
+        XCTAssertEqual(app.activeLocalModel("generation"),"g")
+        XCTAssertEqual(try ChatState(store:store).publicationSnapshot(),try app.publicationSnapshot())
+    }
+
+    func testRoleSettingsSaveFailureKeepsMemoryAndDisk() throws {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent("local-role-failure-\(UUID())")
+        defer { try? FileManager.default.removeItem(at:directory) }
+        var reject = false
+        let store = LocalStateStore(fileURL:directory.appendingPathComponent("state.json"),write:{ bytes,url in
+            if reject { throw CocoaError(.fileWriteNoPermission) }
+            try bytes.write(to:url,options:.atomic)
+        })
+        let app = ChatState(store:store)
+        try app.importWebData(Data(#"{"version":3,"chats":[],"localModelEnabled":false,"activeLocalModels":{"analysis":"original"}}"#.utf8))
+        let before = try app.publicationSnapshot(), disk = try Data(contentsOf:store.fileURL)
+        reject = true
+        XCTAssertThrowsError(try app.saveLocalModelRole(enabled:true))
+        XCTAssertThrowsError(try app.saveLocalModelRole(task:"analysis",modelID:"replacement"))
+        XCTAssertEqual(try app.publicationSnapshot(),before)
+        XCTAssertEqual(try Data(contentsOf:store.fileURL),disk)
+    }
+
     func testModelSelectionRequiresMetadataAndInstalledSingleGGUF() throws {
         let (files,directory) = try modelFixture()
         defer { try? FileManager.default.removeItem(at:directory) }

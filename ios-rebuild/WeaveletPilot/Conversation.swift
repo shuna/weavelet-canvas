@@ -674,6 +674,27 @@ final class ChatState: ObservableObject {
         LocalModelFiles(directory:(store ?? LocalStateStore.applicationStore).fileURL.deletingLastPathComponent().appendingPathComponent("models",isDirectory:true))
     }
 
+    var localModelsEnabled: Bool { (try? publicationSnapshot()["state"]?["localModelEnabled"]) == .bool(true) }
+    func localModelDefinitions() throws -> [OrderedJSON] {
+        try publicationSnapshot().required("state")["localModels"]?.array("local models") ?? []
+    }
+    func activeLocalModel(_ task: String) -> String? {
+        try? publicationSnapshot()["state"]?["activeLocalModels"]?[task]?.string("model ID")
+    }
+    func saveLocalModelRole(task: String? = nil, modelID: String? = nil, enabled: Bool? = nil) throws {
+        guard generation == nil else { throw ExchangeError.invalid("生成結果を保存してからモデル設定を変更してください") }
+        let roots = try syncInputSnapshot().required("state")
+        let projected = OrderedJSON.object(["localModelEnabled","activeLocalModels"].compactMap { key in roots[key].map { .init(key:key,value:$0) } })
+        var fields: [JSONField] = [.init(key:"state",value:projected)]
+        if let enabled {
+            fields += [.init(key:"operation",value:.string("enable")),.init(key:"enabled",value:.bool(enabled))]
+        } else if let task, ["generation","analysis"].contains(task) {
+            fields += [.init(key:"operation",value:.string("assign")),.init(key:"task",value:.string(task)),.init(key:"modelId",value:modelID.map(OrderedJSON.string) ?? .null)]
+        } else { throw ExchangeError.invalid("モデルの役割が不正です") }
+        let result = try SharedWebOperations.call("localModelRole",.object(fields))
+        try applyGlobalState(OrderedJSONChanges.apply(result.required("changes"),to:roots))
+    }
+
     private func beginLocalGeneration(source: OrderedJSON, chat: OrderedJSON, chatID: String, path: [String], history: MessageEditing.HistoryState?, plan: OrderedJSON?, now: Double) throws {
         let config = try chat.required("config")
         let modelID = try config.required("model").string("model")
