@@ -13,6 +13,7 @@ import {
 import { defaultModel } from '@constants/chat';
 import { resolveChatModel, confirmChatModelFavorite } from '@utils/chatModelResolution';
 import { hasMeaningfulContent } from '@utils/contentValidation';
+import { enterSubmission } from '@utils/enterSubmission';
 import { showToast } from '@utils/showToast';
 import i18next from 'i18next';
 
@@ -191,30 +192,19 @@ export function useEditViewLogic({
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement> | KeyboardEvent) => {
     const nativeEvent = 'nativeEvent' in e ? e.nativeEvent : e;
-    // Safari can end composition before the confirming Enter keydown.
-    if (nativeEvent.isComposing || nativeEvent.keyCode === 229) return;
     const isMobile =
       /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini|playbook|silk/i.test(
         navigator.userAgent
       );
-    if (e.key === 'Enter' && !isMobile) {
-      const enterToSubmit = useStore.getState().enterToSubmit;
-      if (e.ctrlKey && e.shiftKey) {
-        e.preventDefault();
-        handleGenerate();
-        resetTextAreaHeight();
-      } else if (
-        (enterToSubmit && !e.shiftKey) ||
-        (!enterToSubmit && (e.ctrlKey || e.shiftKey))
-      ) {
-        if (sticky) {
-          e.preventDefault();
-          handleGenerate();
-          resetTextAreaHeight();
-        } else {
-          handleSave();
-        }
-      }
+    const action = enterSubmission({ key: e.key, isComposing: nativeEvent.isComposing === true,
+      keyCode: nativeEvent.keyCode, isMobile, ctrlKey: e.ctrlKey, shiftKey: e.shiftKey,
+      enterToSubmit: useStore.getState().enterToSubmit, sticky });
+    if (action === 'generate') {
+      e.preventDefault();
+      handleGenerate();
+      resetTextAreaHeight();
+    } else if (action === 'save') {
+      handleSave();
     }
   };
 
