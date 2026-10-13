@@ -124,4 +124,14 @@ final class DisplaySettingsTests: XCTestCase {
         XCTAssertEqual(try ChatState(store: local).publicationSnapshot().encoded(), try saved.encoded())
     }
 
+    func testEnterSettingUsesSharedDefaultAndKeepsUnsupportedRawValue() throws {
+        let defaults = try ChatImport.call("defaults")
+        XCTAssertEqual(try DisplaySettings.value(.enterToSubmit, in: .object([])), try defaults.required("enterToSubmit"))
+        XCTAssertEqual(try defaults.required("enterToSubmit"), .bool(true))
+        let raw = OrderedJSON.utf16String([0xd800])
+        let roots = OrderedJSON.object([.init(key: "enterToSubmit", value: raw)])
+        XCTAssertEqual(try DisplaySettings.value(.enterToSubmit, in: roots).encoded(), try raw.encoded())
+        XCTAssertFalse(DisplaySetting.enterToSubmit.accepts(raw))
+        XCTAssertTrue(DisplaySetting.enterToSubmit.accepts(.bool(false)))
+    }
 }

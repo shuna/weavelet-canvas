@@ -31,7 +31,7 @@ struct DisplaySettingsView: View {
             switch Result(catching: {
                 try (state.displaySetting(.theme), state.displaySetting(.inlineLatex),
                      state.displaySetting(.markdownMode), state.displaySetting(.streamingMarkdownPolicy), state.displaySetting(.displayChatSize),
-                     state.displaySetting(.branchSwipeDirection), state.displaySetting(.animateBubbleNavigation))
+                     state.displaySetting(.branchSwipeDirection), state.displaySetting(.animateBubbleNavigation), state.displaySetting(.enterToSubmit))
             }) {
             case .success(let values):
                 Section("外観") {
@@ -43,6 +43,11 @@ struct DisplaySettingsView: View {
                 }
                 Section("会話一覧") {
                     boolean(.displayChatSize, title: "会話サイズを表示", value: values.4)
+                }
+                Section("本文の入力") {
+                    boolean(.enterToSubmit, title: "キーボードのEnterで送信", value: values.7)
+                    Text("外付けキーボードでの操作に適用します。画面のキーボードでは改行します。")
+                        .font(.footnote).foregroundStyle(.secondary)
                 }
                 Section("本文の移動") {
                     Picker("分岐のスワイプ方向", selection: selection(.branchSwipeDirection, value: values.5)) {
