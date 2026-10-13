@@ -100,6 +100,22 @@ final class ChatFoldersTests: XCTestCase {
         XCTAssertEqual(try ChatFolders.rows(in: revealed).map(\.visible), [true, true, true])
     }
 
+    func testFolderRowsRejectInvalidIdentityWithoutChangingSource() throws {
+        let input = try fixture().required("input")
+        for field in [JSONField(key: "", value: .object([
+            .init(key: "id", value: .string("")), .init(key: "name", value: .string("Bad")),
+            .init(key: "order", value: .number("0")), .init(key: "expanded", value: .bool(true)),
+        ])), JSONField(key: "key", value: .object([
+            .init(key: "id", value: .string("other")), .init(key: "name", value: .string("Bad")),
+            .init(key: "order", value: .number("0")), .init(key: "expanded", value: .bool(true)),
+        ]))] {
+            let source = input.replacing("folders", with: .object([field]))
+            let before = try source.encoded()
+            XCTAssertThrowsError(try ChatFolders.rows(in: source))
+            XCTAssertEqual(try source.encoded(), before)
+        }
+    }
+
     func testInvalidOperationLeavesOriginalDocumentUnchanged() throws {
         let input = try fixture().required("input"), before = try input.encoded()
         XCTAssertThrowsError(try ChatFolders.apply(in: input, operation: .create(id: "f-a")))

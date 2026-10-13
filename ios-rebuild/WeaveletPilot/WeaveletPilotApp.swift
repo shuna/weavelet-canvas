@@ -763,15 +763,8 @@ struct ConversationLibraryView: View {
             .disabled(state.generation != nil)
             .navigationTitle("会話")
             .navigationBarTitleDisplayMode(.inline)
-            .onAppear {
-                perform {
-                    folders = try state.folderRows()
-                    if let id = state.folderID(for: state.selectedConversationID), let folder = folders.first(where: { $0.id.utf8.elementsEqual(id.utf8) }), (!folder.visible || !folder.expanded) {
-                        try state.applyFolder(.move(chatIDs: [], folderID: id))
-                        folders = try state.folderRows()
-                    }
-                }
-            }
+            .onAppear { revealSelectedConversation() }
+            .onChange(of: Data(state.selectedConversationID.utf8)) { _, _ in revealSelectedConversation() }
             .onChange(of: state.exchange?.source) { _, _ in perform {} }
             .toolbar {
                 if let onClose {
@@ -952,6 +945,15 @@ struct ConversationLibraryView: View {
     private func folderColor(_ value: String?) -> Color {
         guard let value, value.hasPrefix("#"), value.count == 7, let rgb = UInt32(value.dropFirst(), radix: 16) else { return .secondary }
         return Color(red: Double((rgb >> 16) & 255) / 255, green: Double((rgb >> 8) & 255) / 255, blue: Double(rgb & 255) / 255)
+    }
+
+    private func revealSelectedConversation() {
+        perform {
+            let rows = try state.folderRows()
+            if let id = state.folderID(for: state.selectedConversationID), let folder = rows.first(where: { $0.id.utf8.elementsEqual(id.utf8) }), (!folder.visible || !folder.expanded) {
+                try state.applyFolder(.move(chatIDs: [], folderID: id))
+            }
+        }
     }
 
     @discardableResult

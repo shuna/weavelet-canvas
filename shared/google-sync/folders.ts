@@ -23,6 +23,9 @@ export function folderOperation(json: string): string {
 }
 export function folderRows(json: string): string {
   const input = JSON.parse(json) as Pick<Projection, 'folders'>;
+  for (const [id, folder] of Object.entries(input.folders)) {
+    if (!id || folder?.id !== id) throw new Error('Invalid folder identity.');
+  }
   const children = new Map<string, ReturnType<typeof orderedFolders>>();
   for (const folder of orderedFolders(input.folders)) {
     const parent = getFolderParentId(input.folders, folder.id) ?? '';

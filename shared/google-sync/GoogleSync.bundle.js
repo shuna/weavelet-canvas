@@ -18914,6 +18914,10 @@ ${JSON.stringify(input.length === 1 ? input[0] : input)}`;
   }
   function folderRows(json) {
     const input = JSON.parse(json);
+    for (const [id, folder] of Object.entries(input.folders)) {
+      if (!id || folder?.id !== id)
+        throw new Error("Invalid folder identity.");
+    }
     const children = /* @__PURE__ */ new Map();
     for (const folder of orderedFolders(input.folders)) {
       const parent = getFolderParentId(input.folders, folder.id) ?? "";

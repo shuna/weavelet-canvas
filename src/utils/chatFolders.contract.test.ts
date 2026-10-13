@@ -84,6 +84,13 @@ describe('shared folder operations', () => {
     expect(rows.find((row: any) => row.id === 'cycleA')).toMatchObject({ displayParentId: '', depth: 0, visible: true, path: 'cycleA' });
   });
 
+  it('rejects empty or mismatched folder identities before projecting rows', () => {
+    for (const folders of [
+      { '': { id: '', name: 'Bad', order: 0, expanded: true } },
+      { key: { id: 'other', name: 'Bad', order: 0, expanded: true } },
+    ]) expect(() => folderRows(JSON.stringify({ folders }))).toThrow('Invalid folder identity');
+  });
+
   it('rejects invalid identities before changing anything', () => {
     const input = structuredClone(fixture.input), before = structuredClone(input);
     for (const operation of [{ type: 'create', id: 'f-a' }, { type: 'remove', id: 'missing' }, { type: 'move', chatIds: ['missing'], folderId: 'f-a' }, { type: 'move', chatIds: ['chat-a'], folderId: 'missing' }] as const) {
