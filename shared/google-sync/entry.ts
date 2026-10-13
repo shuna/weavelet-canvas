@@ -200,3 +200,5 @@ export { generationUsage, generationObservation, generationLiveUsage } from "./u
 export { usageCost } from "./usageCost";
 
 export { evaluation } from './evaluation';
+
+export { localModelRole } from './localModelRole';

@@ -4,6 +4,7 @@ import type {
   LocalModelTask,
 } from '@src/local-llm/types';
 import type { SavedModelMeta } from '@src/local-llm/storage';
+import { mutateLocalModelRole } from '@utils/localModelRole';
 
 export interface LocalModelSlice {
   localModelEnabled: boolean;
@@ -37,7 +38,7 @@ export const createLocalModelSlice: StoreSlice<LocalModelSlice> = (set, get) => 
   localModelExecutionMode: 'sequential',
 
   setLocalModelEnabled: (enabled) => {
-    set({ localModelEnabled: enabled });
+    set((prev) => ({ localModelEnabled: mutateLocalModelRole(prev, {operation: 'enable', enabled}).localModelEnabled }));
   },
 
   addLocalModel: (def) => {
@@ -67,13 +68,7 @@ export const createLocalModelSlice: StoreSlice<LocalModelSlice> = (set, get) => 
   },
 
   setActiveLocalModel: (task, modelId) => {
-    const active = { ...get().activeLocalModels };
-    if (modelId === null) {
-      delete active[task];
-    } else {
-      active[task] = modelId;
-    }
-    set({ activeLocalModels: active });
+    set((prev) => ({ activeLocalModels: mutateLocalModelRole(prev, {operation: 'assign', task, modelId}).activeLocalModels }));
   },
 
   updateSavedModelMeta: (id, patch) => {

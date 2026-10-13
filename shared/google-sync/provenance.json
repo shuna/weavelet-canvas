@@ -99,7 +99,8 @@
     "src/types/evaluation.ts": "4003aabc888d815667259dd49d9efb74a599281e9970841782893d2307eb415c",
     "src/utils/evaluationState.ts": "9dfecfd104425d3788222624e1deffb7b7b270cb3a47108c362048170df72c9d",
     "src/store/evaluation-slice.ts": "17ea8dac39f8f06cb02f1fbf1f6056cc96d4672256b80b42afb90f4443739ec8",
-    "src/store/local-model-slice.ts": "08f2f20edaafc73a23448da7c174e0003725064c71e3c617dbcc8a5d7f4bc0fd",
+    "src/utils/localModelRole.ts": "29491f084ef6ce804a416749b115e6b63a772a735ec2d4fbea21c42e75367816",
+    "src/store/local-model-slice.ts": "96228dcfd3472550069d0a6803d4a2267c0f2c6f9580f7d77ba4251c9630ea86",
     "src/store/store.ts": "debe9137fec89588382491a3a50673ae8a0635618b10a28103c7e8c26d497176",
     "src/store/storage/google/sync.ts": "09ac529bf26b4a2c51c182d2e07215e0491aea7a981f938fdbeed830006b404a",
     "src/store/storage/google/merge.ts": "0fcbea479b8011fa1c396a1b42e7ed6be4c613c93d4ce0f704676710e3158c61",
@@ -263,7 +264,9 @@
     "src/utils/evaluationContextCore.ts": "77c0946260540461fb041f82947b5c47d91b58e9fdfc71d0e139a35529dcf4fd",
     "src/utils/evaluationState.ts": "9dfecfd104425d3788222624e1deffb7b7b270cb3a47108c362048170df72c9d",
     "shared/google-sync/evaluation.ts": "312e235f95b798f72dfc75a896deff85d68da1585f31c5b2df74154281988366",
-    "shared/google-sync/entry.ts": "b2872011a52d8b8ddb665f6338d61b3800777a900d5f33c2d1933ae71e5f6376",
+    "src/utils/localModelRole.ts": "29491f084ef6ce804a416749b115e6b63a772a735ec2d4fbea21c42e75367816",
+    "shared/google-sync/localModelRole.ts": "8ce5bc1651e340c87134a35f4fbf149af159c296ca924a874c95b76b51dc96a5",
+    "shared/google-sync/entry.ts": "b8967fecbc48d91caa9b3a23b4bd70e291abcfa3d2dbef4307dddc009b638b75",
     "shared/google-sync/generate.mjs": "bce157c3313ac97c88aff3c7325450fea534bb76582eac5972260332c02a3e74",
     "shared/google-sync/importDefaults.generate.mjs": "2ff8904af4f192ed0809ceaaabcfbefa708321083aebb527d712fc2a0551b15a"
   },
@@ -300,5 +303,5 @@
     "lz-string/package.json": "f0990a8fd6c347d66c1469d18918f5460d372c6b3af8a0a5737dfd34c809e20d",
     "lz-string/LICENSE": "433fc9dfe659dbfb1e91eed8351f13651e97bfa3ac6d03394c3d63f61d4bbc80"
   },
-  "bundleSHA256": "627db33ecc51d2fc870ed969ceed1919bf9fd9f9c184bda5fb1598f924c8deee"
+  "bundleSHA256": "219e3cedb5e33943047e006972531ee7583dbc21af24e572c63243f1593b56a1"
 }
