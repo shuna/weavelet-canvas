@@ -112,7 +112,7 @@ final class RemoteGenerationTests: XCTestCase {
         XCTAssertEqual(try parts[0].required("unknown").encoded(),try opaque.encoded())
         XCTAssertEqual(try parts[1].encoded(),try second.encoded())
         let state = try state(store()), originalID = try XCTUnwrap(state.conversation).id
-        try state.setComposerText(chatID:originalID,text:"original input")
+        state.setComposerText(chatID:originalID,text:"original input")
         let detail = try state.composerImageDetail(chatID:originalID)
         try state.createChat(defaults:ChatDefaults.webInitial(),id:"new-chat")
         try state.addComposerImages(chatID:originalID,urls:["data:image/png;base64,FAKE_LATE"],detail:detail)
@@ -121,6 +121,9 @@ final class RemoteGenerationTests: XCTestCase {
         XCTAssertEqual(oldDraft.text,"original input")
         XCTAssertEqual(try oldDraft.parts.array("parts").last?["image_url"]?["detail"],.string(detail))
         XCTAssertEqual(state.conversation?.id,"new-chat")
+        try state.removeComposerPart(chatID:originalID,index:0)
+        XCTAssertEqual(state.composerDraft(chatID:originalID).parts,.array([]))
+        XCTAssertEqual(state.composerDraft(chatID:originalID).text,"original input")
         XCTAssertEqual(try ComposerContent.prepare(.array([]),images:[("data:image/png;base64,FAKE_ONLY","auto")]).hasMeaningfulContent,true)
     }
     func testSharedWebRequestProjectionAndSourcePreservation() throws {
@@ -228,11 +231,12 @@ final class RemoteGenerationTests: XCTestCase {
         try FileManager.default.setAttributes([.posixPermissions: 0o500], ofItemAtPath: directory.path)
         defer { try? FileManager.default.setAttributes([.posixPermissions: 0o700], ofItemAtPath: directory.path) }
         let chatID = try XCTUnwrap(state.conversation).id
-        try state.setComposerText(chatID:chatID,text:"Preserved input")
+        state.setComposerText(chatID:chatID,text:"Preserved input")
         try state.addComposerImages(chatID:chatID,urls:["data:image/png;base64,FAKE_COMPOSER_IMAGE"],detail:"high")
         let draft = state.composerDraft(chatID:chatID)
         XCTAssertThrowsError(try state.sendComposer(record:record(stream:false),client:client))
         XCTAssertEqual(state.composerDraft(chatID:chatID).parts,draft.parts)
+        XCTAssertEqual(state.composerDraft(chatID:chatID).text,draft.text)
         XCTAssertEqual(state.exchange?.source, original)
         XCTAssertEqual(try Data(contentsOf: store.fileURL), oldDisk)
         XCTAssertTrue(FakeRemoteProtocol.requests.isEmpty)

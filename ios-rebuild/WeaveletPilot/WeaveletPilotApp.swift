@@ -120,8 +120,7 @@ struct ChatView: View {
                             TextField("送信する本文", text: Binding(
                                 get: { state.composerDraft(chatID:conversation.id).text },
                                 set: { text in
-                                    do { try state.setComposerText(chatID:conversation.id,text:text) }
-                                    catch { state.generationError = error.localizedDescription }
+                                    state.setComposerText(chatID:conversation.id,text:text)
                                 }), axis: .vertical)
                                 .lineLimit(3...8).textFieldStyle(.roundedBorder)
                                 .disabled(state.generation != nil)
@@ -133,11 +132,18 @@ struct ChatView: View {
                                 .disabled(state.generation != nil)
                             }
                             if let parts = try? state.composerDraft(chatID:conversation.id).parts.array("composer parts") {
-                                ForEach(Array(parts.enumerated()),id: \.offset) { _, part in
+                                ForEach(Array(parts.enumerated()),id: \.offset) { index, part in
                                     if case .string("image_url") = part["type"],
                                        case .string(let url) = part["image_url"]?["url"],
                                        case .string(let detail) = part["image_url"]?["detail"] {
-                                        AttachmentImageView(url:url,detail:detail)
+                                        VStack(alignment:.leading) {
+                                            AttachmentImageView(url:url,detail:detail)
+                                            Button("入力画像を取り消す",systemImage:"xmark.circle") {
+                                                do { try state.removeComposerPart(chatID:conversation.id,index:index) }
+                                                catch { state.generationError = error.localizedDescription }
+                                            }
+                                            .disabled(state.generation != nil)
+                                        }
                                     }
                                 }
                             }
@@ -148,7 +154,7 @@ struct ChatView: View {
                                 } catch { state.generationError = error.localizedDescription }
                             }
                             .frame(minHeight: 44)
-                            .disabled(state.generation != nil || !state.composerDraft(chatID:conversation.id).hasMeaningfulContent)
+                            .disabled(state.generation != nil)
                         }
                     } else {
                         ContentUnavailableView("会話がありません", systemImage: "bubble.left.and.bubble.right")

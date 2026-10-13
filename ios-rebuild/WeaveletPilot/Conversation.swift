@@ -77,7 +77,7 @@ struct NavigationFocus: Equatable {
 
 struct ComposerDraft {
     let parts: OrderedJSON
-    let text: String
+    var text: String
     let hasMeaningfulContent: Bool
     static let empty = ComposerDraft(parts:.array([]),text:"",hasMeaningfulContent:false)
 }
@@ -474,25 +474,41 @@ final class ChatState: ObservableObject {
         guard let chat = try exchange?.source.required("chats").array("chats").first(where: { try $0.required("id").string("id").utf8.elementsEqual(chatID.utf8) }) else { throw ExchangeError.invalid("入力先の会話がありません") }
         return try chat["imageDetail"]?.string("imageDetail") ?? ChatDefaults.webInitial().imageDetail
     }
-    func setComposerText(chatID: String, text: String) throws {
-        composerDrafts[Data(chatID.utf8)] = try ComposerContent.prepare(composerDraft(chatID:chatID).parts,text:text)
+    func setComposerText(chatID: String, text: String) {
+        var draft = composerDraft(chatID:chatID)
+        draft.text = text
+        composerDrafts[Data(chatID.utf8)] = draft
     }
     func addComposerImages(chatID: String, urls: [String], detail: String) throws {
         guard conversations.contains(where: { $0.id.utf8.elementsEqual(chatID.utf8) }) else { throw ExchangeError.invalid("画像の入力先の会話がありません") }
-        composerDrafts[Data(chatID.utf8)] = try ComposerContent.prepare(composerDraft(chatID:chatID).parts,images:urls.map { ($0,detail) })
+        let before = composerDraft(chatID:chatID)
+        var prepared = try ComposerContent.prepare(before.parts,images:urls.map { ($0,detail) })
+        prepared.text = before.text
+        composerDrafts[Data(chatID.utf8)] = prepared
+    }
+    func removeComposerPart(chatID: String, index: Int) throws {
+        let before = composerDraft(chatID:chatID)
+        var parts = try before.parts.array("composer parts")
+        guard parts.indices.contains(index) else { throw ExchangeError.invalid("入力画像がありません") }
+        parts.remove(at:index)
+        composerDrafts[Data(chatID.utf8)] = ComposerDraft(parts:.array(parts),text:before.text,hasMeaningfulContent:false)
     }
     func sendComposer(record: RemoteCredentialRecord, client: RemoteClient = RemoteClient(), nodeIDs: [String]? = nil) throws {
         guard let conversation else { throw ExchangeError.invalid("送信先の会話がありません") }
         let identity = conversation.identity
-        try startGeneration(parts:composerDraft(chatID:conversation.id).parts,record:record,client:client,nodeIDs:nodeIDs)
+        let draft = composerDraft(chatID:conversation.id)
+        let prepared = try ComposerContent.prepare(draft.parts,text:draft.text)
+        try startGeneration(prepared:prepared,record:record,client:client,nodeIDs:nodeIDs)
         composerDrafts.removeValue(forKey:identity)
     }
     func startGeneration(input: String, record: RemoteCredentialRecord, client: RemoteClient = RemoteClient(), nodeIDs: [String]? = nil) throws {
         try startGeneration(parts:.array([.object([.init(key:"type",value:.string("text")),.init(key:"text",value:.string(input))])]),record:record,client:client,nodeIDs:nodeIDs)
     }
     func startGeneration(parts: OrderedJSON, record: RemoteCredentialRecord, client: RemoteClient = RemoteClient(), nodeIDs: [String]? = nil) throws {
+        try startGeneration(prepared:ComposerContent.prepare(parts),record:record,client:client,nodeIDs:nodeIDs)
+    }
+    private func startGeneration(prepared: ComposerDraft, record: RemoteCredentialRecord, client: RemoteClient, nodeIDs: [String]?) throws {
         guard generation == nil, let exchange, let conversation else { throw ExchangeError.invalid("保存済み会話を選択し、生成の終了を待ってください") }
-        let prepared = try ComposerContent.prepare(parts)
         guard prepared.hasMeaningfulContent else { throw ExchangeError.invalid("本文または画像を入力してください") }
         let sourceChat = try exchange.source.required("chats").array("chats").first { try $0.required("id").string("ID").utf8.elementsEqual(conversation.id.utf8) }!
         let count = try sourceChat["branchTree"] == nil ? sourceChat.required("messages").array("messages").count + 1 : 1
