@@ -49,7 +49,7 @@ APIは名称や引数の形だけでなく、成功とする時点や操作の�
 | 1 現状差分と対象の選定 | A〜EごとにWebの現行実装・予定契約を整理し、新iOSに必要な責務と環境差を対応付ける。旧iOSはデータ互換と再利用可能な知見の参考として照合 | 機能対応表、互換性上の懸念、最初の試行対象 | 最初の対象、その呼出元・状態所有者・関連テスト・対象外が特定され、未確認事項が明示されている |
 | 2 最初の対象の共通契約と検証 | 対象一つについて入力・結果・失敗・副作用の境界を決め、共有できる検証データを作る | 小さな契約書と共通の入力・期待結果 | Webで検証データが実行でき、意図的な差と不具合を区別できる。iOSで未実行であることを明記 |
 | 3 Web側の境界整理と試行 | 既存関数を優先してUI・状態管理・I/Oとの結合を減らし、対象の呼出経路を移す | 最小のWeb変更と関連検証結果 | 既存機能と契約を維持し、対象内の旧入口や重複を整理。共通化のためだけの未使用層が残らない |
-| 4 共通コード方式の判定 | 別実装＋共通テストと、必要ならRust等の共有実装を比較。候補一つで小規模に評価 | 採用・保留・不採用の理由と測定結果 | 修正箇所、接続コード、性能、メモリ、配布サイズ、ビルド負担から方針を説明できる。Rustを採用しなくても完了 |
+| 4 共通コード方式の判定 | 既存Webの直接共有、環境非依存部分の切出し、具体的理由のあるnative実装の順に判定。必要な境界一つで小規模に評価 | 採用・保留・不採用の理由と測定結果 | 修正箇所、接続コード、性能、メモリ、配布サイズ、ビルド負担から方針を説明できる。Rustを採用しなくても完了 |
 | 5 実装開始後のiOS最初の機能再構築 | 対象機能に必要な最小のアプリ構成を決め、同じ契約・検証データと環境固有の接続を新実装へ組み込む | 両版の対応実装、iOSビルド・起動、互換検証と端末検証の結果 | 対象機能のUIから処理・保存までを確認し、共通契約と環境固有の受入を満たす。全アプリ完成とは区別し、凍結中は未着手とする |
 | 6 機能単位で展開 | 成果と負担を見て次の機能を選び、段階2〜5を繰り返す | 対応表の更新、完了した機能の一覧 | 各対象の移行・検証・不要な旧経路の除去が完了。効果の薄い対象は別実装を維持する理由を記録 |
 
@@ -162,3 +162,23 @@ Finish editing/document sharing first, including attribute handling and operatio
 ### 2026-10-13: 共有編集・文書保存・会話管理の受入
 
 上記の接続途中だった3範囲は、実Web処理を呼ぶ構成で機能単位の検証と独立Astra監査を完了した。Swiftの編集/属性/会話管理規則は撤去し、Webの初期定数と更新時刻判定も共用する。保存v2と旧形式の読取、raw delta・未知値の保持、保存失敗時の非公開を接続テストで確認した。詳細と再実行の区別は[完成条件と証拠](web-native-completion-ledger.md)に記録する。次はこのfull-state境界を使う同期provider/UI接続と残る機能を進める。全面再設計や言語移植は追加しない。
+
+
+## 2026-10-13：独自実装と依存ライブラリの境界監査
+
+独立Astra Mediumが `ede385f1..9e2748a3` のローカル生成、共有TS、native C API境界、取得・ビルド手順と関連テストを確認した。upstreamの保守・license・公開advisoryを直接調査した依存はllama.cppとwllama。全npm/Swift依存、Apple framework自体、全lowbit kernelの網羅監査ではない。詳細な修正状態・検証結果は[完成条件と証拠](web-native-completion-ledger.md)に記録する。
+
+| 配置 | 今回の判断と根拠 | 主な実装箇所 |
+| --- | --- | --- |
+| 既存Web実処理の共有 | 生成入力、fallback prompt、出力・stop、モデル切替・出力上限はアプリ固有規則。Swiftへ写さず実Web callerと同じTSを呼ぶ。localのthinkタグも実Webどおり本文として保持 | `src/utils/localGenerationInput.ts`、`localGenerationOutput.ts`、`localModelLimits.ts`、`shared/google-sync/chatConfig.ts` |
+| OS標準 | JavaScriptCore/WKWebView、Foundation、security-scoped URL、CryptoKit SHA-256、Metalを使う。UI・通信・Keychain・暗号・保存の既存native優先境界を維持し、周辺の業務規則まで別実装にしない | `ios-rebuild/WeaveletPilot/LocalGeneration.swift`、既存共有bridge/描画/保存接続 |
+| 公式または既存ライブラリ | loader/tokenizer/chat template/decode/Metalは公式llama.cpp。samplingはWebで使用するwllamaのC++実装を薄いC ABIから直接呼ぶ。独自tokenizer/samplerを追加しない | `ios-rebuild/WeaveletPilot/LocalLlama.swift`、`ios-rebuild/NativeLlama/Sampling.cpp` |
+| 必要な独自実装 | 生成・取消・保存の接続、モデルIDと端末ファイルの対応、C ABI、取得/ビルド検証は製品またはOS境界の責務。既存lowbit対応は同じC sourceを両環境で使うが、本repoが保守責任を持つ | `Conversation.swift`、`LocalGeneration.swift`、`ios-rebuild/NativeLlama/build.sh`、`vendor/wllama-patches/` |
+
+採用順序は「既存コードの再利用→OS標準→既存依存→必要性を説明できる追加依存」とする。公式に近いという理由だけで安全と判定せず、保守継続、固定revisionへの既知修正の反映、実際に使う入口、ライセンス、取得元・生成物の照合、更新時の接続/ビルド/検証コストを対象機能内で確認する。機能追加のたびに全依存監査を繰り返す運用は追加しない。
+
+今回、別LLM SDK・Swift llama wrapper・別JS runtime・別tokenizer/sampler/Markdown parserを追加する必要はない。これらの候補製品を個別比較して不採用にしたという意味ではなく、既存コードと標準機能で要求を満たせるためである。Rustや他言語への移植も目的にしない。
+
+方針・既存構築への反映：Web setupの誤tagとHEAD fallbackを廃止し、正確tag/SHAを検証。既存sourceを削除せず不一致時は停止する。壊れたpatch 0006を修正し、公式GGUFサイズoverflow修正を0007として両環境のsourceへ適用。nativeではsource/patch/build-input/artifact照合とMIT notice同梱を追加した。独自Swift sampling案を採らずwllama C++を利用し、BOS/EOS処理も実Webと同じ呼出条件に修正した。配布WASMの再生成完了前にWebを修正済みとは扱わない。
+
+公式根拠：[llama.cpp](https://github.com/ggml-org/llama.cpp)、[wllama](https://github.com/ngxson/wllama)、[wllama releases](https://github.com/ngxson/wllama/releases)、[GGUF公式修正](https://github.com/ggml-org/llama.cpp/commit/4e5b83b226919c146fbfa754641a6772bcb2d722)、[CVE-2026-33298 advisory](https://github.com/ggml-org/llama.cpp/security/advisories/GHSA-96jg-mvhq-q7q7)。調査時には両upstreamとも非archive・MIT・保守継続中だったが、古い固定版の安全性とは別判定である。

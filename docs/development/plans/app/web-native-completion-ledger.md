@@ -1,5 +1,15 @@
 # Web / 新iOSの完成条件と証拠
 
+## ローカル生成接続の実装・検証状況（2026-10-13、受入保留）
+
+共有入力に加えて、実Webのfallback prompt・stop・出力処理・モデル設定規則を共通化した。nativeは端末専用GGUFコピー、公式llama.cpp/Metal、既存wllama sampling、取消・原子的保存への接続を担当する。モデルIDのUTF8をSHA-256でファイル名にし、同期metadataと実ファイルの存在を混同しない。ファイルは同期snapshotへ入れない。
+
+再利用した成功：共有関連56 tests・型・bundle鮮度。Catalyst初回25ケースのうち23ケース成功。失敗したlocal接続2ケースでは、共有bridgeのopaque数値復元が抜けており修正。その後の本文assertは実WebExchangeが出力するpartsを検証するよう修正し、全文・raw属性・保存/再起動の保証は維持した。最終は影響する接続2＋実tinyモデル/Metal停止1の計3ケース成功。25ケースの成功範囲は複数runの合算であり、最終全件一括runではない。ログ `/private/tmp/weavelet-local-generation-{catalyst,connection,final}.log`。独立Astraの限定再確認は新規なし。ライセンスnoticeの最終bundle同梱も確認。
+
+実UIではGGUF選択・端末コピー・設定保存と再起動後の保持を確認。pickerのOpenが一時無効だったため調べたが、元のGGUF UTTypeのまま明示選択で成功し、推測による型制限変更は残していない。一方、実生成（stories260K、max_tokens=8、temperature=0）でMetal実行後にmallocのfree block corruptionによるSIGTRAP終了が発生した。自動テスト成功だけで機能完成とは扱わず、native担当が通常完了経路の所有権/寿命を調査中。ログ `/private/tmp/weavelet-local-generation-ui.log`、crash `~/Library/Logs/DiagnosticReports/WeaveletPilot-2026-10-13-155238.ips`。検出されたthreadだけでWebKitや依存ライブラリの責任と断定しない。
+
+依存境界の判断は[計画の監査結果](web-native-commonality-roadmap.md#2026-10-13独自実装と依存ライブラリの境界監査)を参照。公式emsdk 5.0.5を隔離tmpへ導入し、Webの8 WASM/4 glue再生成を別worktreeで開始。まだ生成・ロード完了ではない。現在のnative backendはCatalyst arm64/単一GGUFで、iOS実機、全lowbit形式、分割GGUF、ONNX等の完成を意味しない。
+
 ## ローカル推論の依存採用監査（2026-10-13）
 
 追加SDKやSwift tokenizerを導入せず、既存Webのllama.cpp/wllama sampling実装へC ABIで接続する。公式upstreamが保守中であることと固定revisionの安全性は別に判断する。独立Astraが公式13 advisoryを今回のC API入口へ分類した結果、server/RPC専用5件は対象外、関連6件は固定4abef75fへ修正取り込み済み、CVE-2026-27940は通常loaderのno_alloc=true経路に非該当、CVE-2026-33298は未修正だった。
