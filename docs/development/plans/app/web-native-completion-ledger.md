@@ -719,3 +719,13 @@ b19399bbでWeb一覧の3箇所のサイズ計算と既存formatNumberをpure cha
 d05f4805でMessageViewの既存操作menuをheaderから本文footerへ移し、実Web ContentActionsと同じく分岐切替と並べた。summary/evaluation/omit/protectはheaderに保持し、時刻を追加せず、role iconと本文の端を維持する。狭幅用ViewThatFitsで水平/垂直を選ぶ。handler/保存/生成guardは不変更、44ptを維持。担当Catalyst buildと差分確認成功（/tmp/weavelet-native-message-actions-{build,diff-check}.log）、独立Astraは新規P2以上なし。
 
 FAKE隔離Catalyst実画面でユーザー/アシスタントの本文下部への移動と操作menu全項目の到達を確認。先行b19399bb cloneでも一覧上部検索・下端共通操作・設定→外観と本文→戻る→完了の遷移を確認した。設定値の変更/実生成/実通信は実行せず、通常storeを使わない。各cloneを終了しprocess消失を確認。実機/狭幅/最大文字サイズ/VoiceOverは未確認、Web配置の全差分を解消したとは扱わない。
+
+## 孤立UTF16のI/O境界（2026-10-14）
+
+実Web import/JSCはescaped lone surrogateを含む未知値・キーを受理し、既知chat IDも共有元で再採番する。一方、nativeのJSONDecoder Stringは全取込を拒否していた。d9048acaで既存OrderedJSONへ孤立UTF16専用値とexact JSONStringキーを追加し、値・path・rootOrder・保存・opaque復元で保持した。通常文字列は既存decode、必要なtokenだけ既存JSC JSON.parseからcode unitsを取り出す。新parser依存/Swift再採番規則は追加せず、無効JSON/UTF8/重複キー/深さ制限の拒否を維持する。表示用repairを星変更・未変更会話名/フォルダー名の保存へ戻さない。4851391eでサイズ投影もraw UTF16長へ接続した。
+
+関連Catalyst99件のうち98件成功。新testのpreview取込rootOrder期待値1件は実commitImportがbase順序を保持するため誤りと確認した。未知rootはsidecarとexport/restart bytesで保持済みで、直接V3取込の実rootOrder保存を確認するtestへ訂正後、限定1件が成功した（/private/tmp/weavelet-lossless-{tests,import-rerun}.log）。codec/path/取込/保存失敗/再起動/JSON export/Google records-wire/CloudKit mergeの隔離確認を含む。サイズ接続5件も成功（/private/tmp/weavelet-chat-size-utf16-tests.log）。無関係な全業務suiteは再実行しない。
+
+独立Astraの新P2「raw prompt CSVがopaqueとなり[object Object]へ」「raw systemPromptが空欄扱いされlibrary挿入で消失/preset確認省略」は49612d69で修正。CSVは既知文字列をrawのまま共有元へ渡し、最終UTF8化だけ実Web Blob相当のrepairを行う。修正前22byte対44byteの失敗を再現し、修正後plain/gzip一致と元JSON不変を確認した。systemPromptは当該fieldのnative編集/挿入/置換を明示拒否し、他設定保存ではrawを維持する。通常Unicode/NFC/NFD/日本語/emojiを拒否しない。関連16件成功（/private/tmp/weavelet-utf16-prompt-config-tests.log）、限定再監査は前P2解消・新規P2以上なし。
+
+孤立UTF16を含む本文とsystemPromptのnative編集は未対応で、情報を失う操作を明示拒否する。表示/Markdown・CSVのOS UTF8変換とJSONのexact保全を区別する。実機・実クラウド・大入力性能は未確認。Air lockStateはpasscodeRequired=trueのため今回版の実機実行を再開していない。
