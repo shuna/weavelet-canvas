@@ -1,0 +1,107 @@
+{
+  "purpose": "Offline WK trusted synthetic fixture proof only; not a safety classifier or product adoption",
+  "versions": {
+    "transformers": "4.3.0",
+    "onnxruntimeWeb": "1.31.0-dev.20260914-8d85527a0"
+  },
+  "schemaSource": "https://github.com/onnx/onnx/blob/main/onnx/onnx.proto",
+  "tokenizerSchemaSource": "installed @huggingface/tokenizers types/static/tokenizer.d.ts and implementations",
+  "licenseSources": {
+    "shared/classifier-proof/licenses/onnxruntime-8d85527a-LICENSE.txt": "https://github.com/microsoft/onnxruntime/blob/8d85527a010e294a26b274749f74294b2a32cec5/LICENSE",
+    "shared/classifier-proof/licenses/onnxruntime-8d85527a-ThirdPartyNotices.txt": "https://github.com/microsoft/onnxruntime/blob/8d85527a010e294a26b274749f74294b2a32cec5/ThirdPartyNotices.txt"
+  },
+  "inputs": {
+    "node_modules/@huggingface/transformers/package.json": "7b62eddbd0bb7a7da16775803c13c9310b5aecdf5a60e9c78e579f2e3ece2e27",
+    "node_modules/onnxruntime-web/package.json": "ce2ce78732a15ddcaf52fe5f26c801a05ff149abda4e875dc2837d8a99e455b2",
+    "node_modules/onnxruntime-web/dist/ort.wasm.bundle.min.mjs": "17b52c1ac62b421dc508b4c28b9a9675251c6e25dd512ef54b83a5e2c4242869",
+    "node_modules/onnxruntime-common/dist/esm/backend-impl.js": "97dd81b055a06f61120f09468fe59f046a9262b7b87bf5d05bceb085bf4f5558",
+    "node_modules/onnxruntime-common/dist/esm/backend.js": "017ce2ec9dc2021ebc1ef2c4f04e1bc74276c65921b0297e7ed8cc16e640495b",
+    "node_modules/onnxruntime-common/dist/esm/version.js": "71c36bdc106472438d3f6c865c0e7ffd0f957524dceb0750738c451098c5ef13",
+    "node_modules/onnxruntime-common/dist/esm/env-impl.js": "0da4c562a49fe147e19320a64cbb456184eb0e6242b1fe69c65c8368c55f3d97",
+    "node_modules/onnxruntime-common/dist/esm/env.js": "b2bbd3d3b00a95765713c57cd0f5ef73718ae5b8322e07cb47a43e2accb21f15",
+    "node_modules/onnxruntime-common/dist/esm/tensor-conversion-impl.js": "df6fa3cd1813c2d3e588cc07973cfe5ea2ab8647c957168200caa58e51440161",
+    "node_modules/onnxruntime-common/dist/esm/tensor-factory-impl.js": "cf5606fe23461e01bff59c2d72ac47d74e652548718f1e5fab07a22b441379b4",
+    "node_modules/onnxruntime-common/dist/esm/tensor-impl-type-mapping.js": "20bd5ddb858954cf071bace6c7a6628c8e311433798ec172f4c778bebd81d407",
+    "node_modules/onnxruntime-common/dist/esm/tensor-utils-impl.js": "87d3e07c153616138c2f57846545eea9c47957c714d50c0264696bdc293e6732",
+    "node_modules/onnxruntime-common/dist/esm/tensor-impl.js": "6a749be63055f9d21069566b1515412484a3a03448ca20427c8f8d29328a2843",
+    "node_modules/onnxruntime-common/dist/esm/tensor.js": "721d24a538de5333057bfc423bc00c3453a1c483f4495c857d0a6f9b8f2d330e",
+    "node_modules/onnxruntime-common/dist/esm/trace.js": "9b87e6309a1c502b03558aa94b0a65c8ea1e8eb59cb46090f54f6eacd191b841",
+    "node_modules/onnxruntime-common/dist/esm/inference-session-impl.js": "0446814a392c147b5c38ba242d9911ee54002b5d01a8e19fb4895fb8f8a0cdd3",
+    "node_modules/onnxruntime-common/dist/esm/inference-session.js": "3ad4271a88edb3d242dc1e0e7bbf66510f9a56eff874c433b3b37f900ac007b1",
+    "node_modules/onnxruntime-common/dist/esm/tensor-conversion.js": "8c43ec1d061ab71032a1b28f45d85ef95f8d7bd2d4cd71d059e96d83e3a8f422",
+    "node_modules/onnxruntime-common/dist/esm/tensor-factory.js": "68b9f4f4573f25012ce8a4f73c9a2cee3a28db91de8bbb0a20ddb08bcba33c4b",
+    "node_modules/onnxruntime-common/dist/esm/onnx-model.js": "9e9dc8678be0ea04575a542894508db355a4f9f2155ac7f4c17a697c5f843382",
+    "node_modules/onnxruntime-common/dist/esm/onnx-value.js": "33dc232498753fc9026dfa44c99440cb1a6d29f3e53e1ad2fb8b696705158f06",
+    "node_modules/onnxruntime-common/dist/esm/index.js": "ad23f6d6ce2c99c449031f24a5181f259516c64a9a67428c98a8539b857729bd",
+    "node_modules/@huggingface/transformers/dist/transformers.web.js": "2eb83e73bc8326f14b55b27b59f72b4966d7601a1f48a19e5ca0ea6800eaddd1",
+    "src/workers/transformersWorker.ts": "c9344795572058166f0ab3eaeaeadefaad23a21c0b03c7ef82c1c6901a93d6a5",
+    "shared/classifier-proof/worker.ts": "75688bf4260aa1f2811501d41691dbe97d8182a08494529b7c3cda53d93fc24d",
+    "shared/classifier-proof/host.js": "15258cd68ba5e756540529363c67b5505d4c69809afc5619b094255f79befc0f",
+    "shared/classifier-proof/index.html": "607cc8b0c168e06709d6aa52be8a5c844317f3c529e5d24ad56d9624787f3af5",
+    "node_modules/onnxruntime-web/dist/ort-wasm-simd-threaded.mjs": "c57ca56328877353a575e51bbca6f18450027d6c9bf2307a2cb2c41363b4de9f",
+    "node_modules/onnxruntime-web/dist/ort-wasm-simd-threaded.wasm": "06ba057753da3847e4c24f02d91ab133455b0817c69a44993a9a53a2146df9e3",
+    "node_modules/onnxruntime-web/lib/onnxjs/ort-schema/protobuf/onnx.js": "b6cb83ec708b51f5bcce8295a2dc1452e430d6c8696db2da68c5233d9359cb3f",
+    "node_modules/esbuild/package.json": "eb6b6b4ce6848f39b793823f4d5934917ed56e98e2ffd1a30542153f5f091c34",
+    "node_modules/protobufjs/package.json": "0e56b70de03bffc143e74311b42ae22b557370a4a1f4b5066568fbc77857639a",
+    "shared/classifier-proof/generate.mjs": "700a5f92f62e0f63dc13b3de17762ac8c9201bc732e33c293c94970ad7e59d9f",
+    "shared/classifier-proof/licenses/onnxruntime-8d85527a-LICENSE.txt": "2f07c72751aed99790b8a4869cf2311df85a860b22ded05fa22803587a48922c",
+    "shared/classifier-proof/licenses/onnxruntime-8d85527a-ThirdPartyNotices.txt": "143764b952fdb1a7c69ce653bfba74a7744d6a8a573bfb73e235fba356c83de3",
+    "node_modules/@huggingface/transformers/LICENSE": "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30",
+    "node_modules/@huggingface/tokenizers/package.json": "f6b9849b58de625c4fd79583242dd4506914b92082f9af17719d39416658ef24",
+    "node_modules/@huggingface/tokenizers/LICENSE": "c71d239df91726fc519c6eb72d318ec65820627232b2f796219e87dcf35d0ab4",
+    "node_modules/@huggingface/jinja/package.json": "56e8711f84653dc2c42baeefda647fd2d15e71f9af859f635517c84749cc121c",
+    "node_modules/@huggingface/jinja/LICENSE": "d6e7b19451c1b3d1d66353bb4b1274138953b3bfd9ae60c56e77b1f548796982",
+    "node_modules/@huggingface/tokenizers/types/static/tokenizer.d.ts": "14bd6027ae25caf70b2faa924434eec13e414d4f83f6c1d758e25e66ec42c2ac"
+  },
+  "assets": {
+    "worker.js": {
+      "bytes": 545172,
+      "sha256": "2b1b000c8f522ac734fce4d30f2059709d5a2a9278a083194eb686eddc31e590"
+    },
+    "host.js": {
+      "bytes": 1688,
+      "sha256": "15258cd68ba5e756540529363c67b5505d4c69809afc5619b094255f79befc0f"
+    },
+    "index.html": {
+      "bytes": 286,
+      "sha256": "607cc8b0c168e06709d6aa52be8a5c844317f3c529e5d24ad56d9624787f3af5"
+    },
+    "ort-wasm-simd-threaded.mjs": {
+      "bytes": 24381,
+      "sha256": "c57ca56328877353a575e51bbca6f18450027d6c9bf2307a2cb2c41363b4de9f"
+    },
+    "ort-wasm-simd-threaded.wasm": {
+      "bytes": 14264838,
+      "sha256": "06ba057753da3847e4c24f02d91ab133455b0817c69a44993a9a53a2146df9e3"
+    },
+    "model/onnx/model_quantized.onnx": {
+      "bytes": 299,
+      "sha256": "3be0c18fc5a282d7a084f23ebfaf2428405c1583110093fe1aa3082291175f69"
+    },
+    "model/config.json": {
+      "bytes": 137,
+      "sha256": "ce6afe8ac3b34ed49c7bcaa93792f30565da436a076d0eb5ca511bef083082d9"
+    },
+    "model/tokenizer_config.json": {
+      "bytes": 182,
+      "sha256": "4c034aac8194070e6ebfab2703e3e0b9bd21d11988e59fdd817dba76b3db3b4e"
+    },
+    "model/tokenizer.json": {
+      "bytes": 559,
+      "sha256": "961301311d32924b88245a568a8e5b6175b56e6cad56bcb1b76b26c062a80fc4"
+    },
+    "ORT-LICENSE.txt": {
+      "bytes": 1073,
+      "sha256": "2f07c72751aed99790b8a4869cf2311df85a860b22ded05fa22803587a48922c"
+    },
+    "ORT-ThirdPartyNotices.txt": {
+      "bytes": 338088,
+      "sha256": "143764b952fdb1a7c69ce653bfba74a7744d6a8a573bfb73e235fba356c83de3"
+    },
+    "NOTICE.txt": {
+      "bytes": 23924,
+      "sha256": "eaf42669a89633dbde9190ffedcec47585c9a3bb33d3a32fed64a63b9af1fdbe"
+    }
+  },
+  "totalAssetBytes": 15200627
+}

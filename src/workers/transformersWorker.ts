@@ -60,7 +60,7 @@ async function handleLoadClassifier(req: LoadClassifierRequest) {
 
     // Configure Transformers.js to use our local files via customCache
     env.allowRemoteModels = false;
-    env.allowLocalModels = false;
+    env.allowLocalModels = true;
     env.useBrowserCache = false;
 
     // Resolve URL pattern: extract relative path from HF-style URLs
