@@ -65,42 +65,7 @@ struct ChatView: View {
                 .navigationSplitViewColumnWidth(min:260,ideal:300,max:380)
         } detail: {
         NavigationStack {
-            ScrollViewReader { scroll in
-            ScrollView {
-                LazyVStack(alignment: .leading, spacing: 20) {
-                    if let conversation = state.conversation {
-                        ForEach(conversation.visibleMessages, id: \.identity) { node in
-                            let summaryInfo = try? state.summaryInfo(chatID:conversation.id,nodeID:node.id)
-                            let generation = generation(at:node, in:conversation)
-                            if summaryInfo?["hidden"] != .bool(true) {
-                                messageRow(node:node,conversation:conversation,summaryInfo:summaryInfo,generation:generation)
-                                    .id(node.identity)
-                                    .disabled(state.generation != nil)
-                                if let generation, !generation.running {
-                                    Button("生成結果の保存を再試行") {
-                                        do { try state.saveGenerationResult() } catch { state.generationError = error.localizedDescription }
-                                    }.frame(minHeight: 44)
-                                }
-                                if state.isLocalConversation && node.role == "user" && !node.options.collapsed {
-                                    prefillInput(key:state.assistantPrefillKey(nodeID:node.id))
-                                }
-                            }
-                        }
-                        if let generationError = state.generationError { Text(generationError).foregroundStyle(.red) }
-                        if let automaticEvaluationError = state.automaticEvaluationError { Text(automaticEvaluationError).foregroundStyle(.red) }
-                        if let titleError = state.titleError { Text(titleError).foregroundStyle(.red) }
-                    } else {
-                        ContentUnavailableView("会話がありません", systemImage: "bubble.left.and.bubble.right")
-                    }
-                }
-                .padding(20)
-                .frame(maxWidth: 900)
-                .frame(maxWidth: .infinity)
-            }
-            .onChange(of: state.navigationFocus) { _, focus in
-                if let focus { scroll.scrollTo(Data(focus.nodeID.utf8), anchor: .center) }
-            }
-            }
+            activeContent
             .safeAreaInset(edge:.bottom,spacing:0) {
                 if let conversation = state.conversation, state.exchange != nil { composer(conversation) }
             }
@@ -139,6 +104,15 @@ struct ChatView: View {
                     .frame(minWidth:44,minHeight:44)
                 }
                 ToolbarItemGroup(placement: .topBarTrailing) {
+                    Menu("表示", systemImage: "rectangle.split.2x1") {
+                        ForEach(ChatActiveView.allCases) { mode in
+                            Button(mode.title, systemImage: state.chatActiveView == mode ? "checkmark" : "rectangle.split.2x1") {
+                                do { try state.setChatActiveView(mode) } catch { errorMessage = error.localizedDescription }
+                            }
+                        }
+                    }
+                    .disabled(state.exchange == nil || state.generation != nil)
+                    .frame(minWidth: 44, minHeight: 44)
                     Menu("会話操作",systemImage:"ellipsis.circle") {
                         Button("本文を追加",systemImage:"plus.bubble") {
                             do { draft = try state.messageDraft(nodeID:nil) }
@@ -290,6 +264,65 @@ struct ChatView: View {
         }
         }
         .environment(\.markdownSettings, (try? state.publicationSnapshot().required("state")) ?? .object([]))
+    }
+    @ViewBuilder private var activeContent: some View {
+            Group {
+                switch state.chatActiveView {
+                case .chat: chatContent
+                case .branchEditor: BranchEditorView(state: state)
+                case .splitHorizontal:
+                    GeometryReader { geometry in
+                        if geometry.size.width >= 700 {
+                            HStack(spacing: 0) { chatContent; Divider(); BranchEditorView(state: state) }
+                        } else {
+                            VStack(spacing: 0) { chatContent; Divider(); BranchEditorView(state: state) }
+                        }
+                    }
+                case .splitVertical:
+                    VStack(spacing: 0) { chatContent; Divider(); BranchEditorView(state: state) }
+                }
+            }
+    }
+    private var chatContent: some View {
+            ScrollViewReader { scroll in
+            ScrollView {
+                LazyVStack(alignment: .leading, spacing: 20) {
+                    if let conversation = state.conversation {
+                        ForEach(conversation.visibleMessages, id: \.identity) { node in
+                            let summaryInfo = try? state.summaryInfo(chatID:conversation.id,nodeID:node.id)
+                            let generation = generation(at:node, in:conversation)
+                            if summaryInfo?["hidden"] != .bool(true) {
+                                messageRow(node:node,conversation:conversation,summaryInfo:summaryInfo,generation:generation)
+                                    .id(node.identity)
+                                    .disabled(state.generation != nil)
+                                if let generation, !generation.running {
+                                    Button("生成結果の保存を再試行") {
+                                        do { try state.saveGenerationResult() } catch { state.generationError = error.localizedDescription }
+                                    }.frame(minHeight: 44)
+                                }
+                                if state.isLocalConversation && node.role == "user" && !node.options.collapsed {
+                                    prefillInput(key:state.assistantPrefillKey(nodeID:node.id))
+                                }
+                            }
+                        }
+                        if let generationError = state.generationError { Text(generationError).foregroundStyle(.red) }
+                        if let automaticEvaluationError = state.automaticEvaluationError { Text(automaticEvaluationError).foregroundStyle(.red) }
+                        if let titleError = state.titleError { Text(titleError).foregroundStyle(.red) }
+                    } else {
+                        ContentUnavailableView("会話がありません", systemImage: "bubble.left.and.bubble.right")
+                    }
+                }
+                .padding(20)
+                .frame(maxWidth: 900)
+                .frame(maxWidth: .infinity)
+            }
+            .onChange(of: state.navigationFocus) { _, focus in
+                if let focus { scroll.scrollTo(Data(focus.nodeID.utf8), anchor: .center) }
+            }
+            .onAppear {
+                if let focus = state.navigationFocus { scroll.scrollTo(Data(focus.nodeID.utf8), anchor: .center) }
+            }
+            }
     }
     private func composer(_ conversation: Conversation) -> some View {
         VStack(alignment:.leading,spacing:6) {

@@ -61,6 +61,19 @@ enum ChatStyle: String, CaseIterable, Identifiable {
     var id: Self { self }
 }
 
+enum ChatActiveView: String, CaseIterable, Identifiable {
+    case chat, branchEditor = "branch-editor", splitHorizontal = "split-horizontal", splitVertical = "split-vertical"
+    var id: Self { self }
+    var title: String {
+        switch self {
+        case .chat: "チャット"
+        case .branchEditor: "分岐エディター"
+        case .splitHorizontal: "左右分割"
+        case .splitVertical: "上下分割"
+        }
+    }
+}
+
 struct ActiveGeneration {
     let id: UUID
     let chatID: String
@@ -169,6 +182,37 @@ final class ChatState: ObservableObject {
     var style: ChatStyle {
         get { displayStyle }
         set { update(conversations: conversations, selectedID: selectedID, style: newValue) }
+    }
+    var chatActiveView: ChatActiveView {
+        let raw = document?.snapshot["state"]?["chatActiveView"]
+        return raw.flatMap { try? $0.string("chatActiveView") }.flatMap(ChatActiveView.init(rawValue:)) ?? .chat
+    }
+    func setChatActiveView(_ view: ChatActiveView) throws {
+        guard generation == nil, !initialLoadFailed, let document, let exchange else { throw ExchangeError.invalid("表示を切り替えられません") }
+        guard chatActiveView != view else { return }
+        let candidate = try SyncDocument(snapshot: document.snapshot.replacing("state", with: document.snapshot.required("state").replacing("chatActiveView", with: .string(view.rawValue))), v3Sidecar: document.v3Sidecar, v3RootOrder: document.v3RootOrder)
+        let changed = try WebExchange(source: candidate.uiProjection())
+        try store?.save(SavedChatState(exchange: changed, document: candidate, conversations: conversations, selectedConversationID: selectedID, style: displayStyle))
+        self.document = candidate
+        self.exchange = changed
+        persistenceError = nil
+    }
+    func ensureBranchTreeForEditor(now: Double = Date().timeIntervalSince1970 * 1000) throws {
+        guard generation == nil, let exchange, !initialLoadFailed else { throw ExchangeError.invalid("分岐を開けません") }
+        var chats = try exchange.source.required("chats").array("chats")
+        guard let index = chats.firstIndex(where: { $0["id"] == .string(selectedID) }) else { throw ExchangeError.invalid("会話がありません") }
+        guard chats[index]["branchTree"] == nil else { return }
+        let chat = chats[index], store = try exchange.source.required("contentStore")
+        var boundary = SharedWebProjection()
+        let projected = OrderedJSON.object([.init(key: "chat", value: try boundary.chat(chat)), .init(key: "contentStore", value: try boundary.store(store))])
+        let count = try chat.required("messages").array("messages").count
+        let input = projected.replacing("newIDs", with: .array((0..<count).map { _ in .string(UUID().uuidString.lowercased()) }))
+            .replacing("now", with: .number(String(now)))
+        let changes = try SharedWebOperations.call("branchEnsure", input)
+        let restored = try OrderedJSONChanges.apply(changes, to: .object([.init(key: "chat", value: chat), .init(key: "contentStore", value: store)]), opaque: boundary.opaque)
+        chats[index] = try restored.required("chat")
+        let source = exchange.source.replacing("chats", with: .array(chats)).replacing("contentStore", with: try restored.required("contentStore"))
+        try applyLibrary(source, selectedID: selectedID, resetViewFor: selectedID, now: now)
     }
     var conversation: Conversation? { conversations.first { $0.id.utf8.elementsEqual(selectedID.utf8) } }
 
