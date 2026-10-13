@@ -1,6 +1,6 @@
 # Web / 新iOSの完成条件と証拠
 
-## ローカル生成接続の実装・検証状況（2026-10-13、受入保留）
+## ローカル生成接続の実装・検証状況（2026-10-13）
 
 共有入力に加えて、実Webのfallback prompt・stop・出力処理・モデル設定規則を共通化した。nativeは端末専用GGUFコピー、公式llama.cpp/Metal、既存wllama sampling、取消・原子的保存への接続を担当する。モデルIDのUTF8をSHA-256でファイル名にし、同期metadataと実ファイルの存在を混同しない。ファイルは同期snapshotへ入れない。
 
@@ -9,6 +9,12 @@
 実UIではGGUF選択・端末コピー・設定保存と再起動後の保持を確認。pickerのOpenが一時無効だったため調べたが、元のGGUF UTTypeのまま明示選択で成功し、推測による型制限変更は残していない。一方、実生成（stories260K、max_tokens=8、temperature=0）でMetal実行後にmallocのfree block corruptionによるSIGTRAP終了が発生した。自動テスト成功だけで機能完成とは扱わず、native担当が通常完了経路の所有権/寿命を調査中。ログ `/private/tmp/weavelet-local-generation-ui.log`、crash `~/Library/Logs/DiagnosticReports/WeaveletPilot-2026-10-13-155238.ips`。検出されたthreadだけでWebKitや依存ライブラリの責任と断定しない。
 
 依存境界の判断は[計画の監査結果](web-native-commonality-roadmap.md#2026-10-13独自実装と依存ライブラリの境界監査)を参照。公式emsdk 5.0.5を隔離tmpへ導入し、Webの8 WASM/4 glue再生成を別worktreeで開始。まだ生成・ロード完了ではない。現在のnative backendはCatalyst arm64/単一GGUFで、iOS実機、全lowbit形式、分割GGUF、ONNX等の完成を意味しない。
+
+追加確認（`11ae12e5`）：最終decode後にlogits取得がない場合、非同期計算の完了前にcontext内bufferを解放し得るため、公式`llama_synchronize`をcontext解放前に呼ぶ。modelとcallback状態はそれまで保持する。8token通常完了→再実行の1ケースを追加し、既存callback停止1ケースと合わせ2件成功（`/private/tmp/weavelet-local-completion-fix.log`）。独立Astraはこの解放順序と限定差分に新規なし。元のmalloc破損の正確な書込元まで同定したという証拠ではない。
+
+修正後の隔離Catalyst UIで2回連続生成→保存→正常終了→再起動→両結果の末尾表示に成功。以前の4messagesと初回の保存済み結果も維持し、計10messagesを確認。証拠 `/private/tmp/weavelet-local-completion-ui{,-restart}.log`、`/private/tmp/weavelet-local-completion-ui-saved.json`。この経路で再発はなかった。モデル選択・local生成・停止/保存失敗/遅延callbackの接続を確認済みとし、全local機能やメモリ安全性全般の保証へ拡張しない。
+
+Web生成物の続報（`37451913`）：正確sourceとpatch 0001–0007から8 WASM/4 glueを再生成し、既存smokeのモデルpathだけを隔離コピーでtinyモデルへ変えてChromium全8件load/推論/exit成功。全ST/MTの実結果は指定と一致、exit timeoutなし。cachebusterを更新、glue差分はWebGPU JSPI診断ログ除去のみ、他3種はbyte一致。親でも全12生成物のSHA-256を担当検証済み出力と照合。ログ `/private/tmp/weavelet-wllama-{cve-setup,build,smoke}.log`、hash一覧 `/private/tmp/weavelet-wllama-artifact-hashes.json`。独立Astraは生成元の公式修正・生成/ロード証拠・cachebusterを確認し新規なし。Web配布物にも今回のGGUF修正反映を確認できたが、Firefox/Safari、大モデル、実GPU offload、既存OPFSデータは未確認。モデルとSDKは配布物に追加していない。
 
 ## ローカル推論の依存採用監査（2026-10-13）
 
