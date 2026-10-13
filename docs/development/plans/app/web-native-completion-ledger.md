@@ -1,5 +1,15 @@
 # Web / 新iOSの完成条件と証拠
 
+## remote送信先・認証ヘッダー・OpenRouter制約の共有接続（2026-10-13）
+
+実Webの3つの完了API入口に重複したAzure URL/header構築をrequestTransportへ集約し、OpenRouterのrouting/sticky session/prompt cacheは既存controlsから環境非依存部分を移した。generationRequestはoptional transport指定時にbody/endpoint/headers/認証descriptorを返す。実キーはhostで結合し、nativeのURL解析結果を利用するためJavaScriptCoreへ独自URL parserを追加しない。native直接通信ではproxy専用response cacheを適用しない。
+
+共有関連49件・型・bundle鮮度の担当成功を再利用。URLグローバルなしVMでも実bundle呼出を確認済み。apiVersionは実Webと同じpersist rootから渡し、customHeadersは現Web生成callerが未指定のため新しい保存root/UIを追加しない。nativeはHTTPS/同origin/HTTPヘッダーを確認後に鍵を注入する。OpenRouter max_priceの未知属性だけをraw投影し、大きな数値を保持する。
+
+Catalyst初回18件中16件成功。失敗2件はOpenRouter設定付き会話をfixture.invalidへ送れるというテストの誤前提であり、実Web openrouterRequestのendpoint拒否に合わせた。新testは他origin拒否と別providerでcontrolsを送らない検証を分け、旧catalog fixtureはFakeURLProtocolによる完全捕捉を維持してprovider/credential双方のURLをOpenRouterへ揃えた。実装や情報保持assertは緩めていない。該当2件のみ再実行し成功、他16件を再利用。最終ソースで全18件を単一runした結果ではない。ログ `/private/tmp/weavelet-request-transport-catalyst.log` と `/private/tmp/weavelet-request-transport-final.log`。機能一式の独立Astraは新規なし。fixture修正も該当差分だけ再確認し、期待緩和・実通信への切替なし、新規指摘なし。
+
+未変更の保存/暗号化同期の全検証は省略。実API・実Keychain操作・実機は未確認。OpenRouterの観測/料金表示・リモート取消・proxy機能や全provider対応を完了したとは扱わない。
+
 ## remote応答の本文・推論抽出の共有接続（2026-10-13）
 
 実Web submitRuntimeのreasoning優先順・非stream本文変換をremoteResponseへ切り出し、Web callerとshared remoteOutputから利用する。構造化本文は既存apiContent、分割thinkタグは既存ThinkTagParserを使い、Swiftの独自抽出を撤去した。nativeはURLSession/SSE UTF8・取消・保存を担当し、JSContextは生成単位で保持する。
