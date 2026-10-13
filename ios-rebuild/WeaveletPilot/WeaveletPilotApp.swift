@@ -223,6 +223,7 @@ struct ChatView: View {
             NavigationStack {
                 Form {
                     Section("一般") {
+                        NavigationLink("外観と本文の表示") { DisplaySettingsView(state: state) }
                         Picker("チャット表示", selection: $state.style) {
                             ForEach(ChatStyle.allCases) { style in Text(style.rawValue).tag(style) }
                         }
@@ -264,6 +265,14 @@ struct ChatView: View {
             }
         }
         .environment(\.markdownSettings, (try? state.publicationSnapshot().required("state")) ?? .object([]))
+        .preferredColorScheme(displayColorScheme)
+    }
+    private var displayColorScheme: ColorScheme? {
+        switch try? state.displaySetting(.theme) {
+        case .string("light"): return .light
+        case .string("dark"): return .dark
+        default: return nil
+        }
     }
     private var fileMenu: some View {
         Menu("ファイル", systemImage: "doc") {
