@@ -30,6 +30,7 @@ import {
   moveMessageState,
   pasteBranchSequenceState,
   removeMessageAtIndexState,
+  removeNodeState,
   removeBranchSequenceState,
   setNodeDisplayFieldState,
   resolveNodeTarget,
@@ -646,13 +647,10 @@ export const createBranchSlice: StoreSlice<BranchSlice> = (set, get) => {
     return { status: 'updated', nodeId: result.nodeId };
   },
   removeNode: (input) => {
-    const target = resolveNodeTarget(withRuntimeFlatNodeMaps(get().chats, get()), input, true);
-    if (target.status !== 'valid') return target;
-    if ((target.chat.protectedNodes ?? {})[input.nodeId]) return { status: 'protected' };
     const preserveNode = Object.values(get().generatingSessions).some(session => session.chatId === input.chatId && session.targetNodeId === input.nodeId);
-    const ensured = ensureBranchTreeState(withRuntimeFlatNodeMaps(get().chats, get())!, target.chatIndex, get().contentStore);
-    const result = removeMessageAtIndexState(ensured.chats, target.chatIndex, target.messageIndex, ensured.contentStore, { preserveNode });
-    get().applyBranchState(result.chats, result.contentStore, { historyBase: ensured });
+    const result = removeNodeState(withRuntimeFlatNodeMaps(get().chats, get()), input, get().contentStore, { preserveNode });
+    if (result.status !== 'updated') return result;
+    get().applyBranchState(result.chats, result.contentStore, { historyBase: result.historyBase });
     return { status: 'updated' };
   },
   moveNode: (input) => {

@@ -85,11 +85,11 @@ const ensureBranchReadyState = (
   chatIndex: number,
   currentContentStore: ContentStoreData
 ) => {
-  const ensured = ensureBranchTreeState(chats, chatIndex, currentContentStore);
-  return {
-    chats: cloneChatAt(ensured.chats, chatIndex),
-    contentStore: { ...ensured.contentStore },
-  };
+  // Entries are mutable (refCount and delta promotion); keep the previous
+  // snapshot's entry objects intact while sharing immutable bodies/metadata.
+  const contentStore = Object.fromEntries(Object.entries(currentContentStore).map(([hash, entry]) => [hash, { ...entry }]));
+  const ensured = ensureBranchTreeState(chats, chatIndex, contentStore);
+  return { chats: cloneChatAt(ensured.chats, chatIndex), contentStore: ensured.contentStore };
 };
 
 const cloneNodeIfPresent = (
@@ -303,7 +303,7 @@ export const pruneHiddenNodesState = (
   chatIndex: number,
   currentContentStore: ContentStoreData
 ) => {
-  const contentStore = { ...currentContentStore };
+  const contentStore = Object.fromEntries(Object.entries(currentContentStore).map(([hash, entry]) => [hash, { ...entry }]));
   const updatedChats = cloneChatAt(chats, chatIndex);
   captureProjectedMessageAttributes(updatedChats[chatIndex], contentStore);
   const tree = updatedChats[chatIndex].branchTree!;
@@ -346,9 +346,8 @@ export const pruneHiddenNodesState = (
     }
   }
 
-  if (tree.activePath.length > 0) {
-    tree.rootId = tree.activePath[0];
-  }
+  if (tree.activePath.length > 0) tree.rootId = tree.activePath[0];
+  else if (!tree.nodes[tree.rootId]) tree.rootId = '';
 
   return { chats: updatedChats, contentStore };
 };
@@ -900,4 +899,16 @@ export const insertNodeState = (
   const ensured = ensureBranchTreeState(chats!, chatIndex, contentStore);
   const result = insertMessageAtIndexState(ensured.chats, chatIndex, index, { role: input.role, content: input.content }, ensured.contentStore);
   return { status: 'updated' as const, ...result, nodeId: result.newId, historyBase: ensured };
+};
+
+export const removeNodeState = (
+  chats: ChatInterface[] | undefined, input: { chatId: string; nodeId: string }, contentStore: ContentStoreData,
+  options?: { preserveNode?: boolean }
+) => {
+  const target = resolveNodeTarget(chats, input, true);
+  if (target.status !== 'valid') return target;
+  if ((target.chat.protectedNodes ?? {})[input.nodeId]) return { status: 'protected' as const };
+  const ensured = ensureBranchReadyState(chats!, target.chatIndex, contentStore);
+  const result = removeMessageAtIndexState(ensured.chats, target.chatIndex, target.messageIndex, ensured.contentStore, options);
+  return { status: 'updated' as const, ...result, historyBase: ensured };
 };
