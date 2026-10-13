@@ -18,7 +18,7 @@ import type {
   LocalModelSource,
 } from './types';
 import type { ModelFileProvider, CustomCacheAdapter } from './fileProvider';
-import { resolveUrlToManifestKey } from './fileProvider';
+import { getFinalModelFiles, resolveUrlToManifestKey } from './fileProvider';
 import { getManifestFiles } from './ggufShardUtils';
 
 // ---------------------------------------------------------------------------
@@ -158,14 +158,37 @@ async function opfsRoot(): Promise<FileSystemDirectoryHandle> {
   return navigator.storage.getDirectory();
 }
 
-async function getModelsRoot(): Promise<FileSystemDirectoryHandle> {
+async function getModelsRoot(create = true): Promise<FileSystemDirectoryHandle> {
   const root = await opfsRoot();
-  return root.getDirectoryHandle(MODELS_DIR, { create: true });
+  return root.getDirectoryHandle(MODELS_DIR, { create });
 }
 
-export async function getModelDir(modelId: string): Promise<FileSystemDirectoryHandle> {
-  const modelsRoot = await getModelsRoot();
-  return modelsRoot.getDirectoryHandle(modelId, { create: true });
+export async function getModelDir(modelId: string, create = true): Promise<FileSystemDirectoryHandle> {
+  const modelsRoot = await getModelsRoot(create);
+  return modelsRoot.getDirectoryHandle(modelId, { create });
+}
+
+async function fileLocation(root: string | FileSystemDirectoryHandle, relativePath: string, create = false) {
+  const parts = relativePath.split('/');
+  if (/^[A-Za-z]:/.test(relativePath) || parts.some(part => !part || part === '.' || part === '..' || /[\\\0]/.test(part))) {
+    throw new TypeError('Invalid relative model file path');
+  }
+  const name = parts.pop()!;
+  let dir = typeof root === 'string' ? await getModelDir(root, create) : root;
+  for (const part of parts) dir = await dir.getDirectoryHandle(part, { create });
+  return { dir, name };
+}
+
+const notFound = (error: unknown) => error instanceof DOMException && error.name === 'NotFoundError';
+
+async function* modelFiles(root: string | FileSystemDirectoryHandle, prefix = ''): AsyncGenerator<[string, FileSystemFileHandle]> {
+  let dir: FileSystemDirectoryHandle;
+  try { dir = typeof root === 'string' ? await getModelDir(root, false) : root; }
+  catch (error) { if (notFound(error)) return; throw error; }
+  for await (const [name, handle] of (dir as any).entries()) {
+    if (handle.kind === 'file') yield [prefix + name, handle];
+    else if (handle.kind === 'directory') yield* modelFiles(handle, prefix + name + '/');
+  }
 }
 
 /**
@@ -214,8 +237,8 @@ export async function createOPFSWritable(
   const token = beginWrite(modelId);
   let writable: FileSystemWritableFileStream;
   try {
-    const dir = await getModelDir(modelId);
-    const fileHandle = await dir.getFileHandle(relativePath, { create: true }) as unknown as WritableFileHandle;
+    const { dir, name } = await fileLocation(modelId, relativePath, true);
+    const fileHandle = await dir.getFileHandle(name, { create: true }) as unknown as WritableFileHandle;
     writable = await fileHandle.createWritable({ keepExistingData: false });
   } catch (error) {
     finishWrite(token, 'failed');
@@ -269,8 +292,8 @@ export async function createOPFSSyncWriter(
     close(): void;
   };
   try {
-    const dir = await getModelDir(modelId);
-    const fileHandle = await dir.getFileHandle(relativePath, { create: true });
+    const { dir, name } = await fileLocation(modelId, relativePath, true);
+    const fileHandle = await dir.getFileHandle(name, { create: true });
     // @ts-expect-error — createSyncAccessHandle is available in Worker OPFS
     accessHandle = await fileHandle.createSyncAccessHandle();
   } catch (error) {
@@ -325,13 +348,11 @@ export async function getOPFSFileSize(
   relativePath: string,
 ): Promise<number> {
   try {
-    const dir = await getModelDir(modelId);
-    const fileHandle = await dir.getFileHandle(relativePath);
+    const { dir, name } = await fileLocation(modelId, relativePath);
+    const fileHandle = await dir.getFileHandle(name);
     const file = await (fileHandle as unknown as WritableFileHandle).getFile();
     return file.size;
-  } catch {
-    return 0;
-  }
+  } catch (error) { if (notFound(error)) return 0; throw error; }
 }
 
 /**
@@ -341,8 +362,8 @@ export async function readFile(
   modelId: string,
   relativePath: string,
 ): Promise<File> {
-  const dir = await getModelDir(modelId);
-  const fileHandle = await dir.getFileHandle(relativePath);
+  const { dir, name } = await fileLocation(modelId, relativePath);
+  const fileHandle = await dir.getFileHandle(name);
   return fileHandle.getFile();
 }
 
@@ -350,21 +371,18 @@ export async function readFile(
  * List final files for a model (excludes .part temp files).
  */
 export async function listFiles(modelId: string): Promise<string[]> {
-  const dir = await getModelDir(modelId);
   const files: string[] = [];
-  for await (const [name, handle] of (dir as any).entries()) {
-    if (handle.kind === 'file' && !name.endsWith(PART_SUFFIX)) {
-      files.push(name);
-    }
-  }
-  return files;
+  for await (const [name] of modelFiles(modelId)) files.push(name);
+  return getFinalModelFiles(files);
 }
 
 /**
  * List all model IDs stored in OPFS.
  */
 export async function listSavedModelIds(): Promise<string[]> {
-  const modelsRoot = await getModelsRoot();
+  let modelsRoot: FileSystemDirectoryHandle;
+  try { modelsRoot = await getModelsRoot(false); }
+  catch (error) { if (notFound(error)) return []; throw error; }
   const ids: string[] = [];
   for await (const [name, handle] of (modelsRoot as any).entries()) {
     if (handle.kind === 'directory') {
@@ -382,14 +400,10 @@ export async function getStoredSize(
   modelId: string,
   opts?: { includeTemp?: boolean },
 ): Promise<number> {
-  const dir = await getModelDir(modelId);
   let total = 0;
-  for await (const [name, handle] of (dir as any).entries()) {
-    if (handle.kind === 'file') {
-      if (!opts?.includeTemp && name.endsWith(PART_SUFFIX)) continue;
-      const file: File = await handle.getFile();
-      total += file.size;
-    }
+  for await (const [name, handle] of modelFiles(modelId)) {
+    if (!opts?.includeTemp && name.endsWith(PART_SUFFIX)) continue;
+    total += (await handle.getFile()).size;
   }
   return total;
 }
@@ -502,13 +516,13 @@ export async function openDownloadWriter(
   const token = beginWrite(modelId);
   let writable: FileSystemWritableFileStream;
   try {
-    const dir = await getModelDir(modelId);
-    const fileHandle = await dir.getFileHandle(relativePath, { create: true }) as unknown as WritableFileHandle;
+    const { dir, name } = await fileLocation(modelId, relativePath, true);
+    const fileHandle = await dir.getFileHandle(name, { create: true }) as unknown as WritableFileHandle;
     const keepExisting = resumeOffset > 0;
     writable = await fileHandle.createWritable({ keepExistingData: keepExisting });
     if (keepExisting) await writable.seek(resumeOffset);
     // Create .part marker once (zero-byte sentinel = "download in progress")
-    await dir.getFileHandle(relativePath + PART_SUFFIX, { create: true });
+    await dir.getFileHandle(name + PART_SUFFIX, { create: true });
   } catch (error) {
     finishWrite(token, 'failed');
     throw error;
@@ -541,26 +555,19 @@ export async function writeTempChunk(
   append: boolean,
 ): Promise<void> {
   const token = beginWrite(modelId);
-  const dir = await getModelDir(modelId);
-
-  // Write data directly to the final file name
-  const fileHandle = await dir.getFileHandle(relativePath, { create: true }) as unknown as WritableFileHandle;
-  const writable = await fileHandle.createWritable({ keepExistingData: append });
+  let writable: FileSystemWritableFileStream | undefined;
   try {
-    if (append) {
-      const file = await fileHandle.getFile();
-      await writable.seek(file.size);
-    }
+    const { dir, name } = await fileLocation(modelId, relativePath, true);
+    const fileHandle = await dir.getFileHandle(name, { create: true }) as unknown as WritableFileHandle;
+    writable = await fileHandle.createWritable({ keepExistingData: append });
+    if (append) await writable.seek((await fileHandle.getFile()).size);
     await writable.write(chunk);
     await writable.close();
-    // Ensure .part marker exists (zero-byte sentinel = "download in progress")
-    await dir.getFileHandle(relativePath + PART_SUFFIX, { create: true });
+    await dir.getFileHandle(name + PART_SUFFIX, { create: true });
   } catch (error) {
-    try { await writable.abort(); } catch { /* ignore */ }
+    try { await writable?.abort(); } catch { /* preserve the write error */ }
     throw error;
-  } finally {
-    finishWrite(token, 'partial');
-  }
+  } finally { finishWrite(token, 'partial'); }
 }
 
 /**
@@ -575,23 +582,21 @@ export async function commitTempFile(
   modelId: string,
   relativePath: string,
 ): Promise<void> {
-  const dir = await getModelDir(modelId);
-  const partName = relativePath + PART_SUFFIX;
-
+  let dir: FileSystemDirectoryHandle;
+  let name: string;
   let partHandle: FileSystemFileHandle;
   try {
-    partHandle = await dir.getFileHandle(partName);
-  } catch {
-    // No marker — nothing to commit
-    return;
-  }
+    ({ dir, name } = await fileLocation(modelId, relativePath));
+    partHandle = await dir.getFileHandle(name + PART_SUFFIX);
+  } catch (error) { if (notFound(error)) return; throw error; }
+  const partName = name + PART_SUFFIX;
 
   const partFile = await partHandle.getFile();
 
   if (partFile.size > 0) {
     // Legacy .part that holds actual data — stream-copy to final name.
     // Uses chunked reads to keep memory constant regardless of file size.
-    const finalHandle = await dir.getFileHandle(relativePath, { create: true }) as unknown as WritableFileHandle;
+    const finalHandle = await dir.getFileHandle(name, { create: true }) as unknown as WritableFileHandle;
     const writable = await finalHandle.createWritable();
     const reader = (partFile.stream() as ReadableStream<Uint8Array>).getReader();
     try {
@@ -600,9 +605,11 @@ export async function commitTempFile(
         if (done) break;
         await writable.write(value);
       }
-    } finally {
       await writable.close();
-    }
+    } catch (error) {
+      try { await writable.abort(); } catch { /* preserve the copy error */ }
+      throw error;
+    } finally { reader.releaseLock(); }
     await dir.removeEntry(partName);
   } else {
     // Current format: marker-only — just delete it
@@ -617,13 +624,11 @@ export async function hasTempFile(
   modelId: string,
   relativePath: string,
 ): Promise<boolean> {
-  const dir = await getModelDir(modelId);
   try {
-    await dir.getFileHandle(relativePath + PART_SUFFIX);
+    const { dir, name } = await fileLocation(modelId, relativePath);
+    await dir.getFileHandle(name + PART_SUFFIX);
     return true;
-  } catch {
-    return false;
-  }
+  } catch (error) { if (notFound(error)) return false; throw error; }
 }
 
 /**
@@ -638,21 +643,12 @@ export async function getTempFileSize(
   modelId: string,
   relativePath: string,
 ): Promise<number> {
-  const dir = await getModelDir(modelId);
   try {
-    const partHandle = await dir.getFileHandle(relativePath + PART_SUFFIX);
-    const partFile = await partHandle.getFile();
-    if (partFile.size > 0) {
-      // Legacy: data lives in the .part file itself
-      return partFile.size;
-    }
-    // Current: data lives at the final name
-    const finalHandle = await dir.getFileHandle(relativePath);
-    const finalFile = await finalHandle.getFile();
-    return finalFile.size;
-  } catch {
-    return 0;
-  }
+    const { dir, name } = await fileLocation(modelId, relativePath);
+    const partFile = await (await dir.getFileHandle(name + PART_SUFFIX)).getFile();
+    if (partFile.size > 0) return partFile.size;
+    return (await (await dir.getFileHandle(name)).getFile()).size;
+  } catch (error) { if (notFound(error)) return 0; throw error; }
 }
 
 /**
@@ -663,18 +659,12 @@ export async function removeTempFile(
   modelId: string,
   relativePath: string,
 ): Promise<void> {
-  const dir = await getModelDir(modelId);
-  // Remove .part marker (or legacy data file)
-  try {
-    await dir.removeEntry(relativePath + PART_SUFFIX);
-  } catch {
-    // Already gone
-  }
-  // Remove the partially-written final file
-  try {
-    await dir.removeEntry(relativePath);
-  } catch {
-    // Already gone or never created
+  let location: Awaited<ReturnType<typeof fileLocation>>;
+  try { location = await fileLocation(modelId, relativePath); }
+  catch (error) { if (notFound(error)) return; throw error; }
+  for (const name of [location.name, location.name + PART_SUFFIX]) {
+    try { await location.dir.removeEntry(name); }
+    catch (error) { if (!notFound(error)) throw error; }
   }
 }
 
@@ -684,21 +674,17 @@ export async function removeTempFile(
 
 async function fileExists(dir: FileSystemDirectoryHandle, name: string): Promise<boolean> {
   try {
-    await dir.getFileHandle(name);
+    const location = await fileLocation(dir, name);
+    await location.dir.getFileHandle(location.name);
     return true;
-  } catch {
-    return false;
-  }
+  } catch (error) { if (notFound(error)) return false; throw error; }
 }
 
 async function fileSize(dir: FileSystemDirectoryHandle, name: string): Promise<number> {
   try {
-    const handle = await dir.getFileHandle(name);
-    const file = await handle.getFile();
-    return file.size;
-  } catch {
-    return -1;
-  }
+    const location = await fileLocation(dir, name);
+    return (await (await location.dir.getFileHandle(location.name)).getFile()).size;
+  } catch (error) { if (notFound(error)) return -1; throw error; }
 }
 
 async function anyPartFiles(dir: FileSystemDirectoryHandle): Promise<boolean> {
@@ -719,11 +705,8 @@ export async function verifyStoredModel(
 ): Promise<StorageVerifyResult> {
   let dir: FileSystemDirectoryHandle;
   try {
-    const modelsRoot = await getModelsRoot();
-    dir = await modelsRoot.getDirectoryHandle(modelId);
-  } catch {
-    return 'none';
-  }
+    dir = await getModelDir(modelId, false);
+  } catch (error) { if (notFound(error)) return 'none'; throw error; }
 
   if (manifest.kind === 'single-file') {
     const entrypoint = manifest.entrypoint;
@@ -876,10 +859,8 @@ export interface OpfsModelEntry {
 export async function listAllOpfsEntries(): Promise<OpfsModelEntry[]> {
   let modelsRoot: FileSystemDirectoryHandle;
   try {
-    modelsRoot = await getModelsRoot();
-  } catch {
-    return [];
-  }
+    modelsRoot = await getModelsRoot(false);
+  } catch (error) { if (notFound(error)) return []; throw error; }
 
   const entries: OpfsModelEntry[] = [];
 
@@ -889,8 +870,7 @@ export async function listAllOpfsEntries(): Promise<OpfsModelEntry[]> {
     const files: OpfsFileEntry[] = [];
     let totalSize = 0;
 
-    for await (const [fileName, fileHandle] of (dirHandle as any).entries()) {
-      if (fileHandle.kind !== 'file') continue;
+    for await (const [fileName, fileHandle] of modelFiles(dirHandle)) {
       const file: File = await fileHandle.getFile();
       const isTemp = fileName.endsWith(PART_SUFFIX);
       files.push({ name: fileName, size: file.size, isTemp });
@@ -930,8 +910,8 @@ export async function deleteModelFile(
   modelId: string,
   fileName: string,
 ): Promise<void> {
-  const dir = await getModelDir(modelId);
-  await dir.removeEntry(fileName);
+  const { dir, name } = await fileLocation(modelId, fileName);
+  await dir.removeEntry(name);
 }
 
 /**
@@ -940,16 +920,13 @@ export async function deleteModelFile(
 export async function getTotalStorageUsed(): Promise<number> {
   let modelsRoot: FileSystemDirectoryHandle;
   try {
-    modelsRoot = await getModelsRoot();
-  } catch {
-    return 0;
-  }
+    modelsRoot = await getModelsRoot(false);
+  } catch (error) { if (notFound(error)) return 0; throw error; }
 
   let total = 0;
   for await (const [, dirHandle] of (modelsRoot as any).entries()) {
     if (dirHandle.kind !== 'directory') continue;
-    for await (const [, fileHandle] of (dirHandle as any).entries()) {
-      if (fileHandle.kind !== 'file') continue;
+    for await (const [, fileHandle] of modelFiles(dirHandle)) {
       const file: File = await fileHandle.getFile();
       total += file.size;
     }
