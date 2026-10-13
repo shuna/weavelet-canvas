@@ -25,6 +25,7 @@ struct ChatView: View {
     @State private var preferredCompactColumn: NavigationSplitViewColumn = .detail
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
     @State private var showsSearch = false
+    @State private var searchMode: ChatSearchMode = .grep
     @State private var showsRemoteSettings = false
     @Environment(\.scenePhase) private var scenePhase
     @State private var cloudKitConnection: CloudKitSyncConnection?
@@ -61,7 +62,10 @@ struct ChatView: View {
         NavigationSplitView(columnVisibility:$columnVisibility, preferredCompactColumn:$preferredCompactColumn) {
             ConversationLibraryView(state:state, onSelect: {
                 preferredCompactColumn = .detail
-            }, onClose: closeLibrary)
+            }, onClose: closeLibrary, onSearch: {
+                searchMode = .library
+                showsSearch = true
+            }, footer: { libraryFooter })
                 .navigationSplitViewColumnWidth(min:260,ideal:300,max:380)
         } detail: {
         NavigationStack {
@@ -121,46 +125,16 @@ struct ChatView: View {
                         }.disabled(state.exchange == nil || state.generation != nil)
                     }
                     .frame(minWidth:44,minHeight:44)
-                    Button("検索", systemImage: "magnifyingglass") { showsSearch = true }
+                    Button("検索", systemImage: "magnifyingglass") { searchMode = .grep; showsSearch = true }
                         .disabled(state.exchange == nil || state.generation != nil)
                         .frame(minWidth: 44, minHeight: 44)
-                    Menu("ファイル", systemImage: "doc") {
-                        Button("ファイルを取り込む") { showsImporter = true }.disabled(isPreparingImport)
-                        Button("読み込んだV3 JSONを書き出す") {
-                            do {
-                                exportContentType = .json; exportFilename = "weavelet-native-v3"
-                                exportDocument = WebJSONDocument(data: try state.exportWebData())
-                                showsExporter = true
-                            } catch { errorMessage = error.localizedDescription }
-                        }
-                        .disabled(state.exchange == nil)
-                        Button("形式・範囲を指定して書き出す") { showsExportOptions = true }.disabled(state.exchange == nil)
+                    if horizontalSizeClass == .compact || columnVisibility == .detailOnly {
+                        fileMenu
+                        Button("設定", systemImage: "slider.horizontal.3") { showsSettings = true }
+                            .frame(minWidth: 44, minHeight: 44)
                     }
-                    .frame(minWidth: 44, minHeight: 44)
-                    .disabled(state.generation != nil)
-                    Button("表示設定", systemImage: "slider.horizontal.3") { showsSettings = true }
-                        .frame(minWidth: 44, minHeight: 44)
                 }
             }
-            .fileImporter(isPresented: $showsImporter, allowedContentTypes: [.json, .gzip], allowsMultipleSelection: false) { result in
-                do {
-                    guard let url = try result.get().first else { return }
-                    let access = url.startAccessingSecurityScopedResource()
-                    defer { if access { url.stopAccessingSecurityScopedResource() } }
-                    let data = try Data(contentsOf: url)
-                    prepareImport(data, filename: url.lastPathComponent)
-                } catch {
-                    if (error as? CocoaError)?.code != .userCancelled { errorMessage = error.localizedDescription }
-                }
-            }
-            .fileExporter(isPresented: $showsExporter, document: exportDocument, contentType: exportContentType, defaultFilename: exportFilename) { result in
-                if case .failure(let error) = result, (error as? CocoaError)?.code != .userCancelled {
-                    errorMessage = error.localizedDescription
-                }
-            }
-            .alert("データを処理できませんでした", isPresented: Binding(get: { errorMessage != nil || state.persistenceError != nil }, set: { if !$0 { errorMessage = nil; state.persistenceError = nil } })) {
-                Button("閉じる", role: .cancel) { errorMessage = nil; state.persistenceError = nil }
-            } message: { Text(errorMessage ?? state.persistenceError ?? "") }
             .confirmationDialog(removalDraft?.operation == .remove ? "メッセージを削除しますか？" : "非表示の枝を整理しますか？", isPresented: $showsRemoval, titleVisibility: .visible) {
                 Button(removalDraft?.operation == .remove ? "削除" : "整理", role: .destructive) {
                     guard let removalDraft else { return }
@@ -186,53 +160,67 @@ struct ChatView: View {
             } message: {
                 Text("このメッセージとすべての子孫を、非表示の枝も含めて削除します。保護されたメッセージが含まれる場合は削除しません。ピン留めは削除を防ぎません。")
             }
-            .sheet(isPresented: $showsExportOptions, onDismiss: {
-                if let artifact = pendingExport {
-                    exportDocument = WebJSONDocument(data: artifact.data); exportContentType = artifact.contentType; exportFilename = artifact.filename
-                    pendingExport = nil; showsExporter = true
-                }
-            }) { ChatExportView(state: state) { pendingExport = $0 } }
-            .confirmationDialog("一部のデータを除いて取り込みますか？", isPresented: $confirmsPartialImport, titleVisibility: .visible) {
-                Button("取り込める内容を確認する") {
-                    if let pending = pendingPartialImport {
-                        pendingPartialImport = nil
-                        prepareImport(pending.data, filename: pending.filename, allowPartialImport: true)
-                    }
-                }
-                Button("取消", role: .cancel) { pendingPartialImport = nil }
-            } message: { Text(pendingPartialImport?.message ?? "") }
-            .sheet(item: $importPreview) { preview in FileImportView(state: state, preview: preview) }
-            .overlay { if isPreparingImport { ProgressView("取り込み内容を確認中").padding().background(.regularMaterial, in: RoundedRectangle(cornerRadius: 12)) } }
             .sheet(item: $draft) { draft in MessageEditorView(state: state, draft: draft) }
             .sheet(item: $clipboardDraft) { draft in BranchClipboardView(state: state, draft: draft) }
             .sheet(item: $configDraft) { draft in ChatConfigView(state:state,draft:draft) }
             .sheet(item: $summaryDraft) { draft in ConversationSummaryView(state:state,draft:draft) }
             .sheet(item: $evaluationDraft) { draft in ConversationEvaluationView(state:state,draft:draft) }
             .sheet(item: $optionsDraft) { draft in NodeOptionsView(state: state, draft: draft) }
-            .sheet(isPresented: $showsSearch) {
-                ChatSearchView(state: state) { result, mode in
-                    try state.navigate(chatID: result.chatID, nodeID: result.nodeID, source: mode == .grep ? .grep : .search)
+        }
+        }
+        .fileImporter(isPresented: $showsImporter, allowedContentTypes: [.json, .gzip], allowsMultipleSelection: false) { result in
+            do {
+                guard let url = try result.get().first else { return }
+                let access = url.startAccessingSecurityScopedResource()
+                defer { if access { url.stopAccessingSecurityScopedResource() } }
+                let data = try Data(contentsOf: url)
+                prepareImport(data, filename: url.lastPathComponent)
+            } catch {
+                if (error as? CocoaError)?.code != .userCancelled { errorMessage = error.localizedDescription }
+            }
+        }
+        .fileExporter(isPresented: $showsExporter, document: exportDocument, contentType: exportContentType, defaultFilename: exportFilename) { result in
+            if case .failure(let error) = result, (error as? CocoaError)?.code != .userCancelled {
+                errorMessage = error.localizedDescription
+            }
+        }
+        .alert("データを処理できませんでした", isPresented: Binding(get: { errorMessage != nil || state.persistenceError != nil }, set: { if !$0 { errorMessage = nil; state.persistenceError = nil } })) {
+            Button("閉じる", role: .cancel) { errorMessage = nil; state.persistenceError = nil }
+        } message: { Text(errorMessage ?? state.persistenceError ?? "") }
+        .sheet(isPresented: $showsExportOptions, onDismiss: {
+            if let artifact = pendingExport {
+                exportDocument = WebJSONDocument(data: artifact.data); exportContentType = artifact.contentType; exportFilename = artifact.filename
+                pendingExport = nil; showsExporter = true
+            }
+        }) { ChatExportView(state: state) { pendingExport = $0 } }
+        .confirmationDialog("一部のデータを除いて取り込みますか？", isPresented: $confirmsPartialImport, titleVisibility: .visible) {
+            Button("取り込める内容を確認する") {
+                if let pending = pendingPartialImport {
+                    pendingPartialImport = nil
+                    prepareImport(pending.data, filename: pending.filename, allowPartialImport: true)
                 }
             }
-            .sheet(isPresented: $showsSettings) {
-                NavigationStack {
-                    Form {
+            Button("取消", role: .cancel) { pendingPartialImport = nil }
+        } message: { Text(pendingPartialImport?.message ?? "") }
+        .sheet(item: $importPreview) { preview in FileImportView(state: state, preview: preview) }
+        .overlay { if isPreparingImport { ProgressView("取り込み内容を確認中").padding().background(.regularMaterial, in: RoundedRectangle(cornerRadius: 12)) } }
+        .sheet(isPresented: $showsSearch) {
+            ChatSearchView(state: state, initialMode: searchMode) { result, mode in
+                try state.navigate(chatID: result.chatID, nodeID: result.nodeID, source: mode == .grep ? .grep : .search)
+                preferredCompactColumn = .detail
+            }
+        }
+        .sheet(isPresented: $showsSettings) {
+            NavigationStack {
+                Form {
+                    Section("一般") {
                         Picker("チャット表示", selection: $state.style) {
                             ForEach(ChatStyle.allCases) { style in Text(style.rawValue).tag(style) }
                         }
                         .pickerStyle(.inline)
-                        Button("Google同期") {
-                            if googleConnection == nil { googleConnection = GoogleSyncConnection(state: state) }
-                            shownGoogleConnection = googleConnection
-                        }.disabled(state.generation != nil)
-                        Button("CloudKit同期") {
-                            if cloudKitConnection == nil { cloudKitConnection = CloudKitSyncConnection(state:state) }
-                            shownCloudKitConnection = cloudKitConnection
-                        }.disabled(state.generation != nil)
-                        Button("フォルダー同期・iCloud Drive") {
-                            if folderConnection == nil { folderConnection = FolderSyncConnection(state:state) }
-                            shownFolderConnection = folderConnection
-                        }.disabled(state.generation != nil)
+                        NavigationLink("利用量と費用") { UsageCostSettingsView(state:state) }
+                    }
+                    Section("会話設定") {
                         Button("タイトルの自動生成") {
                             do { titleSettingsDraft = try state.titleSettingsDraft() } catch { state.generationError = error.localizedDescription }
                         }.disabled(state.generation != nil)
@@ -240,27 +228,82 @@ struct ChatView: View {
                             do { defaultConfigDraft = try state.defaultChatConfigDraft() }
                             catch { state.generationError = error.localizedDescription }
                         }.disabled(state.generation != nil)
-                        NavigationLink("利用量と費用") { UsageCostSettingsView(state:state) }
-                        NavigationLink("評価設定") { EvaluationSettingsView(state:state) }
-                        NavigationLink("ローカルモデル") { LocalModelSettingsView(state:state) }
                         Button("remote生成設定") { showsRemoteSettings = true }
                             .disabled(state.generation != nil)
                     }
-                    .sheet(item: $shownGoogleConnection) { connection in
-                        GoogleSyncSettingsView(connection: connection)
+                    Section("同期・データ") {
+                        syncButtons
                     }
-                    .sheet(item: $shownCloudKitConnection) { connection in CloudKitSyncSettingsView(connection:connection) }
-                    .sheet(item: $shownFolderConnection) { connection in FolderSyncSettingsView(connection:connection) }
-                    .sheet(item: $titleSettingsDraft) { draft in ConversationTitleSettingsView(state:state,draft:draft) }
-                    .sheet(item: $defaultConfigDraft) { draft in ChatConfigView(state:state,draft:draft) }
-                    .sheet(isPresented: $showsRemoteSettings) { RemoteSettingsView(state: state) }
-                    .navigationTitle("表示設定")
-                    .toolbar { ToolbarItem(placement: .confirmationAction) { Button("完了") { showsSettings = false } } }
+                    Section("評価") {
+                        NavigationLink("評価設定") { EvaluationSettingsView(state:state) }
+                    }
+                    Section("ローカルモデル") {
+                        NavigationLink("ローカルモデル") { LocalModelSettingsView(state:state) }
+                    }
                 }
+                .sheet(item: $shownGoogleConnection) { connection in
+                    GoogleSyncSettingsView(connection: connection)
+                }
+                .sheet(item: $shownCloudKitConnection) { connection in CloudKitSyncSettingsView(connection:connection) }
+                .sheet(item: $shownFolderConnection) { connection in FolderSyncSettingsView(connection:connection) }
+                .sheet(item: $titleSettingsDraft) { draft in ConversationTitleSettingsView(state:state,draft:draft) }
+                .sheet(item: $defaultConfigDraft) { draft in ChatConfigView(state:state,draft:draft) }
+                .sheet(isPresented: $showsRemoteSettings) { RemoteSettingsView(state: state) }
+                .navigationTitle("設定")
+                .toolbar { ToolbarItem(placement: .confirmationAction) { Button("完了") { showsSettings = false } } }
             }
         }
-        }
         .environment(\.markdownSettings, (try? state.publicationSnapshot().required("state")) ?? .object([]))
+    }
+    private var fileMenu: some View {
+        Menu("ファイル", systemImage: "doc") {
+            Button("ファイルを取り込む") { showsImporter = true }
+                .disabled(isPreparingImport)
+            Button("読み込んだV3 JSONを書き出す") {
+                do {
+                    exportContentType = .json; exportFilename = "weavelet-native-v3"
+                    exportDocument = WebJSONDocument(data: try state.exportWebData())
+                    showsExporter = true
+                } catch { errorMessage = error.localizedDescription }
+            }
+            .disabled(state.exchange == nil)
+            Button("形式・範囲を指定して書き出す") { showsExportOptions = true }
+                .disabled(state.exchange == nil)
+        }
+        .frame(minWidth: 44, minHeight: 44)
+        .disabled(state.generation != nil)
+    }
+    @ViewBuilder private var syncButtons: some View {
+        Button("Google同期") {
+            if googleConnection == nil { googleConnection = GoogleSyncConnection(state: state) }
+            shownGoogleConnection = googleConnection
+        }.disabled(state.generation != nil)
+        Button("CloudKit同期") {
+            if cloudKitConnection == nil { cloudKitConnection = CloudKitSyncConnection(state:state) }
+            shownCloudKitConnection = cloudKitConnection
+        }.disabled(state.generation != nil)
+        Button("フォルダー同期・iCloud Drive") {
+            if folderConnection == nil { folderConnection = FolderSyncConnection(state:state) }
+            shownFolderConnection = folderConnection
+        }.disabled(state.generation != nil)
+    }
+    private var libraryFooter: some View {
+        HStack {
+            Menu("同期", systemImage: "arrow.triangle.2.circlepath") { syncButtons }
+                .disabled(state.generation != nil)
+                .frame(minWidth: 44, minHeight: 44)
+            Spacer()
+            fileMenu
+            Spacer()
+            Button("設定", systemImage: "slider.horizontal.3") {
+                showsSettings = true
+            }
+            .frame(minWidth: 44, minHeight: 44)
+        }
+        .labelStyle(.iconOnly)
+        .sheet(item: Binding(get: { showsSettings ? nil : shownGoogleConnection }, set: { shownGoogleConnection = $0 })) { connection in GoogleSyncSettingsView(connection: connection) }
+        .sheet(item: Binding(get: { showsSettings ? nil : shownCloudKitConnection }, set: { shownCloudKitConnection = $0 })) { connection in CloudKitSyncSettingsView(connection:connection) }
+        .sheet(item: Binding(get: { showsSettings ? nil : shownFolderConnection }, set: { shownFolderConnection = $0 })) { connection in FolderSyncSettingsView(connection:connection) }
     }
     @ViewBuilder private var activeContent: some View {
             Group {
@@ -784,10 +827,13 @@ struct WebJSONDocument: FileDocument {
 }
 
 
-struct ConversationLibraryView: View {
+struct ConversationLibraryView<Footer: View>: View {
     @ObservedObject var state: ChatState
     let onSelect: () -> Void
     let onClose: (() -> Void)?
+    let onSearch: () -> Void
+    @ViewBuilder let footer: () -> Footer
+    @State private var isSelecting = false
     @State private var selected = Set<Data>()
     @State private var pendingDelete: [String] = []
     @State private var showsDelete = false
@@ -820,6 +866,19 @@ struct ConversationLibraryView: View {
                 }
             }
             .disabled(state.generation != nil)
+            .safeAreaInset(edge: .top, spacing: 0) {
+                Button(action: onSearch) {
+                    Label("会話・フォルダを検索", systemImage: "magnifyingglass")
+                        .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
+                }
+                .disabled(state.exchange == nil || state.generation != nil)
+                .padding(.horizontal)
+                .background(.bar)
+            }
+            .safeAreaInset(edge: .bottom, spacing: 0) {
+                VStack(spacing: 0) { Divider(); footer().padding(.horizontal) }
+                    .background(.bar)
+            }
             .navigationTitle("会話")
             .navigationBarTitleDisplayMode(.inline)
             .onAppear { revealSelectedConversation() }
@@ -828,6 +887,14 @@ struct ConversationLibraryView: View {
             .toolbar {
                 if let onClose {
                     ToolbarItem(placement: .topBarLeading) { Button("閉じる",action:onClose) }
+                }
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button(isSelecting ? "選択を終了" : "選択") {
+                        isSelecting.toggle()
+                        if !isSelecting { selected.removeAll() }
+                    }
+                    .disabled(state.exchange == nil || state.generation != nil)
+                    .frame(minWidth: 44, minHeight: 44)
                 }
                 ToolbarItem(placement: .topBarTrailing) {
                     Button("新規フォルダ", systemImage: "folder.badge.plus") { perform { try state.applyFolder(.create(id: UUID().uuidString.lowercased())) } }
@@ -913,7 +980,7 @@ struct ConversationLibraryView: View {
     private func conversationRow(_ conversation: Conversation) -> some View {
         let active = state.selectedConversationID.utf8.elementsEqual(conversation.id.utf8)
         return HStack {
-            if state.exchange != nil {
+            if state.exchange != nil && isSelecting {
                 Button {
                     if !selected.insert(conversation.identity).inserted { selected.remove(conversation.identity) }
                 } label: {
@@ -923,6 +990,10 @@ struct ConversationLibraryView: View {
                 .buttonStyle(.borderless)
                 .accessibilityLabel("選択対象: \(conversation.title)")
                 .accessibilityValue(selected.contains(conversation.identity) ? "選択中" : "未選択")
+            } else {
+                Image(systemName: "bubble.left")
+                    .frame(width: 24)
+                    .accessibilityHidden(true)
             }
             Button {
                 state.selectedConversationID = conversation.id
@@ -930,6 +1001,7 @@ struct ConversationLibraryView: View {
                 else { errorMessage = state.persistenceError }
             } label: {
                 Text(conversation.title.isEmpty ? "（タイトルなし）" : conversation.title)
+                    .lineLimit(1)
                     .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
             }
             .buttonStyle(.borderless)

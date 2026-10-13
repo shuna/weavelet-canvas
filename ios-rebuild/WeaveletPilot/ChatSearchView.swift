@@ -11,6 +11,12 @@ struct ChatSearchView: View {
     @State private var results: [ChatSearchResult] = []
     @State private var errorMessage: String?
 
+    init(state: ChatState, initialMode: ChatSearchMode = .grep, navigate: @escaping (ChatSearchResult, ChatSearchMode) throws -> Void) {
+        self.state = state
+        self.navigate = navigate
+        _mode = State(initialValue: initialMode)
+    }
+
     private struct Request: Equatable {
         let query: String
         let mode: ChatSearchMode
