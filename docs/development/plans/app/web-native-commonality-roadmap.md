@@ -334,3 +334,12 @@ b2f5f976/6a345e4aで同じpure元のbranchLayoutと既存Web ensureBranchTreeSta
 プロンプトライブラリの接続に先立つ独立Astraの限定監査では、Web既存PapaParse5.4.1の文字列parse/unparse再利用を条件付き採用可とした。installed・npm/Yarn lockの版/integrity一致を確認。package.jsonの範囲指定だけで固定済みとはせず、lockと生成provenanceを維持する。[公式Releases](https://github.com/mholt/PapaParse/releases)で保守継続を確認し、確認した[ReDoS advisory](https://github.com/advisories/GHSA-qvjc-g5vr-mfgr)の対象は5.2.0未満。公開照合は未発見問題の不存在を保証しない。
 
 [公式API](https://www.papaparse.com/docs)のCSV文字列処理を共有し、WebのBlob/URL/documentによる保存とnativeのOSファイルI/Oは分離する。worker/download/File/Node-stream経路はnative共有入口へ持ち込まない。配布物へ固定版の[MIT本文・著作権](https://github.com/mholt/PapaParse/blob/master/LICENSE)を保持し、完成bundleの実JSC読込とCSV往復を採用条件とする。現段階は実装中で、native配布・プロンプト機能完成とは扱わない。
+### native接続の採用条件確認
+
+4bb71b7b/db7a353dで固定PapaParseのMIT本文と実source hashをbundleへ同梱し、実JSCによるCSVとnative保存境界を確認した。CSVのOS読込/書出しと共有変換はUI外へ分離し、取消/古いdraft/保存失敗の保全を確認。独立Astraの限定再監査は新規P2以上なし。証拠と実表示等の未確認範囲は[検証台帳](web-native-completion-ledger.md)に記録した。
+
+## 2026-10-14：プロンプト検索の依存境界
+
+次のnative prompt適用ではWebの既存match-sorter6.3.1をname検索に限定再利用する。独立Astraはinstalled/両lockの版一致、remove-accents0.4.2と既存修正版Babel runtime7.26.10への依存を確認。公式[match-sorter Releases](https://github.com/kentcdodds/match-sorter/releases)と[remove-accents](https://github.com/tyxla/remove-accents)を根拠に、MIT本文/著作権と実入力hashの配布保持を条件付き採用可とした。確認できた公開advisoryに両検索packageの該当を見つけず、[Babel advisory](https://github.com/babel/babel/security/advisories/GHSA-968p-4wvh-cqc8)は既存固定版で修正済み。未発見問題の不存在は保証しない。
+
+検索経路はDOM/Node/network不要だが、同順位のlocaleCompareによる全Unicode順序一致をsource共有だけで保証しない。完成bundleの実JSCで名前/同順位/アクセントを確認し、UI外で検索して古い結果を拒否する。ESMとremove-accents原文約18.5KBは実配布増分や実機性能の測定ではない。現段階はnative適用の実装中であり、採用条件確認前に配布/完成済みとは扱わない。
