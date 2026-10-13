@@ -233,6 +233,27 @@ final class NativeLocalEvaluationTests: XCTestCase {
         XCTAssertEqual(try context.encoded(),before)
     }
 
+    func testLocalPromptBridgeDecodesTruncatedEmojiWithoutChangingContext() throws {
+        let cutAt400 = String(repeating:"x",count:399) + "😀"
+        let cutAt150 = String(repeating:"x",count:149) + "😀"
+        let context = OrderedJSON.object([.init(key:"userText",value:.string(cutAt400)),
+                                          .init(key:"assistantText",value:.string("valid 😀 𠀀")),
+                                          .init(key:"xRaw",value:.number("9007199254740993"))])
+        let before = try context.encoded()
+        func plan(_ text: String) throws -> OrderedJSON {
+            try SharedWebOperations.call("evaluation",.object([
+                .init(key:"operation",value:.string("localPrompt")),.init(key:"axis",value:.string("taskCompletion")),
+                .init(key:"text",value:.string(text)),.init(key:"assistantResponse",value:context.required("assistantText")),
+                .init(key:"language",value:.string("en"))]))
+        }
+        let first = try plan(cutAt400)
+        XCTAssertTrue(try first.required("prompt").string("prompt").contains(String(repeating:"x",count:399) + "�"))
+        XCTAssertTrue(try first.required("prompt").string("prompt").contains("valid 😀 𠀀"))
+        let fallback = try plan(cutAt150)
+        XCTAssertTrue(try fallback.required("fallback").string("fallback").contains(String(repeating:"x",count:149) + "�"))
+        XCTAssertEqual(try context.encoded(),before)
+    }
+
     func testStaleRequestDoesNotStartGenerator() async throws {
         let calls = LocalEvaluationCalls()
         let generator: LocalLlama.Generator = { _, request, _ in _ = await calls.record(request) }

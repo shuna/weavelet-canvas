@@ -264,7 +264,7 @@
     "src/utils/evaluationCore.ts": "74e675aabbb05628328ebf5ae49c464f212b6b4a40ad7158415c693c815634d6",
     "src/utils/evaluationContextCore.ts": "77c0946260540461fb041f82947b5c47d91b58e9fdfc71d0e139a35529dcf4fd",
     "src/utils/evaluationState.ts": "9dfecfd104425d3788222624e1deffb7b7b270cb3a47108c362048170df72c9d",
-    "shared/google-sync/evaluation.ts": "312e235f95b798f72dfc75a896deff85d68da1585f31c5b2df74154281988366",
+    "shared/google-sync/evaluation.ts": "2db44184e3cfa83eef78a7b285fa8acf960a6f52cc4b9f4c7ec3da76171f3aa0",
     "src/utils/localModelRole.ts": "29491f084ef6ce804a416749b115e6b63a772a735ec2d4fbea21c42e75367816",
     "shared/google-sync/localModelRole.ts": "8ce5bc1651e340c87134a35f4fbf149af159c296ca924a874c95b76b51dc96a5",
     "src/utils/localModelImport.ts": "f15c25b57b27279b501c26632fbf8c0481b2b23263b22de8e63651dfd5ff7f1b",
@@ -306,5 +306,5 @@
     "lz-string/package.json": "f0990a8fd6c347d66c1469d18918f5460d372c6b3af8a0a5737dfd34c809e20d",
     "lz-string/LICENSE": "433fc9dfe659dbfb1e91eed8351f13651e97bfa3ac6d03394c3d63f61d4bbc80"
   },
-  "bundleSHA256": "3c8e6edb29d3bb43b04aacffebc5c09e4c070d530d2742af955dd106f141727e"
+  "bundleSHA256": "c221c566d97d75422bbb3f01123d135ffe0fab8d3ea2f5a64c223840a6d94696"
 }

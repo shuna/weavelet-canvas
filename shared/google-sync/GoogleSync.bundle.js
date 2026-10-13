@@ -20894,6 +20894,7 @@ ${text}`;
   }
 
   // shared/google-sync/evaluation.ts
+  var wllamaPromptText = (value) => Array.from(value, (scalar) => scalar.length === 1 && scalar.charCodeAt(0) >= 55296 && scalar.charCodeAt(0) <= 57343 ? "\uFFFD" : scalar).join("");
   function evaluation(json) {
     const input = JSON.parse(json);
     switch (input.operation) {
@@ -20918,8 +20919,10 @@ ${text}`;
         return JSON.stringify(evaluationResultKey(input.chatId ?? input.chatID ?? "", input.nodeId ?? input.nodeID ?? "", input.phase));
       case "localAxes":
         return JSON.stringify(qualityAxisKeys);
-      case "localPrompt":
-        return JSON.stringify(localAxisPrompt(input.axis, input.text, input.assistantResponse, input.language));
+      case "localPrompt": {
+        const plan = localAxisPrompt(input.axis, input.text, input.assistantResponse, input.language);
+        return JSON.stringify({ ...plan, prompt: wllamaPromptText(plan.prompt), fallback: wllamaPromptText(plan.fallback) });
+      }
       case "localAxisScore":
         return JSON.stringify(localAxisScore(input.raw));
       case "localQualityResult":

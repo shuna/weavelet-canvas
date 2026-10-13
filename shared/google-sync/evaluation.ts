@@ -27,6 +27,10 @@ type Input =
   | {operation: 'display'; result: EvaluationResult; safetyThresholds?: typeof defaultSafetyThresholds; qualityThresholds?: typeof defaultQualityThresholds}
   | {operation: 'mutate'; state: EvaluationState; action: EvaluationAction};
 
+// Wllama's TextEncoder replaces lone UTF-16 surrogates before inference.
+const wllamaPromptText = (value: string): string => Array.from(value, scalar =>
+  scalar.length === 1 && scalar.charCodeAt(0) >= 0xd800 && scalar.charCodeAt(0) <= 0xdfff ? '\ufffd' : scalar).join('');
+
 export function evaluation(json: string): string {
   const input = JSON.parse(json) as Input;
   switch (input.operation) {
@@ -44,7 +48,10 @@ export function evaluation(json: string): string {
     case 'parseSafety': return JSON.stringify(parseSafetyResponse(input.data, input.now));
     case 'resultKey': return JSON.stringify(evaluationResultKey(input.chatId ?? input.chatID ?? '', input.nodeId ?? input.nodeID ?? '', input.phase));
     case 'localAxes': return JSON.stringify(qualityAxisKeys);
-    case 'localPrompt': return JSON.stringify(localAxisPrompt(input.axis, input.text, input.assistantResponse, input.language));
+    case 'localPrompt': {
+      const plan = localAxisPrompt(input.axis, input.text, input.assistantResponse, input.language);
+      return JSON.stringify({...plan, prompt: wllamaPromptText(plan.prompt), fallback: wllamaPromptText(plan.fallback)});
+    }
     case 'localAxisScore': return JSON.stringify(localAxisScore(input.raw));
     case 'localQualityResult': return JSON.stringify(localQualityResult(input.outputs, input.now));
     case 'localParse': return JSON.stringify(parseLocalQualityResponse(input.raw, input.now));
