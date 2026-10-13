@@ -20,6 +20,8 @@ final class SyncStateStore: @unchecked Sendable {
         do {
             let root = try OrderedJSON.decode(Data(contentsOf: fileURL))
             guard try root.required("version").number("version") == 1 else { throw SyncSessionError.invalid("local sync state version") }
+            if let bookmark = root["folderBookmark"] { _ = try bookmark.syncData() }
+            if let target = root["fileSystemTarget"] { _ = try target.object("file system target") }
             for field in try root.required("datasets").object("datasets") {
                 _ = try field.value.object("dataset state")
                 if let cache = field.value["cache"] { _ = try cache.syncData() }
@@ -72,16 +74,41 @@ final class SyncStateStore: @unchecked Sendable {
             try write(updated.encoded(),fileURL)
         }
     }
+    static var folderStore: SyncStateStore {
+        #if DEBUG
+        if RemoteFixture.enabled { return SyncStateStore(fileURL:applicationStore.fileURL.deletingLastPathComponent().appendingPathComponent("debug-remote-fixture/folder-sync-state.json")) }
+        #endif
+        return SyncStateStore(fileURL: applicationStore.fileURL.deletingLastPathComponent().appendingPathComponent("folder-sync-state.json"))
+    }
+    func folderBookmark() throws -> Data? { try locked(false) { try load()["folderBookmark"]?.syncData() } }
+    func selectFolder(bookmark: Data?) throws {
+        try locked(true) {
+            let root = try load()
+            var updated = OrderedJSON.object(try root.object("sync state").filter { !["folderBookmark","fileSystemTarget","selectedDataset"].contains($0.key) })
+            if let bookmark { updated = updated.replacing("folderBookmark",with:.syncBytes(bookmark)) }
+            try write(updated.encoded(),fileURL)
+        }
+    }
+    func fileSystemTarget() throws -> OrderedJSON? { try locked(false) { try load()["fileSystemTarget"] } }
+    func saveFileSystemTarget(_ target: OrderedJSON?) throws {
+        try locked(true) {
+            let root = try load()
+            if let target { _ = try target.object("file system target") }
+            let updated = try target.map { root.replacing("fileSystemTarget",with:$0) } ?? .object(root.object("sync state").filter { $0.key != "fileSystemTarget" })
+            try write(updated.encoded(),fileURL)
+        }
+    }
     struct Publication {
         let input: OrderedJSON
         let received: OrderedJSON?
         let target: OrderedJSON?
         var mode: String = "sync"
         var replace: Bool = false
+        var initializeIfEmpty: Bool = false
     }
     func publication(dataset: String) throws -> Publication? {
         guard let value = try self.dataset(dataset)["publication"] else { return nil }
-        return try .init(input: Self.decodeSnapshot(value.required("input")), received: value["received"].map(Self.decodeSnapshot), target: value["target"].map(Self.decodeSnapshot), mode: value["mode"].map { try $0.string("mode") } ?? "sync", replace: value["replace"].map { try $0.boolean("replace") } ?? false)
+        return try .init(input: Self.decodeSnapshot(value.required("input")), received: value["received"].map(Self.decodeSnapshot), target: value["target"].map(Self.decodeSnapshot), mode: value["mode"].map { try $0.string("mode") } ?? "sync", replace: value["replace"].map { try $0.boolean("replace") } ?? false,initializeIfEmpty:value["initializeIfEmpty"].map { try $0.boolean("initializeIfEmpty") } ?? false)
     }
     func savePublication(dataset: String, _ publication: Publication?) throws {
         try locked(true) {
@@ -89,6 +116,7 @@ final class SyncStateStore: @unchecked Sendable {
             var state = datasets[dataset] ?? .object([])
             if let publication {
                 var value = OrderedJSON.object([.init(key: "input", value: try Self.encodeSnapshot(publication.input)), .init(key:"mode",value:.string(publication.mode)), .init(key:"replace",value:.bool(publication.replace))])
+                if publication.initializeIfEmpty { value = value.replacing("initializeIfEmpty",with:.bool(true)) }
                 if let received = publication.received { value = value.replacing("received", with: try Self.encodeSnapshot(received)) }
                 if let target = publication.target { value = value.replacing("target", with: try Self.encodeSnapshot(target)) }
                 state = state.replacing("publication", with: value)

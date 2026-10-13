@@ -10,6 +10,7 @@ import Combine
     @Published private(set) var errorMessage: String?
     @Published private(set) var isUnlocked = false
     var isBusy: Bool { task != nil }
+    private let transportMode: SyncSession.TransportMode
     private let chatState: ChatState
     private let drive: any SyncDrive
     private let store: SyncStateStore
@@ -18,18 +19,18 @@ import Combine
     private var task: Task<Void, Error>?
     private var idleWaiters: [CheckedContinuation<Void,Never>] = []
 
-    init(chatState: ChatState, drive: any SyncDrive, store: SyncStateStore = .applicationStore, keyStore: any SyncKeyStore = KeychainSyncKeyStore()) {
-        self.chatState = chatState; self.drive = drive; self.store = store; self.keyStore = keyStore
+    init(chatState: ChatState, drive: any SyncDrive, store: SyncStateStore = .applicationStore, keyStore: any SyncKeyStore = KeychainSyncKeyStore(), transportMode: SyncSession.TransportMode = .drive) {
+        self.transportMode = transportMode; self.chatState = chatState; self.drive = drive; self.store = store; self.keyStore = keyStore
         do { dataset = try store.selectedDataset(); status = dataset == nil ? .disconnected : .locked }
         catch { status = .failed; errorMessage = error.localizedDescription }
     }
     private func getSession() throws -> SyncSession {
         if let session { return session }
-        let created = try SyncSession(drive: drive, store: store, keyStore: keyStore)
+        let created = try SyncSession(drive: drive, store: store, keyStore: keyStore, transportMode: transportMode)
         session = created; return created
     }
     private func perform(_ operation: @escaping @MainActor () async throws -> Void) async throws {
-        guard task == nil else { throw SyncSessionError.invalid("Google sync operation is already running") }
+        guard task == nil else { throw SyncSessionError.invalid("Sync operation is already running") }
         errorMessage = nil; conflictKeys = []; status = .syncing
         let task = Task { try await operation() }; self.task = task
         defer { self.task = nil; let waiters = idleWaiters; idleWaiters.removeAll(); waiters.forEach { $0.resume() } }
@@ -52,7 +53,7 @@ import Combine
             // Preserve the newly created identity before the first upload can fail.
             self.dataset = dataset; self.isUnlocked = true
             try self.store.selectDataset(dataset)
-            try await self.publish(replace: true)
+            try await self.publish(replace:self.transportMode == .drive,initializeIfEmpty:self.transportMode == .filesystem)
         }
     }
     func open(dataset: String) async throws {
@@ -65,7 +66,7 @@ import Combine
     }
     func unlock(password: String) async throws {
         try await perform {
-            guard let dataset = self.dataset else { throw SyncSessionError.invalid("Select a Google dataset first") }
+            guard let dataset = self.dataset else { throw SyncSessionError.invalid("Select a sync dataset first") }
             let session = try self.getSession()
             try await session.open(dataset: dataset)
             try await session.unlock(password: password)
@@ -76,7 +77,7 @@ import Combine
     func restoreKey() async throws -> Bool {
         var restored = false
         try await perform {
-            guard let dataset = self.dataset else { throw SyncSessionError.invalid("Select a Google dataset first") }
+            guard let dataset = self.dataset else { throw SyncSessionError.invalid("Select a sync dataset first") }
             let session = try self.getSession()
             try await session.open(dataset: dataset)
             restored = try await session.restoreKey()
@@ -85,11 +86,15 @@ import Combine
         }
         return restored
     }
+    func initializeFolder() async throws {
+        guard transportMode == .filesystem else { throw SyncSessionError.invalid("フォルダー同期ではありません") }
+        try await perform { try await self.publish(initializeIfEmpty:true) }
+    }
     func synchronize() async throws { try await perform { try await self.publish() } }
     func download() async throws { try await perform { try await self.publish(download: true) } }
     func resolve(_ mode: Resolution) async throws { try await perform { try await self.publish(resolution: mode) } }
-    private func publish(replace: Bool = false, download: Bool = false, resolution: Resolution? = nil) async throws {
-        guard isUnlocked, let dataset, let session else { throw SyncSessionError.invalid("Unlock Google sync first") }
+    private func publish(replace: Bool = false, initializeIfEmpty: Bool = false, download: Bool = false, resolution: Resolution? = nil) async throws {
+        guard isUnlocked, let dataset, let session else { throw SyncSessionError.invalid("Unlock sync first") }
         if resolution == nil, try store.publication(dataset: dataset) != nil {
             try await finishRecovery(dataset: dataset, session: session)
             // A journal without a received result is an interrupted shared operation.
@@ -99,21 +104,22 @@ import Combine
         let actualResolution = resolution ?? interrupted.flatMap { Resolution(rawValue:$0.mode) }
         let actualDownload = download || (resolution == nil && interrupted?.mode == "download")
         let actualReplace = replace || (resolution == nil && interrupted?.replace == true)
+        let actualInitializeIfEmpty = initializeIfEmpty || (resolution == nil && interrupted?.initializeIfEmpty == true)
         let mode = actualResolution?.rawValue ?? (actualDownload ? "download" : "sync")
         let input = try chatState.syncInputSnapshot()
         // Retrying an interrupted download must not silently adopt a newer local input.
         if resolution == nil, let interrupted, input != interrupted.input {
             throw SyncSessionError.invalid("Local data changed after an interrupted sync. Choose how to resolve local and cloud changes.")
         }
-        try store.savePublication(dataset: dataset,.init(input: input,received:nil,target:nil,mode:mode,replace:actualReplace))
+        try store.savePublication(dataset: dataset,.init(input: input,received:nil,target:nil,mode:mode,replace:actualReplace,initializeIfEmpty:actualInitializeIfEmpty))
         let received: OrderedJSON
         if let actualResolution { received = try await session.resolveForPublication(input,mode:actualResolution.rawValue) }
         else if actualDownload { received = try await session.pull() }
-        else { received = try await session.synchronizeForPublication(input,replace:actualReplace) }
-        try store.savePublication(dataset:dataset,.init(input:input,received:received,target:nil,mode:mode,replace:actualReplace))
+        else { received = try await session.synchronizeForPublication(input,replace:actualReplace,initializeIfEmpty:actualInitializeIfEmpty) }
+        try store.savePublication(dataset:dataset,.init(input:input,received:received,target:nil,mode:mode,replace:actualReplace,initializeIfEmpty:actualInitializeIfEmpty))
         try Task.checkCancellation()
         let target = try SyncDocument(snapshot:input).synchronizingSnapshot(received).snapshot
-        try store.savePublication(dataset:dataset,.init(input:input,received:received,target:target,mode:mode,replace:actualReplace))
+        try store.savePublication(dataset:dataset,.init(input:input,received:received,target:target,mode:mode,replace:actualReplace,initializeIfEmpty:actualInitializeIfEmpty))
         try await finishRecovery(dataset:dataset,session:session)
         status = .ready
     }
@@ -121,7 +127,7 @@ import Combine
         guard let journal = try store.publication(dataset:dataset), let received = journal.received else { return }
         let target = try journal.target ?? SyncDocument(snapshot:journal.input).synchronizingSnapshot(received).snapshot
         if journal.target == nil {
-            try store.savePublication(dataset:dataset,.init(input:journal.input,received:received,target:target,mode:journal.mode,replace:journal.replace))
+            try store.savePublication(dataset:dataset,.init(input:journal.input,received:received,target:target,mode:journal.mode,replace:journal.replace,initializeIfEmpty:journal.initializeIfEmpty))
         }
         let current = try chatState.syncInputSnapshot()
         if current == journal.input {
@@ -135,7 +141,7 @@ import Combine
     }
     func recover() async throws {
         try await perform {
-            guard self.isUnlocked, let dataset = self.dataset, let session = self.session else { throw SyncSessionError.invalid("Unlock Google sync first") }
+            guard self.isUnlocked, let dataset = self.dataset, let session = self.session else { throw SyncSessionError.invalid("Unlock sync first") }
             if let journal = try self.store.publication(dataset:dataset), journal.received != nil {
                 try await self.finishRecovery(dataset:dataset,session:session)
             } else { try await self.publish() }

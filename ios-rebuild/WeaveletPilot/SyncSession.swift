@@ -11,6 +11,8 @@ struct SyncSessionError: LocalizedError {
 
 // Actor isolation serializes the JSC VM and the session; network awaits never run inside JSC.
 actor SyncSession {
+    enum TransportMode: String { case drive, filesystem }
+    private let transportMode: TransportMode
     private let drive: any SyncDrive
     private let store: SyncStateStore
     private let host: SyncNativeHost
@@ -19,8 +21,8 @@ actor SyncSession {
     private var busy = false
     private var waiters: [CheckedContinuation<Void, Never>] = []
 
-    init(drive: any SyncDrive, store: SyncStateStore = .applicationStore, keyStore: any SyncKeyStore = KeychainSyncKeyStore()) throws {
-        self.drive = drive; self.store = store
+    init(drive: any SyncDrive, store: SyncStateStore = .applicationStore, keyStore: any SyncKeyStore = KeychainSyncKeyStore(), transportMode: TransportMode = .drive) throws {
+        self.drive = drive; self.store = store; self.transportMode = transportMode
         let host = SyncNativeHost(store: store, keys: keyStore)
         self.host = host
         guard let context = JSContext() else { throw SyncSessionError.invalid("JavaScriptCore unavailable") }
@@ -56,7 +58,7 @@ actor SyncSession {
         if ["acceptLocal", "synchronize", "resolveForPublication", "push", "resolve"].contains(operation) {
             host.nextRawAccepted = args["snapshot"]
         }
-        _ = try invoke("start", [operation, String(decoding: try args.encoded(), as: UTF8.self)])
+        _ = try invoke("start", [operation, String(decoding: try args.replacing("transportMode",with:.string(transportMode.rawValue)).encoded(), as: UTF8.self)])
         var cancellation: Error?
         while true {
             let result = try invokeJSON("result")
@@ -82,8 +84,10 @@ actor SyncSession {
                     response = .object([JSONField(key: "ok", value: .bool(true)), JSONField(key: "value", value: value)])
                 } catch {
                     if error is CancellationError || Task.isCancelled { cancellation = CancellationError() }
+                    let folderMissing: Bool
+                    if case .missing? = error as? FolderSyncFilesError { folderMissing = true } else { folderMissing = false }
                     response = .object([JSONField(key: "ok", value: .bool(false)), JSONField(key: "error", value: .string(error.localizedDescription)),
-                        JSONField(key: "notFound", value: .bool((error as? DriveTransportError) == .notFound))])
+                        JSONField(key: "notFound", value: .bool((error as? DriveTransportError) == .notFound || folderMissing))])
                 }
                 _ = try invoke("settle", [id, String(decoding: try response.encoded(), as: UTF8.self)])
             }
@@ -104,13 +108,17 @@ actor SyncSession {
         if let partBytes { guard partBytes > 0 else { throw SyncSessionError.invalid("Invalid part size") }; options = options.replacing("partBytes", with: .number(String(partBytes))) }
         _ = try await run("open", args: .object([JSONField(key: "dataset", value: .string(dataset)), JSONField(key: "options", value: options)]))
     }
+    func inspectFolder() async throws -> OrderedJSON {
+        guard transportMode == .filesystem else { throw SyncSessionError.invalid("フォルダー同期ではありません") }
+        return try await run("inspectFolder")
+    }
     func unlock(password: String) async throws { _ = try await run("unlock", args: .object([JSONField(key: "password", value: .string(password))])) }
     func restoreKey() async throws -> Bool { try await run("restoreKey").boolean("restoreKey") }
     func push(_ snapshot: OrderedJSON, replace: Bool = false) async throws {
         _ = try await run("push", args: .object([JSONField(key: "snapshot", value: snapshot), JSONField(key: "replace", value: .bool(replace))]))
     }
-    func synchronizeForPublication(_ snapshot: OrderedJSON, replace: Bool = false) async throws -> OrderedJSON {
-        try await run("synchronize", args: .object([.init(key: "snapshot", value: snapshot), .init(key: "replace", value: .bool(replace))]))
+    func synchronizeForPublication(_ snapshot: OrderedJSON, replace: Bool = false, initializeIfEmpty: Bool = false) async throws -> OrderedJSON {
+        try await run("synchronize", args: .object([.init(key: "snapshot", value: snapshot), .init(key: "replace", value: initializeIfEmpty ? .string("if-empty") : .bool(replace))]))
     }
     func resolveForPublication(_ snapshot: OrderedJSON, mode: String) async throws -> OrderedJSON {
         guard ["merge", "local", "cloud"].contains(mode) else { throw SyncSessionError.invalid("Invalid resolution") }

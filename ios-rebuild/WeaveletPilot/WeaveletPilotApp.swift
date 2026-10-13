@@ -23,6 +23,8 @@ struct ChatView: View {
     @State private var showsLibrary = false
     @State private var showsSearch = false
     @State private var showsRemoteSettings = false
+    @State private var folderConnection: FolderSyncConnection?
+    @State private var shownFolderConnection: FolderSyncConnection?
     @State private var shownGoogleConnection: GoogleSyncConnection?
     @State private var googleConnection: GoogleSyncConnection?
     @State private var showsImporter = false
@@ -317,6 +319,10 @@ struct ChatView: View {
                             if googleConnection == nil { googleConnection = GoogleSyncConnection(state: state) }
                             shownGoogleConnection = googleConnection
                         }.disabled(state.generation != nil)
+                        Button("フォルダー同期・iCloud Drive") {
+                            if folderConnection == nil { folderConnection = FolderSyncConnection(state:state) }
+                            shownFolderConnection = folderConnection
+                        }.disabled(state.generation != nil)
                         Button("新規会話の既定設定") {
                             do { defaultConfigDraft = try state.defaultChatConfigDraft() }
                             catch { state.generationError = error.localizedDescription }
@@ -327,6 +333,7 @@ struct ChatView: View {
                     .sheet(item: $shownGoogleConnection) { connection in
                         GoogleSyncSettingsView(connection: connection)
                     }
+                    .sheet(item: $shownFolderConnection) { connection in FolderSyncSettingsView(connection:connection) }
                     .sheet(item: $defaultConfigDraft) { draft in ChatConfigView(state:state,draft:draft) }
                     .sheet(isPresented: $showsRemoteSettings) { RemoteSettingsView(state: state) }
                     .navigationTitle("表示設定")
