@@ -112,6 +112,8 @@ final class ChatState: ObservableObject {
     @Published private(set) var summaryJobs: [SummaryIdentity: SummaryJob] = [:]
     @Published private var summaryChosen: [SummaryIdentity:String] = [:]
     private var summaryTasks: [SummaryIdentity:Task<Void,Never>] = [:]
+    @Published private(set) var evaluationJobs: [SummaryIdentity:EvaluationJob] = [:]
+    private var evaluationTasks: [SummaryIdentity:Task<Void,Never>] = [:]
     @Published var titleError: String?
     private var titleTasks: [Data:(id:UUID,task:Task<Void,Never>)] = [:]
     private var pendingTitleContext: (id:UUID,legacy:RemoteCredentialRecord,client:RemoteClient,read:ProviderModels.CredentialReader)?
@@ -170,7 +172,7 @@ final class ChatState: ObservableObject {
         let candidates = try BranchNavigation.candidates(in: imported.source)
         let nextEditing = try exchange.map { try MessageEditing.invalidatingHistory(editingHistory, before: $0.source, after: imported.source) } ?? nil
         try store?.save(SavedChatState(exchange: imported, document: candidate, conversations: imported.conversations, selectedConversationID: selected, style: displayStyle))
-        invalidateGeneration(); cancelTitles(); cancelSummaries()
+        invalidateGeneration(); cancelTitles(); cancelSummaries(); cancelEvaluations()
         conversations = imported.conversations
         selectedID = selected
         exchange = imported
@@ -951,6 +953,51 @@ final class ChatState: ObservableObject {
     }
     private func cancelSummaries() { for task in summaryTasks.values { task.cancel() }; summaryTasks.removeAll(); summaryJobs.removeAll(); summaryChosen.removeAll() }
 
+    func evaluationDraft(nodeID: String) throws -> ConversationEvaluationDraft {
+        guard let conversation else { throw ExchangeError.invalid("評価する会話がありません") }
+        return .init(chatID:conversation.id,nodeID:nodeID)
+    }
+    func evaluationResult(chatID: String, nodeID: String) throws -> OrderedJSON? {
+        guard let source = exchange?.source, let key = try ConversationEvaluation.resultKey(source:source,chatID:chatID,nodeID:nodeID) else { return nil }
+        return try publicationSnapshot().required("state")["evaluationResults"]?[key]
+    }
+    func evaluationReport(chatID: String, nodeID: String) throws -> OrderedJSON? {
+        guard let result = try evaluationResult(chatID:chatID,nodeID:nodeID) else { return nil }
+        let roots = try publicationSnapshot().required("state")
+        var input = OrderedJSON.object([.init(key:"operation",value:.string("display")),.init(key:"result",value:result)])
+        for key in ["safetyThresholds", "qualityThresholds"] { if let value = roots[key] { input = input.replacing(key,with:value) } }
+        return try SharedWebOperations.call("evaluation",input)
+    }
+    func startEvaluation(_ draft: ConversationEvaluationDraft, dimension: String, scope: String, omittedMode: String,
+                         record: RemoteCredentialRecord? = nil, client: RemoteClient = RemoteClient(), readProviderCredential: ProviderModels.CredentialReader = RemoteCredentials.load(providerID:)) throws {
+        guard let source = exchange?.source else { throw ExchangeError.invalid("保存済み会話がありません") }
+        let key = SummaryIdentity(chatID:draft.chatID,nodeID:draft.nodeID)
+        guard evaluationJobs[key]?.busy != true else { return }
+        let roots = try publicationSnapshot().required("state")
+        let prepared = try ConversationEvaluation.prepare(source:source,state:roots,chatID:draft.chatID,nodeID:draft.nodeID,dimension:dimension,scope:scope,omittedMode:omittedMode,language:Locale.preferredLanguages.first ?? "en",legacy:record ?? RemoteCredentials.load(),readProviderCredential:readProviderCredential)
+        let id = UUID()
+        evaluationJobs[key] = EvaluationJob(id:id,busy:true)
+        evaluationTasks[key] = Task { @MainActor [weak self] in
+            guard let self else { return }
+            defer { if self.evaluationJobs[key]?.id == id { self.evaluationTasks[key] = nil; self.evaluationJobs[key]?.busy = false } }
+            do {
+                let result = try await ConversationEvaluation.run(prepared,client:client)
+                try Task.checkCancellation()
+                guard self.evaluationJobs[key]?.id == id, let latestSource = self.exchange?.source else { return }
+                let updated = try ConversationEvaluation.apply(result,prepared:prepared,source:latestSource,state:self.publicationSnapshot().required("state"))
+                try self.applyLibrary(latestSource,selectedID:self.selectedID,preserveGeneration:true,evaluationResults:try updated.required("evaluationResults"))
+            } catch is CancellationError {} catch { if self.evaluationJobs[key]?.id == id { self.evaluationJobs[key]?.error = error.localizedDescription } }
+        }
+    }
+    func stopEvaluation(chatID: String, nodeID: String) {
+        let key = SummaryIdentity(chatID:chatID,nodeID:nodeID)
+        evaluationTasks[key]?.cancel(); evaluationTasks[key] = nil; evaluationJobs[key] = nil
+    }
+    private func cancelEvaluations() {
+        for task in evaluationTasks.values { task.cancel() }
+        evaluationTasks.removeAll(); evaluationJobs.removeAll()
+    }
+
     private func cancelTitles() { for value in titleTasks.values { value.task.cancel() }; titleTasks.removeAll() }
 
     func renameChat(id: String, title: String, now: Double = Date().timeIntervalSince1970 * 1000) throws {
@@ -984,7 +1031,7 @@ final class ChatState: ObservableObject {
         try applyLibrary(ChatFolders.apply(in: source, operation: operation), selectedID: exchange == nil ? "" : selectedID, preserveGeneration: true, now: now)
     }
 
-    private func applyLibrary(_ source: OrderedJSON, selectedID: String, resetViewFor: String? = nil, resetViewsFor: [String] = [], preserveGeneration: Bool = false, tokenUsage: OrderedJSON? = nil, usageEnabled: Bool? = nil, navigation: BranchNavigation.HistoryResult? = nil, editing: MessageEditing.HistoryState? = nil, clipboard: OrderedJSON? = nil, now: Double = Date().timeIntervalSince1970 * 1000) throws {
+    private func applyLibrary(_ source: OrderedJSON, selectedID: String, resetViewFor: String? = nil, resetViewsFor: [String] = [], preserveGeneration: Bool = false, tokenUsage: OrderedJSON? = nil, usageEnabled: Bool? = nil, evaluationResults: OrderedJSON? = nil, navigation: BranchNavigation.HistoryResult? = nil, editing: MessageEditing.HistoryState? = nil, clipboard: OrderedJSON? = nil, now: Double = Date().timeIntervalSince1970 * 1000) throws {
         guard !initialLoadFailed else { throw ExchangeError.invalid("保存ファイルを読めなかったため更新できません。明示的な置換が必要です") }
         let base = try document ?? SyncDocument(v3: exchange?.source ?? ChatLibrary.emptySource)
         let before = try exchange?.source ?? base.uiProjection()
@@ -995,6 +1042,9 @@ final class ChatState: ObservableObject {
         }
         if let tokenUsage { candidate = try candidate.mergingSnapshot(candidate.snapshot.replacing("state",with:candidate.snapshot.required("state").replacing("totalTokenUsed",with:tokenUsage))) }
         if let usageEnabled { candidate = try candidate.mergingSnapshot(candidate.snapshot.replacing("state",with:candidate.snapshot.required("state").replacing("countTotalTokens",with:.bool(usageEnabled)))) }
+        if let evaluationResults {
+            candidate = try SyncDocument(snapshot:candidate.snapshot.replacing("state",with:candidate.snapshot.required("state").replacing("evaluationResults",with:evaluationResults)),v3Sidecar:candidate.v3Sidecar,v3RootOrder:candidate.v3RootOrder)
+        }
         let changed = try WebExchange(source: candidate.uiProjection())
         let candidates = try BranchNavigation.candidates(in: changed.source)
         var views = changed.conversations
@@ -1076,7 +1126,7 @@ final class ChatState: ObservableObject {
         let nextNavigation = try historySelecting(selected, in: changed.source)
         let nextEditing = try exchange.map { try MessageEditing.invalidatingHistory(editingHistory, before: $0.source, after: changed.source) } ?? nil
         try store?.save(SavedChatState(exchange: changed, document: candidate, conversations: views, selectedConversationID: selected, style: displayStyle))
-        invalidateGeneration(); cancelTitles(); cancelSummaries()
+        invalidateGeneration(); cancelTitles(); cancelSummaries(); cancelEvaluations()
         branchCandidates = candidates
         if let nextNavigation { publishNavigation(nextNavigation, focus: nil) }
         editingHistory = nextEditing

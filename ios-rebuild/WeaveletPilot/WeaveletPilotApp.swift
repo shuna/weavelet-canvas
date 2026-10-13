@@ -52,6 +52,7 @@ struct ChatView: View {
     @State private var showsBranchDeletion = false
     @State private var clipboardDraft: BranchClipboardDraft?
     @State private var summaryDraft: ConversationSummaryDraft?
+    @State private var evaluationDraft: ConversationEvaluationDraft?
 
     var body: some View {
         NavigationStack {
@@ -62,127 +63,26 @@ struct ChatView: View {
                         ForEach(conversation.visibleMessages, id: \.identity) { node in
                             let summaryInfo = try? state.summaryInfo(chatID:conversation.id,nodeID:node.id)
                             if summaryInfo?["hidden"] != .bool(true) {
-                            MessageView(node: node, siblings: state.siblings(for: node.id), style: state.style, edit: state.exchange == nil || state.generation != nil ? nil : {
-                                do { draft = try state.messageDraft(nodeID: node.id) }
-                                catch { errorMessage = error.localizedDescription }
-                            }, insertBefore: state.exchange == nil || state.generation != nil ? nil : {
-                                do { draft = try state.messageInsertionDraft(beforeNodeID: node.id) }
-                                catch { errorMessage = error.localizedDescription }
-                            }, regenerate: state.exchange == nil || state.generation != nil ? nil : {
-                                generate(node.id, operation: .regenerate)
-                            }, generateFromHere: state.exchange == nil || state.generation != nil ? nil : {
-                                generate(node.id, operation: .fromHere)
-                            }, remove: state.exchange == nil || state.generation != nil ? nil : {
-                                do { removalDraft = try state.nodeRemovalDraft(nodeID: node.id); showsRemoval = true }
-                                catch { errorMessage = error.localizedDescription }
-                            }, moveUp: state.exchange == nil || state.generation != nil ? nil : {
-                                move(node.id, direction: .up)
-                            }, moveDown: state.exchange == nil || state.generation != nil ? nil : {
-                                move(node.id, direction: .down)
-                            }, replaceAndPrune: state.exchange == nil || state.generation != nil ? nil : {
-                                do { draft = try state.messageReplacementDraft(nodeID: node.id) }
-                                catch { errorMessage = error.localizedDescription }
-                            }, deleteBranch: state.exchange == nil || state.generation != nil ? nil : {
-                                do { branchDeletion = try state.branchDeletionDraft(nodeID: node.id); showsBranchDeletion = true }
-                                catch { errorMessage = error.localizedDescription }
-                            }, copyRange: state.exchange == nil || state.generation != nil ? nil : {
-                                do { clipboardDraft = try state.branchClipboardDraft(nodeID: node.id) }
-                                catch { errorMessage = error.localizedDescription }
-                            }, pasteRange: state.exchange == nil || state.generation != nil || !state.hasBranchClipboard ? nil : {
-                                do { clipboardDraft = try state.branchClipboardDraft(nodeID: node.id, operation: .paste) }
-                                catch { errorMessage = error.localizedDescription }
-                            }, configure: state.exchange == nil || state.generation != nil ? nil : {
-                                do { optionsDraft = try state.nodeOptionsDraft(nodeID: node.id) }
-                                catch { errorMessage = error.localizedDescription }
-                            }, toggleCollapse: state.exchange == nil || state.generation != nil ? nil : {
-                                do {
-                                    var changed = try state.nodeOptionsDraft(nodeID: node.id)
-                                    changed.value.collapsed.toggle()
-                                    try state.saveNodeOptions(changed)
-                                } catch { errorMessage = error.localizedDescription }
-                            }, summaryInfo: summaryInfo, openSummary: state.exchange == nil ? nil : {
-                                do { summaryDraft = try state.summaryDraft(nodeID:node.id) }
-                                catch { errorMessage = error.localizedDescription }
-                            }) { siblingID in
-                                state.selectSibling(siblingID, of: node.id)
+                                messageRow(node:node,conversation:conversation,summaryInfo:summaryInfo)
+                                    .id(node.identity)
+                                    .disabled(state.generation != nil)
+                                if state.isLocalConversation && node.role == "user" && !node.options.collapsed {
+                                    prefillInput(key:state.assistantPrefillKey(nodeID:node.id))
+                                }
                             }
-                            .id(node.identity)
-                            .disabled(state.generation != nil)
-                            if state.isLocalConversation && node.role == "user" && !node.options.collapsed {
-                                prefillInput(key:state.assistantPrefillKey(nodeID:node.id))
-                            }
-                            }
-                        }
-                        if state.exchange != nil {
-                            Button("本文を追加", systemImage: "plus.bubble") {
-                                do { draft = try state.messageDraft(nodeID: nil) }
-                                catch { errorMessage = error.localizedDescription }
-                            }
-                            .frame(minHeight: 44)
-                            .disabled(state.generation != nil)
-                            Button("非表示の枝を整理", systemImage: "line.3.horizontal.decrease") {
-                                do { removalDraft = try state.pruneHiddenDraft(); showsRemoval = true }
-                                catch { errorMessage = error.localizedDescription }
-                            }
-                            .frame(minHeight: 44).disabled(state.generation != nil)
                         }
                         if let generation = state.generation {
                             VStack(alignment: .leading, spacing: 8) {
                                 Text(generation.running ? "生成中" : "未保存の生成結果").font(.headline)
                                 if !generation.output.reasoning.isEmpty { MessagePartView(part: .reasoning(generation.output.reasoning), isGenerating: generation.running) }
                                 if !generation.output.text.isEmpty { MessagePartView(part: .text(generation.output.text), isGenerating: generation.running) }
-                                if generation.running { Button("停止") { state.stopGeneration() }.frame(minHeight: 44) }
-                                else { Button("生成結果の保存を再試行") {
+                                if !generation.running { Button("生成結果の保存を再試行") {
                                     do { try state.saveGenerationResult() } catch { state.generationError = error.localizedDescription }
                                 }.frame(minHeight: 44) }
                             }
                         }
                         if let generationError = state.generationError { Text(generationError).foregroundStyle(.red) }
                         if let titleError = state.titleError { Text(titleError).foregroundStyle(.red) }
-                        if state.exchange != nil {
-                            Button("会話の生成設定",systemImage:"slider.horizontal.3") {
-                                do { configDraft = try state.chatConfigDraft() }
-                                catch { errorMessage = error.localizedDescription }
-                            }.disabled(state.generation != nil)
-                            TextField("送信する本文", text: Binding(
-                                get: { state.composerDraft(chatID:conversation.id).text },
-                                set: { text in
-                                    state.setComposerText(chatID:conversation.id,text:text)
-                                }), axis: .vertical)
-                                .lineLimit(3...8).textFieldStyle(.roundedBorder)
-                                .disabled(state.generation != nil)
-                            if let detail = try? state.composerImageDetail(chatID:conversation.id) {
-                                ImageInputView(destinationID:conversation.id) { chatID, urls in
-                                    do { try state.addComposerImages(chatID:chatID,urls:urls,detail:detail) }
-                                    catch { state.generationError = error.localizedDescription }
-                                }
-                                .disabled(state.generation != nil)
-                            }
-                            if let parts = try? state.composerDraft(chatID:conversation.id).parts.array("composer parts") {
-                                ForEach(Array(parts.enumerated()),id: \.offset) { index, part in
-                                    if case .string("image_url") = part["type"],
-                                       case .string(let url) = part["image_url"]?["url"],
-                                       case .string(let detail) = part["image_url"]?["detail"] {
-                                        VStack(alignment:.leading) {
-                                            AttachmentImageView(url:url,detail:detail)
-                                            Button("入力画像を取り消す",systemImage:"xmark.circle") {
-                                                do { try state.removeComposerPart(chatID:conversation.id,index:index) }
-                                                catch { state.generationError = error.localizedDescription }
-                                            }
-                                            .disabled(state.generation != nil)
-                                        }
-                                    }
-                                }
-                            }
-                            if state.isLocalConversation { prefillInput(key:state.stickyPrefillKey) }
-                            Button("送信", systemImage: "paperplane") {
-                                do {
-                                    try state.sendComposer()
-                                } catch { state.generationError = error.localizedDescription }
-                            }
-                            .frame(minHeight: 44)
-                            .disabled(state.generation != nil)
-                        }
                     } else {
                         ContentUnavailableView("会話がありません", systemImage: "bubble.left.and.bubble.right")
                     }
@@ -195,7 +95,11 @@ struct ChatView: View {
                 if let focus { scroll.scrollTo(Data(focus.nodeID.utf8), anchor: .center) }
             }
             }
-            .navigationTitle(RemoteFixture.enabled ? "Weavelet Pilot · FAKE" : "Weavelet Pilot")
+            .safeAreaInset(edge:.bottom,spacing:0) {
+                if let conversation = state.conversation, state.exchange != nil { composer(conversation) }
+            }
+            .navigationTitle((state.conversation.flatMap { $0.title.isEmpty ? nil : $0.title } ?? "Weavelet Pilot") + (RemoteFixture.enabled ? " · FAKE" : ""))
+            .navigationBarTitleDisplayMode(.inline)
             .task {
                 guard ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] == nil else { return }
                 do { try state.loadRemoteSettings() } catch { state.generationError = error.localizedDescription }
@@ -204,20 +108,6 @@ struct ChatView: View {
             }
             .onChange(of:scenePhase) { _, phase in if phase == .background { cloudKitConnection?.flushInBackground() } else if phase == .active { cloudKitConnection?.resumeOnForeground() } }
             .toolbar {
-                ToolbarItemGroup(placement: .bottomBar) {
-                    Button("編集を元に戻す", systemImage: "arrow.uturn.backward") {
-                        do { try state.undoMessageEdit() } catch { errorMessage = error.localizedDescription }
-                    }.disabled(!state.canUndoMessageEdit)
-                    Button("編集をやり直す", systemImage: "arrow.uturn.forward") {
-                        do { try state.redoMessageEdit() } catch { errorMessage = error.localizedDescription }
-                    }.disabled(!state.canRedoMessageEdit)
-                    Button("戻る", systemImage: "chevron.backward") {
-                        do { try state.moveNavigation(.back) } catch { errorMessage = error.localizedDescription }
-                    }.disabled(!state.canNavigateBack || state.generation != nil)
-                    Button("進む", systemImage: "chevron.forward") {
-                        do { try state.moveNavigation(.forward) } catch { errorMessage = error.localizedDescription }
-                    }.disabled(!state.canNavigateForward || state.generation != nil)
-                }
                 ToolbarItemGroup(placement: .topBarLeading) {
                     Button("会話一覧", systemImage: "list.bullet") { showsLibrary = true }
                         .disabled(state.generation != nil)
@@ -229,8 +119,34 @@ struct ChatView: View {
                     }
                     .pickerStyle(.menu)
                     .disabled(state.generation != nil)
+                    Menu("履歴",systemImage:"arrow.uturn.backward.circle") {
+                        Button("編集を元に戻す",systemImage:"arrow.uturn.backward") {
+                            do { try state.undoMessageEdit() } catch { errorMessage = error.localizedDescription }
+                        }.disabled(!state.canUndoMessageEdit)
+                        Button("編集をやり直す",systemImage:"arrow.uturn.forward") {
+                            do { try state.redoMessageEdit() } catch { errorMessage = error.localizedDescription }
+                        }.disabled(!state.canRedoMessageEdit)
+                        Button("戻る",systemImage:"chevron.backward") {
+                            do { try state.moveNavigation(.back) } catch { errorMessage = error.localizedDescription }
+                        }.disabled(!state.canNavigateBack || state.generation != nil)
+                        Button("進む",systemImage:"chevron.forward") {
+                            do { try state.moveNavigation(.forward) } catch { errorMessage = error.localizedDescription }
+                        }.disabled(!state.canNavigateForward || state.generation != nil)
+                    }
+                    .frame(minWidth:44,minHeight:44)
                 }
                 ToolbarItemGroup(placement: .topBarTrailing) {
+                    Menu("会話操作",systemImage:"ellipsis.circle") {
+                        Button("本文を追加",systemImage:"plus.bubble") {
+                            do { draft = try state.messageDraft(nodeID:nil) }
+                            catch { errorMessage = error.localizedDescription }
+                        }.disabled(state.exchange == nil || state.generation != nil)
+                        Button("非表示の枝を整理",systemImage:"line.3.horizontal.decrease") {
+                            do { removalDraft = try state.pruneHiddenDraft(); showsRemoval = true }
+                            catch { errorMessage = error.localizedDescription }
+                        }.disabled(state.exchange == nil || state.generation != nil)
+                    }
+                    .frame(minWidth:44,minHeight:44)
                     Button("検索", systemImage: "magnifyingglass") { showsSearch = true }
                         .disabled(state.exchange == nil || state.generation != nil)
                         .frame(minWidth: 44, minHeight: 44)
@@ -317,6 +233,7 @@ struct ChatView: View {
             .sheet(item: $clipboardDraft) { draft in BranchClipboardView(state: state, draft: draft) }
             .sheet(item: $configDraft) { draft in ChatConfigView(state:state,draft:draft) }
             .sheet(item: $summaryDraft) { draft in ConversationSummaryView(state:state,draft:draft) }
+            .sheet(item: $evaluationDraft) { draft in ConversationEvaluationView(state:state,draft:draft) }
             .sheet(item: $optionsDraft) { draft in NodeOptionsView(state: state, draft: draft) }
             .sheet(isPresented: $showsSearch) {
                 ChatSearchView(state: state) { result, mode in
@@ -369,6 +286,71 @@ struct ChatView: View {
         }
         .environment(\.markdownSettings, (try? state.publicationSnapshot().required("state")) ?? .object([]))
     }
+    private func composer(_ conversation: Conversation) -> some View {
+        VStack(alignment:.leading,spacing:6) {
+            HStack(alignment:.bottom,spacing:8) {
+                Button {
+                    do { configDraft = try state.chatConfigDraft() }
+                    catch { errorMessage = error.localizedDescription }
+                } label: { Image(systemName:"slider.horizontal.3").frame(width:44,height:44) }
+                .accessibilityLabel("会話の生成設定")
+                .disabled(state.generation != nil)
+                TextField("送信する本文",text:Binding(
+                    get:{ state.composerDraft(chatID:conversation.id).text },
+                    set:{ state.setComposerText(chatID:conversation.id,text:$0) }),axis:.vertical)
+                    .lineLimit(3...8).textFieldStyle(.roundedBorder)
+                    .disabled(state.generation != nil)
+                if state.generation?.running == true {
+                    Button("停止",systemImage:"stop.fill") { state.stopGeneration() }
+                        .frame(minWidth:44,minHeight:44)
+                } else {
+                    Button("送信",systemImage:"paperplane") {
+                        do { try state.sendComposer() }
+                        catch { state.generationError = error.localizedDescription }
+                    }
+                    .frame(minWidth:44,minHeight:44)
+                    .disabled(state.generation != nil)
+                }
+            }
+            if let detail = try? state.composerImageDetail(chatID:conversation.id) {
+                ImageInputView(destinationID:conversation.id) { chatID, urls in
+                    do { try state.addComposerImages(chatID:chatID,urls:urls,detail:detail) }
+                    catch { state.generationError = error.localizedDescription }
+                }
+                .disabled(state.generation != nil)
+            }
+            if let parts = try? state.composerDraft(chatID:conversation.id).parts.array("composer parts") {
+                let images = Array(parts.enumerated()).filter { $0.element["type"] == .string("image_url") }
+                if !images.isEmpty {
+                ScrollView(.horizontal) {
+                    HStack(alignment:.top) {
+                        ForEach(images,id:\.offset) { index, part in
+                            if case .string("image_url") = part["type"],
+                               case .string(let url) = part["image_url"]?["url"],
+                               case .string(let detail) = part["image_url"]?["detail"] {
+                                VStack(alignment:.leading) {
+                                    AttachmentImageView(url:url,detail:detail)
+                                        .frame(width:100,height:80)
+                                    Button("入力画像を取り消す",systemImage:"xmark.circle") {
+                                        do { try state.removeComposerPart(chatID:conversation.id,index:index) }
+                                        catch { state.generationError = error.localizedDescription }
+                                    }
+                                    .disabled(state.generation != nil)
+                                }
+                            }
+                        }
+                    }
+                }
+                .frame(maxHeight:120)
+                }
+            }
+            if state.isLocalConversation { prefillInput(key:state.stickyPrefillKey) }
+        }
+        .padding(.horizontal,20).padding(.vertical,8)
+        .frame(maxWidth:900)
+        .frame(maxWidth:.infinity)
+        .background(.regularMaterial)
+    }
     private func prefillInput(key: String) -> some View {
         DisclosureGroup("アシスタントの先頭文") {
             TextField("応答の書き出し",text:Binding(
@@ -390,6 +372,72 @@ struct ChatView: View {
                 confirmsPartialImport = true
             }
             catch { errorMessage = error.localizedDescription }
+        }
+    }
+
+    private func messageRow(node: MessageNode, conversation: Conversation, summaryInfo: OrderedJSON?) -> some View {
+        let summarySelection: ((String,Bool) -> Void)? = state.exchange == nil || state.generation != nil ? nil : { id, use in
+            do { try state.mutateSummary(chatID:conversation.id,action:"use",summaryID:id,use:use) }
+            catch { errorMessage = error.localizedDescription }
+        }
+        return MessageView(node: node, siblings: state.siblings(for: node.id), style: state.style, edit: state.exchange == nil || state.generation != nil ? nil : {
+            do { draft = try state.messageDraft(nodeID: node.id) }
+            catch { errorMessage = error.localizedDescription }
+        }, insertBefore: state.exchange == nil || state.generation != nil ? nil : {
+            do { draft = try state.messageInsertionDraft(beforeNodeID: node.id) }
+            catch { errorMessage = error.localizedDescription }
+        }, regenerate: state.exchange == nil || state.generation != nil ? nil : {
+            generate(node.id, operation: .regenerate)
+        }, generateFromHere: state.exchange == nil || state.generation != nil ? nil : {
+            generate(node.id, operation: .fromHere)
+        }, remove: state.exchange == nil || state.generation != nil ? nil : {
+            do { removalDraft = try state.nodeRemovalDraft(nodeID: node.id); showsRemoval = true }
+            catch { errorMessage = error.localizedDescription }
+        }, moveUp: state.exchange == nil || state.generation != nil ? nil : {
+            move(node.id, direction: .up)
+        }, moveDown: state.exchange == nil || state.generation != nil ? nil : {
+            move(node.id, direction: .down)
+        }, replaceAndPrune: state.exchange == nil || state.generation != nil ? nil : {
+            do { draft = try state.messageReplacementDraft(nodeID: node.id) }
+            catch { errorMessage = error.localizedDescription }
+        }, deleteBranch: state.exchange == nil || state.generation != nil ? nil : {
+            do { branchDeletion = try state.branchDeletionDraft(nodeID: node.id); showsBranchDeletion = true }
+            catch { errorMessage = error.localizedDescription }
+        }, copyRange: state.exchange == nil || state.generation != nil ? nil : {
+            do { clipboardDraft = try state.branchClipboardDraft(nodeID: node.id) }
+            catch { errorMessage = error.localizedDescription }
+        }, pasteRange: state.exchange == nil || state.generation != nil || !state.hasBranchClipboard ? nil : {
+            do { clipboardDraft = try state.branchClipboardDraft(nodeID: node.id, operation: .paste) }
+            catch { errorMessage = error.localizedDescription }
+        }, configure: state.exchange == nil || state.generation != nil ? nil : {
+            do { optionsDraft = try state.nodeOptionsDraft(nodeID: node.id) }
+            catch { errorMessage = error.localizedDescription }
+        }, toggleCollapse: state.exchange == nil || state.generation != nil ? nil : {
+            do {
+                var changed = try state.nodeOptionsDraft(nodeID: node.id)
+                changed.value.collapsed.toggle()
+                try state.saveNodeOptions(changed)
+            } catch { errorMessage = error.localizedDescription }
+        }, openEvaluation: state.exchange == nil ? nil : {
+            do { evaluationDraft = try state.evaluationDraft(nodeID:node.id) }
+            catch { errorMessage = error.localizedDescription }
+        }, toggleOmitted: state.exchange == nil || state.generation != nil ? nil : {
+            do {
+                var changed = try state.nodeOptionsDraft(nodeID:node.id)
+                changed.value.omitted.toggle()
+                try state.saveNodeOptions(changed)
+            } catch { errorMessage = error.localizedDescription }
+        }, toggleProtected: state.exchange == nil || state.generation != nil ? nil : {
+            do {
+                var changed = try state.nodeOptionsDraft(nodeID:node.id)
+                changed.value.protected.toggle()
+                try state.saveNodeOptions(changed)
+            } catch { errorMessage = error.localizedDescription }
+        }, summaryInfo: summaryInfo, openSummary: state.exchange == nil ? nil : {
+            do { summaryDraft = try state.summaryDraft(nodeID:node.id) }
+            catch { errorMessage = error.localizedDescription }
+        }, selectSummary: summarySelection) { siblingID in
+            state.selectSibling(siblingID, of: node.id)
         }
     }
 
@@ -427,9 +475,16 @@ struct MessageView: View {
     var pasteRange: (() -> Void)? = nil
     var configure: (() -> Void)? = nil
     var toggleCollapse: (() -> Void)? = nil
+    var openEvaluation: (() -> Void)? = nil
+    var toggleOmitted: (() -> Void)? = nil
+    var toggleProtected: (() -> Void)? = nil
     var summaryInfo: OrderedJSON? = nil
     var openSummary: (() -> Void)? = nil
+    var selectSummary: ((String,Bool) -> Void)? = nil
     let select: (String) -> Void
+    @Environment(\.markdownSettings) private var markdownSettings
+    @State private var markdownMode: Bool?
+    @State private var markdownRevision = 0
 
     private var roleName: String {
         switch node.role {
@@ -447,6 +502,108 @@ struct MessageView: View {
         }
     }
 
+    @ViewBuilder private var messageOperations: some View {
+        if edit != nil || insertBefore != nil || regenerate != nil || generateFromHere != nil || remove != nil || configure != nil || toggleCollapse != nil || moveUp != nil || moveDown != nil || replaceAndPrune != nil || deleteBranch != nil || copyRange != nil || pasteRange != nil {
+            Menu {
+                if let edit { Button("編集", systemImage: "square.and.pencil", action: edit) }
+                if let regenerate { Button("再生成", systemImage:"arrow.clockwise",action:regenerate) }
+                if let generateFromHere { Button("ここから生成",systemImage:"sparkles",action:generateFromHere) }
+                if let insertBefore { Button("前に挿入", systemImage: "text.insert", action: insertBefore) }
+                if let toggleCollapse { Button(node.options.collapsed ? "本文を展開" : "本文を折りたたむ", systemImage: node.options.collapsed ? "chevron.down" : "chevron.up", action: toggleCollapse) }
+                if let configure { Button("メッセージ設定", systemImage: "slider.horizontal.3", action: configure) }
+                if let moveUp { Button("上へ移動", systemImage: "arrow.up", action: moveUp) }
+                if let moveDown { Button("下へ移動", systemImage: "arrow.down", action: moveDown) }
+                if let replaceAndPrune { Button("後続を整理して編集", systemImage: "square.and.pencil", action: replaceAndPrune) }
+                if let copyRange { Button("範囲コピー・切り取り・移動", systemImage: "doc.on.doc", action: copyRange) }
+                if let pasteRange { Button("ここへ貼り付け", systemImage: "doc.on.clipboard", action: pasteRange) }
+                if let remove { Button("1件削除", systemImage: "trash", role: .destructive, action: remove) }
+                if let deleteBranch { Button("枝全体を削除", systemImage: "trash.fill", role: .destructive, action: deleteBranch) }
+            } label: {
+                Image(systemName:"ellipsis").frame(width:44,height:44)
+            }
+            .accessibilityLabel("メッセージ操作")
+            .frame(minWidth: 44, minHeight: 44)
+        }
+    }
+
+    private var headerTitle: some View {
+        HStack(spacing: 8) {
+            Label(roleName,systemImage:icon)
+                .font(.headline)
+                .accessibilityAddTraits(.isHeader)
+            if node.options.starred { Image(systemName:"star.fill").accessibilityLabel("スター") }
+            if node.options.pinned { Image(systemName:"pin.fill").accessibilityLabel("ピン留め") }
+        }
+    }
+
+    private var headerControls: some View {
+        return ViewThatFits(in:.horizontal) {
+            HStack(spacing:2) { primaryHeaderControls; secondaryHeaderControls }
+            VStack(alignment:.trailing,spacing:0) {
+                primaryHeaderControls
+                secondaryHeaderControls
+            }
+        }
+    }
+
+    private var primaryHeaderControls: some View {
+        let tab = (try? summaryInfo?["tab"]?.string("tab")) ?? "original"
+        let tabName = tab == "compact" ? "圧縮" : tab == "summary" ? "要約" : "原文"
+        return HStack(spacing:2) {
+            if let openSummary {
+                Menu {
+                    if let id = try? summaryInfo?["summary"]?["id"]?.string("summary ID") {
+                        Button("原文",systemImage:"doc.text") { selectSummary?(id,false) }
+                            .disabled(selectSummary == nil)
+                    }
+                    if summaryInfo?["valid"] == .bool(true) {
+                        if let id = try? summaryInfo?["readable"]?["id"]?.string("summary ID") {
+                            Button("要約",systemImage:"text.alignleft") { selectSummary?(id,true) }
+                                .disabled(selectSummary == nil)
+                        }
+                        if let id = try? summaryInfo?["compact"]?["id"]?.string("summary ID") {
+                            Button("圧縮",systemImage:"line.3.horizontal.decrease") { selectSummary?(id,true) }
+                                .disabled(selectSummary == nil)
+                        }
+                    }
+                    Divider()
+                    Button("Markdownで整形",systemImage:"textformat") {
+                        markdownMode = true; markdownRevision += 1
+                    }
+                    Button("テキストで表示",systemImage:"text.quote") {
+                        markdownMode = false; markdownRevision += 1
+                    }
+                    Button("詳細設定",systemImage:"slider.horizontal.3",action:openSummary)
+                } label: {
+                    Label(tabName,systemImage:"chevron.down")
+                        .font(.subheadline)
+                        .frame(minHeight:44)
+                }
+                .accessibilityLabel("表示形式: \(tabName)")
+            }
+            if let openEvaluation {
+                Button(action:openEvaluation) { Image(systemName:"checkmark.shield").frame(width:44,height:44) }
+                    .accessibilityLabel("評価")
+            }
+        }
+    }
+
+    private var secondaryHeaderControls: some View {
+        HStack(spacing:2) {
+            if let toggleOmitted {
+                Button(action:toggleOmitted) { Image(systemName:node.options.omitted ? "eye.slash.fill" : "eye.slash").frame(width:44,height:44) }
+                    .foregroundStyle(node.options.omitted ? Color.orange : Color.secondary)
+                    .accessibilityLabel(node.options.omitted ? "生成時の文脈から除外中。解除" : "生成時の文脈から除外")
+            } else if node.options.omitted { Image(systemName:"eye.slash.fill").accessibilityLabel("生成時の文脈から除外") }
+            if let toggleProtected {
+                Button(action:toggleProtected) { Image(systemName:node.options.protected ? "lock.fill" : "lock").frame(width:44,height:44) }
+                    .foregroundStyle(node.options.protected ? Color.blue : Color.secondary)
+                    .accessibilityLabel(node.options.protected ? "保護中。解除" : "上書き・削除から保護")
+            } else if node.options.protected { Image(systemName:"lock.fill").accessibilityLabel("上書き・削除から保護") }
+            messageOperations
+        }
+    }
+
     var body: some View {
         let isBubble = style == .bubbles
         let summary = summaryInfo?["summary"]
@@ -455,18 +612,18 @@ struct MessageView: View {
         HStack(spacing: 0) {
             if isBubble && node.role == "user" { Spacer(minLength: 24) }
             VStack(alignment: .leading, spacing: 12) {
-                Label(roleName, systemImage: icon)
-                    .font(.headline)
-                    .accessibilityAddTraits(.isHeader)
-                if !node.options.label.isEmpty { Text(node.options.label).font(.subheadline).foregroundStyle(.secondary) }
-                if node.options.starred || node.options.pinned || node.options.omitted || node.options.protected {
-                    HStack(spacing: 12) {
-                        if node.options.starred { Image(systemName: "star.fill").accessibilityLabel("スター") }
-                        if node.options.pinned { Image(systemName: "pin.fill").accessibilityLabel("ピン留め") }
-                        if node.options.omitted { Image(systemName: "eye.slash").accessibilityLabel("生成時の文脈から除外") }
-                        if node.options.protected { Image(systemName: "lock.fill").accessibilityLabel("上書き・削除から保護") }
-                    }.foregroundStyle(.secondary)
+                ViewThatFits(in:.horizontal) {
+                    HStack(spacing:8) {
+                        headerTitle
+                        Spacer(minLength:8)
+                        headerControls
+                    }
+                    VStack(alignment:.leading,spacing:0) {
+                        headerTitle
+                        headerControls.frame(maxWidth:.infinity,alignment:.trailing)
+                    }
                 }
+                if !node.options.label.isEmpty { Text(node.options.label).font(.subheadline).foregroundStyle(.secondary) }
                 if showsSummary, let text = try? summary?["text"]?.string("summary text") {
                     Text(tab == "compact" ? "圧縮" : "要約").font(.caption).foregroundStyle(.secondary)
                     MarkdownTextView(text:text)
@@ -478,28 +635,6 @@ struct MessageView: View {
                     ForEach(Array(node.parts.enumerated()), id: \.offset) { _, part in
                         MessagePartView(part: part)
                     }
-                }
-                if let openSummary {
-                    Button("要約・圧縮",systemImage:"text.alignleft",action:openSummary)
-                        .frame(minHeight:44)
-                }
-                if edit != nil || insertBefore != nil || regenerate != nil || generateFromHere != nil || remove != nil || configure != nil || toggleCollapse != nil || moveUp != nil || moveDown != nil || replaceAndPrune != nil || deleteBranch != nil || copyRange != nil || pasteRange != nil {
-                    Menu("メッセージ操作", systemImage: "ellipsis") {
-                        if let edit { Button("編集", systemImage: "square.and.pencil", action: edit) }
-                        if let regenerate { Button("再生成", systemImage:"arrow.clockwise",action:regenerate) }
-                        if let generateFromHere { Button("ここから生成",systemImage:"sparkles",action:generateFromHere) }
-                        if let insertBefore { Button("前に挿入", systemImage: "text.insert", action: insertBefore) }
-                        if let toggleCollapse { Button(node.options.collapsed ? "本文を展開" : "本文を折りたたむ", systemImage: node.options.collapsed ? "chevron.down" : "chevron.up", action: toggleCollapse) }
-                        if let configure { Button("メッセージ設定", systemImage: "slider.horizontal.3", action: configure) }
-                        if let moveUp { Button("上へ移動", systemImage: "arrow.up", action: moveUp) }
-                        if let moveDown { Button("下へ移動", systemImage: "arrow.down", action: moveDown) }
-                        if let replaceAndPrune { Button("後続を整理して編集", systemImage: "square.and.pencil", action: replaceAndPrune) }
-                        if let copyRange { Button("範囲コピー・切り取り・移動", systemImage: "doc.on.doc", action: copyRange) }
-                        if let pasteRange { Button("ここへ貼り付け", systemImage: "doc.on.clipboard", action: pasteRange) }
-                        if let remove { Button("1件削除", systemImage: "trash", role: .destructive, action: remove) }
-                        if let deleteBranch { Button("枝全体を削除", systemImage: "trash.fill", role: .destructive, action: deleteBranch) }
-                    }
-                    .frame(minWidth: 44, minHeight: 44)
                 }
                 if siblings.count > 1 {
                     let position = (siblings.firstIndex(where: { $0.id.utf8.elementsEqual(node.id.utf8) }) ?? 0) + 1
@@ -536,6 +671,7 @@ struct MessageView: View {
             if isBubble && node.role == "assistant" { Spacer(minLength: 24) }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
+        .environment(\.markdownPresentation, MarkdownPresentation(mode:markdownMode,revision:markdownRevision,controlsHidden:openSummary != nil))
     }
 }
 

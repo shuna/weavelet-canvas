@@ -44,9 +44,9 @@ var WeaveletGoogleSync = (() => {
        */
       (function() {
         var undefined2;
-        var VERSION = "4.17.21";
+        var VERSION = "4.18.1";
         var LARGE_ARRAY_SIZE = 200;
-        var CORE_ERROR_TEXT = "Unsupported core-js use. Try https://npms.io/search?q=ponyfill.", FUNC_ERROR_TEXT = "Expected a function", INVALID_TEMPL_VAR_ERROR_TEXT = "Invalid `variable` option passed into `_.template`";
+        var CORE_ERROR_TEXT = "Unsupported core-js use. Try https://npms.io/search?q=ponyfill.", FUNC_ERROR_TEXT = "Expected a function", INVALID_TEMPL_VAR_ERROR_TEXT = "Invalid `variable` option passed into `_.template`", INVALID_TEMPL_IMPORTS_ERROR_TEXT = "Invalid `imports` option passed into `_.template`";
         var HASH_UNDEFINED = "__lodash_hash_undefined__";
         var MAX_MEMOIZE_SIZE = 500;
         var PLACEHOLDER = "__lodash_placeholder__";
@@ -1972,8 +1972,21 @@ var WeaveletGoogleSync = (() => {
           }
           function baseUnset(object2, path) {
             path = castPath(path, object2);
-            object2 = parent(object2, path);
-            return object2 == null || delete object2[toKey(last(path))];
+            var index = -1, length = path.length;
+            if (!length) {
+              return true;
+            }
+            while (++index < length) {
+              var key = toKey(path[index]);
+              if (key === "__proto__" && !hasOwnProperty.call(object2, "__proto__")) {
+                return false;
+              }
+              if ((key === "constructor" || key === "prototype") && index < length - 1) {
+                return false;
+              }
+            }
+            var obj = parent(object2, path);
+            return obj == null || delete obj[toKey(last(path))];
           }
           function baseUpdate(object2, path, updater, customizer) {
             return baseSet(object2, path, updater(baseGet(object2, path)), customizer);
@@ -3300,7 +3313,7 @@ var WeaveletGoogleSync = (() => {
             var index = -1, length = pairs == null ? 0 : pairs.length, result4 = {};
             while (++index < length) {
               var pair = pairs[index];
-              result4[pair[0]] = pair[1];
+              baseAssignValue(result4, pair[0], pair[1]);
             }
             return result4;
           }
@@ -4684,8 +4697,13 @@ var WeaveletGoogleSync = (() => {
               options = undefined2;
             }
             string = toString(string);
-            options = assignInWith({}, options, settings, customDefaultsAssignIn);
-            var imports = assignInWith({}, options.imports, settings.imports, customDefaultsAssignIn), importsKeys = keys(imports), importsValues = baseValues(imports, importsKeys);
+            options = assignWith({}, options, settings, customDefaultsAssignIn);
+            var imports = assignWith({}, options.imports, settings.imports, customDefaultsAssignIn), importsKeys = keys(imports), importsValues = baseValues(imports, importsKeys);
+            arrayEach(importsKeys, function(key) {
+              if (reForbiddenIdentifierChars.test(key)) {
+                throw new Error2(INVALID_TEMPL_IMPORTS_ERROR_TEXT);
+              }
+            });
             var isEscaping, isEvaluating, index = 0, interpolate = options.interpolate || reNoMatch, source = "__p += '";
             var reDelimiters = RegExp2(
               (options.escape || reNoMatch).source + "|" + interpolate.source + "|" + (interpolate === reInterpolate ? reEsTemplate : reNoMatch).source + "|" + (options.evaluate || reNoMatch).source + "|$",
@@ -7515,168 +7533,137 @@ var WeaveletGoogleSync = (() => {
   }
 
   // node_modules/@babel/runtime/helpers/esm/typeof.js
-  function _typeof(obj) {
+  function _typeof(o) {
     "@babel/helpers - typeof";
-    return _typeof = "function" == typeof Symbol && "symbol" == typeof Symbol.iterator ? function(obj2) {
-      return typeof obj2;
-    } : function(obj2) {
-      return obj2 && "function" == typeof Symbol && obj2.constructor === Symbol && obj2 !== Symbol.prototype ? "symbol" : typeof obj2;
-    }, _typeof(obj);
+    return _typeof = "function" == typeof Symbol && "symbol" == typeof Symbol.iterator ? function(o2) {
+      return typeof o2;
+    } : function(o2) {
+      return o2 && "function" == typeof Symbol && o2.constructor === Symbol && o2 !== Symbol.prototype ? "symbol" : typeof o2;
+    }, _typeof(o);
   }
 
   // node_modules/@babel/runtime/helpers/esm/classCallCheck.js
-  function _classCallCheck(instance2, Constructor) {
-    if (!(instance2 instanceof Constructor)) {
+  function _classCallCheck(a, n) {
+    if (!(a instanceof n))
       throw new TypeError("Cannot call a class as a function");
-    }
   }
 
   // node_modules/@babel/runtime/helpers/esm/toPrimitive.js
-  function _toPrimitive(input, hint) {
-    if (_typeof(input) !== "object" || input === null)
-      return input;
-    var prim = input[Symbol.toPrimitive];
-    if (prim !== void 0) {
-      var res = prim.call(input, hint || "default");
-      if (_typeof(res) !== "object")
-        return res;
+  function toPrimitive(t2, r) {
+    if ("object" != _typeof(t2) || !t2)
+      return t2;
+    var e = t2[Symbol.toPrimitive];
+    if (void 0 !== e) {
+      var i = e.call(t2, r || "default");
+      if ("object" != _typeof(i))
+        return i;
       throw new TypeError("@@toPrimitive must return a primitive value.");
     }
-    return (hint === "string" ? String : Number)(input);
+    return ("string" === r ? String : Number)(t2);
   }
 
   // node_modules/@babel/runtime/helpers/esm/toPropertyKey.js
-  function _toPropertyKey(arg) {
-    var key = _toPrimitive(arg, "string");
-    return _typeof(key) === "symbol" ? key : String(key);
+  function toPropertyKey(t2) {
+    var i = toPrimitive(t2, "string");
+    return "symbol" == _typeof(i) ? i : i + "";
   }
 
   // node_modules/@babel/runtime/helpers/esm/createClass.js
-  function _defineProperties(target, props) {
-    for (var i = 0; i < props.length; i++) {
-      var descriptor = props[i];
-      descriptor.enumerable = descriptor.enumerable || false;
-      descriptor.configurable = true;
-      if ("value" in descriptor)
-        descriptor.writable = true;
-      Object.defineProperty(target, _toPropertyKey(descriptor.key), descriptor);
+  function _defineProperties(e, r) {
+    for (var t2 = 0; t2 < r.length; t2++) {
+      var o = r[t2];
+      o.enumerable = o.enumerable || false, o.configurable = true, "value" in o && (o.writable = true), Object.defineProperty(e, toPropertyKey(o.key), o);
     }
   }
-  function _createClass(Constructor, protoProps, staticProps) {
-    if (protoProps)
-      _defineProperties(Constructor.prototype, protoProps);
-    if (staticProps)
-      _defineProperties(Constructor, staticProps);
-    Object.defineProperty(Constructor, "prototype", {
+  function _createClass(e, r, t2) {
+    return r && _defineProperties(e.prototype, r), t2 && _defineProperties(e, t2), Object.defineProperty(e, "prototype", {
       writable: false
-    });
-    return Constructor;
+    }), e;
   }
 
   // node_modules/@babel/runtime/helpers/esm/assertThisInitialized.js
-  function _assertThisInitialized(self2) {
-    if (self2 === void 0) {
+  function _assertThisInitialized(e) {
+    if (void 0 === e)
       throw new ReferenceError("this hasn't been initialised - super() hasn't been called");
-    }
-    return self2;
+    return e;
   }
 
   // node_modules/@babel/runtime/helpers/esm/setPrototypeOf.js
-  function _setPrototypeOf(o, p) {
-    _setPrototypeOf = Object.setPrototypeOf ? Object.setPrototypeOf.bind() : function _setPrototypeOf2(o2, p2) {
-      o2.__proto__ = p2;
-      return o2;
-    };
-    return _setPrototypeOf(o, p);
+  function _setPrototypeOf(t2, e) {
+    return _setPrototypeOf = Object.setPrototypeOf ? Object.setPrototypeOf.bind() : function(t3, e2) {
+      return t3.__proto__ = e2, t3;
+    }, _setPrototypeOf(t2, e);
   }
 
   // node_modules/@babel/runtime/helpers/esm/inherits.js
-  function _inherits(subClass, superClass) {
-    if (typeof superClass !== "function" && superClass !== null) {
+  function _inherits(t2, e) {
+    if ("function" != typeof e && null !== e)
       throw new TypeError("Super expression must either be null or a function");
-    }
-    subClass.prototype = Object.create(superClass && superClass.prototype, {
+    t2.prototype = Object.create(e && e.prototype, {
       constructor: {
-        value: subClass,
+        value: t2,
         writable: true,
         configurable: true
       }
-    });
-    Object.defineProperty(subClass, "prototype", {
+    }), Object.defineProperty(t2, "prototype", {
       writable: false
-    });
-    if (superClass)
-      _setPrototypeOf(subClass, superClass);
+    }), e && _setPrototypeOf(t2, e);
   }
 
   // node_modules/@babel/runtime/helpers/esm/possibleConstructorReturn.js
-  function _possibleConstructorReturn(self2, call2) {
-    if (call2 && (_typeof(call2) === "object" || typeof call2 === "function")) {
-      return call2;
-    } else if (call2 !== void 0) {
+  function _possibleConstructorReturn(t2, e) {
+    if (e && ("object" == _typeof(e) || "function" == typeof e))
+      return e;
+    if (void 0 !== e)
       throw new TypeError("Derived constructors may only return object or undefined");
-    }
-    return _assertThisInitialized(self2);
+    return _assertThisInitialized(t2);
   }
 
   // node_modules/@babel/runtime/helpers/esm/getPrototypeOf.js
-  function _getPrototypeOf(o) {
-    _getPrototypeOf = Object.setPrototypeOf ? Object.getPrototypeOf.bind() : function _getPrototypeOf2(o2) {
-      return o2.__proto__ || Object.getPrototypeOf(o2);
-    };
-    return _getPrototypeOf(o);
+  function _getPrototypeOf(t2) {
+    return _getPrototypeOf = Object.setPrototypeOf ? Object.getPrototypeOf.bind() : function(t3) {
+      return t3.__proto__ || Object.getPrototypeOf(t3);
+    }, _getPrototypeOf(t2);
   }
 
   // node_modules/@babel/runtime/helpers/esm/defineProperty.js
-  function _defineProperty(obj, key, value) {
-    key = _toPropertyKey(key);
-    if (key in obj) {
-      Object.defineProperty(obj, key, {
-        value,
-        enumerable: true,
-        configurable: true,
-        writable: true
-      });
-    } else {
-      obj[key] = value;
-    }
-    return obj;
+  function _defineProperty(e, r, t2) {
+    return (r = toPropertyKey(r)) in e ? Object.defineProperty(e, r, {
+      value: t2,
+      enumerable: true,
+      configurable: true,
+      writable: true
+    }) : e[r] = t2, e;
   }
 
   // node_modules/@babel/runtime/helpers/esm/arrayWithHoles.js
-  function _arrayWithHoles(arr) {
-    if (Array.isArray(arr))
-      return arr;
+  function _arrayWithHoles(r) {
+    if (Array.isArray(r))
+      return r;
   }
 
   // node_modules/@babel/runtime/helpers/esm/iterableToArray.js
-  function _iterableToArray(iter) {
-    if (typeof Symbol !== "undefined" && iter[Symbol.iterator] != null || iter["@@iterator"] != null)
-      return Array.from(iter);
+  function _iterableToArray(r) {
+    if ("undefined" != typeof Symbol && null != r[Symbol.iterator] || null != r["@@iterator"])
+      return Array.from(r);
   }
 
   // node_modules/@babel/runtime/helpers/esm/arrayLikeToArray.js
-  function _arrayLikeToArray(arr, len) {
-    if (len == null || len > arr.length)
-      len = arr.length;
-    for (var i = 0, arr2 = new Array(len); i < len; i++)
-      arr2[i] = arr[i];
-    return arr2;
+  function _arrayLikeToArray(r, a) {
+    (null == a || a > r.length) && (a = r.length);
+    for (var e = 0, n = Array(a); e < a; e++)
+      n[e] = r[e];
+    return n;
   }
 
   // node_modules/@babel/runtime/helpers/esm/unsupportedIterableToArray.js
-  function _unsupportedIterableToArray(o, minLen) {
-    if (!o)
-      return;
-    if (typeof o === "string")
-      return _arrayLikeToArray(o, minLen);
-    var n = Object.prototype.toString.call(o).slice(8, -1);
-    if (n === "Object" && o.constructor)
-      n = o.constructor.name;
-    if (n === "Map" || n === "Set")
-      return Array.from(o);
-    if (n === "Arguments" || /^(?:Ui|I)nt(?:8|16|32)(?:Clamped)?Array$/.test(n))
-      return _arrayLikeToArray(o, minLen);
+  function _unsupportedIterableToArray(r, a) {
+    if (r) {
+      if ("string" == typeof r)
+        return _arrayLikeToArray(r, a);
+      var t2 = {}.toString.call(r).slice(8, -1);
+      return "Object" === t2 && r.constructor && (t2 = r.constructor.name), "Map" === t2 || "Set" === t2 ? Array.from(r) : "Arguments" === t2 || /^(?:Ui|I)nt(?:8|16|32)(?:Clamped)?Array$/.test(t2) ? _arrayLikeToArray(r, a) : void 0;
+    }
   }
 
   // node_modules/@babel/runtime/helpers/esm/nonIterableRest.js
@@ -7685,8 +7672,8 @@ var WeaveletGoogleSync = (() => {
   }
 
   // node_modules/@babel/runtime/helpers/esm/toArray.js
-  function _toArray(arr) {
-    return _arrayWithHoles(arr) || _iterableToArray(arr) || _unsupportedIterableToArray(arr) || _nonIterableRest();
+  function _toArray(r) {
+    return _arrayWithHoles(r) || _iterableToArray(r) || _unsupportedIterableToArray(r) || _nonIterableRest();
   }
 
   // node_modules/i18next/dist/esm/i18next.js
@@ -20438,12 +20425,27 @@ ${assistantResponse}`;
     if (/openai\.com|openrouter\.ai|together\.xyz|fireworks\.ai|groq\.com|mistral\.ai|deepinfra\.com/i.test(chatUrl))
       body.response_format = { type: "json_object" };
     let isOpenRouter = false;
-    try {
-      isOpenRouter = isOpenRouterURL(new URL(chatUrl));
-    } catch {
-    }
-    applyOpenRouterControls(isOpenRouter, { model: input.model, max_tokens: 0, temperature: 0, top_p: 1, presence_penalty: 0, frequency_penalty: 0, openRouter: { routing: hardOpenRouterConstraints(input.openRouter), responseCache: { mode: "off" } } }, body, headers, { auxiliary: true, viaProxy: input.viaProxy ?? false });
+    if (input.endpointURL)
+      isOpenRouter = isOpenRouterURL(input.endpointURL);
+    else
+      try {
+        isOpenRouter = isOpenRouterURL(new URL(chatUrl));
+      } catch {
+      }
+    const routing = hardOpenRouterConstraints(input.openRouter);
+    if (routing && !isOpenRouter)
+      throw new Error("[EVAL_OPENROUTER_AUXILIARY_ENDPOINT_REQUIRED]");
+    applyOpenRouterControls(isOpenRouter, { model: input.model, max_tokens: 0, temperature: 0, top_p: 1, presence_penalty: 0, frequency_penalty: 0, openRouter: { routing, responseCache: { mode: "off" } } }, body, headers, { auxiliary: true, viaProxy: input.viaProxy ?? false });
     return { chatUrl, headers, body };
+  }
+  function buildSafetyRequest(input) {
+    if (hardOpenRouterConstraints(input.openRouter))
+      throw new Error("[EVAL_SAFETY_OPENROUTER_CONSTRAINTS]");
+    return {
+      endpoint: input.endpoint.replace(/\/chat\/completions\/?$/, "").replace(/\/+$/, "") + "/moderations",
+      headers: { "Content-Type": "application/json" },
+      body: { input: input.text }
+    };
   }
 
   // src/utils/evaluationContextCore.ts
@@ -20594,6 +20596,13 @@ ${text}`;
         const { chatUrl, headers, body } = buildJudgeRequest(input);
         return JSON.stringify({ chatUrl, headers, body, authentication: input.hasApiKey ? "bearer" : null });
       }
+      case "safetyAllowed": {
+        if (hardOpenRouterConstraints(input.openRouter))
+          throw new Error("[EVAL_SAFETY_OPENROUTER_CONSTRAINTS]");
+        return JSON.stringify(true);
+      }
+      case "safetyRequest":
+        return JSON.stringify(buildSafetyRequest(input));
       case "parseQuality":
         return JSON.stringify({ ...parseJudgeResponse(input.text, input.mode), timestamp: input.now });
       case "parseSafety":

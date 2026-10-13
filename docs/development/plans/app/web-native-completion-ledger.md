@@ -531,3 +531,18 @@ Web実処理由来の選択・原文保持・生成要求・評価・CRUD・表�
 独立Astraはplan返却判定、重複終了jobによる生成中job隠蔽、削減成功の未採用、omit時の表示/送信不一致を指摘。plan必須request読取、busy優先＋重複終了job除去、共有use操作を利用量と同atomic保存へ接続、既存送信omit条件を共通関数へ分離して表示にも適用した。指摘範囲の再監査は新規なし。SummaryIdentityはUnicode正規化で別IDを混同しないようUTF8 bytesで比較/hash。古いtaskのdeferが新ticketを解除しない。ログは/private/tmp/weavelet-summary-{bundle-final,freshness-final,types-final,web-final,catalyst,catalyst-fixed,catalyst-final}.log。
 
 省略した重複確認：全保存/暗号化同期往復、全依存監査、変更のない全suite。追加SDKなし。画面手動操作、正確なtokenizer、実API/実クラウド同期、要約追加後の実機再インストールは未確認。Air上の導入済み版は前の監査済みcheckpointを維持する。全体目標の完了とは扱わない。
+
+
+## 手動オンライン評価とWeb配置へのUI調整（2026-10-13）
+
+共有coreのWeb実caller接続、native context/request/parse/result保存を統合。安全性はOpenAI専用Keychain credential、品質は既存provider解決とOpenRouter routing制約/補助要求cache無効を使用する。JSCにURL globalがないため検証済native URL metadataを共有判定へ渡す。秘密値は共有入力へ渡さず既存bindEnvelopeで同一originへ束縛。差分はraw stateへ適用し、未変更dimension/unknown属性と新安全性応答の精密値をopaque参照で保持する。世代比較はUTF8 encoded bytes、delta本文は既存共有resolverへ接続した。
+
+再利用する成功結果：共有担当の関連19件・Web型検査。監査修正後の影響core8件が成功、変更のないhookを再実行しない。bundle生成/鮮度と差分確認成功。Catalystは評価adapter3件＋store1件、Markdown表示1件の5件の成功範囲。評価3件はUI分割修正後のrun、store1件はFAKE捕捉修正後の限定run、UI最終変更後はstore1＋Markdown1を確認した。最終5件を単一runした証拠ではない。代表store経路はimport→評価結果保存→再起動→exportの評価root一致、書込失敗時memory/disk不変と再試行成功、未知巨大値保持を確認。追加の暗号化同期全往復は、同期・変換基盤が不変のため既存corpus/wire成功を再利用する。
+
+独立Astra指摘：投影stateに差分を適用してopaqueRefが残る問題、新result再投入による精密値丸め、必須OpenRouter制約と非対応endpointの不一致を拒否しない問題を修正した。UIでは生成中に無効な表示切替項目を選べる問題をdisabledで修正。変更範囲の限定再監査は新規なし。保存・通信・root保持の全再監査は行っていない。
+
+失敗は区別する。初回安全性testのopenRouter:nullは実Web validatorが不正設定として拒否するため、制約なしfixtureは属性未指定へ訂正した。UI追加後は巨大View式の型推論でbuild失敗し、既存message行構築を小さい関数へ分離した。store追加testはURLProtocolがfixture.invalidを捕捉せずDNS失敗し、FAKE host捕捉を追加して元assertのまま成功。以前の失敗を保存失敗の成功証拠に数えない。ログは/private/tmp/weavelet-evaluation-{bundle-final,freshness-final,catalyst,catalyst-final,catalyst-ui-fixed,catalyst-store-fixed,layout-final}.log。
+
+Catalyst実画面は別bundle IDのFAKE cloneで確認。初回表示でMarkdown切替の独立行と大きいタイトル/Scroll終端の入力欄が残ることを観測し、右上menu・inlineタイトル・下端固定へ修正。最終画面で重複行消失、右上操作/本文端/固定入力欄、テキスト切替を確認。手動評価sheetの品質/安全性・範囲controlsを表示したが実API実行はしない。検証アプリは終了しprocess消失を確認、通常store/Keychainを操作していない。iPhone狭幅・Dynamic Type最大・ソフトウェアキーボード/IME実操作と実APIは未確認。Airの導入版は前のcheckpointを維持する。
+
+自動/local/hybrid評価、評価設定UI全体、main split/sidebar/branchのWeb配置再現、実クラウド同期は残件。最新origin/main 7a0a383aをfetchし統合branchの祖先と確認済み。部分機能の成功を全体完了にしない。

@@ -1,10 +1,11 @@
 import XCTest
+import Combine
 @testable import WeaveletPilot
 
 private final class EvaluationProtocol: URLProtocol {
     static var requests: [URLRequest] = []
     static var reply = Data()
-    override class func canInit(with request: URLRequest) -> Bool { request.url?.host == "openrouter.ai" || request.url?.host == "api.openai.com" }
+    override class func canInit(with request: URLRequest) -> Bool { request.url?.host == "fixture.invalid" || request.url?.host == "openrouter.ai" || request.url?.host == "api.openai.com" }
     override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
     override func startLoading() {
         Self.requests.append(request)
@@ -66,7 +67,7 @@ final class ConversationEvaluationTests: XCTestCase {
         let original = try safetySource.required("chats").array("chats")[0]
         XCTAssertThrowsError(try ConversationEvaluation.prepare(source:safetySource,state:state(),chatID:"chat",nodeID:"assistant",
             dimension:"safety",scope:"single",readProviderCredential:read))
-        let safeChat = original.replacing("config",with:try original.required("config").replacing("openRouter",with:.null))
+        let safeChat = original.replacing("config",with:.object(try original.required("config").object("config").filter { $0.key != "openRouter" }))
         let prepared = try ConversationEvaluation.prepare(source:safetySource.replacing("chats",with:.array([safeChat])),state:state(),chatID:"chat",nodeID:"assistant",
             dimension:"safety",scope:"single",readProviderCredential:read)
         XCTAssertEqual(prepared.request.url?.absoluteString,"https://api.openai.com/v1/moderations")
@@ -77,9 +78,11 @@ final class ConversationEvaluationTests: XCTestCase {
         XCTAssertEqual(result["flagged"],.bool(true))
         XCTAssertEqual(result["categories"]?["future"],.bool(true))
         XCTAssertEqual(result["categoryScores"]?["future"],.number("0.1234567890123456789"))
+        let saved = try ConversationEvaluation.apply(result,prepared:prepared,source:safetySource.replacing("chats",with:.array([safeChat])),state:state())
+        XCTAssertEqual(saved["evaluationResults"]?[prepared.key]?["safety"]?["categoryScores"]?["future"],.number("0.1234567890123456789"))
     }
 
-    func testPreparedEvaluationRejectsChangedTargetAndCancellation() throws {
+    func testPreparedEvaluationRejectsChangedTargetAndCancellation() async throws {
         let source = try source(), state = try state()
         let prepared = try ConversationEvaluation.prepare(source:source,state:state,chatID:"chat",nodeID:"assistant",
             dimension:"quality",readProviderCredential:read)
@@ -89,5 +92,50 @@ final class ConversationEvaluationTests: XCTestCase {
         XCTAssertTrue(try ConversationEvaluation.isCurrent(prepared,source:source,state:state))
         XCTAssertEqual(try ConversationEvaluation.resultKey(source:source,chatID:"chat",nodeID:"assistant"),prepared.key)
         XCTAssertNil(try ConversationEvaluation.resultKey(source:source,chatID:"chat",nodeID:"missing"))
+        EvaluationProtocol.requests = []
+        let task = Task { try await ConversationEvaluation.run(prepared,client:client()) }
+        task.cancel()
+        do { _ = try await task.value; XCTFail("Cancelled evaluation must not complete") }
+        catch is CancellationError {} catch { XCTFail("Unexpected cancellation error: \(error)") }
+        XCTAssertTrue(EvaluationProtocol.requests.isEmpty)
     }
+    func testEvaluationStoreKeepsOriginalOnFailureAndRestartsAfterSuccess() async throws {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent("native-eval-store-\(UUID().uuidString)")
+        var reject = false
+        let store = LocalStateStore(fileURL:directory.appendingPathComponent("state.json")) { bytes,url in
+            if reject { throw CocoaError(.fileWriteNoPermission) }
+            try bytes.write(to:url,options:.atomic)
+        }
+        let app = ChatState(store:store)
+        let flat = try json(#"{"version":3,"chats":[{"id":"store-chat","title":"Evaluation","config":{"model":"fake-model","max_tokens":100},"messages":[{"role":"user","content":[{"type":"text","text":"Prompt"}]},{"role":"assistant","content":[{"type":"text","text":"Response"}]}]}]}"#)
+        try app.importWebData(flat.encoded())
+        let snapshot = try app.publicationSnapshot()
+        try app.applySnapshot(snapshot.replacing("state",with:snapshot.required("state").replacing("xEvalRoot",with:.number("9007199254740993"))))
+        let nodeID = try XCTUnwrap(app.conversation?.visibleMessages.last?.id)
+        let draft = try app.evaluationDraft(nodeID:nodeID)
+        EvaluationProtocol.reply = Data(#"{"choices":[{"message":{"content":"{\"scores\":{\"taskCompletion\":0.8}}"}}]}"#.utf8)
+        let legacy = RemoteCredentialRecord(settings:RemoteSettings(endpoint:"https://fixture.invalid/v1/chat/completions",model:"fake-model",stream:false),key:"FAKE")
+        let before = try app.publicationSnapshot(), disk = try Data(contentsOf:store.fileURL)
+        for fail in [true,false] {
+            reject = fail
+            let completed = expectation(description:"evaluation finished")
+            let subscription = app.$evaluationJobs.dropFirst().filter { $0.values.first?.busy == false }.first().sink { _ in completed.fulfill() }
+            try app.startEvaluation(draft,dimension:"quality",scope:"single",omittedMode:"respect-omitted",record:legacy,client:client())
+            await fulfillment(of:[completed],timeout:5)
+            withExtendedLifetime(subscription) {}
+            if fail {
+                XCTAssertNotNil(app.evaluationJobs[.init(chatID:draft.chatID,nodeID:draft.nodeID)]?.error)
+                XCTAssertEqual(try app.publicationSnapshot(),before)
+                XCTAssertEqual(try Data(contentsOf:store.fileURL),disk)
+            } else {
+                XCTAssertNil(app.evaluationJobs[.init(chatID:draft.chatID,nodeID:draft.nodeID)]?.error)
+                XCTAssertEqual(try app.evaluationResult(chatID:draft.chatID,nodeID:draft.nodeID)?["quality"]?["scores"]?["taskCompletion"],.number("0.8"))
+                XCTAssertEqual(try ChatState(store:store).publicationSnapshot(),try app.publicationSnapshot())
+                let exported = try OrderedJSON.decode(app.exportWebData())
+                XCTAssertEqual(exported["evaluationResults"],try app.publicationSnapshot()["state"]?["evaluationResults"])
+                XCTAssertEqual(try app.publicationSnapshot()["state"]?["xEvalRoot"],.number("9007199254740993"))
+            }
+        }
+    }
+
 }

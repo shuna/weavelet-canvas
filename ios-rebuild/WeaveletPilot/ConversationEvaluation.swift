@@ -166,10 +166,11 @@ enum ConversationEvaluation {
             .init(key:"state",value:.object([.init(key:"evaluationResults",value:.object([.init(key:prepared.key,value:projected)]))])),
             .init(key:"action",value:.object([.init(key:"type",value:.string("set-result")),.init(key:"key",value:.string(prepared.key)),
                 .init(key:"phase",value:.string(prepared.phase)),.init(key:"dimension",value:.string(prepared.dimension)),
-                .init(key:"result",value:result),.init(key:"context",value:.object([.init(key:"scope",value:.string(prepared.scope)),
+                .init(key:"result",value:try boundary.reference(result)),.init(key:"context",value:.object([.init(key:"scope",value:.string(prepared.scope)),
                     .init(key:"omittedMode",value:.string(prepared.omittedMode))]))]))])
         let changes = try SharedWebOperations.call("evaluation",input).required("changes")
-        let updated = try OrderedJSONChanges.apply(changes,to:input.required("state"),opaque:boundary.opaque)
+        let raw = OrderedJSON.object([.init(key:"evaluationResults",value:.object([.init(key:prepared.key,value:previous)]))])
+        let updated = try OrderedJSONChanges.apply(changes,to:raw,opaque:boundary.opaque)
         let newResult = try updated.required("evaluationResults").required(prepared.key)
         return state.replacing("evaluationResults",with:(state["evaluationResults"] ?? .object([])).replacing(prepared.key,with:newResult))
     }

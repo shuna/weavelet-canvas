@@ -297,3 +297,10 @@ iOSの設定へ利用量の累計、モデル別推定費用・合計、累計�
 既存Webの対象選択、原文snapshot、要求構築、応答評価、要約CRUD、表示判定を純粋な共有元へ分離し、実Web callerとnative JSC接続で使用する。SwiftにはID/未知値の変換、URLSession、原子的保存、SwiftUIだけを残した。単一・ここまで・選択範囲、読みやすい要約・圧縮、生成/停止、生成設定、候補の表示/送信採用と削除を接続した。削減成功時の自動採用、削減しない場合の原文継続、送信除外nodeを含む範囲の原文復帰も共通規則へ従う。
 
 実Webは非空の要約応答について累計ON/OFFとは独立に利用量を累算するため、その挙動を維持する。主生成やタイトルと同じ条件へ勝手に統一しない。nativeは共有文字数fallbackを使い、Web workerの正確なtoken数との同等性は未確認。Catalyst機能群確認と独立Astra監査後の限定再監査を完了。詳細は[検証台帳](web-native-completion-ledger.md)。要約追加のiPhone Air再インストール、実API、実クラウド同期はこの段階で行っていない。
+
+
+## 2026-10-13：評価の共有元・nativeオンライン評価・チャット配置
+
+既存Webの評価文脈、judge要求、応答解析、結果更新、閾値表示をpure coreへ分離し、Web実callerとnative bridgeから共用する。nativeはKeychain・URLSession・URL/secret束縛・世代照合・原子的保存だけを担当。安全性評価のWeb CORS proxy条件はnative直接通信には不要で、OpenAI専用credentialとOpenRouter必須制約の拒否は維持する。今回のnative範囲は手動オンライン評価（品質/安全性、単一/全文、除外発言の扱い）と結果保存・閲覧。自動評価、local/hybrid評価と評価設定全体は次の接続範囲であり、local analysis指定を無視してremoteへ送らない。
+
+ユーザー追加指示に従い、Webの配置をiOSで再現する調整を進める。今回バブル左にrole/avatar・star/pin、右に表示形式/評価/除外/保護/操作をまとめ、44pt操作領域と狭幅の段組を維持した。Markdown/raw切替の重複行を右上menuへ統合し、本文端を維持。タイトルを現在会話名のinline表示、入力欄を下端固定、履歴と会話操作を上部menuへ移した。次は全体のサイドバー・分割表示、会話/フォルダー一覧と分岐表示の配置をWeb基準で調整する。Catalyst機能群確認・独立Astra監査完了の証拠は[検証台帳](web-native-completion-ledger.md)に記録する。

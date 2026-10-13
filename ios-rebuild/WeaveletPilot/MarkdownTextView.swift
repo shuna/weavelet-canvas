@@ -4,10 +4,22 @@ import WebKit
 private struct MarkdownSettingsKey: EnvironmentKey {
     static let defaultValue = OrderedJSON.object([])
 }
+struct MarkdownPresentation: Equatable {
+    var mode: Bool? = nil
+    var revision = 0
+    var controlsHidden = false
+}
+private struct MarkdownPresentationKey: EnvironmentKey {
+    static let defaultValue = MarkdownPresentation()
+}
 extension EnvironmentValues {
     var markdownSettings: OrderedJSON {
         get { self[MarkdownSettingsKey.self] }
         set { self[MarkdownSettingsKey.self] = newValue }
+    }
+    var markdownPresentation: MarkdownPresentation {
+        get { self[MarkdownPresentationKey.self] }
+        set { self[MarkdownPresentationKey.self] = newValue }
     }
 }
 
@@ -15,6 +27,7 @@ struct MarkdownTextView: View {
     let text: String
     var isGenerating = false
     @Environment(\.markdownSettings) private var settings
+    @Environment(\.markdownPresentation) private var presentation
     @Environment(\.colorScheme) private var colorScheme
     @ScaledMetric(relativeTo: .body) private var fontSize = 17.0
     @State private var renderedOverride: Bool?
@@ -22,10 +35,12 @@ struct MarkdownTextView: View {
     @State private var failure: String?
     @State private var isVisible = false
     private static let defaults = try? ChatImport.call("defaults")
-    private var rendered: Bool {
-        if let renderedOverride { return renderedOverride }
-        if case .bool(let value) = settings["markdownMode"] ?? Self.defaults?["markdownMode"] { return value }
+    static func defaultRendered(settings: OrderedJSON) -> Bool {
+        if case .bool(let value) = settings["markdownMode"] ?? defaults?["markdownMode"] { return value }
         return false
+    }
+    private var rendered: Bool {
+        presentation.mode ?? renderedOverride ?? Self.defaultRendered(settings:settings)
     }
     private var input: [String: Any] {
         var value: [String: Any] = ["content": text, "markdownMode": rendered, "isGenerating": isGenerating,
@@ -38,10 +53,12 @@ struct MarkdownTextView: View {
     }
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
-            HStack {
-                Spacer()
-                Button(rendered ? "原文" : "整形") { renderedOverride = !rendered; failure = nil }
-                    .font(.caption).accessibilityLabel(rendered ? "原文を表示" : "Markdownで表示")
+            if !presentation.controlsHidden {
+                HStack {
+                    Spacer()
+                    Button(rendered ? "原文" : "整形") { renderedOverride = !rendered; failure = nil }
+                        .font(.caption).accessibilityLabel(rendered ? "原文を表示" : "Markdownで表示")
+                }
             }
             if !rendered || failure != nil {
                 Text(text).textSelection(.enabled).fixedSize(horizontal: false, vertical: true)
@@ -53,6 +70,7 @@ struct MarkdownTextView: View {
                 Color.clear.frame(height: height)
             }
         }
+        .onChange(of:presentation.revision) { _, _ in failure = nil }
         .onAppear { isVisible = true }
         .onDisappear { isVisible = false }
     }
