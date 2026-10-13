@@ -76,7 +76,7 @@ final class RemoteGenerationTests: XCTestCase {
         chats[index] = chats[index].replacing("config",with:config)
         let modelState = try OrderedJSON.decode(Data(#"{"favoriteModels":[{"modelId":"anthropic/claude-opus-5.5","providerId":"openrouter","supportsReasoning":true,"reasoningMandatory":true,"streamSupport":false,"xRaw":{"huge":9007199254740993,"decimal":1.2300}}],"providerModelCache":{},"providerCustomModels":{}}"#.utf8))
         let roots = try modelState.object("modelState")
-        try state.applySnapshot(.object([.init(key:"version",value:snapshot.required("version")),.init(key:"state",value:.object([.init(key:"chats",value:.array(chats))] + roots))]))
+        try state.applySnapshot(.object([.init(key:"version",value:snapshot.required("version")),.init(key:"state",value:.object([.init(key:"chats",value:.array(chats)),.init(key:"providers",value:.object([.init(key:"openrouter",value:.object([.init(key:"id",value:.string("openrouter")),.init(key:"name",value:.string("FAKE OpenRouter")),.init(key:"endpoint",value:.string("https://fixture.invalid/v1/chat/completions")),.init(key:"modelsRequireAuth",value:.bool(false)),.init(key:"apiKey",value:.string("FAKE-snapshot-unused"))]))]))] + roots))]))
         let source = try XCTUnwrap(state.exchange).source, sourceBytes = try source.encoded(), before = try state.publicationSnapshot().encoded()
         var credentials = record(stream:true)
         credentials.settings.model = "unused-device-model"
@@ -87,11 +87,16 @@ final class RemoteGenerationTests: XCTestCase {
         XCTAssertEqual(try source.encoded(),sourceBytes); XCTAssertEqual(try state.publicationSnapshot().encoded(),before)
         let remote = client()
         FakeRemoteProtocol.packets = [.init(bytes:try fixture().required("responses").required("nonstream").encoded())]
-        try state.startGeneration(input:"Catalog boundary",record:credentials,client:remote)
+        var bound = credentials; bound.key = "FAKE-bound-provider"
+        credentials.key = "FAKE-wrong-legacy"
+        var selectedProviders: [String] = []
+        try state.startGeneration(input:"Catalog boundary",record:credentials,client:remote,readProviderCredential:{ id in selectedProviders.append(id); return bound })
         try await wait { state.generation == nil }
         XCTAssertNil(state.generationError)
         let sent = try OrderedJSON.decode(XCTUnwrap(FakeRemoteProtocol.requests.first?.httpBody))
         XCTAssertEqual(sent["reasoning"],directBody["reasoning"])
+        XCTAssertEqual(selectedProviders,["openrouter"])
+        XCTAssertEqual(FakeRemoteProtocol.requests.first?.value(forHTTPHeaderField:"Authorization"),"Bearer FAKE-bound-provider")
         let after = try state.publicationSnapshot().required("state")
         for field in roots { XCTAssertEqual(try after.required(field.key).encoded(),try field.value.encoded()) }
     }
@@ -122,7 +127,9 @@ final class RemoteGenerationTests: XCTestCase {
         let state = ChatState(store: store)
         var source = try fixture().required("cases").array("cases")[0].required("source")
         var chats = try source.required("chats").array("chats")
-        chats[0] = chats[0].replacing("config",with:try chats[0].required("config").replacing("stream",with:.bool(stream)))
+        // Transport fixtures intentionally exercise the provider-unspecified legacy record.
+        let config = OrderedJSON.object(try chats[0].required("config").object("config").filter { $0.key != "providerId" })
+        chats[0] = chats[0].replacing("config",with:config.replacing("stream",with:.bool(stream)))
         source = source.replacing("chats",with:.array(chats))
         try state.importWebData(source.encoded())
         return state

@@ -305,6 +305,24 @@ final class ChatState: ObservableObject {
         try applyLibrary(exchange.source.replacing("chats",with:.array(chats)),selectedID:selectedID,now:now)
     }
 
+    @MainActor func refreshProviderModels(providerID: String, expectedSnapshot: OrderedJSON, client: ProviderModelClient = ProviderModelClient(), readCredential: ProviderModels.CredentialReader = RemoteCredentials.load(providerID:)) async throws {
+        guard generation == nil, try publicationSnapshot().encoded() == expectedSnapshot.encoded() else { throw ExchangeError.invalid("保存データが変更されています。モデル一覧を開き直してください") }
+        let state = try expectedSnapshot.required("state")
+        guard let provider = try ProviderModels.providers(in:state).first(where:{ $0.id.utf8.elementsEqual(providerID.utf8) }) else { throw ExchangeError.invalid("provider設定がありません") }
+        let models = try await client.fetch(provider,readCredential:readCredential)
+        try Task.checkCancellation()
+        guard generation == nil, try publicationSnapshot().encoded() == expectedSnapshot.encoded() else { throw ExchangeError.invalid("モデル取得中に保存データが変更されました。既存一覧を維持しています") }
+        let roots = try ProviderModels.cacheChanges(state:state,providerID:providerID,models:models)
+        try applySnapshot(.object([.init(key:"version",value:expectedSnapshot.required("version")),.init(key:"state",value:roots)]))
+    }
+    @MainActor func refreshModelsForConfig(_ draft: ChatConfigDraft, providerID: String, client: ProviderModelClient = ProviderModelClient(), readCredential: ProviderModels.CredentialReader = RemoteCredentials.load(providerID:)) async throws -> ChatConfigDraft {
+        guard let exchange, try exchange.source.encoded() == draft.source.encoded() else { throw ExchangeError.invalid("会話が変更されました。設定を開き直してください") }
+        try await refreshProviderModels(providerID:providerID,expectedSnapshot:draft.snapshot,client:client,readCredential:readCredential)
+        guard let source = self.exchange?.source, try source.encoded() == draft.source.encoded() else { throw ExchangeError.invalid("会話が変更されました。設定を開き直してください") }
+        let snapshot = try publicationSnapshot()
+        return try ChatConfigDraft(chatID:draft.chatID,source:source,snapshot:snapshot,modelState:ChatConfig.modelState(in:snapshot.required("state")),config:draft.config)
+    }
+
     func nodeOptionsDraft(nodeID: String) throws -> NodeOptionsDraft {
         guard let exchange, let conversation,
               let node = conversation.nodes.first(where: { $0.id.utf8.elementsEqual(nodeID.utf8) }) else { throw ExchangeError.invalid("メッセージがありません") }
@@ -509,21 +527,21 @@ final class ChatState: ObservableObject {
         parts.remove(at:index)
         composerDrafts[Data(chatID.utf8)] = ComposerDraft(parts:.array(parts),text:before.text,hasMeaningfulContent:false)
     }
-    func sendComposer(record: RemoteCredentialRecord, client: RemoteClient = RemoteClient(), nodeIDs: [String]? = nil) throws {
+    func sendComposer(record: RemoteCredentialRecord, client: RemoteClient = RemoteClient(), nodeIDs: [String]? = nil, readProviderCredential: ProviderModels.CredentialReader = RemoteCredentials.load(providerID:)) throws {
         guard let conversation else { throw ExchangeError.invalid("送信先の会話がありません") }
         let identity = conversation.identity
         let draft = composerDraft(chatID:conversation.id)
         let prepared = try ComposerContent.prepare(draft.parts,text:draft.text)
-        try startGeneration(prepared:prepared,record:record,client:client,nodeIDs:nodeIDs)
+        try startGeneration(prepared:prepared,record:record,client:client,nodeIDs:nodeIDs,readProviderCredential:readProviderCredential)
         composerDrafts.removeValue(forKey:identity)
     }
-    func startGeneration(input: String, record: RemoteCredentialRecord, client: RemoteClient = RemoteClient(), nodeIDs: [String]? = nil) throws {
-        try startGeneration(parts:.array([.object([.init(key:"type",value:.string("text")),.init(key:"text",value:.string(input))])]),record:record,client:client,nodeIDs:nodeIDs)
+    func startGeneration(input: String, record: RemoteCredentialRecord, client: RemoteClient = RemoteClient(), nodeIDs: [String]? = nil, readProviderCredential: ProviderModels.CredentialReader = RemoteCredentials.load(providerID:)) throws {
+        try startGeneration(parts:.array([.object([.init(key:"type",value:.string("text")),.init(key:"text",value:.string(input))])]),record:record,client:client,nodeIDs:nodeIDs,readProviderCredential:readProviderCredential)
     }
-    func startGeneration(parts: OrderedJSON, record: RemoteCredentialRecord, client: RemoteClient = RemoteClient(), nodeIDs: [String]? = nil) throws {
-        try startGeneration(prepared:ComposerContent.prepare(parts),record:record,client:client,nodeIDs:nodeIDs)
+    func startGeneration(parts: OrderedJSON, record: RemoteCredentialRecord, client: RemoteClient = RemoteClient(), nodeIDs: [String]? = nil, readProviderCredential: ProviderModels.CredentialReader = RemoteCredentials.load(providerID:)) throws {
+        try startGeneration(prepared:ComposerContent.prepare(parts),record:record,client:client,nodeIDs:nodeIDs,readProviderCredential:readProviderCredential)
     }
-    private func startGeneration(prepared: ComposerDraft, record: RemoteCredentialRecord, client: RemoteClient, nodeIDs: [String]?) throws {
+    private func startGeneration(prepared: ComposerDraft, record: RemoteCredentialRecord, client: RemoteClient, nodeIDs: [String]?, readProviderCredential: ProviderModels.CredentialReader) throws {
         guard generation == nil, let exchange, let conversation else { throw ExchangeError.invalid("保存済み会話を選択し、生成の終了を待ってください") }
         guard prepared.hasMeaningfulContent else { throw ExchangeError.invalid("本文または画像を入力してください") }
         let sourceChat = try exchange.source.required("chats").array("chats").first { try $0.required("id").string("ID").utf8.elementsEqual(conversation.id.utf8) }!
@@ -537,7 +555,8 @@ final class ChatState: ObservableObject {
         let path = changed.conversations.first { $0.identity == conversation.identity }!.visibleMessages.map(\.id)
         let savedState = try publicationSnapshot().required("state")
         let modelState = ChatConfig.modelState(in:savedState)
-        let request = try RemoteRequest.make(source: source, chatID: conversation.id, path: path, settings: record.settings, key: record.key, modelState:modelState)
+        let credential = try ProviderModels.generationCredential(config:sourceChat["config"] ?? .object([]),state:savedState,legacy:record,read:readProviderCredential)
+        let request = try RemoteRequest.make(source: source, chatID: conversation.id, path: path, settings: credential.settings, key: credential.key, modelState:modelState)
         let streaming = try RemoteRequest.streaming(request)
         try applyLibrary(source, selectedID: conversation.id, resetViewFor: conversation.id, editing: history, now: now)
         let id = UUID()

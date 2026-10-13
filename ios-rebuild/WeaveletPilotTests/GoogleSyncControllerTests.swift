@@ -453,6 +453,10 @@ import XCTest
         }
         let state = try state(local), drive = try FakeSyncDrive(capture:fixture("google-session-wire","small")), keys = TestSyncKeys(), cache = SyncStateStore(fileURL:dir.appendingPathComponent("sync.json"))
         let controller = GoogleSyncController(chatState:state,drive:drive,store:cache,keyStore:keys)
+        // This test isolates pending sync versus a legacy, provider-unspecified remote transport.
+        var transportDraft = try state.chatConfigDraft()
+        transportDraft.config = .object(try transportDraft.config.object("config").filter { $0.key != "providerId" })
+        try state.saveChatConfig(transportDraft)
         try await controller.open(dataset:"fake1"); try await controller.unlock(password:password)
         fault.reject = true; do { try await controller.download() } catch {}; fault.reject = false
         let configuration = URLSessionConfiguration.ephemeral; configuration.protocolClasses = [HeldControllerGeneration.self]

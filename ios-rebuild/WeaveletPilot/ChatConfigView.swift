@@ -3,17 +3,18 @@ import SwiftUI
 struct ChatConfigView: View {
     @ObservedObject var state: ChatState
     @Environment(\.dismiss) private var dismiss
-    let draft: ChatConfigDraft
+    @State private var draft: ChatConfigDraft
     @State private var values: [String:String]
     @State private var stream: Bool
     @State private var forceReasoning: Bool
     @State private var errorMessage: String?
-    private let originalValues: [String:String]
-    private let originalStream: Bool
-    private let originalForce: Bool
+    @State private var originalValues: [String:String]
+    @State private var originalStream: Bool
+    @State private var originalForce: Bool
+    @State private var showsModels = false
     private static let fields = ["model", "providerId", "max_tokens", "temperature", "reasoning_effort", "reasoning_budget_tokens", "verbosity"]
     init(state: ChatState, draft: ChatConfigDraft) {
-        self.state = state; self.draft = draft
+        self.state = state; _draft = State(initialValue:draft)
         let values = Dictionary(uniqueKeysWithValues:Self.fields.map { key -> (String,String) in
             let text: String
             switch draft.config[key] {
@@ -23,7 +24,7 @@ struct ChatConfigView: View {
             return (key,text)
         })
         let stream = draft.config["stream"] == .bool(true), force = draft.config["force_reasoning"] == .bool(true)
-        self.originalValues = values; self.originalStream = stream; self.originalForce = force
+        _originalValues = State(initialValue:values); _originalStream = State(initialValue:stream); _originalForce = State(initialValue:force)
         _values = State(initialValue:values); _stream = State(initialValue:stream); _forceReasoning = State(initialValue:force)
     }
     static func valuesDiffer(_ lhs: String?, _ rhs: String?) -> Bool { !(lhs ?? "").utf8.elementsEqual((rhs ?? "").utf8) }
@@ -31,6 +32,14 @@ struct ChatConfigView: View {
     var body: some View {
         NavigationStack {
             Form {
+                Button("保存済みモデル一覧から選択") {
+                    do { draft = try editedDraft(); syncFields(); showsModels = true }
+                    catch { errorMessage = error.localizedDescription }
+                }
+                Button("入力したモデルへ切替・設定を復元") {
+                    do { draft = try editedDraft(); syncFields() }
+                    catch { errorMessage = error.localizedDescription }
+                }
                 TextField("モデルID",text:binding("model")).textInputAutocapitalization(.never).autocorrectionDisabled()
                 TextField("provider ID（任意）",text:binding("providerId")).textInputAutocapitalization(.never).autocorrectionDisabled()
                 Text("モデル切替時は保存済み設定を復元します。モデルに応じて出力上限を調整し、非対応モデルではストリーミングを使いません。ローカルモデルは未対応です。")
@@ -45,14 +54,19 @@ struct ChatConfigView: View {
                 if let errorMessage { Text(errorMessage).foregroundStyle(.red) }
             }
             .navigationTitle("会話の生成設定")
+            .sheet(isPresented:$showsModels) {
+                ProviderModelsView(state:state,draft:$draft) { row in
+                    draft.config = try ChatConfig.switched(draft.config,model:row.modelID,providerID:row.providerID,modelState:draft.modelState)
+                    syncFields()
+                }
+            }
             .toolbar {
                 ToolbarItem(placement:.cancellationAction) { Button("取消") { dismiss() } }
                 ToolbarItem(placement:.confirmationAction) { Button("保存",action:save) }
             }
         }
     }
-    private func save() {
-        do {
+    private func editedDraft() throws -> ChatConfigDraft {
             var changed = draft
             if Self.valuesDiffer(values["model"],originalValues["model"]) || Self.valuesDiffer(values["providerId"],originalValues["providerId"]) {
                 changed.config = try ChatConfig.switched(changed.config,model:values["model"] ?? "",providerID:values["providerId"],modelState:draft.modelState)
@@ -69,7 +83,20 @@ struct ChatConfigView: View {
             if stream != originalStream { changed.config = changed.config.replacing("stream",with:.bool(stream)) }
             if forceReasoning != originalForce { changed.config = changed.config.replacing("force_reasoning",with:.bool(forceReasoning)) }
             changed.config = try OrderedJSONChanges.apply(.array(patches),to:changed.config)
-            try state.saveChatConfig(changed); dismiss()
-        } catch { errorMessage = error.localizedDescription }
+            return changed
+    }
+    private func syncFields() {
+        for key in Self.fields {
+            switch draft.config[key] {
+            case .string(let value), .number(let value): values[key] = value
+            default: values[key] = ""
+            }
+        }
+        stream = draft.config["stream"] == .bool(true); forceReasoning = draft.config["force_reasoning"] == .bool(true)
+        originalValues = values; originalStream = stream; originalForce = forceReasoning
+    }
+    private func save() {
+        do { try state.saveChatConfig(editedDraft()); dismiss() }
+        catch { errorMessage = error.localizedDescription }
     }
 }
