@@ -713,3 +713,9 @@ match-sorter/remove-accentsのMIT本文と固定入力hashを配布bundleへ同�
 b19399bbでWeb一覧の3箇所のサイズ計算と既存formatNumberをpure chatSizeへ接続し、native一覧のcaptionとdisplayChatSize設定から共用した。text判定を先に行い、それ以外はimage_urlの存在によってURL長を数える実Webの規則を維持する。nativeはactive messages/delta投影のUTF16長だけを渡し、本文やbase64をJSCへ再転送しない。表示offでは投影自体を省き、取消/古い結果を公開しない。ゼロのcaptionは出さず、一行titleと44ptの操作領域を保つ。
 
 共有3件・native4件、型検査、Catalyst build、bundle鮮度と差分確認の成功を再利用。ログ /tmp/weavelet-native-chat-size-{web-tests,catalyst-tests,tsc,freshness,diff-check}.log。独立Astraは新規P2以上なし。delta fixtureの初期期待値26は、実Web投影と従来式で14文字の本文2つを数える28と確認し、期待値だけを訂正した。比較条件を緩めていない。実表示/最大文字サイズ/VoiceOver・Air導入は未確認。
+
+## 本文操作の配置（2026-10-14）
+
+d05f4805でMessageViewの既存操作menuをheaderから本文footerへ移し、実Web ContentActionsと同じく分岐切替と並べた。summary/evaluation/omit/protectはheaderに保持し、時刻を追加せず、role iconと本文の端を維持する。狭幅用ViewThatFitsで水平/垂直を選ぶ。handler/保存/生成guardは不変更、44ptを維持。担当Catalyst buildと差分確認成功（/tmp/weavelet-native-message-actions-{build,diff-check}.log）、独立Astraは新規P2以上なし。
+
+FAKE隔離Catalyst実画面でユーザー/アシスタントの本文下部への移動と操作menu全項目の到達を確認。先行b19399bb cloneでも一覧上部検索・下端共通操作・設定→外観と本文→戻る→完了の遷移を確認した。設定値の変更/実生成/実通信は実行せず、通常storeを使わない。各cloneを終了しprocess消失を確認。実機/狭幅/最大文字サイズ/VoiceOverは未確認、Web配置の全差分を解消したとは扱わない。
