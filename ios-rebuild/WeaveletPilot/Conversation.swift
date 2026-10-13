@@ -149,6 +149,61 @@ final class ChatState: ObservableObject {
         persistenceError = nil
     }
 
+    func prepareImport(data: Data, filename: String, allowPartialImport: Bool = false) async throws -> ChatImportPreview {
+        guard generation == nil else { throw ExchangeError.invalid("生成中は取り込めません") }
+        let baseline = document?.snapshot
+        let raw = try OrderedJSON.decode(NativeGzip.isCompressed(data) ? NativeGzip.decompress(data) : data)
+        var boundary = SharedWebProjection()
+        let projected = try ChatImport.project(raw, kind: "data", boundary: &boundary)
+        let defaults = try ChatImport.call("defaults")
+        let prepared = try ChatImport.call("prepare", fields: [
+            .init(key:"data",value:projected),.init(key:"defaults",value:defaults),
+            .init(key:"decisions",value:.object(allowPartialImport ? [.init(key:"allowPartialImport",value:.bool(true))] : []))])
+        let status = try prepared.required("status").string("import status")
+        if status == "decision-required" {
+            let decision = try prepared.required("decision")
+            let kind = try decision.required("kind").string("decision kind")
+            let message = try decision.required("message").string("decision message")
+            if kind == "partial-import", !allowPartialImport { throw ChatImportDecisionRequired(kind:kind,message:message) }
+            throw ExchangeError.invalid(message)
+        }
+        guard status == "ready" else { throw ExchangeError.invalid(try prepared["result"]?["message"]?.string("import error") ?? "取り込みに失敗しました") }
+        let source = try ChatImport.restore(prepared.required("source"),boundary:boundary)
+        let previewV3 = try ChatImport.restore(prepared.required("previewV3"),boundary:boundary)
+        let imported = try WebExchange(source:previewV3)
+        var unavailable: [String:[String]] = [:]
+        for field in try source.required("unavailableContent").object("unavailable content") {
+            unavailable[field.key] = try field.value.array("unavailable nodes").map { try $0.string("node ID") }
+        }
+        return ChatImportPreview(filename:filename,conversations:imported.conversations,folderRows:try ChatFolders.rows(in:imported.source),
+            recoveredContentCount:Int(try source.required("recoveredContentCount").number("recovered count")),unavailableContent:unavailable,
+            source:source,baselineSnapshot:baseline,baselineSidecar:document?.v3Sidecar,baselineRootOrder:document?.v3RootOrder,partialImportAccepted:allowPartialImport)
+    }
+    func commitImport(_ preview: ChatImportPreview, mode: ChatImportMode, selectedChatIDs: [String], selectedFolderIDs: [String], includeSettings: Bool, allowPartialImport: Bool) async throws {
+        guard generation == nil else { throw ExchangeError.invalid("生成中は取り込めません") }
+        guard document?.snapshot == preview.baselineSnapshot, document?.v3Sidecar == preview.baselineSidecar, document?.v3RootOrder == preview.baselineRootOrder else { throw ExchangeError.invalid("取り込み準備後に保存データが変更されています") }
+        guard !initialLoadFailed || mode == .replace else { throw ExchangeError.invalid("保存ファイルを読めなかったため追加できません。明示的な置換が必要です") }
+        let base = try document ?? SyncDocument(v3:ChatLibrary.emptySource)
+        var boundary = SharedWebProjection()
+        let projectedBase = try ChatImport.project(base.snapshot.required("state"),kind:"state",boundary:&boundary)
+        let projectedSource = try ChatImport.project(preview.source,kind:"source",boundary:&boundary)
+        var extensions: [JSONField] = []
+        for field in try base.v3Sidecar.object("sidecar") { extensions.append(.init(key:field.key,value:try boundary.reference(field.value))) }
+        let planned = try ChatImport.call("plan",fields:[.init(key:"base",value:projectedBase),.init(key:"source",value:projectedSource),
+            .init(key:"baseExtensions",value:.object(extensions)),.init(key:"defaults",value:try ChatImport.call("defaults")),
+            .init(key:"mode",value:.string(mode.rawValue)),.init(key:"selectedChatIds",value:.array(selectedChatIDs.map(OrderedJSON.string))),
+            .init(key:"selectedFolderIds",value:.array(selectedFolderIDs.map(OrderedJSON.string))),.init(key:"includeSettings",value:.bool(includeSettings)),
+            .init(key:"fileName",value:.string(preview.filename)),.init(key:"currentChatId",value:.string(selectedID))])
+        let state = try OrderedJSONChanges.apply(planned.required("changes"),to:base.snapshot.required("state"),opaque:boundary.opaque)
+        let sidecar = try OrderedJSONChanges.apply(planned.required("extensionChanges"),to:base.v3Sidecar,opaque:boundary.opaque)
+        let candidate = try SyncDocument(snapshot:base.snapshot.replacing("state",with:state),v3Sidecar:sidecar,v3RootOrder:base.v3RootOrder)
+        let chats = try state.required("chats").array("chats")
+        let index = Int(try planned.required("currentChatIndex").number("current chat index"))
+        let selected = chats.indices.contains(index) ? try chats[index].required("id").string("chat ID") : ""
+        try applyDocument(candidate, selectedID:selected, resetViews:true)
+        initialLoadFailed = false
+    }
+
     func siblings(for nodeID: String) -> [MessageNode] {
         guard let conversation else { return [] }
         let ids = branchCandidates.first { $0.chatID.utf8.elementsEqual(conversation.id.utf8) }?.candidates(for: nodeID)?.siblingIDs ?? []
@@ -566,18 +621,19 @@ final class ChatState: ObservableObject {
         let base = try document ?? SyncDocument(v3: exchange?.source ?? ChatLibrary.emptySource)
         try applyDocument(base.synchronizingSnapshot(snapshot))
     }
-    private func applyDocument(_ candidate: SyncDocument) throws {
+    private func applyDocument(_ candidate: SyncDocument, selectedID requestedSelection: String? = nil, resetViews: Bool = false) throws {
         let changed = try WebExchange(source: candidate.uiProjection())
         let candidates = try BranchNavigation.candidates(in: changed.source)
         var views = changed.conversations
         for index in views.indices {
-            if let previous = conversations.first(where: { $0.identity == views[index].identity }),
+            if !resetViews, let previous = conversations.first(where: { $0.identity == views[index].identity }),
                previous.visibleMessages.allSatisfy({ node in views[index].nodes.contains { $0.identity == node.identity } }) {
                 views[index].selectedLeafID = previous.selectedLeafID
                 views[index].displayedPathIDs = previous.displayedPathIDs
             }
         }
-        let selected = views.contains { $0.id.utf8.elementsEqual(selectedID.utf8) } ? selectedID : views.first?.id ?? ""
+        let desired = requestedSelection ?? selectedID
+        let selected = views.contains { $0.id.utf8.elementsEqual(desired.utf8) } ? desired : views.first?.id ?? ""
         let nextNavigation = try historySelecting(selected, in: changed.source)
         let nextEditing = try exchange.map { try MessageEditing.invalidatingHistory(editingHistory, before: $0.source, after: changed.source) } ?? nil
         try store?.save(SavedChatState(exchange: changed, document: candidate, conversations: views, selectedConversationID: selected, style: displayStyle))

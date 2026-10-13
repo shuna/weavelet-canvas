@@ -33,6 +33,7 @@ struct ChatFolderRow: Identifiable {
     let expanded: Bool
     let order: Double
     let color: String?
+    var path: String = ""
     var identity: Data { Data(id.utf8) }
 }
 
@@ -40,6 +41,8 @@ private final class FolderResource {}
 enum SharedWebOperations {
     static func call(_ name: String, _ input: OrderedJSON) throws -> OrderedJSON {
         guard let context = JSContext(), let url = Bundle(for: FolderResource.self).url(forResource: "GoogleSync.bundle", withExtension: "js") else { throw ExchangeError.invalid("共有処理 bundle がありません") }
+        let callback: @convention(block) (String) -> String = { SyncRecords.primitive($0) }
+        context.setObject(callback, forKeyedSubscript: "nativeSyncCall" as NSString)
         context.evaluateScript(try String(contentsOf: url, encoding: .utf8))
         guard context.exception == nil, let bridge = context.objectForKeyedSubscript("WeaveletGoogleSync"), let function = bridge.objectForKeyedSubscript(name), !function.isUndefined else { throw ExchangeError.invalid("共有処理を読み込めません") }
         let result = function.call(withArguments: [String(decoding: try input.encoded(), as: UTF8.self)])
@@ -94,7 +97,7 @@ enum ChatFolders {
         try SharedWebOperations.call("folderRows", input(source)).array("rows").map { row in
             let color: String?
             if case .string(let text) = row["color"] { color = text } else { color = nil }
-            return try ChatFolderRow(id: row.required("id").string("id"), name: row.required("name").string("name"), expanded: row.required("expanded").boolean("expanded"), order: row.required("order").number("order"), color: color)
+            return try ChatFolderRow(id: row.required("id").string("id"), name: row.required("name").string("name"), expanded: row.required("expanded").boolean("expanded"), order: row.required("order").number("order"), color: color, path: row["path"]?.string("path") ?? "")
         }
     }
     static func membership(of chat: OrderedJSON) -> String? {

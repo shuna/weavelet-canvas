@@ -32,7 +32,7 @@ enum SyncRecords {
     }
     static func decodeWire(_ bytes: Data) throws -> OrderedJSON { try OrderedJSON.decode(Data(SyncCompression.decompressGoogle(bytes).utf8)) }
 
-    fileprivate static func primitive(_ json: String) -> String {
+    static func primitive(_ json: String) -> String {
         let response: OrderedJSON
         do {
             let request = try OrderedJSON.decode(Data(json.utf8))
