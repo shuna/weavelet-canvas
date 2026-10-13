@@ -1,5 +1,5 @@
 import Foundation
-#if targetEnvironment(macCatalyst) && arch(arm64)
+#if arch(arm64) && (targetEnvironment(macCatalyst) || (os(iOS) && !targetEnvironment(simulator)))
 import llama
 #endif
 
@@ -19,7 +19,7 @@ enum LocalLlamaError: Error, LocalizedError {
     case unsupported, metalUnavailable, invalidRequest, modelLoad, context, template, tokenize, decode(Int32), invalidUTF8
     var errorDescription: String? {
         switch self {
-        case .unsupported: return "ローカルGGUF実行はCatalyst arm64のみ対応しています"
+        case .unsupported: return "ローカルGGUF実行はCatalystまたはiPhone/iPad実機のarm64のみ対応しています"
         case .metalUnavailable: return "Metal実行デバイスが利用できません"
         case .invalidRequest: return "ローカル生成の設定または入力が不正です"
         case .modelLoad: return "GGUFモデルを読み込めませんでした"
@@ -47,7 +47,7 @@ enum LocalLlama {
         try await withTaskCancellationHandler(operation: { try await task.value }, onCancel: { cancellation.cancel(); task.cancel() })
     }
     private static func run(modelURL: URL, request: LocalLlamaRequest, cancellation: Cancellation, onText: @escaping @Sendable (String) async throws -> Bool) async throws {
-        #if targetEnvironment(macCatalyst) && arch(arm64)
+        #if arch(arm64) && (targetEnvironment(macCatalyst) || (os(iOS) && !targetEnvironment(simulator)))
         try cancellation.check()
         guard modelURL.isFileURL, request.maxTokens >= 0, Int32(exactly:request.maxTokens) != nil, request.temperature.isFinite,
               !request.messages.contains(where: { $0.role.utf8.contains(0) || $0.content.utf8.contains(0) }),
@@ -113,7 +113,7 @@ enum LocalLlama {
         throw LocalLlamaError.unsupported
         #endif
     }
-    #if targetEnvironment(macCatalyst) && arch(arm64)
+    #if arch(arm64) && (targetEnvironment(macCatalyst) || (os(iOS) && !targetEnvironment(simulator)))
     private static func formattedPrompt(model: OpaquePointer, request: LocalLlamaRequest) throws -> String {
         let strings = request.messages.flatMap { [strdup($0.role),strdup($0.content)] }
         defer { strings.forEach { free($0) } }

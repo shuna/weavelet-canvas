@@ -3,10 +3,19 @@ set -euo pipefail
 repo="$(cd "$(dirname "$0")/../.." && pwd)"
 out="$repo/ios-rebuild/.build/local-llama"
 pin=4abef75f2cf2eee75eb5083b30a94cf981587394
-mkdir -p "$out/include" "$out/lib"
-[[ $# == 0 || ( $# == 1 && "$1" == --verify ) ]] || { echo "No probe reuse: build the pinned security-patched source" >&2; exit 1; }
+case "${1:-}" in
+    "") platform=catalyst; verify=false ;;
+    --verify) platform=catalyst; verify=true ;;
+    --iphoneos) platform=iphoneos; verify=false ;;
+    --verify-iphoneos) platform=iphoneos; verify=true ;;
+    *) echo "No probe reuse: build the pinned security-patched source" >&2; exit 1 ;;
+esac
+[[ $# -le 1 ]] || { echo "One build target is required" >&2; exit 1; }
+target_out="$out"
+[[ "$platform" == iphoneos ]] && target_out="$out/iphoneos"
+mkdir -p "$target_out/include" "$target_out/lib"
 source="$out/source"
-build="$out/build"
+build="$target_out/build"
 fingerprint="$(python3 - "$repo" <<'PYHASH'
 import hashlib,sys
 from pathlib import Path
@@ -25,7 +34,7 @@ source_digest() {
 if [[ -d "$source" ]]; then
     [[ -f "$source/.native-fingerprint" ]] && [[ "$(cat "$source/.native-fingerprint")" == "$fingerprint $(source_digest)" ]] || { echo "Source/patch fingerprint mismatch; existing source preserved: $source" >&2; exit 1; }
 else
-    [[ "${1:-}" != --verify ]] || { echo "Prepare the native library with NativeLlama/build.sh first" >&2; exit 1; }
+    [[ "$verify" == false ]] || { echo "Prepare the native library with NativeLlama/build.sh first" >&2; exit 1; }
     git -c http.followRedirects=false clone --depth 1 --branch 2.3.7 https://github.com/ngxson/wllama.git "$source"
     [[ "$(git -C "$source" rev-parse HEAD)" == 5e63e3b226a077b33dc7c608f1fe630f3d21f539 ]]
     git -C "$source" config submodule.llama.cpp.url https://github.com/ggml-org/llama.cpp.git
@@ -40,37 +49,45 @@ else
 fi
 [[ "$(git -C "$source" rev-parse HEAD)" == 5e63e3b226a077b33dc7c608f1fe630f3d21f539 ]]
 [[ "$(git -C "$source/llama.cpp" rev-parse HEAD)" == "$pin" ]]
-if [[ "${1:-}" == --verify ]]; then
-    [[ -f "$out/artifacts.sha256" ]] || { echo "Native build did not finish" >&2; exit 1; }
-    (cd "$repo"; shasum -a 256 -c "$out/build-inputs.sha256")
-    (cd "$out"; shasum -a 256 -c artifacts.sha256)
+if [[ "$verify" == true ]]; then
+    [[ -f "$target_out/artifacts.sha256" ]] || { echo "Native build did not finish" >&2; exit 1; }
+    (cd "$repo"; shasum -a 256 -c "$target_out/build-inputs.sha256")
+    (cd "$target_out"; shasum -a 256 -c artifacts.sha256)
     exit
 fi
-rm -f "$out/artifacts.sha256"
-    mkdir -p "$out/input"
-    cp -R "$repo/vendor/wllama/lowbit-q/cpp/lowbit-q" "$out/input/"
-    cat > "$out/input/CMakeLists.txt" <<CMAKE
+rm -f "$target_out/artifacts.sha256"
+    mkdir -p "$target_out/input"
+    cp -R "$repo/vendor/wllama/lowbit-q/cpp/lowbit-q" "$target_out/input/"
+    cat > "$target_out/input/CMakeLists.txt" <<CMAKE
 cmake_minimum_required(VERSION 3.14)
-project(catalyst_llama C CXX)
+project(native_llama C CXX)
 add_subdirectory("$source/llama.cpp" llama)
 target_include_directories(llama PUBLIC \${CMAKE_CURRENT_SOURCE_DIR}/lowbit-q)
 target_sources(llama PRIVATE lowbit-q/lowbit-q-mul-mat.c lowbit-q/lowbit-q-model-builder.c lowbit-q/lowbit-q-metadata.c)
 CMAKE
-    cmake -S "$out/input" -B "$build" -DCMAKE_SYSTEM_NAME=Darwin -DCMAKE_OSX_SYSROOT=macosx -DCMAKE_OSX_ARCHITECTURES=arm64 -DCMAKE_C_COMPILER_TARGET=arm64-apple-ios17.0-macabi -DCMAKE_CXX_COMPILER_TARGET=arm64-apple-ios17.0-macabi -DCMAKE_ASM_FLAGS=--target=arm64-apple-ios17.0-macabi -DCMAKE_BUILD_TYPE=Release -DBUILD_SHARED_LIBS=OFF -DGGML_METAL=ON -DGGML_METAL_EMBED_LIBRARY=ON -DGGML_BLAS=OFF -DGGML_OPENMP=OFF -DGGML_NATIVE=OFF -DLLAMA_BUILD_COMMON=OFF -DLLAMA_BUILD_TESTS=OFF -DLLAMA_BUILD_TOOLS=OFF -DLLAMA_BUILD_EXAMPLES=OFF -DLLAMA_BUILD_SERVER=OFF -DGGML_RPC=OFF -DGGML_BACKEND_DL=OFF -DLLAMA_CURL=OFF -DLLAMA_HTTPLIB=OFF
+    if [[ "$platform" == iphoneos ]]; then
+        cmake_platform=(-DCMAKE_SYSTEM_NAME=iOS -DCMAKE_OSX_SYSROOT=iphoneos -DCMAKE_OSX_DEPLOYMENT_TARGET=17.0 -DCMAKE_C_COMPILER_TARGET=arm64-apple-ios17.0 -DCMAKE_CXX_COMPILER_TARGET=arm64-apple-ios17.0 -DCMAKE_ASM_FLAGS=--target=arm64-apple-ios17.0)
+        sdk="$(xcrun --sdk iphoneos --show-sdk-path)"
+        clang_target=arm64-apple-ios17.0
+    else
+        cmake_platform=(-DCMAKE_SYSTEM_NAME=Darwin -DCMAKE_OSX_SYSROOT=macosx -DCMAKE_C_COMPILER_TARGET=arm64-apple-ios17.0-macabi -DCMAKE_CXX_COMPILER_TARGET=arm64-apple-ios17.0-macabi -DCMAKE_ASM_FLAGS=--target=arm64-apple-ios17.0-macabi)
+        sdk="$(xcrun --sdk macosx --show-sdk-path)"
+        clang_target=arm64-apple-ios17.0-macabi
+    fi
+    cmake -S "$target_out/input" -B "$build" "${cmake_platform[@]}" -DCMAKE_OSX_ARCHITECTURES=arm64 -DCMAKE_BUILD_TYPE=Release -DBUILD_SHARED_LIBS=OFF -DGGML_METAL=ON -DGGML_METAL_EMBED_LIBRARY=ON -DGGML_BLAS=OFF -DGGML_OPENMP=OFF -DGGML_NATIVE=OFF -DLLAMA_BUILD_COMMON=OFF -DLLAMA_BUILD_TESTS=OFF -DLLAMA_BUILD_TOOLS=OFF -DLLAMA_BUILD_EXAMPLES=OFF -DLLAMA_BUILD_SERVER=OFF -DGGML_RPC=OFF -DGGML_BACKEND_DL=OFF -DLLAMA_CURL=OFF -DLLAMA_HTTPLIB=OFF
     cmake --build "$build" --target llama -j 4
-cp "$source/llama.cpp/include/"*.h "$source/llama.cpp/ggml/include/"*.h "$out/include/"
-cp "$build/llama/src/libllama.a" "$build/llama/ggml/src/"*.a "$build/llama/ggml/src/ggml-metal/libggml-metal.a" "$out/lib/"
-echo "Catalyst arm64 llama $pin prepared in $out"
+cp "$source/llama.cpp/include/"*.h "$source/llama.cpp/ggml/include/"*.h "$target_out/include/"
+cp "$build/llama/src/libllama.a" "$build/llama/ggml/src/"*.a "$build/llama/ggml/src/ggml-metal/libggml-metal.a" "$target_out/lib/"
+echo "$platform arm64 llama $pin prepared in $target_out"
 
 # Compile the pinned wllama sampler as a small C ABI archive; reuse the verified engine libraries.
-sdk="$(xcrun --sdk macosx --show-sdk-path)"
 objects=()
 for unit in "$repo/ios-rebuild/NativeLlama/Sampling.cpp" "$source/cpp/helpers/wsampling.cpp" "$source/cpp/helpers/wcommon.cpp" "$source/cpp/helpers/wlog.cpp"; do
-    object="$out/$(basename "$unit").o"
-    xcrun clang++ -target arm64-apple-ios17.0-macabi -isysroot "$sdk" -std=c++17 -O3 -I "$repo/ios-rebuild/NativeLlama" -I "$source/cpp/helpers" -I "$out/include" -c "$unit" -o "$object"
+    object="$target_out/$(basename "$unit").o"
+    xcrun clang++ -target "$clang_target" -isysroot "$sdk" -std=c++17 -O3 -I "$repo/ios-rebuild/NativeLlama" -I "$source/cpp/helpers" -I "$target_out/include" -c "$unit" -o "$object"
     objects+=("$object")
 done
-xcrun ar rcs "$out/lib/libweavelet-sampling.a" "${objects[@]}"
+xcrun ar rcs "$target_out/lib/libweavelet-sampling.a" "${objects[@]}"
 
-(cd "$out"; shasum -a 256 include/*.h lib/*.a > artifacts.sha256)
-(cd "$repo"; shasum -a 256 ios-rebuild/NativeLlama/build.sh ios-rebuild/NativeLlama/Sampling.h ios-rebuild/NativeLlama/Sampling.cpp vendor/wllama/lowbit-q/cpp/lowbit-q/* > "$out/build-inputs.sha256")
+(cd "$target_out"; shasum -a 256 include/*.h lib/*.a > artifacts.sha256)
+(cd "$repo"; shasum -a 256 ios-rebuild/NativeLlama/build.sh ios-rebuild/NativeLlama/Sampling.h ios-rebuild/NativeLlama/Sampling.cpp ios-rebuild/NativeLlama/module.modulemap ios-rebuild/NativeLlama/iphoneos/module.modulemap vendor/wllama/lowbit-q/cpp/lowbit-q/* > "$target_out/build-inputs.sha256")
