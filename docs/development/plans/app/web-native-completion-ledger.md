@@ -1,5 +1,13 @@
 # Web / 新iOSの完成条件と証拠
 
+## provider一覧・認証先・モデル選択（2026-10-13）
+
+既存WebのnormalizeModelsとfavorite補完を共有接続し、nativeはURLSession・provider別Keychain・選択UIを担当する。Web一覧取得失敗で空配列を保存していた経路は旧cacheを保持するよう修正。成功した空一覧は従来どおり反映する。nativeは認証付き一覧の同origin、保存endpoint一致、provider別鍵を確認し、公開一覧へ鍵を送らない。cache更新は対象subsetの差分だけ保存し、未知属性・元数値表現・編集中configを保持する。
+
+再利用する成功結果：共有normalize関連34件、取得失敗関連41件、補完関連11件と型・bundle鮮度の担当結果（件数には重複あり）。今回の必須確認：Catalystでprovider境界2・生成13・生成中同期保全1の計16件、失敗0。保存失敗・取消・遅延応答・stale拒否・raw保持と認証先を確認した。ログ `/private/tmp/weavelet-provider-models-catalyst.log`。独立Astraは新規指摘なし。今回はcompile/test失敗なし。
+
+省略した重複確認：変更のない共有業務規則のnative複製、保存/書出し/暗号化同期の全経路、画像/Markdown、小変更ごとの監査。実Keychain操作・実API/クラウド・実機・新しい一覧画面の手動操作は未確認。Cohere生成とlocal実行は未対応であり、provider全機能の完成とは扱わない。
+
 ## 会話生成設定・モデル切替・stream/token補正（2026-10-13）
 
 既存WebのswitchConfigModel/savedModelSettings/normalizeConfigStreamとremoteモデル上限判定をpure共有元へ切り出し、Webの旧入口も委譲する。モデル別設定entryの未知属性を上書きで失う経路は、共有元で既存entryへ既知設定を重ねる最小修正を行った。nativeの会話設定画面からモデル/provider・stream・token・temperature・推論設定を編集し、切替結果の差分を原raw値へ戻す。古いdraftと保存失敗時は公開せず、UTF8表現差も上書きしない。
