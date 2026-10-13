@@ -21,7 +21,7 @@ struct ChatView: View {
     @State private var titleSettingsDraft: ConversationTitleSettingsDraft?
     @State private var defaultConfigDraft: ChatConfigDraft?
     @State private var showsSettings = false
-    @State private var showsLibrary = false
+    @State private var columnVisibility: NavigationSplitViewVisibility = .automatic
     @State private var showsSearch = false
     @State private var showsRemoteSettings = false
     @Environment(\.scenePhase) private var scenePhase
@@ -55,6 +55,13 @@ struct ChatView: View {
     @State private var evaluationDraft: ConversationEvaluationDraft?
 
     var body: some View {
+        GeometryReader { layout in
+        NavigationSplitView(columnVisibility:$columnVisibility) {
+            ConversationLibraryView(state:state, onSelect: {
+                if layout.size.width < 700 { columnVisibility = .detailOnly }
+            }, onClose: { columnVisibility = .detailOnly })
+                .navigationSplitViewColumnWidth(min:260,ideal:300,max:380)
+        } detail: {
         NavigationStack {
             ScrollViewReader { scroll in
             ScrollView {
@@ -109,16 +116,11 @@ struct ChatView: View {
             .onChange(of:scenePhase) { _, phase in if phase == .background { cloudKitConnection?.flushInBackground() } else if phase == .active { cloudKitConnection?.resumeOnForeground() } }
             .toolbar {
                 ToolbarItemGroup(placement: .topBarLeading) {
-                    Button("会話一覧", systemImage: "list.bullet") { showsLibrary = true }
+                    Button("会話一覧", systemImage: "sidebar.left") {
+                        columnVisibility = layout.size.width < 700 || columnVisibility == .detailOnly ? .all : .detailOnly
+                    }
                         .disabled(state.generation != nil)
                         .frame(minWidth: 44, minHeight: 44)
-                    Picker("会話", selection: Binding(get: { Data(state.selectedConversationID.utf8) }, set: { state.selectedConversationID = String(decoding: $0, as: UTF8.self) })) {
-                        ForEach(state.conversations, id: \.identity) { conversation in
-                            Text(conversation.title).tag(conversation.identity)
-                        }
-                    }
-                    .pickerStyle(.menu)
-                    .disabled(state.generation != nil)
                     Menu("履歴",systemImage:"arrow.uturn.backward.circle") {
                         Button("編集を元に戻す",systemImage:"arrow.uturn.backward") {
                             do { try state.undoMessageEdit() } catch { errorMessage = error.localizedDescription }
@@ -240,7 +242,6 @@ struct ChatView: View {
                     try state.navigate(chatID: result.chatID, nodeID: result.nodeID, source: mode == .grep ? .grep : .search)
                 }
             }
-            .sheet(isPresented: $showsLibrary) { ConversationLibraryView(state: state) }
             .sheet(isPresented: $showsSettings) {
                 NavigationStack {
                     Form {
@@ -283,6 +284,12 @@ struct ChatView: View {
                     .toolbar { ToolbarItem(placement: .confirmationAction) { Button("完了") { showsSettings = false } } }
                 }
             }
+        }
+        }
+        .onChange(of:layout.size.width) { oldWidth, width in
+            if oldWidth < 700 && width >= 700 { columnVisibility = .all }
+            else if oldWidth >= 700 && width < 700 { columnVisibility = .detailOnly }
+        }
         }
         .environment(\.markdownSettings, (try? state.publicationSnapshot().required("state")) ?? .object([]))
     }
@@ -720,7 +727,8 @@ struct WebJSONDocument: FileDocument {
 
 struct ConversationLibraryView: View {
     @ObservedObject var state: ChatState
-    @Environment(\.dismiss) private var dismiss
+    let onSelect: () -> Void
+    let onClose: () -> Void
     @State private var selected = Set<Data>()
     @State private var pendingDelete: [String] = []
     @State private var showsDelete = false
@@ -759,6 +767,7 @@ struct ConversationLibraryView: View {
                     }, id: \.identity) { conversation in conversationRow(conversation) }
                 }
             }
+            .disabled(state.generation != nil)
             .navigationTitle("会話一覧")
             .onAppear {
                 perform {
@@ -770,24 +779,28 @@ struct ConversationLibraryView: View {
             }
             .onChange(of: state.exchange?.source) { _, _ in perform {} }
             .toolbar {
-                ToolbarItem(placement: .topBarLeading) { Button("閉じる") { dismiss() } }
+                ToolbarItem(placement: .topBarLeading) { Button("閉じる",action:onClose) }
                 ToolbarItem(placement: .topBarTrailing) {
                     Button("新規フォルダ", systemImage: "folder.badge.plus") { perform { try state.applyFolder(.create(id: UUID().uuidString.lowercased())) } }
+                        .disabled(state.generation != nil)
                 }
                 ToolbarItem(placement: .topBarTrailing) {
-                    Button("新規", systemImage: "plus") { perform { try state.createChat() } }
+                    Button("新規", systemImage: "plus") {
+                        if perform({ try state.createChat() }) { onSelect() }
+                    }
+                    .disabled(state.generation != nil)
                 }
                 ToolbarItem(placement: .bottomBar) {
                     Menu("選択を移動（\(selected.count)）") {
                         moveButtons(ids: state.conversations.filter { selected.contains($0.identity) }.map(\.id))
-                    }.disabled(selected.isEmpty)
+                    }.disabled(selected.isEmpty || state.generation != nil)
                 }
                 ToolbarItem(placement: .bottomBar) {
                     Button("選択を削除（\(selected.count)）", role: .destructive) {
                         pendingDelete = state.conversations.filter { selected.contains($0.identity) }.map(\.id)
                         showsDelete = true
                     }
-                    .disabled(selected.isEmpty)
+                    .disabled(selected.isEmpty || state.generation != nil)
                     .frame(minHeight: 44)
                 }
             }
@@ -855,7 +868,7 @@ struct ConversationLibraryView: View {
             }
             Button {
                 state.selectedConversationID = conversation.id
-                if state.selectedConversationID.utf8.elementsEqual(conversation.id.utf8), state.persistenceError == nil { dismiss() }
+                if state.selectedConversationID.utf8.elementsEqual(conversation.id.utf8), state.persistenceError == nil { onSelect() }
                 else { errorMessage = state.persistenceError }
             } label: {
                 Text(conversation.title.isEmpty ? "（タイトルなし）" : conversation.title)
@@ -870,7 +883,7 @@ struct ConversationLibraryView: View {
                         showsRename = true
                     }
                     Button("複製") {
-                        perform { try state.duplicateChat(id: conversation.id) }
+                        if perform({ try state.duplicateChat(id: conversation.id) }) { onSelect() }
                     }
                     Menu("移動") { moveButtons(ids: [conversation.id]) }
                     Button("削除", role: .destructive) {
@@ -891,7 +904,9 @@ struct ConversationLibraryView: View {
                 HStack { Image(systemName: folder.expanded ? "chevron.down" : "chevron.right"); Image(systemName: "folder.fill").foregroundStyle(folderColor(folder.color)); Text(folder.name.isEmpty ? "（名前なし）" : folder.name).frame(maxWidth: .infinity, alignment: .leading) }.frame(minHeight: 44)
             }.buttonStyle(.borderless).accessibilityLabel("フォルダ: \(folder.name)").accessibilityValue(folder.expanded ? "展開中" : "閉じています")
             Menu {
-                Button("このフォルダに新規会話") { perform { try state.createChat(folder: folder.id) } }
+                Button("このフォルダに新規会話") {
+                    if perform({ try state.createChat(folder: folder.id) }) { onSelect() }
+                }
                 Button("改名") { folderRenameID = folder.id; folderRenameTitle = folder.name; showsFolderRename = true }
                 Menu("色") {
                     ForEach(["#be123c", "#6d28d9", "#0369a1", "#047857", "#b45309"], id: \.self) { color in
