@@ -301,6 +301,22 @@ final class ChatState: ObservableObject {
         let snapshot = try publicationSnapshot()
         return try ChatConfigDraft(chatID:conversation.id,source:exchange.source,snapshot:snapshot,modelState:ChatConfig.modelState(in:snapshot.required("state")),config:chat["config"] ?? ChatDefaults.webInitial().config)
     }
+    func defaultChatConfigDraft() throws -> ChatConfigDraft {
+        let snapshot = try syncInputSnapshot(), roots = try snapshot.required("state")
+        let settings = try ChatDefaults.resolved(in:roots).required("settings")
+        return try ChatConfigDraft(chatID:"",source:exchange?.source ?? ChatLibrary.emptySource,snapshot:snapshot,
+            modelState:ChatConfig.modelState(in:roots),config:settings.required("defaultChatConfig"),
+            defaultSettings:(settings.required("defaultSystemMessage").string("system message"),settings.required("defaultImageDetail").string("image detail")))
+    }
+    func saveDefaultChatConfig(_ draft: ChatConfigDraft) throws {
+        guard let settings = draft.defaultSettings else { throw ExchangeError.invalid("新規会話の設定ではありません") }
+        guard try syncInputSnapshot().encoded() == draft.snapshot.encoded() else { throw ExchangeError.invalid("保存データが変更されています。設定を開き直してください") }
+        let roots = OrderedJSON.object([
+            .init(key:"defaultChatConfig",value:try ChatConfig.normalizedDefaults(draft.config,modelState:draft.modelState)),
+            .init(key:"defaultSystemMessage",value:.string(settings.systemMessage)),
+            .init(key:"defaultImageDetail",value:.string(settings.imageDetail))])
+        try applySnapshot(.object([.init(key:"version",value:draft.snapshot.required("version")),.init(key:"state",value:roots)]))
+    }
     func saveChatConfig(_ draft: ChatConfigDraft, now: Double = Date().timeIntervalSince1970 * 1000) throws {
         guard generation == nil else { throw ExchangeError.invalid("生成結果を保存してから設定してください") }
         guard let exchange, try exchange.source.encoded() == draft.source.encoded(), try publicationSnapshot().encoded() == draft.snapshot.encoded() else { throw ExchangeError.invalid("会話または設定が変更されました。設定を開き直してください") }
@@ -312,21 +328,21 @@ final class ChatState: ObservableObject {
     }
 
     @MainActor func refreshProviderModels(providerID: String, expectedSnapshot: OrderedJSON, client: ProviderModelClient = ProviderModelClient(), readCredential: ProviderModels.CredentialReader = RemoteCredentials.load(providerID:)) async throws {
-        guard generation == nil, try publicationSnapshot().encoded() == expectedSnapshot.encoded() else { throw ExchangeError.invalid("保存データが変更されています。モデル一覧を開き直してください") }
+        guard generation == nil, try syncInputSnapshot().encoded() == expectedSnapshot.encoded() else { throw ExchangeError.invalid("保存データが変更されています。モデル一覧を開き直してください") }
         let state = try expectedSnapshot.required("state")
         guard let provider = try ProviderModels.providers(in:state).first(where:{ $0.id.utf8.elementsEqual(providerID.utf8) }) else { throw ExchangeError.invalid("provider設定がありません") }
         let models = try await client.fetch(provider,readCredential:readCredential)
         try Task.checkCancellation()
-        guard generation == nil, try publicationSnapshot().encoded() == expectedSnapshot.encoded() else { throw ExchangeError.invalid("モデル取得中に保存データが変更されました。既存一覧を維持しています") }
+        guard generation == nil, try syncInputSnapshot().encoded() == expectedSnapshot.encoded() else { throw ExchangeError.invalid("モデル取得中に保存データが変更されました。既存一覧を維持しています") }
         let roots = try ProviderModels.cacheChanges(state:state,providerID:providerID,models:models)
         try applySnapshot(.object([.init(key:"version",value:expectedSnapshot.required("version")),.init(key:"state",value:roots)]))
     }
     @MainActor func refreshModelsForConfig(_ draft: ChatConfigDraft, providerID: String, client: ProviderModelClient = ProviderModelClient(), readCredential: ProviderModels.CredentialReader = RemoteCredentials.load(providerID:)) async throws -> ChatConfigDraft {
-        guard let exchange, try exchange.source.encoded() == draft.source.encoded() else { throw ExchangeError.invalid("会話が変更されました。設定を開き直してください") }
+        guard try draft.defaultSettings != nil || exchange?.source.encoded() == draft.source.encoded() else { throw ExchangeError.invalid("会話が変更されました。設定を開き直してください") }
         try await refreshProviderModels(providerID:providerID,expectedSnapshot:draft.snapshot,client:client,readCredential:readCredential)
-        guard let source = self.exchange?.source, try source.encoded() == draft.source.encoded() else { throw ExchangeError.invalid("会話が変更されました。設定を開き直してください") }
+        guard let source = self.exchange?.source, try draft.defaultSettings != nil || source.encoded() == draft.source.encoded() else { throw ExchangeError.invalid("会話が変更されました。設定を開き直してください") }
         let snapshot = try publicationSnapshot()
-        return try ChatConfigDraft(chatID:draft.chatID,source:source,snapshot:snapshot,modelState:ChatConfig.modelState(in:snapshot.required("state")),config:draft.config)
+        return try ChatConfigDraft(chatID:draft.chatID,source:source,snapshot:snapshot,modelState:ChatConfig.modelState(in:snapshot.required("state")),config:draft.config,defaultSettings:draft.defaultSettings)
     }
 
     func nodeOptionsDraft(nodeID: String) throws -> NodeOptionsDraft {
@@ -732,9 +748,9 @@ final class ChatState: ObservableObject {
         generation = nil
     }
 
-    func createChat(defaults: ChatDefaults, id: String = UUID().uuidString.lowercased(), folder: String? = nil, now: Double = Date().timeIntervalSince1970 * 1000) throws {
+    func createChat(defaults: ChatDefaults? = nil, id: String = UUID().uuidString.lowercased(), folder: String? = nil, now: Double = Date().timeIntervalSince1970 * 1000) throws {
         let source = exchange?.source ?? ChatLibrary.emptySource
-        var created = try ChatLibrary.create(in: source, id: id, defaults: defaults, folder: folder)
+        var created = try ChatLibrary.create(in: source, id: id, defaults: defaults ?? ChatDefaults.saved(in:syncInputSnapshot().required("state")), folder: folder)
         if let folder { created = try ChatFolders.apply(in: created, operation: .move(chatIDs: [id], folderID: folder)) }
         try applyLibrary(created, selectedID: id, now: now)
     }
@@ -749,9 +765,9 @@ final class ChatState: ObservableObject {
         try applyLibrary(ChatLibrary.duplicate(in: exchange.source, id: id, newID: newID), selectedID: newID, now: now)
     }
 
-    func deleteChats(ids: [String], defaults: ChatDefaults, replacementID: String = UUID().uuidString.lowercased(), now: Double = Date().timeIntervalSince1970 * 1000) throws {
+    func deleteChats(ids: [String], defaults: ChatDefaults? = nil, replacementID: String = UUID().uuidString.lowercased(), now: Double = Date().timeIntervalSince1970 * 1000) throws {
         guard let exchange else { throw ExchangeError.invalid("サンプル会話は削除できません") }
-        let source = try ChatLibrary.delete(in: exchange.source, ids: ids, replacementID: replacementID, defaults: defaults)
+        let source = try ChatLibrary.delete(in: exchange.source, ids: ids, replacementID: replacementID, defaults: defaults ?? ChatDefaults.saved(in:syncInputSnapshot().required("state")))
         let first = try source.required("chats").array("chats")[0].required("id").string("id")
         try applyLibrary(source, selectedID: first, now: now)
     }

@@ -7,6 +7,7 @@ struct ChatConfigDraft: Identifiable {
     let snapshot: OrderedJSON
     let modelState: OrderedJSON
     var config: OrderedJSON
+    var defaultSettings: (systemMessage: String, imageDetail: String)? = nil
 }
 
 enum ChatConfig {
@@ -16,7 +17,7 @@ enum ChatConfig {
         })
     }
     // Saved model entries copy unknown fields, so carry those values in the same raw table.
-    private static func projection(_ config: OrderedJSON, boundary: inout SharedWebProjection) throws -> OrderedJSON {
+    static func projection(_ config: OrderedJSON, boundary: inout SharedWebProjection) throws -> OrderedJSON {
         var result = try boundary.requestConfig(config)
         if let router = config["openRouter"] { result = result.replacing("openRouter",with:try boundary.reference(router)) }
         if case .object(let entries) = config["modelSettings"] {
@@ -25,6 +26,13 @@ enum ChatConfig {
             result = result.replacing("modelSettings",with:.object(projected))
         }
         return result
+    }
+    static func normalizedDefaults(_ config: OrderedJSON, modelState: OrderedJSON) throws -> OrderedJSON {
+        var boundary = SharedWebProjection()
+        let input = OrderedJSON.object([.init(key:"operation",value:.string("saveDefaults")),
+            .init(key:"config",value:try projection(config,boundary:&boundary)),.init(key:"modelState",value:modelState)])
+        let result = try SharedWebOperations.call("chatConfig",input)
+        return try OrderedJSONChanges.apply(result.required("changes"),to:config,opaque:boundary.opaque)
     }
     static func switched(_ config: OrderedJSON, model: String, providerID: String?, modelState: OrderedJSON, modelSource: String = "remote") throws -> OrderedJSON {
         var boundary = SharedWebProjection()

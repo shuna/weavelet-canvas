@@ -41,6 +41,15 @@ struct ChatConfigView: View {
     var body: some View {
         NavigationStack {
             Form {
+                if draft.defaultSettings != nil {
+                    Section("新規会話の初期値") {
+                        TextField("システム文",text:Binding(get:{draft.defaultSettings?.systemMessage ?? ""},set:{draft.defaultSettings?.systemMessage = $0}),axis:.vertical)
+                        Picker("画像品質",selection:Binding(get:{draft.defaultSettings?.imageDetail ?? "auto"},set:{draft.defaultSettings?.imageDetail = $0})) {
+                            Text("自動").tag("auto"); Text("低").tag("low"); Text("高").tag("high")
+                        }
+                        Text("保存済みの会話は変更しません。").font(.footnote).foregroundStyle(.secondary)
+                    }
+                }
                 Picker("実行場所",selection:$modelSource) {
                     Text("オンライン").tag("remote")
                     Text("この端末（GGUF）").tag("local")
@@ -78,7 +87,7 @@ struct ChatConfigView: View {
                 if let errorMessage { Text(errorMessage).foregroundStyle(.red) }
             }
             .disabled(copyingModel)
-            .navigationTitle("会話の生成設定")
+            .navigationTitle(draft.defaultSettings == nil ? "会話の生成設定" : "新規会話の既定設定")
             .fileImporter(isPresented:$showsModelImporter,allowedContentTypes:[UTType(filenameExtension:"gguf") ?? .data]) { result in
                 do {
                     let source = try result.get(), modelID = importingModelID, files = state.localModelFiles
@@ -136,7 +145,12 @@ struct ChatConfigView: View {
         originalValues = values; originalStream = stream; originalForce = forceReasoning
     }
     private func save() {
-        do { try state.saveChatConfig(editedDraft()); dismiss() }
+        do {
+            let edited = try editedDraft()
+            if edited.defaultSettings != nil { try state.saveDefaultChatConfig(edited) }
+            else { try state.saveChatConfig(edited) }
+            dismiss()
+        }
         catch { errorMessage = error.localizedDescription }
     }
 }

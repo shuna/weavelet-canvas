@@ -4,11 +4,26 @@ struct ChatDefaults {
     let config: OrderedJSON
     let imageDetail: String
 
-    // shortcut: Persisted global/model settings are connected separately from these shared initial values.
     static func webInitial() throws -> ChatDefaults {
         let value = try SharedWebOperations.call("libraryDefaults", .object([]))
         return try ChatDefaults(config: value.required("config"), imageDetail: value.required("imageDetail").string("imageDetail"))
     }
+    static func resolved(in state: OrderedJSON) throws -> OrderedJSON {
+        var boundary = SharedWebProjection()
+        var input = OrderedJSON.object([])
+        if let config = state["defaultChatConfig"] { input = input.replacing("defaultChatConfig",with:try ChatConfig.projection(config,boundary:&boundary)) }
+        for key in ["defaultSystemMessage", "defaultImageDetail"] {
+            if let value = state[key] { input = input.replacing(key,with:value) }
+        }
+        let result = try SharedWebOperations.call("libraryDefaults",.object([.init(key:"state",value:input),.init(key:"modelState",value:ChatConfig.modelState(in:state))]))
+        return try OrderedJSONChanges.apply(.array([.object([.init(key:"op",value:.string("set")),
+            .init(key:"path",value:.array([])),.init(key:"value",value:result)])]),to:.null,opaque:boundary.opaque)
+    }
+    static func saved(in state: OrderedJSON) throws -> ChatDefaults {
+        let value = try resolved(in:state)
+        return try ChatDefaults(config:value.required("config"),imageDetail:value.required("imageDetail").string("imageDetail"))
+    }
+
 }
 
 enum ChatLibrary {

@@ -18,6 +18,7 @@ struct WeaveletPilotApp: App {
 
 struct ChatView: View {
     @ObservedObject var state: ChatState
+    @State private var defaultConfigDraft: ChatConfigDraft?
     @State private var showsSettings = false
     @State private var showsLibrary = false
     @State private var showsSearch = false
@@ -316,12 +317,17 @@ struct ChatView: View {
                             if googleConnection == nil { googleConnection = GoogleSyncConnection(state: state) }
                             shownGoogleConnection = googleConnection
                         }.disabled(state.generation != nil)
+                        Button("新規会話の既定設定") {
+                            do { defaultConfigDraft = try state.defaultChatConfigDraft() }
+                            catch { state.generationError = error.localizedDescription }
+                        }.disabled(state.generation != nil)
                         Button("remote生成設定") { showsRemoteSettings = true }
                             .disabled(state.generation != nil)
                     }
                     .sheet(item: $shownGoogleConnection) { connection in
                         GoogleSyncSettingsView(connection: connection)
                     }
+                    .sheet(item: $defaultConfigDraft) { draft in ChatConfigView(state:state,draft:draft) }
                     .sheet(isPresented: $showsRemoteSettings) { RemoteSettingsView(state: state) }
                     .navigationTitle("表示設定")
                     .toolbar { ToolbarItem(placement: .confirmationAction) { Button("完了") { showsSettings = false } } }
@@ -588,7 +594,7 @@ struct ConversationLibraryView: View {
                     Button("新規フォルダ", systemImage: "folder.badge.plus") { perform { try state.applyFolder(.create(id: UUID().uuidString.lowercased())) } }
                 }
                 ToolbarItem(placement: .topBarTrailing) {
-                    Button("新規", systemImage: "plus") { perform { try state.createChat(defaults: .webInitial()) } }
+                    Button("新規", systemImage: "plus") { perform { try state.createChat() } }
                 }
                 ToolbarItem(placement: .bottomBar) {
                     Menu("選択を移動（\(selected.count)）") {
@@ -607,7 +613,7 @@ struct ConversationLibraryView: View {
             .confirmationDialog("会話を削除しますか？", isPresented: $showsDelete, titleVisibility: .visible) {
                 Button("削除", role: .destructive) {
                     perform {
-                        try state.deleteChats(ids: pendingDelete, defaults: .webInitial())
+                        try state.deleteChats(ids: pendingDelete)
                         selected.removeAll()
                     }
                 }
@@ -704,7 +710,7 @@ struct ConversationLibraryView: View {
                 HStack { Image(systemName: folder.expanded ? "chevron.down" : "chevron.right"); Image(systemName: "folder.fill").foregroundStyle(folderColor(folder.color)); Text(folder.name.isEmpty ? "（名前なし）" : folder.name).frame(maxWidth: .infinity, alignment: .leading) }.frame(minHeight: 44)
             }.buttonStyle(.borderless).accessibilityLabel("フォルダ: \(folder.name)").accessibilityValue(folder.expanded ? "展開中" : "閉じています")
             Menu {
-                Button("このフォルダに新規会話") { perform { try state.createChat(defaults: .webInitial(), folder: folder.id) } }
+                Button("このフォルダに新規会話") { perform { try state.createChat(folder: folder.id) } }
                 Button("改名") { folderRenameID = folder.id; folderRenameTitle = folder.name; showsFolderRename = true }
                 Menu("色") {
                     ForEach(["#be123c", "#6d28d9", "#0369a1", "#047857", "#b45309"], id: \.self) { color in
