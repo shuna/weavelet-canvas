@@ -129,7 +129,7 @@
     "src/store/storage/google/overview.ts": "2cf5c0d58e0d715d7a94e264f6ef075ecdf12a9f0a136d06acca33af38ecbb2c",
     "src/store/storage/sync/EncryptedSync.ts": "0d0a7cbc7b354577e6dacd7fa73cdf264803b1fbe7d38ebcb22692ebcc41f415",
     "src/store/storage/filesystem/transport.ts": "51bd3abb64d9d685785ff30375cf7f691ce324026659480072c60c2c39e07aa5",
-    "src/utils/branchLayout.ts": "5cc4a2b874914cf882eec7932acef99a5e3481757e6b5d94c168539388c14e2a",
+    "src/utils/branchLayout.ts": "baafa6bbc9248df12c7729313ae92029481e84cbe0a104c504d66f60cc9baef7",
     "src/utils/diffUtils.ts": "94fa0a5a590d7bf21abfb95821d9014984c90e4210702cb709740c43c2404d91",
     "src/utils/branchDiff.ts": "0d7fd12643518dce808580e02c9684d99df23df0a2f980ccd5f6af7c59995615",
     "src/utils/date.ts": "36233be4e64f54ddd34210bb10618a017b76c2ee0bd40f81d049c33a0c966279",
@@ -255,7 +255,7 @@
     "src/utils/newChatDefaults.ts": "4d7875d8c3b84559bcd381186f338f32b51c38df8d630a38a300d0edc29a7068",
     "src/utils/chatLibrary.ts": "530bd76d5d4ddc1ef268d511dfb747b13f751a86777a92a9449689c0f0d0a39f",
     "shared/google-sync/library.ts": "c17f54bddd63e50cacf55583f2cc740f62a56f5b165eb3de0a4393cdce89299f",
-    "src/utils/branchLayout.ts": "5cc4a2b874914cf882eec7932acef99a5e3481757e6b5d94c168539388c14e2a",
+    "src/utils/branchLayout.ts": "baafa6bbc9248df12c7729313ae92029481e84cbe0a104c504d66f60cc9baef7",
     "src/utils/diffUtils.ts": "94fa0a5a590d7bf21abfb95821d9014984c90e4210702cb709740c43c2404d91",
     "src/utils/branchDiff.ts": "0d7fd12643518dce808580e02c9684d99df23df0a2f980ccd5f6af7c59995615",
     "shared/google-sync/branchLayout.ts": "5eb46fe1c1fae3389ac6cfe31d6cf320bff2fba3e0c8f01802a33dc3e1495e3b",
@@ -361,5 +361,5 @@
     "remove-accents/package.json": "511775b39122274ad36e9dc32c47b2112a3fd4372e64284c2336b143be853c82",
     "remove-accents/LICENSE": "31279697ad2455927a227e7678f2bb71e9e06dde319f12ce345404b3b7a99b81"
   },
-  "bundleSHA256": "740decf51d587ed8ebbec87d1c18f6ac1636f5956a896532771aab4c55589c8e"
+  "bundleSHA256": "63febd45691f46972206bfc254d17148bc3dbe6324dfb952ec0ec948612a2cea"
 }

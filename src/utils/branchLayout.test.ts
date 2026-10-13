@@ -11,6 +11,16 @@ const input = (text: string): WorkerInput => ({requestId:7,entries:[{
 }],contentStore:{body:{content:[{type:'text',text}],refCount:1}}});
 
 describe('native branch layout bridge', () => {
+  it('keeps raw duplicate IDs and identifies each conversation edge for both consumers', () => {
+    const request = input('multi');
+    request.entries[0].nodes.child = {id:'child',parentId:'root',role:'assistant',contentHash:'body'};
+    request.entries.push({...request.entries[0],chatIndex:1,chatId:'other',chatTitle:'other'});
+    const web = layoutBranchEntries(request);
+    expect(web.rfEdges.map(edge => [edge.source,edge.target,edge.data.chatIndex])).toEqual([['root','child',0],['root','child',1]]);
+    expect(web.rfNodes.map(node => node.data.chatIndex)).toEqual([0,0,1,1]);
+    expect(JSON.parse(branchLayout(JSON.stringify(request)))).toEqual(web);
+  });
+
   it('replaces only a preview surrogate cut by the Web 80-unit limit', () => {
     const request = input('x'.repeat(79) + '😀');
     const before = JSON.stringify(request);

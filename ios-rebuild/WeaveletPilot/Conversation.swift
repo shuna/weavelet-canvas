@@ -114,6 +114,7 @@ final class ChatState: ObservableObject {
     @Published private(set) var conversations = Conversation.samples
     @Published private var selectedID = Conversation.samples[0].id
     @Published private var displayStyle: ChatStyle = .stream
+    @Published var multiViewChatIndices: [Int] = []
     @Published private(set) var exchange: WebExchange?
     @Published private(set) var document: SyncDocument?
     @Published var persistenceError: String?
@@ -198,10 +199,11 @@ final class ChatState: ObservableObject {
         self.exchange = changed
         persistenceError = nil
     }
-    func ensureBranchTreeForEditor(now: Double = Date().timeIntervalSince1970 * 1000) throws {
+    func ensureBranchTreeForEditor(chatID: String? = nil, now: Double = Date().timeIntervalSince1970 * 1000) throws {
         guard generation == nil, let exchange, !initialLoadFailed else { throw ExchangeError.invalid("分岐を開けません") }
         var chats = try exchange.source.required("chats").array("chats")
-        guard let index = chats.firstIndex(where: { $0["id"] == .string(selectedID) }) else { throw ExchangeError.invalid("会話がありません") }
+        let targetID = chatID ?? selectedID
+        guard let index = chats.firstIndex(where: { $0["id"] == .string(targetID) }) else { throw ExchangeError.invalid("会話がありません") }
         guard chats[index]["branchTree"] == nil else { return }
         let chat = chats[index], store = try exchange.source.required("contentStore")
         var boundary = SharedWebProjection()
@@ -213,7 +215,7 @@ final class ChatState: ObservableObject {
         let restored = try OrderedJSONChanges.apply(changes, to: .object([.init(key: "chat", value: chat), .init(key: "contentStore", value: store)]), opaque: boundary.opaque)
         chats[index] = try restored.required("chat")
         let source = exchange.source.replacing("chats", with: .array(chats)).replacing("contentStore", with: try restored.required("contentStore"))
-        try applyLibrary(source, selectedID: selectedID, resetViewFor: selectedID, now: now)
+        try applyLibrary(source, selectedID: selectedID, resetViewFor: targetID, now: now)
     }
     var conversation: Conversation? { conversations.first { $0.id.utf8.elementsEqual(selectedID.utf8) } }
 

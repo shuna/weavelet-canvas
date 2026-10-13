@@ -175,4 +175,88 @@ final class BranchEditorTests: XCTestCase {
         XCTAssertEqual(try key.input(requestID: 9).required("entries").array("entries")[0].required("activePath").array("activePath").count, 1)
         XCTAssertEqual(state.conversation?.visibleMessages.count, 1)
     }
+    func testMultiViewSeparatesDuplicateAndCanonicalEquivalentNodeIDsAndNavigatesTheirChat() throws {
+        let original = try fixture()
+        var chats = try original.required("chats").array("chats")
+        var first = chats[0]
+        let tree = try first.required("branchTree")
+        var nodes = try tree.required("nodes")
+        for id in ["é", "e\u{301}"] {
+            nodes = nodes.replacing(id, with: .object([.init(key: "id", value: .string(id)), .init(key: "parentId", value: .string("n-user")),
+                .init(key: "role", value: .string("assistant")), .init(key: "contentHash", value: .string("inactive")), .init(key: "createdAt", value: .number("1"))]))
+        }
+        first = first.replacing("branchTree", with: tree.replacing("nodes", with: nodes)).replacing("id", with: .string("é")).replacing("title", with: .string("é"))
+        chats = [first, first.replacing("id", with: .string("e\u{301}")).replacing("title", with: .string("e\u{301}"))]
+        let source = original.replacing("chats", with: .array(chats))
+        let state = ChatState()
+        try state.importWebData(source.encoded())
+        state.multiViewChatIndices = [1, 0]
+        let key = BranchLayoutKey(state: state)
+        let before = state.exchange?.source
+        let input = try key.input(requestID: 91)
+        XCTAssertEqual(try input.required("entries").array("entries").map { try $0.required("chatIndex").number("index") }, [1, 0])
+        XCTAssertEqual(try input.required("entries").array("entries")[0].required("nodes"), nodes)
+        let output = try SharedWebOperations.call("branchLayout", input)
+        let graph = try BranchGraph(output, requestID: 91)
+        XCTAssertEqual(graph.positionsByID.count, try nodes.object("nodes").count * 2)
+        for edge in graph.edges {
+            XCTAssertNotNil(graph.positionsByID[.init(chatIndex: edge.chatIndex, nodeID: Data(edge.source.utf8))])
+            XCTAssertNotNil(graph.positionsByID[.init(chatIndex: edge.chatIndex, nodeID: Data(edge.target.utf8))])
+        }
+        let headers = graph.headers(in: key)
+        XCTAssertEqual(headers.map(\.id), [1, 0])
+        XCTAssertTrue(headers[0].title.utf8.elementsEqual("e\u{301}".utf8))
+        XCTAssertTrue(headers[1].title.utf8.elementsEqual("é".utf8))
+        XCTAssertGreaterThan(headers[1].x, headers[0].x + 280)
+        XCTAssertEqual(state.exchange?.source, before)
+        XCTAssertThrowsError(try BranchGraph(output, requestID: 92))
+        let target = try XCTUnwrap(key.context(chatIndex: 1))
+        XCTAssertTrue(try target.select("e\u{301}", in: state))
+        XCTAssertTrue(state.selectedConversationID.utf8.elementsEqual("e\u{301}".utf8))
+        XCTAssertTrue(try XCTUnwrap(state.conversation?.visibleMessages.last?.id).utf8.elementsEqual("e\u{301}".utf8))
+        XCTAssertFalse(key.isCurrent(in: state))
+        let selected = state.exchange?.source
+        XCTAssertFalse(try XCTUnwrap(key.context(chatIndex: 0)).select("e\u{301}", in: state))
+        XCTAssertEqual(state.exchange?.source, selected)
+        let current = BranchLayoutKey(state: state)
+        let compare = try BranchComparison.compare(.init(key: try XCTUnwrap(current.context(chatIndex: 0)), mode: .current(nodeID: "n-inactive")))
+        XCTAssertTrue(compare.hasChanges)
+        state.multiViewChatIndices = [0]
+        XCTAssertFalse(current.isCurrent(in: state))
+        XCTAssertEqual(BranchLayoutKey(state: state).entries.map(\.chatIndex), [1])
+    }
+
+    func testMultiViewSelectionIsTransientAndUnselectedFlatConversionFailureKeepsRawState() throws {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        let url = directory.appendingPathComponent("state.json")
+        var rejects = false
+        let local = LocalStateStore(fileURL: url) { data, path in
+            if rejects { throw CocoaError(.fileWriteNoPermission) }
+            try data.write(to: path, options: .atomic)
+        }
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let state = ChatState(store: local)
+        try state.importWebData(fixture().encoded())
+        state.multiViewChatIndices = [0, 1]
+        let before = state.exchange?.source
+        let disk = try Data(contentsOf: url)
+        rejects = true
+        XCTAssertThrowsError(try state.ensureBranchTreeForEditor(chatID: "chat-b"))
+        XCTAssertEqual(state.selectedConversationID, "chat-a")
+        XCTAssertEqual(state.multiViewChatIndices, [0, 1])
+        XCTAssertEqual(state.exchange?.source, before)
+        XCTAssertEqual(try Data(contentsOf: url), disk)
+        XCTAssertThrowsError(try state.setChatActiveView(.branchEditor))
+        XCTAssertEqual(state.chatActiveView, .chat)
+        XCTAssertEqual(state.multiViewChatIndices, [0, 1])
+        XCTAssertEqual(try Data(contentsOf: url), disk)
+        rejects = false
+        try state.ensureBranchTreeForEditor(chatID: "chat-b", now: 1000)
+        XCTAssertEqual(state.selectedConversationID, "chat-a")
+        XCTAssertEqual(try BranchLayoutKey(state: state).input(requestID: 1).required("entries").array("entries").count, 2)
+        XCTAssertEqual(state.exchange?.source["contentStore"]?["unreferenced"], before?["contentStore"]?["unreferenced"])
+        XCTAssertTrue(ChatState(store: local).multiViewChatIndices.isEmpty)
+        XCTAssertNil(try state.syncInputSnapshot().required("state")["multiViewChatIndices"])
+    }
+
 }

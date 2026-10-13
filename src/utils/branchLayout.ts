@@ -59,6 +59,7 @@ export interface PlainNode {
 }
 
 export interface PlainEdge {
+  data: { chatIndex: number };
   id: string;
   source: string;
   target: string;
@@ -197,6 +198,7 @@ function layoutSingleTree(
     .filter((n) => n.parentId && nodes[n.parentId])
     .map((n) => ({
       id: `${n.parentId}-${n.id}`,
+      data: { chatIndex },
       type: 'step',
       source: n.parentId!,
       target: n.id,
