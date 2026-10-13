@@ -62,6 +62,23 @@ final class PromptLibraryTests: XCTestCase {
         XCTAssertEqual(try ChatState(store: store).promptLibraryDraft().prompts, draft.prompts)
         XCTAssertThrowsError(try state.savePromptLibrary(draft))
     }
+
+    func testAsyncPublicationRejectsCanceledOldDraftAndChangedSource() throws {
+        let state = ChatState()
+        let expected = try state.promptLibraryDraft()
+        XCTAssertTrue(PromptLibrary.canPublish(expected: expected, current: expected,
+                                               source: expected.snapshot, active: true))
+        XCTAssertFalse(PromptLibrary.canPublish(expected: expected, current: expected,
+                                                source: expected.snapshot, active: false))
+        var changed = expected
+        changed.prompts = .array([])
+        XCTAssertFalse(PromptLibrary.canPublish(expected: expected, current: changed,
+                                                source: expected.snapshot, active: true))
+        XCTAssertFalse(PromptLibrary.canPublish(expected: expected, current: nil,
+                                                source: expected.snapshot, active: true))
+        XCTAssertFalse(PromptLibrary.canPublish(expected: expected, current: expected,
+                                                source: .null, active: true))
+    }
 }
 
 private final class PromptWriteFault { var reject = false }

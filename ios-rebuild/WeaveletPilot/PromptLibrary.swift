@@ -68,6 +68,31 @@ enum PromptLibrary {
         ]))
         return try result.required("csv").string("CSV")
     }
+
+    static func importCSV(_ url: URL, into prompts: OrderedJSON, mode: String) throws -> OrderedJSON {
+        let access = url.startAccessingSecurityScopedResource()
+        defer { if access { url.stopAccessingSecurityScopedResource() } }
+        let csv = String(decoding: try Data(contentsOf: url), as: UTF8.self)
+        try Task.checkCancellation()
+        let rows = try parseCSV(csv)
+        try Task.checkCancellation()
+        let ids = try rows.array("CSV rows").map { _ in OrderedJSON.string(UUID().uuidString) }
+        return try apply(prompts, action: .object([
+            .init(key: "type", value: .string("import")), .init(key: "mode", value: .string(mode)),
+            .init(key: "rows", value: rows), .init(key: "newIDs", value: .array(ids))
+        ]))
+    }
+
+    static func exportCSV(_ prompts: OrderedJSON, gzip: Bool) throws -> Data {
+        let bytes = Data(try csv(prompts).utf8)
+        try Task.checkCancellation()
+        return try gzip ? NativeGzip.compress(bytes) : bytes
+    }
+
+    static func canPublish(expected: PromptLibraryDraft, current: PromptLibraryDraft?,
+                           source: OrderedJSON, active: Bool) -> Bool {
+        active && current?.id == expected.id && current?.prompts == expected.prompts && source == expected.snapshot
+    }
 }
 
 extension ChatState {

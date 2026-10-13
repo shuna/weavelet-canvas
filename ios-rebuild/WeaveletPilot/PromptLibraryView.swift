@@ -13,6 +13,9 @@ struct PromptLibraryView: View {
     @State private var exportGzip = false
     @State private var exportDocument: PromptCSVDocument?
     @State private var exportName = "prompts.csv"
+    @State private var busyOperation: UUID?
+    @State private var cancelWork: (() -> Void)?
+    @State private var isVisible = false
 
     private func perform(_ action: OrderedJSON) {
         guard var draft else { return }
@@ -38,29 +41,68 @@ struct PromptLibraryView: View {
         return item.hasOtherLabel || item.label != nil ? "other" : "none"
     }
 
-    private func importFile(_ url: URL) throws {
-        let access = url.startAccessingSecurityScopedResource()
-        defer { if access { url.stopAccessingSecurityScopedResource() } }
-        let csv = String(decoding: try Data(contentsOf: url), as: UTF8.self)
-        let rows = try PromptLibrary.parseCSV(csv)
-        let ids = try rows.array("CSV rows").map { _ in OrderedJSON.string(UUID().uuidString) }
-        perform(action("import", [.init(key: "mode", value: .string(importMode)),
-                                   .init(key: "rows", value: rows),
-                                   .init(key: "newIDs", value: .array(ids))]))
+    private func cancelOperation() {
+        cancelWork?()
+        cancelWork = nil
+        busyOperation = nil
+    }
+
+    private func accepts(_ expected: PromptLibraryDraft, operation: UUID) throws -> Bool {
+        guard busyOperation == operation, isVisible else { return false }
+        guard PromptLibrary.canPublish(expected: expected, current: draft,
+                                       source: try state.syncInputSnapshot(), active: true) else {
+            throw ExchangeError.invalid("保存データが変更されました。プロンプトライブラリを開き直してください")
+        }
+        return true
+    }
+
+    private func importFile(_ url: URL) {
+        guard let expected = draft, busyOperation == nil else { return }
+        let mode = importMode, operation = UUID()
+        busyOperation = operation; errorMessage = nil
+        let worker = Task.detached(priority: .userInitiated) {
+            try PromptLibrary.importCSV(url, into: expected.prompts, mode: mode)
+        }
+        cancelWork = { worker.cancel() }
+        Task { @MainActor in
+            defer { if busyOperation == operation { busyOperation = nil; cancelWork = nil } }
+            do {
+                let imported = try await worker.value
+                guard try accepts(expected, operation: operation) else { return }
+                draft?.prompts = imported
+            } catch {
+                if busyOperation == operation && isVisible && !(error is CancellationError) {
+                    errorMessage = error.localizedDescription
+                }
+            }
+        }
     }
 
     private func export() {
-        guard let draft else { return }
-        do {
-            let csv = try PromptLibrary.csv(draft.original)
-            let bytes = Data(csv.utf8)
-            exportDocument = PromptCSVDocument(data: try exportGzip ? NativeGzip.compress(bytes) : bytes)
-            let formatter = DateFormatter()
-            formatter.dateFormat = "yyyy-MM-dd"
-            if exportGzip { formatter.timeZone = TimeZone(secondsFromGMT: 0) }
-            exportName = "prompts-\(formatter.string(from: Date())).csv" + (exportGzip ? ".gz" : "")
-            showsExporter = true
-        } catch { errorMessage = error.localizedDescription }
+        guard let expected = draft, busyOperation == nil else { return }
+        let gzip = exportGzip, operation = UUID()
+        busyOperation = operation; errorMessage = nil
+        let worker = Task.detached(priority: .userInitiated) {
+            try PromptLibrary.exportCSV(expected.original, gzip: gzip)
+        }
+        cancelWork = { worker.cancel() }
+        Task { @MainActor in
+            defer { if busyOperation == operation { busyOperation = nil; cancelWork = nil } }
+            do {
+                let data = try await worker.value
+                guard try accepts(expected, operation: operation) else { return }
+                let formatter = DateFormatter()
+                formatter.dateFormat = "yyyy-MM-dd"
+                if gzip { formatter.timeZone = TimeZone(secondsFromGMT: 0) }
+                exportDocument = PromptCSVDocument(data: data)
+                exportName = "prompts-\(formatter.string(from: Date())).csv" + (gzip ? ".gz" : "")
+                showsExporter = true
+            } catch {
+                if busyOperation == operation && isVisible && !(error is CancellationError) {
+                    errorMessage = error.localizedDescription
+                }
+            }
+        }
     }
 
     var body: some View {
@@ -73,7 +115,7 @@ struct PromptLibraryView: View {
                     }
                     Button("すべて削除", role: .destructive) { confirmsClear = true }
                         .disabled(items.isEmpty)
-                }
+                }.disabled(busyOperation != nil)
                 ForEach(items.indices, id: \.self) { index in
                     Section("プロンプト \(index + 1)") {
                         TextField("名前", text: Binding(get: { items[index].name }, set: { edit(index, "name", .string($0)) }))
@@ -93,7 +135,7 @@ struct PromptLibraryView: View {
                             perform(action("remove", [.init(key: "index", value: .number(String(index)))]))
                         }
                     }
-                }
+                }.disabled(busyOperation != nil)
                 Section("CSV") {
                     Picker("読み込み方法", selection: $importMode) {
                         Text("追加").tag("append")
@@ -104,22 +146,25 @@ struct PromptLibraryView: View {
                     Button("保存済みプロンプトをCSVに書き出す") { export() }
                     Text("CSVには名前と本文のみ含まれます。読み込み結果は「保存」まで確定しません。ラベルは分類用で、利用方法を制限しません。")
                         .font(.footnote).foregroundStyle(.secondary)
-                }
+                }.disabled(busyOperation != nil)
                 Section {
                     HStack {
-                        Button("キャンセル") { dismiss() }
+                        Button("キャンセル") { cancelOperation(); dismiss() }
                         Spacer()
                         Button("保存") {
                             do { try state.savePromptLibrary(draft); dismiss() }
                             catch { errorMessage = error.localizedDescription }
-                        }.disabled(!draft.hasChanges)
+                        }.disabled(!draft.hasChanges || busyOperation != nil)
                     }
                 }
             } else { ProgressView() }
+            if busyOperation != nil { ProgressView("CSVを処理中…") }
             if let errorMessage { Text(errorMessage).foregroundStyle(.red).textSelection(.enabled) }
         }
         .navigationTitle("プロンプトライブラリ")
         .disabled(state.generation != nil)
+        .onAppear { isVisible = true }
+        .onDisappear { isVisible = false; cancelOperation() }
         .task {
             guard draft == nil else { return }
             do { draft = try state.promptLibraryDraft() }
@@ -129,7 +174,7 @@ struct PromptLibraryView: View {
             Button("すべて削除", role: .destructive) { perform(action("clear")) }
         }
         .fileImporter(isPresented: $showsImporter, allowedContentTypes: [.commaSeparatedText]) { result in
-            do { try importFile(result.get()) }
+            do { importFile(try result.get()) }
             catch { if (error as? CocoaError)?.code != .userCancelled { errorMessage = error.localizedDescription } }
         }
         .fileExporter(isPresented: $showsExporter, document: exportDocument,
