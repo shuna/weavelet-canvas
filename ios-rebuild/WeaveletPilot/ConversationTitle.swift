@@ -18,7 +18,7 @@ enum ConversationTitle {
         }
     }
 
-    private static func settings(_ state: OrderedJSON, fallbackEndpoint: String) throws -> OrderedJSON {
+    private static func settings(_ state: OrderedJSON, global: OrderedJSON, fallbackEndpoint: String) throws -> OrderedJSON {
         let favorites = try (state["favoriteModels"] ?? .array([])).array("favoriteModels").map { item in
             OrderedJSON.object(["modelId", "providerId"].compactMap { key in item[key].map { .init(key:key,value:$0) } })
         }
@@ -31,7 +31,7 @@ enum ConversationTitle {
             .init(key:"fallbackProvider",value:.object([.init(key:"endpoint",value:.string(fallbackEndpoint))]))
         ]
         for key in ["titleModel", "titleProviderId"] {
-            if let value = state[key] { fields.append(.init(key:key,value:value)) }
+            if let value = global[key] { fields.append(.init(key:key,value:value)) }
         }
         return .object(fields)
     }
@@ -44,12 +44,18 @@ enum ConversationTitle {
 
     private static func select(chat: OrderedJSON, state: OrderedJSON, language: String, sourceConfig: OrderedJSON?, fallbackEndpoint: String,
                                boundary: inout SharedWebProjection) throws -> OrderedJSON {
+        let savedGlobal = OrderedJSON.object(["autoTitle", "titleModel", "titleProviderId"].compactMap { key in
+            state[key].map { .init(key:key,value:$0) }
+        })
+        let global = try SharedWebOperations.call("titleOperation",.object([
+            .init(key:"operation",value:.string("settings")),.init(key:"state",value:savedGlobal)
+        ]))
         var input = OrderedJSON.object([
             .init(key:"operation",value:.string("select")),
             .init(key:"chat",value:try projectedChat(chat,&boundary)),
-            .init(key:"autoTitle",value:state["autoTitle"] ?? .bool(false)),
+            .init(key:"autoTitle",value:try global.required("autoTitle")),
             .init(key:"language",value:.string(language)),
-            .init(key:"settings",value:try settings(state,fallbackEndpoint:fallbackEndpoint))
+            .init(key:"settings",value:try settings(state,global:global,fallbackEndpoint:fallbackEndpoint))
         ])
         if let sourceConfig { input = input.replacing("sourceConfig",with:try ChatConfig.projection(sourceConfig,boundary:&boundary)) }
         return try SharedWebOperations.call("titleOperation",input)
