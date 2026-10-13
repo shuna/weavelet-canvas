@@ -1,12 +1,22 @@
 # Web / 新iOSの完成条件と証拠
 
+## remote応答の本文・推論抽出の共有接続（2026-10-13）
+
+実Web submitRuntimeのreasoning優先順・非stream本文変換をremoteResponseへ切り出し、Web callerとshared remoteOutputから利用する。構造化本文は既存apiContent、分割thinkタグは既存ThinkTagParserを使い、Swiftの独自抽出を撤去した。nativeはURLSession/SSE UTF8・取消・保存を担当し、JSContextは生成単位で保持する。
+
+正常終了だけでなくerror/cancel/切断時にもflushする根拠は、実Web直接通信のfinally（proxyなし）。native停止時も保存前に同じ共有flushを行い、失効した生成通知は既存guardで拒否する。既存代表生成・停止・切断テストの入力をstructured本文/reasoning_details/分割タグへ変更し、従来の完成parts期待と旧データ保持を維持。保留タグの停止・切断保存とSession再利用の接続を確認した。
+
+共有関連58件・型検査・bundle鮮度の担当成功を再利用。Catalyst生成14＋provider境界2＋生成中同期保全1の17件が一回で成功、失敗なし。ログ `/private/tmp/weavelet-response-content-catalyst.log`。独立Astraは新規指摘なし。未変更の同期/保存基盤の全経路、共有業務規則のnative大量複製は省略した。
+
+実API/クラウド・実機は未確認。toolcall実行やCohere固有形式は今回追加していない。service workerの既存抽出・provider固有通信の全統一を完了したとは扱わない。
+
 ## provider一覧・認証先・モデル選択（2026-10-13）
 
 既存WebのnormalizeModelsとfavorite補完を共有接続し、nativeはURLSession・provider別Keychain・選択UIを担当する。Web一覧取得失敗で空配列を保存していた経路は旧cacheを保持するよう修正。成功した空一覧は従来どおり反映する。nativeは認証付き一覧の同origin、保存endpoint一致、provider別鍵を確認し、公開一覧へ鍵を送らない。cache更新は対象subsetの差分だけ保存し、未知属性・元数値表現・編集中configを保持する。
 
 再利用する成功結果：共有normalize関連34件、取得失敗関連41件、補完関連11件と型・bundle鮮度の担当結果（件数には重複あり）。今回の必須確認：Catalystでprovider境界2・生成13・生成中同期保全1の計16件、失敗0。保存失敗・取消・遅延応答・stale拒否・raw保持と認証先を確認した。ログ `/private/tmp/weavelet-provider-models-catalyst.log`。独立Astraは新規指摘なし。今回はcompile/test失敗なし。
 
-省略した重複確認：変更のない共有業務規則のnative複製、保存/書出し/暗号化同期の全経路、画像/Markdown、小変更ごとの監査。実Keychain操作・実API/クラウド・実機・新しい一覧画面の手動操作は未確認。Cohere生成とlocal実行は未対応であり、provider全機能の完成とは扱わない。
+省略した重複確認：変更のない共有業務規則のnative複製、保存/書出し/暗号化同期の全経路、画像/Markdown、小変更ごとの監査。隔離FAKE Catalystの実画面では一覧表示・provider切替・閉じた後の会話設定保持を確認。空cacheのためモデル選択は手動未確認。実Keychain操作・実API/クラウド・実機は未確認。Cohere生成とlocal実行は未対応であり、provider全機能の完成とは扱わない。
 
 ## 会話生成設定・モデル切替・stream/token補正（2026-10-13）
 
