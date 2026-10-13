@@ -161,6 +161,9 @@ export interface BubbleSummary {
 }
 
 export interface BranchClipboard {
+  collapsedNodes?: Record<string, boolean>;
+  omittedNodes?: Record<string, boolean>;
+  protectedNodes?: Record<string, boolean>;
   messageAttributesV1?: MessageAttributesV1;
   nodeIds: string[];
   sourceChat: string;

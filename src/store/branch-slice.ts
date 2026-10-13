@@ -1,3 +1,4 @@
+import { branchClipboardState, type SequenceRange, type SequenceFailure } from './branch-clipboard';
 import { captureBranchHistory, invalidateBranchHistory, stepBranchHistory, canStepBranchHistory, type BranchSnapshot } from '@utils/branchHistory';
 import { invalidateAiTasks } from '@hooks/aiTaskLifetime';
 import i18next from 'i18next';
@@ -22,7 +23,6 @@ import {
 } from '@utils/streamingBuffer';
 import {
   appendNodeToActivePathState,
-  copyBranchSequenceState,
   createBranchState,
   pruneHiddenNodesState,
   ensureBranchTreeState,
@@ -30,10 +30,8 @@ import {
   moveNodeState,
   replaceNodeAndPruneState,
   deleteNodeBranchState,
-  pasteBranchSequenceState,
   removeMessageAtIndexState,
   removeNodeState,
-  removeBranchSequenceState,
   setNodeDisplayFieldState,
   resolveNodeTarget,
   switchActivePathState,
@@ -115,36 +113,6 @@ const withRuntimeFlatNodeMaps = (chats: ChatInterface[] | undefined, state: Stor
   return { ...chat, collapsedNodes: state.collapsedNodeMaps[key] ?? chat.collapsedNodes,
     omittedNodes: state.omittedNodeMaps[key] ?? chat.omittedNodes, protectedNodes: state.protectedNodeMaps[key] ?? chat.protectedNodes };
 });
-
-type SequenceRange = { chatId: string; fromNodeId: string; toNodeId: string };
-type SequenceFailure = { status: 'missing' | 'not-ancestor' | 'invalid-target' | 'content-missing' };
-
-const validateSequenceRange = (chats: ChatInterface[] | undefined, input: SequenceRange) => {
-  const chatIndex = chats?.findIndex((chat) => chat.id === input.chatId) ?? -1;
-  const tree = chats?.[chatIndex]?.branchTree;
-  if (!tree?.nodes[input.fromNodeId] || !tree.nodes[input.toNodeId]) {
-    return { status: 'missing' as const };
-  }
-  const clipboard = copyBranchSequenceState(chats!, chatIndex, input.fromNodeId, input.toNodeId);
-  if (!clipboard) return { status: 'not-ancestor' as const };
-  return { status: 'valid' as const, chatIndex, clipboard };
-};
-
-const hasClipboardContent = (clipboard: BranchClipboard, contentStore: ContentStoreData) =>
-  clipboard.nodeIds.length > 0 && clipboard.nodeIds.every((id) => {
-    const node = clipboard.nodes[id];
-    if (!node) return false;
-    const target = getStreamingTargetFromHash(node.contentHash);
-    if (target) return peekBufferedContent(target.chatId, target.nodeId) !== undefined;
-    let hash: string | undefined = node.contentHash;
-    const visited = new Set<string>();
-    while (hash) {
-      if (visited.has(hash) || !contentStore[hash]) return false;
-      visited.add(hash);
-      hash = contentStore[hash].delta?.baseHash;
-    }
-    return true;
-  });
 
 type NodeTarget = { chatId: string; nodeId: string };
 type NodeEdit = NodeTarget & { role: Role; content: ContentInterface[] };
@@ -235,9 +203,9 @@ export interface BranchSlice {
   ) => void;
   removeMessageAtIndex: (chatIndex: number, messageIndex: number) => void;
 
-  copyBranchSequence: (input: SequenceRange) => { status: 'copied' } | { status: 'missing' | 'not-ancestor' };
+  copyBranchSequence: (input: SequenceRange) => { status: 'copied' } | SequenceFailure;
   pasteBranchSequence: (input: { chatId: string; afterNodeId: string }) =>
-    { status: 'pasted'; nodeIds: string[] } | { status: 'missing' | 'clipboard-empty' | 'content-missing' };
+    { status: 'pasted'; nodeIds: string[] } | SequenceFailure;
   setBranchClipboard: (clipboard: BranchClipboard | null) => void;
 }
 
@@ -422,28 +390,16 @@ export const createBranchSlice: StoreSlice<BranchSlice> = (set, get) => {
     set({ multiViewPrimaryChatIndex: index });
   },
   moveBranchSequence: (input) => {
-    const chats = get().chats;
-    const range = validateSequenceRange(chats, { ...input, chatId: input.sourceChatId });
-    if (range.status !== 'valid') return range;
-    const targetIndex = chats!.findIndex((chat) => chat.id === input.targetChatId);
-    if (!chats![targetIndex]?.branchTree?.nodes[input.afterNodeId]) return { status: 'missing' };
-    if (range.chatIndex === targetIndex && range.clipboard.nodeIds.includes(input.afterNodeId)) {
-      return { status: 'invalid-target' };
-    }
-    if (!hasClipboardContent(range.clipboard, get().contentStore)) return { status: 'content-missing' };
-    const removed = removeBranchSequenceState(chats!, range.chatIndex, range.clipboard.nodeIds, get().contentStore);
-    const pasted = pasteBranchSequenceState(removed.chats, targetIndex, input.afterNodeId, range.clipboard, removed.contentStore);
-    const nodeIds = pasted.chats[targetIndex].branchTree!.activePath.slice(-range.clipboard.nodeIds.length);
-    get().applyBranchState(pasted.chats, pasted.contentStore, { clipboard: range.clipboard });
-    return { status: 'moved', nodeIds };
+    const result=branchClipboardState(withRuntimeFlatNodeMaps(get().chats,get()),get().contentStore,get().branchClipboard,{operation:'move',...input});
+    if(result.status!=='moved')return result as SequenceFailure;
+    get().applyBranchState(result.chats,result.contentStore,{clipboard:result.clipboard,historyBase:result.historyBase});
+    return {status:'moved',nodeIds:result.nodeIds!};
   },
   cutBranchSequence: (input) => {
-    const range = validateSequenceRange(get().chats, input);
-    if (range.status !== 'valid') return range;
-    if (!hasClipboardContent(range.clipboard, get().contentStore)) return { status: 'content-missing' };
-    const removed = removeBranchSequenceState(get().chats!, range.chatIndex, range.clipboard.nodeIds, get().contentStore);
-    get().applyBranchState(removed.chats, removed.contentStore, { clipboard: range.clipboard });
-    return { status: 'cut' };
+    const result=branchClipboardState(withRuntimeFlatNodeMaps(get().chats,get()),get().contentStore,get().branchClipboard,{operation:'cut',sourceChatId:input.chatId,...input});
+    if(result.status!=='cut')return result as SequenceFailure;
+    get().applyBranchState(result.chats,result.contentStore,{clipboard:result.clipboard,historyBase:result.historyBase});
+    return {status:'cut'};
   },
   activateFolderOverview: (folderId) => {
     const chats = withRuntimeFlatNodeMaps(get().chats, get());
@@ -651,24 +607,19 @@ export const createBranchSlice: StoreSlice<BranchSlice> = (set, get) => {
   },
 
   copyBranchSequence: (input) => {
-    const range = validateSequenceRange(get().chats, input);
-    if (range.status !== 'valid') return range;
-    set({ branchClipboard: range.clipboard });
-    return { status: 'copied' };
+    const previous=get().chats;
+    const result=branchClipboardState(withRuntimeFlatNodeMaps(previous,get()),get().contentStore,get().branchClipboard,{operation:'copy',sourceChatId:input.chatId,...input});
+    if(result.status!=='copied')return result as SequenceFailure;
+    if(previous?.some((chat,index)=>chat.branchTree!==result.chats[index].branchTree))get().applyBranchState(result.chats,result.contentStore,{clipboard:result.clipboard,recordHistory:false});
+    else set({branchClipboard:result.clipboard});
+    return {status:'copied'};
   },
-
   pasteBranchSequence: (input) => {
-    const chats = get().chats;
-    const chatIndex = chats?.findIndex((chat) => chat.id === input.chatId) ?? -1;
-    if (!chats?.[chatIndex]?.branchTree?.nodes[input.afterNodeId]) return { status: 'missing' };
-    const clipboard = get().branchClipboard;
-    if (!clipboard) return { status: 'clipboard-empty' };
-    if (!hasClipboardContent(clipboard, get().contentStore)) return { status: 'content-missing' };
-    const result = pasteBranchSequenceState(chats, chatIndex, input.afterNodeId, clipboard, get().contentStore);
-    get().applyBranchState(result.chats, result.contentStore);
-    return { status: 'pasted', nodeIds: result.chats[chatIndex].branchTree!.activePath.slice(-clipboard.nodeIds.length) };
+    const result=branchClipboardState(withRuntimeFlatNodeMaps(get().chats,get()),get().contentStore,get().branchClipboard,{operation:'paste',targetChatId:input.chatId,afterNodeId:input.afterNodeId});
+    if(result.status!=='pasted')return result as SequenceFailure;
+    get().applyBranchState(result.chats,result.contentStore,{historyBase:result.historyBase});
+    return {status:'pasted',nodeIds:result.nodeIds!};
   },
-
   setBranchClipboard: (clipboard) => {
     set({ branchClipboard: clipboard });
   },

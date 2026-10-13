@@ -689,6 +689,10 @@ export const copyBranchSequenceState = (
   });
 
   const clipboard: BranchClipboard = { nodeIds, sourceChat: chats[chatIndex].id, nodes };
+  for (const field of ['collapsedNodes','omittedNodes','protectedNodes'] as const) {
+    const source = chats[chatIndex][field];
+    if (source) clipboard[field] = Object.fromEntries(nodeIds.filter(id=>Object.hasOwn(source,id)).map(id=>[id,source[id]]));
+  }
   for (const id of nodeIds) copyMessageAttributes(tree, id, clipboard, id);
   return clipboard;
 };
@@ -699,9 +703,10 @@ export const removeBranchSequenceState = (
   nodeIds: string[],
   currentContentStore: ContentStoreData
 ) => {
-  const contentStore = { ...currentContentStore };
+  const contentStore = Object.fromEntries(Object.entries(currentContentStore).map(([hash,entry])=>[hash,{...entry}]));
   const updatedChats = cloneChatAt(chats, chatIndex);
   const chat = updatedChats[chatIndex];
+  captureProjectedMessageAttributes(chat,contentStore);
   const tree = chat.branchTree!;
   const removed = new Set(nodeIds);
   for (const node of Object.values(tree.nodes)) {
@@ -732,8 +737,9 @@ export const pasteBranchSequenceState = (
   clipboard: BranchClipboard,
   currentContentStore: ContentStoreData
 ) => {
-  const contentStore = { ...currentContentStore };
+  const contentStore = Object.fromEntries(Object.entries(currentContentStore).map(([hash,entry])=>[hash,{...entry}]));
   const updatedChats = cloneChatAt(chats, targetChatIndex);
+  captureProjectedMessageAttributes(updatedChats[targetChatIndex],contentStore);
   const tree = updatedChats[targetChatIndex].branchTree!;
 
   const idMap: Record<string, string> = {};
@@ -741,6 +747,12 @@ export const pasteBranchSequenceState = (
     idMap[id] = uuidv4();
   });
 
+  for (const field of ['collapsedNodes','omittedNodes','protectedNodes'] as const) {
+    const source=clipboard[field];
+    if (source && clipboard.nodeIds.some(id=>Object.hasOwn(source,id))) {
+      updatedChats[targetChatIndex][field]={...updatedChats[targetChatIndex][field],...Object.fromEntries(clipboard.nodeIds.filter(id=>Object.hasOwn(source,id)).map(id=>[idMap[id],source[id]]))};
+    }
+  }
   let prevId = afterNodeId;
   for (const origId of clipboard.nodeIds) {
     const newId = idMap[origId];

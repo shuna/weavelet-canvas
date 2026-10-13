@@ -1,3 +1,4 @@
+import {showToast} from '@utils/showToast';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import ReactFlow, {
   Background,
@@ -332,6 +333,7 @@ const BranchEditorCanvas = ({
   chatIndices: number[];
   primaryChatIndex: number;
 }) => {
+  const { t } = useTranslation();
   const useStore = useWorkspaceStore();
   const readOnly = useWorkspaceReadOnly();
 
@@ -557,7 +559,8 @@ const BranchEditorCanvas = ({
         const ci = (node.data as MessageNodeData).chatIndex >= 0
           ? (node.data as MessageNodeData).chatIndex
           : primaryChatIndex;
-        useStore.getState().cutBranchSequence({ chatId: useStore.getState().chats?.[ci]?.id ?? '', fromNodeId: firstId, toNodeId: lastId });
+        const result=useStore.getState().cutBranchSequence({ chatId: useStore.getState().chats?.[ci]?.id ?? '', fromNodeId: firstId, toNodeId: lastId });
+        if(result.status==='protected')showToast(t('protectedCannotDelete',{ns:'main'}),'warning');
       }
 
       if (e.key === 'v') {
@@ -579,7 +582,7 @@ const BranchEditorCanvas = ({
     };
     document.addEventListener('keydown', handler);
     return () => document.removeEventListener('keydown', handler);
-  }, [selectedNodeIds, rfNodes, primaryChatIndex, deleteBranch]);
+  }, [selectedNodeIds, rfNodes, primaryChatIndex, deleteBranch, t]);
 
   // Cross-conversation drag state
   const copyBranchSequence = useStore((state) => state.copyBranchSequence);
@@ -839,9 +842,10 @@ const BranchEditorCanvas = ({
     if (!sourceChat?.branchTree) return;
     const path = buildPathToLeaf(sourceChat.branchTree, sourceNodeId);
     const leafId = path[path.length - 1];
-    moveBranchSequence({ sourceChatId: sourceChat.id, fromNodeId: sourceNodeId, toNodeId: leafId, targetChatId: chats?.[targetChatIndex]?.id ?? '', afterNodeId: targetNodeId });
+    const result = moveBranchSequence({ sourceChatId: sourceChat.id, fromNodeId: sourceNodeId, toNodeId: leafId, targetChatId: chats?.[targetChatIndex]?.id ?? '', afterNodeId: targetNodeId });
+    if(result.status==='protected')showToast(t('protectedCannotDelete',{ns:'main'}),'warning');
     setDropPopover(null);
-  }, [dropPopover, chats, moveBranchSequence]);
+  }, [dropPopover, chats, moveBranchSequence, t]);
 
   return (
     <div ref={containerRef} className='relative isolate w-full h-full' tabIndex={-1}>

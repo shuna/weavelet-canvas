@@ -76,7 +76,8 @@ const NodeContextMenu = ({
     if (!tree) return;
     const path = buildPathToLeaf(tree, nodeId);
     const leafId = path[path.length - 1];
-    cutBranchSequence({ chatId: chats?.[chatIndex]?.id ?? '', fromNodeId: nodeId, toNodeId: leafId });
+    const result = cutBranchSequence({ chatId: chats?.[chatIndex]?.id ?? '', fromNodeId: nodeId, toNodeId: leafId });
+    if(result.status==='protected')showToast(t('protectedCannotDelete',{ns:'main'}),'warning');
     onClose();
   };
 
@@ -92,7 +93,8 @@ const NodeContextMenu = ({
     if (!tree || selectedNodeIds.length < 2) return;
     const firstId = selectedNodeIds[0];
     const lastId = selectedNodeIds[selectedNodeIds.length - 1];
-    cutBranchSequence({ chatId: chats?.[chatIndex]?.id ?? '', fromNodeId: firstId, toNodeId: lastId });
+    const result = cutBranchSequence({ chatId: chats?.[chatIndex]?.id ?? '', fromNodeId: firstId, toNodeId: lastId });
+    if(result.status==='protected')showToast(t('protectedCannotDelete',{ns:'main'}),'warning');
     onClose();
   };
 
