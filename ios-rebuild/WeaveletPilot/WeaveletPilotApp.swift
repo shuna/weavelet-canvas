@@ -338,7 +338,8 @@ struct ChatView: View {
             (try? $0["id"]?.string("id"))?.utf8.elementsEqual(state.conversation?.id.utf8 ?? "".utf8) == true
         }
         let config = chat?["config"]
-        let model = (try? config?["model"]?.displayString("model")) ?? "モデル設定"
+        let configuredModel = (try? config?["model"]?.displayString("model")) ?? ""
+        let model = configuredModel.isEmpty ? "モデル未選択" : configuredModel
         let local = config?["modelSource"] == .string("local")
         return HStack(spacing: 8) {
             Button {
