@@ -73,7 +73,7 @@ struct MarkdownWebView: UIViewRepresentable {
         view.scrollView.backgroundColor = .clear; view.scrollView.isScrollEnabled = false
         view.navigationDelegate = context.coordinator
         context.coordinator.webView = view
-        if let root = Bundle.main.url(forResource: "resources", withExtension: nil),
+        if let root = Bundle.main.url(forResource: "MarkdownResources", withExtension: nil),
            FileManager.default.fileExists(atPath: root.appendingPathComponent("index.html").path) {
             context.coordinator.resourceRoot = root
             view.loadFileURL(root.appendingPathComponent("index.html"), allowingReadAccessTo: root)

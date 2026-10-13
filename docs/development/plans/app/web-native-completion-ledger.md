@@ -509,3 +509,14 @@ iOS設定へ累計ON/OFF、モデル別費用と合計、確認付きリセッ�
 新設定3件はtoggle/reset後の再起動・他項目保持、保存失敗時memory/disk保持、実mock stream中のlive report非保存と設定/reset後の生成保持を確認する。独立Astraの機能群監査と合計共有化の限定確認は新規なし。ログは `/private/tmp/weavelet-cost-{web-live,types,freshness-final,catalyst,catalyst-retry,catalyst-final,catalyst-live,catalyst-summary}.log`。最新mainはfetchし、origin/main 7a0a383aが既に統合branchの祖先であることを確認した。
 
 変更のない暗号化同期全往復、全依存監査、全suiteを反復しない。実UIの手動操作、正確なtokenizer、OpenRouter事後照合、実APIと実クラウド相互運用は未確認。既存同期/I/Oの全体完成条件は維持する。
+
+
+## iPhone Airインストール・ビルド環境再確認（2026-10-13）
+
+監査済みcheckpoint 8d2910bcを専用worktreeから実機へ導入した。未完成の要約機能と元worktreeの未コミット変更は保全し、導入対象へ含めていない。Xcode 27.0 (27A266a)、iOS/macOS SDK 27.0、初回コンポーネント設定完了を再確認。追加済みアカウントのAutomatic signingによりcom.weavelet.nativepilotのCloudKit対応プロファイルでDebugビルド成功。署名済みappのコンテナーはiCloud.com.sstcr.WeaveletCanvas、環境はDevelopment。codesign検証成功、iPhone Airへインストール成功、最終起動成功とプロセスPID 21382を確認した。
+
+署名解決の変更はチーム設定、コンテナー権限の明示値、Markdown同梱フォルダのMarkdownResourcesへの変更に限定。iOS bundleでResources名が予約される問題を回避した（Apple公式: https://developer.apple.com/go/?id=bundle-structure ）。既存アセットは保持し、generator・bundle参照・接続テストを同じパスへ修正。独立Astra監査は新規なし。最終差分確認成功、Catalyst MarkdownViewTests 1件成功。
+
+失敗は区別する。初回署名はアカウント/プロファイル不足、その後はコンテナー変数の解決とbundleフォルダ名で失敗。初回Catalyst確認は専用worktreeにnative library cacheがなく実行前に失敗し、既存cacheをコピーしてsource/input/artifactの既存ハッシュ検証を通した後に成功した。最終再インストール直後の起動は端末ロックで失敗したが、解除後の再起動とプロセス確認は成功。ログは/private/tmp/weavelet-air-{final-build,final-install,final-launch,final-processes,markdown-catalyst-final,native-cache}.log。
+
+既存の共有業務処理・同期テスト結果を再利用し、全suite/暗号化同期往復/依存監査を反復していない。実機の画面手動操作と実クラウド相互運用は未確認。Development権限での起動はWeb Production同期の成功証明にはならない。

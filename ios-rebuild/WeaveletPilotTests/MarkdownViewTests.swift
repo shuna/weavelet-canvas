@@ -16,7 +16,7 @@ import WebKit
         configuration.userContentController.add(coordinator, name: "markdown")
         let view = WKWebView(frame: CGRect(x: 0, y: 0, width: 420, height: 800), configuration: configuration)
         view.navigationDelegate = coordinator; coordinator.webView = view
-        let root = try XCTUnwrap(Bundle.main.url(forResource: "resources", withExtension: nil))
+        let root = try XCTUnwrap(Bundle.main.url(forResource: "MarkdownResources", withExtension: nil))
         coordinator.resourceRoot = root
         view.loadFileURL(root.appendingPathComponent("index.html"), allowingReadAccessTo: root)
         defer { view.stopLoading(); configuration.userContentController.removeScriptMessageHandler(forName: "markdown") }

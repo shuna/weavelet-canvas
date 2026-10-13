@@ -494,7 +494,7 @@
   "node_modules/zustand/esm/vanilla.mjs": "6eea342dd71d7f242f499c34e2e5224a352f9f2d6142805d959deb9082feb074",
   "node_modules/zustand/package.json": "3be250433bb3c42b82b9a8a67654fca222d3e370f703204c69b4dfa4f6c74de6",
   "shared/google-sync/importDefaults.generated.json": "2c2d78eba4c11ff5348beb24332cdeb018428fdf9d56bab5aaba1cae1848495a",
-  "shared/markdown/generate.mjs": "5d373faa11eaa7565ed2489f16955c8d2ac13cb932ede979340453c1ab82fbc5",
+  "shared/markdown/generate.mjs": "d5903de8600300085fd2b2f2ea0fd6fdf7d6c34e9ad36edbada1d222987667c7",
   "shared/markdown/host.css": "2a7970232e08c6b6159fafdf3ec5072cddd996261944405abb3d34a80f28456d",
   "shared/markdown/host.tsx": "871ae3ede4e4d502952cca7ed7a86af39bb9ed890fe6afdc0c890e7b7989d0e8",
   "shared/markdown/index.html": "cb65dd5e56dd03b8803fde3da05b21af3be131bf928ac29ce87e87e7d10b2daf",

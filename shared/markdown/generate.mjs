@@ -10,7 +10,7 @@ import { fileURLToPath } from 'node:url';
 const require = createRequire(import.meta.url);
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const directory = path.join(root, 'shared/markdown');
-const output = path.join(directory, 'resources');
+const output = path.join(directory, 'MarkdownResources');
 const check = process.argv.includes('--check');
 const emit = (name, value) => {
   const destination = path.join(output, name);

@@ -285,3 +285,8 @@ nativeは正常終了したremote生成だけ累算し、Stop・通信失敗・l
 iOSの設定へ利用量の累計、モデル別推定費用・合計、累計リセットを接続した。設定とリセットは対象rootだけ原子的に保存し、進行中の生成と未保存本文を維持する。生成中の推定は表示用overlayとし、保存済み累計へ書き込まない。送信文脈、画像数、key、文字数fallbackは既存共有元、completion先頭がreasoningの場合はlive completionを計数しない規則も実Web/native双方で共用する。保存後の累算とは分けて扱う。
 
 料金の推定は実請求額の証明ではない。正確なtokenizer、OpenRouter事後照合、実API/実クラウド相互運用と画面の手動操作は残件。今回のCatalyst接続・保全確認と独立Astra監査は[検証台帳](web-native-completion-ledger.md)に記録する。追加SDKはない。
+
+
+## 2026-10-13：実機導入の基盤修正
+
+監査済みcheckpointをiPhone Airへ署名・インストール・起動した。Automatic signingのチームとCloudKitコンテナー権限を明示し、iOS署名に支障があったMarkdown同梱フォルダ名をMarkdownResourcesへ変更した。共有処理と既存アセットを維持し、同じ変更はCatalystの既存表示接続テストで確認した。実機導入とクラウドの実接続確認は別の証拠として扱い、Debug DevelopmentとWeb Productionの相互運用は未確認。詳細は[検証台帳](web-native-completion-ledger.md)に記録する。
