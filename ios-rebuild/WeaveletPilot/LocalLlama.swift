@@ -74,7 +74,8 @@ enum LocalLlama {
         params.abort_callback_data = pointer
         params.abort_callback = { raw in Unmanaged<Cancellation>.fromOpaque(raw!).takeUnretainedValue().cancelled }
         guard let context = llama_init_from_model(model, params) else { try cancellation.check(); throw LocalLlamaError.context }
-        defer { llama_free(context) }
+        // The final decode may still be running when no further logits are requested.
+        defer { llama_synchronize(context); llama_free(context) }
         var tokens = try tokenize(prompt,vocab:vocab)
         let capacity = Int(llama_n_ctx(context))
         guard !tokens.isEmpty, tokens.count <= capacity else { throw LocalLlamaError.context }
