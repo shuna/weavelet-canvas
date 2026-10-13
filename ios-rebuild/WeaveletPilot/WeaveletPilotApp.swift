@@ -66,9 +66,6 @@ struct ChatView: View {
         } detail: {
         NavigationStack {
             activeContent
-            .safeAreaInset(edge:.bottom,spacing:0) {
-                if let conversation = state.conversation, state.exchange != nil { composer(conversation) }
-            }
             .navigationTitle((state.conversation.flatMap { $0.title.isEmpty ? nil : $0.title } ?? "Weavelet Pilot") + (RemoteFixture.enabled ? " · FAKE" : ""))
             .navigationBarTitleDisplayMode(.inline)
             .task {
@@ -322,6 +319,9 @@ struct ChatView: View {
             .onAppear {
                 if let focus = state.navigationFocus { scroll.scrollTo(Data(focus.nodeID.utf8), anchor: .center) }
             }
+            }
+            .safeAreaInset(edge:.bottom,spacing:0) {
+                if let conversation = state.conversation, state.exchange != nil { composer(conversation) }
             }
     }
     private func composer(_ conversation: Conversation) -> some View {
