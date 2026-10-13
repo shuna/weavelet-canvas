@@ -4,7 +4,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import PopupModal from '@components/PopupModal';
 import { PromptLibraryPicker } from '@components/PromptLibraryMenu/PromptLibraryMenu';
-import { appendSystemLibraryPrompt } from '@utils/promptApplication';
+import { appendSystemLibraryPrompt, systemPresetNeedsConfirmation } from '@utils/promptApplication';
 import { SettingsGroup } from '@components/SettingsMenu/SettingsMenu';
 import { ConfigInterface, ImageDetail, ReasoningEffort, Verbosity } from '@type/chat';
 import {
@@ -92,8 +92,7 @@ export const SystemPromptField = ({
 
   const applyPreset = (content: string) => {
     setIsPresetOpen(false);
-    const current = systemPrompt.trim();
-    if (current && current !== content.trim()) {
+    if (systemPresetNeedsConfirmation(systemPrompt, content)) {
       const ok = window.confirm(
         t(
           'presets.replaceConfirm',

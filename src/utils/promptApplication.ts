@@ -16,3 +16,8 @@ export function appendCommandLibraryPrompt(previous: ContentInterface[], text: s
 export function searchPromptLibrary<T extends { name: string }>(prompts: T[], query: string): T[] {
   return matchSorter(prompts, query, { keys: ['name'] });
 }
+
+export function systemPresetNeedsConfirmation(previous: string, content: string): boolean {
+  const current = previous.trim();
+  return Boolean(current && current !== content.trim());
+}

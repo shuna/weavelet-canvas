@@ -1,4 +1,5 @@
 import XCTest
+import JavaScriptCore
 @testable import WeaveletPilot
 
 final class PromptApplicationTests: XCTestCase {
@@ -75,6 +76,50 @@ final class PromptApplicationTests: XCTestCase {
         try state.saveDefaultChatConfig(defaults)
         XCTAssertEqual(try state.defaultChatConfigDraft().defaultSettings?.systemMessage, initial)
         XCTAssertEqual(try state.chatConfigDraft().config["systemPrompt"], saved["systemPrompt"])
+    }
+    func testBuiltInPresetUsesRealWebMarkdownAndECMAScriptConfirmation() async throws {
+        let worker = PromptApplication(), presets = try await worker.systemPresets()
+        let preset = try XCTUnwrap(presets.first)
+        XCTAssertEqual(preset.id, "claude-fable-5")
+        XCTAssertEqual(preset.name, "Claude Fable 5")
+        XCTAssertFalse(preset.description.isEmpty)
+        XCTAssertEqual(preset.approxTokens, 30000)
+        let root = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
+        let raw = try String(contentsOf: root.appendingPathComponent("src/constants/presets/claude-fable-5.md"), encoding: .utf8)
+        let context = try XCTUnwrap(JSContext())
+        let trim = try XCTUnwrap(context.evaluateScript("(value) => value.trim()"))
+        let expected = try XCTUnwrap(trim.call(withArguments: [raw])?.toString())
+        let blank = try await worker.systemPreset(id: preset.id, previous: "\u{FEFF}\u{00A0}\u{2028}")
+        XCTAssertFalse(blank.needsConfirmation)
+        XCTAssertEqual(Data(blank.content.utf8), Data(expected.utf8))
+        let same = try await worker.systemPreset(id: preset.id, previous: "\u{FEFF}" + blank.content + "\u{00A0}")
+        XCTAssertFalse(same.needsConfirmation)
+        let existing = try await worker.systemPreset(id: preset.id, previous: "existing")
+        XCTAssertTrue(existing.needsConfirmation)
+        XCTAssertEqual(Data(existing.content.utf8), Data(expected.utf8))
+        let zeroWidth = try await worker.systemPreset(id: preset.id, previous: "\u{200B}")
+        XCTAssertTrue(zeroWidth.needsConfirmation)
+    }
+    func testPresetPendingDoesNotSaveAndRejectsChangedInputAtConfirmation() async throws {
+        let state = ChatState(), worker = PromptApplication()
+        try state.importWebData(fixture().encoded())
+        var draft = try state.defaultChatConfigDraft()
+        draft.defaultSettings?.systemMessage = "existing"
+        let snapshot = try state.publicationSnapshot(), request = try state.promptPickerRequest(.system(text: "existing"))
+        let choice = try await worker.systemPreset(id: "claude-fable-5", previous: "existing")
+        XCTAssertTrue(choice.needsConfirmation)
+        XCTAssertEqual(draft.defaultSettings?.systemMessage, "existing")
+        XCTAssertEqual(try state.publicationSnapshot().encoded(), try snapshot.encoded())
+        XCTAssertNoThrow(try state.validatePromptPicker(request, input: .system(text: "existing")))
+        draft.defaultSettings?.systemMessage = "newer input"
+        XCTAssertThrowsError(try state.validatePromptPicker(request, input: .system(text: draft.defaultSettings!.systemMessage)))
+        XCTAssertEqual(draft.defaultSettings?.systemMessage, "newer input")
+        XCTAssertEqual(try state.publicationSnapshot().encoded(), try snapshot.encoded())
+        let current = try state.promptPickerRequest(.system(text: "newer input"))
+        try state.validatePromptPicker(current, input: .system(text: draft.defaultSettings!.systemMessage))
+        draft.defaultSettings?.systemMessage = choice.content
+        XCTAssertEqual(draft.defaultSettings?.systemMessage, choice.content)
+        XCTAssertEqual(try state.publicationSnapshot().encoded(), try snapshot.encoded())
     }
     func testStaleSourceCrossChatAndNewerInputsAreRejected() throws {
         let snapshot = try json(#"{"state":{"prompts":[]}}"#)

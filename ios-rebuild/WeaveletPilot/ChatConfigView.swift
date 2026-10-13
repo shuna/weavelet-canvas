@@ -130,6 +130,11 @@ struct ChatConfigView: View {
     @State private var copyingModel = false
     @State private var fileStatus: String?
     @State private var promptRequest: PromptPickerRequest?
+    @State private var systemPresets: [SystemPromptPresetRow] = []
+    @State private var presetWorker = PromptApplication()
+    @State private var presetTask: Task<Void, Never>?
+    @State private var pendingPreset: (request: PromptPickerRequest, choice: SystemPromptPresetChoice)?
+    @State private var showsPresetConfirmation = false
     private static let fields = ["model", "providerId", "max_tokens", "temperature", "reasoning_effort", "reasoning_budget_tokens", "verbosity", "systemPrompt"]
     init(state: ChatState, draft: ChatConfigDraft, auxiliary: Bool = false, saveAction: ((ChatConfigDraft) throws -> Void)? = nil) {
         self.auxiliary = auxiliary; self.saveAction = saveAction
@@ -156,7 +161,7 @@ struct ChatConfigView: View {
                 if draft.defaultSettings != nil {
                     Section("新規会話の初期値") {
                         TextField("システム文",text:Binding(get:{draft.defaultSettings?.systemMessage ?? ""},set:{draft.defaultSettings?.systemMessage = $0}),axis:.vertical)
-                        promptLibraryButton
+                        systemPromptActions
                         Picker("画像品質",selection:Binding(get:{draft.defaultSettings?.imageDetail ?? "auto"},set:{draft.defaultSettings?.imageDetail = $0})) {
                             Text("自動").tag("auto"); Text("低").tag("low"); Text("高").tag("high")
                         }
@@ -166,7 +171,7 @@ struct ChatConfigView: View {
                 if draft.defaultSettings == nil && !auxiliary {
                     Section("システム文") {
                         TextField("会話のシステム文", text: binding("systemPrompt"), axis: .vertical)
-                        promptLibraryButton
+                        systemPromptActions
                     }
                 }
                 Picker("実行場所",selection:$modelSource) {
@@ -224,9 +229,7 @@ struct ChatConfigView: View {
             .sheet(item: $promptRequest) { request in
                 PromptPickerView(request: request) { result in
                     guard case .system(let applied) = result else { throw ExchangeError.invalid("システム文がありません") }
-                    try state.validatePromptPicker(request, input: .system(text: systemText))
-                    if draft.defaultSettings != nil { draft.defaultSettings?.systemMessage = applied }
-                    else { values["systemPrompt"] = applied }
+                    try setSystemPrompt(applied, request: request)
                 }
             }
             .sheet(isPresented:$showsLocalModelSettings) { NavigationStack { LocalModelSettingsView(state:state) } }
@@ -236,6 +239,25 @@ struct ChatConfigView: View {
                     syncFields()
                 }
             }
+            .task {
+                guard !auxiliary else { return }
+                do {
+                    let presets = try await presetWorker.systemPresets()
+                    try Task.checkCancellation()
+                    systemPresets = presets
+                } catch is CancellationError { }
+                catch { errorMessage = error.localizedDescription }
+            }
+            .confirmationDialog("現在のシステム文をプリセットに置き換えますか？", isPresented: $showsPresetConfirmation, titleVisibility: .visible) {
+                Button("置き換える") {
+                    guard let pending = pendingPreset else { return }
+                    do { try setSystemPrompt(pending.choice.content, request: pending.request) }
+                    catch { errorMessage = error.localizedDescription }
+                    pendingPreset = nil
+                }
+                Button("取消", role: .cancel) { pendingPreset = nil }
+            }
+            .onDisappear { presetTask?.cancel(); pendingPreset = nil; showsPresetConfirmation = false }
             .toolbar {
                 ToolbarItem(placement:.cancellationAction) { Button("取消") { dismiss() }.disabled(copyingModel) }
                 ToolbarItem(placement:.confirmationAction) { Button("保存",action:save).disabled(copyingModel) }
@@ -243,6 +265,45 @@ struct ChatConfigView: View {
         }
     }
     private var systemText: String { draft.defaultSettings?.systemMessage ?? values["systemPrompt"] ?? "" }
+    private var systemPromptActions: some View {
+        HStack {
+            Menu("プリセット") {
+                ForEach(systemPresets) { preset in
+                    Section {
+                        Button(preset.name + (preset.approxTokens.map { " · 約\($0) token/回" } ?? "")) { choosePreset(preset.id) }
+                    } header: { Text(preset.description) }
+                }
+            }
+            .frame(minHeight: 44)
+            .disabled(state.generation != nil || presetTask != nil || systemPresets.isEmpty)
+            Spacer()
+            promptLibraryButton
+        }
+    }
+    private func setSystemPrompt(_ text: String, request: PromptPickerRequest) throws {
+        try state.validatePromptPicker(request, input: .system(text: systemText))
+        if draft.defaultSettings != nil { draft.defaultSettings?.systemMessage = text }
+        else { values["systemPrompt"] = text }
+    }
+    private func choosePreset(_ id: String) {
+        do {
+            let previous = systemText
+            let request = try state.promptPickerRequest(.system(text: previous))
+            presetTask = Task { @MainActor in
+                defer { presetTask = nil }
+                do {
+                    let choice = try await presetWorker.systemPreset(id: id, previous: previous)
+                    try Task.checkCancellation()
+                    if choice.needsConfirmation {
+                        try state.validatePromptPicker(request, input: .system(text: systemText))
+                        pendingPreset = (request, choice)
+                        showsPresetConfirmation = true
+                    } else { try setSystemPrompt(choice.content, request: request) }
+                } catch is CancellationError { }
+                catch { errorMessage = error.localizedDescription }
+            }
+        } catch { errorMessage = error.localizedDescription }
+    }
     private var promptLibraryButton: some View {
         Button("ライブラリから挿入") {
             do { promptRequest = try state.promptPickerRequest(.system(text: systemText)) }

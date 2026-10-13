@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { ContentInterface, TextContentInterface } from '@type/chat';
-import { appendCommandLibraryPrompt, appendSystemLibraryPrompt, searchPromptLibrary } from './promptApplication';
+import { appendCommandLibraryPrompt, appendSystemLibraryPrompt, searchPromptLibrary, systemPresetNeedsConfirmation } from './promptApplication';
 
 describe('system prompt library insertion from SystemPromptField.onInsert', () => {
   it.each([
@@ -84,5 +84,20 @@ describe('prompt name search shared with CommandPrompt', () => {
     expect(searchPromptLibrary(prompts, 'cafe').map(p => p.id)).toEqual(['accent', 'plain']);
     expect(searchPromptLibrary(prompts, 'body')).toEqual([]);
     expect(prompts[0].name).toBe('Alpha');
+  });
+});
+
+describe('system preset replacement confirmation from SystemPromptField.applyPreset', () => {
+  it.each([
+    ['', 'new', false],
+    [' \t\r\n', 'new', false],
+    ['\uFEFF\u00A0\u2028', 'new', false],
+    ['old', 'new', true],
+    ['same', 'same', false],
+    ['\uFEFF same \u00A0', '\n same \u2029', false],
+    ['\u200B', 'new', true],
+    ['old', '', true],
+  ])('preserves ECMAScript trim semantics for %j / %j', (previous, content, expected) => {
+    expect(systemPresetNeedsConfirmation(previous, content)).toBe(expected);
   });
 });

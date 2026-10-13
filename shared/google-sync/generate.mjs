@@ -57,6 +57,8 @@ const adapters = new Set(['crypto', 'cache', 'diagnostics', 'progress', 'process
 const bundled = await build({ metafile: true, entryPoints: [path.join(root, 'entry.ts')], outfile: path.join(root, 'GoogleSync.bundle.js'), bundle: true,
   format: 'iife', globalName: 'WeaveletGoogleSync', target: 'es2022', legalComments: 'inline',
   plugins: [{ name: 'native-boundaries', setup(build) {
+    build.onResolve({ filter: /^@constants\/presets\/claude-fable-5\.md\?raw$/ }, () => ({ path: path.join(webRoot, 'src/constants/presets/claude-fable-5.md') }));
+    build.onLoad({ filter: /\/src\/constants\/presets\/claude-fable-5\.md$/ }, args => ({ contents: readFileSync(args.path, 'utf8'), loader: 'text' }));
     build.onResolve({ filter: /^uuid$/ }, () => ({ path: path.join(root, 'adapters/uuid.ts') }));
     build.onResolve({ filter: /^\.\.\/sync\/EncryptedSync$/ }, () => ({ path: path.join(webRoot, 'src/store/storage/sync/EncryptedSync.ts') }));
     build.onResolve({ filter: /^\.\.\/sync\/transport$/ }, args => {

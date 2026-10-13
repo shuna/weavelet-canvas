@@ -27,6 +27,17 @@ struct PromptPickerRow: Identifiable {
     let body: String
 }
 
+struct SystemPromptPresetRow: Identifiable {
+    let id: String
+    let name: String
+    let description: String
+    let approxTokens: Int?
+}
+struct SystemPromptPresetChoice {
+    let content: String
+    let needsConfirmation: Bool
+}
+
 actor PromptApplication {
     private var session: SharedWebOperations.Session?
     private var prompts: OrderedJSON?
@@ -35,6 +46,19 @@ actor PromptApplication {
     private func call(_ input: OrderedJSON) throws -> OrderedJSON {
         if session == nil { session = try SharedWebOperations.Session() }
         return try session!.call("promptApplicationOperation", input)
+    }
+    func systemPresets() throws -> [SystemPromptPresetRow] {
+        try call(.object([.init(key: "operation", value: .string("presets"))])).array("system presets").map { row in
+            try SystemPromptPresetRow(id: row.required("id").string("preset ID"), name: row.required("name").string("preset name"),
+                                      description: row.required("description").string("preset description"),
+                                      approxTokens: row["approxTokens"].map { Int(try $0.number("approximate tokens")) })
+        }
+    }
+    func systemPreset(id: String, previous: String) throws -> SystemPromptPresetChoice {
+        let result = try call(.object([.init(key: "operation", value: .string("preset")),
+                                      .init(key: "id", value: .string(id)), .init(key: "previous", value: .string(previous))]))
+        return try SystemPromptPresetChoice(content: result.required("content").string("preset content"),
+                                             needsConfirmation: result.required("needsConfirmation").boolean("preset confirmation"))
     }
     func search(snapshot: OrderedJSON, query: String) throws -> [PromptPickerRow] {
         let bytes = try snapshot.encoded()
