@@ -8,7 +8,7 @@
 
 同期代表1件は保存→再起動/export→既存fakeDrive暗号化同期→受信→再起動/exportを通し、旧target消去・新target本文・後続parent/activePath・非表示node metadataを確認。初回は内部contentHashの固定比較が失敗し、実Web records.ts:258–283のrestoreEntry/restoreがローカルhashを再割当する根拠から全metadataと参照本文の比較に分離した。次に本文objectのキー順だけの差を確認し、同:63–69のwire canonical処理で比較。配列順序と値・metadataを維持し、情報欠落を隠す比較には変更していない。最後は同期1件だけ再実行して成功。他18件は成功結果を再利用し、全19件を最終ソースで単一runした結果ではない。
 
-ログ `/private/tmp/weavelet-message-regeneration-{catalyst,final,affected,sync}.log`。独立Astraは機能一式に新規なし、fixture/内部hash比較の変更も限定確認して新規なし。保存/同期基盤全suiteの再実行は省略。新menuの手動操作、実API・実クラウド・実機は未確認。全生成モード・prefill・評価・自動タイトルまで完了したとは扱わない。
+ログ `/private/tmp/weavelet-message-regeneration-{catalyst,final,affected,sync}.log`。独立Astraは機能一式に新規なし、fixture/内部hash比較の変更も限定確認して新規なし。保存/同期基盤全suiteの再実行は省略。隔離FAKE Catalystの実画面で中間assistantの「再生成」を実行し、本文がFAKE partialからFAKE partial completeへ更新され、後続user/assistantの本文が残ることを確認した。「ここから生成」はmenu表示と自動接続テストまでで、手動実行は省略。実API・実クラウド・実機は未確認。全生成モード・prefill・評価・自動タイトルまで完了したとは扱わない。
 
 ## remote送信先・認証ヘッダー・OpenRouter制約の共有接続（2026-10-13）
 
