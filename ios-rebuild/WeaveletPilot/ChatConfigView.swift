@@ -42,13 +42,13 @@ struct LocalModelSettingsView: View {
                             Button("未指定") { save { try state.saveLocalModelRole(task:task) } }
                             ForEach(models.indices,id:\.self) { index in
                                 let model = models[index]
-                                if singleGGUF(model), let id = try? model["id"]?.string("id"),
+                                if singleGGUF(model) || multiFile(model), let id = try? model["id"]?.string("id"),
                                    let tasks = try? model["tasks"]?.array("tasks"), tasks.contains(.string(task)) {
                                     Button(name(model)) { save { try state.saveLocalModelRole(task:task,modelID:id) } }
                                 }
                             }
                         } label: {
-                            LabeledContent(task == "generation" ? "生成" : "分析・品質評価",value:selected.map(name) ?? selectedID ?? "未指定")
+                            LabeledContent(task == "generation" ? "生成" : "分析・評価",value:selected.map(name) ?? selectedID ?? "未指定")
                                 .frame(minHeight:44)
                         }
                     }
