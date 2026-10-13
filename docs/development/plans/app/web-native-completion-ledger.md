@@ -570,6 +570,6 @@ FAKE Catalyst cloneで設定route、役割menu、空定義説明と配置を確�
 
 Web由来の同一wllama/llama pin・patch・lowbit C・samplerをiPhoneOS arm64へビルド。Swift処理の別実装は追加せずLocalLlamaの既存実行経路のplatform guardだけ広げた。Catalyst成果物とiPhoneOS成果物を分離し、それぞれのbuild-input/artifact hashをverifyする。暗号/同期/署名権限は変更していない。
 
-担当成功結果：両engine build/verify、両unsigned app build、iPhone archiveのMachO IOS/min17.0確認。親で成果物を取り込み両verify成功、署名付きAir向けbuild/install成功（/private/tmp/weavelet-air-engine-{build,install}.log）。entitlementは既存team/appIDとiCloud.com.sstcr.WeaveletCanvas・CloudKit・Developmentを維持。独立Astraは新規P2以上なし。端末キャッシュへ既存1.1MBの検証用GGUFをコピーし、既存5軸実推論testを実機で実行する準備をした。現在XcodeはAirロック解除待ちで、実機推論・起動の成功とは扱わない（/private/tmp/weavelet-air-engine-real-test.log）。物理端末runnerで使用するapp container相対GGUFパスをtestに追加、業務処理は変更しない。
+担当成功結果：両engine build/verify、両unsigned app build、iPhone archiveのMachO IOS/min17.0確認。親で成果物を取り込み両verify成功、署名付きAir向けbuild/install成功（/private/tmp/weavelet-air-engine-{build,install}.log）。entitlementは既存team/appIDとiCloud.com.sstcr.WeaveletCanvas・CloudKit・Developmentを維持。独立Astraは新規P2以上なし。端末キャッシュへ既存1.1MBの検証用GGUFをコピーし、既存5軸実推論testを実機で実行する準備をした。XcodeはAirロック解除待ちの後、runner起動前の接続喪失でexit65終了。device lockStateもpasscodeRequired=trueを確認したため、テスト本体の失敗や成功とは扱わない（/private/tmp/weavelet-air-engine-real-test.log）。ロック解除後に同じ対象testを再実行する。物理端末runnerで使用するapp container相対GGUFパスをtestに追加、業務処理は変更しない。
 
 未変更の共有業務rule/全同期往復/全依存監査は再実行しない。iPhone実推論、広いモデルのメモリ/消費電力、狭幅UI/IME/Dynamic Type、Production CloudKitとWebの実相互運用は未確認。今回のDevelopment署名installだけではクラウド互換性完成とはしない。
