@@ -194,7 +194,15 @@ final class RemoteGenerationTests: XCTestCase {
             let state = try state(store,stream:streaming)
             let old = try XCTUnwrap(state.exchange).source
             let client = client()
-            FakeRemoteProtocol.packets = streaming ? try streamPackets() : [.init(bytes: try fixture().required("responses").required("nonstream").encoded())]
+            // Same final parts through the actual structured-content/reasoning-details/think route.
+            if streaming {
+                FakeRemoteProtocol.packets = [
+                    .init(bytes:Data(#"data: {"choices":[{"delta":{"content":[{"type":"text","text":"<thi"}],"reasoning_details":[{"type":"reasoning.text","text":"Rea"}]}}]}"#.appending("\n\n").utf8)),
+                    .init(bytes:Data(#"data: {"choices":[{"delta":{"content":"nk>son</think>An"}}]}"#.appending("\n\n").utf8)),
+                    .init(bytes:Data(#"data: {"choices":[{"delta":{"content":[{"type":"output_text","text":"swer 日本語"}]},"finish_reason":"stop"}]}"#.appending("\n\ndata: [DONE]\n\n").utf8))]
+            } else {
+                FakeRemoteProtocol.packets = [.init(bytes:Data(#"{"choices":[{"message":{"content":[{"type":"text","text":"<think>son</think>Answer 日本語"}],"reasoning_details":[{"type":"reasoning.text","text":"Rea"}]},"finish_reason":"stop"}]}"#.utf8))]
+            }
             // Device stream deliberately disagrees: the parser must use the final request.
             if streaming {
                 let imageOnly = OrderedJSON.array([.object([.init(key:"type",value:.string("image_url")),.init(key:"image_url",value:.object([.init(key:"url",value:.string("data:image/png;base64,FAKE_ONLY")),.init(key:"detail",value:.string("auto"))]))])])
@@ -230,7 +238,7 @@ final class RemoteGenerationTests: XCTestCase {
         let store = try store()
         let state = try state(store)
         let client = client()
-        FakeRemoteProtocol.packets = [.init(bytes: Data("data: {\"choices\":[{\"delta\":{\"content\":\"Partial\"}}]}\n\n".utf8)), .init(bytes: Data("data: {\"choices\":[{\"delta\":{\"content\":\" LATE\"}}]}\n\ndata: [DONE]\n\n".utf8), delay: 0.1)]
+        FakeRemoteProtocol.packets = [.init(bytes: Data("data: {\"choices\":[{\"delta\":{\"content\":\"Partial<th\"}}]}\n\n".utf8)), .init(bytes: Data("data: {\"choices\":[{\"delta\":{\"content\":\" LATE\"}}]}\n\ndata: [DONE]\n\n".utf8), delay: 0.1)]
         FakeRemoteProtocol.holdLast = true
         let configDraft = try state.chatConfigDraft()
         try state.startGeneration(input: "Stop", record: record(), client: client)
@@ -245,7 +253,7 @@ final class RemoteGenerationTests: XCTestCase {
         XCTAssertEqual(state.exchange?.source, stopped)
         let fresh = ChatState(store: store)
         let content = try XCTUnwrap(fresh.exchange).source.required("chats").array("chats")[0].required("messages").array("messages").last!.required("content")
-        XCTAssertEqual(content, .array([.object([JSONField(key: "type", value: .string("text")), JSONField(key: "text", value: .string("Partial"))])]))
+        XCTAssertEqual(content, .array([.object([JSONField(key: "type", value: .string("text")), JSONField(key: "text", value: .string("Partial<th"))])]))
     }
     func testNetworkFailurePreservesUserAndPartialWithoutChangingPriorMessages() async throws {
         for partial in [false, true] {
@@ -253,7 +261,7 @@ final class RemoteGenerationTests: XCTestCase {
             let state = try state(store)
             let original = try XCTUnwrap(state.exchange).source.required("chats").array("chats")[0].required("messages").array("messages")
             let client = client()
-            if partial { FakeRemoteProtocol.packets = [.init(bytes: Data("data: {\"choices\":[{\"delta\":{\"content\":\"Recovered\"}}]}\n\n".utf8))] }
+            if partial { FakeRemoteProtocol.packets = [.init(bytes: Data("data: {\"choices\":[{\"delta\":{\"content\":\"Recovered<th\"}}]}\n\n".utf8))] }
             else { FakeRemoteProtocol.status = 500 }
             try state.startGeneration(input: "Failure", record: record(), client: client)
             try await wait { state.generation == nil }
@@ -263,6 +271,7 @@ final class RemoteGenerationTests: XCTestCase {
             XCTAssertEqual(Data(try SyncRecords.canonical(.array(Array(messages.prefix(original.count)))).utf8),
                            Data(try SyncRecords.canonical(.array(original)).utf8))
             XCTAssertEqual(messages.count, original.count + (partial ? 2 : 1))
+            if partial { XCTAssertEqual(try messages.last!.required("content").array("parts")[0]["text"],.string("Recovered<th")) }
             XCTAssertEqual(ChatState(store: store).exchange?.source, state.exchange?.source)
         }
     }
@@ -358,6 +367,16 @@ final class RemoteGenerationTests: XCTestCase {
         XCTAssertThrowsError(try output.consume(OrderedJSON.decode(Data("{\"error\":{\"message\":\"FAKE\"}}".utf8)), streaming: true))
         XCTAssertThrowsError(try output.consume(OrderedJSON.decode(Data("{\"choices\":[{\"delta\":{\"tool_calls\":[]}}]}".utf8)), streaming: true))
         XCTAssertThrowsError(try OrderedJSON.decode(Data("malformed".utf8)))
+    }
+    func testSharedResponseSessionCarriesPendingThinkStateAndFlushParts() throws {
+        var output = RemoteOutput()
+        _ = try output.consume(OrderedJSON.decode(Data(#"{"choices":[{"delta":{"content":"<thi"}}]}"#.utf8)),streaming:true)
+        XCTAssertTrue(output.isEmpty)
+        _ = try output.consume(OrderedJSON.decode(Data(#"{"choices":[{"delta":{"content":"nk>日本語</think>Answer<th"},"finish_reason":"stop"}]}"#.utf8)),streaming:true)
+        XCTAssertEqual(output.reasoning,"日本語"); XCTAssertEqual(output.text,"Answer")
+        try output.flush()
+        XCTAssertEqual(output.text,"Answer<th")
+        XCTAssertEqual(output.parts,.array([.object([.init(key:"type",value:.string("reasoning")),.init(key:"text",value:.string("日本語"))]),.object([.init(key:"type",value:.string("text")),.init(key:"text",value:.string("Answer<th"))])]))
     }
     func testSSELineEndingsBOMAndByteBoundariesPreserveAllText() throws {
         let a = "data: {\"choices\":[{\"delta\":{\"content\":\"A日本語\"}}]}"

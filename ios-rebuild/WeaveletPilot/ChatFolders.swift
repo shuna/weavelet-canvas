@@ -39,16 +39,26 @@ struct ChatFolderRow: Identifiable {
 
 private final class FolderResource {}
 enum SharedWebOperations {
-    static func call(_ name: String, _ input: OrderedJSON) throws -> OrderedJSON {
-        guard let context = JSContext(), let url = Bundle(for: FolderResource.self).url(forResource: "GoogleSync.bundle", withExtension: "js") else { throw ExchangeError.invalid("共有処理 bundle がありません") }
-        let callback: @convention(block) (String) -> String = { SyncRecords.primitive($0) }
-        context.setObject(callback, forKeyedSubscript: "nativeSyncCall" as NSString)
-        context.evaluateScript(try String(contentsOf: url, encoding: .utf8))
-        guard context.exception == nil, let bridge = context.objectForKeyedSubscript("WeaveletGoogleSync"), let function = bridge.objectForKeyedSubscript(name), !function.isUndefined else { throw ExchangeError.invalid("共有処理を読み込めません") }
-        let result = function.call(withArguments: [String(decoding: try input.encoded(), as: UTF8.self)])
-        guard context.exception == nil, let text = result?.toString() else { throw ExchangeError.invalid(context.exception?.toString() ?? "共有処理に失敗しました") }
-        return try OrderedJSON.decode(Data(text.utf8))
+    final class Session {
+        private let context: JSContext
+        private let bridge: JSValue
+        init() throws {
+            guard let context = JSContext(), let url = Bundle(for:FolderResource.self).url(forResource:"GoogleSync.bundle",withExtension:"js") else { throw ExchangeError.invalid("共有処理 bundle がありません") }
+            let callback: @convention(block) (String) -> String = { SyncRecords.primitive($0) }
+            context.setObject(callback,forKeyedSubscript:"nativeSyncCall" as NSString)
+            context.evaluateScript(try String(contentsOf:url,encoding:.utf8))
+            guard context.exception == nil, let bridge = context.objectForKeyedSubscript("WeaveletGoogleSync"), !bridge.isUndefined else { throw ExchangeError.invalid("共有処理を読み込めません") }
+            self.context = context; self.bridge = bridge
+        }
+        func call(_ name: String, _ input: OrderedJSON) throws -> OrderedJSON {
+            context.exception = nil
+            guard let function = bridge.objectForKeyedSubscript(name), !function.isUndefined else { throw ExchangeError.invalid("共有処理を読み込めません") }
+            let result = function.call(withArguments:[String(decoding:try input.encoded(),as:UTF8.self)])
+            guard context.exception == nil, let text = result?.toString() else { throw ExchangeError.invalid(context.exception?.toString() ?? "共有処理に失敗しました") }
+            return try OrderedJSON.decode(Data(text.utf8))
+        }
     }
+    static func call(_ name: String, _ input: OrderedJSON) throws -> OrderedJSON { try Session().call(name,input) }
 }
 
 enum ChatFolders {

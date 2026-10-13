@@ -579,7 +579,12 @@ final class ChatState: ObservableObject {
     func stopGeneration() {
         guard let generation, generation.running else { return }
         generationTask?.cancel()
-        finishGeneration(id: generation.id, error: nil)
+        do {
+            var output = generation.output
+            try output.flush()
+            self.generation?.output = output
+            finishGeneration(id:generation.id,error:nil)
+        } catch { finishGeneration(id:generation.id,error:error) }
     }
 
     func saveGenerationResult() throws {

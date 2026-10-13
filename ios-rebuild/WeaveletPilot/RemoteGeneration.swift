@@ -87,28 +87,31 @@ enum RemoteRequest {
 }
 
 struct RemoteOutput {
-    var text = ""
-    var reasoning = ""
-    var parts: OrderedJSON {
-        var values: [OrderedJSON] = []
-        if !reasoning.isEmpty { values.append(.object([JSONField(key: "type", value: .string("reasoning")), JSONField(key: "text", value: .string(reasoning))])) }
-        if !text.isEmpty { values.append(.object([JSONField(key: "type", value: .string("text")), JSONField(key: "text", value: .string(text))])) }
-        return .array(values)
+    private(set) var text = ""
+    private(set) var reasoning = ""
+    private(set) var parts: OrderedJSON = .array([])
+    private(set) var isEmpty = true
+    private var state: OrderedJSON?
+    private var session: SharedWebOperations.Session?
+    private mutating func apply(_ input: [JSONField]) throws -> Bool {
+        if session == nil { session = try SharedWebOperations.Session() }
+        var fields = input
+        if let state { fields.append(.init(key:"state",value:state)) }
+        let output = try session!.call("remoteOutput",.object(fields))
+        let nextState = try output.required("state")
+        let nextText = try nextState.required("text").string("response text")
+        let nextReasoning = try nextState.required("reasoning").string("response reasoning")
+        let nextParts = try output.required("parts"), empty = try output.required("isEmpty").boolean("response empty")
+        let finished = try output.required("finished").boolean("response finished")
+        state = nextState; text = nextText; reasoning = nextReasoning; parts = nextParts; isEmpty = empty
+        return finished
     }
-    var isEmpty: Bool { text.isEmpty && reasoning.isEmpty }
     mutating func consume(_ value: OrderedJSON, streaming: Bool) throws -> Bool {
-        guard value["error"] == nil else { throw ExchangeError.invalid("remote APIがエラーを返しました") }
-        let choices = try value.required("choices").array("choices")
-        guard let choice = choices.first else { return false }
-        guard let payload = choice[streaming ? "delta" : "message"] else { throw ExchangeError.invalid("完了応答の本文がありません") }
-        if payload["tool_calls"] != nil || payload["function_call"] != nil { throw ExchangeError.invalid("このremote経路は生成tool callに未対応です") }
-        if let content = payload["content"], content != .null {
-            guard case .string(let content) = content else { throw ExchangeError.invalid("このremote経路は文字列の生成本文のみ対応です") }
-            text += content
-        }
-        if let reason = payload["reasoning"] ?? payload["reasoning_content"], reason != .null { reasoning += try reason.string("reasoning") }
-        if let finish = choice["finish_reason"], finish != .null { _ = try finish.string("finish reason"); return true }
-        return !streaming
+        try apply([.init(key:"operation",value:.string("consume")),.init(key:"value",value:value),.init(key:"streaming",value:.bool(streaming))])
+    }
+    mutating func flush() throws {
+        guard state != nil else { return }
+        _ = try apply([.init(key:"operation",value:.string("flush"))])
     }
 }
 
@@ -185,22 +188,38 @@ struct RemoteClient {
         var output = RemoteOutput()
         var finished = false
         func consume(_ event: String) async throws -> Bool {
-            if event == "[DONE]" { return true }
+            if event == "[DONE]" {
+                try output.flush()
+                try Task.checkCancellation()
+                await onOutput(output)
+                return true
+            }
             finished = try output.consume(OrderedJSON.decode(Data(event.utf8)), streaming: true) || finished
             try Task.checkCancellation()
             await onOutput(output)
             return false
         }
-        for try await byte in bytes {
-            try Task.checkCancellation()
-            if let event = try parser.push(byte), try await consume(event) {
+        do {
+            for try await byte in bytes {
+                try Task.checkCancellation()
+                if let event = try parser.push(byte), try await consume(event) {
+                    guard !output.isEmpty else { throw ExchangeError.invalid("完了応答が空です") }; return
+                }
+            }
+            if let event = try parser.finish(), try await consume(event) {
                 guard !output.isEmpty else { throw ExchangeError.invalid("完了応答が空です") }; return
             }
+            guard finished else { throw ExchangeError.invalid("streamが完了前に切断されました") }
+            try output.flush()
+            guard !output.isEmpty else { throw ExchangeError.invalid("完了応答が空です") }
+            try Task.checkCancellation()
+            await onOutput(output)
+        } catch {
+            // Actual Web direct-remote finally flushes pending text even on failure/cancel.
+            try output.flush()
+            await onOutput(output)
+            throw error
         }
-        if let event = try parser.finish(), try await consume(event) {
-            guard !output.isEmpty else { throw ExchangeError.invalid("完了応答が空です") }; return
-        }
-        guard finished, !output.isEmpty else { throw ExchangeError.invalid("streamが完了前に切断されました") }
     }
     private func check(_ response: URLResponse) throws {
         guard let http = response as? HTTPURLResponse, (200..<300).contains(http.statusCode) else {
