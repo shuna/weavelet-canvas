@@ -25,6 +25,11 @@ import XCTest
     func testDownloadFullWebSnapshotPreservesRawRootsAndRestart() async throws {
         let dir = try directory(), store = LocalStateStore(fileURL:dir.appendingPathComponent("local.json")), local = try state(store)
         var snapshot = try corpus().required("syncSnapshot")
+        var currentRoots = try snapshot.required("state")
+        for field in try corpus().required("currentPersistenceRoots").object("current roots") {
+            currentRoots = currentRoots.replacing(field.key,with:field.value)
+        }
+        snapshot = snapshot.replacing("state",with:currentRoots)
         snapshot = try snapshot.replacing("state",with:snapshot.required("state").replacing("xLargeNumber",with:.number("9007199254740993")).replacing("theme",with:.string("FAKE cloud theme")))
         snapshot = snapshot.replacing("xWrapper",with:.number("9007199254740993"))
         let fake = FakeCloudKit(snapshot:try remote(snapshot)), connection = CloudKitSyncConnection(state:local,transport:fake,syncStore:CloudKitSyncStore(fileURL:dir.appendingPathComponent("sync.json")),deviceID:"FAKE")
@@ -32,7 +37,8 @@ import XCTest
         try await connection.connect(); try await connection.download()
         let received = try local.publicationSnapshot().required("state"), incoming = try snapshot.required("state")
         // Web mergeSyncDocumentSnapshot overlays roots: existing root positions stay, new roots append.
-        XCTAssertEqual(try received.object("state").map(\.key),previousRoots + ["xLargeNumber"])
+        let incomingKeys = try incoming.object("state").map(\.key)
+        XCTAssertEqual(try received.object("state").map(\.key),previousRoots + incomingKeys.filter { !previousRoots.contains($0) })
         XCTAssertEqual(Set(try received.object("state").map { Data($0.key.utf8) }),Set(try incoming.object("state").map { Data($0.key.utf8) }))
         for field in try incoming.object("state") { XCTAssertEqual(received[field.key],field.value,field.key) }
         XCTAssertEqual(try local.publicationSnapshot()["xWrapper"],snapshot["xWrapper"])

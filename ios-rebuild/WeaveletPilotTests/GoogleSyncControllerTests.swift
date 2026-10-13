@@ -326,6 +326,11 @@ import XCTest
     func testCreateManualSyncDisconnectRestoreKeyDownloadPreserveAllLocalRootsAndRawValues() async throws {
         let dir = try directory(), local = LocalStateStore(fileURL:dir.appendingPathComponent("local.json")), cache = SyncStateStore(fileURL:dir.appendingPathComponent("sync.json"))
         let state = try state(local), drive = FakeSyncDrive(), keys = TestSyncKeys()
+        let additions = try fixture("io-corpus","currentPersistenceRoots")
+        let initial = try state.publicationSnapshot()
+        var roots = try initial.required("state")
+        for field in try additions.object("current roots") { roots = roots.replacing(field.key,with:field.value) }
+        try state.applySnapshot(initial.replacing("state",with:roots))
         let controller = GoogleSyncController(chatState:state,drive:drive,store:cache,keyStore:keys)
         let before = try state.publicationSnapshot()
         try await controller.create(password:password,folderName:"FAKE folder")
@@ -344,6 +349,24 @@ import XCTest
         try await controller.download()
         XCTAssertEqual(try state.publicationSnapshot()["state"]?["theme"],before["state"]?["theme"])
         XCTAssertEqual(try state.publicationSnapshot()["state"]?["xRaw"],before["state"]?["xRaw"])
+        for field in try additions.object("current roots") {
+            XCTAssertEqual(try state.publicationSnapshot()["state"]?[field.key],field.value,field.key)
+            XCTAssertEqual(try ChatState(store:local).publicationSnapshot()["state"]?[field.key],field.value,field.key)
+        }
+        let receiverStore = LocalStateStore(fileURL:dir.appendingPathComponent("receiver-current-roots.json"))
+        let receiver = ChatState(store:receiverStore)
+        try receiver.importWebData(Data(#"{"version":3,"chats":[],"folders":{},"contentStore":{}}"#.utf8))
+        let receiverBaseline = try receiver.publicationSnapshot()["state"]?["branchSwipeDirection"]
+        let subscriber = GoogleSyncController(chatState:receiver,drive:drive,store:SyncStateStore(fileURL:dir.appendingPathComponent("receiver-current-sync.json")),keyStore:keys)
+        try await subscriber.open(dataset:dataset)
+        let receiverUnlocked = try await subscriber.restoreKey(); XCTAssertTrue(receiverUnlocked)
+        try await subscriber.download()
+        // Actual Web SYNC_LOCAL_SETTINGS excludes swipe direction; independent clients keep their preference.
+        XCTAssertEqual(try receiver.publicationSnapshot()["state"]?["branchSwipeDirection"],receiverBaseline)
+        for key in ["lastContentEditedAt","bubbleSummaryConfig"] {
+            XCTAssertEqual(try receiver.publicationSnapshot()["state"]?[key],additions[key],key)
+            XCTAssertEqual(try ChatState(store:receiverStore).publicationSnapshot()["state"]?[key],additions[key],key)
+        }
         XCTAssertNil(try cache.publication(dataset:dataset))
         let fresh = GoogleSyncController(chatState:ChatState(store:local),drive:drive,store:SyncStateStore(fileURL:cache.fileURL),keyStore:keys)
         XCTAssertEqual(fresh.dataset,dataset); XCTAssertEqual(fresh.status,.locked)

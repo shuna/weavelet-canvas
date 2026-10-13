@@ -1831,5 +1831,22 @@
         "unknown": "keep-root"
       }
     }
+  },
+  "currentPersistenceRoots": {
+    "lastContentEditedAt": 1700000000456,
+    "bubbleSummaryConfig": {
+      "model": "FAKE-summary-model",
+      "providerId": "openai",
+      "max_tokens": 321,
+      "temperature": 0.2,
+      "top_p": 0.8,
+      "presence_penalty": 0.1,
+      "frequency_penalty": 0.2,
+      "stream": true,
+      "xFixtureSummaryConfig": {
+        "unknown": "keep-summary-config"
+      }
+    },
+    "branchSwipeDirection": "right-next"
   }
 }

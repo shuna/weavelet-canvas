@@ -612,3 +612,14 @@ FAKE Catalystで実file pickerから既存検証用1.1MB GGUFを新規登録し�
 親統合でRemoteGeneration22件＋ConversationTitle6件の28件が成功（/private/tmp/weavelet-inline-generation-integration.log）。共有元業務ruleと保存/同期基盤の既存成功は再利用し、全暗号化同期往復を反復しない。独立Astraは新規P2以上なし。
 
 入力欄はWeb EditViewの本文→操作列に合わせ、本文を全幅で置き、その下に左の生成設定・右の送信/停止を配置した。Binding、画像入力、操作時のguardには変更なし。Catalyst最終build成功（/private/tmp/weavelet-composer-layout-build.log）、独立Astraの限定追確認も新規P2以上なし。実画面確認はMacのロックにより開始できず、未確認として残す。iPhone狭幅、IME、最大文字サイズ、生成行の実画面・スクロール追従、Airへの今回版導入は未確認。WebのBranch editor/分割表示は表示styleとは別機能であり、吹き出し切替で代用して完成扱いにはしない。
+
+
+## 現行58保存rootの代表互換経路（2026-10-13）
+
+実Web persistence.tsのFULL_PERSIST_KEYSとhistorical corpusを照合し、mainで追加されたlastContentEditedAt・bubbleSummaryConfig・branchSwipeDirectionをcurrentPersistenceRootsとして補った。歴史55rootの旧snapshotを変えず、最新58rootの非default値を同じfixtureから確認する。summary configは有効な最小設定と未知metadataを含み、送信要求の不正設定を検証用に捏造しない。
+
+Web hydration→partializeの全値比較6件成功。Catalyst代表2件ではCloudKit payload→受信→全root/順序比較→保存再起動、Google暗号化upload→鍵復元→別client download→再起動を確認した。Googleは実Web SYNC_LOCAL_SETTINGSがbranchSwipeDirectionを除外するため独立clientの端末設定を維持し、残り2rootは同期されることを確認。CloudKitは3root全てを保持する。これは両providerの規則差に従う検証であり、全項目を無条件に同期するよう仕様変更していない。
+
+初回Googleは新receiverに保存済み文書がなくpublicationSnapshotが拒否された。既存受信fixtureと同じく空V3を先に読み込んで独立保存を準備し、元assertを維持して再実行成功。ログ /private/tmp/weavelet-current-roots-{web,native}-final.log、失敗は /private/tmp/weavelet-current-roots-native.log。独立Astraは新規P2以上なし。既存保存失敗/誤鍵/競合/取消/全wireの成功結果は基盤不変更につき再利用し、全suiteを繰り返していない。検証はFAKE transport・隔離storeであり、実CloudKit/Google接続や全ネスト項目の全組合せ完成を主張しない。
+
+9d764849ではWeb自動評価のtext-only抽出とphase別auto判定を共有autoEvaluationPlanへ切り出し、実Webpre/post callerとnative用bridgeへ接続した。担当関連16件・型検査・bundle鮮度が成功、独立Astraは新規P2以上なし。nativeの生成前後接続は別担当で実装中であり、この共有抽出だけを自動評価全体の完成とはしない。

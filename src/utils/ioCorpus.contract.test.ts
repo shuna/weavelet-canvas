@@ -14,6 +14,7 @@ const corpus = JSON.parse(readFileSync(
   fixtureVersion: number;
   exportV3: ExportV3;
   syncSnapshot: { version: number; state: PersistedStoreState & { xFixtureRoot?: unknown } };
+  currentPersistenceRoots: Pick<PersistedStoreState, 'lastContentEditedAt' | 'bubbleSummaryConfig' | 'branchSwipeDirection'>;
 };
 
 // This independently listed inventory makes added or removed persistence roots visible.
@@ -61,6 +62,15 @@ describe('synthetic I/O corpus: preservation and explicit Web losses', () => {
     const input = structuredClone(corpus.exportV3.contentStore);
     expect(buildExportContentStore(input)).toEqual(corpus.exportV3.contentStore);
     expect(input).toEqual(corpus.exportV3.contentStore);
+  });
+
+  it('retains all current roots with non-default values alongside the historical snapshot', () => {
+    const input = structuredClone({...corpus.syncSnapshot.state, ...corpus.currentPersistenceRoots});
+    const expected = structuredClone(input);
+    delete expected.chats![0].messages;
+    const saved = createPartializedState(mergePersistedStoreState(input as unknown as StoreState, input));
+    expect(Object.keys(saved).sort()).toEqual([...persistKeys, ...Object.keys(corpus.currentPersistenceRoots), 'xFixtureRoot'].sort());
+    expect(JSON.parse(JSON.stringify(saved))).toEqual(expected);
   });
 
   it.each([false, true])('retains tree/entry extensions while applying visibleBranchOnly=%s', visibleBranchOnly => {
