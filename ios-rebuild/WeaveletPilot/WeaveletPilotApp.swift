@@ -345,6 +345,9 @@ struct ChatView: View {
                 case .chat: chatContent
                 case .branchEditor: branchEditor
                 case .splitHorizontal:
+                    if horizontalSizeClass == .compact {
+                        chatContent
+                    } else {
                     GeometryReader { geometry in
                         if geometry.size.width >= 700 {
                             HStack(spacing: 0) { chatContent; Divider(); branchEditor }
@@ -352,8 +355,13 @@ struct ChatView: View {
                             VStack(spacing: 0) { chatContent; Divider(); branchEditor }
                         }
                     }
+                    }
                 case .splitVertical:
+                    if horizontalSizeClass == .compact {
+                        chatContent
+                    } else {
                     VStack(spacing: 0) { chatContent; Divider(); branchEditor }
+                    }
                 }
             }
     }
