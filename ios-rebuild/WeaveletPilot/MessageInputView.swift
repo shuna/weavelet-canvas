@@ -85,7 +85,7 @@ struct MessageInputView: UIViewRepresentable {
                     return true
                 } catch { input.failure(error); return true }
             }
-            if view.text != input.text && view.markedTextRange == nil {
+            if !view.text.utf8.elementsEqual(input.text.utf8) && view.markedTextRange == nil {
                 let selection = view.selectedRange
                 view.text = input.text
                 let count = (input.text as NSString).length

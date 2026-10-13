@@ -39,6 +39,17 @@ import SwiftUI
         coordinator.update(view)
         XCTAssertEqual(view.text, draft)
         XCTAssertLessThanOrEqual(view.selectedRange.location, (draft as NSString).length)
+        draft = "é"
+        coordinator.input = input()
+        coordinator.update(view)
+        draft = "e\u{0301}"
+        coordinator.input = input()
+        coordinator.update(view)
+        XCTAssertTrue(view.text.utf8.elementsEqual(draft.utf8))
+        view.selectedRange = NSRange(location: (draft as NSString).length, length: 0)
+        view.insertText("!")
+        coordinator.textViewDidChange(view)
+        XCTAssertTrue(draft.utf8.elementsEqual("e\u{0301}!".utf8))
         view.setMarkedText("候補", selectedRange: NSRange(location: 2, length: 0))
         XCTAssertNotNil(view.markedTextRange)
         XCTAssertFalse(view.handleHardwareKey("Enter", modifiers: [.control, .shift]))
