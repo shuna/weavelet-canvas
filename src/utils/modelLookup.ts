@@ -1,12 +1,11 @@
+import { remoteModelContextInfo, remoteModelStreamSupported, remoteModelDefaultMaxTokens } from './remoteModelLimits';
 import { findProviderCustomModel, findFavorite, findCachedModel, modelSupportsReasoning, modelRequiresReasoning } from './modelReasoning';
 import useStore from '@store/store';
-import type { CustomProviderModel, ProviderId, FavoriteModel, ProviderModel } from '@type/provider';
+import type { ProviderId } from '@type/provider';
 import { isVisionModel, isAudioModel, isReasoningModel } from '@api/providerModels';
 import {
-  UNKNOWN_MODEL_CONTEXT_LENGTH,
   UNKNOWN_MODEL_UI_CONTEXT_LENGTH,
 } from './tokenBudget';
-import { defaultUserMaxToken } from '@constants/chat';
 import { getMaxCompletionTokensForContext } from './tokenBudget';
 import { localModelRuntime } from '@src/local-llm/runtime';
 import { getCatalogModel } from '@src/local-llm/catalog';
@@ -117,18 +116,7 @@ export function getModelContextInfo(
   if (modelSource === 'local') {
     return { contextLength: resolveLocalModelContextLength(modelId), isFallback: false };
   }
-  const state = useStore.getState();
-
-  const custom = findProviderCustomModel(state.providerCustomModels, modelId, providerId);
-  if (custom?.contextLength) return { contextLength: custom.contextLength, isFallback: false };
-
-  const fav = findFavorite(state.favoriteModels, modelId, providerId);
-  if (fav?.contextLength) return { contextLength: fav.contextLength, isFallback: false };
-
-  const cached = findCachedModel(state.providerModelCache, modelId, providerId);
-  if (cached?.contextLength) return { contextLength: cached.contextLength, isFallback: false };
-
-  return { contextLength: UNKNOWN_MODEL_CONTEXT_LENGTH, isFallback: true };
+  return remoteModelContextInfo(useStore.getState(), modelId, providerId);
 }
 
 export function getModelCost(
@@ -189,18 +177,7 @@ export function isModelStreamSupported(
   modelSource?: 'remote' | 'local'
 ): boolean {
   if (modelSource === 'local') return true;
-  const state = useStore.getState();
-
-  const custom = findProviderCustomModel(state.providerCustomModels, modelId, providerId);
-  if (custom?.streamSupport != null) return custom.streamSupport;
-
-  const fav = findFavorite(state.favoriteModels, modelId, providerId);
-  if (fav?.streamSupport != null) return fav.streamSupport;
-
-  const cached = findCachedModel(state.providerModelCache, modelId, providerId);
-  if (cached?.streamSupport != null) return cached.streamSupport;
-
-  return true;
+  return remoteModelStreamSupported(useStore.getState(), modelId, providerId);
 }
 
 export function getModelSupportsVision(
@@ -320,15 +297,6 @@ export function getModelDefaultMaxTokens(
   providerId?: ProviderId,
   modelSource?: 'remote' | 'local'
 ): number {
-  const context = getModelContextInfo(modelId, providerId, modelSource);
-  const state = useStore.getState();
-  const outputLimit = modelSource === 'local' ? undefined : [
-    findProviderCustomModel(state.providerCustomModels, modelId, providerId),
-    findFavorite(state.favoriteModels, modelId, providerId),
-    findCachedModel(state.providerModelCache, modelId, providerId),
-  ].map((model) => model?.maxCompletionTokens)
-    .find((limit) => limit != null && Number.isFinite(limit) && limit > 0);
-  const contextLimit = getMaxCompletionTokensForContext(context.contextLength);
-  if (outputLimit != null) return context.isFallback ? outputLimit : Math.min(outputLimit, contextLimit);
-  return context.isFallback ? defaultUserMaxToken : contextLimit;
+  if (modelSource === 'local') return getMaxCompletionTokensForContext(getModelContextInfo(modelId, providerId, modelSource).contextLength);
+  return remoteModelDefaultMaxTokens(useStore.getState(), modelId, providerId);
 }

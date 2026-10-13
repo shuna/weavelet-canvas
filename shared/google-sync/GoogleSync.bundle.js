@@ -6983,6 +6983,7 @@ var WeaveletGoogleSync = (() => {
   __export(entry_exports, {
     branchClipboard: () => branchClipboard,
     branchHistory: () => branchHistory,
+    chatConfig: () => chatConfig,
     chatSearch: () => chatSearch,
     composerContent: () => composerContent,
     documentOperation: () => documentOperation,
@@ -16687,6 +16688,135 @@ ${message.content}` : message.content).join("\n\n").trim();
     );
   }
 
+  // src/utils/tokenBudget.ts
+  var UNKNOWN_MODEL_CONTEXT_LENGTH = 8192;
+  var MIN_PROMPT_RATIO = 0.1;
+  var normalizeContextLength = (contextLength) => Math.max(1, Math.floor(contextLength));
+  var getMinPromptTokensForContext = (contextLength) => Math.max(1, Math.floor(normalizeContextLength(contextLength) * MIN_PROMPT_RATIO));
+  var getMaxCompletionTokensForContext = (contextLength) => {
+    const normalizedContextLength = normalizeContextLength(contextLength);
+    return Math.max(0, normalizedContextLength - getMinPromptTokensForContext(normalizedContextLength));
+  };
+
+  // src/utils/remoteModelLimits.ts
+  function remoteModelContextInfo(state, modelId, providerId) {
+    const custom = findProviderCustomModel(state.providerCustomModels, modelId, providerId);
+    if (custom?.contextLength)
+      return { contextLength: custom.contextLength, isFallback: false };
+    const fav = findFavorite(state.favoriteModels ?? [], modelId, providerId);
+    if (fav?.contextLength)
+      return { contextLength: fav.contextLength, isFallback: false };
+    const cached = findCachedModel(state.providerModelCache ?? {}, modelId, providerId);
+    if (cached?.contextLength)
+      return { contextLength: cached.contextLength, isFallback: false };
+    return { contextLength: UNKNOWN_MODEL_CONTEXT_LENGTH, isFallback: true };
+  }
+  function remoteModelStreamSupported(state, modelId, providerId) {
+    const custom = findProviderCustomModel(state.providerCustomModels, modelId, providerId);
+    if (custom?.streamSupport != null)
+      return custom.streamSupport;
+    const fav = findFavorite(state.favoriteModels ?? [], modelId, providerId);
+    if (fav?.streamSupport != null)
+      return fav.streamSupport;
+    const cached = findCachedModel(state.providerModelCache ?? {}, modelId, providerId);
+    if (cached?.streamSupport != null)
+      return cached.streamSupport;
+    return true;
+  }
+  function remoteModelDefaultMaxTokens(state, modelId, providerId) {
+    const context = remoteModelContextInfo(state, modelId, providerId);
+    const outputLimit = [
+      findProviderCustomModel(state.providerCustomModels, modelId, providerId),
+      findFavorite(state.favoriteModels ?? [], modelId, providerId),
+      findCachedModel(state.providerModelCache ?? {}, modelId, providerId)
+    ].map((model) => model?.maxCompletionTokens).find((limit) => limit != null && Number.isFinite(limit) && limit > 0);
+    const contextLimit = getMaxCompletionTokensForContext(context.contextLength);
+    if (outputLimit != null)
+      return context.isFallback ? outputLimit : Math.min(outputLimit, contextLimit);
+    return context.isFallback ? defaultUserMaxToken : contextLimit;
+  }
+
+  // src/utils/modelSettingsCore.ts
+  var modelKey = ({ model, providerId, modelSource }) => JSON.stringify([modelSource === "local" ? "local" : "remote", providerId ?? "", model]);
+  var defaultOpenRouterSettings = () => ({
+    responseCache: { mode: "off" },
+    stickySession: true
+  });
+  var pickModelSettings = (config) => ({
+    openRouter: config.openRouter ? structuredClone(config.openRouter) : void 0,
+    max_tokens: config.max_tokens,
+    temperature: config.temperature,
+    presence_penalty: config.presence_penalty,
+    top_p: config.top_p,
+    frequency_penalty: config.frequency_penalty,
+    stream: config.stream,
+    reasoning_effort: config.reasoning_effort,
+    reasoning_budget_tokens: config.reasoning_budget_tokens,
+    verbosity: config.verbosity,
+    force_reasoning: config.force_reasoning
+  });
+  var savedModelSettings = (config, target, getModelDefaultMaxTokens) => {
+    if (modelKey(config) === modelKey(target))
+      return pickModelSettings(config);
+    const saved = config.modelSettings?.[modelKey(target)];
+    if (saved)
+      return { ...saved, openRouter: saved.openRouter ? structuredClone(saved.openRouter) : void 0 };
+    return {
+      ...pickModelSettings(_defaultChatConfig),
+      openRouter: target.providerId === "openrouter" && target.modelSource !== "local" ? defaultOpenRouterSettings() : void 0,
+      max_tokens: getModelDefaultMaxTokens(target.model, target.providerId, target.modelSource)
+    };
+  };
+  var switchConfigModel = (config, target, getModelDefaultMaxTokens) => {
+    if (modelKey(config) === modelKey(target))
+      return config;
+    const modelSettings = {
+      ...config.modelSettings,
+      [modelKey(config)]: { ...config.modelSettings?.[modelKey(config)], ...pickModelSettings(config) }
+    };
+    return {
+      ...config,
+      ...savedModelSettings({ ...config, modelSettings }, target, getModelDefaultMaxTokens),
+      ...target,
+      modelSettings
+    };
+  };
+
+  // src/utils/streamSupportCore.ts
+  var normalizeConfigStream = (config, getModelDefaultMaxTokens, isModelStreamSupported) => ({
+    ...config,
+    max_tokens: config.max_tokens === defaultUserMaxToken ? getModelDefaultMaxTokens(config.model, config.providerId, config.modelSource) : config.max_tokens,
+    stream: isModelStreamSupported(config.model, config.providerId, config.modelSource) ? config.stream !== false : false
+  });
+
+  // shared/google-sync/chatConfig.ts
+  function normalizeRemoteConfig(config, modelState) {
+    if (config.modelSource === "local")
+      throw new Error("Local model configuration is not supported by this remote adapter.");
+    return normalizeConfigStream(
+      config,
+      (model, providerId) => remoteModelDefaultMaxTokens(modelState, model, providerId),
+      (model, providerId) => remoteModelStreamSupported(modelState, model, providerId)
+    );
+  }
+  function chatConfig(json) {
+    const input = JSON.parse(json);
+    const state = input.modelState ?? {};
+    let config = input.config;
+    if (input.operation === "switch") {
+      if (!input.target || input.target.modelSource === "local")
+        throw new Error("Missing or unsupported remote model target.");
+      config = switchConfigModel(
+        config,
+        { model: input.target.model, providerId: input.target.providerId, modelSource: input.target.modelSource },
+        (model, providerId) => remoteModelDefaultMaxTokens(state, model, providerId)
+      );
+    } else if (input.operation !== "normalize")
+      throw new Error("Unknown chat config operation.");
+    const next = normalizeRemoteConfig(config, state);
+    return JSON.stringify({ changes: diffJSONChanges(input.config, JSON.parse(JSON.stringify(next))) });
+  }
+
   // src/api/requestBody.ts
   var OPENROUTER_ONLY_EFFORTS = /* @__PURE__ */ new Set([
     "none",
@@ -16834,6 +16964,8 @@ ${message.content}` : message.content).join("\n\n").trim();
   // shared/google-sync/generation.ts
   var generationRequest = (json) => {
     const input = JSON.parse(json);
+    if (input.modelState !== void 0)
+      input.config = normalizeRemoteConfig(input.config, input.modelState);
     const path = input.activePath ?? input.chat?.branchTree?.activePath;
     let chat = input.chat;
     if (chat?.branchTree && input.contentStore) {

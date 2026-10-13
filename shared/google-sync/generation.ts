@@ -1,3 +1,4 @@
+import { normalizeRemoteConfig } from './chatConfig';
 import { getRequestReasoningCapabilities, type ReasoningModelState } from '../../src/utils/modelReasoning';
 import { materializeActivePath } from '../../src/utils/branchUtils';
 import type { ContentStoreData } from '../../src/utils/contentStore';
@@ -17,6 +18,7 @@ export const generationRequest = (json: string): string => {
     modelState?: ReasoningModelState;
     capabilities?: { supportsReasoning: boolean; requiresReasoning: boolean };
   } = JSON.parse(json);
+  if (input.modelState !== undefined) input.config = normalizeRemoteConfig(input.config, input.modelState);
   const path = input.activePath ?? input.chat?.branchTree?.activePath;
   let chat = input.chat;
   if (chat?.branchTree && input.contentStore) {

@@ -121,3 +121,5 @@ export { branchClipboard } from "./branchClipboard";
 export { fileExport } from "./fileExport";
 
 export { composerContent } from "./composer";
+
+export { chatConfig } from "./chatConfig";
