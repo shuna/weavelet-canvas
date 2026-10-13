@@ -19,7 +19,12 @@ enum ImageInput {
               CGImageSourceGetCount(source) > 0,
               CGImageSourceGetStatus(source) == .statusComplete,
               let identifier = CGImageSourceGetType(source), let type = UTType(identifier as String),
-              type.conforms(to: .image), let mime = type.preferredMIMEType else { throw Failure.invalidImage }
+              type.conforms(to: .image), let mime = type.preferredMIMEType,
+              CGImageSourceCreateThumbnailAtIndex(source, 0, [
+                kCGImageSourceCreateThumbnailFromImageAlways:true,
+                kCGImageSourceThumbnailMaxPixelSize:1,
+                kCGImageSourceShouldCacheImmediately:true
+              ] as CFDictionary) != nil else { throw Failure.invalidImage }
         return "data:\(mime);base64," + bytes.base64EncodedString()
     }
     static func fromFile(_ url: URL) async throws -> String {
