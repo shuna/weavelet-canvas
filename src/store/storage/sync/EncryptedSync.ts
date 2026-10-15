@@ -598,16 +598,39 @@ export class EncryptedSync {
       (this.cache.packs ??= {})[pending.id] = manifest;
     } catch (error) {
       if (!(error instanceof SyncFileNotFoundError)) throw error;
-      // Another device can consolidate this published pack before its owner finishes cleanup.
-      await this.discoverPacks();
-      const replacements = Object.values(this.cache.packs ?? {}).filter(pack =>
-        Object.keys(pack.commits).some(id => Object.hasOwn(pending.manifest.commits, id)));
-      // Hash rules belong to each pack version. A replacement may use native canonical hashes instead of legacy LZ.
+      // Authenticate the pending representation before discovery can select an equivalent legacy JSON key order.
       const retained = Object.fromEntries(Object.keys(pending.manifest.commits).filter(id => this.cache.commits[id])
         .map(id => [id, this.cache.commits[id]]));
       const expected = await (pending.manifest.version === 3 ? hashNativeCommitsAsync(retained) : hashCommitsAsync(retained));
-      for (const [id, hash] of Object.entries(pending.manifest.commits)) if (expected[id] !== hash ||
-          !replacements.some(pack => Object.hasOwn(pack.commits, id))) throw new Error('Missing compacted sync history.');
+      if (Object.entries(pending.manifest.commits).some(([id, hash]) => expected[id] !== hash)) {
+        // A previous cleanup attempt may already have persisted another equivalent key order.
+        // The immutable local outbox still contains the original published representation until cleanup completes.
+        const saved = await readSyncEntries(this.dataset, pending.manifest.parts.map(id => `outbox:${id}`));
+        const chunks = await this.parallel(pending.manifest.parts.map((id, index) => ({ id, bytes: saved[index] })), async ({ id, bytes }) => {
+          if (!bytes) throw new Error('Missing local upload data.');
+          return decrypt(this.requireKey(), bytes, this.context(id));
+        });
+        if (chunks.reduce((size, bytes) => size + bytes.length, 0) !== pending.manifest.bytes) throw new Error('Missing compacted sync history.');
+        const { value: original } = pending.manifest.version === 3
+          ? await decodeNativePartsAsync<{ version: number; commits: Record<string, Commit> }>(chunks)
+          : pending.manifest.version === 2 ? await decodeWirePartsAsync<{ version: number; commits: Record<string, Commit> }>(chunks)
+          : await decodePartsAsync<{ version: number; commits: Record<string, Commit> }>(chunks);
+        if (original.version !== 1 || !original.commits || Object.keys(original.commits).length !== Object.keys(pending.manifest.commits).length) {
+          throw new Error('Missing compacted sync history.');
+        }
+        const hashes = await (pending.manifest.version === 3 ? hashNativeCommitsAsync(original.commits) : hashCommitsAsync(original.commits));
+        const canonical = await hashNativeCommitsAsync(original.commits), current = await hashNativeCommitsAsync(retained);
+        if (Object.entries(pending.manifest.commits).some(([id, hash]) => hashes[id] !== hash || canonical[id] !== current[id])) {
+          throw new Error('Missing compacted sync history.');
+        }
+      }
+      // Another device can consolidate this pack with its own hash rule or canonical-equivalent representation.
+      await this.discoverPacks();
+      const replacements = Object.values(this.cache.packs ?? {}).filter(pack =>
+        Object.keys(pack.commits).some(id => Object.hasOwn(pending.manifest.commits, id)));
+      for (const id of Object.keys(pending.manifest.commits)) if (!replacements.some(pack => Object.hasOwn(pack.commits, id))) {
+        throw new Error('Missing compacted sync history.');
+      }
       for (const pack of replacements) await this.loadPack(pack, true);
     }
     await this.refresh();

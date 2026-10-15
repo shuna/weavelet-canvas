@@ -811,3 +811,49 @@ it('uses uncompressed grouping bounds when folding highly compressed existing na
   const reader = new EncryptedSync(file.id, transport); await reader.unlock(password);
   expect((await reader.pull()).state.defaultSystemMessage).toBe('small subsequent change');
 });
+
+it.each(['valid', 'missing', 'corrupt'])('resumes reordered legacy cleanup from its immutable outbox, failing closed for %s outbox data', async variant => {
+  const transport = new MemoryTransport(), password = 'test-only reordered legacy cleanup passphrase';
+  const { session, file } = await EncryptedSync.create(transport, password);
+  await session.push(smallSnapshot(), true);
+  const remove = transport.remove.bind(transport);
+  transport.remove = async () => { throw new Error('cleanup offline'); };
+  await expect(session.compactHistory()).rejects.toThrow('cleanup offline');
+  transport.remove = remove;
+  const internal = session as any;
+  const [oldId, oldFile] = [...transport.files].find(([, value]) => value.kind === 'pack')!;
+  const oldManifest = decode<any>(await decrypt(internal.key, oldFile.bytes, internal.context(oldId)));
+  const [oldPart] = oldManifest.parts;
+  const oldPayload = decode<any>(await decrypt(internal.key, transport.files.get(oldPart)!.bytes, internal.context(oldPart)));
+  const commits = Object.fromEntries(Object.entries(oldPayload.commits).map(([id, value]) => {
+    const commit = value as any;
+    return [id, { changes: commit.changes.map((change: any) => ({ after: change.after, key: change.key, before: change.before })),
+      parents: commit.parents, version: commit.version }];
+  }));
+  const [replacement, part] = await transport.ids(2);
+  const payload = encode({ version: 1, commits });
+  const hashes: Record<string, string> = {};
+  for (const [id, commit] of Object.entries(commits)) hashes[id] = await digest(encode(commit));
+  expect(hashes).not.toEqual(oldManifest.commits);
+  await transport.put(part, file.id, 'pack-part', await encrypt(internal.key, payload, internal.context(part)));
+  const manifest = { version: 1, commits: hashes, parts: [part], bytes: payload.length };
+  await transport.put(replacement, file.id, 'pack', await encrypt(internal.key, encode(manifest), internal.context(replacement)));
+  await remove(oldId); await remove(oldPart);
+  const ciphertext = transport.files.get(replacement)!.bytes.slice();
+  // Persist the replacement representation, then fail cleanup again before the old pending record is removed.
+  transport.remove = async () => { throw new Error('cleanup still offline'); };
+  const retry = new EncryptedSync(file.id, transport); await retry.restoreKey();
+  await expect(retry.pull()).rejects.toThrow('cleanup still offline');
+  transport.remove = remove;
+  if (variant === 'missing') await cacheStorage.writeSyncCache(file.id, undefined, [], [`outbox:${oldPart}`]);
+  if (variant === 'corrupt') {
+    const [bytes] = await cacheStorage.readSyncEntries(file.id, [`outbox:${oldPart}`]);
+    const damaged = bytes!.slice(); damaged[damaged.length - 1] ^= 255;
+    await cacheStorage.writeSyncCache(file.id, undefined, [[`outbox:${oldPart}`, damaged]]);
+  }
+  const resumed = new EncryptedSync(file.id, transport); await resumed.restoreKey();
+  if (variant === 'valid') expect((await resumed.pull()).state.defaultSystemMessage).toBe('initial');
+  else await expect(resumed.pull()).rejects.toThrow(variant === 'missing' ? 'Missing local upload data.' : 'Unable to decrypt sync data');
+  expect([...transport.files.values()].filter(value => value.kind === 'pack')).toHaveLength(1);
+  expect(transport.files.get(replacement)!.bytes).toEqual(ciphertext);
+});

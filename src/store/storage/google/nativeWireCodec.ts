@@ -5,6 +5,7 @@ import type { Commit } from './replay';
 
 // Experimental per-payload processing bound, not history retention or a bound on total process memory.
 // Writers and readers share it so a successfully published native payload remains readable.
+// ponytail: whole JSON payloads cap at 256 MiB; split before compression for larger datasets.
 export const NATIVE_WIRE_MAX_BYTES = 256 * 1024 * 1024;
 export const encodeNativeWire = (value: unknown, maxBytes = NATIVE_WIRE_MAX_BYTES) => encodeGzipJson(value, maxBytes);
 
