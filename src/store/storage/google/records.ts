@@ -4,9 +4,9 @@ import { isBrowserLocalRecord, withoutBrowserLocalSettings } from './settings';
 import type { StorageValue } from 'zustand/middleware';
 import type { PersistedStoreState } from '@store/persistence';
 import type { BranchNode, ContentInterface } from '@type/chat';
-import { addContent, type ContentStoreData } from '@utils/contentStore';
-import DiffMatchPatch from 'diff-match-patch';
+import { addContent, retainContent, resolveContentStrict, type ContentStoreData } from '@utils/contentStore';
 import { digest } from './crypto';
+import { createContentProjector, cachedRecordDigest } from './recordCache';
 
 export class SyncConflictError extends Error {
   constructor(readonly keys: string[]) { super('Concurrent edits conflict. Both copies are preserved.'); }
@@ -15,7 +15,6 @@ export class SyncConflictError extends Error {
 export type Snapshot = StorageValue<Partial<PersistedStoreState>>;
 export type Records = Record<string, string>;
 export type Change = { key: string; before: string | null; after: string | null };
-const dmp = new DiffMatchPatch();
 const forbidden = new Set(['__proto__', 'prototype', 'constructor']);
 
 export async function sameSnapshot([a, b]: [Snapshot, Snapshot]): Promise<boolean> {
@@ -32,37 +31,25 @@ function canonical(value: any): string {
 }
 
 // Fail closed: the local resolver deliberately repairs damaged chains; sync must not publish that repair as an empty message.
-function resolveStrict(store: ContentStoreData, hash: string, visited = new Set<string>()): ContentInterface[] {
-  const entry = store[hash];
-  if (!entry || visited.has(hash) || visited.size >= 100) throw new Error('Missing or cyclic message content; sync stopped.');
-  if (!entry.delta) return entry.content;
-  visited.add(hash);
-  const base = resolveStrict(store, entry.delta.baseHash, visited);
-  const [text, applied] = dmp.patch_apply(dmp.patch_fromText(entry.delta.patches), JSON.stringify(base));
-  if (applied.some((ok: boolean) => !ok)) throw new Error('Invalid message delta; sync stopped.');
-  return JSON.parse(text);
-}
-
 export async function toRecords(snapshot: Snapshot): Promise<Records> {
-  // JSON also removes undefined fields, exactly as the existing persistence format does.
   const started = performance.now();
-  const serialized = JSON.stringify(snapshot);
-  const copy = JSON.parse(serialized) as Snapshot;
-  const state = withoutBrowserLocalSettings(copy.state);
+  // Copy only mutable metadata; never stringify and parse the entire body store.
+  const { chats: sourceChats, contentStore: source = {}, ...shared } = withoutBrowserLocalSettings(snapshot.state);
+  const state = JSON.parse(JSON.stringify(shared)) as Snapshot['state'];
   if (state.folders !== undefined && !validateFolderHierarchy(state.folders)) throw new Error('Invalid folder hierarchy; sync stopped.');
   const records: Records = Object.create(null);
-  const source = state.contentStore ?? {};
   const contentIds = new Map<string, string>();
-  const content: Record<string, unknown> = Object.create(null);
+  const content: Records = Object.create(null);
   const assets: Record<string, string> = Object.create(null);
+  const projector = createContentProjector(source);
   const externalize = async (parts: ContentInterface[]) => {
-    const encoded = JSON.parse(JSON.stringify(parts));
+    const encoded = parts;
     for (const part of encoded) {
       if (part.type === 'image_url' && typeof part.image_url?.url === 'string') {
         const url = part.image_url.url;
-        const id = await digest(url);
+        const id = await cachedRecordDigest(url);
         assets[id] = url;
-        part.image_url.url = { asset: id };
+        (part.image_url as any).url = { asset: id };
       }
     }
     return encoded;
@@ -70,22 +57,35 @@ export async function toRecords(snapshot: Snapshot): Promise<Records> {
   const translate = async (node: BranchNode) => {
     const old = node.contentHash;
     if (!contentIds.has(old)) {
-      const parts = await externalize(resolveStrict(source, old));
-      const id = await digest(canonical(parts));
-      content[id] = parts;
-      contentIds.set(old, id);
+      const projected = await projector.project(old, async parts => {
+        // Capture asset records with this projection so cache hits never omit dependencies.
+        const found: Records = {};
+        const encoded = JSON.parse(JSON.stringify(parts));
+        for (const part of encoded) if (part.type === 'image_url' && typeof part.image_url?.url === 'string') {
+          const url = part.image_url.url, id = await cachedRecordDigest(url);
+          found[id] = url;
+          part.image_url.url = { asset: id };
+        }
+        const value = canonical(encoded);
+        return { id: await cachedRecordDigest(value), value, assets: found };
+      });
+      content[projected.id] = projected.value;
+      for (const [id, url] of Object.entries(projected.assets)) assets[id] = url;
+      contentIds.set(old, projected.id);
     }
     node.contentHash = contentIds.get(old)!;
   };
   const chats: Record<string, unknown> = Object.create(null);
   const order: string[] = [];
-  for (const chat of state.chats ?? []) {
+  for (const original of sourceChats ?? []) {
+    // A tree's materialized messages duplicate its bodies and are never synchronized.
+    const chat = JSON.parse(JSON.stringify(original.branchTree ? { ...original, messages: undefined } : original)) as NonNullable<typeof sourceChats>[number];
     if (!chat.id || chats[chat.id]) throw new Error('Missing or duplicate chat ID; sync stopped.');
     order.push(chat.id);
     if (chat.branchTree) {
       for (const node of Object.values(chat.branchTree.nodes)) {
         const statsKey = `${chat.id}:::${node.id}`;
-        const generationId = node.openRouterObservation?.generationId ?? copy.state.pendingVerifications?.[statsKey]?.generationId ?? copy.state.verifiedStats?.[statsKey]?.generationId;
+        const generationId = node.openRouterObservation?.generationId ?? snapshot.state.pendingVerifications?.[statsKey]?.generationId ?? snapshot.state.verifiedStats?.[statsKey]?.generationId;
         // Retain the lookup identity, not the device's verification queue/cache.
         if (generationId) node.openRouterObservation = { ...node.openRouterObservation, generationId };
         await translate(node);
@@ -109,14 +109,15 @@ export async function toRecords(snapshot: Snapshot): Promise<Records> {
       }
     } else records[JSON.stringify(path)] = canonical(value);
   };
-  flatten({ version: copy.version ?? 0, state, chats, order }, []);
-  for (const [id, parts] of Object.entries(content)) records[JSON.stringify(['content', id])] = canonical(parts);
+  flatten({ version: snapshot.version ?? 0, state, chats, order }, []);
+  for (const [id, value] of Object.entries(content)) records[JSON.stringify(['content', id])] = value;
   for (const [id, url] of Object.entries(assets)) records[JSON.stringify(['assets', id])] = JSON.stringify(url);
-  recordMetric('records', started, new TextEncoder().encode(serialized).length, Object.values(records).reduce((n, value) => n + new TextEncoder().encode(value).length, 0));
+  const bytes = Object.values(records).reduce((n, value) => n + new TextEncoder().encode(value).length, 0);
+  recordMetric('records', started, bytes, bytes);
   return records;
 }
 
-export async function fromRecords(records: Records): Promise<Snapshot> {
+export async function fromRecords(records: Records, previous: ContentStoreData = {}): Promise<Snapshot> {
   const root: any = Object.create(null);
   let skippedLocalState = false;
   const generationIds = new Map<string, string>();
@@ -149,24 +150,76 @@ export async function fromRecords(records: Records): Promise<Snapshot> {
     throw new Error('Incomplete sync snapshot.');
   }
   if (root.state.folders !== undefined && !validateFolderHierarchy(root.state.folders)) throw new Error('Invalid folder hierarchy; sync stopped.');
+  const restoredImages = new Map<string, string>();
   const restoreAssets = async (parts: any[]) => {
     if (!Array.isArray(parts)) throw new Error('Invalid message content.');
     const restored = structuredClone(parts);
     for (const part of restored) {
       if (part.type === 'image_url' && typeof part.image_url?.url === 'object') {
         const id = part.image_url.url?.asset;
-        const url = root.assets?.[id];
-        if (typeof url !== 'string' || await digest(url) !== id) throw new Error('Missing or damaged image.');
+        let url = restoredImages.get(id);
+        if (url === undefined) {
+          url = root.assets?.[id];
+          if (typeof url !== 'string' || await digest(url) !== id) throw new Error('Missing or damaged image.');
+          restoredImages.set(id, url);
+        }
         part.image_url.url = url;
       }
     }
     return restored as ContentInterface[];
   };
   const store: ContentStoreData = {};
+  const restoredContent = new Map<string, string>();
+  let previousDeltas: Map<string, string> | undefined;
+  const reuseDelta = (parts: ContentInterface[]): string | undefined => {
+    if (!previousDeltas) {
+      previousDeltas = new Map();
+      for (const [id, entry] of Object.entries(previous)) if (entry.delta) {
+        try {
+          const resolved: [string, string][] = [];
+          let current = id;
+          while (previous[current]) {
+            resolved.push([canonical(resolveContentStrict(previous, current)), current]);
+            if (!previous[current].delta) break;
+            current = previous[current].delta!.baseHash;
+          }
+          for (const [value, hash] of resolved) previousDeltas.set(value, hash);
+        }
+        catch { /* Damaged old representations cannot replace verified remote content. */ }
+      }
+    }
+    const hash = previousDeltas.get(canonical(parts));
+    if (hash !== undefined) {
+      try {
+          const chain: string[] = [];
+          let current = hash;
+          while (previous[current]) {
+            // A collision with content already restored uses the safe full-body fallback.
+            if (store[current] && canonical(resolveContentStrict(store, current)) !==
+                canonical(resolveContentStrict(previous, current))) return;
+            chain.push(current);
+            if (!previous[current].delta) break;
+            current = previous[current].delta!.baseHash;
+          }
+          for (const id of chain.reverse()) store[id] ??= { ...structuredClone(previous[id]), refCount: 0 };
+          retainContent(store, hash);
+          return hash;
+      } catch { return; } // Verified remote content remains authoritative if the old local delta is damaged.
+    }
+  };
   const restore = async (node: BranchNode) => {
+    const cached = restoredContent.get(node.contentHash);
+    if (cached !== undefined) {
+      retainContent(store, cached);
+      node.contentHash = cached;
+      return;
+    }
     const parts = root.content?.[node.contentHash];
     if (!parts || await digest(canonical(parts)) !== node.contentHash) throw new Error('Missing or damaged message content.');
-    node.contentHash = addContent(store, await restoreAssets(parts));
+    const restored = await restoreAssets(parts);
+    const localHash = reuseDelta(restored) ?? addContent(store, restored);
+    restoredContent.set(node.contentHash, localHash);
+    node.contentHash = localHash;
   };
   // New chats created concurrently may not appear in another writer's order array.
   const ids = [...new Set([...root.order, ...Object.keys(root.chats).sort()])];
@@ -234,7 +287,7 @@ export async function applyChanges(records: Records, changes: Change[]): Promise
 // The baseline only needs equality/precondition hashes, not a second copy of every image/body.
 export async function hashRecords(records: Records): Promise<Records> {
   const hashes: Records = {};
-  for (const [key, value] of Object.entries(records)) hashes[key] = await digest(value);
+  for (const [key, value] of Object.entries(records)) hashes[key] = await cachedRecordDigest(value);
   return hashes;
 }
 export function diffHashedRecords(before: Records, after: Records, hashes: Records): Change[] {
