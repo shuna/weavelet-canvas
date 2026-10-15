@@ -64,19 +64,28 @@ describe('stream relay', () => {
 
   it('aborts an idle upstream read even while heartbeat timers are active', async () => {
     vi.useFakeTimers();
+    let started!: () => void;
+    const readStarted = new Promise<void>((resolve) => { started = resolve; });
     vi.stubGlobal(
       'fetch',
       vi
         .fn()
         .mockResolvedValue(
-          new Response(new ReadableStream<Uint8Array>({ start() {} }))
+          new Response(new ReadableStream<Uint8Array>(
+            { pull() { started(); } },
+            { highWaterMark: 0 }
+          ))
         )
     );
     const response = await stream('idle-upstream');
     const text = response.text();
-    await vi.advanceTimersByTimeAsync(0);
+    // Native cache-key hashing can finish after fake timers advance. Demand
+    // begins only once the relay has installed its heartbeat and idle timers.
+    await readStarted;
     await vi.advanceTimersByTimeAsync(45_000);
-    expect(await text).toContain('event: interrupted');
+    const relayed = await text;
+    expect(relayed).toContain(': ping');
+    expect(relayed).toContain('event: interrupted');
   });
 
   it('forwards Retry-After and bounds failed upstream bodies', async () => {

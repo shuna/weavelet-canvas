@@ -439,7 +439,7 @@ export class EncryptedSync {
         const downloaded = await this.parallel(unbundled, async (id) => [id, await this.downloadManifest(id)] as const);
         for (const [id, manifest] of downloaded) {
           manifests.set(id, manifest);
-          if (manifest.version === 1) partCount += manifest.parts!.length;
+          if (manifest.version !== 2) partCount += manifest.parts!.length;
         }
         syncPhase('downloading', missing.length + partCount, undefined, missing.length);
         for (const id of missing) await this.loadCommit(id, manifests);

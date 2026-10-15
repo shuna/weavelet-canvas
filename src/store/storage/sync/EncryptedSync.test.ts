@@ -9,6 +9,7 @@ import { EncryptedSync } from './EncryptedSync';
 import { SyncFileNotFoundError, type SyncChange, type SyncTransport } from './transport';
 import { toRecords, type Snapshot } from '../google/records';
 import { addContent } from '@utils/contentStore';
+import { useGoogleSyncProgress, withSyncProgress } from '../google/progress';
 
 class MemoryTransport implements SyncTransport {
   next = 0;
@@ -505,7 +506,14 @@ it.each([false, true])('round-trips wireDelta=%s commits and packs through fresh
   globalThis.indexedDB = new IDBFactory();
   const readerDb = globalThis.indexedDB;
   const reader = new EncryptedSync(file.id, transport); await reader.unlock(password);
-  const received = await reader.pull();
+  const downloadTotals: number[] = [];
+  const unsubscribe = useGoogleSyncProgress.subscribe(state => {
+    if (state.phase === 'downloading' && state.totalFiles !== undefined) downloadTotals.push(state.totalFiles);
+  });
+  let received: Snapshot;
+  try { received = await withSyncProgress(() => reader.pull()); }
+  finally { unsubscribe(); }
+  expect(downloadTotals).toContain(commitManifest.parts.length + 1);
   expect(await toRecords(received)).toEqual(expected);
   await reader.acceptLocal(received);
   received.state.chats![0].title = 'default-client title';
