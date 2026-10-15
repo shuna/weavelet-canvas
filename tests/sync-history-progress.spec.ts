@@ -11,11 +11,14 @@ test('shows history counts and receives real Worker progress for a deep history'
   }));
   await page.goto('/', { waitUntil: 'domcontentloaded' });
   await page.getByRole('button', { name: 'すべてスキップ', exact: true }).click();
+  // Completing onboarding opens Settings; dismiss it before opening sync details.
+  await expect(page.getByRole('heading', { name: '設定', exact: true })).toBeVisible();
+  await page.getByRole('button', { name: 'close modal', exact: true }).click();
   await page.evaluate(async () => {
     const load = (path: string) => import(/* @vite-ignore */ path);
     const { default: store } = await load('/src/store/store.ts');
     const { default: auth } = await load('/src/store/cloud-auth-store.ts');
-    store.setState({ onboardingCompleted: true, showProviderMenu: false });
+    store.setState({ onboardingCompleted: true });
     auth.setState({ provider: 'google', cloudSync: true, syncStatus: 'syncing' });
     const { useGoogleSyncProgress, syncHistoryProgress } = await load('/src/store/storage/google/progress.ts');
     useGoogleSyncProgress.setState({ active: true });
