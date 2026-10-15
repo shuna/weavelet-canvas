@@ -8,8 +8,9 @@ import { prepareHydratedData } from '../../rehydrateData';
 import { prepareSave } from '../prepareSave';
 import { encodeWire, decodeWire } from './wire';
 import { encodeCache, decodeCache } from './cacheCodec';
+import { encodeNativeWire, hashNativeCommits, decodeNativeParts } from './nativeWireCodec';
 
-const operations = { encode, decode, encodeCache, decodeCache, toRecords, fromRecords,
+const operations = { encode, decode, encodeCache, decodeCache, encodeNative: encodeNativeWire, hashNativeCommits, decodeNativeParts, toRecords, fromRecords,
   fromRecordsWithContent: ({ records, previous }: { records: Parameters<typeof fromRecords>[0]; previous: Parameters<typeof fromRecords>[1] }) => fromRecords(records, previous),
   encodeWire: ({ value, full }: { value: Parameters<typeof encodeWire>[0]; full?: Uint8Array }) => encodeWire(value, full),
   decodeWireParts: async (parts: Uint8Array[]) => {

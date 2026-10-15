@@ -1,0 +1,365 @@
+{
+  "createdAt": "2026-10-15T13:24:09.832Z",
+  "scale": 1,
+  "bodyBytes": 5300,
+  "smoke": false,
+  "complete": true,
+  "wireCompression": "gzip",
+  "concurrentBenchmarkLoad": false,
+  "limitations": [
+    "Synthetic text only; no personal exports read.",
+    "Repeated fictional text is highly compressible; matching node/JSON sizes does not reproduce the export compression ratio.",
+    "Real Chrome Worker and IndexedDB, zero-latency mock network; no Google Drive traffic.",
+    "restartPull recreates the Engine and reads real IndexedDB in the same page; the Worker/browser process stays alive.",
+    "One sample; CPU contention and garbage collection affect timings.",
+    "JS heap readings exclude reliable process/Worker peak memory measurement.",
+    "Experimental opt-in wire format; incompatible with legacy clients and disabled by default.",
+    "Native prototype processing is limited to 256 MiB of actual uncompressed UTF-8 JSON per payload on both write and read. This is not a history-retention limit or a total process-memory limit; pre-compression block partitioning is deferred."
+  ],
+  "scenarios": {
+    "initial": {
+      "ms": 2546.2000000476837,
+      "uploadedBytes": 750798,
+      "downloadedBytes": 0,
+      "transportCalls": {
+        "ids": 2,
+        "folder": 1,
+        "put": 3,
+        "startToken": 1,
+        "history": 1,
+        "changes": 2
+      },
+      "remoteStorageBytes": 750798,
+      "workerCreations": 1,
+      "metrics": {
+        "encrypt": {
+          "calls": 16,
+          "ms": 2.8999998569488525,
+          "inputBytes": 5084344,
+          "outputBytes": 5084792
+        },
+        "serialize": {
+          "calls": 13,
+          "ms": 287.10000014305115,
+          "inputBytes": 144780849,
+          "outputBytes": 144780849
+        },
+        "compress": {
+          "calls": 13,
+          "ms": 428.69999980926514,
+          "inputBytes": 144780849,
+          "outputBytes": 4333538
+        },
+        "cache": {
+          "calls": 15,
+          "ms": 26.09999966621399,
+          "inputBytes": 5084732,
+          "outputBytes": 0
+        },
+        "records": {
+          "calls": 1,
+          "ms": 218.5,
+          "inputBytes": 60825775,
+          "outputBytes": 60825775
+        },
+        "decrypt": {
+          "calls": 2,
+          "ms": 0.4999997615814209,
+          "inputBytes": 750425,
+          "outputBytes": 0
+        }
+      },
+      "memoryBefore": 166906634,
+      "memoryAfter": 241021468,
+      "maxMainThreadLagMs": 66.79999995231628,
+      "heartbeatTicks": 96
+    },
+    "unchanged": {
+      "ms": 1372.7000000476837,
+      "uploadedBytes": 0,
+      "downloadedBytes": 0,
+      "transportCalls": {
+        "changes": 2
+      },
+      "remoteStorageBytes": 750798,
+      "workerCreations": 1,
+      "metrics": {
+        "records": {
+          "calls": 1,
+          "ms": 205.30000019073486,
+          "inputBytes": 60825775,
+          "outputBytes": 60825775
+        },
+        "cache": {
+          "calls": 4,
+          "ms": 3.9000000953674316,
+          "inputBytes": 2160105,
+          "outputBytes": 0
+        },
+        "serialize": {
+          "calls": 3,
+          "ms": 39.299999952316284,
+          "inputBytes": 12811893,
+          "outputBytes": 12811893
+        },
+        "compress": {
+          "calls": 3,
+          "ms": 99.69999980926514,
+          "inputBytes": 12811893,
+          "outputBytes": 2159997
+        },
+        "encrypt": {
+          "calls": 3,
+          "ms": 1,
+          "inputBytes": 2160021,
+          "outputBytes": 2160105
+        }
+      },
+      "memoryBefore": 241021468,
+      "memoryAfter": 440313738,
+      "maxMainThreadLagMs": 25.700000047683716,
+      "heartbeatTicks": 51
+    },
+    "titleEdit": {
+      "ms": 1539.7999999523163,
+      "uploadedBytes": 285,
+      "downloadedBytes": 0,
+      "transportCalls": {
+        "changes": 2,
+        "ids": 1,
+        "put": 2
+      },
+      "remoteStorageBytes": 751083,
+      "workerCreations": 1,
+      "metrics": {
+        "records": {
+          "calls": 1,
+          "ms": 152.90000009536743,
+          "inputBytes": 60825764,
+          "outputBytes": 60825764
+        },
+        "cache": {
+          "calls": 11,
+          "ms": 10.299999475479126,
+          "inputBytes": 4321078,
+          "outputBytes": 0
+        },
+        "serialize": {
+          "calls": 9,
+          "ms": 79.90000057220459,
+          "inputBytes": 25624193,
+          "outputBytes": 25624193
+        },
+        "compress": {
+          "calls": 9,
+          "ms": 202,
+          "inputBytes": 25624193,
+          "outputBytes": 4320569
+        },
+        "encrypt": {
+          "calls": 10,
+          "ms": 2.8000001907348633,
+          "inputBytes": 4320798,
+          "outputBytes": 4321078
+        },
+        "decrypt": {
+          "calls": 2,
+          "ms": 0.10000014305114746,
+          "inputBytes": 285,
+          "outputBytes": 0
+        }
+      },
+      "memoryBefore": 440313738,
+      "memoryAfter": 646398241,
+      "maxMainThreadLagMs": 21.299999952316284,
+      "heartbeatTicks": 60
+    },
+    "bodyEdit": {
+      "ms": 1542,
+      "uploadedBytes": 474,
+      "downloadedBytes": 0,
+      "transportCalls": {
+        "changes": 2,
+        "ids": 1,
+        "put": 2
+      },
+      "remoteStorageBytes": 751557,
+      "workerCreations": 1,
+      "metrics": {
+        "records": {
+          "calls": 1,
+          "ms": 157.5,
+          "inputBytes": 60831113,
+          "outputBytes": 60831113
+        },
+        "cache": {
+          "calls": 11,
+          "ms": 10.5,
+          "inputBytes": 4321830,
+          "outputBytes": 0
+        },
+        "serialize": {
+          "calls": 9,
+          "ms": 78.20000004768372,
+          "inputBytes": 25630580,
+          "outputBytes": 25630580
+        },
+        "compress": {
+          "calls": 9,
+          "ms": 202.7000002861023,
+          "inputBytes": 25630580,
+          "outputBytes": 4321132
+        },
+        "encrypt": {
+          "calls": 10,
+          "ms": 2.5999999046325684,
+          "inputBytes": 4321550,
+          "outputBytes": 4321830
+        },
+        "decrypt": {
+          "calls": 2,
+          "ms": 0.20000004768371582,
+          "inputBytes": 474,
+          "outputBytes": 0
+        }
+      },
+      "memoryBefore": 646398241,
+      "memoryAfter": 403749812,
+      "maxMainThreadLagMs": 16.40000009536743,
+      "heartbeatTicks": 60
+    },
+    "sharedBody": {
+      "ms": 1498.5,
+      "uploadedBytes": 338,
+      "downloadedBytes": 0,
+      "transportCalls": {
+        "changes": 2,
+        "ids": 1,
+        "put": 2
+      },
+      "remoteStorageBytes": 751895,
+      "workerCreations": 1,
+      "metrics": {
+        "records": {
+          "calls": 1,
+          "ms": 149.59999990463257,
+          "inputBytes": 60831113,
+          "outputBytes": 60831113
+        },
+        "cache": {
+          "calls": 11,
+          "ms": 15.899999856948853,
+          "inputBytes": 4321770,
+          "outputBytes": 0
+        },
+        "serialize": {
+          "calls": 9,
+          "ms": 80.10000014305115,
+          "inputBytes": 25625634,
+          "outputBytes": 25625634
+        },
+        "compress": {
+          "calls": 9,
+          "ms": 199.20000004768372,
+          "inputBytes": 25625634,
+          "outputBytes": 4321210
+        },
+        "encrypt": {
+          "calls": 10,
+          "ms": 2.3000004291534424,
+          "inputBytes": 4321490,
+          "outputBytes": 4321770
+        },
+        "decrypt": {
+          "calls": 2,
+          "ms": 0.10000014305114746,
+          "inputBytes": 338,
+          "outputBytes": 0
+        }
+      },
+      "memoryBefore": 403749812,
+      "memoryAfter": 609728667,
+      "maxMainThreadLagMs": 35.10000014305115,
+      "heartbeatTicks": 57
+    },
+    "restartPull": {
+      "ms": 798.6000001430511,
+      "uploadedBytes": 0,
+      "downloadedBytes": 373,
+      "transportCalls": {
+        "keyHeader": 1,
+        "read": 1,
+        "changes": 1
+      },
+      "remoteStorageBytes": 751895,
+      "workerCreations": 1,
+      "metrics": {
+        "decrypt": {
+          "calls": 7,
+          "ms": 1.2999999523162842,
+          "inputBytes": 2174229,
+          "outputBytes": 0
+        },
+        "cache": {
+          "calls": 5,
+          "ms": 6.200000047683716,
+          "inputBytes": 1440352,
+          "outputBytes": 0
+        },
+        "serialize": {
+          "calls": 2,
+          "ms": 26.299999952316284,
+          "inputBytes": 8541868,
+          "outputBytes": 8541868
+        },
+        "compress": {
+          "calls": 2,
+          "ms": 66.5,
+          "inputBytes": 8541868,
+          "outputBytes": 1440280
+        },
+        "encrypt": {
+          "calls": 2,
+          "ms": 0.40000009536743164,
+          "inputBytes": 1440296,
+          "outputBytes": 1440352
+        }
+      },
+      "memoryBefore": 609728667,
+      "memoryAfter": 336760476,
+      "maxMainThreadLagMs": 21.40000009536743,
+      "heartbeatTicks": 30
+    }
+  },
+  "browser": "155.0.8059.79",
+  "browserProcessIds": [
+    {
+      "type": "browser",
+      "id": 12714
+    },
+    {
+      "type": "GPU",
+      "id": 12720
+    },
+    {
+      "type": "network.mojom.NetworkService",
+      "id": 12721
+    },
+    {
+      "type": "storage.mojom.StorageService",
+      "id": 12722
+    },
+    {
+      "type": "mac_notifications.mojom.MacNotificationProvider",
+      "id": 12723
+    }
+  ],
+  "inputBytes": 61031396,
+  "generationMs": 279.2999999523163,
+  "chats": 795,
+  "nodes": 13107,
+  "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/155.0.0.0 Safari/537.36",
+  "hardwareConcurrency": 10,
+  "workerCreations": 1,
+  "indexedDBVerified": true
+}

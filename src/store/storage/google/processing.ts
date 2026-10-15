@@ -9,6 +9,7 @@ import { prepareHydratedData } from '../../rehydrateData';
 import { prepareSave } from '../prepareSave';
 import { encodeWire, decodeWire } from './wire';
 import { encodeCache, decodeCache } from './cacheCodec';
+import { encodeNativeWire, hashNativeCommits, decodeNativeParts } from './nativeWireCodec';
 
 type Request = { resolve: (value: any) => void; reject: (error: unknown) => void; onProgress?: (progress: HistoryProgress) => void };
 let worker: Worker | undefined;
@@ -89,3 +90,7 @@ export const decodeWirePartsAsync = <T>(value: Uint8Array[]) => processAsync<{ b
 });
 export const prepareHydratedDataAsync = (value: Parameters<typeof prepareHydratedData>[0]) => processAsync('prepareHydratedData', value, () => prepareHydratedData(structuredClone(value)));
 export const prepareSaveAsync = (value: Parameters<typeof prepareSave>[0]) => processAsync('prepareSave', value, () => prepareSave(structuredClone(value)));
+
+export const encodeNativeAsync = (value: unknown) => processAsync('encodeNative', value, () => encodeNativeWire(value));
+export const hashNativeCommitsAsync = (value: Record<string, Commit>) => processAsync('hashNativeCommits', value, () => hashNativeCommits(value));
+export const decodeNativePartsAsync = <T>(value: Uint8Array[]) => processAsync('decodeNativeParts', value, () => decodeNativeParts<T>(value));
