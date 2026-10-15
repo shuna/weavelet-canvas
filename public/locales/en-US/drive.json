@@ -103,6 +103,14 @@
     "enterFolderName": "Enter a sync folder name."
   },
   "progress": {
+    "history": "Processing sync history",
+    "historyDetails": {
+      "scanning": "Checking sync history",
+      "replaying": "Applying sync history changes",
+      "resolving": "Checking sync history consistency",
+      "processed": "{{count}} entries checked (counting total)",
+      "entries": "{{done}} / {{total}} entries processed"
+    },
     "preparing": "Preparing local data",
     "key": "Preparing encryption key",
     "folder": "Creating encrypted folder",

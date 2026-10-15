@@ -1,11 +1,13 @@
 import { startSyncDiagnostics, finishSyncDiagnostics, recordSyncTransfer, type TransferPurpose } from './diagnostics';
 import { getSyncMetrics, resetSyncMetrics } from './metrics';
 import { create } from 'zustand';
+import type { HistoryProgress } from './replay';
 
-export type SyncPhase = 'preparing' | 'key' | 'folder' | 'checking' | 'downloading' | 'encrypting' | 'uploading' | 'saving' | 'verifying';
+export type SyncPhase = 'preparing' | 'key' | 'folder' | 'checking' | 'downloading' | 'encrypting' | 'uploading' | 'saving' | 'verifying' | 'history';
 const initial = () => ({
   overallProgress: 0,
   active: false, phase: 'preparing' as SyncPhase,
+  historyProgress: undefined as HistoryProgress | undefined,
   completedFiles: 0, totalFiles: undefined as number | undefined,
   completedBytes: 0, totalBytes: undefined as number | undefined,
   uploadedBytes: 0, downloadedBytes: 0, downloadedFiles: 0,
@@ -48,7 +50,7 @@ export async function syncStage<T>(index: number, total: number, work: () => Pro
   const span = (parent[1] - parent[0]) / total;
   stageRange = [parent[0] + index * span, parent[0] + (index + 1) * span];
   const end = stageRange[1];
-  useGoogleSyncProgress.setState({ totalFiles: undefined, totalBytes: undefined, completedFiles: 0, completedBytes: 0 });
+  useGoogleSyncProgress.setState({ totalFiles: undefined, totalBytes: undefined, completedFiles: 0, completedBytes: 0, historyProgress: undefined });
   advanceOverall(stageRange[0]);
   try {
     const result = await work();
@@ -63,6 +65,10 @@ function advanceOverall(value: number) {
   useGoogleSyncProgress.setState(s => ({ overallProgress: Math.max(s.overallProgress, Math.min(0.99, value)) }));
 }
 export function phaseProgress(progress: ReturnType<typeof useGoogleSyncProgress.getState>) {
+  if (progress.phase === 'history') {
+    const history = progress.historyProgress;
+    return history?.total ? Math.min(1, history.completed / history.total) : undefined;
+  }
   return progress.totalFiles !== undefined && progress.totalFiles > 0
     ? Math.min(1, progress.completedFiles / progress.totalFiles) : undefined;
 }
@@ -72,8 +78,14 @@ function advanceFiles() {
 }
 export function syncPhase(phase: SyncPhase, totalFiles?: number, totalBytes?: number, completedFiles = 0) {
   if (!useGoogleSyncProgress.getState().active) return;
-  useGoogleSyncProgress.setState({ phase, totalFiles, totalBytes, completedFiles, completedBytes: 0 });
+  useGoogleSyncProgress.setState({ phase, totalFiles, totalBytes, completedFiles, completedBytes: 0, historyProgress: undefined });
   advanceFiles();
+}
+export function syncHistoryProgress(historyProgress: HistoryProgress) {
+  if (!useGoogleSyncProgress.getState().active) return;
+  // History passes may repeat within a stage; only the stage's successful return advances overall progress.
+  useGoogleSyncProgress.setState({ phase: 'history', historyProgress,
+    totalFiles: undefined, totalBytes: undefined, completedFiles: 0, completedBytes: 0 });
 }
 export function completedFile(bytes: number) {
   if (!useGoogleSyncProgress.getState().active) return;

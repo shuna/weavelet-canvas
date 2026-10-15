@@ -1,13 +1,14 @@
 import { encode, decode } from './crypto';
 import { toRecords, fromRecords, hashRecords, sameSnapshot, type Snapshot, type Records } from './records';
 import { mergeSyncMetrics } from './metrics';
-import { hashCommits, replayHistory, type Commit } from './replay';
+import { collectHistory, hashCommits, replayHistory, type Commit, type HistoryProgress } from './replay';
+import { syncHistoryProgress } from './progress';
 import { decodeParts } from './decodeParts';
 import { SyncConflictError } from './records';
 import { prepareHydratedData } from '../../rehydrateData';
 import { prepareSave } from '../prepareSave';
 
-type Request = { resolve: (value: any) => void; reject: (error: unknown) => void };
+type Request = { resolve: (value: any) => void; reject: (error: unknown) => void; onProgress?: (progress: HistoryProgress) => void };
 let worker: Worker | undefined;
 let requestId = 0;
 const requests = new Map<number, Request>();
@@ -26,6 +27,7 @@ const getWorker = () => {
   instance.onmessage = ({ data }) => {
     const request = requests.get(data.id);
     if (!request) return;
+    if (data.progress) { request.onProgress?.(data.progress); return; }
     requests.delete(data.id);
     mergeSyncMetrics(data.metrics);
     if (data.conflictKeys) request.reject(new SyncConflictError(data.conflictKeys));
@@ -38,11 +40,11 @@ const getWorker = () => {
 
 // Keep whole-snapshot CPU work off the UI thread. Only environments without Workers
 // (including unit tests) use the same implementations directly.
-function processAsync<T>(operation: string, value: unknown, fallback: () => T | Promise<T>): Promise<T> {
+function processAsync<T>(operation: string, value: unknown, fallback: () => T | Promise<T>, onProgress?: Request['onProgress']): Promise<T> {
   if (typeof Worker === 'undefined') return Promise.resolve().then(fallback);
   return new Promise((resolve, reject) => {
     const id = requestId++;
-    requests.set(id, { resolve, reject });
+    requests.set(id, { resolve, reject, onProgress });
     // Do not transfer input buffers: the immutable encoded commit remains available
     // to the durable outbox/cache and must survive a worker failure unchanged.
     try { getWorker().postMessage({ id, operation, value }); }
@@ -57,7 +59,8 @@ export const fromRecordsAsync = (value: Records) => processAsync('fromRecords', 
 export const hashRecordsAsync = (value: Records) => processAsync('hashRecords', value, () => hashRecords(value));
 export const hashCommitsAsync = (value: Record<string, Commit>) => processAsync('hashCommits', value, () => hashCommits(value));
 export const sameSnapshotAsync = (a: Snapshot, b: Snapshot) => processAsync('sameSnapshot', [a, b], () => sameSnapshot([a, b]));
-export const replayHistoryAsync = (value: Parameters<typeof replayHistory>[0]) => processAsync('replayHistory', value, () => replayHistory(value));
+export const replayHistoryAsync = (value: Parameters<typeof replayHistory>[0]) => processAsync('replayHistory', value, () => replayHistory(value, syncHistoryProgress), syncHistoryProgress);
+export const collectHistoryAsync = (value: Parameters<typeof collectHistory>[0]) => processAsync('collectHistory', value, () => collectHistory(value, syncHistoryProgress), syncHistoryProgress);
 export const decodePartsAsync = <T>(value: Uint8Array[]) => processAsync('decodeParts', value, () => decodeParts<T>(value));
 export const prepareHydratedDataAsync = (value: Parameters<typeof prepareHydratedData>[0]) => processAsync('prepareHydratedData', value, () => prepareHydratedData(structuredClone(value)));
 export const prepareSaveAsync = (value: Parameters<typeof prepareSave>[0]) => processAsync('prepareSave', value, () => prepareSave(structuredClone(value)));
