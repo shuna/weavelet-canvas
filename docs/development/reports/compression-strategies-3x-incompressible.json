@@ -1,0 +1,1242 @@
+{
+  "createdAt": "2026-10-15T21:08:47.276Z",
+  "config": {
+    "smoke": false,
+    "transport": true,
+    "profile": "incompressible",
+    "bodyBytes": 5300,
+    "editBodyBytes": 5300,
+    "strategies": [
+      "whole-gzip",
+      "split-body-gzip-meta-gzip"
+    ],
+    "injectFailure": "",
+    "repetitions": 1,
+    "scale": 3,
+    "seed": 12345
+  },
+  "complete": true,
+  "allCandidatesSucceeded": true,
+  "candidateFailures": 0,
+  "componentFailures": [],
+  "cases": [
+    {
+      "profile": "incompressible",
+      "workload": "initial",
+      "repetition": 0,
+      "snapshotBytes": 182348340,
+      "generationMs": 2322.100000143051,
+      "projectionMs": 627.5,
+      "wholeSerializeMs": 217.10000014305115,
+      "nativeHashMs": 673,
+      "nativeHashWorkerRoundTripMs": 797.1000001430511,
+      "metadataRecordKinds": [
+        {
+          "kind": "chats/branchTree/contentHash",
+          "bytes": 2130174,
+          "records": 11172
+        },
+        {
+          "kind": "chats/branchTree/createdAt",
+          "bytes": 1493370,
+          "records": 11172
+        },
+        {
+          "kind": "chats/config/",
+          "bytes": 1467828,
+          "records": 14310
+        },
+        {
+          "kind": "chats/branchTree/parentId",
+          "bytes": 1453281,
+          "records": 11172
+        },
+        {
+          "kind": "chats/branchTree/role",
+          "bytes": 1409565,
+          "records": 11172
+        },
+        {
+          "kind": "chats/branchTree/id",
+          "bytes": 1392006,
+          "records": 11172
+        },
+        {
+          "kind": "content",
+          "bytes": 707072,
+          "records": 5524
+        },
+        {
+          "kind": "chats/title/",
+          "bytes": 293706,
+          "records": 2385
+        },
+        {
+          "kind": "chats/id/",
+          "bytes": 250776,
+          "records": 2385
+        },
+        {
+          "kind": "chats/imageDetail/",
+          "bytes": 230328,
+          "records": 2385
+        },
+        {
+          "kind": "chats/titleSet/",
+          "bytes": 213633,
+          "records": 2385
+        },
+        {
+          "kind": "chats/messages/",
+          "bytes": 208662,
+          "records": 2166
+        }
+      ],
+      "partitionMs": 311.39999985694885,
+      "metaSerializeMs": 16.100000143051147,
+      "bodySerializeMs": 61.19999980926514,
+      "stats": {
+        "recordCount": 87841,
+        "bodyRecordCount": 7690,
+        "metadataRecordCount": 80151,
+        "contentRecordCount": 5524,
+        "assetRecordCount": 0,
+        "legacyBodyRecordCount": 2166,
+        "bodyValueUtf8Bytes": 180203240,
+        "logicalJsonBytes": 192107455,
+        "metadataJsonBytes": 11549417,
+        "bodyJsonBytes": 180664589,
+        "bodyReferenceJsonBytes": 98860,
+        "jsonWrapperBytes": 76,
+        "jsonTotalBytes": 192214082,
+        "legacyInlineFieldsRemainInBody": true
+      },
+      "components": {
+        "whole": {
+          "gzip": {
+            "status": "ok",
+            "rawBytes": 192107455,
+            "compressedBytes": 136048665,
+            "encodeMs": 3023.0999999046326,
+            "decodeMs": 721.3999998569489,
+            "encodeWorkerRoundTripMs": 3062.5,
+            "decodeWorkerRoundTripMs": 797.9000000953674,
+            "exactJsonRoundtrip": true
+          }
+        },
+        "metadata": {
+          "gzip": {
+            "status": "ok",
+            "rawBytes": 11549417,
+            "compressedBytes": 1080806,
+            "encodeMs": 66.29999995231628,
+            "decodeMs": 26.700000047683716,
+            "encodeWorkerRoundTripMs": 68.10000014305115,
+            "decodeWorkerRoundTripMs": 30.399999856948853,
+            "exactJsonRoundtrip": true
+          }
+        },
+        "bodies": {
+          "gzip": {
+            "status": "ok",
+            "rawBytes": 180664589,
+            "compressedBytes": 134477614,
+            "encodeMs": 2923,
+            "decodeMs": 674.5,
+            "encodeWorkerRoundTripMs": 2958.800000190735,
+            "decodeWorkerRoundTripMs": 737.8999998569489,
+            "exactJsonRoundtrip": true
+          }
+        }
+      },
+      "candidates": [
+        {
+          "name": "whole-gzip",
+          "whole": "gzip",
+          "status": "ok",
+          "compressedPayloadBytes": 136048665,
+          "binaryHeaderBytes": 20,
+          "framedBytes": 136048685,
+          "dataParts": 130,
+          "modeledDataAesOverheadBytes": 3640,
+          "modeledDataCiphertextBytes": 136052325,
+          "actualTransport": {
+            "encryptMs": 69.70000004768372,
+            "decryptMs": 72.20000076293945,
+            "writeMs": 97.40000009536743,
+            "readMs": 62.09999990463257,
+            "ciphertextBytes": 136053787,
+            "payloadCiphertextBytes": 136052325,
+            "manifestPlainBytes": 1434,
+            "manifestCiphertextBytes": 1462,
+            "parts": 130,
+            "fileCount": 131
+          },
+          "transportObservedMs": 510.7999999523163,
+          "transportModelMs": 301.40000081062317,
+          "encryptedTransferBytes": 136053787,
+          "preparationMs": 217.10000014305115,
+          "encodeMs": 3023.0999999046326,
+          "decodeMs": 721.3999998569489,
+          "workerCodecMs": 3860.4000000953674,
+          "frameAssemblyMs": 10.299999952316284,
+          "restoreMs": 112.30000019073486,
+          "cpuAndLocalMs": 5298.600001335144,
+          "separateManifest": true,
+          "nativeHashIncluded": true,
+          "exactLogicalRoundtrip": true,
+          "networkModels": [
+            {
+              "mbps": 10,
+              "rttMs": 0,
+              "concurrency": 2,
+              "wavesPerDirection": 66,
+              "rttOverheadMs": 0,
+              "uploadMs": 108843.0296,
+              "downloadMs": 108843.0296,
+              "totalMs": 222984.65920133513
+            },
+            {
+              "mbps": 50,
+              "rttMs": 0,
+              "concurrency": 2,
+              "wavesPerDirection": 66,
+              "rttOverheadMs": 0,
+              "uploadMs": 21768.60592,
+              "downloadMs": 21768.60592,
+              "totalMs": 48835.81184133515
+            },
+            {
+              "mbps": 100,
+              "rttMs": 0,
+              "concurrency": 2,
+              "wavesPerDirection": 66,
+              "rttOverheadMs": 0,
+              "uploadMs": 10884.30296,
+              "downloadMs": 10884.30296,
+              "totalMs": 27067.205921335146
+            },
+            {
+              "mbps": 10,
+              "rttMs": 100,
+              "concurrency": 2,
+              "wavesPerDirection": 66,
+              "rttOverheadMs": 13200,
+              "uploadMs": 108843.0296,
+              "downloadMs": 108843.0296,
+              "totalMs": 236184.65920133513
+            },
+            {
+              "mbps": 50,
+              "rttMs": 100,
+              "concurrency": 2,
+              "wavesPerDirection": 66,
+              "rttOverheadMs": 13200,
+              "uploadMs": 21768.60592,
+              "downloadMs": 21768.60592,
+              "totalMs": 62035.81184133515
+            },
+            {
+              "mbps": 100,
+              "rttMs": 100,
+              "concurrency": 2,
+              "wavesPerDirection": 66,
+              "rttOverheadMs": 13200,
+              "uploadMs": 10884.30296,
+              "downloadMs": 10884.30296,
+              "totalMs": 40267.205921335146
+            }
+          ]
+        },
+        {
+          "name": "split-body-gzip-meta-gzip",
+          "body": "gzip",
+          "meta": "gzip",
+          "status": "ok",
+          "compressedPayloadBytes": 135558420,
+          "binaryHeaderBytes": 20,
+          "framedBytes": 135558440,
+          "dataParts": 130,
+          "modeledDataAesOverheadBytes": 3640,
+          "modeledDataCiphertextBytes": 135562080,
+          "actualTransport": {
+            "encryptMs": 75.79999995231628,
+            "decryptMs": 74.50000047683716,
+            "writeMs": 100.79999995231628,
+            "readMs": 64.59999990463257,
+            "ciphertextBytes": 135563542,
+            "payloadCiphertextBytes": 135562080,
+            "manifestPlainBytes": 1434,
+            "manifestCiphertextBytes": 1462,
+            "parts": 130,
+            "fileCount": 131
+          },
+          "transportObservedMs": 526.1000001430511,
+          "transportModelMs": 315.7000002861023,
+          "encryptedTransferBytes": 135563542,
+          "preparationMs": 388.69999980926514,
+          "encodeMs": 2989.2999999523163,
+          "decodeMs": 701.2000000476837,
+          "workerCodecMs": 3795.2000000476837,
+          "frameAssemblyMs": 10.799999952316284,
+          "restoreMs": 193.39999985694885,
+          "cpuAndLocalMs": 5500.900000095367,
+          "separateManifest": true,
+          "nativeHashIncluded": true,
+          "exactLogicalRoundtrip": true,
+          "networkModels": [
+            {
+              "mbps": 10,
+              "rttMs": 0,
+              "concurrency": 2,
+              "wavesPerDirection": 66,
+              "rttOverheadMs": 0,
+              "uploadMs": 108450.8336,
+              "downloadMs": 108450.8336,
+              "totalMs": 222402.56720009536
+            },
+            {
+              "mbps": 50,
+              "rttMs": 0,
+              "concurrency": 2,
+              "wavesPerDirection": 66,
+              "rttOverheadMs": 0,
+              "uploadMs": 21690.16672,
+              "downloadMs": 21690.16672,
+              "totalMs": 48881.23344009537
+            },
+            {
+              "mbps": 100,
+              "rttMs": 0,
+              "concurrency": 2,
+              "wavesPerDirection": 66,
+              "rttOverheadMs": 0,
+              "uploadMs": 10845.08336,
+              "downloadMs": 10845.08336,
+              "totalMs": 27191.06672009537
+            },
+            {
+              "mbps": 10,
+              "rttMs": 100,
+              "concurrency": 2,
+              "wavesPerDirection": 66,
+              "rttOverheadMs": 13200,
+              "uploadMs": 108450.8336,
+              "downloadMs": 108450.8336,
+              "totalMs": 235602.56720009536
+            },
+            {
+              "mbps": 50,
+              "rttMs": 100,
+              "concurrency": 2,
+              "wavesPerDirection": 66,
+              "rttOverheadMs": 13200,
+              "uploadMs": 21690.16672,
+              "downloadMs": 21690.16672,
+              "totalMs": 62081.23344009537
+            },
+            {
+              "mbps": 100,
+              "rttMs": 100,
+              "concurrency": 2,
+              "wavesPerDirection": 66,
+              "rttOverheadMs": 13200,
+              "uploadMs": 10845.08336,
+              "downloadMs": 10845.08336,
+              "totalMs": 40391.06672009537
+            }
+          ]
+        }
+      ],
+      "breakEven": [
+        {
+          "left": "whole-gzip",
+          "right": "split-body-gzip-meta-gzip",
+          "symmetricMbps": 38.773702659766336,
+          "rtt100SymmetricMbps": 38.773702659766336,
+          "paretoDominant": null
+        }
+      ],
+      "workerStarts": 1
+    },
+    {
+      "profile": "incompressible",
+      "workload": "title-edit",
+      "repetition": 0,
+      "snapshotBytes": 182348340,
+      "generationMs": 2322.100000143051,
+      "projectionMs": 627.5,
+      "wholeSerializeMs": 0,
+      "nativeHashMs": 0.09999990463256836,
+      "nativeHashWorkerRoundTripMs": 0.2999999523162842,
+      "metadataRecordKinds": [
+        {
+          "kind": "chats/title/",
+          "bytes": 167,
+          "records": 1
+        }
+      ],
+      "partitionMs": 0.09999990463256836,
+      "metaSerializeMs": 0,
+      "bodySerializeMs": 0,
+      "stats": {
+        "recordCount": 1,
+        "bodyRecordCount": 0,
+        "metadataRecordCount": 1,
+        "contentRecordCount": 0,
+        "assetRecordCount": 0,
+        "legacyBodyRecordCount": 0,
+        "bodyValueUtf8Bytes": 0,
+        "logicalJsonBytes": 215,
+        "metadataJsonBytes": 215,
+        "bodyJsonBytes": 2,
+        "bodyReferenceJsonBytes": 0,
+        "jsonWrapperBytes": 76,
+        "jsonTotalBytes": 293,
+        "legacyInlineFieldsRemainInBody": true
+      },
+      "components": {
+        "whole": {
+          "gzip": {
+            "status": "ok",
+            "rawBytes": 215,
+            "compressedBytes": 182,
+            "encodeMs": 0.39999985694885254,
+            "decodeMs": 0.2999999523162842,
+            "encodeWorkerRoundTripMs": 0.5,
+            "decodeWorkerRoundTripMs": 0.2999999523162842,
+            "exactJsonRoundtrip": true
+          }
+        },
+        "metadata": {
+          "gzip": {
+            "status": "ok",
+            "rawBytes": 215,
+            "compressedBytes": 182,
+            "encodeMs": 0.20000004768371582,
+            "decodeMs": 0.20000004768371582,
+            "encodeWorkerRoundTripMs": 0.3000001907348633,
+            "decodeWorkerRoundTripMs": 0.2999999523162842,
+            "exactJsonRoundtrip": true
+          }
+        },
+        "bodies": {
+          "gzip": {
+            "status": "ok",
+            "rawBytes": 2,
+            "compressedBytes": 22,
+            "encodeMs": 0.20000004768371582,
+            "decodeMs": 0.10000014305114746,
+            "encodeWorkerRoundTripMs": 0.20000004768371582,
+            "decodeWorkerRoundTripMs": 0.2999999523162842,
+            "exactJsonRoundtrip": true
+          }
+        }
+      },
+      "candidates": [
+        {
+          "name": "whole-gzip",
+          "whole": "gzip",
+          "status": "ok",
+          "compressedPayloadBytes": 182,
+          "binaryHeaderBytes": 20,
+          "framedBytes": 202,
+          "dataParts": 1,
+          "modeledDataAesOverheadBytes": 28,
+          "modeledDataCiphertextBytes": 230,
+          "actualTransport": {
+            "encryptMs": 0.09999990463256836,
+            "decryptMs": 0,
+            "writeMs": 0.5,
+            "readMs": 0.20000004768371582,
+            "ciphertextBytes": 375,
+            "payloadCiphertextBytes": 230,
+            "manifestPlainBytes": 117,
+            "manifestCiphertextBytes": 145,
+            "parts": 1,
+            "fileCount": 2
+          },
+          "transportObservedMs": 1.2000000476837158,
+          "transportModelMs": 0.7999999523162842,
+          "encryptedTransferBytes": 375,
+          "preparationMs": 0,
+          "encodeMs": 0.39999985694885254,
+          "decodeMs": 0.2999999523162842,
+          "workerCodecMs": 0.7999999523162842,
+          "frameAssemblyMs": 0,
+          "restoreMs": 0,
+          "cpuAndLocalMs": 1.8999998569488525,
+          "separateManifest": true,
+          "nativeHashIncluded": true,
+          "exactLogicalRoundtrip": true,
+          "networkModels": [
+            {
+              "mbps": 10,
+              "rttMs": 0,
+              "concurrency": 2,
+              "wavesPerDirection": 2,
+              "rttOverheadMs": 0,
+              "uploadMs": 0.3,
+              "downloadMs": 0.3,
+              "totalMs": 2.4999998569488526
+            },
+            {
+              "mbps": 50,
+              "rttMs": 0,
+              "concurrency": 2,
+              "wavesPerDirection": 2,
+              "rttOverheadMs": 0,
+              "uploadMs": 0.06,
+              "downloadMs": 0.06,
+              "totalMs": 2.0199998569488526
+            },
+            {
+              "mbps": 100,
+              "rttMs": 0,
+              "concurrency": 2,
+              "wavesPerDirection": 2,
+              "rttOverheadMs": 0,
+              "uploadMs": 0.03,
+              "downloadMs": 0.03,
+              "totalMs": 1.9599998569488526
+            },
+            {
+              "mbps": 10,
+              "rttMs": 100,
+              "concurrency": 2,
+              "wavesPerDirection": 2,
+              "rttOverheadMs": 400,
+              "uploadMs": 0.3,
+              "downloadMs": 0.3,
+              "totalMs": 402.4999998569489
+            },
+            {
+              "mbps": 50,
+              "rttMs": 100,
+              "concurrency": 2,
+              "wavesPerDirection": 2,
+              "rttOverheadMs": 400,
+              "uploadMs": 0.06,
+              "downloadMs": 0.06,
+              "totalMs": 402.01999985694886
+            },
+            {
+              "mbps": 100,
+              "rttMs": 100,
+              "concurrency": 2,
+              "wavesPerDirection": 2,
+              "rttOverheadMs": 400,
+              "uploadMs": 0.03,
+              "downloadMs": 0.03,
+              "totalMs": 401.95999985694885
+            }
+          ]
+        },
+        {
+          "name": "split-body-gzip-meta-gzip",
+          "body": "gzip",
+          "meta": "gzip",
+          "status": "ok",
+          "compressedPayloadBytes": 204,
+          "binaryHeaderBytes": 20,
+          "framedBytes": 224,
+          "dataParts": 1,
+          "modeledDataAesOverheadBytes": 28,
+          "modeledDataCiphertextBytes": 252,
+          "actualTransport": {
+            "encryptMs": 0,
+            "decryptMs": 0.10000014305114746,
+            "writeMs": 0.20000004768371582,
+            "readMs": 0.19999980926513672,
+            "ciphertextBytes": 397,
+            "payloadCiphertextBytes": 252,
+            "manifestPlainBytes": 117,
+            "manifestCiphertextBytes": 145,
+            "parts": 1,
+            "fileCount": 2
+          },
+          "transportObservedMs": 0.7000000476837158,
+          "transportModelMs": 0.5,
+          "encryptedTransferBytes": 397,
+          "preparationMs": 0.09999990463256836,
+          "encodeMs": 0.40000009536743164,
+          "decodeMs": 0.3000001907348633,
+          "workerCodecMs": 1.1000001430511475,
+          "frameAssemblyMs": 0,
+          "restoreMs": 0,
+          "cpuAndLocalMs": 2,
+          "separateManifest": true,
+          "nativeHashIncluded": true,
+          "exactLogicalRoundtrip": true,
+          "networkModels": [
+            {
+              "mbps": 10,
+              "rttMs": 0,
+              "concurrency": 2,
+              "wavesPerDirection": 2,
+              "rttOverheadMs": 0,
+              "uploadMs": 0.3176,
+              "downloadMs": 0.3176,
+              "totalMs": 2.6352
+            },
+            {
+              "mbps": 50,
+              "rttMs": 0,
+              "concurrency": 2,
+              "wavesPerDirection": 2,
+              "rttOverheadMs": 0,
+              "uploadMs": 0.06352,
+              "downloadMs": 0.06352,
+              "totalMs": 2.12704
+            },
+            {
+              "mbps": 100,
+              "rttMs": 0,
+              "concurrency": 2,
+              "wavesPerDirection": 2,
+              "rttOverheadMs": 0,
+              "uploadMs": 0.03176,
+              "downloadMs": 0.03176,
+              "totalMs": 2.06352
+            },
+            {
+              "mbps": 10,
+              "rttMs": 100,
+              "concurrency": 2,
+              "wavesPerDirection": 2,
+              "rttOverheadMs": 400,
+              "uploadMs": 0.3176,
+              "downloadMs": 0.3176,
+              "totalMs": 402.6352
+            },
+            {
+              "mbps": 50,
+              "rttMs": 100,
+              "concurrency": 2,
+              "wavesPerDirection": 2,
+              "rttOverheadMs": 400,
+              "uploadMs": 0.06352,
+              "downloadMs": 0.06352,
+              "totalMs": 402.12704
+            },
+            {
+              "mbps": 100,
+              "rttMs": 100,
+              "concurrency": 2,
+              "wavesPerDirection": 2,
+              "rttOverheadMs": 400,
+              "uploadMs": 0.03176,
+              "downloadMs": 0.03176,
+              "totalMs": 402.06352
+            }
+          ]
+        }
+      ],
+      "breakEven": [
+        {
+          "left": "whole-gzip",
+          "right": "split-body-gzip-meta-gzip",
+          "symmetricMbps": null,
+          "rtt100SymmetricMbps": null,
+          "paretoDominant": "whole-gzip"
+        }
+      ],
+      "workerStarts": 1
+    },
+    {
+      "profile": "incompressible",
+      "workload": "tree-body-edit",
+      "repetition": 0,
+      "snapshotBytes": 182348340,
+      "generationMs": 2322.100000143051,
+      "projectionMs": 627.5,
+      "wholeSerializeMs": 0,
+      "nativeHashMs": 0.09999990463256836,
+      "nativeHashWorkerRoundTripMs": 0.19999980926513672,
+      "metadataRecordKinds": [
+        {
+          "kind": "chats/branchTree/contentHash",
+          "bytes": 251,
+          "records": 1
+        },
+        {
+          "kind": "content",
+          "bytes": 125,
+          "records": 1
+        }
+      ],
+      "partitionMs": 0,
+      "metaSerializeMs": 0,
+      "bodySerializeMs": 0,
+      "stats": {
+        "recordCount": 2,
+        "bodyRecordCount": 1,
+        "metadataRecordCount": 1,
+        "contentRecordCount": 1,
+        "assetRecordCount": 0,
+        "legacyBodyRecordCount": 0,
+        "bodyValueUtf8Bytes": 5349,
+        "logicalJsonBytes": 5774,
+        "metadataJsonBytes": 425,
+        "bodyJsonBytes": 5361,
+        "bodyReferenceJsonBytes": 10,
+        "jsonWrapperBytes": 76,
+        "jsonTotalBytes": 5862,
+        "legacyInlineFieldsRemainInBody": true
+      },
+      "components": {
+        "whole": {
+          "gzip": {
+            "status": "ok",
+            "rawBytes": 5774,
+            "compressedBytes": 4343,
+            "encodeMs": 0.40000009536743164,
+            "decodeMs": 0.2999999523162842,
+            "encodeWorkerRoundTripMs": 0.40000009536743164,
+            "decodeWorkerRoundTripMs": 0.2999999523162842,
+            "exactJsonRoundtrip": true
+          }
+        },
+        "metadata": {
+          "gzip": {
+            "status": "ok",
+            "rawBytes": 425,
+            "compressedBytes": 259,
+            "encodeMs": 0.20000004768371582,
+            "decodeMs": 0.09999990463256836,
+            "encodeWorkerRoundTripMs": 0.40000009536743164,
+            "decodeWorkerRoundTripMs": 0.09999990463256836,
+            "exactJsonRoundtrip": true
+          }
+        },
+        "bodies": {
+          "gzip": {
+            "status": "ok",
+            "rawBytes": 5361,
+            "compressedBytes": 4090,
+            "encodeMs": 0.2999999523162842,
+            "decodeMs": 0.2999999523162842,
+            "encodeWorkerRoundTripMs": 0.2999999523162842,
+            "decodeWorkerRoundTripMs": 0.2999999523162842,
+            "exactJsonRoundtrip": true
+          }
+        }
+      },
+      "candidates": [
+        {
+          "name": "whole-gzip",
+          "whole": "gzip",
+          "status": "ok",
+          "compressedPayloadBytes": 4343,
+          "binaryHeaderBytes": 20,
+          "framedBytes": 4363,
+          "dataParts": 1,
+          "modeledDataAesOverheadBytes": 28,
+          "modeledDataCiphertextBytes": 4391,
+          "actualTransport": {
+            "encryptMs": 0,
+            "decryptMs": 0,
+            "writeMs": 0.20000004768371582,
+            "readMs": 0.2999999523162842,
+            "ciphertextBytes": 4537,
+            "payloadCiphertextBytes": 4391,
+            "manifestPlainBytes": 118,
+            "manifestCiphertextBytes": 146,
+            "parts": 1,
+            "fileCount": 2
+          },
+          "transportObservedMs": 1,
+          "transportModelMs": 0.5,
+          "encryptedTransferBytes": 4537,
+          "preparationMs": 0,
+          "encodeMs": 0.40000009536743164,
+          "decodeMs": 0.2999999523162842,
+          "workerCodecMs": 0.7000000476837158,
+          "frameAssemblyMs": 0,
+          "restoreMs": 0,
+          "cpuAndLocalMs": 1.3999998569488525,
+          "separateManifest": true,
+          "nativeHashIncluded": true,
+          "exactLogicalRoundtrip": true,
+          "networkModels": [
+            {
+              "mbps": 10,
+              "rttMs": 0,
+              "concurrency": 2,
+              "wavesPerDirection": 2,
+              "rttOverheadMs": 0,
+              "uploadMs": 3.6296,
+              "downloadMs": 3.6296,
+              "totalMs": 8.659199856948852
+            },
+            {
+              "mbps": 50,
+              "rttMs": 0,
+              "concurrency": 2,
+              "wavesPerDirection": 2,
+              "rttOverheadMs": 0,
+              "uploadMs": 0.72592,
+              "downloadMs": 0.72592,
+              "totalMs": 2.8518398569488523
+            },
+            {
+              "mbps": 100,
+              "rttMs": 0,
+              "concurrency": 2,
+              "wavesPerDirection": 2,
+              "rttOverheadMs": 0,
+              "uploadMs": 0.36296,
+              "downloadMs": 0.36296,
+              "totalMs": 2.1259198569488524
+            },
+            {
+              "mbps": 10,
+              "rttMs": 100,
+              "concurrency": 2,
+              "wavesPerDirection": 2,
+              "rttOverheadMs": 400,
+              "uploadMs": 3.6296,
+              "downloadMs": 3.6296,
+              "totalMs": 408.6591998569489
+            },
+            {
+              "mbps": 50,
+              "rttMs": 100,
+              "concurrency": 2,
+              "wavesPerDirection": 2,
+              "rttOverheadMs": 400,
+              "uploadMs": 0.72592,
+              "downloadMs": 0.72592,
+              "totalMs": 402.85183985694886
+            },
+            {
+              "mbps": 100,
+              "rttMs": 100,
+              "concurrency": 2,
+              "wavesPerDirection": 2,
+              "rttOverheadMs": 400,
+              "uploadMs": 0.36296,
+              "downloadMs": 0.36296,
+              "totalMs": 402.1259198569488
+            }
+          ]
+        },
+        {
+          "name": "split-body-gzip-meta-gzip",
+          "body": "gzip",
+          "meta": "gzip",
+          "status": "ok",
+          "compressedPayloadBytes": 4349,
+          "binaryHeaderBytes": 20,
+          "framedBytes": 4369,
+          "dataParts": 1,
+          "modeledDataAesOverheadBytes": 28,
+          "modeledDataCiphertextBytes": 4397,
+          "actualTransport": {
+            "encryptMs": 0,
+            "decryptMs": 0.09999990463256836,
+            "writeMs": 0.2999999523162842,
+            "readMs": 0.20000004768371582,
+            "ciphertextBytes": 4543,
+            "payloadCiphertextBytes": 4397,
+            "manifestPlainBytes": 118,
+            "manifestCiphertextBytes": 146,
+            "parts": 1,
+            "fileCount": 2
+          },
+          "transportObservedMs": 0.7999999523162842,
+          "transportModelMs": 0.5999999046325684,
+          "encryptedTransferBytes": 4543,
+          "preparationMs": 0,
+          "encodeMs": 0.5,
+          "decodeMs": 0.39999985694885254,
+          "workerCodecMs": 1.0999999046325684,
+          "frameAssemblyMs": 0,
+          "restoreMs": 0,
+          "cpuAndLocalMs": 1.8999996185302734,
+          "separateManifest": true,
+          "nativeHashIncluded": true,
+          "exactLogicalRoundtrip": true,
+          "networkModels": [
+            {
+              "mbps": 10,
+              "rttMs": 0,
+              "concurrency": 2,
+              "wavesPerDirection": 2,
+              "rttOverheadMs": 0,
+              "uploadMs": 3.6344,
+              "downloadMs": 3.6344,
+              "totalMs": 9.168799618530272
+            },
+            {
+              "mbps": 50,
+              "rttMs": 0,
+              "concurrency": 2,
+              "wavesPerDirection": 2,
+              "rttOverheadMs": 0,
+              "uploadMs": 0.72688,
+              "downloadMs": 0.72688,
+              "totalMs": 3.3537596185302734
+            },
+            {
+              "mbps": 100,
+              "rttMs": 0,
+              "concurrency": 2,
+              "wavesPerDirection": 2,
+              "rttOverheadMs": 0,
+              "uploadMs": 0.36344,
+              "downloadMs": 0.36344,
+              "totalMs": 2.6268796185302734
+            },
+            {
+              "mbps": 10,
+              "rttMs": 100,
+              "concurrency": 2,
+              "wavesPerDirection": 2,
+              "rttOverheadMs": 400,
+              "uploadMs": 3.6344,
+              "downloadMs": 3.6344,
+              "totalMs": 409.1687996185303
+            },
+            {
+              "mbps": 50,
+              "rttMs": 100,
+              "concurrency": 2,
+              "wavesPerDirection": 2,
+              "rttOverheadMs": 400,
+              "uploadMs": 0.72688,
+              "downloadMs": 0.72688,
+              "totalMs": 403.35375961853026
+            },
+            {
+              "mbps": 100,
+              "rttMs": 100,
+              "concurrency": 2,
+              "wavesPerDirection": 2,
+              "rttOverheadMs": 400,
+              "uploadMs": 0.36344,
+              "downloadMs": 0.36344,
+              "totalMs": 402.62687961853027
+            }
+          ]
+        }
+      ],
+      "breakEven": [
+        {
+          "left": "whole-gzip",
+          "right": "split-body-gzip-meta-gzip",
+          "symmetricMbps": null,
+          "rtt100SymmetricMbps": null,
+          "paretoDominant": "whole-gzip"
+        }
+      ],
+      "workerStarts": 1
+    },
+    {
+      "profile": "incompressible",
+      "workload": "legacy-array-edit",
+      "repetition": 0,
+      "snapshotBytes": 182348340,
+      "generationMs": 2322.100000143051,
+      "projectionMs": 627.5,
+      "wholeSerializeMs": 0,
+      "nativeHashMs": 0.39999985694885254,
+      "nativeHashWorkerRoundTripMs": 0.5,
+      "metadataRecordKinds": [
+        {
+          "kind": "chats/messages/",
+          "bytes": 154,
+          "records": 1
+        }
+      ],
+      "partitionMs": 0,
+      "metaSerializeMs": 0,
+      "bodySerializeMs": 0,
+      "stats": {
+        "recordCount": 1,
+        "bodyRecordCount": 1,
+        "metadataRecordCount": 0,
+        "contentRecordCount": 0,
+        "assetRecordCount": 0,
+        "legacyBodyRecordCount": 1,
+        "bodyValueUtf8Bytes": 69655,
+        "logicalJsonBytes": 70031,
+        "metadataJsonBytes": 202,
+        "bodyJsonBytes": 69841,
+        "bodyReferenceJsonBytes": 10,
+        "jsonWrapperBytes": 76,
+        "jsonTotalBytes": 70119,
+        "legacyInlineFieldsRemainInBody": true
+      },
+      "components": {
+        "whole": {
+          "gzip": {
+            "status": "ok",
+            "rawBytes": 70031,
+            "compressedBytes": 52262,
+            "encodeMs": 1.3999998569488525,
+            "decodeMs": 0.6000001430511475,
+            "encodeWorkerRoundTripMs": 1.5,
+            "decodeWorkerRoundTripMs": 0.6000001430511475,
+            "exactJsonRoundtrip": true
+          }
+        },
+        "metadata": {
+          "gzip": {
+            "status": "ok",
+            "rawBytes": 202,
+            "compressedBytes": 174,
+            "encodeMs": 0.20000004768371582,
+            "decodeMs": 0.20000004768371582,
+            "encodeWorkerRoundTripMs": 0.20000004768371582,
+            "decodeWorkerRoundTripMs": 0.2999999523162842,
+            "exactJsonRoundtrip": true
+          }
+        },
+        "bodies": {
+          "gzip": {
+            "status": "ok",
+            "rawBytes": 69841,
+            "compressedBytes": 52109,
+            "encodeMs": 1.3999998569488525,
+            "decodeMs": 0.5,
+            "encodeWorkerRoundTripMs": 1.3999998569488525,
+            "decodeWorkerRoundTripMs": 0.6000001430511475,
+            "exactJsonRoundtrip": true
+          }
+        }
+      },
+      "candidates": [
+        {
+          "name": "whole-gzip",
+          "whole": "gzip",
+          "status": "ok",
+          "compressedPayloadBytes": 52262,
+          "binaryHeaderBytes": 20,
+          "framedBytes": 52282,
+          "dataParts": 1,
+          "modeledDataAesOverheadBytes": 28,
+          "modeledDataCiphertextBytes": 52310,
+          "actualTransport": {
+            "encryptMs": 0,
+            "decryptMs": 0.09999990463256836,
+            "writeMs": 0.5,
+            "readMs": 0.2999999523162842,
+            "ciphertextBytes": 52457,
+            "payloadCiphertextBytes": 52310,
+            "manifestPlainBytes": 119,
+            "manifestCiphertextBytes": 147,
+            "parts": 1,
+            "fileCount": 2
+          },
+          "transportObservedMs": 1.1999998092651367,
+          "transportModelMs": 0.8999998569488525,
+          "encryptedTransferBytes": 52457,
+          "preparationMs": 0,
+          "encodeMs": 1.3999998569488525,
+          "decodeMs": 0.6000001430511475,
+          "workerCodecMs": 2.1000001430511475,
+          "frameAssemblyMs": 0,
+          "restoreMs": 0,
+          "cpuAndLocalMs": 3.5,
+          "separateManifest": true,
+          "nativeHashIncluded": true,
+          "exactLogicalRoundtrip": true,
+          "networkModels": [
+            {
+              "mbps": 10,
+              "rttMs": 0,
+              "concurrency": 2,
+              "wavesPerDirection": 2,
+              "rttOverheadMs": 0,
+              "uploadMs": 41.9656,
+              "downloadMs": 41.9656,
+              "totalMs": 87.4312
+            },
+            {
+              "mbps": 50,
+              "rttMs": 0,
+              "concurrency": 2,
+              "wavesPerDirection": 2,
+              "rttOverheadMs": 0,
+              "uploadMs": 8.39312,
+              "downloadMs": 8.39312,
+              "totalMs": 20.28624
+            },
+            {
+              "mbps": 100,
+              "rttMs": 0,
+              "concurrency": 2,
+              "wavesPerDirection": 2,
+              "rttOverheadMs": 0,
+              "uploadMs": 4.19656,
+              "downloadMs": 4.19656,
+              "totalMs": 11.89312
+            },
+            {
+              "mbps": 10,
+              "rttMs": 100,
+              "concurrency": 2,
+              "wavesPerDirection": 2,
+              "rttOverheadMs": 400,
+              "uploadMs": 41.9656,
+              "downloadMs": 41.9656,
+              "totalMs": 487.4312
+            },
+            {
+              "mbps": 50,
+              "rttMs": 100,
+              "concurrency": 2,
+              "wavesPerDirection": 2,
+              "rttOverheadMs": 400,
+              "uploadMs": 8.39312,
+              "downloadMs": 8.39312,
+              "totalMs": 420.28624
+            },
+            {
+              "mbps": 100,
+              "rttMs": 100,
+              "concurrency": 2,
+              "wavesPerDirection": 2,
+              "rttOverheadMs": 400,
+              "uploadMs": 4.19656,
+              "downloadMs": 4.19656,
+              "totalMs": 411.89312
+            }
+          ]
+        },
+        {
+          "name": "split-body-gzip-meta-gzip",
+          "body": "gzip",
+          "meta": "gzip",
+          "status": "ok",
+          "compressedPayloadBytes": 52283,
+          "binaryHeaderBytes": 20,
+          "framedBytes": 52303,
+          "dataParts": 1,
+          "modeledDataAesOverheadBytes": 28,
+          "modeledDataCiphertextBytes": 52331,
+          "actualTransport": {
+            "encryptMs": 0.10000014305114746,
+            "decryptMs": 0,
+            "writeMs": 0.39999985694885254,
+            "readMs": 0.20000004768371582,
+            "ciphertextBytes": 52478,
+            "payloadCiphertextBytes": 52331,
+            "manifestPlainBytes": 119,
+            "manifestCiphertextBytes": 147,
+            "parts": 1,
+            "fileCount": 2
+          },
+          "transportObservedMs": 1,
+          "transportModelMs": 0.7000000476837158,
+          "encryptedTransferBytes": 52478,
+          "preparationMs": 0,
+          "encodeMs": 1.5999999046325684,
+          "decodeMs": 0.7000000476837158,
+          "workerCodecMs": 2.5,
+          "frameAssemblyMs": 0,
+          "restoreMs": 0.09999990463256836,
+          "cpuAndLocalMs": 3.799999952316284,
+          "separateManifest": true,
+          "nativeHashIncluded": true,
+          "exactLogicalRoundtrip": true,
+          "networkModels": [
+            {
+              "mbps": 10,
+              "rttMs": 0,
+              "concurrency": 2,
+              "wavesPerDirection": 2,
+              "rttOverheadMs": 0,
+              "uploadMs": 41.9824,
+              "downloadMs": 41.9824,
+              "totalMs": 87.76479995231628
+            },
+            {
+              "mbps": 50,
+              "rttMs": 0,
+              "concurrency": 2,
+              "wavesPerDirection": 2,
+              "rttOverheadMs": 0,
+              "uploadMs": 8.39648,
+              "downloadMs": 8.39648,
+              "totalMs": 20.592959952316285
+            },
+            {
+              "mbps": 100,
+              "rttMs": 0,
+              "concurrency": 2,
+              "wavesPerDirection": 2,
+              "rttOverheadMs": 0,
+              "uploadMs": 4.19824,
+              "downloadMs": 4.19824,
+              "totalMs": 12.196479952316285
+            },
+            {
+              "mbps": 10,
+              "rttMs": 100,
+              "concurrency": 2,
+              "wavesPerDirection": 2,
+              "rttOverheadMs": 400,
+              "uploadMs": 41.9824,
+              "downloadMs": 41.9824,
+              "totalMs": 487.76479995231625
+            },
+            {
+              "mbps": 50,
+              "rttMs": 100,
+              "concurrency": 2,
+              "wavesPerDirection": 2,
+              "rttOverheadMs": 400,
+              "uploadMs": 8.39648,
+              "downloadMs": 8.39648,
+              "totalMs": 420.5929599523163
+            },
+            {
+              "mbps": 100,
+              "rttMs": 100,
+              "concurrency": 2,
+              "wavesPerDirection": 2,
+              "rttOverheadMs": 400,
+              "uploadMs": 4.19824,
+              "downloadMs": 4.19824,
+              "totalMs": 412.1964799523163
+            }
+          ]
+        }
+      ],
+      "breakEven": [
+        {
+          "left": "whole-gzip",
+          "right": "split-body-gzip-meta-gzip",
+          "symmetricMbps": null,
+          "rtt100SymmetricMbps": null,
+          "paretoDominant": "whole-gzip"
+        }
+      ],
+      "workerStarts": 1
+    }
+  ],
+  "timingInterpretation": "cpuAndLocalMs is modeled elapsed processing/local time, not CPU time or measured production Engine total time. Worker IPC and benchmark protocol hashing are included as itemized.",
+  "limitations": [
+    "Structured synthetic means fictional Japanese/English/code and seeded edits; representativeness of personal body distributions is unverified.",
+    "No personal export bodies, titles or IDs were read. Synthetic input generation and record projection are excluded from candidate CPU models.",
+    "Each component/codec is measured once per repetition and reused across candidate strategies: offline comparison, not runtime adaptive selection.",
+    "After codec failure the Worker is recycled before the next operation, isolating failed dictionary allocations. Worker restart/startup is excluded from candidate timings.",
+    "Native canonical commit hashing is measured once and added to framed candidate models. The legacy inline control instead includes logical-LZ encode plus inline-LZ encode and one inline decode.",
+    "Production commit/pack hash costs and framing differ. Candidate bytes/timings are not exact production Engine totals; inline controls preserve the meaningful one-file versus two-file distinction.",
+    "Codec internals and real Worker round-trip times are both measured. Partition/serialization/frame assembly/restore run on the main thread.",
+    "20-byte experimental binary framing is constructed for whole/split candidates. Existing-inline-lz is the actual version-2 LZ manifest control, without this header or a separate manifest.",
+    "Without --transport, encryption/IDB are not executed; 28-byte AES-GCM overhead per 1 MiB data part is modeled and manifests are excluded.",
+    "With --transport, CPU/local models add encryptMs+decryptMs+writeMs+readMs. transportObservedMs separately retains benchmark key setup/validation/cleanup wall time.",
+    "Network models assume symmetric 10/50/100 Mbps and RTT 0/100 ms. RTT uses concurrency 2 and ceil(dataParts/2)+1 waves each direction; shared folder/key work and HTTP overhead are excluded.",
+    "No real network transfer, reliable peak-memory or hardware-acceleration measurement. Pareto comparisons concern measured storage/CPU only.",
+    "Candidates share a process and a fixed measurement order within a profile; garbage collection/order effects remain possible. Peak memory was not measured.",
+    "The dictionary-size-limit failure applies to this seeded input and installed LZ implementation, not a universal 61 MB cutoff.",
+    "Largest measured 3x logical JSON inputs were about 192/207 MB, below the prototype 256 MiB per-payload cap; larger inputs and a total-memory cap were not validated."
+  ],
+  "browser": "155.0.8059.80",
+  "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/155.0.0.0 Safari/537.36",
+  "workerStartupMs": 22.700000047683716,
+  "realWorker": true
+}

@@ -3,14 +3,18 @@ import { mkdir, writeFile } from 'node:fs/promises';
 import { dirname } from 'node:path';
 
 // Synthetic data only. Run each scale in a separate browser/process.
-// node scripts/benchmark-browser-sync.mjs --scale=1 --report=path [--smoke]
+// node scripts/benchmark-browser-sync.mjs --scale=1 --report=path [--smoke] [--wire-compression=gzip] [--verify-pack]
 const smoke = process.argv.includes('--smoke');
+const verifyPack = process.argv.includes('--verify-pack');
 const scale = Number(process.argv.find(arg => arg.startsWith('--scale='))?.slice(8) ?? 1);
+const wireCompression = process.argv.find(arg => arg.startsWith('--wire-compression='))?.slice(19);
+if (wireCompression !== undefined && wireCompression !== 'gzip') throw new Error('Unsupported wire compression option.');
 const bodyBytes = Number(process.env.SYNC_SCALE_BENCH_BODY_BYTES ?? (smoke ? 256 : 5300));
 const reportPath = process.argv.find(arg => arg.startsWith('--report='))?.slice(9) ??
-  `docs/development/reports/browser-sync-scale${scale}${smoke ? '-smoke' : ''}.json`;
+  `docs/development/reports/browser-sync-${wireCompression ? `${wireCompression}-` : ''}scale${scale}${smoke ? '-smoke' : ''}.json`;
 const origin = process.env.WEAVELET_TEST_URL ?? 'http://127.0.0.1:5175';
-const report = { createdAt: new Date().toISOString(), scale, bodyBytes, smoke, complete: false,
+const report = { createdAt: new Date().toISOString(), scale, bodyBytes, smoke, verifyPack, complete: false,
+  wireCompression: wireCompression ?? 'legacy-lz',
   concurrentBenchmarkLoad: process.env.SYNC_BENCH_CONCURRENT_LOAD === '1',
   limitations: ['Synthetic text only; no personal exports read.',
     'Repeated fictional text is highly compressible; matching node/JSON sizes does not reproduce the export compression ratio.',
@@ -18,6 +22,9 @@ const report = { createdAt: new Date().toISOString(), scale, bodyBytes, smoke, c
     'restartPull recreates the Engine and reads real IndexedDB in the same page; the Worker/browser process stays alive.',
     'One sample; CPU contention and garbage collection affect timings.',
     'JS heap readings exclude reliable process/Worker peak memory measurement.'], scenarios: {} };
+if (wireCompression) report.limitations.push('Experimental opt-in wire format; incompatible with legacy clients and disabled by default.');
+if (wireCompression) report.limitations.push('Prototype remote payloads are limited to 256 MiB actual UTF-8 each; this is not a total memory/retention limit. Splitting larger payloads before encoding is deferred.');
+if (verifyPack) report.limitations.push('freshPackPull deletes only the isolated benchmark context sync-private IndexedDB; mock remote files and the Worker/browser process remain alive.');
 await mkdir(dirname(reportPath), { recursive: true });
 const save = () => writeFile(reportPath, JSON.stringify(report, null, 2) + '\n');
 const browser = await chromium.launch({ headless: true,
@@ -36,7 +43,7 @@ try {
     await save();
     console.log(JSON.stringify(value));
   });
-  const summary = await page.evaluate(async ({ scale, bodyBytes, smoke }) => {
+  const summary = await page.evaluate(async ({ scale, bodyBytes, smoke, wireCompression, verifyPack }) => {
     const { createSyntheticSnapshot, SYNTHETIC_PROFILE } = await import('/src/store/storage/google/synthetic.ts');
     const { EncryptedSync } = await import('/src/store/storage/sync/EncryptedSync.ts');
     const { resetSyncMetrics, getSyncMetrics } = await import('/src/store/storage/google/metrics.ts');
@@ -110,7 +117,7 @@ try {
       await progress({ scenario: name, measurement });
     };
     await measure('initial', async () => {
-      const created = await EncryptedSync.create(transport, password);
+      const created = await EncryptedSync.create(transport, password, wireCompression ? { wireCompression } : {});
       session = created.session; dataset = created.file.id;
       return session.synchronize(snapshot, true);
     });
@@ -140,8 +147,29 @@ try {
       await session.unlock(password); return session.pull();
     });
     assert(treeChat().title === 'Synthetic edited title', 'Restart title changed.'); checkBody();
+    if (verifyPack) {
+      await measure('packAggregation', async () => { await session.compactHistory(); return session.pull(); });
+      assert(list(dataset, 'pack').length > 0, 'Aggregation did not publish a pack.');
+      assert(treeChat().title === 'Synthetic edited title', 'Aggregated title changed.'); checkBody();
+      await measure('freshPackPull', async () => {
+        session.close();
+        // This fresh browser context has never loaded the app or personal data.
+        await new Promise((resolve, reject) => {
+          const request = indexedDB.deleteDatabase('weavelet-google-sync');
+          request.onsuccess = () => resolve();
+          request.onerror = () => reject(new Error('Synthetic sync cache deletion failed.'));
+          request.onblocked = () => reject(new Error('Synthetic sync cache deletion was blocked.'));
+        });
+        session = new EncryptedSync(dataset, transport);
+        await session.unlock(password); return session.pull();
+      });
+      assert(treeChat().title === 'Synthetic edited title', 'Fresh pack title changed.'); checkBody();
+      const freshShared = Object.values(treeChat().branchTree.nodes);
+      assert(freshShared[0].contentHash === freshShared[1].contentHash, 'Fresh pack duplicated shared content.');
+      assert(calls.history > 0 && downloadedBytes > 1000, 'Fresh reader did not retrieve remote pack data.');
+    }
     return { workerCreations, indexedDBVerified: true };
-  }, { scale, bodyBytes, smoke });
+  }, { scale, bodyBytes, smoke, wireCompression, verifyPack });
   Object.assign(report, summary, { complete: true });
   await save(); console.log(JSON.stringify({ report: reportPath, complete: true }));
 } catch (error) {

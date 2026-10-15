@@ -1,5 +1,7 @@
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import * as processing from '../google/processing';
+import * as legacyCodec from '../google/crypto';
+import { decodeNativeParts, encodeNativeWire, hashNativeCommits } from '../google/nativeWireCodec';
 import * as cacheStorage from '../google/cache';
 import { decode, decrypt, digest, encode, encrypt } from '../google/crypto';
 import { replayHistory } from '../google/replay';
@@ -54,7 +56,7 @@ class MemoryTransport implements SyncTransport {
 }
 
 beforeEach(() => { globalThis.indexedDB = new IDBFactory(); });
-afterEach(() => vi.restoreAllMocks());
+afterEach(() => { vi.restoreAllMocks(); vi.unstubAllGlobals(); });
 
 it('scans history once for a fresh reader and uses changes after the cursor is saved', async () => {
   const transport = new MemoryTransport();
@@ -542,3 +544,316 @@ it.each([false, true])('round-trips wireDelta=%s commits and packs through fresh
   globalThis.indexedDB = readerDb;
   expect(await toRecords(await reader.pull())).toEqual(await toRecords(latest));
 }, 15000);
+
+it('uses native opt-in commits and canonical-hash packs without large legacy LZ calls', async () => {
+  const transport = new MemoryTransport(), password = 'test-only native integration passphrase';
+  const { session, file } = await EncryptedSync.create(transport, password, {
+    wireCompression: 'gzip', wireDelta: true, partBytes: 2048,
+  });
+  const internal = session as any;
+  const snapshot = smallSnapshot(), store = snapshot.state.contentStore!;
+  const hash = addContent(store, [{ type: 'text', text: 'Synthetic native protocol body. '.repeat(40000) }]);
+  snapshot.state.chats = [{ id: 'chat', title: 'native fixture', messages: [], titleSet: true, imageDetail: 'auto',
+    config: { model: 'test', max_tokens: 1, temperature: 1, presence_penalty: 0, frequency_penalty: 0, top_p: 1 },
+    branchTree: { rootId: 'node', activePath: ['node'], nodes: {
+      node: { id: 'node', parentId: null, role: 'assistant', contentHash: hash, createdAt: 1 },
+    } },
+  }];
+  const legacy = vi.spyOn(legacyCodec, 'encode');
+  await session.push(snapshot, true);
+  const [id, initial] = [...transport.files].find(([, value]) => value.kind === 'commit')!;
+  const manifest = decode<any>(await decrypt(internal.key, initial.bytes, internal.context(id)));
+  expect(manifest.version).toBe(4);
+  expect(manifest.parts.length).toBeGreaterThan(1);
+  const [local] = await cacheStorage.readSyncEntries(file.id, [`commit:${id}`]);
+  const cachedBytes = await decrypt(internal.key, local!, internal.context(`commit:${id}`));
+  expect([...cachedBytes.slice(0, 8)]).toEqual([87, 76, 67, 65, 67, 72, 69, 1]);
+  await session.compactHistory();
+  const [packId, packed] = [...transport.files].find(([, value]) => value.kind === 'pack')!;
+  const index = decode<any>(await decrypt(internal.key, packed.bytes, internal.context(packId)));
+  expect(index.version).toBe(3);
+  expect(index.commits).toEqual(await hashNativeCommits(internal.cache.commits));
+  expect([...transport.files.values()].some(value => value.kind === 'commit')).toBe(false);
+  globalThis.indexedDB = new IDBFactory();
+  const fresh = new EncryptedSync(file.id, transport); await fresh.unlock(password);
+  expect(await toRecords(await fresh.pull())).toEqual(await toRecords(snapshot));
+  // Small LZ manifests and acknowledgement IDs keep their legacy envelope. Message bodies never enter LZ.
+  expect(legacy.mock.calls.every(([value]) => JSON.stringify(value).length < 64 * 1024)).toBe(true);
+});
+
+it('fails native creation before IDs, folders or outboxes when either gzip constructor is unsupported', async () => {
+  for (const name of ['CompressionStream', 'DecompressionStream']) {
+    const transport = new MemoryTransport();
+    vi.stubGlobal(name, class { constructor() { throw new Error('unsupported format'); } });
+    await expect(EncryptedSync.create(transport, 'test-only unavailable passphrase', { wireCompression: 'gzip' }))
+      .rejects.toThrow('Native sync gzip is unavailable.');
+    expect(transport.next).toBe(0);
+    expect(transport.headers.size).toBe(0);
+    expect(transport.files.size).toBe(0);
+    vi.unstubAllGlobals();
+  }
+});
+
+it('persists native opt-in across outbox restart and retries immutable ciphertext exactly', async () => {
+  const transport = new MemoryTransport(), password = 'test-only native retry passphrase';
+  const { session, file } = await EncryptedSync.create(transport, password, { wireCompression: 'gzip' });
+  const put = transport.put.bind(transport);
+  let lost = true;
+  transport.put = async (...args) => {
+    await put(...args);
+    if (args[2] === 'commit' && lost) { lost = false; throw new Error('response lost'); }
+  };
+  await expect(session.push(smallSnapshot(), true)).rejects.toThrow('response lost');
+  const sent = new Map([...transport.files].map(([id, value]) => [id, value.bytes.slice()]));
+  transport.put = put;
+  const reader = new EncryptedSync(file.id, transport); await reader.restoreKey();
+  expect((await reader.pull()).state.defaultSystemMessage).toBe('initial');
+  expect((reader as any).options.wireCompression).toBe('gzip');
+  for (const [id, bytes] of sent) expect(transport.files.get(id)!.bytes).toEqual(bytes);
+  expect([...transport.files.values()].filter(value => value.kind === 'commit')).toHaveLength(1);
+});
+
+it.each([false, true])('resumes pack cleanup after a replacement using the opposite hash rule (native=%s)', async native => {
+  const transport = new MemoryTransport(), password = 'test-only mixed hash retry passphrase';
+  const { session, file } = await EncryptedSync.create(transport, password, native ? { wireCompression: 'gzip' } : {});
+  await session.push(smallSnapshot(), true);
+  const writerDb = globalThis.indexedDB;
+  const remove = transport.remove.bind(transport);
+  transport.remove = async () => { throw new Error('cleanup offline'); };
+  await expect(session.compactHistory()).rejects.toThrow('cleanup offline');
+  const originalPack = [...transport.files].find(([, value]) => value.kind === 'pack')![0];
+  transport.remove = remove;
+  globalThis.indexedDB = new IDBFactory();
+  const other = new EncryptedSync(file.id, transport, native ? {} : { wireCompression: 'gzip' }); await other.unlock(password);
+  await other.pull();
+  await other.acceptLocal(smallSnapshot());
+  const edited = smallSnapshot(); edited.state.defaultSystemMessage = 'after replacement';
+  await other.push(edited);
+  await other.compactHistory();
+  expect(transport.files.has(originalPack)).toBe(false);
+  globalThis.indexedDB = writerDb;
+  const resumed = new EncryptedSync(file.id, transport); await resumed.restoreKey();
+  expect((await resumed.pull()).state.defaultSystemMessage).toBe('after replacement');
+  expect([...transport.files.values()].filter(value => value.kind === 'pack')).toHaveLength(1);
+});
+
+it('rejects authenticated corrupt native gzip and mismatched canonical pack hashes', async () => {
+  const transport = new MemoryTransport(), password = 'test-only native corruption passphrase';
+  const { session, file } = await EncryptedSync.create(transport, password, { wireCompression: 'gzip' });
+  await session.push(smallSnapshot(), true);
+  const internal = session as any;
+  const [partId, part] = [...transport.files].find(([, value]) => value.kind === 'part')!;
+  const original = part.bytes.slice();
+  const bytes = await decrypt(internal.key, part.bytes, internal.context(partId)); bytes[bytes.length - 1] ^= 255;
+  part.bytes = await encrypt(internal.key, bytes, internal.context(partId));
+  const writerDb = globalThis.indexedDB;
+  globalThis.indexedDB = new IDBFactory();
+  const fresh = new EncryptedSync(file.id, transport); await fresh.unlock(password);
+  await expect(fresh.pull()).rejects.toThrow('Invalid native sync gzip data.');
+  expect((fresh as any).remoteCache).toBeUndefined();
+  part.bytes = original;
+  globalThis.indexedDB = writerDb;
+  await session.compactHistory();
+  const [packId, pack] = [...transport.files].find(([, value]) => value.kind === 'pack')!;
+  const manifest = decode<any>(await decrypt(internal.key, pack.bytes, internal.context(packId)));
+  manifest.commits[Object.keys(manifest.commits)[0]] = '0'.repeat(64);
+  pack.bytes = await encrypt(internal.key, encode(manifest), internal.context(packId));
+  globalThis.indexedDB = new IDBFactory();
+  const invalid = new EncryptedSync(file.id, transport); await invalid.unlock(password);
+  await expect(invalid.pull()).rejects.toThrow('Sync pack history mismatch.');
+});
+
+it.each([false, true])('reads coexisting legacy pack %s and native canonical-hash pack through a fresh client', async wireDelta => {
+  const transport = new MemoryTransport(), password = 'test-only coexisting protocol passphrase';
+  const { session, file } = await EncryptedSync.create(transport, password, { wireDelta });
+  let random = 7;
+  const base = Array.from({ length: 18000 }, () => {
+    random = (Math.imul(random, 1664525) + 1013904223) >>> 0;
+    return String.fromCharCode(33 + random % 90);
+  }).join('');
+  const snapshot = smallSnapshot(), store = snapshot.state.contentStore!;
+  const bodies = [base, base.slice(0, 7000) + ' edited ' + base.slice(7008), base.slice(0, 12000) + ' another edit ' + base.slice(12014)];
+  const hashes = bodies.map(text => addContent(store, [{ type: 'text', text }]));
+  snapshot.state.chats = [{ id: 'chat', title: 'mixed protocol fixture', messages: [], titleSet: true, imageDetail: 'auto',
+    config: { model: 'test', max_tokens: 1, temperature: 1, presence_penalty: 0, frequency_penalty: 0, top_p: 1 },
+    branchTree: { rootId: 'n0', activePath: ['n0'], nodes: Object.fromEntries(hashes.map((contentHash, i) => [`n${i}`,
+      { id: `n${i}`, parentId: i ? 'n0' : null, role: 'assistant' as const, contentHash, createdAt: 1 }])) },
+  }];
+  await session.push(snapshot, true); await session.compactHistory();
+  const native = new EncryptedSync(file.id, transport, { wireCompression: 'gzip' }); await native.unlock(password);
+  const edited = structuredClone(snapshot);
+  // Keep this new group above the conservative grouping bound so the old pack remains a separate immutable file.
+  edited.state.defaultSystemMessage = 'Synthetic mixed pack body. '.repeat(35000);
+  await native.push(edited); await native.compactHistory();
+  const key = (native as any).key;
+  const versions = await Promise.all([...transport.files].filter(([, value]) => value.kind === 'pack').map(async ([id, value]) =>
+    decode<any>(await decrypt(key, value.bytes, `${file.id}:${id}`)).version));
+  expect(versions.sort()).toEqual([wireDelta ? 2 : 1, 3]);
+  globalThis.indexedDB = new IDBFactory();
+  const reader = new EncryptedSync(file.id, transport); await reader.unlock(password);
+  expect(await toRecords(await reader.pull())).toEqual(await toRecords(edited));
+});
+
+it('rejects oversized native writes before publishing or persisting a new outbox', async () => {
+  const transport = new MemoryTransport(), password = 'test-only native size passphrase';
+  const { session, file } = await EncryptedSync.create(transport, password, { wireCompression: 'gzip' });
+  const writes = transport.writes.length;
+  vi.spyOn(processing, 'encodeNativeAsync').mockImplementation(value => encodeNativeWire(value, 128));
+  await expect(session.push(smallSnapshot(), true)).rejects.toThrow('Native sync payload exceeds the byte limit.');
+  expect(transport.writes).toHaveLength(writes);
+  expect([...transport.files.values()].some(value => value.kind === 'commit' || value.kind === 'part')).toBe(false);
+  const metadata = await decodeCache<any>(await decrypt((session as any).key,
+    (await cacheStorage.syncCache(file.id))!, `${file.id}:cache`));
+  expect(metadata.pending).toBeUndefined();
+  expect(metadata.baseline).toBeUndefined();
+});
+
+it('keeps the durable reader cursor and baseline unchanged after native expansion limit rejection', async () => {
+  const transport = new MemoryTransport(), password = 'test-only native cursor limit passphrase';
+  const { session, file } = await EncryptedSync.create(transport, password, { wireCompression: 'gzip' });
+  await session.push(smallSnapshot(), true);
+  const writerDb = globalThis.indexedDB;
+  globalThis.indexedDB = new IDBFactory();
+  const readerDb = globalThis.indexedDB;
+  const reader = new EncryptedSync(file.id, transport); await reader.unlock(password);
+  const initial = await reader.pull(); await reader.acceptLocal(initial);
+  const durable = (await cacheStorage.syncCache(file.id))!.slice();
+  globalThis.indexedDB = writerDb;
+  const changed = smallSnapshot(); changed.state.defaultSystemMessage = 'Synthetic larger payload. '.repeat(2000);
+  await session.push(changed);
+  globalThis.indexedDB = readerDb;
+  const decoding = vi.spyOn(processing, 'decodeNativePartsAsync').mockImplementation(parts => decodeNativeParts(parts, 1024));
+  await expect(reader.pull()).rejects.toThrow('Native sync payload exceeds the byte limit.');
+  expect(await cacheStorage.syncCache(file.id)).toEqual(durable);
+  expect((reader as any).remoteCache).toBeUndefined();
+  decoding.mockRestore();
+  expect((await reader.pull()).state.defaultSystemMessage).toBe(changed.state.defaultSystemMessage);
+});
+
+it('explicitly disables native writes after restart while completing the original native outbox unchanged', async () => {
+  const transport = new MemoryTransport(), password = 'test-only native opt-out passphrase';
+  const { session, file } = await EncryptedSync.create(transport, password, { wireCompression: 'gzip' });
+  const put = transport.put.bind(transport);
+  let fail = true;
+  transport.put = async (...args) => {
+    await put(...args);
+    if (args[2] === 'commit' && fail) { fail = false; throw new Error('response lost'); }
+  };
+  await expect(session.push(smallSnapshot(), true)).rejects.toThrow('response lost');
+  const sent = new Map([...transport.files].map(([id, value]) => [id, value.bytes.slice()]));
+  transport.put = put;
+  const reader = new EncryptedSync(file.id, transport, { wireCompression: 'legacy' }); await reader.restoreKey();
+  expect((await reader.pull()).state.defaultSystemMessage).toBe('initial');
+  for (const [id, bytes] of sent) expect(transport.files.get(id)!.bytes).toEqual(bytes);
+  const edited = smallSnapshot(); edited.state.defaultSystemMessage = 'legacy update';
+  await reader.push(edited);
+  const internal = reader as any;
+  const [id, commit] = [...transport.files].filter(([, value]) => value.kind === 'commit').at(-1)!;
+  expect(decode<any>(await decrypt(internal.key, commit.bytes, internal.context(id))).version).toBe(2);
+  const metadata = await decodeCache<any>(await decrypt(internal.key, (await cacheStorage.syncCache(file.id))!, internal.context('cache')));
+  expect(metadata.wireCompression).toBe('legacy');
+  const restarted = new EncryptedSync(file.id, transport); await restarted.restoreKey();
+  expect((await restarted.pull()).state.defaultSystemMessage).toBe('legacy update');
+  expect((restarted as any).options.wireCompression).toBe('legacy');
+});
+
+it.each([[false, false], [true, false], [false, true], [true, true]])(
+  'authenticates reordered native/legacy overlap in either order and rejects changed content (nativeFirst=%s, altered=%s)',
+  async (nativeFirst, altered) => {
+    const transport = new MemoryTransport(), password = 'test-only reordered pack passphrase';
+    const { session, file } = await EncryptedSync.create(transport, password);
+    await session.push(smallSnapshot(), true); await session.compactHistory();
+    const internal = session as any;
+    const legacyId = [...transport.files].find(([, value]) => value.kind === 'pack')![0];
+    const legacy = internal.cache.commits;
+    const setting = JSON.stringify(['state', 'defaultSystemMessage']);
+    const reordered = Object.fromEntries(Object.entries(legacy).map(([id, value]) => {
+      const commit = value as any;
+      return [id, { changes: commit.changes.map((change: any) => ({ after: altered && change.key === setting
+        ? JSON.stringify('different native state') : change.after, key: change.key, before: change.before })),
+        parents: commit.parents, version: commit.version }];
+    }));
+    const [nativeId, part] = await transport.ids(2);
+    const payload = await encodeNativeWire({ version: 1, commits: reordered });
+    await transport.put(part, file.id, 'pack-part', await encrypt(internal.key, payload, internal.context(part)));
+    const manifest = { version: 3, commits: await hashNativeCommits(reordered), parts: [part], bytes: payload.length };
+    await transport.put(nativeId, file.id, 'pack', await encrypt(internal.key, encode(manifest), internal.context(nativeId)));
+    const packs = nativeFirst ? [nativeId, legacyId] : [legacyId, nativeId];
+    transport.history = async () => ({ commits: [], packs });
+    transport.packs = async () => packs;
+    globalThis.indexedDB = new IDBFactory();
+    const reader = new EncryptedSync(file.id, transport); await reader.unlock(password);
+    if (altered) {
+      await expect(reader.pull()).rejects.toThrow('Sync pack history mismatch.');
+      return;
+    }
+    expect((await reader.pull()).state.defaultSystemMessage).toBe('initial');
+    const id = Object.keys(legacy)[0], selected = (reader as any).cache.commits[id];
+    expect(JSON.stringify(selected)).toBe(JSON.stringify(legacy[id]));
+    const [cached] = await cacheStorage.readSyncEntries(file.id, [`commit:${id}`]);
+    const decoded = await decodeCache(await decrypt(internal.key, cached!, internal.context(`commit:${id}`)));
+    expect(JSON.stringify(decoded)).toBe(JSON.stringify(selected));
+  },
+);
+
+it('uses uncompressed grouping bounds when folding highly compressed existing native packs', async () => {
+  const transport = new MemoryTransport(), password = 'test-only native folding bound passphrase';
+  const { session, file } = await EncryptedSync.create(transport, password, { wireCompression: 'gzip' });
+  const original = smallSnapshot(); original.state.defaultSystemMessage = 'Synthetic repeated prior pack. '.repeat(35000);
+  await session.push(original, true); await session.compactHistory();
+  const originalPack = [...transport.files].find(([, value]) => value.kind === 'pack')![0];
+  const edited = smallSnapshot(); edited.state.defaultSystemMessage = 'small subsequent change';
+  await session.push(edited); await session.compactHistory();
+  // Compressed sizes are tiny, but folding the old logical body would exceed the native grouping bound.
+  expect(transport.files.has(originalPack)).toBe(true);
+  expect([...transport.files.values()].filter(value => value.kind === 'pack')).toHaveLength(2);
+  globalThis.indexedDB = new IDBFactory();
+  const reader = new EncryptedSync(file.id, transport); await reader.unlock(password);
+  expect((await reader.pull()).state.defaultSystemMessage).toBe('small subsequent change');
+});
+
+it.each(['valid', 'missing', 'corrupt'])('resumes reordered legacy cleanup from its immutable outbox, failing closed for %s outbox data', async variant => {
+  const transport = new MemoryTransport(), password = 'test-only reordered legacy cleanup passphrase';
+  const { session, file } = await EncryptedSync.create(transport, password);
+  await session.push(smallSnapshot(), true);
+  const remove = transport.remove.bind(transport);
+  transport.remove = async () => { throw new Error('cleanup offline'); };
+  await expect(session.compactHistory()).rejects.toThrow('cleanup offline');
+  transport.remove = remove;
+  const internal = session as any;
+  const [oldId, oldFile] = [...transport.files].find(([, value]) => value.kind === 'pack')!;
+  const oldManifest = decode<any>(await decrypt(internal.key, oldFile.bytes, internal.context(oldId)));
+  const [oldPart] = oldManifest.parts;
+  const oldPayload = decode<any>(await decrypt(internal.key, transport.files.get(oldPart)!.bytes, internal.context(oldPart)));
+  const commits = Object.fromEntries(Object.entries(oldPayload.commits).map(([id, value]) => {
+    const commit = value as any;
+    return [id, { changes: commit.changes.map((change: any) => ({ after: change.after, key: change.key, before: change.before })),
+      parents: commit.parents, version: commit.version }];
+  }));
+  const [replacement, part] = await transport.ids(2);
+  const payload = encode({ version: 1, commits });
+  const hashes: Record<string, string> = {};
+  for (const [id, commit] of Object.entries(commits)) hashes[id] = await digest(encode(commit));
+  expect(hashes).not.toEqual(oldManifest.commits);
+  await transport.put(part, file.id, 'pack-part', await encrypt(internal.key, payload, internal.context(part)));
+  const manifest = { version: 1, commits: hashes, parts: [part], bytes: payload.length };
+  await transport.put(replacement, file.id, 'pack', await encrypt(internal.key, encode(manifest), internal.context(replacement)));
+  await remove(oldId); await remove(oldPart);
+  const ciphertext = transport.files.get(replacement)!.bytes.slice();
+  // Persist the replacement representation, then fail cleanup again before the old pending record is removed.
+  transport.remove = async () => { throw new Error('cleanup still offline'); };
+  const retry = new EncryptedSync(file.id, transport); await retry.restoreKey();
+  await expect(retry.pull()).rejects.toThrow('cleanup still offline');
+  transport.remove = remove;
+  if (variant === 'missing') await cacheStorage.writeSyncCache(file.id, undefined, [], [`outbox:${oldPart}`]);
+  if (variant === 'corrupt') {
+    const [bytes] = await cacheStorage.readSyncEntries(file.id, [`outbox:${oldPart}`]);
+    const damaged = bytes!.slice(); damaged[damaged.length - 1] ^= 255;
+    await cacheStorage.writeSyncCache(file.id, undefined, [[`outbox:${oldPart}`, damaged]]);
+  }
+  const resumed = new EncryptedSync(file.id, transport); await resumed.restoreKey();
+  if (variant === 'valid') expect((await resumed.pull()).state.defaultSystemMessage).toBe('initial');
+  else await expect(resumed.pull()).rejects.toThrow(variant === 'missing' ? 'Missing local upload data.' : 'Unable to decrypt sync data');
+  expect([...transport.files.values()].filter(value => value.kind === 'pack')).toHaveLength(1);
+  expect(transport.files.get(replacement)!.bytes).toEqual(ciphertext);
+});
