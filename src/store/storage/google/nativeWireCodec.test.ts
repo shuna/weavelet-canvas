@@ -69,3 +69,46 @@ it('stops highly compressed payload expansion before parsing JSON, while local c
   parsing.mockRestore();
   expect(await decodeCache(frameCacheGzip(bytes))).toEqual(value);
 });
+
+it('matches the previous native digest for JSON normalization edge cases and lexical key ordering', async () => {
+  const values = [
+    { version: 1, parents: [], changes: [{ key: 'synthetic', before: null, after: '\\"\n日本語🙂\ud800' }], resolutions: undefined },
+    { version: 1, parents: [], changes: [], extra: { z: undefined, zero: -0, nan: NaN, infinite: Infinity,
+      array: [undefined, , NaN, Symbol('ignored'), () => 'ignored'], numeric: { 2: 'two', 10: 'ten', 1: 'one' } } },
+    { version: 1, parents: [], changes: [], extra: JSON.parse('{"__proto__":{"literal":true},"constructor":"literal","prototype":true}') },
+    { version: 1, parents: [], changes: [], extra: Object.assign(Object.create(null), { value: 'synthetic' }) },
+  ];
+  for (const value of values) {
+    const expected = await digest('weavelet-sync-commit:2\n' + canonical(JSON.parse(JSON.stringify(value))));
+    expect((await hashNativeCommits({ synthetic: value as Commit })).synthetic).toBe(expected);
+  }
+});
+
+it('avoids full JSON round-trip copies for plain commits, retaining the exact SHA', async () => {
+  const value: Commit = { version: 1, parents: [], changes: [{ key: 'synthetic', before: null, after: 'Fictional body '.repeat(30000) }] };
+  const expected = await digest('weavelet-sync-commit:2\n' + canonical(JSON.parse(JSON.stringify(value))));
+  const parsing = vi.spyOn(JSON, 'parse'), serializing = vi.spyOn(JSON, 'stringify');
+  expect((await hashNativeCommits({ synthetic: value })).synthetic).toBe(expected);
+  expect(parsing).not.toHaveBeenCalled();
+  expect(serializing.mock.calls.some(([input]) => input === value)).toBe(false);
+});
+
+it('preserves custom JSON conversion, getter and shared-value behavior through the original fallback', async () => {
+  const shared = { value: 'synthetic' };
+  const values = [
+    { version: 1, parents: [], changes: [], extra: new Date('2026-01-01T00:00:00Z') },
+    { version: 1, parents: [], changes: [], extra: { toJSON: (key: string) => ({ key, synthetic: true }) } },
+    { version: 1, parents: [], changes: [], extra: { get synthetic() { return 'accessor'; } } },
+    { version: 1, parents: [], changes: [], first: shared, second: shared },
+    { version: 1, parents: [], changes: [], extra: { toJSON: 'non-function' } },
+    { version: 1, parents: [], changes: [], extra: Object.assign(() => 'unused', { toJSON: () => 'synthetic function JSON' }) },
+  ];
+  for (const value of values) {
+    const expected = await digest('weavelet-sync-commit:2\n' + canonical(JSON.parse(JSON.stringify(value))));
+    expect((await hashNativeCommits({ synthetic: value as Commit })).synthetic).toBe(expected);
+  }
+  const cyclic: any = { version: 1, parents: [], changes: [] }; cyclic.extra = cyclic;
+  await expect(hashNativeCommits({ synthetic: cyclic })).rejects.toThrow();
+  await expect(hashNativeCommits({ synthetic: undefined as unknown as Commit })).rejects.toThrow();
+  await expect(hashNativeCommits({ synthetic: { version: 1, parents: [], changes: [], extra: 1n } as Commit })).rejects.toThrow();
+});

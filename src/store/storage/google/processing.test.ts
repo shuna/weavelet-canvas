@@ -170,7 +170,7 @@ it('omits only derived tree messages before worker transfer and preserves record
   expect(await toRecords(request.value)).toEqual(expected);
   worker.reply({ id: request.id, value: expected, metrics: {} });
   await expect(result).resolves.toEqual(expected);
-  const comparison = processing.sameSnapshotAsync(original, original);
+  const comparison = processing.sameSnapshotAsync(original, { ...original });
   const comparisonRequest = worker.messages[1];
   for (const value of comparisonRequest.value) {
     expect(value.state.chats[0].messages).toEqual([]);
@@ -182,4 +182,26 @@ it('omits only derived tree messages before worker transfer and preserves record
   await expect(processing.toRecordsAsync(original)).resolves.toEqual(expected);
   await expect(processing.sameSnapshotAsync(original, original)).resolves.toBe(true);
   expect(original).toEqual(before);
+});
+
+it('compares one current snapshot with itself without starting a worker', async () => {
+  vi.stubGlobal('Worker', FakeWorker);
+  const processing = await import('./processing');
+  const value: Snapshot = { state: {} };
+  await expect(processing.sameSnapshotAsync(value, value)).resolves.toBe(true);
+  expect(FakeWorker.instances).toHaveLength(0);
+});
+
+it('exposes node/chat projections through the worker while omitting derived tree messages', async () => {
+  vi.stubGlobal('Worker', FakeWorker);
+  const processing = await import('./processing');
+  const value = { state: { chats: [{ id: 'synthetic', messages: [{ synthetic: true }], branchTree: { nodes: {} } }] } } as unknown as Snapshot;
+  const task = processing.projectRecordsAsync(value);
+  const worker = FakeWorker.instances[0], message = worker.messages[0];
+  expect(message.operation).toBe('projectRecords');
+  expect(message.value.state.chats[0].messages).toEqual([]);
+  expect(value.state.chats![0].messages).toHaveLength(1);
+  const projection = { records: {}, nodeHashes: {}, chatHashes: {}, rootHash: 'synthetic-root' };
+  worker.reply({ id: message.id, value: projection, metrics: {} });
+  await expect(task).resolves.toEqual(projection);
 });

@@ -176,12 +176,15 @@ export class DriveTransport implements SyncTransport<DriveFile> {
   async packs(dataset: string): Promise<string[]> {
     return this.listKind(dataset, 'pack');
   }
+  async checkpoints(dataset: string): Promise<string[]> {
+    return this.listKind(dataset, 'checkpoint');
+  }
   async remove(id: string): Promise<void> {
     const response = await this.request(`${API}/files/${encodeURIComponent(id)}`, { method: 'DELETE' });
     // Deleting the captured source set is safe to retry after a lost response.
     if (!response.ok && response.status !== 404) throw new Error(`Google Drive ${response.status}: ${response.statusText}`);
   }
-  private async listKind(dataset: string, kind: 'commit' | 'pack'): Promise<string[]> {
+  private async listKind(dataset: string, kind: 'commit' | 'pack' | 'checkpoint'): Promise<string[]> {
     const ids: string[] = [];
     let pageToken: string | undefined;
     const tokens = new Set<string>();

@@ -1,5 +1,5 @@
 import { encode, decode } from './crypto';
-import { toRecords, fromRecords, hashRecords, sameSnapshot, type Snapshot, type Records } from './records';
+import { toRecords, projectRecords, fromRecords, hashRecords, sameSnapshot, type Snapshot, type Records } from './records';
 import { mergeSyncMetrics } from './metrics';
 import { collectHistory, hashCommits, replayHistory, type Commit, type HistoryProgress } from './replay';
 import { syncHistoryProgress } from './progress';
@@ -10,6 +10,7 @@ import { prepareSave } from '../prepareSave';
 import { encodeWire, decodeWire } from './wire';
 import { encodeCache, decodeCache } from './cacheCodec';
 import { encodeNativeWire, hashNativeCommits, decodeNativeParts } from './nativeWireCodec';
+import { createEncodedCheckpoint, decodeVerifyCheckpoint, type CheckpointSource, type CompressedCheckpointVerification } from './checkpoint';
 
 type Request = { resolve: (value: any) => void; reject: (error: unknown) => void; onProgress?: (progress: HistoryProgress) => void };
 let worker: Worker | undefined;
@@ -68,12 +69,20 @@ export const toRecordsAsync = (value: Snapshot) => {
   const projected = withoutDerivedMessages(value);
   return processAsync('toRecords', projected, () => toRecords(projected));
 };
+// Exposes verified node/chat roots alongside unchanged protocol records.
+export const projectRecordsAsync = (value: Snapshot) => {
+  const projected = withoutDerivedMessages(value);
+  return processAsync('projectRecords', projected, () => projectRecords(projected));
+};
 export const fromRecordsAsync = (value: Records, previous?: Parameters<typeof fromRecords>[1]) =>
   previous ? processAsync('fromRecordsWithContent', { records: value, previous }, () => fromRecords(value, previous))
     : processAsync('fromRecords', value, () => fromRecords(value));
 export const hashRecordsAsync = (value: Records) => processAsync('hashRecords', value, () => hashRecords(value));
 export const hashCommitsAsync = (value: Record<string, Commit>) => processAsync('hashCommits', value, () => hashCommits(value));
 export const sameSnapshotAsync = (a: Snapshot, b: Snapshot) => {
+  // Comparing the very same current value needs no projection. This does not
+  // infer that an object is unchanged from an earlier synchronization.
+  if (a === b) return Promise.resolve(true);
   const projected: [Snapshot, Snapshot] = [withoutDerivedMessages(a), withoutDerivedMessages(b)];
   return processAsync('sameSnapshot', projected, () => sameSnapshot(projected));
 };
@@ -94,3 +103,8 @@ export const prepareSaveAsync = (value: Parameters<typeof prepareSave>[0]) => pr
 export const encodeNativeAsync = (value: unknown) => processAsync('encodeNative', value, () => encodeNativeWire(value));
 export const hashNativeCommitsAsync = (value: Record<string, Commit>) => processAsync('hashNativeCommits', value, () => hashNativeCommits(value));
 export const decodeNativePartsAsync = <T>(value: Uint8Array[]) => processAsync('decodeNativeParts', value, () => decodeNativeParts<T>(value));
+// Combined operations avoid cloning a decoded checkpoint to main only to send it straight back.
+export const createEncodedCheckpointAsync = (value: CheckpointSource) =>
+  processAsync('createEncodedCheckpoint', value, () => createEncodedCheckpoint(value, syncHistoryProgress), syncHistoryProgress);
+export const decodeVerifyCheckpointAsync = (value: CompressedCheckpointVerification) =>
+  processAsync('decodeVerifyCheckpoint', value, () => decodeVerifyCheckpoint(value, syncHistoryProgress), syncHistoryProgress);

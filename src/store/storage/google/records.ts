@@ -6,7 +6,7 @@ import type { PersistedStoreState } from '@store/persistence';
 import type { BranchNode, ContentInterface } from '@type/chat';
 import { addContent, retainContent, resolveContentStrict, type ContentStoreData } from '@utils/contentStore';
 import { digest } from './crypto';
-import { createContentProjector, cachedRecordDigest } from './recordCache';
+import { createContentProjector, cachedRecordDigest, cachedMetadataProjection, rememberProjectedDigest, type ProjectedMetadata } from './recordCache';
 
 export class SyncConflictError extends Error {
   constructor(readonly keys: string[]) { super('Concurrent edits conflict. Both copies are preserved.'); }
@@ -17,9 +17,17 @@ export type Records = Record<string, string>;
 export type Change = { key: string; before: string | null; after: string | null };
 const forbidden = new Set(['__proto__', 'prototype', 'constructor']);
 
+export function sameRecords(left: Records, right: Records): boolean {
+  const keys = Object.keys(left);
+  return keys.length === Object.keys(right).length && keys.every(key => Object.hasOwn(right, key) && left[key] === right[key]);
+}
+
 export async function sameSnapshot([a, b]: [Snapshot, Snapshot]): Promise<boolean> {
-  const left = await toRecords(a), right = await toRecords(b);
-  return Object.keys(left).length === Object.keys(right).length && Object.keys(left).every(key => left[key] === right[key]);
+  const leftProjection = await projectRecords(a), rightProjection = await projectRecords(b);
+  if (leftProjection.rootHash !== rightProjection.rootHash) return false;
+  // Keep exact comparison as the correctness fallback, including unknown future fields.
+  const left = leftProjection.records, right = rightProjection.records;
+  return sameRecords(left, right);
 }
 
 export function canonical(value: any): string {
@@ -31,7 +39,20 @@ export function canonical(value: any): string {
 }
 
 // Fail closed: the local resolver deliberately repairs damaged chains; sync must not publish that repair as an empty message.
+export interface RecordProjection {
+  records: Records;
+  nodeHashes: Record<string, Record<string, string>>;
+  chatHashes: Records;
+  rootHash: string;
+}
+
 export async function toRecords(snapshot: Snapshot): Promise<Records> {
+  return (await projectRecords(snapshot)).records;
+}
+
+// The safe fallback disables caches without changing the projection or protocol.
+// Value signatures, rather than object identity/dirty hints, validate every input.
+export async function projectRecords(snapshot: Snapshot, { cache = true } = {}): Promise<RecordProjection> {
   const started = performance.now();
   // Copy only mutable metadata; never stringify and parse the entire body store.
   const { chats: sourceChats, contentStore: source = {}, ...shared } = withoutBrowserLocalSettings(snapshot.state);
@@ -40,15 +61,37 @@ export async function toRecords(snapshot: Snapshot): Promise<Records> {
   const records: Records = Object.create(null);
   const contentIds = new Map<string, string>();
   const content: Records = Object.create(null);
+  const contentBytes: Record<string, number> = Object.create(null);
+  const assetBytes: Record<string, number> = Object.create(null);
   const assets: Record<string, string> = Object.create(null);
-  const projector = createContentProjector(source);
+  const projector = createContentProjector(source, { cache });
+  const nodeHashes: RecordProjection['nodeHashes'] = Object.create(null);
+  const chatHashes: Records = Object.create(null);
+  let bytes = 0;
+  const flatten = (value: any, path: string[], target: Records = Object.create(null)): Records => {
+    if (value && typeof value === 'object' && !Array.isArray(value) && Object.keys(value).length) {
+      for (const [key, child] of Object.entries(value)) {
+        if (forbidden.has(key)) throw new Error('Unsafe sync record key.');
+        flatten(child, [...path, key], target);
+      }
+    } else target[JSON.stringify(path)] = canonical(value);
+    return target;
+  };
+  const append = (fragment: ProjectedMetadata) => {
+    for (const [key, value] of Object.entries(fragment.records)) {
+      records[key] = value;
+      if (cache) rememberProjectedDigest(value, fragment.hashes[key]);
+    }
+    bytes += Object.values(fragment.byteLengths).reduce((sum, size) => sum + size, 0);
+  };
   const externalize = async (parts: ContentInterface[]) => {
     const encoded = parts;
     for (const part of encoded) {
       if (part.type === 'image_url' && typeof part.image_url?.url === 'string') {
         const url = part.image_url.url;
-        const id = await cachedRecordDigest(url);
+        const id = await cachedRecordDigest(url, { cache });
         assets[id] = url;
+        assetBytes[id] = new TextEncoder().encode(JSON.stringify(url)).length;
         (part.image_url as any).url = { asset: id };
       }
     }
@@ -62,59 +105,86 @@ export async function toRecords(snapshot: Snapshot): Promise<Records> {
         const found: Records = {};
         const encoded = JSON.parse(JSON.stringify(parts));
         for (const part of encoded) if (part.type === 'image_url' && typeof part.image_url?.url === 'string') {
-          const url = part.image_url.url, id = await cachedRecordDigest(url);
+          const url = part.image_url.url, id = await cachedRecordDigest(url, { cache });
           found[id] = url;
           part.image_url.url = { asset: id };
         }
         const value = canonical(encoded);
-        return { id: await cachedRecordDigest(value), value, assets: found };
+        const assetDigests: Records = Object.create(null);
+        for (const [id, url] of Object.entries(found)) assetDigests[id] = await cachedRecordDigest(JSON.stringify(url), { cache });
+        const assetByteLengths: Record<string, number> = Object.create(null);
+        for (const [id, url] of Object.entries(found)) assetByteLengths[id] = new TextEncoder().encode(JSON.stringify(url)).length;
+        return { id: await cachedRecordDigest(value, { cache }), value, assets: found, assetDigests,
+          byteLength: new TextEncoder().encode(value).length, assetByteLengths };
       });
       content[projected.id] = projected.value;
+      contentBytes[projected.id] = projected.byteLength ?? new TextEncoder().encode(projected.value).length;
+      for (const [id, size] of Object.entries(projected.assetByteLengths ?? {})) assetBytes[id] = size;
+      if (cache) {
+        rememberProjectedDigest(projected.value, projected.id);
+        for (const [id, hash] of Object.entries(projected.assetDigests ?? {})) rememberProjectedDigest(JSON.stringify(projected.assets[id]), hash);
+      }
       for (const [id, url] of Object.entries(projected.assets)) assets[id] = url;
       contentIds.set(old, projected.id);
     }
     node.contentHash = contentIds.get(old)!;
   };
-  const chats: Record<string, unknown> = Object.create(null);
+  const chatIds = new Set<string>();
   const order: string[] = [];
   for (const original of sourceChats ?? []) {
-    // A tree's materialized messages duplicate its bodies and are never synchronized.
-    const chat = JSON.parse(JSON.stringify(original.branchTree ? { ...original, messages: undefined } : original)) as NonNullable<typeof sourceChats>[number];
-    if (!chat.id || chats[chat.id]) throw new Error('Missing or duplicate chat ID; sync stopped.');
+    // Clone nodes separately: unchanged nodes reuse their flattening and SHA result.
+    const chat = JSON.parse(JSON.stringify(original.branchTree
+      ? { ...original, messages: undefined, branchTree: { ...original.branchTree, nodes: {} } }
+      : original)) as NonNullable<typeof sourceChats>[number];
+    if (!chat.id || chatIds.has(chat.id)) throw new Error('Missing or duplicate chat ID; sync stopped.');
+    if (forbidden.has(chat.id)) throw new Error('Unsafe sync record key.');
+    chatIds.add(chat.id);
     order.push(chat.id);
+    const hashes: Records = nodeHashes[chat.id] = Object.create(null);
     if (chat.branchTree) {
-      for (const node of Object.values(chat.branchTree.nodes)) {
+      for (const [id, originalNode] of Object.entries(original.branchTree!.nodes)) {
+        if (forbidden.has(id)) throw new Error('Unsafe sync record key.');
+        const node: BranchNode = JSON.parse(JSON.stringify(originalNode));
         const statsKey = `${chat.id}:::${node.id}`;
         const generationId = node.openRouterObservation?.generationId ?? snapshot.state.pendingVerifications?.[statsKey]?.generationId ?? snapshot.state.verifiedStats?.[statsKey]?.generationId;
-        // Retain the lookup identity, not the device's verification queue/cache.
         if (generationId) node.openRouterObservation = { ...node.openRouterObservation, generationId };
         await translate(node);
+        const path = ['chats', chat.id, 'branchTree', 'nodes', id];
+        const fragment = await cachedMetadataProjection('node', JSON.stringify(path), canonical(node), () => flatten(node, path), { cache });
+        hashes[id] = fragment.hash;
+        append(fragment);
       }
-      delete chat.messages;
     } else if (chat.messages) {
       for (const message of chat.messages) message.content = await externalize(message.content);
     }
-    chats[chat.id] = chat;
+    const path = ['chats', chat.id];
+    // The node roots include all normalized metadata and synchronized body IDs.
+    const fragment = await cachedMetadataProjection('chat', JSON.stringify(path), canonical({ chat, nodes: hashes }), () => {
+      const result = flatten(chat, path);
+      if (Object.keys(hashes).length) delete result[JSON.stringify([...path, 'branchTree', 'nodes'])];
+      return result;
+    }, { cache });
+    chatHashes[chat.id] = fragment.hash;
+    append(fragment);
   }
   for (const node of Object.values(state.branchClipboard?.nodes ?? {})) await translate(node);
   delete state.contentStore;
   delete state.chats;
 
-  // Arrays remain atomic (activePath, order, legacy messages); object fields and nodes are independent records.
-  const flatten = (value: any, path: string[]) => {
-    if (value && typeof value === 'object' && !Array.isArray(value) && Object.keys(value).length) {
-      for (const [key, child] of Object.entries(value)) {
-        if (forbidden.has(key)) throw new Error('Unsafe sync record key.');
-        flatten(child, [...path, key]);
-      }
-    } else records[JSON.stringify(path)] = canonical(value);
-  };
-  flatten({ version: snapshot.version ?? 0, state, chats, order }, []);
-  for (const [id, value] of Object.entries(content)) records[JSON.stringify(['content', id])] = value;
-  for (const [id, url] of Object.entries(assets)) records[JSON.stringify(['assets', id])] = JSON.stringify(url);
-  const bytes = Object.values(records).reduce((n, value) => n + new TextEncoder().encode(value).length, 0);
+  const base = { version: snapshot.version ?? 0, state, ...(order.length ? {} : { chats: {} }), order };
+  const root = await cachedMetadataProjection('root', '', canonical({ base, chats: chatHashes }), () => flatten(base, []), { cache });
+  append(root);
+  for (const [id, value] of Object.entries(content)) {
+    records[JSON.stringify(['content', id])] = value;
+    bytes += contentBytes[id];
+  }
+  for (const [id, url] of Object.entries(assets)) {
+    const value = JSON.stringify(url);
+    records[JSON.stringify(['assets', id])] = value;
+    bytes += assetBytes[id] ?? new TextEncoder().encode(value).length;
+  }
   recordMetric('records', started, bytes, bytes);
-  return records;
+  return { records, nodeHashes, chatHashes, rootHash: root.hash };
 }
 
 export async function fromRecords(records: Records, previous: ContentStoreData = {}): Promise<Snapshot> {

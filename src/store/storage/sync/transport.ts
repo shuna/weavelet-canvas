@@ -22,6 +22,8 @@ export interface SyncTransport<T extends SyncDataset = SyncDataset> {
   history(dataset: string): Promise<{ commits: string[]; packs: string[] }>;
   commits(dataset: string): Promise<string[]>;
   packs(dataset: string): Promise<string[]>;
+  // Optional: immutable checkpoints accelerate replay; retained commits remain authoritative.
+  checkpoints?(dataset: string): Promise<string[]>;
   // A cursor advances only after every dependency has been read and authenticated.
   changes(token: string): Promise<{ token: string; changes: SyncChange[] }>;
   remove(id: string): Promise<void>;

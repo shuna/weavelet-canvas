@@ -1,0 +1,947 @@
+{
+  "createdAt": "2026-10-15T22:07:00.563Z",
+  "scale": 3,
+  "bodyBytes": 5300,
+  "smoke": false,
+  "verifyPack": false,
+  "checkpointOnly": true,
+  "complete": false,
+  "wireCompression": "gzip",
+  "smallUpdateCodec": "Existing inline LZ for parented updates with a conservative JSON bound at most 64 KiB; actual inline payload at most 256 KiB.",
+  "checkpointPolicy": "Transport supports production checkpoint discovery and automatic publication; original logical history is retained.",
+  "concurrentBenchmarkLoad": false,
+  "limitations": [
+    "Synthetic text only; no personal exports read.",
+    "Repeated fictional text is highly compressible; matching node/JSON sizes does not reproduce the export compression ratio.",
+    "Real Chrome Worker and IndexedDB, zero-latency mock network; no Google Drive traffic.",
+    "restartPull/checkpointReopen recreate the Engine and read real IndexedDB in the same page; the Worker/browser process and its caches stay alive.",
+    "Warm reopen may read commits after its durable replay checkpoint; oldCommitEntries counts only the initial history commit(s), not those newer tails.",
+    "A first cloud checkpoint use downloads authenticated history and verifyCheckpoint compares its entire replayed records/conflicts exactly; it is not a history-download bypass.",
+    "One sample; CPU contention and garbage collection affect timings.",
+    "Every received snapshot is compared against all input sync records outside its timed interval; this uses the same Worker and can warm its bounded caches.",
+    "JS heap readings exclude reliable process/Worker peak memory measurement.",
+    "Benchmark-only Engine/Worker method events are delivered to Node without arguments or per-event disk writes; this adds IPC overhead.",
+    "Benchmark-only Worker/IndexedDB instrumentation and 20-second diagnostics heartbeats add overhead; a 120-second scenario watchdog saves the latest available diagnostics and closes the isolated browser.",
+    "Gzip is the new default; clients predating native gzip cannot read its v4 commits/v3 packs. Explicit legacy compression remains available.",
+    "Native remote payloads are limited to 256 MiB actual UTF-8 each; this is not a total memory/retention limit. Splitting larger payloads before encoding is deferred."
+  ],
+  "scenarios": {
+    "initial": {
+      "ms": 14614.400000095367,
+      "uploadedBytes": 4376993,
+      "downloadedBytes": 2116550,
+      "transportCalls": {
+        "ids": 3,
+        "folder": 1,
+        "put": 9,
+        "startToken": 1,
+        "history": 1,
+        "changes": 2,
+        "checkpoints": 1,
+        "read": 4
+      },
+      "remoteReadsByKind": {
+        "checkpoint": 1,
+        "checkpoint-part": 3
+      },
+      "remoteReadsByPurpose": {
+        "normal": 4
+      },
+      "indexedDBReads": {
+        "commitEntries": 0,
+        "oldCommitEntries": 0,
+        "replayEntries": 0,
+        "otherEntries": 16
+      },
+      "workerOperations": {
+        "encodeCache": 12,
+        "toRecords": 1,
+        "replayHistory": 2,
+        "hashRecords": 2,
+        "fromRecordsWithContent": 1,
+        "encodeNative": 2,
+        "encode": 2,
+        "createCheckpoint": 1,
+        "decode": 1,
+        "decodeNativeParts": 1,
+        "verifyCheckpoint": 1
+      },
+      "checkpointVerificationCalls": 1,
+      "historyReplayCalls": 2,
+      "remoteFileCounts": {
+        "key": 1,
+        "part": 3,
+        "commit": 1,
+        "checkpoint-part": 3,
+        "checkpoint": 1
+      },
+      "remoteStorageBytes": 4376993,
+      "workerCreations": 1,
+      "metrics": {
+        "encrypt": {
+          "calls": 31,
+          "ms": 13.499999761581421,
+          "inputBytes": 23811131,
+          "outputBytes": 23811999
+        },
+        "serialize": {
+          "calls": 24,
+          "ms": 1526.1999998092651,
+          "inputBytes": 840257501,
+          "outputBytes": 840257501
+        },
+        "compress": {
+          "calls": 24,
+          "ms": 2144.6000006198883,
+          "inputBytes": 840257501,
+          "outputBytes": 21550726
+        },
+        "cache": {
+          "calls": 30,
+          "ms": 42,
+          "inputBytes": 23811939,
+          "outputBytes": 0
+        },
+        "records": {
+          "calls": 1,
+          "ms": 1809.7000000476837,
+          "inputBytes": 182440026,
+          "outputBytes": 182440026
+        },
+        "decrypt": {
+          "calls": 12,
+          "ms": 4.199999809265137,
+          "inputBytes": 6493184,
+          "outputBytes": 0
+        }
+      },
+      "memoryBefore": 303161148,
+      "memoryAfter": 1334665468,
+      "maxMainThreadLagMs": 184,
+      "heartbeatTicks": 540,
+      "exactSnapshotVerified": true
+    },
+    "checkpointTitleTail": {
+      "ms": 5069.299999952316,
+      "uploadedBytes": 226,
+      "downloadedBytes": 0,
+      "transportCalls": {
+        "changes": 2,
+        "checkpoints": 1,
+        "ids": 1,
+        "put": 1
+      },
+      "remoteReadsByKind": {},
+      "remoteReadsByPurpose": {},
+      "indexedDBReads": {
+        "commitEntries": 0,
+        "oldCommitEntries": 0,
+        "replayEntries": 0,
+        "otherEntries": 2
+      },
+      "workerOperations": {
+        "toRecords": 1,
+        "encodeCache": 5,
+        "hashRecords": 1,
+        "fromRecordsWithContent": 1,
+        "encode": 2
+      },
+      "checkpointVerificationCalls": 0,
+      "historyReplayCalls": 0,
+      "remoteFileCounts": {
+        "key": 1,
+        "part": 3,
+        "commit": 2,
+        "checkpoint-part": 3,
+        "checkpoint": 1
+      },
+      "remoteStorageBytes": 4377219,
+      "workerCreations": 1,
+      "metrics": {
+        "records": {
+          "calls": 1,
+          "ms": 1840.4000000953674,
+          "inputBytes": 182440018,
+          "outputBytes": 182440018
+        },
+        "cache": {
+          "calls": 9,
+          "ms": 18.399999856948853,
+          "inputBytes": 12941036,
+          "outputBytes": 0
+        },
+        "serialize": {
+          "calls": 8,
+          "ms": 212.20000052452087,
+          "inputBytes": 76862033,
+          "outputBytes": 76862033
+        },
+        "compress": {
+          "calls": 8,
+          "ms": 536.5999999046326,
+          "inputBytes": 76862033,
+          "outputBytes": 12940772
+        },
+        "encrypt": {
+          "calls": 8,
+          "ms": 7.299999713897705,
+          "inputBytes": 12940812,
+          "outputBytes": 12941036
+        },
+        "decrypt": {
+          "calls": 1,
+          "ms": 0,
+          "inputBytes": 226,
+          "outputBytes": 0
+        }
+      },
+      "memoryBefore": 1338318572,
+      "memoryAfter": 1016975346,
+      "maxMainThreadLagMs": 116.90000009536743,
+      "heartbeatTicks": 190,
+      "exactSnapshotVerified": true
+    },
+    "checkpointPublish": {
+      "ms": 8403.400000095367,
+      "uploadedBytes": 2116670,
+      "downloadedBytes": 2116670,
+      "transportCalls": {
+        "changes": 2,
+        "ids": 1,
+        "put": 4,
+        "read": 4,
+        "checkpoints": 1
+      },
+      "remoteReadsByKind": {
+        "checkpoint": 1,
+        "checkpoint-part": 3
+      },
+      "remoteReadsByPurpose": {
+        "normal": 4
+      },
+      "indexedDBReads": {
+        "commitEntries": 0,
+        "oldCommitEntries": 0,
+        "replayEntries": 0,
+        "otherEntries": 8
+      },
+      "workerOperations": {
+        "encodeCache": 5,
+        "createCheckpoint": 1,
+        "encodeNative": 1,
+        "encode": 1,
+        "decode": 1,
+        "decodeNativeParts": 1,
+        "verifyCheckpoint": 1,
+        "fromRecords": 1
+      },
+      "checkpointVerificationCalls": 1,
+      "historyReplayCalls": 0,
+      "remoteFileCounts": {
+        "key": 1,
+        "part": 3,
+        "commit": 2,
+        "checkpoint-part": 6,
+        "checkpoint": 2
+      },
+      "remoteStorageBytes": 6493889,
+      "workerCreations": 1,
+      "metrics": {
+        "cache": {
+          "calls": 15,
+          "ms": 24.499999523162842,
+          "inputBytes": 12860091,
+          "outputBytes": 0
+        },
+        "serialize": {
+          "calls": 11,
+          "ms": 778.4000000953674,
+          "inputBytes": 431620130,
+          "outputBytes": 431620130
+        },
+        "compress": {
+          "calls": 11,
+          "ms": 1147.6999998092651,
+          "inputBytes": 431620130,
+          "outputBytes": 12859687
+        },
+        "encrypt": {
+          "calls": 13,
+          "ms": 7.600000381469727,
+          "inputBytes": 12859727,
+          "outputBytes": 12860091
+        },
+        "decrypt": {
+          "calls": 8,
+          "ms": 3.0999999046325684,
+          "inputBytes": 4233340,
+          "outputBytes": 0
+        }
+      },
+      "memoryBefore": 1020674962,
+      "memoryAfter": 1373858567,
+      "maxMainThreadLagMs": 163.5,
+      "heartbeatTicks": 316,
+      "exactSnapshotVerified": true
+    },
+    "checkpointReopen": {
+      "ms": 1566.6000001430511,
+      "uploadedBytes": 0,
+      "downloadedBytes": 359,
+      "transportCalls": {
+        "keyHeader": 1,
+        "read": 1,
+        "changes": 1
+      },
+      "remoteReadsByKind": {
+        "key": 1
+      },
+      "remoteReadsByPurpose": {
+        "normal": 1
+      },
+      "indexedDBReads": {
+        "commitEntries": 0,
+        "oldCommitEntries": 0,
+        "replayEntries": 1,
+        "otherEntries": 0
+      },
+      "workerOperations": {
+        "decodeCache": 2,
+        "encodeCache": 1,
+        "fromRecords": 1
+      },
+      "checkpointVerificationCalls": 0,
+      "historyReplayCalls": 0,
+      "remoteFileCounts": {
+        "key": 1,
+        "part": 3,
+        "commit": 2,
+        "checkpoint-part": 6,
+        "checkpoint": 2
+      },
+      "remoteStorageBytes": 6493889,
+      "workerCreations": 1,
+      "metrics": {
+        "decrypt": {
+          "calls": 3,
+          "ms": 2.1999998092651367,
+          "inputBytes": 4272995,
+          "outputBytes": 0
+        },
+        "cache": {
+          "calls": 3,
+          "ms": 34.5,
+          "inputBytes": 2156709,
+          "outputBytes": 0
+        },
+        "serialize": {
+          "calls": 1,
+          "ms": 35.799999952316284,
+          "inputBytes": 12810394,
+          "outputBytes": 12810394
+        },
+        "compress": {
+          "calls": 1,
+          "ms": 88.90000009536743,
+          "inputBytes": 12810394,
+          "outputBytes": 2156673
+        },
+        "encrypt": {
+          "calls": 1,
+          "ms": 1.0999999046325684,
+          "inputBytes": 2156681,
+          "outputBytes": 2156709
+        }
+      },
+      "memoryBefore": 1377945168,
+      "memoryAfter": 800000845,
+      "maxMainThreadLagMs": 97.20000004768372,
+      "heartbeatTicks": 54,
+      "exactSnapshotVerified": true
+    }
+  },
+  "browser": "155.0.8059.80",
+  "browserProcessIds": [
+    {
+      "type": "browser",
+      "id": 25885
+    },
+    {
+      "type": "GPU",
+      "id": 25889
+    },
+    {
+      "type": "network.mojom.NetworkService",
+      "id": 25890
+    },
+    {
+      "type": "storage.mojom.StorageService",
+      "id": 25891
+    },
+    {
+      "type": "mac_notifications.mojom.MacNotificationProvider",
+      "id": 25892
+    }
+  ],
+  "inputBytes": 183056897,
+  "generationMs": 800.2000000476837,
+  "chats": 2385,
+  "nodes": 39321,
+  "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/155.0.0.0 Safari/537.36",
+  "hardwareConcurrency": 10,
+  "diagnostics": {
+    "workerTrace": [
+      {
+        "event": "response",
+        "id": 46,
+        "operation": "encodeCache",
+        "atMs": 36435.5
+      },
+      {
+        "event": "start",
+        "id": 47,
+        "operation": "encodeCache",
+        "atMs": 36437.90000009537
+      },
+      {
+        "event": "response",
+        "id": 47,
+        "operation": "encodeCache",
+        "atMs": 36609.40000009537
+      },
+      {
+        "event": "start",
+        "id": 48,
+        "operation": "encodeCache",
+        "atMs": 36620.200000047684
+      },
+      {
+        "event": "response",
+        "id": 48,
+        "operation": "encodeCache",
+        "atMs": 36783.60000014305
+      },
+      {
+        "event": "start",
+        "id": 49,
+        "operation": "fromRecords",
+        "atMs": 36798
+      },
+      {
+        "event": "response",
+        "id": 49,
+        "operation": "fromRecords",
+        "atMs": 37799.40000009537
+      },
+      {
+        "event": "start",
+        "id": 50,
+        "operation": "sameSnapshot",
+        "atMs": 37800.299999952316
+      },
+      {
+        "event": "response",
+        "id": 50,
+        "operation": "sameSnapshot",
+        "atMs": 41933.5
+      },
+      {
+        "event": "start",
+        "id": 51,
+        "operation": "decodeCache",
+        "atMs": 41990.299999952316
+      },
+      {
+        "event": "response",
+        "id": 51,
+        "operation": "decodeCache",
+        "atMs": 42077.10000014305
+      },
+      {
+        "event": "start",
+        "id": 52,
+        "operation": "decodeCache",
+        "atMs": 42109.799999952316
+      },
+      {
+        "event": "response",
+        "id": 52,
+        "operation": "decodeCache",
+        "atMs": 42463.60000014305
+      },
+      {
+        "event": "start",
+        "id": 53,
+        "operation": "encodeCache",
+        "atMs": 42492.5
+      },
+      {
+        "event": "response",
+        "id": 53,
+        "operation": "encodeCache",
+        "atMs": 42661.10000014305
+      },
+      {
+        "event": "start",
+        "id": 54,
+        "operation": "fromRecords",
+        "atMs": 42675.299999952316
+      },
+      {
+        "event": "response",
+        "id": 54,
+        "operation": "fromRecords",
+        "atMs": 43507.299999952316
+      },
+      {
+        "event": "start",
+        "id": 55,
+        "operation": "sameSnapshot",
+        "atMs": 43507.90000009537
+      },
+      {
+        "event": "response",
+        "id": 55,
+        "operation": "sameSnapshot",
+        "atMs": 47521.299999952316
+      },
+      {
+        "event": "start",
+        "id": 56,
+        "operation": "decode",
+        "atMs": 47577.299999952316
+      },
+      {
+        "event": "start",
+        "id": 57,
+        "operation": "decode",
+        "atMs": 47577.299999952316
+      },
+      {
+        "event": "response",
+        "id": 56,
+        "operation": "decode",
+        "atMs": 47580.60000014305
+      },
+      {
+        "event": "response",
+        "id": 57,
+        "operation": "decode",
+        "atMs": 47580.700000047684
+      },
+      {
+        "event": "start",
+        "id": 58,
+        "operation": "decodeNativeParts",
+        "atMs": 47582.40000009537
+      },
+      {
+        "event": "response",
+        "id": 58,
+        "operation": "decodeNativeParts",
+        "atMs": 47880.700000047684
+      },
+      {
+        "event": "start",
+        "id": 59,
+        "operation": "encode",
+        "atMs": 47881.200000047684
+      },
+      {
+        "event": "response",
+        "id": 59,
+        "operation": "encode",
+        "atMs": 47891.40000009537
+      },
+      {
+        "event": "start",
+        "id": 60,
+        "operation": "decode",
+        "atMs": 47891.700000047684
+      },
+      {
+        "event": "response",
+        "id": 60,
+        "operation": "decode",
+        "atMs": 47892
+      },
+      {
+        "event": "start",
+        "id": 61,
+        "operation": "decodeNativeParts",
+        "atMs": 47893.40000009537
+      },
+      {
+        "event": "response",
+        "id": 61,
+        "operation": "decodeNativeParts",
+        "atMs": 48220.60000014305
+      },
+      {
+        "event": "start",
+        "id": 62,
+        "operation": "verifyCheckpoint",
+        "atMs": 48220.799999952316
+      }
+    ],
+    "engineTrace": [
+      {
+        "event": "start",
+        "operation": "remote",
+        "atMs": 29593.5
+      },
+      {
+        "event": "end",
+        "operation": "remote",
+        "atMs": 29593.5
+      },
+      {
+        "event": "start",
+        "operation": "checkpoint",
+        "atMs": 29593.5
+      },
+      {
+        "event": "start",
+        "operation": "finishCheckpoint",
+        "atMs": 29593.60000014305
+      },
+      {
+        "event": "end",
+        "operation": "finishCheckpoint",
+        "atMs": 29593.60000014305
+      },
+      {
+        "event": "start",
+        "operation": "hydrateHistory",
+        "atMs": 29593.60000014305
+      },
+      {
+        "event": "end",
+        "operation": "hydrateHistory",
+        "atMs": 29593.60000014305
+      },
+      {
+        "event": "start",
+        "operation": "save",
+        "atMs": 32554
+      },
+      {
+        "event": "end",
+        "operation": "save",
+        "atMs": 32733.5
+      },
+      {
+        "event": "start",
+        "operation": "finishCheckpoint",
+        "atMs": 32733.5
+      },
+      {
+        "event": "start",
+        "operation": "hydrateHistory",
+        "atMs": 33107.40000009537
+      },
+      {
+        "event": "end",
+        "operation": "hydrateHistory",
+        "atMs": 33107.40000009537
+      },
+      {
+        "event": "start",
+        "operation": "save",
+        "atMs": 35600.700000047684
+      },
+      {
+        "event": "end",
+        "operation": "save",
+        "atMs": 36617.10000014305
+      },
+      {
+        "event": "end",
+        "operation": "finishCheckpoint",
+        "atMs": 36617.200000047684
+      },
+      {
+        "event": "end",
+        "operation": "checkpoint",
+        "atMs": 36617.200000047684
+      },
+      {
+        "event": "start",
+        "operation": "finishCheckpoint",
+        "atMs": 36620.10000014305
+      },
+      {
+        "event": "end",
+        "operation": "finishCheckpoint",
+        "atMs": 36620.10000014305
+      },
+      {
+        "event": "start",
+        "operation": "refresh",
+        "atMs": 36620.10000014305
+      },
+      {
+        "event": "start",
+        "operation": "save",
+        "atMs": 36620.10000014305
+      },
+      {
+        "event": "end",
+        "operation": "save",
+        "atMs": 36788.700000047684
+      },
+      {
+        "event": "end",
+        "operation": "refresh",
+        "atMs": 36788.799999952316
+      },
+      {
+        "event": "start",
+        "operation": "remote",
+        "atMs": 36788.799999952316
+      },
+      {
+        "event": "end",
+        "operation": "remote",
+        "atMs": 36788.799999952316
+      },
+      {
+        "event": "start",
+        "operation": "finishCheckpoint",
+        "atMs": 42492.40000009537
+      },
+      {
+        "event": "end",
+        "operation": "finishCheckpoint",
+        "atMs": 42492.5
+      },
+      {
+        "event": "start",
+        "operation": "refresh",
+        "atMs": 42492.5
+      },
+      {
+        "event": "start",
+        "operation": "save",
+        "atMs": 42492.5
+      },
+      {
+        "event": "end",
+        "operation": "save",
+        "atMs": 42666.10000014305
+      },
+      {
+        "event": "end",
+        "operation": "refresh",
+        "atMs": 42666.10000014305
+      },
+      {
+        "event": "start",
+        "operation": "remote",
+        "atMs": 42666.10000014305
+      },
+      {
+        "event": "end",
+        "operation": "remote",
+        "atMs": 42666.10000014305
+      }
+    ],
+    "idbActiveRequests": 0,
+    "idbActiveTransactions": 0,
+    "pendingWorkerOperations": 1
+  },
+  "engineTrace": [
+    {
+      "event": "start",
+      "operation": "hydrateHistory",
+      "atMs": 29593.60000014305
+    },
+    {
+      "event": "end",
+      "operation": "hydrateHistory",
+      "atMs": 29593.60000014305
+    },
+    {
+      "event": "start",
+      "operation": "save",
+      "atMs": 32554
+    },
+    {
+      "event": "end",
+      "operation": "save",
+      "atMs": 32733.5
+    },
+    {
+      "event": "start",
+      "operation": "finishCheckpoint",
+      "atMs": 32733.5
+    },
+    {
+      "event": "start",
+      "operation": "hydrateHistory",
+      "atMs": 33107.40000009537
+    },
+    {
+      "event": "end",
+      "operation": "hydrateHistory",
+      "atMs": 33107.40000009537
+    },
+    {
+      "event": "start",
+      "operation": "save",
+      "atMs": 35600.700000047684
+    },
+    {
+      "event": "end",
+      "operation": "save",
+      "atMs": 36617.10000014305
+    },
+    {
+      "event": "end",
+      "operation": "finishCheckpoint",
+      "atMs": 36617.200000047684
+    },
+    {
+      "event": "end",
+      "operation": "checkpoint",
+      "atMs": 36617.200000047684
+    },
+    {
+      "event": "start",
+      "operation": "finishCheckpoint",
+      "atMs": 36620.10000014305
+    },
+    {
+      "event": "end",
+      "operation": "finishCheckpoint",
+      "atMs": 36620.10000014305
+    },
+    {
+      "event": "start",
+      "operation": "refresh",
+      "atMs": 36620.10000014305
+    },
+    {
+      "event": "start",
+      "operation": "save",
+      "atMs": 36620.10000014305
+    },
+    {
+      "event": "end",
+      "operation": "save",
+      "atMs": 36788.700000047684
+    },
+    {
+      "event": "end",
+      "operation": "refresh",
+      "atMs": 36788.799999952316
+    },
+    {
+      "event": "start",
+      "operation": "remote",
+      "atMs": 36788.799999952316
+    },
+    {
+      "event": "end",
+      "operation": "remote",
+      "atMs": 36788.799999952316
+    },
+    {
+      "event": "start",
+      "operation": "finishCheckpoint",
+      "atMs": 42492.40000009537
+    },
+    {
+      "event": "end",
+      "operation": "finishCheckpoint",
+      "atMs": 42492.5
+    },
+    {
+      "event": "start",
+      "operation": "refresh",
+      "atMs": 42492.5
+    },
+    {
+      "event": "start",
+      "operation": "save",
+      "atMs": 42492.5
+    },
+    {
+      "event": "end",
+      "operation": "save",
+      "atMs": 42666.10000014305
+    },
+    {
+      "event": "end",
+      "operation": "refresh",
+      "atMs": 42666.10000014305
+    },
+    {
+      "event": "start",
+      "operation": "remote",
+      "atMs": 42666.10000014305
+    },
+    {
+      "event": "end",
+      "operation": "remote",
+      "atMs": 42666.10000014305
+    },
+    {
+      "event": "start",
+      "operation": "finishCheckpoint",
+      "atMs": 47577.10000014305
+    },
+    {
+      "event": "end",
+      "operation": "finishCheckpoint",
+      "atMs": 47577.10000014305
+    },
+    {
+      "event": "start",
+      "operation": "refresh",
+      "atMs": 47577.10000014305
+    },
+    {
+      "event": "start",
+      "operation": "hydrateHistory",
+      "atMs": 48220.700000047684
+    },
+    {
+      "event": "end",
+      "operation": "hydrateHistory",
+      "atMs": 48220.700000047684
+    }
+  ],
+  "heartbeat": {
+    "at": "2026-10-15T22:07:42.078Z",
+    "scenario": "checkpointPublish",
+    "lastWorkerOperation": {
+      "event": "start",
+      "id": 50,
+      "operation": "sameSnapshot",
+      "atMs": 37800.299999952316
+    }
+  },
+  "pageEvents": [
+    {
+      "type": "pagecrash",
+      "at": "2026-10-15T22:07:51.466Z",
+      "scenario": "checkpointFreshPull"
+    }
+  ],
+  "error": "Benchmark page crashed.",
+  "targetCrashes": [
+    {
+      "status": "crashed",
+      "errorCode": 5,
+      "at": "2026-10-15T22:07:51.466Z",
+      "scenario": "checkpointFreshPull"
+    }
+  ],
+  "chromeStderrDiagnostics": {
+    "logPath": "/tmp/weavelet-checkpoint-only-scale3-oom2-chrome.stderr.log",
+    "v8OomSignature": "V8 javascript OOM (CALL_AND_RETRY_LAST).",
+    "fatalSignatureObserved": false,
+    "capturedVia": "DEBUG=pw:browser (Playwright browser child stderr)"
+  }
+}
