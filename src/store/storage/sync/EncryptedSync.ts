@@ -7,13 +7,14 @@ import { mergeEditTimes } from '../google/editTimes';
 import { collectHistoryAsync, replayHistoryAsync, decodePartsAsync, encodeWireAsync, decodeWirePartsAsync, encodeAsync, decodeAsync, encodeCacheAsync, decodeCacheAsync, toRecordsAsync as toRecords, fromRecordsAsync as fromRecords, hashRecordsAsync as hashRecords, hashCommitsAsync, encodeNativeAsync, decodeNativePartsAsync, hashNativeCommitsAsync } from '../google/processing';
 import { syncPhase, completedFile, syncStage } from '../google/progress';
 import { createKeyEnvelope, unlockKey, encode, decode, encrypt, decrypt, digest, type KeyEnvelope } from '../google/crypto';
-import { diffHashedRecords, applyChanges, type Records, type Snapshot, type Change, diffRecords } from '../google/records';
+import { diffHashedRecords, applyChanges, sameRecords, type Records, type Snapshot, type Change, diffRecords } from '../google/records';
 import { SyncFileNotFoundError, type SyncDataset, type SyncTransport } from './transport';
 import { syncCache, readSyncEntries, writeSyncCache, rememberedSyncKey } from '../google/cache';
 
 import type { Commit } from '../google/replay';
 import { requireNativeGzip } from '../google/gzip';
 import { frameCacheGzip } from '../google/cacheCodec';
+import { createEncodedCheckpointAsync, decodeVerifyCheckpointAsync } from '../google/processing';
 interface CommitManifest { version: number; parts?: string[]; parents?: string[]; changes?: Change[]; resolutions?: Commit['resolutions'] }
 interface Pending {
   id: string;
@@ -28,6 +29,8 @@ interface Compaction {
   files: Pending['files'];
   remove: string[];
 }
+interface CheckpointManifest { version: 1; parts: string[]; bytes: number; stateRoot: string }
+interface CheckpointUpload { id: string; manifest: CheckpointManifest; commits: string[]; files: Pending['files'] }
 interface ReplayCache {
   version: 1;
   commits: string[];
@@ -44,13 +47,18 @@ interface Cache {
   packs?: Record<string, PackManifest>;
   parts?: Record<string, string[]>;
   compaction?: Compaction;
+  checkpointUpload?: CheckpointUpload;
+  lastCheckpoint?: { id: string; commits: string[] };
+  seenCheckpoints?: string[];
 }
 const emptyCache = (): Cache => ({ version: 1, commits: {} });
 const PART_BYTES = 1024 * 1024;
 const INLINE_BYTES = 256 * 1024;
+// Bound JavaScript LZ work before encoding; large payloads go directly to native gzip.
+const INLINE_JSON_BOUND = 64 * 1024;
 const PACK_BYTES = 4 * 1024 * 1024 - 28; // Includes the AES-GCM overhead within a 4 MiB encrypted file.
 const COMPACT_COMMITS = 128;
-// Conservative JSON byte bound for grouping only; the actual native payload limit is checked by its encoder.
+// Conservative JSON byte bound for grouping and bounded inline selection; the native encoder checks its actual limit.
 function nativeCommitByteBound(commit: Commit): number {
   return 128 + commit.parents.reduce((size, parent) => size + parent.length * 6 + 4, 0) +
     commit.changes.reduce((size, change) => size + 128 +
@@ -60,14 +68,16 @@ function nativeCommitByteBound(commit: Commit): number {
 }
 export interface SyncTransferOptions {
   partBytes?: number; concurrency?: 1 | 2;
-  // Opt in only when all devices support delta payloads; existing datasets keep their compatible format.
+  // Optional delta payloads for explicit legacy compression; native gzip takes precedence.
   wireDelta?: boolean;
-  // Explicit opt-in; native full JSON takes precedence over wireDelta in this protocol version.
+  // Native gzip is the default; explicit legacy preserves the old compression and hash formats.
   wireCompression?: 'gzip' | 'legacy';
 }
 interface StoredCache {
   version: 2;
   replay?: true;
+  replayFingerprint?: string;
+  historyParents?: Record<string, string[]>;
   wireDelta?: boolean;
   wireCompression?: 'gzip' | 'legacy';
   commits: string[];
@@ -77,6 +87,9 @@ interface StoredCache {
   packs?: Cache['packs'];
   parts?: Cache['parts'];
   compaction?: Omit<Compaction, 'files'> & { files: { id: string; kind: string; size: number }[] };
+  checkpointUpload?: Omit<CheckpointUpload, 'files'> & { files: { id: string; kind: string; size: number }[] };
+  lastCheckpoint?: Cache['lastCheckpoint'];
+  seenCheckpoints?: string[];
 }
 
 export class EncryptedSync {
@@ -88,6 +101,9 @@ export class EncryptedSync {
   private remoteConflicts: Record<string, (string | null)[]> = {};
   private remoteCache?: ReplayCache;
   private persistedReplay?: ReplayCache;
+  private replayFingerprint?: string;
+  // Authenticated parent metadata is enough for heads/discovery. Bodies stay on disk until a replay needs them.
+  private coldHistory = new Map<string, string[]>();
   private replaySavedAt = 0;
   private loading = new Set<string>();
   private persistedCommits = new Set<string>();
@@ -99,7 +115,54 @@ export class EncryptedSync {
     if (!this.key || this.closed) throw new Error('Unlock encrypted sync with your passphrase first.');
     return this.key;
   }
-  close() { this.closed = true; this.key = undefined; this.remoteCache = undefined; this.persistedReplay = undefined; }
+  close() {
+    this.closed = true; this.key = undefined; this.remoteCache = undefined; this.persistedReplay = undefined;
+    this.replayFingerprint = undefined; this.cacheFingerprint = undefined; this.cache = emptyCache();
+    this.coldHistory.clear(); this.persistedCommits.clear(); this.encodedCommits.clear();
+  }
+  private hasCommit(id: string) { return Object.hasOwn(this.cache.commits, id) || this.coldHistory.has(id); }
+  private commitIds() { return [...new Set([...this.coldHistory.keys(), ...Object.keys(this.cache.commits)])]; }
+  private parentsOf(id: string) { return this.cache.commits[id]?.parents ?? this.coldHistory.get(id)!; }
+  private async hydrateHistory(ids = [...this.coldHistory.keys()]) {
+    const missing = ids.filter(id => this.coldHistory.has(id));
+    for (let offset = 0; offset < missing.length; offset += 32) {
+      const batch = missing.slice(offset, offset + 32);
+      const bytes = await readSyncEntries(this.dataset, batch.map(id => `commit:${id}`));
+      for (let i = 0; i < batch.length; i++) {
+        const id = batch[i];
+        if (!this.coldHistory.has(id)) continue; // A recovered pack may have hydrated this whole batch.
+        const parents = this.coldHistory.get(id)!;
+        try {
+          if (!bytes[i]) throw new Error('Missing local sync commit.');
+          const commit = await decodeCacheAsync<Commit>(await decrypt(this.requireKey(), bytes[i]!, this.context(`commit:${id}`)));
+          if (commit.version !== 1 || !Array.isArray(commit.changes) ||
+              JSON.stringify(commit.parents) !== JSON.stringify(parents)) throw new Error('Invalid local sync history.');
+          this.cache.commits[id] = commit;
+        } catch {
+          // The private history cache is replaceable. Keep the baseline/outbox and recover immutable cloud sources.
+          const wasPersisted = this.persistedCommits.has(id);
+          this.coldHistory.delete(id); this.persistedCommits.delete(id);
+          try {
+            try { await this.loadCommit(id, new Map()); }
+            catch (error) {
+              if (!(error instanceof SyncFileNotFoundError)) throw error;
+              await this.discoverPacks();
+              await this.loadCommit(id, new Map());
+            }
+            if (JSON.stringify(this.cache.commits[id]?.parents) !== JSON.stringify(parents)) throw new Error('Recovered sync history does not match.');
+          }
+          catch (error) {
+            // A best-effort checkpoint caller may catch this error. Its known history must remain complete.
+            delete this.cache.commits[id]; this.encodedCommits.delete(id);
+            this.coldHistory.set(id, parents);
+            if (wasPersisted) this.persistedCommits.add(id);
+            throw error;
+          }
+        }
+        this.coldHistory.delete(id);
+      }
+    }
+  }
   private async parallel<T, R>(values: T[], work: (value: T) => Promise<R>): Promise<R[]> {
     const results = new Array<R>(values.length);
     let next = 0;
@@ -117,7 +180,7 @@ export class EncryptedSync {
     if (failed) throw failure;
     return results;
   }
-  private async save(remove: string[] = []) {
+  private async save(remove: string[] = [], forceReplay = false) {
     const entries: [string, Uint8Array][] = [];
     const commits = { ...this.cache.commits };
     const pending = this.cache.pending;
@@ -126,32 +189,40 @@ export class EncryptedSync {
       if (this.persistedCommits.has(id)) continue;
       entries.push([`commit:${id}`, await encrypt(this.requireKey(), this.encodedCommits.get(id) ?? await encodeCacheAsync(commit), this.context(`commit:${id}`))]);
     }
-    const uploads = [pending, this.cache.compaction].filter((p): p is Pending | Compaction => !!p);
+    const uploads = [pending, this.cache.compaction, this.cache.checkpointUpload].filter((p): p is Pending | Compaction | CheckpointUpload => !!p);
     for (const upload of uploads) for (const file of upload.files) {
       if (file.bytes) entries.push([`outbox:${file.id}`, file.bytes]);
       if (file.sent) entries.push([`ack:${file.id}`, await encrypt(this.requireKey(), encode(upload.id), this.context(`ack:${file.id}`))]);
     }
     let replay = this.persistedReplay;
+    let replayFingerprint = this.replayFingerprint;
     if (this.remoteCache && this.remoteCache !== replay) {
       const known = new Set(replay?.commits ?? []);
       const added = this.remoteCache.commits.filter(id => !known.has(id));
       const changedBytes = added.reduce((total, id) => total + this.cache.commits[id].changes.reduce(
         (size, change) => size + change.key.length * 2 + (change.after?.length ?? 0) * 2, 0), 0);
       // Persist complete state periodically, not on each small edit. Commits remain the durable source of truth.
-      if (!replay || !replay.commits.length || changedBytes >= 8 * 1024 * 1024 || added.length >= 256 ||
+      if (forceReplay || !replay || !replay.commits.length || changedBytes >= 8 * 1024 * 1024 || added.length >= 256 ||
           performance.now() - this.replaySavedAt >= 5 * 60 * 1000) {
         replay = this.remoteCache;
-        entries.push(['replay', await encrypt(this.requireKey(), await encodeCacheAsync(replay), this.context('replay'))]);
+        const bytes = await encrypt(this.requireKey(), await encodeCacheAsync(replay), this.context('replay'));
+        replayFingerprint = await digest(bytes);
+        entries.push(['replay', bytes]);
       }
     }
     const stored: StoredCache = {
-      version: 2, replay: replay ? true : undefined, wireDelta: this.options.wireDelta, wireCompression: this.options.wireCompression,
-      commits: Object.keys(this.cache.commits), token: this.cache.token, baseline: this.cache.baseline,
+      version: 2, replay: replay ? true : undefined, replayFingerprint,
+      historyParents: Object.fromEntries(this.commitIds().map(id => [id, this.parentsOf(id)])),
+      wireDelta: this.options.wireDelta, wireCompression: this.options.wireCompression,
+      commits: this.commitIds(), token: this.cache.token, baseline: this.cache.baseline,
       pending: pending && { id: pending.id, baseline: pending.baseline,
         files: pending.files.map(({ id, kind, size }) => ({ id, kind, size })) },
       packs: this.cache.packs, parts: this.cache.parts,
       compaction: this.cache.compaction && { ...this.cache.compaction,
         files: this.cache.compaction.files.map(({ id, kind, size }) => ({ id, kind, size })) },
+      checkpointUpload: this.cache.checkpointUpload && { ...this.cache.checkpointUpload,
+        files: this.cache.checkpointUpload.files.map(({ id, kind, size }) => ({ id, kind, size })) },
+      lastCheckpoint: this.cache.lastCheckpoint, seenCheckpoints: this.cache.seenCheckpoints,
     };
     const bytes = await encrypt(this.requireKey(), await encodeCacheAsync(stored), this.context('cache'));
     // Publishing the outbox and its immutable ciphertext is one durable transaction.
@@ -160,15 +231,16 @@ export class EncryptedSync {
     for (const upload of uploads) for (const file of upload.files) delete file.bytes;
     if (replay !== this.persistedReplay) this.replaySavedAt = performance.now();
     this.persistedReplay = replay;
+    this.replayFingerprint = replayFingerprint;
     this.cacheFingerprint = await digest(bytes);
     const packs = Object.values(this.cache.packs ?? {});
     const covered = new Set(packs.flatMap(pack => Object.keys(pack.commits)));
-    reportSyncHistory({ unaggregated: Object.keys(this.cache.commits).filter(id => !covered.has(id)).length,
+    reportSyncHistory({ unaggregated: this.commitIds().filter(id => !covered.has(id)).length,
       threshold: COMPACT_COMMITS, partBytes: PACK_BYTES, packs: packs.map(pack => ({ bytes: pack.bytes, parts: pack.parts.length })),
       cleanupTargets: this.cache.compaction?.remove.length ?? 0 });
   }
   private async loadCache(bytes: Uint8Array) {
-    this.remoteCache = undefined; this.persistedReplay = undefined;
+    this.remoteCache = undefined; this.persistedReplay = undefined; this.replayFingerprint = undefined; this.coldHistory.clear();
     const stored = await decodeCacheAsync<StoredCache | Cache>(await decrypt(this.requireKey(), bytes, this.context('cache')));
     if (stored.version === 1) {
       // Upgrade legacy outboxes without regenerating a single ID or ciphertext byte.
@@ -184,26 +256,19 @@ export class EncryptedSync {
     if (stored.version !== 2 || !Array.isArray(stored.commits)) throw new Error('Unsupported local sync cache.');
     this.options.wireDelta ??= stored.wireDelta === true;
     this.options.wireCompression ??= stored.wireCompression === 'gzip' || stored.wireCompression === 'legacy' ? stored.wireCompression : undefined;
-    const ids = [...new Set([...stored.commits, ...(stored.pending ? [stored.pending.id] : [])])];
-    const values = await readSyncEntries(this.dataset, ids.map(id => `commit:${id}`));
-    const commits: Record<string, Commit> = {};
-    for (let i = 0; i < ids.length; i++) {
-      if (!values[i]) throw new Error('Missing local sync commit.');
-      commits[ids[i]] = await decodeCacheAsync<Commit>(await decrypt(this.requireKey(), values[i]!, this.context(`commit:${ids[i]}`)));
-      this.persistedCommits.add(ids[i]);
-    }
-    this.cache = { version: 1, commits: Object.fromEntries(stored.commits.map(id => [id, commits[id]])), token: stored.token, baseline: stored.baseline,
-      pending: stored.pending && { ...stored.pending, commit: commits[stored.pending.id], files: stored.pending.files.map(f => ({ ...f, sent: false })) },
-      packs: stored.packs, parts: stored.parts,
-      compaction: stored.compaction && { ...stored.compaction, files: stored.compaction.files.map(f => ({ ...f, sent: false })) } };
-    if (stored.replay) {
+    const known = new Set(stored.commits);
+    if (stored.replay && stored.replayFingerprint && stored.historyParents &&
+        stored.commits.length === known.size && Object.keys(stored.historyParents).length === known.size &&
+        stored.commits.every(id => typeof id === 'string' && Array.isArray(stored.historyParents![id]) &&
+          stored.historyParents![id].every(parent => typeof parent === 'string' && parent !== id && known.has(parent)))) {
       // This is disposable acceleration data: missing/damaged bytes must never block history recovery.
       try {
         const [bytes] = await readSyncEntries(this.dataset, ['replay']);
-        if (bytes) {
+        if (bytes && await digest(bytes) === stored.replayFingerprint) {
           const replay = await decodeCacheAsync<ReplayCache>(await decrypt(this.requireKey(), bytes, this.context('replay')));
           if (replay.version === 1 && Array.isArray(replay.commits) && Array.isArray(replay.tips) &&
-              replay.commits.every(id => typeof id === 'string' && !!this.cache.commits[id]) &&
+              new Set(replay.commits).size === replay.commits.length &&
+              replay.commits.every(id => typeof id === 'string' && known.has(id)) &&
               replay.tips.every(id => typeof id === 'string' && replay.commits.includes(id)) &&
               replay.records && typeof replay.records === 'object' && !Array.isArray(replay.records) &&
               Object.values(replay.records).every(value => typeof value === 'string') &&
@@ -211,11 +276,36 @@ export class EncryptedSync {
               Object.values(replay.conflicts).every(values => Array.isArray(values) &&
                 values.every(value => value === null || typeof value === 'string'))) {
             this.remoteCache = this.persistedReplay = replay;
+            this.replayFingerprint = stored.replayFingerprint;
+            // The parent index and fingerprint were committed atomically with this locally verified replay.
+            for (const id of replay.commits) this.coldHistory.set(id, stored.historyParents![id]);
             this.replaySavedAt = performance.now();
           }
         }
       } catch { /* Replay from authenticated commits instead. */ }
     }
+    const ids = [...new Set([...stored.commits, ...(stored.pending ? [stored.pending.id] : [])])];
+    const commits: Record<string, Commit> = {};
+    for (let offset = 0; offset < ids.length; offset += 32) {
+      const batch = ids.slice(offset, offset + 32).filter(id => !this.coldHistory.has(id) || id === stored.pending?.id);
+      if (!batch.length) continue;
+      const values = await readSyncEntries(this.dataset, batch.map(id => `commit:${id}`));
+      for (let i = 0; i < batch.length; i++) {
+        const id = batch[i];
+        if (!values[i]) throw new Error('Missing local sync commit.');
+        commits[id] = await decodeCacheAsync<Commit>(await decrypt(this.requireKey(), values[i]!, this.context(`commit:${id}`)));
+      }
+    }
+    for (const id of ids) this.persistedCommits.add(id);
+    this.cache = { version: 1, commits: Object.fromEntries(stored.commits.filter(id => commits[id]).map(id => [id, commits[id]])),
+      token: stored.token, baseline: stored.baseline,
+      pending: stored.pending && { ...stored.pending, commit: commits[stored.pending.id], files: stored.pending.files.map(f => ({ ...f, sent: false })) },
+      packs: stored.packs, parts: stored.parts,
+      compaction: stored.compaction && { ...stored.compaction, files: stored.compaction.files.map(f => ({ ...f, sent: false })) } };
+    this.cache.checkpointUpload = stored.checkpointUpload && { ...stored.checkpointUpload,
+      files: stored.checkpointUpload.files.map(f => ({ ...f, sent: false })) };
+    this.cache.lastCheckpoint = stored.lastCheckpoint;
+    this.cache.seenCheckpoints = stored.seenCheckpoints;
   }
 
   private run<T>(work: () => Promise<T>): Promise<T> {
@@ -235,13 +325,15 @@ export class EncryptedSync {
             this.cacheFingerprint = await digest(cached);
             await this.loadCache(cached);
           }
+          this.options.wireCompression ??= 'gzip';
           if (this.options.wireCompression === 'gzip') requireNativeGzip();
           return await work();
         }
         catch (error) {
           // A failed transaction must be retried from durable state, not half-mutated in-memory metadata.
           this.cacheFingerprint = undefined;
-          this.cache = emptyCache(); this.remoteCache = undefined; this.persistedReplay = undefined; this.persistedCommits.clear(); this.encodedCommits.clear();
+          this.cache = emptyCache(); this.remoteCache = undefined; this.persistedReplay = undefined; this.replayFingerprint = undefined;
+          this.coldHistory.clear(); this.persistedCommits.clear(); this.encodedCommits.clear();
           throw error;
         }
       };
@@ -250,17 +342,17 @@ export class EncryptedSync {
         : guarded();
     };
     const result = this.queue.then(task);
-    this.queue = result.catch(() => {});
+    this.queue = result.then(() => undefined, () => undefined);
     return result;
   }
 
   static async create<T extends SyncDataset>(transport: SyncTransport<T>, password: string, options: SyncTransferOptions & { folderName?: string } = {}): Promise<{ session: EncryptedSync; file: T }> {
-    if (options.wireCompression === 'gzip') requireNativeGzip(); // Fail before allocating IDs/folders/outboxes.
+    if (options.wireCompression !== 'legacy') requireNativeGzip(); // Fail before allocating IDs/folders/outboxes.
     // Derive the key before creating remote files, so invalid passphrases cannot create empty folders.
     const [dataset, header] = await transport.ids(2);
     syncPhase('key');
     const { key, envelope } = await createKeyEnvelope(password, dataset);
-    const session = new EncryptedSync(dataset, transport, options);
+    const session = new EncryptedSync(dataset, transport, { ...options, wireCompression: options.wireCompression ?? 'gzip' });
     session.key = key;
     await session.save();
     await rememberedSyncKey(dataset, key);
@@ -312,7 +404,7 @@ export class EncryptedSync {
   }
 
   private async loadCommit(id: string, manifests: Map<string, CommitManifest>): Promise<void> {
-    if (this.cache.commits[id]) return;
+    if (this.hasCommit(id)) return;
     if (this.loading.has(id)) throw new Error('Cyclic sync history.');
     this.loading.add(id);
     try {
@@ -360,6 +452,7 @@ export class EncryptedSync {
     return pack;
   }
   private async loadPack(pack: PackManifest, verify = false): Promise<void> {
+    await this.hydrateHistory(Object.keys(pack.commits));
     const missing = Object.keys(pack.commits).some(commit => !this.cache.commits[commit]);
     // Authenticate the index against retained commits without downloading known payloads again.
     const retained = Object.fromEntries(Object.keys(pack.commits)
@@ -428,6 +521,7 @@ export class EncryptedSync {
   private async refresh(retry = true): Promise<void> {
     try {
       syncPhase('checking');
+      const initial = !this.cache.token;
       const ids = new Set<string>();
       if (!this.cache.token) {
         const token = await this.transport.startToken();
@@ -444,13 +538,13 @@ export class EncryptedSync {
       const packChanged = page.changes.some(change => change.dataset === this.dataset &&
         change.kind === 'pack') || removedPacks.length > 0;
       // Query live indexes rather than reading stale creation events followed by deletion events.
-      if (packChanged || [...removed].some(id => this.cache.commits[id] || ids.has(id))) await this.discoverPacks();
+      if (packChanged || [...removed].some(id => this.hasCommit(id) || ids.has(id))) await this.discoverPacks();
       const covered = this.packedCommits();
       for (const [, pack] of removedPacks) if (Object.keys(pack.commits).some(id => !covered.has(id))) {
         throw new Error('Sync history was deleted from storage; sync stopped.');
       }
       for (const id of removed) {
-        if ((this.cache.commits[id] || ids.has(id)) && !covered.has(id)) {
+        if ((this.hasCommit(id) || ids.has(id)) && !covered.has(id)) {
           throw new Error('Sync history was deleted from storage; sync stopped.');
         }
         ids.delete(id);
@@ -459,7 +553,7 @@ export class EncryptedSync {
         if (change.dataset === this.dataset && change.kind === 'commit' &&
             !removed.has(change.id)) ids.add(change.id);
       }
-      const missing = [...ids].filter(id => !this.cache.commits[id]);
+      const missing = [...ids].filter(id => !this.hasCommit(id));
       if (missing.length) {
         syncPhase('downloading');
         const manifests = new Map<string, CommitManifest>();
@@ -474,7 +568,10 @@ export class EncryptedSync {
         for (const id of missing) await this.loadCommit(id, manifests);
       }
       for (const commit of Object.values(this.cache.commits)) for (const parent of commit.parents) {
-        if (!this.cache.commits[parent]) await this.loadCommit(parent, new Map());
+        if (!this.hasCommit(parent)) await this.loadCommit(parent, new Map());
+      }
+      if (initial || page.changes.some(change => change.dataset === this.dataset && change.kind === 'checkpoint' && !change.removed)) {
+        await this.discoverCheckpoints();
       }
       this.cache.token = page.token;
       // Cursor and downloaded commits are committed together. Failed reads never advance the durable cursor.
@@ -488,27 +585,137 @@ export class EncryptedSync {
       await this.refresh(false);
     }
   }
+  private async readCheckpoint(id: string): Promise<{ chunks: Uint8Array[]; stateRoot: string }> {
+    const manifest = await decodeAsync<CheckpointManifest>(await decrypt(this.requireKey(),
+      await this.transport.read(id), this.context(id)));
+    if (manifest.version !== 1 || !Array.isArray(manifest.parts) || !manifest.parts.length ||
+        manifest.parts.some(part => typeof part !== 'string' || !/^[A-Za-z0-9_-]+$/.test(part) || part === id) ||
+        new Set(manifest.parts).size !== manifest.parts.length || !Number.isSafeInteger(manifest.bytes) || manifest.bytes < 1 ||
+        typeof manifest.stateRoot !== 'string' || !/^[a-f0-9]{64}$/.test(manifest.stateRoot)) throw new Error('Invalid sync checkpoint manifest.');
+    syncPhase('downloading', manifest.parts.length);
+    const chunks = await this.parallel(manifest.parts, async part => {
+      const bytes = await decrypt(this.requireKey(), await this.transport.read(part), this.context(part));
+      completedFile(bytes.length);
+      return bytes;
+    });
+    if (chunks.reduce((size, bytes) => size + bytes.length, 0) !== manifest.bytes) throw new Error('Incomplete sync checkpoint.');
+    return { chunks, stateRoot: manifest.stateRoot };
+  }
+  private async discoverCheckpoints() {
+    if (!this.transport.checkpoints) return;
+    const seen = new Set(this.cache.seenCheckpoints ?? []);
+    for (const id of await this.transport.checkpoints(this.dataset)) {
+      if (seen.has(id) || id === this.cache.checkpointUpload?.id) continue;
+      try {
+        const encoded = await this.readCheckpoint(id);
+        // Decode and exact history verification share one Worker invocation, avoiding a full snapshot round trip.
+        await this.hydrateHistory();
+        syncPhase('verifying');
+        const checkpoint = await decodeVerifyCheckpointAsync({ ...encoded, commits: this.cache.commits });
+        const ids = Object.keys(checkpoint.commits);
+        if (!this.remoteCache || checkpoint.tips.length === 1 && ids.length > this.remoteCache.commits.length) {
+          this.remoteCache = { version: 1, commits: ids.sort(), tips: checkpoint.tips,
+            records: checkpoint.records, conflicts: checkpoint.conflicts };
+        }
+        if (!this.cache.lastCheckpoint || ids.length > this.cache.lastCheckpoint.commits.length) {
+          this.cache.lastCheckpoint = { id, commits: ids };
+        }
+      } catch {
+        // Disposable acceleration must never replace or block recovery from the authoritative commit history.
+      }
+      // Published files are immutable: a rejected hint cannot become valid without a new ID.
+      seen.add(id);
+    }
+    this.cache.seenCheckpoints = [...seen];
+  }
+  private async finishCheckpoint() {
+    const pending = this.cache.checkpointUpload;
+    if (!pending) return;
+    await this.sendFiles(pending, 'checkpoint');
+    let received: { chunks: Uint8Array[]; stateRoot: string };
+    try { received = await this.readCheckpoint(pending.id); }
+    catch (error) {
+      if (!(error instanceof SyncFileNotFoundError)) throw error;
+      // An ACK proves a previous write, not current existence. Repair only with the original durable ciphertext.
+      await writeSyncCache(this.dataset, undefined, [], pending.files.map(file => `ack:${file.id}`));
+      for (const file of pending.files) file.sent = false;
+      await this.sendFiles(pending, 'checkpoint');
+      received = await this.readCheckpoint(pending.id);
+    }
+    await this.hydrateHistory(pending.commits);
+    syncPhase('verifying');
+    const checkpoint = await decodeVerifyCheckpointAsync({ ...received, expectedCommitIds: pending.commits,
+      commits: Object.fromEntries(pending.commits.map(id => [id, this.cache.commits[id]])) });
+    if (checkpoint.stateRoot !== pending.manifest.stateRoot) throw new Error('Sync checkpoint publication mismatch.');
+    this.cache.lastCheckpoint = { id: pending.id, commits: pending.commits };
+    if (!this.remoteCache || pending.commits.length >= this.remoteCache.commits.length) {
+      this.remoteCache = { version: 1, commits: [...pending.commits].sort(), tips: checkpoint.tips,
+        records: checkpoint.records, conflicts: checkpoint.conflicts };
+    }
+    this.cache.seenCheckpoints = [...new Set([...(this.cache.seenCheckpoints ?? []), pending.id])];
+    delete this.cache.checkpointUpload;
+    await this.save(pending.files.flatMap(file => [`outbox:${file.id}`, `ack:${file.id}`]), true);
+  }
+  private async checkpoint(force = false) {
+    await this.finishCheckpoint();
+    if (!this.transport.checkpoints || this.options.wireCompression !== 'gzip' || !this.commitIds().length) return;
+    const previous = new Set(this.cache.lastCheckpoint?.commits ?? []);
+    const added = this.commitIds().filter(id => !previous.has(id));
+    // Checkpoint cadence is not history retention: every original logical commit remains available.
+    if (previous.size && (!added.length || !force && added.length < COMPACT_COMMITS)) return;
+    await this.hydrateHistory();
+    const checkpoint = await createEncodedCheckpointAsync({ commits: this.cache.commits, tips: this.heads() });
+    syncPhase('encrypting');
+    const { payload } = checkpoint;
+    const partBytes = this.options.partBytes ?? PART_BYTES;
+    const [id, ...parts] = await this.transport.ids(1 + Math.ceil(payload.length / partBytes));
+    const files: Pending['files'] = [];
+    for (let i = 0; i < parts.length; i++) {
+      const bytes = await encrypt(this.requireKey(), payload.slice(i * partBytes, (i + 1) * partBytes), this.context(parts[i]));
+      files.push({ id: parts[i], kind: 'checkpoint-part', bytes, size: bytes.length, sent: false });
+    }
+    const manifest: CheckpointManifest = { version: 1, parts, bytes: payload.length, stateRoot: checkpoint.stateRoot };
+    const bytes = await encrypt(this.requireKey(), await encodeAsync(manifest), this.context(id));
+    files.push({ id, kind: 'checkpoint', bytes, size: bytes.length, sent: false });
+    this.cache.checkpointUpload = { id, manifest, commits: checkpoint.commits, files };
+    await this.save();
+    await this.finishCheckpoint();
+  }
+  private async checkpointAutomatic(force = false) {
+    try { await this.checkpoint(force); }
+    catch {
+      // This is replaceable acceleration, not the data publication boundary. In particular an aggregate checkpoint
+      // may exceed the per-payload budget while every accepted commit is valid. Preserve any durable outbox for retry.
+    }
+  }
+  async checkpointHistory(): Promise<void> {
+    await this.run(async () => {
+      await this.sendPending(); await this.finishCompaction(); await this.refresh();
+      await this.remote(); await this.checkpoint(true);
+    });
+  }
   private heads(): string[] {
-    const parents = new Set(Object.values(this.cache.commits).flatMap((c) => c.parents));
-    return Object.keys(this.cache.commits).filter((id) => !parents.has(id)).sort();
+    const ids = this.commitIds();
+    const parents = new Set(ids.flatMap(id => this.parentsOf(id)));
+    return ids.filter(id => !parents.has(id)).sort();
   }
   private async remote(allowConflicts = false, tips?: string[]): Promise<Records> {
     syncPhase('verifying');
     const heads = tips ?? this.heads();
-    const ids = Object.keys(this.cache.commits).sort();
+    const ids = this.commitIds().sort();
     const cached = tips ? undefined : this.remoteCache;
     let result = cached && JSON.stringify(cached.commits) === JSON.stringify(ids) &&
       JSON.stringify(cached.tips) === JSON.stringify(heads) ? cached : undefined;
     // Only a direct, single-head continuation can discard per-key ancestry information.
     // Deletions/presentation changes can repair activePath; retain the full replay for those cases.
     if (!result && cached?.tips.length === 1 && !Object.keys(cached.conflicts).length &&
-        ids.length > cached.commits.length && cached.commits.every(id => !!this.cache.commits[id])) {
+        ids.length > cached.commits.length && cached.commits.every(id => this.hasCommit(id))) {
       const known = new Set(cached.commits);
       const added = ids.filter(id => !known.has(id));
       const children = new Map<string, string>();
       const direct = added.every(id => {
         const commit = this.cache.commits[id];
-        if (commit.parents.length !== 1 || children.has(commit.parents[0]) || commit.resolutions) return false;
+        if (!commit || commit.parents.length !== 1 || children.has(commit.parents[0]) || commit.resolutions) return false;
         children.set(commit.parents[0], id);
         return commit.changes.every(change => {
             if (change.after === null || isNonBlockingRecord(change.key)) return false;
@@ -535,6 +742,7 @@ export class EncryptedSync {
         catch { /* Preserve full replay validation and its error semantics. */ }
       }
     }
+    if (!result) await this.hydrateHistory();
     const { records, conflicts } = result ?? await replayHistoryAsync({ commits: this.cache.commits, tips: heads });
     if (!tips && (!cached || result !== cached)) {
       this.remoteCache = { version: 1, commits: ids, tips: heads, records, conflicts };
@@ -582,8 +790,11 @@ export class EncryptedSync {
     await this.save(pending.files.flatMap(f => [`outbox:${f.id}`, `ack:${f.id}`]));
   }
   private async finishCompaction() {
+    // Checkpoint failure must not prevent publishing or recovering authoritative commits.
+    await this.finishCheckpoint().catch(() => {});
     const pending = this.cache.compaction;
     if (!pending) return;
+    await this.hydrateHistory(Object.keys(pending.manifest.commits));
     if (useGoogleSyncDiagnostics.getState().compaction.status !== 'running') {
       reportCompaction({ status: 'running', reason: 'resume', sourceFiles: pending.remove.length, newFiles: pending.files.length });
     }
@@ -649,13 +860,14 @@ export class EncryptedSync {
     if (this.transport.supportsCompaction === false) return;
     await this.finishCompaction();
     const covered = this.packedCommits();
-    if (Object.keys(this.cache.commits).filter(id => !covered.has(id)).length < (force ? 1 : COMPACT_COMMITS)) {
+    if (this.commitIds().filter(id => !covered.has(id)).length < (force ? 1 : COMPACT_COMMITS)) {
       reportCompaction({ status: 'skipped', reason: 'belowThreshold' }); return;
     }
     // Capture live sources once. Commits published by another device later are never deletion targets.
     await this.discoverPacks();
     const raw = await this.transport.commits(this.dataset);
     if (raw.length < (force ? 1 : COMPACT_COMMITS)) { reportCompaction({ status: 'skipped', reason: 'liveBelowThreshold' }); return; }
+    await this.hydrateHistory();
     const native = this.options.wireCompression === 'gzip';
     if (native) requireNativeGzip();
     const groups: { commits: string[]; sources: string[]; size: number }[] = [];
@@ -707,12 +919,14 @@ export class EncryptedSync {
   private async prepare(changes: Change[], baseline: Records | undefined, resolutions?: Commit['resolutions']) {
     syncPhase('encrypting');
     const commit: Commit = { version: 1, parents: this.heads(), changes, ...(resolutions ? { resolutions } : {}) };
-    const native = this.options.wireCompression === 'gzip';
+    const gzip = this.options.wireCompression === 'gzip';
+    const boundedInline = gzip && commit.parents.length > 0 && nativeCommitByteBound(commit) <= INLINE_JSON_BOUND;
+    const logical = !gzip || boundedInline ? await encodeAsync(commit) : undefined;
+    const native = gzip && (!boundedInline || logical!.length > INLINE_BYTES);
     if (native) requireNativeGzip();
-    const logical = native ? undefined : await encodeAsync(commit);
-    // Native full JSON is independent of delta encoding; do not run legacy LZ to compare representations.
+    // Native mode uses old inline LZ only for bounded small updates; large bodies never enter JavaScript LZ.
     const payload = native ? await encodeNativeAsync(commit)
-      : this.options.wireDelta ? await encodeWireAsync(commit, logical) : logical!;
+      : !gzip && this.options.wireDelta ? await encodeWireAsync(commit, logical) : logical!;
     const delta = !native && payload.length < logical!.length;
     const inline = !native && !delta && commit.parents.length > 0 && payload.length <= INLINE_BYTES;
     const partBytes = this.options.partBytes ?? PART_BYTES;
@@ -747,7 +961,7 @@ export class EncryptedSync {
           await this.sendPending();
         }
       });
-      await syncStage(5, 6, async () => { await this.compact(); await this.refresh(); await this.remote(); });
+      await syncStage(5, 6, async () => { await this.compact(); await this.refresh(); await this.remote(); await this.checkpointAutomatic(); });
     });
   }
 
@@ -756,7 +970,7 @@ export class EncryptedSync {
       await syncStage(0, 4, async () => { await this.sendPending(); await this.finishCompaction(); });
       await syncStage(1, 4, () => this.refresh());
       await syncStage(2, 4, () => this.remote());
-      await syncStage(3, 4, () => this.compact(true));
+      await syncStage(3, 4, async () => { await this.compact(true); await this.checkpointAutomatic(true); });
     });
   }
 
@@ -767,7 +981,7 @@ export class EncryptedSync {
       await syncStage(1, 8, async () => { await this.sendPending(); await this.finishCompaction(); });
       await syncStage(2, 8, () => this.refresh());
       const remote = await syncStage(3, 8, () => this.remote());
-      const { localHashes, changes } = await syncStage(4, 8, async () => {
+      const { localHashes, changes, validatedSnapshot, validatedRecords } = await syncStage(4, 8, async () => {
         syncPhase('preparing');
         if (replace === 'if-empty' && !this.cache.baseline && Object.keys(remote).length) throw new Error('Existing history must be downloaded before initializing sync.');
         if (!replace && !this.cache.baseline) throw new Error('Choose upload or download before enabling automatic sync.');
@@ -797,13 +1011,14 @@ export class EncryptedSync {
             else merged[change.key] = selected;
           }
         }
-        try { await fromRecords(merged); }
+        let validatedSnapshot: Snapshot;
+        try { validatedSnapshot = await fromRecords(merged, snapshot.state.contentStore); }
         catch (error) {
           // Two valid edits can conflict structurally (for example, deleting a branch another device extends).
           await fromRecords(local); await fromRecords(remote);
           throw new SyncConflictError(changes.map(change => change.key));
         }
-        return { localHashes, changes };
+        return { localHashes, changes, validatedSnapshot, validatedRecords: merged };
       });
       await syncStage(5, 8, async () => {
         if (changes.length) {
@@ -817,9 +1032,12 @@ export class EncryptedSync {
       await syncStage(6, 8, () => this.compact());
       const finalRemote = await syncStage(7, 8, async () => {
         await this.refresh();
-        return this.remote(); // Detect concurrent conflicting publications and cleanup before reporting success.
+        const records = await this.remote(); // Detect concurrent conflicting publications and cleanup before reporting success.
+        await this.checkpointAutomatic();
+        return records;
       });
-      return fromRecords(finalRemote, snapshot.state.contentStore);
+      // The publication/refresh can add concurrent data. Reuse validation only when every final record is unchanged.
+      return sameRecords(finalRemote, validatedRecords) ? validatedSnapshot : fromRecords(finalRemote, snapshot.state.contentStore);
     });
   }
 
@@ -830,6 +1048,7 @@ export class EncryptedSync {
   private async coherentCloudRecords(remote: Records): Promise<Records> {
     let cloud = remote;
     if (Object.keys(this.remoteConflicts).length) {
+      await this.hydrateHistory();
       // Each head is a complete view. Merge coherent views rather than picking unrelated node fields.
       const heads = this.heads();
       const sets: Set<string>[] = [];

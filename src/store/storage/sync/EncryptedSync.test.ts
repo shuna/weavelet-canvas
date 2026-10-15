@@ -201,16 +201,22 @@ const smallSnapshot = (): Snapshot => ({ version: 18, state: {
 
 it('upgrades legacy LZ metadata/replay while keeping remote commits unchanged', async () => {
   const transport = new MemoryTransport(), password = 'test-only cache codec passphrase';
-  const { session, file } = await EncryptedSync.create(transport, password);
+  const { session, file } = await EncryptedSync.create(transport, password, { wireCompression: 'legacy' });
   await session.push(smallSnapshot(), true);
   const internal = session as any;
   const remote = new Map([...transport.files].map(([id, value]) => [id, value.bytes.slice()]));
-  const metadata = await decodeCache(await decrypt(internal.key, (await cacheStorage.syncCache(file.id))!, internal.context('cache')));
+  const metadata = await decodeCache<any>(await decrypt(internal.key, (await cacheStorage.syncCache(file.id))!, internal.context('cache')));
+  delete metadata.replayFingerprint; delete metadata.historyParents;
   await cacheStorage.writeSyncCache(file.id, await encrypt(internal.key, encode(metadata), internal.context('cache')),
     [['replay', await encrypt(internal.key, encode(internal.persistedReplay), internal.context('replay'))]]);
   const replay = vi.spyOn(processing, 'replayHistoryAsync');
   const reader = new EncryptedSync(file.id, transport); await reader.unlock(password);
   expect((await reader.pull()).state.defaultSystemMessage).toBe('initial');
+  // Old replay data has no atomically bound parent index; verify history once before trusting it.
+  expect(replay).toHaveBeenCalledTimes(1);
+  const restarted = new EncryptedSync(file.id, transport); await restarted.unlock(password);
+  replay.mockClear();
+  expect((await restarted.pull()).state.defaultSystemMessage).toBe('initial');
   expect(replay).not.toHaveBeenCalled();
   const rewritten = await decrypt(internal.key, (await cacheStorage.syncCache(file.id))!, internal.context('cache'));
   expect([...rewritten.slice(0, 8)]).toEqual([87, 76, 67, 65, 67, 72, 69, 1]);
@@ -457,7 +463,7 @@ it('falls back after restart when updates after the checkpoint include simultane
 
 it('ignores an optional pack checkpoint with matching commit IDs but different state and replays authenticated history', async () => {
   const transport = new MemoryTransport(), password = 'test-only untrusted checkpoint passphrase';
-  const { session, file } = await EncryptedSync.create(transport, password);
+  const { session, file } = await EncryptedSync.create(transport, password, { wireCompression: 'legacy' });
   const snapshot = smallSnapshot();
   await session.push(snapshot, true);
   await session.compactHistory();
@@ -483,7 +489,7 @@ it('ignores an optional pack checkpoint with matching commit IDs but different s
 
 it.each([false, true])('round-trips wireDelta=%s commits and packs through fresh readers, while default clients can still publish legacy changes', async wireDelta => {
   const transport = new MemoryTransport(), password = 'test-only wire integration passphrase';
-  const { session, file } = await EncryptedSync.create(transport, password, { wireDelta, partBytes: 4096 });
+  const { session, file } = await EncryptedSync.create(transport, password, { wireCompression: 'legacy', wireDelta, partBytes: 4096 });
   const writerDb = globalThis.indexedDB, internal = session as any;
   let random = 7;
   const base = Array.from({ length: 18000 }, () => {
@@ -615,7 +621,7 @@ it('persists native opt-in across outbox restart and retries immutable ciphertex
 
 it.each([false, true])('resumes pack cleanup after a replacement using the opposite hash rule (native=%s)', async native => {
   const transport = new MemoryTransport(), password = 'test-only mixed hash retry passphrase';
-  const { session, file } = await EncryptedSync.create(transport, password, native ? { wireCompression: 'gzip' } : {});
+  const { session, file } = await EncryptedSync.create(transport, password, native ? { wireCompression: 'gzip' } : { wireCompression: 'legacy' });
   await session.push(smallSnapshot(), true);
   const writerDb = globalThis.indexedDB;
   const remove = transport.remove.bind(transport);
@@ -624,7 +630,7 @@ it.each([false, true])('resumes pack cleanup after a replacement using the oppos
   const originalPack = [...transport.files].find(([, value]) => value.kind === 'pack')![0];
   transport.remove = remove;
   globalThis.indexedDB = new IDBFactory();
-  const other = new EncryptedSync(file.id, transport, native ? {} : { wireCompression: 'gzip' }); await other.unlock(password);
+  const other = new EncryptedSync(file.id, transport, native ? { wireCompression: 'legacy' } : { wireCompression: 'gzip' }); await other.unlock(password);
   await other.pull();
   await other.acceptLocal(smallSnapshot());
   const edited = smallSnapshot(); edited.state.defaultSystemMessage = 'after replacement';
@@ -665,7 +671,7 @@ it('rejects authenticated corrupt native gzip and mismatched canonical pack hash
 
 it.each([false, true])('reads coexisting legacy pack %s and native canonical-hash pack through a fresh client', async wireDelta => {
   const transport = new MemoryTransport(), password = 'test-only coexisting protocol passphrase';
-  const { session, file } = await EncryptedSync.create(transport, password, { wireDelta });
+  const { session, file } = await EncryptedSync.create(transport, password, { wireCompression: 'legacy', wireDelta });
   let random = 7;
   const base = Array.from({ length: 18000 }, () => {
     random = (Math.imul(random, 1664525) + 1013904223) >>> 0;
@@ -761,7 +767,7 @@ it.each([[false, false], [true, false], [false, true], [true, true]])(
   'authenticates reordered native/legacy overlap in either order and rejects changed content (nativeFirst=%s, altered=%s)',
   async (nativeFirst, altered) => {
     const transport = new MemoryTransport(), password = 'test-only reordered pack passphrase';
-    const { session, file } = await EncryptedSync.create(transport, password);
+    const { session, file } = await EncryptedSync.create(transport, password, { wireCompression: 'legacy' });
     await session.push(smallSnapshot(), true); await session.compactHistory();
     const internal = session as any;
     const legacyId = [...transport.files].find(([, value]) => value.kind === 'pack')![0];
@@ -814,7 +820,7 @@ it('uses uncompressed grouping bounds when folding highly compressed existing na
 
 it.each(['valid', 'missing', 'corrupt'])('resumes reordered legacy cleanup from its immutable outbox, failing closed for %s outbox data', async variant => {
   const transport = new MemoryTransport(), password = 'test-only reordered legacy cleanup passphrase';
-  const { session, file } = await EncryptedSync.create(transport, password);
+  const { session, file } = await EncryptedSync.create(transport, password, { wireCompression: 'legacy' });
   await session.push(smallSnapshot(), true);
   const remove = transport.remove.bind(transport);
   transport.remove = async () => { throw new Error('cleanup offline'); };
