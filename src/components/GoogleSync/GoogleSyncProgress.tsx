@@ -13,14 +13,20 @@ export default function GoogleSyncProgress() {
   const fraction = phaseProgress(progress);
   const percent = fraction === undefined ? undefined : Math.floor(fraction * 100);
   const overallPercent = Math.floor(progress.overallProgress * 100);
+  const history = progress.historyProgress;
+  const phaseLabel = progress.phase === 'history'
+    ? t(`progress.historyDetails.${history?.step ?? 'scanning'}`) : t(`progress.${progress.phase}`);
   return (
     <div className='mt-2 space-y-1 text-xs' data-testid='google-sync-progress'>
       <div>{t('progress.overall')} — {overallPercent}%</div>
       <progress className='block h-1 w-full accent-emerald-600' max={100} value={overallPercent}
         aria-label={t('progress.overall') as string} />
-      <div>{t(`progress.${progress.phase}`)}{percent !== undefined && ` — ${percent}%`}</div>
+      <div>{phaseLabel}{percent !== undefined && ` — ${percent}%`}</div>
       <progress className='block h-1 w-full accent-emerald-500' max={100} value={percent}
-        aria-label={t(`progress.${progress.phase}`) as string} />
+        aria-label={phaseLabel as string} />
+      {history && <div>{history.total === undefined
+        ? t('progress.historyDetails.processed', { count: history.completed })
+        : t('progress.historyDetails.entries', { done: history.completed, total: history.total })}</div>}
       {progress.totalFiles !== undefined && (
         <div>{t('progress.files', { done: progress.completedFiles, total: progress.totalFiles })}
           {progress.totalBytes !== undefined && <>{' · '}{size(progress.completedBytes)} / {size(progress.totalBytes)}</>}</div>

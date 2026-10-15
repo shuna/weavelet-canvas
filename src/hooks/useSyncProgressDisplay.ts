@@ -13,7 +13,8 @@ export function useSyncProgressDisplay() {
     };
     const unsubscribe = useGoogleSyncProgress.subscribe((next, previous) => {
       if (document.hidden) return;
-      if (next.active !== previous.active || next.phase !== previous.phase) publish();
+      if (next.active !== previous.active || next.phase !== previous.phase ||
+        next.historyProgress?.step !== previous.historyProgress?.step) publish();
       else if (!timer) timer = setTimeout(publish, 1000);
     });
     const visibilityChanged = () => {

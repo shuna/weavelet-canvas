@@ -1,8 +1,23 @@
 import { afterEach, expect, it, vi } from 'vitest';
-import { beginTransfer, syncStage, phaseProgress, syncPhase, completedFile, useGoogleSyncProgress, withSyncProgress } from './progress';
+import { beginTransfer, syncStage, phaseProgress, syncPhase, syncHistoryProgress, completedFile, useGoogleSyncProgress, withSyncProgress } from './progress';
 import { DriveTransport } from './transport';
 
 afterEach(() => { vi.restoreAllMocks(); vi.unstubAllGlobals(); vi.useRealTimers(); });
+
+it('reports history counts separately from files without completing the workflow early', async () => {
+  await withSyncProgress(async () => {
+    syncHistoryProgress({ step: 'scanning', completed: 100 });
+    expect(phaseProgress(useGoogleSyncProgress.getState())).toBeUndefined();
+    syncHistoryProgress({ step: 'replaying', completed: 50, total: 100 });
+    expect(phaseProgress(useGoogleSyncProgress.getState())).toBe(0.5);
+    syncHistoryProgress({ step: 'replaying', completed: 100, total: 100 });
+    expect(useGoogleSyncProgress.getState()).toMatchObject({
+      active: true, phase: 'history', totalFiles: undefined, completedFiles: 0, overallProgress: 0,
+    });
+    syncPhase('saving');
+    expect(useGoogleSyncProgress.getState().historyProgress).toBeUndefined();
+  });
+});
 
 it('reports payload bytes and time only for completed transfers and stops on errors', async () => {
   vi.useFakeTimers();

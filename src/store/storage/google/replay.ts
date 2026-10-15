@@ -4,6 +4,44 @@ import { applyChanges, SyncConflictError, type Records, type Change } from './re
 import { digest, encode } from './crypto';
 
 export interface Commit { version: 1; parents: string[]; changes: Change[]; resolutions?: Record<string, (string | null)[]> }
+export interface HistoryProgress { step: 'scanning' | 'replaying' | 'resolving'; completed: number; total?: number }
+
+// Iterative traversal also handles shared ancestors without visiting them twice.
+export function* historyIds(commits: Record<string, Commit>, tips: string[]): Generator<string> {
+  const pending = [...tips].reverse(), visited = new Set<string>();
+  while (pending.length) {
+    const id = pending.pop()!;
+    if (visited.has(id)) continue;
+    const commit = commits[id];
+    if (!commit) throw new Error('Missing sync history.');
+    visited.add(id);
+    yield id;
+    for (let i = commit.parents.length - 1; i >= 0; i--) pending.push(commit.parents[i]);
+  }
+}
+
+function historyReporter(onProgress?: (progress: HistoryProgress) => void) {
+  let last = performance.now();
+  return async (progress: HistoryProgress, force = false) => {
+    if (!force && performance.now() - last < 50) return;
+    onProgress?.(progress);
+    // Yield a task, not just a microtask, so the UI can paint without a Worker too.
+    await new Promise(resolve => setTimeout(resolve, 0));
+    last = performance.now();
+  };
+}
+
+export async function collectHistory({ commits, tips }: { commits: Record<string, Commit>; tips: string[] },
+  onProgress?: (progress: HistoryProgress) => void) {
+  const report = historyReporter(onProgress), reachable = new Set<string>();
+  await report({ step: 'scanning', completed: 0 }, true);
+  for (const id of historyIds(commits, tips)) {
+    reachable.add(id);
+    await report({ step: 'scanning', completed: reachable.size });
+  }
+  await report({ step: 'scanning', completed: reachable.size, total: reachable.size }, true);
+  return reachable;
+}
 
 export async function hashCommits(commits: Record<string, Commit>): Promise<Record<string, string>> {
   const hashes: Record<string, string> = {};
@@ -11,27 +49,24 @@ export async function hashCommits(commits: Record<string, Commit>): Promise<Reco
   return hashes;
 }
 
-export async function replayHistory({ commits, tips }: { commits: Record<string, Commit>; tips: string[] }) {
+export async function replayHistory({ commits, tips }: { commits: Record<string, Commit>; tips: string[] },
+  onProgress?: (progress: HistoryProgress) => void) {
   // Replay retained history unchanged; run this CPU work in the sync worker.
   const histories = new Map<string, { id: string; value: string | null }[]>();
-  const ancestors = new Map<string, Set<string>>();
-  const reachable = new Set<string>();
-  const visit = (id: string) => {
-    if (reachable.has(id)) return;
-    const commit = commits[id];
-    if (!commit) throw new Error('Missing sync history.');
-    reachable.add(id); commit.parents.forEach(visit);
-  };
-  tips.forEach(visit);
+  const processed = new Set<string>();
+  const reachable = await collectHistory({ commits, tips }, onProgress);
+  const report = historyReporter(onProgress);
+  await report({ step: 'replaying', completed: 0, total: reachable.size }, true);
   const remaining = new Set([...reachable].sort());
   const latest = (versions: { id: string; value: string | null }[]) => {
+    if (versions.length < 2) return versions;
     const excluded = new Set<string>();
     const result: typeof versions = [];
     for (let index = versions.length - 1; index >= 0; index--) {
       const version = versions[index];
       if (excluded.has(version.id)) continue;
       result.push(version);
-      for (const ancestor of ancestors.get(version.id)!) excluded.add(ancestor);
+      for (const ancestor of historyIds(commits, commits[version.id].parents)) excluded.add(ancestor);
     }
     return result.reverse();
   };
@@ -60,12 +95,18 @@ export async function replayHistory({ commits, tips }: { commits: Record<string,
     let progress = false;
     for (const id of remaining) {
       const commit = commits[id];
-      if (!commit.parents.every((p) => ancestors.has(p))) continue;
-      const preceding = new Set(commit.parents);
-      for (const parent of commit.parents) for (const ancestor of ancestors.get(parent)!) preceding.add(ancestor);
-      ancestors.set(id, preceding);
+      await report({ step: 'replaying', completed: processed.size, total: reachable.size });
+      if (!commit.parents.every((p) => processed.has(p))) continue;
+      // ponytail: ancestry still takes O(n²) time in long histories; index reachability if profiling warrants it.
+      // Do not retain an O(n²) collection of ancestor sets for the entire history.
+      const preceding = new Set<string>();
+      if (commit.changes.length) for (const ancestor of historyIds(commits, commit.parents)) {
+        preceding.add(ancestor);
+        await report({ step: 'replaying', completed: processed.size, total: reachable.size });
+      }
       const keys = new Set<string>();
       for (const change of commit.changes) {
+        await report({ step: 'replaying', completed: processed.size, total: reachable.size });
         if (!change || typeof change.key !== 'string' || keys.has(change.key)) throw new Error('Invalid sync change.');
         keys.add(change.key);
         const history = histories.get(change.key) ?? [];
@@ -97,12 +138,14 @@ export async function replayHistory({ commits, tips }: { commits: Record<string,
         history.push({ id, value: change.after });
         histories.set(change.key, history);
       }
-      remaining.delete(id); progress = true;
+      processed.add(id); remaining.delete(id); progress = true;
     }
     if (!progress) throw new Error('Missing or cyclic sync history.');
   }
   const records: Records = {};
   const conflicts: Record<string, (string | null)[]> = {};
+  await report({ step: 'resolving', completed: 0, total: histories.size * 2 }, true);
+  let resolved = 0;
   for (const [key, history] of histories) {
     const versions = latest(history);
     const values = [...new Set(versions.map(v => v.value))];
@@ -110,11 +153,14 @@ export async function replayHistory({ commits, tips }: { commits: Record<string,
     if (values.length > 1 && time === undefined && !isNonBlockingRecord(key)) conflicts[key] = await Promise.all(values.map(v => v === null ? null : digest(v)));
     const value = time ?? versions[0]?.value ?? null;
     if (value !== null) records[key] = value;
+    await report({ step: 'resolving', completed: ++resolved, total: histories.size * 2 });
   }
   for (const [key, history] of histories) {
     const selected = repairedPath(key, latest(history), records);
     if (selected === null) delete records[key];
     else if (selected !== undefined) records[key] = selected;
+    await report({ step: 'resolving', completed: ++resolved, total: histories.size * 2 });
   }
+  await report({ step: 'resolving', completed: resolved, total: histories.size * 2 }, true);
   return { records, conflicts };
 }

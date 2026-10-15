@@ -105,6 +105,14 @@
     "enterFolderName": "同期フォルダーの名前を入力してください。"
   },
   "progress": {
+    "history": "同期履歴を処理しています",
+    "historyDetails": {
+      "scanning": "同期履歴を確認しています",
+      "replaying": "同期履歴の変更を適用しています",
+      "resolving": "同期履歴の整合性を確認しています",
+      "processed": "{{count}} 件確認済み（総数を確認中）",
+      "entries": "{{done}} / {{total}} 件処理済み"
+    },
     "preparing": "ローカルデータを準備しています",
     "key": "暗号鍵を準備しています",
     "folder": "暗号化フォルダーを作成しています",
