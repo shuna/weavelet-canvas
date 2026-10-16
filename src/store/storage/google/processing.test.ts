@@ -1,5 +1,6 @@
 import { afterEach, expect, it, vi } from 'vitest';
 import { digest, encode } from './crypto';
+import { useGoogleSyncProgress, withSyncProgress } from './progress';
 
 class FakeWorker {
   static instances: FakeWorker[] = [];
@@ -15,6 +16,35 @@ class FakeWorker {
 }
 
 afterEach(() => { vi.unstubAllGlobals(); vi.resetModules(); FakeWorker.instances = []; });
+
+it('forwards intermediate history progress without resolving or removing the pending request', async () => {
+  vi.stubGlobal('Worker', FakeWorker);
+  const processing = await import('./processing');
+  await withSyncProgress(async () => {
+    const task = processing.replayHistoryAsync({ commits: {}, tips: [] });
+    const worker = FakeWorker.instances[0];
+    const id = worker.messages[0].id;
+    worker.reply({ id, progress: { step: 'replaying', completed: 1, total: 2 } });
+    expect(useGoogleSyncProgress.getState().historyProgress).toEqual({ step: 'replaying', completed: 1, total: 2 });
+    worker.reply({ id, value: { records: {}, conflicts: {} }, metrics: {} });
+    await expect(task).resolves.toEqual({ records: {}, conflicts: {} });
+    worker.reply({ id, progress: { step: 'replaying', completed: 2, total: 2 } });
+    expect(useGoogleSyncProgress.getState().historyProgress?.completed).toBe(1);
+  });
+});
+
+it('emits progress before the final result from the actual worker handler', async () => {
+  const scope: any = { postMessage: vi.fn() };
+  vi.stubGlobal('self', scope);
+  await import('./processing.worker');
+  scope.onmessage({ data: { id: 7, operation: 'replayHistory', value: {
+    commits: { a: { version: 1, parents: [], changes: [] } }, tips: ['a'],
+  } } });
+  await vi.waitFor(() => expect(scope.postMessage.mock.calls.at(-1)?.[0]).toMatchObject({ id: 7, value: { records: {}, conflicts: {} } }));
+  const replies = scope.postMessage.mock.calls.map(([message]: any[]) => message);
+  expect(replies[0]).toEqual({ id: 7, progress: { step: 'scanning', completed: 0 } });
+  expect(replies.some((message: any) => message.progress?.step === 'replaying')).toBe(true);
+});
 
 it('reuses one worker, keeps inputs owned by the caller, and matches commit digests', async () => {
   vi.stubGlobal('Worker', FakeWorker);

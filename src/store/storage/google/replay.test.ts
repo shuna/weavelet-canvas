@@ -1,9 +1,41 @@
 import { expect, it } from 'vitest';
 import { digest } from './crypto';
-import { replayHistory, type Commit } from './replay';
+import { collectHistory, replayHistory, type Commit, type HistoryProgress } from './replay';
 
 const commit = async (parents: string[], before: string | null, after: string | null, resolutions?: Commit['resolutions']): Promise<Commit> => ({
   version: 1, parents, changes: [{ key: 'key', before: before === null ? null : await digest(before), after }], resolutions,
+});
+
+it('replays 20,000 linked commits with progress and yields to timer tasks', async () => {
+  const ids = Array.from({ length: 20000 }, (_, i) => String(i).padStart(5, '0'));
+  const commits: Record<string, Commit> = Object.fromEntries(ids.map((id, i) => [id, {
+    version: 1, parents: i ? [ids[i - 1]] : [], changes: [],
+  }]));
+  commits[ids[0]] = await commit([], null, 'first');
+  commits[ids.at(-1)!] = await commit([ids.at(-2)!], 'first', 'last');
+  const updates: HistoryProgress[] = [];
+  let yielded = false;
+  const timer = setTimeout(() => { yielded = true; }, 0);
+  try {
+    expect(await replayHistory({ commits, tips: [ids.at(-1)!] }, progress => updates.push(progress)))
+      .toEqual({ records: { key: 'last' }, conflicts: {} });
+    expect(yielded).toBe(true);
+    expect(updates).toContainEqual({ step: 'scanning', completed: 20000, total: 20000 });
+    expect(updates).toContainEqual({ step: 'replaying', completed: 0, total: 20000 });
+    expect(updates.at(-1)).toEqual({ step: 'resolving', completed: 2, total: 2 });
+  } finally { clearTimeout(timer); }
+});
+
+it('deduplicates shared ancestors and continues rejecting missing and cyclic history', async () => {
+  const commits: Record<string, Commit> = {
+    base: { version: 1, parents: [], changes: [] },
+    left: { version: 1, parents: ['base'], changes: [] },
+    right: { version: 1, parents: ['base'], changes: [] },
+  };
+  expect(await collectHistory({ commits, tips: ['left', 'right'] })).toEqual(new Set(['left', 'base', 'right']));
+  await expect(replayHistory({ commits, tips: ['missing'] })).rejects.toThrow('Missing sync history');
+  commits.base.parents = ['right'];
+  await expect(replayHistory({ commits, tips: ['left'] })).rejects.toThrow('Missing or cyclic sync history');
 });
 
 it('keeps the former replay results for linear, branched, merged, deleted, equal and resolved histories', async () => {

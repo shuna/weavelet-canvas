@@ -3,7 +3,7 @@ import { summarizeSyncSnapshot } from '../google/overview';
 import { reportSyncHistory, reportCompaction, recordPackAccess, useGoogleSyncDiagnostics } from '../google/diagnostics';
 import { SyncConflictError, type Resolution } from '../google/conflicts';
 import { mergeSyncRecords } from '../google/merge';
-import { replayHistoryAsync, decodePartsAsync, encodeAsync, decodeAsync, toRecordsAsync as toRecords, fromRecordsAsync as fromRecords, hashRecordsAsync as hashRecords, hashCommitsAsync } from '../google/processing';
+import { collectHistoryAsync, replayHistoryAsync, decodePartsAsync, encodeAsync, decodeAsync, toRecordsAsync as toRecords, fromRecordsAsync as fromRecords, hashRecordsAsync as hashRecords, hashCommitsAsync } from '../google/processing';
 import { syncPhase, completedFile, syncStage } from '../google/progress';
 import { createKeyEnvelope, unlockKey, encode, decode, encrypt, decrypt, digest, type KeyEnvelope } from '../google/crypto';
 import { diffHashedRecords, applyChanges, assertNoConcurrentOrphans, type Records, type Snapshot, type Change, diffRecords } from '../google/records';
@@ -666,11 +666,8 @@ export class EncryptedSync {
     if (Object.keys(this.remoteConflicts).length) {
       // Each head is a complete view. Merge coherent views rather than picking unrelated node fields.
       const heads = this.heads();
-      const ancestors = (id: string, found = new Set<string>()): Set<string> => {
-        if (!found.has(id)) { found.add(id); this.cache.commits[id].parents.forEach(p => ancestors(p, found)); }
-        return found;
-      };
-      const sets = heads.map(id => ancestors(id));
+      const sets: Set<string>[] = [];
+      for (const id of heads) sets.push(await collectHistoryAsync({ commits: this.cache.commits, tips: [id] }));
       const common = [...sets[0]].filter(id => sets.every(set => set.has(id)));
       const base = common.length ? await hashRecords(await this.remote(false, common)) : {};
       cloud = await this.remote(false, [heads[0]]);
