@@ -22,14 +22,14 @@ import WebKit
         if loading == nil {
             loading = Task { @MainActor in
                 try await start()
-                _ = try await send(type: "init", expected: "ready", fields: [])
+                _ = try await send(id: nextRequestID(), type: "init", expected: "ready", fields: [])
                 try Task.checkCancellation()
                 loaded = true
             }
         }
         let task = loading!
-        try await withTaskCancellationHandler(operation: { try await task.value; try Task.checkCancellation() },
-            onCancel: { Task { @MainActor [weak self] in self?.cancel() } })
+        try await task.value
+        try Task.checkCancellation()
     }
     func countTokens(messages: OrderedJSON, model: String) async throws -> Int {
         _ = try messages.array("tokenizer messages")
@@ -59,11 +59,12 @@ import WebKit
     private func request(type: String, expected: String, fields: [JSONField]) async throws -> OrderedJSON {
         try Task.checkCancellation()
         guard loaded else { throw ExchangeError.invalid("Tokenizer is not loaded") }
+        let id = nextRequestID()
         return try await withTaskCancellationHandler(operation: {
-            let result = try await send(type: type, expected: expected, fields: fields)
+            let result = try await send(id: id, type: type, expected: expected, fields: fields)
             try Task.checkCancellation()
             return result
-        }, onCancel: { Task { @MainActor [weak self] in self?.cancel() } })
+        }, onCancel: { Task { @MainActor [weak self] in self?.cancelRequest(id) } })
     }
     private func start() async throws {
         guard let root = Bundle.main.url(forResource: "TokenizerResources", withExtension: nil) else { throw ExchangeError.invalid("Tokenizer resources unavailable") }
@@ -90,12 +91,14 @@ import WebKit
             view.load(URLRequest(url: URL(string: "weavelet-tokenizer://bundle/index.html")!))
         }
     }
-    private func send(type: String, expected: String, fields: [JSONField]) async throws -> OrderedJSON {
+    private func nextRequestID() -> Int { defer { nextID += 1 }; return nextID }
+    private func send(id: Int, type: String, expected: String, fields: [JSONField]) async throws -> OrderedJSON {
+        try Task.checkCancellation()
         guard let webView, !closed else { throw CancellationError() }
-        let id = nextID; nextID += 1
         let json = try OrderedJSON.object([.init(key: "id", value: .number(String(id))), .init(key: "type", value: .string(type))] + fields).encoded()
         let raw = String(decoding: json, as: UTF8.self)
         return try await withCheckedThrowingContinuation { continuation in
+            if Task.isCancelled { continuation.resume(throwing: CancellationError()); return }
             pending[id] = (expected, continuation)
             armTimeout()
             webView.callAsyncJavaScript("window.tokenizerHost.send(json); return true", arguments: ["json": raw], in: nil, in: .page) { [weak self] result in
@@ -103,6 +106,7 @@ import WebKit
             }
         }
     }
+    private func cancelRequest(_ id: Int) { complete(id, .failure(CancellationError())) }
     func cancel() {
         guard !closed else { return }
         closed = true; loaded = false; epoch += 1

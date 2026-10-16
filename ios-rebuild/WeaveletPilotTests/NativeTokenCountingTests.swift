@@ -57,6 +57,28 @@ private final class CountingResponseProtocol: URLProtocol {
         do { _ = try await cancelled.count(messages:messages,model:"gpt-4o"); XCTFail("Cancellation must not return fallback") }
         catch { XCTAssertTrue(error is CancellationError) }
     }
+    func testCancellingOneCountDoesNotInvalidateConcurrentCount() async throws {
+        let entered = expectation(description: "both counts entered")
+        entered.expectedFulfillmentCount = 2
+        var releases: [CheckedContinuation<Void, Never>] = []
+        let counting = NativeTokenCounting(count: { _, _ in
+            await withCheckedContinuation { releases.append($0); entered.fulfill() }
+            return 7
+        })
+        defer { counting.shutdown() }
+        let messages: OrderedJSON = .array([])
+        let cancelled = Task { try await counting.count(messages: messages, model: "gpt-4o") }
+        let surviving = Task { try await counting.count(messages: messages, model: "gpt-4o") }
+        await fulfillment(of: [entered], timeout: 5)
+        cancelled.cancel()
+        releases.forEach { $0.resume() }
+        switch await cancelled.result {
+        case .success: XCTFail("Cancelled count must fail")
+        case .failure(let error): XCTAssertTrue(error is CancellationError)
+        }
+        let result = try await surviving.value
+        XCTAssertGreaterThanOrEqual(result, 0)
+    }
     func testLimitedRemoteRequestAndCachedUsageSurviveSaveRetryWithoutDoubleCounting() async throws {
         var countCalls = 0
         let counting = NativeTokenCounting(count:{ messages,model in

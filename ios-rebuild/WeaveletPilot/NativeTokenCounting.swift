@@ -49,7 +49,7 @@ import Foundation
             guard count >= 0 else { throw ExchangeError.invalid("token count") }
             return try fallback("ensureCount",messages:messages,count:count).nativeTokenInteger("token count")
         } catch {
-            if error is CancellationError || Task.isCancelled || epoch != generation { if epoch == generation { shutdown() }; throw CancellationError() }
+            if error is CancellationError || Task.isCancelled || epoch != generation { throw CancellationError() }
             unavailable = true; ready = false; host?.shutdown(); host = nil
             return try fallback("fallbackCount",messages:messages).nativeTokenInteger("token count")
         }
@@ -59,7 +59,7 @@ import Foundation
         let generation = epoch
         startLoading()
         if let loading {
-            await withTaskCancellationHandler(operation:{ await loading.value },onCancel:{ Task { @MainActor [weak self] in self?.shutdown() } })
+            await loading.value
         }
         try Task.checkCancellation()
         guard epoch == generation else { throw CancellationError() }
@@ -72,7 +72,7 @@ import Foundation
             _ = try result.array("limited messages")
             return result
         } catch {
-            if error is CancellationError || Task.isCancelled || epoch != generation { if epoch == generation { shutdown() }; throw CancellationError() }
+            if error is CancellationError || Task.isCancelled || epoch != generation { throw CancellationError() }
             unavailable = true; ready = false; host?.shutdown(); host = nil
             return try limitedFallback(messages:messages,limit:limit)
         }

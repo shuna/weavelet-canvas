@@ -26,31 +26,58 @@ import XCTest
         XCTAssertEqual(raw["unknown"]?["lone"], try vectors.cases[1].required("messages").array("messages")[2]["unknown"]?["lone"])
         XCTAssertEqual(try raw.required("unknown").required("nfd").stringKey("nfd").utf16, [101, 769])
     }
-    func testTaskCancellationStopsWorkerAndIgnoresLateAndWrongEpochReplies() async throws {
+    func testCancellingOneRequestKeepsOtherRequestAndWorkerAlive() async throws {
         let host = WKTokenizerHost(); defer { host.shutdown() }
         try await host.load()
         let view = try XCTUnwrap(host.webView)
         _ = try await view.evaluateJavaScript("""
+            window.tokenizerRequests = [];
             window.tokenizerEntered = new Promise(resolve => window.tokenizerResolve = resolve);
-            const send = window.tokenizerHost.send.bind(window.tokenizerHost);
+            window.tokenizerOriginalSend = window.tokenizerHost.send.bind(window.tokenizerHost);
             window.tokenizerHost.send = json => {
-                if (JSON.parse(json).type !== 'countTokens') return send(json);
-                window.tokenizerResolve();
+                if (JSON.parse(json).type !== 'countTokens') return window.tokenizerOriginalSend(json);
+                window.tokenizerRequests.push(JSON.parse(json).id);
+                if (window.tokenizerRequests.length === 2) window.tokenizerResolve();
             }; true
             """)
-        let task = Task { try await host.countTokens(messages: .array([]), model: "gpt-4") }
+        let cancelled = Task { try await host.countTokens(messages: .array([]), model: "gpt-4") }
+        _ = try await view.callAsyncJavaScript("while (window.tokenizerRequests.length < 1) await new Promise(resolve => setTimeout(resolve, 1)); return true", arguments: [:], in: nil, contentWorld: .page)
+        let surviving = Task { try await host.countTokens(messages: .array([]), model: "gpt-4") }
         _ = try await view.callAsyncJavaScript("await window.tokenizerEntered; return true", arguments: [:], in: nil, contentWorld: .page)
+        let requestIDs = try await view.evaluateJavaScript("window.tokenizerRequests") as? [Int]
+        let ids = try XCTUnwrap(requestIDs)
         let before = host.acceptedMessages
-        _ = try await view.evaluateJavaScript("window.webkit.messageHandlers.tokenizerHost.postMessage({epoch:0,json:JSON.stringify({id:2,type:'countTokensResult',count:99})});true")
+        _ = try await view.callAsyncJavaScript("window.webkit.messageHandlers.tokenizerHost.postMessage({epoch:0,json:JSON.stringify({id:ids[0],type:'countTokensResult',count:99})});return true", arguments: ["ids": ids], in: nil, contentWorld: .page)
         XCTAssertEqual(host.acceptedMessages, before)
-        task.cancel()
-        switch await task.result {
+        cancelled.cancel()
+        switch await cancelled.result {
         case .success: XCTFail("Cancelled count must fail")
         case .failure(let error): XCTAssertTrue(error is CancellationError)
         }
-        let state = try await view.callAsyncJavaScript("window.webkit.messageHandlers.tokenizerHost.postMessage({epoch:1,json:JSON.stringify({id:2,type:'countTokensResult',count:99})});return window.tokenizerHost.state()", arguments: [:], in: nil, contentWorld: .page) as? [String: Any]
-        XCTAssertEqual(state?["workerAlive"] as? Bool, false)
-        XCTAssertEqual(host.acceptedMessages, before)
+        let state = try await view.callAsyncJavaScript("window.webkit.messageHandlers.tokenizerHost.postMessage({epoch:1,json:JSON.stringify({id:ids[0],type:'countTokensResult',count:99})});window.webkit.messageHandlers.tokenizerHost.postMessage({epoch:1,json:JSON.stringify({id:ids[1],type:'countTokensResult',count:7})});return window.tokenizerHost.state()", arguments: ["ids": ids], in: nil, contentWorld: .page) as? [String: Any]
+        XCTAssertEqual(state?["workerAlive"] as? Bool, true)
+        let survivingCount = try await surviving.value
+        XCTAssertEqual(survivingCount, 7)
+        XCTAssertEqual(host.acceptedMessages, before + 1)
+        _ = try await view.evaluateJavaScript("window.tokenizerHost.send = window.tokenizerOriginalSend; true")
+        let subsequentCount = try await host.countTokens(messages: .array([]), model: "gpt-4")
+        XCTAssertGreaterThanOrEqual(subsequentCount, 0)
+    }
+    func testCancellingOneLoadWaiterKeepsSharedLoadAlive() async throws {
+        let host = WKTokenizerHost(); defer { host.shutdown() }
+        let cancelled = Task { try await host.load() }
+        let surviving = Task { try await host.load() }
+        let deadline = Date().addingTimeInterval(5)
+        while host.webView == nil && Date() < deadline { try await Task.sleep(nanoseconds: 1_000_000) }
+        XCTAssertNotNil(host.webView)
+        cancelled.cancel()
+        switch await cancelled.result {
+        case .success: XCTFail("Cancelled load waiter must fail")
+        case .failure(let error): XCTAssertTrue(error is CancellationError)
+        }
+        try await surviving.value
+        let count = try await host.countTokens(messages: .array([]), model: "gpt-4")
+        XCTAssertGreaterThanOrEqual(count, 0)
     }
     func testOfflineResourceGateAndSelectionValidation() async throws {
         let host = WKTokenizerHost(); defer { host.shutdown() }
