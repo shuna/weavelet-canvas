@@ -11,10 +11,12 @@ const fixture = vi.hoisted(() => ({
 }));
 vi.mock('@store/store', () => ({ default: {
   getState: () => fixture.state,
+  setState: (update: (state: StoreState) => Partial<StoreState>) => { Object.assign(fixture.state, update(fixture.state)); },
   persist: { hasHydrated: () => true },
 } }));
 vi.mock('@utils/streamDb', () => ({
   getAllPending: async () => fixture.records,
+  cleanupStale: vi.fn(),
   deleteRequest: (...args: unknown[]) => fixture.remove(...args),
   saveRequest: (...args: unknown[]) => fixture.save(...args),
   saveRecoveryRecord: (record: StreamRecord) => fixture.save(record),
@@ -52,7 +54,7 @@ beforeEach(() => {
     applyBranchState: (chats: ChatInterface[], store: ContentStoreData) => { fixture.state.chats = chats; fixture.state.contentStore = store; },
   } as unknown as StoreState;
   fixture.records = [{ requestId: 'request', chatId: 'original', nodeId: 'node', checkpointHash: hash, checkpointRole: 'assistant',
-    chatIndex: 0, messageIndex: 0, bufferedText: '', status: 'interrupted', createdAt: 1, updatedAt: 1, acknowledged: false }];
+    chatIndex: 0, messageIndex: 0, bufferedText: '', status: 'interrupted', createdAt: Date.now(), updatedAt: 1, acknowledged: false }];
   fixture.save.mockResolvedValue(undefined);
   fixture.remove.mockResolvedValue(undefined);
 });

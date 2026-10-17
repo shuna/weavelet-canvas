@@ -31,7 +31,7 @@ export default function BranchSwipePreview({ tree, path, startIndex, chatIndex }
         <div className='rounded-2xl bg-white/60 px-4 pt-2.5 pb-2 shadow-sm ring-1 ring-black/5 dark:bg-gray-900/20 dark:ring-white/10 md:px-5 md:pt-3 md:pb-2.5'>
           {collapsed[id] ? <div className='h-[4.5rem] overflow-hidden text-sm leading-6 whitespace-pre-wrap break-words line-clamp-3'>{(text.replace(/\s+/g, ' ').trim() || `${node.role} message`).slice(0, 280)}</div> : <>
             {reasoning && <CollapsibleReasoning chatId={chat.id} reasoning={reasoning} isGenerating={false} visible={false} />}
-            <div className='min-h-[5.25rem]'><ContentBody currentTextContent={text} markdownMode={state.markdownMode} streamingMarkdownPolicy={state.streamingMarkdownPolicy} inlineLatex={state.inlineLatex} isGeneratingMessage={false} nodeId={id} /></div>
+            <div className='min-h-[5.25rem]'><ContentBody currentTextContent={text} markdownMode={state.markdownMode} streamingMarkdownPolicy={state.streamingMarkdownPolicy} inlineLatex={state.inlineLatex} isGeneratingMessage={false} /></div>
             <ContentAttachments images={content.slice(1).filter(isImageContent)} />
             <div className='mt-2.5 min-h-[2.75rem]' />
           </>}

@@ -1,8 +1,15 @@
-import { beforeEach, expect, it } from 'vitest';
+import { afterEach, beforeEach, expect, it, vi } from 'vitest';
+import * as processing from '../google/processing';
+import * as cacheStorage from '../google/cache';
+import { decode, decrypt, digest, encode, encrypt } from '../google/crypto';
+import { replayHistory } from '../google/replay';
+import { decodeCache, encodeCache } from '../google/cacheCodec';
 import { IDBFactory } from 'fake-indexeddb';
 import { EncryptedSync } from './EncryptedSync';
 import { InvalidSyncFileIdError, SyncFileNotFoundError, type SyncChange, type SyncTransport } from './transport';
-import type { Snapshot } from '../google/records';
+import { toRecords, type Snapshot } from '../google/records';
+import { addContent } from '@utils/contentStore';
+import { useGoogleSyncProgress, withSyncProgress } from '../google/progress';
 
 class MemoryTransport implements SyncTransport {
   next = 0;
@@ -67,6 +74,7 @@ class MemoryTransport implements SyncTransport {
 }
 
 beforeEach(() => { globalThis.indexedDB = new IDBFactory(); });
+afterEach(() => vi.restoreAllMocks());
 
 it('scans history once for a fresh reader and uses changes after the cursor is saved', async () => {
   const transport = new MemoryTransport();
@@ -239,3 +247,353 @@ it('retains an authenticated replay for an unchanged cursor and drops it after a
   await expect(session.pull()).rejects.toThrow('not arrived');
   expect((session as any).remoteCache).toBeUndefined();
 });
+
+const smallSnapshot = (): Snapshot => ({ version: 18, state: {
+  chats: [], contentStore: {}, defaultSystemMessage: 'initial',
+} });
+
+it('upgrades legacy LZ metadata/replay while keeping remote commits unchanged', async () => {
+  const transport = new MemoryTransport(), password = 'test-only cache codec passphrase';
+  const { session, file } = await EncryptedSync.create(transport, password);
+  await session.push(smallSnapshot(), true);
+  const internal = session as any;
+  const remote = new Map([...transport.files].map(([id, value]) => [id, value.bytes.slice()]));
+  const metadata = await decodeCache(await decrypt(internal.key, (await cacheStorage.syncCache(file.id))!, internal.context('cache')));
+  await cacheStorage.writeSyncCache(file.id, await encrypt(internal.key, encode(metadata), internal.context('cache')),
+    [['replay', await encrypt(internal.key, encode(internal.persistedReplay), internal.context('replay'))]]);
+  const replay = vi.spyOn(processing, 'replayHistoryAsync');
+  const reader = new EncryptedSync(file.id, transport); await reader.unlock(password);
+  expect((await reader.pull()).state.defaultSystemMessage).toBe('initial');
+  expect(replay).not.toHaveBeenCalled();
+  const rewritten = await decrypt(internal.key, (await cacheStorage.syncCache(file.id))!, internal.context('cache'));
+  expect([...rewritten.slice(0, 8)]).toEqual([87, 76, 67, 65, 67, 72, 69, 1]);
+  for (const [id, bytes] of remote) expect(transport.files.get(id)!.bytes).toEqual(bytes);
+});
+
+it('falls back from invalid authenticated gzip replay but rejects unknown metadata versions', async () => {
+  const transport = new MemoryTransport(), password = 'test-only cache codec passphrase';
+  const { session, file } = await EncryptedSync.create(transport, password);
+  await session.push(smallSnapshot(), true);
+  const internal = session as any;
+  const malformed = (await encodeCache(internal.persistedReplay)).slice(0, 12);
+  await cacheStorage.writeSyncCache(file.id, undefined,
+    [['replay', await encrypt(internal.key, malformed, internal.context('replay'))]]);
+  const replay = vi.spyOn(processing, 'replayHistoryAsync');
+  const reader = new EncryptedSync(file.id, transport); await reader.unlock(password);
+  expect((await reader.pull()).state.defaultSystemMessage).toBe('initial');
+  expect(replay).toHaveBeenCalledTimes(1);
+  const metadata = await decrypt(internal.key, (await cacheStorage.syncCache(file.id))!, internal.context('cache'));
+  metadata[7] = 255;
+  await cacheStorage.writeSyncCache(file.id, await encrypt(internal.key, metadata, internal.context('cache')));
+  const invalid = new EncryptedSync(file.id, transport);
+  await invalid.unlock(password);
+  await expect(invalid.pull()).rejects.toThrow('Unsupported sync cache format.');
+});
+
+it('restores an encrypted replay after restart and falls back for missing or damaged acceleration data', async () => {
+  const transport = new MemoryTransport(), password = 'test-only replay passphrase';
+  const { session, file } = await EncryptedSync.create(transport, password);
+  await session.push(smallSnapshot(), true);
+  const replay = vi.spyOn(processing, 'replayHistoryAsync');
+  const reader = new EncryptedSync(file.id, transport); await reader.unlock(password);
+  expect((await reader.pull()).state.defaultSystemMessage).toBe('initial');
+  expect(replay).not.toHaveBeenCalled();
+  for (const damaged of [false, true]) {
+    if (damaged) await cacheStorage.writeSyncCache(file.id, undefined, [['replay', new Uint8Array([1, 2, 3])]]);
+    else await cacheStorage.writeSyncCache(file.id, undefined, [], ['replay']);
+    const recovering = new EncryptedSync(file.id, transport); await recovering.unlock(password);
+    replay.mockClear();
+    expect((await recovering.pull()).state.defaultSystemMessage).toBe('initial');
+    expect(replay).toHaveBeenCalledTimes(1);
+  }
+});
+
+it('incrementally applies only a direct single-head continuation and replays old-ancestor branches', async () => {
+  const transport = new MemoryTransport();
+  const { session } = await EncryptedSync.create(transport, 'test-only replay passphrase');
+  await session.push(smallSnapshot(), true);
+  const internal = session as any;
+  const parent = internal.remoteCache.tips[0];
+  const key = JSON.stringify(['state', 'defaultSystemMessage']);
+  const first = { version: 1 as const, parents: [parent], changes: [{ key, before: await digest('"initial"'), after: '"next"' }] };
+  internal.cache.commits.next = first;
+  const replay = vi.spyOn(processing, 'replayHistoryAsync');
+  expect((await internal.remote())[key]).toBe('"next"');
+  expect(replay).not.toHaveBeenCalled();
+  internal.cache.commits.branch = { ...first, changes: [{ ...first.changes[0], after: '"branch"' }] };
+  const expected = await replayHistory({ commits: internal.cache.commits, tips: internal.heads() });
+  await internal.remote(true);
+  expect(replay).toHaveBeenCalledTimes(1);
+  expect(internal.remoteCache.records).toEqual(expected.records);
+  expect(internal.remoteCache.conflicts).toEqual(expected.conflicts);
+});
+
+it('retains replay semantics for deletion and presentation changes', async () => {
+  const transport = new MemoryTransport();
+  const { session } = await EncryptedSync.create(transport, 'test-only replay passphrase');
+  await session.push(smallSnapshot(), true);
+  const internal = session as any;
+  const replay = vi.spyOn(processing, 'replayHistoryAsync');
+  const key = JSON.stringify(['state', 'defaultSystemMessage']);
+  internal.cache.commits.deleted = { version: 1, parents: internal.heads(), changes: [{ key, before: await digest('"initial"'), after: null }] };
+  await internal.remote();
+  expect(replay).toHaveBeenCalledTimes(1);
+  const expanded = JSON.stringify(['state', 'folders', 'folder', 'expanded']);
+  internal.cache.commits.presentation = { version: 1, parents: internal.heads(), changes: [{ key: expanded, before: null, after: 'true' }] };
+  await internal.remote();
+  expect(replay).toHaveBeenCalledTimes(2);
+  expect(internal.remoteCache.records).toEqual((await replayHistory({ commits: internal.cache.commits, tips: internal.heads() })).records);
+});
+
+it('discards an uncommitted replay after storage failure and rejects a stale tab', async () => {
+  const transport = new MemoryTransport(), password = 'test-only replay passphrase';
+  const { session, file } = await EncryptedSync.create(transport, password);
+  await session.push(smallSnapshot(), true);
+  const internal = session as any;
+  const key = JSON.stringify(['state', 'defaultSystemMessage']);
+  internal.cache.commits.unsaved = { version: 1, parents: internal.heads(), changes: [{ key, before: await digest('"initial"'), after: '"unsaved"' }] };
+  vi.spyOn(cacheStorage, 'writeSyncCache').mockRejectedValueOnce(new Error('disk full'));
+  await expect(internal.run(() => internal.remote())).rejects.toThrow('disk full');
+  expect(internal.remoteCache).toBeUndefined();
+  expect((await session.pull()).state.defaultSystemMessage).toBe('initial');
+  const another = new EncryptedSync(file.id, transport); await another.unlock(password);
+  await another.pull();
+  const after = smallSnapshot(); after.state.defaultSystemMessage = 'published';
+  await another.push(after);
+  await expect(session.pull()).rejects.toThrow('Another tab');
+});
+
+it('does not resend identical immutable bodies absent from the local baseline', async () => {
+  const transport = new MemoryTransport();
+  const { session } = await EncryptedSync.create(transport, 'test-only immutable passphrase');
+  const snapshot = smallSnapshot();
+  snapshot.state.contentStore = { body: { content: [{ type: 'text', text: 'synthetic body' }], refCount: 1 } };
+  snapshot.state.chats = [{ id: 'chat', title: 'synthetic', messages: [], titleSet: true, imageDetail: 'auto',
+    config: { model: 'test', max_tokens: 100, temperature: 1, presence_penalty: 0, top_p: 1, frequency_penalty: 0 },
+    branchTree: { rootId: 'node', activePath: ['node'], nodes: {
+      node: { id: 'node', parentId: null, role: 'user', contentHash: 'body', createdAt: 1 },
+    } },
+  }];
+  await session.push(snapshot, true);
+  const internal = session as any;
+  for (const key of Object.keys(internal.cache.baseline)) if (JSON.parse(key)[0] === 'content') delete internal.cache.baseline[key];
+  const writes = transport.writes.length;
+  await session.push(snapshot);
+  expect(transport.writes.length).toBe(writes);
+  const changed = structuredClone(snapshot); changed.state.chats![0].branchTree!.nodes.node.label = 'changed';
+  await session.push(changed);
+  const commit = internal.cache.commits[internal.heads()[0]];
+  expect(commit.changes.some((change: any) => JSON.parse(change.key)[0] === 'content')).toBe(false);
+  expect(commit.changes.some((change: any) => change.key.endsWith(',"label"]'))).toBe(true);
+  const contentKey = Object.keys(internal.remoteCache.records).find(key => JSON.parse(key)[0] === 'content')!;
+  internal.remoteCache.records[contentKey] = '[{"type":"text","text":"damaged remote body"}]';
+  delete internal.cache.baseline[contentKey];
+  const beforeCorruption = transport.writes.length;
+  await expect(session.push(changed)).rejects.toThrow();
+  expect(transport.writes.length).toBe(beforeCorruption);
+});
+
+it('replays node restoration so a previously repaired activePath is restored too', async () => {
+  const transport = new MemoryTransport();
+  const { session } = await EncryptedSync.create(transport, 'test-only path passphrase');
+  await session.push(smallSnapshot(), true);
+  const internal = session as any;
+  const prefix = ['chats', 'chat', 'branchTree'];
+  const path = JSON.stringify([...prefix, 'activePath']);
+  const nodeId = JSON.stringify([...prefix, 'nodes', 'child', 'id']);
+  const values: Record<string, string> = {
+    [JSON.stringify(['chats', 'chat', 'id'])]: '"chat"',
+    [JSON.stringify([...prefix, 'rootId'])]: '"root"',
+    [path]: '["root","child"]',
+    [JSON.stringify([...prefix, 'nodes', 'root', 'id'])]: '"root"',
+    [JSON.stringify([...prefix, 'nodes', 'root', 'parentId'])]: 'null',
+    [nodeId]: '"child"',
+    [JSON.stringify([...prefix, 'nodes', 'child', 'parentId'])]: '"root"',
+  };
+  internal.cache.commits.tree = { version: 1, parents: internal.heads(), changes: Object.entries(values).map(([key, after]) => ({ key, before: null, after })) };
+  await internal.remote();
+  internal.cache.commits.deleted = { version: 1, parents: internal.heads(), changes: [{ key: nodeId, before: await digest('"child"'), after: null }] };
+  expect((await internal.remote())[path]).toBe('["root"]');
+  const replay = vi.spyOn(processing, 'replayHistoryAsync');
+  internal.cache.commits.restored = { version: 1, parents: internal.heads(), changes: [{ key: nodeId, before: null, after: '"child"' }] };
+  expect((await internal.remote())[path]).toBe('["root","child"]');
+  expect(replay).toHaveBeenCalledTimes(1);
+});
+
+it('reuses replay across verified pack replacement without treating file changes as new history', async () => {
+  const transport = new MemoryTransport(), password = 'test-only pack passphrase';
+  const { session, file } = await EncryptedSync.create(transport, password);
+  await session.push(smallSnapshot(), true);
+  const replay = vi.spyOn(processing, 'replayHistoryAsync');
+  await session.compactHistory();
+  expect([...transport.files.values()].some(file => file.kind === 'pack')).toBe(true);
+  expect(replay).not.toHaveBeenCalled();
+  const reader = new EncryptedSync(file.id, transport); await reader.unlock(password);
+  expect((await reader.pull()).state.defaultSystemMessage).toBe('initial');
+  expect(replay).not.toHaveBeenCalled();
+});
+
+
+it('normalizes timestamp representations in incremental replay exactly as full replay does', async () => {
+  const { session } = await EncryptedSync.create(new MemoryTransport(), 'test-only timestamp passphrase');
+  await session.push(smallSnapshot(), true);
+  const internal = session as any;
+  const key = JSON.stringify(['state', 'lastContentEditedAt']);
+  const replay = vi.spyOn(processing, 'replayHistoryAsync');
+  internal.cache.commits.time1 = { version: 1, parents: internal.heads(), changes: [{ key, before: null, after: '1e3' }] };
+  expect((await internal.remote())[key]).toBe('1000');
+  internal.cache.commits.time2 = { version: 1, parents: internal.heads(), changes: [{ key, before: await digest('1000'), after: '2000.0' }] };
+  expect((await internal.remote())[key]).toBe('2000');
+  expect(replay).not.toHaveBeenCalled();
+  expect(internal.remoteCache.records).toEqual((await replayHistory({ commits: internal.cache.commits, tips: internal.heads() })).records);
+});
+
+it.each(['records', 'conflicts'])('ignores an authenticated malformed replay with an array in %s', async field => {
+  const transport = new MemoryTransport(), password = 'test-only malformed replay passphrase';
+  const { session, file } = await EncryptedSync.create(transport, password);
+  await session.push(smallSnapshot(), true);
+  const internal = session as any;
+  const malformed = { ...internal.persistedReplay, [field]: [] };
+  const bytes = await encrypt(internal.key, encode(malformed), internal.context('replay'));
+  await cacheStorage.writeSyncCache(file.id, undefined, [['replay', bytes]]);
+  const replay = vi.spyOn(processing, 'replayHistoryAsync');
+  const reader = new EncryptedSync(file.id, transport); await reader.unlock(password);
+  expect((await reader.pull()).state.defaultSystemMessage).toBe('initial');
+  expect(replay).toHaveBeenCalledTimes(1);
+});
+
+it('restores multiple title edits from an old checkpoint without recompressing it after every edit', async () => {
+  const transport = new MemoryTransport(), password = 'test-only checkpoint passphrase';
+  const { session, file } = await EncryptedSync.create(transport, password);
+  const original = smallSnapshot();
+  original.state.chats = [{ id: 'chat', title: 'initial', messages: [{ role: 'user', content: [{ type: 'text', text: 'synthetic checkpoint fixture' }] }],
+    titleSet: true, imageDetail: 'auto', config: { model: 'test', max_tokens: 1, temperature: 1, presence_penalty: 0, frequency_penalty: 0, top_p: 1 } }];
+  await session.push(original, true);
+  const internal = session as any, checkpoint = internal.persistedReplay;
+  const [before] = await cacheStorage.readSyncEntries(file.id, ['replay']);
+  const encoding = vi.spyOn(processing, 'encodeAsync');
+  const replay = vi.spyOn(processing, 'replayHistoryAsync');
+  for (const title of ['first', 'second', 'third']) {
+    const edited = structuredClone(original); edited.state.chats![0].title = title;
+    await session.push(edited);
+  }
+  expect(internal.persistedReplay).toBe(checkpoint);
+  expect(internal.remoteCache.commits.length).toBe(checkpoint.commits.length + 3);
+  expect(encoding.mock.calls.filter(([value]: any[]) => value && Array.isArray(value.commits) && value.records)).toHaveLength(0);
+  const [after] = await cacheStorage.readSyncEntries(file.id, ['replay']);
+  expect(after).toEqual(before);
+  expect(replay).not.toHaveBeenCalled();
+  const reader = new EncryptedSync(file.id, transport); await reader.unlock(password);
+  expect((await reader.pull()).state.chats![0].title).toBe('third');
+  expect(replay).not.toHaveBeenCalled();
+  expect((reader as any).remoteCache.records).toEqual(internal.remoteCache.records);
+});
+
+it('falls back after restart when updates after the checkpoint include simultaneous branches', async () => {
+  const transport = new MemoryTransport(), password = 'test-only branch checkpoint passphrase';
+  const { session, file } = await EncryptedSync.create(transport, password);
+  await session.push(smallSnapshot(), true);
+  const internal = session as any, parent = internal.persistedReplay.tips[0];
+  const key = JSON.stringify(['state', 'defaultSystemMessage']);
+  for (const [id, value] of [['left', 'left fixture'], ['right', 'right fixture']]) {
+    internal.cache.commits[id] = { version: 1, parents: [parent], changes: [{ key, before: await digest('"initial"'), after: JSON.stringify(value) }] };
+  }
+  await internal.save();
+  const expected = await replayHistory({ commits: internal.cache.commits, tips: internal.heads() });
+  const replay = vi.spyOn(processing, 'replayHistoryAsync');
+  const reader = new EncryptedSync(file.id, transport); await reader.unlock(password);
+  await (reader as any).run(() => (reader as any).remote(true));
+  expect(replay).toHaveBeenCalledTimes(1);
+  expect((reader as any).remoteCache.records).toEqual(expected.records);
+  expect((reader as any).remoteCache.conflicts).toEqual(expected.conflicts);
+});
+
+it('ignores an optional pack checkpoint with matching commit IDs but different state and replays authenticated history', async () => {
+  const transport = new MemoryTransport(), password = 'test-only untrusted checkpoint passphrase';
+  const { session, file } = await EncryptedSync.create(transport, password);
+  const snapshot = smallSnapshot();
+  await session.push(snapshot, true);
+  await session.compactHistory();
+  const internal = session as any;
+  const [id, pack] = [...transport.files].find(([, value]) => value.kind === 'pack')!;
+  const manifest = decode<any>(await decrypt(internal.key, pack.bytes, internal.context(id)));
+  const [part] = manifest.parts;
+  const payload = decode<any>(await decrypt(internal.key, transport.files.get(part)!.bytes, internal.context(part)));
+  const key = JSON.stringify(['state', 'defaultSystemMessage']);
+  payload.checkpoint = { version: 1, commits: Object.keys(internal.cache.commits).sort(), tips: internal.heads(), conflicts: {},
+    records: { ...internal.remoteCache.records, [key]: JSON.stringify('different state only in checkpoint') } };
+  const bytes = encode(payload);
+  transport.files.get(part)!.bytes = await encrypt(internal.key, bytes, internal.context(part));
+  manifest.bytes = bytes.length;
+  pack.bytes = await encrypt(internal.key, encode(manifest), internal.context(id));
+  globalThis.indexedDB = new IDBFactory();
+  const replay = vi.spyOn(processing, 'replayHistoryAsync');
+  const reader = new EncryptedSync(file.id, transport); await reader.unlock(password);
+  expect((await reader.pull()).state.defaultSystemMessage).toBe('initial');
+  expect(replay).toHaveBeenCalledTimes(1);
+  expect((reader as any).remoteCache.records).toEqual(await toRecords(snapshot));
+});
+
+it.each([false, true])('round-trips wireDelta=%s commits and packs through fresh readers, while default clients can still publish legacy changes', async wireDelta => {
+  const transport = new MemoryTransport(), password = 'test-only wire integration passphrase';
+  const { session, file } = await EncryptedSync.create(transport, password, { wireDelta, partBytes: 4096 });
+  const writerDb = globalThis.indexedDB, internal = session as any;
+  let random = 7;
+  const base = Array.from({ length: 18000 }, () => {
+    random = (Math.imul(random, 1664525) + 1013904223) >>> 0;
+    return String.fromCharCode(33 + random % 90);
+  }).join('');
+  const snapshot = smallSnapshot(), store = snapshot.state.contentStore!;
+  const bodies = [base, base.slice(0, 7000) + ' edited ' + base.slice(7008), base.slice(0, 12000) + ' another edit ' + base.slice(12014)];
+  const hashes = bodies.map(text => addContent(store, [{ type: 'text', text }]));
+  snapshot.state.chats = [{ id: 'chat', title: 'wire fixture', messages: [], titleSet: true, imageDetail: 'auto',
+    config: { model: 'test', max_tokens: 1, temperature: 1, presence_penalty: 0, frequency_penalty: 0, top_p: 1 },
+    branchTree: { rootId: 'n0', activePath: ['n0'], nodes: Object.fromEntries(hashes.map((contentHash, i) => [`n${i}`,
+      { id: `n${i}`, parentId: i ? 'n0' : null, role: 'assistant' as const, contentHash, createdAt: 1 }])) },
+  }];
+  await session.push(snapshot, true);
+  const [commitId, commitFile] = [...transport.files].find(([, value]) => value.kind === 'commit')!;
+  const commitManifest = decode<any>(await decrypt(internal.key, commitFile.bytes, internal.context(commitId)));
+  expect(commitManifest.version).toBe(wireDelta ? 3 : 1);
+  expect(commitManifest.parts.length).toBeGreaterThan(1);
+  const expected = await toRecords(snapshot);
+
+  globalThis.indexedDB = new IDBFactory();
+  const readerDb = globalThis.indexedDB;
+  const reader = new EncryptedSync(file.id, transport); await reader.unlock(password);
+  const downloadTotals: number[] = [];
+  const unsubscribe = useGoogleSyncProgress.subscribe(state => {
+    if (state.phase === 'downloading' && state.totalFiles !== undefined) downloadTotals.push(state.totalFiles);
+  });
+  let received: Snapshot;
+  try { received = await withSyncProgress(() => reader.pull()); }
+  finally { unsubscribe(); }
+  expect(downloadTotals).toContain(commitManifest.parts.length + 1);
+  expect(await toRecords(received)).toEqual(expected);
+  await reader.acceptLocal(received);
+  received.state.chats![0].title = 'default-client title';
+  await reader.push(received);
+  const [legacyId, legacyFile] = [...transport.files].filter(([, value]) => value.kind === 'commit').at(-1)!;
+  const legacyManifest = decode<any>(await decrypt(internal.key, legacyFile.bytes, internal.context(legacyId)));
+  expect(legacyManifest.version).toBe(2);
+
+  globalThis.indexedDB = writerDb;
+  const restarted = new EncryptedSync(file.id, transport); await restarted.unlock(password);
+  const latest = await restarted.pull();
+  expect(latest.state.chats![0].title).toBe('default-client title');
+  expect((restarted as any).options.wireDelta).toBe(wireDelta);
+  await restarted.compactHistory();
+  const [packId, packFile] = [...transport.files].find(([, value]) => value.kind === 'pack')!;
+  const manifest = decode<any>(await decrypt(internal.key, packFile.bytes, internal.context(packId)));
+  expect(manifest.version).toBe(wireDelta ? 2 : 1);
+  expect([...transport.files.values()].filter(value => value.kind === 'commit')).toHaveLength(0);
+
+  // A third browser must authenticate and decode pack payloads without either local replay cache.
+  globalThis.indexedDB = new IDBFactory();
+  const fresh = new EncryptedSync(file.id, transport); await fresh.unlock(password);
+  expect(await toRecords(await fresh.pull())).toEqual(await toRecords(latest));
+  expect(Object.keys((fresh as any).cache.commits)).toHaveLength(2);
+  // Existing readers also follow source deletion through the replacement pack.
+  globalThis.indexedDB = readerDb;
+  expect(await toRecords(await reader.pull())).toEqual(await toRecords(latest));
+}, 15000);

@@ -3,7 +3,8 @@ import { summarizeSyncSnapshot } from '../google/overview';
 import { reportSyncHistory, reportCompaction, recordPackAccess, useGoogleSyncDiagnostics } from '../google/diagnostics';
 import { SyncConflictError, type Resolution } from '../google/conflicts';
 import { mergeSyncRecords } from '../google/merge';
-import { collectHistoryAsync, replayHistoryAsync, decodePartsAsync, encodeAsync, decodeAsync, toRecordsAsync as toRecords, fromRecordsAsync as fromRecords, hashRecordsAsync as hashRecords, hashCommitsAsync } from '../google/processing';
+import { mergeEditTimes } from '../google/editTimes';
+import { collectHistoryAsync, replayHistoryAsync, decodePartsAsync, encodeWireAsync, decodeWirePartsAsync, encodeAsync, decodeAsync, encodeCacheAsync, decodeCacheAsync, toRecordsAsync as toRecords, fromRecordsAsync as fromRecords, hashRecordsAsync as hashRecords, hashCommitsAsync } from '../google/processing';
 import { syncPhase, completedFile, syncStage } from '../google/progress';
 import { createKeyEnvelope, unlockKey, encode, decode, encrypt, decrypt, digest, type KeyEnvelope } from '../google/crypto';
 import { diffHashedRecords, applyChanges, type Records, type Snapshot, type Change, diffRecords } from '../google/records';
@@ -18,12 +19,19 @@ interface Pending {
   baseline?: Records;
   files: { id: string; kind: string; size: number; bytes?: Uint8Array; sent: boolean }[];
 }
-interface PackManifest { version: 1; commits: Record<string, string>; parts: string[]; bytes: number }
+interface PackManifest { version: 1 | 2; commits: Record<string, string>; parts: string[]; bytes: number }
 interface Compaction {
   id: string;
   manifest: PackManifest;
   files: Pending['files'];
   remove: string[];
+}
+interface ReplayCache {
+  version: 1;
+  commits: string[];
+  tips: string[];
+  records: Records;
+  conflicts: Record<string, (string | null)[]>;
 }
 interface Cache {
   version: 1;
@@ -40,9 +48,15 @@ const PART_BYTES = 1024 * 1024;
 const INLINE_BYTES = 256 * 1024;
 const PACK_BYTES = 4 * 1024 * 1024 - 28; // Includes the AES-GCM overhead within a 4 MiB encrypted file.
 const COMPACT_COMMITS = 128;
-export interface SyncTransferOptions { partBytes?: number; concurrency?: 1 | 2 }
+export interface SyncTransferOptions {
+  partBytes?: number; concurrency?: 1 | 2;
+  // Opt in only when all devices support delta payloads; existing datasets keep their compatible format.
+  wireDelta?: boolean;
+}
 interface StoredCache {
   version: 2;
+  replay?: true;
+  wireDelta?: boolean;
   commits: string[];
   token?: string;
   baseline?: Records;
@@ -59,7 +73,9 @@ export class EncryptedSync {
   private closed = false;
   private cacheFingerprint?: string;
   private remoteConflicts: Record<string, (string | null)[]> = {};
-  private remoteCache?: { records: Records; conflicts: Record<string, (string | null)[]> };
+  private remoteCache?: ReplayCache;
+  private persistedReplay?: ReplayCache;
+  private replaySavedAt = 0;
   private loading = new Set<string>();
   private persistedCommits = new Set<string>();
   private encodedCommits = new Map<string, Uint8Array>();
@@ -70,7 +86,7 @@ export class EncryptedSync {
     if (!this.key || this.closed) throw new Error('Unlock encrypted sync with your passphrase first.');
     return this.key;
   }
-  close() { this.closed = true; this.key = undefined; this.remoteCache = undefined; }
+  close() { this.closed = true; this.key = undefined; this.remoteCache = undefined; this.persistedReplay = undefined; }
   private async parallel<T, R>(values: T[], work: (value: T) => Promise<R>): Promise<R[]> {
     const results = new Array<R>(values.length);
     let next = 0;
@@ -102,19 +118,35 @@ export class EncryptedSync {
       if (file.bytes) entries.push([`outbox:${file.id}`, file.bytes]);
       if (file.sent) entries.push([`ack:${file.id}`, await encrypt(this.requireKey(), encode(upload.id), this.context(`ack:${file.id}`))]);
     }
+    let replay = this.persistedReplay;
+    if (this.remoteCache && this.remoteCache !== replay) {
+      const known = new Set(replay?.commits ?? []);
+      const added = this.remoteCache.commits.filter(id => !known.has(id));
+      const changedBytes = added.reduce((total, id) => total + this.cache.commits[id].changes.reduce(
+        (size, change) => size + change.key.length * 2 + (change.after?.length ?? 0) * 2, 0), 0);
+      // Persist complete state periodically, not on each small edit. Commits remain the durable source of truth.
+      if (!replay || !replay.commits.length || changedBytes >= 8 * 1024 * 1024 || added.length >= 256 ||
+          performance.now() - this.replaySavedAt >= 5 * 60 * 1000) {
+        replay = this.remoteCache;
+        entries.push(['replay', await encrypt(this.requireKey(), await encodeCacheAsync(replay), this.context('replay'))]);
+      }
+    }
     const stored: StoredCache = {
-      version: 2, commits: Object.keys(this.cache.commits), token: this.cache.token, baseline: this.cache.baseline,
+      version: 2, replay: replay ? true : undefined, wireDelta: this.options.wireDelta,
+      commits: Object.keys(this.cache.commits), token: this.cache.token, baseline: this.cache.baseline,
       pending: pending && { id: pending.id, baseline: pending.baseline,
         files: pending.files.map(({ id, kind, size }) => ({ id, kind, size })) },
       packs: this.cache.packs, parts: this.cache.parts,
       compaction: this.cache.compaction && { ...this.cache.compaction,
         files: this.cache.compaction.files.map(({ id, kind, size }) => ({ id, kind, size })) },
     };
-    const bytes = await encrypt(this.requireKey(), await encodeAsync(stored), this.context('cache'));
+    const bytes = await encrypt(this.requireKey(), await encodeCacheAsync(stored), this.context('cache'));
     // Publishing the outbox and its immutable ciphertext is one durable transaction.
     await writeSyncCache(this.dataset, bytes, entries, remove);
     for (const id of Object.keys(commits)) { this.persistedCommits.add(id); this.encodedCommits.delete(id); }
     for (const upload of uploads) for (const file of upload.files) delete file.bytes;
+    if (replay !== this.persistedReplay) this.replaySavedAt = performance.now();
+    this.persistedReplay = replay;
     this.cacheFingerprint = await digest(bytes);
     const packs = Object.values(this.cache.packs ?? {});
     const covered = new Set(packs.flatMap(pack => Object.keys(pack.commits)));
@@ -123,8 +155,8 @@ export class EncryptedSync {
       cleanupTargets: this.cache.compaction?.remove.length ?? 0 });
   }
   private async loadCache(bytes: Uint8Array) {
-    this.remoteCache = undefined;
-    const stored = await decodeAsync<StoredCache | Cache>(await decrypt(this.requireKey(), bytes, this.context('cache')));
+    this.remoteCache = undefined; this.persistedReplay = undefined;
+    const stored = await decodeCacheAsync<StoredCache | Cache>(await decrypt(this.requireKey(), bytes, this.context('cache')));
     if (stored.version === 1) {
       // Upgrade legacy outboxes without regenerating a single ID or ciphertext byte.
       this.cache = stored;
@@ -137,6 +169,7 @@ export class EncryptedSync {
       return;
     }
     if (stored.version !== 2 || !Array.isArray(stored.commits)) throw new Error('Unsupported local sync cache.');
+    this.options.wireDelta ??= stored.wireDelta === true;
     const ids = [...new Set([...stored.commits, ...(stored.pending ? [stored.pending.id] : [])])];
     const values = await readSyncEntries(this.dataset, ids.map(id => `commit:${id}`));
     const commits: Record<string, Commit> = {};
@@ -149,6 +182,26 @@ export class EncryptedSync {
       pending: stored.pending && { ...stored.pending, commit: commits[stored.pending.id], files: stored.pending.files.map(f => ({ ...f, sent: false })) },
       packs: stored.packs, parts: stored.parts,
       compaction: stored.compaction && { ...stored.compaction, files: stored.compaction.files.map(f => ({ ...f, sent: false })) } };
+    if (stored.replay) {
+      // This is disposable acceleration data: missing/damaged bytes must never block history recovery.
+      try {
+        const [bytes] = await readSyncEntries(this.dataset, ['replay']);
+        if (bytes) {
+          const replay = await decodeCacheAsync<ReplayCache>(await decrypt(this.requireKey(), bytes, this.context('replay')));
+          if (replay.version === 1 && Array.isArray(replay.commits) && Array.isArray(replay.tips) &&
+              replay.commits.every(id => typeof id === 'string' && !!this.cache.commits[id]) &&
+              replay.tips.every(id => typeof id === 'string' && replay.commits.includes(id)) &&
+              replay.records && typeof replay.records === 'object' && !Array.isArray(replay.records) &&
+              Object.values(replay.records).every(value => typeof value === 'string') &&
+              replay.conflicts && typeof replay.conflicts === 'object' && !Array.isArray(replay.conflicts) &&
+              Object.values(replay.conflicts).every(values => Array.isArray(values) &&
+                values.every(value => value === null || typeof value === 'string'))) {
+            this.remoteCache = this.persistedReplay = replay;
+            this.replaySavedAt = performance.now();
+          }
+        }
+      } catch { /* Replay from authenticated commits instead. */ }
+    }
   }
 
   private run<T>(work: () => Promise<T>): Promise<T> {
@@ -173,7 +226,7 @@ export class EncryptedSync {
         catch (error) {
           // A failed transaction must be retried from durable state, not half-mutated in-memory metadata.
           this.cacheFingerprint = undefined;
-          this.cache = emptyCache(); this.remoteCache = undefined; this.persistedCommits.clear(); this.encodedCommits.clear();
+          this.cache = emptyCache(); this.remoteCache = undefined; this.persistedReplay = undefined; this.persistedCommits.clear(); this.encodedCommits.clear();
           throw error;
         }
       };
@@ -237,7 +290,7 @@ export class EncryptedSync {
   private async downloadManifest(id: string): Promise<CommitManifest> {
     const encoded = await decrypt(this.requireKey(), await this.transport.read(id), this.context(id));
     const manifest = await decodeAsync<CommitManifest>(encoded);
-    if (manifest.version !== 2 && (manifest.version !== 1 || !Array.isArray(manifest.parts) || !manifest.parts.length ||
+    if (manifest.version !== 2 && (![1, 3].includes(manifest.version) || !Array.isArray(manifest.parts) || !manifest.parts.length ||
         manifest.parts.some(p => typeof p !== 'string'))) throw new Error('Invalid sync commit.');
     return manifest;
   }
@@ -262,9 +315,9 @@ export class EncryptedSync {
         completedFile(bytes.length);
         return bytes;
       });
-      const decoded = await decodePartsAsync<Commit>(chunks);
-      payload = decoded.bytes;
+      const decoded = manifest.version === 3 ? await decodeWirePartsAsync<Commit>(chunks) : await decodePartsAsync<Commit>(chunks);
       commit = decoded.value;
+      payload = manifest.version === 3 ? await encodeAsync(commit) : decoded.bytes;
     }
     if (commit.version !== 1 || !Array.isArray(commit.parents) || !Array.isArray(commit.changes) ||
         commit.parents.some(p => typeof p !== 'string' || p === id)) throw new Error('Invalid sync commit.');
@@ -278,7 +331,7 @@ export class EncryptedSync {
 
   private async readPackManifest(id: string): Promise<PackManifest> {
     const pack = await decodeAsync<PackManifest>(await decrypt(this.requireKey(), await this.transport.read(id, 'pack-index'), this.context(id)));
-    if (pack.version !== 1 || !pack.commits || typeof pack.commits !== 'object' || Array.isArray(pack.commits) ||
+    if (![1, 2].includes(pack.version) || !pack.commits || typeof pack.commits !== 'object' || Array.isArray(pack.commits) ||
         !Object.keys(pack.commits).length || Object.entries(pack.commits).some(([id, hash]) =>
           !/^[A-Za-z0-9_-]+$/.test(id) || ['__proto__', 'constructor', 'prototype'].includes(id) ||
           typeof hash !== 'string' || !/^[a-f0-9]{64}$/.test(hash)) ||
@@ -305,7 +358,9 @@ export class EncryptedSync {
     });
     const size = chunks.reduce((total, bytes) => total + bytes.length, 0);
     if (size !== pack.bytes) throw new Error('Incomplete sync pack.');
-    const { value: data } = await decodePartsAsync<{ version: number; commits: Record<string, Commit> }>(chunks);
+    const { value: data } = pack.version === 2
+      ? await decodeWirePartsAsync<{ version: number; commits: Record<string, Commit> }>(chunks)
+      : await decodePartsAsync<{ version: number; commits: Record<string, Commit> }>(chunks);
     if (data.version !== 1 || !data.commits || Object.keys(data.commits).length !== Object.keys(pack.commits).length) {
       throw new Error('Invalid sync pack.');
     }
@@ -323,7 +378,6 @@ export class EncryptedSync {
     }
     if (!verify) recordPackAccess(false);
     // Never cache half a pack after failed authentication.
-    if (encoded.size) this.remoteCache = undefined;
     for (const [commit, bytes] of encoded) {
       this.cache.commits[commit] = data.commits[commit];
       if (!this.persistedCommits.has(commit)) this.encodedCommits.set(commit, bytes);
@@ -354,8 +408,6 @@ export class EncryptedSync {
         this.cache.token = token;
       }
       const page = await this.transport.changes(this.cache.token!);
-      if (page.changes.some(change => change.removed || (change.dataset === this.dataset &&
-          (change.kind === 'commit' || change.kind === 'pack')))) this.remoteCache = undefined;
       const removed = new Set(page.changes.filter(change => change.removed).map(change => change.id));
       if (removed.has(this.dataset)) throw new Error('Sync folder was deleted from storage; sync stopped.');
       const oldPacks = this.cache.packs ?? {};
@@ -387,7 +439,7 @@ export class EncryptedSync {
         const downloaded = await this.parallel(unbundled, async (id) => [id, await this.downloadManifest(id)] as const);
         for (const [id, manifest] of downloaded) {
           manifests.set(id, manifest);
-          if (manifest.version === 1) partCount += manifest.parts!.length;
+          if (manifest.version !== 2) partCount += manifest.parts!.length;
         }
         syncPhase('downloading', missing.length + partCount, undefined, missing.length);
         for (const id of missing) await this.loadCommit(id, manifests);
@@ -413,9 +465,52 @@ export class EncryptedSync {
   }
   private async remote(allowConflicts = false, tips?: string[]): Promise<Records> {
     syncPhase('verifying');
+    const heads = tips ?? this.heads();
+    const ids = Object.keys(this.cache.commits).sort();
     const cached = tips ? undefined : this.remoteCache;
-    const { records, conflicts } = cached ?? await replayHistoryAsync({ commits: this.cache.commits, tips: tips ?? this.heads() });
-    if (!tips) this.remoteCache = { records, conflicts };
+    let result = cached && JSON.stringify(cached.commits) === JSON.stringify(ids) &&
+      JSON.stringify(cached.tips) === JSON.stringify(heads) ? cached : undefined;
+    // Only a direct, single-head continuation can discard per-key ancestry information.
+    // Deletions/presentation changes can repair activePath; retain the full replay for those cases.
+    if (!result && cached?.tips.length === 1 && !Object.keys(cached.conflicts).length &&
+        ids.length > cached.commits.length && cached.commits.every(id => !!this.cache.commits[id])) {
+      const known = new Set(cached.commits);
+      const added = ids.filter(id => !known.has(id));
+      const children = new Map<string, string>();
+      const direct = added.every(id => {
+        const commit = this.cache.commits[id];
+        if (commit.parents.length !== 1 || children.has(commit.parents[0]) || commit.resolutions) return false;
+        children.set(commit.parents[0], id);
+        return commit.changes.every(change => {
+            if (change.after === null || isNonBlockingRecord(change.key)) return false;
+            const path = JSON.parse(change.key);
+            // Restoring a previously deleted node can restore an old activePath during full replay.
+            return path[0] !== 'chats' || !['id', 'parentId', 'rootId'].includes(path[path.length - 1]);
+          });
+      });
+      if (heads.length === 1 && direct) {
+        try {
+          let records = cached.records, head = cached.tips[0], count = 0;
+          while (children.has(head) && count < added.length) {
+            head = children.get(head)!;
+            const changes = this.cache.commits[head].changes;
+            records = await applyChanges(records, changes);
+            for (const change of changes) {
+              const time = mergeEditTimes(change.key, [change.after]);
+              if (time !== undefined) records[change.key] = time;
+            }
+            if (++count % 8 === 0) await new Promise(resolve => setTimeout(resolve, 0));
+          }
+          if (count === added.length && head === heads[0]) result = { ...cached, records };
+        }
+        catch { /* Preserve full replay validation and its error semantics. */ }
+      }
+    }
+    const { records, conflicts } = result ?? await replayHistoryAsync({ commits: this.cache.commits, tips: heads });
+    if (!tips && (!cached || result !== cached)) {
+      this.remoteCache = { version: 1, commits: ids, tips: heads, records, conflicts };
+      await this.save();
+    }
     this.remoteConflicts = conflicts;
     if (!allowConflicts && Object.keys(conflicts).length) throw new SyncConflictError(Object.keys(conflicts));
     return records;
@@ -459,7 +554,6 @@ export class EncryptedSync {
     syncPhase('saving');
     (this.cache.parts ??= {})[pending.id] = pending.files.filter(file => file.kind === 'part').map(file => file.id);
     this.cache.commits[pending.id] = pending.commit;
-    this.remoteCache = undefined;
     if (pending.baseline) this.cache.baseline = pending.baseline;
     delete this.cache.pending;
     await this.save(pending.files.flatMap(f => [`outbox:${f.id}`, `ack:${f.id}`]));
@@ -588,7 +682,9 @@ export class EncryptedSync {
     }
     for (const group of groups) {
       const commits = Object.fromEntries([...new Set(group.commits)].sort().map(id => [id, this.cache.commits[id]]));
-      const payload = await encodeAsync({ version: 1, commits });
+      const value = { version: 1 as const, commits };
+      const logical = await encodeAsync(value);
+      const payload = this.options.wireDelta ? await encodeWireAsync(value, logical) : logical;
       const hashes = await hashCommitsAsync(commits);
       const [id, ...parts] = await this.transport.ids(1 + Math.ceil(payload.length / PACK_BYTES));
       const files: Pending['files'] = [];
@@ -596,7 +692,7 @@ export class EncryptedSync {
         const bytes = await encrypt(this.requireKey(), payload.slice(i * PACK_BYTES, (i + 1) * PACK_BYTES), this.context(parts[i]));
         files.push({ id: parts[i], kind: 'pack-part', bytes, size: bytes.length, sent: false });
       }
-      const manifest: PackManifest = { version: 1, commits: hashes, parts, bytes: payload.length };
+      const manifest: PackManifest = { version: payload.length < logical.length ? 2 : 1, commits: hashes, parts, bytes: payload.length };
       const bytes = await encrypt(this.requireKey(), await encodeAsync(manifest), this.context(id));
       if (bytes.length > PACK_BYTES + 28) throw new Error('Sync pack index too large.');
       files.push({ id, kind: 'pack', bytes, size: bytes.length, sent: false });
@@ -609,8 +705,10 @@ export class EncryptedSync {
   private async prepare(changes: Change[], baseline: Records | undefined, resolutions?: Commit['resolutions']) {
     syncPhase('encrypting');
     const commit: Commit = { version: 1, parents: this.heads(), changes, ...(resolutions ? { resolutions } : {}) };
-    const payload = await encodeAsync(commit);
-    const inline = commit.parents.length > 0 && payload.length <= INLINE_BYTES;
+    const logical = await encodeAsync(commit);
+    const payload = this.options.wireDelta ? await encodeWireAsync(commit, logical) : logical;
+    const delta = payload.length < logical.length;
+    const inline = !delta && commit.parents.length > 0 && payload.length <= INLINE_BYTES;
     const partBytes = this.options.partBytes ?? PART_BYTES;
     const [id, ...parts] = await this.transport.ids(inline ? 1 : 1 + Math.ceil(payload.length / partBytes));
     syncPhase('encrypting', parts.length + 1);
@@ -620,10 +718,10 @@ export class EncryptedSync {
       files.push({ id: parts[i], kind: 'part', bytes, size: bytes.length, sent: false });
       completedFile(bytes.length);
     }
-    const bytes = await encrypt(this.requireKey(), await encodeAsync(inline ? { ...commit, version: 2 } : { version: 1, parts }), this.context(id));
+    const bytes = await encrypt(this.requireKey(), await encodeAsync(inline ? { ...commit, version: 2 } : { version: delta ? 3 : 1, parts }), this.context(id));
     files.push({ id, kind: 'commit', bytes, size: bytes.length, sent: false });
     completedFile(bytes.length);
-    this.encodedCommits.set(id, payload);
+    this.encodedCommits.set(id, logical);
     this.cache.pending = { id, commit, baseline, files };
     await this.save();
   }
@@ -673,6 +771,9 @@ export class EncryptedSync {
           if (isBrowserLocalRecord(change.key)) return false;
           // Content and assets are immutable and may be referenced by another device. Never GC them from a local snapshot.
           const path = JSON.parse(change.key);
+          // A stale local baseline may not include an immutable body already published by another device.
+          // Only byte-identical remote values qualify; differing data must retain its conflict checks.
+          if ((path[0] === 'content' || path[0] === 'assets') && change.after === remote[change.key]) return false;
           return change.after !== null || (path[0] !== 'content' && path[0] !== 'assets');
         }).map(async change => isNonBlockingRecord(change.key)
           ? { ...change, before: remote[change.key] === undefined ? null : await digest(remote[change.key]) }
@@ -712,7 +813,7 @@ export class EncryptedSync {
         await this.refresh();
         return this.remote(); // Detect concurrent conflicting publications and cleanup before reporting success.
       });
-      return fromRecords(finalRemote);
+      return fromRecords(finalRemote, snapshot.state.contentStore);
     });
   }
 
@@ -770,7 +871,7 @@ export class EncryptedSync {
         const cloud = await this.coherentCloudRecords(remote);
         const chosen = mode === 'local' ? local : mode === 'cloud' ? cloud
           : await mergeSyncRecords(this.cache.baseline ?? {}, local, cloud);
-        const result = await fromRecords(chosen);
+        const result = await fromRecords(chosen, snapshot.state.contentStore);
         const changes = await diffRecords(remote, chosen);
         for (const key of Object.keys(resolutions)) if (!changes.some(change => change.key === key)) {
           changes.push({ key, before: remote[key] === undefined ? null : await digest(remote[key]), after: chosen[key] ?? null });

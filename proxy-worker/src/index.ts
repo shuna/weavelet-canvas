@@ -18,6 +18,7 @@ interface CachedChunk {
 }
 interface CachedSession {
   version: 1;
+  expiresAt?: number;
   firstEventId: number;
   chunks: CachedChunk[];
   generationTerminal: 'streaming' | 'complete' | 'interrupted' | 'failed';
@@ -33,6 +34,7 @@ interface CancelRequest {
   providerCancel?: { generationId: string; apiKey: string };
 }
 const activeStreams = new Map<string, ActiveStream>();
+const RECOVERY_TTL_MS = 300_000;
 const MAX_RECOVERY_CACHE_BYTES = 1_048_576,
   HEADER_TIMEOUT_MS = 45_000,
   DISCONNECT_READ_LIMIT_MS = 20_000,
@@ -225,7 +227,7 @@ async function handleStream(
   } catch {
     return jsonResponse({ error: 'Invalid JSON body' }, 400);
   }
-  const { endpoint, headers, body, sessionId } = parsed;
+  const { endpoint, headers, body, sessionId } = parsed ?? {};
   if (
     !endpoint ||
     !sessionId ||
@@ -238,6 +240,8 @@ async function handleStream(
       { error: 'headers must be an object of string values' },
       400
     );
+  if (activeStreams.has(sessionId))
+    return jsonResponse({ error: 'sessionId is already active' }, 409);
   const abort = new AbortController(),
     headerTimer = setTimeout(() => abort.abort(), HEADER_TIMEOUT_MS),
     apiKey =
@@ -291,7 +295,12 @@ async function handleStream(
       disconnected = false,
       terminalDelivered = false,
       snapshotInflight = false,
+      snapshotCount = 0,
       readAt = 0;
+    let notifyDisconnected!: () => void;
+    const disconnectSignal = new Promise<false>((resolve) => {
+      notifyDisconnected = () => resolve(false);
+    });
     let readTimer: ReturnType<typeof setTimeout> | undefined,
       heartbeat: ReturnType<typeof setInterval> | undefined,
       snapshotTimer: ReturnType<typeof setInterval> | undefined,
@@ -300,12 +309,10 @@ async function handleStream(
     const startDisconnected = () => {
       if (disconnected || terminalDelivered) return;
       disconnected = true;
+      notifyDisconnected();
       readAt = Date.now();
       void snapshot('streaming', true);
       readTimer = setTimeout(() => abort.abort(), DISCONNECT_READ_LIMIT_MS);
-      snapshotTimer = setInterval(() => {
-        void snapshot('streaming');
-      }, SNAPSHOT_INTERVAL_MS);
     };
     const write = async (text: string): Promise<boolean> => {
       const writeAttempt = writeChain.then(() =>
@@ -313,8 +320,7 @@ async function handleStream(
       );
       writeChain = writeAttempt.catch(() => undefined);
       try {
-        await writeAttempt;
-        return true;
+        return await Promise.race([writeAttempt.then(() => true), disconnectSignal]);
       } catch {
         startDisconnected();
         return false;
@@ -324,9 +330,11 @@ async function handleStream(
       terminal: CachedSession['generationTerminal'],
       force = false
     ): Promise<void> => {
-      if (!disconnected || (!force && snapshotInflight)) return snapshotChain;
+      if (!force && (snapshotInflight || snapshotCount >= 40)) return snapshotChain;
+      snapshotCount++;
       const copy: CachedSession = {
         version: 1,
+        expiresAt: Date.now() + RECOVERY_TTL_MS,
         firstEventId: chunks[0]?.id ?? eventId + 1,
         chunks: chunks.map((c) => ({ ...c })),
         generationTerminal: terminal,
@@ -359,6 +367,10 @@ async function handleStream(
     }, 5_000);
     let terminal: CachedSession['generationTerminal'] = 'interrupted',
       error: string | undefined;
+    // A lost terminal response must remain recoverable even if disconnect is never signalled.
+    void snapshot('streaming', true);
+    snapshotTimer = setInterval(() => { void snapshot('streaming'); }, SNAPSHOT_INTERVAL_MS);
+    if (request.signal.aborted) startDisconnected();
     try {
       while (true) {
         const read = await readWithIdleTimeout(reader);
@@ -394,6 +406,7 @@ async function handleStream(
       if (snapshotTimer) clearInterval(snapshotTimer);
       if (readTimer) clearTimeout(readTimer);
       if (!disconnected) {
+        await timeout(snapshot(terminal, true), 5_000);
         const event =
           terminal === 'complete'
             ? 'done'
@@ -422,9 +435,11 @@ async function handleStream(
         await reader.cancel();
       } catch {}
       reader.releaseLock();
-      try {
-        await writer.close();
-      } catch {}
+      if (disconnected) {
+        void writer.abort().catch(() => {});
+      } else {
+        try { await writer.close(); } catch {}
+      }
     }
   };
   ctx.waitUntil(process());
@@ -452,6 +467,11 @@ async function handleRecover(
           await cacheKey(sessionId, request.url)
         );
         if (!response) {
+          if (activeStreams.has(sessionId) && Date.now() - started < RECOVERY_POLL_TIMEOUT_MS) {
+            await writer.write(enc.encode(': waiting\n\n'));
+            await sleep(RECOVERY_POLL_INTERVAL_MS);
+            continue;
+          }
           await writer.write(
             enc.encode('event: cache-miss\ndata: {"complete":false}\n\n')
           );
@@ -468,7 +488,17 @@ async function handleRecover(
           );
           break;
         }
-        for (const chunk of cached.chunks)
+        if (cached.expiresAt !== undefined && cached.expiresAt <= Date.now()) {
+          await writer.write(enc.encode('event: cache-miss\ndata: {"complete":false}\n\n'));
+          break;
+        }
+        const latest = cached.chunks[cached.chunks.length - 1]?.id ?? cached.firstEventId - 1;
+        const pending = cached.chunks.filter(chunk => chunk.id > sent);
+        if ((sent > latest && cached.generationTerminal !== 'streaming' && cached.cacheCapability !== 'overflow') || pending.some((chunk, index) => chunk.id !== sent + index + 1)) {
+          await writer.write(enc.encode('event: interrupted\ndata: {"complete":false,"reason":"event-id-mismatch"}\n\n'));
+          break;
+        }
+        for (const chunk of pending)
           if (chunk.id > sent) {
             sent = chunk.id;
             await writer.write(
@@ -626,6 +656,9 @@ export default {
     if (request.method === 'OPTIONS')
       return withCORS(new Response(null, { status: 204 }));
     const url = new URL(request.url);
+    try { decodeURIComponent(url.pathname); } catch {
+      return jsonResponse({ error: 'Invalid path encoding' }, 400);
+    }
     if (url.pathname === '/health')
       return jsonResponse({ status: 'ok', version: '0.2.0' });
     if (url.pathname.startsWith('/api/') && !authenticated(request, env))
@@ -638,15 +671,10 @@ export default {
       return handleModeration(request);
     if (url.pathname.startsWith('/api/recover/') && request.method === 'GET') {
       const id = decodeURIComponent(url.pathname.slice('/api/recover/'.length));
-      return id
-        ? handleRecover(
-            id,
-            Number.parseInt(url.searchParams.get('lastEventId') ?? '0', 10) ||
-              0,
-            request,
-            ctx
-          )
-        : jsonResponse({ error: 'sessionId is required' }, 400);
+      const cursor = Number(url.searchParams.get('lastEventId') ?? '0');
+      if (!id || !Number.isSafeInteger(cursor) || cursor < 0)
+        return jsonResponse({ error: 'sessionId and a non-negative integer lastEventId are required' }, 400);
+      return handleRecover(id, cursor, request, ctx);
     }
     if (url.pathname.startsWith('/api/ack/') && request.method === 'POST') {
       const id = decodeURIComponent(url.pathname.slice('/api/ack/'.length));

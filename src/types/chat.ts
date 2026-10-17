@@ -91,7 +91,15 @@ export interface MessageInterface {
   content: ContentInterface[];
 }
 
+export type StreamEndReason = 'streaming' | 'completed' | 'max_tokens' | 'interrupted' | 'error' | 'recovered' | 'recovered_partial';
+
 export interface BranchNode {
+  streamState?: {
+    reason: StreamEndReason;
+    requestId?: string;
+    proxy?: boolean;
+    createdAt: number;
+  };
   updatedAt?: number;
   openRouterObservation?: OpenRouterObservation;
   id: string;

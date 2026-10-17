@@ -33,6 +33,8 @@ export type ContentStoreData = Record<string, ContentEntry>;
 
 /** Maximum delta chain depth before forcing full storage */
 const MAX_CHAIN_DEPTH = 5;
+// Read legacy chains without applying the stricter limit used when creating deltas.
+const MAX_RESOLVE_DEPTH = 100;
 
 /**
  * Pending GC: hashes with refCount <= 0 that have been promoted but not yet
@@ -56,7 +58,10 @@ export function flushPendingGC(
   protectedHashes: ReadonlySet<string> = new Set()
 ): string[] {
   const flushed: string[] = [];
+  // A new delta may have reused a pending base since releaseContent ran.
+  const deltaBases = new Set(Object.values(store).flatMap(entry => entry.delta ? [entry.delta.baseHash] : []));
   for (const hash of pendingGCHashes) {
+    if (deltaBases.has(hash)) continue;
     if (protectedHashes.has(hash)) {
       // Reference counts are an optimization and can drift after interrupted
       // or legacy operations. A live branch reference is authoritative.
@@ -157,7 +162,7 @@ function isContentMatch(
   if (!entry) return false;
   if (entry.delta) {
     // Resolve delta to compare
-    const resolved = resolveContent(store, hash);
+    const resolved = resolveContentStrict(store, hash);
     return JSON.stringify(resolved) === serialized;
   }
   return JSON.stringify(entry.content) === serialized;
@@ -180,7 +185,7 @@ export function addContentDelta(
   // Both must be text-only
   if (!isDeltaEligible(content)) return addContent(store, content);
 
-  const baseContent = resolveContent(store, baseHash);
+  const baseContent = resolveContentStrict(store, baseHash);
   if (!isDeltaEligible(baseContent)) return addContent(store, content);
 
   // Check chain depth
@@ -240,7 +245,7 @@ export function retainContent(store: ContentStoreData, hash: string): void {
 export function promoteToFull(store: ContentStoreData, hash: string): void {
   const entry = store[hash];
   if (!entry?.delta) return;
-  const resolved = resolveContent(store, hash);
+  const resolved = resolveContentStrict(store, hash);
   entry.content = resolved;
   delete entry.delta;
 }
@@ -253,13 +258,14 @@ export function promoteDependents(
   store: ContentStoreData,
   baseHash: string
 ): void {
-  for (const [hash, entry] of Object.entries(store)) {
-    if (entry.delta?.baseHash === baseHash) {
-      // Resolve before the base is gone
-      const resolved = resolveContent(store, hash);
-      entry.content = resolved;
-      delete entry.delta;
-    }
+  // Resolve every dependent before changing any entry: a corrupt sibling must
+  // not leave the store half promoted or permit the base to be collected.
+  const resolved = Object.entries(store)
+    .filter(([, entry]) => entry.delta?.baseHash === baseHash)
+    .map(([hash, entry]) => ({ entry, content: resolveContentStrict(store, hash) }));
+  for (const { entry, content } of resolved) {
+    entry.content = content;
+    delete entry.delta;
   }
 }
 
@@ -273,17 +279,17 @@ export function promoteDependents(
 export function releaseContent(store: ContentStoreData, hash: string): void {
   if (isStreamingContentHash(hash)) return;
   if (!store[hash]) return;
-  store[hash].refCount--;
-  if (store[hash].refCount <= 0) {
+  if (store[hash].refCount <= 1) {
     promoteDependents(store, hash);
     pendingGCHashes.add(hash);
     // Entry stays in store until flushPendingGC
   }
+  store[hash].refCount--;
 }
 
 /**
  * Resolve a contentHash to actual content.
- * Follows delta chains up to MAX_CHAIN_DEPTH.
+ * Display reads tolerate corrupt delta chains; strict reads throw instead.
  */
 export function resolveContent(
   store: ContentStoreData,
@@ -293,62 +299,54 @@ export function resolveContent(
     const target = getStreamingTargetFromHash(hash);
     return target ? peekBufferedContent(target.chatId, target.nodeId) ?? [] : [];
   }
-  const entry = store[hash];
-  if (!entry) return [];
-
-  if (!entry.delta) {
-    return entry.content;
-  }
-
-  // Delta resolution
-  const visited = new Set<string>();
-  let current = hash;
-  const deltaChain: Array<{ hash: string; patches: string }> = [];
-
-  // Walk to the base
-  while (store[current]?.delta) {
-    if (visited.has(current)) {
-      // Circular reference detected
-      console.error(`[ContentStore] Circular delta chain detected at ${current}`);
-      return [];
-    }
-    visited.add(current);
-    deltaChain.push({
-      hash: current,
-      patches: store[current].delta!.patches,
-    });
-    current = store[current].delta!.baseHash;
-  }
-
-  const baseEntry = store[current];
-  if (!baseEntry) {
-    console.error(`[ContentStore] Missing delta base: ${current}`);
-    return [];
-  }
-
-  // Apply patches from base to target
-  let text = contentToText(baseEntry.content);
-  for (const { patches: patchText } of deltaChain.reverse()) {
-    const patches = dmp.patch_fromText(patchText);
-    const [result, applied] = dmp.patch_apply(patches, text);
-    if (applied.some((ok: boolean) => !ok)) {
-      console.error(`[ContentStore] Patch apply failed for delta chain`);
-      return [];
-    }
-    text = result;
-  }
-
   try {
-    return JSON.parse(text) as ContentInterface[];
+    return resolveContentStrict(store, hash);
   } catch {
-    console.error(`[ContentStore] Failed to parse resolved delta content`);
+    // Display reads tolerate damaged data; persistence must use the strict resolver.
     return [];
+  }
+}
+
+/** Resolve stored content without turning corruption into a valid empty message. */
+export function resolveContentStrict(
+  store: ContentStoreData,
+  hash: string
+): ContentInterface[] {
+  const visited = new Set<string>();
+  const chain: string[] = [];
+  let current = hash;
+  while (true) {
+    const entry = store[current];
+    if (!entry || visited.has(current) || chain.length >= MAX_RESOLVE_DEPTH) {
+      throw new Error('Missing, cyclic or excessively deep message content.');
+    }
+    if (!entry.delta) break;
+    visited.add(current);
+    chain.push(entry.delta.patches);
+    current = entry.delta.baseHash;
+  }
+  const base = store[current].content;
+  if (!Array.isArray(base)) throw new Error('Invalid message content.');
+  if (!chain.length) return base;
+  try {
+    let content = base;
+    for (const patchText of chain.reverse()) {
+      const [result, applied] = dmp.patch_apply(dmp.patch_fromText(patchText), contentToText(content));
+      if (applied.some((ok: boolean) => !ok)) throw new Error();
+      const resolved: unknown = JSON.parse(result);
+      if (!Array.isArray(resolved)) throw new Error();
+      content = resolved as ContentInterface[];
+    }
+    return content;
+  } catch {
+    // Patch parser errors can contain message text; never expose their raw errors.
+    throw new Error('Invalid message delta.');
   }
 }
 
 /**
  * Check if stored content at the given hash equals the provided content.
- * Uses resolveContent to follow delta chains, then compares serialized form.
+ * Uses strict resolution to avoid mistaking corrupt data for an empty message.
  * Safer than comparing computeContentHash directly because stored hashes
  * may have collision-avoidance suffixes (see addContent).
  */
@@ -357,7 +355,7 @@ export function isContentEqual(
   hash: string,
   content: ContentInterface[]
 ): boolean {
-  const resolved = resolveContent(store, hash);
+  const resolved = isStreamingContentHash(hash) ? resolveContent(store, hash) : resolveContentStrict(store, hash);
   return JSON.stringify(resolved) === JSON.stringify(content);
 }
 
@@ -385,14 +383,7 @@ export function buildExportContentStore(
 ): ContentStoreData {
   const exported: ContentStoreData = {};
   for (const [hash, entry] of Object.entries(store)) {
-    if (entry.delta) {
-      exported[hash] = {
-        content: resolveContent(store, hash),
-        refCount: entry.refCount,
-      };
-    } else {
-      exported[hash] = { content: entry.content, refCount: entry.refCount };
-    }
+    exported[hash] = { content: resolveContentStrict(store, hash), refCount: entry.refCount };
   }
   return exported;
 }
@@ -411,68 +402,10 @@ export function validateDeltaIntegrity(store: ContentStoreData): Set<string> {
 
   for (const [hash, entry] of Object.entries(store)) {
     if (!entry.delta) continue;
-
-    // 1. Missing base
-    if (!store[entry.delta.baseHash]) {
-      console.warn(
-        `[ContentStore] Broken delta: ${hash} references missing base ${entry.delta.baseHash}`
-      );
-      corrupt.add(hash);
-      continue;
-    }
-
-    // 2. Circular chain detection
-    const visited = new Set<string>();
-    let cur = hash;
-    let isCircular = false;
-    while (store[cur]?.delta) {
-      if (visited.has(cur)) {
-        isCircular = true;
-        break;
-      }
-      visited.add(cur);
-      cur = store[cur].delta!.baseHash;
-    }
-    if (isCircular) {
-      console.warn(`[ContentStore] Circular delta chain detected at ${hash}`);
-      corrupt.add(hash);
-      continue;
-    }
-
-    // 3. Patch parse/apply validation
     try {
-      const patches = dmp.patch_fromText(entry.delta.patches);
-      // Walk to base and try full resolution
-      const baseContent = store[cur]?.content;
-      if (baseContent) {
-        let text = contentToText(baseContent);
-        // Apply patches in reverse chain order (from base toward this entry)
-        const chain: string[] = [];
-        let walk = hash;
-        while (store[walk]?.delta) {
-          chain.push(walk);
-          walk = store[walk].delta!.baseHash;
-        }
-        let patchFailed = false;
-        for (const chainHash of chain.reverse()) {
-          const p = dmp.patch_fromText(store[chainHash].delta!.patches);
-          const [result, applied] = dmp.patch_apply(p, text);
-          if (applied.some((ok: boolean) => !ok)) {
-            patchFailed = true;
-            break;
-          }
-          text = result;
-        }
-        if (patchFailed) {
-          console.warn(`[ContentStore] Patch apply failed for delta ${hash}`);
-          corrupt.add(hash);
-          continue;
-        }
-        // 4. Verify JSON parse
-        JSON.parse(text);
-      }
-    } catch (e) {
-      console.warn(`[ContentStore] Delta validation error for ${hash}:`, e);
+      resolveContentStrict(store, hash);
+    } catch {
+      console.warn(`[ContentStore] Invalid delta chain at ${hash}`);
       corrupt.add(hash);
     }
   }

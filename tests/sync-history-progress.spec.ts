@@ -1,6 +1,6 @@
 import { test, expect } from '@playwright/test';
 
-test.use({ headless: true, locale: 'ja-JP', baseURL: 'http://127.0.0.1:5175',
+test.use({ headless: true, locale: 'ja-JP', baseURL: process.env.WEAVELET_TEST_URL ?? 'http://127.0.0.1:5175',
   launchOptions: { executablePath: process.env.PLAYWRIGHT_CHROME_EXECUTABLE } });
 
 test('shows history counts and receives real Worker progress for a deep history', async ({ page }) => {
@@ -9,18 +9,28 @@ test('shows history counts and receives real Worker progress for a deep history'
     contentType: 'application/javascript',
     body: 'window.google={accounts:{oauth2:{initTokenClient:()=>({requestAccessToken:()=>{}}),revoke:()=>{}}}};',
   }));
-  await page.goto('/');
+  await page.goto('/', { waitUntil: 'domcontentloaded' });
+  await page.getByRole('button', { name: 'すべてスキップ', exact: true }).click();
+  // Completing onboarding opens Settings; dismiss it before opening sync details.
+  await expect(page.getByRole('heading', { name: '設定', exact: true })).toBeVisible();
+  await page.getByRole('button', { name: 'close modal', exact: true }).click();
   await page.evaluate(async () => {
     const load = (path: string) => import(/* @vite-ignore */ path);
     const { default: store } = await load('/src/store/store.ts');
     const { default: auth } = await load('/src/store/cloud-auth-store.ts');
-    store.setState({ onboardingCompleted: 1 });
+    store.setState({ onboardingCompleted: true });
     auth.setState({ provider: 'google', cloudSync: true, syncStatus: 'syncing' });
     const { useGoogleSyncProgress, syncHistoryProgress } = await load('/src/store/storage/google/progress.ts');
     useGoogleSyncProgress.setState({ active: true });
     syncHistoryProgress({ step: 'scanning', completed: 123 });
   });
   await page.getByRole('button', { name: /Google Drive:.*同期の詳細を開く/ }).click();
+  // Opening the fixture's provider panel checks its absent OAuth session.
+  await page.evaluate(async () => {
+    const path = '/src/store/cloud-auth-store.ts';
+    const { default: auth } = await import(/* @vite-ignore */ path);
+    auth.setState({ syncStatus: 'syncing' });
+  });
   const progress = page.getByTestId('google-sync-progress');
   await expect(progress).toContainText('123 件確認済み（総数を確認中）');
   await expect(progress.getByRole('progressbar').nth(1)).not.toHaveAttribute('value');
@@ -58,4 +68,23 @@ test('shows history counts and receives real Worker progress for a deep history'
   expect(result.ticks).toBeGreaterThan(0);
   expect(result.progress).toBe(1);
   await expect(progress).toHaveCount(0);
+});
+
+test('round-trips native and legacy cache data through the real Worker', async ({ page }) => {
+  test.setTimeout(60_000);
+  await page.route('https://accounts.google.com/**', route => route.fulfill({ body: '' }));
+  await page.goto('/', { waitUntil: 'domcontentloaded' });
+  const result = await page.evaluate(async () => {
+    const load = (path: string) => import(/* @vite-ignore */ path);
+    const { encodeCacheAsync, decodeCacheAsync, encodeAsync } = await load('/src/store/storage/google/processing.ts');
+    const input = { version: 1, records: { synthetic: '架空の検証用データ'.repeat(10000) }, commits: ['first'] };
+    const native = await encodeCacheAsync(input);
+    const legacy = await encodeAsync(input);
+    return {
+      native: JSON.stringify(await decodeCacheAsync(native)) === JSON.stringify(input),
+      legacy: JSON.stringify(await decodeCacheAsync(legacy)) === JSON.stringify(input),
+      magic: [...native.slice(0, 8)],
+    };
+  });
+  expect(result).toEqual({ native: true, legacy: true, magic: [87, 76, 67, 65, 67, 72, 69, 1] });
 });

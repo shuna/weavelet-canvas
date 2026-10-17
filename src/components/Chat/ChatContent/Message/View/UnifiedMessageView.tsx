@@ -15,6 +15,7 @@ import { MessageEditForm } from './EditView';
 import ContentActions from './ContentActions';
 import ContentAttachments from './ContentAttachments';
 import ContentBody from './ContentBody';
+import StreamStatusIndicator from './StreamStatusIndicator';
 import EvaluationPanel from './EvaluationPanel';
 import type { TabId } from './EvaluationModal';
 import PopupModal from '@components/PopupModal';
@@ -212,7 +213,6 @@ const UnifiedMessageView = memo(
                     streamingMarkdownPolicy={streamingMarkdownPolicy}
                     inlineLatex={inlineLatex}
                     isGeneratingMessage={isGeneratingMessage}
-                    nodeId={nodeId}
                   />
                 </div>
                 <ContentAttachments images={isEditState ? [] : validImageContents} />
@@ -223,6 +223,9 @@ const UnifiedMessageView = memo(
                   </>
                 )}
               </>
+            )}
+            {role === 'assistant' && !isGeneratingMessage && !summaryId && (
+              <StreamStatusIndicator chatId={currentChatId} nodeId={nodeId} />
             )}
             <ContentActions
               nodeId={nodeId}

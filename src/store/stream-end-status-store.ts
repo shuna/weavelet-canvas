@@ -1,24 +1,16 @@
 import { create } from 'zustand';
 
-/**
- * Transient (non-persisted) store that tracks how each streaming message ended.
- * Used to show a brief completion/interruption indicator in the UI.
- */
+import useStore from './store';
+import type { StreamEndReason } from '@type/chat';
+export type { StreamEndReason } from '@type/chat';
 
-export type StreamEndReason =
-  | 'completed'      // LLM finished naturally (finish_reason: stop / [DONE])
-  | 'max_tokens'     // LLM hit max_tokens limit (finish_reason: length)
-  | 'interrupted'    // User stopped or network abort
-  | 'error'          // Stream error / timeout
-  | 'recovered'      // Recovered from proxy (may be partial)
-  | 'recovered_partial'; // Recovered from proxy but incomplete
-
+// Transient notifications supplement the per-node state saved with chat data.
 /** How long the indicator stays visible (ms) */
 const INDICATOR_TTL_MS = 8_000;
 
 interface StreamEndStatusStore {
   statuses: Record<string, StreamEndReason>;
-  setStatus: (nodeId: string, reason: StreamEndReason) => void;
+  setStatus: (nodeId: string, reason: StreamEndReason, chatId?: string, request?: { requestId: string; proxy: boolean; createdAt?: number }) => void;
   clearStatus: (nodeId: string) => void;
 }
 
@@ -26,7 +18,22 @@ const timers = new Map<string, ReturnType<typeof setTimeout>>();
 
 export const useStreamEndStatusStore = create<StreamEndStatusStore>((set, get) => ({
   statuses: {},
-  setStatus: (nodeId, reason) => {
+  setStatus: (nodeId, reason, chatId, request) => {
+    if (chatId) useStore.setState(state => {
+      const index = state.chats?.findIndex(chat => chat.id === chatId) ?? -1;
+      const chat = state.chats?.[index];
+      const node = chat?.branchTree?.nodes[nodeId];
+      if (!chat?.branchTree || !node) return state;
+      const previous = reason === 'streaming' && !request ? undefined : node.streamState;
+      const chats = [...state.chats!];
+      chats[index] = { ...chat, branchTree: { ...chat.branchTree, nodes: {
+        ...chat.branchTree.nodes,
+        [nodeId]: { ...node, streamState: {
+          ...previous, ...request, reason, createdAt: request?.createdAt ?? previous?.createdAt ?? Date.now(),
+        } },
+      } } };
+      return { chats };
+    });
     // Clear any existing timer
     const existing = timers.get(nodeId);
     if (existing) clearTimeout(existing);

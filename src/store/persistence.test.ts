@@ -451,3 +451,13 @@ it('preserves independent summary settings in both persisted snapshots', () => {
   expect(createPartializedState(value as never).bubbleSummaryConfig).toEqual(config);
   expect(createLocalStoragePartializedState(value as never).bubbleSummaryConfig).toEqual(config);
 });
+
+it('preserves bubble interruption and request identity through chat persistence and reload', () => {
+  const state = buildStoreState();
+  const node = state.chats![0].branchTree!.nodes['node-2'];
+  node.streamState = { reason: 'error', requestId: 'request', proxy: true, createdAt: Date.now() };
+  const saved = JSON.parse(JSON.stringify(createPersistedChatDataState(state as never)));
+  const restored = buildStoreState();
+  applyPersistedChatDataState(restored as never, saved);
+  expect(restored.chats![0].branchTree!.nodes['node-2'].streamState).toEqual(node.streamState);
+});

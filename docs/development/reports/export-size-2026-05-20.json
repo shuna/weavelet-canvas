@@ -1,0 +1,120 @@
+{
+  "export_version": 3,
+  "chats": 795,
+  "chats_with_trees": 73,
+  "branch_tree_nodes": 3724,
+  "legacy_message_nodes": 9383,
+  "nodes_per_chat": {
+    "count": 795,
+    "total": 13107,
+    "min": 0,
+    "p50": 13,
+    "p95": 21,
+    "p99": 155,
+    "max": 558
+  },
+  "active_nodes_per_chat": {
+    "count": 795,
+    "total": 10380,
+    "min": 0,
+    "p50": 13,
+    "p95": 20,
+    "p99": 22,
+    "max": 29
+  },
+  "materialized_messages_per_chat": {
+    "count": 795,
+    "total": 10380,
+    "min": 0,
+    "p50": 13,
+    "p95": 20,
+    "p99": 22,
+    "max": 29
+  },
+  "branching": {
+    "roots": 74,
+    "leaves": 1191,
+    "branching_nodes": 213,
+    "orphan_nodes": 0,
+    "cyclic_or_orphan_chain_nodes": 0,
+    "children_max": 65,
+    "depth_per_chat": {
+      "count": 73,
+      "total": 1091,
+      "min": 2,
+      "p50": 14,
+      "p95": 29,
+      "p99": 38,
+      "max": 38
+    }
+  },
+  "content": {
+    "entries": 1563,
+    "delta_entries": 0,
+    "full_entries": 1563,
+    "referenced_entries": 1582,
+    "references": 3724,
+    "missing_references": 20,
+    "transient_missing_references": 0,
+    "nontransient_missing_references": 20,
+    "missing_delta_bases": 0,
+    "unique_stored_text_chars": 5579173,
+    "unique_stored_text_bytes": {
+      "count": 1563,
+      "total": 16102772,
+      "min": 0,
+      "p50": 6502,
+      "p95": 31204,
+      "p99": 43142,
+      "max": 68112
+    },
+    "unique_stored_image_url_bytes": 0,
+    "images": 0,
+    "delta_patch_utf8_bytes": {
+      "count": 0,
+      "total": 0,
+      "min": 0,
+      "p50": 0,
+      "p95": 0,
+      "p99": 0,
+      "max": 0
+    },
+    "inline_node_text_bytes": 35253909,
+    "referenced_node_text_bytes": {
+      "count": 13087,
+      "total": 69259080,
+      "min": 0,
+      "p50": 2516,
+      "p95": 21730,
+      "p99": 33857,
+      "max": 68112
+    },
+    "node_text_bytes_per_chat": {
+      "count": 795,
+      "total": 69259080,
+      "min": 0,
+      "p50": 45472,
+      "p95": 102248,
+      "p99": 1860300,
+      "max": 5951979
+    },
+    "nodes_without_resolved_size": 20
+  },
+  "safety_factor": 3,
+  "design_capacity": {
+    "nodes": 39321,
+    "node_sha256_binary_bytes": 1258272,
+    "expanded_json_bytes": 180452289
+  },
+  "file": {
+    "gzip_bytes": 17750791,
+    "expanded_json_bytes": 60150763,
+    "expansion_ratio": 3.389
+  },
+  "measurement": {
+    "gzip_expand_seconds": 0.177,
+    "json_parse_seconds": 0.108,
+    "summarize_seconds": 0.052,
+    "analyzer_peak_rss_bytes": 232833024
+  }
+}

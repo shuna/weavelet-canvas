@@ -7,6 +7,8 @@ import { decodeParts } from './decodeParts';
 import { SyncConflictError } from './records';
 import { prepareHydratedData } from '../../rehydrateData';
 import { prepareSave } from '../prepareSave';
+import { encodeWire, decodeWire } from './wire';
+import { encodeCache, decodeCache } from './cacheCodec';
 
 type Request = { resolve: (value: any) => void; reject: (error: unknown) => void; onProgress?: (progress: HistoryProgress) => void };
 let worker: Worker | undefined;
@@ -54,13 +56,36 @@ function processAsync<T>(operation: string, value: unknown, fallback: () => T | 
 
 export const encodeAsync = (value: unknown) => processAsync('encode', value, () => encode(value));
 export const decodeAsync = <T>(value: Uint8Array) => processAsync('decode', value, () => decode<T>(value));
-export const toRecordsAsync = (value: Snapshot) => processAsync('toRecords', value, () => toRecords(value));
-export const fromRecordsAsync = (value: Records) => processAsync('fromRecords', value, () => fromRecords(value));
+export const encodeCacheAsync = (value: unknown) => processAsync('encodeCache', value, () => encodeCache(value));
+export const decodeCacheAsync = <T>(value: Uint8Array) => processAsync('decodeCache', value, () => decodeCache<T>(value));
+// Tree messages duplicate contentStore bodies; omit them before structured-cloning into the worker.
+function withoutDerivedMessages(value: Snapshot): Snapshot {
+  return { ...value, state: { ...value.state,
+    chats: value.state.chats?.map(chat => chat.branchTree ? { ...chat, messages: [] } : chat) } };
+}
+export const toRecordsAsync = (value: Snapshot) => {
+  const projected = withoutDerivedMessages(value);
+  return processAsync('toRecords', projected, () => toRecords(projected));
+};
+export const fromRecordsAsync = (value: Records, previous?: Parameters<typeof fromRecords>[1]) =>
+  previous ? processAsync('fromRecordsWithContent', { records: value, previous }, () => fromRecords(value, previous))
+    : processAsync('fromRecords', value, () => fromRecords(value));
 export const hashRecordsAsync = (value: Records) => processAsync('hashRecords', value, () => hashRecords(value));
 export const hashCommitsAsync = (value: Record<string, Commit>) => processAsync('hashCommits', value, () => hashCommits(value));
-export const sameSnapshotAsync = (a: Snapshot, b: Snapshot) => processAsync('sameSnapshot', [a, b], () => sameSnapshot([a, b]));
+export const sameSnapshotAsync = (a: Snapshot, b: Snapshot) => {
+  const projected: [Snapshot, Snapshot] = [withoutDerivedMessages(a), withoutDerivedMessages(b)];
+  return processAsync('sameSnapshot', projected, () => sameSnapshot(projected));
+};
 export const replayHistoryAsync = (value: Parameters<typeof replayHistory>[0]) => processAsync('replayHistory', value, () => replayHistory(value, syncHistoryProgress), syncHistoryProgress);
 export const collectHistoryAsync = (value: Parameters<typeof collectHistory>[0]) => processAsync('collectHistory', value, () => collectHistory(value, syncHistoryProgress), syncHistoryProgress);
 export const decodePartsAsync = <T>(value: Uint8Array[]) => processAsync('decodeParts', value, () => decodeParts<T>(value));
+export const encodeWireAsync = (value: Parameters<typeof encodeWire>[0], full?: Uint8Array) =>
+  processAsync('encodeWire', { value, full }, () => encodeWire(value, full));
+export const decodeWirePartsAsync = <T>(value: Uint8Array[]) => processAsync<{ bytes: Uint8Array; value: T }>('decodeWireParts', value, async () => {
+  const bytes = new Uint8Array(value.reduce((total, part) => total + part.length, 0));
+  let offset = 0;
+  for (const part of value) { bytes.set(part, offset); offset += part.length; }
+  return { bytes, value: await decodeWire<T>(bytes) };
+});
 export const prepareHydratedDataAsync = (value: Parameters<typeof prepareHydratedData>[0]) => processAsync('prepareHydratedData', value, () => prepareHydratedData(structuredClone(value)));
 export const prepareSaveAsync = (value: Parameters<typeof prepareSave>[0]) => processAsync('prepareSave', value, () => prepareSave(structuredClone(value)));

@@ -54,3 +54,10 @@ describe('SW proxy stream terminal and checkpoint semantics', () => {
   });
 
 });
+
+it('does not advance the persisted event ID when EOF cuts an outer SSE frame before its delimiter', async () => {
+  const raw = 'data: {"choices":[{"delta":{"content":"must replay"}}]}\n\n';
+  const { record, messages } = await run([`id: 1\ndata: ${JSON.stringify(raw)}`]);
+  expect(record).toMatchObject({ status: 'failed', lastProxyEventId: 0, bufferedText: '' });
+  expect(messages.some(message => message.type === 'sw-done')).toBe(false);
+});

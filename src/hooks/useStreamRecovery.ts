@@ -3,7 +3,7 @@ import { recordOpenRouterObservation } from '@utils/openrouterObservation';
 import { observeOpenRouterUsage } from '@utils/openrouterControls';
 import { useEffect, useRef } from 'react';
 import useStore from '@store/store';
-import { getAllPending, deleteRequest, saveRecoveryRecord, saveProxyCheckpoint, StreamRecord } from '@utils/streamDb';
+import { getAllPending, cleanupStale, deleteRequest, saveRecoveryRecord, saveProxyCheckpoint, StreamRecord } from '@utils/streamDb';
 import { materializeActivePath } from '@utils/branchUtils';
 import { addContent } from '@utils/contentStore';
 import { beginAiTask, cancelAiTask, finishAiTask, isAiTaskCurrent, type AiTaskTicket } from './aiTaskLifetime';
@@ -18,7 +18,7 @@ import { parseEventSource } from '@api/helper';
 import { ThinkTagParser } from '@utils/thinkTagParser';
 import { extractTextFromApiContent, extractReasoningFromApiContent, extractReasoningFromReasoningDetails } from '@utils/apiContent';
 import { debugReport } from '@store/debug-store';
-import { useStreamEndStatusStore } from '@store/stream-end-status-store';
+import { useStreamEndStatusStore, type StreamEndReason } from '@store/stream-end-status-store';
 import { showToast } from '@utils/showToast';
 import {
   buildVerifiedStatsKey,
@@ -145,7 +145,7 @@ export default function useStreamRecovery() {
   }, []);
 }
 
-/** Max retry attempts when proxy returns an 'interrupted' event (Worker may still be writing) */
+/** Short retries for cache publication races and transient network failures. */
 const PROXY_RECOVERY_MAX_RETRIES = 3;
 const PROXY_RECOVERY_RETRY_DELAY_MS = 500;
 
@@ -198,7 +198,7 @@ async function tryProxyRecovery(
   if (!proxyEnabled || !proxyEndpoint || !record.proxySessionId) return null;
 
   const config: ProxyConfig = {
-    endpoint: proxyEndpoint.replace(/\/+$/, ''),
+    endpoint: proxyEndpoint.trim().replace(/\/+$/, ''),
     authToken: proxyAuthToken || undefined,
   };
 
@@ -272,7 +272,7 @@ async function readProxyRecoveryStream(
 
       const { done, value } = await reader.read();
       const chunk = partial + decoder.decode(done ? undefined : value, { stream: !done });
-      const proxySse = parseProxySse(chunk, done);
+      const proxySse = parseProxySse(chunk);
       partial = proxySse.partial;
 
       let shouldBreak = false;
@@ -361,7 +361,7 @@ async function readProxyRecoveryStream(
   return { text: recoveredText, reasoning: recoveredReasoning, outcome, retry };
 }
 
-export async function recoverPending(opts?: { manual?: boolean; chatId?: string }) {
+export async function recoverPending(opts?: { manual?: boolean; chatId?: string; nodeId?: string; requestId?: string }) {
   // Prevent concurrent calls (StrictMode double-mount, rapid visibility changes)
   if (recoveryInProgress) {
     debugReport('recovery-hook', {
@@ -378,7 +378,7 @@ export async function recoverPending(opts?: { manual?: boolean; chatId?: string 
   debugReport(debugId, { label: 'Stream Recovery', status: 'active', detail: 'Checking pending records…' });
 
   try {
-    await recoverPendingInner(manual, debugId, opts?.chatId);
+    await recoverPendingInner(manual, debugId, opts?.chatId, opts?.nodeId, opts?.requestId);
   } finally {
     // If recovery was cancelled manually (e.g. debug panel ×), the caller
     // already removed the entry — don't re-create it with a debugReport.
@@ -394,7 +394,7 @@ export async function recoverPending(opts?: { manual?: boolean; chatId?: string 
   }
 }
 
-async function recoverPendingInner(manual: boolean, debugId: string, chatId?: string) {
+async function recoverPendingInner(manual: boolean, debugId: string, chatId?: string, nodeId?: string, requestId?: string) {
   const { error: failedError, lastSubmitChatId: failedChatId, lastSubmitMode: failedMode, lastSubmitIndex: failedSubmitIndex, chats } = useStore.getState();
   const failedPath = chats?.find(chat => chat.id === failedChatId)?.branchTree?.activePath;
   const failedIndex = failedMode === 'midchat' ? failedSubmitIndex : (failedPath?.length ?? 0) - 1;
@@ -410,7 +410,8 @@ async function recoverPendingInner(manual: boolean, debugId: string, chatId?: st
 
   let records: StreamRecord[];
   try {
-    records = (await getAllPending()).filter(record => !chatId || record.chatId === chatId);
+    await cleanupStale();
+    records = (await getAllPending()).filter(record => (!chatId || record.chatId === chatId) && (!nodeId || record.nodeId === nodeId) && (!requestId || record.requestId === requestId));
   } catch {
     debugReport(debugId, { status: 'error', detail: 'Failed to read pending records' });
     showToast('リカバリの準備に失敗しました', 'error');
@@ -469,7 +470,6 @@ async function recoverPendingInner(manual: boolean, debugId: string, chatId?: st
       activeRecoveryTicket = ticket;
       let expectedHash = target.node.contentHash;
       let restoredThisRecord = false;
-      let proxyRecoveredThisRecord = false;
       const currentTarget = () => {
         if (!isAiTaskCurrent(ticket)) return null;
         const state = useStore.getState();
@@ -516,7 +516,7 @@ async function recoverPendingInner(manual: boolean, debugId: string, chatId?: st
               // Keep the proxy result recoverable until the primary snapshot commits.
               await saveRecoveryRecord({ ...record, updatedAt: Date.now() }, () => !!currentTarget());
               if (!currentTarget()) continue;
-              if (applyText(proxyResult.text, proxyResult.reasoning)) { recoveredCount++; proxyRecoveredThisRecord = true; }
+              if (applyText(proxyResult.text, proxyResult.reasoning)) { recoveredCount++; }
             }
           } catch {
             debugReport(debugId, { detail: 'Proxy recovery failed, using IndexedDB data' });
@@ -534,15 +534,16 @@ async function recoverPendingInner(manual: boolean, debugId: string, chatId?: st
         }
         if (record.proxyComplete === true) {
           completedCount++;
-          useStreamEndStatusStore.getState().setStatus(record.nodeId!, 'recovered');
         }
+        const recoveryStatus: StreamEndReason = record.proxyComplete ? 'recovered'
+          : proxyOutcome === 'network' ? 'error' : proxyOutcome === 'abort' ? 'interrupted'
+          : proxyOutcome === 'partial' || effectiveStatus === 'interrupted' || effectiveStatus === 'failed' ? 'recovered_partial' : 'completed';
+        useStreamEndStatusStore.getState().setStatus(record.nodeId!, recoveryStatus, record.chatId, { requestId, proxy: !!record.proxySessionId, createdAt: record.createdAt });
         if (restoredThisRecord) {
           await saveRecoveryRecord({ ...record, bufferedText: record.proxySessionId ? record.bufferedText : getCurrentMessageText(latest.message), appliedHash: expectedHash, updatedAt: Date.now() }, () => !!currentTarget());
           requestSnapshotFlush();
           if (!currentTarget()) continue;
           restoredMessageCount++;
-          const isPartial = proxyOutcome ? proxyOutcome !== 'complete' : effectiveStatus === 'interrupted' || effectiveStatus === 'failed';
-          useStreamEndStatusStore.getState().setStatus(record.nodeId!, isPartial ? 'recovered_partial' : proxyRecoveredThisRecord ? 'recovered' : 'completed');
           // Bootstrap acknowledges appliedHash only after the primary snapshot commits.
         } else {
           await saveRecoveryRecord({ ...record, appliedHash: expectedHash, updatedAt: Date.now() }, () => !!currentTarget());

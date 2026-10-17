@@ -1,6 +1,8 @@
 import { afterEach, expect, it, vi } from 'vitest';
 import { digest, encode } from './crypto';
 import { useGoogleSyncProgress, withSyncProgress } from './progress';
+import { toRecords, type Snapshot } from './records';
+import type { ChatInterface, ContentInterface } from '@type/chat';
 
 class FakeWorker {
   static instances: FakeWorker[] = [];
@@ -121,4 +123,63 @@ it('resets worker metrics and runs worker requests in order', async () => {
   const replies = scope.postMessage.mock.calls.map(([message]: any[]) => message);
   expect(replies.map((message: any) => message.id)).toEqual([1, 2, 3]);
   expect(replies[2].metrics.serialize.calls).toBe(1);
+});
+
+it('passes trusted complete wire bytes through the worker adapter without encoding them again', async () => {
+  const scope: any = { postMessage: vi.fn() };
+  vi.stubGlobal('self', scope);
+  await import('./processing.worker');
+  const value = { version: 1 as const, parents: [], changes: [] };
+  const full = encode(value);
+  scope.onmessage({ data: { id: 12, operation: 'encodeWire', value: { value, full } } });
+  await vi.waitFor(() => expect(scope.postMessage).toHaveBeenCalledTimes(1));
+  const reply = scope.postMessage.mock.calls[0][0];
+  expect(reply.id).toBe(12);
+  expect(reply.value).toEqual(full);
+  expect(reply.metrics.serialize).toBeUndefined();
+});
+
+
+it('omits only derived tree messages before worker transfer and preserves records, legacy messages and source snapshots', async () => {
+  const content: ContentInterface[] = [{ type: 'text', text: 'synthetic body' }];
+  const treeChat: ChatInterface = {
+    id: 'tree', title: 'fixture', titleSet: true, imageDetail: 'auto',
+    config: { model: 'test', max_tokens: 1, temperature: 1, presence_penalty: 0, frequency_penalty: 0, top_p: 1 },
+    messages: [{ role: 'user', content }],
+    branchTree: { rootId: 'node', activePath: ['node'], nodes: {
+      node: { id: 'node', parentId: null, role: 'user', contentHash: 'body', createdAt: 1 },
+    } },
+  };
+  const legacyChat = { ...treeChat, id: 'legacy', branchTree: undefined };
+  const original: Snapshot = { version: 18, state: { chats: [treeChat, legacyChat],
+    contentStore: { body: { content, refCount: 1 } }, defaultSystemMessage: 'retained metadata',
+    pendingVerifications: {}, verifiedStats: {},
+  } };
+  const before = structuredClone(original), expected = await toRecords(original);
+  vi.stubGlobal('Worker', FakeWorker);
+  const processing = await import('./processing');
+  const result = processing.toRecordsAsync(original);
+  const worker = FakeWorker.instances[0], request = worker.messages[0];
+  expect(request.value.state.chats[0].messages).toEqual([]);
+  expect(request.value.state.chats[0].branchTree).toBe(treeChat.branchTree);
+  expect(request.value.state.chats[1]).toBe(legacyChat);
+  expect(request.value.state.contentStore).toBe(original.state.contentStore);
+  expect(request.value.state.pendingVerifications).toBe(original.state.pendingVerifications);
+  expect(request.value.state.verifiedStats).toBe(original.state.verifiedStats);
+  expect(request.value.state.defaultSystemMessage).toBe(original.state.defaultSystemMessage);
+  expect(await toRecords(request.value)).toEqual(expected);
+  worker.reply({ id: request.id, value: expected, metrics: {} });
+  await expect(result).resolves.toEqual(expected);
+  const comparison = processing.sameSnapshotAsync(original, original);
+  const comparisonRequest = worker.messages[1];
+  for (const value of comparisonRequest.value) {
+    expect(value.state.chats[0].messages).toEqual([]);
+    expect(value.state.chats[1].messages).toBe(legacyChat.messages);
+  }
+  worker.reply({ id: comparisonRequest.id, value: true, metrics: {} });
+  await expect(comparison).resolves.toBe(true);
+  vi.stubGlobal('Worker', undefined);
+  await expect(processing.toRecordsAsync(original)).resolves.toEqual(expected);
+  await expect(processing.sameSnapshotAsync(original, original)).resolves.toBe(true);
+  expect(original).toEqual(before);
 });

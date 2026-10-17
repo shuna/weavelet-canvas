@@ -590,7 +590,7 @@ async function handleStartStream(msg, port) {
           'read#' + readCount + ' bytes=' + byteLength + ' total=' + totalBytes + ' done=' + done
         );
         const chunk = partial + decoder.decode(done ? undefined : value, { stream: !done });
-        const proxySse = parseProxySse(chunk, done);
+        const proxySse = parseProxySse(chunk);
         partial = proxySse.partial;
 
         for (const evt of proxySse.events) {

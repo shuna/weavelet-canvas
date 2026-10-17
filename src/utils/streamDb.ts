@@ -43,6 +43,8 @@ export interface ProxyCheckpoint {
 const DB_NAME = 'sw-stream-db';
 const STORE_NAME = 'requests';
 const DB_VERSION = 1;
+// Preserve unapplied responses for seven days, even if repeated recovery updates them.
+export const PENDING_RETENTION_MS = 7 * 24 * 60 * 60 * 1000;
 
 function openDb(): Promise<IDBDatabase> {
   return new Promise((resolve, reject) => {
@@ -201,15 +203,17 @@ export async function deleteRequest(requestId: string): Promise<void> {
 
 export async function cleanupStale(maxAgeMs: number = 3600000): Promise<void> {
   const db = await openDb();
-  const store = tx(db, 'readwrite');
+  const transaction = db.transaction(STORE_NAME, 'readwrite');
+  const store = transaction.objectStore(STORE_NAME);
+  const done = transactionDone(transaction, db);
   const all: StreamRecord[] = await reqToPromise(store.getAll());
   const now = Date.now();
   for (const r of all) {
-    if (r.acknowledged && now - r.createdAt > maxAgeMs) {
+    if (now - r.createdAt > (r.acknowledged ? maxAgeMs : PENDING_RETENTION_MS)) {
       store.delete(r.requestId);
     }
   }
-  db.close();
+  await done;
 }
 
 export async function setStreamObservation(requestId: string, patch: OpenRouterObservation): Promise<void> {
