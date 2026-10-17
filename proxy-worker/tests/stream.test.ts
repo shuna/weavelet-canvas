@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { beforeEach, afterEach, describe, expect, it, vi } from 'vitest';
 import worker, { type Env } from '../src/index';
 
 const env = { PROXY_AUTH_TOKEN: '' } as Env;
@@ -17,10 +17,11 @@ function body(parts: string[]) {
     },
   });
 }
-function stream(sessionId: string) {
+function stream(sessionId: string, signal?: AbortSignal) {
   return worker.fetch(
     new Request('https://worker.example/api/stream', {
       method: 'POST',
+      signal,
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         endpoint: 'https://upstream.example/chat',
@@ -33,6 +34,13 @@ function stream(sessionId: string) {
     ctx
   );
 }
+beforeEach(() => {
+  vi.stubGlobal('caches', { default: {
+    match: vi.fn(async (key: Request) => cache.get(key.url)?.clone()),
+    put: vi.fn(async (key: Request, response: Response) => { cache.set(key.url, response); }),
+    delete: vi.fn(async (key: Request) => cache.delete(key.url)),
+  } });
+});
 afterEach(() => {
   vi.useRealTimers();
   vi.unstubAllGlobals();
@@ -179,6 +187,102 @@ describe('stream relay', () => {
     expect(text).toContain('id: 4');
     expect(text).toContain('reason":"capacity');
     expect(text).not.toContain('event: done');
+  });
+
+  it('recovers a completed response when the terminal delivery was lost, and ACK deletes it', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(body(['data: hello\n\n', 'data: [DONE]\n\n']))));
+    expect(await (await stream('chat:request/id?#')).text()).toContain('event: done');
+    const recover = () => worker.fetch(new Request('https://worker.example/api/recover/' + encodeURIComponent('chat:request/id?#') + '?lastEventId=1'), env, ctx);
+    const recovered = await (await recover()).text();
+    expect(recovered).toContain('id: 2');
+    expect(recovered).not.toContain('id: 1');
+    expect(recovered).toContain('event: done');
+    const ack = await worker.fetch(new Request('https://worker.example/api/ack/' + encodeURIComponent('chat:request/id?#'), { method: 'POST' }), env, ctx);
+    expect(await ack.json()).toEqual({ deleted: true });
+    expect(await (await recover()).text()).toContain('event: cache-miss');
+  });
+
+  it('keeps consuming and caches after abort interrupts a blocked client write', async () => {
+    let source!: ReadableStreamDefaultController<Uint8Array>;
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(new ReadableStream<Uint8Array>({ start(c) { source = c; } }))));
+    const abort = new AbortController();
+    const response = await stream('blocked-write', abort.signal);
+    source.enqueue(enc.encode('data: first\n\n'));
+    await vi.waitFor(() => expect(cache.size).toBe(1));
+    // Leave the response unread: writer.write is held by backpressure.
+    abort.abort();
+    source.enqueue(enc.encode('data: second\n\ndata: [DONE]\n\n'));
+    source.close();
+    await vi.waitFor(async () => {
+      expect((await [...cache.values()][0].clone().json()).generationTerminal).toBe('complete');
+    });
+    const recovered = await worker.fetch(new Request('https://worker.example/api/recover/blocked-write?lastEventId=0'), env, ctx);
+    const replay = await recovered.text();
+    expect(replay).toContain('first');
+    expect(replay).toContain('second');
+    expect(replay).toContain('event: done');
+    await response.body?.cancel().catch(() => {});
+  });
+
+  it.each(['-1', 'NaN', '1.5', '1junk', '9007199254740992'])('rejects invalid recovery cursor %s', async cursor => {
+    const response = await worker.fetch(new Request('https://worker.example/api/recover/s?lastEventId=' + cursor), env, ctx);
+    expect(response.status).toBe(400);
+  });
+
+  it.each([0, 4])('rejects a missing prefix or a cursor ahead of the stored stream: %s', async cursor => {
+    vi.stubGlobal('caches', { default: { match: async () => new Response(JSON.stringify({
+      version: 1, firstEventId: 2, chunks: [{ id: 2, data: 'two' }],
+      generationTerminal: 'complete', cacheCapability: 'available',
+    })) } });
+    const response = await worker.fetch(new Request('https://worker.example/api/recover/s?lastEventId=' + cursor), env, ctx);
+    const replay = await response.text();
+    expect(replay).toContain('event-id-mismatch');
+    expect(replay).not.toContain('event: done');
+  });
+
+  it('enforces snapshot expiry even if a cache implementation still returns the entry', async () => {
+    vi.stubGlobal('caches', { default: { match: async () => new Response(JSON.stringify({
+      version: 1, expiresAt: Date.now() - 1, firstEventId: 1, chunks: [],
+      generationTerminal: 'complete', cacheCapability: 'available',
+    })) } });
+    const response = await worker.fetch(new Request('https://worker.example/api/recover/s'), env, ctx);
+    expect(await response.text()).toContain('event: cache-miss');
+  });
+
+  it('publishes the terminal snapshot before sending the terminal SSE event', async () => {
+    let release!: () => void;
+    const gate = new Promise<void>(resolve => { release = resolve; });
+    let terminalWriteStarted = false;
+    vi.stubGlobal('caches', { default: {
+      put: async (key: Request, response: Response) => {
+        const snapshot = await response.clone().json() as { generationTerminal: string };
+        if (snapshot.generationTerminal === 'complete') { terminalWriteStarted = true; await gate; }
+        cache.set(key.url, response);
+      },
+    } });
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(body(['data: [DONE]\n\n']))));
+    let finished = false;
+    const text = (await stream('terminal-order')).text().then(value => { finished = true; return value; });
+    await vi.waitFor(() => expect(terminalWriteStarted).toBe(true));
+    expect(finished).toBe(false);
+    release();
+    expect(await text).toContain('event: done');
+    expect((await [...cache.values()][0].clone().json()).generationTerminal).toBe('complete');
+  });
+
+  it('waits for a newer streaming snapshot when the saved cursor is ahead of the cache', async () => {
+    vi.useFakeTimers();
+    const match = vi.fn()
+      .mockImplementationOnce(async () => new Response(JSON.stringify({ version: 1, firstEventId: 1, chunks: [], generationTerminal: 'streaming', cacheCapability: 'available' })))
+      .mockImplementation(async () => new Response(JSON.stringify({ version: 1, firstEventId: 1, chunks: [{ id: 1, data: 'one' }, { id: 2, data: 'two' }], generationTerminal: 'complete', cacheCapability: 'available' })));
+    vi.stubGlobal('caches', { default: { match } });
+    const replay = (await worker.fetch(new Request('https://worker.example/api/recover/s?lastEventId=1'), env, ctx)).text();
+    await vi.waitFor(() => expect(match).toHaveBeenCalledTimes(1));
+    await vi.advanceTimersByTimeAsync(2_100);
+    const text = await replay;
+    expect(text).toContain('id: 2');
+    expect(text).toContain('event: done');
+    expect(text).not.toContain('event-id-mismatch');
   });
 
   it('reports local and provider cancellation separately', async () => {

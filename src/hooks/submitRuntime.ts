@@ -197,7 +197,7 @@ export const stopSubmitSession = (sessionId: string) => {
     sessionChunkTargets.get(sessionId) ??
     useStore.getState().generatingSessions[sessionId];
   if (chunkTarget) {
-    useStreamEndStatusStore.getState().setStatus(chunkTarget.targetNodeId, 'interrupted');
+    useStreamEndStatusStore.getState().setStatus(chunkTarget.targetNodeId, 'interrupted', chunkTarget.chatId);
   }
 
   // For local model sessions, explicitly report the model's debug status as
@@ -777,6 +777,7 @@ export const executeSubmitStream = async ({
   };
   if (!canApply()) return {};
   sessionChunkTargets.set(sessionId, { chatId, targetNodeId });
+  useStreamEndStatusStore.getState().setStatus(targetNodeId, 'streaming', chatId);
   const isStreamSupported = getEffectiveStreamEnabled(config);
   const proxyConfig = getProxyConfig();
   let capturedGenerationId: string | undefined;
@@ -954,6 +955,7 @@ export const executeSubmitStream = async ({
       await new Promise<void>((resolve, reject) => {
         let swHandle: swBridge.SwStreamHandle | undefined;
         sessionRequestIds.set(sessionId, requestId);
+        useStreamEndStatusStore.getState().setStatus(targetNodeId, 'streaming', chatId, { requestId, proxy: !!proxyConfig });
 
         const cleanup = () => {
           clearInterval(checkStop);
@@ -1039,6 +1041,7 @@ export const executeSubmitStream = async ({
 
       // If user cancelled, signal the caller not to overwrite 'interrupted' status
       if (swCancelledByUser) {
+        useStreamEndStatusStore.getState().setStatus(targetNodeId, 'interrupted', chatId);
         lastFinishReason = '__cancelled__';
       }
       return;
@@ -1060,6 +1063,7 @@ export const executeSubmitStream = async ({
       );
 
       sessionRequestIds.set(sessionId, requestId);
+      useStreamEndStatusStore.getState().setStatus(targetNodeId, 'streaming', chatId, { requestId, proxy: true });
 
       // Write initial streamDb record so useStreamRecovery can find this session
       await saveStreamRecord({
@@ -1081,6 +1085,7 @@ export const executeSubmitStream = async ({
         llmDone: false,
       });
 
+      requestSnapshotFlush();
       const headerTimeout = setTimeout(() => { proxyTimedOut = true; abortController.abort(); }, 45_000);
       let res: Response;
       try {
@@ -1196,7 +1201,7 @@ export const executeSubmitStream = async ({
         while (reading && !abortController.signal.aborted) {
           const { done, value } = await readWithTimeout();
           const chunk = partial + decoder.decode(done ? undefined : value, { stream: !done });
-          const proxySse = parseProxySse(chunk, done);
+          const proxySse = parseProxySse(chunk);
           partial = proxySse.partial;
 
           for (const evt of proxySse.events) {
@@ -1408,7 +1413,7 @@ export const executeSubmitStream = async ({
       // Determine end reason from the error type
       const isAbort = error instanceof Error && error.name === 'AbortError';
       const endReason: StreamEndReason = isAbort ? 'interrupted' : 'error';
-      useStreamEndStatusStore.getState().setStatus(targetNodeId, endReason);
+      useStreamEndStatusStore.getState().setStatus(targetNodeId, endReason, chatId);
       throw withCapturedGenerationId(error, capturedGenerationId);
     }
     try {
@@ -1417,7 +1422,7 @@ export const executeSubmitStream = async ({
     } catch (retryError) {
       const isAbort = retryError instanceof Error && retryError.name === 'AbortError';
       const endReason: StreamEndReason = isAbort ? 'interrupted' : 'error';
-      useStreamEndStatusStore.getState().setStatus(targetNodeId, endReason);
+      useStreamEndStatusStore.getState().setStatus(targetNodeId, endReason, chatId);
       throw withCapturedGenerationId(retryError, capturedGenerationId);
     }
   } finally {
@@ -1450,7 +1455,7 @@ export const executeSubmitStream = async ({
   // Skip if the SW path resolved due to user cancel (status already set by stopSubmitSession)
   if (lastFinishReason !== '__cancelled__') {
     const endReason: StreamEndReason = lastFinishReason === 'length' ? 'max_tokens' : 'completed';
-    useStreamEndStatusStore.getState().setStatus(targetNodeId, endReason);
+    useStreamEndStatusStore.getState().setStatus(targetNodeId, endReason, chatId);
   }
 
   return { generationId: capturedGenerationId };

@@ -46,7 +46,7 @@ describe('recoverPending proxy outcomes', () => {
 
   it('keeps pending data on recovery network failure', async () => {
     const db = await import('@utils/streamDb'); const { recoverPending } = await import('./useStreamRecovery');
-    await db.saveRequest({ chatId: 'c', nodeId: 'n', checkpointHash: state.chats[0].branchTree.nodes.n.contentHash, checkpointRole: 'assistant', requestId: 'n', chatIndex: 0, messageIndex: 0, bufferedText: 'local', status: 'failed', createdAt: 1, updatedAt: 1, acknowledged: false, proxySessionId: 's', lastProxyEventId: 0 });
+    await db.saveRequest({ chatId: 'c', nodeId: 'n', checkpointHash: state.chats[0].branchTree.nodes.n.contentHash, checkpointRole: 'assistant', requestId: 'n', chatIndex: 0, messageIndex: 0, bufferedText: 'local', status: 'failed', createdAt: Date.now(), updatedAt: 1, acknowledged: false, proxySessionId: 's', lastProxyEventId: 0 });
     fetchRecovery.mockRejectedValue(new Error('offline'));
     await recoverPending();
     expect(await db.getRequest('n')).toMatchObject({ acknowledged: false, bufferedText: 'local' });
@@ -55,7 +55,7 @@ describe('recoverPending proxy outcomes', () => {
 
   it('restores split think content and defers deletion until the primary snapshot commits', async () => {
     const db = await import('@utils/streamDb'); const { recoverPending } = await import('./useStreamRecovery');
-    await db.saveRequest({ chatId: 'c', nodeId: 'n', checkpointHash: state.chats[0].branchTree.nodes.n.contentHash, checkpointRole: 'assistant', requestId: 'ok', chatIndex: 0, messageIndex: 0, bufferedText: '', status: 'failed', createdAt: 1, updatedAt: 1, acknowledged: false, proxySessionId: 's', lastProxyEventId: 0, llmSsePartial: '', thinkTagCheckpoint: { state: 'outside', pending: '' } });
+    await db.saveRequest({ chatId: 'c', nodeId: 'n', checkpointHash: state.chats[0].branchTree.nodes.n.contentHash, checkpointRole: 'assistant', requestId: 'ok', chatIndex: 0, messageIndex: 0, bufferedText: '', status: 'failed', createdAt: Date.now(), updatedAt: 1, acknowledged: false, proxySessionId: 's', lastProxyEventId: 0, llmSsePartial: '', thinkTagCheckpoint: { state: 'outside', pending: '' } });
     const raw = 'data: {"choices":[{"delta":{"content":"<think>x</think>y"}}]}\n\ndata: [DONE]\n\n';
     fetchRecovery.mockResolvedValue(response(`id: 1\ndata: ${JSON.stringify(raw)}\n\nevent: done\ndata: {"complete":true}\n\n`));
     await recoverPending();
@@ -68,7 +68,7 @@ describe('recoverPending proxy outcomes', () => {
 
   it('restores content blocks and reasoning_details with the normal extraction rules', async () => {
     const db = await import('@utils/streamDb'); const { recoverPending } = await import('./useStreamRecovery');
-    await db.saveRequest({ chatId: 'c', nodeId: 'n', checkpointHash: state.chats[0].branchTree.nodes.n.contentHash, checkpointRole: 'assistant', requestId: 'blocks', chatIndex: 0, messageIndex: 0, bufferedText: '', status: 'failed', createdAt: 1, updatedAt: 1, acknowledged: false, proxySessionId: 's', lastProxyEventId: 0 });
+    await db.saveRequest({ chatId: 'c', nodeId: 'n', checkpointHash: state.chats[0].branchTree.nodes.n.contentHash, checkpointRole: 'assistant', requestId: 'blocks', chatIndex: 0, messageIndex: 0, bufferedText: '', status: 'failed', createdAt: Date.now(), updatedAt: 1, acknowledged: false, proxySessionId: 's', lastProxyEventId: 0 });
     const raw = 'data: {"choices":[{"delta":{"content":[{"type":"thinking","text":"hidden"},{"type":"text","text":"shown"}]}}]}\n\ndata: {"choices":[{"delta":{"reasoning_details":[{"type":"reasoning.text","text":"detail"}]}}]}\n\ndata: [DONE]\n\n';
     fetchRecovery.mockResolvedValue(response(`id: 1\ndata: ${JSON.stringify(raw)}\n\nevent: done\ndata: {"complete":true}\n\n`));
     await recoverPending();
@@ -81,7 +81,7 @@ describe('recoverPending proxy outcomes', () => {
     const db = await import('@utils/streamDb'); const { recoverPending } = await import('./useStreamRecovery');
     state.chats[0].messages[0].content = [{ type: 'text', text: 'window-final' }, { type: 'reasoning', text: 'window-thought' }];
     state.chats[0].branchTree.nodes.n.contentHash = addContent(state.contentStore, state.chats[0].messages[0].content);
-    await db.saveRequest({ chatId: 'c', nodeId: 'n', checkpointHash: state.chats[0].branchTree.nodes.n.contentHash, checkpointRole: 'assistant', requestId: 'miss', chatIndex: 0, messageIndex: 0, bufferedText: 'idb', bufferedReasoning: 'idb-thinking-long', status: 'failed', createdAt: 1, updatedAt: 1, acknowledged: false, proxySessionId: 's', lastProxyEventId: 0 });
+    await db.saveRequest({ chatId: 'c', nodeId: 'n', checkpointHash: state.chats[0].branchTree.nodes.n.contentHash, checkpointRole: 'assistant', requestId: 'miss', chatIndex: 0, messageIndex: 0, bufferedText: 'idb', bufferedReasoning: 'idb-thinking-long', status: 'failed', createdAt: Date.now(), updatedAt: 1, acknowledged: false, proxySessionId: 's', lastProxyEventId: 0 });
     fetchRecovery.mockImplementation(async () => response('event: cache-miss\ndata: {"complete":false}\n\n'));
     await recoverPending();
     expect(state.chats[0].messages[0].content).toEqual(expect.arrayContaining([
@@ -94,7 +94,7 @@ describe('recoverPending proxy outcomes', () => {
   });
   it('resumes from the persisted event cursor and split think state without duplicating output', async () => {
     const db = await import('@utils/streamDb'); const { recoverPending } = await import('./useStreamRecovery');
-    await db.saveRequest({ chatId: 'c', nodeId: 'n', checkpointHash: state.chats[0].branchTree.nodes.n.contentHash, checkpointRole: 'assistant', requestId: 'resume', chatIndex: 0, messageIndex: 0, bufferedText: '', status: 'streaming', createdAt: 1, updatedAt: 1, acknowledged: false, proxySessionId: 's', lastProxyEventId: 0 });
+    await db.saveRequest({ chatId: 'c', nodeId: 'n', checkpointHash: state.chats[0].branchTree.nodes.n.contentHash, checkpointRole: 'assistant', requestId: 'resume', chatIndex: 0, messageIndex: 0, bufferedText: '', status: 'streaming', createdAt: Date.now(), updatedAt: 1, acknowledged: false, proxySessionId: 's', lastProxyEventId: 0 });
     const first = 'data: {"choices":[{"delta":{"content":"<think>first"}}]}\n\n';
     fetchRecovery.mockResolvedValueOnce(response(`id: 1\ndata: ${JSON.stringify(first)}\n\nevent: interrupted\ndata: {}\n\n`));
     await recoverPending();
@@ -112,7 +112,7 @@ describe('recoverPending proxy outcomes', () => {
   it.each([false, true])('does not restore cancelled output or recreate a pending record (purge=%s)', async (purge) => {
     const db = await import('@utils/streamDb');
     const { recoverPending, cancelActiveRecovery, cancelAndPurgeRecovery } = await import('./useStreamRecovery');
-    await db.saveRequest({ chatId: 'c', nodeId: 'n', checkpointHash: state.chats[0].branchTree.nodes.n.contentHash, checkpointRole: 'assistant', requestId: 'cancel', chatIndex: 0, messageIndex: 0, bufferedText: '', status: 'failed', createdAt: 1, updatedAt: 1, acknowledged: false, proxySessionId: 's', lastProxyEventId: 0 });
+    await db.saveRequest({ chatId: 'c', nodeId: 'n', checkpointHash: state.chats[0].branchTree.nodes.n.contentHash, checkpointRole: 'assistant', requestId: 'cancel', chatIndex: 0, messageIndex: 0, bufferedText: '', status: 'failed', createdAt: Date.now(), updatedAt: 1, acknowledged: false, proxySessionId: 's', lastProxyEventId: 0 });
     let reader!: ReadableStreamDefaultController<Uint8Array>;
     fetchRecovery.mockResolvedValue(new Response(new ReadableStream({ start(controller) { reader = controller; } })));
     const pending = recoverPending();
@@ -131,7 +131,7 @@ describe('recoverPending proxy outcomes', () => {
 
   const seed = async (overrides = {}) => {
     const db = await import('@utils/streamDb');
-    await db.saveRequest({ chatId: 'c', nodeId: 'n', checkpointHash: state.chats[0].branchTree.nodes.n.contentHash, checkpointRole: 'assistant', requestId: 'target', chatIndex: 0, messageIndex: 0, bufferedText: '', status: 'failed', createdAt: 1, updatedAt: 1, acknowledged: false, proxySessionId: 'same-session', lastProxyEventId: 0, ...overrides });
+    await db.saveRequest({ chatId: 'c', nodeId: 'n', checkpointHash: state.chats[0].branchTree.nodes.n.contentHash, checkpointRole: 'assistant', requestId: 'target', chatIndex: 0, messageIndex: 0, bufferedText: '', status: 'failed', createdAt: Date.now(), updatedAt: 1, acknowledged: false, proxySessionId: 'same-session', lastProxyEventId: 0, ...overrides });
     return db;
   };
 
@@ -198,7 +198,7 @@ describe('recoverPending proxy outcomes', () => {
     const { recoverPending } = await import('./useStreamRecovery');
     fetchRecovery.mockResolvedValue(response('event: done\ndata: {"complete":true}\n\n'));
     await recoverPending({ manual: true });
-    expect(setStatus).toHaveBeenCalledWith('n', 'recovered');
+    expect(setStatus).toHaveBeenCalledWith('n', 'recovered', 'c', expect.objectContaining({ proxy: true }));
     expect(showToast).toHaveBeenCalledWith(expect.stringContaining('受信完了'), 'success');
     expect(await db.getRequest('target')).toMatchObject({ proxyComplete: true });
     expect(state.error).toBe('');
@@ -237,4 +237,31 @@ describe('recoverPending proxy outcomes', () => {
     expect(showToast).toHaveBeenCalledWith(expect.stringContaining('リカバリ保留'), 'info');
   });
 
+});
+
+it('recovers only the selected bubble request and rejects an older request identity on that node', async () => {
+  const db = await import('@utils/streamDb');
+  const { recoverPending } = await import('./useStreamRecovery');
+  const { resolveRecoveryTarget } = await import('./streamRecoveryHelpers');
+  // This test uses its own setup because the main suite's beforeEach is scoped.
+  (globalThis as any).indexedDB = new IDBFactory();
+  const contentStore = {};
+  const hash = addContent(contentStore, [{ type: 'text', text: '' }]);
+  state = { proxyEnabled: true, proxyEndpoint: 'https://proxy', chats: [chat()], contentStore, generatingSessions: {},
+    invalidateBranchHistory: vi.fn(), applyBranchState: (chats: any, content: any) => { state.chats = chats; state.contentStore = content; } };
+  state.chats[0].branchTree.nodes.n.contentHash = hash;
+  state.chats[0].branchTree.nodes.n.streamState = { reason: 'error', requestId: 'selected', proxy: true, createdAt: Date.now() };
+  const record = { requestId: 'selected', chatId: 'c', nodeId: 'n', checkpointHash: hash, checkpointRole: 'assistant' as const,
+    chatIndex: 0, messageIndex: 0, bufferedText: '', status: 'failed' as const, createdAt: Date.now(), updatedAt: Date.now(), acknowledged: false, proxySessionId: 'selected-session', lastProxyEventId: 0 };
+  await db.saveRequest(record);
+  await db.saveRequest({ ...record, requestId: 'older', proxySessionId: 'older-session' });
+  expect(resolveRecoveryTarget(state.chats, contentStore, { ...record, requestId: 'older' })).toBeNull();
+  fetchRecovery.mockReset();
+  const raw = 'data: {"choices":[{"delta":{"content":"selected result"}}]}\n\ndata: [DONE]\n\n';
+  fetchRecovery.mockResolvedValue(response(`id: 1\ndata: ${JSON.stringify(raw)}\n\nevent: done\ndata: {"complete":true}\n\n`));
+  await recoverPending({ manual: true, chatId: 'c', nodeId: 'n', requestId: 'selected' });
+  expect(fetchRecovery).toHaveBeenCalledTimes(1);
+  expect(fetchRecovery.mock.calls[0][1]).toBe('selected-session');
+  expect(await db.getRequest('selected')).toMatchObject({ proxyComplete: true });
+  expect(await db.getRequest('older')).toMatchObject({ bufferedText: '', lastProxyEventId: 0 });
 });

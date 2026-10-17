@@ -1,3 +1,4 @@
+import { requestSnapshotFlush } from './streamingBuffer';
 import type { OpenRouterObservation } from '@type/chat';
 import { debugReport } from '@store/debug-store';
 import { saveRequest, cleanupStale, deleteRequest } from './streamDb';
@@ -127,6 +128,7 @@ export async function startStream(params: StartStreamParams): Promise<SwStreamHa
       llmDone: false,
     } : {}),
   });
+  requestSnapshotFlush();
   if (params.signal?.aborted) {
     await deleteRequest(requestId);
     throw new DOMException('Stream cancelled before start', 'AbortError');

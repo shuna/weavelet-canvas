@@ -22,7 +22,13 @@ describe('deepCloneSingleChat', () => {
       imageDetail: 'auto',
     };
 
+    original.branchTree = { rootId: 'n', activePath: ['n'], nodes: { n: {
+      id: 'n', parentId: null, role: 'assistant', contentHash: 'hash', createdAt: 1,
+      streamState: { reason: 'error', requestId: 'original-request', proxy: true, createdAt: Date.now() },
+    } } };
     const clone = deepCloneSingleChat(original);
+    expect(clone.branchTree!.nodes.n.streamState).toBeUndefined();
+    expect(original.branchTree.nodes.n.streamState?.requestId).toBe('original-request');
 
     expect(clone).not.toBe(original);
     expect(clone.id).not.toBe(original.id);

@@ -731,6 +731,7 @@ export const pasteBranchSequenceState = (
     retainContent(contentStore, srcNode.contentHash);
     tree.nodes[newId] = {
       ...srcNode,
+      streamState: undefined,
       id: newId,
       parentId: prevId,
       createdAt: Date.now(),

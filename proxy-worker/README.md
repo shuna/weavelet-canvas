@@ -13,9 +13,12 @@ CloudFlare Worker that proxies SSE streams from LLM APIs with disconnect recover
 1. Client sends LLM request to the Worker instead of directly to the LLM API
 2. Worker forwards the request and streams SSE back with sequential event IDs
 3. Worker buffers up to 1 MiB of chunks in memory during the stream
-4. Disconnect snapshots use the Workers Cache API (5 minute best-effort TTL; entries are not shared between data centers). The saved prefix is capped at 1 MiB; a capacity-limited recovery ends as interrupted.
+4. Initial, periodic, disconnect, and terminal snapshots use the Workers Cache API (5 minute best-effort TTL; entries are not shared between data centers). The saved prefix is capped at 1 MiB; a capacity-limited recovery ends as interrupted.
 5. If the client disconnects, the Worker reads for at most 20 seconds, then waits at most another 5 seconds for its final cache write.
-6. Client reconnects and calls `/api/recover/:sessionId?lastEventId=N` to get missed chunks
+6. Client reconnects and calls `/api/recover/:sessionId?lastEventId=N` to get missed chunks. The cursor must be a non-negative safe integer; missing prefixes and inconsistent terminal cursors return an interrupted result.
+7. The Web app saves each bubble's stream status and request identity with the chat. Incomplete bubbles keep an inline recovery action after reload, scoped to that request. Recovery checkpoints expire seven days after creation; acknowledged records are cleaned up after one hour.
+
+Periodic snapshots run every 10 seconds, with at most 40 periodic writes per stream to leave room for fetch, disconnect, and terminal writes. Terminal delivery waits up to five seconds for the serialized final cache write. Connected snapshots also cover loss of the final response before disconnect detection. Cache availability remains best effort: eviction or reconnecting through another data center can still prevent recovery.
 
 ## Free plan limits
 
