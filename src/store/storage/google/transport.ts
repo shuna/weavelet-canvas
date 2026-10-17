@@ -26,6 +26,24 @@ export { SyncFileNotFoundError as DriveNotFoundError };
 export class DriveTransport implements SyncTransport<DriveFile> {
   constructor(private token: () => string) {}
 
+  private async driveError(response: Response): Promise<Error> {
+    let detail = response.statusText;
+    try {
+      const body = await response.text();
+      if (body) {
+        try {
+          const parsed = JSON.parse(body);
+          const apiError = parsed?.error;
+          const reasons = Array.isArray(apiError?.errors)
+            ? apiError.errors.map((item: { reason?: string; location?: string }) => [item.reason, item.location].filter(Boolean).join(' at ')).filter(Boolean).join(', ')
+            : '';
+          detail = [apiError?.message, apiError?.status, reasons].filter(Boolean).join(' — ') || body;
+        } catch { detail = body; }
+      }
+    } catch { /* Keep status text if the response body is unavailable. */ }
+    return new Error(`Google Drive ${response.status}: ${detail.slice(0, 1000) || 'Unknown error'}`);
+  }
+
   private async request(url: string, init: RequestInit = {}) {
     const connection = useCloudAuthStore.getState().providers.google.connectionId;
     const token = this.token();
@@ -58,7 +76,7 @@ export class DriveTransport implements SyncTransport<DriveFile> {
   private async json(url: string, init?: RequestInit): Promise<any> {
     const started = performance.now();
     const response = await this.request(url, init);
-    if (!response.ok) throw new Error(`Google Drive ${response.status}: ${response.statusText}`);
+    if (!response.ok) throw await this.driveError(response);
     const text = await response.text();
     recordMetric('drive', started, typeof init?.body === 'string' ? new TextEncoder().encode(init.body).length : 0, new TextEncoder().encode(text).length);
     return JSON.parse(text);
@@ -107,7 +125,7 @@ export class DriveTransport implements SyncTransport<DriveFile> {
       const file = await this.metadata(id);
       if (file.id === id && file.mimeType === SYNC_FOLDER_TYPE && file.appProperties?.weaveletSync === '1' && file.appProperties.headerId === headerId) return file;
     }
-    if (!response.ok) throw new Error(`Google Drive ${response.status}: ${response.statusText}`);
+    if (!response.ok) throw await this.driveError(response);
     const text = await response.text();
     recordMetric('drive', started, new TextEncoder().encode(body).length, new TextEncoder().encode(text).length);
     return JSON.parse(text);
@@ -117,7 +135,7 @@ export class DriveTransport implements SyncTransport<DriveFile> {
     const started = performance.now();
     const response = await this.request(`${API}/files/${encodeURIComponent(id)}?alt=media`);
     if (response.status === 404) throw new SyncFileNotFoundError('Google Drive 404: missing sync file.');
-    if (!response.ok) throw new Error(`Google Drive ${response.status}: ${response.statusText}`);
+    if (!response.ok) throw await this.driveError(response);
     const bytes = new Uint8Array(await response.arrayBuffer());
     finish(bytes.length);
     recordMetric('drive', started, 0, bytes.length);
@@ -137,7 +155,7 @@ export class DriveTransport implements SyncTransport<DriveFile> {
       if (await digest(await this.read(id)) !== await digest(bytes)) throw new Error('Drive file ID collision.');
       return;
     }
-    if (!response.ok) throw new Error(`Google Drive ${response.status}: ${response.statusText}`);
+    if (!response.ok) throw await this.driveError(response);
     finish(bytes.length);
   }
   async startToken(): Promise<string> {
@@ -179,7 +197,7 @@ export class DriveTransport implements SyncTransport<DriveFile> {
   async remove(id: string): Promise<void> {
     const response = await this.request(`${API}/files/${encodeURIComponent(id)}`, { method: 'DELETE' });
     // Deleting the captured source set is safe to retry after a lost response.
-    if (!response.ok && response.status !== 404) throw new Error(`Google Drive ${response.status}: ${response.statusText}`);
+    if (!response.ok && response.status !== 404) throw await this.driveError(response);
   }
   private async listKind(dataset: string, kind: 'commit' | 'pack'): Promise<string[]> {
     const ids: string[] = [];

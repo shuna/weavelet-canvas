@@ -219,6 +219,7 @@ const reportFailure = (error: unknown) => {
   if (auth.provider !== 'google' || !auth.cloudSync) return;
   if (error instanceof SyncConflictError) useSyncReview.setState({ conflict: true, conflictKeys: error.keys, cloudOverview: null, cloudReview: null });
   auth.setSyncStatus(isGoogleAuthError(error) ? 'unauthenticated' : 'error');
+  auth.setSyncError(error instanceof Error ? error.message : String(error));
   if (!(error instanceof SyncConflictError)) showToast(error instanceof Error ? error.message : String(error), 'error');
 };
 function flushAndReport() {

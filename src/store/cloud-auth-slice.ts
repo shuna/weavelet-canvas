@@ -15,6 +15,7 @@ import {
 import type { StoreSlice } from './cloud-auth-store';
 
 export interface CloudAuthSlice extends CloudAuthPersistedState {
+  syncError?: string;
   setProvider: (provider: CloudSyncProvider) => void;
   setGoogleAccessToken: (googleAccessToken?: string) => void;
   setGoogleRefreshToken: (googleRefreshToken?: string) => void;
@@ -32,6 +33,7 @@ export interface CloudAuthSlice extends CloudAuthPersistedState {
   ) => void;
   setCloudSync: (cloudSync: boolean) => void;
   setSyncStatus: (syncStatus: SyncStatus) => void;
+  setSyncError: (syncError?: string) => void;
   setSyncTargetConfirmed: (syncTargetConfirmed: boolean) => void;
   resetCloudSyncProvider: (provider?: CloudSyncProvider) => void;
   disconnectCloudSync: () => void;
@@ -136,9 +138,13 @@ export const createCloudAuthSlice: StoreSlice<CloudAuthSlice> = (set) => ({
     }));
   },
   setSyncStatus: (syncStatus: SyncStatus) => {
-    set((prev: CloudAuthSlice) =>
-      mergeCloudAuthState(prev, setCloudSyncStatusState(prev, syncStatus))
-    );
+    set((prev: CloudAuthSlice) => ({
+      ...mergeCloudAuthState(prev, setCloudSyncStatusState(prev, syncStatus)),
+      syncError: syncStatus === 'error' ? prev.syncError : undefined,
+    }));
+  },
+  setSyncError: (syncError?: string) => {
+    set({ syncError });
   },
   setSyncTargetConfirmed: (syncTargetConfirmed: boolean) => {
     set((prev: CloudAuthSlice) =>

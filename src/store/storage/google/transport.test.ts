@@ -40,6 +40,14 @@ it('rejects malformed or cyclic listing and change cursors', async () => {
   await expect(drive.changes('start')).rejects.toThrow('change token');
 });
 
+it('includes the Google API error message and status in failed Drive requests', async () => {
+  vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(JSON.stringify({
+    error: { code: 400, message: 'Invalid field selection', status: 'INVALID_ARGUMENT', errors: [{ reason: 'invalidParameter', location: 'fields' }] },
+  }), { status: 400, statusText: 'Bad Request' })));
+  await expect(new DriveTransport(() => 'token').startToken())
+    .rejects.toThrow('Google Drive 400: Invalid field selection — INVALID_ARGUMENT — invalidParameter at fields');
+});
+
 it('retries a throttled response with backoff and preserves the response when its retry budget is exhausted', async () => {
   vi.useFakeTimers();
   vi.spyOn(Math, 'random').mockReturnValue(0);
