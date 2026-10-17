@@ -1,5 +1,6 @@
 import type { StoreSlice } from './store';
 import type { OpenRouterGenerationStats } from '@api/openrouter';
+import { transitionOpenRouterStats, toVerifiedStats as convertVerifiedStats, type StatsAction } from '@utils/openrouterStats';
 
 export interface VerifiedStats {
   generationId: string;
@@ -63,7 +64,9 @@ export interface OpenRouterStatsSlice {
   setCreditBalanceFetching: (fetching: boolean) => void;
 }
 
-const MAX_ENTRIES = 50;
+const changeStats = (prev: OpenRouterStatsSlice, action: StatsAction) => transitionOpenRouterStats({
+  verifiedStats: prev.verifiedStats, pendingVerifications: prev.pendingVerifications,
+},action,Date.now());
 
 export const createOpenRouterStatsSlice: StoreSlice<OpenRouterStatsSlice> = (
   set
@@ -72,115 +75,15 @@ export const createOpenRouterStatsSlice: StoreSlice<OpenRouterStatsSlice> = (
   pendingVerifications: {},
   creditBalance: null,
   creditBalanceFetching: false,
-  setVerifiedStats: (key, stats) =>
-    set((prev) => {
-      const next = { ...prev.verifiedStats, [key]: stats };
-      const nextPending = { ...prev.pendingVerifications };
-      delete nextPending[key];
-      // Evict oldest entries when over limit
-      const keys = Object.keys(next);
-      if (keys.length > MAX_ENTRIES) {
-        const sorted = keys.sort(
-          (a, b) => (next[a]?.fetchedAt ?? 0) - (next[b]?.fetchedAt ?? 0)
-        );
-        for (let i = 0; i < keys.length - MAX_ENTRIES; i++) {
-          delete next[sorted[i]];
-        }
-      }
-      return { verifiedStats: next, pendingVerifications: nextPending };
-    }),
-  queueVerification: (key, verification) =>
-    set((prev) => {
-      const existing = prev.pendingVerifications[key];
-      return {
-        pendingVerifications: {
-          ...prev.pendingVerifications,
-          [key]: {
-            generationId: verification.generationId,
-            chatId: verification.chatId,
-            targetNodeId: verification.targetNodeId,
-            requestedAt: verification.requestedAt ?? existing?.requestedAt ?? Date.now(),
-            nextAttemptAt: verification.nextAttemptAt,
-            attemptCount: existing?.attemptCount ?? 0,
-            status: 'pending',
-            lastAttemptAt: existing?.lastAttemptAt,
-            lastError: undefined,
-          },
-        },
-      };
-    }),
-  markVerificationFetching: (key) =>
-    set((prev) => {
-      const existing = prev.pendingVerifications[key];
-      if (!existing) return prev;
-      return {
-        pendingVerifications: {
-          ...prev.pendingVerifications,
-          [key]: {
-            ...existing,
-            status: 'fetching',
-            attemptCount: existing.attemptCount + 1,
-            lastAttemptAt: Date.now(),
-            lastError: undefined,
-          },
-        },
-      };
-    }),
-  markVerificationFailed: (key, error, nextAttemptAt) =>
-    set((prev) => {
-      const existing = prev.pendingVerifications[key];
-      if (!existing) return prev;
-      return {
-        pendingVerifications: {
-          ...prev.pendingVerifications,
-          [key]: {
-            ...existing,
-            status: 'failed',
-            nextAttemptAt,
-            lastError: error,
-          },
-        },
-      };
-    }),
-  retryVerificationNow: (key) =>
-    set((prev) => {
-      const existing = prev.pendingVerifications[key];
-      if (!existing) return prev;
-      return {
-        pendingVerifications: {
-          ...prev.pendingVerifications,
-          [key]: {
-            ...existing,
-            status: 'pending',
-            nextAttemptAt: Date.now(),
-            lastError: undefined,
-          },
-        },
-      };
-    }),
-  removePendingVerification: (key) =>
-    set((prev) => {
-      if (!prev.pendingVerifications[key]) return prev;
-      const next = { ...prev.pendingVerifications };
-      delete next[key];
-      return { pendingVerifications: next };
-    }),
-  clearVerifiedStats: () => set({ verifiedStats: {}, pendingVerifications: {} }),
+  setVerifiedStats: (key, stats) => set(prev => changeStats(prev,{type:'verified',key,stats})),
+  queueVerification: (key, verification) => set(prev => changeStats(prev,{type:'queue',key,verification})),
+  markVerificationFetching: key => set(prev => changeStats(prev,{type:'fetching',key})),
+  markVerificationFailed: (key,error,nextAttemptAt) => set(prev => changeStats(prev,{type:'failed',key,error,nextAttemptAt})),
+  retryVerificationNow: key => set(prev => changeStats(prev,{type:'retry',key})),
+  removePendingVerification: key => set(prev => changeStats(prev,{type:'remove',key})),
+  clearVerifiedStats: () => set(prev => changeStats(prev,{type:'clear'})),
   setCreditBalance: (balance) => set({ creditBalance: balance }),
   setCreditBalanceFetching: (fetching) => set({ creditBalanceFetching: fetching }),
 });
 
-export const toVerifiedStats = (
-  raw: OpenRouterGenerationStats
-): VerifiedStats => ({
-  generationId: raw.id,
-  model: raw.model,
-  promptTokens: raw.tokens_prompt,
-  completionTokens: raw.tokens_completion,
-  nativePromptTokens: raw.native_tokens_prompt,
-  nativeCompletionTokens: raw.native_tokens_completion,
-  totalCost: raw.total_cost,
-  cacheDiscount: raw.cache_discount,
-  error: raw.error,
-  fetchedAt: Date.now(),
-});
+export const toVerifiedStats = (raw: OpenRouterGenerationStats): VerifiedStats => convertVerifiedStats(raw);

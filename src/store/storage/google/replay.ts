@@ -20,20 +20,23 @@ export function* historyIds(commits: Record<string, Commit>, tips: string[]): Ge
   }
 }
 
-function historyReporter(onProgress?: (progress: HistoryProgress) => void) {
+type HistoryYield = () => Promise<void>;
+const yieldTimerTask: HistoryYield = () => new Promise(resolve => setTimeout(resolve, 0));
+
+function historyReporter(onProgress?: (progress: HistoryProgress) => void, yieldTask: HistoryYield = yieldTimerTask) {
   let last = performance.now();
   return async (progress: HistoryProgress, force = false) => {
     if (!force && performance.now() - last < 50) return;
     onProgress?.(progress);
     // Yield a task, not just a microtask, so the UI can paint without a Worker too.
-    await new Promise(resolve => setTimeout(resolve, 0));
+    await yieldTask();
     last = performance.now();
   };
 }
 
 export async function collectHistory({ commits, tips }: { commits: Record<string, Commit>; tips: string[] },
-  onProgress?: (progress: HistoryProgress) => void) {
-  const report = historyReporter(onProgress), reachable = new Set<string>();
+  onProgress?: (progress: HistoryProgress) => void, yieldTask: HistoryYield = yieldTimerTask) {
+  const report = historyReporter(onProgress, yieldTask), reachable = new Set<string>();
   await report({ step: 'scanning', completed: 0 }, true);
   for (const id of historyIds(commits, tips)) {
     reachable.add(id);
@@ -50,12 +53,12 @@ export async function hashCommits(commits: Record<string, Commit>): Promise<Reco
 }
 
 export async function replayHistory({ commits, tips }: { commits: Record<string, Commit>; tips: string[] },
-  onProgress?: (progress: HistoryProgress) => void) {
+  onProgress?: (progress: HistoryProgress) => void, yieldTask: HistoryYield = yieldTimerTask) {
   // Replay retained history unchanged; run this CPU work in the sync worker.
   const histories = new Map<string, { id: string; value: string | null }[]>();
   const processed = new Set<string>();
-  const reachable = await collectHistory({ commits, tips }, onProgress);
-  const report = historyReporter(onProgress);
+  const reachable = await collectHistory({ commits, tips }, onProgress, yieldTask);
+  const report = historyReporter(onProgress, yieldTask);
   await report({ step: 'replaying', completed: 0, total: reachable.size }, true);
   const remaining = new Set([...reachable].sort());
   const latest = (versions: { id: string; value: string | null }[]) => {

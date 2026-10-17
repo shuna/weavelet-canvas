@@ -16,6 +16,7 @@ import {
 } from '@utils/proxyClient';
 import { parseEventSource } from '@api/helper';
 import { ThinkTagParser } from '@utils/thinkTagParser';
+import { PROXY_RECOVERY_MAX_RETRIES, PROXY_RECOVERY_RETRY_DELAY_MS, proxyRecoveryRetry } from '@utils/proxyRecoveryPolicy';
 import { extractTextFromApiContent, extractReasoningFromApiContent, extractReasoningFromReasoningDetails } from '@utils/apiContent';
 import { debugReport } from '@store/debug-store';
 import { useStreamEndStatusStore } from '@store/stream-end-status-store';
@@ -145,10 +146,6 @@ export default function useStreamRecovery() {
   }, []);
 }
 
-/** Max retry attempts when proxy returns an 'interrupted' event (Worker may still be writing) */
-const PROXY_RECOVERY_MAX_RETRIES = 3;
-const PROXY_RECOVERY_RETRY_DELAY_MS = 500;
-
 /** Timeout for the entire proxy recovery SSE stream read (ms) */
 const PROXY_RECOVERY_STREAM_TIMEOUT_MS = 120_000; // 2 minutes
 
@@ -203,12 +200,13 @@ async function tryProxyRecovery(
   };
 
   let best: ProxyRecoveryResult | null = null;
+  let nextDelayMs = PROXY_RECOVERY_RETRY_DELAY_MS;
 
   for (let attempt = 0; attempt <= PROXY_RECOVERY_MAX_RETRIES; attempt++) {
     if (signal.aborted) break;
 
     if (attempt > 0) {
-      await new Promise((r) => setTimeout(r, best?.retryAfterMs ?? PROXY_RECOVERY_RETRY_DELAY_MS));
+      await new Promise((r) => setTimeout(r, nextDelayMs));
     }
 
     if (signal.aborted) break;
@@ -220,9 +218,10 @@ async function tryProxyRecovery(
       best = result;
     }
 
-    if (result.outcome === 'complete' || result.outcome === 'abort') return result;
-    if (result.outcome === 'network' || (result.outcome === 'partial' && result.retry)) {
+    const policy = proxyRecoveryRetry({ attempt, outcome: result.outcome, retry: result.retry, retryAfterMs: result.retryAfterMs });
+    if (policy.retry) {
       best = result;
+      nextDelayMs = policy.delayMs;
       continue;
     }
     return result;
@@ -244,8 +243,7 @@ async function readProxyRecoveryStream(
   if (!response.ok || !response.body) {
     const retry = response.headers.get('Retry-After');
     await response.body?.cancel().catch(() => {});
-    const seconds = Number(retry);
-    const retryAfterMs = retry !== null && Number.isFinite(seconds) ? Math.min(Math.max(seconds * 1000, 0), 5_000) : undefined;
+    const retryAfterMs = retry === null ? undefined : proxyRecoveryRetry({ attempt: 0, outcome: 'network', retryAfter: retry }).delayMs;
     return { text: record.bufferedText, reasoning: record.bufferedReasoning ?? '', outcome: 'network', retryAfterMs };
   }
   const stream = response.body;

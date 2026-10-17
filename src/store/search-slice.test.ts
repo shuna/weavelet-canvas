@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
+import { createGrepSlice } from './grep-slice';
 
 import type { BranchTree } from '@type/chat';
 import type { SearchResult } from '@utils/branchSearch';
@@ -62,6 +63,17 @@ const createSearchState = () => {
 };
 
 describe('search-slice', () => {
+  it('keeps graph, sidebar, and chat-find histories separate through the actual callers', () => {
+    let state: any;
+    const set = (patch: any) => { state = {...state,...patch}; };
+    const get = () => state;
+    state = {...createSearchSlice(set as never,get as never),...createGrepSlice(set as never,get as never)};
+    state.saveSearchQueryToHistory(' graph ');
+    state.saveSidebarSearchHistory(' sidebar ');
+    state.saveChatFindHistory(' find ');
+    expect([state.searchHistory,state.sidebarSearchHistory,state.chatFindHistory]).toEqual([['graph'],['sidebar'],['find']]);
+  });
+
   it('stores recent search queries uniquely and caps history at 20 entries', () => {
     const getState = createSearchState();
 
@@ -120,5 +132,21 @@ describe('search-slice', () => {
 
     expect(getState().currentResultNodeId).toBe('branch-a');
     expect(getState().currentResultIndex).toBe(0);
+  });
+
+  it('navigates when the same node ID now belongs to another chat and clears an empty result set', () => {
+    const getState = createSearchState();
+    const first: SearchResult = { nodeId: 'branch-a', chatId: 'chat-a', chatIndex: 0, snippet: 'first', isOnActivePath: true, matchType: 'content' };
+    getState().setSearchResults([first]);
+    getState().navigateToNode.mockClear();
+
+    getState().setSearchResults([{ ...first, chatId: 'chat-b' }]);
+    expect(getState().currentResultIndex).toBe(0);
+    expect(getState().navigateToNode).toHaveBeenCalledTimes(1);
+    expect(getState().navigateToNode).toHaveBeenCalledWith(expect.objectContaining({ chatId: 'chat-b', selectChat: false }));
+
+    getState().setSearchResults([]);
+    expect(getState().currentResultIndex).toBe(-1);
+    expect(getState().currentResultNodeId).toBeNull();
   });
 });

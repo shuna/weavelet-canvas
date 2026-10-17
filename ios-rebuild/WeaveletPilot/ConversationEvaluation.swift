@@ -65,6 +65,7 @@ enum ConversationEvaluation {
                 execution = .local(try NativeLocalEvaluation.modelURL(state:state,files:files))
             } else {
             let legacy = try legacy()
+            let proxy = try legacy.proxy?.validated()
             let prompt = try (scope == "full-context" ? context.required("contextText") : context.required("userText")).string("評価文")
             guard !prompt.isEmpty else { throw ExchangeError.invalid("評価文が空です") }
             let config = try chat.required("config")
@@ -85,7 +86,7 @@ enum ConversationEvaluation {
                 .init(key:"endpointURL",value:.object([.init(key:"protocol",value:.string("https:")),
                     .init(key:"hostname",value:.string(credential.url.host!.lowercased()))])),
                 .init(key:"hasApiKey",value:.bool(!credential.record.key.isEmpty)),.init(key:"language",value:.string(language)),
-                .init(key:"mode",value:.string(target.role))]
+                .init(key:"mode",value:.string(target.role)),.init(key:"viaProxy",value:.bool(proxy != nil))]
             if phase == "post-receive", let response = context["assistantText"] { fields.append(.init(key:"assistantResponse",value:response)) }
             if let openRouter { fields.append(.init(key:"openRouter",value:openRouter)) }
             let envelope = try SharedWebOperations.call("evaluation",.object(fields))
@@ -96,7 +97,7 @@ enum ConversationEvaluation {
                 .init(key:"authentication",value:.array(auth == .null ? [] : [.object([.init(key:"name",value:.string("Authorization")),.init(key:"prefix",value:.string("Bearer "))])]))])
             let body = try OrderedJSONChanges.apply(.array([.object([.init(key:"op",value:.string("set")),
                 .init(key:"path",value:.array([])),.init(key:"value",value:try envelope.required("body"))])]),to:.null,opaque:boundary.opaque)
-            execution = .remote(try RemoteRequest.bindEnvelope(bound,body:body,originalURL:credential.url,key:credential.record.key))
+            execution = .remote(try AuxiliaryRemoteRequest.route(RemoteRequest.bindEnvelope(bound,body:body,originalURL:credential.url,key:credential.record.key),proxy:proxy))
             guard body["stream"] != .bool(true) else { throw ExchangeError.invalid("評価は非streamingが必要です") }
             }
         } else {
@@ -121,7 +122,7 @@ enum ConversationEvaluation {
                 .init(key:"headers",value:try envelope.required("headers")),
                 .init(key:"authentication",value:.array([.object([.init(key:"name",value:.string("Authorization")),
                     .init(key:"prefix",value:.string("Bearer "))])]))])
-            execution = .remote(try RemoteRequest.bindEnvelope(bound,body:envelope.required("body"),originalURL:url,key:credential.key))
+            execution = .remote(try AuxiliaryRemoteRequest.route(RemoteRequest.bindEnvelope(bound,body:envelope.required("body"),originalURL:url,key:credential.key),proxy:legacy().proxy))
         }
         return Prepared(chatID:chatID,nodeID:nodeID,key:key,phase:phase,dimension:dimension,mode:target.role,scope:scope,
                         omittedMode:effectiveOmitted,context:context,execution:execution,language:language,sourceChat:try chat.encoded(),
@@ -253,6 +254,7 @@ extension ConversationEvaluation {
         let localSafetyText: String?
         let safetyError: String?
         let qualityError: String?
+        var proxy: RemoteProxySettings? = nil
     }
 
     static func autoPlan(userContent: OrderedJSON, assistantContent: OrderedJSON? = nil, phase: String, settings: OrderedJSON) throws -> OrderedJSON {
@@ -351,7 +353,7 @@ extension ConversationEvaluation {
           if let text = try plan["safetyText"]?.string("安全性本文"), !text.isEmpty {
             if policy["runLocal"] == .bool(true) { localSafetyText = text }
             else if policy["runRemote"] == .bool(true) {
-                safety = prepared("safety",.remote(try autoSafetyRequest(text:text,config:config,state:state,readProviderCredential:readProviderCredential)))
+                safety = prepared("safety",.remote(try autoSafetyRequest(text:text,config:config,state:state,proxy:legacy.proxy,readProviderCredential:readProviderCredential)))
             }
           }
           } catch { safetyError = error.localizedDescription }
@@ -381,7 +383,8 @@ extension ConversationEvaluation {
                 var fields: [JSONField] = [.init(key:"operation",value:.string("judgeRequest")),.init(key:"userPrompt",value:.string(userText)),
                     .init(key:"endpoint",value:.string(credential.url.absoluteString)),.init(key:"model",value:.string(model)),
                     .init(key:"endpointURL",value:.object([.init(key:"protocol",value:.string("https:")),.init(key:"hostname",value:.string(credential.url.host!.lowercased()))])),
-                    .init(key:"hasApiKey",value:.bool(!credential.record.key.isEmpty)),.init(key:"language",value:.string(language))]
+                    .init(key:"hasApiKey",value:.bool(!credential.record.key.isEmpty)),.init(key:"language",value:.string(language)),
+                    .init(key:"viaProxy",value:.bool(try legacy.proxy?.validated() != nil))]
                 if phase == "post-receive", let response = plan["assistantText"] { fields.append(.init(key:"assistantResponse",value:response)) }
                 if let openRouter { fields.append(.init(key:"openRouter",value:openRouter)) }
                 let envelope = try SharedWebOperations.call("evaluation",.object(fields))
@@ -392,7 +395,7 @@ extension ConversationEvaluation {
                     .init(key:"authentication",value:.array(auth == .null ? [] : [.object([.init(key:"name",value:.string("Authorization")),.init(key:"prefix",value:.string("Bearer "))])]))])
                 let body = try OrderedJSONChanges.apply(.array([.object([.init(key:"op",value:.string("set")),.init(key:"path",value:.array([])),.init(key:"value",value:try envelope.required("body"))])]),to:.null,opaque:boundary.opaque)
                 guard body["stream"] != .bool(true) else { throw ExchangeError.invalid("評価は非streamingが必要です") }
-                quality = prepared("quality",.remote(try RemoteRequest.bindEnvelope(bound,body:body,originalURL:credential.url,key:credential.record.key)))
+                quality = prepared("quality",.remote(try AuxiliaryRemoteRequest.route(RemoteRequest.bindEnvelope(bound,body:body,originalURL:credential.url,key:credential.record.key),proxy:legacy.proxy)))
             }
           } catch { qualityError = error.localizedDescription }
         }
@@ -401,10 +404,10 @@ extension ConversationEvaluation {
         })
         return AutoPrepared(phase:phase,chatID:chatID,nodeID:nodeID,key:key,userContent:userContent,requestPath:selectedPath,requestDependency:dependency,assistantContent:assistantContent,
                             config:try config.encoded(),providerState:try providerState.encoded(),settings:try settings.encoded(),
-                            safety:safety,quality:quality,localSafetyText:localSafetyText,safetyError:safetyError,qualityError:qualityError)
+                            safety:safety,quality:quality,localSafetyText:localSafetyText,safetyError:safetyError,qualityError:qualityError,proxy:legacy.proxy)
     }
 
-    private static func autoSafetyRequest(text: String, config: OrderedJSON, state: OrderedJSON,
+    private static func autoSafetyRequest(text: String, config: OrderedJSON, state: OrderedJSON, proxy: RemoteProxySettings? = nil,
                                           readProviderCredential: ProviderModels.CredentialReader) throws -> URLRequest {
         guard let provider = try ProviderModels.providers(in:state).first(where: { $0.id.utf8.elementsEqual("openai".utf8) }) else { throw ExchangeError.invalid("OpenAI providerがありません") }
         let credential = try ProviderModels.credential(provider,read:readProviderCredential)
@@ -417,7 +420,7 @@ extension ConversationEvaluation {
         let bound = OrderedJSON.object([.init(key:"endpoint",value:try envelope.required("endpoint")),
             .init(key:"headers",value:try envelope.required("headers")),
             .init(key:"authentication",value:.array([.object([.init(key:"name",value:.string("Authorization")),.init(key:"prefix",value:.string("Bearer "))])]))])
-        return try RemoteRequest.bindEnvelope(bound,body:envelope.required("body"),originalURL:url,key:credential.key)
+        return try AuxiliaryRemoteRequest.route(RemoteRequest.bindEnvelope(bound,body:envelope.required("body"),originalURL:url,key:credential.key),proxy:proxy)
     }
 
     @MainActor static func runAutoSafety(_ prepared: AutoPrepared, state: OrderedJSON, files: LocalModelFiles,
@@ -439,7 +442,7 @@ extension ConversationEvaluation {
             guard try SharedWebOperations.call("evaluation",.object(fields))["runRemote"] == .bool(true) else { return }
             try check()
             let config = try OrderedJSON.decode(prepared.config)
-            let request = try autoSafetyRequest(text:text,config:config,state:state,readProviderCredential:readProviderCredential)
+            let request = try autoSafetyRequest(text:text,config:config,state:state,proxy:prepared.proxy,readProviderCredential:readProviderCredential)
             let remote = Prepared(chatID:prepared.chatID,nodeID:prepared.nodeID,key:prepared.key,phase:prepared.phase,
                 dimension:"safety",mode:"user",scope:"single",omittedMode:"respect-omitted",context:.object([]),
                 execution:.remote(request),language:"en",sourceChat:Data(),sourceContentStore:Data(),providerState:Data())

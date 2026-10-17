@@ -3,6 +3,23 @@ import SwiftUI
 @testable import WeaveletPilot
 
 @MainActor final class MessageInputTests: XCTestCase {
+    func testFocusChangesRetainRawDraftAndSelection() {
+        var draft = "e\u{0301} と本文"
+        var focused = false
+        let input = MessageInputView(text:Binding(get:{draft},set:{draft = $0}),label:"本文",enabled:true,sticky:false,
+            focused:Binding(get:{focused},set:{focused = $0}),enterToSubmit:{true},submit:{_ in},failure:{XCTFail($0.localizedDescription)})
+        let coordinator = input.makeCoordinator()
+        let view = MessageInputTextView()
+        coordinator.update(view)
+        view.selectedRange = NSRange(location:2,length:1)
+        coordinator.textViewDidBeginEditing(view)
+        XCTAssertTrue(focused)
+        coordinator.textViewDidEndEditing(view)
+        XCTAssertFalse(focused)
+        XCTAssertEqual(Array(draft.utf8),Array("e\u{0301} と本文".utf8))
+        XCTAssertEqual(view.selectedRange,NSRange(location:2,length:1))
+    }
+
     func testActualSharedPolicyAndMarkedTextBoundary() throws {
         XCTAssertEqual(try EnterSubmission.action(key: "Enter", composing: false, control: false, shift: false, enterToSubmit: true, sticky: true), .generate)
         XCTAssertEqual(try EnterSubmission.action(key: "Enter", composing: false, control: false, shift: false, enterToSubmit: true, sticky: false), .save)

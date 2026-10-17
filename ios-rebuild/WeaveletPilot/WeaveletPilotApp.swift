@@ -3,16 +3,36 @@ import UniformTypeIdentifiers
 
 @main
 struct WeaveletPilotApp: App {
-    @StateObject private var state = ChatState(store: WeaveletPilotApp.stateStore)
+    @StateObject private var live = LiveApplicationState()
+    var body: some Scene {
+        WindowGroup {
+            #if DEBUG
+            if ProcessInfo.processInfo.arguments.contains("--ui-mockup") || Bundle.main.object(forInfoDictionaryKey: "WeaveletLaunchMode") as? String == "ui-mockup" {
+                IOSLayoutMockupView()
+            } else if ProcessInfo.processInfo.arguments.contains("--ui-connected-preview") {
+                ChatView(state:live.state)
+                    .environment(\.horizontalSizeClass,.compact)
+                    .preferredColorScheme(ProcessInfo.processInfo.arguments.contains("--ui-preview-light") ? .light : ProcessInfo.processInfo.arguments.contains("--ui-preview-dark") ? .dark : nil)
+                    .frame(width:393,height:852)
+            } else {
+                ChatView(state: live.state)
+            }
+            #else
+            ChatView(state: live.state)
+            #endif
+        }
+    }
+}
+
+// Keep the mock route outside ChatState initialization and all persisted services.
+@MainActor private final class LiveApplicationState: ObservableObject {
+    lazy var state = ChatState(store: Self.stateStore)
     private static var stateStore: LocalStateStore? {
         if ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] != nil { return nil }
         #if DEBUG
         if RemoteFixture.enabled { return LocalStateStore(fileURL: LocalStateStore.applicationStore.fileURL.deletingLastPathComponent().appendingPathComponent("debug-remote-fixture/local-state.json")) }
         #endif
         return .applicationStore
-    }
-    var body: some Scene {
-        WindowGroup { ChatView(state: state) }
     }
 }
 
@@ -22,12 +42,16 @@ struct ChatView: View {
     @State private var defaultConfigDraft: ChatConfigDraft?
     @State private var settingsConfigDraft: ChatConfigDraft?
     @State private var showsSettings = false
+    @State private var showsModelInspector = false
+    @State private var isModelInspectorClosing = false
     @State private var columnVisibility: NavigationSplitViewVisibility = .automatic
-    @State private var preferredCompactColumn: NavigationSplitViewColumn = .detail
+    @State private var showsLibrary = false
+    @State private var isLibraryClosing = false
+    @State private var afterLibraryDismiss: (() -> Void)?
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
-    @State private var showsSearch = false
-    @State private var searchMode: ChatSearchMode = .grep
+    @State private var showsLibrarySearch = false
+    @State private var showsBranchSearch = false
     @State private var showsRemoteSettings = false
     @Environment(\.scenePhase) private var scenePhase
     @State private var cloudKitConnection: CloudKitSyncConnection?
@@ -39,6 +63,7 @@ struct ChatView: View {
     @State private var showsImporter = false
     @State private var importPreview: ChatImportPreview?
     @State private var isPreparingImport = false
+    @State private var isPreparingRecovery = false
     @State private var pendingPartialImport: (data: Data, filename: String, message: String)?
     @State private var confirmsPartialImport = false
     @State private var showsExporter = false
@@ -49,6 +74,12 @@ struct ChatView: View {
     @State private var exportDocument: WebJSONDocument?
     @State private var errorMessage: String?
     @State private var draft: MessageDraft?
+    @State private var inlineDraft: MessageDraft?
+    @State private var modelDraft: ChatConfigDraft?
+    @State private var inlineFocused = false
+    @State private var composerFocused = false
+    @State private var showsConversationSearch = false
+    @GestureState private var splitDragPosition: CGFloat?
     @State private var configDraft: ChatConfigDraft?
     @State private var optionsDraft: NodeOptionsDraft?
     @State private var removalDraft: NodeRemovalDraft?
@@ -60,86 +91,126 @@ struct ChatView: View {
     @State private var evaluationDraft: ConversationEvaluationDraft?
     @State private var composerPromptRequest: PromptPickerRequest?
 
+    private var librarySearchIsVisible: Bool {
+        showsLibrarySearch && (horizontalSizeClass == .compact ? showsLibrary : columnVisibility != .detailOnly)
+    }
+    private var branchSearchIsVisible: Bool {
+        showsBranchSearch && (state.chatActiveView == .branchEditor || horizontalSizeClass != .compact &&
+            (state.chatActiveView == .splitHorizontal || state.chatActiveView == .splitVertical))
+    }
     private var advancedMode: Bool { (try? state.displaySetting(.advancedMode)) != .bool(false) }
-    var body: some View {
-        let closeLibrary: (() -> Void)? = horizontalSizeClass == .compact ? { preferredCompactColumn = .detail } : nil
-        NavigationSplitView(columnVisibility:$columnVisibility, preferredCompactColumn:$preferredCompactColumn) {
-            ConversationLibraryView(state:state, onSelect: {
-                preferredCompactColumn = .detail
-            }, onClose: closeLibrary, onSearch: {
-                searchMode = .library
-                showsSearch = true
-            }, footer: { libraryFooter })
-                .navigationSplitViewColumnWidth(min:260,ideal:300,max:380)
-        } detail: {
+    private var openRouterCreditsIdentity: String {
+        let chat = (try? state.exchange?.source["chats"]?.array("chats"))?.first { $0["id"] == .string(state.selectedConversationID) }
+        let config = chat?["config"]
+        let provider = (try? config?["providerId"]?.string("provider")) ?? ""
+        let modelSource = (try? config?["modelSource"]?.string("model source")) ?? ""
+        let endpoint = (try? state.document?.snapshot["state"]?["providers"]?["openrouter"]?["endpoint"]?.string("endpoint")) ?? ""
+        return [state.selectedConversationID,provider,modelSource,endpoint].joined(separator:"\u{0}")
+    }
+    private var libraryPane: some View {
+        ConversationLibraryView(state:state,onSelect:{
+            if horizontalSizeClass == .compact { closeLibrary() }
+        },onClose:{
+            closeLibrary()
+        },showsSearch:$showsLibrarySearch,footer:{ libraryFooter })
+        .navigationSplitViewColumnWidth(min:260,ideal:300,max:380)
+    }
+    private var detailPane: some View {
         NavigationStack {
             VStack(spacing: 0) {
                 conversationBar
+                CollapsibleSearchPanel(isPresented:showsConversationSearch && state.chatActiveView != .branchEditor) {
+                    ChatSearchView(state:state,initialMode:.nodes,
+                        initialScope:state.chatActiveView == .branchEditor ? .all : .activePath,
+                        inline:true,close:{ showsConversationSearch = false },reportError:{ errorMessage = $0 }) { result, _ in
+                        try state.navigate(chatID:result.chatID,nodeID:result.nodeID,source:.search)
+                    }
+                }
                 activeContent
             }
             .navigationTitle((state.conversation.flatMap { $0.title.isEmpty ? nil : $0.title } ?? "Weavelet Pilot") + (RemoteFixture.enabled ? " · FAKE" : ""))
             .navigationBarTitleDisplayMode(.inline)
+            .navigationBarBackButtonHidden(horizontalSizeClass == .compact)
             .task {
                 guard ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] == nil else { return }
                 do { try state.loadRemoteSettings() } catch { state.generationError = error.localizedDescription }
+                Task { await state.refreshOpenRouterCredits(reason:"open") }
+                do { try state.recoverOpenRouterVerifications(); state.runOpenRouterVerifications() }
+                catch { state.openRouterVerificationError = "使用量の確認状態を復旧できませんでした。保存データを保持しています。" }
+                state.runProxyRecovery()
                 if cloudKitConnection == nil { cloudKitConnection = CloudKitSyncConnection(state:state) }
                 cloudKitConnection?.run { try await cloudKitConnection?.restoreAutomaticSync() }
             }
-            .onChange(of:scenePhase) { _, phase in if phase == .background { cloudKitConnection?.flushInBackground() } else if phase == .active { cloudKitConnection?.resumeOnForeground() } }
-            .toolbar {
-                ToolbarItemGroup(placement: .topBarLeading) {
-                    if horizontalSizeClass == .compact {
-                        Button("会話一覧", systemImage: "sidebar.left") {
-                            preferredCompactColumn = .sidebar
-                        }
-                            .disabled(state.generation != nil)
-                            .frame(minWidth: 44, minHeight: 44)
-                    }
-                    Menu("履歴",systemImage:"arrow.uturn.backward.circle") {
-                        Button("編集を元に戻す",systemImage:"arrow.uturn.backward") {
-                            do { try state.undoMessageEdit() } catch { errorMessage = error.localizedDescription }
-                        }.disabled(!state.canUndoMessageEdit)
-                        Button("編集をやり直す",systemImage:"arrow.uturn.forward") {
-                            do { try state.redoMessageEdit() } catch { errorMessage = error.localizedDescription }
-                        }.disabled(!state.canRedoMessageEdit)
-                        Button("戻る",systemImage:"chevron.backward") {
-                            do { try state.moveNavigation(.back) } catch { errorMessage = error.localizedDescription }
-                        }.disabled(!state.canNavigateBack || state.generation != nil)
-                        Button("進む",systemImage:"chevron.forward") {
-                            do { try state.moveNavigation(.forward) } catch { errorMessage = error.localizedDescription }
-                        }.disabled(!state.canNavigateForward || state.generation != nil)
-                    }
-                    .frame(minWidth:44,minHeight:44)
-                }
-                ToolbarItemGroup(placement: .topBarTrailing) {
-                    Menu(horizontalSizeClass == .compact ? "その他" : "会話操作",systemImage:"ellipsis.circle") {
-                        if advancedMode {
-                        Button("本文を追加",systemImage:"plus.bubble") {
-                            do { draft = try state.messageDraft(nodeID:nil) }
-                            catch { errorMessage = error.localizedDescription }
-                        }.disabled(state.exchange == nil || state.generation != nil)
-                        }
-                        Button("非表示の枝を整理",systemImage:"line.3.horizontal.decrease") {
-                            do { removalDraft = try state.pruneHiddenDraft(); showsRemoval = true }
-                            catch { errorMessage = error.localizedDescription }
-                        }.disabled(state.exchange == nil || state.generation != nil)
-                        if horizontalSizeClass == .compact {
-                            Divider()
-                            fileMenu
-                            Button("設定", systemImage: "slider.horizontal.3") { showsSettings = true }
-                        }
-                    }
-                    .frame(minWidth:44,minHeight:44)
-                    Button("検索", systemImage: "magnifyingglass") { searchMode = .grep; showsSearch = true }
-                        .disabled(state.exchange == nil || state.generation != nil)
-                        .frame(minWidth: 44, minHeight: 44)
-                    if horizontalSizeClass != .compact && columnVisibility == .detailOnly {
-                        fileMenu
-                        Button("設定", systemImage: "slider.horizontal.3") { showsSettings = true }
-                            .frame(minWidth: 44, minHeight: 44)
+            .onChange(of:scenePhase) { _, phase in
+                if phase == .background { cloudKitConnection?.flushInBackground() }
+                else if phase == .active {
+                    cloudKitConnection?.resumeOnForeground()
+                    if ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] == nil {
+                        state.runProxyRecovery()
+                        state.runOpenRouterVerifications()
                     }
                 }
             }
+            .onChange(of: openRouterCreditsIdentity) { _, _ in
+                guard ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] == nil else { return }
+                Task { await state.refreshOpenRouterCredits(reason:"open") }
+            }
+            .onChange(of: state.document?.snapshot["state"]?["pendingVerifications"]) { _, _ in
+                guard ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] == nil else { return }
+                state.runOpenRouterVerifications()
+            }
+            .onChange(of: state.generation?.running == true) { wasRunning, isRunning in
+                guard wasRunning && !isRunning && ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] == nil else { return }
+                Task { await state.refreshOpenRouterCredits(reason:"completed") }
+            }
+            .toolbar {
+                if !isLibraryClosing && (horizontalSizeClass == .compact || columnVisibility == .detailOnly) {
+                    ToolbarItem(id:"show-library",placement:.topBarLeading) {
+                        Button("会話一覧を表示", systemImage: "sidebar.left") {
+                            if horizontalSizeClass == .compact { showsLibrary = true }
+                            else { columnVisibility = .all }
+                        }
+                    }
+                }
+                ToolbarItemGroup(placement: .topBarLeading) {
+                    Button("新規会話", systemImage:"plus") {
+                        do { try state.createChat() }
+                        catch { errorMessage = error.localizedDescription }
+                    }
+                    .disabled(state.generation != nil)
+                    if state.canNavigateBack || state.canNavigateForward {
+                    Button("戻る", systemImage: "chevron.backward") {
+                        do { try state.moveNavigation(.back) } catch { errorMessage = error.localizedDescription }
+                    }.disabled(!state.canNavigateBack || state.generation != nil)
+                    Button("進む", systemImage: "chevron.forward") {
+                        do { try state.moveNavigation(.forward) } catch { errorMessage = error.localizedDescription }
+                    }.disabled(!state.canNavigateForward || state.generation != nil)
+                    }
+                }
+                ToolbarItemGroup(placement: .topBarTrailing) {
+                    Button("検索", systemImage: "magnifyingglass") {
+                        if state.chatActiveView == .branchEditor { showsBranchSearch.toggle() }
+                        else { showsConversationSearch.toggle() }
+                    }
+                    .disabled(state.exchange == nil || state.generation != nil)
+                    if !showsModelInspector && !isModelInspectorClosing {
+                        Button("モデルのプロパティを表示",systemImage:"sidebar.right") {
+                            showsModelInspector = true
+                        }
+                    }
+                }
+                ToolbarItemGroup(placement: .keyboard) {
+                    if inlineDraft == nil && !showsConversationSearch && !librarySearchIsVisible && !branchSearchIsVisible, let conversation = state.conversation {
+                        composerAccessories(conversation)
+                    }
+                    Spacer()
+                    Button("キーボードを閉じる", systemImage: "keyboard.chevron.compact.down") {
+                        inlineFocused = false
+                        UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
+                    }.labelStyle(.iconOnly)
+                }
+            }
+            .toolbar(removing:.sidebarToggle)
             .confirmationDialog(removalDraft?.operation == .remove ? "メッセージを削除しますか？" : "非表示の枝を整理しますか？", isPresented: $showsRemoval, titleVisibility: .visible) {
                 Button(removalDraft?.operation == .remove ? "削除" : "整理", role: .destructive) {
                     guard let removalDraft else { return }
@@ -168,10 +239,35 @@ struct ChatView: View {
             .sheet(item: $draft) { draft in MessageEditorView(state: state, draft: draft) }
             .sheet(item: $clipboardDraft) { draft in BranchClipboardView(state: state, draft: draft) }
             .sheet(item: $configDraft) { draft in ChatConfigView(state:state,draft:draft) }
+            .sheet(item: $modelDraft) { initial in ConversationModelPicker(state:state,draft:initial) }
             .sheet(item: $summaryDraft) { draft in ConversationSummaryView(state:state,draft:draft) }
             .sheet(item: $evaluationDraft) { draft in ConversationEvaluationView(state:state,draft:draft) }
             .sheet(item: $optionsDraft) { draft in NodeOptionsView(state: state, draft: draft) }
         }
+    }
+    var body: some View {
+        Group {
+            if horizontalSizeClass == .compact {
+                detailPane.sheet(isPresented:$showsLibrary,onDismiss:{
+                    isLibraryClosing = false
+                    let action = afterLibraryDismiss
+                    afterLibraryDismiss = nil
+                    action?()
+                }) { libraryPane }
+            } else {
+                NavigationSplitView(columnVisibility:$columnVisibility) {
+                    libraryPane
+                } detail: {
+                    detailPane
+                }
+            }
+        }
+        .navigationSplitViewStyle(.balanced)
+        .inspector(isPresented:$showsModelInspector) {
+            ConversationModelInspector(state:state,close:closeModelInspector)
+            .inspectorColumnWidth(min:240,ideal:300,max:380)
+            .presentationDetents([.medium,.large])
+            .presentationDragIndicator(.visible)
         }
         .fileImporter(isPresented: $showsImporter, allowedContentTypes: [.json, .gzip], allowsMultipleSelection: false) { result in
             do {
@@ -215,12 +311,6 @@ struct ChatView: View {
                 let current = state.composerDraft(chatID: request.chatID)
                 try state.validatePromptPicker(request, input: .command(parts: current.parts, text: current.text))
                 try state.setComposerPrompt(applied, chatID: request.chatID, expected: ComposerDraft(parts: parts, text: text, hasMeaningfulContent: false))
-            }
-        }
-        .sheet(isPresented: $showsSearch) {
-            ChatSearchView(state: state, initialMode: searchMode) { result, mode in
-                try state.navigate(chatID: result.chatID, nodeID: result.nodeID, source: mode == .grep ? .grep : .search)
-                preferredCompactColumn = .detail
             }
         }
         .sheet(isPresented: $showsSettings) {
@@ -283,23 +373,69 @@ struct ChatView: View {
         default: return nil
         }
     }
+    private func closeModelInspector() {
+        isModelInspectorClosing = true
+        withAnimation(completionCriteria:.logicallyComplete) {
+            showsModelInspector = false
+        } completion: {
+            isModelInspectorClosing = false
+        }
+    }
+    private func closeLibrary() {
+        isLibraryClosing = true
+        if horizontalSizeClass == .compact {
+            showsLibrary = false
+        } else {
+            withAnimation(completionCriteria:.removed) {
+                columnVisibility = .detailOnly
+            } completion: {
+                isLibraryClosing = false
+            }
+        }
+    }
+    private func presentAfterLibrary(_ action: @escaping () -> Void) {
+        if horizontalSizeClass == .compact && showsLibrary {
+            afterLibraryDismiss = action
+            closeLibrary()
+        } else { action() }
+    }
     private var fileMenu: some View {
         Menu("ファイル", systemImage: "doc") {
-            Button("ファイルを取り込む") { showsImporter = true }
+            Button("ファイルを取り込む") { presentAfterLibrary { showsImporter = true } }
                 .disabled(isPreparingImport)
             Button("読み込んだV3 JSONを書き出す") {
+                presentAfterLibrary {
                 do {
                     exportContentType = .json; exportFilename = "weavelet-native-v3"
                     exportDocument = WebJSONDocument(data: try state.exportWebData())
                     showsExporter = true
                 } catch { errorMessage = error.localizedDescription }
+                }
             }
             .disabled(state.exchange == nil)
-            Button("形式・範囲を指定して書き出す") { showsExportOptions = true }
+            Button("形式・範囲を指定して書き出す") { presentAfterLibrary { showsExportOptions = true } }
                 .disabled(state.exchange == nil)
+            Button("中断した応答を復旧",systemImage:"arrow.clockwise") { state.runProxyRecovery() }
+                .disabled(state.isRecoveringStream || state.exchange == nil)
+            Button("保存ファイルを復旧用に書き出す",systemImage:"doc.badge.arrow.up") {
+                presentAfterLibrary {
+                guard !isPreparingRecovery else { return }
+                isPreparingRecovery = true
+                Task {
+                    defer { isPreparingRecovery = false }
+                    do {
+                        let data = try await state.recoveryExport()
+                        exportContentType = .json
+                        exportFilename = "weavelet-native-recovery-export"
+                        exportDocument = WebJSONDocument(data:data)
+                        showsExporter = true
+                    } catch { errorMessage = error.localizedDescription }
+                }
+                }
+            }
         }
         .frame(minWidth: 44, minHeight: 44)
-        .disabled(state.generation != nil)
+        .disabled(state.generation != nil || isPreparingRecovery)
     }
     @ViewBuilder private var syncButtons: some View {
         Button("Google同期") {
@@ -324,7 +460,7 @@ struct ChatView: View {
             fileMenu
             Spacer()
             Button("設定", systemImage: "slider.horizontal.3") {
-                showsSettings = true
+                presentAfterLibrary { showsSettings = true }
             }
             .frame(minWidth: 44, minHeight: 44)
         }
@@ -341,29 +477,66 @@ struct ChatView: View {
         let configuredModel = (try? config?["model"]?.displayString("model")) ?? ""
         let model = configuredModel.isEmpty ? "モデル未選択" : configuredModel
         let local = config?["modelSource"] == .string("local")
-        return HStack(spacing: 8) {
-            Button {
-                do { configDraft = try state.chatConfigDraft() }
-                catch { errorMessage = error.localizedDescription }
+        let openRouter = !local && config?["providerId"] == .string("openrouter")
+        return VStack(spacing: 0) {
+        HStack(spacing: 8) {
+            Menu {
+                Button("オンラインモデルを選択") {
+                    do { modelDraft = try state.chatConfigDraft() } catch { errorMessage = error.localizedDescription }
+                }
+                Button("ローカルモデルと生成設定") {
+                    do { configDraft = try state.chatConfigDraft() } catch { errorMessage = error.localizedDescription }
+                }
             } label: {
                 HStack(spacing: 6) {
                     Image(systemName: local ? "cpu" : "sparkles")
                     Text(model).lineLimit(1).truncationMode(.middle)
                     Image(systemName: "chevron.down").font(.caption)
                 }
-                .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
+                .frame(minHeight: 44, alignment: .leading)
                 .contentShape(Rectangle())
             }
             .accessibilityLabel("会話のモデルと生成設定：\(model)")
+            Spacer(minLength: 0)
             HStack(spacing: 0) {
                 conversationViewButton(.chat, icon: "bubble.left.and.bubble.right")
                 conversationViewButton(.branchEditor, icon: "point.3.connected.trianglepath.dotted")
-                Menu("表示レイアウト", systemImage: "rectangle.split.2x1") {
+                Menu("表示レイアウト", systemImage: "line.3.horizontal") {
+                    Toggle("吹き出し表示", isOn: Binding(get: { state.style == .bubbles },
+                        set: { state.style = $0 ? .bubbles : .stream }))
+                    Divider()
                     ForEach(ChatActiveView.allCases) { mode in
                         Button(mode.title, systemImage: state.chatActiveView == mode ? "checkmark" : "rectangle.split.2x1") {
                             do { try state.setChatActiveView(mode) } catch { errorMessage = error.localizedDescription }
                         }
                     }
+                    if state.chatActiveView == .splitHorizontal || state.chatActiveView == .splitVertical {
+                        Toggle("チャットから分岐図へ連動",isOn:$state.branchEditorSyncEnabled)
+                        Toggle("表示を入れ替え", isOn: Binding(get: { splitSwapped }, set: { swapped in
+                            do { try state.saveDisplaySetting(.splitPanelSwapped,value:.bool(swapped)) }
+                            catch { errorMessage = error.localizedDescription }
+                        }))
+                        Button("分割を均等に戻す",systemImage:"rectangle.split.2x1") { saveSplitRatio(0.5) }
+                    }
+                    Divider()
+                    Button("編集を元に戻す",systemImage:"arrow.uturn.backward") {
+                        do { try state.undoMessageEdit() } catch { errorMessage = error.localizedDescription }
+                    }.disabled(!state.canUndoMessageEdit)
+                    Button("編集をやり直す",systemImage:"arrow.uturn.forward") {
+                        do { try state.redoMessageEdit() } catch { errorMessage = error.localizedDescription }
+                    }.disabled(!state.canRedoMessageEdit)
+                    if advancedMode {
+                        Button("本文を追加",systemImage:"plus.bubble") {
+                            do { draft = try state.messageDraft(nodeID:nil) } catch { errorMessage = error.localizedDescription }
+                        }
+                    }
+                    Button("非表示の枝を整理",systemImage:"line.3.horizontal.decrease") {
+                        do { removalDraft = try state.pruneHiddenDraft(); showsRemoval = true } catch { errorMessage = error.localizedDescription }
+                    }
+                    Divider()
+                    fileMenu
+                    Button("設定",systemImage:"slider.horizontal.3") { showsSettings = true }
+
                 }
                 .labelStyle(.iconOnly)
                 .frame(width: 44, height: 44)
@@ -371,8 +544,28 @@ struct ChatView: View {
         }
         .buttonStyle(.plain)
         .font(.subheadline)
-        .padding(.horizontal, horizontalSizeClass == .compact ? 16 : 20)
+        .padding(.horizontal, horizontalSizeClass == .compact ? 12 : 20)
         .disabled(state.exchange == nil || state.generation != nil)
+        if openRouter {
+            HStack(spacing: 6) {
+                Text("OpenRouter残高").font(.caption).foregroundStyle(.secondary)
+                if let display = state.openRouterCreditDisplay {
+                    Text(display).font(.caption).monospacedDigit().foregroundStyle(.secondary)
+                        .accessibilityLabel("OpenRouter残高 " + display)
+                } else if state.openRouterCreditsFetching {
+                    ProgressView().controlSize(.mini).accessibilityLabel("OpenRouter残高を取得中")
+                } else if let message = state.openRouterCreditsError {
+                    Text(message).font(.caption2).foregroundStyle(.secondary).lineLimit(1)
+                }
+                Spacer(minLength: 0)
+                Button("残高を更新",systemImage:"arrow.clockwise") {
+                    Task { await state.refreshOpenRouterCredits(reason:"manual") }
+                }.labelStyle(.iconOnly).frame(minWidth:44,minHeight:44)
+                    .disabled(state.openRouterCreditsFetching)
+            }
+            .padding(.horizontal, horizontalSizeClass == .compact ? 12 : 20)
+        }
+        }
         .background(Color(uiColor: .secondarySystemBackground))
         .overlay(alignment: .bottom) { Divider() }
     }
@@ -382,7 +575,7 @@ struct ChatView: View {
         } label: {
             Image(systemName: icon)
                 .frame(width: 44, height: 44)
-                .background(state.chatActiveView == mode ? Color.accentColor.opacity(0.12) : .clear, in: RoundedRectangle(cornerRadius: 8))
+                .overlay(alignment:.bottom) { if state.chatActiveView == mode { Rectangle().fill(Color.accentColor).frame(height:2) } }
         }
         .foregroundStyle(state.chatActiveView == mode ? Color.accentColor : .secondary)
         .accessibilityLabel(mode.title)
@@ -399,9 +592,9 @@ struct ChatView: View {
                     } else {
                     GeometryReader { geometry in
                         if geometry.size.width >= 700 {
-                            HStack(spacing: 0) { chatContent; Divider(); branchEditor }
+                            splitContent(horizontal: true)
                         } else {
-                            VStack(spacing: 0) { chatContent; Divider(); branchEditor }
+                            splitContent(horizontal: false)
                         }
                     }
                     }
@@ -409,13 +602,82 @@ struct ChatView: View {
                     if horizontalSizeClass == .compact {
                         chatContent
                     } else {
-                    VStack(spacing: 0) { chatContent; Divider(); branchEditor }
+                    splitContent(horizontal: false)
                     }
                 }
             }
     }
+    private var splitRatio: Double {
+        let value = try? state.displaySetting(.splitPanelRatio).number("split ratio")
+        return value.flatMap { $0.isFinite ? $0 : nil } ?? 0.5
+    }
+    private var splitSwapped: Bool {
+        (try? state.displaySetting(.splitPanelSwapped).boolean("split order")) ?? false
+    }
+    private func saveSplitRatio(_ ratio: Double) {
+        do { try state.saveSplitPanelRatio(ratio) }
+        catch { errorMessage = error.localizedDescription }
+    }
+    private func splitContent(horizontal: Bool) -> some View {
+        GeometryReader { geometry in
+            let divider: CGFloat = 12
+            let extent = max(0, (horizontal ? geometry.size.width : geometry.size.height) - divider)
+            // Pane minima are a native layout constraint, independent of the saved Web ratio.
+            let minimum = min(horizontal ? 240.0 : 160.0, extent / 2)
+            let first = min(max(splitDragPosition ?? extent * splitRatio, minimum), extent - minimum)
+            let chatExtent = splitSwapped ? extent - first : first
+            let graphExtent = splitSwapped ? first : extent - first
+            ZStack(alignment: .topLeading) {
+                chatContent
+                    .frame(width: horizontal ? chatExtent : geometry.size.width,
+                           height: horizontal ? geometry.size.height : chatExtent)
+                    .offset(x: horizontal && splitSwapped ? first + divider : 0,
+                            y: !horizontal && splitSwapped ? first + divider : 0)
+                branchEditor
+                    .frame(width: horizontal ? graphExtent : geometry.size.width,
+                           height: horizontal ? geometry.size.height : graphExtent)
+                    .offset(x: horizontal && !splitSwapped ? first + divider : 0,
+                            y: !horizontal && !splitSwapped ? first + divider : 0)
+                Rectangle().fill(Color(uiColor:.secondarySystemBackground))
+                    .overlay {
+                        Capsule().fill(Color(uiColor:.separator))
+                            .frame(width: horizontal ? 3 : 32, height: horizontal ? 32 : 3)
+                    }
+                    .frame(width: horizontal ? divider : geometry.size.width,
+                           height: horizontal ? geometry.size.height : divider)
+                    .contentShape(Rectangle())
+                    .offset(x: horizontal ? first : 0, y: horizontal ? 0 : first)
+                    .gesture(DragGesture(minimumDistance:0,coordinateSpace:.named("conversation-split"))
+                        .updating($splitDragPosition) { value, position, _ in
+                            guard extent > 0 else { return }
+                            let raw = (horizontal ? value.location.x : value.location.y) - divider / 2
+                            if let ratio = try? DisplaySettings.clampedSplitPanelRatio(raw / extent).number("split ratio") {
+                                position = extent * ratio
+                            }
+                        }
+                        .onEnded { value in
+                            guard extent > 0 else { return }
+                            let position = (horizontal ? value.location.x : value.location.y) - divider / 2
+                            saveSplitRatio(min(max(position,minimum),extent - minimum) / extent)
+                        })
+                    .onTapGesture(count:2) { saveSplitRatio(0.5) }
+                    .accessibilityElement()
+                    .accessibilityLabel("分割位置")
+                    .accessibilityValue("先頭の表示領域 \(Int((extent > 0 ? first / extent : 0.5) * 100))パーセント")
+                    .accessibilityAdjustableAction { direction in
+                        switch direction {
+                        case .increment: saveSplitRatio(splitRatio + 0.05)
+                        case .decrement: saveSplitRatio(splitRatio - 0.05)
+                        @unknown default: break
+                        }
+                    }
+            }
+            .coordinateSpace(name:"conversation-split")
+            .clipped()
+        }
+    }
     private var branchEditor: some View {
-        BranchEditorView(state: state, configure: configureNode, deleteBranch: deleteNodeBranch, clipboard: openBranchClipboard)
+        BranchEditorView(state: state, showsSearch:$showsBranchSearch, configure: configureNode, deleteBranch: deleteNodeBranch, clipboard: openBranchClipboard)
     }
 
     private func configureNode(_ nodeID: String) {
@@ -432,10 +694,20 @@ struct ChatView: View {
         do { clipboardDraft = try state.branchClipboardDraft(nodeID: nodeID, operation: operation) }
         catch { errorMessage = error.localizedDescription }
     }
+    private func inlineTargetIsDisplayed(_ pending: MessageDraft, in conversation: Conversation) -> Bool {
+        guard conversation.id.utf8.elementsEqual(pending.chatID.utf8),
+              let messages = try? DisplaySettings.messagesForDisplay(conversation.visibleMessages,advancedMode:advancedMode) else { return false }
+        return messages.contains { node in
+            guard node.id.utf8.elementsEqual(pending.nodeID?.utf8 ?? "".utf8) else { return false }
+            return (try? state.summaryInfo(chatID:conversation.id,nodeID:node.id))?["hidden"] != .bool(true)
+        }
+    }
     private var chatContent: some View {
+            GeometryReader { viewport in
             ScrollViewReader { scroll in
             ScrollView {
-                LazyVStack(alignment: .leading, spacing: 20) {
+                LazyVStack(alignment: .leading, spacing: 0) {
+                    Color.clear.frame(height:0).id("connected-top")
                     if let conversation = state.conversation {
                         switch Result(catching: { try DisplaySettings.messagesForDisplay(conversation.visibleMessages, advancedMode: advancedMode) }) {
                         case .success(let messages):
@@ -459,15 +731,70 @@ struct ChatView: View {
                         case .failure(let error): Text(error.localizedDescription).foregroundStyle(.red)
                         }
                         if let generationError = state.generationError { Text(generationError).foregroundStyle(.red) }
+                        if state.canRetryFailedGeneration {
+                            Button("生成を再試行",systemImage:"arrow.clockwise") {
+                                do { try state.retryFailedGeneration() } catch { errorMessage = error.localizedDescription }
+                            }.buttonStyle(.plain).foregroundStyle(Color(uiColor:.label)).frame(minHeight:44)
+                        }
+                        if let recoveryError = state.streamRecoveryError { Text(recoveryError).font(.footnote).foregroundStyle(.red) }
+                        if state.isRecoveringStream {
+                            HStack {
+                                ProgressView("応答を復旧中")
+                                Button("復旧を停止") { state.cancelProxyRecovery() }.frame(minHeight:44)
+                            }
+                        }
                         if let automaticEvaluationError = state.automaticEvaluationError { Text(automaticEvaluationError).foregroundStyle(.red) }
                         if let titleError = state.titleError { Text(titleError).foregroundStyle(.red) }
+                        if let pending = inlineDraft, !inlineTargetIsDisplayed(pending,in:conversation) {
+                            Text("表示対象が変わりました。編集中の本文を保持しています。").font(.footnote).foregroundStyle(.secondary)
+                            inlineEditor(pending).padding(16).id("inline-recovery")
+                        }
+                        if state.exchange != nil {
+                            HStack(spacing:0) {
+                                Menu {
+                                    Button("すべての本文を折りたたむ",systemImage:"arrow.down.right.and.arrow.up.left") {
+                                        do { try state.setAllMessagesCollapsed(true) } catch { errorMessage = error.localizedDescription }
+                                    }
+                                    Button("すべての本文を展開",systemImage:"arrow.up.left.and.arrow.down.right") {
+                                        do { try state.setAllMessagesCollapsed(false) } catch { errorMessage = error.localizedDescription }
+                                    }
+                                    Divider()
+                                    Button("編集を元に戻す",systemImage:"arrow.uturn.backward") {
+                                        do { try state.undoMessageEdit() } catch { errorMessage = error.localizedDescription }
+                                    }.disabled(!state.canUndoMessageEdit)
+                                    Button("編集をやり直す",systemImage:"arrow.uturn.forward") {
+                                        do { try state.redoMessageEdit() } catch { errorMessage = error.localizedDescription }
+                                    }.disabled(!state.canRedoMessageEdit)
+                                } label: { Image(systemName:"rectangle.compress.vertical").frame(width:44,height:44) }
+                                .accessibilityLabel("本文の一括表示と編集履歴")
+                                .disabled(state.generation != nil || conversation.visibleMessages.isEmpty)
+                                Spacer()
+                                Button { scroll.scrollTo("connected-top",anchor:.top) } label: {
+                                    Image(systemName:"arrow.up").frame(width:44,height:44)
+                                }.accessibilityLabel("最初へ")
+                                Button { scroll.scrollTo("connected-composer",anchor:.bottom) } label: {
+                                    Image(systemName:"arrow.down").frame(width:44,height:44)
+                                }.accessibilityLabel("入力欄へ")
+                            }.buttonStyle(.plain).padding(.horizontal,12)
+                            composer(conversation).id("connected-composer")
+                        }
+
                     } else {
                         ContentUnavailableView("会話がありません", systemImage: "bubble.left.and.bubble.right")
                     }
                 }
-                .padding(20)
-                .frame(maxWidth: 900)
+                .frame(maxWidth: horizontalSizeClass == .compact ? .infinity : 900)
                 .frame(maxWidth: .infinity)
+            }
+            .environment(\.messageViewport,viewport.frame(in:.global))
+            .background(Color(uiColor:.secondarySystemBackground))
+            .scrollDismissesKeyboard(.interactively)
+            .onChange(of: viewport.size.height) { _, _ in
+                if inlineFocused, let pending = inlineDraft {
+                    if let conversation = state.conversation, inlineTargetIsDisplayed(pending,in:conversation) {
+                        if let nodeID = pending.nodeID { scroll.scrollTo(Data(nodeID.utf8),anchor:.center) }
+                    } else { scroll.scrollTo("inline-recovery",anchor:.bottom) }
+                } else if composerFocused { scroll.scrollTo("connected-composer",anchor:.bottom) }
             }
             .onChange(of: state.navigationFocus) { _, focus in
                 if let focus {
@@ -480,14 +807,13 @@ struct ChatView: View {
                 if let focus = state.navigationFocus { scroll.scrollTo(Data(focus.nodeID.utf8), anchor: .center) }
             }
             }
-            .safeAreaInset(edge:.bottom,spacing:0) {
-                if let conversation = state.conversation, state.exchange != nil { composer(conversation) }
             }
+
     }
     private func composer(_ conversation: Conversation) -> some View {
         let roleName = state.inputRole == "assistant" ? "アシスタント" : "ユーザー"
         let roleIcon = state.inputRole == "assistant" ? "sparkles" : "person.fill"
-        return VStack(alignment:.leading,spacing:6) {
+        return VStack(alignment:.leading,spacing:4) {
             if advancedMode {
                 Menu {
                     Button("ユーザー", systemImage: "person.fill") {
@@ -511,34 +837,22 @@ struct ChatView: View {
                 get: { state.composerDraft(chatID: conversation.id).text },
                 set: { state.setComposerText(chatID: conversation.id, text: $0) }),
                 label: "送信する本文", enabled: state.generation == nil, sticky: true,
+                focused: $composerFocused,
                 enterToSubmit: { try state.displaySetting(.enterToSubmit) == .bool(true) },
                 submit: { _ in
-                    guard state.conversation?.identity == conversation.identity, state.generation == nil else { return }
+                    guard state.conversation?.identity == conversation.identity, state.generation == nil, !state.isRecoveringStream else { return }
                     do { try state.sendComposer() }
                     catch { state.generationError = error.localizedDescription }
                 }, failure: { state.generationError = $0.localizedDescription })
                 .id(conversation.identity)
+                .background(Color(uiColor:.tertiarySystemBackground),in:RoundedRectangle(cornerRadius:10))
                 .overlay(alignment: .topLeading) {
                     if state.composerDraft(chatID: conversation.id).text.isEmpty {
                         Text("送信する本文").foregroundStyle(.secondary).padding(.horizontal, 10).padding(.vertical, 10).allowsHitTesting(false)
                     }
                 }
             HStack(alignment:.bottom,spacing:8) {
-                if let detail = try? state.composerImageDetail(chatID:conversation.id) {
-                    ImageInputView(destinationID:conversation.id) { chatID, urls in
-                        do { try state.addComposerImages(chatID:chatID,urls:urls,detail:detail) }
-                        catch { state.generationError = error.localizedDescription }
-                    }
-                    .disabled(state.generation != nil)
-                }
-                Button {
-                    do {
-                        let input = state.composerDraft(chatID: conversation.id)
-                        composerPromptRequest = try state.promptPickerRequest(.command(parts: input.parts, text: input.text))
-                    } catch { errorMessage = error.localizedDescription }
-                } label: { Text("/").frame(width: 44, height: 44) }
-                .accessibilityLabel("プロンプトライブラリ")
-                .disabled(state.generation != nil)
+                composerAccessories(conversation)
                 if advancedMode {
                 Button {
                     do { configDraft = try state.chatConfigDraft() }
@@ -552,12 +866,14 @@ struct ChatView: View {
                     Button("停止",systemImage:"stop.fill") { state.stopGeneration() }
                         .frame(minWidth:44,minHeight:44)
                 } else {
-                    Button("送信",systemImage:"paperplane") {
+                    Button {
                         do { try state.sendComposer() }
                         catch { state.generationError = error.localizedDescription }
-                    }
+                    } label: { Image(systemName:"arrow.up.circle.fill").font(.title3).frame(width:44,height:44) }
+                    .accessibilityLabel("送信")
+                    .foregroundStyle(Color.accentColor)
                     .frame(minWidth:44,minHeight:44)
-                    .disabled(state.generation != nil)
+                    .disabled(state.generation != nil || state.isRecoveringStream)
                 }
             }
             if let parts = try? state.composerDraft(chatID:conversation.id).parts.array("composer parts") {
@@ -588,11 +904,28 @@ struct ChatView: View {
             if state.isLocalConversation { prefillInput(key:state.stickyPrefillKey) }
         }
         .padding(12)
-        .background(Color(uiColor: .secondarySystemBackground), in: RoundedRectangle(cornerRadius: 16))
-        .padding(.horizontal,20).padding(.vertical,8)
+        .overlay(alignment:.top) { Divider() }
+        .padding(.horizontal,16).padding(.vertical,8)
         .frame(maxWidth:900)
         .frame(maxWidth:.infinity)
-        .background(.regularMaterial)
+        .buttonStyle(.plain)
+    }
+    @ViewBuilder private func composerAccessories(_ conversation: Conversation) -> some View {
+        if let detail = try? state.composerImageDetail(chatID:conversation.id) {
+            ImageInputView(destinationID:conversation.id) { chatID, urls in
+                do { try state.addComposerImages(chatID:chatID,urls:urls,detail:detail) }
+                catch { state.generationError = error.localizedDescription }
+            }
+            .disabled(state.generation != nil)
+        }
+        Button {
+            do {
+                let input = state.composerDraft(chatID: conversation.id)
+                composerPromptRequest = try state.promptPickerRequest(.command(parts: input.parts, text: input.text))
+            } catch { errorMessage = error.localizedDescription }
+        } label: { Text("/").frame(width: 44, height: 44) }
+        .accessibilityLabel("プロンプトライブラリ")
+        .disabled(state.generation != nil)
     }
     private func prefillInput(key: String) -> some View {
         DisclosureGroup("アシスタントの先頭文") {
@@ -635,8 +968,14 @@ struct ChatView: View {
             do { try state.mutateSummary(chatID:conversation.id,action:"use",summaryID:id,use:use) }
             catch { errorMessage = error.localizedDescription }
         }
-        return MessageView(node: node, siblings: state.siblings(for: node.id), style: state.style, advancedMode: advancedMode, branchSwipeDirection: branchSwipePreference, branchSwipeContext: Data(conversation.id.utf8), generation: generation, edit: state.exchange == nil || state.generation != nil ? nil : {
-            do { draft = try state.messageDraft(nodeID: node.id) }
+        let editor: AnyView? = inlineDraft.flatMap { pending in
+            guard pending.chatID.utf8.elementsEqual(conversation.id.utf8), pending.nodeID?.utf8.elementsEqual(node.id.utf8) == true else { return nil }
+            return AnyView(inlineEditor(pending))
+        }
+        return MessageView(node: node, siblings: state.siblings(for: node.id), style: state.style, advancedMode: advancedMode, branchSwipeDirection: branchSwipePreference, branchSwipeContext: Data(conversation.id.utf8), generation: generation, inlineEditor: editor, focusBranchEditor: horizontalSizeClass != .compact && state.branchEditorSyncEnabled && (state.chatActiveView == .splitHorizontal || state.chatActiveView == .splitVertical) && state.generation == nil ? {
+            do { try state.focusBranchEditor(nodeID:node.id) } catch { errorMessage = error.localizedDescription }
+        } : nil, edit: state.exchange == nil || state.generation != nil ? nil : {
+            do { if inlineDraft == nil { inlineDraft = try state.messageDraft(nodeID: node.id) } }
             catch { errorMessage = error.localizedDescription }
         }, insertBefore: !advancedMode || state.exchange == nil || state.generation != nil ? nil : {
             do { draft = try state.messageInsertionDraft(beforeNodeID: node.id) }
@@ -692,6 +1031,77 @@ struct ChatView: View {
         }
     }
 
+    private func inlineEditor(_ seed: MessageDraft) -> some View {
+        let text = Binding(get: { inlineDraft?.text ?? seed.text }, set: { inlineDraft?.text = $0 })
+        let selected = state.selectedConversationID.utf8.elementsEqual(seed.chatID.utf8)
+        let canOverwrite = selected && !seed.isProtected && inlineDraft?.changed == true
+        return VStack(alignment: .leading, spacing: 6) {
+            MessageInputView(text:text,label:"本文を編集",enabled:state.generation == nil,sticky:false,
+                maximumLines:10,fillsAvailableHeight:true,textInsets:UIEdgeInsets(top:12,left:7,bottom:12,right:7),focused:$inlineFocused,
+                enterToSubmit:{ try state.displaySetting(.enterToSubmit) == .bool(true) },
+                submit:{ action in
+                    if action == .save { saveInline(.overwrite) }
+                    else {
+                        guard let pending = inlineDraft else { return }
+                        do {
+                            guard state.selectedConversationID.utf8.elementsEqual(pending.chatID.utf8) else { throw ExchangeError.invalid("編集中の会話を選択してください") }
+                            inlineDraft = try state.saveMessageForGeneration(pending)
+                            guard let nodeID = inlineDraft?.nodeID else { throw ExchangeError.invalid("生成先がありません") }
+                            try state.startGeneration(state.messageGenerationDraft(nodeID:nodeID,operation:.append))
+                            inlineFocused = false; inlineDraft = nil
+                        } catch { errorMessage = error.localizedDescription }
+                    }
+                },failure:{ errorMessage = $0.localizedDescription })
+                .frame(maxWidth:.infinity,maxHeight:.infinity,alignment:.leading)
+                .background(Color(uiColor:.tertiarySystemBackground),in:RoundedRectangle(cornerRadius:12))
+                .overlay(RoundedRectangle(cornerRadius:12).stroke(inlineFocused ? Color.accentColor : Color(uiColor:.separator)))
+                .accessibilityLabel("本文を編集")
+                .onAppear { inlineFocused = true }
+            if seed.isProtected { Text("保護中です。分岐として保存できます。").font(.footnote).foregroundStyle(.secondary) }
+            Color.clear.frame(height:44)
+
+        }
+        .overlay {
+            FloatingMessageActions {
+            HStack(spacing: 8) {
+                Button { inlineFocused = false; inlineDraft = nil } label: {
+                    Text("取消").frame(minWidth:44,minHeight:44,alignment:.leading).contentShape(Rectangle())
+                }
+                Menu {
+                    Button("役割・プロンプト・生成の詳細") {
+                        guard let pending = inlineDraft else { return }
+                        inlineFocused = false; draft = pending; inlineDraft = nil
+                    }.disabled(!selected)
+                } label: { Image(systemName:"ellipsis").frame(width:44,height:44) }
+                    .accessibilityLabel("編集の詳細")
+                Spacer(minLength:0)
+                Button { saveInline(.branch) } label: {
+                    Text("分岐保存").frame(minWidth:44,minHeight:44).contentShape(Rectangle())
+                }.disabled(!selected)
+                Button { saveInline(.overwrite) } label: {
+                    Text("保存").padding(.horizontal,14).frame(minWidth:44,minHeight:44)
+                        .foregroundStyle(canOverwrite ? Color.white : Color(uiColor:.secondaryLabel))
+                        .background(canOverwrite ? Color.accentColor : Color(uiColor:.tertiarySystemFill),in:RoundedRectangle(cornerRadius:8))
+                }.disabled(!canOverwrite)
+            }.buttonStyle(.plain).font(.subheadline)
+                .padding(.horizontal,6)
+                .background(.regularMaterial,in:RoundedRectangle(cornerRadius:16))
+            }
+        }
+        .disabled(state.generation != nil)
+    }
+
+    private func saveInline(_ mode: MessageSaveMode) {
+        guard let pending = inlineDraft else { return }
+        do {
+            guard state.selectedConversationID.utf8.elementsEqual(pending.chatID.utf8) else {
+                throw ExchangeError.invalid("編集中の会話を選択してください。本文は保持しています")
+            }
+            try state.saveMessage(pending,mode:mode)
+            inlineFocused = false; inlineDraft = nil
+        } catch { errorMessage = error.localizedDescription }
+    }
+
     private func generate(_ nodeID: String, operation: MessageGenerationOperation) {
         do {
             let draft = try state.messageGenerationDraft(nodeID:nodeID,operation:operation)
@@ -709,6 +1119,18 @@ struct ChatView: View {
 
 }
 
+private struct ConversationModelPicker: View {
+    @ObservedObject var state: ChatState
+    @State var draft: ChatConfigDraft
+    var body: some View {
+        ProviderModelsView(state:state,draft:$draft) { row in
+            var selected = draft
+            selected.config = try ChatConfig.switched(selected.config,model:row.modelID,providerID:row.providerID,modelState:selected.modelState)
+            try state.saveChatConfig(selected)
+        }
+    }
+}
+
 struct MessageView: View {
     let node: MessageNode
     let siblings: [MessageNode]
@@ -717,6 +1139,8 @@ struct MessageView: View {
     var branchSwipeDirection: String? = nil
     var branchSwipeContext: Data? = nil
     var generation: ActiveGeneration? = nil
+    var inlineEditor: AnyView? = nil
+    var focusBranchEditor: (() -> Void)? = nil
     var edit: (() -> Void)? = nil
     var insertBefore: (() -> Void)? = nil
     var regenerate: (() -> Void)? = nil
@@ -768,9 +1192,18 @@ struct MessageView: View {
 
     @ViewBuilder private var messageOperations: some View {
         if hasMessageOperations {
+            HStack(spacing:0) {
+                if let focusBranchEditor {
+                    Button(action:focusBranchEditor) { Image(systemName:"scope").frame(width:44,height:44) }
+                        .accessibilityLabel("分岐図で表示")
+                }
+                if let edit {
+                    Button(action:edit) { Image(systemName:"pencil").frame(width:44,height:44) }.accessibilityLabel("編集")
+                }
+                if let regenerate {
+                    Button(action:regenerate) { Image(systemName:"arrow.clockwise").frame(width:44,height:44) }.accessibilityLabel("再生成")
+                }
             Menu {
-                if let edit { Button("編集", systemImage: "square.and.pencil", action: edit) }
-                if let regenerate { Button("再生成", systemImage:"arrow.clockwise",action:regenerate) }
                 if let generateFromHere { Button("ここから生成",systemImage:"sparkles",action:generateFromHere) }
                 if let insertBefore { Button("前に挿入", systemImage: "text.insert", action: insertBefore) }
                 if let toggleCollapse { Button(node.options.collapsed ? "本文を展開" : "本文を折りたたむ", systemImage: node.options.collapsed ? "chevron.down" : "chevron.up", action: toggleCollapse) }
@@ -787,6 +1220,8 @@ struct MessageView: View {
             }
             .accessibilityLabel("メッセージ操作")
             .frame(minWidth: 44, minHeight: 44)
+            }.buttonStyle(.plain)
+                .background(.regularMaterial,in:Capsule())
         }
     }
 
@@ -798,12 +1233,12 @@ struct MessageView: View {
                     Image(systemName: "chevron.down").font(.caption)
                 }
                 .buttonStyle(.plain)
-                .font(.headline)
+                .font(.subheadline.weight(.semibold))
                 .frame(minHeight: 44)
                 .accessibilityLabel("\(roleName)：役割と本文を編集")
             } else {
                 roleLabel
-                    .font(.headline)
+                    .font(.subheadline.weight(.semibold))
                     .accessibilityAddTraits(.isHeader)
             }
             if node.options.starred { Image(systemName:"star.fill").accessibilityLabel("スター") }
@@ -861,9 +1296,9 @@ struct MessageView: View {
                     }
                     Button("詳細設定",systemImage:"slider.horizontal.3",action:openSummary)
                 } label: {
-                    Label(tabName,systemImage:"chevron.down")
+                    HStack(spacing:3) { Text(tabName); Image(systemName:"chevron.down").font(.caption2) }
                         .font(.subheadline)
-                        .frame(minHeight:44)
+                        .frame(minWidth:44,minHeight:44)
                 }
                 .accessibilityLabel("表示形式: \(tabName)")
             }
@@ -965,12 +1400,12 @@ struct MessageView: View {
             ViewThatFits(in: .horizontal) {
                 HStack(spacing: 8) {
                     branchControls
-                    Spacer(minLength: 8)
+                    if siblings.count > 1 { Spacer(minLength: 8) }
                     messageOperations
                 }
                 VStack(alignment: .leading, spacing: 0) {
                     branchControls
-                    messageOperations.frame(maxWidth: .infinity, alignment: .trailing)
+                    messageOperations.frame(maxWidth: .infinity, alignment: .center)
                 }
             }
         }
@@ -1004,7 +1439,7 @@ struct MessageView: View {
                         HStack(spacing: 2) { primaryHeaderControls; Spacer(minLength: 0); metadataMenu }
                     }
                 }
-                .padding(.horizontal, isBubble ? 0 : 12)
+                VStack(alignment: .leading, spacing: 8) {
                 VStack(alignment: .leading, spacing: 8) {
                 if !node.options.label.isEmpty { Text(node.options.label).font(.subheadline).foregroundStyle(.secondary) }
                 if let generation {
@@ -1023,14 +1458,29 @@ struct MessageView: View {
                         MessagePartView(part: part)
                     }
                 }
-                footerControls
                 }
+                .simultaneousGesture(TapGesture().onEnded {
+                    if inlineEditor == nil { focusBranchEditor?() }
+                }, including: focusBranchEditor == nil ? .none : .all)
                 .frame(maxWidth: .infinity, alignment: .leading)
+                .frame(minHeight:84,alignment:.topLeading)
                 .padding(isBubble ? 0 : 12)
                 .background {
                     if !isBubble {
-                        RoundedRectangle(cornerRadius: 16)
-                            .fill(Color(uiColor: .secondarySystemBackground))
+                        RoundedRectangle(cornerRadius: 12)
+                            .fill(Color(uiColor: .tertiarySystemBackground))
+                    }
+                }
+                footerControls.hidden()
+                }
+                .opacity(inlineEditor == nil ? 1 : 0)
+                .allowsHitTesting(inlineEditor == nil)
+                .accessibilityHidden(inlineEditor != nil)
+                .overlay {
+                    if let inlineEditor {
+                        inlineEditor.frame(maxWidth:.infinity,maxHeight:.infinity,alignment:.topLeading)
+                    } else {
+                        FloatingMessageActions { footerControls }
                     }
                 }
             }
@@ -1039,12 +1489,14 @@ struct MessageView: View {
             .background {
                 if isBubble {
                     RoundedRectangle(cornerRadius: 18)
-                        .fill(node.role == "user" ? Color.accentColor.opacity(0.12) : Color(uiColor: .secondarySystemBackground))
+                        .fill(node.role == "user" ? Color.accentColor.opacity(0.12) : Color(uiColor: .tertiarySystemBackground))
                 }
             }
             if isBubble && node.role == "assistant" { Spacer(minLength: 24) }
         }
+        .padding(.horizontal,16).padding(.vertical,8)
         .frame(maxWidth: .infinity, alignment: .leading)
+        .buttonStyle(.plain)
         .environment(\.markdownPresentation, MarkdownPresentation(mode:markdownMode,revision:markdownRevision,controlsHidden:openSummary != nil))
     }
 }
@@ -1096,7 +1548,8 @@ struct ConversationLibraryView<Footer: View>: View {
     @ObservedObject var state: ChatState
     let onSelect: () -> Void
     let onClose: (() -> Void)?
-    let onSearch: () -> Void
+    @Binding var showsSearch: Bool
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @ViewBuilder let footer: () -> Footer
     @State private var isSelecting = false
     @State private var selected = Set<Data>()
@@ -1120,6 +1573,15 @@ struct ConversationLibraryView<Footer: View>: View {
 
     var body: some View {
         NavigationStack {
+            Group {
+            if showsSearch {
+                ChatSearchView(state:state,initialMode:.library,inline:true,close:{ showsSearch = false },library:true,reportError:{ errorMessage = $0 }) { result, mode in
+                    try state.navigate(chatID:result.chatID,nodeID:result.nodeID,source:mode == .grep ? .grep : .search)
+                    onSelect()
+                }
+                .transition(reduceMotion ? .opacity : .move(edge:.top).combined(with:.opacity))
+                .zIndex(1)
+            } else {
             List {
                 if let sizeError { Text(sizeError).foregroundStyle(.red) }
                 if state.exchange == nil {
@@ -1136,22 +1598,32 @@ struct ConversationLibraryView<Footer: View>: View {
                     }, id: \.identity) { conversation in conversationRow(conversation) }
                 }
             }
+            .transition(.opacity)
+            }
+            }
+            .animation(.easeInOut(duration:0.35),value:showsSearch)
+            .clipped()
             .disabled(state.generation != nil)
             .safeAreaInset(edge: .top, spacing: 0) {
-                Button(action: onSearch) {
-                    Label("会話・フォルダを検索", systemImage: "magnifyingglass")
+                if !showsSearch {
+                Button { showsSearch = true } label: {
+                    Label("会話・フォルダを検索", systemImage: "magnifyingglass").foregroundStyle(Color(uiColor:.secondaryLabel))
                         .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
                 }
                 .disabled(state.exchange == nil || state.generation != nil)
                 .padding(.horizontal)
                 .background(.bar)
+                .transition(reduceMotion ? .opacity : .move(edge:.top).combined(with:.opacity))
+                }
             }
+            .animation(.easeInOut(duration:0.35),value:showsSearch)
             .safeAreaInset(edge: .bottom, spacing: 0) {
                 VStack(spacing: 0) { Divider(); footer().padding(.horizontal) }
                     .background(.bar)
             }
             .navigationTitle("会話")
             .navigationBarTitleDisplayMode(.inline)
+            .toolbar(removing:.sidebarToggle)
             .onAppear { revealSelectedConversation() }
             .onReceive(state.$exchange) { refreshChatSizes($0?.source) }
             .onDisappear { sizeTask?.cancel(); sizeRequestID = UUID() }
@@ -1159,25 +1631,19 @@ struct ConversationLibraryView<Footer: View>: View {
             .onChange(of: state.exchange?.source) { _, _ in perform {} }
             .toolbar {
                 if let onClose {
-                    ToolbarItem(placement: .topBarLeading) { Button("閉じる",action:onClose) }
-                }
-                ToolbarItem(placement: .topBarTrailing) {
-                    Button(isSelecting ? "選択を終了" : "選択") {
-                        isSelecting.toggle()
-                        if !isSelecting { selected.removeAll() }
+                    ToolbarItem(placement: .topBarLeading) {
+                        Button("会話一覧を閉じる",systemImage:"sidebar.left",action:onClose).labelStyle(.iconOnly)
                     }
-                    .disabled(state.exchange == nil || state.generation != nil)
-                    .frame(minWidth: 44, minHeight: 44)
+                }
+                if isSelecting {
+                    ToolbarItem(placement: .topBarTrailing) {
+                        Button("完了") { isSelecting = false; selected.removeAll() }
+                            .frame(minWidth:44,minHeight:44)
+                    }
                 }
                 ToolbarItem(placement: .topBarTrailing) {
                     Button("新規フォルダ", systemImage: "folder.badge.plus") { perform { try state.applyFolder(.create(id: UUID().uuidString.lowercased())) } }
                         .disabled(state.generation != nil)
-                }
-                ToolbarItem(placement: .topBarTrailing) {
-                    Button("新規", systemImage: "plus") {
-                        if perform({ try state.createChat() }) { onSelect() }
-                    }
-                    .disabled(state.generation != nil)
                 }
                 if !selected.isEmpty {
                     ToolbarItem(placement: .bottomBar) {
@@ -1292,7 +1758,7 @@ struct ConversationLibraryView<Footer: View>: View {
                 else { errorMessage = state.persistenceError }
             } label: {
                 HStack(spacing: 4) {
-                    Text(conversation.title.isEmpty ? "（タイトルなし）" : conversation.title).lineLimit(1)
+                    Text(conversation.title.isEmpty ? "（タイトルなし）" : conversation.title).lineLimit(1).foregroundStyle(Color(uiColor:.label))
                     if (try? state.displaySetting(.displayChatSize)) == .bool(true), let size = chatSizes[conversation.identity] {
                         Text("(\(size))").font(.caption).foregroundStyle(.secondary).fixedSize()
                     }
@@ -1303,6 +1769,10 @@ struct ConversationLibraryView<Footer: View>: View {
             .accessibilityAddTraits(active ? .isSelected : [])
             if state.exchange != nil {
                 Menu {
+                    Button("会話を選択",systemImage:"checkmark.circle") {
+                        isSelecting = true
+                        selected.insert(conversation.identity)
+                    }
                     Button("改名") {
                         renameID = conversation.id
                         renameTitle = conversation.title
@@ -1765,6 +2235,7 @@ struct RemoteSettingsView: View {
     @ObservedObject var state: ChatState
     @Environment(\.dismiss) private var dismiss
     @State private var record = RemoteCredentialRecord()
+    @State private var proxy = RemoteProxySettings()
     @State private var errorMessage: String?
     var body: some View {
         NavigationStack {
@@ -1775,16 +2246,50 @@ struct RemoteSettingsView: View {
                 Toggle("旧会話用の予備streaming", isOn: $record.settings.stream)
                 Text("endpointとAPI keyは端末に保存します。modelとstreamingは会話設定を優先し、モデル未設定の旧会話だけ予備値を使います。local生成・評価は未接続です。")
                     .font(.footnote).foregroundStyle(.secondary)
+                Section("ストリームプロキシ") {
+                    Toggle("プロキシを使用",isOn:$proxy.enabled)
+                    TextField("プロキシURL（HTTPS）",text:$proxy.endpoint).textInputAutocapitalization(.never).autocorrectionDisabled()
+                    SecureField("プロキシ認証token",text:$proxy.authToken)
+                    Text("有効時は生成本文とAPIキーを指定したプロキシ経由で送信します。設定と認証情報はこの端末のKeychainに保存します。").font(.footnote).foregroundStyle(.secondary)
+                }
                 if let errorMessage { Text(errorMessage).foregroundStyle(.red) }
             }
             .navigationTitle("remote生成設定")
-            .task { do { record = try RemoteCredentials.load() } catch { errorMessage = error.localizedDescription } }
+            .task { do { record = try RemoteCredentials.load(); proxy = record.proxy ?? RemoteProxySettings() } catch { errorMessage = error.localizedDescription } }
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) { Button("取消") { dismiss() } }
                 ToolbarItem(placement: .confirmationAction) { Button("保存") {
-                    do { try state.saveRemoteSettings(record); dismiss() } catch { errorMessage = error.localizedDescription }
+                    do { record.proxy = proxy; try state.saveRemoteSettings(record); dismiss() } catch { errorMessage = error.localizedDescription }
                 } }
             }
+        }
+    }
+}
+
+private struct MessageViewportKey: EnvironmentKey {
+    static let defaultValue = CGRect.zero
+}
+private extension EnvironmentValues {
+    var messageViewport: CGRect {
+        get { self[MessageViewportKey.self] }
+        set { self[MessageViewportKey.self] = newValue }
+    }
+}
+
+// Keep controls inside their message while following the visible bottom of the chat.
+private struct FloatingMessageActions<Content: View>: View {
+    @Environment(\.messageViewport) private var viewport
+    @State private var controlsHeight: CGFloat = 44
+    @ViewBuilder var content: () -> Content
+    var body: some View {
+        GeometryReader { geometry in
+            let frame = geometry.frame(in:.global)
+            let bottom = viewport.isEmpty ? frame.maxY : min(frame.maxY,viewport.maxY - 8)
+            content()
+                .fixedSize(horizontal:false,vertical:true)
+                .frame(maxWidth:.infinity)
+                .onGeometryChange(for:CGFloat.self,of:{ $0.size.height }) { controlsHeight = $0 }
+                .offset(y:max(0,min(geometry.size.height - controlsHeight,bottom - frame.minY - controlsHeight)))
         }
     }
 }

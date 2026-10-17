@@ -21,6 +21,20 @@ final class ConversationSummaryTests: XCTestCase {
     private let state = try! OrderedJSON.decode(Data(#"{"favoriteModels":[],"providers":{},"countTotalTokens":false}"#.utf8))
     private let legacy = RemoteCredentialRecord(settings:RemoteSettings(endpoint:"https://fixture.invalid/v1/chat/completions",model:"fake-model",stream:true),key:"FAKE")
 
+    func testSummaryProxyKeepsSharedNonstreamingPlanAndResponse() async throws {
+        var credentials = legacy
+        credentials.proxy = RemoteProxySettings(enabled:true,endpoint:"https://fixture.invalid/relay",authToken:"FAKE-PROXY")
+        let prepared = try XCTUnwrap(ConversationSummary.prepare(source:source,state:state,chatID:"chat",sourceNodeIDs:["u"],mode:"single",originNodeID:"u",summaryID:"proxy-summary",now:1000,legacy:credentials))
+        let envelope = try OrderedJSON.decode(XCTUnwrap(prepared.request.httpBody))
+        XCTAssertEqual(prepared.request.url?.path,"/relay/api/request")
+        XCTAssertEqual(prepared.request.value(forHTTPHeaderField:"Authorization"),"Bearer FAKE-PROXY")
+        XCTAssertEqual(envelope["body"]?["stream"],.bool(false))
+        let config = URLSessionConfiguration.ephemeral; config.protocolClasses = [SummaryResponseProtocol.self]
+        let response = try await ConversationSummary.generate(prepared,client:RemoteClient(session:URLSession(configuration:config)))
+        XCTAssertEqual(response.text,"Useful summary")
+        XCTAssertNotNil(try ConversationSummary.apply(response,prepared:prepared,source:source,state:state))
+    }
+
     func testSummaryRequestSavesOnlyCurrentSourceAndUsesNonstreamingTransport() async throws {
         let prepared = try XCTUnwrap(ConversationSummary.prepare(source:source,state:state,chatID:"chat",sourceNodeIDs:["u"],mode:"single",originNodeID:"u",summaryID:"summary",now:1000,legacy:legacy))
         XCTAssertFalse(try RemoteRequest.streaming(prepared.request))

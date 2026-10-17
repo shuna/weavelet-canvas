@@ -136,4 +136,60 @@ final class LocalStateStoreTests: XCTestCase {
         restored.selectedConversationID = "sample-2"
         XCTAssertEqual(try Data(contentsOf: store.fileURL), malformed)
     }
+
+    func testRecoveryExportKeepsLiveRawStateAndLocalFileBytesWithoutWriting() throws {
+        let store = try store()
+        let bytes = Data(#"{"version":2,"opaque":9007199254740993}"#.utf8)
+        try bytes.write(to: store.fileURL, options: .atomic)
+        let live = try OrderedJSON.decode(Data(#"{"state":{"opaque":1.2300,"lone":"\ud800","ordered":{"z":2,"a":1}}}"#.utf8))
+        let journal = NativeProxyRecoveryStore(libraryURL:store.fileURL)
+        let journalBytes = Data([0xff,0x7b,0x00])
+        try journalBytes.write(to:journal.fileURL,options:.atomic)
+        XCTAssertThrowsError(try journal.upsert(.object([.init(key:"requestId",value:.string("new"))])))
+        let exported = try NativeRecoveryExport.make(liveSnapshot: live, fileURL: store.fileURL, exportedAt: "2026-10-17T00:00:00Z")
+        let payload = try OrderedJSON.decode(exported)
+        XCTAssertEqual(payload["version"], .number("1"))
+        XCTAssertEqual(payload["exportedAt"], .string("2026-10-17T00:00:00Z"))
+        let sources = try payload.required("sources")
+        XCTAssertEqual(try sources.required("liveStore").required("available"), .bool(true))
+        for key in ["zustandPersist", "legacyLocalStorageChats", "indexedDb"] {
+            XCTAssertEqual(try sources.required(key), .object([.init(key: "available", value: .bool(false))]))
+        }
+        XCTAssertEqual(try sources.required("liveStore").required("data").encoded(), try live.required("state").encoded())
+        let local = try sources.required("nativeLocalState")
+        XCTAssertEqual(try local.required("available"), .bool(true))
+        XCTAssertEqual(try local.required("data").required("filename"), .string(store.fileURL.lastPathComponent))
+        XCTAssertEqual(try local.required("data").required("encoding"), .string("base64"))
+        XCTAssertEqual(Data(base64Encoded: try local.required("data").required("bytes").string("bytes")), bytes)
+        XCTAssertEqual(try Data(contentsOf: store.fileURL), bytes)
+        let recovery = try sources.required("nativeStreamRecovery")
+        XCTAssertEqual(Data(base64Encoded:try recovery.required("data").required("bytes").string("bytes")),journalBytes)
+        XCTAssertEqual(try Data(contentsOf:journal.fileURL),journalBytes)
+    }
+
+    func testRecoveryExportReadsMalformedNonUTF8SaveWithoutNormalLoadOrWriting() async throws {
+        let store = try store()
+        let malformed = Data([0xff, 0x00, 0xfe, 0x7b, 0x7d])
+        try malformed.write(to: store.fileURL, options: .atomic)
+        XCTAssertThrowsError(try store.load())
+        let state = ChatState(store: store)
+        XCTAssertNotNil(state.persistenceError)
+        XCTAssertThrowsError(try state.createChat(defaults: .webInitial()))
+        let payload = try OrderedJSON.decode(await state.recoveryExport(exportedAt: Date(timeIntervalSince1970: 0)))
+        let sources = try payload.required("sources")
+        XCTAssertEqual(try sources.required("liveStore").required("available"), .bool(false))
+        let local = try sources.required("nativeLocalState")
+        XCTAssertEqual(try local.required("available"), .bool(true))
+        XCTAssertEqual(Data(base64Encoded: try local.required("data").required("bytes").string("bytes")), malformed)
+        XCTAssertEqual(try Data(contentsOf: store.fileURL), malformed)
+
+        let missing = try OrderedJSON.decode(NativeRecoveryExport.make(liveSnapshot: nil,
+            fileURL: store.fileURL.deletingLastPathComponent().appendingPathComponent("not-created"), exportedAt: "now"))
+        XCTAssertEqual(try missing.required("sources").required("nativeLocalState").required("available"), .bool(false))
+        let unreadable = try OrderedJSON.decode(NativeRecoveryExport.make(liveSnapshot: nil,
+            fileURL: store.fileURL.deletingLastPathComponent(), exportedAt: "now"))
+        let failed = try unreadable.required("sources").required("nativeLocalState")
+        XCTAssertEqual(try failed.required("available"), .bool(true))
+        XCTAssertFalse(try failed.required("error").string("read error").isEmpty)
+    }
 }

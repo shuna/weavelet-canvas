@@ -3,9 +3,7 @@ import { useCallback, useEffect, useRef } from 'react';
 import { fetchCreditBalance } from '@api/openrouter';
 import useStore from '@store/store';
 import { resolveOpenRouterApiKey } from '@utils/openrouterVerification';
-
-const STALE_MS = 5 * 60 * 1000; // 5 minutes
-const COOLDOWN_MS = 3_000;
+import { shouldFetchOpenRouterCredits } from '@utils/openrouterCredits';
 
 /**
  * Fetches and caches the OpenRouter credit balance.
@@ -18,10 +16,10 @@ export default function useOpenRouterCreditBalance(isOpenRouter: boolean) {
   const lastFetchRef = useRef(0);
   const inFlightRef = useRef(false);
 
-  const doFetch = useCallback(async () => {
-    if (inFlightRef.current) return;
+  const doFetch = useCallback(async (reason: 'open' | 'completed' | 'manual') => {
     const now = Date.now();
-    if (now - lastFetchRef.current < COOLDOWN_MS) return;
+    if (!shouldFetchOpenRouterCredits({ reason, now, lastFetch: lastFetchRef.current,
+      inFlight: inFlightRef.current, fetchedAt: useStore.getState().creditBalance?.fetchedAt })) return;
 
     const state = useStore.getState();
     const apiKey = resolveOpenRouterApiKey(
@@ -52,10 +50,7 @@ export default function useOpenRouterCreditBalance(isOpenRouter: boolean) {
   // Fetch on mount if stale
   useEffect(() => {
     if (!isOpenRouter) return;
-    const balance = useStore.getState().creditBalance;
-    if (!balance || Date.now() - balance.fetchedAt > STALE_MS) {
-      void doFetch();
-    }
+    void doFetch('open');
   }, [isOpenRouter, doFetch]);
 
   // Refetch when generation completes for the current chat
@@ -68,10 +63,10 @@ export default function useOpenRouterCreditBalance(isOpenRouter: boolean) {
   useEffect(() => {
     const isGenerating = !!generatingSession;
     if (wasGeneratingRef.current && !isGenerating && isOpenRouter) {
-      void doFetch();
+      void doFetch('completed');
     }
     wasGeneratingRef.current = isGenerating;
   }, [generatingSession, isOpenRouter, doFetch]);
 
-  return { refresh: doFetch };
+  return { refresh: () => doFetch('manual') };
 }

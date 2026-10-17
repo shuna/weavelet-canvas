@@ -1,6 +1,6 @@
 import { shouldConsumeAssistantPrefill } from '@utils/assistantPrefill';
 import { normalizeAssistantPrefill } from '@utils/localGenerationInput';
-import { resolveAssistantPrefillKey } from '@utils/generationPlan';
+import { resolveAssistantPrefillKey, retryTarget } from '@utils/generationPlan';
 import { localModelRuntime } from '@src/local-llm/runtime';
 import { beginAiTask, finishAiTask, isAiTaskCurrent } from './aiTaskLifetime';
 import i18next from 'i18next';
@@ -376,18 +376,14 @@ const useSubmit = () => {
 
     if (lastSubmitMode === 'append') {
       const chat = chats[currentChatIndex];
-      const lastMsg = chat.messages[chat.messages.length - 1];
-      if (lastMsg?.role === 'assistant') {
-        useStore.getState().removeMessageAtIndex(currentChatIndex, chat.messages.length - 1);
-      }
+      const target = retryTarget(chat, 'append', null);
+      if (target.status === 'ready' && target.removeIndex !== null) useStore.getState().removeMessageAtIndex(currentChatIndex, target.removeIndex);
       setError('');
       handleSubmit();
     } else if (lastSubmitMode === 'midchat' && lastSubmitIndex !== null) {
       const chat = chats[currentChatIndex];
-      const targetMsg = chat.messages[lastSubmitIndex];
-      if (targetMsg?.role === 'assistant') {
-        useStore.getState().removeMessageAtIndex(currentChatIndex, lastSubmitIndex);
-      }
+      const target = retryTarget(chat, 'midchat', lastSubmitIndex);
+      if (target.status === 'ready' && target.removeIndex !== null) useStore.getState().removeMessageAtIndex(currentChatIndex, target.removeIndex);
       setError('');
       handleSubmitMidChat(lastSubmitIndex);
     }

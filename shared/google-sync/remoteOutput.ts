@@ -4,23 +4,37 @@ import { extractReasoningFromEvent, extractNonStreamingOutput } from '../../src/
 import { extractTextFromApiContent } from '../../src/utils/apiContent';
 import { ThinkTagParser } from '../../src/utils/thinkTagParser';
 import type { EventSourceDataInterface, NonStreamingResponse } from '../../src/types/api';
+import { openRouterCancelTarget, type OpenRouterCancelInput } from '../../src/utils/openrouterCancel';
 
-type OutputState = { text: string; reasoning: string; think: ReturnType<ThinkTagParser['checkpoint']>; finishReason?: string; observeUsage?: boolean; observation?: OpenRouterObservation };
+type OutputState = { text: string; reasoning: string; think: ReturnType<ThinkTagParser['checkpoint']>; finishReason?: string; observeUsage?: boolean; observation?: OpenRouterObservation; generationId?: string };
+const captureGenerationId = (state: OutputState, id: unknown) => {
+  if (!state.generationId && typeof id === 'string' && id.startsWith('gen-')) state.generationId = id;
+};
+export function openRouterCancel(json: string): string {
+  const target = openRouterCancelTarget(JSON.parse(json) as OpenRouterCancelInput);
+  return JSON.stringify(target && { ...target, authentication: { header: 'Authorization', scheme: 'Bearer' } });
+}
 export function remoteOutput(json: string): string {
-  const input = JSON.parse(json) as { operation: 'consume' | 'flush' | 'headers'; headers?: Record<string, string>; endpointURL?: {protocol:string;hostname:string}; state?: OutputState;
+  const input = JSON.parse(json) as { operation: 'consume' | 'flush' | 'headers' | 'observation' | 'restore'; observation?: OpenRouterObservation; headers?: Record<string, string>; endpointURL?: {protocol:string;hostname:string}; state?: OutputState;
     value?: EventSourceDataInterface & NonStreamingResponse & { error?: unknown }; streaming?: boolean };
   const parser = new ThinkTagParser();
   const state: OutputState = input.state ?? { text: '', reasoning: '', think: parser.checkpoint() };
   parser.restore(state.think);
   let finished = false;
-  if (input.operation === 'headers') {
+  if (input.operation === 'restore') {
+    // Rehydrate the same parser state without flushing an incomplete think tag.
+  } else if (input.operation === 'headers') {
+    captureGenerationId(state, input.headers?.['x-generation-id']);
     state.observeUsage = !!input.endpointURL && isOpenRouterURL(input.endpointURL);
     if (state.observeUsage) state.observation = { ...state.observation, ...observeOpenRouterHeaders({ get: name => input.headers?.[name.toLowerCase()] ?? null }) };
+  } else if (input.operation === 'observation') {
+    if (state.observeUsage) state.observation = { ...state.observation, ...input.observation };
   } else if (input.operation === 'flush') {
     const tail = parser.flush(); state.text += tail.content; state.reasoning += tail.reasoning; finished = true;
   } else if (input.operation === 'consume') {
     const value = input.value;
     if (!value || value.error != null) throw new Error('Remote API error.');
+    captureGenerationId(state, value.id);
     if (state.observeUsage) state.observation = { ...state.observation, ...observeOpenRouterUsage(value.usage) };
     const choice = value.choices?.[0];
     const payload = input.streaming ? choice?.delta : choice?.message;

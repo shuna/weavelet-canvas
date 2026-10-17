@@ -6,6 +6,7 @@ import { ModelOptions } from '@type/chat';
 import type { ProviderId } from '@type/provider';
 import { normalizeConfigStream } from '@utils/streamSupport';
 import { TITLE_DEFAULTS } from '@utils/chatTitle';
+import { clampSplitPanelRatio } from '@utils/splitPanel';
 import { STORE_VERSION } from './version';
 
 const isSameConfig = (
@@ -272,7 +273,7 @@ export const createConfigSlice: StoreSlice<ConfigSlice> = (set, get) => ({
   splitPanelRatio: 0.5,
   splitPanelSwapped: false,
   setSplitPanelRatio: (ratio: number) => {
-    const clamped = Math.max(0.2, Math.min(0.8, ratio));
+    const clamped = clampSplitPanelRatio(ratio);
     if (get().splitPanelRatio === clamped) return;
     set((prev: ConfigSlice) => ({
       ...prev,

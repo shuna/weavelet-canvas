@@ -1,5 +1,5 @@
-import { insertAssistantPlaceholder, prepareRegenerateState, prepareContinueState, finalizeGenerationState, resolveAssistantPrefillKey } from '../../src/utils/generationPlan';
-import { ensureBranchTreeState, switchActivePathState } from '../../src/store/branch-domain';
+import { insertAssistantPlaceholder, prepareRegenerateState, prepareContinueState, finalizeGenerationState, resolveAssistantPrefillKey, retryTarget, type SubmitMode } from '../../src/utils/generationPlan';
+import { ensureBranchTreeState, removeNodeState, switchActivePathState } from '../../src/store/branch-domain';
 import { materializeActivePath } from '../../src/utils/branchUtils';
 import { resolveContent, type ContentStoreData } from '../../src/utils/contentStore';
 import { diffJSONChanges } from '../../src/utils/jsonChanges';
@@ -7,9 +7,10 @@ import { withEditingRuntime } from './editing';
 import type { BranchEditCapture, BranchHistoryState } from '../../src/utils/branchHistory';
 import type { ChatInterface, ContentInterface } from '../../src/types/chat';
 
-type Plan = { targetNodeId:string; messageIndex:number; activePath:string[]; requestPath:string[]; prefillKey:string };
+type Plan = { targetNodeId:string; messageIndex:number; activePath:string[]; requestPath:string[]; prefillKey:string;
+  submitMode:SubmitMode; insertIndex:number|null };
 type Input = {operation:'prepare'|'finalize';chat:ChatInterface;contentStore:ContentStoreData;viewingPath:string[];
-  action?:'append'|'regenerate'|'continue';nodeID?:string;parts?:ContentInterface[];plan?:Plan;newIDs?:string[];now:number};
+  action?:'append'|'regenerate'|'continue'|'retry';nodeID?:string;parts?:ContentInterface[];plan?:Plan;newIDs?:string[];now:number};
 export function generationPlan(json:string,capture?:BranchEditCapture):string {
   const input=JSON.parse(json) as Input;
   const before={chat:input.chat,contentStore:input.contentStore};
@@ -26,7 +27,19 @@ export function generationPlan(json:string,capture?:BranchEditCapture):string {
     let plan=input.plan;
     if(input.operation==='prepare'){
       let mode:'append'|'midchat'='append',index:number|null=null;
-      if(input.action==='regenerate'||input.action==='continue'){
+      if(input.action==='retry'){
+        if(!plan || (plan.submitMode!=='append' && plan.submitMode!=='midchat'))throw Error('Missing retry plan.');
+        const target=retryTarget(state.chats[0],plan.submitMode,plan.insertIndex,
+          {targetNodeId:plan.targetNodeId,requestPath:plan.requestPath});
+        if(target.status!=='ready')return JSON.stringify({status:target.status,changes:[]});
+        mode=plan.submitMode;index=plan.insertIndex;
+        if(target.removeIndex!==null){
+          const removed=removeNodeState(state.chats,{chatId:isolated.chat.id,nodeId:plan.targetNodeId},state.contentStore);
+          if(removed.status!=='updated')return JSON.stringify({status:removed.status,changes:[],...('blockedNodeIds'in removed?{blockedNodeIds:removed.blockedNodeIds}:{} )});
+          capture?.(removed.historyBase as BranchHistoryState,removed);
+          state={chats:removed.chats,contentStore:removed.contentStore};
+        }
+      }else if(input.action==='regenerate'||input.action==='continue'){
         if(input.nodeID===undefined)throw Error('Missing generation target.');
         const nodeId=wasFlat&&input.nodeID.startsWith('message-')?input.nodeID.slice(8):input.nodeID;
         const target={chatId:isolated.chat.id,nodeId};
@@ -39,7 +52,8 @@ export function generationPlan(json:string,capture?:BranchEditCapture):string {
       const prepared=insertAssistantPlaceholder(state.chats,0,mode,state.contentStore,index);
       state={chats:prepared.updatedChats,contentStore:prepared.contentStore};
       const activePath=state.chats[0].branchTree!.activePath;
-      plan={targetNodeId:prepared.targetNodeId,messageIndex:prepared.messageIndex,activePath:[...activePath],requestPath:activePath.slice(0,prepared.messageIndex),prefillKey};
+      plan={targetNodeId:prepared.targetNodeId,messageIndex:prepared.messageIndex,activePath:[...activePath],requestPath:activePath.slice(0,prepared.messageIndex),prefillKey,
+        submitMode:mode,insertIndex:index};
     }else if(input.operation==='finalize'){
       if(!plan||!Array.isArray(input.parts))throw Error('Missing generation result.');
       // No stream output leaves Web's original empty placeholder untouched.

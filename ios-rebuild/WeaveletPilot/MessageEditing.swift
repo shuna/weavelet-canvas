@@ -2,7 +2,7 @@ import Foundation
 
 enum MessageSaveMode: String { case overwrite, branch, append, insert }
 
-enum MessageGenerationOperation: String { case append, regenerate; case fromHere = "continue" }
+enum MessageGenerationOperation: String { case append, regenerate, retry; case fromHere = "continue" }
 struct MessageGenerationDraft {
     let chatID: String
     let nodeID: String

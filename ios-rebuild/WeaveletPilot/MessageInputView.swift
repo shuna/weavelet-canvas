@@ -62,6 +62,9 @@ struct MessageInputView: UIViewRepresentable {
     let sticky: Bool
     var minimumHeight: CGFloat = 44
     var maximumLines: Int = 8
+    var fillsAvailableHeight = false
+    var textInsets = UIEdgeInsets(top: 10, left: 5, bottom: 10, right: 5)
+    var focused: Binding<Bool>? = nil
     let enterToSubmit: () throws -> Bool
     let submit: (EnterSubmission.Action) -> Void
     let failure: (Error) -> Void
@@ -73,7 +76,7 @@ struct MessageInputView: UIViewRepresentable {
         view.adjustsFontForContentSizeCategory = true
         view.backgroundColor = .clear
         view.textColor = .label
-        view.textContainerInset = UIEdgeInsets(top: 10, left: 5, bottom: 10, right: 5)
+        view.textContainerInset = textInsets
         view.layer.cornerRadius = 6
         view.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
         updateUIView(view, context: context)
@@ -86,6 +89,9 @@ struct MessageInputView: UIViewRepresentable {
 
     func sizeThatFits(_ proposal: ProposedViewSize, uiView: MessageInputTextView, context: Context) -> CGSize? {
         guard let width = proposal.width else { return nil }
+        if fillsAvailableHeight, let height = proposal.height, height.isFinite {
+            return CGSize(width:width,height:max(0,height))
+        }
         let fitted = uiView.sizeThatFits(CGSize(width: width, height: .greatestFiniteMagnitude))
         let limit = (uiView.font?.lineHeight ?? 22) * CGFloat(maximumLines) + uiView.textContainerInset.top + uiView.textContainerInset.bottom
         return CGSize(width: width, height: max(minimumHeight, min(fitted.height, limit)))
@@ -119,7 +125,17 @@ struct MessageInputView: UIViewRepresentable {
                 let count = (input.text as NSString).length
                 view.selectedRange = NSRange(location: min(selection.location, count), length: min(selection.length, max(0, count - selection.location)))
             }
+            if let focused = input.focused {
+                if focused.wrappedValue && !view.isFirstResponder && view.window != nil { view.becomeFirstResponder() }
+                else if !focused.wrappedValue && view.isFirstResponder { view.resignFirstResponder() }
+            }
         }
         func textViewDidChange(_ textView: UITextView) { input.text = textView.text }
+        func textViewDidBeginEditing(_ textView: UITextView) {
+            if input.focused?.wrappedValue == false { input.focused?.wrappedValue = true }
+        }
+        func textViewDidEndEditing(_ textView: UITextView) {
+            if input.focused?.wrappedValue == true { input.focused?.wrappedValue = false }
+        }
     }
 }

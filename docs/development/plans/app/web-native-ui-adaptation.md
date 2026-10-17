@@ -1,5 +1,103 @@
 # Web版を基準とした新iOS版のUI調整候補
 
+## 2026-10-15：現行実装からWeb配置へ寄せる修正一覧
+
+今回の基準は統合branch `7391143c`。以下はソース比較による修正計画で、最新画面の実測結果ではない。過去節は経緯として保持するが、配置については本節を優先する。**通常表示はWebの配置・読み順・操作位置・表示密度を再現する。nativeのカードやFormへ置き換えるだけでは完了にしない。** 任意の左右吹き出し表示は別スタイルとして保持する。
+
+位置が同じでも、クリックで大きな設定sheetが開くなど、操作の粒度が異なる場合は修正対象とする。業務処理・共有API・保存形式は本UI変更で作り直さない。
+
+2026-10-17接続状況：U01/U03/U06/U07/U10/U11は承認済みiPhone mockを基準に本番handlerへ接続。U02は既存ProviderModelsViewを選択入口として再利用。U13の現在会話検索はバー直下へ配置し、既存ChatSearch.results/state.navigateを再利用する。表示経路/全分岐/スターを選べ、全体検索sheetの既存対象切替は保持。U13全体（sidebar/graphそれぞれへの最終配置）や全UI項目の完成を意味しない。
+
+### 寸法調整を先に行う
+
+WebのCSS値は参照値であり、CSS pxからptへの全画面一律倍率を定めない。本文幅、左右余白、行高、アイコンの見た目、操作間隔を個別に合わせる。iPhone向けのタッチ判定とCatalystのポインタ操作は区別する。タッチ判定を残したまま余白やアイコンを調整できるが、判定領域の重なりで密度を稼がない。画面全体へのscaleEffect、文字だけの強制縮小、本文を画像化する方式は使わない。
+
+### 2026-10-17：独立Astraによる視覚的統一感の比較
+
+以下は現sourceとWeb counterpartの比較に基づく候補。今回の実画面・contrast比の測定結果ではなく、採用済みの配置を変える承認でもない。文字を薄くする方法ではなく、背景・面・文字階層・強調の数を調整する。上位5項目を先に明暗両モードで確認する。
+
+| 優先 | 対象と根拠（native / Web） | 最小修正候補 |
+| --- | --- | --- |
+| 1 | ProviderModelsView:48、PromptPickerView:33 / ProviderModelList:240、PromptLibraryMenu:389 | 一覧Buttonの操作色が名称全体へ掛からないようタイトルprimary・補足secondary。行全体の操作を維持 |
+| 2 | WeaveletPilotAppの本文・composer背景 / Message/View/UnifiedMessageView:55、EditView:19 | 会話の土台と本文/入力面を一組で明度調整。文字primaryを維持し、暗色の強すぎるカード差を抑える。実画面比較が必要 |
+| 3 | BranchEditorView:242,355 / BranchEditor/nodes/MessageNode:77、ConversationHeaderNode:14 | アプリ内ノードのregularMaterialを不透明中立色へ、会話見出しをsubheadlineへ。active境界・状態表示は保持 |
+| 4 | WeaveletPilotAppのConversationLibraryView / Menu/ChatHistory:19–21 | 会話名primary・検索入口icon secondary。選択背景、ellipsis、44pt判定は保持 |
+| 5 | ChatSearchViewのresultRows / Chat/ChatContent/ChatFindBar:582 | 繰返す会話名をsubheadline medium、snippetをsubheadlineへ。primary/secondaryと44pt判定を維持 |
+| 6 | WeaveletPilotAppのinlineEditor / UnifiedMessageView:55、EditView:19 | 青枠はfocus時のみ、非focus時は中立境界。保存主操作の強調は保持し、disabled時の見え方を確認 |
+| 7 | ConversationEvaluationView:94–108、ConversationSummaryView:104 / EvaluationModal:260,583、BubbleSummaryView:20 | 繰返す種別/提案見出しをsubheadline semiboldへ。本文をcaptionへ落とさず、数値・警告・状態は保持 |
+| 8 | WeaveletPilotAppのcomposer送信icon / EditViewButtons:248、main.css:270 | 描画寸法のみbody〜20pt相当へ。主操作の色と44pt判定、送信/停止の区別を保持 |
+| 9 | PromptLibraryView:120–137 / PromptLibraryMenu:106,136 | 項目Sectionの余白・100pt以上Editorの最小高さを内容に応じて抑える。編集・保存構造を変えない |
+| 10 | DisplaySettingsView、ChatConfigView:69,99,242 / SettingsMenu:269–294 | アプリ追加の繰返すheadlineだけsubheadlineへ。必要な子画面はinline title、Dynamic Typeと標準Form/Pickerは維持 |
+| 11 | GoogleSyncSettingsView:123–152、FolderSyncSettingsView:148–182 / GoogleSync/FileSystemSync:43、GoogleSyncProgress:20 | dataset・補足・状態説明をfootnoteへ統一。競合/復旧/破壊操作の赤と主操作を弱めない |
+
+native根拠は`ios-rebuild/WeaveletPilot/`、Web根拠は`src/components/`（main.cssのみsrc直下）。行番号は実装前監査時点。標準navigation/toolbar、認証/ファイルpicker/確認dialogのOS外観は維持し、アプリ内の内容面と区別する。Avatarの赤/緑・30ptはWebと対応するため無彩色化の根拠は薄い。アイコンタブ下線、承認済み配置と44pt判定も維持する。
+
+後続の実装：候補1–8と10の局所的な色・文字階層を反映。本文の土台はsecondarySystemBackground、本文/入力/assistant吹き出し/graph node面はtertiarySystemBackgroundへ揃え、システムの明暗適応を使う。主文字primary・補足secondary、編集枠はfocusでaccent/非focusでseparator、保存不可の主ボタンは中立色とし、有効条件は変更しない。送信glyphはDynamic Type対応title3、判定44ptを維持。標準子画面のtitleはinlineに揃えた。候補9のEditor高さと11の同期説明の階層は未変更。全画面の最終視覚受入やコントラスト比測定の完了を意味しない。
+
+実画面でButton内のprimary/secondaryにはtintの青/薄青が残ったため、モデル/プロンプト/検索結果/会話名の対象文字だけ動的UIColor.label/secondaryLabelへ明示修正した。全Buttonのtintは変更しない。Catalyst隔離画面の明暗両モードでprompt名と補足が中立色へ変わること、本文と背景、編集の保存可否を視認確認した。数値のcontrast比・最大文字サイズ・実機の目視は未確認。
+
+U21の後続接続：末尾左の補助Menuへ一括折畳/展開と既存undo/redoを追加。WebのsetChatNodeMapStateを直接共有し、Swiftへ一括対象の規則を複製しない。固定隅配置・全スクロール方向を含むU21全体の完了ではない。Catalystの追加接続testとWeb実caller比較は成功、独立Astraは新規なし。今回の実画面操作はMacロックのため未確認。
+
+U14の後続接続：左右/上下splitへ保存済み比率・入替、divider drag、均等復帰、VoiceOver調整を実装。Web setterとnativeで同一clampを共用し、pane最小寸法だけnative表示へ適応。drag終了時のみatomic保存し、編集中本文・他jobを破棄しない。Web/Catalyst関連testと独立Astraは完了、実画面のdrag/入替は未確認。リンク挙動や全UI受入の完了ではない。
+
+U14のリンク接続：Web同様にsplit中の本文click→graph focusをruntime Toggleで制御し、OFFでもgraphからchatへの明示選択は保持。native本文tapと44pt scopeボタン、共有履歴、非同期配置後のviewport focusへ接続。compact単一表示では連動を発火させない。Catalyst関連6件と独立Astraは完了、実画面のtap/文字選択/リンク干渉は未確認。
+
+U13の後続接続：sidebar内の名前/全本文検索とgraph上部の表示chat限定検索へ既存検索UI/共有処理を再利用。graph結果は表示順と元chatIndexを保持し、現在chatを切り替えず対象path更新とgraph focusへ接続。検索履歴・結果の前後移動・graph検索時の自動初回遷移、全UI手動受入は残る。
+
+U13の履歴/結果移動接続：Web由来の共有helperで3種の履歴rootを分離保存し、履歴Menu/消去・前後移動・graph初回結果への自動遷移を追加。実nodeIDなしのlibrary/legacy結果も既存resultIDで選択を保持。Web/Catalyst関連testと独立Astraは完了。Web ChatFindBarのDOM内一致箇所単位の強調/移動、実画面と支援技術の手動受入は残る。
+
+U15の後続実装：共有branchLayoutの座標は変更せず、nativeの表示窓をUIScrollViewのpan/zoomへ接続した。Webと同じ0.1–2倍の範囲とfit余白を基準に、初期全体表示、拡大/縮小、全体表示へ戻す、現在の経路末尾ノードへ移動を追加。操作列は44ptで図と独立、図は拡大できる。同じ表示会話の描画更新では表示窓を保ち、古い描画は操作不可とする。node選択後の既存chat遷移は変更しない。range選択/drag配置/mini map等を含むU15全体の完了を意味しない。
+
+独立Astraによる現行差分の再整理では、修正済み項目を除いた残件を以下の2件とした。いずれもソース比較による懸念で、実画面での問題確定ではない。通常文字を薄くする、全画面へ一律scaleを掛ける、標準navigation/toolbarを独自部品へ置き換える方法は採らない。
+
+| 対象 | 残る修正候補 | 保持する条件 |
+| --- | --- | --- |
+| PromptLibraryView.swift:120–123 / Web PromptLibraryMenu.tsx:106,136 | 独立Sectionと最小100ptのEditorが短文でも大きな面を占める。短文・非focus時の高さを抑え、編集中は必要な高さを確保する | ラベルPicker、削除、入力保持と編集のしやすさ |
+| FolderSyncSettingsView.swift:149–150 / Web FileSystemSync.tsx:43、GoogleSyncProgress.tsx:20 | 通常状態のbodyとdatasetのcaptionを、補助情報としてfootnoteへ揃える | 操作ボタン、競合・復旧説明、エラーの読みやすさと意味のある強調 |
+
+この再整理で新しい具体的な配色・コントラスト不具合は静的確認上なし。実測コントラスト比、最大文字サイズ、全画面の明暗目視を完了した判定ではない。今回の監査整理ではアプリコード変更・ビルド・端末インストールは行わない。
+
+後続実装で上記2件を反映した。プロンプト本文は非focus時60pt・focus時140ptをDynamic Typeに追従させ、標準TextEditor内で長文をスクロールする。FormではminHeightのみだと大きく拡張されたため、実画面確認に基づきheight指定へ変更。子画面タイトルもinlineへ揃えた。フォルダー同期の通常状態・datasetはfootnote、ロック解除・競合・復旧・失敗の状態説明はbodyを維持。本文Binding、共有処理、保存・同期契約は変更していない。Catalystビルド成功、隔離した明色画面で本文欄の拡張/縮小、複数行入力のfocus移動時保持、保存せず戻った後の元本文維持を確認。独立Astra限定監査は新規なし。文字最大化・暗色の今回の2画面・実機は未確認。iPhone Airは接続状態unavailableで導入していない。
+
+| ID・順序 | 現行nativeの差と主な根拠 | 修正方法 | 変更の種類 |
+| --- | --- | --- | --- |
+| U01・1 | mainの標準navigation barとconversationBarが別段。戻る/進むは「履歴」Menu内（WeaveletPilotApp.swift:80–141,336–388） | Webと同じ上部領域に履歴、会話名、左モデル・右表示選択を配置。戻る/進むを直接操作へ戻す。狭幅でのみWeb mobileの段構成へ寄せる。OSの戻る/一覧表示とアプリ内履歴は意味を区別 | 配置 |
+| U02・1 | モデル名を押すとChatConfigView全体をsheet表示（同:346–357） | 同じ位置からモデル選択のMenu/Popoverへ直接到達。生成設定は隣接した独立入口へ。長いモデル名だけ省略し選択先で全文を確認 | 操作粒度 |
+| U03・1 | chat/branchの独立ボタンとレイアウトMenuは各44pt（同:358–388） | Webの選択状態・左右の順序・間隔に合わせる。排他的なchat/branchは小さな選択群、分割方向/入替/リンクは隣接Menuへ。利用可能な機能だけを表示 | 寸法＋配置 |
+| U04・1 | streamの外側20pt、行間20pt、最大幅900。本文にさらに左右12pt（同:435–470,1007–1040） | Webの全幅行と中央columnを分け、sidebar有無・pane幅に応じた本文最大幅へ。Webの外側左右28pxと内側16/20pxを比較の出発点にし、nativeの余白の足し方を合わせる。狭幅で読む幅が不足する場合だけ調整。本文・役割アイコン・操作列・composerの共通端を揃える | 主に寸法 |
+| U05・1 | 本文は単一のsecondarySystemBackgroundの角丸16pt面。Webの全幅交互背景/行境界との階層が違う（同:1031–1040） | Webの全幅交互背景＋中央本文の角丸面という二層を再現。Web自身にも角丸本文面があるため、角丸を一律撤去しない。内側padding・薄い輪郭/陰影・省略/保護の強調を合わせる。左右吹き出しは別スタイルとして保持 | 装飾 |
+| U06・1 | 役割tile30pt、役割はheadline。star/pinが役割の横（同:793–821） | Webのアバター・役割選択の比率、文字の太さ、baselineに合わせる。ヘッダー全高をアイコンの判定領域と混同しない。役割/属性の状態表示は保持 | 主に寸法 |
+| U07・1 | 原文Menuと評価/除外/保護の群がViewThatFitsで複数段になる（同:825–905,987–1006） | Web同様に左役割・右表示/状態。先にアイコン寸法・群内間隔・ラベル幅を調整し、一行に収まる幅では一行を維持。次にヘッダー内の二段化。全状態を単一の…へ隠すのは最終手段。無理なカプセル化はしない | 寸法→配置 |
+| U08・1 | 本文下は編集/再生成/上下移動等を一つの…Menuに収容（同:769–790,961–978） | Webの左分岐・中央主操作・右上下移動を復元。頻用の編集/再生成/コピーを直接表示し、削除や範囲操作を補助Menuへ。hover表示はtouchではタップ/選択状態へ置換 | 操作の露出 |
+| U09・1 | 分岐番号が「分岐 n / m」かつ左右に44ptボタン（同:930–959） | Webに近い簡潔なn/mと矢印へ。見た目の幅と余白を詰め、判定領域は独立させる。フッター高を不必要に増やさない | 主に寸法 |
+| U10・1 | composerは外側20pt、内側12pt、役割/本文/操作を積んだ独自の面（同:487–594） | Webと同じ本文幅・役割見出し・入力面・左補助/右送信停止の配置にする。空入力の高さは内容と文字サイズから決定。添付は本文に近接、キーボードにはsafe areaで追従 | 寸法＋配置 |
+| U11・2 | 編集は常にFormのsheet、本文最低220pt（同:1645–1720） | 通常編集はWeb同様に対象本文内で行い、同じ位置に保存/分岐保存/生成/取消を置く。既存draft・保存handler・IME adapterを再利用。長文の拡大編集のみ明示操作でsheetへ | 表示構造 |
+| U12・1 | サイドバーは標準List、44pt行、各行に常設…、作成系はOS toolbar（同:1100–1200,1270–1330） | Webの上部新規/検索、中央folder/chat、下部同期/ファイル/設定を再現。行inset・階層indent・font・選択背景を揃え、CatalystはListの余白と行高を詰める。touchはswipe/context menuと明示入口を併用 | 主に寸法＋配置 |
+| U13・2 | 全体/本文/分岐検索を共通の検索sheetへ集約（ChatSearchView.swift:33–68） | Webと同じ検索文脈に欄と結果を配置。全体検索はsidebar、会話内はchat、node検索はgraphの検索帯。検索処理と到達handlerは既存を共用。狭幅で必要な結果一覧だけsheetへ | 表示構造 |
+| U14・2 | 左右/上下splitはHStack/VStack＋固定Divider（WeaveletPilotApp.swift:391–414） | Webと同じ方向・pane順・入替・リンク入口と可変divider。最小pane寸法を設ける。狭幅の単一表示への適応では元の分割選択を保持。composerはchat pane内に維持 | レイアウト挙動 |
+| U15・2 | graphは上部「表示する会話」とScrollView＋pinch中心（BranchEditorView.swift:152–205） | Webの隅ごとの操作群、拡縮/全体表示、選択状態・node外観・edge強調へ合わせる。グラフ自体のscaleは適用可。touchのpan/pinch・長押しを使い、ポインタと支援技術用の直接操作も設ける | 寸法＋不足UI |
+| U16・2 | 評価/要約は常にNavigationStack＋Formの別sheet（ConversationEvaluationView.swift:28,ConversationSummaryView.swift:44） | Webのバブル内の状態/結果表示を先に再現。詳細は同位置にanchorしたPopover、狭幅はsheet。全設定を開かず現在の評価・候補・採用状態を把握可能にする | 操作粒度 |
+| U17・3 | 設定は縦のFormカテゴリと複数sheetが中心（WeaveletPilotApp.swift:226–273,ChatConfigView.swift:182） | Webのカテゴリ順と項目群をそのまま使う。広幅はカテゴリ左/内容右、狭幅は標準NavigationStackで同カテゴリへ。モデル設定は既存fieldを2列/同一行へ組み直し、不要なForm行間を減らす | 寸法＋配置 |
+| U18・3 | モデル管理・prompt管理も標準一覧/フォーム中心 | Webと同じ名前/用途/状態/主操作の読み順へ揃える。広幅の横並びを保ち、狭幅のみ縦積み。OSファイル/写真picker、共有、認証は標準UIを維持 | 寸法＋配置 |
+| U19・1 | 本文WK側17pt、native body/headline/captionが混在（MarkdownTextView.swift:32,MessagePartView） | Webに合わせ本文/役割/補助文字/コード/表の比率と行間を揃える。native textとWKを同じ文字サイズ設定へ接続し、Dynamic Typeを保持。独自の一律縮小はしない | 主に寸法 |
+| U20・3 | SF Symbolsの意味は対応してもWebの図形・状態色・選択面と差がある | 既存Web由来の役割/provider assetが利用可能なら再利用。OS固有操作はSF Symbols。通常/選択/除外/保護/disabledの視覚差を揃え、文字と読み上げでも状態を示す | 装飾 |
+| U21・1 | Webの右下4方向移動、左下undo/redo・全折畳等と同じ固定操作群がない | 同じ隅へスクロール操作と履歴/折畳を復元。chat paneの内側に置きcomposer/キーボード/本文末尾を覆わない。Web40px丸ボタン/間隔6pxは見た目の基準、touch領域は別に調整 | 配置＋不足UI |
+| U22・2 | 折畳は本文操作Menu内。Webの行左端の折畳入口がない（同:776,1023） | Web同様に行左端へ小さなchevronと判定領域を設ける。展開/折畳で本文の横位置を動かさず、状態と対象を読み上げる | 配置 |
+
+Web照合根拠：上部は `src/components/Chat/ChatViewTabs.tsx:260,460`（min-height40px、左右8px、tab icon14px、700px未満でラベル省略）、mobileは `src/components/MobileBar/MobileBar.tsx:30`（一覧→履歴→タイトル→検索→新規）、sidebarは `src/components/Menu/Menu.tsx:81`（可変幅、mobile75%）。本文は `src/components/Chat/ChatContent/Message/Message.tsx:168` のmax-w-3xl/4xl/5xl条件と全幅背景・px-7/py-6/md:py-8、本文面は `View/UnifiedMessageView.tsx:54` のrounded-2xl/px-4/md:px-5。固定操作は `ScrollToBottomButton.tsx:17` / `CollapseAllButtons.tsx:36`、会話内検索は `ChatFindBar.tsx:461`、graphは `src/components/BranchEditor/BranchEditorCanvas.tsx:833` を参照する。
+
+忠実な再現にも例外を明記する。現Webの最小84px本文面と末尾144px空白、hover専用操作はそのまま持ち込まない。過去のユーザー指示に従い、短文に意味のない縦空白を作らず、touchで直接到達できるようにする。Webのcomposerはscroll末尾にある。2026-10-16のユーザー指示によりiOSモックも末尾配置へ変更し、常時固定をやめる。キーボード表示時は標準safe areaとフォーカス対象へのスクロールを利用する。
+
+### 実装するまとまりと受入
+
+1. 上部・sidebar・stream・composer・本文操作を一式で調整する（U01–10、U12、U19、U21）。先に余白/幅/文字/アイコンを合わせ、その後に操作入口を戻す。細かい寸法変更ごとのテスト/監査は設けない。
+2. 本文内編集・検索・split/graph・評価/要約・折畳を整える（U11、U13–16、U22）。モーダル化によるWebとの文脈差を減らす。既存共有処理を再実装しない。
+3. 設定・資産管理・装飾を揃える（U17–18、U20）。機能の未対応はUIだけで解消したと扱わない。
+
+比較は同じ合成会話・文字サイズ・表示幅・選択状態で行う。通常表示で上部の順序、本文端、1画面の情報量、各操作の場所と到達手数を確認する。狭幅/広幅/文字拡大/キーボードで欠落やはみ出しを確認し、差分画像のための専用管理基盤は追加しない。通常のビルドと動作確認はCatalyst。iPhoneへの導入・起動・目視確認はユーザーの明示指示がある時だけ行う。各機能一式の独立Astra監査を維持する。
+
+本節作成ではUI実装・ビルド・端末操作は行っていない。寸法候補は実測による確定値ではない。
+
 2026-10-12。状態は調査に基づく変更案。対象はHEAD `02d5e8e7`と調査時の作業ツリー。未コミットのWeb UI変更を含むため、実装前に対象symbolと差分を再確認する。
 
 iOS版はUIに限らず全面的に作り直せる。旧iOSのクラス構造、画面構造、機能不足を新実装の制約にしない。Webの基本構成と操作領域の位置を基準に、その内部配置とコントロールをネイティブに合わせる。本書の初回成果物は調査と計画。以後、ユーザー承認済みの最小チャット表示からCatalystで実装を進める。
@@ -131,3 +229,17 @@ CatalystのFAKE実画面で右上操作、重複行消失、本文端、固定�
 ## 2026-10-13：会話サイドバー
 
 wideではWebと同様に会話/フォルダー一覧を左、チャットと固定入力を右へ配置。compactは標準NavigationSplitViewのpreferredCompactColumnで一覧/詳細に遷移する。既存の選択・作成・複製・改名・移動・削除・フォルダー処理を再利用し、0件選択の操作footerとwideの重複controlを除いた。FAKE Catalystでwide配置、タイトルと選択時controlsを視覚確認済み。compact実機・最大文字サイズ・並替え・分岐キャンバス表示は未確認/未実装として続ける。
+
+### 2026-10-17：左右ペインとツールバー
+
+ユーザー指定の `/Users/suzuki/Documents/XcodeProjectTahoe/3column/3column/ThreePaneView.swift` を参照し、通常幅はNavigationSplitViewのcolumnVisibilityだけで左ペインを制御、compact幅は一覧sheet、右は標準inspectorとした。preferredCompactColumnとの二重制御を除去。左の閉じる操作は一覧左端、再表示は本文左端へ配置し、自動sidebarToggleとの重複を除く。常設「選択」は削除し、会話行メニューの「会話を選択」から複数選択、選択中だけ「完了」を表示する。新規会話の重複した本文上部ボタンも除き、一覧の新規操作は維持する。
+
+右ペインは既存chatConfigDraftを読取り、モデル/provider/実行先、最大出力/temperature/top-p/stream/推論/verbosityを表示する。未知値の再構築・保存・鍵の表示はしない。編集は既存ChatConfigViewへ接続し、compactの提示競合を避けてinspector自身からsheetを出す。一覧sheetから親の設定/import/exportを要求する場合もonDismiss完了後に提示する。独立Astraの提示元に関するP2を修正し、限定再確認は新規なし。
+
+最終Catalyst buildと差分確認成功（`/private/tmp/weavelet-sidebar-inspector-final.log`）。実Catalyst画面で常設選択の不在と「会話」見出し、左右開閉、右を保持した左の閉→再表示、数値プロパティ表示、inspector→生成設定sheet→取消を確認した。compact sheetの実操作・回転・VoiceOverは未確認。iPhone照会/導入は行わず、元の全機能互換性goalの一時停止も維持する。
+
+### 2026-10-17：編集時の高さとフローティング操作
+
+WebのUnifiedMessageView/ContentActionsの実配置を参照。表示本文と非表示の操作列を寸法の基準として残し、同じ領域へ編集欄を重ねる。本文の最小高はWeb同様84ptとし、編集欄は割り当てた高さを使用、長い入力は欄内でスクロールする。編集開始・再生成・メニューと編集中の操作列は、各バブルの範囲内でチャット表示領域下端に追従する。画面全体の固定フッターにはしない。
+
+Catalyst build、既存MessageInputTests 6件、差分確認が成功。独立Astraが指摘した、編集中だけ分岐操作を除いて基準高を変えていた条件を修正し、限定再監査は新規なし。実Catalystで表・コード・数式・画像を含むバブルの編集開始→取消の外枠と次メッセージ位置が一致し、スクロール中の操作バーが表示領域内に追従することを確認。保存は行っていない。iPhoneキーボード表示中、compact幅、Dynamic Type、VoiceOverは未確認。

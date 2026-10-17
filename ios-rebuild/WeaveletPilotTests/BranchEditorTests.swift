@@ -1,7 +1,66 @@
 import XCTest
+import SwiftUI
 @testable import WeaveletPilot
 
 final class BranchEditorTests: XCTestCase {
+    @MainActor func testNativeViewportFitsZoomsAndPreservesManualPositionAcrossContentUpdates() {
+        let controller = BranchGraphViewportController(content:Text("graph"))
+        controller.loadViewIfNeeded()
+        controller.view.frame = CGRect(x:0,y:0,width:393,height:600)
+        let canvas = CGSize(width:900,height:1200)
+        controller.update(content:Text("graph"),size:canvas,request:nil,animated:false)
+        controller.viewDidLayoutSubviews()
+        let fit = controller.scrollView.zoomScale
+        XCTAssertLessThanOrEqual(canvas.width * fit,393)
+        XCTAssertLessThanOrEqual(canvas.height * fit,600)
+        XCTAssertGreaterThanOrEqual(fit,0.1)
+        controller.update(content:Text("graph"),size:canvas,request:.init(action:.zoomIn),animated:false)
+        let zoomed = controller.scrollView.zoomScale
+        XCTAssertGreaterThan(zoomed,fit)
+        controller.update(content:Text("new labels"),size:canvas,request:nil,animated:false)
+        XCTAssertEqual(controller.scrollView.zoomScale,zoomed,accuracy:0.0001)
+        controller.update(content:Text("longer graph"),size:CGSize(width:950,height:1300),request:nil,animated:false)
+        XCTAssertEqual(controller.scrollView.zoomScale,zoomed,accuracy:0.0001)
+        controller.update(content:Text("graph"),size:canvas,request:.init(action:.fit),animated:false)
+        XCTAssertEqual(controller.scrollView.zoomScale,fit,accuracy:0.0001)
+    }
+
+    @MainActor func testNativeViewportDefersInitialFitAndFocusUntilSizedAndClampsZoom() {
+        let controller = BranchGraphViewportController(content:Text("graph"))
+        let canvas = CGSize(width:1200,height:1800)
+        controller.update(content:Text("graph"),size:canvas,request:.init(action:.focus(CGPoint(x:900,y:1300))),animated:false)
+        controller.view.frame = CGRect(x:0,y:0,width:393,height:600)
+        controller.viewDidLayoutSubviews()
+        XCTAssertEqual(controller.scrollView.zoomScale,1.2,accuracy:0.0001)
+        let center = CGPoint(x:(controller.scrollView.contentOffset.x+393/2)/1.2,
+                             y:(controller.scrollView.contentOffset.y+600/2)/1.2)
+        XCTAssertEqual(center.x,900,accuracy:1)
+        XCTAssertEqual(center.y,1300,accuracy:1)
+        for _ in 0..<30 { controller.update(content:Text("graph"),size:canvas,request:.init(action:.zoomIn),animated:false) }
+        XCTAssertEqual(controller.scrollView.zoomScale,2,accuracy:0.0001)
+        for _ in 0..<40 { controller.update(content:Text("graph"),size:canvas,request:.init(action:.zoomOut),animated:false) }
+        XCTAssertEqual(controller.scrollView.zoomScale,0.1,accuracy:0.0001)
+    }
+
+    @MainActor func testNativeViewportCentersEdgeNodeAfterAnimatedZoom() async throws {
+        let controller = BranchGraphViewportController(content:Text("graph"))
+        let window = UIWindow(frame:CGRect(x:0,y:0,width:393,height:600))
+        window.rootViewController = controller
+        window.makeKeyAndVisible()
+        defer { window.isHidden = true }
+        let canvas = CGSize(width:1200,height:1800)
+        controller.update(content:Text("graph"),size:canvas,request:nil,animated:false)
+        controller.view.layoutIfNeeded()
+        let edge = CGPoint(x:1180,y:1780)
+        controller.update(content:Text("graph"),size:canvas,request:.init(action:.focus(edge)),animated:true)
+        try await Task.sleep(for:.milliseconds(600))
+        XCTAssertEqual(controller.scrollView.zoomScale,1.2,accuracy:0.01)
+        let center = CGPoint(x:(controller.scrollView.contentOffset.x+controller.scrollView.bounds.width/2)/controller.scrollView.zoomScale,
+                             y:(controller.scrollView.contentOffset.y+controller.scrollView.bounds.height/2)/controller.scrollView.zoomScale)
+        XCTAssertEqual(center.x,edge.x,accuracy:2)
+        XCTAssertEqual(center.y,edge.y,accuracy:2)
+    }
+
     private func fixture() throws -> OrderedJSON {
         let root = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
         return try OrderedJSON.decode(Data(contentsOf: root.appendingPathComponent("tests/fixtures/web-native/io-corpus.json"))).required("exportV3")

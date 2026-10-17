@@ -3,7 +3,21 @@ import { materializeActivePath, resolveRegenerateTarget } from './branchUtils';
 import { addContent, releaseContent, type ContentStoreData } from './contentStore';
 import { appendNodeToActivePathState, insertMessageAtIndexState, removeNodeState, replaceNodeAndPruneState, resolveNodeTarget, cloneChatAt } from '@store/branch-domain';
 
-type SubmitMode = 'append' | 'midchat';
+export type SubmitMode = 'append' | 'midchat';
+export function retryTarget(chat: ChatInterface, mode: SubmitMode, insertIndex: number | null,
+                            expected?: { targetNodeId: string; requestPath: string[] }) {
+  if (mode === 'midchat' && (insertIndex === null || !Number.isInteger(insertIndex) || insertIndex < 0)) return { status: 'invalid' as const };
+  const index = mode === 'append' ? chat.messages.length - 1 : insertIndex!;
+  const nodeId = chat.branchTree?.activePath[index];
+  if (expected) {
+    const path = chat.branchTree?.activePath;
+    if (!path || nodeId !== expected.targetNodeId || expected.requestPath.length !== index ||
+        expected.requestPath.some((id, position) => path[position] !== id) || chat.messages[index]?.role !== 'assistant') {
+      return { status: 'stale' as const };
+    }
+  }
+  return { status: 'ready' as const, removeIndex: chat.messages[index]?.role === 'assistant' ? index : null };
+}
 export const createAssistantPlaceholder = (): MessageInterface => ({
   role: 'assistant',
   content: [{ type: 'text', text: '' }],

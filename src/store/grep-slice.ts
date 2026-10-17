@@ -2,6 +2,7 @@ import { StoreSlice } from './store';
 import type { SearchResult } from '@utils/branchSearch';
 import { grepChats } from '@utils/chatSearch';
 import { ContentStoreData } from '@utils/contentStore';
+import { saveSearchHistory } from '@utils/searchState';
 
 export interface GrepResult {
   chatId: string;
@@ -70,12 +71,8 @@ export const createGrepSlice: StoreSlice<GrepSlice> = (set, get) => ({
   },
 
   saveSidebarSearchHistory: (query) => {
-    const normalized = (query ?? get().grepQuery).trim();
-    if (!normalized) return;
-    const nextHistory = [
-      normalized,
-      ...get().sidebarSearchHistory.filter((entry) => entry !== normalized),
-    ].slice(0, 20);
+    const nextHistory = saveSearchHistory(get().sidebarSearchHistory, query ?? get().grepQuery);
+    if (nextHistory === get().sidebarSearchHistory) return;
     set({ sidebarSearchHistory: nextHistory });
   },
 
@@ -84,12 +81,8 @@ export const createGrepSlice: StoreSlice<GrepSlice> = (set, get) => ({
   },
 
   saveChatFindHistory: (query) => {
-    const normalized = query.trim();
-    if (!normalized) return;
-    const nextHistory = [
-      normalized,
-      ...get().chatFindHistory.filter((entry) => entry !== normalized),
-    ].slice(0, 20);
+    const nextHistory = saveSearchHistory(get().chatFindHistory, query);
+    if (nextHistory === get().chatFindHistory) return;
     set({ chatFindHistory: nextHistory });
   },
 

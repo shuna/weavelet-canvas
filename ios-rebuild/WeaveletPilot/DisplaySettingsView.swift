@@ -79,6 +79,7 @@ struct DisplaySettingsView: View {
             if let errorMessage { Text(errorMessage).foregroundStyle(.red).textSelection(.enabled) }
         }
         .navigationTitle("外観と本文の表示")
+        .navigationBarTitleDisplayMode(.inline)
         .disabled(state.generation != nil)
     }
 }

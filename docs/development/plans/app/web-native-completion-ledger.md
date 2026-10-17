@@ -846,3 +846,203 @@ a9c2cadaでNativeLocalModerationから既存WKClassifierHost→共有localModera
 変更のない75d8e5b2/3aed0417の成功結果と独立Astraを再利用し、実ブラウザAPIの未確認だけを追加した。専用localhost originで実storage.tsのsaveFile/openDownloadWriter/verifyStoredModel/commitTempFile/listFiles/OpfsFileProvider/getFileEntries/readFile/deleteModelを呼び、nested final・required markerのpartial判定・commit後saved・optional finalの列挙・3byte内容・合成model削除を確認した。Codex In-app BrowserのAXでPASSを確認しtabを閉じ、専用Vite processの終了を確認。実iCloud folder権限・任意モデル実行の証明へ拡張しない。
 
 ログ /private/tmp/weavelet-opfs-browser-result.log、再現HTML /private/tmp/weavelet-opfs-browser-proof.html。HTMLは事前にactualproviderのtuple返却を確認してentry[0]を使用し、常設管理基盤へ追加しない。元作業ツリー内の一時HTMLは取り除いた。通常ユーザーデータ・Google/CloudKit・iPhoneを操作せず、Web source変更や全suiteの反復はない。
+
+## 承認済みiPhone配置への機能接続・第1群（2026-10-16）
+
+既存ChatViewの状態・handlerを再利用し、標準bar、モデル選択、chat/branchアイコン、メッセージ操作、本文内編集、末尾composerを承認済みmockの配置へ合わせた。編集/分岐保存/生成要求/モデル切替は既存共有処理へ接続し、Swiftで業務規則を複製しない。MessageInputViewの既存Enter/IME境界に任意focus Bindingとinsetを追加。親所有draftと元会話照合、保存成功後だけ閉じる動作を維持する。機能未接続mockは別ルートで保持した。
+
+再利用可能な成功結果は編集/保存失敗・保護/モデルraw保持/遅延composer境界4件（`/private/tmp/weavelet-ui-connected-test.log`）と、focus時raw保持・OS入力・編集生成の入力3件（`/private/tmp/weavelet-ui-connected-input-test.log`）。最初の存在しないEnterSubmissionTests指定は0件であり、後者の正しい3件とは区別する。その後のUI配置調整では同じ業務suiteを再実行せず、最終Catalyst build成功（`/private/tmp/weavelet-ui-connected-viewport-build.log`）と差分確認を行った。全I/O・暗号・同期suiteの重複確認は省略する。
+
+隔離clone `com.weavelet.nativepilot.connectedui` はRemoteFixture storeとURLProtocolのFAKEだけを使用した。本文編集中に別会話へ移動してdraft保持/保存無効→元会話へ復帰して保存→再起動後の復元、chat/branch切替、オンラインmodel picker入口を実画面確認。FAKE送信後のuser本文/assistant結果はdiskへ保存され、元の他3会話は全field不変。編集保存の証拠は `/private/tmp/weavelet-ui-connected-20261016/edit-save-result.json`。通常store/Keychain/実クラウドは使用していない。
+
+独立Astraが表示filterで編集対象が消えた際の到達不能をP2として指摘し、実DisplaySettings投影とsummary hidden判定を使うdraft回復欄へ修正。限定再監査はP2解消・新規なし。モデルsheetの状態所有とviewport縮小時scrollの限定確認も新規なし。
+
+CUAの初回click直後typeTextでは先頭欠落を2回観測し、focus確定後の入力は全量保持した。viewport scroll変更ではこの自動操作の欠落は解消せず、修正成功と扱わない。独立Astraは同期draft更新/focus delegate経路に再現可能な古い本文上書きを認めず、原因は未確定。実端末の通常入力・IME・画面keyboardの押上げ/toolbar、最大文字サイズ、VoiceOverは未確認。この群をアプリ全画面の移植完了や実オンライン接続成功とは扱わない。iPhoneへの導入は今回実施せず、指示時のみ行う。
+
+## LAN接続時の導入運用と補助操作群（2026-10-17）
+
+ユーザー指示でAirのLAN接続時は検証済み変更を導入する運用へ変更。前段接続版は署名build/install/launch成功、localNetworkとPID27714を確認（`/private/tmp/weavelet-air-connected-{build,install,launch}.log`）。最初のdevice detailsは接続失敗したが、後続installと接続情報取得が成功したため、一覧のcached availableだけで判断していない。
+
+今回の追加は末尾の上下scroll、既存state.styleへ接続する吹き出しToggle、既存ImageInputView/プロンプト要求のkeyboard toolbar再利用。新業務処理は追加しない。Catalyst実画面で先頭/入力欄移動、吹き出し表示と復帰、既存prompt picker開閉を確認した。keyboard画像pickerがfocus解除で破棄されない条件へ限定修正し、独立Astraは新規なし。前段7件の成功を再利用し、未変更の全業務/I/O/同期suiteを反復しない。実画面keyboard上でのpicker復帰、IME、先述のCUA初回入力欠落の原因は未確認。
+
+限定修正後の最終Catalyst/iOS署名build、署名検証、Air install/launch成功。PID27732と最終install先の一致を確認し、本番connected指定も完成Infoで確認した（`/private/tmp/weavelet-ui-controls-final-build.log`、`/private/tmp/weavelet-air-controls-final-{build,install,launch,processes}.log`）。通常データを使う実機での操作テストは行わず、目視確認はユーザーへ委ねる。隔離Catalyst cloneは終了しprocess不在を確認した。
+
+## 会話内検索・tokenizer取消分離・最新main同期履歴（2026-10-17）
+
+検索は承認済み配置のbar直下へ移し、既存ChatSearchViewの検索/結果行を共用する。現在会話の表示経路/全分岐/スターを既存共有ChatSearchへ渡し、選択は既存navigateへ接続。全体検索sheetの対象切替は保持する。Catalyst関連2件成功、隔離FAKE実画面で入力→2結果→対象遷移と検索帯終了を確認。検索表示中はcomposerのkeyboard補助を出さず、本文draftを変更しない。独立Astraは新規なし。ログ `/private/tmp/weavelet-inline-search-test.log`。
+
+前段tokenizerの未完監査を回収し、一callerの取消が共有host全体をshutdownして他の要約等まで停止するP2を確認。75b12f2b（担当112d7c9f）で要求IDだけを取消し、遅い応答を無視する。共有load待機/NativeTokenCountingの個別取消ではshutdownせず、明示全体shutdown/timeoutは維持。担当Catalystの計数8件とhost4件が別runで成功。初回host2件失敗は空messagesのcountを>0とした誤期待で、実Webの空入力countに従い訂正し4件を再確認した。独立Astraの限定再監査はP2解消・新規なし。ログ `/private/tmp/weavelet-tokenizer-request-cancel-{xcodebuild,host-test}.log`。
+
+origin/mainのc0ee5d05（長い同期履歴の再帰撤去）をmergeし、Web実処理をnative共有bundleへ再生成した。履歴・競合処理は共用し、taskを譲る箇所だけ既定Web timer/native Task.yieldへ分離。nativeのrequest/settleと既存取消境界を維持する。Web replay/worker/progress/暗号化同期83件と追加scheduler1件、型検査、bundle鮮度が成功。Catalyst代表3件でWeb multipart履歴→pack公開→再起動、未知metadata競合/両枝保持、取消outbox保全を確認。未変更の全I/O/暗号/全機能suiteは反復しない。独立Astraの同期群限定監査も新規なし。
+
+最初の生成/テスト起動は部分欠損node_modulesにより実行前失敗。Yarn frozen installで既存lockどおりに復元し、package/lockは変更していない。成功ログは `/private/tmp/weavelet-main-history-{generate-final,web-test-final,yield-test,types,freshness,native-test}.log`。実クラウド・Google OAuth登録・CloudKit環境差・全UI完成などの残条件は維持し、ゴール完了とはしない。
+
+本群の最終署名iOS build・署名検証・Air install/launch成功、PID27757と導入先の一致を確認。導入前のtransportはlocalNetwork。ログ `/private/tmp/weavelet-air-search-history-{build,device,install,launch,processes}.log`。実機の通常データを使う操作テストは行っていない。
+
+## 視覚的統一感の局所修正（2026-10-17）
+
+独立AstraのWeb比較候補1–8/10に対し、会話土台と本文/入力面の明度差、graph Material→中立色、繰返す見出しの文字階層、Button内の名称/補足色、inline子画面title、focus時だけの編集枠、保存不可時の中立色を反映。保存可否の式・Dynamic Type・44pt判定・配置・handler・共有業務処理は維持する。候補9のprompt Editor高さと11の同期説明階層は未変更。
+
+独立Astraのassistant吹き出しが土台と同色になる指摘をtertiary面へ修正し、限定再確認は新規なし。実画面でinline footerも外側本文面に包まれることを発見し、inline時は外側本文面を描かず自前入力面だけにした。初回のprimary/secondary指定ではPromptPickerのtintが青として残ったため、動的UIColor.label/secondaryLabelへ限定修正。最終Catalyst隔離実画面で明暗両モードの名称/補足が中立色になること、本文の可読性、graph面、編集の保存不可→可の外観、取消後の元本文保持を確認した。数値contrast比の測定や全画面の視覚完成とは扱わない。
+
+最終Catalyst build成功（`/private/tmp/weavelet-ui-neutral-label-build.log`）、最終署名iOS build/署名検証成功（`/private/tmp/weavelet-air-neutral-label-build.log`）。今回の可逆な見た目変更に業務testを複製せず、前段の成功結果を再利用する。追加依存/保存形式/外部I/O/同期の変更はない。最終Air導入前のdevice照会/listでunavailableを確認したため今回は更新未実施（`/private/tmp/weavelet-air-neutral-device.log`）。Air導入済みは前群PID27757の版。LAN接続時の導入方針は維持する。検証cloneは終了しprocess不在確認済み。実機目視・IME・最大文字サイズ・全UI/実クラウド互換性の残条件は維持する。
+
+## 分岐図のnative表示窓・拡縮操作（2026-10-17）
+
+共有Web branchLayoutからの座標/ID/edgeは変更せず、UIScrollView/子UIHostingControllerでnative pan/pinch/zoomへ接続した。初期fit、±、全体表示、現在経路の末尾nodeへ移動を追加。Webのfit余白0.2・zoom範囲0.1–2を参照し、ボタンは独立44pt。表示会話のraw UTF8 IDとchatIndexで表示窓の所有を分け、同じ会話の非同期再描画中は旧図を保持してHosting内部もdisabledとする。共有ルール・保存・同期・外部I/O・依存は変更していない。
+
+Catalyst BranchEditorTests14件成功（`/private/tmp/weavelet-graph-viewport-test.log`）。実画面で初期fit/±を確認したが、最初の末尾node移動は下端へ寄ってtoolbarと重なった。setZoomScaleとoffsetの別animationおよび末端を中心に置ける余地の不足を、標準zoom(to:rect,animated:)とviewport半分のinsetへ修正した。修正範囲のnative3件（animated edge focus追加を含む）が成功（`/private/tmp/weavelet-graph-viewport-focus-test.log`）。14件と3件は重複があり、単一17件runとはしない。既存の共有graph/属性/保存検証は成功結果を再利用する。
+
+独立Astraの機能一式・指摘影響範囲の限定確認は新規なし。最終Catalyst実画面で通常animation付きの末尾node中央表示とtoolbar非重複、fitへ戻す操作、nodeタップ→既存chatの正しい枝への遷移と戻るを確認。タップは既存のchat遷移を起こすため、その後もgraph表示窓が残るという手動証拠にはしない。controllerの内容更新時zoom保持は自動testで確認した。検証は専用FAKE storeで、通常保存/Keychain/実同期を操作していない。検証cloneは終了しprocess不在を確認。
+
+最終Catalyst build成功（`/private/tmp/weavelet-graph-viewport-final-build.log`）、署名iOS build成功（`/private/tmp/weavelet-air-graph-viewport-build.log`）。Airは導入前照会でunavailableのため更新未実施（`/private/tmp/weavelet-air-graph-viewport-device.log`）。実端末のpinch/回転/VoiceOver、大規模図、range選択/drag配置/mini map、全機能/実cloud互換性の残条件を維持する。
+
+
+## 本文の一括折畳・展開（2026-10-17）
+
+WebのCollapseAllButtons→chat-slice.setAllCollapsed→setChatNodeMapStateの実経路を確認し、既存共有nodeOptions入口へcollapseAllを追加。Swiftは共有結果の差分を元OrderedJSONへ適用し、既存applyLibraryで保存成功後に公開する。Webと同じく折畳は保存activePathのIDだけのmapへ置換し、非activeの古いmapも除く。展開はmapを空にする。flatはdecimal indexのままで木へ変換しない。本文・木・他属性を作り直さず、表示経路と編集履歴の既存規則を維持する。末尾左の補助Menuに一括操作と既存undo/redoを接続し、44pt判定と中立色を維持。UIの固定隅配置などU21全体の完了ではない。
+
+Web実store callerとのflat/tree比較を含む既存契約suite10件成功（`/private/tmp/weavelet-bulk-collapse-web-test.log`）。Catalystの追加接続test1件で保存失敗時のメモリ/disk保全、他会話・本文store・未知field保持、再起動書出し一致、sync records往復を確認（`/private/tmp/weavelet-bulk-collapse-native-test.log`）。型検査、bundle鮮度、差分確認成功。既存個別node mapの暗号化同期testは経路が変わらないため再実行しない。独立Astraの機能群限定監査は新規なし。
+
+Catalyst実画面の確認を試みたがMacロックによりCUAが操作不可と回答したため、今回の一括Menuの手動受入は未確認。テスト専用cloneを終了した。Airもdevice detailsでunavailableのため未導入（`/private/tmp/weavelet-bulk-collapse-device.log`）。実CloudKit/Google接続・全UI・全機能の残条件を維持し、本群だけで全体完成とはしない。
+
+
+## 分割表示の比率・入替（2026-10-17）
+
+Web SplitView/config-sliceの実処理を基準に、既存20–80%制限をsrc/utils/splitPanel.tsへ切り出してWeb setterとnative bridgeから共有した。nativeは既存splitPanelRatio/Swappedのraw設定を読み、左右/上下分割のdivider drag・均等復帰・表示入替・VoiceOver調整を接続。drag中はGestureStateだけ、終了時に一度保存する。native最小pane幅/高さは表示上だけの制約で、読取時に保存値を書き換えない。compactの単一chat適応中も分割設定は保持。ZStack内のchat/graphを移動するため、入替で親の編集中本文を作り直さない。
+
+独立Astraがdrag中と保存時の比率制限差による跳ね戻りをP2指摘。drag中にも共有clampを適用し、限定再監査で解消・新規なし。既存applySnapshotでは表示だけの変更でも要約等がcancelされるため、今回のsplit設定はsetChatActiveViewと同じ軽量atomic保存を共用し、保存成功後だけdocument/exchangeを更新。業務データ・履歴・他ジョブを変更しない。
+
+Web関連4件、Catalyst DisplaySettingsTests8件成功。保存経路修正後は影響する追加split test1件だけ再確認して成功（8+1は重複）。保存失敗時のdisk/メモリ保全、raw他root/再起動保持、Google/フォルダー暗号化同期recordsへの設定送信除外を確認。CloudKitは既存の全snapshot保存であり、この除外と混同しない。型検査、bundle鮮度、最終Catalyst build、差分確認成功。ログは`/private/tmp/weavelet-split-layout-{web-test,native-test,final-test,types,freshness,final-build}.log`。既存全I/O/暗号suiteの反復は省略。
+
+今回のdrag/入替の実画面操作は未確認（前群でMacロックによりCUA不可）。Airはdevice detailsでunavailableのため未導入。UI手動受入、iPad touch/回転、最大文字サイズ、U14の残るリンク挙動を含む全体完成は未達。
+
+
+## split中のチャット→分岐図連動（2026-10-17）
+
+Web Message.tsx:152–166とBranchEditorCanvas.tsx:613以降を確認し、「リンク」は別chat/pathの独立選択ではなく、split中の本文clickからgraph focusへの一方向の自動連動と整理した。OFFでもgraphからchatへの明示移動は有効。設定はWeb同様runtimeだけで保存/同期へ加えない。nativeはshared navigation historyへchat-click/current path/focused node/split view contextを渡し、本文/保存sourceを変更せずtoken付きfocus要求を出す。分岐図は既存native viewportへ渡し、非同期配置後もraw chat/node ID・key鮮度を確認して適用。新要求を古いconsumeで消さず、表示chat変更や対象消失時に古い要求を残さない。
+
+表示レイアウトMenuに連動Toggle、本文表示面にsimultaneous tap、同じ操作の44pt scopeボタンを追加。inline編集では有効にせず、連動closureがない場合gesture maskもnone。独立Astraがcompact単一表示でも履歴だけ増えるP2を指摘し、実際に両paneを表示するregular条件へ修正。限定再監査で解消・新規なし。保存済split設定は維持する。
+
+Catalyst BranchNavigationTests6件（追加2件を含む）が成功。OFF/非split no-op、source/snapshot/disk不変、共有履歴の前後移動、旧tokenでの新要求消去防止、再起動時runtime初期化を確認。最終Catalyst build/差分確認成功（`/private/tmp/weavelet-split-link-{test,final-build}.log`）。保存・暗号化同期の基盤は変更せず、既存成功suiteを再実行しない。本文tapとWKリンク/テキスト選択の実干渉、非同期配置中の画面操作は未確認。先述のMacロック後、今回の実画面操作は実施していない。Airはdevice detailsでunavailable、未導入（`/private/tmp/weavelet-split-link-device.log`）。全機能/全UI完成の判定ではない。
+
+
+## sidebar/graph内検索の接続（2026-10-17）
+
+既存ChatSearchViewをsidebar内の名前/全本文検索とgraph上部のnode検索へ再利用。現在会話の検索帯は維持し、graph単独時の上部検索はgraph側へ接続する。scope/star controlsは狭幅で段分け。graph検索は表示chat IDsだけを既存searchBranchNodesへ渡し、結果選択後も検索欄を保つ。Web search-slice→navigateToNode(selectChat:false,focus:editor)に合わせ、共有navigate/historyで対象chatのpathを更新し、現在選択chat/viewを変えずgraphへfocusする。保存失敗ではsource/disk/focus要求を公開しない。検索文字の入力だけで最初の結果へ自動遷移するWeb挙動、前後結果移動・検索履歴は今回未接続。
+
+独立Astraの非表示sidebar検索がkeyboard補助を消すP2を、compactの選択列/regularのdetailOnlyを判定する条件へ修正。追加source照合ではWeb BranchEditorCanvas:387–400がchatIndicesの表示順でentriesを作り、branchSearchがその順で検索することを確認。初回adapterのSet filterはstore順となり、最初のtest期待も誤っていたため、表示順に元indexed entryを取り出す方式へ修正し、元chatIndexは保持。期待変更の根拠コメントをtestへ残した。初回の誤順序test成功は互換性の証拠に使わない。限定再監査は新規なし。
+
+Catalyst初回関連7件のうち変更のない6件の成功を再利用し、正しい順序の新testと保存失敗/他chat遷移の影響2件を再確認して成功（重複あり）。型検査・bundle鮮度・最終Catalyst build・差分確認成功。ログ`/private/tmp/weavelet-context-search-{test,order-test,types,freshness,final-build}.log`。未変更のI/O/暗号化同期基盤suiteは反復しない。実画面確認はCUAがMacロックを回答したため未完了、検証cloneは終了。Airはdevice detailsでunavailableのため未導入。全検索UX/全機能の完成とはしない。
+
+
+## 検索履歴・結果の前後移動（2026-10-17）
+
+Web search-slice/grep-sliceのtrim・厳密重複除去・先頭追加20件制限、結果選択保持、前後循環をsrc/utils/searchState.tsへ切り出し、実Web callerとnative bridgeで共有。履歴はgraph searchHistory、sidebar sidebarSearchHistory、chat本文 chatFindHistoryの既存3rootを混ぜず保存する。履歴Menu/消去、Enter/前後44pt操作、index読み上げ、graph結果更新時の初回自動遷移へ接続。close/結果操作/画面離脱で履歴を保存し、重複/no-changeでは既存atomic保存が省略する。離脱時の失敗は親画面へ通知。本文や他rootを変えず、3rootとも既存同期対象のまま維持。
+
+独立Astraのlibrary/legacy grepでnodeIDなしの選択indexが先頭へ戻るP2を、既存resultID+chatIDの補助identityで修正。実nodeID経路とgraph自動遷移判定は元Web規則のまま。追加native testでlibrary3件の2件目保持→3件目、同chatの別legacy結果を区別することを確認し、限定再監査は解消・新規なし。Webの3種実caller分離を含む6件成功、native新2件成功後に修正影響1件のみ再確認して成功（重複）。raw UTF16/履歴順・再起動・SyncRecords往復・保存失敗のdisk/メモリ保全も代表testで確認。型/鮮度/差分確認成功。ログ`/private/tmp/weavelet-search-navigation-{web-final-test,native-test,native-final-test,types,freshness}.log`。Catalyst test内のbuildも成功し、未変更の全I/O/暗号suiteは反復しない。
+
+手動のkeyboard/タップ/VoiceOverは未確認。Airは今回もdevice detailsでunavailableのため導入していない。Web ChatFindBarのDOM内の一致箇所ごとの強調・前後移動（nativeは現在node単位）などの残条件は維持し、全検索UX・全機能・実cloud互換性の完成とはしない。
+
+
+## 残件照合・復旧用の保存ファイル書出し（2026-10-17）
+
+origin/mainをfetchしてHEADとの差分追加なしを確認。A/B主要操作は現UIからhandlerまで接続済みと再確認し、Cの中断生成復旧と直前送信条件での再試行は実Web入口がある一方native未接続と特定した。これらは未完了のまま維持する。今回はI/O保全側の未対応である復旧用書出しを先に追加した。
+
+Web recoveryExportのversion:1/exportedAt/sources envelopeと必須4sourceキーを保持。nativeではliveStoreにメモリstateをraw OrderedJSONで残し、browser固有3sourceはavailable:false、追加nativeLocalStateに元ファイルの全bytesをbase64で回収する。原ファイルをparse/修正せず、非UTF8・通常load失敗でも書出し可能。未作成だけavailable:false、他の読取失敗はavailable:true/error。既存fileMenu/fileExporterへ接続し、読取/エンコードはTask.detached。native保存形式とOS読取の境界であるため、共通VMでデータを再解析せず、既存lossless codecを利用する。復旧用形式は通常importと別であり、自動復元・旧iOS移行の完成を意味しない。
+
+Catalyst代表2件成功後、存在確認を前置せず読取errorで未作成を区別する修正範囲1件を再確認して成功（重複）。精密数値/UTF16/順序、元bytes不変、破損fileから実ChatState入口で回収、通常保存guard継続、未作成/読取失敗を確認。独立Astraは新規なし、差分確認成功。ログ`/private/tmp/weavelet-native-recovery-export-{test,final-test}.log`。保存/同期形式・Keychain・通信に変更はなく、既存成功suiteを反復しない。Catalyst実画面はMacロックで未確認、検証cloneを終了した。ユーザーの後続指示により以後しばらくAirチェック/導入を行わず、Catalystのみで進める。
+
+
+## 生成失敗後の再試行（2026-10-17）
+
+Web useSubmit.handleRetryの実処理（appendでは末尾assistant、中間では元insertIndexのassistantだけ除去して通常再送）を基準に、対象位置の判定を既存generationPlanへ切り出しWeb/nativeで共有した。nativeはshared planに元submitMode/insertIndexを保持し、共通removeNodeState→removeMessageAtIndexStateとinsertAssistantPlaceholderを利用する。composer送信やcontinueの代用ではなく、userを追加せずregenerate:falseで再送する。append後の自動title条件も元の値を維持する。空placeholder/部分本文のどちらも置換対象とし、後続node/別枝の取扱いは既存Webの削除・挿入規則を保つ。
+
+nativeの失敗contextは結果を保存できた場合だけruntimeに保持。選択chat/保存済chatの一致と共有planのtarget ID/requestPathを照合し、編集等で無効化する。生成結果の保存待ちは送信再試行を許可せず、保存失敗では元source/disk/contextを保つ。通常停止は失敗扱いにしない。既存error表示の隣に44ptの「生成を再試行」を接続し、既存の「生成結果の保存を再試行」と区別した。保存・同期形式、新規依存は変更していない。
+
+共有契約6件成功。Catalyst関連5件のうち初回4件成功を再利用し、append retryの期待修正後は該当1件だけ再確認して成功。初回はwire末尾userの最初のpartが送信文であると誤認した。実Web submitContext.ensureRoleAlternationは連続userのcontent配列を順に結合するため、期待を全文字parts [Next,Merged,Retry once]の順序・単一出現へ修正し、根拠コメントを残した。情報欠落の許容や実装の迂回ではない。空/partial retry、composer下書き保持、中間の後続node/未知精密数値保持、変更後の拒否、準備保存失敗時保全、再起動、既存regenerate/continueと保存再試行を確認。ログ `/private/tmp/weavelet-generation-retry-{native-test,native-final-test,types,freshness}.log`。Catalystテスト用build、型検査、bundle鮮度、差分確認成功。独立Astraの限定静的監査は新規なし。
+
+今回の手動UI確認はMacロックにより未確認。Airはユーザー指示により照会・導入とも未実施。Webのproxy stream復旧(useStreamRecovery)は通常の再送とは別で未接続、全機能完成とはしない。
+
+
+## nativeのプロキシ生成通信（2026-10-17）
+
+Web submitRuntimeの /api/stream とproxyClientの /api/request・cancel・ack、および実Workerのenvelopeを確認した。proxyClient内のparseProxySseを純粋proxyProtocolへそのまま移し、Webのimportはre-exportで維持。native用proxyStream bridgeも同じparserと既存parseEventSourceを使い、outer cursor/partialとinner partial/DONEを一緒に更新する。重複cursorは適用せず、完了はinner [DONE]とouter complete/非overflowの両方を要求する。通信は既存URLSession、生成本文/上流header/secretの結合は既存native経路を再利用し、共有generationRequestへviaProxyを渡す。新しい依存はない。
+
+native remote生成設定へチャット生成用の任意proxy設定を追加。上流認証はJSON envelope内、proxy tokenは外側headerに分離。HTTPS・user/passwordなし・query/fragmentなし・header改行なしを検証し、通常clientのredirect拒否を保つ。設定は既存Keychain recordのoptional fieldとし、旧record decode/無効時の直接通信を維持する。取り込んだWebのproxyEndpoint/tokenはraw stateとして引き続き保持するが、端末認証として暗黙利用しない。Web側のproxyEnabledだけGoogle同期除外、endpoint/tokenは対象という既存仕様は変更していない。
+
+成功した主snapshot保存後だけACKを送る。保存失敗では出力とreceiptを保持し、既存保存再試行の成功後にACK。停止は既存部分保存を通し、別通信でbest-effort cancelを送る。partial/不正完了/停止でACKせず、未完thinkタグも既存flushで部分本文に保持する。OpenRouterのproxy metadataは適格な上流originの場合だけ既存観測stateへ結合する。
+
+共有parser/bridge22件とremoteOutput5件成功。Catalyst関連5件成功後、raw envelopeの精密数値/孤立UTF16/認証分離assertを追加した1件のみ再確認して成功（5+1は重複）。stream/nonstream、部分切断/停止cancel、保存失敗→保存再試行後ACK、再起動後の保存結果、旧Keychain形式、危険な設定拒否を確認。型検査・bundle鮮度・差分確認成功。独立Astraの限定静的監査は新規なし。ログ `/private/tmp/weavelet-proxy-transport-{native-test,native-final-test,web-output-test,types,freshness}.log`。実proxy/実Keychainの設定変更はしていない。
+
+これは生成通信の接続であり、Web useStreamRecovery相当の永続checkpoint・GETrecover・再起動/復帰復旧、補助生成/評価のproxy経路、provider-level cancelは未接続として続ける。画面手動確認は未実施（直前のMacロック状態で操作不可）、Air照会/導入はユーザー指示により行っていない。保存済結果の再起動確認を、中断streamの再起動復旧成功とは扱わない。
+
+## プロキシの永続checkpoint・再起動復旧（2026-10-17）
+
+WebのresolveRecoveryTarget/Statusを純粋streamRecoveryへ移し、既存hookのimportを維持。nativeは同じID・role・checkpointHash/appliedHash照合を共有bridgeで利用し、既存generationPlan.finalizeで本文を適用する。flush前のthink状態・内側SSE途中・outer cursor・本文/reasoningを同じatomic journalへ保存。outerイベントごとに保存し、同じcursorでの行単位書込は省略する。再接続ではWeb同様outer途中を捨て、内側の途中とthinkを継続する。主データ形式・オンライン同期方式は変更しない。
+
+journalはlibrary横のproxy-stream-recovery.jsonで、key/tokenやrequest headerは含めない。再取得先は現在の端末Keychain設定と完全一致する場合だけ使い、ファイルのendpointへ認証を自動送信しない。初回・foreground・ファイルMenuから復旧でき、停止は取得だけを止めて記録を保持。明示停止済み生成は再取得しない。主保存前に現hashと予定hashをjournalへ残し、主保存成功後だけ整理/ACK。観測metadataは既存共有処理でmergeし、利用量を二重加算しない。変更のない主snapshotは保存を反復しない。破損journalは上書きせず、復旧用書出しに原bytesのnativeStreamRecovery sourceも追加した。
+
+独立AstraのP2二件（部分保存Aから再取得Bの保存失敗でAのhashが失われる点、照合nodeIdとplan.targetNodeIdの不一致）を修正。現AのcheckpointHashと予定BのappliedHashを保持し、planの対象はUTF8厳密一致を取得前・書込前に確認する。回帰testを追加し、限定再監査は解消・新規なし。
+
+Catalyst関連11件と最終build成功。再起動復旧、think/内側SSE分割とcursor重複排除、初回・二回目の主保存失敗後の復旧、並行編集拒否、未認証endpointへの送信禁止、checkpoint保存失敗時の旧bytes/メモリ保持、停止、ACK順序、破損journal書出しを確認。共有側は関連52件とremoteOutput6件成功（fixture補完後の対象2件再確認は重複）。初回native compileのtry欠落と型検査の新fixture不足fieldは修正済み。旧primary-save testはjournalと主保存を区別するため、directory全体の権限変更から主保存writeだけの失敗注入へ変更し、journal自体の失敗は別testで保全を確認した。ログ `/private/tmp/weavelet-proxy-recovery-{native-test,native-final-test,web-output-test,web-final-test,final-types,final-freshness,final-build}.log`。未変更の全I/O/暗号化同期suiteは成功結果を再利用。
+
+実proxy、OSによる実background中断/復帰、手動画面は未確認。Air照会/導入は未実施。補助生成/評価のproxy経路、provider-level cancel、Webのcache-miss/通信失敗時の短時間自動再試行policyは残る。実cloud互換性や残るUI条件を含む全体完成とはしない。
+
+## 補助生成・評価のproxy経路と復旧再試行（2026-10-17）
+
+タイトル・要約・手動/自動の品質評価・安全性評価・hybridのremote fallbackに、端末global proxy設定を接続した。選択providerの鍵は既存認証検証と共有要求構築を通し、その後に既存の非streaming envelopeへ包む。共有transportへviaProxyを渡すため、補助要求のOpenRouter response cache禁止も既存Web規則による。moderationも検証済みの要求を/api/requestへ送り、/api/moderation専用に本文や認証を作り直さない。localのみの評価は従来の遅延準備を維持し、既存の保存・stale照合は変えない。
+
+Webの復旧再試行判定を純粋proxyRecoveryPolicyへ切り出し、Web loopとnative bridgeから共有。通信失敗またはcache-missは最大3回再試行し、既定500ms、Retry-Afterは0〜5000msに制限する。通常partialやinterrupted/errorでは再試行せず記録を保持。待機中の取消、対象変更、checkpoint保存失敗は取得を続けない。再取得ごとにflush前のcheckpointを復元するため、途中thinkタグやcursorを重複適用しない。
+
+Catalyst初回関連11件成功。親がinner応答decode失敗時にcursorだけ先行する例外経路を追加で確認し、応答とcursorをcandidateへまとめて適用して成功時だけ公開する方式へ修正。新しい例外保全1件と影響する正常retry1件が成功（再実行を含めたuniqueは12件）。補助要求の認証分離・非streaming応答・既存direct経路、manual/auto/hybrid評価、精密数値、cache-miss/503からの復旧、回数上限、待機取消、保存失敗保全を確認。Web関連29件、型検査、bundle鮮度、差分確認も成功。独立Astraの本群監査と追加例外経路の限定確認は新規なし。ログ `/private/tmp/weavelet-proxy-aux-retry-{native-test,native-final-test,types,freshness}.log`。保存/暗号化同期の未変更suiteは反復しない。
+
+実proxyやOSによるbackground中断/復帰と手動画面は未確認。Airは照会・導入とも行っていない。provider-level cancel、実cloud/残るUI等の全体完成条件は維持する。
+
+## プロバイダー側の生成取消（2026-10-17）
+
+Webの取消鍵保持・送信判定をopenrouterCancelへ切り出し、native bridgeと共有した。provider ID=openrouter、HTTPSのcanonical openrouter.ai、既定port/443、gen-形式のIDが揃う場合だけ取消先を返す。Webでも実URLのorigin/portを照合してから鍵を保持・利用する。regional hostや別portへ渡した鍵をcanonical APIへ転送しない。shared remoteOutputはheader/応答の最初のgen- IDを保持し、後続IDで置き換えない。
+
+nativeの停止は既存の部分本文保存を維持し、Task取消時に別の短時間通信でbest-effort provider cancelを送る。directは共有先をさらにsame-origin照合し、proxyは既存/api/cancelのproviderCancel内へIDと上流鍵を入れる。proxy外側の認証は従来どおりproxy tokenのみ。鍵は要求のruntime内で使い、共有VM・本文・journalへ追加しない。ID未取得・非対象provider/originではprovider鍵を送らず、proxyのupstream abortだけを行う。
+
+Catalyst関連4件成功。direct/proxy双方の停止、部分本文と再起動保持、ACKなし、provider認証の分離、別provider/host/portへの鍵送信拒否、既存proxy停止/復旧を確認。Web関連41件成功後のport追加対象2件は重複。未設定provider IDの型エラーは空の不適格値として修正し、型検査・bundle鮮度・差分確認成功。独立Astraは新規なし。ログ `/private/tmp/weavelet-provider-cancel-{native-test,types,freshness}.log`。実OpenRouter取消・regional API対応は未確認であり、regionalへはprovider cancelを送らない。Catalyst手動画面は再照会したがMacロックで未確認、Airは照会・導入とも未実施。実cloud/全UI等の残条件は維持する。
+
+
+## OpenRouter残高の共有処理とnative接続（2026-10-17）
+
+実Web useOpenRouterCreditBalance/API/表示2箇所を基準に、5分stale・3秒cooldown・in-flight、応答の有限数値検証、残額の0下限/通貨表示、credits endpointを既存Web経路からpure helperへ切り出した。nativeも同じshared bridgeを呼び、端末Keychainのprovider別credentialと同originである場合だけ、既存RemoteClient/URLSessionでGETする。キーを共有VM/保存/syncへ渡さず、新規依存も追加しない。Webの既存鍵resolverにはsubstring一致とcustom provider endpointからcanonical APIへ鍵を渡す問題があったため、URL解析によるHTTPSのcanonical origin・標準port・userinfoなしの条件に限定した。
+
+残高・取得状態・error・credential identityはruntimeだけに保持し、保存snapshot/再起動/同期の対象にしない。nativeの認証変更はcache policyより先に検出し無効化する。await後はrequest nonce、現在credential、provider設定を照合し、旧accountの応答・error・終了処理が後続request/残高を消さない。手動更新は44pt操作と中立色の専用行で、既存モデル/表示切替の横幅を圧迫しない。
+
+共有helper/鍵境界8件とWeb型検査・bundle鮮度・差分確認が成功。Catalyst初回2件中、通常残高testが失敗：provider設定が省略されデフォルト補完される場合、読取側nullと再照合側optional nilを誤比較していた。実装の再照合を同じnullへ揃え、期待値は変更しない。旧nonceが新requestを無効化する問題も修正し、最終関連3件が成功した（初回late-key成功1件と重複）。GET/Bearerのnative構築、shared残額表示、fresh cache、壊れた応答時の既存残高保持、account変更中の遅延応答排除、別port鍵の不送信、旧request後着による新account残高の非破壊、source/snapshot/disk不変、再起動後残高なしを確認した。追加のcustom provider設定＋一致する別port credentialでもcanonical APIへ送信しない実行確認は該当1件だけ再実行して成功（重複）した。
+
+独立Astraの機能一式source監査は新規なし。ログ `/private/tmp/weavelet-credits-{shared-test,types,native-test,native-final-test,origin-test,freshness}.log`。保存/同期基盤は変更しておらず、全I/O/暗号化同期の成功結果を再利用する。実OpenRouterへの接続、実画面の狭幅/文字サイズ確認は未実施。iPhone Airの検出/導入はユーザー指示で停止中。verifiedStats/pendingVerificationsのnative操作・表示は別の未完機能として維持する。
+
+最後の入口調整は、選択chatだけでなく同chatのprovider/modelSource/OpenRouter endpoint変更でもopen policyへ接続し、localモデルでは表示・通信を除外した。該当差分の独立Astra限定確認は新規なし、最終Catalyst buildも成功（`/private/tmp/weavelet-credits-final-build.log`）。このUI入口変更で業務/同期suiteを最初から反復していない。
+
+## 一時停止時点の整理（2026-10-17）
+
+ユーザー指示により実装・追加検証を停止。実行中だったCatalyst/型検査の終了結果だけ回収した。未コミット変更・生成artifact・失敗testをそのまま保全し、stash/reset/削除/commitは行っていない。作業先はcodex/shared-main-integration、HEAD 75b12f2b。サブエージェントは全員終了済み。iPhone Airの照会/導入停止も継続する。
+
+### 受入済みの主な範囲
+
+本文/属性/record変換や会話・枝・フォルダー操作等の共有化、要約・評価・タイトル生成・tokenizerの接続、各保存I/OとGoogle/CloudKit/フォルダー同期の隔離互換性検証、承認済みiPhone UIを基礎とする機能接続、検索履歴/分岐移動/分割連動、失敗生成の再試行、proxy通信/永続checkpoint/復旧再試行/補助処理経路、provider取消、OpenRouter残高は前掲の機能群ごとの成功結果・監査結果を維持する。各群の限定受入であり、全UIの手動受入・実オンライン相互運用・全Web機能の完成を意味しない。歴史的な「残件」は後続章で完了したものがあるため、単独引用しない。
+
+### 進行中：OpenRouter確定統計（未受入）
+
+verifiedStats/pendingVerificationsのWeb状態遷移・50件eviction・取得予定・API変換・起動時fetching復旧をpure helperへ切り出し、実Web slice/hook/API/hydrationで利用。nativeは同じbridgeへ接続し、通常生成結果と確認queueの同時保存、native認証付きGET、遅延応答のpending/credential/provider/node照合、保存失敗保全、起動/foreground/scheduler、設定画面の表示と再確認を実装した。API要求/応答の参考はOpenRouter公式 https://openrouter.ai/docs/api/api-reference/generations/get-generation 。
+
+Web関連30件成功と型検査成功を回収。その後bridgeのundefinedがpatchのvalue欠落を生む不具合を修正し、対象4件成功。最終の型検査・bundle鮮度・差分確認も成功。初回native fixtureのflat/tree・stream形式の不整合は実ensureBranchTreeForEditor/SSEへ修正した。期待値を緩めて成功扱いにはしていない。
+
+最新Catalystは4件中3件成功・1件失敗。成功はproxy再起動復旧、旧generationの遅延統計が新pendingを上書きしないこと、最終保存失敗時のdisk保全→再起動recover→再確認。失敗は `RemoteGenerationTests.swift:454`：通常生成queue→GET→確定値保存→既存未知stats保持→再起動まで進んだ後、`exportWebData()`→新storeへimportした結果にverifiedStatsがない。書出し形式が意図的に会話だけを対象にする仕様か、情報欠落かは停止時点で未判定。実Webのexport/import経路と形式仕様を確認してから原因を判断し、根拠なく期待値を変更しない。停止後の修正・再実行はしていない。
+
+独立Astraの静的監査は新規なし。ただし、その後のbridge undefined正規化とproxy復旧→queueの追加差分は限定再監査が未実施。実API・実画面は未確認。この一式を完了扱いにしない。証拠は `/private/tmp/weavelet-verified-stats-{compile,native-test,native-final-test,native-boundary-test,types,freshness}.log`。
+
+### 再開時の優先残件
+
+1. 上記statsのexport/import失敗を実Web仕様で切り分け、必要な実装修正と該当I/O確認、最終差分だけ独立Astra監査を行う。
+2. 現行Webとの残機能差：現在会話の本文内一致箇所ごとの強調/前後移動（現nativeはnode単位）、Cohere固有生成形式・tool callsの対応境界、旧iOS保存形式の移行可否などを完了条件と照合する。全機能同等は未証明。
+3. 実オンライン互換性：GoogleはiOS OAuth未登録で隔離検証先行、CloudKitは旧container利用の実Web/native相互運用とDevelopment/Production境界、フォルダー/iCloud Driveは実配信・placeholder・offline/競合の確認が残る。
+4. UI/OSの手動受入：狭幅/文字サイズ/VoiceOver、IMEとkeyboard押上げ、分岐図/分割/本文操作の干渉、OS background中断/復帰、実モデル精度/性能等。Macロック後の実画面確認は未完了。iPhone確認は再開指示があるまで実施しない。
+
+未変更の共有元・保存・暗号化同期の成功結果は再利用し、小変更ごとの全suite再実行や監査循環は追加しない。

@@ -6,6 +6,10 @@
  * - Auth/key info: retrieves credit usage and rate-limit metadata.
  */
 
+import { OPENROUTER_CREDITS_ENDPOINT, parseOpenRouterCredits } from '@utils/openrouterCredits';
+import { generationStatsRequest, parseVerifiedStats } from '@utils/openrouterStats';
+import type { VerifiedStats } from '@store/openrouter-stats-slice';
+
 const OPENROUTER_BASE = 'https://openrouter.ai/api/v1';
 
 // ── Credit balance ─────────────────────────────────────────────────────
@@ -24,12 +28,13 @@ export async function fetchCreditBalance(
   apiKey: string
 ): Promise<OpenRouterCredits | null> {
   try {
-    const res = await fetch(`${OPENROUTER_BASE}/credits`, {
+    const res = await fetch(OPENROUTER_CREDITS_ENDPOINT, {
       headers: { Authorization: `Bearer ${apiKey}` },
     });
     if (!res.ok) return null;
     const json = await res.json();
-    return (json as { data: OpenRouterCredits }).data ?? null;
+    const balance = parseOpenRouterCredits(json);
+    return balance && { total_credits: balance.totalCredits, total_usage: balance.totalUsage };
   } catch {
     return null;
   }
@@ -84,15 +89,15 @@ export async function cancelGeneration(
 export async function fetchGenerationStats(
   generationId: string,
   apiKey: string
-): Promise<OpenRouterGenerationStats | null> {
+): Promise<VerifiedStats | null> {
   try {
     const res = await fetch(
-      `${OPENROUTER_BASE}/generation?id=${encodeURIComponent(generationId)}`,
+      generationStatsRequest(generationId).endpoint,
       { headers: { Authorization: `Bearer ${apiKey}` } }
     );
     if (!res.ok) return null;
     const json = await res.json();
-    return (json as { data: OpenRouterGenerationStats }).data ?? null;
+    return parseVerifiedStats(json,generationId,Date.now());
   } catch {
     return null;
   }

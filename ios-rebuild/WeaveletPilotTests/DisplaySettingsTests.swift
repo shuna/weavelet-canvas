@@ -168,6 +168,57 @@ final class DisplaySettingsTests: XCTestCase {
         XCTAssertEqual(try state.publicationSnapshot().encoded(), try saved.encoded())
         XCTAssertEqual(try ChatState(store: local).publicationSnapshot().encoded(), try saved.encoded())
     }
+    func testSplitPanelSettingsClampAtomicallyAndStayLocalToRecords() throws {
+        let defaults = try ChatImport.call("defaults")
+        XCTAssertEqual(try DisplaySettings.value(.splitPanelRatio, in: .object([])), try defaults.required("splitPanelRatio"))
+        XCTAssertEqual(try DisplaySettings.value(.splitPanelSwapped, in: .object([])), try defaults.required("splitPanelSwapped"))
+        XCTAssertFalse(DisplaySetting.splitPanelRatio.accepts(.number("1e999")))
+        XCTAssertFalse(DisplaySetting.splitPanelRatio.accepts(.string("0.5")))
+        XCTAssertTrue(DisplaySetting.splitPanelRatio.accepts(.number("0.5")))
+        XCTAssertFalse(DisplaySetting.splitPanelSwapped.accepts(.string("true")))
+
+        var rejects = false
+        let local = try store { data, file in
+            if rejects { throw CocoaError(.fileWriteNoPermission) }
+            try data.write(to: file, options: .atomic)
+        }
+        let state = try rawApp(local), original = try state.publicationSnapshot()
+        let roots = try original.required("state")
+            .replacing("splitPanelRatio", with: .object([.init(key: "future", value: .number("1.2300"))]))
+            .replacing("splitPanelSwapped", with: .string("future"))
+        try state.applySnapshot(.object([.init(key: "version", value: try original.required("version")), .init(key: "state", value: roots)]))
+        let before = try state.publicationSnapshot(), disk = try Data(contentsOf: local.fileURL)
+        XCTAssertEqual(try state.displaySetting(.splitPanelRatio), try roots.required("splitPanelRatio"))
+        XCTAssertEqual(try state.displaySetting(.splitPanelSwapped), try roots.required("splitPanelSwapped"))
+        XCTAssertEqual(try state.publicationSnapshot().encoded(), try before.encoded())
+        XCTAssertEqual(try Data(contentsOf: local.fileURL), disk)
+        XCTAssertThrowsError(try state.saveSplitPanelRatio(.infinity))
+        XCTAssertThrowsError(try state.saveDisplaySetting(.splitPanelRatio, value: .number("1e999")))
+
+        rejects = true
+        XCTAssertThrowsError(try state.saveSplitPanelRatio(0.9))
+        XCTAssertThrowsError(try state.saveDisplaySetting(.splitPanelSwapped, value: .bool(true)))
+        XCTAssertEqual(try state.publicationSnapshot().encoded(), try before.encoded())
+        XCTAssertEqual(try Data(contentsOf: local.fileURL), disk)
+        rejects = false
+        try state.saveSplitPanelRatio(0.9)
+        try state.saveDisplaySetting(.splitPanelSwapped, value: .bool(true))
+        let saved = try state.publicationSnapshot(), savedRoots = try saved.required("state")
+        XCTAssertEqual(try savedRoots.required("splitPanelRatio"), .number("0.8"))
+        XCTAssertEqual(try savedRoots.required("splitPanelSwapped"), .bool(true))
+        XCTAssertEqual(try savedRoots.required("opaqueRoot").encoded(), try roots.required("opaqueRoot").encoded())
+        XCTAssertEqual(try ChatState(store: local).publicationSnapshot().encoded(), try saved.encoded())
+        let records = try SyncRecords.toRecords(saved)
+        for key in ["splitPanelRatio", "splitPanelSwapped"] {
+            XCTAssertFalse(try records.object("records").contains { field in
+                let path = try OrderedJSON.decode(Data(field.key.text.utf8)).array("record path")
+                return path == [.string("state"), .string(key)]
+            })
+        }
+        let restored = try SyncRecords.fromRecords(records).required("state")
+        XCTAssertNil(restored["splitPanelRatio"])
+        XCTAssertNil(restored["splitPanelSwapped"])
+    }
     func testActualDisplayBridgeKeepsOriginalNodesAndHiddenSystemInExportSyncAndRoleEditing() throws {
         let nodes = [MessageNode(id: "system", parentId: nil, createdAt: 1, role: "system"),
                      MessageNode(id: "é", parentId: "system", createdAt: 2, role: "user"),

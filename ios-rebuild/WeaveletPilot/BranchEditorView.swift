@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 
 struct BranchLayoutKey: Equatable {
     struct Entry: Equatable {
@@ -149,8 +150,127 @@ struct BranchGraph {
     }
 }
 
+struct BranchViewportRequest {
+    enum Action { case fit, zoomIn, zoomOut, focus(CGPoint) }
+    let id = UUID()
+    let action: Action
+}
+
+struct BranchGraphViewport<Content: View>: UIViewControllerRepresentable {
+    let content: Content
+    let canvasSize: CGSize
+    let request: BranchViewportRequest?
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    func makeUIViewController(context: Context) -> BranchGraphViewportController<Content> {
+        BranchGraphViewportController(content: content)
+    }
+    func updateUIViewController(_ controller: BranchGraphViewportController<Content>, context: Context) {
+        controller.update(content: content, size: canvasSize, request: request, animated: !reduceMotion)
+    }
+}
+
+final class BranchGraphViewportController<Content: View>: UIViewController, UIScrollViewDelegate {
+    let scrollView = UIScrollView()
+    private let hosting: UIHostingController<Content>
+    private var canvasSize = CGSize.zero
+    private var lastBounds = CGSize.zero
+    private var lastRequest: UUID?
+    private var pendingRequest: BranchViewportRequest?
+    private var followsFit = true
+    init(content: Content) { hosting = UIHostingController(rootView: content); super.init(nibName:nil,bundle:nil) }
+    required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
+    override func loadView() { view = scrollView }
+    override func viewDidLoad() {
+        super.viewDidLoad()
+        scrollView.delegate = self
+        scrollView.backgroundColor = .secondarySystemBackground
+        scrollView.minimumZoomScale = 0.1; scrollView.maximumZoomScale = 2
+        scrollView.contentInsetAdjustmentBehavior = .never
+        scrollView.accessibilityLabel = "分岐図"
+        addChild(hosting)
+        hosting.view.backgroundColor = .clear
+        scrollView.addSubview(hosting.view)
+        hosting.didMove(toParent:self)
+    }
+    func update(content: Content, size: CGSize, request: BranchViewportRequest?, animated: Bool) {
+        loadViewIfNeeded()
+        hosting.rootView = content
+        if size != canvasSize {
+            let wasFollowingFit = followsFit
+            let zoom = scrollView.zoomScale
+            let center = CGPoint(x:(scrollView.contentOffset.x + scrollView.bounds.width / 2) / zoom,
+                                 y:(scrollView.contentOffset.y + scrollView.bounds.height / 2) / zoom)
+            scrollView.setZoomScale(1,animated:false)
+            canvasSize = size
+            hosting.view.frame = CGRect(origin:.zero,size:size)
+            scrollView.contentSize = size
+            scrollView.setZoomScale(zoom,animated:false)
+            centerOn(center,animated:false)
+            followsFit = wasFollowingFit
+            if followsFit { fit(animated:false) }
+        }
+        if request == nil { pendingRequest = nil }
+        if let request, request.id != lastRequest {
+            if scrollView.bounds.width > 0 && scrollView.bounds.height > 0 { apply(request,animated:animated) }
+            else { pendingRequest = request }
+        }
+    }
+    override func viewDidLayoutSubviews() {
+        super.viewDidLayoutSubviews()
+        guard scrollView.bounds.size != lastBounds else { return }
+        lastBounds = scrollView.bounds.size
+        if followsFit { fit(animated:false) } else { updateCanvasInsets() }
+        if let pendingRequest { self.pendingRequest = nil; apply(pendingRequest,animated:false) }
+    }
+    func viewForZooming(in scrollView: UIScrollView) -> UIView? { hosting.view }
+    func scrollViewWillBeginZooming(_ scrollView: UIScrollView, with view: UIView?) { followsFit = false }
+    func scrollViewDidZoom(_ scrollView: UIScrollView) { updateCanvasInsets() }
+    private func updateCanvasInsets() {
+        // Keep edge nodes centerable, as on the Web graph's pannable canvas.
+        scrollView.contentInset = UIEdgeInsets(top:scrollView.bounds.height/2,left:scrollView.bounds.width/2,
+                                              bottom:scrollView.bounds.height/2,right:scrollView.bounds.width/2)
+    }
+    private func zoom(around point: CGPoint, scale: CGFloat, animated: Bool) {
+        guard scrollView.bounds.width > 0, scrollView.bounds.height > 0 else { return }
+        updateCanvasInsets()
+        let scale = min(scrollView.maximumZoomScale,max(scrollView.minimumZoomScale,scale))
+        let size = CGSize(width:scrollView.bounds.width/scale,height:scrollView.bounds.height/scale)
+        scrollView.zoom(to:CGRect(x:point.x-size.width/2,y:point.y-size.height/2,width:size.width,height:size.height),animated:animated)
+    }
+    private func centerOn(_ point: CGPoint, animated: Bool) {
+        updateCanvasInsets()
+        let inset = scrollView.contentInset, bounds = scrollView.bounds, size = scrollView.contentSize
+        let x = point.x * scrollView.zoomScale - bounds.width / 2
+        let y = point.y * scrollView.zoomScale - bounds.height / 2
+        scrollView.setContentOffset(CGPoint(x:min(max(x,-inset.left),max(-inset.left,size.width-bounds.width+inset.right)),
+                                            y:min(max(y,-inset.top),max(-inset.top,size.height-bounds.height+inset.bottom))),animated:animated)
+    }
+    private func fit(animated: Bool) {
+        guard canvasSize.width > 0, canvasSize.height > 0, scrollView.bounds.width > 0, scrollView.bounds.height > 0 else { return }
+        let zoom = min(1,scrollView.bounds.width / (canvasSize.width * 1.4),scrollView.bounds.height / (canvasSize.height * 1.4))
+        self.zoom(around:CGPoint(x:canvasSize.width/2,y:canvasSize.height/2),scale:zoom,animated:animated)
+        followsFit = true
+    }
+    private func apply(_ request: BranchViewportRequest, animated: Bool) {
+        lastRequest = request.id
+        switch request.action {
+        case .fit: fit(animated:animated)
+        case .zoomIn, .zoomOut:
+            followsFit = false
+            let center = CGPoint(x:(scrollView.contentOffset.x+scrollView.bounds.width/2)/scrollView.zoomScale,
+                                 y:(scrollView.contentOffset.y+scrollView.bounds.height/2)/scrollView.zoomScale)
+            let multiplier: CGFloat = { if case .zoomIn = request.action { return 1.25 }; return 0.8 }()
+            zoom(around:center,scale:scrollView.zoomScale*multiplier,animated:animated)
+        case .focus(let point):
+            followsFit = false
+            zoom(around:point,scale:1.2,animated:animated)
+        }
+    }
+}
+
 struct BranchEditorView: View {
     @ObservedObject var state: ChatState
+    @Binding var showsSearch: Bool
     let configure: (String) -> Void
     let deleteBranch: (String) -> Void
     let clipboard: (String, BranchClipboardOperation) -> Void
@@ -158,8 +278,7 @@ struct BranchEditorView: View {
     @State private var compareTarget: (key: BranchLayoutKey, nodeID: String)?
     @State private var comparison: BranchDiffRequest?
     @State private var error: String?
-    @State private var scale: CGFloat = 1
-    @GestureState private var gestureScale: CGFloat = 1
+    @State private var viewportRequest: BranchViewportRequest?
 
     var body: some View {
         let key = BranchLayoutKey(state: state)
@@ -179,23 +298,46 @@ struct BranchEditorView: View {
                         }
                     }
                 }
+                .buttonStyle(.plain).font(.subheadline)
+                .foregroundStyle(Color(uiColor:.label))
+                .frame(minHeight:44)
                 .disabled(state.generation != nil)
                 Spacer()
+                Button { showsSearch.toggle() } label: { Image(systemName:"magnifyingglass").frame(width:44,height:44) }
+                    .accessibilityLabel("表示中の分岐図を検索")
+                    .disabled(state.generation != nil)
             }
             .padding(.horizontal, 16).padding(.vertical, 8)
+            CollapsibleSearchPanel(isPresented:showsSearch) {
+                ChatSearchView(state:state,initialMode:.nodes,initialScope:.all,inline:true,close:{ showsSearch = false },
+                               chatIDs:key.entries.map(\.chatID),dismissOnSelection:false,reportError:{ error = $0 }) { result, _ in
+                    guard key.isCurrent(in:state) else { throw ExchangeError.invalid("表示する会話が変わりました。検索し直してください") }
+                    try state.navigateBranchSearch(result)
+                }
+            }
             Group {
-                if let rendered, rendered.key == key {
+                if let rendered {
                     let graph = rendered.graph
-                    ScrollView([.horizontal, .vertical]) {
-                        graphCanvas(graph, sourceKey: rendered.key)
-                            .frame(width: max(300, graph.width), height: max(100, graph.height) + (key.entries.count > 1 ? 60 : 0))
-                            .scaleEffect(scale * gestureScale, anchor: .topLeading)
-                            .frame(width: graph.width * scale * gestureScale, height: (graph.height + (key.entries.count > 1 ? 60 : 0)) * scale * gestureScale, alignment: .topLeading)
-                            .padding(16)
+                    let height = max(100,graph.height) + (rendered.key.entries.count > 1 ? 60 : 0)
+                    BranchGraphViewport(content:graphCanvas(graph,sourceKey:rendered.key)
+                        .disabled(rendered.key != key)
+                        .frame(width:max(300,graph.width),height:height),
+                        canvasSize:CGSize(width:max(300,graph.width),height:height),request:viewportRequest)
+                        .id(rendered.key.entries.map { Data("\($0.chatIndex):\($0.chatID)".utf8) })
+                    .overlay(alignment:.bottomLeading) {
+                        HStack(spacing:0) {
+                            viewportButton("縮小",icon:"minus",action:.zoomOut)
+                            viewportButton("拡大",icon:"plus",action:.zoomIn)
+                            viewportButton("全体表示",icon:"arrow.up.left.and.arrow.down.right",action:.fit)
+                            if let nodeID = state.conversation?.visibleMessages.last?.id,
+                               let point = graph.positionsByID[.init(chatIndex:key.chatIndex,nodeID:Data(nodeID.utf8))] {
+                                viewportButton("現在のノードへ",icon:"scope",action:.focus(CGPoint(x:point.x,y:point.y + (key.entries.count > 1 ? 60 : 0))))
+                            }
+                        }.buttonStyle(.plain)
+                            .background(Color(uiColor:.secondarySystemBackground),in:RoundedRectangle(cornerRadius:8))
+                            .padding(12)
                     }
-                    .gesture(MagnificationGesture().updating($gestureScale) { value, state, _ in state = value }
-                        .onEnded { scale = min(2, max(0.5, scale * $0)) })
-                    .accessibilityLabel("分岐図")
+                    .disabled(rendered.key != key)
                     .overlay(alignment: .bottom) {
                         if let error { Text(error).foregroundStyle(.red).padding(8).background(.regularMaterial) }
                     }
@@ -207,9 +349,18 @@ struct BranchEditorView: View {
             }
         }
         .sheet(item: $comparison) { request in BranchDiffView(state: state, request: request) }
-        .onChange(of: key) { _, _ in compareTarget = nil; comparison = nil }
+        .onChange(of: key) { _, _ in
+            compareTarget = nil; comparison = nil; viewportRequest = nil
+            if let request = state.branchEditorFocus,
+               !key.entries.contains(where:{ $0.chatID.utf8.elementsEqual(request.chatID.utf8) }) {
+                state.consumeBranchEditorFocus(request.token)
+            }
+        }
+        .onChange(of:state.branchEditorFocus) { _, _ in
+            if let rendered { focusRequestedNode(in:rendered.graph,key:rendered.key) }
+        }
         .task(id: key) {
-            rendered = nil; error = nil
+            error = nil
             if key.tree == nil || key.entries.contains(where: { $0.tree == nil }) {
                 do {
                     if key.tree == nil, !key.entries.contains(where: { $0.chatID.utf8.elementsEqual(key.chatID.utf8) }) {
@@ -228,6 +379,7 @@ struct BranchEditorView: View {
                 }.value
                 guard !Task.isCancelled, key.isCurrent(in: state) else { return }
                 rendered = (key, computed)
+                focusRequestedNode(in:computed,key:key)
             } catch {
                 guard !Task.isCancelled, key.isCurrent(in: state) else { return }
                 self.error = "分岐を表示できません: \(error.localizedDescription)"
@@ -235,12 +387,29 @@ struct BranchEditorView: View {
         }
     }
 
+    private func focusRequestedNode(in graph: BranchGraph, key: BranchLayoutKey) {
+        guard key.isCurrent(in:state), let request = state.branchEditorFocus else { return }
+        guard let entry = key.entries.first(where:{ $0.chatID.utf8.elementsEqual(request.chatID.utf8) }),
+              let point = graph.positionsByID[.init(chatIndex:entry.chatIndex,nodeID:Data(request.nodeID.utf8))] else {
+            state.consumeBranchEditorFocus(request.token)
+            return
+        }
+        viewportRequest = BranchViewportRequest(action:.focus(CGPoint(x:point.x,y:point.y + (key.entries.count > 1 ? 60 : 0))))
+        state.consumeBranchEditorFocus(request.token)
+    }
+
+    private func viewportButton(_ label: String, icon: String, action: BranchViewportRequest.Action) -> some View {
+        Button { viewportRequest = BranchViewportRequest(action:action) } label: {
+            Image(systemName:icon).frame(width:44,height:44)
+        }.accessibilityLabel(label)
+    }
+
     private func graphCanvas(_ graph: BranchGraph, sourceKey: BranchLayoutKey) -> some View {
         let headerOffset: CGFloat = sourceKey.entries.count > 1 ? 60 : 0
         return ZStack(alignment: .topLeading) {
             ForEach(graph.headers(in: sourceKey)) { header in
-                Text(header.title).font(.headline).lineLimit(1).frame(width: 280, height: 40)
-                    .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 8))
+                Text(header.title).font(.subheadline.weight(.semibold)).lineLimit(1).frame(width: 280, height: 40)
+                    .background(Color(uiColor:.tertiarySystemBackground), in: RoundedRectangle(cornerRadius: 8))
                     .position(x: header.x, y: header.y)
             }
             Canvas { context, _ in
@@ -352,7 +521,7 @@ private struct BranchNodeCard: View {
             .accessibilityLabel("メッセージ操作")
         }
         .frame(width: 280, height: 80)
-        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 10))
+        .background(Color(uiColor:.tertiarySystemBackground), in: RoundedRectangle(cornerRadius: 10))
         .overlay(RoundedRectangle(cornerRadius: 10).stroke(node.active ? Color.blue : Color.secondary.opacity(0.5), lineWidth: node.active ? 2 : 1))
     }
 }

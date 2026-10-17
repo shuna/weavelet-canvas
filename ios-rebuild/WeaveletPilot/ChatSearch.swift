@@ -18,11 +18,36 @@ struct ChatSearchResult: Identifiable {
 }
 
 enum ChatSearch {
+    static func searchHistory(_ history: OrderedJSON, query: String) throws -> OrderedJSON {
+        try SharedWebOperations.call("searchStateOperation", .object([
+            .init(key: "operation", value: .string("history")), .init(key: "history", value: history),
+            .init(key: "query", value: .string(query))
+        ]))
+    }
+    static func resultSelection(previous: [ChatSearchResult], index: Int, results: [ChatSearchResult]) throws -> (index: Int, shouldNavigate: Bool) {
+        func identities(_ entries: [ChatSearchResult]) -> OrderedJSON {
+            .array(entries.map { .object([.init(key: "chatId", value: .string($0.chatID)),
+                                     .init(key: "nodeId", value: $0.nodeID.map(OrderedJSON.string) ?? .null),
+                                     .init(key: "resultId", value:.string($0.resultID))]) })
+        }
+        let value = try SharedWebOperations.call("searchStateOperation", .object([
+            .init(key: "operation", value: .string("reconcile")), .init(key: "previous", value: identities(previous)),
+            .init(key: "index", value: .number(String(index))), .init(key: "results", value: identities(results))
+        ]))
+        return (Int(try value.required("index").number("index")), value["shouldNavigate"] == .bool(true))
+    }
+    static func stepResult(index: Int, count: Int, backward: Bool) throws -> Int {
+        let value = try SharedWebOperations.call("searchStateOperation", .object([
+            .init(key: "operation", value: .string("step")), .init(key: "index", value: .number(String(index))),
+            .init(key: "count", value: .number(String(count))), .init(key: "backward", value: .bool(backward))
+        ]))
+        return Int(try value.number("result index"))
+    }
     private static func fields(_ value: OrderedJSON, _ names: [String]) throws -> OrderedJSON {
         .object(try value.object("search object").filter { field in names.contains { field.key.matches($0) } })
     }
     static func results(in source: OrderedJSON, query: String, mode: ChatSearchMode, scope: ChatSearchScope = .all,
-                        starredOnly: Bool = false, chatID: String? = nil, currentChatID: String? = nil, currentPath: [String]? = nil) throws -> [ChatSearchResult] {
+                        starredOnly: Bool = false, chatID: String? = nil, chatIDs: [String]? = nil, currentChatID: String? = nil, currentPath: [String]? = nil) throws -> [ChatSearchResult] {
         var boundary = SharedWebProjection()
         let chats = try source.required("chats").array("chats").map { original -> OrderedJSON in
             var chat = try fields(original, ["id", "title", "folder"])
@@ -49,6 +74,7 @@ enum ChatSearch {
             .init(key: "contentStore", value: store), .init(key: "query", value: .string(query)), .init(key: "mode", value: .string(mode.rawValue)),
             .init(key: "scope", value: .string(scope.rawValue)), .init(key: "starredOnly", value: .bool(starredOnly))]
         if let chatID { input.append(.init(key: "chatID", value: .string(chatID))) }
+        if let chatIDs { input.append(.init(key: "chatIDs", value: .array(chatIDs.map(OrderedJSON.string)))) }
         if let currentChatID { input.append(.init(key: "currentChatID", value: .string(currentChatID))) }
         if let currentPath { input.append(.init(key: "currentPath", value: .array(currentPath.map(OrderedJSON.string)))) }
         let result = try SharedWebOperations.call("chatSearch", .object(input))

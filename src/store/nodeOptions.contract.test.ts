@@ -57,6 +57,20 @@ function state(chat: any, contentStore: any) {
 }
 
 describe('shared node options and actual Web callers', () => {
+  it('bulk collapse bridge uses the actual Web map operation for flat and branched chats', () => {
+    for (const original of [flat(), branched()]) {
+      let chat: any = {...original, collapsedNodes: {inactive: true}, xUnknown: {amount: '1.2300'}};
+      const get = state(chat, store());
+      for (const collapsed of [true, true, false]) {
+        get().setAllCollapsed({chatId: chat.id, value: collapsed});
+        const result = JSON.parse(nodeOptions(JSON.stringify({operation: 'collapseAll', chat, collapsed})));
+        chat = apply({chat}, result.changes).chat;
+        expect(chat).toEqual(get().chats![0]);
+        expect(chat.xUnknown).toEqual({amount: '1.2300'});
+      }
+    }
+  });
+
   it('reads branch options including inactive nodes without changing the source', () => {
     const chat: any = branched(); chat.branchTree.nodes.inactive.label = 'Label'; chat.branchTree.nodes.inactive.starred = true;
     chat.omittedNodes = { inactive: true };

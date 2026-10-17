@@ -93,3 +93,58 @@ Google同期のWeb実protocolは `shared/google-sync/GoogleSync.bundle.js` をJa
 ## 共有文書・編集・会話管理の接続
 
 2026-10-13、実Webのbranch-domain/branchUtils/chatLibraryをnativeへ接続した。保存v2はfull snapshotとV3 sidecarを保持し、旧保存v1も読める。UIの書出しは共有文書投影を使う。本文差分の展開と原delta保持、未知属性・大数値、深さ256、保存失敗時の元状態保持、編集後の再起動を確認した。初期設定と更新時刻の規則もWeb由来となった。検証件数・修正後の限定再実行・独立監査は[完成条件と証拠](../docs/development/plans/app/web-native-completion-ledger.md)に記録する。同期の認証/UIと実オンライン相互運用は引き続き未完了。
+## 2026-10-15：機能未接続のiPhone UIモック
+
+Debug起動引数 `--ui-mockup` で `IOSLayoutMockupView` を表示する。Catalystでも最大393×852ptのiPhone向け領域で確認できる。通常起動とReleaseは既存アプリを表示する。
+
+チャット／分岐図はアイコンのみ。合成会話、本文内編集の開始・取消・メモリ内保存、モデルの仮選択、node選択、入力欄と未接続操作の説明を扱う。ChatState・実保存・Keychain・生成・同期へは接続しない。編集はアプリ終了で消える。
+
+Catalystビルドと実画面でタブ切替、本文編集→保存、送信の未接続説明、393ptでの表示を確認。独立AstraのP2（状態所有者をwindow内へ移すことで通常アプリの複数窓が別stateになる問題）はAppスコープの遅延状態保持へ修正し、限定再監査は新規なし。最終buildログ `/private/tmp/weavelet-ui-mockup-final-build.log`。全業務/同期テストの反復は行わず、iPhone/Simulatorは使わない。最大文字サイズ・IME/画面キーボードは未確認。
+
+ローカルの起動用成果物は `/private/tmp/weavelet-ui-mockup-20261015/OpenUIMockup.command`。必ずこの起動引数付き入口を使う（同フォルダーのappを直接起動すると通常ルートになる）。
+
+### iPhone Airへのモック導入（2026-10-16、ユーザー明示指示）
+
+署名Debugビルド・署名検証・インストール・起動が成功し、PID25538を確認。表示名は `Weavelet Mock`、既存bundle IDの更新として導入した。ホームから開き直してもモックになるよう、このビルドだけ `WEAVELET_LAUNCH_MODE=ui-mockup` をInfo.plistへ展開する。完成appの値も照合済み。通常ビルド/Releaseの選択条件は限定Astra再確認で新規なし。
+
+最初の任意INFOPLIST_KEY指定では独自keyが出力されなかったため、Info.plistの明示key＋build変数へ修正し、再署名ビルド・再インストール後に引数なしで起動した。成功判定は最終版に限る。ログ `/private/tmp/weavelet-air-ui-mockup-{final-build,final-install,launch,processes}.log`。実データの読込/保存や同期へ接続しない。画面の目視確認はユーザーへ委ね、実機機能テストは実施していない。以後の通常確認は引き続きCatalyst。
+
+### 標準ナビゲーションバーへの置換（2026-10-16）
+
+モック上部の独自HStackをNavigationStack・inline navigationTitle・標準toolbarへ変更。左に一覧/アプリ内履歴、右に検索/新規を置き、モデルとアイコンのみのchat/branchは直下の操作帯に維持する。標準toolbarへplain button styleを継承させない。Catalyst build、393ptの実画面、検索開閉、限定Astra確認は新規なし。幅制約により標準barの会話名は末尾省略されることを実表示で確認した。ログ `/private/tmp/weavelet-ui-mockup-native-bars-build.log`。iPhoneへの今回版の再導入は行っていない。
+
+Catalystの検証cloneもWeaveletLaunchMode=ui-mockupへ更新したため、現在のcloneは直接起動でもmockになる。起動用commandも従来どおり利用可能。機能未接続と通常アプリの保存経路は変更していない。
+
+続くユーザー指示で標準バー版もiPhone Airへ署名ビルド・インストール・引数なし起動が成功（PID25674）。完成Infoのmock指定/表示名と署名も確認。ログ `/private/tmp/weavelet-air-native-bars-{build,install,launch,processes}.log`。実画面の目視はユーザー確認用とし、機能接続や追加の実機テストは行っていない。
+
+### キーボードと会話末尾入力（2026-10-16）
+
+標準keyboard toolbarに添付/プロンプトの未接続入口とキーボードを閉じる操作を追加。FocusStateで本文編集・composer・検索を区別し、本文編集開始時はフォーカスと対象へのスクロール、保存/取消・タブ切替時はフォーカス解除を行う。通常のkeyboard safe areaを維持し、スクロールでの対話的な閉じ方を使う。入力フッターは固定safeAreaInsetから会話末尾へ移動し、移動ボタンも本文内に置いて重なりを避けた。
+
+Catalyst build成功（`/private/tmp/weavelet-ui-mockup-keyboard-build.log`）、実画面で末尾配置、入力、本文編集へのfocus移動・取消後のcomposer下書き保持を確認。初回pasteは入力されず、focusを再取得したtypeTextで成功。独立Astraの限定確認は新規なし。ソフトキーボードのtoolbar実表示、アニメーション中の押上げ・IMEはCatalystの確認から推定せず未確認。iPhoneへの今回版の再導入・Simulator実行は行っていない。
+
+続く明示指示でキーボード対応版をiPhone Airへ署名ビルド・インストール・引数なし起動し、PID25894を確認。完成appのmock指定・署名も確認した。ログ `/private/tmp/weavelet-air-keyboard-mock-{build,install,launch,processes}.log`。キーボードの実画面操作確認は未実施。
+
+### 編集欄の整列と操作領域（2026-10-16）
+
+画像の独立レビューを受け、編集欄の固定最低200ptを撤去。標準の複数行TextFieldを1–10行で伸縮させ、閲覧時と同じbody/行間4/余白12へ合わせた。外枠とavatarの左端は維持。原文Menuの最低幅と、取消/分岐保存/保存の各labelに独立した44pt操作領域を指定した。draft、保存/取消、FocusState、keyboard toolbarは維持する。
+
+Catalyst build成功（`/private/tmp/weavelet-ui-mockup-edit-alignment-build.log`）、編集の初期表示で下余白縮小、Return改行・保存後の本文保持を確認。短文への自動置換は選択操作が成立せず、AX setValueはBindingへ反映されなかったため短文時の実測成功とは扱わない。独立Astraの限定確認は新規なし。確認後にmockを再起動し合成データを初期化。IME・10行超の内部scroll・実機の寸法は未確認。iPhoneへの今回版の導入は行っていない。
+
+続く明示指示で整列修正版もiPhone Airへ署名ビルド・インストール・引数なし起動が成功（PID25935）。完成Infoのmock指定・表示名と署名を確認、install先と起動processの一致も確認した。ログ `/private/tmp/weavelet-air-edit-alignment-{build,install,launch,processes}.log`。実機画面の目視・IME確認は未実施。
+
+### 承認済み配置への既存機能接続（2026-10-16）
+
+モックへ業務処理を複製せず、本番ChatViewを承認済み配置へ合わせた。標準bar、モデル選択、アイコンのみのchat/branch切替、本文内編集、会話末尾composerを既存ChatState・共有Web処理へ接続。詳細sheetや既存の評価・保護・文脈除外・分岐操作のhandlerを維持した。本文編集のdraftは親で保持し、会話移動や表示対象変更で失わず、元会話以外では保存しない。保存失敗時も保持する。通常起動は本番、Debugの `--ui-connected-preview` は本番画面を393×852ptで表示する。
+
+Catalyst境界4件と入力3件が別runで成功し、最終build成功。隔離FAKE画面で本文編集→会話移動→復帰→保存→再起動、chat/branch切替、モデル選択入口、生成中→完了を確認した。共有仕様や保存形式・依存追加は変更していない。独立Astraの表示filter変更時にdraftが見えなくなるP2を回復欄で解消し、限定再監査は新規なし。証拠と未確認事項は[完成条件と証拠](../docs/development/plans/app/web-native-completion-ledger.md)を参照。今回iPhone更新は行っていない。
+
+### 現在の検証端末（2026-10-17の後続指示）
+
+ユーザーの指示により、しばらくiPhone Airの接続照会・ビルド先としての確認・インストールは行わない。通常検証はCatalystとし、Air確認は再開指示を受けてから戻す。以下のLAN接続時導入は以前の運用記録である。
+
+### LAN接続時のAir導入と補助操作の接続（2026-10-17）
+
+以後はユーザー指示により、通常検証はCatalystを維持し、iPhone AirがLAN接続されていれば検証・監査済みの変更をインストールする。従来の「実機更新は個別指示時のみ」をこの運用へ変更する。今回、前段接続版の署名build/install/通常launchが成功し、transport=localNetwork、PID27714を確認した。mock指定ではなく本番ChatViewを起動する。
+
+続いて、承認済み配置の「最初へ／入力欄へ」、表示Menuの吹き出し切替、keyboard toolbarの画像・プロンプト入口を既存handlerへ接続した。keyboard補助はinline draft中は出さず、focus解除だけで画像pickerの所有Viewを破棄しない。共有業務処理・保存形式・依存は変更していない。Catalyst隔離実画面で上下移動、吹き出し往復、prompt picker開閉を確認し、独立Astraは新規なし。実keyboard上でのpicker継続・復帰とIMEは未確認。

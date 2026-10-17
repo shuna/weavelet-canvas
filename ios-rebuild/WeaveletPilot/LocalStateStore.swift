@@ -118,3 +118,79 @@ struct LocalStateStore {
         try write(data,fileURL)
     }
 }
+
+enum NativeRecoveryExport {
+    static func make(liveSnapshot: OrderedJSON?, fileURL: URL?, exportedAt: String) throws -> Data {
+        let live: OrderedJSON = liveSnapshot?["state"].map { state in
+            .object([.init(key: "available", value: .bool(true)), .init(key: "data", value: state)])
+        } ?? .object([.init(key: "available", value: .bool(false))])
+        let local = rawFile(fileURL)
+        let stream = rawFile(fileURL.map { NativeProxyRecoveryStore(libraryURL:$0).fileURL })
+        return try OrderedJSON.object([
+            .init(key: "version", value: .number("1")),
+            .init(key: "exportedAt", value: .string(exportedAt)),
+            .init(key: "sources", value: .object([
+                .init(key: "liveStore", value: live),
+                .init(key: "zustandPersist", value: .object([.init(key: "available", value: .bool(false))])),
+                .init(key: "legacyLocalStorageChats", value: .object([.init(key: "available", value: .bool(false))])),
+                .init(key: "indexedDb", value: .object([.init(key: "available", value: .bool(false))])),
+                .init(key: "nativeLocalState", value: local),
+                .init(key: "nativeStreamRecovery", value: stream)
+            ]))
+        ]).encoded()
+    }
+    private static func rawFile(_ fileURL: URL?) -> OrderedJSON {
+        let local: OrderedJSON
+        if let fileURL {
+            do {
+                let bytes = try Data(contentsOf: fileURL)
+                local = .object([.init(key: "available", value: .bool(true)), .init(key: "data", value: .object([
+                    .init(key: "filename", value: .string(fileURL.lastPathComponent)),
+                    .init(key: "encoding", value: .string("base64")),
+                    .init(key: "bytes", value: .string(bytes.base64EncodedString()))
+                ]))])
+            } catch let error as CocoaError where error.code == .fileReadNoSuchFile {
+                local = .object([.init(key: "available", value: .bool(false))])
+            } catch {
+                local = .object([.init(key: "available", value: .bool(true)),
+                                 .init(key: "error", value: .string(error.localizedDescription))])
+            }
+        } else {
+            local = .object([.init(key: "available", value: .bool(false))])
+        }
+        return local
+    }
+}
+
+
+// Runtime stream checkpoints are separate from the interoperable library and never contain credentials.
+struct NativeProxyRecoveryStore {
+    let fileURL: URL
+    private let write: (Data, URL) throws -> Void
+    init(libraryURL: URL, write: @escaping (Data, URL) throws -> Void = { try $0.write(to:$1,options:.atomic) }) {
+        fileURL = libraryURL.deletingLastPathComponent().appendingPathComponent("proxy-stream-recovery.json")
+        self.write = write
+    }
+    func records() throws -> [OrderedJSON] {
+        do {
+            let root = try OrderedJSON.decode(Data(contentsOf:fileURL))
+            guard root["version"] == .number("1") else { throw ExchangeError.invalid("ストリーム復旧記録の形式が不正です") }
+            return try root.required("records").array("recovery records")
+        } catch let error as CocoaError where error.code == .fileReadNoSuchFile { return [] }
+    }
+    func upsert(_ record: OrderedJSON) throws {
+        let id = try record.required("requestId").string("request ID")
+        var records = try records()
+        if let index = records.firstIndex(where: { $0["requestId"] == .string(id) }) { records[index] = record }
+        else { records.append(record) }
+        try save(records)
+    }
+    func remove(_ requestID: String) throws {
+        try save(records().filter { $0["requestId"] != .string(requestID) })
+    }
+    private func save(_ records: [OrderedJSON]) throws {
+        let data = try OrderedJSON.object([.init(key:"version",value:.number("1")),.init(key:"records",value:.array(records))]).encoded()
+        try FileManager.default.createDirectory(at:fileURL.deletingLastPathComponent(),withIntermediateDirectories:true)
+        try write(data,fileURL)
+    }
+}

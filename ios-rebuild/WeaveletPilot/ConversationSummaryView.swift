@@ -101,7 +101,7 @@ struct ConversationSummaryView: View {
                             let id = (try? candidate["id"]?.string("summary ID")) ?? ""
                             let use = candidate["useForSubmit"] == .bool(true)
                             VStack(alignment:.leading,spacing:8) {
-                                Text(candidate["format"] == .string("compact") ? "圧縮" : "要約").font(.headline)
+                                Text(candidate["format"] == .string("compact") ? "圧縮" : "要約").font(.subheadline.weight(.semibold))
                                 Text((try? candidate["text"]?.string("text")) ?? "").textSelection(.enabled)
                                 HStack {
                                     Button(use ? "原文を使う" : "表示・送信に使う") {
@@ -121,6 +121,7 @@ struct ConversationSummaryView: View {
                 }
             }
             .navigationTitle("要約・圧縮")
+            .navigationBarTitleDisplayMode(.inline)
             .toolbar { ToolbarItem(placement:.confirmationAction) { Button("閉じる") { dismiss() } } }
             .sheet(item:$configDraft) { config in
                 ChatConfigView(state:state,draft:config,auxiliary:true) { edited in

@@ -30,8 +30,8 @@ struct PromptPickerView: View {
                         }
                     } label: {
                         VStack(alignment: .leading, spacing: 4) {
-                            Text(row.name.isEmpty ? "（名前なし）" : row.name)
-                            Text(row.body).font(.caption).foregroundStyle(.secondary).lineLimit(2)
+                            Text(row.name.isEmpty ? "（名前なし）" : row.name).foregroundStyle(Color(uiColor:.label))
+                            Text(row.body).font(.caption).foregroundStyle(Color(uiColor:.secondaryLabel)).lineLimit(2)
                         }.frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
                     }
                     .disabled(isApplying)
@@ -39,6 +39,7 @@ struct PromptPickerView: View {
             }
             .searchable(text: $query, prompt: "名前を検索")
             .navigationTitle("プロンプトを選択")
+            .navigationBarTitleDisplayMode(.inline)
             .toolbar { ToolbarItem(placement: .cancellationAction) { Button("取消") { selectionTask?.cancel(); dismiss() } } }
             .task(id: Data(query.utf8)) {
                 let searched = query

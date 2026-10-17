@@ -12,6 +12,39 @@ final class NodeOptionsStateTests: XCTestCase {
         addTeardownBlock { try? FileManager.default.removeItem(at: directory) }
         return directory
     }
+    func testBulkCollapseBridgeKeepsRawFieldsAndPublishesOnlyAfterSave() throws {
+        let fault = NodeOptionWriteFault()
+        let store = LocalStateStore(fileURL: try directory().appendingPathComponent("state.json")) { bytes, url in
+            if fault.reject { throw CocoaError(.fileWriteNoPermission) }
+            try bytes.write(to:url,options:.atomic)
+        }
+        let state = ChatState(store:store)
+        try state.importWebData(fixture().encoded())
+        let before = try state.publicationSnapshot(), disk = try Data(contentsOf:store.fileURL)
+        fault.reject = true
+        XCTAssertThrowsError(try state.setAllMessagesCollapsed(true))
+        XCTAssertEqual(try state.publicationSnapshot(),before)
+        XCTAssertEqual(try Data(contentsOf:store.fileURL),disk)
+        fault.reject = false
+        try state.setAllMessagesCollapsed(true)
+        let changed = try XCTUnwrap(state.exchange).source
+        let original = try fixture()
+        XCTAssertEqual(changed["contentStore"],original["contentStore"])
+        XCTAssertEqual(changed["xFixtureExport"],original["xFixtureExport"])
+        let chats = try changed.required("chats").array("chats")
+        let originals = try original.required("chats").array("chats")
+        XCTAssertEqual(chats[1],originals[1])
+        for field in try originals[0].object("chat") where !field.key.matches("collapsedNodes") {
+            XCTAssertEqual(chats[0][field.key],field.value)
+        }
+        XCTAssertEqual(try ChatState(store:store).exportWebData(),try state.exportWebData())
+        let records = try SyncRecords.toRecords(state.publicationSnapshot())
+        let received = try SyncDocument(snapshot:SyncRecords.fromRecords(records)).uiProjection()
+        XCTAssertEqual(try received.required("chats").array("chats").first?["collapsedNodes"],chats[0]["collapsedNodes"])
+        try state.setAllMessagesCollapsed(false)
+        XCTAssertEqual(try state.exchange?.source.required("chats").array("chats")[0]["collapsedNodes"],.object([]))
+    }
+
     func testOptionsPersistExportSyncAndAffectSearchEditingAndGeneration() throws {
         let store = LocalStateStore(fileURL: try directory().appendingPathComponent("state.json"))
         let state = ChatState(store: store), original = try fixture()

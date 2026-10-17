@@ -6,6 +6,13 @@ final class BranchNavigationTests: XCTestCase {
         let root=URL(fileURLWithPath:#filePath).deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
         return try OrderedJSON.decode(Data(contentsOf:root.appendingPathComponent("tests/fixtures/web-native/io-corpus.json"))).required("exportV3")
     }
+    private func store(writer: ((Data, URL) throws -> Void)? = nil) throws -> LocalStateStore {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent("branch-editor-focus-\(UUID())")
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        addTeardownBlock { try? FileManager.default.removeItem(at: directory) }
+        let file = directory.appendingPathComponent("state.json")
+        return writer.map { LocalStateStore(fileURL: file, write: $0) } ?? LocalStateStore(fileURL: file)
+    }
     func testAnyNodeSiblingAndLegacyViewingPathUseSharedTargetsAndRetainUnknownRawFields() throws {
         let original=try fixture(), store=try original.required("contentStore"), inactive=try store.required("inactive")
         var parts=try inactive.required("content").array("parts")
@@ -57,6 +64,90 @@ final class BranchNavigationTests: XCTestCase {
         XCTAssertEqual(try BranchNavigation.swipeDirection(distance: 44, preference: "left-next"), "previous")
         XCTAssertEqual(try BranchNavigation.swipeDirection(distance: -44, preference: "right-next"), "previous")
         XCTAssertEqual(try BranchNavigation.swipeDirection(distance: 44, preference: "right-next"), "next")
+    }
+    func testChatToBranchFocusIsInactiveOutsideSplitOrWhenLinkIsOff() throws {
+        let local = try store(), state = ChatState(store: local)
+        try state.importWebData(fixture().encoded())
+        let before = try state.publicationSnapshot(), disk = try Data(contentsOf: local.fileURL)
+        try state.focusBranchEditor(nodeID: "n-user")
+        XCTAssertNil(state.branchEditorFocus)
+        XCTAssertFalse(state.canNavigateBack)
+        XCTAssertEqual(try state.publicationSnapshot().encoded(), try before.encoded())
+        XCTAssertEqual(try Data(contentsOf: local.fileURL), disk)
+
+        try state.setChatActiveView(.splitHorizontal)
+        state.branchEditorSyncEnabled = false
+        let split = try state.publicationSnapshot(), splitDisk = try Data(contentsOf: local.fileURL)
+        try state.focusBranchEditor(nodeID: "n-user")
+        XCTAssertNil(state.branchEditorFocus)
+        XCTAssertFalse(state.canNavigateBack)
+        XCTAssertEqual(try state.publicationSnapshot().encoded(), try split.encoded())
+        XCTAssertEqual(try Data(contentsOf: local.fileURL), splitDisk)
+        XCTAssertTrue(ChatState(store: local).branchEditorSyncEnabled)
+    }
+    func testChatToBranchFocusUsesSharedHistoryWithoutSavingContent() throws {
+        let local = try store(), state = ChatState(store: local)
+        try state.importWebData(fixture().encoded())
+        try state.setChatActiveView(.splitVertical)
+        let source = try XCTUnwrap(state.exchange?.source), disk = try Data(contentsOf: local.fileURL)
+        let snapshot = try state.publicationSnapshot()
+        try state.focusBranchEditor(nodeID: "n-user")
+        let first = try XCTUnwrap(state.branchEditorFocus)
+        XCTAssertEqual(first.chatID, state.selectedConversationID)
+        XCTAssertEqual(first.nodeID, "n-user")
+        XCTAssertTrue(state.canNavigateBack)
+        XCTAssertFalse(state.canNavigateForward)
+        XCTAssertEqual(state.exchange?.source, source)
+        XCTAssertEqual(try state.publicationSnapshot().encoded(), try snapshot.encoded())
+        XCTAssertEqual(try Data(contentsOf: local.fileURL), disk)
+
+        try state.focusBranchEditor(nodeID: "n-user")
+        let second = try XCTUnwrap(state.branchEditorFocus)
+        XCTAssertNotEqual(second.token, first.token)
+        state.consumeBranchEditorFocus(first.token)
+        XCTAssertEqual(state.branchEditorFocus, second)
+        state.consumeBranchEditorFocus(second.token)
+        XCTAssertNil(state.branchEditorFocus)
+        try state.moveNavigation(.back)
+        XCTAssertTrue(state.canNavigateForward)
+        XCTAssertNil(ChatState(store: local).branchEditorFocus)
+    }
+    func testBranchSearchMovesOtherChatWithoutSelectingItAndKeepsFailedSaveAtomic() throws {
+        var rejects = false
+        let local = try store { data, file in
+            if rejects { throw CocoaError(.fileWriteNoPermission) }
+            try data.write(to: file, options: .atomic)
+        }
+        var source = try fixture(), chats = try source.required("chats").array("chats")
+        chats.append(chats[0].replacing("id", with: .string("other-tree")))
+        source = source.replacing("chats", with: .array(chats))
+        let state = ChatState(store: local)
+        try state.importWebData(source.encoded())
+        try state.setChatActiveView(.branchEditor)
+        state.branchEditorSyncEnabled = false
+        let result = try XCTUnwrap(ChatSearch.results(in: source, query: "別分岐の本文", mode: .nodes, chatIDs: ["other-tree"]).first)
+        XCTAssertEqual(result.chatID, "other-tree")
+        XCTAssertEqual(result.nodeID, "n-inactive")
+        let before = try state.publicationSnapshot(), beforeSource = try XCTUnwrap(state.exchange?.source)
+        let disk = try Data(contentsOf: local.fileURL)
+        rejects = true
+        XCTAssertThrowsError(try state.navigateBranchSearch(result))
+        XCTAssertEqual(try state.publicationSnapshot().encoded(), try before.encoded())
+        XCTAssertEqual(state.exchange?.source, beforeSource)
+        XCTAssertEqual(try Data(contentsOf: local.fileURL), disk)
+        XCTAssertNil(state.branchEditorFocus)
+        rejects = false
+
+        try state.navigateBranchSearch(result)
+        XCTAssertEqual(state.selectedConversationID, "chat-a")
+        XCTAssertEqual(state.chatActiveView, .branchEditor)
+        XCTAssertTrue(state.canNavigateBack)
+        XCTAssertEqual(state.branchEditorFocus?.chatID, "other-tree")
+        XCTAssertEqual(state.branchEditorFocus?.nodeID, "n-inactive")
+        let updated = try XCTUnwrap(state.exchange?.source).required("chats").array("chats")
+        XCTAssertEqual(updated[0], try beforeSource.required("chats").array("chats")[0])
+        XCTAssertEqual(updated[2]["branchTree"]?["activePath"], .array(["n-system", "n-user", "n-inactive"].map(OrderedJSON.string)))
+        XCTAssertEqual(ChatState(store: local).exchange?.source, state.exchange?.source)
     }
 
 }

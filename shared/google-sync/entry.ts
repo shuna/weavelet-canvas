@@ -1,4 +1,5 @@
-export { messageDisplayIndexes } from './advancedDisplay';
+import { setHistoryYield } from './adapters/processing';
+export { messageDisplayIndexes, splitPanelRatio } from './advancedDisplay';
 export { enterSubmissionOperation } from './enterSubmission';
 export { summaryOperation } from './bubbleSummary';
 export { titleOperation } from './title';
@@ -6,8 +7,9 @@ export { fileImport } from './fileImport';
 export { branchHistory } from './branchHistory';
 export { nodeRemoval } from './nodeRemoval';
 export { nodeOptions } from './nodeOptions';
-export { chatSearch } from './search';
+export { chatSearch, searchStateOperation } from './search';
 export { navigationOperation } from './navigation';
+export { proxyStream, proxyRecoveryTarget, proxyRecoveryRetry } from './proxy';
 export const driveFolderName = (json: string) => JSON.stringify(defaultSyncFolderName(JSON.parse(json)));
 import { defaultSyncFolderName, driveListParameters, nextSyncFolderName, DEFAULT_SYNC_FOLDER_NAME } from '../../src/store/storage/google/datasetListing';
 export const driveListing = (json: string) => JSON.stringify({ parameters: driveListParameters(), suggestedName: nextSyncFolderName(DEFAULT_SYNC_FOLDER_NAME, JSON.parse(json)) });
@@ -46,6 +48,7 @@ const request = (method: string, args: unknown[]) => new Promise((resolve, rejec
   requests.push({ id, method, args }); replies.set(id, { resolve, reject });
 });
 setFileSystemHost(request);
+setHistoryYield(async () => { await request("yieldHistory", []); });
 const drive = new Proxy({}, { get: (_target, method: string) => {
   if (method === 'supportsCompaction') return true;
   if (method === 'keyHeader') return (dataset: string) => request('metadata', [dataset]).then(file => encryptedSyncHeaderId(file as any));
@@ -160,7 +163,9 @@ export { chatConfig } from "./chatConfig";
 
 export { providerModelList } from "./providerModels";
 
-export { remoteOutput } from "./remoteOutput";
+export { remoteOutput, openRouterCancel } from "./remoteOutput";
+export { openRouterCredits } from "./openrouterCredits";
+export { openRouterStats } from "./openrouterStats";
 
 export { generationPlan } from "./generationPlan";
 

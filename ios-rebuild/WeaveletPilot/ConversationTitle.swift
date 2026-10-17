@@ -59,7 +59,8 @@ enum ConversationTitle {
                                    fallbackEndpoint:legacy.settings.endpoint,boundary:&boundary)
         guard selection["status"] == .string("ready") else { return nil }
         let (credential,authorizedURL) = try AuxiliaryRemoteRequest.credential(selection:selection,state:state,legacy:legacy,read:readProviderCredential)
-        let transport = AuxiliaryRemoteRequest.transport(url:authorizedURL,key:credential.key,apiVersion:state["apiVersion"])
+        let proxy = try legacy.proxy?.validated()
+        let transport = AuxiliaryRemoteRequest.transport(url:authorizedURL,key:credential.key,apiVersion:state["apiVersion"],viaProxy:proxy != nil)
         let plan = try SharedWebOperations.call("titleOperation",.object([
             .init(key:"operation",value:.string("plan")),
             .init(key:"chat",value:try projectedChat(rawChat,boundary:&boundary)),
@@ -69,7 +70,8 @@ enum ConversationTitle {
         ]))
         guard plan["status"] == .string("ready") else { return nil }
         let envelope = try plan.required("request")
-        let request = try AuxiliaryRemoteRequest.bind(envelope,boundary:boundary,url:authorizedURL,key:credential.key)
+        let upstream = try AuxiliaryRemoteRequest.bind(envelope,boundary:boundary,url:authorizedURL,key:credential.key)
+        let request = try AuxiliaryRemoteRequest.route(upstream,proxy:proxy)
         let promptMessage = try OrderedJSONChanges.apply(.array([.object([
             .init(key:"op",value:.string("set")),.init(key:"path",value:.array([])),.init(key:"value",value:selection.required("promptMessage"))
         ])]),to:.null,opaque:boundary.opaque)

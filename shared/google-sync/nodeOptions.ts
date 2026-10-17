@@ -8,9 +8,15 @@ import type { ChatInterface } from '../../src/types/chat';
 import type { ContentStoreData } from '../../src/utils/contentStore';
 
 type Value = { label: string; starred: boolean; pinned: boolean; collapsed: boolean; omitted: boolean; protected: boolean };
-type Input = { chat: ChatInterface; contentStore: ContentStoreData; operation: 'read' | 'save'; nodeId: string; value?: Value; newIDs?: string[]; now?: number };
+type Input = { chat: ChatInterface; contentStore: ContentStoreData; operation: 'read' | 'save' | 'collapseAll'; nodeId: string; value?: Value; collapsed?: boolean; newIDs?: string[]; now?: number };
 export function nodeOptions(json: string, capture?: BranchEditCapture): string {
   const input = JSON.parse(json) as Input;
+  if (input.operation === 'collapseAll') {
+    if (typeof input.collapsed !== 'boolean') throw new Error('Invalid collapse state.');
+    const result = setChatNodeMapState([input.chat], {chatId: input.chat.id, value: input.collapsed}, 'collapsedNodes');
+    const changes = result.status === 'updated' ? diffJSONChanges({chat: input.chat}, {chat: result.chats[0]}) : [];
+    return JSON.stringify({status: result.status, changes});
+  }
   const target = resolveNodeTarget([input.chat], { chatId: input.chat.id, nodeId: input.nodeId });
   if (target.status !== 'valid') return JSON.stringify({ status: target.status, changes: [] });
   const node = target.chat.branchTree?.nodes[input.nodeId];

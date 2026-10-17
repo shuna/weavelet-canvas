@@ -47,6 +47,22 @@ final class ConversationTitleTests: XCTestCase {
         XCTAssertNil(try ConversationTitle.apply(response,prepared:prepared,source:changed,state:state,language:"English",fallbackEndpoint:legacy.settings.endpoint))
     }
 
+    func testTitleProxyWrapsTheExistingRequestAndUsesProxyAuthentication() async throws {
+        var credentials = legacy
+        credentials.proxy = RemoteProxySettings(enabled:true,endpoint:"https://fixture.invalid/relay",authToken:"FAKE-PROXY")
+        let prepared = try XCTUnwrap(ConversationTitle.prepare(source:source,state:state,chatID:"first",language:"English",legacy:credentials))
+        let body = try OrderedJSON.decode(XCTUnwrap(prepared.request.httpBody))
+        XCTAssertEqual(prepared.request.url?.path,"/relay/api/request")
+        XCTAssertEqual(prepared.request.value(forHTTPHeaderField:"Authorization"),"Bearer FAKE-PROXY")
+        XCTAssertEqual(body["body"]?["stream"],.bool(false))
+        XCTAssertEqual(body["endpoint"],.string(legacy.settings.endpoint))
+        XCTAssertTrue(try body.required("headers").object("headers").contains { $0.value == .string("Bearer FAKE") })
+        let config = URLSessionConfiguration.ephemeral; config.protocolClasses = [TitleResponseProtocol.self]
+        TitleResponseProtocol.hold = false
+        let response = try await ConversationTitle.generate(prepared,client:RemoteClient(session:URLSession(configuration:config)))
+        XCTAssertNotNil(try ConversationTitle.apply(response,prepared:prepared,source:source,state:state,language:"English",fallbackEndpoint:legacy.settings.endpoint))
+    }
+
     func testChatIDsAndPromptSnapshotsUseExactUnicodeBytes() throws {
         let nfd = "cafe\u{301}", nfc = "café"
         let original = try source.required("chats").array("chats")[0]

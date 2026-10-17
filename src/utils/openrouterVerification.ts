@@ -18,14 +18,19 @@ export const resolveOpenRouterApiKey = (
   fallbackEndpoint?: string,
   fallbackApiKey?: string
 ): string | undefined => {
-  if (provider?.apiKey) return provider.apiKey;
+  const sameOrigin = (endpoint?: string): boolean => {
+    try {
+      const url = new URL(endpoint ?? '');
+      return url.origin === new URL(DEFAULT_PROVIDERS.openrouter.endpoint).origin &&
+        !url.username && !url.password;
+    } catch {
+      return false;
+    }
+  };
+  // Credits and verification always use the canonical API, never a custom provider origin.
+  if (provider?.apiKey && sameOrigin(provider.endpoint)) return provider.apiKey;
 
-  const openRouterEndpoint = DEFAULT_PROVIDERS.openrouter.endpoint;
-  if (
-    fallbackApiKey &&
-    typeof fallbackEndpoint === 'string' &&
-    (fallbackEndpoint.includes('openrouter.ai') || fallbackEndpoint === openRouterEndpoint)
-  ) {
+  if (fallbackApiKey && sameOrigin(fallbackEndpoint)) {
     return fallbackApiKey;
   }
 

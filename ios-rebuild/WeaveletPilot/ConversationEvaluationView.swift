@@ -74,6 +74,7 @@ struct ConversationEvaluationView: View {
                 }
             }
             .navigationTitle("評価")
+            .navigationBarTitleDisplayMode(.inline)
             .toolbar { ToolbarItem(placement:.confirmationAction) { Button("閉じる") { dismiss() } } }
         }
     }
@@ -103,7 +104,7 @@ struct ConversationEvaluationView: View {
     }
     @ViewBuilder private func suggestions(_ suggestions: OrderedJSON?, title: String) -> some View {
         if let values = try? suggestions?.array("suggestions"), !values.isEmpty {
-            Text(title).font(.headline)
+            Text(title).font(.subheadline.weight(.semibold))
             ForEach(Array(values.enumerated()),id:\.offset) { _, value in
                 if let text = try? value.string("suggestion") { Text(text).textSelection(.enabled) }
             }
@@ -158,5 +159,6 @@ struct EvaluationSettingsView: View {
         }
         .disabled(state.generation != nil)
         .navigationTitle("評価設定")
+        .navigationBarTitleDisplayMode(.inline)
     }
 }

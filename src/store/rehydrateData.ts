@@ -8,6 +8,7 @@ import { isBubbleSummary } from '@utils/bubbleSummary';
 import { normalizeProviderConfigs } from './provider-helpers';
 import type { StoreState } from './store';
 import type { PersistedStoreState } from './persistence';
+import { recoverOpenRouterStats } from '@utils/openrouterStats';
 
 function sanitizeBranchTreeReferences(chat: ChatInterface): boolean {
   if (!chat.branchTree) return false;
@@ -115,45 +116,9 @@ export const rehydrateData = (state: StoreState, savedIndex: number) => {
   });
   if (repairedChatTitles.length > 0) repaired = true;
 
-  if (!state.verifiedStats || typeof state.verifiedStats !== 'object') {
-    state.verifiedStats = {};
-  }
-
-  if (!state.pendingVerifications || typeof state.pendingVerifications !== 'object') {
-    state.pendingVerifications = {};
-  } else {
-    const now = Date.now();
-    state.pendingVerifications = Object.fromEntries(
-      Object.entries(state.pendingVerifications).flatMap(([key, verification]) => {
-        if (!verification || typeof verification !== 'object') {
-          return [];
-        }
-        const normalized = {
-          ...verification,
-          status:
-            verification.status === 'fetching' ||
-            verification.status === 'pending' ||
-            verification.status === 'failed'
-              ? verification.status
-              : 'pending',
-          nextAttemptAt:
-            typeof verification.nextAttemptAt === 'number'
-              ? verification.nextAttemptAt
-              : now,
-        };
-        return [[
-          key,
-          normalized.status === 'fetching'
-            ? {
-                ...normalized,
-                status: 'pending',
-                nextAttemptAt: Math.min(normalized.nextAttemptAt, now),
-              }
-            : normalized,
-        ]];
-      })
-    );
-  }
+  const recovered = recoverOpenRouterStats(state,Date.now());
+  state.verifiedStats = recovered.verifiedStats;
+  state.pendingVerifications = recovered.pendingVerifications;
 
   return { repaired, repairedChatTitles };
 };

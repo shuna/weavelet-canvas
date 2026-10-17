@@ -79,7 +79,13 @@ actor SyncSession {
                 let response: OrderedJSON
                 do {
                     try Task.checkCancellation()
-                    let value = try await drive.call(request.required("method").string("method"), args: request.required("args").array("args"))
+                    let value: OrderedJSON
+                    if try request.required("method").string("method") == "yieldHistory" {
+                        await Task.yield()
+                        value = .null
+                    } else {
+                        value = try await drive.call(request.required("method").string("method"), args: request.required("args").array("args"))
+                    }
                     try Task.checkCancellation()
                     response = .object([JSONField(key: "ok", value: .bool(true)), JSONField(key: "value", value: value)])
                 } catch {

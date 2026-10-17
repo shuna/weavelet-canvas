@@ -1,9 +1,20 @@
-import { expect, it } from 'vitest';
+import { expect, it, vi } from 'vitest';
 import { digest } from './crypto';
 import { collectHistory, replayHistory, type Commit, type HistoryProgress } from './replay';
 
 const commit = async (parents: string[], before: string | null, after: string | null, resolutions?: Commit['resolutions']): Promise<Commit> => ({
   version: 1, parents, changes: [{ key: 'key', before: before === null ? null : await digest(before), after }], resolutions,
+});
+
+it('uses a custom task scheduler when browser timers are unavailable', async () => {
+  const commits = { base: await commit([], null, 'one') };
+  let yields = 0;
+  vi.stubGlobal('setTimeout', () => { throw new Error('Browser timers unavailable'); });
+  try {
+    expect(await replayHistory({ commits, tips: ['base'] }, undefined, async () => { yields++; }))
+      .toEqual({ records: { key: 'one' }, conflicts: {} });
+    expect(yields).toBeGreaterThan(0);
+  } finally { vi.unstubAllGlobals(); }
 });
 
 it('replays 20,000 linked commits with progress and yields to timer tasks', async () => {

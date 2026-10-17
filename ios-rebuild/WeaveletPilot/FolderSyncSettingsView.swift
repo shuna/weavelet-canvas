@@ -147,7 +147,9 @@ private struct FolderSyncOperations: View {
     var body: some View {
         Section("同期") {
             Text(statusText)
-            if let dataset = controller.dataset { Text(dataset).font(.caption).textSelection(.enabled) }
+                .font(controller.status == .conflict || controller.status == .recoveryRequired ||
+                      controller.status == .failed || controller.status == .locked ? .body : .footnote)
+            if let dataset = controller.dataset { Text(dataset).font(.footnote).textSelection(.enabled) }
             if controller.dataset == nil {
                 SecureField("パスフレーズ（12文字以上）",text:$password)
                 SecureField("パスフレーズを確認",text:$confirmation)

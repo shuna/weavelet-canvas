@@ -58,6 +58,22 @@ enum NodeOptions {
         guard let chat=try source.required("chats").array("chats").first(where:{ try $0.required("id").string("chat ID").utf8.elementsEqual(chatID.utf8) }) else { throw ExchangeError.invalid("chat ID") }
         return try read(chat:chat,nodeID:nodeID)
     }
+    static func setAllCollapsed(in source: OrderedJSON, chatID: String, value: Bool) throws -> OrderedJSON {
+        var chats = try source.required("chats").array("chats")
+        guard let index = try chats.firstIndex(where: { try $0.required("id").string("chat ID").utf8.elementsEqual(chatID.utf8) }) else { throw ExchangeError.invalid("chat ID") }
+        let chat = chats[index]
+        var boundary = SharedWebProjection()
+        let projected = try boundary.chat(chat)
+        let output = try SharedWebOperations.call("nodeOptions", .object([
+            .init(key:"operation",value:.string("collapseAll")), .init(key:"chat",value:projected),
+            .init(key:"collapsed",value:.bool(value))
+        ]))
+        let status = try output.required("status").string("status")
+        guard status == "updated" || status == "unchanged" else { throw ExchangeError.invalid("collapse status") }
+        let changed = try OrderedJSONChanges.apply(output.required("changes"), to:.object([.init(key:"chat",value:chat)]), opaque:boundary.opaque)
+        chats[index] = try changed.required("chat")
+        return source.replacing("chats",with:.array(chats))
+    }
     static func save(in source: OrderedJSON, chatID: String, nodeID: String, value: Value, newIDs: [String]? = nil, now: Double = Date().timeIntervalSince1970 * 1000) throws -> Result {
         var chats=try source.required("chats").array("chats")
         guard let index=try chats.firstIndex(where:{ try $0.required("id").string("chat ID").utf8.elementsEqual(chatID.utf8) }) else { return .init(status:.chatMissing,nodeID:nil,path:nil,source:source) }

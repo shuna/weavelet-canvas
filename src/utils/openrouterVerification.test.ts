@@ -64,4 +64,15 @@ describe('openrouterVerification utils', () => {
       )
     ).toBeUndefined();
   });
+  it('does not forward custom, lookalike, insecure, or alternate-port credentials to the canonical API', () => {
+    for (const endpoint of ['https://openrouter.ai.evil.invalid/api',
+      'https://evil.invalid/openrouter.ai', 'http://openrouter.ai/api',
+      'https://openrouter.ai:8443/api', 'https://user@openrouter.ai/api', 'invalid']) {
+      expect(resolveOpenRouterApiKey(undefined, endpoint, 'other-origin-key')).toBeUndefined();
+      expect(resolveOpenRouterApiKey({ id: 'openrouter', name: 'custom', endpoint,
+        modelsRequireAuth: false, apiKey: 'other-origin-key' })).toBeUndefined();
+    }
+    expect(resolveOpenRouterApiKey(undefined, 'https://openrouter.ai:443/api/v1/chat/completions', 'canonical-key')).toBe('canonical-key');
+  });
+
 });

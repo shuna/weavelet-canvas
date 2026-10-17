@@ -8498,14 +8498,22 @@ var WeaveletGoogleSync = (() => {
     navigationOperation: () => navigationOperation,
     nodeOptions: () => nodeOptions,
     nodeRemoval: () => nodeRemoval,
+    openRouterCancel: () => openRouterCancel,
+    openRouterCredits: () => openRouterCredits,
+    openRouterStats: () => openRouterStats,
     promptApplicationOperation: () => promptApplicationOperation,
     promptLibraryOperation: () => promptLibraryOperation,
     providerModelList: () => providerModelList,
+    proxyRecoveryRetry: () => proxyRecoveryRetry2,
+    proxyRecoveryTarget: () => proxyRecoveryTarget,
+    proxyStream: () => proxyStream,
     recordsResult: () => recordsResult,
     recordsStart: () => recordsStart,
     remoteOutput: () => remoteOutput,
     result: () => result2,
+    searchStateOperation: () => searchStateOperation,
     settle: () => settle,
+    splitPanelRatio: () => splitPanelRatio,
     start: () => start,
     summaryOperation: () => summaryOperation,
     titleOperation: () => titleOperation,
@@ -8515,12 +8523,2282 @@ var WeaveletGoogleSync = (() => {
     usageCost: () => usageCost
   });
 
+  // shared/google-sync/adapters/host.ts
+  function host(operation, ...args) {
+    const result3 = JSON.parse(nativeSyncCall(JSON.stringify({ operation, args: args.map((value) => JSON.stringify(value ?? null)) })));
+    if (!result3.ok)
+      throw new Error(result3.error);
+    return result3.value;
+  }
+  var bytes = (value) => Array.from(value);
+
+  // shared/google-sync/adapters/crypto.ts
+  var digest = async (value) => host("digest", typeof value === "string" ? value : bytes(value));
+  var encode = (value) => new Uint8Array(host("encode", value));
+  var decode = (value) => host("decode", bytes(value));
+  var encrypt = async (key, value, context) => new Uint8Array(host("encrypt", key, bytes(value), context));
+  var decrypt = async (key, value, context) => new Uint8Array(host("decrypt", key, bytes(value), context));
+  var createKeyEnvelope = async (password, dataset) => host("createKeyEnvelope", password, dataset);
+  var unlockKey = async (envelope, password, dataset) => host("unlockKey", envelope, password, dataset);
+
+  // src/utils/folderHierarchy.ts
+  function validateFolderHierarchy(folders) {
+    if (!folders || typeof folders !== "object" || Array.isArray(folders))
+      return false;
+    const collection = folders;
+    for (const [id, folder] of Object.entries(collection)) {
+      if (!id || !folder || typeof folder !== "object" || folder.id !== id || typeof folder.name !== "string" || !Number.isFinite(folder.order) || typeof folder.expanded !== "boolean" || folder.parentId != null && (typeof folder.parentId !== "string" || !Object.hasOwn(collection, folder.parentId)))
+        return false;
+    }
+    const finished = /* @__PURE__ */ new Set();
+    for (const id of Object.keys(collection)) {
+      const path = /* @__PURE__ */ new Set();
+      let current = id;
+      while (current !== void 0 && !finished.has(current)) {
+        if (path.has(current))
+          return false;
+        path.add(current);
+        current = collection[current].parentId ?? void 0;
+      }
+      for (const member of path)
+        finished.add(member);
+    }
+    return true;
+  }
+  function getFolderParentId(folders, id) {
+    const parent = folders[id]?.parentId ?? void 0;
+    const visited = /* @__PURE__ */ new Set([id]);
+    let current = parent;
+    while (current !== void 0) {
+      if (visited.has(current) || !Object.hasOwn(folders, current))
+        return void 0;
+      visited.add(current);
+      current = folders[current]?.parentId ?? void 0;
+    }
+    return parent;
+  }
+  function getFolderAncestors(folders, id) {
+    const result3 = [];
+    const visited = /* @__PURE__ */ new Set();
+    let current = id;
+    while (current !== void 0 && Object.hasOwn(folders, current) && !visited.has(current)) {
+      visited.add(current);
+      result3.push(current);
+      current = result3.length === 1 ? getFolderParentId(folders, current) : folders[current]?.parentId ?? void 0;
+    }
+    return result3;
+  }
+  function getFolderSubtreeIds(folders, id) {
+    if (!Object.hasOwn(folders, id))
+      return [];
+    const children = /* @__PURE__ */ new Map();
+    for (const [childId, folder] of Object.entries(folders)) {
+      if (folder?.parentId != null) {
+        const list = children.get(folder.parentId) ?? [];
+        list.push(childId);
+        children.set(folder.parentId, list);
+      }
+    }
+    const result3 = [], visited = /* @__PURE__ */ new Set(), pending = [id];
+    while (pending.length) {
+      const current = pending.pop();
+      if (visited.has(current))
+        continue;
+      visited.add(current);
+      result3.push(current);
+      for (const child of children.get(current) ?? [])
+        pending.push(child);
+    }
+    return result3;
+  }
+
+  // shared/google-sync/adapters/metrics.ts
+  var recordMetric = () => {
+  };
+
+  // src/store/storage/google/settings.ts
+  var BROWSER_LOCAL_SETTINGS = [
+    "hideMenuOptions",
+    "hideSideMenu",
+    "menuWidth",
+    "splitPanelRatio",
+    "splitPanelSwapped",
+    "chatActiveView",
+    "showDebugPanel",
+    "proxyEnabled"
+  ];
+  var SYNC_LOCAL_SETTINGS = [
+    ...BROWSER_LOCAL_SETTINGS,
+    "pendingVerifications",
+    "verifiedStats",
+    "providerModelCache",
+    "totalTokenUsed",
+    "theme",
+    "advancedMode",
+    "enterToSubmit",
+    "inlineLatex",
+    "markdownMode",
+    "streamingMarkdownPolicy",
+    "displayChatSize",
+    "animateBubbleNavigation",
+    "branchSwipeDirection"
+  ];
+  function withoutBrowserLocalSettings(state) {
+    const shared2 = { ...state };
+    for (const key of SYNC_LOCAL_SETTINGS)
+      delete shared2[key];
+    return shared2;
+  }
+  function isBrowserLocalRecord(key) {
+    let path;
+    try {
+      path = JSON.parse(key);
+    } catch {
+      return false;
+    }
+    if (!Array.isArray(path) || path[0] !== "state")
+      return false;
+    const field = path[1];
+    return SYNC_LOCAL_SETTINGS.some((key2) => key2 === field);
+  }
+  function isNonBlockingRecord(key) {
+    if (isBrowserLocalRecord(key))
+      return true;
+    let path;
+    try {
+      path = JSON.parse(key);
+    } catch {
+      return false;
+    }
+    if (!Array.isArray(path))
+      return false;
+    return path.length === 4 && path[0] === "state" && path[1] === "folders" && path[3] === "expanded" || path.length >= 3 && path.length <= 4 && path[0] === "chats" && path[2] === "collapsedNodes" || path.length === 4 && path[0] === "chats" && path[2] === "branchTree" && path[3] === "activePath";
+  }
+  function selectActivePath(key, values, records) {
+    if (!key.endsWith(',"activePath"]'))
+      return;
+    const path = JSON.parse(key);
+    if (path.length !== 4 || path[0] !== "chats" || path[2] !== "branchTree" || path[3] !== "activePath")
+      return;
+    if (records[JSON.stringify(["chats", path[1], "id"])] === void 0)
+      return null;
+    const prefix = ["chats", path[1], "branchTree"];
+    const candidates = values.filter((value) => value !== null).map((value) => JSON.parse(value)).filter((value) => Array.isArray(value) && value.every((id) => typeof id === "string"));
+    if (!candidates.length)
+      return;
+    const validPrefix = (ids) => {
+      let length = 0;
+      for (const id of ids) {
+        if (records[JSON.stringify([...prefix, "nodes", id, "id"])] !== JSON.stringify(id) || records[JSON.stringify([...prefix, "nodes", id, "parentId"])] !== JSON.stringify(length ? ids[length - 1] : null))
+          break;
+        length++;
+      }
+      return ids.slice(0, length);
+    };
+    for (const candidate of candidates)
+      if (validPrefix(candidate).length === candidate.length)
+        return JSON.stringify(candidate);
+    const retained = candidates.map(validPrefix).sort((a, b) => b.length - a.length)[0];
+    const root = records[JSON.stringify([...prefix, "rootId"])];
+    return JSON.stringify(retained.length ? retained : root ? validPrefix([JSON.parse(root)]) : []);
+  }
+
+  // src/types/chat.ts
+  var roles = ["user", "assistant", "system"];
+  function strToTextContent(ob) {
+    return {
+      type: "text",
+      text: ob
+    };
+  }
+  function isTextContent(ob) {
+    return ob !== void 0 && ob !== null && ob.type === "text";
+  }
+  function isImageContent(ob) {
+    return ob !== void 0 && ob !== null && ob.image_url !== void 0;
+  }
+  function isToolCallContent(ob) {
+    return ob !== void 0 && ob !== null && ob.type === "tool_call";
+  }
+  function isToolResultContent(ob) {
+    return ob !== void 0 && ob !== null && ob.type === "tool_result";
+  }
+
+  // src/utils/branchUtils.ts
+  var import_lodash = __toESM(require_lodash(), 1);
+
+  // src/utils/contentValidation.ts
+  var hasMeaningfulContent = (content) => content.some((part) => {
+    if (isImageContent(part))
+      return true;
+    return isTextContent(part) && part.text.trim().length > 0;
+  });
+  var hasMeaningfulMessageContent = (messages) => messages.some((message) => hasMeaningfulContent(message.content));
+
+  // src/utils/messageText.ts
+  var firstTextIndex = (content) => content.findIndex((item) => item.type === "text");
+  var textValueOf = (content) => {
+    const index = firstTextIndex(content);
+    return index >= 0 ? content[index].text : "";
+  };
+  var replaceTextValue = (content, text) => {
+    const index = firstTextIndex(content);
+    if (index < 0) {
+      return [{ type: "text", text }, ...content];
+    }
+    const next = [...content];
+    next[index] = { ...content[index], text };
+    return next;
+  };
+
+  // src/utils/jsonChanges.ts
+  var orderedJSONEqual = (left, right) => {
+    if (Object.is(left, right))
+      return true;
+    if (!left || !right || typeof left !== "object" || typeof right !== "object" || Array.isArray(left) !== Array.isArray(right))
+      return false;
+    const a = Object.keys(left), b = Object.keys(right);
+    return a.length === b.length && a.every((key, index) => key === b[index] && orderedJSONEqual(left[key], right[key]));
+  };
+  function appendChanges(before, after, path, output2) {
+    if (orderedJSONEqual(before, after))
+      return;
+    const opaque = (value) => value && typeof value === "object" && !Array.isArray(value) && Object.keys(value).length === 1 && Number.isInteger(value.opaqueRef);
+    if (opaque(before) || opaque(after)) {
+      output2.push({ op: "set", path, value: after });
+      return;
+    }
+    if (Array.isArray(before) && Array.isArray(after)) {
+      for (let i = 0; i < after.length; i++) {
+        if (i < before.length)
+          appendChanges(before[i], after[i], [...path, i], output2);
+        else
+          output2.push({ op: "set", path: [...path, i], value: after[i] });
+      }
+      for (let i = before.length - 1; i >= after.length; i--)
+        output2.push({ op: "remove", path: [...path, i] });
+    } else if (before && after && typeof before === "object" && typeof after === "object" && !Array.isArray(before) && !Array.isArray(after)) {
+      for (const key of Object.keys(before))
+        if (!Object.hasOwn(after, key))
+          output2.push({ op: "remove", path: [...path, key] });
+      for (const key of Object.keys(after)) {
+        if (Object.hasOwn(before, key))
+          appendChanges(before[key], after[key], [...path, key], output2);
+        else
+          output2.push({ op: "set", path: [...path, key], value: after[key] });
+      }
+      if (!orderedJSONEqual(Object.keys(before), Object.keys(after)))
+        output2.push({ op: "keys", path, keys: Object.keys(after) });
+    } else
+      output2.push({ op: "set", path, value: after });
+  }
+  function diffJSONChanges(before, after) {
+    const output2 = [];
+    appendChanges(before, after, [], output2);
+    return output2;
+  }
+
+  // shared/google-sync/editing.ts
+  var runtime;
+  function editingUUID() {
+    if (!runtime)
+      return crypto.randomUUID();
+    const id = runtime.ids.shift();
+    if (!id || runtime.reserved.has(id))
+      throw new Error("Invalid new node ID.");
+    runtime.reserved.add(id);
+    return id;
+  }
+  function withEditingRuntime(newIDs, existingIDs, now, operation) {
+    const clock = Date.now;
+    runtime = { ids: [...newIDs], reserved: new Set(existingIDs) };
+    Date.now = () => now;
+    try {
+      return operation();
+    } finally {
+      Date.now = clock;
+      runtime = void 0;
+    }
+  }
+  function messageEdit(json, capture) {
+    const input = JSON.parse(json);
+    if (input.operation === "textValue")
+      return JSON.stringify(textValueOf(input.parts));
+    if (input.editedText !== void 0 && typeof input.editedText !== "string")
+      throw new Error("Invalid text.");
+    const parts = input.editedText !== void 0 && input.editedText !== textValueOf(input.parts) ? replaceTextValue(input.parts, input.editedText) : input.parts;
+    if (!["user", "assistant", "system"].includes(input.role) || !Array.isArray(input.parts))
+      throw new Error("Invalid message.");
+    if (input.mode === "append" && input.editedText !== void 0 && !hasMeaningfulContent(parts))
+      throw new Error("\u672C\u6587\u3092\u5165\u529B\u3057\u3066\u304F\u3060\u3055\u3044");
+    const before = { chat: input.chat, contentStore: input.contentStore };
+    const isolated = structuredClone(before);
+    let chat = isolated.chat;
+    if (!Array.isArray(chat.messages) && chat.branchTree)
+      chat.messages = materializeActivePath(chat.branchTree, isolated.contentStore);
+    const wasFlat = !chat.branchTree;
+    return withEditingRuntime(input.newIDs, Object.keys(chat.branchTree?.nodes ?? {}), input.now, () => {
+      let result3 = input.mode === "insert" && wasFlat ? { chats: [chat], contentStore: isolated.contentStore } : ensureBranchTreeState([chat], 0, isolated.contentStore);
+      if (!wasFlat) {
+        const path = input.viewingPath;
+        if (path.some((id) => !Object.hasOwn(result3.chats[0].branchTree.nodes, id)))
+          throw new Error("Invalid viewing path.");
+        if (path.length)
+          result3.chats = switchActivePathState(result3.chats, 0, path, result3.contentStore);
+        else
+          result3.chats[0].branchTree.activePath = [];
+      }
+      let historyBase = result3;
+      let insertedNodeID;
+      if (input.mode === "insert") {
+        if (input.nodeID === void 0)
+          throw new Error("Invalid insert target.");
+        const beforeNodeId = wasFlat && input.nodeID?.startsWith("message-") ? input.nodeID.slice(8) : input.nodeID;
+        const inserted = insertNodeState(result3.chats, { chatId: chat.id, beforeNodeId, role: input.role, content: input.operation === "insertGenerate" ? [{ type: "text", text: "" }] : parts }, result3.contentStore);
+        if (inserted.status !== "updated")
+          throw new Error(`Invalid insert target: ${inserted.status}`);
+        historyBase = inserted.historyBase ?? historyBase;
+        result3 = inserted;
+        if (input.operation === "insertGenerate") {
+          capture?.(historyBase, result3);
+          insertedNodeID = inserted.nodeId;
+          historyBase = result3;
+          const index = result3.chats[0].branchTree.activePath.indexOf(insertedNodeID);
+          const generated = replaceNodeAndPruneState(result3.chats, {
+            chatId: chat.id,
+            nodeId: insertedNodeID,
+            role: input.role,
+            content: parts,
+            removeCount: Math.max(0, result3.chats[0].messages.length - (index + 1))
+          }, result3.contentStore);
+          if (generated.status !== "updated" || generated.pruneBlockedBy.length)
+            return JSON.stringify({ ...generated, changes: [] });
+          result3 = generated;
+        }
+      } else {
+        const tree = result3.chats[0].branchTree;
+        let index = -1;
+        if (input.mode !== "append") {
+          const flatID = input.nodeID?.startsWith("message-") ? input.nodeID.slice(8) : input.nodeID;
+          index = wasFlat && flatID !== void 0 && String(Number(flatID)) === flatID ? Number(flatID) : tree.activePath.indexOf(input.nodeID);
+          if (!Number.isInteger(index) || index < 0 || index >= tree.activePath.length)
+            throw new Error("Invalid message node ID.");
+          if (input.mode === "overwrite" && result3.chats[0].protectedNodes?.[tree.activePath[index]])
+            throw new Error("Protected message.");
+        }
+        if (input.mode === "append")
+          result3 = appendNodeToActivePathState(result3.chats, 0, input.role, parts, result3.contentStore);
+        else if (input.mode === "branch") {
+          const branch = createBranchState(result3.chats, 0, tree.activePath[index], parts, result3.contentStore);
+          result3 = branch;
+          if (branch.chats[0].branchTree.nodes[branch.newId].role !== input.role) {
+            result3.chats = updateNodeRoleState(branch.chats, 0, branch.newId, input.role, branch.contentStore);
+          }
+        } else
+          result3 = upsertWithAutoBranchState(result3.chats, 0, index, { role: input.role, content: parts }, result3.contentStore);
+      }
+      const changed = !("noOp" in result3 && result3.noOp);
+      for (const [hash, entry] of Object.entries(result3.contentStore)) {
+        if (entry.delta && JSON.stringify(entry.delta) !== JSON.stringify(before.contentStore[hash]?.delta)) {
+          const content = resolveContent(result3.contentStore, hash);
+          const { delta: _delta, ...full } = entry;
+          result3.contentStore[hash] = { ...full, content };
+        }
+      }
+      chat = result3.chats[0];
+      chat.messages = materializeActivePath(chat.branchTree, result3.contentStore, true);
+      if (changed)
+        capture?.(historyBase, result3);
+      const changes = diffJSONChanges(before, JSON.parse(JSON.stringify({ chat, contentStore: result3.contentStore })));
+      return JSON.stringify(input.operation === "insertGenerate" ? { status: "updated", nodeID: insertedNodeID, changes } : changes);
+    });
+  }
+
+  // src/utils/branchUtils.ts
+  function readMessageAttributes(owner) {
+    const value = owner.messageAttributesV1;
+    if (!Object.hasOwn(owner, "messageAttributesV1"))
+      return void 0;
+    if (!value || value.version !== 1 || !value.byNode || typeof value.byNode !== "object" || Array.isArray(value.byNode) || Object.keys(value).some((key) => key !== "version" && key !== "byNode") || Object.keys(value.byNode).some((id) => !Object.hasOwn(owner.nodes, id)) || Object.values(value.byNode).some((attributes) => !attributes || typeof attributes !== "object" || Array.isArray(attributes) || Object.hasOwn(attributes, "role") || Object.hasOwn(attributes, "content"))) {
+      throw new Error("Unsupported message attributes namespace.");
+    }
+    return value;
+  }
+  var extraMessageAttributes = (message) => {
+    const { role, content, ...attributes } = message;
+    return attributes;
+  };
+  function setMessageAttributes(owner, nodeId, message) {
+    const attributes = extraMessageAttributes(message);
+    if (!Object.keys(attributes).length)
+      return;
+    const previous = readMessageAttributes(owner);
+    owner.messageAttributesV1 = { version: 1, byNode: {
+      ...previous?.byNode,
+      [nodeId]: { ...previous?.byNode[nodeId], ...structuredClone(attributes) }
+    } };
+  }
+  function copyMessageAttributes(source, sourceId, target, targetId) {
+    const attributes = readMessageAttributes(source)?.byNode[sourceId];
+    if (!attributes)
+      return;
+    setMessageAttributes(target, targetId, { ...attributes, role: "user", content: [] });
+  }
+  function deleteMessageAttributes(owner, nodeId) {
+    const previous = readMessageAttributes(owner);
+    if (!previous || !Object.hasOwn(previous.byNode, nodeId))
+      return;
+    const byNode = { ...previous.byNode };
+    delete byNode[nodeId];
+    owner.messageAttributesV1 = { version: 1, byNode };
+  }
+  function captureProjectedMessageAttributes(chat, contentStore) {
+    if (!chat.branchTree)
+      return;
+    let next = chat.branchTree;
+    for (const [index, message] of (chat.messages ?? []).entries()) {
+      const attributes = extraMessageAttributes(message);
+      if (!Object.keys(attributes).length)
+        continue;
+      const nodeId = chat.branchTree.activePath[index], node = chat.branchTree.nodes[nodeId];
+      if (!node || node.role !== message.role || !(0, import_lodash.isEqual)(resolveContent(contentStore, node.contentHash), message.content))
+        throw new Error("Message attributes do not match the active branch.");
+      const existing = readMessageAttributes(next)?.byNode[nodeId];
+      for (const [key, value] of Object.entries(attributes))
+        if (existing && Object.hasOwn(existing, key) && !(0, import_lodash.isEqual)(existing[key], value))
+          throw new Error("Conflicting projected message attributes.");
+      if (next === chat.branchTree)
+        next = { ...next };
+      setMessageAttributes(next, nodeId, message);
+    }
+    chat.branchTree = next;
+  }
+  function resolveBranchSwipeDirection(distance, preference = "left-next") {
+    return distance < 0 === (preference === "left-next") ? "next" : "previous";
+  }
+  function projectMessageAttributes(owner, nodeId, message) {
+    return { ...structuredClone(readMessageAttributes(owner)?.byNode[nodeId] ?? {}), role: message.role, content: message.content };
+  }
+  function materializeActivePath(tree, contentStore, includeAttributes = false) {
+    return tree.activePath.map((id) => {
+      const node = tree.nodes[id];
+      const message = { role: node.role, content: resolveContent(contentStore, node.contentHash) };
+      return includeAttributes ? projectMessageAttributes(tree, id, message) : message;
+    });
+  }
+  function flatMessagesToBranchTree(messages, contentStore) {
+    const nodes = {};
+    const ids = [];
+    const tree = { nodes, rootId: "", activePath: ids };
+    for (let i = 0; i < messages.length; i++) {
+      const id = editingUUID();
+      ids.push(id);
+      const contentHash = addContent(contentStore, messages[i].content);
+      nodes[id] = {
+        id,
+        parentId: i === 0 ? null : ids[i - 1],
+        role: messages[i].role,
+        contentHash,
+        createdAt: Date.now() - (messages.length - i) * 1e3
+      };
+      setMessageAttributes(tree, id, messages[i]);
+    }
+    tree.rootId = ids[0] ?? "";
+    return tree;
+  }
+  function flatChatToBranchTree(chat, contentStore) {
+    if (chat.branchTree)
+      return;
+    const tree = flatMessagesToBranchTree(chat.messages, contentStore);
+    for (const field of ["collapsedNodes", "omittedNodes", "protectedNodes"]) {
+      if (!chat[field])
+        continue;
+      chat[field] = Object.fromEntries(Object.entries(chat[field]).map(([key, value]) => {
+        const index = Number(key);
+        const id = Number.isInteger(index) && index >= 0 && String(index) === key ? tree.activePath[index] : void 0;
+        return [id ?? key, value];
+      }));
+    }
+    chat.branchTree = tree;
+    chat.messages = materializeActivePath(tree, contentStore);
+  }
+  function getChildrenOf(tree, nodeId) {
+    return Object.values(tree.nodes).filter((n) => n.parentId === nodeId);
+  }
+  function getSiblingGroups(tree) {
+    const grouped = /* @__PURE__ */ new Map();
+    const nodes = Object.values(tree.nodes);
+    for (const node of nodes) {
+      const group = grouped.get(node.parentId) ?? [];
+      group.push(node);
+      grouped.set(node.parentId, group);
+    }
+    const groups = [];
+    const byParent = /* @__PURE__ */ new Map();
+    const byNode = /* @__PURE__ */ Object.create(null);
+    for (const node of nodes) {
+      const parent = node.parentId || null;
+      let groupIndex = byParent.get(parent);
+      if (groupIndex === void 0) {
+        groupIndex = groups.length;
+        byParent.set(parent, groupIndex);
+        const group = grouped.get(parent) ?? [];
+        groups.push(group);
+        group.forEach((sibling, index) => {
+          byNode[sibling.id] = { groupIndex, selectedIndex: index };
+        });
+      }
+      if (!byNode[node.id])
+        byNode[node.id] = { groupIndex, selectedIndex: -1 };
+    }
+    return { groups, byNode };
+  }
+  function buildPathToLeaf(tree, nodeId) {
+    const ancestors = [];
+    let cur = nodeId;
+    while (cur) {
+      ancestors.unshift(cur);
+      cur = tree.nodes[cur]?.parentId ?? null;
+    }
+    let tip = nodeId;
+    while (true) {
+      const children = getChildrenOf(tree, tip);
+      if (children.length === 0)
+        break;
+      children.sort((a, b) => b.createdAt - a.createdAt);
+      ancestors.push(children[0].id);
+      tip = children[0].id;
+    }
+    return ancestors;
+  }
+  function findLCA(tree, nodeIdA, nodeIdB) {
+    const ancestorsA = /* @__PURE__ */ new Set();
+    let cur = nodeIdA;
+    while (cur) {
+      ancestorsA.add(cur);
+      cur = tree.nodes[cur]?.parentId ?? null;
+    }
+    cur = nodeIdB;
+    while (cur) {
+      if (ancestorsA.has(cur))
+        return cur;
+      cur = tree.nodes[cur]?.parentId ?? null;
+    }
+    return null;
+  }
+  function buildNodeDiffPaths(tree, nodeIdA, nodeIdB) {
+    const fullPathA = buildPathToLeaf(tree, nodeIdA);
+    const fullPathB = buildPathToLeaf(tree, nodeIdB);
+    const lca = findLCA(tree, nodeIdA, nodeIdB);
+    let pathA = fullPathA;
+    let pathB = fullPathB;
+    if (lca) {
+      const idxA = fullPathA.indexOf(lca);
+      const idxB = fullPathB.indexOf(lca);
+      if (idxA >= 0)
+        pathA = fullPathA.slice(idxA + 1);
+      if (idxB >= 0)
+        pathB = fullPathB.slice(idxB + 1);
+      if (nodeIdA === lca)
+        pathA = fullPathA.slice(idxA);
+      if (nodeIdB === lca)
+        pathB = fullPathB.slice(idxB);
+    }
+    return { pathA, pathB };
+  }
+  function collectDescendants(tree, nodeId) {
+    const result3 = /* @__PURE__ */ new Set();
+    const queue = [nodeId];
+    while (queue.length > 0) {
+      const id = queue.pop();
+      result3.add(id);
+      for (const child of getChildrenOf(tree, id)) {
+        queue.push(child.id);
+      }
+    }
+    return result3;
+  }
+  function resolveRegenerateTarget(role, messageIndex, messagesLength) {
+    if (role === "system")
+      return null;
+    if (role === "assistant") {
+      const afterRemoval = messagesLength - 1;
+      return {
+        removeIndex: messageIndex,
+        submitMode: messageIndex >= afterRemoval ? "append" : "insert",
+        insertIndex: messageIndex
+      };
+    }
+    const nextIndex = messageIndex + 1;
+    const hasNext = nextIndex < messagesLength;
+    const lengthAfterRemoval = hasNext ? messagesLength - 1 : messagesLength;
+    return {
+      removeIndex: hasNext ? nextIndex : -1,
+      submitMode: nextIndex >= lengthAfterRemoval ? "append" : "insert",
+      insertIndex: nextIndex
+    };
+  }
+
+  // src/store/branch-domain.ts
+  var extractSystemText = (content) => content.filter(isTextContent).map((c) => c.text).filter(Boolean).join("\n");
+  var syncBubbleToConfig = (chat, tree, contentStore) => {
+    const topNodeId = tree.activePath[0];
+    if (!topNodeId)
+      return;
+    const topNode = tree.nodes[topNodeId];
+    if (!topNode || topNode.role !== "system")
+      return;
+    const content = resolveContent(contentStore, topNode.contentHash);
+    chat.config = { ...chat.config, systemPrompt: extractSystemText(content) || void 0 };
+  };
+  var cloneChatAt = (chats, chatIndex) => {
+    const result3 = chats.slice();
+    const chat = result3[chatIndex];
+    result3[chatIndex] = {
+      ...chat,
+      messages: chat.messages.slice(),
+      branchTree: chat.branchTree ? {
+        ...chat.branchTree,
+        nodes: { ...chat.branchTree.nodes },
+        activePath: chat.branchTree.activePath.slice(),
+        ...chat.branchTree.messageAttributesV1 ? { messageAttributesV1: structuredClone(readMessageAttributes(chat.branchTree)) } : {}
+      } : void 0,
+      collapsedNodes: chat.collapsedNodes ? { ...chat.collapsedNodes } : void 0,
+      omittedNodes: chat.omittedNodes ? { ...chat.omittedNodes } : void 0,
+      protectedNodes: chat.protectedNodes ? { ...chat.protectedNodes } : void 0
+    };
+    return result3;
+  };
+  var cloneNode = (node) => ({ ...node });
+  var ensureBranchReadyState = (chats, chatIndex, currentContentStore) => {
+    const contentStore = Object.fromEntries(Object.entries(currentContentStore).map(([hash, entry]) => [hash, { ...entry }]));
+    const ensured = ensureBranchTreeState(chats, chatIndex, contentStore);
+    return { chats: cloneChatAt(ensured.chats, chatIndex), contentStore: ensured.contentStore };
+  };
+  var cloneNodeIfPresent = (tree, nodeId) => {
+    if (!nodeId)
+      return;
+    const node = tree.nodes[nodeId];
+    if (!node)
+      return;
+    tree.nodes[nodeId] = cloneNode(node);
+  };
+  var prepareBranchMutationState = (chats, chatIndex, currentContentStore) => {
+    const { chats: updatedChats, contentStore } = ensureBranchReadyState(
+      chats,
+      chatIndex,
+      currentContentStore
+    );
+    const chat = updatedChats[chatIndex];
+    return {
+      chats: updatedChats,
+      chat,
+      tree: chat.branchTree,
+      contentStore
+    };
+  };
+  var finalizePreparedBranchMutationState = ({
+    chats,
+    chat,
+    tree,
+    contentStore
+  }) => {
+    tree.rootId = tree.activePath[0] ?? "";
+    chat.messages = materializeActivePath(tree, contentStore);
+    return { chats, contentStore };
+  };
+  var removeMessageAtIndexFromPreparedState = (state, messageIndex, options) => {
+    const { tree, contentStore } = state;
+    const nodeId = tree.activePath[messageIndex];
+    if (!nodeId)
+      return;
+    const parentId = tree.nodes[nodeId]?.parentId ?? null;
+    const nextId = tree.activePath[messageIndex + 1] ?? null;
+    Object.values(tree.nodes).forEach((node) => {
+      if (node.parentId !== nodeId)
+        return;
+      tree.nodes[node.id] = {
+        ...node,
+        parentId
+      };
+    });
+    if (nextId) {
+      cloneNodeIfPresent(tree, nextId);
+      tree.nodes[nextId].parentId = parentId;
+    }
+    if (!options?.preserveNode) {
+      releaseContent(contentStore, tree.nodes[nodeId].contentHash);
+      deleteMessageAttributes(tree, nodeId);
+      delete tree.nodes[nodeId];
+    }
+    tree.activePath.splice(messageIndex, 1);
+  };
+  var ensureBranchTreeState = (chats, chatIndex, currentContentStore) => {
+    if (chats[chatIndex]?.branchTree) {
+      if (chats[chatIndex].messages.some((message) => Object.keys(message).some((key) => key !== "role" && key !== "content"))) {
+        const updatedChats2 = cloneChatAt(chats, chatIndex);
+        captureProjectedMessageAttributes(updatedChats2[chatIndex], currentContentStore);
+        return { chats: updatedChats2, contentStore: currentContentStore };
+      }
+      return { chats, contentStore: currentContentStore };
+    }
+    const contentStore = Object.fromEntries(Object.entries(currentContentStore).map(([hash, entry]) => [hash, { ...entry }]));
+    const updatedChats = cloneChatAt(chats, chatIndex);
+    flatChatToBranchTree(updatedChats[chatIndex], contentStore);
+    return { chats: updatedChats, contentStore };
+  };
+  var createBranchState = (chats, chatIndex, fromNodeId, newContent, currentContentStore) => {
+    const contentStore = { ...currentContentStore };
+    const updatedChats = cloneChatAt(chats, chatIndex);
+    captureProjectedMessageAttributes(updatedChats[chatIndex], contentStore);
+    const tree = updatedChats[chatIndex].branchTree;
+    const fromNode = tree.nodes[fromNodeId];
+    const newId = editingUUID();
+    const contentHash = newContent ? addContentDelta(contentStore, newContent, fromNode.contentHash) : (() => {
+      retainContent(contentStore, fromNode.contentHash);
+      return fromNode.contentHash;
+    })();
+    tree.nodes[newId] = {
+      id: newId,
+      parentId: fromNode.parentId,
+      role: fromNode.role,
+      contentHash,
+      createdAt: Date.now()
+    };
+    copyMessageAttributes(tree, fromNodeId, tree, newId);
+    const fromIdx = tree.activePath.indexOf(fromNodeId);
+    tree.activePath = [...tree.activePath.slice(0, fromIdx), newId];
+    if (fromIdx === 0)
+      syncBubbleToConfig(updatedChats[chatIndex], tree, contentStore);
+    updatedChats[chatIndex].messages = materializeActivePath(tree, contentStore);
+    return { chats: updatedChats, contentStore, newId };
+  };
+  var switchActivePathState = (chats, chatIndex, newPath, contentStore) => {
+    const updatedChats = cloneChatAt(chats, chatIndex);
+    captureProjectedMessageAttributes(updatedChats[chatIndex], contentStore);
+    const tree = updatedChats[chatIndex].branchTree;
+    tree.activePath = newPath;
+    updatedChats[chatIndex].messages = materializeActivePath(tree, contentStore);
+    return updatedChats;
+  };
+  var deleteBranchState = (chats, chatIndex, nodeId, currentContentStore) => {
+    const contentStore = Object.fromEntries(Object.entries(currentContentStore).map(([hash, entry]) => [hash, { ...entry }]));
+    const updatedChats = cloneChatAt(chats, chatIndex);
+    captureProjectedMessageAttributes(updatedChats[chatIndex], contentStore);
+    const tree = updatedChats[chatIndex].branchTree;
+    const toDelete = collectDescendants(tree, nodeId);
+    const parentId = tree.nodes[nodeId]?.parentId;
+    toDelete.forEach((id) => {
+      releaseContent(contentStore, tree.nodes[id].contentHash);
+      deleteMessageAttributes(tree, id);
+      delete tree.nodes[id];
+    });
+    if (tree.activePath.some((id) => toDelete.has(id))) {
+      if (parentId) {
+        const siblings = getChildrenOf(tree, parentId);
+        if (siblings.length > 0) {
+          tree.activePath = buildPathToLeaf(tree, siblings[0].id);
+        } else {
+          const parentIdx = tree.activePath.indexOf(parentId);
+          tree.activePath = tree.activePath.slice(0, parentIdx + 1);
+        }
+      } else {
+        tree.activePath = [];
+      }
+      updatedChats[chatIndex].messages = materializeActivePath(tree, contentStore);
+    }
+    if (tree.activePath.length)
+      tree.rootId = tree.activePath[0];
+    else if (!tree.nodes[tree.rootId])
+      tree.rootId = "";
+    return { chats: updatedChats, contentStore };
+  };
+  var pruneHiddenNodesState = (chats, chatIndex, currentContentStore) => {
+    const contentStore = Object.fromEntries(Object.entries(currentContentStore).map(([hash, entry]) => [hash, { ...entry }]));
+    const updatedChats = cloneChatAt(chats, chatIndex);
+    captureProjectedMessageAttributes(updatedChats[chatIndex], contentStore);
+    const tree = updatedChats[chatIndex].branchTree;
+    const activeSet = new Set(tree.activePath);
+    const protectedSet = /* @__PURE__ */ new Set();
+    for (const node of Object.values(tree.nodes)) {
+      if (node.pinned) {
+        for (const id of collectDescendants(tree, node.id)) {
+          protectedSet.add(id);
+        }
+      }
+    }
+    const chatProtectedNodes = updatedChats[chatIndex].protectedNodes;
+    if (chatProtectedNodes) {
+      for (const [id, value] of Object.entries(chatProtectedNodes)) {
+        if (value && tree.nodes[id]) {
+          protectedSet.add(id);
+        }
+      }
+    }
+    const toDelete = Object.keys(tree.nodes).filter(
+      (id) => !activeSet.has(id) && !protectedSet.has(id)
+    );
+    toDelete.forEach((id) => {
+      releaseContent(contentStore, tree.nodes[id].contentHash);
+      deleteMessageAttributes(tree, id);
+      delete tree.nodes[id];
+    });
+    for (const id of Object.keys(tree.nodes)) {
+      const node = tree.nodes[id];
+      if (node.parentId && !tree.nodes[node.parentId]) {
+        tree.nodes[id] = cloneNode(node);
+        tree.nodes[id].parentId = null;
+      }
+    }
+    if (tree.activePath.length > 0)
+      tree.rootId = tree.activePath[0];
+    else if (!tree.nodes[tree.rootId])
+      tree.rootId = "";
+    return { chats: updatedChats, contentStore };
+  };
+  var setBranchNodeFieldState = (chats, chatIndex, nodeId, field, value) => {
+    const updated = cloneChatAt(chats, chatIndex);
+    const tree = updated[chatIndex].branchTree;
+    tree.nodes[nodeId] = { ...tree.nodes[nodeId], [field]: value };
+    return updated;
+  };
+  var appendNodeToActivePathState = (chats, chatIndex, role, content, currentContentStore) => {
+    const { chats: updatedChats, chat, tree, contentStore } = prepareBranchMutationState(chats, chatIndex, currentContentStore);
+    const parentId = tree.activePath[tree.activePath.length - 1] ?? null;
+    const newId = editingUUID();
+    tree.nodes[newId] = {
+      id: newId,
+      parentId,
+      role,
+      contentHash: addContent(contentStore, content),
+      createdAt: Date.now()
+    };
+    tree.activePath.push(newId);
+    const finalized = finalizePreparedBranchMutationState({
+      chats: updatedChats,
+      chat,
+      tree,
+      contentStore
+    });
+    return { ...finalized, newId };
+  };
+  var upsertMessageAtIndexState = (chats, chatIndex, messageIndex, message, currentContentStore) => {
+    const { chats: updatedChats, chat, tree, contentStore } = prepareBranchMutationState(chats, chatIndex, currentContentStore);
+    const existingId = tree.activePath[messageIndex];
+    const previousRole = existingId ? tree.nodes[existingId].role : void 0;
+    chat.messages[messageIndex] = message;
+    if (existingId)
+      setMessageAttributes(tree, existingId, message);
+    if (existingId) {
+      const oldHash = tree.nodes[existingId].contentHash;
+      const newHash = addContentDelta(contentStore, message.content, oldHash);
+      releaseContent(contentStore, oldHash);
+      tree.nodes[existingId] = {
+        ...tree.nodes[existingId],
+        role: message.role,
+        contentHash: newHash
+      };
+    } else if (messageIndex === tree.activePath.length) {
+      const parentId = messageIndex === 0 ? null : tree.activePath[messageIndex - 1] ?? null;
+      const newId = editingUUID();
+      tree.nodes[newId] = {
+        id: newId,
+        parentId,
+        role: message.role,
+        contentHash: addContent(contentStore, message.content),
+        createdAt: Date.now()
+      };
+      setMessageAttributes(tree, newId, message);
+      tree.activePath.push(newId);
+      if (messageIndex === 0) {
+        tree.rootId = newId;
+      }
+    }
+    if (messageIndex === 0) {
+      if (previousRole === "system" && message.role !== "system") {
+        chat.config = { ...chat.config, systemPrompt: void 0 };
+      } else {
+        syncBubbleToConfig(chat, tree, contentStore);
+      }
+    }
+    return finalizePreparedBranchMutationState({
+      chats: updatedChats,
+      chat,
+      tree,
+      contentStore
+    });
+  };
+  var insertMessageAtIndexState = (chats, chatIndex, messageIndex, message, currentContentStore) => {
+    const { chats: updatedChats, chat, tree, contentStore } = prepareBranchMutationState(chats, chatIndex, currentContentStore);
+    const prevId = messageIndex > 0 ? tree.activePath[messageIndex - 1] ?? null : null;
+    const nextId = tree.activePath[messageIndex];
+    const newId = editingUUID();
+    tree.nodes[newId] = {
+      id: newId,
+      parentId: prevId,
+      role: message.role,
+      contentHash: addContent(contentStore, message.content),
+      createdAt: Date.now()
+    };
+    if (nextId) {
+      cloneNodeIfPresent(tree, nextId);
+      tree.nodes[nextId].parentId = newId;
+    }
+    setMessageAttributes(tree, newId, message);
+    tree.activePath.splice(messageIndex, 0, newId);
+    if (messageIndex === 0) {
+      tree.rootId = newId;
+    }
+    const finalized = finalizePreparedBranchMutationState({
+      chats: updatedChats,
+      chat,
+      tree,
+      contentStore
+    });
+    return { ...finalized, newId };
+  };
+  var removeMessageAtIndexState = (chats, chatIndex, messageIndex, currentContentStore, options) => {
+    const state = prepareBranchMutationState(chats, chatIndex, currentContentStore);
+    removeMessageAtIndexFromPreparedState(state, messageIndex, options);
+    return finalizePreparedBranchMutationState(state);
+  };
+  var moveMessageState = (chats, chatIndex, messageIndex, direction, currentContentStore) => {
+    const { chats: updatedChats, chat, tree, contentStore } = prepareBranchMutationState(chats, chatIndex, currentContentStore);
+    const targetIndex = direction === "up" ? messageIndex - 1 : messageIndex + 1;
+    const topNode = tree.activePath[0] ? tree.nodes[tree.activePath[0]] : void 0;
+    if (topNode?.role === "system") {
+      if (messageIndex === 0 || targetIndex === 0) {
+        return finalizePreparedBranchMutationState({
+          chats: updatedChats,
+          chat,
+          tree,
+          contentStore
+        });
+      }
+    }
+    if (targetIndex < 0 || targetIndex >= tree.activePath.length || messageIndex < 0 || messageIndex >= tree.activePath.length) {
+      return finalizePreparedBranchMutationState({
+        chats: updatedChats,
+        chat,
+        tree,
+        contentStore
+      });
+    }
+    const start2 = Math.min(messageIndex, targetIndex);
+    const end = Math.max(messageIndex, targetIndex);
+    const reorderedPath = tree.activePath.slice();
+    const [movedId] = reorderedPath.splice(messageIndex, 1);
+    reorderedPath.splice(targetIndex, 0, movedId);
+    tree.activePath = reorderedPath;
+    for (let index = start2; index <= end + 1; index += 1) {
+      const nodeId = tree.activePath[index];
+      if (!nodeId)
+        continue;
+      cloneNodeIfPresent(tree, nodeId);
+      tree.nodes[nodeId].parentId = index === 0 ? null : tree.activePath[index - 1] ?? null;
+    }
+    return finalizePreparedBranchMutationState({
+      chats: updatedChats,
+      chat,
+      tree,
+      contentStore
+    });
+  };
+  var replaceMessageAndPruneFollowingState = (chats, chatIndex, messageIndex, message, currentContentStore, removeCount = 0) => {
+    const state = prepareBranchMutationState(chats, chatIndex, currentContentStore);
+    const { tree, contentStore } = state;
+    const existingId = tree.activePath[messageIndex];
+    state.chat.messages[messageIndex] = message;
+    if (existingId)
+      setMessageAttributes(tree, existingId, message);
+    if (existingId) {
+      const oldHash = tree.nodes[existingId].contentHash;
+      const newHash = addContentDelta(contentStore, message.content, oldHash);
+      releaseContent(contentStore, oldHash);
+      tree.nodes[existingId] = {
+        ...tree.nodes[existingId],
+        role: message.role,
+        contentHash: newHash
+      };
+    } else if (messageIndex === tree.activePath.length) {
+      const parentId = messageIndex === 0 ? null : tree.activePath[messageIndex - 1] ?? null;
+      const newId = editingUUID();
+      tree.nodes[newId] = {
+        id: newId,
+        parentId,
+        role: message.role,
+        contentHash: addContent(contentStore, message.content),
+        createdAt: Date.now()
+      };
+      setMessageAttributes(tree, newId, message);
+      tree.activePath.push(newId);
+    }
+    for (let removed = 0; removed < removeCount; removed += 1) {
+      removeMessageAtIndexFromPreparedState(state, messageIndex + 1);
+    }
+    return finalizePreparedBranchMutationState(state);
+  };
+  var copyBranchSequenceState = (chats, chatIndex, fromNodeId, toNodeId) => {
+    const tree = chats[chatIndex]?.branchTree;
+    if (!tree?.nodes[fromNodeId] || !tree.nodes[toNodeId])
+      return null;
+    const nodeIds = [];
+    let cur = toNodeId;
+    const visited = /* @__PURE__ */ new Set();
+    while (cur) {
+      if (visited.has(cur) || !tree.nodes[cur])
+        return null;
+      visited.add(cur);
+      nodeIds.unshift(cur);
+      if (cur === fromNodeId)
+        break;
+      cur = tree.nodes[cur]?.parentId ?? null;
+    }
+    if (nodeIds[0] !== fromNodeId)
+      return null;
+    const nodes = {};
+    nodeIds.forEach((id) => {
+      nodes[id] = { ...tree.nodes[id] };
+    });
+    const clipboard = { nodeIds, sourceChat: chats[chatIndex].id, nodes };
+    for (const field of ["collapsedNodes", "omittedNodes", "protectedNodes"]) {
+      const source = chats[chatIndex][field];
+      if (source)
+        clipboard[field] = Object.fromEntries(nodeIds.filter((id) => Object.hasOwn(source, id)).map((id) => [id, source[id]]));
+    }
+    for (const id of nodeIds)
+      copyMessageAttributes(tree, id, clipboard, id);
+    return clipboard;
+  };
+  var removeBranchSequenceState = (chats, chatIndex, nodeIds, currentContentStore) => {
+    const contentStore = Object.fromEntries(Object.entries(currentContentStore).map(([hash, entry]) => [hash, { ...entry }]));
+    const updatedChats = cloneChatAt(chats, chatIndex);
+    const chat = updatedChats[chatIndex];
+    captureProjectedMessageAttributes(chat, contentStore);
+    const tree = chat.branchTree;
+    const removed = new Set(nodeIds);
+    for (const node of Object.values(tree.nodes)) {
+      if (removed.has(node.id) || !node.parentId || !removed.has(node.parentId))
+        continue;
+      let parentId = node.parentId;
+      while (parentId && removed.has(parentId))
+        parentId = tree.nodes[parentId].parentId;
+      tree.nodes[node.id] = { ...node, parentId };
+    }
+    for (const id of nodeIds) {
+      releaseContent(contentStore, tree.nodes[id].contentHash);
+      deleteMessageAttributes(tree, id);
+      delete tree.nodes[id];
+    }
+    tree.activePath = tree.activePath.filter((id) => !removed.has(id));
+    if (tree.activePath.length === 0) {
+      const root = Object.values(tree.nodes).find((node) => !node.parentId);
+      if (root)
+        tree.activePath = buildPathToLeaf(tree, root.id);
+    }
+    tree.rootId = tree.activePath[0] ?? "";
+    chat.messages = materializeActivePath(tree, contentStore);
+    return { chats: updatedChats, contentStore };
+  };
+  var pasteBranchSequenceState = (chats, targetChatIndex, afterNodeId, clipboard, currentContentStore) => {
+    const contentStore = Object.fromEntries(Object.entries(currentContentStore).map(([hash, entry]) => [hash, { ...entry }]));
+    const updatedChats = cloneChatAt(chats, targetChatIndex);
+    captureProjectedMessageAttributes(updatedChats[targetChatIndex], contentStore);
+    const tree = updatedChats[targetChatIndex].branchTree;
+    const idMap = {};
+    clipboard.nodeIds.forEach((id) => {
+      idMap[id] = editingUUID();
+    });
+    for (const field of ["collapsedNodes", "omittedNodes", "protectedNodes"]) {
+      const source = clipboard[field];
+      if (source && clipboard.nodeIds.some((id) => Object.hasOwn(source, id))) {
+        updatedChats[targetChatIndex][field] = { ...updatedChats[targetChatIndex][field], ...Object.fromEntries(clipboard.nodeIds.filter((id) => Object.hasOwn(source, id)).map((id) => [idMap[id], source[id]])) };
+      }
+    }
+    let prevId = afterNodeId;
+    for (const origId of clipboard.nodeIds) {
+      const newId = idMap[origId];
+      const srcNode = clipboard.nodes[origId];
+      retainContent(contentStore, srcNode.contentHash);
+      tree.nodes[newId] = {
+        ...srcNode,
+        id: newId,
+        parentId: prevId,
+        createdAt: Date.now()
+      };
+      copyMessageAttributes(clipboard, origId, tree, newId);
+      prevId = newId;
+    }
+    const destinationPath = buildPathToLeaf(tree, afterNodeId);
+    const insertIdx = destinationPath.indexOf(afterNodeId);
+    tree.activePath = [
+      ...destinationPath.slice(0, insertIdx + 1),
+      ...clipboard.nodeIds.map((id) => idMap[id])
+    ];
+    tree.rootId = tree.activePath[0] ?? "";
+    updatedChats[targetChatIndex].messages = materializeActivePath(tree, contentStore);
+    return { chats: updatedChats, contentStore };
+  };
+  var updateNodeRoleState = (chats, chatIndex, nodeId, role, contentStore) => {
+    const updatedChats = cloneChatAt(chats, chatIndex);
+    const chat = updatedChats[chatIndex];
+    captureProjectedMessageAttributes(chat, contentStore);
+    const tree = chat.branchTree;
+    const prevRole = tree.nodes[nodeId]?.role;
+    tree.nodes[nodeId] = { ...tree.nodes[nodeId], role };
+    const isTopNode = tree.activePath[0] === nodeId;
+    if (isTopNode) {
+      if (prevRole === "system" && role !== "system") {
+        chat.config = { ...chat.config, systemPrompt: void 0 };
+      } else if (prevRole !== "system" && role === "system") {
+        syncBubbleToConfig(chat, tree, contentStore);
+      }
+    }
+    chat.messages = materializeActivePath(tree, contentStore);
+    return updatedChats;
+  };
+  var upsertWithAutoBranchState = (chats, chatIndex, messageIndex, message, currentContentStore) => {
+    const { chats: ensuredChats, contentStore: ensuredStore } = ensureBranchReadyState(chats, chatIndex, currentContentStore);
+    const tree = ensuredChats[chatIndex].branchTree;
+    const existingId = tree.activePath[messageIndex];
+    if (!existingId) {
+      return upsertMessageAtIndexState(
+        ensuredChats,
+        chatIndex,
+        messageIndex,
+        message,
+        ensuredStore
+      );
+    }
+    const node = tree.nodes[existingId];
+    const contentChanged = !isContentEqual(ensuredStore, node.contentHash, message.content);
+    const roleChanged = node.role !== message.role;
+    const previousAttributes = JSON.stringify(tree.messageAttributesV1);
+    setMessageAttributes(tree, existingId, message);
+    const attributesChanged = JSON.stringify(tree.messageAttributesV1) !== previousAttributes;
+    if (!contentChanged && !roleChanged && !attributesChanged) {
+      return { chats: ensuredChats, contentStore: ensuredStore, noOp: true };
+    }
+    if (!contentChanged && !roleChanged)
+      return { chats: ensuredChats, contentStore: ensuredStore };
+    if (!contentChanged) {
+      return { chats: updateNodeRoleState(ensuredChats, chatIndex, existingId, message.role, ensuredStore), contentStore: ensuredStore };
+    }
+    return upsertMessageAtIndexState(
+      ensuredChats,
+      chatIndex,
+      messageIndex,
+      message,
+      ensuredStore
+    );
+  };
+  var resolveNodeTarget = (chats, input, activeOnly = false) => {
+    const chatIndex = chats?.findIndex((chat2) => chat2.id === input.chatId) ?? -1;
+    const chat = chats?.[chatIndex];
+    if (!chat)
+      return { status: "chat-missing" };
+    const index = chat.branchTree ? chat.branchTree.activePath.indexOf(input.nodeId) : Number(input.nodeId);
+    const exists2 = chat.branchTree ? !!chat.branchTree.nodes[input.nodeId] : Number.isInteger(index) && index >= 0 && String(index) === input.nodeId && !!chat.messages[index];
+    if (!exists2)
+      return { status: "node-missing" };
+    if (activeOnly && index < 0)
+      return { status: "invalid-target" };
+    return { status: "valid", chatIndex, messageIndex: index, chat };
+  };
+  var setNodeDisplayFieldState = (chats, input, field, value, contentStore) => {
+    const target = resolveNodeTarget(chats, input);
+    if (target.status !== "valid")
+      return target;
+    const ensured = ensureBranchTreeState(chats, target.chatIndex, contentStore);
+    const nodeId = target.chat.branchTree ? input.nodeId : ensured.chats[target.chatIndex].branchTree.activePath[target.messageIndex];
+    if (ensured.chats[target.chatIndex].branchTree.nodes[nodeId][field] === value)
+      return { status: "unchanged" };
+    return {
+      status: "updated",
+      chats: setBranchNodeFieldState(ensured.chats, target.chatIndex, nodeId, field, value),
+      contentStore: ensured.contentStore,
+      nodeId,
+      historyBase: ensured
+    };
+  };
+  var insertNodeState = (chats, input, contentStore) => {
+    const chatIndex = chats?.findIndex((chat) => chat.id === input.chatId) ?? -1;
+    if (chatIndex < 0)
+      return { status: "chat-missing" };
+    const target = input.beforeNodeId === null ? null : resolveNodeTarget(chats, { chatId: input.chatId, nodeId: input.beforeNodeId }, true);
+    if (target && target.status !== "valid")
+      return target;
+    const index = target?.messageIndex ?? chats[chatIndex].messages.length;
+    const ensured = ensureBranchTreeState(chats, chatIndex, contentStore);
+    const result3 = insertMessageAtIndexState(ensured.chats, chatIndex, index, { role: input.role, content: input.content }, ensured.contentStore);
+    return { status: "updated", ...result3, nodeId: result3.newId, historyBase: ensured };
+  };
+  var removeNodeState = (chats, input, contentStore, options) => {
+    const target = resolveNodeTarget(chats, input, true);
+    if (target.status !== "valid")
+      return target;
+    if ((target.chat.protectedNodes ?? {})[input.nodeId])
+      return { status: "protected" };
+    const ensured = ensureBranchReadyState(chats, target.chatIndex, contentStore);
+    const result3 = removeMessageAtIndexState(ensured.chats, target.chatIndex, target.messageIndex, ensured.contentStore, options);
+    return { status: "updated", ...result3, historyBase: ensured };
+  };
+  var moveNodeState = (chats, input, contentStore) => {
+    const target = resolveNodeTarget(chats, input, true);
+    if (target.status !== "valid")
+      return target;
+    if (input.direction === "up" ? target.messageIndex === 0 : target.messageIndex === target.chat.messages.length - 1)
+      return { status: "unchanged" };
+    const topRole = target.chat.messages[0]?.role;
+    if (topRole === "system" && (target.messageIndex === 0 || input.direction === "up" && target.messageIndex === 1))
+      return { status: "unchanged" };
+    const ensured = ensureBranchTreeState(chats, target.chatIndex, contentStore);
+    const result3 = moveMessageState(ensured.chats, target.chatIndex, target.messageIndex, input.direction, ensured.contentStore);
+    return { status: "updated", ...result3, historyBase: ensured };
+  };
+  var replaceNodeAndPruneState = (chats, input, contentStore) => {
+    if (!Number.isInteger(input.removeCount) || input.removeCount < 0)
+      return { status: "invalid-input", removedNodeIds: [], pruneBlockedBy: [] };
+    const target = resolveNodeTarget(chats, input, true);
+    if (target.status !== "valid")
+      return { status: "missing", removedNodeIds: [], pruneBlockedBy: [] };
+    if (target.chat.protectedNodes?.[input.nodeId])
+      return { status: "protected", blockedNodeIds: [input.nodeId], removedNodeIds: [], pruneBlockedBy: [] };
+    const ensured = ensureBranchTreeState(chats, target.chatIndex, contentStore);
+    const prepared = ensured.chats[target.chatIndex];
+    const following = prepared.branchTree.activePath.slice(target.messageIndex + 1, target.messageIndex + 1 + input.removeCount);
+    const pruneBlockedBy = following.filter((id) => prepared.protectedNodes?.[id]);
+    const result3 = replaceMessageAndPruneFollowingState(ensured.chats, target.chatIndex, target.messageIndex, { role: input.role, content: input.content }, ensured.contentStore, pruneBlockedBy.length ? 0 : input.removeCount);
+    return { status: "updated", ...result3, historyBase: ensured, removedNodeIds: pruneBlockedBy.length ? [] : following, pruneBlockedBy };
+  };
+  var deleteNodeBranchState = (chats, input, contentStore) => {
+    const target = resolveNodeTarget(chats, input);
+    if (target.status !== "valid")
+      return target;
+    const blockedNodeIds = target.chat.branchTree ? [...collectDescendants(target.chat.branchTree, input.nodeId)].filter((id) => target.chat.protectedNodes?.[id]) : target.chat.messages.slice(target.messageIndex).map((_23, index) => String(target.messageIndex + index)).filter((id) => target.chat.protectedNodes?.[id]);
+    if (blockedNodeIds.length)
+      return { status: "protected", blockedNodeIds };
+    const ensured = ensureBranchTreeState(chats, target.chatIndex, contentStore);
+    const nodeId = target.chat.branchTree ? input.nodeId : ensured.chats[target.chatIndex].branchTree.activePath[target.messageIndex];
+    const removedNodeIds = [...collectDescendants(ensured.chats[target.chatIndex].branchTree, nodeId)];
+    return { status: "updated", ...deleteBranchState(ensured.chats, target.chatIndex, nodeId, ensured.contentStore), historyBase: ensured, removedNodeIds };
+  };
+
+  // src/utils/streamingBuffer.ts
+  var STREAMING_CONTENT_HASH_PREFIX = "__streaming:";
+  var streamingBuffers = /* @__PURE__ */ new Map();
+  var cloneContentItem = (content) => {
+    if (content.type === "image_url")
+      return { ...content, image_url: { ...content.image_url } };
+    return { ...content };
+  };
+  var cloneContent = (content) => content.map(cloneContentItem);
+  var bufferKey = (chatId, nodeId) => JSON.stringify([chatId, nodeId]);
+  var isStreamingContentHash = (hash) => hash.startsWith(STREAMING_CONTENT_HASH_PREFIX);
+  var getStreamingTargetFromHash = (hash) => {
+    if (!isStreamingContentHash(hash))
+      return null;
+    try {
+      const target = JSON.parse(hash.slice(STREAMING_CONTENT_HASH_PREFIX.length));
+      return Array.isArray(target) && target.length === 2 && target.every((value) => typeof value === "string") ? { chatId: target[0], nodeId: target[1] } : null;
+    } catch {
+      return null;
+    }
+  };
+  var getBufferedContent = (chatId, nodeId) => {
+    const key = bufferKey(chatId, nodeId);
+    const entry = streamingBuffers.get(key);
+    return entry ? cloneContent(entry.content) : void 0;
+  };
+  var peekBufferedContent = (chatId, nodeId) => {
+    const key = bufferKey(chatId, nodeId);
+    return streamingBuffers.get(key)?.content;
+  };
+  var finalizeStreamingSnapshotState = (chats, contentStore) => {
+    if (!chats || chats.length === 0) {
+      return { chats, contentStore, changed: false };
+    }
+    let updatedChats = chats;
+    let updatedContentStore = contentStore;
+    let changed = false;
+    const rematerializedChatIndexes = /* @__PURE__ */ new Set();
+    chats.forEach((chat, chatIndex) => {
+      const tree = chat.branchTree;
+      if (!tree)
+        return;
+      Object.values(tree.nodes).forEach((node) => {
+        if (!isStreamingContentHash(node.contentHash))
+          return;
+        const bufferedContent = getBufferedContent(chat.id, node.id);
+        if (!bufferedContent)
+          return;
+        if (!changed) {
+          updatedChats = chats.slice();
+          updatedContentStore = Object.fromEntries(Object.entries(contentStore).map(([hash, entry]) => [hash, { ...entry }]));
+          changed = true;
+        }
+        if (updatedChats[chatIndex] === chats[chatIndex]) {
+          updatedChats = cloneChatAt(updatedChats, chatIndex);
+        }
+        const updatedChat = updatedChats[chatIndex];
+        const updatedTree = updatedChat.branchTree;
+        updatedTree.nodes[node.id] = {
+          ...updatedTree.nodes[node.id],
+          contentHash: addContent(updatedContentStore, bufferedContent)
+        };
+        rematerializedChatIndexes.add(chatIndex);
+      });
+    });
+    rematerializedChatIndexes.forEach((chatIndex) => {
+      const chat = updatedChats[chatIndex];
+      if (!chat.branchTree)
+        return;
+      chat.messages = materializeActivePath(chat.branchTree, updatedContentStore);
+    });
+    return { chats: updatedChats, contentStore: updatedContentStore, changed };
+  };
+
+  // src/utils/contentStore.ts
+  var import_diff_match_patch = __toESM(require_diff_match_patch());
+  var dmp = new import_diff_match_patch.diff_match_patch();
+  var MAX_CHAIN_DEPTH = 5;
+  var pendingGCHashes = /* @__PURE__ */ new Set();
+  var DELTA_SIZE_THRESHOLD = 0.7;
+  function isDeltaEligible(content) {
+    return content.length > 0 && content.every((c) => c.type === "text");
+  }
+  function computeContentHash(content) {
+    const str = JSON.stringify(content);
+    let hash = 2166136261;
+    for (let i = 0; i < str.length; i++) {
+      hash ^= str.charCodeAt(i);
+      hash = hash * 16777619 >>> 0;
+    }
+    return hash.toString(36);
+  }
+  function getChainDepth(store, hash) {
+    let depth = 0;
+    let current = hash;
+    const visited = /* @__PURE__ */ new Set();
+    while (store[current]?.delta) {
+      if (visited.has(current))
+        return MAX_CHAIN_DEPTH + 1;
+      visited.add(current);
+      depth++;
+      current = store[current].delta.baseHash;
+    }
+    return depth;
+  }
+  function contentToText(content) {
+    return JSON.stringify(content);
+  }
+  function addContent(store, content) {
+    let hash = computeContentHash(content);
+    const serialized = JSON.stringify(content);
+    while (store[hash] && !isContentMatch(store, hash, serialized)) {
+      hash += "_";
+    }
+    if (store[hash]) {
+      store[hash].refCount++;
+    } else {
+      store[hash] = { content, refCount: 1 };
+    }
+    return hash;
+  }
+  function isContentMatch(store, hash, serialized) {
+    const entry = store[hash];
+    if (!entry)
+      return false;
+    if (entry.delta) {
+      const resolved = resolveContent(store, hash);
+      return JSON.stringify(resolved) === serialized;
+    }
+    return JSON.stringify(entry.content) === serialized;
+  }
+  function addContentDelta(store, content, baseHash) {
+    const baseEntry = store[baseHash];
+    if (!baseEntry)
+      return addContent(store, content);
+    if (!isDeltaEligible(content))
+      return addContent(store, content);
+    const baseContent = resolveContent(store, baseHash);
+    if (!isDeltaEligible(baseContent))
+      return addContent(store, content);
+    if (getChainDepth(store, baseHash) >= MAX_CHAIN_DEPTH - 1) {
+      return addContent(store, content);
+    }
+    let hash = computeContentHash(content);
+    const serialized = JSON.stringify(content);
+    while (store[hash] && !isContentMatch(store, hash, serialized)) {
+      hash += "_";
+    }
+    if (store[hash]) {
+      store[hash].refCount++;
+      return hash;
+    }
+    const baseText = contentToText(baseContent);
+    const newText = contentToText(content);
+    const patches = dmp.patch_make(baseText, newText);
+    const patchText = dmp.patch_toText(patches);
+    if (patchText.length >= newText.length * DELTA_SIZE_THRESHOLD) {
+      store[hash] = { content, refCount: 1 };
+      return hash;
+    }
+    store[hash] = {
+      content: [],
+      refCount: 1,
+      delta: {
+        baseHash,
+        patches: patchText
+      }
+    };
+    return hash;
+  }
+  function retainContent(store, hash) {
+    if (isStreamingContentHash(hash))
+      return;
+    if (store[hash]) {
+      store[hash].refCount++;
+    }
+  }
+  function promoteDependents(store, baseHash) {
+    for (const [hash, entry] of Object.entries(store)) {
+      if (entry.delta?.baseHash === baseHash) {
+        const resolved = resolveContent(store, hash);
+        entry.content = resolved;
+        delete entry.delta;
+      }
+    }
+  }
+  function releaseContent(store, hash) {
+    if (isStreamingContentHash(hash))
+      return;
+    if (!store[hash])
+      return;
+    store[hash].refCount--;
+    if (store[hash].refCount <= 0) {
+      promoteDependents(store, hash);
+      pendingGCHashes.add(hash);
+    }
+  }
+  function resolveContent(store, hash) {
+    if (isStreamingContentHash(hash)) {
+      const target = getStreamingTargetFromHash(hash);
+      return target ? peekBufferedContent(target.chatId, target.nodeId) ?? [] : [];
+    }
+    const entry = store[hash];
+    if (!entry)
+      return [];
+    if (!entry.delta) {
+      return entry.content;
+    }
+    const text = resolveDeltaContentJSON(store, hash);
+    return text === null ? [] : JSON.parse(text);
+  }
+  function resolveDeltaContentJSON(store, hash) {
+    const visited = /* @__PURE__ */ new Set();
+    let current = hash;
+    const deltaChain = [];
+    while (store[current]?.delta) {
+      if (visited.has(current)) {
+        console.error(`[ContentStore] Circular delta chain detected at ${current}`);
+        return null;
+      }
+      visited.add(current);
+      deltaChain.push({
+        hash: current,
+        patches: store[current].delta.patches
+      });
+      current = store[current].delta.baseHash;
+    }
+    const baseEntry = store[current];
+    if (!baseEntry) {
+      console.error(`[ContentStore] Missing delta base: ${current}`);
+      return null;
+    }
+    let text = contentToText(baseEntry.content);
+    for (const { patches: patchText } of deltaChain.reverse()) {
+      const patches = dmp.patch_fromText(patchText);
+      const [result3, applied] = dmp.patch_apply(patches, text);
+      if (applied.some((ok) => !ok)) {
+        console.error(`[ContentStore] Patch apply failed for delta chain`);
+        return null;
+      }
+      text = result3;
+    }
+    try {
+      JSON.parse(text);
+      return text;
+    } catch {
+      console.error(`[ContentStore] Failed to parse resolved delta content`);
+      return null;
+    }
+  }
+  function isContentEqual(store, hash, content) {
+    const resolved = resolveContent(store, hash);
+    return JSON.stringify(resolved) === JSON.stringify(content);
+  }
+  function resolveContentText(store, hash) {
+    const content = resolveContent(store, hash);
+    return content.filter((c) => c.type === "text").map((c) => c.text).join(" ");
+  }
+  function buildExportContentStore(store) {
+    const exported = {};
+    for (const [hash, entry] of Object.entries(store)) {
+      const { delta, ...fullEntry } = entry;
+      if (delta) {
+        exported[hash] = {
+          ...fullEntry,
+          content: resolveContent(store, hash)
+        };
+      } else {
+        exported[hash] = fullEntry;
+      }
+    }
+    return exported;
+  }
+  function validateDeltaIntegrity(store) {
+    const corrupt = /* @__PURE__ */ new Set();
+    for (const [hash, entry] of Object.entries(store)) {
+      if (!entry.delta)
+        continue;
+      if (!store[entry.delta.baseHash]) {
+        console.warn(
+          `[ContentStore] Broken delta: ${hash} references missing base ${entry.delta.baseHash}`
+        );
+        corrupt.add(hash);
+        continue;
+      }
+      const visited = /* @__PURE__ */ new Set();
+      let cur = hash;
+      let isCircular = false;
+      while (store[cur]?.delta) {
+        if (visited.has(cur)) {
+          isCircular = true;
+          break;
+        }
+        visited.add(cur);
+        cur = store[cur].delta.baseHash;
+      }
+      if (isCircular) {
+        console.warn(`[ContentStore] Circular delta chain detected at ${hash}`);
+        corrupt.add(hash);
+        continue;
+      }
+      try {
+        const patches = dmp.patch_fromText(entry.delta.patches);
+        const baseContent = store[cur]?.content;
+        if (baseContent) {
+          let text = contentToText(baseContent);
+          const chain = [];
+          let walk = hash;
+          while (store[walk]?.delta) {
+            chain.push(walk);
+            walk = store[walk].delta.baseHash;
+          }
+          let patchFailed = false;
+          for (const chainHash of chain.reverse()) {
+            const p = dmp.patch_fromText(store[chainHash].delta.patches);
+            const [result3, applied] = dmp.patch_apply(p, text);
+            if (applied.some((ok) => !ok)) {
+              patchFailed = true;
+              break;
+            }
+            text = result3;
+          }
+          if (patchFailed) {
+            console.warn(`[ContentStore] Patch apply failed for delta ${hash}`);
+            corrupt.add(hash);
+            continue;
+          }
+          JSON.parse(text);
+        }
+      } catch (e) {
+        console.warn(`[ContentStore] Delta validation error for ${hash}:`, e);
+        corrupt.add(hash);
+      }
+    }
+    if (corrupt.size > 0) {
+      console.warn(
+        `[ContentStore] ${corrupt.size} corrupt delta(s) detected at startup. Affected hashes will return empty content on read.`
+      );
+    }
+    return corrupt;
+  }
+
+  // shared/google-sync/source/records.ts
+  var import_diff_match_patch2 = __toESM(require_diff_match_patch(), 1);
+  var SyncConflictError = class extends Error {
+    constructor(keys) {
+      super("Concurrent edits conflict. Both copies are preserved.");
+      this.keys = keys;
+    }
+  };
+  var dmp2 = new import_diff_match_patch2.default();
+  var forbidden = /* @__PURE__ */ new Set(["__proto__", "prototype", "constructor"]);
+  var readNodeOrder = (value) => {
+    if (!Array.isArray(value) || value.some((id) => typeof id !== "string") || new Set(value).size !== value.length) {
+      throw new Error("Invalid sync node order.");
+    }
+    return value;
+  };
+  var isNodeOrderPath = (path) => Array.isArray(path) && path[0] === "nodeOrder" && (path.length === 3 && path[1] === "chats" && typeof path[2] === "string" || path.length === 2 && path[1] === "clipboard");
+  function isNodeOrderRecord(key) {
+    try {
+      return isNodeOrderPath(JSON.parse(key));
+    } catch {
+      return false;
+    }
+  }
+  function mergeNodeOrderValues(values) {
+    const orders = values.filter((value) => value !== null).map((value) => readNodeOrder(JSON.parse(value)));
+    return orders.length ? JSON.stringify([...new Set(orders.flat())]) : null;
+  }
+  function orderNodes(nodes, value) {
+    if (value === void 0)
+      return nodes;
+    const ids = [.../* @__PURE__ */ new Set([...readNodeOrder(value), ...Object.keys(nodes).sort()])];
+    const ordered = /* @__PURE__ */ Object.create(null);
+    for (const id of ids)
+      if (Object.hasOwn(nodes, id))
+        ordered[id] = nodes[id];
+    return ordered;
+  }
+  var contentEntryIdentity = (contentId, metadata) => digest(canonical({ contentId, metadata }));
+  var contentEntryRefPath = (chatId, nodeId) => ["contentEntryRefs", "chats", chatId, nodeId];
+  var checkSafeMetadata = (value) => {
+    if (value && typeof value === "object")
+      for (const [key, child] of Object.entries(value)) {
+        if (forbidden.has(key))
+          throw new Error("Unsafe sync record key.");
+        checkSafeMetadata(child);
+      }
+  };
+  function canonical(value) {
+    if (Array.isArray(value))
+      return `[${value.map(canonical).join(",")}]`;
+    if (value !== null && typeof value === "object") {
+      return `{${Object.keys(value).sort().map((k) => `${JSON.stringify(k)}:${canonical(value[k])}`).join(",")}}`;
+    }
+    return JSON.stringify(value);
+  }
+  function resolveStrict(store, hash, visited = /* @__PURE__ */ new Set()) {
+    const entry = store[hash];
+    if (!entry || visited.has(hash) || visited.size >= 100)
+      throw new Error("Missing or cyclic message content; sync stopped.");
+    if (!entry.delta)
+      return entry.content;
+    visited.add(hash);
+    const base = resolveStrict(store, entry.delta.baseHash, visited);
+    const [text, applied] = dmp2.patch_apply(dmp2.patch_fromText(entry.delta.patches), JSON.stringify(base));
+    if (applied.some((ok) => !ok))
+      throw new Error("Invalid message delta; sync stopped.");
+    return JSON.parse(text);
+  }
+  async function toRecords(snapshot) {
+    const started = performance.now();
+    const serialized = JSON.stringify(snapshot);
+    const copy2 = JSON.parse(serialized);
+    const state = withoutBrowserLocalSettings(copy2.state);
+    if (state.folders !== void 0 && !validateFolderHierarchy(state.folders))
+      throw new Error("Invalid folder hierarchy; sync stopped.");
+    const records = /* @__PURE__ */ Object.create(null);
+    const source = state.contentStore ?? {};
+    const contentIds = /* @__PURE__ */ new Map();
+    const content = /* @__PURE__ */ Object.create(null);
+    const assets = /* @__PURE__ */ Object.create(null);
+    const entryIds = /* @__PURE__ */ new Map();
+    const entries = /* @__PURE__ */ Object.create(null);
+    const retained = /* @__PURE__ */ Object.create(null);
+    const entryRefs = { chats: /* @__PURE__ */ Object.create(null) };
+    const externalize = async (parts) => {
+      const encoded = JSON.parse(JSON.stringify(parts));
+      for (const part of encoded) {
+        if (part.type === "image_url" && typeof part.image_url?.url === "string") {
+          const url = part.image_url.url;
+          const id = await digest(url);
+          assets[id] = url;
+          part.image_url.url = { asset: id };
+        }
+      }
+      return encoded;
+    };
+    for (const [hash, entry] of Object.entries(source)) {
+      const parts = await externalize(resolveStrict(source, hash));
+      const contentId = await digest(canonical(parts));
+      content[contentId] = parts;
+      contentIds.set(hash, contentId);
+      const { content: _content, refCount: _refCount, delta: _delta, ...metadata } = entry;
+      checkSafeMetadata(metadata);
+      const record = { contentId, metadata };
+      const entryId = await digest(canonical(record));
+      entries[entryId] = record;
+      entryIds.set(hash, entryId);
+      retained[entryId] = true;
+    }
+    const translate = (node, refs) => {
+      const old = node.contentHash;
+      if (!contentIds.has(old))
+        throw new Error("Missing or cyclic message content; sync stopped.");
+      node.contentHash = contentIds.get(old);
+      refs[node.id] = entryIds.get(old);
+    };
+    const chats = /* @__PURE__ */ Object.create(null);
+    const order = [];
+    const nodeOrder = { chats: /* @__PURE__ */ Object.create(null) };
+    for (const chat of state.chats ?? []) {
+      if (!chat.id || chats[chat.id])
+        throw new Error("Missing or duplicate chat ID; sync stopped.");
+      order.push(chat.id);
+      if (chat.branchTree) {
+        captureProjectedMessageAttributes(chat, source);
+        readMessageAttributes(chat.branchTree);
+        nodeOrder.chats[chat.id] = Object.keys(chat.branchTree.nodes);
+        entryRefs.chats[chat.id] = /* @__PURE__ */ Object.create(null);
+        for (const node of Object.values(chat.branchTree.nodes)) {
+          const statsKey = `${chat.id}:::${node.id}`;
+          const generationId = node.openRouterObservation?.generationId ?? copy2.state.pendingVerifications?.[statsKey]?.generationId ?? copy2.state.verifiedStats?.[statsKey]?.generationId;
+          if (generationId)
+            node.openRouterObservation = { ...node.openRouterObservation, generationId };
+          translate(node, entryRefs.chats[chat.id]);
+        }
+        delete chat.messages;
+      } else if (chat.messages) {
+        for (const message of chat.messages)
+          message.content = await externalize(message.content);
+      }
+      chats[chat.id] = chat;
+    }
+    if (state.branchClipboard) {
+      readMessageAttributes(state.branchClipboard);
+      const refs = /* @__PURE__ */ Object.create(null);
+      entryRefs.clipboard = refs;
+      for (const node of Object.values(state.branchClipboard.nodes))
+        translate(node, refs);
+    }
+    if (state.branchClipboard)
+      nodeOrder.clipboard = Object.keys(state.branchClipboard.nodes);
+    delete state.contentStore;
+    delete state.chats;
+    const flatten = (value, path) => {
+      const messageAttributes = path[0] === "chats" && path[2] === "branchTree" && path[3] === "messageAttributesV1" && path[4] === "byNode" && path.length === 6 || path[0] === "state" && path[1] === "branchClipboard" && path[2] === "messageAttributesV1" && path[3] === "byNode" && path.length === 5;
+      if (messageAttributes) {
+        checkSafeMetadata(value);
+        records[JSON.stringify(path)] = canonical(value);
+      } else if (value && typeof value === "object" && !Array.isArray(value) && Object.keys(value).length) {
+        for (const [key, child] of Object.entries(value)) {
+          if (forbidden.has(key))
+            throw new Error("Unsafe sync record key.");
+          flatten(child, [...path, key]);
+        }
+      } else
+        records[JSON.stringify(path)] = canonical(value);
+    };
+    flatten({ version: copy2.version ?? 0, state, chats, order, nodeOrder, contentEntryFormat: 1, contentEntryRefs: entryRefs, retainedContentEntries: retained }, []);
+    for (const [id, entry] of Object.entries(entries))
+      records[JSON.stringify(["contentEntries", id])] = canonical(entry);
+    for (const [id, parts] of Object.entries(content))
+      records[JSON.stringify(["content", id])] = canonical(parts);
+    for (const [id, url] of Object.entries(assets))
+      records[JSON.stringify(["assets", id])] = JSON.stringify(url);
+    recordMetric("records", started, new TextEncoder().encode(serialized).length, Object.values(records).reduce((n, value) => n + new TextEncoder().encode(value).length, 0));
+    return records;
+  }
+  async function fromRecords(records) {
+    const root = /* @__PURE__ */ Object.create(null);
+    let skippedLocalState = false;
+    const generationIds = /* @__PURE__ */ new Map();
+    for (const [encoded, value] of Object.entries(records)) {
+      const path = JSON.parse(encoded);
+      if (!Array.isArray(path) || path.length < 1 || path.length > 100 || path.some((p) => typeof p !== "string" || forbidden.has(p)))
+        throw new Error("Invalid sync record path.");
+      if (isBrowserLocalRecord(encoded)) {
+        skippedLocalState = true;
+        if (path.length === 4 && ["pendingVerifications", "verifiedStats"].includes(path[1]) && path[3] === "generationId") {
+          const id = JSON.parse(value);
+          if (typeof id === "string" && !generationIds.has(path[2]))
+            generationIds.set(path[2], id);
+        }
+        continue;
+      }
+      if (path[0] === "chats" && path[2] === "collapsedNodes" && path.length === 3 && value === "{}")
+        continue;
+      let current = root;
+      for (const part of path.slice(0, -1)) {
+        if (Object.hasOwn(current, part) && (!current[part] || typeof current[part] !== "object" || Array.isArray(current[part]))) {
+          throw new Error("Conflicting sync record paths.");
+        }
+        current = current[part] ??= /* @__PURE__ */ Object.create(null);
+      }
+      const last = path[path.length - 1];
+      if (Object.hasOwn(current, last))
+        throw new Error("Conflicting sync record paths.");
+      current[last] = JSON.parse(value);
+    }
+    if (skippedLocalState && !root.state)
+      root.state = /* @__PURE__ */ Object.create(null);
+    if (!root.state || !root.chats || !Array.isArray(root.order) || !Number.isInteger(root.version)) {
+      throw new Error("Incomplete sync snapshot.");
+    }
+    if (root.nodeOrder !== void 0) {
+      const orders = root.nodeOrder;
+      if (!orders || typeof orders !== "object" || Array.isArray(orders) || orders.chats !== void 0 && (!orders.chats || typeof orders.chats !== "object" || Array.isArray(orders.chats))) {
+        throw new Error("Invalid sync node order.");
+      }
+      for (const value of Object.values(orders.chats ?? {}))
+        readNodeOrder(value);
+      if (orders.clipboard !== void 0)
+        readNodeOrder(orders.clipboard);
+    }
+    if (root.state.folders !== void 0 && !validateFolderHierarchy(root.state.folders))
+      throw new Error("Invalid folder hierarchy; sync stopped.");
+    const restoreAssets = async (parts) => {
+      if (!Array.isArray(parts))
+        throw new Error("Invalid message content.");
+      const restored = structuredClone(parts);
+      for (const part of restored) {
+        if (part.type === "image_url" && typeof part.image_url?.url === "object") {
+          const id = part.image_url.url?.asset;
+          const url = root.assets?.[id];
+          if (typeof url !== "string" || await digest(url) !== id)
+            throw new Error("Missing or damaged image.");
+          part.image_url.url = url;
+        }
+      }
+      return restored;
+    };
+    const store = {};
+    const restoredEntries = /* @__PURE__ */ new Map();
+    const extended = root.contentEntryFormat !== void 0;
+    if (!extended && ["contentEntries", "contentEntryRefs", "retainedContentEntries"].some((key) => root[key] !== void 0))
+      throw new Error("Incomplete content entry extension.");
+    if (extended && root.contentEntryFormat !== 1)
+      throw new Error("Unsupported content entry format.");
+    if (extended) {
+      const refs = root.contentEntryRefs;
+      if (!refs || typeof refs !== "object" || Array.isArray(refs) || !refs.chats || typeof refs.chats !== "object" || Array.isArray(refs.chats))
+        throw new Error("Invalid content entry references.");
+      const checkRefs = (values, nodes) => {
+        if (!values || typeof values !== "object" || Array.isArray(values))
+          throw new Error("Invalid content entry references.");
+        for (const [id, entryId] of Object.entries(values))
+          if (typeof entryId !== "string" || !nodes?.[id])
+            throw new Error("Inconsistent content entry reference.");
+      };
+      for (const [chatId, values] of Object.entries(refs.chats))
+        checkRefs(values, root.chats[chatId]?.branchTree?.nodes);
+      if (refs.clipboard !== void 0)
+        checkRefs(refs.clipboard, root.state.branchClipboard?.nodes);
+    }
+    const restoreEntry = async (entryId) => {
+      if (typeof entryId !== "string")
+        throw new Error("Invalid content entry reference.");
+      if (restoredEntries.has(entryId))
+        return restoredEntries.get(entryId);
+      const entry = root.contentEntries?.[entryId];
+      if (!entry || typeof entry.contentId !== "string" || !entry.metadata || typeof entry.metadata !== "object" || Array.isArray(entry.metadata) || ["content", "refCount", "delta"].some((key) => Object.hasOwn(entry.metadata, key)) || await digest(canonical(entry)) !== entryId) {
+        throw new Error("Missing or damaged content entry.");
+      }
+      checkSafeMetadata(entry.metadata);
+      const parts = root.content?.[entry.contentId];
+      if (!parts || await digest(canonical(parts)) !== entry.contentId)
+        throw new Error("Missing or damaged message content.");
+      const body = await restoreAssets(parts);
+      let hash = computeContentHash(body);
+      while (Object.hasOwn(store, hash))
+        hash += "_";
+      store[hash] = { ...entry.metadata, content: body, refCount: 0 };
+      restoredEntries.set(entryId, hash);
+      return hash;
+    };
+    const restore = async (node, refs) => {
+      if (extended) {
+        const entryId = refs?.[node.id];
+        if (!entryId || root.contentEntries?.[entryId]?.contentId !== node.contentHash)
+          throw new Error("Inconsistent content entry reference.");
+        const hash = await restoreEntry(entryId);
+        store[hash].refCount++;
+        node.contentHash = hash;
+      } else {
+        const parts = root.content?.[node.contentHash];
+        if (!parts || await digest(canonical(parts)) !== node.contentHash)
+          throw new Error("Missing or damaged message content.");
+        node.contentHash = addContent(store, await restoreAssets(parts));
+      }
+    };
+    const ids = [.../* @__PURE__ */ new Set([...root.order, ...Object.keys(root.chats).sort()])];
+    const chats = [];
+    for (const id of ids) {
+      const chat = root.chats[id];
+      if (!chat)
+        continue;
+      if (chat.id !== id)
+        throw new Error("Invalid chat identity.");
+      if (chat.branchTree) {
+        const tree = chat.branchTree;
+        readMessageAttributes(tree);
+        if (!tree.nodes || !Array.isArray(tree.activePath) || typeof tree.rootId !== "string" || tree.rootId && !tree.nodes[tree.rootId]) {
+          throw new Error("Incomplete branch tree.");
+        }
+        tree.nodes = orderNodes(tree.nodes, root.nodeOrder?.chats?.[id]);
+        for (const [nodeId, node] of Object.entries(tree.nodes)) {
+          if (node.id !== nodeId || node.parentId && !tree.nodes[node.parentId] && node.pinned !== true)
+            throw new Error("Orphaned branch node.");
+          const seen = /* @__PURE__ */ new Set();
+          let cursor = node;
+          while (cursor) {
+            if (seen.has(cursor.id))
+              throw new Error("Cyclic branch tree.");
+            seen.add(cursor.id);
+            cursor = cursor.parentId ? tree.nodes[cursor.parentId] : void 0;
+          }
+          await restore(node, root.contentEntryRefs?.chats?.[id]);
+          const generationId = node.openRouterObservation?.generationId ?? generationIds.get(`${id}:::${nodeId}`);
+          if (generationId)
+            node.openRouterObservation = { ...node.openRouterObservation, generationId };
+        }
+        if (tree.activePath.some((nodeId) => !tree.nodes[nodeId]))
+          throw new Error("Invalid active branch path.");
+      } else if (chat.messages) {
+        for (const message of chat.messages)
+          message.content = await restoreAssets(message.content);
+      }
+      chats.push(chat);
+    }
+    if (root.state.branchClipboard) {
+      readMessageAttributes(root.state.branchClipboard);
+      root.state.branchClipboard.nodes = orderNodes(root.state.branchClipboard.nodes, root.nodeOrder?.clipboard);
+    }
+    for (const node of Object.values(root.state.branchClipboard?.nodes ?? {}))
+      await restore(node, root.contentEntryRefs?.clipboard);
+    if (extended) {
+      if (!root.retainedContentEntries || typeof root.retainedContentEntries !== "object" || Array.isArray(root.retainedContentEntries))
+        throw new Error("Invalid retained content entries.");
+      for (const [entryId, retained] of Object.entries(root.retainedContentEntries)) {
+        if (retained !== true)
+          throw new Error("Invalid retained content entry.");
+        await restoreEntry(entryId);
+      }
+    }
+    return { version: root.version, state: { ...withoutBrowserLocalSettings(root.state), chats, contentStore: store } };
+  }
+  async function assertNoConcurrentOrphans(base, local, cloud, merged) {
+    const orphans = Object.entries(merged).filter(([key, value]) => {
+      const path = JSON.parse(key);
+      if (path.length !== 6 || path[0] !== "chats" || path[2] !== "branchTree" || path[3] !== "nodes" || path[5] !== "parentId")
+        return false;
+      const parent = JSON.parse(value);
+      const parentKey = JSON.stringify([...path.slice(0, 4), parent, "id"]);
+      return parent && base[parentKey] && !merged[parentKey];
+    });
+    if (!orphans.length)
+      return;
+    const affected = new Set(orphans.map(([key]) => JSON.parse(key)[1]));
+    for (const source of [local, cloud]) {
+      const changed = /* @__PURE__ */ new Map();
+      for (const [key, value] of Object.entries(source)) {
+        const path = JSON.parse(key);
+        const node = path.length === 6 && path[0] === "chats" && path[2] === "branchTree" && (path[3] === "nodes" && path[5] !== "updatedAt" || path[3] === "messageAttributesV1" && path[4] === "byNode") ? [path[1], path[path[3] === "nodes" ? 4 : 5]] : path.length === 4 && path[0] === "contentEntryRefs" && path[1] === "chats" ? [path[2], path[3]] : void 0;
+        if (!node || !affected.has(node[0]) || await digest(value) === base[key])
+          continue;
+        const [chat, id] = node;
+        const ids = changed.get(chat) ?? /* @__PURE__ */ new Set();
+        changed.set(chat, ids);
+        let cursor = id;
+        while (cursor && !ids.has(cursor)) {
+          ids.add(cursor);
+          const parent = source[JSON.stringify(["chats", chat, "branchTree", "nodes", cursor, "parentId"])];
+          cursor = parent === void 0 ? null : JSON.parse(parent);
+        }
+      }
+      for (const [key, value] of orphans) {
+        const path = JSON.parse(key);
+        const parent = JSON.parse(value);
+        const parentKey = JSON.stringify([...path.slice(0, 4), parent, "id"]);
+        if (source[parentKey] && source[key] === value && changed.get(path[1])?.has(path[4]))
+          throw new SyncConflictError([key]);
+      }
+    }
+  }
+  async function diffRecords(before, after) {
+    const changes = [];
+    for (const key of /* @__PURE__ */ new Set([...Object.keys(before), ...Object.keys(after)])) {
+      if (before[key] === after[key])
+        continue;
+      changes.push({ key, before: before[key] === void 0 ? null : await digest(before[key]), after: after[key] ?? null });
+    }
+    return changes;
+  }
+  async function applyChanges(records, changes) {
+    const result3 = { ...records };
+    const keys = /* @__PURE__ */ new Set();
+    for (const change of changes) {
+      if (!change || typeof change.key !== "string" || keys.has(change.key) || !(change.before === null || typeof change.before === "string") || !(change.after === null || typeof change.after === "string"))
+        throw new Error("Invalid sync change.");
+      keys.add(change.key);
+      const current = result3[change.key];
+      if ((current ?? null) !== change.after && (current === void 0 ? null : await digest(current)) !== change.before) {
+        if (isNodeOrderRecord(change.key)) {
+          const value = mergeNodeOrderValues([current ?? null, change.after]);
+          if (value === null)
+            delete result3[change.key];
+          else
+            result3[change.key] = value;
+          continue;
+        }
+        throw new SyncConflictError([change.key]);
+      }
+      if (change.after === null)
+        delete result3[change.key];
+      else
+        result3[change.key] = change.after;
+    }
+    return result3;
+  }
+  async function hashRecords(records) {
+    const hashes = {};
+    for (const [key, value] of Object.entries(records))
+      hashes[key] = await digest(value);
+    return hashes;
+  }
+  function diffHashedRecords(before, after, hashes) {
+    const changes = [];
+    for (const key of /* @__PURE__ */ new Set([...Object.keys(before), ...Object.keys(after)])) {
+      if (before[key] === hashes[key])
+        continue;
+      changes.push({ key, before: before[key] ?? null, after: after[key] ?? null });
+    }
+    return changes;
+  }
+
+  // src/store/storage/google/editTimes.ts
+  function mergeEditTimes(key, values) {
+    if (key !== '["state","lastContentEditedAt"]' && !key.endsWith(',"updatedAt"]'))
+      return;
+    const path = JSON.parse(key);
+    if (!(path[0] === "state" && path.length === 2 && path[1] === "lastContentEditedAt" || path[0] === "chats" && path.at(-1) === "updatedAt" && (path.length === 3 || path.length === 6 && path[2] === "branchTree" && path[3] === "nodes")))
+      return;
+    const times = values.map((value) => value == null ? NaN : Number(value));
+    if (times.length && times.every((time) => Number.isFinite(time) && time > 0))
+      return String(Math.max(...times));
+  }
+
+  // shared/google-sync/source/replay.ts
+  function* historyIds(commits, tips) {
+    const pending = [...tips].reverse(), visited = /* @__PURE__ */ new Set();
+    while (pending.length) {
+      const id = pending.pop();
+      if (visited.has(id))
+        continue;
+      const commit = commits[id];
+      if (!commit)
+        throw new Error("Missing sync history.");
+      visited.add(id);
+      yield id;
+      for (let i = commit.parents.length - 1; i >= 0; i--)
+        pending.push(commit.parents[i]);
+    }
+  }
+  var yieldTimerTask = () => new Promise((resolve) => setTimeout(resolve, 0));
+  function historyReporter(onProgress, yieldTask = yieldTimerTask) {
+    let last = performance.now();
+    return async (progress, force = false) => {
+      if (!force && performance.now() - last < 50)
+        return;
+      onProgress?.(progress);
+      await yieldTask();
+      last = performance.now();
+    };
+  }
+  async function collectHistory({ commits, tips }, onProgress, yieldTask = yieldTimerTask) {
+    const report = historyReporter(onProgress, yieldTask), reachable = /* @__PURE__ */ new Set();
+    await report({ step: "scanning", completed: 0 }, true);
+    for (const id of historyIds(commits, tips)) {
+      reachable.add(id);
+      await report({ step: "scanning", completed: reachable.size });
+    }
+    await report({ step: "scanning", completed: reachable.size, total: reachable.size }, true);
+    return reachable;
+  }
+  async function hashCommits(commits) {
+    const hashes = {};
+    for (const [id, commit] of Object.entries(commits))
+      hashes[id] = await digest(encode(commit));
+    return hashes;
+  }
+  async function replayHistory({ commits, tips }, onProgress, yieldTask = yieldTimerTask) {
+    const histories = /* @__PURE__ */ new Map();
+    const processed = /* @__PURE__ */ new Set();
+    const reachable = await collectHistory({ commits, tips }, onProgress, yieldTask);
+    const report = historyReporter(onProgress, yieldTask);
+    await report({ step: "replaying", completed: 0, total: reachable.size }, true);
+    const remaining = new Set([...reachable].sort());
+    const latest = (versions) => {
+      if (versions.length < 2)
+        return versions;
+      const excluded = /* @__PURE__ */ new Set();
+      const result3 = [];
+      for (let index = versions.length - 1; index >= 0; index--) {
+        const version = versions[index];
+        if (excluded.has(version.id))
+          continue;
+        result3.push(version);
+        for (const ancestor of historyIds(commits, commits[version.id].parents))
+          excluded.add(ancestor);
+      }
+      return result3.reverse();
+    };
+    const valueOf = (versions, key) => {
+      if (isNodeOrderRecord(key))
+        return mergeNodeOrderValues(versions.map((version) => version.value));
+      const time = mergeEditTimes(key, versions.map((version) => version.value));
+      if (time !== void 0)
+        return time;
+      const values = new Set(versions.map((v) => v.value));
+      if (values.size > 1 && !isNonBlockingRecord(key))
+        throw new SyncConflictError([]);
+      return versions[0]?.value ?? null;
+    };
+    const repairedPath = (key, versions, records2, preceding) => {
+      if (!key.endsWith(',"activePath"]'))
+        return;
+      const values = [...new Set(versions.map((version) => version.value))];
+      if (values.length < 2) {
+        if (!values[0])
+          return;
+        const path = JSON.parse(key), ids = JSON.parse(values[0]);
+        if (!Array.isArray(ids) || !ids.some((id) => {
+          const removed = histories.get(JSON.stringify([...path.slice(0, 3), "nodes", id, "id"]));
+          const retained = removed && latest(removed.filter((version) => !preceding || preceding.has(version.id)));
+          return retained?.length && retained.every((version) => version.value === null);
+        }))
+          return;
+      }
+      return selectActivePath(key, values, records2);
+    };
+    while (remaining.size) {
+      let progress = false;
+      for (const id of remaining) {
+        const commit = commits[id];
+        await report({ step: "replaying", completed: processed.size, total: reachable.size });
+        if (!commit.parents.every((p) => processed.has(p)))
+          continue;
+        const preceding = /* @__PURE__ */ new Set();
+        if (commit.changes.length)
+          for (const ancestor of historyIds(commits, commit.parents)) {
+            preceding.add(ancestor);
+            await report({ step: "replaying", completed: processed.size, total: reachable.size });
+          }
+        const keys = /* @__PURE__ */ new Set();
+        for (const change of commit.changes) {
+          await report({ step: "replaying", completed: processed.size, total: reachable.size });
+          if (!change || typeof change.key !== "string" || keys.has(change.key))
+            throw new Error("Invalid sync change.");
+          keys.add(change.key);
+          const history = histories.get(change.key) ?? [];
+          const parents = latest(history.filter((v) => preceding.has(v.id)));
+          let parentValue;
+          if (commit.resolutions?.[change.key]) {
+            const expected = [...new Set(await Promise.all(parents.map((v) => v.value === null ? null : digest(v.value))))].sort();
+            if (expected.length < 2 || JSON.stringify(expected) !== JSON.stringify([...commit.resolutions[change.key]].sort())) {
+              throw new Error("Invalid conflict resolution parents.");
+            }
+            parentValue = parents[0]?.value ?? null;
+          } else if (isNonBlockingRecord(change.key) || isNodeOrderRecord(change.key)) {
+            const parentHashes = await Promise.all(parents.map((version) => version.value === null ? null : digest(version.value)));
+            const matching = parentHashes.indexOf(change.before);
+            parentValue = matching >= 0 ? parents[matching].value : valueOf(parents, change.key);
+            if (matching < 0 && change.key.endsWith(',"activePath"]')) {
+              const parentRecords = {};
+              for (const [key, versions] of histories) {
+                const retained = latest(versions.filter((version) => preceding.has(version.id)));
+                const value = isNodeOrderRecord(key) ? mergeNodeOrderValues(retained.map((version) => version.value)) : mergeEditTimes(key, retained.map((version) => version.value)) ?? retained[0]?.value ?? null;
+                if (value !== null)
+                  parentRecords[key] = value;
+              }
+              const repaired = repairedPath(change.key, parents, parentRecords, preceding);
+              if (repaired !== void 0 && (repaired === null ? null : await digest(repaired)) === change.before)
+                parentValue = repaired;
+            }
+          } else
+            parentValue = valueOf(parents, change.key);
+          const applied = await applyChanges(parentValue === null ? {} : { [change.key]: parentValue }, [change]);
+          history.push({ id, value: applied[change.key] ?? null });
+          histories.set(change.key, history);
+        }
+        processed.add(id);
+        remaining.delete(id);
+        progress = true;
+      }
+      if (!progress)
+        throw new Error("Missing or cyclic sync history.");
+    }
+    const records = {};
+    const conflicts = {};
+    await report({ step: "resolving", completed: 0, total: histories.size * 2 }, true);
+    let resolved = 0;
+    for (const [key, history] of histories) {
+      const versions = latest(history);
+      const values = [...new Set(versions.map((v) => v.value))];
+      const time = mergeEditTimes(key, values);
+      if (values.length > 1 && time === void 0 && !isNonBlockingRecord(key) && !isNodeOrderRecord(key))
+        conflicts[key] = await Promise.all(values.map((v) => v === null ? null : digest(v)));
+      const value = isNodeOrderRecord(key) ? valueOf(versions, key) : time ?? versions[0]?.value ?? null;
+      if (value !== null)
+        records[key] = value;
+      await report({ step: "resolving", completed: ++resolved, total: histories.size * 2 });
+    }
+    for (const [key, history] of histories) {
+      const selected = repairedPath(key, latest(history), records);
+      if (selected === null)
+        delete records[key];
+      else if (selected !== void 0)
+        records[key] = selected;
+      await report({ step: "resolving", completed: ++resolved, total: histories.size * 2 });
+    }
+    await report({ step: "resolving", completed: resolved, total: histories.size * 2 }, true);
+    return { records, conflicts };
+  }
+
+  // shared/google-sync/source/decodeParts.ts
+  function decodeParts(parts) {
+    const bytes3 = new Uint8Array(parts.reduce((size, part) => size + part.length, 0));
+    let offset = 0;
+    for (const part of parts) {
+      bytes3.set(part, offset);
+      offset += part.length;
+    }
+    return { bytes: bytes3, value: decode(bytes3) };
+  }
+
+  // shared/google-sync/adapters/processing.ts
+  var encodeAsync = async (value) => encode(value);
+  var decodeAsync = async (value) => decode(value);
+  var toRecordsAsync = toRecords;
+  var fromRecordsAsync = fromRecords;
+  var hashRecordsAsync = hashRecords;
+  var yieldHistory;
+  var setHistoryYield = (yieldTask) => {
+    yieldHistory = yieldTask;
+  };
+  var replayHistoryAsync = (value) => replayHistory(value, void 0, yieldHistory);
+  var collectHistoryAsync = (value) => collectHistory(value, void 0, yieldHistory);
+  var decodePartsAsync = async (value) => decodeParts(value);
+  var hashCommitsAsync = hashCommits;
+
   // src/utils/advancedDisplay.ts
   function isMessageVisible(advancedMode, originalIndex, role) {
     return !(!advancedMode && originalIndex === 0 && role === "system");
   }
 
+  // src/utils/splitPanel.ts
+  var clampSplitPanelRatio = (ratio) => Math.max(0.2, Math.min(0.8, ratio));
+
   // shared/google-sync/advancedDisplay.ts
+  function splitPanelRatio(json) {
+    const input = JSON.parse(json);
+    return JSON.stringify(clampSplitPanelRatio(input.ratio));
+  }
   function messageDisplayIndexes(json) {
     const input = JSON.parse(json);
     return JSON.stringify(input.roles.flatMap((role, index) => isMessageVisible(input.advancedMode, index, role) ? [index] : []));
@@ -12213,53 +14491,6 @@ var WeaveletGoogleSync = (() => {
     stream: isModelStreamSupported(config.model, config.providerId, config.modelSource) ? config.stream !== false : false
   });
 
-  // src/utils/jsonChanges.ts
-  var orderedJSONEqual = (left, right) => {
-    if (Object.is(left, right))
-      return true;
-    if (!left || !right || typeof left !== "object" || typeof right !== "object" || Array.isArray(left) !== Array.isArray(right))
-      return false;
-    const a = Object.keys(left), b = Object.keys(right);
-    return a.length === b.length && a.every((key, index) => key === b[index] && orderedJSONEqual(left[key], right[key]));
-  };
-  function appendChanges(before, after, path, output2) {
-    if (orderedJSONEqual(before, after))
-      return;
-    const opaque = (value) => value && typeof value === "object" && !Array.isArray(value) && Object.keys(value).length === 1 && Number.isInteger(value.opaqueRef);
-    if (opaque(before) || opaque(after)) {
-      output2.push({ op: "set", path, value: after });
-      return;
-    }
-    if (Array.isArray(before) && Array.isArray(after)) {
-      for (let i = 0; i < after.length; i++) {
-        if (i < before.length)
-          appendChanges(before[i], after[i], [...path, i], output2);
-        else
-          output2.push({ op: "set", path: [...path, i], value: after[i] });
-      }
-      for (let i = before.length - 1; i >= after.length; i--)
-        output2.push({ op: "remove", path: [...path, i] });
-    } else if (before && after && typeof before === "object" && typeof after === "object" && !Array.isArray(before) && !Array.isArray(after)) {
-      for (const key of Object.keys(before))
-        if (!Object.hasOwn(after, key))
-          output2.push({ op: "remove", path: [...path, key] });
-      for (const key of Object.keys(after)) {
-        if (Object.hasOwn(before, key))
-          appendChanges(before[key], after[key], [...path, key], output2);
-        else
-          output2.push({ op: "set", path: [...path, key], value: after[key] });
-      }
-      if (!orderedJSONEqual(Object.keys(before), Object.keys(after)))
-        output2.push({ op: "keys", path, keys: Object.keys(after) });
-    } else
-      output2.push({ op: "set", path, value: after });
-  }
-  function diffJSONChanges(before, after) {
-    const output2 = [];
-    appendChanges(before, after, [], output2);
-    return output2;
-  }
-
   // shared/google-sync/chatConfig.ts
   function normalizeRemoteConfig(config, modelState) {
     if (config.modelSource === "local")
@@ -12297,1382 +14528,6 @@ var WeaveletGoogleSync = (() => {
       throw new Error("Unknown chat config operation.");
     const next = input.operation === "saveDefaults" ? saveDefaultChatConfig(config, state, input.localCapabilities) : normalizeChatConfig(config, state, input.localCapabilities);
     return JSON.stringify({ changes: diffJSONChanges(input.config, JSON.parse(JSON.stringify(next))) });
-  }
-
-  // src/utils/branchUtils.ts
-  var import_lodash = __toESM(require_lodash(), 1);
-
-  // src/types/chat.ts
-  var roles = ["user", "assistant", "system"];
-  function strToTextContent(ob) {
-    return {
-      type: "text",
-      text: ob
-    };
-  }
-  function isTextContent(ob) {
-    return ob !== void 0 && ob !== null && ob.type === "text";
-  }
-  function isImageContent(ob) {
-    return ob !== void 0 && ob !== null && ob.image_url !== void 0;
-  }
-  function isToolCallContent(ob) {
-    return ob !== void 0 && ob !== null && ob.type === "tool_call";
-  }
-  function isToolResultContent(ob) {
-    return ob !== void 0 && ob !== null && ob.type === "tool_result";
-  }
-
-  // src/utils/contentValidation.ts
-  var hasMeaningfulContent = (content) => content.some((part) => {
-    if (isImageContent(part))
-      return true;
-    return isTextContent(part) && part.text.trim().length > 0;
-  });
-  var hasMeaningfulMessageContent = (messages) => messages.some((message) => hasMeaningfulContent(message.content));
-
-  // src/utils/messageText.ts
-  var firstTextIndex = (content) => content.findIndex((item) => item.type === "text");
-  var textValueOf = (content) => {
-    const index = firstTextIndex(content);
-    return index >= 0 ? content[index].text : "";
-  };
-  var replaceTextValue = (content, text) => {
-    const index = firstTextIndex(content);
-    if (index < 0) {
-      return [{ type: "text", text }, ...content];
-    }
-    const next = [...content];
-    next[index] = { ...content[index], text };
-    return next;
-  };
-
-  // src/utils/streamingBuffer.ts
-  var STREAMING_CONTENT_HASH_PREFIX = "__streaming:";
-  var streamingBuffers = /* @__PURE__ */ new Map();
-  var cloneContentItem = (content) => {
-    if (content.type === "image_url")
-      return { ...content, image_url: { ...content.image_url } };
-    return { ...content };
-  };
-  var cloneContent = (content) => content.map(cloneContentItem);
-  var bufferKey = (chatId, nodeId) => JSON.stringify([chatId, nodeId]);
-  var isStreamingContentHash = (hash) => hash.startsWith(STREAMING_CONTENT_HASH_PREFIX);
-  var getStreamingTargetFromHash = (hash) => {
-    if (!isStreamingContentHash(hash))
-      return null;
-    try {
-      const target = JSON.parse(hash.slice(STREAMING_CONTENT_HASH_PREFIX.length));
-      return Array.isArray(target) && target.length === 2 && target.every((value) => typeof value === "string") ? { chatId: target[0], nodeId: target[1] } : null;
-    } catch {
-      return null;
-    }
-  };
-  var getBufferedContent = (chatId, nodeId) => {
-    const key = bufferKey(chatId, nodeId);
-    const entry = streamingBuffers.get(key);
-    return entry ? cloneContent(entry.content) : void 0;
-  };
-  var peekBufferedContent = (chatId, nodeId) => {
-    const key = bufferKey(chatId, nodeId);
-    return streamingBuffers.get(key)?.content;
-  };
-  var finalizeStreamingSnapshotState = (chats, contentStore) => {
-    if (!chats || chats.length === 0) {
-      return { chats, contentStore, changed: false };
-    }
-    let updatedChats = chats;
-    let updatedContentStore = contentStore;
-    let changed = false;
-    const rematerializedChatIndexes = /* @__PURE__ */ new Set();
-    chats.forEach((chat, chatIndex) => {
-      const tree = chat.branchTree;
-      if (!tree)
-        return;
-      Object.values(tree.nodes).forEach((node) => {
-        if (!isStreamingContentHash(node.contentHash))
-          return;
-        const bufferedContent = getBufferedContent(chat.id, node.id);
-        if (!bufferedContent)
-          return;
-        if (!changed) {
-          updatedChats = chats.slice();
-          updatedContentStore = Object.fromEntries(Object.entries(contentStore).map(([hash, entry]) => [hash, { ...entry }]));
-          changed = true;
-        }
-        if (updatedChats[chatIndex] === chats[chatIndex]) {
-          updatedChats = cloneChatAt(updatedChats, chatIndex);
-        }
-        const updatedChat = updatedChats[chatIndex];
-        const updatedTree = updatedChat.branchTree;
-        updatedTree.nodes[node.id] = {
-          ...updatedTree.nodes[node.id],
-          contentHash: addContent(updatedContentStore, bufferedContent)
-        };
-        rematerializedChatIndexes.add(chatIndex);
-      });
-    });
-    rematerializedChatIndexes.forEach((chatIndex) => {
-      const chat = updatedChats[chatIndex];
-      if (!chat.branchTree)
-        return;
-      chat.messages = materializeActivePath(chat.branchTree, updatedContentStore);
-    });
-    return { chats: updatedChats, contentStore: updatedContentStore, changed };
-  };
-
-  // src/utils/contentStore.ts
-  var import_diff_match_patch = __toESM(require_diff_match_patch());
-  var dmp = new import_diff_match_patch.diff_match_patch();
-  var MAX_CHAIN_DEPTH = 5;
-  var pendingGCHashes = /* @__PURE__ */ new Set();
-  var DELTA_SIZE_THRESHOLD = 0.7;
-  function isDeltaEligible(content) {
-    return content.length > 0 && content.every((c) => c.type === "text");
-  }
-  function computeContentHash(content) {
-    const str = JSON.stringify(content);
-    let hash = 2166136261;
-    for (let i = 0; i < str.length; i++) {
-      hash ^= str.charCodeAt(i);
-      hash = hash * 16777619 >>> 0;
-    }
-    return hash.toString(36);
-  }
-  function getChainDepth(store, hash) {
-    let depth = 0;
-    let current = hash;
-    const visited = /* @__PURE__ */ new Set();
-    while (store[current]?.delta) {
-      if (visited.has(current))
-        return MAX_CHAIN_DEPTH + 1;
-      visited.add(current);
-      depth++;
-      current = store[current].delta.baseHash;
-    }
-    return depth;
-  }
-  function contentToText(content) {
-    return JSON.stringify(content);
-  }
-  function addContent(store, content) {
-    let hash = computeContentHash(content);
-    const serialized = JSON.stringify(content);
-    while (store[hash] && !isContentMatch(store, hash, serialized)) {
-      hash += "_";
-    }
-    if (store[hash]) {
-      store[hash].refCount++;
-    } else {
-      store[hash] = { content, refCount: 1 };
-    }
-    return hash;
-  }
-  function isContentMatch(store, hash, serialized) {
-    const entry = store[hash];
-    if (!entry)
-      return false;
-    if (entry.delta) {
-      const resolved = resolveContent(store, hash);
-      return JSON.stringify(resolved) === serialized;
-    }
-    return JSON.stringify(entry.content) === serialized;
-  }
-  function addContentDelta(store, content, baseHash) {
-    const baseEntry = store[baseHash];
-    if (!baseEntry)
-      return addContent(store, content);
-    if (!isDeltaEligible(content))
-      return addContent(store, content);
-    const baseContent = resolveContent(store, baseHash);
-    if (!isDeltaEligible(baseContent))
-      return addContent(store, content);
-    if (getChainDepth(store, baseHash) >= MAX_CHAIN_DEPTH - 1) {
-      return addContent(store, content);
-    }
-    let hash = computeContentHash(content);
-    const serialized = JSON.stringify(content);
-    while (store[hash] && !isContentMatch(store, hash, serialized)) {
-      hash += "_";
-    }
-    if (store[hash]) {
-      store[hash].refCount++;
-      return hash;
-    }
-    const baseText = contentToText(baseContent);
-    const newText = contentToText(content);
-    const patches = dmp.patch_make(baseText, newText);
-    const patchText = dmp.patch_toText(patches);
-    if (patchText.length >= newText.length * DELTA_SIZE_THRESHOLD) {
-      store[hash] = { content, refCount: 1 };
-      return hash;
-    }
-    store[hash] = {
-      content: [],
-      refCount: 1,
-      delta: {
-        baseHash,
-        patches: patchText
-      }
-    };
-    return hash;
-  }
-  function retainContent(store, hash) {
-    if (isStreamingContentHash(hash))
-      return;
-    if (store[hash]) {
-      store[hash].refCount++;
-    }
-  }
-  function promoteDependents(store, baseHash) {
-    for (const [hash, entry] of Object.entries(store)) {
-      if (entry.delta?.baseHash === baseHash) {
-        const resolved = resolveContent(store, hash);
-        entry.content = resolved;
-        delete entry.delta;
-      }
-    }
-  }
-  function releaseContent(store, hash) {
-    if (isStreamingContentHash(hash))
-      return;
-    if (!store[hash])
-      return;
-    store[hash].refCount--;
-    if (store[hash].refCount <= 0) {
-      promoteDependents(store, hash);
-      pendingGCHashes.add(hash);
-    }
-  }
-  function resolveContent(store, hash) {
-    if (isStreamingContentHash(hash)) {
-      const target = getStreamingTargetFromHash(hash);
-      return target ? peekBufferedContent(target.chatId, target.nodeId) ?? [] : [];
-    }
-    const entry = store[hash];
-    if (!entry)
-      return [];
-    if (!entry.delta) {
-      return entry.content;
-    }
-    const text = resolveDeltaContentJSON(store, hash);
-    return text === null ? [] : JSON.parse(text);
-  }
-  function resolveDeltaContentJSON(store, hash) {
-    const visited = /* @__PURE__ */ new Set();
-    let current = hash;
-    const deltaChain = [];
-    while (store[current]?.delta) {
-      if (visited.has(current)) {
-        console.error(`[ContentStore] Circular delta chain detected at ${current}`);
-        return null;
-      }
-      visited.add(current);
-      deltaChain.push({
-        hash: current,
-        patches: store[current].delta.patches
-      });
-      current = store[current].delta.baseHash;
-    }
-    const baseEntry = store[current];
-    if (!baseEntry) {
-      console.error(`[ContentStore] Missing delta base: ${current}`);
-      return null;
-    }
-    let text = contentToText(baseEntry.content);
-    for (const { patches: patchText } of deltaChain.reverse()) {
-      const patches = dmp.patch_fromText(patchText);
-      const [result3, applied] = dmp.patch_apply(patches, text);
-      if (applied.some((ok) => !ok)) {
-        console.error(`[ContentStore] Patch apply failed for delta chain`);
-        return null;
-      }
-      text = result3;
-    }
-    try {
-      JSON.parse(text);
-      return text;
-    } catch {
-      console.error(`[ContentStore] Failed to parse resolved delta content`);
-      return null;
-    }
-  }
-  function isContentEqual(store, hash, content) {
-    const resolved = resolveContent(store, hash);
-    return JSON.stringify(resolved) === JSON.stringify(content);
-  }
-  function resolveContentText(store, hash) {
-    const content = resolveContent(store, hash);
-    return content.filter((c) => c.type === "text").map((c) => c.text).join(" ");
-  }
-  function buildExportContentStore(store) {
-    const exported = {};
-    for (const [hash, entry] of Object.entries(store)) {
-      const { delta, ...fullEntry } = entry;
-      if (delta) {
-        exported[hash] = {
-          ...fullEntry,
-          content: resolveContent(store, hash)
-        };
-      } else {
-        exported[hash] = fullEntry;
-      }
-    }
-    return exported;
-  }
-  function validateDeltaIntegrity(store) {
-    const corrupt = /* @__PURE__ */ new Set();
-    for (const [hash, entry] of Object.entries(store)) {
-      if (!entry.delta)
-        continue;
-      if (!store[entry.delta.baseHash]) {
-        console.warn(
-          `[ContentStore] Broken delta: ${hash} references missing base ${entry.delta.baseHash}`
-        );
-        corrupt.add(hash);
-        continue;
-      }
-      const visited = /* @__PURE__ */ new Set();
-      let cur = hash;
-      let isCircular = false;
-      while (store[cur]?.delta) {
-        if (visited.has(cur)) {
-          isCircular = true;
-          break;
-        }
-        visited.add(cur);
-        cur = store[cur].delta.baseHash;
-      }
-      if (isCircular) {
-        console.warn(`[ContentStore] Circular delta chain detected at ${hash}`);
-        corrupt.add(hash);
-        continue;
-      }
-      try {
-        const patches = dmp.patch_fromText(entry.delta.patches);
-        const baseContent = store[cur]?.content;
-        if (baseContent) {
-          let text = contentToText(baseContent);
-          const chain = [];
-          let walk = hash;
-          while (store[walk]?.delta) {
-            chain.push(walk);
-            walk = store[walk].delta.baseHash;
-          }
-          let patchFailed = false;
-          for (const chainHash of chain.reverse()) {
-            const p = dmp.patch_fromText(store[chainHash].delta.patches);
-            const [result3, applied] = dmp.patch_apply(p, text);
-            if (applied.some((ok) => !ok)) {
-              patchFailed = true;
-              break;
-            }
-            text = result3;
-          }
-          if (patchFailed) {
-            console.warn(`[ContentStore] Patch apply failed for delta ${hash}`);
-            corrupt.add(hash);
-            continue;
-          }
-          JSON.parse(text);
-        }
-      } catch (e) {
-        console.warn(`[ContentStore] Delta validation error for ${hash}:`, e);
-        corrupt.add(hash);
-      }
-    }
-    if (corrupt.size > 0) {
-      console.warn(
-        `[ContentStore] ${corrupt.size} corrupt delta(s) detected at startup. Affected hashes will return empty content on read.`
-      );
-    }
-    return corrupt;
-  }
-
-  // src/store/branch-domain.ts
-  var extractSystemText = (content) => content.filter(isTextContent).map((c) => c.text).filter(Boolean).join("\n");
-  var syncBubbleToConfig = (chat, tree, contentStore) => {
-    const topNodeId = tree.activePath[0];
-    if (!topNodeId)
-      return;
-    const topNode = tree.nodes[topNodeId];
-    if (!topNode || topNode.role !== "system")
-      return;
-    const content = resolveContent(contentStore, topNode.contentHash);
-    chat.config = { ...chat.config, systemPrompt: extractSystemText(content) || void 0 };
-  };
-  var cloneChatAt = (chats, chatIndex) => {
-    const result3 = chats.slice();
-    const chat = result3[chatIndex];
-    result3[chatIndex] = {
-      ...chat,
-      messages: chat.messages.slice(),
-      branchTree: chat.branchTree ? {
-        ...chat.branchTree,
-        nodes: { ...chat.branchTree.nodes },
-        activePath: chat.branchTree.activePath.slice(),
-        ...chat.branchTree.messageAttributesV1 ? { messageAttributesV1: structuredClone(readMessageAttributes(chat.branchTree)) } : {}
-      } : void 0,
-      collapsedNodes: chat.collapsedNodes ? { ...chat.collapsedNodes } : void 0,
-      omittedNodes: chat.omittedNodes ? { ...chat.omittedNodes } : void 0,
-      protectedNodes: chat.protectedNodes ? { ...chat.protectedNodes } : void 0
-    };
-    return result3;
-  };
-  var cloneNode = (node) => ({ ...node });
-  var ensureBranchReadyState = (chats, chatIndex, currentContentStore) => {
-    const contentStore = Object.fromEntries(Object.entries(currentContentStore).map(([hash, entry]) => [hash, { ...entry }]));
-    const ensured = ensureBranchTreeState(chats, chatIndex, contentStore);
-    return { chats: cloneChatAt(ensured.chats, chatIndex), contentStore: ensured.contentStore };
-  };
-  var cloneNodeIfPresent = (tree, nodeId) => {
-    if (!nodeId)
-      return;
-    const node = tree.nodes[nodeId];
-    if (!node)
-      return;
-    tree.nodes[nodeId] = cloneNode(node);
-  };
-  var prepareBranchMutationState = (chats, chatIndex, currentContentStore) => {
-    const { chats: updatedChats, contentStore } = ensureBranchReadyState(
-      chats,
-      chatIndex,
-      currentContentStore
-    );
-    const chat = updatedChats[chatIndex];
-    return {
-      chats: updatedChats,
-      chat,
-      tree: chat.branchTree,
-      contentStore
-    };
-  };
-  var finalizePreparedBranchMutationState = ({
-    chats,
-    chat,
-    tree,
-    contentStore
-  }) => {
-    tree.rootId = tree.activePath[0] ?? "";
-    chat.messages = materializeActivePath(tree, contentStore);
-    return { chats, contentStore };
-  };
-  var removeMessageAtIndexFromPreparedState = (state, messageIndex, options) => {
-    const { tree, contentStore } = state;
-    const nodeId = tree.activePath[messageIndex];
-    if (!nodeId)
-      return;
-    const parentId = tree.nodes[nodeId]?.parentId ?? null;
-    const nextId = tree.activePath[messageIndex + 1] ?? null;
-    Object.values(tree.nodes).forEach((node) => {
-      if (node.parentId !== nodeId)
-        return;
-      tree.nodes[node.id] = {
-        ...node,
-        parentId
-      };
-    });
-    if (nextId) {
-      cloneNodeIfPresent(tree, nextId);
-      tree.nodes[nextId].parentId = parentId;
-    }
-    if (!options?.preserveNode) {
-      releaseContent(contentStore, tree.nodes[nodeId].contentHash);
-      deleteMessageAttributes(tree, nodeId);
-      delete tree.nodes[nodeId];
-    }
-    tree.activePath.splice(messageIndex, 1);
-  };
-  var ensureBranchTreeState = (chats, chatIndex, currentContentStore) => {
-    if (chats[chatIndex]?.branchTree) {
-      if (chats[chatIndex].messages.some((message) => Object.keys(message).some((key) => key !== "role" && key !== "content"))) {
-        const updatedChats2 = cloneChatAt(chats, chatIndex);
-        captureProjectedMessageAttributes(updatedChats2[chatIndex], currentContentStore);
-        return { chats: updatedChats2, contentStore: currentContentStore };
-      }
-      return { chats, contentStore: currentContentStore };
-    }
-    const contentStore = Object.fromEntries(Object.entries(currentContentStore).map(([hash, entry]) => [hash, { ...entry }]));
-    const updatedChats = cloneChatAt(chats, chatIndex);
-    flatChatToBranchTree(updatedChats[chatIndex], contentStore);
-    return { chats: updatedChats, contentStore };
-  };
-  var createBranchState = (chats, chatIndex, fromNodeId, newContent, currentContentStore) => {
-    const contentStore = { ...currentContentStore };
-    const updatedChats = cloneChatAt(chats, chatIndex);
-    captureProjectedMessageAttributes(updatedChats[chatIndex], contentStore);
-    const tree = updatedChats[chatIndex].branchTree;
-    const fromNode = tree.nodes[fromNodeId];
-    const newId = editingUUID();
-    const contentHash = newContent ? addContentDelta(contentStore, newContent, fromNode.contentHash) : (() => {
-      retainContent(contentStore, fromNode.contentHash);
-      return fromNode.contentHash;
-    })();
-    tree.nodes[newId] = {
-      id: newId,
-      parentId: fromNode.parentId,
-      role: fromNode.role,
-      contentHash,
-      createdAt: Date.now()
-    };
-    copyMessageAttributes(tree, fromNodeId, tree, newId);
-    const fromIdx = tree.activePath.indexOf(fromNodeId);
-    tree.activePath = [...tree.activePath.slice(0, fromIdx), newId];
-    if (fromIdx === 0)
-      syncBubbleToConfig(updatedChats[chatIndex], tree, contentStore);
-    updatedChats[chatIndex].messages = materializeActivePath(tree, contentStore);
-    return { chats: updatedChats, contentStore, newId };
-  };
-  var switchActivePathState = (chats, chatIndex, newPath, contentStore) => {
-    const updatedChats = cloneChatAt(chats, chatIndex);
-    captureProjectedMessageAttributes(updatedChats[chatIndex], contentStore);
-    const tree = updatedChats[chatIndex].branchTree;
-    tree.activePath = newPath;
-    updatedChats[chatIndex].messages = materializeActivePath(tree, contentStore);
-    return updatedChats;
-  };
-  var deleteBranchState = (chats, chatIndex, nodeId, currentContentStore) => {
-    const contentStore = Object.fromEntries(Object.entries(currentContentStore).map(([hash, entry]) => [hash, { ...entry }]));
-    const updatedChats = cloneChatAt(chats, chatIndex);
-    captureProjectedMessageAttributes(updatedChats[chatIndex], contentStore);
-    const tree = updatedChats[chatIndex].branchTree;
-    const toDelete = collectDescendants(tree, nodeId);
-    const parentId = tree.nodes[nodeId]?.parentId;
-    toDelete.forEach((id) => {
-      releaseContent(contentStore, tree.nodes[id].contentHash);
-      deleteMessageAttributes(tree, id);
-      delete tree.nodes[id];
-    });
-    if (tree.activePath.some((id) => toDelete.has(id))) {
-      if (parentId) {
-        const siblings = getChildrenOf(tree, parentId);
-        if (siblings.length > 0) {
-          tree.activePath = buildPathToLeaf(tree, siblings[0].id);
-        } else {
-          const parentIdx = tree.activePath.indexOf(parentId);
-          tree.activePath = tree.activePath.slice(0, parentIdx + 1);
-        }
-      } else {
-        tree.activePath = [];
-      }
-      updatedChats[chatIndex].messages = materializeActivePath(tree, contentStore);
-    }
-    if (tree.activePath.length)
-      tree.rootId = tree.activePath[0];
-    else if (!tree.nodes[tree.rootId])
-      tree.rootId = "";
-    return { chats: updatedChats, contentStore };
-  };
-  var pruneHiddenNodesState = (chats, chatIndex, currentContentStore) => {
-    const contentStore = Object.fromEntries(Object.entries(currentContentStore).map(([hash, entry]) => [hash, { ...entry }]));
-    const updatedChats = cloneChatAt(chats, chatIndex);
-    captureProjectedMessageAttributes(updatedChats[chatIndex], contentStore);
-    const tree = updatedChats[chatIndex].branchTree;
-    const activeSet = new Set(tree.activePath);
-    const protectedSet = /* @__PURE__ */ new Set();
-    for (const node of Object.values(tree.nodes)) {
-      if (node.pinned) {
-        for (const id of collectDescendants(tree, node.id)) {
-          protectedSet.add(id);
-        }
-      }
-    }
-    const chatProtectedNodes = updatedChats[chatIndex].protectedNodes;
-    if (chatProtectedNodes) {
-      for (const [id, value] of Object.entries(chatProtectedNodes)) {
-        if (value && tree.nodes[id]) {
-          protectedSet.add(id);
-        }
-      }
-    }
-    const toDelete = Object.keys(tree.nodes).filter(
-      (id) => !activeSet.has(id) && !protectedSet.has(id)
-    );
-    toDelete.forEach((id) => {
-      releaseContent(contentStore, tree.nodes[id].contentHash);
-      deleteMessageAttributes(tree, id);
-      delete tree.nodes[id];
-    });
-    for (const id of Object.keys(tree.nodes)) {
-      const node = tree.nodes[id];
-      if (node.parentId && !tree.nodes[node.parentId]) {
-        tree.nodes[id] = cloneNode(node);
-        tree.nodes[id].parentId = null;
-      }
-    }
-    if (tree.activePath.length > 0)
-      tree.rootId = tree.activePath[0];
-    else if (!tree.nodes[tree.rootId])
-      tree.rootId = "";
-    return { chats: updatedChats, contentStore };
-  };
-  var setBranchNodeFieldState = (chats, chatIndex, nodeId, field, value) => {
-    const updated = cloneChatAt(chats, chatIndex);
-    const tree = updated[chatIndex].branchTree;
-    tree.nodes[nodeId] = { ...tree.nodes[nodeId], [field]: value };
-    return updated;
-  };
-  var appendNodeToActivePathState = (chats, chatIndex, role, content, currentContentStore) => {
-    const { chats: updatedChats, chat, tree, contentStore } = prepareBranchMutationState(chats, chatIndex, currentContentStore);
-    const parentId = tree.activePath[tree.activePath.length - 1] ?? null;
-    const newId = editingUUID();
-    tree.nodes[newId] = {
-      id: newId,
-      parentId,
-      role,
-      contentHash: addContent(contentStore, content),
-      createdAt: Date.now()
-    };
-    tree.activePath.push(newId);
-    const finalized = finalizePreparedBranchMutationState({
-      chats: updatedChats,
-      chat,
-      tree,
-      contentStore
-    });
-    return { ...finalized, newId };
-  };
-  var upsertMessageAtIndexState = (chats, chatIndex, messageIndex, message, currentContentStore) => {
-    const { chats: updatedChats, chat, tree, contentStore } = prepareBranchMutationState(chats, chatIndex, currentContentStore);
-    const existingId = tree.activePath[messageIndex];
-    const previousRole = existingId ? tree.nodes[existingId].role : void 0;
-    chat.messages[messageIndex] = message;
-    if (existingId)
-      setMessageAttributes(tree, existingId, message);
-    if (existingId) {
-      const oldHash = tree.nodes[existingId].contentHash;
-      const newHash = addContentDelta(contentStore, message.content, oldHash);
-      releaseContent(contentStore, oldHash);
-      tree.nodes[existingId] = {
-        ...tree.nodes[existingId],
-        role: message.role,
-        contentHash: newHash
-      };
-    } else if (messageIndex === tree.activePath.length) {
-      const parentId = messageIndex === 0 ? null : tree.activePath[messageIndex - 1] ?? null;
-      const newId = editingUUID();
-      tree.nodes[newId] = {
-        id: newId,
-        parentId,
-        role: message.role,
-        contentHash: addContent(contentStore, message.content),
-        createdAt: Date.now()
-      };
-      setMessageAttributes(tree, newId, message);
-      tree.activePath.push(newId);
-      if (messageIndex === 0) {
-        tree.rootId = newId;
-      }
-    }
-    if (messageIndex === 0) {
-      if (previousRole === "system" && message.role !== "system") {
-        chat.config = { ...chat.config, systemPrompt: void 0 };
-      } else {
-        syncBubbleToConfig(chat, tree, contentStore);
-      }
-    }
-    return finalizePreparedBranchMutationState({
-      chats: updatedChats,
-      chat,
-      tree,
-      contentStore
-    });
-  };
-  var insertMessageAtIndexState = (chats, chatIndex, messageIndex, message, currentContentStore) => {
-    const { chats: updatedChats, chat, tree, contentStore } = prepareBranchMutationState(chats, chatIndex, currentContentStore);
-    const prevId = messageIndex > 0 ? tree.activePath[messageIndex - 1] ?? null : null;
-    const nextId = tree.activePath[messageIndex];
-    const newId = editingUUID();
-    tree.nodes[newId] = {
-      id: newId,
-      parentId: prevId,
-      role: message.role,
-      contentHash: addContent(contentStore, message.content),
-      createdAt: Date.now()
-    };
-    if (nextId) {
-      cloneNodeIfPresent(tree, nextId);
-      tree.nodes[nextId].parentId = newId;
-    }
-    setMessageAttributes(tree, newId, message);
-    tree.activePath.splice(messageIndex, 0, newId);
-    if (messageIndex === 0) {
-      tree.rootId = newId;
-    }
-    const finalized = finalizePreparedBranchMutationState({
-      chats: updatedChats,
-      chat,
-      tree,
-      contentStore
-    });
-    return { ...finalized, newId };
-  };
-  var removeMessageAtIndexState = (chats, chatIndex, messageIndex, currentContentStore, options) => {
-    const state = prepareBranchMutationState(chats, chatIndex, currentContentStore);
-    removeMessageAtIndexFromPreparedState(state, messageIndex, options);
-    return finalizePreparedBranchMutationState(state);
-  };
-  var moveMessageState = (chats, chatIndex, messageIndex, direction, currentContentStore) => {
-    const { chats: updatedChats, chat, tree, contentStore } = prepareBranchMutationState(chats, chatIndex, currentContentStore);
-    const targetIndex = direction === "up" ? messageIndex - 1 : messageIndex + 1;
-    const topNode = tree.activePath[0] ? tree.nodes[tree.activePath[0]] : void 0;
-    if (topNode?.role === "system") {
-      if (messageIndex === 0 || targetIndex === 0) {
-        return finalizePreparedBranchMutationState({
-          chats: updatedChats,
-          chat,
-          tree,
-          contentStore
-        });
-      }
-    }
-    if (targetIndex < 0 || targetIndex >= tree.activePath.length || messageIndex < 0 || messageIndex >= tree.activePath.length) {
-      return finalizePreparedBranchMutationState({
-        chats: updatedChats,
-        chat,
-        tree,
-        contentStore
-      });
-    }
-    const start2 = Math.min(messageIndex, targetIndex);
-    const end = Math.max(messageIndex, targetIndex);
-    const reorderedPath = tree.activePath.slice();
-    const [movedId] = reorderedPath.splice(messageIndex, 1);
-    reorderedPath.splice(targetIndex, 0, movedId);
-    tree.activePath = reorderedPath;
-    for (let index = start2; index <= end + 1; index += 1) {
-      const nodeId = tree.activePath[index];
-      if (!nodeId)
-        continue;
-      cloneNodeIfPresent(tree, nodeId);
-      tree.nodes[nodeId].parentId = index === 0 ? null : tree.activePath[index - 1] ?? null;
-    }
-    return finalizePreparedBranchMutationState({
-      chats: updatedChats,
-      chat,
-      tree,
-      contentStore
-    });
-  };
-  var replaceMessageAndPruneFollowingState = (chats, chatIndex, messageIndex, message, currentContentStore, removeCount = 0) => {
-    const state = prepareBranchMutationState(chats, chatIndex, currentContentStore);
-    const { tree, contentStore } = state;
-    const existingId = tree.activePath[messageIndex];
-    state.chat.messages[messageIndex] = message;
-    if (existingId)
-      setMessageAttributes(tree, existingId, message);
-    if (existingId) {
-      const oldHash = tree.nodes[existingId].contentHash;
-      const newHash = addContentDelta(contentStore, message.content, oldHash);
-      releaseContent(contentStore, oldHash);
-      tree.nodes[existingId] = {
-        ...tree.nodes[existingId],
-        role: message.role,
-        contentHash: newHash
-      };
-    } else if (messageIndex === tree.activePath.length) {
-      const parentId = messageIndex === 0 ? null : tree.activePath[messageIndex - 1] ?? null;
-      const newId = editingUUID();
-      tree.nodes[newId] = {
-        id: newId,
-        parentId,
-        role: message.role,
-        contentHash: addContent(contentStore, message.content),
-        createdAt: Date.now()
-      };
-      setMessageAttributes(tree, newId, message);
-      tree.activePath.push(newId);
-    }
-    for (let removed = 0; removed < removeCount; removed += 1) {
-      removeMessageAtIndexFromPreparedState(state, messageIndex + 1);
-    }
-    return finalizePreparedBranchMutationState(state);
-  };
-  var copyBranchSequenceState = (chats, chatIndex, fromNodeId, toNodeId) => {
-    const tree = chats[chatIndex]?.branchTree;
-    if (!tree?.nodes[fromNodeId] || !tree.nodes[toNodeId])
-      return null;
-    const nodeIds = [];
-    let cur = toNodeId;
-    const visited = /* @__PURE__ */ new Set();
-    while (cur) {
-      if (visited.has(cur) || !tree.nodes[cur])
-        return null;
-      visited.add(cur);
-      nodeIds.unshift(cur);
-      if (cur === fromNodeId)
-        break;
-      cur = tree.nodes[cur]?.parentId ?? null;
-    }
-    if (nodeIds[0] !== fromNodeId)
-      return null;
-    const nodes = {};
-    nodeIds.forEach((id) => {
-      nodes[id] = { ...tree.nodes[id] };
-    });
-    const clipboard = { nodeIds, sourceChat: chats[chatIndex].id, nodes };
-    for (const field of ["collapsedNodes", "omittedNodes", "protectedNodes"]) {
-      const source = chats[chatIndex][field];
-      if (source)
-        clipboard[field] = Object.fromEntries(nodeIds.filter((id) => Object.hasOwn(source, id)).map((id) => [id, source[id]]));
-    }
-    for (const id of nodeIds)
-      copyMessageAttributes(tree, id, clipboard, id);
-    return clipboard;
-  };
-  var removeBranchSequenceState = (chats, chatIndex, nodeIds, currentContentStore) => {
-    const contentStore = Object.fromEntries(Object.entries(currentContentStore).map(([hash, entry]) => [hash, { ...entry }]));
-    const updatedChats = cloneChatAt(chats, chatIndex);
-    const chat = updatedChats[chatIndex];
-    captureProjectedMessageAttributes(chat, contentStore);
-    const tree = chat.branchTree;
-    const removed = new Set(nodeIds);
-    for (const node of Object.values(tree.nodes)) {
-      if (removed.has(node.id) || !node.parentId || !removed.has(node.parentId))
-        continue;
-      let parentId = node.parentId;
-      while (parentId && removed.has(parentId))
-        parentId = tree.nodes[parentId].parentId;
-      tree.nodes[node.id] = { ...node, parentId };
-    }
-    for (const id of nodeIds) {
-      releaseContent(contentStore, tree.nodes[id].contentHash);
-      deleteMessageAttributes(tree, id);
-      delete tree.nodes[id];
-    }
-    tree.activePath = tree.activePath.filter((id) => !removed.has(id));
-    if (tree.activePath.length === 0) {
-      const root = Object.values(tree.nodes).find((node) => !node.parentId);
-      if (root)
-        tree.activePath = buildPathToLeaf(tree, root.id);
-    }
-    tree.rootId = tree.activePath[0] ?? "";
-    chat.messages = materializeActivePath(tree, contentStore);
-    return { chats: updatedChats, contentStore };
-  };
-  var pasteBranchSequenceState = (chats, targetChatIndex, afterNodeId, clipboard, currentContentStore) => {
-    const contentStore = Object.fromEntries(Object.entries(currentContentStore).map(([hash, entry]) => [hash, { ...entry }]));
-    const updatedChats = cloneChatAt(chats, targetChatIndex);
-    captureProjectedMessageAttributes(updatedChats[targetChatIndex], contentStore);
-    const tree = updatedChats[targetChatIndex].branchTree;
-    const idMap = {};
-    clipboard.nodeIds.forEach((id) => {
-      idMap[id] = editingUUID();
-    });
-    for (const field of ["collapsedNodes", "omittedNodes", "protectedNodes"]) {
-      const source = clipboard[field];
-      if (source && clipboard.nodeIds.some((id) => Object.hasOwn(source, id))) {
-        updatedChats[targetChatIndex][field] = { ...updatedChats[targetChatIndex][field], ...Object.fromEntries(clipboard.nodeIds.filter((id) => Object.hasOwn(source, id)).map((id) => [idMap[id], source[id]])) };
-      }
-    }
-    let prevId = afterNodeId;
-    for (const origId of clipboard.nodeIds) {
-      const newId = idMap[origId];
-      const srcNode = clipboard.nodes[origId];
-      retainContent(contentStore, srcNode.contentHash);
-      tree.nodes[newId] = {
-        ...srcNode,
-        id: newId,
-        parentId: prevId,
-        createdAt: Date.now()
-      };
-      copyMessageAttributes(clipboard, origId, tree, newId);
-      prevId = newId;
-    }
-    const destinationPath = buildPathToLeaf(tree, afterNodeId);
-    const insertIdx = destinationPath.indexOf(afterNodeId);
-    tree.activePath = [
-      ...destinationPath.slice(0, insertIdx + 1),
-      ...clipboard.nodeIds.map((id) => idMap[id])
-    ];
-    tree.rootId = tree.activePath[0] ?? "";
-    updatedChats[targetChatIndex].messages = materializeActivePath(tree, contentStore);
-    return { chats: updatedChats, contentStore };
-  };
-  var updateNodeRoleState = (chats, chatIndex, nodeId, role, contentStore) => {
-    const updatedChats = cloneChatAt(chats, chatIndex);
-    const chat = updatedChats[chatIndex];
-    captureProjectedMessageAttributes(chat, contentStore);
-    const tree = chat.branchTree;
-    const prevRole = tree.nodes[nodeId]?.role;
-    tree.nodes[nodeId] = { ...tree.nodes[nodeId], role };
-    const isTopNode = tree.activePath[0] === nodeId;
-    if (isTopNode) {
-      if (prevRole === "system" && role !== "system") {
-        chat.config = { ...chat.config, systemPrompt: void 0 };
-      } else if (prevRole !== "system" && role === "system") {
-        syncBubbleToConfig(chat, tree, contentStore);
-      }
-    }
-    chat.messages = materializeActivePath(tree, contentStore);
-    return updatedChats;
-  };
-  var upsertWithAutoBranchState = (chats, chatIndex, messageIndex, message, currentContentStore) => {
-    const { chats: ensuredChats, contentStore: ensuredStore } = ensureBranchReadyState(chats, chatIndex, currentContentStore);
-    const tree = ensuredChats[chatIndex].branchTree;
-    const existingId = tree.activePath[messageIndex];
-    if (!existingId) {
-      return upsertMessageAtIndexState(
-        ensuredChats,
-        chatIndex,
-        messageIndex,
-        message,
-        ensuredStore
-      );
-    }
-    const node = tree.nodes[existingId];
-    const contentChanged = !isContentEqual(ensuredStore, node.contentHash, message.content);
-    const roleChanged = node.role !== message.role;
-    const previousAttributes = JSON.stringify(tree.messageAttributesV1);
-    setMessageAttributes(tree, existingId, message);
-    const attributesChanged = JSON.stringify(tree.messageAttributesV1) !== previousAttributes;
-    if (!contentChanged && !roleChanged && !attributesChanged) {
-      return { chats: ensuredChats, contentStore: ensuredStore, noOp: true };
-    }
-    if (!contentChanged && !roleChanged)
-      return { chats: ensuredChats, contentStore: ensuredStore };
-    if (!contentChanged) {
-      return { chats: updateNodeRoleState(ensuredChats, chatIndex, existingId, message.role, ensuredStore), contentStore: ensuredStore };
-    }
-    return upsertMessageAtIndexState(
-      ensuredChats,
-      chatIndex,
-      messageIndex,
-      message,
-      ensuredStore
-    );
-  };
-  var resolveNodeTarget = (chats, input, activeOnly = false) => {
-    const chatIndex = chats?.findIndex((chat2) => chat2.id === input.chatId) ?? -1;
-    const chat = chats?.[chatIndex];
-    if (!chat)
-      return { status: "chat-missing" };
-    const index = chat.branchTree ? chat.branchTree.activePath.indexOf(input.nodeId) : Number(input.nodeId);
-    const exists2 = chat.branchTree ? !!chat.branchTree.nodes[input.nodeId] : Number.isInteger(index) && index >= 0 && String(index) === input.nodeId && !!chat.messages[index];
-    if (!exists2)
-      return { status: "node-missing" };
-    if (activeOnly && index < 0)
-      return { status: "invalid-target" };
-    return { status: "valid", chatIndex, messageIndex: index, chat };
-  };
-  var setNodeDisplayFieldState = (chats, input, field, value, contentStore) => {
-    const target = resolveNodeTarget(chats, input);
-    if (target.status !== "valid")
-      return target;
-    const ensured = ensureBranchTreeState(chats, target.chatIndex, contentStore);
-    const nodeId = target.chat.branchTree ? input.nodeId : ensured.chats[target.chatIndex].branchTree.activePath[target.messageIndex];
-    if (ensured.chats[target.chatIndex].branchTree.nodes[nodeId][field] === value)
-      return { status: "unchanged" };
-    return {
-      status: "updated",
-      chats: setBranchNodeFieldState(ensured.chats, target.chatIndex, nodeId, field, value),
-      contentStore: ensured.contentStore,
-      nodeId,
-      historyBase: ensured
-    };
-  };
-  var insertNodeState = (chats, input, contentStore) => {
-    const chatIndex = chats?.findIndex((chat) => chat.id === input.chatId) ?? -1;
-    if (chatIndex < 0)
-      return { status: "chat-missing" };
-    const target = input.beforeNodeId === null ? null : resolveNodeTarget(chats, { chatId: input.chatId, nodeId: input.beforeNodeId }, true);
-    if (target && target.status !== "valid")
-      return target;
-    const index = target?.messageIndex ?? chats[chatIndex].messages.length;
-    const ensured = ensureBranchTreeState(chats, chatIndex, contentStore);
-    const result3 = insertMessageAtIndexState(ensured.chats, chatIndex, index, { role: input.role, content: input.content }, ensured.contentStore);
-    return { status: "updated", ...result3, nodeId: result3.newId, historyBase: ensured };
-  };
-  var removeNodeState = (chats, input, contentStore, options) => {
-    const target = resolveNodeTarget(chats, input, true);
-    if (target.status !== "valid")
-      return target;
-    if ((target.chat.protectedNodes ?? {})[input.nodeId])
-      return { status: "protected" };
-    const ensured = ensureBranchReadyState(chats, target.chatIndex, contentStore);
-    const result3 = removeMessageAtIndexState(ensured.chats, target.chatIndex, target.messageIndex, ensured.contentStore, options);
-    return { status: "updated", ...result3, historyBase: ensured };
-  };
-  var moveNodeState = (chats, input, contentStore) => {
-    const target = resolveNodeTarget(chats, input, true);
-    if (target.status !== "valid")
-      return target;
-    if (input.direction === "up" ? target.messageIndex === 0 : target.messageIndex === target.chat.messages.length - 1)
-      return { status: "unchanged" };
-    const topRole = target.chat.messages[0]?.role;
-    if (topRole === "system" && (target.messageIndex === 0 || input.direction === "up" && target.messageIndex === 1))
-      return { status: "unchanged" };
-    const ensured = ensureBranchTreeState(chats, target.chatIndex, contentStore);
-    const result3 = moveMessageState(ensured.chats, target.chatIndex, target.messageIndex, input.direction, ensured.contentStore);
-    return { status: "updated", ...result3, historyBase: ensured };
-  };
-  var replaceNodeAndPruneState = (chats, input, contentStore) => {
-    if (!Number.isInteger(input.removeCount) || input.removeCount < 0)
-      return { status: "invalid-input", removedNodeIds: [], pruneBlockedBy: [] };
-    const target = resolveNodeTarget(chats, input, true);
-    if (target.status !== "valid")
-      return { status: "missing", removedNodeIds: [], pruneBlockedBy: [] };
-    if (target.chat.protectedNodes?.[input.nodeId])
-      return { status: "protected", blockedNodeIds: [input.nodeId], removedNodeIds: [], pruneBlockedBy: [] };
-    const ensured = ensureBranchTreeState(chats, target.chatIndex, contentStore);
-    const prepared = ensured.chats[target.chatIndex];
-    const following = prepared.branchTree.activePath.slice(target.messageIndex + 1, target.messageIndex + 1 + input.removeCount);
-    const pruneBlockedBy = following.filter((id) => prepared.protectedNodes?.[id]);
-    const result3 = replaceMessageAndPruneFollowingState(ensured.chats, target.chatIndex, target.messageIndex, { role: input.role, content: input.content }, ensured.contentStore, pruneBlockedBy.length ? 0 : input.removeCount);
-    return { status: "updated", ...result3, historyBase: ensured, removedNodeIds: pruneBlockedBy.length ? [] : following, pruneBlockedBy };
-  };
-  var deleteNodeBranchState = (chats, input, contentStore) => {
-    const target = resolveNodeTarget(chats, input);
-    if (target.status !== "valid")
-      return target;
-    const blockedNodeIds = target.chat.branchTree ? [...collectDescendants(target.chat.branchTree, input.nodeId)].filter((id) => target.chat.protectedNodes?.[id]) : target.chat.messages.slice(target.messageIndex).map((_23, index) => String(target.messageIndex + index)).filter((id) => target.chat.protectedNodes?.[id]);
-    if (blockedNodeIds.length)
-      return { status: "protected", blockedNodeIds };
-    const ensured = ensureBranchTreeState(chats, target.chatIndex, contentStore);
-    const nodeId = target.chat.branchTree ? input.nodeId : ensured.chats[target.chatIndex].branchTree.activePath[target.messageIndex];
-    const removedNodeIds = [...collectDescendants(ensured.chats[target.chatIndex].branchTree, nodeId)];
-    return { status: "updated", ...deleteBranchState(ensured.chats, target.chatIndex, nodeId, ensured.contentStore), historyBase: ensured, removedNodeIds };
-  };
-
-  // shared/google-sync/editing.ts
-  var runtime;
-  function editingUUID() {
-    if (!runtime)
-      return crypto.randomUUID();
-    const id = runtime.ids.shift();
-    if (!id || runtime.reserved.has(id))
-      throw new Error("Invalid new node ID.");
-    runtime.reserved.add(id);
-    return id;
-  }
-  function withEditingRuntime(newIDs, existingIDs, now, operation) {
-    const clock = Date.now;
-    runtime = { ids: [...newIDs], reserved: new Set(existingIDs) };
-    Date.now = () => now;
-    try {
-      return operation();
-    } finally {
-      Date.now = clock;
-      runtime = void 0;
-    }
-  }
-  function messageEdit(json, capture) {
-    const input = JSON.parse(json);
-    if (input.operation === "textValue")
-      return JSON.stringify(textValueOf(input.parts));
-    if (input.editedText !== void 0 && typeof input.editedText !== "string")
-      throw new Error("Invalid text.");
-    const parts = input.editedText !== void 0 && input.editedText !== textValueOf(input.parts) ? replaceTextValue(input.parts, input.editedText) : input.parts;
-    if (!["user", "assistant", "system"].includes(input.role) || !Array.isArray(input.parts))
-      throw new Error("Invalid message.");
-    if (input.mode === "append" && input.editedText !== void 0 && !hasMeaningfulContent(parts))
-      throw new Error("\u672C\u6587\u3092\u5165\u529B\u3057\u3066\u304F\u3060\u3055\u3044");
-    const before = { chat: input.chat, contentStore: input.contentStore };
-    const isolated = structuredClone(before);
-    let chat = isolated.chat;
-    if (!Array.isArray(chat.messages) && chat.branchTree)
-      chat.messages = materializeActivePath(chat.branchTree, isolated.contentStore);
-    const wasFlat = !chat.branchTree;
-    return withEditingRuntime(input.newIDs, Object.keys(chat.branchTree?.nodes ?? {}), input.now, () => {
-      let result3 = input.mode === "insert" && wasFlat ? { chats: [chat], contentStore: isolated.contentStore } : ensureBranchTreeState([chat], 0, isolated.contentStore);
-      if (!wasFlat) {
-        const path = input.viewingPath;
-        if (path.some((id) => !Object.hasOwn(result3.chats[0].branchTree.nodes, id)))
-          throw new Error("Invalid viewing path.");
-        if (path.length)
-          result3.chats = switchActivePathState(result3.chats, 0, path, result3.contentStore);
-        else
-          result3.chats[0].branchTree.activePath = [];
-      }
-      let historyBase = result3;
-      let insertedNodeID;
-      if (input.mode === "insert") {
-        if (input.nodeID === void 0)
-          throw new Error("Invalid insert target.");
-        const beforeNodeId = wasFlat && input.nodeID?.startsWith("message-") ? input.nodeID.slice(8) : input.nodeID;
-        const inserted = insertNodeState(result3.chats, { chatId: chat.id, beforeNodeId, role: input.role, content: input.operation === "insertGenerate" ? [{ type: "text", text: "" }] : parts }, result3.contentStore);
-        if (inserted.status !== "updated")
-          throw new Error(`Invalid insert target: ${inserted.status}`);
-        historyBase = inserted.historyBase ?? historyBase;
-        result3 = inserted;
-        if (input.operation === "insertGenerate") {
-          capture?.(historyBase, result3);
-          insertedNodeID = inserted.nodeId;
-          historyBase = result3;
-          const index = result3.chats[0].branchTree.activePath.indexOf(insertedNodeID);
-          const generated = replaceNodeAndPruneState(result3.chats, {
-            chatId: chat.id,
-            nodeId: insertedNodeID,
-            role: input.role,
-            content: parts,
-            removeCount: Math.max(0, result3.chats[0].messages.length - (index + 1))
-          }, result3.contentStore);
-          if (generated.status !== "updated" || generated.pruneBlockedBy.length)
-            return JSON.stringify({ ...generated, changes: [] });
-          result3 = generated;
-        }
-      } else {
-        const tree = result3.chats[0].branchTree;
-        let index = -1;
-        if (input.mode !== "append") {
-          const flatID = input.nodeID?.startsWith("message-") ? input.nodeID.slice(8) : input.nodeID;
-          index = wasFlat && flatID !== void 0 && String(Number(flatID)) === flatID ? Number(flatID) : tree.activePath.indexOf(input.nodeID);
-          if (!Number.isInteger(index) || index < 0 || index >= tree.activePath.length)
-            throw new Error("Invalid message node ID.");
-          if (input.mode === "overwrite" && result3.chats[0].protectedNodes?.[tree.activePath[index]])
-            throw new Error("Protected message.");
-        }
-        if (input.mode === "append")
-          result3 = appendNodeToActivePathState(result3.chats, 0, input.role, parts, result3.contentStore);
-        else if (input.mode === "branch") {
-          const branch = createBranchState(result3.chats, 0, tree.activePath[index], parts, result3.contentStore);
-          result3 = branch;
-          if (branch.chats[0].branchTree.nodes[branch.newId].role !== input.role) {
-            result3.chats = updateNodeRoleState(branch.chats, 0, branch.newId, input.role, branch.contentStore);
-          }
-        } else
-          result3 = upsertWithAutoBranchState(result3.chats, 0, index, { role: input.role, content: parts }, result3.contentStore);
-      }
-      const changed = !("noOp" in result3 && result3.noOp);
-      for (const [hash, entry] of Object.entries(result3.contentStore)) {
-        if (entry.delta && JSON.stringify(entry.delta) !== JSON.stringify(before.contentStore[hash]?.delta)) {
-          const content = resolveContent(result3.contentStore, hash);
-          const { delta: _delta, ...full } = entry;
-          result3.contentStore[hash] = { ...full, content };
-        }
-      }
-      chat = result3.chats[0];
-      chat.messages = materializeActivePath(chat.branchTree, result3.contentStore, true);
-      if (changed)
-        capture?.(historyBase, result3);
-      const changes = diffJSONChanges(before, JSON.parse(JSON.stringify({ chat, contentStore: result3.contentStore })));
-      return JSON.stringify(input.operation === "insertGenerate" ? { status: "updated", nodeID: insertedNodeID, changes } : changes);
-    });
-  }
-
-  // src/utils/branchUtils.ts
-  function readMessageAttributes(owner) {
-    const value = owner.messageAttributesV1;
-    if (!Object.hasOwn(owner, "messageAttributesV1"))
-      return void 0;
-    if (!value || value.version !== 1 || !value.byNode || typeof value.byNode !== "object" || Array.isArray(value.byNode) || Object.keys(value).some((key) => key !== "version" && key !== "byNode") || Object.keys(value.byNode).some((id) => !Object.hasOwn(owner.nodes, id)) || Object.values(value.byNode).some((attributes) => !attributes || typeof attributes !== "object" || Array.isArray(attributes) || Object.hasOwn(attributes, "role") || Object.hasOwn(attributes, "content"))) {
-      throw new Error("Unsupported message attributes namespace.");
-    }
-    return value;
-  }
-  var extraMessageAttributes = (message) => {
-    const { role, content, ...attributes } = message;
-    return attributes;
-  };
-  function setMessageAttributes(owner, nodeId, message) {
-    const attributes = extraMessageAttributes(message);
-    if (!Object.keys(attributes).length)
-      return;
-    const previous = readMessageAttributes(owner);
-    owner.messageAttributesV1 = { version: 1, byNode: {
-      ...previous?.byNode,
-      [nodeId]: { ...previous?.byNode[nodeId], ...structuredClone(attributes) }
-    } };
-  }
-  function copyMessageAttributes(source, sourceId, target, targetId) {
-    const attributes = readMessageAttributes(source)?.byNode[sourceId];
-    if (!attributes)
-      return;
-    setMessageAttributes(target, targetId, { ...attributes, role: "user", content: [] });
-  }
-  function deleteMessageAttributes(owner, nodeId) {
-    const previous = readMessageAttributes(owner);
-    if (!previous || !Object.hasOwn(previous.byNode, nodeId))
-      return;
-    const byNode = { ...previous.byNode };
-    delete byNode[nodeId];
-    owner.messageAttributesV1 = { version: 1, byNode };
-  }
-  function captureProjectedMessageAttributes(chat, contentStore) {
-    if (!chat.branchTree)
-      return;
-    let next = chat.branchTree;
-    for (const [index, message] of (chat.messages ?? []).entries()) {
-      const attributes = extraMessageAttributes(message);
-      if (!Object.keys(attributes).length)
-        continue;
-      const nodeId = chat.branchTree.activePath[index], node = chat.branchTree.nodes[nodeId];
-      if (!node || node.role !== message.role || !(0, import_lodash.isEqual)(resolveContent(contentStore, node.contentHash), message.content))
-        throw new Error("Message attributes do not match the active branch.");
-      const existing = readMessageAttributes(next)?.byNode[nodeId];
-      for (const [key, value] of Object.entries(attributes))
-        if (existing && Object.hasOwn(existing, key) && !(0, import_lodash.isEqual)(existing[key], value))
-          throw new Error("Conflicting projected message attributes.");
-      if (next === chat.branchTree)
-        next = { ...next };
-      setMessageAttributes(next, nodeId, message);
-    }
-    chat.branchTree = next;
-  }
-  function resolveBranchSwipeDirection(distance, preference = "left-next") {
-    return distance < 0 === (preference === "left-next") ? "next" : "previous";
-  }
-  function projectMessageAttributes(owner, nodeId, message) {
-    return { ...structuredClone(readMessageAttributes(owner)?.byNode[nodeId] ?? {}), role: message.role, content: message.content };
-  }
-  function materializeActivePath(tree, contentStore, includeAttributes = false) {
-    return tree.activePath.map((id) => {
-      const node = tree.nodes[id];
-      const message = { role: node.role, content: resolveContent(contentStore, node.contentHash) };
-      return includeAttributes ? projectMessageAttributes(tree, id, message) : message;
-    });
-  }
-  function flatMessagesToBranchTree(messages, contentStore) {
-    const nodes = {};
-    const ids = [];
-    const tree = { nodes, rootId: "", activePath: ids };
-    for (let i = 0; i < messages.length; i++) {
-      const id = editingUUID();
-      ids.push(id);
-      const contentHash = addContent(contentStore, messages[i].content);
-      nodes[id] = {
-        id,
-        parentId: i === 0 ? null : ids[i - 1],
-        role: messages[i].role,
-        contentHash,
-        createdAt: Date.now() - (messages.length - i) * 1e3
-      };
-      setMessageAttributes(tree, id, messages[i]);
-    }
-    tree.rootId = ids[0] ?? "";
-    return tree;
-  }
-  function flatChatToBranchTree(chat, contentStore) {
-    if (chat.branchTree)
-      return;
-    const tree = flatMessagesToBranchTree(chat.messages, contentStore);
-    for (const field of ["collapsedNodes", "omittedNodes", "protectedNodes"]) {
-      if (!chat[field])
-        continue;
-      chat[field] = Object.fromEntries(Object.entries(chat[field]).map(([key, value]) => {
-        const index = Number(key);
-        const id = Number.isInteger(index) && index >= 0 && String(index) === key ? tree.activePath[index] : void 0;
-        return [id ?? key, value];
-      }));
-    }
-    chat.branchTree = tree;
-    chat.messages = materializeActivePath(tree, contentStore);
-  }
-  function getChildrenOf(tree, nodeId) {
-    return Object.values(tree.nodes).filter((n) => n.parentId === nodeId);
-  }
-  function getSiblingGroups(tree) {
-    const grouped = /* @__PURE__ */ new Map();
-    const nodes = Object.values(tree.nodes);
-    for (const node of nodes) {
-      const group = grouped.get(node.parentId) ?? [];
-      group.push(node);
-      grouped.set(node.parentId, group);
-    }
-    const groups = [];
-    const byParent = /* @__PURE__ */ new Map();
-    const byNode = /* @__PURE__ */ Object.create(null);
-    for (const node of nodes) {
-      const parent = node.parentId || null;
-      let groupIndex = byParent.get(parent);
-      if (groupIndex === void 0) {
-        groupIndex = groups.length;
-        byParent.set(parent, groupIndex);
-        const group = grouped.get(parent) ?? [];
-        groups.push(group);
-        group.forEach((sibling, index) => {
-          byNode[sibling.id] = { groupIndex, selectedIndex: index };
-        });
-      }
-      if (!byNode[node.id])
-        byNode[node.id] = { groupIndex, selectedIndex: -1 };
-    }
-    return { groups, byNode };
-  }
-  function buildPathToLeaf(tree, nodeId) {
-    const ancestors = [];
-    let cur = nodeId;
-    while (cur) {
-      ancestors.unshift(cur);
-      cur = tree.nodes[cur]?.parentId ?? null;
-    }
-    let tip = nodeId;
-    while (true) {
-      const children = getChildrenOf(tree, tip);
-      if (children.length === 0)
-        break;
-      children.sort((a, b) => b.createdAt - a.createdAt);
-      ancestors.push(children[0].id);
-      tip = children[0].id;
-    }
-    return ancestors;
-  }
-  function findLCA(tree, nodeIdA, nodeIdB) {
-    const ancestorsA = /* @__PURE__ */ new Set();
-    let cur = nodeIdA;
-    while (cur) {
-      ancestorsA.add(cur);
-      cur = tree.nodes[cur]?.parentId ?? null;
-    }
-    cur = nodeIdB;
-    while (cur) {
-      if (ancestorsA.has(cur))
-        return cur;
-      cur = tree.nodes[cur]?.parentId ?? null;
-    }
-    return null;
-  }
-  function buildNodeDiffPaths(tree, nodeIdA, nodeIdB) {
-    const fullPathA = buildPathToLeaf(tree, nodeIdA);
-    const fullPathB = buildPathToLeaf(tree, nodeIdB);
-    const lca = findLCA(tree, nodeIdA, nodeIdB);
-    let pathA = fullPathA;
-    let pathB = fullPathB;
-    if (lca) {
-      const idxA = fullPathA.indexOf(lca);
-      const idxB = fullPathB.indexOf(lca);
-      if (idxA >= 0)
-        pathA = fullPathA.slice(idxA + 1);
-      if (idxB >= 0)
-        pathB = fullPathB.slice(idxB + 1);
-      if (nodeIdA === lca)
-        pathA = fullPathA.slice(idxA);
-      if (nodeIdB === lca)
-        pathB = fullPathB.slice(idxB);
-    }
-    return { pathA, pathB };
-  }
-  function collectDescendants(tree, nodeId) {
-    const result3 = /* @__PURE__ */ new Set();
-    const queue = [nodeId];
-    while (queue.length > 0) {
-      const id = queue.pop();
-      result3.add(id);
-      for (const child of getChildrenOf(tree, id)) {
-        queue.push(child.id);
-      }
-    }
-    return result3;
-  }
-  function resolveRegenerateTarget(role, messageIndex, messagesLength) {
-    if (role === "system")
-      return null;
-    if (role === "assistant") {
-      const afterRemoval = messagesLength - 1;
-      return {
-        removeIndex: messageIndex,
-        submitMode: messageIndex >= afterRemoval ? "append" : "insert",
-        insertIndex: messageIndex
-      };
-    }
-    const nextIndex = messageIndex + 1;
-    const hasNext = nextIndex < messagesLength;
-    const lengthAfterRemoval = hasNext ? messagesLength - 1 : messagesLength;
-    return {
-      removeIndex: hasNext ? nextIndex : -1,
-      submitMode: nextIndex >= lengthAfterRemoval ? "append" : "insert",
-      insertIndex: nextIndex
-    };
   }
 
   // src/api/requestBody.ts
@@ -14934,77 +15789,6 @@ ${JSON.stringify(input.length === 1 ? input[0] : input)}`;
       }
     }
     return errors;
-  }
-
-  // src/utils/folderHierarchy.ts
-  function validateFolderHierarchy(folders) {
-    if (!folders || typeof folders !== "object" || Array.isArray(folders))
-      return false;
-    const collection = folders;
-    for (const [id, folder] of Object.entries(collection)) {
-      if (!id || !folder || typeof folder !== "object" || folder.id !== id || typeof folder.name !== "string" || !Number.isFinite(folder.order) || typeof folder.expanded !== "boolean" || folder.parentId != null && (typeof folder.parentId !== "string" || !Object.hasOwn(collection, folder.parentId)))
-        return false;
-    }
-    const finished = /* @__PURE__ */ new Set();
-    for (const id of Object.keys(collection)) {
-      const path = /* @__PURE__ */ new Set();
-      let current = id;
-      while (current !== void 0 && !finished.has(current)) {
-        if (path.has(current))
-          return false;
-        path.add(current);
-        current = collection[current].parentId ?? void 0;
-      }
-      for (const member of path)
-        finished.add(member);
-    }
-    return true;
-  }
-  function getFolderParentId(folders, id) {
-    const parent = folders[id]?.parentId ?? void 0;
-    const visited = /* @__PURE__ */ new Set([id]);
-    let current = parent;
-    while (current !== void 0) {
-      if (visited.has(current) || !Object.hasOwn(folders, current))
-        return void 0;
-      visited.add(current);
-      current = folders[current]?.parentId ?? void 0;
-    }
-    return parent;
-  }
-  function getFolderAncestors(folders, id) {
-    const result3 = [];
-    const visited = /* @__PURE__ */ new Set();
-    let current = id;
-    while (current !== void 0 && Object.hasOwn(folders, current) && !visited.has(current)) {
-      visited.add(current);
-      result3.push(current);
-      current = result3.length === 1 ? getFolderParentId(folders, current) : folders[current]?.parentId ?? void 0;
-    }
-    return result3;
-  }
-  function getFolderSubtreeIds(folders, id) {
-    if (!Object.hasOwn(folders, id))
-      return [];
-    const children = /* @__PURE__ */ new Map();
-    for (const [childId, folder] of Object.entries(folders)) {
-      if (folder?.parentId != null) {
-        const list = children.get(folder.parentId) ?? [];
-        list.push(childId);
-        children.set(folder.parentId, list);
-      }
-    }
-    const result3 = [], visited = /* @__PURE__ */ new Set(), pending = [id];
-    while (pending.length) {
-      const current = pending.pop();
-      if (visited.has(current))
-        continue;
-      visited.add(current);
-      result3.push(current);
-      for (const child of children.get(current) ?? [])
-        pending.push(child);
-    }
-    return result3;
   }
 
   // src/utils/chatIdentity.ts
@@ -16801,6 +17585,19 @@ ${JSON.stringify(input.length === 1 ? input[0] : input)}`;
   }
 
   // src/utils/generationPlan.ts
+  function retryTarget(chat, mode, insertIndex, expected) {
+    if (mode === "midchat" && (insertIndex === null || !Number.isInteger(insertIndex) || insertIndex < 0))
+      return { status: "invalid" };
+    const index = mode === "append" ? chat.messages.length - 1 : insertIndex;
+    const nodeId = chat.branchTree?.activePath[index];
+    if (expected) {
+      const path = chat.branchTree?.activePath;
+      if (!path || nodeId !== expected.targetNodeId || expected.requestPath.length !== index || expected.requestPath.some((id, position) => path[position] !== id) || chat.messages[index]?.role !== "assistant") {
+        return { status: "stale" };
+      }
+    }
+    return { status: "ready", removeIndex: chat.messages[index]?.role === "assistant" ? index : null };
+  }
   var createAssistantPlaceholder = () => ({
     role: "assistant",
     content: [{ type: "text", text: "" }]
@@ -16903,7 +17700,27 @@ ${JSON.stringify(input.length === 1 ? input[0] : input)}`;
       let plan = input.plan;
       if (input.operation === "prepare") {
         let mode = "append", index = null;
-        if (input.action === "regenerate" || input.action === "continue") {
+        if (input.action === "retry") {
+          if (!plan || plan.submitMode !== "append" && plan.submitMode !== "midchat")
+            throw Error("Missing retry plan.");
+          const target = retryTarget(
+            state.chats[0],
+            plan.submitMode,
+            plan.insertIndex,
+            { targetNodeId: plan.targetNodeId, requestPath: plan.requestPath }
+          );
+          if (target.status !== "ready")
+            return JSON.stringify({ status: target.status, changes: [] });
+          mode = plan.submitMode;
+          index = plan.insertIndex;
+          if (target.removeIndex !== null) {
+            const removed = removeNodeState(state.chats, { chatId: isolated.chat.id, nodeId: plan.targetNodeId }, state.contentStore);
+            if (removed.status !== "updated")
+              return JSON.stringify({ status: removed.status, changes: [], ..."blockedNodeIds" in removed ? { blockedNodeIds: removed.blockedNodeIds } : {} });
+            capture?.(removed.historyBase, removed);
+            state = { chats: removed.chats, contentStore: removed.contentStore };
+          }
+        } else if (input.action === "regenerate" || input.action === "continue") {
           if (input.nodeID === void 0)
             throw Error("Missing generation target.");
           const nodeId = wasFlat && input.nodeID.startsWith("message-") ? input.nodeID.slice(8) : input.nodeID;
@@ -16922,7 +17739,15 @@ ${JSON.stringify(input.length === 1 ? input[0] : input)}`;
         const prepared = insertAssistantPlaceholder(state.chats, 0, mode, state.contentStore, index);
         state = { chats: prepared.updatedChats, contentStore: prepared.contentStore };
         const activePath = state.chats[0].branchTree.activePath;
-        plan = { targetNodeId: prepared.targetNodeId, messageIndex: prepared.messageIndex, activePath: [...activePath], requestPath: activePath.slice(0, prepared.messageIndex), prefillKey };
+        plan = {
+          targetNodeId: prepared.targetNodeId,
+          messageIndex: prepared.messageIndex,
+          activePath: [...activePath],
+          requestPath: activePath.slice(0, prepared.messageIndex),
+          prefillKey,
+          submitMode: mode,
+          insertIndex: index
+        };
       } else if (input.operation === "finalize") {
         if (!plan || !Array.isArray(input.parts))
           throw Error("Missing generation result.");
@@ -17142,6 +17967,13 @@ ${JSON.stringify(input.length === 1 ? input[0] : input)}`;
   // shared/google-sync/nodeOptions.ts
   function nodeOptions(json, capture) {
     const input = JSON.parse(json);
+    if (input.operation === "collapseAll") {
+      if (typeof input.collapsed !== "boolean")
+        throw new Error("Invalid collapse state.");
+      const result3 = setChatNodeMapState([input.chat], { chatId: input.chat.id, value: input.collapsed }, "collapsedNodes");
+      const changes = result3.status === "updated" ? diffJSONChanges({ chat: input.chat }, { chat: result3.chats[0] }) : [];
+      return JSON.stringify({ status: result3.status, changes });
+    }
     const target = resolveNodeTarget([input.chat], { chatId: input.chat.id, nodeId: input.nodeId });
     if (target.status !== "valid")
       return JSON.stringify({ status: target.status, changes: [] });
@@ -17550,7 +18382,42 @@ ${JSON.stringify(input.length === 1 ? input[0] : input)}`;
     });
   }
 
+  // src/utils/searchState.ts
+  function saveSearchHistory(history, query) {
+    const normalized = query.trim();
+    return normalized ? [normalized, ...history.filter((entry) => entry !== normalized)].slice(0, 20) : history;
+  }
+  function reconcileSearchResults(previous, index, results) {
+    const previousResult = previous[index];
+    const previousNodeId = previousResult?.nodeId;
+    const preservedIndex = previousNodeId ? results.findIndex((result3) => result3.nodeId === previousNodeId && result3.chatId === previousResult?.chatId) : previousResult?.resultId ? results.findIndex((result3) => result3.nodeId === null && result3.resultId === previousResult.resultId && result3.chatId === previousResult.chatId) : -1;
+    const nextIndex = results.length === 0 ? -1 : preservedIndex >= 0 ? preservedIndex : 0;
+    const nextNodeId = nextIndex >= 0 ? results[nextIndex].nodeId : null;
+    return {
+      index: nextIndex,
+      shouldNavigate: nextNodeId !== null && (nextNodeId !== previousNodeId || results[nextIndex]?.chatId !== previousResult?.chatId)
+    };
+  }
+  function stepSearchResult(index, count, backward) {
+    if (count === 0)
+      return -1;
+    return backward ? (index - 1 + count) % count : (index + 1) % count;
+  }
+
   // shared/google-sync/search.ts
+  function searchStateOperation(json) {
+    const input = JSON.parse(json);
+    switch (input.operation) {
+      case "history":
+        return JSON.stringify(saveSearchHistory(input.history, input.query));
+      case "reconcile":
+        return JSON.stringify(reconcileSearchResults(input.previous, input.index, input.results));
+      case "step":
+        return JSON.stringify(stepSearchResult(input.index, input.count, input.backward));
+      default:
+        throw new Error("Unknown search state operation.");
+    }
+  }
   function resultsJSON(results) {
     return JSON.stringify(results, (key, value) => key === "snippet" && typeof value === "string" ? value.replace(/([\uD800-\uDBFF][\uDC00-\uDFFF])|[\uD800-\uDFFF]/g, (_unit, pair) => pair ?? "\uFFFD") : value);
   }
@@ -17577,7 +18444,12 @@ ${JSON.stringify(input.length === 1 ? input[0] : input)}`;
     }
     if (input.mode !== "nodes")
       throw new Error("Unknown search mode.");
-    const entries = indexed.filter(({ chat }) => chat.branchTree).map(({ chat, index }) => ({ tree: chat.branchTree, chatId: chat.id, chatIndex: index }));
+    const byID = new Map(indexed.map((entry) => [entry.chat.id, entry]));
+    const displayed = input.chatIDs === void 0 ? indexed : input.chatIDs.flatMap((id) => {
+      const entry = byID.get(id);
+      return entry ? [entry] : [];
+    });
+    const entries = displayed.filter(({ chat }) => chat.branchTree).map(({ chat, index }) => ({ tree: chat.branchTree, chatId: chat.id, chatIndex: index }));
     return resultsJSON(searchBranchNodes(input.query, entries, input.contentStore, input.scope ?? "all", { starredOnly: input.starredOnly }).map((match) => ({ ...match, resultId: match.nodeId, chatTitle: input.chats[match.chatIndex].title })));
   }
 
@@ -17717,6 +18589,170 @@ ${JSON.stringify(input.length === 1 ? input[0] : input)}`;
     }
   }
 
+  // src/api/helper.ts
+  var parseEventSource = (data, flush = false) => {
+    const normalized = data.replace(/\r\n/g, "\n").replace(/\r/g, "\n");
+    const rawEvents = normalized.split("\n\n");
+    const partial = flush ? "" : rawEvents.pop() ?? "";
+    const events = [];
+    let done = false;
+    for (const rawEvent of rawEvents) {
+      if (!rawEvent.trim())
+        continue;
+      const dataLines = [];
+      for (const line of rawEvent.split("\n")) {
+        if (line.startsWith("data: ")) {
+          dataLines.push(line.slice(6));
+        } else if (line === "data") {
+          dataLines.push("");
+        }
+      }
+      if (dataLines.length === 0)
+        continue;
+      const payload = dataLines.join("\n");
+      if (payload.trim() === "[DONE]") {
+        done = true;
+        continue;
+      }
+      try {
+        events.push(JSON.parse(payload));
+      } catch {
+      }
+    }
+    return { events, partial, done };
+  };
+
+  // src/utils/proxyProtocol.ts
+  function parseProxySse(text, flush = false) {
+    const normalized = text.replace(/\r\n/g, "\n").replace(/\r/g, "\n");
+    const rawBlocks = normalized.split("\n\n");
+    const partial = flush ? "" : rawBlocks.pop() ?? "";
+    const events = [];
+    for (const block of rawBlocks) {
+      if (!block.trim())
+        continue;
+      let id = 0;
+      let eventType;
+      let dataLine = "";
+      for (const line of block.split("\n")) {
+        if (line.startsWith("id: ")) {
+          id = parseInt(line.slice(4), 10);
+        } else if (line.startsWith("event: ")) {
+          eventType = line.slice(7);
+        } else if (line.startsWith("data: ")) {
+          dataLine = line.slice(6);
+        } else if (line === "data") {
+          dataLine = "";
+        }
+      }
+      if (eventType === "done" || eventType === "error" || eventType === "interrupted" || eventType === "waiting" || eventType === "cache-miss") {
+        try {
+          events.push({ id, eventType, meta: JSON.parse(dataLine) });
+        } catch {
+          events.push({ id, eventType });
+        }
+      } else if (dataLine) {
+        try {
+          const rawText = JSON.parse(dataLine);
+          events.push({ id, rawText });
+        } catch {
+        }
+      }
+    }
+    return { events, partial };
+  }
+
+  // src/utils/streamRecovery.ts
+  var resolveRecoveryTarget = (chats, contentStore, record, expectedHash) => {
+    if (!record.chatId || !record.nodeId || !record.checkpointRole)
+      return null;
+    const chatIndex = chats?.findIndex((chat2) => chat2.id === record.chatId) ?? -1;
+    const chat = chats?.[chatIndex];
+    const node = chat?.branchTree?.nodes[record.nodeId];
+    if (!chat || !node || node.role !== record.checkpointRole)
+      return null;
+    const matchesHash = expectedHash !== void 0 ? node.contentHash === expectedHash : node.contentHash === record.checkpointHash || node.contentHash === record.appliedHash;
+    if (!matchesHash)
+      return null;
+    return { chat, chatIndex, node, messageIndex: chat.branchTree.activePath.indexOf(record.nodeId), message: { role: node.role, content: resolveContent(contentStore, node.contentHash) } };
+  };
+
+  // src/utils/proxyRecoveryPolicy.ts
+  var PROXY_RECOVERY_MAX_RETRIES = 3;
+  var PROXY_RECOVERY_RETRY_DELAY_MS = 500;
+  function proxyRecoveryRetry(input) {
+    const seconds = input.retryAfter === null || input.retryAfter === void 0 ? NaN : Number(input.retryAfter);
+    const headerDelay = Number.isFinite(seconds) ? Math.min(Math.max(seconds * 1e3, 0), 5e3) : void 0;
+    const delay = input.retryAfterMs ?? headerDelay;
+    return {
+      retry: input.attempt < PROXY_RECOVERY_MAX_RETRIES && (input.outcome === "network" || input.outcome === "partial" && input.retry === true),
+      delayMs: delay !== void 0 && Number.isFinite(delay) ? Math.min(Math.max(delay, 0), 5e3) : PROXY_RECOVERY_RETRY_DELAY_MS
+    };
+  }
+
+  // shared/google-sync/proxy.ts
+  function proxyStream(json) {
+    const input = JSON.parse(json);
+    const state = {
+      proxyPartial: input.state?.proxyPartial ?? "",
+      llmPartial: input.state?.llmPartial ?? "",
+      lastEventId: input.state?.lastEventId ?? 0,
+      llmDone: input.state?.llmDone ?? false
+    };
+    const parsed = parseProxySse(state.proxyPartial + input.text, input.flush ?? false);
+    state.proxyPartial = parsed.partial;
+    const output2 = { state, events: [] };
+    for (const event of parsed.events) {
+      if (event.id > 0 && event.id <= state.lastEventId)
+        continue;
+      if (event.id > state.lastEventId)
+        state.lastEventId = event.id;
+      if (event.eventType === "waiting")
+        continue;
+      if (event.eventType === "done" || event.eventType === "error") {
+        if (event.meta?.openRouterObservation)
+          output2.observation = event.meta.openRouterObservation;
+        if (event.eventType === "error") {
+          output2.terminal = "error";
+          output2.retry = false;
+          if (event.meta?.error)
+            output2.error = event.meta.error;
+        } else {
+          output2.terminal = event.meta?.complete === true && event.meta.cacheCapability !== "overflow" && state.llmDone ? "complete" : "partial";
+          output2.retry = false;
+        }
+        break;
+      }
+      if (event.eventType === "interrupted" || event.eventType === "cache-miss") {
+        output2.terminal = "partial";
+        output2.retry = event.eventType === "cache-miss";
+        break;
+      }
+      if ("rawText" in event) {
+        if (typeof event.rawText !== "string")
+          throw new Error("Invalid proxy rawText.");
+        const inner = parseEventSource(state.llmPartial + event.rawText);
+        state.llmPartial = inner.partial;
+        state.llmDone ||= inner.done;
+        output2.events.push(...inner.events);
+      }
+    }
+    if (output2.terminal === "complete" && state.llmPartial) {
+      const inner = parseEventSource(state.llmPartial, true);
+      state.llmPartial = inner.partial;
+      output2.events.push(...inner.events);
+    }
+    return JSON.stringify(output2);
+  }
+  function proxyRecoveryRetry2(json) {
+    return JSON.stringify(proxyRecoveryRetry(JSON.parse(json)));
+  }
+  function proxyRecoveryTarget(json) {
+    const input = JSON.parse(json);
+    const target = resolveRecoveryTarget([input.chat], input.contentStore, input.record, input.expectedHash);
+    return JSON.stringify(target ? { status: "ready", messageIndex: target.messageIndex, nodeID: input.record.nodeId } : { status: "stale" });
+  }
+
   // src/store/storage/google/datasetListing.ts
   var DEFAULT_SYNC_FOLDER_NAME = "Weavelet encrypted sync";
   var defaultSyncFolderName = (id) => `${DEFAULT_SYNC_FOLDER_NAME} (${id})`;
@@ -17742,731 +18778,6 @@ ${JSON.stringify(input.length === 1 ? input[0] : input)}`;
     }
     return file.appProperties.headerId;
   }
-
-  // src/store/storage/google/settings.ts
-  var BROWSER_LOCAL_SETTINGS = [
-    "hideMenuOptions",
-    "hideSideMenu",
-    "menuWidth",
-    "splitPanelRatio",
-    "splitPanelSwapped",
-    "chatActiveView",
-    "showDebugPanel",
-    "proxyEnabled"
-  ];
-  var SYNC_LOCAL_SETTINGS = [
-    ...BROWSER_LOCAL_SETTINGS,
-    "pendingVerifications",
-    "verifiedStats",
-    "providerModelCache",
-    "totalTokenUsed",
-    "theme",
-    "advancedMode",
-    "enterToSubmit",
-    "inlineLatex",
-    "markdownMode",
-    "streamingMarkdownPolicy",
-    "displayChatSize",
-    "animateBubbleNavigation",
-    "branchSwipeDirection"
-  ];
-  function withoutBrowserLocalSettings(state) {
-    const shared2 = { ...state };
-    for (const key of SYNC_LOCAL_SETTINGS)
-      delete shared2[key];
-    return shared2;
-  }
-  function isBrowserLocalRecord(key) {
-    let path;
-    try {
-      path = JSON.parse(key);
-    } catch {
-      return false;
-    }
-    if (!Array.isArray(path) || path[0] !== "state")
-      return false;
-    const field = path[1];
-    return SYNC_LOCAL_SETTINGS.some((key2) => key2 === field);
-  }
-  function isNonBlockingRecord(key) {
-    if (isBrowserLocalRecord(key))
-      return true;
-    let path;
-    try {
-      path = JSON.parse(key);
-    } catch {
-      return false;
-    }
-    if (!Array.isArray(path))
-      return false;
-    return path.length === 4 && path[0] === "state" && path[1] === "folders" && path[3] === "expanded" || path.length >= 3 && path.length <= 4 && path[0] === "chats" && path[2] === "collapsedNodes" || path.length === 4 && path[0] === "chats" && path[2] === "branchTree" && path[3] === "activePath";
-  }
-  function selectActivePath(key, values, records) {
-    if (!key.endsWith(',"activePath"]'))
-      return;
-    const path = JSON.parse(key);
-    if (path.length !== 4 || path[0] !== "chats" || path[2] !== "branchTree" || path[3] !== "activePath")
-      return;
-    if (records[JSON.stringify(["chats", path[1], "id"])] === void 0)
-      return null;
-    const prefix = ["chats", path[1], "branchTree"];
-    const candidates = values.filter((value) => value !== null).map((value) => JSON.parse(value)).filter((value) => Array.isArray(value) && value.every((id) => typeof id === "string"));
-    if (!candidates.length)
-      return;
-    const validPrefix = (ids) => {
-      let length = 0;
-      for (const id of ids) {
-        if (records[JSON.stringify([...prefix, "nodes", id, "id"])] !== JSON.stringify(id) || records[JSON.stringify([...prefix, "nodes", id, "parentId"])] !== JSON.stringify(length ? ids[length - 1] : null))
-          break;
-        length++;
-      }
-      return ids.slice(0, length);
-    };
-    for (const candidate of candidates)
-      if (validPrefix(candidate).length === candidate.length)
-        return JSON.stringify(candidate);
-    const retained = candidates.map(validPrefix).sort((a, b) => b.length - a.length)[0];
-    const root = records[JSON.stringify([...prefix, "rootId"])];
-    return JSON.stringify(retained.length ? retained : root ? validPrefix([JSON.parse(root)]) : []);
-  }
-
-  // shared/google-sync/adapters/host.ts
-  function host(operation, ...args) {
-    const result3 = JSON.parse(nativeSyncCall(JSON.stringify({ operation, args: args.map((value) => JSON.stringify(value ?? null)) })));
-    if (!result3.ok)
-      throw new Error(result3.error);
-    return result3.value;
-  }
-  var bytes = (value) => Array.from(value);
-
-  // shared/google-sync/adapters/crypto.ts
-  var digest = async (value) => host("digest", typeof value === "string" ? value : bytes(value));
-  var encode = (value) => new Uint8Array(host("encode", value));
-  var decode = (value) => host("decode", bytes(value));
-  var encrypt = async (key, value, context) => new Uint8Array(host("encrypt", key, bytes(value), context));
-  var decrypt = async (key, value, context) => new Uint8Array(host("decrypt", key, bytes(value), context));
-  var createKeyEnvelope = async (password, dataset) => host("createKeyEnvelope", password, dataset);
-  var unlockKey = async (envelope, password, dataset) => host("unlockKey", envelope, password, dataset);
-
-  // shared/google-sync/adapters/metrics.ts
-  var recordMetric = () => {
-  };
-
-  // shared/google-sync/source/records.ts
-  var import_diff_match_patch2 = __toESM(require_diff_match_patch(), 1);
-  var SyncConflictError = class extends Error {
-    constructor(keys) {
-      super("Concurrent edits conflict. Both copies are preserved.");
-      this.keys = keys;
-    }
-  };
-  var dmp2 = new import_diff_match_patch2.default();
-  var forbidden = /* @__PURE__ */ new Set(["__proto__", "prototype", "constructor"]);
-  var readNodeOrder = (value) => {
-    if (!Array.isArray(value) || value.some((id) => typeof id !== "string") || new Set(value).size !== value.length) {
-      throw new Error("Invalid sync node order.");
-    }
-    return value;
-  };
-  var isNodeOrderPath = (path) => Array.isArray(path) && path[0] === "nodeOrder" && (path.length === 3 && path[1] === "chats" && typeof path[2] === "string" || path.length === 2 && path[1] === "clipboard");
-  function isNodeOrderRecord(key) {
-    try {
-      return isNodeOrderPath(JSON.parse(key));
-    } catch {
-      return false;
-    }
-  }
-  function mergeNodeOrderValues(values) {
-    const orders = values.filter((value) => value !== null).map((value) => readNodeOrder(JSON.parse(value)));
-    return orders.length ? JSON.stringify([...new Set(orders.flat())]) : null;
-  }
-  function orderNodes(nodes, value) {
-    if (value === void 0)
-      return nodes;
-    const ids = [.../* @__PURE__ */ new Set([...readNodeOrder(value), ...Object.keys(nodes).sort()])];
-    const ordered = /* @__PURE__ */ Object.create(null);
-    for (const id of ids)
-      if (Object.hasOwn(nodes, id))
-        ordered[id] = nodes[id];
-    return ordered;
-  }
-  var contentEntryIdentity = (contentId, metadata) => digest(canonical({ contentId, metadata }));
-  var contentEntryRefPath = (chatId, nodeId) => ["contentEntryRefs", "chats", chatId, nodeId];
-  var checkSafeMetadata = (value) => {
-    if (value && typeof value === "object")
-      for (const [key, child] of Object.entries(value)) {
-        if (forbidden.has(key))
-          throw new Error("Unsafe sync record key.");
-        checkSafeMetadata(child);
-      }
-  };
-  function canonical(value) {
-    if (Array.isArray(value))
-      return `[${value.map(canonical).join(",")}]`;
-    if (value !== null && typeof value === "object") {
-      return `{${Object.keys(value).sort().map((k) => `${JSON.stringify(k)}:${canonical(value[k])}`).join(",")}}`;
-    }
-    return JSON.stringify(value);
-  }
-  function resolveStrict(store, hash, visited = /* @__PURE__ */ new Set()) {
-    const entry = store[hash];
-    if (!entry || visited.has(hash) || visited.size >= 100)
-      throw new Error("Missing or cyclic message content; sync stopped.");
-    if (!entry.delta)
-      return entry.content;
-    visited.add(hash);
-    const base = resolveStrict(store, entry.delta.baseHash, visited);
-    const [text, applied] = dmp2.patch_apply(dmp2.patch_fromText(entry.delta.patches), JSON.stringify(base));
-    if (applied.some((ok) => !ok))
-      throw new Error("Invalid message delta; sync stopped.");
-    return JSON.parse(text);
-  }
-  async function toRecords(snapshot) {
-    const started = performance.now();
-    const serialized = JSON.stringify(snapshot);
-    const copy2 = JSON.parse(serialized);
-    const state = withoutBrowserLocalSettings(copy2.state);
-    if (state.folders !== void 0 && !validateFolderHierarchy(state.folders))
-      throw new Error("Invalid folder hierarchy; sync stopped.");
-    const records = /* @__PURE__ */ Object.create(null);
-    const source = state.contentStore ?? {};
-    const contentIds = /* @__PURE__ */ new Map();
-    const content = /* @__PURE__ */ Object.create(null);
-    const assets = /* @__PURE__ */ Object.create(null);
-    const entryIds = /* @__PURE__ */ new Map();
-    const entries = /* @__PURE__ */ Object.create(null);
-    const retained = /* @__PURE__ */ Object.create(null);
-    const entryRefs = { chats: /* @__PURE__ */ Object.create(null) };
-    const externalize = async (parts) => {
-      const encoded = JSON.parse(JSON.stringify(parts));
-      for (const part of encoded) {
-        if (part.type === "image_url" && typeof part.image_url?.url === "string") {
-          const url = part.image_url.url;
-          const id = await digest(url);
-          assets[id] = url;
-          part.image_url.url = { asset: id };
-        }
-      }
-      return encoded;
-    };
-    for (const [hash, entry] of Object.entries(source)) {
-      const parts = await externalize(resolveStrict(source, hash));
-      const contentId = await digest(canonical(parts));
-      content[contentId] = parts;
-      contentIds.set(hash, contentId);
-      const { content: _content, refCount: _refCount, delta: _delta, ...metadata } = entry;
-      checkSafeMetadata(metadata);
-      const record = { contentId, metadata };
-      const entryId = await digest(canonical(record));
-      entries[entryId] = record;
-      entryIds.set(hash, entryId);
-      retained[entryId] = true;
-    }
-    const translate = (node, refs) => {
-      const old = node.contentHash;
-      if (!contentIds.has(old))
-        throw new Error("Missing or cyclic message content; sync stopped.");
-      node.contentHash = contentIds.get(old);
-      refs[node.id] = entryIds.get(old);
-    };
-    const chats = /* @__PURE__ */ Object.create(null);
-    const order = [];
-    const nodeOrder = { chats: /* @__PURE__ */ Object.create(null) };
-    for (const chat of state.chats ?? []) {
-      if (!chat.id || chats[chat.id])
-        throw new Error("Missing or duplicate chat ID; sync stopped.");
-      order.push(chat.id);
-      if (chat.branchTree) {
-        captureProjectedMessageAttributes(chat, source);
-        readMessageAttributes(chat.branchTree);
-        nodeOrder.chats[chat.id] = Object.keys(chat.branchTree.nodes);
-        entryRefs.chats[chat.id] = /* @__PURE__ */ Object.create(null);
-        for (const node of Object.values(chat.branchTree.nodes)) {
-          const statsKey = `${chat.id}:::${node.id}`;
-          const generationId = node.openRouterObservation?.generationId ?? copy2.state.pendingVerifications?.[statsKey]?.generationId ?? copy2.state.verifiedStats?.[statsKey]?.generationId;
-          if (generationId)
-            node.openRouterObservation = { ...node.openRouterObservation, generationId };
-          translate(node, entryRefs.chats[chat.id]);
-        }
-        delete chat.messages;
-      } else if (chat.messages) {
-        for (const message of chat.messages)
-          message.content = await externalize(message.content);
-      }
-      chats[chat.id] = chat;
-    }
-    if (state.branchClipboard) {
-      readMessageAttributes(state.branchClipboard);
-      const refs = /* @__PURE__ */ Object.create(null);
-      entryRefs.clipboard = refs;
-      for (const node of Object.values(state.branchClipboard.nodes))
-        translate(node, refs);
-    }
-    if (state.branchClipboard)
-      nodeOrder.clipboard = Object.keys(state.branchClipboard.nodes);
-    delete state.contentStore;
-    delete state.chats;
-    const flatten = (value, path) => {
-      const messageAttributes = path[0] === "chats" && path[2] === "branchTree" && path[3] === "messageAttributesV1" && path[4] === "byNode" && path.length === 6 || path[0] === "state" && path[1] === "branchClipboard" && path[2] === "messageAttributesV1" && path[3] === "byNode" && path.length === 5;
-      if (messageAttributes) {
-        checkSafeMetadata(value);
-        records[JSON.stringify(path)] = canonical(value);
-      } else if (value && typeof value === "object" && !Array.isArray(value) && Object.keys(value).length) {
-        for (const [key, child] of Object.entries(value)) {
-          if (forbidden.has(key))
-            throw new Error("Unsafe sync record key.");
-          flatten(child, [...path, key]);
-        }
-      } else
-        records[JSON.stringify(path)] = canonical(value);
-    };
-    flatten({ version: copy2.version ?? 0, state, chats, order, nodeOrder, contentEntryFormat: 1, contentEntryRefs: entryRefs, retainedContentEntries: retained }, []);
-    for (const [id, entry] of Object.entries(entries))
-      records[JSON.stringify(["contentEntries", id])] = canonical(entry);
-    for (const [id, parts] of Object.entries(content))
-      records[JSON.stringify(["content", id])] = canonical(parts);
-    for (const [id, url] of Object.entries(assets))
-      records[JSON.stringify(["assets", id])] = JSON.stringify(url);
-    recordMetric("records", started, new TextEncoder().encode(serialized).length, Object.values(records).reduce((n, value) => n + new TextEncoder().encode(value).length, 0));
-    return records;
-  }
-  async function fromRecords(records) {
-    const root = /* @__PURE__ */ Object.create(null);
-    let skippedLocalState = false;
-    const generationIds = /* @__PURE__ */ new Map();
-    for (const [encoded, value] of Object.entries(records)) {
-      const path = JSON.parse(encoded);
-      if (!Array.isArray(path) || path.length < 1 || path.length > 100 || path.some((p) => typeof p !== "string" || forbidden.has(p)))
-        throw new Error("Invalid sync record path.");
-      if (isBrowserLocalRecord(encoded)) {
-        skippedLocalState = true;
-        if (path.length === 4 && ["pendingVerifications", "verifiedStats"].includes(path[1]) && path[3] === "generationId") {
-          const id = JSON.parse(value);
-          if (typeof id === "string" && !generationIds.has(path[2]))
-            generationIds.set(path[2], id);
-        }
-        continue;
-      }
-      if (path[0] === "chats" && path[2] === "collapsedNodes" && path.length === 3 && value === "{}")
-        continue;
-      let current = root;
-      for (const part of path.slice(0, -1)) {
-        if (Object.hasOwn(current, part) && (!current[part] || typeof current[part] !== "object" || Array.isArray(current[part]))) {
-          throw new Error("Conflicting sync record paths.");
-        }
-        current = current[part] ??= /* @__PURE__ */ Object.create(null);
-      }
-      const last = path[path.length - 1];
-      if (Object.hasOwn(current, last))
-        throw new Error("Conflicting sync record paths.");
-      current[last] = JSON.parse(value);
-    }
-    if (skippedLocalState && !root.state)
-      root.state = /* @__PURE__ */ Object.create(null);
-    if (!root.state || !root.chats || !Array.isArray(root.order) || !Number.isInteger(root.version)) {
-      throw new Error("Incomplete sync snapshot.");
-    }
-    if (root.nodeOrder !== void 0) {
-      const orders = root.nodeOrder;
-      if (!orders || typeof orders !== "object" || Array.isArray(orders) || orders.chats !== void 0 && (!orders.chats || typeof orders.chats !== "object" || Array.isArray(orders.chats))) {
-        throw new Error("Invalid sync node order.");
-      }
-      for (const value of Object.values(orders.chats ?? {}))
-        readNodeOrder(value);
-      if (orders.clipboard !== void 0)
-        readNodeOrder(orders.clipboard);
-    }
-    if (root.state.folders !== void 0 && !validateFolderHierarchy(root.state.folders))
-      throw new Error("Invalid folder hierarchy; sync stopped.");
-    const restoreAssets = async (parts) => {
-      if (!Array.isArray(parts))
-        throw new Error("Invalid message content.");
-      const restored = structuredClone(parts);
-      for (const part of restored) {
-        if (part.type === "image_url" && typeof part.image_url?.url === "object") {
-          const id = part.image_url.url?.asset;
-          const url = root.assets?.[id];
-          if (typeof url !== "string" || await digest(url) !== id)
-            throw new Error("Missing or damaged image.");
-          part.image_url.url = url;
-        }
-      }
-      return restored;
-    };
-    const store = {};
-    const restoredEntries = /* @__PURE__ */ new Map();
-    const extended = root.contentEntryFormat !== void 0;
-    if (!extended && ["contentEntries", "contentEntryRefs", "retainedContentEntries"].some((key) => root[key] !== void 0))
-      throw new Error("Incomplete content entry extension.");
-    if (extended && root.contentEntryFormat !== 1)
-      throw new Error("Unsupported content entry format.");
-    if (extended) {
-      const refs = root.contentEntryRefs;
-      if (!refs || typeof refs !== "object" || Array.isArray(refs) || !refs.chats || typeof refs.chats !== "object" || Array.isArray(refs.chats))
-        throw new Error("Invalid content entry references.");
-      const checkRefs = (values, nodes) => {
-        if (!values || typeof values !== "object" || Array.isArray(values))
-          throw new Error("Invalid content entry references.");
-        for (const [id, entryId] of Object.entries(values))
-          if (typeof entryId !== "string" || !nodes?.[id])
-            throw new Error("Inconsistent content entry reference.");
-      };
-      for (const [chatId, values] of Object.entries(refs.chats))
-        checkRefs(values, root.chats[chatId]?.branchTree?.nodes);
-      if (refs.clipboard !== void 0)
-        checkRefs(refs.clipboard, root.state.branchClipboard?.nodes);
-    }
-    const restoreEntry = async (entryId) => {
-      if (typeof entryId !== "string")
-        throw new Error("Invalid content entry reference.");
-      if (restoredEntries.has(entryId))
-        return restoredEntries.get(entryId);
-      const entry = root.contentEntries?.[entryId];
-      if (!entry || typeof entry.contentId !== "string" || !entry.metadata || typeof entry.metadata !== "object" || Array.isArray(entry.metadata) || ["content", "refCount", "delta"].some((key) => Object.hasOwn(entry.metadata, key)) || await digest(canonical(entry)) !== entryId) {
-        throw new Error("Missing or damaged content entry.");
-      }
-      checkSafeMetadata(entry.metadata);
-      const parts = root.content?.[entry.contentId];
-      if (!parts || await digest(canonical(parts)) !== entry.contentId)
-        throw new Error("Missing or damaged message content.");
-      const body = await restoreAssets(parts);
-      let hash = computeContentHash(body);
-      while (Object.hasOwn(store, hash))
-        hash += "_";
-      store[hash] = { ...entry.metadata, content: body, refCount: 0 };
-      restoredEntries.set(entryId, hash);
-      return hash;
-    };
-    const restore = async (node, refs) => {
-      if (extended) {
-        const entryId = refs?.[node.id];
-        if (!entryId || root.contentEntries?.[entryId]?.contentId !== node.contentHash)
-          throw new Error("Inconsistent content entry reference.");
-        const hash = await restoreEntry(entryId);
-        store[hash].refCount++;
-        node.contentHash = hash;
-      } else {
-        const parts = root.content?.[node.contentHash];
-        if (!parts || await digest(canonical(parts)) !== node.contentHash)
-          throw new Error("Missing or damaged message content.");
-        node.contentHash = addContent(store, await restoreAssets(parts));
-      }
-    };
-    const ids = [.../* @__PURE__ */ new Set([...root.order, ...Object.keys(root.chats).sort()])];
-    const chats = [];
-    for (const id of ids) {
-      const chat = root.chats[id];
-      if (!chat)
-        continue;
-      if (chat.id !== id)
-        throw new Error("Invalid chat identity.");
-      if (chat.branchTree) {
-        const tree = chat.branchTree;
-        readMessageAttributes(tree);
-        if (!tree.nodes || !Array.isArray(tree.activePath) || typeof tree.rootId !== "string" || tree.rootId && !tree.nodes[tree.rootId]) {
-          throw new Error("Incomplete branch tree.");
-        }
-        tree.nodes = orderNodes(tree.nodes, root.nodeOrder?.chats?.[id]);
-        for (const [nodeId, node] of Object.entries(tree.nodes)) {
-          if (node.id !== nodeId || node.parentId && !tree.nodes[node.parentId] && node.pinned !== true)
-            throw new Error("Orphaned branch node.");
-          const seen = /* @__PURE__ */ new Set();
-          let cursor = node;
-          while (cursor) {
-            if (seen.has(cursor.id))
-              throw new Error("Cyclic branch tree.");
-            seen.add(cursor.id);
-            cursor = cursor.parentId ? tree.nodes[cursor.parentId] : void 0;
-          }
-          await restore(node, root.contentEntryRefs?.chats?.[id]);
-          const generationId = node.openRouterObservation?.generationId ?? generationIds.get(`${id}:::${nodeId}`);
-          if (generationId)
-            node.openRouterObservation = { ...node.openRouterObservation, generationId };
-        }
-        if (tree.activePath.some((nodeId) => !tree.nodes[nodeId]))
-          throw new Error("Invalid active branch path.");
-      } else if (chat.messages) {
-        for (const message of chat.messages)
-          message.content = await restoreAssets(message.content);
-      }
-      chats.push(chat);
-    }
-    if (root.state.branchClipboard) {
-      readMessageAttributes(root.state.branchClipboard);
-      root.state.branchClipboard.nodes = orderNodes(root.state.branchClipboard.nodes, root.nodeOrder?.clipboard);
-    }
-    for (const node of Object.values(root.state.branchClipboard?.nodes ?? {}))
-      await restore(node, root.contentEntryRefs?.clipboard);
-    if (extended) {
-      if (!root.retainedContentEntries || typeof root.retainedContentEntries !== "object" || Array.isArray(root.retainedContentEntries))
-        throw new Error("Invalid retained content entries.");
-      for (const [entryId, retained] of Object.entries(root.retainedContentEntries)) {
-        if (retained !== true)
-          throw new Error("Invalid retained content entry.");
-        await restoreEntry(entryId);
-      }
-    }
-    return { version: root.version, state: { ...withoutBrowserLocalSettings(root.state), chats, contentStore: store } };
-  }
-  async function assertNoConcurrentOrphans(base, local, cloud, merged) {
-    const orphans = Object.entries(merged).filter(([key, value]) => {
-      const path = JSON.parse(key);
-      if (path.length !== 6 || path[0] !== "chats" || path[2] !== "branchTree" || path[3] !== "nodes" || path[5] !== "parentId")
-        return false;
-      const parent = JSON.parse(value);
-      const parentKey = JSON.stringify([...path.slice(0, 4), parent, "id"]);
-      return parent && base[parentKey] && !merged[parentKey];
-    });
-    if (!orphans.length)
-      return;
-    const affected = new Set(orphans.map(([key]) => JSON.parse(key)[1]));
-    for (const source of [local, cloud]) {
-      const changed = /* @__PURE__ */ new Map();
-      for (const [key, value] of Object.entries(source)) {
-        const path = JSON.parse(key);
-        const node = path.length === 6 && path[0] === "chats" && path[2] === "branchTree" && (path[3] === "nodes" && path[5] !== "updatedAt" || path[3] === "messageAttributesV1" && path[4] === "byNode") ? [path[1], path[path[3] === "nodes" ? 4 : 5]] : path.length === 4 && path[0] === "contentEntryRefs" && path[1] === "chats" ? [path[2], path[3]] : void 0;
-        if (!node || !affected.has(node[0]) || await digest(value) === base[key])
-          continue;
-        const [chat, id] = node;
-        const ids = changed.get(chat) ?? /* @__PURE__ */ new Set();
-        changed.set(chat, ids);
-        let cursor = id;
-        while (cursor && !ids.has(cursor)) {
-          ids.add(cursor);
-          const parent = source[JSON.stringify(["chats", chat, "branchTree", "nodes", cursor, "parentId"])];
-          cursor = parent === void 0 ? null : JSON.parse(parent);
-        }
-      }
-      for (const [key, value] of orphans) {
-        const path = JSON.parse(key);
-        const parent = JSON.parse(value);
-        const parentKey = JSON.stringify([...path.slice(0, 4), parent, "id"]);
-        if (source[parentKey] && source[key] === value && changed.get(path[1])?.has(path[4]))
-          throw new SyncConflictError([key]);
-      }
-    }
-  }
-  async function diffRecords(before, after) {
-    const changes = [];
-    for (const key of /* @__PURE__ */ new Set([...Object.keys(before), ...Object.keys(after)])) {
-      if (before[key] === after[key])
-        continue;
-      changes.push({ key, before: before[key] === void 0 ? null : await digest(before[key]), after: after[key] ?? null });
-    }
-    return changes;
-  }
-  async function applyChanges(records, changes) {
-    const result3 = { ...records };
-    const keys = /* @__PURE__ */ new Set();
-    for (const change of changes) {
-      if (!change || typeof change.key !== "string" || keys.has(change.key) || !(change.before === null || typeof change.before === "string") || !(change.after === null || typeof change.after === "string"))
-        throw new Error("Invalid sync change.");
-      keys.add(change.key);
-      const current = result3[change.key];
-      if ((current ?? null) !== change.after && (current === void 0 ? null : await digest(current)) !== change.before) {
-        if (isNodeOrderRecord(change.key)) {
-          const value = mergeNodeOrderValues([current ?? null, change.after]);
-          if (value === null)
-            delete result3[change.key];
-          else
-            result3[change.key] = value;
-          continue;
-        }
-        throw new SyncConflictError([change.key]);
-      }
-      if (change.after === null)
-        delete result3[change.key];
-      else
-        result3[change.key] = change.after;
-    }
-    return result3;
-  }
-  async function hashRecords(records) {
-    const hashes = {};
-    for (const [key, value] of Object.entries(records))
-      hashes[key] = await digest(value);
-    return hashes;
-  }
-  function diffHashedRecords(before, after, hashes) {
-    const changes = [];
-    for (const key of /* @__PURE__ */ new Set([...Object.keys(before), ...Object.keys(after)])) {
-      if (before[key] === hashes[key])
-        continue;
-      changes.push({ key, before: before[key] ?? null, after: after[key] ?? null });
-    }
-    return changes;
-  }
-
-  // src/store/storage/google/editTimes.ts
-  function mergeEditTimes(key, values) {
-    if (key !== '["state","lastContentEditedAt"]' && !key.endsWith(',"updatedAt"]'))
-      return;
-    const path = JSON.parse(key);
-    if (!(path[0] === "state" && path.length === 2 && path[1] === "lastContentEditedAt" || path[0] === "chats" && path.at(-1) === "updatedAt" && (path.length === 3 || path.length === 6 && path[2] === "branchTree" && path[3] === "nodes")))
-      return;
-    const times = values.map((value) => value == null ? NaN : Number(value));
-    if (times.length && times.every((time) => Number.isFinite(time) && time > 0))
-      return String(Math.max(...times));
-  }
-
-  // shared/google-sync/source/replay.ts
-  async function hashCommits(commits) {
-    const hashes = {};
-    for (const [id, commit] of Object.entries(commits))
-      hashes[id] = await digest(encode(commit));
-    return hashes;
-  }
-  async function replayHistory({ commits, tips }) {
-    const histories = /* @__PURE__ */ new Map();
-    const ancestors = /* @__PURE__ */ new Map();
-    const reachable = /* @__PURE__ */ new Set();
-    const visit = (id) => {
-      if (reachable.has(id))
-        return;
-      const commit = commits[id];
-      if (!commit)
-        throw new Error("Missing sync history.");
-      reachable.add(id);
-      commit.parents.forEach(visit);
-    };
-    tips.forEach(visit);
-    const remaining = new Set([...reachable].sort());
-    const latest = (versions) => {
-      const excluded = /* @__PURE__ */ new Set();
-      const result3 = [];
-      for (let index = versions.length - 1; index >= 0; index--) {
-        const version = versions[index];
-        if (excluded.has(version.id))
-          continue;
-        result3.push(version);
-        for (const ancestor of ancestors.get(version.id))
-          excluded.add(ancestor);
-      }
-      return result3.reverse();
-    };
-    const valueOf = (versions, key) => {
-      if (isNodeOrderRecord(key))
-        return mergeNodeOrderValues(versions.map((version) => version.value));
-      const time = mergeEditTimes(key, versions.map((version) => version.value));
-      if (time !== void 0)
-        return time;
-      const values = new Set(versions.map((v) => v.value));
-      if (values.size > 1 && !isNonBlockingRecord(key))
-        throw new SyncConflictError([]);
-      return versions[0]?.value ?? null;
-    };
-    const repairedPath = (key, versions, records2, preceding) => {
-      if (!key.endsWith(',"activePath"]'))
-        return;
-      const values = [...new Set(versions.map((version) => version.value))];
-      if (values.length < 2) {
-        if (!values[0])
-          return;
-        const path = JSON.parse(key), ids = JSON.parse(values[0]);
-        if (!Array.isArray(ids) || !ids.some((id) => {
-          const removed = histories.get(JSON.stringify([...path.slice(0, 3), "nodes", id, "id"]));
-          const retained = removed && latest(removed.filter((version) => !preceding || preceding.has(version.id)));
-          return retained?.length && retained.every((version) => version.value === null);
-        }))
-          return;
-      }
-      return selectActivePath(key, values, records2);
-    };
-    while (remaining.size) {
-      let progress = false;
-      for (const id of remaining) {
-        const commit = commits[id];
-        if (!commit.parents.every((p) => ancestors.has(p)))
-          continue;
-        const preceding = new Set(commit.parents);
-        for (const parent of commit.parents)
-          for (const ancestor of ancestors.get(parent))
-            preceding.add(ancestor);
-        ancestors.set(id, preceding);
-        const keys = /* @__PURE__ */ new Set();
-        for (const change of commit.changes) {
-          if (!change || typeof change.key !== "string" || keys.has(change.key))
-            throw new Error("Invalid sync change.");
-          keys.add(change.key);
-          const history = histories.get(change.key) ?? [];
-          const parents = latest(history.filter((v) => preceding.has(v.id)));
-          let parentValue;
-          if (commit.resolutions?.[change.key]) {
-            const expected = [...new Set(await Promise.all(parents.map((v) => v.value === null ? null : digest(v.value))))].sort();
-            if (expected.length < 2 || JSON.stringify(expected) !== JSON.stringify([...commit.resolutions[change.key]].sort())) {
-              throw new Error("Invalid conflict resolution parents.");
-            }
-            parentValue = parents[0]?.value ?? null;
-          } else if (isNonBlockingRecord(change.key) || isNodeOrderRecord(change.key)) {
-            const parentHashes = await Promise.all(parents.map((version) => version.value === null ? null : digest(version.value)));
-            const matching = parentHashes.indexOf(change.before);
-            parentValue = matching >= 0 ? parents[matching].value : valueOf(parents, change.key);
-            if (matching < 0 && change.key.endsWith(',"activePath"]')) {
-              const parentRecords = {};
-              for (const [key, versions] of histories) {
-                const retained = latest(versions.filter((version) => preceding.has(version.id)));
-                const value = isNodeOrderRecord(key) ? mergeNodeOrderValues(retained.map((version) => version.value)) : mergeEditTimes(key, retained.map((version) => version.value)) ?? retained[0]?.value ?? null;
-                if (value !== null)
-                  parentRecords[key] = value;
-              }
-              const repaired = repairedPath(change.key, parents, parentRecords, preceding);
-              if (repaired !== void 0 && (repaired === null ? null : await digest(repaired)) === change.before)
-                parentValue = repaired;
-            }
-          } else
-            parentValue = valueOf(parents, change.key);
-          const applied = await applyChanges(parentValue === null ? {} : { [change.key]: parentValue }, [change]);
-          history.push({ id, value: applied[change.key] ?? null });
-          histories.set(change.key, history);
-        }
-        remaining.delete(id);
-        progress = true;
-      }
-      if (!progress)
-        throw new Error("Missing or cyclic sync history.");
-    }
-    const records = {};
-    const conflicts = {};
-    for (const [key, history] of histories) {
-      const versions = latest(history);
-      const values = [...new Set(versions.map((v) => v.value))];
-      const time = mergeEditTimes(key, values);
-      if (values.length > 1 && time === void 0 && !isNonBlockingRecord(key) && !isNodeOrderRecord(key))
-        conflicts[key] = await Promise.all(values.map((v) => v === null ? null : digest(v)));
-      const value = isNodeOrderRecord(key) ? valueOf(versions, key) : time ?? versions[0]?.value ?? null;
-      if (value !== null)
-        records[key] = value;
-    }
-    for (const [key, history] of histories) {
-      const selected = repairedPath(key, latest(history), records);
-      if (selected === null)
-        delete records[key];
-      else if (selected !== void 0)
-        records[key] = selected;
-    }
-    return { records, conflicts };
-  }
-
-  // shared/google-sync/source/decodeParts.ts
-  function decodeParts(parts) {
-    const bytes3 = new Uint8Array(parts.reduce((size, part) => size + part.length, 0));
-    let offset = 0;
-    for (const part of parts) {
-      bytes3.set(part, offset);
-      offset += part.length;
-    }
-    return { bytes: bytes3, value: decode(bytes3) };
-  }
-
-  // shared/google-sync/adapters/processing.ts
-  var encodeAsync = async (value) => encode(value);
-  var decodeAsync = async (value) => decode(value);
-  var toRecordsAsync = toRecords;
-  var fromRecordsAsync = fromRecords;
-  var hashRecordsAsync = hashRecords;
-  var replayHistoryAsync = replayHistory;
-  var decodePartsAsync = async (value) => decodeParts(value);
-  var hashCommitsAsync = hashCommits;
 
   // src/store/storage/google/overview.ts
   function summarizeSyncRecords(snapshot, records) {
@@ -19601,14 +19912,9 @@ ${JSON.stringify(input.length === 1 ? input[0] : input)}`;
       let cloud = remote;
       if (Object.keys(this.remoteConflicts).length) {
         const heads = this.heads();
-        const ancestors = (id, found = /* @__PURE__ */ new Set()) => {
-          if (!found.has(id)) {
-            found.add(id);
-            this.cache.commits[id].parents.forEach((p) => ancestors(p, found));
-          }
-          return found;
-        };
-        const sets2 = heads.map((id) => ancestors(id));
+        const sets2 = [];
+        for (const id of heads)
+          sets2.push(await collectHistoryAsync({ commits: this.cache.commits, tips: [id] }));
         const common = [...sets2[0]].filter((id) => sets2.every((set) => set.has(id)));
         const base = common.length ? await hashRecordsAsync(await this.remote(false, common)) : {};
         cloud = await this.remote(false, [heads[0]]);
@@ -25141,17 +25447,34 @@ ${messageContent}---
     }
   };
 
+  // src/utils/openrouterCancel.ts
+  var isOpenRouterCancelEligible = ({ providerID, endpointURL }) => providerID === "openrouter" && endpointURL?.protocol === "https:" && endpointURL.hostname === "openrouter.ai" && (!endpointURL.port || endpointURL.port === "443");
+  var openRouterCancelTarget = (input) => isOpenRouterCancelEligible(input) && typeof input.generationID === "string" && input.generationID.startsWith("gen-") ? { endpoint: `https://openrouter.ai/api/v1/generation/${encodeURIComponent(input.generationID)}/cancel` } : null;
+
   // shared/google-sync/remoteOutput.ts
+  var captureGenerationId = (state, id) => {
+    if (!state.generationId && typeof id === "string" && id.startsWith("gen-"))
+      state.generationId = id;
+  };
+  function openRouterCancel(json) {
+    const target = openRouterCancelTarget(JSON.parse(json));
+    return JSON.stringify(target && { ...target, authentication: { header: "Authorization", scheme: "Bearer" } });
+  }
   function remoteOutput(json) {
     const input = JSON.parse(json);
     const parser = new ThinkTagParser();
     const state = input.state ?? { text: "", reasoning: "", think: parser.checkpoint() };
     parser.restore(state.think);
     let finished = false;
-    if (input.operation === "headers") {
+    if (input.operation === "restore") {
+    } else if (input.operation === "headers") {
+      captureGenerationId(state, input.headers?.["x-generation-id"]);
       state.observeUsage = !!input.endpointURL && isOpenRouterURL(input.endpointURL);
       if (state.observeUsage)
         state.observation = { ...state.observation, ...observeOpenRouterHeaders({ get: (name) => input.headers?.[name.toLowerCase()] ?? null }) };
+    } else if (input.operation === "observation") {
+      if (state.observeUsage)
+        state.observation = { ...state.observation, ...input.observation };
     } else if (input.operation === "flush") {
       const tail = parser.flush();
       state.text += tail.content;
@@ -25161,6 +25484,7 @@ ${messageContent}---
       const value = input.value;
       if (!value || value.error != null)
         throw new Error("Remote API error.");
+      captureGenerationId(state, value.id);
       if (state.observeUsage)
         state.observation = { ...state.observation, ...observeOpenRouterUsage(value.usage) };
       const choice = value.choices?.[0];
@@ -25195,6 +25519,192 @@ ${messageContent}---
       ...state.text ? [{ type: "text", text: state.text }] : []
     ];
     return JSON.stringify({ state, parts, finished, isEmpty: parts.length === 0 });
+  }
+
+  // src/utils/openrouterCredits.ts
+  var OPENROUTER_CREDITS_ENDPOINT = "https://openrouter.ai/api/v1/credits";
+  var shouldFetchOpenRouterCredits = ({ reason, now, lastFetch, inFlight, fetchedAt }) => !inFlight && now - lastFetch >= 3e3 && (reason !== "open" || fetchedAt === void 0 || now - fetchedAt > 5 * 60 * 1e3);
+  var displayOpenRouterCredits = ({ totalCredits, totalUsage }) => Number.isFinite(totalCredits) && Number.isFinite(totalUsage) ? `$${Math.max(0, totalCredits - totalUsage).toFixed(2)}` : null;
+  var parseOpenRouterCredits = (payload) => {
+    if (!payload || typeof payload !== "object")
+      return null;
+    const data = payload.data;
+    if (!data || typeof data !== "object")
+      return null;
+    const { total_credits, total_usage } = data;
+    return typeof total_credits === "number" && Number.isFinite(total_credits) && typeof total_usage === "number" && Number.isFinite(total_usage) ? { totalCredits: total_credits, totalUsage: total_usage } : null;
+  };
+
+  // shared/google-sync/openrouterCredits.ts
+  function openRouterCredits(json) {
+    const input = JSON.parse(json);
+    switch (input.operation) {
+      case "policy":
+        return JSON.stringify({ fetch: shouldFetchOpenRouterCredits(input) });
+      case "display":
+        return JSON.stringify({ display: displayOpenRouterCredits(input.balance) });
+      case "request":
+        return JSON.stringify({
+          endpoint: OPENROUTER_CREDITS_ENDPOINT,
+          authentication: { header: "Authorization", scheme: "Bearer" }
+        });
+      case "parse": {
+        const balance = parseOpenRouterCredits(input.payload);
+        return JSON.stringify(balance && { balance });
+      }
+      default:
+        throw new Error("Unknown OpenRouter credits operation.");
+    }
+  }
+
+  // src/utils/openrouterVerification.ts
+  var OPENROUTER_VERIFICATION_INITIAL_DELAY_MS = 1e4;
+  var buildVerifiedStatsKey = (chatId, targetNodeId) => `${chatId}:::${targetNodeId}`;
+
+  // src/utils/openrouterStats.ts
+  var generationStatsRequest = (generationId) => ({
+    endpoint: `https://openrouter.ai/api/v1/generation?id=${encodeURIComponent(generationId)}`,
+    authentication: { header: "Authorization", scheme: "Bearer" }
+  });
+  var toVerifiedStats = (raw, now = Date.now()) => ({
+    generationId: raw.id,
+    model: raw.model,
+    promptTokens: raw.tokens_prompt,
+    completionTokens: raw.tokens_completion,
+    nativePromptTokens: raw.native_tokens_prompt,
+    nativeCompletionTokens: raw.native_tokens_completion,
+    totalCost: raw.total_cost,
+    cacheDiscount: raw.cache_discount,
+    error: raw.error,
+    fetchedAt: now
+  });
+  var parseVerifiedStats = (payload, generationId, now) => {
+    if (!payload || typeof payload !== "object" || !Number.isFinite(now))
+      return null;
+    const raw = payload.data;
+    if (!raw || typeof raw !== "object")
+      return null;
+    const value = raw;
+    if (value.id !== generationId || typeof value.model !== "string" || !value.model || value.error !== void 0 && typeof value.error !== "string" || value.cache_discount !== null && (typeof value.cache_discount !== "number" || !Number.isFinite(value.cache_discount)) || ["tokens_prompt", "tokens_completion", "native_tokens_prompt", "native_tokens_completion", "total_cost"].some((key) => typeof value[key] !== "number" || !Number.isFinite(value[key])))
+      return null;
+    return toVerifiedStats(raw, now);
+  };
+  var transitionOpenRouterStats = (state, action, now) => {
+    const key = action.key ?? "";
+    const existing = state.pendingVerifications[key];
+    switch (action.type) {
+      case "queue": {
+        if (!action.verification)
+          return state;
+        const verification = action.verification;
+        return { ...state, pendingVerifications: { ...state.pendingVerifications, [key]: {
+          ...existing,
+          generationId: verification.generationId,
+          chatId: verification.chatId,
+          targetNodeId: verification.targetNodeId,
+          requestedAt: verification.requestedAt ?? existing?.requestedAt ?? now,
+          nextAttemptAt: verification.nextAttemptAt ?? now + OPENROUTER_VERIFICATION_INITIAL_DELAY_MS,
+          attemptCount: existing?.attemptCount ?? 0,
+          status: "pending",
+          lastAttemptAt: existing?.lastAttemptAt,
+          lastError: void 0
+        } } };
+      }
+      case "fetching":
+        return existing ? { ...state, pendingVerifications: {
+          ...state.pendingVerifications,
+          [key]: {
+            ...existing,
+            status: "fetching",
+            attemptCount: existing.attemptCount + 1,
+            lastAttemptAt: now,
+            lastError: void 0
+          }
+        } } : state;
+      case "failed":
+        return existing ? { ...state, pendingVerifications: {
+          ...state.pendingVerifications,
+          [key]: {
+            ...existing,
+            status: "failed",
+            nextAttemptAt: action.nextAttemptAt ?? Number.MAX_SAFE_INTEGER,
+            lastError: action.error ?? ""
+          }
+        } } : state;
+      case "retry":
+        return existing ? { ...state, pendingVerifications: {
+          ...state.pendingVerifications,
+          [key]: { ...existing, status: "pending", nextAttemptAt: now, lastError: void 0 }
+        } } : state;
+      case "verified": {
+        if (!action.stats)
+          return state;
+        const verifiedStats = { ...state.verifiedStats, [key]: action.stats };
+        const pendingVerifications = { ...state.pendingVerifications };
+        delete pendingVerifications[key];
+        const keys = Object.keys(verifiedStats);
+        if (keys.length > 50) {
+          keys.sort((a, b) => (verifiedStats[a]?.fetchedAt ?? 0) - (verifiedStats[b]?.fetchedAt ?? 0));
+          for (let i = 0; i < keys.length - 50; i++)
+            delete verifiedStats[keys[i]];
+        }
+        return { ...state, verifiedStats, pendingVerifications };
+      }
+      case "remove": {
+        if (!existing)
+          return state;
+        const pendingVerifications = { ...state.pendingVerifications };
+        delete pendingVerifications[key];
+        return { ...state, pendingVerifications };
+      }
+      case "clear":
+        return { ...state, verifiedStats: {}, pendingVerifications: {} };
+    }
+  };
+  var scheduleOpenRouterStats = (state, now) => {
+    const entries = Object.entries(state.pendingVerifications);
+    const dueKeys = entries.filter(([, item]) => item.status !== "fetching" && item.nextAttemptAt <= now).map(([key]) => key);
+    const future = entries.filter(([, item]) => item.status !== "fetching" && Number.isFinite(item.nextAttemptAt) && item.nextAttemptAt > now && item.nextAttemptAt < Number.MAX_SAFE_INTEGER).map(([, item]) => item.nextAttemptAt);
+    return { dueKeys, nextAt: future.length ? Math.min(...future) : null };
+  };
+  var recoverOpenRouterStats = (state, now) => ({
+    ...state,
+    verifiedStats: state.verifiedStats && typeof state.verifiedStats === "object" ? state.verifiedStats : {},
+    pendingVerifications: state.pendingVerifications && typeof state.pendingVerifications === "object" ? Object.fromEntries(Object.entries(state.pendingVerifications).flatMap(([key, verification]) => {
+      if (!verification || typeof verification !== "object")
+        return [];
+      const normalized = {
+        ...verification,
+        status: ["fetching", "pending", "failed"].includes(verification.status) ? verification.status : "pending",
+        nextAttemptAt: typeof verification.nextAttemptAt === "number" ? verification.nextAttemptAt : now
+      };
+      return [[key, normalized.status === "fetching" ? { ...normalized, status: "pending", nextAttemptAt: Math.min(normalized.nextAttemptAt, now) } : normalized]];
+    })) : {}
+  });
+
+  // shared/google-sync/openrouterStats.ts
+  function openRouterStats(json) {
+    const input = JSON.parse(json);
+    switch (input.operation) {
+      case "transition": {
+        const after = transitionOpenRouterStats(input.state, input.action, input.now);
+        return JSON.stringify({ changes: diffJSONChanges(input.state, JSON.parse(JSON.stringify(after))) });
+      }
+      case "key":
+        return JSON.stringify({ key: buildVerifiedStatsKey(input.chatId, input.targetNodeId) });
+      case "schedule":
+        return JSON.stringify(scheduleOpenRouterStats(input.state, input.now));
+      case "recover":
+        return JSON.stringify({ changes: diffJSONChanges(input.state, recoverOpenRouterStats(input.state, input.now)) });
+      case "request":
+        return JSON.stringify(generationStatsRequest(input.generationId));
+      case "parse": {
+        const stats = parseVerifiedStats(input.payload, input.generationId, input.now);
+        return JSON.stringify(stats && { stats });
+      }
+      default:
+        throw new Error("Unknown OpenRouter stats operation.");
+    }
   }
 
   // src/utils/localGenerationOutput.ts
@@ -26572,6 +27082,9 @@ ${text}`;
     replies.set(id, { resolve, reject });
   });
   setFileSystemHost(request2);
+  setHistoryYield(async () => {
+    await request2("yieldHistory", []);
+  });
   var drive = new Proxy({}, { get: (_target, method) => {
     if (method === "supportsCompaction")
       return true;

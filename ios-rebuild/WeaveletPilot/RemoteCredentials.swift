@@ -4,6 +4,7 @@ import Security
 struct RemoteCredentialRecord: Codable, Equatable {
     var settings = RemoteSettings()
     var key = ""
+    var proxy: RemoteProxySettings?
 }
 
 // Interim native storage; global Web settings remain untouched until the full-state sync bridge.
@@ -43,7 +44,7 @@ enum RemoteCredentials {
     static func save(_ record: RemoteCredentialRecord) throws {
         #if DEBUG
         if RemoteFixture.enabled {
-            var fake = record; fake.key = "FAKE"
+            var fake = record; fake.key = "FAKE"; if fake.proxy != nil { fake.proxy?.authToken = "FAKE" }
             UserDefaults(suiteName: "com.weavelet.nativepilot.debug.remote")!.set(try JSONEncoder().encode(fake), forKey: "record")
             return
         }
@@ -53,7 +54,7 @@ enum RemoteCredentials {
     static func save(_ record: RemoteCredentialRecord, providerID: String) throws {
         #if DEBUG
         if RemoteFixture.enabled {
-            var fake = record; fake.key = "FAKE"
+            var fake = record; fake.key = "FAKE"; if fake.proxy != nil { fake.proxy?.authToken = "FAKE" }
             UserDefaults(suiteName:"com.weavelet.nativepilot.debug.remote")!.set(try JSONEncoder().encode(fake),forKey:"provider:" + providerID)
             return
         }

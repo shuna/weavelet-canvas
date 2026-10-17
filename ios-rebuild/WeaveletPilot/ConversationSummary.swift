@@ -129,7 +129,8 @@ enum ConversationSummary {
                                    state:state,fallbackEndpoint:legacy.settings.endpoint,boundary:&boundary)
         guard selection["status"] == .string("ready") else { return nil }
         let (credential,url) = try AuxiliaryRemoteRequest.credential(selection:selection,state:state,legacy:legacy,read:readProviderCredential)
-        let transport = AuxiliaryRemoteRequest.transport(url:url,key:credential.key,apiVersion:state["apiVersion"])
+        let proxy = try legacy.proxy?.validated()
+        let transport = AuxiliaryRemoteRequest.transport(url:url,key:credential.key,apiVersion:state["apiVersion"],viaProxy:proxy != nil)
         var planInput = OrderedJSON.object([
             .init(key:"operation",value:.string("plan")),.init(key:"chat",value:try projectedChat(rawChat,boundary:&boundary)),
             .init(key:"selection",value:selection),.init(key:"modelState",value:ChatConfig.modelState(in:state)),
@@ -137,7 +138,8 @@ enum ConversationSummary {
         ])
         if let promptTokens { planInput = planInput.replacing("promptTokens",with:.number(String(promptTokens))) }
         let plan = try SharedWebOperations.call("summaryOperation",planInput)
-        let request = try AuxiliaryRemoteRequest.bind(plan.required("request"),boundary:boundary,url:url,key:credential.key)
+        let upstream = try AuxiliaryRemoteRequest.bind(plan.required("request"),boundary:boundary,url:url,key:credential.key)
+        let request = try AuxiliaryRemoteRequest.route(upstream,proxy:proxy)
         return try PreparedSummary(chatID:chatID,sourceNodeIDs:wireSources,mode:mode,originNodeID:wireOrigin,format:format,
             summaryID:summaryID,now:now,config:config,originalChat:rawChat,expectedChatConfig:rawChat["config"] ?? .object([]),
             expectedBranchTree:rawChat["branchTree"] ?? .null,

@@ -8,7 +8,8 @@ private final class EvaluationProtocol: URLProtocol {
     override class func canInit(with request: URLRequest) -> Bool { request.url?.host == "fixture.invalid" || request.url?.host == "openrouter.ai" || request.url?.host == "api.openai.com" }
     override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
     override func startLoading() {
-        Self.requests.append(request)
+        var captured = request; captured.httpBody = RemoteRequest.fixtureBody(request)
+        Self.requests.append(captured)
         client?.urlProtocol(self,didReceive:HTTPURLResponse(url:request.url!,statusCode:200,httpVersion:nil,headerFields:nil)!,cacheStoragePolicy:.notAllowed)
         client?.urlProtocol(self,didLoad:Self.reply)
         client?.urlProtocolDidFinishLoading(self)
@@ -66,6 +67,50 @@ final class ConversationEvaluationTests: XCTestCase {
     private func read(_ id: String) -> RemoteCredentialRecord? {
         let endpoint = id == "openai" ? "https://api.openai.com/v1/chat/completions" : "https://openrouter.ai/api/v1/chat/completions"
         return RemoteCredentialRecord(settings:RemoteSettings(endpoint:endpoint,model:"fake-model",stream:false),key:"FAKE-\(id)")
+    }
+
+    func testManualAndAutomaticEvaluationUseGlobalProxyWithoutChangingProviderCredentials() async throws {
+        let original = try source(), roots = try state()
+        var global = RemoteCredentialRecord()
+        global.proxy = RemoteProxySettings(enabled:true,endpoint:"https://fixture.invalid/relay",authToken:"FAKE-PROXY")
+        let quality = try ConversationEvaluation.prepare(source:original,state:roots,chatID:"chat",nodeID:"assistant",dimension:"quality",legacy:global,readProviderCredential:read)
+        let qRequest = try request(quality), qBody = try OrderedJSON.decode(XCTUnwrap(qRequest.httpBody))
+        XCTAssertEqual(qRequest.url?.path,"/relay/api/request")
+        XCTAssertEqual(qRequest.value(forHTTPHeaderField:"Authorization"),"Bearer FAKE-PROXY")
+        XCTAssertEqual(qBody["endpoint"],.string("https://openrouter.ai/api/v1/chat/completions"))
+        let headers = try qBody.required("headers").object("headers")
+        XCTAssertTrue(headers.contains { (try? $0.key.native("key").lowercased()) == "authorization" && $0.value == .string("Bearer FAKE-openrouter") })
+        XCTAssertTrue(headers.contains { (try? $0.key.native("key").lowercased()) == "x-openrouter-cache" && $0.value == .string("false") })
+        XCTAssertEqual(qBody["body"]?["provider"]?["max_price"]?["xFuture"],.number("9007199254740993"))
+        EvaluationProtocol.reply = Data(#"{"choices":[{"message":{"content":"{\"scores\":{\"taskCompletion\":0.8}}"}}]}"#.utf8)
+        let qualityResult = try await ConversationEvaluation.run(quality,client:client())
+        XCTAssertEqual(qualityResult["scores"]?["taskCompletion"],.number("0.8"))
+        let chat = try original.required("chats").array("chats")[0]
+        let safe = original.replacing("chats",with:.array([chat.replacing("config",with:OrderedJSON.object(try chat.required("config").object("config").filter { !$0.key.matches("openRouter") }))]))
+        let safety = try ConversationEvaluation.prepare(source:safe,state:roots,chatID:"chat",nodeID:"assistant",dimension:"safety",legacy:global,readProviderCredential:read)
+        let sBody = try OrderedJSON.decode(XCTUnwrap(request(safety).httpBody))
+        XCTAssertEqual(sBody["endpoint"],.string("https://api.openai.com/v1/moderations"))
+        XCTAssertNotNil(sBody["body"]?["input"])
+        let defaults = try SharedWebOperations.call("evaluation",.object([.init(key:"operation",value:.string("defaults"))])).required("evaluationSettings")
+        let automatic = roots.replacing("evaluationSettings",with:defaults.replacing("safetyPreSend",with:.string("auto")).replacing("qualityPreSend",with:.string("auto")))
+        let plan = try XCTUnwrap(ConversationEvaluation.prepareAuto(source:safe,state:automatic,chatID:"chat",nodeID:"assistant",phase:"pre-send",
+            userContent:json(#"[{"type":"text","text":"質問"}]"#),legacy:global,files:nil,readProviderCredential:read))
+        for prepared in [try XCTUnwrap(plan.quality),try XCTUnwrap(plan.safety)] {
+            XCTAssertEqual(try request(prepared).url?.path,"/relay/api/request")
+            XCTAssertEqual(try request(prepared).value(forHTTPHeaderField:"Authorization"),"Bearer FAKE-PROXY")
+        }
+        let hybrid = automatic.replacing("evaluationSettings",with:try automatic.required("evaluationSettings").replacing("safetyEngine",with:.string("hybrid")))
+        let hybridPlan = try XCTUnwrap(ConversationEvaluation.prepareAuto(source:safe,state:hybrid,chatID:"chat",nodeID:"assistant",phase:"pre-send",
+            userContent:json(#"[{"type":"text","text":"質問"}]"#),legacy:global,files:nil,readProviderCredential:read))
+        XCTAssertNotNil(hybridPlan.localSafetyText)
+        EvaluationProtocol.requests = []
+        EvaluationProtocol.reply = Data(#"{"results":[{"flagged":false,"categories":{},"category_scores":{}}]}"#.utf8)
+        var published = false
+        try await ConversationEvaluation.runAutoSafety(hybridPlan,state:hybrid,files:LocalModelFiles(directory:FileManager.default.temporaryDirectory),client:client(),
+            readProviderCredential:read,isCurrent:{true},onResult:{ _,_ in published = true })
+        XCTAssertTrue(published)
+        XCTAssertEqual(EvaluationProtocol.requests.last?.url?.path,"/relay/api/request")
+        XCTAssertEqual(EvaluationProtocol.requests.last?.value(forHTTPHeaderField:"Authorization"),"Bearer FAKE-PROXY")
     }
 
     func testAutoPlanAndPreSendGuardUseSharedRules() throws {

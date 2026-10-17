@@ -66,7 +66,7 @@ struct LocalModelSettingsView: View {
                     ForEach(models.indices,id:\.self) { index in
                         let model = models[index]
                         VStack(alignment:.leading,spacing:8) {
-                            Text(name(model)).font(.headline)
+                            Text(name(model)).font(.subheadline.weight(.semibold))
                             if let id = try? model["id"]?.string("id") {
                                 Text(id).font(.caption).foregroundStyle(.secondary).textSelection(.enabled)
                                 if singleGGUF(model) {
@@ -97,6 +97,7 @@ struct LocalModelSettingsView: View {
         }
         .disabled(copying || state.generation != nil || state.evaluationJobs.values.contains { $0.busy })
         .navigationTitle("ローカルモデル")
+        .navigationBarTitleDisplayMode(.inline)
         .fileImporter(isPresented:$showsImporter,allowedContentTypes:importingDirectoryModel == nil ? [UTType(filenameExtension:"gguf") ?? .data] : [.folder]) { result in
             do {
                 let source = try result.get()
@@ -240,6 +241,7 @@ struct ChatConfigView: View {
             }
             .disabled(copyingModel)
             .navigationTitle(auxiliary ? "要約の生成設定" : draft.defaultSettings == nil ? "会話の生成設定" : "新規会話の既定設定")
+            .navigationBarTitleDisplayMode(.inline)
             .fileImporter(isPresented:$showsModelImporter,allowedContentTypes:[UTType(filenameExtension:"gguf") ?? .data]) { result in
                 do {
                     let source = try result.get(), modelID = importingModelID, files = state.localModelFiles
@@ -391,5 +393,60 @@ struct ChatConfigView: View {
             dismiss()
         }
         catch { errorMessage = error.localizedDescription }
+    }
+}
+
+struct ConversationModelInspector: View {
+    @ObservedObject var state: ChatState
+    let close: () -> Void
+    @State private var configDraft: ChatConfigDraft?
+    @State private var errorMessage: String?
+    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
+
+    private func value(_ config: OrderedJSON, _ key: String) -> String {
+        guard let raw = config[key] else { return "未指定" }
+        if case .bool(let enabled) = raw { return enabled ? "オン" : "オフ" }
+        if case .number(let text) = raw { return text }
+        if raw == .null { return "未指定" }
+        return (try? raw.displayString(key)) ?? "表示できない値"
+    }
+    var body: some View {
+        NavigationStack {
+            Form {
+                if let draft = try? state.chatConfigDraft() {
+                    Section("現在のモデル") {
+                        LabeledContent("モデル",value:value(draft.config,"model"))
+                        LabeledContent("Provider",value:value(draft.config,"providerId"))
+                        LabeledContent("実行先",value:draft.config["modelSource"] == .string("local") ? "この端末" : "オンライン")
+                    }
+                    Section("生成プロパティ") {
+                        LabeledContent("最大出力トークン",value:value(draft.config,"max_tokens"))
+                        LabeledContent("Temperature",value:value(draft.config,"temperature"))
+                        LabeledContent("Top P",value:value(draft.config,"top_p"))
+                        LabeledContent("ストリーミング",value:value(draft.config,"stream"))
+                        LabeledContent("推論の強さ",value:value(draft.config,"reasoning_effort"))
+                        LabeledContent("推論トークン予算",value:value(draft.config,"reasoning_budget_tokens"))
+                        LabeledContent("応答の詳しさ",value:value(draft.config,"verbosity"))
+                    }
+                    Button("生成設定を編集",systemImage:"slider.horizontal.3") {
+                        do { configDraft = try state.chatConfigDraft(); errorMessage = nil }
+                        catch { errorMessage = error.localizedDescription }
+                    }.frame(minHeight:44).disabled(state.generation != nil)
+                    if let errorMessage { Text(errorMessage).font(.footnote).foregroundStyle(.secondary) }
+                } else {
+                    ContentUnavailableView("会話を選択してください",systemImage:"bubble.left")
+                }
+            }
+            .sheet(item:$configDraft) { draft in ChatConfigView(state:state,draft:draft) }
+            .textSelection(.enabled)
+            .navigationTitle("モデルのプロパティ")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement:horizontalSizeClass == .compact ? .topBarLeading : .topBarTrailing) {
+                    Button("プロパティを閉じる",systemImage:horizontalSizeClass == .compact ? "xmark.circle" : "sidebar.trailing",action:close)
+                        .labelStyle(.iconOnly)
+                }
+            }
+        }
     }
 }

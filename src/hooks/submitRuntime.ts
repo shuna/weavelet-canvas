@@ -27,6 +27,7 @@ import {
 } from '@utils/streamDb';
 import { getProxyConfig, sendCancel, parseProxySse, retryAfterMessage, type ProxyConfig } from '@utils/proxyClient';
 import { cancelGeneration } from '@api/openrouter';
+import { isOpenRouterCancelEligible, openRouterCancelTarget } from '@utils/openrouterCancel';
 import {
   appendToStreamingBuffer,
   appendReasoningToStreamingBuffer,
@@ -71,6 +72,8 @@ interface SessionCancelMeta {
   proxySessionId?: string;
   proxyConfig?: ProxyConfig;
   apiKey?: string;
+  cancelEndpointURL?: { protocol: string; hostname: string; port: string };
+  cancelProviderID?: string;
 }
 const sessionCancelMetas = new Map<string, SessionCancelMeta>();
 const formatDebugTime = (time = Date.now()): string =>
@@ -209,18 +212,20 @@ export const stopSubmitSession = (sessionId: string) => {
   // Fire provider-level cancel (best-effort, non-blocking)
   const meta = sessionCancelMetas.get(sessionId);
   if (meta) {
+    const providerCancel = meta.apiKey && meta.cancelEndpointURL && meta.cancelProviderID &&
+      openRouterCancelTarget({ providerID: meta.cancelProviderID, endpointURL: meta.cancelEndpointURL, generationID: meta.generationId })
+      ? { generationId: meta.generationId!, apiKey: meta.apiKey }
+      : undefined;
     if (meta.proxyConfig && meta.proxySessionId) {
       // Proxy path: tell the Worker to abort upstream + call provider cancel
       sendCancel(
         meta.proxyConfig,
         meta.proxySessionId,
-        meta.generationId && meta.apiKey
-          ? { generationId: meta.generationId, apiKey: meta.apiKey }
-          : undefined
+        providerCancel
       );
-    } else if (meta.generationId && meta.apiKey) {
+    } else if (providerCancel) {
       // Direct path: call provider cancel API from the client
-      cancelGeneration(meta.generationId, meta.apiKey);
+      cancelGeneration(providerCancel.generationId, providerCancel.apiKey);
     }
   }
 
@@ -737,11 +742,15 @@ export const executeSubmitStream = async ({
   const thinkTagParser = new ThinkTagParser();
 
   // Seed cancel metadata so stopSubmitSession can reach the provider.
-  // Only store apiKey when the provider is OpenRouter — sending keys
-  // to openrouter.ai for non-OpenRouter providers would be a leak.
-  const isOpenRouter = config.providerId === 'openrouter';
+  // Provider cancellation is only defined for the canonical OpenRouter origin.
+  let cancelEndpointURL: URL | undefined;
+  try { cancelEndpointURL = new URL(resolvedProvider.endpoint); } catch { /* Invalid endpoints cannot be cancelled. */ }
+  const cancelProviderID = config.providerId ?? '';
+  const canCancelProvider = !!cancelEndpointURL && isOpenRouterCancelEligible({ providerID: cancelProviderID, endpointURL: cancelEndpointURL });
   setSessionCancelMeta(sessionId, {
-    apiKey: isOpenRouter ? (resolvedProvider.key || undefined) : undefined,
+    apiKey: canCancelProvider ? (resolvedProvider.key || undefined) : undefined,
+    cancelEndpointURL: cancelEndpointURL && { protocol: cancelEndpointURL.protocol, hostname: cancelEndpointURL.hostname, port: cancelEndpointURL.port },
+    cancelProviderID,
     proxyConfig,
   });
   const requestContext: OpenRouterRequestContext = {

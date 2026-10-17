@@ -27,6 +27,7 @@ struct ProviderModelsView: View {
                 if let errorMessage { Text(errorMessage).foregroundStyle(.red) }
             }
             .navigationTitle("生成モデルを選択")
+            .navigationBarTitleDisplayMode(.inline)
             .toolbar { ToolbarItem(placement:.cancellationAction) { Button("閉じる") { dismiss() } } }
             .task {
                 do {
@@ -35,7 +36,7 @@ struct ProviderModelsView: View {
                     selectedProvider = providers.contains { $0.id.utf8.elementsEqual(configured.utf8) } ? configured : providers.first?.id ?? ""
                 } catch { errorMessage = error.localizedDescription }
             }
-            .sheet(isPresented:$showsCredential) { if let provider { ProviderCredentialView(provider:provider) } }
+            .sheet(isPresented:$showsCredential) { if let provider { ProviderCredentialView(provider:provider,onSaved: { if provider.id == "openrouter" { state.invalidateOpenRouterCredits() } }) } }
             .onDisappear { refreshTask?.cancel() }
         }
     }
@@ -45,7 +46,7 @@ struct ProviderModelsView: View {
                 ForEach(models) { row in
                     Button {
                         do { try onSelect(row); dismiss() } catch { errorMessage = error.localizedDescription }
-                    } label: { VStack(alignment:.leading) { Text(row.name); Text(row.modelID).font(.caption).foregroundStyle(.secondary) } }
+                    } label: { VStack(alignment:.leading) { Text(row.name).foregroundStyle(Color(uiColor:.label)); Text(row.modelID).font(.caption).foregroundStyle(Color(uiColor:.secondaryLabel)) } }
                     .disabled(refreshTask != nil)
                 }
             } else { Text("保存されたモデルはありません").foregroundStyle(.secondary) }
@@ -64,6 +65,7 @@ struct ProviderModelsView: View {
 
 struct ProviderCredentialView: View {
     let provider: ProviderDescriptor
+    var onSaved: () -> Void = {}
     var read: ProviderModels.CredentialReader = RemoteCredentials.load(providerID:)
     var write: ProviderModels.CredentialWriter = RemoteCredentials.save(_:providerID:)
     @Environment(\.dismiss) private var dismiss
@@ -78,6 +80,7 @@ struct ProviderCredentialView: View {
                 if let errorMessage { Text(errorMessage).foregroundStyle(.red) }
             }
             .navigationTitle("端末認証設定")
+            .navigationBarTitleDisplayMode(.inline)
             .task {
                 record.settings.endpoint = provider.endpoint
                 do { if let saved = try read(provider.id) { record = try ProviderModels.credential(provider,read:{ _ in saved }) } }
@@ -86,7 +89,7 @@ struct ProviderCredentialView: View {
             .toolbar {
                 ToolbarItem(placement:.cancellationAction) { Button("取消") { dismiss() } }
                 ToolbarItem(placement:.confirmationAction) { Button("保存") {
-                    do { try ProviderModels.saveCredential(record,provider:provider,write:write); dismiss() }
+                    do { try ProviderModels.saveCredential(record,provider:provider,write:write); onSaved(); dismiss() }
                     catch { errorMessage = error.localizedDescription }
                 } }
             }

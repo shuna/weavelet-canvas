@@ -16,6 +16,9 @@ struct PromptLibraryView: View {
     @State private var busyOperation: UUID?
     @State private var cancelWork: (() -> Void)?
     @State private var isVisible = false
+    @FocusState private var focusedBody: Int?
+    @ScaledMetric(relativeTo: .body) private var restingEditorHeight = 60
+    @ScaledMetric(relativeTo: .body) private var editingEditorHeight = 140
 
     private func perform(_ action: OrderedJSON) {
         guard var draft else { return }
@@ -120,7 +123,8 @@ struct PromptLibraryView: View {
                     Section("プロンプト \(index + 1)") {
                         TextField("名前", text: Binding(get: { items[index].name }, set: { edit(index, "name", .string($0)) }))
                         TextEditor(text: Binding(get: { items[index].body }, set: { edit(index, "prompt", .string($0)) }))
-                            .frame(minHeight: 100)
+                            .focused($focusedBody, equals: index)
+                            .frame(height: focusedBody == index ? editingEditorHeight : restingEditorHeight)
                             .accessibilityLabel("本文")
                         Picker("ラベル", selection: Binding(get: { label(items[index]) }, set: { value in
                             guard value != "other" else { return }
@@ -132,6 +136,7 @@ struct PromptLibraryView: View {
                             if label(items[index]) == "other" { Text("その他（元の値）").tag("other") }
                         }
                         Button("このプロンプトを削除", role: .destructive) {
+                            focusedBody = nil
                             perform(action("remove", [.init(key: "index", value: .number(String(index)))]))
                         }
                     }
@@ -162,6 +167,7 @@ struct PromptLibraryView: View {
             if let errorMessage { Text(errorMessage).foregroundStyle(.red).textSelection(.enabled) }
         }
         .navigationTitle("プロンプトライブラリ")
+        .navigationBarTitleDisplayMode(.inline)
         .disabled(state.generation != nil)
         .onAppear { isVisible = true }
         .onDisappear { isVisible = false; cancelOperation() }

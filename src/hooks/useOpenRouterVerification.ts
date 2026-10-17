@@ -3,8 +3,8 @@ import { useEffect, useRef } from 'react';
 import { fetchCreditBalance, fetchGenerationStats } from '@api/openrouter';
 import useStore, { type StoreState } from '@store/store';
 import { debugReport } from '@store/debug-store';
-import { toVerifiedStats } from '@store/openrouter-stats-slice';
 import { resolveOpenRouterApiKey } from '@utils/openrouterVerification';
+import { scheduleOpenRouterStats } from '@utils/openrouterStats';
 
 const EMPTY_PENDING_VERIFICATIONS: StoreState['pendingVerifications'] = {};
 const NO_AUTO_RETRY_AT = Number.MAX_SAFE_INTEGER;
@@ -32,19 +32,17 @@ export default function useOpenRouterVerification() {
   };
 
   useEffect(() => {
-    const entries = Object.entries(pendingVerifications);
-    if (entries.length === 0) {
+    if (Object.keys(pendingVerifications).length === 0) {
       clearActiveTimer();
       return;
     }
 
     const now = Date.now();
-    const dueEntries = entries.filter(([, verification]) =>
-      verification.status !== 'fetching' && verification.nextAttemptAt <= now
-    );
+    const { dueKeys, nextAt } = scheduleOpenRouterStats({ verifiedStats: {}, pendingVerifications },now);
 
-    if (dueEntries.length > 0) {
-      for (const [statsKey, verification] of dueEntries) {
+    if (dueKeys.length > 0) {
+      for (const statsKey of dueKeys) {
+        const verification = pendingVerifications[statsKey];
         if (inFlightRef.current.has(statsKey)) continue;
 
         const resolvedApiKey = resolveOpenRouterApiKey(
@@ -73,12 +71,12 @@ export default function useOpenRouterVerification() {
         });
 
         void fetchGenerationStats(verification.generationId, resolvedApiKey)
-          .then((raw) => {
-            if (raw) {
-              useStore.getState().setVerifiedStats(statsKey, toVerifiedStats(raw));
+          .then((stats) => {
+            if (stats) {
+              useStore.getState().setVerifiedStats(statsKey, stats);
               debugReport(`or-verify:${statsKey}`, {
                 status: 'done',
-                detail: `${formatDebugTime()} fetched ${raw.id}`,
+                detail: `${formatDebugTime()} fetched ${stats.generationId}`,
               });
               // Refresh credit balance alongside verified stats
               void fetchCreditBalance(resolvedApiKey).then((info) => {
@@ -125,18 +123,11 @@ export default function useOpenRouterVerification() {
       }
     }
 
-    const futureEntries = entries.filter(([, verification]) =>
-      verification.status !== 'fetching' &&
-      Number.isFinite(verification.nextAttemptAt) &&
-      verification.nextAttemptAt > now &&
-      verification.nextAttemptAt < NO_AUTO_RETRY_AT
-    );
-    if (futureEntries.length === 0) {
+    if (nextAt === null) {
       clearActiveTimer();
       return;
     }
 
-    const nextAt = Math.min(...futureEntries.map(([, verification]) => verification.nextAttemptAt));
     clearActiveTimer();
     timerRef.current = setTimeout(() => {
       useStore.setState((state) => ({ pendingVerifications: { ...state.pendingVerifications } }));

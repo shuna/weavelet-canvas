@@ -1,5 +1,6 @@
 import { StoreSlice } from './store';
 import { SearchResult } from '@utils/branchSearch';
+import { reconcileSearchResults, saveSearchHistory, stepSearchResult } from '@utils/searchState';
 
 export interface SearchSlice {
   searchQuery: string;
@@ -41,14 +42,8 @@ export const createSearchSlice: StoreSlice<SearchSlice> = (set, get) => ({
   },
 
   saveSearchQueryToHistory: (query) => {
-    const normalized = (query ?? get().searchQuery).trim();
-    if (!normalized) return;
-
-    const nextHistory = [
-      normalized,
-      ...get().searchHistory.filter((entry) => entry !== normalized),
-    ].slice(0, 20);
-
+    const nextHistory = saveSearchHistory(get().searchHistory, query ?? get().searchQuery);
+    if (nextHistory === get().searchHistory) return;
     set({ searchHistory: nextHistory });
   },
 
@@ -57,22 +52,11 @@ export const createSearchSlice: StoreSlice<SearchSlice> = (set, get) => ({
   },
 
   setSearchResults: (results) => {
-    const previousResult = get().searchResults[get().currentResultIndex];
-    const previousResultNodeId = previousResult?.nodeId;
     const matchedNodeIds = new Set(results.map((r) => r.nodeId));
-    const preservedIndex = previousResultNodeId
-      ? results.findIndex((result) => result.nodeId === previousResultNodeId && result.chatId === previousResult?.chatId)
-      : -1;
-    const currentResultIndex =
-      results.length === 0
-        ? -1
-        : preservedIndex >= 0
-          ? preservedIndex
-          : 0;
+    const { index: currentResultIndex, shouldNavigate: shouldNavigateToCurrentResult } =
+      reconcileSearchResults(get().searchResults, get().currentResultIndex, results);
     const currentResultNodeId =
       currentResultIndex >= 0 ? results[currentResultIndex].nodeId : null;
-    const shouldNavigateToCurrentResult =
-      currentResultNodeId !== null && (currentResultNodeId !== previousResultNodeId || results[currentResultIndex]?.chatId !== previousResult?.chatId);
 
     set({ searchResults: results, matchedNodeIds, currentResultIndex, currentResultNodeId });
 
@@ -93,7 +77,7 @@ export const createSearchSlice: StoreSlice<SearchSlice> = (set, get) => ({
     const { searchResults, currentResultIndex } = get();
     if (searchResults.length === 0) return;
     get().saveSearchQueryToHistory();
-    const next = (currentResultIndex + 1) % searchResults.length;
+    const next = stepSearchResult(currentResultIndex, searchResults.length, false);
     const result = searchResults[next];
     set({ currentResultIndex: next, currentResultNodeId: result.nodeId });
     get().navigateToNode({ ...result, source: 'search', history: 'push', selectChat: false, focus: 'editor' });
@@ -103,7 +87,7 @@ export const createSearchSlice: StoreSlice<SearchSlice> = (set, get) => ({
     const { searchResults, currentResultIndex } = get();
     if (searchResults.length === 0) return;
     get().saveSearchQueryToHistory();
-    const prev = (currentResultIndex - 1 + searchResults.length) % searchResults.length;
+    const prev = stepSearchResult(currentResultIndex, searchResults.length, true);
     const result = searchResults[prev];
     set({ currentResultIndex: prev, currentResultNodeId: result.nodeId });
     get().navigateToNode({ ...result, source: 'search', history: 'push', selectChat: false, focus: 'editor' });

@@ -23,6 +23,7 @@ import WasmChipIcon from '@components/Chat/ChatContent/WasmChipIcon';
 import { useWasmCapabilities } from '@hooks/useWasmCapabilities';
 import TokenCount from '@components/TokenCount/TokenCount';
 import useOpenRouterCreditBalance from '@hooks/useOpenRouterCreditBalance';
+import { displayOpenRouterCredits } from '@utils/openrouterCredits';
 import { buildVerifiedStatsKey } from '@utils/openrouterVerification';
 import type {
   PendingOpenRouterVerification,
@@ -124,8 +125,7 @@ const ChatViewTabs = ({
   const creditDisplay = (() => {
     if (!isOpenRouter) return null;
     if (!creditBalance) return creditBalanceFetching ? '...' : null;
-    const remaining = Math.max(0, creditBalance.totalCredits - creditBalance.totalUsage);
-    return `$${remaining.toFixed(2)}`;
+    return displayOpenRouterCredits(creditBalance);
   })();
 
   const dropdownRef = useRef<HTMLDivElement>(null);

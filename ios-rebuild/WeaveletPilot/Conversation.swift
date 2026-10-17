@@ -15,6 +15,12 @@ struct MessageNode: Decodable, Identifiable, Equatable {
     enum CodingKeys: String, CodingKey { case id, parentId, createdAt }
 }
 
+enum OpenRouterCreditsClient {
+    static func fetch(_ request: URLRequest) async throws -> OrderedJSON {
+        try await RemoteClient().completeJSON(request)
+    }
+}
+
 // Samples and fixture callers use the same Web sibling ordering as imported documents.
 func siblingSource(_ conversations: [Conversation]) -> OrderedJSON {
     .object([.init(key: "chats", value: .array(conversations.map { chat in
@@ -83,12 +89,26 @@ struct ActiveGeneration {
     var output = RemoteOutput()
     var running = true
     var completedSuccessfully = false
+    var failed = false
     var usesRemoteTransport = true
     var titleAfterAppend = false
     var tokenCounts: OrderedJSON?
 }
 
+private struct FailedGenerationRetry {
+    let chatID: String
+    let chat: OrderedJSON
+    let plan: OrderedJSON
+    let titleAfterAppend: Bool
+}
+
 struct NavigationFocus: Equatable {
+    let nodeID: String
+    let token = UUID()
+}
+
+struct BranchEditorFocus: Equatable {
+    let chatID: String
     let nodeID: String
     let token = UUID()
 }
@@ -121,7 +141,22 @@ final class ChatState: ObservableObject {
     @Published var persistenceError: String?
     @Published private(set) var generation: ActiveGeneration?
     @Published private(set) var remoteSettings = RemoteSettings()
+    @Published var openRouterVerificationError: String?
+    private var openRouterVerificationTasks: [Data:Task<Void,Never>] = [:]
+    private var openRouterVerificationTimer: Task<Void,Never>?
+    @Published private(set) var openRouterCreditDisplay: String?
+    @Published private(set) var openRouterCreditsFetching = false
+    @Published private(set) var openRouterCreditsError: String?
+    private var openRouterCreditsFetchedAt: Double?
+    private var lastOpenRouterCreditFetch = 0.0
+    private var openRouterCreditRequestID: UUID?
+    private var openRouterCreditCredential: RemoteCredentialRecord?
+    private var openRouterCreditProviderSnapshot: OrderedJSON?
     @Published var generationError: String?
+    @Published var streamRecoveryError: String?
+    @Published private(set) var isRecoveringStream = false
+    private var streamRecoveryTask: Task<Void,Never>?
+    @Published private var failedGenerationRetry: FailedGenerationRetry?
     @Published var automaticEvaluationError: String?
     private var automaticEvaluationTasks: [UUID: [UUID:Task<Void,Never>]] = [:]
     private var automaticEvaluationContext: (id: UUID, chatID: String, nodeID: String, requestPath: [String], userContent: OrderedJSON, record: RemoteCredentialRecord?, client: RemoteClient, read: ProviderModels.CredentialReader)?
@@ -148,6 +183,8 @@ final class ChatState: ObservableObject {
     private let localModerationClassify: NativeLocalModeration.Classifier?
     private var initialLoadFailed = false
     @Published private(set) var navigationFocus: NavigationFocus?
+    @Published var branchEditorSyncEnabled = true
+    @Published private(set) var branchEditorFocus: BranchEditorFocus?
     @Published private(set) var canNavigateBack = false
     @Published private(set) var canNavigateForward = false
     private var navigationHistory: OrderedJSON?
@@ -198,9 +235,13 @@ final class ChatState: ObservableObject {
         return raw.flatMap { try? $0.string("chatActiveView") }.flatMap(ChatActiveView.init(rawValue:)) ?? .chat
     }
     func setChatActiveView(_ view: ChatActiveView) throws {
-        guard generation == nil, !initialLoadFailed, let document, let exchange else { throw ExchangeError.invalid("表示を切り替えられません") }
         guard chatActiveView != view else { return }
-        let candidate = try SyncDocument(snapshot: document.snapshot.replacing("state", with: document.snapshot.required("state").replacing("chatActiveView", with: .string(view.rawValue))), v3Sidecar: document.v3Sidecar, v3RootOrder: document.v3RootOrder)
+        try saveLayoutSetting("chatActiveView", value:.string(view.rawValue))
+    }
+    func saveLayoutSetting(_ key: String, value: OrderedJSON) throws {
+        guard generation == nil, !initialLoadFailed, let document, let exchange else { throw ExchangeError.invalid("表示を切り替えられません") }
+        guard document.snapshot["state"]?[key] != value else { return }
+        let candidate = try SyncDocument(snapshot: document.snapshot.replacing("state", with: document.snapshot.required("state").replacing(key, with: value)), v3Sidecar: document.v3Sidecar, v3RootOrder: document.v3RootOrder)
         let changed = try WebExchange(source: candidate.uiProjection())
         try store?.save(SavedChatState(exchange: changed, document: candidate, conversations: conversations, selectedConversationID: selectedID, style: displayStyle))
         self.document = candidate
@@ -328,7 +369,31 @@ final class ChatState: ObservableObject {
 
     private func currentNavigationHistory(in source: OrderedJSON) throws -> BranchNavigation.HistoryResult {
         let history = try navigationHistory ?? BranchNavigation.emptyHistory()
-        return try BranchNavigation.history(history, action: .initialize, in: source, chatID: selectedID, view: "chat", viewingPath: conversation?.visibleMessages.map(\.id))
+        return try BranchNavigation.history(history, action: .initialize, in: source, chatID: selectedID, view: chatActiveView.rawValue, viewingPath: conversation?.visibleMessages.map(\.id))
+    }
+
+    func focusBranchEditor(nodeID: String) throws {
+        guard generation == nil, branchEditorSyncEnabled,
+              chatActiveView == .splitHorizontal || chatActiveView == .splitVertical,
+              let exchange, let conversation,
+              conversation.visibleMessages.contains(where: { $0.id.utf8.elementsEqual(nodeID.utf8) }),
+              let chat = try exchange.source.required("chats").array("chats").first(where: { $0["id"] == .string(conversation.id) }),
+              let tree = chat["branchTree"], case .object = tree else { return }
+        let current = try currentNavigationHistory(in: exchange.source)
+        let entry = OrderedJSON.object([
+            .init(key: "chatId", value: .string(conversation.id)),
+            .init(key: "activePath", value: .array(conversation.visibleMessages.map { .string($0.id) })),
+            .init(key: "focusedNodeId", value: .string(nodeID)),
+            .init(key: "viewContext", value: .string(chatActiveView.rawValue)),
+            .init(key: "source", value: .string(BranchNavigation.Source.chatClick.rawValue))
+        ])
+        let next = try BranchNavigation.history(current.history, action: .push, in: exchange.source, entry: entry)
+        publishNavigation(next, focus: nil)
+        branchEditorFocus = BranchEditorFocus(chatID: conversation.id, nodeID: nodeID)
+    }
+
+    func consumeBranchEditorFocus(_ token: UUID) {
+        if branchEditorFocus?.token == token { branchEditorFocus = nil }
     }
 
     func navigate(chatID: String, nodeID: String? = nil, source: BranchNavigation.Source) throws {
@@ -340,6 +405,18 @@ final class ChatState: ObservableObject {
         let next = try BranchNavigation.history(history.history, action: .push, in: target.source, target: target, view: "chat", navigationSource: source)
         try applyLibrary(target.source, selectedID: chatID, resetViewFor: chatID, navigation: next)
         navigationFocus = (target.focusedNodeID ?? target.path.last).map { NavigationFocus(nodeID: $0) }
+    }
+
+    func navigateBranchSearch(_ result: ChatSearchResult) throws {
+        guard let nodeID = result.nodeID else { throw ExchangeError.invalid("移動先のメッセージがありません") }
+        guard generation == nil, let exchange else { throw ExchangeError.invalid("生成結果を保存してから会話を移動してください") }
+        let current = try currentNavigationHistory(in: exchange.source)
+        let target = try BranchNavigation.navigate(in: exchange.source, chatID: result.chatID, nodeID: nodeID, source: .search)
+        guard target.status == .reached else { throw ExchangeError.invalid("移動先の会話またはメッセージがありません") }
+        let next = try BranchNavigation.history(current.history, action: .push, in: target.source, target: target,
+                                                view: chatActiveView.rawValue, navigationSource: .search)
+        try applyLibrary(target.source, selectedID: selectedID, resetViewFor: result.chatID, navigation: next)
+        branchEditorFocus = BranchEditorFocus(chatID: result.chatID, nodeID: nodeID)
     }
 
     func moveNavigation(_ direction: BranchNavigation.HistoryAction) throws {
@@ -434,6 +511,14 @@ final class ChatState: ObservableObject {
         let source = try MessageEditing.saveOptions(in: exchange.source, chatID: draft.chatID, nodeID: draft.nodeID, value: draft.value, newIDs: ids, now: now, history: editingHistory) { history = $0 }
         if source == exchange.source { return }
         try applyLibrary(source, selectedID: selectedID, resetViewFor: sourceChat["branchTree"] == nil ? draft.chatID : nil, editing: history, now: now)
+    }
+
+    func setAllMessagesCollapsed(_ value: Bool) throws {
+        guard generation == nil else { throw ExchangeError.invalid("生成結果を保存してから設定してください") }
+        guard let exchange, let conversation else { throw ExchangeError.invalid("保存済み会話を選択してください") }
+        let source = try NodeOptions.setAllCollapsed(in:exchange.source,chatID:conversation.id,value:value)
+        guard source != exchange.source else { return }
+        try applyLibrary(source,selectedID:selectedID)
     }
 
     func messageDraft(nodeID: String?) throws -> MessageDraft {
@@ -626,8 +711,94 @@ final class ChatState: ObservableObject {
     func saveRemoteSettings(_ record: RemoteCredentialRecord, write: (RemoteCredentialRecord) throws -> Void = RemoteCredentials.save) throws {
         guard generation == nil else { throw ExchangeError.invalid("生成を停止してから設定してください") }
         _ = try record.settings.validatedURL()
+        _ = try record.proxy?.validated()
         try write(record)
         remoteSettings = record.settings
+    }
+
+    func invalidateOpenRouterCredits() {
+        openRouterCreditRequestID = nil
+        openRouterCreditDisplay = nil
+        openRouterCreditsFetching = false
+        openRouterCreditsError = nil
+        openRouterCreditsFetchedAt = nil
+        lastOpenRouterCreditFetch = 0
+        openRouterCreditCredential = nil
+        openRouterCreditProviderSnapshot = nil
+    }
+
+    @MainActor func refreshOpenRouterCredits(reason: String,
+        readCredential: ProviderModels.CredentialReader = RemoteCredentials.load(providerID:),
+        fetch: @escaping (URLRequest) async throws -> OrderedJSON = OpenRouterCreditsClient.fetch,
+        now: Double = Date().timeIntervalSince1970 * 1000) async {
+        guard ["open","completed","manual"].contains(reason),
+              let source = exchange?.source,
+              let chats = try? source.required("chats").array("chats"),
+              let chat = chats.first(where: { $0["id"] == .string(selectedID) }),
+              chat["config"]?["modelSource"] != .string("local"),
+              chat["config"]?["providerId"] == .string("openrouter") else { return }
+        let record: RemoteCredentialRecord
+        let providerSnapshot: OrderedJSON
+        do {
+            let roots = try publicationSnapshot().required("state")
+            guard let provider = try ProviderModels.providers(in:roots).first(where: { $0.id == "openrouter" }) else { throw ExchangeError.invalid("OpenRouterのprovider設定がありません") }
+            record = try ProviderModels.credential(provider,read:readCredential)
+            guard !record.key.isEmpty else { throw ExchangeError.invalid("OpenRouterのAPI keyがありません") }
+            providerSnapshot = roots["providers"]?["openrouter"] ?? .null
+            if openRouterCreditCredential != record || openRouterCreditProviderSnapshot != providerSnapshot { invalidateOpenRouterCredits() }
+            openRouterCreditCredential = record
+            openRouterCreditProviderSnapshot = providerSnapshot
+        } catch {
+            invalidateOpenRouterCredits()
+            openRouterCreditsError = "残高を取得できませんでした"
+            return
+        }
+        var startedRequestID: UUID?
+        defer {
+            if let startedRequestID, openRouterCreditRequestID == startedRequestID {
+                lastOpenRouterCreditFetch = now
+                openRouterCreditRequestID = nil
+                openRouterCreditsFetching = false
+            }
+        }
+        do {
+            var policyFields: [JSONField] = [
+                .init(key:"operation",value:.string("policy")),.init(key:"reason",value:.string(reason)),
+                .init(key:"now",value:.number(String(now))),.init(key:"lastFetch",value:.number(String(lastOpenRouterCreditFetch))),
+                .init(key:"inFlight",value:.bool(openRouterCreditsFetching))]
+            if let openRouterCreditsFetchedAt { policyFields.append(.init(key:"fetchedAt",value:.number(String(openRouterCreditsFetchedAt)))) }
+            let policy = try SharedWebOperations.call("openRouterCredits",.object(policyFields))
+            guard try policy.required("fetch").boolean("fetch credits") else { return }
+            let envelope = try SharedWebOperations.call("openRouterCredits",.object([.init(key:"operation",value:.string("request"))]))
+            let destination = try RemoteSettings(endpoint:envelope.required("endpoint").string("credits endpoint")).validatedURL()
+            let origin = try record.settings.validatedURL()
+            guard ProviderModels.sameOrigin(destination,origin),
+                  envelope["authentication"]?["header"] == .string("Authorization"),
+                  envelope["authentication"]?["scheme"] == .string("Bearer"),
+                  !record.key.unicodeScalars.contains(where: { $0.value < 32 || $0.value == 127 }) else { throw ExchangeError.invalid("OpenRouter credits要求を検証できませんでした") }
+            var request = URLRequest(url:destination)
+            request.httpMethod = "GET"
+            request.setValue("Bearer " + record.key,forHTTPHeaderField:"Authorization")
+            let requestID = UUID()
+            startedRequestID = requestID
+            openRouterCreditRequestID = requestID
+            openRouterCreditsFetching = true
+            let payload = try await fetch(request)
+            guard openRouterCreditRequestID == requestID else { return }
+            guard let latest = try readCredential("openrouter"), latest == record,
+                  try (publicationSnapshot().required("state")["providers"]?["openrouter"] ?? .null) == providerSnapshot else {
+                invalidateOpenRouterCredits(); return
+            }
+            let parsed = try SharedWebOperations.call("openRouterCredits",.object([.init(key:"operation",value:.string("parse")),.init(key:"payload",value:payload)]))
+            guard parsed != .null, let balance = parsed["balance"] else { throw ExchangeError.invalid("OpenRouter credits応答が不正です") }
+            let display = try SharedWebOperations.call("openRouterCredits",.object([.init(key:"operation",value:.string("display")),.init(key:"balance",value:balance)]))
+            openRouterCreditDisplay = try display.required("display").string("credit balance")
+            openRouterCreditsFetchedAt = now
+            openRouterCreditsError = nil
+        } catch {
+            guard startedRequestID == nil || openRouterCreditRequestID == startedRequestID else { return }
+            openRouterCreditsError = "残高を取得できませんでした"
+        }
     }
 
     var isLocalConversation: Bool {
@@ -698,6 +869,29 @@ final class ChatState: ObservableObject {
         try startGeneration(prepared:prepared,role:inputRole,record:record,client:client,nodeIDs:nodeIDs,readProviderCredential:readProviderCredential)
         composerDrafts.removeValue(forKey:identity)
     }
+    var canRetryFailedGeneration: Bool {
+        guard generation == nil, !isRecoveringStream, let retry = failedGenerationRetry,
+              selectedConversationID.utf8.elementsEqual(retry.chatID.utf8),
+              let chats = try? exchange?.source.required("chats").array("chats") else { return false }
+        return chats.first { $0["id"] == .string(retry.chatID) } == retry.chat
+    }
+
+    func retryFailedGeneration(record: RemoteCredentialRecord? = nil, client: RemoteClient = RemoteClient(), nodeIDs: [String]? = nil,
+                               readProviderCredential: @escaping ProviderModels.CredentialReader = RemoteCredentials.load(providerID:)) throws {
+        guard canRetryFailedGeneration, let retry = failedGenerationRetry, let exchange, let conversation else {
+            throw ExchangeError.invalid("再試行する会話が変更されています。保存状態と対象を確認してください")
+        }
+        let now = Date().timeIntervalSince1970 * 1000
+        var history: MessageEditing.HistoryState?
+        let prepared = try MessageEditing.generation(in:exchange.source,chatID:retry.chatID,operation:"prepare",action:.retry,
+            viewingPath:conversation.visibleMessages.map(\.id),plan:retry.plan,newIDs:nodeIDs,now:now,history:editingHistory) { history = $0 }
+        guard prepared.output["status"] == .string("updated") else { throw ExchangeError.invalid("再試行する生成先が変更されているか、保護されています") }
+        let plan = try prepared.output.required("plan")
+        let path = try plan.required("requestPath").array("requestPath").map { try $0.string("node ID") }
+        try beginGeneration(source:prepared.source,chatID:retry.chatID,path:path,history:history,plan:plan,regenerate:false,
+            record:record,client:client,readProviderCredential:readProviderCredential,now:now,titleAfterAppend:retry.titleAfterAppend)
+    }
+
     func messageGenerationDraft(nodeID: String, operation: MessageGenerationOperation) throws -> MessageGenerationDraft {
         guard generation == nil, let exchange, let conversation else { throw ExchangeError.invalid("保存済み会話を選択し、生成の終了を待ってください") }
         return MessageGenerationDraft(chatID:conversation.id,nodeID:nodeID,operation:operation,source:exchange.source,path:conversation.visibleMessages.map(\.id))
@@ -705,7 +899,7 @@ final class ChatState: ObservableObject {
 
     func startGeneration(_ draft: MessageGenerationDraft, record: RemoteCredentialRecord? = nil, client: RemoteClient = RemoteClient(), nodeIDs: [String]? = nil,
                          readProviderCredential: @escaping ProviderModels.CredentialReader = RemoteCredentials.load(providerID:)) throws {
-        guard generation == nil, let exchange else { throw ExchangeError.invalid("生成結果を保存してから操作してください") }
+        guard generation == nil, !isRecoveringStream, let exchange else { throw ExchangeError.invalid("生成結果の保存・復旧が終わってから操作してください") }
         guard try draft.source.encoded() == exchange.source.encoded() else { throw ExchangeError.invalid("会話が変更されています。操作を開き直してください") }
         let now = Date().timeIntervalSince1970 * 1000
         var history: MessageEditing.HistoryState?
@@ -728,7 +922,7 @@ final class ChatState: ObservableObject {
         try startGeneration(prepared:ComposerContent.prepare(parts),record:record,client:client,nodeIDs:nodeIDs,readProviderCredential:readProviderCredential)
     }
     private func startGeneration(prepared: ComposerDraft, role: String = "user", record: RemoteCredentialRecord? = nil, client: RemoteClient, nodeIDs: [String]?, readProviderCredential: @escaping ProviderModels.CredentialReader) throws {
-        guard generation == nil, let exchange, let conversation else { throw ExchangeError.invalid("保存済み会話を選択し、生成の終了を待ってください") }
+        guard generation == nil, !isRecoveringStream, let exchange, let conversation else { throw ExchangeError.invalid("保存済み会話を選択し、生成・復旧の終了を待ってください") }
         guard prepared.hasMeaningfulContent else { throw ExchangeError.invalid("本文または画像を入力してください") }
         let sourceChat = try exchange.source.required("chats").array("chats").first { try $0.required("id").string("ID").utf8.elementsEqual(conversation.id.utf8) }!
         let count = try sourceChat["branchTree"] == nil ? sourceChat.required("messages").array("messages").count + 1 : 1
@@ -759,6 +953,7 @@ final class ChatState: ObservableObject {
             return
         }
         let legacy = try record ?? RemoteCredentials.load()
+        let proxy = try legacy.proxy?.validated()
         let credential = try ProviderModels.generationCredential(config:sourceChat["config"] ?? .object([]),state:savedState,legacy:legacy,read:readProviderCredential)
         let apiVersion: String?
         if case .string(let value) = savedState["apiVersion"] { apiVersion = value }
@@ -799,7 +994,7 @@ final class ChatState: ObservableObject {
                     .init(key:"config",value:config),.init(key:"modelState",value:modelState),.init(key:"promptTokens",value:.number(String(promptTokens)))]))
                 guard checked["fits"] == .bool(true) else { throw ExchangeError.invalid("送信本文がtoken上限を超えています") }
                 let request = try RemoteRequest.make(source:source,chatID:chatID,path:path,settings:credential.settings,key:credential.key,
-                    modelState:modelState,apiVersion:apiVersion,regenerate:regenerate,tokenMessages:messages)
+                    modelState:modelState,apiVersion:apiVersion,regenerate:regenerate,tokenMessages:messages,viaProxy:proxy != nil)
                 let streaming = try RemoteRequest.streaming(request)
                 let userContent = try ConversationEvaluation.transmittedUserContent(messages)
                 if let userContent {
@@ -807,7 +1002,17 @@ final class ChatState: ObservableObject {
                     self.automaticEvaluationContext = (id,chatID,nodeID,path,userContent,legacy,client,readProviderCredential)
                     self.startAutomaticEvaluation(phase:"pre-send",generationID:id)
                 }
-                try await client.complete(request, streaming: streaming) { [weak self] output in
+                var savedCursor: OrderedJSON?
+                var savedComplete: Bool?
+                try await client.complete(request, streaming: streaming, proxy:proxy, providerID:sourceChat["config"]?["providerId"].flatMap { try? $0.string("provider ID") }, proxySessionID:chatID + ":" + id.uuidString.lowercased(),onProxyCheckpoint:{ [weak self] output in
+                    guard let self, let current = self.generation, current.id == id, current.running,
+                          self.exchange?.source == current.baseSource else { throw CancellationError() }
+                    let cursor = output.proxyReceipt?.decoder?["lastEventId"] ?? .number("0")
+                    let complete = output.proxyReceipt?.complete == true
+                    guard cursor != savedCursor || complete != savedComplete else { return }
+                    try self.proxyRecoveryStore.upsert(self.makeProxyRecoveryRecord(current,output:output))
+                    savedCursor = cursor; savedComplete = complete
+                }) { [weak self] output in
                     guard let self, self.generation?.id == id, self.generation?.running == true,
                           self.exchange?.source == self.generation?.baseSource else { return }
                     self.generation?.output = output
@@ -984,6 +1189,7 @@ final class ChatState: ObservableObject {
         guard var current = generation, current.id == id, current.running, exchange?.source == current.baseSource else { return }
         current.running = false
         current.completedSuccessfully = completed && error == nil
+        current.failed = error != nil
         generation = current
         generationTask = nil
         if let error { generationError = "生成を完了できませんでした。\n" + error.localizedDescription }
@@ -999,6 +1205,12 @@ final class ChatState: ObservableObject {
         guard exchange?.source == current.baseSource else { throw ExchangeError.invalid("生成開始後に会話が変更されています") }
         if try current.output.isEmpty && current.output.observation.object("observation").isEmpty {
             cancelAutomaticEvaluation(generationID:current.id)
+            if current.output.proxyReceipt != nil {
+                if current.failed { try proxyRecoveryStore.upsert(makeProxyRecoveryRecord(current,output:current.output)) }
+                else { try proxyRecoveryStore.remove(current.id.uuidString.lowercased()) }
+            }
+            if let stats = try queuedOpenRouterStats(current,now:Date().timeIntervalSince1970 * 1000) { try saveOpenRouterStats(stats) }
+            rememberFailedGeneration(current)
             generation = nil
             return
         }
@@ -1011,8 +1223,23 @@ final class ChatState: ObservableObject {
         var source = finalized.source
         let accounting = try generationAccounting(source:source,current:current)
         source = accounting.source
-        try applyLibrary(source, selectedID: current.chatID, resetViewFor: current.chatID, tokenUsage:accounting.usage, editing: history, now: now)
+        if current.output.proxyReceipt != nil {
+            let chat = try source.required("chats").array("chats").first { $0["id"] == .string(current.chatID) }
+            let target = try plan.required("targetNodeId").string("target")
+            let hash = try chat?.required("branchTree").required("nodes").required(target).required("contentHash")
+            try proxyRecoveryStore.upsert(makeProxyRecoveryRecord(current,output:current.output).replacing("appliedHash",with:hash ?? .null))
+        }
+        try applyLibrary(source, selectedID: current.chatID, resetViewFor: current.chatID, tokenUsage:accounting.usage, editing: history, openRouterStats:try queuedOpenRouterStats(current,now:now), now: now)
+        rememberFailedGeneration(current)
         generation = nil
+        if let receipt = current.output.proxyReceipt, current.completedSuccessfully || !current.failed {
+            do { try proxyRecoveryStore.remove(current.id.uuidString.lowercased()) }
+            catch { streamRecoveryError = "保存済み応答の復旧記録を整理できませんでした。\n" + error.localizedDescription }
+            if current.completedSuccessfully && receipt.complete {
+                let control = titleContext?.client.auxiliaryClient() ?? RemoteClient()
+                Task { await control.proxyControl(settings:receipt.settings,sessionID:receipt.sessionID,operation:"ack") }
+            }
+        }
         if current.completedSuccessfully, automaticEvaluationContext?.id == current.id {
             cancelledAutomaticEvaluationIDs.remove(current.id)
             startAutomaticEvaluation(phase:"post-receive",generationID:current.id)
@@ -1021,6 +1248,155 @@ final class ChatState: ObservableObject {
             let config = try current.baseSource.required("chats").array("chats").first { $0["id"].flatMap { try? $0.string("id") }?.utf8.elementsEqual(current.chatID.utf8) == true }?["config"]
             startAutomaticTitle(chatID:current.chatID,sourceConfig:config,legacy:titleContext?.legacy,client:titleContext?.client,readProviderCredential:titleContext?.read ?? RemoteCredentials.load(providerID:))
         }
+    }
+
+    private var proxyRecoveryStore: NativeProxyRecoveryStore {
+        NativeProxyRecoveryStore(libraryURL:(store ?? LocalStateStore.applicationStore).fileURL)
+    }
+    private func updatingProxyRecord(_ record: OrderedJSON, output: RemoteOutput) throws -> OrderedJSON {
+        guard let receipt = output.proxyReceipt else { throw ExchangeError.invalid("プロキシの復旧情報がありません") }
+        return record.replacing("checkpoint",with:output.proxyCheckpoint)
+            .replacing("bufferedText",with:receipt.responseState?["text"] ?? .string(output.text))
+            .replacing("bufferedReasoning",with:receipt.responseState?["reasoning"] ?? .string(output.reasoning))
+            .replacing("proxyComplete",with:.bool(receipt.complete))
+    }
+    private func makeProxyRecoveryRecord(_ current: ActiveGeneration, output: RemoteOutput) throws -> OrderedJSON {
+        guard let receipt = output.proxyReceipt, let plan = current.plan else { throw ExchangeError.invalid("プロキシの生成先がありません") }
+        let nodeID = try plan.required("targetNodeId").string("target")
+        let chat = try current.baseSource.required("chats").array("chats").first { $0["id"] == .string(current.chatID) }
+        guard let node = chat?["branchTree"]?["nodes"]?[nodeID] else { throw ExchangeError.invalid("プロキシの生成先がありません") }
+        let record = try OrderedJSON.object([
+            .init(key:"requestId",value:.string(current.id.uuidString.lowercased())),.init(key:"chatId",value:.string(current.chatID)),
+            .init(key:"nodeId",value:.string(nodeID)),.init(key:"checkpointRole",value:node.required("role")),
+            .init(key:"checkpointHash",value:node.required("contentHash")),.init(key:"plan",value:plan),
+            .init(key:"proxyEndpoint",value:.string(receipt.settings.endpoint)),.init(key:"proxySessionId",value:.string(receipt.sessionID)),
+            .init(key:"stopped",value:.bool(!current.running && !current.completedSuccessfully && !current.failed))])
+        return try updatingProxyRecord(record,output:output)
+    }
+    private func proxyRecoveryTarget(_ record: OrderedJSON) throws -> Bool {
+        guard let source = exchange?.source, let chatID = try record["chatId"]?.string("chat ID"),
+              let nodeID = try record["nodeId"]?.string("node ID"),
+              let planTarget = try record["plan"]?["targetNodeId"]?.string("plan target"), nodeID.utf8.elementsEqual(planTarget.utf8),
+              let chat = try source.required("chats").array("chats").first(where: { $0["id"] == .string(chatID) }) else { return false }
+        var boundary = SharedWebProjection()
+        let result = try SharedWebOperations.call("proxyRecoveryTarget",.object([
+            .init(key:"chat",value:boundary.chat(chat)),.init(key:"contentStore",value:boundary.store(source.required("contentStore"))),.init(key:"record",value:record)]))
+        return result["status"] == .string("ready")
+    }
+    func runProxyRecovery() {
+        guard streamRecoveryTask == nil else { return }
+        streamRecoveryTask = Task { @MainActor [weak self] in
+            guard let self else { return }
+            do { try await recoverProxyStreams() }
+            catch is CancellationError { }
+            catch { streamRecoveryError = "ストリームを復旧できませんでした。記録は保持しています。\n" + error.localizedDescription }
+            streamRecoveryTask = nil
+        }
+    }
+    func cancelProxyRecovery() { streamRecoveryTask?.cancel() }
+
+    @MainActor func recoverProxyStreams(record credential: RemoteCredentialRecord? = nil, client: RemoteClient? = nil) async throws {
+        guard generation == nil, !isRecoveringStream, !initialLoadFailed, exchange != nil else { return }
+        let records = try proxyRecoveryStore.records()
+        streamRecoveryError = nil
+        guard !records.isEmpty else { return }
+        isRecoveringStream = true
+        defer { isRecoveringStream = false }
+        let trusted = try credential ?? RemoteCredentials.load()
+        let settings = try trusted.proxy?.validated()
+        var retained = 0
+        for original in records {
+            try Task.checkCancellation()
+            guard try proxyRecoveryTarget(original) else { retained += 1; continue }
+            let complete = original["proxyComplete"] == .bool(true), stopped = original["stopped"] == .bool(true)
+            // Never send a token to an endpoint recovered from disk or imported data.
+            let recordedEndpoint = try original.required("proxyEndpoint").string("proxy endpoint")
+            let canFetch = settings?.endpoint.utf8.elementsEqual(recordedEndpoint.utf8) == true
+            let reconstruction = settings ?? RemoteProxySettings(enabled:true,endpoint:recordedEndpoint)
+            var output = try RemoteOutput(proxyCheckpoint:original.required("checkpoint"),settings:reconstruction,
+                sessionID:original.required("proxySessionId").string("proxy session"),complete:complete)
+            var latest = original
+            let originalError = generationError
+            let clearsSendError = failedGenerationRetry?.chatID == (try original.required("chatId").string("chat ID")) && failedGenerationRetry?.plan["targetNodeId"] == original["nodeId"]
+            var networkError: Error?
+            if !complete && !stopped && canFetch {
+                var attempt = 0
+                while true {
+                    try Task.checkCancellation()
+                    guard generation == nil, try proxyRecoveryTarget(latest) else { throw CancellationError() }
+                    output = try RemoteOutput(proxyCheckpoint:output.proxyCheckpoint,settings:reconstruction,
+                        sessionID:original.required("proxySessionId").string("proxy session"),complete:false)
+                    do {
+                        try await (client?.auxiliaryClient() ?? RemoteClient()).recoverProxy(output,onCheckpoint:{ [weak self] next in
+                            guard let self, self.generation == nil, try self.proxyRecoveryTarget(latest) else { throw CancellationError() }
+                            let previousCursor = latest["checkpoint"]?["decoder"]?["lastEventId"] ?? .number("0")
+                            let previousComplete = latest["proxyComplete"] == .bool(true)
+                            latest = try self.updatingProxyRecord(latest,output:next)
+                            if next.proxyReceipt?.decoder?["lastEventId"] != previousCursor || next.proxyReceipt?.complete != previousComplete {
+                                try self.proxyRecoveryStore.upsert(latest)
+                            }
+                        },onOutput:{ next in output = next })
+                        networkError = nil
+                        break
+                    } catch is CancellationError { throw CancellationError() }
+                    catch let failure as ProxyCheckpointFailure { throw failure.underlying }
+                    catch {
+                        networkError = error
+                        let failure = error as? ProxyRecoveryFailure
+                        var fields: [JSONField] = [.init(key:"attempt",value:.number(String(attempt))),
+                            .init(key:"outcome",value:.string(failure?.outcome ?? "network")),.init(key:"retry",value:.bool(failure?.retry == true))]
+                        if let value = failure?.retryAfter { fields.append(.init(key:"retryAfter",value:.string(value))) }
+                        let policy = try SharedWebOperations.call("proxyRecoveryRetry",.object(fields))
+                        guard policy["retry"] == .bool(true) else { break }
+                        let delay = try policy.required("delayMs").number("retry delay")
+                        try await Task.sleep(nanoseconds:UInt64(delay * 1_000_000))
+                        attempt += 1
+                    }
+                }
+            }
+            try Task.checkCancellation()
+            guard generation == nil, try proxyRecoveryTarget(latest), let source = exchange?.source else { retained += 1; continue }
+            try output.flush()
+            let chatID = try latest.required("chatId").string("chat ID")
+            let plan = try latest.required("plan")
+            var history: MessageEditing.HistoryState?
+            let finalized = try MessageEditing.generation(in:source,chatID:chatID,operation:"finalize",viewingPath:[],plan:plan,parts:output.parts,
+                now:Date().timeIntervalSince1970 * 1000,history:editingHistory) { history = $0 }
+            guard finalized.output["status"] == .string("updated") else { retained += 1; continue }
+            let nodeID = try latest.required("nodeId").string("node ID")
+            guard let requestID = UUID(uuidString:try latest.required("requestId").string("request ID")) else { throw ExchangeError.invalid("復旧用request IDが不正です") }
+            // Recovery merges observed metadata, as Web does, without counting an already received response twice.
+            let session = ActiveGeneration(id:requestID,chatID:chatID,baseSource:source,path:[],plan:plan,output:output,running:false)
+            let accounted = try generationAccounting(source:finalized.source,current:session).source
+            let chat = try accounted.required("chats").array("chats").first { $0["id"] == .string(chatID) }
+            let beforeChat = try source.required("chats").array("chats").first { $0["id"] == .string(chatID) }
+            latest = try updatingProxyRecord(latest,output:output)
+                .replacing("checkpointHash",with:beforeChat!.required("branchTree").required("nodes").required(nodeID).required("contentHash"))
+                .replacing("appliedHash",with:chat!.required("branchTree").required("nodes").required(nodeID).required("contentHash"))
+            try proxyRecoveryStore.upsert(latest)
+            var verificationSession = session
+            verificationSession.failed = !stopped
+            let verification = try queuedOpenRouterStats(verificationSession,now:Date().timeIntervalSince1970 * 1000)
+            if try accounted.encoded() != source.encoded() || verification != nil {
+                try applyLibrary(accounted,selectedID:selectedID,editing:history,openRouterStats:verification)
+            }
+            if stopped || latest["proxyComplete"] == .bool(true) {
+                if !stopped && clearsSendError && generationError == originalError { generationError = nil }
+                try proxyRecoveryStore.remove(latest.required("requestId").string("request ID"))
+                if !stopped && canFetch, let settings {
+                    await (client?.auxiliaryClient() ?? RemoteClient()).proxyControl(settings:settings,sessionID:try latest.required("proxySessionId").string("proxy session"),operation:"ack")
+                }
+            } else { retained += 1 }
+            if let networkError { streamRecoveryError = "復旧途中の本文を保存しました。記録は保持しています。\n" + networkError.localizedDescription }
+        }
+        if retained > 0 && streamRecoveryError == nil { streamRecoveryError = "復旧が未完了の記録が\(retained)件あります。生成先やプロキシ設定を確認してください。記録は保持しています。" }
+    }
+
+    private func rememberFailedGeneration(_ current: ActiveGeneration) {
+        guard current.failed, let plan = current.plan,
+              let chats = try? exchange?.source.required("chats").array("chats"),
+              let chat = chats.first(where: { $0["id"] == .string(current.chatID) }) else { return }
+        failedGenerationRetry = FailedGenerationRetry(chatID:current.chatID,chat:chat,plan:plan,titleAfterAppend:current.titleAfterAppend)
     }
 
     @MainActor private func prepareGenerationTokenCounts(id: UUID) async throws {
@@ -1140,6 +1516,7 @@ final class ChatState: ObservableObject {
     }
 
     private func invalidateGeneration() {
+        failedGenerationRetry = nil
         liveUsageVersion += 1; liveUsageTask = nil; liveTokenCounts = nil
         if let current = generation, current.running { cancelAutomaticEvaluation(generationID:current.id) }
         pendingTitleContext = nil
@@ -1478,7 +1855,7 @@ final class ChatState: ObservableObject {
         try applyLibrary(ChatFolders.apply(in: source, operation: operation), selectedID: exchange == nil ? "" : selectedID, preserveGeneration: true, now: now)
     }
 
-    private func applyLibrary(_ source: OrderedJSON, selectedID: String, resetViewFor: String? = nil, resetViewsFor: [String] = [], preserveGeneration: Bool = false, tokenUsage: OrderedJSON? = nil, usageEnabled: Bool? = nil, evaluationResults: OrderedJSON? = nil, navigation: BranchNavigation.HistoryResult? = nil, editing: MessageEditing.HistoryState? = nil, clipboard: OrderedJSON? = nil, now: Double = Date().timeIntervalSince1970 * 1000) throws {
+    private func applyLibrary(_ source: OrderedJSON, selectedID: String, resetViewFor: String? = nil, resetViewsFor: [String] = [], preserveGeneration: Bool = false, tokenUsage: OrderedJSON? = nil, usageEnabled: Bool? = nil, evaluationResults: OrderedJSON? = nil, navigation: BranchNavigation.HistoryResult? = nil, editing: MessageEditing.HistoryState? = nil, clipboard: OrderedJSON? = nil, openRouterStats: OrderedJSON? = nil, now: Double = Date().timeIntervalSince1970 * 1000) throws {
         guard !initialLoadFailed else { throw ExchangeError.invalid("保存ファイルを読めなかったため更新できません。明示的な置換が必要です") }
         let base = try document ?? SyncDocument(v3: exchange?.source ?? ChatLibrary.emptySource)
         let before = try exchange?.source ?? base.uiProjection()
@@ -1491,6 +1868,11 @@ final class ChatState: ObservableObject {
         if let usageEnabled { candidate = try candidate.mergingSnapshot(candidate.snapshot.replacing("state",with:candidate.snapshot.required("state").replacing("countTotalTokens",with:.bool(usageEnabled)))) }
         if let evaluationResults {
             candidate = try SyncDocument(snapshot:candidate.snapshot.replacing("state",with:candidate.snapshot.required("state").replacing("evaluationResults",with:evaluationResults)),v3Sidecar:candidate.v3Sidecar,v3RootOrder:candidate.v3RootOrder)
+        }
+        if let openRouterStats {
+            var roots = try candidate.snapshot.required("state")
+            for field in try openRouterStats.object("OpenRouter stats") { roots = roots.replacing(field.key,with:field.value) }
+            candidate = try SyncDocument(snapshot:candidate.snapshot.replacing("state",with:roots),v3Sidecar:candidate.v3Sidecar,v3RootOrder:candidate.v3RootOrder)
         }
         let changed = try WebExchange(source: candidate.uiProjection())
         let candidates = try BranchNavigation.candidates(in: changed.source)
@@ -1506,7 +1888,7 @@ final class ChatState: ObservableObject {
         let nextEditing = try editing ?? (navigation != nil ? editingHistory : MessageEditing.invalidatingHistory(editingHistory, before: before, after: changed.source))
         try store?.save(SavedChatState(exchange: changed, document: candidate, conversations: views, selectedConversationID: selectedID, style: displayStyle))
         if preserveGeneration, let current = generation {
-            generation = ActiveGeneration(id: current.id, chatID: current.chatID, baseSource: changed.source, path: current.path, plan: current.plan, output: current.output, running: current.running, completedSuccessfully:current.completedSuccessfully, usesRemoteTransport:current.usesRemoteTransport, titleAfterAppend:current.titleAfterAppend,tokenCounts:current.tokenCounts)
+            generation = ActiveGeneration(id: current.id, chatID: current.chatID, baseSource: changed.source, path: current.path, plan: current.plan, output: current.output, running: current.running, completedSuccessfully:current.completedSuccessfully, failed:current.failed, usesRemoteTransport:current.usesRemoteTransport, titleAfterAppend:current.titleAfterAppend,tokenCounts:current.tokenCounts)
         } else { invalidateGeneration() }
         branchCandidates = candidates
         conversations = views
@@ -1535,6 +1917,18 @@ final class ChatState: ObservableObject {
         let v3 = try OrderedJSON.decode(exportWebData())
         return try ChatExport.make(v3:v3,format:format,scope:scope,chatID:conversation?.id,visiblePath:scope == .all ? nil : conversation?.visibleMessages.map(\.id),compressed:compressed)
     }
+    func recoveryExport(exportedAt: Date = Date()) async throws -> Data {
+        let snapshot = document?.snapshot
+        let fileURL = store?.fileURL
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withInternetDateTime,.withFractionalSeconds]
+        let timestamp = formatter.string(from:exportedAt)
+        // Recovery must remain available when normal loading/validation has failed.
+        return try await Task.detached(priority:.userInitiated) {
+            try NativeRecoveryExport.make(liveSnapshot:snapshot,fileURL:fileURL,exportedAt:timestamp)
+        }.value
+    }
+
     func applySnapshot(_ snapshot: OrderedJSON) throws {
         guard !initialLoadFailed else { throw ExchangeError.invalid("保存ファイルを読めなかったため更新できません。明示的な置換が必要です") }
         let base = try document ?? SyncDocument(v3: exchange?.source ?? ChatLibrary.emptySource)
@@ -1590,5 +1984,147 @@ final class ChatState: ObservableObject {
             displayStyle = style
             persistenceError = nil
         } catch { persistenceError = "変更を保存できませんでした。表示と保存データは変更していません。\n" + error.localizedDescription }
+    }
+}
+
+private enum NativeOpenRouterStats {
+    static func roots(_ snapshot: OrderedJSON) throws -> OrderedJSON {
+        let state = try snapshot.required("state")
+        return .object([.init(key:"verifiedStats",value:state["verifiedStats"] ?? .object([])),
+                        .init(key:"pendingVerifications",value:state["pendingVerifications"] ?? .object([]))])
+    }
+    static func call(_ operation: String, roots: OrderedJSON, fields: [JSONField] = [], now: Double) throws -> OrderedJSON {
+        var projection = SharedWebProjection(), projected: [JSONField] = []
+        for root in try roots.object("stats roots") {
+            var entries: [JSONField] = []
+            for entry in try root.value.object("stats entries") {
+                let known = root.key == "verifiedStats" ? ["fetchedAt"] : ["generationId","chatId","targetNodeId","requestedAt","nextAttemptAt","attemptCount","status","lastAttemptAt","lastError"]
+                entries.append(.init(key:entry.key,value:.object(try entry.value.object("stats entry").map { field in
+                    .init(key:field.key,value:known.contains(where:field.key.matches) ? field.value : try projection.reference(field.value))
+                })))
+            }
+            projected.append(.init(key:root.key,value:.object(entries)))
+        }
+        let result = try SharedWebOperations.call("openRouterStats",.object([
+            .init(key:"operation",value:.string(operation)),.init(key:"state",value:.object(projected)),
+            .init(key:"now",value:.number(String(now)))] + fields))
+        if let changes = result["changes"] { return try OrderedJSONChanges.apply(changes,to:roots,opaque:projection.opaque) }
+        return result
+    }
+    static func key(chatID: String, nodeID: String) throws -> String {
+        try SharedWebOperations.call("openRouterStats",.object([.init(key:"operation",value:.string("key")),
+            .init(key:"chatId",value:.string(chatID)),.init(key:"targetNodeId",value:.string(nodeID))])).required("key").string("stats key")
+    }
+}
+
+extension ChatState {
+    private func queuedOpenRouterStats(_ current: ActiveGeneration, now: Double) throws -> OrderedJSON? {
+        guard current.usesRemoteTransport, current.completedSuccessfully || current.failed,
+              let generationID = current.output.generationID,
+              let chat = try current.baseSource.required("chats").array("chats").first(where:{ $0["id"] == .string(current.chatID) }),
+              chat["config"]?["providerId"] == .string("openrouter"),
+              let target = try current.plan?["targetNodeId"]?.string("node ID") else { return nil }
+        let key = try NativeOpenRouterStats.key(chatID:current.chatID,nodeID:target)
+        let action = OrderedJSON.object([.init(key:"type",value:.string("queue")),.init(key:"key",value:.string(key)),
+            .init(key:"verification",value:.object([.init(key:"generationId",value:.string(generationID)),
+                .init(key:"chatId",value:.string(current.chatID)),.init(key:"targetNodeId",value:.string(target))]))])
+        return try NativeOpenRouterStats.call("transition",roots:NativeOpenRouterStats.roots(publicationSnapshot()),fields:[.init(key:"action",value:action)],now:now)
+    }
+    private func saveOpenRouterStats(_ roots: OrderedJSON) throws {
+        try applyLibrary(exchange?.source ?? ChatLibrary.emptySource,selectedID:selectedID,preserveGeneration:true,openRouterStats:roots)
+    }
+    private func changeOpenRouterVerification(_ action: OrderedJSON, now: Double) throws {
+        let before = try NativeOpenRouterStats.roots(publicationSnapshot())
+        let after = try NativeOpenRouterStats.call("transition",roots:before,fields:[.init(key:"action",value:action)],now:now)
+        if before != after { try saveOpenRouterStats(after) }
+    }
+    func isVerifyingOpenRouter(_ key: String) -> Bool { openRouterVerificationTasks[Data(key.utf8)] != nil }
+    func retryOpenRouterVerification(_ key: String, now: Double = Date().timeIntervalSince1970 * 1000) throws {
+        try changeOpenRouterVerification(.object([.init(key:"type",value:.string("retry")),.init(key:"key",value:.string(key))]),now:now)
+    }
+    func recoverOpenRouterVerifications(now: Double = Date().timeIntervalSince1970 * 1000) throws {
+        let roots = try NativeOpenRouterStats.roots(publicationSnapshot())
+        let next = try NativeOpenRouterStats.call("recover",roots:roots,now:now)
+        if next != roots { try saveOpenRouterStats(next) }
+    }
+    @MainActor func verifyOpenRouterGeneration(_ key: String,
+        readCredential: ProviderModels.CredentialReader = RemoteCredentials.load(providerID:),
+        fetch: (URLRequest) async throws -> OrderedJSON = OpenRouterCreditsClient.fetch,
+        now: Double = Date().timeIntervalSince1970 * 1000) async throws {
+        let roots = try publicationSnapshot().required("state")
+        guard let pending = roots["pendingVerifications"]?[key] else { return }
+        let chatID = try pending.required("chatId").string("chat ID"), nodeID = try pending.required("targetNodeId").string("node ID")
+        guard try NativeOpenRouterStats.key(chatID:chatID,nodeID:nodeID).utf8.elementsEqual(key.utf8) else { throw ExchangeError.invalid("使用量確認の識別子が一致しません") }
+        let generationID = try pending.required("generationId").string("generation ID")
+        func node() throws -> OrderedJSON? {
+            try exchange?.source.required("chats").array("chats").first(where:{ $0["id"] == .string(chatID) })?["branchTree"]?["nodes"]?[nodeID]
+        }
+        let originalNode = try node()
+        let action: [JSONField] = [.init(key:"key",value:.string(key))]
+        func failed() throws {
+            try changeOpenRouterVerification(.object(action + [.init(key:"type",value:.string("failed")),
+                .init(key:"error",value:.string("OpenRouterの使用量を確認できませんでした。再確認できます。")),
+                .init(key:"nextAttemptAt",value:.number("9007199254740991"))]),now:now)
+        }
+        let record: RemoteCredentialRecord, providerSnapshot = roots["providers"]?["openrouter"] ?? .null
+        let request: URLRequest
+        do {
+            guard originalNode?["role"] == .string("assistant"),
+                  let provider = try ProviderModels.providers(in:roots).first(where:{ $0.id == "openrouter" }) else { throw ExchangeError.invalid("使用量の対象がありません") }
+            record = try ProviderModels.credential(provider,read:readCredential)
+            let envelope = try SharedWebOperations.call("openRouterStats",.object([.init(key:"operation",value:.string("request")),.init(key:"generationId",value:.string(generationID))]))
+            guard envelope["authentication"]?["header"] == .string("Authorization"), envelope["authentication"]?["scheme"] == .string("Bearer") else { throw ExchangeError.invalid("使用量API認証が不正です") }
+            let bound = OrderedJSON.object([.init(key:"endpoint",value:try envelope.required("endpoint")),.init(key:"headers",value:.object([])),
+                .init(key:"authentication",value:.array([.object([.init(key:"name",value:.string("Authorization")),.init(key:"prefix",value:.string("Bearer "))])]))])
+            var prepared = try RemoteRequest.bindEnvelope(bound,body:.null,originalURL:record.settings.validatedURL(),key:record.key)
+            prepared.httpMethod = "GET"; prepared.httpBody = nil; prepared.timeoutInterval = 60
+            request = prepared
+        } catch { try failed(); return }
+        try changeOpenRouterVerification(.object(action + [.init(key:"type",value:.string("fetching"))]),now:now)
+        let expected = try publicationSnapshot().required("state")["pendingVerifications"]?[key]
+        let payload: OrderedJSON
+        do { payload = try await fetch(request); try Task.checkCancellation() }
+        catch is CancellationError { throw CancellationError() }
+        catch {
+            if try publicationSnapshot().required("state")["pendingVerifications"]?[key] == expected { try failed() }
+            return
+        }
+        guard try publicationSnapshot().required("state")["pendingVerifications"]?[key] == expected else { return }
+        guard try readCredential("openrouter") == record,
+              try (publicationSnapshot().required("state")["providers"]?["openrouter"] ?? .null) == providerSnapshot,
+              try node() == originalNode else { try failed(); return }
+        let parsed = try SharedWebOperations.call("openRouterStats",.object([.init(key:"operation",value:.string("parse")),
+            .init(key:"payload",value:payload),.init(key:"generationId",value:.string(generationID)),.init(key:"now",value:.number(String(now)))]))
+        guard let stats = parsed["stats"] else { try failed(); return }
+        try changeOpenRouterVerification(.object([.init(key:"type",value:.string("verified")),.init(key:"key",value:.string(key)),.init(key:"stats",value:stats)]),now:now)
+    }
+    @MainActor func runOpenRouterVerifications() {
+        openRouterVerificationTimer?.cancel(); openRouterVerificationTimer = nil
+        do {
+            let schedule = try NativeOpenRouterStats.call("schedule",roots:NativeOpenRouterStats.roots(publicationSnapshot()),now:Date().timeIntervalSince1970 * 1000)
+            for raw in try schedule.required("dueKeys").array("due keys") {
+                let key = try raw.string("stats key"), identity = Data(key.utf8)
+                guard openRouterVerificationTasks[identity] == nil else { continue }
+                openRouterVerificationTasks[identity] = Task { @MainActor [weak self] in
+                    guard let self else { return }
+                    do {
+                        try await self.verifyOpenRouterGeneration(key)
+                        self.openRouterVerificationTasks.removeValue(forKey:identity)
+                        self.openRouterVerificationError = nil
+                        self.runOpenRouterVerifications()
+                    } catch {
+                        self.openRouterVerificationTasks.removeValue(forKey:identity)
+                        self.openRouterVerificationError = "使用量の確認状態を保存できませんでした。保存データを保持しています。"
+                    }
+                }
+            }
+            if let next = schedule["nextAt"], next != .null {
+                let delay = max(0,try next.number("next verification") - Date().timeIntervalSince1970 * 1000)
+                openRouterVerificationTimer = Task { @MainActor [weak self] in
+                    do { try await Task.sleep(nanoseconds:UInt64(min(delay,86_400_000) * 1_000_000)); self?.runOpenRouterVerifications() }
+                    catch { return }
+                }
+            }
+        } catch { openRouterVerificationError = "使用量の確認予定を読み取れませんでした。保存データを保持しています。" }
     }
 }
