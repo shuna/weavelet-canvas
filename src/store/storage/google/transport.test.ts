@@ -2,6 +2,7 @@ import { afterEach, expect, it, vi } from 'vitest';
 import { DriveTransport, nextSyncFolderName, DEFAULT_SYNC_FOLDER_NAME } from './transport';
 import useCloudAuthStore from '@store/cloud-auth-store';
 import { listDriveFiles, getDriveFolderSize } from '@api/google-api';
+import { InvalidSyncFileIdError } from '../sync/transport';
 const json = (data: unknown, status = 200) => new Response(JSON.stringify(data), { status });
 afterEach(() => { vi.unstubAllGlobals(); vi.restoreAllMocks(); vi.useRealTimers(); });
 
@@ -38,6 +39,34 @@ it('rejects malformed or cyclic listing and change cursors', async () => {
   await expect(drive.history('dataset')).rejects.toThrow('listing token');
   vi.stubGlobal('fetch', vi.fn().mockResolvedValue(json({ changes: [] })));
   await expect(drive.changes('start')).rejects.toThrow('change token');
+});
+
+it('includes the Google API error message and status in failed Drive requests', async () => {
+  vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(JSON.stringify({
+    error: { code: 400, message: 'Invalid field selection', status: 'INVALID_ARGUMENT', errors: [{ reason: 'invalidParameter', location: 'fields' }] },
+  }), { status: 400, statusText: 'Bad Request' })));
+  await expect(new DriveTransport(() => 'token').read('private-file-id'))
+    .rejects.toThrow('Google Drive 400 (GET /drive/v3/files/{fileId}): Invalid field selection — INVALID_ARGUMENT — invalidParameter at fields');
+});
+
+it('shows the rejected upload ID, parent, kind and whether the ID was generated in this session', async () => {
+  const drive = new DriveTransport(() => 'token');
+  const fetch = vi.fn().mockResolvedValueOnce(json({ ids: ['generated-id'] }))
+    .mockResolvedValueOnce(new Response(JSON.stringify({ error: {
+      code: 400, message: 'Invalid Value', status: 'INVALID_ARGUMENT',
+      errors: [{ domain: 'global', reason: 'invalid', location: 'fileId', locationType: 'parameter' }],
+    } }), { status: 400 }));
+  vi.stubGlobal('fetch', fetch);
+  await drive.ids(1);
+  await expect(drive.put('generated-id', 'parent-id', 'part', new Uint8Array([1])))
+    .rejects.toThrow('fileId="generated-id" (length 12, generated in this session: true); parentId="parent-id"; kind=part');
+
+  fetch.mockResolvedValueOnce(new Response(JSON.stringify({ error: {
+    code: 400, message: 'Invalid Value', status: 'INVALID_ARGUMENT',
+    errors: [{ domain: 'global', reason: 'invalid', location: 'fileId', locationType: 'parameter' }],
+  } }), { status: 400 }));
+  await expect(drive.put('restored-id', 'parent-id', 'part', new Uint8Array([1])))
+    .rejects.toBeInstanceOf(InvalidSyncFileIdError);
 });
 
 it('retries a throttled response with backoff and preserves the response when its retry budget is exhausted', async () => {

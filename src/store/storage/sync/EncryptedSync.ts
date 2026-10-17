@@ -8,7 +8,7 @@ import { collectHistoryAsync, replayHistoryAsync, decodePartsAsync, encodeWireAs
 import { syncPhase, completedFile, syncStage } from '../google/progress';
 import { createKeyEnvelope, unlockKey, encode, decode, encrypt, decrypt, digest, type KeyEnvelope } from '../google/crypto';
 import { diffHashedRecords, applyChanges, type Records, type Snapshot, type Change, diffRecords } from '../google/records';
-import { SyncFileNotFoundError, type SyncDataset, type SyncTransport } from './transport';
+import { InvalidSyncFileIdError, SyncFileNotFoundError, type SyncDataset, type SyncTransport } from './transport';
 import { syncCache, readSyncEntries, writeSyncCache, rememberedSyncKey } from '../google/cache';
 
 import type { Commit } from '../google/replay';
@@ -542,9 +542,15 @@ export class EncryptedSync {
     for (const file of remaining.filter(file => file.kind === publication)) await send(file);
   }
   private async sendPending() {
-    const pending = this.cache.pending;
+    let pending = this.cache.pending;
     if (!pending) return;
-    await this.sendFiles(pending, 'commit');
+    try { await this.sendFiles(pending, 'commit'); }
+    catch (error) {
+      if (!(error instanceof InvalidSyncFileIdError)) throw error;
+      await this.reissuePendingCommit(pending);
+      pending = this.cache.pending!;
+      await this.sendFiles(pending, 'commit');
+    }
     syncPhase('saving');
     (this.cache.parts ??= {})[pending.id] = pending.files.filter(file => file.kind === 'part').map(file => file.id);
     this.cache.commits[pending.id] = pending.commit;
@@ -552,13 +558,66 @@ export class EncryptedSync {
     delete this.cache.pending;
     await this.save(pending.files.flatMap(f => [`outbox:${f.id}`, `ack:${f.id}`]));
   }
+  private async reissuePendingCommit(pending: Pending) {
+    const oldIds = pending.files.map(file => file.id);
+    const { files, ids } = await this.reissueFiles(pending.id, pending.files, 'commit');
+    const replacement = { ...pending, id: ids.get(pending.id)!, files };
+    if (!replacement.id) throw new Error('Cannot replace the rejected sync commit ID.');
+    this.cache.pending = replacement;
+    this.persistedCommits.delete(pending.id);
+    this.encodedCommits.delete(pending.id);
+    await this.save(oldIds.flatMap(id => [`outbox:${id}`, `ack:${id}`]).concat(`commit:${pending.id}`));
+  }
+  private async reissuePendingPack(pending: Compaction) {
+    const oldIds = pending.files.map(file => file.id);
+    const { files, ids } = await this.reissueFiles(pending.id, pending.files, 'pack');
+    const id = ids.get(pending.id);
+    if (!id) throw new Error('Cannot replace the rejected sync pack ID.');
+    this.cache.compaction = { ...pending, id, files,
+      manifest: { ...pending.manifest, parts: pending.manifest.parts.map(part => ids.get(part) ?? part) } };
+    await this.save(oldIds.flatMap(fileId => [`outbox:${fileId}`, `ack:${fileId}`]));
+  }
+  private async reissueFiles(id: string, files: Pending['files'], publication: 'commit' | 'pack') {
+    if (files.filter(file => file.kind === publication).length !== 1 || !files.some(file => file.id === id && file.kind === publication)) {
+      throw new Error(`Cannot recover the rejected sync ${publication} ID.`);
+    }
+    const oldIds = files.map(file => file.id);
+    const newIds = await this.transport.ids(oldIds.length);
+    const ids = new Map(oldIds.map((oldId, index) => [oldId, newIds[index]]));
+    if (newIds.length !== oldIds.length || new Set(newIds).size !== newIds.length || newIds.some(newId => !newId || oldIds.includes(newId))) {
+      throw new Error(`Drive did not return fresh IDs for the rejected sync ${publication}.`);
+    }
+    const replacementFiles: Pending['files'] = [];
+    for (const file of files) {
+      const [ciphertext] = await readSyncEntries(this.dataset, [`outbox:${file.id}`]);
+      if (!ciphertext || ciphertext.length !== file.size) throw new Error(`Missing local upload data for the rejected sync ${publication}.`);
+      let plaintext = await decrypt(this.requireKey(), ciphertext, this.context(file.id));
+      if (file.kind === publication) {
+        const manifest = await decodeAsync<{ version: number; parts?: string[] }>(plaintext);
+        if (manifest.version === 1 && manifest.parts) {
+          plaintext = await encodeAsync({ ...manifest, parts: manifest.parts.map(part => ids.get(part) ?? part) });
+        }
+      }
+      const newId = ids.get(file.id)!;
+      const bytes = await encrypt(this.requireKey(), plaintext, this.context(newId));
+      replacementFiles.push({ id: newId, kind: file.kind, bytes, size: bytes.length, sent: false });
+    }
+    return { files: replacementFiles, ids };
+  }
   private async finishCompaction() {
-    const pending = this.cache.compaction;
-    if (!pending) return;
+    const initial = this.cache.compaction;
+    if (!initial) return;
+    let pending: Compaction = initial;
     if (useGoogleSyncDiagnostics.getState().compaction.status !== 'running') {
       reportCompaction({ status: 'running', reason: 'resume', sourceFiles: pending.remove.length, newFiles: pending.files.length });
     }
-    await this.sendFiles(pending, 'pack');
+    try { await this.sendFiles(pending, 'pack'); }
+    catch (error) {
+      if (!(error instanceof InvalidSyncFileIdError)) throw error;
+      await this.reissuePendingPack(pending);
+      pending = this.cache.compaction!;
+      await this.sendFiles(pending, 'pack');
+    }
     try {
       const manifest = await this.readPackManifest(pending.id);
       if (await digest(await encodeAsync(manifest)) !== await digest(await encodeAsync(pending.manifest))) {

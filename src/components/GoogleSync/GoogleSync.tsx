@@ -200,6 +200,7 @@ const GoogleSync = ({ clientId, openOnMount = false, showEntry = true, isModalOp
   const syncStatus = useGStore((state) => state.syncStatus);
   const cloudSync = useGStore((state) => state.cloudSync);
   const setSyncStatus = useGStore((state) => state.setSyncStatus);
+  const setSyncError = useGStore((state) => state.setSyncError);
   const syncTargetConfirmed = useGStore((state) => state.syncTargetConfirmed);
   const progress = useSyncProgressDisplay();
   const [showSlowSync, setShowSlowSync] = useState(false);
@@ -239,6 +240,7 @@ const GoogleSync = ({ clientId, openOnMount = false, showEntry = true, isModalOp
       validated = await validateGoogleOath2AccessToken(_googleAccessToken);
     } catch (error) {
       setSyncStatus('unauthenticated');
+      setSyncError((error as Error).message);
       showToast((error as Error).message, 'error');
       return;
     }
@@ -266,6 +268,7 @@ const GoogleSync = ({ clientId, openOnMount = false, showEntry = true, isModalOp
         }
       } catch (e: unknown) {
         setSyncStatus(resolveGoogleSyncErrorStatus(e));
+        setSyncError(e instanceof Error ? e.message : String(e));
         if (!(e instanceof SyncConflictError)) showToast((e as Error).message, 'error');
       }
     } else {
@@ -339,7 +342,9 @@ const GooglePopup = ({
   const { t } = useTranslation(['drive']);
 
   const syncStatus = useGStore((state) => state.syncStatus);
+  const syncError = useGStore((state) => state.syncError);
   const setSyncStatus = useGStore((state) => state.setSyncStatus);
+  const setSyncError = useGStore((state) => state.setSyncError);
   const cloudSync = useGStore((state) => state.cloudSync);
   const googleAccessToken = useGStore((state) => state.googleAccessToken);
   const setFileId = useGStore((state) => state.setFileId);
@@ -532,6 +537,7 @@ const GooglePopup = ({
       setSyncStatus('synced');
     } catch (e: unknown) {
       setSyncStatus(resolveGoogleSyncErrorStatus(e));
+      setSyncError(e instanceof Error ? e.message : String(e));
       if (!(e instanceof SyncConflictError)) showToast((e as Error).message, 'error');
     }
   };
@@ -579,6 +585,7 @@ const GooglePopup = ({
       setSyncStatus('synced');
     } catch (e: unknown) {
       setSyncStatus(resolveGoogleSyncErrorStatus(e));
+      setSyncError(e instanceof Error ? e.message : String(e));
       if (!(e instanceof SyncConflictError)) showToast((e as Error).message, 'error');
     }
   };
@@ -604,6 +611,7 @@ const GooglePopup = ({
       setSyncStatus('synced');
     } catch (e: unknown) {
       setSyncStatus(resolveGoogleSyncErrorStatus(e));
+      setSyncError(e instanceof Error ? e.message : String(e));
       if (!(e instanceof SyncConflictError)) showToast((e as Error).message, 'error');
     }
   };
@@ -616,6 +624,7 @@ const GooglePopup = ({
       setSyncStatus('synced');
     } catch (error) {
       setSyncStatus(resolveGoogleSyncErrorStatus(error));
+      setSyncError(error instanceof Error ? error.message : String(error));
       if (!(error instanceof SyncConflictError)) showToast((error as Error).message, 'error');
     }
   };
@@ -677,6 +686,7 @@ const GooglePopup = ({
         setSyncStatus('synced');
       } catch (error) {
         setSyncStatus(resolveGoogleSyncErrorStatus(error));
+        setSyncError(error instanceof Error ? error.message : String(error));
         if (!(error instanceof SyncConflictError)) showToast((error as Error).message, 'error');
       }
       return;
@@ -754,6 +764,7 @@ const GooglePopup = ({
           {isBusy && <SyncIcon status='syncing' />}
           <div id='google-sync-guidance' role='status' className='text-sm text-gray-600 dark:text-gray-300'>
             {syncStatus === 'error' && !conflict && <p>{t('encryption.failed')}</p>}
+            {syncError && syncStatus === 'error' && <p role='alert' className='max-w-xl break-words rounded bg-red-50 p-2 text-xs text-red-800 dark:bg-red-950 dark:text-red-200'>{syncError}</p>}
             <p>{t(statusMessageKey)}</p>
             {isBusy && <GoogleSyncProgress />}
           </div>
