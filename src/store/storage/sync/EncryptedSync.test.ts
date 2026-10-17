@@ -13,7 +13,9 @@ class MemoryTransport implements SyncTransport {
   historyCalls = 0;
   failHistory = false;
   failCommitOnce = false;
+  failPackOnce = false;
   rejectCommitIdOnce = false;
+  rejectPackIdOnce = false;
   hidden = new Set<string>();
   async ids(count: number) { return Array.from({ length: count }, () => `memory-${++this.next}`); }
   async folder(id: string, headerId: string) { this.headers.set(id, headerId); return { id }; }
@@ -34,6 +36,14 @@ class MemoryTransport implements SyncTransport {
     }
     if (kind === 'commit' && this.rejectCommitIdOnce) {
       this.rejectCommitIdOnce = false;
+      throw new InvalidSyncFileIdError('invalid fileId');
+    }
+    if (kind === 'pack' && this.failPackOnce) {
+      this.failPackOnce = false;
+      throw new Error('offline');
+    }
+    if (kind === 'pack' && this.rejectPackIdOnce) {
+      this.rejectPackIdOnce = false;
       throw new InvalidSyncFileIdError('invalid fileId');
     }
     const existing = this.files.get(id);
@@ -185,6 +195,22 @@ it('reissues a persisted local commit with fresh IDs when Drive rejects its file
   expect((await reader.pull()).state.defaultSystemMessage).toBe('dark');
   expect(transport.files.size).toBeGreaterThan(2);
   expect(transport.files.has(failedCommitId!)).toBe(false);
+});
+
+it('reissues a local compaction pack with fresh IDs when Drive rejects its file ID', async () => {
+  const transport = new MemoryTransport();
+  const password = 'test-only shared sync passphrase';
+  const { session } = await EncryptedSync.create(transport, password);
+  const snapshot: Snapshot = { version: 18, state: { chats: [], contentStore: {}, defaultSystemMessage: 'dark' } };
+  await session.push(snapshot, true);
+  transport.failPackOnce = true;
+  await expect(session.compactHistory()).rejects.toThrow('offline');
+  const reader = new EncryptedSync(session.dataset, transport);
+  await reader.restoreKey();
+  transport.rejectPackIdOnce = true;
+  await reader.compactHistory();
+  expect([...transport.files.values()].some(file => file.kind === 'pack')).toBe(true);
+  expect((await reader.pull()).state.defaultSystemMessage).toBe('dark');
 });
 
 it('does not initialize over existing history when another browser has no baseline', async () => {

@@ -54,7 +54,7 @@ it('shows the rejected upload ID, parent, kind and whether the ID was generated 
   const fetch = vi.fn().mockResolvedValueOnce(json({ ids: ['generated-id'] }))
     .mockResolvedValueOnce(new Response(JSON.stringify({ error: {
       code: 400, message: 'Invalid Value', status: 'INVALID_ARGUMENT',
-      errors: [{ reason: 'invalid', location: 'fileId' }],
+      errors: [{ domain: 'global', reason: 'invalid', location: 'fileId', locationType: 'parameter' }],
     } }), { status: 400 }));
   vi.stubGlobal('fetch', fetch);
   await drive.ids(1);
@@ -63,7 +63,7 @@ it('shows the rejected upload ID, parent, kind and whether the ID was generated 
 
   fetch.mockResolvedValueOnce(new Response(JSON.stringify({ error: {
     code: 400, message: 'Invalid Value', status: 'INVALID_ARGUMENT',
-    errors: [{ reason: 'invalid', location: 'fileId' }],
+    errors: [{ domain: 'global', reason: 'invalid', location: 'fileId', locationType: 'parameter' }],
   } }), { status: 400 }));
   await expect(drive.put('restored-id', 'parent-id', 'part', new Uint8Array([1])))
     .rejects.toBeInstanceOf(InvalidSyncFileIdError);
