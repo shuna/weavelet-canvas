@@ -24,9 +24,10 @@ export interface DriveFile extends GoogleFileResource {
 }
 export { SyncFileNotFoundError as DriveNotFoundError };
 export class DriveTransport implements SyncTransport<DriveFile> {
+  private readonly generatedIds = new Set<string>();
   constructor(private token: () => string) {}
 
-  private async driveError(response: Response, url: string, method = 'GET'): Promise<Error> {
+  private async driveError(response: Response, url: string, method = 'GET', context?: string): Promise<Error> {
     let detail = response.statusText;
     try {
       const body = await response.text();
@@ -35,11 +36,16 @@ export class DriveTransport implements SyncTransport<DriveFile> {
           const parsed = JSON.parse(body);
           const apiError = parsed?.error;
           const reasons = Array.isArray(apiError?.errors)
-            ? apiError.errors.map((item: { reason?: string; location?: string }) => [item.reason, item.location].filter(Boolean).join(' at ')).filter(Boolean).join(', ')
+            ? apiError.errors.map((item: { domain?: string; reason?: string; location?: string; locationType?: string }) => {
+              const reason = [item.domain, item.reason].filter(Boolean).join('/');
+              const location = item.location && `${item.locationType ? `${item.locationType} ` : ''}${item.location}`;
+              return [reason, location && `${reason ? 'at ' : ''}${location}`].filter(Boolean).join(' ');
+            }).filter(Boolean).join(', ')
             : '';
-          detail = [apiError?.message, apiError?.status, reasons].filter(Boolean).join(' — ') || body;
+          detail = [apiError?.message, apiError?.status, reasons, context].filter(Boolean).join(' — ') || body;
         } catch { detail = body; }
       }
+      if (context && !detail.includes(context)) detail += ` — ${context}`;
     } catch { /* Keep status text if the response body is unavailable. */ }
     const endpoint = new URL(url).pathname.replace(/\/files\/[^/]+(?=\/|$)/g, '/files/{fileId}');
     return new Error(`Google Drive ${response.status} (${method} ${endpoint}): ${detail.slice(0, 1000) || 'Unknown error'}`);
@@ -95,6 +101,7 @@ export class DriveTransport implements SyncTransport<DriveFile> {
         throw new Error('Drive did not return the requested file IDs.');
       }
       ids.push(...data.ids);
+      data.ids.forEach((id: string) => this.generatedIds.add(id));
     }
     if (new Set(ids).size !== count) throw new Error('Drive returned duplicate file IDs.');
     return ids;
@@ -156,7 +163,8 @@ export class DriveTransport implements SyncTransport<DriveFile> {
       if (await digest(await this.read(id)) !== await digest(bytes)) throw new Error('Drive file ID collision.');
       return;
     }
-    if (!response.ok) throw await this.driveError(response, 'https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id', 'POST');
+    if (!response.ok) throw await this.driveError(response, 'https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id', 'POST',
+      `fileId=${JSON.stringify(id)} (length ${id.length}, generated in this session: ${this.generatedIds.has(id)}); parentId=${JSON.stringify(dataset)}; kind=${kind}`);
     finish(bytes.length);
   }
   async startToken(): Promise<string> {

@@ -48,6 +48,26 @@ it('includes the Google API error message and status in failed Drive requests', 
     .rejects.toThrow('Google Drive 400 (GET /drive/v3/files/{fileId}): Invalid field selection — INVALID_ARGUMENT — invalidParameter at fields');
 });
 
+it('shows the rejected upload ID, parent, kind and whether the ID was generated in this session', async () => {
+  const drive = new DriveTransport(() => 'token');
+  const fetch = vi.fn().mockResolvedValueOnce(json({ ids: ['generated-id'] }))
+    .mockResolvedValueOnce(new Response(JSON.stringify({ error: {
+      code: 400, message: 'Invalid Value', status: 'INVALID_ARGUMENT',
+      errors: [{ reason: 'invalid', location: 'fileId' }],
+    } }), { status: 400 }));
+  vi.stubGlobal('fetch', fetch);
+  await drive.ids(1);
+  await expect(drive.put('generated-id', 'parent-id', 'part', new Uint8Array([1])))
+    .rejects.toThrow('fileId="generated-id" (length 12, generated in this session: true); parentId="parent-id"; kind=part');
+
+  fetch.mockResolvedValueOnce(new Response(JSON.stringify({ error: {
+    code: 400, message: 'Invalid Value', status: 'INVALID_ARGUMENT',
+    errors: [{ reason: 'invalid', location: 'fileId' }],
+  } }), { status: 400 }));
+  await expect(drive.put('restored-id', 'parent-id', 'part', new Uint8Array([1])))
+    .rejects.toThrow('fileId="restored-id" (length 11, generated in this session: false)');
+});
+
 it('retries a throttled response with backoff and preserves the response when its retry budget is exhausted', async () => {
   vi.useFakeTimers();
   vi.spyOn(Math, 'random').mockReturnValue(0);
