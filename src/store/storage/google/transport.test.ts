@@ -2,6 +2,7 @@ import { afterEach, expect, it, vi } from 'vitest';
 import { DriveTransport, nextSyncFolderName, DEFAULT_SYNC_FOLDER_NAME } from './transport';
 import useCloudAuthStore from '@store/cloud-auth-store';
 import { listDriveFiles, getDriveFolderSize } from '@api/google-api';
+import { InvalidSyncFileIdError } from '../sync/transport';
 const json = (data: unknown, status = 200) => new Response(JSON.stringify(data), { status });
 afterEach(() => { vi.unstubAllGlobals(); vi.restoreAllMocks(); vi.useRealTimers(); });
 
@@ -65,7 +66,7 @@ it('shows the rejected upload ID, parent, kind and whether the ID was generated 
     errors: [{ reason: 'invalid', location: 'fileId' }],
   } }), { status: 400 }));
   await expect(drive.put('restored-id', 'parent-id', 'part', new Uint8Array([1])))
-    .rejects.toThrow('fileId="restored-id" (length 11, generated in this session: false)');
+    .rejects.toBeInstanceOf(InvalidSyncFileIdError);
 });
 
 it('retries a throttled response with backoff and preserves the response when its retry budget is exhausted', async () => {

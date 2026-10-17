@@ -1,7 +1,7 @@
 import { beforeEach, expect, it } from 'vitest';
 import { IDBFactory } from 'fake-indexeddb';
 import { EncryptedSync } from './EncryptedSync';
-import { SyncFileNotFoundError, type SyncChange, type SyncTransport } from './transport';
+import { InvalidSyncFileIdError, SyncFileNotFoundError, type SyncChange, type SyncTransport } from './transport';
 import type { Snapshot } from '../google/records';
 
 class MemoryTransport implements SyncTransport {
@@ -12,6 +12,8 @@ class MemoryTransport implements SyncTransport {
   writes: string[] = [];
   historyCalls = 0;
   failHistory = false;
+  failCommitOnce = false;
+  rejectCommitIdOnce = false;
   hidden = new Set<string>();
   async ids(count: number) { return Array.from({ length: count }, () => `memory-${++this.next}`); }
   async folder(id: string, headerId: string) { this.headers.set(id, headerId); return { id }; }
@@ -26,6 +28,14 @@ class MemoryTransport implements SyncTransport {
     return file.bytes.slice();
   }
   async put(id: string, dataset: string, kind: string, bytes: Uint8Array) {
+    if (kind === 'commit' && this.failCommitOnce) {
+      this.failCommitOnce = false;
+      throw new Error('offline');
+    }
+    if (kind === 'commit' && this.rejectCommitIdOnce) {
+      this.rejectCommitIdOnce = false;
+      throw new InvalidSyncFileIdError('invalid fileId');
+    }
     const existing = this.files.get(id);
     if (existing) { expect(existing.bytes).toEqual(bytes); return; }
     this.files.set(id, { dataset, kind, bytes: bytes.slice() });
@@ -156,6 +166,25 @@ it('downloads without publishing a persisted outbox and discards it only after a
   await reader.push(received);
   expect(transport.writes).toHaveLength(count);
   expect((await reader.pull()).state.defaultSystemMessage).toBe('dark');
+});
+
+it('reissues a persisted local commit with fresh IDs when Drive rejects its file ID', async () => {
+  const transport = new MemoryTransport();
+  const password = 'test-only shared sync passphrase';
+  const { session, file } = await EncryptedSync.create(transport, password);
+  const snapshot: Snapshot = { version: 18, state: { chats: [], contentStore: {}, defaultSystemMessage: 'dark' } };
+  transport.failCommitOnce = true;
+  await expect(session.push(snapshot, true)).rejects.toThrow('offline');
+  const failedCommitId = transport.next > 2 ? `memory-${transport.next - 1}` : undefined;
+  expect(failedCommitId).toBeTruthy();
+
+  const reader = new EncryptedSync(file.id, transport);
+  await reader.restoreKey();
+  transport.rejectCommitIdOnce = true;
+  await reader.push(snapshot, true);
+  expect((await reader.pull()).state.defaultSystemMessage).toBe('dark');
+  expect(transport.files.size).toBeGreaterThan(2);
+  expect(transport.files.has(failedCommitId!)).toBe(false);
 });
 
 it('does not initialize over existing history when another browser has no baseline', async () => {

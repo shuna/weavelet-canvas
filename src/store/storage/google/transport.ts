@@ -1,4 +1,4 @@
-import { SyncFileNotFoundError, type SyncChange, type SyncTransport } from '../sync/transport';
+import { InvalidSyncFileIdError, SyncFileNotFoundError, type SyncChange, type SyncTransport } from '../sync/transport';
 import type { TransferPurpose } from './diagnostics';
 import { measure, recordMetric } from './metrics';
 import { beginTransfer } from './progress';
@@ -29,12 +29,14 @@ export class DriveTransport implements SyncTransport<DriveFile> {
 
   private async driveError(response: Response, url: string, method = 'GET', context?: string): Promise<Error> {
     let detail = response.statusText;
+    let invalidFileId = false;
     try {
       const body = await response.text();
       if (body) {
         try {
           const parsed = JSON.parse(body);
           const apiError = parsed?.error;
+          invalidFileId = response.status === 400 && apiError?.errors?.some((item: { location?: string }) => item.location === 'fileId' || item.location === 'parameter fileId');
           const reasons = Array.isArray(apiError?.errors)
             ? apiError.errors.map((item: { domain?: string; reason?: string; location?: string; locationType?: string }) => {
               const reason = [item.domain, item.reason].filter(Boolean).join('/');
@@ -48,7 +50,8 @@ export class DriveTransport implements SyncTransport<DriveFile> {
       if (context && !detail.includes(context)) detail += ` — ${context}`;
     } catch { /* Keep status text if the response body is unavailable. */ }
     const endpoint = new URL(url).pathname.replace(/\/files\/[^/]+(?=\/|$)/g, '/files/{fileId}');
-    return new Error(`Google Drive ${response.status} (${method} ${endpoint}): ${detail.slice(0, 1000) || 'Unknown error'}`);
+    const message = `Google Drive ${response.status} (${method} ${endpoint}): ${detail.slice(0, 1000) || 'Unknown error'}`;
+    return invalidFileId ? new InvalidSyncFileIdError(message) : new Error(message);
   }
 
   private async request(url: string, init: RequestInit = {}) {
