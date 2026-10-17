@@ -26,7 +26,7 @@ export { SyncFileNotFoundError as DriveNotFoundError };
 export class DriveTransport implements SyncTransport<DriveFile> {
   constructor(private token: () => string) {}
 
-  private async driveError(response: Response): Promise<Error> {
+  private async driveError(response: Response, url: string, method = 'GET'): Promise<Error> {
     let detail = response.statusText;
     try {
       const body = await response.text();
@@ -41,7 +41,8 @@ export class DriveTransport implements SyncTransport<DriveFile> {
         } catch { detail = body; }
       }
     } catch { /* Keep status text if the response body is unavailable. */ }
-    return new Error(`Google Drive ${response.status}: ${detail.slice(0, 1000) || 'Unknown error'}`);
+    const endpoint = new URL(url).pathname.replace(/\/files\/[^/]+(?=\/|$)/g, '/files/{fileId}');
+    return new Error(`Google Drive ${response.status} (${method} ${endpoint}): ${detail.slice(0, 1000) || 'Unknown error'}`);
   }
 
   private async request(url: string, init: RequestInit = {}) {
@@ -76,7 +77,7 @@ export class DriveTransport implements SyncTransport<DriveFile> {
   private async json(url: string, init?: RequestInit): Promise<any> {
     const started = performance.now();
     const response = await this.request(url, init);
-    if (!response.ok) throw await this.driveError(response);
+    if (!response.ok) throw await this.driveError(response, url, init?.method ?? 'GET');
     const text = await response.text();
     recordMetric('drive', started, typeof init?.body === 'string' ? new TextEncoder().encode(init.body).length : 0, new TextEncoder().encode(text).length);
     return JSON.parse(text);
@@ -125,7 +126,7 @@ export class DriveTransport implements SyncTransport<DriveFile> {
       const file = await this.metadata(id);
       if (file.id === id && file.mimeType === SYNC_FOLDER_TYPE && file.appProperties?.weaveletSync === '1' && file.appProperties.headerId === headerId) return file;
     }
-    if (!response.ok) throw await this.driveError(response);
+    if (!response.ok) throw await this.driveError(response, `${API}/files?fields=id,name,mimeType,appProperties`, 'POST');
     const text = await response.text();
     recordMetric('drive', started, new TextEncoder().encode(body).length, new TextEncoder().encode(text).length);
     return JSON.parse(text);
@@ -135,7 +136,7 @@ export class DriveTransport implements SyncTransport<DriveFile> {
     const started = performance.now();
     const response = await this.request(`${API}/files/${encodeURIComponent(id)}?alt=media`);
     if (response.status === 404) throw new SyncFileNotFoundError('Google Drive 404: missing sync file.');
-    if (!response.ok) throw await this.driveError(response);
+    if (!response.ok) throw await this.driveError(response, `${API}/files/${encodeURIComponent(id)}?alt=media`);
     const bytes = new Uint8Array(await response.arrayBuffer());
     finish(bytes.length);
     recordMetric('drive', started, 0, bytes.length);
@@ -155,7 +156,7 @@ export class DriveTransport implements SyncTransport<DriveFile> {
       if (await digest(await this.read(id)) !== await digest(bytes)) throw new Error('Drive file ID collision.');
       return;
     }
-    if (!response.ok) throw await this.driveError(response);
+    if (!response.ok) throw await this.driveError(response, 'https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id', 'POST');
     finish(bytes.length);
   }
   async startToken(): Promise<string> {
@@ -197,7 +198,7 @@ export class DriveTransport implements SyncTransport<DriveFile> {
   async remove(id: string): Promise<void> {
     const response = await this.request(`${API}/files/${encodeURIComponent(id)}`, { method: 'DELETE' });
     // Deleting the captured source set is safe to retry after a lost response.
-    if (!response.ok && response.status !== 404) throw await this.driveError(response);
+    if (!response.ok && response.status !== 404) throw await this.driveError(response, `${API}/files/${encodeURIComponent(id)}`, 'DELETE');
   }
   private async listKind(dataset: string, kind: 'commit' | 'pack'): Promise<string[]> {
     const ids: string[] = [];
