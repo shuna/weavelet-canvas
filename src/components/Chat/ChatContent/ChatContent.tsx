@@ -1,5 +1,5 @@
 import { useSyncReview, acknowledgeSyncChat } from '@store/storage/google/conflicts';
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { useWorkspaceStore, useWorkspaceReadOnly } from '@store/workspaceScope';
 import { useTranslation } from 'react-i18next';
 
@@ -297,7 +297,9 @@ const ChatContent = ({ isChatFindOpen, onChatFindClose }: ChatContentProps = {})
   const streamFollowRef = useRef(true);
   const streamScrollerRef = useRef<HTMLElement | null>(null);
   const streamScrollTopRef = useRef(0);
-  const streamLayoutActiveRef = useRef(false);
+  const scrollContentRef = useRef<HTMLDivElement>(null);
+  const previousStreamRef = useRef({ key: '', generating: false });
+  const scrollLayoutKey = JSON.stringify([currentChatId, activePath]);
   const pendingEditStateSyncRef = useRef<number | null>(null);
   const saveAnchorTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const explicitScrollNavigationRef = useRef(false);
@@ -350,6 +352,26 @@ const ChatContent = ({ isChatFindOpen, onChatFindClose }: ChatContentProps = {})
     };
   }, [saveCurrentAnchor]);
 
+  useLayoutEffect(() => {
+    const previous = previousStreamRef.current;
+    previousStreamRef.current = { key: scrollLayoutKey, generating: isCurrentChatGenerating };
+    const content = scrollContentRef.current;
+    const scroller = scrollerElement;
+    if (!content || !scroller) return;
+    if (previous.key !== scrollLayoutKey || isCurrentChatGenerating) {
+      content.style.minHeight = '';
+      return;
+    }
+    if (!previous.generating) return;
+
+    streamFollowRef.current = false;
+    const top = streamScrollTopRef.current;
+    // Keep the old position reachable even while lazy Markdown temporarily shrinks.
+    content.style.minHeight = `${top + scroller.clientHeight}px`;
+    scroller.scrollTop = top;
+    streamScrollTopRef.current = scroller.scrollTop;
+  }, [isCurrentChatGenerating, scrollLayoutKey, scrollerElement]);
+
   // --- Scroll event: atBottom + anchor tracking ---
   useEffect(() => {
     const scroller = scrollerElement;
@@ -359,6 +381,11 @@ const ChatContent = ({ isChatFindOpen, onChatFindClose }: ChatContentProps = {})
       if (scroller.clientHeight === 0) {
         setBubbleNavigationState({ canMoveUp: false, canMoveDown: false });
         return;
+      }
+      const content = scrollContentRef.current;
+      if (event && content?.style.minHeight) {
+        // Release spare space as the user scrolls up, without moving their viewport.
+        content.style.minHeight = `${scroller.scrollTop + scroller.clientHeight}px`;
       }
       const isBottom = scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight < BOTTOM_THRESHOLD;
       const isTop = scroller.scrollTop < BOTTOM_THRESHOLD;
@@ -465,13 +492,7 @@ const ChatContent = ({ isChatFindOpen, onChatFindClose }: ChatContentProps = {})
   }, []);
 
   useEffect(() => {
-    streamLayoutActiveRef.current = false;
-  }, [currentChatId]);
-
-  useEffect(() => {
-    if (isCurrentChatGenerating) streamLayoutActiveRef.current = true;
-    // Keep observing after completion: Markdown and controls can settle later.
-    if (!streamLayoutActiveRef.current) return;
+    if (!isCurrentChatGenerating) return;
     if (isEditingInScroller) return;
 
     const scroller = scrollerElement;
@@ -480,6 +501,7 @@ const ChatContent = ({ isChatFindOpen, onChatFindClose }: ChatContentProps = {})
 
     const scrollToEnd = () => {
       if (scroller.dataset.branchSwiping) return;
+      if (!Object.values(useStore.getState().generatingSessions).some(session => session.chatId === currentChatId)) return;
       // Stop following if user scrolled away manually
       if (!streamFollowRef.current) return;
       scrollViewportToBottom(scroller, syncAtBottomState);
@@ -514,7 +536,7 @@ const ChatContent = ({ isChatFindOpen, onChatFindClose }: ChatContentProps = {})
       observer.disconnect();
       mutationObserver.disconnect();
     };
-  }, [isCurrentChatGenerating, isEditingInScroller, scrollerElement, currentChatId, syncAtBottomState]);
+  }, [isCurrentChatGenerating, isEditingInScroller, scrollerElement, currentChatId, syncAtBottomState, useStore]);
 
   // Restore scroll anchor on mount
   const pendingChatFocus = useStore((state) => state.pendingChatFocus);
@@ -842,6 +864,7 @@ const ChatContent = ({ isChatFindOpen, onChatFindClose }: ChatContentProps = {})
           data-chat-scroller
           data-chat-id={currentChatId}
         >
+          <div ref={scrollContentRef} data-scroll-content>
           {syncChanged && <div role='status' className='flex items-center justify-between gap-3 px-7 py-2 text-sm text-amber-800 bg-amber-50 dark:bg-gray-700 dark:text-amber-200'><span>{t('drive:review.description')}</span><button type='button' className='shrink-0 underline' onClick={() => acknowledgeSyncChat(reviewChatId)}>{t('drive:review.chatDone')}</button></div>}
           <div className='relative' data-message-list>
             {items.map((item, index) => (
@@ -906,6 +929,7 @@ const ChatContent = ({ isChatFindOpen, onChatFindClose }: ChatContentProps = {})
               </div>
             )}
             <div className='w-full h-36'></div>
+          </div>
           </div>
         </div>
       </div>
