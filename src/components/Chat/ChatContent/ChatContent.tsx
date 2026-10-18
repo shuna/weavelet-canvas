@@ -374,7 +374,9 @@ const ChatContent = ({ isChatFindOpen, onChatFindClose }: ChatContentProps = {})
       // Layout measurements must not change the user's streaming follow choice.
       if (event || streamScrollerRef.current !== scroller) {
         if (scroller.scrollTop !== streamScrollTopRef.current || streamScrollerRef.current !== scroller) {
-          streamFollowRef.current = anchorRef.current.wasAtBottom;
+          // Fitting in the viewport does not mean the user chose to follow the end.
+          streamFollowRef.current = scroller.scrollHeight > scroller.clientHeight + SCROLL_ALIGN_TOLERANCE
+            && anchorRef.current.wasAtBottom;
         }
         streamScrollerRef.current = scroller;
         streamScrollTopRef.current = scroller.scrollTop;
