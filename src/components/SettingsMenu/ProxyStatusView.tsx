@@ -74,6 +74,7 @@ export function ProxyStatusView({ config }: { config: ProxyConfig }) {
       <div className='rounded border p-3 dark:border-gray-600 space-y-1'>
         <p>Worker {status.version} · 接続拠点 {status.colo} · 実行環境 <span className='font-mono'>{status.instanceId.slice(0, 8)}</span></p>
         <p>保存上限 {(status.limits.cacheBytes / 1048576).toFixed(0)} MiB · 保存期限 {status.limits.retentionMs / 60000}分 · 上流の無通信期限 {status.limits.idleTimeoutMs / 1000}秒</p>
+        {status.recentSessionsVisible === false && <p className='text-xs text-amber-600 dark:text-amber-400'>プロキシ認証が未設定のため、セッションIDの一覧公開を無効にしています。既知のIDだけを照会します。</p>}
         <p className='text-xs text-gray-500 dark:text-gray-400'>このブラウザの直近20件と、接続した実行環境の履歴を表示します。別の拠点・実行環境の履歴は一覧に含まれません。「保存データなし」は削除・期限切れ・別拠点でも発生します。</p>
       </div>
       {!status.sessions.length && <p>照会できるリクエストはありません。別デバイスのセッションIDも指定できます。</p>}

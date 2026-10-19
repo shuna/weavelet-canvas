@@ -608,12 +608,14 @@ async function handleRecover(
   ctx.waitUntil(run());
   return sseResponse(readable);
 }
-async function handleStatus(request: Request): Promise<Response> {
+async function handleStatus(request: Request, env: Env): Promise<Response> {
   const requested = new URL(request.url).searchParams.getAll('sessionId');
   if (requested.length > 20 || requested.some(id => !id || id.length > 512))
     return jsonResponse({ error: 'At most 20 session IDs of 1–512 characters are allowed' }, 400);
   const recent = sessionDiagnostics();
-  const ids = [...new Set([...requested, ...recent.slice(0, Math.max(0, 20 - requested.length)).map(s => s.sessionId)])];
+  // In open-proxy mode, session IDs are capability tokens: never enumerate them.
+  const visible = env.PROXY_AUTH_TOKEN ? recent.slice(0, Math.max(0, 20 - requested.length)) : [];
+  const ids = [...new Set([...requested, ...visible.map(s => s.sessionId)])];
   const sessions: ProxyStatus['sessions'] = [];
   for (const sessionId of ids) {
     let cache: ProxyStatus['sessions'][number]['cache'] = { state: 'missing' };
@@ -631,7 +633,7 @@ async function handleStatus(request: Request): Promise<Response> {
     sessions.push({ sessionId, local: recent.find(s => s.sessionId === sessionId) ?? null, cache });
   }
   const response = jsonResponse({ version: '0.3.0', checkedAt: Date.now(),
-    colo: (request.cf as { colo?: string } | undefined)?.colo ?? 'local', instanceId: getInstanceId(), scope: 'current-isolate',
+    colo: (request.cf as { colo?: string } | undefined)?.colo ?? 'local', instanceId: getInstanceId(), scope: 'current-isolate', recentSessionsVisible: !!env.PROXY_AUTH_TOKEN,
     limits: { cacheBytes: MAX_RECOVERY_CACHE_BYTES, retentionMs: RECOVERY_TTL_MS, idleTimeoutMs: BODY_IDLE_TIMEOUT_MS }, sessions } satisfies ProxyStatus);
   response.headers.set('Cache-Control', 'no-store');
   return response;
@@ -754,7 +756,7 @@ export default {
       return jsonResponse({ status: 'ok', version: '0.3.0' });
     if (url.pathname.startsWith('/api/') && !authenticated(request, env))
       return jsonResponse({ error: 'Unauthorized' }, 401);
-    if (url.pathname === '/api/status' && request.method === 'GET') return handleStatus(request);
+    if (url.pathname === '/api/status' && request.method === 'GET') return handleStatus(request, env);
     if (url.pathname === '/api/stream' && request.method === 'POST')
       return handleStream(request, env, ctx);
     if (url.pathname === '/api/request' && request.method === 'POST')

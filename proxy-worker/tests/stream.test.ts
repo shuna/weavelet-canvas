@@ -366,6 +366,17 @@ describe('stream relay', () => {
     expect(cancel).toHaveBeenCalled();
   });
 
+  it('never enumerates session IDs when proxy authentication is disabled', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(body(['data: [DONE]\n\n']))));
+    await (await stream('private-capability-session')).text();
+    const result = await (await worker.fetch(new Request('https://worker.example/api/status'), env, ctx)).json();
+    expect(result.recentSessionsVisible).toBe(false);
+    expect(result.sessions).toEqual([]);
+    const known = await (await worker.fetch(new Request('https://worker.example/api/status?sessionId=private-capability-session'), env, ctx)).json();
+    expect(known.sessions).toHaveLength(1);
+    expect(known.sessions[0].sessionId).toBe('private-capability-session');
+  });
+
   it('reports local and provider cancellation separately', async () => {
     vi.stubGlobal(
       'fetch',

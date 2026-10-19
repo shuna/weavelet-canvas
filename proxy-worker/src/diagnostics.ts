@@ -20,6 +20,7 @@ export interface ProxyStatus {
   colo: string;
   instanceId: string;
   scope: 'current-isolate';
+  recentSessionsVisible: boolean;
   limits: { cacheBytes: number; retentionMs: number; idleTimeoutMs: number };
   sessions: Array<{
     sessionId: string;
