@@ -1,8 +1,10 @@
+export { SessionRegistry } from './sessionRegistry';
 import { RecoveryStore, type RecoveryCache } from './recoveryStore';
-import { getInstanceId, sessionDiagnostics, startDiagnostic, type ProxyStatus } from './diagnostics';
+import { forgetDiagnostic, getInstanceId, sessionDiagnostics, startDiagnostic, type ProxyStatus } from './diagnostics';
 export interface Env {
   PROXY_AUTH_TOKEN: string;
   SESSIONS?: DurableObjectNamespace;
+  REGISTRY?: DurableObjectNamespace;
   recoveryStore?: RecoveryStore;
 }
 interface StreamRequest {
@@ -42,7 +44,17 @@ interface CancelRequest {
   providerCancel?: { generationId: string; apiKey: string };
 }
 const recoveryCache = (env: Env): RecoveryCache => env.recoveryStore ?? caches.default;
-const persistDiagnostic = (env: Env, diagnostic: ReturnType<typeof startDiagnostic>) => env.recoveryStore?.saveDiagnostic(diagnostic) ?? Promise.resolve();
+const registry = (env: Env) => env.REGISTRY?.get(env.REGISTRY.idFromName('sessions'));
+const persistDiagnostic = async (env: Env, diagnostic: ReturnType<typeof startDiagnostic>) => {
+  if (!env.recoveryStore) return;
+  if (env.recoveryStore.wasPurged) throw new Error('Session storage was deleted');
+  const index = registry(env);
+  if (index && env.SESSIONS) {
+    const response = await index.fetch('https://registry.internal/session', { method: 'PUT', body: JSON.stringify({ objectId: env.SESSIONS.idFromName(diagnostic.sessionId).toString() }) });
+    if (!response.ok) throw new Error('Failed to register session storage');
+  }
+  await env.recoveryStore.saveDiagnostic(diagnostic);
+};
 const activeStreams = new Map<string, ActiveStream>();
 const RECOVERY_TTL_MS = 300_000;
 const MAX_RECOVERY_CACHE_BYTES = 1_048_576,
@@ -662,7 +674,7 @@ async function handleStatus(request: Request, env: Env): Promise<Response> {
     } catch { cache = { state: 'error' }; }
     sessions.push({ sessionId, local: recent.find(s => s.sessionId === sessionId) ?? null, cache });
   }
-  const response = jsonResponse({ version: '0.4.0', checkedAt: Date.now(),
+  const response = jsonResponse({ version: '0.5.0', checkedAt: Date.now(),
     colo: (request.cf as { colo?: string } | undefined)?.colo ?? 'local', instanceId: getInstanceId(), scope: env.recoveryStore ? 'durable-session' : 'current-isolate', recentSessionsVisible: !!env.PROXY_AUTH_TOKEN,
     limits: { cacheBytes: MAX_RECOVERY_CACHE_BYTES, retentionMs: RECOVERY_TTL_MS, idleTimeoutMs: BODY_IDLE_TIMEOUT_MS }, sessions } satisfies ProxyStatus);
   response.headers.set('Cache-Control', 'no-store');
@@ -783,9 +795,15 @@ const worker = {
       return jsonResponse({ error: 'Invalid path encoding' }, 400);
     }
     if (url.pathname === '/health')
-      return jsonResponse({ status: 'ok', version: '0.4.0' });
+      return jsonResponse({ status: 'ok', version: '0.5.0' });
     if (url.pathname.startsWith('/api/') && !authenticated(request, env))
       return jsonResponse({ error: 'Unauthorized' }, 401);
+    if (url.pathname === '/api/storage' && request.method === 'DELETE') {
+      if (!env.PROXY_AUTH_TOKEN) return jsonResponse({ error: 'Bulk deletion requires proxy authentication' }, 403);
+      const index = registry(env);
+      if (!index) return jsonResponse({ error: 'Storage deletion is unavailable' }, 501);
+      return withCORS(await index.fetch(`https://registry.internal/all${url.search}`, { method: 'DELETE' }));
+    }
     if (env.SESSIONS && !env.recoveryStore) {
       if (url.pathname === '/api/status' && request.method === 'GET') {
         const ids = [...new Set(url.searchParams.getAll('sessionId'))];
@@ -799,17 +817,22 @@ const worker = {
           return (await response.json() as ProxyStatus).sessions[0];
           } catch { return { sessionId: id, local: null, cache: { state: 'error' as const } }; }
         }));
-        const response = jsonResponse({ ...base, scope: 'durable-session', recentSessionsVisible: false, sessions: results });
+        const response = jsonResponse({ ...base, scope: 'durable-session', recentSessionsVisible: false, storageDeletion: { individual: true, all: !!env.PROXY_AUTH_TOKEN && !!env.REGISTRY }, sessions: results });
         response.headers.set('Cache-Control', 'no-store');
         return response;
       }
       let id: string | undefined;
       if (url.pathname === '/api/stream' && request.method === 'POST') {
         try { id = (await request.clone().json() as StreamRequest)?.sessionId; } catch { return jsonResponse({ error: 'Invalid JSON body' }, 400); }
-      } else if (/^\/api\/(recover|ack|cancel)\//.test(url.pathname)) id = decodeURIComponent(url.pathname.split('/').slice(3).join('/'));
+      } else if (/^\/api\/(recover|ack|cancel|storage)\//.test(url.pathname)) id = decodeURIComponent(url.pathname.split('/').slice(3).join('/'));
       if (id !== undefined) {
         if (typeof id !== 'string' || !id || id.length > 512) return jsonResponse({ error: 'sessionId must contain 1–512 characters' }, 400);
-        return env.SESSIONS.get(env.SESSIONS.idFromName(id)).fetch(request);
+        const objectId = env.SESSIONS.idFromName(id);
+        const result = await env.SESSIONS.get(objectId).fetch(request);
+        if (request.method === 'DELETE' && url.pathname.startsWith('/api/storage/') && result.ok) {
+          await registry(env)?.fetch(`https://registry.internal/session?objectId=${objectId}`, { method: 'DELETE' });
+        }
+        return result;
       }
     }
     if (url.pathname === '/api/status' && request.method === 'GET') return handleStatus(request, env);
@@ -856,7 +879,21 @@ export class ProxySession {
   constructor(private state: DurableObjectState, private env: Env) {
     this.store = new RecoveryStore(state.storage);
   }
-  fetch(request: Request) {
+  async fetch(request: Request) {
+    const url = new URL(request.url);
+    if (request.method === 'DELETE' && (url.pathname === '/internal/storage' || url.pathname.startsWith('/api/storage/'))) {
+      if (!authenticated(request, this.env) && url.pathname !== '/internal/storage') return jsonResponse({ error: 'Unauthorized' }, 401);
+      const diagnostic = await this.store.diagnostic();
+      const sessionId = diagnostic?.sessionId ?? [...activeStreams.keys()].find(id => this.env.SESSIONS?.idFromName(id).toString() === this.state.id.toString());
+      const purging = this.store.purge();
+      if (sessionId) { activeStreams.get(sessionId)?.abortController.abort(); forgetDiagnostic(sessionId); }
+      await purging;
+      return jsonResponse({ deleted: true });
+    }
+    if (request.method === 'GET' && url.pathname === '/api/status') {
+      const diagnostic = await this.store.diagnostic();
+      if (diagnostic && this.env.REGISTRY) await registry(this.env)!.fetch('https://registry.internal/session', { method: 'PUT', body: JSON.stringify({ objectId: this.state.id.toString() }) });
+    }
     return worker.fetch(request, { ...this.env, recoveryStore: this.store }, {
       waitUntil: (promise: Promise<unknown>) => this.state.waitUntil(promise),
     } as ExecutionContext);

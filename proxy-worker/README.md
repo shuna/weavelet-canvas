@@ -28,6 +28,16 @@ The authenticated `GET /api/status?sessionId=...` API returns only metadata, nev
 
 The status reader reads compact stored metadata rather than downloading response bodies on each poll. Blocked client writes transition to disconnected after 15 seconds; the existing 20-second upstream-read and 25-second final-save deadlines still apply. Stream-end logs contain only a hashed session reference, counters and a classified reason.
 
+## Deleting stored data
+
+The status view offers individual deletion and **プロキシの全保存データを削除**. Confirmation names the scope: response snapshots and diagnostic history are removed and matching active relays are aborted. Local conversations/checkpoints remain. New saves or ACKs from an already-deleted relay cannot recreate its stored data.
+
+- `DELETE /api/storage/:sessionId` removes that session's response and diagnostic storage, alarms, and in-memory diagnostic record.
+- `DELETE /api/storage` requires configured `PROXY_AUTH_TOKEN` and valid bearer authentication. It removes data across devices, including sessions outside the browser's twenty-item status list. Sessions started after the server's initial cutoff are preserved.
+- Bulk responses contain `{ deleted, failed, before, cursor }`. Continue with the returned `before` and `cursor` until `cursor` is null. A failed item stays indexed for retry; clients must report failures rather than claiming complete deletion.
+
+The REGISTRY Durable Object indexes opaque session object IDs with bounded retention (48 hours from their last registration). Each call deletes at most twenty objects. Deploy the v2 migration with the Worker. Before upgrading an existing v0.4 deployment, wait for its retained records to expire or inspect their known IDs so they are registered; previously created objects cannot be enumerated through a Durable Object binding. No live session storage existed in this production deployment when the registry was introduced.
+
 ## Storage and execution limits
 
 Recovery uses SQLite-backed Durable Objects, provisioned by the binding and migration in `wrangler.toml`. Storage, request, and execution charges/limits apply according to the Cloudflare account plan; periodic snapshot writes continue for the duration of a stream. Each object keeps at most the latest 1 MiB of raw upstream data plus bounded metadata. Stored JSON is split into bounded values and committed atomically. [Cloudflare storage limits](https://developers.cloudflare.com/durable-objects/platform/limits/).
@@ -155,4 +165,4 @@ Replays chunks after the given event ID. A missing/expired/acknowledged response
 
 ### `GET /health`
 
-Returns `{ "status": "ok", "version": "0.4.0" }`. No auth required.
+Returns `{ "status": "ok", "version": "0.5.0" }`. No auth required.

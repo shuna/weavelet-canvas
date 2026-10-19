@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import PopupModal from '@components/PopupModal';
 import useStore from '@store/store';
-import { fetchProxyStatus, type ProxyConfig, type ProxyStatus } from '@utils/proxyClient';
+import { deleteProxyStorage, fetchProxyStatus, type ProxyConfig, type ProxyStatus } from '@utils/proxyClient';
 import { getAllPending, type StreamRecord } from '@utils/streamDb';
 import { recoverPending } from '@hooks/useStreamRecovery';
 import { resolveRecoveryTarget } from '@hooks/streamRecoveryHelpers';
@@ -25,11 +25,14 @@ const time = (value?: number) => value ? new Date(value).toLocaleTimeString() : 
 export function ProxyStatusView({ config }: { config: ProxyConfig }) {
   const [status, setStatus] = useState<ProxyStatus>();
   const [records, setRecords] = useState<StreamRecord[]>([]);
+  const [actionError, setActionError] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const [manualId, setManualId] = useState('');
   const [selectedId, setSelectedId] = useState('');
   const [refresh, setRefresh] = useState(0);
+  const [deleting, setDeleting] = useState<string>();
+  const [notice, setNotice] = useState('');
   const [recovering, setRecovering] = useState<string>();
   useEffect(() => {
     let active = true;
@@ -60,6 +63,19 @@ export function ProxyStatusView({ config }: { config: ProxyConfig }) {
     return () => { active = false; abort?.abort(); clearInterval(poll); };
   }, [config.endpoint, config.authToken, selectedId, refresh]);
 
+  const removeStorage = async (sessionId?: string) => {
+    const description = sessionId === undefined
+      ? 'このプロキシの全端末の復旧データと診断履歴を削除します。削除開始時点の中継も停止します。表示されていない保存データも対象です。'
+      : `このリクエストの復旧データと診断履歴を削除し、中継中の場合は停止します。\n${sessionId}`;
+    if (!window.confirm(`${description}\n端末に保存済みの会話は残ります。プロキシからは復旧できなくなります。削除しますか？`)) return;
+    setDeleting(sessionId ?? '*'); setNotice(''); setActionError('');
+    try {
+      const count = await deleteProxyStorage(config, sessionId);
+      setNotice(sessionId === undefined ? `${count}件の保存データを削除しました。` : 'このリクエストの保存データを削除しました。');
+    } catch (e) { setActionError(e instanceof Error ? e.message : '保存データの削除に失敗しました'); }
+    finally { setDeleting(undefined); setRefresh(n => n + 1); }
+  };
+
   return <div className='p-5 space-y-4 text-sm text-gray-900 dark:text-gray-100 w-[90vw] max-w-5xl'>
     <div className='flex flex-wrap items-center gap-3'>
       <span className='font-mono break-all'>{config.endpoint}</span>
@@ -70,9 +86,12 @@ export function ProxyStatusView({ config }: { config: ProxyConfig }) {
       <input className='flex-1 min-w-0 rounded border p-2 dark:bg-gray-800 dark:border-gray-600' aria-label='調べるプロキシセッションID' placeholder='セッションIDを指定して照会' value={manualId} onChange={event => setManualId(event.target.value)} />
       <button className='btn btn-neutral' type='submit'>照会</button>
     </form>
-    {error && <p role='alert' className='text-red-600 dark:text-red-400'>{error}</p>}
+    {notice && <p role='status'>{notice}</p>}
+    {(actionError || error) && <p role='alert' className='text-red-600 dark:text-red-400'>{actionError || error}</p>}
     {status && <>
       <div className='rounded border p-3 dark:border-gray-600 space-y-1'>
+        {status.storageDeletion?.all && <button type='button' className='btn btn-neutral text-red-600 dark:text-red-400' disabled={!!deleting || !!recovering} onClick={() => { void removeStorage(); }}>{deleting === '*' ? '全保存データを削除中…' : 'プロキシの全保存データを削除'}</button>}
+        {status.storageDeletion?.individual && !status.storageDeletion.all && <p className='text-xs'>全削除にはプロキシ側の認証設定が必要です。</p>}
         <p>Worker {status.version} · 接続拠点 {status.colo} · 実行環境 <span className='font-mono'>{status.instanceId.slice(0, 8)}</span></p>
         <p>保存上限 {(status.limits.cacheBytes / 1048576).toFixed(0)} MiB · 保存期限 {status.limits.retentionMs / 60000}分 · 上流の無通信期限 {status.limits.idleTimeoutMs / 1000}秒</p>
         {status.scope !== 'durable-session' && status.recentSessionsVisible === false && <p className='text-xs text-amber-600 dark:text-amber-400'>プロキシ認証が未設定のため、セッションIDの一覧公開を無効にしています。既知のIDだけを照会します。</p>}
@@ -106,12 +125,13 @@ export function ProxyStatusView({ config }: { config: ProxyConfig }) {
             {record && <p className='text-xs'>端末の記録: {record.status} · リクエストID <span className='font-mono'>{record.requestId}</span>{record.error ? ` · ${record.error}` : ''}</p>}
             {gap && <p className='text-amber-600 dark:text-amber-400'>端末の受信位置と保存範囲が一致しないため、欠落なく復旧することはできません。</p>}
             {record && !target && <p className='text-amber-600 dark:text-amber-400'>保存先のバブルまたは内容が変更されています。自動で上書きしません。</p>}
-            {record && !live && target && <button type='button' className='btn btn-neutral' disabled={!!recovering || !!gap} onClick={async () => {
+            {record && !live && target && <button type='button' className='btn btn-neutral' disabled={!!recovering || !!deleting || !!gap} onClick={async () => {
               setRecovering(record.requestId);
               try { await recoverPending({ manual: true, chatId: record.chatId, nodeId: record.nodeId, requestId: record.requestId }); }
               catch (e) { setError(e instanceof Error ? e.message : '復旧処理に失敗しました'); }
               finally { setRecovering(undefined); setRefresh(n => n + 1); }
             }}>{recovering === record.requestId ? '復旧中…' : 'このリクエストを復旧'}</button>}
+            {status.storageDeletion?.individual && <button type='button' className='btn btn-neutral text-red-600 dark:text-red-400' disabled={!!deleting || !!recovering} onClick={() => { void removeStorage(session.sessionId); }}>{deleting === session.sessionId ? '削除中…' : 'この保存データを削除'}</button>}
           </section>;
         })}
       </div>

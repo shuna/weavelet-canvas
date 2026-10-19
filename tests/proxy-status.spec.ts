@@ -4,6 +4,17 @@ test.use({ headless: true, baseURL: process.env.PLAYWRIGHT_BASE_URL ?? 'http://1
 test('inspects server metadata against local cursors and displays missing data and authentication errors', async ({ page }) => {
   let unauthorized = false;
   let durable = false;
+  const deleted = new Set<string>();
+  let allDeleted = false, deleteCalls = 0;
+  await page.route('https://proxy.test/api/storage**', async route => {
+    expect(route.request().method()).toBe('DELETE');
+    expect(route.request().headers().authorization).toBe('Bearer private-token');
+    deleteCalls++;
+    const path = new URL(route.request().url()).pathname;
+    if (path === '/api/storage') { allDeleted = true; return route.fulfill({ contentType: 'application/json', body: JSON.stringify({ deleted: 3, failed: 0, before: 100, cursor: null }) }); }
+    deleted.add(decodeURIComponent(path.slice('/api/storage/'.length)));
+    await route.fulfill({ contentType: 'application/json', body: '{"deleted":true}' });
+  });
   let lookedUpManualId = false;
   await page.route('https://proxy.test/api/status**', async route => {
     expect(route.request().headers().authorization).toBe('Bearer private-token');
@@ -11,10 +22,10 @@ test('inspects server metadata against local cursors and displays missing data a
     if (unauthorized) return route.fulfill({ status: 401, body: '{"error":"Unauthorized"}' });
     const ids = new URL(route.request().url()).searchParams.getAll('sessionId');
     lookedUpManualId ||= ids.includes('other-device-session');
-    const session = (id: string, first: number) => ({ sessionId: id,
+    const session = (id: string, first: number) => allDeleted || deleted.has(id) ? { sessionId: id, local: null, cache: { state: 'not-recorded' } } : ({ sessionId: id,
       local: { sessionId: id, startedAt: Date.now(), updatedAt: Date.now(), lastChunkAt: Date.now(), phase: 'interrupted', lastEventId: 20, firstEventId: first, receivedBytes: 2200000, bufferedBytes: 1000000, cacheWrites: 4, cacheFailures: 1, reason: 'upstream-idle-timeout' },
       cache: { state: 'available', firstEventId: first, lastEventId: 20, terminal: 'interrupted', expiresAt: Date.now() + 300000, updatedAt: Date.now() } });
-    await route.fulfill({ contentType: 'application/json', headers: { 'Access-Control-Allow-Origin': '*' }, body: JSON.stringify({ version: '0.3.0', checkedAt: Date.now(), colo: 'NRT', instanceId: 'diagnostic-instance', scope: durable ? 'durable-session' : 'current-isolate', limits: { cacheBytes: 1048576, retentionMs: 300000, idleTimeoutMs: 45000 }, sessions: [session('session-a', 10), session('session-b', 1), ...(lookedUpManualId ? [{ sessionId: 'other-device-session', local: null, cache: { state: durable ? 'not-recorded' : 'missing' } }] : [])] }) });
+    await route.fulfill({ contentType: 'application/json', headers: { 'Access-Control-Allow-Origin': '*' }, body: JSON.stringify({ version: '0.3.0', checkedAt: Date.now(), colo: 'NRT', instanceId: 'diagnostic-instance', scope: durable ? 'durable-session' : 'current-isolate', storageDeletion: { individual: true, all: true }, limits: { cacheBytes: 1048576, retentionMs: 300000, idleTimeoutMs: 45000 }, sessions: [session('session-a', 10), session('session-b', 1), ...(lookedUpManualId ? [{ sessionId: 'other-device-session', local: null, cache: { state: durable ? 'not-recorded' : 'missing' } }] : [])] }) });
   });
   await page.goto('/', { waitUntil: 'networkidle' });
   await page.evaluate(async () => {
@@ -51,6 +62,20 @@ test('inspects server metadata against local cursors and displays missing data a
   await expect(page.getByText(/別拠点からも同じ記録を確認/)).toBeVisible();
   await expect(page.getByText(/サーバーに受付記録がありません/)).toBeVisible();
   await expect(page.getByText('復旧データ: サーバー記録なし')).toBeVisible();
+  page.once('dialog', dialog => dialog.dismiss());
+  await gap.getByRole('button', { name: 'この保存データを削除', exact: true }).click();
+  expect(deleteCalls).toBe(0);
+  page.once('dialog', dialog => dialog.accept());
+  await gap.getByRole('button', { name: 'この保存データを削除', exact: true }).click();
+  await expect(page.getByRole('status')).toContainText('このリクエストの保存データを削除しました');
+  await expect(gap).toContainText('復旧データ: サーバー記録なし');
+  page.once('dialog', async dialog => { expect(dialog.message()).toContain('全端末'); await dialog.accept(); });
+  await page.getByRole('button', { name: 'プロキシの全保存データを削除', exact: true }).click();
+  await expect(page.getByRole('status')).toContainText('3件の保存データを削除しました');
+  await expect(retained).toContainText('復旧データ: サーバー記録なし');
+  expect(deleteCalls).toBe(2);
+  const localRecords = await page.evaluate(async () => { const load = (path: string) => import(/* @vite-ignore */ path); return (await (await load('/src/utils/streamDb.ts')).getAllPending()).length; });
+  expect(localRecords).toBe(2);
   unauthorized = true;
   await page.getByRole('button', { name: '更新', exact: true }).click();
   await expect(page.getByRole('alert')).toContainText('認証に失敗');
