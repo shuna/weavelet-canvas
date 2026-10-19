@@ -22,7 +22,7 @@ export async function sameSnapshot([a, b]: [Snapshot, Snapshot]): Promise<boolea
   return Object.keys(left).length === Object.keys(right).length && Object.keys(left).every(key => left[key] === right[key]);
 }
 
-function canonical(value: any): string {
+export function canonical(value: any): string {
   if (Array.isArray(value)) return `[${value.map(canonical).join(',')}]`;
   if (value !== null && typeof value === 'object') {
     return `{${Object.keys(value).sort().map((k) => `${JSON.stringify(k)}:${canonical(value[k])}`).join(',')}}`;

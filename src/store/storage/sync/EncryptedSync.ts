@@ -4,7 +4,7 @@ import { reportSyncHistory, reportCompaction, recordPackAccess, useGoogleSyncDia
 import { SyncConflictError, type Resolution } from '../google/conflicts';
 import { mergeSyncRecords } from '../google/merge';
 import { mergeEditTimes } from '../google/editTimes';
-import { collectHistoryAsync, replayHistoryAsync, decodePartsAsync, encodeWireAsync, decodeWirePartsAsync, encodeAsync, decodeAsync, encodeCacheAsync, decodeCacheAsync, toRecordsAsync as toRecords, fromRecordsAsync as fromRecords, hashRecordsAsync as hashRecords, hashCommitsAsync } from '../google/processing';
+import { collectHistoryAsync, replayHistoryAsync, decodePartsAsync, encodeWireAsync, decodeWirePartsAsync, encodeAsync, decodeAsync, encodeCacheAsync, decodeCacheAsync, toRecordsAsync as toRecords, fromRecordsAsync as fromRecords, hashRecordsAsync as hashRecords, hashCommitsAsync, encodeNativeAsync, decodeNativePartsAsync, hashNativeCommitsAsync } from '../google/processing';
 import { syncPhase, completedFile, syncStage } from '../google/progress';
 import { createKeyEnvelope, unlockKey, encode, decode, encrypt, decrypt, digest, type KeyEnvelope } from '../google/crypto';
 import { diffHashedRecords, applyChanges, type Records, type Snapshot, type Change, diffRecords } from '../google/records';
@@ -12,6 +12,8 @@ import { InvalidSyncFileIdError, SyncFileNotFoundError, type SyncDataset, type S
 import { syncCache, readSyncEntries, writeSyncCache, rememberedSyncKey } from '../google/cache';
 
 import type { Commit } from '../google/replay';
+import { requireNativeGzip } from '../google/gzip';
+import { frameCacheGzip } from '../google/cacheCodec';
 interface CommitManifest { version: number; parts?: string[]; parents?: string[]; changes?: Change[]; resolutions?: Commit['resolutions'] }
 interface Pending {
   id: string;
@@ -19,7 +21,7 @@ interface Pending {
   baseline?: Records;
   files: { id: string; kind: string; size: number; bytes?: Uint8Array; sent: boolean }[];
 }
-interface PackManifest { version: 1 | 2; commits: Record<string, string>; parts: string[]; bytes: number }
+interface PackManifest { version: 1 | 2 | 3; commits: Record<string, string>; parts: string[]; bytes: number }
 interface Compaction {
   id: string;
   manifest: PackManifest;
@@ -48,15 +50,26 @@ const PART_BYTES = 1024 * 1024;
 const INLINE_BYTES = 256 * 1024;
 const PACK_BYTES = 4 * 1024 * 1024 - 28; // Includes the AES-GCM overhead within a 4 MiB encrypted file.
 const COMPACT_COMMITS = 128;
+// Conservative JSON byte bound for grouping only; the actual native payload limit is checked by its encoder.
+function nativeCommitByteBound(commit: Commit): number {
+  return 128 + commit.parents.reduce((size, parent) => size + parent.length * 6 + 4, 0) +
+    commit.changes.reduce((size, change) => size + 128 +
+      (change.key.length + (change.before?.length ?? 0) + (change.after?.length ?? 0)) * 6, 0) +
+    Object.entries(commit.resolutions ?? {}).reduce((size, [key, values]) => size + 16 + key.length * 6 +
+      values.reduce((total, value) => total + (value?.length ?? 0) * 6 + 8, 0), 0);
+}
 export interface SyncTransferOptions {
   partBytes?: number; concurrency?: 1 | 2;
   // Opt in only when all devices support delta payloads; existing datasets keep their compatible format.
   wireDelta?: boolean;
+  // Explicit opt-in; native full JSON takes precedence over wireDelta in this protocol version.
+  wireCompression?: 'gzip' | 'legacy';
 }
 interface StoredCache {
   version: 2;
   replay?: true;
   wireDelta?: boolean;
+  wireCompression?: 'gzip' | 'legacy';
   commits: string[];
   token?: string;
   baseline?: Records;
@@ -111,7 +124,7 @@ export class EncryptedSync {
     if (pending) commits[pending.id] = pending.commit;
     for (const [id, commit] of Object.entries(commits)) {
       if (this.persistedCommits.has(id)) continue;
-      entries.push([`commit:${id}`, await encrypt(this.requireKey(), this.encodedCommits.get(id) ?? await encodeAsync(commit), this.context(`commit:${id}`))]);
+      entries.push([`commit:${id}`, await encrypt(this.requireKey(), this.encodedCommits.get(id) ?? await encodeCacheAsync(commit), this.context(`commit:${id}`))]);
     }
     const uploads = [pending, this.cache.compaction].filter((p): p is Pending | Compaction => !!p);
     for (const upload of uploads) for (const file of upload.files) {
@@ -132,7 +145,7 @@ export class EncryptedSync {
       }
     }
     const stored: StoredCache = {
-      version: 2, replay: replay ? true : undefined, wireDelta: this.options.wireDelta,
+      version: 2, replay: replay ? true : undefined, wireDelta: this.options.wireDelta, wireCompression: this.options.wireCompression,
       commits: Object.keys(this.cache.commits), token: this.cache.token, baseline: this.cache.baseline,
       pending: pending && { id: pending.id, baseline: pending.baseline,
         files: pending.files.map(({ id, kind, size }) => ({ id, kind, size })) },
@@ -170,12 +183,13 @@ export class EncryptedSync {
     }
     if (stored.version !== 2 || !Array.isArray(stored.commits)) throw new Error('Unsupported local sync cache.');
     this.options.wireDelta ??= stored.wireDelta === true;
+    this.options.wireCompression ??= stored.wireCompression === 'gzip' || stored.wireCompression === 'legacy' ? stored.wireCompression : undefined;
     const ids = [...new Set([...stored.commits, ...(stored.pending ? [stored.pending.id] : [])])];
     const values = await readSyncEntries(this.dataset, ids.map(id => `commit:${id}`));
     const commits: Record<string, Commit> = {};
     for (let i = 0; i < ids.length; i++) {
       if (!values[i]) throw new Error('Missing local sync commit.');
-      commits[ids[i]] = await decodeAsync<Commit>(await decrypt(this.requireKey(), values[i]!, this.context(`commit:${ids[i]}`)));
+      commits[ids[i]] = await decodeCacheAsync<Commit>(await decrypt(this.requireKey(), values[i]!, this.context(`commit:${ids[i]}`)));
       this.persistedCommits.add(ids[i]);
     }
     this.cache = { version: 1, commits: Object.fromEntries(stored.commits.map(id => [id, commits[id]])), token: stored.token, baseline: stored.baseline,
@@ -221,6 +235,7 @@ export class EncryptedSync {
             this.cacheFingerprint = await digest(cached);
             await this.loadCache(cached);
           }
+          if (this.options.wireCompression === 'gzip') requireNativeGzip();
           return await work();
         }
         catch (error) {
@@ -240,6 +255,7 @@ export class EncryptedSync {
   }
 
   static async create<T extends SyncDataset>(transport: SyncTransport<T>, password: string, options: SyncTransferOptions & { folderName?: string } = {}): Promise<{ session: EncryptedSync; file: T }> {
+    if (options.wireCompression === 'gzip') requireNativeGzip(); // Fail before allocating IDs/folders/outboxes.
     // Derive the key before creating remote files, so invalid passphrases cannot create empty folders.
     const [dataset, header] = await transport.ids(2);
     syncPhase('key');
@@ -290,7 +306,7 @@ export class EncryptedSync {
   private async downloadManifest(id: string): Promise<CommitManifest> {
     const encoded = await decrypt(this.requireKey(), await this.transport.read(id), this.context(id));
     const manifest = await decodeAsync<CommitManifest>(encoded);
-    if (manifest.version !== 2 && (![1, 3].includes(manifest.version) || !Array.isArray(manifest.parts) || !manifest.parts.length ||
+    if (manifest.version !== 2 && (![1, 3, 4].includes(manifest.version) || !Array.isArray(manifest.parts) || !manifest.parts.length ||
         manifest.parts.some(p => typeof p !== 'string'))) throw new Error('Invalid sync commit.');
     return manifest;
   }
@@ -315,9 +331,11 @@ export class EncryptedSync {
         completedFile(bytes.length);
         return bytes;
       });
-      const decoded = manifest.version === 3 ? await decodeWirePartsAsync<Commit>(chunks) : await decodePartsAsync<Commit>(chunks);
+      const decoded = manifest.version === 4 ? await decodeNativePartsAsync<Commit>(chunks)
+        : manifest.version === 3 ? await decodeWirePartsAsync<Commit>(chunks) : await decodePartsAsync<Commit>(chunks);
       commit = decoded.value;
-      payload = manifest.version === 3 ? await encodeAsync(commit) : decoded.bytes;
+      payload = manifest.version === 4 ? frameCacheGzip(decoded.bytes)
+        : manifest.version === 3 ? await encodeCacheAsync(commit) : decoded.bytes;
     }
     if (commit.version !== 1 || !Array.isArray(commit.parents) || !Array.isArray(commit.changes) ||
         commit.parents.some(p => typeof p !== 'string' || p === id)) throw new Error('Invalid sync commit.');
@@ -331,7 +349,7 @@ export class EncryptedSync {
 
   private async readPackManifest(id: string): Promise<PackManifest> {
     const pack = await decodeAsync<PackManifest>(await decrypt(this.requireKey(), await this.transport.read(id, 'pack-index'), this.context(id)));
-    if (![1, 2].includes(pack.version) || !pack.commits || typeof pack.commits !== 'object' || Array.isArray(pack.commits) ||
+    if (![1, 2, 3].includes(pack.version) || !pack.commits || typeof pack.commits !== 'object' || Array.isArray(pack.commits) ||
         !Object.keys(pack.commits).length || Object.entries(pack.commits).some(([id, hash]) =>
           !/^[A-Za-z0-9_-]+$/.test(id) || ['__proto__', 'constructor', 'prototype'].includes(id) ||
           typeof hash !== 'string' || !/^[a-f0-9]{64}$/.test(hash)) ||
@@ -346,10 +364,10 @@ export class EncryptedSync {
     // Authenticate the index against retained commits without downloading known payloads again.
     const retained = Object.fromEntries(Object.keys(pack.commits)
       .filter(commit => this.cache.commits[commit]).map(commit => [commit, this.cache.commits[commit]]));
-    for (const [commit, hash] of Object.entries(await hashCommitsAsync(retained))) {
-      if (hash !== pack.commits[commit]) throw new Error('Sync pack history mismatch.');
-    }
-    if (!missing && !verify) { recordPackAccess(true); return; }
+    const retainedHashes = await (pack.version === 3 ? hashNativeCommitsAsync(retained) : hashCommitsAsync(retained));
+    const retainedMismatch = Object.entries(retainedHashes).some(([commit, hash]) => hash !== pack.commits[commit]);
+    // Different JSON key order can change legacy LZ hashes. Authenticate that pack independently before comparing logical values.
+    if (!missing && !verify && !retainedMismatch) { recordPackAccess(true); return; }
     syncPhase('downloading', pack.parts.length);
     const chunks = await this.parallel(pack.parts, async (part) => {
       const bytes = await decrypt(this.requireKey(), await this.transport.read(part, verify ? 'verification' : 'pack'), this.context(part));
@@ -358,8 +376,9 @@ export class EncryptedSync {
     });
     const size = chunks.reduce((total, bytes) => total + bytes.length, 0);
     if (size !== pack.bytes) throw new Error('Incomplete sync pack.');
-    const { value: data } = pack.version === 2
-      ? await decodeWirePartsAsync<{ version: number; commits: Record<string, Commit> }>(chunks)
+    const { value: data } = pack.version === 3
+      ? await decodeNativePartsAsync<{ version: number; commits: Record<string, Commit> }>(chunks)
+      : pack.version === 2 ? await decodeWirePartsAsync<{ version: number; commits: Record<string, Commit> }>(chunks)
       : await decodePartsAsync<{ version: number; commits: Record<string, Commit> }>(chunks);
     if (data.version !== 1 || !data.commits || Object.keys(data.commits).length !== Object.keys(pack.commits).length) {
       throw new Error('Invalid sync pack.');
@@ -371,16 +390,26 @@ export class EncryptedSync {
           value.parents.some(parent => typeof parent !== 'string' || parent === commit) || !Array.isArray(value.changes)) {
         throw new Error('Invalid packed commit.');
       }
-      encoded.set(commit, await encodeAsync(value));
+      encoded.set(commit, pack.version === 3 ? await encodeCacheAsync(value) : await encodeAsync(value));
     }
-    for (const [commit, hash] of Object.entries(pack.commits)) if (await digest(encoded.get(commit)!) !== hash) {
+    const nativeHashes = pack.version === 3 ? await hashNativeCommitsAsync(data.commits) : undefined;
+    for (const [commit, hash] of Object.entries(pack.commits)) if ((nativeHashes?.[commit] ?? await digest(encoded.get(commit)!)) !== hash) {
       throw new Error('Sync pack history mismatch.');
     }
+    if (retainedMismatch) {
+      const existing = await hashNativeCommitsAsync(retained);
+      const received = nativeHashes ?? await hashNativeCommitsAsync(data.commits);
+      if (Object.entries(existing).some(([id, hash]) => received[id] !== hash)) throw new Error('Sync pack history mismatch.');
+    }
     if (!verify) recordPackAccess(false);
-    // Never cache half a pack after failed authentication.
+    // Never cache half a pack after failed authentication. Prefer existing legacy order when reading native packs.
     for (const [commit, bytes] of encoded) {
-      this.cache.commits[commit] = data.commits[commit];
-      if (!this.persistedCommits.has(commit)) this.encodedCommits.set(commit, bytes);
+      const previous = this.cache.commits[commit];
+      const chosen = pack.version === 3 && previous ? previous : data.commits[commit];
+      if (previous && pack.version !== 3 && retainedHashes[commit] !== pack.commits[commit]) this.persistedCommits.delete(commit);
+      this.cache.commits[commit] = chosen;
+      if (!this.persistedCommits.has(commit)) this.encodedCommits.set(commit,
+        chosen === data.commits[commit] ? bytes : await encodeCacheAsync(chosen));
     }
   }
   private async discoverPacks(ids?: string[]): Promise<void> {
@@ -628,11 +657,37 @@ export class EncryptedSync {
       (this.cache.packs ??= {})[pending.id] = manifest;
     } catch (error) {
       if (!(error instanceof SyncFileNotFoundError)) throw error;
-      // Another device can consolidate this published pack before its owner finishes cleanup.
+      // Authenticate the pending representation before discovery can select an equivalent legacy JSON key order.
+      const retained = Object.fromEntries(Object.keys(pending.manifest.commits).filter(id => this.cache.commits[id])
+        .map(id => [id, this.cache.commits[id]]));
+      const expected = await (pending.manifest.version === 3 ? hashNativeCommitsAsync(retained) : hashCommitsAsync(retained));
+      if (Object.entries(pending.manifest.commits).some(([id, hash]) => expected[id] !== hash)) {
+        // A previous cleanup attempt may already have persisted another equivalent key order.
+        // The immutable local outbox still contains the original published representation until cleanup completes.
+        const saved = await readSyncEntries(this.dataset, pending.manifest.parts.map(id => `outbox:${id}`));
+        const chunks = await this.parallel(pending.manifest.parts.map((id, index) => ({ id, bytes: saved[index] })), async ({ id, bytes }) => {
+          if (!bytes) throw new Error('Missing local upload data.');
+          return decrypt(this.requireKey(), bytes, this.context(id));
+        });
+        if (chunks.reduce((size, bytes) => size + bytes.length, 0) !== pending.manifest.bytes) throw new Error('Missing compacted sync history.');
+        const { value: original } = pending.manifest.version === 3
+          ? await decodeNativePartsAsync<{ version: number; commits: Record<string, Commit> }>(chunks)
+          : pending.manifest.version === 2 ? await decodeWirePartsAsync<{ version: number; commits: Record<string, Commit> }>(chunks)
+          : await decodePartsAsync<{ version: number; commits: Record<string, Commit> }>(chunks);
+        if (original.version !== 1 || !original.commits || Object.keys(original.commits).length !== Object.keys(pending.manifest.commits).length) {
+          throw new Error('Missing compacted sync history.');
+        }
+        const hashes = await (pending.manifest.version === 3 ? hashNativeCommitsAsync(original.commits) : hashCommitsAsync(original.commits));
+        const canonical = await hashNativeCommitsAsync(original.commits), current = await hashNativeCommitsAsync(retained);
+        if (Object.entries(pending.manifest.commits).some(([id, hash]) => hashes[id] !== hash || canonical[id] !== current[id])) {
+          throw new Error('Missing compacted sync history.');
+        }
+      }
+      // Another device can consolidate this pack with its own hash rule or canonical-equivalent representation.
       await this.discoverPacks();
       const replacements = Object.values(this.cache.packs ?? {}).filter(pack =>
         Object.keys(pack.commits).some(id => Object.hasOwn(pending.manifest.commits, id)));
-      for (const [id, hash] of Object.entries(pending.manifest.commits)) if (!replacements.some(pack => pack.commits[id] === hash)) {
+      for (const id of Object.keys(pending.manifest.commits)) if (!replacements.some(pack => Object.hasOwn(pack.commits, id))) {
         throw new Error('Missing compacted sync history.');
       }
       for (const pack of replacements) await this.loadPack(pack, true);
@@ -660,12 +715,16 @@ export class EncryptedSync {
     await this.discoverPacks();
     const raw = await this.transport.commits(this.dataset);
     if (raw.length < (force ? 1 : COMPACT_COMMITS)) { reportCompaction({ status: 'skipped', reason: 'liveBelowThreshold' }); return; }
+    const native = this.options.wireCompression === 'gzip';
+    if (native) requireNativeGzip();
     const groups: { commits: string[]; sources: string[]; size: number }[] = [];
     let group = { commits: [] as string[], sources: [] as string[], size: 0 };
     for (const id of raw.sort()) {
       const commit = this.cache.commits[id];
       if (!commit) continue; // A concurrent publication belongs to the next synchronization.
-      const size = Math.max((await encodeAsync(commit)).length, id.length + 128);
+      // Native groups use a conservative uncompressed estimate; final payloads are still split by actual bytes.
+      const estimated = native ? nativeCommitByteBound(commit) : (await encodeAsync(commit)).length;
+      const size = Math.max(estimated, id.length + 128);
       if (group.commits.length && group.size + size > PACK_BYTES) {
         groups.push(group); group = { commits: [], sources: [], size: 0 };
       }
@@ -675,7 +734,8 @@ export class EncryptedSync {
     if (group.commits.length) groups.push(group);
     // Fold small existing packs into the new group; do not rewrite full packs on every edit.
     for (const [id, pack] of Object.entries(this.cache.packs ?? {})) {
-      const size = Math.max(pack.bytes, Object.keys(pack.commits).reduce((sum, commit) => sum + commit.length + 128, 0));
+      const size = native ? Object.keys(pack.commits).reduce((sum, id) => sum + nativeCommitByteBound(this.cache.commits[id]), 0)
+        : Math.max(pack.bytes, Object.keys(pack.commits).reduce((sum, commit) => sum + commit.length + 128, 0));
       const target = groups.find(group => group.size + size <= PACK_BYTES);
       if (!target) continue;
       target.commits.push(...Object.keys(pack.commits)); target.sources.push(id, ...pack.parts); target.size += size;
@@ -683,16 +743,17 @@ export class EncryptedSync {
     for (const group of groups) {
       const commits = Object.fromEntries([...new Set(group.commits)].sort().map(id => [id, this.cache.commits[id]]));
       const value = { version: 1 as const, commits };
-      const logical = await encodeAsync(value);
-      const payload = this.options.wireDelta ? await encodeWireAsync(value, logical) : logical;
-      const hashes = await hashCommitsAsync(commits);
+      const logical = native ? undefined : await encodeAsync(value);
+      const payload = native ? await encodeNativeAsync(value)
+        : this.options.wireDelta ? await encodeWireAsync(value, logical) : logical!;
+      const hashes = await (native ? hashNativeCommitsAsync(commits) : hashCommitsAsync(commits));
       const [id, ...parts] = await this.transport.ids(1 + Math.ceil(payload.length / PACK_BYTES));
       const files: Pending['files'] = [];
       for (let i = 0; i < parts.length; i++) {
         const bytes = await encrypt(this.requireKey(), payload.slice(i * PACK_BYTES, (i + 1) * PACK_BYTES), this.context(parts[i]));
         files.push({ id: parts[i], kind: 'pack-part', bytes, size: bytes.length, sent: false });
       }
-      const manifest: PackManifest = { version: payload.length < logical.length ? 2 : 1, commits: hashes, parts, bytes: payload.length };
+      const manifest: PackManifest = { version: native ? 3 : payload.length < logical!.length ? 2 : 1, commits: hashes, parts, bytes: payload.length };
       const bytes = await encrypt(this.requireKey(), await encodeAsync(manifest), this.context(id));
       if (bytes.length > PACK_BYTES + 28) throw new Error('Sync pack index too large.');
       files.push({ id, kind: 'pack', bytes, size: bytes.length, sent: false });
@@ -705,10 +766,14 @@ export class EncryptedSync {
   private async prepare(changes: Change[], baseline: Records | undefined, resolutions?: Commit['resolutions']) {
     syncPhase('encrypting');
     const commit: Commit = { version: 1, parents: this.heads(), changes, ...(resolutions ? { resolutions } : {}) };
-    const logical = await encodeAsync(commit);
-    const payload = this.options.wireDelta ? await encodeWireAsync(commit, logical) : logical;
-    const delta = payload.length < logical.length;
-    const inline = !delta && commit.parents.length > 0 && payload.length <= INLINE_BYTES;
+    const native = this.options.wireCompression === 'gzip';
+    if (native) requireNativeGzip();
+    const logical = native ? undefined : await encodeAsync(commit);
+    // Native full JSON is independent of delta encoding; do not run legacy LZ to compare representations.
+    const payload = native ? await encodeNativeAsync(commit)
+      : this.options.wireDelta ? await encodeWireAsync(commit, logical) : logical!;
+    const delta = !native && payload.length < logical!.length;
+    const inline = !native && !delta && commit.parents.length > 0 && payload.length <= INLINE_BYTES;
     const partBytes = this.options.partBytes ?? PART_BYTES;
     const [id, ...parts] = await this.transport.ids(inline ? 1 : 1 + Math.ceil(payload.length / partBytes));
     syncPhase('encrypting', parts.length + 1);
@@ -718,10 +783,10 @@ export class EncryptedSync {
       files.push({ id: parts[i], kind: 'part', bytes, size: bytes.length, sent: false });
       completedFile(bytes.length);
     }
-    const bytes = await encrypt(this.requireKey(), await encodeAsync(inline ? { ...commit, version: 2 } : { version: delta ? 3 : 1, parts }), this.context(id));
+    const bytes = await encrypt(this.requireKey(), await encodeAsync(inline ? { ...commit, version: 2 } : { version: native ? 4 : delta ? 3 : 1, parts }), this.context(id));
     files.push({ id, kind: 'commit', bytes, size: bytes.length, sent: false });
     completedFile(bytes.length);
-    this.encodedCommits.set(id, logical);
+    this.encodedCommits.set(id, native ? frameCacheGzip(payload) : logical!);
     this.cache.pending = { id, commit, baseline, files };
     await this.save();
   }
