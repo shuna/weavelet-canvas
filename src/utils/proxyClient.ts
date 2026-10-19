@@ -1,5 +1,7 @@
 import useStore from '@store/store';
 import type { OpenRouterObservation } from '@type/chat';
+import type { ProxyStatus } from '../../proxy-worker/src/diagnostics';
+export type { ProxyStatus } from '../../proxy-worker/src/diagnostics';
 /**
  * Client utilities for the Weavelet Stream Proxy (Cloudflare Worker).
  *
@@ -23,6 +25,22 @@ export interface ProxyConfig {
 function authHeaders(config: ProxyConfig): Record<string, string> {
   if (!config.authToken) return {};
   return { Authorization: `Bearer ${config.authToken}` };
+}
+
+export async function fetchProxyStatus(config: ProxyConfig, sessionIds: string[], signal?: AbortSignal): Promise<ProxyStatus> {
+  const query = new URLSearchParams();
+  for (const id of sessionIds) query.append('sessionId', id);
+  const response = await fetch(`${config.endpoint.trim().replace(/\/+$/, '')}/api/status?${query}`, {
+    headers: authHeaders(config), cache: 'no-store', signal,
+  });
+  if (!response.ok) {
+    await response.body?.cancel().catch(() => {});
+    throw new Error(response.status === 401 ? '認証に失敗しました。プロキシの認証トークンを確認してください。'
+      : response.status === 404 ? 'このプロキシは状態APIに対応していません。Workerを更新してください。' : `状態の取得に失敗しました（HTTP ${response.status}）`);
+  }
+  const status = await response.json() as ProxyStatus;
+  if (!Array.isArray(status.sessions)) throw new Error('プロキシからの状態応答が不正です');
+  return status;
 }
 
 export function getProxyConfig(): ProxyConfig | undefined {

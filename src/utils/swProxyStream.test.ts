@@ -7,15 +7,17 @@ const bytes = (parts: string[]) => new ReadableStream<Uint8Array>({
   start(controller) { parts.forEach((part) => controller.enqueue(new TextEncoder().encode(part))); controller.close(); },
 });
 
-async function run(parts: string[], stall = false) {
+async function run(parts: string[], stall = false, onStart?: (scope: any) => void) {
   const messages: any[] = [];
   const scope = runInNewContext(`${readFileSync('public/sw-stream.js', 'utf8')}\n({ handleStartStream, dbGet })`, {
     indexedDB: new IDBFactory(), self: { addEventListener() {} }, Date, Map, Promise,
     TextEncoder, TextDecoder, ReadableStream, AbortController, setTimeout, clearTimeout,
     console: { log() {} }, fetch: async () => new Response(stall ? new ReadableStream({ start(controller) { parts.forEach(part => controller.enqueue(new TextEncoder().encode(part))); } }) : bytes(parts), { status: 200 }),
   });
-  await scope.handleStartStream({ requestId: 'r', chatId: 'c', nodeId: 'n', endpoint: 'https://llm', headers: {}, body: {}, chatIndex: 0, messageIndex: 0,
+  const pending = scope.handleStartStream({ requestId: 'r', chatId: 'c', nodeId: 'n', endpoint: 'https://llm', headers: {}, body: {}, chatIndex: 0, messageIndex: 0,
     proxyMode: true, proxyConfig: { endpoint: 'https://proxy', sessionId: 's' } }, { postMessage: (message: any) => messages.push(message) });
+  onStart?.(scope);
+  await pending;
   return { messages, record: await scope.dbGet('r') };
 }
 
@@ -60,4 +62,18 @@ it('does not advance the persisted event ID when EOF cuts an outer SSE frame bef
   const { record, messages } = await run([`id: 1\ndata: ${JSON.stringify(raw)}`]);
   expect(record).toMatchObject({ status: 'failed', lastProxyEventId: 0, bufferedText: '' });
   expect(messages.some(message => message.type === 'sw-done')).toBe(false);
+});
+
+it('checkpoints reasoning-only events before any display text or terminal response arrives', async () => {
+  vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+  try {
+    let scope: any;
+    const raw = 'data: {"choices":[{"delta":{"reasoning":"still thinking"}}]}\n\n';
+    const pending = run([`id: 1\ndata: ${JSON.stringify(raw)}\n\n`], true, value => { scope = value; });
+    await vi.waitFor(() => expect(vi.getTimerCount()).toBeGreaterThan(0));
+    await vi.advanceTimersByTimeAsync(801);
+    await vi.waitFor(async () => expect(await scope.dbGet('r')).toMatchObject({ bufferedText: '', bufferedReasoning: 'still thinking', lastProxyEventId: 1, status: 'streaming' }));
+    await vi.advanceTimersByTimeAsync(45_001);
+    await pending;
+  } finally { vi.useRealTimers(); }
 });

@@ -1,5 +1,6 @@
 import { beforeEach, afterEach, describe, expect, it, vi } from 'vitest';
 import worker, { type Env } from '../src/index';
+import { sessionDiagnostics } from '../src/diagnostics';
 
 const env = { PROXY_AUTH_TOKEN: '' } as Env;
 const enc = new TextEncoder();
@@ -60,6 +61,16 @@ describe('stream relay', () => {
     );
     const response = await stream(`done-${_name}`);
     expect(await response.text()).toContain('event: done');
+  });
+
+  it('completes on DONE without waiting for the upstream HTTP body to close', async () => {
+    const cancel = vi.fn();
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(new ReadableStream<Uint8Array>({
+      start(controller) { controller.enqueue(enc.encode('data: [DONE]\n\n')); }, cancel,
+    }))));
+    const response = await stream('done-with-open-body');
+    expect(await response.text()).toContain('event: done');
+    expect(cancel).toHaveBeenCalled();
   });
 
   it('treats EOF without [DONE] as interrupted', async () => {
@@ -283,6 +294,76 @@ describe('stream relay', () => {
     expect(text).toContain('id: 2');
     expect(text).toContain('event: done');
     expect(text).not.toContain('event-id-mismatch');
+  });
+
+  it('recovers a large reply from the retained tail and rejects a cursor before that window', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(body(['data: ' + 'x'.repeat(400_000) + '\n\n', 'data: ' + 'y'.repeat(400_000) + '\n\n', 'data: ' + 'z'.repeat(400_000) + '\n\n', 'data: [DONE]\n\n']))));
+    expect(await (await stream('large-tail')).text()).toContain('event: done');
+    const request = (cursor: number) => worker.fetch(new Request('https://worker.example/api/recover/large-tail?lastEventId=' + cursor), env, ctx);
+    const recovered = await (await request(2)).text();
+    expect(recovered).toContain('id: 3');
+    expect(recovered).toContain('event: done');
+    expect(recovered).not.toContain('event: interrupted');
+    expect(await (await request(0)).text()).toContain('event-id-mismatch');
+    const stored = await [...cache.values()][0].clone().json();
+    expect(stored.firstEventId).toBe(2);
+    expect(stored.lastEventId).toBe(4);
+    expect(sessionDiagnostics().find(s => s.sessionId === 'large-tail')!.bufferedBytes).toBeLessThanOrEqual(1_048_576);
+  });
+
+  it('bounds a blocked downstream write even when the runtime does not signal a client abort', async () => {
+    vi.useFakeTimers();
+    let upstream!: ReadableStreamDefaultController<Uint8Array>;
+    vi.stubGlobal('fetch', vi.fn((_url: unknown, init: RequestInit) => {
+      const response = new Response(new ReadableStream<Uint8Array>({ start(c) { upstream = c; c.enqueue(enc.encode('data: first\n\n')); } }));
+      init.signal?.addEventListener('abort', () => upstream.error(new Error('aborted')));
+      return Promise.resolve(response);
+    }));
+    const response = await stream('backpressure-timeout');
+    await vi.waitFor(() => expect(sessionDiagnostics().find(s => s.sessionId === 'backpressure-timeout')!.lastEventId).toBe(1));
+    await vi.advanceTimersByTimeAsync(36_000);
+    expect(sessionDiagnostics().find(s => s.sessionId === 'backpressure-timeout')).toMatchObject({ phase: 'interrupted', reason: 'client-write-timeout' });
+    const saved = await [...cache.values()][0].clone().json();
+    expect(saved.generationTerminal).toBe('interrupted');
+    await response.body?.cancel().catch(() => {});
+  });
+
+  it('authenticates status queries and returns counters without prompts or provider credentials', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(body(['data: private-prompt-text\n\ndata: [DONE]\n\n']))));
+    await (await stream('status-session')).text();
+    const request = (authorization?: string) => new Request('https://worker.example/api/status?sessionId=status-session', { headers: authorization ? { Authorization: authorization } : {} });
+    expect((await worker.fetch(request(), { PROXY_AUTH_TOKEN: 'secret' }, ctx)).status).toBe(401);
+    const response = await worker.fetch(request('Bearer secret'), { PROXY_AUTH_TOKEN: 'secret' }, ctx);
+    expect(response.headers.get('Cache-Control')).toBe('no-store');
+    const result = await response.json();
+    const session = result.sessions.find((s: any) => s.sessionId === 'status-session');
+    expect(session.local).toMatchObject({ phase: 'complete', lastEventId: 1, cacheFailures: 0 });
+    expect(session.cache).toMatchObject({ state: 'available', terminal: 'complete', lastEventId: 1 });
+    expect(JSON.stringify(result)).not.toContain('private-prompt-text');
+    expect(JSON.stringify(result)).not.toContain('secret');
+  });
+
+  it('reports an unknown cache separately from an expired entry, and bounds lookups', async () => {
+    vi.stubGlobal('caches', { default: { match: async (key: Request) => key.url ? new Response(JSON.stringify({ expiresAt: Date.now() - 1, chunks: [], firstEventId: 1, generationTerminal: 'interrupted', cacheCapability: 'available' })) : undefined } });
+    const result = await (await worker.fetch(new Request('https://worker.example/api/status?sessionId=expired-status'), env, ctx)).json();
+    expect(result.sessions.find((s: any) => s.sessionId === 'expired-status').cache.state).toBe('expired');
+    const tooMany = new URL('https://worker.example/api/status');
+    for (let n = 0; n < 21; n++) tooMany.searchParams.append('sessionId', String(n));
+    expect((await worker.fetch(new Request(tooMany), env, ctx)).status).toBe(400);
+  });
+
+  it('reads compact cache metadata without parsing the stored response body', async () => {
+    const json = vi.fn().mockRejectedValue(new Error('must not download the stream body'));
+    const cancel = vi.fn();
+    vi.stubGlobal('caches', { default: { match: async () => ({
+      headers: new Headers({ 'X-Weavelet-Status': JSON.stringify({ firstEventId: 10, lastEventId: 20, terminal: 'complete', expiresAt: Date.now() + 1000 }) }),
+      json, body: new ReadableStream({ cancel }),
+    }) } });
+    const response = await worker.fetch(new Request('https://worker.example/api/status?sessionId=metadata-only'), env, ctx);
+    const result = await response.json();
+    expect(result.sessions.find((s: any) => s.sessionId === 'metadata-only').cache).toMatchObject({ state: 'available', firstEventId: 10, lastEventId: 20 });
+    expect(json).not.toHaveBeenCalled();
+    expect(cancel).toHaveBeenCalled();
   });
 
   it('reports local and provider cancellation separately', async () => {

@@ -1,0 +1,51 @@
+import { test, expect } from '@playwright/test';
+test.use({ headless: true, baseURL: process.env.PLAYWRIGHT_BASE_URL ?? 'http://127.0.0.1:5175', launchOptions: { executablePath: process.env.PLAYWRIGHT_CHROME_EXECUTABLE } });
+
+test('inspects server metadata against local cursors and displays missing data and authentication errors', async ({ page }) => {
+  let unauthorized = false;
+  let lookedUpManualId = false;
+  await page.route('https://proxy.test/api/status**', async route => {
+    expect(route.request().headers().authorization).toBe('Bearer private-token');
+    expect(route.request().url()).not.toContain('private-token');
+    if (unauthorized) return route.fulfill({ status: 401, body: '{"error":"Unauthorized"}' });
+    const ids = new URL(route.request().url()).searchParams.getAll('sessionId');
+    lookedUpManualId ||= ids.includes('other-device-session');
+    const session = (id: string, first: number) => ({ sessionId: id,
+      local: { sessionId: id, startedAt: Date.now(), updatedAt: Date.now(), lastChunkAt: Date.now(), phase: 'interrupted', lastEventId: 20, firstEventId: first, receivedBytes: 2200000, bufferedBytes: 1000000, cacheWrites: 4, cacheFailures: 1, reason: 'upstream-idle-timeout' },
+      cache: { state: 'available', firstEventId: first, lastEventId: 20, terminal: 'interrupted', expiresAt: Date.now() + 300000, updatedAt: Date.now() } });
+    await route.fulfill({ contentType: 'application/json', headers: { 'Access-Control-Allow-Origin': '*' }, body: JSON.stringify({ version: '0.3.0', checkedAt: Date.now(), colo: 'NRT', instanceId: 'diagnostic-instance', scope: 'current-isolate', limits: { cacheBytes: 1048576, retentionMs: 300000, idleTimeoutMs: 45000 }, sessions: [session('session-a', 10), session('session-b', 1), ...(lookedUpManualId ? [{ sessionId: 'other-device-session', local: null, cache: { state: 'missing' } }] : [])] }) });
+  });
+  await page.goto('/', { waitUntil: 'networkidle' });
+  await page.evaluate(async () => {
+    const load = (path: string) => import(/* @vite-ignore */ path);
+    const { default: store } = await load('/src/store/store.ts');
+    const { generateDefaultChat } = await load('/src/constants/chat.ts');
+    const { addContent } = await load('/src/utils/contentStore.ts');
+    const { materializeActivePath } = await load('/src/utils/branchUtils.ts');
+    const { saveRequest } = await load('/src/utils/streamDb.ts');
+    const contentStore = {};
+    const nodes: Record<string, any> = {};
+    ['a', 'b'].forEach((id, n) => { nodes[id] = { id, parentId: n ? 'a' : null, role: 'assistant', createdAt: Date.now(), contentHash: addContent(contentStore, [{ type: 'text', text: 'partial' }]) }; });
+    const tree = { rootId: 'a', activePath: ['a', 'b'], nodes };
+    store.getState().setOnboardingCompleted(true);
+    store.setState({ chats: [{ ...generateDefaultChat('Diagnostics'), id: 'diagnostics', branchTree: tree, messages: materializeActivePath(tree, contentStore) }], currentChatIndex: 0, contentStore, generatingSessions: {}, proxyEnabled: true, proxyEndpoint: 'https://proxy.test', proxyAuthToken: 'private-token' });
+    for (const id of ['a', 'b']) await saveRequest({ requestId: `request-${id}`, chatId: 'diagnostics', nodeId: id, checkpointHash: nodes[id].contentHash, checkpointRole: 'assistant', chatIndex: 0, messageIndex: id === 'a' ? 0 : 1, bufferedText: 'partial', status: 'failed', createdAt: Date.now(), updatedAt: Date.now(), acknowledged: false, proxySessionId: `session-${id}`, lastProxyEventId: 3 });
+    store.getState().setShowProxySettings(true);
+  });
+  await page.getByRole('button', { name: 'プロキシの状態を確認', exact: true }).click();
+  await expect(page.getByText(/Worker 0.3.0/)).toBeVisible();
+  const gap = page.locator('section').filter({ has: page.getByText('session-a', { exact: true }) });
+  const retained = page.locator('section').filter({ has: page.getByText('session-b', { exact: true }) });
+  await expect(gap).toContainText('欠落なく復旧することはできません');
+  await expect(gap.getByRole('button', { name: 'このリクエストを復旧' })).toBeDisabled();
+  await expect(retained.getByRole('button', { name: 'このリクエストを復旧' })).toBeEnabled();
+  await expect(retained).toContainText('upstream-idle-timeout');
+  await page.getByRole('textbox', { name: '調べるプロキシセッションID' }).fill('other-device-session');
+  await page.getByRole('button', { name: '照会', exact: true }).click();
+  await expect(page.getByText('other-device-session', { exact: true })).toBeVisible();
+  await expect(page.getByText('保存データなし', { exact: false }).last()).toBeVisible();
+  await page.screenshot({ path: '/tmp/weavelet-proxy-status.png', fullPage: true });
+  unauthorized = true;
+  await page.getByRole('button', { name: '更新', exact: true }).click();
+  await expect(page.getByRole('alert')).toContainText('認証に失敗');
+});

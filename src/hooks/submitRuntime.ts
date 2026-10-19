@@ -1258,8 +1258,8 @@ export const executeSubmitStream = async ({
                 const parsedContent = checkpointThinkParser.process(resultString);
                 dbBuffered += parsedContent.content;
                 dbReasoning += parsedContent.reasoning;
-                scheduleDbFlush();
               }
+              scheduleDbFlush();
               if (llmParsed.done) {
                 llmCompleted = true;
               }
