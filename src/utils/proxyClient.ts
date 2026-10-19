@@ -6,7 +6,7 @@ export type { ProxyStatus } from '../../proxy-worker/src/diagnostics';
  * Client utilities for the Weavelet Stream Proxy (Cloudflare Worker).
  *
  * Provides:
- * - ACK endpoint to delete KV cache after full receipt
+ * - ACK endpoint to delete recovery data after full receipt
  * - Recovery endpoint to replay missed chunks
  * - Proxy SSE event parsing helpers
  */
@@ -41,6 +41,39 @@ export async function fetchProxyStatus(config: ProxyConfig, sessionIds: string[]
   const status = await response.json() as ProxyStatus;
   if (!Array.isArray(status.sessions)) throw new Error('プロキシからの状態応答が不正です');
   return status;
+}
+
+export async function deleteProxyStorage(config: ProxyConfig, sessionId?: string): Promise<number> {
+  const base = config.endpoint.trim().replace(/\/+$/, '');
+  let deleted = 0, before: number | undefined, cursor: string | null = null, failed = 0;
+  do {
+    const query = new URLSearchParams();
+    if (before !== undefined) query.set('before', String(before));
+    if (cursor) query.set('cursor', cursor);
+    const abort = new AbortController();
+    const timer = setTimeout(() => abort.abort(), 30_000);
+    try {
+    const response = await fetch(`${base}/api/storage${sessionId === undefined ? `?${query}` : `/${encodeURIComponent(sessionId)}`}`, {
+      method: 'DELETE', headers: authHeaders(config), cache: 'no-store', signal: abort.signal,
+    });
+    if (!response.ok) {
+      await response.body?.cancel().catch(() => {});
+      throw new Error(response.status === 401 || response.status === 403 ? '削除する権限がありません。プロキシの認証トークンを確認してください。'
+        : response.status === 404 || response.status === 501 ? 'このプロキシは保存データの削除に対応していません。' : `保存データの削除に失敗しました（HTTP ${response.status}）。再度実行してください。`);
+    }
+    const result = await response.json();
+    if (sessionId !== undefined) {
+      if (result.deleted !== true) throw new Error('削除結果を確認できませんでした');
+      return 1;
+    }
+    if (!Number.isSafeInteger(result.deleted) || result.deleted < 0 || !Number.isSafeInteger(result.failed) || result.failed < 0 || !Number.isSafeInteger(result.before) || (before !== undefined && before !== result.before) || (result.cursor !== null && (typeof result.cursor !== 'string' || !/^session:[a-f0-9]{64}$/.test(result.cursor) || (cursor !== null && result.cursor <= cursor))))
+      throw new Error('プロキシからの削除応答が不正です');
+    deleted += result.deleted; failed += result.failed;
+    before = result.before; cursor = result.cursor;
+    } finally { clearTimeout(timer); }
+  } while (cursor);
+  if (failed) throw new Error(`${deleted}件を削除しましたが、${failed}件の削除に失敗しました。再度実行してください。`);
+  return deleted;
 }
 
 export function getProxyConfig(): ProxyConfig | undefined {
@@ -108,7 +141,7 @@ export async function sendCancel(
 
 /**
  * Notify the proxy that the client has fully received all chunks.
- * The proxy will delete the KV cache immediately.
+ * The proxy will delete recovery data immediately.
  */
 export async function sendAck(
   config: ProxyConfig,

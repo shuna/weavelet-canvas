@@ -184,6 +184,12 @@ describe('stream relay', () => {
     expect(sessionDiagnostics().find(s => s.sessionId === 'long-periodic-snapshots')?.cacheWrites).toBeGreaterThan(42);
   });
 
+  it('requires configured authentication for deleting all proxy storage', async () => {
+    const request = () => new Request('https://worker.example/api/storage', { method: 'DELETE' });
+    expect((await worker.fetch(request(), env, ctx)).status).toBe(403);
+    expect((await worker.fetch(request(), { PROXY_AUTH_TOKEN: 'private' }, ctx)).status).toBe(401);
+  });
+
   it('returns cache-miss immediately', async () => {
     vi.stubGlobal('caches', {
       default: {

@@ -24,6 +24,7 @@ export interface ProxyStatus {
   instanceId: string;
   scope: 'current-isolate' | 'durable-session';
   recentSessionsVisible: boolean;
+  storageDeletion?: { individual: boolean; all: boolean };
   limits: { cacheBytes: number; retentionMs: number; idleTimeoutMs: number };
   sessions: Array<{
     sessionId: string;
@@ -46,3 +47,5 @@ export function startDiagnostic(sessionId: string): SessionDiagnostic {
   recent.set(sessionId, value);
   return value;
 }
+
+export const forgetDiagnostic = (sessionId: string) => recent.delete(sessionId);

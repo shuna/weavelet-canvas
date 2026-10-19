@@ -16,6 +16,7 @@ function fixture() {
     async delete(keys: string[]) { for (const key of keys) data.delete(key); },
     async list() { return new Map(data); },
     async deleteAll() { data.clear(); },
+    deleteAlarm: vi.fn(async () => {}),
     setAlarm: vi.fn(async (_at: number) => {}),
     async transaction<T>(fn: (tx: unknown) => Promise<T>) { return fn(storage); },
   };
@@ -58,6 +59,20 @@ describe('durable recovery storage', () => {
     expect(await store.diagnostic()).toBeDefined();
     await vi.advanceTimersByTimeAsync(DIAGNOSTIC_TTL_MS);
     await store.alarm();
+    expect(data.size).toBe(0);
+    expect((await store.summary()).state).toBe('not-recorded');
+  });
+  it('purges response and diagnostics without letting delayed writes or ACK recreate records', async () => {
+    const { store, data, storage } = fixture();
+    const diagnostic = startDiagnostic('purge-record');
+    await store.saveDiagnostic(diagnostic);
+    await store.put(key, snapshot('private response'));
+    await store.purge();
+    expect(data.size).toBe(0);
+    expect(storage.deleteAlarm).toHaveBeenCalled();
+    await store.put(key, snapshot('late response'));
+    await expect(store.saveDiagnostic(diagnostic)).rejects.toThrow('deleted');
+    await store.delete(key);
     expect(data.size).toBe(0);
     expect((await store.summary()).state).toBe('not-recorded');
   });

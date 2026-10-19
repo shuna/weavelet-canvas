@@ -15,10 +15,13 @@ async function deleteParts(storage: DurableObjectTransaction, count: number, sta
 
 // Each session has its own object; metadata and the bounded response commit together.
 export class RecoveryStore implements RecoveryCache {
+  private purged = false;
+  get wasPurged() { return this.purged; }
   constructor(private storage: DurableObjectStorage) {}
   async diagnostic() { return this.storage.get<SessionDiagnostic>('diagnostic'); }
   async saveDiagnostic(diagnostic: SessionDiagnostic) {
     await this.storage.transaction(async tx => {
+      if (this.purged) throw new Error('Session storage was deleted');
       await tx.put('diagnostic', { ...diagnostic });
       const saved = await tx.get<Saved>('saved');
       await tx.setAlarm(saved && !saved.deleted && saved.expiresAt > Date.now() ? saved.expiresAt : Date.now() + DIAGNOSTIC_TTL_MS);
@@ -48,6 +51,7 @@ export class RecoveryStore implements RecoveryCache {
     const headers = [...response.headers.entries()] as [string, string][];
     const summary = JSON.parse(response.headers.get('X-Weavelet-Status')!);
     await this.storage.transaction(async tx => {
+      if (this.purged) return;
       const previous = await tx.get<Saved>('saved');
       if (previous?.deleted || await tx.get('acknowledged')) return; // A delayed final write must not undo acknowledgement.
       const parts = Math.ceil(body.length / 32_768);
@@ -63,6 +67,7 @@ export class RecoveryStore implements RecoveryCache {
   }
   async delete(_key: Request) {
     return this.storage.transaction(async tx => {
+      if (this.purged) return false;
       const saved = await tx.get<Saved>('saved');
       await tx.put('acknowledged', true);
       if (!saved) { await tx.setAlarm(Date.now() + DIAGNOSTIC_TTL_MS); return false; }
@@ -71,6 +76,11 @@ export class RecoveryStore implements RecoveryCache {
       await tx.setAlarm(saved.diagnosticExpiresAt);
       return !saved.deleted;
     });
+  }
+  async purge() {
+    this.purged = true;
+    await this.storage.deleteAll();
+    await this.storage.deleteAlarm();
   }
   async alarm() {
     await this.storage.transaction(async tx => {

@@ -17,3 +17,11 @@ class_name = "ProxySession"
 [[migrations]]
 tag = "v1"
 new_sqlite_classes = ["ProxySession"]
+
+[[durable_objects.bindings]]
+name = "REGISTRY"
+class_name = "SessionRegistry"
+
+[[migrations]]
+tag = "v2"
+new_sqlite_classes = ["SessionRegistry"]
