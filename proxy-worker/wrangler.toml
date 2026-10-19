@@ -9,3 +9,11 @@ head_sampling_rate = 1
 
 # Secrets (set via `wrangler secret put <NAME>`):
 # - PROXY_AUTH_TOKEN: Token to authenticate clients to this proxy
+
+[[durable_objects.bindings]]
+name = "SESSIONS"
+class_name = "ProxySession"
+
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["ProxySession"]

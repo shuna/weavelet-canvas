@@ -152,6 +152,25 @@ describe('stream relay', () => {
     expect((await pending).status).toBe(502);
   });
 
+  it('continues periodic snapshots after forty writes on a long connected stream', async () => {
+    vi.useFakeTimers();
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(new ReadableStream<Uint8Array>({
+      start(controller) {
+        let count = 0;
+        const timer = setInterval(() => {
+          controller.enqueue(enc.encode(`data: ${++count}\n\n`));
+          if (count === 45) { clearInterval(timer); controller.enqueue(enc.encode('data: [DONE]\n\n')); controller.close(); }
+        }, 10_000);
+      },
+    }))));
+    const response = await stream('long-periodic-snapshots');
+    const output = response.text();
+    await vi.advanceTimersByTimeAsync(450_001);
+    expect(await output).toContain('event: done');
+    expect(vi.mocked(caches.default.put).mock.calls.length).toBeGreaterThan(42);
+    expect(sessionDiagnostics().find(s => s.sessionId === 'long-periodic-snapshots')?.cacheWrites).toBeGreaterThan(42);
+  });
+
   it('returns cache-miss immediately', async () => {
     vi.stubGlobal('caches', {
       default: {

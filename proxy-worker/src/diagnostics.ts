@@ -5,6 +5,9 @@ export interface SessionDiagnostic {
   phase: 'headers' | 'streaming' | 'disconnected' | 'complete' | 'interrupted' | 'failed' | 'acknowledged';
   lastEventId: number;
   lastChunkAt?: number;
+  disconnectedAt?: number;
+  disconnectReason?: string;
+  lastClientWriteAt?: number;
   firstEventId: number;
   receivedBytes: number;
   bufferedBytes: number;
@@ -19,13 +22,13 @@ export interface ProxyStatus {
   checkedAt: number;
   colo: string;
   instanceId: string;
-  scope: 'current-isolate';
+  scope: 'current-isolate' | 'durable-session';
   recentSessionsVisible: boolean;
   limits: { cacheBytes: number; retentionMs: number; idleTimeoutMs: number };
   sessions: Array<{
     sessionId: string;
     local: SessionDiagnostic | null;
-    cache: { state: 'available' | 'missing' | 'expired' | 'error'; firstEventId?: number; lastEventId?: number; terminal?: string; expiresAt?: number; updatedAt?: number; capability?: string; reason?: string };
+    cache: { state: 'available' | 'missing' | 'expired' | 'error' | 'acknowledged' | 'not-saved' | 'not-recorded'; firstEventId?: number; lastEventId?: number; terminal?: string; expiresAt?: number; updatedAt?: number; capability?: string; reason?: string };
   }>;
 }
 
