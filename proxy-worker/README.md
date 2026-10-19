@@ -13,12 +13,20 @@ CloudFlare Worker that proxies SSE streams from LLM APIs with disconnect recover
 1. Client sends LLM request to the Worker instead of directly to the LLM API
 2. Worker forwards the request and streams SSE back with sequential event IDs
 3. Worker buffers up to 1 MiB of chunks in memory during the stream
-4. Initial, periodic, disconnect, and terminal snapshots use the Workers Cache API (5 minute best-effort TTL; entries are not shared between data centers). The saved prefix is capped at 1 MiB; a capacity-limited recovery ends as interrupted.
+4. Initial, periodic, disconnect, and terminal snapshots use the Workers Cache API (5 minute best-effort TTL; entries are not shared between data centers). The most recent contiguous window is capped at 1 MiB. Recovery succeeds when the saved client cursor is within that window; a missing prefix returns an interrupted result.
 5. If the client disconnects, the Worker reads for at most 20 seconds, then waits at most another 5 seconds for its final cache write.
 6. Client reconnects and calls `/api/recover/:sessionId?lastEventId=N` to get missed chunks. The cursor must be a non-negative safe integer; missing prefixes and inconsistent terminal cursors return an interrupted result.
 7. The Web app saves each bubble's stream status and request identity with the chat. Incomplete bubbles keep an inline recovery action after reload, scoped to that request. Recovery checkpoints expire seven days after creation; acknowledged records are cleaned up after one hour.
 
-Periodic snapshots run every 10 seconds, with at most 40 periodic writes per stream to leave room for fetch, disconnect, and terminal writes. Terminal delivery waits up to five seconds for the serialized final cache write. Connected snapshots also cover loss of the final response before disconnect detection. Cache availability remains best effort: eviction or reconnecting through another data center can still prevent recovery.
+Changed snapshots are saved at most every 10 seconds, with at most 40 periodic writes per stream to leave room for fetch, disconnect, and terminal writes. Terminal delivery waits up to five seconds for the serialized final cache write. Connected snapshots also cover loss of the final response before disconnect detection. Cache availability remains best effort: eviction or reconnecting through another data center can still prevent recovery.
+
+## Inspecting proxy state
+
+Open **Settings → Proxy → プロキシの状態を確認**. The view refreshes every five seconds and compares the browser's latest 20 pending request cursors with server-side cache ranges. It shows the Worker version, Cloudflare data center, execution-instance identifier, relay phase, received/buffered bytes, cache-write failures, expiry, and classified termination reason. A session ID from another device can be entered manually.
+
+The authenticated `GET /api/status?sessionId=...` API returns only metadata, never prompt/response bodies or provider credentials. Supply up to 20 repeated `sessionId` query parameters. The recent-request list is limited to 100 entries and five minutes **in the current isolate**; an empty list does not prove there are no active requests elsewhere. Known IDs are also checked against the local Cache API, independently of this list. When `PROXY_AUTH_TOKEN` is unset, recent IDs are never enumerated because each session ID acts as a capability token; only explicitly supplied IDs are returned. A cache miss cannot distinguish eviction, ACK deletion, expiry, or a different data center.
+
+The status reader uses compact cache-response headers rather than downloading every stored response on each poll. Blocked client writes transition to disconnected after 15 seconds; the existing 20-second upstream-read and 25-second final-save deadlines still apply. Stream-end logs contain only a hashed session reference, counters and a classified reason.
 
 ## Free plan limits
 
