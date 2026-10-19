@@ -6,7 +6,7 @@ import { getAllPending, type StreamRecord } from '@utils/streamDb';
 import { recoverPending } from '@hooks/useStreamRecovery';
 import { resolveRecoveryTarget } from '@hooks/streamRecoveryHelpers';
 
-const phaseLabels: Record<string, string> = { headers: '応答ヘッダー待ち', streaming: '受信中', disconnected: 'クライアント切断', complete: '完了', interrupted: '中断', failed: '失敗', acknowledged: '受信確認・削除済み' };
+const phaseLabels: Record<string, string> = { headers: '応答ヘッダー待ち', streaming: '受信中', disconnected: 'クライアント切断', complete: '完了', interrupted: '中断', failed: '失敗', acknowledged: '受信確認済み' };
 const cacheLabels: Record<string, string> = { available: '保存あり', missing: '保存データなし', expired: '期限切れ', error: '保存状態を取得できません' };
 const reasonLabels: Record<string, string> = {
   'upstream-idle-timeout': '上流APIから45秒間データが届きませんでした',
@@ -91,7 +91,7 @@ export function ProxyStatusView({ config }: { config: ProxyConfig }) {
             <div className='flex flex-wrap gap-x-5 gap-y-1'>
               <span>中継: {session.local ? phaseLabels[session.local.phase] : 'この実行環境では確認できません'}</span>
               <span>復旧データ: {cacheLabels[session.cache.state]}</span>
-              <span>生成結果: {session.cache.terminal ? phaseLabels[session.cache.terminal] : '不明'}</span>
+              <span>最終保存状態: {session.cache.terminal === 'streaming' ? '受信中の記録（現在の実行は未確認）' : session.cache.terminal ? phaseLabels[session.cache.terminal] : '不明'}</span>
             </div>
             <dl className='grid grid-cols-2 md:grid-cols-4 gap-2 text-xs'>
               <div><dt>端末の受信位置</dt><dd>{record ? cursor : 'この端末に記録なし'}</dd></div>
