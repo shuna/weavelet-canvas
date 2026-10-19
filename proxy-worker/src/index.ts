@@ -674,7 +674,7 @@ async function handleStatus(request: Request, env: Env): Promise<Response> {
     } catch { cache = { state: 'error' }; }
     sessions.push({ sessionId, local: recent.find(s => s.sessionId === sessionId) ?? null, cache });
   }
-  const response = jsonResponse({ version: '0.5.0', checkedAt: Date.now(),
+  const response = jsonResponse({ version: '0.6.0', checkedAt: Date.now(),
     colo: (request.cf as { colo?: string } | undefined)?.colo ?? 'local', instanceId: getInstanceId(), scope: env.recoveryStore ? 'durable-session' : 'current-isolate', recentSessionsVisible: !!env.PROXY_AUTH_TOKEN,
     limits: { cacheBytes: MAX_RECOVERY_CACHE_BYTES, retentionMs: RECOVERY_TTL_MS, idleTimeoutMs: BODY_IDLE_TIMEOUT_MS }, sessions } satisfies ProxyStatus);
   response.headers.set('Cache-Control', 'no-store');
@@ -795,7 +795,7 @@ const worker = {
       return jsonResponse({ error: 'Invalid path encoding' }, 400);
     }
     if (url.pathname === '/health')
-      return jsonResponse({ status: 'ok', version: '0.5.0' });
+      return jsonResponse({ status: 'ok', version: '0.6.0' });
     if (url.pathname.startsWith('/api/') && !authenticated(request, env))
       return jsonResponse({ error: 'Unauthorized' }, 401);
     if (url.pathname === '/api/storage' && request.method === 'DELETE') {
@@ -809,6 +809,20 @@ const worker = {
         const ids = [...new Set(url.searchParams.getAll('sessionId'))];
         if (ids.length > 20 || ids.some(id => !id || id.length > 512)) return jsonResponse({ error: 'At most 20 session IDs of 1–512 characters are allowed' }, 400);
         const base = await (await handleStatus(new Request(new URL('/api/status', url)), { ...env, PROXY_AUTH_TOKEN: '' })).json() as ProxyStatus;
+        if (url.searchParams.get('all') === '1') {
+          if (!env.PROXY_AUTH_TOKEN) return jsonResponse({ error: 'Listing all sessions requires proxy authentication' }, 403);
+          const index = registry(env);
+          if (!index) return jsonResponse({ error: 'Global status is unavailable' }, 501);
+          const query = new URLSearchParams();
+          if (url.searchParams.has('cursor')) query.set('cursor', url.searchParams.get('cursor')!);
+          const response = await index.fetch(`https://registry.internal/all?${query}`);
+          if (!response.ok) return withCORS(response);
+          const page = await response.json() as { sessions: ProxyStatus['sessions']; cursor: string | null; failed: number };
+          const result = jsonResponse({ ...base, scope: 'all-sessions', recentSessionsVisible: true, nextCursor: page.cursor, unavailableSessions: page.failed, storageDeletion: { individual: true, all: true }, sessions: page.sessions } satisfies ProxyStatus);
+          result.headers.set('Cache-Control', 'no-store');
+          return result;
+        }
+
         const results = await Promise.all(ids.map(async id => {
           try {
           const target = new URL('/api/status', url); target.searchParams.set('sessionId', id);
@@ -881,6 +895,15 @@ export class ProxySession {
   }
   async fetch(request: Request) {
     const url = new URL(request.url);
+    if (request.method === 'GET' && url.pathname === '/internal/status') {
+      const diagnostic = await this.store.diagnostic();
+      if (!diagnostic) return jsonResponse({ session: null });
+      const target = new URL('/api/status', request.url);
+      target.searchParams.set('sessionId', diagnostic.sessionId);
+      const response = await handleStatus(new Request(target), { ...this.env, recoveryStore: this.store });
+      const status = await response.json() as ProxyStatus;
+      return jsonResponse({ session: status.sessions[0] });
+    }
     if (request.method === 'DELETE' && (url.pathname === '/internal/storage' || url.pathname.startsWith('/api/storage/'))) {
       if (!authenticated(request, this.env) && url.pathname !== '/internal/storage') return jsonResponse({ error: 'Unauthorized' }, 401);
       const diagnostic = await this.store.diagnostic();

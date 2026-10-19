@@ -43,3 +43,18 @@ it.each([401, 403, 404, 500])('reports deletion HTTP %s as failure', async statu
   vi.stubGlobal('fetch', vi.fn(async () => new Response('error', { status })));
   await expect(deleteProxyStorage({ endpoint: 'https://proxy.example' }, 'id')).rejects.toThrow(/権限|対応|HTTP/);
 });
+
+it('requests the global status page with authenticated headers and a server cursor', async () => {
+  const cursor = 'session:' + 'a'.repeat(64);
+  const fetcher = vi.fn(async () => jsonResponse({ scope: 'all-sessions', sessions: [], nextCursor: null }));
+  vi.stubGlobal('fetch', fetcher);
+  await fetchProxyStatus({ endpoint: 'https://proxy.example', authToken: 'secret' }, [], undefined, { all: true, cursor });
+  const [url, init] = fetcher.mock.calls[0] as unknown as [string, RequestInit];
+  expect(new URL(url).searchParams.get('all')).toBe('1');
+  expect(new URL(url).searchParams.get('cursor')).toBe(cursor);
+  expect(init.headers).toEqual({ Authorization: 'Bearer secret' });
+});
+it('rejects an old proxy that cannot enumerate every runtime', async () => {
+  vi.stubGlobal('fetch', vi.fn(async () => jsonResponse({ scope: 'durable-session', sessions: [] })));
+  await expect(fetchProxyStatus({ endpoint: 'https://proxy.example' }, [], undefined, { all: true })).rejects.toThrow('全実行環境');
+});

@@ -1,3 +1,4 @@
+import type { ProxyStatus } from './diagnostics';
 import { DIAGNOSTIC_TTL_MS } from './recoveryStore';
 
 interface RegistryEnv { SESSIONS: DurableObjectNamespace }
@@ -15,6 +16,21 @@ export class SessionRegistry {
       await storage.put(key, { createdAt: existing?.createdAt ?? Date.now(), expiresAt: Date.now() + 2 * DIAGNOSTIC_TTL_MS });
       if (await storage.getAlarm() === null) await storage.setAlarm(Date.now() + DIAGNOSTIC_TTL_MS);
       return Response.json({ registered: true });
+    }
+    if (request.method === 'GET' && url.pathname === '/all') {
+      const cursor = url.searchParams.get('cursor') ?? '';
+      if (cursor && !/^session:[a-f0-9]{64}$/.test(cursor)) return new Response('Invalid status cursor', { status: 400 });
+      const records = await storage.list({ prefix: 'session:', limit: 20, ...(cursor ? { startAfter: cursor } : {}) });
+      let failed = 0;
+      const sessions = await Promise.all([...records.keys()].map(async key => {
+        try {
+          const object = this.env.SESSIONS.get(this.env.SESSIONS.idFromString(key.slice(8)));
+          const response = await object.fetch('https://session.internal/internal/status');
+          if (!response.ok) throw new Error('Session status unavailable');
+          return (await response.json() as { session: ProxyStatus['sessions'][number] | null }).session;
+        } catch { failed++; return null; }
+      }));
+      return Response.json({ sessions: sessions.filter(session => session !== null), failed, cursor: records.size === 20 ? [...records.keys()].at(-1) : null });
     }
     if (request.method === 'DELETE' && url.pathname === '/session') {
       await storage.delete('session:' + url.searchParams.get('objectId'));

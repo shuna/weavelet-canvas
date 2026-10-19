@@ -22,7 +22,9 @@ export interface ProxyStatus {
   checkedAt: number;
   colo: string;
   instanceId: string;
-  scope: 'current-isolate' | 'durable-session';
+  scope: 'current-isolate' | 'durable-session' | 'all-sessions';
+  nextCursor?: string | null;
+  unavailableSessions?: number;
   recentSessionsVisible: boolean;
   storageDeletion?: { individual: boolean; all: boolean };
   limits: { cacheBytes: number; retentionMs: number; idleTimeoutMs: number };

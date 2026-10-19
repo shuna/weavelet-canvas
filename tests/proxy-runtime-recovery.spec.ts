@@ -126,6 +126,24 @@ const server = http.createServer((req, res) => {
     const result = await proxyFetch(`${proxyBase}/api/stream`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ endpoint: 'http://127.0.0.1:1/unreachable', headers: {}, body: {}, sessionId: `${sessionId}-hidden-${n}` }) });
     assert.equal(result.status, 502);
   }));
+  const globallyListed: string[] = [];
+  let statusCursor: string | null = null, statusPages = 0;
+  do {
+    const query = new URLSearchParams({ all: '1' });
+    if (statusCursor) query.set('cursor', statusCursor);
+    const result = await proxyFetch(`${proxyBase}/api/status?${query}`);
+    assert(result.ok);
+    const page = await result.json();
+    assert.equal(page.scope, 'all-sessions');
+    assert.equal(page.unavailableSessions, 0);
+    globallyListed.push(...page.sessions.map(s => s.sessionId));
+    statusCursor = page.nextCursor; statusPages++;
+  } while (statusCursor);
+  assert.equal(new Set(globallyListed).size, 24);
+  for (let n = 0; n < 23; n++) assert(globallyListed.includes(`${sessionId}-hidden-${n}`));
+  assert(globallyListed.includes(sessionId));
+  assert(statusPages >= 2);
+  assert.equal((await fetch(`${proxyBase}/api/status?all=1`)).status, 401);
   let deletionCursor: string | null = null, cutoff: number | undefined, totalDeleted = 0, pages = 0;
   do {
     const query = new URLSearchParams();

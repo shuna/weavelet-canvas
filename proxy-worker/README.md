@@ -22,9 +22,11 @@ Changed snapshots are saved every 10 seconds throughout the stream, without a li
 
 ## Inspecting proxy state
 
-Open **Settings → Proxy → プロキシの状態を確認**. The view refreshes every five seconds and compares the browser's latest 20 pending request cursors with server-side cache ranges. It shows the Worker version, Cloudflare data center, execution-instance identifier, relay phase, received/buffered bytes, cache-write failures, expiry, and classified termination reason. A session ID from another device can be entered manually.
+Open **Settings → Proxy → プロキシの状態を確認**. The view refreshes every five seconds and lists stored records from all devices and runtimes in pages of twenty, comparing local recovery cursors where available. It shows the Worker version, Cloudflare data center, execution-instance identifier, relay phase, received/buffered bytes, cache-write failures, expiry, and classified termination reason. A session ID from another device can be entered manually.
 
-The authenticated `GET /api/status?sessionId=...` API returns only metadata, never prompt/response bodies or provider credentials. Supply up to 20 repeated `sessionId` query parameters. Each known ID is looked up in its durable session, regardless of the caller's current data center or runtime. IDs are never enumerated globally. Status distinguishes available responses, expiry, ACK deletion, accepted requests with no response snapshot, absent server records, and lookup errors. Initial receipt is persisted before contacting the provider; unavailable receipt storage returns 503 without starting a generation. IDs cannot be reused while their receipt is retained. Diagnostics retain upstream termination and downstream disconnect reasons independently.
+The authenticated `GET /api/status?all=1` API enumerates the shared registry and reads metadata directly from each durable session, including requests this browser has never seen. It requires configured `PROXY_AUTH_TOKEN`. The response uses `scope: "all-sessions"`, `nextCursor`, and `unavailableSessions`; repeat with `cursor` to browse further pages. It never returns prompt/response bodies or provider credentials. Expired/removed diagnostic records are omitted; a page can be empty while still exposing a cursor for later registry entries. Missing objects are distinct from temporarily unavailable lookups, which are counted and shown as errors.
+
+Known-ID inspection remains available through `GET /api/status?sessionId=...` (up to twenty IDs), including open-proxy mode where IDs act as capability tokens. Each known ID resolves to its durable session independently of the caller's data center. Diagnostic receipt is persisted before contacting the provider; unavailable receipt storage returns 503 without starting generation. Retained IDs cannot be reused. The browser's local database is only used to attach recovery cursors and actions; it does not select or block global records.
 
 The status reader reads compact stored metadata rather than downloading response bodies on each poll. Blocked client writes transition to disconnected after 15 seconds; the existing 20-second upstream-read and 25-second final-save deadlines still apply. Stream-end logs contain only a hashed session reference, counters and a classified reason.
 
@@ -165,4 +167,4 @@ Replays chunks after the given event ID. A missing/expired/acknowledged response
 
 ### `GET /health`
 
-Returns `{ "status": "ok", "version": "0.5.0" }`. No auth required.
+Returns `{ "status": "ok", "version": "0.6.0" }`. No auth required.
