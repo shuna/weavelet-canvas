@@ -30,6 +30,9 @@ export function ProxyStatusView({ config }: { config: ProxyConfig }) {
   const [loading, setLoading] = useState(false);
   const [manualId, setManualId] = useState('');
   const [selectedId, setSelectedId] = useState('');
+  const [pages, setPages] = useState(['']);
+  const cursor = pages[pages.length - 1];
+  useEffect(() => { setPages(['']); }, [config.endpoint, config.authToken, selectedId]);
   const [refresh, setRefresh] = useState(0);
   const [deleting, setDeleting] = useState<string>();
   const [notice, setNotice] = useState('');
@@ -46,10 +49,11 @@ export function ProxyStatusView({ config }: { config: ProxyConfig }) {
       abort = new AbortController();
       const timer = setTimeout(() => abort?.abort(), 8_000);
       try {
-        const pending = (await getAllPending()).filter(r => !!r.proxySessionId).sort((a, b) => b.createdAt - a.createdAt);
-        const ids = [...new Set([...(selectedId ? [selectedId] : []), ...pending.map(r => r.proxySessionId!)])].slice(0, 20);
-        const result = await fetchProxyStatus(config, ids, abort.signal);
-        if (active) { setRecords(pending); setStatus(result); setError(''); }
+        void getAllPending().then(pending => {
+          if (active) setRecords(pending.filter(r => !!r.proxySessionId));
+        }).catch(() => { if (active) setRecords([]); });
+        const result = await fetchProxyStatus(config, selectedId ? [selectedId] : [], abort.signal, selectedId ? undefined : { all: true, cursor: cursor || undefined });
+        if (active) { setStatus(result); setError(''); }
       } catch (e) {
         if (active) setError(e instanceof Error && e.name !== 'AbortError' ? e.message : '状態の取得がタイムアウトしました');
       } finally {
@@ -61,7 +65,7 @@ export function ProxyStatusView({ config }: { config: ProxyConfig }) {
     void load();
     const poll = setInterval(() => { void load(); }, 5_000);
     return () => { active = false; abort?.abort(); clearInterval(poll); };
-  }, [config.endpoint, config.authToken, selectedId, refresh]);
+  }, [config.endpoint, config.authToken, selectedId, cursor, refresh]);
 
   const removeStorage = async (sessionId?: string) => {
     const description = sessionId === undefined
@@ -85,6 +89,7 @@ export function ProxyStatusView({ config }: { config: ProxyConfig }) {
     <form className='flex gap-2' onSubmit={event => { event.preventDefault(); setSelectedId(manualId.trim()); setRefresh(n => n + 1); }}>
       <input className='flex-1 min-w-0 rounded border p-2 dark:bg-gray-800 dark:border-gray-600' aria-label='調べるプロキシセッションID' placeholder='セッションIDを指定して照会' value={manualId} onChange={event => setManualId(event.target.value)} />
       <button className='btn btn-neutral' type='submit'>照会</button>
+      {selectedId && <button className='btn btn-neutral' type='button' onClick={() => { setManualId(''); setSelectedId(''); }}>全記録に戻る</button>}
     </form>
     {notice && <p role='status'>{notice}</p>}
     {(actionError || error) && <p role='alert' className='text-red-600 dark:text-red-400'>{actionError || error}</p>}
@@ -94,10 +99,11 @@ export function ProxyStatusView({ config }: { config: ProxyConfig }) {
         {status.storageDeletion?.individual && !status.storageDeletion.all && <p className='text-xs'>全削除にはプロキシ側の認証設定が必要です。</p>}
         <p>Worker {status.version} · 接続拠点 {status.colo} · 実行環境 <span className='font-mono'>{status.instanceId.slice(0, 8)}</span></p>
         <p>保存上限 {(status.limits.cacheBytes / 1048576).toFixed(0)} MiB · 保存期限 {status.limits.retentionMs / 60000}分 · 上流の無通信期限 {status.limits.idleTimeoutMs / 1000}秒</p>
-        {status.scope !== 'durable-session' && status.recentSessionsVisible === false && <p className='text-xs text-amber-600 dark:text-amber-400'>プロキシ認証が未設定のため、セッションIDの一覧公開を無効にしています。既知のIDだけを照会します。</p>}
-        <p className='text-xs text-gray-500 dark:text-gray-400'>{status.scope === 'durable-session' ? 'このブラウザの直近20件をIDごとの永続保存先に照会します。別拠点からも同じ記録を確認できます。応答は最終保存から5分、診断履歴は24時間保持します。更新前のリクエストの履歴は引き継げません。' : 'このブラウザの直近20件と、接続した実行環境の履歴を表示します。別の拠点・実行環境の履歴は一覧に含まれません。「保存データなし」は削除・期限切れ・別拠点でも発生します。'}</p>
+        {status.scope === 'current-isolate' && status.recentSessionsVisible === false && <p className='text-xs text-amber-600 dark:text-amber-400'>プロキシ認証が未設定のため、セッションIDの一覧公開を無効にしています。既知のIDだけを照会します。</p>}
+        <p className='text-xs text-gray-500 dark:text-gray-400'>{status.scope === 'all-sessions' ? '全端末・全実行環境の保存記録を20件ずつ表示します。応答は最終保存から5分、診断履歴は24時間保持します。削除済み・保持期限を過ぎた記録は表示されません。' : status.scope === 'durable-session' ? '指定したIDの永続保存先を照会しています。応答は最終保存から5分、診断履歴は24時間保持します。' : 'このブラウザの直近20件と、接続した実行環境の履歴を表示します。別の拠点・実行環境の履歴は一覧に含まれません。「保存データなし」は削除・期限切れ・別拠点でも発生します。'}</p>
       </div>
-      {!status.sessions.length && <p>照会できるリクエストはありません。別デバイスのセッションIDも指定できます。</p>}
+      {!!status.unavailableSessions && <p role='alert' className='text-red-600 dark:text-red-400'>{status.unavailableSessions}件の記録を取得できませんでした。更新して再試行してください。</p>}
+      {!status.sessions.length && <p>このページに保存記録はありません。IDを指定して個別に照会することもできます。</p>}
       <div className='space-y-3'>
         {status.sessions.map(session => {
           const record = records.find(r => r.proxySessionId === session.sessionId);
@@ -109,7 +115,7 @@ export function ProxyStatusView({ config }: { config: ProxyConfig }) {
           return <section className='rounded border p-3 dark:border-gray-600 space-y-2' key={session.sessionId}>
             <div className='font-mono text-xs break-all select-text'>{session.sessionId}</div>
             <div className='flex flex-wrap gap-x-5 gap-y-1'>
-              <span>中継: {session.local ? phaseLabels[session.local.phase] : status.scope === 'durable-session' ? '記録なし（更新前・別URL・24時間経過など）' : 'この実行環境では確認できません'}</span>
+              <span>中継: {session.local ? phaseLabels[session.local.phase] : status.scope !== 'current-isolate' ? '記録なし（更新前・別URL・24時間経過など）' : 'この実行環境では確認できません'}</span>
               <span>復旧データ: {cacheLabels[session.cache.state]}</span>
               <span>最終保存状態: {session.cache.terminal === 'streaming' ? '受信中の記録（現在の実行は未確認）' : session.cache.terminal ? phaseLabels[session.cache.terminal] : '不明'}</span>
             </div>
@@ -135,14 +141,21 @@ export function ProxyStatusView({ config }: { config: ProxyConfig }) {
           </section>;
         })}
       </div>
+      {!selectedId && <div className='flex items-center gap-3'>
+        <button type='button' className='btn btn-neutral' disabled={loading || pages.length === 1} onClick={() => setPages(values => values.slice(0, -1))}>前の20件</button>
+        <span>{pages.length}ページ目</span>
+        <button type='button' className='btn btn-neutral' disabled={loading || !status.nextCursor} onClick={() => setPages(values => [...values, status.nextCursor!])}>次の20件</button>
+      </div>}
     </>}
   </div>;
 }
 
 export default function ProxyStatusButton({ config }: { config: ProxyConfig }) {
   const [open, setOpen] = useState(false);
+  const missing = [!config.endpoint.trim() && 'URL', !config.authToken?.trim() && '認証トークン（パスワード）'].filter(Boolean).join('・');
   return <>
     <button type='button' className='btn btn-neutral' disabled={!config.endpoint.trim()} onClick={() => setOpen(true)}>プロキシの状態を確認</button>
+    {missing && <p className='text-xs text-gray-500 dark:text-gray-400'>{missing}が未入力です。</p>}
     {open && <PopupModal title='プロキシの状態' setIsModalOpen={setOpen} maxWidth='max-w-5xl' cancelButton={false}>
       <ProxyStatusView config={config} />
     </PopupModal>}

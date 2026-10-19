@@ -190,6 +190,20 @@ describe('stream relay', () => {
     expect((await worker.fetch(request(), { PROXY_AUTH_TOKEN: 'private' }, ctx)).status).toBe(401);
   });
 
+  it('authenticates global status and forwards its server cursor to the registry', async () => {
+    const cursor = 'session:' + 'a'.repeat(64);
+    const registryFetch = vi.fn(async () => Response.json({ sessions: [], failed: 1, cursor }));
+    const configured = { PROXY_AUTH_TOKEN: 'private', SESSIONS: {}, REGISTRY: { idFromName: () => 'index', get: () => ({ fetch: registryFetch }) } } as unknown as Env;
+    const request = (authorized: boolean) => new Request(`https://worker.example/api/status?all=1&cursor=${cursor}`, { headers: authorized ? { Authorization: 'Bearer private' } : {} });
+    expect((await worker.fetch(request(false), configured, ctx)).status).toBe(401);
+    expect((await worker.fetch(request(false), { ...configured, PROXY_AUTH_TOKEN: '' }, ctx)).status).toBe(403);
+    expect(registryFetch).not.toHaveBeenCalled();
+    const response = await worker.fetch(request(true), configured, ctx);
+    expect(await response.json()).toMatchObject({ scope: 'all-sessions', nextCursor: cursor, unavailableSessions: 1 });
+    expect(new URL((registryFetch.mock.calls[0] as unknown as [string])[0]).searchParams.get('cursor')).toBe(cursor);
+    expect(response.headers.get('Cache-Control')).toBe('no-store');
+  });
+
   it('returns cache-miss immediately', async () => {
     vi.stubGlobal('caches', {
       default: {

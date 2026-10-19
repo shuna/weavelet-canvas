@@ -27,19 +27,23 @@ function authHeaders(config: ProxyConfig): Record<string, string> {
   return { Authorization: `Bearer ${config.authToken}` };
 }
 
-export async function fetchProxyStatus(config: ProxyConfig, sessionIds: string[], signal?: AbortSignal): Promise<ProxyStatus> {
+export async function fetchProxyStatus(config: ProxyConfig, sessionIds: string[], signal?: AbortSignal, page?: { all: true; cursor?: string }): Promise<ProxyStatus> {
   const query = new URLSearchParams();
   for (const id of sessionIds) query.append('sessionId', id);
+  if (page?.all) query.set('all', '1');
+  if (page?.cursor) query.set('cursor', page.cursor);
   const response = await fetch(`${config.endpoint.trim().replace(/\/+$/, '')}/api/status?${query}`, {
     headers: authHeaders(config), cache: 'no-store', signal,
   });
   if (!response.ok) {
     await response.body?.cancel().catch(() => {});
     throw new Error(response.status === 401 ? '認証に失敗しました。プロキシの認証トークンを確認してください。'
-      : response.status === 404 ? 'このプロキシは状態APIに対応していません。Workerを更新してください。' : `状態の取得に失敗しました（HTTP ${response.status}）`);
+      : response.status === 403 ? '全実行環境の記録を見るには、プロキシの認証設定と認証トークンが必要です。'
+      : response.status === 404 || response.status === 501 ? 'このプロキシは状態APIに対応していません。Workerを更新してください。' : `状態の取得に失敗しました（HTTP ${response.status}）`);
   }
   const status = await response.json() as ProxyStatus;
-  if (!Array.isArray(status.sessions)) throw new Error('プロキシからの状態応答が不正です');
+  if (!Array.isArray(status.sessions) || (status.nextCursor !== undefined && status.nextCursor !== null && (typeof status.nextCursor !== 'string' || !/^session:[a-f0-9]{64}$/.test(status.nextCursor)))) throw new Error('プロキシからの状態応答が不正です');
+  if (page?.all && status.scope !== 'all-sessions') throw new Error('このプロキシは全実行環境の一覧に対応していません。Workerを更新してください。');
   return status;
 }
 

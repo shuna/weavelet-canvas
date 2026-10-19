@@ -20,12 +20,14 @@ test('inspects server metadata against local cursors and displays missing data a
     expect(route.request().headers().authorization).toBe('Bearer private-token');
     expect(route.request().url()).not.toContain('private-token');
     if (unauthorized) return route.fulfill({ status: 401, body: '{"error":"Unauthorized"}' });
-    const ids = new URL(route.request().url()).searchParams.getAll('sessionId');
+    const query = new URL(route.request().url()).searchParams;
+    const ids = query.getAll('sessionId');
+    const all = query.get('all') === '1';
     lookedUpManualId ||= ids.includes('other-device-session');
     const session = (id: string, first: number) => allDeleted || deleted.has(id) ? { sessionId: id, local: null, cache: { state: 'not-recorded' } } : ({ sessionId: id,
       local: { sessionId: id, startedAt: Date.now(), updatedAt: Date.now(), lastChunkAt: Date.now(), phase: 'interrupted', lastEventId: 20, firstEventId: first, receivedBytes: 2200000, bufferedBytes: 1000000, cacheWrites: 4, cacheFailures: 1, reason: 'upstream-idle-timeout' },
       cache: { state: 'available', firstEventId: first, lastEventId: 20, terminal: 'interrupted', expiresAt: Date.now() + 300000, updatedAt: Date.now() } });
-    await route.fulfill({ contentType: 'application/json', headers: { 'Access-Control-Allow-Origin': '*' }, body: JSON.stringify({ version: '0.3.0', checkedAt: Date.now(), colo: 'NRT', instanceId: 'diagnostic-instance', scope: durable ? 'durable-session' : 'current-isolate', storageDeletion: { individual: true, all: true }, limits: { cacheBytes: 1048576, retentionMs: 300000, idleTimeoutMs: 45000 }, sessions: [session('session-a', 10), session('session-b', 1), ...(lookedUpManualId ? [{ sessionId: 'other-device-session', local: null, cache: { state: durable ? 'not-recorded' : 'missing' } }] : [])] }) });
+    await route.fulfill({ contentType: 'application/json', headers: { 'Access-Control-Allow-Origin': '*' }, body: JSON.stringify({ version: '0.3.0', checkedAt: Date.now(), colo: 'NRT', instanceId: 'diagnostic-instance', scope: all ? 'all-sessions' : 'durable-session', storageDeletion: { individual: true, all: true }, limits: { cacheBytes: 1048576, retentionMs: 300000, idleTimeoutMs: 45000 }, sessions: [session('session-a', 10), session('session-b', 1), ...(lookedUpManualId ? [{ sessionId: 'other-device-session', local: null, cache: { state: durable ? 'not-recorded' : 'missing' } }] : [])] }) });
   });
   await page.goto('/', { waitUntil: 'networkidle' });
   await page.evaluate(async () => {
@@ -59,7 +61,7 @@ test('inspects server metadata against local cursors and displays missing data a
   await page.screenshot({ path: '/tmp/weavelet-proxy-status.png', fullPage: true });
   durable = true;
   await page.getByRole('button', { name: '更新', exact: true }).click();
-  await expect(page.getByText(/別拠点からも同じ記録を確認/)).toBeVisible();
+  await expect(page.getByText(/指定したIDの永続保存先/)).toBeVisible();
   await expect(page.getByText(/サーバーに受付記録がありません/)).toBeVisible();
   await expect(page.getByText('復旧データ: サーバー記録なし')).toBeVisible();
   page.once('dialog', dialog => dialog.dismiss());
@@ -79,4 +81,36 @@ test('inspects server metadata against local cursors and displays missing data a
   unauthorized = true;
   await page.getByRole('button', { name: '更新', exact: true }).click();
   await expect(page.getByRole('alert')).toContainText('認証に失敗');
+});
+
+test('browses server records from other runtimes without local recovery records', async ({ page }) => {
+  const cursor = 'session:' + 'b'.repeat(64);
+  const requests: string[] = [];
+  await page.route('https://global-proxy.test/api/status**', async route => {
+    const url = new URL(route.request().url()); requests.push(url.search);
+    expect(url.searchParams.get('all')).toBe('1');
+    expect(url.searchParams.getAll('sessionId')).toEqual([]);
+    expect(route.request().headers().authorization).toBe('Bearer global-token');
+    const second = url.searchParams.get('cursor') === cursor;
+    await route.fulfill({ contentType: 'application/json', body: JSON.stringify({ version: '0.6.0', checkedAt: Date.now(), colo: 'NRT', instanceId: 'all-instances', scope: 'all-sessions', recentSessionsVisible: true, nextCursor: second ? null : cursor, limits: { cacheBytes: 1048576, retentionMs: 300000, idleTimeoutMs: 45000 }, sessions: [{ sessionId: second ? 'another-runtime-page-two' : 'other-device-server-record', local: null, cache: { state: 'available', terminal: 'complete', firstEventId: 1, lastEventId: 10 } }] }) });
+  });
+  await page.goto('/', { waitUntil: 'networkidle' });
+  await page.evaluate(async () => {
+    const load = (path: string) => import(/* @vite-ignore */ path);
+    const { default: store } = await load('/src/store/store.ts');
+    store.getState().setOnboardingCompleted(true);
+    store.setState({ proxyEnabled: true, proxyEndpoint: 'https://global-proxy.test', proxyAuthToken: 'global-token' });
+    store.getState().setShowProxySettings(true);
+  });
+  await page.getByRole('button', { name: 'プロキシの状態を確認', exact: true }).click();
+  await expect(page.getByText('other-device-server-record', { exact: true })).toBeVisible();
+  await expect(page.getByText(/全端末・全実行環境の保存記録/)).toBeVisible();
+  await expect(page.getByText('この端末に記録なし', { exact: true })).toBeVisible();
+  await expect(page.getByRole('button', { name: '前の20件', exact: true })).toBeDisabled();
+  await page.getByRole('button', { name: '次の20件', exact: true }).click();
+  await expect(page.getByText('another-runtime-page-two', { exact: true })).toBeVisible();
+  await expect(page.getByRole('button', { name: '次の20件', exact: true })).toBeDisabled();
+  await page.getByRole('button', { name: '前の20件', exact: true }).click();
+  await expect(page.getByText('other-device-server-record', { exact: true })).toBeVisible();
+  expect(requests.some(query => query.includes('cursor='))).toBe(true);
 });

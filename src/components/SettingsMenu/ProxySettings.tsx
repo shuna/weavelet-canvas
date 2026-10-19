@@ -33,7 +33,6 @@ const ProxySettingsForm = ({
   if (layout === 'inline') {
     return (
       <>
-        <ProxyStatusButton config={{ endpoint, authToken }} />
         <SettingsGroup label={t('settingsSection.proxyConnection')}>
           <Toggle
             label={t('proxyEnabled') as string}
@@ -70,13 +69,13 @@ const ProxySettingsForm = ({
             />
           </div>
         </SettingsGroup>
+        <ProxyStatusButton config={{ endpoint, authToken }} />
       </>
     );
   }
 
   return (
     <>
-      <ProxyStatusButton config={{ endpoint, authToken }} />
       <Toggle
         label={t('proxyEnabled') as string}
         isChecked={isChecked}
@@ -108,6 +107,7 @@ const ProxySettingsForm = ({
           aria-label={t('proxyAuthToken') as string}
         />
       </div>
+      <ProxyStatusButton config={{ endpoint, authToken }} />
     </>
   );
 };
