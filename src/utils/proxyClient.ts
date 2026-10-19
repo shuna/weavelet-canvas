@@ -50,8 +50,11 @@ export async function deleteProxyStorage(config: ProxyConfig, sessionId?: string
     const query = new URLSearchParams();
     if (before !== undefined) query.set('before', String(before));
     if (cursor) query.set('cursor', cursor);
+    const abort = new AbortController();
+    const timer = setTimeout(() => abort.abort(), 30_000);
+    try {
     const response = await fetch(`${base}/api/storage${sessionId === undefined ? `?${query}` : `/${encodeURIComponent(sessionId)}`}`, {
-      method: 'DELETE', headers: authHeaders(config), cache: 'no-store', signal: AbortSignal.timeout(30_000),
+      method: 'DELETE', headers: authHeaders(config), cache: 'no-store', signal: abort.signal,
     });
     if (!response.ok) {
       await response.body?.cancel().catch(() => {});
@@ -67,6 +70,7 @@ export async function deleteProxyStorage(config: ProxyConfig, sessionId?: string
       throw new Error('プロキシからの削除応答が不正です');
     deleted += result.deleted; failed += result.failed;
     before = result.before; cursor = result.cursor;
+    } finally { clearTimeout(timer); }
   } while (cursor);
   if (failed) throw new Error(`${deleted}件を削除しましたが、${failed}件の削除に失敗しました。再度実行してください。`);
   return deleted;
