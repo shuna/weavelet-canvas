@@ -152,6 +152,38 @@ describe('stream relay', () => {
     expect((await pending).status).toBe(502);
   });
 
+  it('continues periodic snapshots after forty writes on a long connected stream', async () => {
+    vi.useFakeTimers();
+    let upstream!: ReadableStreamDefaultController<Uint8Array>;
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(new ReadableStream<Uint8Array>({
+      start(controller) { upstream = controller; },
+    }))));
+    const response = await stream('long-periodic-snapshots');
+    const reader = response.body!.getReader();
+    let output = '', received: (() => void) | undefined;
+    const consuming = (async () => {
+      while (true) {
+        const next = await reader.read();
+        if (next.done) return;
+        const frame = new TextDecoder().decode(next.value);
+        output += frame;
+        if (frame.startsWith('id: ')) { received?.(); received = undefined; }
+      }
+    })();
+    for (let n = 1; n <= 45; n++) {
+      const delivered = new Promise<void>(resolve => { received = resolve; });
+      upstream.enqueue(enc.encode(`data: ${n}\n\n`));
+      await delivered;
+      await vi.advanceTimersByTimeAsync(10_000);
+    }
+    upstream.enqueue(enc.encode('data: [DONE]\n\n'));
+    upstream.close();
+    await consuming;
+    expect(output).toContain('event: done');
+    expect(vi.mocked(caches.default.put).mock.calls.length).toBeGreaterThan(42);
+    expect(sessionDiagnostics().find(s => s.sessionId === 'long-periodic-snapshots')?.cacheWrites).toBeGreaterThan(42);
+  });
+
   it('returns cache-miss immediately', async () => {
     vi.stubGlobal('caches', {
       default: {

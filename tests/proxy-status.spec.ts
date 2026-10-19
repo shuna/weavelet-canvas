@@ -3,6 +3,7 @@ test.use({ headless: true, baseURL: process.env.PLAYWRIGHT_BASE_URL ?? 'http://1
 
 test('inspects server metadata against local cursors and displays missing data and authentication errors', async ({ page }) => {
   let unauthorized = false;
+  let durable = false;
   let lookedUpManualId = false;
   await page.route('https://proxy.test/api/status**', async route => {
     expect(route.request().headers().authorization).toBe('Bearer private-token');
@@ -13,7 +14,7 @@ test('inspects server metadata against local cursors and displays missing data a
     const session = (id: string, first: number) => ({ sessionId: id,
       local: { sessionId: id, startedAt: Date.now(), updatedAt: Date.now(), lastChunkAt: Date.now(), phase: 'interrupted', lastEventId: 20, firstEventId: first, receivedBytes: 2200000, bufferedBytes: 1000000, cacheWrites: 4, cacheFailures: 1, reason: 'upstream-idle-timeout' },
       cache: { state: 'available', firstEventId: first, lastEventId: 20, terminal: 'interrupted', expiresAt: Date.now() + 300000, updatedAt: Date.now() } });
-    await route.fulfill({ contentType: 'application/json', headers: { 'Access-Control-Allow-Origin': '*' }, body: JSON.stringify({ version: '0.3.0', checkedAt: Date.now(), colo: 'NRT', instanceId: 'diagnostic-instance', scope: 'current-isolate', limits: { cacheBytes: 1048576, retentionMs: 300000, idleTimeoutMs: 45000 }, sessions: [session('session-a', 10), session('session-b', 1), ...(lookedUpManualId ? [{ sessionId: 'other-device-session', local: null, cache: { state: 'missing' } }] : [])] }) });
+    await route.fulfill({ contentType: 'application/json', headers: { 'Access-Control-Allow-Origin': '*' }, body: JSON.stringify({ version: '0.3.0', checkedAt: Date.now(), colo: 'NRT', instanceId: 'diagnostic-instance', scope: durable ? 'durable-session' : 'current-isolate', limits: { cacheBytes: 1048576, retentionMs: 300000, idleTimeoutMs: 45000 }, sessions: [session('session-a', 10), session('session-b', 1), ...(lookedUpManualId ? [{ sessionId: 'other-device-session', local: null, cache: { state: durable ? 'not-recorded' : 'missing' } }] : [])] }) });
   });
   await page.goto('/', { waitUntil: 'networkidle' });
   await page.evaluate(async () => {
@@ -45,6 +46,11 @@ test('inspects server metadata against local cursors and displays missing data a
   await expect(page.getByText('other-device-session', { exact: true })).toBeVisible();
   await expect(page.getByText('保存データなし', { exact: false }).last()).toBeVisible();
   await page.screenshot({ path: '/tmp/weavelet-proxy-status.png', fullPage: true });
+  durable = true;
+  await page.getByRole('button', { name: '更新', exact: true }).click();
+  await expect(page.getByText(/別拠点からも同じ記録を確認/)).toBeVisible();
+  await expect(page.getByText(/サーバーに受付記録がありません/)).toBeVisible();
+  await expect(page.getByText('復旧データ: サーバー記録なし')).toBeVisible();
   unauthorized = true;
   await page.getByRole('button', { name: '更新', exact: true }).click();
   await expect(page.getByRole('alert')).toContainText('認証に失敗');

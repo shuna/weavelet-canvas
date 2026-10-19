@@ -3,12 +3,17 @@ import http from 'node:http';
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
+import { mkdtemp, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 
 test('real Workers runtime resumes a disconnected response larger than the recovery window', async ({}, info) => {
   test.setTimeout(45_000);
   const root = fileURLToPath(new URL('../', import.meta.url));
   const proxyBase = 'http://127.0.0.1:8799';
-  const worker = spawn(process.execPath, [root + 'proxy-worker/node_modules/wrangler/bin/wrangler.js', 'dev', '--local', '--config', root + 'proxy-worker/wrangler.toml', '--port', '8799'], { cwd: root, env: { ...process.env, WRANGLER_SEND_METRICS: 'false' }, stdio: ['ignore', 'pipe', 'pipe'] });
+  const persist = await mkdtemp(join(tmpdir(), 'weavelet-recovery-'));
+  const startWorker = () => spawn(process.execPath, [root + 'proxy-worker/node_modules/wrangler/bin/wrangler.js', 'dev', '--local', '--config', root + 'proxy-worker/wrangler.toml', '--port', '8799', '--persist-to', persist], { cwd: root, env: { ...process.env, WRANGLER_SEND_METRICS: 'false' }, stdio: ['ignore', 'pipe', 'pipe'] });
+  let worker = startWorker();
   let logs = '';
   worker.stdout.on('data', data => { logs = (logs + data).slice(-4000); });
   worker.stderr.on('data', data => { logs = (logs + data).slice(-4000); });
@@ -57,6 +62,25 @@ const server = http.createServer((req, res) => {
     if (session?.cache.terminal === 'complete') break;
   }
   assert.equal(session.cache.terminal, 'complete');
+  // Restart the entire runtime: no isolate memory or Cache API entry can supply recovery.
+  worker.kill('SIGTERM');
+  await new Promise<void>(resolve => worker.once('exit', () => resolve()));
+  worker = startWorker();
+  worker.stdout.on('data', data => { logs = (logs + data).slice(-4000); });
+  worker.stderr.on('data', data => { logs = (logs + data).slice(-4000); });
+  let restored: any;
+  for (let n = 0; n < 100; n++) {
+    try {
+      const result = await (await fetch(`${proxyBase}/api/status?sessionId=${sessionId}`, { signal: AbortSignal.timeout(500) })).json();
+      restored = result.sessions[0];
+      assert.equal(result.scope, 'durable-session');
+      break;
+    } catch {}
+    await new Promise(r => setTimeout(r, 200));
+  }
+  assert.equal(restored?.local?.phase, 'complete', logs);
+  assert.equal(restored.cache.lastEventId, session.cache.lastEventId);
+  session = restored;
   assert(session.cache.firstEventId > 1);
   assert(cursor >= session.cache.firstEventId - 1);
   assert(session.local.bufferedBytes <= 1048576);
@@ -65,6 +89,20 @@ const server = http.createServer((req, res) => {
   assert.equal(Number(replay.match(/^id: (\d+)/)?.[1]), cursor + 1);
   const stale = await (await fetch(`${proxyBase}/api/recover/${sessionId}?lastEventId=0`)).text();
   assert(stale.includes('event-id-mismatch'));
+  const duplicate = await fetch(`${proxyBase}/api/stream`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ endpoint: `http://127.0.0.1:${upstreamPort}/chat`, headers: {}, body: {}, sessionId }) });
+  assert.equal(duplicate.status, 409);
+  const failedId = `${sessionId}-failed`;
+  const failed = await fetch(`${proxyBase}/api/stream`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ endpoint: 'http://127.0.0.1:1/unreachable', headers: {}, body: {}, sessionId: failedId }) });
+  assert.equal(failed.status, 502);
+  const failureStatus = await (await fetch(`${proxyBase}/api/status?sessionId=${failedId}`)).json();
+  assert.equal(failureStatus.sessions[0].local.reason, 'upstream-connection-error');
+  assert.equal(failureStatus.sessions[0].cache.state, 'not-saved');
+  const ack = await fetch(`${proxyBase}/api/ack/${sessionId}`, { method: 'POST' });
+  assert(ack.ok);
+  const acknowledged = await (await fetch(`${proxyBase}/api/status?sessionId=${sessionId}`)).json();
+  assert.equal(acknowledged.sessions[0].cache.state, 'acknowledged');
+  const missing = await (await fetch(`${proxyBase}/api/status?sessionId=unknown-${Date.now()}`)).json();
+  assert.equal(missing.sessions[0].cache.state, 'not-recorded');
   await info.attach('runtime-recovery', { body: JSON.stringify({ receivedBytes: bytes, cursor, firstRetained: session.cache.firstEventId, lastRetained: session.cache.lastEventId, bufferedBytes: session.local.bufferedBytes }), contentType: 'application/json' });
   } finally {
     server.close();
@@ -73,5 +111,6 @@ const server = http.createServer((req, res) => {
       const timer = setTimeout(() => { worker.kill('SIGKILL'); resolve(); }, 3000);
       worker.once('exit', () => { clearTimeout(timer); resolve(); });
     });
+    await rm(persist, { recursive: true, force: true });
   }
 });

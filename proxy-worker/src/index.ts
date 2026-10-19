@@ -1,6 +1,9 @@
+import { RecoveryStore, type RecoveryCache } from './recoveryStore';
 import { getInstanceId, sessionDiagnostics, startDiagnostic, type ProxyStatus } from './diagnostics';
 export interface Env {
   PROXY_AUTH_TOKEN: string;
+  SESSIONS?: DurableObjectNamespace;
+  recoveryStore?: RecoveryStore;
 }
 interface StreamRequest {
   endpoint: string;
@@ -38,6 +41,8 @@ interface ActiveStream {
 interface CancelRequest {
   providerCancel?: { generationId: string; apiKey: string };
 }
+const recoveryCache = (env: Env): RecoveryCache => env.recoveryStore ?? caches.default;
+const persistDiagnostic = (env: Env, diagnostic: ReturnType<typeof startDiagnostic>) => env.recoveryStore?.saveDiagnostic(diagnostic) ?? Promise.resolve();
 const activeStreams = new Map<string, ActiveStream>();
 const RECOVERY_TTL_MS = 300_000;
 const MAX_RECOVERY_CACHE_BYTES = 1_048_576,
@@ -244,7 +249,7 @@ async function handleStream(
     !endpoint ||
     !sessionId ||
     typeof endpoint !== 'string' ||
-    typeof sessionId !== 'string'
+    typeof sessionId !== 'string' || sessionId.length > 512
   )
     return jsonResponse({ error: 'endpoint and sessionId are required' }, 400);
   if (!isStringRecord(headers))
@@ -252,6 +257,8 @@ async function handleStream(
       { error: 'headers must be an object of string values' },
       400
     );
+  if (await env.recoveryStore?.diagnostic())
+    return jsonResponse({ error: 'sessionId has already been used' }, 409);
   if (activeStreams.has(sessionId))
     return jsonResponse({ error: 'sessionId is already active' }, 409);
   const diagnostic = startDiagnostic(sessionId);
@@ -261,6 +268,8 @@ async function handleStream(
       headers.Authorization?.replace(/^Bearer\s+/i, '') ??
       headers.authorization?.replace(/^Bearer\s+/i, '');
   activeStreams.set(sessionId, { abortController: abort, apiKey });
+  try { await persistDiagnostic(env, diagnostic); }
+  catch { clearTimeout(headerTimer); activeStreams.delete(sessionId); return jsonResponse({ error: 'Failed to persist session receipt' }, 503); }
   let upstream: Response;
   try {
     upstream = await fetch(endpoint, {
@@ -273,6 +282,7 @@ async function handleStream(
     clearTimeout(headerTimer);
     activeStreams.delete(sessionId);
     Object.assign(diagnostic, { phase: 'failed', updatedAt: Date.now(), reason: abort.signal.aborted ? 'header-timeout' : 'upstream-connection-error' });
+    await persistDiagnostic(env, diagnostic);
     return jsonResponse(
       { error: `Failed to reach LLM API: ${(e as Error).message}` },
       502
@@ -282,6 +292,7 @@ async function handleStream(
   if (!upstream.ok) {
     Object.assign(diagnostic, { phase: 'failed', updatedAt: Date.now(), reason: `upstream-http-${upstream.status}` });
     activeStreams.delete(sessionId);
+    await persistDiagnostic(env, diagnostic);
     const text = await boundedBody(upstream);
     return withCORS(
       new Response(text, {
@@ -293,6 +304,7 @@ async function handleStream(
   if (!upstream.body) {
     Object.assign(diagnostic, { phase: 'failed', updatedAt: Date.now(), reason: 'upstream-no-body' });
     activeStreams.delete(sessionId);
+    await persistDiagnostic(env, diagnostic);
     return jsonResponse({ error: 'LLM API returned no body' }, 502);
   }
   diagnostic.phase = 'streaming';
@@ -314,7 +326,6 @@ async function handleStream(
       disconnected = false,
       terminalDelivered = false,
       snapshotInflight = false,
-      snapshotCount = 0,
       readAt = 0;
     const disconnectedSignal = new AbortController();
     let readTimer: ReturnType<typeof setTimeout> | undefined,
@@ -326,7 +337,7 @@ async function handleStream(
       if (disconnected || terminalDelivered) return;
       disconnected = true;
       disconnectedSignal.abort();
-      Object.assign(diagnostic, { phase: 'disconnected', reason, updatedAt: Date.now() });
+      Object.assign(diagnostic, { phase: 'disconnected', reason, disconnectReason: reason, disconnectedAt: Date.now(), updatedAt: Date.now() });
       readAt = Date.now();
       void snapshot('streaming', true);
       readTimer = setTimeout(() => abort.abort(), DISCONNECT_READ_LIMIT_MS);
@@ -343,6 +354,7 @@ async function handleStream(
         const finish = (ok: boolean) => {
           clearTimeout(timer);
           disconnectedSignal.signal.removeEventListener('abort', onDisconnect);
+          if (ok) diagnostic.lastClientWriteAt = Date.now();
           resolve(ok);
         };
         const onDisconnect = () => finish(false);
@@ -356,8 +368,7 @@ async function handleStream(
       terminal: CachedSession['generationTerminal'],
       force = false
     ): Promise<void> => {
-      if (!force && (snapshotInflight || snapshotCount >= 40 || eventId === lastSnapshotEventId)) return snapshotChain;
-      snapshotCount++;
+      if (!force && (snapshotInflight || eventId === lastSnapshotEventId)) return snapshotChain;
       lastSnapshotEventId = eventId;
       const copy: CachedSession = {
         version: 1,
@@ -375,13 +386,14 @@ async function handleStream(
       snapshotInflight = true;
       snapshotChain = snapshotChain.then(async () => {
         try {
-          await caches.default.put(key, cacheResponse(copy));
+          await recoveryCache(env).put(key, cacheResponse(copy));
           diagnostic.cacheWrites++;
           diagnostic.lastCacheWriteAt = Date.now();
         } catch (e) {
           diagnostic.cacheFailures++;
           console.error('stream cache write failed');
         } finally {
+          await persistDiagnostic(env, diagnostic).catch(() => { console.error('diagnostic write failed'); });
           snapshotInflight = false;
         }
       });
@@ -478,6 +490,7 @@ async function handleStream(
         )
           terminalDelivered = true;
       }
+      diagnostic.phase = terminal;
       if (disconnected)
         await timeout(
           snapshot(terminal, true),
@@ -512,7 +525,8 @@ async function handleRecover(
   sessionId: string,
   lastEventId: number,
   request: Request,
-  ctx: ExecutionContext
+  ctx: ExecutionContext,
+  env: Env
 ): Promise<Response> {
   const { readable, writable } = new TransformStream<Uint8Array, Uint8Array>(),
     writer = writable.getWriter(),
@@ -522,7 +536,7 @@ async function handleRecover(
     let sent = lastEventId;
     try {
       while (true) {
-        const response = await caches.default.match(
+        const response = await recoveryCache(env).match(
           await cacheKey(sessionId, request.url)
         );
         if (!response) {
@@ -588,6 +602,10 @@ async function handleRecover(
           );
           break;
         }
+        if (env.recoveryStore && !activeStreams.has(sessionId)) {
+          await writer.write(enc.encode(`event: interrupted\ndata: ${JSON.stringify({ totalChunks: sent, complete: false, reason: 'runtime-ended' })}\n\n`));
+          break;
+        }
         if (Date.now() - started >= RECOVERY_POLL_TIMEOUT_MS) {
           await writer.write(
             enc.encode(
@@ -614,13 +632,25 @@ async function handleStatus(request: Request, env: Env): Promise<Response> {
     return jsonResponse({ error: 'At most 20 session IDs of 1–512 characters are allowed' }, 400);
   const recent = sessionDiagnostics();
   // In open-proxy mode, session IDs are capability tokens: never enumerate them.
-  const visible = env.PROXY_AUTH_TOKEN ? recent.slice(0, Math.max(0, 20 - requested.length)) : [];
+  const visible = env.PROXY_AUTH_TOKEN && !env.recoveryStore ? recent.slice(0, Math.max(0, 20 - requested.length)) : [];
   const ids = [...new Set([...requested, ...visible.map(s => s.sessionId)])];
   const sessions: ProxyStatus['sessions'] = [];
   for (const sessionId of ids) {
     let cache: ProxyStatus['sessions'][number]['cache'] = { state: 'missing' };
+    let diagnostic = recent.find(s => s.sessionId === sessionId) ?? null;
+    if (env.recoveryStore) {
+      try {
+        cache = await env.recoveryStore.summary();
+        diagnostic = activeStreams.has(sessionId) ? diagnostic : await env.recoveryStore.diagnostic() ?? null;
+        if (diagnostic && cache.state === 'acknowledged') diagnostic = { ...diagnostic, phase: 'acknowledged' };
+        if (diagnostic && !activeStreams.has(sessionId) && ['headers', 'streaming', 'disconnected'].includes(diagnostic.phase))
+          diagnostic = { ...diagnostic, phase: 'interrupted', reason: 'runtime-ended' };
+      } catch { cache = { state: 'error' }; }
+      sessions.push({ sessionId, local: diagnostic, cache });
+      continue;
+    }
     try {
-      const response = await caches.default.match(await cacheKey(sessionId, request.url));
+      const response = await recoveryCache(env).match(await cacheKey(sessionId, request.url));
       if (response) {
         try {
           // Inspect metadata without reading up to 20 MiB of cached SSE on each poll.
@@ -632,8 +662,8 @@ async function handleStatus(request: Request, env: Env): Promise<Response> {
     } catch { cache = { state: 'error' }; }
     sessions.push({ sessionId, local: recent.find(s => s.sessionId === sessionId) ?? null, cache });
   }
-  const response = jsonResponse({ version: '0.3.0', checkedAt: Date.now(),
-    colo: (request.cf as { colo?: string } | undefined)?.colo ?? 'local', instanceId: getInstanceId(), scope: 'current-isolate', recentSessionsVisible: !!env.PROXY_AUTH_TOKEN,
+  const response = jsonResponse({ version: '0.4.0', checkedAt: Date.now(),
+    colo: (request.cf as { colo?: string } | undefined)?.colo ?? 'local', instanceId: getInstanceId(), scope: env.recoveryStore ? 'durable-session' : 'current-isolate', recentSessionsVisible: !!env.PROXY_AUTH_TOKEN,
     limits: { cacheBytes: MAX_RECOVERY_CACHE_BYTES, retentionMs: RECOVERY_TTL_MS, idleTimeoutMs: BODY_IDLE_TIMEOUT_MS }, sessions } satisfies ProxyStatus);
   response.headers.set('Cache-Control', 'no-store');
   return response;
@@ -740,7 +770,7 @@ async function handleCancel(
     }
   return jsonResponse({ localAbortRequested: !!local, providerCancel });
 }
-export default {
+const worker = {
   async fetch(
     request: Request,
     env: Env,
@@ -753,9 +783,35 @@ export default {
       return jsonResponse({ error: 'Invalid path encoding' }, 400);
     }
     if (url.pathname === '/health')
-      return jsonResponse({ status: 'ok', version: '0.3.0' });
+      return jsonResponse({ status: 'ok', version: '0.4.0' });
     if (url.pathname.startsWith('/api/') && !authenticated(request, env))
       return jsonResponse({ error: 'Unauthorized' }, 401);
+    if (env.SESSIONS && !env.recoveryStore) {
+      if (url.pathname === '/api/status' && request.method === 'GET') {
+        const ids = [...new Set(url.searchParams.getAll('sessionId'))];
+        if (ids.length > 20 || ids.some(id => !id || id.length > 512)) return jsonResponse({ error: 'At most 20 session IDs of 1–512 characters are allowed' }, 400);
+        const base = await (await handleStatus(new Request(new URL('/api/status', url)), { ...env, PROXY_AUTH_TOKEN: '' })).json() as ProxyStatus;
+        const results = await Promise.all(ids.map(async id => {
+          try {
+          const target = new URL('/api/status', url); target.searchParams.set('sessionId', id);
+          const response = await env.SESSIONS!.get(env.SESSIONS!.idFromName(id)).fetch(new Request(target, { headers: request.headers }));
+          if (!response.ok) throw new Error('Session status unavailable');
+          return (await response.json() as ProxyStatus).sessions[0];
+          } catch { return { sessionId: id, local: null, cache: { state: 'error' as const } }; }
+        }));
+        const response = jsonResponse({ ...base, scope: 'durable-session', recentSessionsVisible: false, sessions: results });
+        response.headers.set('Cache-Control', 'no-store');
+        return response;
+      }
+      let id: string | undefined;
+      if (url.pathname === '/api/stream' && request.method === 'POST') {
+        try { id = (await request.clone().json() as StreamRequest)?.sessionId; } catch { return jsonResponse({ error: 'Invalid JSON body' }, 400); }
+      } else if (/^\/api\/(recover|ack|cancel)\//.test(url.pathname)) id = decodeURIComponent(url.pathname.split('/').slice(3).join('/'));
+      if (id !== undefined) {
+        if (typeof id !== 'string' || !id || id.length > 512) return jsonResponse({ error: 'sessionId must contain 1–512 characters' }, 400);
+        return env.SESSIONS.get(env.SESSIONS.idFromName(id)).fetch(request);
+      }
+    }
     if (url.pathname === '/api/status' && request.method === 'GET') return handleStatus(request, env);
     if (url.pathname === '/api/stream' && request.method === 'POST')
       return handleStream(request, env, ctx);
@@ -768,15 +824,16 @@ export default {
       const cursor = Number(url.searchParams.get('lastEventId') ?? '0');
       if (!id || !Number.isSafeInteger(cursor) || cursor < 0)
         return jsonResponse({ error: 'sessionId and a non-negative integer lastEventId are required' }, 400);
-      return handleRecover(id, cursor, request, ctx);
+      return handleRecover(id, cursor, request, ctx, env);
     }
     if (url.pathname.startsWith('/api/ack/') && request.method === 'POST') {
       const id = decodeURIComponent(url.pathname.slice('/api/ack/'.length));
       const diagnostic = sessionDiagnostics().find(s => s.sessionId === id);
       if (diagnostic) { diagnostic.phase = 'acknowledged'; diagnostic.updatedAt = Date.now(); }
+      if (diagnostic) await persistDiagnostic(env, diagnostic);
       return id
         ? jsonResponse({
-            deleted: await caches.default.delete(
+            deleted: await recoveryCache(env).delete(
               await cacheKey(id, request.url)
             ),
           })
@@ -791,3 +848,18 @@ export default {
     return jsonResponse({ error: 'Not Found' }, 404);
   },
 };
+
+export default worker;
+
+export class ProxySession {
+  private store: RecoveryStore;
+  constructor(private state: DurableObjectState, private env: Env) {
+    this.store = new RecoveryStore(state.storage);
+  }
+  fetch(request: Request) {
+    return worker.fetch(request, { ...this.env, recoveryStore: this.store }, {
+      waitUntil: (promise: Promise<unknown>) => this.state.waitUntil(promise),
+    } as ExecutionContext);
+  }
+  alarm() { return this.store.alarm(); }
+}
