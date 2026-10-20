@@ -9,13 +9,14 @@ import type {
 import {
   searchHfModels,
   resolveGgufFiles,
+  sortSearchResults,
+  findExistingModelForVariant as findExistingModel,
 } from '@src/local-llm/hfSearch';
 import {
   saveSearchSession,
   loadSearchSession,
   clearSearchSession,
 } from '@src/components/SettingsMenu/localModelSearchSession';
-import { CURATED_MODELS } from '@src/local-llm/catalog';
 
 export function useHfSearch(rehydrated: boolean) {
   // Search state
@@ -96,21 +97,14 @@ export function useHfSearch(rehydrated: boolean) {
     pagesLoadedRef.current = 1;
 
     try {
-      const apiSort = searchSort === 'size' ? 'downloads' : searchSort;
       const { results, nextPageUrl } = await searchHfModels({
         query: searchQuery,
         engine: searchEngine,
-        sort: apiSort,
+        sort: searchSort,
         sortDir: searchSort === 'size' ? 'desc' : searchSortDir,
         limit: 20,
       });
-      const sorted = searchSort === 'size'
-        ? [...results].sort((a, b) => {
-            const sa = a.bestCandidateSize ?? 0;
-            const sb = b.bestCandidateSize ?? 0;
-            return searchSortDir === 'asc' ? sa - sb : sb - sa;
-          })
-        : results;
+      const sorted = sortSearchResults(results, searchSort, searchSortDir);
       setSearchResults(sorted);
       setSearchNextUrl(nextPageUrl);
       setSearchHasMore(nextPageUrl !== null);
@@ -127,11 +121,10 @@ export function useHfSearch(rehydrated: boolean) {
     setLoadingMore(true);
 
     try {
-      const apiSort = searchSort === 'size' ? 'downloads' : searchSort;
       const { results, nextPageUrl } = await searchHfModels({
         query: searchQuery,
         engine: searchEngine,
-        sort: apiSort,
+        sort: searchSort,
         sortDir: searchSort === 'size' ? 'desc' : searchSortDir,
         nextUrl: searchNextUrl,
       });
@@ -242,18 +235,7 @@ export function useHfSearch(rehydrated: boolean) {
   }, []);
 
   const findExistingModelForVariant = useCallback((repoId: string, fileName: string): string | null => {
-    for (const cm of CURATED_MODELS) {
-      if (cm.huggingFaceRepo === repoId && cm.downloadFiles.includes(fileName)) {
-        return cm.id;
-      }
-    }
-    const store = useStore.getState();
-    for (const m of store.localModels) {
-      if (m.origin === repoId && m.manifest.kind === 'single-file' && m.manifest.entrypoint === fileName) {
-        return m.id;
-      }
-    }
-    return null;
+    return findExistingModel(repoId, fileName, useStore.getState().localModels);
   }, []);
 
   return {

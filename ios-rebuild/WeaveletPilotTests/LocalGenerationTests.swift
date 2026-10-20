@@ -139,6 +139,98 @@ private final class CatalogDownloadProtocol: URLProtocol {
         XCTAssertFalse(String(decoding:try Data(contentsOf:store.fileURL),as:UTF8.self).contains("sticky draft must survive"))
     }
 
+    func testHfSearchDownloadReusesAtomicInstallAndPreservesFullCorpusOnSaveFailure() async throws {
+        let original = try store(), gate = LocalSaveGate()
+        let library = LocalStateStore(fileURL:original.fileURL) { bytes,url in
+            if gate.reject { throw CocoaError(.fileWriteNoPermission) }
+            try bytes.write(to:url,options:.atomic)
+        }
+        let state = try catalogState(library)
+        let root = URL(fileURLWithPath:#filePath).deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
+        let corpus = try OrderedJSON.decode(Data(contentsOf:root.appendingPathComponent("tests/fixtures/web-native/io-corpus.json"))).required("syncSnapshot")
+        try state.applySnapshot(corpus)
+        let query = try OrderedJSON.decode(Data(#"{"query":"FAKE","engine":"wllama","sort":"downloads"}"#.utf8))
+        let data = try OrderedJSON.decode(Data(#"[{"id":"FAKE/search-instruct","tags":["gguf","text-generation"],"downloads":1}]"#.utf8))
+        let response = try SharedWebOperations.call("hfSearchOperation",.object([
+            .init(key:"operation",value:.string("searchResponse")),.init(key:"query",value:query),.init(key:"data",value:data),.init(key:"link",value:.null)
+        ]))
+        let result = try XCTUnwrap(response.required("results").array("results").first)
+        let repository = try OrderedJSON.decode(Data(#"{"siblings":[{"rfilename":"model-Q4_K_M.gguf","size":32}]}"#.utf8))
+        let resolution = try SharedWebOperations.call("hfSearchOperation",.object([.init(key:"operation",value:.string("variants")),.init(key:"data",value:repository)]))
+        let variant = try XCTUnwrap(resolution.required("variants").array("variants").first)
+        let plan = try SharedWebOperations.call("hfSearchOperation",.object([
+            .init(key:"operation",value:.string("downloadPlan")),.init(key:"result",value:result),.init(key:"variant",value:variant)
+        ]))
+        let id = try plan.required("model").required("id").string("model ID")
+        let bytes = Data("GGUFsearch boundary fixture".utf8)
+        CatalogDownloadProtocol.handler = { request in
+            XCTAssertEqual(request.url?.host,"huggingface.co")
+            XCTAssertEqual(request.url?.path,"/FAKE/search-instruct/resolve/main/model-Q4_K_M.gguf")
+            return (200,bytes)
+        }
+        defer { CatalogDownloadProtocol.handler = nil }
+        let before = try state.publicationSnapshot(), beforeDisk = try Data(contentsOf:library.fileURL)
+        gate.reject = true
+        try state.startHfModelDownload(result:result,variant:variant)
+        try await wait { state.catalogDownload(id:id)?.running == false }
+        XCTAssertNotNil(state.catalogDownload(id:id)?.error)
+        XCTAssertEqual(try state.publicationSnapshot(),before)
+        XCTAssertEqual(try Data(contentsOf:library.fileURL),beforeDisk)
+        XCTAssertThrowsError(try state.localModelFiles.installed(modelID:id))
+        gate.reject = false
+        try state.startHfModelDownload(result:result,variant:variant)
+        try await wait { state.catalogDownload(id:id)?.running == false }
+        XCTAssertNil(state.catalogDownload(id:id)?.error)
+        XCTAssertEqual(try Data(contentsOf:state.localModelFiles.installed(modelID:id)),bytes)
+        let snapshot = try state.publicationSnapshot(), roots = try snapshot.required("state")
+        let changed = ["localModels","activeLocalModels","favoriteLocalModelIds","savedModelMeta"]
+        XCTAssertEqual(OrderedJSON.object(try roots.object("state").filter { !changed.contains($0.key.text) }),
+                       .object(try before.required("state").object("state").filter { !changed.contains($0.key.text) }))
+        let model = try XCTUnwrap(state.localModelDefinitions().first { $0["id"] == .string(id) })
+        XCTAssertEqual(model["origin"],.string("FAKE/search-instruct"))
+        XCTAssertEqual(model["fileSize"],.number(String(bytes.count)))
+        XCTAssertEqual(try ChatState(store:library).publicationSnapshot(),snapshot)
+        CatalogDownloadProtocol.handler = { _ in
+            XCTFail("An installed search model must be reused without a new download")
+            return (500,Data())
+        }
+        XCTAssertEqual(try state.startHfModelDownload(result:result,variant:variant),id)
+        XCTAssertEqual(try state.publicationSnapshot(),snapshot)
+        let restored = try SyncRecords.fromRecords(SyncRecords.toRecords(snapshot)).required("state")
+        for key in changed {
+            XCTAssertEqual(try SyncRecords.canonical(restored[key] ?? .null),try SyncRecords.canonical(roots[key] ?? .null),key)
+        }
+    }
+
+    func testHfSearchDoesNotTreatOrphanCatalogFileAsRegistered() async throws {
+        let library = try store(), state = try catalogState(library)
+        let catalogID = "qwen3-0.6b-q4km"
+        let bytes = Data("GGUForphan boundary fixture".utf8)
+        let source = library.fileURL.deletingLastPathComponent().appendingPathComponent("orphan.gguf")
+        try bytes.write(to:source)
+        try state.localModelFiles.install(source,modelID:catalogID)
+        let query = try OrderedJSON.decode(Data(#"{"query":"Qwen","engine":"wllama","sort":"downloads"}"#.utf8))
+        let data = try OrderedJSON.decode(Data(#"[{"id":"bartowski/Qwen_Qwen3-0.6B-GGUF","tags":["gguf","text-generation"]}]"#.utf8))
+        let response = try SharedWebOperations.call("hfSearchOperation",.object([
+            .init(key:"operation",value:.string("searchResponse")),.init(key:"query",value:query),.init(key:"data",value:data)
+        ]))
+        let result = try XCTUnwrap(response.required("results").array("results").first)
+        let repository = try OrderedJSON.decode(Data(#"{"siblings":[{"rfilename":"Qwen_Qwen3-0.6B-Q4_K_M.gguf","size":32}]}"#.utf8))
+        let resolution = try SharedWebOperations.call("hfSearchOperation",.object([
+            .init(key:"operation",value:.string("variants")),.init(key:"data",value:repository)
+        ]))
+        let variant = try XCTUnwrap(resolution.required("variants").array("variants").first)
+        CatalogDownloadProtocol.handler = { _ in (200,bytes) }
+        defer { CatalogDownloadProtocol.handler = nil }
+        let id = try state.startHfModelDownload(result:result,variant:variant)
+        XCTAssertNotEqual(id,catalogID)
+        try await wait { state.catalogDownload(id:id)?.running == false }
+        XCTAssertNil(state.catalogDownload(id:id)?.error)
+        XCTAssertEqual(state.catalogDownload(id:id)?.installedModelID,id)
+        XCTAssertTrue(try state.localModelDefinitions().contains { $0["id"] == .string(id) })
+        XCTAssertEqual(try Data(contentsOf:state.localModelFiles.installed(modelID:catalogID)),bytes)
+    }
+
     func testCatalogDownloadRegistersSharedDefinitionAndLocalRevision() async throws {
         let store = try store(), state = try catalogState(store)
         let before = try state.publicationSnapshot()
@@ -227,6 +319,7 @@ private final class CatalogDownloadProtocol: URLProtocol {
         try await wait { state.catalogDownload(id:"smollm2-360m-instruct-q8")?.running == false }
         let updated = try state.publicationSnapshot().required("state")
         XCTAssertEqual(try updated.required("localModels").array("models").count,1)
+        XCTAssertEqual(state.catalogDownload(id:"smollm2-360m-instruct-q8")?.installedModelID,duplicateID)
         XCTAssertEqual(updated["activeLocalModels"]?["generation"],.string(duplicateID))
         XCTAssertEqual(updated["favoriteLocalModelIds"],.array([.string(duplicateID)]))
         XCTAssertNil(updated["savedModelMeta"]?["smollm2-360m-instruct-q8"])
@@ -294,3 +387,5 @@ private final class CatalogDownloadProtocol: URLProtocol {
         XCTAssertEqual(state.assistantPrefill(key:state.stickyPrefillKey),"next generation draft")
     }
 }
+
+private final class LocalSaveGate: @unchecked Sendable { var reject = false }

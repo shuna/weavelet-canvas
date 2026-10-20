@@ -1427,3 +1427,15 @@ Web旧diagnostics/progressと共有coreの固有9件成功（担当実行）、c
 生成中保全testの失敗は一時的なstack取得で、evaluation.autoPreSendAllowed→hardOpenRouterConstraints→validateOpenRouterSettingsの拒否と特定した（一時出力は撤去済み）。I/O corpusはorderとsortを同時保持するため、生成開始に有効な設定ではない。このtestのlegacy provider無指定という目的に合わせ、生成前のconfig準備でproviderIdとopenRouterを除去した。原本fixture・全項目I/O・record期待値は変更していない。さらに古いnavigate/backのthrow期待は、実Web navigation-sliceと既存nativeの生成中layout移動許可に反するため、実操作後の生成ID・snapshot不変の確認へ訂正した。保存操作・復旧・手動整理の拒否は維持する。実処理を根拠とする両訂正について独立Astraの限定確認は新規P1/P2なし。
 
 対象testだけの最終runは成功し、関連native固有5件が確認済みとなった。初回成功4件は再実行せず再利用した。最後のtest buildで理由/観測時刻を含むUIもcompile成功。ログ: /private/tmp/weavelet-sync-diagnostics-{types-final,web-build,web-compaction,core-final,native,native-final,web-readback,ui-build,generation-final,generation-corrected}.log。native.logはbuild失敗でtest0件、native-final.logは5件中4成功、generation-final.logは古いnavigation期待で失敗、generation-corrected.logは該当1件成功であり、最終5件の一括成功と扱わない。
+
+## Hugging Face検索と単一GGUF取得の共有（2026-10-21）
+
+実Webの検索条件・結果分類・GGUF候補解決・推奨候補・サイズ並べ替え・取得定義・既存モデル判定をhfSearchの純粋関数へ切り出し、Web実callerとnativeの同じbundle入口から利用する。HTTP/URLComponents/取消はnative標準APIへ残す。サイズ順は実Webと同じdownloads降順取得後の初回ページ並べ替え、追加ページは既存順へ追加する。取得元は公開Hugging Face APIだけ、認証情報を持たないephemeral session、redirect拒否。モデルbytes取得は既存URLSessionとatomic install/保存失敗rollback/再開sidecarを再利用し、HTTPS以外のredirectを拒否する。ファイル名の#/?/%とencoded traversalは共有URL生成で各segmentをencodeする。新しい依存や同期schemaは追加しない。
+
+native設定に検索・実行形式・並び順と昇降順・取消・追加ページ・GGUF選択を接続した。入力変更で旧応答と候補取得を失効させ、null cursor/推奨候補なしを正常に扱い、HTTP失敗を空の成功に変えない。既存モデルの即再利用は登録定義と実ファイルの両方がある場合に限定する。取得後のSHA重複集約ではjobへ保存成功後の実採用IDを返し、UIはその定義と実ファイルで完了を判定する。単一GGUFのみ今回接続し、分割候補は明示的な未対応表示を残す。分割GGUFの取得・保存・推論の完成は後続必須項目でありOS固有として除外しない。
+
+共有関連固有15件成功（HF6/catalog3/import6）。最終size direction修正後はHF6件だけ再確認し成功。型検査・最終Vite build・共有bundle生成/鮮度成功。Viteの既存chunk容量警告は継続。Catalyst初回buildは新URLProtocolのfallback tuple label不足で失敗しtest0件。修正後7件成功。Astra指摘修正後は影響3件中2成功/新orphan fixture1失敗。後者は未分類の手書きresultを渡して共有downloadPlanが拒否するfixture誤りであり、実searchResponse経由のresultへ直し当該1件だけ成功。固有8件成功を確認した。一括8件成功とはしない。検索の引数・null/HTTP失敗・古い応答排除、取得保存失敗で全corpus/disk/asset不変、retry、変更対象4root以外全項目保持、再起動raw一致、4rootの実record canonical往復、既存asset再利用、orphan catalog asset保全と登録、SHA重複の実採用IDを確認。保存/sync/暗号基盤は未変更のため、全項目I/Oと実Web→native→Web暗号化wireの既存成功を再利用し、実cloud成功とは扱わない。
+
+独立Astraはnull/旧応答/取消表示/URL変換とsize取得方向/残存file/重複完了表示を指摘し、修正後の限定再監査は新規P1/P2なし。ログは/private/tmp/weavelet-hf-search-{generate,types-final,web-build,web-build-final,web-final,native,native-final,native-audit-fixes,native-orphan}.log。
+
+隔離FAKE Catalystの設定から実公開APIを検索し、DevQuasar-11候補Q4-K-M 258MBとHuggingFaceTB候補Q8-0 369MBの到着、選択欄と取得入口を実画面で確認した。認証・モデル本体の取得は実行していない。合成小GGUFは取得/配置境界の証拠で実推論の証拠ではない。終了後process不在とbuilt Info.plistのbyte一致復元を確認。実Range/resume・大容量・GGUF実推論・実cloud相互運用・狭幅/文字拡大/VoiceOver等の最終受入は未完了。追加照合でnative言語選択と会話/フォルダー全消去も残件と確認した。iPhone照会/導入、push/main統合は行っていない。

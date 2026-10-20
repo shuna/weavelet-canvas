@@ -102,6 +102,13 @@ private struct NativeCatalogResumeStore {
 
 private final class CatalogDownloadSessionDelegate: NSObject, URLSessionDownloadDelegate {
     weak var owner: CatalogDownloadTransport?
+    func urlSession(_ session: URLSession, task: URLSessionTask, willPerformHTTPRedirection response: HTTPURLResponse, newRequest request: URLRequest, completionHandler: @escaping (URLRequest?) -> Void) {
+        guard let url = request.url, let components = URLComponents(url: url, resolvingAgainstBaseURL: false),
+              components.scheme == "https", components.user == nil, components.password == nil else {
+            completionHandler(nil); return
+        }
+        completionHandler(request)
+    }
     func urlSession(_ session: URLSession, downloadTask: URLSessionDownloadTask, didWriteData bytes: Int64, totalBytesWritten: Int64, totalBytesExpectedToWrite: Int64) { owner?.wrote(downloadTask,bytes:bytes,totalBytesWritten:totalBytesWritten,totalBytesExpectedToWrite:totalBytesExpectedToWrite) }
     func urlSession(_ session: URLSession, downloadTask: URLSessionDownloadTask, didFinishDownloadingTo location: URL) { owner?.finished(downloadTask,location:location) }
     func urlSession(_ session: URLSession, task: URLSessionTask, didCompleteWithError error: Error?) { owner?.completed(task,error:error) }
@@ -174,6 +181,7 @@ struct CatalogDownloadJob: Equatable {
     let partial: Bool
     let error: String?
     let canResume: Bool
+    var installedModelID: String? = nil
 }
 
 struct NativeDiagnosticEntry: Identifiable, Equatable {
@@ -1629,20 +1637,47 @@ final class ChatState: ObservableObject {
         }
     }
     func startCatalogDownload(id: String) throws {
+        let plan = try SharedWebOperations.call("localModelImport",.object([.init(key:"operation",value:.string("catalogPlan")),.init(key:"id",value:.string(id))]))
+        try startModelDownload(plan:plan)
+    }
+    @discardableResult func startHfModelDownload(result: OrderedJSON, variant: OrderedJSON) throws -> String {
+        let definitionRequest = OrderedJSON.object([
+            .init(key:"operation",value:.string("downloadPlan")),.init(key:"result",value:result),.init(key:"variant",value:variant)
+        ])
+        let plan = try SharedWebOperations.call("hfSearchOperation",definitionRequest)
+        let existing = try SharedWebOperations.call("hfSearchOperation",.object([
+            .init(key:"operation",value:.string("existingModel")),.init(key:"repoID",value:try result.required("repoId")),
+            .init(key:"fileName",value:try variant.required("fileName")),.init(key:"models",value:.array(try localModelDefinitions()))
+        ]))
+        if existing != .null {
+            let id = try existing.string("existing model ID")
+            if try localModelDefinitions().contains(where: { $0["id"] == .string(id) }),
+               (try? localModelFiles.installed(modelID:id)) != nil { return id }
+        }
+        try startModelDownload(plan:plan,definitionRequest:definitionRequest)
+        return try plan.required("model").required("id").string("model ID")
+    }
+    private func startModelDownload(plan: OrderedJSON, definitionRequest: OrderedJSON? = nil) throws {
         guard !hasGenerations, !evaluationJobs.values.contains(where: { $0.busy }) else {
             throw ExchangeError.invalid("生成・評価の終了後にモデルを取得してください")
         }
+        let id = try plan.required("model").required("id").string("model ID")
         let key = Data(id.utf8)
         guard catalogDownloadTasks[key] == nil, !catalogInstallations.contains(key) else { throw ExchangeError.invalid("このモデルの取得・取消処理が終了してから再試行してください") }
         let roots = try syncInputSnapshot().required("state")
-        let plan = try SharedWebOperations.call("localModelImport",.object([.init(key:"operation",value:.string("catalogPlan")),.init(key:"id",value:.string(id))]))
         let model = try plan.required("model")
         let modelID = try model.required("id").string("catalog model ID")
+        if model["manifest"]?["kind"] == .string("gguf-sharded") {
+            throw ExchangeError.invalid("分割GGUFのダウンロードにはまだ対応していません")
+        }
         guard modelID.utf8.elementsEqual(id.utf8), model["engine"] == .string("wllama"), model["manifest"]?["kind"] == .string("single-file") else {
             throw ExchangeError.invalid("取得できないカタログモデルです")
         }
         let files = try plan.required("files").array("catalog files")
-        guard files.count == 1, let urlText = try files[0]["url"]?.string("catalog URL"), let url = URL(string:urlText), url.scheme == "https" else {
+        guard files.count == 1, let urlText = try files[0]["url"]?.string("catalog URL"), let url = URL(string:urlText),
+              let components = URLComponents(url:url,resolvingAgainstBaseURL:false), components.scheme == "https",
+              components.host?.lowercased() == "huggingface.co", components.port == nil || components.port == 443,
+              components.user == nil, components.password == nil, components.fragment == nil else {
             throw ExchangeError.invalid("カタログの取得先が不正です")
         }
         let expectedText = try model["expectedDownloadSize"]?.number("expected download size")
@@ -1674,7 +1709,7 @@ final class ChatState: ObservableObject {
                     do {
                         let inspected = try await Task.detached { try self.localModelFiles.inspect(temporary) }.value
                         try Task.checkCancellation()
-                        try await self.finishCatalogDownload(id:id,key:key,token:token,roots:roots,model:model,file:files[0],temporary:temporary,inspected:inspected)
+                        try await self.finishCatalogDownload(id:id,key:key,token:token,roots:roots,model:model,file:files[0],definitionRequest:definitionRequest,temporary:temporary,inspected:inspected)
                     } catch is CancellationError {
                         self.finishCatalogDownloadFailure(key:key,token:token,expected:expected,error:nil)
                     } catch { self.finishCatalogDownloadFailure(key:key,token:token,expected:expected,error:error) }
@@ -1696,7 +1731,7 @@ final class ChatState: ObservableObject {
         diagnostics.report(id:"model-" + String(data:key,encoding:.utf8)!,label:"モデル取得",status:"error",detail:"失敗")
     }
 
-    @MainActor private func finishCatalogDownload(id: String, key: Data, token: UUID, roots: OrderedJSON, model: OrderedJSON, file: OrderedJSON,
+    @MainActor private func finishCatalogDownload(id: String, key: Data, token: UUID, roots: OrderedJSON, model: OrderedJSON, file: OrderedJSON, definitionRequest: OrderedJSON?,
                                        temporary: URL, inspected: (name:String,hash:String,size:Int64)) async throws {
         guard catalogDownloadTasks[key] == token else { throw CancellationError() }
         guard let fileName = try file["path"]?.string("catalog file path"), let revision = try model["revision"]?.string("catalog revision") else {
@@ -1742,9 +1777,13 @@ final class ChatState: ObservableObject {
             definition = .object([.init(key:"id",value:.string(duplicateID)),.init(key:"tasks",value:stored["tasks"] ?? .array([]))])
             duplicateRevision = candidate.revision
         } else {
-            definition = try SharedWebOperations.call("localModelImport",.object([
-                .init(key:"operation",value:.string("catalogDefinition")),.init(key:"id",value:.string(id)),.init(key:"totalBytes",value:.number(String(inspected.size)))
-            ]))
+            if let definitionRequest {
+                definition = try SharedWebOperations.call("hfSearchOperation",definitionRequest.replacing("totalBytes",with:.number(String(inspected.size)))).required("definition")
+            } else {
+                definition = try SharedWebOperations.call("localModelImport",.object([
+                    .init(key:"operation",value:.string("catalogDefinition")),.init(key:"id",value:.string(id)),.init(key:"totalBytes",value:.number(String(inspected.size)))
+                ]))
+            }
             duplicateRevision = nil
         }
         let modelID = try definition.required("id").string("catalog model ID")
@@ -1827,7 +1866,7 @@ final class ChatState: ObservableObject {
         catalogResumeData.removeValue(forKey:key)
         catalogResumePlans.removeValue(forKey:key)
         try? catalogResumeStore.save(catalogResumeRecords())
-        catalogDownloads[key] = .init(receivedBytes:inspected.size,expectedBytes:inspected.size,running:false,partial:false,error:nil,canResume:false)
+        catalogDownloads[key] = .init(receivedBytes:inspected.size,expectedBytes:inspected.size,running:false,partial:false,error:nil,canResume:false,installedModelID:modelID)
         diagnostics.report(id:"model-" + id,label:"モデル取得",status:"done")
     }
 

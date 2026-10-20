@@ -12,6 +12,8 @@ struct LocalModelSettingsView: View {
     @State private var fileStatus: String?
     @State private var catalog: [OrderedJSON] = []
     @State private var catalogLoaded = false
+    @StateObject private var hfSearch = HfModelSearch()
+    @State private var hfDownloadIDs: [Data: String] = [:]
 
     private func name(_ model: OrderedJSON) -> String {
         (try? model["label"]?.string("label")) ?? (try? model["id"]?.string("id")) ?? "モデル"
@@ -21,6 +23,11 @@ struct LocalModelSettingsView: View {
     }
     private func multiFile(_ model: OrderedJSON) -> Bool {
         model["engine"] == .string("transformers.js") && model["manifest"]?["kind"] == .string("multi-file")
+    }
+    private func candidateKey(_ result: OrderedJSON, _ variant: OrderedJSON) -> Data? {
+        guard let repository = try? result.required("repoId").string("repository"),
+              let file = try? variant.required("fileName").string("GGUF file") else { return nil }
+        return Data((repository + "\u{0}" + file).utf8)
     }
     private func save(_ action: () throws -> Void) {
         do { try action(); errorMessage = nil }
@@ -99,6 +106,7 @@ struct LocalModelSettingsView: View {
             if let errorMessage { Text(errorMessage).foregroundStyle(.red) }
             }
             .disabled(copying || state.hasGenerations || state.evaluationJobs.values.contains { $0.busy })
+            hfSearchSection
             catalogSection
         }
         .navigationTitle("ローカルモデル")
@@ -137,6 +145,113 @@ struct LocalModelSettingsView: View {
             }
         }
         .onDisappear { if importingDirectoryModel != nil { importTask?.cancel() } }
+    }
+
+    private var hfSearchSection: some View {
+        Section("Hugging Face を検索") {
+            TextField("リポジトリ名を検索", text: $hfSearch.query)
+                .textInputAutocapitalization(.never).autocorrectionDisabled()
+            Picker("実行形式", selection: $hfSearch.engine) {
+                Text("すべて").tag("all"); Text("GGUF").tag("wllama"); Text("Transformers").tag("transformers.js")
+            }
+            Picker("並び順", selection: $hfSearch.sort) {
+                Text("更新日").tag("lastModified"); Text("ダウンロード数").tag("downloads"); Text("サイズ").tag("size")
+            }
+            Picker("順序", selection: $hfSearch.sortDirection) {
+                Text("降順").tag("desc"); Text("昇順").tag("asc")
+            }
+            Button(hfSearch.searching ? "検索中…" : "検索") { hfSearch.search() }
+                .frame(minHeight:44).disabled(hfSearch.searching)
+            if hfSearch.searching || hfSearch.loadingMore {
+                Button("検索を取り消す") { hfSearch.cancel() }.frame(minHeight:44)
+            }
+            if let error = hfSearch.error { Text(error).font(.footnote).foregroundStyle(.red) }
+            ForEach(hfSearch.results.indices, id: \.self) { index in
+                let result = hfSearch.results[index]
+                hfResultRow(result)
+                    .onAppear { hfSearch.loadVariants(for: result) }
+            }
+            if hfSearch.nextPageURL != nil {
+                Button(hfSearch.loadingMore ? "追加分を取得中…" : "さらに読み込む") { hfSearch.loadMore() }
+                    .frame(minHeight:44).disabled(hfSearch.loadingMore)
+            }
+        }
+    }
+
+    @ViewBuilder private func hfResultRow(_ result: OrderedJSON) -> some View {
+        let repository = (try? result.required("repoId").string("repository")) ?? "Hugging Face"
+        VStack(alignment:.leading, spacing:6) {
+            Text(repository).font(.subheadline.weight(.semibold)).textSelection(.enabled)
+            if let description = try? result["description"]?.string("description"), !description.isEmpty {
+                Text(description).font(.footnote).foregroundStyle(.secondary).lineLimit(2)
+            }
+            if let variants = hfSearch.variants(for: result) {
+                if variants.variants.isEmpty { Text("利用可能なGGUFはありません。").font(.footnote).foregroundStyle(.secondary) }
+                else {
+                    Picker("GGUF", selection: Binding(get: {
+                        (try? hfSearch.selectedVariant(for: result)?.required("fileName").string("GGUF file")) ?? ""
+                    }, set: { file in
+                        if let selected = variants.variants.first(where: { (try? $0.required("fileName").string("GGUF file"))?.utf8.elementsEqual(file.utf8) == true }) {
+                            hfSearch.select(variant:selected, for:result)
+                        }
+                    })) {
+                        ForEach(variants.variants.indices, id: \.self) { variantIndex in
+                            let variant = variants.variants[variantIndex]
+                            Text((try? variant.required("label").string("GGUF label")) ?? "GGUF").tag((try? variant.required("fileName").string("GGUF file")) ?? "")
+                        }
+                    }
+                    if let selected = hfSearch.selectedVariant(for: result) { hfVariantActions(result, selected) }
+                }
+            } else if let repository = try? result.required("repoId").string("repository"), hfSearch.variantFailures.contains(Data(repository.utf8)) {
+                Text("GGUF候補を取得できませんでした。").font(.footnote).foregroundStyle(.secondary)
+            } else {
+                ProgressView().controlSize(.small)
+            }
+        }
+    }
+
+    @ViewBuilder private func hfVariantActions(_ result: OrderedJSON, _ variant: OrderedJSON) -> some View {
+        let status = (try? variant.required("supportStatus").string("variant status")) ?? "unsupported"
+        let shards = (try? variant["shardFiles"]?.array("GGUF shards")) ?? []
+        if shards.count > 1 {
+            Text("分割GGUFにはまだ対応していません。").font(.footnote).foregroundStyle(.secondary)
+        } else if status == "unsupported" {
+            Text((try? variant["supportReason"]?.string("variant reason")) ?? "このGGUFは利用できません。").font(.footnote).foregroundStyle(.secondary)
+        } else {
+            if status == "not-recommended", let reason = try? variant["supportReason"]?.string("variant reason") {
+                Text(reason).font(.footnote).foregroundStyle(.secondary)
+            }
+            if let key = candidateKey(result, variant), let id = hfDownloadIDs[key] {
+                let installedID = state.catalogDownload(id:id)?.installedModelID ?? id
+                let installed = (try? state.localModelDefinitions())?.contains { model in
+                    (try? model.required("id").string("model ID"))?.utf8.elementsEqual(installedID.utf8) == true
+                } == true && (try? state.localModelFiles.installed(modelID:installedID)) != nil
+                if installed {
+                    Text("この端末にファイルあり").font(.footnote).foregroundStyle(.secondary)
+                } else if let job = state.catalogDownload(id:id), job.running {
+                    if let total = job.expectedBytes, total > 0 { ProgressView(value:Double(job.receivedBytes), total:Double(total)) }
+                    else { ProgressView() }
+                    Button("取得を取り消す") { state.cancelCatalogDownload(id:id) }.frame(minHeight:44)
+                } else if let job = state.catalogDownload(id:id), let error = job.error {
+                    Text(error).font(.footnote).foregroundStyle(.red)
+                    Button("再試行") { startHfDownload(result, variant) }.frame(minHeight:44)
+                } else if let job = state.catalogDownload(id:id), job.partial {
+                    Button(job.canResume ? "取得を再開" : "再試行") { startHfDownload(result, variant) }.frame(minHeight:44)
+                } else {
+                    Button("再試行") { startHfDownload(result, variant) }.frame(minHeight:44)
+                }
+            } else {
+                Button("ダウンロード", systemImage:"arrow.down.circle") { startHfDownload(result, variant) }.frame(minHeight:44)
+            }
+        }
+    }
+
+    private func startHfDownload(_ result: OrderedJSON, _ variant: OrderedJSON) {
+        do {
+            let id = try state.startHfModelDownload(result:result, variant:variant)
+            if let key = candidateKey(result, variant) { hfDownloadIDs[key] = id }
+            errorMessage = nil
+        } catch { errorMessage = error.localizedDescription }
     }
 
     private var catalogSection: some View {

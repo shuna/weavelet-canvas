@@ -15,6 +15,7 @@ import type {
   LocalModelEngine,
   LocalModelTask,
   LocalModelManifest,
+  LocalModelDefinition,
   LocalModelDisplayMeta,
   HfSearchQuery,
   HfRepoFile,
@@ -27,13 +28,15 @@ import type {
   ResolvedSearchCandidate,
 } from './types';
 import { formatBytes } from './device';
-import { groupShardFiles, isShardGroupComplete, generateShardFileNames } from './ggufShardUtils';
+import { groupShardFiles, isShardGroupComplete } from './ggufShardUtils';
+import { buildHfUrl } from './catalogPlan';
+import { CURATED_MODELS } from './catalog';
 
 // ---------------------------------------------------------------------------
 // Constants
 // ---------------------------------------------------------------------------
 
-const HF_API_BASE = 'https://huggingface.co/api/models';
+export const HF_API_BASE = 'https://huggingface.co/api/models';
 // Size thresholds for variant classification
 const SIZE_HEAVY =    1.5 * 1024 * 1024 * 1024;  // 1.5 GB — "heavy"
 const SIZE_VERY_HEAVY = 4 * 1024 * 1024 * 1024;  // 4 GB — "very heavy"
@@ -121,7 +124,7 @@ function sanitizeIdSegment(s: string): string {
 // HF API types (raw response shapes)
 // ---------------------------------------------------------------------------
 
-interface HfApiModel {
+export interface HfApiModel {
   _id: string;
   id: string;              // "owner/repo"
   modelId?: string;
@@ -137,6 +140,52 @@ interface HfApiModel {
   gated?: boolean | string;
   description?: string;
   cardData?: { tags?: string[] };
+}
+
+export interface HfSearchPlan {
+  url: string;
+  parameters?: [string, string][];
+  empty?: true;
+}
+
+export type HfSearchSort = HfSearchQuery['sort'] | 'size';
+export type HfSearchUIQuery = Omit<HfSearchQuery, 'sort'> & { sort: HfSearchSort };
+
+export interface HfDownloadModel {
+  id: string;
+  engine: LocalModelEngine;
+  tasks: LocalModelTask[];
+  label: string;
+  huggingFaceRepo: string;
+  revision: 'main';
+  downloadFiles: string[];
+  manifest: LocalModelManifest;
+  expectedDownloadSize: number;
+  displayMeta: LocalModelDisplayMeta;
+}
+
+export interface HfDownloadPlan {
+  model: HfDownloadModel;
+  files: { path: string; url: string }[];
+  definition: LocalModelDefinition;
+}
+
+const repoSegment = /^[A-Za-z0-9][A-Za-z0-9._-]*$/;
+
+function requireRepoId(repoId: string): string {
+  const parts = repoId.split('/');
+  if (parts.length !== 2 || !parts.every((part) => repoSegment.test(part))) {
+    throw new Error('Invalid Hugging Face repository ID.');
+  }
+  return repoId;
+}
+
+function requireFilePath(fileName: string): string {
+  const parts = fileName.split('/');
+  if (!parts.length || parts.some((part) => !part || part === '.' || part === '..' || part.includes('\\'))) {
+    throw new Error('Invalid Hugging Face file path.');
+  }
+  return fileName;
 }
 
 // ---------------------------------------------------------------------------
@@ -203,119 +252,125 @@ function parseLinkNext(linkHeader: string | null): string | null {
   return match ? match[1] : null;
 }
 
+export function searchPlan(query: HfSearchUIQuery): HfSearchPlan {
+  const { query: text, engine, sort, sortDir = 'desc', limit = DEFAULT_LIMIT, nextUrl } = query;
+  if (nextUrl) return { url: nextUrl };
+  if (!text.trim()) return { url: HF_API_BASE, empty: true };
+
+  const parameters: [string, string][] = [
+    ['search', text],
+    ['sort', sort === 'lastModified' ? 'lastModified' : 'downloads'],
+    ['direction', sort !== 'size' && sortDir === 'asc' ? '1' : '-1'],
+    ['limit', String(limit)],
+  ];
+  if (engine === 'wllama') parameters.push(['filter', 'gguf']);
+  else if (engine === 'transformers.js') parameters.push(['library', 'transformers.js']);
+  return { url: HF_API_BASE, parameters };
+}
+
+export function sortSearchResults(
+  results: HfSearchResult[],
+  sort: HfSearchSort,
+  sortDir: 'asc' | 'desc' = 'desc',
+): HfSearchResult[] {
+  if (sort !== 'size') return results;
+  return [...results].sort((left, right) => {
+    const leftSize = left.bestCandidateSize ?? 0;
+    const rightSize = right.bestCandidateSize ?? 0;
+    return sortDir === 'asc' ? leftSize - rightSize : rightSize - leftSize;
+  });
+}
+
+function resultForModel(model: HfApiModel, query: HfSearchUIQuery): HfSearchResult[] {
+  const tags = Array.isArray(model.tags) ? model.tags.filter((tag): tag is string => typeof tag === 'string') : [];
+  const siblings: HfRepoFile[] | null = Array.isArray(model.siblings)
+    ? model.siblings
+        .filter((s): s is { rfilename: string; size: number } =>
+          typeof s.rfilename === 'string' && typeof s.size === 'number' && s.size > 0,
+        )
+        .map((s) => ({ rfilename: s.rfilename, size: s.size }))
+    : null;
+
+  let detectedEngine: LocalModelEngine | null = null;
+  if (query.engine === 'wllama' || tags.includes('gguf')) detectedEngine = 'wllama';
+  else if (query.engine === 'transformers.js' || model.library_name === 'transformers.js') detectedEngine = 'transformers.js';
+
+  const { status, reason } = classifyRepoSupport(siblings, tags, detectedEngine);
+  if (status !== 'supported') return [];
+
+  let bestCandidateSize: number | null = null;
+  if (siblings && detectedEngine === 'wllama') {
+    const siblingsWithSize = siblings.map((s) => ({ rfilename: s.rfilename, size: s.size }));
+    const shardGroups = groupShardFiles(siblingsWithSize.filter((s) => s.rfilename.endsWith('.gguf')));
+    const shardedFileNames = new Set<string>();
+    for (const group of shardGroups.values()) for (const file of group.files) shardedFileNames.add(file);
+    const candidates: Array<{ name: string; size: number }> = [];
+    for (const sibling of siblingsWithSize) {
+      if (sibling.rfilename.endsWith('.gguf') && !shardedFileNames.has(sibling.rfilename)) {
+        candidates.push({ name: sibling.rfilename, size: sibling.size });
+      }
+    }
+    for (const [baseName, group] of shardGroups) candidates.push({ name: baseName, size: group.totalSize });
+    candidates.sort((left, right) => {
+      const leftQuant = extractRawQuantization(left.name);
+      const rightQuant = extractRawQuantization(right.name);
+      const leftPriority = leftQuant ? (QUANT_PRIORITY[normalizeQuantization(leftQuant)] ?? 99) : 99;
+      const rightPriority = rightQuant ? (QUANT_PRIORITY[normalizeQuantization(rightQuant)] ?? 99) : 99;
+      return leftPriority - rightPriority;
+    });
+    bestCandidateSize = candidates[0]?.size ?? null;
+  }
+
+  if (!model.id || !repoSegment.test(model.id.split('/')[0] ?? '') || !repoSegment.test(model.id.split('/')[1] ?? '') || model.id.split('/').length !== 2) {
+    return [];
+  }
+  return [{
+    repoId: model.id,
+    repoUrl: `https://huggingface.co/${model.id}`,
+    description: model.description ?? '',
+    tags,
+    downloads: model.downloads ?? 0,
+    lastModified: model.lastModified ?? model.createdAt ?? '',
+    bestCandidateSize,
+    supportStatus: status,
+    supportReason: reason,
+    engine: detectedEngine,
+  }];
+}
+
+export function searchResponse(query: HfSearchUIQuery, data: unknown, link: string | null): HfSearchResponse {
+  if (!Array.isArray(data)) throw new Error('Invalid Hugging Face search response.');
+  return {
+    results: data.flatMap((model) => (
+      model && typeof model === 'object' ? resultForModel(model as HfApiModel, query) : []
+    )),
+    nextPageUrl: parseLinkNext(link),
+  };
+}
+
+export function repoPlan(repoId: string): { url: string } {
+  return { url: `${HF_API_BASE}/${requireRepoId(repoId)}?blobs=true` };
+}
+
 /**
  * Search Hugging Face Hub for models.
  * Uses cursor-based pagination via the Link header.
  */
 export async function searchHfModels(
-  query: HfSearchQuery,
+  query: HfSearchUIQuery,
 ): Promise<HfSearchResponse> {
-  const { query: q, engine, sort, sortDir = 'desc', limit = DEFAULT_LIMIT, nextUrl } = query;
-
-  if (!q.trim() && !nextUrl) return { results: [], nextPageUrl: null };
-
-  let fetchUrl: string;
-  if (nextUrl) {
-    fetchUrl = nextUrl;
-  } else {
-    const params = new URLSearchParams({
-      search: q,
-      sort: sort === 'lastModified' ? 'lastModified' : 'downloads',
-      direction: sortDir === 'asc' ? '1' : '-1',
-      limit: String(limit),
-    });
-    if (engine === 'wllama') {
-      params.append('filter', 'gguf');
-    } else if (engine === 'transformers.js') {
-      params.append('library', 'transformers.js');
-    }
-    fetchUrl = `${HF_API_BASE}?${params.toString()}`;
+  const plan = searchPlan(query);
+  if (plan.empty) return { results: [], nextPageUrl: null };
+  const url = plan.parameters
+    ? `${plan.url}?${new URLSearchParams(plan.parameters).toString()}`
+    : plan.url;
+  const parsed = new URL(url);
+  if (parsed.protocol !== 'https:' || parsed.hostname !== 'huggingface.co') {
+    throw new Error('Invalid Hugging Face URL.');
   }
-
-  let data: HfApiModel[];
-  let nextPageUrl: string | null = null;
-  try {
-    const response = await fetch(fetchUrl);
-    if (!response.ok) {
-      throw new Error(`HF API: ${response.status}`);
-    }
-    data = await response.json();
-    nextPageUrl = parseLinkNext(response.headers.get('Link'));
-  } catch {
-    return { results: [], nextPageUrl: null };
-  }
-
-  // Filter out non-supported repos entirely (no GGUF, unsupported formats, etc.)
-  const results = data.flatMap((model): HfSearchResult[] => {
-    const tags = model.tags ?? [];
-    const siblings: HfRepoFile[] | null = model.siblings
-      ? model.siblings
-          .filter((s): s is { rfilename: string; size: number } =>
-            typeof s.size === 'number' && s.size > 0,
-          )
-          .map((s) => ({ rfilename: s.rfilename, size: s.size }))
-      : null;
-
-    // Determine engine from context
-    let detectedEngine: LocalModelEngine | null = null;
-    if (engine === 'wllama' || tags.includes('gguf')) {
-      detectedEngine = 'wllama';
-    } else if (engine === 'transformers.js' || model.library_name === 'transformers.js') {
-      detectedEngine = 'transformers.js';
-    }
-
-    const { status, reason } = classifyRepoSupport(siblings, tags, detectedEngine);
-
-    // Drop unsupported and needs-manual-review repos from results
-    if (status !== 'supported') return [];
-
-    // Estimate best candidate size (recommended GGUF variant)
-    let bestCandidateSize: number | null = null;
-    if (siblings && detectedEngine === 'wllama') {
-      // Include both single-file GGUFs and shard group totals for best candidate size estimation
-      const siblingsWithSize = siblings.map((s) => ({ rfilename: s.rfilename, size: typeof s.size === 'number' ? s.size : 0 }));
-      const shardGroups = groupShardFiles(siblingsWithSize.filter((s) => s.rfilename.endsWith('.gguf')));
-      const shardedFileNames = new Set<string>();
-      for (const g of shardGroups.values()) for (const f of g.files) shardedFileNames.add(f);
-
-      // Candidates: single-file GGUFs + one entry per shard group
-      const candidates: Array<{ name: string; size: number }> = [];
-      for (const s of siblingsWithSize) {
-        if (!s.rfilename.endsWith('.gguf')) continue;
-        if (shardedFileNames.has(s.rfilename)) continue;
-        candidates.push({ name: s.rfilename, size: s.size });
-      }
-      for (const [baseName, group] of shardGroups) {
-        candidates.push({ name: baseName, size: group.totalSize });
-      }
-
-      candidates.sort((a, b) => {
-        const qa = extractRawQuantization(a.name);
-        const qb = extractRawQuantization(b.name);
-        const pa = qa ? (QUANT_PRIORITY[normalizeQuantization(qa)] ?? 99) : 99;
-        const pb = qb ? (QUANT_PRIORITY[normalizeQuantization(qb)] ?? 99) : 99;
-        return pa - pb;
-      });
-      if (candidates.length > 0) {
-        bestCandidateSize = candidates[0].size;
-      }
-    }
-
-    return [{
-      repoId: model.id,
-      repoUrl: `https://huggingface.co/${model.id}`,
-      description: model.description ?? '',
-      tags,
-      downloads: model.downloads ?? 0,
-      lastModified: model.lastModified ?? model.createdAt ?? '',
-      bestCandidateSize,
-      supportStatus: status,
-      supportReason: reason,
-      engine: detectedEngine,
-    }];
-  });
-
-  return { results, nextPageUrl };
+  const response = await fetch(parsed);
+  if (!response.ok) throw new Error(`HF API: ${response.status}`);
+  return searchResponse(query, await response.json(), response.headers.get('Link'));
 }
 
 // ---------------------------------------------------------------------------
@@ -329,19 +384,29 @@ export async function searchHfModels(
 export async function resolveGgufFiles(
   repoId: string,
 ): Promise<GgufRepoResolution | null> {
-  let data: HfApiModel;
+  let data: unknown;
   try {
-    const response = await fetch(`${HF_API_BASE}/${repoId}?blobs=true`);
+    const plan = repoPlan(repoId);
+    const url = new URL(plan.url);
+    if (url.protocol !== 'https:' || url.hostname !== 'huggingface.co') return null;
+    const response = await fetch(url);
     if (!response.ok) return null;
     data = await response.json();
   } catch {
     return null;
   }
 
-  if (!data.siblings) return null;
+  return resolveGgufResponse(data);
+}
 
-  const ggufSiblings = data.siblings.filter(
-    (s) => s.rfilename.endsWith('.gguf')
+export function resolveGgufResponse(data: unknown): GgufRepoResolution | null {
+  if (!data || typeof data !== 'object') return null;
+  const model = data as HfApiModel;
+
+  if (!Array.isArray(model.siblings)) return null;
+
+  const ggufSiblings = model.siblings.filter(
+    (s) => typeof s.rfilename === 'string' && s.rfilename.endsWith('.gguf')
       // Exclude vision projector files (not runnable models)
       && !/mmproj/i.test(s.rfilename),
   );
@@ -473,7 +538,7 @@ export async function resolveGgufFiles(
   }
 
   if (variants.length === 0) {
-    return { variants: [], recommendedFile: null, lastModified: data.lastModified };
+    return { variants: [], recommendedFile: null, lastModified: model.lastModified };
   }
 
   // Find best recommendation: prefer supported, fall back to not-recommended (lighter first)
@@ -513,7 +578,7 @@ export async function resolveGgufFiles(
     return pa - pb;
   });
 
-  return { variants, recommendedFile, lastModified: data.lastModified };
+  return { variants, recommendedFile, lastModified: model.lastModified };
 }
 
 // ---------------------------------------------------------------------------
@@ -578,6 +643,75 @@ export function resolveSearchCandidate(
     selectedFile: variant.fileName,
     displayMeta,
   };
+}
+
+export function downloadPlan(
+  result: HfSearchResult,
+  variant: GgufVariant,
+  totalBytes?: number,
+): HfDownloadPlan {
+  requireRepoId(result.repoId);
+  if (result.supportStatus !== 'supported' || (result.engine !== 'wllama' && !result.tags.includes('gguf'))) {
+    throw new Error('Unsupported Hugging Face search result.');
+  }
+  if (variant.supportStatus === 'unsupported') throw new Error('Unsupported GGUF variant.');
+  if (totalBytes !== undefined && (!Number.isFinite(totalBytes) || totalBytes < 0)) {
+    throw new Error('Invalid Hugging Face download size.');
+  }
+  requireFilePath(variant.fileName);
+  if (variant.shardFiles) {
+    if (variant.shardFiles.length < 2 || new Set(variant.shardFiles).size !== variant.shardFiles.length) {
+      throw new Error('Invalid GGUF shard files.');
+    }
+    variant.shardFiles.forEach((fileName) => {
+      requireFilePath(fileName);
+      if (!fileName.endsWith('.gguf')) throw new Error('Invalid GGUF shard file.');
+    });
+  }
+  const candidate = resolveSearchCandidate(result, variant);
+  if (!candidate) throw new Error('Unsupported Hugging Face search candidate.');
+  const model: HfDownloadModel = {
+    id: generateSearchModelId(result.repoId, variant),
+    engine: candidate.engine,
+    tasks: candidate.tasks,
+    label: candidate.label,
+    huggingFaceRepo: result.repoId,
+    revision: 'main',
+    downloadFiles: candidate.downloadFiles,
+    manifest: candidate.manifest,
+    expectedDownloadSize: candidate.estimatedSize,
+    displayMeta: candidate.displayMeta,
+  };
+  return {
+    model,
+    files: model.downloadFiles.map((path) => ({ path, url: buildHfUrl(model.huggingFaceRepo, model.revision, path) })),
+    definition: {
+      id: model.id,
+      engine: model.engine,
+      tasks: model.tasks,
+      label: model.label,
+      origin: model.huggingFaceRepo,
+      source: 'opfs',
+      manifest: model.manifest,
+      fileSize: totalBytes ?? model.expectedDownloadSize,
+    },
+  };
+}
+
+export function findExistingModelForVariant(
+  repoId: string,
+  fileName: string,
+  models: LocalModelDefinition[],
+): string | null {
+  for (const model of CURATED_MODELS) {
+    if (model.huggingFaceRepo === repoId && model.downloadFiles.includes(fileName)) return model.id;
+  }
+  for (const model of models) {
+    if (model.origin === repoId && model.manifest.kind === 'single-file' && model.manifest.entrypoint === fileName) {
+      return model.id;
+    }
+  }
+  return null;
 }
 
 // ---------------------------------------------------------------------------

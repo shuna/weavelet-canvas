@@ -2,7 +2,8 @@ import { CURATED_MODELS, type CatalogModel } from './catalog';
 import type { LocalModelDefinition } from './types';
 
 export function buildHfUrl(repo: string, revision: string, filePath: string): string {
-  return `https://huggingface.co/${repo}/resolve/${revision}/${filePath}`;
+  const encodedPath = filePath.split('/').map(encodeURIComponent).join('/');
+  return `https://huggingface.co/${repo}/resolve/${encodeURIComponent(revision)}/${encodedPath}`;
 }
 
 export function catalogModels(): CatalogModel[] {

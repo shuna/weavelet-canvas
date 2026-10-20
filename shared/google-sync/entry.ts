@@ -245,3 +245,5 @@ export { localModelFiles } from './localModelFiles';
 export { debugState } from './debugState';
 
 export const syncDiagnostics = () => JSON.stringify({diagnostics: useGoogleSyncDiagnostics.getState(), progress: useGoogleSyncProgress.getState(), metrics: getSyncMetrics()});
+
+export { hfSearchOperation } from "./hfSearch";

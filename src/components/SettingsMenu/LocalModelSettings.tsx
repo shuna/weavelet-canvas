@@ -29,8 +29,8 @@ import type {
   GgufVariant,
 } from '@src/local-llm/types';
 import {
+  downloadPlan as buildSearchDownloadPlan,
   resolveGgufFiles,
-  resolveSearchCandidate,
   generateSearchModelId,
 } from '@src/local-llm/hfSearch';
 import { getManifestFiles, getManifestPrimaryFile, parseShardInfo } from '@src/local-llm/ggufShardUtils';
@@ -734,49 +734,43 @@ const LocalModelSettings = () => {
       const meta = useStore.getState().savedModelMeta[existingId];
       if (meta?.storageState === 'saved' || meta?.storageState === 'downloading' || abortControllers.current[existingId]) return;
     }
-    const candidate = resolveSearchCandidate(result, variant);
-    if (!candidate) return;
-    const modelId = generateSearchModelId(result.repoId, variant);
+    let plan;
+    try { plan = buildSearchDownloadPlan(result, variant); } catch { return; }
+    const modelId = plan.model.id;
     if (abortControllers.current[modelId]) return;
 
     hfSearch.setActiveSearchDownloads((prev) => ({ ...prev, [modelId]: { result, variant, modelId } }));
 
     const store = useStore.getState();
     if (!store.localModels.some((m) => m.id === modelId)) {
-      store.addLocalModel({
-        id: modelId, engine: candidate.engine, tasks: candidate.tasks, label: candidate.label,
-        origin: result.repoId, source: 'opfs', manifest: candidate.manifest, fileSize: candidate.estimatedSize,
-      });
+      store.addLocalModel(plan.definition);
     }
 
     startDownload(modelId, (cb, sig) => downloadModelFiles({
-      modelId, repo: result.repoId, revision: 'main', files: candidate.downloadFiles,
+      modelId, repo: plan.model.huggingFaceRepo, revision: plan.model.revision, files: plan.model.downloadFiles,
     }, cb, sig), {
-      storedFiles: [...candidate.downloadFiles],
-      onComplete: () => {
+      storedFiles: [...plan.model.downloadFiles],
+      onComplete: (totalBytes) => {
         hfSearch.setActiveSearchDownloads((prev) => { const { [modelId]: _, ...rest } = prev; return rest; });
-        void registerDownloadedOrUseDuplicate({
-          id: modelId, engine: candidate.engine, tasks: candidate.tasks, label: candidate.label,
-          origin: result.repoId, source: 'opfs', manifest: candidate.manifest, fileSize: candidate.estimatedSize,
-        }, candidate.estimatedSize);
+        void registerDownloadedOrUseDuplicate(buildSearchDownloadPlan(result, variant, totalBytes).definition, totalBytes);
       },
     });
   }, [registerDownloadedOrUseDuplicate, startDownload, hfSearch.findExistingModelForVariant, hfSearch.setActiveSearchDownloads]);
 
   const handleResumeSearchModel = useCallback((result: HfSearchResult, variant: GgufVariant) => {
-    const candidate = resolveSearchCandidate(result, variant);
-    if (!candidate) return;
-    const modelId = generateSearchModelId(result.repoId, variant);
+    let plan;
+    try { plan = buildSearchDownloadPlan(result, variant); } catch { return; }
+    const modelId = plan.model.id;
     if (abortControllers.current[modelId]) return;
 
     hfSearch.setActiveSearchDownloads((prev) => ({ ...prev, [modelId]: { result, variant, modelId } }));
     clearResumeFallback(modelId);
 
     startDownload(modelId, (cb, sig) => downloadModelFiles({
-      modelId, repo: result.repoId, revision: 'main', files: candidate.downloadFiles, resume: true,
+      modelId, repo: plan.model.huggingFaceRepo, revision: plan.model.revision, files: plan.model.downloadFiles, resume: true,
     }, cb, sig), {
       resume: true,
-      storedFiles: [...candidate.downloadFiles],
+      storedFiles: [...plan.model.downloadFiles],
       resumeFallbackMsg: t('localModel.resumeFallback') as string,
       onComplete: () => {
         hfSearch.setActiveSearchDownloads((prev) => { const { [modelId]: _, ...rest } = prev; return rest; });
@@ -793,25 +787,21 @@ const LocalModelSettings = () => {
   }, [cancelDownload]);
 
   const handleLoadSearchModel = useCallback(async (result: HfSearchResult, variant: GgufVariant) => {
-    const candidate = resolveSearchCandidate(result, variant);
-    if (!candidate) return;
-    const modelId = generateSearchModelId(result.repoId, variant);
-    const provider = new OpfsFileProvider(modelId, candidate.manifest);
+    let plan;
+    try { plan = buildSearchDownloadPlan(result, variant); } catch { return; }
+    const modelId = plan.model.id;
+    const provider = new OpfsFileProvider(modelId, plan.model.manifest);
     try {
       if (localModelRuntime.isLoaded(modelId)) await localModelRuntime.unloadModel(modelId, { force: true });
       await localModelRuntime.loadModel(
-        { id: modelId, engine: candidate.engine, tasks: candidate.tasks, label: candidate.label,
-          origin: result.repoId, source: 'opfs', manifest: candidate.manifest, fileSize: candidate.estimatedSize },
+        plan.definition,
         provider,
       );
       const store = useStore.getState();
       if (!store.localModels.some((m) => m.id === modelId)) {
-        store.addLocalModel({
-          id: modelId, engine: candidate.engine, tasks: candidate.tasks, label: candidate.label,
-          origin: result.repoId, source: 'opfs', manifest: candidate.manifest, fileSize: candidate.estimatedSize,
-        });
+        store.addLocalModel(plan.definition);
       }
-      autoAssignIfUnset(modelId, candidate.tasks);
+      autoAssignIfUnset(modelId, plan.model.tasks);
       if (!store.favoriteLocalModelIds.includes(modelId)) store.toggleFavoriteLocalModel(modelId);
       setOutput('');
     } catch (err) {

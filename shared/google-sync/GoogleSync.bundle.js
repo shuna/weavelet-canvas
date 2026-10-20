@@ -8489,6 +8489,7 @@ var WeaveletGoogleSync = (() => {
     generationRequest: () => generationRequest,
     generationUsage: () => generationUsage,
     generationUsagePlan: () => generationUsagePlan,
+    hfSearchOperation: () => hfSearchOperation,
     libraryDefaults: () => libraryDefaults,
     libraryOperation: () => libraryOperation,
     localGenerationInput: () => localGenerationInput,
@@ -28267,7 +28268,8 @@ ${text}`;
 
   // src/local-llm/catalogPlan.ts
   function buildHfUrl(repo, revision, filePath) {
-    return `https://huggingface.co/${repo}/resolve/${revision}/${filePath}`;
+    const encodedPath = filePath.split("/").map(encodeURIComponent).join("/");
+    return `https://huggingface.co/${repo}/resolve/${encodeURIComponent(revision)}/${encodedPath}`;
   }
   function catalogModels() {
     return CURATED_MODELS;
@@ -28320,6 +28322,47 @@ ${text}`;
   }
 
   // src/local-llm/ggufShardUtils.ts
+  var SHARD_PATTERN = /^(.*)-(\d{5})-of-(\d{5})\.gguf$/;
+  function parseShardInfo(fileName) {
+    const m = fileName.match(SHARD_PATTERN);
+    if (!m)
+      return null;
+    return {
+      baseName: m[1],
+      current: parseInt(m[2], 10),
+      total: parseInt(m[3], 10)
+    };
+  }
+  function isShardGroupComplete(group) {
+    return group.files.length === group.expectedTotal;
+  }
+  function groupShardFiles(files) {
+    const groups = /* @__PURE__ */ new Map();
+    for (const f of files) {
+      const info = parseShardInfo(f.rfilename);
+      if (!info)
+        continue;
+      if (!groups.has(info.baseName)) {
+        groups.set(info.baseName, { shards: /* @__PURE__ */ new Map(), expectedTotal: info.total });
+      }
+      const group = groups.get(info.baseName);
+      if (group.expectedTotal !== info.total)
+        continue;
+      if (!group.shards.has(info.current)) {
+        group.shards.set(info.current, { name: f.rfilename, size: f.size });
+      }
+    }
+    const result3 = /* @__PURE__ */ new Map();
+    for (const [baseName, { shards: shardMap, expectedTotal }] of groups) {
+      const sorted = Array.from(shardMap.entries()).sort(([a], [b]) => a - b).map(([, v]) => v);
+      result3.set(baseName, {
+        files: sorted.map((s) => s.name),
+        totalSize: sorted.reduce((sum, s) => sum + s.size, 0),
+        expectedTotal
+      });
+    }
+    return result3;
+  }
   function getManifestFiles(manifest) {
     switch (manifest.kind) {
       case "single-file":
@@ -28416,6 +28459,497 @@ ${text}`;
         logs: input.state.logs.map((line) => ({ ...line, formatted: formatDebugLogLine(line) }))
       });
     throw new Error("Invalid debug state operation.");
+  }
+
+  // src/local-llm/device.ts
+  function formatBytes(bytes4) {
+    const mb = bytes4 / (1024 * 1024);
+    if (mb >= 100)
+      return `${Math.round(mb)} MB`;
+    if (mb >= 10)
+      return `${mb.toFixed(1)} MB`;
+    if (mb >= 1)
+      return `${mb.toFixed(2)} MB`;
+    const kb = bytes4 / 1024;
+    return `${Math.round(kb)} KB`;
+  }
+
+  // src/local-llm/hfSearch.ts
+  var HF_API_BASE = "https://huggingface.co/api/models";
+  var SIZE_HEAVY = 1.5 * 1024 * 1024 * 1024;
+  var SIZE_VERY_HEAVY = 4 * 1024 * 1024 * 1024;
+  var SIZE_EXTREME = 8 * 1024 * 1024 * 1024;
+  var DEFAULT_LIMIT = 20;
+  var QUANT_ABBREVIATIONS = {
+    q2k: "q2-k",
+    q3km: "q3-k-m",
+    q3ks: "q3-k-s",
+    q3kl: "q3-k-l",
+    q4km: "q4-k-m",
+    q4ks: "q4-k-s",
+    q4kl: "q4-k-l",
+    q5km: "q5-k-m",
+    q5ks: "q5-k-s",
+    q5kl: "q5-k-l",
+    q6k: "q6-k",
+    q8k: "q8-k",
+    iq2xs: "iq2-xs",
+    iq2xxs: "iq2-xxs",
+    iq3xs: "iq3-xs",
+    iq3xxs: "iq3-xxs",
+    iq4xs: "iq4-xs",
+    iq4nl: "iq4-nl"
+  };
+  var QUANT_PRIORITY = {
+    "q4-k-m": 1,
+    "q4-0": 2,
+    "q4-k-s": 3,
+    "q5-k-m": 4,
+    "q5-k-s": 5,
+    "q3-k-m": 6,
+    "q8-0": 7,
+    "q6-k": 8
+  };
+  function extractRawQuantization(fileName) {
+    const match = fileName.match(/[._-]((?:I?Q)\d[\w]*)/i);
+    return match ? match[1] : null;
+  }
+  function normalizeQuantization(raw) {
+    let norm = raw.toLowerCase().replace(/_/g, "-");
+    const stripped = norm.replace(/-/g, "");
+    if (QUANT_ABBREVIATIONS[stripped]) {
+      return QUANT_ABBREVIATIONS[stripped];
+    }
+    return norm;
+  }
+  function sanitizeIdSegment(s) {
+    return s.toLowerCase().replace(/[^a-z0-9]/g, "-").replace(/-+/g, "-").replace(/^-|-$/g, "");
+  }
+  var repoSegment = /^[A-Za-z0-9][A-Za-z0-9._-]*$/;
+  function requireRepoId(repoId) {
+    const parts = repoId.split("/");
+    if (parts.length !== 2 || !parts.every((part) => repoSegment.test(part))) {
+      throw new Error("Invalid Hugging Face repository ID.");
+    }
+    return repoId;
+  }
+  function requireFilePath(fileName) {
+    const parts = fileName.split("/");
+    if (!parts.length || parts.some((part) => !part || part === "." || part === ".." || part.includes("\\"))) {
+      throw new Error("Invalid Hugging Face file path.");
+    }
+    return fileName;
+  }
+  function classifyRepoSupport(siblings, tags, engine) {
+    if (engine === "transformers.js") {
+      return {
+        status: "needs-manual-review",
+        reason: "Transformers.js repos require manual review in current version"
+      };
+    }
+    if (!siblings) {
+      if (tags.includes("gguf")) {
+        return { status: "supported", reason: "" };
+      }
+      if (engine === "wllama") {
+        return { status: "supported", reason: "" };
+      }
+      return {
+        status: "needs-manual-review",
+        reason: "No GGUF files detected. Only GGUF models are supported."
+      };
+    }
+    const ggufFiles = siblings.filter(
+      (s) => s.rfilename.endsWith(".gguf") && s.size > 0
+    );
+    if (ggufFiles.length === 0) {
+      return {
+        status: "unsupported",
+        reason: "No compatible model files found"
+      };
+    }
+    return { status: "supported", reason: "" };
+  }
+  function parseLinkNext(linkHeader) {
+    if (!linkHeader)
+      return null;
+    const match = linkHeader.match(/<([^>]+)>;\s*rel="next"/);
+    return match ? match[1] : null;
+  }
+  function searchPlan(query) {
+    const { query: text, engine, sort, sortDir = "desc", limit = DEFAULT_LIMIT, nextUrl } = query;
+    if (nextUrl)
+      return { url: nextUrl };
+    if (!text.trim())
+      return { url: HF_API_BASE, empty: true };
+    const parameters = [
+      ["search", text],
+      ["sort", sort === "lastModified" ? "lastModified" : "downloads"],
+      ["direction", sort !== "size" && sortDir === "asc" ? "1" : "-1"],
+      ["limit", String(limit)]
+    ];
+    if (engine === "wllama")
+      parameters.push(["filter", "gguf"]);
+    else if (engine === "transformers.js")
+      parameters.push(["library", "transformers.js"]);
+    return { url: HF_API_BASE, parameters };
+  }
+  function sortSearchResults(results, sort, sortDir = "desc") {
+    if (sort !== "size")
+      return results;
+    return [...results].sort((left, right) => {
+      const leftSize = left.bestCandidateSize ?? 0;
+      const rightSize = right.bestCandidateSize ?? 0;
+      return sortDir === "asc" ? leftSize - rightSize : rightSize - leftSize;
+    });
+  }
+  function resultForModel(model, query) {
+    const tags = Array.isArray(model.tags) ? model.tags.filter((tag) => typeof tag === "string") : [];
+    const siblings = Array.isArray(model.siblings) ? model.siblings.filter(
+      (s) => typeof s.rfilename === "string" && typeof s.size === "number" && s.size > 0
+    ).map((s) => ({ rfilename: s.rfilename, size: s.size })) : null;
+    let detectedEngine = null;
+    if (query.engine === "wllama" || tags.includes("gguf"))
+      detectedEngine = "wllama";
+    else if (query.engine === "transformers.js" || model.library_name === "transformers.js")
+      detectedEngine = "transformers.js";
+    const { status, reason } = classifyRepoSupport(siblings, tags, detectedEngine);
+    if (status !== "supported")
+      return [];
+    let bestCandidateSize = null;
+    if (siblings && detectedEngine === "wllama") {
+      const siblingsWithSize = siblings.map((s) => ({ rfilename: s.rfilename, size: s.size }));
+      const shardGroups = groupShardFiles(siblingsWithSize.filter((s) => s.rfilename.endsWith(".gguf")));
+      const shardedFileNames = /* @__PURE__ */ new Set();
+      for (const group of shardGroups.values())
+        for (const file of group.files)
+          shardedFileNames.add(file);
+      const candidates = [];
+      for (const sibling of siblingsWithSize) {
+        if (sibling.rfilename.endsWith(".gguf") && !shardedFileNames.has(sibling.rfilename)) {
+          candidates.push({ name: sibling.rfilename, size: sibling.size });
+        }
+      }
+      for (const [baseName, group] of shardGroups)
+        candidates.push({ name: baseName, size: group.totalSize });
+      candidates.sort((left, right) => {
+        const leftQuant = extractRawQuantization(left.name);
+        const rightQuant = extractRawQuantization(right.name);
+        const leftPriority = leftQuant ? QUANT_PRIORITY[normalizeQuantization(leftQuant)] ?? 99 : 99;
+        const rightPriority = rightQuant ? QUANT_PRIORITY[normalizeQuantization(rightQuant)] ?? 99 : 99;
+        return leftPriority - rightPriority;
+      });
+      bestCandidateSize = candidates[0]?.size ?? null;
+    }
+    if (!model.id || !repoSegment.test(model.id.split("/")[0] ?? "") || !repoSegment.test(model.id.split("/")[1] ?? "") || model.id.split("/").length !== 2) {
+      return [];
+    }
+    return [{
+      repoId: model.id,
+      repoUrl: `https://huggingface.co/${model.id}`,
+      description: model.description ?? "",
+      tags,
+      downloads: model.downloads ?? 0,
+      lastModified: model.lastModified ?? model.createdAt ?? "",
+      bestCandidateSize,
+      supportStatus: status,
+      supportReason: reason,
+      engine: detectedEngine
+    }];
+  }
+  function searchResponse(query, data, link) {
+    if (!Array.isArray(data))
+      throw new Error("Invalid Hugging Face search response.");
+    return {
+      results: data.flatMap((model) => model && typeof model === "object" ? resultForModel(model, query) : []),
+      nextPageUrl: parseLinkNext(link)
+    };
+  }
+  function repoPlan(repoId) {
+    return { url: `${HF_API_BASE}/${requireRepoId(repoId)}?blobs=true` };
+  }
+  function resolveGgufResponse(data) {
+    if (!data || typeof data !== "object")
+      return null;
+    const model = data;
+    if (!Array.isArray(model.siblings))
+      return null;
+    const ggufSiblings = model.siblings.filter(
+      (s) => typeof s.rfilename === "string" && s.rfilename.endsWith(".gguf") && !/mmproj/i.test(s.rfilename)
+    );
+    const variants = [];
+    const shardGroups = groupShardFiles(
+      ggufSiblings.map((s) => ({ rfilename: s.rfilename, size: typeof s.size === "number" ? s.size : 0 }))
+    );
+    const shardedFileNames = /* @__PURE__ */ new Set();
+    for (const group of shardGroups.values()) {
+      for (const f of group.files)
+        shardedFileNames.add(f);
+    }
+    for (const sibling of ggufSiblings) {
+      const rfilename = sibling.rfilename;
+      const size = typeof sibling.size === "number" ? sibling.size : 0;
+      if (!rfilename || rfilename === ".gguf")
+        continue;
+      if (shardedFileNames.has(rfilename))
+        continue;
+      const rawQuant = extractRawQuantization(rfilename);
+      const normalizedQuant = rawQuant ? normalizeQuantization(rawQuant) : sanitizeIdSegment(rfilename.replace(/\.gguf$/i, ""));
+      let supportStatus = "supported";
+      let supportReason;
+      if (size > 0 && size > SIZE_EXTREME) {
+        supportStatus = "not-recommended";
+        supportReason = "extreme";
+      } else if (size > 0 && size > SIZE_VERY_HEAVY) {
+        supportStatus = "not-recommended";
+        supportReason = "very-heavy";
+      } else if (size > 0 && size > SIZE_HEAVY) {
+        supportStatus = "not-recommended";
+        supportReason = "heavy";
+      }
+      const sizeStr = size > 0 ? formatBytes(size) : "?";
+      const label = rawQuant ? `${normalizedQuant.toUpperCase()} \u2014 ${sizeStr}` : `${rfilename} \u2014 ${sizeStr}`;
+      variants.push({
+        fileName: rfilename,
+        size,
+        rawQuantization: rawQuant,
+        normalizedQuantization: normalizedQuant,
+        supportStatus,
+        supportReason,
+        label,
+        recommended: false
+        // set below
+      });
+    }
+    for (const [baseName, group] of shardGroups) {
+      const firstShard = group.files[0];
+      if (!firstShard)
+        continue;
+      const rawQuant = extractRawQuantization(baseName);
+      const normalizedQuant = rawQuant ? normalizeQuantization(rawQuant) : sanitizeIdSegment(baseName);
+      if (!isShardGroupComplete(group)) {
+        const shardLabel2 = `${group.files.length}/${group.expectedTotal} shards`;
+        const sizeStr2 = group.totalSize > 0 ? formatBytes(group.totalSize) : "?";
+        const label2 = rawQuant ? `${normalizedQuant.toUpperCase()} \u2014 ${sizeStr2} (${shardLabel2}, incomplete)` : `${baseName} \u2014 ${sizeStr2} (${shardLabel2}, incomplete)`;
+        variants.push({
+          fileName: firstShard,
+          size: group.totalSize,
+          rawQuantization: rawQuant,
+          normalizedQuantization: normalizedQuant,
+          supportStatus: "unsupported",
+          supportReason: `Incomplete shard set: ${group.files.length} of ${group.expectedTotal} shards found`,
+          label: label2,
+          recommended: false,
+          shardFiles: group.files
+        });
+        continue;
+      }
+      const totalSize = group.totalSize;
+      let supportStatus = "supported";
+      let supportReason;
+      if (totalSize > 0 && totalSize > SIZE_EXTREME) {
+        supportStatus = "not-recommended";
+        supportReason = "extreme";
+      } else if (totalSize > 0 && totalSize > SIZE_VERY_HEAVY) {
+        supportStatus = "not-recommended";
+        supportReason = "very-heavy";
+      } else if (totalSize > 0 && totalSize > SIZE_HEAVY) {
+        supportStatus = "not-recommended";
+        supportReason = "heavy";
+      }
+      const sizeStr = totalSize > 0 ? formatBytes(totalSize) : "?";
+      const shardLabel = `${group.files.length} shards`;
+      const label = rawQuant ? `${normalizedQuant.toUpperCase()} \u2014 ${sizeStr} (${shardLabel})` : `${baseName} \u2014 ${sizeStr} (${shardLabel})`;
+      variants.push({
+        fileName: firstShard,
+        size: totalSize,
+        rawQuantization: rawQuant,
+        normalizedQuantization: normalizedQuant,
+        supportStatus,
+        supportReason,
+        label,
+        recommended: false,
+        // set below
+        shardFiles: group.files
+      });
+    }
+    if (variants.length === 0) {
+      return { variants: [], recommendedFile: null, lastModified: model.lastModified };
+    }
+    const supported = variants.filter((v) => v.supportStatus === "supported");
+    const candidates = supported.length > 0 ? supported : variants.filter((v) => v.supportStatus === "not-recommended");
+    if (candidates.length === 1) {
+      candidates[0].recommended = true;
+    } else if (candidates.length > 1) {
+      const sorted = [...candidates].sort((a, b) => {
+        const pa = QUANT_PRIORITY[a.normalizedQuantization] ?? 99;
+        const pb = QUANT_PRIORITY[b.normalizedQuantization] ?? 99;
+        if (pa !== pb)
+          return pa - pb;
+        return a.size - b.size;
+      });
+      const best = variants.find((v) => v.fileName === sorted[0].fileName);
+      if (best)
+        best.recommended = true;
+    }
+    const recommendedFile = variants.find((v) => v.recommended)?.fileName ?? null;
+    variants.sort((a, b) => {
+      const statusOrder = {
+        supported: 0,
+        "not-recommended": 1,
+        unsupported: 2
+      };
+      const so = statusOrder[a.supportStatus] - statusOrder[b.supportStatus];
+      if (so !== 0)
+        return so;
+      const pa = QUANT_PRIORITY[a.normalizedQuantization] ?? 99;
+      const pb = QUANT_PRIORITY[b.normalizedQuantization] ?? 99;
+      return pa - pb;
+    });
+    return { variants, recommendedFile, lastModified: model.lastModified };
+  }
+  function resolveSearchCandidate(result3, variant) {
+    if (!variant.fileName.endsWith(".gguf"))
+      return null;
+    if (result3.engine !== "wllama" && !result3.tags.includes("gguf"))
+      return null;
+    const manifest = variant.shardFiles && variant.shardFiles.length > 1 ? {
+      kind: "gguf-sharded",
+      entrypoint: variant.shardFiles[0],
+      shards: variant.shardFiles,
+      totalSize: variant.size
+    } : {
+      kind: "single-file",
+      entrypoint: variant.fileName
+    };
+    const tasks = guessTasksFromRepo(result3.repoId, result3.tags, variant.fileName);
+    const [, repoName] = result3.repoId.split("/");
+    const quantLabel = variant.rawQuantization ? variant.normalizedQuantization.toUpperCase() : variant.fileName.replace(/\.gguf$/i, "");
+    const label = `${repoName ?? result3.repoId} (${quantLabel})`;
+    const displayMeta = {
+      supportsTextInference: true,
+      quantization: variant.rawQuantization ? variant.normalizedQuantization.toUpperCase() : void 0,
+      sourceLabel: "search"
+    };
+    return {
+      repoId: result3.repoId,
+      engine: "wllama",
+      label,
+      manifest,
+      // For sharded models, downloadFiles contains all shards; for single-file, just the one file.
+      downloadFiles: variant.shardFiles && variant.shardFiles.length > 1 ? variant.shardFiles : [variant.fileName],
+      estimatedSize: variant.size,
+      tasks,
+      selectedFile: variant.fileName,
+      displayMeta
+    };
+  }
+  function downloadPlan(result3, variant, totalBytes) {
+    requireRepoId(result3.repoId);
+    if (result3.supportStatus !== "supported" || result3.engine !== "wllama" && !result3.tags.includes("gguf")) {
+      throw new Error("Unsupported Hugging Face search result.");
+    }
+    if (variant.supportStatus === "unsupported")
+      throw new Error("Unsupported GGUF variant.");
+    if (totalBytes !== void 0 && (!Number.isFinite(totalBytes) || totalBytes < 0)) {
+      throw new Error("Invalid Hugging Face download size.");
+    }
+    requireFilePath(variant.fileName);
+    if (variant.shardFiles) {
+      if (variant.shardFiles.length < 2 || new Set(variant.shardFiles).size !== variant.shardFiles.length) {
+        throw new Error("Invalid GGUF shard files.");
+      }
+      variant.shardFiles.forEach((fileName) => {
+        requireFilePath(fileName);
+        if (!fileName.endsWith(".gguf"))
+          throw new Error("Invalid GGUF shard file.");
+      });
+    }
+    const candidate = resolveSearchCandidate(result3, variant);
+    if (!candidate)
+      throw new Error("Unsupported Hugging Face search candidate.");
+    const model = {
+      id: generateSearchModelId(result3.repoId, variant),
+      engine: candidate.engine,
+      tasks: candidate.tasks,
+      label: candidate.label,
+      huggingFaceRepo: result3.repoId,
+      revision: "main",
+      downloadFiles: candidate.downloadFiles,
+      manifest: candidate.manifest,
+      expectedDownloadSize: candidate.estimatedSize,
+      displayMeta: candidate.displayMeta
+    };
+    return {
+      model,
+      files: model.downloadFiles.map((path) => ({ path, url: buildHfUrl(model.huggingFaceRepo, model.revision, path) })),
+      definition: {
+        id: model.id,
+        engine: model.engine,
+        tasks: model.tasks,
+        label: model.label,
+        origin: model.huggingFaceRepo,
+        source: "opfs",
+        manifest: model.manifest,
+        fileSize: totalBytes ?? model.expectedDownloadSize
+      }
+    };
+  }
+  function findExistingModelForVariant(repoId, fileName, models) {
+    for (const model of CURATED_MODELS) {
+      if (model.huggingFaceRepo === repoId && model.downloadFiles.includes(fileName))
+        return model.id;
+    }
+    for (const model of models) {
+      if (model.origin === repoId && model.manifest.kind === "single-file" && model.manifest.entrypoint === fileName) {
+        return model.id;
+      }
+    }
+    return null;
+  }
+  function guessTasksFromRepo(repoId, tags, selectedFile) {
+    const combined = [
+      repoId.toLowerCase(),
+      ...tags.map((t2) => t2.toLowerCase()),
+      (selectedFile ?? "").toLowerCase()
+    ].join(" ");
+    if (tags.some((t2) => t2 === "text-classification")) {
+      return ["moderation"];
+    }
+    if (tags.some((t2) => t2 === "text-generation") || combined.includes("instruct") || combined.includes("chat")) {
+      return ["generation", "analysis"];
+    }
+    return [];
+  }
+  function generateSearchModelId(repoId, variant) {
+    const parts = repoId.split("/");
+    const owner = sanitizeIdSegment(parts[0] ?? "unknown");
+    const repo = sanitizeIdSegment(parts[1] ?? parts[0] ?? "unknown");
+    const variantKey = variant.rawQuantization ? variant.normalizedQuantization : sanitizeIdSegment(variant.fileName.replace(/\.gguf$/i, ""));
+    return `hf--${owner}--${repo}--${variantKey}`;
+  }
+
+  // shared/google-sync/hfSearch.ts
+  function hfSearchOperation(json) {
+    const input = JSON.parse(json);
+    switch (input.operation) {
+      case "searchPlan":
+        return JSON.stringify(searchPlan(input.query));
+      case "searchResponse":
+        return JSON.stringify(searchResponse(input.query, input.data, input.link ?? null));
+      case "sortResults":
+        return JSON.stringify(sortSearchResults(input.results, input.sort, input.sortDir));
+      case "repoPlan":
+        return JSON.stringify(repoPlan(input.repoID));
+      case "variants":
+        return JSON.stringify(resolveGgufResponse(input.data));
+      case "downloadPlan":
+        return JSON.stringify(downloadPlan(input.result, input.variant, input.totalBytes));
+      case "existingModel":
+        return JSON.stringify(findExistingModelForVariant(input.repoID, input.fileName, input.models));
+      default:
+        throw new Error("Invalid Hugging Face search operation.");
+    }
   }
 
   // shared/google-sync/entry.ts
