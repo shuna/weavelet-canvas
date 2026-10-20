@@ -1046,3 +1046,15 @@ Web関連30件成功と型検査成功を回収。その後bridgeのundefinedが
 4. UI/OSの手動受入：狭幅/文字サイズ/VoiceOver、IMEとkeyboard押上げ、分岐図/分割/本文操作の干渉、OS background中断/復帰、実モデル精度/性能等。Macロック後の実画面確認は未完了。iPhone確認は再開指示があるまで実施しない。
 
 未変更の共有元・保存・暗号化同期の成功結果は再利用し、小変更ごとの全suite再実行や監査循環は追加しない。
+
+## 再開：OpenRouter確定統計のI/O保証範囲確定（2026-10-20）
+
+プッシュ済み300902faを基点に、新しい管理worktreeのcodex/web-ios-continuationへ復元して再開した。従来worktreeとルートcheckoutの未保存変更は変更していない。依存物はlockfileと既存native build手順から復元し、共有bundleの鮮度確認が成功した。
+
+前回失敗は実装の情報欠落ではなく、通常V3会話書出しへ端末ローカル統計の保持を要求した期待値の誤りだった。根拠はWeb実caller `ExportChat.tsx:20-27` が会話・フォルダー・contentStore・評価rootのみをfileExportへ渡すこと、`importService.ts` が永続化設定rootのV3追加root混入を拒否すること。`persistence.ts` のFULL_PERSIST_KEYSは両統計rootを保存する一方、`storage/google/settings.ts` のSYNC_LOCAL_SETTINGSはverifiedStats/pendingVerificationsをrecord同期から除外する。通常会話I/O、全state保存、record同期を同じ保証として扱わない。CloudKitのfull-state契約は変更していない。
+
+既存native境界testの誤ったV3期待値を訂正し、非空pendingを持つ状態でのV3取込み後保持・record往復での非送信・受信適用後のローカル保持を追加した。確定統計の未知巨大数・数値表記・孤立UTF16保持、再起動、古い応答の拒否、保存失敗保全、recovery書出しは引き続き確認する。比較方法や値保持assertは緩めていない。業務処理や外部形式の変更はない。
+
+Webの統計/同期58件、fileExport/importService契約75件が成功。Catalystの関連4件が成功し、監査で網羅性の限界として挙がった非空pendingのI/O確認を追加後、変更した1件だけ再実行して成功（合計uniqueは4件）。独立Astra Lowの未監査だったundefined正規化、proxy復旧からqueue、native認証/遅延応答失効、保存成功前の非公開と今回の期待値根拠の監査は新規なし。ログ `/private/tmp/weavelet-stats-io-{web-test,native-test}.log`、`/private/tmp/weavelet-stats-export-contract-web-test.log`、`/private/tmp/weavelet-stats-nonempty-io-native-test.log`。以前の本群の未受入理由はこの隔離確認範囲で解消した。
+
+実OpenRouter通信、実CloudKit/Google/iCloud Drive相互運用、実機UI/OS条件は未確認のまま。iPhone Airの接続照会・導入は再開していない。次はWebのChatFindBarの実処理を基準に本文内一致位置と移動の共有化・native表示接続へ進む。全体goalは未完了で、mainへの統合は行わない。
