@@ -291,7 +291,8 @@ final class ChatState: ObservableObject {
     func prepareImport(data: Data, filename: String, allowPartialImport: Bool = false) async throws -> ChatImportPreview {
         guard generation == nil else { throw ExchangeError.invalid("生成中は取り込めません") }
         let baseline = document?.snapshot
-        let raw = try OrderedJSON.decode(NativeGzip.isCompressed(data) ? NativeGzip.decompress(data) : data)
+        let unpacked = try NativeGzip.isCompressed(data) ? NativeGzip.decompress(data) : data
+        let raw = try OrderedJSON.decode(NativeLegacySnapshot.decode(unpacked))
         var boundary = SharedWebProjection()
         let projected = try ChatImport.project(raw, kind: "data", boundary: &boundary)
         let defaults = try ChatImport.call("defaults")

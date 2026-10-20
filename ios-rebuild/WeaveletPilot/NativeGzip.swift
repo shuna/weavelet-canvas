@@ -1,5 +1,36 @@
 import Foundation
 import zlib
+import CZstdLegacy
+
+enum NativeLegacySnapshot {
+    static func decode(_ bytes: Data) throws -> Data {
+        let header = try ChatImport.call("container", fields: [
+            .init(key: "header", value: .array(bytes.prefix(20).map { .number(String($0)) })),
+            .init(key: "totalLength", value: .number(String(bytes.count)))])
+        if case .null = header { return bytes }
+        let expected = Int(try header.required("uncompressedSize").number("snapshot size"))
+        let payload = bytes.dropFirst(20)
+        return try payload.withUnsafeBytes { input in
+            let compressedSize = ZSTD_findFrameCompressedSize(input.baseAddress, payload.count)
+            guard ZSTD_isError(compressedSize) == 0, compressedSize == payload.count,
+                  ZSTD_getDictID_fromFrame(input.baseAddress, payload.count) == 0 else {
+                throw ExchangeError.invalid("旧iOS圧縮データが不正です")
+            }
+            let frameSize = ZSTD_getFrameContentSize(input.baseAddress, payload.count)
+            guard frameSize == UInt64.max || frameSize == UInt64(expected) else {
+                throw ExchangeError.invalid("旧iOS圧縮データの展開サイズが一致しません")
+            }
+            var output = Data(count: expected)
+            let size = output.withUnsafeMutableBytes { destination in
+                ZSTD_decompress(destination.baseAddress, expected, input.baseAddress, payload.count)
+            }
+            guard ZSTD_isError(size) == 0, size == expected else {
+                throw ExchangeError.invalid("旧iOS圧縮データを展開できません")
+            }
+            return output
+        }
+    }
+}
 
 enum NativeGzip {
     static func isCompressed(_ bytes: Data) -> Bool { bytes.starts(with: [0x1f, 0x8b]) }

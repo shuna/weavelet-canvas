@@ -128,6 +128,7 @@
     "src/api/requestBody.ts": "fddc6e59dda8049e43d7fc96b91686b611caf98d235a1528c5d083031cb5502d",
     "src/utils/submitContext.ts": "12fc43ead2afc57ce27c3fc290fb95b5774349cc6b12a81ec496f55313e48210",
     "src/utils/legacyIOSImport.ts": "921b398270cc0b3115591efe0186934ebcfbfe7e2c344f969fb1327b86655c6e",
+    "src/utils/legacySnapshotContainer.ts": "1f30df5135dabbd1cbf20918f6547fe1cf33dd0cda58d49575c41cc965de2de0",
     "src/utils/import.ts": "7e83785e8d924e81fcf0d07cab444041e70e92e2ab822c35e929adc2dff2f746",
     "src/utils/fileImport.ts": "77ac0ef207250bc3a89190b4f43c7ddc2c023e25a7a3062a917286f2faba85de",
     "src/utils/fileImportProjection.ts": "41f36d09865a475d81b0929f1302e351e8ab6999b54b5fad015eea2fbe3d7fc2",
@@ -226,6 +227,7 @@
     "shared/google-sync/bubbleSummary.ts": "b6f5bd034fe1fe04264d021fc4ef15919de51f1918fd69a8e7e50ad7cf292662",
     "shared/google-sync/title.ts": "b253de2539e4ac1e071d4013ef772186678be3084cb0359cc872a3e39a2dea51",
     "src/utils/legacyIOSImport.ts": "921b398270cc0b3115591efe0186934ebcfbfe7e2c344f969fb1327b86655c6e",
+    "src/utils/legacySnapshotContainer.ts": "1f30df5135dabbd1cbf20918f6547fe1cf33dd0cda58d49575c41cc965de2de0",
     "shared/google-sync/importDefaults.generated.json": "2c2d78eba4c11ff5348beb24332cdeb018428fdf9d56bab5aaba1cae1848495a",
     "src/store/version.ts": "c1ce6b0ecd6bd3a6fd71d6e862e940486bf61c3e2c7cda6bdab9650ae75715f4",
     "src/store/storage/prepareSave.ts": "99e7f268013eabd2edb3686014a3e56b68e5f2e449f30108c376191878ce436f",
@@ -235,7 +237,7 @@
     "src/utils/systemPromptNormalize.ts": "587d8e8fa9728f63a29f059a1f5d85f4dd1bae960d1fc5aa6469405efc0340fb",
     "src/utils/fileImport.ts": "77ac0ef207250bc3a89190b4f43c7ddc2c023e25a7a3062a917286f2faba85de",
     "src/utils/fileImportProjection.ts": "41f36d09865a475d81b0929f1302e351e8ab6999b54b5fad015eea2fbe3d7fc2",
-    "shared/google-sync/fileImport.ts": "34beca886b251fb0f6bc14f9e589b9a6afc6fecadbaa39309d45b512f2cdfb6b",
+    "shared/google-sync/fileImport.ts": "90c2233b0822ca6a8daddee738d107236f03c3188fbd1bbccc1c2053e3ccf4c6",
     "src/utils/generationPlan.ts": "d238a5492c4d8411f81cd970e2525abcd72d445d70e39509dfcb64779d18d7be",
     "shared/google-sync/generationPlan.ts": "2090466f9957f539adc1762c9816d3cb2642686fe5d7050e7e9b33408b74b015",
     "src/utils/branchHistory.ts": "df602c874e3e624217070847d34d28ad0ee93fe0c042c69c7eba8e704dd563ca",
@@ -396,5 +398,5 @@
     "remove-accents/package.json": "511775b39122274ad36e9dc32c47b2112a3fd4372e64284c2336b143be853c82",
     "remove-accents/LICENSE": "31279697ad2455927a227e7678f2bb71e9e06dde319f12ce345404b3b7a99b81"
   },
-  "bundleSHA256": "68e77133d43ea79572fa8d39be607fe06bb1799b2479bb2197d73d3e85197ba6"
+  "bundleSHA256": "a76663ae6efbee35572e79282d917aa3d858d9c2100219b2806c9f6471ed0cac"
 }

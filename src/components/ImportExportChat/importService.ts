@@ -73,6 +73,10 @@ const warnUnsupportedModels = (chats: unknown[], t: Translator) => {
 };
 
 export const readImportFile = async (file: File): Promise<string> => {
+  if (file.name.toLowerCase().endsWith('.wvlt')) {
+    const { readLegacySnapshotImport } = await import('../../utils/legacySnapshotImport');
+    return readLegacySnapshotImport(file);
+  }
   if (file.name.endsWith('.gz') && typeof DecompressionStream !== 'undefined') {
     const ds = new DecompressionStream('gzip');
     const decompressedStream = file.stream().pipeThrough(ds);

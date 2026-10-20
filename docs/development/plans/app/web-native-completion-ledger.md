@@ -1105,3 +1105,15 @@ legacy-ios-app-state.json/legacy-ios-sync-snapshot.jsonは旧DomainのChatTypes/
 ログは /private/tmp/legacy-ios-{vitest,tsc}.log、/private/tmp/weavelet-legacy-ios-native-{test,final-test}.log。共有exchangeReadの既存6失敗はgetInitialState mock不足として担当がbaseline同一を確認し、成功扱いに含めない。未変更の全I/O/暗号化同期の成功結果は再利用した。
 
 binary圧縮containerと旧CloudKit record移行は未完了。旧writerのmagicはUInt32LE 0x57564C54で実bytesがTLVWとなり、コメントのWVLTとは区別する。zstd decoderは今回追加しない。将来AppState version2は通常WebV2と識別できず、この変更で対応済みとはしない。実オンライン・UI手動・大規模性能とmain統合は残件。iPhone照会/導入は実施していない。
+
+## 旧iOS圧縮ファイルの共有読取（2026-10-20）
+
+前章のbinaryファイル読取残件を解消した。旧SnapshotContainer.encode/ZstdCompressorと旧vendored C1.5.6を変更せずコンパイルし、合成snapshotから991byteのlegacy-ios-sync-snapshot.wvltを生成した。生成driverは /private/tmp/weavelet-old-zstd-writer/main.swift。実magic TLVW、version1/codec1、予約値、長さの検査をlegacySnapshotContainerへ置き、Web/native双方で使用する。nativeはJSC経由で同じheader検査を呼び、OS上のCで展開する。Webは.wvlt選択時だけWASMを読み込み、展開したJSONを既存の即時/preview経路へ渡す。通常JSON/gzip、現在の外部書出し・暗号化同期protocolは変更していない。
+
+依存境界は公式facebook/zstd v1.5.7 commit f8745da6ff1ad1e7bab384bd1f9d742439278e99のdecompress-only amalgamation CをnativeとWASMで共用する。第三者codec実装や新npm runtime依存を追加しない。固定archive SHA、公式生成手順、Emscripten4.0.20と出力hashをshared/zstdに記録し、担当が再生成後のSHA一致を確認した。WASMは50,881byte、通常のWeb主bundleとは分離される。nativeはZstd BSD LICENSEを同梱、Web配布はZstdと静的リンクされたEmscripten/musl/compiler-rt等の全文noticeをpublic/licenses/weavelet-zstd.txtへ同梱する。公式license由来の末尾空白は原文を保持する。依存Astraの公式由来・保守・license・公開advisoryの限定監査は新規なし。公開advisory不掲載を未発見問題の不存在とは扱わない。
+
+取込は圧縮payload・展開後とも128MiB以下に制限し、単一frame、辞書無し、frame宣言長と実展開長の一致を確認する。超過・未来version/codec・予約値不明・破損・余剰frame/bytesは元ファイルと保存状態を保持して拒否する。新形式の圧縮書出しや旧クラウドの自動上書きは追加しない。
+
+担当のNode/実Chromiumの14 codecケース、入力上限・並行再利用、旧writer実payload、同Cのnative known/unknown-size展開とchecksum破損拒否の成功を回収した。親は関連Web92件、型検査、Vite build、bundle鮮度、実ChromeのreadImportFile→preview接続1件、Catalyst3件（圧縮旧writer/旧JSONwriter/既存gzip→append）を確認した。旧snapshot全項目のJSON一致、未参照store保持、破損/切詰/サイズ超過/複数frameでの未公開・disk不変、成功後の保存/再起動、入力bytes不変を確認する。app接続の独立Astra監査も新規なし。Chrome初回はheadless-shell未配置で起動失敗し、既存インストール済みChromeを使う隔離設定で成功した。WebKitの確認は行っていない。
+
+ログは /private/tmp/weavelet-zstd-{build,test}.log、/private/tmp/weavelet-legacy-container-{web-test,types,build,final-build,browser-test,native-test}.log。未変更の業務規則・全I/O・暗号化同期は既存成功を再利用した。旧CloudKit/Googleのrecord/file探索からの実移行、実オンライン互換性、UI手動・大規模性能、将来AppState版の識別とmain統合は残件。iPhone照会/導入は行っていない。

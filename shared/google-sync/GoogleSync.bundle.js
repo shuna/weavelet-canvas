@@ -15485,6 +15485,22 @@ ${JSON.stringify(input.length === 1 ? input[0] : input)}`;
     return { ...data, version: 3, chats };
   }
 
+  // src/utils/legacySnapshotContainer.ts
+  var LEGACY_SNAPSHOT_MAX_BYTES = 128 * 1024 * 1024;
+  function inspectLegacySnapshotContainer(header, totalLength) {
+    if (header[0] !== 84 || header[1] !== 76 || header[2] !== 86 || header[3] !== 87)
+      return null;
+    if (header.length < 20 || header.some((byte) => !Number.isInteger(byte) || byte < 0 || byte > 255))
+      throw new Error("Invalid old iOS container header");
+    const u32 = (offset) => header[offset] + header[offset + 1] * 256 + header[offset + 2] * 65536 + header[offset + 3] * 16777216;
+    if (header[4] !== 1 || header[5] !== 0 || header[6] !== 1 || u32(16) !== 0)
+      throw new Error("Unsupported old iOS container");
+    const uncompressedSize = u32(8), compressedSize = u32(12);
+    if (!uncompressedSize || uncompressedSize > LEGACY_SNAPSHOT_MAX_BYTES || !compressedSize || compressedSize > LEGACY_SNAPSHOT_MAX_BYTES || totalLength !== 20 + compressedSize)
+      throw new Error("Invalid old iOS container size");
+    return { uncompressedSize, compressedSize };
+  }
+
   // shared/google-sync/importDefaults.generated.json
   var importDefaults_generated_default = {
     keys: [
@@ -17547,6 +17563,8 @@ ${JSON.stringify(input.length === 1 ? input[0] : input)}`;
   }
   function fileImport(json) {
     const input = JSON.parse(json);
+    if (input.operation === "container")
+      return JSON.stringify(inspectLegacySnapshotContainer(input.header, input.totalLength));
     const t2 = (key, opts) => String(input.messages?.[key] ?? opts?.defaultValue ?? key).replace(/\{\{(\w+)\}\}/g, (_23, name) => String(opts?.[name] ?? ""));
     if (input.operation === "defaults")
       return JSON.stringify(importDefaults());

@@ -275,7 +275,7 @@ struct ChatView: View {
             .presentationDetents([.medium,.large])
             .presentationDragIndicator(.visible)
         }
-        .fileImporter(isPresented: $showsImporter, allowedContentTypes: [.json, .gzip], allowsMultipleSelection: false) { result in
+        .fileImporter(isPresented: $showsImporter, allowedContentTypes: [.json, .gzip, UTType(filenameExtension: "wvlt") ?? .data], allowsMultipleSelection: false) { result in
             do {
                 guard let url = try result.get().first else { return }
                 let access = url.startAccessingSecurityScopedResource()

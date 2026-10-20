@@ -58,7 +58,7 @@ const ImportChat = ({ hideTitle }: { hideTitle?: boolean }) => {
     <>
       {!hideTitle && (
         <div className='block mb-2 text-sm font-medium text-gray-900 dark:text-gray-300'>
-          {t('import')} (JSON)
+          {t('import')} (JSON / .wvlt)
         </div>
       )}
       {/* Native <label> trigger — avoids Chrome user-activation issues
@@ -70,7 +70,7 @@ const ImportChat = ({ hideTitle }: { hideTitle?: boolean }) => {
           <input
             className='absolute w-0 h-0 overflow-hidden opacity-0'
             type='file'
-            accept='.json,.json.gz,.gz'
+            accept='.json,.json.gz,.gz,.wvlt'
             ref={inputRef}
             onChange={() => setFile(inputRef.current?.files?.[0])}
           />

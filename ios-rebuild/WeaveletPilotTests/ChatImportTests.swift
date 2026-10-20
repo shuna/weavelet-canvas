@@ -12,6 +12,41 @@ final class ChatImportTests: XCTestCase {
         addTeardownBlock { try? FileManager.default.removeItem(at:root) }
         return LocalStateStore(fileURL:root.appendingPathComponent("state.json"))
     }
+    func testOldCompressedWriterImportsAndRejectsDamagedContainersWithoutPublishing() async throws {
+        let root = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
+        let url = root.appendingPathComponent("tests/fixtures/web-native/legacy-ios-sync-snapshot.wvlt")
+        let bytes = try Data(contentsOf: url)
+        let json = try Data(contentsOf: root.appendingPathComponent("tests/fixtures/web-native/legacy-ios-sync-snapshot.json"))
+        XCTAssertEqual(Array(bytes.prefix(4)), [0x54, 0x4c, 0x56, 0x57])
+        XCTAssertEqual(try OrderedJSON.decode(NativeLegacySnapshot.decode(bytes)), try OrderedJSON.decode(json))
+        let store = try local(), state = ChatState(store: store)
+        try state.importWebData(fixture().encoded())
+        let before = try state.publicationSnapshot(), disk = try Data(contentsOf: store.fileURL)
+        let preview = try await state.prepareImport(data: bytes, filename: "old.wvlt")
+        XCTAssertEqual(try state.publicationSnapshot(), before)
+        var invalid = [Data(bytes.prefix(19)), bytes + Data([0])]
+        let mutations: [(Int, UInt8)] = [(4, 2), (6, 2), (16, 1), (8, 0xff), (11, 0xff), (12, 0xff), (20, 0)]
+        for (offset, value) in mutations {
+            var changed = bytes; changed[offset] = value; invalid.append(changed)
+        }
+        // A second frame is rejected even if the outer compressed length includes it.
+        var doubled = bytes + bytes.dropFirst(20)
+        let length = UInt32(doubled.count - 20)
+        for i in 0..<4 { doubled[12 + i] = UInt8(truncatingIfNeeded: length >> (8 * i)) }
+        invalid.append(doubled)
+        for bad in invalid {
+            do { _ = try await state.prepareImport(data: bad, filename: "damaged.wvlt"); XCTFail("damaged old container accepted") } catch {}
+            XCTAssertEqual(try state.publicationSnapshot(), before)
+            XCTAssertEqual(try Data(contentsOf: store.fileURL), disk)
+        }
+        try await state.commitImport(preview, mode: .replace, selectedChatIDs: preview.conversations.map(\.id), selectedFolderIDs: preview.folderRows.map(\.id), includeSettings: false)
+        let result = try OrderedJSON.decode(state.exportWebData())
+        XCTAssertEqual(result["deviceId"], .string("FAKE-LEGACY-DEVICE"))
+        XCTAssertEqual(result["contentStore"]?["unreferenced"], try OrderedJSON.decode(json)["contentStore"]?["unreferenced"])
+        XCTAssertEqual(try ChatState(store: store).exportWebData(), try state.exportWebData())
+        XCTAssertEqual(try Data(contentsOf: url), bytes)
+    }
+
     func testOldIOSWriterJSONUsesSharedImportWithoutLosingRawValues() async throws {
         let root = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
         let opaque = try OrderedJSON.decode(Data(#"{"z":9007199254740993,"a":1.2300,"utf16":"\ud800"}"#.utf8))

@@ -59,3 +59,8 @@ It requires existing project dependencies, `clang`, and Playwright Chromium
 The small synthetic `.zst` fixtures were generated from `tests/body.json` with
 Zstandard CLI 1.5.7 `--check`, also `--no-content-size`; `empty.zst` is compressed
 empty stdin. The actual old iOS fixture is owned by the application import tests.
+
+Web distribution includes `public/licenses/weavelet-zstd.txt`. After changing
+these sources, refresh it with
+`cat shared/zstd/LICENSE shared/zstd/WASM-RUNTIME-LICENSES.txt > public/licenses/weavelet-zstd.txt`.
+The native target bundles the Zstandard `LICENSE` and does not link the WASM runtime.
