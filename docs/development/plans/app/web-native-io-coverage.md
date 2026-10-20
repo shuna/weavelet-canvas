@@ -1,5 +1,13 @@
 # E：合成I/O corpusとWeb経路の検証範囲
 
+## 現在の位置付け（2026-10-21）
+
+本書の初回corpusは2026-10-12の固定資料であり、55既知root等の数値を現在の永続root総数として扱わない。後続root・機能の保持証拠は[完成条件と証拠](web-native-completion-ledger.md)、現在の残件は[ロードマップ](web-native-commonality-roadmap.md)を参照する。日付別の「未接続」「次は」は当時の記録。
+
+現在は共有編集・message属性、保存・record・暗号化wire、Google/CloudKit/フォルダーprovider、旧iOS JSON/TLVW・zstd/旧クラウドreadonly読取まで接続し、各機能の限定検証を記録済み。実Google OAuth設定/クラウド相互運用、旧保存への実到達、iCloud Drive配信、旧writer混在時の新拡張保持と全体の最終互換性受入は未完了。provider未実装と実接続未検証を区別する。内部DB方式の一致は要求しない。
+
+以下は観測差分と後続修正の履歴。既知の差を解消した後も、旧版writerの制限や未確認範囲を消して完全互換とは判定しない。
+
 2026-10-12。最終受入はWebと新iOSのデータ形式・オンライン同期方式の完全互換であり、交換・同期のI/O結果で判定する。新iOSの内部表現やローカルDB（CoreData等）は最適化できる。未知項目の破棄書戻しを認めず、旧iOS独自保存データにも無損失の引継経路を必要とする。この文書は段階ごとの部分検証を示す。隔離したテストデータへの保存・同期実装は進めてよい。未検証の既存ユーザーデータ上書きと本番同期書込みは行わない。初回corpus検証の後、pinned孤立枝・未知拡張保持・取込衝突を修正し、native保存と同期wireの明示node順序を追加した。各段階の証拠と旧形式の扱いは下記に記す。
 
 ## 合成corpus
@@ -114,11 +122,11 @@ local merge、同期hydrate、Worker処理、import復元で未知rootをprivate
 
 担当worktreeで関連5ファイル64件・型検査成功、独立Astraは新規なし。親の統合後は会話管理の実setChatsも用いて、2機能の接点を限定検証した。部分hydrateでは未知rootを合併し、省略を削除として扱わない。prototype予約名はlocal保存では保持するが、Google同期の既存unsafe-key検査は弱めず明示拒否する。実クラウド通信・実ユーザーデータでの確認は行っていない。
 
-## 本文編集で判明した未解決のmessage属性
+## 本文編集のmessage属性保持（後続修正済み）
 
-flat会話の数値indexで保持されたomitted/collapsed/protected mapも、tree化で生成するnode IDへの対応付けが必要。送信直前のtree化で除外を失う経路が判明したため、message属性の移行と同じ単位でWeb/nativeを修正中。既存treeのIDを数値indexとして再解釈しない。
+初期調査では、flatのtree化とbranchのmessages再投影によりmessage要素直下の未知属性や、数値indexのomitted/collapsed/protected mapを失う経路があった。現在は`src/utils/branchUtils.ts`の`readMessageAttributes`/`setMessageAttributes`/`copyMessageAttributes`/`deleteMessageAttributes`と`messageAttributesV1`でnode本体と分離して保持し、materialize/flat-tree変換へ接続している。flat mapは生成node IDへ移し、既存tree IDを数値indexとして解釈し直さない。
 
-`src/utils/branchUtils.ts:materializeActivePath`はnodeからrole/contentだけを投影し、`flatMessagesToBranchTree`もflat message要素の未知属性をnodeへ移さない。したがって、未知属性を持つflat会話のtree化と、branch付き会話のmessages再生成ではmessage要素直下の情報を失い得る。これは本文part・node・treeの未知属性とは別の未達項目で、現状を完全互換と判定しない。冗長なmessages投影の省略と、唯一の保存先にある未知属性の喪失を区別し、移行時の属性衝突とinactive branch保持まで扱う必要がある。iOSで既存sourceを保持できてもWeb側の未達は解消しない。
+Web/nativeは共有編集処理を利用する。属性衝突、inactive branch、本文編集、record/交換・保存への接続と限定再確認はledgerの「メッセージ属性と同期serviceの接続中」「共有編集・文書保存・会話管理の接続」および後続記録を参照する。これは修正済み範囲の証拠であり、全旧クライアントの書戻しや実クラウドまで保証するものではない。
 
 ## Google content entry拡張の受入
 
@@ -126,4 +134,4 @@ Web/nativeのwriterにwire専用`contentEntryFormat:1`、`contentEntries`、`con
 
 Webはmerge・chatコピー・clipboard競合で本文とmetadataを一組として選択する。実push/fresh replay・後続commitもfake Driveで検証。関連8ファイル152件・型検査成功。nativeは共通`content-entry-wire.json`の固定追加recordと意味を比較し、Catalyst関連16件成功。テスト済みsourceは親へbyte一致で統合。独立AstraのWeb/native合同監査は新規指摘なしで、この機能範囲を受入。
 
-旧recordの読み取りは継続する。旧writerは新拡張を保持できず、旧版混在時の保持保証は未達。壊れた未参照deltaも送信対象となるため同期を明示停止する。既存local GCを変更して未知metadataを永久保持する方式は採っていない。実クラウド通信、新iOSのprovider接続、全アプリ互換性の確認はまだ未完了。
+旧recordの読み取りは継続する。旧writerは新拡張を保持できず、旧版混在時の保持保証は未達。壊れた未参照deltaも送信対象となるため同期を明示停止する。既存local GCを変更して未知metadataを永久保持する方式は採っていない。provider接続は後続で実装・隔離検証済み。実クラウド通信と全アプリ互換性の最終確認は未完了。

@@ -2,7 +2,7 @@
 
 既存Webの業務処理を共有bundleから利用し、通信・認証・暗号・保存・UIはApple APIへ接続する再構築アプリ。別bundle ID `com.weavelet.nativepilot` と専用Application Supportを使用し、旧`ios2`のコード／Swift Package依存を取り込まない。
 
-現在の機能と完了証拠、未確認範囲は[completion ledger](../docs/development/plans/app/web-native-completion-ledger.md)を正本とする。会話・枝編集、ファイルI/O、Google同期、remote/local生成、モデル設定、添付と本文描画は各共有Web入口へ接続している。以下のpilot対象と段階ごとの「未対応」は開発履歴であり、現在の機能一覧ではない。
+現在の計画・未実装/未検証の区別は[ロードマップ](../docs/development/plans/app/web-native-commonality-roadmap.md)、機能ごとの完了証拠と失敗/再確認の記録は[completion ledger](../docs/development/plans/app/web-native-completion-ledger.md)を正本とする。会話・枝編集、ファイルI/O、Google同期、remote/local生成、モデル設定、添付と本文描画は各共有Web入口へ接続している。以下のpilot対象と段階ごとの「未対応」は開発履歴であり、現在の機能一覧ではない。
 
 実配布依存はGoogleSync bundleのnpm処理、WKWebView描画のReact/remark/rehype/KaTeX、lz-string、Catalyst arm64の固定llama.cpp/wllama samplerとApple frameworks。node_modules全体、旧ios2のSDK、Web WASMをnative appへ持ち込まない。同期bundle内license、MarkdownResources/NOTICE、LZ/DMP license、LocalLlama-Licensesを同梱する。DMPはGoogle公式repoがarchive済みの固定互換依存であり、全依存の保守継続・脆弱性不存在は保証しない。 KaTeXは未信頼数式の展開に到達する既知advisoryの修正版0.18.2へ、lodashは4.18.1（4.18.0はnpmでBad releaseとしてdeprecated）、@babel/runtimeは7.26.10へ限定固定する。後二者の脆弱機能は現共有入口では未使用だが、配布する既知脆弱版を除くため更新した。
 
