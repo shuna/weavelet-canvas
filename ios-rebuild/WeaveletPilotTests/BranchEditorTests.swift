@@ -106,6 +106,27 @@ final class BranchEditorTests: XCTestCase {
         XCTAssertEqual(controller.scrollView.zoomScale,0.1,accuracy:0.0001)
     }
 
+    @MainActor func testNodeDragProviderCarriesOnlyAnOpaqueProcessLocalToken() async throws {
+        let key = BranchLayoutKey(chatID:"private chat",chatIndex:0,title:"private title",tree:nil,contentStore:nil)
+        let drag = BranchNodeDrag(key:key,nodeID:"private node",snapshot:.object([.init(key:"private body",value:.string("secret text"))]))
+        let declarations = Bundle.main.object(forInfoDictionaryKey:"UTExportedTypeDeclarations") as? [[String:Any]]
+        XCTAssertTrue(declarations?.contains { ($0["UTTypeIdentifier"] as? String) == BranchNodeDrag.type.identifier && ($0["UTTypeConformsTo"] as? [String]) == ["public.data"] } == true)
+        let provider = drag.itemProvider()
+        XCTAssertEqual(provider.registeredTypeIdentifiers,[BranchNodeDrag.type.identifier])
+        let data: Data = try await withCheckedThrowingContinuation { continuation in
+            provider.loadDataRepresentation(forTypeIdentifier:BranchNodeDrag.type.identifier) { data,error in
+                if let error { continuation.resume(throwing:error) }
+                else if let data { continuation.resume(returning:data) }
+                else { continuation.resume(throwing:ExchangeError.invalid("drag token がありません")) }
+            }
+        }
+        XCTAssertTrue(drag.accepts(data))
+        XCTAssertEqual(String(decoding:data,as:UTF8.self),drag.id.uuidString)
+        XCTAssertFalse(drag.accepts(Data("private node".utf8)))
+        XCTAssertFalse(drag.accepts(nil))
+        XCTAssertFalse(BranchNodeDrag(key:key,nodeID:drag.nodeID,snapshot:drag.snapshot).accepts(data))
+    }
+
     private func fixture() throws -> OrderedJSON {
         let root = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
         return try OrderedJSON.decode(Data(contentsOf: root.appendingPathComponent("tests/fixtures/web-native/io-corpus.json"))).required("exportV3")

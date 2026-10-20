@@ -845,6 +845,80 @@ final class MessageEditingTests: XCTestCase {
         try assertTransformIO(state,local:local,path:["flat-copied","flat-pasted"])
     }
 
+    func testBranchDropUsesSharedLeafPathAndPreservesCrossChatState() throws {
+        let input = try cases()[0].required("input").replacing("xHuge",with:.number("9007199254740993"))
+        let local = try store(), state = ChatState(store:local)
+        try state.importWebData(input.encoded())
+        try state.ensureBranchTreeForEditor(chatID:"other",now:500)
+        let target = try XCTUnwrap(state.conversations.first { $0.id.utf8.elementsEqual("other".utf8) })
+        let after = try XCTUnwrap(target.visibleMessages.last?.id)
+        let copy = try state.branchDropDraft(sourceChatID:"target",nodeID:"middle",targetChatID:"other",afterNodeID:after)
+        XCTAssertEqual(copy.operation,.move); XCTAssertEqual(copy.toNodeID,"last")
+        let copied = try state.saveBranchDrop(copy,operation:.copy,newIDs:["drop-copy-middle","drop-copy-last"],now:1000)
+        XCTAssertEqual(copied.status,"pasted"); XCTAssertEqual(copied.nodeIDs,["drop-copy-middle","drop-copy-last"])
+        let afterCopy = try state.publicationSnapshot(), copyDisk = try Data(contentsOf:local.fileURL)
+        XCTAssertThrowsError(try state.saveBranchDrop(copy,operation:.move,newIDs:["stale-drop"],now:1100))
+        XCTAssertEqual(try state.publicationSnapshot(),afterCopy); XCTAssertEqual(try Data(contentsOf:local.fileURL),copyDisk)
+        let source = try XCTUnwrap(state.exchange).source
+        XCTAssertNotNil(try source.required("chats").array("chats")[0]["branchTree"]?["nodes"]?["hidden"])
+        XCTAssertEqual(source["xHuge"],.number("9007199254740993"))
+        let saved = try state.publicationSnapshot(), restarted = ChatState(store:local)
+        XCTAssertEqual(try restarted.publicationSnapshot().encoded(),try saved.encoded())
+        XCTAssertNil(try OrderedJSON.decode(restarted.exportWebData())["branchClipboard"])
+        let records = try SyncRecords.toRecords(saved)
+        XCTAssertEqual(try SyncRecords.canonical(SyncRecords.toRecords(SyncRecords.fromRecords(records))),try SyncRecords.canonical(records))
+
+        let movedState = ChatState(store:try store())
+        try movedState.importWebData(input.encoded())
+        try movedState.ensureBranchTreeForEditor(chatID:"other",now:500)
+        let moveTarget = try XCTUnwrap(movedState.conversations.first { $0.id.utf8.elementsEqual("other".utf8) }?.visibleMessages.last?.id)
+        let move = try movedState.branchDropDraft(sourceChatID:"target",nodeID:"middle",targetChatID:"other",afterNodeID:moveTarget)
+        let moved = try movedState.saveBranchDrop(move,operation:.move,newIDs:["drop-move-middle","drop-move-last"],now:1000)
+        XCTAssertEqual(moved.status,"moved"); XCTAssertEqual(moved.nodeIDs,["drop-move-middle","drop-move-last"])
+        let movedSource = try XCTUnwrap(movedState.exchange).source
+        XCTAssertNil(try movedSource.required("chats").array("chats")[0]["branchTree"]?["nodes"]?["middle"])
+        XCTAssertNotNil(try movedSource.required("chats").array("chats")[0]["branchTree"]?["nodes"]?["hidden"])
+    }
+
+    func testBranchDropCopyStopsBeforePasteAndPreservesExistingClipboardWhenCopyIsRejected() throws {
+        let local = try store(), state = ChatState(store:local)
+        try state.importWebData(cases()[0].required("input").encoded())
+        try state.ensureBranchTreeForEditor(chatID:"other",now:500)
+        XCTAssertEqual(try state.saveBranchClipboard(state.branchClipboardDraft(nodeID:"hidden"),newIDs:[],now:600).status,"copied")
+        let target = try XCTUnwrap(state.conversations.first { $0.id.utf8.elementsEqual("other".utf8) }?.visibleMessages.last?.id)
+        var drop = try state.branchDropDraft(sourceChatID:"target",nodeID:"middle",targetChatID:"other",afterNodeID:target)
+        drop.toNodeID = "hidden"
+        let before = try state.publicationSnapshot(), disk = try Data(contentsOf:local.fileURL)
+        let result = try state.saveBranchDrop(drop,operation:.copy,newIDs:["must-not-paste"],now:1000)
+        XCTAssertEqual(result.status,"not-ancestor")
+        XCTAssertEqual(try state.publicationSnapshot(),before); XCTAssertEqual(try Data(contentsOf:local.fileURL),disk)
+        XCTAssertEqual(try state.publicationSnapshot().required("state").required("branchClipboard")["nodeIds"],.array([.string("hidden")]))
+    }
+
+    func testBranchDropWriteFailurePreservesSourceAndDisk() throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString); try FileManager.default.createDirectory(at:root,withIntermediateDirectories:true)
+        defer { try? FileManager.default.removeItem(at:root) }
+        var writes = 0, rejectWrite: Int?
+        let local = LocalStateStore(fileURL:root.appendingPathComponent("local.json")) { data,url in
+            writes += 1
+            if writes == rejectWrite { throw CocoaError(.fileWriteNoPermission) }
+            try data.write(to:url,options:.atomic)
+        }
+        let state = ChatState(store:local); try state.importWebData(cases()[0].required("input").encoded())
+        try state.ensureBranchTreeForEditor(chatID:"other",now:500)
+        let target = try XCTUnwrap(state.conversations.first { $0.id.utf8.elementsEqual("other".utf8) }?.visibleMessages.last?.id)
+        let drop = try state.branchDropDraft(sourceChatID:"target",nodeID:"middle",targetChatID:"other",afterNodeID:target)
+        let before = try state.publicationSnapshot(), disk = try Data(contentsOf:local.fileURL)
+        rejectWrite = writes + 1
+        XCTAssertThrowsError(try state.saveBranchDrop(drop,operation:.move,newIDs:["failed-middle","failed-last"],now:1000))
+        XCTAssertEqual(try state.publicationSnapshot(),before); XCTAssertEqual(try Data(contentsOf:local.fileURL),disk)
+        rejectWrite = writes + 2
+        XCTAssertThrowsError(try state.saveBranchDrop(drop,operation:.copy,newIDs:["failed-paste-middle","failed-paste-last"],now:2000))
+        XCTAssertEqual(state.exchange?.source,drop.source)
+        XCTAssertEqual(try state.publicationSnapshot().required("state").required("branchClipboard")["nodeIds"],.array([.string("middle"),.string("last")]))
+        XCTAssertEqual(try ChatState(store:local).publicationSnapshot(),try state.publicationSnapshot())
+    }
+
     func testClipboardProtectedInvalidRangeAndTargetDoNotReplaceStoredClipboard() throws {
         let local = try store(), state = ChatState(store:local); try state.importWebData(cases()[0].required("input").encoded())
         _ = try state.saveBranchClipboard(state.branchClipboardDraft(nodeID:"hidden"),newIDs:[],now:1000)
@@ -900,11 +974,14 @@ final class MessageEditingTests: XCTestCase {
     @MainActor func testEveryMessageSaveModeRejectsActiveGenerationWithoutDiscardingPartialOutput() async throws {
         let store=try store(), state=ChatState(store:store)
         try state.importWebData(cases()[0].required("input").encoded())
+        try state.ensureBranchTreeForEditor(chatID:"other",now:900)
         var draft=try state.messageInsertionDraft(beforeNodeID:"middle"); draft.text="Must not save"
         let removal = try state.nodeRemovalDraft(nodeID: "middle"), prune = try state.pruneHiddenDraft()
         let move = try state.nodeMoveDraft(nodeID: "middle", direction: .down), deletion = try state.branchDeletionDraft(nodeID: "middle")
         var replacement = try state.messageReplacementDraft(nodeID: "middle"); replacement.text = "Blocked replacement"
         let clipboardDraft = try state.branchClipboardDraft(nodeID:"middle")
+        let dropTarget = try XCTUnwrap(state.conversations.first { $0.id.utf8.elementsEqual("other".utf8) }?.visibleMessages.last?.id)
+        let branchDrop = try state.branchDropDraft(sourceChatID:"target",nodeID:"middle",targetChatID:"other",afterNodeID:dropTarget)
         let config=URLSessionConfiguration.ephemeral; config.protocolClasses=[HeldInsertionProtocol.self]
         let client=RemoteClient(session:URLSession(configuration:config))
         let record=RemoteCredentialRecord(settings:RemoteSettings(endpoint:"https://fixture.invalid/v1/chat/completions",model:"FAKE-model",stream:true),key:"FAKE")
@@ -930,6 +1007,7 @@ final class MessageEditingTests: XCTestCase {
             var draft = clipboardDraft; draft.operation = operation
             XCTAssertThrowsError(try state.saveBranchClipboard(draft,newIDs:[],now:1000))
         }
+        XCTAssertThrowsError(try state.saveBranchDrop(branchDrop,operation:.move,newIDs:["blocked-drop"],now:1000))
         XCTAssertThrowsError(try state.saveMessageReplacingAndPruning(replacement, newIDs: [], now: 1000))
         for draft in [move, deletion] { XCTAssertThrowsError(try state.saveNodeTransform(draft, newIDs: [], now: 1000)) }
         XCTAssertFalse(state.canUndoMessageEdit); XCTAssertFalse(state.canRedoMessageEdit)

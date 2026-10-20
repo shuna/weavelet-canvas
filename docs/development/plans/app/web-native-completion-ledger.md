@@ -1308,3 +1308,16 @@ UIKitの既存viewportへ104x76ptのミニマップを右下に追加した。sh
 Web関連8件、型検査、Vite build、共有bundle鮮度、Catalyst最終関連28件（BranchEditor18・MessageEditing5・ParallelGeneration5）が成功。共有選択順/混在chat/Unicode、橋渡し、未知raw属性とmaps、保存失敗/再試行、古いdraft拒否、再起動/export/paste、他会話生成との両立、minimap座標と既存viewportの拡縮上下限/手動zoom保持を確認した。読み上げ要素の明示追加後は最終Catalyst buildと実画面を確認し、未変更28件を反復していない。保存/record/暗号/同期基盤は変更しておらず、全項目I/Oと暗号化同期の既存成功を再利用した。ログ /private/tmp/weavelet-graph-selection-{generate,types,web-test,web-build,freshness,native-test,native-final-test,final-build}.log。
 
 隔離FAKE Catalystの393pt制約表示で選択mode/2件の表示と操作列の非重複、menu-root→menu-leftの始点/終点prefill、コピー後のsheet終了と隔離保存ファイルのnodeIds完全一致を確認した。ミニマップのnode/表示窓描画、tapで上方へ・dragで下方へ移動、全体表示への復帰も実画面で確認。終了後process不在とbuilt Info.plist byte一致復元を確認した。実touch pinch、Web browserの実keyboard/mouse操作、文字拡大/VoiceOver全操作、実API/cloudは未確認。iPhone照会/導入・push・main統合は行っていない。全機能/全UIと実オンライン相互運用の完成とはしない。
+
+
+## 会話間の範囲操作接続・ドラッグ操作は未受入（2026-10-21）
+
+実Web BranchEditorCanvasのdrop経路を確認し、既存buildPathToLeafの最後を終点とする範囲選択と、既存共有branchClipboardのcopy/move/pasteをnativeへ接続した。祖先を含むpath全体を転送範囲には使わず、始点はドラッグ元nodeのまま。任意node座標の保存、独自tree算法、新規依存、保存/sync fieldは追加していない。今回のWeb sourceと共有bundleは未変更。
+
+copyはWeb同様にcopy成功後だけpasteする。独立AstraのP2（copy拒否後に以前のclipboardを貼る可能性）はstatus判定で修正し、実Webがnot-ancestorを返す範囲で元clipboard不変を確認した。copy後のpaste保存失敗では新clipboardを保持し、両会話本文は維持する。moveは既存原子的保存を使う。古いsnapshot、対象会話の生成中、raw UTF8 ID違いを既存境界で拒否する。
+
+Catalyst固有24件（BranchEditor19、MessageEditing4、暗号化同期clipboard1）が成功。共有経路への引数/結果、未知巨大整数・範囲外の枝・maps/parts、copy拒否、move書込失敗、copy後のpaste書込失敗、古いdraft、生成途中出力、再起動/export/record往復、暗号化同期後のpasteを確認した。初回compileのJSONString参照誤記を修正して再実行した。UTI宣言追加後は重複するtoken境界1件のみ再確認し成功（固有件数に加算しない）。bundle鮮度確認も成功。保存/record/暗号/sync基盤を変更していないため、全項目I/Oと実Web→native→Web暗号化wireの既存成功を再利用し、全領域の反復は省略した。ログ /private/tmp/weavelet-branch-drop-{native-test,native-final-test,type-test,freshness,uikit-build}.log。
+
+ドラッグ用providerはownProcessのUUIDのみで、本文・node/chat IDは渡さない。受信後にtoken・現行layout・snapshotを再検証する。SwiftUI onDragで開始を確認できなかったためUIKit UIDragInteractionへ接続し、同一アプリに制限した。最終Catalyst build成功。モデル/status修正とUIKit差分の独立Astra限定監査は新規P1/P2なし。card280×80とmenu44ptは維持したが、handle22ptの実touchの掴みやすさは未確認。
+
+隔離FAKE Catalystでは複数会話、handleの描画/AX、メニューから会話間移動画面と始点/終点のprefillを確認した。一方、handle中心から他会話cardへの自動pointer dragでconfirmationは出ず、ドラッグ開始/完了は確認できていない。これは完了や互換性成功の証明に含めない。標準APIの開始接続はsource上欠落を確認していない。現SDKのUIDragInteraction.h:57–64はmacOSのpointer開始にlift delayを待つ既定動作を明記しているが、CUA dragには押下後の待機指定がなく、この操作での原因確定や実動作成功とは扱わない。未受入を維持する。終了後process不在とbuilt Info.plist byte一致復元を確認した。実cloud、実touch、全UI/OS/性能受入は未完了。iPhone照会/導入・push・main統合は行っていない。

@@ -9,4 +9,9 @@
 <key>CFBundleURLName</key><string>Google OAuth</string>
 <key>CFBundleURLSchemes</key><array><string>$(GOOGLE_REDIRECT_SCHEME)</string></array>
 </dict></array>
+<key>UTExportedTypeDeclarations</key><array><dict>
+<key>UTTypeIdentifier</key><string>com.weavelet.nativepilot.branch-node</string>
+<key>UTTypeConformsTo</key><array><string>public.data</string></array>
+<key>UTTypeDescription</key><string>Weavelet branch drag</string>
+</dict></array>
 </dict></plist>

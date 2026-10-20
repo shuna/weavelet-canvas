@@ -1,5 +1,6 @@
 import SwiftUI
 import UIKit
+import UniformTypeIdentifiers
 
 struct BranchLayoutKey: Equatable {
     struct Entry: Equatable {
@@ -403,6 +404,41 @@ final class BranchGraphViewportController<Content: View>: UIViewController, UISc
     }
 }
 
+struct BranchNodeDrag {
+    static let type = UTType(exportedAs:"com.weavelet.nativepilot.branch-node",conformingTo:.data)
+    let id = UUID()
+    let key: BranchLayoutKey
+    let nodeID: String
+    let snapshot: OrderedJSON
+    func accepts(_ data: Data?) -> Bool { data == Data(id.uuidString.utf8) }
+    func itemProvider() -> NSItemProvider {
+        let provider = NSItemProvider(), token = Data(id.uuidString.utf8)
+        provider.registerDataRepresentation(forTypeIdentifier:Self.type.identifier,visibility:.ownProcess) { completion in
+            completion(token,nil)
+            return nil
+        }
+        return provider
+    }
+}
+
+private final class BranchNodeDragSession { var current: BranchNodeDrag? }
+
+private struct BranchNodeDropDelegate: DropDelegate {
+    let accepts: () -> Bool
+    let receive: ([NSItemProvider]) -> Bool
+    @Binding var targeted: Bool
+    func validateDrop(info: DropInfo) -> Bool {
+        info.hasItemsConforming(to:[BranchNodeDrag.type.identifier]) && accepts()
+    }
+    func dropEntered(info: DropInfo) { targeted = validateDrop(info:info) }
+    func dropExited(info: DropInfo) { targeted = false }
+    func performDrop(info: DropInfo) -> Bool {
+        targeted = false
+        guard validateDrop(info:info) else { return false }
+        return receive(info.itemProviders(for:[BranchNodeDrag.type.identifier]))
+    }
+}
+
 struct BranchEditorView: View {
     @ObservedObject var state: ChatState
     @Binding var showsSearch: Bool
@@ -417,6 +453,8 @@ struct BranchEditorView: View {
     @State private var selecting = false
     @State private var selectedNodes: Set<BranchGraph.Identity> = []
     @State private var selectionDraft: BranchClipboardDraft?
+    @State private var nodeDrag = BranchNodeDragSession()
+    @State private var pendingDrop: BranchClipboardDraft?
 
     var body: some View {
         let key = BranchLayoutKey(state: state)
@@ -513,7 +551,16 @@ struct BranchEditorView: View {
         }
         .sheet(item: $comparison) { request in BranchDiffView(state: state, request: request) }
         .sheet(item:$selectionDraft) { draft in BranchClipboardView(state:state,draft:draft) }
+        .confirmationDialog("別の会話へ範囲を追加",isPresented:Binding(get:{ pendingDrop != nil },set:{ if !$0 { pendingDrop = nil } }),titleVisibility:.visible,presenting:pendingDrop) { draft in
+            Button("ここにコピー") { finishDrop(draft,operation:.copy) }
+            Button("ここに移動",role:.destructive) { finishDrop(draft,operation:.move) }
+            Button("取消",role:.cancel) { pendingDrop = nil }
+        } message: { _ in
+            Text("ドラッグしたメッセージから枝の末尾までを、ドロップ先のメッセージの後へ追加します。")
+        }
+        .onDisappear { nodeDrag.current = nil; pendingDrop = nil }
         .onChange(of: key) { _, _ in
+            nodeDrag.current = nil; pendingDrop = nil
             selectedNodes.removeAll()
             compareTarget = nil; comparison = nil; viewportRequest = nil
             if let request = state.branchEditorFocus,
@@ -597,6 +644,9 @@ struct BranchEditorView: View {
                     let otherNode = target.flatMap { $0.utf8.elementsEqual(node.id.utf8) ? nil : $0 }
                     BranchNodeCard(node: node, preview: livePreviews[node.identity] ?? node.preview,
                         selecting:selecting,selected:selectedNodes.contains(node.identity),
+                        dragProvider:sourceKey.entries.count > 1 && !selecting && state.generation(for:nodeKey.chatID) == nil ? { beginDrag(node.id,key:nodeKey) } : nil,
+                        acceptsDrop:{ nodeDrag.current?.key.chatID.utf8.elementsEqual(nodeKey.chatID.utf8) == false },
+                        dropProviders:sourceKey.entries.count > 1 && !selecting && state.generation(for:nodeKey.chatID) == nil ? { receiveDrop($0,nodeID:node.id,key:nodeKey) } : nil,
                         canEdit: state.exchange != nil && state.generation(for: nodeKey.chatID) == nil,
                         canDelete: !(node.role == "system" && nodeKey.isRoot(node.id)),
                         hasClipboard: state.hasBranchClipboard, select: {
@@ -643,6 +693,37 @@ struct BranchEditorView: View {
         }
         return previews
     }
+    private func beginDrag(_ nodeID: String, key: BranchLayoutKey) -> NSItemProvider {
+        guard key.isCurrent(in:state), let snapshot = try? state.publicationSnapshot() else { return NSItemProvider() }
+        let drag = BranchNodeDrag(key:key,nodeID:nodeID,snapshot:snapshot)
+        nodeDrag.current = drag
+        return drag.itemProvider()
+    }
+    private func receiveDrop(_ providers: [NSItemProvider], nodeID: String, key: BranchLayoutKey) -> Bool {
+        guard let drag = nodeDrag.current, providers.count == 1,
+              !drag.key.chatID.utf8.elementsEqual(key.chatID.utf8),
+              drag.key.isCurrent(in:state), key.isCurrent(in:state),
+              providers[0].hasItemConformingToTypeIdentifier(BranchNodeDrag.type.identifier) else { return false }
+        providers[0].loadDataRepresentation(forTypeIdentifier:BranchNodeDrag.type.identifier) { data, failure in
+            Task { @MainActor in
+                guard failure == nil, drag.accepts(data), nodeDrag.current?.id == drag.id,
+                      drag.key.isCurrent(in:state), key.isCurrent(in:state),
+                      (try? state.publicationSnapshot()) == drag.snapshot else { return }
+                do {
+                    pendingDrop = try state.branchDropDraft(sourceChatID:drag.key.chatID,nodeID:drag.nodeID,targetChatID:key.chatID,afterNodeID:nodeID)
+                } catch { self.error = error.localizedDescription }
+                nodeDrag.current = nil
+            }
+        }
+        return true
+    }
+    private func finishDrop(_ draft: BranchClipboardDraft, operation: BranchClipboardOperation) {
+        pendingDrop = nil
+        do {
+            let result = try state.saveBranchDrop(draft,operation:operation)
+            if let explanation = result.explanation { error = explanation }
+        } catch { self.error = error.localizedDescription }
+    }
     private func openSelectedRange(_ operation: BranchClipboardOperation) {
         guard let rendered, rendered.key.isCurrent(in:state) else { return }
         let selection = rendered.graph.nodes.filter { selectedNodes.contains($0.identity) }.compactMap { node -> (chatID:String,nodeID:String)? in
@@ -664,11 +745,54 @@ struct BranchEditorView: View {
     }
 }
 
+private struct BranchNodeDragHandle: UIViewRepresentable {
+    let itemProvider: () -> NSItemProvider
+
+    func makeCoordinator() -> Coordinator { Coordinator(itemProvider:itemProvider) }
+    func makeUIView(context: Context) -> UIView {
+        let view = UIView()
+        view.isAccessibilityElement = true
+        view.accessibilityLabel = "別の会話へドラッグ"
+        view.accessibilityHint = "長押しして別の会話のメッセージへ移動します"
+        let image = UIImageView(image:UIImage(systemName:"circle.grid.2x2.fill"))
+        image.tintColor = .tertiaryLabel
+        image.contentMode = .scaleAspectFit
+        image.translatesAutoresizingMaskIntoConstraints = false
+        view.addSubview(image)
+        NSLayoutConstraint.activate([
+            image.centerXAnchor.constraint(equalTo:view.centerXAnchor),
+            image.centerYAnchor.constraint(equalTo:view.centerYAnchor),
+            image.widthAnchor.constraint(equalToConstant:14),
+            image.heightAnchor.constraint(equalToConstant:14)
+        ])
+        let interaction = UIDragInteraction(delegate:context.coordinator)
+        interaction.isEnabled = true
+        view.addInteraction(interaction)
+        return view
+    }
+    func updateUIView(_ view: UIView, context: Context) { context.coordinator.itemProvider = itemProvider }
+
+    final class Coordinator: NSObject, UIDragInteractionDelegate {
+        var itemProvider: () -> NSItemProvider
+        init(itemProvider: @escaping () -> NSItemProvider) { self.itemProvider = itemProvider }
+        func dragInteraction(_ interaction: UIDragInteraction, itemsForBeginning session: UIDragSession) -> [UIDragItem] {
+            [UIDragItem(itemProvider:itemProvider())]
+        }
+        func dragInteraction(_ interaction: UIDragInteraction, sessionIsRestrictedToDraggingApplication session: UIDragSession) -> Bool {
+            true
+        }
+    }
+}
+
 private struct BranchNodeCard: View {
     let node: BranchGraph.Node
     let preview: String
     let selecting: Bool
     let selected: Bool
+    let dragProvider: (() -> NSItemProvider)?
+    let acceptsDrop: () -> Bool
+    let dropProviders: (([NSItemProvider]) -> Bool)?
+    @State private var dropTargeted = false
     let canEdit: Bool
     let canDelete: Bool
     let hasClipboard: Bool
@@ -680,9 +804,15 @@ private struct BranchNodeCard: View {
     let setCompareTarget: () -> Void
     let compareSelected: (() -> Void)?
 
-    var body: some View {
-        HStack(spacing: 0) {
-            Button(action: select) {
+    @ViewBuilder var body: some View {
+        if let dropProviders {
+            card.onDrop(of:[BranchNodeDrag.type.identifier],delegate:BranchNodeDropDelegate(accepts:acceptsDrop,receive:dropProviders,targeted:$dropTargeted))
+        } else {
+            card
+        }
+    }
+    private var nodeButton: some View {
+        Button(action: select) {
                 VStack(alignment: .leading, spacing: 4) {
                     HStack {
                         if selecting { Image(systemName:selected ? "checkmark.circle.fill" : "circle").foregroundStyle(selected ? Color.accentColor : .secondary) }
@@ -694,18 +824,24 @@ private struct BranchNodeCard: View {
                         .frame(maxWidth: .infinity, alignment: .leading)
                 }
                 .padding(10)
-                .frame(width: 236, height: 80, alignment: .topLeading)
+                .frame(width: dragProvider == nil ? 236 : 214, height: 80, alignment: .topLeading)
             }
             .buttonStyle(.plain)
             .accessibilityLabel("\(node.label ?? node.role)、\(preview)")
             .accessibilityAddTraits(selected ? .isSelected : [])
             .accessibilityHint(selecting ? "タップして範囲の選択を切り替えます" : "")
+    }
+    private var card: some View {
+        HStack(spacing:0) {
+            if let dragProvider { BranchNodeDragHandle(itemProvider:dragProvider).frame(width:22,height:80) }
+            nodeButton
             Menu {
                 Button("ラベル・スター・ピン留め", systemImage: "slider.horizontal.3", action: configure)
                     .disabled(!canEdit)
                 Divider()
                 Button("範囲をコピー", systemImage: "doc.on.doc") { clipboard(.copy) }.disabled(!canEdit)
                 Button("範囲を切り取り", systemImage: "scissors") { clipboard(.cut) }.disabled(!canEdit)
+                Button("別の会話へ移動",systemImage:"arrow.right.square") { clipboard(.move) }.disabled(!canEdit)
                 if hasClipboard { Button("範囲を貼り付け", systemImage: "doc.on.clipboard") { clipboard(.paste) }.disabled(!canEdit) }
                 if canDelete {
                     Divider()
@@ -725,6 +861,6 @@ private struct BranchNodeCard: View {
         }
         .frame(width: 280, height: 80)
         .background(selected ? Color.accentColor.opacity(0.14) : Color(uiColor:.tertiarySystemBackground), in: RoundedRectangle(cornerRadius: 10))
-        .overlay(RoundedRectangle(cornerRadius: 10).stroke(node.active ? Color.blue : Color.secondary.opacity(0.5), lineWidth: node.active ? 2 : 1))
+        .overlay(RoundedRectangle(cornerRadius: 10).stroke(dropTargeted ? Color.accentColor : node.active ? Color.blue : Color.secondary.opacity(0.5), lineWidth: dropTargeted ? 3 : node.active ? 2 : 1))
     }
 }

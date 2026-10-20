@@ -773,9 +773,55 @@ final class ChatState: ObservableObject {
         return try BranchClipboardDraft(source:exchange.source,snapshot:publicationSnapshot(),operation:operation,
             sourceChatID:chatID,fromNodeID:from,toNodeID:to,targetChatID:chatID,afterNodeID:to)
     }
+    func branchDropDraft(sourceChatID: String, nodeID: String, targetChatID: String, afterNodeID: String) throws -> BranchClipboardDraft {
+        guard !sourceChatID.utf8.elementsEqual(targetChatID.utf8), generation(for:sourceChatID) == nil, generation(for:targetChatID) == nil,
+              let exchange, let document else { throw ExchangeError.invalid("生成結果を保存してから会話間の範囲を操作してください") }
+        let chats = try exchange.source.required("chats").array("chats")
+        guard let source = try chats.first(where:{ try $0.required("id").string("chat ID").utf8.elementsEqual(sourceChatID.utf8) }),
+              let target = try chats.first(where:{ try $0.required("id").string("chat ID").utf8.elementsEqual(targetChatID.utf8) }),
+              let sourceTree = source["branchTree"], let targetTree = target["branchTree"] else {
+            throw ExchangeError.invalid("分岐図の対象メッセージが変更されました")
+        }
+        let sourceNodes = try sourceTree.required("nodes").object("nodes"), targetNodes = try targetTree.required("nodes").object("nodes")
+        guard sourceNodes.contains(where: { $0.key.matches(nodeID) }),
+              targetNodes.contains(where: { $0.key.matches(afterNodeID) }) else {
+            throw ExchangeError.invalid("分岐図の対象メッセージが変更されました")
+        }
+        let path = try SharedWebOperations.call("branchPath",.object([
+            .init(key:"tree",value:sourceTree),.init(key:"nodeId",value:.string(nodeID))])).array("branch path")
+        guard let last = path.last else { throw ExchangeError.invalid("分岐図の対象メッセージがありません") }
+        let leaf = try last.string("branch leaf")
+        return BranchClipboardDraft(source:exchange.source,snapshot:document.snapshot,operation:.move,
+            sourceChatID:sourceChatID,fromNodeID:nodeID,toNodeID:leaf,targetChatID:targetChatID,afterNodeID:afterNodeID)
+    }
     func branchClipboardIsBusy(_ draft: BranchClipboardDraft) -> Bool {
         let affected = draft.operation == .paste ? [draft.targetChatID] : draft.operation == .move ? [draft.sourceChatID,draft.targetChatID] : [draft.sourceChatID]
         return affected.contains { generation(for:$0) != nil }
+    }
+    private func branchDropIsBusy(_ draft: BranchClipboardDraft) -> Bool {
+        [draft.sourceChatID,draft.targetChatID].contains { generation(for:$0) != nil }
+    }
+    func saveBranchDrop(_ draft: BranchClipboardDraft, operation: BranchClipboardOperation, newIDs: [String]? = nil,
+                        now: Double = Date().timeIntervalSince1970 * 1000) throws -> BranchClipboardResult {
+        guard operation == .copy || operation == .move else { throw ExchangeError.invalid("会話間の範囲操作が不正です") }
+        guard !branchDropIsBusy(draft) else { throw ExchangeError.invalid("生成結果を保存してから会話間の範囲を操作してください") }
+        guard let exchange, let document, exchange.source == draft.source, document.snapshot == draft.snapshot else {
+            throw ExchangeError.invalid("会話または分岐図の対象が変更されました。操作を開き直してください")
+        }
+        if operation == .move {
+            var moving = draft; moving.operation = .move
+            return try saveBranchClipboard(moving,newIDs:newIDs,now:now)
+        }
+        var copying = draft; copying.operation = .copy
+        let copied = try saveBranchClipboard(copying,newIDs:[],now:now)
+        guard copied.status == "copied" else { return copied }
+        guard !branchDropIsBusy(draft), let copiedExchange = self.exchange, let copiedDocument = self.document else {
+            throw ExchangeError.invalid("生成結果を保存してから会話間の範囲を操作してください")
+        }
+        let paste = BranchClipboardDraft(source:copiedExchange.source,snapshot:copiedDocument.snapshot,operation:.paste,
+            sourceChatID:draft.sourceChatID,fromNodeID:draft.fromNodeID,toNodeID:draft.toNodeID,
+            targetChatID:draft.targetChatID,afterNodeID:draft.afterNodeID)
+        return try saveBranchClipboard(paste,newIDs:newIDs,now:now)
     }
     func saveBranchClipboard(_ draft: BranchClipboardDraft, newIDs: [String]? = nil, now: Double = Date().timeIntervalSince1970 * 1000) throws -> BranchClipboardResult {
         guard !branchClipboardIsBusy(draft) else { throw ExchangeError.invalid("生成結果を保存してから範囲を操作してください") }
