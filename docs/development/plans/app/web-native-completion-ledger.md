@@ -1341,3 +1341,17 @@ Catalyst追加1case testBranchClipboardDraftThroughLeafUsesSharedLatestForkPath�
 初期native testは新testのtry? Bool?の誤記でcompile失敗。その修正後も新UIのcatch errorと表示state errorの名前衝突でcompilerがtimeout/assertを起こした。self.error明示で修正し、切り分け用のview/task分割は撤去した。期待値やテスト条件を緩めた結果ではなく、成功件数は最終runの5件のみ。ログ /private/tmp/weavelet-graph-pruning-{generate,web-test,types,web-build,freshness,native-test,native-final-test,native-menu-test,native-separated-test,native-content-test,native-load-test,native-fixed-test}.log。Viteの既存chunk容量警告は継続。独立Astraの機能群監査と、catch修正後のエラー提示/確認dialogのみの限定再確認は新規P1/P2なし。
 
 隔離FAKE Catalystで同じ分岐を持つ合成二会話を表示し、一回の確認で両方が7→2nodeになること、activePath・対象外会話・clipboardの不変を保存ファイルでも確認した。取消時の永続state完全不変、整理後の再整理disabled、undo一回で後の会話のみ7nodeへ、二回で両会話の元node map復元も確認。終了後process不在とbuilt Info.plist byte一致復元を確認した。実touch/文字拡大/VoiceOver、前節のdrag開始/完了、実API/cloudと全機能/UI最終受入は未完了。iPhone照会/導入・push・main統合は行っていない。
+
+## 分岐図のノード詳細と対象会話の属性操作（2026-10-21）
+
+Web Canvas onNodeClick/MessageDetailModalに合わせ、headerはchat移動、本文は詳細sheetへ接続した。共有navigation/historyで対象pathを更新し、選択会話とviewを維持、focusを発行しない。既存branch searchの保存接続を小helperで共用した。詳細は原文text/imageのみを順に表示し、reasoning/tool等は保存データから削除しない。画像loaderと生成対象検証は既存処理を使う。
+
+star/pinは明示chatIDのfresh draftを既存共有setterへ渡す。対象会話の生成中は拒否し、他会話の生成は維持する。card280×80、menu44ptを保持し、本文48pt/header32ptへ分けた。headerは44ptメニューでも操作でき、選択modeは従来の一ボタンを維持する。
+
+Catalyst固有7件の成功範囲を確認（最終一括runではない）。新detailの他chat path/選択/split/focus・保存失敗保全・再起動/record往復、明示chat属性とraw UTF16/巨大数/未知項目、既存search、属性保存失敗/stale、暗号化Driveの新受信、生成対象/非対象の属性操作と部分出力保持を確認した。初回6成功・新options1失敗は、実corpusのstarred:trueをfalseと誤認した期待値だった。OFF時は実Web branch-slice.setNodeStar/shared nodeOptionsがfieldを削除するため、raw削除とtyped falseを両方検証するよう修正。同1caseだけ再確認して成功し、他6件は再利用した。V3 projectionとsnapshot wrapperの不適切な比較も実行前に既存全record往復比較へ修正した。情報欠落を許容する変更ではない。ログ /private/tmp/weavelet-node-detail-{native-test,options-test,options-final-test,final-build,close-build}.log。
+
+隔離FAKE Catalystでtext→data URI画像→text、原文Markdown記号、star OFF/pin ON保存、全contentStore/config/pathと選択会話の不変、再起動後の属性、header→chatを確認した。UI用省略fixtureはvalidatorが拒否したため実corpus形状へ戻した。非foregroundで入力できなかった操作はwindow Raiseと実focusで入力値を確認してやり直し、商品コードを自動操作のために変更していない。
+
+詳細内の画像拡大sheetはdetached presenterを記録して閉じるため、Webと同じ直接表示にした。AttachmentImageViewのallowsExpansion既定trueを保ち、新detailだけfalseで384pt上限の非Button画像を使う。既存chatの拡大経路とloaderは未変更。暗背景のclose textを標準toolbarの44pt xmarkへ変更し、白いiconとdismissを実画面で確認した。最終Catalyst build成功。独立Astraの機能群と画像/close境界の限定監査は新規P1/P2なし。描画修正後は影響UI/buildだけ再確認した。
+
+別会話Copyを選択したまま元会話の生成node詳細を開き、FAKE partial→complete更新、生成中star/pin disabled→完了後enabled、starの元会話への保存とCopy選択保持を確認した。選択modeの一node押下→1件表示も確認。終了後process不在・built Info byte一致復元済み。共有Web/bundleと保存/sync基盤は未変更で、全項目I/O・実Web→native→Web暗号化wire・bundle鮮度の既存成功を再利用した。実cloud、実touch/狭幅/文字拡大/VoiceOver全経路、前節dragと全機能/UIの最終受入は未完了。iPhone照会/導入・push・main統合はしていない。
