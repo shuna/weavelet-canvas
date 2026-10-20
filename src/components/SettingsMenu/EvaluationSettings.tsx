@@ -11,6 +11,7 @@ import type {
   ModerationCategories,
   SafetyCategoryThreshold,
 } from '@type/evaluation';
+import { dualThresholdPercentages, editDualThreshold, parseDualThresholdInput } from '@utils/evaluationState';
 import {
   moderationCategoryKeys,
   qualityAxisKeys,
@@ -95,31 +96,24 @@ const DualThresholdSlider = ({
   onResetRight?: () => void;
   showResetRight?: boolean;
 }) => {
-  const redPct = Math.round(threshold.red * 100);
-  const greenPct = Math.round(threshold.green * 100);
+  const {red: redPct, green: greenPct} = dualThresholdPercentages(threshold);
 
   const handleRedChange = (val: number) => {
-    const clamped = Math.min(val, greenPct);
-    onChange({ red: clamped / 100, green: threshold.green });
+    onChange(editDualThreshold(threshold, 'red', val));
   };
 
   const handleGreenChange = (val: number) => {
-    const clamped = Math.max(val, redPct);
-    onChange({ red: threshold.red, green: clamped / 100 });
+    onChange(editDualThreshold(threshold, 'green', val));
   };
 
   const handleRedInput = (raw: string) => {
-    const n = parseInt(raw, 10);
-    if (isNaN(n)) return;
-    const val = Math.max(0, Math.min(100, n));
-    handleRedChange(val);
+    const value = parseDualThresholdInput(raw);
+    if (value !== null) handleRedChange(value);
   };
 
   const handleGreenInput = (raw: string) => {
-    const n = parseInt(raw, 10);
-    if (isNaN(n)) return;
-    const val = Math.max(0, Math.min(100, n));
-    handleGreenChange(val);
+    const value = parseDualThresholdInput(raw);
+    if (value !== null) handleGreenChange(value);
   };
 
   return (
@@ -210,13 +204,12 @@ const SafetyThresholdSlider = ({
   onResetBlock?: () => void;
   showResetBlock?: boolean;
 }) => {
-  const reviewPct = Math.round(threshold.review * 100);
-  const blockPct = Math.round(threshold.block * 100);
+  const {red: reviewPct, green: blockPct} = dualThresholdPercentages({red:threshold.review,green:threshold.block});
 
   return (
     <DualThresholdSlider
       threshold={{ red: threshold.review, green: threshold.block }}
-      onChange={(next) => onChange({ review: next.red, block: next.green })}
+      onChange={(next) => onChange({ ...threshold, review: next.red, block: next.green })}
       leftThumbClassName={safetyLeftThumbClassName}
       rightThumbClassName={safetyRightThumbClassName}
       trackBackground={`linear-gradient(to right, rgb(34,197,94) 0%, rgb(34,197,94) ${reviewPct}%, rgb(209,213,219) ${reviewPct}%, rgb(209,213,219) ${blockPct}%, rgb(239,68,68) ${blockPct}%, rgb(239,68,68) 100%)`}
@@ -249,8 +242,7 @@ const QualityThresholdSlider = ({
   onResetGreen?: () => void;
   showResetGreen?: boolean;
 }) => {
-  const redPct = Math.round(threshold.red * 100);
-  const greenPct = Math.round(threshold.green * 100);
+  const {red: redPct, green: greenPct} = dualThresholdPercentages(threshold);
 
   return (
     <DualThresholdSlider

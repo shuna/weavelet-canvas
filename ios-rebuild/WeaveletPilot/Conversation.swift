@@ -2068,6 +2068,42 @@ final class ChatState: ObservableObject {
         let roots = try publicationSnapshot().required("state")
         return try roots["evaluationSettings"] ?? SharedWebOperations.call("evaluation",.object([.init(key:"operation",value:.string("defaults"))])).required("evaluationSettings")
     }
+    func evaluationThresholds(_ kind: String) throws -> [OrderedJSON] {
+        let roots = try publicationSnapshot().required("state")
+        var input = OrderedJSON.object([.init(key:"operation",value:.string("thresholdFields")),.init(key:"kind",value:.string(kind))])
+        for key in ["safetyThresholds","qualityThresholds"] where roots[key] != nil {
+            input = input.replacing(key,with:roots[key]!)
+        }
+        return try SharedWebOperations.call("evaluation",input).array("threshold fields")
+    }
+    func saveEvaluationThreshold(kind: String, key: String, field: String, percent: Double? = nil, text: String? = nil, reset: Bool = false) throws {
+        guard !hasGenerations else { throw ExchangeError.invalid("生成終了後に評価設定を変更してください") }
+        let roots = try publicationSnapshot().required("state")
+        let rows = try evaluationThresholds(kind)
+        guard let row = try rows.first(where: { try $0.required("key").string("threshold key").utf8.elementsEqual(key.utf8) }) else {
+            throw ExchangeError.invalid("評価閾値")
+        }
+        let mapName = kind == "safety" ? "safetyThresholds" : "qualityThresholds"
+        var map = roots[mapName] ?? .object([])
+        _ = try map.object("threshold map")
+        for entry in rows {
+            let entryKey = try entry.required("key").string("threshold key")
+            if map[entryKey] == nil { map = map.replacing(entryKey,with:try entry.required("value")) }
+        }
+        let current = try map[key] ?? row.required("value")
+        _ = try current.object("threshold pair")
+        var input = OrderedJSON.object([
+            .init(key:"operation",value:.string("thresholdEdit")),.init(key:"kind",value:.string(kind)),
+            .init(key:"key",value:.string(key)),.init(key:"field",value:.string(field)),.init(key:"current",value:current),
+        ])
+        if let percent { input = input.replacing("percent",with:.number(String(percent))) }
+        if let text { input = input.replacing("text",with:.string(text)) }
+        if reset { input = input.replacing("reset",with:.bool(true)) }
+        let updated = try SharedWebOperations.call("evaluation",input)
+        if updated == .null { return }
+        let pair = current.replacing(field,with:try updated.required(field))
+        try applyGlobalState(roots.replacing(mapName,with:map.replacing(key,with:pair)))
+    }
     func saveEvaluationSetting(_ key: String, value: OrderedJSON) throws {
         guard !hasGenerations else { throw ExchangeError.invalid("生成終了後に評価設定を変更してください") }
         let action: OrderedJSON

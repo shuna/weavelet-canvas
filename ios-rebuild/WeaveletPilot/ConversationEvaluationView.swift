@@ -147,18 +147,117 @@ struct EvaluationSettingsView: View {
                     Text("選択したローカルモデルで自動判定します。読み込みや判定に失敗した場合は Remote を使用します。")
                         .font(.footnote).foregroundStyle(.secondary)
                 }
+                NavigationLink("安全性の閾値") { EvaluationThresholdsView(state:state,kind:"safety") }
             }
             Section("品質") {
                 Picker("送信前",selection:mode("qualityPreSend")) { Text("手動").tag("manual"); Text("自動").tag("auto") }
                 Picker("受信後",selection:mode("qualityPostReceive")) { Text("手動").tag("manual"); Text("自動").tag("auto") }
+                NavigationLink("品質の閾値") { EvaluationThresholdsView(state:state,kind:"quality") }
             }
             if let errorMessage { Text(errorMessage).foregroundStyle(.red) }
             if let automaticEvaluationError = state.automaticEvaluationError {
                 Text(automaticEvaluationError).foregroundStyle(.red)
             }
         }
-        .disabled(state.generation != nil)
+        .disabled(state.hasGenerations)
         .navigationTitle("評価設定")
         .navigationBarTitleDisplayMode(.inline)
+    }
+}
+
+private struct EvaluationThresholdsView: View {
+    @ObservedObject var state: ChatState
+    let kind: String
+    private let titles = [
+        "sexual":"性的コンテンツ", "hate":"ヘイト", "harassment":"ハラスメント", "self-harm":"自傷行為",
+        "sexual/minors":"未成年の性的コンテンツ", "hate/threatening":"脅迫を伴うヘイト",
+        "violence/graphic":"暴力的描写", "violence":"暴力", "harassment/threatening":"脅迫を伴うハラスメント",
+        "self-harm/intent":"自傷の意図", "self-harm/instructions":"自傷の手順", "illicit":"違法行為", "illicit/violent":"暴力を伴う違法行為",
+        "taskCompletion":"タスク達成度", "faithfulness":"正確性", "coherence":"一貫性", "conciseness":"簡潔性", "instructionFollowing":"指示遵守"
+    ]
+    var body: some View {
+        Form {
+            if let entries = try? state.evaluationThresholds(kind) {
+                ForEach(Array(entries.enumerated()),id:\.offset) { _, entry in
+                    if let key = try? entry["key"]?.string("threshold key") {
+                        Section(titles[key] ?? key) {
+                            ForEach(kind == "safety" ? ["review", "block"] : ["red", "green"],id:\.self) { field in
+                                if let percentage = try? entry["percentages"]?[field]?.number("percentage"),
+                                   let current = try? entry["value"]?[field]?.number("threshold"),
+                                   let original = try? entry["defaults"]?[field]?.number("default threshold") {
+                                    EvaluationThresholdControl(state:state,kind:kind,key:key,title:titles[key] ?? key,field:field,
+                                        label:field == "review" ? "要確認" : field == "block" ? "ブロック" : field == "red" ? "赤" : "緑",
+                                        percentage:percentage,showReset:current != original)
+                                }
+                            }
+                        }
+                    }
+                }
+            } else { Text("評価設定を読み込めませんでした").foregroundStyle(.red) }
+        }
+        .disabled(state.hasGenerations)
+        .navigationTitle(kind == "safety" ? "安全性の閾値" : "品質の閾値")
+        .navigationBarTitleDisplayMode(.inline)
+    }
+}
+
+private struct EvaluationThresholdControl: View {
+    @ObservedObject var state: ChatState
+    let kind: String
+    let key: String
+    let title: String
+    let field: String
+    let label: String
+    let percentage: Double
+    let showReset: Bool
+    @State private var draft: Double?
+    @State private var input: String?
+    @State private var errorMessage: String?
+    @FocusState private var focused: Bool
+    private var value: Binding<Double> { .init(get:{ draft ?? percentage },set:{ draft = $0; input = nil }) }
+    private var text: Binding<String> { .init(get:{ input ?? String(Int(draft ?? percentage)) },set:{ input = $0; draft = nil }) }
+    private func save() {
+        guard draft != nil || input != nil else { return }
+        do {
+            try state.saveEvaluationThreshold(kind:kind,key:key,field:field,percent:draft,text:input)
+            draft = nil; input = nil; errorMessage = nil
+        } catch { errorMessage = error.localizedDescription }
+    }
+    var body: some View {
+        VStack(alignment:.leading,spacing:4) {
+            HStack {
+                Text(label)
+                Spacer()
+                TextField(label,text:text)
+                    .keyboardType(.numbersAndPunctuation).multilineTextAlignment(.trailing).frame(width:56).frame(minHeight:44)
+                    .focused($focused).onSubmit(save)
+                    .accessibilityLabel("\(title) \(label) パーセント")
+                Text("%").foregroundStyle(.secondary)
+                if showReset {
+                    Button {
+                        do {
+                            try state.saveEvaluationThreshold(kind:kind,key:key,field:field,reset:true)
+                            draft = nil; input = nil; errorMessage = nil
+                        } catch { errorMessage = error.localizedDescription }
+                    } label: { Image(systemName:"arrow.counterclockwise").frame(width:44,height:44) }
+                    .buttonStyle(.borderless).accessibilityLabel("\(title) \(label) を既定値に戻す")
+                }
+            }
+            Slider(value:value,in:0...100,step:1,onEditingChanged:{ editing in if !editing { save() } })
+                .accessibilityLabel("\(title) \(label)")
+            if let errorMessage {
+                Text(errorMessage).font(.footnote).foregroundStyle(.red)
+                if draft != nil || input != nil { Button("再試行",action:save).buttonStyle(.borderless) }
+            }
+        }
+        .onChange(of:focused) { _, editing in if !editing { save() } }
+        .toolbar {
+            if focused {
+                ToolbarItemGroup(placement:.keyboard) {
+                    Spacer()
+                    Button("完了") { focused = false }
+                }
+            }
+        }
     }
 }

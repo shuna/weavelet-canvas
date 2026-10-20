@@ -23,6 +23,18 @@ export type EvaluationAction =
   | {type: 'setSafetyThreshold'; key: keyof ModerationCategories; value: SafetyCategoryThreshold}
   | {type: 'setQualityThreshold'; key: keyof QualityScores; value: QualityAxisThreshold};
 
+export type DualThreshold = {red: number; green: number};
+export const dualThresholdPercentages = (threshold: DualThreshold) => ({ red: Math.round(threshold.red * 100), green: Math.round(threshold.green * 100) });
+export const parseDualThresholdInput = (raw: string): number | null => {
+  const value = parseInt(raw, 10);
+  return Number.isNaN(value) ? null : Math.max(0, Math.min(100, value));
+};
+export const editDualThreshold = (threshold: DualThreshold, field: keyof DualThreshold, percent: number): DualThreshold => {
+  const {red, green} = dualThresholdPercentages(threshold);
+  return field === 'red' ? {...threshold, red: Math.min(percent, green) / 100}
+    : {...threshold, green: Math.max(percent, red) / 100};
+};
+
 export function applyAutoEvaluationResult(existing: EvaluationResult | undefined, incoming: EvaluationResult): EvaluationResult {
   const entry = {...existing, phase: incoming.phase};
   if (incoming.safety !== undefined) {

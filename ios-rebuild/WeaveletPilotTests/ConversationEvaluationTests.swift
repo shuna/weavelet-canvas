@@ -447,6 +447,98 @@ final class ConversationEvaluationTests: XCTestCase {
         }
     }
 
+    func testEvaluationThresholdEditsAndResetPreserveOpaqueStateAcrossRestart() throws {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent("native-eval-thresholds-\(UUID().uuidString)")
+        let store = LocalStateStore(fileURL:directory.appendingPathComponent("state.json"))
+        let app = ChatState(store:store)
+        try app.importWebData(json(#"{"version":3,"chats":[{"id":"threshold-chat","title":"Thresholds","config":{"model":"fake-model"},"messages":[]}]}"#).encoded())
+        let safetyRows = try app.evaluationThresholds("safety")
+        let qualityRows = try app.evaluationThresholds("quality")
+        let safetyKey = try XCTUnwrap(safetyRows.first?["key"]?.string("safety key"))
+        let qualityRow = try XCTUnwrap(qualityRows.first)
+        let qualityKey = try qualityRow.required("key").string("quality key")
+        let qualityDefault = try qualityRow.required("defaults").required("red")
+        try app.saveEvaluationThreshold(kind:"safety",key:safetyKey,field:"review",percent:20)
+        try app.saveEvaluationThreshold(kind:"quality",key:qualityKey,field:"red",percent:20)
+        let initialized = try app.publicationSnapshot().required("state")
+        XCTAssertEqual(try initialized.required("safetyThresholds").object("safety thresholds").count,safetyRows.count)
+        XCTAssertEqual(try initialized.required("qualityThresholds").object("quality thresholds").count,qualityRows.count)
+        let otherSafetyKey = try XCTUnwrap(safetyRows.dropFirst().first?["key"]?.string("safety key"))
+        let displayed = try SharedWebOperations.call("evaluation",.object([
+            .init(key:"operation",value:.string("display")),
+            .init(key:"safetyThresholds",value:try initialized.required("safetyThresholds")),
+            .init(key:"result",value:.object([
+                .init(key:"phase",value:.string("post-receive")),
+                .init(key:"safety",value:.object([
+                    .init(key:"flagged",value:.bool(false)),
+                    .init(key:"categories",value:.object([.init(key:otherSafetyKey,value:.bool(false))])),
+                    .init(key:"categoryScores",value:.object([.init(key:otherSafetyKey,value:.number("0.5"))])),
+                ])),
+            ])),
+        ]))
+        XCTAssertTrue(try displayed.required("safety").required("categories").array("categories").contains { try $0.required("key").string("category key").utf8.elementsEqual(otherSafetyKey.utf8) })
+        let snapshot = try app.publicationSnapshot(), roots = try snapshot.required("state")
+        let safetyPair = try json(#"{"review":0.1234567890123456789,"block":0.876543210987654321,"xPair":9007199254740993,"xUTF":"\ud800"}"#)
+        let qualityPair = try json(#"{"red":0.234567890123456789,"green":0.876543210987654321,"xPair":9007199254740993}"#)
+        let configured = roots
+            .replacing("xThresholdRoot",with:.number("9007199254740993"))
+            .replacing("safetyThresholds",with:.object([.init(key:"xMap",value:.number("9007199254740993")),.init(key:safetyKey,value:safetyPair)]))
+            .replacing("qualityThresholds",with:.object([.init(key:"xMap",value:.number("9007199254740993")),.init(key:qualityKey,value:qualityPair)]))
+        try app.applySnapshot(snapshot.replacing("state",with:configured))
+
+        try app.saveEvaluationThreshold(kind:"safety",key:safetyKey,field:"review",percent:70)
+        try app.saveEvaluationThreshold(kind:"quality",key:qualityKey,field:"red",reset:true)
+
+        let saved = try app.publicationSnapshot().required("state")
+        XCTAssertEqual(saved["safetyThresholds"]?[safetyKey]?["review"],.number("0.7"))
+        XCTAssertEqual(saved["safetyThresholds"]?[safetyKey]?["block"],.number("0.876543210987654321"))
+        XCTAssertEqual(saved["safetyThresholds"]?[safetyKey]?["xPair"],.number("9007199254740993"))
+        XCTAssertEqual(saved["safetyThresholds"]?[safetyKey]?["xUTF"],.utf16String([0xd800]))
+        XCTAssertEqual(saved["qualityThresholds"]?[qualityKey]?["red"],qualityDefault)
+        XCTAssertEqual(saved["qualityThresholds"]?[qualityKey]?["green"],.number("0.876543210987654321"))
+        XCTAssertEqual(saved["qualityThresholds"]?[qualityKey]?["xPair"],.number("9007199254740993"))
+        XCTAssertEqual(saved["safetyThresholds"]?["xMap"],.number("9007199254740993"))
+        XCTAssertEqual(saved["qualityThresholds"]?["xMap"],.number("9007199254740993"))
+        XCTAssertEqual(saved["xThresholdRoot"],.number("9007199254740993"))
+        try app.saveEvaluationThreshold(kind:"safety",key:safetyKey,field:"review",text:"12.9")
+        XCTAssertEqual(try app.publicationSnapshot()["state"]?["safetyThresholds"]?[safetyKey]?["review"],.number("0.12"))
+        let beforeInvalidText = try app.publicationSnapshot()
+        try app.saveEvaluationThreshold(kind:"safety",key:safetyKey,field:"review",text:"")
+        XCTAssertEqual(try app.publicationSnapshot(),beforeInvalidText)
+        XCTAssertEqual(try ChatState(store:store).publicationSnapshot(),try app.publicationSnapshot())
+        let restored = try SyncRecords.fromRecords(SyncRecords.toRecords(app.publicationSnapshot()))
+        // Web records use JS numbers and sorted-key canonical JSON; threshold lookup uses category keys, not map order.
+        for root in ["safetyThresholds", "qualityThresholds"] {
+            XCTAssertEqual(try SyncRecords.canonical(XCTUnwrap(restored["state"]?[root])),
+                           try SyncRecords.canonical(XCTUnwrap(beforeInvalidText["state"]?[root])))
+        }
+        XCTAssertEqual(restored["state"]?["safetyThresholds"]?[safetyKey]?["xUTF"],.utf16String([0xd800]))
+        XCTAssertNotNil(restored["state"]?["safetyThresholds"]?["xMap"])
+        XCTAssertEqual(try app.publicationSnapshot(),beforeInvalidText)
+    }
+
+    func testEvaluationThresholdSaveFailureLeavesMemoryAndDiskUntouched() throws {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent("native-eval-threshold-save-\(UUID().uuidString)")
+        var reject = false
+        let store = LocalStateStore(fileURL:directory.appendingPathComponent("state.json")) { bytes,url in
+            if reject { throw CocoaError(.fileWriteNoPermission) }
+            try bytes.write(to:url,options:.atomic)
+        }
+        let app = ChatState(store:store)
+        try app.importWebData(json(#"{"version":3,"chats":[{"id":"threshold-chat","title":"Thresholds","config":{"model":"fake-model"},"messages":[]}]}"#).encoded())
+        let key = try XCTUnwrap(try app.evaluationThresholds("safety").first?["key"]?.string("safety key"))
+        let snapshot = try app.publicationSnapshot(), roots = try snapshot.required("state")
+        try app.applySnapshot(snapshot.replacing("state",with:roots.replacing("safetyThresholds",with:.object([.init(key:key,value:try json(#"{"review":0.2,"block":0.8,"xPair":9007199254740993}"#))]))))
+        let before = try app.publicationSnapshot(), disk = try Data(contentsOf:store.fileURL)
+        reject = true
+        XCTAssertThrowsError(try app.saveEvaluationThreshold(kind:"safety",key:key,field:"block",percent:90))
+        XCTAssertEqual(try app.publicationSnapshot(),before)
+        XCTAssertEqual(try Data(contentsOf:store.fileURL),disk)
+        reject = false
+        try app.saveEvaluationThreshold(kind:"safety",key:key,field:"block",percent:90)
+        XCTAssertEqual(try app.publicationSnapshot()["state"]?["safetyThresholds"]?[key]?["block"],.number("0.9"))
+    }
+
     func testLocalAnalysisUsesInstalledGGUFWithoutReadingRemoteCredentialsAndPersistsProgress() async throws {
         let dir = FileManager.default.temporaryDirectory.appendingPathComponent("native-local-eval-store-\(UUID().uuidString)")
         let store = LocalStateStore(fileURL:dir.appendingPathComponent("state.json"))

@@ -27728,6 +27728,15 @@ ${text}`;
     safetyEngine: "remote",
     hybridRemoteOnSafe: true
   };
+  var dualThresholdPercentages = (threshold) => ({ red: Math.round(threshold.red * 100), green: Math.round(threshold.green * 100) });
+  var parseDualThresholdInput = (raw) => {
+    const value = parseInt(raw, 10);
+    return Number.isNaN(value) ? null : Math.max(0, Math.min(100, value));
+  };
+  var editDualThreshold = (threshold, field, percent) => {
+    const { red, green } = dualThresholdPercentages(threshold);
+    return field === "red" ? { ...threshold, red: Math.min(percent, green) / 100 } : { ...threshold, green: Math.max(percent, red) / 100 };
+  };
   function applyAutoEvaluationResult(existing, incoming) {
     const entry = { ...existing, phase: incoming.phase };
     if (incoming.safety !== void 0) {
@@ -27777,6 +27786,30 @@ ${text}`;
   }
 
   // shared/google-sync/evaluation.ts
+  var thresholdPair = (value, first, second) => {
+    if (!value || typeof value !== "object")
+      throw new Error("Invalid threshold pair.");
+    const fields = value, a = fields[first], b = fields[second];
+    if (typeof a !== "number" || typeof b !== "number" || !Number.isFinite(a) || !Number.isFinite(b) || a < 0 || a > 1 || b < 0 || b > 1)
+      throw new Error("Invalid threshold pair.");
+    return { red: a, green: b };
+  };
+  var thresholdFieldRows = (kind, safety, quality) => {
+    const row = (key, value, fallback, names) => {
+      const current = thresholdPair(value, names[0], names[1]), initial = thresholdPair(fallback, names[0], names[1]);
+      const percentages = dualThresholdPercentages(current), defaultPercentages = dualThresholdPercentages(initial);
+      return {
+        key,
+        value,
+        defaults: fallback,
+        percentages: kind === "safety" ? { review: percentages.red, block: percentages.green } : percentages,
+        defaultPercentages: kind === "safety" ? { review: defaultPercentages.red, block: defaultPercentages.green } : defaultPercentages
+      };
+    };
+    if (kind === "safety")
+      return moderationCategoryKeys.map((key) => row(key, safety[key] ?? defaultSafetyThresholds[key], defaultSafetyThresholds[key], ["review", "block"]));
+    return qualityAxisKeys.map((key) => row(key, quality[key] ?? defaultQualityThresholds[key], defaultQualityThresholds[key], ["red", "green"]));
+  };
   var wllamaPromptText = (value) => Array.from(value, (scalar) => scalar.length === 1 && scalar.charCodeAt(0) >= 55296 && scalar.charCodeAt(0) <= 57343 ? "\uFFFD" : scalar).join("");
   function evaluation(json) {
     const input = JSON.parse(json);
@@ -27824,6 +27857,41 @@ ${text}`;
         return JSON.stringify(localSafetyPolicy(input.safetyEngine, input.hybridRemoteOnSafe, input.localSafety));
       case "defaults":
         return JSON.stringify({ evaluationSettings: defaultEvaluationSettings, safetyThresholds: defaultSafetyThresholds, qualityThresholds: defaultQualityThresholds });
+      case "thresholdFields": {
+        if (input.kind !== "safety" && input.kind !== "quality")
+          throw new Error("Invalid threshold kind.");
+        return JSON.stringify(thresholdFieldRows(input.kind, input.safetyThresholds ?? {}, input.qualityThresholds ?? {}));
+      }
+      case "thresholdEdit": {
+        if (input.kind !== "safety" && input.kind !== "quality")
+          throw new Error("Invalid threshold kind.");
+        const safety = input.kind === "safety";
+        if (safety ? !moderationCategoryKeys.includes(input.key) : !qualityAxisKeys.includes(input.key))
+          throw new Error("Invalid threshold key.");
+        const fields = safety ? ["review", "block"] : ["red", "green"];
+        if (!fields.includes(input.field))
+          throw new Error("Invalid threshold field.");
+        const current = thresholdPair(input.current, fields[0], fields[1]);
+        const defaults = safety ? defaultSafetyThresholds[input.key] : defaultQualityThresholds[input.key];
+        const defaultPair = thresholdPair(defaults, fields[0], fields[1]);
+        if (input.reset === true)
+          return JSON.stringify({ ...input.current, [input.field]: input.field === fields[0] ? defaultPair.red : defaultPair.green });
+        let percent;
+        if (input.text !== void 0) {
+          if (typeof input.text !== "string")
+            throw new Error("Invalid threshold text.");
+          const parsed = parseDualThresholdInput(input.text);
+          if (parsed === null)
+            return JSON.stringify(null);
+          percent = parsed;
+        } else {
+          if (!Number.isInteger(input.percent) || input.percent < 0 || input.percent > 100)
+            throw new Error("Invalid threshold percent.");
+          percent = input.percent;
+        }
+        const updated = editDualThreshold(current, input.field === fields[0] ? "red" : "green", percent);
+        return JSON.stringify(safety ? { ...input.current, review: updated.red, block: updated.green } : { ...input.current, red: updated.red, green: updated.green });
+      }
       case "display": {
         const safetyThresholds = input.safetyThresholds ?? defaultSafetyThresholds;
         const qualityThresholds = input.qualityThresholds ?? defaultQualityThresholds;
