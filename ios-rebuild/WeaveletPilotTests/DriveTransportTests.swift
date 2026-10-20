@@ -11,6 +11,85 @@ final class DriveTransportTests: XCTestCase {
     override func tearDown() { DriveURLProtocol.handler = nil; super.tearDown() }
     private func json(_ value: String) -> Data { Data(value.utf8) }
 
+    @MainActor func testLegacyGoogleReadUsesSharedLocatorAndExistingPreviewWithoutChangingState() async throws {
+        let root = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
+        let fixture = root.appendingPathComponent("tests/fixtures/web-native/legacy-ios-sync-snapshot.wvlt")
+        let original = try Data(contentsOf: fixture)
+        var raw = original, calls = 0
+        let drive = transport { request in
+            calls += 1
+            XCTAssertEqual(request.httpMethod, "GET")
+            XCTAssertEqual(request.url?.host, "www.googleapis.com")
+            let query = URLComponents(url: request.url!, resolvingAgainstBaseURL: false)!.queryItems!
+            if request.url?.path == "/drive/v3/files" {
+                let definition = try ChatImport.call("legacyGoogleSource").required("parameters").object("parameters")
+                for field in definition { XCTAssertEqual(query.first { field.key.matches($0.name) }?.value, try field.value.string("parameter")) }
+                return (200, self.json("{\"files\":[{\"id\":\"FAKE-legacy\",\"name\":\"weavelet-canvas-sync.wvlt\"}]}"))
+            }
+            XCTAssertEqual(request.url?.path, "/drive/v3/files/FAKE-legacy")
+            XCTAssertEqual(query.first { $0.name == "alt" }?.value, "media")
+            return (200, raw)
+        }
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent("legacy-google-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: directory) }
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        let store = LocalStateStore(fileURL: directory.appendingPathComponent("state.json")), state = ChatState(store: LocalStateStore(fileURL: directory.appendingPathComponent("state.json")))
+        let web = try Data(contentsOf: root.appendingPathComponent("tests/fixtures/web-native/message-editing.json"))
+        try state.importWebData(OrderedJSON.decode(web).required("cases").array("cases")[0].required("input").encoded())
+        let before = try state.publicationSnapshot(), disk = try Data(contentsOf: store.fileURL)
+        let syncStore = SyncStateStore(fileURL: directory.appendingPathComponent("sync.json"))
+        try syncStore.selectDataset("FAKE-canonical")
+        try syncStore.transaction(dataset: "FAKE-canonical", expectedCache: .null, cache: .syncBytes(Data([1, 2, 255])), entries: [], remove: [], accepted: state.syncInputSnapshot())
+        let syncDisk = try Data(contentsOf: syncStore.fileURL)
+        let connection = GoogleSyncConnection(state: state, store: syncStore), dataset = connection.controller.dataset
+        let preview = try await connection.prepareLegacyIOSImport(reader: drive)
+        XCTAssertFalse(preview.conversations.isEmpty)
+        XCTAssertEqual(connection.legacySnapshot, original)
+        XCTAssertEqual(try state.publicationSnapshot(), before); XCTAssertEqual(try Data(contentsOf: store.fileURL), disk)
+        XCTAssertEqual(connection.controller.dataset, dataset)
+        XCTAssertEqual(try Data(contentsOf: syncStore.fileURL), syncDisk)
+        raw = Data([0, 1, 2, 255])
+        do { _ = try await connection.prepareLegacyIOSImport(reader: drive); XCTFail("Corrupt container accepted") } catch {}
+        XCTAssertEqual(connection.legacySnapshot, raw)
+        XCTAssertEqual(try state.publicationSnapshot(), before); XCTAssertEqual(try Data(contentsOf: store.fileURL), disk)
+        XCTAssertEqual(connection.controller.dataset, dataset)
+        XCTAssertEqual(try Data(contentsOf: syncStore.fileURL), syncDisk)
+        XCTAssertEqual(calls, 4); XCTAssertEqual(try Data(contentsOf: fixture), original)
+    }
+    func testLegacyGoogleSkipsEmptyPagesAndRejectsRepeatedCursor() async throws {
+        var calls = 0
+        let drive = transport { request in
+            calls += 1
+            XCTAssertEqual(request.httpMethod, "GET")
+            if calls == 1 { return (200, self.json("{\"files\":[],\"nextPageToken\":\"FAKE-next\"}")) }
+            if calls == 2 {
+                XCTAssertEqual(URLComponents(url: request.url!, resolvingAgainstBaseURL: false)?.queryItems?.first { $0.name == "pageToken" }?.value, "FAKE-next")
+                return (200, self.json("{\"files\":[{\"id\":\"FAKE-first\",\"name\":\"weavelet-canvas-sync.wvlt\"}],\"nextPageToken\":\"more\"}"))
+            }
+            XCTAssertEqual(request.url?.path, "/drive/v3/files/FAKE-first")
+            return (200, Data([0, 1, 255]))
+        }
+        let bytes = try await drive.readLegacyIOSSnapshot()
+        XCTAssertEqual(bytes, Data([0, 1, 255])); XCTAssertEqual(calls, 3)
+        let repeatPage = transport { _ in (200, self.json("{\"files\":[],\"nextPageToken\":\"same\"}")) }
+        do { _ = try await repeatPage.readLegacyIOSSnapshot(); XCTFail("Repeated cursor accepted") }
+        catch { XCTAssertEqual(error as? DriveTransportError, .invalidResponse) }
+    }
+    func testLegacyGoogleAbsentIncompleteAndCancelledReadsCannotDownloadOrWrite() async throws {
+        for body in ["{\"files\":[]}", "{\"files\":[],\"incompleteSearch\":true}", "{\"files\":[{\"id\":\"wrong\",\"name\":\"other\"}]}"] {
+            var calls = 0
+            let drive = transport { request in
+                calls += 1; XCTAssertEqual(request.httpMethod, "GET"); XCTAssertEqual(request.url?.path, "/drive/v3/files")
+                return (200, self.json(body))
+            }
+            do { _ = try await drive.readLegacyIOSSnapshot(); XCTFail("Invalid/absent source accepted") } catch {}
+            XCTAssertEqual(calls, 1)
+        }
+        let drive = transport { _ in XCTFail("Cancelled migration sent a request"); return (500, Data()) }
+        let task = Task { withUnsafeCurrentTask { $0?.cancel() }; return try await drive.readLegacyIOSSnapshot() }
+        do { _ = try await task.value; XCTFail() } catch {}
+    }
+
     func testStructuredInvalidFileIDCrossesNativeHTTPBoundaryWithoutExposingResponseText() async throws {
         for location in ["fileId", "parameter fileId", "parentId"] {
             let response = json("{\"error\":{\"message\":\"FAKE PRIVATE RESPONSE\",\"errors\":[{\"location\":\"\(location)\"}]}}")

@@ -1171,3 +1171,14 @@ Web関連6files48件成功。Catalystでは関連RemoteGenerationの固有9件�
 新IO確認の最初のrecords再構築比較では、外側record辞書の列挙順だけが変わった。実WebのdiffRecordsはkeyとrecord文字列で照合し、既存SyncRecordsTestsも件数＋全キーのUTF8文字列一致を用いる。実Web engineでも104キー全ての文字列一致を確認した上で、この同じ比較へ訂正した。node順序を表すrecordやrecord内部のキー順・値は正規化しない。nativeが出力した今回のsnapshotと104recordsを実Web reader/writerでも照合し、全record文字列が一致した。既存の全I/O/暗号化同期経路は直前の成功を再利用し、同期形式自体は変更していない。
 
 型検査・Vite build・最終Catalyst build・共有bundle/Markdown鮮度・差分確認成功。ログは /private/tmp/weavelet-stream-state-{web-test,types,native-test,native-final-test,preservation-test,io-final-test,local-test,web-read,build,final-build,freshness,markdown-freshness}.log。Catalyst実画面では既存debug fixture storeに合成会話を追加し、外部通信しないFAKE生成→停止→部分本文と「中断されました」の表示を確認した。AX click/typeで入力されなかったため表示位置からpasteで入力し直した。通常データ/実Keychainは使用せず、終了後にprocess不在とbuilt Info.plist復元を確認した。全理由/復旧ボタンの手動画面、狭幅/文字サイズ/VoiceOver、実cloud、旧Google保存のreadonly移行等は残る。main統合・push・iPhone照会/導入は行っていない。
+
+
+## 旧Google appData保存のreadonly取込み（2026-10-20）
+
+旧iOS GoogleDriveSyncProviderの固定名 `weavelet-canvas-sync.wvlt`、`appDataFolder`、`modifiedTime desc` を共有legacyIOSSyncへ定義した。nativeは共有locator/選択検査を呼び、最初の対象が見つかるまでGETのみで取得する。新しい通常同期形式や旧writerを追加しない。既存のPKCE認証を移行専用 `drive.appdata` とメモリ内credentialで再利用し、通常の `drive.file` / Keychain recordには触れない。新SDK・依存は追加していない。Web認証/BFFのscopeも変更せず、Webでの旧ファイル読込は既存 `.wvlt` importを利用する。
+
+取得後は原bytesを接続オブジェクトに保持し、既存ChatState.prepareImport / FileImportViewへ接続する。確認前は会話/保存/同期先/accepted/cacheを変更しない。壊れた旧ファイルでも取得原本を書き出せる。原本の保持は接続オブジェクトの存続中で、永続アーカイブではない。旧remoteファイルは変更しない。取得できない場合に空データを作ったり通常同期先へ切り替えたりしない。
+
+初回はWeb関連4件とCatalyst関連22件が成功。独立AstraでnextPageToken未取得により途中の空ページを未検出と誤判定するP2を指摘され修正した。[Google files.list仕様](https://developers.google.com/workspace/drive/api/reference/rest/v3/files/list)の継続tokenを根拠に、次ページ取得と空/反復cursor拒否を追加。修正後は共有2件とnative影響2件のみ再確認して成功（前結果と重複、新しいpaginationケース1件を含む）。限定再監査は新規P1/P2なし。nativeの既存sync fileに選択先/cache/acceptedを用意し、正常・破損の取得後とも全bytesと主保存state/diskが不変であることを確認。通常認証、401 refresh、取消、保存失敗・refresh競合などの既存成功を再利用し、変更のない全I/O/暗号化同期suiteは反復しない。
+
+型検査・共有bundle鮮度・差分確認が成功し、Catalyst test用buildも成功。ログ `/private/tmp/weavelet-legacy-google-{web-test,web-final-test,types,native-test,native-final-test,generate,freshness}.log`。実Catalystで同期→Google同期→旧データ取込みの表示、説明、OAuth未設定時のボタン無効と正常なシート開閉を確認した。既存debug fixtureのみを使い、終了後にprocess不在とbuilt Info.plistの原本復元を確認。取得後の実画面操作・実OAuth・旧アプリのappData可視性は未確認。[Google appData仕様](https://developers.google.com/workspace/drive/api/guides/appdata)では作成したアプリのみアクセス可能であり、新nativeクライアントと旧アプリのGoogle設定の関係を実接続時に確認する必要がある。iPhone照会/導入・main統合・pushはしていない。全機能完成・実オンライン相互運用の完成とは扱わない。

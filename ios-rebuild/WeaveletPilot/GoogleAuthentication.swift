@@ -6,25 +6,26 @@ import Security
 struct GoogleAuthenticationConfiguration {
     let clientID: String
     let redirectScheme: String
+    let requestedScope: String
     var redirectURI: String { "\(redirectScheme):/oauth2redirect" }
     static let scope = "https://www.googleapis.com/auth/drive.file"
 
-    init(clientID: String, redirectScheme: String) throws {
+    init(clientID: String, redirectScheme: String, requestedScope: String = Self.scope) throws {
         guard clientID.hasSuffix(".apps.googleusercontent.com"), !clientID.hasPrefix("."),
               redirectScheme == clientID.split(separator: ".").reversed().joined(separator: "."),
               redirectScheme.range(of: "^[A-Za-z][A-Za-z0-9.+-]*$", options: .regularExpression) != nil else {
             throw GoogleAuthenticationError.configuration
         }
-        self.clientID = clientID; self.redirectScheme = redirectScheme
+        self.clientID = clientID; self.redirectScheme = redirectScheme; self.requestedScope = requestedScope
     }
-    static func bundled(_ bundle: Bundle = .main) throws -> Self {
+    static func bundled(_ bundle: Bundle = .main, requestedScope: String = Self.scope) throws -> Self {
         guard let client = bundle.object(forInfoDictionaryKey: "GOOGLE_CLIENT_ID") as? String,
               let scheme = bundle.object(forInfoDictionaryKey: "GOOGLE_REDIRECT_SCHEME") as? String,
               let types = bundle.object(forInfoDictionaryKey: "CFBundleURLTypes") as? [[String: Any]],
               types.contains(where: { ($0["CFBundleURLSchemes"] as? [String])?.contains(scheme) == true }) else {
             throw GoogleAuthenticationError.configuration
         }
-        return try Self(clientID: client, redirectScheme: scheme)
+        return try Self(clientID: client, redirectScheme: scheme, requestedScope: requestedScope)
     }
 }
 
@@ -154,7 +155,7 @@ struct GoogleAuthenticationKeychain: GoogleAuthenticationStorage {
         let verifier = try Self.random(), state = try Self.random()
         var components = URLComponents(string: "https://accounts.google.com/o/oauth2/v2/auth")!
         components.queryItems = ["client_id": configuration.clientID, "redirect_uri": configuration.redirectURI,
-            "response_type": "code", "scope": GoogleAuthenticationConfiguration.scope, "code_challenge": Self.challenge(verifier),
+            "response_type": "code", "scope": configuration.requestedScope, "code_challenge": Self.challenge(verifier),
             "code_challenge_method": "S256", "state": state, "access_type": "offline", "prompt": "consent"].map { URLQueryItem(name: $0.key, value: $0.value) }
         let callback = try await currentBrowser.authenticate(components.url!, scheme: configuration.redirectScheme)
         try check(expected)
@@ -233,7 +234,7 @@ struct GoogleAuthenticationKeychain: GoogleAuthenticationStorage {
               let expiry = json?["expires_in"] as? NSNumber, CFGetTypeID(expiry) != CFBooleanGetTypeID(),
               expiry.doubleValue.isFinite, expiry.doubleValue > 0,
               let refresh = (json?["refresh_token"] as? String) ?? previousRefresh, !refresh.isEmpty else { throw GoogleAuthenticationError.invalidResponse }
-        if let scope = json?["scope"] as? String, !scope.split(separator: " ").contains(Substring(GoogleAuthenticationConfiguration.scope)) { throw GoogleAuthenticationError.invalidResponse }
+        if let scope = json?["scope"] as? String, !scope.split(separator: " ").contains(Substring(configuration.requestedScope)) { throw GoogleAuthenticationError.invalidResponse }
         let expiresAt = now().addingTimeInterval(expiry.doubleValue)
         guard expiresAt.timeIntervalSince1970.isFinite else { throw GoogleAuthenticationError.invalidResponse }
         return GoogleAuthenticationCredential(clientID: configuration.clientID, accessToken: access, refreshToken: refresh, expiresAt: expiresAt)

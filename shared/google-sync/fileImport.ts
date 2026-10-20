@@ -1,6 +1,6 @@
 import {normalizeLegacyIOSImport} from '../../src/utils/legacyIOSImport';
 import {inspectLegacySnapshotContainer} from '../../src/utils/legacySnapshotContainer';
-import {LEGACY_IOS_CLOUDKIT_SOURCE} from '../../src/utils/legacyIOSSync';
+import {LEGACY_IOS_CLOUDKIT_SOURCE,LEGACY_IOS_GOOGLE_SOURCE,legacyIOSGoogleFile} from '../../src/utils/legacyIOSSync';
 import initialState from './importDefaults.generated.json';
 import {prepareImportData,buildPreviewAppendPatch,createImportPlan,validatePreviewSource,validateImportSelection,type ImportPreviewSource,type ImportDecisions,type Translator} from '../../src/utils/fileImport';
 import {importOpaquePaths} from '../../src/utils/fileImportProjection';
@@ -14,6 +14,8 @@ function importDefaults(): StoreState {
 export function fileImport(json:string):string {
  const input=JSON.parse(json);
  if(input.operation==='legacyCloudKitSource')return JSON.stringify(LEGACY_IOS_CLOUDKIT_SOURCE);
+ if(input.operation==='legacyGoogleSource')return JSON.stringify(LEGACY_IOS_GOOGLE_SOURCE);
+ if(input.operation==='legacyGoogleFile')return JSON.stringify(legacyIOSGoogleFile(input.data));
  if(input.operation==='container')return JSON.stringify(inspectLegacySnapshotContainer(input.header,input.totalLength));
  const t:Translator=(key,opts)=>String(input.messages?.[key]??opts?.defaultValue??key).replace(/\{\{(\w+)\}\}/g,(_,name)=>String(opts?.[name]??''));
  if(input.operation==='defaults')return JSON.stringify(importDefaults());

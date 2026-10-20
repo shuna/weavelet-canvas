@@ -65,6 +65,28 @@ import AuthenticationServices
         let token = try await auth.token(force: false)
         XCTAssertEqual(token, "FAKE NEW")
     }
+    func testMigrationAuthorizationIsEphemeralAndDoesNotReplaceSyncCredentials() async throws {
+        let normal = GoogleAuthTestStorage(); normal.value = old()
+        let browser = GoogleAuthTestBrowser(), memory = LegacyGoogleCredentialStorage()
+        let source = try ChatImport.call("legacyGoogleSource")
+        let scope = try source.required("scope").string("scope")
+        let config = try GoogleAuthenticationConfiguration(clientID: old().clientID, redirectScheme: "com.googleusercontent.apps.FAKE-ios", requestedScope: scope)
+        let response = self.response.replacingOccurrences(of: GoogleAuthenticationConfiguration.scope, with: scope)
+        let isolated = session { _ in (200, response) }
+        let auth = try GoogleAuthentication(configuration: config, session: isolated, storage: memory, now: { self.clock }, browserFactory: { _ in browser })
+        try await auth.signIn(presentationAnchor: ASPresentationAnchor())
+        XCTAssertEqual(browser.parameters["scope"], scope)
+        let token = try await auth.token(force: false)
+        XCTAssertEqual(token, "FAKE NEW")
+        XCTAssertEqual(normal.value, old()); XCTAssertEqual(normal.writes, 0)
+        XCTAssertNil(try LegacyGoogleCredentialStorage().load())
+        try auth.disconnect()
+        XCTAssertNil(try memory.load()); XCTAssertEqual(normal.value, old())
+        let wrongScope = try GoogleAuthentication(configuration: config, session: session { _ in (200, self.response) }, storage: memory, browserFactory: { _ in browser })
+        do { try await wrongScope.signIn(presentationAnchor: ASPresentationAnchor()); XCTFail("Missing migration scope accepted") }
+        catch { XCTAssertEqual(error as? GoogleAuthenticationError, .invalidResponse) }
+        XCTAssertNil(try memory.load())
+    }
     func testUnconfiguredDoesNotLoadCredentialsOrStartBrowser() async throws {
         let storage = GoogleAuthTestStorage(), browser = GoogleAuthTestBrowser()
         let auth = try GoogleAuthentication(storage: storage, browserFactory: { _ in browser })

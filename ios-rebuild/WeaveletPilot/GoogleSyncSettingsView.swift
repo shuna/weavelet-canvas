@@ -1,8 +1,12 @@
 import SwiftUI
 import AuthenticationServices
+import UniformTypeIdentifiers
 
 @MainActor final class GoogleSyncConnection: ObservableObject, Identifiable {
     let id = UUID()
+    let state: ChatState
+    @Published private(set) var legacySnapshot: Data?
+    private var legacyAuthentication: GoogleAuthentication?
     let controller: GoogleSyncController
     let drive: DriveTransport
     private let authentication: AuthenticationProvider
@@ -22,11 +26,12 @@ import AuthenticationServices
         func cancel() { value?.cancelSignIn() }
         func disconnect() throws { try value?.disconnect(); value = nil }
     }
-    init(state: ChatState) {
+    init(state: ChatState, store: SyncStateStore = .applicationStore) {
+        self.state = state
         let authentication = AuthenticationProvider()
         self.authentication = authentication
         drive = DriveTransport { force in try await authentication.get().token(force: force) }
-        controller = GoogleSyncController(chatState: state, drive: drive)
+        controller = GoogleSyncController(chatState: state, drive: drive, store: store)
     }
     var isConfigured: Bool { (try? GoogleAuthenticationConfiguration.bundled()) != nil }
     func run(_ operation: @escaping @MainActor () async throws -> Void) {
@@ -47,7 +52,27 @@ import AuthenticationServices
         let names = try files.map { try $0.required("name") }
         return try SharedWebOperations.call("driveListing", .array(names)).required("suggestedName").string("name")
     }
-    func cancel() { task?.cancel(); controller.cancel(); authentication.cancel() }
+    func prepareLegacyIOSImport(anchor: ASPresentationAnchor) async throws -> ChatImportPreview {
+        let source = try ChatImport.call("legacyGoogleSource")
+        let configuration = try GoogleAuthenticationConfiguration.bundled(requestedScope: source.required("scope").string("legacy scope"))
+        let auth = try GoogleAuthentication(configuration: configuration, storage: LegacyGoogleCredentialStorage())
+        legacyAuthentication = auth
+        defer { auth.cancelSignIn(); legacyAuthentication = nil }
+        try await auth.signIn(presentationAnchor: anchor)
+        let reader = DriveTransport { force in try await auth.token(force: force) }
+        return try await prepareLegacyIOSImport(reader: reader)
+    }
+    func prepareLegacyIOSImport(reader: DriveTransport) async throws -> ChatImportPreview {
+        let source = try ChatImport.call("legacyGoogleSource")
+        let bytes = try await reader.readLegacyIOSSnapshot()
+        try Task.checkCancellation()
+        // Keep the downloaded original available even when preview decoding fails.
+        legacySnapshot = bytes
+        let preview = try await state.prepareImport(data: bytes, filename: source.required("filename").string("legacy filename"))
+        try Task.checkCancellation()
+        return preview
+    }
+    func cancel() { task?.cancel(); controller.cancel(); authentication.cancel(); legacyAuthentication?.cancelSignIn() }
     func disconnectAccount() async throws {
         try await controller.disconnect()
         // Also load a saved credential when sign-out precedes this run's first request.
@@ -60,6 +85,9 @@ struct GoogleSyncSettingsView: View {
     @ObservedObject var connection: GoogleSyncConnection
     @ObservedObject var controller: GoogleSyncController
     @Environment(\.dismiss) private var dismiss
+    @State private var importPreview: ChatImportPreview?
+    @State private var exportDocument: WebJSONDocument?
+    @State private var exporting = false
     @State private var password = ""
     @State private var folderName = ""
     @State private var anchor: UIWindow?
@@ -145,6 +173,19 @@ struct GoogleSyncSettingsView: View {
                             .disabled(connection.working)
                     }
                 }
+                Section("旧iOSデータの取込み") {
+                    Button("旧Google保存を確認") {
+                        guard let anchor else { return }
+                        connection.run { importPreview = try await connection.prepareLegacyIOSImport(anchor: anchor) }
+                    }.disabled(!connection.isConfigured || anchor == nil || connection.working)
+                    Text("移行専用のGoogle認証で最新の旧保存を読み取ります。元ファイルは変更しません。旧アプリと同じGoogleアプリ設定からアクセスできる必要があります。")
+                        .font(.footnote).foregroundStyle(.secondary)
+                    if let bytes = connection.legacySnapshot {
+                        Button("取得した原本を書き出す") {
+                            exportDocument = WebJSONDocument(data: bytes); exporting = true
+                        }
+                    }
+                }
                 Section {
                     Button("Googleからログアウト", role: .destructive) { connection.run { try await connection.disconnectAccount() } }
                         .disabled(connection.working || !connection.isConfigured)
@@ -153,6 +194,10 @@ struct GoogleSyncSettingsView: View {
                 }
             }
             .background(GoogleAuthenticationWindow(window: $anchor).frame(width: 0, height: 0))
+            .sheet(item: $importPreview) { preview in FileImportView(state: connection.state, preview: preview) }
+            .fileExporter(isPresented: $exporting, document: exportDocument, contentType: .data, defaultFilename: "weavelet-canvas-sync.wvlt") { result in
+                if case .failure(let error) = result { connection.errorMessage = error.localizedDescription }
+            }
             .navigationTitle("Google同期")
             .toolbar { ToolbarItem(placement: .confirmationAction) { Button("完了") { dismiss() }.disabled(connection.working) } }
             .interactiveDismissDisabled(connection.working)
@@ -179,4 +224,12 @@ private struct GoogleAuthenticationWindow: UIViewRepresentable {
         required init?(coder: NSCoder) { fatalError("init(coder:) is unavailable") }
         override func didMoveToWindow() { super.didMoveToWindow(); let value = window; DispatchQueue.main.async { self.changed(value) } }
     }
+}
+
+// Migration credentials never load or replace the normal sync Keychain item.
+final class LegacyGoogleCredentialStorage: GoogleAuthenticationStorage {
+    private var value: GoogleAuthenticationCredential?
+    func load() throws -> GoogleAuthenticationCredential? { value }
+    func save(_ credential: GoogleAuthenticationCredential) throws { value = credential }
+    func remove() throws { value = nil }
 }

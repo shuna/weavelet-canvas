@@ -130,6 +130,27 @@ actor DriveTransport: SyncDrive {
         return .array(files)
     }
 
+    // Separate authorization is supplied by the migration caller; GET only.
+    func readLegacyIOSSnapshot() async throws -> Data {
+        try Task.checkCancellation()
+        let source = try ChatImport.call("legacyGoogleSource")
+        let parameters = try source.required("parameters").object("parameters")
+        let query = try parameters.map { URLQueryItem(name: try $0.key.native("query key"), value: try $0.value.string("query value")) }
+        var page: String?, seen = Set<String>()
+        repeat {
+            try Task.checkCancellation()
+            let listing = try await json("/files", query: query + (page.map { [URLQueryItem(name: "pageToken", value: $0)] } ?? []))
+            let id = try ChatImport.call("legacyGoogleFile", fields: [.init(key: "data", value: listing)])
+            if id != .null {
+                try Task.checkCancellation()
+                return try await read(id.string("legacy file ID"))
+            }
+            page = try listing["nextPageToken"].map { try $0.string("pageToken") }
+            if let page { guard !page.isEmpty, seen.insert(page).inserted else { throw DriveTransportError.invalidResponse } }
+        } while page != nil
+        throw DriveTransportError.notFound
+    }
+
     func call(_ method: String, args: [OrderedJSON]) async throws -> OrderedJSON {
         switch method {
         case "ids":

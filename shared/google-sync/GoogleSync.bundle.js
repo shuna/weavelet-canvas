@@ -15850,6 +15850,30 @@ ${JSON.stringify(input.length === 1 ? input[0] : input)}`;
     recordType: "WeaveletSnapshot",
     snapshotVersion: 1
   };
+  var LEGACY_IOS_GOOGLE_SOURCE = {
+    filename: "weavelet-canvas-sync.wvlt",
+    scope: "https://www.googleapis.com/auth/drive.appdata",
+    parameters: {
+      q: "name='weavelet-canvas-sync.wvlt' and trashed=false",
+      spaces: "appDataFolder",
+      orderBy: "modifiedTime desc",
+      pageSize: "1",
+      fields: "nextPageToken,incompleteSearch,files(id,name)"
+    }
+  };
+  function legacyIOSGoogleFile(result3) {
+    if (!result3 || typeof result3 !== "object" || Array.isArray(result3))
+      throw new Error("Invalid legacy Google listing.");
+    const listing = result3;
+    if (listing.incompleteSearch !== void 0 && listing.incompleteSearch !== false || !Array.isArray(listing.files))
+      throw new Error("Incomplete legacy Google listing.");
+    if (!listing.files.length)
+      return null;
+    const file = listing.files[0];
+    if (!file || typeof file.id !== "string" || !file.id || file.name !== LEGACY_IOS_GOOGLE_SOURCE.filename)
+      throw new Error("Invalid legacy Google file.");
+    return file.id;
+  }
 
   // shared/google-sync/importDefaults.generated.json
   var importDefaults_generated_default = {
@@ -17919,6 +17943,10 @@ ${JSON.stringify(input.length === 1 ? input[0] : input)}`;
     const input = JSON.parse(json);
     if (input.operation === "legacyCloudKitSource")
       return JSON.stringify(LEGACY_IOS_CLOUDKIT_SOURCE);
+    if (input.operation === "legacyGoogleSource")
+      return JSON.stringify(LEGACY_IOS_GOOGLE_SOURCE);
+    if (input.operation === "legacyGoogleFile")
+      return JSON.stringify(legacyIOSGoogleFile(input.data));
     if (input.operation === "container")
       return JSON.stringify(inspectLegacySnapshotContainer(input.header, input.totalLength));
     const t2 = (key, opts) => String(input.messages?.[key] ?? opts?.defaultValue ?? key).replace(/\{\{(\w+)\}\}/g, (_23, name) => String(opts?.[name] ?? ""));

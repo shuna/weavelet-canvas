@@ -132,7 +132,7 @@
     "src/utils/submitContext.ts": "12fc43ead2afc57ce27c3fc290fb95b5774349cc6b12a81ec496f55313e48210",
     "src/utils/legacyIOSImport.ts": "921b398270cc0b3115591efe0186934ebcfbfe7e2c344f969fb1327b86655c6e",
     "src/utils/legacySnapshotContainer.ts": "1f30df5135dabbd1cbf20918f6547fe1cf33dd0cda58d49575c41cc965de2de0",
-    "src/utils/legacyIOSSync.ts": "42066c05dc48f6d8450ef494fa20a8b06dc62d4c511749f47aed19610aa30703",
+    "src/utils/legacyIOSSync.ts": "85829f9c3be69b1601ba01650d0a86d303a88bd7bf010fd9c0032ba5bab67e45",
     "src/utils/import.ts": "7e83785e8d924e81fcf0d07cab444041e70e92e2ab822c35e929adc2dff2f746",
     "src/utils/fileImport.ts": "c90e38a679529f27a944296bbeee02e9c562ab354b4a98c27ae6392b05a83e87",
     "src/utils/fileImportProjection.ts": "41f36d09865a475d81b0929f1302e351e8ab6999b54b5fad015eea2fbe3d7fc2",
@@ -238,7 +238,7 @@
     "shared/google-sync/title.ts": "b253de2539e4ac1e071d4013ef772186678be3084cb0359cc872a3e39a2dea51",
     "src/utils/legacyIOSImport.ts": "921b398270cc0b3115591efe0186934ebcfbfe7e2c344f969fb1327b86655c6e",
     "src/utils/legacySnapshotContainer.ts": "1f30df5135dabbd1cbf20918f6547fe1cf33dd0cda58d49575c41cc965de2de0",
-    "src/utils/legacyIOSSync.ts": "42066c05dc48f6d8450ef494fa20a8b06dc62d4c511749f47aed19610aa30703",
+    "src/utils/legacyIOSSync.ts": "85829f9c3be69b1601ba01650d0a86d303a88bd7bf010fd9c0032ba5bab67e45",
     "shared/google-sync/importDefaults.generated.json": "2c2d78eba4c11ff5348beb24332cdeb018428fdf9d56bab5aaba1cae1848495a",
     "src/store/version.ts": "c1ce6b0ecd6bd3a6fd71d6e862e940486bf61c3e2c7cda6bdab9650ae75715f4",
     "src/store/storage/prepareSave.ts": "99e7f268013eabd2edb3686014a3e56b68e5f2e449f30108c376191878ce436f",
@@ -248,7 +248,7 @@
     "src/utils/systemPromptNormalize.ts": "587d8e8fa9728f63a29f059a1f5d85f4dd1bae960d1fc5aa6469405efc0340fb",
     "src/utils/fileImport.ts": "c90e38a679529f27a944296bbeee02e9c562ab354b4a98c27ae6392b05a83e87",
     "src/utils/fileImportProjection.ts": "41f36d09865a475d81b0929f1302e351e8ab6999b54b5fad015eea2fbe3d7fc2",
-    "shared/google-sync/fileImport.ts": "cfbd9ef0e31dde468c3b4db923c95b2505be12f69b9ad960e4da23dd1601d9ce",
+    "shared/google-sync/fileImport.ts": "115f0c32a45cc91247fd1751419e87d51530729f06a45fcb59584c82f3ea3f14",
     "src/utils/generationPlan.ts": "d238a5492c4d8411f81cd970e2525abcd72d445d70e39509dfcb64779d18d7be",
     "src/utils/streamStatus.ts": "4d094e43924c46be34bd35758a2da65981773db7a305b23d5a4f29c1f623cfe2",
     "shared/google-sync/generationPlan.ts": "e1d001de06cb2faf1a9974d5a780aae4ddd5d355d338bfbfe6e8f5c2b182bfd3",
@@ -412,5 +412,5 @@
     "remove-accents/package.json": "511775b39122274ad36e9dc32c47b2112a3fd4372e64284c2336b143be853c82",
     "remove-accents/LICENSE": "31279697ad2455927a227e7678f2bb71e9e06dde319f12ce345404b3b7a99b81"
   },
-  "bundleSHA256": "9fafef819c397589ab92ecaf562631b740795d5ed4b578e795dc9bd9d47e06a3"
+  "bundleSHA256": "5ba4a0ece1d9dbfd062ab8cc0c42c5accb981c4fd5fe4f8c451d7569cf1cca3e"
 }
