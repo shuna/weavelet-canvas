@@ -75,7 +75,7 @@ const getCloudSyncTarget = (): CloudSyncTarget | null => {
   };
 };
 
-const cloudKitSessionGuard = (target: CloudSyncTarget) => {
+export const cloudKitSessionGuard = (target: CloudSyncTarget) => {
   const initial = useCloudAuthStore.getState().providers.cloudkit;
   const { connectionId, sessionToken } = initial;
   const valid = sessionToken === target.accessToken;

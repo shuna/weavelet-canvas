@@ -1,3 +1,6 @@
+import { prepareImportPreview } from '@components/ImportExportChat/importService';
+import { useImportPreviewSession } from '@components/ImportExportChat/LocalFilePreview';
+import { fetchLegacyIOSCloudKitFile, downloadLegacyIOSCloudKitFile, assertLegacyIOSCloudKitPreview, type LegacyIOSCloudKitFile } from '@utils/legacyIOSCloudKit';
 import { applyExternalSnapshot } from '@store/storage/applyExternalSnapshot';
 import SyncDots from './SyncDots';
 import React, { useEffect, useRef, useState } from 'react';
@@ -73,7 +76,7 @@ const normalizeRemoteStorageValue = (
 };
 
 const CloudKitSync = () => {
-  const { t } = useTranslation(['cloudkit']);
+  const { t } = useTranslation(['cloudkit', 'import']);
 
   const provider = useCloudAuthStore((s) => s.provider);
   const cloudSync = useCloudAuthStore((s) => s.cloudSync);
@@ -88,6 +91,51 @@ const CloudKitSync = () => {
 
   const [busy, setBusy] = useState(false);
   const popupRef = useRef<Window | null>(null);
+  const [legacyFile, setLegacyFile] = useState<LegacyIOSCloudKitFile | null>(null);
+  const [legacyBusy, setLegacyBusy] = useState(false);
+  const [legacyError, setLegacyError] = useState('');
+  const legacyPending = useRef(false);
+  const mounted = useRef(true);
+  useEffect(() => {
+    mounted.current = true;
+    return () => { mounted.current = false; };
+  }, []);
+
+  const handleLegacyRead = async () => {
+    if (busy || legacyPending.current) return;
+    legacyPending.current = true;
+    setLegacyBusy(true); setLegacyError(''); setLegacyFile(null);
+    try {
+      const snapshot = await fetchLegacyIOSCloudKitFile(() => mounted.current);
+      if (mounted.current) {
+        setLegacyFile(snapshot);
+        if (!snapshot) setLegacyError(String(t('legacyIOS.notFound', '旧iOSデータが見つかりませんでした。')));
+      }
+    } catch (error) {
+      if (mounted.current) setLegacyError(error instanceof Error ? error.message : String(error));
+    } finally {
+      legacyPending.current = false;
+      if (mounted.current) setLegacyBusy(false);
+    }
+  };
+
+  const handleLegacyPreview = async () => {
+    if (!legacyFile || busy || legacyPending.current) return;
+    legacyPending.current = true;
+    setLegacyBusy(true); setLegacyError('');
+    try {
+      assertLegacyIOSCloudKitPreview(legacyFile);
+      const source = await prepareImportPreview(legacyFile.file, (key, options) => String(t(key, options as any)));
+      if (!mounted.current) return;
+      assertLegacyIOSCloudKitPreview(legacyFile);
+      useImportPreviewSession.setState({ source, fileName: legacyFile.file.name });
+    } catch (error) {
+      if (mounted.current) setLegacyError(error instanceof Error ? error.message : String(error));
+    } finally {
+      legacyPending.current = false;
+      if (mounted.current) setLegacyBusy(false);
+    }
+  };
 
   const config = getCloudKitConfig();
 
@@ -314,17 +362,17 @@ const CloudKitSync = () => {
 
       <div className='flex flex-wrap gap-1.5'>
         {!isConnected && !needsReconnect && (
-          <button type='button' className={compactBtnPrimary} onClick={handleConnect} disabled={busy}>
+          <button type='button' className={compactBtnPrimary} onClick={handleConnect} disabled={busy || legacyBusy}>
             {busy ? t('status.authenticating') : t('button.connect')}
           </button>
         )}
 
         {needsReconnect && (
           <>
-            <button type='button' className={compactBtnPrimary} onClick={handleConnect} disabled={busy}>
+            <button type='button' className={compactBtnPrimary} onClick={handleConnect} disabled={busy || legacyBusy}>
               {busy ? t('status.authenticating') : t('button.connect')}
             </button>
-            <button type='button' className={compactBtnNeutral} onClick={handleDisconnect} disabled={busy}>
+            <button type='button' className={compactBtnNeutral} onClick={handleDisconnect} disabled={busy || legacyBusy}>
               {t('button.disconnect')}
             </button>
           </>
@@ -332,18 +380,37 @@ const CloudKitSync = () => {
 
         {isConnected && (
           <>
-            <button type='button' className={compactBtnPrimary} onClick={handlePull} disabled={busy}>
+            <button type='button' className={compactBtnPrimary} onClick={handlePull} disabled={busy || legacyBusy}>
               {t('button.pull')}
             </button>
-            <button type='button' className={compactBtnPrimary} onClick={handlePush} disabled={busy}>
+            <button type='button' className={compactBtnPrimary} onClick={handlePush} disabled={busy || legacyBusy}>
               {t('button.push')}
             </button>
-            <button type='button' className={compactBtnNeutral} onClick={handleDisconnect} disabled={busy}>
+            <button type='button' className={compactBtnNeutral} onClick={handleDisconnect} disabled={busy || legacyBusy}>
               {t('button.disconnect')}
             </button>
           </>
         )}
       </div>
+      {isConnected && <details className='border-t border-gray-200 pt-1.5 text-xs dark:border-gray-700'>
+        <summary className='cursor-pointer'>{t('legacyIOS.title', '旧iOSデータの取り込み')}</summary>
+        <div className='mt-1.5 flex flex-wrap gap-1.5'>
+          <button type='button' className={compactBtnNeutral} onClick={handleLegacyRead} disabled={busy || legacyBusy}>
+            {t('legacyIOS.fetch', '旧iOSデータを取得')}
+          </button>
+          {legacyFile && <>
+            <button type='button' className={compactBtnNeutral} disabled={busy || legacyBusy} onClick={() => {
+              try { downloadLegacyIOSCloudKitFile(legacyFile); }
+              catch (error) { setLegacyError(error instanceof Error ? error.message : String(error)); }
+            }}>{t('legacyIOS.download', '原本を保存')}</button>
+            <button type='button' className={compactBtnNeutral} onClick={handleLegacyPreview} disabled={busy || legacyBusy}>
+              {t('legacyIOS.preview', '内容を確認')}
+            </button>
+          </>}
+        </div>
+        {legacyFile && <p className='mt-1'>{legacyFile.file.name}</p>}
+        {legacyError && <p className='mt-1 whitespace-pre-wrap text-red-600' role='alert'>{legacyError}</p>}
+      </details>}
     </div>
   );
 };
