@@ -8496,6 +8496,7 @@ var WeaveletGoogleSync = (() => {
     localGenerationOutput: () => localGenerationOutput,
     localModelFiles: () => localModelFiles,
     localModelImport: () => localModelImport,
+    localModelRegistry: () => localModelRegistry,
     localModelRole: () => localModelRole,
     messageAttributesOperation: () => messageAttributesOperation,
     messageDisplayIndexes: () => messageDisplayIndexes,
@@ -28325,6 +28326,41 @@ ${text}`;
     if (input.operation === "catalogCommit")
       return JSON.stringify({ changes: diffJSONChanges(before, commitLocalModel(before, input.model, input.existingIDs)) });
     return JSON.stringify({ changes: diffJSONChanges(before, commitSingleGGUFImport(before, input.model, input.existingIDs)) });
+  }
+
+  // src/utils/localModelRegistry.ts
+  function registeredModelID(model) {
+    if (model && typeof model === "object" && "id" in model)
+      return model.id;
+    return void 0;
+  }
+  function removeRegisteredLocalModel(state3, id) {
+    const localModels = state3.localModels.filter(
+      (model) => registeredModelID(model) !== id
+    );
+    const activeLocalModels = { ...state3.activeLocalModels };
+    for (const task of Object.keys(activeLocalModels)) {
+      if (activeLocalModels[task] === id)
+        delete activeLocalModels[task];
+    }
+    const { [id]: _23, ...savedModelMeta } = state3.savedModelMeta;
+    return {
+      localModels,
+      activeLocalModels,
+      favoriteLocalModelIds: state3.favoriteLocalModelIds.filter((favoriteID) => favoriteID !== id),
+      savedModelMeta
+    };
+  }
+  function toggleRegisteredLocalModelFavorite(state3, id) {
+    const favoriteLocalModelIds = state3.favoriteLocalModelIds.includes(id) ? state3.favoriteLocalModelIds.filter((favoriteID) => favoriteID !== id) : [...state3.favoriteLocalModelIds, id];
+    return { ...state3, favoriteLocalModelIds };
+  }
+
+  // shared/google-sync/localModelRegistry.ts
+  function localModelRegistry(json) {
+    const input = JSON.parse(json);
+    const next = input.operation === "remove" ? removeRegisteredLocalModel(input.state, input.id) : toggleRegisteredLocalModelFavorite(input.state, input.id);
+    return JSON.stringify({ changes: diffJSONChanges(input.state, next) });
   }
 
   // src/local-llm/ggufShardUtils.ts

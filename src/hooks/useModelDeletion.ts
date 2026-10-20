@@ -2,7 +2,6 @@ import { useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
 import useStore from '@store/store';
 import { removeAssets } from '@src/local-llm/assetRemoval';
-import { ASSIGNABLE_TASKS } from '@src/components/SettingsMenu/localModelConstants';
 
 export interface DeleteModelOpts {
   /** Abort controller map — will abort + clean up if an active download exists */
@@ -31,16 +30,8 @@ export function useModelDeletion() {
     const removal = await removeAssets(modelId);
     if (removal.status !== 'removed') return false;
 
-    // Clear task assignments pointing to this model
     const store = useStore.getState();
-    for (const task of ASSIGNABLE_TASKS) {
-      if (store.activeLocalModels[task] === modelId) {
-        store.setActiveLocalModel(task, null);
-      }
-    }
-
     // Runtime and OPFS are stopped/removed before store metadata changes.
-    store.removeSavedModelMeta(modelId);
     store.removeLocalModel(modelId);
 
     opts?.onDeleted?.();

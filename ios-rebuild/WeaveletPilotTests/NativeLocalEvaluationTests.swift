@@ -24,6 +24,22 @@ final class NativeLocalEvaluationTests: XCTestCase {
     private func state() throws -> OrderedJSON {
         try json(#"{"localModelEnabled":true,"activeLocalModels":{"analysis":"analysis-model"},"localModels":[{"id":"analysis-model","engine":"wllama","tasks":["analysis","quality"],"manifest":{"kind":"single-file","entrypoint":"fake.gguf"}}],"xLarge":9007199254740993}"#)
     }
+    private func registrySnapshot() throws -> OrderedJSON {
+        let root = URL(fileURLWithPath:#filePath).deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
+        let corpus = try OrderedJSON.decode(Data(contentsOf:root.appendingPathComponent("tests/fixtures/web-native/io-corpus.json")))
+        let additions = try json(#"{"localModelEnabled":true,"localModels":[{"id":"remove","engine":"wllama","tasks":["generation"],"manifest":{"kind":"single-file","entrypoint":"remove.gguf"}},{"id":"keep","engine":"wllama","tasks":["analysis"],"manifest":{"kind":"single-file","entrypoint":"keep.gguf"},"xModel":9007199254740993}],"activeLocalModels":{"generation":"remove","analysis":"keep","xRaw":9007199254740993},"favoriteLocalModelIds":["keep"],"savedModelMeta":{"remove":{"storedBytes":10},"keep":{"opaque":true}}}"#)
+        var roots = try corpus.required("syncSnapshot").required("state")
+        for field in try additions.object("registry roots") { roots = roots.replacing(field.key,with:field.value) }
+        return try corpus.required("syncSnapshot").replacing("state",with:roots)
+    }
+    private func registryState(_ store: LocalStateStore) throws -> ChatState {
+        let root = URL(fileURLWithPath:#filePath).deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
+        let corpus = try OrderedJSON.decode(Data(contentsOf:root.appendingPathComponent("tests/fixtures/web-native/io-corpus.json")))
+        let app = ChatState(store:store)
+        try app.importWebData(corpus.required("exportV3").encoded())
+        try app.applySnapshot(registrySnapshot())
+        return app
+    }
 
     func testSharedRoleSettingsPreserveMetadataAndRestart() throws {
         let directory = FileManager.default.temporaryDirectory.appendingPathComponent("local-role-\(UUID())")
@@ -181,6 +197,98 @@ final class NativeLocalEvaluationTests: XCTestCase {
         XCTAssertThrowsError(try app.saveLocalModelRole(task:"analysis",modelID:"replacement"))
         XCTAssertEqual(try app.publicationSnapshot(),before)
         XCTAssertEqual(try Data(contentsOf:store.fileURL),disk)
+    }
+
+    func testLocalModelRegistrySaveFailureKeepsStateDiskAndStagedAsset() async throws {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent("local-model-registry-failure-\(UUID())")
+        defer { try? FileManager.default.removeItem(at:directory) }
+        var reject = false
+        let store = LocalStateStore(fileURL:directory.appendingPathComponent("state.json"),write:{ bytes,url in
+            if reject { throw CocoaError(.fileWriteNoPermission) }
+            try bytes.write(to:url,options:.atomic)
+        })
+        let app = try registryState(store)
+        let source = directory.appendingPathComponent("remove.gguf")
+        try Data("GGUF registry failure".utf8).write(to:source)
+        try app.localModelFiles.install(source,modelID:"remove")
+        let target = try XCTUnwrap(app.localModelDefinitions().first { $0["id"] == .string("remove") })
+        let before = try app.publicationSnapshot(), disk = try Data(contentsOf:store.fileURL)
+
+        reject = true
+        XCTAssertThrowsError(try app.toggleLocalModelFavorite(target))
+        do { try await app.removeLocalModel(target); XCTFail("save should fail") } catch { }
+
+        XCTAssertEqual(try app.publicationSnapshot(),before)
+        XCTAssertEqual(try Data(contentsOf:store.fileURL),disk)
+        XCTAssertEqual(try Data(contentsOf:app.localModelFiles.installed(modelID:"remove")),Data("GGUF registry failure".utf8))
+
+        reject = false
+        try app.toggleLocalModelFavorite(target)
+        try await app.removeLocalModel(target)
+        XCTAssertThrowsError(try app.localModelFiles.installed(modelID:"remove"))
+        XCTAssertNil(try app.publicationSnapshot().required("state")["savedModelMeta"]?["remove"])
+    }
+
+    func testLocalModelRegistryRemovalPreservesOtherRootsAcrossRestartAndRecords() async throws {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent("local-model-registry-success-\(UUID())")
+        defer { try? FileManager.default.removeItem(at:directory) }
+        let store = LocalStateStore(fileURL:directory.appendingPathComponent("state.json")), app = try registryState(store)
+        let source = directory.appendingPathComponent("remove.gguf")
+        try Data("GGUF registry success".utf8).write(to:source)
+        try app.localModelFiles.install(source,modelID:"remove")
+        let target = try XCTUnwrap(app.localModelDefinitions().first { $0["id"] == .string("remove") })
+        let before = try app.publicationSnapshot(), beforeRoots = try before.required("state")
+
+        try app.toggleLocalModelFavorite(target)
+        XCTAssertEqual(try app.publicationSnapshot().required("state").required("favoriteLocalModelIds"),.array([.string("keep"),.string("remove")]))
+        try await app.removeLocalModel(target)
+
+        let after = try app.publicationSnapshot(), updated = try after.required("state")
+        XCTAssertEqual(try updated.required("localModels").array("models").count,1)
+        XCTAssertEqual(updated["activeLocalModels"]?["analysis"],.string("keep"))
+        XCTAssertEqual(updated["activeLocalModels"]?["xRaw"],.number("9007199254740993"))
+        XCTAssertNil(updated["activeLocalModels"]?["generation"])
+        XCTAssertEqual(updated["favoriteLocalModelIds"],.array([.string("keep")]))
+        XCTAssertNil(updated["savedModelMeta"]?["remove"])
+        XCTAssertEqual(updated["savedModelMeta"]?["keep"]?["opaque"],.bool(true))
+        XCTAssertEqual(try updated.required("localModels").array("models")[0]["xModel"],.number("9007199254740993"))
+        let registryRoots = Set(["localModels","activeLocalModels","favoriteLocalModelIds","savedModelMeta"])
+        for field in try beforeRoots.object("baseline roots") where !registryRoots.contains(field.key.text) {
+            XCTAssertEqual(updated[field.key],field.value,field.key.text)
+        }
+        XCTAssertThrowsError(try app.localModelFiles.installed(modelID:"remove"))
+        XCTAssertEqual(try ChatState(store:store).publicationSnapshot(),after)
+        let records = try SyncRecords.toRecords(after)
+        let received = try SyncRecords.fromRecords(records).required("state")
+        for key in registryRoots {
+            XCTAssertEqual(try SyncRecords.canonical(received[key] ?? .null),try SyncRecords.canonical(updated[key] ?? .null),key)
+        }
+    }
+
+    func testLocalModelRegistryRestartRecoversStagedRemovalByRegistration() throws {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent("local-model-registry-recovery-\(UUID())")
+        defer { try? FileManager.default.removeItem(at:directory) }
+        let store = LocalStateStore(fileURL:directory.appendingPathComponent("state.json")), app = try registryState(store)
+        let source = directory.appendingPathComponent("remove.gguf"), bytes = Data("GGUF registry recovery".utf8)
+        try bytes.write(to:source); try app.localModelFiles.install(source,modelID:"remove")
+
+        _ = try app.localModelFiles.stageModelRemoval(modelID:"remove")
+        let restored = ChatState(store:store)
+        XCTAssertEqual(try Data(contentsOf:restored.localModelFiles.installed(modelID:"remove")),bytes)
+
+        let snapshot = try restored.publicationSnapshot(), roots = try snapshot.required("state")
+        let remainingModels = try roots.required("localModels").array("models").filter { $0["id"] != .string("remove") }
+        let remainingActive = try roots.required("activeLocalModels").object("active").filter { $0.value != .string("remove") }
+        let remainingFavorites = try roots.required("favoriteLocalModelIds").array("favorites").filter { $0 != .string("remove") }
+        let remainingMetadata = try roots.required("savedModelMeta").object("metadata").filter { !$0.key.matches("remove") }
+        let unregistered = roots.replacing("localModels",with:.array(remainingModels))
+            .replacing("activeLocalModels",with:.object(remainingActive))
+            .replacing("favoriteLocalModelIds",with:.array(remainingFavorites))
+            .replacing("savedModelMeta",with:.object(remainingMetadata))
+        try restored.applySnapshot(snapshot.replacing("state",with:unregistered))
+        _ = try restored.localModelFiles.stageModelRemoval(modelID:"remove")
+        let committed = ChatState(store:store)
+        XCTAssertThrowsError(try committed.localModelFiles.installed(modelID:"remove"))
     }
 
     func testModelSelectionRequiresMetadataAndInstalledSingleGGUF() throws {

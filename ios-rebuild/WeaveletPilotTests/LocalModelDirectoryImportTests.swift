@@ -118,7 +118,7 @@ import XCTest
         XCTAssertEqual(try Data(contentsOf:store.fileURL),disk)
         staged.discard(); try noPending(state)
     }
-    func testGenerationStartedAfterStagePreventsPublication() throws {
+    func testGenerationStartedAfterStagePreventsPublication() async throws {
         let (root,store,state,model) = try fixture(), original = try originalTarget(root,state,model)
         let staged = try stage(source(root,"replacement"),state,model)
         defer { staged.discard() }
@@ -135,9 +135,19 @@ import XCTest
         XCTAssertNotNil(state.generation)
         let snapshot = try state.publicationSnapshot().encoded(), disk = try Data(contentsOf:store.fileURL)
         XCTAssertThrowsError(try state.publishModelDirectory(staged,model:model))
+        do { try await state.removeLocalModel(model); XCTFail("generation must prevent removal") } catch { }
+        do { try await state.replaceLocalModelFile(gguf,modelID:"busy-gguf"); XCTFail("generation must prevent replacement") } catch { }
+        XCTAssertNotNil(state.generation)
         XCTAssertEqual(try targetBytes(state,model),original)
         XCTAssertEqual(try state.publicationSnapshot().encoded(),snapshot)
         XCTAssertEqual(try Data(contentsOf:store.fileURL),disk)
+        try state.toggleLocalModelFavorite(model)
+        XCTAssertNotNil(state.generation)
+        let favoriteState = try state.publicationSnapshot().required("state")
+        XCTAssertEqual(favoriteState["favoriteLocalModelIds"],.array([try model.required("id")]))
+        for field in try OrderedJSON.decode(snapshot).required("state").object("state") where !field.key.matches("favoriteLocalModelIds") {
+            XCTAssertEqual(favoriteState[field.key],field.value,field.key.text)
+        }
         staged.discard(); try noPending(state)
     }
 }

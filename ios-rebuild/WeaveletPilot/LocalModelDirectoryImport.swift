@@ -7,6 +7,7 @@ extension ChatState {
             throw ExchangeError.invalid("生成・評価の終了後にモデルフォルダーを選択してください")
         }
         let id = try model.required("id").string("model id")
+        try requireLocalModelAssetAccess(id:id)
         let matches = try localModelDefinitions().filter { definition in
             (try? definition.required("id").string("id"))?.utf8.elementsEqual(id.utf8) == true
         }

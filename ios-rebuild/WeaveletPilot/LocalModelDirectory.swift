@@ -31,6 +31,22 @@ extension LocalModelFiles {
         }
         deinit { discard() }
     }
+    fileprivate struct ModelRemovalRecord {
+        let id: String
+        let quarantine: String
+        let entries: [String]
+    }
+    enum ModelRemovalRecoveryError: Error {
+        case incompleteRollback
+    }
+    final class ModelRemoval {
+        private let owner: LocalModelFiles
+        fileprivate let record: ModelRemovalRecord?
+        fileprivate init(owner: LocalModelFiles, record: ModelRemovalRecord?) { self.owner = owner; self.record = record }
+        // Deliberately no deinit cleanup: the journal decides recovery after an interrupted save.
+        func rollback() throws { if let record { try owner.rollbackModelRemoval(record) } }
+        func commit() throws { if let record { try owner.commitModelRemoval(record) } }
+    }
     final class DownloadCache {
         let url: URL
         private let cacheParent: Int32
@@ -163,6 +179,77 @@ extension LocalModelFiles {
         try url(modelID:modelID).deletingPathExtension()
     }
 
+    func stageModelRemoval(modelID: String) throws -> ModelRemoval {
+        Self.directoryLock.lock(); defer { Self.directoryLock.unlock() }
+        let models = try removalModelsDirectory(create:true)
+        defer { close(models) }
+        let entries = try removalEntries(modelID:modelID,models:models)
+        guard !entries.isEmpty else { return ModelRemoval(owner:self,record:nil) }
+        let quarantines = try ModelDirectoryAccess.openOrCreateDirectory(".model-removals",from:models)
+        defer { close(quarantines) }
+        let name = UUID().uuidString.lowercased()
+        guard mkdirat(quarantines,name,0o700) == 0 else { throw modelFilePOSIXError() }
+        let quarantine = openat(quarantines,name,O_RDONLY | O_DIRECTORY | O_NOFOLLOW)
+        guard quarantine >= 0 else {
+            _ = unlinkat(quarantines,name,AT_REMOVEDIR)
+            throw modelFilePOSIXError()
+        }
+        defer { close(quarantine) }
+        let record = ModelRemovalRecord(id:modelID,quarantine:name,entries:entries)
+        var records = try removalRecords(models)
+        records.append(record)
+        do { try saveRemovalRecords(records,models:models) }
+        catch {
+            _ = unlinkat(quarantines,name,AT_REMOVEDIR)
+            throw error
+        }
+        do {
+            for entry in entries {
+                guard renameat(models,entry,quarantine,entry) == 0 else { throw modelFilePOSIXError() }
+            }
+        } catch {
+            let original = error
+            var restored = true
+            for entry in entries.reversed() {
+                do {
+                    let source = try removalExists(entry,in:quarantine)
+                    let target = try removalExists(entry,in:models)
+                    guard !(source && target), source || target else { restored = false; continue }
+                    if source { guard renameat(quarantine,entry,models,entry) == 0 else { restored = false; continue } }
+                } catch { restored = false }
+            }
+            if restored {
+                do {
+                    guard unlinkat(quarantines,name,AT_REMOVEDIR) == 0 else { throw modelFilePOSIXError() }
+                    try removeRemovalRecord(record,models:models)
+                } catch {
+                    // The byte rollback completed, but leave the journal for idempotent cleanup.
+                    throw ModelRemovalRecoveryError.incompleteRollback
+                }
+            }
+            // The journal remains authoritative until recovery has restored every entry.
+            if restored { throw original }
+            throw ModelRemovalRecoveryError.incompleteRollback
+        }
+        return ModelRemoval(owner:self,record:record)
+    }
+
+    func recoverModelRemovals(registeredIDs: [String]) throws {
+        Self.directoryLock.lock(); defer { Self.directoryLock.unlock() }
+        var info = stat()
+        if lstat(directory.path,&info) != 0 {
+            if errno == ENOENT { return }
+            throw modelFilePOSIXError()
+        }
+        let models = try removalModelsDirectory(create:false)
+        defer { close(models) }
+        let registered = Set(registeredIDs.map { Data($0.utf8) })
+        for record in try removalRecords(models) {
+            if registered.contains(Data(record.id.utf8)) { try rollbackModelRemoval(record,models:models) }
+            else { try commitModelRemoval(record,models:models) }
+        }
+    }
+
     func openDownloadCache(name: String) throws -> DownloadCache {
         try ModelDirectoryAccess.validatePaths([name])
         guard !name.contains("/") else { throw ExchangeError.invalid("モデルキャッシュ名が不正です") }
@@ -183,6 +270,189 @@ extension LocalModelFiles {
         }
         close(models)
         return DownloadCache(url:directory.appendingPathComponent(".catalog-cache").appendingPathComponent(name).appendingPathComponent("parts"),cacheParent:cacheParent,root:root,parts:parts,name:name)
+    }
+
+    private func removalModelsDirectory(create: Bool) throws -> Int32 {
+        if create { try FileManager.default.createDirectory(at:directory,withIntermediateDirectories:true) }
+        let descriptor = open(directory.path,O_RDONLY | O_DIRECTORY | O_NOFOLLOW)
+        guard descriptor >= 0 else { throw modelFilePOSIXError() }
+        return descriptor
+    }
+    private func removalEntryNames(modelID: String) throws -> [String] {
+        let names = [try url(modelID:modelID).lastPathComponent, try directoryURL(modelID:modelID).lastPathComponent]
+        guard names[0] != names[1] else { throw ExchangeError.invalid("モデルの削除先が不正です") }
+        try ModelDirectoryAccess.validatePaths(names)
+        return names
+    }
+    private func removalEntries(modelID: String, models: Int32) throws -> [String] {
+        let names = try removalEntryNames(modelID:modelID)
+        var result: [String] = []
+        for (index,name) in names.enumerated() {
+            var info = stat()
+            if fstatat(models,name,&info,AT_SYMLINK_NOFOLLOW) != 0 {
+                if errno == ENOENT { continue }
+                throw modelFilePOSIXError()
+            }
+            let expected = index == 0 ? S_IFREG : S_IFDIR
+            guard info.st_mode & S_IFMT == expected else { throw ExchangeError.invalid("モデル資産の形式が不正です") }
+            result.append(name)
+        }
+        return result
+    }
+    private func removalExists(_ name: String, in directory: Int32) throws -> Bool {
+        var info = stat()
+        if fstatat(directory,name,&info,AT_SYMLINK_NOFOLLOW) == 0 { return true }
+        if errno == ENOENT { return false }
+        throw modelFilePOSIXError()
+    }
+    private func removalRecords(_ models: Int32) throws -> [ModelRemovalRecord] {
+        let descriptor = openat(models,".model-removals-journal.json",O_RDONLY | O_NOFOLLOW)
+        if descriptor < 0 {
+            if errno == ENOENT { return [] }
+            throw modelFilePOSIXError()
+        }
+        let file = FileHandle(fileDescriptor:descriptor,closeOnDealloc:true)
+        defer { try? file.close() }
+        var info = stat()
+        guard fstat(descriptor,&info) == 0, info.st_mode & S_IFMT == S_IFREG, info.st_size <= 1024 * 1024,
+              let data = try file.readToEnd(), data.count == Int(info.st_size) else {
+            throw ExchangeError.invalid("モデル削除記録が不正です")
+        }
+        let root = try OrderedJSON.decode(data)
+        guard root["version"] == .number("1") else { throw ExchangeError.invalid("モデル削除記録の形式が不正です") }
+        return try root.required("records").array("removal records").map { row in
+            let id = try row.required("id").string("model id")
+            let quarantine = try row.required("quarantine").string("quarantine")
+            let entries = try row.required("entries").array("entries").map { try $0.string("entry") }
+            let expected = try removalEntryNames(modelID:id)
+            let entryBytes = Set(entries.map { Data($0.utf8) })
+            try ModelDirectoryAccess.validatePaths([quarantine] + entries)
+            guard UUID(uuidString:quarantine)?.uuidString.lowercased() == quarantine,
+                  !entries.isEmpty, entryBytes.count == entries.count,
+                  entries.allSatisfy({ entry in expected.contains { Data($0.utf8) == Data(entry.utf8) } }) else {
+                throw ExchangeError.invalid("モデル削除記録の形式が不正です")
+            }
+            return .init(id:id,quarantine:quarantine,entries:entries)
+        }
+    }
+    private func saveRemovalRecords(_ records: [ModelRemovalRecord], models: Int32) throws {
+        let bytes = try OrderedJSON.object([
+            .init(key:"version",value:.number("1")),.init(key:"records",value:.array(records.map { record in
+                .object([.init(key:"id",value:.string(record.id)),.init(key:"quarantine",value:.string(record.quarantine)),.init(key:"entries",value:.array(record.entries.map(OrderedJSON.string)))])
+            }))
+        ]).encoded()
+        let temporary = ".model-removals-\(UUID().uuidString).part"
+        let descriptor = openat(models,temporary,O_WRONLY | O_CREAT | O_EXCL | O_NOFOLLOW,0o600)
+        guard descriptor >= 0 else { throw modelFilePOSIXError() }
+        var saved = false
+        defer { if !saved { _ = unlinkat(models,temporary,0) } }
+        let file = FileHandle(fileDescriptor:descriptor,closeOnDealloc:true)
+        defer { try? file.close() }
+        try file.write(contentsOf:bytes); try file.synchronize()
+        guard renameat(models,temporary,models,".model-removals-journal.json") == 0 else { throw modelFilePOSIXError() }
+        saved = true
+    }
+    private func removeRemovalRecord(_ record: ModelRemovalRecord, models: Int32) throws {
+        try saveRemovalRecords(try removalRecords(models).filter { $0.quarantine != record.quarantine },models:models)
+    }
+    private func removalEntryHasExpectedType(_ entry: String, record: ModelRemovalRecord, directory: Int32) throws -> Bool {
+        let names = try removalEntryNames(modelID:record.id)
+        guard let index = names.firstIndex(where: { Data($0.utf8) == Data(entry.utf8) }) else { return false }
+        var info = stat()
+        guard fstatat(directory,entry,&info,AT_SYMLINK_NOFOLLOW) == 0 else {
+            if errno == ENOENT { return false }
+            throw modelFilePOSIXError()
+        }
+        return info.st_mode & S_IFMT == (index == 0 ? S_IFREG : S_IFDIR)
+    }
+    private func removalTargetsRestored(_ record: ModelRemovalRecord, models: Int32) throws -> Bool {
+        try record.entries.allSatisfy { try removalEntryHasExpectedType($0,record:record,directory:models) }
+    }
+    private func removalTargetsAbsent(_ record: ModelRemovalRecord, models: Int32) throws -> Bool {
+        try record.entries.allSatisfy { !(try removalExists($0,in:models)) }
+    }
+    private func rollbackModelRemoval(_ record: ModelRemovalRecord) throws {
+        Self.directoryLock.lock(); defer { Self.directoryLock.unlock() }
+        let models = try removalModelsDirectory(create:false)
+        defer { close(models) }
+        try rollbackModelRemoval(record,models:models)
+    }
+    private func rollbackModelRemoval(_ record: ModelRemovalRecord, models: Int32) throws {
+        let quarantines: Int32
+        do { quarantines = try ModelDirectoryAccess.descriptor(".model-removals",from:models,directory:true) }
+        catch let error as POSIXError where error.code == .ENOENT {
+            guard try removalTargetsRestored(record,models:models) else { throw error }
+            try removeRemovalRecord(record,models:models)
+            return
+        }
+        defer { close(quarantines) }
+        let quarantine: Int32
+        do { quarantine = try ModelDirectoryAccess.descriptor(record.quarantine,from:quarantines,directory:true) }
+        catch let error as POSIXError where error.code == .ENOENT {
+            guard try removalTargetsRestored(record,models:models) else { throw error }
+            try removeRemovalRecord(record,models:models)
+            return
+        }
+        defer { close(quarantine) }
+        for entry in record.entries {
+            let source = try removalExists(entry,in:quarantine), target = try removalExists(entry,in:models)
+            guard !(source && target), source || target else { throw ExchangeError.invalid("削除したモデル資産が見つかりません") }
+            if source {
+                guard try removalEntryHasExpectedType(entry,record:record,directory:quarantine) else {
+                    throw ExchangeError.invalid("削除したモデル資産の形式が不正です")
+                }
+            } else {
+                guard try removalEntryHasExpectedType(entry,record:record,directory:models) else {
+                    throw ExchangeError.invalid("削除したモデル資産の形式が不正です")
+                }
+            }
+        }
+        for entry in record.entries where try removalExists(entry,in:quarantine) {
+            guard renameat(quarantine,entry,models,entry) == 0 else { throw modelFilePOSIXError() }
+        }
+        guard unlinkat(quarantines,record.quarantine,AT_REMOVEDIR) == 0 else { throw modelFilePOSIXError() }
+        try removeRemovalRecord(record,models:models)
+    }
+    private func commitModelRemoval(_ record: ModelRemovalRecord) throws {
+        Self.directoryLock.lock(); defer { Self.directoryLock.unlock() }
+        let models = try removalModelsDirectory(create:false)
+        defer { close(models) }
+        try commitModelRemoval(record,models:models)
+    }
+    private func commitModelRemoval(_ record: ModelRemovalRecord, models: Int32) throws {
+        let quarantines: Int32
+        do { quarantines = try ModelDirectoryAccess.descriptor(".model-removals",from:models,directory:true) }
+        catch let error as POSIXError where error.code == .ENOENT {
+            guard try removalTargetsAbsent(record,models:models) else { throw error }
+            try removeRemovalRecord(record,models:models)
+            return
+        }
+        defer { close(quarantines) }
+        let quarantine: Int32
+        do { quarantine = try ModelDirectoryAccess.descriptor(record.quarantine,from:quarantines,directory:true) }
+        catch let error as POSIXError where error.code == .ENOENT {
+            guard try removalTargetsAbsent(record,models:models) else { throw error }
+            try removeRemovalRecord(record,models:models)
+            return
+        }
+        defer { close(quarantine) }
+        for entry in record.entries {
+            var info = stat()
+            if fstatat(quarantine,entry,&info,AT_SYMLINK_NOFOLLOW) != 0 {
+                if errno == ENOENT { continue }
+                throw modelFilePOSIXError()
+            }
+            if info.st_mode & S_IFMT == S_IFDIR {
+                let child = try ModelDirectoryAccess.descriptor(entry,from:quarantine,directory:true)
+                defer { close(child) }
+                try ModelDirectoryAccess.removeContents(child)
+                guard unlinkat(quarantine,entry,AT_REMOVEDIR) == 0 else { throw modelFilePOSIXError() }
+            } else if info.st_mode & S_IFMT == S_IFREG {
+                guard unlinkat(quarantine,entry,0) == 0 else { throw modelFilePOSIXError() }
+            } else { throw ExchangeError.invalid("削除したモデル資産の形式が不正です") }
+        }
+        guard unlinkat(quarantines,record.quarantine,AT_REMOVEDIR) == 0 else { throw modelFilePOSIXError() }
+        try removeRemovalRecord(record,models:models)
     }
 
     private func directoryPlan(_ model: OrderedJSON, files: [String] = []) throws -> OrderedJSON {

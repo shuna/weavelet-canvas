@@ -7,7 +7,6 @@ import {
 import { removeAssets } from '@src/local-llm/assetRemoval';
 import type { OpfsModelEntry } from '@src/local-llm/storage';
 import { formatBytes } from '@src/local-llm/device';
-import type { LocalModelTask } from '@src/local-llm/types';
 import useStore from '@store/store';
 
 // ---------------------------------------------------------------------------
@@ -79,14 +78,8 @@ const OpfsFileBrowser = ({
         setDeleteError(removal.error ?? `削除できませんでした (${removal.status})`);
         return;
       }
-      // Clean store — metadata, definition, and task assignments
+      // Clean store — metadata, definition, and task assignments.
       const store = useStore.getState();
-      for (const task of Object.keys(store.activeLocalModels) as LocalModelTask[]) {
-        if (store.activeLocalModels[task] === modelId) {
-          store.setActiveLocalModel(task, null);
-        }
-      }
-      store.removeSavedModelMeta(modelId);
       store.removeLocalModel(modelId);
       onStorageChanged?.();
       await refresh();
@@ -135,13 +128,7 @@ const OpfsFileBrowser = ({
       }
       // Keep metadata for models whose stop/remove operation was blocked.
       for (const id of removedIds) {
-        store.removeSavedModelMeta(id);
         store.removeLocalModel(id);
-      }
-      for (const task of Object.keys(store.activeLocalModels) as LocalModelTask[]) {
-        if (removedIds.includes(store.activeLocalModels[task] ?? '')) {
-          store.setActiveLocalModel(task, null);
-        }
       }
       onStorageChanged?.();
       await refresh();

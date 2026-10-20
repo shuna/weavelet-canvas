@@ -6,6 +6,7 @@ import type {
 import type { SavedModelMeta } from '@src/local-llm/storage';
 import { mutateLocalModelRole } from '@utils/localModelRole';
 import { commitLocalModel } from '@utils/localModelImport';
+import { removeRegisteredLocalModel, toggleRegisteredLocalModelFavorite } from '@utils/localModelRegistry';
 
 export interface LocalModelSlice {
   localModelEnabled: boolean;
@@ -49,16 +50,12 @@ export const createLocalModelSlice: StoreSlice<LocalModelSlice> = (set, get) => 
   },
 
   removeLocalModel: (id) => {
-    const models = get().localModels.filter((m) => m.id !== id);
-    const active = { ...get().activeLocalModels };
-    // Remove from active assignments if this model was active
-    for (const task of Object.keys(active) as LocalModelTask[]) {
-      if (active[task] === id) {
-        delete active[task];
-      }
-    }
-    const favorites = get().favoriteLocalModelIds.filter((fid) => fid !== id);
-    set({ localModels: models, activeLocalModels: active, favoriteLocalModelIds: favorites });
+    set((state) => removeRegisteredLocalModel({
+      localModels: state.localModels,
+      activeLocalModels: state.activeLocalModels,
+      favoriteLocalModelIds: state.favoriteLocalModelIds,
+      savedModelMeta: state.savedModelMeta,
+    }, id));
   },
 
   updateLocalModel: (id, patch) => {
@@ -93,12 +90,14 @@ export const createLocalModelSlice: StoreSlice<LocalModelSlice> = (set, get) => 
   },
 
   toggleFavoriteLocalModel: (id) => {
-    const current = get().favoriteLocalModelIds;
-    if (current.includes(id)) {
-      set({ favoriteLocalModelIds: current.filter((fid) => fid !== id) });
-    } else {
-      set({ favoriteLocalModelIds: [...current, id] });
-    }
+    set((state) => ({
+      favoriteLocalModelIds: toggleRegisteredLocalModelFavorite({
+        localModels: state.localModels,
+        activeLocalModels: state.activeLocalModels,
+        favoriteLocalModelIds: state.favoriteLocalModelIds,
+        savedModelMeta: state.savedModelMeta,
+      }, id).favoriteLocalModelIds,
+    }));
   },
 
   setLocalModelExecutionMode: (mode) => {

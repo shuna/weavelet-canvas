@@ -116,7 +116,8 @@
     "src/store/evaluation-slice.ts": "17ea8dac39f8f06cb02f1fbf1f6056cc96d4672256b80b42afb90f4443739ec8",
     "src/utils/localModelRole.ts": "29491f084ef6ce804a416749b115e6b63a772a735ec2d4fbea21c42e75367816",
     "src/utils/localModelImport.ts": "3999961eacdeef845226904f9f86f876b111c38670ca991e6a18dca79f23f79a",
-    "src/store/local-model-slice.ts": "b3f40cfe750505bd92b0beef0c6c72908b0b79b794f7746abe895564e195c96d",
+    "src/utils/localModelRegistry.ts": "b4f9a839dd1287d6f9b8ca41c6e459bcb5bd75709f1f4a534e838fdb86aa2a93",
+    "src/store/local-model-slice.ts": "a7e5e3dbbaca2d6cc26597e6e9fd656c16e9549d14b10674694494e49d7d1eae",
     "src/store/store.ts": "debe9137fec89588382491a3a50673ae8a0635618b10a28103c7e8c26d497176",
     "src/components/Chat/ChatContent/Message/CommandPrompt/CommandPrompt.tsx": "f263bcba31adf57b468d45903916a7dd6c9edff203b5b6a911337afd089b1535",
     "src/components/ConfigMenu/ConfigMenu.tsx": "a724082a0729eea1650afa6b6fa79176e23d6d900e84fdb5231530b85e25dced",
@@ -380,6 +381,8 @@
     "src/utils/localModelImport.ts": "3999961eacdeef845226904f9f86f876b111c38670ca991e6a18dca79f23f79a",
     "src/local-llm/catalogPlan.ts": "b667fb74381650ec9df8ed01739ed547ab78dc49f91312e562fa6a68ef880cf8",
     "shared/google-sync/localModelImport.ts": "cd0e9481a917aa64edc5fd955cb9625f327a8b9351bc6e36e2331310609a1da2",
+    "src/utils/localModelRegistry.ts": "b4f9a839dd1287d6f9b8ca41c6e459bcb5bd75709f1f4a534e838fdb86aa2a93",
+    "shared/google-sync/localModelRegistry.ts": "4d4aa70ed998addbd0a688be3957659aa470ce19fe83c07ed7b65e66c37b426c",
     "src/local-llm/ggufShardUtils.ts": "33845697477f6a02eab2bcc6ce94412ce34cea521400fe7dcac1ffb9823e6ef7",
     "src/local-llm/fileProvider.ts": "4046bf8b8036f227ee000132a829adfd95100e83826319dce5fadb840427d121",
     "shared/google-sync/localModelFiles.ts": "1dd753d43e248ef74320cebac1f305bb2dcaf8465a129bba990d0e02560a82d0",
@@ -388,7 +391,7 @@
     "src/local-llm/device.ts": "101d2cab33624f53fc116a942592c6a7c78bc510542a760d0f9b4faa29f7b87f",
     "src/local-llm/hfSearch.ts": "ad4fdcc56f84ebab9dc702977027d222d9ea6752c935a98263c878408b12139c",
     "shared/google-sync/hfSearch.ts": "591cc3cd56fe8b5156b964f74f90c83c995b09e55e90a2898a48cf713f366e1b",
-    "shared/google-sync/entry.ts": "7b057d879ebc75ad52575442d67f0b29ba1fbe048bff4fa651dcef4e700bd0aa",
+    "shared/google-sync/entry.ts": "4ff5c78754f4cdd8ca3e9a51fb6dca380774a4cb0a6f1959c74b07060921ada8",
     "shared/google-sync/generate.mjs": "3b6c9ade9f1651fad5f4dfc1cce2b7e492d9be197fc8854ded1fbc553a058982",
     "shared/google-sync/importDefaults.generate.mjs": "2ff8904af4f192ed0809ceaaabcfbefa708321083aebb527d712fc2a0551b15a"
   },
@@ -440,5 +443,5 @@
     "remove-accents/package.json": "511775b39122274ad36e9dc32c47b2112a3fd4372e64284c2336b143be853c82",
     "remove-accents/LICENSE": "31279697ad2455927a227e7678f2bb71e9e06dde319f12ce345404b3b7a99b81"
   },
-  "bundleSHA256": "8090ce5765832eb4cdb83feb9618a76b4935bb5f81300972faf14034a364b4b4"
+  "bundleSHA256": "4465d6ec487a4ddd220443bb7eb9fe0e64391a302f770755e688ccbec06f13de"
 }

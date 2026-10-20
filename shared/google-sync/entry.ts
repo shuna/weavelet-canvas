@@ -239,6 +239,7 @@ export { evaluation } from './evaluation';
 export { localModelRole } from './localModelRole';
 
 export { localModelImport } from './localModelImport';
+export { localModelRegistry } from './localModelRegistry';
 
 export { localModelFiles } from './localModelFiles';
 

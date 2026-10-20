@@ -400,6 +400,7 @@ final class ChatState: ObservableObject {
     private var catalogDownloadTasks: [Data: UUID] = [:]
     private var catalogDownloadEpochs: [Data: UUID] = [:]
     private var catalogShardCaches: Set<Data> = []
+    @Published private(set) var modelAssetRecoveryError: String?
     private var catalogResumeData: [Data: Data] = [:]
     private var catalogResumePlans: [Data: (url: String, revision: String)] = [:]
     private var catalogInstallations: Set<Data> = []
@@ -560,6 +561,11 @@ final class ChatState: ObservableObject {
                 exchange = saved.exchange
                 document = saved.document
                 branchCandidates = candidates
+                do { try localModelFiles.recoverModelRemovals(registeredIDs:localModelDefinitions().compactMap { try? $0.required("id").string("model ID") }) }
+                catch {
+                    modelAssetRecoveryError = error.localizedDescription
+                    persistenceError = "モデル削除の復旧を完了できませんでした。残存ファイルは保持しています。\n" + error.localizedDescription
+                }
             }
         } catch { initialLoadFailed = true; persistenceError = "保存した会話を復元できませんでした。保存ファイルは変更していません。\n" + error.localizedDescription }
     }
@@ -1666,7 +1672,7 @@ final class ChatState: ObservableObject {
         }
         let id = try plan.required("model").required("id").string("model ID")
         let key = Data(id.utf8)
-        guard catalogDownloadTasks[key] == nil, !catalogInstallations.contains(key) else { throw ExchangeError.invalid("このモデルの取得・取消処理が終了してから再試行してください") }
+        try requireLocalModelAssetAccess(id:id)
         let roots = try syncInputSnapshot().required("state")
         let model = try plan.required("model")
         let modelID = try model.required("id").string("catalog model ID")
@@ -2026,6 +2032,113 @@ final class ChatState: ObservableObject {
         }
     }
 
+    func requireLocalModelAssetAccess(id: String) throws {
+        guard modelAssetRecoveryError == nil else { throw ExchangeError.invalid("モデル削除の復旧を完了してからファイルを変更してください") }
+        let key = Data(id.utf8)
+        guard catalogDownloadTasks[key] == nil, !catalogInstallations.contains(key) else {
+            throw ExchangeError.invalid("このモデルのファイル処理が終了してから操作してください")
+        }
+    }
+
+    private func localModelRegistryChange(_ operation: String, id: String, in roots: OrderedJSON) throws -> OrderedJSON {
+        var boundary = SharedWebProjection()
+        let models = try (roots["localModels"] ?? .array([])).array("local models").map { model in
+            OrderedJSON.object(try model.object("model").map { field in
+                let stringID = field.key.matches("id") && (try? field.value.stringKey("id")) != nil
+                return JSONField(key:field.key,value:stringID ? field.value : try boundary.reference(field.value))
+            })
+        }
+        let active = try (roots["activeLocalModels"] ?? .object([])).object("active models").map { field in
+            JSONField(key:field.key,value:(try? field.value.stringKey("model ID")) != nil || field.value == .null ? field.value : try boundary.reference(field.value))
+        }
+        let favorites = try (roots["favoriteLocalModelIds"] ?? .array([])).array("favorites").map { value in
+            (try? value.stringKey("model ID")) != nil ? value : try boundary.reference(value)
+        }
+        let metadata = try (roots["savedModelMeta"] ?? .object([])).object("model metadata").map { field in
+            JSONField(key:field.key,value:try boundary.reference(field.value))
+        }
+        let state = OrderedJSON.object([
+            .init(key:"localModels",value:.array(models)),.init(key:"activeLocalModels",value:.object(active)),
+            .init(key:"favoriteLocalModelIds",value:.array(favorites)),.init(key:"savedModelMeta",value:.object(metadata))
+        ])
+        let result = try SharedWebOperations.call("localModelRegistry",.object([
+            .init(key:"operation",value:.string(operation)),.init(key:"id",value:.string(id)),.init(key:"state",value:state)
+        ]))
+        let base = operation == "favorite" && roots["favoriteLocalModelIds"] == nil ? roots.replacing("favoriteLocalModelIds",with:.array([])) : roots
+        return try OrderedJSONChanges.apply(result.required("changes"),to:base,opaque:boundary.opaque)
+    }
+
+    func toggleLocalModelFavorite(_ model: OrderedJSON) throws {
+        let id = try model.required("id").string("model ID")
+        try requireLocalModelAssetAccess(id:id)
+        let roots = try publicationSnapshot().required("state")
+        guard try localModelDefinitions().contains(where:{ try $0.encoded() == model.encoded() }) else {
+            throw ExchangeError.invalid("モデル定義が変更されました。もう一度選択してください")
+        }
+        let updated = try localModelRegistryChange("favorite",id:id,in:roots)
+        try saveLayoutSetting("favoriteLocalModelIds",value:updated.required("favoriteLocalModelIds"))
+    }
+
+    @MainActor func removeLocalModel(_ model: OrderedJSON) async throws {
+        let id = try model.required("id").string("model ID"), key = Data(id.utf8)
+        try requireLocalModelAssetAccess(id:id)
+        guard !hasGenerations, !evaluationJobs.values.contains(where:{ $0.busy }) else {
+            throw ExchangeError.invalid("生成・評価の終了後にモデルを削除してください")
+        }
+        let original = try syncInputSnapshot().required("state")
+        guard try localModelDefinitions().filter({ $0["id"] == .string(id) }).count == 1,
+              try localModelDefinitions().contains(where:{ try $0.encoded() == model.encoded() }) else {
+            throw ExchangeError.invalid("モデル定義が変更されました。もう一度選択してください")
+        }
+        catalogInstallations.insert(key)
+        defer { catalogInstallations.remove(key) }
+        let files = localModelFiles
+        let staged: LocalModelFiles.ModelRemoval
+        do { staged = try await Task.detached { try files.stageModelRemoval(modelID:id) }.value }
+        catch let error as LocalModelFiles.ModelRemovalRecoveryError {
+            modelAssetRecoveryError = error.localizedDescription
+            throw ExchangeError.invalid("ファイルの復旧を完了できなかったため、残存ファイルを保持しています。再起動して復旧を再試行してください。")
+        }
+        do {
+            try Task.checkCancellation()
+            let current = try syncInputSnapshot().required("state")
+            guard !hasGenerations, !evaluationJobs.values.contains(where:{ $0.busy }) else {
+                throw ExchangeError.invalid("生成・評価の終了後にモデルを削除してください")
+            }
+            for field in ["localModels","activeLocalModels","favoriteLocalModelIds","savedModelMeta"] {
+                guard current[field] == original[field] else { throw ExchangeError.invalid("モデル設定が変更されました。もう一度選択してください") }
+            }
+            try applyGlobalState(localModelRegistryChange("remove",id:id,in:current))
+        } catch {
+            let failure = error
+            do { try await Task.detached { try staged.rollback() }.value }
+            catch {
+                modelAssetRecoveryError = error.localizedDescription
+                throw ExchangeError.invalid("モデル設定は変更していません。ファイルの復旧を完了できなかったため、残存ファイルを保持しています。再起動して復旧を再試行してください。\n" + error.localizedDescription)
+            }
+            throw failure
+        }
+        // Registry removal is durable before reclaiming bytes. An interrupted cleanup is replayed at startup.
+        do { try await Task.detached { try staged.commit() }.value }
+        catch {
+            modelAssetRecoveryError = error.localizedDescription
+            throw ExchangeError.invalid("モデル定義の削除は保存済みですが、ファイルの削除を完了できませんでした。再起動して残りの削除を再試行してください。\n" + error.localizedDescription)
+        }
+        catalogDownloads.removeValue(forKey:key); catalogResumeData.removeValue(forKey:key); catalogResumePlans.removeValue(forKey:key)
+        try? catalogResumeStore.save(catalogResumeRecords())
+    }
+
+    @MainActor func replaceLocalModelFile(_ source: URL, modelID: String) async throws {
+        try requireLocalModelAssetAccess(id:modelID)
+        guard !hasGenerations, !evaluationJobs.values.contains(where:{ $0.busy }) else {
+            throw ExchangeError.invalid("生成・評価の終了後にモデルを選択してください")
+        }
+        let key = Data(modelID.utf8), files = localModelFiles
+        catalogInstallations.insert(key)
+        defer { catalogInstallations.remove(key) }
+        try await Task.detached { try files.install(source,modelID:modelID) }.value
+    }
+
     func saveLocalModelRole(task: String? = nil, modelID: String? = nil, enabled: Bool? = nil) throws {
         guard !hasGenerations else { throw ExchangeError.invalid("生成結果を保存してからモデル設定を変更してください") }
         let roots = try syncInputSnapshot().required("state")
@@ -2070,6 +2183,10 @@ final class ChatState: ObservableObject {
             .init(key:"candidates",value:.array(candidates.map(\.value))),.init(key:"existingIDs",value:.array(ids.map(OrderedJSON.string))) ]))
         let proposed = try prepared.required("model")
         let modelID = try proposed.required("id").string("model ID")
+        try requireLocalModelAssetAccess(id:modelID)
+        let reservation = Data(modelID.utf8)
+        catalogInstallations.insert(reservation)
+        defer { catalogInstallations.remove(reservation) }
         let existing = prepared["existing"] == .bool(true)
         let selected = candidates.first { $0.id.utf8.elementsEqual(modelID.utf8) }
         let model: OrderedJSON

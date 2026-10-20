@@ -249,4 +249,61 @@ import CryptoKit
         XCTAssertEqual(try Data(contentsOf:cache.url.appendingPathComponent("nested/model.gguf")),Data("GGUFdownload".utf8))
         XCTAssertEqual(try Data(contentsOf:outside.appendingPathComponent("kept.gguf")),Data("GGUFoutside".utf8))
     }
+    func testModelRemovalStagesBothAssetsThenRollsBackOrCommits() throws {
+        let (root,files) = try setup(), id = "remove/é", metadata = model(id)
+        let gguf = root.appendingPathComponent("remove.gguf")
+        try Data("GGUFremove".utf8).write(to:gguf)
+        try files.install(gguf,modelID:id)
+        try install(try source(root),files,metadata)
+
+        let staged = try files.stageModelRemoval(modelID:id)
+        XCTAssertThrowsError(try files.installed(modelID:id))
+        XCTAssertFalse(try files.directoryIsPresent(modelID:id))
+        try staged.rollback()
+        XCTAssertEqual(try Data(contentsOf:files.installed(modelID:id)),Data("GGUFremove".utf8))
+        XCTAssertTrue(try files.directoryIsPresent(modelID:id))
+
+        let committed = try files.stageModelRemoval(modelID:id)
+        try committed.commit()
+        XCTAssertThrowsError(try files.installed(modelID:id))
+        XCTAssertFalse(try files.directoryIsPresent(modelID:id))
+    }
+    func testModelRemovalRecoveryRespectsRegistrationAndNeverOverwritesNewGeneration() throws {
+        let (root,files) = try setup(), id = "recover/model"
+        let first = root.appendingPathComponent("first.gguf")
+        try Data("GGUFfirst".utf8).write(to:first)
+        try files.install(first,modelID:id)
+        _ = try files.stageModelRemoval(modelID:id)
+        try files.recoverModelRemovals(registeredIDs:[id])
+        XCTAssertEqual(try Data(contentsOf:files.installed(modelID:id)),Data("GGUFfirst".utf8))
+
+        _ = try files.stageModelRemoval(modelID:id)
+        try files.recoverModelRemovals(registeredIDs:[])
+        XCTAssertThrowsError(try files.installed(modelID:id))
+
+        try files.install(first,modelID:id)
+        let stale = try files.stageModelRemoval(modelID:id)
+        let replacement = try files.url(modelID:id)
+        try Data("GGUFnew".utf8).write(to:replacement)
+        XCTAssertThrowsError(try stale.rollback())
+        XCTAssertEqual(try Data(contentsOf:replacement),Data("GGUFnew".utf8))
+        XCTAssertTrue(FileManager.default.fileExists(atPath:files.directory.appendingPathComponent(".model-removals-journal.json").path))
+    }
+    func testModelRemovalRecoveryClearsCompletedRollbackJournalWithoutDeletingRestoredAsset() throws {
+        let (root,files) = try setup(), id = "recover/completed"
+        let first = root.appendingPathComponent("first.gguf")
+        try Data("GGUFfirst".utf8).write(to:first)
+        try files.install(first,modelID:id)
+        _ = try files.stageModelRemoval(modelID:id)
+
+        let quarantines = files.directory.appendingPathComponent(".model-removals")
+        let quarantine = try XCTUnwrap(try FileManager.default.contentsOfDirectory(at:quarantines,includingPropertiesForKeys:nil).first)
+        let target = try files.url(modelID:id)
+        try FileManager.default.moveItem(at:quarantine.appendingPathComponent(target.lastPathComponent),to:target)
+        try FileManager.default.removeItem(at:quarantine)
+
+        try files.recoverModelRemovals(registeredIDs:[id])
+        try files.recoverModelRemovals(registeredIDs:[])
+        XCTAssertEqual(try Data(contentsOf:files.installed(modelID:id)),Data("GGUFfirst".utf8))
+    }
 }

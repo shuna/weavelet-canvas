@@ -1,5 +1,17 @@
 # Web / 新iOSの完成条件と証拠
 
+## 保存済みモデルの削除とお気に入り（2026-10-21）
+
+Web storeと削除の実callerから、定義・全用途割当・お気に入り・保存metadataの更新をlocalModelRegistryへ切り出し、Web/nativeが同じ処理を使う。Webは既存removeAssetsの成功後だけ一回のstore更新へ進み、callerの重複更新を撤去した。nativeはIDのみを公開し、他model属性・metadata・不明値をopaque参照にする。お気に入りは既存の単一root保存経路で更新し、生成・評価・要約を取り消さない。
+
+native削除は同IDの単一GGUFとdirectoryをdescriptor相対のquarantineへ退避し、journalを先に保存する。登録情報の保存失敗・取消・stale時は復元し、保存成功後だけbytesを削除する。起動時は実保存stateに登録が残るかでrollback/commitを判断する。部分move・部分削除・復元後のjournal保存失敗も再実行でき、新世代衝突や形式不正は削除せず復旧待ちにする。journalはUUID quarantineとID由来の資産名だけを受理し、symlinkを追わない。復旧失敗時は資産変更を拒否し再起動時に再試行する。同IDの取得・import・置換と予約を共用する。保存後のcleanup失敗は、登録削除が保存済みであることと残ファイルの復旧待ちを区別する。会話と他設定は削除しない。未登録cache/.part管理UIは次群に残す。
+
+Web関連13件（registry3/role3/import7）が成功。未使用引数を除いた後はregistry3件だけ再確認し、型・最終Vite build・bundle生成/鮮度も成功。Catalyst機能群27件が成功した。その後追加した生成中接続確認では、favoriteがsyncInputSnapshotの同期用busy guardに拒否されることを検出した。初回失敗と2回の原因切分けは成功へ含めない。読取をpublicationSnapshotへ直し、期待値を緩めず影響4件のみ再実行して成功した。固有27件の成功であり、最終ソースで全27件を一括再実行したという意味ではない。全項目corpusで非対象全rootのraw保持、4registry rootsのrecords canonical、保存失敗時snapshot/disk/退避asset保持とretry、実ChatState再起動のrollback/commitを確認した。held-generationでは削除・置換拒否後のstate/disk/assets不変と、favoriteだけ更新して既存生成を保持することを確認する。未変更の保存・暗号化同期基盤は、既存の全項目I/O・Web/native暗号化wire成功結果を再利用する。ログは/private/tmp/weavelet-model-registry-{web,web-final,types,web-build-final,native,native-final,generation,generation-diagnostic,generation-diagnostic2}.log。
+
+独立Astraの非同期API実行境界P2を受け、remove/replaceをMainActorへ修正した。最終journal・投影・同ID排他・復旧の監査は新規P1/P2なし。後続のfavorite読取変更と生成保持testの限定再監査も新規なし。隔離Catalyst実UIでお気に入り追加の表示・保存、削除確認と取消後の定義保持を確認した。実削除は一時領域の自動testで確認し、UIでは実行していない。終了後process不在、fixture state/built Infoのbyte一致復元を確認した。iPhone照会/導入、push/main統合は行っていない。
+
+先の任意skipだった実五軸評価も、固定済み公式stories260K.ggufをTEST_RUNNER_WEAVELET_REAL_GGUFで渡しCatalystで1件成功（skipなし、/private/tmp/weavelet-real-quality-five-axes.log）。実engineによる共有5軸prompt実行・15回進捗・有限0..1の5scoreを確認した。小型モデルの品質精度やfallbackなしを保証する結果ではない。実cloud接続、大容量Range/resume・OS中断、全UI/OS/性能の最終受入は引き続き未完了。
+
 
 ## Web共有フォルダー同期とnativeファイル接続（2026-10-13）
 

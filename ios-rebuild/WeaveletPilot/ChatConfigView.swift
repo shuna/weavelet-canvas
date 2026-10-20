@@ -10,6 +10,8 @@ struct LocalModelSettingsView: View {
     @State private var copying = false
     @State private var errorMessage: String?
     @State private var fileStatus: String?
+    @State private var pendingRemoval: OrderedJSON?
+    @State private var removing = false
     @State private var catalog: [OrderedJSON] = []
     @State private var catalogLoaded = false
     @StateObject private var hfSearch = HfModelSearch()
@@ -77,7 +79,14 @@ struct LocalModelSettingsView: View {
                     ForEach(models.indices,id:\.self) { index in
                         let model = models[index]
                         VStack(alignment:.leading,spacing:8) {
-                            Text(name(model)).font(.subheadline.weight(.semibold))
+                            HStack {
+                                Text(name(model)).font(.subheadline.weight(.semibold))
+                                Spacer()
+                                let favorite = (try? state.publicationSnapshot()["state"]?["favoriteLocalModelIds"]?.array("favorites"))?.contains(model["id"] ?? .null) == true
+                                Button(favorite ? "お気に入りから解除" : "お気に入りに追加",systemImage:favorite ? "star.fill" : "star") {
+                                    save { try state.toggleLocalModelFavorite(model) }
+                                }.labelStyle(.iconOnly).buttonStyle(.borderless).frame(minWidth:44,minHeight:44)
+                            }
                             if let id = try? model["id"]?.string("id") {
                                 Text(id).font(.caption).foregroundStyle(.secondary).textSelection(.enabled)
                                 if singleGGUF(model) {
@@ -96,6 +105,8 @@ struct LocalModelSettingsView: View {
                                     Text("この形式の端末内実行は未対応です。定義は保持します。")
                                         .font(.footnote).foregroundStyle(.secondary)
                                 }
+                                Button("モデルを削除",role:.destructive) { pendingRemoval = model }
+                                    .buttonStyle(.borderless).frame(minHeight:44)
                             }
                         }
                     }
@@ -103,12 +114,32 @@ struct LocalModelSettingsView: View {
             case .failure(let error): Text(error.localizedDescription).foregroundStyle(.red)
             }
             if copying { ProgressView("ファイルを保存中…") }
+            if removing { ProgressView("モデルを削除中…") }
+            if state.modelAssetRecoveryError != nil {
+                Text("モデルファイルの復旧待ちです。再起動して復旧を再試行してください。")
+                    .font(.footnote).foregroundStyle(.red)
+            }
             if let fileStatus { Text(fileStatus).font(.footnote) }
             if let errorMessage { Text(errorMessage).foregroundStyle(.red) }
             }
-            .disabled(copying || state.hasGenerations || state.evaluationJobs.values.contains { $0.busy })
+            .disabled(copying || removing || state.hasGenerations || state.evaluationJobs.values.contains { $0.busy })
             hfSearchSection
             catalogSection
+        }
+        .confirmationDialog("モデルを削除しますか？",isPresented:Binding(get:{pendingRemoval != nil},set:{if !$0 {pendingRemoval = nil}}),titleVisibility:.visible) {
+            if let model = pendingRemoval {
+                Button("モデルを削除",role:.destructive) {
+                    pendingRemoval = nil; removing = true; errorMessage = nil; fileStatus = nil
+                    Task { @MainActor in
+                        defer { removing = false }
+                        do { try await state.removeLocalModel(model); fileStatus = "モデルを削除しました" }
+                        catch { errorMessage = error.localizedDescription }
+                    }
+                }
+            }
+            Button("取消",role:.cancel) { pendingRemoval = nil }
+        } message: {
+            Text("この端末のモデルファイルと、モデル定義・役割の割り当て・お気に入りを削除します。会話は保持します。")
         }
         .navigationTitle("ローカルモデル")
         .navigationBarTitleDisplayMode(.inline)
@@ -120,7 +151,7 @@ struct LocalModelSettingsView: View {
         .fileImporter(isPresented:$showsImporter,allowedContentTypes:importingDirectoryModel == nil ? [UTType(filenameExtension:"gguf") ?? .data] : [.folder]) { result in
             do {
                 let source = try result.get()
-                let modelID = importingModelID, model = importingDirectoryModel, files = state.localModelFiles
+                let modelID = importingModelID, model = importingDirectoryModel
                 copying = true; errorMessage = nil; fileStatus = nil
                 importTask = Task { @MainActor in
                     defer { copying = false; importTask = nil }
@@ -129,7 +160,7 @@ struct LocalModelSettingsView: View {
                             let importedID = try await state.importModelDirectory(source,model:model)
                             fileStatus = "モデルフォルダーを保存しました（" + importedID + "）"
                         } else if let modelID {
-                            try await Task.detached { try files.install(source,modelID:modelID) }.value
+                            try await state.replaceLocalModelFile(source,modelID:modelID)
                             fileStatus = "ファイルを保存しました（" + modelID + "）"
                         } else {
                             let importedID = try await state.importSingleGGUF(source)
