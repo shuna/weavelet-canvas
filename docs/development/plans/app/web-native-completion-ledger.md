@@ -1,6 +1,17 @@
 # Web / 新iOSの完成条件と証拠
 
 
+## 単一・分割モデル取得後の共有重複採用（2026-10-21）
+
+前群で確認した実Webの取得後処理に合わせ、native分割downloadも共有selectionDuplicateへ全必須file順の全量SHA/容量を渡し、別IDの完全一致モデルを再利用する。単一downloadで既に使っていたcatalogDuplicateCommitのopaque投影をprivate helperへ移し、両経路が同じ共有関数を使う。採用先metadata/定義の未知属性は保持し、取得元IDの定義/役割/favorite/metadataの処理は共有規則へ委譲する。新規の単一・分割metadataには既存Web互換fingerprintを保存し、全量SHAはコピー/照合に使い分ける。候補の全file revision、定義・実行状態、job tokenをawait後に確認し、採用先IDを既存予約へ加える。
+
+取得元IDの旧file/directoryは既存ModelRemovalで退避し、fresh stateの保存後にだけ削除する。保存失敗/取消/staleは復元する。独立Astraが、取得元IDが元から未登録の場合、従来の「未登録=削除保存済み」という起動時判定では保存前中断の旧orphan bytesまで削除するP2を指摘した。既存v1 journalにoptional rollbackOnRecoveryを追加し、この採用だけ退避時に復元方針、commit最初のunlink前に削除方針、rollback最初のrename前に復元方針を原子的に保存する。項目がない旧記録は従来の登録判定を維持する。設定保存後・削除方針保存前に終了した場合は旧取得元資産を安全側へ復元する（採用設定は保存済み、旧資産は未登録の余剰file）。採用先資産は変更しない。方針保存失敗時は退避bytesを保持し、新世代のlive資産を上書き/削除せずに後始末を再開できる。アプリ外部schema/同期wire/暗号は変更しない。
+
+Catalyst初回LocalGenerationTests16件成功、失敗なし。P2修正後はfilesystem33件と影響generation4件の37件成功、失敗なし。未変更generation12件は初回成功を再利用し、固有49件の成功とする（最終単一runで49件成功とはしない）。新接続testは全項目I/O corpusから、採用先metadata/非対象全root保持、取得元の旧単一file＋不完全directoryの保存失敗rollback、検証済みcacheをnetwork再取得せずretry、実採用ID返却、再起動/records canonical往復を確認する。先頭が同じ・後続shardが異なる場合は別モデルとして双方のbytesを保持する。既存単一duplicate testも実取得元assetを用意して削除を確認するよう強化した。filesystemには未登録資産の保存前復元、部分/完了cleanup後の再開、新世代保持、方針保存失敗の3件を追加。test期待値訂正・失敗runはなし。独立Astraの限定再監査はP2解消、新規P1/P2なし。ログ/private/tmp/weavelet-download-duplicate-native{,-final}.log。
+
+共有元/Web codeは前群から未変更で、関連28件・型/Vite成功を再利用し、bundle鮮度/diff checkを確認した。変更しない保存/暗号化同期は既存全項目I/O・実Web/native暗号化wire成功を再利用する。新UIはなくCatalyst自動接続で確認し、同じ表示の再操作は省略した。単一は従来の全量scanを置換し、64MiB超でsample分の最大2MiB読取を追加する。分割の通常登録は既存配置検証前に全量scan1回と対象候補の全量scanが増えるが、duplicate時はdirectoryコピーを省く。大容量実測・実Range/OS中断・実cloud・全UI/AX/性能は未完了。iPhone照会/導入、push/main統合は行っていない。
+
+
 ## モデル保存領域の管理とカタログ重複照合（2026-10-21）
 
 実WebのOpfsFileBrowserから、登録済み/未登録モデル一覧、容量、全体削除、未完了fileのbody→marker削除順序を確認した。fileRemovalPathsを既存localModelRegistryへ抽出し、Web実callerとnativeが共有する。nativeはモデルfile/directory、取得cache、旧/新形式の一時stageを区別して表示し、登録済み全体削除は既存共有registry更新へ、未登録/cache/部分削除はファイル境界へ接続した。hash basenameをmodel IDとして扱わない。部分削除は登録情報・会話を変更せず、全体一括削除は成功分だけ反映し、同一登録のfile/directoryは重複処理しない。Web一覧読取失敗は既存行/容量を保持してエラー表示する。

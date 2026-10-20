@@ -305,6 +305,102 @@ private final class CatalogDownloadProtocol: URLProtocol {
         XCTAssertEqual(try SyncRecords.canonical(SyncRecords.toRecords(SyncRecords.fromRecords(records))),try SyncRecords.canonical(records))
     }
 
+    func testShardedDownloadAdoptsCompleteDuplicateAndRollsBackOwnAssetsOnSaveFailure() async throws {
+        let base = try store(), gate = LocalSaveGate()
+        let library = LocalStateStore(fileURL:base.fileURL) { bytes,url in
+            if gate.reject { throw CocoaError(.fileWriteNoPermission) }
+            try bytes.write(to:url,options:.atomic)
+        }
+        let state = try catalogState(library), candidate = try shardedCandidate()
+        let fixtureRoot = URL(fileURLWithPath:#filePath).deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
+        try state.applySnapshot(OrderedJSON.decode(Data(contentsOf:fixtureRoot.appendingPathComponent("tests/fixtures/web-native/io-corpus.json"))).required("syncSnapshot"))
+        let input = library.fileURL.deletingLastPathComponent().appendingPathComponent("incoming")
+        try FileManager.default.createDirectory(at:input,withIntermediateDirectories:true)
+        let bytes = [Data("GGUFfirst complete".utf8),Data("GGUFsecond complete".utf8)]
+        for index in candidate.paths.indices { try bytes[index].write(to:input.appendingPathComponent(candidate.paths[index])) }
+        let duplicateID = try await state.importGGUFFiles(candidate.paths.map { input.appendingPathComponent($0) })
+        let snapshot = try state.publicationSnapshot(), roots = try snapshot.required("state")
+        let plan = try SharedWebOperations.call("hfSearchOperation",.object([
+            .init(key:"operation",value:.string("downloadPlan")),.init(key:"result",value:candidate.result),.init(key:"variant",value:candidate.variant)
+        ]))
+        let models = try roots.required("localModels").array("models") + [plan.required("model")]
+        let metadata = try roots.required("savedModelMeta").replacing(candidate.id,with:.object([.init(key:"opaque",value:.number("9007199254740993"))]))
+        let active = try roots.required("activeLocalModels").replacing("generation",with:.string(candidate.id)).replacing("analysis",with:.string(duplicateID))
+        let favorites = try roots.required("favoriteLocalModelIds").array("favorites") + [.string(candidate.id)]
+        try state.applySnapshot(snapshot.replacing("state",with:roots.replacing("localModels",with:.array(models)).replacing("activeLocalModels",with:active).replacing("favoriteLocalModelIds",with:.array(favorites)).replacing("savedModelMeta",with:metadata)))
+        // An incomplete old download must not suppress retry or be lost on failed registry save.
+        let oldDirectory = try state.localModelFiles.directoryURL(modelID:candidate.id)
+        try FileManager.default.createDirectory(at:oldDirectory,withIntermediateDirectories:true)
+        let oldFile = oldDirectory.appendingPathComponent(candidate.paths[0]), oldBytes = Data("GGUFold partial".utf8)
+        try oldBytes.write(to:oldFile)
+        let oldSingleSource = input.appendingPathComponent("old.gguf")
+        try Data("GGUFold single".utf8).write(to:oldSingleSource)
+        try state.localModelFiles.install(oldSingleSource,modelID:candidate.id)
+        let oldSingle = try state.localModelFiles.url(modelID:candidate.id)
+        let before = try state.publicationSnapshot(), disk = try Data(contentsOf:library.fileURL)
+        CatalogDownloadProtocol.handler = { request in
+            guard let index = candidate.paths.firstIndex(of:request.url?.lastPathComponent ?? "") else { throw CocoaError(.fileReadUnknown) }
+            return (200,bytes[index])
+        }
+        defer { CatalogDownloadProtocol.handler = nil }
+        gate.reject = true
+        try state.startHfModelDownload(result:candidate.result,variant:candidate.variant)
+        try await wait { state.catalogDownload(id:candidate.id)?.running == false }
+        XCTAssertNotNil(state.catalogDownload(id:candidate.id)?.error)
+        XCTAssertEqual(try state.publicationSnapshot(),before)
+        XCTAssertEqual(try Data(contentsOf:library.fileURL),disk)
+        XCTAssertEqual(try Data(contentsOf:oldFile),oldBytes)
+        XCTAssertEqual(try Data(contentsOf:oldSingle),Data("GGUFold single".utf8))
+        gate.reject = false
+        CatalogDownloadProtocol.handler = { _ in XCTFail("Verified shards must be retained after failed duplicate registration"); return (500,Data()) }
+        try state.startHfModelDownload(result:candidate.result,variant:candidate.variant)
+        try await wait { state.catalogDownload(id:candidate.id)?.running == false }
+        XCTAssertNil(state.catalogDownload(id:candidate.id)?.error)
+        XCTAssertEqual(state.catalogDownload(id:candidate.id)?.installedModelID,duplicateID)
+        let after = try state.publicationSnapshot(), updated = try after.required("state")
+        let changed = ["localModels","activeLocalModels","favoriteLocalModelIds","savedModelMeta"]
+        XCTAssertEqual(OrderedJSON.object(try updated.object("state").filter { !changed.contains($0.key.text) }),.object(try before.required("state").object("state").filter { !changed.contains($0.key.text) }))
+        XCTAssertEqual(updated["localModels"],roots["localModels"])
+        XCTAssertEqual(updated["savedModelMeta"],roots["savedModelMeta"])
+        XCTAssertEqual(updated["activeLocalModels"]?["generation"],.string(duplicateID))
+        XCTAssertEqual(updated["activeLocalModels"]?["analysis"],.string(duplicateID))
+        XCTAssertEqual(updated["favoriteLocalModelIds"],roots["favoriteLocalModelIds"])
+        XCTAssertFalse(FileManager.default.fileExists(atPath:oldDirectory.path))
+        XCTAssertFalse(FileManager.default.fileExists(atPath:oldSingle.path))
+        let adopted = try XCTUnwrap(state.localModelDefinitions().first { $0["id"] == .string(duplicateID) })
+        let entries = Dictionary(uniqueKeysWithValues:try state.localModelFiles.directoryEntries(model:adopted).map { ($0.path,$0.data) })
+        for index in candidate.paths.indices { XCTAssertEqual(entries[candidate.paths[index]],bytes[index]) }
+        XCTAssertEqual(try ChatState(store:library).publicationSnapshot(),after)
+        let records = try SyncRecords.toRecords(after)
+        XCTAssertEqual(try SyncRecords.canonical(SyncRecords.toRecords(SyncRecords.fromRecords(records))),try SyncRecords.canonical(records))
+    }
+
+    func testShardedDownloadDoesNotAdoptModelWithDifferentLaterShard() async throws {
+        let library = try store(), state = try catalogState(library), candidate = try shardedCandidate()
+        let input = library.fileURL.deletingLastPathComponent().appendingPathComponent("different-shard")
+        try FileManager.default.createDirectory(at:input,withIntermediateDirectories:true)
+        let first = Data("GGUFshared first".utf8), oldSecond = Data("GGUFsecond old".utf8), newSecond = Data("GGUFsecond new".utf8)
+        try first.write(to:input.appendingPathComponent(candidate.paths[0])); try oldSecond.write(to:input.appendingPathComponent(candidate.paths[1]))
+        let existingID = try await state.importGGUFFiles(candidate.paths.map { input.appendingPathComponent($0) })
+        let before = try state.publicationSnapshot().required("state")
+        CatalogDownloadProtocol.handler = { request in (200,request.url?.lastPathComponent == candidate.paths[0] ? first : newSecond) }
+        defer { CatalogDownloadProtocol.handler = nil }
+        try state.startHfModelDownload(result:candidate.result,variant:candidate.variant)
+        try await wait { state.catalogDownload(id:candidate.id)?.running == false }
+        XCTAssertNil(state.catalogDownload(id:candidate.id)?.error)
+        XCTAssertEqual(state.catalogDownload(id:candidate.id)?.installedModelID,candidate.id)
+        let after = try state.publicationSnapshot().required("state")
+        XCTAssertEqual(after["activeLocalModels"],before["activeLocalModels"])
+        XCTAssertEqual(after["favoriteLocalModelIds"],before["favoriteLocalModelIds"])
+        XCTAssertEqual(after["savedModelMeta"]?[existingID],before["savedModelMeta"]?[existingID])
+        let existing = try XCTUnwrap(state.localModelDefinitions().first { $0["id"] == .string(existingID) })
+        let downloaded = try XCTUnwrap(state.localModelDefinitions().first { $0["id"] == .string(candidate.id) })
+        let oldEntries = Dictionary(uniqueKeysWithValues:try state.localModelFiles.directoryEntries(model:existing).map { ($0.path,$0.data) })
+        let newEntries = Dictionary(uniqueKeysWithValues:try state.localModelFiles.directoryEntries(model:downloaded).map { ($0.path,$0.data) })
+        XCTAssertEqual(oldEntries[candidate.paths[0]],first); XCTAssertEqual(oldEntries[candidate.paths[1]],oldSecond)
+        XCTAssertEqual(newEntries[candidate.paths[0]],first); XCTAssertEqual(newEntries[candidate.paths[1]],newSecond)
+    }
+
     func testLocalGenerationConnectsShardedDefinitionToFirstFile() async throws {
         let library = try store(), candidate = try shardedCandidate()
         let requestModel = "test-local"
@@ -439,6 +535,7 @@ private final class CatalogDownloadProtocol: URLProtocol {
         let existing = try OrderedJSON.decode(Data(#"{"id":"existing-local","engine":"wllama","tasks":["generation","analysis"],"manifest":{"kind":"single-file","entrypoint":"existing.gguf"}}"#.utf8))
         let downloaded = try OrderedJSON.decode(Data(#"{"id":"smollm2-360m-instruct-q8","engine":"wllama","tasks":["generation"],"manifest":{"kind":"single-file","entrypoint":"old.gguf"}}"#.utf8))
         try state.applySnapshot(snapshot.replacing("state",with:roots.replacing("localModels",with:.array([existing,downloaded])).replacing("activeLocalModels",with:.object([.init(key:"generation",value:.string("smollm2-360m-instruct-q8"))])).replacing("favoriteLocalModelIds",with:.array([.string("smollm2-360m-instruct-q8")])).replacing("savedModelMeta",with:.object([.init(key:"smollm2-360m-instruct-q8",value:.object([.init(key:"storageState",value:.string("saved"))]))]))))
+        try state.localModelFiles.install(source,modelID:"smollm2-360m-instruct-q8")
         CatalogDownloadProtocol.handler = { _ in (200,bytes) }
         defer { CatalogDownloadProtocol.handler = nil }
         try state.startCatalogDownload(id:"smollm2-360m-instruct-q8")

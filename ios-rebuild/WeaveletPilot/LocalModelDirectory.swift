@@ -67,8 +67,9 @@ extension LocalModelFiles {
         let quarantine: String
         let entries: [String]
         let asset: AssetRemoval?
-        init(id: String, quarantine: String, entries: [String], asset: AssetRemoval? = nil) {
-            self.id = id; self.quarantine = quarantine; self.entries = entries; self.asset = asset
+        let rollbackOnRecovery: Bool?
+        init(id: String, quarantine: String, entries: [String], asset: AssetRemoval? = nil, rollbackOnRecovery: Bool? = nil) {
+            self.id = id; self.quarantine = quarantine; self.entries = entries; self.asset = asset; self.rollbackOnRecovery = rollbackOnRecovery
         }
     }
     enum ModelRemovalRecoveryError: Error {
@@ -310,7 +311,7 @@ extension LocalModelFiles {
         try url(modelID:modelID).deletingPathExtension()
     }
 
-    func stageModelRemoval(modelID: String, expectedEntry: ModelAssetInventoryEntry? = nil) throws -> ModelRemoval {
+    func stageModelRemoval(modelID: String, expectedEntry: ModelAssetInventoryEntry? = nil, rollbackOnRestart: Bool = false) throws -> ModelRemoval {
         Self.directoryLock.lock(); defer { Self.directoryLock.unlock() }
         let models = try removalModelsDirectory(create:true)
         defer { close(models) }
@@ -339,7 +340,7 @@ extension LocalModelFiles {
             throw modelFilePOSIXError()
         }
         defer { close(quarantine) }
-        let record = ModelRemovalRecord(id:modelID,quarantine:name,entries:entries)
+        let record = ModelRemovalRecord(id:modelID,quarantine:name,entries:entries,rollbackOnRecovery:rollbackOnRestart ? true : nil)
         var records = try removalRecords(models)
         records.append(record)
         do { try saveRemovalRecords(records,models:models) }
@@ -506,14 +507,14 @@ extension LocalModelFiles {
     private func markAssetStaged(_ record: ModelRemovalRecord, models: Int32) throws -> ModelRemovalRecord {
         guard let asset = record.asset else { return record }
         let staged = AssetRemoval(kind:asset.kind,key:asset.key,subset:asset.subset,staged:true,rollbackRequested:asset.rollbackRequested,snapshot:asset.snapshot,modelsIdentity:asset.modelsIdentity,parentIdentity:asset.parentIdentity)
-        let result = ModelRemovalRecord(id:record.id,quarantine:record.quarantine,entries:record.entries,asset:staged)
+        let result = ModelRemovalRecord(id:record.id,quarantine:record.quarantine,entries:record.entries,asset:staged,rollbackOnRecovery:record.rollbackOnRecovery)
         try saveRemovalRecords(try removalRecords(models).map { $0.quarantine == record.quarantine ? result : $0 },models:models)
         return result
     }
     private func markAssetRollback(_ record: ModelRemovalRecord, models: Int32) throws -> ModelRemovalRecord {
         guard let asset = record.asset else { return record }
         let rollback = AssetRemoval(kind:asset.kind,key:asset.key,subset:asset.subset,staged:asset.staged,rollbackRequested:true,snapshot:asset.snapshot,modelsIdentity:asset.modelsIdentity,parentIdentity:asset.parentIdentity)
-        let result = ModelRemovalRecord(id:record.id,quarantine:record.quarantine,entries:record.entries,asset:rollback)
+        let result = ModelRemovalRecord(id:record.id,quarantine:record.quarantine,entries:record.entries,asset:rollback,rollbackOnRecovery:record.rollbackOnRecovery)
         try saveRemovalRecords(try removalRecords(models).map { $0.quarantine == record.quarantine ? result : $0 },models:models)
         return result
     }
@@ -618,6 +619,11 @@ extension LocalModelFiles {
         defer { close(models) }
         let registered = Set(registeredIDs.map { Data($0.utf8) })
         for record in try removalRecords(models) {
+            if let rollback = record.rollbackOnRecovery {
+                if rollback { try rollbackModelRemoval(record,models:models) }
+                else { try commitModelRemoval(record,models:models) }
+                continue
+            }
             if let asset = record.asset {
                 let isModel = asset.kind == .modelFile || asset.kind == .modelDirectory
                 let names = isModel && !asset.subset ? try registeredIDs.flatMap { try removalEntryNames(modelID:$0) } : []
@@ -727,7 +733,13 @@ extension LocalModelFiles {
                 guard entries.allSatisfy({ entry in expected.contains { $0.utf8.elementsEqual(entry.utf8) } }) else { throw ExchangeError.invalid("モデル削除記録の形式が不正です") }
                 asset = nil
             }
-            return .init(id:id,quarantine:quarantine,entries:entries,asset:asset)
+            let rollbackOnRecovery: Bool?
+            switch row["rollbackOnRecovery"] {
+            case nil: rollbackOnRecovery = nil
+            case .some(.bool(let value)): rollbackOnRecovery = value
+            default: throw ExchangeError.invalid("モデル削除記録の復旧方針が不正です")
+            }
+            return .init(id:id,quarantine:quarantine,entries:entries,asset:asset,rollbackOnRecovery:rollbackOnRecovery)
         }
         guard Set(records.map(\.quarantine)).count == records.count else { throw ExchangeError.invalid("モデル削除記録が重複しています") }
         return records
@@ -736,6 +748,7 @@ extension LocalModelFiles {
         let rows = try records.map { record -> OrderedJSON in
             var fields: [JSONField] = [.init(key:"id",value:.string(record.id)),.init(key:"quarantine",value:.string(record.quarantine)),.init(key:"entries",value:.array(record.entries.map(OrderedJSON.string)))]
             if let asset = record.asset { fields.append(.init(key:"asset",value:try OrderedJSON.decode(JSONEncoder().encode(asset)))) }
+            if let rollback = record.rollbackOnRecovery { fields.append(.init(key:"rollbackOnRecovery",value:.bool(rollback))) }
             return .object(fields)
         }
         let bytes = try OrderedJSON.object([
@@ -755,6 +768,14 @@ extension LocalModelFiles {
     }
     private func removeRemovalRecord(_ record: ModelRemovalRecord, models: Int32) throws {
         try saveRemovalRecords(try removalRecords(models).filter { $0.quarantine != record.quarantine },models:models)
+    }
+    private func saveRemovalDisposition(_ record: ModelRemovalRecord, rollback: Bool, models: Int32) throws -> ModelRemovalRecord {
+        let updated = ModelRemovalRecord(id:record.id,quarantine:record.quarantine,entries:record.entries,asset:record.asset,rollbackOnRecovery:rollback)
+        var records = try removalRecords(models)
+        if let index = records.firstIndex(where:{ $0.quarantine == record.quarantine }) { records[index] = updated }
+        else { records.append(updated) }
+        try saveRemovalRecords(records,models:models)
+        return updated
     }
     private func removalEntryHasExpectedType(_ entry: String, record: ModelRemovalRecord, directory: Int32) throws -> Bool {
         let names = try removalEntryNames(modelID:record.id)
@@ -779,6 +800,7 @@ extension LocalModelFiles {
         try rollbackModelRemoval(record,models:models)
     }
     private func rollbackModelRemoval(_ record: ModelRemovalRecord, models: Int32) throws {
+        var record = record
         if record.asset != nil {
             do { try rollbackAssetRemoval(record,models:models) }
             catch { throw ModelRemovalRecoveryError.incompleteRollback }
@@ -813,6 +835,7 @@ extension LocalModelFiles {
                 }
             }
         }
+        if record.rollbackOnRecovery != nil { record = try saveRemovalDisposition(record,rollback:true,models:models) }
         for entry in record.entries where try removalExists(entry,in:quarantine) {
             guard renameatx_np(quarantine,entry,models,entry,UInt32(RENAME_EXCL)) == 0 else { throw modelFilePOSIXError() }
         }
@@ -826,11 +849,14 @@ extension LocalModelFiles {
         try commitModelRemoval(record,models:models)
     }
     private func commitModelRemoval(_ record: ModelRemovalRecord, models: Int32) throws {
+        var record = record
+        // Explicit preparation protects orphan bytes until the caller has durably saved its state.
+        if record.rollbackOnRecovery == true { record = try saveRemovalDisposition(record,rollback:false,models:models) }
         if record.asset != nil { try commitAssetRemoval(record,models:models); return }
         let quarantines: Int32
         do { quarantines = try ModelDirectoryAccess.descriptor(".model-removals",from:models,directory:true) }
         catch let error as POSIXError where error.code == .ENOENT {
-            guard try removalTargetsAbsent(record,models:models) else { throw error }
+            guard try record.rollbackOnRecovery == false || removalTargetsAbsent(record,models:models) else { throw error }
             try removeRemovalRecord(record,models:models)
             return
         }
@@ -838,7 +864,7 @@ extension LocalModelFiles {
         let quarantine: Int32
         do { quarantine = try ModelDirectoryAccess.descriptor(record.quarantine,from:quarantines,directory:true) }
         catch let error as POSIXError where error.code == .ENOENT {
-            guard try removalTargetsAbsent(record,models:models) else { throw error }
+            guard try record.rollbackOnRecovery == false || removalTargetsAbsent(record,models:models) else { throw error }
             try removeRemovalRecord(record,models:models)
             return
         }

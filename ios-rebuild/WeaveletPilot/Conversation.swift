@@ -1718,7 +1718,7 @@ final class ChatState: ObservableObject {
                 case .success(let temporary):
                     defer { try? FileManager.default.removeItem(at:temporary) }
                     do {
-                        let inspected = try await Task.detached { try self.localModelFiles.inspect(temporary) }.value
+                        let inspected = try await Task.detached { try self.localModelFiles.inspectSelectedGGUFs([temporary])[0] }.value
                         try Task.checkCancellation()
                         try await self.finishCatalogDownload(id:id,key:key,token:token,roots:roots,model:model,file:files[0],definitionRequest:definitionRequest,temporary:temporary,inspected:inspected)
                     } catch is CancellationError {
@@ -1816,43 +1816,86 @@ final class ChatState: ObservableObject {
                 self.catalogInstallations.insert(key)
                 defer { self.catalogInstallations.remove(key) }
                 let expectedHashes = Dictionary(uniqueKeysWithValues:hashes.map { (Data($0.key.text.utf8),$0.value) })
-                let staged = try await Task.detached { () -> LocalModelFiles.DirectoryStage in
-                    let inspection = try storage.inspectDirectory(cache.url,model:definition)
-                    let actualHashes = Dictionary(uniqueKeysWithValues:inspection.files.map { (Data($0.path.utf8),OrderedJSON.string($0.hash)) })
+                let currentModels = try self.localModelDefinitions()
+                let inspected = try await Task.detached { () -> (downloaded:[LocalModelFiles.SelectedGGUF], candidates:[(model:OrderedJSON, files:[LocalModelFiles.SelectedGGUF])]) in
+                    let downloaded = try storage.inspectSelectedGGUFs(paths.map { cache.url.appendingPathComponent($0) })
+                    let actualHashes = Dictionary(uniqueKeysWithValues:zip(paths,downloaded).map { (Data($0.0.utf8),OrderedJSON.string($0.1.hash)) })
                     guard actualHashes == expectedHashes else { throw ExchangeError.invalid("取得後にモデルのファイルが変更されました") }
-                    if try storage.directoryIsPresent(modelID:id) {
-                        let existing = try storage.inspectDirectory(storage.directoryURL(modelID:id),model:definition)
-                        let before = Dictionary(uniqueKeysWithValues:existing.files.map { (Data($0.path.utf8),$0.hash) })
-                        let after = Dictionary(uniqueKeysWithValues:inspection.files.map { (Data($0.path.utf8),$0.hash) })
-                        guard before == after else { throw ExchangeError.invalid("同じモデルIDの別ファイルがこの端末にあります") }
+                    let candidates = currentModels.compactMap { candidate -> (model:OrderedJSON, files:[LocalModelFiles.SelectedGGUF])? in
+                        guard candidate["engine"] == .string("wllama"), candidate["manifest"]?["kind"] == .string("gguf-sharded"),
+                              let candidateID = try? candidate.required("id").string("model ID"), !candidateID.utf8.elementsEqual(id.utf8),
+                              (try? storage.installed(model:candidate)) != nil,
+                              let declaration = try? SharedWebOperations.call("localModelFiles",.object([.init(key:"model",value:candidate)])),
+                              let candidatePaths = try? declaration.required("requiredFiles").array("files").map({ try $0.string("file") }),
+                              let root = try? storage.directoryURL(modelID:candidateID),
+                              let selected = try? storage.inspectSelectedGGUFs(candidatePaths.map { root.appendingPathComponent($0) }) else { return nil }
+                        return (candidate,selected)
                     }
-                    return try storage.stageDirectory(cache.url,model:definition,inspection:inspection)
+                    return (downloaded,candidates)
                 }.value
-                defer { staged.discard() }
                 try check()
-                let current = try self.syncInputSnapshot().required("state")
-                guard !self.hasGenerations, !self.evaluationJobs.values.contains(where:{ $0.busy }),
-                      try (current["localModels"] ?? .array([])).encoded() == (roots["localModels"] ?? .array([])).encoded(),
-                      try (current["activeLocalModels"] ?? .object([])).encoded() == (roots["activeLocalModels"] ?? .object([])).encoded() else {
-                    throw ExchangeError.invalid("モデル設定または実行状態が変更されました。もう一度取得してください")
+                try storage.checkSelectedGGUFs(inspected.downloaded)
+                let duplicateID = try SharedWebOperations.call("localModelImport",.object([
+                    .init(key:"operation",value:.string("selectionDuplicate")),
+                    .init(key:"files",value:.array(zip(paths,inspected.downloaded).map { .object([
+                        .init(key:"name",value:.string($0.0)),.init(key:"size",value:.number(String($0.1.size))),.init(key:"hash",value:.string($0.1.hash))
+                    ]) })),
+                    .init(key:"candidates",value:.array(try inspected.candidates.map { candidate in
+                        .object([.init(key:"id",value:try candidate.model.required("id")),.init(key:"engine",value:.string("wllama")),.init(key:"kind",value:.string("gguf-sharded")),
+                                 .init(key:"hashes",value:.array(candidate.files.map { .string($0.hash) })),.init(key:"size",value:.number(String(candidate.files.reduce(UInt64(0)) { $0 + $1.size })))])
+                    }))
+                ]))
+                let installedModelID: String
+                if let duplicate = inspected.candidates.first(where:{ $0.model["id"] == duplicateID }) {
+                    let duplicateDefinition = OrderedJSON.object([.init(key:"id",value:try duplicate.model.required("id")),.init(key:"tasks",value:duplicate.model["tasks"] ?? .array([]))])
+                    try await self.adoptCatalogDuplicate(downloadedID:id,duplicate:duplicateDefinition,key:key,token:token,roots:roots) {
+                        try storage.checkSelectedGGUFs(inspected.downloaded)
+                        _ = try storage.installed(model:duplicate.model)
+                        try storage.checkSelectedGGUFs(duplicate.files)
+                    }
+                    installedModelID = try duplicate.model.required("id").string("duplicate model ID")
+                } else {
+                    let staged = try await Task.detached { () -> LocalModelFiles.DirectoryStage in
+                        let inspection = try storage.inspectDirectory(cache.url,model:definition)
+                        let actualHashes = Dictionary(uniqueKeysWithValues:inspection.files.map { (Data($0.path.utf8),OrderedJSON.string($0.hash)) })
+                        guard actualHashes == expectedHashes else { throw ExchangeError.invalid("取得後にモデルのファイルが変更されました") }
+                        if try storage.directoryIsPresent(modelID:id) {
+                            let existing = try storage.inspectDirectory(storage.directoryURL(modelID:id),model:definition)
+                            let before = Dictionary(uniqueKeysWithValues:existing.files.map { (Data($0.path.utf8),$0.hash) })
+                            let after = Dictionary(uniqueKeysWithValues:inspection.files.map { (Data($0.path.utf8),$0.hash) })
+                            guard before == after else { throw ExchangeError.invalid("同じモデルIDの別ファイルがこの端末にあります") }
+                        }
+                        return try storage.stageDirectory(cache.url,model:definition,inspection:inspection)
+                    }.value
+                    defer { staged.discard() }
+                    try check()
+                    try storage.checkSelectedGGUFs(inspected.downloaded)
+                    let current = try self.syncInputSnapshot().required("state")
+                    guard !self.hasGenerations, !self.evaluationJobs.values.contains(where:{ $0.busy }),
+                          try (current["localModels"] ?? .array([])).encoded() == (roots["localModels"] ?? .array([])).encoded(),
+                          try (current["activeLocalModels"] ?? .object([])).encoded() == (roots["activeLocalModels"] ?? .object([])).encoded() else {
+                        throw ExchangeError.invalid("モデル設定または実行状態が変更されました。もう一度取得してください")
+                    }
+                    if let existing = try current["localModels"]?.array("models").first(where:{ $0["id"] == .string(id) }) {
+                        let oldPlan = try SharedWebOperations.call("localModelFiles",.object([.init(key:"model",value:existing)]))
+                        let newPlan = try SharedWebOperations.call("localModelFiles",.object([.init(key:"model",value:definition)]))
+                        guard oldPlan == newPlan else { throw ExchangeError.invalid("同じモデルIDの別の定義が登録されています") }
+                    }
+                    try storage.publishDirectory(staged,model:definition)
+                    do { try self.commitStoredLocalModel(definition,current:current,storedFiles:paths,fileHashes:zip(paths,inspected.downloaded).map { .init(key:$0.0,value:.string($0.1.fingerprint)) },bytes:total,revision:revision) }
+                    catch {
+                        try storage.rollbackDirectory(staged,model:definition)
+                        throw error
+                    }
+                    installedModelID = id
                 }
-                if let existing = try current["localModels"]?.array("models").first(where:{ $0["id"] == .string(id) }) {
-                    let oldPlan = try SharedWebOperations.call("localModelFiles",.object([.init(key:"model",value:existing)]))
-                    let newPlan = try SharedWebOperations.call("localModelFiles",.object([.init(key:"model",value:definition)]))
-                    guard oldPlan == newPlan else { throw ExchangeError.invalid("同じモデルIDの別の定義が登録されています") }
-                }
-                try storage.publishDirectory(staged,model:definition)
-                do { try self.commitStoredLocalModel(definition,current:current,storedFiles:paths,fileHashes:hashes,bytes:total,revision:revision) }
-                catch {
-                    try storage.rollbackDirectory(staged,model:definition)
-                    throw error
-                }
+                try check()
                 self.catalogDownloadTasks.removeValue(forKey:key)
                 self.catalogResumeData.removeValue(forKey:key); self.catalogResumePlans.removeValue(forKey:key)
                 try? self.catalogResumeStore.save(self.catalogResumeRecords())
                 await Task.detached { cache.discard() }.value
                 self.catalogShardCaches.remove(key)
-                self.catalogDownloads[key] = .init(receivedBytes:total,expectedBytes:total,running:false,partial:false,error:nil,canResume:false,installedModelID:id)
+                self.catalogDownloads[key] = .init(receivedBytes:total,expectedBytes:total,running:false,partial:false,error:nil,canResume:false,installedModelID:installedModelID)
                 self.diagnostics.report(id:"model-" + id,label:"モデル取得",status:"done")
             } catch {
                 self.finishCatalogDownloadFailure(key:key,token:token,expected:expected,error:error is CancellationError ? nil : error)
@@ -1874,11 +1917,12 @@ final class ChatState: ObservableObject {
     }
 
     @MainActor private func finishCatalogDownload(id: String, key: Data, token: UUID, roots: OrderedJSON, model: OrderedJSON, file: OrderedJSON, definitionRequest: OrderedJSON?,
-                                       temporary: URL, inspected: (name:String,hash:String,size:Int64)) async throws {
+                                       temporary: URL, inspected: LocalModelFiles.SelectedGGUF) async throws {
         guard catalogDownloadTasks[key] == token else { throw CancellationError() }
         guard let fileName = try file["path"]?.string("catalog file path"), let revision = try model["revision"]?.string("catalog revision") else {
             throw ExchangeError.invalid("カタログのモデル情報が不正です")
         }
+        guard let byteCount = Int64(exactly:inspected.size) else { throw ExchangeError.invalid("モデルの容量が大きすぎます") }
         var current = try syncInputSnapshot().required("state")
         var currentModels = try current["localModels"]?.array("local models") ?? []
         let files = localModelFiles
@@ -1896,6 +1940,7 @@ final class ChatState: ObservableObject {
             }
         }.value
         guard catalogDownloadTasks[key] == token else { throw CancellationError() }
+        try files.checkSelectedGGUFs([inspected])
         current = try syncInputSnapshot().required("state")
         guard !hasGenerations, !evaluationJobs.values.contains(where: { $0.busy }),
               try (current["localModels"] ?? .array([])).encoded() == (roots["localModels"] ?? .array([])).encoded(),
@@ -1955,34 +2000,15 @@ final class ChatState: ObservableObject {
                   try (current["activeLocalModels"] ?? .object([])).encoded() == (roots["activeLocalModels"] ?? .object([])).encoded() else {
                 throw ExchangeError.invalid("モデル設定または実行状態が変更されました。もう一度取得してください")
             }
+            try files.checkSelectedGGUFs([inspected])
             if let installedRevision { try files.checkRevision(target,expected:installedRevision) }
             if duplicate {
-                var boundary = SharedWebProjection()
-                let models = try current["localModels"]?.array("local models") ?? []
-                let active = current["activeLocalModels"] ?? .object([])
-                let projected = OrderedJSON.object([
-                    .init(key:"localModels",value:.array(try models.map { try boundary.reference($0) })),
-                    .init(key:"activeLocalModels",value:try OrderedJSON.object(try active.object("active models").map { field in
-                        JSONField(key:field.key,value:field.value == .null || (try? field.value.string("model ID")) != nil ? field.value : try boundary.reference(field.value))
-                    }))
-                ])
-                guard let duplicateRevision, try files.revision(files.installed(modelID:modelID)) == duplicateRevision else { throw ExchangeError.invalid("既存モデルのファイルが変更されました") }
-                let favorites = current["favoriteLocalModelIds"] ?? .array([])
-                let metadata = current["savedModelMeta"] ?? .object([])
-                let duplicateState = OrderedJSON.object([
-                    .init(key:"localModels",value:try projected.required("localModels")),.init(key:"activeLocalModels",value:try projected.required("activeLocalModels")),
-                    .init(key:"favoriteLocalModelIds",value:.array(try favorites.array("favorites").map { value in (try? value.string("favorite")) != nil ? value : try boundary.reference(value) })),
-                    .init(key:"savedModelMeta",value:try OrderedJSON.object(try metadata.object("saved metadata").map { JSONField(key:$0.key,value:try boundary.reference($0.value)) }))
-                ])
-                let result = try SharedWebOperations.call("localModelImport",.object([
-                    .init(key:"operation",value:.string("catalogDuplicateCommit")),.init(key:"state",value:duplicateState),
-                    .init(key:"localModelIDs",value:.array(try models.map { .string(try $0.required("id").string("model ID")) })),
-                    .init(key:"downloadedID",value:.string(id)),.init(key:"duplicate",value:definition)
-                ]))
-                let updated = try OrderedJSONChanges.apply(result.required("changes"),to:current,opaque:boundary.opaque)
-                try applyGlobalState(updated)
+                try await adoptCatalogDuplicate(downloadedID:id,duplicate:definition,key:key,token:token,roots:roots) {
+                    try files.checkSelectedGGUFs([inspected])
+                    guard let duplicateRevision, try files.revision(files.installed(modelID:modelID)) == duplicateRevision else { throw ExchangeError.invalid("既存モデルのファイルが変更されました") }
+                }
             } else {
-                try commitStoredLocalModel(definition,current:current,storedFiles:[fileName],fileHashes:[.init(key:fileName,value:.string(inspected.hash))],bytes:inspected.size,revision:revision)
+                try commitStoredLocalModel(definition,current:current,storedFiles:[fileName],fileHashes:[.init(key:fileName,value:.string(inspected.fingerprint))],bytes:byteCount,revision:revision)
             }
         } catch {
             if !duplicate, !existed, let installedRevision, (try? files.revision(target)) == installedRevision { try? FileManager.default.removeItem(at:target) }
@@ -1993,8 +2019,81 @@ final class ChatState: ObservableObject {
         catalogResumeData.removeValue(forKey:key)
         catalogResumePlans.removeValue(forKey:key)
         try? catalogResumeStore.save(catalogResumeRecords())
-        catalogDownloads[key] = .init(receivedBytes:inspected.size,expectedBytes:inspected.size,running:false,partial:false,error:nil,canResume:false,installedModelID:modelID)
+        catalogDownloads[key] = .init(receivedBytes:byteCount,expectedBytes:byteCount,running:false,partial:false,error:nil,canResume:false,installedModelID:modelID)
         diagnostics.report(id:"model-" + id,label:"モデル取得",status:"done")
+    }
+
+    private func commitCatalogDuplicate(downloadedID: String, duplicate: OrderedJSON, current: OrderedJSON) throws {
+        var boundary = SharedWebProjection()
+        let models = try current["localModels"]?.array("local models") ?? []
+        let active = current["activeLocalModels"] ?? .object([])
+        let projected = OrderedJSON.object([
+            .init(key:"localModels",value:.array(try models.map { try boundary.reference($0) })),
+            .init(key:"activeLocalModels",value:try OrderedJSON.object(try active.object("active models").map { field in
+                JSONField(key:field.key,value:field.value == .null || (try? field.value.string("model ID")) != nil ? field.value : try boundary.reference(field.value))
+            }))
+        ])
+        let favorites = current["favoriteLocalModelIds"] ?? .array([])
+        let metadata = current["savedModelMeta"] ?? .object([])
+        let duplicateState = OrderedJSON.object([
+            .init(key:"localModels",value:try projected.required("localModels")),.init(key:"activeLocalModels",value:try projected.required("activeLocalModels")),
+            .init(key:"favoriteLocalModelIds",value:.array(try favorites.array("favorites").map { value in (try? value.string("favorite")) != nil ? value : try boundary.reference(value) })),
+            .init(key:"savedModelMeta",value:try OrderedJSON.object(try metadata.object("saved metadata").map { JSONField(key:$0.key,value:try boundary.reference($0.value)) }))
+        ])
+        let result = try SharedWebOperations.call("localModelImport",.object([
+            .init(key:"operation",value:.string("catalogDuplicateCommit")),.init(key:"state",value:duplicateState),
+            .init(key:"localModelIDs",value:.array(try models.map { .string(try $0.required("id").string("model ID")) })),
+            .init(key:"downloadedID",value:.string(downloadedID)),.init(key:"duplicate",value:duplicate)
+        ]))
+        let updated = try OrderedJSONChanges.apply(result.required("changes"),to:current,opaque:boundary.opaque)
+        try applyGlobalState(updated)
+    }
+
+    @MainActor private func adoptCatalogDuplicate(downloadedID: String, duplicate: OrderedJSON, key: Data, token: UUID, roots: OrderedJSON, verifyFiles: () throws -> Void) async throws {
+        let duplicateID = try duplicate.required("id").string("duplicate model ID")
+        guard !duplicateID.utf8.elementsEqual(downloadedID.utf8) else { throw ExchangeError.invalid("重複モデルのIDが不正です") }
+        try requireLocalModelAssetAccess(id:duplicateID)
+        let duplicateKey = Data(duplicateID.utf8)
+        catalogInstallations.insert(duplicateKey)
+        defer { catalogInstallations.remove(duplicateKey) }
+        @MainActor func checkedState() throws -> OrderedJSON {
+            try Task.checkCancellation()
+            guard catalogDownloadTasks[key] == token else { throw CancellationError() }
+            let current = try syncInputSnapshot().required("state")
+            guard !hasGenerations, !evaluationJobs.values.contains(where:{ $0.busy }),
+                  try (current["localModels"] ?? .array([])).encoded() == (roots["localModels"] ?? .array([])).encoded(),
+                  try (current["activeLocalModels"] ?? .object([])).encoded() == (roots["activeLocalModels"] ?? .object([])).encoded() else {
+                throw ExchangeError.invalid("モデル設定または実行状態が変更されました。もう一度取得してください")
+            }
+            try verifyFiles()
+            return current
+        }
+        _ = try checkedState()
+        let files = localModelFiles
+        let removal: LocalModelFiles.ModelRemoval
+        do { removal = try await Task.detached { try files.stageModelRemoval(modelID:downloadedID,rollbackOnRestart:true) }.value }
+        catch let error as LocalModelFiles.ModelRemovalRecoveryError {
+            modelAssetRecoveryError = error.localizedDescription
+            throw ExchangeError.invalid("ファイルの復旧を完了できませんでした。再起動して復旧を再試行してください")
+        }
+        do {
+            let current = try checkedState()
+            try commitCatalogDuplicate(downloadedID:downloadedID,duplicate:duplicate,current:current)
+        } catch {
+            let failure = error
+            do { try await Task.detached { try removal.rollback() }.value }
+            catch {
+                modelAssetRecoveryError = error.localizedDescription
+                throw ExchangeError.invalid("ファイルの復旧を完了できませんでした。残存ファイルを保持しています。再起動して復旧を再試行してください")
+            }
+            throw failure
+        }
+        // The shared duplicate state is durable before reclaiming the downloaded ID's old assets.
+        do { try await Task.detached { try removal.commit() }.value }
+        catch {
+            modelAssetRecoveryError = error.localizedDescription
+            throw ExchangeError.invalid("モデル設定は保存済みですが、ファイルの削除を完了できませんでした。再起動して残りの削除を再試行してください")
+        }
     }
 
     private func commitStoredLocalModel(_ definition: OrderedJSON, current: OrderedJSON, storedFiles: [String], fileHashes: [JSONField], bytes: Int64, revision: String? = nil, operation: String = "catalogCommit", preserveMetadata: Bool = false) throws {

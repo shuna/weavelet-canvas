@@ -601,4 +601,74 @@ import Darwin
         XCTAssertTrue(FileManager.default.fileExists(atPath:bucket.appendingPathComponent("body.bin.part").path))
     }
 
+    private func setRemovalJournalRollback(_ files: LocalModelFiles, _ rollback: Bool) throws {
+        let journal = files.directory.appendingPathComponent(".model-removals-journal.json")
+        var object = try XCTUnwrap(JSONSerialization.jsonObject(with:Data(contentsOf:journal)) as? [String:Any])
+        var records = try XCTUnwrap(object["records"] as? [[String:Any]])
+        records[0]["rollbackOnRecovery"] = rollback; object["records"] = records
+        try JSONSerialization.data(withJSONObject:object).write(to:journal)
+    }
+    func testExplicitModelRemovalPreparationRestoresUnregisteredAssetsOnRestart() throws {
+        let (_,files) = try setup(), id = "unregistered/downloaded"
+        let file = try files.url(modelID:id), bucket = try files.directoryURL(modelID:id)
+        try write(files.directory,file.lastPathComponent,Data("GGUFold".utf8))
+        try write(bucket,"nested/incomplete.bin",Data("old partial".utf8))
+        _ = try files.stageModelRemoval(modelID:id,rollbackOnRestart:true)
+        XCTAssertFalse(FileManager.default.fileExists(atPath:file.path))
+        XCTAssertFalse(FileManager.default.fileExists(atPath:bucket.path))
+        // The downloaded ID has no definition before or after the interrupted state save.
+        try files.recoverModelRemovals(registeredIDs:[])
+        try files.recoverModelRemovals(registeredIDs:[])
+        XCTAssertEqual(try Data(contentsOf:file),Data("GGUFold".utf8))
+        XCTAssertEqual(try Data(contentsOf:bucket.appendingPathComponent("nested/incomplete.bin")),Data("old partial".utf8))
+    }
+    func testExplicitModelRemovalCommitReplaysPartialAndCompletedCleanupDespiteNewAssets() throws {
+        let (_,files) = try setup(), id = "explicit/commit"
+        let file = try files.url(modelID:id), bucket = try files.directoryURL(modelID:id)
+        try write(files.directory,file.lastPathComponent,Data("GGUFold".utf8))
+        try write(bucket,"nested/first.bin",Data([1])); try write(bucket,"nested/second.bin",Data([2]))
+        _ = try files.stageModelRemoval(modelID:id,rollbackOnRestart:true)
+        var quarantine = try quarantineDirectory(files)
+        // A durable commit disposition precedes all unlink operations.
+        try setRemovalJournalRollback(files,false)
+        try FileManager.default.removeItem(at:quarantine.appendingPathComponent(file.lastPathComponent))
+        try FileManager.default.removeItem(at:quarantine.appendingPathComponent(bucket.lastPathComponent + "/nested/first.bin"))
+        try write(files.directory,file.lastPathComponent,Data("GGUFnew".utf8))
+        try write(bucket,"new.bin",Data([3]))
+        try files.recoverModelRemovals(registeredIDs:[id])
+        XCTAssertFalse(FileManager.default.fileExists(atPath:quarantine.path))
+        XCTAssertEqual(try Data(contentsOf:file),Data("GGUFnew".utf8))
+        XCTAssertEqual(try Data(contentsOf:bucket.appendingPathComponent("new.bin")),Data([3]))
+        let staged = try files.stageModelRemoval(modelID:id,rollbackOnRestart:true)
+        quarantine = try quarantineDirectory(files)
+        try setRemovalJournalRollback(files,false)
+        // Simulate completed byte cleanup followed by interruption of journal cleanup.
+        try FileManager.default.removeItem(at:quarantine)
+        try write(files.directory,file.lastPathComponent,Data("GGUFnewer".utf8))
+        try files.recoverModelRemovals(registeredIDs:[id])
+        try staged.commit()
+        try staged.commit()
+        XCTAssertEqual(try Data(contentsOf:file),Data("GGUFnewer".utf8))
+    }
+    func testExplicitModelRemovalCommitIntentFailurePreservesQuarantinedBytes() throws {
+        let (_,files) = try setup(), id = "explicit/failed-save"
+        let file = try files.url(modelID:id), bucket = try files.directoryURL(modelID:id)
+        try write(files.directory,file.lastPathComponent,Data("GGUFold".utf8))
+        try write(bucket,"partial.bin",Data("old partial".utf8))
+        let staged = try files.stageModelRemoval(modelID:id,rollbackOnRestart:true)
+        let quarantine = try quarantineDirectory(files)
+        let journal = files.directory.appendingPathComponent(".model-removals-journal.json")
+        let savedJournal = try Data(contentsOf:journal)
+        try FileManager.default.removeItem(at:journal)
+        try FileManager.default.createDirectory(at:journal,withIntermediateDirectories:false)
+        XCTAssertThrowsError(try staged.commit())
+        XCTAssertEqual(try Data(contentsOf:quarantine.appendingPathComponent(file.lastPathComponent)),Data("GGUFold".utf8))
+        XCTAssertEqual(try Data(contentsOf:quarantine.appendingPathComponent(bucket.lastPathComponent + "/partial.bin")),Data("old partial".utf8))
+        try FileManager.default.removeItem(at:journal)
+        try savedJournal.write(to:journal)
+        try files.recoverModelRemovals(registeredIDs:[])
+        XCTAssertEqual(try Data(contentsOf:file),Data("GGUFold".utf8))
+        XCTAssertEqual(try Data(contentsOf:bucket.appendingPathComponent("partial.bin")),Data("old partial".utf8))
+    }
+
 }
