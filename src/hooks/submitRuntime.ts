@@ -48,7 +48,8 @@ import {
   extractTextFromApiContent,
 } from '@utils/apiContent';
 import { getEffectiveStreamEnabled } from '@utils/streamSupport';
-import { useStreamEndStatusStore, type StreamEndReason } from '@store/stream-end-status-store';
+import { useStreamEndStatusStore } from '@store/stream-end-status-store';
+import { streamEndReason } from '@utils/streamStatus';
 import * as swBridge from '@utils/swBridge';
 import {
   ConfigInterface,
@@ -1358,7 +1359,7 @@ export const executeSubmitStream = async ({
     if (upstreamDataStarted || !shouldRetryWithoutSystemMessages(error, messages)) {
       // Determine end reason from the error type
       const isAbort = error instanceof Error && error.name === 'AbortError';
-      const endReason: StreamEndReason = isAbort ? 'interrupted' : 'error';
+      const endReason = streamEndReason(!isAbort, false);
       useStreamEndStatusStore.getState().setStatus(targetNodeId, endReason, chatId);
       throw withCapturedGenerationId(error, capturedGenerationId);
     }
@@ -1367,7 +1368,7 @@ export const executeSubmitStream = async ({
       requestCompleted = true;
     } catch (retryError) {
       const isAbort = retryError instanceof Error && retryError.name === 'AbortError';
-      const endReason: StreamEndReason = isAbort ? 'interrupted' : 'error';
+      const endReason = streamEndReason(!isAbort, false);
       useStreamEndStatusStore.getState().setStatus(targetNodeId, endReason, chatId);
       throw withCapturedGenerationId(retryError, capturedGenerationId);
     }
@@ -1400,7 +1401,7 @@ export const executeSubmitStream = async ({
   // Stream completed successfully — determine the reason
   // Skip if the SW path resolved due to user cancel (status already set by stopSubmitSession)
   if (lastFinishReason !== '__cancelled__') {
-    const endReason: StreamEndReason = lastFinishReason === 'length' ? 'max_tokens' : 'completed';
+    const endReason = streamEndReason(false, true, lastFinishReason);
     useStreamEndStatusStore.getState().setStatus(targetNodeId, endReason, chatId);
   }
 

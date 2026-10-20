@@ -169,7 +169,7 @@ enum MessageEditing {
 
     static func generation(in source: OrderedJSON, chatID: String, operation: String, action: MessageGenerationOperation? = nil,
                            nodeID: String? = nil, viewingPath: [String], plan: OrderedJSON? = nil, parts: OrderedJSON? = nil,
-                           newIDs: [String]? = nil, now: Double, history: HistoryState?, onHistory: @escaping (HistoryState) -> Void) throws -> (source: OrderedJSON, output: OrderedJSON) {
+                           newIDs: [String]? = nil, stream: OrderedJSON? = nil, now: Double, history: HistoryState?, onHistory: @escaping (HistoryState) -> Void) throws -> (source: OrderedJSON, output: OrderedJSON) {
         guard let chat = try source.required("chats").array("chats").first(where:{ try $0.required("id").string("id").utf8.elementsEqual(chatID.utf8) }) else { throw ExchangeError.invalid("chat ID") }
         var target = nodeID
         if let nodeID, chat["branchTree"] == nil {
@@ -181,10 +181,20 @@ enum MessageEditing {
             if let action { fields.append(.init(key:"action",value:.string(action.rawValue))) }
             if let target { fields.append(.init(key:"nodeID",value:.string(target))) }
             if let plan { fields.append(.init(key:"plan",value:plan)) }
+            if let stream { fields.append(.init(key:"stream",value:stream)) }
             if let parts { fields.append(.init(key:"parts",value:try boundary.parts(parts))) }
             if let newIDs { fields.append(.init(key:"newIDs",value:.array(newIDs.map(OrderedJSON.string)))) }
             return fields
         }
+    }
+
+    static func streamState(in source: OrderedJSON, chatID: String, plan: OrderedJSON, stream: OrderedJSON, now: Double) throws -> OrderedJSON {
+        let changed = try perform(in:source,chatID:chatID,kind:"generationPlan",history:nil,onHistory:nil) { _ in [
+            .init(key:"operation",value:.string("streamState")),.init(key:"plan",value:plan),.init(key:"stream",value:stream),
+            .init(key:"viewingPath",value:.array([])),.init(key:"now",value:.number(String(now)))
+        ] }
+        guard changed.output["status"] == .string("updated") else { throw ExchangeError.invalid("生成状態の保存先がありません") }
+        return changed.source
     }
 
     static func remove(in source: OrderedJSON, chatID: String, nodeID: String?, viewingPath: [String],
@@ -394,7 +404,15 @@ struct SharedWebProjection {
         if let tree = value["branchTree"] {
             var projectedTree = try fields(tree, known: ["nodes", "rootId", "activePath", "messageAttributesV1"])
             var nodes: [JSONField] = []
-            for node in try tree.required("nodes").object("nodes") { nodes.append(.init(key: node.key, value: try fields(node.value, known: ["id", "parentId", "role", "contentHash", "createdAt"]))) }
+            for node in try tree.required("nodes").object("nodes") {
+                var projected = try fields(node.value, known: ["id", "parentId", "role", "contentHash", "createdAt", "streamState"])
+                if let saved = node.value["streamState"] {
+                    if case .object = saved {
+                        projected = projected.replacing("streamState",with:try fields(saved,known:["reason","requestId","proxy","createdAt"]))
+                    } else { projected = projected.replacing("streamState",with:try reference(saved)) }
+                }
+                nodes.append(.init(key:node.key,value:projected))
+            }
             projectedTree = projectedTree.replacing("nodes", with: .object(nodes))
             if let attributes = tree["messageAttributesV1"] {
                 var byNode: [JSONField] = []

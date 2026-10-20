@@ -19,7 +19,8 @@ import { ThinkTagParser } from '@utils/thinkTagParser';
 import { PROXY_RECOVERY_MAX_RETRIES, PROXY_RECOVERY_RETRY_DELAY_MS, proxyRecoveryRetry } from '@utils/proxyRecoveryPolicy';
 import { extractTextFromApiContent, extractReasoningFromApiContent, extractReasoningFromReasoningDetails } from '@utils/apiContent';
 import { debugReport } from '@store/debug-store';
-import { useStreamEndStatusStore, type StreamEndReason } from '@store/stream-end-status-store';
+import { useStreamEndStatusStore } from '@store/stream-end-status-store';
+import { streamRecoveryReason } from '@utils/streamStatus';
 import { showToast } from '@utils/showToast';
 import {
   buildVerifiedStatsKey,
@@ -533,9 +534,7 @@ async function recoverPendingInner(manual: boolean, debugId: string, chatId?: st
         if (record.proxyComplete === true) {
           completedCount++;
         }
-        const recoveryStatus: StreamEndReason = record.proxyComplete ? 'recovered'
-          : proxyOutcome === 'network' ? 'error' : proxyOutcome === 'abort' ? 'interrupted'
-          : proxyOutcome === 'partial' || effectiveStatus === 'interrupted' || effectiveStatus === 'failed' ? 'recovered_partial' : 'completed';
+        const recoveryStatus = streamRecoveryReason(!!record.proxyComplete, proxyOutcome, effectiveStatus);
         useStreamEndStatusStore.getState().setStatus(record.nodeId!, recoveryStatus, record.chatId, { requestId, proxy: !!record.proxySessionId, createdAt: record.createdAt });
         if (restoredThisRecord) {
           await saveRecoveryRecord({ ...record, bufferedText: record.proxySessionId ? record.bufferedText : getCurrentMessageText(latest.message), appliedHash: expectedHash, updatedAt: Date.now() }, () => !!currentTarget());

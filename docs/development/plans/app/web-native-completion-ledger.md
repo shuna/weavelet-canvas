@@ -1157,3 +1157,17 @@ nativeは既存remote設定から標準NavigationStack/Formへ接続し、全記
 実Catalyst画面で設定→状態、ID欄、エラー表示、戻る経路を確認した。戻ると未保存設定が再読込で消える問題を発見し、初回読込成功時だけdidLoadを立てて修正。修正後のdraft保持と、誤ったV3 JSON文言が状態エラーに付かないことを再確認した。既存debug fixture storeとFAKE通信だけを使い、下書きは取消、正常終了後にprocess不在とbuilt Info.plistの原本復元を確認した。実proxyの正常一覧/削除、狭幅/VoiceOverの全行、実cloud、iPhoneは未確認。永続node状態のnative表示、旧Google保存のreadonly移行等の残件は維持する。
 
 独立Astraの機能一式監査と指摘外の実画面修正の限定確認は新規なし。ログは /private/tmp/weavelet-proxy-management-{web-test,web-final-test,shared-final-test,shared-check,native-test,native-final-test,ui-fix-native-test,shared-native-test,final-types,final-build,final-catalyst-build,freshness}.log。main統合・push・iPhone照会/導入は行っていない。
+
+## 永続stream状態の共有判定・native保存/表示（2026-10-20）
+
+Webのstream-end-status-store、StreamStatusIndicator、submitRuntime、useStreamRecoveryから、既存streamState更新・7理由の表示・7日保持・終了理由・復旧理由の優先順位をpure streamStatusへ抽出し、元のWebも同じ関数へ接続した。transient通知のTTLとWeb配色は維持する。未知のfuture reasonは表示を省略して原本を保持し、新要求開始時だけはWebと同じく旧要求状態を解除する。nativeは既存generationPlanの差分適用を使い、開始のstreaming/requestId/proxy/createdAt、終了のcompleted/max_tokens/interrupted/error、復旧結果を本文と同じatomic保存へ含める。暗号/HTTP/保存はnative境界のままである。
+
+SharedWebProjectionはstreamStateの既知fieldを共有へ渡し、未知fieldは既存opaque参照で保持する。これにより共有resolveRecoveryTargetのrequestId照合もnativeで有効になる。表示は元レイアウトのcaptionと既存復旧操作を使い、生成中と要約表示中には終了状態を出さない。資格情報を共有VMへ渡さず、復旧ボタンは同じ要求のlocal journalと既存stale照合が通る場合だけ接続する。複数バブルを一律「復旧中」に置き換えず、進行状況は既存の全体表示を利用する。
+
+独立Astraで、空出力の状態を主保存した後にjournal更新が失敗すると再保存できなくなるP2を発見した。journalのupsert準備を主保存前へ、成功後removeを独立catchへ移した。準備失敗ではdisk/base/generationを維持して保存再試行でき、主保存後の整理失敗では保存済みstateとjournal原本を保ち、未保存生成として扱わない。修正確認で他の新規P2以上はない。
+
+Web関連6files48件成功。Catalystでは関連RemoteGenerationの固有9件と、射影変更の影響するMessageEditing30件が成功した。local生成の既存接続2件でも、資格情報を読まずに終了状態を保存することと、停止時の保存失敗から再試行してinterruptedを保存することを確認した。最初はMainActor指定不足でcompile失敗し修正。新IO fixtureはflat会話だったため既存Web prepare経路でtree化してから検証した。保存済みstreamStateの未知大数/数値表記/孤立UTF16の保持、異なるrequestId拒否、初期状態/length終了/停止/通信失敗/復旧、保存失敗と再試行、再起動、export/importを確認する。成功済みの変更無関係なケースは再実行せず、41件を一括実行した結果とは区別する。
+
+新IO確認の最初のrecords再構築比較では、外側record辞書の列挙順だけが変わった。実WebのdiffRecordsはkeyとrecord文字列で照合し、既存SyncRecordsTestsも件数＋全キーのUTF8文字列一致を用いる。実Web engineでも104キー全ての文字列一致を確認した上で、この同じ比較へ訂正した。node順序を表すrecordやrecord内部のキー順・値は正規化しない。nativeが出力した今回のsnapshotと104recordsを実Web reader/writerでも照合し、全record文字列が一致した。既存の全I/O/暗号化同期経路は直前の成功を再利用し、同期形式自体は変更していない。
+
+型検査・Vite build・最終Catalyst build・共有bundle/Markdown鮮度・差分確認成功。ログは /private/tmp/weavelet-stream-state-{web-test,types,native-test,native-final-test,preservation-test,io-final-test,local-test,web-read,build,final-build,freshness,markdown-freshness}.log。Catalyst実画面では既存debug fixture storeに合成会話を追加し、外部通信しないFAKE生成→停止→部分本文と「中断されました」の表示を確認した。AX click/typeで入力されなかったため表示位置からpasteで入力し直した。通常データ/実Keychainは使用せず、終了後にprocess不在とbuilt Info.plist復元を確認した。全理由/復旧ボタンの手動画面、狭幅/文字サイズ/VoiceOver、実cloud、旧Google保存のreadonly移行等は残る。main統合・push・iPhone照会/導入は行っていない。

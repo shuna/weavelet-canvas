@@ -1550,4 +1550,105 @@ final class RemoteGenerationTests: XCTestCase {
         XCTAssertFalse(FakeRemoteProtocol.requests.contains { $0.url?.absoluteString.contains("FAKE%20other%20session") == true })
         XCTAssertEqual(ChatState(store:local).exchange?.source,restarted.exchange?.source)
     }
+
+    func testStreamStateStartsAndCompletesWithSharedLimitReasonAndRestart() async throws {
+        let local = try store(), app = try state(local,stream:false), remote = client()
+        FakeRemoteProtocol.packets = [.init(bytes:Data(#"{"choices":[{"message":{"content":"FAKE limited answer"},"finish_reason":"length"}]}"#.utf8))]
+        try app.startGeneration(input:"FAKE question",record:record(stream:false),client:remote)
+        let current = try XCTUnwrap(app.generation), target = try current.plan!.required("targetNodeId").string("node")
+        let started = try app.exchange!.source.required("chats").array("chats")[0].required("branchTree").required("nodes").required(target).required("streamState")
+        XCTAssertEqual(started["reason"],.string("streaming"))
+        XCTAssertEqual(started["requestId"],.string(current.id.uuidString.lowercased()))
+        XCTAssertEqual(started["proxy"],.bool(false))
+        try await wait { app.generation == nil }
+        let completed = try app.exchange!.source.required("chats").array("chats")[0].required("branchTree").required("nodes").required(target).required("streamState")
+        XCTAssertEqual(completed,started.replacing("reason",with:.string("max_tokens")))
+        XCTAssertEqual(try app.streamStatus(chatID:current.chatID,nodeID:target)?["reason"],.string("max_tokens"))
+        XCTAssertEqual(ChatState(store:local).exchange?.source,app.exchange?.source)
+    }
+
+    func testImportedStreamStateKeepsRawAttributesIORecordsAndRequestIdentityGuard() throws {
+        let local = try store(), app = try state(local)
+        var source = try XCTUnwrap(app.exchange).source
+        let originalChat = try source.required("chats").array("chats")[0]
+        let ids = try (0..<(originalChat.required("messages").array("messages").count + 1)).map { "FAKE-stream-node-\($0)" }
+        source = try MessageEditing.generation(in:source,chatID:originalChat.required("id").string("chat"),operation:"prepare",action:.append,
+            viewingPath:[],newIDs:ids,now:1,history:nil) { _ in }.source
+        var chats = try source.required("chats").array("chats")
+        let chatID = try chats[0].required("id").string("chat")
+        let tree = try chats[0].required("branchTree"), nodes = try tree.required("nodes")
+        let field = try XCTUnwrap(nodes.object("nodes").first { $0.value["role"] == .string("assistant") })
+        let nodeID = try field.key.native("node")
+        let saved = try OrderedJSON.decode(Data(#"{"reason":"error","requestId":"FAKE original","proxy":true,"createdAt":1,"future":{"big":9007199254740993,"decimal":1.2300,"text":"\ud800"}}"#.utf8))
+        chats[0] = chats[0].replacing("branchTree",with:tree.replacing("nodes",with:nodes.replacing(nodeID,with:field.value.replacing("streamState",with:saved))))
+        source = source.replacing("chats",with:.array(chats))
+        try app.importWebData(source.encoded())
+        let plan = OrderedJSON.object([.init(key:"targetNodeId",value:.string(nodeID))])
+        let recovery = OrderedJSON.object([.init(key:"requestId",value:.string("FAKE other")),.init(key:"chatId",value:.string(chatID)),
+            .init(key:"nodeId",value:.string(nodeID)),.init(key:"checkpointRole",value:try field.value.required("role")),
+            .init(key:"checkpointHash",value:try field.value.required("contentHash")),.init(key:"plan",value:plan)])
+        XCTAssertFalse(app.canRecoverProxyRecord(recovery))
+        XCTAssertTrue(app.canRecoverProxyRecord(recovery.replacing("requestId",with:.string("FAKE original"))))
+        let changed = try MessageEditing.streamState(in:source,chatID:chatID,plan:plan,stream:.object([.init(key:"reason",value:.string("recovered_partial"))]),now:10)
+        let updated = try changed.required("chats").array("chats")[0].required("branchTree").required("nodes").required(nodeID).required("streamState")
+        XCTAssertEqual(try updated.encoded(),try saved.replacing("reason",with:.string("recovered_partial")).encoded())
+        try app.importWebData(changed.encoded())
+        XCTAssertEqual(try app.streamStatus(chatID:chatID,nodeID:nodeID,now:10)?["reason"],.string("recovered_partial"))
+        XCTAssertEqual(try WebExchange(data:app.exportWebData()).source.encoded(),try app.exchange!.source.encoded())
+        XCTAssertEqual(ChatState(store:local).exchange?.source,app.exchange?.source)
+        let snapshot = try app.publicationSnapshot(), records = try SyncRecords.toRecords(snapshot)
+        let roundtrip = try SyncRecords.toRecords(SyncRecords.fromRecords(records))
+        // Web diffRecords compares the record map by key and exact string; node order remains inside those strings.
+        XCTAssertEqual(try roundtrip.object("records").count,try records.object("records").count)
+        for field in try records.object("records") {
+            XCTAssertEqual(try roundtrip.required(field.key).string("record").utf8.map { $0 },try field.value.string("record").utf8.map { $0 })
+        }
+        try OrderedJSON.object([.init(key:"snapshot",value:snapshot),.init(key:"records",value:records)]).encoded()
+            .write(to:URL(fileURLWithPath:"/private/tmp/weavelet-stream-state-native-output.json"),options:.atomic)
+    }
+
+    func testEmptyProxyJournalFailureKeepsGenerationAndPrimaryBytesForSaveRetry() async throws {
+        let local = try store(), app = try state(local), remote = client()
+        let journal = NativeProxyRecoveryStore(libraryURL:local.fileURL)
+        try FileManager.default.createDirectory(at:journal.fileURL,withIntermediateDirectories:false)
+        try app.startGeneration(input:"FAKE empty failure",record:proxyRecord(),client:remote)
+        let before = try Data(contentsOf:local.fileURL)
+        try await wait { app.generation?.running == false }
+        let current = try XCTUnwrap(app.generation)
+        XCTAssertTrue(current.failed)
+        XCTAssertEqual(app.exchange?.source,current.baseSource)
+        XCTAssertEqual(try Data(contentsOf:local.fileURL),before)
+        XCTAssertTrue(FakeRemoteProtocol.requests.isEmpty)
+        try FileManager.default.removeItem(at:journal.fileURL)
+        try app.saveGenerationResult()
+        XCTAssertNil(app.generation)
+        let saved = try XCTUnwrap(journal.records().first)
+        let target = try saved.required("nodeId").string("node")
+        XCTAssertEqual(try app.streamStatus(chatID:current.chatID,nodeID:target)?["reason"],.string("error"))
+        XCTAssertEqual(ChatState(store:local).exchange?.source,app.exchange?.source)
+    }
+
+    func testEmptyProxyPostCommitCleanupFailureDoesNotBecomeAnUnsavableGeneration() async throws {
+        let base = try store(), journal = NativeProxyRecoveryStore(libraryURL:base.fileURL)
+        var failCleanup = false
+        let retained = Data(#"{"version":999,"records":[],"future":"FAKE preserve"}"#.utf8)
+        let local = LocalStateStore(fileURL:base.fileURL) { bytes,url in
+            try bytes.write(to:url,options:.atomic)
+            if failCleanup { try retained.write(to:journal.fileURL,options:.atomic) }
+        }
+        let app = try state(local), remote = client()
+        FakeRemoteProtocol.packets = [proxyDone]
+        FakeRemoteProtocol.holdLast = true
+        try app.startGeneration(input:"FAKE stop before output",record:proxyRecord(),client:remote)
+        try await wait { !FakeRemoteProtocol.requests.isEmpty }
+        let current = try XCTUnwrap(app.generation), target = try current.plan!.required("targetNodeId").string("node")
+        failCleanup = true
+        app.stopGeneration()
+        XCTAssertNil(app.generation)
+        XCTAssertNil(app.generationError)
+        XCTAssertNotNil(app.streamRecoveryError)
+        XCTAssertEqual(try Data(contentsOf:journal.fileURL),retained)
+        XCTAssertEqual(try app.streamStatus(chatID:current.chatID,nodeID:target)?["reason"],.string("interrupted"))
+        XCTAssertEqual(ChatState(store:base).exchange?.source,app.exchange?.source)
+    }
 }

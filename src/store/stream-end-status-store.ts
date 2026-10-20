@@ -2,6 +2,7 @@ import { create } from 'zustand';
 
 import useStore from './store';
 import type { StreamEndReason } from '@type/chat';
+import { updateStreamState } from '@utils/streamStatus';
 export type { StreamEndReason } from '@type/chat';
 
 // Transient notifications supplement the per-node state saved with chat data.
@@ -24,13 +25,10 @@ export const useStreamEndStatusStore = create<StreamEndStatusStore>((set, get) =
       const chat = state.chats?.[index];
       const node = chat?.branchTree?.nodes[nodeId];
       if (!chat?.branchTree || !node) return state;
-      const previous = reason === 'streaming' && !request ? undefined : node.streamState;
       const chats = [...state.chats!];
       chats[index] = { ...chat, branchTree: { ...chat.branchTree, nodes: {
         ...chat.branchTree.nodes,
-        [nodeId]: { ...node, streamState: {
-          ...previous, ...request, reason, createdAt: request?.createdAt ?? previous?.createdAt ?? Date.now(),
-        } },
+        [nodeId]: { ...node, streamState: updateStreamState(node.streamState, reason, request, Date.now()) },
       } } };
       return { chats };
     });

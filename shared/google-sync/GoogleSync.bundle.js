@@ -8517,6 +8517,7 @@ var WeaveletGoogleSync = (() => {
     settle: () => settle,
     splitPanelRatio: () => splitPanelRatio,
     start: () => start,
+    streamStatus: () => streamStatus,
     summaryOperation: () => summaryOperation,
     titleOperation: () => titleOperation,
     tokenBudgetOperation: () => tokenBudgetOperation,
@@ -18091,6 +18092,58 @@ ${JSON.stringify(input.length === 1 ? input[0] : input)}`;
   }
   var resolveAssistantPrefillKey = (chat, mode, insertIndex) => mode === "append" ? "__sticky__" : chat.branchTree?.activePath[(insertIndex ?? 1) - 1] ?? "__sticky__";
 
+  // src/utils/streamStatus.ts
+  var PENDING_RETENTION_MS = 7 * 24 * 60 * 60 * 1e3;
+  var labels = {
+    streaming: { text: "\u5FDC\u7B54\u304C\u4E2D\u65AD\u3055\u308C\u307E\u3057\u305F", tone: "warning" },
+    completed: { text: "\u5B8C\u4E86", tone: "success" },
+    max_tokens: { text: "\u6700\u5927\u30C8\u30FC\u30AF\u30F3\u6570\u306B\u5230\u9054\uFF08\u5FDC\u7B54\u304C\u9014\u5207\u308C\u3066\u3044\u308B\u53EF\u80FD\u6027\u304C\u3042\u308A\u307E\u3059\uFF09", tone: "warning" },
+    interrupted: { text: "\u4E2D\u65AD\u3055\u308C\u307E\u3057\u305F", tone: "neutral" },
+    error: { text: "\u9001\u4FE1\u30A8\u30E9\u30FC", tone: "error" },
+    recovered: { text: "\u30D7\u30ED\u30AD\u30B7\u304B\u3089\u5FA9\u5143\u6E08\u307F", tone: "info" },
+    recovered_partial: { text: "\u30D7\u30ED\u30AD\u30B7\u304B\u3089\u90E8\u5206\u5FA9\u5143\uFF08\u5FDC\u7B54\u304C\u4E0D\u5B8C\u5168\u3067\u3059\uFF09", tone: "warning" }
+  };
+  function updateStreamState(previous, reason, request3, now) {
+    const retained = reason === "streaming" && !request3 ? void 0 : previous;
+    return { ...retained, ...request3, reason, createdAt: request3?.createdAt ?? retained?.createdAt ?? now };
+  }
+  function describeStreamStatus(saved, transient, proxyEnabled, now) {
+    const reason = saved?.reason ?? transient;
+    if (!reason || !Object.hasOwn(labels, reason))
+      return null;
+    const incomplete = reason === "streaming" || reason === "interrupted" || reason === "error" || reason === "recovered_partial";
+    const expired = !!saved && now - saved.createdAt > PENDING_RETENTION_MS;
+    return {
+      reason,
+      ...labels[reason],
+      incomplete,
+      expired,
+      canRecover: !!(incomplete && saved?.proxy && saved.requestId && proxyEnabled && !expired),
+      ...saved?.requestId === void 0 ? {} : { requestId: saved.requestId }
+    };
+  }
+  function streamEndReason(failed, completed, finishReason) {
+    return failed ? "error" : !completed ? "interrupted" : finishReason === "length" ? "max_tokens" : "completed";
+  }
+  function streamRecoveryReason(proxyComplete, proxyOutcome, effectiveStatus) {
+    return proxyComplete ? "recovered" : proxyOutcome === "network" ? "error" : proxyOutcome === "abort" ? "interrupted" : proxyOutcome === "partial" || effectiveStatus === "interrupted" || effectiveStatus === "failed" ? "recovered_partial" : "completed";
+  }
+  function streamStatus(json) {
+    const input = JSON.parse(json);
+    switch (input.operation) {
+      case "update":
+        return JSON.stringify(updateStreamState(input.previous, input.reason, input.request, input.now));
+      case "describe":
+        return JSON.stringify(describeStreamStatus(input.saved, input.transient, input.proxyEnabled, input.now));
+      case "endReason":
+        return JSON.stringify(streamEndReason(input.failed, input.completed, input.finishReason));
+      case "recoveryReason":
+        return JSON.stringify(streamRecoveryReason(input.proxyComplete, input.proxyOutcome, input.effectiveStatus));
+      default:
+        throw new Error("Unknown stream status operation");
+    }
+  }
+
   // shared/google-sync/generationPlan.ts
   function generationPlan(json, capture) {
     const input = JSON.parse(json);
@@ -18167,8 +18220,16 @@ ${JSON.stringify(input.length === 1 ? input[0] : input)}`;
             return JSON.stringify({ status: result3.status, changes: [] });
           state = { chats: result3.chats, contentStore: result3.contentStore };
         }
-      } else
+      } else if (input.operation !== "streamState")
         throw Error("Invalid generation operation.");
+      if (input.stream) {
+        const node = plan && state.chats[0].branchTree?.nodes[plan.targetNodeId];
+        if (!node)
+          return JSON.stringify({ status: "missing", changes: [] });
+        const previous = input.operation === "streamState" && input.stream.reason === "streaming" ? updateStreamState(node.streamState, "streaming", void 0, input.now) : node.streamState;
+        node.streamState = updateStreamState(previous, input.stream.reason, input.stream.request, input.now);
+      } else if (input.operation === "streamState")
+        throw Error("Missing stream state.");
       for (const [hash, entry] of Object.entries(state.contentStore))
         if (entry.delta && JSON.stringify(entry.delta) !== JSON.stringify(before.contentStore[hash]?.delta)) {
           const content = resolveContent(state.contentStore, hash);
@@ -27155,15 +27216,15 @@ ${label.name}:`,
     }
     return { kind: "standard", scores, reasoning, promptSuggestions: [], configSuggestions: [], source: "local", timestamp: now };
   }
-  function localModeration(labels, now) {
-    const negativeLabels = labels.filter((l) => !isPositiveLabel(l.label));
+  function localModeration(labels2, now) {
+    const negativeLabels = labels2.filter((l) => !isPositiveLabel(l.label));
     const maxNegativeScore = negativeLabels.length > 0 ? Math.max(...negativeLabels.map((l) => l.score)) : 0;
     let screening = "safe";
     if (maxNegativeScore >= BLOCK_THRESHOLD)
       screening = "block-candidate";
     else if (maxNegativeScore >= WARN_THRESHOLD)
       screening = "warn";
-    return { screening, rawScores: labels.map((l) => ({ label: l.label, score: l.score })), source: "local", timestamp: now };
+    return { screening, rawScores: labels2.map((l) => ({ label: l.label, score: l.score })), source: "local", timestamp: now };
   }
   function localSafetyPolicy(safetyEngine, hybridRemoteOnSafe, localSafety) {
     return {

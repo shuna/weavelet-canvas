@@ -4,12 +4,14 @@ import { materializeActivePath } from '../../src/utils/branchUtils';
 import { resolveContent, type ContentStoreData } from '../../src/utils/contentStore';
 import { diffJSONChanges } from '../../src/utils/jsonChanges';
 import { withEditingRuntime } from './editing';
+import { updateStreamState } from '../../src/utils/streamStatus';
 import type { BranchEditCapture, BranchHistoryState } from '../../src/utils/branchHistory';
-import type { ChatInterface, ContentInterface } from '../../src/types/chat';
+import type { ChatInterface, ContentInterface, StreamEndReason } from '../../src/types/chat';
 
 type Plan = { targetNodeId:string; messageIndex:number; activePath:string[]; requestPath:string[]; prefillKey:string;
   submitMode:SubmitMode; insertIndex:number|null };
-type Input = {operation:'prepare'|'finalize';chat:ChatInterface;contentStore:ContentStoreData;viewingPath:string[];
+type Input = {operation:'prepare'|'finalize'|'streamState';chat:ChatInterface;contentStore:ContentStoreData;viewingPath:string[];
+  stream?:{reason:StreamEndReason;request?:{requestId:string;proxy:boolean;createdAt?:number}};
   action?:'append'|'regenerate'|'continue'|'retry';nodeID?:string;parts?:ContentInterface[];plan?:Plan;newIDs?:string[];now:number};
 export function generationPlan(json:string,capture?:BranchEditCapture):string {
   const input=JSON.parse(json) as Input;
@@ -62,7 +64,15 @@ export function generationPlan(json:string,capture?:BranchEditCapture):string {
         if(result.status!=='updated')return JSON.stringify({status:result.status,changes:[]});
         state={chats:result.chats,contentStore:result.contentStore};
       }
-    }else throw Error('Invalid generation operation.');
+    }else if(input.operation!=='streamState')throw Error('Invalid generation operation.');
+    if(input.stream){
+      const node=plan&&state.chats[0].branchTree?.nodes[plan.targetNodeId];
+      if(!node)return JSON.stringify({status:'missing',changes:[]});
+      // Web clears the old request before attaching the next generation's identity.
+      const previous=input.operation==='streamState'&&input.stream.reason==='streaming'
+        ?updateStreamState(node.streamState,'streaming',undefined,input.now):node.streamState;
+      node.streamState=updateStreamState(previous,input.stream.reason,input.stream.request,input.now);
+    }else if(input.operation==='streamState')throw Error('Missing stream state.');
     for(const [hash,entry]of Object.entries(state.contentStore))if(entry.delta&&JSON.stringify(entry.delta)!==JSON.stringify(before.contentStore[hash]?.delta)){
       const content=resolveContent(state.contentStore,hash);const {delta:_delta,...full}=entry;state.contentStore[hash]={...full,content};
     }

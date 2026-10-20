@@ -136,6 +136,7 @@
     "src/utils/import.ts": "7e83785e8d924e81fcf0d07cab444041e70e92e2ab822c35e929adc2dff2f746",
     "src/utils/fileImport.ts": "c90e38a679529f27a944296bbeee02e9c562ab354b4a98c27ae6392b05a83e87",
     "src/utils/fileImportProjection.ts": "41f36d09865a475d81b0929f1302e351e8ab6999b54b5fad015eea2fbe3d7fc2",
+    "src/utils/streamStatus.ts": "4d094e43924c46be34bd35758a2da65981773db7a305b23d5a4f29c1f623cfe2",
     "src/api/helper.ts": "efff4e27b984f4382a536ea95a0a42d09ac6f00dc818efdfded771070bfad15a",
     "src/utils/proxyProtocol.ts": "1eec9e5c3fe646a189854160ff97afd933b56fb13f3961ae9a4f8f3b4665a6a2",
     "src/utils/streamRecovery.ts": "10ec126041618c3e3ba7328c9704154ddeab2caf8681d722e46ff73efc7bdcf0",
@@ -249,7 +250,8 @@
     "src/utils/fileImportProjection.ts": "41f36d09865a475d81b0929f1302e351e8ab6999b54b5fad015eea2fbe3d7fc2",
     "shared/google-sync/fileImport.ts": "cfbd9ef0e31dde468c3b4db923c95b2505be12f69b9ad960e4da23dd1601d9ce",
     "src/utils/generationPlan.ts": "d238a5492c4d8411f81cd970e2525abcd72d445d70e39509dfcb64779d18d7be",
-    "shared/google-sync/generationPlan.ts": "2090466f9957f539adc1762c9816d3cb2642686fe5d7050e7e9b33408b74b015",
+    "src/utils/streamStatus.ts": "4d094e43924c46be34bd35758a2da65981773db7a305b23d5a4f29c1f623cfe2",
+    "shared/google-sync/generationPlan.ts": "e1d001de06cb2faf1a9974d5a780aae4ddd5d355d338bfbfe6e8f5c2b182bfd3",
     "src/utils/branchHistory.ts": "df602c874e3e624217070847d34d28ad0ee93fe0c042c69c7eba8e704dd563ca",
     "shared/google-sync/nodeRemoval.ts": "d7e6d28e38b5da3e9c1af23d67a5574336ff9a01a03a89c69c3c3ef9efcabcca",
     "src/utils/nodeOptions.ts": "e549f540ad7bb4be11377c56edaa995394639ab05f6a9e8a39fbf919878c18ac",
@@ -358,7 +360,7 @@
     "src/local-llm/ggufShardUtils.ts": "33845697477f6a02eab2bcc6ce94412ce34cea521400fe7dcac1ffb9823e6ef7",
     "src/local-llm/fileProvider.ts": "4046bf8b8036f227ee000132a829adfd95100e83826319dce5fadb840427d121",
     "shared/google-sync/localModelFiles.ts": "b677bf5a478483ecb3cc42e8d252de9e4456e12eb98fe64ffd528b9135b1edbe",
-    "shared/google-sync/entry.ts": "3c5cb10922bc3ea7d8b705226312a8cfca6869983227ea73b840a52b6a1775ee",
+    "shared/google-sync/entry.ts": "e72e397b2c21e435eaf5d6c81a49965f3a6c986522723b997dde7ade34497385",
     "shared/google-sync/generate.mjs": "3b6c9ade9f1651fad5f4dfc1cce2b7e492d9be197fc8854ded1fbc553a058982",
     "shared/google-sync/importDefaults.generate.mjs": "2ff8904af4f192ed0809ceaaabcfbefa708321083aebb527d712fc2a0551b15a"
   },
@@ -410,5 +412,5 @@
     "remove-accents/package.json": "511775b39122274ad36e9dc32c47b2112a3fd4372e64284c2336b143be853c82",
     "remove-accents/LICENSE": "31279697ad2455927a227e7678f2bb71e9e06dde319f12ce345404b3b7a99b81"
   },
-  "bundleSHA256": "671ed8a70c879435654d42ce17e4fa3bb7b175c4f104822dfae75d014a2ee2f6"
+  "bundleSHA256": "9fafef819c397589ab92ecaf562631b740795d5ed4b578e795dc9bd9d47e06a3"
 }

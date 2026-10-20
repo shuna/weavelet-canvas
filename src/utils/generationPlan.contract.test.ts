@@ -19,6 +19,20 @@ const run=(input:any)=>JSON.parse(generationPlan(JSON.stringify({...input,now:10
 function apply(before:any,changes:any[]){const result=structuredClone(before);for(const change of changes){let value=result;for(const key of change.path.slice(0,-1))value=value[key];const key=change.path.at(-1);if(change.op==='set')value[key]=change.value;else if(change.op==='remove'){if(Array.isArray(value))value.splice(key,1);else delete value[key];}else{const object=change.path.length?value[key]:result,values={...object};for(const name of Object.keys(object))delete object[name];for(const name of change.keys)object[name]=values[name];}}return result;}
 function storeFor(chat:ChatInterface,contentStore:any){let state:any;const set=(value:any)=>{state={...state,...(typeof value==='function'?value(state):value)};};state={...createBranchSlice(set,()=>state),chats:[chat],contentStore,generatingSessions:{},collapsedNodeMaps:{},omittedNodeMaps:{},protectedNodeMaps:{}};return ()=>state;}
 describe('shared actual generation preparation/finalization',()=>{
+  it('updates persisted stream state without rebuilding content and clears the prior request on start',()=>{
+    const original=fixture();
+    original.chat.branchTree.nodes.a.streamState={reason:'error',requestId:'old',proxy:true,createdAt:1,future:{opaqueRef:7}};
+    const before=structuredClone(original),plan={targetNodeId:'a'};
+    const started=apply(original,run({...original,operation:'streamState',plan,stream:{reason:'streaming',request:{requestId:'new',proxy:false,createdAt:100}}}).changes);
+    expect(started.chat.branchTree.nodes.a.streamState).toEqual({reason:'streaming',requestId:'new',proxy:false,createdAt:100});
+    expect(started.contentStore).toEqual(before.contentStore);
+    started.chat.branchTree.nodes.a.streamState.future={opaqueRef:8};
+    const ended=apply(started,run({...started,operation:'finalize',plan,parts:[],stream:{reason:'max_tokens'}}).changes);
+    expect(ended.chat.branchTree.nodes.a.streamState).toEqual({...started.chat.branchTree.nodes.a.streamState,reason:'max_tokens'});
+    expect(ended.contentStore).toEqual(before.contentStore);
+    expect(original).toEqual(before);
+    expect(run({...original,operation:'streamState',plan:{targetNodeId:'missing'},stream:{reason:'error'}})).toEqual({status:'missing',changes:[]});
+  });
   it('matches actual Web regenerate preparation plus placeholder and leaves input unchanged',()=>{
     const original=fixture(),before=structuredClone(original);
     const get=storeFor(original.chat,original.contentStore);

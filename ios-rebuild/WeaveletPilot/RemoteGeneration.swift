@@ -306,6 +306,7 @@ struct RemoteOutput {
     private(set) var generationID: String?
     private var state: OrderedJSON?
     private var session: SharedWebOperations.Session?
+    var finishReason: OrderedJSON? { state?["finishReason"] }
     var proxyCheckpoint: OrderedJSON {
         .object([.init(key:"decoder",value:proxyReceipt?.decoder ?? .null),.init(key:"response",value:proxyReceipt?.responseState ?? state ?? .null)])
     }

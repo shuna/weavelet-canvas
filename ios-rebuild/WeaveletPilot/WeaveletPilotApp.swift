@@ -994,6 +994,10 @@ struct ChatView: View {
         return try? value.string("branch swipe direction")
     }
     private func messageRow(node: MessageNode, conversation: Conversation, summaryInfo: OrderedJSON?, generation: ActiveGeneration?) -> some View {
+        let stream = node.role == "assistant" && generation?.running != true && summaryInfo?["tab"] != .string("readable") && summaryInfo?["tab"] != .string("compact")
+            ? try? state.streamStatus(chatID:conversation.id,nodeID:node.id) : nil
+        let recovery = stream?["canRecover"] == .bool(true)
+            ? try? state.streamRecoveryRecord(chatID:conversation.id,nodeID:node.id,requestID:stream?["requestId"]) : nil
         let summarySelection: ((String,Bool) -> Void)? = state.exchange == nil || state.generation != nil ? nil : { id, use in
             do { try state.mutateSummary(chatID:conversation.id,action:"use",summaryID:id,use:use) }
             catch { errorMessage = error.localizedDescription }
@@ -1002,7 +1006,15 @@ struct ChatView: View {
             guard pending.targets(chatID:conversation.id,nodeID:node.id) else { return nil }
             return AnyView(inlineEditor(pending))
         }
-        return MessageView(node: node, siblings: state.siblings(for: node.id), style: state.style, advancedMode: advancedMode, branchSwipeDirection: branchSwipePreference, branchSwipeContext: Data(conversation.id.utf8), generation: generation, inlineEditor: editor, focusBranchEditor: horizontalSizeClass != .compact && state.branchEditorSyncEnabled && (state.chatActiveView == .splitHorizontal || state.chatActiveView == .splitVertical) && state.generation == nil ? {
+        return MessageView(node: node, siblings: state.siblings(for: node.id), style: state.style, advancedMode: advancedMode, branchSwipeDirection: branchSwipePreference, branchSwipeContext: Data(conversation.id.utf8), generation: generation, streamStatus:stream, recoverStream:recovery.flatMap { record in
+            guard let id = try? record.required("proxySessionId").string("session") else { return nil }
+            return {
+                Task { @MainActor in
+                    do { try await state.recoverProxyStreams(sessionID:id) }
+                    catch { errorMessage = error.localizedDescription }
+                }
+            }
+        }, recoveringStream:state.isRecoveringStream, inlineEditor: editor, focusBranchEditor: horizontalSizeClass != .compact && state.branchEditorSyncEnabled && (state.chatActiveView == .splitHorizontal || state.chatActiveView == .splitVertical) && state.generation == nil ? {
             do { try state.focusBranchEditor(nodeID:node.id) } catch { errorMessage = error.localizedDescription }
         } : nil, edit: state.exchange == nil || state.generation != nil ? nil : {
             do { if inlineDraft == nil { inlineDraft = try state.messageDraft(nodeID: node.id) } }
@@ -1169,6 +1181,9 @@ struct MessageView: View {
     var branchSwipeDirection: String? = nil
     var branchSwipeContext: Data? = nil
     var generation: ActiveGeneration? = nil
+    var streamStatus: OrderedJSON? = nil
+    var recoverStream: (() -> Void)? = nil
+    var recoveringStream = false
     var inlineEditor: AnyView? = nil
     var focusBranchEditor: (() -> Void)? = nil
     var edit: (() -> Void)? = nil
@@ -1191,6 +1206,15 @@ struct MessageView: View {
     var openSummary: (() -> Void)? = nil
     var selectSummary: ((String,Bool) -> Void)? = nil
     let select: (String) -> Void
+    private var streamStatusColor: Color {
+        switch streamStatus?["tone"] {
+        case .string("success"): return .green
+        case .string("warning"): return .orange
+        case .string("error"): return .red
+        case .string("info"): return .blue
+        default: return .secondary
+        }
+    }
     @Environment(\.isEnabled) private var isEnabled
     @GestureState private var swipeActive = false
     @State private var swipeSource: [Data]?
@@ -1492,6 +1516,17 @@ struct MessageView: View {
                         RoundedRectangle(cornerRadius: 12)
                             .fill(Color(uiColor: .tertiarySystemBackground))
                     }
+                }
+                if let streamStatus, let text = try? streamStatus.required("text").string("stream status") {
+                    VStack(alignment:.leading,spacing:4) {
+                        Text(text).foregroundStyle(streamStatusColor)
+                        if let recoverStream {
+                            Button("プロキシから復旧",action:recoverStream).buttonStyle(.borderless).disabled(recoveringStream)
+                        }
+                        if streamStatus["incomplete"] == .bool(true), streamStatus["expired"] == .bool(true) {
+                            Text("復旧データの保持期間が終了しました").foregroundStyle(.secondary)
+                        }
+                    }.font(.caption).frame(maxWidth:.infinity,alignment:.leading)
                 }
                 footerControls.hidden()
                 }

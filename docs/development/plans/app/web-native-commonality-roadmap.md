@@ -374,3 +374,5 @@ main a4d83db6の新同期wireをWeb実engineの共有実行へ取り込んだ。
 次はmainで増えたproxy状態/保存データ管理・永続node状態表示を実Web callerから接続し、業務規則は必要箇所だけ抽出する。旧Google保存のreadonly移行、実cloud互換性、狭幅/文字サイズ等のUI受入は引き続き残る。既存共有範囲の全面再設計やnativeへの再実装は行わず、機能群単位の検証と独立Astra監査を維持する。
 
 同日の次機能群でproxy状態/保存データ管理を共有接続した。要求/応答・削除継続・受信位置gap・labelをWebから共有し、nativeは通信/資格情報/標準画面と既存journal復旧の接続を担当する。証拠と実接続/UIの未確認範囲は完成ledgerへ追記した。次は永続node状態表示と旧Google保存のreadonly移行を扱う。実cloud/全UI受入の完成条件は維持する。
+
+続く機能群で永続streamStateの更新・表示・終了/復旧分類をWebから共有し、nativeの既存atomic保存とバブル表示へ接続した。未知raw値を保持し、要求IDによる古い復旧の拒否を有効にした。Astra指摘の空出力/journal保存順序を修正し、代表I/O/recordsと保全を確認した。次は旧Google保存のreadonly移行を扱う。実cloud・全UI条件は引き続き残し、完成ledgerの未確認範囲を縮小しない。

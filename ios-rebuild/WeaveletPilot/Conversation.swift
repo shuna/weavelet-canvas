@@ -173,6 +173,7 @@ final class ChatState: ObservableObject {
     private var titleTasks: [Data:(id:UUID,task:Task<Void,Never>)] = [:]
     private var pendingTitleContext: (id:UUID,legacy:RemoteCredentialRecord,client:RemoteClient,read:ProviderModels.CredentialReader)?
     private var generationTask: Task<Void, Never>?
+    private var streamStatusBridge: SharedWebOperations.Session?
     private let store: LocalStateStore?
     private let localGenerate: LocalLlama.Generator
     private let localEvaluationGenerate: LocalLlama.Generator?
@@ -963,8 +964,10 @@ final class ChatState: ObservableObject {
         let config = try RemoteRequest.configuration(chat:sourceChat,settings:credential.settings)
         let contextMessages = try RemoteRequest.tokenContext(source:source,chat:sourceChat,config:config,path:path)
         try ConversationEvaluation.enforcePreSendSafety(settings:ConversationEvaluation.autoSettings(savedState),chat:sourceChat)
-        try applyLibrary(source, selectedID: chatID, resetViewFor: chatID, editing: history, now: now)
         let id = UUID()
+        guard let plan else { throw ExchangeError.invalid("生成先がありません") }
+        let started = try startingStreamState(source:source,chatID:chatID,plan:plan,id:id,proxy:proxy != nil,now:now)
+        try applyLibrary(started, selectedID: chatID, resetViewFor: chatID, editing: history, now: now)
         generation = ActiveGeneration(id: id, chatID: chatID, baseSource: try publishedSource(), path: path, plan: plan, titleAfterAppend: titleAfterAppend)
         generationError = nil
         automaticEvaluationError = nil
@@ -999,7 +1002,7 @@ final class ChatState: ObservableObject {
                 let streaming = try RemoteRequest.streaming(request)
                 let userContent = try ConversationEvaluation.transmittedUserContent(messages)
                 if let userContent {
-                    let nodeID = try plan?.required("targetNodeId").string("target node") ?? ""
+                    let nodeID = try plan.required("targetNodeId").string("target node")
                     self.automaticEvaluationContext = (id,chatID,nodeID,path,userContent,legacy,client,readProviderCredential)
                     self.startAutomaticEvaluation(phase:"pre-send",generationID:id)
                 }
@@ -1132,13 +1135,15 @@ final class ChatState: ObservableObject {
             let modelURL = try localModelFiles.installed(modelID:modelID)
             var output = RemoteOutput()
             _ = try output.consumeLocal("",input:request.input)
-            try applyLibrary(source,selectedID:chatID,resetViewFor:chatID,editing:history,now:now)
             let id = UUID()
+            guard let plan else { throw ExchangeError.invalid("生成先がありません") }
+            let started = try startingStreamState(source:source,chatID:chatID,plan:plan,id:id,proxy:false,now:now)
+            try applyLibrary(started,selectedID:chatID,resetViewFor:chatID,editing:history,now:now)
             generation = ActiveGeneration(id:id,chatID:chatID,baseSource:try publishedSource(),path:path,plan:plan,output:output,usesRemoteTransport:false,titleAfterAppend:titleAfterAppend)
             generationError = nil
             automaticEvaluationError = nil
             if let userContent {
-                let nodeID = try plan?.required("targetNodeId").string("target node") ?? ""
+                let nodeID = try plan.required("targetNodeId").string("target node")
                 automaticEvaluationContext = (id,chatID,nodeID,path,userContent,nil,RemoteClient(),RemoteCredentials.load(providerID:))
                 startAutomaticEvaluation(phase:"pre-send",generationID:id)
             }
@@ -1204,22 +1209,30 @@ final class ChatState: ObservableObject {
     private func persistGeneration(_ current: ActiveGeneration) throws {
         let titleContext = pendingTitleContext?.id == current.id ? pendingTitleContext : nil
         guard exchange?.source == current.baseSource else { throw ExchangeError.invalid("生成開始後に会話が変更されています") }
+        guard let plan = current.plan else { throw ExchangeError.invalid("生成先がありません") }
+        var endFields: [JSONField] = [.init(key:"operation",value:.string("endReason")),
+            .init(key:"failed",value:.bool(current.failed)),.init(key:"completed",value:.bool(current.completedSuccessfully))]
+        if let finishReason = current.output.finishReason { endFields.append(.init(key:"finishReason",value:finishReason)) }
+        let stream = try OrderedJSON.object([.init(key:"reason",value:SharedWebOperations.call("streamStatus",.object(endFields)))])
         if try current.output.isEmpty && current.output.observation.object("observation").isEmpty {
             cancelAutomaticEvaluation(generationID:current.id)
+            let source = try MessageEditing.streamState(in:current.baseSource,chatID:current.chatID,plan:plan,stream:stream,now:Date().timeIntervalSince1970 * 1000)
             if current.output.proxyReceipt != nil {
-                if current.failed { try proxyRecoveryStore.upsert(makeProxyRecoveryRecord(current,output:current.output)) }
-                else { try proxyRecoveryStore.remove(current.id.uuidString.lowercased()) }
+                try proxyRecoveryStore.upsert(makeProxyRecoveryRecord(current,output:current.output))
             }
-            if let stats = try queuedOpenRouterStats(current,now:Date().timeIntervalSince1970 * 1000) { try saveOpenRouterStats(stats) }
+            try applyLibrary(source,selectedID:current.chatID,editing:editingHistory,openRouterStats:try queuedOpenRouterStats(current,now:Date().timeIntervalSince1970 * 1000))
+            if current.output.proxyReceipt != nil && !current.failed {
+                do { try proxyRecoveryStore.remove(current.id.uuidString.lowercased()) }
+                catch { streamRecoveryError = "保存済み応答の復旧記録を整理できませんでした。\n" + error.localizedDescription }
+            }
             rememberFailedGeneration(current)
             generation = nil
             return
         }
         let now = Date().timeIntervalSince1970 * 1000
         var history: MessageEditing.HistoryState?
-        guard let plan = current.plan else { throw ExchangeError.invalid("生成先がありません") }
         let finalized = try MessageEditing.generation(in:current.baseSource,chatID:current.chatID,operation:"finalize",viewingPath:current.path,plan:plan,
-            parts:current.output.parts,now:now,history:editingHistory) { history = $0 }
+            parts:current.output.parts,stream:stream,now:now,history:editingHistory) { history = $0 }
         guard finalized.output["status"] == .string("updated") else { throw ExchangeError.invalid("生成先が変更されているため、結果を保存できません") }
         var source = finalized.source
         let accounting = try generationAccounting(source:source,current:current)
@@ -1254,6 +1267,25 @@ final class ChatState: ObservableObject {
     private var proxyRecoveryStore: NativeProxyRecoveryStore {
         NativeProxyRecoveryStore(libraryURL:(store ?? LocalStateStore.applicationStore).fileURL)
     }
+    private func startingStreamState(source: OrderedJSON, chatID: String, plan: OrderedJSON, id: UUID, proxy: Bool, now: Double) throws -> OrderedJSON {
+        try MessageEditing.streamState(in:source,chatID:chatID,plan:plan,stream:.object([
+            .init(key:"reason",value:.string("streaming")),.init(key:"request",value:.object([
+                .init(key:"requestId",value:.string(id.uuidString.lowercased())),.init(key:"proxy",value:.bool(proxy)),
+                .init(key:"createdAt",value:.number(String(Int(now))))]))]),now:now)
+    }
+    func streamStatus(chatID: String, nodeID: String, now: Double = Date().timeIntervalSince1970 * 1000) throws -> OrderedJSON? {
+        guard let chat = try exchange?.source.required("chats").array("chats").first(where:{ $0["id"] == .string(chatID) }),
+              let saved = chat["branchTree"]?["nodes"]?[nodeID]?["streamState"] else { return nil }
+        if streamStatusBridge == nil { streamStatusBridge = try SharedWebOperations.Session() }
+        let enabled = saved["proxy"] == .bool(true) && (try? RemoteCredentials.load().proxy?.validated()) != nil
+        let result = try streamStatusBridge!.call("streamStatus",.object([.init(key:"operation",value:.string("describe")),
+            .init(key:"saved",value:saved),.init(key:"proxyEnabled",value:.bool(enabled)),.init(key:"now",value:.number(String(now)))]))
+        return result == .null ? nil : result
+    }
+    @MainActor func streamRecoveryRecord(chatID: String, nodeID: String, requestID: OrderedJSON?) throws -> OrderedJSON? {
+        try proxyRecoveryStore.records().first { $0["chatId"] == .string(chatID) && $0["nodeId"] == .string(nodeID)
+            && $0["requestId"] == requestID && canRecoverProxyRecord($0) }
+    }
     @MainActor func proxyRecoveryRecords() throws -> [OrderedJSON] { try proxyRecoveryStore.records() }
     private func updatingProxyRecord(_ record: OrderedJSON, output: RemoteOutput) throws -> OrderedJSON {
         guard let receipt = output.proxyReceipt else { throw ExchangeError.invalid("プロキシの復旧情報がありません") }
@@ -1271,6 +1303,7 @@ final class ChatState: ObservableObject {
             .init(key:"requestId",value:.string(current.id.uuidString.lowercased())),.init(key:"chatId",value:.string(current.chatID)),
             .init(key:"nodeId",value:.string(nodeID)),.init(key:"checkpointRole",value:node.required("role")),
             .init(key:"checkpointHash",value:node.required("contentHash")),.init(key:"plan",value:plan),
+            .init(key:"createdAt",value:node["streamState"]?["createdAt"] ?? .number(String(Int(Date().timeIntervalSince1970 * 1000)))),
             .init(key:"proxyEndpoint",value:.string(receipt.settings.endpoint)),.init(key:"proxySessionId",value:.string(receipt.sessionID)),
             .init(key:"stopped",value:.bool(!current.running && !current.completedSuccessfully && !current.failed))])
         return try updatingProxyRecord(record,output:output)
@@ -1363,9 +1396,16 @@ final class ChatState: ObservableObject {
             try output.flush()
             let chatID = try latest.required("chatId").string("chat ID")
             let plan = try latest.required("plan")
+            let outcome = stopped ? "abort" : (networkError as? ProxyRecoveryFailure)?.outcome ?? (networkError == nil ? "partial" : "network")
+            let recoveredReason = try SharedWebOperations.call("streamStatus",.object([
+                .init(key:"operation",value:.string("recoveryReason")),.init(key:"proxyComplete",value:latest["proxyComplete"] ?? .bool(false)),
+                .init(key:"proxyOutcome",value:.string(outcome)),.init(key:"effectiveStatus",value:.string(stopped ? "interrupted" : "streaming-with-proxy"))]))
+            var recoveryRequest: [JSONField] = [.init(key:"requestId",value:try latest.required("requestId")),.init(key:"proxy",value:.bool(true))]
+            if let createdAt = latest["createdAt"] { recoveryRequest.append(.init(key:"createdAt",value:createdAt)) }
+            let stream = OrderedJSON.object([.init(key:"reason",value:recoveredReason),.init(key:"request",value:.object(recoveryRequest))])
             var history: MessageEditing.HistoryState?
             let finalized = try MessageEditing.generation(in:source,chatID:chatID,operation:"finalize",viewingPath:[],plan:plan,parts:output.parts,
-                now:Date().timeIntervalSince1970 * 1000,history:editingHistory) { history = $0 }
+                stream:stream,now:Date().timeIntervalSince1970 * 1000,history:editingHistory) { history = $0 }
             guard finalized.output["status"] == .string("updated") else { retained += 1; continue }
             let nodeID = try latest.required("nodeId").string("node ID")
             guard let requestID = UUID(uuidString:try latest.required("requestId").string("request ID")) else { throw ExchangeError.invalid("復旧用request IDが不正です") }

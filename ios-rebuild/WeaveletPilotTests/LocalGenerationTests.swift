@@ -61,6 +61,8 @@ import XCTest
         let restarted = ChatState(store:store)
         XCTAssertEqual(try restarted.exportWebData(),try state.exportWebData())
         XCTAssertEqual(restarted.conversation?.visibleMessages.last?.parts,[.text("<think>local text</think> answer")])
+        let chat = try XCTUnwrap(restarted.conversation), node = try XCTUnwrap(chat.visibleMessages.last)
+        XCTAssertEqual(try restarted.streamStatus(chatID:chat.id,nodeID:node.id)?["reason"],.string("completed"))
         let after = try XCTUnwrap(state.exchange).source
         let before = try OrderedJSON.decode(original)
         XCTAssertEqual(after["xRoot"],before["xRoot"])
@@ -129,6 +131,8 @@ import XCTest
         XCTAssertNil(state.generation)
         await fulfillment(of:[finished],timeout:2)
         XCTAssertEqual(ChatState(store:store).conversation?.visibleMessages.last?.parts,[.text("seed:local partial")])
+        let chat = try XCTUnwrap(state.conversation), node = try XCTUnwrap(chat.visibleMessages.last)
+        XCTAssertEqual(try state.streamStatus(chatID:chat.id,nodeID:node.id)?["reason"],.string("interrupted"))
         XCTAssertEqual(state.assistantPrefill(key:state.stickyPrefillKey),"next generation draft")
     }
 }

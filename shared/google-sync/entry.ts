@@ -171,6 +171,7 @@ export { openRouterCredits } from "./openrouterCredits";
 export { openRouterStats } from "./openrouterStats";
 
 export { generationPlan } from "./generationPlan";
+export { streamStatus } from '../../src/utils/streamStatus';
 
 export { localGenerationInput, localGenerationOutput } from "./localGeneration";
 

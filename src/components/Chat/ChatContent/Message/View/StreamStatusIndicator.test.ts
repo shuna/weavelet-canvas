@@ -33,3 +33,7 @@ it('keeps the incomplete status but removes the action when recovery data has ex
   expect(render()).toContain('保持期間が終了');
   expect(render()).not.toContain('<button');
 });
+it('does not render an unknown future reason', () => {
+  fixture.state.chats[0].branchTree.nodes.n.streamState.reason = 'future_reason';
+  expect(render()).toBe('');
+});

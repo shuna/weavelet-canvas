@@ -1,4 +1,6 @@
 import type { ChatInterface, OpenRouterObservation, Role } from '@type/chat';
+import { PENDING_RETENTION_MS } from './streamStatus';
+export { PENDING_RETENTION_MS } from './streamStatus';
 export interface StreamRecord {
   openRouterObservation?: OpenRouterObservation;
   requestId: string;
@@ -44,7 +46,6 @@ const DB_NAME = 'sw-stream-db';
 const STORE_NAME = 'requests';
 const DB_VERSION = 1;
 // Preserve unapplied responses for seven days, even if repeated recovery updates them.
-export const PENDING_RETENTION_MS = 7 * 24 * 60 * 60 * 1000;
 
 function openDb(): Promise<IDBDatabase> {
   return new Promise((resolve, reject) => {
