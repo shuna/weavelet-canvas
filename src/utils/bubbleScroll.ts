@@ -53,3 +53,27 @@ export function restoredBubbleScrollTop(input: {
   if (input.itemTop != null) return input.scrollTop + input.itemTop + anchor.offsetWithinItem;
   return anchor.scrollTop ?? null;
 }
+
+export function streamFollowAfterScroll(input: {
+  following: boolean;
+  previousScrollTop: number;
+  scrollTop: number;
+  scrollHeight: number;
+  clientHeight: number;
+  scrollEvent: boolean;
+  scrollerChanged: boolean;
+}): boolean {
+  if (!input.scrollEvent && !input.scrollerChanged) return input.following;
+  if (input.scrollTop === input.previousScrollTop && !input.scrollerChanged) return input.following;
+  return input.scrollHeight > input.clientHeight + 0.5
+    && input.scrollTop >= input.scrollHeight - input.clientHeight - 0.5;
+}
+
+export function shouldFollowStream(input: {
+  following: boolean;
+  generating: boolean;
+  editing: boolean;
+  branchSwiping: boolean;
+}): boolean {
+  return input.following && input.generating && !input.editing && !input.branchSwiping;
+}

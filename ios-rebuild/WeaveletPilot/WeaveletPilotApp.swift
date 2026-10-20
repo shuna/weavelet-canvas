@@ -78,6 +78,7 @@ struct ChatView: View {
     @State private var modelDraft: ChatConfigDraft?
     @State private var inlineFocused = false
     @State private var composerFocused = false
+    @State private var minimumChatContentHeight: CGFloat?
     @State private var showsConversationSearch = false
     @StateObject private var conversationFind = ConversationFind()
     @GestureState private var splitDragPosition: CGFloat?
@@ -795,10 +796,11 @@ struct ChatView: View {
                 }
                 .frame(maxWidth: horizontalSizeClass == .compact ? .infinity : 900)
                 .frame(maxWidth: .infinity)
+                .frame(minHeight: minimumChatContentHeight, alignment: .top)
                 .chatScrollMarker(.content)
                 .chatScrollMarker(.context(state.conversation?.identity ?? Data()))
             }
-            .modifier(ChatScrollControls(state:state,scroll:scroll,ids:chatScrollIDs,viewportHeight:viewport.size.height,isEditing:inlineDraft != nil || composerFocused,reportError:{ errorMessage = $0.localizedDescription }))
+            .modifier(ChatScrollControls(state:state,scroll:scroll,ids:chatScrollIDs,viewportHeight:viewport.size.height,isEditing:inlineDraft != nil || composerFocused,minimumContentHeight:$minimumChatContentHeight,reportError:{ errorMessage = $0.localizedDescription }))
             .environment(\.messageViewport,viewport.frame(in:.global))
             .background(Color(uiColor:.secondarySystemBackground))
             .scrollDismissesKeyboard(.interactively)
@@ -998,37 +1000,37 @@ struct ChatView: View {
                     catch { errorMessage = error.localizedDescription }
                 }
             }
-        }, recoveringStream:state.isRecoveringStream, inlineEditor: editor, focusBranchEditor: horizontalSizeClass != .compact && state.branchEditorSyncEnabled && (state.chatActiveView == .splitHorizontal || state.chatActiveView == .splitVertical) && state.generation == nil ? {
+        }, recoveringStream:state.isRecoveringStream, inlineEditor: editor, focusBranchEditor: horizontalSizeClass != .compact && state.branchEditorSyncEnabled && (state.chatActiveView == .splitHorizontal || state.chatActiveView == .splitVertical) ? {
             do { try state.focusBranchEditor(nodeID:node.id) } catch { errorMessage = error.localizedDescription }
-        } : nil, edit: state.exchange == nil || state.generation != nil ? nil : {
+        } : nil, edit: state.exchange == nil ? nil : {
             do { if inlineDraft == nil { inlineDraft = try state.messageDraft(nodeID: node.id) } }
             catch { errorMessage = error.localizedDescription }
-        }, insertBefore: !advancedMode || state.exchange == nil || state.generation != nil ? nil : {
+        }, insertBefore: !advancedMode || state.exchange == nil ? nil : {
             do { draft = try state.messageInsertionDraft(beforeNodeID: node.id) }
             catch { errorMessage = error.localizedDescription }
-        }, regenerate: state.exchange == nil || state.generation != nil ? nil : {
+        }, regenerate: state.exchange == nil ? nil : {
             generate(node.id, operation: .regenerate)
-        }, generateFromHere: state.exchange == nil || state.generation != nil ? nil : {
+        }, generateFromHere: state.exchange == nil ? nil : {
             generate(node.id, operation: .fromHere)
-        }, remove: state.exchange == nil || state.generation != nil ? nil : {
+        }, remove: state.exchange == nil ? nil : {
             do { removalDraft = try state.nodeRemovalDraft(nodeID: node.id); showsRemoval = true }
             catch { errorMessage = error.localizedDescription }
-        }, moveUp: state.exchange == nil || state.generation != nil ? nil : {
+        }, moveUp: state.exchange == nil ? nil : {
             move(node.id, direction: .up)
-        }, moveDown: state.exchange == nil || state.generation != nil ? nil : {
+        }, moveDown: state.exchange == nil ? nil : {
             move(node.id, direction: .down)
-        }, replaceAndPrune: state.exchange == nil || state.generation != nil ? nil : {
+        }, replaceAndPrune: state.exchange == nil ? nil : {
             do { draft = try state.messageReplacementDraft(nodeID: node.id) }
             catch { errorMessage = error.localizedDescription }
-        }, deleteBranch: state.exchange == nil || state.generation != nil ? nil : {
+        }, deleteBranch: state.exchange == nil ? nil : {
             deleteNodeBranch(node.id)
-        }, copyRange: state.exchange == nil || state.generation != nil ? nil : {
+        }, copyRange: state.exchange == nil ? nil : {
             openBranchClipboard(node.id, operation: .copy)
-        }, pasteRange: state.exchange == nil || state.generation != nil || !state.hasBranchClipboard ? nil : {
+        }, pasteRange: state.exchange == nil || !state.hasBranchClipboard ? nil : {
             openBranchClipboard(node.id, operation: .paste)
-        }, configure: state.exchange == nil || state.generation != nil ? nil : {
+        }, configure: state.exchange == nil ? nil : {
             configureNode(node.id)
-        }, showsCollapseControl: state.exchange != nil, toggleCollapse: state.exchange == nil || state.generation != nil ? nil : {
+        }, showsCollapseControl: state.exchange != nil, toggleCollapse: state.exchange == nil ? nil : {
             do {
                 var changed = try state.nodeOptionsDraft(nodeID: node.id)
                 changed.value.collapsed.toggle()
@@ -1037,13 +1039,13 @@ struct ChatView: View {
         }, openEvaluation: state.exchange == nil ? nil : {
             do { evaluationDraft = try state.evaluationDraft(nodeID:node.id) }
             catch { errorMessage = error.localizedDescription }
-        }, toggleOmitted: state.exchange == nil || state.generation != nil ? nil : {
+        }, toggleOmitted: state.exchange == nil ? nil : {
             do {
                 var changed = try state.nodeOptionsDraft(nodeID:node.id)
                 changed.value.omitted.toggle()
                 try state.saveNodeOptions(changed)
             } catch { errorMessage = error.localizedDescription }
-        }, toggleProtected: state.exchange == nil || state.generation != nil ? nil : {
+        }, toggleProtected: state.exchange == nil ? nil : {
             do {
                 var changed = try state.nodeOptionsDraft(nodeID:node.id)
                 changed.value.protected.toggle()

@@ -4,7 +4,7 @@ import UIKit
 @MainActor final class ChatScrollOffset: ObservableObject {
     weak var scrollView: UIScrollView?
     @Published private(set) var attached = false
-    var isInteracting: Bool { scrollView.map { $0.isDragging || $0.isDecelerating } ?? false }
+    var isInteracting: Bool { scrollView.map { $0.isTracking || $0.isDragging || $0.isDecelerating } ?? false }
     func attach(_ value: UIScrollView) {
         guard scrollView !== value else { return }
         scrollView = value
@@ -13,14 +13,16 @@ import UIKit
             self.attached = true
         }
     }
-    func move(by delta: CGFloat) {
-        guard let scrollView, !isInteracting else { return }
+    @discardableResult func move(by delta: CGFloat) -> CGFloat {
+        guard let scrollView, !isInteracting else { return 0 }
+        let previous = scrollView.contentOffset.y
         let minimum = -scrollView.adjustedContentInset.top
         let maximum = max(minimum, scrollView.contentSize.height - scrollView.bounds.height + scrollView.adjustedContentInset.bottom)
         let y = min(max(scrollView.contentOffset.y + delta, minimum), maximum)
         if abs(y - scrollView.contentOffset.y) > 0.5 {
             scrollView.setContentOffset(CGPoint(x:scrollView.contentOffset.x,y:y),animated:false)
         }
+        return scrollView.contentOffset.y - previous
     }
 }
 
@@ -119,18 +121,47 @@ struct ChatScrollTargets: Equatable {
     }
 }
 
+struct ChatStreamFollowing {
+    var following = true
+    var scrollTop: CGFloat = 0
+
+    mutating func measure(top: CGFloat, height: CGFloat, viewport: CGFloat, scrollEvent: Bool,
+                          changedScroller: Bool, generating: Bool, editing: Bool,
+                          bridge: SharedWebOperations.Session) throws -> Bool {
+        let result = try bridge.call("bubbleScroll", .object([
+            .init(key:"operation",value:.string("streamFollow")),
+            .init(key:"following",value:.bool(following)),
+            .init(key:"previousScrollTop",value:.number(String(Double(scrollTop)))),
+            .init(key:"scrollTop",value:.number(String(Double(top)))),
+            .init(key:"scrollHeight",value:.number(String(Double(height)))),
+            .init(key:"clientHeight",value:.number(String(Double(viewport)))),
+            .init(key:"scrollEvent",value:.bool(scrollEvent)),
+            .init(key:"scrollerChanged",value:.bool(changedScroller)),
+            .init(key:"generating",value:.bool(generating)),
+            .init(key:"editing",value:.bool(editing)),
+            // Message rows, including branch gestures, are disabled during native generation.
+            .init(key:"branchSwiping",value:.bool(false))]))
+        following = try result.required("following").boolean("stream following")
+        scrollTop = top
+        return try result.required("shouldScroll").boolean("stream scrolling")
+    }
+}
+
 struct ChatScrollControls: ViewModifier {
     @ObservedObject var state: ChatState
     let scroll: ScrollViewProxy
     let ids: [Data]
     let viewportHeight: CGFloat
     let isEditing: Bool
+    @Binding var minimumContentHeight: CGFloat?
     let reportError: (Error) -> Void
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var frames: [ChatScrollMarker: CGRect] = [:]
     @State private var targets = ChatScrollTargets()
     @State private var bridge: SharedWebOperations.Session?
     @StateObject private var offset = ChatScrollOffset()
+    @State private var stream = ChatStreamFollowing()
+    @State private var streamChatID: Data?
 
     private var atTop: Bool { (frames[.content]?.minY ?? 0) >= -0.5 }
     private var atBottom: Bool { (frames[.content]?.maxY ?? 0) <= viewportHeight + 0.5 }
@@ -169,6 +200,24 @@ struct ChatScrollControls: ViewModifier {
             if let anchor = try captureAnchor() { state.captureChatScroll(chatID:state.selectedConversationID,anchor:anchor) }
         }
     }
+    private func followStream(scrollEvent: Bool = false) {
+        guard let chatID = state.conversation?.identity, frames[.context(chatID)] != nil,
+              let content = frames[.content], viewportHeight > 0 else { return }
+        perform {
+            if bridge == nil { bridge = try SharedWebOperations.Session() }
+            let top = max(0, -content.minY)
+            let changed = streamChatID != chatID
+            if changed { minimumContentHeight = nil }
+            let shouldScroll = try stream.measure(top:top,height:content.height,viewport:viewportHeight,
+                scrollEvent:scrollEvent,changedScroller:changed,generating:state.generation?.running == true,
+                editing:isEditing || offset.isInteracting || state.chatScrollRestoration != nil,bridge:bridge!)
+            streamChatID = chatID
+            if scrollEvent, minimumContentHeight != nil { minimumContentHeight = top + viewportHeight }
+            if shouldScroll {
+                stream.scrollTop = top + offset.move(by:content.maxY - viewportHeight)
+            }
+        }
+    }
     private func restorePosition() {
         guard let request = state.chatScrollRestoration,
               request.chatID.utf8.elementsEqual(state.selectedConversationID.utf8) else { return }
@@ -191,7 +240,8 @@ struct ChatScrollControls: ViewModifier {
             if desired != .null { offset.move(by:CGFloat(try desired.number("scroll position")) - max(0,-content.minY)) }
         }
     }
-    private func move<ID: Hashable>(_ id: ID, anchor: UnitPoint) {
+    private func move<ID: Hashable>(_ id: ID, anchor: UnitPoint, followsEnd: Bool = false) {
+        stream.following = followsEnd
         if let request = state.chatScrollRestoration { state.completeChatScrollRestoration(id:request.id) }
         do {
             if let current = try captureAnchor() { try state.recordChatScrollNavigation(chatID:state.selectedConversationID,anchor:current) }
@@ -220,16 +270,28 @@ struct ChatScrollControls: ViewModifier {
             .coordinateSpace(name: "chat-scroll-viewport")
             .onPreferenceChange(ChatScrollFrames.self) { value in
                 guard let chatID = state.conversation?.identity, value[.context(chatID)] != nil else { return }
+                // Lazy layout can change the offset without a user scroll event.
+                let scrollEvent = offset.isInteracting
                 frames = value
                 updateTargets()
+                followStream(scrollEvent:scrollEvent)
                 restorePosition()
                 updateAnchor()
             }
-            .onChange(of: viewportHeight) { _, _ in updateTargets(); restorePosition() }
-            .onChange(of: ids) { _, _ in updateTargets(); restorePosition() }
-            .onChange(of: offset.attached) { _, _ in restorePosition() }
+            .onChange(of: viewportHeight) { _, _ in updateTargets(); restorePosition(); followStream() }
+            .onChange(of: ids) { _, _ in minimumContentHeight = nil; updateTargets(); restorePosition() }
+            .onChange(of: state.conversation?.identity) { _, _ in minimumContentHeight = nil }
+            .onChange(of: offset.attached) { _, _ in restorePosition(); followStream() }
+            .onChange(of: state.generation?.running == true) { wasRunning, running in
+                if running { minimumContentHeight = nil; followStream() }
+                else if wasRunning, streamChatID == state.conversation?.identity {
+                    stream.following = false
+                    minimumContentHeight = stream.scrollTop + viewportHeight
+                }
+            }
             .onChange(of: isEditing) { _, editing in
                 if editing, let request = state.chatScrollRestoration { state.completeChatScrollRestoration(id:request.id) }
+                if !editing { followStream() }
             }
             .task(id:state.chatScrollRestoration?.id) {
                 guard let request = state.chatScrollRestoration,
@@ -260,7 +322,7 @@ struct ChatScrollControls: ViewModifier {
                             button("最初へ", "arrow.up.to.line", disabled: atTop) { move("connected-top", anchor: .top) }
                             button("一つ前のバブルへ", "chevron.up", disabled: targets.previous < 0) { moveBubble(targets.previous) }
                             button("一つ次のバブルへ", "chevron.down", disabled: targets.next < 0) { moveBubble(targets.next) }
-                            button("入力欄へ", "arrow.down.to.line", disabled: atBottom) { move("connected-composer", anchor: .bottom) }
+                            button("入力欄へ", "arrow.down.to.line", disabled: atBottom) { move("connected-composer", anchor: .bottom, followsEnd:true) }
                         }
                     }
                     .padding(.horizontal, 8).padding(.bottom, bottomInset)

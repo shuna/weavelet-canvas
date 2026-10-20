@@ -3,6 +3,31 @@ import UIKit
 @testable import WeaveletPilot
 
 final class ChatScrollControlsTests: XCTestCase {
+    @MainActor func testSharedStreamDecisionDrivesNativeOffsetAndKeepsManualDeparture() throws {
+        let view = UIScrollView(frame:CGRect(x:0,y:0,width:400,height:600))
+        view.contentSize = CGSize(width:500,height:2000)
+        view.contentOffset = CGPoint(x:17,y:1400)
+        let offset = ChatScrollOffset(); offset.attach(view)
+        let bridge = try SharedWebOperations.Session()
+        var stream = ChatStreamFollowing()
+        XCTAssertTrue(try stream.measure(top:1400,height:2000,viewport:600,scrollEvent:false,
+            changedScroller:true,generating:true,editing:false,bridge:bridge))
+        view.contentSize.height = 2100
+        XCTAssertTrue(try stream.measure(top:1400,height:2100,viewport:600,scrollEvent:false,
+            changedScroller:false,generating:true,editing:false,bridge:bridge))
+        stream.scrollTop += offset.move(by:100)
+        XCTAssertEqual(view.contentOffset,CGPoint(x:17,y:1500))
+        XCTAssertFalse(try stream.measure(top:1500,height:2100,viewport:600,scrollEvent:true,
+            changedScroller:false,generating:true,editing:true,bridge:bridge))
+        XCTAssertTrue(stream.following)
+        view.contentOffset.y = 1100
+        XCTAssertFalse(try stream.measure(top:1100,height:2100,viewport:600,scrollEvent:true,
+            changedScroller:false,generating:true,editing:false,bridge:bridge))
+        XCTAssertFalse(try stream.measure(top:1100,height:2300,viewport:600,scrollEvent:false,
+            changedScroller:false,generating:true,editing:false,bridge:bridge))
+        XCTAssertEqual(view.contentOffset,CGPoint(x:17,y:1100))
+    }
+
     @MainActor func testSharedRestorationDeltaUsesNativeScrollBoundsAndRetainsHorizontalPosition() throws {
         let view = UIScrollView(frame:CGRect(x:0,y:0,width:400,height:600))
         view.contentSize = CGSize(width:500,height:2000)

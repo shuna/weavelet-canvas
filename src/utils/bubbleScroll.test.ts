@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { bubbleNavigationTargets, captureBubbleScrollAnchor, restoredBubbleScrollTop } from './bubbleScroll';
+import { bubbleNavigationTargets, captureBubbleScrollAnchor, restoredBubbleScrollTop, shouldFollowStream, streamFollowAfterScroll } from './bubbleScroll';
 import { bubbleScroll } from '../../shared/google-sync/bubbleScroll';
 
 describe('bubbleNavigationTargets', () => {
@@ -25,5 +25,22 @@ describe('bubbleNavigationTargets', () => {
   it('restores the bottom or saved raw scroll position when no item is available', () => {
     expect(restoredBubbleScrollTop({ anchor: { firstVisibleItemIndex: -1, offsetWithinItem: 0, wasAtBottom: true, scrollTop: 12 }, scrollTop: 0, scrollHeight: 700, clientHeight: 300 })).toBe(700);
     expect(JSON.parse(bubbleScroll(JSON.stringify({ operation: 'restore', anchor: { firstVisibleItemIndex: -1, offsetWithinItem: 0, wasAtBottom: false, scrollTop: 12 }, scrollTop: 0, scrollHeight: 700, clientHeight: 300 })))).toBe(12);
+  });
+
+  it('changes stream following only for a scroll change or a replaced scroller', () => {
+    const base = { following: true, previousScrollTop: 600, scrollTop: 600, scrollHeight: 900, clientHeight: 300, scrollEvent: false, scrollerChanged: false };
+    expect(streamFollowAfterScroll(base)).toBe(true);
+    expect(streamFollowAfterScroll({ ...base, scrollEvent: true, scrollTop: 599.4 })).toBe(false);
+    expect(streamFollowAfterScroll({ ...base, scrollerChanged: true })).toBe(true);
+    expect(streamFollowAfterScroll({ ...base, scrollEvent: true, previousScrollTop: 10, scrollTop: 0, scrollHeight: 300 })).toBe(false);
+  });
+
+  it('does not stream-follow while editing, swiping, or without a session', () => {
+    const base = { following: true, generating: true, editing: false, branchSwiping: false };
+    expect(shouldFollowStream(base)).toBe(true);
+    expect(shouldFollowStream({ ...base, editing: true })).toBe(false);
+    expect(shouldFollowStream({ ...base, branchSwiping: true })).toBe(false);
+    expect(shouldFollowStream({ ...base, generating: false })).toBe(false);
+    expect(JSON.parse(bubbleScroll(JSON.stringify({ operation: 'streamFollow', ...base, previousScrollTop: 10, scrollTop: 0, scrollHeight: 100, clientHeight: 100, scrollEvent: true, scrollerChanged: false })))).toEqual({ following: false, shouldScroll: false });
   });
 });

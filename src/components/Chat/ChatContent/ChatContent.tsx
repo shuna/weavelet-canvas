@@ -19,7 +19,7 @@ import countTokens, { limitMessageTokens } from '@utils/messageUtils';
 import { perfStart, perfEnd } from '@utils/perfTrace';
 import { defaultModel, reduceMessagesToTotalToken } from '@constants/chat';
 import { showToast } from '@utils/showToast';
-import { bubbleNavigationTargets, captureBubbleScrollAnchor, restoredBubbleScrollTop } from '@utils/bubbleScroll';
+import { bubbleNavigationTargets, captureBubbleScrollAnchor, restoredBubbleScrollTop, shouldFollowStream, streamFollowAfterScroll } from '@utils/bubbleScroll';
 
 const EMPTY_MESSAGES: never[] = [];
 const EMPTY_ACTIVE_PATH: string[] = [];
@@ -404,12 +404,13 @@ const ChatContent = ({ isChatFindOpen, onChatFindClose }: ChatContentProps = {})
       });
       anchorRef.current = capturedAnchor;
       // Layout measurements must not change the user's streaming follow choice.
-      if (event || streamScrollerRef.current !== scroller) {
-        if (scroller.scrollTop !== streamScrollTopRef.current || streamScrollerRef.current !== scroller) {
-          // Fitting in the viewport does not mean the user chose to follow the end.
-          streamFollowRef.current = scroller.scrollHeight > scroller.clientHeight + SCROLL_ALIGN_TOLERANCE
-            && anchorRef.current.wasAtBottom;
-        }
+      const scrollerChanged = streamScrollerRef.current !== scroller;
+      if (event || scrollerChanged) {
+        streamFollowRef.current = streamFollowAfterScroll({
+          following: streamFollowRef.current, previousScrollTop: streamScrollTopRef.current,
+          scrollTop: scroller.scrollTop, scrollHeight: scroller.scrollHeight, clientHeight: scroller.clientHeight,
+          scrollEvent: !!event, scrollerChanged,
+        });
         streamScrollerRef.current = scroller;
         streamScrollTopRef.current = scroller.scrollTop;
       }
@@ -488,10 +489,8 @@ const ChatContent = ({ isChatFindOpen, onChatFindClose }: ChatContentProps = {})
     if (!scroller || !messageList) return;
 
     const scrollToEnd = () => {
-      if (scroller.dataset.branchSwiping) return;
-      if (!Object.values(useStore.getState().generatingSessions).some(session => session.chatId === currentChatId)) return;
-      // Stop following if user scrolled away manually
-      if (!streamFollowRef.current) return;
+      const generating = Object.values(useStore.getState().generatingSessions).some(session => session.chatId === currentChatId);
+      if (!shouldFollowStream({ following: streamFollowRef.current, generating, editing: isEditingInScroller, branchSwiping: !!scroller.dataset.branchSwiping })) return;
       scrollViewportToBottom(scroller, syncAtBottomState);
       streamScrollTopRef.current = scroller.scrollTop;
     };

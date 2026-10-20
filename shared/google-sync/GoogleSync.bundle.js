@@ -8584,6 +8584,16 @@ var WeaveletGoogleSync = (() => {
       return input.scrollTop + input.itemTop + anchor.offsetWithinItem;
     return anchor.scrollTop ?? null;
   }
+  function streamFollowAfterScroll(input) {
+    if (!input.scrollEvent && !input.scrollerChanged)
+      return input.following;
+    if (input.scrollTop === input.previousScrollTop && !input.scrollerChanged)
+      return input.following;
+    return input.scrollHeight > input.clientHeight + 0.5 && input.scrollTop >= input.scrollHeight - input.clientHeight - 0.5;
+  }
+  function shouldFollowStream(input) {
+    return input.following && input.generating && !input.editing && !input.branchSwiping;
+  }
 
   // shared/google-sync/bubbleScroll.ts
   function bubbleScroll(json) {
@@ -8592,6 +8602,10 @@ var WeaveletGoogleSync = (() => {
       return JSON.stringify(captureBubbleScrollAnchor(input));
     if (input.operation === "restore")
       return JSON.stringify(restoredBubbleScrollTop(input));
+    if (input.operation === "streamFollow") {
+      const following = streamFollowAfterScroll(input);
+      return JSON.stringify({ following, shouldScroll: shouldFollowStream({ ...input, following }) });
+    }
     return JSON.stringify(bubbleNavigationTargets(input));
   }
 

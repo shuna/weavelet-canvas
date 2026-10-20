@@ -253,3 +253,8 @@ Catalyst build、既存MessageInputTests 6件、差分確認が成功。独立As
 ### 2026-10-21：位置履歴の接続
 
 U21で残したスクロール位置のcapture/復元を、Webのpure位置計算と既存共有履歴へ接続した。会話ごとの非永続cache、戻る/進むと表示文脈のatomic保存、native UIScrollViewの精密位置反映を使い、入力開始で復元を取消す。Catalyst実画面の途中位置/前後/会話切替、関連自動確認と独立Astra指摘修正を完成ledgerへ記録した。U22と全UI条件の未受入は維持する。
+
+
+### 2026-10-21：行左端の折畳と生成追従
+
+U22は44ptの独立入口を既存NodeOptionsへ接続した。生成追従の判断はWebから共有し、nativeの計測/操作へ接続する。生成中もメッセージ操作の配置を残して行全体を無効化し、開始/終了でfooter高さを変えない。Catalystの明示移動/通常scroll後の位置保持、最終buildと独立Astra監査は完成ledgerに記録した。長時間の出力・実keyboard・狭幅/文字拡大/VoiceOver等の最終受入は残る。

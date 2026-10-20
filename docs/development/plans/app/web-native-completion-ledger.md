@@ -1258,3 +1258,14 @@ U22の入口を操作Menuから行左端へ移し、既存NodeOptionsの共有�
 最終Catalyst buildと差分確認成功。隔離FAKE画面で折畳→展開、本文再表示、対象行編集中のdisabled状態と整列を確認し、編集は取消した。終了後のprocess不在とbuilt Info.plistのbyte一致復元を確認。独立Astraは新規P1/P2なし、同一差分の前回監査結果を再利用した。業務規則・保存/同期形式は未変更で、NodeOptionsと全項目I/O・暗号化同期の既存成功を再利用する。ログ /private/tmp/weavelet-row-collapse-final-build.log。
 
 狭幅・文字拡大・実keyboard・VoiceOver全操作、生成中の実画面確認は未実施。iPhone照会/導入・push・main統合は行わない。次はWebの生成中スクロール追従とnative接続を実callerで照合する。実オンライン相互運用と全機能/UIの最終受入は未完了。
+
+
+## 生成中の末尾追従と操作欄の高さ保持（2026-10-21）
+
+WebのstreamFollowAfterScroll/shouldFollowStreamをbubbleScrollへ抽出し、Web実callerとnative JSCが同じ追従判断を使う。実Webの0.5境界、短いcontentだけでは追従を選ばないこと、layoutだけでは選択を変えないこと、編集/分岐swipe/対象会話の生成がない場合の抑止を保持した。DOM observerはWeb、SwiftUI geometryとUIScrollViewの操作はnativeに残す。nativeはpublicのtracking/dragging/decelerationをユーザー操作として渡し、単なるLazy layoutのoffset変化を手動離脱と混同しない。明示的な末尾ボタンは追従を選び、他の移動は解除する。終了時はWeb同様に最小content高さを保ち、手動移動や会話/表示行変更で解放する。
+
+実画面では生成中のhandler nil化で各行のfooter実体が縮み、完了時に再拡大する問題を確認した。既存の行全体disabledを維持しながらhandlerと操作配置を保持する修正で解消した。最初に試した終了anchor補正はこの原因を直さないため撤去し、新しい復元taskや保存fieldを残していない。独立Astraの途中指摘（補正位置の上書き）はこの撤去範囲であり、最終の配置保持とinteraction境界の限定監査は新規P1/P2なし。
+
+Web関連16件・型検査・Vite build・共有bundle鮮度は成功。Catalyst controls6/history4の固有10件が成功し、共有判定の引数/結果とnative offset接続、手動離脱、編集時抑止、横位置保持、既存履歴/保存失敗保全を確認した。反復した同じ10件を加算しない。最終UI修正後はCatalyst buildと実画面の関連経路を確認し、未変更suiteは再利用した。保存/同期schemaと共有業務規則は未変更で、全項目I/O・実Web→native→Web暗号化同期の既存成功も再利用する。ログ /private/tmp/weavelet-stream-follow-{web-test,types,web-build,freshness,native-test,native-corrected-test,interaction-build}.log。
+
+隔離FAKE Catalystでは長文送信/再生成の末尾追従、生成中の操作ボタンdisabled、前バブルへの明示移動後の位置保持を確認した。最終では生成中にユーザー見出し約260pxの位置へ移動し、完了後も同位置だった。通常scrollも本文外側の座標で操作し、段落5が約292pxの位置から完了後も動かないことを確認した。本文内のAX scrollはnoValueとなり、外側で操作し直した。これは短い2イベントのFAKE出力であり、実ハードウェアのwheel/trackpad慣性、長時間の多段階出力で行高が増え続ける場合、狭幅/文字拡大/実keyboard/VoiceOverを証明するものではない。終了後のprocess不在とbuilt Info.plistのbyte一致復元を確認した。実API/cloud・iPhone・push・main統合は行っていない。全Web機能/UIと実オンライン相互運用の最終受入は未完了。
