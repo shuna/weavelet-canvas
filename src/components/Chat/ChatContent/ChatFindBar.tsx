@@ -2,20 +2,13 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next';
 import { useWorkspaceStore } from '@store/workspaceScope';
 import { SearchResult, searchBranchNodes } from '@utils/branchSearch';
+import { clearChatFind, highlightChatFind, selectChatFindMatch, type ChatFindMatch } from '@utils/chatFindDom';
+import { stepSearchResult } from '@utils/searchState';
 
 interface ChatFindBarProps {
   scrollerRef: React.RefObject<HTMLDivElement | null>;
   onClose: () => void;
 }
-
-const MARK_CLASS = 'chat-find-highlight';
-const MARK_ACTIVE_CLASS = 'chat-find-highlight-active';
-
-type SearchTarget = {
-  node: Text;
-  text: string;
-  positions: number[];
-};
 
 /**
  * Scroll a mark element into view within the given scroller only,
@@ -23,16 +16,16 @@ type SearchTarget = {
  * Mobile Safari keyboard from pushing the header off-screen).
  */
 function scrollMarkIntoView(
-  mark: HTMLElement,
+  match: ChatFindMatch,
   scroller: HTMLElement | null
 ) {
   if (!scroller) {
-    mark.scrollIntoView({ block: 'center', behavior: 'smooth' });
+    match.marks[0].scrollIntoView({ block: 'center', behavior: 'smooth' });
     return;
   }
 
   const scrollerRect = scroller.getBoundingClientRect();
-  const markRect = mark.getBoundingClientRect();
+  const markRect = match.range.getBoundingClientRect();
 
   const markCenterInScroller =
     markRect.top - scrollerRect.top + scroller.scrollTop + markRect.height / 2;
@@ -65,7 +58,7 @@ const ChatFindBar = ({ scrollerRef, onClose }: ChatFindBarProps) => {
   const [currentIndex, setCurrentIndex] = useState(-1);
   const [isHistoryOpen, setIsHistoryOpen] = useState(false);
   const debounceRef = useRef<ReturnType<typeof setTimeout>>();
-  const marksRef = useRef<HTMLElement[]>([]);
+  const marksRef = useRef<ChatFindMatch[]>([]);
 
   // "allNodes" mode state
   const [nodeResults, setNodeResults] = useState<SearchResult[]>([]);
@@ -137,13 +130,7 @@ const ChatFindBar = ({ scrollerRef, onClose }: ChatFindBarProps) => {
   const clearHighlights = useCallback(() => {
     const scroller = scrollerRef.current;
     if (!scroller) return;
-    const marks = scroller.querySelectorAll(`mark.${MARK_CLASS}`);
-    marks.forEach((mark) => {
-      const parent = mark.parentNode;
-      if (!parent) return;
-      parent.replaceChild(document.createTextNode(mark.textContent ?? ''), mark);
-      parent.normalize();
-    });
+    clearChatFind(scroller);
     marksRef.current = [];
   }, [scrollerRef]);
 
@@ -157,66 +144,13 @@ const ChatFindBar = ({ scrollerRef, onClose }: ChatFindBarProps) => {
         return;
       }
 
-      const lowerQ = q.toLowerCase();
-      const walker = document.createTreeWalker(scroller, NodeFilter.SHOW_TEXT, {
-        acceptNode: (node) => {
-          if ((node.parentElement as HTMLElement)?.closest('[data-chat-find-bar]')) {
-            return NodeFilter.FILTER_REJECT;
-          }
-          const tag = node.parentElement?.tagName;
-          if (tag === 'TEXTAREA' || tag === 'INPUT') {
-            return NodeFilter.FILTER_REJECT;
-          }
-          return NodeFilter.FILTER_ACCEPT;
-        },
-      });
-
-      const marks: HTMLElement[] = [];
-      const searchTargets: SearchTarget[] = [];
-
-      let node: Node | null;
-      while ((node = walker.nextNode())) {
-        const text = node.textContent ?? '';
-        const lower = text.toLowerCase();
-        let idx = lower.indexOf(lowerQ);
-        if (idx === -1) continue;
-
-        const positions: number[] = [];
-        while (idx !== -1) {
-          positions.push(idx);
-          idx = lower.indexOf(lowerQ, idx + 1);
-        }
-
-        searchTargets.push({ node: node as Text, text, positions });
-      }
-
-      for (const { node: textNode, text, positions } of searchTargets) {
-        const parent = textNode.parentNode;
-        if (!parent) continue;
-        const frag = document.createDocumentFragment();
-        let lastEnd = 0;
-        for (const pos of positions) {
-          if (pos > lastEnd) {
-            frag.appendChild(document.createTextNode(text.slice(lastEnd, pos)));
-          }
-          const mark = document.createElement('mark');
-          mark.className = MARK_CLASS;
-          mark.textContent = text.slice(pos, pos + q.length);
-          frag.appendChild(mark);
-          marks.push(mark);
-          lastEnd = pos + q.length;
-        }
-        if (lastEnd < text.length) {
-          frag.appendChild(document.createTextNode(text.slice(lastEnd)));
-        }
-        parent.replaceChild(frag, textNode);
-      }
+      const marks = highlightChatFind(scroller, q);
 
       marksRef.current = marks;
       setMatchCount(marks.length);
       if (marks.length > 0) {
         setCurrentIndex(0);
-        marks[0].classList.add(MARK_ACTIVE_CLASS);
+        selectChatFindMatch(marks, 0);
         pushVisibleSearchEntry();
         scrollMarkIntoView(marks[0], scrollerRef.current);
       } else {
@@ -273,51 +207,11 @@ const ChatFindBar = ({ scrollerRef, onClose }: ChatFindBarProps) => {
       const scroller = scrollerRef.current;
       if (!scroller || !q.trim()) return;
 
-      const lowerQ = q.toLowerCase();
-      const walker = document.createTreeWalker(scroller, NodeFilter.SHOW_TEXT, {
-        acceptNode: (node) => {
-          if ((node.parentElement as HTMLElement)?.closest('[data-chat-find-bar]')) {
-            return NodeFilter.FILTER_REJECT;
-          }
-          const tag = node.parentElement?.tagName;
-          if (tag === 'TEXTAREA' || tag === 'INPUT') return NodeFilter.FILTER_REJECT;
-          return NodeFilter.FILTER_ACCEPT;
-        },
-      });
-
-      const marks: HTMLElement[] = [];
-      const targets: SearchTarget[] = [];
-      let nd: Node | null;
-      while ((nd = walker.nextNode())) {
-        const text = nd.textContent ?? '';
-        const lower = text.toLowerCase();
-        let idx = lower.indexOf(lowerQ);
-        if (idx === -1) continue;
-        const positions: number[] = [];
-        while (idx !== -1) { positions.push(idx); idx = lower.indexOf(lowerQ, idx + 1); }
-        targets.push({ node: nd as Text, text, positions });
-      }
-      for (const { node: textNode, text, positions } of targets) {
-        const parent = textNode.parentNode;
-        if (!parent) continue;
-        const frag = document.createDocumentFragment();
-        let lastEnd = 0;
-        for (const pos of positions) {
-          if (pos > lastEnd) frag.appendChild(document.createTextNode(text.slice(lastEnd, pos)));
-          const mark = document.createElement('mark');
-          mark.className = MARK_CLASS;
-          mark.textContent = text.slice(pos, pos + q.length);
-          frag.appendChild(mark);
-          marks.push(mark);
-          lastEnd = pos + q.length;
-        }
-        if (lastEnd < text.length) frag.appendChild(document.createTextNode(text.slice(lastEnd)));
-        parent.replaceChild(frag, textNode);
-      }
+      const marks = highlightChatFind(scroller, q);
       marksRef.current = marks;
 
       if (marks.length > 0) {
-        marks[0].classList.add(MARK_ACTIVE_CLASS);
+        selectChatFindMatch(marks, 0);
         scrollMarkIntoView(marks[0], scrollerRef.current);
       }
     },
@@ -350,10 +244,7 @@ const ChatFindBar = ({ scrollerRef, onClose }: ChatFindBarProps) => {
       if (scope === 'visible') {
         const marks = marksRef.current;
         if (marks.length === 0) return;
-        if (currentIndex >= 0 && currentIndex < marks.length) {
-          marks[currentIndex].classList.remove(MARK_ACTIVE_CLASS);
-        }
-        marks[newIndex].classList.add(MARK_ACTIVE_CLASS);
+        selectChatFindMatch(marks, newIndex);
         pushVisibleSearchEntry();
         scrollMarkIntoView(marks[newIndex], scrollerRef.current);
         setCurrentIndex(newIndex);
@@ -370,12 +261,12 @@ const ChatFindBar = ({ scrollerRef, onClose }: ChatFindBarProps) => {
 
   const goNext = useCallback(() => {
     if (matchCount === 0) return;
-    goTo((currentIndex + 1) % matchCount);
+    goTo(stepSearchResult(currentIndex, matchCount, false));
   }, [currentIndex, matchCount, goTo]);
 
   const goPrev = useCallback(() => {
     if (matchCount === 0) return;
-    goTo((currentIndex - 1 + matchCount) % matchCount);
+    goTo(stepSearchResult(currentIndex, matchCount, true));
   }, [currentIndex, matchCount, goTo]);
 
   // ---------- Scope switch ----------
