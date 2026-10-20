@@ -39,3 +39,12 @@ it('lists saved versions only for the current format', () => {
   const html = renderToStaticMarkup(createElement(BubbleSummaryView, { nodeId: 'b', children: 'Original', renderSummary }));
   expect(html).not.toContain('保存済み要約');
 });
+
+it('uses the shared saved-version label', () => {
+  const first = { ...mocks.value.summary, id: 'first', format: undefined, text: '  First\nvalue  ' };
+  const second = { ...first, id: 'second', text: 'Second' };
+  mocks.value.summary = first; mocks.value.candidates = [first, second]; mocks.value.tab = 'summary';
+  const html = renderToStaticMarkup(createElement(BubbleSummaryView, { nodeId: 'b', children: 'Original', renderSummary }));
+  expect(html).toContain('2件 · First\nvalue');
+  expect(html).toContain('2件 · Second');
+});

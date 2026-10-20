@@ -2,6 +2,7 @@ import { useWorkspaceReadOnly } from '@store/workspaceScope';
 import { type ReactNode } from 'react';
 import type { BubbleSummary } from '@type/chat';
 import { normalizeBubbleSummaryText } from '@utils/bubbleSummary';
+import { savedBubbleSummaryVersions } from '@utils/bubbleSummaryOperations';
 
 import { useBubbleSummary, useSummaryDisplay } from './bubbleSummaryDisplay';
 
@@ -15,9 +16,9 @@ export default function BubbleSummaryView({ nodeId, isCollapsed = false, childre
     <div hidden={tab !== 'original'}>{children}</div>
   </>;
   const preview = normalizeBubbleSummaryText(summary.text).replace(/\s+/g, ' ').trim();
-  const versions = candidates.filter(value => value.format === summary.format);
+  const versions = savedBubbleSummaryVersions(candidates, summary);
   return <section className='text-gray-800 dark:text-gray-100' onClick={event => event.stopPropagation()}>
-    {!readOnly && versions.length > 1 && <label className='mb-3 block text-xs'>保存済み要約 <select aria-label='保存済み要約' className='rounded border bg-transparent p-1' value={summary.id} onChange={event => { const value = candidates.find(item => item.id === event.target.value); if (value) choose(chat.id, value, tab !== 'original'); }}>{versions.map(value => <option key={value.id} value={value.id}>{value.sources.length}件 · {normalizeBubbleSummaryText(value.text).slice(0, 32)}</option>)}</select></label>}
+    {!readOnly && versions.length > 1 && <label className='mb-3 block text-xs'>保存済み要約 <select aria-label='保存済み要約' className='rounded border bg-transparent p-1' value={summary.id} onChange={event => { const value = candidates.find(item => item.id === event.target.value); if (value) choose(chat.id, value, tab !== 'original'); }}>{versions.map(value => <option key={value.id} value={value.id}>{value.label}</option>)}</select></label>}
     <div>
       <div hidden={tab !== 'original'}>{children}</div>
       <div hidden={tab === 'original'}>

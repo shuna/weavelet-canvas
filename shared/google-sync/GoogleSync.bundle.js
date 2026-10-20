@@ -15591,6 +15591,12 @@ ${JSON.stringify(input.length === 1 ? input[0] : input)}`;
       replacementMessage: bubbleSummarySubmitMessage(saved)
     };
   }
+  function savedBubbleSummaryVersions(candidates, summary) {
+    return candidates.filter((value) => value.format === summary?.format).map((value) => ({
+      id: value.id,
+      label: `${value.sources.length}\u4EF6 \xB7 ${normalizeBubbleSummaryText(value.text).slice(0, 32)}`
+    }));
+  }
   function describeBubbleSummary(chat, nodeId, generatingNodeIds = [], chosenSummaryId, mode = "single", originNodeId = nodeId) {
     const pathIds = chat.branchTree?.activePath ?? chat.messages.map((_23, index) => String(index));
     const path = pathIds.map((id, index) => ({
@@ -15625,6 +15631,7 @@ ${JSON.stringify(input.length === 1 ? input[0] : input)}`;
       range,
       tab,
       anchor,
+      savedVersions: savedBubbleSummaryVersions(candidates, summary),
       hidden: !!summary && tab !== "original" && anchor !== nodeId
     };
   }

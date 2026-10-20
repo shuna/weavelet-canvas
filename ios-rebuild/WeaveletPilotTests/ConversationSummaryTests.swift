@@ -109,6 +109,44 @@ final class ConversationSummaryTests: XCTestCase {
         XCTAssertEqual(try before.required("state")["xSummary"],.number("9007199254740993"))
     }
 
+    func testSavedVersionsUseSharedDescriptionAndPreserveSelectionOnFailedSave() throws {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent("native-summary-versions-\(UUID().uuidString)")
+        addTeardownBlock { try? FileManager.default.removeItem(at: directory) }
+        var reject = false
+        let store = LocalStateStore(fileURL: directory.appendingPathComponent("state.json")) { bytes, url in
+            if reject { throw CocoaError(.fileWriteNoPermission) }
+            try bytes.write(to: url, options: .atomic)
+        }
+        let chat = try source.required("chats").array("chats")[0]
+        var value = source.replacing("chats", with: .array([.object(try chat.object("chat").filter { $0.key != "branchTree" })]))
+        for (index, id) in ["summary-é", "summary-e\u{0301}"].enumerated() {
+            // Web replaces matching mode/source/format; different modes retain separate saved candidates.
+            let prepared = try XCTUnwrap(ConversationSummary.prepare(source:value,state:state,chatID:"chat",sourceNodeIDs:["message-0"],mode:index == 0 ? "single" : "through",originNodeID:"message-0",summaryID:id,now:Double(index + 1),legacy:legacy))
+            value = try XCTUnwrap(ConversationSummary.apply(("Saved version \(index + 1)",nil),prepared:prepared,source:value,state:state)).source
+        }
+        let app = ChatState(store: store)
+        try app.importWebData(value.replacing("version",with:.number("3")).encoded())
+        let info = try XCTUnwrap(app.summaryInfo(chatID:"chat",nodeID:"message-0"))
+        XCTAssertEqual(info["anchor"], .string("message-0"))
+        let versions = try info.required("savedVersions").array("versions")
+        XCTAssertEqual(versions.map { $0["id"] }, [.string("summary-é"), .string("summary-e\u{0301}")])
+        XCTAssertEqual(versions.map { $0["label"] }, [.string("1件 · Saved version 1"), .string("1件 · Saved version 2")])
+        let before = try app.publicationSnapshot(), disk = try Data(contentsOf:store.fileURL)
+        reject = true
+        XCTAssertThrowsError(try app.mutateSummary(chatID:"chat",action:"use",summaryID:"summary-é",use:true))
+        XCTAssertEqual(try app.publicationSnapshot(), before)
+        XCTAssertEqual(try Data(contentsOf:store.fileURL), disk)
+        XCTAssertEqual(try app.summaryInfo(chatID:"chat",nodeID:"message-0"), info)
+        reject = false
+        try app.mutateSummary(chatID:"chat",action:"use",summaryID:"summary-é",use:true)
+        XCTAssertEqual(try app.summaryInfo(chatID:"chat",nodeID:"message-0")?["summary"]?["id"], .string("summary-é"))
+        try app.mutateSummary(chatID:"chat",action:"use",summaryID:"summary-é",use:false)
+        try app.mutateSummary(chatID:"chat",action:"use",summaryID:"summary-e\u{0301}",use:false)
+        XCTAssertEqual(try app.summaryInfo(chatID:"chat",nodeID:"message-0")?["tab"], .string("original"))
+        XCTAssertEqual(try app.summaryInfo(chatID:"chat",nodeID:"message-0")?["summary"]?["id"], .string("summary-e\u{0301}"))
+        XCTAssertEqual(try ChatState(store:store).exportWebData(), try app.exportWebData())
+    }
+
     func testGeneratedSummaryAppliesAndRestartsThroughTheNativeStore() async throws {
         let dir = FileManager.default.temporaryDirectory.appendingPathComponent("native-summary-job-\(UUID().uuidString)")
         let store = LocalStateStore(fileURL:dir.appendingPathComponent("state.json"))

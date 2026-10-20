@@ -101,6 +101,11 @@ export function evaluateBubbleSummary(chat: ChatInterface, selection: SummarySel
     replacementMessage: bubbleSummarySubmitMessage(saved) };
 }
 
+export function savedBubbleSummaryVersions(candidates: BubbleSummary[], summary?: BubbleSummary) {
+  return candidates.filter(value => value.format === summary?.format).map(value => ({ id: value.id,
+    label: `${value.sources.length}件 · ${normalizeBubbleSummaryText(value.text).slice(0, 32)}` }));
+}
+
 export function describeBubbleSummary(chat: ChatInterface, nodeId: string, generatingNodeIds: string[] = [], chosenSummaryId?: string,
   mode: BubbleSummary['mode'] = 'single', originNodeId: string = nodeId) {
   const pathIds = chat.branchTree?.activePath ?? chat.messages.map((_, index) => String(index));
@@ -124,5 +129,5 @@ export function describeBubbleSummary(chat: ChatInterface, nodeId: string, gener
   const anchor = summary?.sources.at(-1)?.nodeId;
   return { eligible: path[pathIds.indexOf(nodeId)]?.eligible ?? false, selectedTarget: !!chat.summaryTargets?.[nodeId], path, sourceNodeIds,
     candidates, summary, readable, compact, chosenSummaryId, valid: !!range, range, tab,
-    anchor, hidden: !!summary && tab !== 'original' && anchor !== nodeId };
+    anchor, savedVersions: savedBubbleSummaryVersions(candidates, summary), hidden: !!summary && tab !== 'original' && anchor !== nodeId };
 }

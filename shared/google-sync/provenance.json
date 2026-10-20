@@ -59,7 +59,7 @@
     "src/utils/openrouterRequest.ts": "b608183eadce3da1c3f04a1b71bb68866e562ed77e6d669de0d77a697f21f60a",
     "src/utils/chatTitle.ts": "0afee5d73c186004972f2f1f957d014132941545bf88675644bff417661df448",
     "src/utils/modelSettingsCore.ts": "8c08f794f5ca97e6707e3ddc039efb0e77219805e45e014639839a4823eaead1",
-    "src/utils/bubbleSummaryOperations.ts": "5aef4ccabfa2d9b26c0b9a62c9808613e61bc4e407d562dc31200e0c86fd8478",
+    "src/utils/bubbleSummaryOperations.ts": "ef6af3c4e8be1208d0e17a3dc02c6cbf193f7717d709c936eb1dbd24abda6138",
     "src/store/chat-edit-time.ts": "1d7abac60c3dbc063fcaaef270dd846c2cf2d78dc0aa1a286b99ffc708ecac8c",
     "src/store/chat-slice.ts": "101bb96fe5b0d8663fe039a0a9d6a70885ff5c9bbe4d8f07a5c1667dce31560c",
     "src/store/input-slice.ts": "7474b0e1a83527ea71337c09cabc8d5b60c949811ac8b1ce2893bfb479469a5d",
@@ -242,7 +242,7 @@
     "src/store/provider-helpers.ts": "d8cd473cdba8eeb950294a784a7266a58d7aff80d31095cabd1c29459aa43ac1",
     "src/utils/chatTitle.ts": "0afee5d73c186004972f2f1f957d014132941545bf88675644bff417661df448",
     "src/utils/bubbleSummaryPrompt.ts": "b78beceb1bac49ec3d6f9f1856c4c17fa823e32fa31e5fb23d7dacf3437802a6",
-    "src/utils/bubbleSummaryOperations.ts": "5aef4ccabfa2d9b26c0b9a62c9808613e61bc4e407d562dc31200e0c86fd8478",
+    "src/utils/bubbleSummaryOperations.ts": "ef6af3c4e8be1208d0e17a3dc02c6cbf193f7717d709c936eb1dbd24abda6138",
     "shared/google-sync/bubbleSummary.ts": "b6f5bd034fe1fe04264d021fc4ef15919de51f1918fd69a8e7e50ad7cf292662",
     "shared/google-sync/title.ts": "b253de2539e4ac1e071d4013ef772186678be3084cb0359cc872a3e39a2dea51",
     "src/utils/legacyIOSImport.ts": "921b398270cc0b3115591efe0186934ebcfbfe7e2c344f969fb1327b86655c6e",
@@ -424,5 +424,5 @@
     "remove-accents/package.json": "511775b39122274ad36e9dc32c47b2112a3fd4372e64284c2336b143be853c82",
     "remove-accents/LICENSE": "31279697ad2455927a227e7678f2bb71e9e06dde319f12ce345404b3b7a99b81"
   },
-  "bundleSHA256": "6943432abbb247f41a6d227a2af63f14eb9da19787dd7366f7562f67148c5f20"
+  "bundleSHA256": "f57db0aa52afe6c22c8f72970f0e4924f3ab41bb04bc74d36e3fb06152acac61"
 }

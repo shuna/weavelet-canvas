@@ -1362,3 +1362,12 @@ Web Chat.tsxの実effectからviewSwitchNavigationEntryを抽出し、Web実call
 Web関連18件・型検査・Vite build・bundle鮮度、Catalyst BranchNavigation9＋ParallelGeneration6の15件が成功。新ケースは生成request/plan保持、別会話tree作成、保存失敗時のsource/disk/表示保持、再試行、履歴の戻る/進む、生成完了後の本文保存と再起動I/Oを確認する。初回compileのtry不足2箇所を修正した。最初の実行は14成功/1失敗で、会話切替履歴のviewがnativeではchat固定、Webでは現在のchatActiveViewという接続差を検出した。期待値は変えずnavigate(.chatSwitch)とhistorySelectingを修正し、影響する15件を再確認した。独立Astraの機能一式監査とこの2箇所の限定再監査は新規P1/P2なし。ログは /private/tmp/weavelet-view-switch-{web-test,types,build,freshness,native-test,native-final-test,native-retry-test,native-history-test}.log。
 
 隔離FAKE Catalystの最終buildで、同じ会話の生成中にchatからgraphへ切り替え、FAKE partial表示、表示layout menuの有効化と本文操作のdisabled、左右分割への切替後の完了本文、戻る操作でgraph復元を確認した。隔離保存sourceの最終assistant本文FAKE partial completeも確認。途中buildの最初の試行は生成途中で終了したため中断扱いであり、完了成功に含めない。終了後process不在とbuilt Info.plistのbyte一致復元を確認。保存/同期schemaは未変更で、全項目I/O・実Web→native→Web暗号化wireの既存成功を再利用する。実cloud、実touch/文字拡大/VoiceOver全経路、前節dragと全機能/UI最終受入は未完了。iPhone照会/導入・push・main統合は行っていない。
+## バブル内の保存済み要約選択（2026-10-21）
+
+Web BubbleSummaryViewの同形式候補filterと「件数・normalize後UTF-16の32単位」ラベルをsavedBubbleSummaryVersionsへ抽出し、実Web selectorとdescribe.savedVersionsを介したnative Menuが共用する。anchor nodeだけ、複数候補のときだけ表示し、原文tabで選ぶ場合はuse:falseを既存mutateSummaryへ渡す。ID比較はnativeでUTF8を使い、追加の永続stateや同期fieldはない。
+
+Web関連12件・型検査・Vite build・bundle鮮度が成功。Catalyst Summaryの既存6件は成功、新caseは初回失敗後に1件だけ修正・成功し、固有7件を確認した。初回は同mode/source/formatの再生成が二候補を残すと誤認したfixtureだった。実selectBubbleSummaryは既存IDを再利用するため、singleとthroughの実生成経路で二候補を作成するよう直した。期待値や保全assertは緩めていない。新caseはflat ID変換、正規化等価な二ID、保存失敗時のsource/disk/選択不変、原文tab維持、再起動I/Oを確認。独立Astraは新規P1/P2なし。ログ /private/tmp/weavelet-summary-versions-{generate,web-test,types,build,freshness,native-test,native-final-test}.log。
+
+隔離FAKE Catalystでtree付き合成会話を通常取込し、バブル内二候補表示、原文を維持した版選択、要約表示後のSaved version 1→2更新を確認した。終了後process不在・built Info byte一致復元済み。flat会話の選択追加取込ではsummary参照がtree生成IDへ追従せず、後段の範囲抽出で候補が除外される共有元の問題を別途発見し、修正中。tree付き表示確認をこのflat保全の成功とは数えない。設定入口の追加照合では評価safety/quality閾値編集とdebug panel入口/実表示にnative差を確認し、後続対象とする。モデルcatalog/downloadの機能差は端末file importだけで同等と推定せず、別途判断する。
+
+保存/同期schemaは未変更で、全項目I/O・暗号化wireの既存成功を再利用。実cloud、狭幅/文字拡大/VoiceOver、drag開始/完了を含む全機能/UI最終受入は未完了。iPhone照会/導入・push・main統合は行っていない。

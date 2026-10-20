@@ -1348,6 +1348,37 @@ struct MessageView: View {
         }
     }
 
+    @ViewBuilder private var savedSummaryControl: some View {
+        if let info = summaryInfo,
+           let anchor = try? info["anchor"]?.string("summary anchor"), anchor.utf8.elementsEqual(node.id.utf8),
+           let versions = try? info["savedVersions"]?.array("saved summaries"), versions.count > 1,
+           let selected = try? info["summary"]?["id"]?.string("summary ID") {
+            let label = versions.first { (try? $0["id"]?.string("summary ID"))?.utf8.elementsEqual(selected.utf8) == true }?["label"]
+            HStack(spacing: 6) {
+                Text("保存済み要約").font(.caption).foregroundStyle(.secondary)
+                Menu {
+                    ForEach(Array(versions.enumerated()), id: \.offset) { _, version in
+                        if let id = try? version["id"]?.string("summary ID"),
+                           let title = try? version["label"]?.displayString("summary label") {
+                            Button(title, systemImage: id.utf8.elementsEqual(selected.utf8) ? "checkmark" : "text.alignleft") {
+                                selectSummary?(id, info["tab"] != .string("original"))
+                            }
+                        }
+                    }
+                } label: {
+                    HStack(spacing: 4) {
+                        Text((try? label?.displayString("summary label")) ?? "選択").lineLimit(1)
+                        Image(systemName: "chevron.down").font(.caption2)
+                    }
+                    .font(.footnote)
+                    .frame(minHeight: 44)
+                }
+                .disabled(selectSummary == nil)
+                .accessibilityLabel("保存済み要約")
+            }
+        }
+    }
+
     private var secondaryHeaderControls: some View {
         HStack(spacing:2) {
             if let openEvaluation {
@@ -1493,6 +1524,7 @@ struct MessageView: View {
                 }
                 VStack(alignment: .leading, spacing: 8) {
                 VStack(alignment: .leading, spacing: 8) {
+                savedSummaryControl
                 ForEach(MessageBodyItem.items(node:node,summaryInfo:summaryInfo,generation:generation,context:branchSwipeContext)) { item in
                     Group {
                         switch item.content {

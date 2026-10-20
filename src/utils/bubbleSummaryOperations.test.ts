@@ -24,6 +24,20 @@ it('selects one source snapshot and describes the same valid range', () => {
   expect(described.path[1]).toMatchObject({ nodeId: 'b', eligible: true, targeted: false });
 });
 
+it('describes saved versions with the Web selector format and UTF-16 truncation', () => {
+  const value = chat(), selection = select(value);
+  value.summaries = [
+    { ...selection.summary, id: 'readable', text: `${'x'.repeat(31)}😀tail`, useForSubmit: true },
+    { ...selection.summary, id: 'compact', format: 'compact', text: 'Compact' },
+    { ...selection.summary, id: 'second', text: 'Second' },
+  ];
+  const described = call({ operation: 'describe', chat: value, nodeId: 'b' });
+  expect(described.savedVersions).toEqual([
+    { id: 'readable', label: `2件 · ${'x'.repeat(31)}\ud83d` },
+    { id: 'second', label: '2件 · Second' },
+  ]);
+});
+
 it('plans the auxiliary nonstream request from native URL metadata without a URL global', () => {
   const value = chat(), selection = select(value);
   const originalURL = globalThis.URL;
