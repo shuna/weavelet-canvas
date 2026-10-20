@@ -27,4 +27,49 @@ describe('single GGUF import', () => {
     expect(changes.every((change:{path:string[]}) => ['localModels','activeLocalModels'].includes(change.path[0]))).toBe(true);
     expect(JSON.stringify(changes)).not.toContain('savedModelMeta');
   });
+  it('exposes curated download metadata and keeps catalog registration role-neutral', () => {
+    const catalog = run({operation:'catalog'});
+    expect(catalog.map((model:{id:string}) => model.id)).toEqual([
+      'smollm2-360m-instruct-q8', 'qwen3-0.6b-q4km', 'llm-jp-3-1.8b-instruct-q4km',
+    ]);
+    const plan = run({operation:'catalogPlan',id:'smollm2-360m-instruct-q8'});
+    expect(plan.files[0]).toEqual({
+      path:'smollm2-360m-instruct-q8_0.gguf',
+      url:'https://huggingface.co/HuggingFaceTB/SmolLM2-360M-Instruct-GGUF/resolve/main/smollm2-360m-instruct-q8_0.gguf',
+    });
+    const model = run({operation:'catalogDefinition',id:plan.model.id,totalBytes:456});
+    expect(model).toMatchObject({id:plan.model.id,origin:plan.model.huggingFaceRepo,source:'opfs',fileSize:456});
+    expect(run({operation:'catalogCommit',state:{localModels:[],activeLocalModels:{generation:'',analysis:'existing'}},model}).changes).toEqual([
+      {op:'set',path:['localModels',0],value:model},
+    ]);
+    expect(run({operation:'catalogCommit',state:{localModels:[model],activeLocalModels:{generation:'existing'}},model,existingIDs:[model.id]}).changes).toEqual([]);
+  });
+  it('consolidates a downloaded catalog duplicate without losing unrelated state', () => {
+    const downloaded = {...prepared.model,id:'downloaded'};
+    const duplicate = {...prepared.model,id:'stored',tasks:['generation','analysis']};
+    const state = {
+      localModels:[downloaded,duplicate,{...prepared.model,id:'other'}],
+      activeLocalModels:{generation:'downloaded',analysis:'other',opaque:'keep'},
+      favoriteLocalModelIds:['downloaded','other'],
+      savedModelMeta:{downloaded:{partial:true},other:{opaque:true}},
+    };
+    const changes = run({operation:'catalogDuplicateCommit',state,downloadedID:'downloaded',duplicate}).changes;
+    expect(changes).toEqual(expect.arrayContaining([
+      {op:'remove',path:['savedModelMeta','downloaded']},
+      {op:'set',path:['activeLocalModels','generation'],value:'stored'},
+      {op:'set',path:['favoriteLocalModelIds',0],value:'other'},
+      {op:'set',path:['favoriteLocalModelIds',1],value:'stored'},
+    ]));
+    expect(JSON.stringify(changes)).toContain('"other"');
+  });
+  it('removes the downloaded opaque model through its aligned ID', () => {
+    const duplicate = {id:'stored',tasks:['generation']};
+    const changes = run({operation:'catalogDuplicateCommit',localModelIDs:['downloaded','other'],downloadedID:'downloaded',duplicate,state:{
+      localModels:[{opaqueRef:0},{opaqueRef:1}], activeLocalModels:{}, favoriteLocalModelIds:[], savedModelMeta:{},
+    }}).changes;
+    expect(changes).toEqual(expect.arrayContaining([
+      {op:'set',path:['localModels',0],value:{opaqueRef:1}},
+      {op:'remove',path:['localModels',1]},
+    ]));
+  });
 });

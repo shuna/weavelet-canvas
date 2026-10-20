@@ -27969,11 +27969,72 @@ ${text}`;
     return { model: duplicate ?? proposed, existing: !!duplicate };
   }
   function commitSingleGGUFImport(state, model, existingIDs) {
+    const next = commitLocalModel(state, model, existingIDs);
+    return {
+      ...next,
+      activeLocalModels: autoAssignImportedModel(next.activeLocalModels, model)
+    };
+  }
+  function commitLocalModel(state, model, existingIDs) {
     const current = existingIDs ? existingIDs.includes(model.id) : state.localModels.some((entry) => entry.id === model.id);
     return {
       ...state,
-      localModels: current ? state.localModels : [...state.localModels, model],
-      activeLocalModels: autoAssignImportedModel(state.activeLocalModels, model)
+      localModels: current ? state.localModels : [...state.localModels, model]
+    };
+  }
+  function commitCatalogDuplicate(state, downloadedID, duplicate, localModelIDs) {
+    const activeLocalModels = { ...state.activeLocalModels };
+    for (const task of Object.keys(activeLocalModels)) {
+      if (activeLocalModels[task] === downloadedID)
+        delete activeLocalModels[task];
+    }
+    const savedModelMeta = { ...state.savedModelMeta };
+    delete savedModelMeta[downloadedID];
+    const favoriteLocalModelIds = state.favoriteLocalModelIds.filter((id) => id !== downloadedID);
+    if (!favoriteLocalModelIds.includes(duplicate.id))
+      favoriteLocalModelIds.push(duplicate.id);
+    return {
+      ...state,
+      localModels: state.localModels.filter((model, index) => {
+        const id = localModelIDs?.[index] ?? (typeof model === "object" && model !== null && "id" in model && typeof model.id === "string" ? model.id : void 0);
+        return id !== downloadedID;
+      }),
+      activeLocalModels: autoAssignImportedModel(activeLocalModels, duplicate),
+      favoriteLocalModelIds,
+      savedModelMeta
+    };
+  }
+
+  // src/local-llm/catalogPlan.ts
+  function buildHfUrl(repo, revision, filePath) {
+    return `https://huggingface.co/${repo}/resolve/${revision}/${filePath}`;
+  }
+  function catalogModels() {
+    return CURATED_MODELS;
+  }
+  function catalogPlan(id) {
+    const model = catalogModels().find((candidate) => candidate.id === id);
+    if (!model)
+      throw new Error("Unknown catalog model.");
+    return {
+      model,
+      files: model.downloadFiles.map((path) => ({
+        path,
+        url: buildHfUrl(model.huggingFaceRepo, model.revision, path)
+      }))
+    };
+  }
+  function catalogDefinition(model, totalBytes) {
+    return {
+      id: model.id,
+      engine: model.engine,
+      tasks: model.tasks,
+      label: model.label,
+      origin: model.huggingFaceRepo,
+      source: "opfs",
+      manifest: model.manifest,
+      fileSize: totalBytes,
+      displayMeta: model.displayMeta
     };
   }
 
@@ -27982,7 +28043,19 @@ ${text}`;
     const input = JSON.parse(json);
     if (input.operation === "prepare")
       return JSON.stringify(prepareSingleGGUFImport(input.name, input.hash, input.size, input.candidates, input.existingModel, input.existingIDs));
+    if (input.operation === "catalog")
+      return JSON.stringify(catalogModels());
+    if (input.operation === "catalogPlan")
+      return JSON.stringify(catalogPlan(input.id));
+    if (input.operation === "catalogDefinition") {
+      const { model } = catalogPlan(input.id);
+      return JSON.stringify(catalogDefinition(model, input.totalBytes));
+    }
+    if (input.operation === "catalogDuplicateCommit")
+      return JSON.stringify({ changes: diffJSONChanges(input.state, commitCatalogDuplicate(input.state, input.downloadedID, input.duplicate, input.localModelIDs)) });
     const before = { localModels: input.state.localModels, activeLocalModels: input.state.activeLocalModels };
+    if (input.operation === "catalogCommit")
+      return JSON.stringify({ changes: diffJSONChanges(before, commitLocalModel(before, input.model, input.existingIDs)) });
     return JSON.stringify({ changes: diffJSONChanges(before, commitSingleGGUFImport(before, input.model, input.existingIDs)) });
   }
 

@@ -111,7 +111,8 @@
     "src/utils/evaluationState.ts": "9c515b6450fd0be91cd5ef624d490f38d024c3c37e67654ff0eab6bd691a25bb",
     "src/store/evaluation-slice.ts": "17ea8dac39f8f06cb02f1fbf1f6056cc96d4672256b80b42afb90f4443739ec8",
     "src/utils/localModelRole.ts": "29491f084ef6ce804a416749b115e6b63a772a735ec2d4fbea21c42e75367816",
-    "src/store/local-model-slice.ts": "96228dcfd3472550069d0a6803d4a2267c0f2c6f9580f7d77ba4251c9630ea86",
+    "src/utils/localModelImport.ts": "3999961eacdeef845226904f9f86f876b111c38670ca991e6a18dca79f23f79a",
+    "src/store/local-model-slice.ts": "b3f40cfe750505bd92b0beef0c6c72908b0b79b794f7746abe895564e195c96d",
     "src/store/store.ts": "debe9137fec89588382491a3a50673ae8a0635618b10a28103c7e8c26d497176",
     "src/components/Chat/ChatContent/Message/CommandPrompt/CommandPrompt.tsx": "f263bcba31adf57b468d45903916a7dd6c9edff203b5b6a911337afd089b1535",
     "src/components/ConfigMenu/ConfigMenu.tsx": "a724082a0729eea1650afa6b6fa79176e23d6d900e84fdb5231530b85e25dced",
@@ -185,7 +186,7 @@
     "src/utils/evaluationCore.ts": "74e675aabbb05628328ebf5ae49c464f212b6b4a40ad7158415c693c815634d6",
     "src/utils/evaluationContextCore.ts": "77c0946260540461fb041f82947b5c47d91b58e9fdfc71d0e139a35529dcf4fd",
     "src/utils/evaluationAutoCore.ts": "509166a974da3caf0a47d9fd1788c4abdf3a0d27ce8f8bf1177748255cfca533",
-    "src/utils/localModelImport.ts": "f15c25b57b27279b501c26632fbf8c0481b2b23263b22de8e63651dfd5ff7f1b"
+    "src/local-llm/catalogPlan.ts": "319816d971f83aa8be3add67fa265e13d0f727464a97a2ae87c2b52a8ddffe9e"
   },
   "bundleInputs": {
     "src/utils/aiTaskTarget.ts": "f488a1395da67bb853e66f34007817db8967cfc7ac287f534c21a109a92f9a9e",
@@ -367,8 +368,9 @@
     "shared/google-sync/evaluation.ts": "c4cd0770e8357666c663fd2a9e37911d2b6f696cacf23be576b8f0153de7ce96",
     "src/utils/localModelRole.ts": "29491f084ef6ce804a416749b115e6b63a772a735ec2d4fbea21c42e75367816",
     "shared/google-sync/localModelRole.ts": "8ce5bc1651e340c87134a35f4fbf149af159c296ca924a874c95b76b51dc96a5",
-    "src/utils/localModelImport.ts": "f15c25b57b27279b501c26632fbf8c0481b2b23263b22de8e63651dfd5ff7f1b",
-    "shared/google-sync/localModelImport.ts": "60f00ad8a824ab478800fcbb21d6510ddd107978108182d5d2f0ee3f0d3c5473",
+    "src/utils/localModelImport.ts": "3999961eacdeef845226904f9f86f876b111c38670ca991e6a18dca79f23f79a",
+    "src/local-llm/catalogPlan.ts": "319816d971f83aa8be3add67fa265e13d0f727464a97a2ae87c2b52a8ddffe9e",
+    "shared/google-sync/localModelImport.ts": "cd0e9481a917aa64edc5fd955cb9625f327a8b9351bc6e36e2331310609a1da2",
     "src/local-llm/ggufShardUtils.ts": "33845697477f6a02eab2bcc6ce94412ce34cea521400fe7dcac1ffb9823e6ef7",
     "src/local-llm/fileProvider.ts": "4046bf8b8036f227ee000132a829adfd95100e83826319dce5fadb840427d121",
     "shared/google-sync/localModelFiles.ts": "b677bf5a478483ecb3cc42e8d252de9e4456e12eb98fe64ffd528b9135b1edbe",
@@ -424,5 +426,5 @@
     "remove-accents/package.json": "511775b39122274ad36e9dc32c47b2112a3fd4372e64284c2336b143be853c82",
     "remove-accents/LICENSE": "31279697ad2455927a227e7678f2bb71e9e06dde319f12ce345404b3b7a99b81"
   },
-  "bundleSHA256": "0bf8d3526958dfec53d4e3b17984d28aef3b0031b3432f997406328e61e5402b"
+  "bundleSHA256": "627351d312dc799ffc2f3f275f3ef2be295c3f816274a38ceb8facc17e42bcb9"
 }

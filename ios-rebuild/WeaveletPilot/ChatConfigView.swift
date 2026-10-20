@@ -10,6 +10,8 @@ struct LocalModelSettingsView: View {
     @State private var copying = false
     @State private var errorMessage: String?
     @State private var fileStatus: String?
+    @State private var catalog: [OrderedJSON] = []
+    @State private var catalogLoaded = false
 
     private func name(_ model: OrderedJSON) -> String {
         (try? model["label"]?.string("label")) ?? (try? model["id"]?.string("id")) ?? "モデル"
@@ -26,6 +28,7 @@ struct LocalModelSettingsView: View {
     }
     var body: some View {
         Form {
+            Group {
             Toggle("ローカルモデルを使用",isOn:Binding(get:{state.localModelsEnabled},set:{enabled in
                 save { try state.saveLocalModelRole(enabled:enabled) }
             }))
@@ -94,10 +97,17 @@ struct LocalModelSettingsView: View {
             if copying { ProgressView("ファイルを保存中…") }
             if let fileStatus { Text(fileStatus).font(.footnote) }
             if let errorMessage { Text(errorMessage).foregroundStyle(.red) }
+            }
+            .disabled(copying || state.hasGenerations || state.evaluationJobs.values.contains { $0.busy })
+            catalogSection
         }
-        .disabled(copying || state.hasGenerations || state.evaluationJobs.values.contains { $0.busy })
         .navigationTitle("ローカルモデル")
         .navigationBarTitleDisplayMode(.inline)
+        .task {
+            guard !catalogLoaded else { return }
+            do { catalog = try state.localModelCatalog(); catalogLoaded = true }
+            catch { errorMessage = error.localizedDescription }
+        }
         .fileImporter(isPresented:$showsImporter,allowedContentTypes:importingDirectoryModel == nil ? [UTType(filenameExtension:"gguf") ?? .data] : [.folder]) { result in
             do {
                 let source = try result.get()
@@ -127,6 +137,48 @@ struct LocalModelSettingsView: View {
             }
         }
         .onDisappear { if importingDirectoryModel != nil { importTask?.cancel() } }
+    }
+
+    private var catalogSection: some View {
+        Section("モデルカタログ") {
+            ForEach(catalog.indices,id:\.self) { index in
+                let model = catalog[index]
+                if let id = try? model["id"]?.string("model ID") {
+                    let job = state.catalogDownload(id:id)
+                    let registered = (try? state.localModelDefinitions())?.contains { model in
+                        (try? model["id"]?.string("model ID"))?.utf8.elementsEqual(id.utf8) == true
+                    } == true
+                    let installed = registered && (try? state.localModelFiles.installed(modelID:id)) != nil
+                    VStack(alignment:.leading,spacing:6) {
+                        Text(name(model)).font(.subheadline.weight(.semibold)).foregroundStyle(.primary)
+                        if let repo = try? model["huggingFaceRepo"]?.string("repository") {
+                            Text(repo).font(.caption).foregroundStyle(.secondary)
+                        }
+                        if let bytes = try? model["expectedDownloadSize"]?.number("download size") {
+                            Text(ByteCountFormatter.string(fromByteCount:Int64(bytes),countStyle:.file))
+                                .font(.footnote).foregroundStyle(.secondary)
+                        }
+                        if job?.running == true {
+                            if let total = job?.expectedBytes, total > 0 {
+                                ProgressView(value:Double(job?.receivedBytes ?? 0),total:Double(total))
+                            } else { ProgressView() }
+                            Text(ByteCountFormatter.string(fromByteCount:job?.receivedBytes ?? 0,countStyle:.file))
+                                .font(.footnote).foregroundStyle(.secondary)
+                            Button("取得を取り消す") { state.cancelCatalogDownload(id:id) }.frame(minHeight:44)
+                        } else if installed && job?.error == nil {
+                            Text("この端末にファイルあり").font(.footnote).foregroundStyle(.secondary)
+                        } else {
+                            Button(job?.canResume == true ? "取得を再開" : "ダウンロード",systemImage:"arrow.down.circle") {
+                                save { try state.startCatalogDownload(id:id) }
+                            }
+                            .frame(minHeight:44)
+                            .disabled(copying || state.hasGenerations || state.evaluationJobs.values.contains { $0.busy })
+                        }
+                        if let message = job?.error { Text(message).font(.footnote).foregroundStyle(.red) }
+                    }
+                }
+            }
+        }
     }
 }
 

@@ -1387,3 +1387,17 @@ Web関連5件、最終型検査・Vite build・bundle鮮度が成功。初回型
 独立Astra初回P2はnative数値欄がDoubleを直接保存しWebのparseInt/clampを通らない点。raw文字列を共有parserへ渡し、101→100・12.9→12・1e2→1、空/不正は保存なしへ修正した。Slider整数経路とresetの片側既定値直代入は維持。P2とmissing default補完の限定再監査は新規P1/P2なし。追加2casesを最終ソースで限定実行して成功し、未変更の16成功を再利用して固有18casesを確認した（最終18件一括runではない）。ログは /private/tmp/weavelet-evaluation-threshold-{web-test,types,build,native-test,native-final-test,native-text-test,native-canonical-test,text-web-test,text-types,text-build,text-freshness}.log。
 
 隔離FAKE Catalystで安全性blockの101入力→100、reset→95とreview80保持、品質redの12.9入力→12とgreen80保持、標準Slider drag→36への更新を確認した。終了後の保存sourceでもsafety13/quality5全pair、red0.36とpeer0.8、safety原値への復帰を確認。設定sheetを閉じて正常終了し、process不在とbuilt Info byte一致復元済み。iPhone keyboard/VoiceOver/文字拡大・実cloudと全UI最終受入は未完了。共有同期wire/schema・暗号は未変更で既存暗号化往復を再利用。push・main統合・iPhone照会/導入はしていない。
+
+## ローカルモデルカタログの共有とnative取得（2026-10-21）
+
+実Webの選定3モデル、Hugging Face URL生成、取得後の定義literal、同IDの追加省略をcatalogPlanとlocalModelImportの共有処理へ抽出し、Web実callerとnativeが使用する。通常のカタログ登録は用途を自動割当しない。ファイル取込と、同内容の既存モデルへの集約だけが空き用途を補充する。集約時の旧定義/metadata/お気に入り/用途参照の整理と既存モデルのお気に入り追加も実Webから抽出した。Webは資産削除成功後に最新storeへ適用する。opaqueモデルのIDは別配列で渡し、未知属性・raw値を再構築しない。
+
+nativeは標準URLSessionDownloadTaskで一時ファイルへ取得し、既存GGUF検査/SHA256/installNewへ接続する。アプリ状態更新はMainActor、候補hash検査と配置時のコピー/hashはdetachedで実施。各await後にtoken・モデル/用途依存値・生成/評価状態を再照合し、他のrootは最新snapshotから維持する。取消epochと一時ファイル回収、異内容の同ID拒否、保存失敗時の新規ファイルだけのrevision付きrollbackを実装。配置/後片付け中は同IDの再開始を拒否し、旧処理が新処理の採用ファイルを削除しない。
+
+標準APIから得られた再開情報は端末専用sidecarへ原子的に保存し、同catalog ID/URL/revisionのときだけ再利用する。旧resume dataは取得失敗時に破棄し、当該エラーから新しいresume dataが得られれば置換する。取得後のdownloadRevisionはWebと同じsavedModelMetaに保持し、定義へ独自項目を追加しない。実ファイルやresume bytesはsnapshot/exportへ埋め込まない。追加依存なし。
+
+共有関連の固有14件（catalog3、import/登録/opaque境界6、用途3、download lifetime2）、型検査・bundle生成/鮮度が成功。関連Catalyst初回は引数label/try不足とUI数値変換のcompileを修正後、21件中20件成功、1件は実GGUF未指定でskip。成功ケースのrecord検査を単なる存在確認から、localModels/activeLocalModels/favoriteLocalModelIds/savedModelMetaの全値・配列順の比較へ強化し該当1件成功。実Web recordsはobject keyをcanonical化するため、両側を既存canonicalで比較し、local保存/再起動はraw snapshot一致を別に確認する。実行境界・配置保全の修正後は影響LocalGenerationTests9件のみ成功。変更のないNativeLocalEvaluation11件の成功を再利用し、最終21件一括実行とはしない。
+
+独立Astraで検出したawait前stateの上書き、opaque ID欠落、失効resume再使用、評価の無断取消と、後続配置awaitのcleanup漏れ/同ID再開始競合を修正した。変更部分だけの限定確認は新規P1/P2なし。親の統合確認でもMainActor明示と大容量I/O分離を補った。ログは `/private/tmp/weavelet-catalog-{web-test,web-related,duplicate-web-test,opaque-web-test,types-opaque,catalyst,catalyst-compile-fixed,catalyst-tests,record-boundary,catalyst-final,install-preservation}.log`。保存/同期wire/schema・暗号は未変更のため、全項目I/O・実Webとの暗号化往復の既存成功を再利用する。
+
+隔離FAKE Catalystの実設定画面で既存の役割/ファイル取込入口、選定3モデルの名称・取得元・容量・標準取得buttonを確認した。実インターネットの大容量取得は実行せず、取得/取消/HTTP失敗/保存失敗と再試行/同ID衝突/重複集約はURLProtocolの小さな合成GGUFで確認した。実サーバーのRange再開、実resume dataの再起動後利用、OS中断/復帰、大容量性能、実GGUF推論と実cloud/全UI最終受入は未確認。現catalogのrevisionはmainであり、固定commitや署名済み資産の来歴を保証するものではない。画面確認後はprocess不在とbuilt Infoのbyte一致復元済み。iPhone照会/導入、push/main統合は行っていない。

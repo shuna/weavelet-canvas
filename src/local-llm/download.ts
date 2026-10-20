@@ -9,6 +9,8 @@
  */
 
 import type { CatalogModel } from './catalog';
+import { buildHfUrl } from './catalogPlan';
+export { buildHfUrl } from './catalogPlan';
 import {
   openDownloadWriter,
   commitTempFile,
@@ -47,14 +49,6 @@ export interface DownloadRequest {
   revision: string;
   files: string[];
   resume?: boolean;
-}
-
-// ---------------------------------------------------------------------------
-// URL builder
-// ---------------------------------------------------------------------------
-
-export function buildHfUrl(repo: string, revision: string, filePath: string): string {
-  return `https://huggingface.co/${repo}/resolve/${revision}/${filePath}`;
 }
 
 // ---------------------------------------------------------------------------

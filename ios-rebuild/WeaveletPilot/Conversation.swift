@@ -80,6 +80,102 @@ enum ChatActiveView: String, CaseIterable, Identifiable {
     }
 }
 
+private struct NativeCatalogResumeStore {
+    let fileURL: URL
+    init(libraryURL: URL) { fileURL = libraryURL.deletingLastPathComponent().appendingPathComponent("catalog-download-resume.json") }
+    func records() -> [(id: String, url: String, revision: String, data: Data)] {
+        guard let root = try? OrderedJSON.decode(Data(contentsOf:fileURL)), root["version"] == .number("1"), let rows = try? root.required("records").array("records") else { return [] }
+        return rows.compactMap { row in
+            guard let id = try? row.required("id").string("id"), let url = try? row.required("url").string("url"),
+                  let revision = try? row.required("revision").string("revision"), let text = try? row.required("data").string("data"), let data = Data(base64Encoded:text) else { return nil }
+            return (id,url,revision,data)
+        }
+    }
+    func save(_ records: [(id: String, url: String, revision: String, data: Data)]) throws {
+        let value = OrderedJSON.object([.init(key:"version",value:.number("1")),.init(key:"records",value:.array(records.map {
+            .object([.init(key:"id",value:.string($0.id)),.init(key:"url",value:.string($0.url)),.init(key:"revision",value:.string($0.revision)),.init(key:"data",value:.string($0.data.base64EncodedString()))])
+        }))])
+        try FileManager.default.createDirectory(at:fileURL.deletingLastPathComponent(),withIntermediateDirectories:true)
+        try value.encoded().write(to:fileURL,options:.atomic)
+    }
+}
+
+private final class CatalogDownloadSessionDelegate: NSObject, URLSessionDownloadDelegate {
+    weak var owner: CatalogDownloadTransport?
+    func urlSession(_ session: URLSession, downloadTask: URLSessionDownloadTask, didWriteData bytes: Int64, totalBytesWritten: Int64, totalBytesExpectedToWrite: Int64) { owner?.wrote(downloadTask,bytes:bytes,totalBytesWritten:totalBytesWritten,totalBytesExpectedToWrite:totalBytesExpectedToWrite) }
+    func urlSession(_ session: URLSession, downloadTask: URLSessionDownloadTask, didFinishDownloadingTo location: URL) { owner?.finished(downloadTask,location:location) }
+    func urlSession(_ session: URLSession, task: URLSessionTask, didCompleteWithError error: Error?) { owner?.completed(task,error:error) }
+}
+
+private final class CatalogDownloadTransport {
+    private struct Request {
+        let token: UUID
+        let progress: @Sendable (Int64, Int64?) -> Void
+        let finish: @Sendable (Result<URL, Error>) -> Void
+    }
+    private let lock = NSLock()
+    private var requests: [Int: Request] = [:]
+    private var tasks: [Int: URLSessionDownloadTask] = [:]
+    private var session: URLSession?
+    private let configuration: URLSessionConfiguration
+    private let delegate: CatalogDownloadSessionDelegate
+    init(configuration: URLSessionConfiguration? = nil) {
+        self.configuration = configuration ?? .default
+        self.delegate = CatalogDownloadSessionDelegate()
+        self.delegate.owner = self
+    }
+    func start(_ url: URL, resumeData: Data?, token: UUID, progress: @escaping @Sendable (Int64, Int64?) -> Void, finish: @escaping @Sendable (Result<URL, Error>) -> Void) {
+        let session = self.session ?? URLSession(configuration: configuration, delegate: delegate, delegateQueue: nil)
+        self.session = session
+        let task = resumeData.map { session.downloadTask(withResumeData:$0) } ?? session.downloadTask(with:url)
+        lock.lock(); requests[task.taskIdentifier] = .init(token:token,progress:progress,finish:finish); tasks[task.taskIdentifier] = task; lock.unlock()
+        task.resume()
+    }
+    func invalidateAndCancel() { session?.invalidateAndCancel() }
+    func cancel(_ token: UUID, completion: @escaping @Sendable (Data?) -> Void) {
+        lock.lock()
+        let taskID = requests.first { $0.value.token == token }?.key
+        let task = taskID.flatMap { tasks.removeValue(forKey:$0) }
+        if let taskID { requests.removeValue(forKey:taskID) }
+        lock.unlock()
+        task?.cancel(byProducingResumeData:completion)
+        if task == nil { completion(nil) }
+    }
+    fileprivate func wrote(_ downloadTask: URLSessionDownloadTask, bytes _: Int64, totalBytesWritten: Int64, totalBytesExpectedToWrite: Int64) {
+        lock.lock(); let request = requests[downloadTask.taskIdentifier]; lock.unlock()
+        request?.progress(totalBytesWritten,totalBytesExpectedToWrite >= 0 ? totalBytesExpectedToWrite : nil)
+    }
+    fileprivate func finished(_ downloadTask: URLSessionDownloadTask, location: URL) {
+        lock.lock(); let request = requests.removeValue(forKey:downloadTask.taskIdentifier); tasks.removeValue(forKey:downloadTask.taskIdentifier); lock.unlock()
+        guard let request else { return }
+        do {
+            guard let http = downloadTask.response as? HTTPURLResponse, (200...299).contains(http.statusCode) else {
+                throw ExchangeError.invalid("モデルの取得に失敗しました")
+            }
+            let directory = FileManager.default.temporaryDirectory.appendingPathComponent("weavelet-catalog",isDirectory:true)
+            try FileManager.default.createDirectory(at:directory,withIntermediateDirectories:true)
+            let copy = directory.appendingPathComponent(request.token.uuidString + ".gguf")
+            try? FileManager.default.removeItem(at:copy)
+            try FileManager.default.moveItem(at:location,to:copy)
+            request.finish(.success(copy))
+        } catch { request.finish(.failure(error)) }
+    }
+    fileprivate func completed(_ task: URLSessionTask, error: Error?) {
+        guard let error else { return }
+        lock.lock(); let request = requests.removeValue(forKey:task.taskIdentifier); tasks.removeValue(forKey:task.taskIdentifier); lock.unlock()
+        request?.finish(.failure(error))
+    }
+}
+
+struct CatalogDownloadJob: Equatable {
+    let receivedBytes: Int64
+    let expectedBytes: Int64?
+    let running: Bool
+    let partial: Bool
+    let error: String?
+    let canResume: Bool
+}
+
 struct ActiveGeneration {
     let id: UUID
     let chatID: String
@@ -150,6 +246,13 @@ final class ChatState: ObservableObject {
     @Published private(set) var document: SyncDocument?
     @Published var persistenceError: String?
     @Published private(set) var generations: [Data: ActiveGeneration] = [:]
+    @Published private var catalogDownloads: [Data: CatalogDownloadJob] = [:]
+    private var catalogDownloadTasks: [Data: UUID] = [:]
+    private var catalogDownloadEpochs: [Data: UUID] = [:]
+    private var catalogResumeData: [Data: Data] = [:]
+    private var catalogResumePlans: [Data: (url: String, revision: String)] = [:]
+    private var catalogInstallations: Set<Data> = []
+    private let catalogTransport: CatalogDownloadTransport
     private var branchPreviewCache: [UUID: (parts: OrderedJSON, preview: String)] = [:]
     @Published private(set) var remoteSettings = RemoteSettings()
     @Published var openRouterVerificationError: String?
@@ -279,14 +382,21 @@ final class ChatState: ObservableObject {
         return latest["branchTree"]?["nodes"]?[nodeID]?["streamState"]?["requestId"] == .string(current.id.uuidString.lowercased())
     }
 
-    init(store: LocalStateStore? = nil, localGenerate: LocalLlama.Generator? = nil, localClassify: NativeLocalModeration.Classifier? = nil, tokenCounting: NativeTokenCounting? = nil) {
+    init(store: LocalStateStore? = nil, localGenerate: LocalLlama.Generator? = nil, localClassify: NativeLocalModeration.Classifier? = nil, tokenCounting: NativeTokenCounting? = nil,
+         catalogDownloadConfiguration: URLSessionConfiguration? = nil) {
         self.store = store
         self.tokenCounting = tokenCounting ?? NativeTokenCounting()
+        self.catalogTransport = CatalogDownloadTransport(configuration:catalogDownloadConfiguration)
         self.localGenerate = localGenerate ?? { url, request, onText in
             try await LocalLlama.generate(modelURL:url,request:request,onText:onText)
         }
         self.localEvaluationGenerate = localGenerate
         self.localModerationClassify = localClassify
+        for record in NativeCatalogResumeStore(libraryURL:(store ?? LocalStateStore.applicationStore).fileURL).records() {
+            let key = Data(record.id.utf8)
+            catalogResumeData[key] = record.data
+            catalogResumePlans[key] = (record.url,record.revision)
+        }
         do {
             stickyPrefillKey = try SharedWebOperations.call("assistantPrefill",.object([.init(key:"operation",value:.string("resolve")),.init(key:"mode",value:.string("append")),.init(key:"insertIndex",value:.null)])).required("key").string("prefill key")
             branchCandidates = try BranchNavigation.candidates(in: siblingSource(conversations))
@@ -1338,6 +1448,8 @@ final class ChatState: ObservableObject {
         }
     }
 
+    deinit { catalogTransport.invalidateAndCancel() }
+
     var localModelFiles: LocalModelFiles {
         LocalModelFiles(directory:(store ?? LocalStateStore.applicationStore).fileURL.deletingLastPathComponent().appendingPathComponent("models",isDirectory:true))
     }
@@ -1349,6 +1461,238 @@ final class ChatState: ObservableObject {
     func activeLocalModel(_ task: String) -> String? {
         try? publicationSnapshot()["state"]?["activeLocalModels"]?[task]?.string("model ID")
     }
+    func localModelCatalog() throws -> [OrderedJSON] {
+        try SharedWebOperations.call("localModelImport",.object([.init(key:"operation",value:.string("catalog"))])).array("catalog")
+    }
+    func catalogDownload(id: String) -> CatalogDownloadJob? {
+        let key = Data(id.utf8)
+        return catalogDownloads[key] ?? (catalogResumeData[key]?.isEmpty == false ? .init(receivedBytes:0,expectedBytes:nil,running:false,partial:true,error:nil,canResume:true) : nil)
+    }
+    func cancelCatalogDownload(id: String) {
+        let key = Data(id.utf8)
+        guard let token = catalogDownloadTasks.removeValue(forKey:key) else { return }
+        let expected = catalogDownloads[key]?.expectedBytes
+        let plan = catalogResumePlans[key]
+        catalogDownloads[key] = .init(receivedBytes:0,expectedBytes:expected,running:false,partial:true,error:nil,canResume:false)
+        catalogTransport.cancel(token) { [weak self] data in
+            Task { @MainActor in
+                guard let self, self.catalogDownloadEpochs[key] == token, self.catalogDownloadTasks[key] == nil else { return }
+                if let data, !data.isEmpty, let plan {
+                    self.catalogResumeData[key] = data; self.catalogResumePlans[key] = plan
+                    try? self.catalogResumeStore.save(self.catalogResumeRecords())
+                }
+                self.catalogDownloads[key] = .init(receivedBytes:0,expectedBytes:expected,running:false,partial:true,error:nil,canResume:data?.isEmpty == false)
+            }
+        }
+    }
+    func startCatalogDownload(id: String) throws {
+        guard !hasGenerations, !evaluationJobs.values.contains(where: { $0.busy }) else {
+            throw ExchangeError.invalid("生成・評価の終了後にモデルを取得してください")
+        }
+        let key = Data(id.utf8)
+        guard catalogDownloadTasks[key] == nil, !catalogInstallations.contains(key) else { throw ExchangeError.invalid("このモデルの取得・取消処理が終了してから再試行してください") }
+        let roots = try syncInputSnapshot().required("state")
+        let plan = try SharedWebOperations.call("localModelImport",.object([.init(key:"operation",value:.string("catalogPlan")),.init(key:"id",value:.string(id))]))
+        let model = try plan.required("model")
+        let modelID = try model.required("id").string("catalog model ID")
+        guard modelID.utf8.elementsEqual(id.utf8), model["engine"] == .string("wllama"), model["manifest"]?["kind"] == .string("single-file") else {
+            throw ExchangeError.invalid("取得できないカタログモデルです")
+        }
+        let files = try plan.required("files").array("catalog files")
+        guard files.count == 1, let urlText = try files[0]["url"]?.string("catalog URL"), let url = URL(string:urlText), url.scheme == "https" else {
+            throw ExchangeError.invalid("カタログの取得先が不正です")
+        }
+        let expectedText = try model["expectedDownloadSize"]?.number("expected download size")
+        let expected = expectedText.flatMap(Int64.init)
+        let revision = try model.required("revision").string("catalog revision")
+        let resumeData: Data?
+        if let plan = catalogResumePlans[key], plan.url == urlText, plan.revision == revision { resumeData = catalogResumeData[key] }
+        else { catalogResumeData.removeValue(forKey:key); catalogResumePlans.removeValue(forKey:key); try? catalogResumeStore.save(catalogResumeRecords()); resumeData = nil }
+        catalogResumePlans[key] = (urlText,revision)
+        catalogDownloads[key] = .init(receivedBytes:0,expectedBytes:expected,running:true,partial:false,error:nil,canResume:false)
+        let token = UUID()
+        catalogDownloadEpochs[key] = token
+        catalogDownloadTasks[key] = token
+        catalogTransport.start(url,resumeData:resumeData,token:token,progress: { [weak self] received, total in
+            Task { @MainActor in
+                guard let self, self.catalogDownloadTasks[key] == token else { return }
+                self.catalogDownloads[key] = .init(receivedBytes:received,expectedBytes:total ?? expected,running:true,partial:false,error:nil,canResume:false)
+            }
+        },finish: { [weak self] result in
+            Task { @MainActor in
+                guard let self, self.catalogDownloadTasks[key] == token else {
+                    if case .success(let temporary) = result { try? FileManager.default.removeItem(at:temporary) }
+                    return
+                }
+                switch result {
+                case .success(let temporary):
+                    defer { try? FileManager.default.removeItem(at:temporary) }
+                    do {
+                        let inspected = try await Task.detached { try self.localModelFiles.inspect(temporary) }.value
+                        try Task.checkCancellation()
+                        try await self.finishCatalogDownload(id:id,key:key,token:token,roots:roots,model:model,file:files[0],temporary:temporary,inspected:inspected)
+                    } catch is CancellationError {
+                        self.finishCatalogDownloadFailure(key:key,token:token,expected:expected,error:nil)
+                    } catch { self.finishCatalogDownloadFailure(key:key,token:token,expected:expected,error:error) }
+                case .failure(let error): self.finishCatalogDownloadFailure(key:key,token:token,expected:expected,error:error)
+                }
+            }
+        })
+    }
+    private func finishCatalogDownloadFailure(key: Data, token: UUID, expected: Int64?, error: Error?) {
+        guard catalogDownloadTasks[key] == token else { return }
+        let received = catalogDownloads[key]?.receivedBytes ?? 0
+        catalogResumeData.removeValue(forKey:key)
+        if let data = (error as NSError?)?.userInfo[NSURLSessionDownloadTaskResumeData] as? Data, !data.isEmpty {
+            catalogResumeData[key] = data
+        } else { catalogResumePlans.removeValue(forKey:key) }
+        try? catalogResumeStore.save(catalogResumeRecords())
+        catalogDownloadTasks.removeValue(forKey:key)
+        catalogDownloads[key] = .init(receivedBytes:received,expectedBytes:expected,running:false,partial:true,error:error?.localizedDescription,canResume:catalogResumeData[key]?.isEmpty == false)
+    }
+
+    @MainActor private func finishCatalogDownload(id: String, key: Data, token: UUID, roots: OrderedJSON, model: OrderedJSON, file: OrderedJSON,
+                                       temporary: URL, inspected: (name:String,hash:String,size:Int64)) async throws {
+        guard catalogDownloadTasks[key] == token else { throw CancellationError() }
+        guard let fileName = try file["path"]?.string("catalog file path"), let revision = try model["revision"]?.string("catalog revision") else {
+            throw ExchangeError.invalid("カタログのモデル情報が不正です")
+        }
+        var current = try syncInputSnapshot().required("state")
+        var currentModels = try current["localModels"]?.array("local models") ?? []
+        let files = localModelFiles
+        let candidates: [(value: OrderedJSON, id: String, revision: LocalModelFiles.Revision)] = try await Task.detached {
+            try currentModels.compactMap { model in
+                guard let candidateID = try? model.required("id").string("model ID"), !candidateID.utf8.elementsEqual(id.utf8), model["engine"] == .string("wllama"),
+                      model["manifest"]?["kind"] == .string("single-file"), let installed = try? files.installed(modelID:candidateID),
+                      let revision = try? files.revision(installed), let fingerprint = try? files.inspect(installed),
+                      (try? files.revision(installed)) == revision else { return nil }
+                let value = OrderedJSON.object([.init(key:"model",value:.object([
+                    .init(key:"id",value:.string(candidateID)),.init(key:"engine",value:.string("wllama")),
+                    .init(key:"manifest",value:.object([.init(key:"kind",value:.string("single-file"))]))
+                ])),.init(key:"hash",value:.string(fingerprint.hash)),.init(key:"size",value:.number(String(fingerprint.size)))])
+                return (value,candidateID,revision)
+            }
+        }.value
+        guard catalogDownloadTasks[key] == token else { throw CancellationError() }
+        current = try syncInputSnapshot().required("state")
+        guard !hasGenerations, !evaluationJobs.values.contains(where: { $0.busy }),
+              try (current["localModels"] ?? .array([])).encoded() == (roots["localModels"] ?? .array([])).encoded(),
+              try (current["activeLocalModels"] ?? .object([])).encoded() == (roots["activeLocalModels"] ?? .object([])).encoded() else {
+            throw ExchangeError.invalid("モデル設定または実行状態が変更されました。もう一度取得してください")
+        }
+        currentModels = try current["localModels"]?.array("local models") ?? []
+        let prepared = try SharedWebOperations.call("localModelImport",.object([
+            .init(key:"operation",value:.string("prepare")),.init(key:"name",value:.string(inspected.name)),
+            .init(key:"hash",value:.string(inspected.hash)),.init(key:"size",value:.number(String(inspected.size))),
+            .init(key:"candidates",value:.array(candidates.map(\.value))),.init(key:"existingIDs",value:.array(try currentModels.map { .string(try $0.required("id").string("model ID")) }))
+        ]))
+        let duplicate = prepared["existing"] == .bool(true)
+        let definition: OrderedJSON
+        let duplicateRevision: LocalModelFiles.Revision?
+        if duplicate {
+            let duplicateID = try prepared.required("model").required("id").string("duplicate model ID")
+            guard let stored = currentModels.first(where: { (try? $0.required("id").string("model ID"))?.utf8.elementsEqual(duplicateID.utf8) == true }),
+                  let candidate = candidates.first(where: { $0.id.utf8.elementsEqual(duplicateID.utf8) }),
+                  (try? files.revision(files.installed(modelID:duplicateID))) == candidate.revision else { throw ExchangeError.invalid("既存モデルのファイルが変更されました") }
+            definition = .object([.init(key:"id",value:.string(duplicateID)),.init(key:"tasks",value:stored["tasks"] ?? .array([]))])
+            duplicateRevision = candidate.revision
+        } else {
+            definition = try SharedWebOperations.call("localModelImport",.object([
+                .init(key:"operation",value:.string("catalogDefinition")),.init(key:"id",value:.string(id)),.init(key:"totalBytes",value:.number(String(inspected.size)))
+            ]))
+            duplicateRevision = nil
+        }
+        let modelID = try definition.required("id").string("catalog model ID")
+        if !duplicate, !modelID.utf8.elementsEqual(id.utf8) { throw ExchangeError.invalid("カタログモデルが変更されました") }
+        guard try (current["localModels"] ?? .array([])).encoded() == (roots["localModels"] ?? .array([])).encoded(),
+              try (current["activeLocalModels"] ?? .object([])).encoded() == (roots["activeLocalModels"] ?? .object([])).encoded() else {
+            throw ExchangeError.invalid("モデル設定が変更されました。もう一度取得してください")
+        }
+        let target = try localModelFiles.url(modelID:modelID)
+        let existed = FileManager.default.fileExists(atPath:target.path)
+        // Keep a cancelled install from deleting a file adopted by a newer job.
+        catalogInstallations.insert(key)
+        defer { catalogInstallations.remove(key) }
+        let installedRevision: LocalModelFiles.Revision?
+        if duplicate { installedRevision = nil }
+        else {
+            installedRevision = try await Task.detached {
+                try files.installNew(temporary,modelID:modelID,hash:inspected.hash)
+                return try files.revision(files.installed(modelID:modelID))
+            }.value
+        }
+        do {
+            guard catalogDownloadTasks[key] == token else { throw CancellationError() }
+            current = try syncInputSnapshot().required("state")
+            guard !hasGenerations, !evaluationJobs.values.contains(where: { $0.busy }),
+                  try (current["localModels"] ?? .array([])).encoded() == (roots["localModels"] ?? .array([])).encoded(),
+                  try (current["activeLocalModels"] ?? .object([])).encoded() == (roots["activeLocalModels"] ?? .object([])).encoded() else {
+                throw ExchangeError.invalid("モデル設定または実行状態が変更されました。もう一度取得してください")
+            }
+            if let installedRevision { try files.checkRevision(target,expected:installedRevision) }
+            var boundary = SharedWebProjection()
+            let models = try current["localModels"]?.array("local models") ?? []
+            let active = current["activeLocalModels"] ?? .object([])
+            let projected = OrderedJSON.object([
+                .init(key:"localModels",value:.array(try models.map { try boundary.reference($0) })),
+                .init(key:"activeLocalModels",value:try OrderedJSON.object(try active.object("active models").map { field in
+                    JSONField(key:field.key,value:field.value == .null || (try? field.value.string("model ID")) != nil ? field.value : try boundary.reference(field.value))
+                }))
+            ])
+            let result: OrderedJSON
+            if duplicate {
+                guard let duplicateRevision, try files.revision(files.installed(modelID:modelID)) == duplicateRevision else { throw ExchangeError.invalid("既存モデルのファイルが変更されました") }
+                let favorites = current["favoriteLocalModelIds"] ?? .array([])
+                let metadata = current["savedModelMeta"] ?? .object([])
+                let duplicateState = OrderedJSON.object([
+                    .init(key:"localModels",value:try projected.required("localModels")),.init(key:"activeLocalModels",value:try projected.required("activeLocalModels")),
+                    .init(key:"favoriteLocalModelIds",value:.array(try favorites.array("favorites").map { value in (try? value.string("favorite")) != nil ? value : try boundary.reference(value) })),
+                    .init(key:"savedModelMeta",value:try OrderedJSON.object(try metadata.object("saved metadata").map { JSONField(key:$0.key,value:try boundary.reference($0.value)) }))
+                ])
+                result = try SharedWebOperations.call("localModelImport",.object([
+                    .init(key:"operation",value:.string("catalogDuplicateCommit")),.init(key:"state",value:duplicateState),
+                    .init(key:"localModelIDs",value:.array(try models.map { .string(try $0.required("id").string("model ID")) })),
+                    .init(key:"downloadedID",value:.string(id)),.init(key:"duplicate",value:definition)
+                ]))
+                let updated = try OrderedJSONChanges.apply(result.required("changes"),to:current,opaque:boundary.opaque)
+                try applyGlobalState(updated)
+            } else {
+                result = try SharedWebOperations.call("localModelImport",.object([
+                    .init(key:"operation",value:.string("catalogCommit")),.init(key:"state",value:projected),.init(key:"model",value:definition),
+                    .init(key:"existingIDs",value:.array(try models.map { .string(try $0.required("id").string("model ID")) }))
+                ]))
+                var metadata = current["savedModelMeta"] ?? .object([])
+                var entry = metadata[modelID] ?? .object([])
+                entry = entry.replacing("storageState",with:.string("saved"))
+                    .replacing("storedBytes",with:.number(String(inspected.size)))
+                    .replacing("storedFiles",with:.array([.string(fileName)]))
+                    .replacing("fileHashes",with:.object([.init(key:fileName,value:.string(inspected.hash))]))
+                    .replacing("lastVerifiedAt",with:.number(String(Int(Date().timeIntervalSince1970 * 1000))))
+                    .replacing("downloadRevision",with:.string(revision))
+                metadata = metadata.replacing(modelID,with:entry)
+                let updated = try OrderedJSONChanges.apply(result.required("changes"),to:current.replacing("localModels",with:current["localModels"] ?? .array([])).replacing("activeLocalModels",with:current["activeLocalModels"] ?? .object([])),opaque:boundary.opaque)
+                try applyGlobalState(updated.replacing("savedModelMeta",with:metadata))
+            }
+        } catch {
+            if !duplicate, !existed, let installedRevision, (try? files.revision(target)) == installedRevision { try? FileManager.default.removeItem(at:target) }
+            throw error
+        }
+        guard catalogDownloadTasks[key] == token else { throw CancellationError() }
+        catalogDownloadTasks.removeValue(forKey:key)
+        catalogResumeData.removeValue(forKey:key)
+        catalogResumePlans.removeValue(forKey:key)
+        try? catalogResumeStore.save(catalogResumeRecords())
+        catalogDownloads[key] = .init(receivedBytes:inspected.size,expectedBytes:inspected.size,running:false,partial:false,error:nil,canResume:false)
+    }
+
+    private var catalogResumeStore: NativeCatalogResumeStore { NativeCatalogResumeStore(libraryURL:(store ?? LocalStateStore.applicationStore).fileURL) }
+    private func catalogResumeRecords() -> [(id: String, url: String, revision: String, data: Data)] {
+        catalogResumeData.compactMap { key, data in
+            guard let id = String(data:key,encoding:.utf8), let plan = catalogResumePlans[key] else { return nil }
+            return (id,plan.url,plan.revision,data)
+        }
+    }
+
     func saveLocalModelRole(task: String? = nil, modelID: String? = nil, enabled: Bool? = nil) throws {
         guard !hasGenerations else { throw ExchangeError.invalid("生成結果を保存してからモデル設定を変更してください") }
         let roots = try syncInputSnapshot().required("state")

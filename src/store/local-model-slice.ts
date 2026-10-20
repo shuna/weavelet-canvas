@@ -5,6 +5,7 @@ import type {
 } from '@src/local-llm/types';
 import type { SavedModelMeta } from '@src/local-llm/storage';
 import { mutateLocalModelRole } from '@utils/localModelRole';
+import { commitLocalModel } from '@utils/localModelImport';
 
 export interface LocalModelSlice {
   localModelEnabled: boolean;
@@ -42,9 +43,9 @@ export const createLocalModelSlice: StoreSlice<LocalModelSlice> = (set, get) => 
   },
 
   addLocalModel: (def) => {
-    const existing = get().localModels;
-    if (existing.some((m) => m.id === def.id)) return;
-    set({ localModels: [...existing, def] });
+    const current = get();
+    const next = commitLocalModel(current, def);
+    if (next.localModels !== current.localModels) set({ localModels: next.localModels });
   },
 
   removeLocalModel: (id) => {

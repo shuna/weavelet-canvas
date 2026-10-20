@@ -16,6 +16,7 @@ import { removeAssets } from '@src/local-llm/assetRemoval';
 import { rehydrateLocalModels } from '@hooks/useLocalModelRehydration';
 import { CURATED_MODELS } from '@src/local-llm/catalog';
 import type { CatalogModel } from '@src/local-llm/catalog';
+import { catalogDefinition } from '@src/local-llm/catalogPlan';
 import { downloadCatalogModel, downloadModelFiles } from '@src/local-llm/download';
 import { estimateDeviceTier, getModelFit } from '@src/local-llm/device';
 import type { DeviceTier } from '@src/local-llm/device';
@@ -41,7 +42,7 @@ import { CatalogCard, DownloadedModelRow, DownloadingModelRow, TaskAssignmentRow
 import SearchResultCard from './SearchResultCard';
 import { useModelDownload } from '@src/hooks/useModelDownload';
 import { useModelDeletion } from '@src/hooks/useModelDeletion';
-import { autoAssignImportedModel, prepareSingleGGUFImport } from '@utils/localModelImport';
+import { autoAssignImportedModel, commitCatalogDuplicate, prepareSingleGGUFImport } from '@utils/localModelImport';
 import { useHfSearch } from '@src/hooks/useHfSearch';
 
 const IMPORTED_MODEL_PREFIX = 'local-file';
@@ -400,10 +401,13 @@ const LocalModelSettings = () => {
       if (duplicate) {
         const removal = await removeAssets(model.id);
         if (removal.status !== 'removed') return;
-        store.removeSavedModelMeta(model.id);
-        store.removeLocalModel(model.id);
-        if (!store.favoriteLocalModelIds.includes(duplicate.id)) store.toggleFavoriteLocalModel(duplicate.id);
-        autoAssignIfUnset(duplicate.id, duplicate.tasks);
+        const current = useStore.getState();
+        useStore.setState(commitCatalogDuplicate({
+          localModels: current.localModels,
+          activeLocalModels: current.activeLocalModels,
+          favoriteLocalModelIds: current.favoriteLocalModelIds,
+          savedModelMeta: current.savedModelMeta,
+        }, model.id, duplicate));
         bumpOpfsBrowser();
         return;
       }
@@ -421,11 +425,7 @@ const LocalModelSettings = () => {
     startDownload(model.id, (cb, sig) => downloadCatalogModel(model, cb, sig), {
       storedFiles: [...model.downloadFiles],
       onComplete: (totalBytes) => {
-        void registerDownloadedOrUseDuplicate({
-          id: model.id, engine: model.engine, tasks: model.tasks, label: model.label,
-          origin: model.huggingFaceRepo, source: 'opfs', manifest: model.manifest,
-          fileSize: totalBytes, displayMeta: model.displayMeta,
-        }, totalBytes);
+        void registerDownloadedOrUseDuplicate(catalogDefinition(model, totalBytes), totalBytes);
       },
     });
   }, [registerDownloadedOrUseDuplicate, startDownload]);

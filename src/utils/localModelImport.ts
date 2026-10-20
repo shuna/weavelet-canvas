@@ -33,10 +33,43 @@ export function prepareSingleGGUFImport(name: string, hash: string, size: number
 }
 
 export function commitSingleGGUFImport<T extends {localModels: LocalModelDefinition[]; activeLocalModels: Partial<Record<LocalModelTask, string>>}>(state: T, model: LocalModelDefinition, existingIDs?: string[]): T {
+  const next = commitLocalModel(state, model, existingIDs);
+  return {
+    ...next,
+    activeLocalModels: autoAssignImportedModel(next.activeLocalModels, model),
+  };
+}
+
+export function commitLocalModel<T extends {localModels: LocalModelDefinition[]}>(state: T, model: LocalModelDefinition, existingIDs?: string[]): T {
   const current = existingIDs ? existingIDs.includes(model.id) : state.localModels.some(entry => entry.id === model.id);
   return {
     ...state,
     localModels: current ? state.localModels : [...state.localModels, model],
-    activeLocalModels: autoAssignImportedModel(state.activeLocalModels, model),
+  };
+}
+
+export function commitCatalogDuplicate<T extends {
+  localModels: unknown[];
+  activeLocalModels: Partial<Record<LocalModelTask, string>>;
+  favoriteLocalModelIds: string[];
+  savedModelMeta: Record<string, unknown>;
+}>(state: T, downloadedID: string, duplicate: Pick<LocalModelDefinition, 'id' | 'tasks'>, localModelIDs?: string[]): T {
+  const activeLocalModels = {...state.activeLocalModels};
+  for (const task of Object.keys(activeLocalModels) as LocalModelTask[]) {
+    if (activeLocalModels[task] === downloadedID) delete activeLocalModels[task];
+  }
+  const savedModelMeta = {...state.savedModelMeta};
+  delete savedModelMeta[downloadedID];
+  const favoriteLocalModelIds = state.favoriteLocalModelIds.filter((id) => id !== downloadedID);
+  if (!favoriteLocalModelIds.includes(duplicate.id)) favoriteLocalModelIds.push(duplicate.id);
+  return {
+    ...state,
+    localModels: state.localModels.filter((model, index) => {
+      const id = localModelIDs?.[index] ?? (typeof model === 'object' && model !== null && 'id' in model && typeof model.id === 'string' ? model.id : undefined);
+      return id !== downloadedID;
+    }),
+    activeLocalModels: autoAssignImportedModel(activeLocalModels, duplicate),
+    favoriteLocalModelIds,
+    savedModelMeta,
   };
 }

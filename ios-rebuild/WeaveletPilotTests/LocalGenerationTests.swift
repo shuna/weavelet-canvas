@@ -1,5 +1,29 @@
 import XCTest
+import Foundation
 @testable import WeaveletPilot
+
+private final class CatalogDownloadProtocol: URLProtocol {
+    static var handler: ((URLRequest) throws -> (Int, Data))?
+    static var held: CatalogDownloadProtocol?
+    static var hold = false
+    override class func canInit(with request: URLRequest) -> Bool { request.url?.host == "huggingface.co" }
+    override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
+    override func startLoading() {
+        if Self.hold { Self.held = self; return }
+        respond()
+    }
+    static func release() { let value = held; held = nil; value?.respond() }
+    private func respond() {
+        do {
+            let (status,body) = try Self.handler?(request) ?? (500,Data())
+            let response = HTTPURLResponse(url:request.url!,statusCode:status,httpVersion:"HTTP/1.1",headerFields:["Content-Length":"\(body.count)"])!
+            client?.urlProtocol(self,didReceive:response,cacheStoragePolicy:.notAllowed)
+            client?.urlProtocol(self,didLoad:body)
+            client?.urlProtocolDidFinishLoading(self)
+        } catch { client?.urlProtocol(self,didFailWithError:error) }
+    }
+    override func stopLoading() {}
+}
 
 @MainActor final class LocalGenerationTests: XCTestCase {
     private func store() throws -> LocalStateStore {
@@ -7,6 +31,12 @@ import XCTest
         try FileManager.default.createDirectory(at:dir,withIntermediateDirectories:true)
         addTeardownBlock { try? FileManager.default.removeItem(at:dir) }
         return LocalStateStore(fileURL:dir.appendingPathComponent("state.json"))
+    }
+    private func catalogState(_ store: LocalStateStore) throws -> ChatState {
+        let config = URLSessionConfiguration.ephemeral; config.protocolClasses = [CatalogDownloadProtocol.self]
+        let state = ChatState(store:store,catalogDownloadConfiguration:config)
+        try state.importWebData(ChatLibrary.emptySource.encoded())
+        return state
     }
     private func state(_ store: LocalStateStore, generate: @escaping LocalLlama.Generator) throws -> ChatState {
         let root = URL(fileURLWithPath:#filePath).deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
@@ -32,6 +62,13 @@ import XCTest
             try await Task.sleep(nanoseconds:5_000_000)
         }
         XCTFail("Local generation did not reach expected state")
+    }
+    private func waitForCatalogProtocol() async throws {
+        for _ in 0..<200 {
+            if CatalogDownloadProtocol.held != nil { return }
+            try await Task.sleep(nanoseconds:5_000_000)
+        }
+        XCTFail("Catalog request did not start")
     }
     func testDeviceModelCopyPreservesOldFileOnInvalidImportAndSeparatesUTF8IDs() throws {
         let store = try store(), files = LocalModelFiles(directory:store.fileURL.deletingLastPathComponent().appendingPathComponent("models"))
@@ -100,6 +137,123 @@ import XCTest
         XCTAssertEqual(restarted.assistantPrefill(key:key),"")
         XCTAssertEqual(try restarted.exportWebData(),try state.exportWebData())
         XCTAssertFalse(String(decoding:try Data(contentsOf:store.fileURL),as:UTF8.self).contains("sticky draft must survive"))
+    }
+
+    func testCatalogDownloadRegistersSharedDefinitionAndLocalRevision() async throws {
+        let store = try store(), state = try catalogState(store)
+        let before = try state.publicationSnapshot()
+        try state.applySnapshot(before.replacing("state",with:try before.required("state").replacing("xCatalogOpaque",with:.number("9007199254740993"))))
+        CatalogDownloadProtocol.handler = { request in
+            XCTAssertEqual(request.url?.host,"huggingface.co")
+            return (200,Data("GGUFcatalog fixture".utf8))
+        }
+        defer { CatalogDownloadProtocol.handler = nil }
+        let catalog = try state.localModelCatalog()
+        XCTAssertEqual(catalog.count,3)
+        try state.startCatalogDownload(id:"smollm2-360m-instruct-q8")
+        try await wait { state.catalogDownload(id:"smollm2-360m-instruct-q8")?.running == false }
+        let id = "smollm2-360m-instruct-q8"
+        XCTAssertEqual(try state.localModelDefinitions().first { (try? $0.required("id").string("id")) == id }?["origin"],.string("HuggingFaceTB/SmolLM2-360M-Instruct-GGUF"))
+        let roots = try state.publicationSnapshot().required("state")
+        XCTAssertEqual(roots["savedModelMeta"]?[id]?["downloadRevision"],.string("main"))
+        XCTAssertEqual(try roots["savedModelMeta"]?[id]?["fileHashes"]?.object("hashes").count,1)
+        XCTAssertNotNil(try? state.localModelFiles.installed(modelID:id))
+        XCTAssertEqual(try state.publicationSnapshot().required("state")["xCatalogOpaque"],.number("9007199254740993"))
+        let restarted = ChatState(store:store)
+        XCTAssertEqual(try restarted.publicationSnapshot(),try state.publicationSnapshot())
+        XCTAssertNotNil(try? restarted.localModelFiles.installed(modelID:id))
+        let records = try SyncRecords.toRecords(state.publicationSnapshot())
+        let received = try SyncRecords.fromRecords(records).required("state")
+        // Actual Web records canonicalizes object keys; model values and array order must survive.
+        for key in ["localModels","activeLocalModels","favoriteLocalModelIds","savedModelMeta"] {
+            XCTAssertEqual(try SyncRecords.canonical(received[key] ?? .null),try SyncRecords.canonical(roots[key] ?? .null),key)
+        }
+        XCTAssertFalse(String(decoding:try state.exportWebData(),as:UTF8.self).contains("catalog-download-resume"))
+    }
+
+    func testCatalogCancellationIgnoresLateDownloadCompletion() async throws {
+        let store = try store(), state = try catalogState(store)
+        CatalogDownloadProtocol.handler = { _ in (200,Data("GGUFlate catalog".utf8)) }
+        CatalogDownloadProtocol.hold = true
+        defer { CatalogDownloadProtocol.hold = false; CatalogDownloadProtocol.held = nil; CatalogDownloadProtocol.handler = nil }
+        let before = try state.publicationSnapshot()
+        try state.startCatalogDownload(id:"qwen3-0.6b-q4km")
+        try await waitForCatalogProtocol()
+        state.cancelCatalogDownload(id:"qwen3-0.6b-q4km")
+        CatalogDownloadProtocol.release()
+        try await wait { state.catalogDownload(id:"qwen3-0.6b-q4km")?.running == false }
+        XCTAssertEqual(try state.publicationSnapshot(),before)
+        XCTAssertThrowsError(try state.localModelFiles.installed(modelID:"qwen3-0.6b-q4km"))
+    }
+
+    func testCatalogSaveFailureRollsBackFileThenRetries() async throws {
+        final class Gate { var reject = false }
+        let base = try store(), gate = Gate()
+        let rejecting = LocalStateStore(fileURL:base.fileURL,write: { data, url in
+            if gate.reject { throw ExchangeError.invalid("reject save") }
+            try data.write(to:url,options:.atomic)
+        })
+        let config = URLSessionConfiguration.ephemeral; config.protocolClasses = [CatalogDownloadProtocol.self]
+        let state = ChatState(store:rejecting,catalogDownloadConfiguration:config)
+        try state.importWebData(ChatLibrary.emptySource.encoded())
+        CatalogDownloadProtocol.handler = { _ in (200,Data("GGUFsave retry".utf8)) }
+        defer { CatalogDownloadProtocol.handler = nil }
+        let id = "llm-jp-3-1.8b-instruct-q4km", before = try state.publicationSnapshot()
+        gate.reject = true
+        try state.startCatalogDownload(id:id)
+        try await wait { state.catalogDownload(id:id)?.running == false }
+        XCTAssertNotNil(state.catalogDownload(id:id)?.error)
+        XCTAssertEqual(try state.publicationSnapshot(),before)
+        XCTAssertThrowsError(try state.localModelFiles.installed(modelID:id))
+        gate.reject = false
+        try state.startCatalogDownload(id:id)
+        try await wait { state.catalogDownload(id:id)?.running == false }
+        XCTAssertNil(state.catalogDownload(id:id)?.error)
+        XCTAssertNotNil(try? state.localModelFiles.installed(modelID:id))
+    }
+
+    func testCatalogIDConflictAndHashDuplicatePreserveExistingAssetsAndUseSharedCleanup() async throws {
+        let store = try store(), state = try catalogState(store), bytes = Data("GGUFduplicate bytes".utf8)
+        let duplicateID = "existing-local"
+        let source = store.fileURL.deletingLastPathComponent().appendingPathComponent("existing.gguf")
+        try bytes.write(to:source); try state.localModelFiles.install(source,modelID:duplicateID)
+        let snapshot = try state.publicationSnapshot(), roots = try snapshot.required("state")
+        let existing = try OrderedJSON.decode(Data(#"{"id":"existing-local","engine":"wllama","tasks":["generation","analysis"],"manifest":{"kind":"single-file","entrypoint":"existing.gguf"}}"#.utf8))
+        let downloaded = try OrderedJSON.decode(Data(#"{"id":"smollm2-360m-instruct-q8","engine":"wllama","tasks":["generation"],"manifest":{"kind":"single-file","entrypoint":"old.gguf"}}"#.utf8))
+        try state.applySnapshot(snapshot.replacing("state",with:roots.replacing("localModels",with:.array([existing,downloaded])).replacing("activeLocalModels",with:.object([.init(key:"generation",value:.string("smollm2-360m-instruct-q8"))])).replacing("favoriteLocalModelIds",with:.array([.string("smollm2-360m-instruct-q8")])).replacing("savedModelMeta",with:.object([.init(key:"smollm2-360m-instruct-q8",value:.object([.init(key:"storageState",value:.string("saved"))]))]))))
+        CatalogDownloadProtocol.handler = { _ in (200,bytes) }
+        defer { CatalogDownloadProtocol.handler = nil }
+        try state.startCatalogDownload(id:"smollm2-360m-instruct-q8")
+        try await wait { state.catalogDownload(id:"smollm2-360m-instruct-q8")?.running == false }
+        let updated = try state.publicationSnapshot().required("state")
+        XCTAssertEqual(try updated.required("localModels").array("models").count,1)
+        XCTAssertEqual(updated["activeLocalModels"]?["generation"],.string(duplicateID))
+        XCTAssertEqual(updated["favoriteLocalModelIds"],.array([.string(duplicateID)]))
+        XCTAssertNil(updated["savedModelMeta"]?["smollm2-360m-instruct-q8"])
+        XCTAssertThrowsError(try state.localModelFiles.installed(modelID:"smollm2-360m-instruct-q8"))
+    }
+
+    func testCatalogDownloadHTTPFailureKeepsLibraryAndFiles() async throws {
+        let store = try store(), state = try catalogState(store)
+        CatalogDownloadProtocol.handler = { _ in (503,Data("unavailable".utf8)) }
+        defer { CatalogDownloadProtocol.handler = nil }
+        let before = try state.publicationSnapshot(), disk = try Data(contentsOf:store.fileURL)
+        try state.startCatalogDownload(id:"qwen3-0.6b-q4km")
+        try await wait { state.catalogDownload(id:"qwen3-0.6b-q4km")?.running == false }
+        XCTAssertNotNil(state.catalogDownload(id:"qwen3-0.6b-q4km")?.error)
+        XCTAssertEqual(try state.publicationSnapshot(),before)
+        XCTAssertEqual(try Data(contentsOf:store.fileURL),disk)
+        XCTAssertThrowsError(try state.localModelFiles.installed(modelID:"qwen3-0.6b-q4km"))
+        let existing = store.fileURL.deletingLastPathComponent().appendingPathComponent("conflicting.gguf")
+        try Data("GGUFexisting catalog ID".utf8).write(to:existing)
+        try state.localModelFiles.install(existing,modelID:"qwen3-0.6b-q4km")
+        let original = try Data(contentsOf:state.localModelFiles.installed(modelID:"qwen3-0.6b-q4km"))
+        CatalogDownloadProtocol.handler = { _ in (200,Data("GGUFdifferent catalog ID".utf8)) }
+        try state.startCatalogDownload(id:"qwen3-0.6b-q4km")
+        try await wait { state.catalogDownload(id:"qwen3-0.6b-q4km")?.running == false }
+        XCTAssertNotNil(state.catalogDownload(id:"qwen3-0.6b-q4km")?.error)
+        XCTAssertEqual(try Data(contentsOf:state.localModelFiles.installed(modelID:"qwen3-0.6b-q4km")),original)
+        XCTAssertEqual(try state.publicationSnapshot(),before)
     }
 
     func testLocalStopKeepsPartialOutputOnSaveFailureThenRetries() async throws {
