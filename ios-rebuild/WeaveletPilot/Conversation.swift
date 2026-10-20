@@ -752,9 +752,18 @@ final class ChatState: ObservableObject {
         guard let clipboard = document?.snapshot["state"]?["branchClipboard"], case .array(let ids) = clipboard["nodeIds"] else { return false }
         return !ids.isEmpty
     }
-    func branchClipboardDraft(nodeID: String, operation: BranchClipboardOperation = .copy) throws -> BranchClipboardDraft {
+    func branchClipboardDraft(nodeID: String, operation: BranchClipboardOperation = .copy, throughLeaf: Bool = false) throws -> BranchClipboardDraft {
         guard let conversation else { throw ExchangeError.invalid("対象メッセージがありません") }
-        return try branchClipboardDraft(selectedNodes:[(conversation.id,nodeID)],operation:operation)
+        guard throughLeaf, operation != .paste else {
+            return try branchClipboardDraft(selectedNodes:[(conversation.id,nodeID)],operation:operation)
+        }
+        guard let exchange,
+              let chat = try exchange.source.required("chats").array("chats").first(where: { try $0.required("id").string("chat ID").utf8.elementsEqual(conversation.id.utf8) }),
+              let tree = chat["branchTree"] else { throw ExchangeError.invalid("分岐図の対象メッセージがありません") }
+        let path = try SharedWebOperations.call("branchPath",.object([
+            .init(key:"tree",value:tree),.init(key:"nodeId",value:.string(nodeID))])).array("branch path")
+        guard let leaf = path.last else { throw ExchangeError.invalid("分岐図の対象メッセージがありません") }
+        return try branchClipboardDraft(selectedNodes:[(conversation.id,nodeID),(conversation.id,try leaf.string("branch leaf"))],operation:operation)
     }
     func branchClipboardDraft(selectedNodes: [(chatID:String,nodeID:String)], operation: BranchClipboardOperation) throws -> BranchClipboardDraft {
         guard let exchange, !selectedNodes.isEmpty, selectedNodes.allSatisfy({ selected in

@@ -692,7 +692,7 @@ struct ChatView: View {
         }
     }
     private var branchEditor: some View {
-        BranchEditorView(state: state, showsSearch:$showsBranchSearch, configure: configureNode, deleteBranch: deleteNodeBranch, clipboard: openBranchClipboard)
+        BranchEditorView(state: state, showsSearch:$showsBranchSearch, configure: configureNode, deleteBranch: deleteNodeBranch, clipboard: { openBranchClipboard($0, operation:$1, throughLeaf:true) })
     }
 
     private func configureNode(_ nodeID: String) {
@@ -705,8 +705,8 @@ struct ChatView: View {
         catch { errorMessage = error.localizedDescription }
     }
 
-    private func openBranchClipboard(_ nodeID: String, operation: BranchClipboardOperation) {
-        do { clipboardDraft = try state.branchClipboardDraft(nodeID: nodeID, operation: operation) }
+    private func openBranchClipboard(_ nodeID: String, operation: BranchClipboardOperation, throughLeaf: Bool = false) {
+        do { clipboardDraft = try state.branchClipboardDraft(nodeID: nodeID, operation: operation, throughLeaf:throughLeaf) }
         catch { errorMessage = error.localizedDescription }
     }
     private func inlineTargetIsDisplayed(_ pending: MessageDraft, in conversation: Conversation) -> Bool {

@@ -1321,3 +1321,12 @@ Catalyst固有24件（BranchEditor19、MessageEditing4、暗号化同期clipboar
 ドラッグ用providerはownProcessのUUIDのみで、本文・node/chat IDは渡さない。受信後にtoken・現行layout・snapshotを再検証する。SwiftUI onDragで開始を確認できなかったためUIKit UIDragInteractionへ接続し、同一アプリに制限した。最終Catalyst build成功。モデル/status修正とUIKit差分の独立Astra限定監査は新規P1/P2なし。card280×80とmenu44ptは維持したが、handle22ptの実touchの掴みやすさは未確認。
 
 隔離FAKE Catalystでは複数会話、handleの描画/AX、メニューから会話間移動画面と始点/終点のprefillを確認した。一方、handle中心から他会話cardへの自動pointer dragでconfirmationは出ず、ドラッグ開始/完了は確認できていない。これは完了や互換性成功の証明に含めない。標準APIの開始接続はsource上欠落を確認していない。現SDKのUIDragInteraction.h:57–64はmacOSのpointer開始にlift delayを待つ既定動作を明記しているが、CUA dragには押下後の待機指定がなく、この操作での原因確定や実動作成功とは扱わない。未受入を維持する。終了後process不在とbuilt Info.plist byte一致復元を確認した。実cloud、実touch、全UI/OS/性能受入は未完了。iPhone照会/導入・push・main統合は行っていない。
+
+
+## 分岐図メニューのコピー・切取り範囲を共有末端へ接続（2026-10-21）
+
+実Web NodeContextMenuのcopy/cutは選択nodeからbuildPathToLeafの最後までを対象とする。nativeのgraph menuは単一nodeが初期値だったため、graph callbackだけthroughLeaf指定を渡し、既存共有branchPathから末端IDを得て既存範囲draftへ接続した。会話間移動も同じ範囲を使う。通常chat入口は従来の単一node、paste先も押したnodeを維持する。Swiftで子探索/時刻sortを複製せず、共有コード・保存・同期基盤・Web sourceは変更していない。
+
+Catalyst追加1case testBranchClipboardDraftThroughLeafUsesSharedLatestForkPath成功。createdAt最新fork末端、始点祖先の除外、copy/cut/moveの範囲、通常入口とpasteの単一node維持を確認した。これはbridge接続の検証で、共有探索の全業務テストをnativeへ複製していない。test実行のCatalyst buildも成功。既存範囲保存・保全・全項目I/O・暗号化wireの成功は再利用した。ログ /private/tmp/weavelet-branch-menu-leaf-test.log。独立Astraの機能群監査は新規P1/P2なし。
+
+隔離FAKE Catalystでmenu-leftの範囲コピーからsheetを開き、始点menu-leftと別IDの末端が初期選択されることを確認。コピー実行後は隔離保存clipboardの5nodeとその順序、先頭menu-left、表示された末端ID、menu-rootの除外を確認した。終了後process不在とbuilt Info.plist byte一致復元を確認。前節のdrag開始/完了は未受入のまま。実API/cloud、全UI/OS受入は未完了。iPhone照会/導入・push・main統合は行っていない。

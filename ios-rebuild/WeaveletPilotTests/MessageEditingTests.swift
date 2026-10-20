@@ -767,6 +767,25 @@ final class MessageEditingTests: XCTestCase {
         try state.undoMessageEdit(now: 3000); XCTAssertFalse(state.canUndoMessageEdit)
     }
 
+    func testBranchClipboardDraftThroughLeafUsesSharedLatestForkPath() throws {
+        var input = try cases()[0].required("input"), chats = try input.required("chats").array("chats"), chat = chats[0]
+        var tree = try chat.required("branchTree"), nodes = try tree.required("nodes")
+        let older = try nodes.required("last").replacing("id",with:.string("older")).replacing("createdAt",with:.number("5"))
+        let newest = try nodes.required("last").replacing("id",with:.string("newest")).replacing("createdAt",with:.number("6"))
+        nodes = nodes.replacing("older",with:older).replacing("newest",with:newest)
+        tree = tree.replacing("nodes",with:nodes); chat = chat.replacing("branchTree",with:tree); chats[0] = chat
+        input = input.replacing("chats",with:.array(chats))
+        let state = ChatState(store:try store()); try state.importWebData(input.encoded())
+        let ordinary = try state.branchClipboardDraft(nodeID:"middle")
+        XCTAssertEqual(ordinary.fromNodeID,"middle"); XCTAssertEqual(ordinary.toNodeID,"middle")
+        for operation in [BranchClipboardOperation.copy,.cut,.move] {
+            let draft = try state.branchClipboardDraft(nodeID:"middle",operation:operation,throughLeaf:true)
+            XCTAssertEqual(draft.sourceChatID,"target"); XCTAssertEqual(draft.fromNodeID,"middle"); XCTAssertEqual(draft.toNodeID,"newest")
+        }
+        let paste = try state.branchClipboardDraft(nodeID:"middle",operation:.paste,throughLeaf:true)
+        XCTAssertEqual(paste.fromNodeID,"middle"); XCTAssertEqual(paste.toNodeID,"middle"); XCTAssertEqual(paste.afterNodeID,"middle")
+    }
+
     func testClipboardCopyRestartPasteKeepsPersistedMapsOpaqueMetadataAndRawRoots() throws {
         var input = try cases()[0].required("input"), chats = try input.required("chats").array("chats"), chat = chats[0], tree = try chat.required("branchTree"), nodes = try tree.required("nodes")
         let rawMetadata = OrderedJSON.object([.init(key:"z",value:.number("9007199254740993")),.init(key:"a",value:.number("1.2300"))])
