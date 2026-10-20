@@ -10230,9 +10230,9 @@ var WeaveletGoogleSync = (() => {
       contentIds.set(hash, contentId);
       const { content: _content, refCount: _refCount, delta: _delta, ...metadata } = entry;
       checkSafeMetadata(metadata);
-      const record = { contentId, metadata };
-      const entryId = await digest(canonical(record));
-      entries[entryId] = record;
+      const record2 = { contentId, metadata };
+      const entryId = await digest(canonical(record2));
+      entries[entryId] = record2;
       entryIds.set(hash, entryId);
       retained[entryId] = true;
     }
@@ -15448,6 +15448,43 @@ ${JSON.stringify(input.length === 1 ? input[0] : input)}`;
     throw new Error("Unknown title operation.");
   }
 
+  // src/utils/legacyIOSImport.ts
+  var record = (value) => typeof value === "object" && value !== null && !Array.isArray(value);
+  function normalizeLegacyIOSImport(data) {
+    if (!record(data))
+      return data;
+    const snapshot = !Object.hasOwn(data, "version") && Object.hasOwn(data, "snapshotVersion");
+    if (!snapshot && (data.version !== 1 || !Object.hasOwn(data, "contentStore")))
+      return data;
+    if (snapshot && (data.snapshotVersion !== 1 || typeof data.updatedAt !== "number" || typeof data.deviceId !== "string")) {
+      throw new Error("Unsupported legacy iOS snapshot");
+    }
+    if (!Array.isArray(data.chats) || !record(data.contentStore) || !record(data.folders)) {
+      throw new Error("Invalid legacy iOS import");
+    }
+    const inline = data.chats.some((chat) => record(chat?.branchTree?.nodes) && Object.values(chat.branchTree.nodes).some((node) => record(node) && Object.hasOwn(node, "content")));
+    if (inline && !snapshot)
+      return data;
+    const chats = data.chats.map((chat) => {
+      if (!record(chat) || !Array.isArray(chat.messages))
+        throw new Error("Invalid legacy iOS chat");
+      if (chat.branchTree === void 0)
+        return chat;
+      const tree = chat.branchTree;
+      if (!record(tree) || !record(tree.nodes) || typeof tree.rootId !== "string" || !Array.isArray(tree.activePath)) {
+        throw new Error("Invalid legacy iOS branch tree");
+      }
+      const nodes = Object.fromEntries(Object.entries(tree.nodes).map(([id, node]) => {
+        if (!record(node) || typeof node.contentHash !== "string" || Object.hasOwn(node, "content")) {
+          throw new Error("Invalid legacy iOS hashed node");
+        }
+        return [id, Object.hasOwn(node, "parentId") ? node : { ...node, parentId: null }];
+      }));
+      return { ...chat, branchTree: { ...tree, nodes } };
+    });
+    return { ...data, version: 3, chats };
+  }
+
   // shared/google-sync/importDefaults.generated.json
   var importDefaults_generated_default = {
     keys: [
@@ -16227,8 +16264,8 @@ ${JSON.stringify(input.length === 1 ? input[0] : input)}`;
         refCount
       });
     });
-    const filterNodeRecord = (record) => record ? Object.fromEntries(
-      Object.entries(record).filter(([id]) => includedNodeSet.has(id))
+    const filterNodeRecord = (record2) => record2 ? Object.fromEntries(
+      Object.entries(record2).filter(([id]) => includedNodeSet.has(id))
     ) : void 0;
     const collapsedNodes = filterNodeRecord(chat.collapsedNodes);
     const omittedNodes = filterNodeRecord(chat.omittedNodes);
@@ -17228,7 +17265,7 @@ ${JSON.stringify(input.length === 1 ? input[0] : input)}`;
     }
   };
   var prepareImportData = (data, base, t2, decisions = {}, resolveDecision, allowEmpty = false) => {
-    const raw = deepClone(data);
+    const raw = normalizeLegacyIOSImport(deepClone(data));
     const payload = isRecord3(raw) && isRecord3(raw.state) ? raw.state : raw;
     const rawChats = isRecord3(payload) && Array.isArray(payload.chats) ? payload.chats : Array.isArray(payload) ? payload : [payload];
     let recoveredContentCount = 0;
@@ -17516,14 +17553,14 @@ ${JSON.stringify(input.length === 1 ? input[0] : input)}`;
     if (input.operation === "inspect") {
       if (!["data", "state", "source"].includes(input.kind))
         throw new Error("Invalid import projection kind.");
-      const data = input.data, contentStorePaths = [];
+      const data = input.kind === "data" ? normalizeLegacyIOSImport(input.data) : input.data, contentStorePaths = [];
       if (data && typeof data === "object" && !Array.isArray(data)) {
         if (data.contentStore && typeof data.contentStore === "object")
           contentStorePaths.push(["contentStore"]);
         if (data.state?.contentStore && typeof data.state.contentStore === "object")
           contentStorePaths.push(["state", "contentStore"]);
       }
-      return JSON.stringify({ opaquePaths: importOpaquePaths(data), contentStorePaths });
+      return JSON.stringify({ opaquePaths: importOpaquePaths(data), contentStorePaths, ...data !== input.data ? { normalizationChanges: diffJSONChanges(input.data, data) } : {} });
     }
     const run = () => {
       if (input.operation === "preview") {
@@ -18663,18 +18700,18 @@ ${JSON.stringify(input.length === 1 ? input[0] : input)}`;
   }
 
   // src/utils/streamRecovery.ts
-  var resolveRecoveryTarget = (chats, contentStore, record, expectedHash) => {
-    if (!record.chatId || !record.nodeId || !record.checkpointRole)
+  var resolveRecoveryTarget = (chats, contentStore, record2, expectedHash) => {
+    if (!record2.chatId || !record2.nodeId || !record2.checkpointRole)
       return null;
-    const chatIndex = chats?.findIndex((chat2) => chat2.id === record.chatId) ?? -1;
+    const chatIndex = chats?.findIndex((chat2) => chat2.id === record2.chatId) ?? -1;
     const chat = chats?.[chatIndex];
-    const node = chat?.branchTree?.nodes[record.nodeId];
-    if (!chat || !node || node.role !== record.checkpointRole)
+    const node = chat?.branchTree?.nodes[record2.nodeId];
+    if (!chat || !node || node.role !== record2.checkpointRole)
       return null;
-    const matchesHash = expectedHash !== void 0 ? node.contentHash === expectedHash : node.contentHash === record.checkpointHash || node.contentHash === record.appliedHash;
+    const matchesHash = expectedHash !== void 0 ? node.contentHash === expectedHash : node.contentHash === record2.checkpointHash || node.contentHash === record2.appliedHash;
     if (!matchesHash)
       return null;
-    return { chat, chatIndex, node, messageIndex: chat.branchTree.activePath.indexOf(record.nodeId), message: { role: node.role, content: resolveContent(contentStore, node.contentHash) } };
+    return { chat, chatIndex, node, messageIndex: chat.branchTree.activePath.indexOf(record2.nodeId), message: { role: node.role, content: resolveContent(contentStore, node.contentHash) } };
   };
 
   // src/utils/proxyRecoveryPolicy.ts

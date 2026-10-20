@@ -1,0 +1,185 @@
+{
+  "chats" : [
+    {
+      "branchTree" : {
+        "activePath" : [
+          "root",
+          "user",
+          "answer"
+        ],
+        "nodes" : {
+          "answer" : {
+            "contentHash" : "answer",
+            "createdAt" : 3,
+            "id" : "answer",
+            "parentId" : "user",
+            "role" : "assistant"
+          },
+          "inactive" : {
+            "contentHash" : "inactive",
+            "createdAt" : 4,
+            "id" : "inactive",
+            "parentId" : "user",
+            "pinned" : true,
+            "role" : "assistant"
+          },
+          "root" : {
+            "contentHash" : "system",
+            "createdAt" : 1,
+            "id" : "root",
+            "role" : "system"
+          },
+          "user" : {
+            "contentHash" : "rich",
+            "createdAt" : 2,
+            "id" : "user",
+            "label" : "合成ラベル",
+            "parentId" : "root",
+            "role" : "user",
+            "starred" : true
+          }
+        },
+        "rootId" : "root"
+      },
+      "collapsedNodes" : {
+        "inactive" : true
+      },
+      "config" : {
+        "frequency_penalty" : 0,
+        "max_tokens" : 4000,
+        "model" : "FAKE-LEGACY-MODEL",
+        "presence_penalty" : 0,
+        "providerId" : "openai",
+        "temperature" : 1,
+        "top_p" : 1
+      },
+      "folder" : "child",
+      "id" : "legacy-tree",
+      "imageDetail" : "high",
+      "messages" : [
+
+      ],
+      "omittedNodes" : {
+        "inactive" : true
+      },
+      "protectedNodes" : {
+        "user" : true
+      },
+      "title" : "旧iOS合成会話",
+      "titleSet" : true
+    },
+    {
+      "config" : {
+        "frequency_penalty" : 0,
+        "max_tokens" : 4000,
+        "model" : "FAKE-LEGACY-MODEL",
+        "presence_penalty" : 0,
+        "providerId" : "openai",
+        "temperature" : 1,
+        "top_p" : 1
+      },
+      "id" : "legacy-flat",
+      "imageDetail" : "auto",
+      "messages" : [
+        {
+          "content" : [
+            {
+              "text" : "flat 日本語 é",
+              "type" : "text"
+            }
+          ],
+          "role" : "user"
+        }
+      ],
+      "title" : "旧flat会話",
+      "titleSet" : false
+    }
+  ],
+  "contentStore" : {
+    "answer" : {
+      "content" : [
+        {
+          "text" : "回答",
+          "type" : "text"
+        }
+      ],
+      "refCount" : 1
+    },
+    "inactive" : {
+      "content" : [
+        {
+          "text" : "非表示分岐",
+          "type" : "text"
+        }
+      ],
+      "refCount" : 1
+    },
+    "rich" : {
+      "content" : [
+        {
+          "text" : "本文 日本語🙂",
+          "type" : "text"
+        },
+        {
+          "image_url" : {
+            "detail" : "high",
+            "url" : "data:image\/png;base64,FAKE_LEGACY_IMAGE"
+          },
+          "type" : "image_url"
+        },
+        {
+          "text" : "検討",
+          "type" : "reasoning"
+        },
+        {
+          "arguments" : "{\"q\":\"日本語\"}",
+          "id" : "FAKE-CALL",
+          "name" : "fake_lookup",
+          "type" : "tool_call"
+        },
+        {
+          "content" : "FAKE RESULT",
+          "tool_call_id" : "FAKE-CALL",
+          "type" : "tool_result"
+        }
+      ],
+      "refCount" : 1
+    },
+    "system" : {
+      "content" : [
+        {
+          "text" : "system instruction",
+          "type" : "text"
+        }
+      ],
+      "refCount" : 1
+    },
+    "unreferenced" : {
+      "content" : [
+        {
+          "text" : "未参照も保持",
+          "type" : "text"
+        }
+      ],
+      "refCount" : 0
+    }
+  },
+  "currentChatID" : "legacy-flat",
+  "folders" : {
+    "child" : {
+      "expanded" : false,
+      "id" : "child",
+      "name" : "子",
+      "order" : 1,
+      "parentId" : "parent"
+    },
+    "parent" : {
+      "color" : "#123456",
+      "expanded" : true,
+      "id" : "parent",
+      "name" : "親",
+      "order" : 0
+    }
+  },
+  "version" : 1
+}

@@ -12,6 +12,80 @@ final class ChatImportTests: XCTestCase {
         addTeardownBlock { try? FileManager.default.removeItem(at:root) }
         return LocalStateStore(fileURL:root.appendingPathComponent("state.json"))
     }
+    func testOldIOSWriterJSONUsesSharedImportWithoutLosingRawValues() async throws {
+        let root = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
+        let opaque = try OrderedJSON.decode(Data(#"{"z":9007199254740993,"a":1.2300,"utf16":"\ud800"}"#.utf8))
+        for name in ["legacy-ios-app-state", "legacy-ios-sync-snapshot"] {
+            let url = root.appendingPathComponent("tests/fixtures/web-native/\(name).json")
+            let original = try Data(contentsOf: url)
+            var input = try OrderedJSON.decode(original)
+            var chats = try input.required("chats").array("chats")
+            let tree = try chats[0].required("branchTree"), nodes = try tree.required("nodes")
+            XCTAssertNil(nodes["root"]?["parentId"])
+            chats[0] = chats[0].replacing("branchTree", with: tree.replacing("nodes", with: nodes.replacing("root", with: try nodes.required("root").replacing("xRaw", with: opaque))))
+            input = input.replacing("chats", with: .array(chats)).replacing("xRaw", with: opaque)
+            let store = try local(), state = ChatState(store: store)
+            try state.importWebData(fixture().encoded())
+            let before = try state.publicationSnapshot(), disk = try Data(contentsOf: store.fileURL)
+            let preview = try await state.prepareImport(data: input.encoded(), filename: name + ".json")
+            XCTAssertEqual(try state.publicationSnapshot(), before)
+            XCTAssertEqual(try Data(contentsOf: store.fileURL), disk)
+            XCTAssertEqual(preview.conversations.count, 2)
+            XCTAssertTrue(preview.unavailableContent.values.allSatisfy(\.isEmpty))
+            let sourceChats = try preview.source.required("chats").array("chats")
+            let importedNodes = try sourceChats[0].required("branchTree").required("nodes")
+            XCTAssertEqual(importedNodes["root"]?["parentId"], .null)
+            XCTAssertEqual(try importedNodes.required("root").required("xRaw").encoded(), try opaque.encoded())
+            XCTAssertEqual(importedNodes["inactive"], nodes["inactive"])
+            // Web normalization adds the config system body and flat body; original entries remain raw.
+            let previewStore = try preview.source.required("contentStore")
+            XCTAssertEqual(try previewStore.object("preview store").count, try input.required("contentStore").object("old store").count + 2)
+            for entry in try input.required("contentStore").object("old store") {
+                XCTAssertEqual(try previewStore.required(entry.key).encoded(), try entry.value.encoded())
+            }
+            let systemHash = try importedNodes.required("root").required("contentHash").string("system hash")
+            let systemContent = OrderedJSON.array([.object([.init(key: "type", value: .string("text")), .init(key: "text", value: .string("system instruction"))])])
+            XCTAssertNil(input["contentStore"]?[systemHash])
+            XCTAssertEqual(previewStore[systemHash]?["content"], systemContent)
+            XCTAssertEqual(previewStore[systemHash]?["refCount"], .number("1"))
+            try await state.commitImport(preview, mode: .replace, selectedChatIDs: preview.conversations.map(\.id), selectedFolderIDs: preview.folderRows.map(\.id), includeSettings: false)
+            let exported = try OrderedJSON.decode(state.exportWebData())
+            XCTAssertEqual(try exported.required("xRaw").encoded(), try opaque.encoded())
+            XCTAssertEqual(exported["currentChatID"], input["currentChatID"])
+            for key in ["snapshotVersion", "updatedAt", "deviceId"] { XCTAssertEqual(exported[key], input[key]) }
+            XCTAssertEqual(exported["folders"], input["folders"])
+            let savedStore = try exported.required("contentStore")
+            for entry in try input.required("contentStore").object("old store") {
+                XCTAssertEqual(try savedStore.required(entry.key).encoded(), try entry.value.encoded())
+            }
+            let savedChats = try exported.required("chats").array("chats")
+            XCTAssertEqual(savedChats[0]["collapsedNodes"], chats[0]["collapsedNodes"])
+            XCTAssertEqual(savedChats[0]["omittedNodes"], chats[0]["omittedNodes"])
+            XCTAssertEqual(savedChats[0]["protectedNodes"], chats[0]["protectedNodes"])
+            XCTAssertEqual(savedChats[0]["branchTree"]?["nodes"]?["root"]?["xRaw"], opaque)
+            // materializeActivePath constructs role then content; only the object key order changes.
+            let flatMessages = try chats[1].required("messages").array("flat messages")
+            let materialized = try flatMessages.map { message in
+                OrderedJSON.object([.init(key: "role", value: try message.required("role")), .init(key: "content", value: try message.required("content"))])
+            }
+            XCTAssertEqual(savedChats[1]["messages"], .array(materialized))
+            let flatTree = try savedChats[1].required("branchTree")
+            let flatID = try XCTUnwrap(flatTree.required("activePath").array("flat path").first).string("flat ID")
+            let flatHash = try flatTree.required("nodes").required(flatID).required("contentHash").string("flat hash")
+            XCTAssertEqual(savedStore[flatHash]?["content"], flatMessages[0]["content"])
+            XCTAssertEqual(try ChatState(store: store).exportWebData(), try state.exportWebData())
+            XCTAssertEqual(try Data(contentsOf: url), original)
+            if name == "legacy-ios-sync-snapshot" {
+                let after = try state.publicationSnapshot(), saved = try Data(contentsOf: store.fileURL)
+                for bad in [input.replacing("snapshotVersion", with: .number("2")), input.replacing("contentStore", with: .array([]))] {
+                    do { _ = try await state.prepareImport(data: bad.encoded(), filename: "invalid.json"); XCTFail("invalid old data accepted") } catch {}
+                    XCTAssertEqual(try state.publicationSnapshot(), after)
+                    XCTAssertEqual(try Data(contentsOf: store.fileURL), saved)
+                }
+            }
+        }
+    }
+
     func testPreviewAppendKeepsRawExtensionsAndExistingStateAcrossRestartAndRejectsRepeatedCommit() async throws {
         let opaque = OrderedJSON.object([.init(key:"z",value:.number("9007199254740993")),.init(key:"a",value:.number("1.2300")),.init(key:"word",value:.string("e\u{301} 日本語"))])
         var input = try fixture(), chats = try input.required("chats").array("chats")

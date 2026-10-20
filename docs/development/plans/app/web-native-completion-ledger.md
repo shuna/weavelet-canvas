@@ -1093,3 +1093,15 @@ Catalystは関連unique 10件の成功結果を機能群内で回収した（複
 同じ実入力caseでUnicode正規化等価なqueryの切替が状態更新されない不具合を検出した。標準入力を維持し、query状態とtask識別をUTF-8 DataにしてWebのliteral一致と同じ区別を保持する。éとe+combiningの入力切替をbyte一致で確認した。最終の追加1case成功 `/private/tmp/weavelet-node-find-ui-final-test.log`、最初の群で成功した既存raw長文scroll/遅延query拒否2caseを再利用する（unique 3件）。独立Astraの機能差分とUnicode/fixture期待根拠の限定監査は新規なし。手書き差分検査成功。保存・同期形式と共有JSを変更しておらず、未変更の全I/O/同期・Web検索テストの成功結果を再利用した。
 
 今回で前章の全ノードscope強調の残件を解消した。通常画面の手動受入・大規模会話の性能、旧iOS保存データの移行可否、実クラウド等は残る。iPhone Air照会・導入とmain統合は行っていない。
+
+## 旧iOS JSONの共有インポート（2026-10-20）
+
+旧ios2のAppState（version1）とSyncSnapshot（version無し・snapshotVersion1）の明示的JSON取込みを、既存V3 import/preview/planへ接続した。Webの即時取込み・previewとnativeが同じlegacyIOSImportを使用する。Swiftに変換規則を複製せず、共有inspectのversion/省略parentId差分をOrderedJSONへ適用してからopaque参照化する。通常Web V1/V2の経路は維持する。旧sandbox、同期record、入力ファイルへ自動書込みしない。
+
+legacy-ios-app-state.json/legacy-ios-sync-snapshot.jsonは旧DomainのChatTypes/MessageTypes/BranchTypes/ProviderTypes/CloudSyncTypes/ContentStore/PersistenceServiceを変更せずswiftcでコンパイルし、実JSONEncoderで生成した合成fixture。生成driverは /private/tmp/weavelet-legacy-ios-writer/main.swift。非表示分岐、flat会話、全旧ContentItem、未参照store、階層folderとcurrentChatIDを含む。nativeでは未知巨大整数・小数表記・孤立UTF16を追加し、preview非公開、raw保持、replace、再起動・V3書出し、未来snapshot/不正storeの拒否を確認した。currentChatID等は拡張metadataとして保持し、旧画面の選択状態再現を保証したものではない。append時の未参照store除外は既存の選択import仕様、全store保持はpreview/full replaceで確認する。
+
+共有/Web関連102件と型検査成功を担当から回収し、親はbundle再生成・鮮度確認、Catalyst関連unique3件を確認した。既存save失敗再試行・stale拒否2件は初回成功を再利用、新規writer接続1件は修正後成功。最初の期待値はstore同一とflat messageのkey順同一を要求して失敗した。実Web fileImport.mergeChats→normalizeSystemPromptがconfig用system本文を追加し、flatChatToBranchTreeがflat本文を追加するため、元全entryのbytes保持＋追加exact2件/参照先本文に訂正した。materializeActivePathがrole/content順に再構築する根拠でflat message期待を同順にし、本文配列順・全値・未知rawのassertを維持した。製品挙動をテストに合わせて変更していない。独立Astraの機能監査・期待訂正の限定確認は新規なし。
+
+ログは /private/tmp/legacy-ios-{vitest,tsc}.log、/private/tmp/weavelet-legacy-ios-native-{test,final-test}.log。共有exchangeReadの既存6失敗はgetInitialState mock不足として担当がbaseline同一を確認し、成功扱いに含めない。未変更の全I/O/暗号化同期の成功結果は再利用した。
+
+binary圧縮containerと旧CloudKit record移行は未完了。旧writerのmagicはUInt32LE 0x57564C54で実bytesがTLVWとなり、コメントのWVLTとは区別する。zstd decoderは今回追加しない。将来AppState version2は通常WebV2と識別できず、この変更で対応済みとはしない。実オンライン・UI手動・大規模性能とmain統合は残件。iPhone照会/導入は実施していない。

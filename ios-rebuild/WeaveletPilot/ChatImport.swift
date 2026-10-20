@@ -37,22 +37,23 @@ enum ChatImport {
     }
     static func project(_ raw: OrderedJSON, kind: String, boundary: inout SharedWebProjection) throws -> OrderedJSON {
         let inspection = try SharedWebOperations.call("fileImport", .object([.init(key:"operation",value:.string("inspect")),.init(key:"kind",value:.string(kind)),.init(key:"data",value:raw)]))
+        let normalized = try inspection["normalizationChanges"].map { try OrderedJSONChanges.apply($0,to:raw) } ?? raw
         let stores = try inspection.required("contentStorePaths").array("store paths")
         var changes: [OrderedJSON] = []
         func set(_ path: OrderedJSON, _ value: OrderedJSON) -> OrderedJSON {
             .object([.init(key:"op",value:.string("set")),.init(key:"path",value:path),.init(key:"value",value:value)])
         }
-        for path in stores { changes.append(set(path, try boundary.store(value(at:path,in:raw),strict:true))) }
+        for path in stores { changes.append(set(path, try boundary.store(value(at:path,in:normalized),strict:true))) }
         for path in try inspection.required("opaquePaths").array("opaque paths") {
             let components = try path.array("path")
             if try stores.contains(where: { store in
                 let prefix = try store.array("store path")
                 return components.count >= prefix.count && Array(components.prefix(prefix.count)) == prefix
             }) { continue }
-            changes.append(set(path, try boundary.reference(value(at:path,in:raw))))
+            changes.append(set(path, try boundary.reference(value(at:path,in:normalized))))
         }
         // Apply references as values here, without restoring the table until output.
-        return try OrderedJSONChanges.apply(.array(changes),to:raw)
+        return try OrderedJSONChanges.apply(.array(changes),to:normalized)
     }
     static func restore(_ value: OrderedJSON, boundary: SharedWebProjection) throws -> OrderedJSON {
         try OrderedJSONChanges.apply(.array([.object([.init(key:"op",value:.string("set")),.init(key:"path",value:.array([])),.init(key:"value",value:value)])]),to:.null,opaque:boundary.opaque)
