@@ -4,12 +4,20 @@ const MARK_CLASS = 'chat-find-highlight';
 const ACTIVE_CLASS = 'chat-find-highlight-active';
 export type ChatFindMatch = { marks: HTMLElement[]; range: Range };
 
+type HighlightedText = { node: Text; text: string; pieces: Node[] };
+type HighlightSession = { targets: HighlightedText[]; observer: MutationObserver };
+const sessions = new WeakMap<HTMLElement, HighlightSession>();
+
 export function clearChatFind(root: HTMLElement): void {
-  for (const mark of root.querySelectorAll(`mark.${MARK_CLASS}`)) {
-    const parent = mark.parentNode;
-    if (!parent) continue;
-    parent.replaceChild(root.ownerDocument.createTextNode(mark.textContent ?? ''), mark);
-    parent.normalize();
+  const session = sessions.get(root);
+  if (!session) return;
+  const updated = new Set(session.observer.takeRecords().filter(record => record.type === 'characterData').map(record => record.target));
+  session.observer.disconnect();
+  sessions.delete(root);
+  for (const { node, text, pieces } of session.targets) {
+    // Keep React's Text identity and never overwrite a renderer's newer value.
+    if (node.parentNode && !updated.has(node) && node.data === '') node.data = text;
+    for (const piece of pieces) piece.parentNode?.removeChild(piece);
   }
 }
 
@@ -24,6 +32,17 @@ export function highlightChatFind(root: HTMLElement, query: string): ChatFindMat
   const targets: Text[] = [];
   while (walker.nextNode()) targets.push(walker.currentNode as Text);
   const matches: ChatFindMatch[] = [];
+  const session: HighlightSession = {
+    targets: [],
+    observer: new MutationObserver(records => {
+      // Preserve mutation records so clear can distinguish a renderer's empty text from ours.
+      for (const record of records) if (record.type === 'characterData') {
+        const target = session.targets.find(entry => entry.node === record.target);
+        if (target) target.text = target.node.data;
+      }
+      clearChatFind(root);
+    }),
+  };
   for (const node of targets) {
     const text = node.data;
     const positions = findTextMatches(text, query);
@@ -54,13 +73,20 @@ export function highlightChatFind(root: HTMLElement, query: string): ChatFindMat
         active.forEach(match => local[match].marks.push(mark));
       } else fragment.appendChild(part);
     }
-    node.parentNode!.replaceChild(fragment, node);
+    const pieces = Array.from(fragment.childNodes);
+    node.parentNode!.insertBefore(fragment, node.nextSibling);
+    node.data = '';
+    session.targets.push({ node, text, pieces });
     for (const match of local) {
       match.range.setStart(match.marks[0].firstChild!, 0);
       const last = match.marks[match.marks.length - 1].lastChild!;
       match.range.setEnd(last, last.textContent!.length);
       matches.push(match);
     }
+  }
+  if (session.targets.length) {
+    sessions.set(root, session);
+    session.observer.observe(root, { childList: true, characterData: true, subtree: true });
   }
   return matches;
 }

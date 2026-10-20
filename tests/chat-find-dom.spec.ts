@@ -40,3 +40,51 @@ test('overlapping and Unicode matches preserve DOM text, selection and exclusion
   expect(result.cleared).toBe(result.original);
   expect(result.marks).toBe(0);
 });
+
+for (const clearBeforeUpdate of [false, true]) {
+  test(`React updates content and structure with clear-before-render=${clearBeforeUpdate}`, async ({ page }) => {
+    await page.goto('/');
+    const errors: string[] = [];
+    page.on('pageerror', error => errors.push(error.message));
+    const result = await page.evaluate(async clearFirst => {
+      const modulePath = '/tests/chat-find-react-fixture.ts';
+      return (await import(modulePath)).exerciseReactChatFind(clearFirst);
+    }, clearBeforeUpdate);
+    expect(result.error).toBeNull();
+    expect(result.stages).toEqual(['updated banana suffix', 'updated banana suffix', 'final', 'replacement']);
+    expect(result.count).toBe(2);
+    expect(errors).toEqual([]);
+  });
+}
+
+test('clear keeps original Text identity and synchronous renderer edits, including deletion', async ({ page }) => {
+  await page.goto('/');
+  const result = await page.evaluate(async () => {
+    const modulePath = '/src/utils/chatFindDom.ts';
+    const { highlightChatFind, clearChatFind } = await import(modulePath);
+    const root = document.createElement('div');
+    document.body.appendChild(root);
+    const text = document.createTextNode('banana');
+    root.appendChild(text);
+    highlightChatFind(root, 'ana');
+    clearChatFind(root);
+    const identity = root.firstChild === text && root.textContent === 'banana';
+    highlightChatFind(root, 'ana');
+    text.data = '';
+    clearChatFind(root);
+    const empty = root.textContent;
+    text.data = 'banana';
+    highlightChatFind(root, 'ana');
+    root.removeChild(text);
+    await Promise.resolve();
+    const removed = root.textContent;
+    clearChatFind(root);
+    root.appendChild(document.createTextNode('new banana'));
+    const ranges = highlightChatFind(root, 'ana').map((match: { range: Range }) => match.range.toString());
+    clearChatFind(root);
+    const refreshed = root.textContent;
+    root.remove();
+    return { identity, empty, removed, ranges, refreshed };
+  });
+  expect(result).toEqual({ identity: true, empty: '', removed: '', ranges: ['ana', 'ana'], refreshed: 'new banana' });
+});
