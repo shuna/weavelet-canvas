@@ -732,6 +732,11 @@ struct ChatView: View {
         let nodeNavigation: UUID
         static func == (a:Self,b:Self) -> Bool { a.query.utf8.elementsEqual(b.query.utf8) && a.enabled == b.enabled && a.bodies == b.bodies && a.running == b.running && a.starredOnly == b.starredOnly && a.highlightsNodes == b.highlightsNodes && a.nodeNavigation == b.nodeNavigation }
     }
+    private var chatScrollIDs: [Data] {
+        guard let conversation = state.conversation,
+              let nodes = try? DisplaySettings.messagesForDisplay(conversation.visibleMessages,advancedMode:advancedMode) else { return [] }
+        return nodes.filter { (try? state.summaryInfo(chatID:conversation.id,nodeID:$0.id))?["hidden"] != .bool(true) }.map(\.identity)
+    }
     private var chatContent: some View {
             GeometryReader { viewport in
             ScrollViewReader { scroll in
@@ -747,6 +752,7 @@ struct ChatView: View {
                             if summaryInfo?["hidden"] != .bool(true) {
                                 messageRow(node:node,conversation:conversation,summaryInfo:summaryInfo,generation:generation)
                                     .id(node.identity)
+                                    .chatScrollMarker(.message(node.identity))
                                     .disabled(state.generation != nil)
                                 if let generation, !generation.running {
                                     Button("生成結果の保存を再試行") {
@@ -780,33 +786,7 @@ struct ChatView: View {
                             inlineEditor(pending).padding(16).id("inline-recovery")
                         }
                         if state.exchange != nil {
-                            HStack(spacing:0) {
-                                Menu {
-                                    Button("すべての本文を折りたたむ",systemImage:"arrow.down.right.and.arrow.up.left") {
-                                        do { try state.setAllMessagesCollapsed(true) } catch { errorMessage = error.localizedDescription }
-                                    }
-                                    Button("すべての本文を展開",systemImage:"arrow.up.left.and.arrow.down.right") {
-                                        do { try state.setAllMessagesCollapsed(false) } catch { errorMessage = error.localizedDescription }
-                                    }
-                                    Divider()
-                                    Button("編集を元に戻す",systemImage:"arrow.uturn.backward") {
-                                        do { try state.undoMessageEdit() } catch { errorMessage = error.localizedDescription }
-                                    }.disabled(!state.canUndoMessageEdit)
-                                    Button("編集をやり直す",systemImage:"arrow.uturn.forward") {
-                                        do { try state.redoMessageEdit() } catch { errorMessage = error.localizedDescription }
-                                    }.disabled(!state.canRedoMessageEdit)
-                                } label: { Image(systemName:"rectangle.compress.vertical").frame(width:44,height:44) }
-                                .accessibilityLabel("本文の一括表示と編集履歴")
-                                .disabled(state.generation != nil || conversation.visibleMessages.isEmpty)
-                                Spacer()
-                                Button { scroll.scrollTo("connected-top",anchor:.top) } label: {
-                                    Image(systemName:"arrow.up").frame(width:44,height:44)
-                                }.accessibilityLabel("最初へ")
-                                Button { scroll.scrollTo("connected-composer",anchor:.bottom) } label: {
-                                    Image(systemName:"arrow.down").frame(width:44,height:44)
-                                }.accessibilityLabel("入力欄へ")
-                            }.buttonStyle(.plain).padding(.horizontal,12)
-                            composer(conversation).id("connected-composer")
+                            composer(conversation).id("connected-composer").chatScrollMarker(.composer)
                         }
 
                     } else {
@@ -815,7 +795,9 @@ struct ChatView: View {
                 }
                 .frame(maxWidth: horizontalSizeClass == .compact ? .infinity : 900)
                 .frame(maxWidth: .infinity)
+                .chatScrollMarker(.content)
             }
+            .modifier(ChatScrollControls(state:state,scroll:scroll,ids:chatScrollIDs,viewportHeight:viewport.size.height,isEditing:inlineDraft != nil || composerFocused,reportError:{ errorMessage = $0.localizedDescription }))
             .environment(\.messageViewport,viewport.frame(in:.global))
             .background(Color(uiColor:.secondarySystemBackground))
             .scrollDismissesKeyboard(.interactively)

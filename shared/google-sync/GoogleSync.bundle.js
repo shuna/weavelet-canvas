@@ -8462,6 +8462,7 @@ var WeaveletGoogleSync = (() => {
     branchLayout: () => branchLayout,
     branchNodeDiffPaths: () => branchNodeDiffPaths,
     branchPath: () => branchPath,
+    bubbleScroll: () => bubbleScroll,
     chatConfig: () => chatConfig,
     chatSearch: () => chatSearch,
     chatSizes: () => chatSizes,
@@ -8548,6 +8549,25 @@ var WeaveletGoogleSync = (() => {
     const input = JSON.parse(json);
     const before = aiTaskFingerprint(input.ticket, input.before);
     return JSON.stringify(before !== null && aiTaskFingerprint(input.ticket, input.current) === before);
+  }
+
+  // src/utils/bubbleScroll.ts
+  function bubbleNavigationTargets(input) {
+    let previous = -1;
+    let next = -1;
+    const maxScrollTop = Math.max(0, input.scrollHeight - input.clientHeight);
+    for (const item of input.items) {
+      if (item.top < -0.5)
+        previous = item.index;
+      if (next < 0 && Math.min(input.scrollTop + item.top, maxScrollTop) > input.scrollTop + 0.5)
+        next = item.index;
+    }
+    return { previous, next };
+  }
+
+  // shared/google-sync/bubbleScroll.ts
+  function bubbleScroll(json) {
+    return JSON.stringify(bubbleNavigationTargets(JSON.parse(json)));
   }
 
   // shared/google-sync/adapters/host.ts

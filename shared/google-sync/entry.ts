@@ -1,4 +1,5 @@
 export { aiTaskTarget } from './aiTask';
+export { bubbleScroll } from './bubbleScroll';
 import { setHistoryYield } from './adapters/processing';
 export { messageDisplayIndexes, splitPanelRatio } from './advancedDisplay';
 export { enterSubmissionOperation } from './enterSubmission';

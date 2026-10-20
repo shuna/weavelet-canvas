@@ -19,6 +19,7 @@ import countTokens, { limitMessageTokens } from '@utils/messageUtils';
 import { perfStart, perfEnd } from '@utils/perfTrace';
 import { defaultModel, reduceMessagesToTotalToken } from '@constants/chat';
 import { showToast } from '@utils/showToast';
+import { bubbleNavigationTargets } from '@utils/bubbleScroll';
 
 const EMPTY_MESSAGES: never[] = [];
 const EMPTY_ACTIVE_PATH: string[] = [];
@@ -97,21 +98,15 @@ export function scrollViewportToBottom(
 export function getBubbleNavigationTargets(scroller: Pick<HTMLElement,
   'getBoundingClientRect' | 'querySelectorAll' | 'scrollTop' | 'scrollHeight' | 'clientHeight'
 > | null): { previous: number; next: number } {
-  let previous = -1;
-  let next = -1;
-  if (!scroller) return { previous, next };
+  if (!scroller) return { previous: -1, next: -1 };
 
   const viewportTop = scroller.getBoundingClientRect().top;
-  const maxScrollTop = Math.max(0, scroller.scrollHeight - scroller.clientHeight);
-  for (const item of Array.from(scroller.querySelectorAll<HTMLElement>(MESSAGE_ITEM_SELECTOR))) {
-    const index = Number(item.dataset.itemIndex);
-    const top = item.getBoundingClientRect().top - viewportTop;
-    if (top < -SCROLL_ALIGN_TOLERANCE) previous = index;
-    if (next < 0 && Math.min(scroller.scrollTop + top, maxScrollTop) > scroller.scrollTop + SCROLL_ALIGN_TOLERANCE) {
-      next = index;
-    }
-  }
-  return { previous, next };
+  return bubbleNavigationTargets({
+    items: Array.from(scroller.querySelectorAll<HTMLElement>(MESSAGE_ITEM_SELECTOR)).map(item => ({
+      index: Number(item.dataset.itemIndex), top: item.getBoundingClientRect().top - viewportTop,
+    })),
+    scrollTop: scroller.scrollTop, scrollHeight: scroller.scrollHeight, clientHeight: scroller.clientHeight,
+  });
 }
 
 function isEditableTarget(target: EventTarget | null): boolean {

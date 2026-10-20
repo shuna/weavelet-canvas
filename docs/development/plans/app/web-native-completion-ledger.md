@@ -1225,3 +1225,14 @@ sidebarの会話移動と新規作成を許可し、停止は行のchat/要求UU
 4並行ケースはNFC/NFDの別chat ID、生成中の新規作成、同chat再送拒否、逆順完了と選択不変、停止後の遅延通知、片方だけの通信失敗、A保存失敗→B保存→A再試行と再起動/exportを確認した。未知大数と孤立UTF16を含むraw値を保持する。既存remoteの停止/保存失敗/proxy/利用量、local/evaluation接続も関連範囲で確認。sync schema/暗号/recordsは変更せず、直前の全項目実Web→native→Web暗号化同期・全I/O corpus成功を再利用し反復しない。ログ /private/tmp/weavelet-parallel-{shared-final,types-final,web-build,native-corrected-test,native-affected-test}.log。
 
 Catalyst test用buildと隔離native接続は成功したが、今回は並行2件の実画面操作、実API・実cloud・消費電力/大規模性能は未確認。iPhone照会/導入・main統合・pushは行っていない。全Web機能再現と実オンライン相互運用・全UI受入の最終完成とは扱わない。
+
+
+## chat paneのフローティング移動・編集ショートカット（2026-10-20）
+
+実Web getBubbleNavigationTargetsの算出部分をbubbleScrollへ切り出し、WebはDOM測定、nativeはSwiftUI座標測定を担当する。先頭・前のバブル・次のバブル・入力欄への既存ScrollViewProxy移動と、undo/redo・全折畳/全展開の既存handlerを、pane左右下の44pt操作へ接続した。末尾の重複toolbarを除き、composerは引き続きscroll末尾に置く。入力欄が画面に入るとその上へ操作を退避し、編集/focus中や配置余地がない場合はoverlayを表示しない。色は中立、移動animationは既存設定とReduce Motionを守る。native LazyVStackの未描画前後行だけは、計測済み行と既存の表示ID順から補完する。
+
+共有Web12件と型検査成功。Catalyst初回3件成功後、独立Astraのviewport/ID変更時の再計算漏れと未描画の前行へ戻れないP2を修正し、影響4件のみ成功（初回と重複、固有4件）。限定再監査は新規P1/P2なし。UTF8別ID、座標入力の不変、長い行/未描画の前後行、短いcontentと削除ID、viewport変更を確認した。保存・同期schemaや業務handlerは変更せず、全I/O/暗号化同期・折畳/編集履歴の既存成功結果を再利用した。ログ /private/tmp/weavelet-scroll-controls-{native-test,native-final-test,types,web-build,generate}.log。
+
+隔離FAKE Catalystの実画面で先頭→次→前、移動可否の切替、全折畳→全展開を確認し、composerより上の操作配置を目視した。通常データ/実Keychainを使わず、検証後はprocess不在とbuilt Info.plist復元を確認した。最初のQuit後のAX取得でprocessが残ったため再度終了操作を行い、terminalで不在を確認するまで終了扱いにしていない。監査後の座標補完/再計算は自動境界確認までで、狭幅・文字拡大・実keyboard・全行操作の重なりは未確認。iPhone照会/導入・main統合・pushは行わない。
+
+U21の操作入口は接続したが、実Web recordExplicitScrollNavigationにあるスクロール位置の履歴capture/復元と、行左端の独立折畳入口（U22）は残る。これらを単なるボタン配置の完成から推定せず、次の接続範囲とする。全UI/OS・実オンライン互換の最終受入は引き続き未完了。
